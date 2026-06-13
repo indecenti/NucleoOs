@@ -9,7 +9,7 @@
 int                       nucleo_app_count(void);
 const nucleo_app_def_t   *nucleo_app_at(int i);
 
-#define MAX_APPS 28
+#define MAX_APPS 40
 #define MAX_CATS 8
 #define MAX_DEPTH 6
 

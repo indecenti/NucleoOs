@@ -121,7 +121,7 @@ extern "C" esp_err_t nucleo_app_register_display(httpd_handle_t server)
 }
 
 // ---- registered foreground apps --------------------------------------------
-#define MAX_APPS 32
+#define MAX_APPS 40
 static nucleo_app_def_t s_apps[MAX_APPS];
 static int s_app_count;
 
