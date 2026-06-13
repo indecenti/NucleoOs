@@ -9,3 +9,7 @@ GEMINI API KEY*.txt
 # Cookie di sessione/auth (sensibili)
 /devcookie.txt
 /*cookie*.txt
+
+# --- Bytecode Python generato (non sorgente) ---
+__pycache__/
+*.pyc

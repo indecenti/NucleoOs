@@ -40,6 +40,15 @@ function Is-UserContent($rel) {
     return ($rel -like 'data/*') -and -not ($rel -like 'data/anima/*')
 }
 
+# The on-device VOICE is an integral system asset that must always ship and must NEVER be
+# mirror-deleted by any deploy run. Two packages: the nucleo_tts clip banks under data/tts/
+# (the voice that SPEAKS) and the Vosk dictation models under apps/anima/www/vosk/models/
+# (the mic that LISTENS). Mirrors firmware nucleo_fs_is_protected (which pins data/tts/<lang>
+# and the whole /apps tree) so the SD copy and the on-device copy are protected the same way.
+function Is-Voice($rel) {
+    return ($rel -like 'data/tts/*') -or ($rel -like 'apps/anima/www/vosk/models/*')
+}
+
 # Device-state files: provisioned by the USER at runtime (API keys, learned cards, settings,
 # telemetry). The release system must NEVER stage, overwrite, or mirror-delete these — a key on
 # the SD always wins over anything in the repo. Mirrors the protection in sd-sync.ps1 / sd_deploy.py.
@@ -128,6 +137,7 @@ function Apply-Mirror($dstRoot, $seen, $man, $stat) {
         if ($rel -eq $MANIFEST) { return }
         if (-not $seen.ContainsKey($rel)) {
             if (Is-Protected $rel)   { return }   # pinned media: never mirror-delete
+            if (Is-Voice $rel)       { return }   # TTS clip banks / Vosk models: never mirror-delete
             if (Is-State $rel)       { return }   # user key / learned / settings: never mirror-delete
             if (Is-UserContent $rel) { return }   # user media/documents/captures: never mirror-delete
             if (-not $DryRun) { Remove-Item -LiteralPath $_.FullName -Force }
@@ -198,4 +208,19 @@ if ($To) {
     Apply-Mirror $To $tseen $tman $tstat
     Save-Manifest $To $tman
     Report "Push ($To)" $tstat
+
+    # Voice that SPEAKS: the nucleo_tts clip banks (data/tts/, ~800 MB) are too big for the
+    # git-tracked deploy/sd staging, so they ship straight from deploy/sd-safe. No /MIR -> only
+    # adds/updates, never deletes; Is-Voice also shields them from the mirror pass above. The
+    # Vosk models (the mic that LISTENS) ride the normal apps/ flow and are already pushed.
+    $ttsSrc = Join-Path $repo 'deploy\sd-safe\data\tts'
+    if (Test-Path (Join-Path $ttsSrc 'it\clips.pcm')) {
+        if (-not $DryRun) {
+            & robocopy $ttsSrc (Join-Path $To 'data\tts') *.* /E /NJH /NJS /NDL /NFL /NP /R:1 /W:1 | Out-Null
+            if ($LASTEXITCODE -ge 8) { throw "robocopy TTS ha riportato un errore (exit $LASTEXITCODE)" }
+        }
+        Write-Host "Voce TTS: data/tts -> $To (da deploy/sd-safe, mai cancellata)"
+    } else {
+        Write-Warning "Voce TTS assente in deploy/sd-safe/data/tts - ricostruisci con: node oversized-assets/rejoin.mjs tts-it-clips tts-en-clips"
+    }
 }

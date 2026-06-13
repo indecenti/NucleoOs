@@ -16,8 +16,13 @@
 //   • device STATE (settings, keys, sessions, logs, the user's Groq key, ANIMA's learned
 //     cards / profile / telemetry / vectors) stays freely deletable — it is regenerable
 //     and belongs to the user, mirroring sd_deploy.py's DEVICE_STATE list.
-//   • everything under /data EXCEPT ANIMA's offline brain (media, documents, recordings,
-//     downloads, ROMs…) stays freely deletable.
+//   • everything under /data EXCEPT ANIMA's offline brain AND the on-device voice clip
+//     banks (media, documents, recordings, downloads, ROMs…) stays freely deletable.
+//
+// The on-device VOICE is an integral system asset and is pinned two ways here: the Vosk
+// dictation models live under /apps (already protected wholesale) and the nucleo_tts clip
+// banks live under /data/tts/<lang>/ (protected by the block below). NucleoOS itself — the
+// file manager, ANIMA, the JS runtime, the Files app — can never delete them.
 //
 // Pure string logic: zero heap, no SD I/O — safe to call from the httpd task and the UI
 // task on this PSRAM-less, ~18 KB-heap board. Keep it allocation-free.
@@ -105,6 +110,17 @@ static inline bool nucleo_fs_is_protected(const char *abs)
         if (strncasecmp(b, "dict-",  5) == 0) return true;             // translation dictionaries
         if (strncasecmp(b, "commands", 8) == 0) return true;           // ANIMA command map
         return false;                                                  // learned/, teacher.json, *.vec, …
+    }
+
+    // 6) The on-device voice (nucleo_tts) ships its clip banks under /data/tts/<lang>/
+    //    (index.bin + clips.pcm). Those are immutable system assets — protect them so
+    //    NucleoOS can never delete the voice. The runtime state in the /data/tts ROOT —
+    //    the speak.cfg / speed.cfg toggles, the _say.wav scratch and the c_*.wav render
+    //    cache — stays freely deletable so the device can purge and rebuild its own cache.
+    if (nucleo_fs__seg(rel, "data/tts")) {
+        if (nucleo_fs__seg(rel, "data/tts/it")) return true;
+        if (nucleo_fs__seg(rel, "data/tts/en")) return true;
+        return false;
     }
 
     // Everything else (the rest of /data, wallpapers, evilportal, README, config, backups,

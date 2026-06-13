@@ -4,6 +4,12 @@
   Sorgente : deploy/sd/  (asset statici: apps, www, system/registry, pack ANIMA)
   Target   : la radice della SD (es. H:\)
 
+  VOCE (parte integrante del sistema, sempre a bordo):
+   - i modelli di dettatura Vosk (apps/anima/www/vosk/models, parti split) viaggiano col payload deploy/sd;
+   - il banco clip TTS (data/tts, ~800 MB) è troppo grande per deploy/sd -> copiato a parte da deploy/sd-safe.
+   Entrambi senza /MIR: solo aggiunti/aggiornati, mai cancellati (e il firmware nucleo_fs_is_protected
+   ne impedisce la cancellazione anche on-device).
+
   GARANZIE:
    - NON cancella MAI niente sul target (nessun /MIR /PURGE): aggiunge/aggiorna soltanto.
    - PROTEGGE lo stato del device anche se per errore finisse nel payload:
@@ -70,6 +76,20 @@ Write-Host ''
 $rc = $LASTEXITCODE
 # robocopy: 0-7 = successo (8+ = errore reale)
 if ($rc -ge 8) { throw "robocopy ha riportato un errore (exit $rc)." }
+
+# Voce TTS: il banco clip (data/tts) non sta in deploy/sd (troppo grande per il repo) ->
+# copiato direttamente da deploy/sd-safe. Stesso patto: nessun /MIR, solo aggiunge/aggiorna.
+$ttsSafe = Join-Path $PSScriptRoot '..\deploy\sd-safe\data\tts'
+if (Test-Path (Join-Path $ttsSafe 'it\clips.pcm')) {
+  $ttsSrc = (Resolve-Path $ttsSafe).Path
+  Write-Host ''
+  Write-Host "Voce TTS : $ttsSrc -> $Target (data\tts)"
+  & robocopy "$ttsSrc" (Join-Path $Target 'data\tts') *.* @flags
+  if ($LASTEXITCODE -ge 8) { throw "robocopy della voce TTS ha riportato un errore (exit $LASTEXITCODE)." }
+} else {
+  Write-Warning "Voce TTS assente in deploy/sd-safe/data/tts - ricostruiscila con: node oversized-assets/rejoin.mjs tts-it-clips tts-en-clips"
+}
+
 Write-Host ''
-Write-Host "OK - copia sicura completata (robocopy exit $rc; 0-7 = successo). Stato device preservato."
+Write-Host "OK - copia sicura completata (robocopy exit $rc; 0-7 = successo). Voce a bordo, stato device preservato."
 exit 0

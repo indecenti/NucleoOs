@@ -39,6 +39,15 @@ int main(void)
     check("/sd/data/anima/akb5/ai-ml.bin", true);
     check("/sd/data/anima/akb5", true);
 
+    // ---- PROTECTED: on-device voice ----
+    check("/sd/data/tts/it/index.bin", true);             // TTS clip bank (speaks)
+    check("/sd/data/tts/it/clips.pcm", true);
+    check("/sd/data/tts/en/index.bin", true);
+    check("/sd/data/tts/en/clips.pcm", true);
+    check("/sd/data/tts/it", true);
+    check("/sd/data/tts/en", true);
+    check("/sd/apps/anima/www/vosk/models/vosk-model-small-it-0.4.tar.gz.000", true); // Vosk (under /apps)
+
     // ---- BYPASS attempts must still be caught ----
     check("/sd/APPS/anima/manifest.json", true);          // case
     check("/sd/Apps", true);                               // case
@@ -56,6 +65,13 @@ int main(void)
     check("/sd/data/downloads/file.zip", false);
     check("/sd/data/ROMs/game.gb", false);
     check("/sd/data", false);                              // the data dir itself
+
+    // ---- FREE: TTS runtime state in the /data/tts root (cache/toggles, regenerable) ----
+    check("/sd/data/tts", false);                         // dir node (lang banks guard themselves)
+    check("/sd/data/tts/speak.cfg", false);
+    check("/sd/data/tts/speed.cfg", false);
+    check("/sd/data/tts/_say.wav", false);                // scratch
+    check("/sd/data/tts/c_a1b2c3.wav", false);            // render cache
 
     // ---- FREE: ANIMA user state (regenerable / user-owned) ----
     check("/sd/data/anima", false);                       // dir node (children guard themselves)
@@ -92,6 +108,8 @@ int main(void)
     check("/sd/data/anima/akb5extra/x.bin", false);       // not the akb5 dir
     check("/sd/appstore/thing", false);                   // not /apps
     check("/sd/systemic/x", false);                       // not /system
+    check("/sd/data/ttsbackup/x.pcm", false);             // not data/tts
+    check("/sd/data/tts/italian/x.bin", false);           // not data/tts/it (only it/en)
 
     // ---- degenerate ----
     check("/sd", false);

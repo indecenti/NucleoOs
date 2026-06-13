@@ -41,7 +41,8 @@ def _src(*cands):
 # NB: questa classificazione (SOURCE_MAP = sistema, DEVICE_STATE = stato utente) è la stessa
 # che il firmware applica A RUNTIME per impedire la CANCELLAZIONE dei file di sistema dall'SD:
 # vedi firmware/components/nucleo_board/include/nucleo_fsprotect.h (nucleo_fs_is_protected), che
-# blocca delete/move-away di system/registry, system/web, apps/, www/ e del cervello ANIMA
+# blocca delete/move-away di system/registry, system/web, apps/, www/, della VOCE (clip TTS in
+# data/tts/<lang>/ + modelli Vosk sotto apps/) e del cervello ANIMA
 # (data/anima/{anima-*,dict-*,commands*,akb5/}) per file-manager, ANIMA, runtime JS e app Files.
 # Se aggiungi qui un nuovo albero di sistema, aggiorna anche quel predicato (e viceversa).
 SOURCE_MAP = [
@@ -58,6 +59,11 @@ SOURCE_MAP = [
          src=_src("deploy/sd-safe/data/anima/akb5")),
     dict(dest="data/anima/anima-it-akb5.bin", kind="file", gz=False,
          src=_src("deploy/sd-safe/data/anima/anima-it-akb5.bin", "models/anima-it-akb5.bin")),
+    # VOCE che PARLA: banco clip del TTS concatenativo (nucleo_tts), IT+EN. clips.pcm è oversize
+    # (ricostruito da oversized-assets/rejoin.mjs); index.bin è committato. Parte di sistema, non
+    # stato utente -> sempre scritto, mai cancellato. (La VOCE che ASCOLTA — modelli Vosk a parti
+    # split — cavalca la regola 'apps' qui sopra.)
+    dict(dest="data/tts",        kind="tree", gz=False, src=_src("deploy/sd-safe/data/tts")),
     # extra solo-payload
     dict(dest="evilportal",      kind="tree", gz=False, src=_src("deploy/sd-safe/evilportal")),
     dict(dest="wallpapers",      kind="tree", gz=False, src=_src("deploy/sd-safe/wallpapers")),
@@ -71,6 +77,13 @@ COMPLETENESS = [
     ("manifest akb5",    "data/anima/anima-it-akb5.bin"),
     ("shell index.html", "www/shell/index.html"),
     ("registry apps",    "system/registry/apps.json"),
+    # VOCE (parte integrante del sistema): clip TTS (parla) + modelli Vosk a parti (ascolta).
+    # Un clips.pcm mancante = oversize non ricostruito -> 'node oversized-assets/rejoin.mjs'.
+    ("voce TTS it (clip)", "data/tts/it/clips.pcm"),
+    ("voce TTS en (clip)", "data/tts/en/clips.pcm"),
+    ("voce TTS it (idx)",  "data/tts/it/index.bin"),
+    ("dettatura Vosk it",  "apps/anima/www/vosk/models/vosk-model-small-it-0.4.tar.gz.000"),
+    ("dettatura Vosk en",  "apps/anima/www/vosk/models/vosk-model-small-en-us-0.15.tar.gz.000"),
 ]
 MIN_AKB5_SHARDS = 40
 
