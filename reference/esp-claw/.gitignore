@@ -1,0 +1,45 @@
+# Build output
+build/
+tmp/
+releases/
+
+# ESP-IDF
+sdkconfig
+sdkconfig.old
+sdkconfig.priv
+sdkconfig.bmgr_board.old
+dependencies.lock
+managed_components/
+
+# IDE / Editor
+.vscode/
+.devcontainer/
+.idea/
+.clangd
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+# Cache / Compiled
+.cache
+*.pyc
+
+# MCP / Memov
+.mcp.json
+.mem/
+.memignore
+# OS
+.DS_Store
+Thumbs.db
+.venv/
+
+.codex
+
+# Docs
+docs/node_modules
+docs/public/d2
+docs/dist
+docs/.astro
+docs/**/*.bin

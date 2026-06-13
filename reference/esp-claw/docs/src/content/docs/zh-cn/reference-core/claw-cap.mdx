@@ -1,0 +1,63 @@
+---
+title: Capability Runtime
+description: 能力注册表、分组、生命周期与大语言模型可见性。
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+
+头文件：<LinkToSource relativePath="components/claw_modules/claw_cap/include/claw_cap.h" />
+
+## 职责
+
+`claw_cap` 是 **Capability 运行时**：所有面向「可被调用的一段能力」——无论是给模型当 tool、给控制台当 `cap call`、还是被 Event Router 直接 `call_cap`——都先登记成带元数据的描述符，再经统一入口执行。
+
+## Capability 描述符
+
+`claw_cap_descriptor_t` 描述单个能力，核心字段包括：
+
+- `id` / `name`：标识与展示名（调用时通常用 name 或 id，以实现为准）。
+- `family`：逻辑分组（列表输出时会带上）。
+- `description`、`input_schema_json`：给人和给模型看的说明与参数 schema。
+- `kind`：`CALLABLE`、`EVENT_SOURCE`、`HYBRID` 等，表达该能力是否以调用为主、是否会产事件、或两者兼有。
+- `cap_flags`：例如是否允许被大语言模型调用（`CLAW_CAP_FLAG_CALLABLE_BY_LLM`）、是否支持生命周期等。
+- `init` / `start` / `stop`：可选的生命周期钩子。
+- `execute`：真正执行时收到 **JSON 字符串输入**、**调用上下文** `claw_cap_call_context_t`（含 session、channel、caller 等），输出写入调用方提供的缓冲区。
+
+一批相关描述符可以放在 `claw_cap_group_t`，通过 `claw_cap_register_group` 注册为 Group，便于统一 `start/stop` 与按 group 启停。
+
+## 发起 `claw_cap_call` 的常见路径
+
+常见调用路径：
+
+1. **Agent**：`claw_core` → 配置的 `call_cap` → `claw_cap_call_from_core`（会把 `claw_core_request_t` 映射成 `claw_cap_call_context_t`）。
+2. **Console**：`cap call <name> <json>`（见 [Console 交互](@lang/reference-project/console-usage)）。
+3. **Event Router**：规则动作 `call_cap`（见 [数据流与自动化](@lang/reference-project/dataflow-and-automation)）。
+
+`claw_cap_call_context_t.caller` 区分 `SYSTEM` / `AGENT` / `CONSOLE`，Capability 实现可据此区分调用方。
+
+## 大语言模型可见性
+
+`claw_cap_build_llm_tools_json` 会根据当前上下文生成工具列表；`claw_cap_tools_provider` 把它作为 `TOOLS` 类上下文交给 `claw_core`。
+
+`claw_cap_set_llm_visible_groups` 用 **group_id 白名单** 限制暴露范围。
+`edge_agent` 里默认对大语言模型暴露 `cap_files`、`cap_scheduler`、`cap_lua`、`cap_skill`、`cap_llm_inspect`、`cap_http_request`、`cap_web_search`、`cap_router_mgr`，完整结构化记忆模式还会暴露 `claw_memory`，
+见 <LinkToSource relativePath="components/common/app_claw/app_capabilities.c" /> 中的可见组配置。
+
+<Aside type="tip">
+  其余已注册的 Group（IM、搜索、MCP、Lua……）仍然存在，Console 和自动化可直接调用；
+  若要让模型「原生」看到对应 tool 名称及用法，需要将对应 Group 加入白名单，或通过 Skills 「渐进式披露」。这是为了避免上下文过长导致大语言模型能力退化。
+</Aside>
+
+<Aside type="note">
+  为避免上游请求因超长工具描述触发错误，`claw_cap` 在构造 tools JSON 时会对 `description` 做长度上限保护（当前为 256 字节，采用 UTF-8 安全截断方式并记录告警日志）。
+</Aside>
+
+## 状态与运维 API
+
+- `claw_cap_list` / `claw_cap_list_groups`：枚举能力与 group。
+- `claw_cap_enable_group` / `claw_cap_disable_group`：按组启用或禁用。
+- `claw_cap_unregister_group` / `claw_cap_unregister`：卸载（带超时等待活跃调用结束）。
+
+<LinkCard title="能力（cap_*）总览" href="@lang/reference-cap/" description="自带的 Capabilities 总览" />

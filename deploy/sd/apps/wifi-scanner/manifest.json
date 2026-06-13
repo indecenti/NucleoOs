@@ -1,0 +1,21 @@
+{
+  "id": "wifi-scanner",
+  "name": "WiFi Scanner",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Scan nearby Wi-Fi networks with signal, channel and security.",
+  "category": "connectivity",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/wifi-scanner/",
+  "icon": "/apps/wifi-scanner/icon.svg",
+  "permissions": ["net.wifi", "system.events", "device.display"],
+  "mounts": { "app": "/apps/wifi-scanner/data" },
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": ["wifi.scan"],
+  "publishes": ["wifi.scan.request"],
+  "power": { "budget_class": "medium", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

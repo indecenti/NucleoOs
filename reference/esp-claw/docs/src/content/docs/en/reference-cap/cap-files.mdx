@@ -1,0 +1,149 @@
+---
+title: cap_files — filesystem operations
+description: Filesystem reference capability—read, write, edit, copy, move, and delete operations over a managed FATFS tree with path-safety rules.
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+
+Source: <LinkToSource relativePath="components/claw_capabilities/cap_files/src/cap_files.c" /> · header: <LinkToSource relativePath="components/claw_capabilities/cap_files/include/cap_files.h" />
+
+## Role
+
+`cap_files` is the **reference filesystem capability**: it exposes file read/write, edit, copy, move, and delete operations on a managed FATFS directory to the LLM and automation rules, and shows how to wrap filesystem access as tools safely on embedded targets.
+
+The default managed root is `/fatfs`; change it at init with `cap_files_set_base_dir()`.
+
+## Tools exposed
+
+| Tool ID | Purpose | Input |
+|---------|---------|-------|
+| `read_file` | Read a text file | `path` |
+| `write_file` | Create or overwrite a file | `path`, `content` |
+| `edit_file` | Replace the first matching substring | `path`, `old_string`, `new_string` |
+| `delete_file` | Delete a file | `path` |
+| `copy_file` | Copy a file to a new path | `src_path`, `dst_path` |
+| `move_file` | Move a file to a new path | `src_path`, `dst_path` |
+| `list_dir` | Recursively list files under the tree | optional `keyword` |
+
+All tools are flagged `CLAW_CAP_FLAG_CALLABLE_BY_LLM`.
+
+## Path safety
+
+The core guard is strict boundary checks to block path traversal:
+
+```c
+static bool cap_files_path_is_valid(const char *path)
+{
+    // Disallow ".." (stay under base_dir)
+    if (strstr(path, "..") != NULL) return false;
+
+    // Path must start with base_dir
+    if (strncmp(path, s_files_base_dir, base_len) != 0) return false;
+
+    // Allow exact base_dir or base_dir/… children
+    return path[base_len] == '\0' || path[base_len] == '/';
+}
+```
+
+`cap_files_resolve_path` accepts **absolute** and **relative** inputs:
+
+```c
+// Absolute: validate under base_dir
+// "/fatfs/notes/hello.txt" → OK
+
+// Relative: join under base_dir
+// "notes/hello.txt" → "/fatfs/notes/hello.txt"
+snprintf(resolved, resolved_size, "%s/%s", s_files_base_dir, path);
+```
+
+This lets the LLM use short relative paths while keeping a hard sandbox.
+
+## Tool behavior
+
+### `read_file`: size cap
+
+Reads are capped at 32 KB (`CAP_FILES_MAX_FILE_SIZE`); extra bytes are truncated so huge files cannot blow the LLM context:
+
+```c
+max_read = output_size - 1;
+if (max_read > CAP_FILES_MAX_FILE_SIZE) {
+    max_read = CAP_FILES_MAX_FILE_SIZE;
+}
+read_size = fread(output, 1, max_read, file);
+output[read_size] = '\0';
+```
+
+### `write_file`: parent dirs
+
+`write_file` recursively creates missing parents—no manual `mkdir`:
+
+```c
+cap_files_ensure_parent_dirs(resolved_path);
+// e.g. /fatfs → /fatfs/notes → /fatfs/notes/2026 …
+```
+
+### `copy_file` / `move_file`: sandboxed paths and destination preparation
+
+Both `copy_file` and `move_file` require the source and destination to stay under the managed root, and they reject identical source/destination paths.
+
+Missing parent directories for the destination are created automatically.
+
+`move_file` tries `rename()` first. If direct rename is unavailable for the underlying filesystem path, it falls back to copy-then-delete so callers still get move semantics.
+
+### `edit_file`: first match only
+
+`edit_file` does **one** substring replace (`strstr` + memcpy), not global replace:
+
+```c
+match = strstr(buffer, old_string);
+if (!match) {
+    snprintf(output, output_size, "Error: old_string not found in %s", resolved_path);
+    return ESP_ERR_NOT_FOUND;
+}
+// prefix + new_string + suffix, write back once
+```
+
+That gives precise edits and clear errors when `old_string` is wrong.
+
+### `list_dir`: recursion + keyword
+
+```c
+// Walk base_dir recursively, emit full paths per file
+// Optional case-insensitive keyword filter on the full path
+cap_files_list_recursive(s_files_base_dir, keyword, output, output_size, &offset, &count);
+```
+
+Output is one absolute path per line:
+```
+/fatfs/notes/hello.txt
+/fatfs/scripts/blink.lua
+/fatfs/skills/cap_lua/SKILL.md
+```
+
+Empty trees return `"(no files found)"` instead of a blank string so the LLM does not misread silence.
+
+## Boundary with `cap_lua`
+
+`cap_files` and `cap_lua` manage different subtrees:
+
+| Module | Tree | File types |
+|--------|------|------------|
+| `cap_files` | `/fatfs` (configurable) | Any text file |
+| `cap_lua` | `/fatfs/scripts` (default) | `.lua` only |
+
+The LLM can edit Lua with `cap_files` and run with `cap_lua`, or read `.md` skills managed by `cap_skill`.
+
+## Configuration
+
+```c
+// Change base dir (before register_group)
+cap_files_set_base_dir("/sdcard");
+
+// Register with claw_cap
+cap_files_register_group();
+```
+
+<Aside type="caution">
+  `write_file`, `edit_file`, `copy_file`, and `move_file` all change managed files, including skills and Lua. Treat this capability carefully for multi-tenant or untrusted models, or narrow writable paths with access control.
+</Aside>

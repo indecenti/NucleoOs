@@ -1,0 +1,49 @@
+version: 1.0.0
+# Devices Configuration
+devices:
+  # DSI Display Device
+  - name: display_lcd
+    chip: fl7707n
+    type: display_lcd
+    sub_type: dsi
+    dependencies:
+      esp_lcd_fl7707n:
+        override_path: "${BOARD_PATH}/components/esp_lcd_fl7707n"
+        require: public
+    config:
+      reset_gpio_num: 3
+      rgb_ele_order: LCD_RGB_ELEMENT_ORDER_RGB
+      bits_per_pixel: 24
+      reset_active_high: 0
+      dbi_config:
+        virtual_channel: 0
+        lcd_cmd_bits: 8
+        lcd_param_bits: 8
+      dpi_config:
+        virtual_channel: 0
+        dpi_clk_src: MIPI_DSI_DPI_CLK_SRC_DEFAULT
+        dpi_clock_freq_mhz: 48
+        pixel_format: LCD_COLOR_PIXEL_FORMAT_RGB565
+        in_color_format: LCD_COLOR_FMT_RGB565
+        out_color_format: LCD_COLOR_FMT_RGB565
+        num_fbs: 2
+        flags:
+          use_dma2d: true
+        video_timing:
+          h_size: 720
+          v_size: 720
+          hsync_back_porch : 120
+          hsync_pulse_width : 60
+          hsync_front_porch : 106
+          vsync_back_porch : 20
+          vsync_pulse_width : 4
+          vsync_front_porch : 20
+      peripherals:
+      - name: ldo_mipi
+      - name: dsi_display
+
+  - name: lcd_brightness
+    type: ledc_ctrl
+    version: default
+    peripherals:
+      - name: ledc_backlight

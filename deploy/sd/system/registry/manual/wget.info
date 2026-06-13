@@ -1,0 +1,16 @@
+{
+  "id": "wget",
+  "category": "system",
+  "it": {
+    "title": "wget - Scarica file da internet",
+    "synopsis": "wget <url> [-O outfile]",
+    "description": "Scarica un file da un URL web e lo salva sulla scheda SD.",
+    "details": "NOME\n  wget - Download file tramite HTTP.\n\nSINTASSI\n  wget <url> [-O <file_destinazione>]\n\nDESCRIZIONE\n  Scarica una risorsa remota tramite richiesta GET e la scrive fisicamente sulla scheda SD.\n\nOPZIONI\n  <url>\n    L'URL del file da scaricare.\n  -O <file_destinazione>\n    Percorso e nome file su SD in cui salvare la risorsa.\n\nARCHITETTURA E BASSO LIVELLO\n  Scarica i dati come ArrayBuffer binario. Successivamente, effettua una chiamata HTTP POST a '/api/fs/write?path=<dest>' inviando il buffer. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo. Download completato e scritto.\n  1\n    Errore di connessione o di scrittura su SD.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  curl(1), ping(1), web_api(7)\n\nESEMPI AVANZATI\n  wget google.com/index.html\n  wget http://example.com/file.bin -O /data/firmware.bin"
+  },
+  "en": {
+    "title": "wget - Download file from web",
+    "synopsis": "wget <url> [-O outfile]",
+    "description": "Download web resources and write them to the local SD storage.",
+    "details": "NAME\n  wget - Download file over HTTP.\n\nSYNOPSIS\n  wget <url> [-O <destination_file>]\n\nDESCRIPTION\n  Downloads a remote resource using a GET request and writes it to the local SD Card.\n\nOPTIONS\n  <url>\n    The URL of the file to download.\n  -O <destination_file>\n    The exact path on the SD card to write the payload to.\n\nSYSTEM ARCHITECTURE\n  Retrieves data as a binary ArrayBuffer. Then, transmits the buffer via POST to '/api/fs/write?path=<dest>'. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. Downloaded and written successfully.\n  1\n    Network error or SD Card write failure.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  curl(1), ping(1), web_api(7)\n\nADVANCED EXAMPLES\n  wget google.com/index.html\n  wget http://example.com/file.bin -O /data/firmware.bin"
+  }
+}

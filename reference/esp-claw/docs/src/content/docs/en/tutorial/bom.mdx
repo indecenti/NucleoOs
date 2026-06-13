@@ -1,0 +1,117 @@
+---
+title: Prepare materials
+description: Prepare hardware materials for the ESP32-S3 breadboard version of ESP-Claw.
+---
+
+import { LinkCard } from 'starlight-theme-nova/components'
+
+import ESP32S3DevKitC1Png from "@/assets/images/esp32-s3-devkitc-1-v1.1-isometric.png?url";
+import ESP32S3DevKitC1WebP from "@/assets/images/esp32-s3-devkitc-1-v1.1-isometric.webp?url";
+import BreadboardPng from "@/assets/images/breadboard-400.png?url";
+import BreadboardWebP from "@/assets/images/breadboard-400.webp?url";
+import Ws2812Png from "@/assets/images/ws2812.png?url";
+import Ws2812WebP from "@/assets/images/ws2812.webp?url";
+
+For the breadboard form of ESP-Claw, you need one ESP32-S3 dev board, one or more breadboards, and optional extension peripherals.
+
+## Required hardware
+
+### ESP32-S3 dev board
+
+ESP32-S3 has multiple variants such as `N8R8` and `N4R2`. `N8` means 8 MB Flash, and `R2` means 2 MB PSRAM.
+To run ESP-Claw, you need an ESP32-S3 with **at least 8 MB Flash and 8 MB PSRAM**.
+
+<picture>
+    <source srcset={ESP32S3DevKitC1WebP} type="image/webp" />
+    <img src={ESP32S3DevKitC1Png} alt="ESP32-S3-DevKitC-1" width="50%" style="display: block; margin: 0 auto;" />
+</picture>
+
+**We recommend the official ESP32-S3-DevKitC-1 board from Espressif**. It exposes more pins and is suitable for breadboard assembly.
+You can buy it from Espressif official channels.
+
+<LinkCard 
+    title="Espressif sample purchase channels"
+    href="https://www.espressif.com/en/contact-us/get-samples"
+    description="Buy ESP32-S3-DevKitC-1 through Espressif channels"
+/>
+
+<LinkCard 
+    title="ESP32-S3-DevKitC-1 on Espressif Taobao store"
+    href="https://item.taobao.com/item.htm?id=653155344338"
+    description="Select: 1-N8R8. Models marked with U are not recommended"
+/>
+
+### Breadboard
+
+<picture>
+    <source srcset={BreadboardWebP} type="image/webp" />
+    <img src={BreadboardPng} alt="Breadboard" width="50%" style="display: block; margin: 0 auto;" />
+</picture>
+
+Prepare a breadboard with 400 tie points or more. It is recommended to reserve extra breadboards for optional peripherals.
+
+### Wires and Dupont cables
+
+Wires and Dupont jumper cables are needed for connections. Prepare enough quantity for wiring.
+
+## Optional peripherals
+
+ESP-Claw supports various extensions, including display, camera, microphone, and speaker.
+These peripherals make interactions richer.
+
+### Display
+
+ESP-Claw supports external displays. The web flasher firmware supports an ST7789 SPI color display; you can buy the same model from the link below.
+
+<LinkCard
+    title="2.0-inch TFT ST7789 240x320 SPI display"
+    href="https://item.taobao.com/item.htm?id=851909895424"
+    description="Select: 2.0-inch, 8-pin blue board module, with header pins"
+/>
+
+If you choose another display, you may need software adaptation.
+
+### Camera
+
+ESP-Claw supports USB cameras for vision features. Even without a vision-capable model, captured images can still be sent to users.
+
+For ESP32-S3, the USB camera should meet the requirements in the [USB Stream User Guide](https://docs.espressif.com/projects/esp-iot-solution/en/latest/usb/usb_host/usb_stream.html#id1).
+
+<LinkCard
+    title="USB camera from Espressif Taobao store"
+    href="https://item.taobao.com/item.htm?id=848914354287"
+    description="This camera meets the requirements above"
+/>
+
+If you buy the USB camera sample from Espressif, it is recommended to also buy an MX1.25 4-pin single-ended cable (male) for breadboard wiring later.
+
+### Microphone & speaker
+
+Besides USB-UVC (USB camera), ESP-Claw also supports USB-UAC (microphone and speaker).
+
+If you use the USB camera sample from Espressif, you only need to buy a microphone and speaker and connect them to the reserved ports on the camera with MX1.25 2-pin terminals.
+
+### WS2812 light strip/ring
+
+<picture>
+    <source srcset={Ws2812WebP} type="image/webp" />
+    <img src={Ws2812Png} alt="WS2812" width="30%" style="display: block; margin: 0 auto;" />
+</picture>
+
+In addition to the built-in WS2812 LED on ESP32-S3-DevKitC-1, you can connect a WS2812 strip/ring to extend lighting effects.
+
+Due to power limits, do not connect an overly long WS2812 strip/ring.
+You can choose the WS2812 ring with the same model as the [demo image](https://detail.tmall.com/item.htm?id=994762490273&skuId=6139364670619).
+
+### Servo
+
+ESP-Claw supports servos for mechanical motion.
+You can choose a common servo, such as [this one](https://item.taobao.com/item.htm?id=1016474722460).
+
+---
+
+<LinkCard
+    title="Next step: Assemble ESP-Claw"
+    href="@lang/tutorial/assemble"
+    description="After preparing hardware materials, you can start assembling ESP-Claw."
+/>

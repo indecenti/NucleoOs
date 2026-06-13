@@ -1,0 +1,314 @@
+---
+title: 如何实现 Capability
+description: 从零编写一个 cap_* 组件的完整指南，包括描述符定义、Group 注册与生命周期管理。
+---
+
+import { Aside, FileTree } from '@astrojs/starlight/components';
+import LinkToSource from '@/components/LinkToSource.astro';
+
+本节介绍如何为 ESP-Claw 编写一个自定义 Capability，完整地覆盖从文件结构、描述符定义到 Group 注册的全流程。
+
+## 核心数据结构
+
+实现 Capability 前需理解两个核心结构体，均定义于 <LinkToSource relativePath="components/claw_modules/claw_cap/include/claw_cap.h" />：
+
+### `claw_cap_descriptor_t` — 单个能力描述符
+
+```c
+typedef struct {
+    const char *id;                  // 唯一标识，调用时使用
+    const char *name;                // 展示名（通常与 id 相同）
+    const char *family;              // 逻辑分组标签（如 "im"、"files"、"system"）
+    const char *description;         // 给 LLM 看的功能描述
+    claw_cap_kind_t kind;            // CALLABLE / EVENT_SOURCE / HYBRID
+    uint32_t cap_flags;              // 标志位，如 CLAW_CAP_FLAG_CALLABLE_BY_LLM
+    const char *input_schema_json;   // JSON Schema 格式的输入参数定义
+    // 生命周期钩子（可选）
+    esp_err_t (*init)(void);
+    esp_err_t (*start)(void);
+    esp_err_t (*stop)(void);
+    // 执行回调（CALLABLE 必须实现）
+    esp_err_t (*execute)(const char *input_json,
+                         const claw_cap_call_context_t *ctx,
+                         char *output,
+                         size_t output_size);
+} claw_cap_descriptor_t;
+```
+
+### `claw_cap_group_t` — 描述符集合
+
+```c
+typedef struct {
+    const char *group_id;                    // Group 唯一标识
+    const char *plugin_name;                 // 插件名（可选）
+    const char *version;                     // 版本号（可选）
+    void *plugin_ctx;                        // 插件私有上下文（可选）
+    const claw_cap_descriptor_t *descriptors; // 描述符数组
+    size_t descriptor_count;
+    // Group 级生命周期钩子（可选，与描述符内钩子互补）
+    esp_err_t (*group_init)(void);
+    esp_err_t (*group_start)(void);
+    esp_err_t (*group_stop)(void);
+} claw_cap_group_t;
+```
+
+## 实现步骤
+
+### 步骤 1：创建组件目录结构
+
+<FileTree>
+- components/claw_capabilities/cap_my_feature
+    - CMakeLists.txt
+    - include
+        - cap_my_feature.h 头文件
+    - src
+        - cap_my_feature.c 具体实现
+    - skills skills 目录，可选，见下文文档
+        - cap_my_feature
+            - SKILL.md Skill 元数据与正文
+</FileTree>
+
+`CMakeLists.txt` 最小示例：
+
+```cmake
+idf_component_register(
+    SRCS "src/cap_my_feature.c"
+    INCLUDE_DIRS "include"
+    REQUIRES claw_cap cJSON # 至少需要依赖 claw_cap 核心库与 cJSON 库用于解析 JSON 数据
+)
+```
+
+### 步骤 2：编写头文件
+
+头文件只暴露注册函数，避免泄露内部状态：
+
+```c
+// include/cap_my_feature.h
+#pragma once
+#include "esp_err.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+esp_err_t cap_my_feature_register_group(void);
+
+#ifdef __cplusplus
+}
+#endif
+```
+
+### 步骤 3：实现 `execute` 回调
+
+`execute` 是 Capability 的核心：接收 JSON 字符串输入，将结果写入 `output` 缓冲区。
+
+```c
+static esp_err_t my_feature_execute(const char *input_json,
+                                     const claw_cap_call_context_t *ctx,
+                                     char *output,
+                                     size_t output_size)
+{
+    cJSON *root = cJSON_Parse(input_json ? input_json : "{}");
+    if (!root) {
+        snprintf(output, output_size, "Error: invalid JSON");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // 从 ctx 中获取调用上下文（会话 ID、频道、chat_id 等）
+    const char *session_id = ctx ? ctx->session_id : NULL;
+
+    cJSON *param = cJSON_GetObjectItem(root, "param");
+    if (!cJSON_IsString(param)) {
+        cJSON_Delete(root);
+        snprintf(output, output_size, "Error: param is required");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // 执行实际逻辑 ...
+    snprintf(output, output_size, "Done: %s", param->valuestring);
+
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+```
+
+**关键规则：**
+- 输出必须写入 `output` 缓冲区，不要直接打印到串口
+- 返回 `ESP_OK` 表示执行成功；非零返回码会被框架记录并返回给调用方
+- 错误信息同样写入 `output`，以 `"Error: ..."` 开头是惯例
+- `claw_cap_call_context_t` 包含 `session_id`、`chat_id`、`source_channel`、`caller` 等，可用于多会话/多渠道场景
+
+### 步骤 4：定义描述符与 Group
+
+```c
+static const claw_cap_descriptor_t s_my_descriptors[] = {
+    {
+        .id = "my_action",
+        .name = "my_action",
+        .family = "custom",
+        .description = "Perform my custom action with the given param.",
+        .kind = CLAW_CAP_KIND_CALLABLE,
+        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
+        .input_schema_json =
+            "{\"type\":\"object\","
+            "\"properties\":{\"param\":{\"type\":\"string\"}},"
+            "\"required\":[\"param\"]}",
+        .execute = my_feature_execute,
+    },
+};
+
+static const claw_cap_group_t s_my_group = {
+    .group_id = "cap_my_feature",
+    .descriptors = s_my_descriptors,
+    .descriptor_count = sizeof(s_my_descriptors) / sizeof(s_my_descriptors[0]),
+};
+```
+
+### 步骤 5：实现注册函数
+
+```c
+esp_err_t cap_my_feature_register_group(void)
+{
+    if (claw_cap_group_exists(s_my_group.group_id)) {
+        return ESP_OK;
+    }
+    return claw_cap_register_group(&s_my_group);
+}
+```
+
+### 步骤 6：在应用层注册
+
+在 `app_claw.c`（或你的应用初始化文件）中调用：
+
+```c
+#include "cap_my_feature.h"
+
+// 在 app_capabilities_init 或类似初始化文件中
+void my_app_init(void)
+{
+    // ... 其他注册 ...
+    cap_my_feature_register_group();
+    // 如需对 LLM 可见，加入可见 group 列表
+}
+```
+
+## 添加生命周期钩子
+
+如果 Capability 需要持有后台任务（如轮询、定时器），通过 `init` / `start` / `stop` 钩子管理：
+
+```c
+static esp_err_t my_feature_start(void)
+{
+    // 创建 FreeRTOS 任务、定时器等
+    s_running = true;
+    return xTaskCreate(my_poll_task, "my_poll", 4096, NULL, 5, &s_task) == pdPASS
+               ? ESP_OK : ESP_FAIL;
+}
+
+static esp_err_t my_feature_stop(void)
+{
+    s_running = false;
+    // 等待任务退出...
+    return ESP_OK;
+}
+
+// 在描述符中填写钩子
+static const claw_cap_descriptor_t s_my_descriptors[] = {
+    {
+        // ...
+        .init  = NULL,           // 一次性初始化（可选）
+        .start = my_feature_start,
+        .stop  = my_feature_stop,
+    },
+};
+```
+
+## 实现事件源
+
+若 Capability 需要主动产生事件（如 IM 接收消息），将 `kind` 设为 `CLAW_CAP_KIND_EVENT_SOURCE` 并在后台任务中调用 Event Router 接口：
+
+```c
+// 产生文本消息事件（最常见）
+claw_event_router_publish_message(
+    "my_gateway",   // source_cap
+    "my_channel",   // source_channel
+    chat_id,        // chat_id
+    text,           // 消息正文
+    sender_id,      // 发送者 ID
+    message_id      // 消息 ID
+);
+
+// 产生自定义事件
+claw_event_t event = {0};
+strlcpy(event.source_cap, "my_gateway", sizeof(event.source_cap));
+strlcpy(event.event_type, "my_custom_event", sizeof(event.event_type));
+// ... 填充其他字段 ...
+claw_event_router_publish(&event);
+```
+
+事件产生后，`claw_event_router` 会根据规则决定是触发自动化、还是路由给 `claw_core` 做 Agent 推理。
+
+## 提供 Skills 文档
+
+<Aside type="tip" title="可选，但建议">
+    虽然 Capability 的 Skills 激活方式是可选的，但建议为每个 Capability 提供配套的 Skills 文档。
+
+    这是因为 Skills 通常可以提供更好的渐进式披露机制，让 LLM 在需要时再获取完整的文档。
+</Aside>
+
+### 目录结构
+
+在组件目录下添加 `skills/` 子目录：
+
+<FileTree>
+- cap_my_feature
+    - **skills** skills 目录
+        - cap_my_feature
+            - SKILL.md         Skill 元数据与正文
+</FileTree>
+
+构建时 `components/common/skill_builder` 会把这些文件同步到 FATFS 的 Skills 根目录（默认 `/fatfs/skills/`）下。
+
+### `SKILL.md` frontmatter 格式
+
+````md
+---
+{
+  "name": "cap_my_feature",
+  "description": "一句话描述这个 Skill 的用途，LLM 未激活时看到的摘要",
+  "metadata": {
+    "cap_groups": ["cap_my_feature"],
+    "manage_mode": "readonly"
+  }
+}
+---
+
+# cap_my_feature
+````
+
+激活 Skill 时，`cap_skill` 会将列表中所有 Group 加入当前 session 的 LLM 工具可见白名单。一个 Skill 可以绑定多个 Group，例如一个「文件编辑」Skill 同时开放 `cap_files` 和 `cap_lua`。
+
+关于 Skill 文档的撰写规范（模板、要素说明），请参阅 [Skills 指南](@lang/reference-project/skills#撰写有效的-skill-文档)。
+
+<Aside type="tip" title="Skills 与 LLM 可见性的关系">
+  若你的 Capability 非常简单（例如只有一个无歧义的查询工具），也可以不提供 Skill，直接在 `claw_cap_set_llm_visible_groups` 中设为初始可见。
+
+  Skills 主要价值在于：复杂工具的使用指引、按需加载以控制上下文大小、以及多场景的渐进式披露。
+</Aside>
+
+## 常见模式对照
+
+| 需求 | 模式 | 参考实现 |
+|------|------|----------|
+| 纯工具，无副作用 | 简单 `execute` 回调 | `cap_time`、`cap_llm_inspect` |
+| 需要读写文件系统 | 路径校验 + POSIX IO | `cap_files`、`cap_lua` |
+| 持续轮询/推送事件 | 后台任务 + `EVENT_SOURCE` | `cap_im_tg` |
+| 调用 LLM 推理 | `claw_core_llm_infer_*` | `cap_llm_inspect` |
+| 管理 core 运行时状态 | 调用 `claw_skill_*` / `claw_cap_*` | `cap_skill` |
+
+<Aside type="caution">
+  **内存安全注意事项：**
+  - `execute` 中分配的临时内存必须在函数返回前释放
+  - `output` 缓冲区大小由框架分配，通常为 4096–8192 字节，不要假设更大的空间
+  - 如需输出大量文本，考虑分段或返回文件路径让 LLM 进一步查询
+</Aside>

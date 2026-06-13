@@ -1,0 +1,70 @@
+---
+title: 你好👋，欢迎体验 ESP-Claw！
+description: 面向物联网设备的 AI 智能体框架，通过对话定义设备行为。
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+import { LinkButton } from 'starlight-theme-nova/components'
+
+import ClawAnimationUrl from "@/assets/logos/claw-animation.svg?url";
+import ClawBreadboardPhotoJpg from "@/assets/images/claw-breadboard-photo.jpg?url";
+import ClawBreadboardPhotoWebp from "@/assets/images/claw-breadboard-photo.webp?url";
+
+<img src={ClawAnimationUrl} alt="ESP-Claw" width="50%" style="display: block; margin: 0 auto;" />
+
+**ESP-Claw** 是面向物联网设备的 **Chat Coding（聊天造物）** 式 AI 智能体框架，以对话定义设备行为，在乐鑫芯片上本地完成感知、推理、决策与执行的完整闭环。
+
+<CardGrid stagger>
+  <Card title="聊天即造物" icon="comment">
+    通过 IM 聊天 + Lua 动态加载，普通用户即可定义设备行为，生成的逻辑可固化为本地确定性规则
+  </Card>
+  <Card title="事件驱动" icon="random">
+    设备主动上报事件，毫秒级响应；无匹配规则时自动调用 LLM，超出本地算力时云边协同
+  </Card>
+  <Card title="MCP 双向互联" icon="puzzle">
+    设备同时具备 MCP Server 和 MCP Client 身份，既能被外部 Agent 调用，也能主动调用外部服务
+  </Card>
+  <Card title="本地记忆" icon="document">
+    结构化长期记忆系统，摘要标签轻量检索，隐私不上云
+  </Card>
+</CardGrid>
+
+## ESP-Claw vs 传统 IoT
+
+| **维度** | **传统 IoT（云中心化）** | **ESP-Claw（边缘 AI）** |
+| --- | --- | --- |
+| **处理逻辑** | 预设静态规则（If-This-Then-That） | LLM 动态决策 + Lua 确定性规则 |
+| **执行引擎** | 规则引擎 | LLM + Lua + Router（三级事件处理） |
+| **控制中心** | 云端服务器 | 边缘节点（ESP 芯片） |
+| **设备协议** | MQTT / Matter / 私有 SDK | MCP 统一语言 + 多协议桥接 |
+| **记忆管理** | 云端数据存储 | 本地结构化记忆（JSONL + 标签） |
+| **交互方式** | App / 控制面板 | IM（Telegram / 微信 / 飞书） |
+| **智能能力** | 预设自动化 | LLM + 本地规则（持续进化） |
+
+## 开始体验
+
+这篇教程将带你从零开始，用面包板组装一台基于 ESP32S3 的 ESP-Claw 硬件，并烧录最新的 ESP-Claw 固件。
+
+<picture>
+    <source srcset={ClawBreadboardPhotoWebp} type="image/webp" />
+    <img src={ClawBreadboardPhotoJpg} alt="ESP-Claw Breadboard" style="display: block; margin: 0 auto;" />
+</picture>
+
+<CardGrid>
+  <LinkCard title="面包板形态的 ESP-Claw" href="@lang/tutorial/assemble" description="BOM 清单与组装" />
+  <LinkCard title="快速开始" href="@lang/tutorial/get-started" description="已有硬件？从这里开始烧录与配置" />
+</CardGrid>
+
+## 开发计划
+
+ESP-Claw 目前仍处于活跃开发阶段，欢迎向我们提交 Issue 反馈问题或提交 Feature 请求。
+也可以通过[在线问卷](https://fcn5wbhnyubf.feishu.cn/share/base/form/shrcndYcjbGFY1ymttTSyYoGIPh)告诉我们你的想法。
+
+[点此查看我们的 TODO List](https://fcn5wbhnyubf.feishu.cn/wiki/SRlgwWUYei4WmykU8uMcUtzTnFf?table=tblWSgzWcyW7jv7B&view=vewaP9B0KX)，
+为你心仪的 Feature / 关注的 Issue 投票，我们可以更早实现/修复！
+
+## 文档地图
+
+- **想从用户角度上手**：[快速开始](@lang/tutorial/get-started) → [Web 配置](@lang/tutorial/web-config) / [Console 交互](@lang/reference-project/console-usage) → [FAQ](@lang/tutorial/faq)
+- **想从开发者角度改固件**：[从源码编译与烧录](@lang/reference-project/build-from-source)，再配合 [项目架构总览](@lang/reference-project/)、[核心 Core](@lang/reference-core/)、[能力 Capabilities](@lang/reference-cap/)

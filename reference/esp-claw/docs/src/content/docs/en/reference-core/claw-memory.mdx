@@ -1,0 +1,64 @@
+---
+title: Memory Manager
+description: Session history and long-term memory file I/O and how they connect to claw_core.
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside, FileTree } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+
+Header: <LinkToSource relativePath="components/claw_modules/claw_memory/include/claw_memory.h" />
+
+## Init configuration
+
+Common fields in `claw_memory_config_t`:
+
+| Field | Meaning | `edge_agent` default |
+|------|------|------|
+| `session_root_dir` | Root for session history files | `/fatfs/sessions` |
+| `memory_root_dir` | Long-term memory directory (`claw_memory` manages `MEMORY.md` and all structured memory files under this directory) | `/fatfs/memory` |
+| `max_message_chars` | Max characters per message | `4096` |
+| `max_tool_iterations` | Maximum tool-call iterations, kept consistent with `claw_core` | `32` |
+| `enable_async_extract_stage_note` | Enable async extract-stage notes for structured memory | `true` in full mode |
+
+Session history is stored as an append-only data file plus a matching `.idx` file. It loads the complete indexed session and compacts old tool details only when the data file exceeds the session size limit after a finalized assistant turn.
+
+## Wiring into claw_core
+
+`claw_memory` connects via multiple Context Providers and Callback:
+
+**Context Providers** (registered after `claw_core_init`):
+
+- `claw_memory_profile_provider`: inject editable profile/persona files (`user.md` / `soul.md` / `identity.md`).
+- `claw_memory_long_term_provider` (full mode): inject only the long-term summary-tag catalog, not the full memory text.
+- `claw_memory_long_term_lightweight_provider` (lightweight mode): inject `MEMORY.md` text directly.
+- `claw_memory_session_history_provider`: inject recent turns for the current session.
+
+**Write-back Callback**:
+
+- `claw_memory_persist_context_callback`: passed as `claw_core_config_t.persist_context`; typed raw context records are appended to the session file for plain turns, tool rounds, final assistant records, and failure notes.
+- Full mode also enables `on_request_start` and `collect_stage_note` for structured-memory auto-extraction.
+
+## Long-term memory file layout
+
+`edge_agent` uses `claw_memory_init` to create required memory files under `/fatfs/memory/`:
+
+<FileTree>
+- fatfs/
+  - memory/
+    - memory_records.jsonl Structured memory records
+    - memory_index.json Summary-tag and keyword index
+    - memory_digest.log Memory-operation digest log
+    - MEMORY.md Human-readable memory view (read-only)
+    - user.md User profile
+    - soul.md Persona
+    - identity.md Identity
+</FileTree>
+
+<Aside type="caution" title="About the role of MEMORY.md">
+  In full structured mode, `MEMORY.md` is mainly a synchronized artifact for human inspection, not the retrieval source.
+
+  Retrieval and recall use `memory_records.jsonl` + `memory_index.json`.
+</Aside>
+
+<LinkCard title="Memory" href="@lang/reference-project/memory" description="Init fields, full/lightweight mode differences, and memory directory layout" />

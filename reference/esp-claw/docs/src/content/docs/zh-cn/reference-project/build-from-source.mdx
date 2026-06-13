@@ -1,0 +1,90 @@
+---
+title: 从源码编译与烧录
+description: 从源码编译与烧录 ESP-Claw。
+---
+
+import { Steps, Aside, Badge } from '@astrojs/starlight/components';
+import LinkToSource from '@/components/LinkToSource.astro';
+
+
+<Aside>
+    本章节适用于开发者。
+    - 如果你只是想快速体验 ESP-Claw，请参考 [快速开始](@lang/tutorial/get-started)。
+    - 如果你想理解架构与模块边界，请从 [项目架构总览](@lang/reference-project/) 入手，再按需阅读 [核心 Core](@lang/reference-core/) 与 [能力 Capabilities](@lang/reference-cap/)。
+</Aside>
+
+## 操作流程
+
+<Steps>
+1. **准备 ESP-IDF 环境**
+
+   {/* 链接有意指向 v6.0 文档：v6.0 的安装教程比 v5.x 文档更加详细，安装步骤具有向下兼容性，实际安装的 IDF 版本为 v5.5.4 */}
+   参考 [ESP-IDF 安装指南](https://docs.espressif.com/projects/esp-idf/zh_CN/v6.0/esp32s3/get-started/index.html#get-started-set-up-tools)，安装 ESP-IDF v5.5.4，并激活 ESP-IDF 环境。
+
+   激活 IDF 环境后，安装 ESP Board Manager 包：
+   ```bash
+   pip install esp-bmgr-assist
+   ```
+
+   <Aside title="需要适配新的开发板？" type="tip">
+    ESP-Claw 使用 ESP Board Manager 适配多种开发板。
+
+    如需添加其他开发板，请参考 [ESP Board Manager 文档](https://github.com/espressif/esp-gmf/blob/main/packages/esp_board_manager/docs/how_to_customize_board_cn.md)，
+    将开发板适配文件存放到 <LinkToSource relativePath="application/edge_agent/boards/" />
+
+    欢迎将开发板适配代码通过 Pull Request 提交到 ESP-Claw 仓库。
+   </Aside>
+
+2. **获取 ESP-Claw 源码**
+
+   ```bash
+   git clone https://github.com/espressif/esp-claw.git
+   cd esp-claw/application/edge_agent
+   ```
+
+3. **选择开发板**
+
+   ```bash
+   idf.py bmgr -c ./boards -b <board_name>
+   # 例如: idf.py bmgr -c ./boards -b esp32_S3_DevKitC_1
+   ```
+
+   <Aside type="tip" title="支持的开发板列表">
+      你可以通过以下命令列出支持的开发板列表：
+      ```bash
+      idf.py bmgr -c ./boards -l
+      ```
+
+      也可以在 <LinkToSource relativePath="application/edge_agent/boards/" /> 下查阅支持的开发板列表。
+   </Aside>
+
+   <Aside type="note" title="为什么不需要 set-target">
+      ESP Board Manager 会自动根据开发板选择合适的芯片型号，因此不需要 `idf.py set-target`。
+   </Aside>
+
+4. **调整 menuconfig 配置** <Badge variant="tip" text="可选" />
+
+   ```bash
+   idf.py menuconfig
+   ```
+   推荐修改以下配置：
+   - <kbd>(Top)</kbd> → <kbd>App Claw Config</kbd>
+     - 参考 [配置说明](@lang/reference-project/configuration#basic-config) 配置基础设置。
+   - <kbd>(Top)</kbd> → <kbd>Component config</kbd> → <kbd>ESP-Claw Core</kbd> → <kbd>Agent stage notification verbosity</kbd>
+     - 默认 Simple；
+     - 若希望 Event Router 收到 `agent_stage` 事件（例如经 `router_rules.json` 把工具调用进度发到 IM），请选择 Verbose。
+     - 详见 [数据流与自动化](@lang/reference-project/dataflow-and-automation#agent_stage-事件与执行过程通知)。
+   - <kbd>(Top)</kbd> → <kbd>Component config</kbd> → <kbd>ESP System Settings</kbd>
+     - 配置 `Channel for console output`，使其与开发板硬件一致。
+
+   <Aside type="tip">
+     设备运行后，配置也可通过 NVS 持久化，运行时修改无需重新编译。详见 [配置说明](@lang/reference-project/configuration)。
+   </Aside>
+
+5. **编译与烧录**
+
+   ```bash
+   idf.py build
+   idf.py flash monitor
+   ```
+</Steps>

@@ -1,0 +1,16 @@
+{
+  "id": "event_bus",
+  "category": "guide",
+  "it": {
+    "title": "Event Bus e Protocollo Sincronizzazione",
+    "synopsis": "event_bus",
+    "description": "Guida al bus degli eventi di sistema, WebSocket (/ws), Delta Sync e messaggi Swarm.",
+    "details": "NOME\n  event_bus - Bus degli eventi e protocolli di sincronizzazione in NucleoOS.\n\nDESCRIZIONE\n  NucleoOS adotta un modello event-sourced ed append-only per propagare i cambiamenti di stato in tempo reale tra hardware e client.\n\n  1. ENVELOPE DEGLI EVENTI:\n     Ciascun evento è serializzato in JSON (o CBOR per ESP-NOW/BLE):\n       { \"t\": \"topic\", \"seq\": 100, \"ts\": 1717245000, \"d\": { ... } }\n     - t: Topic dell'evento (es. 'fs.changed', 'rec.level').\n     - seq: Numero di sequenza incrementale (u32) univoco.\n     - ts: Timestamp Unix Epoch.\n     - d: Payload specifico dell'evento.\n\n  2. DELTA SYNC (RISPARMIO MEMORIA):\n     - I client web non memorizzano lo stato completo sul chip. Al momento della connessione a '/ws', inviano l'ultimo 'seq' memorizzato.\n     - Il server risponde trasmettendo solo gli eventi persi (dove seq > last), riducendo drasticamente l'uso di heap RAM.\n\n  3. EVENTI PRINCIPALI:\n     - fs.changed: Notifica modifiche su file (write, delete, mkdir).\n     - rec.level: Livello RMS del microfono (inviato ~ogni 0.8s durante la registrazione).\n     - rec.started / rec.stopped: Stato del registratore audio.\n     - apps.changed: Ricaricamento a caldo del catalogo app.\n\n  4. ESTENSIONE SWARM (ESP-NOW):\n     Gli eventi con namespace 'mesh.*' o dotati di campo 'src' (swarm origin) vengono propagati automaticamente tra i dispositivi Cardputer vicini."
+  },
+  "en": {
+    "title": "Event Bus and Sync Protocol",
+    "synopsis": "event_bus",
+    "description": "Technical manual on the WebSocket event bus (/ws), Delta Sync logic, and Swarm messages.",
+    "details": "NAME\n  event_bus - System event bus and synchronization protocols in NucleoOS.\n\nDESCRIPTION\n  NucleoOS utilizes an event-sourced append-only architecture to propagate system state changes in real-time across hardware and network clients.\n\n  1. EVENT ENVELOPE FORMAT:\n     Serialized as JSON (or CBOR for ESP-NOW and BLE links):\n       { \"t\": \"topic\", \"seq\": 100, \"ts\": 1717245000, \"d\": { ... } }\n     - t: Event topic namespace (e.g. 'fs.changed', 'rec.level').\n     - seq: Monotonic sequence number (u32).\n     - ts: Unix timestamp.\n     - d: Event-specific metadata dictionary.\n\n  2. DELTA SYNC MECHANISM:\n     - Client browsers do not request raw heap dumps. On WebSocket connection to `/ws`, they query sending their last known `seq` index.\n     - The firmware streams back only new delta entries (`seq > last`), protecting SRAM allocations from exhaustion.\n\n  3. CORE TOPICS:\n     - fs.changed: Emitted on SD Card file mutation operations (write, delete, mkdir).\n     - rec.level: RMS level peak measurements (emitted every ~0.8s during capture).\n     - rec.started / rec.stopped: Audio recorder status changes.\n     - apps.changed: Live reloading hook for the launcher app catalog.\n\n  4. SWARM MODE (ESP-NOW):\n     Events using the `mesh.*` namespace or carrying a remote `src` key are automatically gossiped to neighboring Cardputer nodes."
+  }
+}

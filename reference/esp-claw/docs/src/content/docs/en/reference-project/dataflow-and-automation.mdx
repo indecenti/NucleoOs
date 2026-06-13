@@ -1,0 +1,322 @@
+---
+title: Dataflow and automation
+description: How events enter the router, how rules act, and how outputs reach the Agent.
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+import { Code } from 'starlight-theme-nova/components'
+import RouterRulesSchema from '@/assets/router_rules.schema.json?raw';
+
+ESP-Claw is an **event-driven** Agent framework: an **Event** is the trigger for Agent messages and automation.
+
+<LinkCard href="@lang/reference-project/core-cap-event" title="Core, Capability, and Event" description="Events as the message carrier in ESP-Claw" />
+
+## Definitions
+
+### Event
+
+An Event is the message carrier in ESP-Claw: id, source, target, type, chat id, sender, text or JSON payload, timestamp, session policy, and more.
+
+`claw_event_t` (see <LinkToSource path="components/claw_modules/claw_event_router/include/claw_event.h" />) packs those fields.
+
+### Event Router
+
+`claw_event_router` is the event scheduler: it dispatches Events according to rules.
+
+### Rules
+
+`router_rules.json` is ESP-Claw's automation rules file: it defines how Events that enter `claw_event_router` are handled.
+The **order** of rules in `router_rules.json` is evaluation order. Each rule typically has:
+- `id`: unique rule id.
+- `ack`: optional acknowledgement after a match.
+- `consume_on_match`: whether matching stops further evaluation.
+- `match`: match conditions.
+- `actions`: action list, for example:
+    | Action | Typical use |
+    |--------------|----------|
+    | `call_cap` | Run a capability without the LLM |
+    | `run_agent` | Asynchronously submit to `claw_core`; Agent response is published back via `out_message` event |
+    | `run_script` | Run a Lua script |
+    | `send_message` | Send IM via outbound binding |
+    | `emit_event` | Emit a new Event back into `claw_event_router` |
+    | `drop` | Drop the Event |
+
+<Aside type="tip">
+  For actions such as `run_script`, `send_message`, and `emit_event`, put parameters under `actions[*].input` (for example, `{"type":"run_script","input":{"path":"demo.lua"}}`) instead of at the action object's top level.
+</Aside>
+
+`match.text` uses exact matching by default. To build command-style rules, set `match.text_match_rule` to `prefix`; the router left-trims the incoming text, requires a token boundary after the command, and exposes the argument text as `{{match.remainder}}`.
+
+```json
+{
+  "id": "run_script_command",
+  "match": {
+    "event_type": "message",
+    "event_key": "text",
+    "content_type": "text",
+    "text": "/run",
+    "text_match_rule": "prefix"
+  },
+  "actions": [
+    {
+      "type": "run_script",
+      "input": {
+        "path": "/fatfs/skills/runner/scripts/run.lua",
+        "args": {
+          "command": "{{match.remainder}}"
+        }
+      }
+    }
+  ]
+}
+```
+
+Matched text templates include `{{match.text}}`, `{{match.rule}}`, and `{{match.remainder}}`.
+
+`edge_agent` ships a starter `router_rules.json` for basic IM flows. See <LinkToSource relativePath="application/edge_agent/fatfs_image/router_rules/router_rules.json" />.
+
+Full syntax is captured in the JSON Schema.
+
+<details>
+    <summary>router_rules.json JSON Schema</summary>
+    <Code lang="json" code={RouterRulesSchema} title="router_rules.schema.json" />
+</details>
+
+<Aside type="tip" title="Editing router_rules.json by hand">
+    In `edge_agent`, the file lives at `/fatfs/router_rules/router_rules.json`.
+    Prefer Console commands to edit rules, but you can also edit via the Web file manager.
+
+    **Run `auto reload` after changes.**
+</Aside>
+
+## Event Router workflow
+
+### Rule matching flow
+
+After an Event enters the router, it is dequeued and walked against the rule set. The diagram shows the full logic:
+
+```d2
+direction: down
+
+queue: "Event queue"
+guard: {
+  label: "Source is\nclaw_event_router?"
+  shape: diamond
+}
+skip: "Skip (prevent router self-loop)"
+init_ctx: "Build ctx (event / rule / vars / last)"
+has_more: {
+  label: "More rules left?"
+  shape: diamond
+}
+match_check: {
+  label: "Rule enabled &&\nall match fields hit?"
+  shape: diamond
+}
+exec_actions: "Run actions in order"
+consume_check: {
+  label: "consume_on_match\n= true?"
+  shape: diamond
+}
+stop: "Stop matching\n(event consumed)"
+fallback_check: {
+  label: "No rule matched &&\ndefault_route_messages_to_agent &&\nevent_type = \"message\"?"
+  shape: diamond
+}
+run_default: "Default Agent\n(run_agent)"
+done: "Done"
+
+queue -> guard: "dequeue"
+guard -> skip: "yes"
+guard -> init_ctx: "no"
+init_ctx -> has_more
+has_more -> match_check: "yes"
+has_more -> fallback_check: "no (end of rules)"
+match_check -> exec_actions: "matched"
+match_check -> has_more: "no match"
+exec_actions -> consume_check
+consume_check -> stop: "yes"
+consume_check -> has_more: "no, continue"
+fallback_check -> run_default: "yes"
+fallback_check -> done: "no"
+```
+
+## `out_message` Event and Outbound Messages
+
+When the `run_agent` action is triggered, the Agent's response is not returned synchronously. Instead, it is published back to the Event Router as an asynchronous event of type `out_message`.
+
+To send the Agent's response to an IM channel, you need to configure a routing rule for `out_message`, for example:
+
+```json
+{
+  "id": "agent_out_message_send_message",
+  "consume_on_match": true,
+  "match": {
+    "source_cap": "claw_core",
+    "event_type": "out_message",
+    "content_type": "text"
+  },
+  "actions": [
+    {
+      "type": "send_message",
+      "input": {
+        "channel": "{{event.source_channel}}",
+        "chat_id": "{{event.chat_id}}",
+        "message": "{{event.text}}"
+      }
+    }
+  ]
+}
+```
+
+The `channel` / `chat_id` fields usually come from `target_channel` / `target_chat_id` passed when triggering `run_agent`.
+
+## Agent-request cancellation and queue cleanup
+
+After a `run_agent` action is submitted to `claw_core`, a `request_id` is allocated and recorded for later cancellation or tracking.
+
+Accordingly, the framework offers two cancellation layers (C APIs):
+
+- `claw_core_cancel_request(request_id)`: cancel the currently executing (in-flight) Agent request.
+- `claw_event_router_cancel_event(event_id)`: mark and skip one pending Event in the queue.
+- `claw_event_router_purge_queue(event_type_filter, source_cap_filter, &out_cancelled)`: batch-mark and skip pending queue Events (optional filters by event type and source cap).
+
+<Aside type="note">
+
+- These APIs only affect objects that have not finished processing; completed requests/Events are not rolled back.
+  - `claw_core_cancel_request(0)` means "cancel any current in-flight request"; when a concrete `request_id` is provided, only that request is matched.
+  - Event Router cancellation means "skip pending queue items", and does not affect actions already in execution.
+</Aside>
+
+## `agent_stage` Event and Execution Progress Notifications
+
+Besides the final `out_message`, `claw_core` can also publish `agent_stage` events during multi-round tool calling, which can be used to push staged tool-call progress information.
+
+The `agent_stage` event structure is:
+- `source_cap`: `claw_core`
+- `event_type`: `agent_stage`
+- `event.text`: staged information during tool calls
+
+To auto-publish `agent_stage` events, adjust this menuconfig option: <kbd>(Top)</kbd> → <kbd>Component config</kbd> → <kbd>ESP-Claw Core</kbd> → <kbd>Agent stage notification verbosity</kbd>
+- With <kbd>Verbose</kbd>, `claw_core` publishes `agent_stage` events to Event Router on turns that contain tool calls.
+- With <kbd>Simple</kbd>, `agent_stage` events are not published at the routing layer.
+
+`agent_stage` events can be routed to channels such as IM to provide real-time progress updates.
+For example, `edge_agent` includes rule `agent_stage_im_notify` in <LinkToSource relativePath="application/edge_agent/fatfs_image/router_rules/router_rules.json" />. When Verbose is enabled and this rule matches, it sends `{{event.text}}` from `agent_stage` back to the source IM conversation.
+
+## Scheduled Dispatch
+
+`cap_scheduler` provides time-based event triggering, supporting three types: `once`, `interval` (repeating), and `cron` (calendar expression, 5 segments, no seconds).
+
+The scheduler is **only responsible for publishing Events on time**; the specific behavior after triggering is determined by the Event Router's rules. Therefore, adding a scheduled task typically requires two steps:
+
+1. Add a schedule item (via `schedules.json` or `scheduler_add`).
+2. Add a matching routing rule (via `router_rules.json` or `add_router_rule`).
+
+Typical matching: the schedule item sets `event_type: "schedule"` + `event_key`, and the routing rule hits it using `match.event_type` + `match.event_key`.
+
+### Scheduler Console Commands
+
+```sh
+scheduler --list                     # list all schedule items
+scheduler --reload                   # reload from disk
+scheduler --add --json '<json>'      # add a new schedule item
+scheduler --enable <id>              # enable
+scheduler --disable <id>             # disable
+scheduler --pause <id>               # pause
+scheduler --resume <id>              # resume
+scheduler --trigger <id>             # trigger once immediately
+```
+
+### Scheduler LLM Tools
+
+`cap_scheduler` registers tools like `scheduler_list`, `scheduler_get`, `scheduler_add`, `scheduler_update`, `scheduler_remove`, `scheduler_enable`, `scheduler_disable`, `scheduler_pause`, `scheduler_resume`, `scheduler_trigger_now`, and `scheduler_reload`. `cap_scheduler` is visible to the LLM by default and does not require Skill activation to use.
+
+`cap_router_mgr` registers tools like `list_router_rules`, `get_router_rule`, `add_router_rule`, `update_router_rule`, `delete_router_rule`, and `reload_router_rules`.
+
+<Aside type="tip">
+  Both the scheduler and router manager provide Skill files (`cap_scheduler.md`, `cap_router_mgr.md`). The LLM can activate the corresponding Skill to get detailed usage guidance when needed.
+</Aside>
+
+## Event Router Console commands
+
+<LinkCard href="@lang/reference-project/console-usage" title="Console usage" description="Basic Console command usage" />
+
+Event Router provides two sets of Console commands. The `auto` command comes from `edge_agent`, and the `event_router` command comes from `cap_router_mgr`. Both are functionally equivalent and operate on the same set of rules.
+
+```sh
+# auto command (provided by edge_agent)
+auto reload                  # reload router_rules.json
+auto rules                   # dump current rules JSON
+auto rule <id>               # show one rule JSON
+auto add_rule '<json>'       # append a rule
+auto update_rule '<json>'    # replace rule by id
+auto delete_rule <id>        # delete a rule
+auto emit_message ...        # details below
+auto emit_trigger ...        # details below
+auto last                    # last match stats, details below
+
+# event_router command (provided by cap_router_mgr)
+event_router --rules                     # dump current rules JSON
+event_router --rule <id>                 # show one rule JSON
+event_router --add-rule-json '<json>'    # append a rule
+event_router --update-rule-json '<json>' # replace rule by id
+event_router --delete-rule <id>          # delete a rule
+event_router --reload                    # reload router_rules.json
+event_router --emit-message ...          # publish message Event
+event_router --emit-trigger ...          # publish trigger Event
+event_router --last                      # last match stats
+```
+
+- `auto emit_message` synthesizes an IM-style message Event:
+
+    ```sh
+    auto emit_message <source_cap> <channel> <chat_id> <text...>
+    # auto emit_message qq_gateway    qq      123456   hello world
+    ```
+
+    | Arg | Meaning | Example |
+    |------|------|------|
+    | `source_cap` | Source capability name | `qq_gateway` |
+    | `channel` | Source channel | `qq` |
+    | `chat_id` | Chat id (group / topic, etc.) | `123456` |
+    | `text...` | Message text (spaces allowed; words concatenate) | `hello world` |
+
+
+
+- `auto emit_trigger` synthesizes a trigger Event:
+    ```sh
+    auto emit_trigger <source_cap> <event_type> <event_key> '<payload_json>'
+    # auto emit_trigger  tester      trigger     smoke_test '{"ok":true}'
+    ```
+
+    | Arg | Meaning | Example |
+    |------|------|------|
+    | `source_cap` | Source capability name | `tester` |
+    | `event_type` | Event type for `match.event_type` | `trigger` |
+    | `event_key` | Event key for `match.event_key` | `smoke_test` |
+    | `payload_json` | JSON object payload | `'{"ok":true}'` |
+
+
+
+- `auto last` prints the last routing result, e.g.:
+
+    ```text
+    matched=true matched_rules=1 action_count=2 failed_actions=0 route=1 handled_at_ms=...
+    first_rule_id=handle-message
+    ack=matched:handle-message
+    last_error=ESP_OK
+    ```
+
+    | Field | Meaning |
+    |------|------|
+    | `matched` | Any rule matched |
+    | `matched_rules` | Number of matched rules |
+    | `action_count` | Actions executed |
+    | `failed_actions` | Actions that failed |
+    | `route` | `0` = PASS (not consumed), `1` = CONSUMED |
+    | `first_rule_id` | `id` of first matched rule |
+    | `ack` | Rendered `ack` from the matched rule |
+    | `last_error` | Last action error code |

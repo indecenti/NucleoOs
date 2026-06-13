@@ -1,0 +1,81 @@
+/* Centro Notifiche — stile Windows 11, stessa lingua visiva dell'action-center.
+   Tutto il DOM è iniettato da notify.js; qui solo l'aspetto. */
+
+/* ---- campanella in tray + badge non-letti ---- */
+#notif-bell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text); cursor: pointer; padding: 0 4px;
+}
+#notif-bell .nb-badge {
+  position: absolute; top: -3px; right: -2px; min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: 8px; background: var(--accent); color: #fff; font-size: 9px; font-weight: 700;
+  line-height: 15px; text-align: center; box-shadow: 0 0 0 1.5px #0e1830;
+}
+#notif-bell .nb-badge[hidden] { display: none; }
+#notif-bell.dnd { color: var(--muted); opacity: .7; }
+
+/* ---- flyout centro notifiche ---- */
+#notif-center {
+  position: absolute; right: 12px; bottom: calc(var(--taskbar-h) + 12px);
+  width: 360px; max-height: min(560px, 70vh); display: flex; flex-direction: column;
+  background: #0e1830cc; border: 1px solid #ffffff1a; border-radius: 12px;
+  box-shadow: 0 24px 64px #000c; backdrop-filter: blur(30px) saturate(2);
+  z-index: 9999; overflow: hidden;
+}
+html[data-theme='light'] #notif-center { background: #ffffffdd; }
+#notif-center:not(.hidden) { animation: popInRight .15s cubic-bezier(0.1, 0.9, 0.2, 1); }
+
+.nc-head {
+  display: flex; align-items: center; gap: 8px; padding: 12px 14px 8px;
+  border-bottom: 1px solid #ffffff12;
+}
+.nc-head .nc-title { font-size: 14px; font-weight: 600; flex: 1; }
+.nc-head button {
+  display: inline-flex; align-items: center; gap: 6px; background: #ffffff12;
+  border: 1px solid #ffffff0a; border-radius: 7px; color: var(--text); cursor: pointer;
+  font-size: 11px; padding: 6px 9px; transition: background .15s;
+}
+.nc-head button:hover { background: #ffffff22; }
+.nc-head button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+html[data-theme='light'] .nc-head button { background: #00000008; color: var(--text); }
+
+.nc-digest { padding: 8px 14px 0; font-size: 11px; color: var(--muted); letter-spacing: .01em; }
+.nc-digest[hidden] { display: none; }
+.nc-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.nc-empty { padding: 36px 16px; text-align: center; color: var(--muted); font-size: 12px; }
+
+.nc-item {
+  display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px;
+  background: #ffffff10; border: 1px solid #ffffff0a; border-left: 3px solid var(--accent);
+  border-radius: 9px; cursor: pointer; transition: background .15s;
+  animation: toastIn .2s cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+.nc-item:hover { background: #ffffff1c; }
+html[data-theme='light'] .nc-item { background: #00000006; }
+.nc-item.lvl-success { border-left-color: #5cdb95; }
+.nc-item.lvl-warn    { border-left-color: #ffcc4d; }
+.nc-item.lvl-critical{ border-left-color: #ff8093; }
+.nc-item .nc-ic { font-size: 18px; flex: none; line-height: 1.2; }
+.nc-item .nc-body { flex: 1; min-width: 0; }
+.nc-item .nc-row { display: flex; align-items: baseline; gap: 6px; }
+.nc-item .nc-ttl { font-size: 13px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nc-item .nc-count { font-size: 10px; font-weight: 700; color: var(--accent); flex: none; }
+.nc-item .nc-when { font-size: 10px; color: var(--muted); flex: none; }
+.nc-item .nc-txt { font-size: 12px; color: var(--muted); margin-top: 2px; word-break: break-word; }
+.nc-item .nc-tag { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-top: 4px; opacity: .8; }
+.nc-item .nc-x {
+  flex: none; align-self: flex-start; background: none; border: none; color: var(--muted);
+  cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; opacity: 0; transition: opacity .12s, color .12s;
+}
+.nc-item:hover .nc-x { opacity: 1; }
+.nc-item .nc-x:hover { color: var(--text); }
+
+/* ---- toast arricchito (livelli + azione), convive con #toast-container esistente ---- */
+.toast.n-toast { flex-direction: column; align-items: stretch; gap: 8px; }
+.toast.n-toast .nt-main { display: flex; align-items: flex-start; gap: 12px; }
+.toast.n-toast .nt-act {
+  align-self: flex-end; background: var(--accent); color: #fff; border: none; border-radius: 7px;
+  font-size: 11px; font-weight: 600; padding: 6px 12px; cursor: pointer;
+}
+.toast.warn .toast-title { color: #ffcc4d; }
+.toast.critical .toast-title { color: #ff8093; }

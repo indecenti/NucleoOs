@@ -1,0 +1,36 @@
+{
+  "_lang": "en",
+  "title": "WiFi Manager",
+  "btn_auto": "Auto",
+  "auto_hint": "Auto-refresh every 8s",
+  "connect": "Connect",
+  "reconnect": "Reconnect",
+  "forget": "Forget",
+  "password": "Password",
+  "password_keep": "Password (blank = use saved)",
+  "saved": "saved",
+  "saved_hint": "Saved network — auto-rejoin",
+  "priority": "priority",
+  "connecting": "Connecting to {ssid}…",
+  "connected_to": "Connected to {ssid}",
+  "connect_failed": "Connection failed — check the password",
+  "forgotten": "Network forgotten",
+  "need_pair": "Pair the device to manage networks",
+  "src_idle": "idle",
+  "empty_msg": "No networks found.<br>Press <b>Scan</b> to search again.",
+  "count": {
+    "one": "{count} network",
+    "other": "{count} networks"
+  },
+  "count_open": {
+    "one": "{count} open",
+    "other": "{count} open"
+  },
+  "ch": "ch {ch}",
+  "sec_open": "open",
+  "sec_open_hint": "Open network",
+  "hidden_ssid": "(hidden)",
+  "src_connected_only": "connected AP only — scan API pending",
+  "src_demo": "demo data — device offline",
+  "src_live": "live scan"
+}

@@ -1,0 +1,126 @@
+---
+title: FAQ
+description: 常见问题、故障现象与排查建议。
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note">
+  排查时建议保持串口连接，使用 `idf.py monitor`、[在线烧录工具](@lang/flash)的 Console，或 `minicom` 查看日志与执行命令。命令用法见 [Console 交互](@lang/reference-project/console-usage)。
+</Aside>
+
+## 基本运行
+
+### 启动后没有连上 Wi-Fi
+
+**常见原因：**
+- SSID/密码错误：两者均区分大小写。
+- 路由器频段不兼容：除 ESP32-C5 外，其他芯片暂仅支持 2.4GHz Wi-Fi。
+- Wi-Fi 信号过差。
+
+**排查建议：**
+1. 通过 SoftAP 下的 Web 配置页，修改 Wi-Fi SSID 与密码，连接到 2.4G Wi-Fi。[➡️Web 配置](@lang/tutorial/web-config)
+2. 使开发板靠近路由器。如果开发板带天线座，检查与天线连接是否良好。
+
+### `ask` 超时或没有回复
+
+**常见原因：**
+- 设备访问不了 LLM 云端（DNS、防火墙、地区网络）。
+- API Key、backend_type、model 不匹配或过期。
+- 模型过慢，超过路由层等待 `claw_core` 的时间（日志里会有线索）。
+- Event Router 规则不正确，消息无法正确路由。
+
+**排查建议：**
+1. 观察日志中是否有 HTTP / TLS 相关错误。
+2. 确认配置中 LLM 配置完整。[➡️配置说明](@lang/reference-project/configuration) 
+3. 检查 Event Router 规则是否正确，消息是否正确路由。
+
+### 通过 IM 发送的消息没有响应
+
+**常见原因：**
+- ESP-Claw 无法收到 IM 发送的消息，或者 ESP-Claw 无法通过 IM API 发送消息。
+- LLM 运行故障。
+- Event Router 规则不正确，消息无法正确路由。
+
+**排查建议：**
+1. 观察日志中的 HTTP 状态与错误消息。
+2. 查看 IM 消息是否已经收到。如果 IM 消息已收到，串口会打出相应 log。[➡️ESP-Claw 无法收发 IM 消息](#esp-claw-无法收发-im-消息)
+3. 检查 `ask` 命令是否正常运行：在串口使用 `ask "你好"`，如果能正常收到回复，说明 LLM 已经正常工作。[➡️`ask` 超时或没有回复](#ask-超时或没有回复)
+4. 检查 Event Router 规则是否正确，消息是否正确路由。
+
+### ESP-Claw 无法收发 IM 消息
+
+**常见原因：**
+- IM 配置参数不正确，或者 Secret/Token 过期。
+- ESP-Claw 无法访问 IM 平台 API：使用 Telegram Bot API 通常需要较好的网络环境。
+- 飞书等平台 Bot 权限配置不正确。
+
+**排查建议：**
+1. 观察日志中的 HTTP 状态与错误消息。
+2. 重新配置 IM 相关参数，配置完成后重启设备。
+3. 检查飞书 Bot 权限是否配置正确。
+
+## Agent 与工具
+
+### Agent 一直无法完成某个任务
+
+**典型症状：**
+- Agent 声称自己完成了某个任务，但实际没有完成。后续重复指令，Agent 仍然无法完成。
+
+**常见原因：**
+- LLM 可能因为在之前调用了错误的工具，导致后续 LLM 一直参考错误的上下文。
+- LLM 的能力欠佳，无法正确完成动作。
+
+**排查建议：**
+
+1. 向 Agent 发送 `/new` 命令，切换至新 Session。
+2. 更换能力较强的模型，或缩短历史上下文。
+
+### 模型「看不到」某个工具
+
+**常见原因：**
+
+- 该工具所在 **group** 不在 `claw_cap_set_llm_visible_groups` 白名单内（demo 默认是 `cap_files`、`cap_scheduler`、`cap_lua`、`cap_skill`、`cap_llm_inspect`、`cap_http_request`、`cap_web_search`、`cap_router_mgr`，完整结构化记忆模式还包含 `claw_memory`）。
+- 需要 **激活技能** 后，模型才会同时拿到工具文档与对应 group 的可见性。
+
+**排查建议：**
+
+1. `cap list` 确认 descriptor 已注册。
+2. 用 `skill --activate <id> --session <当前 session>` 激活后重试对话。
+
+### 模型声称调了工具但没有效果
+
+**常见原因：**
+
+- 模型幻觉，实际未产生 tool call。
+- 工具执行失败但回复里未说明。
+- 上下文过长导致行为异常。
+
+**排查建议：**
+
+1. 看 `claw_core` 日志里的 tool 名称摘要。
+2. 手工 `cap call <name> '<json>'` 复现。
+3. 更换能力较强的模型，或缩短历史上下文。
+
+### 自编程等高级功能表现不佳
+
+**常见原因：**
+- 所用模型的推理能力不足，无法正确生成 Lua 代码或复杂工具调用。
+
+**排查建议：**
+- 自编程、复杂工具组合等功能依赖强推理模型的能力，推荐选用 GPT-5.4 或类似性能的模型以取得最佳体验。
+- 如果使用较弱的模型，建议先从简单任务（日常问答、定时提醒等）开始体验。
+
+## 自动化与 Lua
+
+### 规则改了不生效
+
+1. 校验 JSON。
+2. `auto reload`。
+3. `auto emit_message` / `auto emit_trigger` 做最小用例。
+
+### Lua 执行失败
+
+- 路径是否在受管目录、扩展名是否为 `.lua`。
+- 参数是否符合脚本预期。
+- 异步任务是否超时（可尝试同步执行）。

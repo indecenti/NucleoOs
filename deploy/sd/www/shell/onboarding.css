@@ -1,0 +1,58 @@
+/* NucleoOS first-boot onboarding — curated welcome + install tutorial + AI key setup. */
+#nob-scrim{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(120% 120% at 50% 0%,rgba(20,28,46,.86),rgba(8,10,18,.94));
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:nob-fade .25s ease}
+@keyframes nob-fade{from{opacity:0}to{opacity:1}}
+#nob-card{width:min(560px,94vw);max-height:92vh;overflow:auto;background:#10131c;border:1px solid #2a3550;
+  border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.6);color:#e7ecf6;font:14px/1.55 system-ui,Segoe UI,Roboto,sans-serif}
+.nob-hd{padding:26px 28px 8px;display:flex;gap:14px;align-items:center}
+.nob-logo{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;font-size:24px;
+  background:linear-gradient(135deg,#6aa8ff,#9b7bff);box-shadow:0 6px 18px rgba(106,168,255,.4)}
+.nob-hd h1{margin:0;font-size:19px;font-weight:650;letter-spacing:.2px}
+.nob-hd .nob-sub{margin:2px 0 0;font-size:12.5px;color:#8ea0c0}
+.nob-body{padding:8px 28px 4px}
+.nob-body p{margin:10px 0;color:#c4cfe4}
+.nob-body b{color:#fff}
+.nob-feat{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 4px}
+.nob-feat>div{background:#161b27;border:1px solid #232d44;border-radius:12px;padding:12px 14px}
+.nob-feat .ic{font-size:18px}
+.nob-feat .t{font-weight:600;margin:6px 0 2px;font-size:13px}
+.nob-feat .d{font-size:12px;color:#8ea0c0}
+.nob-choices{display:flex;flex-direction:column;gap:10px;margin:16px 0 6px}
+.nob-choice{display:flex;gap:13px;align-items:flex-start;text-align:left;width:100%;cursor:pointer;
+  background:#161b27;border:1.5px solid #232d44;border-radius:13px;padding:14px 16px;color:#e7ecf6;transition:.15s}
+.nob-choice:hover{border-color:#3a4a6e;background:#1a2030}
+.nob-choice.sel{border-color:#6aa8ff;background:#172238;box-shadow:0 0 0 3px rgba(106,168,255,.18)}
+.nob-choice .cic{font-size:22px;line-height:1.1}
+.nob-choice .ct{font-weight:650;font-size:14px}
+.nob-choice .cd{font-size:12.5px;color:#8ea0c0;margin-top:2px}
+.nob-choice .reco{display:inline-block;font-size:10px;font-weight:700;color:#0b0e16;background:#6aee9f;
+  border-radius:6px;padding:1px 7px;margin-left:8px;vertical-align:middle}
+.nob-steps{counter-reset:s;margin:14px 0;padding:0;list-style:none}
+.nob-steps li{position:relative;padding:6px 0 6px 38px;color:#c4cfe4;font-size:13px}
+.nob-steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:5px;width:24px;height:24px;
+  border-radius:50%;background:#1d2740;border:1px solid #31436c;color:#9fc1ff;display:grid;place-items:center;font-weight:700;font-size:12px}
+.nob-steps a{color:#7fb2ff}
+.nob-field{display:flex;flex-direction:column;gap:8px;margin:14px 0}
+.nob-field label{font-size:12px;color:#8ea0c0;font-weight:600}
+.nob-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.nob-input,.nob-select{flex:1;min-width:0;background:#0c0f17;border:1px solid #2a3550;border-radius:10px;
+  color:#e7ecf6;padding:11px 13px;font-size:13.5px;font-family:inherit}
+.nob-input:focus,.nob-select:focus{outline:none;border-color:#6aa8ff;box-shadow:0 0 0 3px rgba(106,168,255,.18)}
+.nob-select{cursor:pointer}
+.nob-stat{font-size:12.5px;min-height:18px;color:#9fb0cf;margin:2px 0 0}
+.nob-stat.ok{color:#6aee9f}.nob-stat.err{color:#ff8a8a}
+.nob-note{font-size:11.5px;color:#7c8aa6;margin:12px 0 2px;display:flex;gap:8px;align-items:flex-start}
+.nob-ft{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:18px 28px 24px}
+.nob-dots{display:flex;gap:7px}
+.nob-dots i{width:7px;height:7px;border-radius:50%;background:#2c3654;transition:.2s}
+.nob-dots i.on{background:#6aa8ff;width:18px;border-radius:4px}
+.nob-btns{display:flex;gap:10px}
+.nob-btn{border:1px solid #2a3550;background:#161b27;color:#e7ecf6;border-radius:10px;padding:10px 18px;
+  font-size:13.5px;font-weight:600;cursor:pointer;transition:.15s;font-family:inherit}
+.nob-btn:hover{background:#1d2738}
+.nob-btn.pri{background:linear-gradient(135deg,#6aa8ff,#7d8bff);border:none;color:#0a0d16}
+.nob-btn.pri:hover{filter:brightness(1.08)}
+.nob-btn.ghost{background:transparent;border-color:transparent;color:#8ea0c0}
+.nob-btn:disabled{opacity:.45;cursor:default;pointer-events:none}
+@media (max-width:520px){.nob-feat{grid-template-columns:1fr}}

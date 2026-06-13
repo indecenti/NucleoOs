@@ -1,0 +1,106 @@
+---
+title: Capabilities 总览
+description: ESP-Claw 中 cap_* 模块的整体架构、分类与注册机制。
+---
+
+import { CardGrid, Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+import LinkToSource from '@/components/LinkToSource.astro';
+
+## 什么是 Capability
+
+**Capability（能力）** 是 ESP-Claw 中一切可被调用功能的统一抽象单元。每个 `cap_*` 组件向 `claw_cap` 注册一个或多个带有元数据的 **描述符**（`claw_cap_descriptor_t`），系统在运行时通过统一入口路由调用。
+
+一个 Capability 可以扮演三种角色：
+
+| 角色 | `kind` 值 | 说明 |
+|------|-----------|------|
+| 可调用工具 | `CLAW_CAP_KIND_CALLABLE` | 接收 JSON 输入，返回字符串结果；可被 LLM、Console、事件规则调用 |
+| 事件源 | `CLAW_CAP_KIND_EVENT_SOURCE` | 持续运行，产生事件推入 `claw_event_router` |
+| 混合 | `CLAW_CAP_KIND_HYBRID` | 同时具备调用与事件源能力 |
+
+所有描述符通过 **Capability Group**（`claw_cap_group_t`）组织，Group 是 Capability 的最小管理单元，支持统一注册、启停与 LLM 可见性控制。
+
+## 系统内置 Capability 分类
+
+| 分类 | 组件 | 说明 |
+|------|------|------|
+| **IM 接入** | `cap_im_platform` | 飞书、QQ、Telegram、微信的统一 IM 组件，并注册 `cap_im_tg` 等按平台划分的运行时 Group |
+| **文件系统** | `cap_files` | 受管 FATFS 目录的读写、编辑、复制、移动、列举与删除 |
+| **Lua 脚本** | `cap_lua` | Lua 脚本的写入、同步/异步执行与任务管理 |
+| **Skill 管理** | `cap_skill` | Skill 的注册/注销与激活（暴露 core 功能为工具，激活时返回完整文档） |
+| **LLM 检视** | `cap_llm_inspect` | 将本地图像文件发送给 LLM 分析（与 LLM 产生嵌套交互） |
+| **HTTP 请求** | `cap_http_request` | 受 allowlist 保护的直接 HTTP / HTTPS 请求 |
+| **网络搜索** | `cap_web_search` | 调用外部搜索 API |
+| **时间** | `cap_time` | 查询设备当前本地时间，并为相对时间推理提供时间上下文 |
+| **系统信息** | `cap_system` | 查询设备系统/内存/CPU/Wi-Fi/IP 信息，并支持触发重启等运维操作 |
+| **调度器** | `cap_scheduler` | 定时任务的注册与管理 |
+| **Router 管理** | `cap_router_mgr` | 动态维护 Event Router 规则 |
+| **MCP** | `cap_mcp_*` | Model Context Protocol 客户端/服务端 |
+| **CLI** | `cap_cli` | 将 Capability 调用暴露为终端命令 |
+| **会话管理** | `cap_session_mgr` | 会话状态读写 |
+| **子智能体管理** | `cap_agent_mgr` | 仅根可用的子智能体派生 / 监管 / 关闭 / 删除 |
+
+## Group 注册机制
+
+每个 `cap_*` 组件在应用层通过 `cap_xxx_register_group()` 将自身注册到 `claw_cap`：
+
+```c
+// 以 cap_files 为例
+esp_err_t cap_files_register_group(void)
+{
+    if (claw_cap_group_exists(s_files_group.group_id)) {
+        return ESP_OK;
+    }
+    return claw_cap_register_group(&s_files_group);
+}
+```
+
+`claw_cap_register_group` 内部会验证 Group ID 唯一性，并将所有描述符的 `init` 钩子执行完成后即完成注册。调用 `claw_cap_start_group` 后，生命周期钩子 `start` 被调用（如 `cap_im_platform` 中的 TG 轮询任务启动）。
+
+## LLM 可见性控制
+
+并非所有已注册的 Group 都对 LLM 可见。`claw_cap_set_llm_visible_groups` 通过**白名单**决定哪些 Group 的工具会注入 LLM 上下文：
+
+```c
+// 典型设置：只对 LLM 初始暴露基础工具
+static const char *VISIBLE_GROUPS[] = { "cap_files", "cap_skill", "cap_system" };
+claw_cap_set_llm_visible_groups(VISIBLE_GROUPS, 3);
+```
+
+其余 Group 仍然存在，Console 与自动化规则可直接调用；通过激活 Skill 可以动态扩展 LLM 可见的工具集。
+
+<Aside type="tip">
+  **为什么不把所有 Capability 都暴露给 LLM？**
+
+  将大量 tool 描述符注入上下文会使 token 数量急剧增加，导致 LLM 推理质量下降，且增加延迟与成本。ESP-Claw 通过 Skills 机制实现「渐进式披露」：用户（或 LLM 自身）按需激活 Skill，仅在需要时加载对应工具描述。
+</Aside>
+
+## 调用路径
+
+Capability 可通过以下三条路径被调用：
+
+1. **LLM 工具调用**：`claw_core` → `claw_cap_call_from_core`（携带 session/channel 上下文）
+2. **Console 命令**：`cap call <name> <json>` 直接执行
+3. **Event Router 规则**：规则动作 `call_cap`（见 [数据流与自动化](@lang/reference-project/dataflow-and-automation)）
+
+`claw_cap_call_context_t.caller` 字段标识调用来源（`SYSTEM` / `AGENT` / `CONSOLE`），Capability 实现可据此区分行为。
+
+## 详细文档
+
+<CardGrid>
+  <LinkCard title="如何实现 Capability" href="./implement-capability" description="从零实现一个 cap_* 组件的完整步骤与最佳实践" />
+  <LinkCard title="cap_im_platform" href="./cap-im-platform" description="统一 IM 参考：飞书、QQ、Telegram 与微信" />
+  <LinkCard title="cap_skill" href="./cap-skill" description="core 功能暴露代表：将 claw_skill 能力封装为工具" />
+  <LinkCard title="cap_agent_mgr" href="./cap-agent-mgr" description="子智能体参考：仅根可用的派生、监管与回收子智能体" />
+  <LinkCard title="cap_llm_inspect" href="./cap-llm-inspect" description="LLM 交互代表：在工具执行中嵌套发起 LLM 推理" />
+  <LinkCard title="cap_files" href="./cap-files" description="文件系统代表：受管目录的读写、编辑、复制、移动与删除能力" />
+  <LinkCard title="cap_system" href="./cap-system" description="系统信息代表：读取设备运行状态并支持安全重启" />
+  <LinkCard title="cap_scheduler" href="./cap-scheduler" description="定时调度代表：基于时间触发事件，管理周期性任务" />
+  <LinkCard title="cap_http_request" href="./cap-http-request" description="受 Allowlist 保护的 HTTP/HTTPS 请求" />
+  <LinkCard title="cap_web_search" href="./cap-web-search" description="调用外部搜索 API（Tavily / Brave）进行网络搜索" />
+  <LinkCard title="cap_router_mgr" href="./cap-router-mgr" description="动态维护 Event Router 自动化规则" />
+  <LinkCard title="cap_mcp_client / cap_mcp_server" href="./cap-mcp" description="MCP 协议客户端与服务端，支持多设备工具互调" />
+  <LinkCard title="cap_lua 与 Lua 综述" href="./cap-lua" description="Lua 脚本能力与 Lua 在 ESP-Claw 中的整体定位" />
+  <LinkCard title="Lua 扩展模块" href="./lua-modules" description="lua_module_* / lua_driver_* 的注册机制、实现方式与 display 模块分析" />
+</CardGrid>

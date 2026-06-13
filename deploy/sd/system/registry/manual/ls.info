@@ -1,0 +1,16 @@
+{
+  "id": "ls",
+  "category": "terminal",
+  "it": {
+    "title": "ls - Elenca il contenuto di una directory",
+    "synopsis": "ls [path]",
+    "description": "Visualizza informazioni sui file e le cartelle presenti nella directory corrente o nel percorso specificato.",
+    "details": "NOME\n  ls - Elenca il contenuto delle directory.\n\nSINTASSI\n  ls [percorso]\n\nDESCRIZIONE\n  Elenca le entry della cartella specificata. Se nessun percorso è fornito, utilizza la directory di lavoro corrente (CWD).\n  Il formato dell'output ordina prioritariamente le directory (evidenziate in colore blu-accento e contrassegnate da uno slash finale '/') e successivamente i file in ordine alfabetico.\n\nOPZIONI\n  [percorso]\n    Il percorso assoluto o relativo della cartella da elencare.\n\nARCHITETTURA E BASSO LIVELLO\n  Il client esegue una chiamata HTTP GET a '/api/fs/list?path=<percorso>'. Sul firmware ESP32S3, la richiesta è gestita dal server HTTPD, il quale chiama a basso livello la funzione POSIX 'opendir()' e cicla con 'readdir()' leggendo le entry dal file system FAT montato su scheda SD. I dati vengono serializzati in JSON e inviati come risposta HTTP chunked.\n\nCODICI DI RITORNO\n  0\n    Successo. La cartella esiste e il contenuto è stato stampato.\n  1\n    Errore del filesystem (ad es. SD non montata) o API non raggiungibile.\n  404\n    La directory specificata non esiste sul filesystem.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  cd(1), find(1), pwd(1), web_api(7)\n\nESEMPI AVANZATI\n  ls               # Elenca la directory corrente\n  ls /data         # Mostra il contenuto della cartella data sulla SD\n  ls ../system     # Mostra il contenuto usando un percorso relativo superiore"
+  },
+  "en": {
+    "title": "ls - List directory contents",
+    "synopsis": "ls [path]",
+    "description": "List information about the files and directories under a specific path.",
+    "details": "NAME\n  ls - List directory contents.\n\nSYNOPSIS\n  ls [path]\n\nDESCRIPTION\n  List entries of the target folder. If no path is provided, falls back to the current working directory (CWD).\n  The output formats directories first (rendered in cyan with a trailing slash '/') and files sorted alphabetically.\n\nOPTIONS\n  [path]\n    The relative or absolute path of the target directory.\n\nSYSTEM ARCHITECTURE\n  The client performs an HTTP GET request to '/api/fs/list?path=<path>'. The ESP32S3 firmware maps this call to the POSIX APIs 'opendir()' and 'readdir()', fetching records from the SD Card FAT filesystem. Serialized JSON structures are streamed back using HTTP chunked transfer encoding.\n\nEXIT CODES\n  0\n    Success. The folder exists and contents were printed.\n  1\n    Filesystem or API error (e.g. SD Card unmounted).\n  404\n    The specified directory does not exist.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  cd(1), find(1), pwd(1), web_api(7)\n\nADVANCED EXAMPLES\n  ls               # List active directory\n  ls /data         # List contents of the SD Card data partition\n  ls ../system     # List using relative parent pathing"
+  }
+}

@@ -1,0 +1,94 @@
+---
+title: Event Router
+description: Unified event model, automation rules, and hand-off to Agent / scripts / outbound messages.
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+
+## Header Files
+
+The module is split into three header files:
+
+| Header | Responsibilities |
+|--------|------|
+| <LinkToSource relativePath="components/claw_modules/claw_event_router/include/claw_event.h" /> | Event struct `claw_event_t`, session policy enum `claw_event_session_policy_t`, `claw_event_clone`/`claw_event_free`/`claw_event_build_session_id` |
+| <LinkToSource relativePath="components/claw_modules/claw_event_router/include/claw_event_publisher.h" /> | Event publishing API: `claw_event_router_publish`/`claw_event_router_publish_message`/`claw_event_router_publish_trigger`, and the `claw_event_publish_fn` callback type |
+| <LinkToSource relativePath="components/claw_modules/claw_event_router/include/claw_event_router.h" /> | Router initialization, rule CRUD, configuration, outbound binding, `claw_event_router_handle_event`, etc. (imports `claw_event.h` for types) |
+
+At minimum, include `claw_event_publisher.h` if you only need to publish events (it automatically includes `claw_event.h`).
+
+## Responsibilities
+
+`claw_event_router` ingests structured `claw_event_t` events, matches them against `router_rules.json` (or rules added/removed at runtime), and runs a chain of actions (e.g. call a capability, run Lua, invoke the Agent, send a message, emit another event).
+
+For the end-to-end flow and full `router_rules.json` syntax, see [Dataflow and automation](@lang/reference-project/dataflow-and-automation).
+<LinkCard title="Dataflow and automation" href="@lang/reference-project/dataflow-and-automation" description="Full router_rules.json syntax, Event Router workflow, and Console commands" />
+
+## Event Sources
+
+Capabilities (especially IM gateways, MCP, etc.) call `claw_event_router_publish_message` or `claw_event_router_publish_trigger` at appropriate times. `claw_core` also publishes Agent responses as `out_message` events when the `CLAW_CORE_REQUEST_FLAG_PUBLISH_OUT_MESSAGE` flag is set;
+when `Verbose` stage notifications are enabled, it also emits `agent_stage` events during inference (see [Dataflow and automation](@lang/reference-project/dataflow-and-automation#agent_stage-event-and-execution-progress-notifications)).
+
+The router processes the queue asynchronously so heavy work does not run on CPU-heavy callback stacks.
+
+## Interaction with claw_core
+
+The `run_agent` action submits the request asynchronously to `claw_core` and returns immediately (status `queued`) without waiting for the Agent's response. Once inference is complete, `claw_core` publishes the response back to the Event Router as an `out_message` event via `claw_event_router_publish`. Rules then decide how to handle it (usually via `send_message` to an IM channel).
+
+Common fields in `claw_event_router_config_t`:
+
+- `core_submit_timeout_ms`: upper bound for the router thread waiting to submit a request to the `claw_core` queue.
+- `default_route_messages_to_agent`: whether certain messages are routed to the Agent when no rule matches.
+- `session_builder`: optional callback to override the default `claw_event_build_session_id` logic.
+- `outbound_resolver`: optional callback to resolve the `target_channel` to a capability name before checking the binding table.
+
+In `edge_agent`, `default_route_messages_to_agent` depends on whether the LLM is fully configured: if the LLM API is not set up correctly, it will be `false`.
+
+<Aside type="caution" title="When the LLM is not configured, claw_core does not start">
+  If any of the LLM API key, backend_type, or model is empty, `edge_agent` skips `claw_core_init` and `claw_core_start`, so the inference core never starts.
+  Then `run_agent`, `ask`, image inspect, and other core-dependent features stay unavailable until the LLM settings are filled in and the device reboots. The Event Router, automation rules, local capabilities, and the Console REPL still work.
+</Aside>
+
+## Queue cancellation and purge
+
+`claw_event_router` provides two pending-event queue management APIs:
+
+- `claw_event_router_cancel_event(event_id)`: cancel (skip) one pending event by `event_id`.
+- `claw_event_router_purge_queue(event_type_filter, source_cap_filter, &out_cancelled)`: batch-cancel pending events with optional filtering by `event_type` and `source_cap`, and returns how many were marked.
+
+<Aside type="note">
+
+  - These APIs only affect events that are still pending in the queue, and do not interrupt actions already executing.
+  - If the target `event_id` is not found in pending queue items, `claw_event_router_cancel_event` returns `ESP_ERR_NOT_FOUND`.
+  - This is useful for fast mitigation, such as clearing an event flood or retracting queued automation events before execution.
+
+</Aside>
+
+## Outbound channel bindings
+
+`claw_event_router_register_outbound_binding(channel, cap_name)` maps logical channel names to real capability names.
+
+User-facing “components” in ESP-Claw are also capabilities. When wrapping user input as an Event they add a `channel` field for the source and act as the default target `channel` for follow-on Events from that trigger.
+When the Event Router handles a final send-message Event, it resolves the target `channel` to a capability and invokes its `send_message` action. If an `outbound_resolver` is configured, it is called first; if it doesn't match, the binding table is used.
+
+In `edge_agent`, QQ, Feishu, Telegram, WeChat, and Web (local IM) each bind their send path and `channel` name.
+
+## Session policy
+
+`claw_event_session_policy_t` affects how `claw_event_build_session_id` derives session ids, and thus how events align with `claw_memory` / `claw_skill` session state.
+
+| Policy | Description |
+|------|------|
+| `CHAT` | Derived from `source_channel:chat_id`. All messages in the same chat window share a session. |
+| `TRIGGER` | Derived from `trigger:source_cap:event_key`. Each trigger source has an independent session. |
+| `GLOBAL` | Derived from `global:source_cap`. All events from the same source capability share a global session. |
+| `EPHEMERAL` | Derived from `ephemeral:event_id`. Each event gets a unique, one-time session. |
+| `NOSAVE` | Generates an empty session id (length 0). Turns are not saved to session history. |
+
+<Aside type="tip">
+
+  If automation or IM shows “mixed memory” or odd Skill activation, check that rule `session_policy` matches the event fields.
+
+</Aside>

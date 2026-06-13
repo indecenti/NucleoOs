@@ -1,0 +1,192 @@
+---
+title: cap_lua and Lua overview
+description: Where Lua fits in ESP-Claw, the `cap_lua` tool surface, and sync vs async execution.
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+
+Source: <LinkToSource relativePath="components/claw_capabilities/cap_lua/src/cap_lua.c" /> · header: <LinkToSource relativePath="components/claw_capabilities/cap_lua/include/cap_lua.h" />
+
+## Where Lua fits
+
+ESP-Claw uses **Lua** as the primary on-device language for **programmable automation**. It plays three roles:
+
+### 1. LLM-programmable execution layer
+
+The LLM can author scripts with file tools (`write_file`) and run them (`lua_run_script`). Lua bridges natural-language plans to hardware: GPIO, display, audio, etc.
+
+```
+LLM decides → emits Lua → write_file saves under scripts/ → lua_run_script runs → hardware reacts
+```
+
+### 2. Vehicle for automation actions
+
+`claw_event_router` supports a `run_script` action so rules can fire Lua **without** going through an LLM:
+
+```json
+{
+  // Some fields (for example, id) are omitted
+  "match": { "event_type": "button_pressed" },
+  "actions": [{ "type": "run_script", "input": { "path": "on_press.lua" } }]
+}
+```
+
+That yields fully local, low-latency responses without network or model cost.
+
+### 3. Rapid prototyping / extension surface
+
+Users who do not ship C firmware can still extend behavior via Lua. Native modules registered as `lua_module_*` / `lua_driver_*` expose peripherals through small Lua APIs.
+
+## Lua runtime sketch
+
+ESP-Claw runs Lua via `cap_lua_runtime_*` helpers. The runtime initializes in `cap_lua_group_init`, locks module registration, then starts.
+
+### Script path management
+
+Writable `cap_lua` runtime scripts must live under the Script Base Dir. In `edge_agent`, the default Script Base Dir is `/fatfs/scripts/` (apps can override it via `cap_lua_set_base_dir`). Read-only scripts bundled with Skills may run from `/fatfs/skills/<skill_id>/scripts/...`.
+
+- `path` must target a `.lua` file.
+- `path` supports two forms:
+  - Managed relative path: e.g. `hello.lua` or `builtin/test/hello.lua` (auto-expanded under `${base_dir}` and must not contain `..`).
+  - Skill-local absolute path: e.g. `{CUR_SKILL_DIR}/scripts/hello.lua` when an active skill documents that script. It resolves under `/fatfs/skills/<skill_id>/scripts/...`, must stay under the Skill root, and must not contain `..`.
+- Discover and read scripts with file tools: `list_dir {"keyword":"scripts/"}` and `read_file {"path":"scripts/hello.lua"}`.
+
+### Module registration lock
+
+`cap_lua_register_module` is only valid **before** `cap_lua_group_init`. After init, `s_module_registration_locked = true` and further registration returns `ESP_ERR_INVALID_STATE`, freezing the module set at boot.
+
+```c
+// During app init (before cap_lua_register_group)
+lua_module_display_register();   // register display
+lua_driver_gpio_register();      // register gpio
+// ...
+cap_lua_register_group("/fatfs/scripts");  // pass script base dir, then lock
+```
+
+## `cap_lua` tool surface
+
+`cap_lua` currently registers six Callables:
+
+| Tool ID | Purpose |
+|---------|---------|
+| `lua_run_script` | **Sync** run; block until output |
+| `lua_run_script_async` | **Async** enqueue; returns `job_id` immediately |
+| `lua_list_async_jobs` | List async jobs (status filter) |
+| `lua_get_async_job` | Fetch status/output for one job (supports lookup by `job_id` or `name`) |
+| `lua_stop_async_job` | Stop one async job (by `job_id` or `name`) |
+| `lua_stop_all_async_jobs` | Stop async jobs in bulk (optionally filter by `exclusive` group) |
+
+### Sync vs async
+
+| Mode | When to use | Timeout | Returns |
+|------|-------------|---------|---------|
+| `lua_run_script` | Quick work / state reads | optional `timeout_ms` | script output string |
+| `lua_run_script_async` | Long work (animation, waiting on sensors) | `timeout_ms=0` means run until stopped (default) | `job_id` |
+
+`lua_run_script_async` supports `name`, `exclusive`, and `replace` controls:
+
+- `name`: assign a logical name for later `lua_get_async_job` / `lua_stop_async_job` operations.
+- `exclusive`: mutual-exclusion group (for example, `"display"`), commonly used for single-slot resources.
+- `replace: true`: when an active job with the same `name` or `exclusive` group exists, attempt to preempt and replace it.
+
+Typical flow:
+
+```json
+// LLM call (start a long-running job):
+{"path": "animation.lua", "name": "clock_anim", "exclusive": "display", "timeout_ms": 0}
+
+// Immediate return:
+"Started Lua job 8a72f3c1 (name=clock_anim, exclusive=display, timeout_ms=0 [until cancelled], status=running) for animation.lua"
+
+// Later query:
+{"name": "clock_anim"}
+// Response: includes job_id / status / summary, etc.
+
+// Stop the job:
+{"name":"clock_anim"}
+```
+
+### Passing arguments
+
+Optional JSON `args` becomes the global `args` inside the script:
+
+```lua
+-- read parameters in-script
+local input = args  -- mirrors caller args object
+local speed = input.speed or 100
+```
+
+When `lua_run_script` / `lua_run_script_async` is triggered by the Agent inside an IM conversation, if the tool call does not explicitly provide `args.channel`, `args.chat_id`, or `args.session_id`, the runtime auto-merges the current session context into `args`.
+This lets scripts read conversation context directly (for example, for replies) without passing these fields every time.
+
+### Authoring scripts with file tools
+
+```json
+{"path": "scripts/hello.lua", "content": "print('hello')"}
+```
+
+Use `write_file` to create or overwrite Lua scripts under the file capability base dir. Then run the same script through `lua_run_script` with the leading `scripts/` removed, for example `{"path":"hello.lua"}`.
+
+## Runtime limits and stability
+
+- Lua timeout detection combines an instruction-hook check (triggered every fixed instruction count) with wall-clock timeout; when timed out, it throws `execution timed out`.
+- The hook callback proactively calls `taskYIELD()` to avoid tight loops monopolizing CPU and accidentally triggering the task watchdog.
+- Integer-like values in JSON `args` are preserved as Lua integer type where possible, reducing type ambiguity for GPIO values, pixel coordinates, and similar parameters.
+
+<Aside type="tip">
+  In loops for hardware polling or animation, explicitly calling `delay.delay_ms(...)` to yield CPU is still recommended; runtime protections exist, but cooperative yielding at script level is the safer practice.
+</Aside>
+
+## C-callable helpers
+
+Besides tools, `cap_lua` exposes C helpers for firmware code:
+
+```c
+// sync run
+cap_lua_run_script("startup.lua", NULL, 3000, output, sizeof(output));
+
+// async run (optional name / exclusive / replace)
+cap_lua_run_script_async("startup.lua",
+                         NULL,
+                         0,
+                         "startup_loop",
+                         "display",
+                         false,
+                         output,
+                         sizeof(output));
+
+// stop one async job (job_id or name)
+cap_lua_stop_job("startup_loop", 2000, output, sizeof(output));
+
+// stop all async jobs in a group
+cap_lua_stop_all_jobs("display", 2000, output, sizeof(output));
+
+// register module (must be before cap_lua_register_group)
+cap_lua_register_module("my_module", luaopen_my_module);
+```
+
+## Async job state machine
+
+Jobs move through:
+
+```d2
+queued -> running
+running -> done
+running -> failed
+running -> timeout
+running -> stopped
+```
+
+`lua_list_async_jobs` filters with `"all"` / `"queued"` / `"running"` / `"done"` / `"failed"` / `"timeout"` / `"stopped"`.
+
+## Coordination With Skills
+
+The `cap_lua` Skill instructs the model to inspect running Lua async jobs with `lua_list_async_jobs` / `lua_get_async_job` before stopping, replacing, or deactivating long-lived work.
+
+<Aside type="tip">
+  **Suggested workflow:** For peripheral-heavy scripts (continuous animation), submit with `lua_run_script_async` so the LLM can tell the user “started” immediately, then poll `lua_get_async_job` without stalling the Agent loop on a long script.
+</Aside>
+
+<LinkCard title="Lua extension modules" href="./lua-modules" description="How `lua_module_*` / `lua_driver_*` registers, how to build your own, and a deep dive on `display`" />

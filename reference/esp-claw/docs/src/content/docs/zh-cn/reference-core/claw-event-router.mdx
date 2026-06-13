@@ -1,0 +1,94 @@
+---
+title: Event Router
+description: 统一事件模型、自动化规则、与 Agent / 脚本 / 出站消息的衔接。
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+
+## 头文件
+
+模块拆分为三个头文件：
+
+| 头文件 | 职责 |
+|--------|------|
+| <LinkToSource relativePath="components/claw_modules/claw_event_router/include/claw_event.h" /> | 事件结构体 `claw_event_t`、会话策略枚举 `claw_event_session_policy_t`、`claw_event_clone`/`claw_event_free`/`claw_event_build_session_id` |
+| <LinkToSource relativePath="components/claw_modules/claw_event_router/include/claw_event_publisher.h" /> | 事件发布 API：`claw_event_router_publish`/`claw_event_router_publish_message`/`claw_event_router_publish_trigger`，以及 `claw_event_publish_fn` 回调类型 |
+| <LinkToSource relativePath="components/claw_modules/claw_event_router/include/claw_event_router.h" /> | 路由器初始化、规则 CRUD、配置、出站绑定、`claw_event_router_handle_event` 等（通过 `#include "claw_event.h"` 引入事件类型） |
+
+仅发布事件时，最少需要包含 `claw_event_publisher.h`（其自动引入 `claw_event.h`）。
+
+## 职责
+
+`claw_event_router` 接收结构化的 Event `claw_event_t`，再按 `router_rules.json`（或运行时增删改的规则）做匹配，执行一串动作（如调用 Capability、运行 Lua、调用 Agent、发送消息、继续抛事件等）。
+
+`claw_event_router` 的运作流程与 `router_rules.json` 的详细语法定义见 [数据流与自动化](@lang/reference-project/dataflow-and-automation)。
+<LinkCard title="数据流与自动化" href="@lang/reference-project/dataflow-and-automation" description="router_rules.json 完整语法、Event Router 工作流程与 Console 命令详解" />
+
+## 事件来源
+
+能力实现（尤其是 IM gateway、MCP 等）在合适时机调用 `claw_event_router_publish_message` 或 `claw_event_router_publish_trigger` 发布事件。`claw_core` 在设置了 `CLAW_CORE_REQUEST_FLAG_PUBLISH_OUT_MESSAGE` 标志时，也会将 Agent 响应以 `out_message` 类型的事件发布回 Event Router；
+在启用 `Verbose` 阶段通知时，还会在推理过程中发布 `agent_stage` 事件（见 [数据流与自动化](@lang/reference-project/dataflow-and-automation#agent_stage-事件与执行过程通知)）。
+
+路由任务异步处理队列中的事件，避免在回调栈里承担 CPU 负担较重的任务。
+
+## 与 claw_core 的衔接
+
+`run_agent` 动作将请求异步提交至 `claw_core`，提交后立即返回（状态为 `queued`），不再同步等待 Agent 响应。Agent 完成推理后，`claw_core` 通过 `claw_event_router_publish` 将响应以 `out_message` 事件发布回 Event Router，由规则决定如何处理（通常是 `send_message` 至 IM 通道）。
+
+`claw_event_router_config_t` 中常见字段含义：
+
+- `core_submit_timeout_ms`：路由线程等待提交请求至 `claw_core` 队列的超时时间。
+- `default_route_messages_to_agent`：是否在没有规则命中时，把某类消息默认送给 Agent。
+- `session_builder`：可选回调，覆盖默认的 `claw_event_build_session_id` 逻辑。
+- `outbound_resolver`：可选回调，在出站绑定表之前解析 `target_channel` 到 cap 名。
+
+`edge_agent` 中，`default_route_messages_to_agent` 取值取决于大语言模型是否已完整配置：如大语言模型 API 未正确配置，此处将为 `false`。
+
+<Aside type="caution" title="LLM 未配置时 claw_core 不会启动">
+  若 LLM 的 API Key、backend_type、model 三项任一为空，`edge_agent` 会跳过 `claw_core_init` 与 `claw_core_start`，整个推理核心不启动。
+  此时 `run_agent` 动作、`ask` 命令、图片 inspect 等依赖 core 的功能完全不可用，直到 LLM 配置补全并重启设备。Event Router、自动化规则、本地 Capability 和 Console REPL 仍可正常使用。
+</Aside>
+
+## 队列取消与清理
+
+`claw_event_router` 提供了两个“待处理事件队列”管理接口：
+
+- `claw_event_router_cancel_event(event_id)`：取消（跳过）指定 `event_id` 的待处理事件。
+- `claw_event_router_purge_queue(event_type_filter, source_cap_filter, &out_cancelled)`：批量取消待处理事件，可按 `event_type`、`source_cap` 过滤，并返回本次标记数量。
+
+<Aside type="note">
+
+  - 这两个接口作用于“队列里尚未被处理”的事件，不会中断已经在执行中的动作。
+  - 若指定 `event_id` 不存在于待处理队列，`claw_event_router_cancel_event` 将返回 `ESP_ERR_NOT_FOUND`。
+  - 适用于做“快速止损”：例如清空某类触发洪峰、撤销尚未执行的批量自动化事件。
+
+</Aside>
+
+## 出站通道绑定
+
+`claw_event_router_register_outbound_binding(channel, cap_name)` 把逻辑 channel 名映射到真实 Capability 名。
+
+提供用户交互的「组件」在 ESP-Claw 中也是一种 Capability。它将用户消息包装为 Event 时会添加 `channel` 字段，标示消息来源，并充当由该 Event 触发的一系列 Event 的默认目标 `channel`。
+当 Event Router 接收到最终发送消息的 Event 时，会根据目标 `channel` 字段找到对应的 Capability 并调用其 `send_message` 动作。若配置了 `outbound_resolver`，则先调用自定义解析器，未命中再查表。
+
+`edge_agent` 中，QQ、飞书、Telegram、微信、Web（本地 IM）分别绑定了其发送消息的函数与 `channel` 名称。
+
+## 会话策略
+
+`claw_event_session_policy_t` 影响 `claw_event_build_session_id` 如何为事件生成 session id，从而决定与 `claw_memory` / `claw_skill` 会话状态的对应关系。
+
+| 策略 | 说明 |
+|------|------|
+| `CHAT` | 按 `source_channel:chat_id` 生成，同一聊天窗口共享会话 |
+| `TRIGGER` | 按 `trigger:source_cap:event_key` 生成，每类触发源独立会话 |
+| `GLOBAL` | 按 `global:source_cap` 生成，同一来源 cap 共享全局会话 |
+| `EPHEMERAL` | 按 `ephemeral:event_id` 生成，每个事件独立的一次性会话 |
+| `NOSAVE` | 生成空 session id（长度为 0），不保存会话历史 |
+
+<Aside type="tip">
+
+  调用自动化或 IM 时，若发现「记忆杂糅」或「Skill 激活态异常」，可检查规则中 `session_policy` 与事件字段是否一致。
+
+</Aside>

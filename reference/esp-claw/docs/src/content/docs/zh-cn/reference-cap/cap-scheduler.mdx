@@ -1,0 +1,135 @@
+---
+title: cap_scheduler — 定时调度
+description: 定时调度代表：基于时间触发事件，管理一次性或周期性任务，与 Event Router 协同工作。
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+
+源码：<LinkToSource relativePath="components/claw_capabilities/cap_scheduler/src/cap_scheduler.c" /> · 头文件：<LinkToSource relativePath="components/claw_capabilities/cap_scheduler/include/cap_scheduler.h" />
+
+## 定位
+
+`cap_scheduler` 是 ESP-Claw 的**时间触发中心**。它负责在指定的时间点生成事件并推送到 `claw_event_router`。调度器本身不执行具体的业务逻辑（如发消息或调工具），而是通过发布事件来触发后续的自动化规则。
+
+这种「调度与执行分离」的设计，使得定时任务可以复用 Event Router 的所有动作能力（run_agent、call_cap、run_script 等）。
+
+## 核心概念
+
+### 调度项（Schedule Item）
+
+每个调度项定义了「什么时候」发布「什么样的事件」。主要字段包括：
+
+- `id`: 唯一标识。
+- `kind`: 调度类型，支持 `once`（一次性）、`interval`（间隔）、`cron`（标准 5 段式 Cron 表达式）。
+- `enabled`: 是否启用。
+- `event_type`: 发布事件的类型（对应路由规则的 `match.event_type`）。
+- `event_key`: 事件键（对应路由规则的 `match.event_key`）。
+- `payload_json`: 附带的 JSON 数据。
+
+### 调度数据持久化
+
+调度器管理两份数据：
+1. **定义文件** (`schedules.json`)：存储所有的调度项配置。
+2. **状态文件**（由 `schedules_path + ".state"` 自动推导，例如 `schedules.json.state`）：存储运行时的动态信息，如 `last_fire_ms`（上次触发时间）、`run_count`（运行次数）等。这保证了设备重启后能正确找回进度，不会丢失或重复触发任务。
+
+每次 `scheduler_reload`（以及启动时加载）后，调度器会将条目按默认值规则补齐 `schedules.json` 中的缺失字段。
+
+## 暴露给 LLM 的工具
+
+| 工具 ID | 功能 | 输入参数 |
+|---------|------|----------|
+| `scheduler_list` | 列出所有调度项及其运行状态 | (无) |
+| `scheduler_get` | 查询单个调度项详情 | `id` |
+| `scheduler_add` | 新增一个调度项 | `schedule_json` (字符串) |
+| `scheduler_update` | 更新一个已存在的调度项 | `schedule_json` (字符串) |
+| `scheduler_remove` | 删除一个调度项 | `id` |
+| `scheduler_enable` | 启用指定调度项 | `id` |
+| `scheduler_disable` | 禁用指定调度项 | `id` |
+| `scheduler_pause` | 暂停指定调度项 | `id` |
+| `scheduler_resume` | 恢复指定调度项 | `id` |
+| `scheduler_trigger_now` | 立即触发一次调度（不影响后续计划） | `id` |
+| `scheduler_reload` | 从磁盘重新加载配置 | (无) |
+
+其中：
+- `schedule_json` (字符串) 指 `{"schedule_json":"<JSON 字符串>"}`，其中 `schedule_json` 是字符串（需转义），不是嵌套的对象。
+- `id` 指 `{"id":"..."}`。
+
+## 使用示例
+
+### 1. 配置调度项
+
+典型的 `schedules.json` 条目：
+
+```json
+{
+  "id": "morning_reminder",
+  "kind": "cron",
+  "cron_expr": "0 7 * * *",
+  "enabled": true,
+  "event_type": "schedule",
+  "event_key": "reminder",
+  "text": "早上好！又是充满活力的一天，记得喝水喵。"
+}
+```
+
+### 2. 配置路由规则
+
+在 `router_rules.json` 中添加对应规则，将该调度事件发送到 IM：
+
+```json
+{
+  "id": "handle_morning_reminder",
+  "match": {
+    "event_type": "schedule",
+    "event_key": "reminder"
+  },
+  "actions": [
+    {
+      "type": "send_message",
+      "input": {
+        "channel": "telegram",
+        "chat_id": "YOUR_CHAT_ID",
+        "message": "{{event.text}}"
+      }
+    }
+  ]
+}
+```
+
+## 时间同步说明
+
+`cap_scheduler` 依赖系统时间的准确性。
+- 对于 `cron` 和 `once` 任务，必须在 SNTP 同步成功后才会触发。
+- 对于 `interval` 任务，若没有配置 `start_at` 或 `end_at`，则不依赖外部时间，上电即开始计时。
+- `cron` 的匹配基于设备当前本地时间（`localtime_r`）。
+
+### 首次时间同步后的时间校准
+
+`edge_agent` 在首次 SNTP 同步成功（`had_valid_time == false`）后，会调用 `cap_scheduler_handle_time_sync()` 对调度器进行时间校准（rebase）：设备上电后可能基于不准确的时钟提前开始计时，首次获得有效系统时间后，调度器会修正各任务的参考时间点，避免重复触发或遗漏触发。
+
+## 配置与初始化
+
+在应用层初始化：
+
+```c
+ESP_RETURN_ON_ERROR(cap_scheduler_init(&(cap_scheduler_config_t) {
+    .schedules_path = "/fatfs/scheduler/schedules.json",
+    .tick_ms = 1000,              // 检查频率（ms）
+    .max_items = 32,              // 最大调度项数
+    .task_stack_size = 6144,      // 调度任务栈大小
+    .task_priority = 5,           // 调度任务优先级
+    .task_core = tskNO_AFFINITY,  // 核心亲和性
+    .publish_event = claw_event_router_publish, // 绑定发布接口
+    .persist_after_fire = true,   // 触发后持久化运行时状态
+}), TAG, "Failed to init scheduler");
+
+// cap_scheduler_start() 在 claw_event_router_start() 之后调用
+cap_scheduler_start();
+```
+
+<Aside type="tip" title="LLM 交互技巧">
+  当用户说「每天 8 点提醒我...」时，大语言模型应先调用 `scheduler_add` 增加定时任务，再（如果需要）调用 `add_router_rule` 增加动作规则。
+
+  为了简化交互，建议将常用的提醒逻辑封装在 Lua 脚本中，自动化规则只需 `run_script` 即可。
+</Aside>

@@ -1,0 +1,80 @@
+{"child":"theoretical-physicist","parent":"physicist","child_it":"theoretical physicist","child_en":"theoretical physicist","parent_it":"physicist","parent_en":"physicist","src":"wd:Q19350898#P279:Q169470"}
+{"child":"theoretical-physicist","parent":"theorist","child_it":"theoretical physicist","child_en":"theoretical physicist","parent_it":"theorist","parent_en":"theorist","src":"wd:Q19350898#P279:Q18931911"}
+{"child":"physicist","parent":"scientist","child_it":"physicist","child_en":"physicist","parent_it":"scientist","parent_en":"scientist","src":"wd:Q169470#P279:Q901"}
+{"child":"physicist","parent":"physical-scientist","child_it":"physicist","child_en":"physicist","parent_it":"physical scientist","parent_en":"physical scientist","src":"wd:Q169470#P279:Q124637774"}
+{"child":"theorist","parent":"scientist","child_it":"theorist","child_en":"theorist","parent_it":"scientist","parent_en":"scientist","src":"wd:Q18931911#P279:Q901"}
+{"child":"scientist","parent":"researcher","child_it":"scientist","child_en":"scientist","parent_it":"researcher","parent_en":"researcher","src":"wd:Q901#P279:Q1650915"}
+{"child":"scientist","parent":"scholar","child_it":"scientist","child_en":"scientist","parent_it":"scholar","parent_en":"scholar","src":"wd:Q901#P279:Q20826540"}
+{"child":"physical-scientist","parent":"naturalist","child_it":"physical scientist","child_en":"physical scientist","parent_it":"naturalist","parent_en":"naturalist","src":"wd:Q124637774#P279:Q18805"}
+{"child":"scholar","parent":"person","child_it":"scholar","child_en":"scholar","parent_it":"person","parent_en":"person","src":"wd:Q20826540#P279:Q215627"}
+{"child":"naturalist","parent":"scientist","child_it":"naturalist","child_en":"naturalist","parent_it":"scientist","parent_en":"scientist","src":"wd:Q18805#P279:Q901"}
+{"child":"author","parent":"creator","child_it":"author","child_en":"author","parent_it":"creator","parent_en":"creator","src":"wd:Q482980#P279:Q2500638"}
+{"child":"academic","parent":"scientist","child_it":"academic","child_en":"academic","parent_it":"scientist","parent_en":"scientist","src":"wd:Q3400985#P279:Q901"}
+{"child":"academic","parent":"scholar","child_it":"academic","child_en":"academic","parent_it":"scholar","parent_en":"scholar","src":"wd:Q3400985#P279:Q20826540"}
+{"child":"creator","parent":"person","child_it":"creator","child_en":"creator","parent_it":"person","parent_en":"person","src":"wd:Q2500638#P279:Q215627"}
+{"child":"writer","parent":"author","child_it":"writer","child_en":"writer","parent_it":"author","parent_en":"author","src":"wd:Q36180#P279:Q482980"}
+{"child":"writer","parent":"artist","child_it":"writer","child_en":"writer","parent_it":"artist","parent_en":"artist","src":"wd:Q36180#P279:Q483501"}
+{"child":"writer","parent":"penman","child_it":"writer","child_en":"writer","parent_it":"penman","parent_en":"penman","src":"wd:Q36180#P279:Q108762424"}
+{"child":"artist","parent":"creator","child_it":"artist","child_en":"artist","parent_it":"creator","parent_en":"creator","src":"wd:Q483501#P279:Q2500638"}
+{"child":"penman","parent":"creator","child_it":"penman","child_en":"penman","parent_it":"creator","parent_en":"creator","src":"wd:Q108762424#P279:Q2500638"}
+{"child":"mathematician","parent":"scientist","child_it":"mathematician","child_en":"mathematician","parent_it":"scientist","parent_en":"scientist","src":"wd:Q170790#P279:Q901"}
+{"child":"mathematician","parent":"mathematicians-actuaries-and-statisticians","child_it":"mathematician","child_en":"mathematician","parent_it":"mathematicians, actuaries and statisticians","parent_en":"mathematicians, actuaries and statisticians","src":"wd:Q170790#P279:Q108289378"}
+{"child":"philosopher","parent":"humanities-scholar","child_it":"philosopher","child_en":"philosopher","parent_it":"humanities scholar","parent_en":"humanities scholar","src":"wd:Q4964182#P279:Q16727193"}
+{"child":"humanities-scholar","parent":"scientist","child_it":"humanities scholar","child_en":"humanities scholar","parent_it":"scientist","parent_en":"scientist","src":"wd:Q16727193#P279:Q901"}
+{"child":"humanities-scholar","parent":"scholar","child_it":"humanities scholar","child_en":"humanities scholar","parent_it":"scholar","parent_en":"scholar","src":"wd:Q16727193#P279:Q20826540"}
+{"child":"chemist","parent":"physical-scientist","child_it":"chemist","child_en":"chemist","parent_it":"physical scientist","parent_en":"physical scientist","src":"wd:Q593644#P279:Q124637774"}
+{"child":"university-teacher","parent":"teacher","child_it":"university teacher","child_en":"university teacher","parent_it":"teacher","parent_en":"teacher","src":"wd:Q1622272#P279:Q37226"}
+{"child":"teacher","parent":"educator","child_it":"teacher","child_en":"teacher","parent_it":"educator","parent_en":"educator","src":"wd:Q37226#P279:Q974144"}
+{"child":"teacher","parent":"academic","child_it":"teacher","child_en":"teacher","parent_it":"academic","parent_en":"academic","src":"wd:Q37226#P279:Q3400985"}
+{"child":"teacher","parent":"school-staff","child_it":"teacher","child_en":"teacher","parent_it":"school staff","parent_en":"school staff","src":"wd:Q37226#P279:Q11448772"}
+{"child":"educator","parent":"educational-personnel","child_it":"educator","child_en":"educator","parent_it":"educational personnel","parent_en":"educational personnel","src":"wd:Q974144#P279:Q93918935"}
+{"child":"educator","parent":"teaching-professionals","child_it":"educator","child_en":"educator","parent_it":"teaching professionals","parent_en":"teaching professionals","src":"wd:Q974144#P279:Q108284914"}
+{"child":"school-staff","parent":"employee","child_it":"school staff","child_en":"school staff","parent_it":"employee","parent_en":"employee","src":"wd:Q11448772#P279:Q703534"}
+{"child":"school-staff","parent":"educational-personnel","child_it":"school staff","child_en":"school staff","parent_it":"educational personnel","parent_en":"educational personnel","src":"wd:Q11448772#P279:Q93918935"}
+{"child":"pianist","parent":"keyboardist","child_it":"pianist","child_en":"pianist","parent_it":"keyboardist","parent_en":"keyboardist","src":"wd:Q486748#P279:Q1075651"}
+{"child":"keyboardist","parent":"instrumentalist","child_it":"keyboardist","child_en":"keyboardist","parent_it":"instrumentalist","parent_en":"instrumentalist","src":"wd:Q1075651#P279:Q1278335"}
+{"child":"instrumentalist","parent":"musician","child_it":"instrumentalist","child_en":"instrumentalist","parent_it":"musician","parent_en":"musician","src":"wd:Q1278335#P279:Q639669"}
+{"child":"musician","parent":"artist","child_it":"musician","child_en":"musician","parent_it":"artist","parent_en":"artist","src":"wd:Q639669#P279:Q483501"}
+{"child":"organist","parent":"musician","child_it":"organist","child_en":"organist","parent_it":"musician","parent_en":"musician","src":"wd:Q765778#P279:Q639669"}
+{"child":"organist","parent":"keyboardist","child_it":"organist","child_en":"organist","parent_it":"keyboardist","parent_en":"keyboardist","src":"wd:Q765778#P279:Q1075651"}
+{"child":"illustrator","parent":"graphic-artist","child_it":"illustrator","child_en":"illustrator","parent_it":"graphic artist","parent_en":"graphic artist","src":"wd:Q644687#P279:Q1925963"}
+{"child":"illustrator","parent":"draftsperson","child_it":"illustrator","child_en":"illustrator","parent_it":"draftsperson","parent_en":"draftsperson","src":"wd:Q644687#P279:Q15296811"}
+{"child":"graphic-artist","parent":"visual-artist","child_it":"graphic artist","child_en":"graphic artist","parent_it":"visual artist","parent_en":"visual artist","src":"wd:Q1925963#P279:Q3391743"}
+{"child":"draftsperson","parent":"graphic-artist","child_it":"draftsperson","child_en":"draftsperson","parent_it":"graphic artist","parent_en":"graphic artist","src":"wd:Q15296811#P279:Q1925963"}
+{"child":"draftsperson","parent":"visual-artist","child_it":"draftsperson","child_en":"draftsperson","parent_it":"visual artist","parent_en":"visual artist","src":"wd:Q15296811#P279:Q3391743"}
+{"child":"visual-artist","parent":"creator","child_it":"visual artist","child_en":"visual artist","parent_it":"creator","parent_en":"creator","src":"wd:Q3391743#P279:Q2500638"}
+{"child":"visual-artist","parent":"creative-and-performing-artist","child_it":"visual artist","child_en":"visual artist","parent_it":"creative and performing artist","parent_en":"creative and performing artist","src":"wd:Q3391743#P279:Q108289408"}
+{"child":"creative-and-performing-artist","parent":"legal-social-and-cultural-professionals","child_it":"creative and performing artist","child_en":"creative and performing artist","parent_it":"legal, social and cultural professionals","parent_en":"legal, social and cultural professionals","src":"wd:Q108289408#P279:Q108289030"}
+{"child":"poster-artist","parent":"graphic-designer","child_it":"poster artist","child_en":"poster artist","parent_it":"graphic designer","parent_en":"graphic designer","src":"wd:Q739437#P279:Q627325"}
+{"child":"poster-artist","parent":"visual-artist","child_it":"poster artist","child_en":"poster artist","parent_it":"visual artist","parent_en":"visual artist","src":"wd:Q739437#P279:Q3391743"}
+{"child":"graphic-designer","parent":"designer","child_it":"graphic designer","child_en":"graphic designer","parent_it":"designer","parent_en":"designer","src":"wd:Q627325#P279:Q5322166"}
+{"child":"designer","parent":"creative-professional","child_it":"designer","child_en":"designer","parent_it":"creative professional","parent_en":"creative professional","src":"wd:Q5322166#P279:Q4453355"}
+{"child":"creative-professional","parent":"creator","child_it":"creative professional","child_en":"creative professional","parent_it":"creator","parent_en":"creator","src":"wd:Q4453355#P279:Q2500638"}
+{"child":"playwright","parent":"writer","child_it":"playwright","child_en":"playwright","parent_it":"writer","parent_en":"writer","src":"wd:Q214917#P279:Q36180"}
+{"child":"dramaturge","parent":"writer","child_it":"dramaturge","child_en":"dramaturge","parent_it":"writer","parent_en":"writer","src":"wd:Q487596#P279:Q36180"}
+{"child":"stage-actor","parent":"actor","child_it":"stage actor","child_en":"stage actor","parent_it":"actor","parent_en":"actor","src":"wd:Q2259451#P279:Q33999"}
+{"child":"stage-actor","parent":"theatre-maker","child_it":"stage actor","child_en":"stage actor","parent_it":"theatre maker","parent_en":"theatre maker","src":"wd:Q2259451#P279:Q47492700"}
+{"child":"actor","parent":"performing-artist","child_it":"actor","child_en":"actor","parent_it":"performing artist","parent_en":"performing artist","src":"wd:Q33999#P279:Q713200"}
+{"child":"actor","parent":"creative-and-performing-artist","child_it":"actor","child_en":"actor","parent_it":"creative and performing artist","parent_en":"creative and performing artist","src":"wd:Q33999#P279:Q108289408"}
+{"child":"theatre-maker","parent":"artist","child_it":"theatre maker","child_en":"theatre maker","parent_it":"artist","parent_en":"artist","src":"wd:Q47492700#P279:Q483501"}
+{"child":"performing-artist","parent":"artist","child_it":"performing artist","child_en":"performing artist","parent_it":"artist","parent_en":"artist","src":"wd:Q713200#P279:Q483501"}
+{"child":"monarch","parent":"sovereign","child_it":"monarch","child_en":"monarch","parent_it":"sovereign","parent_en":"sovereign","src":"wd:Q116#P279:Q2304859"}
+{"child":"monarch","parent":"noble","child_it":"monarch","child_en":"monarch","parent_it":"noble","parent_en":"noble","src":"wd:Q116#P279:Q16744001"}
+{"child":"sovereign","parent":"head-of-state","child_it":"sovereign","child_en":"sovereign","parent_it":"head of state","parent_en":"head of state","src":"wd:Q2304859#P279:Q48352"}
+{"child":"noble","parent":"aristocrat","child_it":"noble","child_en":"noble","parent_it":"aristocrat","parent_en":"aristocrat","src":"wd:Q16744001#P279:Q2478141"}
+{"child":"head-of-state","parent":"statesperson","child_it":"head of state","child_en":"head of state","parent_it":"statesperson","parent_en":"statesperson","src":"wd:Q48352#P279:Q372436"}
+{"child":"head-of-state","parent":"leader","child_it":"head of state","child_en":"head of state","parent_it":"leader","parent_en":"leader","src":"wd:Q48352#P279:Q1251441"}
+{"child":"aristocrat","parent":"person-with-an-activity","child_it":"aristocrat","child_en":"aristocrat","parent_it":"person with an activity","parent_en":"person with an activity","src":"wd:Q2478141#P279:Q129586023"}
+{"child":"statesperson","parent":"politician","child_it":"statesperson","child_en":"statesperson","parent_it":"politician","parent_en":"politician","src":"wd:Q372436#P279:Q82955"}
+{"child":"leader","parent":"person","child_it":"leader","child_en":"leader","parent_it":"person","parent_en":"person","src":"wd:Q1251441#P279:Q215627"}
+{"child":"person-with-an-activity","parent":"person","child_it":"person with an activity","child_en":"person with an activity","parent_it":"person","parent_en":"person","src":"wd:Q129586023#P279:Q215627"}
+{"child":"military-officer","parent":"military-personnel","child_it":"military officer","child_en":"military officer","parent_it":"military personnel","parent_en":"military personnel","src":"wd:Q189290#P279:Q47064"}
+{"child":"military-officer","parent":"officer","child_it":"military officer","child_en":"military officer","parent_it":"officer","parent_en":"officer","src":"wd:Q189290#P279:Q61022630"}
+{"child":"military-personnel","parent":"civil-servant","child_it":"military personnel","child_en":"military personnel","parent_it":"civil servant","parent_en":"civil servant","src":"wd:Q47064#P279:Q212238"}
+{"child":"military-personnel","parent":"employee","child_it":"military personnel","child_en":"military personnel","parent_it":"employee","parent_en":"employee","src":"wd:Q47064#P279:Q703534"}
+{"child":"military-personnel","parent":"warrior","child_it":"military personnel","child_en":"military personnel","parent_it":"warrior","parent_en":"warrior","src":"wd:Q47064#P279:Q1250916"}
+{"child":"officer","parent":"leader","child_it":"officer","child_en":"officer","parent_it":"leader","parent_en":"leader","src":"wd:Q61022630#P279:Q1251441"}
+{"child":"civil-servant","parent":"public-employee","child_it":"civil servant","child_en":"civil servant","parent_it":"public employee","parent_en":"public employee","src":"wd:Q212238#P279:Q3796928"}
+{"child":"warrior","parent":"combatant","child_it":"warrior","child_en":"warrior","parent_it":"combatant","parent_en":"combatant","src":"wd:Q1250916#P279:Q1414937"}
+{"child":"public-employee","parent":"employee","child_it":"public employee","child_en":"public employee","parent_it":"employee","parent_en":"employee","src":"wd:Q3796928#P279:Q703534"}
+{"child":"combatant","parent":"person","child_it":"combatant","child_en":"combatant","parent_it":"person","parent_en":"person","src":"wd:Q1414937#P279:Q215627"}

@@ -1,0 +1,13 @@
+pre_check_docs:
+  stage: pre-check
+  tags:
+    - build
+  image: node:24-alpine
+  extends:
+    - .rules:pre_check:docs
+  script:
+    - cd docs
+    - corepack enable
+    - pnpm ci
+    - pnpm run check:doc-lines
+    - pnpm run astro check

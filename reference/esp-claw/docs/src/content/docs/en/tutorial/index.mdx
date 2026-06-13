@@ -1,0 +1,70 @@
+---
+title: Hello👋, welcome to ESP-Claw!
+description: An AI agent framework for IoT devices that defines device behavior through conversation.
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+import { LinkButton } from 'starlight-theme-nova/components'
+
+import ClawAnimationUrl from "@/assets/logos/claw-animation.svg?url";
+import ClawBreadboardPhotoJpg from "@/assets/images/claw-breadboard-photo.jpg?url";
+import ClawBreadboardPhotoWebp from "@/assets/images/claw-breadboard-photo.webp?url";
+
+<img src={ClawAnimationUrl} alt="ESP-Claw" width="50%" style="display: block; margin: 0 auto;" />
+
+**ESP-Claw** is a **Chat Coding** AI agent framework for IoT devices. It defines device behavior through conversation and completes the full loop of sensing, reasoning, decision-making, and execution locally on Espressif chips.
+
+<CardGrid stagger>
+  <Card title="Chat to Build" icon="comment">
+    Define device behavior through IM chat + dynamic Lua loading, with generated logic persisted as local deterministic rules
+  </Card>
+  <Card title="Event-Driven" icon="random">
+    Devices report events proactively with millisecond-level response; if no rule matches, call LLM automatically with cloud-edge collaboration
+  </Card>
+  <Card title="Bi-Directional MCP" icon="puzzle">
+    Devices act as both MCP Server and MCP Client, callable by external Agents while also calling external services proactively
+  </Card>
+  <Card title="Local Memory" icon="document">
+    Structured long-term memory with lightweight summary-tag retrieval, keeping privacy local
+  </Card>
+</CardGrid>
+
+## ESP-Claw vs Traditional IoT
+
+| **Dimension** | **Traditional IoT (Cloud-Centric)** | **ESP-Claw (Edge AI)** |
+| --- | --- | --- |
+| **Processing logic** | Preset static rules (If-This-Then-That) | LLM dynamic decision-making + Lua deterministic rules |
+| **Execution engine** | Rule engine | LLM + Lua + Router (three-tier event handling) |
+| **Control center** | Cloud server | Edge node (ESP chip) |
+| **Device protocol** | MQTT / Matter / proprietary SDK | MCP as a unified language + multi-protocol bridging |
+| **Memory management** | Cloud data storage | Local structured memory (JSONL + tags) |
+| **Interaction model** | App / control panel | IM chat (Telegram / WeChat / Feishu) |
+| **Intelligence** | Preset automation | LLM + local rules (continuous evolution) |
+
+## Get Started
+
+This tutorial walks you from zero to a working ESP32-S3 breadboard build, then flashes the latest ESP-Claw firmware.
+
+<picture>
+    <source srcset={ClawBreadboardPhotoWebp} type="image/webp" />
+    <img src={ClawBreadboardPhotoJpg} alt="ESP-Claw Breadboard" style="display: block; margin: 0 auto;" />
+</picture>
+
+<CardGrid>
+  <LinkCard title="Breadboard ESP-Claw" href="@lang/tutorial/assemble" description="BOM list and assembly" />
+  <LinkCard title="Get Started" href="@lang/tutorial/get-started" description="Already have hardware? Start flashing and setup here" />
+</CardGrid>
+
+## Development Plan
+
+ESP-Claw is still under active development. Feel free to open an issue to report problems or request features.
+You can also share your ideas through our [online survey (in Chinese)](https://fcn5wbhnyubf.feishu.cn/share/base/form/shrcndYcjbGFY1ymttTSyYoGIPh).
+
+[Click here to view our TODO List (in Chinese)](https://fcn5wbhnyubf.feishu.cn/wiki/SRlgwWUYei4WmykU8uMcUtzTnFf?table=tblWSgzWcyW7jv7B&view=vewaP9B0KX),
+and vote for the features or issues you care about. That helps us prioritize them sooner.
+
+## Documentation Map
+
+- **Start from user workflows:** [Get Started](@lang/tutorial/get-started) → [Web Config](@lang/tutorial/web-config) / [Console Usage](@lang/reference-project/console-usage) → [FAQ](@lang/tutorial/faq)
+- **Start from developer workflows:** [Build and Flash from Source](@lang/reference-project/build-from-source), then [Project Architecture](@lang/reference-project/), [Core](@lang/reference-core/), and [Capabilities](@lang/reference-cap/)

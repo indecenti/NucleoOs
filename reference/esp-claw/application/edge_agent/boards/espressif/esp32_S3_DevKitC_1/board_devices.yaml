@@ -1,0 +1,17 @@
+version: 1.0.0
+# Devices Configuration
+devices:
+
+  - name: led_strip
+    chip: ws2812
+    type: custom
+    version: default
+    init_skip: true
+    dependencies:
+      espressif/led_strip:
+        version: "^3.0"
+        public: true
+    config:
+      max_leds: 1                  # Number of LEDs in the strip
+    peripherals:
+      - name: rmt_tx               # RMT TX peripheral used by the LED strip

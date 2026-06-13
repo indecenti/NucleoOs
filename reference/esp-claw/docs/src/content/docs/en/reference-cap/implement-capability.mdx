@@ -1,0 +1,314 @@
+---
+title: How to implement a capability
+description: End-to-end guide for authoring a `cap_*` component—descriptors, group registration, and lifecycle hooks.
+---
+
+import { Aside, FileTree } from '@astrojs/starlight/components';
+import LinkToSource from '@/components/LinkToSource.astro';
+
+This page walks through authoring a custom capability for ESP-Claw—from layout and descriptors to registering a group.
+
+## Core data structures
+
+Understand two structs from <LinkToSource relativePath="components/claw_modules/claw_cap/include/claw_cap.h" /> before coding:
+
+### `claw_cap_descriptor_t` — single capability
+
+```c
+typedef struct {
+    const char *id;                  // unique id used when calling
+    const char *name;                // display name (often same as id)
+    const char *family;              // logical family tag (e.g. "im", "files", "system")
+    const char *description;         // model-facing summary
+    claw_cap_kind_t kind;            // CALLABLE / EVENT_SOURCE / HYBRID
+    uint32_t cap_flags;              // flags such as CLAW_CAP_FLAG_CALLABLE_BY_LLM
+    const char *input_schema_json;   // JSON Schema for parameters
+    // Optional lifecycle hooks
+    esp_err_t (*init)(void);
+    esp_err_t (*start)(void);
+    esp_err_t (*stop)(void);
+    // execute is required for CALLABLE kinds
+    esp_err_t (*execute)(const char *input_json,
+                         const claw_cap_call_context_t *ctx,
+                         char *output,
+                         size_t output_size);
+} claw_cap_descriptor_t;
+```
+
+### `claw_cap_group_t` — descriptor bundle
+
+```c
+typedef struct {
+    const char *group_id;                    // unique group id
+    const char *plugin_name;                 // optional plugin name
+    const char *version;                     // optional version string
+    void *plugin_ctx;                        // optional plugin private context
+    const claw_cap_descriptor_t *descriptors; // descriptor array
+    size_t descriptor_count;
+    // Optional group-level hooks (complement per-descriptor hooks)
+    esp_err_t (*group_init)(void);
+    esp_err_t (*group_start)(void);
+    esp_err_t (*group_stop)(void);
+} claw_cap_group_t;
+```
+
+## Implementation steps
+
+### Step 1 — scaffold the component
+
+<FileTree>
+- components/claw_capabilities/cap_my_feature
+    - CMakeLists.txt
+    - include
+        - cap_my_feature.h public header
+    - src
+        - cap_my_feature.c implementation
+    - skills optional skills bundle (see below)
+        - cap_my_feature
+            - SKILL.md Skill metadata and body
+</FileTree>
+
+Minimal `CMakeLists.txt`:
+
+```cmake
+idf_component_register(
+    SRCS "src/cap_my_feature.c"
+    INCLUDE_DIRS "include"
+    REQUIRES claw_cap cJSON # needs claw_cap plus cJSON for parsing inputs
+)
+```
+
+### Step 2 — public header
+
+Expose only registration to keep internals private:
+
+```c
+// include/cap_my_feature.h
+#pragma once
+#include "esp_err.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+esp_err_t cap_my_feature_register_group(void);
+
+#ifdef __cplusplus
+}
+#endif
+```
+
+### Step 3 — implement `execute`
+
+`execute` is the heart: JSON string in, formatted text out via `output`.
+
+```c
+static esp_err_t my_feature_execute(const char *input_json,
+                                     const claw_cap_call_context_t *ctx,
+                                     char *output,
+                                     size_t output_size)
+{
+    cJSON *root = cJSON_Parse(input_json ? input_json : "{}");
+    if (!root) {
+        snprintf(output, output_size, "Error: invalid JSON");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Pull routing context (session id, channel, chat_id, …)
+    const char *session_id = ctx ? ctx->session_id : NULL;
+
+    cJSON *param = cJSON_GetObjectItem(root, "param");
+    if (!cJSON_IsString(param)) {
+        cJSON_Delete(root);
+        snprintf(output, output_size, "Error: param is required");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Real work goes here …
+    snprintf(output, output_size, "Done: %s", param->valuestring);
+
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+```
+
+**Rules of thumb:**
+- Always render human/model text into `output`, not only UART logs
+- `ESP_OK` means success; other codes propagate to callers
+- Prefix human errors with `"Error: ..."`
+- `claw_cap_call_context_t` carries `session_id`, `chat_id`, `source_channel`, `caller`, etc., for multi-session routing
+
+### Step 4 — descriptors + group
+
+```c
+static const claw_cap_descriptor_t s_my_descriptors[] = {
+    {
+        .id = "my_action",
+        .name = "my_action",
+        .family = "custom",
+        .description = "Perform my custom action with the given param.",
+        .kind = CLAW_CAP_KIND_CALLABLE,
+        .cap_flags = CLAW_CAP_FLAG_CALLABLE_BY_LLM,
+        .input_schema_json =
+            "{\"type\":\"object\","
+            "\"properties\":{\"param\":{\"type\":\"string\"}},"
+            "\"required\":[\"param\"]}",
+        .execute = my_feature_execute,
+    },
+};
+
+static const claw_cap_group_t s_my_group = {
+    .group_id = "cap_my_feature",
+    .descriptors = s_my_descriptors,
+    .descriptor_count = sizeof(s_my_descriptors) / sizeof(s_my_descriptors[0]),
+};
+```
+
+### Step 5 — registration helper
+
+```c
+esp_err_t cap_my_feature_register_group(void)
+{
+    if (claw_cap_group_exists(s_my_group.group_id)) {
+        return ESP_OK;
+    }
+    return claw_cap_register_group(&s_my_group);
+}
+```
+
+### Step 6 — wire from the app
+
+Call from `app_claw.c` (or your init):
+
+```c
+#include "cap_my_feature.h"
+
+// In app_capabilities_init or a similar initialization file
+void my_app_init(void)
+{
+    // …other registrations…
+    cap_my_feature_register_group();
+    // add the group id to LLM visibility if needed
+}
+```
+
+## Lifecycle hooks
+
+Use `init` / `start` / `stop` when you own background work (poll loops, timers):
+
+```c
+static esp_err_t my_feature_start(void)
+{
+    // spin up FreeRTOS tasks, timers, etc.
+    s_running = true;
+    return xTaskCreate(my_poll_task, "my_poll", 4096, NULL, 5, &s_task) == pdPASS
+               ? ESP_OK : ESP_FAIL;
+}
+
+static esp_err_t my_feature_stop(void)
+{
+    s_running = false;
+    // wait for tasks to exit…
+    return ESP_OK;
+}
+
+// Wire hooks on the descriptor
+static const claw_cap_descriptor_t s_my_descriptors[] = {
+    {
+        // …
+        .init  = NULL,           // optional one-shot init
+        .start = my_feature_start,
+        .stop  = my_feature_stop,
+    },
+};
+```
+
+## Acting as an event source
+
+When you must emit events (IM ingress, sensors), set `kind` to `CLAW_CAP_KIND_EVENT_SOURCE` and publish from background work via the Event Router:
+
+```c
+// Text message event (common case)
+claw_event_router_publish_message(
+    "my_gateway",   // source_cap
+    "my_channel",   // source_channel
+    chat_id,        // chat_id
+    text,           // body
+    sender_id,      // sender id
+    message_id      // message id
+);
+
+// Custom event shape
+claw_event_t event = {0};
+strlcpy(event.source_cap, "my_gateway", sizeof(event.source_cap));
+strlcpy(event.event_type, "my_custom_event", sizeof(event.event_type));
+// …fill remaining fields…
+claw_event_router_publish(&event);
+```
+
+Downstream, `claw_event_router` decides between automation actions and handing off to `claw_core`.
+
+## Ship Skill docs
+
+<Aside type="tip" title="Optional but recommended">
+    Skills activation per capability is optional, yet each capability should still ship companion Skill docs.
+
+    Skills are the best progressive-disclosure mechanism so the LLM pulls full guidance only when needed.
+</Aside>
+
+### Directory layout
+
+Add `skills/` beside your sources:
+
+<FileTree>
+- cap_my_feature
+    - **skills** bundle directory
+        - cap_my_feature
+            - SKILL.md         Skill metadata and body
+</FileTree>
+
+At build time, `components/common/skill_builder` syncs these files under the FATFS skills root (default `/fatfs/skills/`).
+
+### `SKILL.md` frontmatter shape
+
+````md
+---
+{
+  "name": "cap_my_feature",
+  "description": "One-line summary shown before activation",
+  "metadata": {
+    "cap_groups": ["cap_my_feature"],
+    "manage_mode": "readonly"
+  }
+}
+---
+
+# cap_my_feature
+````
+
+Activating via `cap_skill` merges every listed group into the session’s LLM allow-list. One Skill may bind multiple groups—for example a “file editing” Skill that opens both `cap_files` and `cap_lua`.
+
+For authoring guidance (templates, required sections), see the [Skills reference](@lang/reference-project/skills#writing-effective-skill-documentation).
+
+<Aside type="tip" title="Skills vs. LLM visibility">
+  If your capability is very simple (for example, only one unambiguous query tool), you can skip a Skill and expose it by default via `claw_cap_set_llm_visible_groups`.
+
+  Skills are most valuable for complex tool usage guides, on-demand loading to control context size, and progressive disclosure across scenarios.
+</Aside>
+
+## Pattern cheat sheet
+
+| Need | Pattern | Reference |
+|------|---------|-----------|
+| Pure tool, no side effects | Small `execute` body | `cap_time`, `cap_llm_inspect` |
+| Filesystem IO | Path checks + POSIX APIs | `cap_files`, `cap_lua` |
+| Streaming / polling ingress | Background task + `EVENT_SOURCE` | `cap_im_tg` |
+| Nested LLM work | `claw_core_llm_infer_*` | `cap_llm_inspect` |
+| Mutate core runtime | Call `claw_skill_*` / `claw_cap_*` | `cap_skill` |
+
+<Aside type="caution">
+  **Memory hygiene:**
+  - Free scratch allocations before returning from `execute`
+  - `output` is typically 4–8 KB; never assume unbounded space
+  - For huge payloads, chunk, spill to disk, or return a path for follow-up reads
+</Aside>

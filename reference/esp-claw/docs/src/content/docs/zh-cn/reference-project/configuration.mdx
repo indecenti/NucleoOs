@@ -1,0 +1,43 @@
+---
+title: 配置说明
+description: 编译期默认值、NVS 持久化与 Web 修改的优先级与生效方式。
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components';
+import LinkToSource from '@/components/LinkToSource.astro';
+
+ESP-Claw `edge_agent` 使用 menuconfig (sdkconfig) 保存初始化默认配置，使用 NVS 持久化运行时修改的配置。
+
+`edge_agent` 会将配置储存在 NVS 命名空间 `app` 里。
+上电后，程序会读取 menuconfig 中的默认配置，再使用 NVS 中储存的键（如有）覆盖。
+字段列表与读写逻辑位于 <LinkToSource relativePath="application/edge_agent/components/app_config/app_config.c" />。
+
+<Aside title="优先级如何理解">
+  **当前运行使用的值 = NVS 里有的用 NVS，没有的用编译默认值。**
+
+  因此：第一次在 Web 或串口工具里保存过后，就会以 NVS 为准；想「恢复出厂默认」需要清除对应 NVS 键。
+</Aside>
+
+## edge_agent 配置字段
+
+ESP-Claw 不建议通过 menuconfig 修改配置，因为它们可能会被 NVS 内容覆盖。
+有关这部分配置的详细说明，请参考 Web 配置文档的说明。
+
+<LinkCard href="@lang/tutorial/web-config" title="Web 配置" description="了解如何通过 Web 配置修改配置" />
+
+## 编译期 Kconfig 选项
+
+除上述运行时可改的 NVS 配置外，部分行为由编译期 **Kconfig**（`menuconfig`）控制，未提供运行时修改方法，修改后需重新编译固件：
+
+- **`APP_CLAW_MEMORY_MODE`**：选择长期记忆工作模式。
+  - **Structured（完整结构化记忆，默认）**：启用结构化记忆抽取流程；LLM 可见组额外包含 `claw_memory`；注入摘要标签目录而非完整 `MEMORY.md`。
+  - **Lightweight（轻量）**：跳过结构化抽取，直接将 `MEMORY.md` 文本注入上下文；适合内存或上下文窗口受限场景。
+- **`APP_CLAW_ENABLE_EMOTE`**：是否在启动时启用 LCD 表情/状态显示组件。仅在板型带 LCD 时有意义，不开启可节省少量堆内存。
+
+可通过 `idf.py menuconfig` → `(Top)` → `App Claw Config` 查看和修改上述选项。
+
+<Aside type="caution" title="安全提醒">
+  配置页与 NVS 中存有机密令牌，请勿把导出的配置或整机 NVS 转储随意公开。
+</Aside>
+

@@ -1,0 +1,81 @@
+start Tue Jun  2 22:16:18     2026
+=== c-lang (qwen2.5-coder:7b) ===
+  + c.pointer: ask 14/14 -> 14/14  detail=y  (23s)
+  + c.dereference: ask 14/14 -> 14/14  detail=y  (15s)
+  + c.struct: ask 3/3 -> 8/8  detail=y  (22s)
+  + c.header: ask 3/3 -> 12/3  detail=y  (30s)
+  + c.include: ask 3/2 -> 8/7  detail=y  (20s)
+  + c.define: ask 3/2 -> 8/7  detail=y  (19s)
+  + c.malloc: ask 3/3 -> 13/3  detail=y  (29s)
+  + c.null: ask 3/2 -> 10/9  detail=y  (24s)
+  + c.array: ask 3/2 -> 13/12  detail=y  (27s)
+  + c.string: ask 3/3 -> 13/13  detail=y  (28s)
+  + c.stack-heap: ask 3/3 -> 9/9  detail=y  (19s)
+  + c.segfault: ask 3/2 -> 13/12  detail=y  (24s)
+  + c.const: ask 3/2 -> 13/2  detail=y  (27s)
+  + c.sizeof: ask 3/2 -> 7/6  detail=y  (16s)
+  + c.typedef: ask 3/2 -> 6/5  detail=y  (15s)
+  + c.enum: ask 3/2 -> 9/8  detail=y  (20s)
+  + c.compile-link: ask 3/3 -> 9/9  detail=y  (23s)
+  + c.pointer-arith: ask 2/2 -> 12/2  detail=y  (33s)
+[generate] tools/anima/knowledge/c-lang.jsonl updated
+[generate] enriched 18 card(s) with qwen2.5-coder:7b
+[done c-lang Tue Jun  2 22:23:11     2026]
+=== electronics (qwen2.5-coder:7b) ===
+  + elec.voltage: ask 4/3 -> 14/13  detail=y  (29s)
+  + elec.current: ask 3/3 -> 12/12  detail=y  (31s)
+  + elec.resistance: ask 3/2 -> 8/7  detail=y  (29s)
+  + elec.ohm-law: ask 5/4 -> 14/14  detail=y  (33s)
+  + elec.power: ask 3/3 -> 13/13  detail=y  (27s)
+  + elec.resistor: ask 3/2 -> 13/12  detail=y  (32s)
+  + elec.capacitor: ask 3/3 -> 13/13  detail=y  (27s)
+  + elec.diode: ask 3/2 -> 13/12  detail=y  (32s)
+Traceback (most recent call last):
+  File "G:\Nucleo\tools\anima\generate.py", line 131, in <module>
+    main()
+  File "G:\Nucleo\tools\anima\generate.py", line 110, in main
+    det["it"] = gd["it"].strip()
+                ^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'strip'
+[done electronics Tue Jun  2 22:27:30     2026]
+=== esp32 (qwen2.5-coder:7b) ===
+  + esp.esp32: ask 4/3 -> 14/13  detail=y  (31s)
+  + esp.esp32s3: ask 3/2 -> 13/12  detail=y  (30s)
+  + esp.microcontroller: ask 3/2 -> 9/8  detail=y  (20s)
+Traceback (most recent call last):
+  File "G:\Nucleo\tools\anima\generate.py", line 131, in <module>
+    main()
+  File "G:\Nucleo\tools\anima\generate.py", line 110, in main
+    det["it"] = gd["it"].strip()
+                ^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'strip'
+[done esp32 Tue Jun  2 22:29:19     2026]
+=== nucleoos (qwen2.5-coder:7b) ===
+  + os.device: ask 3/3 -> 9/9  detail=y  (28s)
+  + os.no-psram: ask 2/2 -> 12/12  detail=y  (31s)
+  + os.manifest: ask 3/2 -> 8/7  detail=y  (15s)
+  + os.runtimes: ask 2/2 -> 12/2  detail=y  (28s)
+  + os.associations: ask 2/2 -> 8/8  detail=y  (19s)
+Traceback (most recent call last):
+  File "G:\Nucleo\tools\anima\generate.py", line 131, in <module>
+    main()
+  File "G:\Nucleo\tools\anima\generate.py", line 110, in main
+    det["it"] = gd["it"].strip()
+                ^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'strip'
+[done nucleoos Tue Jun  2 22:31:35     2026]
+=== science (qwen2.5-coder:7b) ===
+Traceback (most recent call last):
+  File "G:\Nucleo\tools\anima\generate.py", line 131, in <module>
+    main()
+  File "G:\Nucleo\tools\anima\generate.py", line 110, in main
+    det["it"] = gd["it"].strip()
+                ^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'strip'
+[done science Tue Jun  2 22:32:02     2026]
+=== math (qwen2.5-coder:7b) ===
+  + math.km-metres: ask 2/2 -> 5/5  detail=y  (13s)
+  + math.hour-minutes: ask 2/1 -> 12/11  detail=y  (22s)
+  + math.day-hours: ask 1/1 -> 7/1  detail=y  (20s)
+  + math.week-days: ask 1/1 -> 6/6  detail=y  (15s)
+  + math.year-days: ask 1/1 -> 6/6  detail=y  (15s)

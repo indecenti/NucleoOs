@@ -1,0 +1,35 @@
+start Tue Jun  2 21:57:30     2026
+=== programming (qwen2.5-coder:7b) ===
+  + prog.variable: ask 3/2 -> 8/7  detail=y  (24s)
+  + prog.for-loop: ask 3/2 -> 13/12  detail=y  (33s)
+  + prog.while-loop: ask 2/1 -> 7/6  detail=y  (20s)
+  + prog.loop: ask 2/2 -> 12/12  detail=y  (26s)
+  + prog.if-else: ask 3/3 -> 13/13  detail=y  (30s)
+  + prog.function: ask 2/2 -> 12/12  detail=y  (32s)
+  + prog.array: ask 3/2 -> 13/12  detail=y  (26s)
+  + prog.string: ask 1/1 -> 6/6  detail=y  (17s)
+  + prog.boolean: ask 2/2 -> 12/12  detail=y  (26s)
+  + prog.integer: ask 2/2 -> 12/12  detail=y  (26s)
+  + prog.float: ask 2/2 -> 5/5  detail=y  (13s)
+  + prog.comment: ask 2/2 -> 12/12  detail=y  (29s)
+  + prog.function-param: ask 2/2 -> 12/12  detail=y  (34s)
+  + prog.return: ask 2/2 -> 7/7  detail=y  (18s)
+  + prog.recursion: ask 2/2 -> 12/12  detail=y  (33s)
+  + prog.object: ask 2/2 -> 8/8  detail=y  (17s)
+  + prog.class: ask 1/1 -> 6/6  detail=y  (17s)
+  + prog.api: ask 2/2 -> 8/8  detail=y  (25s)
+  + prog.json: ask 2/1 -> 7/6  detail=y  (19s)
+  + prog.http: ask 2/2 -> 12/12  detail=y  (30s)
+  + prog.compiler: ask 2/2 -> 12/12  detail=y  (28s)
+  + prog.algorithm: ask 1/1 -> 6/6  detail=y  (17s)
+Traceback (most recent call last):
+  File "G:\Nucleo\tools\anima\generate.py", line 131, in <module>
+    main()
+  File "G:\Nucleo\tools\anima\generate.py", line 110, in main
+    det["it"] = gd["it"].strip()
+                ^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'strip'
+[done programming Tue Jun  2 22:06:59     2026]
+=== c-lang (qwen2.5-coder:7b) ===
+  + c.pointer: ask 13/13 -> 14/14  detail=y  (21s)
+  + c.dereference: ask 13/12 -> 14/14  detail=y  (21s)

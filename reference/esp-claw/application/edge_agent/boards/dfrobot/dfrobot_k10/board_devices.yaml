@@ -1,0 +1,137 @@
+# Devices Configuration for DFRobot K10
+version: 1.0.0
+devices:
+
+  # IO Expander: TCA9555 (16-bit, I2C addr 0x20)
+  - name: gpio_expander
+    chip: tca9555
+    type: gpio_expander
+    version: default
+    dependencies:
+      espressif/esp_io_expander_tca95xx_16bit:
+        version: "*"
+        require: public
+    config:
+      max_pins: 16
+      output_io_mask: [0, 1]
+      output_io_level_mask: [1, 1]
+      input_io_mask: [2, 12]
+    peripherals:
+      - name: i2c_master
+        i2c_addr: [0x40]   # 8-bit for TCA9555 ADDRESS_000 (7-bit 0x20)
+
+  # Speaker path: I2S TX to NS4168 (CTRL selects I2S right slot in hardware).
+  - name: audio_dac
+    chip: internal
+    type: audio_codec
+    version: default
+    config:
+      adc_enabled: false
+      dac_enabled: true
+      dac_max_channel: 2
+      dac_channel_mask: "11"
+      dac_init_gain: 0
+      mclk_enabled: false
+    peripherals:
+      - name: i2s_audio_out
+
+  # Microphones: ES7243E, I2S Philips stereo (STD RX) @ 24 kHz on I2S0.
+  # I2C 0x22 = 8-bit style address for 7-bit 0x11 (AD0 high on K10).
+  - name: audio_adc
+    chip: es7243e
+    type: audio_codec
+    version: default
+    config:
+      adc_enabled: true
+      dac_enabled: false
+      adc_max_channel: 2
+      adc_channel_mask: "11"
+      adc_init_gain: 0
+      mclk_enabled: true
+    peripherals:
+      - name: i2s_audio_in
+      - name: i2c_master
+        address: 0x22
+        frequency: 400000
+
+  # Camera: GC2145 (2 MP) over DVP 8-bit
+  - name: camera
+    type: camera
+    sub_type: dvp
+    version: default
+    config:
+      dvp_config:
+        reset_io: -1
+        pwdn_io: -1
+        vsync_io: 4
+        de_io: 5
+        pclk_io: 17
+        xclk_io: 7
+        xclk_freq: 6000000
+        data_width: CAM_CTLR_DATA_WIDTH_8
+        data_io:
+          data_io_0: 8
+          data_io_1: 10
+          data_io_2: 11
+          data_io_3: 9
+          data_io_4: 18
+          data_io_5: 16
+          data_io_6: 15
+          data_io_7: 6
+          data_io_8: -1
+          data_io_9: -1
+          data_io_10: -1
+          data_io_11: -1
+          data_io_12: -1
+          data_io_13: -1
+          data_io_14: -1
+          data_io_15: -1
+    peripherals:
+      - name: i2c_master
+        frequency: 100000
+
+  # LCD: ILI9341 320×240 via SPI3
+  - name: display_lcd
+    chip: ili9341
+    type: display_lcd
+    sub_type: spi
+    version: default
+    dependencies:
+      espressif/esp_lcd_ili9341: "*"
+    config:
+      mirror_x: false
+      mirror_y: true
+      x_max: 240
+      y_max: 320
+      invert_color: false
+      io_spi_config:
+        cs_gpio_num: 14
+        dc_gpio_num: 13
+        spi_mode: 0
+        pclk_hz: 40000000
+        flags:
+          sio_mode: false
+      lcd_panel_config:
+        reset_gpio_num: -1
+        rgb_ele_order: LCD_RGB_ELEMENT_ORDER_BGR
+        bits_per_pixel: 16
+        data_endian: LCD_RGB_DATA_ENDIAN_BIG
+        flags:
+          reset_active_high: false
+    peripherals:
+      - name: spi_master
+
+  # LED strip: 3× WS2812
+  - name: led_strip
+    chip: ws2812
+    type: custom
+    version: default
+    init_skip: true
+    dependencies:
+      espressif/led_strip:
+        version: "^3.0"
+        require: public
+    config:
+      max_leds: 3
+    peripherals:
+      - name: rmt_tx

@@ -1,0 +1,72 @@
+version: 1.0.0
+# Peripherals Configuration for DFRobot K10
+peripherals:
+
+  # I2C bus (port 1) — IO expander (TCA9555), ES7243E, camera SCCB (GC2145).
+  - name: i2c_master
+    type: i2c
+    role: master
+    config:
+      port: 1
+      pins:
+        sda: 47   # AUDIO_CODEC_I2C_SDA_PIN
+        scl: 48   # AUDIO_CODEC_I2C_SCL_PIN
+
+  # I2S0 full-duplex @ 24 kHz: NS4168 (TX, SDI) + ES7243E (RX, SDOUT) share
+  # MCLK/BCLK/WS; keep TX/RX both stereo for consistent 2-channel record/play.
+  - name: i2s_audio_out
+    type: i2s
+    role: master
+    format: std-out
+    config: &i2s_k10_audio
+      port: 0
+      sample_rate_hz: 24000
+      mclk_multiple: 256
+      data_bit_width: 16
+      slot_bit_width: I2S_SLOT_BIT_WIDTH_AUTO
+      slot_mode: I2S_SLOT_MODE_STEREO
+      slot_mask: I2S_STD_SLOT_BOTH
+      ws_width: 16
+      pins:
+        mclk: 3    # AUDIO_I2S_GPIO_MCLK
+        bclk: 0    # AUDIO_I2S_GPIO_BCLK
+        ws: 38     # AUDIO_I2S_GPIO_WS
+        dout: 45   # AUDIO_I2S_GPIO_DOUT → NS4168 SDI
+        din: 39    # AUDIO_I2S_GPIO_DIN ← ES7243E SDOUT
+
+  - name: i2s_audio_in
+    type: i2s
+    role: master
+    format: std-in
+    config: *i2s_k10_audio
+
+  # SPI bus — ILI9341 320×240 LCD
+  - name: spi_master
+    type: spi
+    role: master
+    config:
+      spi_bus_config:
+        spi_port: SPI3_HOST
+        mosi_io_num: 21
+        miso_io_num: -1
+        sclk_io_num: 12
+        max_transfer_sz: 153600   # 320 * 240 * 2
+
+  # LED strip RMT TX — 3× WS2812 on GPIO46
+  - name: rmt_tx
+    type: rmt
+    role: tx
+    config:
+      gpio_num: 46   # BUILTIN_LED_GPIO
+      clk_src: RMT_CLK_SRC_DEFAULT
+      resolution_hz: 10000000
+      mem_block_symbols: 64
+      trans_queue_depth: 4
+      intr_priority: 1
+      flags:
+        invert_out: false
+        with_dma: true
+        io_loop_back: false
+        io_od_mode: false
+        allow_pd: false
+        init_level: false

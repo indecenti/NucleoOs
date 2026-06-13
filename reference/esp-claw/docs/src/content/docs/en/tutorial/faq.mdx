@@ -1,0 +1,126 @@
+---
+title: FAQ
+description: Common issues, symptoms, and troubleshooting tips.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note">
+  Keep serial attached; use `idf.py monitor`, the [web flasher](@lang/flash) Console, or `minicom` for logs and commands. Command usage: [Console usage](@lang/reference-project/console-usage).
+</Aside>
+
+## Basic operation
+
+### Wi‑Fi does not connect after boot
+
+**Typical causes:**
+- Wrong SSID/password (case-sensitive).
+- Router band mismatch: except ESP32-C5, only 2.4 GHz Wi‑Fi is supported today.
+- Weak signal.
+
+**What to try:**
+1. Open the Web config page under SoftAP, update Wi-Fi SSID and password, and connect to 2.4 GHz Wi-Fi. [➡️Web config](@lang/tutorial/web-config)
+2. Move the board closer to the AP; check antenna connection if present.
+
+### `ask` times out or never replies
+
+**Typical causes:**
+- Device cannot reach the LLM cloud (DNS, firewall, region).
+- API key / backend_type / model mismatch or expired key.
+- Model slower than router wait for `claw_core` (check logs).
+- Event Router rules mis-route messages.
+
+**What to try:**
+1. Look for HTTP/TLS errors in logs.
+2. Confirm LLM settings are complete. [➡️ Configuration](@lang/reference-project/configuration) 
+3. Validate Event Router rules and routing.
+
+### Messages sent via IM get no response
+
+**Typical causes:**
+- ESP-Claw never receives IM traffic or cannot call the IM API to send.
+- LLM runtime failure.
+- Event Router rules mis-route messages.
+
+**What to try:**
+1. Check HTTP status and error text in logs.
+2. Confirm the IM message was ingested—serial logs should show it. [➡️ ESP-Claw cannot send/receive IM](#esp-claw-cannot-send-or-receive-im)
+3. Run `ask "hello"` on serial; if that works, the LLM path is OK. [➡️ `ask` times out](#ask-times-out-or-never-replies)
+4. Re-check Event Router rules and routing.
+
+### ESP-Claw cannot send or receive IM
+
+**Typical causes:**
+- Wrong IM credentials or expired secret/token.
+- Device cannot reach IM platform APIs (Telegram often needs solid connectivity).
+- Feishu bot permissions misconfigured.
+
+**What to try:**
+1. Inspect HTTP status/errors in logs.
+2. Re-enter IM settings and reboot.
+3. Verify Feishu bot permissions.
+
+## Agent and tools
+
+### The Agent cannot complete a task
+
+**Typical symptoms:**
+- The Agent claims it completed a task but did not. Subsequent instructions, the Agent still cannot complete.
+
+**Common causes:**
+- The LLM may have called the wrong tool in the previous turn, causing the LLM to continue to reference the wrong context.
+- The LLM's ability is not strong enough to correctly complete the action.
+
+**What to try:**
+
+1. Send `/new` command to switch to a new Session.
+2. Use a stronger model or shorten history.
+
+### The model “does not see” a tool
+
+**Typical causes:**
+
+- The tool’s **group** is outside `claw_cap_set_llm_visible_groups` (demo defaults to `cap_files`, `cap_scheduler`, `cap_lua`, `cap_skill`, `cap_llm_inspect`, `cap_http_request`, `cap_web_search`, `cap_router_mgr`; full structured-memory mode also includes `claw_memory`).
+- A **Skill must be activated** so the model gets both the tool docs and that group's visibility.
+
+**What to try:**
+
+1. `cap list` to confirm descriptors registered.
+2. `skill --activate <id> --session <current session>` then retry chat.
+
+### The model claims it called a tool but nothing happens
+
+**Typical causes:**
+
+- Hallucinated tool call—no real tool invocation.
+- Tool failed but the reply hid the error.
+- Overlong context causing odd behavior.
+
+**What to try:**
+
+1. Read `claw_core` logs for tool name summaries.
+2. Manually `cap call <name> '<json>'`.
+3. Use a stronger model or shorten history.
+
+### Self-programming and other advanced features underperform
+
+**Typical causes:**
+- The model’s reasoning is too weak to reliably generate Lua code or complex tool calls.
+
+**What to try:**
+- Self-programming and complex tool orchestration depend on strong reasoning models; we recommend GPT-5.4 or similarly capable models for the best experience.
+- With weaker models, start with simpler tasks (daily Q&A, reminders, and so on).
+
+## Automation and Lua
+
+### Rule changes do not apply
+
+1. Validate JSON.
+2. `auto reload`.
+3. `auto emit_message` / `auto emit_trigger` for a minimal repro.
+
+### Lua execution fails
+
+- Path under the managed root? Extension `.lua`?
+- Args match script expectations?
+- Async task timing out (try synchronous run).

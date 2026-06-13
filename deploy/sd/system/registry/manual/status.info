@@ -1,0 +1,16 @@
+{
+  "id": "status",
+  "category": "system",
+  "it": {
+    "title": "status - Diagnostica globale di sistema",
+    "synopsis": "status",
+    "description": "Stampa lo stato di RAM, SD card, partizioni OTA e connettività di rete.",
+    "details": "NOME\n  status - Stato diagnostico.\n\nSINTASSI\n  status\n\nDESCRIZIONE\n  Visualizza la diagnostica del dispositivo: versione OS, uptime, heap RAM, SD card e stato di rete.\n\nARCHITETTURA E BASSO LIVELLO\n  Raccoglie i dati via HTTP da '/api/status'. Il firmware ESP32 interroga i moduli ESP-IDF per ricavare la configurazione attiva (heap, FAT, connessione Wi-Fi, NTP). Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo.\n  1\n    Errore di connessione.\n\nCONFORMITÀ A\n  Estensione NucleoOS proprietaria.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  uptime(1), free(1), web_api(7)\n\nESEMPI AVANZATI\n  status"
+  },
+  "en": {
+    "title": "status - Global system diagnostics",
+    "synopsis": "status",
+    "description": "Display heap memory, SD storage, network connectivity, and partition status.",
+    "details": "NAME\n  status - Diagnostic status.\n\nSYNOPSIS\n  status\n\nDESCRIPTION\n  Displays hardware and software diagnostics: OS version, uptime, heap, SD Card partitions, and network.\n\nSYSTEM ARCHITECTURE\n  Fetches statistics from '/api/status'. The ESP32 firmware intercepts this and queries internal ESP-IDF modules. See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    Network query failed.\n\nCONFORMING TO\n  NucleoOS proprietary extension.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  uptime(1), free(1), web_api(7)\n\nADVANCED EXAMPLES\n  status"
+  }
+}

@@ -1,0 +1,220 @@
+---
+title: cap_im_platform — 统一 IM 平台接入
+description: 飞书、QQ、Telegram、微信的统一 IM 组件，负责入站事件、出站发送与附件处理。
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+
+入口：<LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_platform.c" /> ·
+头文件：<LinkToSource relativePath="components/claw_capabilities/cap_im_platform/include/cap_im_platform.h" /> ·
+Skill：<LinkToSource relativePath="components/claw_capabilities/cap_im_platform/skills/cap_im_platform/SKILL.md" />
+
+## 定位
+
+`cap_im_platform` 是 ESP-Claw 的统一 IM 源码组件。它把飞书、QQ、Telegram、微信以及共享附件处理实现放在同一个 ESP-IDF 组件中，但运行时接口仍按平台拆分。
+
+这意味着构建依赖已经统一，但原有运行时 Group ID 与工具名保持稳定：
+
+| 运行时 Group | 事件源 | 文本 | 图片 | 文件 |
+|--------------|--------|------|------|------|
+| `cap_im_feishu` | `feishu_gateway` | `feishu_send_message` | `feishu_send_image` | `feishu_send_file` |
+| `cap_im_qq` | `qq_gateway` | `qq_send_message` | `qq_send_image` | `qq_send_file` |
+| `cap_im_tg` | `tg_gateway` | `tg_send_message` | `tg_send_image` | `tg_send_file` |
+| `cap_im_wechat` | `wechat_gateway` | `wechat_send_message` | `wechat_send_image` | 不支持 |
+| `cap_im_local` | `local_gateway` | `local_send_message` | — | — |
+
+## 组件结构
+
+平台组件仍按后端拆分源码文件，避免把协议细节混在一起：
+
+| 源码 | 职责 |
+|------|------|
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_platform.c" /> | 注册所有启用的 IM 运行时 Group。 |
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_feishu.c" /> | 飞书 WebSocket/Event API 入站、富文本展开与发送。 |
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_qq.c" /> | QQ Bot WebSocket 入站、Token 处理与发送。 |
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_tg.c" /> | Telegram 长轮询入站、附件下载队列与发送。 |
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_wechat.c" /> | 微信 ClawBot 轮询、扫码登录状态与发送。 |
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_attachment.c" /> | 共享本地附件路径辅助逻辑。 |
+
+## 运行模型
+
+每个 IM 后端都遵循同一组职责：
+
+1. **事件源**：从 IM 平台接收消息，归一化后发布到 `claw_event_router`。
+2. **可调用工具**：暴露平台专属发送函数，供 Agent、Console 或自动化规则发送文本和媒体。
+3. **附件处理**：把入站媒体保存到配置的 inbox 根目录，并发布 `attachment_saved` 事件供下游规则处理。
+
+```d2
+im_api: "IM 平台 API"
+gateway: "平台网关\n(飞书 / QQ / Telegram / 微信)"
+router: "claw_event_router"
+core: "claw_core\n(Agent)"
+fatfs: "FATFS inbox"
+tools: "发送工具\n*_send_message / *_send_image / *_send_file"
+
+im_api -> gateway: "入站消息"
+gateway -> router: "message 事件"
+gateway -> fatfs: "保存附件"
+gateway -> router: "attachment_saved 事件"
+router -> core: "run_agent 规则"
+core -> tools: "LLM 工具调用"
+tools -> im_api: "出站文本/媒体"
+router -> tools: "send_message 绑定"
+```
+
+## 启动与可见性
+
+应用启动时会按启用的平台分别准备凭证和附件配置，再注册对应的运行时 Group。`edge_agent` 会把 Event Router 的出站 channel，例如 `qq`、`feishu`、`telegram`、`wechat`、`web`，绑定到对应发送工具。
+
+统一 IM Skill 在 `cap_groups` 中声明四个平台的运行时 Group。激活该 Skill 后，模型会同时获得平台专属工具和通道选择说明，避免跨平台误发或重复回复。
+
+<Aside type="note">
+  `cap_im_platform` 当前是源码组件，而不是单个运行时 Group。保留按平台划分的 Group 可以维持现有配置、Skill 可见性和 enable/disable 行为。
+</Aside>
+
+## 平台差异
+
+| 平台 | 入站模型 | 会话目标 | 说明 |
+|------|----------|----------|------|
+| 飞书 | WebSocket/Event API | 飞书 `chat_id`，或以 `ou_` 开头的用户 `open_id` | 文本优先使用支持 Markdown 的交互卡片，失败后回退纯文本。媒体 caption 会作为后续文本发送。 |
+| QQ | QQ Bot WebSocket API | `c2c:<openid>` 或 `group:<group_openid>` | 文件发送依赖 QQ 平台侧支持；图片和通用文件使用不同工具。 |
+| Telegram | Bot API 长轮询 | 数字 chat id，例如 `123456789` 或 `-100...` | 长文本会自动分片，文件通过 multipart 流式上传。 |
+| 微信 | ClawBot 轮询 API | 明确的群 id 或联系人 id | 支持文本和图片发送，暂不支持通用非图片文件发送。 |
+| Web（本地） | HTTP/WebSocket（Web 前端） | `web` channel | 独立组件 `cap_im_local`，用于 Web 配置页内置的 IM 对话界面，支持文本发送。 |
+
+## Telegram 作为代表实现
+
+Telegram 仍是一个适合阅读的代表实现，因为它完整展示了 IM 后端的典型路径：长轮询入站、去重、异步附件下载，以及文本/媒体发送工具。
+
+```d2
+tg_api: "Telegram Bot API"
+poll_task: "tg_poll_task\n(FreeRTOS)"
+router: "claw_event_router"
+core: "claw_core\n(Agent)"
+attach_queue: "attachment_queue"
+attach_task: "tg_attachment_task\n(FreeRTOS)"
+fatfs: "FATFS"
+
+tg_api -> poll_task: "getUpdates\n(长轮询, 20 s)"
+poll_task -> router: "文本消息\npublish_message()"
+router -> core: "Event Router 规则"
+poll_task -> attach_queue: "附件（图片/文件）"
+attach_queue -> attach_task
+attach_task -> tg_api: "getFile -> 下载 URL"
+attach_task -> fatfs: "流式写入"
+attach_task -> router: "attachment_saved 事件"
+
+llm_call: "LLM 工具调用\ntg_send_message\ntg_send_image / tg_send_file"
+llm_call -> tg_api: "sendMessage\nsendPhoto / sendDocument"
+```
+
+### 事件源：长轮询机制
+
+Telegram 后端在 `cap_im_tg` Group 的 `start` 钩子中启动两个 FreeRTOS 任务。
+
+`tg_poll_task` 持续调用 `getUpdates`（带 20 秒 long-poll 超时），将收到的每条消息解析后发布事件：
+
+```c
+// 文本消息 -> 标准 message 事件
+claw_event_router_publish_message(
+    "tg_gateway",   // source_cap（事件来源标识）
+    "telegram",     // source_channel（渠道）
+    chat_id,        // 会话 ID
+    text,           // 消息正文
+    sender_id,      // 发送者 ID
+    message_id      // 消息 ID
+);
+```
+
+`claw_event_router` 收到此事件后，根据规则决定是交给 `claw_core` 运行 Agent，还是触发自动化动作。
+
+### 去重缓存
+
+由于网络抖动可能导致同一更新被重复下发，`cap_im_tg` 维护了一个循环 FNV-1a 哈希缓存，避免同一消息被处理两次：
+
+```c
+#define CAP_IM_TG_DEDUP_CACHE_SIZE 64
+
+static bool cap_im_tg_dedup_check_and_record(const char *update_key)
+{
+    uint64_t key = cap_im_tg_fnv1a64(update_key);
+    for (size_t i = 0; i < CAP_IM_TG_DEDUP_CACHE_SIZE; i++) {
+        if (s_tg.seen_update_keys[i] == key) return true; // 已见过
+    }
+    s_tg.seen_update_keys[s_tg.seen_update_idx] = key;
+    s_tg.seen_update_idx = (s_tg.seen_update_idx + 1) % CAP_IM_TG_DEDUP_CACHE_SIZE;
+    return false;
+}
+```
+
+### 附件处理
+
+附件（图片/文档）的下载是耗时操作，Telegram 后端会异步处理：
+
+1. `tg_poll_task` 将 `cap_im_tg_attachment_job_t` 放入队列。
+2. `tg_attachment_task` 消费队列，调用 `getFile` 获取下载 URL，流式写入 FATFS。
+3. 下载完成后发布 `attachment_saved` 事件，携带本地路径、MIME、尺寸与平台元数据。
+
+```c
+// attachment_saved 事件的 payload_json 示例
+{
+  "platform": "telegram",
+  "attachment_kind": "photo",
+  "saved_path": "/fatfs/inbox/telegram/-123456/789/photo.jpg",
+  "saved_dir": "/fatfs/inbox/telegram/-123456/789",
+  "saved_name": "photo.jpg",
+  "mime": "image/jpeg",
+  "caption": "看看这个",
+  "platform_file_id": "AgACAgIAAxkBAAI...",
+  "size_bytes": 45231,
+  "saved_at_ms": 1714000000000
+}
+```
+
+下游规则可以监听 `attachment_saved` 事件，触发 `cap_llm_inspect`、文件操作或自定义自动化动作。
+
+### 可调用工具
+
+`cap_im_tg` 运行时 Group 注册了四个 Capability 描述符：
+
+| 工具 ID | 描述 | kind |
+|---------|------|------|
+| `tg_gateway` | 轮询网关（事件源） | `EVENT_SOURCE` |
+| `tg_send_message` | 发送文本消息到指定 chat_id | `CALLABLE` |
+| `tg_send_image` | 发送本地图片文件到 Telegram | `CALLABLE` |
+| `tg_send_file` | 发送本地任意文件到 Telegram | `CALLABLE` |
+
+`tg_send_message` 中，如果输入没有提供 `chat_id`，会从当前调用上下文取值：
+
+```c
+// chat_id 优先级：JSON 参数 > 调用上下文
+if (cJSON_IsString(chat_id_json) && chat_id_json->valuestring[0]) {
+    chat_id = chat_id_json->valuestring;
+} else if (ctx && ctx->chat_id && ctx->chat_id[0]) {
+    chat_id = ctx->chat_id;  // 从会话上下文自动继承
+}
+```
+
+超长文本会自动分片以适配 Telegram 限制。`tg_send_image` 和 `tg_send_file` 通过 multipart/form-data 上传文件，使用 `stat()` 预先获取精确 `Content-Length`，并通过 `esp_http_client_open` 手动流式写入各 part，避免将整个文件载入内存。
+
+### 配置 API
+
+应用层通过 `cap_im_platform` 导出的 `cap_im_tg_*` API 配置 Telegram 后端：
+
+```c
+// 设置 Bot Token（必须在 start 前调用）
+cap_im_tg_set_token("YOUR_BOT_TOKEN");
+
+// 配置附件接收（可选）
+cap_im_tg_set_attachment_config(&(cap_im_tg_attachment_config_t){
+    .storage_root_dir         = "/fatfs/inbox",
+    .max_inbound_file_bytes   = 2 * 1024 * 1024,  // 最大 2 MB
+    .enable_inbound_attachments = true,
+});
+
+// 手动启动（通常由 claw_cap_start_group 调用）
+cap_im_tg_start();
+```
+
+其他后端使用相同的架构角色，只是在认证方式、消息格式和媒体 API 上存在平台差异。

@@ -1,0 +1,135 @@
+---
+title: "cap_scheduler — Scheduling"
+description: "Time-based event triggering: manage one-time or periodic tasks working with the Event Router."
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+
+Source: <LinkToSource relativePath="components/claw_capabilities/cap_scheduler/src/cap_scheduler.c" /> · Header: <LinkToSource relativePath="components/claw_capabilities/cap_scheduler/include/cap_scheduler.h" />
+
+## Mission
+
+`cap_scheduler` is the **time-trigger center** for ESP-Claw. It is responsible for generating events at specified points in time and pushing them to the `claw_event_router`. The scheduler itself does not execute specific business logic (like sending messages or calling tools); instead, it triggers subsequent automation rules by publishing events.
+
+This "separation of scheduling and execution" design allows scheduled tasks to reuse all action capabilities of the Event Router (`run_agent`, `call_cap`, `run_script`, etc.).
+
+## Core Concepts
+
+### Schedule Item
+
+Each schedule item defines "when" to publish "what kind of event". Key fields include:
+
+- `id`: Unique identifier.
+- `kind`: Schedule type, supports `once` (one-time), `interval` (interval-based), `cron` (standard 5-field Cron expression).
+- `enabled`: Whether it is enabled.
+- `event_type`: The type of event to publish (corresponds to `match.event_type` in routing rules).
+- `event_key`: The event key (corresponds to `match.event_key` in routing rules).
+- `payload_json`: Accompanying JSON data.
+
+### Data Persistence
+
+The scheduler manages two persisted data sets:
+1. **Definition file** (`schedules.json`): Stores all schedule item configurations.
+2. **State file** (derived automatically as `schedules_path + ".state"`, e.g. `schedules.json.state`): Stores runtime dynamic information, such as `last_fire_ms` (last triggered time) and `run_count` (number of runs). This ensures that the device can correctly resume progress after a reboot without losing or repeating tasks.
+
+After each `scheduler_reload` (and when loading on startup), the scheduler fills missing fields in each entry of `schedules.json` using default rules.
+
+## Tools Exposed to LLM
+
+| Tool ID | Function | Input Parameters |
+|---------|----------|------------------|
+| `scheduler_list` | List all schedule items and their running status | (None) |
+| `scheduler_get` | Get details for one schedule item | `id` |
+| `scheduler_add` | Add a new schedule item | `schedule_json` (string) |
+| `scheduler_update` | Update an existing schedule item | `schedule_json` (string) |
+| `scheduler_remove` | Remove a schedule item | `id` |
+| `scheduler_enable` | Enable a specific schedule item | `id` |
+| `scheduler_disable` | Disable a specific schedule item | `id` |
+| `scheduler_pause` | Pause a specific schedule item | `id` |
+| `scheduler_resume` | Resume a specific schedule item | `id` |
+| `scheduler_trigger_now` | Trigger a schedule immediately (does not affect subsequent plans) | `id` |
+| `scheduler_reload` | Reload configuration from disk | (None) |
+
+Where:
+- `schedule_json` (string) means `{"schedule_json":"<JSON string>"}`. Here `schedule_json` itself is a string value (escaped), not a nested object.
+- `id` means `{"id":"..."}`.
+
+## Usage Examples
+
+### 1. Configure a Schedule Item
+
+A typical entry in `schedules.json`:
+
+```json
+{
+  "id": "morning_reminder",
+  "kind": "cron",
+  "cron_expr": "0 7 * * *",
+  "enabled": true,
+  "event_type": "schedule",
+  "event_key": "reminder",
+  "text": "Good morning! It's another vibrant day, remember to drink water meow."
+}
+```
+
+### 2. Configure a Routing Rule
+
+Add a corresponding rule in `router_rules.json` to send this schedule event to IM:
+
+```json
+{
+  "id": "handle_morning_reminder",
+  "match": {
+    "event_type": "schedule",
+    "event_key": "reminder"
+  },
+  "actions": [
+    {
+      "type": "send_message",
+      "input": {
+        "channel": "telegram",
+        "chat_id": "YOUR_CHAT_ID",
+        "message": "{{event.text}}"
+      }
+    }
+  ]
+}
+```
+
+## Time Synchronization Notes
+
+`cap_scheduler` relies on the accuracy of the system time.
+- For `cron` and `once` tasks, they will only be triggered after SNTP synchronization is successful.
+- For `interval` tasks, if `start_at` or `end_at` are not configured, they do not rely on external time and start timing upon power-on.
+- `cron` matching is based on the device's current local time (`localtime_r`).
+
+### Time rebase after first time sync
+
+After the first successful SNTP sync in `edge_agent` (`had_valid_time == false` → valid time), `cap_scheduler_handle_time_sync()` **rebases** the scheduler: if the device had already been counting from a wrong clock since boot, the first accurate system time adjusts each task’s reference points so triggers are not duplicated or skipped.
+
+## Configuration and Initialization
+
+Initialize at the application layer:
+
+```c
+ESP_RETURN_ON_ERROR(cap_scheduler_init(&(cap_scheduler_config_t) {
+    .schedules_path = "/fatfs/scheduler/schedules.json",
+    .tick_ms = 1000,              // Check interval (ms)
+    .max_items = 32,              // Max schedule items
+    .task_stack_size = 6144,      // Scheduler task stack size
+    .task_priority = 5,           // Scheduler task priority
+    .task_core = tskNO_AFFINITY,  // Core affinity
+    .publish_event = claw_event_router_publish, // Bind publishing interface
+    .persist_after_fire = true,   // Persist runtime state after a fire
+}), TAG, "Failed to init scheduler");
+
+// cap_scheduler_start() is called after claw_event_router_start()
+cap_scheduler_start();
+```
+
+<Aside type="tip" title="LLM Interaction Tips">
+  When a user says "Remind me to... at 8 AM every day," the large language model should first call `scheduler_add` to add a scheduled task, then (if necessary) call `add_router_rule` to add an action rule.
+
+  To simplify interaction, it is recommended to encapsulate common reminder logic in Lua scripts; the automation rule then only needs to `run_script`.
+</Aside>

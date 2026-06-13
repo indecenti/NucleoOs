@@ -1,0 +1,25 @@
+version: 1.0.0
+# Peripherals Configuration for LilyGO T-Display-S3
+
+peripherals:
+  # I2C bus — used by the capacitive touch controller (Touch variant only)
+  # SCL=GPIO17, SDA=GPIO18
+  - name: i2c_master
+    type: i2c
+    role: master
+    config:
+      port: 0
+      pins:
+        sda: 18
+        scl: 17
+
+  # LCD backlight PWM control — GPIO38, active HIGH
+  - name: ledc_backlight
+    type: ledc
+    role: none
+    config:
+      gpio_num: 38
+      freq_hz: 5000
+      duty: 0
+      duty_resolution: LEDC_TIMER_10_BIT
+      output_invert: false

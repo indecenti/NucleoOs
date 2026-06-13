@@ -1,0 +1,1557 @@
+---
+import SiteShell from "@/layouts/SiteShell.astro";
+import type { Lang } from "@/site/locales";
+import { localeHref } from "@/site/locales";
+import { getChromeStrings } from "@/site/chrome-i18n";
+import { getHomeContent } from "@/site/home-i18n";
+
+import EspressifLogoHorizontal from "@/assets/logos/espressif-logo-horizontal.svg";
+import CloudToClaw from "@/assets/images/cloud-to-claw.png";
+import ArchitectureDiagram from "@/assets/images/architecture-diagram-dark.webp";
+
+import { Zap } from "@lucide/astro"
+import ClawLogoHorizontalRaw from "@/assets/logos/logo-horizontal.svg?raw";
+import ClawAnimationRaw from "@/assets/logos/claw-animation.svg?raw";
+import ClawAnimationUrl from "@/assets/logos/claw-animation.svg?url";
+
+export function getStaticPaths() {
+  return [{ params: { lang: "en" } }, { params: { lang: "zh-cn" } }];
+}
+
+const { lang } = Astro.params as { lang: Lang };
+const h = getHomeContent(lang);
+const chrome = getChromeStrings(lang);
+const docsHref = localeHref(lang, "tutorial");
+const getStartedHref = localeHref(lang, "tutorial/");
+const flashHref = localeHref(lang, "flash");
+---
+
+<SiteShell
+  lang={lang}
+  title={h.metaTitle}
+  description={h.metaDescription}
+  pagePath=""
+  chrome={chrome}
+>
+  <style slot="head">
+    @import url('@/styles/homepage.css');
+    
+    .hero {
+      display: flex;
+      justify-content: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+
+    .hero-right {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 3.5rem 2rem 3rem;
+      max-width: 780px;
+      width: 100%;
+      background: radial-gradient(
+        ellipse at 50% 20%,
+        rgba(232, 54, 45, 0.05) 0%,
+        transparent 60%
+      );
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: .9rem;
+      font-weight: 500;
+      color: var(--accent-soft);
+      background: var(--accent-dim);
+      border: 1px solid var(--border-accent);
+      border-radius: 100px;
+      padding: 0.25rem 0.75rem;
+      margin-bottom: 1.5rem;
+      width: fit-content;
+      letter-spacing: 0.02em;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      animation: pulse 2s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.5;
+        transform: scale(0.8);
+      }
+    }
+
+    .hero-claw-logo {
+      width: 18rem;
+      height: auto;
+      display: inline-block;
+      margin-bottom: 1rem;
+      margin-top: 1rem;
+      padding: 1rem;
+    }
+
+    .hero-logo-easter-egg {
+      display: inline-block;
+      cursor: pointer;
+      position: relative;
+      border-radius: 50%;
+      transition: filter 0.2s;
+      -webkit-tap-highlight-color: transparent;
+      outline: none;
+    }
+
+    .hero-logo-easter-egg:hover {
+      filter: drop-shadow(0 0 12px rgba(232, 54, 45, 0.45));
+    }
+
+    .hero-logo-easter-egg .egg-static,
+    .hero-logo-easter-egg .egg-anim {
+      display: block;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+
+    .hero-logo-easter-egg .egg-anim {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 18rem;
+      height: 18rem;
+      translate: -50% -50%;
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(0.88);
+    }
+
+    .hero-logo-easter-egg.egg-active .egg-static {
+      opacity: 0;
+      transform: scale(0.88);
+    }
+
+    .hero-logo-easter-egg.egg-active .egg-anim {
+      opacity: 1;
+      pointer-events: auto;
+      transform: scale(1);
+    }
+
+    .hero-logo-easter-egg .egg-hint {
+      position: absolute;
+      bottom: -0.25rem;
+      right: 0.25rem;
+      font-size: 0.6rem;
+      color: var(--text-muted);
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .hero-logo-easter-egg:hover .egg-hint {
+      opacity: 0.6;
+    }
+
+    .hero-logo-easter-egg.egg-active .egg-hint {
+      opacity: 0;
+    }
+
+    #cursor-claw {
+      position: fixed;
+      pointer-events: none;
+      z-index: 9999;
+      width: 80px;
+      height: 80px;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      will-change: left, top;
+      transform: translate(8px, -88px);
+    }
+
+    #cursor-claw.claw-visible {
+      opacity: 1;
+    }
+
+    #cursor-claw img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .hero-description {
+      font-size: 1.3rem;
+      font-weight: 500;
+      letter-spacing: 0.015em;
+      line-height: 1.6;
+      margin-top: 0.1rem;
+      margin-bottom: 1.5rem;
+      background: linear-gradient(
+        135deg,
+        var(--text-primary) 30%,
+        color-mix(in srgb, var(--text-secondary) 70%, var(--accent-soft) 30%) 100%
+      );
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      display: inline-block;
+      padding-bottom: 0.1rem;
+    }
+
+    .hero-espressif {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .hero-espressif-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .hero-espressif-divider {
+      display: inline;
+    }
+
+    .hero-espressif-logo {
+      height: 1.5rem;
+      width: auto;
+      transform: translateY(0.1rem);
+    }
+
+    .hero-espressif-badge {
+      height: 1.5rem;
+      width: auto;
+      transform: translateY(0.1rem);
+    }
+
+    .hero-espressif span {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+
+
+
+    .final-cta {
+      text-align: center;
+      background: radial-gradient(
+        ellipse at 50% 0%,
+        rgba(232, 54, 45, 0.06) 0%,
+        transparent 70%
+      );
+      border-bottom: 1px solid var(--border);
+    }
+
+    .final-cta-link {
+      display: block;
+      padding: 5rem 2rem;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .final-cta h2 {
+      font-size: clamp(1.4rem, 2.5vw, 2rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--text-primary);
+      /* margin-bottom: 2rem; */
+    }
+
+    .final-cta h2 .highlight {
+      color: var(--accent-soft);
+    }
+
+    .final-cta-arrow {
+      display: inline-block;
+      transition: transform 0.2s ease;
+    }
+
+    .final-cta-link:hover .final-cta-arrow {
+      transform: translateX(0.25rem);
+    }
+
+    /* ── First Fold ── */
+    @media (min-width: 901px) {
+      .first-fold {
+        min-height: calc(100vh - 56px);
+        min-height: calc(100dvh - 56px);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .first-fold > .hero {
+        flex: 1 1 auto;
+      }
+
+      .first-fold > .highlights {
+        flex-shrink: 0;
+      }
+    }
+
+    /* ── Highlights ── */
+    .highlights {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-surface);
+    }
+
+    .hl-item {
+      flex: 1 1 0%;
+      min-width: 0;
+      padding: 2.5rem 2rem;
+      border-right: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+      transition:
+        flex-grow 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+        background 0.3s ease;
+    }
+
+    .hl-item:last-child {
+      border-right: none;
+    }
+
+    .hl-item::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.35s ease;
+    }
+
+    .hl-item::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        ellipse at 50% 100%,
+        rgba(232, 54, 45, 0.04) 0%,
+        transparent 70%
+      );
+      pointer-events: none;
+    }
+
+    .hl-idx {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--accent-soft);
+      font-family: 'IBM Plex Mono', monospace;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.85rem;
+    }
+
+    .hl-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.015em;
+      margin: 0 0 0.4rem;
+    }
+
+    .hl-sub {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      transition: opacity 0.3s ease;
+    }
+
+    .hl-body {
+      opacity: 0;
+      visibility: hidden;
+      z-index: 1;
+      transform: translateY(0.6rem);
+      transition:
+        opacity 0.08s ease,
+        transform 0.08s cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s linear 0.08s;
+    }
+
+    .hl-body p {
+      font-size: 0.86rem;
+      color: var(--text-secondary);
+      line-height: 1.65;
+      padding-top: 0.85rem;
+      border-top: 1px solid var(--border);
+      margin-top: 0.85rem;
+      text-align: justify;
+    }
+
+    .hl-chevron {
+      display: none;
+      color: var(--text-muted);
+      transition: transform 0.3s ease;
+      position: absolute;
+      right: 1.5rem;
+      top: 2.6rem;
+    }
+
+    @media (min-width: 901px) {
+      /* Allow the absolutely-positioned body panel to overflow upward */
+      .hl-item {
+        overflow: visible;
+      }
+
+      /* Force single-line to prevent text reflow when items narrow on hover */
+      .hl-title,
+      .hl-sub {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Float the detail panel above the highlights bar, out of page flow */
+      .hl-body {
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        right: 0;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-bottom: none;
+        padding: 1rem 2rem 1.2rem;
+        z-index: 10;
+      }
+
+      .hl-body p {
+        padding-top: 0;
+        border-top: none;
+        margin-top: 0;
+      }
+
+      .highlights:hover .hl-item:not(:hover) .hl-sub {
+        opacity: 0;
+      }
+
+      .highlights:hover .hl-item:hover {
+        flex-grow: 3;
+        background: var(--bg-card);
+      }
+
+      .highlights:hover .hl-item:hover::before {
+        transform: scaleX(1);
+      }
+
+      .highlights:hover .hl-item:hover::after {
+        background: radial-gradient(
+          ellipse at 50% 0%,
+          rgba(232, 54, 45, 0.06) 0%,
+          transparent 60%
+        );
+      }
+
+      .highlights:hover .hl-item:hover .hl-body {
+        visibility: visible;
+        opacity: 1;
+        transform: translateY(0);
+        transition:
+          opacity 0.16s ease 0.46s,
+          transform 0.16s cubic-bezier(0.16, 1, 0.3, 1) 0.46s,
+          visibility 0s linear 0s;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .highlights {
+        flex-direction: column;
+      }
+
+      .hl-item {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        padding-right: 3.5rem;
+      }
+
+      .hl-item:last-child {
+        border-bottom: none;
+      }
+
+      .hl-body {
+        position: static;
+        max-height: 0;
+        overflow: hidden;
+        visibility: visible;
+        transform: none;
+        transition:
+          max-height 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+          opacity 0.2s ease;
+      }
+
+      .hl-chevron {
+        display: block;
+      }
+
+      .hl-item.hl-active {
+        background: var(--bg-card);
+      }
+
+      .hl-item.hl-active::before {
+        transform: scaleX(1);
+      }
+
+      .hl-item.hl-active .hl-body {
+        max-height: 12rem;
+        opacity: 1;
+      }
+
+      .hl-item.hl-active .hl-chevron {
+        transform: rotate(180deg);
+        color: var(--accent-soft);
+      }
+    }
+
+    @media (max-width: 900px) {
+      .hero {
+        min-height: auto;
+      }
+
+      .hero-right {
+        padding: 3.5rem 2rem 2.5rem 2rem;
+      }
+
+
+      .hero-espressif {
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .hero-espressif-divider {
+        display: none;
+      }
+    }
+
+    /* ── What's Missing After IoT ── */
+    .what-s-missing-after-iot {
+      padding: 5.5rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: center;
+      background: linear-gradient(to bottom, transparent, rgba(232, 54, 45, 0.02) 100%);
+    }
+
+    .what-s-missing-after-iot-inner {
+      max-width: 860px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .what-s-missing-after-iot-inner h2 {
+      font-size: clamp(1.4rem, 2vw, 1.6rem);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      margin-bottom: 2rem;
+      display: inline-block;
+    }
+
+    .what-s-missing-after-iot-inner img {
+      width: 100%;
+      max-width: 40rem;
+      height: auto;
+      margin: 2rem 0;
+      border-radius: 0.5rem;
+    }
+
+    .what-s-missing-after-iot-inner p {
+      font-size: 1.2rem;
+      line-height: 1.75;
+      color: var(--text-secondary);
+      margin-bottom: 1.5rem;
+      text-align: center;
+      letter-spacing: 0.01em;
+    }
+
+    .what-s-missing-after-iot-inner p:last-child {
+      color: var(--text-primary);
+      margin-bottom: 0;
+    }
+
+    @media (max-width: 900px) {
+      .what-s-missing-after-iot {
+        padding: 4rem 1.5rem;
+      }
+      .what-s-missing-after-iot-inner h2 {
+        text-align: left;
+        width: 100%;
+        margin-bottom: 1.5rem;
+        font-size: clamp(1.25rem, 2vw, 1.4rem);
+      }
+      .what-s-missing-after-iot-inner p {
+        text-align: left;
+        font-size: 1.1rem;
+      }
+    }
+
+    /* ── Technological Advantages ── */
+    .tech-advantages {
+      padding: 5rem 2rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: center;
+      background: var(--bg-base);
+    }
+
+    .tech-advantages-inner {
+      max-width: 1120px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .tech-advantages-inner h2 {
+      font-size: clamp(1.4rem, 2vw, 1.7rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--text-primary);
+      margin: 0 0 2rem;
+    }
+
+    .tech-advantages-figure {
+      margin: 0;
+    }
+
+    .tech-advantages-figure img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .tech-advantages-note {
+      margin-top: 0.85rem;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      line-height: 1.55;
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .tech-advantages {
+        padding: 3.5rem 1.25rem;
+      }
+
+      .tech-advantages-inner h2 {
+        text-align: left;
+        margin-bottom: 1.5rem;
+        font-size: clamp(1.25rem, 2vw, 1.4rem);
+      }
+
+      .tech-advantages-note {
+        text-align: left;
+      }
+    }
+
+    /* ── Feat and Demo ── */
+    .feat-and-demo {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.5rem;
+      padding: 3.5rem clamp(1.5rem, 5vw, 4rem);
+      max-width: 1280px;
+      margin: 0 auto;
+      background: transparent;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+
+    .fad-item {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 0;
+      overflow: hidden;
+      z-index: 1;
+      transition:
+        background 0.35s ease,
+        border-color 0.35s ease,
+        transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 0.4s ease;
+    }
+
+    /* Top accent bar reveals on hover (replaces harsh red glow) */
+    .fad-item::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 5;
+    }
+
+    /* Ambient radial glow from bottom */
+    .fad-item::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        ellipse at 50% 110%,
+        rgba(232, 54, 45, 0.05) 0%,
+        transparent 55%
+      );
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+    }
+
+    .fad-item:hover {
+      background: var(--bg-card);
+      border-color: var(--border-accent);
+      transform: translateY(-3px);
+      box-shadow: 0 14px 32px -18px rgba(232, 54, 45, 0.35),
+                  0 4px 12px -6px rgba(0, 0, 0, 0.25);
+    }
+
+    .fad-item:hover::before {
+      transform: scaleX(1);
+    }
+
+    .fad-item:hover::after {
+      opacity: 1;
+    }
+
+    /* Video as the hero, placed on top */
+    .fad-video-wrap {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: var(--bg-base);
+      position: relative;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+      isolation: isolate;
+    }
+
+    .fad-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: brightness(0.85) saturate(0.9);
+      transition:
+        transform 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+        filter 0.4s ease;
+    }
+
+    .fad-item:hover .fad-video {
+      transform: scale(1.035);
+      filter: brightness(1) saturate(1);
+    }
+
+    /* Gradient overlay for depth */
+    .fad-video-wrap::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        180deg,
+        rgba(10, 11, 14, 0.08) 0%,
+        transparent 35%,
+        rgba(10, 11, 14, 0.45) 100%
+      );
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+      z-index: 1;
+    }
+
+    .fad-item:hover .fad-video-wrap::after {
+      opacity: 0.35;
+    }
+
+    /* Glass-morphic play/pause indicator */
+    .fad-play {
+      position: absolute;
+      top: 0.9rem;
+      right: 0.9rem;
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: 50%;
+      background: rgba(10, 11, 14, 0.55);
+      backdrop-filter: blur(10px) saturate(140%);
+      -webkit-backdrop-filter: blur(10px) saturate(140%);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-primary);
+      opacity: 0;
+      transform: translateY(-4px) scale(0.9);
+      transition:
+        opacity 0.3s ease,
+        transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+        background 0.3s ease,
+        border-color 0.3s ease;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .fad-item:hover .fad-play {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      background: var(--accent);
+      border-color: transparent;
+      color: var(--text-on-accent);
+      box-shadow: 0 6px 20px rgba(232, 54, 45, 0.35);
+    }
+
+    .fad-play svg {
+      width: 0.9rem;
+      height: 0.9rem;
+    }
+
+    .fad-play .icon-pause {
+      display: none;
+    }
+
+    .fad-item.is-hovering .fad-play .icon-play {
+      display: none;
+    }
+
+    .fad-item.is-hovering .fad-play .icon-pause {
+      display: block;
+    }
+
+    /* Text block below the video */
+    .fad-text {
+      position: relative;
+      z-index: 2;
+      padding: 1.6rem 1.75rem 1.75rem 1.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      flex: 1 1 auto;
+    }
+
+    .fad-idx {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--accent-soft);
+      letter-spacing: 0.1em;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .fad-idx::after {
+      content: "";
+      width: 1.75rem;
+      height: 1px;
+      background: var(--border-accent);
+      transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                  background 0.3s ease;
+    }
+
+    .fad-item:hover .fad-idx::after {
+      width: 3rem;
+      background: var(--accent);
+    }
+
+    .fad-text h3 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.018em;
+      line-height: 1.25;
+      transition: color 0.3s ease;
+    }
+
+    .fad-item:hover .fad-text h3 {
+      color: var(--accent-soft);
+    }
+
+    .fad-text p {
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      line-height: 1.65;
+      margin: 0;
+    }
+
+    @media (max-width: 900px) {
+      .feat-and-demo {
+        grid-template-columns: 1fr;
+        gap: 1.1rem;
+        padding: 2.5rem 1.25rem;
+      }
+      .fad-text {
+        padding: 1.35rem 1.5rem 1.6rem 1.5rem;
+      }
+      .fad-text h3 {
+        font-size: 1.1rem;
+      }
+      /* On touch, always show the indicator subtly */
+      .fad-play {
+        opacity: 0.85;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* ── Video Cases ── */
+    .video-cases {
+      padding: 5rem 0 5rem;
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .video-cases-header {
+      padding: 0 clamp(1.5rem, 5vw, 4rem);
+      margin-bottom: 2.5rem;
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 1rem;
+    }
+
+    .video-cases-header h2 {
+      font-size: clamp(1.3rem, 2.2vw, 1.7rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--text-primary);
+      margin: 0;
+    }
+
+    .video-cases-track-wrap {
+      position: relative;
+    }
+
+    .video-cases-track-wrap::before,
+    .video-cases-track-wrap::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: clamp(1.5rem, 5vw, 4rem);
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .video-cases-track-wrap::before {
+      left: 0;
+      background: linear-gradient(to right, var(--bg-base), transparent);
+    }
+
+    .video-cases-track-wrap::after {
+      right: 0;
+      background: linear-gradient(to left, var(--bg-base), transparent);
+    }
+
+    .video-cases-track {
+      display: flex;
+      gap: 1.25rem;
+      overflow-x: auto;
+      overflow-y: visible;
+      padding: 0.25rem clamp(1.5rem, 5vw, 4rem) 1.25rem;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+
+    .video-cases-track.is-auto-scrolling {
+      scroll-snap-type: none;
+    }
+
+    .video-cases-track::-webkit-scrollbar {
+      display: none;
+    }
+
+    .vc-item {
+      flex: 0 0 clamp(240px, 30vw, 340px);
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      text-decoration: none;
+      color: inherit;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      overflow: hidden;
+      transition:
+        border-color 0.3s ease,
+        background 0.3s ease,
+        box-shadow 0.35s ease;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .vc-item::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 2;
+    }
+
+    .vc-item:hover {
+      border-color: var(--border-accent);
+      background: var(--bg-card);
+      box-shadow: 0 12px 28px -16px rgba(232, 54, 45, 0.3),
+                  0 4px 10px -5px rgba(0, 0, 0, 0.2);
+    }
+
+    .vc-item:hover::before {
+      transform: scaleX(1);
+    }
+
+    .vc-thumb {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-base);
+      flex-shrink: 0;
+    }
+
+    .vc-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                  opacity 0.3s ease;
+    }
+
+    .vc-thumb img[data-loaded="false"] {
+      opacity: 0;
+    }
+
+    .vc-thumb img[data-loaded="true"] {
+      opacity: 1;
+    }
+
+    .vc-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--bg-surface) 90%, var(--accent) 10%) 0%,
+        var(--bg-surface) 100%
+      );
+      transition: opacity 0.3s ease;
+    }
+
+    .vc-placeholder svg {
+      width: 2.5rem;
+      height: 2.5rem;
+      color: var(--border-accent);
+      opacity: 0.5;
+    }
+
+    .vc-thumb img[data-loaded="true"] + .vc-placeholder {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .vc-thumb-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        180deg,
+        transparent 50%,
+        rgba(10, 11, 14, 0.5) 100%
+      );
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      z-index: 1;
+    }
+
+    .vc-play-badge {
+      position: absolute;
+      bottom: 0.7rem;
+      right: 0.7rem;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: rgba(10, 11, 14, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      z-index: 2;
+      opacity: 0;
+      transition: opacity 0.3s ease, background 0.3s ease;
+    }
+
+    .vc-play-badge svg {
+      width: 0.75rem;
+      height: 0.75rem;
+    }
+
+    .vc-item:hover .vc-play-badge {
+      opacity: 1;
+      background: var(--accent);
+      border-color: transparent;
+    }
+
+    .vc-caption {
+      padding: 0.85rem 1rem 1rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      letter-spacing: -0.01em;
+      transition: color 0.3s ease;
+    }
+
+    .vc-item:hover .vc-caption {
+      color: var(--text-primary);
+    }
+
+    @media (max-width: 900px) {
+      .video-cases {
+        padding: 3.5rem 0 3.5rem;
+      }
+
+      .vc-item {
+        flex: 0 0 min(78vw, 300px);
+      }
+    }
+  </style>
+
+  <div class="first-fold">
+    <section class="hero">
+      <div class="hero-right">
+        <div class="hero-badge">
+          <span class="badge-dot"></span>
+          {h.heroBadge}
+        </div>
+
+        <div
+          id="hero-logo-egg"
+          class="hero-logo-easter-egg"
+          role="button"
+          tabindex="0"
+          aria-label="Toggle logo animation"
+          title="✨"
+        >
+          <span class="hero-claw-logo egg-static" set:html={ClawLogoHorizontalRaw} />
+          <span class="hero-claw-logo egg-anim" set:html={ClawAnimationRaw} />
+          <span class="egg-hint">✨</span>
+        </div>
+
+        <p class="hero-description">
+          <span set:html={h.heroDescription}></span>
+        </p>
+
+        <p class="hero-espressif">
+          <a href="https://github.com/espressif/esp-claw" target="_blank" rel="noopener">
+            <img
+              src="https://img.shields.io/github/stars/espressif/esp-claw?style=for-the-badge&logo=github&label=Stars&color=e8362d"
+              alt="GitHub Stars"
+              class="hero-espressif-badge"
+            />
+          </a>
+          <span class="hero-espressif-meta">
+            <span class="hero-espressif-divider" aria-hidden="true">|</span>
+            {h.heroEspressifPrefix}
+            <a href="https://www.espressif.com/" target="_blank" rel="noopener">
+              <img src={EspressifLogoHorizontal.src} alt="ESPRESSIF" class="hero-espressif-logo" />
+            </a>
+          </span>
+        </p>
+
+        <div class="hero-actions">
+          <a href={flashHref} class="btn-primary">
+            {h.flashOnline}
+            <Zap class="button-icon" />
+          </a>
+          <a href={getStartedHref} class="btn-secondary">
+            {h.getStartedDocs}
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <path
+                d="M2.5 6.5h8M7 3.5l3 3-3 3"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"></path>
+            </svg>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="highlights">
+    {h.highlights.map((hl, idx) => (
+      <div class="hl-item">
+        <span class="hl-idx">{String(idx + 1).padStart(2, '0')}</span>
+        <h3 class="hl-title">{hl.title}</h3>
+        <p class="hl-sub">{hl.subtitle}</p>
+        <div class="hl-body">
+          <p>{hl.detail}</p>
+        </div>
+        <svg class="hl-chevron" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path d="M4 6l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter" />
+        </svg>
+      </div>
+    ))}
+    </section>
+  </div>
+
+  <section class="what-s-missing-after-iot">
+    <div class="what-s-missing-after-iot-inner">
+      <h2>{h.whatsMissingAfterIoTTitle}</h2>
+      <p>{h.whatsMissingAfterIoTP1}</p>
+      <img src={CloudToClaw.src} alt="cloud-to-claw" />
+      <p>{h.whatsMissingAfterIoTP2}</p>
+    </div>
+  </section>
+
+  <section class="tech-advantages">
+    <div class="tech-advantages-inner">
+      <h2>{h.techAdvantagesTitle}</h2>
+      <figure class="tech-advantages-figure">
+        <img src={ArchitectureDiagram.src} alt={h.techAdvantagesTitle} loading="lazy" />
+        <figcaption class="tech-advantages-note">
+          All logos and product names are the property of their respective owners and are used for identification purposes only.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="feat-and-demo">
+    {h.featAndDemos.map((fad, idx) => (
+      <div class="fad-item">
+        <div class="fad-video-wrap">
+          <video
+            class="fad-video"
+            src={fad.video}
+            muted
+            playsinline
+            webkit-playsinline="true"
+            x5-playsinline="true"
+            loop
+            preload="auto"
+            disablepictureinpicture
+            data-poster-time={fad.posterTime}
+          ></video>
+          <span class="fad-play" aria-hidden="true">
+            <svg class="icon-play" viewBox="0 0 12 12" fill="currentColor">
+              <path d="M3 1.5v9l7.5-4.5L3 1.5z" />
+            </svg>
+            <svg class="icon-pause" viewBox="0 0 12 12" fill="currentColor">
+              <rect x="3" y="2" width="2.25" height="8" rx="0.4" />
+              <rect x="6.75" y="2" width="2.25" height="8" rx="0.4" />
+            </svg>
+          </span>
+        </div>
+        <div class="fad-text">
+          <span class="fad-idx">{String(idx + 1).padStart(2, '0')}</span>
+          <h3>{fad.title}</h3>
+          <p>{fad.desc}</p>
+        </div>
+      </div>
+    ))}
+  </section>
+
+
+  <section class="video-cases">
+    <div class="video-cases-header">
+      <h2>{h.videoCasesTitle}</h2>
+    </div>
+    <div class="video-cases-track-wrap">
+      <div class="video-cases-track">
+        {h.videoCases.map((vc) => (
+          <a
+            class="vc-item"
+            href={vc.videoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-has-thumb={vc.thumbnail ? "true" : undefined}
+          >
+            <div class="vc-thumb">
+              {vc.thumbnail && (
+                <img
+                  src={vc.thumbnail}
+                  alt={vc.title}
+                  loading="lazy"
+                  data-loaded="false"
+                  onload="this.dataset.loaded='true'"
+                />
+              )}
+              <div class="vc-placeholder" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+              </div>
+              <div class="vc-thumb-overlay" aria-hidden="true"></div>
+              <div class="vc-play-badge" aria-hidden="true">
+                <svg viewBox="0 0 12 12" fill="currentColor">
+                  <path d="M3 1.5v9l7.5-4.5L3 1.5z" />
+                </svg>
+              </div>
+            </div>
+            <div class="vc-caption">{vc.title}</div>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <div class="final-cta">
+    <a href={docsHref} class="final-cta-link">
+      <h2>{h.finalCtaHeading} <span class="highlight final-cta-arrow">→</span></h2>
+    </a>
+  </div>
+
+  <script>
+    document.querySelectorAll<HTMLElement>('.hl-item').forEach(item => {
+      item.addEventListener('click', () => {
+        if (window.innerWidth > 900) return;
+        const wasActive = item.classList.contains('hl-active');
+        document.querySelectorAll('.hl-item.hl-active').forEach(el =>
+          el.classList.remove('hl-active')
+        );
+        if (!wasActive) item.classList.add('hl-active');
+      });
+    });
+  </script>
+
+  <div id="cursor-claw" aria-hidden="true">
+    <img src={ClawAnimationUrl} alt="" width="80" height="80" />
+  </div>
+
+  <script>
+    const egg = document.getElementById('hero-logo-egg') as HTMLElement | null;
+    const cursorClaw = document.getElementById('cursor-claw') as HTMLElement | null;
+    let eggState = 0;
+
+    function onMouseMove(e: MouseEvent) {
+      if (cursorClaw) {
+        cursorClaw.style.left = e.clientX + 'px';
+        cursorClaw.style.top = e.clientY + 'px';
+      }
+    }
+
+    if (egg) {
+      const toggle = () => {
+        eggState = (eggState + 1) % 3;
+
+        if (eggState === 1) {
+          egg.classList.add('egg-active');
+          if (cursorClaw) cursorClaw.classList.remove('claw-visible');
+          document.removeEventListener('mousemove', onMouseMove);
+        } else if (eggState === 2) {
+          egg.classList.add('egg-active');
+          if (cursorClaw) {
+            cursorClaw.classList.add('claw-visible');
+            document.addEventListener('mousemove', onMouseMove);
+          }
+        } else {
+          egg.classList.remove('egg-active');
+          if (cursorClaw) cursorClaw.classList.remove('claw-visible');
+          document.removeEventListener('mousemove', onMouseMove);
+        }
+      };
+
+      egg.addEventListener('click', toggle);
+      egg.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
+    }
+  </script>
+
+  <script>
+    document.querySelectorAll('.fad-item').forEach(item => {
+      const video = item.querySelector('.fad-video') as HTMLVideoElement;
+      if (!video) return;
+
+      const posterTime = parseFloat(video.dataset.posterTime || '10');
+      let isPlaying = false;
+      let desiredState: 'playing' | 'poster' = 'poster';
+
+      const safeSeek = (t: number) => {
+        try { video.currentTime = t; } catch (_) {}
+      };
+
+      const gotoPoster = () => {
+        if (video.readyState >= 1) {
+          safeSeek(posterTime);
+        } else {
+          video.addEventListener('loadedmetadata', () => safeSeek(posterTime), { once: true });
+        }
+      };
+      gotoPoster();
+
+      const playVideo = () => {
+        if (isPlaying) return;
+        isPlaying = true;
+        desiredState = 'playing';
+        item.classList.add('is-hovering');
+
+        const start = () => {
+          if (desiredState !== 'playing') return;
+          safeSeek(0);
+          const p = video.play();
+          if (p && typeof p.catch === 'function') {
+            p.catch(() => {
+              console.error('Failed to play video');
+            });
+          }
+        };
+
+        if (video.readyState >= 2) {
+          start();
+        } else {
+          video.addEventListener('loadeddata', start, { once: true });
+          try { video.load(); } catch (_) {}
+        }
+      };
+
+      const pauseVideo = () => {
+        desiredState = 'poster';
+        if (!isPlaying) return;
+        isPlaying = false;
+        item.classList.remove('is-hovering');
+        video.pause();
+        safeSeek(posterTime);
+      };
+
+      const hasHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+      if (hasHover) {
+        item.addEventListener('mouseenter', playVideo);
+        item.addEventListener('mouseleave', pauseVideo);
+      } else {
+        const obs = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting && entry.intersectionRatio >= 0.25) {
+              playVideo();
+            } else {
+              pauseVideo();
+            }
+          });
+        }, { threshold: [0, 0.25, 0.5] });
+        obs.observe(item);
+
+        item.addEventListener('click', () => {
+          if (isPlaying) pauseVideo();
+          else playVideo();
+        });
+      }
+    });
+  </script>
+
+  <script>
+    document.querySelectorAll<HTMLElement>('.video-cases-track').forEach((track) => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+      const items = Array.from(track.children) as HTMLElement[];
+      if (items.length < 2) return;
+
+      const initialWidth = track.scrollWidth;
+      if (initialWidth <= track.clientWidth) return;
+
+      items.forEach((item) => {
+        const clone = item.cloneNode(true) as HTMLElement;
+        clone.setAttribute('aria-hidden', 'true');
+        clone.setAttribute('tabindex', '-1');
+        clone.querySelectorAll<HTMLElement>('a, button, input, select, textarea, [tabindex]').forEach((el) => {
+          el.setAttribute('tabindex', '-1');
+        });
+
+        track.append(clone);
+      });
+
+      const firstItem = items[0];
+      const firstClone = track.children[items.length] as HTMLElement | undefined;
+      const loopWidth = firstItem && firstClone
+        ? firstClone.offsetLeft - firstItem.offsetLeft
+        : initialWidth;
+
+      if (loopWidth <= 0) return;
+
+      track.classList.add('is-auto-scrolling');
+
+      const speed = 28;
+      let paused = false;
+      let rafId = 0;
+      let lastTs = 0;
+      let resumeTimer = 0;
+
+      const pause = () => {
+        paused = true;
+        if (resumeTimer) window.clearTimeout(resumeTimer);
+      };
+
+      const resume = (delay = 0) => {
+        if (resumeTimer) window.clearTimeout(resumeTimer);
+        resumeTimer = window.setTimeout(() => {
+          paused = false;
+        }, delay);
+      };
+
+      const step = (ts: number) => {
+        if (!lastTs) lastTs = ts;
+        const delta = ts - lastTs;
+        lastTs = ts;
+
+        if (!paused) {
+          track.scrollLeft += (speed * delta) / 1000;
+          if (track.scrollLeft >= loopWidth) {
+            track.scrollLeft -= loopWidth;
+          }
+        }
+
+        rafId = window.requestAnimationFrame(step);
+      };
+
+      track.addEventListener('pointerenter', pause);
+      track.addEventListener('pointerleave', () => resume());
+      track.addEventListener('focusin', pause);
+      track.addEventListener('focusout', () => resume());
+      track.addEventListener('touchstart', pause, { passive: true });
+      track.addEventListener('touchend', () => resume(2500), { passive: true });
+      track.addEventListener('wheel', () => resume(1500), { passive: true });
+
+      rafId = window.requestAnimationFrame(step);
+
+      window.addEventListener('pagehide', () => {
+        if (resumeTimer) window.clearTimeout(resumeTimer);
+        window.cancelAnimationFrame(rafId);
+      }, { once: true });
+    });
+  </script>
+</SiteShell>

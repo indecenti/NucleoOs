@@ -1,0 +1,4 @@
+board: lilygo_t_display_s3
+chip: esp32s3
+description: "LilyGO T-Display-S3 Development Board (ST7789 170x320, i80 interface)"
+manufacturer: "LilyGO"

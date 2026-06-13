@@ -1,0 +1,13 @@
+---
+title: Lua 脚本
+description: cap_lua 管理的 Lua 脚本根目录、工具暴露与运行机制。
+---
+
+import { LinkCard } from 'starlight-theme-nova/components'
+
+`cap_lua` 管理一个**受管 Lua 根目录**（demo：`/fatfs/scripts/`），向大语言模型暴露列举、编写、同步/异步执行脚本的工具。可写脚本位于该根目录下。
+
+脚本在设备上运行时能调用哪些原生能力（GPIO、延时、向 Event Router 发布事件等），由应用注册的 `lua_module_*` / `lua_driver_*` 模块决定。`claw_event_router` 的 `run_script` 动作也可直接触发 Lua 脚本，无需大语言模型参与。
+
+<LinkCard href="@lang/reference-cap/cap-lua" title="cap_lua" description="工具列表、异步执行与自动化 run_script" />
+<LinkCard href="@lang/reference-cap/lua-modules" title="Lua 扩展模块" description="lua_module_* / lua_driver_* 的注册机制与脚本内可用的原生能力" />

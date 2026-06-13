@@ -1,0 +1,100 @@
+DEFAULT:
+  perform_check: yes  # should the check be performed?
+  # Sections setting this to 'no' don't need to include any other options as they are ignored
+  # When a file is using a section with the option set to 'no', no checks are performed.
+
+  # what licenses (or license expressions) are allowed for files in this section
+  # when setting this option in a section, you need to list all the allowed licenses
+  allowed_licenses:
+    - Apache-2.0
+  license_for_new_files: Apache-2.0  # license to be used when inserting a new copyright notice
+  new_notice_c: |  # notice for new C, CPP, H, HPP and LD files
+    /*
+     * SPDX-FileCopyrightText: {years} Espressif Systems (Shanghai) CO LTD
+     *
+     * SPDX-License-Identifier: {license}
+     */
+  new_notice_python: |  # notice for new python files
+    # SPDX-FileCopyrightText: {years} Espressif Systems (Shanghai) CO LTD
+    # SPDX-License-Identifier: {license}
+
+  # comment lines matching:
+  # SPDX-FileCopyrightText: year[-year] Espressif Systems
+  # or
+  # SPDX-FileContributor: year[-year] Espressif Systems
+  # are replaced with this template prefixed with the correct comment notation (# or // or *) and SPDX- notation
+  espressif_copyright: '{years} Espressif Systems (Shanghai) CO LTD'
+
+# You can create your own rules for files or group of files
+examples_and_unit_tests:
+  include:
+    - 'examples/**/*'
+    - 'components/**/*'
+    - 'tools/**/*'
+  allowed_licenses:
+  - Apache-2.0
+  - MIT
+  - CC0-1.0
+  - Unlicense
+  license_for_new_files: Apache-2.0
+
+edge_agent_boards:
+  include:
+    - 'application/edge_agent/boards/espressif/**/*'
+  allowed_licenses:
+  - Apache-2.0
+  - CC0-1.0
+  - LicenseRef-Espressif-Modified-MIT
+  license_for_new_files: Apache-2.0
+
+ignore:  # You can also select ignoring files here
+  perform_check: no  # Don't check files from that block
+  include:
+    - 'application/edge_agent/boards/**'
+    - '!application/edge_agent/boards/espressif/**'
+    - 'components/audio/dac_audio/test/wave_1ch_16bits.c'
+    - 'components/audio/dac_audio/test/wave_1ch_8bits.c'
+    - 'components/audio/dac_audio/test/wave_2ch_16bits.c'
+    - 'components/audio/dac_audio/test/wave_2ch_8bits.c'
+    - 'components/audio/pwm_audio/test/wave_1ch_16bits.c'
+    - 'components/audio/pwm_audio/test/wave_1ch_8bits.c'
+    - 'components/audio/pwm_audio/test/wave_2ch_16bits.c'
+    - 'components/audio/pwm_audio/test/wave_2ch_8bits.c'
+    - 'components/bluetooth/ble_profiles/esp/ble_ota/proto-c/**/*'
+    - 'components/bluetooth/ble_profiles/esp/ble_ota/python/**/*'
+    - 'components/display/touch_panel/calibration/basic_painter/fonts/**/*'
+    - 'components/sensors/gas/bme690/*'
+    - 'components/sensors/gas/bme690/common/*'
+    - 'components/usb/esp_tinyuf2/**/*'
+    - 'components/usb/iot_usbh_rndis/priv_include/ndis.h'
+    - 'components/usb/usb_device_uvc/tusb/**/*'
+    - 'components/usb/usb_device_uac/tusb/**/*'
+    - 'components/usb/usb_device_uac/tusb_uac/**/*'
+    - 'components/usb/usb_stream/include/libuvc_def.h'
+    - 'components/usb/usb_stream/test_apps/main/wave_1ch_16bits.c'
+    - 'components/utilities/xz/**/*'
+    - 'docs/**/*'
+    - 'examples/ai/esp_dl/self_learning_classification/main/ui/**/*'
+    - 'examples/screen/main/img_array.h'
+    - 'examples/keyboard/hid_device/**/*'
+    - 'examples/usb/device/usb_extend_screen/main/usb_device/**/*'
+    - 'examples/usb/device/usb_extend_screen/main/tusb/**/*'
+    - 'examples/usb/device/usb_hid_device/hid_device/**/*'
+    - 'examples/usb/device/usb_surface_dial/main/tusb_config.h'
+    - 'examples/usb/device/usb_surface_dial/main/usb_descriptors.c'
+    - 'examples/usb/device/usb_uf2_nvs/pytest_usb_uf2_nvs.py'
+    - 'examples/usb/device/usb_webcam/eyes_show/**/*'
+    - 'examples/usb/host/usb_camera_lcd_display/components/esp_jpeg/**/*'
+    - 'examples/usb/host/usb_camera_lcd_display/components/esp_painter/font/**/*'
+    - 'examples/usb/host/usb_camera_mic_spk/main/wave_1ch_16bits.c'
+    - 'examples/usb/host/usb_cdc_4g_module/components/json_parse/**/*'
+    - 'examples/usb/otg/usb_host_device_mode_manual_switch/cdc_device/usb_descriptors.c'
+    - 'examples/usb/otg/usb_host_device_mode_manual_switch/cdc_device/tusb_config.h'
+    - 'tools/ci/check_copyright_ignore.txt'
+    - 'tools/cmake_utilities/test_apps/pytest_cmake_utilities.py'
+    - 'examples/usb/device/usb_dongle/main/CLI_Commands.c'
+    - 'examples/usb/device/usb_dongle/components/FreeRTOS-Plus-CLI/**/*'
+    - 'components/display/tools/esp_lv_decoder/priv_include/qoi.h'
+    - 'examples/robot/ragtime_panthera/follower/main/ui/**/*'
+    - 'components/lua_modules/lua_module_magnetometer/src/bmm350/**/*'
+    - 'components/lua_modules/lua_module_magnetometer/src/bmm150/**/*'

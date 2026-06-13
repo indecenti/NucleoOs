@@ -1,0 +1,79 @@
+---
+title: Web Flash
+description: Flash ESP-Claw firmware using the web flasher.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+import { LinkButton } from 'starlight-theme-nova/components'
+import LinkToSource from '@/components/LinkToSource.astro';
+
+## Prerequisites
+
+At this point, you should already have assembled the ESP-Claw breadboard hardware, or prepared other ESP-Claw compatible hardware.
+You can view the list of ESP-Claw compatible development boards in <LinkToSource relativePath="application/edge_agent/boards/" />.
+ESP-Claw requires at least 8 MB Flash and 8 MB PSRAM, currently supports ESP32-S3 and ESP32-P4.
+
+Before flashing, prepare a computer with Chrome or Edge installed. Web flashing is not available in Firefox for now.
+
+<Aside type="tip">
+    **Advanced**: [Build from source and flash](@lang/reference-project/build-from-source).
+</Aside>
+
+## Web flash
+
+<Steps>
+
+1. **Connect the board with a data cable**
+
+   Connect the board to your PC with a USB data cable. If you are using the breadboard form ESP-Claw, use the USB port labeled UART.
+
+2. **Open the web flasher and connect serial**
+
+   <LinkCard title="Web flash" href="@lang/flash" description="Open the web flasher to program ESP-Claw on ESP32" />
+
+   Open the web flasher, click Connect, and select your board.
+
+3. **Configure options**
+
+   - Pick the firmware image for your board.
+   - Configure Wi-Fi SSID and password (required).
+   - Configure LLM: Supports GPT (OpenAI), Qwen (Alibaba Bailian), Claude (Anthropic), and DeepSeek (DeepSeek API). Generate an API Key as prompted and enter it.
+      <Aside type="note" title="Please select a model with strong reasoning ability">
+         ESP-Claw's self-programming, complex tool combination, and other advanced features rely on the ability of strong reasoning models.
+         We recommend using GPT-5.4, Qwen3.6-plus, Claude4.6-sonnet, DeepSeek v4 Pro, or similar performance models to get the best experience.
+      </Aside>
+   - Configure chat apps to connect: currently supports Telegram, QQ Bot (OpenClaw), Feishu, and WeChat ClawBot. You can fill several at once.
+     | Chat app | Setting | Help |
+     | --- | --- | --- |
+     | Telegram | Bot token | [Telegram Bot docs](https://core.telegram.org/bots#6-create-a-token) |
+     | QQ Bot | ID and secret | [QQ Bot site](https://q.qq.com/qqbot/openclaw/) |
+     | Feishu | App ID and secret | [Feishu doc](https://www.feishu.cn/content/article/7602519239445974205) |
+     | WeChat ClawBot | Automatic configuration via WeChat QR scan | N/A |
+   - Configure search engine:
+      <Aside type="tip">
+         After a search engine is configured, ESP-Claw can retrieve up-to-date information from the web. Weather queries also depend on search engine support.
+
+         Tavily is recommended and provides a free quota.
+      </Aside>
+      Open [Tavily Dashboard](https://app.tavily.com/), sign up and sign in, copy an API Key, then paste it into the Tavily field in the web flasher.
+   - Configure advanced settings (optional). See [Configuration](@lang/reference-project/configuration).
+
+4. **Flash**
+
+   Click Flash and wait for programming to finish.
+
+5. **Start using it**
+
+   After flashing, the device restarts automatically and is ready to use.
+
+   <Aside type="note">
+      If the Wi-Fi SSID or password is incorrect, ESP-Claw may fail to connect. In this case, connect to the SoftAP provided by ESP-Claw and update the config there. [➡️Web config](@lang/tutorial/web-config)
+   </Aside>
+
+</Steps>
+
+## Next steps
+
+<LinkButton href="@lang/tutorial/first-interactions">First interactions</LinkButton>
+<LinkButton href="@lang/reference-project/configuration" variant="secondary">Configuration</LinkButton>

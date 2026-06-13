@@ -1,0 +1,16 @@
+{
+  "id": "history",
+  "category": "terminal",
+  "it": {
+    "title": "history - Cronologia comandi",
+    "synopsis": "history",
+    "description": "Mostra l'elenco dei comandi digitati nella sessione corrente.",
+    "details": "NOME\n  history - Cronologia comandi.\n\nSINTASSI\n  history\n\nDESCRIZIONE\n  Mostra l'elenco dei comandi precedentemente digitati e memorizzati nella sessione del Terminale.\n\nARCHITETTURA E BASSO LIVELLO\n  Legge l'array globale 'hist' salvato in memoria RAM. La cronologia ha una capienza massima di 100 comandi.\n\nCODICI DI RITORNO\n  0\n    Successo.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  clear(1)\n\nESEMPI AVANZATI\n  history"
+  },
+  "en": {
+    "title": "history - Command history list",
+    "synopsis": "history",
+    "description": "List previous commands entered in the current session.",
+    "details": "NAME\n  history - Command history list.\n\nSYNOPSIS\n  history\n\nDESCRIPTION\n  Displays the list of commands entered in the current terminal session.\n\nSYSTEM ARCHITECTURE\n  Reads from the global 'hist' array stored in RAM. The queue is bounded to a maximum of 100 commands.\n\nEXIT CODES\n  0\n    Success.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  clear(1)\n\nADVANCED EXAMPLES\n  history"
+  }
+}

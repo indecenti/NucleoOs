@@ -1,0 +1,13 @@
+---
+title: Lua scripts
+description: Managed Lua root for cap_lua, tool surface, and execution model.
+---
+
+import { LinkCard } from 'starlight-theme-nova/components'
+
+`cap_lua` manages a **managed Lua root** (demo: `/fatfs/scripts/`), exposing tools to list, write, and run scripts synchronously or asynchronously. Writable scripts live under that root.
+
+Which native hooks scripts can call (GPIO, delays, publishing events to the router, …) depends on registered `lua_module_*` / `lua_driver_*` modules. `claw_event_router`’s `run_script` action can also launch Lua without the LLM.
+
+<LinkCard href="@lang/reference-cap/cap-lua" title="cap_lua" description="Tool list, async execution, and automation run_script" />
+<LinkCard href="@lang/reference-cap/lua-modules" title="Lua extension modules" description="lua_module_* / lua_driver_* registration and native APIs inside scripts" />

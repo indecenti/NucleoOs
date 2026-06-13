@@ -1,0 +1,192 @@
+---
+title: cap_lua 与 Lua 综述
+description: Lua 脚本引擎在 ESP-Claw 中的定位、cap_lua 工具集，以及同步/异步执行机制。
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+
+源码：<LinkToSource relativePath="components/claw_capabilities/cap_lua/src/cap_lua.c" /> · 头文件：<LinkToSource relativePath="components/claw_capabilities/cap_lua/include/cap_lua.h" />
+
+## Lua 在 ESP-Claw 中的定位
+
+ESP-Claw 将 **Lua** 作为设备端「可编程自动化」的首选语言。它在系统中扮演三个角色：
+
+### 1. LLM 可编程的执行层
+
+LLM 可以通过文件工具写入 Lua 脚本（`write_file`），然后执行（`lua_run_script`）。Lua 是 LLM 与硬件外设之间的桥梁：LLM 用自然语言的逻辑生成代码，Lua 负责实际执行 GPIO 操作、屏幕绘制、音频播放等。
+
+```
+LLM 决策 → 生成 Lua 代码 → write_file 保存到 scripts/ → lua_run_script 执行 → 硬件响应
+```
+
+### 2. 自动化动作的载体
+
+`claw_event_router` 支持 `run_script` 动作，允许事件规则在不经过 LLM 的情况下直接触发 Lua 脚本：
+
+```json
+{
+  // 省略了部分字段，如 id
+  "match": { "event_type": "button_pressed" },
+  "actions": [{ "type": "run_script", "input": { "path": "on_press.lua" } }]
+}
+```
+
+这让设备具备完全本地、低延迟的自动化响应能力，不依赖网络和 LLM 推理。
+
+### 3. 快速原型与扩展接口
+
+对于不熟悉 C 开发的用户，Lua 脚本提供了一种无需重新编译固件即可扩展设备行为的方式。通过 `lua_module_*` / `lua_driver_*` 机制注册的原生模块，可以将任意外设能力以简洁的 Lua API 暴露出来。
+
+## Lua 运行时概述
+
+ESP-Claw 使用 Lua 解释器，通过 `cap_lua_runtime_*` 系列函数初始化和执行脚本。运行时在 `cap_lua_group_init` 中初始化，锁定模块注册后启动。
+
+### 脚本路径管理
+
+`cap_lua` 的可写运行时脚本需位于 Script 基目录（Script Base Dir）下。`edge_agent` 中 Script Base Dir 默认为 `/fatfs/scripts/`（应用可通过 `cap_lua_set_base_dir` 修改）。Skill 自带脚本是只读资源，允许以 `/fatfs/skills/<skill_id>/scripts/...` 形式执行。
+
+- `path` 必须是 `.lua` 文件。
+- `path` 可用两种形式：
+  - 受管相对路径：如 `hello.lua` 或 `builtin/test/hello.lua`（会自动拼到 `${base_dir}` 下，且不能包含 `..`）。
+  - Skill 本地绝对路径：如 `{CUR_SKILL_DIR}/scripts/hello.lua`，前提是活动 Skill 文档明确提供该脚本。该路径会展开到 `/fatfs/skills/<skill_id>/scripts/...`，必须位于 Skill 根目录下，且不能包含 `..`。
+- 使用文件工具发现和读取脚本：`list_dir {"keyword":"scripts/"}` 与 `read_file {"path":"scripts/hello.lua"}`。
+
+### 模块注册锁
+
+`cap_lua_register_module` 只能在 `cap_lua_group_init` 调用**之前**执行。初始化完成后，`s_module_registration_locked = true`，之后的注册调用返回 `ESP_ERR_INVALID_STATE`。这确保运行时启动时模块集合已确定。
+
+```c
+// 应在应用初始化阶段（cap_lua_register_group 之前）注册模块
+lua_module_display_register();   // 注册 display 模块
+lua_driver_gpio_register();      // 注册 gpio 模块
+// ...
+cap_lua_register_group("/fatfs/scripts");  // 传入脚本基目录，之后锁定
+```
+
+## cap_lua 工具集
+
+`cap_lua` 当前注册了六个 Callable：
+
+| 工具 ID | 功能 |
+|---------|------|
+| `lua_run_script` | **同步**执行脚本，等待结果返回 |
+| `lua_run_script_async` | **异步**提交脚本，立即返回 job_id |
+| `lua_list_async_jobs` | 列举异步任务（按状态过滤） |
+| `lua_get_async_job` | 查询特定异步任务的状态和输出（支持按 `job_id` 或 `name`） |
+| `lua_stop_async_job` | 停止单个异步任务（按 `job_id` 或 `name`） |
+| `lua_stop_all_async_jobs` | 批量停止异步任务（可按 `exclusive` 分组过滤） |
+
+### 同步执行 vs. 异步执行
+
+| 方式 | 适用场景 | 超时 | 返回值 |
+|------|----------|------|--------|
+| `lua_run_script` | 快速计算、状态读取 | 可设 `timeout_ms` | 脚本输出字符串 |
+| `lua_run_script_async` | 长耗时操作（动画、等待传感器）| `timeout_ms=0` 表示持续运行直到被停止（默认） | job_id |
+
+`lua_run_script_async` 支持 `name`、`exclusive`、`replace` 三个控制字段：
+
+- `name`：给任务一个逻辑名，便于后续 `lua_get_async_job` / `lua_stop_async_job` 按名称操作。
+- `exclusive`：互斥分组（例如 `"display"`），同组常用于“单槽位”资源。
+- `replace: true`：当同名或同 `exclusive` 组已有活动任务时，尝试抢占并替换旧任务。
+
+典型流程：
+
+```json
+// LLM 调用（启动长期任务）：
+{"path": "animation.lua", "name": "clock_anim", "exclusive": "display", "timeout_ms": 0}
+
+// 立即返回：
+"Started Lua job 8a72f3c1 (name=clock_anim, exclusive=display, timeout_ms=0 [until cancelled], status=running) for animation.lua"
+
+// 稍后查询：
+{"name": "clock_anim"}
+// 返回：包含 job_id / status / summary 等
+
+// 停止任务：
+{"name":"clock_anim"}
+```
+
+### 脚本参数传递
+
+脚本执行时可传入 JSON 对象或数组作为参数（`args` 字段），在脚本内通过 `args` 全局变量访问：
+
+```lua
+-- 脚本内读取参数
+local input = args  -- 对应调用时传入的 args 对象
+local speed = input.speed or 100
+```
+
+当 `lua_run_script` / `lua_run_script_async` 由 Agent 在 IM 会话中触发时，如果工具调用里没有显式提供 `args.channel`、`args.chat_id`、`args.session_id`，运行时会自动把当前会话上下文合并进 `args`。
+这让脚本可以直接读取会话信息（例如回消息）而不必每次均指定。
+
+### 使用文件工具编写脚本
+
+```json
+{"path": "scripts/hello.lua", "content": "print('hello')"}
+```
+
+使用 `write_file` 在文件能力的基目录下创建或覆盖 Lua 脚本。随后用 `lua_run_script` 执行同一脚本时去掉开头的 `scripts/`，例如 `{"path":"hello.lua"}`。
+
+## 运行时限制与稳定性
+
+- Lua 超时检测使用指令级 Hook（固定步数触发）+ 墙钟超时，超时后抛出 `execution timed out`。
+- Hook 回调内会主动 `taskYIELD()`，避免紧密循环长期占用 CPU 导致任务看门狗误触发。
+- JSON `args` 里的“整数值”会尽量以 Lua 整数类型进入脚本，减少 GPIO/像素坐标等参数的类型歧义。
+
+<Aside type="tip">
+  建议在涉及硬件轮询或动画的循环中显式使用 `delay.delay_ms(...)` 让出 CPU；虽然运行时已有保护机制，但脚本层主动让步仍是更稳妥的实践。
+</Aside>
+
+## C 语言调用接口
+
+除工具调用外，`cap_lua` 也提供 C 函数接口，供应用代码直接调用：
+
+```c
+// 同步执行
+cap_lua_run_script("startup.lua", NULL, 3000, output, sizeof(output));
+
+// 异步执行（可选 name / exclusive / replace）
+cap_lua_run_script_async("startup.lua",
+                         NULL,
+                         0,
+                         "startup_loop",
+                         "display",
+                         false,
+                         output,
+                         sizeof(output));
+
+// 停止单个异步任务（job_id 或 name）
+cap_lua_stop_job("startup_loop", 2000, output, sizeof(output));
+
+// 按分组停止全部异步任务
+cap_lua_stop_all_jobs("display", 2000, output, sizeof(output));
+
+// 注册模块（必须在 cap_lua_register_group 之前调用）
+cap_lua_register_module("my_module", luaopen_my_module);
+```
+
+## 异步任务状态机
+
+异步任务有以下状态：
+
+```d2
+queued -> running
+running -> done
+running -> failed
+running -> timeout
+running -> stopped
+```
+
+`lua_list_async_jobs` 支持按状态过滤：`"all"` / `"queued"` / `"running"` / `"done"` / `"failed"` / `"timeout"` / `"stopped"`。
+
+## 与 Skill 的协同
+
+`cap_lua` Skill 文档会指导模型在停止、替换或停用长期任务前，先用 `lua_list_async_jobs` / `lua_get_async_job` 按需检查仍在运行的 Lua 异步任务。
+
+<Aside type="tip">
+  **推荐工作流：** 对于控制外设的脚本（如持续动画），使用 `lua_run_script_async` 提交，LLM 可以立即告知用户「已启动」，随后用 `lua_get_async_job` 确认完成状态，而不会因等待脚本执行而阻塞 Agent 循环。
+</Aside>
+
+<LinkCard title="Lua 扩展模块" href="./lua-modules" description="lua_module_* / lua_driver_* 的注册机制、如何实现自定义模块，以及 display 模块完整分析" />

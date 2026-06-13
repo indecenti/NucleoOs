@@ -1,0 +1,1 @@
+{"ffmpeg":"0.12.10","core":"0.12.6","threads":false,"files":{"main":"ffmpeg.js","worker":"814.ffmpeg.js","core":"ffmpeg-core.js","wasm":"ffmpeg-core.wasm"}}

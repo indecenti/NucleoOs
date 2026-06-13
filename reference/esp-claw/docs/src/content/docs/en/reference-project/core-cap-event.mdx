@@ -1,0 +1,36 @@
+---
+title: Core, Capability, and Event
+description: How the pieces collaborate
+---
+
+import { LinkCard } from 'starlight-theme-nova/components'
+import RouterBlockDiagram from "@/assets/images/router_block.svg?url";
+
+<img src={RouterBlockDiagram} alt="Core, Capability, and Event relationship" />
+
+## Event
+
+ESP-Claw is **event-driven**: an **Event** is the trigger for Agent traffic and automation. Core and capabilities consume Events and emit Actions.
+
+`claw_event_router` schedules each Event: to Core for LLM work, to a capability for an action, or end processing.
+
+<LinkCard href="@lang/reference-project/dataflow-and-automation" title="Dataflow and automation" description="Event shape and detailed Event Router behavior" />
+
+## Core
+
+Core is the Agent runtime. It runs the **LLM loop**: fold Events and context into a prompt, call the model, and emit follow-on Events back through `claw_event_router`.
+The LLM's output is also passed to `claw_event_router` for further processing.
+
+<LinkCard href="@lang/reference-core/claw-core" title="Agent Core" description="Deep dive into core behavior" />
+
+## Capability
+
+Capabilities implement concrete features. In ESP-Claw they can both emit Events and handle Actions, for example:
+- **Emit Events**:
+  - `cap_im_platform` gateways wrap inbound IM as Events for `claw_event_router`.
+  - Peripherals can emit Events on interrupts.
+- **Handle Actions**:
+  - `claw_event_router` hands outbound IM sends to per-platform groups implemented by `cap_im_platform`.
+  - Core invokes tool calls on capabilities.
+
+<LinkCard href="@lang/reference-cap/" title="Capability" description="Capability overview" />

@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "_comment": "Catalogo dei modelli ML scaricabili/gestibili dal Model Manager in ANIMA. La UI legge questo file via /api/fs/read. Il manifest reale degli shard (pezzi da 7MB + SHA-256) di ogni modello è generato dallo script di provisioning (tools/sdxs/) e vive su SD in 'manifestPath'. Il downloader (model-fetch.js) scarica gli shard dal 'cdn.baseUrl' (se presente) e li scrive in 'sdDir'; se cdn.baseUrl è vuoto il modello va provvisto da PC (vedi tools/sdxs/README).",
+  "models": [
+    {
+      "id": "sdxs-512-dreamshaper-sketch",
+      "name": "SDXS 512 · Sketch → Immagine",
+      "kind": "diffusion",
+      "family": "stable-diffusion-xs",
+      "purpose": "Generazione immagini nello studio Atelier di Paint (WebGPU, schizzo→immagine).",
+      "consumer": "paint",
+      "default": true,
+      "license": "openrail++",
+      "source": "https://huggingface.co/IDKiro/sdxs-512-dreamshaper-sketch",
+      "onnxExport": "https://github.com/lsb/sdxs-controlnet-sketch",
+      "runtime": "onnxruntime-web",
+      "steps": 1,
+      "resolution": 512,
+      "sizeBytes": 451000000,
+      "minVramMB": 1500,
+      "recommendVramMB": 2500,
+      "sdDir": "/apps/paint/www/models/sdxs-512-dreamshaper-sketch",
+      "manifestPath": "/apps/paint/www/models/sdxs-512-dreamshaper-sketch/manifest.json",
+      "cdn": { "baseUrl": "" },
+      "components": [
+        { "role": "tokenizer",    "file": "tokenizer.json",       "note": "CLIP ViT-L/14 vocab+merges (piccolo, non chunked)" },
+        { "role": "text-encoder", "file": "text_encoder.onnx",    "note": "CLIP ViT-L/14" },
+        { "role": "controlnet",   "file": "controlnet.onnx",      "note": "condizionato sullo schizzo" },
+        { "role": "unet",         "file": "unet.onnx",            "note": "denoising one-step" },
+        { "role": "vae-decoder",  "file": "vae_decoder.onnx",     "note": "latente→immagine" }
+      ],
+      "chunkBytes": 7340032,
+      "provision": "Esegui tools/sdxs/provision.mjs su PC per esportare l'ONNX, dividerlo in pezzi da 7MB e sincronizzarlo su SD; oppure imposta cdn.baseUrl per scaricarlo dal dispositivo."
+    },
+    {
+      "id": "vosk-it-0.4",
+      "name": "Vosk · Riconoscimento vocale (IT)",
+      "kind": "asr",
+      "family": "vosk",
+      "purpose": "Dettatura vocale offline (italiano).",
+      "consumer": "anima/dictation",
+      "license": "apache-2.0",
+      "bundled": true,
+      "sizeBytes": 41000000,
+      "sdDir": "/apps/anima/www/vosk/models",
+      "components": [ { "role": "model", "file": "vosk-model-small-it-0.4.tar.gz" } ],
+      "chunkBytes": 7340032,
+      "note": "Già fornito su SD (rig esistente in voice.js/asr.js). Mostrato per stato/spazio, non riscaricato dal manager."
+    },
+    {
+      "id": "vosk-en-0.15",
+      "name": "Vosk · Speech recognition (EN)",
+      "kind": "asr",
+      "family": "vosk",
+      "purpose": "Offline voice dictation (English).",
+      "consumer": "anima/dictation",
+      "license": "apache-2.0",
+      "bundled": true,
+      "sizeBytes": 39000000,
+      "sdDir": "/apps/anima/www/vosk/models",
+      "components": [ { "role": "model", "file": "vosk-model-small-en-us-0.15.tar.gz" } ],
+      "chunkBytes": 7340032,
+      "note": "Already on SD; shown for status only."
+    }
+  ]
+}

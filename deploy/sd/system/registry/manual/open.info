@@ -1,0 +1,16 @@
+{
+  "id": "open",
+  "category": "system",
+  "it": {
+    "title": "open - Apri file con associazione grafica",
+    "synopsis": "open <file>",
+    "description": "Apre un file usando l'applicazione di sistema associata.",
+    "details": "NOME\n  open - Apri file tramite l'app associata.\n\nSINTASSI\n  open <file>\n\nDESCRIZIONE\n  Apre la risorsa specificata. La shell desktop riceve la chiamata ed avvia l'applicazione registrata in base all'estensione del file.\n\nOPZIONI\n  <file>\n    La risorsa da aprire.\n\nARCHITETTURA E BASSO LIVELLO\n  Utilizza l'evento 'postMessage' del browser. Il terminale invia un payload '{ type: \"open-file\", path: file }' al frame genitore. Il controller della shell intercetta l'estensione, legge '/system/config/file-associations.json' e lancia l'app associata (es. 'notepad', 'photo-viewer').\n\nCODICI DI RITORNO\n  0\n    Successo. Messaggio inoltrato alla shell.\n  1\n    Shell non raggiungibile o errore di associazione.\n\nCONFORMITÀ A\n  Estensione NucleoOS proprietaria.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  echo(1)\n\nESEMPI AVANZATI\n  open /data/Pictures/wallpaper.png\n  open /data/documento.txt"
+  },
+  "en": {
+    "title": "open - Open file with default app",
+    "synopsis": "open <file>",
+    "description": "Open a file using the associated graphical application.",
+    "details": "NAME\n  open - Open file with default application.\n\nSYNOPSIS\n  open <file>\n\nDESCRIPTION\n  Opens the specified resource. The desktop shell resolves the file extension and launches the default associated window.\n\nOPTIONS\n  <file>\n    The path of the file to open.\n\nSYSTEM ARCHITECTURE\n  Uses browser iframe 'postMessage' calls. Terminal sends '{ type: \"open-file\", path: file }' to the parent window. The shell parses the extension, reads '/system/config/file-associations.json' and opens the app (e.g. 'notepad', 'photo-viewer').\n\nEXIT CODES\n  0\n    Success. Message dispatched to the shell.\n  1\n    Shell host unreachable or invalid file association.\n\nCONFORMING TO\n  NucleoOS proprietary extension.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  echo(1)\n\nADVANCED EXAMPLES\n  open /data/Pictures/wallpaper.png\n  open /data/document.txt"
+  }
+}

@@ -1,0 +1,21 @@
+version: 1.0.0
+# Peripherals Configuration
+
+peripherals:
+  - name: rmt_tx
+    type: rmt
+    role: tx
+    config:
+      gpio_num: 38
+      clk_src: RMT_CLK_SRC_DEFAULT
+      resolution_hz: 10000000
+      mem_block_symbols: 64
+      trans_queue_depth: 4
+      intr_priority: 1
+      flags:
+        invert_out: false
+        with_dma: true  # RMT peripheral can connect to DMA channel in esp32s3
+        io_loop_back: false
+        io_od_mode: false
+        allow_pd: false
+        init_level: false

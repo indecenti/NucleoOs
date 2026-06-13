@@ -1,0 +1,220 @@
+---
+title: cap_im_platform — IM platform integration
+description: Unified IM component for Feishu, QQ, Telegram, and WeChat event ingress, outbound sends, and attachment handling.
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+
+Entry point: <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_platform.c" /> ·
+header: <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/include/cap_im_platform.h" /> ·
+Skill: <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/skills/cap_im_platform/SKILL.md" />
+
+## Role
+
+`cap_im_platform` is the unified source component for ESP-Claw IM integrations. It bundles the Feishu, QQ, Telegram, WeChat, and shared attachment implementation into one ESP-IDF component, while keeping the runtime surface split by platform.
+
+This means the build dependency is unified, but the existing runtime group ids and tool names remain stable:
+
+| Runtime group | Event source | Text | Image | File |
+|---------------|--------------|------|-------|------|
+| `cap_im_feishu` | `feishu_gateway` | `feishu_send_message` | `feishu_send_image` | `feishu_send_file` |
+| `cap_im_qq` | `qq_gateway` | `qq_send_message` | `qq_send_image` | `qq_send_file` |
+| `cap_im_tg` | `tg_gateway` | `tg_send_message` | `tg_send_image` | `tg_send_file` |
+| `cap_im_wechat` | `wechat_gateway` | `wechat_send_message` | `wechat_send_image` | Not supported |
+| `cap_im_local` | `local_gateway` | `local_send_message` | — | — |
+
+## Component layout
+
+The platform component keeps each backend in its own source file so protocol-specific logic stays isolated:
+
+| Source | Responsibility |
+|--------|----------------|
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_platform.c" /> | Registers all enabled IM runtime groups. |
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_feishu.c" /> | Feishu WebSocket/Event API ingress, rich text flattening, and sends. |
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_qq.c" /> | QQ Bot WebSocket ingress, token handling, and sends. |
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_tg.c" /> | Telegram long-poll ingress, attachment download queue, and sends. |
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_wechat.c" /> | WeChat ClawBot polling, QR login state, and sends. |
+| <LinkToSource relativePath="components/claw_capabilities/cap_im_platform/src/cap_im_attachment.c" /> | Shared local attachment path helpers. |
+
+## Runtime model
+
+Each backend follows the same split:
+
+1. **Event source**: receive messages from the IM platform, normalize them, and publish `claw_event_router` events.
+2. **Callable tools**: expose platform-specific send functions so the Agent, Console, or automation can send text or media.
+3. **Attachment handling**: save inbound media under the configured inbox root and publish `attachment_saved` events for downstream rules.
+
+```d2
+im_api: "IM platform API"
+gateway: "platform gateway\n(Feishu / QQ / Telegram / WeChat)"
+router: "claw_event_router"
+core: "claw_core\n(Agent)"
+fatfs: "FATFS inbox"
+tools: "send tools\n*_send_message / *_send_image / *_send_file"
+
+im_api -> gateway: "inbound messages"
+gateway -> router: "message event"
+gateway -> fatfs: "save attachments"
+gateway -> router: "attachment_saved event"
+router -> core: "run_agent rule"
+core -> tools: "LLM tool call"
+tools -> im_api: "outbound text/media"
+router -> tools: "send_message binding"
+```
+
+## Startup and visibility
+
+Application startup prepares credentials and attachment settings per enabled platform, then registers the matching runtime groups. The `edge_agent` app binds outbound Event Router channels such as `qq`, `feishu`, `telegram`, `wechat`, and `web` to the corresponding send tools.
+
+The unified Skill declares all four IM runtime groups in `cap_groups`. Activating the Skill gives the model the platform-specific tools together with the guidance for choosing the current channel and avoiding duplicate replies.
+
+<Aside type="note">
+  `cap_im_platform` is a source component, not currently a single runtime group. Keeping per-platform groups preserves existing configuration, Skill visibility, and enable/disable behavior.
+</Aside>
+
+## Platform differences
+
+| Platform | Inbound model | Chat target | Notes |
+|----------|---------------|-------------|-------|
+| Feishu | WebSocket/Event API | Feishu `chat_id`, or user `open_id` beginning with `ou_` | Text sends prefer Markdown-capable interactive cards with plain-text fallback. Media captions are sent as follow-up text. |
+| QQ | QQ Bot WebSocket API | `c2c:<openid>` or `group:<group_openid>` | File delivery depends on QQ platform support; image and generic file paths are separate tool calls. |
+| Telegram | Bot API long polling | Numeric chat id such as `123456789` or `-100...` | Long text is chunked and files are uploaded with multipart streaming. |
+| WeChat | ClawBot polling API | Concrete room id or contact id | Text and image sends are supported; generic non-image file send is not available. |
+| Web (local) | HTTP/WebSocket (Web frontend) | `web` channel | Separate `cap_im_local` component for the built-in IM chat UI on the Web config page; supports text sending. |
+
+## Telegram as a reference backend
+
+Telegram remains a useful representative implementation because it shows the full pattern in a compact backend: long-poll ingress, deduplication, async attachment downloads, and callable text/media sends.
+
+```d2
+tg_api: "Telegram Bot API"
+poll_task: "tg_poll_task\n(FreeRTOS)"
+router: "claw_event_router"
+core: "claw_core\n(Agent)"
+attach_queue: "attachment_queue"
+attach_task: "tg_attachment_task\n(FreeRTOS)"
+fatfs: "FATFS"
+
+tg_api -> poll_task: "getUpdates\n(long poll, 20 s)"
+poll_task -> router: "text\npublish_message()"
+router -> core: "Event Router rules"
+poll_task -> attach_queue: "attachments (image/file)"
+attach_queue -> attach_task
+attach_task -> tg_api: "getFile -> download URL"
+attach_task -> fatfs: "stream write"
+attach_task -> router: "attachment_saved event"
+
+llm_call: "LLM tool calls\ntg_send_message\ntg_send_image / tg_send_file"
+llm_call -> tg_api: "sendMessage\nsendPhoto / sendDocument"
+```
+
+### Event source: long polling
+
+The Telegram backend starts two FreeRTOS tasks from the `cap_im_tg` group `start` hook.
+
+`tg_poll_task` calls `getUpdates` with a 20 s long-poll timeout, parses each update, and publishes events:
+
+```c
+// Text -> standard message event
+claw_event_router_publish_message(
+    "tg_gateway",   // source_cap
+    "telegram",     // source_channel
+    chat_id,        // chat id
+    text,           // body
+    sender_id,      // sender id
+    message_id      // message id
+);
+```
+
+`claw_event_router` then routes the event to `claw_core` for the Agent or to automation actions.
+
+### Dedup cache
+
+Network jitter can replay updates; `cap_im_tg` keeps a ring of FNV-1a 64-bit hashes so the same message is not handled twice:
+
+```c
+#define CAP_IM_TG_DEDUP_CACHE_SIZE 64
+
+static bool cap_im_tg_dedup_check_and_record(const char *update_key)
+{
+    uint64_t key = cap_im_tg_fnv1a64(update_key);
+    for (size_t i = 0; i < CAP_IM_TG_DEDUP_CACHE_SIZE; i++) {
+        if (s_tg.seen_update_keys[i] == key) return true; // seen
+    }
+    s_tg.seen_update_keys[s_tg.seen_update_idx] = key;
+    s_tg.seen_update_idx = (s_tg.seen_update_idx + 1) % CAP_IM_TG_DEDUP_CACHE_SIZE;
+    return false;
+}
+```
+
+### Attachments
+
+Media download is slow, so Telegram handles it asynchronously:
+
+1. `tg_poll_task` enqueues `cap_im_tg_attachment_job_t` items into a queue.
+2. `tg_attachment_task` consumes jobs, calls `getFile`, and streams the payload into FATFS.
+3. On completion it publishes `attachment_saved` with local path, MIME, size, and platform metadata.
+
+```c
+// Example attachment_saved payload_json
+{
+  "platform": "telegram",
+  "attachment_kind": "photo",
+  "saved_path": "/fatfs/inbox/telegram/-123456/789/photo.jpg",
+  "saved_dir": "/fatfs/inbox/telegram/-123456/789",
+  "saved_name": "photo.jpg",
+  "mime": "image/jpeg",
+  "caption": "Look at this",
+  "platform_file_id": "AgACAgIAAxkBAAI...",
+  "size_bytes": 45231,
+  "saved_at_ms": 1714000000000
+}
+```
+
+Downstream rules can listen for `attachment_saved` and chain `cap_llm_inspect`, file operations, or custom automation.
+
+### Callable tools
+
+The `cap_im_tg` runtime group registers four descriptors:
+
+| Tool ID | Description | kind |
+|---------|-------------|------|
+| `tg_gateway` | Poll gateway (event source) | `EVENT_SOURCE` |
+| `tg_send_message` | Send text to a chat_id | `CALLABLE` |
+| `tg_send_image` | Send a local image file | `CALLABLE` |
+| `tg_send_file` | Send a local arbitrary file | `CALLABLE` |
+
+For `tg_send_message`, `chat_id` falls back to the current call context when omitted:
+
+```c
+// chat_id precedence: JSON arg > call context
+if (cJSON_IsString(chat_id_json) && chat_id_json->valuestring[0]) {
+    chat_id = chat_id_json->valuestring;
+} else if (ctx && ctx->chat_id && ctx->chat_id[0]) {
+    chat_id = ctx->chat_id;  // inherit session context
+}
+```
+
+Long text is chunked to fit Telegram's message limits. `tg_send_image` and `tg_send_file` upload via multipart/form-data, using `stat()` for exact `Content-Length` and streaming parts through `esp_http_client_open` instead of buffering the whole file in RAM.
+
+### Configuration API
+
+Application code configures the Telegram backend through the `cap_im_tg_*` API exported by `cap_im_platform`:
+
+```c
+// Bot token (must be set before start)
+cap_im_tg_set_token("YOUR_BOT_TOKEN");
+
+// Optional inbound attachment policy
+cap_im_tg_set_attachment_config(&(cap_im_tg_attachment_config_t){
+    .storage_root_dir         = "/fatfs/inbox",
+    .max_inbound_file_bytes   = 2 * 1024 * 1024,  // max 2 MB
+    .enable_inbound_attachments = true,
+});
+
+// Manual start (normally via claw_cap_start_group)
+cap_im_tg_start();
+```
+
+The same architectural roles are used by the other backends, with platform-specific authentication, message formats, and media APIs.

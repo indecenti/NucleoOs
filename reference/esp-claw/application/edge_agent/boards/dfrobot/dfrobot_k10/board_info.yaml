@@ -1,0 +1,5 @@
+board: dfrobot_k10
+chip: esp32s3
+version: 1.0.0
+description: "DFRobot K10 AI Camera Board"
+manufacturer: "DFRobot"

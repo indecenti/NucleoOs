@@ -1,0 +1,460 @@
+---
+title: Lua extension modules (`lua_module_*` / `lua_driver_*`)
+description: How `lua_module_*` and `lua_driver_*` components register with `cap_lua`, how to author your own, and a full `display` walkthrough.
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside, CardGrid } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+
+## Overview
+
+`lua_module_*` and `lua_driver_*` components are ESP-Claw's **bridge from hardware to Lua**. `lua_driver_*` wraps low-level peripheral drivers (ADC, GPIO, I2C, MCPWM, Touch, UART), while `lua_module_*` covers higher-level modules. Each component is a standard Lua C library (`lua_CFunction` style), registered through `cap_lua_register_module`, then loaded in scripts via `require("module_name")`.
+Pure Lua modules may provide only managed resources such as `lib/`, `test/`, and `README.md`.
+
+## Built-in modules
+
+#### `lua_driver_*` (hardware peripheral drivers)
+
+| Module | Component | Purpose |
+|--------|-----------|---------|
+| `adc` | `lua_driver_adc` | ADC sampling |
+| `gpio` | `lua_driver_gpio` | GPIO reads/writes and direction |
+| `i2c` | `lua_driver_i2c` | I2C bus scan and per-device read/write |
+| `ssd1306` | `lua_driver_i2c` | Pure-Lua SSD1306 I2C OLED driver |
+| `lib_si12t_touch` | `lua_driver_i2c` | Pure-Lua Si12T I2C capacitive touch driver |
+| `mcpwm` | `lua_driver_mcpwm` | Generic PWM output (frequency/duty control) |
+| `pcnt` | `lua_driver_pcnt` | PCNT pulse counter / encoder reading |
+| `touch` | `lua_driver_touch` | Capacitive touch key reads |
+| `uart` | `lua_driver_uart` | UART serial I/O (polling read/write) |
+
+#### `lua_module_*` (higher-level modules)
+
+| Module | Component | Purpose |
+|--------|-----------|---------|
+| `audio` | `lua_module_audio` | PCM/WAV playback/recording and spectrum analysis |
+| `ble_hid` | `lua_module_ble_hid` | BLE HID composite peripheral (media control, keyboard, mouse) |
+| `board_manager` | `lua_module_board_manager` | Board initialization and peripheral handle lookup |
+| `button` | `lua_module_button` | Button events and callbacks |
+| `capability` | `lua_module_call_capability` | Call registered Capabilities directly from Lua |
+| `camera` | `lua_module_camera` | Still capture / streaming hooks |
+| `delay` | `lua_module_delay` | `delay.delay_ms(n)` helpers |
+| `dht` | `lua_module_dht` | DHT-family temperature and humidity reads |
+| `display` | `lua_module_display` | LCD drawing (text, primitives, JPEG/PNG) |
+| `environmental_sensor` | `lua_module_environmental_sensor` | BME690 temperature, humidity, pressure, and gas data |
+| `event_publisher` | `lua_module_event_publisher` | Publish events from Lua into the Event Router |
+| `http_server` | `lua_module_http_server` | Publish static files and HTTP callbacks on the existing HTTP server |
+| `image` | `lua_module_image` | Generic image frame type, format conversion, resizing, and file I/O |
+| `json` | `lua_module_json` | JSON encode/decode helper library |
+| `lib_fuel_gauge` | `lua_module_fuel_gauge` | Pure-Lua battery fuel-gauge library for BQ27220/MAX17048 and similar chips |
+| `imu` | `lua_module_imu` | IMU accelerometer and gyroscope reads |
+| `ir` | `lua_module_ir` | IR receive, learn, and transmit |
+| `knob` | `lua_module_knob` | Rotary encoder / knob events |
+| `lcd` | `lua_module_lcd` | LCD panel initialization, backlight, and display helpers |
+| `lcd_touch` | `lua_module_lcd_touch` | Touch coordinates |
+| `led_strip` | `lua_module_led_strip` | Addressable strips such as WS2812 |
+| `lvgl` | `lua_module_lvgl` | LVGL graphics binding with full UI widgets and event system |
+| `magnetometer` | `lua_module_magnetometer` | Magnetometer / compass reads |
+| `motion_detect` | `lua_module_vision` | Motion detection based on `image.frame` |
+| `sci` | `lua_module_sci` | DFRobot SCI acquisition module (DFR0999) I2C reading |
+| `storage` | `lua_module_storage` | Filesystem operations |
+| `system` | `lua_module_system` | Time, uptime, IP, memory, heap, task stack, and Wi-Fi status |
+| `thread` | `lua_module_thread` | Lua task management, named synchronization queues/semaphores/event groups |
+| `arg_schema` | `lua_module_system` | Pure-Lua argument normalization helper |
+
+<Aside type="note" title="Module conditional compilation">
+    In `edge_agent`, every module is controlled by Kconfig. When the firmware is not built with a module's component, Lua scripts cannot use that module.
+</Aside>
+
+## Registration flow
+
+Each `lua_module_*` / `lua_driver_*` ships exactly one registrar named `lua_module_<name>_register()` or `lua_driver_<name>_register()`:
+
+```c
+// lua_module_display/src/lua_module_display.h
+esp_err_t lua_module_display_register(void);
+```
+
+The body calls `cap_lua_register_module` to bind the Lua module name to its `luaopen_*` entry:
+
+```c
+// lua_module_display/src/lua_module_display.c
+esp_err_t lua_module_display_register(void)
+{
+    return cap_lua_register_module("display", luaopen_display);
+}
+```
+
+**All modules must register before `cap_lua_register_group()`**—later calls fail because the runtime locks registration.
+
+### Example wiring from the app
+
+```c
+// app_claw.c or equivalent init
+#include "lua_module_display.h"
+#include "lua_driver_gpio.h"
+#include "lua_module_delay.h"
+#include "cap_lua.h"
+
+void app_lua_modules_init(void)
+{
+    lua_module_display_register();
+    lua_driver_gpio_register();
+    lua_module_delay_register();
+    // …other modules…
+
+    cap_lua_register_group("/fatfs/scripts");  // pass script base dir; no more registration after lock
+}
+```
+
+## Authoring a custom Lua module
+
+Below is a minimal `myled` module (single GPIO LED) end-to-end.
+
+### 1. Create the component tree
+
+```
+components/lua_modules/lua_module_myled/
+├── CMakeLists.txt
+├── README.md
+├── test/
+│   └── myled_smoke.lua
+├── lib/
+│   ├── lib_myled.md
+│   └── lib_myled.lua
+└── src/
+    ├── lua_module_myled.c
+    └── lua_module_myled.h
+```
+
+`CMakeLists.txt` and `README.md` are required. `test/`, `lib/`, and `src/` are optional.
+
+```cmake
+# CMakeLists.txt
+idf_component_register(
+    SRCS "src/lua_module_myled.c"
+    INCLUDE_DIRS "src"
+    REQUIRES cap_lua driver
+)
+```
+
+Pure Lua modules may use an empty `idf_component_register()`. C-backed modules must list their C source files and include directories.
+
+### 2. Write `README.md`
+
+`README.md` is the required module-level API document. During build it is synced into the Lua module reference docs. It should describe:
+
+- What the module does and which Lua APIs or reusable Lua libraries it provides.
+- How to call each API, including arguments, return values, error behavior, and cleanup requirements.
+- Hardware resource ownership, blocking behavior, concurrency limits, and safe GPIO guidance when relevant.
+
+`README.md` should document only APIs that already exist. Avoid describing planned or unimplemented functions; keep examples short and directly runnable when possible.
+
+### 3. Implement Lua C functions
+
+Every binding uses `int fn(lua_State *L)`:
+- Read arguments with `luaL_check*` helpers
+- Perform the hardware/service work
+- Push return values and return the result count
+
+```c
+// src/lua_module_myled.c
+#include "lua.h"
+#include "lauxlib.h"
+#include "cap_lua.h"
+#include "driver/gpio.h"
+
+#define MYLED_GPIO GPIO_NUM_2
+
+// Lua: myled.set(on)
+static int myled_set(lua_State *L)
+{
+    // 1. read stack args (bool)
+    int on = lua_toboolean(L, 1);
+
+    // 2. drive hardware
+    gpio_set_level(MYLED_GPIO, on ? 1 : 0);
+
+    // 3. no Lua return values
+    return 0;
+}
+
+// Lua: myled.get() -> bool
+static int myled_get(lua_State *L)
+{
+    int level = gpio_get_level(MYLED_GPIO);
+    lua_pushboolean(L, level);
+    return 1;  // one return value
+}
+
+// Module entry: publish functions on a table
+int luaopen_myled(lua_State *L)
+{
+    // GPIO setup (normally centralized in board_manager)
+    gpio_config_t cfg = {
+        .pin_bit_mask = (1ULL << MYLED_GPIO),
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    gpio_config(&cfg);
+
+    // build module table
+    lua_newtable(L);
+
+    lua_pushcfunction(L, myled_set);
+    lua_setfield(L, -2, "set");
+
+    lua_pushcfunction(L, myled_get);
+    lua_setfield(L, -2, "get");
+
+    return 1;  // return the table
+}
+
+esp_err_t lua_module_myled_register(void)
+{
+    return cap_lua_register_module("myled", luaopen_myled);
+}
+```
+
+### 4. Header
+
+```c
+// src/lua_module_myled.h
+#pragma once
+#include "esp_err.h"
+
+esp_err_t lua_module_myled_register(void);
+```
+
+### 5. Add `test/` and `lib/` (optional)
+
+`test/` stores model-readable reference scripts for module validation, hardware validation, demos, and implementation patterns.
+Hardware-related test scripts should be self-contained and include required cleanup and resource release.
+
+For example, `test/myled_smoke.lua` can directly show how scripts load and call the module:
+
+```lua
+local myled = require("myled")
+local delay = require("delay")
+
+myled.set(true)   -- on
+delay.delay_ms(500)     -- needs lua_module_delay
+myled.set(false)  -- off
+```
+
+`lib/` stores reusable Lua libraries. `lib/abc.lua` is an implementation library, not a directly runnable program.
+Public library functions must be documented in the same-name `lib/abc.md`. Every synced `lib/*.lua` must have a same-name Markdown document.
+
+Just like `cap_*` modules, **each `lua_module_*` / `lua_driver_*` should ship a Skill** so the LLM knows how to call it from generated scripts.
+
+## Build sync rules
+
+The build system collects managed `lua_module_*` resources and syncs them into the application filesystem image.
+Output roots are application-specific; in `edge_agent`, built-in Lua resources usually go to `/fatfs/scripts/builtin`.
+Module docs go to `/fatfs/scripts/docs`.
+
+| Source path | Sync output |
+|-------------|-------------|
+| `README.md` | `<component_name>.md` in the Lua module docs output directory |
+| `test/foo.lua` | `test/foo.lua` in the built-in Lua output directory |
+| `lib/foo.lua` | `lib/foo.lua` in the built-in Lua output directory |
+| `lib/foo.md` | `lib/foo.md` in the built-in Lua output directory |
+
+Sync rules:
+
+- `README.md` sync applies only to components named `lua_module_*`.
+- `lib/` and `test/` preserve their relative paths under those directories.
+- All synced script and library output paths must be globally unique.
+- Root-level `.lua` files are not managed sync outputs; modules should not maintain flat root-level Lua files.
+- Lua module directories must be named `lua_module_xx`.
+
+## Case study: `lua_module_gpio`
+
+Source: <LinkToSource relativePath="components/lua_modules/lua_module_gpio/src/lua_module_gpio.c" />
+
+`lua_module_gpio` is a small but complete C-backed Lua module and a good reference for simple hardware bindings.
+It exposes only three Lua APIs: configure direction, write output level, and read input level.
+
+### Component layout
+
+`lua_module_gpio` follows the standard `lua_module_*` layout:
+
+```text
+lua_module_gpio/
+├── CMakeLists.txt
+├── README.md
+└── src/
+    ├── lua_module_gpio.c
+    └── lua_module_gpio.h
+```
+
+`README.md` documents script-side APIs, while `src/` stores the C implementation and registration header:
+
+```c
+// src/lua_module_gpio.h
+int luaopen_gpio(lua_State *L);
+esp_err_t lua_module_gpio_register(void);
+```
+
+Unlike `cap_*` Skills, `lua_module_*` / `lua_driver_*` Skills **do not** bind a dedicated capability group (there is no `lua_module` group). They attach to **`cap_lua`** instead.
+
+### API table
+
+| Lua API | Description |
+|---------|-------------|
+| `gpio.set_direction(pin, mode)` | Configure GPIO direction |
+| `gpio.set_level(pin, level)` | Set output level; non-zero means high |
+| `gpio.get_level(pin)` | Read current GPIO level and return an integer |
+
+`mode` supports `"input"`, `"output"`, `"input_output"`, `"output_od"`, `"input_output_od"`, and `"disable"`.
+
+### Module registration
+
+The registration function only binds Lua module name `gpio` to `luaopen_gpio` in `cap_lua`:
+
+```c
+esp_err_t lua_module_gpio_register(void)
+{
+    return cap_lua_register_module("gpio", luaopen_gpio);
+}
+```
+
+After the application calls `lua_module_gpio_register()` during init, scripts can use `require("gpio")` to get the module table.
+
+### Lua table export
+
+`luaopen_gpio` creates a Lua table and attaches C functions to public fields:
+
+```c
+int luaopen_gpio(lua_State *L)
+{
+    lua_newtable(L);
+
+    lua_pushcfunction(L, lua_module_gpio_set_direction);
+    lua_setfield(L, -2, "set_direction");
+    lua_pushcfunction(L, lua_module_gpio_set_level);
+    lua_setfield(L, -2, "set_level");
+    lua_pushcfunction(L, lua_module_gpio_get_level);
+    lua_setfield(L, -2, "get_level");
+
+    return 1;
+}
+```
+
+This pattern fits most simple modules: call `lua_newtable()`, attach functions with `lua_setfield()`, then return one table.
+
+### Argument validation and errors
+
+The GPIO module uses `luaL_checkinteger` / `luaL_checkstring` for argument validation.
+These helpers raise Lua errors directly when arguments are missing or have the wrong type, so C code does not continue with invalid input.
+
+```c
+static int lua_module_gpio_set_level(lua_State *L)
+{
+    gpio_num_t pin = (gpio_num_t)luaL_checkinteger(L, 1);
+    uint32_t level = (uint32_t)luaL_checkinteger(L, 2);
+
+    if (gpio_set_level(pin, level ? 1 : 0) != ESP_OK) {
+        return luaL_error(L, "gpio_set_level failed");
+    }
+    return 0;
+}
+```
+
+When an underlying ESP-IDF call fails, the module uses `luaL_error` to return the failure to the Lua runtime.
+This makes script execution fail with a clear reason visible to the caller.
+
+Activating the Skill exposes the Lua run tools (`lua_run_script`, `lua_run_script_async`, …), while the Skill document is injected into conversation history as the `activate_skill` tool result so the LLM can author `myled` scripts confidently. Script files are created and inspected with file tools such as `write_file`, `read_file`, and `list_dir`.
+
+### String enum mapping
+
+`set_direction` accepts `mode` as a string, then centralizes conversion to ESP-IDF `gpio_mode_t`:
+
+```c
+static gpio_mode_t lua_module_gpio_mode_from_string(const char *mode)
+{
+    if (!mode || strcmp(mode, "input") == 0) {
+        return GPIO_MODE_INPUT;
+    }
+    if (strcmp(mode, "output") == 0) {
+        return GPIO_MODE_OUTPUT;
+    }
+    if (strcmp(mode, "input_output") == 0) {
+        return GPIO_MODE_INPUT_OUTPUT;
+    }
+    if (strcmp(mode, "output_od") == 0) {
+        return GPIO_MODE_OUTPUT_OD;
+    }
+    if (strcmp(mode, "input_output_od") == 0) {
+        return GPIO_MODE_INPUT_OUTPUT_OD;
+    }
+    if (strcmp(mode, "disable") == 0) {
+        return GPIO_MODE_DISABLE;
+    }
+    return GPIO_MODE_DISABLE;
+}
+```
+
+`set_direction` then distinguishes valid `"disable"` from an unknown string:
+
+```c
+if (mode == GPIO_MODE_DISABLE && strcmp(mode_str, "disable") != 0) {
+    return luaL_error(L, "invalid gpio mode: %s", mode_str);
+}
+```
+
+### Test script example
+
+The GPIO example under `test/` can show the minimal call flow directly:
+
+```lua
+local gpio = require("gpio")
+
+gpio.set_direction(2, "output")
+gpio.set_level(2, 1)
+local level = gpio.get_level(2)
+print("GPIO2 level:", level)
+```
+
+Hardware test scripts should choose GPIOs according to the actual board wiring. Avoid boot strapping pins, Flash/PSRAM pins, or IOs already occupied by other peripherals.
+
+<CardGrid>
+  <LinkCard title="cap_lua overview" href="./cap-lua" description="Runtime setup, script management, async jobs" />
+  <LinkCard title="Dataflow and automation" href="@lang/reference-project/dataflow-and-automation" description="Event Router `run_script` actions" />
+</CardGrid>
+
+## Notes: module-specific logic
+
+### `display` module
+
+The display module has a dedicated ownership-management ("arbitration") mechanism, ensuring Lua scripts can exclusively use display resources and avoid conflicts with other tasks.
+
+After `display.init(...)` succeeds in `lua_module_display`, Lua automatically acquires foreground display ownership; ownership is released on `display.deinit()` or script-exit cleanup to avoid conflicts with other display tasks.
+
+Additionally, in display-HAL re-creation scenarios, the runtime cleans up stale swap-buffer and display-callback state to reduce cross-script display resource leak risks (especially when switching with `lua_run_script_async` `exclusive:"display"` + `replace:true`).
+
+### `event_publisher`: publish events to Event Router
+
+`publish_message` supports two forms:
+
+1. String form: simpler, but carries less information
+
+```lua
+local ep = require("event_publisher")
+ep.publish_message("Button pressed!")
+```
+
+2. Message-object form: carries more information, but you need to build the message object manually
+
+```lua
+local ep = require("event_publisher")
+ep.publish_message({
+  source_cap = "lua_script", -- required
+  channel = args.channel, -- optional; if missing, runtime tries to backfill from global args.channel
+  chat_id = args.chat_id, -- optional; if missing, runtime tries to backfill from global args.chat_id
+  text = "Button pressed!", -- required
+})
+```
+
+<Aside type="note">
+  Dot-call only: `ep.publish_message(...)`; colon-call `ep:publish_message(...)` is not supported.
+</Aside>

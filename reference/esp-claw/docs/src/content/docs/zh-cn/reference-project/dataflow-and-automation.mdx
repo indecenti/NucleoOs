@@ -1,0 +1,322 @@
+---
+title: 数据流与自动化
+description: 事件如何进入路由、规则如何动作、与 Agent 输出的衔接。
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+import { Code } from 'starlight-theme-nova/components'
+import RouterRulesSchema from '@/assets/router_rules.schema.json?raw';
+
+ESP-Claw 是一个**事件驱动**的 Agent 框架，「事件」Event 是每个 Agent 消息/自动化的触发基础。
+
+<LinkCard href="@lang/reference-project/core-cap-event" title="Core、Capability 与 Event" description="Event 在 ESP-Claw 框架中的消息载体职能" />
+
+## 基本定义
+
+### Event
+
+Event 是 ESP-Claw 框架中的消息载体，包含了 Event ID、来源、目标、Event 类型、聊天 ID、发送者、文本或 JSON Payload、时间戳、以及 Session 策略等信息。
+
+`claw_event_t`（见 <LinkToSource path="components/claw_modules/claw_event_router/include/claw_event.h" />）通过结构体组织上述信息。
+
+### Event Router
+
+`claw_event_router` 是 ESP-Claw 框架中的事件调度器，负责将 Event 按照规则进行调度。
+
+### 规则
+
+`router_rules.json` 是 ESP-Claw 框架中的自动化规则文件，指定进入 `claw_event_router` 的 Event 如何处理。
+`router_rules.json` 中的规则顺序决定了 Event 匹配规则的顺序。每条规则的主要内容有：
+- `id`: 规则的唯一标识。
+- `ack`: 规则命中后，可选的确认消息。
+- `consume_on_match`: 是否在规则命中后，阻止继续向下传递。
+- `match`: 规则的匹配条件。
+- `actions`: 规则的动作列表，例如：
+    | 动作类型 | 典型用途 |
+    |--------------|----------|
+    | `call_cap` | 不经过大语言模型，直接执行某个能力 |
+    | `run_agent` | 异步提交消息至 `claw_core`，Agent 响应通过 `out_message` 事件发布回 Event Router |
+    | `run_script` | 运行 Lua 脚本 |
+    | `send_message` | 发送 IM 消息至出站绑定的目标 |
+    | `emit_event` | 生成新的事件并传递给 `claw_event_router` |
+    | `drop` | 丢弃事件 |
+
+<Aside type="tip">
+  `run_script`、`send_message`、`emit_event` 等动作，参数应放在 `actions[*].input` 中（例如 `{"type":"run_script","input":{"path":"demo.lua"}}`），而不是放在动作对象顶层。
+</Aside>
+
+`match.text` 默认使用精确匹配。若要定义命令式规则，可将 `match.text_match_rule` 设置为 `prefix`；路由器会先左裁剪输入文本，要求命令后面是字符串结尾或空白字符，并把后续参数暴露为 `{{match.remainder}}`。
+
+```json
+{
+  "id": "run_script_command",
+  "match": {
+    "event_type": "message",
+    "event_key": "text",
+    "content_type": "text",
+    "text": "/run",
+    "text_match_rule": "prefix"
+  },
+  "actions": [
+    {
+      "type": "run_script",
+      "input": {
+        "path": "/fatfs/skills/runner/scripts/run.lua",
+        "args": {
+          "command": "{{match.remainder}}"
+        }
+      }
+    }
+  ]
+}
+```
+
+命中文本相关模板包括 `{{match.text}}`、`{{match.rule}}`、`{{match.remainder}}`。
+
+`edge_agent` 自带简单的 `router_rules.json`，可以处理 IM 消息收发等基础任务。见 <LinkToSource relativePath="application/edge_agent/fatfs_image/router_rules/router_rules.json" />。
+
+`router_rules.json` 的详细语法定义可见 JSON Schema。
+
+<details>
+    <summary>router_rules.json 的 JSON Schema</summary>
+    <Code lang="json" code={RouterRulesSchema} title="router_rules.schema.json" />
+</details>
+
+<Aside type="tip" title="手动修改 router_rules.json">
+    `edge_agent` 的 `router_rules.json` 位于 `/fatfs/router_rules/router_rules.json`。
+    虽然更推荐使用 Console 命令增删修改规则，你也可以通过 Web 配置页的文件系统管理功能直接编辑 `router_rules.json`。
+
+    **修改后，需要执行 `auto reload` 命令使修改生效。**
+</Aside>
+
+## Event Router 的工作流程
+
+### 规则匹配流程
+
+Event 进入 Event Router 后，从队列取出并逐条与规则集匹配。以下流程图展示完整逻辑：
+
+```d2
+direction: down
+
+queue: "Event 队列"
+guard: {
+  label: "来源为\nclaw_event_router?"
+  shape: diamond
+}
+skip: "跳过（防止路由自循环）"
+init_ctx: "构建 ctx（event / rule / vars / last）"
+has_more: {
+  label: "还有下一条规则?"
+  shape: diamond
+}
+match_check: {
+  label: "规则已启用 &&\n所有 match 字段命中?"
+  shape: diamond
+}
+exec_actions: "依次执行动作列表"
+consume_check: {
+  label: "consume_on_match\n= true?"
+  shape: diamond
+}
+stop: "停止匹配\n（Event 已消耗）"
+fallback_check: {
+  label: "未命中任何规则 &&\ndefault_route_messages_to_agent &&\nevent_type = \"message\"?"
+  shape: diamond
+}
+run_default: "提交给默认 Agent\n（run_agent）"
+done: "处理完成"
+
+queue -> guard: "取出 Event"
+guard -> skip: "是"
+guard -> init_ctx: "否"
+init_ctx -> has_more
+has_more -> match_check: "是"
+has_more -> fallback_check: "否（遍历完毕）"
+match_check -> exec_actions: "命中"
+match_check -> has_more: "未命中"
+exec_actions -> consume_check
+consume_check -> stop: "是"
+consume_check -> has_more: "否，继续"
+fallback_check -> run_default: "是"
+fallback_check -> done: "否"
+```
+
+## `out_message` 事件与出站消息
+
+当 Event Router 的 `run_agent` 动作被触发后，Agent 的响应不会同步返回，而是以 `out_message` 类型的事件异步发布回 Event Router。
+
+如需将 Agent 响应发送到 IM 通道，需要为 `out_message` 配置对应的路由规则，例如：
+
+```json
+{
+  "id": "agent_out_message_send_message",
+  "consume_on_match": true,
+  "match": {
+    "source_cap": "claw_core",
+    "event_type": "out_message",
+    "content_type": "text"
+  },
+  "actions": [
+    {
+      "type": "send_message",
+      "input": {
+        "channel": "{{event.source_channel}}",
+        "chat_id": "{{event.chat_id}}",
+        "message": "{{event.text}}"
+      }
+    }
+  ]
+}
+```
+
+其中 `channel` / `chat_id` 通常来自触发 `run_agent` 时传入的 `target_channel` / `target_chat_id`。
+
+## 推理任务取消与清理
+
+`run_agent` 动作提交到 `claw_core` 后会分配并记录 `request_id`，用于后续取消或追踪。
+
+对应地，框架提供了两层“取消”能力（C API）：
+
+- `claw_core_cancel_request(request_id)`：取消当前正在执行（in-flight）的 Agent 请求。
+- `claw_event_router_cancel_event(event_id)`：标记并跳过队列中尚未处理的单个 Event。
+- `claw_event_router_purge_queue(event_type_filter, source_cap_filter, &out_cancelled)`：批量标记并跳过队列中的待处理 Event（可按事件类型、来源 cap 过滤）。
+
+<Aside type="note">
+
+- 这些接口只对“还没完成处理”的对象生效；已处理完成的请求/Event 不会被回滚。
+  - `claw_core_cancel_request(0)` 表示“取消任意当前 in-flight 请求”；传具体 `request_id` 时只匹配该请求。
+  - Event Router 的取消是“跳过队列中的待处理项”，不影响已进入执行阶段的动作。
+</Aside>
+
+## `agent_stage` 事件与执行过程通知
+
+除最终结果对应的 `out_message` 外，`claw_core` 还可以在 Agent 多轮工具调用过程中发布 `agent_stage` 事件，可用于推送工具调用的阶段性信息。
+
+`agent_stage` 事件的结构为：
+- `source_cap`：`claw_core`
+- `event_type`：`agent_stage`
+- `event.text`：工具调用过程中的阶段性信息
+
+如需自动发出 `agent_stage` 事件，需调整 menuconfig 中的配置：<kbd>(Top)</kbd> → <kbd>Component config</kbd> → <kbd>ESP-Claw Core</kbd> → <kbd>Agent stage notification verbosity</kbd>
+- 选择 <kbd>Verbose</kbd> 时，`claw_core` 会在每轮存在工具调用时向 Event Router 发布 `agent_stage` 事件；
+- 选择 <kbd>Simple</kbd> 时，不在路由层发布 `agent_stage` 事件。
+
+`agent_stage` 事件可以被路由到 IM 等通道，以实时向用户反馈「工作进度」。
+例如 `edge_agent` 默认的 <LinkToSource relativePath="application/edge_agent/fatfs_image/router_rules/router_rules.json" /> 中定义了规则 `agent_stage_im_notify`，在启用 Verbose 且命中该规则时，会把 `agent_stage` 的 `{{event.text}}` 发回来源 IM 会话。
+
+## 定时调度
+
+`cap_scheduler` 提供基于时间的事件触发能力，支持 `once`（一次性）、`interval`（间隔重复）和 `cron`（日历表达式，5 段，不含秒）三种调度类型。
+
+调度器**只负责到时发布 Event**，触发后的具体行为由 Event Router 的规则决定。因此，添加定时任务通常需要同时：
+
+1. 添加一条调度项（`schedules.json` 或通过 `scheduler_add`）
+2. 添加一条匹配的路由规则（`router_rules.json` 或通过 `add_router_rule`）
+
+典型的匹配方式：调度项设置 `event_type: "schedule"` + `event_key`，路由规则用 `match.event_type` + `match.event_key` 命中。
+
+### 调度器的 Console 命令
+
+```sh
+scheduler --list                     # 列出所有调度项
+scheduler --reload                   # 从磁盘重新载入
+scheduler --add --json '<json>'      # 新增调度项
+scheduler --enable <id>              # 启用
+scheduler --disable <id>             # 禁用
+scheduler --pause <id>               # 暂停
+scheduler --resume <id>              # 恢复
+scheduler --trigger <id>             # 立即触发一次
+```
+
+### 调度器的 LLM 工具
+
+`cap_scheduler` 注册了 `scheduler_list`、`scheduler_get`、`scheduler_add`、`scheduler_update`、`scheduler_remove`、`scheduler_enable`、`scheduler_disable`、`scheduler_pause`、`scheduler_resume`、`scheduler_trigger_now`、`scheduler_reload` 等 LLM 可调用工具。`cap_scheduler` 默认对 LLM 可见，无需通过 Skill 激活即可使用。
+
+`cap_router_mgr` 注册了 `list_router_rules`、`get_router_rule`、`add_router_rule`、`update_router_rule`、`delete_router_rule`、`reload_router_rules` 等 LLM 可调用工具。
+
+<Aside type="tip">
+  调度器与路由管理器均提供了 Skill 文件（`cap_scheduler.md`、`cap_router_mgr.md`），LLM 可在需要时激活对应 Skill 以获取详细用法指引。
+</Aside>
+
+## Event Router 提供的 Console 命令
+
+<LinkCard href="@lang/reference-project/console-usage" title="Console 交互" description="查看 Console 命令的基本用法" />
+
+Event Router 提供了两组 Console 命令。`auto` 命令来自 `edge_agent`，`event_router` 命令来自 `cap_router_mgr`，两者功能等价，操作同一份规则集。
+
+```sh
+# auto 命令（edge_agent 提供）
+auto reload                  # 重新载入 router_rules.json
+auto rules                   # 列出当前规则集 JSON
+auto rule <id>               # 查看单条规则 JSON
+auto add_rule '<json>'       # 新增一条规则
+auto update_rule '<json>'    # 按 id 替换一条规则
+auto delete_rule <id>        # 删除一条规则
+auto emit_message ...        # 见后文详细说明
+auto emit_trigger ...        # 见后文详细说明
+auto last                    # 查看最近一次匹配统计，见后文详细说明
+
+# event_router 命令（cap_router_mgr 提供）
+event_router --rules                     # 列出当前规则集 JSON
+event_router --rule <id>                 # 查看单条规则 JSON
+event_router --add-rule-json '<json>'    # 新增一条规则
+event_router --update-rule-json '<json>' # 按 id 替换一条规则
+event_router --delete-rule <id>          # 删除一条规则
+event_router --reload                    # 重新载入 router_rules.json
+event_router --emit-message ...          # 发布消息 Event
+event_router --emit-trigger ...          # 发布触发 Event
+event_router --last                      # 查看最近一次匹配统计
+```
+
+- `auto emit_message` 模拟一条来自 IM 的消息 Event：
+
+    ```sh
+    auto emit_message <source_cap> <channel> <chat_id> <text...>
+    # auto emit_message qq_gateway    qq      123456   hello world
+    ```
+
+    | 参数 | 说明 | 示例 |
+    |------|------|------|
+    | `source_cap` | 来源 Capability 名称 | `qq_gateway` |
+    | `channel` | 来源频道 | `qq` |
+    | `chat_id` | 聊天 ID（群号 / 话题 ID 等） | `123456` |
+    | `text...` | 消息文本（支持空格，多词自动拼接） | `hello world` |
+
+
+
+- `auto emit_trigger` 模拟一条触发类 Event：
+    ```sh
+    auto emit_trigger <source_cap> <event_type> <event_key> '<payload_json>'
+    # auto emit_trigger  tester      trigger     smoke_test '{"ok":true}'
+    ```
+
+    | 参数 | 说明 | 示例 |
+    |------|------|------|
+    | `source_cap` | 来源 Capability 名称 | `tester` |
+    | `event_type` | 事件类型，对应规则 `match.event_type` | `trigger` |
+    | `event_key` | 事件键，对应规则 `match.event_key` | `smoke_test` |
+    | `payload_json` | JSON 对象格式的 Payload | `'{"ok":true}'` |
+
+
+
+- `auto last` 输出最近一次 Event 的处理结果，例如：
+
+    ```text
+    matched=true matched_rules=1 action_count=2 failed_actions=0 route=1 handled_at_ms=...
+    first_rule_id=handle-message
+    ack=matched:handle-message
+    last_error=ESP_OK
+    ```
+
+    | 字段 | 说明 |
+    |------|------|
+    | `matched` | 是否命中至少一条规则 |
+    | `matched_rules` | 命中规则总数 |
+    | `action_count` | 执行动作总数 |
+    | `failed_actions` | 执行失败的动作数 |
+    | `route` | `0` = PASS（未消耗），`1` = CONSUMED（已消耗） |
+    | `first_rule_id` | 第一条命中规则的 `id` |
+    | `ack` | 命中规则的 `ack` 字段渲染结果 |
+    | `last_error` | 最后一次动作的错误码 |

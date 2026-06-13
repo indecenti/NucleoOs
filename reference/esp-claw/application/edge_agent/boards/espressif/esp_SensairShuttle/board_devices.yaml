@@ -1,0 +1,123 @@
+version: 1.0.0
+# Devices Configuration
+devices:
+
+  - name: display_lcd
+    chip: ili9341
+    type: display_lcd
+    sub_type: spi
+    version: default
+    dependencies:
+      espressif/esp_lcd_ili9341: "*"
+    config:
+      mirror_x: true
+      mirror_y: false
+      swap_xy: true
+      x_max: 284
+      y_max: 240
+      # esp_lcd_panel_io_spi_config_t fields
+      io_spi_config:
+        cs_gpio_num: 25                   # GPIO14 - LCD_CS (BSP_LCD_CS)
+        dc_gpio_num: 26                   # GPIO45 - LCD_DC (BSP_LCD_DC)
+        spi_mode: 3                       # Traditional SPI mode (0~3)
+        pclk_hz: 20000000                 # Frequency of pixel clock
+        flags:
+          sio_mode: true                 # Single line mode
+        peripherals:
+          - name: spi_display                  # SPI peripheral for LCD communication
+
+      lcd_panel_config:
+        reset_gpio_num: -1
+        data_endian: "LCD_RGB_DATA_ENDIAN_LITTLE" # LCD_RGB_DATA_ENDIAN_LITTLE
+        flags:
+          reset_active_high: true
+        # ST77916 specific configuration
+        vendor_config: NULL
+
+  # Touch Panel Configuration
+  - name: lcd_touch
+    chip: cst816s
+    type: lcd_touch
+    sub_type: i2c
+    version: default
+    dependencies:
+      espressif/esp_lcd_touch_cst816s: "*"
+    config:
+      io_i2c_config: {}
+      touch_config:
+        x_max: 240
+        y_max: 284
+        int_gpio_num: -1
+        flags:
+          swap_xy: true
+          mirror_x: true
+          mirror_y: true
+    peripherals:
+      - name: i2c_master
+        i2c_addr: 0x2a
+
+  - name: imu_sensor
+    chip: bmi270
+    type: custom
+    version: 1.0.0
+    init_skip: true
+    config:
+      i2c_addr: 0x68
+      frequency: 400000
+      int_gpio_num: -1
+      sdo_gpio_num: 9
+    peripherals:
+      - name: i2c_master
+
+  - name: magnetometer_sensor
+    chip: bmm350
+    type: custom
+    version: 1.0.0
+    init_skip: true
+    config:
+      i2c_addr: 0x14
+      frequency: 400000
+      int_gpio_num: -1
+      sdo_gpio_num: 9
+    peripherals:
+      - name: i2c_master
+
+  - name: environmental_sensor
+    chip: bme690
+    type: custom
+    version: 1.0.0
+    init_skip: true
+    config:
+      i2c_addr: 0x77
+      frequency: 400000
+      int_gpio_num: -1
+    peripherals:
+      - name: i2c_master
+
+  - name: audio_dac
+    chip: internal
+    type: audio_codec
+    version: default
+    config:
+      dac_enabled: true
+    peripherals:
+      - name: i2s_audio_out
+        tx_aux_out_io: 8
+        tx_aux_out_invert: true
+      - name: gpio_pa_control
+        gain: 6
+        active_level: 1
+
+  - name: audio_adc
+    chip: internal
+    type: audio_codec
+    config:
+      adc_enabled: true
+      dac_enabled: false
+      adc_local_cfg:
+        channel_list: [5]          # required
+        sample_rate_hz: 16000
+        max_store_buf_size: 1024
+        conv_frame_size: 256
+        unit_id: ADC_UNIT_1
+        atten: ADC_ATTEN_DB_0

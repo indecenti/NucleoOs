@@ -1,0 +1,63 @@
+---
+title: Skills 与 Capability
+description: Skills 注入机制、Capability 工具注册，以及两者的协作关系。
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+
+## Capability：工具层
+
+Capability（能力）是 ESP-Claw 中可供大语言模型调用的**工具集合**。每个 `cap_*` 模块实现一类功能（如 Lua 脚本执行、IM 发送、文件操作等），并向 `claw_cap` 注册一个带 ID 的 **Capability Group**。
+
+每次向 LLM 发送请求时，`claw_cap_tools_provider` 只会将当前 session **可见（visible）** 的 Group 所含工具注入上下文——Group 不可见时，其工具对 LLM 不存在。这一设计避免将大量不相关工具堆入上下文。
+
+## Skills：知识层
+
+Skill 是存储在文件系统中的一个 **Markdown 文档**，描述某项功能的使用方式、工作流程或行为约定。`claw_skill` 通过 context provider 将 Skills 目录清单注入 `claw_core`：
+
+| Provider | 注入内容 | 始终生效 |
+|----------|----------|:--------:|
+| `claw_skill_skills_list_provider` | 所有 Skill 的 `name`、`description` | 是 |
+
+LLM 在未激活时只能看到摘要——调用 `activate_skill` 后，完整 Skill 文档通过**工具返回值**注入会话历史（而非系统提示词），确保 prompt cache 前缀稳定。激活状态按 session 隔离，持久化在文件系统中，重启后恢复。
+
+## 两者的关系与差异
+
+单独的 Capability 只向 LLM 暴露工具签名，没有使用指南；单独的 Skill 只提供文档，没有可调用的工具。两者在角色上互补：
+
+| | Capability | Skill |
+|---|---|---|
+| **本质** | 工具（Functions / Tools） | 知识文档（Context） |
+| **载体** | C 代码（`cap_*` 模块） | Markdown 文件 |
+| **作用** | 让 LLM **能执行**动作 | 让 LLM **知道怎么**做 |
+| **生命周期** | 启动时注册，按 Group 管理可见性 | 按需激活，状态持久化 |
+
+两者通过 `SKILL.md` frontmatter 中的 `metadata.cap_groups` 字段形成绑定：
+
+```md
+---
+{
+  "name": "cap_lua",
+  "description": "Write, run, and manage Lua scripts.",
+  "metadata": {
+    "cap_groups": ["cap_lua"]
+  }
+}
+---
+```
+
+**激活一个 Skill 等价于同时完成两件事**：
+
+1. 通过 `activate_skill` 工具的返回值将 `SKILL.md` 正文注入会话历史（LLM 获得知识）；
+2. 将 `metadata.cap_groups` 中列出的 Capability Group 设为 session 可见（LLM 获得工具）。
+
+Skill 文档不再注入系统提示词，而是通过工具返回值进入上下文，确保 prompt cache 的前缀保持稳定。
+
+<Aside type="tip">
+  若某 Capability Group 不涉及复杂用法，也可不配置对应 Skill，直接在 `claw_cap_set_llm_visible_groups` 中设为初始可见，无需经由 Skill 激活。
+</Aside>
+
+<LinkCard href="@lang/reference-core/claw-skill" title="claw_skill" description="Skills 目录结构、SKILL.md 元数据与 session 激活状态的底层实现" />
+<LinkCard href="@lang/reference-cap/cap-skill" title="cap_skill" description="activate_skill 工具与缓存友好的 Skill 文档注入" />
+<LinkCard href="@lang/reference-project/skills" title="Skills 使用指南" description="手动与 Agent 管理 Skills 的操作方法、Skill 文件格式示例" />

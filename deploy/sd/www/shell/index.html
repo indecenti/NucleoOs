@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101826">
+  <title>NucleoOS</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="copilot.css">
+  <link rel="stylesheet" href="notify.css">
+  <link rel="stylesheet" href="onboarding.css">
+  <!-- Capture the PWA install prompt early so the first-boot onboarding can offer "Install app". -->
+  <script>window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__nucleoInstallPrompt=e;});</script>
+</head>
+<body>
+  <!-- Boot Splash Screen: full-screen animated atom (Nucleo = nucleus), the web twin of the
+       on-device firmware boot splash. Inline + element styles so it paints correctly DURING parse,
+       before style.css/shell.js load. The IIFE stops itself when shell.js adds .hidden (saves CPU). -->
+  <div id="boot-screen" class="boot-screen" role="status" aria-label="Avvio di NucleoOS in corso"
+       style="position:fixed;inset:0;z-index:999999;overflow:hidden;background:radial-gradient(circle at 50% 43%,#0a1430 0%,#05070f 55%,#02030a 100%);">
+    <canvas id="boot-atom" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;display:block;"></canvas>
+  </div>
+  <script>
+  (function(){
+    var cv=document.getElementById('boot-atom'); if(!cv||!cv.getContext) return;
+    var ctx=cv.getContext('2d'), raf=0, stopped=false, t0=0;
+    var DPR=Math.min(window.devicePixelRatio||1,2), W=0, H=0;
+    var TILTS=[0,Math.PI/3,2*Math.PI/3], SPD=[2.0,-2.45,2.95], PH=[0,2.1,4.2];
+    var stars=[], dust=[], nebula=[], NUC=[];
+    function rnd(s){var x=Math.sin(s*127.1+311.7)*43758.5453;return x-Math.floor(x);}
+    function build(){
+      stars=[]; var n=Math.min(280,Math.round(W*H/6000));
+      for(var i=0;i<n;i++){var L=rnd(i+3)<0.5?0:(rnd(i+5)<0.7?1:2);
+        stars.push({x:rnd(i+1)*W,y:rnd(i+7)*H,L:L,b:0.15+rnd(i+13)*0.8,tw:rnd(i+19)*6.2832,r:(0.5+rnd(i+29))*(1+L*0.5),fl:rnd(i+37)<0.05});}
+      dust=[]; var dn=Math.min(48,Math.round(W*H/22000));
+      for(var j=0;j<dn;j++)dust.push({x:rnd(j+101)*W,y:rnd(j+131)*H,ph:rnd(j+151)*6.2832,sp:0.3+rnd(j+167)*0.7,r:0.6+rnd(j+181)*1.4,a:0.08+rnd(j+199)*0.22});
+      nebula=[{x:0.30,y:0.32,c:'40,90,200',s:0.55,ph:0.0},{x:0.72,y:0.30,c:'120,55,185',s:0.50,ph:1.7},
+              {x:0.64,y:0.70,c:'20,150,170',s:0.60,ph:3.1},{x:0.26,y:0.74,c:'180,60,120',s:0.45,ph:4.6}];
+      NUC=[]; for(var k=0;k<22;k++)NUC.push({a:k*2.399963,rr:Math.sqrt(k/22),p:(k%3!==0),ph:rnd(k+41)*6.2832});
+    }
+    function ensureSize(){var w=window.innerWidth||document.documentElement.clientWidth||0,
+      h=window.innerHeight||document.documentElement.clientHeight||0; if(w===W&&h===H)return;
+      W=w;H=h;cv.width=Math.max(1,Math.round(W*DPR));cv.height=Math.max(1,Math.round(H*DPR));
+      ctx.setTransform(DPR,0,0,DPR,0,0); build();}
+    function ept(ring,pm,R,B,cx,cy){var ex=R*Math.cos(pm),ey=B*Math.sin(pm),T=TILTS[ring];
+      return {x:cx+ex*Math.cos(T)-ey*Math.sin(T),y:cy+ex*Math.sin(T)+ey*Math.cos(T),d:Math.sin(pm)};}
+    function pill(x,y,w,h){var r=h/2;ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+      ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);}
+    function glow(x,y,r,col,a){var g=ctx.createRadialGradient(x,y,0,x,y,r);
+      g.addColorStop(0,'rgba('+col+','+a+')');g.addColorStop(1,'rgba('+col+',0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,6.2832);ctx.fill();}
+    function frame(ts){
+      if(stopped)return; if(!t0)t0=ts; ensureSize(); if(!W||!H){raf=requestAnimationFrame(frame);return;} var t=(ts-t0)/1000;
+      var cx=W/2, cy=H*0.42, R=Math.max(74,Math.min(168,Math.min(W,H)*0.18)), B=R*0.32;
+      var nucR=R*0.22, eR=Math.max(2.4,R*0.05), fs=Math.max(22,Math.min(48,Math.min(W,H)*0.064));
+      var ign=Math.min(1,t/0.6), ringR=Math.min(1,Math.max(0,(t-0.3)/0.8)),
+          elec=Math.min(1,Math.max(0,(t-0.6)/0.7)), word=Math.min(1,Math.max(0,(t-1.05)/0.8));
+
+      // ---- animated background (additive bloom over an opaque base) ----
+      ctx.clearRect(0,0,W,H);
+      var bgg=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(W,H)*0.75);
+      bgg.addColorStop(0,'#0a1430');bgg.addColorStop(0.5,'#05070f');bgg.addColorStop(1,'#010206');
+      ctx.fillStyle=bgg;ctx.fillRect(0,0,W,H);
+      ctx.globalCompositeOperation='lighter';
+      for(var nb=0;nb<nebula.length;nb++){var b=nebula[nb];
+        var bx=(b.x+0.03*Math.sin(t*0.15+b.ph))*W, by=(b.y+0.03*Math.cos(t*0.12+b.ph))*H;
+        glow(bx,by,Math.max(W,H)*b.s*(0.85+0.15*Math.sin(t*0.4+b.ph)),b.c,0.15);}
+      for(var i=0;i<stars.length;i++){var s=stars[i];
+        var sx=(s.x+t*(4+s.L*9))%W, sy=(s.y+t*(1.5+s.L*3))%H; if(sx<0)sx+=W; if(sy<0)sy+=H;
+        var tw=0.55+0.45*Math.sin(t*(1.5+s.L)+s.tw);
+        ctx.globalAlpha=s.b*tw; ctx.fillStyle=s.L?'#dce8ff':'#9fb4e0';
+        ctx.beginPath();ctx.arc(sx,sy,s.r,0,6.2832);ctx.fill();
+        if(s.fl){var gl=s.r*3.4;ctx.globalAlpha=s.b*tw*0.7;ctx.fillStyle='#bcd8ff';
+          ctx.fillRect(sx-gl,sy-0.4,gl*2,0.8);ctx.fillRect(sx-0.4,sy-gl,0.8,gl*2);}}
+      for(var dd=0;dd<dust.length;dd++){var dm=dust[dd];
+        var dx=(dm.x+Math.sin(t*dm.sp+dm.ph)*18)%W, dy=(dm.y-t*dm.sp*10)%H; if(dx<0)dx+=W; if(dy<0)dy+=H;
+        ctx.globalAlpha=dm.a*(0.5+0.5*Math.sin(t*2+dm.ph));ctx.fillStyle='#9fc6ff';
+        ctx.beginPath();ctx.arc(dx,dy,dm.r,0,6.2832);ctx.fill();}
+      ctx.globalAlpha=1;
+      (function(){var per=4.5,idx=Math.floor(t/per),lt=t-idx*per,dur=0.9;   // periodic meteor
+        if(lt<dur){var pr=lt/dur,sx0=rnd(idx*7+1)*W*0.8,sy0=rnd(idx*7+3)*H*0.25,ang=0.5+rnd(idx*7+5)*0.5,len=180;
+          var hx=sx0+Math.cos(ang)*W*0.55*pr,hy=sy0+Math.sin(ang)*H*0.6*pr,a=Math.sin(pr*Math.PI)*0.8;
+          var mg=ctx.createLinearGradient(hx-Math.cos(ang)*len,hy-Math.sin(ang)*len,hx,hy);
+          mg.addColorStop(0,'rgba(140,200,255,0)');mg.addColorStop(1,'rgba(205,232,255,'+a+')');
+          ctx.strokeStyle=mg;ctx.lineWidth=2;ctx.lineCap='round';ctx.beginPath();
+          ctx.moveTo(hx-Math.cos(ang)*len,hy-Math.sin(ang)*len);ctx.lineTo(hx,hy);ctx.stroke();
+          glow(hx,hy,9,'205,232,255',a);}})();
+      ctx.globalCompositeOperation='source-over';
+
+      // ---- atom ----
+      if(ringR>0){ctx.save();ctx.globalAlpha=ringR*0.45;ctx.translate(cx,cy);ctx.rotate(t*0.25);  // energy HUD ring
+        ctx.strokeStyle='rgba(70,205,255,0.6)';ctx.lineWidth=1;
+        for(var tk=0;tk<48;tk++){var aa=tk/48*6.2832,r1=R*1.12,r2=R*(tk%4===0?1.21:1.16);
+          ctx.beginPath();ctx.moveTo(Math.cos(aa)*r1,Math.sin(aa)*r1);ctx.lineTo(Math.cos(aa)*r2,Math.sin(aa)*r2);ctx.stroke();}
+        ctx.restore();}
+      function ringHalf(front,col,glowcol,w){ctx.lineCap='round';
+        ctx.globalCompositeOperation='lighter';ctx.shadowColor=glowcol;ctx.shadowBlur=14;ctx.strokeStyle=col;ctx.lineWidth=w;
+        for(var r=0;r<3;r++){ctx.beginPath();var on=false;for(var j=0;j<=72;j++){var m=j/72*6.2832,d=Math.sin(m);
+          if((d>=0)!==front){on=false;continue;}var p=ept(r,m,R,B,cx,cy);if(!on){ctx.moveTo(p.x,p.y);on=true;}else ctx.lineTo(p.x,p.y);}ctx.stroke();}
+        ctx.shadowBlur=0;ctx.globalCompositeOperation='source-over';}
+      function electrons(front){for(var r=0;r<3;r++){var m=SPD[r]*t+PH[r],p=ept(r,m,R,B,cx,cy);
+        if((p.d>=0)!==front)continue;var dep=(p.d+1)/2,sz=eR*(0.65+dep)*elec;
+        ctx.globalCompositeOperation='lighter';
+        for(var q=12;q>=1;q--){var tp=m-(SPD[r]>0?1:-1)*q*0.085,tq=ept(r,tp,R,B,cx,cy);if((tq.d>=0)!==front)continue;
+          ctx.globalAlpha=(1-q/13)*0.4*elec;ctx.fillStyle='#36e0ff';ctx.beginPath();ctx.arc(tq.x,tq.y,sz*(1-q/15),0,6.2832);ctx.fill();}
+        ctx.globalAlpha=1;glow(p.x,p.y,sz*5,'80,220,255',0.5*elec*(0.6+dep*0.4));
+        ctx.shadowColor='#9af0ff';ctx.shadowBlur=16*elec;ctx.fillStyle='#eaffff';ctx.beginPath();ctx.arc(p.x,p.y,sz,0,6.2832);ctx.fill();ctx.shadowBlur=0;
+        if(front&&dep>0.55){var g2=sz*4.5*(0.6+0.4*Math.sin(t*8+r));ctx.globalAlpha=elec*0.6;ctx.fillStyle='#cdfaff';
+          ctx.fillRect(p.x-g2,p.y-0.6,g2*2,1.2);ctx.fillRect(p.x-0.6,p.y-g2,1.2,g2*2);ctx.globalAlpha=1;}
+        ctx.globalCompositeOperation='source-over';}}
+      if(ringR>0)ringHalf(false,'rgba(40,140,170,'+(0.8*ringR)+')','rgba(40,160,200,0.6)',Math.max(1,R*0.013));
+      electrons(false);
+      var pulse=1+0.06*Math.sin(t*5);                                   // nucleus
+      ctx.globalCompositeOperation='lighter';
+      glow(cx,cy,nucR*3.2*pulse,'255,150,60',0.5*ign);glow(cx,cy,nucR*1.7*pulse,'255,210,130',0.6*ign);
+      ctx.globalCompositeOperation='source-over';
+      for(var mm=0;mm<NUC.length;mm++){var nu=NUC[mm],rr=nucR*0.82*nu.rr*ign,
+        jx=Math.cos(nu.ph+t*3)*nucR*0.07,jy=Math.sin(nu.ph+t*3.3)*nucR*0.07;
+        ctx.fillStyle=nu.p?'rgba(255,120,70,'+ign+')':'rgba(140,170,240,'+ign+')';
+        ctx.beginPath();ctx.arc(cx+Math.cos(nu.a)*rr+jx,cy+Math.sin(nu.a)*rr*0.92+jy,nucR*0.15,0,6.2832);ctx.fill();}
+      ctx.globalCompositeOperation='lighter';glow(cx,cy,nucR*0.95,'255,250,225',0.95*ign);ctx.globalCompositeOperation='source-over';
+      for(var ep=0;ep<2;ep++){var pp=((t+ep*0.7)%1.6)/1.15; if(pp<1){ctx.strokeStyle='rgba(120,210,255,'+((1-pp)*0.3*ign)+')';
+        ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(cx,cy,nucR+pp*R*1.0,0,6.2832);ctx.stroke();}}
+      if(ringR>0)ringHalf(true,'rgba(90,235,255,'+(0.95*ringR)+')','rgba(60,224,255,0.8)',Math.max(1.4,R*0.016));
+      electrons(true);
+
+      // ---- foreground ----
+      if(word>0){ctx.globalAlpha=word;ctx.textAlign='center';ctx.textBaseline='middle';var wy=cy+R*1.45;
+        ctx.shadowColor='rgba(60,224,255,0.8)';ctx.shadowBlur=28*word;ctx.fillStyle='#eaf6ff';
+        ctx.font='700 '+fs+'px ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif';ctx.fillText('NucleoOS',cx,wy);ctx.shadowBlur=0;
+        var uw=ctx.measureText('NucleoOS').width*0.5*Math.min(1,Math.max(0,(t-1.1)/0.6));
+        if(uw>0){var ug=ctx.createLinearGradient(cx-uw,0,cx+uw,0);ug.addColorStop(0,'rgba(60,224,255,0)');
+          ug.addColorStop(0.5,'rgba(90,240,255,0.9)');ug.addColorStop(1,'rgba(60,224,255,0)');ctx.fillStyle=ug;ctx.fillRect(cx-uw,wy+fs*0.62,uw*2,1.5);}
+        ctx.fillStyle='rgba(150,180,210,'+word+')';ctx.font='400 '+Math.max(11,fs*0.29)+'px ui-sans-serif,system-ui,sans-serif';
+        ctx.fillText('w e b - n a t i v e   o s',cx,wy+fs*0.92);ctx.globalAlpha=1;}
+      var bw=Math.min(280,W*0.5), bx=cx-bw/2, by=cy+R*1.45+fs*1.7+16, sweep=(t*0.55)%1;
+      ctx.fillStyle='rgba(255,255,255,0.07)';pill(bx,by,bw,3);ctx.fill();
+      ctx.save();pill(bx,by,bw,3);ctx.clip();ctx.globalCompositeOperation='lighter';
+      var hw=bw*0.36, hx=bx-hw+(bw+hw)*sweep, lg=ctx.createLinearGradient(hx,0,hx+hw,0);
+      lg.addColorStop(0,'rgba(60,224,255,0)');lg.addColorStop(0.5,'rgba(120,240,255,1)');lg.addColorStop(1,'rgba(60,224,255,0)');
+      ctx.fillStyle=lg;ctx.fillRect(bx-hw,by-2,bw+hw*2,7);ctx.restore();
+      var vg=ctx.createRadialGradient(cx,cy,Math.min(W,H)*0.3,cx,cy,Math.max(W,H)*0.72);  // vignette
+      vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,6,0.55)');ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);
+      raf=requestAnimationFrame(frame);
+    }
+    function stop(){if(stopped)return;stopped=true;if(raf)cancelAnimationFrame(raf);window.removeEventListener('resize',ensureSize);}
+    var bs=document.getElementById('boot-screen');
+    if(bs){if(bs.classList.contains('hidden'))stop();
+      else if(window.MutationObserver){var mo=new MutationObserver(function(){if(bs.classList.contains('hidden')){setTimeout(stop,500);mo.disconnect();}});mo.observe(bs,{attributes:true,attributeFilter:['class']});}}
+    setTimeout(stop,60000);   // hard backstop: never spin forever if the hide signal is missed
+    window.addEventListener('resize',ensureSize);
+    try{ensureSize();raf=requestAnimationFrame(frame);}catch(e){}
+  })();
+  </script>
+
+  <!-- Pairing overlay: blocks the OS until this browser is paired with the device. The
+       6-digit code is shown on the Cardputer screen (proof of physical proximity). -->
+  <div id="pair-overlay" class="pair-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pair-title">
+    <form id="pair-form" class="pair-card">
+      <div class="pair-logo">
+        <svg viewBox="0 0 20 20" width="34" height="34" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="7" height="7" rx="2"/><rect x="11" y="2" width="7" height="7" rx="2"/><rect x="2" y="11" width="7" height="7" rx="2"/><rect x="11" y="11" width="7" height="7" rx="2"/></svg>
+      </div>
+      <h1 id="pair-title" data-i18n="pair_title">Associa questo dispositivo</h1>
+      <p class="pair-sub" data-i18n="pair_sub">Inserisci il codice a 6 cifre mostrato sullo schermo del Cardputer.</p>
+      <input id="pair-pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
+             placeholder="••••••" data-i18n-attr="aria-label:pair_pin_aria" aria-label="Codice di accoppiamento" autofocus>
+      <div id="pair-msg" class="pair-msg" role="alert"></div>
+      <button id="pair-submit" type="submit" data-i18n="pair_submit">Associa</button>
+    </form>
+  </div>
+
+  <!-- Mobile Placeholder (visibile solo su schermi piccoli) -->
+  <div id="mobile-placeholder" class="hidden-desktop">
+    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+    <h2 data-i18n="mobile_title">App Telefono in Arrivo</h2>
+    <p data-i18n="mobile_body">Collega lo smartphone al monitor (Desktop Mode) per usare NucleoOS, oppure ruota il dispositivo.</p>
+  </div>
+
+  <!-- Desktop: app icons live here -->
+  <main id="desktop" aria-label="Desktop"></main>
+
+  <!-- Window layer: app windows are created here by the window manager -->
+  <div id="windows"></div>
+
+  <!-- Right-click context menu (desktop icons + empty desktop) -->
+  <div id="ctxmenu" class="ctx hidden" role="menu"></div>
+
+  <!-- Start menu — Windows 11 style: search box, pinned grid, recommended, account/power bar -->
+  <section id="start-menu" class="hidden" aria-label="Start menu">
+    <!-- Search field at the top: typing here switches the body to live search results -->
+    <div class="sm-search">
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><line x1="10.6" y1="10.6" x2="14" y2="14" stroke-linecap="round"/></svg>
+      <input id="sm-search-input" type="text" placeholder="Cerca app, file e impostazioni" data-i18n-attr="placeholder:start_search_ph;aria-label:search" autocomplete="off" spellcheck="false" aria-label="Cerca">
+    </div>
+
+    <div class="sm-body">
+      <!-- Home view: pinned apps + recommended files -->
+      <div id="sm-home" class="sm-view">
+        <div class="sm-sechead">
+          <span class="sm-sectitle" data-i18n="start_pinned">Aggiunte</span>
+          <button class="sm-pill" id="sm-allapps-btn" type="button"><span data-i18n="start_allApps">Tutte le app</span> <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
+        <div id="sm-pinned" class="sm-grid"></div>
+        <div class="sm-sechead sm-reco-head">
+          <span class="sm-sectitle" data-i18n="start_recommended">Consigliati</span>
+          <button class="sm-reco-toggle" id="sm-reco-toggle" type="button" aria-expanded="true" data-i18n-attr="title:start_reco_toggle;aria-label:start_reco_toggle" title="Mostra o nascondi i consigliati" aria-label="Mostra o nascondi i consigliati"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
+        <div id="sm-reco" class="sm-reco"></div>
+      </div>
+
+      <!-- All apps view: full alphabetical list -->
+      <div id="sm-allapps" class="sm-view hidden">
+        <div class="sm-sechead">
+          <button class="sm-pill sm-back" id="sm-back-btn" type="button"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4l-4 4 4 4" stroke-linecap="round" stroke-linejoin="round"/></svg> <span data-i18n="back">Indietro</span></button>
+          <span class="sm-sectitle" data-i18n="start_allApps">Tutte le app</span>
+        </div>
+        <div id="sm-all" class="sm-list"></div>
+      </div>
+
+      <!-- Search results view (shown while typing in the Start search box) -->
+      <div id="sm-results" class="sm-view hidden"></div>
+    </div>
+
+    <!-- Account + power bar -->
+    <footer class="sm-foot">
+      <button class="sm-account" id="sm-account" type="button">
+        <span class="sm-avatar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6" stroke-linecap="round"/></svg></span>
+        <span class="sm-acctxt"><span class="sm-accname" id="sm-device">NucleoOS</span><span class="sm-accsub" id="sm-storage">SD —</span></span>
+      </button>
+      <div class="sm-foot-actions">
+        <a class="sm-iconbtn" href="/downloads/NucleoConnect.exe" download data-i18n-attr="title:start_dl_win" title="Scarica l'app per Windows"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg></a>
+        <a class="sm-iconbtn" href="/downloads/NucleoOS.apk" download data-i18n-attr="title:start_dl_apk" title="Scarica l'app Android"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg></a>
+        <button class="sm-iconbtn sm-power" id="sm-power" type="button" data-i18n-attr="title:start_power_title" title="Riavvia il Cardputer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg></button>
+      </div>
+    </footer>
+  </section>
+
+  <!-- Search results (apps + SD files), popped above the taskbar search box -->
+  <section id="search-panel" class="search-panel hidden" aria-label="Search results"></section>
+
+  <!-- Toast notification container (bottom-right, stacked) -->
+  <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- Drop overlay: shown when user drags a file from the OS onto the browser -->
+  <div id="drop-overlay" class="hidden" aria-hidden="true">
+    <div class="drop-inner">
+      <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <p data-i18n="drop_text">Rilascia per caricare sulla SD del Cardputer</p>
+      <span class="drop-dest">/data/uploads/</span>
+    </div>
+  </div>
+  
+  <!-- OS File Dialog (Common Dialog) -->
+  <div id="os-dialog-scrim" class="os-dialog-scrim" aria-hidden="true">
+    <div class="os-dialog-box">
+      <div class="os-dialog-header">
+        <span class="os-dialog-title" id="os-dialog-title">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
+          <span id="os-dialog-title-text" data-i18n="osdlg_browse">Sfoglia</span>
+        </span>
+        <button class="os-dialog-close" id="os-dialog-close">&times;</button>
+      </div>
+      <div class="os-dialog-search-row">
+        <div class="os-dialog-search-wrapper">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" class="os-dialog-search-input" id="os-dialog-search" placeholder="Cerca..." data-i18n-attr="placeholder:search">
+        </div>
+      </div>
+      <div class="os-dialog-crumbs" id="os-dialog-crumbs">/data</div>
+      <ul class="os-dialog-list" id="os-dialog-list"></ul>
+      <div class="os-dialog-footer">
+        <input type="text" id="os-dialog-filename" class="os-dialog-filename-input" placeholder="Nome file" data-i18n-attr="placeholder:fileName" autocomplete="off" spellcheck="false">
+        <button class="os-dialog-btn" id="os-dialog-btn-cancel" data-i18n="cancel">Annulla</button>
+        <button class="os-dialog-btn primary" id="os-dialog-btn-confirm" data-i18n="open">Apri</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generic modal: styled prompt / confirm / properties (built by shell.js; replaces native dialogs) -->
+  <div id="os-modal-scrim" class="os-modal-scrim" aria-hidden="true"></div>
+
+  <section id="action-center" class="hidden" aria-label="Action Center">
+    <div class="ac-grid">
+      <button class="ac-btn active" id="ac-wifi" title="Wi-Fi">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 5.6C5.5 2.6 10.5 2.6 14 5.6" stroke-linecap="round"/><path d="M4 8.1C6.4 6.1 9.6 6.1 12 8.1" stroke-linecap="round"/><path d="M6 10.6c1.2-1 2.8-1 4 0" stroke-linecap="round"/><circle cx="8" cy="13" r="0.9" fill="currentColor" stroke="none"/></svg>
+        <span>Wi-Fi</span>
+      </button>
+      <button class="ac-btn" id="ac-theme" data-i18n-attr="title:ac_theme_title" title="Dark Mode">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span data-i18n="theme">Theme</span>
+      </button>
+      <button class="ac-btn" id="ac-eco" data-i18n-attr="title:ac_eco_title" title="Eco Mode">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="16" height="10" rx="2" ry="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="22" y1="11" x2="22" y2="13" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span data-i18n="ac_eco">Eco</span>
+      </button>
+    </div>
+    <div class="ac-slider">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <input type="range" id="ac-brightness" min="0" max="100" value="70">
+    </div>
+  </section>
+
+  <!-- Taskbar — Windows-11 style: app cluster centered, system tray on the right -->
+  <footer id="taskbar">
+    <div class="tb-side tb-left"></div>
+    <div class="tb-center">
+      <button id="start-btn" title="Start">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="7" height="7" rx="2"/><rect x="11" y="2" width="7" height="7" rx="2"/><rect x="2" y="11" width="7" height="7" rx="2"/><rect x="11" y="11" width="7" height="7" rx="2"/></svg>
+      </button>
+      <div id="search" data-i18n-attr="title:tb_search_title" title="Cerca app e file">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><line x1="10.6" y1="10.6" x2="14" y2="14" stroke-linecap="round"/></svg>
+        <input id="search-input" type="text" placeholder="Cerca" data-i18n-attr="placeholder:tb_search_ph;aria-label:tb_search_title" autocomplete="off" spellcheck="false" aria-label="Cerca app e file">
+      </div>
+      <button id="copilot-btn" data-i18n-attr="title:tb_copilot_title;aria-label:tb_copilot_title" title="ANIMA Copilot — Ctrl+Spazio" aria-label="ANIMA Copilot">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 2.2l1.9 5.4 5.4 1.9-5.4 1.9L12 16.8l-1.9-5.4L4.7 9.5l5.4-1.9L12 2.2zM19 14l.9 2.6 2.6.9-2.6.9L19 21l-.9-2.6-2.6-.9 2.6-.9L19 14z"/></svg>
+      </button>
+      <div class="tb-divider"></div>
+      <div id="task-pinned" class="task-zone"></div>
+      <div id="task-running" class="task-zone"></div>
+    </div>
+    <div id="tray">
+      <span id="tray-remote" title="" hidden></span>
+      <span id="tray-busy" title="" hidden></span>
+      <span id="tray-ws" data-i18n-attr="title:tray_ws_title" title="Connessione al Cardputer"><span class="ws-dot offline"></span></span>
+      <span id="tray-net" data-i18n-attr="title:tray_net_title" title="Rete"></span>
+      <span id="tray-storage">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3.5 2.5h5L12 6v7.5H3.5z" stroke-linejoin="round"/><line x1="6" y1="2.8" x2="6" y2="5"/><line x1="8" y1="2.8" x2="8" y2="5"/><line x1="10" y1="3.4" x2="10" y2="5"/></svg>
+        <span class="v">—</span>
+      </span>
+      <span id="clock" data-i18n-attr="title:tray_clock_title" title="Mostra la data"><span class="ck-time">--:--</span><span class="ck-date"></span></span>
+      <button id="show-desktop" data-i18n-attr="title:tb_showDesktop;aria-label:tb_showDesktop" title="Mostra il desktop" aria-label="Mostra il desktop"></button>
+    </div>
+  </footer>
+
+  <script type="module" src="shell.js"></script>
+</body>
+</html>

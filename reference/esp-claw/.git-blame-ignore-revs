@@ -1,0 +1,10 @@
+# move dfrobot_k10 from `basic_demo` to `edge_agent`
+07b3d57794b6be1981f54c7e26c336ae187f429f
+# mv dfrobot_k10 to third_party
+cbcdfd0a1dc146bfd78c5cecf86d850a7325d866
+# Add vendor categorization for boards
+a9ddd64fad1d21dae373d2fc71da71d2fca7c4e8
+# move lilygo_t_display_s3 from `basic_demo` to `edge_agent`
+57a0187ae38ccae74f42a3a7a2776179dbd15957
+# rename waveshare esp32_p4_nano to waveshare_esp32_p4_nano
+8ffc20e4b1119bf34a16e1a8e9d95081d406e8c2

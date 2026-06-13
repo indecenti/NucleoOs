@@ -1,0 +1,68 @@
+---
+import { getRelativeLocaleUrl } from "astro:i18n";
+import logoRaw from "@/assets/logos/logo.svg?raw";
+
+const mainPage = getRelativeLocaleUrl(Astro.currentLocale ?? "en", "/");
+const docsPage = getRelativeLocaleUrl(Astro.currentLocale ?? "en", "/tutorial/");
+---
+
+<div class="site-title sl-flex">
+  <a class="project-name" href={mainPage} aria-label="ESP-Claw">
+    <span class="project-logo" set:html={logoRaw} />
+  </a>
+  <span class="divider"></span>
+  <a class="docs-name" href={docsPage} aria-label="Docs">Docs</a>
+</div>
+
+<style>
+  .site-title {
+    gap: 1rem;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+  }
+  .project-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--sl-color-white);
+    font-weight: 600;
+    font-size: 1.4rem;
+    text-decoration: none;
+    letter-spacing: -0.01em;
+  }
+  .project-logo {
+    display: block;
+    line-height: 0;
+  }
+  .docs-name {
+    color: var(--sl-color-text-accent);
+    display: flex;
+    align-items: center;
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    letter-spacing: -0.01em;
+  }
+  .divider {
+    width: 1px;
+    height: 100%;
+    background-color: var(--sl-color-gray-4);
+  }
+  .site-title a:focus-visible {
+    outline: 0;
+  }
+  .site-title a:focus-visible > :global(*) {
+    outline: auto;
+    outline-offset: 0.33rem;
+    border-radius: 1px;
+  }
+  .site-title :global(svg) {
+    margin-block: 0;
+    transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .project-logo :global(svg) {
+    height: 2rem;
+    width: auto;
+  }
+</style>

@@ -1,0 +1,665 @@
+---
+import {
+  SITE_LOCALES,
+  localeHref,
+  htmlLangAttribute,
+  type Lang,
+} from "@/site/locales";
+import type { ChromeStrings } from "@/site/chrome-i18n";
+import { Languages, ArrowRight, Menu, X, ChevronDown } from "@lucide/astro";
+import logoRaw from "@/assets/logos/logo.svg?raw";
+import EspressifLogo from "@/assets/logos/espressif-logo.svg";
+
+interface Props {
+  lang: Lang;
+  title: string;
+  description: string;
+  pagePath: string;
+  chrome: ChromeStrings;
+}
+
+const { lang, title, description, pagePath, chrome } = Astro.props;
+const htmlLang = htmlLangAttribute(lang);
+const currentLocaleLabel =
+  SITE_LOCALES.find((l) => l.id === lang)?.label ?? lang;
+---
+
+<!doctype html>
+<html lang={htmlLang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+
+    <style>
+      html {
+        background: var(--bg-base);
+        color: var(--text-primary);
+        font-family: "Inter", system-ui, sans-serif;
+        font-size: 16px;
+        line-height: 1.6;
+        scroll-behavior: smooth;
+      }
+
+      body {
+        min-height: 100vh;
+        background: #07080a;
+        overflow-x: hidden;
+        margin: 0px;
+      }
+
+      .site-container {
+        max-width: 85em;
+        margin: 0 auto;
+        min-height: 100vh;
+        background: var(--bg-base);
+        border-left: 1px solid rgba(255, 255, 255, 0.08);
+        border-right: 1px solid rgba(255, 255, 255, 0.08);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 0 100px rgba(0, 0, 0, 0.5);
+      }
+
+      nav {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        column-gap: 1rem;
+        padding: 0 2rem;
+        height: 56px;
+        background: rgba(10, 11, 14, 0.85);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .nav-brand {
+        justify-self: start;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-weight: 600;
+        font-size: 1.2rem;
+        color: var(--text-primary);
+        text-decoration: none;
+        letter-spacing: -0.01em;
+      }
+
+      .nav-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 7rem;
+        height: auto;
+      }
+
+      .nav-links {
+        justify-self: center;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+      }
+
+      .nav-links a {
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 0.875rem;
+        padding: 0.35rem 0.8rem;
+        border-radius: var(--radius-sm);
+        transition:
+          color 0.15s,
+          background 0.15s;
+      }
+
+      .nav-links a:hover {
+        color: var(--text-primary);
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .nav-right {
+        justify-self: end;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .mobile-nav {
+        display: none;
+      }
+
+      .mobile-nav-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        padding: 0;
+        color: var(--text-primary);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          border-color 0.15s;
+      }
+
+      .mobile-nav-toggle:hover {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+
+      .mobile-nav-toggle::-webkit-details-marker {
+        display: none;
+      }
+
+      .mobile-nav-icon,
+      .mobile-nav-close {
+        width: 1.1rem;
+        height: 1.1rem;
+      }
+
+      .mobile-nav[open] .mobile-nav-icon {
+        display: none;
+      }
+
+      .mobile-nav:not([open]) .mobile-nav-close {
+        display: none;
+      }
+
+      .mobile-nav-panel {
+        display: none;
+      }
+
+      .mobile-nav-locale-menu {
+        display: none;
+      }
+
+      .lang-switcher-icon {
+        width: 1em;
+        height: 1em;
+      }
+
+      .lang-switcher {
+        position: relative;
+      }
+
+      .lang-switcher > summary {
+        list-style: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        cursor: pointer;
+        padding: 0.3rem 0.55rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: transparent;
+        transition:
+          background 0.15s,
+          border-color 0.15s;
+      }
+
+      .lang-switcher > summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .lang-switcher > summary:hover {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+
+      .lang-switcher-chevron {
+        flex-shrink: 0;
+        opacity: 0.75;
+      }
+
+      .lang-switcher-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        min-width: 9rem;
+        padding: 0.35rem 0;
+        margin: 0;
+        list-style: none;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+        z-index: 200;
+      }
+
+      .lang-switcher-menu a {
+        display: block;
+        padding: 0.45rem 0.9rem;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        text-decoration: none;
+        transition:
+          background 0.12s,
+          color 0.12s;
+      }
+
+      .lang-switcher-menu a:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text-primary);
+      }
+
+      .lang-switcher-menu a.is-current {
+        color: var(--accent-soft);
+        font-weight: 600;
+        pointer-events: none;
+      }
+
+      .nav-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--text-on-accent);
+        background: var(--accent);
+        padding: 0.4rem 1rem;
+        border-radius: var(--radius-sm);
+        text-decoration: none;
+        transition: opacity 0.15s;
+      }
+
+      .nav-cta:hover {
+        opacity: 0.88;
+      }
+
+      .button-icon {
+        width: 1em;
+        height: 1em;
+        transform: translateY(-0.06em);
+      }
+
+      footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.25rem 2rem;
+        border-top: 1px solid var(--border);
+      }
+
+      .footer-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        text-decoration: none;
+      }
+
+      .footer-logo {
+        width: 1.2rem;
+        height: 1.2rem;
+      }
+
+      .footer-logo-text {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .footer-logo-text:hover {
+        color: var(--text-secondary);
+      }
+
+      .footer-logo-text-highlight {
+        font-weight: 600;
+      }
+
+      .footer-links {
+        display: flex;
+        gap: 1.25rem;
+      }
+
+      .footer-links a {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        transition: color 0.15s;
+      }
+
+      .footer-links a:hover {
+        color: var(--text-secondary);
+      }
+
+      @media (max-width: 700px) {
+        nav {
+          grid-template-columns: 1fr auto;
+          padding: 0 1rem;
+        }
+
+        .nav-links {
+          display: none;
+        }
+
+        .nav-right {
+          display: none;
+        }
+
+        .mobile-nav {
+          display: block;
+          justify-self: end;
+          position: relative;
+        }
+
+        .mobile-nav[open] .mobile-nav-panel {
+          position: absolute;
+          top: calc(100% + 0.75rem);
+          right: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.4rem;
+          width: min(18rem, calc(100vw - 2rem));
+          padding: 0.8rem;
+          background: rgba(18, 20, 24, 0.97);
+          border: 1px solid var(--border);
+          border-radius: var(--radius-md);
+          box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+          backdrop-filter: blur(14px);
+          transform-origin: top right;
+          animation: mobile-nav-enter 0.18s ease-out;
+        }
+
+        .mobile-nav-panel a {
+          display: flex;
+          align-items: center;
+          min-height: 2.75rem;
+          padding: 0 0.9rem;
+          color: var(--text-secondary);
+          text-decoration: none;
+          border-radius: var(--radius-sm);
+          transition:
+            color 0.15s,
+            background 0.15s;
+        }
+
+        .mobile-nav-panel a:hover {
+          color: var(--text-primary);
+          background: rgba(255, 255, 255, 0.05);
+        }
+
+        .mobile-nav-locale {
+          margin: 0;
+        }
+
+        .mobile-nav-locale > summary {
+          list-style: none;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          min-height: 2.75rem;
+          padding: 0 0.9rem;
+          color: var(--text-secondary);
+          cursor: pointer;
+          border-radius: var(--radius-sm);
+          transition:
+            color 0.15s,
+            background 0.15s;
+        }
+
+        .mobile-nav-locale > summary::-webkit-details-marker {
+          display: none;
+        }
+
+        .mobile-nav-locale > summary:hover {
+          color: var(--text-primary);
+          background: rgba(255, 255, 255, 0.05);
+        }
+
+        .mobile-nav-locale-label {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.45rem;
+        }
+
+        .mobile-nav-locale-name {
+          font-size: 0.875rem;
+        }
+
+        .mobile-nav-locale-chevron {
+          width: 1rem;
+          height: 1rem;
+          opacity: 0.75;
+          transition: transform 0.15s ease;
+        }
+
+        .mobile-nav-locale[open] .mobile-nav-locale-chevron {
+          transform: rotate(180deg);
+        }
+
+        .mobile-nav-locale-links {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          padding: 0.35rem 0.9rem 0.1rem;
+        }
+
+        .mobile-nav-locale[open] .mobile-nav-locale-menu {
+          display: block;
+          animation: mobile-nav-enter 0.16s ease-out;
+        }
+
+        .mobile-nav-locale-links a {
+          min-height: auto;
+          padding: 0.35rem 0.7rem;
+          font-size: 0.82rem;
+          border: 1px solid var(--border);
+          background: rgba(255, 255, 255, 0.02);
+        }
+
+        .mobile-nav-locale-links a.is-current {
+          color: var(--accent-soft);
+          border-color: rgba(255, 255, 255, 0.18);
+          background: rgba(255, 255, 255, 0.05);
+          pointer-events: none;
+        }
+
+        .mobile-nav-cta {
+          justify-content: center;
+          gap: 0.45rem;
+          margin-top: 0.2rem;
+          font-weight: 600;
+          color: var(--text-on-accent) !important;
+          background: var(--accent);
+        }
+
+        @keyframes mobile-nav-enter {
+          from {
+            opacity: 0;
+            transform: translateY(-8px) scale(0.98);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        footer {
+          flex-direction: column;
+          gap: 1rem;
+          text-align: center;
+        }
+      }
+    </style>
+
+    <!-- Set default theme (document) to dark -->
+    <script is:inline lang="ts">
+      const colorTheme = localStorage.getItem("theme-toggle");
+      const hasSetTheme = localStorage.getItem("theme-set");
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (isDark) {
+        /* no need to set theme */
+        return;
+      }
+      if (!colorTheme || !hasSetTheme) {
+        localStorage.setItem("theme-set", "1");
+        localStorage.setItem("theme-toggle", "dark");
+      }
+    </script>
+
+    <slot name="head" />
+  </head>
+  <body>
+    <div class="site-container">
+      <nav>
+        <a href={localeHref(lang, "")} class="nav-brand">
+          <span class="nav-logo" set:html={logoRaw} />
+        </a>
+        <div class="nav-links">
+          <a href={localeHref(lang, "")}>{chrome.navHome}</a>
+          <a href={localeHref(lang, "tutorial")}>{chrome.navDocs}</a>
+          <a
+            href="https://skills-lab.esp-claw.com"
+            target="_blank"
+            rel="noopener">{chrome.navSkillsLab}</a>
+          <a
+            href="https://github.com/espressif/esp-claw"
+            target="_blank"
+            rel="noopener">{chrome.navGitHub}</a
+          >
+        </div>
+        <div class="nav-right">
+          <details class="lang-switcher">
+            <summary>
+              <Languages class="lang-switcher-icon" />
+              <span>{currentLocaleLabel}</span>
+              <svg
+                class="lang-switcher-chevron"
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2.5 4L5 6.5L7.5 4"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"></path>
+              </svg>
+            </summary>
+            <ul class="lang-switcher-menu" role="list">
+              {
+                SITE_LOCALES.map((loc) => (
+                  <li>
+                    <a
+                      href={localeHref(loc.id, pagePath)}
+                      class:list={[{ "is-current": loc.id === lang }]}
+                      hreflang={loc.id}
+                      lang={loc.id}
+                    >
+                      {loc.label}
+                    </a>
+                  </li>
+                ))
+              }
+            </ul>
+          </details>
+          <a href={localeHref(lang, "tutorial")} class="nav-cta">
+            {chrome.navCta}
+            <ArrowRight class="button-icon" />
+          </a>
+        </div>
+        <details class="mobile-nav" data-mobile-nav>
+          <summary class="mobile-nav-toggle" aria-label="Open navigation menu">
+            <Menu class="mobile-nav-icon" />
+            <X class="mobile-nav-close" />
+          </summary>
+          <div class="mobile-nav-panel">
+            <a href={localeHref(lang, "")} data-mobile-nav-link>{chrome.navHome}</a>
+            <a href={localeHref(lang, "tutorial")} data-mobile-nav-link>{chrome.navDocs}</a>
+            <a
+              href="https://skills-lab.esp-claw.com"
+              target="_blank"
+              rel="noopener"
+              data-mobile-nav-link
+            >
+              {chrome.navSkillsLab}
+            </a>
+            <a
+              href="https://github.com/espressif/esp-claw"
+              target="_blank"
+              rel="noopener"
+              data-mobile-nav-link
+            >
+              {chrome.navGitHub}
+            </a>
+            <details class="mobile-nav-locale">
+              <summary>
+                <span class="mobile-nav-locale-label">
+                  <Languages class="lang-switcher-icon" />
+                  <span class="mobile-nav-locale-name">{currentLocaleLabel}</span>
+                </span>
+                <ChevronDown class="mobile-nav-locale-chevron" />
+              </summary>
+              <div class="mobile-nav-locale-menu">
+                <div class="mobile-nav-locale-links">
+                  {
+                    SITE_LOCALES.map((loc) => (
+                      <a
+                        href={localeHref(loc.id, pagePath)}
+                        class:list={[{ "is-current": loc.id === lang }]}
+                        hreflang={loc.id}
+                        lang={loc.id}
+                        data-mobile-nav-link
+                      >
+                        {loc.label}
+                      </a>
+                    ))
+                  }
+                </div>
+              </div>
+            </details>
+            <a href={localeHref(lang, "tutorial")} class="mobile-nav-cta" data-mobile-nav-link>
+              {chrome.navCta}
+              <ArrowRight class="button-icon" />
+            </a>
+          </div>
+        </details>
+      </nav>
+
+      <slot />
+
+      <footer>
+        <a href="https://www.espressif.com" class="footer-brand">
+          <img class="footer-logo" src={EspressifLogo.src} alt="Espressif" />
+          <span class="footer-logo-text">
+            Copyright ©
+            {
+              new Date().getFullYear() === 2026
+                ? "2026"
+                : `2026-${new Date().getFullYear() + 1}`
+            }
+            <span class="footer-logo-text-highlight">Espressif Systems</span>
+          </span>
+        </a>
+        <div class="footer-links">
+          <a href={chrome.footerTermsLink}>{chrome.footerTerms}</a>
+          <a href={chrome.footerPrivacyLink}>{chrome.footerPrivacy}</a>
+        </div>
+      </footer>
+    </div>
+    <script>
+      document.querySelectorAll("[data-mobile-nav]").forEach((menu) => {
+        const details = menu as HTMLDetailsElement;
+        details.querySelectorAll("[data-mobile-nav-link]").forEach((link) => {
+          link.addEventListener("click", () => {
+            details.removeAttribute("open");
+            details
+              .querySelectorAll("details[open]")
+              .forEach((nested) => nested.removeAttribute("open"));
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,97 @@
+---
+title: Memory
+description: "Structured long-term memory and session history: summary-tag retrieval, session-history isolation, and auto-extraction."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+
+LLMs are stateless—each request starts fresh. ESP-Claw uses `claw_memory` to inject two kinds of persisted context before each request so the Agent appears to “remember” chats and users.
+
+The two memories target different horizons and solve different problems:
+
+## Memory modes
+
+ESP-Claw's memory module provides two modes:
+
+| Mode | Behavior | Best for |
+|---|---|---|
+| `Structured memory management` (full mode) | Uses structured records + a summary-tag catalog; recalls details via `memory_recall` when needed | Default mode, suitable for continuous use and auto-extraction |
+| `Lightweight memory` (lightweight mode) | Keeps profile and session history; long-term memory mainly injects `MEMORY.md` text | Resource-constrained setups or simpler pipelines |
+
+`edge_agent` uses full mode by default. You can switch in menuconfig at <kbd>(Top)</kbd> → <kbd>App Claw Config</kbd> → <kbd>App Claw memory management mode</kbd>.
+
+## Session history: coherence within a conversation
+
+Session history keeps **turn-to-turn coherence** within one conversation. Without it, every line is a fresh start for the model and prior content cannot be referenced.
+
+ESP-Claw scopes history by **Session ID**. Turns under the same Session ID form one thread; **changing Session ID switches to another isolated thread**—ideal for parallel chats from different IM users or channels.
+
+History is capped (max messages and max characters per message). Older turns drop first by design: prevent unbounded token growth and steer durable facts into long-term memory.
+
+## Long-term memory: durable knowledge across sessions
+
+Long-term memory is **shared across all Sessions** for facts that outlive one chat: preferences, device summaries, cross-task agreements, and more.
+
+### Memory capabilities
+
+Structured long-term memory supports the following basic operations:
+
+| Operation | Purpose |
+|------|------|
+| `memory_store` | Write one long-term memory entry |
+| `memory_recall` | Recall related memories by summary label |
+| `memory_list` | List currently stored memories |
+| `memory_update` | Update an existing memory |
+| `memory_forget` | Delete a specified memory |
+
+### Editable profile and soul memory
+
+Besides structured long-term memory, `claw_memory` also maintains three editable profile files, and injects them as system context:
+
+| File | Purpose | Suggested content |
+|---|---|---|
+| `user.md` | Current user profile | Name/call sign, preferred language, common terms, standing agreements |
+| `soul.md` | Agent “soul” and values | Core style, operating principles, priority order |
+| `identity.md` | Agent identity card | Name, role, capability boundaries, strengths |
+
+You can treat these as “stable behavior settings”, while structured entries in `memory_records.jsonl` are closer to “retrievable factual memories”.
+
+### Structured memory entries
+
+In the current implementation, long-term memory is not a fixed type enum. It is a structured entry model. Each entry mainly contains:
+
+| Field | Purpose | Example |
+|------|------|------|
+| `content` | Memory body (normalized durable fact) | "The user prefers replies in Chinese." |
+| `tags` | Used to build the summary-label catalog (takes up to the first 1-3) | `Chinese,reply-style` |
+| `keywords` | Used in keyword index to help locate related entries | `Chinese,concise` |
+| `source` | Source marker (for example `manual`, `auto_llm`) | `auto_llm` |
+
+### Lightweight retrieval: summary labels
+
+ESP-Claw does not rely on a vector database. It uses **summary labels** for lightweight retrieval. Each memory usually has 1-3 `tags`, and the system builds a summary-label catalog from them. In full mode, the catalog is auto-injected on each request so the LLM can pick labels first, then call `memory_recall` for details.
+
+### Auto-extraction and deduplication
+
+In full mode, the system attempts auto-extraction from the latest user message at request start: durable information is written into structured memory, with dedup/replace handling before and after writes to avoid repeated accumulation of the same fact.
+
+Note that current auto-extraction is mainly based on user messages; whether device events are stored depends on whether business logic explicitly calls `memory_store`.
+
+<Aside type="caution" title="Mind the source of truth">
+  In full mode, `MEMORY.md` is not the retrieval source of truth. Retrieval and updates are based on structured files (`memory_records.jsonl`, `memory_index.json`).
+</Aside>
+
+## What to store where
+
+| Content | Prefer |
+|---|---|
+| Assistant personality, style, values | `soul.md` |
+| Assistant name, role, capability boundaries | `identity.md` |
+| User long-term preferences and communication agreements | `user.md` + long-term memory (`memory_ops`) |
+| Name, preferences, language habits | Long-term memory (in full mode, prefer managing through `memory_ops`) |
+| Device state, finished-task summaries | Long-term memory (structured records + summary tags) |
+| Ephemeral instructions for this chat | Leave in session history—no extra steps |
+| One-off facts that span sessions | Write to long-term memory, clear when the task completes |
+
+<LinkCard href="@lang/reference-core/claw-memory" title="claw_memory" description="Init fields, full/lightweight mode differences, and memory directory layout" />

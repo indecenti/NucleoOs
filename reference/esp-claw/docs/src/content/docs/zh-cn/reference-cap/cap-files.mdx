@@ -1,0 +1,149 @@
+---
+title: cap_files — 文件系统操作
+description: 文件系统代表：受管 FATFS 目录的读写、编辑、复制、移动、删除与路径安全机制。
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+
+源码：<LinkToSource relativePath="components/claw_capabilities/cap_files/src/cap_files.c" /> · 头文件：<LinkToSource relativePath="components/claw_capabilities/cap_files/include/cap_files.h" />
+
+## 定位
+
+`cap_files` 是**文件系统类 Capability 的代表实现**，向 LLM 和自动化规则暴露对受管 FATFS 目录的文件读写、编辑、复制、移动与删除能力。它展示了如何在嵌入式环境中安全地将文件系统访问抽象为工具接口。
+
+默认管理目录为 `/fatfs`，可通过 `cap_files_set_base_dir()` 在应用初始化时修改。
+
+## 暴露的工具
+
+| 工具 ID | 功能 | 输入 |
+|---------|------|------|
+| `read_file` | 读取文本文件内容 | `path` |
+| `write_file` | 创建或覆盖文件 | `path`, `content` |
+| `edit_file` | 替换文件中第一个匹配字符串 | `path`, `old_string`, `new_string` |
+| `delete_file` | 删除文件 | `path` |
+| `copy_file` | 复制文件到新路径 | `src_path`, `dst_path` |
+| `move_file` | 移动文件到新路径 | `src_path`, `dst_path` |
+| `list_dir` | 递归列举目录下所有文件 | `keyword`（可选） |
+
+所有工具均标记为 `CLAW_CAP_FLAG_CALLABLE_BY_LLM`。
+
+## 路径安全机制
+
+`cap_files` 的核心安全设计是严格的路径边界校验，防止路径遍历攻击（path traversal）：
+
+```c
+static bool cap_files_path_is_valid(const char *path)
+{
+    // 禁止 ".." 序列（防止跳出基目录）
+    if (strstr(path, "..") != NULL) return false;
+
+    // 路径必须以 base_dir 开头
+    if (strncmp(path, s_files_base_dir, base_len) != 0) return false;
+
+    // 允许精确匹配基目录本身，或 base_dir/ 开头的子路径
+    return path[base_len] == '\0' || path[base_len] == '/';
+}
+```
+
+`cap_files_resolve_path` 同时支持**绝对路径**和**相对路径**输入：
+
+```c
+// 绝对路径：直接校验是否在 base_dir 下
+// "/fatfs/notes/hello.txt" → 合法
+
+// 相对路径：自动拼接 base_dir
+// "notes/hello.txt" → "/fatfs/notes/hello.txt"
+snprintf(resolved, resolved_size, "%s/%s", s_files_base_dir, path);
+```
+
+这种设计让 LLM 可以使用简短的相对路径，同时保证安全边界。
+
+## 工具实现细节
+
+### `read_file`：大小限制
+
+文件读取有 32 KB 上限（`CAP_FILES_MAX_FILE_SIZE`），超出部分被截断。这是为了防止大文件将整个 LLM 上下文占满：
+
+```c
+max_read = output_size - 1;
+if (max_read > CAP_FILES_MAX_FILE_SIZE) {
+    max_read = CAP_FILES_MAX_FILE_SIZE;
+}
+read_size = fread(output, 1, max_read, file);
+output[read_size] = '\0';
+```
+
+### `write_file`：自动创建父目录
+
+`write_file` 在写入前会递归创建不存在的父目录，无需用户预先 `mkdir`：
+
+```c
+cap_files_ensure_parent_dirs(resolved_path);
+// 依次创建 /fatfs → /fatfs/notes → /fatfs/notes/2026 ...
+```
+
+### `copy_file` / `move_file`：路径约束与目录补齐
+
+`copy_file` 和 `move_file` 都要求源路径与目标路径位于受管根目录下，且两者不能相同。
+
+目标路径缺失父目录时，会先自动补齐目录。
+
+`move_file` 优先使用 `rename()`；若底层文件系统或跨目录场景导致直接重命名失败，则自动回退到“先复制，再删除源文件”的流程，因此对调用方仍表现为一次移动操作。
+
+### `edit_file`：字符串替换语义
+
+`edit_file` 实现的是**第一次匹配替换**（`strstr` + 内存复制），不是全局替换：
+
+```c
+match = strstr(buffer, old_string);
+if (!match) {
+    snprintf(output, output_size, "Error: old_string not found in %s", resolved_path);
+    return ESP_ERR_NOT_FOUND;
+}
+// 将 prefix + new_string + suffix 组合为新内容，一次性写回
+```
+
+这让 LLM 可以精确修改文件的某一处内容，同时错误信息明确（找不到时告知 LLM 提供的旧字符串不正确）。
+
+### `list_dir`：递归遍历 + 关键词过滤
+
+```c
+// 递归遍历 base_dir，输出每个文件的完整路径
+// 支持可选的大小写不敏感 keyword 过滤（匹配完整路径）
+cap_files_list_recursive(s_files_base_dir, keyword, output, output_size, &offset, &count);
+```
+
+输出格式为每行一个绝对路径：
+```
+/fatfs/notes/hello.txt
+/fatfs/scripts/blink.lua
+/fatfs/skills/cap_lua/SKILL.md
+```
+
+若目录下无文件，返回 `"(no files found)"` 而非空字符串，避免 LLM 误判。
+
+## 与 `cap_lua` 的边界
+
+`cap_files` 和 `cap_lua` 分别管理不同的目录子树，互不干涉：
+
+| 模块 | 管理目录 | 文件类型 |
+|------|----------|---------|
+| `cap_files` | `/fatfs`（可配置） | 任意文本文件 |
+| `cap_lua` | `/fatfs/scripts`（默认） | 仅 `.lua` 文件 |
+
+LLM 可用 `cap_files` 读取和修改 Lua 脚本的源码，再用 `cap_lua` 执行；也可用 `cap_files` 读取 `cap_skill` 所管理的 `.md` Skill 文档。
+
+## 配置
+
+```c
+// 修改基目录（必须在 register_group 前调用）
+cap_files_set_base_dir("/sdcard");
+
+// 注册到 claw_cap
+cap_files_register_group();
+```
+
+<Aside type="caution">
+  `cap_files` 的 `write_file`、`edit_file`、`copy_file` 与 `move_file` 都会改变设备上的受管文件，包括 Skill 文档和 Lua 脚本。在多用户或不可信 LLM 场景下，应谨慎开放此 Capability，或通过访问控制限制可写目录。
+</Aside>

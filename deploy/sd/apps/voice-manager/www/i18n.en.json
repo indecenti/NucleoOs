@@ -1,0 +1,95 @@
+{
+  "_lang": "en",
+  "app_title": "Voice Commands",
+  "ws_connecting": "Connecting…",
+  "mic": "Mic",
+
+  "tab_tutorial": "Tutorial",
+  "tab_commands": "Commands",
+  "tab_test": "Test",
+  "tab_custom": "Custom",
+
+  "prog_label": { "one": "1 command trained", "other": "{count} commands trained" },
+  "prog_cap": "max {count}",
+
+  "t0_title": "Teach the Cardputer your voice",
+  "t0_intro": "This tool trains the Cardputer's <b>native</b> voice recognizer: it runs entirely <b>offline</b>, on the device, and learns <b>your</b> voice. The more you use it, the more accurate it gets — every recognized command fine-tunes its own model automatically.",
+  "t0_tip1": "It's <b>push-to-talk</b>: hold <span class=\"keycap\">FN</span> (or <span class=\"keycap\">G0</span>) on the Cardputer, say the command, release.",
+  "t0_tip2": "The device recognizes the <b>word</b>; ANIMA turns it into the action (open an app, tell the time…).",
+  "t0_tip3": "No cloud, no key: the audio never leaves the device.",
+  "t0_next": "Let's start →",
+
+  "t1_title": "How to speak clearly",
+  "t1_intro": "A few rules make a huge difference to accuracy:",
+  "t1_tip1": "<b>Quiet environment</b> and a constant distance from the microphone (~20 cm).",
+  "t1_tip2": "Press <span class=\"keycap\">FN</span> <b>before</b> speaking, release <b>right after</b>. One word/phrase per recording.",
+  "t1_tip3": "Speak in a <b>natural and steady</b> way — just like you'll say it in real use.",
+  "t1_tip4": "Pick <b>distinct</b>, multi-syllable commands. Avoid single syllables and words that sound nearly alike.",
+  "t1_next": "Got it →",
+
+  "back_arrow": "← Back",
+  "next_arrow": "Next →",
+
+  "t2_title": "Train the essential commands",
+  "t2_intro": "Let's start with a distinct, useful base set. Press <b>Train</b>, then hold <span class=\"keycap\">FN</span> and say the command shown.",
+
+  "t3_title": "Try it",
+  "t3_intro": "Let's test what you've trained. Hold <span class=\"keycap\">FN</span> and say one of the commands: you'll see in real time <b>what was recognized</b> and how confidently. Notice how the <b>radius</b> tightens over time: that's the model learning you.",
+  "t3_goto_test": "Go to Test",
+
+  "t4_title": "Ready!",
+  "t4_intro": "You've got the basics. From here you can:",
+  "t4_tip1": "Add more commands from the <b>Commands</b> tab (up to 20).",
+  "t4_tip2": "Create your own phrases from the <b>Custom</b> tab.",
+  "t4_tip3": "Come back to <b>Test</b> whenever you like: every use improves recognition.",
+  "t4_goto_commands": "Go to Commands →",
+
+  "cmd_library": "Command library",
+  "cmd_sub": "Native commands ready to use. 🟢 = already trained with your voice. The device handles up to <b>20</b>: pick your favorites.",
+
+  "test_title": "Live test",
+  "test_sub": "Hold <span class=\"keycap\">FN</span> on the Cardputer and say a trained command.",
+  "test_hint": "Each recognition shows <b>distance</b> (lower = more similar), <b>margin</b> over the 2nd candidate, and the word's <b>self-calibrating radius</b>. Green = excellent, yellow = acceptable.",
+  "test_waiting": "Waiting… press FN and speak.",
+
+  "custom_title": "Custom command",
+  "custom_sub": "Record a phrase of your own that isn't in the curriculum. Keep it short and distinct.",
+  "custom_ph": "e.g. turn on the light",
+  "custom_start": "Start training",
+  "custom_yours": "Your custom commands",
+  "custom_empty": "No custom commands saved.",
+
+  "rec_title": "On the Cardputer: hold FN and speak",
+  "rec_hold_say": "Hold <span class=\"keycap\">FN</span> (or <span class=\"keycap\">G0</span>) and say:",
+  "rec_then_release": "then <b>release</b>.",
+  "rec_waiting": "Waiting for the Cardputer…",
+  "rec_recording": "🔴 Recording… release FN to save.",
+  "rec_processing": "Processing…",
+  "rec_too_short": "⚠️ Too short or silent — try again: hold FN and speak clearly.",
+  "rec_timeout": "⚠️ No response from the Cardputer. Make sure you're holding <b>FN</b> while you speak (recording happens on the device, not in the browser) and that the voice firmware is up to date.",
+  "rec_stop": "Stop",
+
+  "ok_trained": "Trained!",
+  "ok_msg": "“{word}” recorded with your voice.",
+  "ok_next_cmd": "Next command →",
+
+  "badge_trained": "Trained",
+  "cap_reached": "limit reached",
+  "btn_train": "Train",
+
+  "confirm_delete": "Delete the command “{word}”?",
+  "err_delete": "Error while deleting",
+  "err_network": "Network error",
+  "alert_cap": "You've reached the limit of {max} commands. Remove one first.",
+  "err_arm": "Couldn't arm the engine (device busy?)",
+  "err_connect": "Connection error to the Cardputer",
+
+  "conf_excellent": "Excellent",
+  "conf_good": "Good",
+  "conf_fair": "Fair",
+  "conf_weak": "Weak",
+
+  "meta_dist": "dist",
+  "meta_second": "2nd",
+  "meta_radius": "radius"
+}

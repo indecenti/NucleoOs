@@ -1,0 +1,10 @@
+{
+"D": 192,
+"K": 93,
+"N": 35294,
+"corpus_sha": "03e7eb18026ad541666db442a07d13d62bbb98cf4ab7d1c5d52cb89836ff1314",
+"encoder_sha": "c33213d0bdc978d7ec815f82e95e8191d41d0272f4674b44d126a4e425df65ef",
+"n_labels": 2014,
+"schema": 1,
+"tool": "build_akb2.py"
+}

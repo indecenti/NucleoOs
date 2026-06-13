@@ -1,0 +1,186 @@
+---
+import MobileMenuFooter from "virtual:starlight/components/MobileMenuFooter";
+import SidebarPersister from "@astrojs/starlight/components/SidebarPersister.astro";
+import SidebarSublist from "@astrojs/starlight/components/SidebarSublist.astro";
+import BookOpen from "@lucide/astro/icons/book-open";
+import FileText from "@lucide/astro/icons/file-text";
+import Info from "@lucide/astro/icons/info";
+import Rocket from "@lucide/astro/icons/rocket";
+
+type SidebarLink = { type: 'link'; label: string; href: string; isCurrent: boolean; entries?: never };
+type SidebarGroup = { type: 'group'; label: string; entries: SidebarEntry[] };
+type SidebarEntry = SidebarLink | SidebarGroup;
+
+const { sidebar } = Astro.locals.starlightRoute;
+
+function hasCurrentEntry(entry: SidebarEntry): boolean {
+  if (entry.type === "link") return entry.isCurrent;
+  if (!entry.entries?.length) return false;
+
+  return entry.entries.some(hasCurrentEntry);
+}
+
+function firstLinkHref(entries: SidebarEntry[]): string | null {
+  for (const entry of entries) {
+    if (entry.type === "link") return entry.href;
+    if (entry.entries?.length) {
+      const href = firstLinkHref(entry.entries);
+      if (href) return href;
+    }
+  }
+  return null;
+}
+
+const topLevelGroups = sidebar.filter((entry) => entry.type === "group");
+const useGroupSwitcher = topLevelGroups.length > 1 && topLevelGroups.length === sidebar.length;
+const currentGroupIndex = useGroupSwitcher
+  ? Math.max(
+      0,
+      topLevelGroups.findIndex((group) => hasCurrentEntry(group)),
+    )
+  : 0;
+
+const selectedGroup = useGroupSwitcher ? topLevelGroups[currentGroupIndex] : null;
+const selectedEntries = selectedGroup?.entries ?? sidebar;
+
+function getGroupKind(group: SidebarGroup): { kind: string; icon: typeof FileText } {
+  const label = (group.label || "").toLowerCase();
+  const href = (firstLinkHref(group.entries) || "").toLowerCase();
+  if (label === "tutorial" || href.includes("/tutorial/")) {
+    return { kind: "tutorial", icon: Rocket };
+  }
+  if (label.includes("guide") || label.includes("指南") || href.includes("/guides/")) {
+    return { kind: "guides", icon: BookOpen };
+  }
+  if (label.includes("reference") || label.includes("参考") || href.includes("/reference-")) {
+    return { kind: "reference", icon: Info };
+  }
+  return { kind: "other", icon: FileText };
+}
+
+const groupMeta = topLevelGroups.map((group) => ({
+  label: group.label,
+  href: firstLinkHref(group.entries),
+  ...getGroupKind(group),
+}));
+---
+
+{
+  useGroupSwitcher && selectedGroup ? (
+    <nav class="doc-group-switcher" aria-label="Document groups">
+      <ul class="doc-group-switcher-list">
+        {groupMeta.map((group, index) => {
+          const isCurrent = index === currentGroupIndex;
+          const IconComp = group.icon;
+          if (group.href) {
+            return (
+              <li>
+                <a
+                  href={group.href}
+                  class:list={["doc-group-switcher-link", { active: isCurrent }]}
+                  aria-current={isCurrent ? "page" : undefined}
+                >
+                  <IconComp class="doc-group-switcher-icon" size={15} stroke-width={1.8} aria-hidden="true" />
+                  <span>{group.label}</span>
+                </a>
+              </li>
+            );
+          }
+          return (
+            <li>
+              <span class:list={["doc-group-switcher-link", "disabled", { active: isCurrent }]}>
+                <IconComp class="doc-group-switcher-icon" size={15} stroke-width={1.8} aria-hidden="true" />
+                <span>{group.label}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  ) : null
+}
+
+<SidebarPersister>
+  <SidebarSublist sublist={selectedEntries} />
+</SidebarPersister>
+
+<div class="md:sl-hidden">
+  <MobileMenuFooter />
+</div>
+
+<style>
+  .doc-group-switcher {
+    margin-bottom: 1rem;
+    border: 1px solid var(--sl-color-hairline-light);
+    border-radius: 0.95rem;
+    background: rgba(255, 255, 255, 0.074);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    padding: 0.38rem;
+  }
+
+  :root[data-theme="light"] .doc-group-switcher {
+    background: rgba(0, 0, 0, 0.02);
+    border-color: inset 0 1px 0 rgba(0, 0, 0, 0.041);
+  }
+
+  :root[data-theme="dark"] .doc-group-switcher {
+    background: rgba(255, 255, 255, 0.074);
+  }
+
+  .doc-group-switcher-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .doc-group-switcher-link {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    border-radius: 0.7rem;
+    border: 1px solid transparent;
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+    font-weight: 600;
+    padding: 0.2rem 0.7rem;
+    transition: all 0.18s ease;
+  }
+
+  .doc-group-switcher-link:hover {
+    color: var(--sl-color-white);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .doc-group-switcher-link.active {
+    color: var(--sl-color-white);
+    border-color: rgba(236, 142, 142, 0.18);
+    background: rgba(236, 142, 142, 0.18);
+  }
+
+  :root[data-theme="dark"] .doc-group-switcher-link.active {
+    border-color: rgba(124, 43, 43, 0.825);
+    background: rgba(124, 43, 43, 0.852);
+  }
+
+  .doc-group-switcher-link.disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .doc-group-switcher-icon {
+    opacity: 0.85;
+    flex-shrink: 0;
+  }
+
+  .doc-group-switcher-link.active .doc-group-switcher-icon {
+    opacity: 1;
+  }
+
+  @media (min-width: 50rem) {
+    .doc-group-switcher-link {
+    font-size: var(--sl-text-sm);
+    }
+  }
+</style>

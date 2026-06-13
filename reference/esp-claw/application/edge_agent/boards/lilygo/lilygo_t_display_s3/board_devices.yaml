@@ -1,0 +1,54 @@
+version: 1.0.0
+# Devices Configuration for LilyGO T-Display-S3
+#
+# The ST7789 LCD is connected via 8-bit parallel (Intel 8080 / i80) interface,
+# which is not natively supported by esp_board_manager's display_lcd SPI/DSI
+# subtypes. We use type: custom and implement the full init in setup_device.c.
+
+devices:
+  # ST7789 LCD — 8-bit parallel (i80) interface, 320x170, 1.9"
+  # GPIO15: power enable (must be HIGH before LCD use)
+  # Data: D0=39 D1=40 D2=41 D3=42 D4=45 D5=46 D6=47 D7=48
+  # CS=6, DC=7, WR=8, RD=9, RST=5
+  - name: display_lcd
+    chip: st7789
+    type: custom
+    version: default
+    config:
+      lcd_width: 320
+      lcd_height: 170
+
+  # LCD backlight brightness control (PWM via LEDC)
+  - name: lcd_brightness
+    type: ledc_ctrl
+    version: default
+    peripherals:
+      - name: ledc_backlight
+
+  # -----------------------------------------------------------------------
+  # Touch panel (CST816S) — only on the T-Display-S3 Touch variant
+  # Uncomment the block below if your board has a touch screen.
+  # Requires:  idf.py add-dependency espressif/esp_lcd_touch_cst816s
+  # -----------------------------------------------------------------------
+  # - name: lcd_touch
+  #   chip: cst816s
+  #   type: lcd_touch
+  #   sub_type: i2c
+  #   version: default
+  #   dependencies:
+  #     espressif/esp_lcd_touch_cst816s: "*"
+  #   config:
+  #     io_i2c_config:
+  #       lcd_cmd_bits: 8
+  #       scl_speed_hz: 400000
+  #     touch_config:
+  #       x_max: 320
+  #       y_max: 170
+  #       int_gpio_num: 16
+  #       rst_gpio_num: 21
+  #       flags:
+  #         mirror_x: false
+  #         mirror_y: false
+  #   peripherals:
+  #     - name: i2c_master
+  #       i2c_addr: [0x2a]

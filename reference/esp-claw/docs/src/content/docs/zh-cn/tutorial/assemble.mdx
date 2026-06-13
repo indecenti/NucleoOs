@@ -1,0 +1,39 @@
+---
+title: 组装 ESP-Claw
+description: 组装 ESP-Claw。
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import ClawBreadboardPng from "@/assets/images/claw-breadboard.png?url";
+import ClawBreadboardWebP from "@/assets/images/claw-breadboard.webp?url";
+
+<picture>
+    <source srcset={ClawBreadboardWebP} type="image/webp" />
+    <img src={ClawBreadboardPng} alt="ESP-Claw Breadboard" style="display: block; margin: 0 auto;" />
+</picture>
+
+<Steps>
+
+1. **将 ESP32-S3-DevKitC-1 开发板安装到面包板上**
+
+    将 ESP32-S3-DevKitC-1 开发板安装到其中一块面包板的中央，左右各留出一列空位，便于后续接入其他扩展外设。
+
+2. **接入屏幕（可选）**
+
+    可按上图所示接入屏幕，注意屏幕的供电需接入 3V3 供电引脚。
+
+3. **接入 USB 摄像头（可选）**
+
+    ESP32-S3 的 GPIO20、GPIO19 分别对应 USB 的 D+、D- 引脚。USB 摄像头还需要供电引脚，可从 ESP32-S3 的 5V 引脚引出。
+
+    乐鑫官方淘宝店提供的 USB 摄像头样品，靠近 USB 接口一侧的 2pin 接口可连接喇叭，另一侧的 2pin 接口可连接咪头。
+
+4. **接入 WS2812 灯带/灯环（可选）**
+
+    WS2812 灯带/灯环需要供电引脚，可从 ESP32-S3 的 5V 引脚引出。DATA IN 引脚需要连接到 ESP32-S3 的 GPIO14 引脚。
+
+5. **接入舵机（可选）**
+
+    舵机需要 5V 供电，可从 ESP32-S3 的 5V 引脚引出。舵机的 PWM 信号引脚需要连接至 ESP32-S3 的 GPIO47 引脚。
+
+</Steps>

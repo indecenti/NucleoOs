@@ -1,0 +1,36 @@
+---
+title: Core、Capability 与 Event
+description: 不同部分的协作职责
+---
+
+import { LinkCard } from 'starlight-theme-nova/components'
+import RouterBlockDiagram from "@/assets/images/router_block.svg?url";
+
+<img src={RouterBlockDiagram} alt="Core、Capability 与 Event 的关系" />
+
+## Event
+
+ESP-Claw 是一个**事件驱动**的 Agent 框架，「事件」Event 是每个 Agent 消息/自动化的触发基础。Core 和 Capability 在 Agent 中运行，都是通过输入 Event、输出 Action 实现的。
+
+Event 的调度由 `claw_event_router` 实现。`claw_event_router` 会将每个 Event 按照指定的规则传递给 Core 调用大语言模型，或传递给某个 Capability 执行动作，或者结束运作。
+
+<LinkCard href="@lang/reference-project/dataflow-and-automation" title="数据流与自动化" description="查看 Event 的定义与 Event Router 的详细运作文档" />
+
+## Core
+
+Core 是 ESP-Claw Agent 运行核心。Core 负责维持「大语言模型循环」（LLM Loop）：将传入的 Event 与上下文信息组装为完整的 Prompt，调用大语言模型进行推理。
+大语言模型的输出也会传递给 `claw_event_router` 继续处理。
+
+<LinkCard href="@lang/reference-core/claw-core" title="Agent Core" description="查看 Agent Core 的详细运作文档" />
+
+## Capability
+
+Capability 负责提供和处理每个「能力」。在 ESP-Claw 体系中，Capability 可以产生 Event 和接收 Action，例如：
+- **产生 Event**:
+  - `cap_im_platform` 中的 IM Gateway 收到消息后，会构造 Event 并传递给 `claw_event_router`。
+  - 特定外设在触发中断等事件时，会构造 Event 并传递给 `claw_event_router`。
+- **接收 Action**:
+  - `claw_event_router` 将 IM 消息发送任务传递给 `cap_im_platform` 实现的各平台 Group 执行实际发送动作。
+  - Core 调用某个 Capability 提供的工具。
+
+<LinkCard href="@lang/reference-cap/" title="Capability" description="查看 capability 总览" />

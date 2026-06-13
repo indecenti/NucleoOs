@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title data-i18n="app_title">Comandi Vocali</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg-dark: #0a0e14;
+      --bg-panel: rgba(255, 255, 255, 0.05);
+      --border-panel: rgba(255, 255, 255, 0.1);
+      --primary: #18e06a;
+      --primary-dim: rgba(24, 224, 106, 0.12);
+      --primary-hover: #25f57c;
+      --warn: #fd20;
+      --danger: #ff4d4d;
+      --danger-dim: rgba(255, 77, 77, 0.1);
+      --text-main: #e8eef9;
+      --text-muted: #8892b0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: radial-gradient(circle at top, #152238 0%, var(--bg-dark) 70%);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0; padding: 20px 16px 60px; min-height: 100vh; overflow-x: hidden;
+    }
+    .container { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+    .header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .header h1 {
+      margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--primary), #0aa); -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .status-chips { display: flex; gap: 8px; align-items: center; }
+    .chip {
+      font-size: 12px; padding: 5px 11px; border-radius: 20px; border: 1px solid var(--border-panel);
+      background: var(--bg-panel); color: var(--text-muted); display: flex; align-items: center; gap: 6px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+    .dot.on { background: var(--primary); box-shadow: 0 0 8px var(--primary); }
+    .dot.live { background: var(--warn); box-shadow: 0 0 8px var(--warn); animation: blink 0.8s infinite; }
+    @keyframes blink { 50% { opacity: 0.3; } }
+
+    .progress-wrap { background: var(--bg-panel); border: 1px solid var(--border-panel); border-radius: 12px; padding: 14px 18px; }
+    .progress-top { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+    .progress-bar { height: 8px; border-radius: 6px; background: rgba(255,255,255,0.07); overflow: hidden; }
+    .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--primary), var(--primary-hover)); transition: width 0.4s; }
+
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tab-btn {
+      background: var(--bg-panel); border: 1px solid var(--border-panel); color: var(--text-muted);
+      padding: 10px 18px; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 500;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    .tab-btn.active { background: var(--primary-dim); border-color: var(--primary); color: var(--primary); }
+
+    .panel {
+      background: rgba(10, 14, 20, 0.65); border: 1px solid var(--border-panel); border-radius: 16px;
+      padding: 26px; display: none; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      animation: fadeIn 0.3s ease-out;
+    }
+    .panel.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    h2.sec { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+    p.sub { margin: 0 0 18px; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+    .category-title {
+      font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.4px;
+      font-weight: 600; margin: 26px 0 12px; padding-bottom: 7px; border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .category-title:first-child { margin-top: 0; }
+
+    .trigger-item {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      background: var(--bg-panel); padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border-panel);
+      margin-bottom: 9px; transition: all 0.2s;
+    }
+    .trigger-item.saved { border-color: rgba(24, 224, 106, 0.4); background: linear-gradient(90deg, rgba(24,224,106,0.06), rgba(0,0,0,0)); }
+    .trigger-item:hover { background: rgba(255,255,255,0.07); }
+    .trigger-name { font-size: 15px; font-weight: 500; font-family: "SFMono-Regular", Consolas, Menlo, monospace; }
+    .trigger-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+    .badge-ok { color: var(--primary); font-size: 12px; font-weight: 600; }
+
+    button.act {
+      border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08); color: #fff;
+      padding: 7px 14px; border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s;
+    }
+    button.act:hover { background: rgba(255,255,255,0.16); border-color: #fff; }
+    button.act:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.del { background: var(--danger-dim); border-color: rgba(255,77,77,0.3); color: var(--danger); }
+    button.del:hover { background: rgba(255,77,77,0.2); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-hover)); color: #042;
+      border: none; padding: 13px 26px; font-size: 15px; font-weight: 700; border-radius: 10px;
+      cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 14px rgba(24,224,106,0.25);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(24,224,106,0.35); }
+    .btn-primary:disabled { background: #333; color: #777; box-shadow: none; transform: none; cursor: not-allowed; }
+    .btn-ghost { background: var(--bg-panel); border: 1px solid var(--border-panel); color: var(--text-main);
+      padding: 12px 22px; border-radius: 10px; cursor: pointer; font-size: 14px; }
+    .btn-ghost:hover { background: rgba(255,255,255,0.1); }
+
+    input[type="text"] {
+      background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.15); color: #fff;
+      padding: 14px 18px; font-size: 17px; border-radius: 10px; width: 100%; max-width: 440px;
+      text-align: center; outline: none; font-family: monospace;
+    }
+    input[type="text"]:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-dim); }
+
+    /* Tutorial stepper */
+    .stepper { display: flex; gap: 6px; margin-bottom: 24px; }
+    .step-dot { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.1); }
+    .step-dot.done { background: var(--primary); }
+    .step-dot.cur { background: var(--primary-hover); }
+    .tut-step { display: none; }
+    .tut-step.active { display: block; animation: fadeIn 0.3s; }
+    .tut-step h2 { font-size: 22px; margin: 0 0 10px; }
+    .tut-step p { color: var(--text-muted); line-height: 1.65; font-size: 15px; }
+    .tut-nav { display: flex; justify-content: space-between; margin-top: 28px; gap: 12px; }
+    .tiplist { list-style: none; padding: 0; margin: 18px 0; }
+    .tiplist li { padding: 11px 14px; margin-bottom: 8px; background: var(--bg-panel); border: 1px solid var(--border-panel);
+      border-radius: 9px; font-size: 14px; line-height: 1.5; display: flex; gap: 11px; align-items: flex-start; }
+    .tiplist li .em { font-size: 19px; flex-shrink: 0; }
+
+    .keycap { display: inline-block; padding: 2px 9px; border-radius: 6px; background: #1b2433;
+      border: 1px solid #2c3a52; border-bottom-width: 2px; font-family: monospace; font-weight: 600; color: var(--primary); }
+
+    /* Recording overlay */
+    .mic-ring { width: 130px; height: 130px; border-radius: 50%; background: rgba(253,32,0,0.05);
+      margin: 6px auto 24px; display: flex; align-items: center; justify-content: center; position: relative; }
+    .mic-ring::before { content: ''; position: absolute; inset: -10px; border-radius: 50%;
+      border: 2px solid rgba(253,32,0,0.35); animation: ringpulse 1.8s infinite; }
+    @keyframes ringpulse { 0% { transform: scale(0.9); opacity: 1; } 100% { transform: scale(1.35); opacity: 0; } }
+    .mic-icon { font-size: 46px; }
+    .display-word { display: inline-block; margin-top: 14px; font-size: 23px; font-weight: bold; color: #fff;
+      font-family: monospace; padding: 9px 18px; background: rgba(255,255,255,0.08); border-radius: 9px;
+      border: 1px solid rgba(255,255,255,0.18); }
+
+    /* Test / telemetry */
+    .test-hint { background: var(--primary-dim); border: 1px solid rgba(24,224,106,0.3); border-radius: 12px;
+      padding: 16px 18px; font-size: 14px; line-height: 1.55; margin-bottom: 18px; }
+    .match-card { background: var(--bg-panel); border: 1px solid var(--border-panel); border-radius: 11px;
+      padding: 13px 16px; margin-bottom: 10px; animation: fadeIn 0.25s; }
+    .match-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
+    .match-word { font-size: 16px; font-weight: 600; font-family: monospace; }
+    .conf-label { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+    .conf-bar { height: 7px; border-radius: 5px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 7px; }
+    .conf-fill { height: 100%; border-radius: 5px; transition: width 0.3s; }
+    .match-meta { font-size: 11px; color: var(--text-muted); font-family: monospace; display: flex; gap: 14px; flex-wrap: wrap; }
+    .empty { text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎙️ <span data-i18n="app_title">Comandi Vocali</span></h1>
+      <div class="status-chips">
+        <span class="chip"><span id="ws-dot" class="dot"></span><span id="ws-txt" data-i18n="ws_connecting">Connessione…</span></span>
+        <span class="chip"><span id="listen-dot" class="dot"></span><span data-i18n="mic">Mic</span></span>
+      </div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-top"><span id="prog-label">0 comandi addestrati</span><span id="prog-cap">max 20</span></div>
+      <div class="progress-bar"><div id="prog-fill" class="progress-fill"></div></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="tutorial" onclick="showTab('tutorial')">📚 <span data-i18n="tab_tutorial">Tutorial</span></button>
+      <button class="tab-btn" data-tab="commands" onclick="showTab('commands')">🗂️ <span data-i18n="tab_commands">Comandi</span></button>
+      <button class="tab-btn" data-tab="test" onclick="showTab('test')">🎯 <span data-i18n="tab_test">Prova</span></button>
+      <button class="tab-btn" data-tab="custom" onclick="showTab('custom')">✏️ <span data-i18n="tab_custom">Custom</span></button>
+    </div>
+
+    <!-- ===== TUTORIAL ===== -->
+    <div id="panel-tutorial" class="panel active">
+      <div class="stepper" id="stepper"></div>
+
+      <div class="tut-step active" data-step="0">
+        <h2 data-i18n="t0_title">Insegna al Cardputer la tua voce</h2>
+        <p data-i18n-html="t0_intro">Questo strumento addestra il riconoscitore vocale <b>nativo</b> del Cardputer: gira
+           interamente <b>offline</b>, sul dispositivo, e impara <b>la tua</b> voce. Più lo usi, più
+           diventa preciso — ogni comando riconosciuto affina da solo il proprio modello.</p>
+        <ul class="tiplist">
+          <li><span class="em">🎙️</span><div data-i18n-html="t0_tip1">Funziona a <b>premi-e-parla</b>: tieni premuto <span class="keycap">FN</span> (o <span class="keycap">G0</span>) sul Cardputer, pronuncia il comando, rilascia.</div></li>
+          <li><span class="em">🧠</span><div data-i18n-html="t0_tip2">Il dispositivo riconosce la <b>parola</b>; ANIMA la trasforma nell'azione (aprire un'app, dire l'ora…).</div></li>
+          <li><span class="em">🔒</span><div data-i18n-html="t0_tip3">Nessun cloud, nessuna chiave: l'audio non lascia mai il dispositivo.</div></li>
+        </ul>
+        <div class="tut-nav"><span></span><button class="btn-primary" onclick="tutNext()" data-i18n="t0_next">Iniziamo →</button></div>
+      </div>
+
+      <div class="tut-step" data-step="1">
+        <h2 data-i18n="t1_title">Come pronunciare bene</h2>
+        <p data-i18n="t1_intro">Poche regole fanno una differenza enorme sulla precisione:</p>
+        <ul class="tiplist">
+          <li><span class="em">🤫</span><div data-i18n-html="t1_tip1"><b>Ambiente silenzioso</b> e distanza costante dal microfono (~20 cm).</div></li>
+          <li><span class="em">⏱️</span><div data-i18n-html="t1_tip2">Premi <span class="keycap">FN</span> <b>prima</b> di parlare, rilascia <b>subito dopo</b>. Una sola parola/frase per registrazione.</div></li>
+          <li><span class="em">🗣️</span><div data-i18n-html="t1_tip3">Parla in modo <b>naturale e costante</b> — come lo dirai poi nell'uso reale.</div></li>
+          <li><span class="em">🎯</span><div data-i18n-html="t1_tip4">Scegli comandi <b>distinti</b> e di più sillabe. Evita monosillabi e parole quasi uguali tra loro.</div></li>
+        </ul>
+        <div class="tut-nav"><button class="btn-ghost" onclick="tutPrev()" data-i18n="back_arrow">← Indietro</button><button class="btn-primary" onclick="tutNext()" data-i18n="t1_next">Ho capito →</button></div>
+      </div>
+
+      <div class="tut-step" data-step="2">
+        <h2 data-i18n="t2_title">Addestra i comandi essenziali</h2>
+        <p data-i18n-html="t2_intro">Partiamo da un set di base distinto e utile. Premi <b>Addestra</b>, poi tieni
+           <span class="keycap">FN</span> e pronuncia il comando mostrato.</p>
+        <div id="starter-list"></div>
+        <div class="tut-nav"><button class="btn-ghost" onclick="tutPrev()" data-i18n="back_arrow">← Indietro</button><button class="btn-primary" onclick="tutNext()" data-i18n="next_arrow">Avanti →</button></div>
+      </div>
+
+      <div class="tut-step" data-step="3">
+        <h2 data-i18n="t3_title">Provalo</h2>
+        <p data-i18n-html="t3_intro">Mettiamo alla prova quello che hai addestrato. Tieni <span class="keycap">FN</span> e
+           pronuncia uno dei comandi: vedrai in tempo reale <b>cosa è stato riconosciuto</b> e con
+           quanta sicurezza. Nota come il <b>raggio</b> si stringe man mano: è il modello che impara te.</p>
+        <button class="btn-primary" onclick="showTab('test')">🎯 <span data-i18n="t3_goto_test">Vai alla Prova</span></button>
+        <div class="tut-nav"><button class="btn-ghost" onclick="tutPrev()" data-i18n="back_arrow">← Indietro</button><button class="btn-primary" onclick="tutNext()" data-i18n="next_arrow">Avanti →</button></div>
+      </div>
+
+      <div class="tut-step" data-step="4">
+        <h2>✅ <span data-i18n="t4_title">Pronto!</span></h2>
+        <p data-i18n="t4_intro">Hai le basi. Da qui puoi:</p>
+        <ul class="tiplist">
+          <li><span class="em">🗂️</span><div data-i18n-html="t4_tip1">Aggiungere altri comandi dalla scheda <b>Comandi</b> (fino a 20).</div></li>
+          <li><span class="em">✏️</span><div data-i18n-html="t4_tip2">Creare frasi tue dalla scheda <b>Custom</b>.</div></li>
+          <li><span class="em">🎯</span><div data-i18n-html="t4_tip3">Tornare alla <b>Prova</b> quando vuoi: ogni uso migliora il riconoscimento.</div></li>
+        </ul>
+        <div class="tut-nav"><button class="btn-ghost" onclick="tutPrev()" data-i18n="back_arrow">← Indietro</button><button class="btn-primary" onclick="showTab('commands')" data-i18n="t4_goto_commands">Vai ai Comandi →</button></div>
+      </div>
+    </div>
+
+    <!-- ===== COMMANDS ===== -->
+    <div id="panel-commands" class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:6px;">
+        <h2 class="sec" data-i18n="cmd_library">Libreria comandi</h2>
+        <button class="act" onclick="loadTriggers()">🔄 <span data-i18n="refresh">Aggiorna</span></button>
+      </div>
+      <p class="sub" data-i18n-html="cmd_sub">Comandi nativi pronti all'uso. 🟢 = già addestrato con la tua voce. Il dispositivo
+         ne gestisce fino a <b>20</b>: scegli i tuoi preferiti.</p>
+      <div id="curriculum-list"></div>
+    </div>
+
+    <!-- ===== TEST ===== -->
+    <div id="panel-test" class="panel">
+      <h2 class="sec" data-i18n="test_title">Prova dal vivo</h2>
+      <p class="sub" data-i18n-html="test_sub">Tieni <span class="keycap">FN</span> sul Cardputer e pronuncia un comando addestrato.</p>
+      <div class="test-hint" data-i18n-html="test_hint">
+        Ogni riconoscimento mostra <b>distanza</b> (più bassa = più simile), <b>margine</b> sul 2° candidato
+        e il <b>raggio</b> auto-tarante della parola. Verde = ottimo, giallo = accettabile.
+      </div>
+      <div id="match-feed"><div class="empty" data-i18n="test_waiting">In attesa… premi FN e parla.</div></div>
+    </div>
+
+    <!-- ===== CUSTOM ===== -->
+    <div id="panel-custom" class="panel">
+      <h2 class="sec" data-i18n="custom_title">Comando personalizzato</h2>
+      <p class="sub" data-i18n="custom_sub">Registra una frase tua non presente nel curriculum. Falla breve e distinta.</p>
+      <div style="text-align:center; margin-bottom:24px;">
+        <input type="text" id="trigger-word" data-i18n-attr="placeholder:custom_ph" placeholder="es: accendi luce" autocomplete="off" maxlength="30" oninput="checkInput()">
+        <br><br>
+        <button id="btn-start-custom" class="btn-primary" onclick="startCustomRecord()" disabled>🎙️ <span data-i18n="custom_start">Inizia addestramento</span></button>
+      </div>
+      <div class="category-title" data-i18n="custom_yours">I tuoi comandi custom</div>
+      <div id="custom-trigger-list"></div>
+    </div>
+
+    <!-- ===== RECORDING OVERLAY ===== -->
+    <div id="panel-record" class="panel">
+      <div id="rec-step" style="text-align:center; padding: 14px 0;">
+        <div class="mic-ring" id="rec-ring"><div class="mic-icon">🎙️</div></div>
+        <h2 id="rec-title" style="color:#fd20; margin:0;" data-i18n="rec_title">Sul Cardputer: tieni FN e parla</h2>
+        <p style="font-size:16px; color:var(--text-muted); margin:14px 0;">
+          <span data-i18n-html="rec_hold_say">Tieni premuto <span class="keycap">FN</span> (o <span class="keycap">G0</span>) e pronuncia:</span><br>
+          <span id="display-word" class="display-word"></span><br>
+          <span data-i18n-html="rec_then_release">poi <b>rilascia</b>.</span>
+        </p>
+        <p id="rec-status" style="font-size:13px; opacity:0.75; min-height:18px;" data-i18n="rec_waiting">In attesa del Cardputer…</p>
+        <div id="rec-timeout-hint" style="display:none; background:var(--danger-dim);
+             border:1px solid rgba(255,77,77,0.3); border-radius:10px; padding:12px 14px;
+             font-size:13px; line-height:1.5; margin:0 auto 16px; max-width:440px; text-align:left;"
+             data-i18n-html="rec_timeout">
+          ⚠️ Nessuna risposta dal Cardputer. Verifica di tener premuto <b>FN</b> mentre parli
+          (la registrazione avviene sul dispositivo, non nel browser) e che il firmware vocale
+          sia aggiornato.
+        </div>
+        <button class="btn-primary" style="background:var(--danger); box-shadow:none; color:#fff;"
+                onclick="cancelRecord()">⏹ <span data-i18n="rec_stop">Ferma</span></button>
+      </div>
+      <div id="ok-step" style="text-align:center; padding:14px 0; display:none;">
+        <div style="font-size:58px; margin-bottom:14px;">✅</div>
+        <h2 style="color:var(--primary); margin:0;" data-i18n="ok_trained">Addestrato!</h2>
+        <p id="ok-msg" style="color:var(--text-muted); margin:14px 0;"></p>
+        <button class="btn-primary" id="ok-next" data-i18n="continue">Continua</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    window.__t = await I18N.init('voice-manager');
+    if (typeof window.redrawI18n === 'function') window.redrawI18n();
+    I18N.onChange(() => { if (typeof window.redrawI18n === 'function') window.redrawI18n(); });
+  </script>
+</body>
+</html>

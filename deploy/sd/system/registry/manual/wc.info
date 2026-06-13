@@ -1,0 +1,16 @@
+{
+  "id": "wc",
+  "category": "terminal",
+  "it": {
+    "title": "wc - Conteggio righe, parole e byte",
+    "synopsis": "wc <file>",
+    "description": "Stampa il numero di righe, parole e byte in un file.",
+    "details": "NOME\n  wc - Conta righe, parole e byte.\n\nSINTASSI\n  wc <file>\n\nDESCRIZIONE\n  Esegue un'analisi quantitativa del file stampando a schermo il numero totale di righe, parole e byte.\n\nOPZIONI\n  <file>\n    Il file da scansionare.\n\nARCHITETTURA E BASSO LIVELLO\n  Ottiene il contenuto dal chip via HTTP. Le righe sono calcolate tramite split '\\n', le parole tramite split '\\s+' (filtrando elementi vuoti) e i byte calcolando la dimensione di un oggetto 'Blob' inizializzato con il testo. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo. Conteggi completati.\n  1\n    Errore di lettura.\n  404\n    File non trovato.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  cat(1), head(1), tail(1), web_api(7)\n\nESEMPI AVANZATI\n  wc /data/notes.txt"
+  },
+  "en": {
+    "title": "wc - Word, line, and byte count",
+    "synopsis": "wc <file>",
+    "description": "Print word, line, and byte counts of a file.",
+    "details": "NAME\n  wc - Word, line, and byte count.\n\nSYNOPSIS\n  wc <file>\n\nDESCRIPTION\n  Performs a metrics analysis of the target file, printing line, word, and byte counts.\n\nOPTIONS\n  <file>\n    The target file to parse.\n\nSYSTEM ARCHITECTURE\n  Fetches data via the filesystem read endpoint. Lines are resolved using a '\\n' split, words using a '\\s+' regex filter, and bytes using a JavaScript 'Blob' size check. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. Counts printed.\n  1\n    Filesystem read error.\n  404\n    File was not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  cat(1), head(1), tail(1), web_api(7)\n\nADVANCED EXAMPLES\n  wc /data/notes.txt"
+  }
+}

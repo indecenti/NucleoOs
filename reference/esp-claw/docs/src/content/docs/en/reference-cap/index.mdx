@@ -1,0 +1,106 @@
+---
+title: Capabilities overview
+description: How `cap_*` modules fit together—taxonomy, registration, and visibility rules.
+---
+
+import { CardGrid, Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+import LinkToSource from '@/components/LinkToSource.astro';
+
+## What is a capability?
+
+A **capability** is the uniform abstraction for anything callable in ESP-Claw. Each `cap_*` component registers one or more metadata-rich **descriptors** (`claw_cap_descriptor_t`) with `claw_cap`, and all execution funnels through the shared dispatcher.
+
+Capabilities can play three roles:
+
+| Role | `kind` | Meaning |
+|------|--------|---------|
+| Callable tool | `CLAW_CAP_KIND_CALLABLE` | JSON in, text out; invocable from the LLM, Console, or automation |
+| Event source | `CLAW_CAP_KIND_EVENT_SOURCE` | Long-lived producer feeding `claw_event_router` |
+| Hybrid | `CLAW_CAP_KIND_HYBRID` | Both callable and event emitting |
+
+Descriptors are grouped into **capability groups** (`claw_cap_group_t`)—the smallest unit for registration, start/stop, and LLM visibility toggles.
+
+## Built-in taxonomy
+
+| Family | Components | Notes |
+|--------|------------|-------|
+| **IM ingress** | `cap_im_platform` | Unified component for Feishu, QQ, Telegram, and WeChat; registers per-platform groups such as `cap_im_tg` |
+| **Filesystem** | `cap_files` | Managed FATFS read/write, edit, copy, move, delete, and listing |
+| **Lua** | `cap_lua` | Author, sync/async run, and track Lua jobs |
+| **Skill admin** | `cap_skill` | Register/unregister and activate Skills, exposing core features as tools and returning the full document on activation |
+| **LLM inspect** | `cap_llm_inspect` | Nested multimodal calls over local images |
+| **HTTP request** | `cap_http_request` | Allowlisted direct HTTP and HTTPS requests |
+| **Web search** | `cap_web_search` | External search APIs |
+| **Time** | `cap_time` | Current local time queries plus time context for relative-date reasoning |
+| **System info** | `cap_system` | Query system/memory/CPU/Wi-Fi/IP status and support operational actions like restart |
+| **Scheduler** | `cap_scheduler` | Cron-like scheduling |
+| **Router admin** | `cap_router_mgr` | Dynamic Event Router rule maintenance |
+| **MCP** | `cap_mcp_*` | Model Context Protocol client/server |
+| **CLI** | `cap_cli` | Surface caps through terminal helpers |
+| **Sessions** | `cap_session_mgr` | Session state persistence |
+| **Agent manager** | `cap_agent_mgr` | Root-only subagent spawn / supervise / close / delete |
+
+## Group registration
+
+Every `cap_*` exposes `cap_xxx_register_group()` for the app to call during init:
+
+```c
+// cap_files example
+esp_err_t cap_files_register_group(void)
+{
+    if (claw_cap_group_exists(s_files_group.group_id)) {
+        return ESP_OK;
+    }
+    return claw_cap_register_group(&s_files_group);
+}
+```
+
+`claw_cap_register_group` enforces unique group ids, runs descriptor `init` hooks, then finishes registration. `claw_cap_start_group` later invokes `start` (e.g. launching the Telegram poll task from the `cap_im_platform` component).
+
+## LLM visibility
+
+Not every registered group is visible to the model. `claw_cap_set_llm_visible_groups` applies an **allow-list** controlling which tool schemas enter context:
+
+```c
+// Typical boot policy: only baseline tools
+static const char *VISIBLE_GROUPS[] = { "cap_files", "cap_skill", "cap_system" };
+claw_cap_set_llm_visible_groups(VISIBLE_GROUPS, 3);
+```
+
+Other groups remain callable from the Console or automation; activating Skills expands the LLM-facing set.
+
+<Aside type="tip">
+  **Why not expose everything?**
+
+  Dumping every tool description balloons tokens, hurting quality, latency, and cost. Skills implement **progressive disclosure**: humans (or the LLM) activate only the guides—and tool metadata—they need for the current task.
+</Aside>
+
+## Call paths
+
+Three primary entry points:
+
+1. **LLM tool calls**: `claw_core` → `claw_cap_call_from_core` (session/channel aware)
+2. **Console**: `cap call <name> <json>` for direct execution
+3. **Event Router rules**: `call_cap` actions (see [Dataflow and automation](@lang/reference-project/dataflow-and-automation))
+
+`claw_cap_call_context_t.caller` records whether the invoker was `SYSTEM`, `AGENT`, or `CONSOLE`.
+
+## Deep dives
+
+<CardGrid>
+  <LinkCard title="How to implement a capability" href="./implement-capability" description="Authoring a `cap_*` component end-to-end" />
+  <LinkCard title="cap_im_platform" href="./cap-im-platform" description="Unified IM reference: Feishu, QQ, Telegram, and WeChat" />
+  <LinkCard title="cap_skill" href="./cap-skill" description="Core-surface reference: `claw_skill` as tools" />
+  <LinkCard title="cap_agent_mgr" href="./cap-agent-mgr" description="Subagent reference: root-only spawn, supervise, and tear down subagents" />
+  <LinkCard title="cap_llm_inspect" href="./cap-llm-inspect" description="LLM-interaction reference: nested inference" />
+  <LinkCard title="cap_files" href="./cap-files" description="Filesystem reference: managed-tree read/write, edit, copy, move, and delete" />
+  <LinkCard title="cap_system" href="./cap-system" description="System-state reference: inspect runtime status and support safe restart" />
+  <LinkCard title="cap_scheduler" href="./cap-scheduler" description="Scheduling reference: time-based event triggering and periodic tasks" />
+  <LinkCard title="cap_http_request" href="./cap-http-request" description="Allowlist-protected HTTP/HTTPS requests" />
+  <LinkCard title="cap_web_search" href="./cap-web-search" description="Web search through external search APIs (Tavily / Brave)" />
+  <LinkCard title="cap_router_mgr" href="./cap-router-mgr" description="Dynamic Event Router automation rule maintenance" />
+  <LinkCard title="cap_mcp_client / cap_mcp_server" href="./cap-mcp" description="MCP client and server support for cross-device tool calls" />
+  <LinkCard title="cap_lua and Lua overview" href="./cap-lua" description="Lua tooling plus where scripts fit in the stack" />
+  <LinkCard title="Lua extension modules" href="./lua-modules" description="Registering `lua_module_*` / `lua_driver_*`, custom modules, `display` deep dive" />
+</CardGrid>

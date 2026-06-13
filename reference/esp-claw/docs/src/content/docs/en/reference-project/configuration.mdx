@@ -1,0 +1,43 @@
+---
+title: Configuration
+description: Build-time defaults, NVS persistence, and precedence for Web-based changes.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components';
+import LinkToSource from '@/components/LinkToSource.astro';
+
+ESP-Claw `edge_agent` uses menuconfig (`sdkconfig`) for initial default settings, and uses NVS to persist runtime configuration changes.
+
+`edge_agent` stores configuration in the NVS namespace `app`.
+At boot, it loads default values from menuconfig first, then overrides them with keys stored in NVS (if present).
+The field list and read/write logic are in <LinkToSource relativePath="application/edge_agent/components/app_config/app_config.c" />.
+
+<Aside title="How to understand precedence">
+  **Effective runtime value = use NVS value if present; otherwise use compile-time default.**
+
+  So: once you save from Web or serial tools for the first time, NVS takes precedence; to “restore factory defaults”, clear the related NVS keys.
+</Aside>
+
+## edge_agent configuration fields
+
+ESP-Claw does not recommend changing these settings via menuconfig, because they may be overridden by NVS values.
+For detailed explanations of these fields, see the Web configuration documentation.
+
+<LinkCard href="@lang/tutorial/web-config" title="Web Configuration" description="Learn how to modify settings from Web configuration" />
+
+## Compile-time Kconfig options
+
+In addition to the runtime-editable NVS settings above, some behaviors are controlled by compile-time **Kconfig** (`menuconfig`) options. They are not editable at runtime and require rebuilding firmware after changes:
+
+- **`APP_CLAW_MEMORY_MODE`**: selects the long-term memory mode.
+  - **Structured (full structured memory, default)**: enables structured memory extraction; LLM-visible groups additionally include `claw_memory`; injects summary-tag catalog instead of full `MEMORY.md`.
+  - **Lightweight**: skips structured extraction and injects `MEMORY.md` text directly into context; suitable for memory- or context-window-constrained scenarios.
+- **`APP_CLAW_ENABLE_EMOTE`**: whether to enable the LCD emote/status display component at boot. Only meaningful on boards with LCD; disabling it saves a small amount of heap memory.
+
+You can view and modify these options via `idf.py menuconfig` → `(Top)` → `App Claw Config`.
+
+<Aside type="caution" title="Security note">
+  The configuration page and NVS contain secret tokens. Do not publicly share exported config files or full-device NVS dumps.
+</Aside>
+

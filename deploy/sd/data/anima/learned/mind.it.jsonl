@@ -1,0 +1,1522 @@
+{"subject": "roma", "rel": "capital", "value": "Italia", "label": "Roma"}
+{"subject": "roma", "rel": "located_in", "value": "Italia", "label": "Roma"}
+{"subject": "italia", "rel": "located_in", "value": "Europa", "label": "Italia"}
+{"subject": "parigi", "rel": "capital", "value": "Francia", "label": "Parigi"}
+{"subject": "parigi", "rel": "located_in", "value": "Francia", "label": "Parigi"}
+{"subject": "francia", "rel": "located_in", "value": "Europa", "label": "Francia"}
+{"subject": "madrid", "rel": "capital", "value": "Spagna", "label": "Madrid"}
+{"subject": "madrid", "rel": "located_in", "value": "Spagna", "label": "Madrid"}
+{"subject": "spagna", "rel": "located_in", "value": "Europa", "label": "Spagna"}
+{"subject": "berlino", "rel": "capital", "value": "Germania", "label": "Berlino"}
+{"subject": "berlino", "rel": "located_in", "value": "Germania", "label": "Berlino"}
+{"subject": "germania", "rel": "located_in", "value": "Europa", "label": "Germania"}
+{"subject": "londra", "rel": "capital", "value": "Regno Unito", "label": "Londra"}
+{"subject": "londra", "rel": "located_in", "value": "Regno Unito", "label": "Londra"}
+{"subject": "regno-unito", "rel": "located_in", "value": "Europa", "label": "Regno Unito"}
+{"subject": "mosca", "rel": "capital", "value": "Russia", "label": "Mosca"}
+{"subject": "mosca", "rel": "located_in", "value": "Russia", "label": "Mosca"}
+{"subject": "russia", "rel": "located_in", "value": "Europa", "label": "Russia"}
+{"subject": "atene", "rel": "capital", "value": "Grecia", "label": "Atene"}
+{"subject": "atene", "rel": "located_in", "value": "Grecia", "label": "Atene"}
+{"subject": "grecia", "rel": "located_in", "value": "Europa", "label": "Grecia"}
+{"subject": "lisbona", "rel": "capital", "value": "Portogallo", "label": "Lisbona"}
+{"subject": "lisbona", "rel": "located_in", "value": "Portogallo", "label": "Lisbona"}
+{"subject": "portogallo", "rel": "located_in", "value": "Europa", "label": "Portogallo"}
+{"subject": "berna", "rel": "capital", "value": "Svizzera", "label": "Berna"}
+{"subject": "berna", "rel": "located_in", "value": "Svizzera", "label": "Berna"}
+{"subject": "svizzera", "rel": "located_in", "value": "Europa", "label": "Svizzera"}
+{"subject": "vienna", "rel": "capital", "value": "Austria", "label": "Vienna"}
+{"subject": "vienna", "rel": "located_in", "value": "Austria", "label": "Vienna"}
+{"subject": "austria", "rel": "located_in", "value": "Europa", "label": "Austria"}
+{"subject": "amsterdam", "rel": "capital", "value": "Paesi Bassi", "label": "Amsterdam"}
+{"subject": "amsterdam", "rel": "located_in", "value": "Paesi Bassi", "label": "Amsterdam"}
+{"subject": "paesi-bassi", "rel": "located_in", "value": "Europa", "label": "Paesi Bassi"}
+{"subject": "bruxelles", "rel": "capital", "value": "Belgio", "label": "Bruxelles"}
+{"subject": "bruxelles", "rel": "located_in", "value": "Belgio", "label": "Bruxelles"}
+{"subject": "belgio", "rel": "located_in", "value": "Europa", "label": "Belgio"}
+{"subject": "oslo", "rel": "capital", "value": "Norvegia", "label": "Oslo"}
+{"subject": "oslo", "rel": "located_in", "value": "Norvegia", "label": "Oslo"}
+{"subject": "norvegia", "rel": "located_in", "value": "Europa", "label": "Norvegia"}
+{"subject": "stoccolma", "rel": "capital", "value": "Svezia", "label": "Stoccolma"}
+{"subject": "stoccolma", "rel": "located_in", "value": "Svezia", "label": "Stoccolma"}
+{"subject": "svezia", "rel": "located_in", "value": "Europa", "label": "Svezia"}
+{"subject": "copenaghen", "rel": "capital", "value": "Danimarca", "label": "Copenaghen"}
+{"subject": "copenaghen", "rel": "located_in", "value": "Danimarca", "label": "Copenaghen"}
+{"subject": "danimarca", "rel": "located_in", "value": "Europa", "label": "Danimarca"}
+{"subject": "helsinki", "rel": "capital", "value": "Finlandia", "label": "Helsinki"}
+{"subject": "helsinki", "rel": "located_in", "value": "Finlandia", "label": "Helsinki"}
+{"subject": "finlandia", "rel": "located_in", "value": "Europa", "label": "Finlandia"}
+{"subject": "varsavia", "rel": "capital", "value": "Polonia", "label": "Varsavia"}
+{"subject": "varsavia", "rel": "located_in", "value": "Polonia", "label": "Varsavia"}
+{"subject": "polonia", "rel": "located_in", "value": "Europa", "label": "Polonia"}
+{"subject": "dublino", "rel": "capital", "value": "Irlanda", "label": "Dublino"}
+{"subject": "dublino", "rel": "located_in", "value": "Irlanda", "label": "Dublino"}
+{"subject": "irlanda", "rel": "located_in", "value": "Europa", "label": "Irlanda"}
+{"subject": "budapest", "rel": "capital", "value": "Ungheria", "label": "Budapest"}
+{"subject": "budapest", "rel": "located_in", "value": "Ungheria", "label": "Budapest"}
+{"subject": "ungheria", "rel": "located_in", "value": "Europa", "label": "Ungheria"}
+{"subject": "praga", "rel": "capital", "value": "Repubblica Ceca", "label": "Praga"}
+{"subject": "praga", "rel": "located_in", "value": "Repubblica Ceca", "label": "Praga"}
+{"subject": "repubblica-ceca", "rel": "located_in", "value": "Europa", "label": "Repubblica Ceca"}
+{"subject": "bucarest", "rel": "capital", "value": "Romania", "label": "Bucarest"}
+{"subject": "bucarest", "rel": "located_in", "value": "Romania", "label": "Bucarest"}
+{"subject": "romania", "rel": "located_in", "value": "Europa", "label": "Romania"}
+{"subject": "kiev", "rel": "capital", "value": "Ucraina", "label": "Kiev"}
+{"subject": "kiev", "rel": "located_in", "value": "Ucraina", "label": "Kiev"}
+{"subject": "ucraina", "rel": "located_in", "value": "Europa", "label": "Ucraina"}
+{"subject": "zagabria", "rel": "capital", "value": "Croazia", "label": "Zagabria"}
+{"subject": "zagabria", "rel": "located_in", "value": "Croazia", "label": "Zagabria"}
+{"subject": "croazia", "rel": "located_in", "value": "Europa", "label": "Croazia"}
+{"subject": "belgrado", "rel": "capital", "value": "Serbia", "label": "Belgrado"}
+{"subject": "belgrado", "rel": "located_in", "value": "Serbia", "label": "Belgrado"}
+{"subject": "serbia", "rel": "located_in", "value": "Europa", "label": "Serbia"}
+{"subject": "lubiana", "rel": "capital", "value": "Slovenia", "label": "Lubiana"}
+{"subject": "lubiana", "rel": "located_in", "value": "Slovenia", "label": "Lubiana"}
+{"subject": "slovenia", "rel": "located_in", "value": "Europa", "label": "Slovenia"}
+{"subject": "tokyo", "rel": "capital", "value": "Giappone", "label": "Tokyo"}
+{"subject": "tokyo", "rel": "located_in", "value": "Giappone", "label": "Tokyo"}
+{"subject": "giappone", "rel": "located_in", "value": "Asia", "label": "Giappone"}
+{"subject": "pechino", "rel": "capital", "value": "Cina", "label": "Pechino"}
+{"subject": "pechino", "rel": "located_in", "value": "Cina", "label": "Pechino"}
+{"subject": "cina", "rel": "located_in", "value": "Asia", "label": "Cina"}
+{"subject": "nuova-delhi", "rel": "capital", "value": "India", "label": "Nuova Delhi"}
+{"subject": "nuova-delhi", "rel": "located_in", "value": "India", "label": "Nuova Delhi"}
+{"subject": "india", "rel": "located_in", "value": "Asia", "label": "India"}
+{"subject": "seul", "rel": "capital", "value": "Corea del Sud", "label": "Seul"}
+{"subject": "seul", "rel": "located_in", "value": "Corea del Sud", "label": "Seul"}
+{"subject": "corea-del-sud", "rel": "located_in", "value": "Asia", "label": "Corea del Sud"}
+{"subject": "ankara", "rel": "capital", "value": "Turchia", "label": "Ankara"}
+{"subject": "ankara", "rel": "located_in", "value": "Turchia", "label": "Ankara"}
+{"subject": "turchia", "rel": "located_in", "value": "Asia", "label": "Turchia"}
+{"subject": "bangkok", "rel": "capital", "value": "Thailandia", "label": "Bangkok"}
+{"subject": "bangkok", "rel": "located_in", "value": "Thailandia", "label": "Bangkok"}
+{"subject": "thailandia", "rel": "located_in", "value": "Asia", "label": "Thailandia"}
+{"subject": "giacarta", "rel": "capital", "value": "Indonesia", "label": "Giacarta"}
+{"subject": "giacarta", "rel": "located_in", "value": "Indonesia", "label": "Giacarta"}
+{"subject": "indonesia", "rel": "located_in", "value": "Asia", "label": "Indonesia"}
+{"subject": "gerusalemme", "rel": "capital", "value": "Israele", "label": "Gerusalemme"}
+{"subject": "gerusalemme", "rel": "located_in", "value": "Israele", "label": "Gerusalemme"}
+{"subject": "israele", "rel": "located_in", "value": "Asia", "label": "Israele"}
+{"subject": "islamabad", "rel": "capital", "value": "Pakistan", "label": "Islamabad"}
+{"subject": "islamabad", "rel": "located_in", "value": "Pakistan", "label": "Islamabad"}
+{"subject": "pakistan", "rel": "located_in", "value": "Asia", "label": "Pakistan"}
+{"subject": "il-cairo", "rel": "capital", "value": "Egitto", "label": "Il Cairo"}
+{"subject": "il-cairo", "rel": "located_in", "value": "Egitto", "label": "Il Cairo"}
+{"subject": "egitto", "rel": "located_in", "value": "Africa", "label": "Egitto"}
+{"subject": "pretoria", "rel": "capital", "value": "Sudafrica", "label": "Pretoria"}
+{"subject": "pretoria", "rel": "located_in", "value": "Sudafrica", "label": "Pretoria"}
+{"subject": "sudafrica", "rel": "located_in", "value": "Africa", "label": "Sudafrica"}
+{"subject": "rabat", "rel": "capital", "value": "Marocco", "label": "Rabat"}
+{"subject": "rabat", "rel": "located_in", "value": "Marocco", "label": "Rabat"}
+{"subject": "marocco", "rel": "located_in", "value": "Africa", "label": "Marocco"}
+{"subject": "washington", "rel": "capital", "value": "Stati Uniti", "label": "Washington"}
+{"subject": "washington", "rel": "located_in", "value": "Stati Uniti", "label": "Washington"}
+{"subject": "stati-uniti", "rel": "located_in", "value": "America", "label": "Stati Uniti"}
+{"subject": "brasilia", "rel": "capital", "value": "Brasile", "label": "Brasilia"}
+{"subject": "brasilia", "rel": "located_in", "value": "Brasile", "label": "Brasilia"}
+{"subject": "brasile", "rel": "located_in", "value": "America", "label": "Brasile"}
+{"subject": "ottawa", "rel": "capital", "value": "Canada", "label": "Ottawa"}
+{"subject": "ottawa", "rel": "located_in", "value": "Canada", "label": "Ottawa"}
+{"subject": "canada", "rel": "located_in", "value": "America", "label": "Canada"}
+{"subject": "citta-del-messico", "rel": "capital", "value": "Messico", "label": "Citta del Messico"}
+{"subject": "citta-del-messico", "rel": "located_in", "value": "Messico", "label": "Citta del Messico"}
+{"subject": "messico", "rel": "located_in", "value": "America", "label": "Messico"}
+{"subject": "buenos-aires", "rel": "capital", "value": "Argentina", "label": "Buenos Aires"}
+{"subject": "buenos-aires", "rel": "located_in", "value": "Argentina", "label": "Buenos Aires"}
+{"subject": "argentina", "rel": "located_in", "value": "America", "label": "Argentina"}
+{"subject": "kingston", "rel": "capital", "value": "Giamaica", "label": "Kingston"}
+{"subject": "kingston", "rel": "located_in", "value": "Giamaica", "label": "Kingston"}
+{"subject": "giamaica", "rel": "located_in", "value": "America", "label": "Giamaica"}
+{"subject": "bogota", "rel": "capital", "value": "Colombia", "label": "Bogota"}
+{"subject": "bogota", "rel": "located_in", "value": "Colombia", "label": "Bogota"}
+{"subject": "colombia", "rel": "located_in", "value": "America", "label": "Colombia"}
+{"subject": "l-avana", "rel": "capital", "value": "Cuba", "label": "L'Avana"}
+{"subject": "l-avana", "rel": "located_in", "value": "Cuba", "label": "L'Avana"}
+{"subject": "cuba", "rel": "located_in", "value": "America", "label": "Cuba"}
+{"subject": "santiago", "rel": "capital", "value": "Cile", "label": "Santiago"}
+{"subject": "santiago", "rel": "located_in", "value": "Cile", "label": "Santiago"}
+{"subject": "cile", "rel": "located_in", "value": "America", "label": "Cile"}
+{"subject": "caracas", "rel": "capital", "value": "Venezuela", "label": "Caracas"}
+{"subject": "caracas", "rel": "located_in", "value": "Venezuela", "label": "Caracas"}
+{"subject": "venezuela", "rel": "located_in", "value": "America", "label": "Venezuela"}
+{"subject": "canberra", "rel": "capital", "value": "Australia", "label": "Canberra"}
+{"subject": "canberra", "rel": "located_in", "value": "Australia", "label": "Canberra"}
+{"subject": "australia", "rel": "located_in", "value": "Oceania", "label": "Australia"}
+{"subject": "wellington", "rel": "capital", "value": "Nuova Zelanda", "label": "Wellington"}
+{"subject": "wellington", "rel": "located_in", "value": "Nuova Zelanda", "label": "Wellington"}
+{"subject": "nuova-zelanda", "rel": "located_in", "value": "Oceania", "label": "Nuova Zelanda"}
+{"subject": "kabul", "rel": "capital", "value": "Afghanistan", "label": "Kabul"}
+{"subject": "kabul", "rel": "located_in", "value": "Afghanistan", "label": "Kabul"}
+{"subject": "afghanistan", "rel": "located_in", "value": "Asia", "label": "Afghanistan"}
+{"subject": "tirana", "rel": "capital", "value": "Albania", "label": "Tirana"}
+{"subject": "tirana", "rel": "located_in", "value": "Albania", "label": "Tirana"}
+{"subject": "albania", "rel": "located_in", "value": "Europa", "label": "Albania"}
+{"subject": "algeri", "rel": "capital", "value": "Algeria", "label": "Algeri"}
+{"subject": "algeri", "rel": "located_in", "value": "Algeria", "label": "Algeri"}
+{"subject": "algeria", "rel": "located_in", "value": "Africa", "label": "Algeria"}
+{"subject": "andorra-la-vella", "rel": "capital", "value": "Andorra", "label": "Andorra la Vella"}
+{"subject": "andorra-la-vella", "rel": "located_in", "value": "Andorra", "label": "Andorra la Vella"}
+{"subject": "andorra", "rel": "located_in", "value": "Europa", "label": "Andorra"}
+{"subject": "luanda", "rel": "capital", "value": "Angola", "label": "Luanda"}
+{"subject": "luanda", "rel": "located_in", "value": "Angola", "label": "Luanda"}
+{"subject": "angola", "rel": "located_in", "value": "Africa", "label": "Angola"}
+{"subject": "san-giacomo-d-antigua", "rel": "capital", "value": "Antigua e Barbuda", "label": "San Giacomo d'Antigua"}
+{"subject": "san-giacomo-d-antigua", "rel": "located_in", "value": "Antigua e Barbuda", "label": "San Giacomo d'Antigua"}
+{"subject": "antigua-e-barbuda", "rel": "located_in", "value": "America", "label": "Antigua e Barbuda"}
+{"subject": "erevan", "rel": "capital", "value": "Armenia", "label": "Erevan"}
+{"subject": "erevan", "rel": "located_in", "value": "Armenia", "label": "Erevan"}
+{"subject": "armenia", "rel": "located_in", "value": "Asia", "label": "Armenia"}
+{"subject": "baku", "rel": "capital", "value": "Azerbaigian", "label": "Baku"}
+{"subject": "baku", "rel": "located_in", "value": "Azerbaigian", "label": "Baku"}
+{"subject": "azerbaigian", "rel": "located_in", "value": "Asia", "label": "Azerbaigian"}
+{"subject": "manama", "rel": "capital", "value": "Bahrein", "label": "Manama"}
+{"subject": "manama", "rel": "located_in", "value": "Bahrein", "label": "Manama"}
+{"subject": "bahrein", "rel": "located_in", "value": "Asia", "label": "Bahrein"}
+{"subject": "dacca", "rel": "capital", "value": "Bangladesh", "label": "Dacca"}
+{"subject": "dacca", "rel": "located_in", "value": "Bangladesh", "label": "Dacca"}
+{"subject": "bangladesh", "rel": "located_in", "value": "Asia", "label": "Bangladesh"}
+{"subject": "bridgetown", "rel": "capital", "value": "Barbados", "label": "Bridgetown"}
+{"subject": "bridgetown", "rel": "located_in", "value": "Barbados", "label": "Bridgetown"}
+{"subject": "barbados", "rel": "located_in", "value": "America", "label": "Barbados"}
+{"subject": "belmopan", "rel": "capital", "value": "Belize", "label": "Belmopan"}
+{"subject": "belmopan", "rel": "located_in", "value": "Belize", "label": "Belmopan"}
+{"subject": "belize", "rel": "located_in", "value": "America", "label": "Belize"}
+{"subject": "porto-novo", "rel": "capital", "value": "Benin", "label": "Porto-Novo"}
+{"subject": "porto-novo", "rel": "located_in", "value": "Benin", "label": "Porto-Novo"}
+{"subject": "benin", "rel": "located_in", "value": "Africa", "label": "Benin"}
+{"subject": "thimphu", "rel": "capital", "value": "Bhutan", "label": "Thimphu"}
+{"subject": "thimphu", "rel": "located_in", "value": "Bhutan", "label": "Thimphu"}
+{"subject": "bhutan", "rel": "located_in", "value": "Asia", "label": "Bhutan"}
+{"subject": "minsk", "rel": "capital", "value": "Bielorussia", "label": "Minsk"}
+{"subject": "minsk", "rel": "located_in", "value": "Bielorussia", "label": "Minsk"}
+{"subject": "bielorussia", "rel": "located_in", "value": "Europa", "label": "Bielorussia"}
+{"subject": "naypyidaw", "rel": "capital", "value": "Birmania", "label": "Naypyidaw"}
+{"subject": "naypyidaw", "rel": "located_in", "value": "Birmania", "label": "Naypyidaw"}
+{"subject": "birmania", "rel": "located_in", "value": "Asia", "label": "Birmania"}
+{"subject": "sucre", "rel": "capital", "value": "Bolivia", "label": "Sucre"}
+{"subject": "sucre", "rel": "located_in", "value": "Bolivia", "label": "Sucre"}
+{"subject": "bolivia", "rel": "located_in", "value": "America", "label": "Bolivia"}
+{"subject": "sarajevo", "rel": "capital", "value": "Bosnia ed Erzegovina", "label": "Sarajevo"}
+{"subject": "sarajevo", "rel": "located_in", "value": "Bosnia ed Erzegovina", "label": "Sarajevo"}
+{"subject": "bosnia-ed-erzegovina", "rel": "located_in", "value": "Europa", "label": "Bosnia ed Erzegovina"}
+{"subject": "gaborone", "rel": "capital", "value": "Botswana", "label": "Gaborone"}
+{"subject": "gaborone", "rel": "located_in", "value": "Botswana", "label": "Gaborone"}
+{"subject": "botswana", "rel": "located_in", "value": "Africa", "label": "Botswana"}
+{"subject": "bandar-seri-begawen", "rel": "capital", "value": "Brunei", "label": "Bandar Seri Begawen"}
+{"subject": "bandar-seri-begawen", "rel": "located_in", "value": "Brunei", "label": "Bandar Seri Begawen"}
+{"subject": "brunei", "rel": "located_in", "value": "Asia", "label": "Brunei"}
+{"subject": "sofia", "rel": "capital", "value": "Bulgaria", "label": "Sofia"}
+{"subject": "sofia", "rel": "located_in", "value": "Bulgaria", "label": "Sofia"}
+{"subject": "bulgaria", "rel": "located_in", "value": "Europa", "label": "Bulgaria"}
+{"subject": "ouagadougou", "rel": "capital", "value": "Burkina Faso", "label": "Ouagadougou"}
+{"subject": "ouagadougou", "rel": "located_in", "value": "Burkina Faso", "label": "Ouagadougou"}
+{"subject": "burkina-faso", "rel": "located_in", "value": "Africa", "label": "Burkina Faso"}
+{"subject": "gitega", "rel": "capital", "value": "Burundi", "label": "Gitega"}
+{"subject": "gitega", "rel": "located_in", "value": "Burundi", "label": "Gitega"}
+{"subject": "burundi", "rel": "located_in", "value": "Africa", "label": "Burundi"}
+{"subject": "phnom-penh", "rel": "capital", "value": "Cambogia", "label": "Phnom Penh"}
+{"subject": "phnom-penh", "rel": "located_in", "value": "Cambogia", "label": "Phnom Penh"}
+{"subject": "cambogia", "rel": "located_in", "value": "Asia", "label": "Cambogia"}
+{"subject": "yaounde", "rel": "capital", "value": "Cameroon", "label": "Yaoundé"}
+{"subject": "yaounde", "rel": "located_in", "value": "Cameroon", "label": "Yaoundé"}
+{"subject": "cameroon", "rel": "located_in", "value": "Africa", "label": "Cameroon"}
+{"subject": "praia", "rel": "capital", "value": "Cape Verde", "label": "Praia"}
+{"subject": "praia", "rel": "located_in", "value": "Cape Verde", "label": "Praia"}
+{"subject": "cape-verde", "rel": "located_in", "value": "Africa", "label": "Cape Verde"}
+{"subject": "bangui", "rel": "capital", "value": "Centrafrica", "label": "Bangui"}
+{"subject": "bangui", "rel": "located_in", "value": "Centrafrica", "label": "Bangui"}
+{"subject": "centrafrica", "rel": "located_in", "value": "Africa", "label": "Centrafrica"}
+{"subject": "nicosia", "rel": "capital", "value": "Cipro", "label": "Nicosia"}
+{"subject": "nicosia", "rel": "located_in", "value": "Cipro", "label": "Nicosia"}
+{"subject": "cipro", "rel": "located_in", "value": "Asia", "label": "Cipro"}
+{"subject": "moroni", "rel": "capital", "value": "Comore", "label": "Moroni"}
+{"subject": "moroni", "rel": "located_in", "value": "Comore", "label": "Moroni"}
+{"subject": "comore", "rel": "located_in", "value": "Africa", "label": "Comore"}
+{"subject": "yamoussoukro", "rel": "capital", "value": "Costa d'Avorio", "label": "Yamoussoukro"}
+{"subject": "yamoussoukro", "rel": "located_in", "value": "Costa d'Avorio", "label": "Yamoussoukro"}
+{"subject": "costa-d-avorio", "rel": "located_in", "value": "Africa", "label": "Costa d'Avorio"}
+{"subject": "san-jose", "rel": "capital", "value": "Costa Rica", "label": "San José"}
+{"subject": "san-jose", "rel": "located_in", "value": "Costa Rica", "label": "San José"}
+{"subject": "costa-rica", "rel": "located_in", "value": "America", "label": "Costa Rica"}
+{"subject": "roseau", "rel": "capital", "value": "Dominica", "label": "Roseau"}
+{"subject": "roseau", "rel": "located_in", "value": "Dominica", "label": "Roseau"}
+{"subject": "dominica", "rel": "located_in", "value": "America", "label": "Dominica"}
+{"subject": "quito", "rel": "capital", "value": "Ecuador", "label": "Quito"}
+{"subject": "quito", "rel": "located_in", "value": "Ecuador", "label": "Quito"}
+{"subject": "ecuador", "rel": "located_in", "value": "America", "label": "Ecuador"}
+{"subject": "san-salvador", "rel": "capital", "value": "El Salvador", "label": "San Salvador"}
+{"subject": "san-salvador", "rel": "located_in", "value": "El Salvador", "label": "San Salvador"}
+{"subject": "el-salvador", "rel": "located_in", "value": "America", "label": "El Salvador"}
+{"subject": "abu-dhabi", "rel": "capital", "value": "Emirati Arabi Uniti", "label": "Abu Dhabi"}
+{"subject": "abu-dhabi", "rel": "located_in", "value": "Emirati Arabi Uniti", "label": "Abu Dhabi"}
+{"subject": "emirati-arabi-uniti", "rel": "located_in", "value": "Asia", "label": "Emirati Arabi Uniti"}
+{"subject": "asmara", "rel": "capital", "value": "Eritrea", "label": "Asmara"}
+{"subject": "asmara", "rel": "located_in", "value": "Eritrea", "label": "Asmara"}
+{"subject": "eritrea", "rel": "located_in", "value": "Africa", "label": "Eritrea"}
+{"subject": "tallinn", "rel": "capital", "value": "Estonia", "label": "Tallinn"}
+{"subject": "tallinn", "rel": "located_in", "value": "Estonia", "label": "Tallinn"}
+{"subject": "estonia", "rel": "located_in", "value": "Europa", "label": "Estonia"}
+{"subject": "addis-abeba", "rel": "capital", "value": "Etiopia", "label": "Addis Abeba"}
+{"subject": "addis-abeba", "rel": "located_in", "value": "Etiopia", "label": "Addis Abeba"}
+{"subject": "etiopia", "rel": "located_in", "value": "Africa", "label": "Etiopia"}
+{"subject": "suva", "rel": "capital", "value": "Fiji", "label": "Suva"}
+{"subject": "suva", "rel": "located_in", "value": "Fiji", "label": "Suva"}
+{"subject": "fiji", "rel": "located_in", "value": "Oceania", "label": "Fiji"}
+{"subject": "manila", "rel": "capital", "value": "Filippine", "label": "Manila"}
+{"subject": "manila", "rel": "located_in", "value": "Filippine", "label": "Manila"}
+{"subject": "filippine", "rel": "located_in", "value": "Asia", "label": "Filippine"}
+{"subject": "libreville", "rel": "capital", "value": "Gabon", "label": "Libreville"}
+{"subject": "libreville", "rel": "located_in", "value": "Gabon", "label": "Libreville"}
+{"subject": "gabon", "rel": "located_in", "value": "Africa", "label": "Gabon"}
+{"subject": "banjul", "rel": "capital", "value": "Gambia", "label": "Banjul"}
+{"subject": "banjul", "rel": "located_in", "value": "Gambia", "label": "Banjul"}
+{"subject": "gambia", "rel": "located_in", "value": "Africa", "label": "Gambia"}
+{"subject": "tbilisi", "rel": "capital", "value": "Georgia", "label": "Tbilisi"}
+{"subject": "tbilisi", "rel": "located_in", "value": "Georgia", "label": "Tbilisi"}
+{"subject": "georgia", "rel": "located_in", "value": "Asia", "label": "Georgia"}
+{"subject": "accra", "rel": "capital", "value": "Ghana", "label": "Accra"}
+{"subject": "accra", "rel": "located_in", "value": "Ghana", "label": "Accra"}
+{"subject": "ghana", "rel": "located_in", "value": "Africa", "label": "Ghana"}
+{"subject": "gibilterra", "rel": "capital", "value": "Gibilterra", "label": "Gibilterra"}
+{"subject": "gibilterra", "rel": "located_in", "value": "Gibilterra", "label": "Gibilterra"}
+{"subject": "gibilterra", "rel": "located_in", "value": "Europa", "label": "Gibilterra"}
+{"subject": "amman", "rel": "capital", "value": "Giordania", "label": "Amman"}
+{"subject": "amman", "rel": "located_in", "value": "Giordania", "label": "Amman"}
+{"subject": "giordania", "rel": "located_in", "value": "Asia", "label": "Giordania"}
+{"subject": "san-giacomo", "rel": "capital", "value": "Grenada", "label": "San Giacomo"}
+{"subject": "san-giacomo", "rel": "located_in", "value": "Grenada", "label": "San Giacomo"}
+{"subject": "grenada", "rel": "located_in", "value": "America", "label": "Grenada"}
+{"subject": "citta-del-guatemala", "rel": "capital", "value": "Guatemala", "label": "Città del Guatemala"}
+{"subject": "citta-del-guatemala", "rel": "located_in", "value": "Guatemala", "label": "Città del Guatemala"}
+{"subject": "guatemala", "rel": "located_in", "value": "America", "label": "Guatemala"}
+{"subject": "conakry", "rel": "capital", "value": "Guinea", "label": "Conakry"}
+{"subject": "conakry", "rel": "located_in", "value": "Guinea", "label": "Conakry"}
+{"subject": "guinea", "rel": "located_in", "value": "Africa", "label": "Guinea"}
+{"subject": "bissau", "rel": "capital", "value": "Guinea-Bissau", "label": "Bissau"}
+{"subject": "bissau", "rel": "located_in", "value": "Guinea-Bissau", "label": "Bissau"}
+{"subject": "guinea-bissau", "rel": "located_in", "value": "Africa", "label": "Guinea-Bissau"}
+{"subject": "georgetown", "rel": "capital", "value": "Guyana", "label": "Georgetown"}
+{"subject": "georgetown", "rel": "located_in", "value": "Guyana", "label": "Georgetown"}
+{"subject": "guyana", "rel": "located_in", "value": "America", "label": "Guyana"}
+{"subject": "porto-principe", "rel": "capital", "value": "Haiti", "label": "Porto Principe"}
+{"subject": "porto-principe", "rel": "located_in", "value": "Haiti", "label": "Porto Principe"}
+{"subject": "haiti", "rel": "located_in", "value": "America", "label": "Haiti"}
+{"subject": "tegucigalpa", "rel": "capital", "value": "Honduras", "label": "Tegucigalpa"}
+{"subject": "tegucigalpa", "rel": "located_in", "value": "Honduras", "label": "Tegucigalpa"}
+{"subject": "honduras", "rel": "located_in", "value": "America", "label": "Honduras"}
+{"subject": "teheran", "rel": "capital", "value": "Iran", "label": "Teheran"}
+{"subject": "teheran", "rel": "located_in", "value": "Iran", "label": "Teheran"}
+{"subject": "iran", "rel": "located_in", "value": "Asia", "label": "Iran"}
+{"subject": "baghdad", "rel": "capital", "value": "Iraq", "label": "Baghdad"}
+{"subject": "baghdad", "rel": "located_in", "value": "Iraq", "label": "Baghdad"}
+{"subject": "iraq", "rel": "located_in", "value": "Asia", "label": "Iraq"}
+{"subject": "astana", "rel": "capital", "value": "Kazakistan", "label": "Astana"}
+{"subject": "astana", "rel": "located_in", "value": "Kazakistan", "label": "Astana"}
+{"subject": "kazakistan", "rel": "located_in", "value": "Asia", "label": "Kazakistan"}
+{"subject": "nairobi", "rel": "capital", "value": "Kenya", "label": "Nairobi"}
+{"subject": "nairobi", "rel": "located_in", "value": "Kenya", "label": "Nairobi"}
+{"subject": "kenya", "rel": "located_in", "value": "Africa", "label": "Kenya"}
+{"subject": "bishkek", "rel": "capital", "value": "Kirghizistan", "label": "Bishkek"}
+{"subject": "bishkek", "rel": "located_in", "value": "Kirghizistan", "label": "Bishkek"}
+{"subject": "kirghizistan", "rel": "located_in", "value": "Asia", "label": "Kirghizistan"}
+{"subject": "chisinau", "rel": "capital", "value": "Moldavia", "label": "Chișinău"}
+{"subject": "chisinau", "rel": "located_in", "value": "Moldavia", "label": "Chișinău"}
+{"subject": "moldavia", "rel": "located_in", "value": "Europa", "label": "Moldavia"}
+{"subject": "ulaanbaatar", "rel": "capital", "value": "Mongolia", "label": "Ulaanbaatar"}
+{"subject": "ulaanbaatar", "rel": "located_in", "value": "Mongolia", "label": "Ulaanbaatar"}
+{"subject": "mongolia", "rel": "located_in", "value": "Asia", "label": "Mongolia"}
+{"subject": "podgorica", "rel": "capital", "value": "Montenegro", "label": "Podgorica"}
+{"subject": "podgorica", "rel": "located_in", "value": "Montenegro", "label": "Podgorica"}
+{"subject": "montenegro", "rel": "located_in", "value": "Europa", "label": "Montenegro"}
+{"subject": "maputo", "rel": "capital", "value": "Mozambico", "label": "Maputo"}
+{"subject": "maputo", "rel": "located_in", "value": "Mozambico", "label": "Maputo"}
+{"subject": "mozambico", "rel": "located_in", "value": "Africa", "label": "Mozambico"}
+{"subject": "windhoek", "rel": "capital", "value": "Namibia", "label": "Windhoek"}
+{"subject": "windhoek", "rel": "located_in", "value": "Namibia", "label": "Windhoek"}
+{"subject": "namibia", "rel": "located_in", "value": "Africa", "label": "Namibia"}
+{"subject": "yaren", "rel": "capital", "value": "Nauru", "label": "Yaren"}
+{"subject": "yaren", "rel": "located_in", "value": "Nauru", "label": "Yaren"}
+{"subject": "nauru", "rel": "located_in", "value": "Oceania", "label": "Nauru"}
+{"subject": "katmandu", "rel": "capital", "value": "Nepal", "label": "Katmandu"}
+{"subject": "katmandu", "rel": "located_in", "value": "Nepal", "label": "Katmandu"}
+{"subject": "nepal", "rel": "located_in", "value": "Asia", "label": "Nepal"}
+{"subject": "managua", "rel": "capital", "value": "Nicaragua", "label": "Managua"}
+{"subject": "managua", "rel": "located_in", "value": "Nicaragua", "label": "Managua"}
+{"subject": "nicaragua", "rel": "located_in", "value": "America", "label": "Nicaragua"}
+{"subject": "niamey", "rel": "capital", "value": "Niger", "label": "Niamey"}
+{"subject": "niamey", "rel": "located_in", "value": "Niger", "label": "Niamey"}
+{"subject": "niger", "rel": "located_in", "value": "Africa", "label": "Niger"}
+{"subject": "abuja", "rel": "capital", "value": "Nigeria", "label": "Abuja"}
+{"subject": "abuja", "rel": "located_in", "value": "Nigeria", "label": "Abuja"}
+{"subject": "nigeria", "rel": "located_in", "value": "Africa", "label": "Nigeria"}
+{"subject": "alofi", "rel": "capital", "value": "Niue", "label": "Alofi"}
+{"subject": "alofi", "rel": "located_in", "value": "Niue", "label": "Alofi"}
+{"subject": "niue", "rel": "located_in", "value": "Oceania", "label": "Niue"}
+{"subject": "mascate", "rel": "capital", "value": "Oman", "label": "Mascate"}
+{"subject": "mascate", "rel": "located_in", "value": "Oman", "label": "Mascate"}
+{"subject": "oman", "rel": "located_in", "value": "Asia", "label": "Oman"}
+{"subject": "ngerulmud", "rel": "capital", "value": "Palau", "label": "Ngerulmud"}
+{"subject": "ngerulmud", "rel": "located_in", "value": "Palau", "label": "Ngerulmud"}
+{"subject": "palau", "rel": "located_in", "value": "Oceania", "label": "Palau"}
+{"subject": "citta-di-panama", "rel": "capital", "value": "Panama", "label": "Città di Panama"}
+{"subject": "citta-di-panama", "rel": "located_in", "value": "Panama", "label": "Città di Panama"}
+{"subject": "panama", "rel": "located_in", "value": "America", "label": "Panama"}
+{"subject": "port-moresby", "rel": "capital", "value": "Papua Nuova Guinea", "label": "Port Moresby"}
+{"subject": "port-moresby", "rel": "located_in", "value": "Papua Nuova Guinea", "label": "Port Moresby"}
+{"subject": "papua-nuova-guinea", "rel": "located_in", "value": "Oceania", "label": "Papua Nuova Guinea"}
+{"subject": "asuncion", "rel": "capital", "value": "Paraguay", "label": "Asunción"}
+{"subject": "asuncion", "rel": "located_in", "value": "Paraguay", "label": "Asunción"}
+{"subject": "paraguay", "rel": "located_in", "value": "America", "label": "Paraguay"}
+{"subject": "lima", "rel": "capital", "value": "Perù", "label": "Lima"}
+{"subject": "lima", "rel": "located_in", "value": "Perù", "label": "Lima"}
+{"subject": "peru", "rel": "located_in", "value": "America", "label": "Perù"}
+{"subject": "doha", "rel": "capital", "value": "Qatar", "label": "Doha"}
+{"subject": "doha", "rel": "located_in", "value": "Qatar", "label": "Doha"}
+{"subject": "qatar", "rel": "located_in", "value": "Asia", "label": "Qatar"}
+{"subject": "kinsasa", "rel": "capital", "value": "Repubblica Democratica del Congo", "label": "Kinsasa"}
+{"subject": "kinsasa", "rel": "located_in", "value": "Repubblica Democratica del Congo", "label": "Kinsasa"}
+{"subject": "repubblica-democratica-del-congo", "rel": "located_in", "value": "Africa", "label": "Repubblica Democratica del Congo"}
+{"subject": "santo-domingo", "rel": "capital", "value": "Repubblica Dominicana", "label": "Santo Domingo"}
+{"subject": "santo-domingo", "rel": "located_in", "value": "Repubblica Dominicana", "label": "Santo Domingo"}
+{"subject": "repubblica-dominicana", "rel": "located_in", "value": "America", "label": "Repubblica Dominicana"}
+{"subject": "kigali", "rel": "capital", "value": "Rwanda", "label": "Kigali"}
+{"subject": "kigali", "rel": "located_in", "value": "Rwanda", "label": "Kigali"}
+{"subject": "rwanda", "rel": "located_in", "value": "Africa", "label": "Rwanda"}
+{"subject": "basseterre", "rel": "capital", "value": "Saint Kitts e Nevis", "label": "Basseterre"}
+{"subject": "basseterre", "rel": "located_in", "value": "Saint Kitts e Nevis", "label": "Basseterre"}
+{"subject": "saint-kitts-e-nevis", "rel": "located_in", "value": "America", "label": "Saint Kitts e Nevis"}
+{"subject": "castries", "rel": "capital", "value": "Saint Lucia", "label": "Castries"}
+{"subject": "castries", "rel": "located_in", "value": "Saint Lucia", "label": "Castries"}
+{"subject": "saint-lucia", "rel": "located_in", "value": "America", "label": "Saint Lucia"}
+{"subject": "kingstown", "rel": "capital", "value": "Saint Vincent e Grenadine", "label": "Kingstown"}
+{"subject": "kingstown", "rel": "located_in", "value": "Saint Vincent e Grenadine", "label": "Kingstown"}
+{"subject": "saint-vincent-e-grenadine", "rel": "located_in", "value": "America", "label": "Saint Vincent e Grenadine"}
+{"subject": "apia", "rel": "capital", "value": "Samoa", "label": "Apia"}
+{"subject": "apia", "rel": "located_in", "value": "Samoa", "label": "Apia"}
+{"subject": "samoa", "rel": "located_in", "value": "Oceania", "label": "Samoa"}
+{"subject": "san-marino", "rel": "capital", "value": "San Marino", "label": "San Marino"}
+{"subject": "san-marino", "rel": "located_in", "value": "San Marino", "label": "San Marino"}
+{"subject": "san-marino", "rel": "located_in", "value": "Europa", "label": "San Marino"}
+{"subject": "sao-tome", "rel": "capital", "value": "Sao Tomé e Principe", "label": "São Tomé"}
+{"subject": "sao-tome", "rel": "located_in", "value": "Sao Tomé e Principe", "label": "São Tomé"}
+{"subject": "sao-tome-e-principe", "rel": "located_in", "value": "Africa", "label": "Sao Tomé e Principe"}
+{"subject": "riad", "rel": "capital", "value": "Saudita", "label": "Riad"}
+{"subject": "riad", "rel": "located_in", "value": "Saudita", "label": "Riad"}
+{"subject": "saudita", "rel": "located_in", "value": "Asia", "label": "Saudita"}
+{"subject": "dakar", "rel": "capital", "value": "Senegal", "label": "Dakar"}
+{"subject": "dakar", "rel": "located_in", "value": "Senegal", "label": "Dakar"}
+{"subject": "senegal", "rel": "located_in", "value": "Africa", "label": "Senegal"}
+{"subject": "victoria", "rel": "capital", "value": "Seychelles", "label": "Victoria"}
+{"subject": "victoria", "rel": "located_in", "value": "Seychelles", "label": "Victoria"}
+{"subject": "seychelles", "rel": "located_in", "value": "Africa", "label": "Seychelles"}
+{"subject": "freetown", "rel": "capital", "value": "Sierra Leone", "label": "Freetown"}
+{"subject": "freetown", "rel": "located_in", "value": "Sierra Leone", "label": "Freetown"}
+{"subject": "sierra-leone", "rel": "located_in", "value": "Africa", "label": "Sierra Leone"}
+{"subject": "singapore", "rel": "capital", "value": "Singapore", "label": "Singapore"}
+{"subject": "singapore", "rel": "located_in", "value": "Singapore", "label": "Singapore"}
+{"subject": "singapore", "rel": "located_in", "value": "Asia", "label": "Singapore"}
+{"subject": "bratislava", "rel": "capital", "value": "Slovacchia", "label": "Bratislava"}
+{"subject": "bratislava", "rel": "located_in", "value": "Slovacchia", "label": "Bratislava"}
+{"subject": "slovacchia", "rel": "located_in", "value": "Europa", "label": "Slovacchia"}
+{"subject": "mogadiscio", "rel": "capital", "value": "Somalia", "label": "Mogadiscio"}
+{"subject": "mogadiscio", "rel": "located_in", "value": "Somalia", "label": "Mogadiscio"}
+{"subject": "somalia", "rel": "located_in", "value": "Africa", "label": "Somalia"}
+{"subject": "khartoum", "rel": "capital", "value": "Sudan", "label": "Khartoum"}
+{"subject": "khartoum", "rel": "located_in", "value": "Sudan", "label": "Khartoum"}
+{"subject": "sudan", "rel": "located_in", "value": "Africa", "label": "Sudan"}
+{"subject": "colombo", "rel": "capital", "value": "Sri Lanka", "label": "Colombo"}
+{"subject": "colombo", "rel": "located_in", "value": "Sri Lanka", "label": "Colombo"}
+{"subject": "sri-lanka", "rel": "located_in", "value": "Asia", "label": "Sri Lanka"}
+{"subject": "giuba", "rel": "capital", "value": "Sudan del Sud", "label": "Giuba"}
+{"subject": "giuba", "rel": "located_in", "value": "Sudan del Sud", "label": "Giuba"}
+{"subject": "sudan-del-sud", "rel": "located_in", "value": "Africa", "label": "Sudan del Sud"}
+{"subject": "paramaribo", "rel": "capital", "value": "Suriname", "label": "Paramaribo"}
+{"subject": "paramaribo", "rel": "located_in", "value": "Suriname", "label": "Paramaribo"}
+{"subject": "suriname", "rel": "located_in", "value": "America", "label": "Suriname"}
+{"subject": "damasco", "rel": "capital", "value": "Siria", "label": "Damasco"}
+{"subject": "damasco", "rel": "located_in", "value": "Siria", "label": "Damasco"}
+{"subject": "siria", "rel": "located_in", "value": "Asia", "label": "Siria"}
+{"subject": "dushanbe", "rel": "capital", "value": "Tagikistan", "label": "Dushanbe"}
+{"subject": "dushanbe", "rel": "located_in", "value": "Tagikistan", "label": "Dushanbe"}
+{"subject": "tagikistan", "rel": "located_in", "value": "Asia", "label": "Tagikistan"}
+{"subject": "dodoma", "rel": "capital", "value": "Tanzania", "label": "Dodoma"}
+{"subject": "dodoma", "rel": "located_in", "value": "Tanzania", "label": "Dodoma"}
+{"subject": "tanzania", "rel": "located_in", "value": "Africa", "label": "Tanzania"}
+{"subject": "lome", "rel": "capital", "value": "Togo", "label": "Lomè"}
+{"subject": "lome", "rel": "located_in", "value": "Togo", "label": "Lomè"}
+{"subject": "togo", "rel": "located_in", "value": "Africa", "label": "Togo"}
+{"subject": "nuku-alofa", "rel": "capital", "value": "Tonga", "label": "Nuku'alofa"}
+{"subject": "nuku-alofa", "rel": "located_in", "value": "Tonga", "label": "Nuku'alofa"}
+{"subject": "tonga", "rel": "located_in", "value": "Oceania", "label": "Tonga"}
+{"subject": "port-of-spain", "rel": "capital", "value": "Trinidad e Tobago", "label": "Port of Spain"}
+{"subject": "port-of-spain", "rel": "located_in", "value": "Trinidad e Tobago", "label": "Port of Spain"}
+{"subject": "trinidad-e-tobago", "rel": "located_in", "value": "America", "label": "Trinidad e Tobago"}
+{"subject": "funafuti", "rel": "capital", "value": "Tuvalu", "label": "Funafuti"}
+{"subject": "funafuti", "rel": "located_in", "value": "Tuvalu", "label": "Funafuti"}
+{"subject": "tuvalu", "rel": "located_in", "value": "Oceania", "label": "Tuvalu"}
+{"subject": "kampala", "rel": "capital", "value": "Uganda", "label": "Kampala"}
+{"subject": "kampala", "rel": "located_in", "value": "Uganda", "label": "Kampala"}
+{"subject": "uganda", "rel": "located_in", "value": "Africa", "label": "Uganda"}
+{"subject": "montevideo", "rel": "capital", "value": "Uruguay", "label": "Montevideo"}
+{"subject": "montevideo", "rel": "located_in", "value": "Uruguay", "label": "Montevideo"}
+{"subject": "uruguay", "rel": "located_in", "value": "America", "label": "Uruguay"}
+{"subject": "tashkent", "rel": "capital", "value": "Uzbekistan", "label": "Tashkent"}
+{"subject": "tashkent", "rel": "located_in", "value": "Uzbekistan", "label": "Tashkent"}
+{"subject": "uzbekistan", "rel": "located_in", "value": "Asia", "label": "Uzbekistan"}
+{"subject": "port-vila", "rel": "capital", "value": "Vanuatu", "label": "Port Vila"}
+{"subject": "port-vila", "rel": "located_in", "value": "Vanuatu", "label": "Port Vila"}
+{"subject": "vanuatu", "rel": "located_in", "value": "Oceania", "label": "Vanuatu"}
+{"subject": "citta-del-vaticano", "rel": "capital", "value": "Vaticano", "label": "Città del Vaticano"}
+{"subject": "citta-del-vaticano", "rel": "located_in", "value": "Vaticano", "label": "Città del Vaticano"}
+{"subject": "vaticano", "rel": "located_in", "value": "Europa", "label": "Vaticano"}
+{"subject": "hanoi", "rel": "capital", "value": "Vietnam", "label": "Hanoi"}
+{"subject": "hanoi", "rel": "located_in", "value": "Vietnam", "label": "Hanoi"}
+{"subject": "vietnam", "rel": "located_in", "value": "Asia", "label": "Vietnam"}
+{"subject": "sana-a", "rel": "capital", "value": "Yemen", "label": "Sana'a"}
+{"subject": "sana-a", "rel": "located_in", "value": "Yemen", "label": "Sana'a"}
+{"subject": "yemen", "rel": "located_in", "value": "Asia", "label": "Yemen"}
+{"subject": "lusaka", "rel": "capital", "value": "Zambia", "label": "Lusaka"}
+{"subject": "lusaka", "rel": "located_in", "value": "Zambia", "label": "Lusaka"}
+{"subject": "zambia", "rel": "located_in", "value": "Africa", "label": "Zambia"}
+{"subject": "harare", "rel": "capital", "value": "Zimbabwe", "label": "Harare"}
+{"subject": "harare", "rel": "located_in", "value": "Zimbabwe", "label": "Harare"}
+{"subject": "zimbabwe", "rel": "located_in", "value": "Africa", "label": "Zimbabwe"}
+{"subject": "albert-einstein", "rel": "born", "value": "14 marzo 1879", "label": "Albert Einstein"}
+{"subject": "albert-einstein", "rel": "country", "value": "Germania", "label": "Albert Einstein"}
+{"subject": "dante-alighieri", "rel": "born", "value": "1265", "label": "Dante Alighieri"}
+{"subject": "dante-alighieri", "rel": "country", "value": "Italia", "label": "Dante Alighieri"}
+{"subject": "cristoforo-colombo", "rel": "born", "value": "1451", "label": "Cristoforo Colombo"}
+{"subject": "cristoforo-colombo", "rel": "country", "value": "Italia", "label": "Cristoforo Colombo"}
+{"subject": "isaac-newton", "rel": "born", "value": "4 gennaio 1643", "label": "Isaac Newton"}
+{"subject": "isaac-newton", "rel": "country", "value": "Regno Unito", "label": "Isaac Newton"}
+{"subject": "kurt-cobain", "rel": "country", "value": "Stati Uniti", "label": "Kurt Donald Cobain"}
+{"subject": "madonna", "rel": "born", "value": "1958", "label": "Madonna Louise Ciccone"}
+{"subject": "madonna", "rel": "country", "value": "Stati Uniti", "label": "Madonna Louise Ciccone"}
+{"subject": "michael-jackson", "rel": "country", "value": "Stati Uniti", "label": "Michael Joseph Jackson"}
+{"subject": "bob-marley", "rel": "country", "value": "Giamaica", "label": "Robert Nesta Marley, detto Bob,"}
+{"subject": "prince-musician", "rel": "born", "value": "1958", "label": "Prince Musician"}
+{"subject": "prince-musician", "rel": "died", "value": "2016", "label": "Prince Musician"}
+{"subject": "prince-musician", "rel": "country", "value": "Stati Uniti", "label": "Prince Musician"}
+{"subject": "david-bowie", "rel": "country", "value": "Regno Unito", "label": "David Bowie"}
+{"subject": "elvis-presley", "rel": "country", "value": "Stati Uniti", "label": "Elvis Aaron Presley"}
+{"subject": "freddie-mercury", "rel": "country", "value": "Regno Unito", "label": "Freddie Mercury"}
+{"subject": "adele", "rel": "born", "value": "1988", "label": "Adele"}
+{"subject": "adele", "rel": "country", "value": "Regno Unito", "label": "Adele"}
+{"subject": "beyonce", "rel": "country", "value": "Stati Uniti", "label": "Beyoncé Giselle Knowles-Carter"}
+{"subject": "elton-john", "rel": "country", "value": "Regno Unito", "label": "Sir Elton Hercules John"}
+{"subject": "lady-gaga", "rel": "country", "value": "Stati Uniti", "label": "Lady Gaga"}
+{"subject": "taylor-swift", "rel": "country", "value": "Stati Uniti", "label": "Taylor Alison Swift"}
+{"subject": "bruno-mars", "rel": "country", "value": "Stati Uniti", "label": "Bruno Mars"}
+{"subject": "eminem", "rel": "country", "value": "Stati Uniti", "label": "Eminem"}
+{"subject": "jay-z", "rel": "country", "value": "Stati Uniti", "label": "Jay-Z, pseudonimo di Shawn Corey Carter,"}
+{"subject": "kanye-west", "rel": "country", "value": "Stati Uniti", "label": "Kanye Omari West, anche noto come Ye,"}
+{"subject": "drake-musician", "rel": "born", "value": "1986", "label": "Aubrey Drake Graham"}
+{"subject": "drake-musician", "rel": "country", "value": "Canada", "label": "Aubrey Drake Graham"}
+{"subject": "rihanna", "rel": "country", "value": "Barbados", "label": "Robyn Rihanna Fenty"}
+{"subject": "tom-hanks", "rel": "country", "value": "Stati Uniti", "label": "Thomas Jeffrey Hanks, detto Tom,"}
+{"subject": "morgan-freeman", "rel": "country", "value": "Stati Uniti", "label": "Morgan Freeman"}
+{"subject": "leonardo-dicaprio", "rel": "country", "value": "Stati Uniti", "label": "Leonardo Wilhelm DiCaprio"}
+{"subject": "brad-pitt", "rel": "country", "value": "Stati Uniti", "label": "William Bradley Pitt, detto Brad,"}
+{"subject": "robert-de-niro", "rel": "country", "value": "Stati Uniti", "label": "Robert Anthony De Niro"}
+{"subject": "al-pacino", "rel": "country", "value": "Stati Uniti", "label": "Alfredo James Pacino, detto Al,"}
+{"subject": "sean-connery", "rel": "country", "value": "Regno Unito", "label": "Sir Thomas Sean Connery"}
+{"subject": "will-smith", "rel": "country", "value": "Stati Uniti", "label": "Willard Carroll Smith II, detto Will,"}
+{"subject": "christian-bale", "rel": "country", "value": "Regno Unito", "label": "Christian Charles Philip Bale"}
+{"subject": "joaquin-phoenix", "rel": "country", "value": "Stati Uniti", "label": "Joaquin Rafael Phoenix"}
+{"subject": "angelina-jolie", "rel": "country", "value": "Stati Uniti", "label": "Angelina Jolie, DCMG,"}
+{"subject": "scarlett-johansson", "rel": "country", "value": "Stati Uniti", "label": "Scarlett Ingrid Johansson"}
+{"subject": "emma-stone", "rel": "country", "value": "Stati Uniti", "label": "Emily Jean \"Emma\" Stone"}
+{"subject": "jennifer-lawrence", "rel": "country", "value": "Stati Uniti", "label": "Jennifer Shrader Lawrence"}
+{"subject": "meryl-streep", "rel": "country", "value": "Stati Uniti", "label": "Mary Louise \"Meryl\" Streep"}
+{"subject": "cate-blanchett", "rel": "country", "value": "Australia", "label": "Catherine Elise Blanchett, detta Cate,"}
+{"subject": "helen-mirren", "rel": "country", "value": "Regno Unito", "label": "Dame Helen Mirren"}
+{"subject": "julia-roberts", "rel": "country", "value": "Stati Uniti", "label": "Julia Fiona Roberts"}
+{"subject": "donald-trump", "rel": "country", "value": "Stati Uniti", "label": "Donald John Trump"}
+{"subject": "barack-obama", "rel": "country", "value": "Stati Uniti", "label": "Barack Hussein Obama II"}
+{"subject": "nelson-mandela", "rel": "country", "value": "Sudafrica", "label": "Nelson Rolihlahla Mandela"}
+{"subject": "mahatma-gandhi", "rel": "country", "value": "India", "label": "Mohāndās Karamchand Gāndhī"}
+{"subject": "winston-churchill", "rel": "country", "value": "Regno Unito", "label": "Sir Winston Leonard Spencer Churchill"}
+{"subject": "adolf-hitler", "rel": "country", "value": "Germania", "label": "Adolf Hitler"}
+{"subject": "joseph-stalin", "rel": "country", "value": "Russia", "label": "Joseph Vissarionovich Stalin"}
+{"subject": "fidel-castro", "rel": "country", "value": "Cuba", "label": "Fidel Alejandro Castro Ruz"}
+{"subject": "che-guevara", "rel": "country", "value": "Argentina", "label": "Ernesto \"Che\" Guevara de la Serna"}
+{"subject": "vladimir-putin", "rel": "country", "value": "Russia", "label": "Vladimir Vladimirovič Putin"}
+{"subject": "xi-jinping", "rel": "country", "value": "Cina", "label": "Xi Jinping"}
+{"subject": "luiz-inacio-lula-da-silva", "rel": "country", "value": "Brasile", "label": "Luiz Inacio Lula Da Silva"}
+{"subject": "volodymyr-zelenskyy", "rel": "country", "value": "Ucraina", "label": "Volodymyr Oleksandrovyč Zelens'kyj"}
+{"subject": "angela-merkel", "rel": "country", "value": "Germania", "label": "Angela Dorothea Kasner, coniugata Merkel"}
+{"subject": "emmanuel-macron", "rel": "country", "value": "Francia", "label": "Emmanuel Jean-Michel Frédéric Macron"}
+{"subject": "boris-johnson", "rel": "country", "value": "Regno Unito", "label": "Alexander Boris de Pfeffel Johnson"}
+{"subject": "william-shakespeare", "rel": "country", "value": "Regno Unito", "label": "William Shakespeare"}
+{"subject": "mark-twain", "rel": "country", "value": "Stati Uniti", "label": "Mark Twain"}
+{"subject": "ernest-hemingway", "rel": "country", "value": "Stati Uniti", "label": "Ernest Miller Hemingway"}
+{"subject": "george-orwell", "rel": "country", "value": "Regno Unito", "label": "Eric Arthur Blair"}
+{"subject": "jane-austen", "rel": "country", "value": "Regno Unito", "label": "Jane Austen"}
+{"subject": "charles-dickens", "rel": "country", "value": "Regno Unito", "label": "Charles John Huffam Dickens"}
+{"subject": "leo-tolstoy", "rel": "country", "value": "Russia", "label": "Leo Tolstoy"}
+{"subject": "franz-kafka", "rel": "country", "value": "Germania", "label": "Franz Kafka"}
+{"subject": "friedrich-nietzsche", "rel": "country", "value": "Germania", "label": "Friedrich Wilhelm Nietzsche"}
+{"subject": "oscar-wilde", "rel": "country", "value": "Irlanda", "label": "Oscar Fingal O'Flahertie Wills Wilde"}
+{"subject": "emily-dickinson", "rel": "country", "value": "Stati Uniti", "label": "Emily Elizabeth Dickinson"}
+{"subject": "virginia-woolf", "rel": "country", "value": "Regno Unito", "label": "Adeline Virginia Woolf, nata Stephen,"}
+{"subject": "gabriel-garcia-marquez", "rel": "country", "value": "Colombia", "label": "Gabriel José García Márquez"}
+{"subject": "pablo-neruda", "rel": "country", "value": "Cile", "label": "Pablo Neruda"}
+{"subject": "giovanni-boccaccio", "rel": "country", "value": "Italia", "label": "Giovanni Boccaccio"}
+{"subject": "petrarch", "rel": "country", "value": "Italia", "label": "Francesco Petrarca"}
+{"subject": "alessandro-manzoni", "rel": "country", "value": "Italia", "label": "Alessandro Manzoni"}
+{"subject": "michael-jordan", "rel": "country", "value": "Stati Uniti", "label": "Michael Jordan"}
+{"subject": "lionel-messi", "rel": "country", "value": "Argentina", "label": "Lionel Andrés Messi"}
+{"subject": "cristiano-ronaldo", "rel": "country", "value": "Portogallo", "label": "Cristiano Ronaldo"}
+{"subject": "pele", "rel": "country", "value": "Brasile", "label": "Pele"}
+{"subject": "david-beckham", "rel": "country", "value": "Regno Unito", "label": "Sir David Beckham"}
+{"subject": "zlatan-ibrahimovic", "rel": "country", "value": "Svezia", "label": "Zlatan Ibrahimović"}
+{"subject": "roger-federer", "rel": "country", "value": "Svizzera", "label": "Roger Federer"}
+{"subject": "rafael-nadal", "rel": "country", "value": "Spagna", "label": "Rafael Nadal Parera, detto Rafa,"}
+{"subject": "serena-williams", "rel": "country", "value": "Stati Uniti", "label": "Serena Jameka Williams"}
+{"subject": "muhammad-ali", "rel": "country", "value": "Stati Uniti", "label": "Muhammad Ali"}
+{"subject": "kobe-bryant", "rel": "country", "value": "Stati Uniti", "label": "Kobe Bean Bryant"}
+{"subject": "tiger-woods", "rel": "country", "value": "Stati Uniti", "label": "Eldrick Tont Woods, detto Tiger,"}
+{"subject": "babe-ruth", "rel": "country", "value": "Stati Uniti", "label": "George Herman \"Babe\" Ruth"}
+{"subject": "charles-darwin", "rel": "country", "value": "Regno Unito", "label": "Charles Robert Darwin"}
+{"subject": "stephen-hawking", "rel": "country", "value": "Regno Unito", "label": "Stephen William Hawking, CBE CH"}
+{"subject": "leonardo-da-vinci", "rel": "country", "value": "Italia", "label": "Leonardo di ser Piero da Vinci"}
+{"subject": "pablo-picasso", "rel": "country", "value": "Spagna", "label": "Pablo Ruiz Picasso"}
+{"subject": "vincent-van-gogh", "rel": "country", "value": "Paesi Bassi", "label": "Vincent Willem van Gogh"}
+{"subject": "ludwig-van-beethoven", "rel": "country", "value": "Germania", "label": "Ludwig van Beethoven"}
+{"subject": "steve-jobs", "rel": "country", "value": "Stati Uniti", "label": "Steven Paul Jobs, detto Steve,"}
+{"subject": "bill-gates", "rel": "country", "value": "Stati Uniti", "label": "William Henry Gates III, detto Bill,"}
+{"subject": "marie-curie", "rel": "country", "value": "Polonia", "label": "Maria Salomea Skłodowska-Curie"}
+{"subject": "napoleon", "rel": "born", "value": "1769", "label": "Napoleon"}
+{"subject": "napoleon", "rel": "died", "value": "1821", "label": "Napoleon"}
+{"subject": "ed-gein", "rel": "country", "value": "Stati Uniti", "label": "Edward \"Ed\" Theodore Gein"}
+{"subject": "ozzy-osbourne", "rel": "country", "value": "Regno Unito", "label": "John Michael Osbourne, detto Ozzy,"}
+{"subject": "kamala-harris", "rel": "country", "value": "Stati Uniti", "label": "Kamala Devi Harris"}
+{"subject": "facebook", "rel": "country", "value": "Stati Uniti", "label": "Facebook"}
+{"subject": "jd-vance", "rel": "country", "value": "Stati Uniti", "label": "James David Vance"}
+{"subject": "jeffrey-epstein", "rel": "country", "value": "Stati Uniti", "label": "Jeffrey Edward Epstein"}
+{"subject": "ansel-adams", "rel": "country", "value": "Stati Uniti", "label": "Ansel Easton Adams"}
+{"subject": "val-kilmer", "rel": "country", "value": "Stati Uniti", "label": "Val Edward Kilmer"}
+{"subject": "diane-keaton", "rel": "country", "value": "Stati Uniti", "label": "Diane Keaton, pseudonimo di Diane Hall,"}
+{"subject": "sydney-sweeney", "rel": "country", "value": "Stati Uniti", "label": "Sydney Bernice Sweeney"}
+{"subject": "o-j-simpson", "rel": "country", "value": "Stati Uniti", "label": "O J Simpson"}
+{"subject": "robert-f-kennedy-jr", "rel": "country", "value": "Stati Uniti", "label": "Robert F Kennedy Jr"}
+{"subject": "jannik-sinner", "rel": "country", "value": "Italia", "label": "Jannik Sinner"}
+{"subject": "arnold-schwarzenegger", "rel": "country", "value": "Austria", "label": "Arnold Alois Schwarzenegger"}
+{"subject": "lamine-yamal", "rel": "country", "value": "Spagna", "label": "Lamine Yamal Nasraoui Ebana"}
+{"subject": "hulk-hogan", "rel": "country", "value": "Stati Uniti", "label": "Hulk Hogan"}
+{"subject": "nikki-haley", "rel": "country", "value": "Stati Uniti", "label": "Nimrata Nikki Randhawa, coniugata Haley,"}
+{"subject": "ratan-tata", "rel": "country", "value": "India", "label": "Ratan Naval Tata"}
+{"subject": "novak-djokovic", "rel": "country", "value": "Serbia", "label": "Novak Đoković"}
+{"subject": "alia-bhatt", "rel": "country", "value": "Regno Unito", "label": "Alia Bhatt Kapoor"}
+{"subject": "shohei-ohtani", "rel": "country", "value": "Giappone", "label": "Shōhei Ōtani"}
+{"subject": "timothee-chalamet", "rel": "country", "value": "Stati Uniti", "label": "Timothée Hal Chalamet"}
+{"subject": "carlos-alcaraz", "rel": "country", "value": "Spagna", "label": "Carlos Alcaraz Garfia"}
+{"subject": "x-social-network", "rel": "country", "value": "Stati Uniti", "label": "X, formerly known as Twitter,"}
+{"subject": "sean-combs", "rel": "country", "value": "Stati Uniti", "label": "Sean Combs"}
+{"subject": "griselda-blanco", "rel": "country", "value": "Colombia", "label": "Griselda Blanco Restrepo"}
+{"subject": "keir-starmer", "rel": "country", "value": "Regno Unito", "label": "Sir Keir Rodney Starmer"}
+{"subject": "barry-keoghan", "rel": "country", "value": "Irlanda", "label": "Barry Keoghan"}
+{"subject": "keanu-reeves", "rel": "country", "value": "Canada", "label": "Keanu Charles Reeves"}
+{"subject": "diogo-jota", "rel": "country", "value": "Portogallo", "label": "Diogo Jota"}
+{"subject": "jeremy-allen-white", "rel": "country", "value": "Stati Uniti", "label": "Jeremy Allen White"}
+{"subject": "ryan-reynolds", "rel": "country", "value": "Canada", "label": "Ryan Rodney Reynolds"}
+{"subject": "jeffrey-dahmer", "rel": "country", "value": "Stati Uniti", "label": "Jeffrey Lionel Dahmer"}
+{"subject": "dwayne-johnson", "rel": "country", "value": "Stati Uniti", "label": "Dwayne Johnson"}
+{"subject": "ghislaine-maxwell", "rel": "country", "value": "Regno Unito", "label": "Ghislaine Noëlle Marion Maxwell"}
+{"subject": "natalia-grace", "rel": "country", "value": "Stati Uniti", "label": "Natalyah Grace Renee Mans"}
+{"subject": "zendaya", "rel": "country", "value": "Stati Uniti", "label": "Zendaya Maree Stoermer Coleman"}
+{"subject": "rodney-alcala", "rel": "country", "value": "Stati Uniti", "label": "Rodney Alcala"}
+{"subject": "pedro-pascal", "rel": "country", "value": "Cile", "label": "José Pedro Balmaceda Pascal"}
+{"subject": "macaulay-culkin", "rel": "country", "value": "Stati Uniti", "label": "Macaulay Macaulay Culkin Culkin"}
+{"subject": "simone-biles", "rel": "country", "value": "Stati Uniti", "label": "Simone Arianne Biles, coniugata Owens,"}
+{"subject": "ted-bundy", "rel": "country", "value": "Stati Uniti", "label": "Theodore Robert Bundy"}
+{"subject": "malcolm-jamal-warner", "rel": "country", "value": "Stati Uniti", "label": "Malcolm-Jamal Warner"}
+{"subject": "dua-lipa", "rel": "country", "value": "Regno Unito", "label": "Dua Lipa"}
+{"subject": "leonard-bernstein", "rel": "country", "value": "Stati Uniti", "label": "Leonard Bernstein, nato Louis Bernstein"}
+{"subject": "kylian-mbappe", "rel": "country", "value": "Francia", "label": "Kylian Mbappé Lottin"}
+{"subject": "virat-kohli", "rel": "country", "value": "India", "label": "Virat Kohli, detto Chikoo,"}
+{"subject": "ronald-reagan", "rel": "country", "value": "Stati Uniti", "label": "Ronald Wilson Reagan"}
+{"subject": "travis-kelce", "rel": "country", "value": "Stati Uniti", "label": "Travis Michael Kelce"}
+{"subject": "shannen-doherty", "rel": "country", "value": "Stati Uniti", "label": "Shannen Maria Doherty"}
+{"subject": "selena-gomez", "rel": "country", "value": "Stati Uniti", "label": "Selena Marie Gomez Levin"}
+{"subject": "nicole-kidman", "rel": "country", "value": "Australia", "label": "Nicole Mary Kidman"}
+{"subject": "benjamin-netanyahu", "rel": "country", "value": "Israele", "label": "Benjamin Netanyahu, detto Bibi,"}
+{"subject": "chappell-roan", "rel": "country", "value": "Stati Uniti", "label": "Chappell Roan"}
+{"subject": "ariana-grande", "rel": "country", "value": "Stati Uniti", "label": "Ariana Grande-Butera"}
+{"subject": "robin-williams", "rel": "country", "value": "Stati Uniti", "label": "Robin McLaurin Williams"}
+{"subject": "scottie-scheffler", "rel": "country", "value": "Stati Uniti", "label": "Scott Alexander Scheffler"}
+{"subject": "dakota-johnson", "rel": "country", "value": "Stati Uniti", "label": "Dakota Mayi Johnson"}
+{"subject": "celine-dion", "rel": "country", "value": "Canada", "label": "Céline Marie Claudette Dion"}
+{"subject": "ryan-gosling", "rel": "country", "value": "Canada", "label": "Ryan Thomas Gosling"}
+{"subject": "cher", "rel": "country", "value": "Stati Uniti", "label": "Cher, pseudonimo di Cheryl Sarkisian,"}
+{"subject": "andrew-tate", "rel": "country", "value": "Stati Uniti", "label": "Emory Andrew Tate III"}
+{"subject": "katy-perry", "rel": "country", "value": "Stati Uniti", "label": "Katy Perry"}
+{"subject": "alan-ritchson", "rel": "country", "value": "Stati Uniti", "label": "Alan Michael Ritchson"}
+{"subject": "richard-gadd", "rel": "country", "value": "Regno Unito", "label": "Richard Robert Steven Gadd"}
+{"subject": "george-w-bush", "rel": "country", "value": "Stati Uniti", "label": "George Walker Bush"}
+{"subject": "mrbeast", "rel": "country", "value": "Stati Uniti", "label": "Mrbeast"}
+{"subject": "harrison-ford", "rel": "country", "value": "Stati Uniti", "label": "Harrison Ford"}
+{"subject": "diana-princess-of-wales", "rel": "born", "value": "1961", "label": "Diana, Princess of Wales,"}
+{"subject": "diana-princess-of-wales", "rel": "died", "value": "1997", "label": "Diana, Princess of Wales,"}
+{"subject": "jennifer-lopez", "rel": "country", "value": "Stati Uniti", "label": "Jennifer Lynn Lopez"}
+{"subject": "john-cena", "rel": "country", "value": "Stati Uniti", "label": "John Felix Anthony Cena"}
+{"subject": "marilyn-monroe", "rel": "country", "value": "Stati Uniti", "label": "Marilyn Monroe"}
+{"subject": "jason-momoa", "rel": "country", "value": "Stati Uniti", "label": "Joseph Jason Namakaeha Momoa"}
+{"subject": "virginia-giuffre", "rel": "country", "value": "Stati Uniti", "label": "Virginia Lee Roberts Giuffre"}
+{"subject": "nicolas-cage", "rel": "country", "value": "Stati Uniti", "label": "Nicolas Cage, nato Nicolas Kim Coppola,"}
+{"subject": "hailee-steinfeld", "rel": "country", "value": "Stati Uniti", "label": "Hailee Steinfeld"}
+{"subject": "johnny-depp", "rel": "country", "value": "Stati Uniti", "label": "John Christopher Depp II, detto Johnny,"}
+{"subject": "justin-bieber", "rel": "country", "value": "Canada", "label": "Justin Drew Bieber"}
+{"subject": "ted-kaczynski", "rel": "country", "value": "Stati Uniti", "label": "Theodore John Kaczynski, detto Ted"}
+{"subject": "jennifer-aniston", "rel": "country", "value": "Stati Uniti", "label": "Jennifer Joanna Aniston"}
+{"subject": "heath-ledger", "rel": "country", "value": "Australia", "label": "Heath Andrew Ledger"}
+{"subject": "blake-lively", "rel": "country", "value": "Stati Uniti", "label": "Blake Lively"}
+{"subject": "rishi-sunak", "rel": "country", "value": "Regno Unito", "label": "Rishi Sunak"}
+{"subject": "bill-clinton", "rel": "country", "value": "Stati Uniti", "label": "William Jefferson Clinton"}
+{"subject": "priscilla-presley", "rel": "country", "value": "Stati Uniti", "label": "Priscilla Ann Presley"}
+{"subject": "melania-trump", "rel": "country", "value": "Slovenia", "label": "Melania Knauss Trump"}
+{"subject": "jenna-ortega", "rel": "country", "value": "Stati Uniti", "label": "Jenna Marie Ortega"}
+{"subject": "narendra-modi", "rel": "country", "value": "India", "label": "Narendra Damodardas Modi"}
+{"subject": "cillian-murphy", "rel": "country", "value": "Irlanda", "label": "Cillian Murphy"}
+{"subject": "jason-statham", "rel": "country", "value": "Regno Unito", "label": "Jason Statham"}
+{"subject": "joe-flacco", "rel": "country", "value": "Stati Uniti", "label": "Joseph Vincent Flacco, detto Joe,"}
+{"subject": "ian-watkins", "rel": "born", "value": "1977", "label": "Ian David Karslake Watkins"}
+{"subject": "ian-watkins", "rel": "died", "value": "2025", "label": "Ian David Karslake Watkins"}
+{"subject": "ian-watkins", "rel": "country", "value": "Regno Unito", "label": "Ian David Karslake Watkins"}
+{"subject": "jeff-bezos", "rel": "country", "value": "Stati Uniti", "label": "Jeffrey Preston Bezos"}
+{"subject": "nikola-jokic", "rel": "country", "value": "Serbia", "label": "Nikola Jokić"}
+{"subject": "caitlin-clark", "rel": "country", "value": "Stati Uniti", "label": "Caitlin Elizabeth Clark"}
+{"subject": "jacob-elordi", "rel": "country", "value": "Australia", "label": "Jacob Nathaniel Elordi"}
+{"subject": "andre-braugher", "rel": "country", "value": "Stati Uniti", "label": "Andre Keith Braugher"}
+{"subject": "anne-hathaway", "rel": "country", "value": "Stati Uniti", "label": "Anne Jacqueline Hathaway"}
+{"subject": "ana-de-armas", "rel": "country", "value": "Cuba", "label": "Ana Celia de Armas Caso"}
+{"subject": "jude-bellingham", "rel": "country", "value": "Regno Unito", "label": "Jude Victor William Bellingham"}
+{"subject": "margot-robbie", "rel": "country", "value": "Australia", "label": "Margot Elise Robbie"}
+{"subject": "benny-blanco", "rel": "country", "value": "Stati Uniti", "label": "Benny Blanco"}
+{"subject": "tupac-shakur", "rel": "country", "value": "Stati Uniti", "label": "Tupac Shakur"}
+{"subject": "henry-cavill", "rel": "country", "value": "Regno Unito", "label": "Henry William Dalgliesh Cavill"}
+{"subject": "hamish-harding", "rel": "born", "value": "1964", "label": "George Hamish Livingston Harding"}
+{"subject": "hamish-harding", "rel": "died", "value": "2023", "label": "George Hamish Livingston Harding"}
+{"subject": "hamish-harding", "rel": "country", "value": "Regno Unito", "label": "George Hamish Livingston Harding"}
+{"subject": "shah-rukh-khan", "rel": "country", "value": "India", "label": "Shah Rukh Khan"}
+{"subject": "jane-goodall", "rel": "country", "value": "Regno Unito", "label": "Dame Valerie Jane Morris-Goodall"}
+{"subject": "patrick-mahomes", "rel": "country", "value": "Stati Uniti", "label": "Patrick Lavon Mahomes II"}
+{"subject": "princess-margaret-countess-of-snowdon", "rel": "born", "value": "1930", "label": "Princess Margaret, Countess of Snowdon,"}
+{"subject": "princess-margaret-countess-of-snowdon", "rel": "died", "value": "2002", "label": "Princess Margaret, Countess of Snowdon,"}
+{"subject": "george-santos", "rel": "country", "value": "Stati Uniti", "label": "George Anthony Devolder Santos"}
+{"subject": "emma-watson", "rel": "country", "value": "Regno Unito", "label": "Emma Charlotte Duerre Watson"}
+{"subject": "vivek-ramaswamy", "rel": "country", "value": "Stati Uniti", "label": "Vivek Ganapathy Ramaswamy"}
+{"subject": "julian-mcmahon", "rel": "country", "value": "Australia", "label": "Julian Dana William McMahon"}
+{"subject": "jim-harbaugh", "rel": "country", "value": "Stati Uniti", "label": "James Joseph Harbaugh, detto Jim,"}
+{"subject": "robert-f-kennedy", "rel": "country", "value": "Stati Uniti", "label": "Robert Francis Kennedy, chiamato Bob"}
+{"subject": "william-prince-of-wales", "rel": "born", "value": "1982", "label": "William, Prince of Wales,"}
+{"subject": "florence-pugh", "rel": "country", "value": "Regno Unito", "label": "Florence Rose Pugh"}
+{"subject": "kim-kardashian", "rel": "country", "value": "Stati Uniti", "label": "Kimberly Noel Kardashian, detta Kim"}
+{"subject": "jelly-roll-singer", "rel": "born", "value": "1984", "label": "Jelly Roll Singer"}
+{"subject": "jelly-roll-singer", "rel": "country", "value": "Stati Uniti", "label": "Jelly Roll Singer"}
+{"subject": "gypsy-rose-blanchard", "rel": "born", "value": "1991", "label": "Gypsy Rose Blanchard"}
+{"subject": "gypsy-rose-blanchard", "rel": "country", "value": "Stati Uniti", "label": "Gypsy Rose Blanchard"}
+{"subject": "vanessa-kirby", "rel": "country", "value": "Regno Unito", "label": "Vanessa Nuala Kirby"}
+{"subject": "aryna-sabalenka", "rel": "country", "value": "Bielorussia", "label": "Aryna Sjarheeŭna Sabalenka"}
+{"subject": "richard-speck", "rel": "country", "value": "Stati Uniti", "label": "Richard Benjamin Speck"}
+{"subject": "adam-sandler", "rel": "country", "value": "Stati Uniti", "label": "Adam Richard Sandler"}
+{"subject": "young-sheldon", "rel": "country", "value": "Stati Uniti", "label": "Young Sheldon"}
+{"subject": "charli-xcx", "rel": "country", "value": "Regno Unito", "label": "Charli Xcx"}
+{"subject": "stephen-curry", "rel": "country", "value": "Stati Uniti", "label": "Wardell Stephen Curry II, detto Steph,"}
+{"subject": "shaquille-o-neal", "rel": "country", "value": "Stati Uniti", "label": "Shaquille Rashaun O'Neal"}
+{"subject": "margaret-qualley", "rel": "country", "value": "Stati Uniti", "label": "Sarah Margaret Qualley"}
+{"subject": "neymar", "rel": "country", "value": "Brasile", "label": "Neymar"}
+{"subject": "mike-tyson", "rel": "country", "value": "Stati Uniti", "label": "Michael Gerard Tyson, detto Mike,"}
+{"subject": "david-corenswet", "rel": "country", "value": "Stati Uniti", "label": "David Packard Corenswet"}
+{"subject": "erling-haaland", "rel": "country", "value": "Norvegia", "label": "Erling Braut Haaland, nato Håland"}
+{"subject": "chris-pratt", "rel": "country", "value": "Stati Uniti", "label": "Christopher Michael Pratt, detto Chris,"}
+{"subject": "donald-j-harris", "rel": "country", "value": "Giamaica", "label": "Donald Jasper Harris"}
+{"subject": "peter-thiel", "rel": "country", "value": "Germania", "label": "Peter Andreas Thiel"}
+{"subject": "ella-purnell", "rel": "country", "value": "Regno Unito", "label": "Ella Summer Purnell"}
+{"subject": "matthew-mcconaughey", "rel": "country", "value": "Stati Uniti", "label": "Matthew David McConaughey"}
+{"subject": "zac-efron", "rel": "country", "value": "Stati Uniti", "label": "Zachary David Alexander Efron"}
+{"subject": "kate-beckinsale", "rel": "country", "value": "Regno Unito", "label": "Kathrin Romany Beckinsale, detta Kate,"}
+{"subject": "amar-singh-chamkila", "rel": "born", "value": "1960", "label": "Amar Singh Chamkila"}
+{"subject": "amar-singh-chamkila", "rel": "died", "value": "1988", "label": "Amar Singh Chamkila"}
+{"subject": "amar-singh-chamkila", "rel": "country", "value": "India", "label": "Amar Singh Chamkila"}
+{"subject": "emily-blunt", "rel": "country", "value": "Regno Unito", "label": "Emily Olivia Laura Blunt"}
+{"subject": "mark-wahlberg", "rel": "country", "value": "Stati Uniti", "label": "Mark Wahlberg"}
+{"subject": "christopher-reeve", "rel": "country", "value": "Stati Uniti", "label": "Christopher D'Olier Reeve"}
+{"subject": "mia-goth", "rel": "country", "value": "Regno Unito", "label": "Mia Gypsy Mello da Silva Goth"}
+{"subject": "karoline-leavitt", "rel": "country", "value": "Stati Uniti", "label": "Karoline Claire Leavitt"}
+{"subject": "charlie-hunnam", "rel": "country", "value": "Regno Unito", "label": "Charles Matthew Hunnam"}
+{"subject": "conor-mcgregor", "rel": "country", "value": "Irlanda", "label": "Conor Anthony McGregor"}
+{"subject": "dick-van-dyke", "rel": "country", "value": "Stati Uniti", "label": "Richard Wayne Van Dyke, detto Dick,"}
+{"subject": "chris-hemsworth", "rel": "country", "value": "Australia", "label": "Christopher Hemsworth"}
+{"subject": "victor-wembanyama", "rel": "country", "value": "Francia", "label": "Victor Wembanyama"}
+{"subject": "cole-palmer", "rel": "country", "value": "Regno Unito", "label": "Cole Jermaine Palmer"}
+{"subject": "emma-raducanu", "rel": "country", "value": "Regno Unito", "label": "Emma Raducanu"}
+{"subject": "mary-kay-letourneau", "rel": "country", "value": "Stati Uniti", "label": "Mary Katherine Fualaau"}
+{"subject": "triptii-dimri", "rel": "born", "value": "1994", "label": "Triptii Dimri"}
+{"subject": "triptii-dimri", "rel": "country", "value": "India", "label": "Triptii Dimri"}
+{"subject": "anthony-perkins", "rel": "country", "value": "Stati Uniti", "label": "Anthony Perkins"}
+{"subject": "snoop-dogg", "rel": "country", "value": "Stati Uniti", "label": "Snoop Dogg"}
+{"subject": "lawrence-bishnoi", "rel": "born", "value": "1993", "label": "Lawrence Bishnoi"}
+{"subject": "lawrence-bishnoi", "rel": "country", "value": "India", "label": "Lawrence Bishnoi"}
+{"subject": "michael-madsen", "rel": "country", "value": "Stati Uniti", "label": "Michael Søren Madsen"}
+{"subject": "adam-brody", "rel": "country", "value": "Stati Uniti", "label": "Adam Jared Brody"}
+{"subject": "judy-garland", "rel": "country", "value": "Stati Uniti", "label": "Judy Garland"}
+{"subject": "amanda-anisimova", "rel": "country", "value": "Stati Uniti", "label": "Amanda Anisimova"}
+{"subject": "justin-trudeau", "rel": "country", "value": "Canada", "label": "Justin Pierre James Trudeau"}
+{"subject": "riley-keough", "rel": "country", "value": "Stati Uniti", "label": "Danielle Riley Keough"}
+{"subject": "charlie-kirk", "rel": "country", "value": "Stati Uniti", "label": "Charles James Kirk, detto Charlie,"}
+{"subject": "baba-siddique", "rel": "born", "value": "1958", "label": "Baba Ziauddin Siddique"}
+{"subject": "baba-siddique", "rel": "died", "value": "2024", "label": "Baba Ziauddin Siddique"}
+{"subject": "baba-siddique", "rel": "country", "value": "India", "label": "Baba Ziauddin Siddique"}
+{"subject": "jake-gyllenhaal", "rel": "country", "value": "Stati Uniti", "label": "Jacob Benjamin Gyllenhaal, detto Jake,"}
+{"subject": "jim-carrey", "rel": "country", "value": "Canada", "label": "James Eugene Carrey, detto Jim,"}
+{"subject": "iga-swiatek", "rel": "country", "value": "Polonia", "label": "Iga Natalia Świątek"}
+{"subject": "john-wayne-gacy", "rel": "country", "value": "Stati Uniti", "label": "John Wayne Gacy"}
+{"subject": "alex-pereira", "rel": "country", "value": "Brasile", "label": "Alex Sandro Silva Pereira"}
+{"subject": "sofia-vergara", "rel": "country", "value": "Colombia", "label": "Sofía Margarita Vergara"}
+{"subject": "bill-belichick", "rel": "country", "value": "Stati Uniti", "label": "William Stephen Belichick, detto Bill,"}
+{"subject": "kieran-culkin", "rel": "country", "value": "Stati Uniti", "label": "Kieran Kyle Culkin"}
+{"subject": "rachel-zegler", "rel": "country", "value": "Stati Uniti", "label": "Rachel Anne Zegler"}
+{"subject": "jayne-mansfield", "rel": "country", "value": "Stati Uniti", "label": "Jayne Mansfield"}
+{"subject": "jojo-siwa", "rel": "country", "value": "Stati Uniti", "label": "Joelle Joanie Siwa, detta JoJo,"}
+{"subject": "matthew-perry", "rel": "country", "value": "Stati Uniti", "label": "Matthew Langford Perry"}
+{"subject": "ayo-edebiri", "rel": "country", "value": "Stati Uniti", "label": "Ayo Edebiri"}
+{"subject": "shelley-duvall", "rel": "country", "value": "Stati Uniti", "label": "Shelley Alexis Duvall"}
+{"subject": "harry-kane", "rel": "country", "value": "Regno Unito", "label": "Harry Edward Kane"}
+{"subject": "kristi-noem", "rel": "country", "value": "Stati Uniti", "label": "Kristi Lynn Noem, da nubile Arnold,"}
+{"subject": "ryan-o-neal", "rel": "country", "value": "Stati Uniti", "label": "Charles Patrick Ryan O'Neal"}
+{"subject": "priyanka-chopra", "rel": "country", "value": "India", "label": "Priyanka Chopra, coniugata Jonas,"}
+{"subject": "yevgeny-prigozhin", "rel": "country", "value": "Russia", "label": "Evgenij Viktorovič Prigožin"}
+{"subject": "mark-carney", "rel": "country", "value": "Canada", "label": "Mark Joseph Carney"}
+{"subject": "thomas-crooks", "rel": "country", "value": "Stati Uniti", "label": "Thomas Matthew Crooks"}
+{"subject": "aaron-taylor-johnson", "rel": "country", "value": "Regno Unito", "label": "Aaron Perry Taylor-Johnson"}
+{"subject": "pablo-escobar", "rel": "country", "value": "Colombia", "label": "Pablo Emilio Escobar Gaviria"}
+{"subject": "jennifer-pan", "rel": "country", "value": "Stati Uniti", "label": "Jennifer Pan"}
+{"subject": "michelle-keegan", "rel": "country", "value": "Regno Unito", "label": "Michelle Elizabeth Keegan"}
+{"subject": "henry-kissinger", "rel": "country", "value": "Stati Uniti", "label": "Henry Alfred Kissinger"}
+{"subject": "freddie-freeman", "rel": "country", "value": "Canada", "label": "Frederick Charles Freeman"}
+{"subject": "lee-sun-kyun", "rel": "country", "value": "Corea del Sud", "label": "Lee Sun-kyun"}
+{"subject": "alexandra-daddario", "rel": "country", "value": "Stati Uniti", "label": "Alexandra Anna Daddario"}
+{"subject": "b-r-ambedkar", "rel": "country", "value": "India", "label": "Bhimrao Ramji Ambedkar"}
+{"subject": "cary-grant", "rel": "country", "value": "Regno Unito", "label": "Cary Grant"}
+{"subject": "kylie-jenner", "rel": "country", "value": "Stati Uniti", "label": "Kylie Kristen Jenner"}
+{"subject": "zoe-saldana", "rel": "born", "value": "1978", "label": "Zoe Saldana"}
+{"subject": "zoe-saldana", "rel": "country", "value": "Stati Uniti", "label": "Zoe Saldana"}
+{"subject": "emma-roberts", "rel": "country", "value": "Stati Uniti", "label": "Emma Rose Roberts"}
+{"subject": "roman-reigns", "rel": "country", "value": "Stati Uniti", "label": "Roman Reigns"}
+{"subject": "andrew-mountbatten-windsor", "rel": "born", "value": "1960", "label": "Andrew Mountbatten Windsor"}
+{"subject": "jason-kelce", "rel": "country", "value": "Stati Uniti", "label": "Jason Daniel Kelce"}
+{"subject": "jonathan-majors", "rel": "country", "value": "Stati Uniti", "label": "Jonathan Michael Majors"}
+{"subject": "jodie-foster", "rel": "country", "value": "Stati Uniti", "label": "Alicia Christian Foster, detta Jodie,"}
+{"subject": "catherine-princess-of-wales", "rel": "born", "value": "1982", "label": "Catherine, Princess of Wales,"}
+{"subject": "katt-williams", "rel": "country", "value": "Stati Uniti", "label": "Micah \"Katt\" Williams"}
+{"subject": "pam-bondi", "rel": "country", "value": "Stati Uniti", "label": "Pamela Jo Bondi, detta Pam,"}
+{"subject": "hunter-schafer", "rel": "country", "value": "Stati Uniti", "label": "Hunter Schafer"}
+{"subject": "brock-purdy", "rel": "country", "value": "Stati Uniti", "label": "Brock Purdy"}
+{"subject": "shyamala-gopalan-harris", "rel": "country", "value": "Stati Uniti", "label": "Shyamala Gopalan"}
+{"subject": "eva-mendes", "rel": "country", "value": "Stati Uniti", "label": "Eva Mendes"}
+{"subject": "ace-frehley", "rel": "country", "value": "Stati Uniti", "label": "Paul Daniel Frehley, detto Ace,"}
+{"subject": "mukesh-ambani", "rel": "country", "value": "India", "label": "Mukesh Ambani"}
+{"subject": "tom-hardy", "rel": "country", "value": "Regno Unito", "label": "Edward Thomas Hardy, detto Tom,"}
+{"subject": "mariska-hargitay", "rel": "country", "value": "Stati Uniti", "label": "Mariska Magdolna Hargitay"}
+{"subject": "sam-manekshaw", "rel": "born", "value": "1914", "label": "Sam Manekshaw"}
+{"subject": "sam-manekshaw", "rel": "died", "value": "2009", "label": "Sam Manekshaw"}
+{"subject": "sam-manekshaw", "rel": "country", "value": "India", "label": "Sam Manekshaw"}
+{"subject": "brenda-song", "rel": "country", "value": "Stati Uniti", "label": "Brenda Song"}
+{"subject": "elliot-page", "rel": "country", "value": "Canada", "label": "Elliot Page"}
+{"subject": "vaibhav-sooryavanshi", "rel": "born", "value": "2011", "label": "Vaibhav Sooryavanshi"}
+{"subject": "vaibhav-sooryavanshi", "rel": "country", "value": "India", "label": "Vaibhav Sooryavanshi"}
+{"subject": "shia-labeouf", "rel": "country", "value": "Stati Uniti", "label": "Shia Saide LaBeouf"}
+{"subject": "aimee-osbourne", "rel": "born", "value": "1983", "label": "Aimee Rachel Osbourne"}
+{"subject": "aimee-osbourne", "rel": "country", "value": "Regno Unito", "label": "Aimee Rachel Osbourne"}
+{"subject": "dennis-rader", "rel": "country", "value": "Stati Uniti", "label": "Dennis Lynn Rader"}
+{"subject": "shahzada-dawood", "rel": "born", "value": "1975", "label": "Shahzada Dawood"}
+{"subject": "shahzada-dawood", "rel": "died", "value": "2023", "label": "Shahzada Dawood"}
+{"subject": "shahzada-dawood", "rel": "country", "value": "Pakistan", "label": "Shahzada Dawood"}
+{"subject": "mae-martin", "rel": "born", "value": "1987", "label": "Mae Pearl Martin"}
+{"subject": "mae-martin", "rel": "country", "value": "Canada", "label": "Mae Pearl Martin"}
+{"subject": "rashmika-mandanna", "rel": "born", "value": "1996", "label": "Rashmika Mandanna"}
+{"subject": "rashmika-mandanna", "rel": "country", "value": "India", "label": "Rashmika Mandanna"}
+{"subject": "max-holloway", "rel": "country", "value": "Stati Uniti", "label": "Jerome Max Keli'i Holloway"}
+{"subject": "whitney-houston", "rel": "country", "value": "Stati Uniti", "label": "Whitney Elizabeth Houston"}
+{"subject": "rosamund-pike", "rel": "country", "value": "Regno Unito", "label": "Rosamund Mary Ellen Pike"}
+{"subject": "jennifer-garner", "rel": "country", "value": "Stati Uniti", "label": "Jennifer Anne Garner"}
+{"subject": "srikanth-bolla", "rel": "born", "value": "1991", "label": "Srikanth Bolla"}
+{"subject": "srikanth-bolla", "rel": "country", "value": "India", "label": "Srikanth Bolla"}
+{"subject": "andrew-garfield", "rel": "country", "value": "Regno Unito", "label": "Andrew Russell Garfield"}
+{"subject": "daniil-medvedev", "rel": "country", "value": "Russia", "label": "Daniil Sergeevič Medvedev"}
+{"subject": "mark-kelly", "rel": "country", "value": "Stati Uniti", "label": "Mark Edward Kelly"}
+{"subject": "tulsi-gabbard", "rel": "country", "value": "Stati Uniti", "label": "Tulsi Gabbard"}
+{"subject": "bella-ramsey", "rel": "country", "value": "Regno Unito", "label": "Isabella May Ramsey, detta Bella,"}
+{"subject": "hugh-jackman", "rel": "country", "value": "Australia", "label": "Hugh Michael Jackman"}
+{"subject": "lily-gladstone", "rel": "country", "value": "Stati Uniti", "label": "Lily Gladstone"}
+{"subject": "lizzie-borden", "rel": "country", "value": "Stati Uniti", "label": "Lizzie Andrew Borden"}
+{"subject": "justin-rose", "rel": "country", "value": "Regno Unito", "label": "Justin Peter Rose"}
+{"subject": "baker-mayfield", "rel": "country", "value": "Stati Uniti", "label": "Baker Reagan Mayfield"}
+{"subject": "jonathan-owens", "rel": "country", "value": "Stati Uniti", "label": "Jonathan Owens"}
+{"subject": "john-travolta", "rel": "country", "value": "Stati Uniti", "label": "John Joseph Travolta"}
+{"subject": "christian-mccaffrey", "rel": "country", "value": "Stati Uniti", "label": "Christian Jackson McCaffrey"}
+{"subject": "john-candy", "rel": "country", "value": "Canada", "label": "John Franklin Candy"}
+{"subject": "brigitte-macron", "rel": "country", "value": "Francia", "label": "Brigitte Marie-Claude Macron"}
+{"subject": "nico-williams", "rel": "country", "value": "Spagna", "label": "Nicholas Williams Arthuer, detto Nico,"}
+{"subject": "saddam-hussein", "rel": "country", "value": "Iraq", "label": "Ṣaddām Ḥusayn ʿAbd al-Majīd al-Tikrītī"}
+{"subject": "donald-trump-jr", "rel": "country", "value": "Stati Uniti", "label": "Donald Trump Jr"}
+{"subject": "dakota-fanning", "rel": "country", "value": "Stati Uniti", "label": "Hannah Dakota Fanning"}
+{"subject": "rachel-mcadams", "rel": "country", "value": "Canada", "label": "Rachel Anne McAdams"}
+{"subject": "alexandria-ocasio-cortez", "rel": "country", "value": "Stati Uniti", "label": "Alexandria Ocasio Cortez"}
+{"subject": "luke-littler", "rel": "country", "value": "Regno Unito", "label": "Luke Littler"}
+{"subject": "rachel-brosnahan", "rel": "country", "value": "Stati Uniti", "label": "Rachel Brosnahan"}
+{"subject": "kristen-bell", "rel": "country", "value": "Stati Uniti", "label": "Kristen Annie Bell"}
+{"subject": "pamela-anderson", "rel": "country", "value": "Canada", "label": "Pamela Denise Anderson"}
+{"subject": "aaron-rodgers", "rel": "country", "value": "Stati Uniti", "label": "Aaron Charles Rodgers"}
+{"subject": "natasha-lyonne", "rel": "country", "value": "Stati Uniti", "label": "Natasha Bianca Lyonne Braunstein"}
+{"subject": "julian-sands", "rel": "country", "value": "Regno Unito", "label": "Julian Richard Morley Sands"}
+{"subject": "kimberly-guilfoyle", "rel": "country", "value": "Stati Uniti", "label": "Kimberly Ann Guilfoyle"}
+{"subject": "kevin-von-erich", "rel": "country", "value": "Stati Uniti", "label": "Kevin Ross Adkisson"}
+{"subject": "paige-bueckers", "rel": "country", "value": "Stati Uniti", "label": "Paige Madison Bueckers"}
+{"subject": "kris-kristofferson", "rel": "country", "value": "Stati Uniti", "label": "Kristoffer Kristofferson, detto Kris,"}
+{"subject": "cody-rhodes", "rel": "country", "value": "Stati Uniti", "label": "Cody Garrett Runnels Rhodes"}
+{"subject": "claudine-gay", "rel": "country", "value": "Stati Uniti", "label": "Claudine Gay"}
+{"subject": "alec-baldwin", "rel": "country", "value": "Stati Uniti", "label": "Alexander Rae Baldwin III, detto Alec,"}
+{"subject": "maria-shriver", "rel": "country", "value": "Stati Uniti", "label": "Maria Owings Shriver"}
+{"subject": "paddy-pimblett", "rel": "country", "value": "Regno Unito", "label": "Patrick Pimblett, detto Paddy,"}
+{"subject": "mark-kerr-fighter", "rel": "born", "value": "1968", "label": "Mark Kerr"}
+{"subject": "mark-kerr-fighter", "rel": "country", "value": "Stati Uniti", "label": "Mark Kerr"}
+{"subject": "vince-mcmahon", "rel": "country", "value": "Stati Uniti", "label": "Vincent Kennedy McMahon, detto Vince,"}
+{"subject": "naval-tata", "rel": "born", "value": "1904", "label": "Naval Hormusji Tata"}
+{"subject": "naval-tata", "rel": "died", "value": "1989", "label": "Naval Hormusji Tata"}
+{"subject": "naval-tata", "rel": "country", "value": "India", "label": "Naval Hormusji Tata"}
+{"subject": "jack-black", "rel": "country", "value": "Stati Uniti", "label": "Thomas Jacob Black, detto Jack,"}
+{"subject": "noel-tata", "rel": "born", "value": "1957", "label": "Noel Naval Tata"}
+{"subject": "noel-tata", "rel": "country", "value": "India", "label": "Noel Naval Tata"}
+{"subject": "stockton-rush", "rel": "born", "value": "1962", "label": "Richard Stockton Rush III"}
+{"subject": "stockton-rush", "rel": "died", "value": "2023", "label": "Richard Stockton Rush III"}
+{"subject": "stockton-rush", "rel": "country", "value": "Stati Uniti", "label": "Richard Stockton Rush III"}
+{"subject": "rohit-sharma", "rel": "born", "value": "1987", "label": "Rohit Gurunath Sharma"}
+{"subject": "rohit-sharma", "rel": "country", "value": "India", "label": "Rohit Gurunath Sharma"}
+{"subject": "vijayakanth", "rel": "born", "value": "1952", "label": "Vijayakanth"}
+{"subject": "vijayakanth", "rel": "died", "value": "2023", "label": "Vijayakanth"}
+{"subject": "vijayakanth", "rel": "country", "value": "India", "label": "Vijayakanth"}
+{"subject": "kaley-cuoco", "rel": "country", "value": "Stati Uniti", "label": "Kaley Christine Cuoco"}
+{"subject": "danny-masterson", "rel": "country", "value": "Stati Uniti", "label": "Daniel Peter Masterson, detto Danny,"}
+{"subject": "alexander-skarsgard", "rel": "country", "value": "Svezia", "label": "Alexander Johan Hjalmar Skarsgård"}
+{"subject": "eddie-murphy", "rel": "country", "value": "Stati Uniti", "label": "Edward Regan Murphy, detto Eddie,"}
+{"subject": "daniel-naroditsky", "rel": "country", "value": "Stati Uniti", "label": "Daniel Aaron Naroditsky"}
+{"subject": "frank-sinatra", "rel": "country", "value": "Stati Uniti", "label": "Francis Albert Sinatra, detto Frank,"}
+{"subject": "nicole-brown-simpson", "rel": "country", "value": "Germania", "label": "Nicole Brown Simpson"}
+{"subject": "yungblud", "rel": "country", "value": "Regno Unito", "label": "Yungblud"}
+{"subject": "nicki-minaj", "rel": "country", "value": "Trinidad e Tobago", "label": "Nicki Minaj"}
+{"subject": "orlando-bloom", "rel": "country", "value": "Regno Unito", "label": "Orlando Jonathan Blanchard Bloom"}
+{"subject": "bryson-dechambeau", "rel": "country", "value": "Stati Uniti", "label": "Bryson James Aldrich DeChambeau"}
+{"subject": "jared-leto", "rel": "country", "value": "Stati Uniti", "label": "Jared Joseph Leto"}
+{"subject": "ilia-topuria", "rel": "country", "value": "Georgia", "label": "Ilia Topuria"}
+{"subject": "rodri-footballer-born-1996", "rel": "country", "value": "Spagna", "label": "Rodri Footballer Born 1996"}
+{"subject": "jennifer-connelly", "rel": "country", "value": "Stati Uniti", "label": "Jennifer Lynn Connelly"}
+{"subject": "jamie-lee-curtis", "rel": "country", "value": "Stati Uniti", "label": "Jamie Lee Curtis"}
+{"subject": "demi-moore", "rel": "country", "value": "Stati Uniti", "label": "Demi Gene Moore"}
+{"subject": "channing-tatum", "rel": "country", "value": "Stati Uniti", "label": "Channing Matthew Tatum"}
+{"subject": "lisa-rapper", "rel": "country", "value": "Thailandia", "label": "Lisa Rapper"}
+{"subject": "rowan-atkinson", "rel": "country", "value": "Regno Unito", "label": "Rowan Sebastian Atkinson"}
+{"subject": "kalen-deboer", "rel": "born", "value": "1974", "label": "Kalen Douglas DeBoer"}
+{"subject": "kalen-deboer", "rel": "country", "value": "Stati Uniti", "label": "Kalen Douglas DeBoer"}
+{"subject": "connie-francis", "rel": "country", "value": "Stati Uniti", "label": "Connie Francis"}
+{"subject": "lauren-sanchez-bezos", "rel": "born", "value": "1969", "label": "Lauren Wendy Sánchez Bezos"}
+{"subject": "lauren-sanchez-bezos", "rel": "country", "value": "Stati Uniti", "label": "Lauren Wendy Sánchez Bezos"}
+{"subject": "ms-dhoni", "rel": "born", "value": "1981", "label": "Mahendra Singh Dhoni"}
+{"subject": "ms-dhoni", "rel": "country", "value": "India", "label": "Mahendra Singh Dhoni"}
+{"subject": "peter-navarro", "rel": "country", "value": "Stati Uniti", "label": "Peter Kent Navarro"}
+{"subject": "ishowspeed", "rel": "country", "value": "Stati Uniti", "label": "Ishowspeed"}
+{"subject": "carey-mulligan", "rel": "country", "value": "Regno Unito", "label": "Carey Hannah Mulligan"}
+{"subject": "paul-mescal", "rel": "country", "value": "Irlanda", "label": "Paul Colm Michael Mescal"}
+{"subject": "dawn-staley", "rel": "country", "value": "Stati Uniti", "label": "Dawn Michelle Staley"}
+{"subject": "bob-newhart", "rel": "country", "value": "Stati Uniti", "label": "George Robert Newhart, detto Bob,"}
+{"subject": "ebon-moss-bachrach", "rel": "country", "value": "Stati Uniti", "label": "Ebon Moss-Bachrach"}
+{"subject": "andy-murray", "rel": "country", "value": "Regno Unito", "label": "Sir Andrew Barron Murray, detto Andy,"}
+{"subject": "trey-yesavage", "rel": "born", "value": "2003", "label": "Trey David Yesavage"}
+{"subject": "trey-yesavage", "rel": "country", "value": "Stati Uniti", "label": "Trey David Yesavage"}
+{"subject": "dan-campbell", "rel": "country", "value": "Stati Uniti", "label": "Daniel Allen Campbell"}
+{"subject": "michael-b-jordan", "rel": "country", "value": "Stati Uniti", "label": "Michael Bakari Jordan"}
+{"subject": "vanessa-trump", "rel": "born", "value": "1977", "label": "Vanessa Kay Trump"}
+{"subject": "vanessa-trump", "rel": "country", "value": "Stati Uniti", "label": "Vanessa Kay Trump"}
+{"subject": "miley-cyrus", "rel": "country", "value": "Stati Uniti", "label": "Miley Ray Cyrus"}
+{"subject": "phil-collins", "rel": "country", "value": "Regno Unito", "label": "Philip David Charles Collins"}
+{"subject": "cheryl-hines", "rel": "country", "value": "Stati Uniti", "label": "Cheryl Hines"}
+{"subject": "prabhas", "rel": "country", "value": "India", "label": "Prabhas"}
+{"subject": "leighton-meester", "rel": "country", "value": "Stati Uniti", "label": "Leighton Marissa Meester"}
+{"subject": "michelle-trachtenberg", "rel": "country", "value": "Stati Uniti", "label": "Michelle Christine Trachtenberg"}
+{"subject": "michael-phelps", "rel": "country", "value": "Stati Uniti", "label": "Michael Fred Phelps II"}
+{"subject": "jurgen-klopp", "rel": "country", "value": "Germania", "label": "Jürgen Norbert Klopp"}
+{"subject": "aishwarya-rai", "rel": "born", "value": "1973", "label": "Aishwarya Rai Bachchan"}
+{"subject": "aishwarya-rai", "rel": "country", "value": "India", "label": "Aishwarya Rai Bachchan"}
+{"subject": "teri-garr", "rel": "country", "value": "Stati Uniti", "label": "Terry Ann Garr, detta Teri,"}
+{"subject": "gabriel-attal", "rel": "country", "value": "Francia", "label": "Gabriel Nissim Attal de Couriss"}
+{"subject": "ranbir-kapoor", "rel": "country", "value": "India", "label": "Ranbir Kapoor"}
+{"subject": "aaron-judge", "rel": "country", "value": "Stati Uniti", "label": "Aaron James Judge"}
+{"subject": "jared-goff", "rel": "country", "value": "Stati Uniti", "label": "Jared Thomas Goff"}
+{"subject": "lily-rose-depp", "rel": "country", "value": "Francia", "label": "Lily-Rose Melody Depp"}
+{"subject": "juno-temple", "rel": "country", "value": "Regno Unito", "label": "Juno Violet Temple"}
+{"subject": "christian-oliver", "rel": "country", "value": "Germania", "label": "Christian Oliver"}
+{"subject": "patrick-schwarzenegger", "rel": "country", "value": "Stati Uniti", "label": "Patrick Arnold Shriver Schwarzenegger"}
+{"subject": "andrew-scott-actor", "rel": "born", "value": "1976", "label": "Andrew Scott"}
+{"subject": "andrew-scott-actor", "rel": "country", "value": "Irlanda", "label": "Andrew Scott"}
+{"subject": "pierce-brosnan", "rel": "country", "value": "Irlanda", "label": "Pierce Brendan Brosnan"}
+{"subject": "julie-andrews", "rel": "country", "value": "Regno Unito", "label": "Dame Julie Andrews"}
+{"subject": "paul-walker", "rel": "country", "value": "Stati Uniti", "label": "Paul William Walker IV"}
+{"subject": "c-j-stroud", "rel": "born", "value": "2001", "label": "C J Stroud"}
+{"subject": "david-soul", "rel": "country", "value": "Stati Uniti", "label": "David Soul"}
+{"subject": "coco-gauff", "rel": "country", "value": "Stati Uniti", "label": "Cori Dionne Gauff, detta Coco,"}
+{"subject": "sandeep-reddy-vanga", "rel": "country", "value": "India", "label": "Sandeep Reddy Vanga"}
+{"subject": "jasmine-paolini", "rel": "country", "value": "Italia", "label": "Jasmine Paolini"}
+{"subject": "keri-russell", "rel": "born", "value": "1998", "label": "Keri Lynn Russell"}
+{"subject": "keri-russell", "rel": "died", "value": "2002", "label": "Keri Lynn Russell"}
+{"subject": "keri-russell", "rel": "country", "value": "Stati Uniti", "label": "Keri Lynn Russell"}
+{"subject": "maria-corina-machado", "rel": "country", "value": "Venezuela", "label": "María Corina Machado Parisca"}
+{"subject": "kerry-von-erich", "rel": "country", "value": "Stati Uniti", "label": "Kerry Von Erich"}
+{"subject": "ejae", "rel": "country", "value": "Corea del Sud", "label": "Ejae, pseudonimo di Kim Eun-jae,"}
+{"subject": "shedeur-sanders", "rel": "country", "value": "Stati Uniti", "label": "Shedeur Deion Sanders"}
+{"subject": "isabela-merced", "rel": "country", "value": "Stati Uniti", "label": "Isabela Merced"}
+{"subject": "ivana-trump", "rel": "country", "value": "Repubblica Ceca", "label": "Ivana Marie Trump"}
+{"subject": "colin-farrell", "rel": "country", "value": "Irlanda", "label": "Colin James Farrell"}
+{"subject": "fred-trump", "rel": "country", "value": "Stati Uniti", "label": "Frederick Christ Trump Sr., detto Fred,"}
+{"subject": "sanae-takaichi", "rel": "country", "value": "Giappone", "label": "Sanae Takaichi"}
+{"subject": "ezra-miller", "rel": "country", "value": "Stati Uniti", "label": "Ezra Matthew Miller"}
+{"subject": "mohamed-al-fayed", "rel": "country", "value": "Egitto", "label": "Mohamed Abdel Moneim Al-Fayed"}
+{"subject": "jordan-love", "rel": "country", "value": "Stati Uniti", "label": "Jordan Alexander Love"}
+{"subject": "sacha-baron-cohen", "rel": "country", "value": "Regno Unito", "label": "Sacha Noam Baron Cohen"}
+{"subject": "zayn-malik", "rel": "country", "value": "Regno Unito", "label": "Zayn, pseudonimo di Zain Javadd Malik,"}
+{"subject": "george-baldock", "rel": "country", "value": "Regno Unito", "label": "George Henry Ivor Baldock"}
+{"subject": "nicholas-hoult", "rel": "country", "value": "Regno Unito", "label": "Nicholas Caradoc Hoult"}
+{"subject": "elizabeth-taylor", "rel": "country", "value": "Regno Unito", "label": "Dame Elizabeth Rosemond Taylor"}
+{"subject": "ryan-garcia", "rel": "country", "value": "Stati Uniti", "label": "Ryan García"}
+{"subject": "tommy-devito-american-football", "rel": "born", "value": "1998", "label": "Thomas DeVito"}
+{"subject": "tommy-devito-american-football", "rel": "country", "value": "Stati Uniti", "label": "Thomas DeVito"}
+{"subject": "kate-winslet", "rel": "country", "value": "Regno Unito", "label": "Kate Elizabeth Winslet"}
+{"subject": "charlize-theron", "rel": "country", "value": "Sudafrica", "label": "Charlize Theron"}
+{"subject": "ali-wong", "rel": "country", "value": "Stati Uniti", "label": "Ali Wong, pseudonimo di Alexandra Wong,"}
+{"subject": "jessica-gunning", "rel": "country", "value": "Regno Unito", "label": "Jessica Faye Gunning"}
+{"subject": "sonay-kartal", "rel": "country", "value": "Regno Unito", "label": "Sonay Kartal"}
+{"subject": "amber-heard", "rel": "country", "value": "Stati Uniti", "label": "Amber Laura Heard"}
+{"subject": "aubrey-plaza", "rel": "country", "value": "Stati Uniti", "label": "Aubrey Christina Plaza"}
+{"subject": "revanth-reddy", "rel": "born", "value": "1969", "label": "Anumula Revanth Reddy"}
+{"subject": "revanth-reddy", "rel": "country", "value": "India", "label": "Anumula Revanth Reddy"}
+{"subject": "cristin-milioti", "rel": "country", "value": "Stati Uniti", "label": "Cristin Milioti"}
+{"subject": "shoaib-malik", "rel": "born", "value": "1982", "label": "Shoaib Malik"}
+{"subject": "tadej-pogacar", "rel": "country", "value": "Slovenia", "label": "Tadej Pogačar"}
+{"subject": "kyren-lacy", "rel": "born", "value": "2000", "label": "Kyren Pierre Lacy"}
+{"subject": "kyren-lacy", "rel": "died", "value": "2025", "label": "Kyren Pierre Lacy"}
+{"subject": "kyren-lacy", "rel": "country", "value": "Stati Uniti", "label": "Kyren Pierre Lacy"}
+{"subject": "chuck-mangione", "rel": "country", "value": "Stati Uniti", "label": "Charles Frank Mangione, detto Chuck,"}
+{"subject": "emilia-clarke", "rel": "born", "value": "2011", "label": "Emilia Isobel Euphemia Rose Clarke"}
+{"subject": "emilia-clarke", "rel": "died", "value": "2019", "label": "Emilia Isobel Euphemia Rose Clarke"}
+{"subject": "emilia-clarke", "rel": "country", "value": "Regno Unito", "label": "Emilia Isobel Euphemia Rose Clarke"}
+{"subject": "laura-loomer", "rel": "country", "value": "Stati Uniti", "label": "Laura Elizabeth Loomer"}
+{"subject": "cameron-boyce", "rel": "country", "value": "Stati Uniti", "label": "Cameron Mica Boyce"}
+{"subject": "ruben-amorim", "rel": "country", "value": "Portogallo", "label": "Ruben Filipe Marques Amorim"}
+{"subject": "adan-canto", "rel": "country", "value": "Messico", "label": "Adan Canto"}
+{"subject": "aaron-hernandez", "rel": "country", "value": "Stati Uniti", "label": "Aaron Josef Hernandez"}
+{"subject": "sana-javed", "rel": "born", "value": "1993", "label": "Sana Javed"}
+{"subject": "sana-javed", "rel": "country", "value": "Pakistan", "label": "Sana Javed"}
+{"subject": "ynw-melly", "rel": "country", "value": "Stati Uniti", "label": "Ynw Melly"}
+{"subject": "jason-sudeikis", "rel": "country", "value": "Stati Uniti", "label": "Daniel Jason Sudeikis"}
+{"subject": "jesse-plemons", "rel": "country", "value": "Stati Uniti", "label": "Jesse Lon Plemons"}
+{"subject": "alexander-ovechkin", "rel": "country", "value": "Russia", "label": "Aleksandr Michajlovič Ovečkin"}
+{"subject": "tony-hinchcliffe", "rel": "born", "value": "1984", "label": "Tony Hinchcliffe"}
+{"subject": "tony-hinchcliffe", "rel": "country", "value": "Stati Uniti", "label": "Tony Hinchcliffe"}
+{"subject": "sunisa-lee", "rel": "country", "value": "Stati Uniti", "label": "Sunisa Lee, detta Suni,"}
+{"subject": "joanne-whalley", "rel": "country", "value": "Regno Unito", "label": "Joanne Whalley"}
+{"subject": "katie-ledecky", "rel": "country", "value": "Stati Uniti", "label": "Kathleen Genevieve Ledecky, detta Katie,"}
+{"subject": "vladimir-guerrero-jr", "rel": "country", "value": "Dominica", "label": "Vladimir Guerrero Jr"}
+{"subject": "jack-quaid", "rel": "country", "value": "Stati Uniti", "label": "Jack Henry Quaid"}
+{"subject": "sean-strickland", "rel": "country", "value": "Stati Uniti", "label": "Sean Thomas Strickland"}
+{"subject": "cory-booker", "rel": "country", "value": "Stati Uniti", "label": "Cory Anthony Booker"}
+{"subject": "giorgia-meloni", "rel": "country", "value": "Italia", "label": "Giorgia Meloni"}
+{"subject": "emma-corrin", "rel": "country", "value": "Regno Unito", "label": "Emma-Louise Corrin"}
+{"subject": "mandisa", "rel": "country", "value": "Stati Uniti", "label": "Mandisa"}
+{"subject": "alexander-zverev", "rel": "country", "value": "Germania", "label": "Alexander Zverev"}
+{"subject": "anna-kendrick", "rel": "country", "value": "Stati Uniti", "label": "Anna Cooke Kendrick"}
+{"subject": "joey-king", "rel": "country", "value": "Stati Uniti", "label": "Joey Lynn King"}
+{"subject": "vicky-kaushal", "rel": "country", "value": "India", "label": "Vicky Kaushal"}
+{"subject": "alina-habba", "rel": "born", "value": "1984", "label": "Alina Saad Habba"}
+{"subject": "alina-habba", "rel": "country", "value": "Stati Uniti", "label": "Alina Saad Habba"}
+{"subject": "paula-vennells", "rel": "born", "value": "1959", "label": "Paula Anne Vennells"}
+{"subject": "paula-vennells", "rel": "country", "value": "Regno Unito", "label": "Paula Anne Vennells"}
+{"subject": "norman-lear", "rel": "country", "value": "Stati Uniti", "label": "Norman Milton Lear"}
+{"subject": "xabi-alonso", "rel": "country", "value": "Spagna", "label": "Xabier Alonso Olano"}
+{"subject": "curtis-sliwa", "rel": "country", "value": "Stati Uniti", "label": "Curtis Anthony Sliwa"}
+{"subject": "pete-buttigieg", "rel": "country", "value": "Stati Uniti", "label": "Peter Paul Montgomery Buttigieg"}
+{"subject": "pierre-poilievre", "rel": "country", "value": "Canada", "label": "Pierre Marcel Poilievre"}
+{"subject": "mohamed-salah", "rel": "country", "value": "Egitto", "label": "Mohamed Salah Hamed Mahrous Ghaly"}
+{"subject": "kamala-sohonie", "rel": "country", "value": "India", "label": "Kamala Sohonie"}
+{"subject": "bernard-arnault", "rel": "country", "value": "Francia", "label": "Bernard Jean Étienne Arnault"}
+{"subject": "ivanka-trump", "rel": "country", "value": "Stati Uniti", "label": "Ivana Marie Trump, detta Ivanka,"}
+{"subject": "zooey-deschanel", "rel": "country", "value": "Stati Uniti", "label": "Zooey Claire Deschanel"}
+{"subject": "fernando-valenzuela", "rel": "country", "value": "Messico", "label": "Fernando Valenzuela Anguamea"}
+{"subject": "adam-driver", "rel": "country", "value": "Stati Uniti", "label": "Adam Douglas Driver"}
+{"subject": "leslie-abramson", "rel": "born", "value": "1943", "label": "Leslie Hope Abramson"}
+{"subject": "kaitlin-olson", "rel": "country", "value": "Stati Uniti", "label": "Aimee Kaitlin Willow Olson"}
+{"subject": "kirsten-dunst", "rel": "country", "value": "Stati Uniti", "label": "Kirsten Caroline Dunst"}
+{"subject": "post-malone", "rel": "country", "value": "Stati Uniti", "label": "Post Malone"}
+{"subject": "dominique-dunne", "rel": "country", "value": "Stati Uniti", "label": "Dominique Ellen Dunne"}
+{"subject": "candace-owens", "rel": "country", "value": "Stati Uniti", "label": "Candace Amber Owens Farmer"}
+{"subject": "sania-mirza", "rel": "country", "value": "India", "label": "Sania Mirza"}
+{"subject": "nigel-farage", "rel": "country", "value": "Regno Unito", "label": "Nigel Paul Farage"}
+{"subject": "julia-garner", "rel": "country", "value": "Stati Uniti", "label": "Julia Garner"}
+{"subject": "mike-mcdaniel", "rel": "country", "value": "Stati Uniti", "label": "Michael Lee McDaniel"}
+{"subject": "tim-curry", "rel": "country", "value": "Regno Unito", "label": "Timothy James Curry, detto Tim,"}
+{"subject": "britney-spears", "rel": "country", "value": "Stati Uniti", "label": "Britney Jean Spears"}
+{"subject": "callum-turner", "rel": "country", "value": "Regno Unito", "label": "Callum Robilliard Turner"}
+{"subject": "ralph-fiennes", "rel": "country", "value": "Regno Unito", "label": "Ralph Fiennes"}
+{"subject": "amanda-bynes", "rel": "country", "value": "Stati Uniti", "label": "Amanda Laura Bynes"}
+{"subject": "tony-blair", "rel": "country", "value": "Regno Unito", "label": "Sir Anthony Charles Lynton Blair"}
+{"subject": "jaxson-dart", "rel": "country", "value": "Stati Uniti", "label": "Jaxson Chase Dart"}
+{"subject": "a-p-j-abdul-kalam", "rel": "country", "value": "India", "label": "Avul Pakir Jainulabdeen Abdul Kalam"}
+{"subject": "kevin-durant", "rel": "country", "value": "Stati Uniti", "label": "Kevin Wayne Durant"}
+{"subject": "audrey-hepburn", "rel": "country", "value": "Regno Unito", "label": "Audrey Kathleen Hepburn"}
+{"subject": "nayib-bukele", "rel": "country", "value": "El Salvador", "label": "Nayib Armando Bukele Ortez"}
+{"subject": "bryce-dallas-howard", "rel": "country", "value": "Stati Uniti", "label": "Bryce Dallas Howard"}
+{"subject": "serinda-swan", "rel": "country", "value": "Canada", "label": "Serinda Swan"}
+{"subject": "mahershala-ali", "rel": "country", "value": "Stati Uniti", "label": "Mahershala Ali"}
+{"subject": "kevin-bacon", "rel": "country", "value": "Stati Uniti", "label": "Kevin Norwood Bacon"}
+{"subject": "judith-barsi", "rel": "country", "value": "Stati Uniti", "label": "Judith Eva Barsi"}
+{"subject": "jon-hamm", "rel": "country", "value": "Stati Uniti", "label": "Jonathan Daniel Hamm, detto Jon,"}
+{"subject": "margaret-thatcher", "rel": "country", "value": "Regno Unito", "label": "Margaret Thatcher"}
+{"subject": "maggie-smith", "rel": "country", "value": "Regno Unito", "label": "Dame Margaret Natalie Smith"}
+{"subject": "eric-dane", "rel": "country", "value": "Stati Uniti", "label": "Eric William Dane"}
+{"subject": "michael-douglas", "rel": "country", "value": "Stati Uniti", "label": "Michael Kirk Douglas"}
+{"subject": "bill-paxton", "rel": "country", "value": "Stati Uniti", "label": "William Paxton"}
+{"subject": "zach-edey", "rel": "country", "value": "Canada", "label": "Zachary Edey, detto Zach,"}
+{"subject": "john-harbaugh", "rel": "country", "value": "Stati Uniti", "label": "John William Harbaugh"}
+{"subject": "kristen-stewart", "rel": "country", "value": "Stati Uniti", "label": "Kristen Jaymes Stewart"}
+{"subject": "gareth-southgate", "rel": "country", "value": "Regno Unito", "label": "Sir Gareth Southgate"}
+{"subject": "george-soros", "rel": "country", "value": "Ungheria", "label": "George Soros"}
+{"subject": "keira-knightley", "rel": "country", "value": "Regno Unito", "label": "Keira Christina Knightley"}
+{"subject": "rachel-reeves", "rel": "country", "value": "Regno Unito", "label": "Rachel Jane Reeves"}
+{"subject": "anthony-edwards-basketball", "rel": "born", "value": "2001", "label": "Anthony Edwards Basketball"}
+{"subject": "anthony-edwards-basketball", "rel": "country", "value": "Stati Uniti", "label": "Anthony Edwards Basketball"}
+{"subject": "ollie-watkins", "rel": "country", "value": "Regno Unito", "label": "Oliver George Arthur Watkins"}
+{"subject": "silvio-berlusconi", "rel": "country", "value": "Italia", "label": "Silvio Berlusconi"}
+{"subject": "taylor-fritz", "rel": "country", "value": "Stati Uniti", "label": "Taylor Fritz"}
+{"subject": "elise-stefanik", "rel": "country", "value": "Stati Uniti", "label": "Elise Marie Stefanik"}
+{"subject": "barbora-krejcikova", "rel": "country", "value": "Repubblica Ceca", "label": "Barbora Krejčíková"}
+{"subject": "tom-daley", "rel": "country", "value": "Regno Unito", "label": "Thomas Robert Daley, detto Tom,"}
+{"subject": "jerome-powell", "rel": "country", "value": "Stati Uniti", "label": "Jerome Hayden Powell"}
+{"subject": "vontae-davis", "rel": "country", "value": "Stati Uniti", "label": "Vontae Ottis Davis"}
+{"subject": "matt-rife", "rel": "country", "value": "Stati Uniti", "label": "Matthew Steven Rife"}
+{"subject": "theo-james", "rel": "country", "value": "Regno Unito", "label": "Theodore Peter James Kinnaird Taptiklis"}
+{"subject": "jack-o-connell-actor", "rel": "born", "value": "1990", "label": "Jack O'Connell"}
+{"subject": "jack-o-connell-actor", "rel": "country", "value": "Regno Unito", "label": "Jack O'Connell"}
+{"subject": "mark-zuckerberg", "rel": "country", "value": "Stati Uniti", "label": "Mark Elliot Zuckerberg"}
+{"subject": "satish-shah", "rel": "country", "value": "India", "label": "Satish Beri Shah, noto come Satish Shah,"}
+{"subject": "prince-harry-duke-of-sussex", "rel": "born", "value": "1984", "label": "Prince Harry, Duke of Sussex,"}
+{"subject": "giancarlo-esposito", "rel": "country", "value": "Stati Uniti", "label": "Giancarlo Giuseppe Alessandro Esposito"}
+{"subject": "sofia-boutella", "rel": "country", "value": "Algeria", "label": "Sofia Boutella"}
+{"subject": "victoria-starmer", "rel": "country", "value": "Regno Unito", "label": "Victoria Starmer, styled Lady Starmer,"}
+{"subject": "eva-longoria", "rel": "country", "value": "Stati Uniti", "label": "Eva Jacqueline Longoria"}
+{"subject": "hunter-biden", "rel": "country", "value": "Stati Uniti", "label": "Robert Hunter Biden"}
+{"subject": "tyreek-hill", "rel": "country", "value": "Stati Uniti", "label": "Tyreek Hill"}
+{"subject": "curt-cignetti", "rel": "country", "value": "Stati Uniti", "label": "Curt Cignetti"}
+{"subject": "cooper-koch", "rel": "country", "value": "Stati Uniti", "label": "Cooper Koch"}
+{"subject": "tyler-the-creator", "rel": "country", "value": "Stati Uniti", "label": "Tyler The Creator"}
+{"subject": "halle-bailey", "rel": "country", "value": "Stati Uniti", "label": "Halle Lynn Bailey"}
+{"subject": "andre-silva-footballer-born-2000", "rel": "born", "value": "2000", "label": "André Filipe Teixeira da Silva"}
+{"subject": "andre-silva-footballer-born-2000", "rel": "died", "value": "2025", "label": "André Filipe Teixeira da Silva"}
+{"subject": "andre-silva-footballer-born-2000", "rel": "country", "value": "Portogallo", "label": "André Filipe Teixeira da Silva"}
+{"subject": "sandra-day-o-connor", "rel": "country", "value": "Stati Uniti", "label": "Sandra Day O'Connor"}
+{"subject": "brittany-murphy", "rel": "country", "value": "Stati Uniti", "label": "Brittany Anne Murphy, nata Bertolotti,"}
+{"subject": "michelle-monaghan", "rel": "country", "value": "Stati Uniti", "label": "Michelle Lynn Monaghan"}
+{"subject": "mookie-betts", "rel": "country", "value": "Stati Uniti", "label": "Markus Lynn Betts, detto Mookie,"}
+{"subject": "emma-navarro", "rel": "country", "value": "Stati Uniti", "label": "Emma Navarro"}
+{"subject": "song-kang", "rel": "country", "value": "Corea del Sud", "label": "Song Kang"}
+{"subject": "guinness-family", "rel": "country", "value": "Regno Unito", "label": "The Guinness family"}
+{"subject": "ronnie-o-sullivan", "rel": "country", "value": "Regno Unito", "label": "Ronald Antonio O'Sullivan, detto Ronnie,"}
+{"subject": "medha-shankr", "rel": "country", "value": "India", "label": "Medha Shankr"}
+{"subject": "charles-manson", "rel": "country", "value": "Stati Uniti", "label": "Charles Milles Manson"}
+{"subject": "vin-diesel", "rel": "country", "value": "Stati Uniti", "label": "Vin Diesel"}
+{"subject": "cameron-norrie", "rel": "country", "value": "Regno Unito", "label": "Cameron Norrie"}
+{"subject": "declan-rice", "rel": "country", "value": "Regno Unito", "label": "Declan Rice"}
+{"subject": "austin-butler", "rel": "country", "value": "Stati Uniti", "label": "Austin Robert Butler"}
+{"subject": "aneet-padda", "rel": "born", "value": "2002", "label": "Aneet Padda"}
+{"subject": "aneet-padda", "rel": "country", "value": "India", "label": "Aneet Padda"}
+{"subject": "lindsay-lohan", "rel": "country", "value": "Stati Uniti", "label": "Lindsay Dee Lohan"}
+{"subject": "ron-goldman", "rel": "born", "value": "1968", "label": "Ronald Lyle Goldman"}
+{"subject": "ron-goldman", "rel": "died", "value": "1994", "label": "Ronald Lyle Goldman"}
+{"subject": "ron-goldman", "rel": "country", "value": "Stati Uniti", "label": "Ronald Lyle Goldman"}
+{"subject": "catherine-o-hara", "rel": "country", "value": "Canada", "label": "Catherine Anne O'Hara"}
+{"subject": "dave-mccary", "rel": "country", "value": "Stati Uniti", "label": "David Lawrence McCary, detto Dave,"}
+{"subject": "jo-koy", "rel": "country", "value": "Stati Uniti", "label": "Jo Koy"}
+{"subject": "franz-beckenbauer", "rel": "country", "value": "Germania", "label": "Franz Anton Beckenbauer"}
+{"subject": "carrie-coon", "rel": "country", "value": "Stati Uniti", "label": "Carrie Alexandra Coon"}
+{"subject": "jrd-tata", "rel": "born", "value": "1904", "label": "Jehangir Ratanji Dadabhoy Tata"}
+{"subject": "jrd-tata", "rel": "died", "value": "1993", "label": "Jehangir Ratanji Dadabhoy Tata"}
+{"subject": "jrd-tata", "rel": "country", "value": "India", "label": "Jehangir Ratanji Dadabhoy Tata"}
+{"subject": "natasha-richardson", "rel": "country", "value": "Regno Unito", "label": "Natasha Jane Richardson"}
+{"subject": "lewis-strauss", "rel": "country", "value": "Stati Uniti", "label": "Lewis Lichtenstein Strauss"}
+{"subject": "timothy-mcveigh", "rel": "country", "value": "Stati Uniti", "label": "Timothy James McVeigh"}
+{"subject": "rami-malek", "rel": "country", "value": "Stati Uniti", "label": "Rami Said Malek"}
+{"subject": "hugh-grant", "rel": "country", "value": "Regno Unito", "label": "Hugh John Mungo Grant"}
+{"subject": "maya-harris", "rel": "country", "value": "Stati Uniti", "label": "Maya Lakshmi Harris"}
+{"subject": "vladimir-guerrero", "rel": "country", "value": "Dominica", "label": "Vladimir Guerrero"}
+{"subject": "deion-sanders", "rel": "country", "value": "Stati Uniti", "label": "Deion Luwynn Sanders"}
+{"subject": "ilona-maher", "rel": "born", "value": "1996", "label": "Ilona Delsing Rosa Maher"}
+{"subject": "ilona-maher", "rel": "country", "value": "Stati Uniti", "label": "Ilona Delsing Rosa Maher"}
+{"subject": "nicolas-maduro", "rel": "country", "value": "Venezuela", "label": "Nicolás Maduro Moros"}
+{"subject": "nicholas-alexander-chavez", "rel": "born", "value": "1999", "label": "Nicholas Alexander Chavez"}
+{"subject": "nicholas-alexander-chavez", "rel": "country", "value": "Stati Uniti", "label": "Nicholas Alexander Chavez"}
+{"subject": "aimee-lou-wood", "rel": "country", "value": "Regno Unito", "label": "Aimee Lou Wood"}
+{"subject": "katherine-schwarzenegger", "rel": "country", "value": "Stati Uniti", "label": "Katherine Eunice Schwarzenegger"}
+{"subject": "alexander-hamilton", "rel": "country", "value": "Stati Uniti", "label": "Alexander Hamilton"}
+{"subject": "jerry-brudos", "rel": "country", "value": "Stati Uniti", "label": "Jerome Henry Brudos, detto Jerry,"}
+{"subject": "catherine-connolly", "rel": "country", "value": "Irlanda", "label": "Catherine Martina Ann Connolly"}
+{"subject": "javier-milei", "rel": "country", "value": "Argentina", "label": "Javier Gerardo Milei"}
+{"subject": "viktor-gyokeres", "rel": "country", "value": "Svezia", "label": "Viktor Einar Gyökeres"}
+{"subject": "mikey-madison", "rel": "country", "value": "Stati Uniti", "label": "Mikaela Madison Rosberg, detta Mikey,"}
+{"subject": "justine-lupe", "rel": "country", "value": "Stati Uniti", "label": "Justine Lupe-Schomp"}
+{"subject": "pat-mcafee", "rel": "country", "value": "Stati Uniti", "label": "Patrick Justin McAfee"}
+{"subject": "joao-pedro-footballer-born-2001", "rel": "born", "value": "2001", "label": "Joao Pedro Footballer Born 2001"}
+{"subject": "joao-pedro-footballer-born-2001", "rel": "country", "value": "Brasile", "label": "Joao Pedro Footballer Born 2001"}
+{"subject": "ncuti-gatwa", "rel": "country", "value": "Rwanda", "label": "Mizero Ncuti Gatwa"}
+{"subject": "edward-guinness-1st-earl-of-iveagh", "rel": "born", "value": "1847", "label": "Edward Guinness 1St Earl Of Iveagh"}
+{"subject": "edward-guinness-1st-earl-of-iveagh", "rel": "died", "value": "1927", "label": "Edward Guinness 1St Earl Of Iveagh"}
+{"subject": "edward-guinness-1st-earl-of-iveagh", "rel": "country", "value": "Regno Unito", "label": "Edward Guinness 1St Earl Of Iveagh"}
+{"subject": "maitreyi-ramakrishnan", "rel": "country", "value": "Canada", "label": "Maitreyi Ramakrishnan"}
+{"subject": "cam-skattebo", "rel": "country", "value": "Stati Uniti", "label": "Cameron Skattebo, detto Cam,"}
+{"subject": "shubman-gill", "rel": "born", "value": "1999", "label": "Shubman Gill"}
+{"subject": "shubman-gill", "rel": "country", "value": "India", "label": "Shubman Gill"}
+{"subject": "maggie-q", "rel": "country", "value": "Stati Uniti", "label": "Maggie Q"}
+{"subject": "ruth-codd", "rel": "country", "value": "Irlanda", "label": "Ruth Codd"}
+{"subject": "carlo-ancelotti", "rel": "country", "value": "Italia", "label": "Carlo Ancelotti"}
+{"subject": "james-rodriguez", "rel": "country", "value": "Colombia", "label": "James David Rodríguez Rubio"}
+{"subject": "tom-aspinall", "rel": "country", "value": "Regno Unito", "label": "Thomas Paul Aspinall"}
+{"subject": "chloe-kelly", "rel": "country", "value": "Regno Unito", "label": "Chloe Maggie Kelly"}
+{"subject": "shakira", "rel": "country", "value": "Colombia", "label": "Shakira Isabel Mebarak Ripoll"}
+{"subject": "ratanji-tata", "rel": "born", "value": "1871", "label": "Sir Ratanji Jamsetji Tata"}
+{"subject": "ratanji-tata", "rel": "died", "value": "1918", "label": "Sir Ratanji Jamsetji Tata"}
+{"subject": "ratanji-tata", "rel": "country", "value": "India", "label": "Sir Ratanji Jamsetji Tata"}
+{"subject": "marianne-bachmeier", "rel": "born", "value": "1950", "label": "Marianne Bachmeier"}
+{"subject": "marianne-bachmeier", "rel": "died", "value": "1996", "label": "Marianne Bachmeier"}
+{"subject": "elizabeth-holmes", "rel": "country", "value": "Stati Uniti", "label": "Elizabeth Holmes"}
+{"subject": "james-caan", "rel": "country", "value": "Stati Uniti", "label": "James Edmund Caan"}
+{"subject": "wyndham-clark", "rel": "country", "value": "Stati Uniti", "label": "Wyndham Robert Clark"}
+{"subject": "ben-shelton", "rel": "country", "value": "Stati Uniti", "label": "Benjamin Todd Shelton"}
+{"subject": "jennifer-jason-leigh", "rel": "country", "value": "Stati Uniti", "label": "Jennifer Jason Leigh"}
+{"subject": "vikrant-massey", "rel": "country", "value": "India", "label": "Vikrant Massey"}
+{"subject": "michael-keaton", "rel": "country", "value": "Stati Uniti", "label": "Michael Keaton"}
+{"subject": "scott-bessent", "rel": "country", "value": "Stati Uniti", "label": "Scott Kenneth Homer Bessent"}
+{"subject": "phil-foden", "rel": "country", "value": "Regno Unito", "label": "Philip Walter Foden, detto Phil,"}
+{"subject": "archie-madekwe", "rel": "country", "value": "Regno Unito", "label": "Archie Uchena Madekwe"}
+{"subject": "mark-sanchez", "rel": "country", "value": "Stati Uniti", "label": "Mark Travis John Sanchez"}
+{"subject": "karim-benzema", "rel": "country", "value": "Francia", "label": "Karim Mostafa Benzema"}
+{"subject": "sam-rivers-bassist", "rel": "born", "value": "1977", "label": "Samuel Robert Rivers"}
+{"subject": "sam-rivers-bassist", "rel": "died", "value": "2025", "label": "Samuel Robert Rivers"}
+{"subject": "sam-rivers-bassist", "rel": "country", "value": "Stati Uniti", "label": "Samuel Robert Rivers"}
+{"subject": "bobby-deol", "rel": "country", "value": "India", "label": "Bobby Deol"}
+{"subject": "dani-olmo", "rel": "country", "value": "Spagna", "label": "Daniel Olmo Carvajal"}
+{"subject": "arthur-guinness", "rel": "born", "value": "1725", "label": "Arthur Guinness"}
+{"subject": "arthur-guinness", "rel": "died", "value": "1803", "label": "Arthur Guinness"}
+{"subject": "arthur-guinness", "rel": "country", "value": "Irlanda", "label": "Arthur Guinness"}
+{"subject": "jimmy-butler", "rel": "country", "value": "Stati Uniti", "label": "Jimmy Butler III"}
+{"subject": "jake-paul", "rel": "country", "value": "Stati Uniti", "label": "Jake Joseph Paul"}
+{"subject": "eric-bana", "rel": "country", "value": "Australia", "label": "Eric Bana"}
+{"subject": "mrunal-thakur", "rel": "country", "value": "India", "label": "Mrunal Thakur"}
+{"subject": "daisy-edgar-jones", "rel": "country", "value": "Regno Unito", "label": "Daisy Jessica Edgar-Jones"}
+{"subject": "ilkay-gundogan", "rel": "country", "value": "Germania", "label": "İlkay Gündoğan"}
+{"subject": "kurt-russell", "rel": "country", "value": "Stati Uniti", "label": "Kurt Vogel Russell"}
+{"subject": "sarina-wiegman", "rel": "country", "value": "Paesi Bassi", "label": "Sarina Wiegman"}
+{"subject": "ernest-burkhart", "rel": "country", "value": "Stati Uniti", "label": "Ernest George Burkhart"}
+{"subject": "manu-bhaker", "rel": "country", "value": "India", "label": "Manu Bhaker"}
+{"subject": "greta-thunberg", "rel": "country", "value": "Svezia", "label": "Greta Tintin Eleonora Ernman Thunberg"}
+{"subject": "golshifteh-farahani", "rel": "country", "value": "Iran", "label": "Golshifteh Farahani"}
+{"subject": "sinead-o-connor", "rel": "country", "value": "Irlanda", "label": "Sinéad Marie Bernadette O'Connor"}
+{"subject": "steven-van-de-velde", "rel": "country", "value": "Paesi Bassi", "label": "Steven van de Velde"}
+{"subject": "manifest-tv-series", "rel": "born", "value": "2018", "label": "Manifest"}
+{"subject": "manifest-tv-series", "rel": "died", "value": "2023", "label": "Manifest"}
+{"subject": "manifest-tv-series", "rel": "country", "value": "Stati Uniti", "label": "Manifest"}
+{"subject": "george-springer", "rel": "country", "value": "Stati Uniti", "label": "George Chelston Springer III"}
+{"subject": "oleksandr-usyk", "rel": "country", "value": "Ucraina", "label": "Oleksandr Oleksandrovyč Usyk"}
+{"subject": "cal-raleigh", "rel": "country", "value": "Stati Uniti", "label": "Caleb John Raleigh, detto Big Dumper,"}
+{"subject": "rosie-o-donnell", "rel": "country", "value": "Stati Uniti", "label": "Roseann Teresa O'Donnell"}
+{"subject": "calista-flockhart", "rel": "country", "value": "Stati Uniti", "label": "Calista Kay Flockhart"}
+{"subject": "luigi-mangione", "rel": "country", "value": "Stati Uniti", "label": "Luigi Nicholas Mangione"}
+{"subject": "patricia-routledge", "rel": "country", "value": "Regno Unito", "label": "Dame Katherine Patricia Routledge"}
+{"subject": "brenda-lee", "rel": "country", "value": "Stati Uniti", "label": "Brenda Lee"}
+{"subject": "elle-king", "rel": "country", "value": "Stati Uniti", "label": "Elle King"}
+{"subject": "hayao-miyazaki", "rel": "country", "value": "Giappone", "label": "Hayao Miyazaki"}
+{"subject": "chris-von-erich", "rel": "country", "value": "Stati Uniti", "label": "Christopher Barton Adkisson"}
+{"subject": "devin-haney", "rel": "country", "value": "Stati Uniti", "label": "Devin Miles Haney"}
+{"subject": "kali-reis", "rel": "country", "value": "Stati Uniti", "label": "Kali Reis"}
+{"subject": "william-michael-haley", "rel": "born", "value": "1970", "label": "William Michael Haley"}
+{"subject": "william-michael-haley", "rel": "country", "value": "Stati Uniti", "label": "William Michael Haley"}
+{"subject": "megan-fox", "rel": "country", "value": "Stati Uniti", "label": "Megan Denise Fox"}
+{"subject": "amelia-earhart", "rel": "country", "value": "Stati Uniti", "label": "Amelia Mary Earhart"}
+{"subject": "josh-hutcherson", "rel": "country", "value": "Stati Uniti", "label": "Joshua Ryan Hutcherson, detto Josh,"}
+{"subject": "dharmendra", "rel": "country", "value": "India", "label": "Dharmendra"}
+{"subject": "nick-cannon", "rel": "country", "value": "Stati Uniti", "label": "Nicholas Scott Cannon"}
+{"subject": "addison-timlin", "rel": "country", "value": "Stati Uniti", "label": "Addison Jayne Timlin"}
+{"subject": "gigi-hadid", "rel": "country", "value": "Stati Uniti", "label": "Jelena Nour Hadid, detta Gigi,"}
+{"subject": "javier-bardem", "rel": "country", "value": "Spagna", "label": "Javier Ángel Encinas Bardem"}
+{"subject": "minka-kelly", "rel": "country", "value": "Stati Uniti", "label": "Minka Dumont Kelly"}
+{"subject": "ethel-kennedy", "rel": "born", "value": "1928", "label": "Ethel Kennedy"}
+{"subject": "ethel-kennedy", "rel": "died", "value": "2024", "label": "Ethel Kennedy"}
+{"subject": "ethel-kennedy", "rel": "country", "value": "Stati Uniti", "label": "Ethel Kennedy"}
+{"subject": "michelle-thomas", "rel": "country", "value": "Stati Uniti", "label": "Michelle Thomas"}
+{"subject": "emma-d-arcy", "rel": "country", "value": "Regno Unito", "label": "Emma Zia D'Arcy"}
+{"subject": "adam-peaty", "rel": "country", "value": "Regno Unito", "label": "Adam George Peaty"}
+{"subject": "lady-jane-grey", "rel": "country", "value": "Regno Unito", "label": "Jane Grey"}
+{"subject": "nick-mangold", "rel": "country", "value": "Stati Uniti", "label": "Nick Mangold"}
+{"subject": "jose-mourinho", "rel": "country", "value": "Portogallo", "label": "José Mário dos Santos Mourinho Félix"}
+{"subject": "klay-thompson", "rel": "country", "value": "Stati Uniti", "label": "Klay Alexander Thompson"}
+{"subject": "jayden-daniels", "rel": "country", "value": "Stati Uniti", "label": "Jayden Daniels"}
+{"subject": "simone-tata", "rel": "born", "value": "1930", "label": "Simone Naval Tata"}
+{"subject": "simone-tata", "rel": "died", "value": "2025", "label": "Simone Naval Tata"}
+{"subject": "simone-tata", "rel": "country", "value": "India", "label": "Simone Naval Tata"}
+{"subject": "paul-giamatti", "rel": "country", "value": "Stati Uniti", "label": "Paul Edward Valentine Giamatti"}
+{"subject": "rose-singer", "rel": "born", "value": "1997", "label": "Rose Singer"}
+{"subject": "liam-hemsworth", "rel": "country", "value": "Australia", "label": "Liam Hemsworth"}
+{"subject": "cameron-diaz", "rel": "country", "value": "Stati Uniti", "label": "Cameron Michelle Diaz"}
+{"subject": "ruby-franke", "rel": "born", "value": "1982", "label": "Ruby Franke"}
+{"subject": "ruby-franke", "rel": "country", "value": "Stati Uniti", "label": "Ruby Franke"}
+{"subject": "harlan-coben", "rel": "country", "value": "Stati Uniti", "label": "Harlan Coben"}
+{"subject": "sunny-sandler", "rel": "country", "value": "Stati Uniti", "label": "Sunny Madeline Sandler"}
+{"subject": "meghan-duchess-of-sussex", "rel": "country", "value": "Stati Uniti", "label": "Meghan Markle, \"Duchessa di Sussex\","}
+{"subject": "will-poulter", "rel": "country", "value": "Regno Unito", "label": "William Jack Poulter"}
+{"subject": "dennis-quaid", "rel": "country", "value": "Stati Uniti", "label": "Dennis William Quaid"}
+{"subject": "kylie-minogue", "rel": "country", "value": "Australia", "label": "Kylie Ann Minogue"}
+{"subject": "armie-hammer", "rel": "country", "value": "Stati Uniti", "label": "Armand Douglas Hammer, detto Armie,"}
+{"subject": "mamitha-baiju", "rel": "country", "value": "India", "label": "Mamitha Baiju"}
+{"subject": "larry-ellison", "rel": "country", "value": "Stati Uniti", "label": "Lawrence Joseph Ellison"}
+{"subject": "gordon-ramsay", "rel": "country", "value": "Regno Unito", "label": "Gordon James Ramsay"}
+{"subject": "paul-henri-nargeolet", "rel": "born", "value": "1946", "label": "Paul-Henri Nargeolet"}
+{"subject": "paul-henri-nargeolet", "rel": "died", "value": "2023", "label": "Paul-Henri Nargeolet"}
+{"subject": "paul-henri-nargeolet", "rel": "country", "value": "Francia", "label": "Paul-Henri Nargeolet"}
+{"subject": "venus-williams", "rel": "country", "value": "Stati Uniti", "label": "Venus Ebony Starr Williams"}
+{"subject": "e-jean-carroll", "rel": "country", "value": "Stati Uniti", "label": "Elizabeth Jean Carroll"}
+{"subject": "eric-trump", "rel": "country", "value": "Stati Uniti", "label": "Eric Frederick Trump"}
+{"subject": "dave-roberts-baseball-manager", "rel": "born", "value": "1972", "label": "David Ray Roberts, nicknamed \"Doc\","}
+{"subject": "dave-roberts-baseball-manager", "rel": "country", "value": "Stati Uniti", "label": "David Ray Roberts, nicknamed \"Doc\","}
+{"subject": "rickie-fowler", "rel": "country", "value": "Stati Uniti", "label": "Rick Yutaka Fowler"}
+{"subject": "shannon-sharpe", "rel": "country", "value": "Stati Uniti", "label": "Shannon Sharpe"}
+{"subject": "drake-maye", "rel": "country", "value": "Stati Uniti", "label": "Drake Lee Maye"}
+{"subject": "elizabeth-olsen", "rel": "country", "value": "Stati Uniti", "label": "Elizabeth Chase Olsen"}
+{"subject": "wyatt-russell", "rel": "country", "value": "Stati Uniti", "label": "Wyatt Hawn Russell"}
+{"subject": "daniel-day-lewis", "rel": "country", "value": "Regno Unito", "label": "Sir Daniel Michael Blake Day-Lewis"}
+{"subject": "mckenna-grace", "rel": "country", "value": "Stati Uniti", "label": "Mckenna Grace"}
+{"subject": "jason-bateman", "rel": "country", "value": "Stati Uniti", "label": "Jason Kent Bateman"}
+{"subject": "jack-antonoff", "rel": "country", "value": "Stati Uniti", "label": "Jack Michael Antonoff"}
+{"subject": "lance-reddick", "rel": "country", "value": "Stati Uniti", "label": "Lance Solomon Reddick"}
+{"subject": "jake-browning", "rel": "country", "value": "Stati Uniti", "label": "Jake Browning"}
+{"subject": "dov-charney", "rel": "born", "value": "1969", "label": "Dov Charney"}
+{"subject": "dov-charney", "rel": "country", "value": "Canada", "label": "Dov Charney"}
+{"subject": "winona-ryder", "rel": "country", "value": "Stati Uniti", "label": "Winona Ryder"}
+{"subject": "monica-barbaro", "rel": "country", "value": "Stati Uniti", "label": "Monica Barbaro"}
+{"subject": "joel-embiid", "rel": "country", "value": "Cameroon", "label": "Joel Hans Embiid"}
+{"subject": "felix-baumgartner", "rel": "country", "value": "Austria", "label": "Felix Baumgartner"}
+{"subject": "sarah-snook", "rel": "country", "value": "Australia", "label": "Sarah Ruth Snook"}
+{"subject": "ryne-sandberg", "rel": "country", "value": "Stati Uniti", "label": "Ryne Dee Sandberg, nicknamed \"Ryno\","}
+{"subject": "jack-kilmer", "rel": "country", "value": "Stati Uniti", "label": "John Wallace Kilmer"}
+{"subject": "gabby-giffords", "rel": "country", "value": "Stati Uniti", "label": "Gabrielle Dee Giffords"}
+{"subject": "daniel-radcliffe", "rel": "country", "value": "Regno Unito", "label": "Daniel Jacob Radcliffe"}
+{"subject": "drew-barrymore", "rel": "country", "value": "Stati Uniti", "label": "Drew Blythe Barrymore"}
+{"subject": "luis-antonio-tagle", "rel": "country", "value": "Filippine", "label": "Luis Antonio Gokim Tagle"}
+{"subject": "rashida-jones", "rel": "country", "value": "Stati Uniti", "label": "Rashida Leah Jones"}
+{"subject": "tate-mcrae", "rel": "country", "value": "Canada", "label": "Tate Rosner McRae"}
+{"subject": "colin-jost", "rel": "country", "value": "Stati Uniti", "label": "Colin Kelly Jost"}
+{"subject": "willa-fitzgerald", "rel": "country", "value": "Stati Uniti", "label": "Willa Fitzgerald"}
+{"subject": "jennie-singer", "rel": "born", "value": "1996", "label": "Jennie Singer"}
+{"subject": "jennie-singer", "rel": "country", "value": "Corea del Sud", "label": "Jennie Singer"}
+{"subject": "naomi-watts", "rel": "country", "value": "Regno Unito", "label": "Naomi Ellen Watts"}
+{"subject": "jon-bernthal", "rel": "born", "value": "2010", "label": "Jonathan Edward Bernthal, detto Jon,"}
+{"subject": "jon-bernthal", "rel": "died", "value": "2012", "label": "Jonathan Edward Bernthal, detto Jon,"}
+{"subject": "jon-bernthal", "rel": "country", "value": "Stati Uniti", "label": "Jonathan Edward Bernthal, detto Jon,"}
+{"subject": "ella-emhoff", "rel": "born", "value": "1999", "label": "Ella Rose Emhoff"}
+{"subject": "ella-emhoff", "rel": "country", "value": "Stati Uniti", "label": "Ella Rose Emhoff"}
+{"subject": "dawood-ibrahim", "rel": "country", "value": "India", "label": "Dawood Ibrahim Kaskar"}
+{"subject": "bernie-sanders", "rel": "country", "value": "Stati Uniti", "label": "Bernard Sanders, detto Bernie,"}
+{"subject": "kaitlyn-dever", "rel": "country", "value": "Stati Uniti", "label": "Kaitlyn Rochelle Dever"}
+{"subject": "bill-gothard", "rel": "born", "value": "1934", "label": "Bill Gothard"}
+{"subject": "barron-trump", "rel": "born", "value": "2006", "label": "Barron William Trump"}
+{"subject": "luke-humphries", "rel": "country", "value": "Regno Unito", "label": "Luke Humphries"}
+{"subject": "tom-wilkinson", "rel": "country", "value": "Regno Unito", "label": "Thomas Geoffrey Wilkinson, detto Tom,"}
+{"subject": "josh-hartnett", "rel": "country", "value": "Stati Uniti", "label": "Joshua Daniel Hartnett, detto Josh,"}
+{"subject": "ryan-mallett", "rel": "country", "value": "Stati Uniti", "label": "Ryan Mallett"}
+{"subject": "liz-cheney", "rel": "country", "value": "Stati Uniti", "label": "Elizabeth Lynne Cheney Perry, detta Liz,"}
+{"subject": "reese-witherspoon", "rel": "country", "value": "Stati Uniti", "label": "Laura Jeanne Reese Witherspoon"}
+{"subject": "julie-bowen", "rel": "country", "value": "Stati Uniti", "label": "Julie Bowen Luetkemeyer"}
+{"subject": "pat-robertson", "rel": "country", "value": "Stati Uniti", "label": "Marion Gordon Robertson, detto Pat,"}
+{"subject": "xander-schauffele", "rel": "country", "value": "Stati Uniti", "label": "Alexander Victor Schauffele"}
+{"subject": "natarajan-chandrasekaran", "rel": "born", "value": "1963", "label": "Natarajan Chandrasekaran"}
+{"subject": "natarajan-chandrasekaran", "rel": "country", "value": "India", "label": "Natarajan Chandrasekaran"}
+{"subject": "carlo-acutis", "rel": "country", "value": "Italia", "label": "Carlo Acutis"}
+{"subject": "arne-slot", "rel": "country", "value": "Paesi Bassi", "label": "Arend Martijn Slot, detto Arne,"}
+{"subject": "luka-doncic", "rel": "country", "value": "Slovenia", "label": "Luka Dončić"}
+{"subject": "myha-la", "rel": "country", "value": "Stati Uniti", "label": "Myha'la Joel Herrold"}
+{"subject": "alex-de-minaur", "rel": "country", "value": "Australia", "label": "Alex de Minaur Román"}
+{"subject": "cynthia-erivo", "rel": "country", "value": "Regno Unito", "label": "Cynthia Erivo"}
+{"subject": "gal-gadot", "rel": "country", "value": "Israele", "label": "Gal Gadot"}
+{"subject": "nicole-scherzinger", "rel": "country", "value": "Stati Uniti", "label": "Nicole Prascovia Elikolani Scherzinger"}
+{"subject": "roberto-canessa", "rel": "country", "value": "Uruguay", "label": "Roberto Jorge Canessa Urta"}
+{"subject": "triple-h", "rel": "country", "value": "Stati Uniti", "label": "Triple H"}
+{"subject": "arthur-guinness-baron-ardilaun", "rel": "country", "value": "Regno Unito", "label": "Arthur Guinness Baron Ardilaun"}
+{"subject": "eugenia-cooney", "rel": "born", "value": "1994", "label": "Eugenia Sullivan Cooney"}
+{"subject": "eugenia-cooney", "rel": "country", "value": "Stati Uniti", "label": "Eugenia Sullivan Cooney"}
+{"subject": "lou-pearlman", "rel": "country", "value": "Stati Uniti", "label": "Louis Jay Pearlman"}
+{"subject": "katrina-kaif", "rel": "country", "value": "Regno Unito", "label": "Katrina Kaif"}
+{"subject": "angela-rayner", "rel": "country", "value": "Regno Unito", "label": "Angela Rayner"}
+{"subject": "king-von", "rel": "country", "value": "Stati Uniti", "label": "King Von"}
+{"subject": "mark-ruffalo", "rel": "country", "value": "Stati Uniti", "label": "Mark Alan Ruffalo"}
+{"subject": "jessica-alba", "rel": "country", "value": "Stati Uniti", "label": "Jessica Marie Alba"}
+{"subject": "idris-elba", "rel": "country", "value": "Regno Unito", "label": "Sir Idrissa Akuna Elba"}
+{"subject": "steve-martin", "rel": "country", "value": "Stati Uniti", "label": "Stephen Glenn Martin, detto Steve,"}
+{"subject": "sam-altman", "rel": "country", "value": "Stati Uniti", "label": "Samuel Harris Altman"}
+{"subject": "ronaldo-brazilian-footballer", "rel": "born", "value": "1976", "label": "Ronaldo Brazilian Footballer"}
+{"subject": "ronaldo-brazilian-footballer", "rel": "country", "value": "Brasile", "label": "Ronaldo Brazilian Footballer"}
+{"subject": "rose-byrne", "rel": "country", "value": "Australia", "label": "Mary Rose Byrne"}
+{"subject": "helena-bonham-carter", "rel": "country", "value": "Regno Unito", "label": "Helena Bonham Carter CBE"}
+{"subject": "pankaj-dheer", "rel": "born", "value": "1956", "label": "Pankaj Dheer"}
+{"subject": "pankaj-dheer", "rel": "died", "value": "2025", "label": "Pankaj Dheer"}
+{"subject": "pankaj-dheer", "rel": "country", "value": "India", "label": "Pankaj Dheer"}
+{"subject": "barbra-streisand", "rel": "country", "value": "Stati Uniti", "label": "Barbara Joan Streisand, detta Barbra,"}
+{"subject": "rhea-ripley", "rel": "country", "value": "Australia", "label": "Rhea Ripley, pseudonimo di Demi Bennett,"}
+{"subject": "russell-wilson", "rel": "country", "value": "Stati Uniti", "label": "Russell Carrington Wilson"}
+{"subject": "chris-eubank", "rel": "country", "value": "Regno Unito", "label": "Chris Eubank"}
+{"subject": "bhavatharini", "rel": "born", "value": "1976", "label": "Bhavatharini Raja"}
+{"subject": "bhavatharini", "rel": "died", "value": "2024", "label": "Bhavatharini Raja"}
+{"subject": "bhavatharini", "rel": "country", "value": "India", "label": "Bhavatharini Raja"}
+{"subject": "kemi-badenoch", "rel": "country", "value": "Regno Unito", "label": "Kemi Badenoch"}
+{"subject": "phoebe-waller-bridge", "rel": "country", "value": "Regno Unito", "label": "Phoebe Mary Waller-Bridge"}
+{"subject": "robert-lewandowski", "rel": "country", "value": "Polonia", "label": "Robert Lewandowski"}
+{"subject": "joseph-quinn", "rel": "country", "value": "Regno Unito", "label": "Joseph Quinn"}
+{"subject": "arch-manning", "rel": "country", "value": "Stati Uniti", "label": "Archibald Charles Manning, detto Arch,"}
+{"subject": "edmund-kemper", "rel": "country", "value": "Stati Uniti", "label": "Edmund Emil Kemper III, detto Ed,"}
+{"subject": "sunny-leone", "rel": "country", "value": "Canada", "label": "Sunny Leone"}
+{"subject": "max-scherzer", "rel": "country", "value": "Stati Uniti", "label": "Max Scherzer"}
+{"subject": "jordan-chiles", "rel": "country", "value": "Stati Uniti", "label": "Jordan Chiles"}
+{"subject": "aaliyah", "rel": "country", "value": "Stati Uniti", "label": "Aaliyah Dana Haughton"}
+{"subject": "matthew-macfadyen", "rel": "country", "value": "Regno Unito", "label": "David Matthew Macfadyen"}
+{"subject": "sharon-tate", "rel": "country", "value": "Stati Uniti", "label": "Sharon Marie Tate"}
+{"subject": "randy-rhoads", "rel": "country", "value": "Stati Uniti", "label": "Randall William Rhoads, detto Randy,"}
+{"subject": "mahmood-mamdani", "rel": "born", "value": "1946", "label": "Mahmood Mamdani"}
+{"subject": "mahmood-mamdani", "rel": "country", "value": "Uganda", "label": "Mahmood Mamdani"}
+{"subject": "nita-ambani", "rel": "country", "value": "India", "label": "Nita Mukesh Ambani"}
+{"subject": "chelsea-manning", "rel": "country", "value": "Stati Uniti", "label": "Chelsea Elizabeth Manning"}
+{"subject": "maya-rudolph", "rel": "country", "value": "Stati Uniti", "label": "Maya Rudolph"}
+{"subject": "matt-bomer", "rel": "country", "value": "Stati Uniti", "label": "Matthew Staton Bomer, detto Matt,"}
+{"subject": "khyree-jackson", "rel": "country", "value": "Stati Uniti", "label": "Khyree Jackson"}
+{"subject": "david-attenborough", "rel": "country", "value": "Regno Unito", "label": "Sir David Frederick Attenborough"}
+{"subject": "emma-thompson", "rel": "country", "value": "Regno Unito", "label": "Dame Emma Thompson"}
+{"subject": "thomas-tuchel", "rel": "country", "value": "Germania", "label": "Thomas Tuchel"}
+{"subject": "sid-wilson", "rel": "country", "value": "Stati Uniti", "label": "Sidney George Wilson"}
+{"subject": "cat-stevens", "rel": "country", "value": "Regno Unito", "label": "Cat Stevens"}
+{"subject": "benjamin-guinness", "rel": "country", "value": "Regno Unito", "label": "Benjamin Lee Guinness, I Baronetto,"}
+{"subject": "liz-truss", "rel": "country", "value": "Regno Unito", "label": "Mary Elizabeth Truss, detta Liz,"}
+{"subject": "mila-kunis", "rel": "country", "value": "Stati Uniti", "label": "Milena Markovna \"Mila\" Kunis"}
+{"subject": "parker-posey", "rel": "country", "value": "Stati Uniti", "label": "Parker Christian Posey"}
+{"subject": "noah-wyle", "rel": "country", "value": "Stati Uniti", "label": "Noah Strausser Speer Wyle"}
+{"subject": "jana-novotna", "rel": "country", "value": "Repubblica Ceca", "label": "Jana Novotná"}
+{"subject": "avantika-actress", "rel": "country", "value": "Stati Uniti", "label": "Avantika Vandanapu"}
+{"subject": "sarah-jessica-parker", "rel": "country", "value": "Stati Uniti", "label": "Sarah Jessica Parker"}
+{"subject": "edgar-allan-poe", "rel": "country", "value": "Stati Uniti", "label": "Edgar Allan Poe, nato Edgar Poe,"}
+{"subject": "kevin-de-bruyne", "rel": "country", "value": "Belgio", "label": "Kevin De Bruyne"}
+{"subject": "joshua-zirkzee", "rel": "country", "value": "Paesi Bassi", "label": "Joshua Orobosa Zirkzee"}
+{"subject": "stephen-king", "rel": "country", "value": "Stati Uniti", "label": "Stephen Edwin King"}
+{"subject": "milly-alcock", "rel": "country", "value": "Australia", "label": "Amelia Alcock, detta Milly,"}
+{"subject": "glenda-jackson", "rel": "country", "value": "Regno Unito", "label": "Glenda May Jackson"}
+{"subject": "dev-patel", "rel": "country", "value": "Regno Unito", "label": "Dev Patel"}
+{"subject": "jamal-murray", "rel": "country", "value": "Canada", "label": "Jamal Murray"}
+{"subject": "bill-skarsgard", "rel": "country", "value": "Svezia", "label": "Bill Istvan Günther Skarsgård"}
+{"subject": "puka-nacua", "rel": "country", "value": "Stati Uniti", "label": "Makea Nacua, detto Puka,"}
+{"subject": "glynis-johns", "rel": "country", "value": "Regno Unito", "label": "Glynis Margaret Payne Johns"}
+{"subject": "zoe-kravitz", "rel": "country", "value": "Stati Uniti", "label": "Zoë Isabella Kravitz"}
+{"subject": "felicia-montealegre", "rel": "born", "value": "1922", "label": "Felicia Montealegre Bernstein"}
+{"subject": "felicia-montealegre", "rel": "died", "value": "1978", "label": "Felicia Montealegre Bernstein"}
+{"subject": "cormac-mccarthy", "rel": "country", "value": "Stati Uniti", "label": "Cormac McCarthy"}
+{"subject": "malala-yousafzai", "rel": "country", "value": "Pakistan", "label": "Malala Yousafzai"}
+{"subject": "roy-cohn", "rel": "country", "value": "Stati Uniti", "label": "Roy Marcus Cohn"}
+{"subject": "wayne-gretzky", "rel": "country", "value": "Canada", "label": "Wayne Douglas Gretzky"}
+{"subject": "amitabh-bachchan", "rel": "country", "value": "India", "label": "Amitabh Bachchan"}
+{"subject": "stephen-graham", "rel": "country", "value": "Regno Unito", "label": "Stephen Graham"}
+{"subject": "kourtney-kardashian", "rel": "country", "value": "Stati Uniti", "label": "Kourtney Mary Kardashian Barker"}
+{"subject": "keith-hunter-jesperson", "rel": "country", "value": "Stati Uniti", "label": "Keith Hunter Jesperson"}
+{"subject": "kate-mara", "rel": "country", "value": "Stati Uniti", "label": "Kate Rooney Mara"}
+{"subject": "anthony-bourdain", "rel": "country", "value": "Stati Uniti", "label": "Anthony Michael Bourdain"}
+{"subject": "chester-bennington", "rel": "country", "value": "Stati Uniti", "label": "Chester Charles Bennington"}
+{"subject": "benito-mussolini", "rel": "country", "value": "Italia", "label": "Benito Amilcare Andrea Mussolini"}
+{"subject": "anna-sawai", "rel": "country", "value": "Giappone", "label": "Anna Sawai"}
+{"subject": "hugo-ekitike", "rel": "country", "value": "Francia", "label": "Hugo Ekitike"}
+{"subject": "the-iron-sheik", "rel": "country", "value": "Iran", "label": "The Iron Sheik"}
+{"subject": "kelvin-sampson", "rel": "country", "value": "Stati Uniti", "label": "Kelvin Dale Sampson"}
+{"subject": "andre-silva-footballer-born-1995", "rel": "born", "value": "1995", "label": "André Miguel Valente da Silva"}
+{"subject": "andre-silva-footballer-born-1995", "rel": "country", "value": "Portogallo", "label": "André Miguel Valente da Silva"}
+{"subject": "jorge-ayala", "rel": "country", "value": "Colombia", "label": "Jorge Nicolás Ayala Silva"}
+{"subject": "dustin-poirier", "rel": "country", "value": "Stati Uniti", "label": "Dustin Glenn Poirier"}
+{"subject": "giancarlo-stanton", "rel": "country", "value": "Stati Uniti", "label": "Giancarlo Cruz Michael Stanton"}
+{"subject": "dricus-du-plessis", "rel": "born", "value": "1994", "label": "Dricus Du Plessis"}
+{"subject": "dricus-du-plessis", "rel": "country", "value": "Sudafrica", "label": "Dricus Du Plessis"}
+{"subject": "phil-spector", "rel": "country", "value": "Stati Uniti", "label": "Harvey Phillip Spector"}
+{"subject": "eliot-sumner", "rel": "country", "value": "Regno Unito", "label": "Eliot Paulina Sumner"}
+{"subject": "alec-musser", "rel": "born", "value": "1973", "label": "Alexander Barrett \"Alec\" Musser"}
+{"subject": "alec-musser", "rel": "died", "value": "2024", "label": "Alexander Barrett \"Alec\" Musser"}
+{"subject": "alec-musser", "rel": "country", "value": "Stati Uniti", "label": "Alexander Barrett \"Alec\" Musser"}
+{"subject": "richard-montanez", "rel": "country", "value": "Stati Uniti", "label": "Richard Montañez"}
+{"subject": "artur-beterbiev", "rel": "country", "value": "Russia", "label": "Artur Asil'bekovič Beterbiev"}
+{"subject": "it-s-always-sunny-in-philadelphia", "rel": "country", "value": "Stati Uniti", "label": "C'è sempre il sole a Philadelphia"}
+{"subject": "richard-armitage-actor", "rel": "born", "value": "1971", "label": "Richard Crispin Armitage"}
+{"subject": "richard-armitage-actor", "rel": "country", "value": "Regno Unito", "label": "Richard Crispin Armitage"}
+{"subject": "michelle-agyemang", "rel": "country", "value": "Regno Unito", "label": "Michelle Agyemang"}
+{"subject": "jacoby-jones", "rel": "country", "value": "Stati Uniti", "label": "Jacoby Jones"}
+{"subject": "slash-musician", "rel": "born", "value": "1965", "label": "Slash Musician"}
+{"subject": "slash-musician", "rel": "country", "value": "Regno Unito", "label": "Slash Musician"}
+{"subject": "salma-hayek", "rel": "country", "value": "Messico", "label": "Salma Valgarma Hayek Pinault"}
+{"subject": "mukund-varadarajan", "rel": "born", "value": "1983", "label": "Mukund Varadarajan, AC"}
+{"subject": "mukund-varadarajan", "rel": "died", "value": "2014", "label": "Mukund Varadarajan, AC"}
+{"subject": "munawar-faruqui", "rel": "born", "value": "1994", "label": "Munawar Faruqui"}
+{"subject": "munawar-faruqui", "rel": "country", "value": "India", "label": "Munawar Faruqui"}
+{"subject": "sasha-calle", "rel": "country", "value": "Stati Uniti", "label": "Sasha Calle"}
+{"subject": "mike-white-filmmaker", "rel": "born", "value": "1970", "label": "Michael Christopher White"}
+{"subject": "mike-white-filmmaker", "rel": "country", "value": "Stati Uniti", "label": "Michael Christopher White"}
+{"subject": "june-lockhart", "rel": "country", "value": "Stati Uniti", "label": "June Kathleen Lockhart"}
+{"subject": "matthew-stafford", "rel": "country", "value": "Stati Uniti", "label": "John Matthew Stafford"}
+{"subject": "claudia-doumit", "rel": "country", "value": "Australia", "label": "Claudia Doumit"}
+{"subject": "benjamin-franklin", "rel": "country", "value": "Stati Uniti", "label": "Benjamin Franklin"}
+{"subject": "marjorie-taylor-greene", "rel": "country", "value": "Stati Uniti", "label": "Marjorie Taylor Greene"}
+{"subject": "angel-reese", "rel": "country", "value": "Stati Uniti", "label": "Angel Reese"}
+{"subject": "asrani", "rel": "country", "value": "India", "label": "Govardhan Asrani, noto solo come Asrani,"}
+{"subject": "kim-porter", "rel": "born", "value": "1970", "label": "Kimberly Antwinette Porter"}
+{"subject": "kim-porter", "rel": "died", "value": "2018", "label": "Kimberly Antwinette Porter"}
+{"subject": "kim-porter", "rel": "country", "value": "Stati Uniti", "label": "Kimberly Antwinette Porter"}
+{"subject": "technoblade", "rel": "born", "value": "1999", "label": "Alexander, known online as Technoblade,"}
+{"subject": "technoblade", "rel": "died", "value": "2022", "label": "Alexander, known online as Technoblade,"}
+{"subject": "technoblade", "rel": "country", "value": "Stati Uniti", "label": "Alexander, known online as Technoblade,"}
+{"subject": "celia-imrie", "rel": "country", "value": "Regno Unito", "label": "Celia Diana Savile Imrie"}
+{"subject": "pepe-footballer-born-february-1983", "rel": "born", "value": "1983", "label": "Pepe Footballer Born February 1983"}
+{"subject": "leslie-bibb", "rel": "country", "value": "Stati Uniti", "label": "Leslie Louise Bibb"}
+{"subject": "luke-perry", "rel": "country", "value": "Stati Uniti", "label": "Coy Luther \"Luke\" Perry III"}
+{"subject": "haley-joel-osment", "rel": "country", "value": "Stati Uniti", "label": "Haley Joel Osment"}
+{"subject": "dikembe-mutombo", "rel": "country", "value": "Repubblica Democratica del Congo", "label": "Dikembe Mutombo"}
+{"subject": "jon-jones", "rel": "country", "value": "Stati Uniti", "label": "Jonathan Dwight \"Jon\" Jones"}
+{"subject": "bill-ackman", "rel": "country", "value": "Stati Uniti", "label": "William Albert Ackman"}
+{"subject": "sha-carri-richardson", "rel": "country", "value": "Stati Uniti", "label": "Sha'Carri Richardson"}
+{"subject": "kim-ji-won", "rel": "born", "value": "1992", "label": "Kim Ji-won"}
+{"subject": "kim-ji-won", "rel": "country", "value": "Corea del Sud", "label": "Kim Ji-won"}
+{"subject": "dmitry-bivol", "rel": "country", "value": "Russia", "label": "Dmitrij Jur'evič Bivol"}
+{"subject": "lena-dunham", "rel": "country", "value": "Stati Uniti", "label": "Lena Dunham"}
+{"subject": "adeel-akhtar", "rel": "country", "value": "Regno Unito", "label": "Adeel Akhtar"}
+{"subject": "minouche-shafik", "rel": "born", "value": "1962", "label": "Minouche Shafik"}
+{"subject": "minouche-shafik", "rel": "country", "value": "Regno Unito", "label": "Minouche Shafik"}
+{"subject": "drake-bell", "rel": "country", "value": "Stati Uniti", "label": "Jared Drake Bell"}
+{"subject": "jonathan-bailey", "rel": "country", "value": "Regno Unito", "label": "Jonathan Stuart Bailey"}
+{"subject": "robert-kardashian", "rel": "country", "value": "Stati Uniti", "label": "Robert George Kardashian"}
+{"subject": "tatum-o-neal", "rel": "country", "value": "Stati Uniti", "label": "Tatum Beatrice O'Neal"}
+{"subject": "alejandro-kirk", "rel": "born", "value": "1998", "label": "Alejandro Kirk"}
+{"subject": "alejandro-kirk", "rel": "country", "value": "Messico", "label": "Alejandro Kirk"}
+{"subject": "rubby-perez", "rel": "born", "value": "1956", "label": "Rubby Perez"}
+{"subject": "rubby-perez", "rel": "died", "value": "2025", "label": "Rubby Perez"}
+{"subject": "rubby-perez", "rel": "country", "value": "Dominica", "label": "Rubby Perez"}
+{"subject": "demeco-ryans", "rel": "country", "value": "Stati Uniti", "label": "DeMeco Ryans"}
+{"subject": "bari-weiss", "rel": "born", "value": "1984", "label": "Bari Weiss"}
+{"subject": "bari-weiss", "rel": "country", "value": "Stati Uniti", "label": "Bari Weiss"}
+{"subject": "alvaro-morata", "rel": "country", "value": "Spagna", "label": "Álvaro Borja Morata Martín"}
+{"subject": "josh-duhamel", "rel": "country", "value": "Stati Uniti", "label": "Joshua David Duhamel"}
+{"subject": "cyrus-mistry", "rel": "born", "value": "1968", "label": "Cyrus Pallonji Mistry"}
+{"subject": "cyrus-mistry", "rel": "died", "value": "2022", "label": "Cyrus Pallonji Mistry"}
+{"subject": "cyrus-mistry", "rel": "country", "value": "Irlanda", "label": "Cyrus Pallonji Mistry"}
+{"subject": "james-stewart", "rel": "country", "value": "Stati Uniti", "label": "James Maitland Stewart"}

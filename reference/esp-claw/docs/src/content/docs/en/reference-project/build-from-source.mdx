@@ -1,0 +1,90 @@
+---
+title: Build from source and flash
+description: Build and flash ESP-Claw from source.
+---
+
+import { Steps, Aside, Badge } from '@astrojs/starlight/components';
+import LinkToSource from '@/components/LinkToSource.astro';
+
+
+<Aside>
+    This section is for developers.
+    - To try ESP-Claw quickly, see [Get started](@lang/tutorial/get-started).
+    - To understand architecture and boundaries, start with [Project architecture](@lang/reference-project/), then read [Core](@lang/reference-core/) and [Capabilities](@lang/reference-cap/) as needed.
+</Aside>
+
+## Steps
+
+<Steps>
+1. **Prepare the ESP-IDF environment**
+
+   {/* Link targets v6.0 docs on purpose: the v6.0 install guide is more detailed than v5.x; steps are backward compatible; the IDF version installed is v5.5.4 */}
+   Follow the [ESP-IDF get-started guide](https://docs.espressif.com/projects/esp-idf/en/v6.0/esp32s3/get-started/index.html#get-started-set-up-tools), install ESP-IDF v5.5.4, and export the ESP-IDF environment.
+
+   After activating the IDF environment, install the ESP Board Manager package:
+   ```bash
+   pip install esp-bmgr-assist
+   ```
+
+   <Aside title="Need to adapt a new development board?" type="tip">
+    ESP-Claw uses ESP Board Manager to support multiple development boards.
+
+    To add other boards, see the [ESP Board Manager component](https://github.com/espressif/esp-gmf/blob/main/packages/esp_board_manager/docs/how_to_customize_board.md),
+    and put the board adaptation files in <LinkToSource relativePath="application/edge_agent/boards/" />.
+
+    Welcome to submit the board adaptation code to the ESP-Claw repository via Pull Request.
+   </Aside>
+
+2. **Get the ESP-Claw source**
+
+   ```bash
+   git clone https://github.com/espressif/esp-claw.git
+   cd esp-claw/application/edge_agent
+   ```
+
+3. **Select a development board**
+
+   ```bash
+   idf.py bmgr -c ./boards -b <board_name>
+   # e.g.: idf.py bmgr -c ./boards -b esp32_S3_DevKitC_1
+   ```
+
+   <Aside type="tip" title="Supported boards">
+      You can list supported boards with:
+      ```bash
+      idf.py bmgr -c ./boards -l
+      ```
+
+      Or check <LinkToSource relativePath="application/edge_agent/boards/" />.
+   </Aside>
+
+   <Aside type="note" title="Why set-target is not needed">
+      ESP Board Manager automatically selects the chip target based on the board, so `idf.py set-target` is not required.
+   </Aside>
+
+4. **Adjust menuconfig settings** <Badge variant="tip" text="Optional" />
+
+   ```bash
+   idf.py menuconfig
+   ```
+   Suggested changes:
+   - <kbd>(Top)</kbd> → <kbd>App Claw Config</kbd>
+     - Apply [Configuration](@lang/reference-project/configuration#basic-config) for baseline settings.
+   - <kbd>(Top)</kbd> → <kbd>Component config</kbd> → <kbd>ESP-Claw Core</kbd> → <kbd>Agent stage notification verbosity</kbd>
+     - Simple by default;
+     - If you want Event Router to receive `agent_stage` events (for example, forwarding tool-call progress to IM via `router_rules.json`), choose Verbose.
+     - See [Dataflow and automation](@lang/reference-project/dataflow-and-automation#agent_stage-event-and-execution-progress-notifications).
+   - <kbd>(Top)</kbd> → <kbd>Component config</kbd> → <kbd>ESP System Settings</kbd>
+     - Set `Channel for console output` to match your board hardware.
+
+   <Aside type="tip">
+     After the device is running, settings can also persist via NVS, so runtime changes do not require a rebuild. See [Configuration](@lang/reference-project/configuration).
+   </Aside>
+
+5. **Build and flash**
+
+   ```bash
+   idf.py build
+   idf.py flash monitor
+   ```
+</Steps>

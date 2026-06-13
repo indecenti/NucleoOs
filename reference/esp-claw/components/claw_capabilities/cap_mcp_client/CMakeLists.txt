@@ -1,0 +1,18 @@
+idf_component_register(
+    SRCS
+        "src/cap_mcp_client.c"
+        "src/cap_mcp_client_core.c"
+        "src/cap_mcp_discover_core.c"
+        "src/cmd_cap_mcp_client.c"
+    INCLUDE_DIRS
+        "include"
+        "src"
+    REQUIRES
+        claw_cap
+        cap_mcp_server
+        esp_http_client
+        http_reuse
+        esp_netif
+        mdns
+        console
+)

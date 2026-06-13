@@ -1,0 +1,4 @@
+start Tue Jun  2 21:38:43     2026
+=== esp32 (qwen2.5-coder:14b) ===
+  + esp.esp32: ask 14/13 -> 14/14  detail=y  (98s)
+  + esp.esp32s3: ask 13/12 -> 14/14  detail=y  (92s)

@@ -1,0 +1,6 @@
+=== esp32 (qwen2.5-coder:14b) ===
+  ! esp.esp32: LLM error (timed out)
+  ! esp.esp32s3: LLM error (Remote end closed connection without response)
+  ! esp.microcontroller: LLM error (<urlopen error [WinError 10061] Impossibile stabilire la connessione. Rifiuto persistente del computer di destinazione>)
+  + esp.gpio: ask 13/12 -> 14/14  detail=y  (158s)
+=== electronics (qwen2.5-coder:14b) ===

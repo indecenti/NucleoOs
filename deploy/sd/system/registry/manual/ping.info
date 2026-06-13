@@ -1,0 +1,16 @@
+{
+  "id": "ping",
+  "category": "system",
+  "it": {
+    "title": "ping - Latenza e connettività di rete",
+    "synopsis": "ping [host]",
+    "description": "Invia richieste per testare la connettività di rete e la latenza.",
+    "details": "NOME\n  ping - Testa latenza di rete.\n\nSINTASSI\n  ping [host]\n\nDESCRIZIONE\n  Misura il tempo di andata e ritorno (RTT) inviando 4 pacchetti HTTP HEAD consecutivi.\n\nOPZIONI\n  [host]\n    L'host o indirizzo IP da testare (es. 'google.com'). Se omesso, esegue il ping locale sul Cardputer.\n\nARCHITETTURA E BASSO LIVELLO\n  Invia 4 richieste HEAD asincrone. Usa 'performance.now()' per cronometrare accuratamente la latenza di risposta a livello di socket TCP. Se inviato al dispositivo reale, fa riferimento a web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo. Almeno una risposta ricevuta.\n  1\n    Tutti i pacchetti persi o errore di risoluzione host.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  curl(1), wget(1), web_api(7)\n\nESEMPI AVANZATI\n  ping             # Ping locale\n  ping google.com  # Ping verso google.com"
+  },
+  "en": {
+    "title": "ping - Network latency diagnostics",
+    "synopsis": "ping [host]",
+    "description": "Send network echo requests to test host connectivity and response times.",
+    "details": "NAME\n  ping - Test network latency.\n\nSYNOPSIS\n  ping [host]\n\nDESCRIPTION\n  Measures round-trip time (RTT) latency by dispatching 4 HTTP HEAD requests sequentially.\n\nOPTIONS\n  [host]\n    The hostname or IP address to target (e.g. 'google.com'). Defaults to the local Cardputer status route.\n\nSYSTEM ARCHITECTURE\n  Issues 4 asynchronous HEAD requests. Calculates latency using 'performance.now()' time deltas at the TCP socket layer. Relies on web_api(7) on-device.\n\nEXIT CODES\n  0\n    Success. At least one reply received.\n  1\n    100% packet loss or name resolution failed.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  curl(1), wget(1), web_api(7)\n\nADVANCED EXAMPLES\n  ping             # Ping local device\n  ping google.com  # Ping google.com"
+  }
+}

@@ -1,0 +1,79 @@
+---
+title: 在线烧录
+description: 使用在线烧录工具为 ESP-Claw 烧录固件。
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+import { LinkButton } from 'starlight-theme-nova/components'
+import LinkToSource from '@/components/LinkToSource.astro';
+
+## 准备工作
+
+进行到这里，你应当已经组装好 ESP-Claw 面包板，或已经准备好 ESP-Claw 适配的其他硬件。
+你可以在 <LinkToSource relativePath="application/edge_agent/boards/" /> 中查看 ESP-Claw 适配的开发板列表。
+ESP-Claw 需要至少 8 MB Flash 和 8 MB PSRAM，目前支持 ESP32-S3、ESP32-P4。
+
+在烧录之前，你还需要准备一台电脑，并安装 Chrome 或 Edge 浏览器。在线烧录暂时无法使用 Firefox 浏览器完成。
+
+<Aside type="tip">
+    **进阶操作**: [从源码编译与烧录](@lang/reference-project/build-from-source)。
+</Aside>
+
+## 在线烧录
+
+<Steps>
+
+1. **使用数据线连接开发板**
+
+   使用数据线将开发板连接到 PC。如果你使用面包板形态的 ESP-Claw，请使用标记有 UART 的 USB 口连接。
+
+2. **启动在线烧录工具并连接串口**
+
+   <LinkCard title="在线烧录" href="@lang/flash" description="打开在线烧录工具，为 ESP32 烧录 ESP-Claw" />
+
+   打开在线烧录工具，点击「连接」，连接到开发板。
+
+3. **配置参数**
+
+   - 选择你的开发板对应的固件。
+   - 配置 Wi-Fi SSID 及密码，必填。
+   - 配置 LLM：可选 GPT (OpenAI), Qwen (阿里云百炼), Claude (Anthropic), DeepSeek (DeepSeek API)，请按提示生成 API Key 并填入。
+      <Aside type="note" title="请选择推理能力较强的模型">
+         ESP-Claw 的自编程、复杂工具组合等功能依赖强推理模型的能力。
+         推荐选用 GPT-5.4、Qwen3.6-plus、Claude4.6-sonnet、DeepSeek v4 Pro 或类似性能的模型以取得最佳体验。
+      </Aside>
+   - 配置需要连接到的聊天软件：目前支持 Telegram、QQ Bot（OpenClaw）、飞书与微信 ClawBot 等，可同时填写多个。
+     | 聊天软件 | 配置项 | 帮助文档 |
+     | --- | --- | --- |
+     | Telegram | Bot Token | [Telegram Bot 文档](https://core.telegram.org/bots#6-create-a-token) |
+     | QQ Bot | ID 和 Secret | [QQ Bot 网站](https://q.qq.com/qqbot/openclaw/) |
+     | 飞书 | App ID 和 Secret | [飞书文档](https://www.feishu.cn/content/article/7602519239445974205) |
+     | 微信 ClawBot | 微信扫码自动配置 | N/A |
+   - 配置搜索引擎:
+      <Aside type="tip">
+         配置搜索引擎后，ESP-Claw 才能通过网络检索获取最新信息。查询天气也依赖搜索引擎支持。
+
+         推荐配置 Tavily，有一定的免费额度。
+      </Aside>
+      打开 [Tavily Dashboard](https://app.tavily.com/)，注册账号并登录，复制一个 API Key 并填入网页烧录工具的「Tavily」输入框。
+   - 配置高级设置（可选），见 [配置说明](@lang/reference-project/configuration)。
+
+4. **烧录**
+
+   点击「烧录」按钮，开始烧录。
+
+5. **开始体验！**
+
+   烧录完成后，设备会自动重启，即可开始体验。
+
+   <Aside type="note">
+      如输入了错误的 Wi-Fi SSID 或密码，ESP-Claw 可能无法联网。此时，可以连接 ESP-Claw 提供的 SoftAP 网络，检查并修改配置。[➡️Web 配置](@lang/tutorial/web-config)
+   </Aside>
+
+</Steps>
+
+## 下一步……？
+
+<LinkButton href="@lang/tutorial/first-interactions">上手体验</LinkButton>
+<LinkButton href="@lang/reference-project/configuration" variant="secondary">配置说明</LinkButton>

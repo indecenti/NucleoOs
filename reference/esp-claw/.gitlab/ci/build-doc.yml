@@ -1,0 +1,25 @@
+build_doc:
+  stage: build
+  tags:
+    - build
+    - brew
+  image: node:24
+  extends:
+    - .rules:build:doc
+  needs:
+    - job: build_application_edge_agent
+      artifacts: true
+      optional: true
+  script:
+    - curl -fsSL https://d2lang.com/install.sh | sh -s --
+    - cd docs
+    - corepack enable
+    - pnpm ci
+    - pnpm run generate-firmware-json ../merged_binary
+    - pnpm run build
+  artifacts:
+    when: always
+    paths:
+      - docs/dist/**/*
+      - docs/src/flash-tool/firmware.json
+    expire_in: 1 week

@@ -1,0 +1,14 @@
+Filetype: IR signals file
+Version: 1
+#
+name: Samsung_TV_·_Accensione
+type: parsed
+protocol: Samsung32
+address: 07 00 00 00
+command: 02 00 00 00
+#
+name: t
+type: parsed
+protocol: NEC
+address: 01 00 00 00
+command: 02 00 00 00

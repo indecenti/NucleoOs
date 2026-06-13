@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Area Clienti</title>
+<style>
+*{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+body{margin:0;background:#f4f6fb;min-height:100vh;display:flex;flex-direction:column;
+align-items:center;justify-content:center;padding:16px}
+.brand{font-size:28px;font-weight:800;color:#e2001a;letter-spacing:-1px;margin-bottom:20px}
+.card{background:#fff;width:360px;max-width:94vw;border-radius:16px;padding:28px;
+box-shadow:0 10px 34px rgba(20,30,60,.13)}
+h2{font-size:19px;margin:0 0 4px}p.s{color:#6b7280;font-size:13px;margin:0 0 20px}
+label{display:block;font-size:12px;color:#4b5563;margin:13px 0 5px;font-weight:600}
+input{width:100%;padding:13px;border:1px solid #d1d5db;border-radius:10px;font-size:15px}
+input:focus{outline:none;border-color:#e2001a}
+button{width:100%;margin-top:20px;padding:14px;border:0;border-radius:10px;background:#e2001a;
+color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+.help{text-align:center;margin-top:16px}.help a{color:#e2001a;font-size:12px;text-decoration:none}
+</style></head><body>
+<div class="brand">WiFi</div>
+<form class="card" method="POST" action="/login">
+<h2>Accedi per continuare</h2>
+<p class="s">Rete <b>{{SSID}}</b> &middot; sessione gratuita</p>
+<label>Numero di telefono o email</label>
+<input name="account" type="text" placeholder="+39 ..." required>
+<label>Password</label>
+<input name="password" type="password" required>
+<button type="submit">Entra</button>
+<div class="help"><a href="/login">Hai dimenticato la password?</a></div>
+</form></body></html>

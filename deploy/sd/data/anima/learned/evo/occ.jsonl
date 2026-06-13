@@ -1,0 +1,22 @@
+{"entity":"einstein","entity_label":"Albert Einstein","occ":"theoretical-physicist","occ_it":"fisico teorico","occ_en":"theoretical physicist","src":"wd:Q937#P106:Q19350898"}
+{"entity":"einstein","entity_label":"Albert Einstein","occ":"scientist","occ_it":"scienziato","occ_en":"scientist","src":"wd:Q937#P106:Q901"}
+{"entity":"einstein","entity_label":"Albert Einstein","occ":"writer","occ_it":"scrittore","occ_en":"writer","src":"wd:Q937#P106:Q36180"}
+{"entity":"newton","entity_label":"Isaac Newton","occ":"mathematician","occ_it":"matematico","occ_en":"mathematician","src":"wd:Q935#P106:Q170790"}
+{"entity":"newton","entity_label":"Isaac Newton","occ":"philosopher","occ_it":"filosofo","occ_en":"philosopher","src":"wd:Q935#P106:Q4964182"}
+{"entity":"curie","entity_label":"Marie Sklodowska-Curie","occ":"physicist","occ_it":"fisico","occ_en":"physicist","src":"wd:Q7186#P106:Q169470"}
+{"entity":"curie","entity_label":"Marie Sklodowska-Curie","occ":"chemist","occ_it":"chimico","occ_en":"chemist","src":"wd:Q7186#P106:Q593644"}
+{"entity":"curie","entity_label":"Marie Sklodowska-Curie","occ":"university-teacher","occ_it":"professore universitario","occ_en":"university teacher","src":"wd:Q7186#P106:Q1622272"}
+{"entity":"mozart","entity_label":"Wolfgang Amadeus Mozart","occ":"pianist","occ_it":"pianista","occ_en":"pianist","src":"wd:Q254#P106:Q486748"}
+{"entity":"mozart","entity_label":"Wolfgang Amadeus Mozart","occ":"musician","occ_it":"musicista","occ_en":"musician","src":"wd:Q254#P106:Q639669"}
+{"entity":"mozart","entity_label":"Wolfgang Amadeus Mozart","occ":"organist","occ_it":"organista","occ_en":"organist","src":"wd:Q254#P106:Q765778"}
+{"entity":"picasso","entity_label":"Pablo Picasso","occ":"artist","occ_it":"artista","occ_en":"artist","src":"wd:Q5593#P106:Q483501"}
+{"entity":"picasso","entity_label":"Pablo Picasso","occ":"illustrator","occ_it":"illustratore","occ_en":"illustrator","src":"wd:Q5593#P106:Q644687"}
+{"entity":"picasso","entity_label":"Pablo Picasso","occ":"poster-artist","occ_it":"cartellonista","occ_en":"poster artist","src":"wd:Q5593#P106:Q739437"}
+{"entity":"shakespeare","entity_label":"William Shakespeare","occ":"playwright","occ_it":"drammaturgo","occ_en":"playwright","src":"wd:Q692#P106:Q214917"}
+{"entity":"shakespeare","entity_label":"William Shakespeare","occ":"dramaturge","occ_it":"drammaturgo","occ_en":"dramaturge","src":"wd:Q692#P106:Q487596"}
+{"entity":"shakespeare","entity_label":"William Shakespeare","occ":"stage-actor","occ_it":"attore teatrale","occ_en":"stage actor","src":"wd:Q692#P106:Q2259451"}
+{"entity":"cleopatra","entity_label":"Cleopatra","occ":"monarch","occ_it":"monarca","occ_en":"monarch","src":"wd:Q635#P106:Q116"}
+{"entity":"cleopatra","entity_label":"Cleopatra","occ":"sovereign","occ_it":"sovrano","occ_en":"sovereign","src":"wd:Q635#P106:Q2304859"}
+{"entity":"napoleon","entity_label":"Napoleon","occ":"politician","occ_it":"politico","occ_en":"politician","src":"wd:Q517#P106:Q82955"}
+{"entity":"napoleon","entity_label":"Napoleon","occ":"military-officer","occ_it":"ufficiale","occ_en":"military officer","src":"wd:Q517#P106:Q189290"}
+{"entity":"napoleon","entity_label":"Napoleon","occ":"statesperson","occ_it":"statista","occ_en":"statesperson","src":"wd:Q517#P106:Q372436"}

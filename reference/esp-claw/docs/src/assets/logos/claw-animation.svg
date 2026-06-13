@@ -1,0 +1,154 @@
+<svg viewBox="283 318 1244 1244" xmlns="http://www.w3.org/2000/svg">
+  <!-- Raw viewBox: 0 0 1866.87 1866.87 -->
+  <defs>
+    <linearGradient id="g50" x1="2330.33" y1="571.94" x2="2194.77" y2="692.43" gradientTransform="matrix(0.91047928,0.13201321,-0.13201321,0.91047928,-613.31,-319.75)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e6002c"/>
+      <stop offset="1" stop-color="#e4052a"/>
+    </linearGradient>
+
+    <linearGradient id="g50b" x1="2404.67" y1="699.28" x2="2265.26" y2="823.2" gradientTransform="matrix(0.91047928,0.13201321,-0.12914336,0.89068625,-617.12,-339.57)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e6002c"/>
+      <stop offset="1" stop-color="#e4052a"/>
+    </linearGradient>
+
+    <linearGradient id="g28" x1="721.53" y1="647.68" x2="865.08" y2="647.68" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fd2b27"/>
+      <stop offset="1" stop-color="#fbb03b"/>
+    </linearGradient>
+
+    <linearGradient id="g28b" x1="864.72" y1="782.29" x2="1001.4" y2="468.66" href="#g28"/>
+
+    <filter id="ds" x="631.54" y="666.65" width="548.34" height="548.34" filterUnits="userSpaceOnUse">
+      <feOffset dx="-4" dy="1"/>
+      <feGaussianBlur result="b" stdDeviation="5"/>
+      <feFlood flood-color="#ee192c" flood-opacity=".75"/>
+      <feComposite in2="b" operator="in" result="s"/>
+      <feComposite in="SourceGraphic" in2="s"/>
+    </filter>
+  </defs>
+
+  <!-- ripples -->
+  <g fill="none">
+    <circle cx="905" cy="940" r="270" stroke="rgba(255,64,46,.55)" stroke-width="4">
+      <animate attributeName="r" values="270;620" dur="3s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".9;.7;.3;0" keyTimes="0;.3;.7;1" dur="3s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-width" values="4;1" dur="3s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="905" cy="940" r="270" stroke="rgba(255,255,255,.4)" stroke-width="4">
+      <animate attributeName="r" values="270;620" dur="3s" begin=".7s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".9;.7;.3;0" keyTimes="0;.3;.7;1" dur="3s" begin=".7s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-width" values="4;1" dur="3s" begin=".7s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="905" cy="940" r="270" stroke="rgba(255,64,46,.35)" stroke-width="4">
+      <animate attributeName="r" values="270;620" dur="3s" begin="1.4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".9;.7;.3;0" keyTimes="0;.3;.7;1" dur="3s" begin="1.4s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-width" values="4;1" dur="3s" begin="1.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="905" cy="940" r="270" stroke="rgba(255,255,255,.25)" stroke-width="4">
+      <animate attributeName="r" values="270;620" dur="3s" begin="2.1s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".9;.7;.3;0" keyTimes="0;.3;.7;1" dur="3s" begin="2.1s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-width" values="4;1" dur="3s" begin="2.1s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="905" cy="940" r="270" stroke="rgba(255,64,46,.18)" stroke-width="4">
+      <animate attributeName="r" values="270;620" dur="3s" begin="2.7s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".9;.7;.3;0" keyTimes="0;.3;.7;1" dur="3s" begin="2.7s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-width" values="4;1" dur="3s" begin="2.7s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- tail tip -->
+  <g>
+    <animateTransform attributeName="transform" type="rotate"
+      values="0 1245 568;4 1245 568;-3 1245 568;0 1245 568"
+      keyTimes="0;.4;.7;1" dur="2.4s" repeatCount="indefinite"/>
+    <path d="m 1245.56,568.13 c 56.82,56.72 102.41,116.25 127.32,182.62 2.75,7.33 8.59,13 16.42,12.61 l 80.11,-4 c 39.8,-1.99 51.06,-40.98 34.84,-74.92 -38.02,-79.52 -101.87,-164.42 -163.39,-228.28 -16.21,-16.82 -39.1,-13.98 -50.79,6.25 l -48.97,84.69 c -3.98,6.89 -1.17,15.42 4.46,21.04 z" fill="#ff402e" stroke="#511e1e" stroke-width="6" stroke-miterlimit="10"/>
+    <polyline points="1404.78 534.78 1390.14 515.66 1282.31 601 1296.2 617.76" fill="url(#g50)"/>
+    <polyline points="1470.87 629.94 1458.91 609.96 1347.21 688.83 1357.62 707.66" fill="url(#g50b)"/>
+  </g>
+
+  <!-- tail head -->
+  <path d="m 1185.26,911.66 c -3.15,-97.5 -76.49,-186.67 -148.46,-219.06 -3.22,-1.45 -3.37,-5.95 -0.25,-7.61 l 72.92,-38.78 c 12.5,-8.18 29.41,-6.27 40.77,4.75 45.77,44.4 84.83,95.14 113.85,158.5 6.32,13.81 3.05,29.59 -7.6,38.85 -2.88,2.51 -5.56,5.24 -8.2,8 l -55.73,58.15 c -2.6,2.72 -7.17,0.95 -7.3,-2.81 z"
+    fill="#fd2b27" stroke="#511e1e" stroke-width="3" stroke-miterlimit="10">
+    <animateTransform attributeName="transform" type="rotate"
+      values="0 1110 860;3 1110 860;-2.5 1110 860;0 1110 860"
+      keyTimes="0;.4;.7;1" dur="2.4s" begin=".18s" repeatCount="indefinite"/>
+  </path>
+
+  <!-- tail mid -->
+  <path d="m 1278.43,811.29 c -14.72,-44.68 -85.11,-138.75 -127.13,-174.73 -6.26,-5.36 -4.92,-15.39 2.56,-18.84 l 56.8,-26.24 c 11.31,-7.4 26.6,-5.67 36.88,4.3 41.4,40.16 76.74,86.06 102.99,143.38 6.1,13.33 2.32,28.68 -8.89,36.74 l -44.96,40.28 c -6.07,5.43 -15.69,2.84 -18.24,-4.89 z"
+    fill="#fd2b27" stroke="#511e1e" stroke-width="3" stroke-miterlimit="10">
+    <animateTransform attributeName="transform" type="rotate"
+      values="0 1200 780;3.5 1200 780;-3 1200 780;0 1200 780"
+      keyTimes="0;.4;.7;1" dur="2.4s" begin=".1s" repeatCount="indefinite"/>
+  </path>
+
+  <!-- far pincer -->
+  <path d="m 528.33,936.91 -129.74,62.52 c -15.05,7.25 -32.88,-1.06 -37.23,-17.19 -21.19,-78.63 16.06,-164.68 91.85,-201.21 85.51,-41.21 189.79,-4.76 231,80.76 41.21,85.51 4.76,189.79 -80.76,231 -60.32,29.07 -131.45,20.2 -182.64,-20.31 -12.98,-10.28 -13.37,-29.86 -0.91,-40.76 l 108.42,-94.8 z"
+    fill="#fd2b27" stroke="#511e1e" stroke-width="6" stroke-linejoin="round">
+    <animateTransform attributeName="transform" type="rotate"
+      values="0 600 930;3 600 930;-2.5 600 930;0 600 930"
+      keyTimes="0;.4;.75;1" dur="2.8s" begin=".45s" repeatCount="indefinite"/>
+  </path>
+
+  <!-- feet -->
+  <g>
+    <animateTransform attributeName="transform" type="translate"
+      values="0 0;0 -6;0 4;0 0"
+      keyTimes="0;.4;.7;1" dur="2.4s" begin=".35s" repeatCount="indefinite"/>
+    <g>
+      <animateTransform attributeName="transform" type="rotate"
+        values="0 1180 1080;2.5 1180 1080;-2 1180 1080;0 1180 1080"
+        keyTimes="0;.4;.7;1" dur="2.4s" begin=".35s" repeatCount="indefinite"/>
+      <circle cx="1145.28" cy="1143.86" r="27.29" fill="#fd2b27" stroke="#511e1e" stroke-width="6"/>
+      <circle cx="1192.56" cy="1086.3" r="27.29" fill="#fd2b27" stroke="#511e1e" stroke-width="6"/>
+      <circle cx="1213.04" cy="1015.82" r="27.29" fill="#fd2b27" stroke="#511e1e" stroke-width="6"/>
+    </g>
+  </g>
+
+  <!-- body -->
+  <g>
+    <animateTransform attributeName="transform" type="scale"
+      values="1 1;1.012 1.012;1 1"
+      keyTimes="0;.5;1" dur="2.4s" repeatCount="indefinite"
+      additive="sum"/>
+    <animateTransform attributeName="transform" type="translate"
+      values="0 0;-10.86 -11.28;0 0"
+      keyTimes="0;.5;1" dur="2.4s" repeatCount="indefinite"
+      additive="sum"/>
+    <g filter="url(#ds)">
+      <circle cx="905.71" cy="940.82" r="271.17" fill="#ff402e" stroke="#511e1e" stroke-width="6" stroke-miterlimit="10"/>
+    </g>
+
+    <!-- antenna -->
+    <g>
+      <animateTransform attributeName="transform" type="rotate"
+        values="0 840 760;2 840 760;-1.5 840 760;0 840 760"
+        keyTimes="0;.35;.65;1" dur="2.4s" begin=".05s" repeatCount="indefinite"/>
+      <path d="m 768.53,763.38 c -4.29,0 -8.54,-1.83 -11.51,-5.37 -17.08,-20.4 -28.12,-41.27 -32.83,-62.02 -4.31,-18.99 -3.38,-37.97 2.75,-56.42 11.43,-34.39 38.76,-60.09 59.68,-75.6 22.63,-16.77 47.31,-28.59 60.01,-31.59 8.06,-1.91 16.14,3.08 18.05,11.15 1.91,8.06 -3.08,16.14 -11.15,18.05 -18.07,4.27 -81.92,38.7 -98.12,87.45 -9.52,28.64 -1.24,58.83 24.62,89.72 5.32,6.35 4.48,15.81 -1.88,21.13 -2.81,2.35 -6.22,3.5 -9.62,3.5 z"
+        fill="url(#g28)" stroke="#511e1e" stroke-width="6" stroke-miterlimit="10"/>
+      <path d="m 916.22,766.69 c -4.1,0 -8.19,-1.67 -11.15,-4.96 -31.62,-35.11 -44.56,-69.74 -38.44,-102.95 11.36,-61.63 85.44,-99.56 125.24,-119.94 l 3.62,-1.86 c 7.37,-3.78 16.41,-0.88 20.19,6.49 3.78,7.37 0.88,16.41 -6.49,20.19 l -3.65,1.87 c -35.2,18.02 -100.73,51.57 -109.41,98.67 -4.34,23.56 6.16,49.61 31.23,77.43 5.54,6.16 5.05,15.64 -1.11,21.18 -2.87,2.58 -6.46,3.85 -10.03,3.85 z"
+        fill="url(#g28b)" stroke="#511e1e" stroke-width="6" stroke-miterlimit="10"/>
+    </g>
+
+    <!-- eyes -->
+    <g>
+      <animateTransform attributeName="transform" type="translate"
+        values="0 0;0 -5;0 0"
+        keyTimes="0;.5;1" dur="2.4s" begin=".08s" repeatCount="indefinite"/>
+      <ellipse cx="729.97" cy="774.56" rx="61.13" ry="88.09" fill="#fff"/>
+      <ellipse cx="729.26" cy="774.56" rx="48.98" ry="73.15" fill="#1b1b1b"/>
+      <circle cx="691.65" cy="741.24" r="16.03" fill="#f9fbff"/>
+      <ellipse cx="889.33" cy="774.56" rx="61.13" ry="88.09" fill="#fff"/>
+      <ellipse cx="889.33" cy="774.56" rx="48.98" ry="73.15" fill="#1b1b1b"/>
+      <circle cx="853.41" cy="746.68" r="16.03" fill="#f9fbff"/>
+    </g>
+  </g>
+
+  <!-- near pincer -->
+  <path d="m 885.64,1248.72 -134.17,52.33 c -15.57,6.07 -32.7,-3.59 -35.79,-20.01 -15.06,-80.03 28.71,-162.95 107.09,-193.52 88.43,-34.49 189.59,9.89 224.08,98.33 34.49,88.43 -9.89,189.59 -98.33,224.08 -62.38,24.33 -132.62,10.01 -180.52,-34.34 -12.15,-11.25 -11.03,-30.81 2.24,-40.71 l 115.41,-86.16 z"
+    fill="#fd2b27" stroke="#511e1e" stroke-width="6" stroke-linejoin="round">
+    <animateTransform attributeName="transform" type="rotate"
+      values="0 870 1180;-3 870 1180;2 870 1180;0 870 1180"
+      keyTimes="0;.4;.75;1" dur="2.8s" begin=".55s" repeatCount="indefinite"/>
+  </path>
+</svg>

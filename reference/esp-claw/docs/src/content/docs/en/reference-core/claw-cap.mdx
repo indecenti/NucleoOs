@@ -1,0 +1,63 @@
+---
+title: Capability Runtime
+description: Capability registry, grouping, lifecycle, and LLM visibility.
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+
+Header: <LinkToSource relativePath="components/claw_modules/claw_cap/include/claw_cap.h" />
+
+## Responsibilities
+
+`claw_cap` is the **capability runtime**: anything “callable as a capability”—whether exposed to the model as a tool, to the console as `cap call`, or invoked from the Event Router via `call_cap`—is registered with metadata and executed through one entry point.
+
+## Capability descriptors
+
+`claw_cap_descriptor_t` describes a single capability. Key fields:
+
+- `id` / `name`: identifiers and display names (call path depends on implementation).
+- `family`: logical grouping (shown in listings).
+- `description`, `input_schema_json`: human- and model-facing docs and parameter schema.
+- `kind`: e.g. `CALLABLE`, `EVENT_SOURCE`, `HYBRID` for call-only vs event-emitting vs both.
+- `cap_flags`: e.g. `CLAW_CAP_FLAG_CALLABLE_BY_LLM`, lifecycle support, etc.
+- `init` / `start` / `stop`: optional lifecycle hooks.
+- `execute`: receives **JSON input string** and **call context** `claw_cap_call_context_t` (session, channel, caller, …); output goes to caller-provided buffers.
+
+Related descriptors can be grouped in `claw_cap_group_t` and registered with `claw_cap_register_group` for unified `start/stop` and per-group enable/disable.
+
+## Common paths into `claw_cap_call`
+
+Typical call paths:
+
+1. **Agent**: `claw_core` → configured `call_cap` → `claw_cap_call_from_core` (maps `claw_core_request_t` to `claw_cap_call_context_t`).
+2. **Console**: `cap call <name> <json>` (see [Console usage](@lang/reference-project/console-usage)).
+3. **Event Router**: rule action `call_cap` (see [Dataflow and automation](@lang/reference-project/dataflow-and-automation)).
+
+`claw_cap_call_context_t.caller` distinguishes `SYSTEM` / `AGENT` / `CONSOLE` so implementations can branch.
+
+## LLM visibility
+
+`claw_cap_build_llm_tools_json` builds the tool list for the current context; `claw_cap_tools_provider` supplies it as `TOOLS` context to `claw_core`.
+
+`claw_cap_set_llm_visible_groups` applies a **group id allow-list**.
+`edge_agent` defaults to exposing `cap_files`, `cap_scheduler`, `cap_lua`, `cap_skill`, `cap_llm_inspect`, `cap_http_request`, `cap_web_search`, and `cap_router_mgr` to the LLM, and full structured-memory mode also exposes `claw_memory`;
+see the visible-group configuration in <LinkToSource relativePath="components/common/app_claw/app_capabilities.c" />.
+
+<Aside type="tip">
+  Other registered groups (IM, search, MCP, Lua, …) still exist and can be called from Console or automation;
+  to let the model “natively” see those tool names, add their groups to the allow-list or disclose them gradually via Skills. This avoids bloated context that degrades LLM behavior.
+</Aside>
+
+<Aside type="note">
+  To avoid upstream errors caused by overlong tool descriptions, `claw_cap` applies a length cap to `description` when building tools JSON (currently 256 bytes, using UTF-8-safe truncation with warning logs).
+</Aside>
+
+## State and ops APIs
+
+- `claw_cap_list` / `claw_cap_list_groups`: enumerate caps and groups.
+- `claw_cap_enable_group` / `claw_cap_disable_group`: enable or disable by group.
+- `claw_cap_unregister_group` / `claw_cap_unregister`: unload (waits for active calls with timeout).
+
+<LinkCard title="Capabilities (cap_*) overview" href="@lang/reference-cap/" description="Overview of built-in capabilities" />

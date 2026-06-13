@@ -1,0 +1,460 @@
+---
+title: Lua 扩展模块（lua_module_* / lua_driver_*）
+description: lua_module_* 与 lua_driver_* 组件的注册机制、实现方式，以及 display 模块的完整分析。
+---
+
+import LinkToSource from '@/components/LinkToSource.astro';
+import { Aside, CardGrid } from '@astrojs/starlight/components';
+import { LinkCard } from 'starlight-theme-nova/components'
+
+## 概述
+
+`lua_module_*` 与 `lua_driver_*` 是 ESP-Claw 中**将硬件外设能力暴露给 Lua 脚本**的扩展机制。`lua_driver_*` 封装底层外设驱动（ADC、GPIO、I2C、MCPWM、Touch、UART），`lua_module_*` 涵盖更高层的功能模块。每个组件本质上是一个标准 Lua C 模块（`lua_CFunction` 格式），通过 `cap_lua_register_module` 注册后，在 Lua 脚本中可以用 `require("module_name")` 加载。
+纯 Lua 模块也可以只提供 `lib/`、`test/`、`README.md` 等。
+
+## 内置模块总览
+
+#### `lua_driver_*`（硬件外设驱动）
+
+| 模块名 | 组件目录 | 说明 |
+|--------|----------|------|
+| `adc` | `lua_driver_adc` | ADC 采样 |
+| `gpio` | `lua_driver_gpio` | GPIO 读写、方向配置 |
+| `i2c` | `lua_driver_i2c` | I2C 总线扫描与设备读写 |
+| `ssd1306` | `lua_driver_i2c` | 纯 Lua SSD1306 I2C OLED 驱动 |
+| `lib_si12t_touch` | `lua_driver_i2c` | 纯 Lua Si12T I2C 电容触摸驱动 |
+| `mcpwm` | `lua_driver_mcpwm` | 通用 PWM 输出（频率/占空比控制） |
+| `pcnt` | `lua_driver_pcnt` | PCNT 脉冲计数器/编码器读取 |
+| `touch` | `lua_driver_touch` | 电容触摸按键数据读取 |
+| `uart` | `lua_driver_uart` | UART 串口收发（polling 读写） |
+
+#### `lua_module_*`（高层功能模块）
+
+| 模块名 | 组件目录 | 说明 |
+|--------|----------|------|
+| `audio` | `lua_module_audio` | 音频播放/录制（PCM/WAV）与频谱分析 |
+| `ble_hid` | `lua_module_ble_hid` | BLE HID 复合外设（媒体控制、键盘、鼠标） |
+| `board_manager` | `lua_module_board_manager` | 板级初始化与外设句柄获取 |
+| `button` | `lua_module_button` | 按键事件注册与回调 |
+| `capability` | `lua_module_call_capability` | 从 Lua 脚本直接调用已注册 Capability |
+| `camera` | `lua_module_camera` | 摄像头拍照与流式采集 |
+| `delay` | `lua_module_delay` | `delay.delay_ms(n)` 毫秒级延时 |
+| `dht` | `lua_module_dht` | DHT 系列温湿度传感器读取 |
+| `display` | `lua_module_display` | LCD 屏幕绘图（文字、图形、JPEG/PNG） |
+| `environmental_sensor` | `lua_module_environmental_sensor` | BME690 温度、湿度、气压与气体数据读取 |
+| `event_publisher` | `lua_module_event_publisher` | 从 Lua 脚本向 Event Router 发布事件 |
+| `http_server` | `lua_module_http_server` | 在现有 HTTP 服务器上发布静态文件与 HTTP 回调 |
+| `image` | `lua_module_image` | 通用图像帧类型、格式转换、缩放与文件读写 |
+| `json` | `lua_module_json` | JSON 编码/解码辅助库 |
+| `lib_fuel_gauge` | `lua_module_fuel_gauge` | 纯 Lua 电池电量计库，支持 BQ27220/MAX17048 等 |
+| `imu` | `lua_module_imu` | IMU 加速度计与陀螺仪数据读取 |
+| `ir` | `lua_module_ir` | 红外接收、学习与发送 |
+| `knob` | `lua_module_knob` | 旋钮/旋转编码器事件读取 |
+| `lcd` | `lua_module_lcd` | LCD 面板初始化、背光与显示辅助控制 |
+| `lcd_touch` | `lua_module_lcd_touch` | 触摸屏坐标读取 |
+| `led_strip` | `lua_module_led_strip` | WS2812 等可寻址 LED 灯带控制 |
+| `lvgl` | `lua_module_lvgl` | LVGL 图形库绑定，支持完整 UI 控件与事件系统 |
+| `magnetometer` | `lua_module_magnetometer` | 磁力计/指南针数据读取 |
+| `motion_detect` | `lua_module_vision` | 基于 image.frame 的运动检测 |
+| `sci` | `lua_module_sci` | DFRobot SCI 采集模块（DFR0999）I2C 读取 |
+| `storage` | `lua_module_storage` | 文件系统操作 |
+| `system` | `lua_module_system` | 时间、运行时长、IP、内存、堆、任务栈与 Wi-Fi 状态查询 |
+| `thread` | `lua_module_thread` | Lua 任务管理、命名同步队列/信号量/事件组 |
+| `arg_schema` | `lua_module_system` | 纯 Lua 参数归一化辅助库 |
+
+<Aside type="note" title="模块条件编译">
+    每个模块在 `edge_agent` 中受 Kconfig 条件编译控制，当固件中没有编译包含该模块的组件时，Lua 脚本中不允许使用该模块。
+</Aside>
+
+## 注册机制
+
+每个 `lua_module_*` / `lua_driver_*` 组件对外只暴露一个注册函数，命名规则为 `lua_module_<name>_register()` 或 `lua_driver_<name>_register()`：
+
+```c
+// lua_module_display/src/lua_module_display.h
+esp_err_t lua_module_display_register(void);
+```
+
+注册函数内部调用 `cap_lua_register_module`，将模块名与 `luaopen_*` 函数关联：
+
+```c
+// lua_module_display/src/lua_module_display.c
+esp_err_t lua_module_display_register(void)
+{
+    return cap_lua_register_module("display", luaopen_display);
+}
+```
+
+**注意：所有模块必须在 `cap_lua_register_group()` 之前注册**，之后注册会被拒绝（运行时锁定）。
+
+### 应用层注册示例
+
+```c
+// app_claw.c 或类似初始化文件
+#include "lua_module_display.h"
+#include "lua_driver_gpio.h"
+#include "lua_module_delay.h"
+#include "cap_lua.h"
+
+void app_lua_modules_init(void)
+{
+    lua_module_display_register();
+    lua_driver_gpio_register();
+    lua_module_delay_register();
+    // ... 其他模块 ...
+
+    cap_lua_register_group("/fatfs/scripts");  // 传入脚本基目录，锁定后不能再注册模块
+}
+```
+
+## 如何实现一个自定义 Lua 模块
+
+以下展示实现一个简单的 `myled` 模块（控制单个 LED）的完整流程：
+
+### 1. 创建组件目录
+
+```
+components/lua_modules/lua_module_myled/
+├── CMakeLists.txt
+├── README.md
+├── test/
+│   └── myled_smoke.lua
+├── lib/
+│   ├── lib_myled.md
+│   └── lib_myled.lua
+└── src/
+    ├── lua_module_myled.c
+    └── lua_module_myled.h
+```
+
+`CMakeLists.txt` 与 `README.md` 是必需文件；`test/`、`lib/`、`src/` 均为可选目录。
+
+```cmake
+# CMakeLists.txt
+idf_component_register(
+    SRCS "src/lua_module_myled.c"
+    INCLUDE_DIRS "src"
+    REQUIRES cap_lua driver
+)
+```
+
+纯 Lua 模块可以使用空的 `idf_component_register()`；C-backed 模块必须列出 C 源文件和 include 目录。
+
+### 2. 编写 `README.md`
+
+`README.md` 是必需的模块级 API 文档，构建时会同步为 Lua 模块参考文档，它应描述：
+
+- 模块做什么，提供哪些 Lua API 或可复用 Lua 库。
+- 每个 API 的调用方式、参数、返回值、错误行为和清理要求。
+- 硬件资源所有权、阻塞行为、并发限制，以及安全 GPIO 建议（如适用）。
+
+`README.md` 只应记录已经实现的 API，避免描述规划中或不存在的函数；示例应短小并尽量可直接运行。
+
+### 3. 实现 Lua C 函数
+
+每个 Lua C 函数遵循统一签名 `int func(lua_State *L)`：
+- 通过 `luaL_check*` 系列函数从 Lua 栈获取参数
+- 执行实际操作（调用 ESP-IDF 驱动等）
+- 将返回值 push 到栈，return 返回值数量
+
+```c
+// src/lua_module_myled.c
+#include "lua.h"
+#include "lauxlib.h"
+#include "cap_lua.h"
+#include "driver/gpio.h"
+
+#define MYLED_GPIO GPIO_NUM_2
+
+// Lua: myled.set(on)
+static int myled_set(lua_State *L)
+{
+    // 1. 从栈获取参数（bool）
+    int on = lua_toboolean(L, 1);
+
+    // 2. 执行操作
+    gpio_set_level(MYLED_GPIO, on ? 1 : 0);
+
+    // 3. 无返回值，push 0 个值
+    return 0;
+}
+
+// Lua: myled.get() -> bool
+static int myled_get(lua_State *L)
+{
+    int level = gpio_get_level(MYLED_GPIO);
+    lua_pushboolean(L, level);
+    return 1;  // 返回 1 个值
+}
+
+// 模块入口：注册所有函数到 Lua table
+int luaopen_myled(lua_State *L)
+{
+    // 初始化 GPIO（实际项目中通常由 board_manager 管理）
+    gpio_config_t cfg = {
+        .pin_bit_mask = (1ULL << MYLED_GPIO),
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    gpio_config(&cfg);
+
+    // 创建模块 table
+    lua_newtable(L);
+
+    lua_pushcfunction(L, myled_set);
+    lua_setfield(L, -2, "set");
+
+    lua_pushcfunction(L, myled_get);
+    lua_setfield(L, -2, "get");
+
+    return 1;  // 返回 table
+}
+
+esp_err_t lua_module_myled_register(void)
+{
+    return cap_lua_register_module("myled", luaopen_myled);
+}
+```
+
+### 4. 头文件
+
+```c
+// src/lua_module_myled.h
+#pragma once
+#include "esp_err.h"
+
+esp_err_t lua_module_myled_register(void);
+```
+
+### 5. 添加 `test/` 与 `lib/`（可选）
+
+`test/` 用于保存模型可读的参考脚本，可用于模块验证、硬件验证、演示和实现模式示例。
+硬件相关测试脚本应自包含，并包含必要的清理逻辑和资源释放。
+
+例如 `test/myled_smoke.lua` 可以直接展示脚本侧如何加载和调用模块：
+
+```lua
+local myled = require("myled")
+local delay = require("delay")
+
+myled.set(true)   -- 点亮
+delay.delay_ms(500)     -- 需要 lua_module_delay
+myled.set(false)  -- 熄灭
+```
+
+`lib/` 用于保存可复用 Lua 库。`lib/abc.lua` 是实现库，不是可直接运行的程序。
+公开库函数必须在同名 `lib/abc.md` 中说明。每个被同步的 `lib/*.lua` 都必须有同名 Markdown 文档。
+
+`lua_module_*` / `lua_driver_*` 与 `cap_*` 一样，**强烈建议**为每个组件提供配套的 Skill 文档，告诉 LLM 如何在 Lua 脚本中正确使用该模块。
+
+## 构建同步规则
+
+构建系统会收集 `lua_module_*` 的受管资源并同步到应用文件系统镜像。
+输出根目录由应用配置决定；在 `edge_agent` 中，内置 Lua 资源通常进入 `/fatfs/scripts/builtin`。
+模块文档进入 `/fatfs/scripts/docs`。
+
+| 源路径 | 同步输出 |
+|--------|----------|
+| `README.md` | Lua 模块文档输出目录中的 `<component_name>.md` |
+| `test/foo.lua` | 内置 Lua 输出目录中的 `test/foo.lua` |
+| `lib/foo.lua` | 内置 Lua 输出目录中的 `lib/foo.lua` |
+| `lib/foo.md` | 内置 Lua 输出目录中的 `lib/foo.md` |
+
+同步规则：
+
+- `README.md` 同步只适用于组件名为 `lua_module_*` 的组件。
+- `lib/` 与 `test/` 会保留各自目录内的相对路径。
+- 所有同步后的脚本和库输出路径必须全局唯一。
+- 根目录下的 `.lua` 文件不是受管同步输出，模块不应维护扁平的根级 Lua 文件。
+- Lua 模块目录必须命名为 `lua_module_xx`。
+
+## 典型外设模块深度分析：`lua_module_gpio`
+
+源码：<LinkToSource relativePath="components/lua_modules/lua_module_gpio/src/lua_module_gpio.c" />
+
+`lua_module_gpio` 是一个小而完整的 C-backed Lua 模块，适合作为实现简单硬件绑定的参考。
+它只暴露三个 Lua API：设置方向、写输出电平、读输入电平。
+
+### 组件结构
+
+`lua_module_gpio` 遵循标准 `lua_module_*` 目录布局：
+
+```text
+lua_module_gpio/
+├── CMakeLists.txt
+├── README.md
+└── src/
+    ├── lua_module_gpio.c
+    └── lua_module_gpio.h
+```
+
+`README.md` 记录脚本侧 API，`src/` 保存 C 实现与注册头文件：
+
+```c
+// src/lua_module_gpio.h
+int luaopen_gpio(lua_State *L);
+esp_err_t lua_module_gpio_register(void);
+```
+
+与 `cap_*` 的 Skill 不同，`lua_module_*` / `lua_driver_*` 的 Skill 绑定的 `cap_groups` **不是自己的 Group**（lua_module 没有独立的 Capability Group），而是绑定到 **`cap_lua`**：
+
+### API 表
+
+| Lua API | 说明 |
+|---------|------|
+| `gpio.set_direction(pin, mode)` | 设置 GPIO 方向 |
+| `gpio.set_level(pin, level)` | 设置输出电平，非 0 视为高电平 |
+| `gpio.get_level(pin)` | 读取 GPIO 当前电平，返回整数 |
+
+`mode` 支持 `"input"`、`"output"`、`"input_output"`、`"output_od"`、`"input_output_od"`、`"disable"`。
+
+### 模块注册
+
+模块注册函数只负责把 Lua 模块名 `gpio` 与 `luaopen_gpio` 绑定到 `cap_lua`：
+
+```c
+esp_err_t lua_module_gpio_register(void)
+{
+    return cap_lua_register_module("gpio", luaopen_gpio);
+}
+```
+
+应用初始化阶段调用 `lua_module_gpio_register()` 后，脚本即可通过 `require("gpio")` 获取模块 table。
+
+### Lua table 导出
+
+`luaopen_gpio` 创建一个 Lua table，并把 C 函数挂到公开字段上：
+
+```c
+int luaopen_gpio(lua_State *L)
+{
+    lua_newtable(L);
+
+    lua_pushcfunction(L, lua_module_gpio_set_direction);
+    lua_setfield(L, -2, "set_direction");
+    lua_pushcfunction(L, lua_module_gpio_set_level);
+    lua_setfield(L, -2, "set_level");
+    lua_pushcfunction(L, lua_module_gpio_get_level);
+    lua_setfield(L, -2, "get_level");
+
+    return 1;
+}
+```
+
+这个模式适合大多数简单模块：先 `lua_newtable()`，再逐个 `lua_setfield()`，最后返回 1 个 table。
+
+### 参数校验与错误返回
+
+GPIO 模块使用 `luaL_checkinteger` / `luaL_checkstring` 做参数校验。
+这些函数会在参数缺失或类型错误时直接抛出 Lua error，避免 C 层继续处理非法输入。
+
+```c
+static int lua_module_gpio_set_level(lua_State *L)
+{
+    gpio_num_t pin = (gpio_num_t)luaL_checkinteger(L, 1);
+    uint32_t level = (uint32_t)luaL_checkinteger(L, 2);
+
+    if (gpio_set_level(pin, level ? 1 : 0) != ESP_OK) {
+        return luaL_error(L, "gpio_set_level failed");
+    }
+    return 0;
+}
+```
+
+当底层 ESP-IDF 调用失败时，模块用 `luaL_error` 将错误传回 Lua 运行时。
+这类错误会成为脚本执行失败结果，便于调用方看到明确原因。
+
+激活该 Skill 时，Lua 运行工具（`lua_run_script`、`lua_run_script_async` 等）会对当前 session 可见，同时 Skill 文档作为 `activate_skill` 的工具返回值注入会话历史，LLM 即可编写并执行使用 `myled` 模块的脚本。脚本文件通过 `write_file`、`read_file`、`list_dir` 等文件工具创建和检查。
+
+### 字符串枚举映射
+
+`set_direction` 的 `mode` 参数是字符串，C 层集中转换为 ESP-IDF 的 `gpio_mode_t`：
+
+```c
+static gpio_mode_t lua_module_gpio_mode_from_string(const char *mode)
+{
+    if (!mode || strcmp(mode, "input") == 0) {
+        return GPIO_MODE_INPUT;
+    }
+    if (strcmp(mode, "output") == 0) {
+        return GPIO_MODE_OUTPUT;
+    }
+    if (strcmp(mode, "input_output") == 0) {
+        return GPIO_MODE_INPUT_OUTPUT;
+    }
+    if (strcmp(mode, "output_od") == 0) {
+        return GPIO_MODE_OUTPUT_OD;
+    }
+    if (strcmp(mode, "input_output_od") == 0) {
+        return GPIO_MODE_INPUT_OUTPUT_OD;
+    }
+    if (strcmp(mode, "disable") == 0) {
+        return GPIO_MODE_DISABLE;
+    }
+    return GPIO_MODE_DISABLE;
+}
+```
+
+随后 `set_direction` 会额外区分合法的 `"disable"` 与未知字符串：
+
+```c
+if (mode == GPIO_MODE_DISABLE && strcmp(mode_str, "disable") != 0) {
+    return luaL_error(L, "invalid gpio mode: %s", mode_str);
+}
+```
+
+### 测试脚本示例
+
+`test/` 目录中的 GPIO 示例可以直接展示最小调用流程：
+
+```lua
+local gpio = require("gpio")
+
+gpio.set_direction(2, "output")
+gpio.set_level(2, 1)
+local level = gpio.get_level(2)
+print("GPIO2 level:", level)
+```
+
+硬件测试脚本应根据实际板级连接选择 GPIO，避免占用启动绑带脚、Flash/PSRAM 管脚或已经被其他外设占用的 IO。
+
+<CardGrid>
+  <LinkCard title="cap_lua 综述" href="./cap-lua" description="Lua 运行时、脚本管理与异步执行机制" />
+  <LinkCard title="数据流与自动化" href="@lang/reference-project/dataflow-and-automation" description="Event Router 的 run_script 动作" />
+</CardGrid>
+
+## 附注：模块特殊逻辑
+
+### `display` 显示模块
+
+显示模块有特殊的所有权管理逻辑（「仲裁」机制），确保 Lua 脚本可以独占使用显示资源，避免与其他任务冲突。
+
+`lua_module_display` 模块在 `display.init(...)` 成功后，Lua 会自动获取前台显示所有权；`display.deinit()` 或脚本结束清理时释放所有权，避免与其他显示任务冲突。
+
+另外，在显示 HAL 重新创建场景中，运行时会清理历史残留的 swap buffer / display callback 状态，减少跨脚本切换时的显示资源泄漏风险（特别是配合 `lua_run_script_async` 的 `exclusive:"display"` + `replace:true` 切换时）。
+
+### `event_publisher` 向 Event Router 发布事件
+
+`publish_message` 支持两种形式：
+
+1. 字符串形式：更加简洁，但可携带的信息较少
+
+```lua
+local ep = require("event_publisher")
+ep.publish_message("Button pressed!")
+```
+
+2. 消息对象形式：可以携带更多信息，但需要手动构造消息对象
+
+```lua
+local ep = require("event_publisher")
+ep.publish_message({
+  source_cap = "lua_script", -- source_cap 必填
+  channel = args.channel, -- channel 可选，若未提供，运行时会尝试从全局 args.channel 回填
+  chat_id = args.chat_id, -- chat_id 可选，若未提供，运行时会尝试从全局 args.chat_id 回填
+  text = "Button pressed!", -- text 必填
+})
+```
+
+<Aside type="note">
+  仅支持点调用：`ep.publish_message(...)`，不支持冒号调用 `ep:publish_message(...)`。
+</Aside>

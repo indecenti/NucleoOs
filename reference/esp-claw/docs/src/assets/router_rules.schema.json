@@ -1,0 +1,226 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ESP-Claw Router Rules",
+  "description": "Schema for ESP-Claw router rules (router_rules.json)",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "Unique identifier for the rule"
+      },
+      "description": {
+        "type": "string",
+        "description": "Optional description of the rule"
+      },
+      "enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Whether the rule is active"
+      },
+      "consume_on_match": {
+        "type": "boolean",
+        "default": true,
+        "description": "If true, the event is marked as consumed and no further rules are processed for the same event"
+      },
+      "ack": {
+        "type": "string",
+        "description": "Optional acknowledgment message template"
+      },
+      "vars": {
+        "type": "object",
+        "description": "Rule-specific local variables",
+        "additionalProperties": true
+      },
+      "match": {
+        "type": "object",
+        "required": ["event_type"],
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "description": "The type of event to match (e.g., 'message', 'trigger')"
+          },
+          "event_key": {
+            "type": "string",
+            "description": "Specific key to match within the event"
+          },
+          "source_cap": {
+            "type": "string",
+            "description": "Capability that emitted the event"
+          },
+          "channel": {
+            "type": "string",
+            "description": "Alias for source_channel (kept for compatibility; prefer source_channel)"
+          },
+          "source_channel": {
+            "type": "string",
+            "description": "Channel from which the event originated"
+          },
+          "chat_id": {
+            "type": "string",
+            "description": "Chat or session identifier"
+          },
+          "content_type": {
+            "type": "string",
+            "description": "Type of content in the event"
+          },
+          "text": {
+            "type": "string",
+            "description": "Text to match. Exact matching is the default unless text_match_rule is set."
+          },
+          "text_match_rule": {
+            "type": "string",
+            "enum": ["exact", "prefix"],
+            "default": "exact",
+            "description": "Match mode for match.text. exact requires identical text; prefix matches a leading command token and exposes the remaining text as {{match.remainder}}."
+          }
+        },
+        "additionalProperties": false
+      },
+      "actions": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "call_cap",
+                "run_agent",
+                "run_script",
+                "send_message",
+                "emit_event",
+                "drop"
+              ],
+              "description": "The action to perform"
+            },
+            "caller": {
+              "type": "string",
+              "enum": ["system", "agent", "console"],
+              "default": "system",
+              "description": "The security context for execution"
+            },
+            "cap": {
+              "type": "string",
+              "description": "Specific capability name (required for call_cap)"
+            },
+            "capture_output": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether to capture the output for subsequent actions"
+            },
+            "fail_open": {
+              "type": "boolean",
+              "default": false,
+              "description": "If true, rule processing continues even if this action fails"
+            },
+            "input": {
+              "type": "object",
+              "description": "Action configuration. Supports template rendering via {{...}}",
+              "additionalProperties": true
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": { "type": { "const": "call_cap" } }
+              },
+              "then": { "required": ["cap", "input"] }
+            },
+            {
+              "if": { "properties": { "type": { "const": "send_message" } } },
+              "then": {
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "properties": {
+                      "channel": { "type": "string" },
+                      "chat_id": { "type": "string" },
+                      "message": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": { "properties": { "type": { "const": "run_agent" } } },
+              "then": {
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "properties": {
+                      "text": { "type": "string" },
+                      "target_channel": { "type": "string" },
+                      "target_chat_id": { "type": "string" },
+                      "session_policy": {
+                        "type": "string",
+                        "enum": [
+                          "chat",
+                          "trigger",
+                          "global",
+                          "ephemeral",
+                          "nosave"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": { "properties": { "type": { "const": "run_script" } } },
+              "then": {
+                "required": ["input"],
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "properties": {
+                      "path": { "type": "string" },
+                      "async": { "type": "boolean" }
+                    },
+                    "required": ["path"]
+                  }
+                }
+              }
+            },
+            {
+              "if": { "properties": { "type": { "const": "emit_event" } } },
+              "then": {
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "properties": {
+                      "source_cap": { "type": "string" },
+                      "event_type": { "type": "string" },
+                      "source_channel": { "type": "string" },
+                      "chat_id": { "type": "string" },
+                      "message_id": { "type": "string" },
+                      "content_type": { "type": "string" },
+                      "text": { "type": "string" },
+                      "payload_json": { "type": "string" },
+                      "session_policy": {
+                        "type": "string",
+                        "enum": [
+                          "chat",
+                          "trigger",
+                          "global",
+                          "ephemeral",
+                          "nosave"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "required": ["id", "match", "actions"],
+    "additionalProperties": false
+  }
+}
