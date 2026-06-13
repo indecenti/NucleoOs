@@ -1642,7 +1642,15 @@ esp_err_t nucleo_httpd_start(void)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_open_sockets = 6;                     // 4->6. (Tried 8 to dodge lru-purge of the persistent /ws, but a realistic-load stress then drove min_free internal heap to 156 B — near-OOM — because each extra concurrent keep-alive socket holds httpd scratch buffers that fragment the scarce heap. 6 keeps min_free ~10-13 KB and still gives 0 WS flaps under a single real browser; the rare flap under heavy parallel load is the lesser evil vs near-OOM on this PSRAM-less, battery-powered chip.)
     config.uri_match_fn = httpd_uri_match_wildcard;  // enable the "/*" static catch-all
-    config.max_uri_handlers = 48;   // headroom for the pairing routes + /api/anima + /api/reboot + /api/heap + /api/proxy + /api/llm (GET+POST) + /api/transcribe
+    // Sized to the ACTUAL route count, with small headroom. We register 55 handlers below: 26 explicit
+    // here + auth(2) + fs(6) + rec(4) + ir(4) + gpio(1) + link(9) + display(1) + ws(1) + webfs catch-all(1).
+    // At 48 the last 7 silently failed (httpd_uri: "no slots left") — the casualties were the TAIL of the
+    // list: 4x /api/link/*, /api/display, /ws, and the webfs "/*" catch-all that serves the whole shell +
+    // app UIs from SD, i.e. the web layer went dark while early routes (/api/status etc.) still answered.
+    // RAM cost of the bump is tiny and one-time at httpd_start: hd_calls is calloc(max, sizeof(ptr)) so the
+    // 16 extra slots are +64 B, plus the 7 now-registering handlers are ~24 B each (malloc per handler).
+    // WHEN YOU ADD AN ENDPOINT: bump this past the new total, or it silently drops off the end again.
+    config.max_uri_handlers = 64;   // 55 in use (2026-06-14) + 9 headroom
     config.close_fn = on_sock_close;                 // detect client disconnects immediately
     // The shell opens many parallel connections (assets + several /api/fs + /ws). lru_purge
     // recycles the oldest idle socket instead of refusing/resetting new ones — this (plus the
