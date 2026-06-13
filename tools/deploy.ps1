@@ -21,6 +21,7 @@ $MANIFEST = '.deploy-manifest.json'
 # (project image AND the physical Cardputer card) but are too big / personal to keep
 # in the repo source tree. Match is against the forward-slash relative path.
 #   -> The 5 Wallace & Gromit shorts are pinned here per explicit request: keep forever.
+#   (Now largely subsumed by Is-UserContent below — kept for documentation.)
 $KEEP = @(
     'data/Videos/Wallace e Gromit - *.nfv',
     'data/Videos/Wallace e Gromit - *.mp3'
@@ -28,6 +29,15 @@ $KEEP = @(
 function Is-Protected($rel) {
     foreach ($p in $KEEP) { if ($rel -like $p) { return $true } }
     return $false
+}
+
+# User content (Music, Videos, Pictures, Recordings, ROMs, DOS, Documents, Notes, captures, ...)
+# lives DIRECTLY on the SD and is never kept in the repo source tree, so it is always "unseen" by
+# the staging walk. The mirror must NEVER delete it — otherwise every `deploy.ps1 -To <SD>` wipes
+# the user's media. Everything under data/ is treated as user-owned EXCEPT data/anima/, which is
+# ANIMA system knowledge that deploy actually manages (so stale shards can still be pruned).
+function Is-UserContent($rel) {
+    return ($rel -like 'data/*') -and -not ($rel -like 'data/anima/*')
 }
 
 # Device-state files: provisioned by the USER at runtime (API keys, learned cards, settings,
@@ -102,8 +112,9 @@ function Apply-Mirror($dstRoot, $seen, $man, $stat) {
         $rel = ($_.FullName.Substring($dstRoot.Length).TrimStart('\', '/')) -replace '\\', '/'
         if ($rel -eq $MANIFEST) { return }
         if (-not $seen.ContainsKey($rel)) {
-            if (Is-Protected $rel) { return }   # pinned media: never mirror-delete
-            if (Is-State $rel)     { return }   # user key / learned / settings: never mirror-delete
+            if (Is-Protected $rel)   { return }   # pinned media: never mirror-delete
+            if (Is-State $rel)       { return }   # user key / learned / settings: never mirror-delete
+            if (Is-UserContent $rel) { return }   # user media/documents/captures: never mirror-delete
             if (-not $DryRun) { Remove-Item -LiteralPath $_.FullName -Force }
             $man.Remove($rel); $stat.deleted++
         }

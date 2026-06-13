@@ -164,4 +164,15 @@ self.addEventListener('fetch', (e) => {
   }
   // Asset statici dello shell: prima la cache, poi rete con gate + retry, e un fallback
   // pulito così un reset transitorio non diventa un "Uncaught Failed to fetch" in console.
-  e.re
+  e.respondWith((async () => {
+    const hit = await caches.match(e.request);
+    if (hit) return hit;
+    try { return await gatedFetch(e.request); }
+    catch { return new Response('', { status: 504, statusText: 'device unreachable' }); }
+  })());
+});
+
+
+
+
+

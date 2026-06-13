@@ -38,6 +38,7 @@
 #include "freertos/task.h"
 extern "C" {
 #include "nucleo_audio.h"
+#include "nucleo_exclusive.h"   // dedicated-mode reclaim (~70KB) while streaming — like music/video; NX_VOICE frees the mic
 #include "nucleo_board.h"
 #include "nucleo_kbd.h"
 #include "cJSON.h"
@@ -187,6 +188,9 @@ static void draw_volume(void)
 static void listen(const station_t *st)
 {
     nucleo_app_release_buffers();                 // reclaim RAM for the decoder + HTTP client
+    // Dedicated mode while streaming: NX_NET_APP frees ~70KB (Wi-Fi STA stays for the stream) so the Helix
+    // MP3 decoder never OOMs, and NX_VOICE drops the mic so it can't collide with the speaker on GPIO43.
+    nucleo_exclusive_enter(NX_NET_APP, nullptr);
     nucleo_audio_play_url(st->stream);
     radio_static(st);
 
@@ -214,6 +218,7 @@ static void listen(const station_t *st)
         vTaskDelay(pdMS_TO_TICKS(60));
     }
     nucleo_audio_stop();                          // terminate the stream task before leaving the modal
+    nucleo_exclusive_exit();                       // restore httpd/mDNS/voice/L1 (Wi-Fi never went down)
     d.fillScreen(BG);
     nucleo_app_request_draw();                    // full list redraw on the way back
 }
@@ -297,6 +302,7 @@ static void enter(void)
 static void leave(void)
 {
     nucleo_audio_stop();
+    if (nucleo_exclusive_active()) nucleo_exclusive_exit();   // safety net: never leave services suspended
     if (s_st && s_st != &s_fallback) free(s_st);
     s_st = nullptr; s_cap = 0; s_count = 0; s_sel = 0; s_top = 0;
 }

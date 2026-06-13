@@ -13,6 +13,7 @@
 extern "C" {
 #include "nucleo_micspec.h"
 }
+#include "nucleo_exclusive.h"   // dedicated-mode RAM reclaim (~70KB) + NX_VOICE frees the mic — like music/video
 
 #include "launcher_theme.h"
 
@@ -324,15 +325,19 @@ static void enter(void)
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_ptt_handler(on_ptt);
     set_hint();
+    // Dedicated mode FIRST: NX_NET_APP suspends voice (the other GPIO43/mic owner) and frees ~70KB so the
+    // DSP scratch + waterfall never starve. Wi-Fi STA stays up. Restored in on_exit() after the mic closes.
+    nucleo_exclusive_enter(NX_NET_APP, nullptr);
     nucleo_micspec_start();
     nucleo_app_request_draw();
 }
 
 static void on_exit(void)
 {
-    nucleo_micspec_stop();
+    nucleo_micspec_stop();                 // blocks until the mic RX is fully closed (GPIO43 released)
     nucleo_app_set_ptt_handler(nullptr);
     if (s_hist) { free(s_hist); s_hist = nullptr; }
+    nucleo_exclusive_exit();               // ...THEN restore httpd/mDNS/voice/L1 (voice won't re-grab a mic we still held)
 }
 
 extern "C" void nucleo_register_micspec(void)

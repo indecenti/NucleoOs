@@ -23,6 +23,10 @@
 #define BIN_HZ   ((float)MS_RATE / (float)MS_FFT)   // 31.25 Hz / bin
 
 static const char *TAG = "micspec";
+
+// Speaker playback shares GPIO43 with the mic (WS == PDM clk). Refuse to grab the mic while a track/
+// chime is playing so we never collide the I2S TX line. Symmetric to nucleo_audio's micspec_running() guard.
+extern bool nucleo_audio_is_playing(void);
 static const char *NOTE_NAMES[12] = { "C","C#","D","D#","E","F","F#","G","G#","A","A#","B" };
 
 static i2s_chan_handle_t s_rx   = NULL;
@@ -295,7 +299,7 @@ static void free_scratch(void)
 esp_err_t nucleo_micspec_start(void)
 {
     if (atomic_load(&s_run)) return ESP_OK;
-    if (nucleo_recorder_is_busy()) { atomic_store(&s_err, MS_ERR_BUSY); return ESP_ERR_INVALID_STATE; }
+    if (nucleo_recorder_is_busy() || nucleo_audio_is_playing()) { atomic_store(&s_err, MS_ERR_BUSY); return ESP_ERR_INVALID_STATE; }
 
     if (!s_lock) s_lock = xSemaphoreCreateMutex();
     s_td   = (float *)malloc(sizeof(float) * MS_FFT);

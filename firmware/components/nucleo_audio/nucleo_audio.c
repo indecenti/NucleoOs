@@ -18,6 +18,10 @@
 // The recorder owns the shared mic/speaker pins; declared here to enforce record-XOR-play.
 extern bool nucleo_recorder_is_recording(void);
 extern bool nucleo_recorder_is_busy(void);   // true until the mic RX is FULLY released (lingers ~200ms after stop)
+// The Spectrum app (nucleo_micspec) holds the mic PDM-RX on the SAME shared GPIO43 but does NOT go
+// through the recorder gate, so block TX while it runs too — else opening a player after/over Spectrum
+// installs the speaker WS on a pin the mic still drives -> TX/RX collision that wedges the I2S driver.
+extern bool nucleo_micspec_running(void);
 
 static const char *TAG = "audio";
 
@@ -322,7 +326,7 @@ static void player_task(void *arg)
 static esp_err_t start_play_window(const char *path, uint32_t start_ms, uint32_t duration_ms,
                                    uint32_t file_off, uint32_t file_len)
 {
-    if (nucleo_recorder_is_busy()) return ESP_ERR_INVALID_STATE;        // shared GPIO43 (mic⊕speaker): wait for the mic RX to FULLY release, not just is_recording()
+    if (nucleo_recorder_is_busy() || nucleo_micspec_running()) return ESP_ERR_INVALID_STATE;  // shared GPIO43 (mic⊕speaker): block while the recorder/dictation OR the Spectrum app holds the mic RX
     audio_lock();                                                       // single owner: no concurrent I2S/task setup
     nucleo_audio_stop();                                                // stop anything current (re-takes the recursive lock)
     snprintf(s_path, sizeof(s_path), "%s", path);

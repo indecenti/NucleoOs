@@ -2651,4 +2651,42 @@ function renderOsDialogList(filterQuery = '') {
       ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
       : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg>';
     
-    // The fs/list API reports the byte size as
+    // The fs/list API reports the byte size as `size` (see nucleo_fsapi.c / serve-shell.mjs).
+    const sizeStr = e.type === 'file' && e.size != null ? Math.round(e.size/1024) + ' KB' : '';
+    li.innerHTML = `<div class="os-dialog-icon ${e.type}">${icon}</div><div class="os-dialog-name">${escapeHtml(e.name)}</div><div class="os-dialog-size">${sizeStr}</div>`;
+    
+    li.onclick = () => {
+      document.querySelectorAll('.os-dialog-item').forEach(i => i.classList.remove('active'));
+      li.classList.add('active');
+      if (e.type === 'file') {
+        osDialogFilename.value = e.name;
+      }
+    };
+    
+    li.ondblclick = () => {
+      if (e.type === 'dir') {
+        const next = e.name === '..' ? osDialogCwd.substring(0, osDialogCwd.lastIndexOf('/')) || '/' : (osDialogCwd === '/' ? '/' + e.name : osDialogCwd + '/' + e.name);
+        loadOsDialogDir(next);
+      } else {
+        osDialogFilename.value = e.name;
+        const finalPath = (osDialogCwd === '/' ? '' : osDialogCwd) + '/' + e.name;
+        closeOsFileDialog(finalPath);
+      }
+    };
+    
+    osDialogList.appendChild(li);
+  });
+}
+
+if (osDialogSearch) {
+  osDialogSearch.addEventListener('input', (e) => renderOsDialogList(e.target.value));
+}
+if (osDialogCloseBtn) osDialogCloseBtn.onclick = () => closeOsFileDialog(null);
+if (osDialogBtnCancel) osDialogBtnCancel.onclick = () => closeOsFileDialog(null);
+if (osDialogBtnConfirm) osDialogBtnConfirm.onclick = () => {
+  const val = osDialogFilename.value.trim();
+  if (osDialogMode === 'save' && !val) return;
+  if (!val && osDialogMode === 'open') return;
+  const finalPath = (osDialogCwd === '/' ? '' : osDialogCwd) + '/' + val;
+  closeOsFileDialog(finalPath);
+};
