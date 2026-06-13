@@ -36,6 +36,14 @@ extern "C" {
                                            // dip to ~0 (near-OOM). 38 KB keeps a ~4 KB safety margin above the peak; the
                                            // wait-and-retry in http_post_json covers transient dips below it.
 
+// Voice-synthesis reclaim bar. The TTS player task needs a ~5 KB CONTIGUOUS stack (+ render FDs); below
+// this the audio task can't spawn and the play is dropped in SILENCE ("offline niente voce"). When the
+// largest internal block is under it, the ANIMA worker opens a brief exclusive window — freeing the
+// web/online layer it doesn't need WHILE speaking — so the voice synthesizes, then restores. Lower than
+// the TLS bar above: speaking costs far less contiguous RAM than a cloud handshake, so we don't churn
+// httpd on voice turns whose heap is fine for the voice but would've failed a TLS gate.
+#define NUCLEO_VOICE_MIN_BLOCK (8 * 1024)
+
 // Which cascade tier produced the result (see docs/anima.md §2).
 typedef enum {
     ANIMA_TIER_NONE = 0,   // nothing matched with enough confidence

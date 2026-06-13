@@ -659,7 +659,26 @@ static void anima_worker(void *arg)
         if (g == s_gen) s_busy = false;   // a /stop or a newer request already moved on -> don't clear its busy flag
         // Parla la risposta on-device (no-op se la voce e' disattiva). Questo e' il path del Cardputer;
         // il path web passa da nucleo_httpd, quindi resta escluso (usa speechSynthesis del browser).
-        if (g == s_gen) speak_result(r, s_en);
+        // VOCE A STEP (chip senza PSRAM): la sintesi avviene SOLO ORA, dopo che la risposta e' GIA' a
+        // schermo (s_done sopra). Il task audio vuole ~5 KB di stack CONTIGUO; mentre httpd/L1/mDNS/voce-
+        // input tengono l'heap (frammentato) xTaskCreate falliva e il play era scartato in SILENZIO
+        // ("offline niente voce"). Quel layer web/online non serve nulla mentre si parla: apri una finestra
+        // esclusiva (NX_NET_APP = ~70 KB liberi, Wi-Fi STA resta, audio in USCITA intatto) SOLO per la
+        // durata della sintesi, poi ripristina httpd/L1/mDNS/voce. Gated: voce attiva + heap davvero sotto
+        // la soglia voce + c'e' qualcosa da dire (LAUNCH/TOOL/vuoto non parlano -> niente finestra inutile).
+        if (g == s_gen) {
+            bool will_speak = r.reply[0] && r.action != ANIMA_ACT_LAUNCH && r.action != ANIMA_ACT_TOOL;
+            bool vnx = false;
+            if (will_speak && nucleo_tts_enabled() &&
+                heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < NUCLEO_VOICE_MIN_BLOCK) {
+                nucleo_exclusive_info_t vi;
+                vnx = nucleo_exclusive_enter(NX_NET_APP, &vi);
+                ESP_LOGI(ATAG, "voice reclaim: exclusive=%d free=%u largest=%u",
+                         (int)vnx, (unsigned)vi.free_after, (unsigned)vi.largest_after);
+            }
+            speak_result(r, s_en);
+            if (vnx) nucleo_exclusive_exit();   // ridai httpd/L1/mDNS/voce: il task audio e' gia' nato con spazio
+        }
     }
     vTaskDelete(NULL);
 }
