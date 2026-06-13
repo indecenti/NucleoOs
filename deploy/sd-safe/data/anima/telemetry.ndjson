@@ -1,0 +1,102 @@
+{"t":1,"q":"chi è nixon","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"chi è einstein","tier":"fact","intent":"l1","domain":"knowledge","conf":71,"budget":6}
+{"t":1,"q":"chi è mandela","tier":"none","intent":"mosaico","domain":"faq","conf":82,"budget":6}
+{"t":1,"q":"cos'è la fotosintesi","tier":"none","intent":"mosaico","domain":"faq","conf":100,"budget":6}
+{"t":1,"q":"qual è la capitale della Norvegia","tier":"fact","intent":"l1","domain":"knowledge","conf":93,"budget":6}
+{"t":1,"q":"capitale del Giappone","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":6}
+{"t":1,"q":"qual e la capitale dell'Egitto","tier":"fact","intent":"l1","domain":"knowledge","conf":92,"budget":6}
+{"t":1,"q":"capitale di Malta","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":6}
+{"t":1,"q":"what is the capital of Brazil","tier":"none","intent":"mosaico","domain":"faq","conf":100,"budget":3}
+{"t":1,"q":"capital of Kenya","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":6}
+{"t":1,"q":"capitale della Francia","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"qual è la capitale del Canada","tier":"fact","intent":"l1","domain":"knowledge","conf":96,"budget":6}
+{"t":1,"q":"costante di Planck","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"quanto vale la costante di Planck","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":2}
+{"t":1,"q":"costante di Avogadro","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"carica dell'elettrone","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"value of the speed of light","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"cos'è il DNS","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":6}
+{"t":1,"q":"what is a transistor","tier":"none","intent":"mosaico","domain":"faq","conf":100,"budget":3}
+{"t":1,"q":"cos'è la fotosintesi","tier":"none","intent":"mosaico","domain":"faq","conf":100,"budget":6}
+{"t":1,"q":"cos'è un microcontrollore","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"what is photosynthesis","tier":"none","intent":"mosaico","domain":"faq","conf":100,"budget":2}
+{"t":1,"q":"chi è nixon","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"chi è einstein","tier":"fact","intent":"l1","domain":"knowledge","conf":71,"budget":6}
+{"t":1,"q":"chi è mandela","tier":"none","intent":"mosaico","domain":"faq","conf":82,"budget":6}
+{"t":1,"q":"who is obama","tier":"fact","intent":"l1","domain":"knowledge","conf":79,"budget":6}
+{"t":1,"q":"qual è la capitale di Marte","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la capitale della Luna","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la capitale del Sole","tier":"none","intent":"weather","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la capitale di Giove","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is the capital of Mars","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is the capital of the Moon","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"quando ha twittato Cristoforo Colombo","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"quanti followers ha il Medioevo","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è l'indirizzo email di Napoleone","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la costante di Planck di Marte","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è il pianeta più grande oltre Giove","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is the biggest planet other than Jupiter","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"che cosa è il protocollo Flixxon-9","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is the half-life of isotope Carbon-Floonk-14","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la radice cubica del cristallo Zorblax-27","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is 50 percent of Floonkonium-200","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"come si configura il modulo Frobnicator-X12","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è il server Discord di Napoleone","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is the Discord username of Cleopatra","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la valuta del Giappone","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è il lago più grande del deserto del Sahara","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"chi è Floonk Zorblax","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"chi è Mario Inventato Inesistente","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"who is Glerbon Flonzo","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"chi è Zibbib Qwronk","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"come funziona il Frobnicator-X12","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"vorrei capire come funziona la memoria","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la capitale della Norvegia","tier":"fact","intent":"l1","domain":"knowledge","conf":93,"budget":6}
+{"t":1,"q":"capitale del Giappone","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":6}
+{"t":1,"q":"qual e la capitale dell'Egitto","tier":"fact","intent":"l1","domain":"knowledge","conf":92,"budget":6}
+{"t":1,"q":"capitale di Malta","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":6}
+{"t":1,"q":"what is the capital of Brazil","tier":"none","intent":"mosaico","domain":"faq","conf":100,"budget":3}
+{"t":1,"q":"capital of Kenya","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":6}
+{"t":1,"q":"capitale della Francia","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"qual è la capitale del Canada","tier":"fact","intent":"l1","domain":"knowledge","conf":96,"budget":6}
+{"t":1,"q":"costante di Planck","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"quanto vale la costante di Planck","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":2}
+{"t":1,"q":"costante di Avogadro","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"carica dell'elettrone","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"value of the speed of light","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"cos'è il DNS","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":6}
+{"t":1,"q":"what is a transistor","tier":"none","intent":"mosaico","domain":"faq","conf":100,"budget":3}
+{"t":1,"q":"cos'è la fotosintesi","tier":"none","intent":"mosaico","domain":"faq","conf":100,"budget":6}
+{"t":1,"q":"cos'è un microcontrollore","tier":"fact","intent":"l1","domain":"knowledge","conf":100,"budget":3}
+{"t":1,"q":"what is photosynthesis","tier":"none","intent":"mosaico","domain":"faq","conf":100,"budget":2}
+{"t":1,"q":"chi è nixon","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"chi è einstein","tier":"fact","intent":"l1","domain":"knowledge","conf":71,"budget":6}
+{"t":1,"q":"chi è mandela","tier":"none","intent":"mosaico","domain":"faq","conf":82,"budget":6}
+{"t":1,"q":"who is obama","tier":"fact","intent":"l1","domain":"knowledge","conf":79,"budget":6}
+{"t":1,"q":"qual è la capitale di Marte","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la capitale della Luna","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la capitale del Sole","tier":"none","intent":"weather","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la capitale di Giove","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is the capital of Mars","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is the capital of the Moon","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"quando ha twittato Cristoforo Colombo","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"quanti followers ha il Medioevo","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è l'indirizzo email di Napoleone","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la costante di Planck di Marte","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è il pianeta più grande oltre Giove","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is the biggest planet other than Jupiter","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"che cosa è il protocollo Flixxon-9","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is the half-life of isotope Carbon-Floonk-14","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la radice cubica del cristallo Zorblax-27","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is 50 percent of Floonkonium-200","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"come si configura il modulo Frobnicator-X12","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è il server Discord di Napoleone","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"what is the Discord username of Cleopatra","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è la valuta del Giappone","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"qual è il lago più grande del deserto del Sahara","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"chi è Floonk Zorblax","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"chi è Mario Inventato Inesistente","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"who is Glerbon Flonzo","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"chi è Zibbib Qwronk","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"come funziona il Frobnicator-X12","tier":"none","intent":"","domain":"none","conf":0,"budget":0}
+{"t":1,"q":"vorrei capire come funziona la memoria","tier":"none","intent":"","domain":"none","conf":0,"budget":0}

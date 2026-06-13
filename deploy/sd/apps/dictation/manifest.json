@@ -1,0 +1,16 @@
+{
+  "id": "dictation",
+  "name": "Trascrizione",
+  "version": "0.1.0",
+  "description": "Trascrizione vocale dal vivo dal microfono del Cardputer: il device manda solo l'audio (~32 KB/s), il riconoscimento gira nel browser (Vosk, offline) e il testo si salva quasi in tempo reale su SD. All'avvio spegne il display del Cardputer e lo riaccende all'uscita.",
+  "category": "media",
+  "runtime": "web",
+  "entry_service": "dictation",
+  "web_route": "/apps/dictation/",
+  "icon": "/apps/dictation/icon.svg",
+  "permissions": ["storage.shared", "device.audio", "device.display"],
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": ["rec.started", "rec.stopped"],
+  "power": { "budget_class": "high", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

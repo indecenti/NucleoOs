@@ -1,0 +1,22 @@
+{
+  "id": "recorder",
+  "name": "Voice Recorder",
+  "version": "0.1.0",
+  "description": "Record the built-in microphone to WAV on the SD card; convert to MP3 in the browser.",
+  "category": "media",
+  "runtime": "web",
+  "entry_service": "recorder",
+  "web_route": "/apps/recorder/",
+  "icon": "assets/icon.svg",
+  "permissions": ["storage.shared", "device.audio"],
+  "mounts": { "app": "/apps/recorder/data" },
+  "handles": {
+    "role": "player",
+    "extensions": ["wav"]
+  },
+  "intents": [ { "action": "play", "extensions": ["wav"] } ],
+  "subscribes": ["rec.started", "rec.stopped", "rec.level", "fs.changed"],
+  "publishes": ["rec.request"],
+  "power": { "budget_class": "high", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

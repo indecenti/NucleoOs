@@ -1,0 +1,1090 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Video Player</title>
+  <!-- Offline-first: rely on the system font stack ('Outfit', system-ui, sans-serif) instead of a
+       render-blocking remote webfont — the device often has no internet. -->
+  <style>
+    :root {
+      --bg: #070a12;
+      --panel: #0f1521;
+      --panel-hover: var(--panel2, #1a2433);
+      --text: #f3f4f6;
+      --text-muted: var(--muted, #93a1b8);
+      --accent: #4ea1ff;
+      --accent-hover: #2f8bff;
+      --accent-alpha: rgba(78, 161, 255, 0.18);
+      --border: rgba(255, 255, 255, 0.07);
+      --glass: var(--panel2, rgba(15, 21, 33, 0.85));
+      --shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+      --transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    * { box-sizing: border-box; outline: none; }
+    html, body { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: 'Outfit', system-ui, sans-serif; overflow: hidden; }
+    body { display: flex; flex-direction: column; }
+
+    /* ---------- Header & Menu bar ---------- */
+    header { background: var(--panel); border-bottom: 1px solid var(--border); user-select: none; z-index: 20; }
+    .header-top { display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; }
+    .title-area { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; letter-spacing: 0.3px; min-width: 0; }
+    .title-area .brand-mark { color: var(--accent); display: flex; }
+    .title-sub { color: var(--text-muted); font-weight: 400; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; }
+    .header-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; transition: var(--transition); }
+    .status-dot.online { background: #34d399; box-shadow: 0 0 8px rgba(52,211,153,0.6); }
+
+    .menu-bar { display: flex; padding: 0 6px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.03); }
+    .menu-item { position: relative; padding: 6px 12px; font-size: 12px; cursor: pointer; border-radius: 5px 5px 0 0; transition: var(--transition); font-weight: 500; }
+    .menu-item:hover, .menu-item.active { background: var(--panel-hover); color: var(--text); }
+    .dropdown {
+      position: absolute; top: 100%; left: 0; background: var(--glass); backdrop-filter: blur(18px);
+      border: 1px solid var(--border); border-radius: 0 8px 8px 8px; min-width: 230px; box-shadow: var(--shadow);
+      display: none; flex-direction: column; padding: 5px 0; z-index: 100; animation: fadeIn 0.14s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .menu-item.active .dropdown { display: flex; }
+    .dropdown-item { display: flex; justify-content: space-between; align-items: center; gap: 22px; padding: 7px 14px; font-size: 12px; color: var(--text); cursor: pointer; transition: var(--transition); }
+    .dropdown-item:hover { background: var(--accent); color: #04101f; }
+    .dropdown-item .shortcut { color: var(--text-muted); font-size: 10px; font-weight: 500; }
+    .dropdown-item:hover .shortcut { color: rgba(255,255,255,0.85); }
+    .dropdown-item.check::before { content: '✓'; width: 12px; opacity: 0; font-size: 11px; }
+    .dropdown-item.check.on::before { opacity: 1; }
+    .dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
+    .dropdown-label { padding: 4px 14px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); }
+
+    /* ---------- Player stage ---------- */
+    .player-container { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; min-height: 0; overflow: hidden; }
+    video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+    .player-container.idle video { display: none; }
+    .player-container.playing-hidden { cursor: none; }
+
+    /* Welcome / empty state */
+    .welcome { position: absolute; inset: 0; display: none; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 6px; padding: 24px; z-index: 4; }
+    .player-container.idle .welcome { display: flex; }
+    .welcome-logo { width: 76px; height: 76px; border-radius: 22px; background: var(--accent-alpha); color: var(--accent); display: grid; place-items: center; margin-bottom: 8px; }
+    .welcome h1 { font-size: 20px; font-weight: 700; margin: 0; color: #f3f4f6; }
+    .welcome p { color: var(--text-muted); font-size: 13px; margin: 0 0 14px; max-width: 360px; line-height: 1.5; }
+    .welcome-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .btn { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border); background: rgba(255,255,255,0.05); color: #f3f4f6; border-radius: 8px; padding: 9px 16px; cursor: pointer; font-size: 13px; font-family: inherit; font-weight: 500; transition: var(--transition); }
+    .btn:hover { background: rgba(255,255,255,0.1); border-color: var(--text-muted); }
+    .btn.primary { background: var(--accent); color: #04101f; border-color: transparent; font-weight: 600; }
+    .btn.primary:hover { background: var(--accent-hover); }
+    .btn svg { width: 16px; height: 16px; }
+    .welcome-hint { margin-top: 16px; font-size: 11px; color: var(--text-muted); opacity: 0.7; }
+
+    /* ---------- Controls overlay (VLC style) ---------- */
+    .video-controls {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.45) 65%, transparent 100%);
+      padding: 26px 16px 12px; display: flex; flex-direction: column; gap: 10px; z-index: 5;
+      transition: opacity 0.3s ease, transform 0.3s ease; user-select: none;
+    }
+    .player-container.idle .video-controls { display: none; }
+    .video-controls.hidden { opacity: 0; transform: translateY(10px); pointer-events: none; }
+
+    .progress-area { display: flex; align-items: center; width: 100%; height: 14px; cursor: pointer; position: relative; }
+    .progress-bar-container { position: relative; width: 100%; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; transition: height 0.15s ease; }
+    .progress-area:hover .progress-bar-container { height: 6px; }
+    .progress-buffer, .progress-current { position: absolute; height: 100%; border-radius: 2px; width: 0; top: 0; left: 0; }
+    .progress-buffer { background: rgba(255,255,255,0.18); }
+    .progress-current { background: var(--accent); }
+    .progress-handle { position: absolute; width: 13px; height: 13px; background: #fff; border-radius: 50%; top: 50%; transform: translate(-50%, -50%) scale(0); transition: transform 0.1s ease; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+    .progress-area:hover .progress-handle { transform: translate(-50%, -50%) scale(1); }
+    .seek-tooltip { position: absolute; bottom: 18px; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: #e8eef9; border: 1px solid var(--border); padding: 2px 7px; border-radius: 5px; font-size: 11px; font-family: monospace; pointer-events: none; opacity: 0; transition: opacity 0.1s; white-space: nowrap; }
+    .progress-area:hover .seek-tooltip { opacity: 1; }
+
+    .controls-row { display: flex; justify-content: space-between; align-items: center; }
+    .controls-left, .controls-right { display: flex; align-items: center; gap: 10px; }
+    .control-btn { background: none; border: none; color: #e8eef9; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 7px; border-radius: 7px; transition: var(--transition); position: relative; }
+    .control-btn:hover { background: rgba(255,255,255,0.14); color: #fff; }
+    .control-btn svg { width: 17px; height: 17px; }
+    .control-btn.play-btn { background: var(--accent); color: #04101f; padding: 9px; border-radius: 50%; }
+    .control-btn.play-btn:hover { background: var(--accent-hover); transform: scale(1.06); }
+    .control-btn.rate-btn { font-size: 12px; font-weight: 700; min-width: 40px; font-family: monospace; }
+    .time-display { font-size: 11px; color: #d7e1f2; font-family: monospace; min-width: 96px; }
+
+    .volume-control { display: flex; align-items: center; gap: 4px; }
+    .volume-slider-container { width: 0; overflow: hidden; transition: width 0.25s ease; display: flex; align-items: center; }
+    .volume-control:hover .volume-slider-container { width: 74px; }
+    .volume-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; background: rgba(255,255,255,0.25); border-radius: 2px; cursor: pointer; }
+    .volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 11px; border-radius: 50%; background: #fff; cursor: pointer; }
+
+    /* Rate popover */
+    .rate-pop { position: absolute; bottom: 46px; right: 0; background: var(--glass); backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: 8px; padding: 4px; display: none; flex-direction: column; box-shadow: var(--shadow); z-index: 8; }
+    .rate-pop.open { display: flex; }
+    .rate-opt { padding: 6px 18px; font-size: 12px; border-radius: 5px; cursor: pointer; text-align: center; font-family: monospace; }
+    .rate-opt:hover { background: rgba(255,255,255,0.1); }
+    .rate-opt.active { background: var(--accent); color: #04101f; font-weight: 700; }
+
+    /* Subtitle / audio popovers */
+    .menu-pop { position: absolute; bottom: 46px; right: 0; min-width: 210px; max-width: 280px; background: var(--glass); backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: 9px; padding: 6px; display: none; flex-direction: column; gap: 2px; box-shadow: var(--shadow); z-index: 8; }
+    .menu-pop.open { display: flex; }
+    .menu-pop .pop-label { padding: 5px 10px 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); }
+    .pop-opt { display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 12px; border-radius: 6px; cursor: pointer; }
+    .pop-opt:hover { background: rgba(255,255,255,0.1); }
+    .pop-opt .tick { width: 14px; font-size: 12px; opacity: 0; }
+    .pop-opt.active .tick { opacity: 1; color: var(--accent); }
+    .pop-opt .opt-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pop-opt .opt-tag { font-size: 10px; color: var(--text-muted); text-transform: uppercase; }
+    .pop-divider { height: 1px; background: var(--border); margin: 4px 2px; }
+    .pop-size-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; }
+    .pop-size-row .sz-btns { display: flex; gap: 4px; }
+    .sz-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: rgba(255,255,255,0.05); color: var(--text); cursor: pointer; font-size: 13px; display: grid; place-items: center; }
+    .sz-btn:hover { background: rgba(255,255,255,0.12); }
+    .sz-val { font-size: 11px; font-family: monospace; color: var(--text-muted); min-width: 42px; text-align: center; }
+    .control-btn.has-sub { color: var(--accent); }
+    .control-btn.has-sub::after { content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
+
+    /* ---------- Playlist panel (off by default) ---------- */
+    .playlist-bar { background: var(--panel); border-top: 1px solid var(--border); display: flex; flex-direction: column; max-height: 150px; transition: max-height 0.3s cubic-bezier(0.4,0,0.2,1); overflow: hidden; }
+    .playlist-bar.hidden { max-height: 0; border-top-color: transparent; }
+    .playlist-title { font-size: 11px; color: var(--text-muted); padding: 7px 12px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; letter-spacing: 0.4px; }
+    .playlist-title .pl-actions { display: flex; gap: 12px; }
+    .pl-link { cursor: pointer; color: var(--accent); }
+    .pl-link:hover { text-decoration: underline; }
+    .playlist-items { display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto; flex: 1; }
+    .playlist-chip { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 7px; padding: 7px 12px; font-size: 11px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 7px; transition: var(--transition); max-width: 220px; overflow: hidden; }
+    .playlist-chip:hover { background: rgba(255,255,255,0.08); border-color: var(--text-muted); }
+    .playlist-chip.active { background: var(--accent-alpha); border-color: var(--accent); color: var(--accent); font-weight: 500; }
+    .playlist-chip span { overflow: hidden; text-overflow: ellipsis; }
+    .playlist-empty { color: var(--text-muted); font-size: 12px; padding: 8px 2px; }
+
+    /* Drag overlay */
+    .drag-overlay { position: absolute; inset: 0; background: rgba(7,10,18,0.88); border: 3px dashed var(--accent); border-radius: 8px; display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; pointer-events: none; backdrop-filter: blur(8px); }
+    .drag-overlay svg { color: var(--accent); margin-bottom: 12px; animation: bounce 1s infinite alternate; }
+    .drag-overlay span { font-weight: 600; font-size: 16px; color: #f3f4f6; }
+    @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+
+    /* Center action flash (play/pause feedback) */
+    .center-flash { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(0.6); width: 76px; height: 76px; border-radius: 50%; background: rgba(0,0,0,0.55); display: grid; place-items: center; opacity: 0; pointer-events: none; z-index: 6; }
+    .center-flash svg { width: 36px; height: 36px; color: #fff; }
+    .center-flash.flash { animation: flashAnim 0.5s ease-out; }
+    @keyframes flashAnim { 0% { opacity: 0.9; transform: translate(-50%,-50%) scale(0.7); } 100% { opacity: 0; transform: translate(-50%,-50%) scale(1.3); } }
+
+    /* ---------- Modals ---------- */
+    .modal-scrim { position: fixed; inset: 0; background: rgba(0,0,0,0.66); backdrop-filter: blur(12px); display: grid; place-items: center; z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.22s ease; }
+    .modal-scrim.visible { opacity: 1; pointer-events: all; }
+    .modal-box { background: var(--glass); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; transform: scale(0.96); transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1); }
+    .modal-scrim.visible .modal-box { transform: scale(1); }
+    .explorer-box { width: 540px; height: 460px; max-width: 95%; }
+    .modal-header { padding: 13px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .modal-title { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+    .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 22px; line-height: 1; padding: 0 4px; }
+    .modal-close:hover { color: #fff; }
+    .explorer-search-row { padding: 10px 12px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.15); }
+    .search-wrapper { position: relative; display: flex; align-items: center; }
+    .search-wrapper svg { position: absolute; left: 10px; color: var(--text-muted); pointer-events: none; }
+    .search-input { width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-size: 12px; padding: 8px 10px 8px 32px; font-family: inherit; }
+    .search-input:focus { border-color: var(--accent); background: rgba(0,0,0,0.5); }
+    .modal-crumbs { padding: 8px 16px; font-size: 11px; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); color: var(--text-muted); white-space: nowrap; overflow-x: auto; }
+    .crumbs-seg { color: var(--accent); cursor: pointer; font-weight: 500; }
+    .crumbs-seg:hover { text-decoration: underline; }
+    .explorer-list { flex: 1; overflow-y: auto; padding: 6px; list-style: none; margin: 0; }
+    .explorer-item { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 7px; cursor: pointer; font-size: 12px; transition: var(--transition); }
+    .explorer-item:hover { background: rgba(255,255,255,0.06); }
+    .explorer-item.active { background: var(--accent-alpha); color: var(--accent); }
+    .explorer-icon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 5px; background: rgba(255,255,255,0.04); }
+    .explorer-icon svg { width: 15px; height: 15px; }
+    .explorer-icon.dir { color: #f59e0b; }
+    .explorer-icon.video { color: var(--accent); }
+    .explorer-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .explorer-size { font-size: 10px; color: var(--text-muted); font-family: monospace; }
+    .explorer-msg { padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px; }
+    .explorer-msg.error { color: #f87171; }
+
+    .about-box { width: 440px; max-width: 90%; padding: 22px; text-align: center; }
+    .about-logo { width: 62px; height: 62px; background: var(--accent-alpha); border-radius: 18px; color: var(--accent); display: inline-grid; place-items: center; margin-bottom: 12px; }
+    .about-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .about-version { font-size: 11px; color: var(--text-muted); margin-bottom: 14px; }
+    .about-desc { font-size: 12px; line-height: 1.55; color: var(--text-muted); margin-bottom: 20px; }
+    .about-shortcuts-table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; margin-bottom: 20px; }
+    .about-shortcuts-table th { border-bottom: 1px solid var(--border); padding: 6px; color: var(--text-muted); font-weight: 600; }
+    .about-shortcuts-table td { padding: 6px; border-bottom: 1px dotted rgba(255,255,255,0.05); }
+    .about-shortcuts-table kbd { background: rgba(255,255,255,0.1); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+    .about-btn { width: 100%; background: var(--accent); border: none; color: #04101f; padding: 9px 0; border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 600; transition: var(--transition); }
+    .about-btn:hover { background: var(--accent-hover); }
+
+    video::-webkit-media-controls { display: none !important; }
+    video::-webkit-media-controls-enclosure { display: none !important; }
+  </style>
+  <!-- Dynamic subtitle cue styling (intelligent sizing scales with the video height) -->
+  <style id="cue-style">
+    #v::cue { font-size: 3.2vh; line-height: 1.25; color: #fff; background: rgba(0,0,0,0.55); text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-family: 'Outfit', system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-top">
+      <div class="title-area">
+        <span class="brand-mark">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+        </span>
+        <span>Video Player</span>
+        <span class="title-sub" id="title-sub" data-i18n="noFilePlaying">— Nessun file in riproduzione</span>
+      </div>
+      <div class="header-status" data-i18n-attr="title:sdStatusTooltip" title="Stato MicroSD">
+        <span class="status-dot" id="sd-status-dot"></span>
+        <span id="sd-status-text" data-i18n="sdDash">SD —</span>
+      </div>
+    </div>
+    <nav class="menu-bar" id="menu-bar">
+      <div class="menu-item" id="menu-file">
+        <span data-i18n="menuMedia">Media</span>
+        <div class="dropdown">
+          <div class="dropdown-item" id="mi-open-local"><span data-i18n="openLocal">Apri file locale…</span><span class="shortcut">Ctrl+O</span></div>
+          <div class="dropdown-item" id="mi-open-sd"><span data-i18n="openSd">Apri da MicroSD…</span><span class="shortcut">Ctrl+Shift+O</span></div>
+          <div class="dropdown-divider"></div>
+          <div class="dropdown-item" id="mi-clear"><span data-i18n="closeMedia">Chiudi media</span><span class="shortcut">Esc</span></div>
+        </div>
+      </div>
+      <div class="menu-item" id="menu-play">
+        <span data-i18n="menuPlayback">Riproduzione</span>
+        <div class="dropdown">
+          <div class="dropdown-item" id="mi-toggle-play"><span data-i18n="playPause">Riproduci / Pausa</span><span class="shortcut" data-i18n="kbdSpace">Spazio</span></div>
+          <div class="dropdown-item" id="mi-stop"><span data-i18n="stopPlayback">Interrompi</span><span class="shortcut">S</span></div>
+          <div class="dropdown-divider"></div>
+          <div class="dropdown-item" id="mi-backward"><span data-i18n="back10">Indietro 10s</span><span class="shortcut">←</span></div>
+          <div class="dropdown-item" id="mi-forward"><span data-i18n="fwd10">Avanti 10s</span><span class="shortcut">→</span></div>
+          <div class="dropdown-item" id="mi-prev"><span data-i18n="prevTrack">Precedente</span><span class="shortcut">Ctrl+←</span></div>
+          <div class="dropdown-item" id="mi-next"><span data-i18n="nextTrack">Successivo</span><span class="shortcut">Ctrl+→</span></div>
+          <div class="dropdown-divider"></div>
+          <div class="dropdown-item" id="mi-mute"><span data-i18n="mute">Muto</span><span class="shortcut">M</span></div>
+          <div class="dropdown-label" data-i18n="speed">Velocità</div>
+          <div class="dropdown-item rate-menu" data-rate="0.5"><span>0.5×</span></div>
+          <div class="dropdown-item rate-menu" data-rate="1"><span data-i18n="rateNormal">Normale (1×)</span></div>
+          <div class="dropdown-item rate-menu" data-rate="1.5"><span>1.5×</span></div>
+          <div class="dropdown-item rate-menu" data-rate="2"><span>2×</span></div>
+        </div>
+      </div>
+      <div class="menu-item" id="menu-view">
+        <span data-i18n="menuView">Visualizza</span>
+        <div class="dropdown">
+          <div class="dropdown-item" id="mi-fullscreen"><span data-i18n="fullscreen">Schermo intero</span><span class="shortcut">F</span></div>
+          <div class="dropdown-item" id="mi-pip"><span>Picture-in-Picture</span><span class="shortcut">I</span></div>
+          <div class="dropdown-divider"></div>
+          <div class="dropdown-item check" id="mi-loop"><span data-i18n="loopPlaylist">Ripeti playlist</span><span class="shortcut">L</span></div>
+          <div class="dropdown-item check" id="mi-playlist"><span data-i18n="showPlaylist">Mostra playlist</span><span class="shortcut">P</span></div>
+        </div>
+      </div>
+      <div class="menu-item" id="menu-subs">
+        <span data-i18n="menuSubs">Sottotitoli</span>
+        <div class="dropdown">
+          <div class="dropdown-item" id="mi-sub-load"><span data-i18n="loadSubFile">Carica file sottotitoli…</span><span class="shortcut">.srt .vtt</span></div>
+          <div class="dropdown-item" id="mi-sub-toggle"><span data-i18n="subToggle">Attiva / disattiva</span><span class="shortcut">C</span></div>
+          <div class="dropdown-divider"></div>
+          <div class="dropdown-item" id="mi-sub-bigger"><span data-i18n="subBigger">Aumenta dimensione</span><span class="shortcut">+</span></div>
+          <div class="dropdown-item" id="mi-sub-smaller"><span data-i18n="subSmaller">Riduci dimensione</span><span class="shortcut">-</span></div>
+          <div class="dropdown-item" id="mi-sub-reset"><span data-i18n="subReset">Dimensione predefinita</span></div>
+        </div>
+      </div>
+      <div class="menu-item" id="menu-help">
+        <span data-i18n="help">Aiuto</span>
+        <div class="dropdown">
+          <div class="dropdown-item" id="mi-shortcuts"><span data-i18n="keyboardShortcuts">Scorciatoie da tastiera</span><span class="shortcut">?</span></div>
+          <div class="dropdown-item" id="mi-about"><span data-i18n="aboutItem">Informazioni</span></div>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <input type="file" id="input-file" accept="video/*" style="display:none;">
+  <input type="file" id="input-sub" accept=".srt,.vtt,.webvtt" style="display:none;">
+
+  <main class="player-container idle" id="player-container">
+    <video id="v" playsinline></video>
+
+    <!-- Welcome / empty state -->
+    <div class="welcome" id="welcome">
+      <div class="welcome-logo">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+      </div>
+      <h1>Video Player</h1>
+      <p data-i18n="welcomeDesc">Riproduci video locali o dalla MicroSD. La decodifica avviene nel browser: il dispositivo fa solo streaming dei byte.</p>
+      <div class="welcome-actions">
+        <button class="btn primary" id="welcome-open-local">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+          <span data-i18n="openLocalBtn">Apri file locale</span>
+        </button>
+        <button class="btn" id="welcome-open-sd">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+          <span data-i18n="browseSd">Sfoglia MicroSD</span>
+        </button>
+      </div>
+      <div class="welcome-hint" data-i18n="dragHint">…oppure trascina un file video in questa finestra</div>
+    </div>
+
+    <!-- Center play/pause flash -->
+    <div class="center-flash" id="center-flash"></div>
+
+    <!-- Controls overlay -->
+    <div class="video-controls" id="video-controls">
+      <div class="progress-area" id="progress-area">
+        <div class="seek-tooltip" id="seek-tooltip">00:00</div>
+        <div class="progress-bar-container">
+          <div class="progress-buffer" id="progress-buffer"></div>
+          <div class="progress-current" id="progress-current"></div>
+          <div class="progress-handle" id="progress-handle"></div>
+        </div>
+      </div>
+      <div class="controls-row">
+        <div class="controls-left">
+          <button class="control-btn play-btn" id="ctrl-play" data-i18n-attr="title:tipPlayPause" title="Riproduci/Pausa (Spazio)"><svg viewBox="0 0 24 24" id="icon-play-state"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></button>
+          <button class="control-btn" id="ctrl-stop" data-i18n-attr="title:tipStop" title="Interrompi (S)"><svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z" fill="currentColor"/></svg></button>
+          <button class="control-btn" id="ctrl-backward" data-i18n-attr="title:tipBack" title="Indietro 10s (←)"><svg viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z" fill="currentColor"/></svg></button>
+          <button class="control-btn" id="ctrl-forward" data-i18n-attr="title:tipFwd" title="Avanti 10s (→)"><svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" fill="currentColor"/></svg></button>
+          <div class="volume-control">
+            <button class="control-btn" id="ctrl-mute" data-i18n-attr="title:tipMute" title="Muto (M)"><svg viewBox="0 0 24 24" id="icon-volume-state"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="currentColor"/></svg></button>
+            <div class="volume-slider-container"><input type="range" class="volume-slider" id="volume-slider" min="0" max="1" step="0.05" value="1"></div>
+          </div>
+          <span class="time-display" id="time-display">00:00 / 00:00</span>
+        </div>
+        <div class="controls-right">
+          <div style="position:relative;">
+            <button class="control-btn" id="ctrl-audio" data-i18n-attr="title:tipAudio" title="Tracce audio" style="display:none;"><svg viewBox="0 0 24 24"><path d="M12 3v9.28a4.39 4.39 0 0 0-1.5-.28C8.01 12 6 13.79 6 16s2.01 4 4.5 4S15 18.21 15 16V7h4V3h-7z" fill="currentColor"/></svg></button>
+            <div class="menu-pop" id="audio-pop"></div>
+          </div>
+          <div style="position:relative;">
+            <button class="control-btn" id="ctrl-sub" data-i18n-attr="title:tipSub" title="Sottotitoli (C)"><svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM4 12h4v2H4v-2zm10 6H4v-2h10v2zm6 0h-4v-2h4v2zm0-4H10v-2h10v2z" fill="currentColor"/></svg></button>
+            <div class="menu-pop" id="sub-pop"></div>
+          </div>
+          <div style="position:relative;">
+            <button class="control-btn rate-btn" id="ctrl-rate" data-i18n-attr="title:tipRate" title="Velocità di riproduzione">1×</button>
+            <div class="rate-pop" id="rate-pop">
+              <div class="rate-opt" data-rate="0.5">0.5×</div>
+              <div class="rate-opt" data-rate="0.75">0.75×</div>
+              <div class="rate-opt active" data-rate="1">1×</div>
+              <div class="rate-opt" data-rate="1.25">1.25×</div>
+              <div class="rate-opt" data-rate="1.5">1.5×</div>
+              <div class="rate-opt" data-rate="2">2×</div>
+            </div>
+          </div>
+          <button class="control-btn" id="ctrl-pip" data-i18n-attr="title:tipPip" title="Picture-in-Picture (I)"><svg viewBox="0 0 24 24"><path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16.01H3V4.98h18v14.03z" fill="currentColor"/></svg></button>
+          <button class="control-btn" id="ctrl-playlist" data-i18n-attr="title:tipPlaylist" title="Playlist (P)"><svg viewBox="0 0 24 24"><path d="M4 10h12v2H4zm0-4h12v2H4zm0 8h8v2H4zm10 0v6l5-3z" fill="currentColor"/></svg></button>
+          <button class="control-btn" id="ctrl-fullscreen" data-i18n-attr="title:tipFullscreen" title="Schermo intero (F)"><svg viewBox="0 0 24 24" id="icon-fs-state"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="currentColor"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="drag-overlay" id="drag-overlay">
+      <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+      <span data-i18n="dragDrop">Rilascia un video — o un file .srt/.vtt durante la riproduzione</span>
+    </div>
+  </main>
+
+  <!-- Playlist panel -->
+  <div class="playlist-bar hidden" id="playlist-bar">
+    <div class="playlist-title">
+      <span id="playlist-title-label" data-i18n="playlistTitle" data-i18n-args='{"dir":"/data/Videos"}'>PLAYLIST — /data/Videos</span>
+      <div class="pl-actions">
+        <span class="pl-link" id="playlist-refresh" data-i18n="refresh">Aggiorna</span>
+        <span class="pl-link" id="playlist-close" data-i18n="hide">Nascondi</span>
+      </div>
+    </div>
+    <div class="playlist-items" id="playlist-items"></div>
+  </div>
+
+  <!-- SD Explorer -->
+  <div class="modal-scrim" id="sd-modal">
+    <div class="modal-box explorer-box">
+      <div class="modal-header">
+        <span class="modal-title">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
+          <span data-i18n="browseSd">Sfoglia MicroSD</span>
+        </span>
+        <button class="modal-close" id="sd-modal-close">&times;</button>
+      </div>
+      <div class="explorer-search-row">
+        <div class="search-wrapper">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" class="search-input" id="sd-search" data-i18n-attr="placeholder:searchFolder" placeholder="Cerca nella cartella corrente…">
+        </div>
+      </div>
+      <div class="modal-crumbs" id="modal-crumbs">SD /data</div>
+      <ul class="explorer-list" id="explorer-list"></ul>
+    </div>
+  </div>
+
+  <!-- About / shortcuts -->
+  <div class="modal-scrim" id="about-modal">
+    <div class="modal-box about-box">
+      <div class="about-logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg></div>
+      <div class="about-name">Video Player</div>
+      <div class="about-version" data-i18n="aboutVersion">Versione 3.0 — NucleoOS</div>
+      <div class="about-desc" data-i18n="aboutDesc">Riproduttore multimediale professionale per NucleoOS. Decodifica hardware nel browser e caricamento segmentato (HTTP Range) dalla MicroSD del dispositivo.</div>
+      <table class="about-shortcuts-table">
+        <thead><tr><th data-i18n="colCommand">Comando</th><th data-i18n="colShortcut">Scorciatoia</th></tr></thead>
+        <tbody>
+          <tr><td data-i18n="playPause">Riproduci / Pausa</td><td><kbd data-i18n="kbdSpace">Spazio</kbd> / <kbd>K</kbd></td></tr>
+          <tr><td data-i18n="stopPlayback">Interrompi</td><td><kbd>S</kbd></td></tr>
+          <tr><td data-i18n="skip10">Salta ±10 secondi</td><td><kbd>←</kbd> / <kbd>→</kbd></td></tr>
+          <tr><td data-i18n="prevNext">Precedente / Successivo</td><td><kbd>Ctrl+←</kbd> / <kbd>Ctrl+→</kbd></td></tr>
+          <tr><td data-i18n="volumePct">Volume ±10%</td><td><kbd>↑</kbd> / <kbd>↓</kbd></td></tr>
+          <tr><td data-i18n="mute">Muto</td><td><kbd>M</kbd></td></tr>
+          <tr><td data-i18n="fullscreen">Schermo intero</td><td><kbd>F</kbd></td></tr>
+          <tr><td>Picture-in-Picture</td><td><kbd>I</kbd></td></tr>
+          <tr><td data-i18n="subOnOff">Sottotitoli on/off</td><td><kbd>C</kbd></td></tr>
+          <tr><td data-i18n="subSize">Dimensione sottotitoli</td><td><kbd>+</kbd> / <kbd>−</kbd></td></tr>
+          <tr><td data-i18n="loopPlaylist">Ripeti playlist</td><td><kbd>L</kbd></td></tr>
+          <tr><td data-i18n="showPlaylistShort">Mostra Playlist</td><td><kbd>P</kbd></td></tr>
+        </tbody>
+      </table>
+      <button class="about-btn" id="about-btn-close" data-i18n="close">Chiudi</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    const t = await I18N.init('video-player');   // loads core + this app's catalog, paints [data-i18n], live-switches
+    // Re-render imperatively-built text after a live language change. The engine's apply() already
+    // repaints every [data-i18n] node — but #title-sub carries a (live) file name while playing and
+    // the playlist label / popovers are built in JS, so we restore those here.
+    I18N.onChange(() => {
+      refreshTitleSub();
+      renderSdStatus();
+      playlistTitleLabel.textContent = t('playlistTitle', { dir: playlistDir });
+      if (subPop.classList.contains('open')) renderSubPop();
+      if (audioPop.classList.contains('open')) renderAudioPop();
+    });
+
+    const DEFAULT_VIDS_DIR = '/data/Videos';
+    const VIDEO_RE = /\.(mp4|webm|mov|mkv|m4v|ogv)$/i;
+
+    const $ = (id) => document.getElementById(id);
+    const v = $('v');
+    const playerContainer = $('player-container');
+    const titleSub = $('title-sub');
+    const inputFile = $('input-file');
+    const welcome = $('welcome');
+    const centerFlash = $('center-flash');
+
+    const controls = $('video-controls');
+    const btnPlay = $('ctrl-play'), btnStop = $('ctrl-stop'), btnMute = $('ctrl-mute');
+    const btnFullscreen = $('ctrl-fullscreen'), btnPlaylistToggle = $('ctrl-playlist');
+    const btnForward = $('ctrl-forward'), btnBackward = $('ctrl-backward');
+    const btnPip = $('ctrl-pip'), btnRate = $('ctrl-rate'), ratePop = $('rate-pop');
+    const btnSub = $('ctrl-sub'), subPop = $('sub-pop'), btnAudio = $('ctrl-audio'), audioPop = $('audio-pop');
+    const inputSub = $('input-sub'), cueStyle = $('cue-style');
+    const volumeSlider = $('volume-slider'), timeDisplay = $('time-display');
+
+    const progressArea = $('progress-area'), progressCurrent = $('progress-current');
+    const progressBuffer = $('progress-buffer'), progressHandle = $('progress-handle');
+    const seekTooltip = $('seek-tooltip');
+
+    const iconPlayState = $('icon-play-state'), iconVolumeState = $('icon-volume-state'), iconFsState = $('icon-fs-state');
+
+    const sdModal = $('sd-modal'), sdSearch = $('sd-search'), modalCrumbs = $('modal-crumbs'), explorerList = $('explorer-list');
+    const aboutModal = $('about-modal');
+
+    const playlistBar = $('playlist-bar'), playlistItems = $('playlist-items');
+    const playlistTitleLabel = $('playlist-title-label');
+    const menuBarItems = document.querySelectorAll('.menu-item');
+    const dragOverlay = $('drag-overlay');
+
+    // State
+    let currentPath = '';        // SD path or 'local'
+    let sdCwd = '/data';
+    let cachedFiles = [];
+    let isDraggingProgress = false;
+    let controlsTimer;
+    let lastVolume = 1;
+    let loopPlaylist = false;
+    let playlist = [];           // [{name, path}]
+    let playlistLoaded = false;
+    let subTracks = [];          // [{label, lang, el}] active <track> elements
+    let activeSub = -1;          // index into subTracks, -1 = off
+    let subScale = 1.0;          // intelligent-sizing multiplier
+    const SUB_RE = /\.(srt|vtt|webvtt)$/i;
+
+    const getSdUrl = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
+
+    // Keep the header subtitle correct across a live language change: a playing file shows its
+    // (untranslatable) name; idle shows the translated "no file" label.
+    function refreshTitleSub() {
+      if (currentPath) {
+        const isLocal = currentPath.startsWith('blob:') || currentPath.startsWith('data:');
+        const name = isLocal ? (v.dataset.name || t('localFile')) : currentPath.split('/').pop();
+        titleSub.textContent = '— ' + name;
+      } else {
+        titleSub.textContent = t('noFilePlaying');
+      }
+    }
+
+    function init() {
+      setupMenu();
+      setupControls();
+      setupDragAndDrop();
+      setupKeybindings();
+      probeSd();
+
+      const q = new URLSearchParams(location.search).get('path');
+      if (q) {
+        // Preload the folder of the launched file into the playlist for prev/next.
+        const dir = q.substring(0, q.lastIndexOf('/')) || DEFAULT_VIDS_DIR;
+        loadPlaylist(dir, false).then(() => playVideo(q));
+      }
+      // No autoplay otherwise: the welcome screen is shown until the user picks a file.
+    }
+
+    /* ---------- Menus ---------- */
+    function setupMenu() {
+      menuBarItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const active = item.classList.contains('active');
+          closeMenus();
+          if (!active) item.classList.add('active');
+        });
+      });
+      document.addEventListener('click', closeMenus);
+      function closeMenus() { menuBarItems.forEach(i => i.classList.remove('active')); }
+
+      $('mi-open-local').onclick = () => inputFile.click();
+      $('mi-open-sd').onclick = () => openSdExplorer();
+      $('mi-clear').onclick = () => stopVideo();
+      $('mi-toggle-play').onclick = () => togglePlay();
+      $('mi-stop').onclick = () => stopVideo();
+      $('mi-forward').onclick = () => seekRelative(10);
+      $('mi-backward').onclick = () => seekRelative(-10);
+      $('mi-prev').onclick = () => playPrev();
+      $('mi-next').onclick = () => playNext();
+      $('mi-mute').onclick = () => toggleMute();
+      $('mi-fullscreen').onclick = () => toggleFullscreen();
+      $('mi-pip').onclick = () => togglePip();
+      $('mi-loop').onclick = () => toggleLoop();
+      $('mi-playlist').onclick = () => togglePlaylist();
+      $('mi-shortcuts').onclick = () => openAbout();
+      $('mi-about').onclick = () => openAbout();
+      document.querySelectorAll('.rate-menu').forEach(el => el.onclick = () => setRate(parseFloat(el.dataset.rate)));
+
+      $('mi-sub-load').onclick = () => inputSub.click();
+      $('mi-sub-toggle').onclick = () => toggleSub();
+      $('mi-sub-bigger').onclick = () => bumpSubScale(0.1);
+      $('mi-sub-smaller').onclick = () => bumpSubScale(-0.1);
+      $('mi-sub-reset').onclick = () => setSubScale(1.0);
+
+      $('welcome-open-local').onclick = () => inputFile.click();
+      $('welcome-open-sd').onclick = () => openSdExplorer();
+    }
+
+    /* ---------- Playback ---------- */
+    function playVideo(path) {
+      currentPath = path;
+      clearSubs();
+      const isLocal = path.startsWith('blob:') || path.startsWith('data:');
+      v.src = isLocal ? path : getSdUrl(path);
+      playerContainer.classList.remove('idle');
+      v.play().catch(() => {});
+      const name = isLocal ? (v.dataset.name || t('localFile')) : path.split('/').pop();
+      titleSub.removeAttribute('data-i18n');   // file name is live data — keep the engine from repainting it
+      titleSub.textContent = '— ' + name;
+      highlightActiveChip();
+      updatePlayIcon(true);
+      resetControlsTimeout();
+      if (!isLocal) detectSidecarSubs(path);   // auto-load matching .srt/.vtt from the SD folder
+    }
+
+    function togglePlay() {
+      if (!currentPath) return;
+      if (v.paused) { v.play().catch(() => {}); updatePlayIcon(true); flashCenter(true); }
+      else { v.pause(); updatePlayIcon(false); flashCenter(false); }
+      resetControlsTimeout();
+    }
+
+    function stopVideo() {
+      v.pause(); clearSubs(); v.removeAttribute('src'); v.load();
+      currentPath = '';
+      playerContainer.classList.add('idle');
+      updatePlayIcon(false);
+      titleSub.setAttribute('data-i18n', 'noFilePlaying');   // back to a static, translatable label
+      titleSub.textContent = t('noFilePlaying');
+      progressCurrent.style.width = '0%'; progressHandle.style.left = '0%';
+      highlightActiveChip();
+    }
+
+    function seekRelative(secs) {
+      if (!v.duration) return;
+      v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + secs));
+      resetControlsTimeout();
+    }
+
+    function toggleMute() {
+      if (v.muted || v.volume === 0) {
+        v.muted = false; const restore = lastVolume || 1;
+        v.volume = restore; volumeSlider.value = restore; updateVolumeIcon(restore);
+      } else {
+        lastVolume = v.volume; v.muted = true; v.volume = 0; volumeSlider.value = 0; updateVolumeIcon(0);
+      }
+      resetControlsTimeout();
+    }
+
+    function setVolume(val) {
+      val = Math.max(0, Math.min(1, val));
+      v.volume = val; v.muted = val === 0; volumeSlider.value = val; updateVolumeIcon(val);
+      if (val > 0) lastVolume = val;
+    }
+
+    function setRate(rate) {
+      v.playbackRate = rate;
+      btnRate.textContent = (rate === 1 ? '1' : rate) + '×';
+      document.querySelectorAll('.rate-opt').forEach(o => o.classList.toggle('active', parseFloat(o.dataset.rate) === rate));
+      ratePop.classList.remove('open');
+    }
+
+    /* ---------- Controls wiring ---------- */
+    function setupControls() {
+      btnPlay.onclick = (e) => { e.stopPropagation(); togglePlay(); };
+      btnStop.onclick = (e) => { e.stopPropagation(); stopVideo(); };
+      btnForward.onclick = (e) => { e.stopPropagation(); seekRelative(10); };
+      btnBackward.onclick = (e) => { e.stopPropagation(); seekRelative(-10); };
+      btnMute.onclick = (e) => { e.stopPropagation(); toggleMute(); };
+      btnFullscreen.onclick = (e) => { e.stopPropagation(); toggleFullscreen(); };
+      btnPip.onclick = (e) => { e.stopPropagation(); togglePip(); };
+      btnPlaylistToggle.onclick = (e) => { e.stopPropagation(); togglePlaylist(); };
+      btnRate.onclick = (e) => { e.stopPropagation(); closePops(ratePop); ratePop.classList.toggle('open'); };
+      document.querySelectorAll('.rate-opt').forEach(o => o.onclick = (e) => { e.stopPropagation(); setRate(parseFloat(o.dataset.rate)); });
+      btnSub.onclick = (e) => { e.stopPropagation(); const willOpen = !subPop.classList.contains('open'); closePops(subPop); if (willOpen) { renderSubPop(); subPop.classList.add('open'); } else subPop.classList.remove('open'); };
+      btnAudio.onclick = (e) => { e.stopPropagation(); const willOpen = !audioPop.classList.contains('open'); closePops(audioPop); if (willOpen) { renderAudioPop(); audioPop.classList.add('open'); } else audioPop.classList.remove('open'); };
+      inputSub.onclick = (e) => e.stopPropagation();
+      inputSub.onchange = (e) => { const f = e.target.files[0]; if (f) loadLocalSub(f); inputSub.value = ''; };
+
+      $('playlist-close').onclick = () => togglePlaylist(false);
+      $('playlist-refresh').onclick = () => loadPlaylist(playlistDir, false);
+
+      volumeSlider.oninput = (e) => setVolume(parseFloat(e.target.value));
+
+      v.ontimeupdate = () => {
+        if (!isDraggingProgress && v.duration) {
+          const pct = (v.currentTime / v.duration) * 100;
+          progressCurrent.style.width = pct + '%'; progressHandle.style.left = pct + '%';
+          updateTimeDisplay();
+        }
+      };
+      v.onprogress = () => {
+        if (v.buffered.length && v.duration) {
+          const pct = (v.buffered.end(v.buffered.length - 1) / v.duration) * 100;
+          progressBuffer.style.width = pct + '%';
+        }
+      };
+      v.onloadedmetadata = () => { updateTimeDisplay(); refreshAudioBtn(); };
+      v.onplay = () => updatePlayIcon(true);
+      v.onpause = () => updatePlayIcon(false);
+      v.onended = () => { updatePlayIcon(false); playNext(true); };
+
+      progressArea.onmousedown = (e) => { isDraggingProgress = true; seekFromEvent(e); };
+      progressArea.onmousemove = (e) => {
+        if (!v.duration) return;
+        const rect = progressArea.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        seekTooltip.style.left = (pct * 100) + '%';
+        seekTooltip.textContent = formatTime(pct * v.duration);
+      };
+      document.addEventListener('mousemove', (e) => { if (isDraggingProgress) seekFromEvent(e); });
+      document.addEventListener('mouseup', () => { isDraggingProgress = false; });
+
+      function seekFromEvent(e) {
+        if (!v.duration) return;
+        const rect = progressArea.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        progressCurrent.style.width = (pct * 100) + '%'; progressHandle.style.left = (pct * 100) + '%';
+        v.currentTime = pct * v.duration; updateTimeDisplay();
+      }
+
+      playerContainer.addEventListener('mousemove', () => { showControls(); resetControlsTimeout(); });
+      playerContainer.addEventListener('mouseleave', () => { if (!v.paused && currentPath) hideControls(); });
+      // Click the video area (not the controls) toggles play.
+      playerContainer.onclick = (e) => { if (currentPath && !controls.contains(e.target) && !welcome.contains(e.target)) togglePlay(); };
+      controls.onclick = (e) => e.stopPropagation();
+      document.addEventListener('click', () => closePops());
+      v.textTracks.addEventListener && v.textTracks.addEventListener('change', () => {});
+      if (v.audioTracks) { v.audioTracks.onaddtrack = refreshAudioBtn; v.audioTracks.onremovetrack = refreshAudioBtn; }
+    }
+
+    function closePops(except) {
+      [ratePop, subPop, audioPop].forEach(p => { if (p !== except) p.classList.remove('open'); });
+    }
+
+    function showControls() { controls.classList.remove('hidden'); playerContainer.classList.remove('playing-hidden'); }
+    function hideControls() { if (!v.paused) { controls.classList.add('hidden'); playerContainer.classList.add('playing-hidden'); } }
+    function resetControlsTimeout() { clearTimeout(controlsTimer); showControls(); if (!v.paused && currentPath) controlsTimer = setTimeout(hideControls, 2600); }
+
+    function updateTimeDisplay() { timeDisplay.textContent = formatTime(v.currentTime) + ' / ' + formatTime(v.duration || 0); }
+    function formatTime(secs) {
+      if (!isFinite(secs)) secs = 0;
+      const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = Math.floor(secs % 60);
+      const pad = (n) => String(n).padStart(2, '0');
+      return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+    }
+
+    function updatePlayIcon(playing) {
+      iconPlayState.innerHTML = playing
+        ? '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="currentColor"/>'
+        : '<path d="M8 5v14l11-7z" fill="currentColor"/>';
+    }
+    function updateVolumeIcon(val) {
+      if (val === 0 || v.muted) iconVolumeState.innerHTML = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.21.05-.42.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" fill="currentColor"/>';
+      else if (val < 0.5) iconVolumeState.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="currentColor"/>';
+      else iconVolumeState.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" fill="currentColor"/>';
+    }
+
+    function flashCenter(playing) {
+      centerFlash.innerHTML = playing
+        ? '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>'
+        : '<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="currentColor"/></svg>';
+      centerFlash.classList.remove('flash'); void centerFlash.offsetWidth; centerFlash.classList.add('flash');
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) playerContainer.requestFullscreen().catch(() => {});
+      else document.exitFullscreen();
+    }
+    document.addEventListener('fullscreenchange', () => {
+      iconFsState.innerHTML = document.fullscreenElement
+        ? '<path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" fill="currentColor"/>'
+        : '<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="currentColor"/>';
+    });
+
+    async function togglePip() {
+      try {
+        if (document.pictureInPictureElement) await document.exitPictureInPicture();
+        else if (currentPath) await v.requestPictureInPicture();
+      } catch {}
+    }
+
+    function toggleLoop() {
+      loopPlaylist = !loopPlaylist;
+      $('mi-loop').classList.toggle('on', loopPlaylist);
+    }
+
+    /* ---------- Playlist ---------- */
+    let playlistDir = DEFAULT_VIDS_DIR;
+
+    function togglePlaylist(force = null) {
+      const show = force !== null ? force : playlistBar.classList.contains('hidden');
+      playlistBar.classList.toggle('hidden', !show);
+      $('mi-playlist').classList.toggle('on', show);
+      if (show && !playlistLoaded) loadPlaylist(playlistDir, false);
+    }
+
+    async function loadPlaylist(dir = DEFAULT_VIDS_DIR, autoplay = false) {
+      playlistDir = dir;
+      playlistTitleLabel.textContent = t('playlistTitle', { dir });
+      try {
+        const res = await fetch('/api/fs/list?path=' + encodeURIComponent(dir));
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        playlist = (data.entries || [])
+          .filter(e => e.type === 'file' && VIDEO_RE.test(e.name))
+          .map(e => ({ name: e.name, path: dir + '/' + e.name }));
+        playlistLoaded = true;
+        renderPlaylist();
+        if (autoplay && playlist.length && !currentPath) playVideo(playlist[0].path);
+      } catch {
+        playlist = [];
+        playlistItems.innerHTML = '<span class="playlist-empty" data-i18n="plSdError">MicroSD non montata o cartella non leggibile.</span>';
+      }
+    }
+
+    function renderPlaylist() {
+      if (!playlist.length) { playlistItems.innerHTML = '<span class="playlist-empty" data-i18n="plEmpty">Nessun video in questa cartella.</span>'; return; }
+      playlistItems.innerHTML = '';
+      playlist.forEach(item => {
+        const chip = document.createElement('div');
+        chip.className = 'playlist-chip';
+        chip.dataset.path = item.path;
+        chip.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg><span>' + item.name + '</span>';
+        chip.onclick = () => playVideo(item.path);
+        playlistItems.appendChild(chip);
+      });
+      highlightActiveChip();
+    }
+
+    function highlightActiveChip() {
+      playlistItems.querySelectorAll('.playlist-chip').forEach(c => c.classList.toggle('active', c.dataset.path === currentPath));
+    }
+
+    function currentIndex() { return playlist.findIndex(i => i.path === currentPath); }
+    function playNext(auto = false) {
+      const idx = currentIndex();
+      if (idx === -1 || !playlist.length) return;
+      if (idx + 1 < playlist.length) playVideo(playlist[idx + 1].path);
+      else if (loopPlaylist) playVideo(playlist[0].path);
+      else if (auto) { updatePlayIcon(false); }
+    }
+    function playPrev() {
+      const idx = currentIndex();
+      if (idx > 0) playVideo(playlist[idx - 1].path);
+      else if (idx === 0 && loopPlaylist) playVideo(playlist[playlist.length - 1].path);
+    }
+
+    /* ---------- Subtitles ---------- */
+    function clearSubs() {
+      v.querySelectorAll('track').forEach(tr => { if (tr.src.startsWith('blob:')) URL.revokeObjectURL(tr.src); tr.remove(); });
+      subTracks = []; activeSub = -1; updateSubBtn();
+    }
+
+    // Add a WebVTT track from already-converted VTT text. Returns its index.
+    function addSubTrack(label, lang, vttText) {
+      const blob = new Blob([vttText], { type: 'text/vtt' });
+      const url = URL.createObjectURL(blob);
+      const tr = document.createElement('track');
+      tr.kind = 'subtitles'; tr.label = label; tr.srclang = lang || ''; tr.src = url; tr.default = false;
+      v.appendChild(tr);
+      const idx = subTracks.push({ label, lang: lang || '', el: tr }) - 1;
+      // textTracks mode must be set after the element is parsed
+      setTimeout(() => { if (v.textTracks[idx]) v.textTracks[idx].mode = 'disabled'; }, 0);
+      return idx;
+    }
+
+    function setActiveSub(idx) {
+      for (let i = 0; i < v.textTracks.length; i++) v.textTracks[i].mode = (i === idx) ? 'showing' : 'disabled';
+      activeSub = idx;
+      updateSubBtn(); renderSubPop();
+    }
+    function toggleSub() {
+      if (!subTracks.length) { inputSub.click(); return; }
+      setActiveSub(activeSub === -1 ? 0 : -1);
+    }
+    function updateSubBtn() { btnSub.classList.toggle('has-sub', activeSub !== -1); }
+
+    function setSubScale(s) {
+      subScale = Math.max(0.5, Math.min(2.5, Math.round(s * 10) / 10));
+      cueStyle.textContent = `#v::cue { font-size: ${(3.2 * subScale).toFixed(2)}vh; line-height: 1.25; color: #fff; background: rgba(0,0,0,0.55); text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-family: 'Outfit', system-ui, sans-serif; }`;
+      renderSubPop();
+    }
+    function bumpSubScale(d) { setSubScale(subScale + d); }
+
+    // SRT -> WebVTT conversion (timestamps comma->dot, strip indices, add header).
+    function srtToVtt(srt) {
+      const body = srt.replace(/\r+/g, '')
+        .replace(/^﻿/, '')
+        .replace(/^\d+\s*$/gm, '')                                   // cue index lines
+        .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');           // , -> . in timestamps
+      return 'WEBVTT\n\n' + body.trim() + '\n';
+    }
+
+    async function addSubFromText(name, rawText) {
+      const isVtt = /vtt|webvtt/i.test(name) || /^\s*WEBVTT/.test(rawText);
+      const vtt = isVtt ? (/^\s*WEBVTT/.test(rawText) ? rawText : 'WEBVTT\n\n' + rawText) : srtToVtt(rawText);
+      const lang = (name.match(/\.([a-z]{2,3})\.(srt|vtt)$/i) || [])[1] || '';
+      const idx = addSubTrack(name.replace(/\.[^.]+$/, ''), lang, vtt);
+      setTimeout(() => setActiveSub(idx), 30);   // auto-enable freshly loaded subtitle
+    }
+
+    function loadLocalSub(file) {
+      const reader = new FileReader();
+      reader.onload = () => addSubFromText(file.name, reader.result);
+      reader.readAsText(file);
+    }
+
+    // Look for sidecar subtitle files (same basename) next to an SD video.
+    async function detectSidecarSubs(sdPath) {
+      const dir = sdPath.substring(0, sdPath.lastIndexOf('/')) || '/';
+      const base = sdPath.substring(sdPath.lastIndexOf('/') + 1).replace(/\.[^.]+$/, '').toLowerCase();
+      try {
+        const res = await fetch('/api/fs/list?path=' + encodeURIComponent(dir));
+        if (!res.ok) return;
+        const data = await res.json();
+        const subs = (data.entries || []).filter(e => e.type === 'file' && SUB_RE.test(e.name) &&
+          e.name.toLowerCase().replace(/\.([a-z]{2,3})?\.?(srt|vtt|webvtt)$/i, '') === base);
+        for (const s of subs) {
+          try {
+            const txt = await (await fetch(getSdUrl(dir + '/' + s.name))).text();
+            await addSubFromText(s.name, txt);
+          } catch {}
+        }
+        if (subs.length) { setTimeout(() => setActiveSub(0), 40); }   // show first match by default
+      } catch {}
+    }
+
+    function renderSubPop() {
+      let html = '<div class="pop-label" data-i18n="menuSubs">Sottotitoli</div>';
+      html += `<div class="pop-opt ${activeSub === -1 ? 'active' : ''}" data-sub="-1"><span class="tick">✓</span><span class="opt-name" data-i18n="subOff">Disattivati</span></div>`;
+      subTracks.forEach((tr, i) => {
+        html += `<div class="pop-opt ${activeSub === i ? 'active' : ''}" data-sub="${i}"><span class="tick">✓</span><span class="opt-name">${tr.label}</span>${tr.lang ? `<span class="opt-tag">${tr.lang}</span>` : ''}</div>`;
+      });
+      html += '<div class="pop-divider"></div>';
+      html += '<div class="pop-opt" id="sub-load-opt"><span class="tick"></span><span class="opt-name" data-i18n="loadFile">Carica file…</span></div>';
+      html += `<div class="pop-divider"></div><div class="pop-label" data-i18n="sizeLabel">Dimensione</div>
+        <div class="pop-size-row"><span class="sz-val">${Math.round(subScale * 100)}%</span>
+        <div class="sz-btns"><button class="sz-btn" data-sz="-1">A−</button><button class="sz-btn" data-sz="0">↺</button><button class="sz-btn" data-sz="1">A+</button></div></div>`;
+      subPop.innerHTML = html;
+      subPop.querySelectorAll('.pop-opt[data-sub]').forEach(el => el.onclick = (e) => { e.stopPropagation(); setActiveSub(parseInt(el.dataset.sub)); });
+      $('sub-load-opt').onclick = (e) => { e.stopPropagation(); inputSub.click(); };
+      subPop.querySelectorAll('.sz-btn').forEach(el => el.onclick = (e) => { e.stopPropagation(); const d = parseInt(el.dataset.sz); d === 0 ? setSubScale(1.0) : bumpSubScale(d * 0.1); });
+    }
+
+    /* ---------- Audio tracks (when the browser exposes them) ---------- */
+    function refreshAudioBtn() { btnAudio.style.display = (v.audioTracks && v.audioTracks.length > 1) ? 'flex' : 'none'; }
+    function renderAudioPop() {
+      const tracks = v.audioTracks;
+      let html = '<div class="pop-label" data-i18n="audioTrack">Traccia audio</div>';
+      if (!tracks || tracks.length <= 1) {
+        html += '<div class="pop-opt"><span class="opt-name" style="color:var(--text-muted)" data-i18n="singleTrack">Traccia unica</span></div>';
+      } else {
+        for (let i = 0; i < tracks.length; i++) {
+          const tk = tracks[i];
+          html += `<div class="pop-opt ${tk.enabled ? 'active' : ''}" data-audio="${i}"><span class="tick">✓</span><span class="opt-name">${tk.label || tk.language || t('trackN', { n: i + 1 })}</span>${tk.language ? `<span class="opt-tag">${tk.language}</span>` : ''}</div>`;
+        }
+      }
+      audioPop.innerHTML = html;
+      audioPop.querySelectorAll('.pop-opt[data-audio]').forEach(el => el.onclick = (e) => {
+        e.stopPropagation(); const idx = parseInt(el.dataset.audio);
+        for (let i = 0; i < tracks.length; i++) tracks[i].enabled = (i === idx);
+        renderAudioPop();
+      });
+    }
+
+    /* ---------- Drag & drop / local ---------- */
+    function setupDragAndDrop() {
+      let dragDepth = 0;
+      window.addEventListener('dragover', (e) => e.preventDefault());
+      window.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; dragOverlay.style.display = 'flex'; });
+      window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; dragOverlay.style.display = 'none'; } });
+      window.addEventListener('drop', (e) => {
+        e.preventDefault(); dragDepth = 0; dragOverlay.style.display = 'none';
+        const file = e.dataTransfer.files[0];
+        if (!file) return;
+        if (file.type.startsWith('video/')) openLocalFile(file);
+        else if (SUB_RE.test(file.name)) { if (currentPath) loadLocalSub(file); }
+      });
+      inputFile.onchange = (e) => { const f = e.target.files[0]; if (f) openLocalFile(f); inputFile.value = ''; };
+    }
+    function openLocalFile(file) {
+      const url = URL.createObjectURL(file);
+      v.dataset.name = file.name + ' (' + t('localTag') + ')';
+      playVideo(url);
+    }
+
+    /* ---------- Keybindings ---------- */
+    function setupKeybindings() {
+      document.addEventListener('keydown', (e) => {
+        if (document.activeElement.tagName === 'INPUT') return;
+        const k = e.key.toLowerCase();
+        if (e.key === ' ' || k === 'k') { e.preventDefault(); togglePlay(); }
+        else if (e.key === 'ArrowRight' && e.ctrlKey) { e.preventDefault(); playNext(); }
+        else if (e.key === 'ArrowLeft' && e.ctrlKey) { e.preventDefault(); playPrev(); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); seekRelative(10); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); seekRelative(-10); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setVolume(v.volume + 0.1); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); setVolume(v.volume - 0.1); }
+        else if (e.ctrlKey && k === 'o' && e.shiftKey) { e.preventDefault(); openSdExplorer(); }
+        else if (e.ctrlKey && k === 'o') { e.preventDefault(); inputFile.click(); }
+        else if (k === 'f') { e.preventDefault(); toggleFullscreen(); }
+        else if (k === 'i') { e.preventDefault(); togglePip(); }
+        else if (k === 'm') { e.preventDefault(); toggleMute(); }
+        else if (k === 'p') { e.preventDefault(); togglePlaylist(); }
+        else if (k === 'l') { e.preventDefault(); toggleLoop(); }
+        else if (k === 'c') { e.preventDefault(); toggleSub(); }
+        else if (e.key === '+' || e.key === '=') { e.preventDefault(); bumpSubScale(0.1); }
+        else if (e.key === '-' || e.key === '_') { e.preventDefault(); bumpSubScale(-0.1); }
+        else if (k === 's') { e.preventDefault(); stopVideo(); }
+        else if (k === '?') { e.preventDefault(); openAbout(); }
+        else if (e.key === 'Escape') {
+          if (sdModal.classList.contains('visible')) sdModal.classList.remove('visible');
+          else if (aboutModal.classList.contains('visible')) aboutModal.classList.remove('visible');
+          else if (document.fullscreenElement) document.exitFullscreen();
+          else stopVideo();
+        }
+      });
+    }
+
+    /* ---------- SD explorer ---------- */
+    function openSdExplorer() { sdCwd = '/data'; sdSearch.value = ''; sdModal.classList.add('visible'); loadSdDir(); }
+    $('sd-modal-close').onclick = () => sdModal.classList.remove('visible');
+    sdModal.onclick = (e) => { if (e.target === sdModal) sdModal.classList.remove('visible'); };
+
+    async function loadSdDir() {
+      const parts = sdCwd.split('/').filter(Boolean);
+      let acc = '', crumbs = '<span class="crumbs-seg" data-path="/">SD</span>';
+      parts.forEach(seg => { acc += '/' + seg; crumbs += ' › <span class="crumbs-seg" data-path="' + acc + '">' + seg + '</span>'; });
+      modalCrumbs.innerHTML = crumbs;
+      modalCrumbs.querySelectorAll('.crumbs-seg').forEach(el => el.onclick = () => { sdCwd = el.dataset.path; loadSdDir(); });
+
+      explorerList.innerHTML = '<li class="explorer-msg" data-i18n="loading">Caricamento…</li>';
+      try {
+        const res = await fetch('/api/fs/list?path=' + encodeURIComponent(sdCwd));
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        cachedFiles = (data.entries || []).sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name) : (a.type === 'dir' ? -1 : 1));
+        renderSdFiles();
+      } catch {
+        explorerList.innerHTML = '<li class="explorer-msg error" data-i18n="sdReadError">Impossibile leggere la MicroSD.</li>';
+      }
+    }
+
+    function renderSdFiles() {
+      const query = sdSearch.value.trim().toLowerCase();
+      explorerList.innerHTML = '';
+      if (sdCwd !== '/') {
+        const li = document.createElement('li'); li.className = 'explorer-item';
+        li.innerHTML = '<div class="explorer-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></div><span class="explorer-name" data-i18n="parentDir">.. (Cartella superiore)</span>';
+        li.onclick = () => { sdCwd = sdCwd.substring(0, sdCwd.lastIndexOf('/')) || '/'; loadSdDir(); };
+        explorerList.appendChild(li);
+      }
+      let count = 0;
+      cachedFiles.forEach(e => {
+        const isDir = e.type === 'dir';
+        const isVideo = !isDir && VIDEO_RE.test(e.name);
+        if (!isDir && !isVideo) return;
+        if (query && !e.name.toLowerCase().includes(query)) return;
+        const fullPath = sdCwd.endsWith('/') ? sdCwd + e.name : sdCwd + '/' + e.name;
+        const li = document.createElement('li'); li.className = 'explorer-item';
+        if (fullPath === currentPath) li.classList.add('active');
+        li.innerHTML = '<div class="explorer-icon ' + (isDir ? 'dir' : 'video') + '">' +
+          (isDir ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
+                  : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg>') +
+          '</div><span class="explorer-name">' + e.name + '</span>' +
+          (isDir ? '' : '<span class="explorer-size">' + formatBytes(e.size) + '</span>');
+        li.onclick = () => {
+          if (isDir) { sdCwd = fullPath; loadSdDir(); }
+          else { loadPlaylist(sdCwd, false); playVideo(fullPath); sdModal.classList.remove('visible'); }
+        };
+        explorerList.appendChild(li); count++;
+      });
+      if (count === 0) explorerList.innerHTML += '<li class="explorer-msg" data-i18n="noVideoOrFolder">Nessun video o cartella.</li>';
+    }
+    sdSearch.oninput = renderSdFiles;
+
+    function formatBytes(bytes) {
+      if (!bytes) return '0 B';
+      const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    /* ---------- SD status probe ---------- */
+    let sdStatus = null;   // {online:bool, count:int|null} — last probe result, re-rendered on lang change
+    function renderSdStatus() {
+      const el = $('sd-status-text');
+      el.removeAttribute('data-i18n');   // value is computed; keep the engine from repainting "SD —"
+      if (!sdStatus) { el.textContent = t('sdDash'); el.setAttribute('data-i18n', 'sdDash'); return; }
+      if (sdStatus.online) el.textContent = sdStatus.count ? t('sdVideoCount', { count: sdStatus.count }) : t('sdReady');
+      else el.textContent = t('sdOffline');
+    }
+    async function probeSd() {
+      try {
+        const res = await fetch('/api/fs/list?path=' + encodeURIComponent(DEFAULT_VIDS_DIR));
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const n = (data.entries || []).filter(e => e.type === 'file' && VIDEO_RE.test(e.name)).length;
+        $('sd-status-dot').classList.add('online');
+        sdStatus = { online: true, count: n };
+      } catch {
+        $('sd-status-dot').classList.remove('online');
+        sdStatus = { online: false, count: null };
+      }
+      renderSdStatus();
+    }
+
+    /* ---------- About ---------- */
+    function openAbout() { aboutModal.classList.add('visible'); }
+    $('about-btn-close').onclick = () => aboutModal.classList.remove('visible');
+    aboutModal.onclick = (e) => { if (e.target === aboutModal) aboutModal.classList.remove('visible'); };
+
+    init();
+  </script>
+</body>
+</html>

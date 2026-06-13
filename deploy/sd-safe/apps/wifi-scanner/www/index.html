@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WiFi Scanner</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff;
+      --line:#2a3a5e; --field:#0b1220; --ok:#2fd07a; --warn:#f5b13d; --err:#e2576b; }
+    html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86;
+      --accent:#2b6fd6; --line:#cdd8ee; --field:#f4f7fe; --ok:#1c9d5b; --warn:#c2820f; --err:#c83e52; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+      font: 14px system-ui, "Segoe UI", sans-serif; }
+    header { display: flex; align-items: center; gap: 6px; padding: 5px 8px; flex: none;
+      background: var(--panel); border-bottom: 1px solid var(--line); }
+    header .t { font-weight: 600; flex: 1; }
+    header .spin { width: 13px; height: 13px; border: 2px solid var(--line); border-top-color: var(--accent);
+      border-radius: 50%; animation: sp .7s linear infinite; display: none; flex: none; }
+    header.scanning .spin { display: inline-block; }
+    @keyframes sp { to { transform: rotate(360deg); } }
+    header button { border: 1px solid var(--line); background: #80808018; color: var(--text);
+      border-radius: 6px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+    header button:hover { background: #80808033; } header button.on { background: var(--accent); color: #07101f; border-color: transparent; }
+
+    main { flex: 1; overflow: auto; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+    li:hover { background: #80808012; }
+    li.cur { background: linear-gradient(90deg, #2fd07a18, transparent); }
+
+    /* signal bars */
+    .bars { display: flex; align-items: flex-end; gap: 2px; height: 18px; flex: none; width: 22px; }
+    .bars i { width: 4px; background: var(--line); border-radius: 1px; }
+    .bars i:nth-child(1){height:5px} .bars i:nth-child(2){height:9px}
+    .bars i:nth-child(3){height:13px} .bars i:nth-child(4){height:18px}
+    .bars.q4 i, .bars.q3 i:nth-child(-n+3), .bars.q2 i:nth-child(-n+2), .bars.q1 i:nth-child(1) { background: var(--sig); }
+
+    .info { flex: 1; min-width: 0; }
+    .ssid { display: flex; align-items: center; gap: 6px; font-weight: 600; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }
+    .ssid .lock { color: var(--muted); font-size: 11px; flex: none; }
+    .ssid .open { color: var(--warn); }
+    .ssid .me { font-size: 10px; font-weight: 600; color: var(--ok); border: 1px solid var(--ok);
+      border-radius: 8px; padding: 0 6px; flex: none; }
+    .meta { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rssi { text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+    .rssi .dbm { font-weight: 600; } .rssi .pct { color: var(--muted); font-size: 11px; }
+
+    .empty { color: var(--muted); text-align: center; padding: 40px 20px; line-height: 1.6; font-size: 13px; }
+    .empty .big { font-size: 30px; display: block; margin-bottom: 6px; opacity: .7; }
+
+    footer { display: flex; align-items: center; gap: 8px; padding: 5px 10px; flex: none;
+      background: var(--panel); border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+    footer .sp { flex: 1; }
+    .pill { display: inline-flex; align-items: center; gap: 5px; }
+    .pill .d { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .pill .d.live { background: var(--ok); }
+    main::-webkit-scrollbar { width: 6px; } main::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <header id="hd">
+    <span class="t">📶 WiFi Scanner</span>
+    <span class="spin"></span>
+    <button id="auto" title="Auto-refresh every 8s">Auto</button>
+    <button id="scan" class="on">Scan</button>
+  </header>
+
+  <main><ul id="list"></ul></main>
+
+  <footer>
+    <span id="count">—</span>
+    <span class="sp"></span>
+    <span class="pill"><span class="d" id="srcdot"></span><span id="src">idle</span></span>
+  </footer>
+
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const SETTINGS = '/system/config/settings.json';
+
+    async function readJSON(path) {
+      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+        return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; }
+    }
+    async function loadTheme() {
+      const s = await readJSON(SETTINGS);
+      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
+    }
+
+    // ---- signal model ----------------------------------------------------------
+    // RSSI dBm → 0..100% and a 1..4 quality bucket, with a colour ramp.
+    const pct = (rssi) => Math.max(0, Math.min(100, Math.round(2 * (rssi + 100))));
+    const quality = (p) => p >= 75 ? 4 : p >= 50 ? 3 : p >= 25 ? 2 : 1;
+    const sigColor = (p) => p >= 60 ? 'var(--ok)' : p >= 35 ? 'var(--warn)' : 'var(--err)';
+    const secLabel = (s) => !s || /open|none/i.test(s) ? 'Open' : s.toUpperCase();
+    const isOpen = (s) => !s || /open|none/i.test(s);
+
+    let connectedSSID = null;
+
+    function render(nets) {
+      const list = $('list');
+      list.innerHTML = '';
+      if (!nets.length) {
+        const li = document.createElement('li'); li.style.borderBottom = '0';
+        li.innerHTML = `<div class="empty"><span class="big">📡</span>No networks found.<br>Press <b>Scan</b> to search again.</div>`;
+        list.appendChild(li);
+        $('count').textContent = '0 networks';
+        return;
+      }
+      nets.sort((a, b) => b.rssi - a.rssi);
+      for (const n of nets) {
+        const p = pct(n.rssi), q = quality(p), col = sigColor(p);
+        const cur = connectedSSID && n.ssid === connectedSSID;
+        const li = document.createElement('li');
+        if (cur) li.className = 'cur';
+        const ch = n.channel ? 'ch ' + n.channel : '';
+        const bss = n.bssid ? n.bssid : '';
+        const band = n.channel ? (n.channel > 14 ? '5 GHz' : '2.4 GHz') : '';
+        li.innerHTML =
+          `<div class="bars q${q}" style="--sig:${col}"><i></i><i></i><i></i><i></i></div>` +
+          `<div class="info">` +
+            `<div class="ssid">` +
+              `<span class="name"></span>` +
+              (isOpen(n.auth) ? `<span class="lock open" title="Open network">⚠ open</span>`
+                              : `<span class="lock" title="${secLabel(n.auth)}">🔒 ${secLabel(n.auth)}</span>`) +
+              (cur ? `<span class="me">connected</span>` : ``) +
+            `</div>` +
+            `<div class="meta">${[ch, band, bss].filter(Boolean).join('  ·  ')}</div>` +
+          `</div>` +
+          `<div class="rssi"><div class="dbm" style="color:${col}">${n.rssi} dBm</div><div class="pct">${p}%</div></div>`;
+        li.querySelector('.name').textContent = n.ssid || '(hidden)';
+        list.appendChild(li);
+      }
+      const open = nets.filter((n) => isOpen(n.auth)).length;
+      $('count').textContent = `${nets.length} network${nets.length === 1 ? '' : 's'}` + (open ? ` · ${open} open` : '');
+    }
+
+    // ---- data sources ----------------------------------------------------------
+    function setSrc(txt, live) { $('src').textContent = txt; $('srcdot').classList.toggle('live', !!live); }
+
+    async function fetchStatus() {
+      try { const r = await fetch('/api/status', { cache: 'no-store' });
+        if (r.ok) { const s = await r.json(); connectedSSID = s?.network?.ssid || null; return s; } } catch {}
+      return null;
+    }
+
+    // Try the device scan endpoint; normalise a few likely field names.
+    async function deviceScan() {
+      try {
+        const r = await fetch('/api/wifi/scan', { cache: 'no-store' });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const arr = Array.isArray(j) ? j : (j.networks || j.aps || j.results || null);
+        if (!Array.isArray(arr)) return null;
+        return arr.map((n) => ({
+          ssid: n.ssid ?? n.SSID ?? n.name ?? '',
+          rssi: n.rssi ?? n.RSSI ?? n.signal ?? -90,
+          channel: n.channel ?? n.ch ?? n.primary ?? null,
+          auth: n.auth ?? n.security ?? n.encryption ?? n.authmode ?? null,
+          bssid: n.bssid ?? n.BSSID ?? n.mac ?? null,
+        }));
+      } catch { return null; }
+    }
+
+    // Demo set so the app is fully explorable in preview / before the API exists.
+    function demoScan() {
+      return [
+        { ssid: 'NucleoOS-Mesh', rssi: -41, channel: 6,  auth: 'WPA2', bssid: '4C:11:AE:0B:2F:90' },
+        { ssid: 'HomeFiber-5G',  rssi: -57, channel: 36, auth: 'WPA3', bssid: '8C:DE:52:1A:77:01' },
+        { ssid: 'Cardputer-AP',  rssi: -63, channel: 1,  auth: 'WPA2', bssid: 'A0:B7:65:34:9C:12' },
+        { ssid: 'GuestZone',     rssi: -71, channel: 11, auth: 'Open', bssid: 'F8:1A:67:22:0D:88' },
+        { ssid: 'IoT-Lab',       rssi: -78, channel: 6,  auth: 'WPA2', bssid: '24:6F:28:5E:31:AA' },
+        { ssid: '',              rssi: -84, channel: 9,  auth: 'WPA2', bssid: 'DC:A6:32:11:8E:43' },
+        { ssid: 'eduroam',       rssi: -88, channel: 44, auth: 'WPA2-Enterprise', bssid: '00:0C:E6:7B:55:10' },
+      ];
+    }
+
+    let scanning = false;
+    async function scan() {
+      if (scanning) return;
+      scanning = true; $('hd').classList.add('scanning');
+      await fetchStatus();                       // refresh "connected" highlight
+      let nets = await deviceScan(), live = true;
+      if (!nets) {                               // no scan API: at least show the connected AP, else demo
+        if (connectedSSID) {
+          const s = await fetchStatus();
+          nets = [{ ssid: connectedSSID, rssi: s?.network?.rssi ?? -55, channel: s?.network?.channel ?? null,
+                    auth: s?.network?.auth ?? 'WPA2', bssid: s?.network?.bssid ?? null }];
+          setSrc('connected AP only — scan API pending', false);
+          live = false;
+        } else {
+          nets = demoScan(); setSrc('demo data — device offline', false); live = false;
+        }
+      } else {
+        setSrc('live scan', true);
+      }
+      render(nets);
+      scanning = false; $('hd').classList.remove('scanning');
+      if (live) setSrc('live scan · ' + new Date().toLocaleTimeString(), true);
+    }
+
+    // ---- controls --------------------------------------------------------------
+    $('scan').onclick = scan;
+    let autoTimer = 0;
+    $('auto').onclick = (e) => {
+      const on = e.target.classList.toggle('on');
+      clearInterval(autoTimer);
+      if (on) { autoTimer = setInterval(scan, 8000); scan(); }
+    };
+    addEventListener('keydown', (e) => {
+      if (e.key === 'r' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scan(); }
+    });
+
+    // ---- live: theme + pushed scan events --------------------------------------
+    window.addEventListener('message', (e) => {
+      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
+      if (e.data?.t === 'fs.changed' && e.data.d?.path?.endsWith('settings.json')) loadTheme();
+      if (e.data?.t === 'wifi.scan' && Array.isArray(e.data.d?.networks)) { setSrc('live scan', true); render(e.data.d.networks); }
+    });
+
+    // ---- boot ------------------------------------------------------------------
+    async function init() {
+      await loadTheme();
+      scan();
+    }
+    init();
+  </script>
+</body>
+</html>

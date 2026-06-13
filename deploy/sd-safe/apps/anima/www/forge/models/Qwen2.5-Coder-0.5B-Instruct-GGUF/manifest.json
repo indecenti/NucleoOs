@@ -1,0 +1,16 @@
+{
+  "model": "Qwen2.5-Coder-0.5B-Instruct-GGUF",
+  "format": "gguf",
+  "revision": "ebb2015119c907b064c512bf053e945850b5875f",
+  "modelType": null,
+  "contextWindow": null,
+  "totalBytes": 491400064,
+  "shards": [
+    {
+      "name": "qwen2.5-coder-0.5b-instruct-q4_k_m.gguf",
+      "bytes": 491400064,
+      "sha256": "1d9614638d18024d0fbb36575a15f1302a3adf044df10345688ec4f6e1c4ff32"
+    }
+  ],
+  "aux": []
+}

@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DOS Box</title>
+  <style>
+    :root { --bg:#0b0f1a; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc; --muted:#8aa0c8;
+            --accent:#4ea1ff; --line:#2a3a5e; --warn:#ffcf66; --err:#ff8093; --ok:#4cd07d; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: var(--bg); color: var(--text); font: 14px system-ui, sans-serif; }
+    header { display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: var(--panel);
+      border-bottom: 1px solid var(--line); }
+    header .title { font-weight: 600; white-space: nowrap; }
+    header .sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    header .tools { display: flex; gap: 6px; }
+    header button { border: 1px solid var(--line); background: #ffffff10; color: var(--text); border-radius: 7px;
+      padding: 5px 9px; cursor: pointer; font: inherit; line-height: 1; }
+    header button:hover:not(:disabled) { background: #ffffff1f; }
+    header button:disabled { opacity: .4; cursor: default; }
+    .stage { flex: 1; position: relative; display: grid; place-items: center; background: #000; min-height: 0; }
+    #dos { width: 100%; height: 100%; }
+    .overlay { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+    .hint { max-width: 480px; padding: 0 18px; text-align: center; color: var(--muted); line-height: 1.55; }
+    .hint .big { font-size: 40px; margin-bottom: 6px; }
+    .hint code { color: #e8eefc; background: #ffffff14; padding: 1px 5px; border-radius: 4px; }
+    .hint.warn { color: var(--warn); } .hint.err { color: var(--err); }
+    .spin { width: 26px; height: 26px; border: 3px solid #ffffff22; border-top-color: var(--accent);
+      border-radius: 50%; animation: sp .8s linear infinite; margin: 0 auto 10px; }
+    @keyframes sp { to { transform: rotate(360deg); } }
+    .bar { display: flex; gap: 6px; overflow-x: auto; padding: 7px; background: var(--panel); border-top: 1px solid var(--line); }
+    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border: 1px solid var(--line);
+      border-radius: 8px; cursor: pointer; white-space: nowrap; color: var(--text); }
+    .chip:hover { background: #ffffff14; } .chip.active { border-color: var(--accent); color: var(--accent); background: #4ea1ff14; }
+    .chip .ic { opacity: .7; }
+    .bar .sec { flex-shrink: 0; align-self: center; padding: 0 8px 0 4px; margin-left: 4px; color: var(--muted);
+      font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; border-left: 1px solid var(--line); }
+    .bar .sec:first-child { border-left: 0; margin-left: 0; }
+    .muted { color: var(--muted); font-size: 12px; padding: 6px 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="title">🕹️ DOS Box</span>
+    <span class="sub" id="sub" data-i18n="sub">emulated by your browser, streamed from the device</span>
+    <span class="tools">
+      <button id="btnReload" title="Restart this program" data-i18n-attr="title:btn_restart_tip" disabled>⟳ <span data-i18n="btn_restart">Restart</span></button>
+      <button id="btnStop" title="Stop and return to the library" data-i18n-attr="title:btn_stop_tip" disabled>■ <span data-i18n="btn_stop">Stop</span></button>
+      <button id="btnFull" title="Fullscreen" data-i18n-attr="title:btn_fullscreen_tip" disabled>⛶</button>
+    </span>
+  </header>
+  <div class="stage">
+    <div id="dos"></div>
+    <div class="overlay" id="overlay"></div>
+  </div>
+  <div class="bar" id="bar"></div>
+
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    const t = await I18N.init('dosbox');
+    // ── NucleoOS "Commodore trick" ─────────────────────────────────────────────
+    // The ESP32 only STORES and STREAMS the disk image from SD. The x86/DOS emulation
+    // (js-dos = DOSBox compiled to WebAssembly) runs entirely in the CLIENT browser
+    // (PC / Android), so the device RAM cost is ~file serving only.
+    //
+    // Loader source. By default we load js-dos from its CDN. For fully OFFLINE use, MIRROR the
+    // CDN layout under  apps/dosbox/www/vendor/  on the SD card:
+    //   vendor/js-dos.js  vendor/js-dos.css  vendor/emulators/…  (the wasm/worker assets)
+    // If vendor/js-dos.js is present it is used automatically; otherwise we fall back to the CDN.
+    // js-dos locates its own wasm assets relative to the js-dos.js it was loaded from, so keeping
+    // the emulators/ subfolder next to js-dos.js is what makes offline work (do NOT flatten it).
+    const CDN = 'https://v8.js-dos.com/latest/';
+    const VENDOR = 'vendor/';
+    let LOADER = null;            // resolved { base, css, js } — memoised by ensureLoader()
+
+    // js-dos emulation engine. The device's bundles ship a *classic DOSBox* dosbox.conf,
+    // so we use the matching (and js-dos-default) 'dosbox' backend — smaller, faster and
+    // more compatible than 'dosboxX' for these vintage titles. A per-bundle override is
+    // possible via a "# nucleo:backend=dosboxX" line in the bundle's conf (rare).
+    const BACKEND = 'dosbox';
+
+    const DIR = '/data/DOS';                                      // library folder on SD
+    const RUNNABLE = /\.(jsdos|zip|img|ima|exe|com|bat)$/i;       // listed in the bar / openable
+    const BUNDLE   = /\.(jsdos|zip)$/i;                           // a ready js-dos bundle (loaded by url)
+    const DISKIMG  = /\.(img|ima)$/i;                             // a raw floppy/HD image (booted)
+    const RAWPROG  = /\.(exe|com|bat)$/i;                         // a bare DOS executable (mounted + run)
+
+    const stage = document.querySelector('.stage');
+    const dos = document.getElementById('dos');
+    const bar = document.getElementById('bar');
+    const overlay = document.getElementById('overlay');
+    const sub = document.getElementById('sub');
+    const btnReload = document.getElementById('btnReload');
+    const btnStop = document.getElementById('btnStop');
+    const btnFull = document.getElementById('btnFull');
+
+    // Cache-buster: js-dos (and the browser) would otherwise reuse a stale copy of a bundle
+    // by its URL, so a freshly re-installed/fixed game would still load the old bytes. A unique
+    // query each launch forces a fresh fetch. The device ignores extra query keys (reads ?path).
+    const src = (p) => '/api/fs/read?path=' + encodeURIComponent(p) + '&_=' + Date.now();
+    const fsBytes = async (p) => new Uint8Array(await (await fetch(src(p))).arrayBuffer());
+    const base = (p) => p.split('/').pop();
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    let ci = null;            // current js-dos command interface (DosProps)
+    let current = null;       // path of the running program
+    let loaderReady = null;   // memoised loader promise
+
+    function showOverlay(html, cls) {
+      overlay.innerHTML = html ? `<div class="hint${cls ? ' ' + cls : ''}">${html}</div>` : '';
+      overlay.style.display = html ? 'grid' : 'none';
+    }
+    const spinner = (label) => showOverlay(`<div class="spin"></div>${esc(label || t('loading'))}`);
+
+    function setRunning(on, name) {
+      btnReload.disabled = btnStop.disabled = btnFull.disabled = !on;
+      if (on) { sub.removeAttribute('data-i18n'); sub.textContent = t('sub_running', { name }); }
+      else { sub.setAttribute('data-i18n', 'sub'); sub.textContent = t('sub'); }
+    }
+
+    // ── loader ─────────────────────────────────────────────────────────────────
+    function loadOnce(tag, attrs) {
+      return new Promise((res, rej) => {
+        const el = document.createElement(tag);
+        Object.assign(el, attrs);
+        el.onload = res; el.onerror = () => rej(new Error('failed to load ' + (attrs.src || attrs.href)));
+        document.head.appendChild(el);
+      });
+    }
+    // Vendor (offline) copy is OPT-IN: after placing js-dos.js/.css + the emulators/ subfolder under
+    // apps/dosbox/www/vendor/ on the SD, set  localStorage['dosbox.vendor']='1'. By default we go
+    // straight to the CDN and never fire a probe — so the common online path produces no 404 noise.
+    const useVendor = (() => { try { return localStorage.getItem('dosbox.vendor') === '1'; } catch { return false; } })();
+    async function vendorPresent() {
+      if (!useVendor) return false;
+      try { const r = await fetch(VENDOR + 'js-dos.js', { method: 'GET', cache: 'no-store' }); return r.ok; }
+      catch { return false; }
+    }
+    function ensureLoader() {
+      if (loaderReady) return loaderReady;
+      loaderReady = (async () => {
+        const baseUrl = (await vendorPresent()) ? VENDOR : CDN;
+        LOADER = { base: baseUrl, css: baseUrl + 'js-dos.css', js: baseUrl + 'js-dos.js' };
+        await loadOnce('link', { rel: 'stylesheet', href: LOADER.css });
+        await loadOnce('script', { src: LOADER.js });
+        if (typeof Dos !== 'function') throw new Error('js-dos global not found after load');
+        return LOADER;
+      })().catch((e) => { loaderReady = null; throw e; });
+      return loaderReady;
+    }
+
+    // ── option builders per file kind ───────────────────────────────────────────
+    // Raw .exe/.com/.bat → mount C: at the FS root, drop the file there, auto-run it.
+    async function rawProgram(path) {
+      const name = base(path);
+      const run = /\.bat$/i.test(name) ? 'call ' + name : name;
+      const conf = [
+        '[sdl]', 'autolock=false', '',
+        '[dosbox]', 'machine=svga_s3', 'memsize=16', '',
+        '[cpu]', 'core=auto', 'cputype=auto', 'cycles=auto', '',
+        '[mixer]', 'nosound=false', 'rate=44100', '',
+        '[sblaster]', 'sbtype=sb16', 'irq=7', 'dma=1', 'hdma=5', 'oplmode=auto', 'oplrate=44100', '',
+        '[dos]', 'xms=true', 'ems=true', 'umb=true', '',
+        '[autoexec]', '@echo off', 'mount c /', 'c:', run, '',
+      ].join('\n');
+      return { dosboxConf: conf, initFs: [{ path: name, contents: await fsBytes(path) }] };
+    }
+    // Raw floppy/HD disk image → imgmount + boot. Floppy detection by size (≤ 2.88 MB).
+    // HD boot is best-effort (DOSBox auto-detects geometry from a standard image's MBR/BPB).
+    async function diskImage(path) {
+      const name = base(path).toUpperCase().replace(/[^A-Z0-9._-]/g, '_');
+      const contents = await fsBytes(path);
+      const floppy = contents.length <= 2949120;                 // 2.88 MB
+      const conf = floppy
+        ? ['[autoexec]', '@echo off', 'mount c /', 'imgmount a c:\\' + name + ' -t floppy', 'boot -l a', ''].join('\n')
+        : ['[autoexec]', '@echo off', 'mount d /', 'imgmount c d:\\' + name + ' -t hdd -fs fat', 'boot -l c', ''].join('\n');
+      return { dosboxConf: conf, initFs: [{ path: name, contents }] };
+    }
+
+    async function buildOpts(path) {
+      if (BUNDLE.test(path))  return { url: src(path) };          // ready bundle: js-dos reads its own .jsdos/dosbox.conf
+      if (DISKIMG.test(path)) return await diskImage(path);
+      if (RAWPROG.test(path)) return await rawProgram(path);
+      throw new Error('unsupported file type: ' + base(path));
+    }
+
+    // ── boot / stop ─────────────────────────────────────────────────────────────
+    async function stop() {
+      try { ci && ci.stop && await ci.stop(); } catch {}
+      ci = null; current = null;
+      dos.innerHTML = '';
+      setRunning(false);
+      bar.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
+      showOverlay('<div class="big">🕹️</div>' + esc(t('pick_to_boot')));
+    }
+
+    async function boot(path, chip) {
+      bar.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
+      // a deep-link boot has no chip arg — light up the matching library chip if there is one
+      if (!chip) chip = bar.querySelector('.chip[data-name="' + base(path).replace(/"/g, '\\"') + '"]');
+      chip && chip.classList.add('active');
+      try { ci && ci.stop && await ci.stop(); } catch {}
+      ci = null; dos.innerHTML = '';
+      const name = base(path);
+      spinner(t('loading_emulator'));
+      try {
+        await ensureLoader();
+      } catch {
+        const reason = (LOADER && LOADER.base === VENDOR) ? t('load_fail') : t('load_fail_net');
+        showOverlay(`${esc(reason)}<br><br>` +
+          t('load_fail_hint'), 'warn');
+        return;
+      }
+      spinner(t('starting', { name }));
+      try {
+        const opts = await buildOpts(path);
+        // NB: we deliberately do NOT pass pathPrefix — js-dos auto-derives the location of its
+        // wasm/worker assets (emulators/…) from the <script> that loaded it. Setting it explicitly
+        // to the loader base points at a non-existent emulators.js (the assets live in an
+        // emulators/ subfolder) and breaks every boot. Auto-derivation works for CDN and vendor alike.
+        ci = await Dos(dos, {
+          backend: BACKEND,
+          autoStart: true,
+          noCloud: true,          // offline appliance: no js-dos cloud login / save-to-cloud nag
+          ...opts,
+        });
+        current = path;
+        setRunning(true, name);
+        showOverlay('');          // js-dos draws its own UI + loading bar from here on
+      } catch (e) {
+        const msg = e && e.message ? e.message : String(e);
+        showOverlay(t('start_fail', { name: '<b>' + esc(name) + '</b>' }) + '<br>' + esc(msg), 'err');
+        setRunning(false);
+      }
+    }
+
+    // ── library ──────────────────────────────────────────────────────────────────
+    // Optional /data/DOS/library.json adds titles + categories: { "<file>": {title, category, note} }.
+    // Anything not listed falls back to a prettified filename and a category inferred from its type,
+    // so the library works with zero metadata and improves as entries are added (e.g. by add-win311).
+    const PRETTY = (n) => n.replace(/\.[^.]+$/, '');
+    const defaultCat = (n) => DISKIMG.test(n) ? 'Disks' : RAWPROG.test(n) ? 'Programs' : 'Games';
+    const iconFor = (n, cat, title) => cat === 'Systems'
+        ? (/windows|win\s?3/i.test(title) ? '🪟' : '🖥️')
+        : DISKIMG.test(n) ? '💾' : RAWPROG.test(n) ? '📄' : '🎮';
+    const CAT_ORDER = ['Systems', 'Games', 'Programs', 'Disks'];
+
+    async function loadMeta() {
+      try {
+        const r = await fetch(src(DIR + '/library.json'));
+        return r.ok ? await r.json() : {};
+      } catch { return {}; }
+    }
+
+    async function loadLibrary() {
+      let data;
+      try { data = await (await fetch('/api/fs/list?path=' + encodeURIComponent(DIR))).json(); }
+      catch { bar.innerHTML = '<span class="muted">' + esc(t('fs_unavailable')) + '</span>'; return []; }
+      const meta = await loadMeta();
+      const items = (data.entries || []).filter((e) => e.type === 'file' && RUNNABLE.test(e.name)).map((e) => {
+        const m = meta[e.name] || {};
+        return { name: e.name, title: m.title || PRETTY(e.name), category: m.category || defaultCat(e.name), note: m.note || '' };
+      });
+      bar.innerHTML = '';
+      if (!items.length) {
+        bar.innerHTML = `<span class="muted">` + t('empty_lib', { dir: esc(DIR) }) + `</span>`;
+        return [];
+      }
+      // group by category, ordered (known categories first, then any extras), titles A→Z within a group
+      const cats = [...new Set(items.map((i) => i.category))]
+        .sort((a, b) => (CAT_ORDER.indexOf(a) + 1 || 99) - (CAT_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
+      const CAT_KEY = { Systems: 'cat_systems', Games: 'cat_games', Programs: 'cat_programs', Disks: 'cat_disks' };
+      const catLabel = (c) => CAT_KEY[c] ? t(CAT_KEY[c]) : c;   // known cats translated; custom cats kept verbatim
+      for (const cat of cats) {
+        const label = document.createElement('span'); label.className = 'sec'; label.textContent = catLabel(cat); bar.appendChild(label);
+        for (const it of items.filter((i) => i.category === cat).sort((a, b) => a.title.localeCompare(b.title))) {
+          const c = document.createElement('div');
+          c.className = 'chip';
+          c.dataset.name = it.name;
+          c.innerHTML = `<span class="ic">${iconFor(it.name, it.category, it.title)}</span>${esc(it.title)}`;
+          c.title = it.note ? `${it.name} — ${it.note}` : it.name;
+          c.onclick = () => boot(DIR + '/' + it.name, c);
+          bar.appendChild(c);
+        }
+      }
+      return items;
+    }
+
+    // ── toolbar ──────────────────────────────────────────────────────────────────
+    btnReload.onclick = () => { if (current) boot(current, bar.querySelector('.chip.active')); };
+    btnStop.onclick = stop;
+    btnFull.onclick = () => {
+      const el = dos.querySelector('canvas') || dos;
+      if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    };
+
+    // ── start ─────────────────────────────────────────────────────────────────────
+    // A deep-link (opened from the File Manager / an intent) auto-boots; otherwise we show the
+    // library and let the user pick — no surprise download/CPU spike when the app opens.
+    (async () => {
+      const items = await loadLibrary();
+      const qPath = new URLSearchParams(location.search).get('path');
+      if (qPath) { boot(qPath); return; }
+      showOverlay('<div class="big">🕹️</div>' + esc(items.length ? t('pick_to_boot') : t('none_yet')));
+    })();
+
+    // Live language switch: redraw the imperative bits the observer can't reach —
+    // the "running" sub label, the library (category labels), and the idle overlay.
+    I18N.onChange(() => {
+      if (current) sub.textContent = t('sub_running', { name: base(current) });
+      loadLibrary().then((items) => {
+        // re-light the running chip if one is active
+        if (current) { const c = bar.querySelector('.chip[data-name="' + base(current).replace(/"/g, '\\"') + '"]'); c && c.classList.add('active'); }
+        else if (overlay.style.display !== 'none') showOverlay('<div class="big">🕹️</div>' + esc(items.length ? t('pick_to_boot') : t('none_yet')));
+      });
+    });
+  </script>
+</body>
+</html>

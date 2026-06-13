@@ -1,0 +1,21 @@
+{
+  "id": "code-runner",
+  "name": "Code Runner",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Run small JavaScript programs in a sandboxed Web Worker — edit, run and see the output, with capability-gated access to the SD, the network and ANIMA.",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/code-runner/",
+  "icon": "assets/icon.svg",
+  "permissions": ["storage.shared", "system.events", "system.notify", "device.keyboard"],
+  "mounts": { "app": "/apps/code-runner/data" },
+  "handles": { "role": "editor", "extensions": ["js", "mjs", "cjs"] },
+  "subscribes": ["fs.open"],
+  "publishes": ["fs.changed"],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101826">
+  <title>NucleoOS</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="copilot.css">
+</head>
+<body>
+  <!-- Boot Splash Screen -->
+  <div id="boot-screen" class="boot-screen">
+    <svg viewBox="0 0 20 20" width="64" height="64" fill="currentColor" aria-hidden="true" style="color: var(--accent)"><rect x="2" y="2" width="7" height="7" rx="2"/><rect x="11" y="2" width="7" height="7" rx="2"/><rect x="2" y="11" width="7" height="7" rx="2"/><rect x="11" y="11" width="7" height="7" rx="2"/></svg>
+    <div class="boot-spinner"></div>
+  </div>
+
+  <!-- Pairing overlay: blocks the OS until this browser is paired with the device. The
+       6-digit code is shown on the Cardputer screen (proof of physical proximity). -->
+  <div id="pair-overlay" class="pair-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pair-title">
+    <form id="pair-form" class="pair-card">
+      <div class="pair-logo">
+        <svg viewBox="0 0 20 20" width="34" height="34" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="7" height="7" rx="2"/><rect x="11" y="2" width="7" height="7" rx="2"/><rect x="2" y="11" width="7" height="7" rx="2"/><rect x="11" y="11" width="7" height="7" rx="2"/></svg>
+      </div>
+      <h1 id="pair-title">Pair with this device</h1>
+      <p class="pair-sub">Enter the 6-digit code shown on your Cardputer screen.</p>
+      <input id="pair-pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
+             placeholder="••••••" aria-label="Pairing code" autofocus>
+      <div id="pair-msg" class="pair-msg" role="alert"></div>
+      <button id="pair-submit" type="submit">Pair</button>
+    </form>
+  </div>
+
+  <!-- Mobile Placeholder (visibile solo su schermi piccoli) -->
+  <div id="mobile-placeholder" class="hidden-desktop">
+    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+    <h2>App Telefono in Arrivo</h2>
+    <p>Collega lo smartphone al monitor (Desktop Mode) per usare NucleoOS, oppure ruota il dispositivo.</p>
+  </div>
+
+  <!-- Desktop: app icons live here -->
+  <main id="desktop" aria-label="Desktop"></main>
+
+  <!-- Window layer: app windows are created here by the window manager -->
+  <div id="windows"></div>
+
+  <!-- Right-click context menu (desktop icons + empty desktop) -->
+  <div id="ctxmenu" class="ctx hidden" role="menu"></div>
+
+  <!-- Start menu — Windows 11 style: search box, pinned grid, recommended, account/power bar -->
+  <section id="start-menu" class="hidden" aria-label="Start menu">
+    <!-- Search field at the top: typing here switches the body to live search results -->
+    <div class="sm-search">
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><line x1="10.6" y1="10.6" x2="14" y2="14" stroke-linecap="round"/></svg>
+      <input id="sm-search-input" type="text" placeholder="Cerca app, file e impostazioni" autocomplete="off" spellcheck="false" aria-label="Cerca">
+    </div>
+
+    <div class="sm-body">
+      <!-- Home view: pinned apps + recommended files -->
+      <div id="sm-home" class="sm-view">
+        <div class="sm-sechead">
+          <span class="sm-sectitle">Aggiunte</span>
+          <button class="sm-pill" id="sm-allapps-btn" type="button">Tutte le app <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        </div>
+        <div id="sm-pinned" class="sm-grid"></div>
+        <div class="sm-sechead sm-reco-head">
+          <span class="sm-sectitle">Consigliati</span>
+        </div>
+        <div id="sm-reco" class="sm-reco"></div>
+      </div>
+
+      <!-- All apps view: full alphabetical list -->
+      <div id="sm-allapps" class="sm-view hidden">
+        <div class="sm-sechead">
+          <button class="sm-pill sm-back" id="sm-back-btn" type="button"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 4l-4 4 4 4" stroke-linecap="round" stroke-linejoin="round"/></svg> Indietro</button>
+          <span class="sm-sectitle">Tutte le app</span>
+        </div>
+        <div id="sm-all" class="sm-list"></div>
+      </div>
+
+      <!-- Search results view (shown while typing in the Start search box) -->
+      <div id="sm-results" class="sm-view hidden"></div>
+    </div>
+
+    <!-- Account + power bar -->
+    <footer class="sm-foot">
+      <button class="sm-account" id="sm-account" type="button">
+        <span class="sm-avatar"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6" stroke-linecap="round"/></svg></span>
+        <span class="sm-acctxt"><span class="sm-accname" id="sm-device">NucleoOS</span><span class="sm-accsub" id="sm-storage">SD —</span></span>
+      </button>
+      <div class="sm-foot-actions">
+        <a class="sm-iconbtn" href="/downloads/NucleoConnect.exe" download title="Scarica l'app per Windows"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line></svg></a>
+        <a class="sm-iconbtn" href="/downloads/NucleoOS.apk" download title="Scarica l'app Android"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg></a>
+        <button class="sm-iconbtn sm-power" id="sm-power" type="button" title="Riavvia il Cardputer"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg></button>
+      </div>
+    </footer>
+  </section>
+
+  <!-- Search results (apps + SD files), popped above the taskbar search box -->
+  <section id="search-panel" class="search-panel hidden" aria-label="Search results"></section>
+
+  <!-- Toast notification container (bottom-right, stacked) -->
+  <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- Drop overlay: shown when user drags a file from the OS onto the browser -->
+  <div id="drop-overlay" class="hidden" aria-hidden="true">
+    <div class="drop-inner">
+      <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <p>Rilascia per caricare sulla SD del Cardputer</p>
+      <span class="drop-dest">/data/uploads/</span>
+    </div>
+  </div>
+  
+  <!-- OS File Dialog (Common Dialog) -->
+  <div id="os-dialog-scrim" class="os-dialog-scrim" aria-hidden="true">
+    <div class="os-dialog-box">
+      <div class="os-dialog-header">
+        <span class="os-dialog-title" id="os-dialog-title">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
+          <span id="os-dialog-title-text">Sfoglia</span>
+        </span>
+        <button class="os-dialog-close" id="os-dialog-close">&times;</button>
+      </div>
+      <div class="os-dialog-search-row">
+        <div class="os-dialog-search-wrapper">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" class="os-dialog-search-input" id="os-dialog-search" placeholder="Cerca...">
+        </div>
+      </div>
+      <div class="os-dialog-crumbs" id="os-dialog-crumbs">/data</div>
+      <ul class="os-dialog-list" id="os-dialog-list"></ul>
+      <div class="os-dialog-footer">
+        <input type="text" id="os-dialog-filename" class="os-dialog-filename-input" placeholder="Nome file" autocomplete="off" spellcheck="false">
+        <button class="os-dialog-btn" id="os-dialog-btn-cancel">Annulla</button>
+        <button class="os-dialog-btn primary" id="os-dialog-btn-confirm">Apri</button>
+      </div>
+    </div>
+  </div>
+
+  <section id="action-center" class="hidden" aria-label="Action Center">
+    <div class="ac-grid">
+      <button class="ac-btn active" id="ac-wifi" title="Wi-Fi">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 5.6C5.5 2.6 10.5 2.6 14 5.6" stroke-linecap="round"/><path d="M4 8.1C6.4 6.1 9.6 6.1 12 8.1" stroke-linecap="round"/><path d="M6 10.6c1.2-1 2.8-1 4 0" stroke-linecap="round"/><circle cx="8" cy="13" r="0.9" fill="currentColor" stroke="none"/></svg>
+        <span>Wi-Fi</span>
+      </button>
+      <button class="ac-btn" id="ac-theme" title="Dark Mode">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Theme</span>
+      </button>
+      <button class="ac-btn" id="ac-eco" title="Eco Mode">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="16" height="10" rx="2" ry="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="22" y1="11" x2="22" y2="13" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Eco</span>
+      </button>
+    </div>
+    <div class="ac-slider">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <input type="range" id="ac-brightness" min="0" max="100" value="70">
+    </div>
+  </section>
+
+  <!-- Taskbar — Windows-11 style: app cluster centered, system tray on the right -->
+  <footer id="taskbar">
+    <div class="tb-side tb-left"></div>
+    <div class="tb-center">
+      <button id="start-btn" title="Start">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="7" height="7" rx="2"/><rect x="11" y="2" width="7" height="7" rx="2"/><rect x="2" y="11" width="7" height="7" rx="2"/><rect x="11" y="11" width="7" height="7" rx="2"/></svg>
+      </button>
+      <div id="search" title="Search apps and files">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><line x1="10.6" y1="10.6" x2="14" y2="14" stroke-linecap="round"/></svg>
+        <input id="search-input" type="text" placeholder="Search" autocomplete="off" spellcheck="false" aria-label="Search apps and files">
+      </div>
+      <button id="copilot-btn" title="ANIMA Copilot — Ctrl+Spazio" aria-label="ANIMA Copilot">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 2.2l1.9 5.4 5.4 1.9-5.4 1.9L12 16.8l-1.9-5.4L4.7 9.5l5.4-1.9L12 2.2zM19 14l.9 2.6 2.6.9-2.6.9L19 21l-.9-2.6-2.6-.9 2.6-.9L19 14z"/></svg>
+      </button>
+      <div class="tb-divider"></div>
+      <div id="task-pinned" class="task-zone"></div>
+      <div id="task-running" class="task-zone"></div>
+    </div>
+    <div id="tray">
+      <span id="tray-remote" title="" hidden></span>
+      <span id="tray-busy" title="" hidden></span>
+      <span id="tray-ws" title="Connessione al Cardputer"><span class="ws-dot offline"></span></span>
+      <span id="tray-net" title="Network"></span>
+      <span id="tray-storage">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3.5 2.5h5L12 6v7.5H3.5z" stroke-linejoin="round"/><line x1="6" y1="2.8" x2="6" y2="5"/><line x1="8" y1="2.8" x2="8" y2="5"/><line x1="10" y1="3.4" x2="10" y2="5"/></svg>
+        <span class="v">—</span>
+      </span>
+      <span id="clock" title="Show date"><span class="ck-time">--:--</span><span class="ck-date"></span></span>
+      <button id="show-desktop" title="Show desktop" aria-label="Show desktop"></button>
+    </div>
+  </footer>
+
+  <script type="module" src="shell.js"></script>
+</body>
+</html>

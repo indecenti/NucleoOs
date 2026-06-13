@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Updates</title>
+<style>
+  :root { --bg:#0b1220; --panel:#18233a; --panel2:#1f2d4a; --accent:#4ea1ff;
+          --text:#e8eefc; --muted:#8aa0c8; --line:#2a3a5e;
+          /* Status hues mixed toward --text so they stay readable in BOTH OS themes
+             (bright on dark, auto-darkened on a light panel). */
+          --ok:color-mix(in srgb, #3ddc97 60%, var(--text));
+          --warn:color-mix(in srgb, #ffc466 60%, var(--text));
+          --err:color-mix(in srgb, #ff8093 60%, var(--text)); }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 14px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; color: var(--text);
+         background: var(--bg); padding: 16px; overflow-y: auto; }
+  h1 { font-size: 17px; margin: 0 0 14px; display: flex; align-items: center; gap: 8px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 0 0 10px; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+  .row .k { color: var(--muted); } .row .v { font-variant-numeric: tabular-nums; text-align: right; }
+  .pill { padding: 1px 8px; border-radius: 10px; font-size: 12px; }
+  .pill.ok { background:#3ddc9722; color:var(--ok); } .pill.warn { background:#ffc46622; color:var(--warn); }
+  .pill.err { background:#ff809322; color:var(--err); } .pill.muted { background:#ffffff14; color:var(--muted); }
+  button { border: 1px solid var(--line); background: #ffffff10; color: var(--text); border-radius: 8px;
+           padding: 8px 14px; cursor: pointer; font: inherit; font-size: 13px; }
+  button:hover:not(:disabled) { background: #ffffff1f; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); color: #07101f; border-color: var(--accent); font-weight: 600; }
+  .file { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }
+  .file input { flex: 1; min-width: 160px; color: var(--muted); font-size: 12px; }
+  .note { color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .note b { color: var(--text); }
+  .bar { height: 8px; background: #ffffff14; border-radius: 5px; overflow: hidden; margin: 10px 0 4px; display: none; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .status-msg { font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .status-msg.ok { color: var(--ok); } .status-msg.warn { color: var(--warn); } .status-msg.err { color: var(--err); }
+  code { background:#ffffff10; padding:1px 5px; border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+  <h1>🔄 Updates</h1>
+
+  <div class="card">
+    <h2>System</h2>
+    <div class="row"><span class="k">Version</span><span class="v" id="version">…</span></div>
+    <div class="row"><span class="k">Firmware slot</span><span class="v" id="slot">…</span></div>
+    <div class="row"><span class="k">Image state</span><span class="v" id="state">…</span></div>
+    <div class="row"><span class="k">Free memory</span><span class="v" id="heap">…</span></div>
+    <div class="row"><span class="k">Storage</span><span class="v" id="storage">…</span></div>
+    <div class="row"><span class="k">Network</span><span class="v" id="net">…</span></div>
+    <div style="margin-top:10px"><button id="refresh">Refresh</button></div>
+  </div>
+
+  <div class="card">
+    <h2>Firmware update (over the air)</h2>
+    <p class="note">Pick a <code>nucleoos.bin</code> and install it wirelessly — no USB cable. The image is written to the
+      <b>spare flash slot</b> and only booted if it is valid; if the new firmware fails to start, the device
+      <b>automatically rolls back</b> to this one. So it always stays bootable.</p>
+    <div class="file">
+      <input id="bin" type="file" accept=".bin,application/octet-stream">
+      <button id="install" class="primary" disabled>Install firmware</button>
+    </div>
+    <div class="bar" id="bar"><i id="barfill"></i></div>
+    <div class="status-msg" id="msg"></div>
+    <p class="note">⚠ Keep the device powered during the update. It reboots automatically when done.</p>
+  </div>
+
+  <div class="card">
+    <h2>App &amp; shell updates</h2>
+    <p class="note">The shell and apps live on the SD card, so they update independently of the firmware — either by
+      syncing the card from a PC (<code>deploy.ps1 -To &lt;sd&gt;</code>) or over the network with
+      <code>npm run push-ota -- --host http://&lt;ip&gt;</code>. After a web update, just reload the shell.</p>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const fmtSize = (b) => (!b && b !== 0) ? '—' : b >= 1e9 ? (b/1e9).toFixed(1)+' GB' : b >= 1e6 ? (b/1e6).toFixed(0)+' MB' : (b/1e3).toFixed(0)+' KB';
+  const stateClass = { valid:'ok', pending:'warn', new:'warn', invalid:'err', aborted:'err' };
+
+  async function loadStatus() {
+    try {
+      const s = await (await fetch('/api/status', { cache: 'no-store' })).json();
+      $('version').textContent = 'v' + (s.version || '?');
+      const ota = s.ota || {};
+      $('slot').textContent = ota.running || '?';
+      const cls = stateClass[ota.state] || 'muted';
+      $('state').innerHTML = '<span class="pill ' + cls + '">' + (ota.state || 'unknown') + '</span>' +
+        (ota.rollback_enabled ? ' <span class="pill ok">rollback on</span>' : '');
+      $('heap').textContent = fmtSize(s.free_heap) + ' free';
+      const st = s.storage || {};
+      $('storage').textContent = st.mounted ? (st.fs + ' · ' + fmtSize(st.free_bytes) + ' free') : 'not mounted';
+      const n = s.network || {};
+      $('net').textContent = n.mode === 'sta' ? ('Wi-Fi ' + (n.ssid || '') + (n.ip ? ' · ' + n.ip : '')) : ('AP ' + (n.ssid || ''));
+      return true;
+    } catch { return false; }
+  }
+
+  let file = null;
+  $('bin').addEventListener('change', (e) => {
+    file = e.target.files[0] || null;
+    $('install').disabled = !file;
+    setMsg(file ? (file.name + ' · ' + fmtSize(file.size)) : '', '');
+  });
+
+  function setMsg(text, kind) { const m = $('msg'); m.textContent = text; m.className = 'status-msg' + (kind ? ' ' + kind : ''); }
+
+  $('install').addEventListener('click', () => {
+    if (!file) return;
+    if (!/\.bin$/i.test(file.name)) { setMsg('Please choose a .bin firmware file.', 'err'); return; }
+    $('install').disabled = true; $('bin').disabled = true; $('refresh').disabled = true;
+    $('bar').style.display = 'block';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/ota');
+    xhr.upload.onprogress = (ev) => {
+      if (!ev.lengthComputable) return;
+      const pct = Math.round(ev.loaded / ev.total * 100);
+      $('barfill').style.width = pct + '%';
+      setMsg('Uploading… ' + pct + '%', '');
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) { setMsg('Image written. Rebooting into the new firmware…', 'ok'); waitForReboot(); }
+      else { setMsg('Update rejected: ' + (xhr.responseText || ('HTTP ' + xhr.status)), 'err'); resetControls(); }
+    };
+    // The device reboots right after responding, so the socket may drop — treat that as "rebooting".
+    xhr.onerror = () => { setMsg('Upload finished; device is rebooting…', 'ok'); waitForReboot(); };
+    xhr.ontimeout = () => { setMsg('Device is rebooting…', 'ok'); waitForReboot(); };
+    xhr.send(file);
+  });
+
+  function resetControls() { $('install').disabled = !file; $('bin').disabled = false; $('refresh').disabled = false; $('bar').style.display = 'none'; $('barfill').style.width = '0'; }
+
+  // Poll /api/status until the device is back, then show the new state.
+  function waitForReboot() {
+    $('barfill').style.width = '100%';
+    let tries = 0;
+    const iv = setInterval(async () => {
+      tries++;
+      const ok = await loadStatus();
+      if (ok) { clearInterval(iv); setMsg('Update complete — device is back online. ✔', 'ok'); resetControls(); file = null; $('bin').value = ''; }
+      else if (tries > 40) { clearInterval(iv); setMsg('Device did not come back in time. Check it and refresh.', 'warn'); resetControls(); }
+      else setMsg('Rebooting… waiting for the device (' + tries + ')', 'warn');
+    }, 2000);
+  }
+
+  $('refresh').addEventListener('click', loadStatus);
+  loadStatus();
+</script>
+</body>
+</html>

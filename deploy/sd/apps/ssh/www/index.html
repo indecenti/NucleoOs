@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SSH</title>
+<style>
+  :root{ --bg:#0b0e16; --panel:#10131c; --panel2:#161b27; --line:#232d44; --ink:#e7ecf6; --dim:#8ea0c0;
+    --accent:#6aa8ff; --accent2:#9b7bff; --ok:#6aee9f; --warn:#ffcf6a; --err:#ff8a8a;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"DejaVu Sans Mono",monospace;
+    --nt-bg:#0a0d14; --nt-fg:#d6deea; --nt-cur:#6aee9f; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
+  body{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  header{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .logo{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:15px;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .ttl{font-weight:650}.ttl small{display:block;font-weight:400;font-size:11px;color:var(--dim)}
+  .grow{flex:1}
+  .dot{width:9px;height:9px;border-radius:50%;background:#445}.dot.ok{background:var(--ok)}.dot.busy{background:var(--warn);animation:pulse 1s infinite}.dot.err{background:var(--err)}
+  @keyframes pulse{50%{opacity:.4}}
+  .bridge{font:11px var(--mono);color:var(--dim)}
+  button{border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:8px;padding:7px 12px;font:13px system-ui;cursor:pointer}
+  button:hover{background:#1d2738}button.pri{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#0a0d16;font-weight:600}
+  button.danger{border-color:#5a2b2b;color:var(--err)}button:disabled{opacity:.5;cursor:default}
+  main{flex:1;display:flex;min-height:0}
+  .side{width:210px;flex:0 0 auto;border-right:1px solid var(--line);background:var(--panel);overflow:auto;padding:8px}
+  .side h3{margin:6px 6px 8px;font-size:11px;text-transform:uppercase;color:var(--accent2);letter-spacing:.5px}
+  .host{padding:9px 10px;border-radius:9px;cursor:pointer;border:1px solid transparent}
+  .host:hover{background:var(--panel2)}.host.sel{background:#172238;border-color:#2c3a5c}
+  .host .hn{font-weight:600;font-size:13px}.host .hh{font:11px var(--mono);color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .host .del{float:right;color:var(--dim);opacity:0;border:none;background:none;padding:0 4px}.host:hover .del{opacity:1}
+  .area{flex:1;min-width:0;display:flex;flex-direction:column}
+  /* connect form */
+  .form{max-width:460px;margin:24px auto;padding:0 16px;width:100%}
+  .form h2{margin:0 0 4px}.form p{color:var(--dim);margin:0 0 16px;font-size:13px}
+  .row{display:flex;gap:10px;margin:9px 0}.row .f{flex:1;display:flex;flex-direction:column;gap:4px}
+  label{font-size:12px;color:var(--dim)}
+  input,select{background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:9px 11px;font:13px var(--mono);width:100%}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(106,168,255,.18)}
+  .seg{display:flex;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px;width:fit-content}
+  .seg button{border:none;background:none;padding:6px 12px;border-radius:6px;color:var(--dim)}.seg button.on{background:var(--panel2);color:var(--accent)}
+  .hint{font-size:11.5px;color:var(--dim)}
+  /* terminal */
+  .term-wrap{flex:1;min-height:0;display:flex;flex-direction:column}
+  .tbar{display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid var(--line);background:var(--panel);font:12px var(--mono)}
+  .tbar .who{color:var(--ink)}.tbar .st{color:var(--dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nt-host{flex:1;min-height:0;background:var(--nt-bg);overflow:hidden;position:relative}
+  .nt-screen{font:13px/1.2 var(--mono);color:var(--nt-fg);white-space:pre;padding:3px 4px;height:100%;outline:none;overflow:hidden;cursor:text}
+  /* overlays */
+  .ovl{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:rgba(6,8,14,.7);backdrop-filter:blur(4px)}
+  .ovl.show{display:flex}
+  .card{width:min(460px,94vw);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .card h3{margin:0 0 10px}
+  .card .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+  .gate{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}
+  .gate .gi{font-size:40px}.gate h2{margin:8px 0 6px}.gate p{color:var(--dim);max-width:420px}
+  .gate code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font:12px var(--mono)}
+  .banner{padding:6px 10px;font:11.5px var(--mono);background:#1a1f12;color:var(--warn);border-bottom:1px solid var(--line);display:none}
+  .banner.show{display:block}
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">⌘</div>
+    <div class="ttl">SSH<small id="sub" data-i18n="subtitle">terminale remoto · via bridge</small></div>
+    <div class="grow"></div>
+    <span class="bridge" id="bridge-line">bridge —</span>
+    <span class="dot" id="bridge-dot"></span>
+    <button id="settings-btn" data-i18n-attr="title:settings_btn_title">⚙</button>
+  </header>
+
+  <main>
+    <aside class="side">
+      <h3 data-i18n="saved_hosts">Host salvati</h3>
+      <div id="hosts"></div>
+      <button class="pri" id="new-btn" style="width:100%;margin-top:8px">＋ <span data-i18n="new_host">Nuovo host</span></button>
+    </aside>
+
+    <section class="area" id="area"><!-- connect form OR terminal injected here --></section>
+  </main>
+
+  <!-- settings overlay -->
+  <div class="ovl" id="set-ovl"><div class="card">
+    <h3 data-i18n="settings_title">Bridge SSH</h3>
+    <p class="hint" data-i18n-html="settings_hint">Il terminale si collega a un piccolo <b>bridge</b> che giri su una tua macchina (PC/Pi/NAS). Niente servizi terzi. Avvia <code>nucleo-ssh-bridge</code>, copia qui URL e token.</p>
+    <div class="row"><div class="f"><label data-i18n="bridge_url_label">URL bridge (WebSocket)</label><input id="set-url" placeholder="ws://localhost:8022"></div></div>
+    <div class="row"><div class="f"><label data-i18n="token_label">Token</label><input id="set-token" type="password" data-i18n-attr="placeholder:token_ph" placeholder="incolla il token stampato dal bridge"></div></div>
+    <div class="hint" id="set-stat"></div>
+    <div class="btns"><button id="set-test" data-i18n="verify">Verifica</button><button id="set-cancel" data-i18n="cancel">Annulla</button><button class="pri" id="set-save" data-i18n="save">Salva</button></div>
+  </div></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

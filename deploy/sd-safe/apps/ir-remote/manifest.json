@@ -1,0 +1,45 @@
+{
+  "id": "ir-remote",
+  "name": "IR Remote",
+  "version": "0.1.0",
+  "description": "Learn and send infrared codes; a universal remote.",
+  "category": "tools",
+  "runtime": "service",
+  "entry_service": "ir_remote_main",
+  "web_route": "/apps/ir-remote/",
+  "permissions": [
+    "storage.app",
+    "system.events",
+    "device.ir"
+  ],
+  "mounts": {
+    "app": "/apps/ir-remote/data"
+  },
+  "handles": {
+    "role": "editor",
+    "extensions": [
+      "ir"
+    ]
+  },
+  "subscribes": [
+    "fs.open",
+    "ir.received"
+  ],
+  "publishes": [
+    "ir.sent",
+    "ir.received"
+  ],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard",
+      "ir"
+    ]
+  },
+  "mesh": {
+    "exposes": [
+      "ir.sent"
+    ],
+    "consumes": []
+  }
+}

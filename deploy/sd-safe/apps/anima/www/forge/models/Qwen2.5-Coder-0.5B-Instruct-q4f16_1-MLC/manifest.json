@@ -1,0 +1,87 @@
+{
+  "model": "Qwen2.5-Coder-0.5B-Instruct-q4f16_1-MLC",
+  "format": "mlc",
+  "revision": "b0c035a7873e2f0db0eef83c910c92b34b44af80",
+  "modelType": "qwen2",
+  "contextWindow": 32768,
+  "totalBytes": 289690815,
+  "shards": [
+    {
+      "name": "params_shard_0.bin",
+      "bytes": 68067328,
+      "sha256": "8ba207c8b5b2502d9d178202d44dfd774050b79e4abd263faaf1c37084f9e781"
+    },
+    {
+      "name": "params_shard_1.bin",
+      "bytes": 33234176,
+      "sha256": "4d65d9746fee0cec58dc28350391f96da2e11c143058237d6149b0229ca5f73b"
+    },
+    {
+      "name": "params_shard_2.bin",
+      "bytes": 33505280,
+      "sha256": "fdaaecfaf16fe3cb86840a0fe3c70424b4efc087604e4551dfd1d84b93aee20f"
+    },
+    {
+      "name": "params_shard_3.bin",
+      "bytes": 33053696,
+      "sha256": "4b5566be1d7d5a885b92b7d0fa250a6e48db7aa6749a5d8ae32b41e461d34f7e"
+    },
+    {
+      "name": "params_shard_4.bin",
+      "bytes": 33020928,
+      "sha256": "c269ed538f402a94b2e7a4f883c20b7764b114ed98ad982df6d59380158ed45a"
+    },
+    {
+      "name": "params_shard_5.bin",
+      "bytes": 29211648,
+      "sha256": "4e1fa63b515392f4ca61d44eec16c22fd433862e7e0682f2fc2cc3f0e6c09f0b"
+    },
+    {
+      "name": "params_shard_6.bin",
+      "bytes": 33297408,
+      "sha256": "6fd596e81fc46ee295af587f6304adc4f8007d2c826b657df02d6116bd2aab28"
+    },
+    {
+      "name": "params_shard_7.bin",
+      "bytes": 14605824,
+      "sha256": "a5c04a0de382276122c49db421768b950783f371b321560602b416b44e0152c4"
+    }
+  ],
+  "aux": [
+    {
+      "name": "merges.txt",
+      "bytes": 1671839,
+      "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3"
+    },
+    {
+      "name": "mlc-chat-config.json",
+      "bytes": 2043,
+      "sha256": "e1ac4f8e323fb7455629cf31aa3021e76f4399657a18ae8936233bf35b2657a1"
+    },
+    {
+      "name": "ndarray-cache.json",
+      "bytes": 102431,
+      "sha256": "308ae05f2aa75c0fa04a5b822b373af8910548ea9f5c9102750fe010c3845bc6"
+    },
+    {
+      "name": "tensor-cache.json",
+      "bytes": 102431,
+      "sha256": "308ae05f2aa75c0fa04a5b822b373af8910548ea9f5c9102750fe010c3845bc6"
+    },
+    {
+      "name": "tokenizer.json",
+      "bytes": 7031645,
+      "sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "bytes": 7305,
+      "sha256": "5b5d4f65d0acd3b2d56a35b56d374a36cbc1c8fa5cf3b3febbbfabf22f359583"
+    },
+    {
+      "name": "vocab.json",
+      "bytes": 2776833,
+      "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+    }
+  ]
+}

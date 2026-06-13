@@ -1,0 +1,21 @@
+{
+  "id": "paint",
+  "name": "Paint",
+  "version": "1.0.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Editor di immagini e disegno",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/paint/",
+  "icon": "/apps/paint/icon.svg",
+  "permissions": [],
+  "mounts": { "app": "/apps/paint/data" },
+  "handles": { "role": "editor", "extensions": ["jpg", "jpeg", "png", "bmp"] },
+  "subscribes": [],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

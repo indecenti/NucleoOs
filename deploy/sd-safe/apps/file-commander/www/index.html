@@ -1,0 +1,1239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>File Commander</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff; --line:#2a3a5e; --danger:#ff8093; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: row; background: var(--bg); color: var(--text);
+      font: 14px system-ui, "Segoe UI", sans-serif; user-select: none; }
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    header { display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+      background: var(--panel); border-bottom: 1px solid var(--line); }
+    /* left rail: a real, Explorer-style folder tree (expand/collapse, follows the current folder) */
+    aside.side { width: 230px; flex: none; display: flex; flex-direction: column;
+      background: var(--bg, #0b1426); border-right: 1px solid var(--line); overflow: hidden; }
+    .tree { flex: 1; overflow: auto; padding: 4px 6px 8px; }
+    .side-sec { display: flex; align-items: center; gap: 6px; margin: 8px 4px 3px; font-size: 11px;
+      text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    .side-sec:first-child { margin-top: 2px; }
+    .side-sec .sp { flex: 1; }
+    /* a tree row: [twisty] [glyph] [name] (×) — indented by depth */
+    .tnode { display: flex; align-items: center; gap: 5px; padding: 4px 6px; border-radius: 7px; cursor: pointer;
+      color: var(--text); border: 1px solid transparent; white-space: nowrap; }
+    .tnode:hover { background: #ffffff10; }
+    .tnode.active { background: #2b6fd633; border-color: #2b6fd6aa; }
+    .tnode.drop-target { background: #4cd07d2e; border-color: #4cd07d; }
+    .tnode .tw { width: 14px; flex: none; display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 9px; transition: transform .12s; }
+    .tnode .tw.open { transform: rotate(90deg); }
+    .tnode .tw.leaf { visibility: hidden; }
+    .tnode .tw.busy { animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .tnode .tg { width: 18px; text-align: center; font-size: 15px; flex: none; }
+    .tnode .tn { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    .tnode .tx { color: var(--muted); font-size: 11px; cursor: pointer; padding: 0 3px; opacity: 0; }
+    .tnode:hover .tx { opacity: .7; } .tnode .tx:hover { opacity: 1; color: var(--danger); }
+    .side-empty { color: var(--muted); font-size: 11px; padding: 4px 10px; line-height: 1.4; }
+    .side-foot { padding: 6px 8px; border-top: 1px solid var(--line); }
+    .side-foot button { width: 100%; justify-content: center; }
+    /* draggable splitter between the tree and the file list */
+    .resizer { width: 5px; flex: none; cursor: col-resize; background: transparent; }
+    .resizer:hover, .resizer.drag { background: #2b6fd655; }
+    li.dragging { opacity: .4; }
+    button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line);
+      background: #ffffff10; color: var(--text); border-radius: 6px; padding: 4px 9px; cursor: pointer; font: inherit; }
+    button:hover { background: #ffffff1f; }
+    button[hidden] { display: none; }   /* the `display:inline-flex` above otherwise defeats [hidden] */
+    button svg { flex: none; }
+    .crumbs { flex: 1; display: flex; align-items: center; gap: 2px; overflow: hidden;
+      font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .crumbs .seg { padding: 2px 6px; border-radius: 5px; cursor: pointer; color: var(--accent); }
+    .crumbs .seg:hover { background: #ffffff14; }
+    .crumbs .sepc { opacity: .5; }
+    ul { list-style: none; margin: 0; padding: 0; flex: 1; overflow: auto; }
+    li { display: flex; align-items: center; gap: 10px; padding: 7px 12px; cursor: pointer;
+      border-bottom: 1px solid #ffffff0a; }
+    li:hover, li.sel { background: #ffffff12; }
+    .glyph { width: 22px; text-align: center; font-size: 16px; flex: none; }
+    .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .size { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .empty { color: var(--muted); padding: 16px; text-align: center; }
+    li.sel { background: #2b6fd64d; } li.sel:hover { background: #2b6fd666; }
+    li.cut { opacity: .5; }
+    .find { display: flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; width: 150px;
+      border: 1px solid var(--line); border-radius: 14px; background: #ffffff0d; color: var(--muted); }
+    .find input { flex: 1; min-width: 0; border: 0; background: none; outline: none; color: var(--text); font: inherit; font-size: 13px; }
+    .list-header { display: flex; padding: 4px 12px 4px 44px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); background: var(--panel2); gap: 10px; user-select: none; }
+    .lh-col { cursor: pointer; }
+    .lh-col:hover { color: var(--text); }
+    .lh-name { flex: 1; }
+    .lh-size { width: 80px; text-align: right; }
+    .arr { display: inline-block; width: 12px; text-align: center; }
+    ul.view-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; padding: 10px; align-content: start; }
+    ul.view-grid li { flex-direction: column; text-align: center; border: 1px solid transparent; padding: 12px 8px; border-radius: 8px; justify-content: center; height: 100px; }
+    ul.view-grid li.sel { background: #2b6fd633; border-color: #2b6fd6aa; }
+    ul.view-grid .glyph { font-size: 32px; width: auto; margin-bottom: 5px; }
+    ul.view-grid .name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 12px; line-height: 1.2; }
+    ul.view-grid .size { display: none; }
+    body.is-grid .list-header { display: none; }
+    .statusbar { display: flex; align-items: center; gap: 10px; padding: 4px 12px; font-size: 12px;
+      color: var(--muted); background: var(--panel); border-top: 1px solid var(--line); }
+    .statusbar .sp { flex: 1; } .statusbar .hint { font-size: 11px; opacity: .8; }
+    /* context menu */
+    .ctx { position: fixed; z-index: 50; min-width: 180px; padding: 6px; background: var(--panel2);
+      border: 1px solid #ffffff1f; border-radius: 10px; box-shadow: 0 16px 40px #000c; font-size: 13px; }
+    .ctx.hidden { display: none; }
+    .ci { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+    .ci:hover { background: #ffffff16; }
+    .ci .k { width: 18px; text-align: center; }
+    .ci.danger { color: var(--danger); }
+    .ci.danger:hover { background: #e0556b22; }
+    .ci.disabled { opacity: .4; cursor: default; } .ci.disabled:hover { background: none; }
+    .sep { height: 1px; margin: 5px 6px; background: #ffffff14; }
+    /* modal (properties / input) */
+    .scrim { position: fixed; inset: 0; background: #0008; display: grid; place-items: center; z-index: 60; }
+    .scrim.hidden { display: none; }
+    .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+      width: 300px; box-shadow: 0 20px 60px #000c; }
+    .modal h3 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .modal table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .modal td { padding: 4px 0; vertical-align: top; }
+    .modal td.k { color: var(--muted); width: 84px; }
+    .modal td.v { word-break: break-all; }
+    .modal input { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+      border-radius: 6px; padding: 7px 9px; font: inherit; margin-top: 4px; }
+    .modal .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+    .modal .primary { background: var(--accent); color: #07101f; border-color: var(--accent); }
+    /* drag-and-drop upload overlay */
+    .drop { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center;
+      background: #0e1830cc; border: 2px dashed var(--accent); border-radius: 10px;
+      backdrop-filter: blur(1px); pointer-events: none; }
+    .drop.hidden { display: none; }
+    .drop .box { display: flex; flex-direction: column; align-items: center; gap: 8px;
+      color: #e8eefc; font-size: 15px; }
+    .drop .box .big { font-size: 40px; }
+    .drop .box .dest { color: #8aa0c8; font-size: 12px; max-width: 80vw; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }
+    /* upload progress panel (bottom-right) */
+    .uploads { position: fixed; right: 12px; bottom: 36px; z-index: 55; width: 280px;
+      background: var(--panel2); border: 1px solid #ffffff1f; border-radius: 10px;
+      box-shadow: 0 16px 40px #000c; font-size: 12px; overflow: hidden; }
+    .uploads.hidden { display: none; }
+    .uploads .uh { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      background: var(--panel); border-bottom: 1px solid var(--line); font-weight: 600; }
+    .uploads .uh .sp { flex: 1; } .uploads .uh button { padding: 2px 8px; font-size: 12px; }
+    .uploads .body { max-height: 168px; overflow: auto; }
+    .uitem { padding: 7px 10px; border-bottom: 1px solid #ffffff0a; }
+    .uitem:last-child { border-bottom: 0; }
+    .uitem .top { display: flex; gap: 8px; align-items: baseline; }
+    .uitem .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .uitem .pc { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .uitem .bar { height: 4px; margin-top: 5px; border-radius: 3px; background: #ffffff14; overflow: hidden; }
+    .uitem .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+    .uitem.done .bar > i { background: #4cd07d; } .uitem.err .nm { color: var(--danger); }
+    .uitem.err .bar > i { background: var(--danger); }
+  </style>
+</head>
+<body>
+  <aside class="side" id="side">
+    <div class="tree" id="tree"></div>
+    <div class="side-foot"><button id="add-loc" title="Add a folder or drive">＋ Add a folder</button></div>
+  </aside>
+  <div class="resizer" id="resizer" title="Drag to resize"></div>
+  <div class="main">
+  <header>
+    <button id="up" title="Up one folder">
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 13V4M4 7.5 8 3.5l4 4" stroke-linecap="round" stroke-linejoin="round"/></svg>Up
+    </button>
+    <div class="crumbs" id="crumbs"></div>
+    <button id="tosd" title="Copy selection to NucleoOS SD" hidden>
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M5 7l3 3 3-3" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12.5h10" stroke-linecap="round"/></svg>To SD
+    </button>
+    <button id="newfolder" title="New folder">
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4.5h4l1.2 1.5H14V12H2z" stroke-linejoin="round"/><line x1="11" y1="7.5" x2="11" y2="10.5" stroke-linecap="round"/><line x1="9.5" y1="9" x2="12.5" y2="9" stroke-linecap="round"/></svg>New
+    </button>
+    <button id="refresh" title="Refresh (F5)">
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M13 8a5 5 0 1 1-1.5-3.5" stroke-linecap="round"/><path d="M13 2.5V5h-2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="find">
+      <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><line x1="10.6" y1="10.6" x2="14" y2="14" stroke-linecap="round"/></svg>
+      <input id="find" type="text" placeholder="Search" autocomplete="off" spellcheck="false" aria-label="Filter this folder">
+    </div>
+    <button id="btn-view" title="Toggle View" style="padding:4px 6px;margin-left:5px">🔲</button>
+  </header>
+  <div class="list-header" id="list-header">
+    <div class="lh-col lh-name" data-col="name">Name <span class="arr"></span></div>
+    <div class="lh-col lh-size" data-col="size">Size <span class="arr"></span></div>
+  </div>
+  <ul id="list" class="view-list"></ul>
+  <div class="statusbar"><span id="count"></span><span class="sp"></span><span class="hint" id="hint">Ctrl+C/X/V · Ctrl+A · F2 · Del · Ctrl+Z</span></div>
+  </div>
+
+  <div id="ctx" class="ctx hidden" role="menu"></div>
+  <div id="scrim" class="scrim hidden"><div class="modal" id="modal"></div></div>
+
+  <div id="drop" class="drop hidden">
+    <div class="box">
+      <div class="big">📥</div>
+      <div>Drop to upload here</div>
+      <div class="dest" id="dropdest"></div>
+    </div>
+  </div>
+  <div id="uploads" class="uploads hidden">
+    <div class="uh"><span id="up-title">Uploads</span><span class="sp"></span><button id="up-clear">Clear</button></div>
+    <div class="body" id="up-body"></div>
+  </div>
+
+  <script type="module">
+    let cwd = new URLSearchParams(location.search).get('path') || '/data';
+    let entries = [];
+    let filterText = '';
+    const selected = new Set();          // selected entry names in cwd
+    let lastClick = -1;                  // anchor index for Shift-range selection
+    const undoStack = [];                // session undo (bounded); the trash is the persistent net
+    const UNDO_CAP = 25, TRASH = '/system/.trash', TRASH_DB = '/system/config/trash.json', TRASH_CAP = 20;
+    const list = document.getElementById('list');
+    const crumbs = document.getElementById('crumbs');
+    const ctx = document.getElementById('ctx');
+
+    // ---- flicker-free rendering + listing cache -------------------------------------------
+    // The list is reconciled (keyed by entry name), never torn down: selection, filtering and
+    // background revalidation touch only the rows that actually changed. Folder listings are
+    // cached per location+path, so navigation paints instantly (stale-while-revalidate) and a
+    // re-list that returns identical bytes makes zero DOM mutations — no blink, no scroll jump.
+    const rowEls = new Map();            // entry name -> live <li> in the list
+    const listCache = new Map();         // cacheKey() -> { entries:[…server order], ts }
+    let loadSeq = 0;                     // guards against out-of-order list responses
+    let lastSyncedKey = null;            // folder the sidebar highlight was last synced to
+    const sig = (es) => es.map((e) => (e.type === 'dir' ? 'd' : 'f') + e.name + ':' + (e.size || 0)).join('|');
+    const pruneSelection = () => { for (const n of [...selected]) if (!entries.some((e) => e.name === n)) selected.delete(n); };
+
+    const headerRow = document.getElementById('list-header');
+    if (headerRow) {
+      headerRow.addEventListener('click', (e) => {
+        const col = e.target.closest('.lh-col');
+        if (!col) return;
+        const c = col.dataset.col;
+        if (sortCol === c) sortDir *= -1;
+        else { sortCol = c; sortDir = 1; }
+        sortEntries(); render(); updateHeaders();
+      });
+    }
+    const btnView = document.getElementById('btn-view');
+    if (btnView) {
+      btnView.onclick = () => {
+        viewMode = viewMode === 'list' ? 'grid' : 'list';
+        list.className = 'view-' + viewMode;
+        document.body.classList.toggle('is-grid', viewMode === 'grid');
+        btnView.textContent = viewMode === 'list' ? '🔲' : '📄';
+      };
+    }
+    const scrim = document.getElementById('scrim');
+    const modal = document.getElementById('modal');
+    const join = (a, b) => (a.endsWith('/') ? a + b : a + '/' + b);
+    const parent = (p) => p.replace(/\/[^/]+\/?$/, '') || '/';
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const fmt = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? (b / 1024).toFixed(0) + ' KB' : b + ' B';
+    const api = (op, path, opts) => fetch(`/api/fs/${op}?path=` + encodeURIComponent(path), opts);
+
+    // ---- locations: the SD on the device + folders/drives on the host PC -----------------
+    // Two backends sit behind one navigable list:
+    //   • 'sd'    — the NucleoOS card, over /api/fs/* (full read/write, trash, undo).
+    //   • 'local' — a Windows drive/folder. Auto-listed via the NucleoConnect native bridge
+    //               when running inside its WebView2, else added one-at-a-time with the
+    //               browser File System Access API. Browse + read-only + "copy to SD".
+    // window.chrome.webview.hostObjects.nucleo is injected by NucleoConnect (see windows-app).
+    const bridge = (() => {
+      try { return window.chrome && window.chrome.webview && window.chrome.webview.hostObjects
+        ? window.chrome.webview.hostObjects.nucleo : null; } catch { return null; }
+    })();
+    const fsaSupported = typeof window.showDirectoryPicker === 'function';
+    const SD_LOC = { id: 'sd', kind: 'sd', label: 'NucleoOS SD', glyph: '💾', removable: false };
+    const locals = [];                 // [{ id, kind:'local', src:'bridge'|'fsa', label, glyph, path, stack? }]
+    let ACTIVE = SD_LOC;               // currently-browsed location
+    let sdPath = (new URLSearchParams(location.search).get('path') || '/data');  // last SD folder (copy-to-SD target)
+    const isSD = () => ACTIVE.kind === 'sd';
+    // Windows path helpers (bridge paths use backslashes; "C:\" is a drive root).
+    const winJoin = (a, b) => a.replace(/\\+$/, '') + '\\' + b;
+    const winParent = (p) => { const t = p.replace(/\\+$/, ''); const i = t.lastIndexOf('\\'); return i <= 0 ? t.slice(0, 2) + '\\' : (t.slice(0, i) || t.slice(0, 2) + '\\'); };
+    const winName = (p) => p.replace(/\\+$/, '').split('\\').pop() || p;
+
+    // Glyph by extension — readable file typing like a real explorer.
+    const EXT = { mp3:'🎵', wav:'🎵', mp4:'🎬', webm:'🎬', mov:'🎬', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️',
+      svg:'🖼️', txt:'📄', md:'📄', json:'🧾', log:'📜', jsdos:'🕹️', zip:'🗜️', img:'💽', ima:'💽',
+      exe:'🕹️', com:'🕹️', bat:'⚙️', wad:'🕹️', gb:'🎮', gbc:'🎮', gg:'🎮' };
+    const fileGlyph = (name) => EXT[(name.split('.').pop() || '').toLowerCase()] || '📄';
+
+    function renderCrumbs() {
+      if (isSD()) {
+        const parts = cwd.split('/').filter(Boolean);
+        let acc = '';
+        crumbs.innerHTML = `<span class="seg" data-p="/">💾</span>`;
+        parts.forEach((seg) => { acc = join(acc || '/', seg); crumbs.innerHTML += `<span class="sepc">›</span><span class="seg" data-p="${esc(acc)}">${esc(seg)}</span>`; });
+        [...crumbs.querySelectorAll('.seg')].forEach((el) => el.onclick = () => { cwd = el.dataset.p; load(); });
+        return;
+      }
+      // local: root chip jumps home; the trailing path is shown read-only (no random-access handles in FSA)
+      crumbs.innerHTML = `<span class="seg" data-root="1">${ACTIVE.glyph} ${esc(ACTIVE.label)}</span>`;
+      const tail = ACTIVE.kind === 'local' ? localTail() : '';
+      if (tail) crumbs.innerHTML += `<span class="sepc">›</span><span style="color:var(--muted)">${esc(tail)}</span>`;
+      crumbs.querySelector('.seg').onclick = () => { localGoRoot(ACTIVE); load(); };
+    }
+    // The part of a local path past its root, for the breadcrumb (e.g. "Users\me\Pictures").
+    function localTail() {
+      if (ACTIVE.src === 'bridge') { const r = ACTIVE.root || ''; return ACTIVE.path.length > r.length ? ACTIVE.path.slice(r.length).replace(/^\\+/, '') : ''; }
+      return ACTIVE.stack.slice(1).map((h) => h.name).join('\\');
+    }
+
+    let sortCol = 'name', sortDir = 1, viewMode = 'list';
+    function sortEntries() {
+      entries.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+        let cmp = 0;
+        if (sortCol === 'name') cmp = a.name.localeCompare(b.name);
+        else if (sortCol === 'size') cmp = a.size - b.size;
+        return cmp * sortDir;
+      });
+    }
+    function updateHeaders() {
+      const h = document.getElementById('list-header');
+      if (!h) return;
+      h.querySelectorAll('.lh-col').forEach(el => {
+        const arr = el.querySelector('.arr');
+        if (el.dataset.col === sortCol) arr.textContent = sortDir === 1 ? '▲' : '▼';
+        else arr.textContent = '';
+      });
+    }
+
+    // A stable key for the folder currently shown (location + path), used to cache its listing.
+    function cacheKey() {
+      if (isSD()) return 'sd:' + cwd;
+      if (ACTIVE.src === 'bridge') return 'br:' + ACTIVE.path;
+      return 'fsa:' + ACTIVE.id + ':' + ACTIVE.stack.map((h) => h.name).join('/');
+    }
+    // Stale-while-revalidate: paint the cached listing instantly (no spinner, no teardown), then
+    // fetch in the background and reconcile only if the bytes changed. A newer navigation bumps
+    // loadSeq so a slow earlier response can't clobber the folder you're now looking at.
+    async function load() {
+      renderCrumbs();
+      syncToolbar();
+      const key = cacheKey();
+      const cached = listCache.get(key);
+      const seq = ++loadSeq;
+      if (cached) {                                   // instant paint from cache
+        entries = cached.entries.slice(); sortEntries(); pruneSelection();
+        render(); updateHeaders();
+      } else {
+        const countEl = document.getElementById('count');
+        if (countEl) countEl.innerHTML = '<span class="busy" style="display:inline-block;animation:spin .7s linear infinite">⏳</span> Loading...';
+      }
+      if (key !== lastSyncedKey) { lastSyncedKey = key; syncTree(); }   // navigation → move the tree highlight
+      let result;
+      try { result = isSD() ? await listSD() : await listLocal(ACTIVE); }
+      catch (err) {
+        if (seq !== loadSeq) return;                  // superseded by a newer navigation
+        if (!cached) { list.innerHTML = `<li class="empty">Cannot read this location.${err && err.message ? '<br><span style="font-size:11px">' + esc(err.message) + '</span>' : ''}</li>`; rowEls.clear(); entries = []; updateCount(0); }
+        return;
+      }
+      if (seq !== loadSeq) return;                    // drop a stale response that lost the race
+      const next = result.entries || [];
+      const changed = !cached || sig(next) !== sig(cached.entries);
+      listCache.set(key, { entries: next.slice(), ts: Date.now() });
+      if (changed) {                                  // only re-render when the listing really differs
+        entries = next; sortEntries(); pruneSelection();
+        render(); updateHeaders(); syncTree();
+      }
+    }
+    async function listSD() {
+      sdPath = cwd;                                   // remember for copy-to-SD from a local view
+      return await (await api('list', cwd)).json();
+    }
+
+    // Show/hide toolbar affordances that only make sense for one backend.
+    function syncToolbar() {
+      const local = !isSD();
+      document.getElementById('newfolder').style.display = (isSD() || writable()) ? '' : 'none';
+      document.getElementById('tosd').hidden = !local;
+      document.getElementById('hint').textContent = !local
+        ? 'Ctrl+C/X/V · Ctrl+A · F2 · Del · Ctrl+Z'
+        : (writable()
+            ? 'Read/write · Ctrl+C/X/V · F2 · Del · “To SD” copies to the card'
+            : 'Read-only · select files · “To SD” copies them to the card');
+    }
+
+    // ---- local backend (Windows drives/folders) ----
+    async function listLocal(loc) {
+      if (loc.src === 'bridge') {
+        const raw = await bridge.ListDir(loc.path);
+        const j = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (j && j.error) throw new Error(j.error);
+        return { entries: (j.entries || []).map((e) => ({ name: e.name, type: e.type === 'dir' ? 'dir' : 'file', size: e.size || 0 })) };
+      }
+      const dir = loc.stack[loc.stack.length - 1];
+      const out = [];
+      for await (const [name, h] of dir.entries()) {
+        if (h.kind === 'directory') out.push({ name, type: 'dir', size: 0 });
+        else { let size = 0; try { size = (await h.getFile()).size; } catch {} out.push({ name, type: 'file', size }); }
+      }
+      return { entries: out };
+    }
+    async function localEnter(loc, name) {
+      if (loc.src === 'bridge') { loc.path = winJoin(loc.path, name); return; }
+      const h = await loc.stack[loc.stack.length - 1].getDirectoryHandle(name);
+      loc.stack.push(h);
+    }
+    function localUp(loc) {
+      if (loc.src === 'bridge') { if (loc.path.replace(/\\+$/, '').length > 2) loc.path = winParent(loc.path); }
+      else if (loc.stack.length > 1) loc.stack.pop();
+    }
+    function localAtRoot(loc) {
+      return loc.src === 'bridge' ? loc.path.replace(/\\+$/, '').length <= 2 : loc.stack.length <= 1;
+    }
+    function localGoRoot(loc) {
+      if (loc.src === 'bridge') loc.path = loc.root;
+      else loc.stack = [loc.stack[0]];
+    }
+    // Read one file from the current local folder as a Blob (for transfer to the SD).
+    async function localReadFile(loc, name) {
+      if (loc.src === 'bridge') return bridgeReadBlob(winJoin(loc.path, name));
+      const fh = await loc.stack[loc.stack.length - 1].getFileHandle(name);
+      return await fh.getFile();
+    }
+    const b64ToBlob = (b64) => { const bin = atob(b64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return new Blob([u8]); };
+    const blobToB64 = (blob) => new Promise((res, rej) => { const fr = new FileReader(); fr.onerror = () => rej(new Error('read failed')); fr.onload = () => { const s = String(fr.result); res(s.slice(s.indexOf(',') + 1)); }; fr.readAsDataURL(blob); });
+    async function bridgeReadBlob(absPath) {
+      const b64 = await bridge.ReadFileB64(absPath);
+      if (b64 == null || b64 === '') throw new Error('cannot read (empty, missing, or over the bridge size limit)');
+      return b64ToBlob(b64);
+    }
+    const bridgeCall = async (p) => { const r = JSON.parse((await p) || '{}'); if (r && r.error) throw new Error(r.error); return r; };
+
+    // ---- unified write ops on a location (SD or a writable local device) ----
+    function writable() { return isSD() ? true : ACTIVE.writable === true; }
+    async function localWriteFile(loc, name, blob) {
+      if (loc.src === 'bridge') return bridgeCall(bridge.WriteFileB64(winJoin(loc.path, name), await blobToB64(blob)));
+      const fh = await loc.stack[loc.stack.length - 1].getFileHandle(name, { create: true });
+      const w = await fh.createWritable(); await w.write(blob); await w.close();   // FSA streams — no size limit
+    }
+    async function localMkdir(loc, name) {
+      if (loc.src === 'bridge') return bridgeCall(bridge.MakeDir(winJoin(loc.path, name)));
+      await loc.stack[loc.stack.length - 1].getDirectoryHandle(name, { create: true });
+    }
+    async function localDeleteEntry(loc, e) {
+      if (loc.src === 'bridge') return bridgeCall(bridge.DeleteEntry(winJoin(loc.path, e.name)));
+      await loc.stack[loc.stack.length - 1].removeEntry(e.name, { recursive: e.type === 'dir' });
+    }
+    async function localRenameEntry(loc, e, newName) {
+      if (loc.src === 'bridge') return bridgeCall(bridge.Rename(winJoin(loc.path, e.name), newName));
+      if (e.type === 'dir') throw new Error('folder rename is not supported on this location');
+      const blob = await localReadFile(loc, e.name);     // FSA has no rename: copy bytes, drop the old name
+      await localWriteFile(loc, newName, blob);
+      await localDeleteEntry(loc, e);
+    }
+    async function bridgeDelete(absPath) { return bridgeCall(bridge.DeleteEntry(absPath)); }
+
+    // ---- cross-provider clipboard (SD ⇄ local, local ⇄ local) ----
+    // Captures concrete byte-readers + deleters at copy time, so later navigation can't
+    // invalidate them. Files only (folders are skipped, as the SD paste always has been).
+    let xfer = null;   // { op:'copy'|'cut', items:[{ name, read:()=>Promise<Blob>, del:()=>Promise }] }
+    async function buildXfer(op) {
+      const sel = selectedEntries().filter((e) => e.type === 'file');
+      if (!sel.length) { xfer = null; return; }
+      const items = [];
+      if (isSD()) {
+        for (const e of sel) { const p = join(cwd, e.name); items.push({ name: e.name, read: () => api('read', p).then((r) => r.blob()), del: () => trashFile(p, false) }); }
+      } else if (ACTIVE.src === 'bridge') {
+        for (const e of sel) { const p = winJoin(ACTIVE.path, e.name); items.push({ name: e.name, read: () => bridgeReadBlob(p), del: () => bridgeDelete(p) }); }
+      } else {
+        const dir = ACTIVE.stack[ACTIVE.stack.length - 1];
+        for (const e of sel) { const fh = await dir.getFileHandle(e.name); items.push({ name: e.name, read: () => fh.getFile(), del: () => dir.removeEntry(e.name) }); }
+      }
+      xfer = { op, items };
+      paintCut();
+    }
+    // Copy/Cut from any location; mirror SD copies to the OS clipboard for cross-window paste.
+    async function copyCut(op) {
+      await buildXfer(op);
+      if (isSD() && xfer) { const paths = xfer.items.map((it) => join(cwd, it.name)); window.parent.postMessage({ type: 'clipboard-write', kind: 'files', data: { op, paths } }, '*'); }
+    }
+    async function pasteHere(osClip) {
+      if (xfer) return pasteXfer();
+      if (isSD()) { osClip ? pasteFiles(osClip) : window.parent.postMessage({ type: 'clipboard-read' }, '*'); }
+    }
+    async function pasteXfer() {
+      if (!xfer || !xfer.items.length || !writable()) return;
+      const { op, items } = xfer;
+      if (isSD()) {
+        let taken = new Set(); try { const sd = await (await api('list', cwd)).json(); taken = new Set((sd.entries || []).map((e) => e.name)); } catch {}
+        const jobs = items.map((it) => ({ label: it.name, dest: join(cwd, uniqueName(it.name, taken)), read: it.read }));
+        await runUploadJobs(jobs);                       // progress panel + 640 MB guard
+        pushUndo({ type: 'paste', created: jobs.map((j) => j.dest) });
+      } else {
+        let taken = new Set(); try { taken = new Set((await listLocal(ACTIVE)).entries.map((e) => e.name)); } catch {}
+        for (const it of items) { try { const blob = await it.read(); await localWriteFile(ACTIVE, uniqueName(it.name, taken), blob); } catch (err) { console.warn('paste failed:', it.name, err); } }
+        load();
+      }
+      if (op === 'cut') { for (const it of items) { try { await it.del(); } catch {} } xfer = null; if (isSD()) load(); }
+    }
+
+    // The view = entries filtered by the search box. Single click selects (Windows-style),
+    // double click opens; selection drives the OS shortcuts (copy/cut/delete/rename).
+    function view() { const f = filterText.toLowerCase(); return f ? entries.filter((e) => e.name.toLowerCase().includes(f)) : entries; }
+    // Keyed reconciliation: reuse each entry's <li> across renders, mutating only what changed
+    // and moving rows only when their order actually shifts. This is what keeps selection,
+    // filtering and live revalidation from flickering or jumping the scroll.
+    function render() {
+      const items = view();
+      if (!entries.length) { showEmpty('This folder is empty. Right-click to create a file or folder.'); return; }
+      if (!items.length) { showEmpty(`No items match “${esc(filterText)}”.`); return; }
+      if (list.firstElementChild && list.firstElementChild.classList.contains('empty')) { list.innerHTML = ''; rowEls.clear(); }
+      const want = new Set(items.map((e) => e.name));
+      for (const [name, li] of rowEls) if (!want.has(name)) { li.remove(); rowEls.delete(name); }   // dropped entries
+      let prev = null;
+      for (const e of items) {
+        let li = rowEls.get(e.name);
+        if (!li) { li = buildRow(e); rowEls.set(e.name, li); } else updateRow(li, e);
+        const ref = prev ? prev.nextSibling : list.firstChild;
+        if (li !== ref) list.insertBefore(li, ref);   // reposition only when out of order
+        prev = li;
+      }
+      updateCount(items.length);
+    }
+    function showEmpty(html) { list.innerHTML = `<li class="empty">${html}</li>`; rowEls.clear(); updateCount(0); }
+    function buildRow(e) {
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="glyph"></span><span class="name"></span><span class="size"></span>';
+      li.onclick = (ev) => rowClick(ev, li._e);
+      li.ondblclick = () => open(li._e);
+      li.oncontextmenu = (ev) => { ev.preventDefault(); const en = li._e; if (!selected.has(en.name)) { selected.clear(); selected.add(en.name); paintSelection(); } itemMenu(ev, en); };
+      updateRow(li, e);
+      return li;
+    }
+    function updateRow(li, e) {
+      li._e = e;
+      const isDir = e.type === 'dir';
+      const g = li.children[0], nm = li.children[1], sz = li.children[2];
+      const glyph = isDir ? '📁' : fileGlyph(e.name);
+      if (g.textContent !== glyph) g.textContent = glyph;
+      if (nm.textContent !== e.name) nm.textContent = e.name;       // textContent: no markup, no XSS
+      const size = isDir ? '' : fmt(e.size);
+      if (sz.textContent !== size) sz.textContent = size;
+      li.classList.toggle('sel', selected.has(e.name));
+      li.classList.toggle('cut', !!(xfer && xfer.op === 'cut' && xfer.items.some((it) => it.name === e.name)));
+      const localFile = !isSD() && e.type === 'file';               // local files drag onto the SD node
+      li.draggable = localFile;
+      if (localFile && !li._dragWired) wireDrag(li);
+    }
+    function wireDrag(li) {
+      li._dragWired = true;
+      li.ondragstart = (ev) => { const en = li._e; if (!selected.has(en.name)) { selected.clear(); selected.add(en.name); paintSelection(); } ev.dataTransfer.setData('application/x-nucleo-local', '1'); ev.dataTransfer.effectAllowed = 'copy'; li.classList.add('dragging'); };
+      li.ondragend = () => li.classList.remove('dragging');
+    }
+    // Selection and cut-marking repaint classes in place — they never rebuild the list.
+    function paintSelection() { for (const [name, li] of rowEls) li.classList.toggle('sel', selected.has(name)); updateCount(view().length); }
+    function paintCut() { for (const [name, li] of rowEls) li.classList.toggle('cut', !!(xfer && xfer.op === 'cut' && xfer.items.some((it) => it.name === name))); }
+    function updateCount(shown) {
+      const el = document.getElementById('count'); if (!el) return;
+      el.textContent = selected.size ? `${selected.size} selected` : `${shown} item${shown === 1 ? '' : 's'}${filterText ? ' · filtered' : ''}`;
+    }
+
+    async function open(e) {
+      if (isSD()) {
+        if (e.type === 'dir') { cwd = join(cwd, e.name); load(); }
+        else window.parent.postMessage({ type: 'open-file', path: join(cwd, e.name) }, '*');
+        return;
+      }
+      if (e.type === 'dir') { try { await localEnter(ACTIVE, e.name); } catch {} load(); }
+      // local files aren't opened in place — they're transferred to the SD first
+    }
+
+    // ---- context menus (the "esplora risorse" feel) ----
+    function showCtx(x, y, items) {
+      ctx.innerHTML = '';
+      for (const it of items) {
+        if (it.sep) { const s = document.createElement('div'); s.className = 'sep'; ctx.appendChild(s); continue; }
+        const d = document.createElement('div');
+        d.className = 'ci' + (it.danger ? ' danger' : '') + (it.disabled ? ' disabled' : '');
+        d.innerHTML = `<span class="k">${it.icon || ''}</span><span>${esc(it.label)}</span>`;
+        if (!it.disabled) d.onclick = () => { hideCtx(); it.fn(); };
+        ctx.appendChild(d);
+      }
+      ctx.classList.remove('hidden');
+      const r = ctx.getBoundingClientRect();
+      ctx.style.left = Math.min(x, innerWidth - r.width - 6) + 'px';
+      ctx.style.top = Math.min(y, innerHeight - r.height - 6) + 'px';
+    }
+    const hideCtx = () => ctx.classList.add('hidden');
+
+    function itemMenu(ev, e) {
+      const isDir = e.type === 'dir';
+      if (!isSD()) {                                   // local file/folder
+        const w = writable();
+        showCtx(ev.clientX, ev.clientY, [
+          { label: 'Open', icon: isDir ? '📂' : '▶', disabled: !isDir, fn: () => open(e) },
+          { label: 'Copy to NucleoOS SD', icon: '💾', disabled: isDir, fn: () => copyToSD() },
+          { sep: true },
+          { label: 'Copy', icon: '📋', disabled: isDir, fn: () => copyCut('copy') },
+          { label: 'Cut', icon: '✂️', disabled: isDir || !w, fn: () => copyCut('cut') },
+          { label: 'Paste', icon: '📌', disabled: !w || !xfer, fn: () => pasteHere() },
+          { sep: true },
+          { label: 'Rename…', icon: '✏️', disabled: !w || (isDir && ACTIVE.src !== 'bridge'), fn: () => renameFile(e) },
+          { label: 'Delete', icon: '🗑', danger: true, disabled: !w, fn: () => del(e) },
+          { sep: true },
+          { label: 'Properties', icon: 'ⓘ', fn: () => properties(e, (ACTIVE.src === 'bridge' ? winJoin(ACTIVE.path, e.name) : (localTail() ? localTail() + '\\' : '') + e.name)) },
+        ]);
+        return;
+      }
+      const path = join(cwd, e.name);
+      showCtx(ev.clientX, ev.clientY, [
+        { label: 'Open', icon: isDir ? '📂' : '▶', fn: () => open(e) },
+        { label: 'Rename…', icon: '✏️', disabled: isDir, fn: () => renameFile(e) },
+        { label: 'Save to PC…', icon: '⬇', disabled: isDir, fn: () => downloadToPC(e) },
+        { label: 'Add to archive...', icon: '🗜️', fn: () => compressSelection() },
+        { label: 'Copy path', icon: '🔗', fn: () => copy(path) },
+        { sep: true },
+        { label: 'Copy', icon: '📋', disabled: isDir, fn: () => copyCut('copy') },
+        { label: 'Cut', icon: '✂️', disabled: isDir, fn: () => copyCut('cut') },
+        { label: 'Paste', icon: '📌', disabled: !xfer, fn: () => pasteHere() },
+        { sep: true },
+        { label: 'Delete', icon: '🗑', danger: true, fn: () => del(e) },
+        { sep: true },
+        { label: 'Properties', icon: 'ⓘ', fn: () => properties(e, path) },
+      ]);
+    }
+    function bgMenu(ev) {
+      if (!isSD()) {
+        const w = writable();
+        showCtx(ev.clientX, ev.clientY, [
+          { label: 'New folder…', icon: '📁', disabled: !w, fn: newFolder },
+          { label: 'Paste', icon: '📌', disabled: !w || !xfer, fn: () => pasteHere() },
+          { sep: true },
+          { label: 'Refresh', icon: '🔄', fn: load },
+        ]);
+        return;
+      }
+      showCtx(ev.clientX, ev.clientY, [
+        { label: 'New folder…', icon: '📁', fn: newFolder },
+        { label: 'New text file…', icon: '📄', fn: newFile },
+        { label: 'Paste', icon: '📌', disabled: !xfer, fn: () => pasteHere() },
+        { sep: true },
+        { label: 'Refresh', icon: '🔄', fn: load },
+        { label: 'Open in Terminal', icon: '⌨', disabled: true, fn: () => {} },
+      ]);
+    }
+    list.addEventListener('contextmenu', (ev) => { if (ev.target === list || ev.target.classList.contains('empty')) { ev.preventDefault(); bgMenu(ev); } });
+    document.addEventListener('click', (e) => { if (!ctx.contains(e.target)) hideCtx(); });
+    window.addEventListener('blur', hideCtx);
+
+    // ---- operations ----
+    async function del(e) {
+      if (!isSD()) {
+        if (!writable()) return;
+        if (!await confirmModal(`Delete ${e.type === 'dir' ? 'folder' : 'file'} “${e.name}” from ${ACTIVE.label}?`,
+          'Local items skip the Recycle Bin — this is permanent.')) return;
+        try { await localDeleteEntry(ACTIVE, e); } catch (err) { console.warn('delete failed', err); }
+        load(); return;
+      }
+      const path = join(cwd, e.name);
+      const ok = await confirmModal(`Delete ${e.type === 'dir' ? 'folder' : 'file'} “${e.name}”?`,
+        e.type === 'dir' ? 'Everything inside it is removed permanently.' : 'It goes to the Recycle Bin (Ctrl+Z to undo).');
+      if (!ok) return;
+      if (e.type === 'dir') await api('delete', path, { method: 'POST' });
+      else await trashFile(path);                 // recoverable
+      load();
+    }
+    async function newFolder() {
+      if (!writable()) return;
+      const name = await inputModal('New folder', 'Folder name', 'New folder');
+      if (!name) return;
+      try { if (isSD()) await api('mkdir', join(cwd, name), { method: 'POST' }); else await localMkdir(ACTIVE, name); } catch (err) { console.warn('mkdir failed', err); }
+      load();
+    }
+    async function newFile() {
+      let name = await inputModal('New text file', 'File name', 'untitled.txt');
+      if (!name) return;
+      if (!/\.[a-z0-9]+$/i.test(name)) name += '.txt';
+      await api('write', join(cwd, name), { method: 'POST', body: '' }); load();
+    }
+    async function renameFile(e) {
+      if (!writable()) return;
+      const name = await inputModal('Rename', 'New name', e.name);
+      if (!name || name === e.name) return;
+      try {
+        if (isSD()) {   // no move endpoint on the device: copy bytes to the new name, then delete the old
+          const buf = await (await api('read', join(cwd, e.name))).arrayBuffer();
+          await api('write', join(cwd, name), { method: 'POST', body: buf });
+          await api('delete', join(cwd, e.name), { method: 'POST' });
+        } else await localRenameEntry(ACTIVE, e, name);
+      } catch (err) { console.warn('rename failed', err); }
+      load();
+    }
+    async function copy(text) { try { await navigator.clipboard.writeText(text); } catch {} }
+
+    function compressSelection() {
+      const paths = selectedPaths();
+      if (!paths.length) return;
+      const q = encodeURIComponent(JSON.stringify(paths));
+      window.parent.postMessage({ type: 'open-app', id: 'archive-manager', query: 'compress=' + q }, '*');
+    }
+
+    function properties(e, path) {
+      const isDir = e.type === 'dir';
+      const where = isSD() ? 'SD:' + cwd : ACTIVE.label + (localTail() ? '\\' + localTail() : '');
+      openModal(`<h3><span>${isDir ? '📁' : fileGlyph(e.name)}</span> Properties</h3>
+        <table>
+          <tr><td class="k">Name</td><td class="v">${esc(e.name)}</td></tr>
+          <tr><td class="k">Type</td><td class="v">${isDir ? 'Folder' : ((e.name.split('.').pop() || '').toUpperCase() + ' file')}</td></tr>
+          <tr><td class="k">Size</td><td class="v">${isDir ? '—' : fmt(e.size) + ` (${e.size.toLocaleString()} bytes)`}</td></tr>
+          <tr><td class="k">Location</td><td class="v">${esc(where)}</td></tr>
+          <tr><td class="k">Full path</td><td class="v">${esc(path)}</td></tr>
+        </table>
+        <div class="row"><button class="primary" id="m-ok">Close</button></div>`);
+      modal.querySelector('#m-ok').onclick = closeModal;
+    }
+
+    // ---- tiny modal helpers ----
+    function openModal(html) { modal.innerHTML = html; scrim.classList.remove('hidden'); }
+    function closeModal() { scrim.classList.add('hidden'); }
+    scrim.addEventListener('click', (e) => { if (e.target === scrim) closeModal(); });
+    function inputModal(title, label, value) {
+      return new Promise((res) => {
+        openModal(`<h3>${esc(title)}</h3><label>${esc(label)}<input id="m-in" value="${esc(value)}"></label>
+          <div class="row"><button id="m-cancel">Cancel</button><button class="primary" id="m-ok">OK</button></div>`);
+        const input = modal.querySelector('#m-in'); input.focus(); input.select();
+        const done = (v) => { closeModal(); res(v); };
+        modal.querySelector('#m-ok').onclick = () => done(input.value.trim());
+        modal.querySelector('#m-cancel').onclick = () => done(null);
+        input.onkeydown = (e) => { if (e.key === 'Enter') done(input.value.trim()); else if (e.key === 'Escape') done(null); };
+      });
+    }
+    function confirmModal(title, sub) {
+      return new Promise((res) => {
+        openModal(`<h3>${esc(title)}</h3>${sub ? `<div style="color:var(--muted);font-size:13px">${esc(sub)}</div>` : ''}
+          <div class="row"><button id="m-cancel">Cancel</button><button class="primary" id="m-ok" style="background:var(--danger);border-color:var(--danger)">Delete</button></div>`);
+        const done = (v) => { closeModal(); res(v); };
+        modal.querySelector('#m-ok').onclick = () => done(true);
+        modal.querySelector('#m-cancel').onclick = () => done(false);
+      });
+    }
+
+    // ---- selection (click / Ctrl+click toggle / Shift+range) ----
+    function rowClick(ev, e) {
+      const items = view();
+      const i = items.findIndex((x) => x.name === e.name);
+      if (ev.shiftKey && lastClick >= 0 && lastClick < items.length) {
+        const [a, b] = [Math.min(lastClick, i), Math.max(lastClick, i)];
+        if (!ev.ctrlKey) selected.clear();
+        for (let k = a; k <= b; k++) selected.add(items[k].name);
+      } else if (ev.ctrlKey) {
+        selected.has(e.name) ? selected.delete(e.name) : selected.add(e.name); lastClick = i;
+      } else { selected.clear(); selected.add(e.name); lastClick = i; }
+      paintSelection();
+    }
+    const selectedPaths = () => [...selected].map((n) => join(cwd, n));
+    const selectedEntries = () => entries.filter((e) => selected.has(e.name));
+
+    // ---- OS clipboard fallback (SD→SD across windows/apps), via the shell ----
+    async function pasteFiles(clip) {
+      if (!clip || clip.kind !== 'files' || !clip.data) return;
+      const { op, paths } = clip.data; const created = [], moved = [];
+      for (const src of paths) {
+        let name = src.split('/').pop(), dst = join(cwd, name);
+        if (dst === src) { if (op === 'cut') continue; name = name.replace(/(\.[^.]+)?$/, ' copy$&'); dst = join(cwd, name); }
+        try {
+          const buf = await (await api('read', src)).arrayBuffer();   // files only (folders skipped)
+          await api('write', dst, { method: 'POST', body: buf });
+          created.push(dst);
+          if (op === 'cut') { await trashFile(src, false); moved.push({ src, dst }); }
+        } catch {}
+      }
+      if (op === 'cut' && moved.length) pushUndo({ type: 'move', moved });
+      else if (created.length) pushUndo({ type: 'paste', created });
+      load();
+    }
+
+    // ---- recycle bin (persistent, bounded) + session undo ----
+    async function loadTrashDb() { try { const r = await api('read', TRASH_DB); if (r.ok) return JSON.parse(await r.text()); } catch {} return { items: [] }; }
+    const saveTrashDb = (db) => api('write', TRASH_DB, { method: 'POST', body: JSON.stringify(db) });
+    async function trashFile(path, record = true) {
+      await api('mkdir', TRASH, { method: 'POST' });
+      const tpath = join(TRASH, Date.now() + '_' + Math.floor(Math.random() * 9999) + '_' + path.split('/').pop());
+      const buf = await (await api('read', path)).arrayBuffer();
+      await api('write', tpath, { method: 'POST', body: buf });
+      await api('delete', path, { method: 'POST' });
+      const db = await loadTrashDb();
+      db.items.unshift({ orig: path, trash: tpath, name: path.split('/').pop(), ts: Date.now() });
+      while (db.items.length > TRASH_CAP) { const old = db.items.pop(); try { await api('delete', old.trash, { method: 'POST' }); } catch {} }
+      await saveTrashDb(db);
+      if (record) pushUndo({ type: 'delete', orig: path, trash: tpath });
+    }
+    async function restoreFromTrash(trash, orig) {
+      try { const buf = await (await api('read', trash)).arrayBuffer(); await api('write', orig, { method: 'POST', body: buf });
+        await api('delete', trash, { method: 'POST' }); const db = await loadTrashDb(); db.items = db.items.filter((i) => i.trash !== trash); await saveTrashDb(db); } catch {}
+    }
+    async function deleteSelection() {
+      const sel = selectedEntries(); if (!sel.length) return;
+      if (!isSD()) {
+        if (!writable()) return;
+        if (!await confirmModal(`Delete ${sel.length} item${sel.length === 1 ? '' : 's'} from ${ACTIVE.label}?`, 'Local items skip the Recycle Bin — this is permanent.')) return;
+        for (const e of sel) { try { await localDeleteEntry(ACTIVE, e); } catch (err) { console.warn('delete failed', err); } }
+        selected.clear(); load(); return;
+      }
+      if (sel.length > 1 && !await confirmModal(`Delete ${sel.length} items?`, 'Files go to the Recycle Bin (Ctrl+Z to undo).')) return;
+      for (const e of sel) {
+        const p = join(cwd, e.name);
+        if (e.type === 'dir') { if (await confirmModal(`Delete folder “${e.name}”?`, 'Everything inside is removed permanently.')) await api('delete', p, { method: 'POST' }); }
+        else await trashFile(p);
+      }
+      selected.clear(); load();
+    }
+    function pushUndo(rec) { undoStack.push(rec); if (undoStack.length > UNDO_CAP) undoStack.shift(); }
+    async function undo() {
+      const rec = undoStack.pop(); if (!rec) return;
+      if (rec.type === 'delete') await restoreFromTrash(rec.trash, rec.orig);
+      else if (rec.type === 'paste') { for (const p of rec.created) try { await api('delete', p, { method: 'POST' }); } catch {} }
+      else if (rec.type === 'move') { for (const m of rec.moved) try { const b = await (await api('read', m.dst)).arrayBuffer(); await api('write', m.src, { method: 'POST', body: b }); await api('delete', m.dst, { method: 'POST' }); } catch {} }
+      load();
+    }
+
+    // ---- OS-wide keyboard shortcuts arrive from the shell as {type:'os-shortcut'} ----
+    let fsChangedTimer = null;
+    let fsChangedPaths = new Set();
+    // Paths the OS rewrites constantly (window layout, session, the trash ledger). They never
+    // belong to a folder the user is browsing, so reacting to them is pure churn — drop them.
+    const FS_NOISE = new Set(['/system/config/ui-state.json', '/system/config/session.json', TRASH_DB]);
+    window.addEventListener('message', (e) => {
+      const d = e.data; if (!d) return;
+      if (d.t === 'fs.changed') {
+        if (!isSD()) return;                          // a local (PC) view gets no device fs events
+        const cp = d.d && d.d.path ? d.d.path.replace(/\\/g, '/') : null;
+        if (cp) { if (FS_NOISE.has(cp)) return; fsChangedPaths.add(cp); }
+        if (fsChangedTimer) clearTimeout(fsChangedTimer);
+        fsChangedTimer = setTimeout(async () => {
+          const paths = [...fsChangedPaths]; fsChangedPaths.clear();
+          const hitsCwd = paths.length === 0 || paths.some((p) => parent(p) === cwd || p === cwd);
+          const treeRelevant = paths.some((p) => underOpenTree(p));
+          if (hitsCwd) await load();                  // revalidate this folder (reconciles; no blink if unchanged)
+          if (treeRelevant) refreshTree();            // only when a sub-folder appeared/vanished where it's visible
+        }, 400);
+        return;
+      }
+      if (d.type === 'clipboard-data') { pasteFiles(d.item); return; }   // reply to a paste request
+      if (d.type !== 'os-shortcut') return;
+      // On a local location, write actions apply only when it's writable.
+      if (!isSD()) {
+        const w = writable();
+        if (d.action === 'selectAll') { view().forEach((x) => selected.add(x.name)); paintSelection(); }
+        else if (d.action === 'copy') copyCut('copy');
+        else if (d.action === 'cut') { if (w) copyCut('cut'); }
+        else if (d.action === 'paste') { if (w) pasteHere(); }
+        else if (d.action === 'delete') { if (w) deleteSelection(); }
+        else if (d.action === 'rename') { if (w) { const s = selectedEntries(); if (s.length === 1) renameFile(s[0]); } }
+        else if (d.action === 'refresh') load();
+        return;
+      }
+      switch (d.action) {
+        case 'copy': copyCut('copy'); break;
+        case 'cut': copyCut('cut'); break;
+        case 'paste': pasteHere(d.clip); break;
+        case 'selectAll': view().forEach((x) => selected.add(x.name)); paintSelection(); break;
+        case 'delete': deleteSelection(); break;
+        case 'rename': { const s = selectedEntries(); if (s.length === 1) renameFile(s[0]); break; }
+        case 'undo': undo(); break;
+        case 'refresh': load(); break;
+      }
+    });
+
+    // ---- drag-and-drop upload (copies dropped files into the current folder) ----
+    const MAX_UPLOAD = 640 * 1024 * 1024;                 // 640 MB hard ceiling (matches firmware)
+    const dropEl = document.getElementById('drop');
+    const dropDest = document.getElementById('dropdest');
+    const upPanel = document.getElementById('uploads');
+    const upBody = document.getElementById('up-body');
+    let dragDepth = 0;                                    // enter/leave counter → no flicker over children
+
+    // POST one file's bytes to /api/fs/write with live upload progress. XHR (not fetch) so
+    // we get upload.onprogress; timeout=0 means the browser never gives up on a huge transfer.
+    function putFile(file, destPath, onProgress) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `/api/fs/write?path=` + encodeURIComponent(destPath));
+        xhr.timeout = 0;
+        xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
+        xhr.onload = () => (xhr.status >= 200 && xhr.status < 300)
+          ? resolve()
+          : reject(new Error((xhr.responseText || '').trim() || ('HTTP ' + xhr.status)));
+        xhr.onerror = () => reject(new Error('network error'));
+        xhr.onabort = () => reject(new Error('aborted'));
+        xhr.send(file);
+      });
+    }
+
+    // Avoid clobbering an existing entry: "report.txt" → "report (1).txt". `taken` also holds
+    // names claimed earlier in this same drop so a multi-file batch can't collide with itself.
+    function uniqueName(name, taken) {
+      if (!taken.has(name)) { taken.add(name); return name; }
+      const dot = name.lastIndexOf('.');
+      const base = dot > 0 ? name.slice(0, dot) : name;
+      const ext = dot > 0 ? name.slice(dot) : '';
+      for (let i = 1; ; i++) { const c = `${base} (${i})${ext}`; if (!taken.has(c)) { taken.add(c); return c; } }
+    }
+
+    function upRow(label) {
+      const row = document.createElement('div');
+      row.className = 'uitem';
+      row.innerHTML = `<div class="top"><span class="nm">${esc(label)}</span><span class="pc">0%</span></div><div class="bar"><i></i></div>`;
+      upBody.appendChild(row); upBody.scrollTop = upBody.scrollHeight;
+      const bar = row.querySelector('i'), pc = row.querySelector('.pc');
+      return {
+        progress: (l, t) => { const r = t ? l / t : 0; bar.style.width = (r * 100).toFixed(1) + '%'; pc.textContent = Math.round(r * 100) + '%'; },
+        done: () => { row.classList.add('done'); bar.style.width = '100%'; pc.textContent = '✓'; },
+        fail: (msg) => { row.classList.add('err'); pc.textContent = '✕'; row.querySelector('.nm').title = msg; },
+      };
+    }
+
+    // Flatten a drop into a list of { file, rel } where rel is the path relative to cwd
+    // (so dropped folders are recreated). Uses the webkitGetAsEntry tree when available,
+    // and falls back to the flat FileList otherwise.
+    async function collect(dt) {
+      const out = [];
+      const items = dt.items ? [...dt.items] : [];
+      const entriesApi = items.length && items[0].webkitGetAsEntry;
+      if (entriesApi) {
+        const walk = (entry, prefix) => new Promise((res) => {
+          if (entry.isFile) entry.file((f) => { out.push({ file: f, rel: prefix + entry.name }); res(); }, () => res());
+          else if (entry.isDirectory) {
+            const rd = entry.createReader(); const acc = [];
+            const readBatch = () => rd.readEntries(async (es) => {
+              if (!es.length) { for (const c of acc) await walk(c, prefix + entry.name + '/'); res(); }
+              else { acc.push(...es); readBatch(); }                 // readEntries returns in chunks
+            }, () => res());
+            readBatch();
+          } else res();
+        });
+        const roots = items.map((it) => it.webkitGetAsEntry && it.webkitGetAsEntry()).filter(Boolean);
+        for (const r of roots) await walk(r, '');
+      }
+      if (!out.length) for (const f of dt.files || []) out.push({ file: f, rel: f.name });
+      return out;
+    }
+
+    let uploading = false;
+    async function handleDrop(dt) {
+      const dropped = await collect(dt);
+      if (!dropped.length) return;
+      // Resolve destination paths up front: unique top-level names, mkdir for any folder depth.
+      const taken = new Set(entries.map((e) => e.name));
+      const madeDirs = new Set();
+      const jobs = [];
+      for (const { file, rel } of dropped) {
+        const segs = rel.split('/').filter(Boolean);
+        const top = segs[0];
+        const finalTop = uniqueName(top, taken);            // dedupe only the top segment
+        segs[0] = finalTop;
+        let dir = cwd;
+        for (let i = 0; i < segs.length - 1; i++) {
+          dir = join(dir, segs[i]);
+          if (!madeDirs.has(dir)) { madeDirs.add(dir); await api('mkdir', dir, { method: 'POST' }).catch(() => {}); }
+        }
+        jobs.push({ file, dest: join(dir, segs[segs.length - 1]), label: segs.join('/') });
+      }
+
+      await runUploadJobs(jobs);
+    }
+
+    // Run a queue of { file:Blob, dest:sdPath, label } uploads sequentially, with the
+    // progress panel. Shared by drag-and-drop-from-Explorer and copy-from-local-device.
+    async function runUploadJobs(jobs) {
+      if (!jobs.length) return;
+      const title = document.getElementById('up-title');
+      upPanel.classList.remove('hidden');
+      uploading = true;
+      let ok = 0, failed = 0, done = 0;
+      title.textContent = `Uploading 0/${jobs.length}…`;
+      for (const job of jobs) {
+        const ui = upRow(job.label);
+        try {
+          const file = job.file || (job.read && await job.read());      // lazy read (local files fetched on demand)
+          if (file.size > MAX_UPLOAD) { ui.fail(`too large (${fmt(file.size)} > 640 MB)`); failed++; }
+          else { await putFile(file, job.dest, ui.progress); ui.done(); ok++; }
+        } catch (err) { ui.fail((err && err.message) || 'failed'); failed++; }
+        title.textContent = `Uploading ${++done}/${jobs.length}…`;
+      }
+      uploading = false;
+      title.textContent = `Uploaded ${ok}${failed ? `, ${failed} failed` : ''}`;
+      if (isSD()) load();   // refresh only if the SD is the current view
+    }
+
+    // Copy the selected files from the active local device into the SD (at the last SD folder).
+    async function copyToSD() {
+      if (isSD()) return;
+      const names = [...selected].filter((n) => { const e = entries.find((x) => x.name === n); return e && e.type === 'file'; });
+      if (!names.length) return;
+      let taken = new Set();
+      try { const sd = await (await api('list', sdPath)).json(); taken = new Set((sd.entries || []).map((e) => e.name)); } catch {}
+      const jobs = names.map((name) => ({
+        label: name + '  →  SD:' + sdPath,
+        dest: join(sdPath, uniqueName(name, taken)),
+        read: () => localReadFile(ACTIVE, name),     // read bytes only when the job runs
+      }));
+      await runUploadJobs(jobs);
+    }
+
+    // Save an SD file to the PC: a writable handle (FSA) if we have one, else a browser download.
+    async function downloadToPC(e) {
+      const src = join(cwd, e.name);
+      const a = document.createElement('a');
+      a.href = '/api/fs/read?path=' + encodeURIComponent(src);
+      a.download = e.name;
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+
+    // External file drops (from Windows Explorer) only upload when the SD is the active view —
+    // that's the destination they target. While browsing a local device, ignore them.
+    function showDrop(e) {
+      if (!isSD() || !e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return false;
+      dropDest.textContent = 'Destination: SD:' + cwd;
+      dropEl.classList.remove('hidden');
+      return true;
+    }
+    window.addEventListener('dragenter', (e) => { if (showDrop(e)) { e.preventDefault(); dragDepth++; } });
+    window.addEventListener('dragover', (e) => { if (isSD() && e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+    window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; dropEl.classList.add('hidden'); } });
+    window.addEventListener('drop', (e) => {
+      if (!isSD() || !e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+      e.preventDefault(); dragDepth = 0; dropEl.classList.add('hidden');
+      handleDrop(e.dataTransfer);
+    });
+    document.getElementById('up-clear').onclick = () => { if (uploading) return; upBody.innerHTML = ''; upPanel.classList.add('hidden'); };
+
+    // ---- sidebar: a real folder tree (Explorer-style) over every location -----------------
+    // Each location (the SD, each PC drive/folder) is a tree ROOT. Folders expand lazily; the
+    // tree auto-reveals and highlights whatever folder the file list is showing, and clicking a
+    // node navigates there. One generic tree drives all three backends (SD api / bridge / FSA).
+    const treeBox = document.getElementById('tree');
+    let roots = [];                          // [rootNode] — index 0 is always the SD
+    const byName = (a, b) => a.name.localeCompare(b.name);
+    const arrEq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+    // node = { loc, label, glyph, depth, isRoot, segs:[name…from root], expanded, loaded, leaf,
+    //          children:[], parent, path?(sd/bridge), handle?(fsa) }
+    function makeRoot(loc) {
+      const r = { loc, label: loc.label, glyph: loc.glyph, depth: 0, isRoot: true, removable: loc.removable,
+        segs: [], expanded: false, loaded: false, leaf: false, children: [], parent: null };
+      if (loc.kind === 'sd') r.path = '/';
+      else if (loc.src === 'bridge') r.path = loc.root;
+      else r.handle = loc.stack[0];
+      return r;
+    }
+    function childNode(parent, name, extra) {
+      return { loc: parent.loc, label: name, glyph: '📁', depth: parent.depth + 1, isRoot: false,
+        segs: [...parent.segs, name], expanded: false, loaded: false, leaf: false, children: [], parent, ...extra };
+    }
+    // List ONLY the sub-folders of a node, as fresh child nodes (files don't belong in the tree).
+    async function listChildFolders(node) {
+      const loc = node.loc;
+      try {
+        if (loc.kind === 'sd') {
+          const j = await (await api('list', node.path)).json();
+          return (j.entries || []).filter((e) => e.type === 'dir').sort(byName).map((e) => childNode(node, e.name, { path: join(node.path, e.name), leaf: e.has_subdirs !== undefined ? !e.has_subdirs : false }));
+        }
+        if (loc.src === 'bridge') {
+          const raw = await bridge.ListDir(node.path); const j = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (j && j.error) throw new Error(j.error);
+          return (j.entries || []).filter((e) => e.type === 'dir').sort(byName).map((e) => childNode(node, e.name, { path: winJoin(node.path, e.name), leaf: e.has_subdirs !== undefined ? !e.has_subdirs : false }));
+        }
+        const out = [];                                  // FSA: walk the directory handle
+        for await (const [name, h] of node.handle.entries()) {
+          if (h.kind === 'directory') {
+            let has_subdirs = false;
+            try {
+              for await (const [_, subh] of h.entries()) {
+                if (subh.kind === 'directory') { has_subdirs = true; break; }
+              }
+            } catch {}
+            out.push({ name, h, has_subdirs });
+          }
+        }
+        out.sort((a, b) => a.name.localeCompare(b.name));
+        return out.map((o) => childNode(node, o.name, { handle: o.h, leaf: !o.has_subdirs }));
+      } catch { return []; }
+    }
+    async function loadChildren(node) { node.children = await listChildFolders(node); node.loaded = true; node.leaf = node.children.length === 0; }
+    async function ensureLoaded(node) { if (!node.loaded) await loadChildren(node); }
+
+    // The folder segments (names from the root) the file list is currently showing.
+    function activeSegments() {
+      const loc = ACTIVE;
+      if (loc.kind === 'sd') return cwd.split('/').filter(Boolean);
+      if (loc.src === 'bridge') { const r = loc.root.replace(/\\+$/, ''); const t = loc.path.replace(/\\+$/, ''); return t.length > r.length ? t.slice(r.length).split('\\').filter(Boolean) : []; }
+      return loc.stack.slice(1).map((h) => h.name);
+    }
+    // Expand the root and walk down `segs`, loading + opening each node along the way.
+    async function expandToSegments(root, segs) {
+      await ensureLoaded(root); root.expanded = true;
+      let node = root;
+      for (const name of segs) { const c = node.children.find((x) => x.label === name); if (!c) break; await ensureLoaded(c); c.expanded = true; node = c; }
+      return node;
+    }
+    async function revealActive() { const root = roots.find((r) => r.loc === ACTIVE); if (root) await expandToSegments(root, activeSegments()); }
+    // Keep roots in step with the locations list, preserving any already-built (expanded) tree.
+    function rebuildRoots() {
+      const prev = new Map(roots.map((r) => [r.loc.id, r]));
+      roots = [prev.get(SD_LOC.id) || makeRoot(SD_LOC)];
+      for (const loc of locals) roots.push(prev.get(loc.id) || makeRoot(loc));
+    }
+
+    function renderSidebar() {
+      rebuildRoots();
+      const act = activeSegments();
+      treeBox.innerHTML = '';
+      const sec = (text) => { const h = document.createElement('div'); h.className = 'side-sec'; h.textContent = text; treeBox.appendChild(h); };
+      sec('This device');
+      renderNode(roots[0], act);
+      sec('This PC');
+      const localRoots = roots.slice(1);
+      if (!localRoots.length) {
+        const m = document.createElement('div'); m.className = 'side-empty';
+        m.textContent = bridge ? 'Scanning drives…' : (fsaSupported ? 'Add a folder or drive below.' : 'Local browsing needs Chrome/Edge or the NucleoConnect app.');
+        treeBox.appendChild(m);
+      } else for (const r of localRoots) renderNode(r, act);
+      const a = treeBox.querySelector('.tnode.active'); if (a) a.scrollIntoView({ block: 'nearest' });
+    }
+    function renderNode(node, act) {
+      const row = document.createElement('div');
+      row.className = 'tnode' + (node.loc === ACTIVE && arrEq(node.segs, act) ? ' active' : '');
+      row.style.paddingLeft = (6 + node.depth * 15) + 'px';
+      const tw = document.createElement('span'); tw.className = 'tw' + (node.expanded ? ' open' : '') + (node.leaf ? ' leaf' : ''); tw.textContent = '▶';
+      const tg = document.createElement('span'); tg.className = 'tg'; tg.textContent = node.isRoot ? node.glyph : (node.expanded ? '📂' : '📁');
+      const tn = document.createElement('span'); tn.className = 'tn'; tn.textContent = node.label;
+      row.append(tw, tg, tn);
+      if (node.isRoot && node.removable) { const x = document.createElement('span'); x.className = 'tx'; x.title = 'Remove'; x.textContent = '✕'; x.onclick = (e) => { e.stopPropagation(); removeLocal(node.loc); }; row.appendChild(x); }
+      tw.onclick = (e) => { e.stopPropagation(); toggleNode(node, tw); };
+      row.onclick = () => navigateToNode(node);
+      if (node.loc.kind === 'sd') {           // the SD (any of its nodes) accepts local-file drags → copy to card
+        row.ondragover = (e) => { if ([...e.dataTransfer.types].includes('application/x-nucleo-local')) { e.preventDefault(); row.classList.add('drop-target'); } };
+        row.ondragleave = () => row.classList.remove('drop-target');
+        row.ondrop = (e) => { if ([...e.dataTransfer.types].includes('application/x-nucleo-local')) { e.preventDefault(); row.classList.remove('drop-target'); copyToSD(); } };
+      }
+      treeBox.appendChild(row);
+      if (node.expanded) for (const c of node.children) renderNode(c, act);
+    }
+    async function toggleNode(node, tw) {
+      if (node.leaf) return;
+      if (!node.loaded) { if (tw) tw.classList.add('busy'); await loadChildren(node); node.expanded = true; }
+      else node.expanded = !node.expanded;
+      renderSidebar();
+    }
+    // Navigate the file list to a tree node (switching location if needed).
+    async function navigateToNode(node) {
+      const loc = node.loc;
+      if (loc !== ACTIVE) { ACTIVE = loc; lastClick = -1; filterText = ''; document.getElementById('find').value = ''; }
+      selected.clear();
+      if (loc.kind === 'sd') cwd = node.segs.length ? '/' + node.segs.join('/') : '/';
+      else if (loc.src === 'bridge') loc.path = node.segs.length ? loc.root.replace(/\\+$/, '') + '\\' + node.segs.join('\\') : loc.root;
+      else { try { loc.stack = await fsaStackFromSegs(loc, node.segs); } catch {} }
+      load();
+    }
+    async function fsaStackFromSegs(loc, segs) {
+      const root = roots.find((r) => r.loc === loc); let h = root.handle; const stack = [h];
+      for (const s of segs) { h = await h.getDirectoryHandle(s); stack.push(h); }
+      return stack;
+    }
+    // load() calls this every navigation: reveal + highlight the current folder without re-fetching loaded levels.
+    async function syncTree() { try { await revealActive(); } catch {} renderSidebar(); }
+    // True when a changed path's parent is an already-loaded, expanded SD folder in the tree —
+    // i.e. a sub-folder may have appeared/vanished somewhere the user can actually see it. If
+    // nothing open matches, the tree needn't be rebuilt at all (no flicker for off-screen churn).
+    function underOpenTree(p) {
+      const par = parent(p);
+      const root = roots.find((r) => r.loc.kind === 'sd'); if (!root) return false;
+      let hit = false;
+      (function walk(n) { if (hit) return; if (n.loaded && n.expanded && '/' + n.segs.join('/') === par) hit = true; n.children.forEach(walk); })(root);
+      return hit;
+    }
+    // fs.changed: rebuild the active location's tree, preserving which folders were open.
+    async function refreshTree() {
+      const root = roots.find((r) => r.loc === ACTIVE) || roots[0]; if (!root) return;
+      const open = []; (function walk(n) { if (n.expanded) open.push(n.segs.slice()); n.children.forEach(walk); })(root);
+      root.loaded = false; root.expanded = false; root.children = [];
+      open.sort((a, b) => a.length - b.length);
+      for (const segs of open) { try { await expandToSegments(root, segs); } catch {} }
+      try { await revealActive(); } catch {}
+      renderSidebar();
+    }
+
+    // Programmatic location switch (drag-to-SD, test hooks). Tree-row clicks use navigateToNode.
+    function switchTo(loc) {
+      if (loc === ACTIVE) { load(); return; }
+      ACTIVE = loc; selected.clear(); lastClick = -1; filterText = ''; document.getElementById('find').value = '';
+      if (loc.kind === 'local') localGoRoot(loc);
+      load();
+    }
+    function removeLocal(loc) {
+      const i = locals.indexOf(loc); if (i >= 0) locals.splice(i, 1);
+      if (ACTIVE === loc) { ACTIVE = SD_LOC; load(); } else renderSidebar();
+    }
+
+    // ---- resizable sidebar (persisted) ----
+    const aside = document.getElementById('side'), resizer = document.getElementById('resizer');
+    const savedW = parseInt(localStorage.getItem('fc.sidew') || '', 10);
+    if (savedW >= 160 && savedW <= 520) aside.style.width = savedW + 'px';
+    let rz = null;
+    resizer.onpointerdown = (e) => { rz = { x: e.clientX, w: aside.getBoundingClientRect().width }; resizer.classList.add('drag'); resizer.setPointerCapture(e.pointerId); };
+    resizer.onpointermove = (e) => { if (!rz) return; let w = Math.max(160, Math.min(520, Math.round(rz.w + (e.clientX - rz.x)))); aside.style.width = w + 'px'; };
+    resizer.onpointerup = () => { if (!rz) return; rz = null; resizer.classList.remove('drag'); localStorage.setItem('fc.sidew', String(parseInt(aside.style.width, 10) || 230)); };
+
+    // Native bridge present (NucleoConnect): auto-list the real connected drives.
+    async function loadDrives() {
+      if (!bridge) return;
+      try {
+        const raw = await bridge.Drives();
+        const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        for (const d of (arr || [])) {
+          const root = d.path || (d.name + ':\\');
+          locals.push({ id: 'drv:' + root, kind: 'local', src: 'bridge', glyph: d.glyph || '💽',
+            label: d.label || d.name || root, root, path: root, removable: false, writable: true });
+        }
+        renderSidebar();
+      } catch (err) { console.warn('drive list failed', err); }
+    }
+    // Browser fallback: let the user grant a folder/drive via the File System Access API.
+    async function addLocalViaPicker() {
+      if (!fsaSupported) return;
+      let handle; try { handle = await window.showDirectoryPicker({ mode: 'readwrite' }); } catch { return; }   // user cancelled
+      let perm = 'granted';
+      try { perm = await handle.queryPermission({ mode: 'readwrite' }); if (perm !== 'granted') perm = await handle.requestPermission({ mode: 'readwrite' }); } catch { perm = 'denied'; }
+      const loc = { id: 'fsa:' + handle.name + ':' + Math.random().toString(36).slice(2), kind: 'local',
+        src: 'fsa', glyph: '📂', label: handle.name, stack: [handle], path: handle.name, removable: true, writable: perm === 'granted' };
+      locals.push(loc); renderSidebar(); switchTo(loc);
+    }
+    document.getElementById('add-loc').onclick = addLocalViaPicker;
+    document.getElementById('add-loc').title = bridge ? 'Add a folder' : (fsaSupported ? 'Add a folder or drive' : 'Not supported in this browser');
+    if (!bridge && !fsaSupported) document.getElementById('add-loc').disabled = true;
+
+    document.getElementById('up').onclick = () => {
+      if (isSD()) { if (cwd !== '/') { cwd = parent(cwd); selected.clear(); load(); } }
+      else if (!localAtRoot(ACTIVE)) { localUp(ACTIVE); selected.clear(); load(); }
+    };
+    document.getElementById('tosd').onclick = copyToSD;
+    document.getElementById('refresh').onclick = load;
+    document.getElementById('newfolder').onclick = newFolder;
+    const findEl = document.getElementById('find'); findEl.oninput = () => { filterText = findEl.value; render(); };
+    // Preview/inspection hook (harness only; mirrors the device apps' _debugState). Lets a test
+    // mount a real FileSystemDirectoryHandle as a local location without the native picker dialog.
+    window._fc = {
+      state: () => ({ active: ACTIVE.id, kind: ACTIVE.kind, locals: locals.map((l) => l.id), cwd, sdPath, names: entries.map((e) => e.name) }),
+      mountFsa: (handle, label, writableFlag = true) => { const loc = { id: 'fsa:test', kind: 'local', src: 'fsa', glyph: '📂', label: label || handle.name, stack: [handle], path: handle.name, removable: true, writable: writableFlag }; locals.push(loc); renderSidebar(); switchTo(loc); return loc.id; },
+      goSD: () => switchTo(SD_LOC),
+      go: (id) => { const l = id === 'sd' ? SD_LOC : locals.find((x) => x.id === id); if (l) switchTo(l); },
+    };
+
+    renderSidebar(); loadDrives(); load();
+  </script>
+</body>
+</html>

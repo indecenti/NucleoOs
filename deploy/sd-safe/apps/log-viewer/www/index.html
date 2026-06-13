@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log Viewer</title>
+<style>
+  :root { --bg:#0b1220; --panel:#18233a; --panel2:#1f2d4a; --accent:#4ea1ff;
+          --text:#e8eefc; --muted:#8aa0c8; --line:#2a3a5e; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 13px/1.4 system-ui, "Segoe UI", Roboto, sans-serif; color: var(--text);
+         background: var(--bg); display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; flex-wrap: wrap;
+           background: var(--panel2); border-bottom: 1px solid var(--line); flex: none; }
+  header .title { font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  header .spacer { flex: 1; }
+  input[type=text] { flex: none; width: 150px; height: 28px; padding: 0 9px; border: 1px solid var(--line);
+           background: #ffffff0d; color: var(--text); border-radius: 14px; font: inherit; font-size: 12px; outline: none; }
+  input[type=text]:focus { border-color: var(--accent); background: #ffffff14; }
+  button { border: 1px solid var(--line); background: #ffffff10; color: var(--text);
+           border-radius: 7px; padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+  button:hover { background: #ffffff1f; }
+  button.on { border-color: var(--accent); color: var(--accent); }
+  label.chk { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; cursor: pointer; }
+  #log { flex: 1; overflow: auto; padding: 4px 0; font-family: "Cascadia Code", ui-monospace, "Consolas", monospace; }
+  .ev { display: flex; align-items: baseline; gap: 8px; padding: 2px 10px; border-bottom: 1px solid #ffffff08; white-space: nowrap; }
+  .ev:hover { background: #ffffff0a; }
+  .ev .seq { color: var(--muted); font-size: 11px; width: 46px; text-align: right; flex: none; }
+  .ev .time { color: var(--muted); font-size: 11px; width: 64px; flex: none; }
+  .ev .t { font-weight: 600; flex: none; padding: 1px 7px; border-radius: 5px; font-size: 11px; }
+  .ev .d { color: var(--text); overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; opacity: .85; }
+  /* category colours */
+  /* solid self-consistent chips: tint over var(--bg) collapsed to ~1:1 in the OS light theme */
+  .c-system { background:#1c4a7a; color:#cfe6ff; }
+  .c-fs     { background:#13624a; color:#bff0dc; }
+  .c-rec    { background:#4a3a7a; color:#e2d4ff; }
+  .c-storage{ background:#6e4e16; color:#ffe6bf; }
+  .c-net    { background:#16566e; color:#cdeeff; }
+  .c-error  { background:#7a2230; color:#ffcfd6; }
+  .c-other  { background:#ffffff14; color:var(--muted); }
+  .bar { padding: 6px 10px; color: var(--muted); font-size: 11px; background: var(--panel);
+         border-top: 1px solid var(--line); display: flex; gap: 12px; flex: none; }
+  .empty { display: grid; place-items: center; height: 100%; color: var(--muted); text-align: center; padding: 20px; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="title">📜 Log Viewer</span>
+    <span class="spacer"></span>
+    <input id="filter" type="text" placeholder="Filter type/data" autocomplete="off" spellcheck="false">
+    <button id="pause">⏸ Pause</button>
+    <button id="history" title="Read the event journal from the SD card (on demand — keeps the device idle otherwise)">↧ History</button>
+    <button id="clear">Clear</button>
+    <label class="chk"><input id="follow" type="checkbox" checked> Follow</label>
+  </header>
+  <div id="log"><div class="empty" id="placeholder">Listening for live events…<br><span style="font-size:11px">Press <b>History</b> to load the journal from the SD card.</span></div></div>
+  <div class="bar"><span id="stat">0 events</span><span id="src"></span></div>
+
+<script>
+  // Journal lives on the SD card (event-sourced, append-only NDJSON). To keep the ESP idle
+  // we DON'T read it on open — we live-tail events the shell already forwards over the WS,
+  // and only read the (potentially large) journal file when the user asks for History.
+  const JOURNAL = '/journal/events.ndjson';
+  const CAP = 600;                      // bounded view — never grows without limit
+  const events = [];                    // newest at the end
+  let paused = false, follow = true, filterStr = '';
+
+  const logEl = document.getElementById('log');
+  const statEl = document.getElementById('stat');
+  const srcEl = document.getElementById('src');
+
+  const category = (t) => {
+    const p = String(t || '').split('.')[0];
+    if (p === 'system') return 'system';
+    if (p === 'fs') return 'fs';
+    if (p === 'rec') return 'rec';
+    if (p === 'storage') return 'storage';
+    if (p === 'net' || p === 'wifi' || p === 'ble' || p === 'mesh') return 'net';
+    if (/error|warn|fail|panic/i.test(t)) return 'error';
+    return 'other';
+  };
+  const fmtTime = (ts) => {
+    if (!ts) return '—';
+    try { const d = new Date(ts); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0'); }
+    catch { return '—'; }
+  };
+  const compact = (d) => { if (d == null) return ''; if (typeof d === 'string') return d; try { return JSON.stringify(d); } catch { return String(d); } };
+  const matches = (e) => !filterStr || (e.t + ' ' + compact(e.d)).toLowerCase().includes(filterStr);
+
+  const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  function rowHtml(e) {
+    const cat = category(e.t);
+    return '<div class="ev">' +
+      '<span class="seq">' + (e.seq != null ? '#' + e.seq : '') + '</span>' +
+      '<span class="time">' + fmtTime(e.ts) + '</span>' +
+      '<span class="t c-' + cat + '">' + escapeHtml(e.t) + '</span>' +
+      '<span class="d">' + escapeHtml(compact(e.d)) + '</span></div>';
+  }
+
+  function render() {
+    const shown = events.filter(matches);
+    statEl.textContent = shown.length + (shown.length === 1 ? ' event' : ' events') +
+      (events.length !== shown.length ? ' (of ' + events.length + ')' : '') + (paused ? ' · paused' : '');
+    if (!events.length) { logEl.innerHTML = '<div class="empty">Listening for live events…<br><span style="font-size:11px">Press <b>History</b> to load the journal from the SD card.</span></div>'; return; }
+    logEl.innerHTML = shown.map(rowHtml).join('');
+    if (follow) logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function add(e) {
+    if (!e || !e.t) return;
+    events.push(e);
+    if (events.length > CAP) events.splice(0, events.length - CAP);   // bound memory
+  }
+
+  async function loadHistory() {
+    const btn = document.getElementById('history');
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      const r = await fetch('/api/fs/read?path=' + encodeURIComponent(JOURNAL), { cache: 'no-store' });
+      if (r.ok) {
+        const text = await r.text();
+        const lines = text.split('\n').filter((l) => l.trim());
+        const hist = [];
+        for (const line of lines.slice(-CAP)) { try { hist.push(JSON.parse(line)); } catch {} }
+        // Merge: keep journal history first, then any live events not already present (by seq).
+        const seen = new Set(hist.map((h) => h.seq));
+        const live = events.filter((e) => !seen.has(e.seq));
+        events.length = 0; events.push(...hist, ...live);
+        if (events.length > CAP) events.splice(0, events.length - CAP);
+        srcEl.textContent = 'journal: ' + lines.length + ' lines on SD';
+      } else { srcEl.textContent = 'no journal on SD yet'; }
+    } catch { srcEl.textContent = 'journal unavailable'; }
+    btn.disabled = false; btn.textContent = '↧ History';
+    render();
+  }
+
+  // Live tail: the shell forwards every device event into this iframe as a postMessage.
+  window.addEventListener('message', (e) => {
+    const m = e.data;
+    if (!m || typeof m.t !== 'string') return;
+    if (m.type === 'os-shortcut') { if (m.action === 'refresh') loadHistory(); return; }
+    if (paused) return;
+    add(m); render();
+  });
+
+  document.getElementById('filter').addEventListener('input', (e) => { filterStr = e.target.value.trim().toLowerCase(); render(); });
+  document.getElementById('pause').addEventListener('click', (e) => {
+    paused = !paused; e.target.classList.toggle('on', paused); e.target.textContent = paused ? '▶ Resume' : '⏸ Pause'; render();
+  });
+  document.getElementById('history').addEventListener('click', loadHistory);
+  document.getElementById('clear').addEventListener('click', () => { events.length = 0; srcEl.textContent = ''; render(); });
+  document.getElementById('follow').addEventListener('change', (e) => { follow = e.target.checked; if (follow) render(); });
+
+  render();
+</script>
+</body>
+</html>

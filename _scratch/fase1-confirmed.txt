@@ -1,0 +1,484 @@
+﻿#1 [morto-fw] firmware/sdkconfig.defaults:90
+T: Self-test HDC/KGE abilitato nel build di produzione (contraddice il Kconfig 'default n / zero cost')
+W: firmware/components/nucleo_anima/Kconfig dichiara NUCLEO_ANIMA_HDC_SELFTEST 'default n' promettendo firmware 'byte-for-byte unchanged', ma sdkconfig.defaults:90 e sdkconfig:2073 lo forzano =y: a OGNI boot main.c:173-175 chiama nucleo_anima_hdc_selftest() (nucl…
+C: ~1.6KB flash (text 889B + literal 100B + rodata 647B, verificati su nucleoos.map), 8704B heap transitori (4608+2048+2048, liberati a fine test) + decine di ms a ogni boot; NESSUN r…
+conf=alta/v:alta risk=basso
+F: Rimuovere CONFIG_NUCLEO_ANIMA_HDC_SELFTEST=y da sdkconfig.defaults (e rigenerare sdkconfig) cosÃ¬ il default n del Kconfig torna effettivo e il linker scarta il selftest; oppure, se la prova a boot Ã¨…
+
+#2 [morto-fw] firmware/components/nucleo_httpd/nucleo_httpd.c:951-986 (registrazione 1539+1561) â€” corrette come dichiarate
+T: /api/anima/verify registrato ma con zero consumer in tutto il repo
+W: Il handler anima_verify_get (registrato a riga 1539+1561, senza NUCLEO_AUTH_GUARD) era la spina per il client web di ANIMA Forge, che non esiste: grep di 'anima/verify' su apps/ e web/ dÃ zero risultati (le uniche occorrenze sono le spec generate e docs/anima-…
+C: ~1.34KB flash misurati su nucleoos.map (handler .text 426B + verify_claim .text 753B + literal/rodata ~156B), 1 dei 48 slot max_uri_handlers (nucleo_httpd.c:1499)
+conf=alta/v:alta risk=basso
+F: De-registrare la route e compilare via il thin wrapper (lasciando intatta nucleo_anima_verify_claim in nucleo_anima.c:3387, che Ã¨ host-gated), poi rigenerare la spec con gen:api per tenere verde il g…
+
+#3 [morto-fw] firmware/components/nucleo_app/app_gfx.h:24-26 (la menzogna principale Ã¨ la riga 25; la riga 22 dello stesso header la contraddice giÃ )
+T: Commento header che mente: nucleo_screen_release 'no-op' libera in realtÃ  32KB; nucleo_screen_buffer Ã¨ API morta
+W: app_gfx.h:25 dichiara nucleo_screen_release 'no-op: the buffer is permanent (kept for call-site compat)', ma nucleo_ui.cpp:57 fa deleteSprite() del canvas condiviso (~32KB) e nucleo_app.cpp:735 ci conta davvero ('give the 32 KB canvas back'). Un contributore c…
+C: 0 RAM/flash confermato: nucleo_screen_buffer Ã¨ giÃ GC'd dal linker (sezioni a 0x00000000 nei Discarded input sections), quindi la rimozione Ã¨ pura igiene documentale
+conf=alta/v:alta risk=basso
+F: Correggere i commenti di app_gfx.h:24-25 per descrivere il comportamento reale (release libera il canvas, acquire lo rialloca lazy) e rimuovere nucleo_screen_buffer (decl + def nucleo_ui.cpp:76).
+
+#4 [morto-fw] firmware/components/nucleo_anima/nucleo_anima_online.c:2785-2789
+T: nucleo_anima_online_teacher_pure: wrapper superseded, zero chiamanti firmware e host
+W: Definito qui, dichiarato in nucleo_anima_online.h:84 e stubbato in tools/anima-host/anima_online_stub.c:45, ma nessuno lo chiama piÃ¹: il modo online-only usa nucleo_anima_online_chat_ctx con la trascrizione multi-turno, e il commento in nucleo_anima.c:2940-29…
+C: 0 RAM/flash (confermato dal map: sezioni in Discarded input sections; ~30 byte se non fosse GC'd)
+conf=alta/v:alta risk=basso
+F: Rimuovere la funzione, la dichiarazione in nucleo_anima_online.h:84 e lo stub host corrispondente; lasciare invariato il twin apps/anima/local (snapshot separato).
+
+#5 [morto-fw] firmware/components/nucleo_ui/nucleo_ui.cpp:182-224
+T: Gruppo di 9 funzioni pubbliche mai chiamate (tutte GC'd dal linker)
+W: Verificate una a una (grep simbolo su tutto firmware/ + harness host, poi conferma nella sezione 'Discarded input sections' di nucleoos.map): nucleo_ui_kbdtest (qui, ~40 righe di loop di test tastiera), launcher_render_remote (launcher_render.cpp:523), launche…
+C: 0 flash/RAM sul device (gc-sections); costo solo di manutenzione e API che promette comportamenti non cablati
+conf=alta/v:alta risk=basso
+F: Cancellare le 9 funzioni con le rispettive dichiarazioni negli header; per launcher_render_free_band valutare prima se il commento ('release the band canvas entering an app') indicava una chiamata mai…
+
+#6 [morto-fw] firmware/components/nucleo_setup/include/nucleo_setup.h:nucleo_setup.h:70; secondari verificati: launcher_render.cpp:41, nucleo_audio.c:372, nucleo_audio.h:54
+T: Dichiarazioni fantasma: nucleo_setup_home_loop senza definizione + extern stantio di nucleo_audio_duration
+W: nucleo_setup_home_loop(void) Ã¨ dichiarata nell'header pubblico ma non esiste alcuna definizione in tutto il repo (linkerebbe solo perchÃ© nessuno la chiama): Ã¨ il residuo del vecchio 'static setup loop' sostituito da nucleo_app_run. Analogamente launcher_ren…
+C: 0 RAM/0 flash nel binario (funzione giÃ scartata dal linker: 0x31+0xc byte solo nell'archivio .a); puro debito di igiene
+conf=alta/v:alta risk=basso
+F: Rimuovere la dichiarazione da nucleo_setup.h:70 e l'extern da launcher_render.cpp:41; decidere se eliminare anche nucleo_audio_duration (def + decl nucleo_audio.h) visto che esiste giÃ duration_ms usa…
+
+#7 [morto-web] apps/games/www/llm.js:17-67
+T: Risoluzione provider/teacher.json copia-incollata in 6+ punti invece del registro unico /ai.js
+W: web/shell/ai.js Ã¨ il registro canonico (readTeacher:148-158, PROVIDERS, cloudComplete) e viene giÃ importato cross-app come '/ai.js' da anima (index.html:3145), ir-remote (607), settings (1241), spreadsheet (1987). Ma games/llm.js:17-65 (brandOf + loadCfg con…
+C: 0 RAM device; ~10-12KB raw (~4-5KB gzippati) di resolver/registro duplicati in 7+ siti (non 15-20KB: parte dei file Ã¨ logica app-specifica); il costo vero Ã¨ il drift, GIÃ€ manife…
+conf=alta/v:alta risk=medio
+F: Estrarre il resolver (brandOf/precedenze/default) in un modulo condiviso esportato da /ai.js (giÃ importabile cross-app come /nucleo-i18n.js) e migrare games/paint/agent/dictation/groq-chat; aggiornar…
+
+#8 [morto-web] apps/ir-remote/www/codes.json:1-37
+T: codes.json (DB marche IR) orfano: l'app carica solo presets.json e /api/ir/db
+W: index.html dell'app IR fetcha './presets.json' (riga 670) e '/api/ir/db' (riga 301); nessun file in apps/, web/, tools/ o firmware referenzia codes.json (unica occorrenza della parola 'codes' Ã¨ un commento a index.html:552). Ãˆ il vecchio DB marche supersedut…
+C: ~2.0KB su SD (codes.json 1464B + codes.json.gz 568B), non 2.5KB
+conf=alta/v:alta risk=basso
+F: Eliminare codes.json e codes.json.gz; se i codici decimali servono ancora, fonderli dentro presets.json (che Ã¨ il file realmente caricato).
+
+#9 [morto-web] apps/calendar/icon.svg:1-19 (intero file; "1" come riga di testa Ã¨ accettabile, il claim riguarda il file intero)
+T: 14 icon.svg a livello root app (fuori da www/) irraggiungibili via HTTP: duplicati morti
+W: Il webfs firmware mappa OGNI /apps/<id>/<rest> su /apps/<id>/www/<rest> (firmware/components/nucleo_webfs/nucleo_webfs.c:56-70), quindi il manifest icon '/apps/<id>/icon.svg' serve sempre www/icon.svg: il file gemello in root app non Ã¨ raggiungibile da nessun…
+C: 16.733B (~16.7KB) esatti: 11.4KB svg + 5.3KB .gz nelle 14 app; 0 RAM (solo SD/repo/release)
+conf=alta/v:alta risk=basso
+F: Rimuovere apps/<id>/icon.svg(+.gz) dalle 14 app; la fonte resta www/icon.svg giÃ puntata dal manifest via route.
+
+#10 [morto-web] apps/calendar/www/assets/icon.svg:1-5
+T: 10 www/assets/icon.svg stantii (vecchio schema icone pre-7-giugno) accanto alla versione live
+W: In calendar, dos-importer, groq-chat, recorder, spreadsheet, tasks, terminal, video-studio, wifi-scanner il manifest punta a /apps/<id>/icon.svg â†’ www/icon.svg (datati 7 giu), ma resta anche www/assets/icon.svg (datati 2-3 giu, contenuto DIVERSO: es. calenda…
+C: 7678 B (svg+gz nelle 10 app, misurato); 0 RAM
+conf=alta/v:alta risk=basso
+F: Eliminare www/assets/icon.svg(+.gz) nelle 10 app elencate (NON in anima, anima-knowledge, code-runner, log-viewer, recycle-bin, updates dove il manifest punta proprio ad assets/icon.svg).
+
+#11 [morto-web] apps/dj/www/_test_dj.mjs:1-110
+T: Tre file di test dev dentro il www servito dell'app DJ, non cablati a nessun gate
+W: _test_dj.mjs (110 righe, test Node del planner: 'Run: node apps/dj/www/_test_dj.mjs'), _test_npx.mjs (34 righe, decode .npx) e _test_engine.html (85 righe, harness Web Audio) vivono in apps/dj/www/ con gemelli .gz giÃ generati: la pipeline gzip-assets li tratt…
+C: ~10.8KB sorgenti + ~4.7KB .gz = ~15.5KB nel tree servito; giÃ staged in deploy/sd e registrati nel .deploy-manifest.json (6 voci); 0 RAM
+conf=alta/v:alta risk=basso
+F: Spostarli fuori da www/ (es. apps/dj/test/ o tools/dj/) aggiustando i path di import relativi, e cablare i due .mjs in un npm script (es. dj:test) cosÃ¬ diventano gate reali.
+
+#12 [morto-web] registry/apps.json:3-43
+T: App DJ completa su disco ma assente dall'array installed: app orfana/invisibile
+W: apps/dj/ ha manifest.json completo (id 'dj', runtime web, web_route /apps/dj/) e un'app funzionante (index.html + dj-engine/dj-brain/dj-planner/npx.js + i18n), ma Ã¨ l'UNICA app del repo non elencata in registry/apps.json installed (39 su 40) nÃ© nel registry …
+C: 0 RAM; ~144KB nel repo (97KB sorgenti + ~47KB .gz); sull'SD reale H: ~704KB allocati in \apps\dj giÃ spediti via deploy.ps1 ma invisibili (registry H: senza dj)
+conf=alta/v:alta risk=basso
+F: Decidere esplicitamente: registrare 'dj' in installed quando la fase web Ã¨ pronta, oppure marcare il WIP (commento nel manifest o nota) ed escludere apps/dj dal payload deploy finchÃ© orfana.
+
+#13 [morto-web] apps/code-runner/examples/pong.js:1-59
+T: examples/pong.js orfano: gli esempi del Code Runner sono inline e la dir examples/ Ã¨ irraggiungibile
+W: Gli esempi offerti dall'app sono stringhe inline nell'oggetto EXAMPLES di index.html (righe 202-210) e pong non Ã¨ tra loro; nessun file del repo referenzia 'examples/pong'. Il file sta fuori da www/ quindi non Ã¨ nemmeno servibile (il webfs mappa /apps/code-r…
+C: ~3KB su SD (2118B sorgente + 977B .gz, entrambi deployati), 0 RAM
+conf=alta/v:alta risk=basso
+F: O aggiungerlo come voce di EXAMPLES (Ã¨ giÃ scritto per quel Worker, autogioca sotto il timeout) o rimuovere la directory examples/.
+
+#14 [morto-web] apps/anima/www/forge/client.js:1-101 (intero file; makeClient = righe 21-100, le righe 1-25 citate sono solo header+firma)
+T: forge/client.js (adapter 'one ANIMA, four substrates') servito ma senza alcun consumer runtime
+W: L'unico import di makeClient in tutto il repo Ã¨ il test host tools/anima-host/forge-client.test.mjs: nÃ© anima/index.html nÃ© forge-demo.html (che importa engine-loader/engine-policy/loop direttamente) lo usano. Ãˆ la 'spina host' del Forge costruita in attes…
+C: 8.463 byte su SD (client.js 6.046 + client.js.gz 2.417), entrambi nel manifest deploy; 0 RAM (mai fetchato a runtime)
+conf=alta/v:alta risk=medio
+F: Non rimuovere (gate forge-client.test.mjs): o cablare ask() di makeClient nel percorso engine della demo/app come previsto, o annotare nel file lo stato 'staged, pending hardware' con il riferimento a…
+
+#15 [spreco-fw] firmware/components/nucleo_audio/nucleo_audio.c:23-24,151,245
+T: Buffer di decodifica audio statici (~9.7KB .bss) residenti anche ad audio fermo
+W: nucleo_audio_in[2048] + nucleo_audio_out[4608] (globali, righe 23-24), il chunk WAV function-static buf[1024]*2B (riga 245) e il blocco zero z[512]*2B (riga 151) sono .bss permanenti, ma il task player Ã¨ giÃ on-demand (creato in start_play_window riga 321, si…
+C: 9728 B esatti di .bss (4608+2048+2048+1024, confermati nel map); di cui 1024 B (z) recuperabili in modo permanente e a rischio zero con static const â†’ .rodata
+conf=alta/v:alta risk=medio
+F: Allocare in/out/chunk all'ingresso di player_task e liberarli all'uscita (stesso ciclo di vita del task, come voice fa giÃ con vdsp_acc); se il malloc fallisce sotto pressione il play viene rifiutato …
+
+#16 [spreco-fw] firmware/components/nucleo_app/app_anima.cpp:90-103,142-148,318-326 (il blocco worker include s_req/s_gen a 318-322; il blocco Today include s_today_hdr/s_complics a 147-148, non contati nel costo)
+T: Stato statico dell'app ANIMA nativa (~8.1KB .bss) residente anche ad app chiusa
+W: s_msg (22*186B=4092), s_row (120 righe=1920), s_res (anima_result_t=1396) e s_today (720) sono .bss permanenti (misure dal linker map), ma servono solo quando l'app nativa Ã¨ in foreground â€” e l'uso primario del device Ã¨ via web. enter() li azzera comunque …
+C: 8128 B esatti (4092+1920+1396+720, verificati su nucleoos.map); +120 B opzionali se si includono s_today_hdr+s_complics nello stesso blocco
+conf=alta/v:alta risk=medio
+F: Raggruppare s_msg/s_row/s_res/s_today in una struct allocata in enter() e liberata in leave() dopo stop_worker(). s_row contiene puntatori dentro s_msg: tenerli nello stesso blocco preserva la validit…
+
+#17 [spreco-fw] firmware/components/nucleo_app/app_recorder.cpp:381-391 (corrette; do_title 379-386, ai_task 388-431)
+T: ai_task: static text[4096]+out[1024] permanenti per un job cloud occasionale
+W: I buffer function-static di ai_task (riga 391, +t[96] in do_title riga 381) restano in .bss per sempre (linker map: 4096+1024) ma vivono logicamente solo durante un job rec-ai (trascrizione/sommario su richiesta utente). Lo stesso file adotta esplicitamente la…
+C: 5216 B esatti di .bss (linker map nucleoos.map: text 0x1000 + out 0x400 + t 0x60), permanenti a 0x3fca72b0-0x3fca8710
+conf=alta/v:alta risk=basso
+F: malloc di un blocco unico (5KB) all'ingresso di ai_task con un solo punto di cleanup (goto) prima dei vari vTaskDelete; su fallimento s_job=3 (stesso path d'errore giÃ esistente).
+
+#18 [spreco-fw] firmware/components/nucleo_anima/nucleo_anima_online.c:1226-1232
+T: Transcribe: malloc(HTTP_CAP=12288) upfront contro il pattern lazy documentato nello stesso file
+W: Il loop di lettura risposta Whisper alloca 12KB contigui in un colpo solo mentre la connessione TLS Ã¨ ancora aperta (buffer SSL vivi). Il commento alle righe 864-869 dello STESSO file spiega perchÃ© altrove non si fa: pre-allocare HTTP_CAP sequestra il larges…
+C: Picco transitorio contiguo evitabile ~10-11KB (HTTP_CAP 12288 meno risposta Whisper tipica 1-4KB), vivo solo pochi secondi POST-handshake (read loop + cJSON_Parse). Non Ã¨ la fines…
+conf=alta/v:alta risk=basso
+F: Sostituire il malloc upfront con crescita raddoppiante nel loop esp_http_client_read (riuso dello schema http_acc_t, partenza 1-2KB, cap invariato HTTP_CAP). Comportamento identico a risposta completa…
+
+#19 [spreco-fw] firmware/components/nucleo_registry/nucleo_registry.c:10
+T: Registry app: array statico dimensionato al cap 48 invece che alle app installate
+W: s_apps[NUCLEO_MAX_APPS] = 48*157B = 7536B .bss (linker map). Il commento in include/nucleo_registry.h:6 dice che le app installate sono ~33: ~15 slot vuoti = ~2.4KB sprecati per sempre. Il registry Ã¨ caricato una volta da apps.json (righe 60-78) e il contenut…
+C: ~1.4KB (9 slot vuoti Ã— 157B: le app installate sono 39 â€” registry/apps.json e SD live H: â€” non ~33 come dice il commento stantio del header). Nota: il fix sposta ~6.1KB da .bs…
+conf=alta/v:alta risk=basso
+F: Contare le voci dell'array 'installed' di cJSON e calloc(count*sizeof(nucleo_app_t)) (o realloc-shrink dopo il parse). nucleo_registry_apps() continua a restituire un puntatore stabile; su reload free…
+
+#20 [spreco-fw] firmware/components/nucleo_eventbus/nucleo_eventbus.c:42-49 (journal_append) + 61 (chiamata dentro il lock 54-62)
+T: Journal eventi: fopen/append/fclose su SD per OGNI publish, dentro il mutex, senza rotazione
+W: journal_append (righe 42-49) fa fopen+fprintf+fclose su /journal/events.ndjson a ogni nucleo_event_publish, mentre tiene il lock del bus (riga 54-62). Produttori caldi verificati: rec.level ogni ~0.8s durante la registrazione (nucleo_recorder.c:129-133, sul ta…
+C: 0 RAM; fopen+fprintf+fclose su FAT per evento (apertura con dir-lookup + flush/aggiornamento dir-entry alla close, "~2 transazioni" Ã¨ semmai conservativo), ~75 append/min in regis…
+conf=alta/v:alta risk=basso
+F: Saltare il journaling per i topic effimeri (rec.level, system.busy, voice/state) con una piccola denylist, e applicare a events.ndjson la stessa rotazione a dimensione di notify_journal.h. Il ring RAM…
+
+#21 [spreco-fw] firmware/components/nucleo_anima/nucleo_anima_online.c:1844-1856
+T: Recall semantico: norme per-card in double software-emulated dove basta int32 esatto
+W: nucleo_anima_online_recall ricalcola la norma di ogni vettore learned con accumulo double ('vn += (double)rv[k]*rv[k]', riga 1853) per <=256 card (LEARN_MAX, riga 64) x D<=256: ~65k MAC in doppia precisione emulata via software su ESP32-S3 (niente FPU double),…
+C: 0 RAM; ~10-25ms CPU worst-case per query recall (cache piena 256 card, D device=192 non 256 â†’ ~49k MAC soft-double, non 65k), proporzionalmente meno con poche card apprese; il te…
+conf=alta/v:alta risk=basso
+F: Accumulare vn (e qn alla riga 1844) in int32 e usare sqrtf, replicando esattamente la trasformazione giÃ fatta in l1.c. Verificare con i gate host che nessun match borderline su RECALL_THRESH=0.75 cam…
+
+#22 [spreco-fw] firmware/components/nucleo_ir/nucleo_ir.c:369-396
+T: Canale RMT IR creato e tenuto ENABLED dal boot: pm-lock permanente + driver residente
+W: nucleo_ir_init (chiamato al boot, main.c:141) fa rmt_new_tx_channel + rmt_enable e non disabilita mai. Su IDF 5.4 (verificato nel sorgente installato C:/esp/esp-idf): rmt_tx_enable acquisisce il pm-lock del canale (esp_driver_rmt/src/rmt_tx.c:780-782) di tipo …
+C: ~0.6-1KB heap driver (canale+3 code+encoder+pm-lock) impegnati 24/7, liberabili solo con create/destroy lazy; il solo toggle enable/disable libera il pm-lock APB ma non l'heap; eff…
+conf=alta/v:alta risk=basso
+F: Spostare rmt_enable/rmt_disable attorno alla sezione TX in ir_blast (ir_set_carrier giÃ fa disable/apply/enable, riga 46-53, quindi il toggle Ã¨ collaudato), oppure creare il canale lazy alla prima tr…
+
+#23 [spreco-fw] firmware/components/nucleo_app/calendar_svc.cpp:32-37,97-104
+T: cal-svc: unico servizio sempre-attivo non-lazy (4KB stack + cache eventi 2.4KB dimensionata al massimo)
+W: Il task cal-svc (xTaskCreate 4096B, riga 104) gira per sempre con wake ogni 15s, e la cache s_ev[24] (righe 32-34, Ev=104B â†’ 2472B nel linker map) Ã¨ .bss piena anche a calendario vuoto. Il servizio Ã¨ by-design (notifiche device-autoritative) e giÃ event-li…
+C: ~1.3KB .bss recuperabili (s_ev confermato 0x9a8=2472B nel map; con MAX_EV 16 e x[64] resta 1136B â†’ âˆ’1336B, non 1.4KB); residente totale â‰ˆ2.5KB .bss + 4096B stack heap + TCB
+conf=alta/v:alta risk=basso
+F: Trim conservativo: MAX_EV 24â†’16 e x[96]â†’x[64] (-1.4KB, comportamento identico salvo testi promemoria molto lunghi troncati); loggare uxTaskGetStackHighWaterMark del task per un'eventuale riduzione…
+
+#24 [spreco-web] apps/voice-manager/www/app.js:283-296 (connectWS) + 315 (chiamata incondizionata in DOMContentLoaded)
+T: Voice Manager apre un proprio /ws dentro lo shell: ping-pong di eviction infinito
+W: Il firmware ha MAX_CLIENTS=1 hard con eviction last-wins (firmware/components/nucleo_ws/nucleo_ws.c:10,36-50). Voice Manager apre il SUO WebSocket /ws incondizionatamente (connectWS in DOMContentLoaded, app.js:315), anche dentro l'iframe dello shell che ha giÃ…
+C: ~22 handshake WS/min (ciclo stabile 5,5s = 3s riconnessione shell + 2,5s VM, 2 handshake/ciclo), non 40; shell connesso solo ~45% del tempo e gli eventi persi NON vengono recuperat…
+conf=alta/v:alta risk=basso
+F: Guardare connectWS con window.top===window.self (come anima) e, dentro lo shell, consumare gli eventi voice/* giÃ inoltrati a ogni iframe via postMessage (shell.js:628) â€” wifi-scanner usa giÃ questo…
+
+#25 [spreco-web] web/shell/shell.js:600-601
+T: Ogni fs.changed (anche scritture proprie dello shell) scatena /api/status + ricrawl COMPLETO di /data
+W: shell.js:601 chiama FsIndex.invalidate() su OGNI fs.changed senza filtro di path, e fsindex ricrawla TUTTO /data in BFS (fino a 600 /api/fs/list, fsindex.js:14-16,72-94). Il firmware pubblica fs.changed per ogni write/mkdir/delete (nucleo_fsapi.c:89). Ma lo sh…
+C: ~N+1 /api/fs/list per burst di scrittura (N=dir sotto /data; sull'SD attuale 31 â†’ ~32 list per crawl, cap 600 solo teorico) + 1 /api/status; con Game Center in host: un crawl com…
+conf=alta/v:alta risk=basso
+F: In shell.js filtrare: invalidare l'indice solo se ev.d.path inizia con /data (ignorare /system/config e /data/play/rooms); in fsindex aggiornare incrementalmente solo la directory toccata (1 list) inv…
+
+#26 [spreco-web] apps/games/www/nucleo-play.js:nucleo-play.js 66-67, 110-129 (mkdir riga 111), 245-250 + 326/333 (host non ferma mai il poll), 502-504 (heartbeat); index.html 987 + 369-371; nucleo_fsapi.c 360-375 (publish a riga 371)
+T: Game Center: lobby 4s con mkdir ripetuto + host che polla il mailbox a 700ms per tutta la partita
+W: In lobby loadRooms gira ogni 4s (index.html:987) e OGNI chiamata fa POST /api/fs/mkdir di /data/play/rooms (nucleo-play.js:111) + list + 1 read per room: 30-75 req/min stando fermi. Peggio: mkdir_post pubblica fs.changed ANCHE su EEXIST (nucleo_fsapi.c:365-371…
+C: Sottostimato, non gonfiato. Lobby idle: 30-75 req/min diretti + per ogni tick 4s un /api/status E un re-crawl COMPLETO di /data (fino a 600 /api/fs/list, fsindex.js MAX_DIRS) perch…
+conf=alta/v:alta risk=medio
+F: mkdir di ROOMS_DIR una sola volta (flag memo); firmware: pubblicare fs.changed solo se mkdir ha creato davvero (errno!=EEXIST â†’ skip publish, 1 riga); host: poll sig/ guidato dagli eventi fs.changed…
+
+#27 [spreco-web] web/shell/sw.js:129-137
+T: Asset delle app mai messi in cache: ogni apertura ri-scarica tutto dal device
+W: Il fetch handler degli statici fa cache-first ma su miss NON salva mai la risposta (sw.js:131-136: gatedFetch e basta, nessun c.put â€” solo le immagini /api/fs/read vengono cache-ate, riga 106-118). Il firmware serve HTML/JS/CSS/WASM con Cache-Control: no-cac…
+C: ~25-440KB ritrasferiti dal device a ogni apertura a freddo di un'app (file-commander â‰ˆ26KB gz; anima in modalitÃ edge â‰ˆ440KB contando anche anima-local.mjs.gz 20KB + engine.js.…
+conf=alta/v:alta risk=medio
+F: Nel SW aggiungere runtime-cache stale-while-revalidate per i GET /apps/*: servi dalla cache e rivalida in background, invalidando su evento apps.changed o con una chiave di versione; in alternativa (o…
+
+#28 [spreco-web] apps/system-monitor/www/index.html:230-238, 256
+T: System Monitor: 60 req/min sulle schede RAM/CPU, e continua anche da minimizzato
+W: tick() gira a 1Hz e sulle schede RAM/CPU fa un fetch per tick (/api/heap o /api/cpu, righe 236-237) = 60 req/min. Il guard Ã¨ solo document.hidden (riga 231), ma una finestra minimizzata nello shell Ã¨ solo class 'hidden' CSS sull'elemento (wm.js:59,203): per …
+C: 60 req/min (1 Hz) quando la scheda attiva Ã¨ RAM o CPU, anche minimizzato; ~12 req/min su Panoramica. Connessione keep-alive riusata (1 socket persistente occupato su 6, non un soc…
+conf=alta/v:alta risk=basso
+F: Portare RAM/CPU a 2s (ancora fluido con lo Spark) e fermare il polling quando l'app non Ã¨ visibile: IntersectionObserver sul body (display:none â†’ not intersecting) o un messaggio 'os-visibility' da…
+
+#29 [spreco-web] web/shell/shell.js:web/shell/shell.js:547, 2362-2380 (forward WS a 628); apps/clock:314-316+504; apps/anima:1864-1865+3616; apps/system-monitor:230-237; apps/wifi-scanner:153-154+194
+T: /api/status pollato in parallelo da shell + 3-4 app: nessun rebroadcast del dato
+W: Lo shell polla /api/status ogni 15s (shell.js:547). In piÃ¹, ogni app aperta ripolla lo STESSO endpoint per conto suo: clock ogni 15s (apps/clock/www/index.html:314-316,504), anima ogni 20s per il status-dot (apps/anima/www/index.html:1864-1865,3616), system-m…
+C: ~19 req/min duplicate (23 totali vs 4 necessarie) con shell+clock+anima+monitor(Overview) visibili; ogni req costruisce l'intero cJSON su heap (~1-2KB transitori) e occupa uno slot…
+conf=alta/v:alta risk=basso
+F: Dopo doRefreshStatus, lo shell fa postMessage({t:'status.snapshot', d:s}) a tutti gli iframe; le app consumano quello e tengono il fetch diretto solo come fallback standalone (window.top===window.self…
+
+#30 [spreco-web] apps/wifi-scanner/www/index.html:216-221 (corpo di scan(): 190-212; handler firmware: nucleo_httpd.c:276-295 â†’ nucleo_setup.c:309-315)
+T: Auto-scan Wi-Fi ogni 8s: ogni scan BLOCCA il task httpd per ~1.5-2s
+W: Il toggle auto fa setInterval(scan, 8000); ogni scan() chiama /api/status + /api/wifi/scan. Il handler firmware esegue esp_wifi_scan_start(NULL, true) BLOCCANTE sul task httpd (nucleo_setup.c:309-315) e forza WIFI_MODE_APSTA: per la durata dello scan (~1.5-2s …
+C: ~15 req/min, di cui 7.5 scan bloccanti da ~1-2s (stima del firmware stesso): httpd congelato ~8-15s/min (13-25% del tempo), non solo 12-15s
+conf=alta/v:alta risk=basso
+F: Cadenza minima 20-30s per l'auto-scan, stop quando l'app non Ã¨ visibile, e dedup con gli eventi wifi.scan pushati (se arriva un push, salta il prossimo tick).
+
+#31 [spreco-web] web/shell/sw.js:4, 19, 71-81 (install handler corretto; ASSETS riga 4, gate riga 19)
+T: Precache del SW: ~24 fetch in PARALLELO che bypassano il gate MAX_INFLIGHT del SW stesso
+W: L'install fa Promise.allSettled(ASSETS.map(c.add)) â€” 24 richieste lanciate insieme (inclusa wallpaper.png da 535KB). I fetch interni del SW non passano dal suo fetch-handler, quindi il semaforo MAX_INFLIGHT=3 (riga 19), creato proprio perchÃ© 'a burst of par…
+C: Burst tipico ~125KB gzipped su ~23 fetch (browser-cap ~6 concorrenti) a ogni bump; i 535KB di wallpaper.png passano sul filo solo a cache HTTP fredda/scaduta (max-age=604800, ~1 vo…
+conf=alta/v:alta risk=basso
+F: Sostituire allSettled con un loop sequenziale (o a finestre di 3) con un retry per asset, e togliere il duplicato './'/'index.html'.
+
+#32 [spreco-web] apps/anima/www/local/anima-local.wasm:1 (binario; riferimenti webfs corretti ma il file Ã¨ firmware/components/nucleo_webfs/nucleo_webfs.c, non firmware/main)
+T: anima-local.wasm da 299KB senza sibling .gz: ritrasferito intero a ogni boot edge
+W: Ãˆ l'unico asset grande non-vendor senza gemello .gz (verificato su tutto apps/*/www: solo questo, preset-engine.js 14.5KB e diag.js 12KB). Il webfs serve i .gz in trasparenza (nucleo_webfs.c:138-140) ma qui non c'Ã¨; il MIME application/wasm non rientra in is…
+C: ~171KB per boot edge (306.652 â†’ 131.127 bytes gz reali, -57%), non ~190KB; letture SD/httpd proporzionali
+conf=alta/v:alta risk=basso
+F: Generare anima-local.wasm.gz con il tool gzip-assets esistente (il webfs lo serve giÃ da solo); in piÃ¹ valutare il caching del wasm in IndexedDB accanto al PACK con la stessa CACHE_VER.
+
+#33 [spreco-web] apps/recorder/www/index.html:apps/recorder/www/index.html:743 (solo resume-path); percorso normale = web/shell/micgate.js:221-227 via recordToSd (index.html:379-388); i due poll non girano mai insieme
+T: Polling /api/rec/status a 300ms per tutta la durata di una registrazione
+W: Quando il device registra, l'app web polla /api/rec/status ogni 300ms per il VU meter e il fine-take (riga 743); micgate fa lo stesso a 300ms per recordToSd (web/shell/micgate.js:220-228). Sono 200 req/min per tutta la durata della take â€” che puÃ² essere di …
+C: 200 req/min (corretto) ma su connessione keep-alive riusata, handler che legge solo variabili statiche (~150B JSON, zero accessi SD): ~0,5 KB/s di overhead, trascurabile rispetto a…
+conf=alta/v:media risk=basso
+F: Portare il poll a 800-1000ms interpolando il VU lato client tra i campioni (come fa radio con la barra), o pollare a 300ms solo i primi secondi e poi degradare.
+
+#34 [spreco-web] web/shell/shell.js:web/shell/shell.js:170-192 (ingresso non filtrato anche a riga 701: postMessage clipboard-write)
+T: clipboard.json persistito senza cap in byte: ogni copia riscrive l'intera storia su SD
+W: La storia clipboard Ã¨ limitata a 20 voci (CLIP_CAP) ma NESSUN limite sulla dimensione di ogni voce: clipboardWrite accetta qualsiasi `data` dalle app via postMessage (testi interi da Notepad/ANIMA). Ogni Ctrl+C riscrive l'INTERO array su /system/config/clipbo…
+C: Write SD = intera storia (max 20 voci) ad ogni copia, debounce 400ms, in modalitÃ esclusiva SW + cascata fs.changed (refreshStatus + ricrawl indice debounced 1500ms). MA il payload…
+conf=alta/v:alta risk=basso
+F: Cap per-voce (es. 8KB, troncando con marcatore) + budget totale (es. 64KB, scartando le voci piÃ¹ vecchie oltre budget) in clipboardWrite prima di persistere.
+
+#35 [spreco-web] web/shell/ai.js:148-158
+T: teacher.json letto da 9+ moduli indipendenti senza cache condivisa
+W: readTeacher fa sempre fetch no-store di /data/anima/teacher.json; solo copilot.js lo memoizza (15s, copilot.js:18-24). Tutti gli altri consumer rileggono il file dal device a ogni apertura: anima (index.html:3086), spreadsheet (index.html:1960), games/llm.js:1…
+C: ~1 /api/fs/read al device per apertura/prima-azione di ogni app AI-aware; consumer reali = 10 (il finder ha mancato ir-remote/index.html:608); settings ne fa fino a 3 (righe 1305/1…
+conf=alta/v:alta risk=basso
+F: Centralizzare in ai.js una cache modulo-level con TTL breve (30-60s) invalidata dall'evento fs.changed su quel path, e far importare readTeacher dalle app invece dei fetch inline duplicati.
+
+#36 [ram-frag] firmware/components/nucleo_audio/nucleo_audio_http.c:nucleo_audio_http.c:31-96 (cfg+crt_bundle_attach a 32-41, loop riconnessione completo fino a 96); nucleo_audio.c:257 e :321 corretti
+T: Radio: TLS abilitato di fatto (crt_bundle_attach) senza arb, senza heap-gate, su task da 8KB di stack, in loop di riconnessione infinito
+W: Il commento di testa (righe 4-6) dichiara 'No TLS on purpose... TLS would not fit beside the decoder', ma la cfg a riga 40 attacca esp_crt_bundle_attach e il dispatch in nucleo_audio.c:257 usa strncmp(s_path,"http",4) che matcha anche https://. Una stazione ht…
+C: Heap handshake ~30-40KB di picco (IN 16KB + OUT 4KB + stato mbedTLS; VARIABLE_BUFFER_LENGTH=y restringe solo DOPO l'handshake). Stack overflow su 8KB = rischio plausibile ma non ce…
+conf=alta/v:alta risk=basso
+F: In nucleo_audio_stream_url rifiutare esplicitamente url https:// con un ESP_LOGW (allineando il codice all'intent documentato) e rimuovere crt_bundle_attach; in alternativa, gate: heap-bar + nucleo_ar…
+
+#37 [ram-frag] firmware/components/nucleo_httpd/nucleo_httpd.c:576-623 (core read/fallback/rewrite 592-622, reply 617-620); agenda 762-794; mirror identico apply_event in firmware/components/nucleo_app/app_anima.cpp:512-559
+T: anima_apply_event: lettura intera di calendar.json con cap 200KB e TRONCAMENTO silenzioso del calendario su OOM/parse-fail
+W: Il file viene letto intero in heap (malloc(n+1) con n fino a 200000 â€” su un device con ~40-76KB liberi qualunque file sopra ~50KB fallisce sempre) e poi cJSON_Parse (~2-3x la size in heap). Se malloc fallisce, il file Ã¨ >=200KB, o il parse fallisce (anche p…
+C: Perdita dati silenziosa confermata (fallback riga 598 + rename 614 + reply 'Aggiunto' 619). Il picco heap reale Ã¨ buffer file + albero cJSON (~2-3x) coesistenti durante il parse, …
+conf=alta/v:alta risk=basso
+F: Se il file esiste con size>0 ma read/malloc/parse falliscono â†’ return false (niente riscrittura), e abbassare il cap a ~16-32KB coerente col device. Per l'agenda (riga 770) stesso cap; opzionale par…
+
+#38 [ram-frag] firmware/components/nucleo_anima/nucleo_anima_online.c:949, 1066, 1197 (1066 = http_post_anthropic, stesso gap per provider Claude)
+T: transcribe e teacher_complete: heap-gate senza reclaim L1 (incoerente con proxy/llm/cascata) â†’ fallimenti spurii
+W: nucleo_anima_transcribe (riga 1197) e http_post_json via teacher_complete (riga 949, usato da summarize/actions/qa/title del Recorder e da /api/transcribe per il summary) fanno bail su online_tls_heap_too_low SENZA prima provare nucleo_anima_l1_unload(). Tutti…
+C: 0 RAM; impatto funzionale reale ma piÃ¹ raro di quanto implicato: enter_remote (app.cpp:710), web-focus e il push per-turno online_brain scaricano giÃ L1 nei flussi web comuni; fin…
+conf=alta/v:alta risk=basso
+F: Replicare il pattern httpd: in nucleo_anima_transcribe e http_post_json/http_get, su gate fallito chiamare nucleo_anima_l1_unload() e ricontrollare una volta prima del bail (l'indice si ricarica lazy …
+
+#39 [ram-frag] firmware/components/nucleo_voice/nucleo_voice.c:488-497, 565-572, 699-718
+T: PTT voce: ~38KB allocati al rising edge senza consultare nÃ© arb nÃ© heap-bar â†’ puÃ² sommarsi a un handshake TLS in volo
+W: Al PTT (riga 572) voice_ensure_ready (488-497) alloca vdsp_ctx ~7KB + vdsp_acc ~24KB + pcm 1KB + scan/win ~6.6KB (il commento a 566-569 dice '~38 KB of buffers'). L'unica protezione Ã¨ il malloc-fail graceful: nessuna barra di heap preventiva e nessuna interaz…
+C: Picco freddo voice ~54KB (38.7KB buffer verificati a mano + 16KB stack task creato in voice_recompute) concorrente a ~35KB TLS post-gate; il finder ha SOTTOSTIMATO
+conf=media/v:alta risk=basso
+F: Al rising edge, fail-fast se nucleo_arb_busy() o se le barre 18/40KB non reggono dopo l'alloc stimata (beep 'occupato' invece del chime); in alternativa registrare la sessione PTT come job ARB_BG try-…
+
+#40 [ram-frag] firmware/components/nucleo_anima/nucleo_anima_online.c:1224-1232 (malloc a 1226, close a 1228, free dopo cJSON_Parse a 1232)
+T: transcribe: malloc(HTTP_CAP=12KB) contiguo mentre la sessione mbedTLS Ã¨ ancora aperta, in contrasto col pattern lazy-acc documentato
+W: La risposta Whisper viene letta in un buffer pre-allocato da 12288B PRIMA di esp_http_client_close (riga 1228), cioÃ¨ mentre mbedTLS tiene ancora i suoi buffer di record (rx fino a 16KB con VARIABLE_BUFFER_LENGTH + tx 4KB). Il commento alle righe 863-869 dello…
+C: 12.288B contigui mallocati post-handshake ma dentro la sessione TLS aperta (tenuti dal dopo-fetch_headers fino a free riga 1232, oltre la close); su malloc fallito la trascrizione …
+conf=alta/v:alta risk=basso
+F: Leggere la risposta con lo stesso accumulator lazy-grow di http_evt (start 1-2KB, doubling fino a HTTP_CAP), oppure leggere a chunk di 2KB e crescere con realloc solo sul ricevuto.
+
+#41 [ram-frag] firmware/components/nucleo_httpd/nucleo_httpd.c:1372-1398
+T: Inventario malloc nei handler httpd/fsapi: i due request-scoped che pesano stanno dentro la finestra TLS di /api/transcribe
+W: Censimento completo dei malloc nei handler: nucleo_httpd.c:595 (calendar â‰¤200KB, vedi finding dedicato), :770 (agenda â‰¤64KB, idem), :1372 text=4096B, :1386 summary=2048B; nucleo_fsapi.c:295 (write buffer 16KB con halving-fallback, tenuto per l'intera durat…
+C: 4KB vivi nella finestra TLS di transcribe (handshake + streaming intero file audio), 6KB (4+2) nella seconda finestra TLS di summarize; ~6KB Ã¨ il picco corretto, non gonfiato
+conf=alta/v:alta risk=medio
+F: Far allocare l'out-buffer a nucleo_anima_transcribe/summarize DOPO la chiusura TLS (out char**, il parse avviene giÃ post-close a riga 1232), oppure un buffer statico single-flight tanto il path Ã¨ se…
+
+#42 [ram-frag] firmware/components/nucleo_httpd/nucleo_httpd.c:632-633
+T: Soglie TLS 18KB/40KB duplicate in due file con sincronia a mano ('keep in sync')
+W: NUCLEO_ANIMA_ONLINE_MIN_BLOCK/MIN_FREE (nucleo_httpd.c:632-633) e ONLINE_TLS_MIN_BLOCK/MIN_FREE (nucleo_anima_online.c:40-41) sono la stessa coppia di barre, definita due volte; entrambi i commenti dicono esplicitamente 'keep in sync'. Le soglie risultano moti…
+C: 0 RAM, igiene anti-drift su costanti di sicurezza critiche
+conf=alta/v:alta risk=basso
+F: Spostare le due costanti (e volendo l'inline nucleo_tls_heap_ok) in un header condiviso, es. nucleo_anima_online.h o un nucleo_tlsgate.h, e includerlo da entrambi.
+
+#43 [race] firmware/components/nucleo_app/app_anima.cpp:380-386 (stop_worker); lock hold 358-365; leave() 917-921
+T: stop_worker fa vTaskDelete di un worker che puÃ² detenere lo spine lock ANIMA e un token arb
+W: leave() (riga 917-919, task UI) chiama stop_worker che aspetta s_busy max 3s e poi fa vTaskDelete(s_worker) INCONDIZIONATO. Il worker (anima_sh) prende lo spine lock a riga 358 e lo rilascia solo a 365: una query online (timeout HTTP 30s in nucleo_anima_online…
+C: 0 RAM a riposo; al trigger: s_anima_gate e token nucleo_arb bloccati fino al reboot (nessun reset path o expiry esiste nel repo), leak ~10-40KB (acc.buf 12KB HTTP_CAP + esp_http_cl…
+conf=alta/v:alta risk=medio
+F: Mai vTaskDelete su worker busy: aggiungere flag s_worker_quit; il worker lo controlla a inizio loop e si auto-cancella (pattern di voice_task). stop_worker: se ancora busy dopo la grazia, setta il fla…
+
+#44 [race] firmware/components/nucleo_anima/nucleo_anima_l1.c:457-473 (corrette); call-site ungated effettivi = 6, non 4: nucleo_httpd.c:1076, 1260, anima_l1_postâ†’l1.c:507/512/517, nucleo_exclusive.c:45, PIÃ™ nucleo_app.cpp:220 (open_app_def) e nucleo_app.cpp:710 (enter_remote), entrambi sul task UI
+T: nucleo_anima_l1_unload libera s_cdir/s_ec_row e chiude s_idx senza lock mentre un altro task puÃ² essere dentro l1_query
+W: l1_unload Ã¨ chiamato FUORI dallo spine lock da: nucleo_httpd.c:1076 (proxy_get) e 1260 (llm_proxy) sul task httpd quando l'heap Ã¨ stretto, da anima_l1_post via set_mode (1156+), e da nucleo_exclusive.c:45 sul task UI. Intanto il worker nativo ANIMA (app_anim…
+C: crash/reboot del device (UAF su s_cdir/s_ec_row + fread/fseek su FILE* chiuso); finestra ampia (scan SD di l1_query, decine-centinaia di ms) ma serve la sovrapposizione query nativ…
+conf=alta/v:alta risk=medio
+F: Gating ai 4 call-site ESTERNI (proxy, llm, anima_l1_post, exclusive): if (nucleo_anima_try_lock()) { l1_unload(); unlock(); } else skip â€” fail-closed: se ANIMA Ã¨ occupata si rinuncia al reclaim e i…
+
+#45 [race] firmware/components/nucleo_recorder/nucleo_recorder.c:262-296 (corrette; contesto completo 259-321)
+T: httpd_stop con dictation stream async in volo: nessuna coordinazione, UAF nel worker
+W: stream_worker gira su task proprio con una copia async della request (httpd_req_async_handler_begin, riga 310) e puÃ² streammare fino a 5 minuti. nucleo_httpd_stop (nucleo_httpd.c:1598-1605) Ã¨ chiamato da nucleo_exclusive.c:44 (app SSH, task UI), nucleo_evilp…
+C: Crash/heap-corruption probabilistico (race, non deterministico) con reboot del device se si entra in SSH/Evil Portal/WiFi Atks durante una dettatura web. Il costo secondario "mic r…
+conf=alta/v:alta risk=basso
+F: Aggiungere nucleo_recorder_stream_abort(): atomic_bool s_stream_stop controllato nel loop del worker (esce, chiude mic, completa l'async req) + attesa bounded (poll s_streaming==false, ~1s). Chiamarla…
+
+#46 [race] firmware/components/nucleo_httpd/nucleo_httpd.c:958-986
+T: /api/anima/verify entra nella cascata L1/HDC senza lo spine lock
+W: anima_verify_get chiama nucleo_anima_verify_claim che esegue nucleo_anima_hdc_reason e nucleo_anima_l1_query (nucleo_anima.c:3411-3412) sul task httpd SENZA nucleo_anima_try_lock â€” mentre /api/anima (riga 702) e i caller nativi (voice 344, worker app_anima 3…
+C: Oltre a evidence corrotta/UAF su s_idx: doppia free dei globali HDC g_simcnt/g_bcnt (nucleo_anima_hdc.c:617-622 vs 764-765) se verify e una query nativa girano insieme = heap corru…
+conf=alta/v:alta risk=basso
+F: Stesso pattern di anima_get:702: if (!nucleo_anima_try_lock()) â†’ 503 {busy:true,retry_after_ms}; unlock dopo verify_claim. Il client Forge giÃ gestisce i retry.
+
+#47 [race] firmware/components/nucleo_recorder/nucleo_recorder.c:161-185 (check 163, store 178; error path 99/104; stream_get 303)
+T: Claim del mic check-then-act non atomico tra task httpd e task UI: una start concorrente uccide la registrazione attiva
+W: nucleo_recorder_start Ã¨ chiamata dal task httpd (start_post) E dal task UI nativo (app_recorder.cpp:851); stream_get (303) aggiunge un terzo percorso. Il check a riga 163 (s_recording || s_task || s_streaming) e lo store a riga 178 non sono atomici, e in mezz…
+C: 0 RAM; al trigger: registrazione persa/0-byte + rec.started/ok:true spurii; i flag convergono a uno stato finale coerente (incoerenza solo transitoria); nessun UAF
+conf=alta/v:alta risk=basso
+F: Un solo owner atomico: atomic_int s_owner {IDLE,REC,STREAM}; claim con atomic_compare_exchange_strong(IDLEâ†’X) come PRIMA azione in start/stream_get; ogni error path rilascia solo il proprio claim. I…
+
+#48 [race] firmware/components/nucleo_eventbus/nucleo_eventbus.c:42-62 (journal_append def. 42-49, chiamata sotto s_lock a 61; take/give a 54/62)
+T: journal_append (fopen/fprintf/fclose su SD) dentro il mutex globale del bus, sui path realtime di voice e recorder
+W: Ogni nucleo_event_publish scrive su SD TENENDO s_lock. Il voice task pubblica voice/match DENTRO la PTT a mic aperto (nucleo_voice.c:452 via handle_burst a 680) e record_task pubblica rec.level nel loop di cattura (nucleo_recorder.c:132): entrambi pagano la la…
+C: 0 RAM; jitter SD (tail FAT-append 10-100+ms) sui loop di cattura, ma marginale rispetto alle SD-read tpl_match_sd (voice) e alle fwrite audio (recorder) giÃ presenti su quei path; …
+conf=alta/v:alta risk=basso
+F: Spostare journal_append fuori dal mutex (copia locale dell'evento sotto lock, write dopo il give) e saltare il journal per i topic effimeri ad alta frequenza (rec.level, voice/match, voice/state) â€” …
+
+#49 [race] firmware/components/nucleo_audio/nucleo_audio_http.c:32-41 (riga chiave 40); percorso completo: app_radio.cpp:190 + load_config 88-103 senza filtro schema + nucleo_audio.c:257 strncmp("http",4) che matcha anche https
+T: Radio: crt_bundle_attach abilita TLS fuori dall'arbiter per tutta la durata del playback
+W: Il commento di testa (righe 4-6) dice 'No TLS on purposeâ€¦ TLS would not fit beside the decoder', ma la config a riga 40 attacca il CA bundle ('enables https://'). app_radio.cpp non filtra lo schema (riga 190 passa st->stream raw da radio.json, editabile dall…
+C: Picco handshake ~40-50KB per tentativo (ripetuto ogni ~1.5s dal reconnect loop se fallisce); steady-state ~20-30KB per la durata del playback con MBEDTLS_SSL_VARIABLE_BUFFER_LENGTH…
+conf=alta/v:alta risk=basso
+F: Fail-closed in nucleo_audio_stream_url: if (!strncmp(url,"https://",8)) { ESP_LOGW + publish radio.error; return; } e rimuovere crt_bundle_attach. Coerente con la regola di prodotto 'stream radio = HT…
+
+#50 [race] firmware/components/nucleo_voice/nucleo_voice.c:864-874 (arm) + consumer 416-421, 540-548, 631-636; dichiarazioni non-volatile a 106/110-111
+T: Stato learning-mode con 3 task scrittori senza lock + deadline int64 non atomica
+W: nucleo_voice_arm_learning_mode scrive s_learning_word (strncpy) poi s_learning_mode=true ed Ã¨ chiamata dal task httpd (nucleo_httpd.c:1424) E dal task UI (app_voice.cpp:166); il voice task (core 1) li legge/azzera in handle_burst (416-421) e nei path di expir…
+C: 0 RAM; rischio principale = arm perso con VH_LEARN orfano e deadline=0 â†’ engine 16KB pinnato indefinitamente (non solo 30s) + wizard appeso; label .tpl corrotta possibile ma fine…
+conf=alta/v:alta risk=basso
+F: Riusare s_intro_mux (o un nuovo portMUX dedicato): arm = {copia word + set mode + set deadline} in critica; il voice task consuma con {snapshot word + clear} in critica. La deadline diventa coppia (ui…
+
+#51 [race] firmware/components/nucleo_eventbus/nucleo_eventbus.c:62-64
+T: Sink WS chiamato fuori dal lock con puntatori dentro lo slot del ring
+W: nucleo_event_publish rilascia s_lock (62) e poi chiama s_sink(seq, e->topic, e->payload) con puntatori DENTRO s_ring[seq%16]. Se il publisher viene prerilasciato lÃ¬ e nel frattempo altri task pubblicano â‰¥16 eventi (RING=16, ridotto da 32), lo slot viene ris…
+C: 0 RAM statica; col fix +256-272B di stack transitorio sul task del publisher (attenzione ai task con stack piccolo, es. cal-svc 4KB). Sintomo reale piÃ¹ probabile: frame WS ben for…
+conf=alta/v:alta risk=basso
+F: Sotto il lock copiare topic+payload (o l'intera event_t) in locali sullo stack del publisher e chiamare il sink con la copia dopo il give. Nessun cambio di contratto per i sink.
+
+#52 [race] firmware/components/nucleo_httpd/nucleo_httpd.c:710-721 (corrette; lato nativo app_anima.cpp:273-278 + chiamanti 733/783-785/962, tutti senza spine lock)
+T: Override per-request della modalitÃ  online: save/restore globale che puÃ² cancellare il toggle nativo concorrente
+W: anima_get salva s_online_enabled/s_online_only (712-713), li muta per la request e li ripristina a 720 â€” ma la scrittura nativa (app_anima.cpp:275-276, task UI, eseguita nel tab Impostazioni SENZA spine lock) puÃ² interleavarsi: l'utente cambia modalitÃ sul …
+C: 0 RAM; perdita del solo stato live del motore (il valore nuovo resta persistito in anima_ui.json e torna al prossimo apply_online_mode/rientro app); divergenza UI-nativaâ†”motore p…
+conf=alta/v:alta risk=basso
+F: Eliminare il mutate-globale: passare la modalitÃ come parametro per-request (campo in anima_result_t/contesto di query o variante nucleo_anima_query_mode(q,lang,mode)), lasciando i globali solo come d…
+
+#53 [drift] apps/settings/www/index.html.gz:firmware/components/nucleo_webfs/nucleo_webfs.c:100-108 (il file .gz citato Ã¨ binario, "righe" non applicabili)
+T: 13 coppie .gz stantie in apps/*/www: il device spedisce codice vecchio (gz ha precedenza)
+W: nucleo_webfs.c:100-106 serve SEMPRE il sibling .gz quando il client accetta gzip. Verifica meccanica hash su 260 coppie: 13 disallineate (decompresso != sorgente). Le peggiori: settings/index.html.gz (contiene 99.578B vs sorgente 119.776B â€” manca il lavoro C…
+C: 0 RAM. Via deploy.ps1 COMPLETO solo i 2 .json.gz di log-viewer spediscono stantio (il blocco gzip rigenera *.js/*.css/*.html quando il .gz Ã¨ piÃ¹ vecchio del sorgente, vero per tu…
+conf=alta/v:alta risk=basso
+F: Rigenerare i .gz delle 13 coppie con il tool gzip-assets (o aggiungere un gate pre-deploy che hash-confronta ogni coppia file/file.gz e fallisce se stantia, come questo controllo).
+
+#54 [drift] apps/anima/www/forge/model-store.js:40 e 66 (le due sdBase); consumatori: index.html:1033,1039,2995-2998
+T: Forge: sdBase con /www/ â†’ double-www 404, la sorgente SD dei modelli Ã¨ morta (sempre CDN)
+W: sdBase='/apps/anima/www/forge/models/...' Ã¨ usato come URL HTTP diretto (index.html:1033 getManifest via _manGet fetch, index.html:1039 fetchRange con header Range). Il webfs mappa /apps/<id>/<rest> â†’ SD /apps/<id>/www/<rest> (nucleo_webfs.c:56-70), quindi …
+C: 0 RAM device. Costo reale: install offline da SD sempre impossibile (order=['sd'] â†’ 404 su ogni shard), fallback SD su CDN-failure morto, e il probe air-gap _agWeightsReady ripor…
+conf=alta/v:alta risk=basso
+F: Togliere /www dalle due sdBase (â†’ /apps/anima/forge/models/<id>/). Non toccare i path /api/fs/read di model-io.js (lÃ¬ /www Ã¨ corretto: spazio filesystem, non URL). Il gemello forgeModelKey matcha …
+
+#55 [drift] apps/anima/www/index.html:apps/anima/www/index.html 2987-3037 + forge/readiness.js:55; stesso bug anche in forge/model-store.js:40,66 (sdBase), index.html:1033 e forge-demo.html:98,122,128
+T: Pannello air-gap readiness + 'Verifica SD': _agSD con /www/ â†’ tutte le probe 404, l'UI mente
+W: _agSD = location.origin+'/apps/anima/www/forge/vendor/' (riga 2987) Ã¨ fetchato/probato come URL: lib-manifest.json 404 â†’ _agMan={libs:[]} (riga 2989), le range-probe di readinessMatrix 404 â†’ gli engine locali risultano sempre 'serve: wllama.mjsâ€¦' anche …
+C: 0 RAM; diagnostica air-gap inattendibile in entrambe le direzioni + (piÃ¹ ampio del claim) anche il caricamento SD-first dei pesi via sdBase e forge-demo puntano allo stesso path r…
+conf=alta/v:alta risk=basso
+F: Correggere _agSD e VENDOR_BASE in '/apps/anima/forge/vendor/'. Aggiungere al gate un test che proba i path reali contro la mappa webfs (id, rest senza www) per impedire regressioni.
+
+#56 [drift] apps/anima/www/forge-demo.html:91, 98, 122, 128, 143-144
+T: forge-demo.html rotta se servita dal device/sim: import relativo ../../code-runner/www/ + URL SD con /www/
+W: Riga 91: import '../../code-runner/www/nucleo-run.js' da /apps/anima/forge-demo.html risolve a /code-runner/www/... che il webfs mappa su /www/shell/code-runner/... â†’ 404 (la pagina muore al parse del modulo). Funziona solo da un static server con docroot=re…
+C: 0 RAM; pagina Forge demo morta on-device e nel sim (import statico 404 = modulo intero non esegue), raggiungibile dal comando /forge della chat ANIMA; funziona solo dai preview pyt…
+conf=alta/v:alta risk=basso
+F: Import â†’ '/apps/code-runner/nucleo-run.js'; SD_LIB/GGUF_DIR/sdModelBase senza /www (come il fix di model-store). Ãˆ una pagina demo: nessun gate da aggiornare.
+
+#57 [drift] web/shell/index.html:101
+T: Start menu: link morto /downloads/NucleoOS.apk (file inesistente in repo e in entrambi gli staging)
+W: Il bottone Android del menu Start punta a /downloads/NucleoOS.apk ma il file non esiste nÃ© in web/shell (nessuna dir downloads nel repo) nÃ© in deploy/sd-safe/www/shell/downloads nÃ© in deploy/sd/www/shell/downloads (contengono solo NucleoConnect.exe, 1.27MB …
+C: 0 RAM; UX: bottone Android del menu Start sempre visibile ma sempre 404
+conf=alta/v:alta risk=basso
+F: Nascondere il bottone APK finchÃ© l'artefatto non esiste (HEAD-probe come fa il Forge per le lib SD, o flag build-time), oppure aggiungere l'apk allo staging quando verrÃ compilata.
+
+#58 [drift] web/shell/sw.js:4
+T: sw.js v75: icon.png referenziata da index.html e manifest.webmanifest ma assente da ASSETS
+W: index.html righe 9-10 la usa come favicon + apple-touch-icon e manifest.webmanifest:11 come icona PWA (1024x1024, 59KB su disco), ma ASSETS (sw.js:4) non la include: offline il fetch passa dal gatedFetch e fallisce con 504 'device unreachable' invece di servir…
+C: 0 RAM, igiene; favicon/icona PWA puÃ² mancare offline SOLO quando la HTTP cache Ã¨ scaduta (>7gg) o evitta â€” webfs serve image/* con Cache-Control: public, max-age=604800 (nucleo…
+conf=alta/v:alta risk=basso
+F: Aggiungere 'icon.png' ad ASSETS e bumpare CACHE a v76 (protocollo documentato: bump sw.js a ogni modifica asset shell).
+
+#59 [drift] apps/anima/www/index.html:apps/anima/www/index.html:2941-2944 (definizione) + 1040 (uso reale: cablate in makeModelStore come cacheHas/cachePut)
+T: Costanti cache Forge triplicate: la copia _fmCache/_fm* di anima non Ã¨ coperta dal gate anti-drift
+W: Il nome cache 'anima-forge-models' e il prefisso chiave '/fc/<id>/<file>' vivono in 3 posti: web/shell/sw.js:61-67, apps/anima/www/index.html:2941-2944 (_fmCache/_fmHas/_fmPut) e forge-demo.html:154-156. La coppia sw.jsâ†”forge/model-url-map.js Ã¨ pinnata byte…
+C: 0 RAM, igiene; rischio futuro reale di rottura silenziosa del loop installâ†’offline (l'installer di produzione scrive SOLO via _fmPut)
+conf=alta/v:alta risk=basso
+F: Far importare a index.html le costanti/chiave da forge/model-url-map.js (Ã¨ giÃ un modulo ES puro importabile dall'app) oppure estendere il test pin per coprire anche _fmHas/_fmPut.
+
+#60 [igiene] tmp_esp_claw/:n/a (directory, 1270 file)
+T: Clone git completo di esp-claw duplicato alla radice (41.3MB), il canonico Ã¨ giÃ  in reference/esp-claw
+W: tmp_esp_claw/ (41.3MB di cui 21.9MB di .git con 178 file) ha lo stesso albero top-level di reference/esp-claw (19.4MB, 1092 file): .agents, application, components, docs, AGENTS.md, README_CN.md ecc. La memoria di progetto indica reference/ come sede canonica …
+C: 41.3MB interamente ridondanti (non ~68%): working tree byte-identico a reference/esp-claw allo stesso commit 2e10d186, .git recuperabile da github.com/espressif/esp-claw
+conf=alta/v:alta risk=basso
+F: Cancellare tmp_esp_claw/ (la copia di consultazione resta in reference/esp-claw; la history Ã¨ su GitHub). Facoltativo: aggiornare il commento in tools/gen-api-spec.mjs:25 togliendo la menzione.
+
+#61 [igiene] package.json:package.json:74; .claude/launch.json:95-99
+T: Gate di produzione games:gate e server pong3d vivono dentro _scratch/ mescolati a vera spazzatura
+W: package.json:74 (games:gate) esegue _scratch/test-foundation.mjs, test-multiplayer.mjs, test-forza4.mjs, test-tris.mjs, test-pong.mjs, test-brain.mjs; .claude/launch.json:95-99 punta a _scratch/pong3d-verify/server.js. Nella stessa directory convivono scarti r…
+C: 0 RAM; ~375KB di scarti recuperabili (diag-build.log 340.746B + log/cjs/jsonl/Probe.* minori); de-rischia games:gate e launcher pong3d
+conf=alta/v:alta risk=medio
+F: Spostare i 6 test-*.mjs in tools/games-host/ (o tools/) e pong3d-verify/ in tools/, aggiornando package.json:74 e .claude/launch.json:97; poi rilanciare games:gate per conferma. Dopo lo spostamento, g…
+
+#62 [igiene] fw-build.log:n/a (127 file interi alla radice)
+T: 127 log di build/flash/release morti alla radice del repo (2.61MB)
+W: Gruppo: fw-build-*.log (~75 file: radio, sizeopt, hdc, wifi3, twin, watch1-4, gemini, ir1-3, cpumon, ...), fw-flash-*.log (~25: tlsvar 333KB, com3-recover, webfocus, ...), release-*.log (7: full1-4, ota, sd, deploy), flash-build.log, flash6.err/out.log, _flash…
+C: 2.61MB confermati (2.737.094 byte); 127 log su 154 file alla radice (non ~170)
+conf=alta/v:alta risk=basso
+F: Cancellarli tutti (Get-ChildItem G:\Nucleo -File -Filter *.log | Remove-Item). In futuro redirigere i log dei lanci harness in $env:TEMP o in _scratch/, e aggiungere /*.log radice a .gitignore.
+
+#63 [igiene] deploy_fix.ps1:deploy_fix.ps1 1-19 corrette; compress.ps1 1-12, deploy_asr.ps1 1-9, deploy_fixes.ps1 1-29, test_anima.ps1 1-31 tutte verificate
+T: 5 script PowerShell one-off alla radice: deploy parziali con IP/PIN hardcoded, pericolosi se rilanciati
+W: Gruppo: compress.ps1 (1-12: gzippa il solo shell.js in deploy/sd â€” duplicato povero di tools/gzip-assets.mjs, ignora deploy/sd-safe), deploy_asr.ps1 (1-9) e deploy_fixes.ps1 (1-29: pair su 192.168.0.166 con PIN 689614 e upload di liste file ormai stantie â€”…
+C: 5.0KB su disco (5.084 byte misurati); valore principale = igiene + rimozione footgun di deploy parziale
+conf=alta/v:alta risk=basso
+F: Cancellare tutti e 5 (i flussi canonici esistono giÃ in tools/). Se si vuole conservare test_anima.ps1 come esempio di smoke-test live, spostarlo in tools/ parametrizzando IP/PIN.
+
+#64 [igiene] devcookie.txt:1-5
+T: Cookie di sessione del device in chiaro alla radice, non gitignorato
+W: Cookie-jar libcurl con nucleo_session valido per 192.168.0.166 e scadenza epoch 1812415546 (~giugno 2027). Residuo dei giri di debug live curl -b (pairâ†’cookieâ†’/api/fs). Zero riferimenti negli script: grep 'devcookie' su tools/, web/, apps/, firmware/compon…
+C: 249 byte (esatto); credenziale di sessione valida fino a ~giu 2027 in chiaro su disco
+conf=alta/v:alta risk=basso
+F: Cancellare il file e aggiungere devcookie.txt (o *cookie*.txt) a .gitignore; i futuri giri curl lo rigenerano al volo con /api/pair.
+
+#65 [igiene] bounce_test_buildup.wav:n/a (3 file interi)
+T: 3 WAV di test del motore DJ alla radice (3.66MB), output rigenerabili di tools/test_bounce.py
+W: bounce_test.wav (768KB), bounce_test_buildup.wav (1.5MB), bounce_test_dsp.wav (1.5MB). tools/test_bounce.py:203 scrive 'bounce_test_buildup.wav' relativo alla cwd (mix_dsp_wav), quindi i tre file sono artefatti di run lanciate dalla radice durante la fase 1 de…
+C: 3.66 MiB (3.840.132 byte esatti: 768.044 + 1.536.044 + 1.536.044)
+conf=alta/v:alta risk=basso
+F: Cancellare i 3 .wav. MigliorÃ¬a a costo zero: in tools/test_bounce.py:203 scrivere l'output in _scratch/ o $env:TEMP invece che nella cwd, cosÃ¬ non si ricreano alla radice.
+
+#66 [igiene] events.ndjson:n/a â€” 8 file interi alla radice (events.ndjson + 5 TEMP*.txt + input.txt + output.txt), non 6 come nel fixSketch
+T: Dump di debug usa-e-getta alla radice: events.ndjson, TEMP*.txt (nomi corrotti), input.txt, output.txt
+W: Gruppo (~257KB): events.ndjson (242KB, dump del journal device /journal/events.ndjson â€” il firmware nucleo_eventbus.c:17 e log-viewer referenziano SOLO il path on-device, test-lab non legge file radice: grep = 0); 5 TEMP*.txt il cui primo carattere Ã¨ U+F03A…
+C: 256.982 byte esatti (~257KB decimali / ~251KiB) sul gruppo di 8 file
+conf=alta/v:alta risk=basso
+F: Cancellare i 6 file (per i TEMP* usare -LiteralPath o wildcard, il nome contiene U+F03A). I dump journal futuri salvarli in _scratch/ o $env:TEMP.
+
+#67 [igiene] scratch_log_dj.mjs:1-48
+T: 4 script di debug usa-e-getta alla radice: scratch_*.mjs (DJ-era) e tmp_fix.js (append mai atterrato)
+W: scratch_api_test.mjs (1-29), scratch_list.mjs (1-29), scratch_log_dj.mjs (1-48): tutti pairano su 192.168.0.166 PIN 689614 e interrogano endpoint DJ/journal â€” diagnostica live della fase DJ, conclusa. tmp_fix.js (1-7) appende 2 card (assistant.joke, assistan…
+C: 4.0KB (4119 byte esatti: 780+781+1509+1049)
+conf=alta/v:alta risk=basso
+F: Cancellare i 4 file. Nota: se le 2 card jokes interessano davvero, vanno aggiunte via pipeline corpus (con gate anima:gate), non con un append raw â€” il file cosÃ¬ com'Ã¨ bypasserebbe dedup e gate.
+
+#68 [igiene] .gitignore:1-8 (intero file, corrette)
+T: .gitignore copre solo le chiavi API: nessun pattern per log, scratch, temp-dir, staging (build/ e deploy/ inclusi)
+W: .gitignore ha 4 pattern, tutti per segreti (teacher.json, *API KEY*.txt, *.apikey). Niente per: *.log radice, TEMP/scratch_/tmp_*, devcookie.txt, events.ndjson, bounce_test*.wav, _tmp_*/, tmp_esp_claw/, e soprattutto gli alberi rigenerabili build/ (vivo: tools…
+C: 0 RAM; misura reale: deploy/ = 1722 file / 2.58 GiB (~2.77 GB), build/irctest.exe = 282KB rigenerato da ir-check.mjs, devcookie.txt contiene una nucleo_session live
+conf=alta/v:alta risk=basso
+F: Aggiungere a .gitignore: /*.log, /TEMP*, /scratch_*, /tmp_*, /_tmp_*/, /devcookie.txt, /events.ndjson, /bounce_test*.wav, /build/, /deploy/, /_scratch/ (con eccezione negata per i test se restano lÃ¬)…
+
+#69 [igiene] _tmp_ort/:n/a (2 directory vuote)
+T: Directory _tmp_ort/ e _tmp_wllama/ completamente vuote alla radice
+W: Misurate ricorsivamente: 0 file, 0 byte entrambe. Residui di esperimenti onnxruntime/wllama (era ANIMA Local/WASM). Zero riferimenti: grep '_tmp_ort|_tmp_wllama' su tools/, docs/, package.json, apps/, web/ = 0. Costano solo rumore visivo nella radice.
+C: 0KB (vuote); pura igiene radice
+conf=alta/v:alta risk=basso
+F: Remove-Item -Recurse -Force su entrambe.
+
+

@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "_comment": "Single source of truth for ANIMA natural-language app launch (the 'apri X' intent). Consumed by TWO live resolvers: the device firmware (generated into firmware/components/nucleo_anima/nucleo_anima.c via tools/anima/gen_aliases.py) and the host harness/sim (tools/serve-shell.mjs reads this file directly). Keep both in lock-step by editing ONLY this file and re-running the generator. Aliases are lowercase ASCII with Italian accents folded to base letters (matching a_tokenize); mix IT+EN freely. Resolution is first-match in the order below, so order matters only when two apps share/prefix an alias — the generator flags exact collisions as errors and prefix collisions as warnings.",
+  "aliases": {
+    "photo-viewer": ["foto", "fotografie", "immagini", "galleria", "photos", "photo", "images", "pictures", "gallery"],
+    "paint": ["paint", "disegno", "disegna", "disegnare", "pittura", "draw", "painting"],
+    "notepad": ["note", "blocco", "appunti", "testo", "nota", "scrivi", "notes", "text", "write"],
+    "file-commander": ["file", "files", "cartelle", "documenti", "esplora", "documents", "folders"],
+    "media-player": ["musica", "brani", "canzoni", "audio", "lettore", "music", "songs", "song", "player"],
+    "radio": ["radio", "radioline", "stazione", "fm", "station"],
+    "video-player": ["video", "filmati", "filmato", "film", "videos", "movie", "movies"],
+    "spreadsheet": ["excel", "spreadsheet", "foglio", "fogli", "tabella", "tabelle", "celle", "sheet", "csv"],
+    "calculator": ["calcolatrice", "calcoli", "calculator", "math"],
+    "terminal": ["terminale", "terminal", "shell", "console", "prompt", "bash", "cli"],
+    "clock": ["orologio", "sveglia", "cronometro", "timer", "clock", "stopwatch", "alarm"],
+    "calendar": ["calendario", "agenda", "appuntamenti", "eventi", "calendar", "events"],
+    "settings": ["impostazioni", "settaggi", "configurazione", "opzioni", "settings", "options", "config"],
+    "browser": ["browser", "naviga", "navigatore", "navigare", "navigazione"],
+    "tasks": ["tasks", "task", "attivita", "compiti", "todo"],
+    "system-monitor": ["monitor", "risorse", "stato", "prestazioni", "status", "resources"],
+    "ir-remote": ["telecomando", "infrarossi", "remote", "infrared"],
+    "log-viewer": ["log", "registro", "diagnostica", "logs"],
+    "swarm": ["sciame", "swarm"],
+    "automation-studio": ["automazioni", "automazione", "scenari", "automation", "macros"],
+    "recorder": ["registratore", "registra", "voce", "microfono", "recorder", "record", "mic", "voice", "memo", "nota vocale", "promemoria vocale", "dettatura", "detta", "trascrivi", "registrazione"],
+    "dictation": ["trascrizione", "sottotitoli", "stt", "transcription", "speech to text"],
+    "recycle-bin": ["cestino", "eliminati", "spazzatura", "trash", "recycle", "bin"],
+    "updates": ["aggiornamenti", "aggiorna", "update", "updates"],
+    "dosbox": ["dos", "giochi", "gioco", "emulatore", "games", "game"],
+    "code-runner": ["runner", "playground", "script", "javascript", "coderunner"],
+    "miei-fatti": ["fatti", "miei fatti", "i miei fatti", "i miei dati", "ricordi", "conoscenze", "facts", "my facts", "my data", "knowledge"]
+  },
+  "notes": {
+    "spreadsheet": "Listed before calculator on purpose: \"foglio di calcolo\" must resolve to the sheet app.",
+    "calculator": "No \"calc\"/\"calcolo\" alias on purpose: it prefix-collides with \"foglio di calcolo\" (spreadsheet)."
+  }
+}

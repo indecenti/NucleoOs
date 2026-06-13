@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clock</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff; --line:#2a3a5e; --field:#0b1220; }
+    html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86; --accent:#2b6fd6; --line:#cdd8ee; --field:#f4f7fe; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { background: var(--bg); color: var(--text); font: 14px system-ui, "Segoe UI", sans-serif;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+    #time { font-size: 56px; font-variant-numeric: tabular-nums; letter-spacing: 2px; line-height: 1.05; }
+    #ampm { font-size: 22px; color: var(--muted); }
+    #date { color: var(--muted); }
+    /* Device clock state: confirms the nucleo itself is NTP-synced, not just this browser. */
+    #dev { margin-top: 4px; font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .dot.ok { background: #2fd07a; } .dot.warn { background: #f5b13d; } .dot.off { background: #e2576b; }
+    .sw { margin-top: 22px; text-align: center; }
+    #sw { font-size: 30px; font-variant-numeric: tabular-nums; color: var(--accent); }
+    .row { margin-top: 8px; display: flex; gap: 8px; justify-content: center; align-items: center; }
+    .cap { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    button { border: 1px solid var(--line); background: #80808018; color: var(--text); border-radius: 7px; padding: 7px 16px; cursor: pointer; font: inherit; }
+    button:hover { background: #80808033; }
+    #gear { position: fixed; top: 8px; right: 10px; padding: 4px 9px; }
+    /* Settings drawer — persisted on the device. */
+    #cfg { position: fixed; inset: 0; background: #0009; display: none; align-items: center; justify-content: center; }
+    #cfg.open { display: flex; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-width: 240px; }
+    .card h2 { margin: 0 0 12px; font-size: 14px; color: var(--accent); }
+    .opt { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 7px 0; }
+    .opt label { color: var(--muted); }
+    .save { color: var(--muted); font-size: 11px; margin-top: 8px; min-height: 14px; }
+  </style>
+</head>
+<body>
+  <button id="gear" title="Settings">⚙</button>
+  <div id="time">--:--:--</div>
+  <div id="date">—</div>
+  <div id="dev"><span class="dot" id="dev-dot"></span><span id="dev-txt">device clock…</span></div>
+
+  <div class="sw">
+    <div class="cap">Stopwatch</div>
+    <div id="sw">00:00.0</div>
+    <div class="row">
+      <button id="se">Start</button>
+      <button id="sr">Reset</button>
+    </div>
+  </div>
+
+  <div id="cfg">
+    <div class="card">
+      <h2>Clock settings</h2>
+      <div class="opt"><label for="o24">24-hour clock</label><input type="checkbox" id="o24"></div>
+      <div class="opt"><label for="osec">Show seconds</label><input type="checkbox" id="osec"></div>
+      <div class="save" id="cfgsave"></div>
+      <div class="row" style="justify-content:flex-end"><button id="cfgclose">Close</button></div>
+    </div>
+  </div>
+
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const pad = (n, w = 2) => String(n).padStart(w, '0');
+
+    // --- prefs live on the device (not localStorage) ---------------------------
+    const CFG = '/system/config/clock.json';
+    const SETTINGS = '/system/config/settings.json';
+    const prefs = { format24: true, showSeconds: true };
+    let locale;   // from device settings; undefined => browser default
+
+    async function readJSON(path) {
+      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+        return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; }
+    }
+    async function writeJSON(path, obj) {
+      try { const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path),
+        { method: 'POST', body: JSON.stringify(obj, null, 2) }); return r.ok; } catch { return false; }
+    }
+
+    async function loadSettings() {                 // theme + locale shared with the whole OS
+      const s = await readJSON(SETTINGS);
+      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
+      if (s?.device?.locale) locale = s.device.locale;
+    }
+    async function loadPrefs() {
+      const p = await readJSON(CFG);
+      if (p && typeof p === 'object') Object.assign(prefs, p);
+      $('o24').checked = !!prefs.format24; $('osec').checked = !!prefs.showSeconds;
+    }
+
+    // --- main clock (browser local time, reliable on the companion) ------------
+    function tick() {
+      const d = new Date();
+      let h = d.getHours(), suffix = '';
+      if (!prefs.format24) { suffix = h < 12 ? ' AM' : ' PM'; h = h % 12 || 12; }
+      let t = `${prefs.format24 ? pad(h) : h}:${pad(d.getMinutes())}`;
+      if (prefs.showSeconds) t += `:${pad(d.getSeconds())}`;
+      $('time').innerHTML = t + (suffix ? `<span id="ampm">${suffix}</span>` : '');
+      $('date').textContent = d.toLocaleDateString(locale, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
+    // --- device clock badge: is the nucleo itself NTP-synced? ------------------
+    async function pollDevice() {
+      const st = await readJSON('/api/status') ?? await (async () => {
+        try { const r = await fetch('/api/status', { cache: 'no-store' }); return r.ok ? r.json() : null; } catch { return null; }
+      })();
+      const dot = $('dev-dot'), txt = $('dev-txt');
+      const net = st?.network;
+      if (!net) { dot.className = 'dot off'; txt.textContent = 'device unreachable'; return; }
+      if (net.time_synced && net.time) {
+        const dev = new Date(net.time * 1000);
+        const drift = Math.abs(dev.getTime() - Date.now()) / 1000;
+        dot.className = 'dot ' + (drift > 120 ? 'warn' : 'ok');
+        const hh = pad(dev.getHours()), mm = pad(dev.getMinutes());
+        txt.textContent = drift > 120 ? `nucleo NTP-synced · drift ${Math.round(drift)}s (${hh}:${mm})`
+                                      : `nucleo NTP-synced · ${hh}:${mm}`;
+      } else {
+        dot.className = 'dot warn'; txt.textContent = 'nucleo: waiting for NTP sync';
+      }
+    }
+
+    // --- settings drawer -------------------------------------------------------
+    $('gear').onclick = () => $('cfg').classList.add('open');
+    $('cfgclose').onclick = () => $('cfg').classList.remove('open');
+    async function onPrefChange() {
+      prefs.format24 = $('o24').checked; prefs.showSeconds = $('osec').checked;
+      tick();
+      $('cfgsave').textContent = 'Saving…';
+      $('cfgsave').textContent = (await writeJSON(CFG, prefs)) ? 'Saved to device' : 'Save failed — device unreachable';
+    }
+    $('o24').onchange = onPrefChange; $('osec').onchange = onPrefChange;
+
+    // Live: another client changed theme/locale → reflect it without a reload.
+    window.addEventListener('message', (e) => {
+      if (e.data?.t === 'fs.changed' && typeof e.data.d?.path === 'string') {
+        if (e.data.d.path.endsWith('settings.json')) loadSettings().then(tick);
+        if (e.data.d.path.endsWith('clock.json')) loadPrefs().then(tick);
+      }
+      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
+    });
+
+    // --- stopwatch (unchanged behaviour) ---------------------------------------
+    let base = 0, start = 0, running = false, raf;
+    const swEl = $('sw');
+    function show(ms) { const m = Math.floor(ms / 60000), s = Math.floor(ms % 60000 / 1000), t = Math.floor(ms % 1000 / 100); swEl.textContent = `${pad(m)}:${pad(s)}.${t}`; }
+    function loop() { if (!running) return; show(base + (performance.now() - start)); raf = requestAnimationFrame(loop); }
+    $('se').onclick = (e) => {
+      if (running) { running = false; base += performance.now() - start; e.target.textContent = 'Start'; cancelAnimationFrame(raf); }
+      else { running = true; start = performance.now(); e.target.textContent = 'Stop'; loop(); }
+    };
+    $('sr').onclick = () => { running = false; base = 0; $('se').textContent = 'Start'; cancelAnimationFrame(raf); show(0); };
+    show(0);
+
+    // --- boot ------------------------------------------------------------------
+    async function init() {
+      await loadSettings(); await loadPrefs();
+      tick(); setInterval(tick, 250);
+      pollDevice(); setInterval(pollDevice, 15000);
+    }
+    init();
+  </script>
+</body>
+</html>

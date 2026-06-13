@@ -1,0 +1,22 @@
+{
+  "id": "tasks",
+  "name": "Tasks",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "A keyboard-first to-do list with priorities, saved on the device.",
+  "category": "productivity",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/tasks/",
+  "icon": "/apps/tasks/icon.svg",
+  "permissions": ["storage.shared", "system.events", "device.keyboard"],
+  "mounts": { "app": "/apps/tasks/data" },
+  "handles": { "role": "editor", "extensions": ["todo"] },
+  "intents": [ { "action": "edit", "extensions": ["todo"] } ],
+  "subscribes": ["fs.changed"],
+  "publishes": ["fs.changed"],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

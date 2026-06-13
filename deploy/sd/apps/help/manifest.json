@@ -1,0 +1,33 @@
+{
+  "id": "help",
+  "name": "Help",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Sistema di aiuto e documentazione di NucleoOS.",
+  "category": "system",
+  "runtime": "web",
+  "entry_service": "help_main",
+  "web_route": "/apps/help/",
+  "permissions": [
+    "storage.shared",
+    "system.events",
+    "device.keyboard"
+  ],
+  "handles": {
+    "role": "viewer",
+    "extensions": [
+      "info"
+    ]
+  },
+  "power": {
+    "budget_class": "low"
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

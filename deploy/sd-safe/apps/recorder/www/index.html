@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voice Recorder</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff; --rec:#ff5a5a; --line:#2a3a5e; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: var(--bg); color: var(--text); font: 14px system-ui, sans-serif; }
+    header { padding: 8px 10px; background: var(--panel); border-bottom: 1px solid var(--line); font-weight: 600; }
+    .rec-bar { padding: 14px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); }
+    button { font: inherit; color: var(--text); background: var(--panel2, #24345a); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+    button:hover { background: var(--panel, #2c3e6b); } button:disabled { opacity: .4; cursor: default; }
+    #recBtn { font-size: 15px; font-weight: 600; }
+    #recBtn.on { background: var(--rec); border-color: var(--rec); }
+    .dot { width: 12px; height: 12px; border-radius: 50%; background: #44557e; display: inline-block; }
+    .dot.on { background: var(--rec); animation: blink 1s steps(2) infinite; }
+    @keyframes blink { 50% { opacity: .25; } }
+    .time { font-variant-numeric: tabular-nums; font-size: 18px; min-width: 64px; }
+    .meter { flex: 1; height: 8px; background: #11203f; border-radius: 4px; overflow: hidden; }
+    .meter > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg,#4ea1ff,#7CFC9A); transition: width .15s; }
+    .muted { color: var(--muted); font-size: 12px; padding: 6px 14px; }
+    ul { list-style: none; margin: 0; padding: 0; flex: 1; overflow: auto; }
+    li { padding: 10px 14px; border-bottom: 1px solid #ffffff0a; display: flex; flex-direction: column; gap: 6px; }
+    .row { display: flex; align-items: center; gap: 8px; }
+    .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sz { color: var(--muted); font-size: 12px; }
+    audio { width: 100%; height: 32px; }
+    .mini { padding: 4px 8px; font-size: 12px; }
+    .mini.del { color: #ffb4b4; }
+  </style>
+</head>
+<body>
+  <header>🎙️ Voice Recorder</header>
+  <div class="rec-bar">
+    <button id="recBtn">● Record</button>
+    <span id="dot" class="dot"></span>
+    <span id="time" class="time">00:00</span>
+    <span class="meter"><i id="level"></i></span>
+  </div>
+  <div class="muted" id="hint">Records the built-in mic to /data/Recordings as WAV · convert to MP3 in your browser</div>
+  <ul id="list"></ul>
+
+  <script src="vendor/lame.min.js"></script>
+  <script type="module">
+    const DIR = '/data/Recordings';
+    const recBtn = document.getElementById('recBtn');
+    const dot = document.getElementById('dot');
+    const timeEl = document.getElementById('time');
+    const levelEl = document.getElementById('level');
+    const hint = document.getElementById('hint');
+    const list = document.getElementById('list');
+    const readUrl = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
+
+    let recording = false, poll = null;
+    const fmtTime = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    const fmtSize = (b) => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
+
+    function setRecUI(on) {
+      recording = on;
+      recBtn.classList.toggle('on', on);
+      recBtn.textContent = on ? '■ Stop' : '● Record';
+      dot.classList.toggle('on', on);
+      if (!on) { levelEl.style.width = '0'; }
+    }
+
+    async function tick() {
+      try {
+        const s = await (await fetch('/api/rec/status')).json();
+        timeEl.textContent = fmtTime(s.seconds || 0);
+        levelEl.style.width = Math.min(100, s.level || 0) + '%';
+        if (recording && !s.recording) { setRecUI(false); stopPolling(); loadList(); }
+      } catch {}
+    }
+    function startPolling() { stopPolling(); poll = setInterval(tick, 400); }
+    function stopPolling() { if (poll) { clearInterval(poll); poll = null; } }
+
+    recBtn.onclick = async () => {
+      if (!recording) {
+        try {
+          const r = await (await fetch('/api/rec/start', { method: 'POST' })).json();
+          if (r.ok) { setRecUI(true); timeEl.textContent = '00:00'; startPolling(); }
+        } catch { hint.textContent = 'Could not start recording (mic unavailable?)'; }
+      } else {
+        try { await fetch('/api/rec/stop', { method: 'POST' }); } catch {}
+        // tick() will flip the UI once the device finalises the file
+      }
+    };
+
+    async function loadList() {
+      let data; try { data = await (await fetch('/api/fs/list?path=' + encodeURIComponent(DIR))).json(); } catch { return; }
+      const recs = (data.entries || []).filter(e => e.type === 'file' && /\.wav$/i.test(e.name)).sort((a, b) => b.name.localeCompare(a.name));
+      list.innerHTML = recs.length ? '' : '<li class="muted">No recordings yet — press Record.</li>';
+      for (const f of recs) {
+        const path = DIR + '/' + f.name;
+        const li = document.createElement('li');
+        const head = document.createElement('div'); head.className = 'row';
+        head.innerHTML = `<span class="name">${f.name}</span><span class="sz">${fmtSize(f.size)}</span>`;
+        const audio = document.createElement('audio'); audio.controls = true; audio.src = readUrl(path);
+        const actions = document.createElement('div'); actions.className = 'row';
+        const wav = document.createElement('button'); wav.className = 'mini'; wav.textContent = '⬇ WAV';
+        wav.onclick = () => download(path, f.name);
+        const mp3 = document.createElement('button'); mp3.className = 'mini'; mp3.textContent = '♫ MP3';
+        mp3.onclick = () => convertMp3(path, f.name, mp3);
+        const del = document.createElement('button'); del.className = 'mini del'; del.textContent = '🗑';
+        del.onclick = async () => { await fetch('/api/fs/delete?path=' + encodeURIComponent(path), { method: 'POST' }); loadList(); };
+        actions.append(wav, mp3, del);
+        li.append(head, audio, actions);
+        list.appendChild(li);
+      }
+    }
+
+    async function download(path, name) {
+      const blob = await (await fetch(readUrl(path))).blob();
+      saveBlob(blob, name);
+    }
+
+    function saveBlob(blob, name) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    }
+
+    // Convert the device's WAV to MP3 entirely in the browser (lamejs). The ESP never
+    // runs an encoder — it only served the raw PCM bytes. This is the project's
+    // "device serves bytes, client does the heavy lifting" principle in action.
+    async function convertMp3(path, name, btn) {
+      const old = btn.textContent; btn.disabled = true; btn.textContent = '…';
+      try {
+        const buf = await (await fetch(readUrl(path))).arrayBuffer();
+        const { samples, rate } = parseWav(buf);
+        const enc = new lamejs.Mp3Encoder(1, rate, 128);
+        const out = []; const block = 1152;
+        for (let i = 0; i < samples.length; i += block) {
+          const chunk = samples.subarray(i, i + block);
+          const mp3 = enc.encodeBuffer(chunk);
+          if (mp3.length) out.push(new Int8Array(mp3));
+        }
+        const end = enc.flush(); if (end.length) out.push(new Int8Array(end));
+        const blob = new Blob(out, { type: 'audio/mpeg' });
+        saveBlob(blob, name.replace(/\.wav$/i, '.mp3'));
+        btn.textContent = '✓ MP3';
+      } catch (e) {
+        btn.textContent = '✗'; hint.textContent = 'MP3 conversion failed: ' + (e.message || e);
+      } finally {
+        setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 1500);
+      }
+    }
+
+    // Parse a 16-bit PCM mono/stereo WAV into Int16 samples (mono mix) + sample rate.
+    function parseWav(buf) {
+      const dv = new DataView(buf);
+      if (dv.getUint32(0, false) !== 0x52494646) throw new Error('not a WAV');
+      let off = 12, rate = 16000, ch = 1, bits = 16, dataOff = 44, dataLen = buf.byteLength - 44;
+      while (off + 8 <= buf.byteLength) {
+        const id = dv.getUint32(off, false), sz = dv.getUint32(off + 4, true);
+        if (id === 0x666d7420) { ch = dv.getUint16(off + 10, true); rate = dv.getUint32(off + 12, true); bits = dv.getUint16(off + 22, true); }
+        else if (id === 0x64617461) { dataOff = off + 8; dataLen = sz; break; }
+        off += 8 + sz + (sz & 1);
+      }
+      if (bits !== 16) throw new Error('expected 16-bit PCM');
+      const n = Math.floor(dataLen / 2);
+      const raw = new Int16Array(buf, dataOff, n);
+      if (ch === 1) return { samples: raw, rate };
+      const mono = new Int16Array(Math.floor(n / ch));         // downmix to mono
+      for (let i = 0, j = 0; j < mono.length; i += ch, j++) mono[j] = raw[i];
+      return { samples: mono, rate };
+    }
+
+    // sync UI with device on open, in case a recording is already running
+    tick().then(() => { if (recording === false) { /* status may say recording */ } });
+    (async () => { try { const s = await (await fetch('/api/rec/status')).json(); if (s.recording) { setRecUI(true); startPolling(); } } catch {} loadList(); })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+{
+  "id": "games",
+  "name": "Giochi",
+  "version": "0.1.0",
+  "description": "Centro giochi multiplayer: lobby di rete, chat e partite fino a 4 giocatori peer-to-peer (WebRTC). Il dispositivo fa solo da incontro; il gioco viaggia tra i browser.",
+  "category": "games",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/games/",
+  "permissions": [
+    "storage.shared",
+    "system.events",
+    "device.keyboard"
+  ],
+  "mounts": {
+    "app": "/apps/games/data"
+  },
+  "handles": {
+    "role": "viewer",
+    "extensions": []
+  },
+  "subscribes": [],
+  "publishes": [
+    "play.state"
+  ],
+  "power": {
+    "budget_class": "high",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

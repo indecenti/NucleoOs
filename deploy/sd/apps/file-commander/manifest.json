@@ -1,0 +1,43 @@
+{
+  "id": "file-commander",
+  "name": "File Commander",
+  "version": "0.1.0",
+  "description": "Browse, move and organize files on the SD card; the default open-with fallback.",
+  "category": "system",
+  "entry_service": "file_commander_main",
+  "web_route": "/apps/file-commander/",
+  "permissions": [
+    "storage.shared",
+    "storage.app",
+    "system.events",
+    "system.notify",
+    "device.keyboard"
+  ],
+  "mounts": {
+    "root": "/",
+    "app": "/apps/file-commander/data"
+  },
+  "handles": {
+    "role": "none",
+    "extensions": []
+  },
+  "subscribes": [
+    "system.boot",
+    "storage.changed",
+    "fs.open"
+  ],
+  "publishes": [
+    "fs.changed",
+    "fs.open"
+  ],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

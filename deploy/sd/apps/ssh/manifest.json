@@ -1,0 +1,21 @@
+{
+  "id": "ssh",
+  "name": "SSH",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Terminale SSH reale verso host remoti, via un piccolo bridge self-hosted (nessun servizio terzo). Il lavoro SSH gira fuori dal Cardputer; lo shell fa solo da terminale.",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/ssh/",
+  "icon": "icon.svg",
+  "permissions": ["storage.shared", "system.events", "device.keyboard"],
+  "mounts": { "app": "/apps/ssh/data" },
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": [],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

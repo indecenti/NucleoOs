@@ -1,0 +1,37 @@
+{
+  "id": "browser",
+  "name": "Browser",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Browser leggero: apre i siti esterni in una scheda reale del browser, con ricerca e download integrati.",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/browser/",
+  "permissions": [
+    "system.events"
+  ],
+  "mounts": {
+    "app": "/apps/browser/data"
+  },
+  "handles": {
+    "role": "none",
+    "extensions": []
+  },
+  "subscribes": [],
+  "publishes": [],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "_lang": "it",
+  "app_title": "Attività",
+  "filter_active": "Attive",
+  "add_ph": "Aggiungi un'attività e premi Invio…",
+  "priority": "Priorità",
+  "clear_done": "Cancella completate",
+  "saving": "Salvataggio…",
+  "saved_locally": "Salvato in locale",
+  "copied": "Copiato",
+  "empty_done": "Nessuna attività completata.",
+  "empty_active": "Niente da fare — tutto fatto! 🎉",
+  "empty_all": "Nessuna attività.<br>Scrivi sopra e premi Invio.",
+  "toggle": "Attiva/disattiva",
+  "count": "{active} attive · {total} totali"
+}

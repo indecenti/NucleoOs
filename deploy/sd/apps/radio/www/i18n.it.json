@@ -1,0 +1,67 @@
+{
+  "_lang": "it",
+
+  "sub_loading": "Radio live gratuita · sincronizzata col tuo dispositivo",
+  "sub_count": {
+    "one": "Radio live gratuita · {count} stazione · sincronizzata col tuo dispositivo",
+    "other": "Radio live gratuita · {count} stazioni · sincronizzata col tuo dispositivo"
+  },
+  "btn_add": "Aggiungi stazione",
+  "hint": "▶ ascolta nel browser · ★ imposta come predefinita del dispositivo · ✎ modifica · ⌃⌄ riordina.",
+  "info_title": "Info e guida",
+  "info_aria": "Info e guida",
+
+  "np_idle": "Nessuna riproduzione",
+  "np_idle_hint": "Scegli una stazione per iniziare ad ascoltare",
+  "vol_title": "Volume",
+  "play_pause": "Play / pausa",
+  "connecting": "connessione…",
+  "live_stream": "stream live",
+
+  "empty_list": "Ancora nessuna stazione — aggiungine una con ＋.",
+  "support_somafm": "sostieni SomaFM",
+
+  "badge_default": "predefinita",
+  "badge_browser_only": "solo browser",
+  "badge_browser_only_title": "https si ascolta nel browser ma non sul Cardputer",
+  "act_set_default": "Imposta come predefinita del dispositivo",
+  "act_move_up": "Sposta su",
+  "act_move_down": "Sposta giù",
+
+  "dlg_add": "Aggiungi stazione",
+  "dlg_edit": "Modifica stazione",
+  "f_name": "Nome",
+  "f_name_ph": "La mia stazione",
+  "f_genre": "Genere / sottotitolo",
+  "f_genre_ph": "Ambient / Downtempo",
+  "f_stream": "URL dello stream",
+  "note_stream": "Lo stream MP3 http:// semplice si ascolta anche sul Cardputer. https:// funziona qui ma non sul dispositivo.",
+  "note_stream_warn": "⚠ https si ascolta nel browser ma NON sul Cardputer (niente TLS). Usa http:// per il supporto sul dispositivo.",
+  "f_np": "URL now-playing",
+  "optional": "(facoltativo)",
+  "note_np": "Metadati JSON per la riga del brano — lascia vuoto per uno stream live semplice.",
+
+  "err_https": "⚠ stream https bloccato qui — ma si riprodurrà sul dispositivo se raggiungibile.",
+  "err_unreachable": "⚠ stream non raggiungibile dal browser (potrebbe comunque funzionare sul dispositivo).",
+
+  "info_lead": "Radio internet live gratuita per NucleoOS. Un'unica lista di stazioni, condivisa tra questa app e l'app Radio sul tuo Cardputer.",
+  "info_add": "<b>Aggiungi una stazione.</b> Tocca <b>Aggiungi stazione</b>, dalle un nome e incolla un URL di stream diretto (uno stream MP3). Entra subito nella lista ovunque.",
+  "info_star": "<b>Imposta la predefinita del dispositivo.</b> La stazione con la stella è quella che il tuo Cardputer sintonizza nel momento in cui apri la sua app Radio.",
+  "info_listen": "<b>Ascolta qui.</b> Riproduci qualsiasi stazione nel browser. Se fornisce le info sul brano, vedrai artista, titolo e una barra di avanzamento.",
+  "info_reorder": "<b>Riordina e modifica.</b> Usa ⌃⌄ per riordinare, ✎ per modificare, 🗑 per rimuovere. Ogni modifica si salva sul dispositivo nell'istante in cui la fai.",
+  "info_device_note": "<b>Nota sul dispositivo:</b> il Cardputer riproduce solo stream MP3 <b>http://</b> semplici — non ha spazio per HTTPS accanto al decoder audio. Le stazioni <b>https://</b> sono contrassegnate <b>“solo browser”</b>: si ascoltano qui ma non funzionano sul dispositivo. Le stazioni gratuite curate provengono da <b>SomaFM</b>.",
+  "keyboard": "Tastiera",
+  "keys_help": "<kbd>↑</kbd><kbd>↓</kbd> seleziona · <kbd>Enter</kbd> play · <kbd>Spazio</kbd> play/pausa · <kbd>n</kbd>/<kbd>p</kbd> succ./prec.",
+  "got_it": "Ho capito",
+
+  "saving": "Salvataggio…",
+  "saved_ok": "Salvato ✓",
+  "save_failed": "Salvataggio fallito",
+  "toast_seeded": "lista di stazioni predefinita inizializzata",
+  "toast_readonly": "Apri Radio dalla shell del dispositivo per salvare le modifiche",
+  "toast_default": "“{name}” è ora la predefinita del dispositivo",
+  "toast_removed": "Rimossa “{name}”",
+  "toast_saved_changes": "Modifiche salvate",
+  "toast_added": "Aggiunta “{name}”",
+  "confirm_remove": "Rimuovere “{name}” dalla lista delle stazioni?"
+}

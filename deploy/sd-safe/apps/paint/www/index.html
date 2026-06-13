@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Paint</title>
+<style>
+  :root{ --bg:#070a12; --panel:#0f1521; --panel2:#1a2433; --text:#f3f4f6; --muted:#93a1b8;
+         --accent:#4ea1ff; --line:rgba(255,255,255,.08); }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);
+    font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column;font-size:13px}
+  /* menu bar */
+  .menubar{display:flex;background:var(--panel);border-bottom:1px solid var(--line);user-select:none;position:relative;z-index:30}
+  .menu{position:relative}
+  .menu>.label{padding:6px 12px;cursor:pointer}
+  .menu>.label:hover,.menu.open>.label{background:var(--panel2)}
+  .dropdown{position:absolute;top:100%;left:0;min-width:200px;background:var(--panel);border:1px solid var(--line);
+    border-radius:0 0 8px 8px;box-shadow:0 12px 28px rgba(0,0,0,.5);padding:4px;display:none}
+  .menu.open .dropdown{display:block}
+  .mi{display:flex;justify-content:space-between;gap:24px;padding:7px 12px;border-radius:6px;cursor:pointer;white-space:nowrap}
+  .mi:hover{background:var(--accent);color:#001}
+  .mi .k{color:var(--muted);font-size:11px}
+  .mi:hover .k{color:#013}
+  .sep{height:1px;background:var(--line);margin:4px 6px}
+  /* toolbar */
+  .toolbar{display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line);user-select:none;flex-wrap:wrap}
+  .grp{display:flex;align-items:center;gap:3px;padding-right:10px;border-right:1px solid var(--line)}
+  .grp:last-child{border-right:none}
+  .btn{background:transparent;border:1px solid transparent;color:var(--text);width:32px;height:32px;border-radius:7px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center}
+  .btn:hover{background:rgba(255,255,255,.1)}
+  .btn.active{background:var(--accent);color:#001}
+  .btn svg{width:18px;height:18px}
+  input[type=color]{width:30px;height:30px;border:1px solid var(--line);border-radius:7px;padding:0;background:none;cursor:pointer}
+  input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+  input[type=color]::-webkit-color-swatch{border:none;border-radius:5px}
+  input[type=range]{width:90px}
+  .swatches{display:flex;gap:3px;flex-wrap:wrap;max-width:160px}
+  .sw{width:16px;height:16px;border-radius:4px;cursor:pointer;border:1px solid rgba(255,255,255,.15)}
+  .size-lbl{color:var(--muted);min-width:34px;text-align:right}
+  /* canvas */
+  .stage{flex:1;overflow:auto;background:#0a0d15;display:flex;align-items:center;justify-content:center;padding:24px}
+  .wrap{position:relative;background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.6);flex:none}
+  canvas{display:block}
+  #overlay{position:absolute;left:0;top:0;pointer-events:none}
+  #stage.dragover .wrap{outline:3px dashed var(--accent);outline-offset:6px}
+  /* status */
+  .status{display:flex;gap:16px;padding:4px 12px;background:var(--panel);border-top:1px solid var(--line);color:var(--muted);font-size:11px}
+  .status b{color:var(--text);font-weight:600}
+  .drop-hint{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(78,161,255,.12);color:var(--accent);font-size:15px;font-weight:600;pointer-events:none}
+  #stage.dragover .drop-hint{display:flex}
+  /* ---- transparency checkerboard + work area + right panel + zoom (Paint 2.0) ---- */
+  .workarea{flex:1;display:flex;min-height:0}
+  .wrap{background:repeating-conic-gradient(#c4ccd8 0% 25%, #eef2f7 0% 50%) 0 0 / 18px 18px}
+  .panel{width:232px;flex:none;background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;font-size:12px}
+  .panel.hidden{display:none}
+  .panel-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+  .panel-head b{font-size:12px;font-weight:700;flex:1;letter-spacing:.02em}
+  .panel-head .ph-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;border-radius:5px}
+  .panel-head .ph-close:hover{color:var(--text);background:rgba(255,255,255,.08)}
+  .psec{border-bottom:1px solid var(--line)}
+  .psec>h4{margin:0;padding:9px 12px;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none;transition:color .12s}
+  .psec>h4:hover{color:var(--text)}
+  .psec:not(.collapsed)>h4{color:var(--text)}
+  .psec>h4 .chev{transition:transform .18s;font-size:10px;opacity:.6}
+  .psec.collapsed>h4 .chev{transform:rotate(-90deg)}
+  .psec-body{padding:0 12px 13px;display:flex;flex-direction:column;gap:10px}
+  .psec.collapsed .psec-body{display:none}
+  .prow{display:flex;align-items:center;gap:9px}
+  .prow>label{flex:none;width:72px;color:var(--muted)}
+  .prow input[type=range]{flex:1;width:auto;accent-color:var(--accent)}
+  .prow .val{width:28px;text-align:right;color:var(--text);font-variant-numeric:tabular-nums}
+  .pbtns{display:flex;flex-wrap:wrap;gap:6px}
+  .pbtn{flex:1 1 auto;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:7px 8px;cursor:pointer;font-size:12px;white-space:nowrap;transition:background .12s,border-color .12s}
+  .pbtn:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.18)}
+  .pbtn:active{transform:translateY(1px)}
+  .pbtn.primary{background:linear-gradient(135deg,#6d5efc,#4ea1ff);color:#fff;border:none;font-weight:700}
+  .pbtn.primary:hover{filter:brightness(1.08)}
+  .pbtn.full{flex:1 1 100%;text-align:center}
+  .phint{color:var(--muted);font-size:11px;line-height:1.45}
+  .panel::-webkit-scrollbar{width:9px} .panel::-webkit-scrollbar-thumb{background:var(--panel2);border-radius:5px;border:2px solid var(--panel)} .panel::-webkit-scrollbar-thumb:hover{background:#2a3850}
+  .tg-btn{width:34px} .tg-btn.on{background:var(--accent);color:#012}
+  .zoomctl{display:flex;align-items:center;gap:4px}
+  .zoomctl b{min-width:38px;text-align:center;font-variant-numeric:tabular-nums}
+  .zoomctl button{background:var(--panel2);border:1px solid var(--line);color:var(--text);width:22px;height:20px;border-radius:5px;cursor:pointer;line-height:1;font-size:13px}
+  .zoomctl button:hover{background:rgba(255,255,255,.1)}
+  @media (max-width:720px){ .panel{position:absolute;right:0;top:0;bottom:0;box-shadow:-8px 0 24px rgba(0,0,0,.4);z-index:40} }
+  /* rulers */
+  .canvasarea{flex:1;display:grid;grid-template-columns:22px 1fr;grid-template-rows:22px 1fr;min-height:0;min-width:0}
+  .canvasarea.norulers{grid-template-columns:0 1fr;grid-template-rows:0 1fr}
+  .ruler-corner{background:var(--panel);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .ruler-top{border-bottom:1px solid var(--line);width:100%;height:22px;display:block}
+  .ruler-left{border-right:1px solid var(--line);width:22px;height:100%;display:block}
+  .canvasarea.norulers .ruler-corner,.canvasarea.norulers .ruler-top,.canvasarea.norulers .ruler-left{display:none}
+  /* options bar (contextual, per tool) */
+  .toolbar-opts{padding:4px 12px;gap:16px;min-height:30px;font-size:12px;color:var(--muted)}
+  .opt-tool{font-weight:700;color:var(--text);min-width:72px}
+  .opt-grp{display:none;align-items:center;gap:12px}
+  .opt-grp.show{display:inline-flex}
+  .opt{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+  .opt input[type=range]{width:92px;accent-color:var(--accent)}
+  .opt input[type=number]{width:54px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:4px 6px}
+  .opt b{color:var(--text);font-variant-numeric:tabular-nums}
+  .opt-hint{margin-left:auto;color:var(--muted);font-size:11px}
+  /* natural-language command bar */
+  .cmdbar{display:flex;align-items:center;gap:9px;padding:7px 12px;background:linear-gradient(90deg,rgba(109,94,252,.12),rgba(78,161,255,.05));border-bottom:1px solid var(--line)}
+  .cmd-ico{color:#9b8cff;font-size:15px;flex:none}
+  #cmdInput{flex:1;min-width:120px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 11px;font-family:inherit;font-size:13px}
+  #cmdInput:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(78,161,255,.18)}
+  .cmd-go{flex:none;background:linear-gradient(135deg,#6d5efc,#4ea1ff);border:none;color:#fff;border-radius:8px;width:36px;height:33px;cursor:pointer;font-size:15px}
+  .cmd-go:hover{filter:brightness(1.08)}
+  .cmd-resp{flex:none;font-size:12px;color:var(--muted);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cmd-resp.ok{color:#7fe3a6}.cmd-resp.warn{color:#ffd86b}
+  /* primary + secondary colour with swap */
+  .color-pair{position:relative;display:inline-flex;align-items:center}
+  .color-pair input[type=color]{width:26px;height:26px}
+  .color-pair input[type=color]:nth-child(2){margin-left:-9px}
+  .color-pair .swap{margin-left:7px;background:var(--panel2);border:1px solid var(--line);color:var(--text);width:24px;height:24px;border-radius:6px;cursor:pointer;line-height:1}
+  .color-pair .swap:hover{background:rgba(255,255,255,.1)}
+  /* grid overlay (scales with the wrap transform → grid is in canvas pixels) */
+  .grid-overlay{position:absolute;inset:0;pointer-events:none;display:none;background-image:linear-gradient(rgba(78,161,255,.22) 1px,transparent 1px),linear-gradient(90deg,rgba(78,161,255,.22) 1px,transparent 1px);background-size:40px 40px}
+  .grid-overlay.on{display:block}
+  /* layers: each layer is an absolutely-stacked canvas; the browser composites them (opacity + mix-blend-mode) */
+  .wrap>canvas,.wrap>.grid-overlay{position:absolute;left:0;top:0}
+  .lay-list{display:flex;flex-direction:column;gap:4px;max-height:190px;overflow:auto;margin-bottom:2px}
+  .lay-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:7px;cursor:pointer;border:1px solid transparent}
+  .lay-row:hover{background:rgba(255,255,255,.05)}
+  .lay-row.active{background:rgba(78,161,255,.14);border-color:rgba(78,161,255,.32)}
+  .lay-row .eye{flex:none;width:16px;text-align:center;cursor:pointer}
+  .lay-row .eye.off{opacity:.28}
+  .lay-row .thumb{flex:none;width:34px;height:26px;border:1px solid var(--line);border-radius:4px;background:repeating-conic-gradient(#c4ccd8 0 25%,#eef2f7 0 50%) 0 0/8px 8px;image-rendering:pixelated}
+  .lay-row .nm{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  select#layBlend{background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:5px 6px;flex:1;font-size:12px}
+  /* ---- Atelier (AI image generation) ---- */
+  .btn.atelier{width:auto;padding:0 12px;gap:6px;font-weight:600;background:linear-gradient(135deg,#6d5efc,#4ea1ff);color:#fff;border:none}
+  .btn.atelier:hover{filter:brightness(1.08)}
+  .atl-backdrop{position:fixed;inset:0;background:rgba(3,6,14,.62);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;z-index:100}
+  .atl-backdrop.open{display:flex}
+  .atl{position:relative;width:min(560px,94vw);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+  .atl-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .atl-head h3{margin:0;font-size:15px;font-weight:700;flex:1}
+  .atl-x{background:transparent;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
+  .atl-x:hover{color:var(--text)}
+  .atl-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+  .atl-tabs{display:flex;gap:4px;background:var(--bg);border-radius:9px;padding:3px}
+  .atl-tab{flex:1;text-align:center;padding:7px 6px;border-radius:7px;cursor:pointer;color:var(--muted);font-size:12px;user-select:none}
+  .atl-tab.on{background:var(--panel2);color:var(--text)}
+  .atl label{font-size:11px;color:var(--muted);display:block;margin-bottom:4px}
+  .atl textarea,.atl input[type=text],.atl input[type=number]{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:9px 10px;font-family:inherit;font-size:13px;resize:vertical}
+  .atl textarea{min-height:62px}
+  .atl-row{display:flex;gap:10px;align-items:flex-end}
+  .atl-row>div{flex:1}
+  .atl-seed{display:flex;gap:6px;align-items:center}
+  .atl-seed input{width:110px}
+  .atl-mini{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;cursor:pointer;font-size:12px}
+  .atl-mini:hover{background:rgba(255,255,255,.08)}
+  .atl-status{font-size:12px;color:var(--muted);min-height:16px}
+  .atl-banner{font-size:12px;border-radius:8px;padding:8px 10px;display:none}
+  .atl-banner.show{display:block}
+  .atl-banner.info{background:rgba(78,161,255,.12);color:#9cd0ff;border:1px solid rgba(78,161,255,.25)}
+  .atl-banner.warn{background:rgba(255,193,7,.12);color:#ffd86b;border:1px solid rgba(255,193,7,.25)}
+  .atl-foot{display:flex;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+  .atl-go{flex:1;background:linear-gradient(135deg,#6d5efc,#4ea1ff);border:none;color:#fff;font-weight:700;padding:11px;border-radius:9px;cursor:pointer;font-size:14px}
+  .atl-go:disabled{opacity:.5;cursor:default}
+  .atl-chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap}
+  .atl-prog{height:4px;background:var(--bg);border-radius:3px;overflow:hidden;display:none}
+  .atl-prog.show{display:block}
+  .atl-prog>i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+  .atl-variants{display:flex;gap:6px;flex-wrap:wrap}
+  .atl-variants canvas{width:64px;height:64px;border-radius:7px;border:1px solid var(--line);cursor:pointer;background:#0008}
+  .atl-variants canvas:hover{border-color:var(--accent)}
+  .atl-variants canvas.pick{outline:2px solid var(--accent)}
+  /* ---- Model manager (source selection) ---- */
+  .atl-status .ok{color:#5fe39a}.atl-status .warn{color:#ffd86b}
+  .atl-mm{display:flex;flex-direction:column;gap:11px}
+  .atl-mm-state{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--line);font-size:13px;line-height:1.45}
+  .atl-mm-state .ic{font-size:18px;flex:none;line-height:1.2}
+  .atl-mm-state.ok{border-color:rgba(95,227,154,.4);background:rgba(95,227,154,.08)}
+  .atl-mm-state.warn{border-color:rgba(255,193,7,.3);background:rgba(255,193,7,.08)}
+  .atl-src{display:flex;align-items:center;gap:11px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+  .atl-src .si{font-size:20px;flex:none}
+  .atl-src .sl{flex:1;min-width:0}
+  .atl-src .sl b{display:block;font-size:13px}
+  .atl-src .sl small{color:var(--muted);font-size:11px}
+  .atl-src button{background:linear-gradient(135deg,#6d5efc,#4ea1ff);border:none;color:#fff;font-weight:600;padding:8px 15px;border-radius:8px;cursor:pointer;font-size:12px;white-space:nowrap}
+  .atl-src button:disabled{opacity:.45;cursor:default;background:var(--panel);color:var(--muted)}
+  .atl-src.dim{opacity:.6}
+  .atl-mm-alt{display:flex;gap:8px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+  .atl-link{background:none;border:none;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:12px;padding:4px 0}
+  .atl-link:hover{color:var(--text)}
+  .atl-link.danger:hover{color:#ff8b8b}
+  /* ---- Blocking download overlay ---- */
+  .atl-dl{position:absolute;inset:0;background:var(--panel);border-radius:14px;display:none;flex-direction:column;padding:20px;gap:12px;z-index:5}
+  .atl-dl.show{display:flex}
+  .atl-dl h4{margin:0;font-size:15px;display:flex;align-items:center;gap:8px}
+  .atl-dl-pct{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+  .atl-dl-bar{height:8px;background:var(--bg);border-radius:5px;overflow:hidden}
+  .atl-dl-bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#6d5efc,#4ea1ff);transition:width .25s}
+  .atl-dl-sub{font-size:12px;color:var(--muted);min-height:14px}
+  .atl-steps{display:flex;flex-direction:column;gap:8px;margin-top:2px}
+  .atl-step{display:flex;gap:9px;font-size:12.5px;align-items:flex-start;color:var(--muted)}
+  .atl-step .si{flex:none;width:16px;text-align:center}
+  .atl-step.active{color:var(--text)}.atl-step.active .si{animation:atlspin 1s linear infinite;display:inline-block}
+  .atl-step.done{color:#5fe39a}.atl-step.error{color:#ff8b8b}
+  .atl-step .ss{display:block;font-size:11px;opacity:.85;margin-top:1px}
+  @keyframes atlspin{to{transform:rotate(360deg)}}
+  .atl-dl-warn{margin-top:auto;font-size:11.5px;color:#ffd86b;background:rgba(255,193,7,.1);border:1px solid rgba(255,193,7,.25);border-radius:8px;padding:9px 11px;line-height:1.4}
+  .atl-dl-err{margin-top:auto;display:flex;flex-direction:column;gap:9px}
+  .atl-dl-err .em{font-size:12.5px;color:#ff8b8b;line-height:1.45}
+  .atl-dl-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .atl-dl-actions button{flex:1;min-width:118px;padding:9px;border-radius:8px;cursor:pointer;font-size:12px;border:1px solid var(--line);background:var(--panel2);color:var(--text)}
+  .atl-dl-actions button.primary{background:linear-gradient(135deg,#6d5efc,#4ea1ff);border:none;color:#fff;font-weight:700}
+  .atl-head .atl-mini{margin-left:auto}
+</style>
+</head>
+<body>
+  <div class="menubar" id="menubar">
+    <div class="menu" data-menu="file"><div class="label">File</div>
+      <div class="dropdown">
+        <div class="mi" data-cmd="new"><span>Nuovo</span><span class="k">Ctrl+N</span></div>
+        <div class="mi" data-cmd="open"><span>Apri…</span><span class="k">Ctrl+O</span></div>
+        <div class="sep"></div>
+        <div class="mi" data-cmd="save"><span>Salva</span><span class="k">Ctrl+S</span></div>
+        <div class="mi" data-cmd="saveas"><span>Salva con nome…</span><span class="k">Ctrl+Shift+S</span></div>
+        <div class="sep"></div>
+        <div class="mi" data-cmd="exit"><span>Esci</span><span class="k">Ctrl+Q</span></div>
+      </div>
+    </div>
+    <div class="menu" data-menu="edit"><div class="label">Modifica</div>
+      <div class="dropdown">
+        <div class="mi" data-cmd="undo"><span>Annulla</span><span class="k">Ctrl+Z</span></div>
+        <div class="mi" data-cmd="redo"><span>Ripeti</span><span class="k">Ctrl+Y</span></div>
+        <div class="sep"></div>
+        <div class="mi" data-cmd="copy"><span>Copia</span><span class="k">Ctrl+C</span></div>
+        <div class="mi" data-cmd="paste"><span>Incolla</span><span class="k">Ctrl+V</span></div>
+        <div class="sep"></div>
+        <div class="mi" data-cmd="clear"><span>Cancella tutto</span><span class="k">Canc</span></div>
+        <div class="mi" data-cmd="resize"><span>Ridimensiona tela…</span></div>
+      </div>
+    </div>
+    <div class="menu" data-menu="image"><div class="label">Immagine</div>
+      <div class="dropdown">
+        <div class="mi" data-cmd="newTransparent"><span>Nuovo trasparente</span></div>
+        <div class="sep"></div>
+        <div class="mi" data-cmd="cropSel"><span>Ritaglia a selezione</span></div>
+        <div class="mi" data-cmd="trim"><span>Rifila bordi trasparenti</span></div>
+        <div class="sep"></div>
+        <div class="mi" data-cmd="rotcw"><span>Ruota 90° orario</span></div>
+        <div class="mi" data-cmd="rotccw"><span>Ruota 90° antiorario</span></div>
+        <div class="mi" data-cmd="fliph"><span>Rifletti orizzontale</span></div>
+        <div class="mi" data-cmd="flipv"><span>Rifletti verticale</span></div>
+        <div class="sep"></div>
+        <div class="mi" data-cmd="removeBg"><span>Rimuovi sfondo (auto)</span></div>
+      </div>
+    </div>
+    <div class="menu" data-menu="adjust"><div class="label">Regola</div>
+      <div class="dropdown">
+        <div class="mi" data-cmd="openAdjust"><span>Luminosità / Contrasto / Saturazione…</span></div>
+        <div class="sep"></div>
+        <div class="mi" data-cmd="fxGray"><span>Scala di grigi</span></div>
+        <div class="mi" data-cmd="fxInvert"><span>Inverti colori</span></div>
+        <div class="mi" data-cmd="fxSepia"><span>Seppia</span></div>
+        <div class="sep"></div>
+        <div class="mi" data-cmd="fxBlur"><span>Sfoca</span></div>
+        <div class="mi" data-cmd="fxSharp"><span>Nitidezza</span></div>
+        <div class="mi" data-cmd="fxEdges"><span>Contorni</span></div>
+      </div>
+    </div>
+    <div class="menu" data-menu="view"><div class="label">Vista</div>
+      <div class="dropdown">
+        <div class="mi" data-cmd="toggleRulers"><span>Righelli</span></div>
+        <div class="mi" data-cmd="toggleGrid"><span>Griglia</span></div>
+        <div class="mi" data-cmd="togglePanel"><span>Pannello strumenti</span><span class="k">Tab</span></div>
+        <div class="sep"></div>
+        <div class="mi" data-cmd="zoomReset"><span>Zoom 100%</span></div>
+        <div class="mi" data-cmd="fitZoom"><span>Adatta alla finestra</span></div>
+      </div>
+    </div>
+    <div class="menu" data-menu="help"><div class="label">Aiuto</div>
+      <div class="dropdown">
+        <div class="mi" data-cmd="tour"><span>Tutorial guidato ✨</span></div>
+        <div class="mi" data-cmd="shortcuts"><span>Scorciatoie da tastiera</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="grp" id="tools">
+      <button class="btn active" data-tool="brush" title="Pennello (B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg></button>
+      <button class="btn" data-tool="line" title="Linea (L)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="20" x2="20" y2="4"/></svg></button>
+      <button class="btn" data-tool="rect" title="Rettangolo (R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="1"/></svg></button>
+      <button class="btn" data-tool="ellipse" title="Ellisse (E)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="9" ry="7"/></svg></button>
+      <button class="btn" data-tool="eraser" title="Gomma"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L2 15l13-13 8 8-3 3z"/><path d="M18 12l-8 8"/></svg></button>
+      <button class="btn" data-tool="fill" title="Secchiello"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11L9 1 2 8l8 8 9-5z"/><path d="M5 12h14"/><circle cx="20" cy="16" r="2"/></svg></button>
+      <button class="btn" data-tool="pick" title="Contagocce"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22l4-1 10-10-3-3L3 18l-1 4z"/><path d="M13 5l3 3 3-3-3-3-3 3z"/></svg></button>
+      <button class="btn" data-tool="select" title="Selezione rettangolare (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"><rect x="3" y="3" width="18" height="18" rx="1"/></svg></button>
+      <button class="btn" data-tool="wand" title="Bacchetta magica — cancella sfondo cliccando (W)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8L19 13M17.8 6.2L19 5M3 21l9-9M12.2 6.2L11 5"/></svg></button>
+      <button class="btn" data-tool="text" title="Testo (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></button>
+    </div>
+    <div class="grp">
+      <span class="color-pair">
+        <input type="color" id="color" value="#000000" title="Colore primario (tratto)">
+        <input type="color" id="color2" value="#ffffff" title="Colore secondario (riempimento)">
+        <button class="swap" id="colorSwap" title="Scambia colori (X)">⇄</button>
+      </span>
+      <div class="swatches" id="swatches"></div>
+    </div>
+    <div class="grp">
+      <input type="range" id="size" min="1" max="64" value="5" title="Spessore">
+      <span class="size-lbl" id="sizeLbl">5px</span>
+    </div>
+    <div class="grp">
+      <button class="btn" data-cmd="undo" title="Annulla (Ctrl+Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg></button>
+      <button class="btn" data-cmd="redo" title="Ripeti (Ctrl+Y)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h1"/></svg></button>
+    </div>
+    <div class="grp">
+      <button class="btn tg-btn on" id="panelToggle" title="Mostra/nascondi pannello (Tab)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="1.5"/><line x1="15" y1="4" x2="15" y2="20"/></svg></button>
+    </div>
+    <div class="grp" style="border-right:none">
+      <button class="btn atelier" id="atelierBtn" title="Atelier — genera un'immagine con l'IA (WebGPU, sul dispositivo)">✨&nbsp;Atelier</button>
+    </div>
+  </div>
+
+  <div class="toolbar toolbar-opts" id="optsbar">
+    <span class="opt-tool" id="optTool">Pennello</span>
+    <span class="opt-grp" data-for="line rect ellipse"><label class="opt"><input type="checkbox" id="shapeFill"> Riempito (colore 2)</label></span>
+    <span class="opt-grp" data-for="fill wand"><label class="opt">Tolleranza<input type="range" id="fillTol" min="0" max="120" value="32"><b id="fillTolVal">32</b></label></span>
+    <span class="opt-grp" data-for="text"><label class="opt">Dimensione<input type="number" id="fontSize" min="8" max="240" value="24"></label><label class="opt"><input type="checkbox" id="fontBold"> Grassetto</label></span>
+    <span class="opt-hint" id="optHint"></span>
+  </div>
+
+  <div class="cmdbar">
+    <span class="cmd-ico">✦</span>
+    <input id="cmdInput" type="text" autocomplete="off" spellcheck="false" placeholder="Chiedi a Paint… es. «rimuovi lo sfondo», «crea un'icona di un gatto», «luminosità +20», «ruota a destra»">
+    <button class="cmd-go" id="cmdGo" title="Esegui (Invio)">↵</button>
+    <span class="cmd-resp" id="cmdResp"></span>
+  </div>
+
+  <div class="workarea">
+    <div class="canvasarea" id="canvasarea">
+      <div class="ruler-corner" id="rulerCorner"></div>
+      <canvas class="ruler-top" id="rulerTop"></canvas>
+      <canvas class="ruler-left" id="rulerLeft"></canvas>
+      <div class="stage" id="stage">
+        <div class="wrap" id="wrap">
+          <canvas id="c" width="800" height="600"></canvas>
+          <canvas id="overlay" width="800" height="600"></canvas>
+          <div class="grid-overlay" id="gridOverlay"></div>
+        </div>
+        <div class="drop-hint">Rilascia per aprire l'immagine</div>
+      </div>
+    </div>
+    <aside class="panel" id="panel">
+      <div class="panel-head"><b>Strumenti</b><button class="ph-close" id="panelClose" title="Nascondi pannello (Tab)">×</button></div>
+      <div class="psec" data-sec="layers"><h4>Livelli <span class="chev">▾</span></h4><div class="psec-body">
+        <div class="lay-list" id="layList"></div>
+        <div class="prow"><label>Opacità</label><input type="range" id="layOpacity" min="0" max="100" value="100"><span class="val" id="layOpacityVal">100</span></div>
+        <div class="prow"><label>Fusione</label><select id="layBlend">
+          <option value="normal">Normale</option><option value="multiply">Moltiplica</option><option value="screen">Scolora</option>
+          <option value="overlay">Sovrapponi</option><option value="darken">Scurisci</option><option value="lighten">Schiarisci</option>
+          <option value="color-dodge">Brucia</option><option value="difference">Differenza</option></select></div>
+        <div class="pbtns">
+          <button class="pbtn" data-cmd="layerAdd" title="Nuovo livello">＋</button>
+          <button class="pbtn" data-cmd="layerDup" title="Duplica">⧉</button>
+          <button class="pbtn" data-cmd="layerUp" title="Sposta su">▲</button>
+          <button class="pbtn" data-cmd="layerDown" title="Sposta giù">▼</button>
+          <button class="pbtn" data-cmd="layerMerge" title="Unisci sotto">⤓</button>
+          <button class="pbtn" data-cmd="layerDel" title="Elimina">🗑</button>
+        </div>
+      </div></div>
+      <div class="psec collapsed" data-sec="brush"><h4>Pennello <span class="chev">▾</span></h4><div class="psec-body">
+        <div class="prow"><label>Opacità</label><input type="range" id="opacity" min="5" max="100" value="100"><span class="val" id="opacityVal">100</span></div>
+        <div class="phint">La gomma cancella in trasparente (alpha PNG reale).</div>
+      </div></div>
+      <div class="psec collapsed" data-sec="sel"><h4>Selezione <span class="chev">▾</span></h4><div class="psec-body">
+        <div class="phint" id="selInfo">Nessuna selezione. Strumento ▭ per selezionare un'area.</div>
+        <div class="pbtns">
+          <button class="pbtn" data-cmd="cropSel">Ritaglia</button>
+          <button class="pbtn" data-cmd="clearSel">Cancella</button>
+          <button class="pbtn" data-cmd="fillSel">Riempi</button>
+          <button class="pbtn primary" data-cmd="genSel">✨ Genera qui</button>
+          <button class="pbtn" data-cmd="deselect">Deseleziona</button>
+        </div>
+      </div></div>
+      <div class="psec collapsed" data-sec="bg"><h4>Sfondo <span class="chev">▾</span></h4><div class="psec-body">
+        <div class="prow"><label>Tolleranza</label><input type="range" id="bgTol" min="5" max="120" value="48"><span class="val" id="bgTolVal">48</span></div>
+        <div class="prow"><label>Sfuma</label><input type="range" id="bgFeather" min="0" max="4" value="1"><span class="val" id="bgFeatherVal">1</span></div>
+        <div class="pbtns"><button class="pbtn primary full" data-cmd="removeBg">Rimuovi sfondo (auto)</button>
+          <button class="pbtn full" data-cmd="trim">Rifila bordi trasparenti</button></div>
+        <div class="phint">Oppure scegli la 🪄 bacchetta e clicca lo sfondo da cancellare.</div>
+      </div></div>
+      <div class="psec collapsed" data-sec="adj"><h4>Regolazioni <span class="chev">▾</span></h4><div class="psec-body">
+        <div class="prow"><label>Luminosità</label><input type="range" id="adjB" min="-100" max="100" value="0"><span class="val" id="adjBVal">0</span></div>
+        <div class="prow"><label>Contrasto</label><input type="range" id="adjC" min="-100" max="100" value="0"><span class="val" id="adjCVal">0</span></div>
+        <div class="prow"><label>Saturazione</label><input type="range" id="adjS" min="-100" max="100" value="0"><span class="val" id="adjSVal">0</span></div>
+        <div class="pbtns"><button class="pbtn primary" data-cmd="adjApply">Applica</button><button class="pbtn" data-cmd="adjReset">Ripristina</button></div>
+        <div class="pbtns"><button class="pbtn" data-cmd="fxGray">Grigi</button><button class="pbtn" data-cmd="fxInvert">Inverti</button><button class="pbtn" data-cmd="fxSepia">Seppia</button>
+          <button class="pbtn" data-cmd="fxBlur">Sfoca</button><button class="pbtn" data-cmd="fxSharp">Nitido</button><button class="pbtn" data-cmd="fxEdges">Contorni</button></div>
+      </div></div>
+      <div class="psec collapsed" data-sec="xf"><h4>Trasforma <span class="chev">▾</span></h4><div class="psec-body">
+        <div class="pbtns"><button class="pbtn" data-cmd="rotccw">⟲ 90°</button><button class="pbtn" data-cmd="rotcw">⟳ 90°</button>
+          <button class="pbtn" data-cmd="fliph">⇄ Orizz.</button><button class="pbtn" data-cmd="flipv">⇅ Vert.</button></div>
+      </div></div>
+    </aside>
+  </div>
+
+  <div class="status">
+    <span>File: <b id="st-file">senza titolo</b><b id="st-dirty"></b></span>
+    <span>Tela: <b id="st-dim">800 × 600</b></span>
+    <span id="st-pos">—</span>
+    <span class="zoomctl"><button id="zoomOut" title="Riduci">−</button><b id="zoomLbl">100%</b><button id="zoomIn" title="Ingrandisci">+</button><button id="zoomFit" title="Adatta">⤢</button></span>
+    <span style="margin-left:auto" id="st-msg">Pronto</span>
+  </div>
+
+<script>
+let c = document.getElementById('c'), ctx = c.getContext('2d', { willReadFrequently:true });   // c/ctx = the ACTIVE layer (reassigned on layer switch); all drawing code targets them unchanged
+const ov = document.getElementById('overlay'), octx = ov.getContext('2d');
+const wrap = document.getElementById('wrap'), stage = document.getElementById('stage');
+const $ = id => document.getElementById(id);
+// Isolation guard: when the caret is in a text field (e.g. the Atelier prompt) NO drawing hotkey or
+// canvas-clearing shortcut fires — so typing "blue rect" can't switch tools or wipe the canvas.
+function isTyping(){ const a=document.activeElement; return !!(a && (a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.isContentEditable)); }
+
+let tool='brush', color='#000000', color2='#ffffff', size=5, brushOpacity=1, bgTransparent=false;
+let selecting=false, selStart={x:0,y:0}, sel=null;   // rectangular selection state (declared early: read by pointer handlers)
+let path='', dirty=false;
+let drawing=false, sx=0, sy=0, snapshot=null;
+let layers=[], activeIdx=0, layerSeq=0;                 // layer stack (index 0 = bottom); c/ctx = layers[activeIdx]
+const undoStack=[], redoStack=[], MAX_UNDO=16;
+
+// ---- init: fill helper for the ACTIVE layer; the layer stack is set up by initLayers() (hoisted, below) ----
+function fill(w,h){ if(bgTransparent){ ctx.clearRect(0,0,w,h); } else { ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); } }
+initLayers();
+
+// ---- status / title ----
+function setMsg(m){ $('st-msg').textContent=m; }
+function syncTitle(){
+  $('st-file').textContent = path ? path.split('/').pop() : 'senza titolo';
+  $('st-dirty').textContent = dirty ? ' •' : '';
+  $('st-dim').textContent = c.width+' × '+c.height;
+  try{ window.parent.postMessage({type:'set-window-title', title:'Paint — '+(path?path.split('/').pop():'senza titolo')+(dirty?' •':'')}, '*'); }catch{}
+}
+function markDirty(){ if(!dirty){ dirty=true; syncTitle(); } }
+
+// ---- undo / redo (LAYER-AWARE: a snapshot captures the whole stack — pixels + props + active index) ----
+function snapState(){ return { w:c.width, h:c.height, active:activeIdx,
+  layers: layers.map(L=>({ name:L.name, visible:L.visible, opacity:L.opacity, blend:L.blend, data:L.ctx.getImageData(0,0,L.canvas.width,L.canvas.height).data })) }; }
+function applyState(s){ layers.forEach(L=>L.canvas.remove());
+  layers = s.layers.map(ls=>{ const k=mkLayerCanvas(s.w,s.h); k.ctx.putImageData(new ImageData(new Uint8ClampedArray(ls.data), s.w, s.h),0,0);
+    return { id:++layerSeq, name:ls.name, canvas:k.canvas, ctx:k.ctx, visible:ls.visible, opacity:ls.opacity, blend:ls.blend }; });
+  activeIdx=Math.min(s.active, layers.length-1); setImageSize(s.w,s.h); reorderDOM(); setActive(activeIdx); applyZoom(); syncTitle(); renderLayersUI(); }
+function pushUndo(){ try{ undoStack.push(snapState()); if(undoStack.length>MAX_UNDO) undoStack.shift(); redoStack.length=0; }catch(e){} }
+function undo(){ if(!undoStack.length) return; redoStack.push(snapState()); applyState(undoStack.pop()); setMsg('Annullato'); }
+function redo(){ if(!redoStack.length) return; undoStack.push(snapState()); applyState(redoStack.pop()); setMsg('Ripetuto'); }
+
+// ===== LAYERS — each layer is an absolutely-stacked <canvas>; the browser composites them (opacity +
+// mix-blend-mode). c/ctx ALWAYS point to the ACTIVE layer, so every drawing/imaging op is unchanged. =====
+function setWrapSize(W,H){ wrap.style.width=W+'px'; wrap.style.height=H+'px'; }
+function setImageSize(W,H){ setWrapSize(W,H); ov.width=W; ov.height=H; }
+function mkLayerCanvas(W,H){ const cv=document.createElement('canvas'); cv.className='layer'; cv.width=W; cv.height=H;
+  const cx=cv.getContext('2d',{willReadFrequently:true}); wrap.insertBefore(cv, ov); return {canvas:cv, ctx:cx}; }
+function activeLayer(){ return layers[activeIdx]; }
+function applyLayerStyles(){ layers.forEach((L,i)=>{ const st=L.canvas.style; st.zIndex=String(i); st.display=L.visible?'block':'none';
+    st.opacity=String(L.opacity); st.mixBlendMode=(L.blend==='normal'?'normal':L.blend); });
+  ov.style.zIndex=String(layers.length+2); const g=$('gridOverlay'); if(g) g.style.zIndex=String(layers.length+1); }
+function reorderDOM(){ layers.forEach(L=>wrap.insertBefore(L.canvas, ov)); applyLayerStyles(); }
+function setActive(i){ activeIdx=Math.max(0,Math.min(layers.length-1,i)); c=activeLayer().canvas; ctx=activeLayer().ctx; renderLayersUI(); }
+function initLayers(){ c.classList.add('layer');
+  layers=[{ id:++layerSeq, name:'Livello 1', canvas:c, ctx, visible:true, opacity:1, blend:'normal' }];
+  activeIdx=0; setImageSize(c.width, c.height); fill(c.width, c.height); reorderDOM(); renderLayersUI(); }
+
+function addLayer(){ pushUndo(); const k=mkLayerCanvas(c.width,c.height);
+  layers.splice(activeIdx+1,0,{ id:++layerSeq, name:'Livello '+layerSeq, canvas:k.canvas, ctx:k.ctx, visible:true, opacity:1, blend:'normal' });
+  reorderDOM(); setActive(activeIdx+1); markDirty(); setMsg('Livello aggiunto'); }
+function addImageLayer(name){ const k=mkLayerCanvas(c.width,c.height);   // for Atelier "on a new layer" (caller pushUndo)
+  layers.splice(activeIdx+1,0,{ id:++layerSeq, name:name||('Livello '+layerSeq), canvas:k.canvas, ctx:k.ctx, visible:true, opacity:1, blend:'normal' });
+  reorderDOM(); setActive(activeIdx+1); return activeLayer(); }
+function deleteLayer(){ if(layers.length<=1){ setMsg('Serve almeno un livello'); return; } pushUndo();
+  layers.splice(activeIdx,1)[0].canvas.remove(); activeIdx=Math.min(activeIdx, layers.length-1); reorderDOM(); setActive(activeIdx); markDirty(); }
+function duplicateLayer(){ pushUndo(); const src=activeLayer(); const k=mkLayerCanvas(c.width,c.height); k.ctx.drawImage(src.canvas,0,0);
+  layers.splice(activeIdx+1,0,{ id:++layerSeq, name:src.name+' copia', canvas:k.canvas, ctx:k.ctx, visible:true, opacity:src.opacity, blend:src.blend });
+  reorderDOM(); setActive(activeIdx+1); markDirty(); }
+function moveLayer(d){ const j=activeIdx+d; if(j<0||j>=layers.length) return; pushUndo();
+  const t=layers[activeIdx]; layers[activeIdx]=layers[j]; layers[j]=t; activeIdx=j; reorderDOM(); setActive(activeIdx); markDirty(); }
+function mergeDown(){ if(activeIdx<=0){ setMsg('Nessun livello sotto'); return; } pushUndo();
+  const top=layers[activeIdx], bot=layers[activeIdx-1]; bot.ctx.save(); bot.ctx.globalAlpha=top.visible?top.opacity:0;
+  bot.ctx.globalCompositeOperation=(top.blend==='normal'?'source-over':top.blend); bot.ctx.drawImage(top.canvas,0,0); bot.ctx.restore();
+  top.canvas.remove(); layers.splice(activeIdx,1); activeIdx-=1; reorderDOM(); setActive(activeIdx); markDirty(); setMsg('Livelli uniti'); }
+function flattenLayers(){ if(layers.length<=1) return; pushUndo(); const k=mkLayerCanvas(c.width,c.height); compositeTo(k.ctx, c.width, c.height);
+  layers.forEach(L=>L.canvas.remove()); layers=[{ id:++layerSeq, name:'Sfondo', canvas:k.canvas, ctx:k.ctx, visible:true, opacity:1, blend:'normal' }]; activeIdx=0; reorderDOM(); setActive(0); markDirty(); setMsg('Immagine appiattita'); }
+
+function compositeTo(cx, W, H){ layers.forEach(L=>{ if(!L.visible || L.opacity<=0) return; cx.save(); cx.globalAlpha=L.opacity;
+  cx.globalCompositeOperation=(L.blend==='normal'?'source-over':L.blend); cx.drawImage(L.canvas,0,0,W,H); cx.restore(); }); }
+function compositeCanvas(){ const t=document.createElement('canvas'); t.width=c.width; t.height=c.height; compositeTo(t.getContext('2d'), c.width, c.height); return t; }
+
+// IMAGE-WIDE transforms (rotate/flip/crop/trim) apply to ALL layers; filters/adjust stay on the active one.
+function applyImagingAll(fn, msg){ if(!imOk()) return; pushUndo(); let nw=c.width, nh=c.height;
+  layers.forEach(L=>{ const src={ data:L.ctx.getImageData(0,0,L.canvas.width,L.canvas.height).data, width:L.canvas.width, height:L.canvas.height };
+    let out; try{ out=fn(src); }catch{ out=src; } L.canvas.width=out.width; L.canvas.height=out.height;
+    L.ctx.putImageData(new ImageData(new Uint8ClampedArray(out.data), out.width, out.height),0,0); nw=out.width; nh=out.height; });
+  setImageSize(nw,nh); setSelection(null); markDirty(); syncTitle(); applyZoom(); reorderDOM(); renderLayersUI(); if(msg) setMsg(msg); }
+
+function renderLayersUI(){ const list=$('layList'); if(!list) return; list.innerHTML='';
+  for(let i=layers.length-1;i>=0;i--){ const L=layers[i], row=document.createElement('div'); row.className='lay-row'+(i===activeIdx?' active':'');
+    const eye=document.createElement('span'); eye.className='eye'+(L.visible?'':' off'); eye.textContent=L.visible?'👁':'—';
+    eye.title='Mostra/nascondi'; eye.onclick=(e)=>{ e.stopPropagation(); setLayerVisible(i,!L.visible); };
+    const th=document.createElement('canvas'); th.className='thumb'; th.width=34; th.height=26; try{ th.getContext('2d').drawImage(L.canvas,0,0,34,26); }catch{}
+    const nm=document.createElement('span'); nm.className='nm'; nm.textContent=L.name; nm.title='Doppio clic: rinomina'; nm.ondblclick=(e)=>{ e.stopPropagation(); renameLayer(i); };
+    row.append(eye,th,nm); row.onclick=()=>setActive(i); list.appendChild(row); }
+  const A=activeLayer(); if(A){ const op=$('layOpacity'), v=$('layOpacityVal'), bl=$('layBlend');
+    if(op) op.value=Math.round(A.opacity*100); if(v) v.textContent=String(Math.round(A.opacity*100)); if(bl) bl.value=A.blend; } }
+function setLayerVisible(i,v){ layers[i].visible=v; applyLayerStyles(); markDirty(); renderLayersUI(); }
+function setLayerOpacity(o){ activeLayer().opacity=o; applyLayerStyles(); markDirty(); }
+function setLayerBlend(b){ activeLayer().blend=b; applyLayerStyles(); markDirty(); }
+function renameLayer(i){ const n=prompt('Nome livello:', layers[i].name); if(n!=null && n.trim()){ layers[i].name=n.trim(); renderLayersUI(); } }
+function resetLayers(W,H,drawFn,name){ layers.forEach(L=>L.canvas.remove()); const k=mkLayerCanvas(W,H); if(drawFn) drawFn(k.ctx);
+  layers=[{ id:++layerSeq, name:name||'Livello 1', canvas:k.canvas, ctx:k.ctx, visible:true, opacity:1, blend:'normal' }]; activeIdx=0;
+  setImageSize(W,H); reorderDOM(); setActive(0); renderLayersUI(); }
+
+// ---- tools ----
+$('tools').addEventListener('click', e=>{ const b=e.target.closest('[data-tool]'); if(!b)return;
+  tool=b.dataset.tool; document.querySelectorAll('#tools .btn').forEach(x=>x.classList.toggle('active',x===b));
+  c.style.cursor = tool==='pick'?'crosshair':'crosshair'; });
+$('color').addEventListener('input', e=>color=e.target.value);
+$('size').addEventListener('input', e=>{ size=+e.target.value; $('sizeLbl').textContent=size+'px'; });
+// palette
+const PALETTE=['#000000','#7f7f7f','#c3c3c3','#ffffff','#ed1c24','#ff7f27','#fff200','#22b14c','#00a2e8','#3f48cc','#a349a4','#b97a57','#ffaec9','#99d9ea','#7092be','#ffc90e'];
+PALETTE.forEach(col=>{ const s=document.createElement('div'); s.className='sw'; s.style.background=col;
+  s.title=col; s.onclick=()=>{ color=col; $('color').value=col; }; $('swatches').appendChild(s); });
+
+// ---- pointer geometry (canvas internal == displayed, 1:1) ----
+function pos(e){ const r=c.getBoundingClientRect(); return { x:Math.round((e.clientX-r.left)*c.width/r.width), y:Math.round((e.clientY-r.top)*c.height/r.height) }; }
+
+c.addEventListener('mousedown', e=>{
+  const p=pos(e);
+  if(tool==='pick'){ const d=ctx.getImageData(p.x,p.y,1,1).data; color='#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join(''); $('color').value=color; setMsg('Colore prelevato '+color); return; }
+  if(tool==='fill'){ pushUndo(); floodFill(p.x,p.y,hexRgb(color)); markDirty(); return; }
+  if(tool==='wand'){ doWand(p.x,p.y); return; }
+  if(tool==='text'){ placeText(p.x,p.y); return; }
+  if(tool==='select'){ selecting=true; selStart={x:p.x,y:p.y}; setSelection(null); drawMarquee(p.x,p.y,p.x,p.y); return; }
+  pushUndo(); drawing=true; sx=p.x; sy=p.y;
+  if(tool==='brush'||tool==='eraser'){ dot(p.x,p.y); }
+  else { snapshot=ctx.getImageData(0,0,c.width,c.height); }   // shapes preview from this base
+});
+window.addEventListener('mousemove', e=>{
+  const p=pos(e); $('st-pos').textContent=p.x+', '+p.y;
+  if(selecting){ drawMarquee(selStart.x,selStart.y,p.x,p.y); return; }
+  if(!drawing) return;
+  if(tool==='brush'||tool==='eraser'){ stroke(sx,sy,p.x,p.y); sx=p.x; sy=p.y; }
+  else { ctx.putImageData(snapshot,0,0); shape(tool,sx,sy,p.x,p.y,e.shiftKey); }
+});
+window.addEventListener('mouseup', e=>{ if(selecting){ selecting=false; const p=pos(e); finalizeSelection(selStart.x,selStart.y,p.x,p.y); return; } if(!drawing)return; drawing=false; markDirty(); setMsg('Pronto'); });
+
+// Eraser cuts to TRANSPARENT (destination-out), not white — so the alpha channel is real. Brush honours opacity.
+function dot(x,y){ const er=tool==='eraser'; ctx.save(); if(er) ctx.globalCompositeOperation='destination-out'; else ctx.globalAlpha=brushOpacity;
+  ctx.beginPath(); ctx.arc(x,y,size/2,0,7); ctx.fillStyle=er?'#000':color; ctx.fill(); ctx.restore(); }
+function stroke(x0,y0,x1,y1){ const er=tool==='eraser'; ctx.save(); if(er) ctx.globalCompositeOperation='destination-out'; else ctx.globalAlpha=brushOpacity;
+  ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1);
+  ctx.strokeStyle=er?'#000':color; ctx.lineWidth=size; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke(); ctx.restore(); }
+function shape(t,x0,y0,x1,y1,sq){ const fillShapes=$('shapeFill')&&$('shapeFill').checked;
+  ctx.strokeStyle=color; ctx.lineWidth=size; ctx.lineCap='round'; ctx.lineJoin='round';
+  let w=x1-x0, h=y1-y0; if(sq){ const m=Math.max(Math.abs(w),Math.abs(h)); w=Math.sign(w||1)*m; h=Math.sign(h||1)*m; }
+  ctx.beginPath();
+  if(t==='line'){ ctx.moveTo(x0,y0); ctx.lineTo(x0+w,y0+h); }
+  else if(t==='rect'){ ctx.rect(x0,y0,w,h); }
+  else if(t==='ellipse'){ ctx.ellipse(x0+w/2,y0+h/2,Math.abs(w/2),Math.abs(h/2),0,0,7); }
+  if(fillShapes && t!=='line'){ ctx.save(); ctx.globalAlpha=brushOpacity; ctx.fillStyle=color2; ctx.fill(); ctx.restore(); }
+  ctx.stroke();
+}
+
+// ---- flood fill ----
+function hexRgb(h){ const n=parseInt(h.slice(1),16); return [n>>16&255,n>>8&255,n&255,255]; }
+function floodFill(x,y,col){ const im=ctx.getImageData(0,0,c.width,c.height), d=im.data, W=c.width,H=c.height;
+  const i0=(y*W+x)*4, tr=d[i0],tg=d[i0+1],tb=d[i0+2],ta=d[i0+3];
+  const tol=(+($('fillTol')?$('fillTol').value:0))||0, tol2=tol*tol*3;
+  const seen=new Uint8Array(W*H), st=[x,y];
+  const near=(i)=>{ const dr=d[i]-tr,dg=d[i+1]-tg,db=d[i+2]-tb,da=d[i+3]-ta; return dr*dr+dg*dg+db*db<=tol2 && Math.abs(da)<=tol+40; };
+  while(st.length){ const py=st.pop(), px=st.pop(); if(px<0||py<0||px>=W||py>=H) continue; const p=py*W+px; if(seen[p]) continue;
+    const i=p*4; if(!near(i)) continue; seen[p]=1;
+    d[i]=col[0];d[i+1]=col[1];d[i+2]=col[2];d[i+3]=255; st.push(px+1,py,px-1,py,px,py+1,px,py-1); }
+  ctx.putImageData(im,0,0);
+}
+
+// ---- load an image (from path, dropped File, or open-file) ----
+function loadImageEl(img){ pushUndo(); const W=img.naturalWidth||img.width, H=img.naturalHeight||img.height;
+  resetLayers(W,H, cx=>cx.drawImage(img,0,0), 'Immagine'); syncTitle(); }   // single layer, preserves PNG alpha (no white-fill)
+function loadFromPath(p){ const img=new Image(); img.onload=()=>{ loadImageEl(img); path=p; dirty=false; syncTitle(); setMsg('Aperto '+p); };
+  img.onerror=()=>setMsg('Impossibile aprire '+p); img.src='/api/fs/read?path='+encodeURIComponent(p)+'&t='+Date.now(); }
+function loadFromFile(file){ const r=new FileReader(); r.onload=()=>{ const img=new Image();
+  img.onload=()=>{ loadImageEl(img); dirty=true; setMsg('Immagine caricata: '+file.name+' (salva per memorizzarla)'); }; img.src=r.result; }; r.readAsDataURL(file); }
+
+// ---- save (RAW bytes, not FormData — the previous bug corrupted PNGs) ----
+function mimeFor(p){ return /\.jpe?g$/i.test(p)?'image/jpeg':/\.webp$/i.test(p)?'image/webp':'image/png'; }
+function writeTo(p){ return new Promise(res=>{ compositeCanvas().toBlob(async blob=>{   // save the FLATTENED composite of all layers
+  try{ const r=await fetch('/api/fs/write?path='+encodeURIComponent(p),{method:'POST',body:blob});
+    if(r.ok){ path=p; dirty=false; syncTitle(); setMsg('Salvato in '+p); res(true); }
+    else { setMsg('Salvataggio fallito ('+r.status+')'); res(false); } }
+  catch(err){ setMsg('Errore di rete: '+err.message); res(false); } }, mimeFor(p), 0.92); }); }
+function save(){ if(path) writeTo(path); else saveAs(); }
+function saveAs(){ dialog('save', path||'/data/Pictures', path? path.split('/').pop():'disegno.png').then(p=>{ if(p) writeTo(p); }); }
+
+// ---- copy / paste the canvas image (system clipboard; needs HTTPS/localhost) ----
+const inShell = window.parent && window.parent !== window;
+async function copyImage(){
+  try{
+    const blob = await new Promise(res=>compositeCanvas().toBlob(res,'image/png'));
+    if(navigator.clipboard && window.ClipboardItem && blob){ await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]); setMsg('Immagine copiata negli appunti'); }
+    else setMsg('Copia immagine non disponibile qui (serve HTTPS o localhost)');
+  }catch(err){ setMsg('Copia non riuscita: '+(err && err.message || err)); }
+}
+async function pasteImage(){
+  try{
+    if(!navigator.clipboard || !navigator.clipboard.read){ setMsg('Incolla non disponibile qui (serve HTTPS o localhost)'); return; }
+    const items = await navigator.clipboard.read();
+    for(const it of items){ const type=(it.types||[]).find(t=>/^image\//.test(t)); if(type){ const blob=await it.getType(type);
+      const img=new Image(); img.onload=()=>{ pushUndo(); ctx.drawImage(img,0,0); markDirty(); setMsg('Immagine incollata'); }; img.src=URL.createObjectURL(blob); return; } }
+    setMsg('Nessuna immagine negli appunti');
+  }catch(err){ setMsg('Incolla non riuscita: '+(err && err.message || err)); }
+}
+
+// ---- OS file dialog (open/save) ----
+let reqId=null, reqResolve=null;
+function dialog(mode, defPath, defName){ return new Promise(res=>{ reqId='pf-'+Date.now()+'-'+Math.random().toString(36).slice(2); reqResolve=res;
+  window.parent.postMessage({ type:'os-file-dialog', id:reqId, mode, title: mode==='save'?'Salva immagine':'Apri immagine',
+    filter:['.png','.jpg','.jpeg','.bmp','.gif','.webp'], defaultPath:defPath||'/data/Pictures', defaultName:defName||'disegno.png' }, '*'); }); }
+
+window.addEventListener('message', e=>{ const d=e.data||{};
+  if(d.type==='os-file-dialog-result' && d.id===reqId){ const r=reqResolve; reqId=null; reqResolve=null; if(r) r(d.action==='cancel'?null:d.path); return; }
+  if(d.type==='open-file' && d.path){ loadFromPath(d.path); return; }
+  // OS keyboard bridge: in the shell these arrive as {type:'os-shortcut'} (the single source, so the
+  // local keydown below only runs standalone — no double-handling).
+  if(d.type==='os-shortcut'){
+    const a=d.action;
+    if(a==='save') save(); else if(a==='saveAs') saveAs(); else if(a==='new') newCanvas(); else if(a==='open') CMD.open();
+    else if(a==='undo') undo(); else if(a==='redo') redo();
+    else if(a==='delete'){ if(isTyping()) return; pushUndo(); fill(c.width,c.height); markDirty(); }
+    else if(a==='copy'||a==='selectAll') copyImage();
+    else if(a==='paste') pasteImage();
+  }
+});
+
+// ---- drag & drop a file from the desktop / file manager ----
+// While Atelier is downloading the model (__atelierBusy) drops are ignored — the environment is locked.
+['dragenter','dragover'].forEach(ev=>stage.addEventListener(ev, e=>{ e.preventDefault(); if(window.__atelierBusy) return; stage.classList.add('dragover'); }));
+['dragleave','drop'].forEach(ev=>stage.addEventListener(ev, e=>{ if(ev==='dragleave' && e.relatedTarget && stage.contains(e.relatedTarget)) return; stage.classList.remove('dragover'); }));
+stage.addEventListener('drop', e=>{ e.preventDefault(); if(window.__atelierBusy) return;
+  const f=[...(e.dataTransfer.files||[])].find(x=>/^image\//.test(x.type));
+  if(f){ loadFromFile(f); return; }
+  const p=e.dataTransfer.getData('text/plain'); if(p && /\.(png|jpe?g|bmp|gif|webp)$/i.test(p)) loadFromPath(p); });
+
+// ---- commands ----
+function newCanvas(){ pushUndo(); const W=c.width,H=c.height; bgTransparent=false; resetLayers(W,H, cx=>{ cx.fillStyle='#fff'; cx.fillRect(0,0,W,H); }, 'Livello 1'); path=''; dirty=false; syncTitle(); setMsg('Nuovo'); }
+function resizeCanvas(){ const w=parseInt(prompt('Larghezza tela:', c.width)||c.width,10), h=parseInt(prompt('Altezza tela:', c.height)||c.height,10);
+  if(!w||!h||w<1||h<1||w>4000||h>4000){ setMsg('Dimensione non valida'); return; }
+  pushUndo();
+  layers.forEach(L=>{ const tmp=document.createElement('canvas'); tmp.width=L.canvas.width; tmp.height=L.canvas.height; tmp.getContext('2d').drawImage(L.canvas,0,0);
+    L.canvas.width=w; L.canvas.height=h; L.ctx.clearRect(0,0,w,h); L.ctx.drawImage(tmp,0,0); });
+  setImageSize(w,h); markDirty(); syncTitle(); applyZoom(); renderLayersUI(); }
+function exit(){ if(dirty && !confirm('Uscire senza salvare? Le modifiche andranno perse.')) return; try{ window.parent.postMessage({type:'close-window'}, '*'); }catch{} }
+const CMD={ new:newCanvas, open:()=>dialog('open').then(p=>{ if(p) loadFromPath(p); }), save, saveas:saveAs,
+  exit, undo, redo, clear:()=>{ pushUndo(); fill(c.width,c.height); markDirty(); }, resize:resizeCanvas };
+
+// ---- menus ----
+document.querySelectorAll('.menu>.label').forEach(l=>l.addEventListener('click', e=>{ e.stopPropagation();
+  const m=l.parentElement, open=m.classList.contains('open'); document.querySelectorAll('.menu').forEach(x=>x.classList.remove('open')); if(!open) m.classList.add('open'); }));
+document.addEventListener('click', ()=>document.querySelectorAll('.menu').forEach(x=>x.classList.remove('open')));
+document.querySelectorAll('[data-cmd]').forEach(el=>el.addEventListener('click', e=>{ e.stopPropagation();
+  document.querySelectorAll('.menu').forEach(x=>x.classList.remove('open')); const fn=CMD[el.dataset.cmd]; if(fn) fn(); }));
+
+// ---- keyboard ----
+window.addEventListener('keydown', e=>{
+  const k=e.key.toLowerCase(), ctrl=e.ctrlKey||e.metaKey;
+  // Atelier modal: Escape closes it (even while the prompt is focused).
+  if(k==='escape' && window.__atelierClose){ if(window.__atelierClose()) { e.preventDefault(); return; } }
+  // App-local hotkeys (never OS-routed) → always handled: tool letters + Ctrl+Q exit.
+  if(ctrl && k==='q'){ e.preventDefault(); exit(); return; }
+  // Tool letters are SUPPRESSED while typing (e.g. the Atelier prompt) — the isolation guard.
+  if(!ctrl && !isTyping()){ if(k==='x'){ swapColors(); return; } const map={b:'brush',l:'line',r:'rect',e:'ellipse'}; if(map[k]){ tool=map[k]; document.querySelectorAll('#tools .btn').forEach(x=>x.classList.toggle('active',x.dataset.tool===tool)); showOpts(tool); return; } }
+  // The rest (Ctrl+S/N/O/Z/Y, Ctrl+C/V, Delete) are OS shortcuts. In the shell they arrive as
+  // {type:'os-shortcut'} (single source); only act on them directly when running standalone.
+  if(inShell) return;
+  if(ctrl && k==='s'){ e.preventDefault(); e.shiftKey?saveAs():save(); }
+  else if(ctrl && k==='o'){ e.preventDefault(); CMD.open(); }
+  else if(ctrl && k==='n'){ e.preventDefault(); newCanvas(); }
+  else if(ctrl && k==='z' && !e.shiftKey){ e.preventDefault(); undo(); }
+  else if(ctrl && (k==='y'||(k==='z'&&e.shiftKey))){ e.preventDefault(); redo(); }
+  else if(ctrl && k==='c'){ e.preventDefault(); copyImage(); }
+  else if(ctrl && k==='v'){ e.preventDefault(); pasteImage(); }
+  else if(!ctrl && e.key==='Delete' && !isTyping()){ pushUndo(); fill(c.width,c.height); markDirty(); }
+});
+
+// ---- open via ?path= (launched from File Commander) ----
+const qp=new URLSearchParams(location.search).get('path'); if(qp) loadFromPath(qp);
+syncTitle();
+
+// =====================================================================================================
+// PAINT 2.0 — bridge the host-tested imaging.js (transparency, background removal, adjustments, filters,
+// transforms, selection, zoom, text) to the canvas. Every destructive op goes through pushUndo.
+// =====================================================================================================
+let IM=null; import('./imaging.js').then(m=>{ IM=m; }).catch(()=>{ IM=null; });
+function imOk(){ if(!IM){ setMsg('Modulo immagini non ancora caricato'); return false; } return true; }
+
+$('opacity').addEventListener('input', e=>{ brushOpacity=(+e.target.value)/100; $('opacityVal').textContent=e.target.value; });
+
+// Apply a pure imaging.js op (im -> {data,width,height}) to the whole canvas, undoable, resizing if needed.
+function applyImaging(fn, msg){ if(!imOk()) return; pushUndo();
+  const src={ data:ctx.getImageData(0,0,c.width,c.height).data, width:c.width, height:c.height };
+  let out; try{ out=fn(src); }catch(err){ setMsg('Operazione fallita: '+(err&&err.message||err)); return; }
+  if(!out) return;
+  if(out.width!==c.width||out.height!==c.height){ c.width=out.width; c.height=out.height; ov.width=out.width; ov.height=out.height; setSelection(null); }
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(out.data), out.width, out.height),0,0);
+  markDirty(); syncTitle(); applyZoom(); if(msg) setMsg(msg); }
+
+// ---- background tools ----
+function bgOpts(){ return { tolerance:+$('bgTol').value, feather:+$('bgFeather').value }; }
+function doWand(x,y){ if(!imOk()) return; pushUndo();
+  const src={ data:ctx.getImageData(0,0,c.width,c.height).data, width:c.width, height:c.height };
+  const tol=(+($('fillTol')?$('fillTol').value:40))||40;
+  const out=IM.magicWandErase(src,x,y,{tolerance:tol, feather:1});
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(out.data), out.width, out.height),0,0); markDirty(); setMsg('Sfondo cancellato (bacchetta)'); }
+
+// ---- selection (rectangular marquee on the overlay) ----
+function setSelection(s){ sel=s; octx.clearRect(0,0,ov.width,ov.height);
+  if(s){ octx.save(); octx.strokeStyle='#4ea1ff'; octx.lineWidth=1; octx.setLineDash([4,3]); octx.strokeRect(s.x+0.5,s.y+0.5,Math.max(1,s.w-1),Math.max(1,s.h-1)); octx.restore(); }
+  const info=$('selInfo'); if(info) info.textContent = s ? ('Selezione '+s.w+'×'+s.h+' a ('+s.x+','+s.y+')') : "Nessuna selezione. Strumento ▭ per selezionare un'area."; }
+function drawMarquee(x0,y0,x1,y1){ octx.clearRect(0,0,ov.width,ov.height); octx.save(); octx.strokeStyle='#4ea1ff'; octx.lineWidth=1; octx.setLineDash([4,3]);
+  const x=Math.min(x0,x1),y=Math.min(y0,y1),w=Math.abs(x1-x0),h=Math.abs(y1-y0); octx.strokeRect(x+0.5,y+0.5,w,h); octx.restore(); }
+function finalizeSelection(x0,y0,x1,y1){ const x=Math.max(0,Math.min(x0,x1)),y=Math.max(0,Math.min(y0,y1));
+  const w=Math.min(c.width-x,Math.abs(x1-x0)),h=Math.min(c.height-y,Math.abs(y1-y0));
+  if(w<2||h<2){ setSelection(null); return; } setSelection({x,y,w,h}); }
+function cropToSelection(){ if(!sel){ setMsg('Nessuna selezione'); return; } const s=sel; applyImagingAll(im=>IM.crop(im,s.x,s.y,s.w,s.h),'Ritagliato alla selezione'); }
+function clearSelection(){ if(!sel) return; pushUndo(); ctx.clearRect(sel.x,sel.y,sel.w,sel.h); markDirty(); setMsg('Area svuotata'); }
+function fillSelection(){ if(!sel) return; pushUndo(); ctx.save(); ctx.globalAlpha=brushOpacity; ctx.fillStyle=color; ctx.fillRect(sel.x,sel.y,sel.w,sel.h); ctx.restore(); markDirty(); }
+window.__paintSel=()=>sel;   // the Atelier reads this to generate INTO the selection
+
+// ---- text tool ----
+function placeText(x,y){ const t=prompt('Testo:'); if(t==null||t==='') return; pushUndo();
+  const fs=Math.max(8,parseInt($('fontSize')&&$('fontSize').value,10)||24), bold=($('fontBold')&&$('fontBold').checked)?'bold ':'';
+  ctx.save(); ctx.globalAlpha=brushOpacity; ctx.fillStyle=color; ctx.textBaseline='top';
+  ctx.font=bold+fs+"px 'Segoe UI',system-ui,sans-serif"; ctx.fillText(t,x,y); ctx.restore(); markDirty(); setMsg('Testo inserito'); }
+
+// ---- zoom (CSS transform on the wrap; pos() already divides by the on-screen rect so it stays accurate) ----
+let zoom=1;
+function applyZoom(){ wrap.style.transform = zoom===1 ? '' : ('scale('+zoom+')'); const z=$('zoomLbl'); if(z) z.textContent=Math.round(zoom*100)+'%'; if(typeof scheduleRulers==='function') scheduleRulers(); }
+function setZoom(z){ zoom=Math.max(0.1,Math.min(8,z)); applyZoom(); }
+function fitZoom(){ const sw=stage.clientWidth-48, sh=stage.clientHeight-48; setZoom(Math.min(sw/c.width, sh/c.height, 4)); }
+$('zoomIn').onclick=()=>setZoom(zoom*1.25); $('zoomOut').onclick=()=>setZoom(zoom/1.25); $('zoomFit').onclick=fitZoom;
+stage.addEventListener('wheel', e=>{ if(!e.ctrlKey) return; e.preventDefault(); setZoom(zoom*(e.deltaY<0?1.1:0.9)); }, {passive:false});
+
+// ---- adjustments (non-destructive live preview over a base snapshot) ----
+let adjBase=null, adjBaseState=null;
+function adjCapture(){ adjBase=ctx.getImageData(0,0,c.width,c.height); adjBaseState=snapState(); }
+function adjPreview(){ if(!adjBase||!IM) return; const b={ brightness:+$('adjB').value, contrast:+$('adjC').value, saturation:+$('adjS').value };
+  $('adjBVal').textContent=$('adjB').value; $('adjCVal').textContent=$('adjC').value; $('adjSVal').textContent=$('adjS').value;
+  const out=IM.adjust({ data:adjBase.data, width:adjBase.width, height:adjBase.height }, b);
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(out.data), out.width, out.height),0,0); }
+['adjB','adjC','adjS'].forEach(id=>$(id).addEventListener('input', ()=>{ if(!adjBase) adjCapture(); adjPreview(); }));
+function resetAdjSliders(){ ['adjB','adjC','adjS'].forEach(id=>{ $(id).value=0; }); $('adjBVal').textContent='0'; $('adjCVal').textContent='0'; $('adjSVal').textContent='0'; }
+function adjApply(){ if(!adjBase) return; undoStack.push(adjBaseState); if(undoStack.length>MAX_UNDO) undoStack.shift(); redoStack.length=0; adjBase=null; adjBaseState=null; markDirty(); setMsg('Regolazioni applicate'); resetAdjSliders(); }
+function adjReset(){ if(adjBase){ ctx.putImageData(adjBase,0,0); adjBase=null; adjBaseState=null; } resetAdjSliders(); setMsg('Ripristinato'); }
+$('bgTol').addEventListener('input', e=>$('bgTolVal').textContent=e.target.value);
+$('bgFeather').addEventListener('input', e=>$('bgFeatherVal').textContent=e.target.value);
+
+// ---- panel: section collapse + show/hide + tool-contextual expansion (progressive disclosure) ----
+document.querySelectorAll('.psec>h4').forEach(h=>h.addEventListener('click', ()=>h.parentElement.classList.toggle('collapsed')));
+const PANEL=$('panel'), PTOG=$('panelToggle');
+function togglePanel(force){ const hide = (force!=null) ? !force : !PANEL.classList.contains('hidden'); PANEL.classList.toggle('hidden', hide); PTOG.classList.toggle('on', !hide); }
+PTOG.onclick=()=>togglePanel(); $('panelClose').onclick=()=>togglePanel(false);
+const TOOLSEC={ select:'sel', wand:'bg' };   // picking these tools reveals their relevant panel section
+function focusToolSection(t){ const sec=TOOLSEC[t]; if(!sec) return; if(PANEL.classList.contains('hidden')) togglePanel(true);
+  const el=document.querySelector('.psec[data-sec="'+sec+'"]'); if(el){ el.classList.remove('collapsed'); el.querySelector('h4').scrollIntoView({block:'nearest'}); } }
+$('tools').addEventListener('click', e=>{ const b=e.target.closest('[data-tool]'); if(b){ focusToolSection(b.dataset.tool); showOpts(b.dataset.tool); } });
+
+// ---- secondary colour + swap ----
+$('color2').addEventListener('input', e=>color2=e.target.value);
+function swapColors(){ const t=color; color=color2; color2=t; $('color').value=color; $('color2').value=color2; }
+$('colorSwap').onclick=swapColors;
+
+// ---- contextual options bar (Photoshop-style: the bar reflects the active tool) ----
+const TOOLNAME={brush:'Pennello',line:'Linea',rect:'Rettangolo',ellipse:'Ellisse',eraser:'Gomma',fill:'Secchiello',pick:'Contagocce',select:'Selezione',wand:'Bacchetta magica',text:'Testo'};
+const TOOLHINT={brush:'Trascina per disegnare · opacità nel pannello',eraser:'Cancella in trasparente (alpha PNG)',fill:'Clicca per riempire un’area · tolleranza qui',pick:'Clicca per prelevare un colore',select:'Trascina un rettangolo, poi usa il pannello Selezione',wand:'Clicca lo sfondo da cancellare',text:'Clicca dove vuoi scrivere',line:'Trascina · Shift per vincolare l’angolo',rect:'Trascina · Shift per un quadrato',ellipse:'Trascina · Shift per un cerchio'};
+function showOpts(t){ const ot=$('optTool'); if(ot) ot.textContent=TOOLNAME[t]||t; const oh=$('optHint'); if(oh) oh.textContent=TOOLHINT[t]||'';
+  document.querySelectorAll('#optsbar .opt-grp').forEach(g=>g.classList.toggle('show',(g.dataset.for||'').split(' ').includes(t))); }
+$('fillTol').addEventListener('input', e=>$('fillTolVal').textContent=e.target.value);
+showOpts('brush');
+
+// ---- rulers (canvas coordinates, accurate under zoom + scroll) ----
+const rTop=$('rulerTop'), rLeft=$('rulerLeft'), rtx=rTop.getContext('2d'), rlx=rLeft.getContext('2d');
+let rulersOn=true, mc={x:-1,y:-1};
+function sizeRulers(){ rTop.width=rTop.clientWidth||1; rTop.height=22; rLeft.width=22; rLeft.height=rLeft.clientHeight||1; }
+function niceStep(){ const target=64/zoom; const p=Math.pow(10,Math.floor(Math.log10(target))); for(const m of [1,2,5,10]) if(p*m>=target) return p*m; return p*10; }
+function drawRulers(){ if(!rulersOn) return; const cr=c.getBoundingClientRect(), tr=rTop.getBoundingClientRect(), lr=rLeft.getBoundingClientRect();
+  const step=niceStep(), bg='#0f1521', tick='rgba(255,255,255,.28)', lab='#7e8aa0';
+  rtx.fillStyle=bg; rtx.fillRect(0,0,rTop.width,rTop.height); rtx.strokeStyle=tick; rtx.fillStyle=lab; rtx.font='9px system-ui,sans-serif'; rtx.beginPath();
+  const x0=cr.left-tr.left;
+  for(let v=0; v<=c.width+1; v+=step){ const px=Math.round(x0+v*zoom)+0.5; if(px<-1||px>rTop.width+1) continue; rtx.moveTo(px,22); rtx.lineTo(px,11); rtx.fillText(String(Math.round(v)),px+2,9); }
+  rtx.stroke();
+  if(mc.x>=0){ rtx.fillStyle='#4ea1ff'; rtx.fillRect(Math.round(x0+mc.x*zoom),0,1,22); }
+  rlx.fillStyle=bg; rlx.fillRect(0,0,rLeft.width,rLeft.height); rlx.strokeStyle=tick; rlx.fillStyle=lab; rlx.font='9px system-ui,sans-serif'; rlx.beginPath();
+  const y0=cr.top-lr.top;
+  for(let v=0; v<=c.height+1; v+=step){ const py=Math.round(y0+v*zoom)+0.5; if(py<-1||py>rLeft.height+1) continue; rlx.moveTo(22,py); rlx.lineTo(11,py); rlx.save(); rlx.translate(9,py-2); rlx.rotate(-Math.PI/2); rlx.fillText(String(Math.round(v)),0,0); rlx.restore(); }
+  rlx.stroke();
+  if(mc.y>=0){ rlx.fillStyle='#4ea1ff'; rlx.fillRect(0,Math.round(y0+mc.y*zoom),22,1); } }
+let rRAF=0; function scheduleRulers(){ if(rRAF) return; rRAF=requestAnimationFrame(()=>{ rRAF=0; drawRulers(); }); }
+stage.addEventListener('scroll', scheduleRulers);
+stage.addEventListener('mousemove', e=>{ mc=pos(e); scheduleRulers(); });
+stage.addEventListener('mouseleave', ()=>{ mc={x:-1,y:-1}; scheduleRulers(); });
+window.addEventListener('resize', ()=>{ sizeRulers(); scheduleRulers(); });
+try{ new ResizeObserver(()=>{ sizeRulers(); scheduleRulers(); }).observe($('canvasarea')); }catch{}
+sizeRulers(); scheduleRulers();
+
+// ---- view toggles + extra CMD entries ----
+Object.assign(CMD, {
+  togglePanel:()=>togglePanel(), zoomReset:()=>setZoom(1), fitZoom:()=>fitZoom(),
+  toggleRulers:()=>{ const ca=$('canvasarea'); rulersOn=ca.classList.toggle('norulers')?false:true; if(rulersOn){ sizeRulers(); scheduleRulers(); } setMsg('Righelli '+(rulersOn?'on':'off')); },
+  toggleGrid:()=>{ const on=$('gridOverlay').classList.toggle('on'); setMsg('Griglia '+(on?'on':'off')); },
+  tour:()=>startTour(true), shortcuts:()=>showShortcuts(),
+});
+
+// ---- new commands wired into the existing CMD map (menus + panel buttons share [data-cmd]) ----
+Object.assign(CMD, {
+  newTransparent:()=>{ pushUndo(); bgTransparent=true; resetLayers(c.width,c.height,null,'Livello 1'); path=''; dirty=false; setSelection(null); syncTitle(); setMsg('Nuova tela trasparente'); },
+  copy:copyImage, paste:pasteImage,
+  cropSel:cropToSelection, clearSel:clearSelection, fillSel:fillSelection, deselect:()=>setSelection(null),
+  genSel:()=>{ if(window.openAtelier) window.openAtelier(sel?'sketch':'text'); },
+  trim:()=>{ if(!imOk())return; const comp=compositeCanvas(); const bb=IM.trimTransparent({data:comp.getContext('2d').getImageData(0,0,comp.width,comp.height).data,width:comp.width,height:comp.height});
+    if(bb.empty){ setMsg('Tela vuota'); return; } applyImagingAll(im=>IM.crop(im,bb.x,bb.y,bb.width,bb.height),'Bordi trasparenti rifilati'); },
+  rotcw:()=>applyImagingAll(im=>IM.rotate90(im,'cw'),'Ruotato 90°'), rotccw:()=>applyImagingAll(im=>IM.rotate90(im,'ccw'),'Ruotato 90°'),
+  fliph:()=>applyImagingAll(im=>IM.flipH(im),'Riflesso'), flipv:()=>applyImagingAll(im=>IM.flipV(im),'Riflesso'),
+  removeBg:()=>{ bgTransparent=true; applyImaging(im=>IM.removeBackgroundAuto(im,bgOpts()),'Sfondo rimosso (livello attivo)'); },
+  fxGray:()=>applyImaging(im=>IM.grayscale(im),'Scala di grigi'), fxInvert:()=>applyImaging(im=>IM.invert(im),'Colori invertiti'),
+  fxSepia:()=>applyImaging(im=>IM.sepia(im),'Seppia'), fxBlur:()=>applyImaging(im=>IM.blur(im),'Sfocato'),
+  fxSharp:()=>applyImaging(im=>IM.sharpen(im),'Nitidezza aumentata'), fxEdges:()=>applyImaging(im=>IM.edges(im),'Contorni'),
+  openAdjust:()=>{ const s=document.querySelector('.psec[data-sec="adj"]'); if(s){ s.classList.remove('collapsed'); s.scrollIntoView({block:'nearest'}); } adjCapture(); },
+  adjApply, adjReset,
+  layerAdd:addLayer, layerDel:deleteLayer, layerDup:duplicateLayer, layerUp:()=>moveLayer(1), layerDown:()=>moveLayer(-1), layerMerge:mergeDown, layerFlatten:flattenLayers,
+});
+// layers panel: active-layer opacity + blend (no undo on drag — easily reversible)
+$('layOpacity').addEventListener('input', e=>{ setLayerOpacity((+e.target.value)/100); $('layOpacityVal').textContent=e.target.value; });
+$('layBlend').addEventListener('change', e=>setLayerBlend(e.target.value));
+
+// ===== NATURAL-LANGUAGE COMMAND BAR — type a phrase, Paint does it. DETERMINISTIC + OFFLINE (nlcommand.js,
+// zero hallucination). Fully ISOLATED in Paint: nothing routes through ANIMA; ANIMA still never touches images.
+let NLC=null; import('./nlcommand.js').then(m=>NLC=m).catch(()=>{});
+function cmdLang(){ try{ return (localStorage.getItem('anima.lang')||navigator.language||'it').toLowerCase().slice(0,2)==='en'?'en':'it'; }catch{ return 'it'; } }
+function cmdResp(text,cls){ const r=$('cmdResp'); if(r){ r.textContent=text||''; r.className='cmd-resp'+(cls?' '+cls:''); } if(text) setMsg(text); }
+async function runCommand(text){ if(!text||!text.trim()) return; if(!NLC){ try{ NLC=await import('./nlcommand.js'); }catch{ cmdResp('Modulo comandi non caricato','warn'); return; } }
+  const d=NLC.parseCommand(text, cmdLang());
+  if(d.kind==='edit'){ try{ executeEdit(d); cmdResp(d.reply,'ok'); }catch(e){ cmdResp('Errore: '+(e&&e.message||e),'warn'); } }
+  else if(d.kind==='generate'){ cmdResp(d.reply,'ok'); const b=NLC.buildGeneration(d, cmdLang()); if(window.__atelierRun) window.__atelierRun(b); else if(window.openAtelier) window.openAtelier('text'); }
+  else cmdResp(d.reply,'warn'); }
+function executeEdit(d){
+  const simple=['rotcw','rotccw','fliph','flipv','removeBg','fxGray','fxInvert','fxSepia','fxBlur','fxSharp','fxEdges','trim','cropSel','layerAdd','layerDup','layerMerge','layerFlatten','layerDel','undo','redo','save','deselect','toggleGrid','toggleRulers','fitZoom','zoomReset','newTransparent'];
+  if(simple.includes(d.op)){ if(CMD[d.op]) CMD[d.op](); return; }
+  if(d.op==='clear'){ pushUndo(); fill(c.width,c.height); markDirty(); return; }
+  if(d.op==='fill'){ color=d.color; $('color').value=d.color; if(sel) fillSelection();
+    else { pushUndo(); ctx.save(); ctx.globalAlpha=brushOpacity; ctx.fillStyle=d.color; ctx.fillRect(0,0,c.width,c.height); ctx.restore(); markDirty(); } return; }
+  if(d.op==='opacity'){ $('layOpacity').value=d.value; setLayerOpacity(d.value/100); renderLayersUI(); return; }
+  if(d.op==='resize'){ pushUndo(); layers.forEach(L=>{ const tmp=document.createElement('canvas'); tmp.width=L.canvas.width; tmp.height=L.canvas.height; tmp.getContext('2d').drawImage(L.canvas,0,0);
+    L.canvas.width=d.w; L.canvas.height=d.h; L.ctx.clearRect(0,0,d.w,d.h); L.ctx.drawImage(tmp,0,0); }); setImageSize(d.w,d.h); markDirty(); syncTitle(); applyZoom(); renderLayersUI(); return; }
+  if(d.op==='zoom'){ if(d.dir==='in') setZoom(zoom*1.25); else if(d.dir==='out') setZoom(zoom/1.25); else if(d.value) setZoom(d.value/100); return; }
+  if(d.op==='adjust'){ const sid={brightness:'adjB',contrast:'adjC',saturation:'adjS'}[d.which], vid={brightness:'adjBVal',contrast:'adjCVal',saturation:'adjSVal'}[d.which];
+    if(!adjBase) adjCapture(); const cur=+$(sid).value, nv=Math.max(-100,Math.min(100, d.mode==='set'? d.value : cur+d.value));
+    $(sid).value=nv; $(vid).textContent=nv; adjPreview(); adjApply(); return; }
+}
+$('cmdGo').onclick=()=>{ const v=$('cmdInput').value; runCommand(v); };
+$('cmdInput').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); const v=$('cmdInput').value; $('cmdInput').value=''; runCommand(v); } });
+// extra tool hotkeys (M select, W wand, T text) + Tab toggles the panel — suppressed while typing, never with Ctrl.
+window.addEventListener('keydown', e=>{ if(e.ctrlKey||e.metaKey||isTyping()) return; const map={m:'select',w:'wand',t:'text'}, k=e.key.toLowerCase();
+  if(k==='tab'){ e.preventDefault(); togglePanel(); return; }
+  if(map[k]){ tool=map[k]; document.querySelectorAll('#tools .btn').forEach(x=>x.classList.toggle('active',x.dataset.tool===tool)); focusToolSection(tool); showOpts(tool); } });
+
+// ---- guided tutorial (tour.js) — bilingual, first-run + Aiuto menu ----
+let _tour=null;
+function tourLang(){ try{ const l=(localStorage.getItem('anima.lang')||navigator.language||'it').toLowerCase(); return l.slice(0,2)==='en'?'en':'it'; }catch{ return 'it'; } }
+async function loadTour(){ if(!_tour) _tour=await import('./tour.js'); return _tour; }
+async function startTour(force){ try{ const m=await loadTour(); m.startTour({ lang:tourLang(), force:!!force, modelDir:'/apps/paint/models/sdxs-512-dreamshaper-sketch', inShell }); }catch(e){ setMsg('Tutorial non disponibile'); } }
+async function showShortcuts(){ try{ const m=await loadTour(); m.showShortcuts(tourLang()); }catch{} }
+setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(false); }catch{} }, 700);   // first-run auto-start
+
+// =====================================================================================================
+// ATELIER — AI image generation, fully ISOLATED inside Paint. Generation runs on the CLIENT GPU (WebGPU)
+// via Stable Diffusion XS served from the Cardputer SD; if the model isn't downloaded or WebGPU is absent
+// it falls back to a deterministic procedural preview (honest banner). The prompt box is keyboard-isolated
+// (see isTyping()), so typing never touches the drawing tools. Nothing here routes through ANIMA's engine.
+// =====================================================================================================
+(function(){
+  const MODEL_DIR='/apps/paint/www/models/sdxs-512-dreamshaper-sketch';  // raw SD path for /api/fs/read (www incluso)
+  const RES=512;
+  let engine=null, engKind='', booting=null, generating=false, el={}, back=null;
+
+  const rnd = ()=> (Math.floor(Math.random()*1e9));
+
+  function buildModal(){
+    back=document.createElement('div'); back.className='atl-backdrop';
+    back.innerHTML=`
+      <div class="atl" role="dialog" aria-label="Atelier" onclick="event.stopPropagation()">
+        <div class="atl-head"><span>✨</span><h3>Atelier — genera un'immagine</h3>
+          <button class="atl-mini" id="atlModelBtn" title="Gestione modello SDXS">⚙&nbsp;Modello</button>
+          <button class="atl-x" id="atlX" title="Chiudi (Esc)">×</button></div>
+        <div class="atl-body">
+          <div class="atl-mm" id="atlManager" style="display:none"></div>
+          <div id="atlStudio">
+          <div class="atl-tabs" id="atlTabs">
+            <div class="atl-tab on" data-mode="text">Testo → Immagine</div>
+            <div class="atl-tab" data-mode="sketch">Schizzo → Immagine</div>
+            <div class="atl-tab" data-mode="img">Da immagine</div>
+          </div>
+          <div><label>Descrizione (prompt)</label><textarea id="atlPrompt" placeholder="es. un gatto rosso seduto su un divano, luce calda, stile acquerello"></textarea></div>
+          <div><label>Cosa evitare (negative, opzionale)</label><textarea id="atlNeg" style="min-height:38px" placeholder="es. sfocato, deforme, testo, filigrana, bassa qualità"></textarea></div>
+          <div id="atlHint" class="atl-status"></div>
+          <div class="atl-row">
+            <div><label>Seed (riproducibile)</label><div class="atl-seed"><input type="number" id="atlSeed" value="42" min="0" step="1"><button class="atl-mini" id="atlDice" title="Seed casuale">🎲</button></div></div>
+            <div><label>Varianti: <span id="atlVarVal">1</span></label><input type="range" id="atlVar" min="1" max="6" step="1" value="1" style="width:100%"></div>
+          </div>
+          <div class="atl-row">
+            <div id="atlCtrlWrap" style="display:none"><label>Aderenza allo schizzo: <span id="atlCtrlVal">0.85</span></label><input type="range" id="atlCtrl" min="0" max="1" step="0.05" value="0.85" style="width:100%"></div>
+            <div id="atlStrWrap" style="display:none"><label>Forza (img→img): <span id="atlStrVal">0.6</span></label><input type="range" id="atlStr" min="0" max="1" step="0.05" value="0.6" style="width:100%"></div>
+          </div>
+          <div class="atl-prog" id="atlProg"><i id="atlProgBar"></i></div>
+          <div class="atl-status" id="atlStatus"></div>
+          <div class="atl-variants" id="atlVariants"></div>
+          <div class="atl-banner" id="atlBanner"></div>
+          </div>
+        </div>
+        <div class="atl-foot" id="atlFoot">
+          <label class="atl-chk"><input type="checkbox" id="atlLayer"> nuovo livello</label>
+          <label class="atl-chk"><input type="checkbox" id="atlSave" checked> salva su Cardputer</label>
+          <button class="atl-go" id="atlGo">Genera</button>
+        </div>
+        <div class="atl-dl" id="atlDl"></div>
+      </div>`;
+    back.addEventListener('click', ()=>close());
+    document.body.appendChild(back);
+    const q=s=>back.querySelector(s);
+    el={ tabs:q('#atlTabs'), prompt:q('#atlPrompt'), neg:q('#atlNeg'), hint:q('#atlHint'),
+         seed:q('#atlSeed'), dice:q('#atlDice'), varEl:q('#atlVar'), varVal:q('#atlVarVal'),
+         ctrlWrap:q('#atlCtrlWrap'), ctrl:q('#atlCtrl'), ctrlVal:q('#atlCtrlVal'),
+         strWrap:q('#atlStrWrap'), str:q('#atlStr'), strVal:q('#atlStrVal'), prog:q('#atlProg'),
+         progBar:q('#atlProgBar'), status:q('#atlStatus'), variants:q('#atlVariants'), banner:q('#atlBanner'),
+         layer:q('#atlLayer'), save:q('#atlSave'), go:q('#atlGo'), x:q('#atlX'),
+         model:q('#atlModelBtn'), manager:q('#atlManager'), studio:q('#atlStudio'), foot:q('#atlFoot'), dl:q('#atlDl') };
+    el.x.onclick=close;
+    el.model.onclick=openManager;
+    el.go.onclick=generate;
+    el.dice.onclick=()=>{ el.seed.value=rnd(); };
+    el.str.oninput=()=>{ el.strVal.textContent=(+el.str.value).toFixed(2); };
+    el.ctrl.oninput=()=>{ el.ctrlVal.textContent=(+el.ctrl.value).toFixed(2); };
+    el.varEl.oninput=()=>{ el.varVal.textContent=el.varEl.value; };
+    el.tabs.onclick=(e)=>{ const t=e.target.closest('[data-mode]'); if(!t) return; setMode(t.dataset.mode); };
+  }
+  let mode='text';
+  function setMode(m){ mode=m; [...el.tabs.children].forEach(x=>x.classList.toggle('on', x.dataset.mode===m));
+    el.strWrap.style.display = m==='img' ? '' : 'none';
+    el.ctrlWrap.style.display = m==='sketch' ? '' : 'none';
+    const s = window.__paintSel && window.__paintSel();
+    const selNote = s ? ` · genererò NELLA selezione ${s.w}×${s.h}` : '';
+    el.hint.textContent = (m==='sketch' ? 'Usa il tuo disegno come schizzo guida (ControlNet).'
+      : m==='img' ? 'Rielabora il contenuto attuale della tela secondo il prompt.'
+      : 'Genera dal solo testo (tela ignorata).') + selNote;
+  }
+  function banner(kind, text){ el.banner.className='atl-banner show '+kind; el.banner.textContent=text; }
+  function clearBanner(){ el.banner.className='atl-banner'; el.banner.textContent=''; }
+  function setProg(p){ if(!p){ el.prog.classList.remove('show'); return; } el.prog.classList.add('show');
+    let pct=0;
+    if(p.totalBytes&&p.bytes) pct=Math.round((p.bytes/p.totalBytes)*100);
+    else if(p.index!=null&&p.total) pct=Math.round(p.index/p.total*100);
+    el.progBar.style.width=Math.max(4,Math.min(100,pct))+'%';
+    if(p.phase==='fetch'&&p.bytes){
+      const mb=(p.bytes/1e6).toFixed(0), tot=p.totalBytes?(p.totalBytes/1e6).toFixed(0):'?';
+      el.status.textContent=mb+'/'+tot+' MB';
+    } else if(p.role){ el.status.textContent='Carico '+p.role+'…'; }
+  }
+
+  function open(m){ if(!back) buildModal(); setMode(m||'text'); clearBanner(); el.status.textContent=''; if(el.variants) el.variants.innerHTML=''; back.classList.add('open');
+    setTimeout(()=>{ if(el.studio.style.display!=='none' && el.prompt) el.prompt.focus(); },30); boot(); }
+  function close(){ if(window.__atelierBusy) return false;   // download in corso → chiusura bloccata
+    if(back && back.classList.contains('open')){ back.classList.remove('open'); c.focus&&c.focus(); return true; } return false; }
+  window.__atelierClose=close;
+
+  // =====================================================================================================
+  //  MODEL MANAGER — explicit, user-driven provisioning of the SDXS engine.
+  //  Sources (priority shown to user): local cache (instant) · Internet (GitHub) · Cardputer SD (WiFi).
+  //  Download is BLOCKING: while it runs the modal is locked (no close, no drag-drop), steps are shown,
+  //  failures are explained with retry/alternative. Once fetched the model lives in IndexedDB → instant next time.
+  // =====================================================================================================
+  const REV='2024-12-lsb';                                                       // cache revision (matches provision-lsb.mjs)
+  const LSB='https://raw.githubusercontent.com/lsb/sdxs-controlnet-sketch/trunk';// internet model source
+  const HF ='https://huggingface.co/IDKiro/sdxs-512-dreamshaper/resolve/main/tokenizer';
+  const NET_SRCS=[                                                               // internet components (download order)
+    {role:'text-encoder', file:'sd_text_encoder_q8.onnx', parts:3, bytes:124e6, label:'Text encoder'},
+    {role:'fused',        file:'sd512q68.onnx',           parts:9, bytes:429e6, label:'Modello fuso (ControlNet + UNet + VAE)'},
+  ];
+  const TOTAL_BYTES=NET_SRCS.reduce((a,s)=>a+s.bytes,0);                         // ≈553 MB
+  const pad3=n=>String(n).padStart(3,'0');
+  const FUSED_IO={fused:{image:'image',promptEmbeds:'prompt_embeds',conditioningScale:'conditioning_scale',latents:'latents',output:'output_image'},text:{input:'input_ids',output:'output_embeddings'}};
+  // ORT runtime (22.5 MB) is too big for the Cardputer httpd (→503), so it's chunked on the SD like the
+  // model and handed to ORT via wasm.wasmBinary. Delivery priority: cache → SD chunks → CDN (version-pinned).
+  const ORT_WASM_DIR='/apps/paint/www/vendor/onnxruntime-web/';                  // raw SD path for /api/fs/read
+  const ORT_WASM_FILE='ort-wasm-simd-threaded.asyncify.wasm';
+  const ORT_WASM_PARTS=4, ORT_WASM_BYTES=23678474;                              // from tools/sdxs/chunk-ort-wasm.mjs
+  const ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/';     // matches vendored version
+  let modelCache=null, probe=null, ort=null, depsReady=false, manState=null, ortWasmReady=false;
+
+  async function ensureDeps(){
+    if(depsReady) return;
+    const {makeModelCache}=await import('./diffusion/model-cache.js');
+    modelCache=makeModelCache({revision:REV});
+    try{ probe=await import('./diffusion/webgpu-probe.js').then(m=>m.probeDiffusion({})); }catch{ probe={ep:'wasm'}; }
+    try{ ort=await import('./vendor/onnxruntime-web/ort.webgpu.min.mjs').then(m=>m.default||m); }catch{}
+    if(ort&&ort.env&&ort.env.wasm){
+      // ORT must be told where its .wasm/.mjs backend lives, else it fetches from a CDN (offline → fail).
+      // Resolve to the served vendor dir on whatever host (Cardputer IP or dev server).
+      try{ ort.env.wasm.wasmPaths=new URL('./vendor/onnxruntime-web/',location.href).href; }catch{}
+      ort.env.wasm.numThreads=1;          // no SharedArrayBuffer (httpd lacks COOP/COEP) → single-thread
+      ort.env.wasm.proxy=false;
+    }
+    depsReady=true;
+  }
+  const eps=()=> (probe&&probe.ep==='webgpu')?['webgpu','wasm']:['wasm'];
+
+  // Ensure ORT's wasm backend is available without the httpd ever serving the 22.5 MB blob whole.
+  // Priority: cache → SD chunks (/api/fs/read, offline) → whole local file (dev/host w/o 7 MB limit) → CDN.
+  // The first three deliver the EXACT vendored bytes (matched to the local glue .mjs) via wasm.wasmBinary;
+  // only the last resort hits the version-pinned CDN.
+  async function ensureRuntime(onStep){
+    if(ortWasmReady) return;
+    const useBinary=(bin)=>{ modelCache.put('ort-wasm',bin); ort.env.wasm.wasmBinary=bin.buffer; ortWasmReady=true;
+      onStep&&onStep('runtime',{state:'done',bytes:bin.byteLength,totalBytes:bin.byteLength}); };
+
+    // 1) cache (instant, offline)
+    let bin=await modelCache.get('ort-wasm');
+    if(bin){ useBinary(bin); return; }
+
+    // 2) SD chunks via /api/fs/read (Cardputer — 7 MB pieces dodge the static-handler 503)
+    try{
+      onStep&&onStep('runtime',{state:'active'});
+      let parts=ORT_WASM_PARTS, bytes=ORT_WASM_BYTES;
+      const mf=await fetch('/api/fs/read?path='+encodeURIComponent(ORT_WASM_DIR+'ort-wasm.manifest.json')+'&t='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null);
+      if(mf&&mf.parts){parts=mf.parts;bytes=mf.bytes;}
+      const chunks=[];let soFar=0;
+      for(let i=0;i<parts;i++){
+        const r=await fetch('/api/fs/read?path='+encodeURIComponent(ORT_WASM_DIR+ORT_WASM_FILE+'.'+pad3(i))+'&t='+Date.now());
+        if(!r.ok) throw new Error('SD '+r.status);
+        const b=new Uint8Array(await r.arrayBuffer());chunks.push(b);soFar+=b.byteLength;
+        onStep&&onStep('runtime',{state:'active',bytes:soFar,totalBytes:bytes,part:i+1,parts});
+      }
+      const out=new Uint8Array(soFar);let off=0;for(const c of chunks){out.set(c,off);off+=c.byteLength;}
+      useBinary(out); return;
+    }catch{}
+
+    // 3) whole vendored file from the static server (dev server / any host without the 7 MB limit; 503 on the Cardputer → skip)
+    try{
+      const r=await fetch(new URL('./vendor/onnxruntime-web/'+ORT_WASM_FILE,location.href).href);
+      if(r.ok){ useBinary(new Uint8Array(await r.arrayBuffer())); return; }
+    }catch{}
+
+    // 4) CDN (version-pinned; matched glue .mjs + .wasm fetched lazily on createSession)
+    ort.env.wasm.wasmPaths=ORT_CDN; ortWasmReady=true;
+    onStep&&onStep('runtime',{state:'done',bytes:ORT_WASM_BYTES,totalBytes:ORT_WASM_BYTES});
+  }
+
+  // Inspect every source and report what's available right now.
+  async function probeState(){
+    await ensureDeps();
+    const [netF,netT,man]=await Promise.all([
+      modelCache.get('net-fused'),
+      modelCache.get('net-text-encoder'),
+      fetch('/api/fs/read?path='+encodeURIComponent(MODEL_DIR+'/manifest.json')+'&t='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
+    ]);
+    manState=man;
+    const netCached=!!(netF&&netT);                                             // both internet components present
+    const fusedComp=man&&man.components&&man.components.find(c=>c.role==='fused');
+    const sdCached=fusedComp&&fusedComp.partSha?await modelCache.hasAny(fusedComp.partSha):false;
+    return { cached:netCached||sdCached, cachedKind:netCached?'net':(sdCached?'sd':null),
+             onSD:!!(man&&Array.isArray(man.components)), ortOk:!!(ort&&ort.InferenceSession),
+             webgpu:!!(probe&&probe.ep==='webgpu') };
+  }
+
+  // Tokenizer: SD copy → cached internet copy → HuggingFace.
+  async function getTokenizer(){
+    const {makeClipTokenizer}=await import('./diffusion/clip-tokenizer.js');
+    if(manState){
+      const tj=await fetch('/api/fs/read?path='+encodeURIComponent(MODEL_DIR+'/tokenizer.json')+'&t='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null);
+      if(tj){const v=(tj.model&&tj.model.vocab)||tj.vocab||{},m=(tj.model&&tj.model.merges)||tj.merges||[];return makeClipTokenizer({vocab:v,merges:m});}
+    }
+    const ntok=await modelCache.get('net-tokenizer');
+    if(ntok){try{const tj=JSON.parse(new TextDecoder().decode(ntok));return makeClipTokenizer({vocab:tj.vocab,merges:tj.merges});}catch{}}
+    try{
+      const [vR,mR]=await Promise.all([fetch(HF+'/vocab.json'),fetch(HF+'/merges.txt')]);
+      if(!vR.ok||!mR.ok) return null;
+      const vocab=await vR.json();
+      const merges=(await mR.text()).split('\n').filter(l=>l&&!l.startsWith('#'));
+      modelCache.put('net-tokenizer',new TextEncoder().encode(JSON.stringify({vocab,merges})));
+      return makeClipTokenizer({vocab,merges});
+    }catch{return null;}
+  }
+
+  // Download every component for a source into a {role:Uint8Array} map, reporting per-step progress.
+  async function downloadComponents(source, onStep){
+    const bufs={};
+    if(source==='sd'){
+      if(!manState||!Array.isArray(manState.components)) throw new Error('manifest SD assente');
+      const {loadComponent}=await import('./diffusion/sd-loader.js');
+      const rawRead=(path)=>fetch('/api/fs/read?path='+encodeURIComponent(path)+'&t='+Date.now())
+        .then(async r=>r.ok?{ok:true,status:r.status,bytes:new Uint8Array(await r.arrayBuffer())}:{ok:false,status:r.status})
+        .catch(()=>({ok:false,status:0}));
+      for(const comp of manState.components){
+        if(!comp.parts) continue;                                              // skip tokenizer.json (parts:0)
+        onStep(comp.role,{state:'active'});
+        const res=await loadComponent({base:MODEL_DIR+'/'+comp.file,parts:comp.parts,totalBytes:comp.bytes,
+          readPart:modelCache.wrap(rawRead,comp.partSha),
+          onProgress:p=>onStep(comp.role,{state:'active',bytes:p.bytes,totalBytes:p.totalBytes,part:p.index,parts:p.total})});
+        if(!res.ok) throw new Error('lettura SD '+comp.role+' '+(res.status||''));
+        bufs[comp.role]=new Uint8Array(res.buffer);
+        onStep(comp.role,{state:'done',bytes:comp.bytes,totalBytes:comp.bytes});
+      }
+    } else {                                                                    // internet
+      for(const src of NET_SRCS){
+        onStep(src.role,{state:'active'});
+        const chunks=[];let soFar=0;
+        for(let i=0;i<src.parts;i++){
+          const r=await fetch(`${LSB}/${src.file}.${pad3(i)}.db`);
+          if(!r.ok) throw new Error(src.label+': HTTP '+r.status);
+          const b=new Uint8Array(await r.arrayBuffer());
+          chunks.push(b);soFar+=b.byteLength;
+          onStep(src.role,{state:'active',bytes:soFar,totalBytes:src.bytes,part:i+1,parts:src.parts});
+        }
+        const buf=new Uint8Array(soFar);let off=0;for(const ch of chunks){buf.set(ch,off);off+=ch.byteLength;}
+        bufs[src.role]=buf; modelCache.put('net-'+src.role,buf);                // persist for next time
+        onStep(src.role,{state:'done',bytes:soFar,totalBytes:src.bytes});
+      }
+    }
+    return bufs;
+  }
+
+  // Assemble an inference engine from already-loaded component buffers.
+  // onStep (optional) drives the 'runtime' + 'engine' rows of the blocking overlay.
+  async function buildEngine(bufs, source, onStep){
+    const tokenizer=await getTokenizer(); if(!tokenizer) throw new Error('tokenizer non disponibile');
+    await ensureRuntime(onStep);                                                // ORT wasm ready before any session
+    onStep&&onStep('engine',{state:'active'});
+    const {makeFusedEngine,makeDiffusionEngine}=await import('./diffusion/diffusion-engine.js');
+    const createSession=(role,buf)=>ort.InferenceSession.create(buf,{executionProviders:eps()});
+    const loadComp=async(comp)=>{ const b=bufs[comp.role]; return b?{ok:true,buffer:b.buffer}:{ok:false,error:'miss:'+comp.role}; };
+    const makeTensor=(data,dims,type)=>new ort.Tensor(type,data,dims);             // real ort.Tensor (host tests use the plain default)
+    if(source==='sd' && manState && manState.format && manState.format!=='lsb-fused'){
+      const cfg={...manState,ep:probe&&probe.ep||'wasm',components:manState.components};
+      const eng=makeDiffusionEngine({createSession,loadComponent:loadComp,tokenizer,config:cfg,makeTensor});
+      const ld=await eng.load(); if(!ld||!ld.ok) throw new Error('avvio motore fallito'); return eng;
+    }
+    const cfg={format:'lsb-fused',revision:REV,resolution:RES,steps:1,ep:probe&&probe.ep||'wasm',io:FUSED_IO,components:[{role:'fused'},{role:'text-encoder'}]};
+    const eng=makeFusedEngine({createSession,loadComponent:loadComp,tokenizer,config:cfg,makeTensor});
+    const ld=await eng.load(); if(!ld||!ld.ok) throw new Error('avvio motore fallito'); return eng;
+  }
+
+  // Instant load from cache (no network) — used on open when the model is already local.
+  async function loadCached(kind){
+    let bufs;
+    if(kind==='net') bufs={fused:await modelCache.get('net-fused'),'text-encoder':await modelCache.get('net-text-encoder')};
+    else bufs=await downloadComponents('sd',()=>{});                            // chunks are cached → no WiFi
+    return await buildEngine(bufs, kind==='net'?'internet':'sd', null);
+  }
+
+  async function useMock(){
+    const de=await import('./diffusion/diffusion-engine.js');
+    engine=de.makeMockEngine({resolution:RES}); engKind='mock'; await engine.load();
+    showStudio(); showReady();
+    banner('info',"Anteprima procedurale attiva. Per immagini reali apri ⚙ Modello e scarica SDXS.");
+  }
+
+  // ---- view switching + busy lock ----------------------------------------------------------------------
+  function setBusy(b){ window.__atelierBusy=b;
+    if(el.x){ el.x.style.opacity=b?'.35':''; el.x.style.pointerEvents=b?'none':''; }
+    if(el.model) el.model.disabled=!!b; }
+  function showStudio(){ el.manager.style.display='none'; el.studio.style.display=''; el.foot.style.display=''; }
+  function showManagerView(){ el.studio.style.display='none'; el.foot.style.display='none'; el.manager.style.display=''; }
+
+  // ---- boot: instant if cached, otherwise present the manager (never auto-download) --------------------
+  async function boot(){
+    if(engine){ showReady(); return engine; }
+    if(booting) return booting;
+    el.status.textContent='Verifico modello…';
+    booting=(async()=>{
+      let st; try{ st=await probeState(); }catch{ st={cached:false,cachedKind:null,onSD:false,ortOk:false,webgpu:false}; }
+      if(st.cached && st.ortOk){
+        // Model is local, but the runtime may still need a one-time fetch + the GPU must compile the model
+        // — both shown as a short progress overlay so the user is never left staring at a frozen panel.
+        const e=await prepareCachedEngine(st.cachedKind);
+        if(e) return e;
+        if(window.__atelierBusy===false && el.dl.classList.contains('show')) return null;  // error overlay handles it
+      }
+      renderManager(st); showManagerView();
+      return null;
+    })();
+    const r=await booting; booting=null; return r;
+  }
+  function showReady(){
+    const labels={'sdxs-fused':'Pronto · SDXS q68 su WebGPU','sdxs':'Pronto · SDXS su WebGPU','mock':'Pronto · anteprima procedurale'};
+    el.status.textContent=labels[engKind]||'Pronto'; }
+
+  // ---- manager view: shows state + source choices ------------------------------------------------------
+  function openManager(){ if(!back||window.__atelierBusy) return; probeState().then(st=>{ renderManager(st); showManagerView(); }).catch(()=>{}); }
+
+  function renderManager(st){
+    const offline = (navigator.onLine===false);
+    const wgLine = st.webgpu ? '<span class="ok">✓ WebGPU attivo — generazione veloce</span>'
+                             : '<span class="warn">⚠ WebGPU assente — userà la CPU (lento ma funziona)</span>';
+    const cachedRow = st.cached
+      ? `<div class="atl-mm-state ok"><span class="ic">✓</span><div>Modello in <b>cache locale</b> — pronto, caricamento istantaneo. Nessun download necessario.</div></div>`
+      : `<div class="atl-mm-state warn"><span class="ic">⬇</span><div>Modello <b>non in cache</b>. Scaricalo una sola volta (≈553&nbsp;MB): poi resta nel browser e si avvia subito.</div></div>`;
+    const ortBad = !st.ortOk ? `<div class="atl-mm-state warn"><span class="ic">⚠</span><div>ONNX&nbsp;Runtime non disponibile (serve Chrome/Edge desktop). Puoi comunque usare l'anteprima procedurale.</div></div>` : '';
+    const netDis = !st.ortOk || offline;
+    const sdDis  = !st.ortOk || !st.onSD;
+    const actLabel = st.cached?'Ri-scarica':'Scarica';
+    el.manager.innerHTML = `
+      ${cachedRow}${ortBad}
+      <div class="atl-src ${netDis?'dim':''}">
+        <span class="si">📡</span>
+        <div class="sl"><b>Scarica da Internet</b><small>${offline?'offline — nessuna connessione':'GitHub · ~553 MB · richiede connessione'}</small></div>
+        <button data-src="internet" ${netDis?'disabled':''}>${actLabel}</button>
+      </div>
+      <div class="atl-src ${sdDis?'dim':''}">
+        <span class="si">💾</span>
+        <div class="sl"><b>Scarica dal Cardputer</b><small>${st.onSD?'SD via WiFi locale · ~553 MB':'modello non presente sull&#39;SD'}</small></div>
+        <button data-src="sd" ${sdDis?'disabled':''}>${actLabel}</button>
+      </div>
+      <div class="atl-mm-alt">
+        <button class="atl-link" data-act="mock">Usa anteprima procedurale (senza download)</button>
+        ${st.cached?'<button class="atl-link danger" data-act="clear">Rimuovi dalla cache</button>':''}
+      </div>
+      <div class="atl-status">${wgLine}</div>`;
+    el.manager.querySelectorAll('[data-src]').forEach(b=>b.onclick=()=>startDownload(b.dataset.src));
+    el.manager.querySelectorAll('[data-act]').forEach(b=>b.onclick=async()=>{
+      if(b.dataset.act==='mock'){ await useMock(); }
+      else if(b.dataset.act==='clear'){ b.disabled=true; await modelCache.clear(); engine=null; engKind=''; const ns=await probeState(); renderManager(ns); }
+    });
+  }
+
+  // ---- blocking progress overlay -----------------------------------------------------------------------
+  // mode 'full' = download model + runtime + start engine · mode 'runtime' = model already cached, only
+  // fetch the runtime (first time) + compile on the GPU. dlRetry holds the action the "Riprova" button re-runs.
+  let dlSteps=null, dlRetry=null;
+  const DL_DEFS=(mode)=> mode==='runtime'
+    ? [ {id:'runtime', label:'Runtime ORT (motore di inferenza)', bytes:ORT_WASM_BYTES},
+        {id:'engine',  label:'Avvio motore '+(probe&&probe.ep==='webgpu'?'WebGPU':'CPU'), bytes:0} ]
+    : [ {id:'text-encoder', label:'Text encoder', bytes:124e6},
+        {id:'fused',        label:'Modello fuso (ControlNet + UNet + VAE)', bytes:429e6},
+        {id:'runtime',      label:'Runtime ORT (motore di inferenza)', bytes:ORT_WASM_BYTES},
+        {id:'engine',       label:'Avvio motore '+(probe&&probe.ep==='webgpu'?'WebGPU':'CPU'), bytes:0} ];
+  function renderDl(source, errMsg, mode){
+    const defs=DL_DEFS(mode);
+    const totalBytes=defs.reduce((a,d)=>a+(d.bytes||0),0)||1;
+    const dlBytes=defs.filter(d=>d.bytes).reduce((a,d)=>{const s=dlSteps[d.id];return a+((s&&s.bytes)||0);},0);
+    let pct=Math.min(99,Math.round(dlBytes/totalBytes*100));
+    const engStep=dlSteps['engine']; if(engStep&&engStep.state==='done') pct=100;
+    const stepHtml=defs.map(d=>{
+      const s=dlSteps[d.id]||{state:'pending'};
+      const ic=s.state==='done'?'✓':s.state==='active'?'⟳':s.state==='error'?'✕':'·';
+      let sub='';
+      if(s.state==='active'&&s.bytes&&d.bytes) sub=`<span class="ss">${(s.bytes/1e6).toFixed(0)} / ${(d.bytes/1e6).toFixed(0)} MB${s.part?` · parte ${s.part}/${s.parts}`:''}</span>`;
+      else if(s.state==='done'&&d.bytes) sub=`<span class="ss">${(d.bytes/1e6).toFixed(0)} MB completati</span>`;
+      else if(s.state==='active'&&d.id==='engine') sub=`<span class="ss">compilazione del modello sulla GPU…</span>`;
+      return `<div class="atl-step ${s.state}"><span class="si">${ic}</span><div>${d.label}${sub}</div></div>`;
+    }).join('');
+    const header = errMsg ? '⚠ Operazione non riuscita'
+      : mode==='runtime' ? '⚙ Preparo il motore'
+      : '⬇ Scarico da '+(source==='internet'?'Internet (GitHub)':'Cardputer (SD)');
+    const footer = errMsg
+      ? `<div class="atl-dl-err"><div class="em">✕ ${errMsg}</div><div class="atl-dl-actions">
+           <button class="primary" data-dl="retry">Riprova</button>
+           ${mode!=='runtime'&&source==='internet'&&manState?'<button data-dl="sd">Prova dal Cardputer</button>':''}
+           ${mode!=='runtime'&&source==='sd'?'<button data-dl="internet">Prova da Internet</button>':''}
+           <button data-dl="mock">Usa anteprima</button></div></div>`
+      : `<div class="atl-dl-warn">⚠ ${mode==='runtime'?'Quasi pronto — un attimo. Non chiudere Atelier.':'Download in corso — tieni Atelier aperto e non trascinare file finché non è completo. Puoi continuare a usare il resto del PC.'}</div>`;
+    const sub = errMsg ? '' : (mode==='runtime'?'Solo la prima volta: poi l’avvio è immediato.':'Una volta sola: poi il modello resta in cache e parte subito.');
+    el.dl.innerHTML=`
+      <h4>${header}</h4>
+      <div class="atl-dl-pct">${pct}%</div>
+      <div class="atl-dl-bar"><i style="width:${Math.max(3,pct)}%"></i></div>
+      <div class="atl-dl-sub">${sub}</div>
+      <div class="atl-steps">${stepHtml}</div>
+      ${footer}`;
+    if(errMsg) el.dl.querySelectorAll('[data-dl]').forEach(b=>b.onclick=()=>{
+      const a=b.dataset.dl;
+      if(a==='mock'){ hideDl(); setBusy(false); useMock(); }
+      else if(a==='retry'){ if(dlRetry) dlRetry(); }
+      else startDownload(a);                                                    // 'sd' / 'internet' alternative
+    });
+  }
+  function showDl(){ el.dl.classList.add('show'); }
+  function hideDl(){ el.dl.classList.remove('show'); }
+
+  // The blocking action: download model (chosen source) → runtime → start engine, modal locked throughout.
+  async function startDownload(source){
+    if(window.__atelierBusy) return;
+    dlSteps={}; dlRetry=()=>startDownload(source); setBusy(true); showDl(); renderDl(source,null,'full');
+    const patch=(id,p)=>{ dlSteps[id]=Object.assign(dlSteps[id]||{},p); renderDl(source,null,'full'); };
+    try{
+      const bufs=await downloadComponents(source,patch);
+      const eng=await buildEngine(bufs,source,patch);                            // runtime + engine steps emitted inside
+      patch('engine',{state:'done'});
+      engine=eng; engKind=eng.kind||'sdxs-fused';
+      setBusy(false); hideDl(); showStudio(); showReady();
+      banner('info','Modello pronto e salvato in cache — le prossime aperture sono immediate.');
+    }catch(err){
+      for(const k of Object.keys(dlSteps)){ if(dlSteps[k].state==='active') dlSteps[k].state='error'; }
+      setBusy(false);                                                           // re-enable close + error actions
+      renderDl(source, (err&&err.message)||String(err), 'full');
+    }
+  }
+
+  // Model already cached → only the runtime (first time) + GPU compile remain. Same overlay, 'runtime' mode.
+  async function prepareCachedEngine(kind){
+    dlSteps={}; dlRetry=()=>prepareCachedEngine(kind); setBusy(true); showDl(); renderDl('cache',null,'runtime');
+    const patch=(id,p)=>{ dlSteps[id]=Object.assign(dlSteps[id]||{},p); renderDl('cache',null,'runtime'); };
+    try{
+      let bufs;
+      if(kind==='net') bufs={fused:await modelCache.get('net-fused'),'text-encoder':await modelCache.get('net-text-encoder')};
+      else bufs=await downloadComponents('sd',()=>{});                          // model chunks cached → instant, no UI
+      const eng=await buildEngine(bufs, kind==='net'?'internet':'sd', patch);   // ensureRuntime + engine steps
+      patch('engine',{state:'done'});
+      engine=eng; engKind=eng.kind||'sdxs-fused';
+      setBusy(false); hideDl(); showStudio(); showReady();
+      return engine;
+    }catch(err){
+      for(const k of Object.keys(dlSteps)){ if(dlSteps[k].state==='active') dlSteps[k].state='error'; }
+      setBusy(false);
+      renderDl('cache', (err&&err.message)||String(err), 'runtime');
+      return null;
+    }
+  }
+
+  // ---- the canvas <-> engine bridge -------------------------------------------------------------------
+  function sketchFromCanvas(){ return { width:c.width, height:c.height, data:ctx.getImageData(0,0,c.width,c.height).data }; }
+  function imageToTemp(img){ const t=document.createElement('canvas'); t.width=img.width; t.height=img.height;
+    t.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(img.data), img.width, img.height),0,0); return t; }
+
+  function regionSketch(r){ const d=ctx.getImageData(r.x,r.y,r.w,r.h); return { width:r.w, height:r.h, data:d.data }; }
+  async function generate(){
+    if(generating) return;
+    const prompt=(el.prompt.value||'').trim();
+    const negativePrompt=(el.neg.value||'').trim();
+    if(!prompt && mode!=='img'){ banner('warn','Scrivi una descrizione.'); el.prompt.focus(); return; }
+    const eng=await boot(); if(!eng) return;
+    generating=true; el.go.disabled=true; const goLabel=el.go.textContent; el.go.textContent='Genero…'; clearBanner(); el.variants.innerHTML='';
+    try{
+      const seed0=Math.max(0,(parseInt(el.seed.value,10)||0))>>>0;
+      const nVar=Math.max(1,Math.min(6,parseInt(el.varEl.value,10)||1));
+      const controlScale = mode==='sketch' ? +el.ctrl.value : 1;
+      const s = window.__paintSel && window.__paintSel();                 // generate INTO the selection if present
+      const region = s || {x:0,y:0,w:c.width,h:c.height};
+      const sketch = (mode==='text') ? null : regionSketch(region);       // hint = selection (or whole canvas)
+      const results=[];
+      for(let i=0;i<nVar;i++){
+        const seed=(seed0+i)>>>0;
+        el.status.textContent = nVar>1 ? `Variante ${i+1}/${nVar}…` : 'Generazione in corso…'; setProg({bytes:0,total:0});
+        const out=await eng.generate({ prompt, negativePrompt, seed, sketch, controlScale, width:RES, height:RES }, (st)=>{ el.status.textContent='· '+st.step; });
+        results.push({ out, seed });
+      }
+      setProg(null);
+      if(nVar===1){ await applyResult(results[0], region); }
+      else { renderVariants(results, region); el.status.textContent='Scegli una variante qui sotto.'; }
+    }catch(err){ setProg(null); banner('warn','Generazione non riuscita: '+(err&&err.message||err)); }
+    finally{ generating=false; el.go.disabled=false; el.go.textContent=goLabel; }
+  }
+  function renderVariants(results, region){ el.variants.innerHTML='';
+    results.forEach(res=>{ const t=imageToTemp(res.out.image); const th=document.createElement('canvas'); th.width=64; th.height=64;
+      th.getContext('2d').drawImage(t,0,0,64,64); th.title='seed '+res.seed;
+      th.onclick=()=>{ [...el.variants.children].forEach(x=>x.classList.remove('pick')); th.classList.add('pick'); applyResult(res, region); };
+      el.variants.appendChild(th); }); }
+  async function applyResult(res, region){ const { out, seed }=res; pushUndo();
+    if(el.layer && el.layer.checked && typeof addImageLayer==='function') addImageLayer('AI · seed '+seed);   // generate onto a fresh layer
+    const temp=imageToTemp(out.image);
+    const hasSel = !!(window.__paintSel && window.__paintSel());
+    if(mode==='img' && !hasSel){ const strength=+el.str.value; ctx.save(); ctx.globalAlpha=strength; ctx.drawImage(temp,0,0,c.width,c.height); ctx.restore(); }
+    else { ctx.drawImage(temp, region.x, region.y, region.w, region.h); }
+    markDirty(); syncTitle();
+    let msg = (engKind==='sdxs'?'Immagine generata (SDXS)':'Anteprima generata')+' · seed '+seed+(hasSel?' · nella selezione':'');
+    if(el.save.checked){ const name='atelier-'+seed+'-'+Math.random().toString(36).slice(2,6)+'.png'; const ok=await saveGenerated('/data/Pictures/'+name); msg += ok?(' · salvata in /data/Pictures/'+name):' · salvataggio fallito'; }
+    setMsg(msg); el.status.textContent=msg;
+  }
+  function saveGenerated(p){ return new Promise(res=>{ compositeCanvas().toBlob(async blob=>{ try{ const r=await fetch('/api/fs/write?path='+encodeURIComponent(p),{method:'POST',body:blob}); res(r.ok); }catch{ res(false);} }, 'image/png', 0.95); }); }
+
+  // wire the toolbar button + expose for menus / ANIMA hand-off
+  const btn=document.getElementById('atelierBtn'); if(btn) btn.addEventListener('click', ()=>open('text'));
+  window.openAtelier=open;
+  // programmatic run for the NL command bar: open the studio, fill the prompt, generate onto a new layer,
+  // and (for icons/logos) auto-remove the background so you get a clean transparent asset.
+  window.__atelierRun = async ({ prompt='', negative='', removeBg=false } = {}) => {
+    open('text'); if(el.prompt) el.prompt.value=prompt; if(el.neg) el.neg.value=negative||'';
+    if(el.varEl){ el.varEl.value='1'; el.varVal.textContent='1'; } if(el.layer) el.layer.checked=true;
+    await generate();
+    if(removeBg && typeof CMD!=='undefined' && CMD.removeBg) CMD.removeBg();
+  };
+  // allow the shell / ANIMA to deep-link: ?atelier=1 or ?atelier=sketch
+  const aq=new URLSearchParams(location.search).get('atelier'); if(aq){ setTimeout(()=>open(aq==='1'?'text':aq),120); }
+})();
+</script>
+</body>
+</html>

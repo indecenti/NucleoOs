@@ -1,0 +1,16 @@
+{
+  "id": "cd",
+  "category": "terminal",
+  "it": {
+    "title": "cd - Cambia la directory corrente",
+    "synopsis": "cd [path]",
+    "description": "Modifica la directory di lavoro corrente della sessione del terminale.",
+    "details": "NOME\n  cd - Cambia directory di lavoro.\n\nSINTASSI\n  cd [percorso]\n\nDESCRIZIONE\n  Modifica la directory corrente (CWD) del Terminale. Se nessun percorso viene specificato, ritorna alla root '/'.\n  Per garantire la consistenza del filesystem, prima di aggiornare il percorso locale, il terminale esegue una chiamata di test a '/api/fs/list' sulla cartella di destinazione. Se il test fallisce (404), il cambio di directory viene bloccato.\n\nOPZIONI\n  [percorso]\n    Il percorso di destinazione (es. '..', '/data', 'Pictures').\n\nARCHITETTURA E BASSO LIVELLO\n  Aggiorna le variabili locali del browser 'cwd' e 'envVars.CWD'. I percorsi relativi vengono risolti normalizzando i segmenti intermedi (rimozione di '.' e risoluzione di '..') prima di effettuare la verifica di sicurezza.\n\nCODICI DI RITORNO\n  0\n    Successo. La directory esiste e il percorso è stato modificato.\n  1\n    La directory specificata non esiste (restituito in seguito al fallimento del test 404).\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  ls(1), pwd(1), web_api(7)\n\nESEMPI AVANZATI\n  cd /data         # Cambia directory entrando in /data\n  cd ..            # Ritorna alla cartella superiore\n  cd               # Ritorna alla root di sistema"
+  },
+  "en": {
+    "title": "cd - Change working directory",
+    "synopsis": "cd [path]",
+    "description": "Change the current working directory of the terminal session.",
+    "details": "NAME\n  cd - Change working directory.\n\nSYNOPSIS\n  cd [path]\n\nDESCRIPTION\n  Modifies the active context path (CWD) of the terminal. If no path is provided, falls back to the system root '/'.\n  To ensure filesystem integrity, the client executes a dry-run check via '/api/fs/list' on the target folder before changing paths. If the check returns 404, the path update is aborted.\n\nOPTIONS\n  [path]\n    The target folder path (e.g. '..', '/data', 'Pictures').\n\nSYSTEM ARCHITECTURE\n  Updates the local browser variables 'cwd' and 'envVars.CWD'. Relative paths are normalized to prune '.' and resolve '..' segments prior to executing the safety check.\n\nEXIT CODES\n  0\n    Success. Directory exists and active path updated.\n  1\n    Target directory does not exist (failed dry-run check).\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  ls(1), pwd(1), web_api(7)\n\nADVANCED EXAMPLES\n  cd /data         # Enters /data\n  cd ..            # Moves up one directory tier\n  cd               # Resets working directory to root /"
+  }
+}

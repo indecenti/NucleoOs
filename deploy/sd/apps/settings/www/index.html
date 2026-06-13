@@ -1,0 +1,1399 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <title>Impostazioni</title>
+  <style>
+    :root{
+      --bg:#0b1020; --panel:#121a30; --panel2:#0e1526; --line:#22304f; --ink:#e8eefc; --dim:#8aa0c8;
+      --accent:#5ee0a0; --accent2:#6aa8ff; --warn:#ffd166; --bad:#ff6b6b; --ok:#5ee0a0;
+      --field:#0a0e1c; --r:12px; --glass:rgba(18,26,48,0.82);
+    }
+    html[data-theme="light"]{
+      --bg:#eef2fb; --panel:#ffffff; --panel2:#e6ecf8; --ink:#10203a; --dim:#5a6a86;
+      --accent:#1f9d63; --accent2:#2b6fd6; --warn:#b9750f; --bad:#cf3a50; --ok:#1f9d63;
+      --line:#cdd8ee; --field:#f4f7fe; --glass:rgba(255,255,255,0.82);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-size:14px}
+    body{display:flex;flex-direction:column;background:linear-gradient(160deg,#0a0f1e,var(--bg) 42%,#0a1224);
+      color:var(--ink);font-family:system-ui,"Segoe UI",sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
+    html[data-theme="light"] body{background:linear-gradient(160deg,#f4f7ff,var(--bg) 42%,#e9eefb)}
+
+    /* ---- top bar: brand + command bar + freeze/last-updated ---- */
+    header{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--glass);
+      backdrop-filter:blur(16px);border-bottom:1px solid var(--line);flex:none;z-index:30}
+    header .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+      display:grid;place-items:center;color:#06121f;font-weight:800;font-size:15px;flex:none}
+    header .brand{font-weight:600;font-size:1.02rem;letter-spacing:.3px;flex:none}
+    .cmd-trigger{flex:1;max-width:420px;display:flex;align-items:center;gap:8px;background:var(--field);
+      border:1px solid var(--line);border-radius:10px;padding:7px 12px;cursor:text;color:var(--dim);font-size:12.5px;
+      transition:.15s;min-width:0}
+    .cmd-trigger:hover{border-color:var(--accent2)}
+    .cmd-trigger .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .cmd-trigger kbd{background:rgba(128,128,128,.14);border:1px solid var(--line);border-radius:5px;
+      padding:1px 6px;font:11px ui-monospace,monospace;flex:none}
+    .live-pill{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);flex:none;cursor:pointer;
+      border:1px solid var(--line);border-radius:999px;padding:5px 10px;background:var(--field);user-select:none}
+    .live-pill:hover{border-color:var(--accent2)}
+    .live-pill .ld{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 7px rgba(94,224,160,.6);transition:.3s}
+    .live-pill.frozen .ld{background:var(--warn);box-shadow:0 0 7px rgba(255,209,102,.6);animation:none}
+    .live-pill .ld{animation:pulse-dot 2s ease-in-out infinite}
+    @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.35}}
+
+    /* ---- layout ---- */
+    .app-layout{display:flex;flex:1;overflow:hidden}
+    .sidebar{width:208px;background:var(--panel2);border-right:1px solid var(--line);padding:12px 8px;
+      display:flex;flex-direction:column;gap:3px;flex:none;overflow-y:auto}
+    .nav-item{padding:10px 13px;border-radius:10px;cursor:pointer;color:var(--dim);transition:.18s;
+      display:flex;align-items:center;gap:11px;font-weight:500;font-size:13px;user-select:none}
+    .nav-item:hover{background:rgba(128,128,128,0.1);color:var(--ink)}
+    .nav-item.active{background:linear-gradient(135deg,rgba(94,224,160,0.16),rgba(106,168,255,0.1));
+      color:var(--ink);border:1px solid rgba(94,224,160,0.25)}
+    .nav-item .ni{font-size:16px;width:22px;text-align:center}
+
+    main.content{flex:1;overflow:auto;padding:18px 22px;scroll-behavior:smooth}
+    .tab-content{display:none;animation:fade-in .22s ease}
+    .tab-content.active{display:block}
+    @keyframes fade-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+    /* ---- cards ---- */
+    .sect{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+      padding:16px 18px;margin-bottom:14px;box-shadow:0 4px 24px rgba(0,0,0,0.08)}
+    .sect h2{margin:0 0 13px;font-size:12px;color:var(--accent2);text-transform:uppercase;
+      letter-spacing:1.1px;font-weight:600;display:flex;align-items:center;gap:8px}
+    .badge{font-size:9px;padding:2px 8px;border-radius:10px;border:1px solid var(--accent);
+      color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+    .badge.fw{border-color:var(--accent2);color:var(--accent2)}
+    .keychip{font-size:11px;border:1px solid var(--line);background:var(--field);color:var(--dim);border-radius:999px;padding:3px 10px;cursor:pointer;margin:0 6px 6px 0;font-weight:600}
+    .keychip.set{color:var(--ok);border-color:var(--ok)}
+    .keychip.cur{outline:2px solid var(--accent2);outline-offset:1px;color:var(--ink)}
+    .cap-card{display:flex;gap:9px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:12px;line-height:1.5;flex:1}
+    .cap-card .ic{font-size:16px;flex:none;line-height:1.3}
+    .cap-card code,.hint code{background:rgba(128,128,128,.16);border-radius:4px;padding:1px 5px;font-size:11px}
+    .badge.ro{border-color:var(--dim);color:var(--dim)}
+    .badge.live{border-color:var(--ok);color:var(--ok)}
+
+    /* ---- rows / inputs ---- */
+    .row{display:flex;align-items:center;gap:14px;padding:9px 0;border-bottom:1px solid rgba(128,128,128,0.07)}
+    .row:last-child{border-bottom:none}
+    .row label{flex:0 0 158px;color:var(--ink);font-size:13.5px;font-weight:500}
+    .row .ctl{flex:1;display:flex;align-items:center;gap:12px;min-width:0}
+    .hint{font-size:12px;color:var(--dim);line-height:1.5}
+    input[type=text],input[type=password],input[type=number],select{
+      background:var(--field);color:var(--ink);border:1px solid var(--line);
+      border-radius:8px;padding:8px 12px;font:inherit;width:100%;max-width:280px;transition:.18s}
+    input:focus,select:focus{border-color:var(--accent2);outline:none;box-shadow:0 0 0 2px rgba(106,168,255,0.2)}
+    input[type=range]{flex:1;max-width:220px;accent-color:var(--accent);height:6px}
+    .range-val{min-width:46px;text-align:right;font-size:13px;color:var(--accent);font-weight:600}
+
+    .sw{position:relative;width:44px;height:24px;flex:none}
+    .sw input{opacity:0;width:100%;height:100%;margin:0;cursor:pointer;position:absolute;z-index:2}
+    .sw span{position:absolute;inset:0;background:var(--line);border-radius:24px;transition:.25s cubic-bezier(.4,0,.2,1);pointer-events:none}
+    .sw span::after{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;
+      background:#fff;border-radius:50%;transition:.25s cubic-bezier(.4,0,.2,1);box-shadow:0 2px 4px rgba(0,0,0,0.25)}
+    .sw input:checked+span{background:var(--accent)}
+    .sw input:checked+span::after{transform:translateX(20px)}
+
+    button{border:1px solid var(--line);background:rgba(128,128,128,0.06);color:var(--ink);
+      border-radius:8px;padding:7px 16px;cursor:pointer;transition:.15s;font:inherit;font-size:13px}
+    button:hover{background:rgba(128,128,128,0.14)}
+    button:active{transform:scale(.97)}
+    button.primary{background:linear-gradient(135deg,rgba(94,224,160,0.2),rgba(106,168,255,0.12));
+      border-color:rgba(94,224,160,0.3);color:var(--ink);font-weight:600}
+    button.primary:hover{background:linear-gradient(135deg,rgba(94,224,160,0.3),rgba(106,168,255,0.2))}
+    button.danger{border:1px solid rgba(255,107,107,0.32);background:rgba(255,107,107,0.08);color:var(--bad)}
+    button.danger:hover{background:rgba(255,107,107,0.16)}
+    button:disabled{opacity:.45;cursor:default;pointer-events:none}
+
+    /* ════════════ CONTROL CENTER ════════════ */
+    .hero{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,var(--panel),var(--panel2));
+      border:1px solid var(--line);border-radius:16px;padding:16px 20px;margin-bottom:14px;position:relative;overflow:hidden}
+    .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 120% at 100% 0,rgba(94,224,160,.10),transparent 55%);pointer-events:none}
+    .hero .verdict-dot{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;font-size:24px;flex:none;
+      background:rgba(94,224,160,.12)}
+    .hero .verdict-dot.bad{background:rgba(255,107,107,.13)} .hero .verdict-dot.warn{background:rgba(255,209,102,.14)}
+    .hero .h-main{flex:1;min-width:0}
+    .hero .h-title{font-weight:700;font-size:16px}
+    .hero .h-sub{font-size:12px;color:var(--dim);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 14px}
+    .hero .h-sub b{color:var(--ink);font-weight:600}
+
+    .pulse-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+    .tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;position:relative;overflow:hidden;min-height:84px}
+    .tile.wide{grid-column:span 2}
+    .tile .tk{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px}
+    .tile .tv{font-size:23px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;line-height:1.1}
+    .tile .tv small{font-size:12px;color:var(--dim);font-weight:500}
+    .tile .tsub{font-size:11px;color:var(--dim);margin-top:2px}
+    .tile canvas{position:absolute;right:0;bottom:0;width:100%;height:34px;opacity:.9}
+    .tile .dotcol{width:9px;height:9px;border-radius:50%;background:var(--ok)}
+    .tile.ok .dotcol{background:var(--ok)} .tile.warn .dotcol{background:var(--warn)} .tile.bad .dotcol{background:var(--bad)}
+    .tile .tv.ok{color:var(--ok)} .tile .tv.warn{color:var(--warn)} .tile .tv.bad{color:var(--bad)}
+    .cores{display:flex;gap:4px;margin-top:6px}
+    .cores .cbar{flex:1;height:6px;border-radius:3px;background:rgba(128,128,128,.18);overflow:hidden}
+    .cores .cbar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s ease}
+
+    .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{display:flex;align-items:center;gap:8px;background:var(--field);border:1px solid var(--line);border-radius:12px;
+      padding:9px 13px;cursor:pointer;transition:.16s;user-select:none}
+    .chip:hover{transform:translateY(-1px);border-color:var(--accent2)}
+    .chip.active{border-color:var(--accent);background:linear-gradient(135deg,rgba(94,224,160,.14),rgba(106,168,255,.08))}
+    .chip .ci{font-size:18px} .chip .cl{font-weight:600;font-size:12.5px}
+    .chip .cd{font-size:11px;color:var(--dim)}
+
+    /* ---- AI presets (intelligent profiles) ---- */
+    .ps{display:grid;grid-template-columns:repeat(auto-fit,minmax(152px,1fr));gap:8px}
+    .pcard{background:var(--field);border:1px solid var(--line);border-radius:12px;padding:11px 12px;cursor:pointer;transition:.16s}
+    .pcard:hover{transform:translateY(-1px);border-color:var(--accent2)}
+    .pcard.active{border-color:var(--accent);background:linear-gradient(135deg,rgba(94,224,160,.14),rgba(106,168,255,.08))}
+    .pcard.rec{border-color:var(--accent2)}
+    .pcard.blocked{opacity:.5;cursor:default} .pcard.blocked:hover{transform:none;border-color:var(--line)}
+    .pcard .ph{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13px}
+    .pcard .pin{font-size:11px;color:var(--dim);margin:3px 0 8px;line-height:1.35;min-height:30px}
+    .ppill{font-size:10.5px;padding:3px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:4px;font-weight:600}
+    .ppill.ok{background:rgba(94,224,160,.16);color:var(--ok)}
+    .ppill.prep{background:rgba(255,209,102,.16);color:var(--warn)}
+    .ppill.blk{background:rgba(255,107,107,.13);color:var(--bad)}
+    .ppill.rec{background:rgba(106,168,255,.16);color:var(--accent2)}
+    .tier-band{display:flex;gap:7px;flex-wrap:wrap;align-items:stretch}
+    .rung{flex:1;min-width:116px;background:var(--field);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
+    .rung .rh{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600}
+    .rung .rs{font-size:10.5px;color:var(--dim);margin-top:2px}
+    .led{width:8px;height:8px;border-radius:50%;flex:none;background:var(--dim);opacity:.5}
+    .led.on{background:var(--ok);opacity:1} .led.warn{background:var(--warn);opacity:1}
+    .caps-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px}
+    .capchip{display:flex;align-items:center;gap:7px;font-size:11.5px;border:1px solid var(--line);border-radius:9px;padding:7px 9px;background:var(--field)}
+    .capchip .cg{margin-left:auto;font-weight:600}.capchip .cg.ok{color:var(--ok)}
+    .capchip button{font-size:10.5px;padding:3px 8px;margin-left:auto}
+    .apps-list .arow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid rgba(128,128,128,.07);font-size:12px}
+    .apps-list .arow:last-child{border-bottom:none}
+    .apps-list .ast{font-size:11px;font-weight:600;flex:none}.apps-list .ast.ok{color:var(--ok)}.apps-list .ast.warn{color:var(--warn)}
+    .scope-legend{display:flex;gap:7px;flex-wrap:wrap}
+    .scope-legend span{font-size:10.5px;color:var(--dim);background:var(--field);border:1px solid var(--line);border-radius:8px;padding:3px 9px}
+    details.adv,details.apps-det{border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+    details.adv{margin-bottom:14px}
+    details.adv>summary,details.apps-det>summary{cursor:pointer;padding:11px 14px;font-size:12.5px;font-weight:600;color:var(--accent2);user-select:none;list-style:none}
+    details.adv>summary::-webkit-details-marker,details.apps-det>summary::-webkit-details-marker{display:none}
+    details.adv>summary::before,details.apps-det>summary::before{content:"▸ ";color:var(--dim)}
+    details.adv[open]>summary::before,details.apps-det[open]>summary::before{content:"▾ "}
+    details.adv>.adv-inner{padding:0 12px}
+    details.apps-det>.apps-list{padding:2px 14px 10px}
+
+    .toggle-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+    .qtoggle{display:flex;align-items:center;gap:10px;background:var(--field);border:1px solid var(--line);
+      border-radius:13px;padding:11px 13px;cursor:pointer;transition:.16s;user-select:none;text-align:left}
+    .qtoggle:hover{border-color:var(--accent2)}
+    .qtoggle.on{border-color:var(--accent);background:linear-gradient(135deg,rgba(94,224,160,.16),rgba(106,168,255,.07))}
+    .qtoggle .qi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:17px;flex:none;
+      background:rgba(128,128,128,.12);transition:.16s}
+    .qtoggle.on .qi{background:rgba(94,224,160,.18)}
+    .qtoggle .qt{flex:1;min-width:0}
+    .qtoggle .ql{font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .qtoggle .qs{font-size:11px;color:var(--dim)}
+    .qtoggle.busy{opacity:.6;pointer-events:none}
+
+    /* ---- self-test ---- */
+    .st-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+    .st-item{display:flex;align-items:center;gap:10px;background:var(--field);border:1px solid var(--line);
+      border-radius:9px;padding:8px 12px;font-size:13px}
+    .st-item .sm{width:20px;text-align:center;font-weight:700}
+    .st-item .sm.ok{color:var(--ok)} .st-item .sm.warn{color:var(--warn)} .st-item .sm.bad{color:var(--bad)} .st-item .sm.run{color:var(--dim)}
+    .st-item .sl{flex:1} .st-item .sp{font:11px ui-monospace,monospace;color:var(--dim)} .st-item .ss{font-size:11px;color:var(--dim)}
+
+    /* ---- network scan ---- */
+    .ap{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;
+      background:var(--field);margin-bottom:6px}
+    .ap .bars{display:flex;align-items:flex-end;gap:2px;height:16px;flex:none}
+    .ap .bars i{width:3px;background:var(--dim);border-radius:1px}
+    .ap.connected{border-color:var(--accent)}
+    .ap .as{font-size:11px;color:var(--dim);flex:none}
+
+    /* ---- logs ---- */
+    .logbox{background:#05080f;border:1px solid var(--line);border-radius:9px;padding:10px 12px;
+      font:11.5px/1.55 ui-monospace,Consolas,monospace;color:#add6c0;white-space:pre-wrap;max-height:280px;overflow:auto}
+    html[data-theme="light"] .logbox{background:#0b1322;color:#bfe8d0}
+
+    /* ---- theme/accent/font (appearance) ---- */
+    .theme-cards{display:flex;gap:12px;margin-bottom:12px}
+    .theme-card{flex:1;padding:15px;border:2px solid transparent;border-radius:var(--r);background:var(--field);
+      color:var(--ink);cursor:pointer;text-align:center;transition:.18s;position:relative}
+    .theme-card:hover{transform:translateY(-2px);border-color:var(--line)}
+    .theme-card.active{border-color:var(--accent);background:var(--panel2)}
+    .theme-card.active::before{content:"✓";position:absolute;top:8px;right:10px;color:var(--accent);font-weight:bold}
+    .theme-card .icon{font-size:23px;margin-bottom:7px} .theme-card .name{font-weight:600;font-size:13px}
+    .accent-row{display:flex;gap:10px;flex-wrap:wrap}
+    .color-swatch{width:32px;height:32px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.18s;box-shadow:0 2px 6px rgba(0,0,0,0.2)}
+    .color-swatch:hover{transform:scale(1.14)} .color-swatch.active{border-color:var(--ink);outline:2px solid var(--ink);outline-offset:2px}
+    .seg-row{display:flex;gap:2px;background:var(--field);border-radius:8px;padding:3px;width:fit-content;border:1px solid var(--line);flex-wrap:wrap}
+    .seg-item{padding:7px 15px;border-radius:6px;cursor:pointer;color:var(--dim);transition:.16s;font-weight:500;font-size:13px;user-select:none}
+    .seg-item:hover{color:var(--ink)} .seg-item.active{background:var(--panel);color:var(--accent);box-shadow:0 2px 6px rgba(0,0,0,0.1)}
+    /* ---- Language & Region ---- */
+    .lr-label{font-size:12px;color:var(--dim);margin-bottom:6px;font-weight:600}
+    .lang-row .seg-item{display:flex;align-items:center;gap:7px}
+    .lang-row .seg-item .fl{font-size:15px;line-height:1}
+    .lr-select{background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 12px;font-size:13px;min-width:240px;cursor:pointer}
+    .lr-preview{margin-top:11px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .lr-preview .pv{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 11px}
+    .lr-preview .pl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+    .lr-preview .pvv{font-size:13.5px;font-weight:600;color:var(--ink);margin-top:2px}
+    .lr-status{margin-top:13px;font-size:11.5px;color:var(--dim);line-height:1.5}
+    .lr-status b{color:var(--ok);font-weight:600}
+    .wp-gallery{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}
+    .wp-item{flex:0 0 128px;height:78px;border-radius:10px;border:2px solid transparent;background-size:cover;
+      background-position:center;cursor:pointer;transition:.18s;position:relative;box-shadow:0 3px 10px rgba(0,0,0,0.1)}
+    .wp-item:hover{transform:scale(1.04)} .wp-item.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+    .wp-item .wp-name{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;
+      padding:3px 6px;text-align:center;border-radius:0 0 8px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .info-cell{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+    .info-cell .il{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+    .info-cell .iv{font-size:15px;font-weight:600;color:var(--ink);word-break:break-all}
+    .info-cell .iv.ok{color:var(--ok)}
+
+    /* ---- command palette ---- */
+    .cmd-scrim{position:fixed;inset:0;background:rgba(6,10,22,0.6);backdrop-filter:blur(5px);z-index:300;
+      display:none;align-items:flex-start;justify-content:center;padding:80px 16px 16px}
+    .cmd-scrim.show{display:flex}
+    .cmd-box{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:100%;max-width:520px;
+      box-shadow:0 24px 60px rgba(0,0,0,0.5);overflow:hidden}
+    .cmd-box input{width:100%;max-width:none;border:none;border-bottom:1px solid var(--line);border-radius:0;
+      background:transparent;padding:15px 18px;font-size:15px}
+    .cmd-box input:focus{box-shadow:none}
+    .cmd-results{max-height:340px;overflow:auto;padding:6px}
+    .cmd-row{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:9px;cursor:pointer}
+    .cmd-row.sel{background:linear-gradient(135deg,rgba(94,224,160,0.16),rgba(106,168,255,0.08))}
+    .cmd-row .cr-i{width:26px;text-align:center;font-size:15px}
+    .cmd-row .cr-t{flex:1;font-size:13.5px}
+    .cmd-row .cr-s{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+    .cmd-row.danger .cr-s{color:var(--bad);border-color:rgba(255,107,107,.4)}
+    .cmd-empty{padding:22px;text-align:center;color:var(--dim);font-size:13px}
+
+    /* ---- modal ---- */
+    .modal-scrim{position:fixed;inset:0;background:rgba(6,10,22,0.8);backdrop-filter:blur(6px);z-index:320;
+      display:none;align-items:center;justify-content:center;padding:16px}
+    .modal-scrim.show{display:flex}
+    .modal-box{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;max-width:380px;width:100%;
+      box-shadow:0 20px 50px rgba(0,0,0,0.4);text-align:center}
+    .modal-box .mi{font-size:34px;margin-bottom:10px} .modal-box .mt{font-size:16px;font-weight:600;margin-bottom:6px}
+    .modal-box .md{font-size:13px;color:var(--dim);margin-bottom:18px;line-height:1.5}
+    .modal-box .mbtns{display:flex;gap:10px;justify-content:center} .modal-box .mbtns button{flex:1;padding:10px}
+
+    footer{padding:7px 14px;font-size:11.5px;color:var(--dim);background:var(--panel2);border-top:1px solid var(--line);
+      flex:none;display:flex;align-items:center;gap:12px}
+    footer .dot{width:7px;height:7px;border-radius:50%;transition:.3s}
+    footer .dot.ok{background:var(--ok);box-shadow:0 0 6px rgba(94,224,160,0.5)} footer .dot.err{background:var(--bad)}
+    footer .sp{flex:1}
+
+    @media(max-width:720px){ .sidebar{width:62px} .nav-item .lbl{display:none} .pulse-grid{grid-template-columns:repeat(2,1fr)} .info-grid{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">⚙</div>
+    <div class="brand" id="brand">Impostazioni</div>
+    <div class="cmd-trigger" id="cmd-trigger" title="Comando rapido">
+      <span>⌘</span><span class="t" id="cmd-trigger-t">Comanda il Cardputer…</span><kbd>Ctrl K</kbd>
+    </div>
+    <div class="live-pill" id="live-pill"><span class="ld"></span><span id="live-txt">Live</span></div>
+  </header>
+
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="content">
+
+      <!-- ═══════════ CONTROL CENTER ═══════════ -->
+      <section id="tab-control" class="tab-content active">
+        <div class="hero" id="hero">
+          <div class="verdict-dot" id="hero-dot">🟢</div>
+          <div class="h-main">
+            <div class="h-title" id="hero-title">NucleoOS</div>
+            <div class="h-sub" id="hero-sub"><span id="hero-net">—</span></div>
+          </div>
+        </div>
+
+        <div class="sect" style="padding-bottom:14px">
+          <h2 id="t-pulse">Battito del dispositivo <span class="badge live">Live</span></h2>
+          <div class="pulse-grid" id="pulse-grid">
+            <div class="tile wide ok" id="tile-heap"><div class="tk"><span class="dotcol"></span><span>Memoria libera</span></div><div class="tv ok">—</div><div class="tsub">internal SRAM</div><canvas></canvas></div>
+            <div class="tile wide ok" id="tile-cpu"><div class="tk"><span class="dotcol"></span><span>CPU</span></div><div class="tv ok">—</div><div class="cores" id="cpu-cores"></div><canvas></canvas></div>
+            <div class="tile ok" id="tile-frag"><div class="tk"><span class="dotcol"></span><span>Framm.</span></div><div class="tv ok">—</div><div class="tsub">heap</div></div>
+            <div class="tile ok" id="tile-min"><div class="tk"><span class="dotcol"></span><span>Min storico</span></div><div class="tv ok">—</div><div class="tsub">watermark</div></div>
+            <div class="tile ok" id="tile-up"><div class="tk"><span class="dotcol"></span><span>Acceso da</span></div><div class="tv">—</div></div>
+            <div class="tile ok" id="tile-sd"><div class="tk"><span class="dotcol"></span><span>Storage</span></div><div class="tv">—</div><div class="tsub" id="tile-sd-sub"></div></div>
+          </div>
+        </div>
+
+        <div class="sect">
+          <h2 id="t-scenes">Scene <span class="badge">Un tocco</span></h2>
+          <div class="chips" id="scene-chips"></div>
+        </div>
+
+        <div class="sect">
+          <h2 id="t-quick">Interruttori rapidi <span class="badge fw">Live</span></h2>
+          <div class="toggle-grid" id="quick-grid"></div>
+        </div>
+
+        <div class="sect">
+          <h2 id="t-st-cc">Self-Test <span class="badge">Battito</span></h2>
+          <div class="row" style="border-bottom:none;padding-top:0">
+            <div class="ctl" style="gap:8px;flex-wrap:wrap">
+              <button class="primary" id="cc-selftest">🩺 Esegui Self-Test</button>
+              <button id="cc-selftest-copy" disabled>Copia esito</button>
+              <span class="hint" id="cc-selftest-stat"></span>
+            </div>
+          </div>
+          <div class="st-list" id="cc-st-list"></div>
+        </div>
+      </section>
+
+      <!-- ═══════════ DISPLAY ═══════════ -->
+      <section id="tab-display" class="tab-content">
+        <div class="sect">
+          <h2>Schermo <span class="badge fw">Firmware</span></h2>
+          <div class="row">
+            <label>Stato schermo</label>
+            <div class="ctl"><span class="hint" id="disp-state">Tocca per comandare il pannello.</span>
+              <button id="disp-toggle" class="primary" style="margin-left:auto">⏻ Spegni</button></div>
+          </div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1">Lo spegnimento porta la retroilluminazione a 0 (nero) senza cambiare la luminosità impostata. È l'<b>unica leva live</b> dello schermo via web; non interroga il pannello all'apertura per non risvegliarlo.</div></div>
+        </div>
+        <div class="sect">
+          <h2>Luminosità & Audio</h2>
+          <div class="row"><label>Luminosità display</label>
+            <div class="ctl"><span style="color:var(--dim)">🔅</span><input type="range" id="pw-bri" min="10" max="100" step="5" value="100"><span style="color:var(--dim)">🔆</span><span class="range-val" id="pw-bri-v">100%</span></div></div>
+          <div class="row"><label>Volume audio</label>
+            <div class="ctl"><span style="color:var(--dim)">🔈</span><input type="range" id="pw-vol" min="0" max="100" step="10" value="70"><span style="color:var(--dim)">🔊</span><span class="range-val" id="pw-vol-v">70%</span></div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1">Luminosità e volume si <b>salvano</b> nelle impostazioni e si applicano al <b>prossimo avvio</b> (il firmware non espone un setter a caldo per questi).</div></div>
+        </div>
+      </section>
+
+      <!-- ═══════════ APPEARANCE ═══════════ -->
+      <section id="tab-personalization" class="tab-content">
+        <div class="sect"><h2>Tema <span class="badge live">Live</span></h2>
+          <div class="theme-cards">
+            <div class="theme-card" data-val="light" id="theme-light"><div class="icon">☀️</div><div class="name">Chiaro</div></div>
+            <div class="theme-card" data-val="dark" id="theme-dark"><div class="icon">🌙</div><div class="name">Scuro</div></div>
+          </div></div>
+        <div class="sect"><h2>Colore accento <span class="badge live">Live</span></h2>
+          <div class="accent-row" id="accent-container">
+            <div class="color-swatch" style="background:#4ea1ff" data-color="#4ea1ff"></div>
+            <div class="color-swatch" style="background:#5ee0a0" data-color="#5ee0a0"></div>
+            <div class="color-swatch" style="background:#ff4e4e" data-color="#ff4e4e"></div>
+            <div class="color-swatch" style="background:#ffb84e" data-color="#ffb84e"></div>
+            <div class="color-swatch" style="background:#d14eff" data-color="#d14eff"></div>
+            <div class="color-swatch" style="background:#e0556b" data-color="#e0556b"></div>
+            <div class="color-swatch" style="background:#2b6fd6" data-color="#2b6fd6"></div>
+          </div></div>
+        <div class="sect"><h2>Dimensione testo <span class="badge live">Live</span></h2>
+          <div class="seg-row">
+            <div class="seg-item" data-size="12px" style="font-size:12px">Piccolo</div>
+            <div class="seg-item" data-size="14px" style="font-size:14px">Normale</div>
+            <div class="seg-item" data-size="16px" style="font-size:16px">Grande</div>
+          </div></div>
+        <div class="sect"><h2 id="t-langregion">Lingua e regione <span class="badge live">Live</span></h2>
+          <div class="lr-label" id="t-displang">Lingua di visualizzazione</div>
+          <div class="seg-row lang-row" id="lang-row"></div>
+          <div class="hint" id="lang-hint" style="margin-top:7px">Imposta la lingua di sistema per ANIMA, il copilota e la voce.</div>
+          <div class="lr-label" id="t-region" style="margin-top:15px">Formato regionale</div>
+          <select id="region-select" class="lr-select" aria-label="Formato regionale"></select>
+          <div class="lr-preview" id="region-preview"></div>
+          <div class="lr-status" id="lang-status"></div></div>
+        <div class="sect"><h2>Sfondo <span class="badge live">Live</span></h2>
+          <div id="wp-container" class="wp-gallery"><div class="hint" style="padding:10px">Apri questa scheda per caricare gli sfondi…</div></div></div>
+      </section>
+
+      <!-- ═══════════ NETWORK ═══════════ -->
+      <section id="tab-network" class="tab-content">
+        <div class="sect"><h2>Stato Wi-Fi <span class="badge ro">Sola lettura</span></h2>
+          <div class="info-grid">
+            <div class="info-cell"><div class="il">Modalità</div><div class="iv" id="net-mode">—</div></div>
+            <div class="info-cell"><div class="il">SSID</div><div class="iv" id="net-ssid">—</div></div>
+            <div class="info-cell"><div class="il">Indirizzo IP</div><div class="iv" id="net-ip">—</div></div>
+            <div class="info-cell"><div class="il">Orologio</div><div class="iv" id="net-time">—</div></div>
+          </div></div>
+        <div class="sect"><h2>Reti vicine</h2>
+          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl"><button id="wifi-scan">📡 Scansiona</button><span class="hint" id="wifi-scan-stat"></span></div></div>
+          <div id="wifi-list"></div>
+          <div class="hint" style="margin-top:6px">La scansione è <b>su richiesta</b> e a sola lettura. Per <b>connettersi</b> o cambiare rete usa l'app <b>Wi-Fi</b> nativa: il firmware non espone un endpoint di join via web.</div></div>
+        <div class="sect"><h2>Connettività <span class="badge fw">Firmware</span></h2>
+          <div class="row"><label>Wi-Fi</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-wifi"><span></span></span></div></div>
+          <div class="row"><label>Bluetooth LE</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-ble"><span></span></span></div></div>
+          <div class="row"><label>Swarm (ESP-NOW)</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-swarm"><span></span></span></div></div>
+          <div class="hint" style="margin-top:6px">Le modifiche si salvano e si applicano al prossimo avvio.</div></div>
+        <div class="sect"><h2>IPv6 <span class="badge fw">Firmware</span></h2>
+          <div class="row"><label>Abilita IPv6</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-ipv6"><span></span></span></div></div>
+          <div class="hint" style="margin-top:6px">IPv6 è <b>disabilitato</b> nel firmware per liberare SRAM: tutta la rete viaggia su IPv4. Le tabelle IPv6 di lwIP si allocano a compilazione — questo controllo registra solo la preferenza; per riattivarlo davvero ricompila con <code>CONFIG_LWIP_IPV6=y</code>.</div></div>
+      </section>
+
+      <!-- ═══════════ AI / MODELS ═══════════ -->
+      <section id="tab-ai" class="tab-content">
+        <div class="sect" id="ai-presets-sect"><h2>Profilo IA <span class="badge live">Intelligente</span></h2>
+          <div class="hint" style="margin-bottom:10px">Scegli <b>come deve ragionare ANIMA</b>. Il sistema rileva cosa è davvero disponibile — chiavi online, GPU del browser, cervello offline — e <b>attiva solo i profili possibili</b>, spiegando cosa manca.</div>
+          <div class="ps" id="preset-strip"><span class="hint">rilevo le possibilità…</span></div>
+          <div class="tier-band" id="tier-band" style="margin-top:13px"></div>
+          <div style="margin-top:13px"><div style="font-size:12.5px;font-weight:600;margin-bottom:6px">Cosa può fare la configurazione attuale</div>
+            <div class="caps-row" id="caps-row"></div></div>
+          <details class="apps-det" id="apps-det" style="margin-top:11px"><summary>Su quali app agisce</summary><div class="apps-list" id="apps-list"></div></details>
+          <div class="scope-legend" id="scope-legend" style="margin-top:11px"></div>
+        </div>
+
+        <details class="adv" id="ai-adv"><summary>Impostazioni avanzate · provider, chiave, cervello offline, voce</summary><div class="adv-inner">
+        <div class="sect"><h2>Cervelli & catena di fallback <span class="badge">Come funziona</span></h2>
+          <div class="hint" style="margin-bottom:10px">ANIMA ha <b>quattro menti</b> e le prova <b>in ordine</b>, dalla più capace a quella sempre-disponibile. Sfrutta prima la potenza del browser/PC e <b>scala sul Cardputer solo come ultima rete di sicurezza</b>.</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">☁</span><div style="flex:1"><div style="font-weight:600;font-size:13px">1 · IA online (cloud)</div><div class="hint">Claude / Groq / Grok — serve chiave + Internet. La più capace.</div></div></div>
+            <div style="text-align:center;color:var(--dim)">↓</div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">✦</span><div style="flex:1"><div style="font-weight:600;font-size:13px">2 · LLM locale (GPU del browser)</div><div class="hint">Un LLM completo sulla GPU del browser (WebLLM). Offline dopo il primo download.</div></div></div>
+            <div style="text-align:center;color:var(--dim)">↓</div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">◆</span><div style="flex:1"><div style="font-weight:600;font-size:13px">3 · Browser — cervello locale (WASM) + indice web</div><div class="hint">La cascata del Cardputer compilata a WebAssembly, sulla CPU del browser. <b>Ultimo passo prima del Cardputer.</b></div></div></div>
+            <div style="text-align:center;color:var(--dim)">↓</div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">▣</span><div style="flex:1"><div style="font-weight:600;font-size:13px">4 · Cardputer (on-device)</div><div class="hint">Il cervello nel dispositivo. <b>Sempre disponibile e offline</b>: la rete di sicurezza finale.</div></div></div>
+          </div></div>
+
+        <div class="sect"><h2>Cervello offline (L1) <span class="badge fw">Live · RAM</span></h2>
+          <div class="row"><label>Politica</label>
+            <div class="ctl"><div class="seg-row" id="l1-policy">
+              <div class="seg-item" data-m="auto">Auto</div><div class="seg-item" data-m="on">Sempre</div><div class="seg-item" data-m="off">Mai</div></div></div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" id="l1-stat" style="flex:1">…</div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1">In <b>Auto</b> il cervello offline si fa da parte (liberando ~31&nbsp;KB) quando c'è un cervello più forte (online o LLM browser). <b>Sempre</b> lo tiene attivo, <b>Mai</b> non lo serve mai.</div></div></div>
+
+        <div class="sect"><h2>Assistente IA · Provider e chiave</h2>
+          <!-- Single shared key manager (shell/ai-keys.js) — same component the ANIMA app mounts; the ONE
+               place the OS asks for / stores a provider key. Provider chips, model, exec, key + test/save/delete,
+               Gemini plan detection — all on shell/ai.js. No provider table or teacher.json I/O lives here anymore. -->
+          <div id="ai-keys-mount"><span class="hint">carico il gestore chiavi…</span></div>
+          <div class="row" style="border-bottom:none;margin-top:8px"><div class="hint" style="flex:1">🎨 <b>Generare immagini con l'IA</b> in Paint (Atelier) richiede una chiave <b>Grok (xAI)</b> — modello <code>grok-2-image</code>. Claude e Groq non disegnano, ma possono <b>migliorare il prompt</b>. 🎙️ La <b>trascrizione vocale</b> (Recorder, Dettatura) usa sempre Groq/OpenAI (Whisper), anche con Claude, Gemini o Grok come chat.</div></div></div>
+
+        <div class="sect"><h2>Browser · cervello locale (WASM) <span class="badge">Offline</span></h2>
+          <div class="row"><label>Stato</label><div class="ctl" style="flex-wrap:wrap"><span class="hint" id="edge-brain-stat" style="flex:1">controllo…</span></div></div>
+          <div class="row" style="border-bottom:none"><label></label><div class="ctl" style="gap:8px;flex-wrap:wrap"><button id="edge-brain-prep">⬇ Prepara / Aggiorna</button><span class="hint" id="edge-brain-prog"></span></div></div>
+          <div class="row"><label>Ricerca web on-demand</label><div class="ctl"><span class="sw"><input type="checkbox" id="edge-web-on"><span></span></span><span class="hint" style="flex:1">In modalità <b>Browser</b>, quando i cervelli locali non sanno, recupera la risposta <b>certa</b> da Wikipedia (dal browser, mai dal Cardputer) e la <b>mette in cache</b>: da lì resta offline. Spento = solo conoscenza già in cache (nulla esce dal dispositivo).</span></div></div>
+          <div class="row"><label>Conoscenza in cache</label><div class="ctl" style="gap:8px;flex-wrap:wrap"><span class="hint" id="edge-kb-count" style="flex:1">…</span><button id="edge-kb-clear">🗑 Svuota</button></div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1">Lo <b>stesso motore del Cardputer</b> compilato a WebAssembly: apre app, calcola, risponde e impara <b>senza che nulla lasci il dispositivo</b>. Si scarica una volta (~14&nbsp;MB), poi funziona anche col Cardputer <b>spento</b>. Con la ricerca web on-demand diventa un <b>centralizzatore di conoscenza certa</b> che cresce con l'uso.</div></div></div>
+
+        <div class="sect"><h2>Voce on-device <span class="badge fw">Firmware</span></h2>
+          <div class="row"><label>Parla quando interrogato</label><div class="ctl"><span class="sw"><input type="checkbox" id="tts-enabled"><span></span></span><span class="hint" id="tts-stat">…</span></div></div>
+          <div class="row"><label>Velocità di lettura</label><div class="ctl"><input type="range" id="tts-speed" min="70" max="160" step="5" value="110" style="width:150px;accent-color:var(--accent)"><span class="hint" id="tts-speed-val" style="min-width:42px;text-align:right">110%</span></div></div>
+          <div class="row" style="border-bottom:none"><label></label><div class="ctl"><button id="tts-test">🔊 Prova voce</button></div></div>
+          <div class="row"><label>Voce sempre attiva</label><div class="ctl"><span class="sw"><input type="checkbox" id="voice-always-on"><span></span></span><span class="hint" id="vao-stat"></span></div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1">Tiene i <b>comandi vocali</b> (PTT col tasto FN) sempre pronti dalla home. Costa ~16&nbsp;KB: lascialo spento finché non hai registrato i comandi.</div></div></div>
+        </div></details>
+      </section>
+
+      <!-- ═══════════ DEVICE ═══════════ -->
+      <section id="tab-device" class="tab-content">
+        <div class="sect"><h2>Identità dispositivo</h2>
+          <div class="row"><label>Nome dispositivo</label><div class="ctl"><input type="text" id="dev-name" maxlength="32" placeholder="nucleo-01"></div></div>
+          <div class="row"><label>Locale</label><div class="ctl"><input type="text" id="dev-locale" maxlength="12" placeholder="it-IT"></div></div>
+          <div class="row"><label>Fuso orario</label><div class="ctl"><input type="text" id="dev-tz" maxlength="40" placeholder="Europe/Rome"></div></div>
+          <div class="hint" style="margin-top:6px">Il nome è usato da mDNS/Swarm e si applica al prossimo avvio.</div></div>
+        <div class="sect"><h2>Manutenzione <span class="badge fw">Firmware</span></h2>
+          <div class="ctl" style="gap:10px;flex-wrap:wrap">
+            <button id="dev-selftest">🩺 Self-Test</button>
+            <button class="danger" id="btn-reboot">🔄 Riavvia dispositivo</button></div>
+          <div class="hint" style="margin-top:10px">Il riavvio ricarica firmware e indice ANIMA dalla SD. Per gli aggiornamenti firmware usa l'app <b>Aggiornamenti</b> (l'OTA è inaffidabile su questo dispositivo: preferisci il flash seriale).</div></div>
+      </section>
+
+      <!-- ═══════════ DIAGNOSTICS ═══════════ -->
+      <section id="tab-diagnostics" class="tab-content">
+        <div class="sect"><h2>Self-Test endpoint <span class="badge">Battito</span></h2>
+          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl" style="gap:8px;flex-wrap:wrap">
+            <button class="primary" id="dg-selftest">🩺 Esegui</button><button id="dg-selftest-copy" disabled>Copia esito</button><span class="hint" id="dg-selftest-stat"></span></div></div>
+          <div class="st-list" id="dg-st-list"></div></div>
+        <div class="sect"><h2>Heap (regioni) <span class="badge live">Live</span></h2>
+          <div class="info-grid" id="heap-grid"><div class="hint" style="padding:6px">Apri questa scheda per leggere l'heap…</div></div></div>
+        <div class="sect"><h2>Log di sistema <span class="badge live">Live</span></h2>
+          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl"><button id="logs-refresh">⟳ Aggiorna</button><span class="hint">Ring RAM ~2&nbsp;KB · funziona anche senza SD/seriale.</span></div></div>
+          <div class="logbox" id="logbox">—</div></div>
+        <div class="sect"><h2>Privacy <span class="badge ro">Nota</span></h2>
+          <div class="hint">Alcuni endpoint diagnostici (<code>/api/status</code>, <code>/api/heap</code>, <code>/api/cpu</code>, <code>/api/logs</code>) sono <b>pubblici</b> sulla rete locale e mostrano SSID/IP, memoria e cause di reboot. Tienilo presente su reti condivise.</div></div>
+      </section>
+
+      <!-- ═══════════ ABOUT ═══════════ -->
+      <section id="tab-about" class="tab-content">
+        <div class="sect"><h2>Informazioni sistema</h2>
+          <div class="info-grid">
+            <div class="info-cell"><div class="il">Piattaforma</div><div class="iv">M5Stack Cardputer</div></div>
+            <div class="info-cell"><div class="il">Chip</div><div class="iv">ESP32-S3</div></div>
+            <div class="info-cell"><div class="il">Indirizzo IP</div><div class="iv" id="info-ip">—</div></div>
+            <div class="info-cell"><div class="il">Acceso da</div><div class="iv" id="info-uptime">—</div></div>
+            <div class="info-cell"><div class="il">Storage SD</div><div class="iv" id="info-sd">—</div></div>
+            <div class="info-cell"><div class="il">NucleoOS</div><div class="iv" id="info-ver">v0.1.0</div></div>
+            <div class="info-cell"><div class="il">Slot OTA</div><div class="iv" id="info-ota">—</div></div>
+            <div class="info-cell"><div class="il">App installate</div><div class="iv" id="info-apps">—</div></div>
+          </div></div>
+        <div class="sect"><h2>Pannello di Controllo</h2>
+          <div class="hint">Versione app <b>1.0</b> · Centro di Controllo con Battito live, scene, comando rapido e self-test. Pensato per dare <b>controllo completo da web</b> senza mai sovraccaricare il Cardputer.</div></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- command palette -->
+  <div class="cmd-scrim" id="cmd-scrim">
+    <div class="cmd-box">
+      <input type="text" id="cmd-input" placeholder="Comanda il Cardputer…" autocomplete="off" spellcheck="false">
+      <div class="cmd-results" id="cmd-results"></div>
+    </div>
+  </div>
+
+  <!-- reboot modal -->
+  <div class="modal-scrim" id="reboot-modal">
+    <div class="modal-box">
+      <div class="mi">🔄</div><div class="mt">Conferma riavvio</div>
+      <div class="md" id="reboot-md">Vuoi davvero riavviare il dispositivo? Le connessioni attive verranno interrotte.</div>
+      <div class="mbtns"><button id="reboot-cancel">Annulla</button><button class="danger" id="reboot-confirm" disabled>Riavvia (3)</button></div>
+    </div>
+  </div>
+
+  <!-- preset confirm sheet -->
+  <div class="modal-scrim" id="preset-modal">
+    <div class="modal-box">
+      <div class="mi" id="pm-ic">✨</div><div class="mt" id="pm-title">Profilo</div>
+      <div class="md"><div id="pm-bullets" style="text-align:left"></div><div id="pm-apps" class="hint" style="margin-top:9px;text-align:left"></div></div>
+      <div class="mbtns"><button id="pm-cancel">Annulla</button><button class="primary" id="pm-apply">Applica</button></div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="dot ok" id="conn-dot"></div><span id="status-text">Pronto</span>
+    <div class="sp"></div>
+    <button id="btn-save" class="primary" disabled>💾 Salva</button>
+    <button id="btn-reload" style="font-size:12px">⟳</button>
+  </footer>
+
+<script type="module">
+import { DEFAULTS, merge } from './settings-merge.js';
+import { STR, t as tr, detectLang } from './i18n.js';
+import I18N, { LANGS } from '/nucleo-i18n.js';   // OS i18n engine: live language + regional formats
+import { createPoller } from './poller.js';
+import { SCENES, applyScene } from './scenes.js';
+import { PRESETS, applyPreset, planPreset, feasibility, buildRegistry, gaps, APP_MAP, appStatus } from './preset-engine.js';
+import { buildActionRegistry, filterActions } from './actions.js';
+import { ENDPOINTS, runSelfTest, formatReport } from './selftest.js';
+
+const PATH = '/system/config/settings.json';
+const $ = (id) => document.getElementById(id);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+let model = merge(DEFAULTS, {});
+let lang = 'it';
+let dirty = false;
+let caps = { l1Mode: 'auto', l1Serving: false, hasKey: false };
+let screenOn = true;            // optimistic; we never POST on load (would wake a headless device)
+
+const T = (k) => tr(lang, k);
+function status(txt, ok = true) { $('status-text').textContent = txt; $('conn-dot').className = 'dot ' + (ok ? 'ok' : 'err'); }
+function setDirty(v) { dirty = v; $('btn-save').disabled = !v; }
+
+// ---- device API helper: builds query, JSON body, returns Response ----
+function api(path, { method = 'GET', query, body } = {}) {
+  let url = path;
+  if (query) { const q = new URLSearchParams(); for (const k in query) q.set(k, query[k]); url += (url.includes('?') ? '&' : '?') + q.toString(); }
+  const opt = { method, cache: 'no-store' };
+  if (body !== undefined) opt.body = JSON.stringify(body);
+  return fetch(url, opt);
+}
+async function apiJson(path, opt) { try { const r = await api(path, opt); return r.ok ? await r.json() : null; } catch { return null; } }
+
+// ═══════════ tabs / sidebar ═══════════
+const TABS = [
+  ['control', '🎛'], ['display', '📺'], ['personalization', '🎨'], ['network', '🌐'],
+  ['ai', '🧠'], ['device', '💻'], ['diagnostics', '🩺'], ['about', 'ℹ️'],
+];
+let activeTab = 'control';
+function buildSidebar() {
+  const sb = $('sidebar'); sb.innerHTML = '';
+  for (const [id, icon] of TABS) {
+    const el = document.createElement('div');
+    el.className = 'nav-item' + (id === activeTab ? ' active' : '');
+    el.innerHTML = `<span class="ni">${icon}</span><span class="lbl">${T('tab_' + id)}</span>`;
+    el.addEventListener('click', () => selectTab(id));
+    sb.appendChild(el);
+  }
+}
+const tabOpened = {};
+function selectTab(id) {
+  activeTab = id;
+  $$('.nav-item').forEach((n, i) => n.classList.toggle('active', TABS[i][0] === id));
+  $$('.tab-content').forEach((c) => c.classList.toggle('active', c.id === 'tab-' + id));
+  if (!tabOpened[id]) { tabOpened[id] = true; onTabFirstOpen(id); }
+  if (id === 'diagnostics') refreshLogs();
+}
+function onTabFirstOpen(id) {
+  if (id === 'personalization') loadWallpapers();
+  if (id === 'diagnostics') { refreshHeapDetail(); refreshLogs(); }
+}
+
+// ═══════════ live data poller (the ONLY timer) ═══════════
+const HISTORY = { heap: [], cpu: [], frag: [] };
+function pushHist(k, v) { const a = HISTORY[k]; a.push(v); if (a.length > 120) a.shift(); }
+
+// tiny sparkline drawn only on a fresh sample (zero device cost) — mirrors System Monitor's Spark.
+function drawSpark(canvas, buf, max, color) {
+  if (!canvas) return; const x = canvas.getContext('2d');
+  const w = canvas.width = canvas.clientWidth || 200, h = canvas.height = 34, n = buf.length;
+  x.clearRect(0, 0, w, h); if (n < 2) return;
+  const cap = 120, dx = w / (cap - 1), y = (v) => h - 1 - (Math.max(0, Math.min(max, v)) / max) * (h - 3);
+  const x0 = w - (n - 1) * dx;
+  x.beginPath(); x.moveTo(x0, h); for (let i = 0; i < n; i++) x.lineTo(x0 + i * dx, y(buf[i])); x.lineTo(x0 + (n - 1) * dx, h); x.closePath();
+  x.fillStyle = color + '22'; x.fill();
+  x.beginPath(); for (let i = 0; i < n; i++) { const px = x0 + i * dx, py = y(buf[i]); i ? x.lineTo(px, py) : x.moveTo(px, py); }
+  x.strokeStyle = color; x.lineWidth = 1.5; x.stroke();
+}
+const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const band = { ok: () => cssv('--ok'), warn: () => cssv('--warn'), bad: () => cssv('--bad') };
+function setTileBand(tileId, level) { const el = $(tileId); if (!el) return; el.classList.remove('ok', 'warn', 'bad'); el.classList.add(level);
+  const tv = el.querySelector('.tv'); if (tv) { tv.classList.remove('ok', 'warn', 'bad'); tv.classList.add(level); } }
+const fmtB = (b) => b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : b >= 1e3 ? (b / 1e3).toFixed(0) + ' KB' : (b | 0) + ' B';
+const fmtUp = (s) => { s |= 0; const d = s / 86400 | 0, h = s % 86400 / 3600 | 0, m = s % 3600 / 60 | 0; return d ? `${d}g ${h}h` : h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`; };
+
+let lastStatus = null, lastUpdateAt = 0, everReached = false;
+function renderStatus(s) {
+  lastStatus = s; everReached = true; lastUpdateAt = Date.now();
+  const net = s.network || {}, st = s.storage || {};
+  // hero verdict
+  const minFree = s.min_free_heap ?? 0, busy = s.arbiter && s.arbiter.busy;
+  let level = 'ok', icon = '🟢', title = T('online');
+  if (busy) { level = 'warn'; icon = '🟡'; title = T('busy'); }
+  if (minFree && minFree < 8000) { level = 'warn'; icon = '🟡'; title = T('heapTight'); }
+  $('hero-dot').className = 'verdict-dot ' + (level === 'ok' ? '' : level); $('hero-dot').textContent = icon;
+  $('hero-title').textContent = (net.ssid ? net.ssid : 'NucleoOS');
+  $('hero-net').innerHTML = `<b>${(net.mode || '').toUpperCase()}</b> · ${net.ip || '—'} · ${T('uptime')} <b>${fmtUp(s.uptime_s)}</b> · ${title}`;
+  // network tab
+  $('net-mode') && ($('net-mode').textContent = (net.mode || '—').toUpperCase());
+  $('net-ssid') && ($('net-ssid').textContent = net.ssid || '—');
+  $('net-ip') && ($('net-ip').textContent = net.ip || '—');
+  $('net-time') && ($('net-time').textContent = net.time ? new Date(net.time * 1000).toLocaleString() : (net.time_synced ? 'sync' : '—'));
+  // about / tiles
+  $('info-ip').textContent = net.ip || location.hostname || '—'; $('info-ip').className = 'iv ok';
+  $('info-uptime').textContent = fmtUp(s.uptime_s); $('info-ver').textContent = (s.os || 'NucleoOS') + ' v' + (s.version || '0.1.0');
+  $('info-ota').textContent = s.ota ? `${s.ota.running} · ${s.ota.state}` : '—';
+  $('info-apps').textContent = s.apps ? String(s.apps.installed) : '—';
+  const used = (st.total_bytes || 0) - (st.free_bytes || 0);
+  $('info-sd').textContent = st.mounted ? `${fmtB(st.free_bytes)} libere / ${fmtB(st.total_bytes)}` : 'non montato';
+  $('tile-up').querySelector('.tv').textContent = fmtUp(s.uptime_s);
+  $('tile-sd').querySelector('.tv').textContent = st.mounted ? fmtB(st.free_bytes) : 'n/d';
+  $('tile-sd-sub').textContent = st.mounted ? `${st.fs} · ${fmtB(used)} usati` : '';
+  const sdPct = st.total_bytes ? 100 * used / st.total_bytes : 0;
+  setTileBand('tile-sd', sdPct > 90 ? 'bad' : sdPct > 75 ? 'warn' : 'ok');
+  // min-free watermark tile
+  $('tile-min').querySelector('.tv').textContent = minFree ? fmtB(minFree) : 'n/d';
+  setTileBand('tile-min', minFree && minFree < 6000 ? 'bad' : minFree && minFree < 12000 ? 'warn' : 'ok');
+}
+function renderHeap(h) {
+  const r = h.internal || {}; const free = r.free_bytes || 0, frag = r.frag_pct ?? 0;
+  pushHist('heap', free / 1024); pushHist('frag', frag);
+  const tv = $('tile-heap').querySelector('.tv'); tv.innerHTML = (free / 1024).toFixed(0) + ' <small>KB</small>';
+  setTileBand('tile-heap', free < 12000 ? 'bad' : free < 25000 ? 'warn' : 'ok');
+  drawSpark($('tile-heap').querySelector('canvas'), HISTORY.heap, Math.max(120, ...HISTORY.heap), free < 25000 ? band.warn() : band.ok());
+  $('tile-frag').querySelector('.tv').textContent = frag + '%';
+  setTileBand('tile-frag', frag > 70 ? 'bad' : frag > 45 ? 'warn' : 'ok');
+}
+function renderCpu(c) {
+  const loads = c.load || []; const n = loads.length || c.cores || 1;
+  const avg = c.load_avg ?? (loads.reduce((a, b) => a + b, 0) / (n || 1));
+  pushHist('cpu', avg);
+  const tv = $('tile-cpu').querySelector('.tv'); tv.innerHTML = avg.toFixed(0) + ' <small>%</small>';
+  setTileBand('tile-cpu', avg >= 85 ? 'bad' : avg >= 60 ? 'warn' : 'ok');
+  const box = $('cpu-cores');
+  if (box.children.length !== n) { box.innerHTML = ''; for (let i = 0; i < n; i++) { const b = document.createElement('div'); b.className = 'cbar'; b.innerHTML = '<i></i>'; box.appendChild(b); } }
+  for (let i = 0; i < n; i++) { const v = loads[i] ?? 0; const fill = box.children[i].firstChild; fill.style.width = Math.min(100, v) + '%'; fill.style.background = v >= 85 ? band.bad() : v >= 60 ? band.warn() : band.ok(); }
+  drawSpark($('tile-cpu').querySelector('canvas'), HISTORY.cpu, 100, avg >= 60 ? band.warn() : band.ok());
+}
+
+const metricOf = { status: (d) => d && d.uptime_s, heap: (d) => d && d.internal && Math.round((d.internal.free_bytes || 0) / 512), cpu: (d) => d && Math.round(d.load_avg || 0) };
+const poller = createPoller({
+  fetchJson: async (src) => {
+    const path = src === 'status' ? '/api/status' : src === 'heap' ? '/api/heap' : '/api/cpu';
+    const r = await fetch(path, { cache: 'no-store' });            // throws on network error → poller.onError
+    if (r.status === 503) return { __status: 503 };
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  },
+  hidden: () => document.hidden,
+  changed: (src, prev, next) => { if (!prev || !next) return true; return metricOf[src](prev) !== metricOf[src](next); },
+  crossedThreshold: (src, prev, next) => {
+    if (src !== 'heap' || !next || !next.internal) return false;
+    return (next.internal.free_bytes || 0) < 25000;            // entered warn band → watch closely
+  },
+  onSample: (src, data) => {
+    if (data && data.__status === 503) { setLive('busy'); return; }
+    if (src === 'status') renderStatus(data);
+    else if (src === 'heap') renderHeap(data);
+    else if (src === 'cpu') renderCpu(data);
+    setLive('live');
+  },
+  onError: () => { setLive('offline'); if (Date.now() - lastUpdateAt > 6000) markOffline(); },
+});
+function markOffline() { $('hero-dot').className = 'verdict-dot bad'; $('hero-dot').textContent = '🔴'; $('hero-title').textContent = T('offline'); }
+function setLive(state) {
+  const pill = $('live-pill'), txt = $('live-txt');
+  if (poller.frozen) { pill.classList.add('frozen'); txt.textContent = T('frozen'); return; }
+  pill.classList.remove('frozen');
+  const ago = lastUpdateAt ? Math.round((Date.now() - lastUpdateAt) / 1000) : 0;
+  txt.textContent = state === 'offline' ? T('offline') : state === 'busy' ? T('busy') : `${T('live')} · ${ago}${T('secondsAgo')}`;
+}
+$('live-pill').addEventListener('click', () => { poller.setFrozen(!poller.frozen); setLive('live'); if (!poller.frozen) poller.refreshNow(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poller.refreshNow(); });
+setInterval(() => { if (!poller.frozen && !document.hidden) setLive('live'); }, 1000);   // keeps the "Ns ago" honest (no fetch)
+
+// ═══════════ scenes ═══════════
+let activeScene = null;
+function buildScenes() {
+  const box = $('scene-chips'); box.innerHTML = '';
+  for (const s of SCENES) {
+    const el = document.createElement('div'); el.className = 'chip'; el.dataset.id = s.id;
+    el.innerHTML = `<span class="ci">${s.icon}</span><div><div class="cl">${s[lang] || s.it}</div><div class="cd">${(s.desc && s.desc[lang]) || ''}</div></div>`;
+    el.addEventListener('click', () => runScene(s.id));
+    box.appendChild(el);
+  }
+}
+async function runScene(id) {
+  const res = applyScene(model, id);
+  if (!res) return;
+  $$('#scene-chips .chip').forEach((c) => c.classList.toggle('active', c.dataset.id === id));
+  activeScene = id;
+  if (res.selfTest) { selectTab('diagnostics'); runSelfTestUI('dg'); return; }
+  status('Applico scena: ' + (res.scene[lang] || res.scene.it) + '…');
+  model = res.model; toForm();
+  await persistModel();                                   // patch persisted (drift-aware)
+  for (const c of res.apiCalls) {                         // SEQUENTIAL — never parallel
+    try { await api(c.path, { method: c.method, query: c.query, body: c.body }); } catch {}
+  }
+  await refreshCaps();
+  syncQuickToggles();
+  status('Scena applicata: ' + (res.scene[lang] || res.scene.it));
+}
+
+// ═══════════ quick toggles ═══════════
+const QUICK = [
+  { id: 'screen', icon: '📺', label: () => T('screen'), get: () => screenOn, set: toggleScreen },
+  { id: 'voice', icon: '🎙️', label: () => T('voiceAlways'), get: () => !!(model.voice && model.voice.alwaysOn), set: toggleVoiceAlways },
+  { id: 'l1', icon: '🧠', label: () => T('offlineBrain'), get: () => caps.l1Serving, sub: () => caps.l1Mode, set: cycleL1 },
+  { id: 'tts', icon: '🔊', label: () => T('tts'), get: () => ttsState.enabled, set: toggleTts },
+  { id: 'theme', icon: '🌙', label: () => 'Tema', get: () => model.ui.theme === 'dark', sub: () => model.ui.theme, set: toggleTheme },
+];
+function buildQuick() {
+  const box = $('quick-grid'); box.innerHTML = '';
+  for (const q of QUICK) {
+    const el = document.createElement('button'); el.className = 'qtoggle'; el.dataset.id = q.id;
+    el.innerHTML = `<span class="qi">${q.icon}</span><span class="qt"><span class="ql">${q.label()}</span><span class="qs"></span></span>`;
+    el.addEventListener('click', async () => { el.classList.add('busy'); try { await q.set(); } finally { el.classList.remove('busy'); syncQuickToggles(); } });
+    box.appendChild(el);
+  }
+  syncQuickToggles();
+}
+function syncQuickToggles() {
+  for (const q of QUICK) {
+    const el = $('quick-grid').querySelector(`[data-id="${q.id}"]`); if (!el) continue;
+    const on = !!q.get(); el.classList.toggle('on', on);
+    el.querySelector('.qs').textContent = q.sub ? q.sub() : (on ? T('on') : T('off'));
+  }
+}
+async function toggleScreen() { const want = !screenOn; const r = await apiJson('/api/display', { method: 'POST', query: { on: want ? 1 : 0 } }); if (r) { screenOn = r.on; status(screenOn ? 'Schermo acceso' : 'Schermo spento'); } updateScreenUI(); }
+function updateScreenUI() { const b = $('disp-toggle'), s = $('disp-state'); if (b) b.textContent = screenOn ? '⏻ Spegni' : '⏻ Accendi'; if (s) s.textContent = screenOn ? 'Schermo ACCESO (ultima azione).' : 'Schermo SPENTO.'; }
+async function toggleVoiceAlways() {
+  const on = !(model.voice && model.voice.alwaysOn);
+  if (!model.voice) model.voice = {}; model.voice.alwaysOn = on;
+  const r = await apiJson('/api/voice/always', { method: 'POST', body: { on } });
+  const vs = $('vao-stat'); if ($('voice-always-on')) $('voice-always-on').checked = on;
+  if (vs) vs.textContent = r ? (on ? 'attiva (PTT da home)' : 'su richiesta') : T('unreachable');
+  status(r ? (on ? 'Voce sempre attiva' : 'Voce su richiesta') : T('unreachable'), !!r);
+}
+async function cycleL1() { const next = caps.l1Mode === 'auto' ? 'on' : caps.l1Mode === 'on' ? 'off' : 'auto'; await setL1(next); }
+async function setL1(mode) { const r = await apiJson('/api/anima/l1', { method: 'POST', body: { mode } }); if (r) { caps.l1Mode = r.l1Mode; caps.l1Serving = r.l1Serving; paintL1(); status('Cervello offline: ' + r.l1Mode); } }
+const ttsState = { enabled: false, available: false, speed: 110, smin: 70, smax: 160, sstep: 5 };
+async function toggleTts() { const r = await apiJson('/api/tts', { method: 'POST', body: { enabled: !ttsState.enabled } }); if (r) { ttsState.enabled = r.enabled; ttsState.available = r.available; paintTts(); } }
+function toggleTheme() { model.ui.theme = model.ui.theme === 'dark' ? 'light' : 'dark'; applyLiveUI(); persistUiSoon(); }
+
+// ═══════════ self-test UI ═══════════
+async function runSelfTestUI(prefix) {
+  const list = $(prefix + '-st-list'), stat = $(prefix + '-selftest-stat'), copy = $(prefix + '-selftest-copy');
+  list.innerHTML = ''; stat.textContent = T('testing'); copy.disabled = true;
+  const rows = {};
+  for (const ep of ENDPOINTS) {
+    const el = document.createElement('div'); el.className = 'st-item';
+    el.innerHTML = `<span class="sm run">…</span><span class="sl">${ep[lang]}</span><span class="sp">${ep.path}</span><span class="ss"></span>`;
+    list.appendChild(el); rows[ep.key] = el;
+  }
+  const results = await runSelfTest((p, o) => fetch(p, o), { now: () => performance.now(), lang });
+  for (const r of results) {
+    const el = rows[r.key]; if (!el) continue;
+    const sm = el.querySelector('.sm'), ss = el.querySelector('.ss');
+    const lvl = !r.ok ? 'bad' : r.warn ? 'warn' : 'ok';
+    sm.className = 'sm ' + lvl; sm.textContent = !r.ok ? '✗' : r.warn ? '!' : '✓';
+    ss.textContent = r.ok ? (r.warn ? T('warn') : `${Math.round(r.ms)}ms`) : (r.status ? 'HTTP ' + r.status : T('unreachable'));
+  }
+  const okN = results.filter((r) => r.ok && !r.warn).length;
+  stat.textContent = `${okN}/${results.length} ${T('pass')}`;
+  const report = formatReport(results, lang); copy.disabled = false;
+  copy.onclick = async () => { try { await navigator.clipboard.writeText(report); } catch {} try { window.parent.postMessage({ type: 'clipboard-write', kind: 'text', data: report }, '*'); } catch {} copy.textContent = T('copied'); setTimeout(() => copy.textContent = T('copyReport'), 1400); };
+}
+$('cc-selftest').addEventListener('click', () => runSelfTestUI('cc'));
+$('dg-selftest').addEventListener('click', () => runSelfTestUI('dg'));
+$('dev-selftest').addEventListener('click', () => { selectTab('diagnostics'); runSelfTestUI('dg'); });
+
+// ═══════════ command palette ═══════════
+let cmdActions = [], cmdSel = 0, cmdFiltered = [];
+function buildActions() {
+  cmdActions = buildActionRegistry({
+    nav: selectTab,
+    api: (p, o) => api(p, o).then(() => status('✓ ' + p)).catch(() => status(T('unreachable'), false)),
+    reboot: () => $('reboot-modal') && openReboot(),
+    selfTest: () => { selectTab('control'); runSelfTestUI('cc'); },
+    applyScene: runScene,
+    scanWifi: scanWifi,
+    toast: status,
+  });
+}
+function openCmd() { $('cmd-scrim').classList.add('show'); $('cmd-input').value = ''; renderCmd(''); $('cmd-input').focus(); }
+function closeCmd() { $('cmd-scrim').classList.remove('show'); }
+function renderCmd(q) {
+  cmdFiltered = filterActions(cmdActions, q, lang); cmdSel = 0;
+  const box = $('cmd-results');
+  if (!cmdFiltered.length) { box.innerHTML = `<div class="cmd-empty">${T('noMatch')}</div>`; return; }
+  box.innerHTML = '';
+  cmdFiltered.forEach((a, i) => {
+    const el = document.createElement('div'); el.className = 'cmd-row' + (a.section === 'danger' ? ' danger' : '') + (i === 0 ? ' sel' : '');
+    const icon = a.section === 'nav' ? '↪' : a.section === 'scene' ? '🎬' : a.section === 'danger' ? '⚠' : '⚡';
+    el.innerHTML = `<span class="cr-i">${icon}</span><span class="cr-t">${a[lang] || a.it}</span><span class="cr-s">${a.section}</span>`;
+    el.addEventListener('click', () => runCmd(a));
+    el.addEventListener('mousemove', () => { cmdSel = i; markCmdSel(); });
+    box.appendChild(el);
+  });
+}
+function markCmdSel() { $$('#cmd-results .cmd-row').forEach((r, i) => r.classList.toggle('sel', i === cmdSel)); const sel = $$('#cmd-results .cmd-row')[cmdSel]; sel && sel.scrollIntoView({ block: 'nearest' }); }
+function runCmd(a) { closeCmd(); try { a.run(); } catch (e) { status('Errore comando', false); } }
+$('cmd-input').addEventListener('input', (e) => renderCmd(e.target.value));
+$('cmd-input').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); cmdSel = Math.min(cmdFiltered.length - 1, cmdSel + 1); markCmdSel(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); cmdSel = Math.max(0, cmdSel - 1); markCmdSel(); }
+  else if (e.key === 'Enter') { e.preventDefault(); const a = cmdFiltered[cmdSel]; if (a) runCmd(a); }
+  else if (e.key === 'Escape') { closeCmd(); }
+});
+$('cmd-scrim').addEventListener('mousedown', (e) => { if (e.target === $('cmd-scrim')) closeCmd(); });
+$('cmd-trigger').addEventListener('click', openCmd);
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); $('cmd-scrim').classList.contains('show') ? closeCmd() : openCmd(); }
+});
+
+// ═══════════ network scan ═══════════
+async function scanWifi() {
+  const stat = $('wifi-scan-stat'), list = $('wifi-list'); stat.textContent = T('scanning'); list.innerHTML = '';
+  const d = await apiJson('/api/wifi/scan'); stat.textContent = '';
+  if (!d || !Array.isArray(d.networks)) { stat.textContent = T('unreachable'); return; }
+  const cur = lastStatus && lastStatus.network ? lastStatus.network.ssid : '';
+  d.networks.sort((a, b) => (b.rssi || -999) - (a.rssi || -999));
+  for (const ap of d.networks) {
+    const conn = ap.ssid && ap.ssid === cur;
+    const strength = ap.rssi >= -55 ? 4 : ap.rssi >= -67 ? 3 : ap.rssi >= -78 ? 2 : 1;
+    const bars = [6, 9, 12, 16].map((h, i) => `<i style="height:${h}px;${i < strength ? 'background:var(--accent)' : ''}"></i>`).join('');
+    const el = document.createElement('div'); el.className = 'ap' + (conn ? ' connected' : '');
+    el.innerHTML = `<span class="bars">${bars}</span><div style="flex:1;min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${ap.ssid || '(nascosta)'} ${conn ? '· <span style="color:var(--accent)">connessa</span>' : ''}</div><div class="as">${ap.auth || ''} · ch ${ap.channel || '?'}</div></div><span class="as">${ap.rssi} dBm</span>`;
+    list.appendChild(el);
+  }
+}
+$('wifi-scan').addEventListener('click', scanWifi);
+
+// ═══════════ diagnostics: heap detail + logs ═══════════
+async function refreshHeapDetail() {
+  const grid = $('heap-grid'); const h = await apiJson('/api/heap');
+  if (!h) { grid.innerHTML = `<div class="hint" style="padding:6px">${T('unreachable')}</div>`; return; }
+  const cell = (l, v) => `<div class="info-cell"><div class="il">${l}</div><div class="iv">${v}</div></div>`;
+  const r = h.internal || {};
+  grid.innerHTML = cell('Internal libera', fmtB(r.free_bytes || 0)) + cell('Blocco max', fmtB(r.largest_free_block || 0))
+    + cell('Frammentazione', (r.frag_pct ?? 0) + '%') + cell('Min storico', fmtB(r.min_free_bytes || 0))
+    + cell('DMA libera', fmtB((h.dma || {}).free_bytes || 0)) + cell('Stack httpd min', fmtB(h.httpd_stack_free_min || 0));
+}
+async function refreshLogs() {
+  const box = $('logbox'); try { const r = await fetch('/api/logs', { cache: 'no-store' }); box.textContent = r.ok ? (await r.text()) || '(vuoto)' : T('unreachable'); } catch { box.textContent = T('unreachable'); }
+}
+$('logs-refresh').addEventListener('click', refreshLogs);
+
+// ═══════════ appearance: theme/accent/font/lang/wallpaper ═══════════
+function applyLiveUI() {
+  try { window.parent.postMessage({ type: 'set-theme', theme: model.ui.theme, accent: model.ui.accent, fontSize: model.ui.fontSize }, '*'); } catch {}
+  document.documentElement.dataset.theme = model.ui.theme;
+  document.documentElement.style.setProperty('--accent', model.ui.accent);
+  $('theme-light').classList.toggle('active', model.ui.theme === 'light');
+  $('theme-dark').classList.toggle('active', model.ui.theme === 'dark');
+  $$('.color-swatch').forEach((el) => el.classList.toggle('active', el.dataset.color === model.ui.accent));
+  $$('.seg-item[data-size]').forEach((el) => el.classList.toggle('active', el.dataset.size === model.ui.fontSize));
+  lang = detectLang(model);
+  $$('.lang-item').forEach((el) => el.classList.toggle('active', el.dataset.lang === lang));
+  try { localStorage.setItem('anima.lang', lang); } catch {}
+  document.documentElement.lang = lang;
+  model.device.locale = (lang === 'en') ? 'en-US' : 'it-IT';
+  retitle();
+}
+function retitle() {
+  $('brand').textContent = T('appTitle'); buildSidebar();
+  $('cmd-trigger-t').textContent = T('cmdPlaceholder'); $('cmd-input').placeholder = T('cmdPlaceholder');
+  // re-render dynamic labels
+  buildScenes(); buildQuick();
+  $('t-pulse') && ($('t-pulse').firstChild.textContent = T('pulse') + ' ');
+  $('t-scenes') && ($('t-scenes').firstChild.textContent = T('scenes') + ' ');
+  $('t-quick') && ($('t-quick').firstChild.textContent = T('quickToggles') + ' ');
+  $('lang-hint') && ($('lang-hint').textContent = T('langHint'));
+  $('t-langregion') && ($('t-langregion').firstChild.textContent = T('langRegion') + ' ');
+  $('t-displang') && ($('t-displang').textContent = T('displayLang'));
+  $('t-region') && ($('t-region').textContent = T('regionFormat'));
+  renderLangRegion();
+}
+$('theme-light').addEventListener('click', () => { model.ui.theme = 'light'; applyLiveUI(); persistUiSoon(); });
+$('theme-dark').addEventListener('click', () => { model.ui.theme = 'dark'; applyLiveUI(); persistUiSoon(); });
+$$('.color-swatch').forEach((el) => el.addEventListener('click', () => { model.ui.accent = el.dataset.color; applyLiveUI(); persistUiSoon(); }));
+$$('.seg-item[data-size]').forEach((el) => el.addEventListener('click', () => { model.ui.fontSize = el.dataset.size; applyLiveUI(); persistUiSoon(); }));
+// ═══════════ Language & Region (evolved, engine-backed, live OS-wide) ═══════════
+// Curated regional formats. '' = follow the display language. Adding a row here adds an option;
+// adding a LANGUAGE happens once in nucleo-i18n.js LANGS and this picker renders it automatically.
+const REGION_LOCALES = [
+  ['', null], ['it-IT', 'Italiano (Italia)'], ['it-CH', 'Italiano (Svizzera)'],
+  ['en-US', 'English (United States)'], ['en-GB', 'English (United Kingdom)'],
+  ['de-DE', 'Deutsch (Deutschland)'], ['fr-FR', 'Français (France)'], ['es-ES', 'Español (España)'],
+];
+let _coverage = null;
+async function loadCoverage() {
+  if (_coverage !== null) return _coverage;
+  try { const r = await fetch('/i18n/coverage.json', { cache: 'no-cache' }); _coverage = r.ok ? await r.json() : {}; }
+  catch { _coverage = {}; }
+  return _coverage;
+}
+// Display-language chips, rendered from the engine's LANGS (scalable: new language → new chip, free).
+function renderLangRow() {
+  const row = $('lang-row'); if (!row) return;
+  const cur = I18N.lang;
+  row.innerHTML = '';
+  for (const l of LANGS) {
+    const el = document.createElement('div');
+    el.className = 'seg-item lang-item' + (l.code === cur ? ' active' : '');
+    el.dataset.lang = l.code;
+    el.innerHTML = '<span class="fl"></span><span class="lb"></span>';
+    el.querySelector('.fl').textContent = l.flag;
+    el.querySelector('.lb').textContent = l.label;
+    el.addEventListener('click', () => {
+      if (l.code === I18N.lang) return;
+      model.ui.language = l.code; lang = l.code;
+      applyLiveUI(); persistUiSoon();
+      I18N.setLang(l.code);                 // broadcast to the whole OS (shell + every open app), live
+    });
+    row.appendChild(el);
+  }
+}
+function renderRegionSelect() {
+  const sel = $('region-select'); if (!sel) return;
+  if (!sel.dataset.wired) {
+    for (const [v, label] of REGION_LOCALES) {
+      const o = document.createElement('option'); o.value = v; o.textContent = label || T('regionAuto'); sel.appendChild(o);
+    }
+    sel.addEventListener('change', () => {
+      I18N.setLocale(sel.value);            // engine = source of truth for Intl formatting
+      model.ui.regionLocale = sel.value; persistUiSoon();
+      renderRegionPreview();
+    });
+    sel.dataset.wired = '1';
+  } else { sel.options[0].textContent = T('regionAuto'); }   // refresh the "Automatic" label on lang switch
+  sel.value = I18N.formatLocale() || '';
+}
+// Live, locale-correct format preview (the modern-OS touch). Pure Intl — zero device cost.
+function renderRegionPreview() {
+  const box = $('region-preview'); if (!box) return;
+  const now = new Date();
+  const cells = [
+    [T('pvDate'), I18N.fmtDate(now, { dateStyle: 'full' })],
+    [T('pvTime'), I18N.fmtTime(now, { timeStyle: 'medium' })],
+    [T('pvNumber'), I18N.fmtNumber(1234567.89, { minimumFractionDigits: 2 })],
+    [T('pvRelative'), I18N.fmtRelative(-2, 'hour')],
+  ];
+  box.innerHTML = '';
+  for (const [l, v] of cells) {
+    const d = document.createElement('div'); d.className = 'pv';
+    const pl = document.createElement('div'); pl.className = 'pl'; pl.textContent = l;
+    const pv = document.createElement('div'); pv.className = 'pvv'; pv.textContent = v;
+    d.append(pl, pv); box.appendChild(d);
+  }
+}
+async function renderLangStatus() {
+  const el = $('lang-status'); if (!el) return;
+  const c = await loadCoverage();
+  const codes = LANGS.map((l) => l.code.toUpperCase()).join(' ⇄ ');
+  if (c && c.surfaces) {
+    el.innerHTML = '<b>✓</b> ' + T('langStatusOk')
+      .replace('{n}', c.surfaces).replace('{k}', c.totalKeys).replace('{langs}', codes);
+  } else {
+    el.textContent = codes;
+  }
+}
+function renderLangRegion() { renderLangRow(); renderRegionSelect(); renderRegionPreview(); renderLangStatus(); }
+
+// Make Settings the canonical control AND keep it in sync with changes made elsewhere (copilot,
+// onboarding, another window): install engine listeners, then react to live language changes.
+I18N.init('core', { observe: false, apply: false }).then(() => {
+  I18N.onChange(() => {
+    if (I18N.lang !== lang) { lang = I18N.lang; model.ui.language = lang; applyLiveUI(); }  // cascades to renderLangRegion
+    else renderLangRegion();                                                                 // region/format-only change
+  });
+  renderLangRegion();
+});
+
+async function loadWallpapers() {
+  const container = $('wp-container'); let activeWp = '';
+  try { const uiR = await fetch('/api/fs/read?path=/system/config/ui-state.json'); if (uiR.ok) activeWp = (await uiR.json()).wallpaper || ''; } catch {}
+  try {
+    const r = await fetch('/api/fs/list?path=/data/Pictures');
+    if (!r.ok) { container.innerHTML = `<div class="hint" style="padding:10px">${T('unreachable')}</div>`; return; }
+    const imgs = ((await r.json()).entries || []).filter((e) => e.type === 'file' && /\.(png|jpe?g)$/i.test(e.name));
+    if (!imgs.length) { container.innerHTML = '<div class="hint" style="padding:10px">Nessuno sfondo in /data/Pictures/</div>'; return; }
+    container.innerHTML = '';
+    for (const img of imgs) {
+      const path = '/data/Pictures/' + img.name; const el = document.createElement('div'); el.className = 'wp-item' + (path === activeWp ? ' active' : '');
+      el.style.backgroundImage = `url("/api/fs/read?path=${encodeURIComponent(path)}")`; el.innerHTML = `<div class="wp-name">${img.name}</div>`;
+      el.addEventListener('click', () => { try { window.parent.postMessage({ type: 'set-wallpaper', path }, '*'); } catch {} $$('.wp-item').forEach((i) => i.classList.remove('active')); el.classList.add('active'); });
+      container.appendChild(el);
+    }
+  } catch { container.innerHTML = `<div class="hint" style="padding:10px">${T('unreachable')}</div>`; }
+}
+
+// ═══════════ display / device forms ═══════════
+$('disp-toggle').addEventListener('click', toggleScreen);
+$('pw-bri').addEventListener('input', (e) => { $('pw-bri-v').textContent = e.target.value + '%'; model.power.display_brightness = +e.target.value; setDirty(true); });
+$('pw-vol').addEventListener('input', (e) => { $('pw-vol-v').textContent = e.target.value + '%'; model.power.volume = +e.target.value; setDirty(true); });
+$$('#tab-device input, #tab-network input[type=checkbox]').forEach((el) => el.addEventListener('input', () => { fromForm(); setDirty(true); }));
+
+function toForm() {
+  $('dev-name').value = model.device.name; $('dev-locale').value = model.device.locale; $('dev-tz').value = model.device.timezone;
+  $('pw-bri').value = model.power.display_brightness; $('pw-bri-v').textContent = model.power.display_brightness + '%';
+  $('pw-vol').value = model.power.volume ?? 70; $('pw-vol-v').textContent = (model.power.volume ?? 70) + '%';
+  $('net-wifi').checked = !!model.network.wifi.enabled; $('net-ble').checked = !!model.network.ble.enabled;
+  $('net-swarm').checked = !!model.network.swarm.enabled; $('net-ipv6').checked = !!(model.network.ipv6 && model.network.ipv6.enabled);
+  $('voice-always-on').checked = !!(model.voice && model.voice.alwaysOn);
+  $('vao-stat').textContent = (model.voice && model.voice.alwaysOn) ? 'attiva (PTT da home)' : 'su richiesta';
+}
+function fromForm() {
+  model.device.name = $('dev-name').value.trim() || 'nucleo-01'; model.device.locale = $('dev-locale').value.trim(); model.device.timezone = $('dev-tz').value.trim();
+  model.power.display_brightness = +$('pw-bri').value; model.power.volume = +$('pw-vol').value;
+  model.network.wifi.enabled = $('net-wifi').checked; model.network.ble.enabled = $('net-ble').checked; model.network.swarm.enabled = $('net-swarm').checked;
+  if (!model.network.ipv6) model.network.ipv6 = {}; model.network.ipv6.enabled = $('net-ipv6').checked;
+  if (!model.voice) model.voice = {}; model.voice.alwaysOn = $('voice-always-on').checked;
+}
+
+// ═══════════ persistence (drift-aware: re-read → merge → write) ═══════════
+async function readSettingsFile() { try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store' }); if (r.ok) { const t = await r.text(); return t ? JSON.parse(t) : {}; } } catch {} return {}; }
+async function persistModel() {
+  const onDisk = await readSettingsFile();                 // preserve keys we don't manage
+  const out = merge(onDisk, model);
+  try { const w = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH), { method: 'POST', body: JSON.stringify(out, null, 2) }); return w.ok; } catch { return false; }
+}
+async function save() { fromForm(); status('Salvataggio…'); const ok = await persistModel(); status(ok ? T('saved') : 'Salvataggio fallito', ok); if (ok) setDirty(false); }
+let uiSaveT = null;
+function persistUiSoon() { clearTimeout(uiSaveT); uiSaveT = setTimeout(async () => { status('Salvataggio…'); const ok = await persistModel(); status(ok ? 'Personalizzazione salvata' : 'Salvataggio fallito', ok); }, 350); }
+$('btn-save').addEventListener('click', save);
+$('btn-reload').addEventListener('click', load);
+
+// ═══════════ reboot (guarded + countdown) ═══════════
+let rebootTimer = null;
+function openReboot() {
+  $('reboot-modal').classList.add('show'); let n = 3; const b = $('reboot-confirm'); b.disabled = true; b.textContent = `Riavvia (${n})`;
+  rebootTimer = setInterval(() => { n--; if (n <= 0) { clearInterval(rebootTimer); b.disabled = false; b.textContent = T('reboot'); } else b.textContent = `Riavvia (${n})`; }, 1000);
+}
+function closeReboot() { clearInterval(rebootTimer); $('reboot-modal').classList.remove('show'); }
+$('btn-reboot').addEventListener('click', openReboot);
+$('reboot-cancel').addEventListener('click', closeReboot);
+$('reboot-confirm').addEventListener('click', async () => { closeReboot(); status('Riavvio in corso…'); try { await fetch('/api/reboot', { method: 'POST' }); } catch {} status('Dispositivo in riavvio — ricarica la pagina tra qualche secondo', false); });
+
+// ═══════════ ANIMA caps (L1) ═══════════
+function paintL1() { $$('#l1-policy .seg-item').forEach((el) => el.classList.toggle('active', el.dataset.m === caps.l1Mode));
+  const s = $('l1-stat'); if (s) s.textContent = caps.l1Serving ? 'attivo (sta servendo richieste offline)' : (caps.l1Mode === 'off' ? 'spento (RAM liberata)' : 'a riposo (un cervello più forte è attivo)'); }
+let onCapsRefreshed = null;   // preset engine subscribes here so profiles re-evaluate when caps change
+async function refreshCaps() { const c = await apiJson('/api/anima/caps'); if (c) { caps = Object.assign(caps, c); paintL1(); } if (typeof onCapsRefreshed === 'function') { try { onCapsRefreshed(); } catch {} } }
+$$('#l1-policy .seg-item').forEach((el) => el.addEventListener('click', () => setL1(el.dataset.m)));
+
+// ═══════════ TTS ═══════════
+function paintTts() {
+  if ($('tts-enabled')) $('tts-enabled').checked = ttsState.enabled;
+  const st = $('tts-stat'); if (st) st.textContent = !ttsState.available ? 'pacchetto voce non installato (/data/tts/)' : ttsState.enabled ? 'attiva' : 'disattivata';
+  const sl = $('tts-speed'); if (sl) { sl.min = ttsState.smin; sl.max = ttsState.smax; sl.step = ttsState.sstep; sl.value = ttsState.speed; }
+  const sv = $('tts-speed-val'); if (sv) sv.textContent = ttsState.speed + '%';
+}
+async function loadTts() { const d = await apiJson('/api/tts'); if (d) { ttsState.enabled = d.enabled; ttsState.available = d.available; if (typeof d.speed === 'number') ttsState.speed = d.speed; if (typeof d.speed_min === 'number') ttsState.smin = d.speed_min; if (typeof d.speed_max === 'number') ttsState.smax = d.speed_max; if (typeof d.speed_step === 'number') ttsState.sstep = d.speed_step; } paintTts(); }
+$('tts-enabled').addEventListener('change', async () => { const d = await apiJson('/api/tts', { method: 'POST', body: { enabled: $('tts-enabled').checked } }); if (d) { ttsState.enabled = d.enabled; ttsState.available = d.available; } paintTts(); syncQuickToggles(); });
+// Velocità: aggiornamento etichetta live (input), salvataggio + anteprima udibile al rilascio (change).
+if ($('tts-speed')) {
+  $('tts-speed').addEventListener('input', () => { const sv = $('tts-speed-val'); if (sv) sv.textContent = $('tts-speed').value + '%'; });
+  $('tts-speed').addEventListener('change', async () => {
+    const v = parseInt($('tts-speed').value, 10);
+    const phrase = lang === 'en' ? 'Twenty-three degrees.' : 'Ventitré gradi.';   // breve: senti il nuovo passo
+    const body = ttsState.enabled ? { speed: v, say: phrase, lang } : { speed: v };  // anteprima solo se la voce è attiva
+    const d = await apiJson('/api/tts', { method: 'POST', body });
+    if (d && typeof d.speed === 'number') ttsState.speed = d.speed;
+    paintTts();
+  });
+}
+$('tts-test').addEventListener('click', async () => { const phrase = lang === 'en' ? 'Hello, I am your Cardputer. Twenty-three degrees.' : 'Ciao, sono il tuo Cardputer. Ventitré gradi.'; $('tts-stat').textContent = 'riproduco…'; const d = await apiJson('/api/tts', { method: 'POST', body: { enabled: true, say: phrase, lang } }); if (d) { ttsState.enabled = d.enabled; ttsState.available = d.available; } paintTts(); });
+$('voice-always-on').addEventListener('change', toggleVoiceAlways);
+
+// ═══════════ AI provider panel — shared key manager (shell/ai-keys.js) ═══════════
+// The provider table + teacher.json I/O + cloud test used to live here, duplicated (and DRIFTED) vs the
+// ANIMA app. Now this panel just MOUNTS the shared component (shell/ai-keys.js, built on shell/ai.js) — the
+// single owner of provider config + the device key vault. onChange re-runs the capability/preset engine.
+(async function () {
+  const mountEl = $('ai-keys-mount'); if (!mountEl) return;
+  try {
+    const { mountKeyManager } = await import('/ai-keys.js');
+    const km = mountKeyManager(mountEl, { variant: 'full', lang: (I18N.lang === 'en' ? 'en' : 'it'), onChange() { refreshCaps(); } });
+    try { I18N.onChange(() => { if (km && km.setLang) km.setLang(I18N.lang === 'en' ? 'en' : 'it'); }); } catch {}
+  } catch (e) { mountEl.innerHTML = '<span class="hint">Gestore chiavi non disponibile (' + (e && e.message || e) + ').</span>'; }
+})();
+
+// ═══════════ edge brain (WASM) ═══════════
+(function () {
+  const stat = $('edge-brain-stat'), btn = $('edge-brain-prep'), prog = $('edge-brain-prog'); if (!stat || !btn) return;
+  const ENG = '/apps/anima/local/engine.js';
+  async function refresh() { try { const m = await import(ENG); const cached = await m.packCached(); stat.textContent = cached ? '✓ in cache · pronto offline' : '○ non ancora scaricato — premi “Prepara”'; stat.style.color = cached ? '#36d399' : 'var(--dim)'; } catch { stat.textContent = 'motore non raggiungibile da qui'; } }
+  btn.addEventListener('click', async () => { btn.disabled = true; prog.textContent = 'preparo…'; try { const m = await import(ENG); await m.prefetchPack((p) => { const mb = p && p.bytes ? (p.bytes / 1048576).toFixed(1) + ' MB' : ''; prog.textContent = (mb + (p && p.count ? ' · ' + p.idx + '/' + p.count : '')) || 'scarico…'; }); prog.textContent = '✓ pronto'; prog.style.color = '#36d399'; } catch (e) { prog.textContent = '✗ ' + (e && e.message || e); prog.style.color = '#f87272'; } finally { btn.disabled = false; refresh(); } });
+  // On-demand web search in Browser mode (opt-in; default off = recall-only, nothing leaves the device).
+  const web = $('edge-web-on');
+  if (web) { try { web.checked = localStorage.getItem('anima.edgeWeb') === '1'; } catch {}
+    web.addEventListener('change', () => { try { localStorage.setItem('anima.edgeWeb', web.checked ? '1' : '0'); } catch {} }); }
+  // Accumulated certain-knowledge: the web-index cards cached in IndexedDB — the "centralizer" growing with use.
+  const WS = '/apps/anima/local/webstore.js', kb = $('edge-kb-count'), kbClr = $('edge-kb-clear');
+  async function kbRefresh() { if (!kb) return; try { const s = (await import(WS)).webStore; const n = await s.count(); kb.textContent = n > 0 ? (n + ' voci di conoscenza web · pronte offline') : 'nessuna voce ancora (cresce con l’uso online)'; } catch { kb.textContent = '—'; } }
+  if (kbClr) kbClr.addEventListener('click', async () => { if (!confirm('Svuotare la conoscenza web in cache?')) return; try { const s = (await import(WS)).webStore; if (s.clear) await s.clear(); } catch {} kbRefresh(); });
+  refresh(); kbRefresh();
+})();
+
+// ═══════════ AI presets (intelligent, capability-aware profiles) ═══════════
+// Reads the live CapabilityModel (caps + teacher.json keys{} + WebGPU + WASM pack) and translates the
+// chosen preset INTENT into the concrete knobs across the four backends. Pure decisions live in
+// preset-engine.js; this block only probes (browser-side, zero device cost) and applies one call at a time.
+(function () {
+  const TPATH = '/data/anima/teacher.json';
+  let REG = { providers: {} }, lastSig = null, evaluating = false, pendingApply = null;
+  const L = (o) => (o && (o[lang] || o.it)) || '';
+  const EN = () => lang === 'en';
+
+  async function buildReg() { try { const ai = await import('/ai.js'); REG = buildRegistry(ai.PROVIDERS, ai.CAPMATRIX, ai.TIERS); } catch {} }
+
+  // Build the CapabilityModel from signals that already exist (caps + teacher.json) + cheap browser probes.
+  async function probeSignals() {
+    const c = (await apiJson('/api/anima/caps')) || caps || {};   // fresh: hasKey/online/enabled/provider/l1
+    const keys = { anthropic: false, openai: false, xai: false, google: false };
+    let exec = 'browser', geminiTier = '';
+    try {
+      const r = await fetch('/api/fs/read?path=' + encodeURIComponent(TPATH), { cache: 'no-store' });
+      if (r.ok) { const j = JSON.parse(await r.text()) || {}; const kk = j.keys || {};
+        for (const p of Object.keys(keys)) keys[p] = !!(kk[p] && kk[p].key) || (j.provider === p && !!j.key);
+        exec = j.exec || 'browser'; geminiTier = j.geminiTier || ''; }
+    } catch {}
+    let webgpu = false, vramMB = null;
+    try { if (navigator.gpu) { const a = await navigator.gpu.requestAdapter(); if (a) { webgpu = true; const lim = a.limits && a.limits.maxBufferSize; if (lim) vramMB = Math.round(lim / 1048576); } } } catch {}
+    let packCached = false;
+    try { const m = await import('/apps/anima/local/engine.js'); packCached = await m.packCached(); } catch {}
+    return {
+      online: navigator.onLine && (c.online !== false), enabled: c.enabled !== false, hasKey: !!c.hasKey,
+      provider: c.provider || 'anthropic', model: c.model || '', keys, geminiTier,
+      l1Mode: c.l1Mode || 'auto', l1Serving: !!c.l1Serving,
+      webgpu, vramMB, deviceMemory: navigator.deviceMemory || null,
+      packCached, packUsable: packCached, localModelReady: false, localModelId: null,
+      tts: !!ttsState.available, exec,
+    };
+  }
+
+  function renderStrip(sig) {
+    const box = $('preset-strip'); if (!box) return; box.innerHTML = '';
+    const active = (model.ai && model.ai.preset) || 'auto';
+    for (const p of PRESETS) {
+      const f = feasibility(p.id, sig, REG), pl = planPreset(p.id, sig, REG);
+      const el = document.createElement('div');
+      el.className = 'pcard' + (p.id === active ? ' active' : '') + (f.state === 'recommended' ? ' rec' : '') + (f.state === 'blocked' ? ' blocked' : '');
+      el.dataset.id = p.id;
+      let pill;
+      if (f.state === 'blocked') pill = `<span class="ppill blk">${L(f.reason) || (EN() ? 'Unavailable' : 'Non disponibile')}</span>`;
+      else if (f.state === 'needs-prep') pill = `<span class="ppill prep">⬇ ${EN() ? 'To prepare' : 'Da preparare'}</span>`;
+      else if (f.state === 'recommended') pill = `<span class="ppill rec">✓ ${L(pl.using)}</span>`;
+      else pill = `<span class="ppill ok">✓ ${L(pl.using)}</span>`;
+      el.innerHTML = `<div class="ph"><span>${p.icon}</span><span>${L(p)}</span></div><div class="pin">${L(p.intent)}</div>${pill}`;
+      if (f.state !== 'blocked') el.addEventListener('click', () => onPick(p.id));
+      box.appendChild(el);
+    }
+  }
+
+  function renderTier(sig) {
+    const box = $('tier-band'); if (!box) return;
+    const active = (model.ai && model.ai.preset) || 'auto';
+    const landed = (planPreset(active, sig, REG) || {}).landedRung;
+    const cloudOk = sig.online && sig.enabled && sig.hasKey;
+    const gpuOk = sig.webgpu && (sig.vramMB || 0) >= 900 && sig.localModelReady;
+    const wasmOk = sig.packUsable;
+    const rungs = [
+      { k: 'cloud', t: EN() ? '1 · Cloud' : '1 · Cloud', led: cloudOk ? 'on' : (sig.hasKey ? 'warn' : 'off'), s: cloudOk ? ('✓ ' + sig.provider) : (sig.hasKey ? (sig.online ? (EN() ? 'ready' : 'pronta') : 'offline') : (EN() ? 'no key' : 'nessuna chiave')) },
+      { k: 'gpu', t: EN() ? '2 · Browser GPU' : '2 · GPU browser', led: gpuOk ? 'on' : 'off', s: sig.webgpu ? (gpuOk ? (EN() ? 'ready' : 'pronto') : (EN() ? 'model not downloaded' : 'modello non scaricato')) : (EN() ? 'WebGPU absent' : 'WebGPU assente') },
+      { k: 'wasm', t: EN() ? '3 · Browser WASM' : '3 · WASM browser', led: wasmOk ? 'on' : 'warn', s: wasmOk ? (EN() ? 'cached' : 'in cache') : (EN() ? 'pack not downloaded' : 'pack non scaricato') },
+      { k: 'device', t: EN() ? '4 · Cardputer' : '4 · Cardputer', led: 'on', s: EN() ? 'always ready' : 'sempre pronto' },
+    ];
+    box.innerHTML = rungs.map((r) => `<div class="rung" style="${r.k === landed ? 'border-color:var(--accent)' : ''}"><div class="rh"><span class="led ${r.led}"></span>${r.t}${r.k === landed ? ' ◀' : ''}</div><div class="rs">${r.s}</div></div>`).join('')
+      + `<div style="flex-basis:100%;margin-top:5px"><button id="preset-verify" style="font-size:12px">▶ ${EN() ? 'Test now' : 'Prova adesso'}</button> <span class="hint" id="preset-verify-out"></span></div>`;
+    const vb = $('preset-verify'); if (vb) vb.addEventListener('click', () => verifyNow());
+  }
+
+  function renderCaps(sig) {
+    const box = $('caps-row'); if (!box) return; box.innerHTML = '';
+    const cap = ((REG.providers && REG.providers[sig.provider]) || {}).caps || {};
+    const items = [
+      { ic: '💬', t: EN() ? 'Chat' : 'Chat', ok: true },
+      { ic: '🎨', t: EN() ? 'Images' : 'Immagini', ok: !!cap.image || sig.keys.xai, fix: 'xai' },
+      { ic: '🎙️', t: EN() ? 'Transcription' : 'Trascrizione', ok: !!cap.whisper || sig.keys.openai, fix: 'openai' },
+      { ic: '🛠️', t: 'Tool-use', ok: true },
+    ];
+    for (const it of items) {
+      const el = document.createElement('div'); el.className = 'capchip';
+      el.innerHTML = it.ok ? `<span>${it.ic}</span>${it.t}<span class="cg ok">OK</span>` : `<span>${it.ic}</span>${it.t}<button data-fix="${it.fix}">+ ${it.fix === 'xai' ? 'xAI' : 'Groq'}</button>`;
+      box.appendChild(el);
+    }
+    for (const b of box.querySelectorAll('button[data-fix]')) b.addEventListener('click', () => addKeyFlow(b.dataset.fix));
+  }
+
+  function renderApps(sig) {
+    const box = $('apps-list'); if (!box) return; box.innerHTML = '';
+    for (const a of APP_MAP) {
+      const st = appStatus(a, sig, REG), el = document.createElement('div'); el.className = 'arow';
+      el.innerHTML = `<span>${EN() ? a.en : a.it}</span><span class="ast ${st.ok ? 'ok' : 'warn'}">${st.ok ? (EN() ? '✓ use this' : '✓ usano questo') : (EN() ? st.en : st.it)}</span>`;
+      box.appendChild(el);
+    }
+  }
+
+  function renderScope() {
+    const box = $('scope-legend'); if (!box) return;
+    box.innerHTML = (EN()
+      ? ['💾 SD · survives reboot', '⚡ Live · resets on reboot', '🌐 This browser only']
+      : ['💾 SD · sopravvive al riavvio', '⚡ Live · si azzera al riavvio', '🌐 Solo questo browser']).map((s) => `<span>${s}</span>`).join('');
+  }
+
+  async function reEval() {
+    if (evaluating) return; evaluating = true;
+    try { const sig = await probeSignals(); lastSig = sig; renderStrip(sig); renderTier(sig); renderCaps(sig); renderApps(sig); renderScope(); }
+    finally { evaluating = false; }
+  }
+
+  function l1Human(m) { return m === 'off' ? (EN() ? 'frees ~31 KB (offline brain off)' : 'libera ~31 KB (cervello offline spento)')
+    : m === 'on' ? (EN() ? 'keeps the offline brain resident' : 'tiene il cervello offline residente')
+    : (EN() ? 'offline brain stands aside when a stronger one is active' : 'il cervello offline si fa da parte quando uno più forte è attivo'); }
+
+  function onPick(id) {
+    const sig = lastSig; if (!sig) return;
+    if (id === 'auto') return doApply(id, sig);            // Auto re-evaluates and applies instantly
+    const res = applyPreset(model, id, sig, REG); if (!res) return;
+    $('pm-ic').textContent = res.preset.icon; $('pm-title').textContent = L(res.preset);
+    const bul = [(EN() ? 'Will use: ' : 'Userà: ') + L(res.using), l1Human(res.apiCalls[0].body.mode)];
+    if (res.teacherModel) bul.push((EN() ? 'Model: ' : 'Modello: ') + res.teacherModel);
+    if (res.local['anima.edgeWeb'] === '0') bul.push(EN() ? 'Blocks on-demand web access (no egress)' : 'Blocca l’accesso web on-demand (nessuna uscita di rete)');
+    $('pm-bullets').innerHTML = bul.map((x) => '• ' + x).join('<br>');
+    const gg = res.gaps || [];
+    $('pm-apps').innerHTML = gg.length ? ('⚠ ' + gg.map((g) => L(g)).join('<br>⚠ ')) : (EN() ? 'All configured apps are covered.' : 'Tutte le app configurate sono coperte.');
+    pendingApply = { id, sig };
+    $('preset-modal').classList.add('show');
+  }
+
+  async function writeTeacherModel(m) {
+    try {
+      const r = await fetch('/api/fs/read?path=' + encodeURIComponent(TPATH), { cache: 'no-store' });
+      if (!r.ok) return;                                   // no teacher / unpaired → model nudge only applies with a key
+      let j; try { j = JSON.parse(await r.text()) || {}; } catch { return; }
+      if (!j.key && !(j.keys && Object.keys(j.keys).length)) return;
+      j.model = m; if (j.provider && j.keys && j.keys[j.provider]) j.keys[j.provider].model = m;
+      await fetch('/api/fs/write?path=' + encodeURIComponent(TPATH), { method: 'POST', body: JSON.stringify(j) });
+    } catch {}
+  }
+
+  async function doApply(id, sig) {
+    const res = applyPreset(model, id, sig, REG); if (!res) return;
+    status((EN() ? 'Applying profile: ' : 'Applico profilo: ') + L(res.preset) + '…');
+    model = res.model; toForm(); await persistModel();                       // 1. durable intent on SD
+    try { for (const k of Object.keys(res.local)) localStorage.setItem(k, res.local[k]); } catch {}  // 2. shared-origin localStorage
+    if (res.teacherModel) await writeTeacherModel(res.teacherModel);          // 3. teacher.json model nudge
+    let failed = false;
+    for (const c of res.apiCalls) { try { const r = await api(c.path, { method: c.method, body: c.body }); if (!r || !r.ok) failed = true; } catch { failed = true; } }  // 4. live, sequential
+    await refreshCaps(); syncQuickToggles();                                  // refreshCaps → reEval via hook
+    status(failed ? (EN() ? 'Profile saved — some live steps need a retry' : 'Profilo salvato — alcuni passi live vanno ritentati')
+      : ((EN() ? 'Profile applied: ' : 'Profilo applicato: ') + L(res.preset) + ' · ' + L(res.using)), !failed);
+  }
+
+  // Add a SECONDARY provider key (image=xAI, Whisper=Groq) into teacher.json.keys{} WITHOUT changing the
+  // active chat provider — the real fix for "Claude can't draw / transcribe" without losing Claude as chat.
+  async function addSecondaryKey(provider, key) {
+    try {
+      const r = await fetch('/api/fs/read?path=' + encodeURIComponent(TPATH), { cache: 'no-store' });
+      if (r.status === 401 || r.status === 403) { status(EN() ? 'Pair the browser first.' : 'Accoppia prima il browser.', false); return false; }
+      let j = {}; if (r.ok) { try { j = JSON.parse(await r.text()) || {}; } catch {} }
+      j.keys = (j.keys && typeof j.keys === 'object') ? j.keys : {};
+      const bases = { xai: 'https://api.x.ai/v1', openai: 'https://api.groq.com/openai/v1' };
+      const defs = { xai: 'grok-2-latest', openai: 'llama-3.1-8b-instant' };
+      j.keys[provider] = { base: bases[provider], model: defs[provider], key };
+      const w = await fetch('/api/fs/write?path=' + encodeURIComponent(TPATH), { method: 'POST', body: JSON.stringify(j) });
+      return w.ok;
+    } catch { return false; }
+  }
+  async function addKeyFlow(provider) {
+    const name = provider === 'xai' ? 'Grok (xAI)' : 'Groq';
+    const k = prompt((EN() ? 'Paste the ' : 'Incolla la chiave ') + name + (EN() ? ' key (kept on device, used only for that feature):' : ' (resta sul dispositivo, usata solo per quella funzione):'));
+    if (!k || !k.trim()) return;
+    status(EN() ? 'saving…' : 'salvo…');
+    const ok = await addSecondaryKey(provider, k.trim());
+    status(ok ? (name + (EN() ? ' key added' : ' chiave aggiunta')) : (EN() ? 'save failed (pair the browser?)' : 'salvataggio fallito (browser accoppiato?)'), ok);
+    if (ok) { await refreshCaps(); reEval(); }
+  }
+
+  async function verifyNow() {
+    const out = $('preset-verify-out'); if (out) out.textContent = EN() ? 'testing…' : 'provo…';
+    const sig = lastSig || await probeSignals();
+    const pl = planPreset((model.ai && model.ai.preset) || 'auto', sig, REG) || {};
+    const t0 = performance.now();
+    try {
+      if (pl.mode === 'only' && sig.exec !== 'device' && sig.hasKey) {
+        const ai = await import('/ai.js'); const cfg = await ai.readTeacher();
+        if (cfg && cfg.key) { const ok = await ai.cloudPing(cfg); const ms = Math.round(performance.now() - t0);
+          if (out) out.textContent = ok ? `✓ ${cfg.provider} ${EN() ? 'responds' : 'risponde'} · ${ms} ms` : (EN() ? '✗ key rejected' : '✗ chiave rifiutata'); return; }
+      }
+      const r = await fetch('/api/anima?q=ping&lang=' + lang + '&mode=' + (pl.mode === 'on' ? 'on' : 'off'), { cache: 'no-store' });
+      const j = await r.json().catch(() => null); const ms = Math.round(performance.now() - t0);
+      if (out) out.textContent = j ? `✓ ${EN() ? 'answered by' : 'risponde'} ${j.intent || j.tier || 'device'} · ${ms} ms` : (EN() ? '✗ no answer' : '✗ nessuna risposta');
+    } catch (e) { if (out) out.textContent = '✗ ' + (e && e.message || e); }
+  }
+
+  const pmCancel = $('pm-cancel'), pmApply = $('pm-apply');
+  if (pmCancel) pmCancel.addEventListener('click', () => $('preset-modal').classList.remove('show'));
+  if (pmApply) pmApply.addEventListener('click', async () => { $('preset-modal').classList.remove('show'); if (pendingApply) { const { id, sig } = pendingApply; pendingApply = null; await doApply(id, sig); } });
+
+  onCapsRefreshed = reEval;                                  // re-evaluate whenever caps refresh
+  window.addEventListener('online', reEval); window.addEventListener('offline', reEval);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) reEval(); });
+  (async () => { await buildReg(); await reEval(); })();
+})();
+
+// ═══════════ bus events (from shell over postMessage) ═══════════
+window.addEventListener('message', (e) => {
+  const d = e.data; if (!d) return;
+  if (d.t === 'fs.changed' && typeof d.d?.path === 'string' && d.d.path.endsWith('settings.json') && !dirty) load();
+  else if (d.t === 'system.busy' && d.d) { if (d.d.busy) setLive('busy'); }
+});
+
+// ═══════════ load ═══════════
+async function load() {
+  status('Caricamento…');
+  const onDisk = await readSettingsFile();
+  model = merge(DEFAULTS, onDisk);
+  if (model.ui.language !== 'it' && model.ui.language !== 'en') model.ui.language = /^en/i.test(model.device.locale || '') ? 'en' : 'it';
+  lang = detectLang(model);
+  applyLiveUI(); toForm(); updateScreenUI(); setDirty(false);
+  status(T('ready'));
+  await refreshCaps(); await loadTts(); syncQuickToggles();
+}
+
+// ═══════════ boot ═══════════
+buildSidebar(); buildScenes(); buildQuick(); buildActions(); selectTab('control');
+load();
+poller.start();
+</script>
+</body>
+</html>

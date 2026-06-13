@@ -1,0 +1,56 @@
+{
+  "id": "video-studio",
+  "name": "Video Studio",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Convert videos to the device .nfv format and deliver them to the SD. Conversion runs on a PC companion (native ffmpeg + GPU); this app is the front end.",
+  "category": "media",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/video-studio/",
+  "icon": "/apps/video-studio/icon.svg",
+  "permissions": [
+    "storage.shared"
+  ],
+  "mounts": {
+    "app": "/apps/video-studio/data"
+  },
+  "handles": {
+    "role": "editor",
+    "extensions": [
+      "mp4",
+      "mkv",
+      "mov",
+      "avi",
+      "webm"
+    ]
+  },
+  "intents": [
+    {
+      "action": "edit",
+      "extensions": [
+        "mp4",
+        "mkv",
+        "mov",
+        "avi",
+        "webm"
+      ]
+    }
+  ],
+  "subscribes": [],
+  "publishes": [],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

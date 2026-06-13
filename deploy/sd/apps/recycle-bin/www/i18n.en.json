@@ -1,0 +1,23 @@
+{
+  "_lang": "en",
+  "title": "Recycle Bin",
+  "restore_all": "Restore all",
+  "empty_bin": "Empty bin",
+  "restore": "Restore",
+  "count": {
+    "one": "· {count} item",
+    "other": "· {count} items"
+  },
+  "count_empty": "· empty",
+  "empty_title": "The Recycle Bin is empty.",
+  "empty_hint": "Files you delete in File Commander land here and can be restored.",
+  "toast_restored_to": "Restored to {path}",
+  "toast_restore_failed": "Restore failed",
+  "toast_deleted_perm": "Deleted permanently",
+  "toast_restored_all": "Restored everything",
+  "toast_bin_emptied": "Bin emptied",
+  "confirm_empty": {
+    "one": "Permanently delete {count} item? This cannot be undone.",
+    "other": "Permanently delete {count} items? This cannot be undone."
+  }
+}

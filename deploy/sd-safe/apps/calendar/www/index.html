@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calendar</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc; --muted:#8aa0c8;
+      --accent:#4ea1ff; --line:#2a3a5e; --field:#0b1220; --today:#4ea1ff; }
+    html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --panel2:#e6ecf8; --text:#10203a;
+      --muted:#5a6a86; --accent:#2b6fd6; --line:#cdd8ee; --field:#f4f7fe; --today:#2b6fd6; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { background: var(--bg); color: var(--text); font: 14px system-ui, "Segoe UI", sans-serif;
+      display: flex; flex-direction: column; }
+    header { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+      background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+    header .title { flex: 1; font-weight: 600; font-size: 15px; }
+    button { border: 1px solid var(--line); background: #80808018; color: var(--text);
+      border-radius: 6px; padding: 5px 11px; cursor: pointer; font: inherit; }
+    button:hover { background: #80808033; }
+    main { flex: 1; display: flex; min-height: 0; }
+    .cal { flex: 1; display: flex; flex-direction: column; padding: 10px 12px; min-width: 0; }
+    .dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; color: var(--muted);
+      font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+    .dow div { text-align: center; }
+    .grid { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 1fr; gap: 4px; }
+    .cell { background: var(--panel); border: 1px solid var(--line); border-radius: 7px;
+      padding: 5px 6px; cursor: pointer; position: relative; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+    .cell:hover { border-color: var(--accent); }
+    .cell.out { opacity: .38; }
+    .cell.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .cell .n { font-variant-numeric: tabular-nums; font-size: 13px; }
+    .cell.today .n { color: #07101f; background: var(--today); border-radius: 50%;
+      width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; }
+    .cell .evs { display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow: hidden; }
+    .cell .ev { font-size: 10px; background: var(--accent); color: #07101f; border-radius: 3px;
+      padding: 0 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cell .more { font-size: 9px; color: var(--muted); }
+    /* Day panel */
+    aside { flex: 0 0 230px; background: var(--panel); border-left: 1px solid var(--line);
+      display: flex; flex-direction: column; padding: 10px 12px; }
+    aside h2 { margin: 0 0 2px; font-size: 14px; }
+    aside .sub { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
+    .evlist { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+    .evrow { display: flex; align-items: center; gap: 8px; background: var(--panel2);
+      border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+    .evrow .et { font-variant-numeric: tabular-nums; color: var(--accent); font-size: 12px; flex: none; min-width: 38px; }
+    .evrow .ex { flex: 1; word-break: break-word; }
+    .evrow .del { color: var(--muted); cursor: pointer; padding: 0 4px; border: none; background: none; }
+    .evrow .del:hover { color: #e2576b; }
+    .empty { color: var(--muted); font-size: 12px; padding: 8px 0; }
+    .add { display: flex; gap: 6px; margin-top: 8px; }
+    .add input[type=time] { width: 84px; }
+    .add input { background: var(--field); color: var(--text); border: 1px solid var(--line);
+      border-radius: 6px; padding: 5px 7px; font: inherit; }
+    .add input[type=text] { flex: 1; min-width: 0; }
+    .save { color: var(--muted); font-size: 11px; min-height: 14px; margin-top: 6px; }
+    @media (max-width: 560px) { aside { flex-basis: 180px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <button id="prev" title="Previous month">‹</button>
+    <span class="title" id="month">—</span>
+    <button id="today-btn">Today</button>
+    <button id="next" title="Next month">›</button>
+  </header>
+  <main>
+    <div class="cal">
+      <div class="dow" id="dow"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <aside>
+      <h2 id="day-title">—</h2>
+      <div class="sub" id="day-sub"></div>
+      <div class="evlist" id="evlist"></div>
+      <div class="add">
+        <input type="time" id="ev-time">
+        <input type="text" id="ev-text" placeholder="New event… (Enter)" maxlength="80">
+      </div>
+      <div class="save" id="save"></div>
+    </aside>
+  </main>
+
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const CAL = '/system/config/calendar.json';
+    const SETTINGS = '/system/config/settings.json';
+    let locale, firstDay = 0;          // firstDay: 0=Sun, 1=Mon (from locale)
+    let data = { schema: 1, events: {} };
+    let view = new Date(); view.setDate(1);
+    let selKey = null;
+    let seq = 1;                       // local id source; no Date.now reliance for uniqueness within a save
+
+    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const todayKey = ymd(new Date());
+
+    async function readJSON(path) {
+      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+        return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; }
+    }
+    async function writeJSON(path, obj) {
+      try { const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path),
+        { method: 'POST', body: JSON.stringify(obj, null, 2) }); return r.ok; } catch { return false; }
+    }
+
+    async function loadSettings() {
+      const s = await readJSON(SETTINGS);
+      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
+      if (s?.device?.locale) locale = s.device.locale;
+      // Infer week start from locale: most of the world starts Monday; US/CA/JP start Sunday.
+      const reg = (locale || navigator.language || 'en-US').split('-')[1]?.toUpperCase();
+      firstDay = ['US', 'CA', 'JP'].includes(reg) ? 0 : 1;
+    }
+    async function loadEvents() {
+      const d = await readJSON(CAL);
+      if (d && typeof d === 'object' && d.events) data = d;
+    }
+    async function persist() {
+      $('save').textContent = 'Saving…';
+      $('save').textContent = (await writeJSON(CAL, data)) ? 'Saved to device' : 'Save failed — device unreachable';
+    }
+
+    function monthLabel(d) { return d.toLocaleDateString(locale, { month: 'long', year: 'numeric' }); }
+
+    function renderDow() {
+      const ref = new Date(2023, 0, 1);  // a Sunday
+      const out = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(ref); d.setDate(1 + ((firstDay + i) % 7));
+        out.push(`<div>${d.toLocaleDateString(locale, { weekday: 'short' })}</div>`);
+      }
+      $('dow').innerHTML = out.join('');
+    }
+
+    function renderGrid() {
+      $('month').textContent = monthLabel(view);
+      const y = view.getFullYear(), m = view.getMonth();
+      const first = new Date(y, m, 1);
+      const lead = (first.getDay() - firstDay + 7) % 7;       // blank cells before day 1
+      const start = new Date(y, m, 1 - lead);
+      const cells = [];
+      for (let i = 0; i < 42; i++) {                          // 6 weeks fixed grid
+        const d = new Date(start); d.setDate(start.getDate() + i);
+        const key = ymd(d), out = d.getMonth() !== m;
+        const evs = (data.events[key] || []).slice().sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+        const chips = evs.slice(0, 2).map((e) => `<div class="ev" title="${esc(e.text)}">${e.time ? esc(e.time) + ' ' : ''}${esc(e.text)}</div>`).join('');
+        const more = evs.length > 2 ? `<div class="more">+${evs.length - 2} more</div>` : '';
+        cells.push(`<div class="cell${out ? ' out' : ''}${key === todayKey ? ' today' : ''}${key === selKey ? ' sel' : ''}" data-k="${key}">
+          <div class="n">${d.getDate()}</div><div class="evs">${chips}${more}</div></div>`);
+      }
+      $('grid').innerHTML = cells.join('');
+      $('grid').querySelectorAll('.cell').forEach((c) => c.onclick = () => select(c.dataset.k));
+    }
+
+    function renderDay() {
+      if (!selKey) { $('day-title').textContent = 'Pick a day'; $('day-sub').textContent = ''; $('evlist').innerHTML = ''; return; }
+      const d = new Date(selKey + 'T00:00:00');
+      $('day-title').textContent = d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
+      $('day-sub').textContent = selKey === todayKey ? 'Today' : '';
+      const evs = (data.events[selKey] || []).slice().sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+      if (!evs.length) { $('evlist').innerHTML = '<div class="empty">No events. Add one below.</div>'; return; }
+      $('evlist').innerHTML = evs.map((e) => `<div class="evrow">
+        <span class="et">${e.time ? esc(e.time) : '–'}</span><span class="ex">${esc(e.text)}</span>
+        <button class="del" data-id="${e.id}" title="Delete">✕</button></div>`).join('');
+      $('evlist').querySelectorAll('.del').forEach((b) => b.onclick = () => removeEvent(b.dataset.id));
+    }
+
+    function select(key) { selKey = key; renderGrid(); renderDay(); $('ev-text').focus(); }
+
+    async function addEvent() {
+      const text = $('ev-text').value.trim(); if (!text || !selKey) return;
+      const time = $('ev-time').value || '';
+      (data.events[selKey] ||= []).push({ id: 'e' + (seq++) + '-' + selKey, time, text });
+      $('ev-text').value = '';
+      renderGrid(); renderDay(); await persist();
+    }
+    async function removeEvent(id) {
+      const arr = data.events[selKey] || [];
+      data.events[selKey] = arr.filter((e) => e.id !== id);
+      if (!data.events[selKey].length) delete data.events[selKey];
+      renderGrid(); renderDay(); await persist();
+    }
+
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    $('prev').onclick = () => { view.setMonth(view.getMonth() - 1); renderGrid(); };
+    $('next').onclick = () => { view.setMonth(view.getMonth() + 1); renderGrid(); };
+    $('today-btn').onclick = () => { view = new Date(); view.setDate(1); select(todayKey); };
+    $('ev-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') addEvent(); });
+
+    // Live cross-client: another window edited the calendar or theme → reflect it.
+    window.addEventListener('message', (e) => {
+      if (e.data?.t === 'fs.changed' && typeof e.data.d?.path === 'string') {
+        if (e.data.d.path.endsWith('calendar.json')) loadEvents().then(() => { renderGrid(); renderDay(); });
+        if (e.data.d.path.endsWith('settings.json')) loadSettings().then(() => { renderDow(); renderGrid(); renderDay(); });
+      }
+      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
+    });
+
+    async function init() {
+      await loadSettings(); await loadEvents();
+      renderDow(); select(todayKey);
+    }
+    init();
+  </script>
+</body>
+</html>

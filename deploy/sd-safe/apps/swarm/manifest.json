@@ -1,0 +1,52 @@
+{
+  "id": "swarm",
+  "name": "Swarm",
+  "version": "0.1.0",
+  "description": "Federate nearby Cardputers over ESP-NOW: shared clipboard, peers and events.",
+  "category": "connectivity",
+  "runtime": "service",
+  "entry_service": "swarm_main",
+  "web_route": "/apps/swarm/",
+  "permissions": [
+    "system.events",
+    "system.clipboard",
+    "net.ble",
+    "mesh.peer"
+  ],
+  "mounts": {
+    "app": "/apps/swarm/data"
+  },
+  "handles": {
+    "role": "none",
+    "extensions": []
+  },
+  "subscribes": [
+    "system.boot",
+    "mesh.peer_found",
+    "mesh.clipboard",
+    "system.clipboard"
+  ],
+  "publishes": [
+    "mesh.peer_found",
+    "mesh.clipboard",
+    "mesh.event"
+  ],
+  "power": {
+    "budget_class": "medium",
+    "wants_wakeup": [
+      "mesh",
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [
+      "mesh.clipboard",
+      "mesh.event"
+    ],
+    "consumes": [
+      "mesh.clipboard",
+      "mesh.event",
+      "automation.rule_fired"
+    ]
+  }
+}

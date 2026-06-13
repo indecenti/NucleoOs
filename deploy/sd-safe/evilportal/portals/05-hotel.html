@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WiFi Ospiti</title>
+<style>
+*{box-sizing:border-box;font-family:Georgia,'Times New Roman',serif}
+body{margin:0;background:#23303a;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.card{background:#fbf8f1;color:#2a2a2a;width:380px;max-width:94vw;border-radius:6px;padding:32px;
+box-shadow:0 12px 40px rgba(0,0,0,.45)}
+.crest{text-align:center;color:#b08d57;letter-spacing:3px;font-size:13px;margin-bottom:6px}
+h1{text-align:center;font-size:24px;font-weight:400;margin:0 0 4px}
+p.s{text-align:center;color:#777;font-size:13px;margin:0 0 24px;font-family:Arial,sans-serif}
+label{display:block;font-size:12px;color:#666;margin:14px 0 5px;font-family:Arial,sans-serif}
+input{width:100%;padding:12px;border:1px solid #cfc6b5;border-radius:4px;font-size:15px;background:#fff;font-family:Arial,sans-serif}
+button{margin-top:24px;width:100%;padding:13px;border:0;border-radius:4px;background:#b08d57;
+color:#fff;font-size:15px;letter-spacing:1px;cursor:pointer;font-family:Arial,sans-serif}
+</style></head><body>
+<form class="card" method="POST" action="/login">
+<div class="crest">&#9670; HOTEL &#9670;</div>
+<h1>WiFi Ospiti</h1>
+<p class="s">Rete {{SSID}} &middot; accesso riservato agli ospiti</p>
+<label>Cognome</label>
+<input name="surname" type="text" required>
+<label>Numero camera</label>
+<input name="room" type="text" inputmode="numeric" required>
+<label>Email (per la ricevuta)</label>
+<input name="email" type="email" required>
+<button type="submit">Connetti</button>
+</form></body></html>

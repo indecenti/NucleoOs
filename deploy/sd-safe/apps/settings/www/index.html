@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings</title>
+  <style>
+    :root { 
+      --bg:#0e1830; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc; --muted:#8aa0c8;
+      --accent:#4ea1ff; --line:#2a3a5e; --field:#0b1220; --glass:#18233a99;
+    }
+    html[data-theme="light"] { 
+      --bg:#eef2fb; --panel:#ffffff; --panel2:#e6ecf8; --text:#10203a;
+      --muted:#5a6a86; --accent:#2b6fd6; --line:#cdd8ee; --field:#f4f7fe; --glass:#ffffff99;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; font-size: 14px; }
+    body { 
+      display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+      font-family: system-ui, "Segoe UI", sans-serif;
+    }
+    header { 
+      display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+      background: var(--glass); backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--line); flex: none; z-index: 10;
+    }
+    header .title { flex: 1; font-weight: 600; font-size: 1.1rem; }
+    button { 
+      border: 1px solid var(--line); background: #80808018; color: var(--text);
+      border-radius: 6px; padding: 6px 14px; cursor: pointer; transition: .2s;
+    }
+    button:hover { background: #80808033; }
+    button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+    button:disabled { opacity: .5; cursor: default; }
+    
+    .app-layout {
+      display: flex; flex: 1; overflow: hidden;
+    }
+    .sidebar {
+      width: 220px; background: var(--panel2); border-right: 1px solid var(--line);
+      padding: 12px 8px; display: flex; flex-direction: column; gap: 4px;
+    }
+    .nav-item {
+      padding: 10px 14px; border-radius: 8px; cursor: pointer; color: var(--muted);
+      transition: .2s; display: flex; align-items: center; gap: 10px; font-weight: 500;
+    }
+    .nav-item:hover { background: #8080801a; color: var(--text); }
+    .nav-item.active { background: var(--accent); color: #fff; }
+    
+    main.content {
+      flex: 1; overflow: auto; padding: 24px; scroll-behavior: smooth;
+    }
+    .tab-content { display: none; animation: fade-in .3s ease; }
+    .tab-content.active { display: block; }
+    @keyframes fade-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+    .sect { 
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+      padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+    .sect h2 { margin: 0 0 16px; font-size: 14px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+    
+    /* Theme Cards */
+    .theme-cards { display: flex; gap: 16px; margin-bottom: 20px; }
+    .theme-card {
+      flex: 1; padding: 20px; border: 2px solid transparent; border-radius: 12px;
+      background: var(--field); color: var(--text); cursor: pointer; text-align: center;
+      transition: .2s cubic-bezier(0.2, 0.8, 0.2, 1); position: relative; overflow: hidden;
+    }
+    .theme-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); border-color: var(--line); }
+    .theme-card.active { border-color: var(--accent); background: var(--panel2); }
+    .theme-card.active::before {
+      content: "✓"; position: absolute; top: 12px; right: 14px; color: var(--accent); font-weight: bold; font-size: 16px;
+    }
+    .theme-card .icon { font-size: 28px; margin-bottom: 12px; }
+
+    /* Accent Colors */
+    .accent-colors { display: flex; gap: 12px; margin-bottom: 20px; }
+    .color-swatch {
+      width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+      border: 2px solid transparent; transition: .2s; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .color-swatch:hover { transform: scale(1.15); }
+    .color-swatch.active { border-color: var(--text); outline: 2px solid var(--text); outline-offset: 2px; }
+
+    /* Font Size Selector */
+    .font-sizes { display: flex; gap: 12px; background: var(--field); border-radius: 8px; padding: 4px; width: fit-content; border: 1px solid var(--line); margin-bottom: 20px; }
+    .fs-item {
+      padding: 8px 16px; border-radius: 6px; cursor: pointer; color: var(--muted);
+      transition: .2s; text-align: center; font-weight: 500;
+    }
+    .fs-item:hover { color: var(--text); }
+    .fs-item.active { background: var(--panel); color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .fs-small { font-size: 12px; }
+    .fs-normal { font-size: 14px; }
+    .fs-large { font-size: 16px; }
+
+    /* Wallpaper Gallery */
+    .wp-gallery {
+      display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px;
+    }
+    .wp-gallery::-webkit-scrollbar { height: 6px; }
+    .wp-gallery::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+    .wp-item {
+      flex: 0 0 140px; height: 90px; border-radius: 10px; border: 2px solid transparent;
+      background-size: cover; background-position: center; cursor: pointer;
+      transition: .2s; position: relative; box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .wp-item:hover { transform: scale(1.05); }
+    .wp-item.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+    .wp-item .wp-name {
+      position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+      color: #fff; font-size: 11px; padding: 4px; text-align: center;
+      border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .wp-loading { font-size: 13px; color: var(--muted); padding: 10px 0; }
+
+    .row { display: flex; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid #ffffff0a; }
+    .row:last-child { border-bottom: none; }
+    .row label { flex: 0 0 180px; color: var(--text); font-size: 1rem; }
+    .row .ctl { flex: 1; display: flex; align-items: center; gap: 12px; }
+    input[type=text], input[type=number], select {
+      background: var(--field); color: var(--text); border: 1px solid var(--line);
+      border-radius: 8px; padding: 8px 12px; font: inherit; width: 100%; max-width: 280px; transition: .2s;
+    }
+    input[type=text]:focus, input[type=number]:focus, select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px #4ea1ff33; }
+    input[type=range] { flex: 1; max-width: 240px; accent-color: var(--accent); }
+    .hint { font-size: 0.85rem; color: var(--muted); }
+    .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--accent);
+      color: var(--accent); white-space: nowrap; font-weight: 600; text-transform: uppercase; }
+    .sw { position: relative; width: 44px; height: 24px; flex: none; }
+    .sw input { opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; position: absolute; z-index: 2; }
+    .sw span { position: absolute; inset: 0; background: var(--line); border-radius: 24px; transition: .2s; pointer-events: none; }
+    .sw span::after { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px;
+      background: #fff; border-radius: 50%; transition: .2s cubic-bezier(0.2, 0.8, 0.2, 1); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    .sw input:checked + span { background: var(--accent); }
+    .sw input:checked + span::after { transform: translateX(20px); }
+    footer { padding: 6px 16px; font-size: 12px; color: var(--muted);
+      background: var(--panel2); border-top: 1px solid var(--line); flex: none; text-align: right; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="title">⚙ Settings</span>
+    <button id="reload">⟳ Reload</button>
+    <button id="save" class="primary" disabled>Save Settings</button>
+  </header>
+
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="nav-item active" data-tab="personalization">🎨 Personalization</div>
+      <div class="nav-item" data-tab="system">💻 System</div>
+      <div class="nav-item" data-tab="power">🔋 Power</div>
+      <div class="nav-item" data-tab="network">🌐 Network</div>
+    </aside>
+    
+    <main class="content">
+      <section id="tab-personalization" class="tab-content active">
+        <div class="sect">
+          <h2>Theme Mode <span class="badge">Live</span></h2>
+          <div class="theme-cards">
+            <div class="theme-card" data-val="light" id="theme-light">
+              <div class="icon">☀️</div>
+              <div style="font-weight: 600;">Light Mode</div>
+            </div>
+            <div class="theme-card" data-val="dark" id="theme-dark">
+              <div class="icon">🌙</div>
+              <div style="font-weight: 600;">Dark Mode</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="sect">
+          <h2>Accent Color <span class="badge">Live</span></h2>
+          <div class="accent-colors" id="accent-container">
+            <div class="color-swatch" style="background: #4ea1ff" data-color="#4ea1ff"></div>
+            <div class="color-swatch" style="background: #ff4e4e" data-color="#ff4e4e"></div>
+            <div class="color-swatch" style="background: #4eff8a" data-color="#4eff8a"></div>
+            <div class="color-swatch" style="background: #ffb84e" data-color="#ffb84e"></div>
+            <div class="color-swatch" style="background: #d14eff" data-color="#d14eff"></div>
+            <div class="color-swatch" style="background: #e0556b" data-color="#e0556b"></div>
+            <div class="color-swatch" style="background: #2b6fd6" data-color="#2b6fd6"></div>
+          </div>
+        </div>
+
+        <div class="sect">
+          <h2>Font Size <span class="badge">Live</span></h2>
+          <div class="font-sizes">
+            <div class="fs-item fs-small" data-size="12px">Small</div>
+            <div class="fs-item fs-normal" data-size="14px">Normal</div>
+            <div class="fs-item fs-large" data-size="16px">Large</div>
+          </div>
+        </div>
+
+        <div class="sect">
+          <h2>Wallpaper <span class="badge">Live</span></h2>
+          <div id="wp-container" class="wp-gallery">
+            <div class="wp-loading">Caricamento sfondi in corso...</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-system" class="tab-content">
+        <div class="sect">
+          <h2>Device Information</h2>
+          <div class="row"><label>Device name</label><div class="ctl"><input type="text" id="dev-name" maxlength="32"></div></div>
+          <div class="row"><label>Locale</label><div class="ctl"><input type="text" id="dev-locale" maxlength="12"></div></div>
+          <div class="row"><label>Timezone</label><div class="ctl"><input type="text" id="dev-tz" maxlength="40"></div></div>
+        </div>
+      </section>
+
+      <section id="tab-power" class="tab-content">
+        <div class="sect">
+          <h2>Power & Display <span class="badge">Firmware</span></h2>
+          <div class="row">
+            <label>Brightness</label>
+            <div class="ctl"><input type="range" id="pw-bri" min="5" max="100" step="5"><span class="hint" id="pw-bri-v" style="width: 40px; text-align:right;"></span></div>
+          </div>
+          <div class="row"><label>Sleep timeout (s)</label><div class="ctl"><input type="number" id="pw-sleep" min="0" max="3600" step="10"></div></div>
+          <div class="row"><label>Power Profile</label><div class="ctl"><select id="pw-profile"><option>powersave</option><option>balanced</option><option>performance</option></select></div></div>
+        </div>
+      </section>
+
+      <section id="tab-network" class="tab-content">
+        <div class="sect">
+          <h2>Connectivity <span class="badge">Firmware</span></h2>
+          <div class="row"><label>Wi-Fi</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-wifi"><span></span></span></div></div>
+          <div class="row"><label>Bluetooth LE</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-ble"><span></span></span></div></div>
+          <div class="row"><label>Swarm (ESP-NOW)</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-swarm"><span></span></span></div></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <footer id="status">Loading…</footer>
+
+  <script type="module">
+    const PATH = '/system/config/settings.json';
+    const DEFAULTS = {
+      schema: 1,
+      device: { name: 'nucleo-01', locale: 'en-US', timezone: 'UTC' },
+      network: { wifi: { enabled: true }, ble: { enabled: true }, swarm: { enabled: true } },
+      power: { profile: 'balanced', sleep_timeout_s: 60, display_brightness: 70 },
+      ui: { theme: 'dark', accent: '#4ea1ff', fontSize: '14px' },
+    };
+    const $ = (id) => document.getElementById(id);
+    const status = $('status');
+    let model = structuredClone(DEFAULTS);
+    let dirty = false;
+
+    // Tabs logic
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        item.classList.add('active');
+        $('tab-' + item.dataset.tab).classList.add('active');
+      });
+    });
+
+    const merge = (base, over) => { const o = structuredClone(base);
+      for (const k in (over || {})) o[k] = (over[k] && typeof over[k] === 'object' && !Array.isArray(over[k])) ? merge(base[k] || {}, over[k]) : over[k];
+      return o; };
+
+    function applyLiveUI() {
+      // Send message to shell.js which has the Global Theme Engine
+      try { 
+        window.parent.postMessage({ 
+          type: 'set-theme', 
+          theme: model.ui.theme, 
+          accent: model.ui.accent,
+          fontSize: model.ui.fontSize 
+        }, '*'); 
+      } catch {}
+
+      // Update local UI state
+      document.documentElement.dataset.theme = model.ui.theme;
+      document.documentElement.style.setProperty('--accent', model.ui.accent);
+      
+      $('theme-light').classList.toggle('active', model.ui.theme === 'light');
+      $('theme-dark').classList.toggle('active', model.ui.theme === 'dark');
+      
+      document.querySelectorAll('.color-swatch').forEach(el => {
+        el.classList.toggle('active', el.dataset.color === model.ui.accent);
+      });
+      document.querySelectorAll('.fs-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.size === model.ui.fontSize);
+      });
+    }
+    
+    function setDirty(v) { dirty = v; $('save').disabled = !v; }
+
+    function toForm() {
+      applyLiveUI();
+      $('dev-name').value = model.device.name;
+      $('dev-locale').value = model.device.locale;
+      $('dev-tz').value = model.device.timezone;
+      $('pw-bri').value = model.power.display_brightness; $('pw-bri-v').textContent = model.power.display_brightness + '%';
+      $('pw-sleep').value = model.power.sleep_timeout_s;
+      $('pw-profile').value = model.power.profile;
+      $('net-wifi').checked = !!model.network.wifi.enabled;
+      $('net-ble').checked = !!model.network.ble.enabled;
+      $('net-swarm').checked = !!model.network.swarm.enabled;
+    }
+    
+    function fromForm() {
+      model.device.name = $('dev-name').value.trim() || 'nucleo-01';
+      model.device.locale = $('dev-locale').value.trim();
+      model.device.timezone = $('dev-tz').value.trim();
+      model.power.display_brightness = +$('pw-bri').value;
+      model.power.sleep_timeout_s = Math.max(0, +$('pw-sleep').value || 0);
+      model.power.profile = $('pw-profile').value;
+      model.network.wifi.enabled = $('net-wifi').checked;
+      model.network.ble.enabled = $('net-ble').checked;
+      model.network.swarm.enabled = $('net-swarm').checked;
+    }
+
+    async function loadWallpapers() {
+      const container = $('wp-container');
+      let activeWp = '';
+      try {
+        const uiR = await fetch('/api/fs/read?path=/system/config/ui-state.json');
+        if (uiR.ok) {
+          const uiState = await uiR.json();
+          activeWp = uiState.wallpaper || '';
+        }
+      } catch {}
+
+      try {
+        const r = await fetch('/api/fs/list?path=/data/Pictures');
+        if (r.ok) {
+          const data = await r.json();
+          const images = (data.entries || []).filter(e => e.type === 'file' && /\.(png|jpg|jpeg)$/i.test(e.name));
+          if (images.length === 0) {
+            container.innerHTML = '<div class="wp-loading">Nessuno sfondo trovato in /data/Pictures/.</div>';
+            return;
+          }
+          container.innerHTML = '';
+          images.forEach(img => {
+            const path = '/data/Pictures/' + img.name;
+            const el = document.createElement('div');
+            el.className = 'wp-item';
+            if (path === activeWp) el.classList.add('active');
+            el.style.backgroundImage = `url("/api/fs/read?path=${encodeURIComponent(path)}")`;  // SD files serve only via /api/fs/read, not the raw /data path
+            el.innerHTML = `<div class="wp-name">${img.name}</div>`;
+            el.addEventListener('click', () => {
+              try { window.parent.postMessage({ type: 'set-wallpaper', path: path }, '*'); } catch {}
+              document.querySelectorAll('.wp-item').forEach(i => i.classList.remove('active'));
+              el.classList.add('active');
+            });
+            container.appendChild(el);
+          });
+        } else {
+          container.innerHTML = '<div class="wp-loading">Impossibile caricare gli sfondi.</div>';
+        }
+      } catch {
+        container.innerHTML = '<div class="wp-loading">Dispositivo non raggiungibile.</div>';
+      }
+    }
+
+    async function load() {
+      try {
+        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store' });
+        if (r.ok) { model = merge(DEFAULTS, JSON.parse(await r.text())); status.textContent = 'Loaded from device'; }
+        else { status.textContent = 'No settings on device yet — showing defaults'; }
+      } catch { status.textContent = 'Device unreachable — showing defaults'; }
+      
+      // Upgrade vecchi settings
+      if (!model.ui.accent) model.ui.accent = DEFAULTS.ui.accent;
+      if (!model.ui.fontSize) model.ui.fontSize = DEFAULTS.ui.fontSize;
+
+      toForm(); setDirty(false);
+      loadWallpapers();
+    }
+
+    async function save() {
+      fromForm();
+      status.textContent = 'Saving…';
+      try {
+        const r = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH),
+          { method: 'POST', body: JSON.stringify(model, null, 2) });
+        if (r.ok) { status.textContent = 'Saved to device'; setDirty(false); }
+        else status.textContent = 'Save failed (HTTP ' + r.status + ')';
+      } catch { status.textContent = 'Save failed: device unreachable'; }
+    }
+
+    // Personalization auto-persists (no Save needed): write ONLY the ui section back, read-merge
+    // so device/power/network edits in the other tabs aren't clobbered.
+    let uiSaveT = null;
+    function persistUiSoon() {
+      clearTimeout(uiSaveT);
+      uiSaveT = setTimeout(async () => {
+        status.textContent = 'Saving…';
+        try {
+          const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store' });
+          let s = {}; if (r.ok) { const t = await r.text(); if (t) s = JSON.parse(t); }
+          if (!s.ui) s.ui = {};
+          s.ui.theme = model.ui.theme; s.ui.accent = model.ui.accent; s.ui.fontSize = model.ui.fontSize;
+          const w = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH), { method: 'POST', body: JSON.stringify(s, null, 2) });
+          status.textContent = w.ok ? 'Personalization saved' : 'Save failed (HTTP ' + w.status + ')';
+        } catch { status.textContent = 'Save failed: device unreachable'; }
+      }, 350);
+    }
+
+    // UI Click Handlers — apply live AND persist automatically.
+    $('theme-light').addEventListener('click', () => { model.ui.theme = 'light'; applyLiveUI(); persistUiSoon(); });
+    $('theme-dark').addEventListener('click', () => { model.ui.theme = 'dark'; applyLiveUI(); persistUiSoon(); });
+
+    document.querySelectorAll('.color-swatch').forEach(el => {
+      el.addEventListener('click', () => {
+        model.ui.accent = el.dataset.color;
+        applyLiveUI();
+        persistUiSoon();
+      });
+    });
+
+    document.querySelectorAll('.fs-item').forEach(el => {
+      el.addEventListener('click', () => {
+        model.ui.fontSize = el.dataset.size;
+        applyLiveUI();
+        persistUiSoon();
+      });
+    });
+
+    document.querySelectorAll('input, select').forEach((el) => {
+      el.addEventListener('input', () => {
+        if (el.id === 'pw-bri') $('pw-bri-v').textContent = el.value + '%';
+        setDirty(true);
+      });
+    });
+    $('save').addEventListener('click', save);
+    $('reload').addEventListener('click', load);
+    window.addEventListener('message', (e) => {
+      if (e.data && e.data.t === 'fs.changed' && typeof e.data.d?.path === 'string'
+          && e.data.d.path.endsWith('settings.json') && !dirty) load();
+    });
+    load();
+  </script>
+</body>
+</html>

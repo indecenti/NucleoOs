@@ -1,0 +1,157 @@
+{
+  "ls": {
+    "name": "ls",
+    "synopsis": "ls [path]",
+    "description": "List directory contents. Displays folder names with a trailing slash '/' and file sizes in human-readable bytes."
+  },
+  "cd": {
+    "name": "cd",
+    "synopsis": "cd [path]",
+    "description": "Change working directory. Supports relative path '..' and absolute paths like '/data'. If no path is provided, falls back to '/'."
+  },
+  "pwd": {
+    "name": "pwd",
+    "synopsis": "pwd",
+    "description": "Print working directory. Output the absolute path of the current directory."
+  },
+  "cat": {
+    "name": "cat",
+    "synopsis": "cat <file>",
+    "description": "Concatenate and display file content on the stdout."
+  },
+  "cp": {
+    "name": "cp",
+    "synopsis": "cp <source> <dest>",
+    "description": "Copy a file from source to destination path. Preserves binary data."
+  },
+  "mv": {
+    "name": "mv",
+    "synopsis": "mv <source> <dest>",
+    "description": "Move or rename a file. Performs a copy followed by deleting the source file."
+  },
+  "mkdir": {
+    "name": "mkdir",
+    "synopsis": "mkdir <dir>",
+    "description": "Create a new directory on the SD card."
+  },
+  "touch": {
+    "name": "touch",
+    "synopsis": "touch <file>",
+    "description": "Create an empty file if it does not exist."
+  },
+  "rm": {
+    "name": "rm",
+    "synopsis": "rm <path>",
+    "description": "Delete a file or an empty directory."
+  },
+  "echo": {
+    "name": "echo",
+    "synopsis": "echo [text] [> file]",
+    "description": "Print text to stdout. If redirect operator '>' is present, writes the text to the specified file."
+  },
+  "open": {
+    "name": "open",
+    "synopsis": "open <file>",
+    "description": "Open a file using the Web OS default associated application."
+  },
+  "grep": {
+    "name": "grep",
+    "synopsis": "grep <pattern> <file>",
+    "description": "Search for pattern inside the specified file and display matching lines with line numbers."
+  },
+  "find": {
+    "name": "find",
+    "synopsis": "find [path] -name <pattern>",
+    "description": "Recursively search for files/directories matching the pattern under the specified path."
+  },
+  "wc": {
+    "name": "wc",
+    "synopsis": "wc <file>",
+    "description": "Print newline, word, and byte counts for the specified file."
+  },
+  "head": {
+    "name": "head",
+    "synopsis": "head [-n lines] <file>",
+    "description": "Output the first part (default 10 lines) of a file."
+  },
+  "tail": {
+    "name": "tail",
+    "synopsis": "tail [-n lines] <file>",
+    "description": "Output the last part (default 10 lines) of a file."
+  },
+  "df": {
+    "name": "df",
+    "synopsis": "df",
+    "description": "Show free and used space on the SD Card filesystem."
+  },
+  "uptime": {
+    "name": "uptime",
+    "synopsis": "uptime",
+    "description": "Display device uptime, active session info, and free memory heap."
+  },
+  "ping": {
+    "name": "ping",
+    "synopsis": "ping [host]",
+    "description": "Send network requests to measure round-trip time (RTT) latency to Cardputer or external host."
+  },
+  "curl": {
+    "name": "curl",
+    "synopsis": "curl <url>",
+    "description": "Fetch and display raw text content from the specified URL."
+  },
+  "wget": {
+    "name": "wget",
+    "synopsis": "wget <url> [-O outfile]",
+    "description": "Download a file from URL to the specified SD card path."
+  },
+  "sleep": {
+    "name": "sleep",
+    "synopsis": "sleep <seconds>",
+    "description": "Delay execution for the specified number of seconds (accepts decimals)."
+  },
+  "env": {
+    "name": "env",
+    "synopsis": "env",
+    "description": "Display current environment variables."
+  },
+  "export": {
+    "name": "export",
+    "synopsis": "export [NAME=value]",
+    "description": "Set environment variables or list all marked variables if called without arguments."
+  },
+  "history": {
+    "name": "history",
+    "synopsis": "history",
+    "description": "Show command history list."
+  },
+  "uname": {
+    "name": "uname",
+    "synopsis": "uname [-a]",
+    "description": "Print system information. Flag -a prints machine architecture (esp32s3) and hardware info."
+  },
+  "status": {
+    "name": "status",
+    "synopsis": "status",
+    "description": "Display diagnostic summary of heap memory, SD storage, network connectivity, and OTA partitions."
+  },
+  "free": {
+    "name": "free",
+    "synopsis": "free",
+    "description": "Show free heap memory pool on the microcontroller."
+  },
+  "date": {
+    "name": "date",
+    "synopsis": "date",
+    "description": "Display current local date and time."
+  },
+  "theme": {
+    "name": "theme",
+    "synopsis": "theme [dark|light]",
+    "description": "View or switch the system UI theme."
+  },
+  "clear": {
+    "name": "clear",
+    "synopsis": "clear",
+    "description": "Clear the terminal screen output."
+  }
+}

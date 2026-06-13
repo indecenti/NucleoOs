@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Conoscenza ANIMA</title>
+<style>
+  :root { --bg:#0e1830; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc; --muted:#8aa0c8;
+    --accent:#5bd6c8; --accent2:#8ab4ff; --line:#2a3a5e; --field:#0b1220; --ok:#2fd07a; --hi:#e2576b; --med:#f5b13d; }
+  html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --panel2:#e9edf8; --text:#10203a; --muted:#5a6a86;
+    --accent:#119d92; --accent2:#3a6bd6; --line:#cdd8ee; --field:#f4f7fe; --ok:#1c9d5b; --hi:#c83e52; --med:#c2820f; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  header { padding:9px 14px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; flex:0 0 auto; }
+  header .logo { width:26px; height:26px; flex:0 0 auto; }
+  header h1 { font-size:16px; margin:0; font-weight:650; letter-spacing:.2px; }
+  header .sub { font-size:11.5px; color:var(--muted); }
+  .spacer { flex:1; }
+  .tabs { display:flex; gap:4px; padding:8px 12px 0; flex:0 0 auto; }
+  .tabs button { border:1px solid var(--line); border-bottom:0; background:var(--panel); color:var(--muted);
+    border-radius:9px 9px 0 0; padding:8px 14px; font:inherit; font-weight:600; cursor:pointer; }
+  .tabs button.on { background:var(--panel2); color:var(--text); border-color:color-mix(in srgb,var(--accent) 50%,var(--line)); }
+  main { flex:1 1 auto; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:14px; }
+  .pane { display:none; flex-direction:column; gap:14px; } .pane.on { display:flex; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .card h2 { margin:0 0 4px; font-size:13.5px; font-weight:650; display:flex; align-items:center; gap:8px; }
+  .card .hint { color:var(--muted); font-size:11.5px; margin:0 0 12px; }
+  label { display:block; font-size:11px; color:var(--muted); margin:0 0 4px; text-transform:uppercase; letter-spacing:.4px; }
+  input, select { width:100%; background:var(--field); color:var(--text); border:1px solid var(--line);
+    border-radius:8px; padding:9px 10px; font:inherit; outline:none; }
+  input:focus, select:focus { border-color:var(--accent); }
+  input[type=range]{ padding:0; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .row > div { flex:1 1 160px; min-width:0; }
+  .btns { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  button.act { cursor:pointer; border:1px solid var(--line); background:var(--panel2); color:var(--text);
+    border-radius:8px; padding:8px 13px; font:inherit; font-weight:600; }
+  button.act:hover { border-color:var(--accent); }
+  button.primary { background:linear-gradient(135deg,var(--accent),var(--accent2)); border:0; color:#06101b; }
+  button.ghost { background:transparent; }
+  button.act:disabled { opacity:.5; cursor:default; }
+  .msg { font-size:12.5px; color:var(--muted); margin-left:4px; white-space:pre-wrap; } .msg.err{ color:var(--hi); } .msg.ok{ color:var(--ok); }
+  .stats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .stat { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:8px 12px; min-width:90px; }
+  .stat b { display:block; font-size:18px; } .stat span { font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+  .bar { height:7px; border-radius:6px; background:var(--panel2); overflow:hidden; margin:8px 0; }
+  .bar i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--accent2)); transition:width .25s; }
+  ul.cards { list-style:none; margin:6px 0 0; padding:0; display:flex; flex-direction:column; gap:8px; }
+  li.kc { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 11px; }
+  li.kc .top { display:flex; gap:8px; align-items:center; }
+  li.kc .title { font-weight:650; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  li.kc .reply { color:var(--muted); font-size:12.5px; margin-top:4px; }
+  li.kc .reply.en { border-top:1px dashed var(--line); margin-top:6px; padding-top:6px; }
+  li.kc .lang { font-size:9.5px; font-weight:700; color:var(--accent); margin-right:5px; }
+  li.kc .detail { color:var(--muted); font-size:11.5px; margin-top:6px; font-style:italic; opacity:.85; }
+  .chip { display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; text-transform:uppercase; letter-spacing:.3px; }
+  .chip.bi { background:color-mix(in srgb,var(--ok) 22%,transparent); color:var(--ok); }
+  .chip.mono { background:color-mix(in srgb,var(--med) 22%,transparent); color:var(--med); }
+  .chip.cat { background:var(--field); color:var(--muted); }
+  .iconbtn { border:1px solid var(--line); background:transparent; color:var(--muted); border-radius:7px; padding:5px 8px; cursor:pointer; font-size:12px; }
+  .iconbtn:hover { border-color:var(--hi); color:var(--hi); }
+  .empty { color:var(--muted); text-align:center; padding:18px 10px; font-size:13px; }
+  code { background:var(--field); border:1px solid var(--line); border-radius:6px; padding:2px 6px; font-size:12px; font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--accent2); }
+  pre { background:var(--field); border:1px solid var(--line); border-radius:8px; padding:10px; overflow:auto; font-size:11.5px; margin:8px 0; }
+  .note { font-size:11.5px; color:var(--muted); border-left:3px solid var(--accent); padding:4px 0 4px 10px; margin:8px 0; }
+  footer { flex:0 0 auto; border-top:1px solid var(--line); padding:7px 14px; display:flex; gap:12px; align-items:center; font-size:11.5px; color:var(--muted); }
+  footer kbd { background:var(--field); border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:11px; }
+  [hidden]{ display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <img class="logo" src="assets/icon.svg" alt="">
+  <div>
+    <h1 id="t-title">Conoscenza ANIMA</h1>
+    <div class="sub" id="t-sub"></div>
+  </div>
+  <div class="spacer"></div>
+  <span class="msg" id="net"></span>
+</header>
+
+<div class="tabs" id="tabs">
+  <button data-tab="explore" class="on" id="t-tab1">Esplora</button>
+  <button data-tab="library" id="t-tab2">Libreria</button>
+  <button data-tab="transfer" id="t-tab3">Trasferisci</button>
+</div>
+
+<main>
+  <!-- ===== EXPLORE ===== -->
+  <section class="pane on" data-pane="explore">
+    <div class="card">
+      <h2>🌿 <span id="t-crawlh"></span></h2>
+      <p class="hint" id="t-crawlhint"></p>
+      <div class="row">
+        <div style="flex:2 1 240px"><label id="t-topic"></label><input id="topic" autocomplete="off" spellcheck="false"></div>
+        <div style="flex:0 0 150px"><label id="t-pages"></label>
+          <input type="range" id="pages" min="1" max="20" value="8"><div class="hint" id="pagesv" style="margin:2px 0 0"></div></div>
+      </div>
+      <div class="btns">
+        <button class="act primary" id="crawl"><span id="t-crawlbtn"></span></button>
+        <button class="act" id="entity"><span id="t-entitybtn"></span></button>
+        <span class="msg" id="cmsg"></span>
+      </div>
+      <div class="bar" id="cbar" hidden><i></i></div>
+    </div>
+    <div class="card" id="resultcard" hidden>
+      <h2>📥 <span id="t-resh"></span></h2>
+      <ul class="cards" id="results"></ul>
+    </div>
+  </section>
+
+  <!-- ===== LIBRARY ===== -->
+  <section class="pane" data-pane="library">
+    <div class="card">
+      <h2>📚 <span id="t-libh"></span></h2>
+      <p class="hint" id="t-libhint"></p>
+      <div class="stats" id="stats"></div>
+      <div class="row">
+        <div style="flex:2"><input id="search" placeholder="🔎" autocomplete="off"></div>
+        <div style="flex:0 0 130px"><select id="filter"></select></div>
+      </div>
+      <div class="btns">
+        <button class="act ghost" id="refreshlib"><span id="t-refresh"></span></button>
+        <button class="act ghost" id="clearlib" style="color:var(--hi)"><span id="t-clear"></span></button>
+      </div>
+      <ul class="cards" id="lib"></ul>
+      <div class="empty" id="libempty" hidden></div>
+    </div>
+  </section>
+
+  <!-- ===== TRANSFER ===== -->
+  <section class="pane" data-pane="transfer">
+    <div class="card">
+      <h2>🧠 <span id="t-permh"></span></h2>
+      <p class="hint" id="t-permhint"></p>
+      <div class="hint" id="perm-budget" style="font-weight:600;margin:2px 0"></div>
+      <p class="hint" id="t-budgetwhy" style="margin:2px 0 8px"></p>
+      <div class="btns">
+        <button class="act primary" id="genpack"><span id="t-genbtn"></span></button>
+        <button class="act" id="dlpack"><span id="t-dlbtn"></span></button>
+        <span class="msg" id="pmsg"></span>
+      </div>
+      <div class="note" id="t-permnote"></div>
+      <pre id="cmd"></pre>
+    </div>
+    <div class="card">
+      <h2>⚡ <span id="t-quickh"></span></h2>
+      <p class="hint" id="t-quickhint"></p>
+      <div class="btns">
+        <button class="act" id="teachdev"><span id="t-teachbtn"></span></button>
+        <span class="msg" id="qmsg"></span>
+      </div>
+      <div class="bar" id="qbar" hidden><i></i></div>
+      <div class="note" id="t-quicknote"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span id="t-foot"></span><span class="spacer"></span>
+  <span><kbd>Enter</kbd> <span id="t-footk"></span></span>
+</footer>
+
+<script type="module">
+  import { crawlBranch, webIndexAnswer, exportForPromotion, classify } from '/apps/anima/local/webindex.js';
+  import { webStore } from '/apps/anima/local/webstore.js';
+  import I18N from '/nucleo-i18n.js';
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const lang = () => (localStorage.getItem('anima.lang') === 'en' ? 'en' : 'it');
+  const SETTINGS = '/system/config/settings.json';
+  const PACK_PATH = '/data/anima/knowledge/web.jsonl';
+
+  // ── ESP / Cardputer knowledge budgets — the CLEAR LIMITS. The browser library (webStore) is UNCAPPED:
+  // it lives on the PC's GB of RAM and evolves freely. But what we POUR INTO the Cardputer must stay
+  // within what the ESP's offline AKB5 can load and query fast & stable (18 KB heap, SD-streamed shards).
+  // So every device-bound path is hard-capped here; the overflow simply stays in the browser.
+  const DEVICE_CARD_BUDGET = 400;   // permanent pack (web.jsonl) — mirrors tools/anima/web-promote.mjs MAX_PROMOTE (the host bake enforces the same ceiling). Never write more cards to the device than this.
+  const DEVICE_TEACH_BUDGET = 128;  // quick-teach — the device's user-taught ring is FIFO ~128; sending more just churns it.
+
+  async function readJSON(p) { try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(p), { cache: 'no-store' }); return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; } }
+  async function writeText(p, s) { try { const r = await fetch('/api/fs/write?path=' + encodeURIComponent(p), { method: 'POST', body: s }); return r.ok; } catch { return false; } }
+  async function mkdir(p) { try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent(p), { method: 'POST' }); } catch {} }
+  async function anima(q) { try { const r = await fetch('/api/anima?q=' + encodeURIComponent(q) + '&lang=' + lang(), { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch { return null; } }
+
+  // ---------------- i18n ----------------
+  const S = {
+    it: {
+      sub: 'Scarica conoscenza dal web (offline-LLM) e portala nel cervello del Cardputer.',
+      tab1: 'Esplora', tab2: 'Libreria', tab3: 'Trasferisci',
+      crawlh: 'Scarica un ramo di conoscenza', crawlhint: 'Cerca un argomento: scarico il ramo (pagina + sotto-articoli più rilevanti), catalogo bilingue e verbatim — niente invenzioni. Limitato per non riempire il dispositivo.',
+      topic: 'Argomento / entità', topicPh: 'Seconda guerra mondiale', pages: 'Pagine max', crawlbtn: '🌿 Scarica ramo', entitybtn: '🔎 Cerca entità',
+      resh: 'Catalogate ora',
+      pagesv: (n) => n + ' pagine · ~' + (n * 1.3).toFixed(0) + ' KB max',
+      crawling: 'Scarico e catalogo…', searching: 'Cerco…', offline: 'Offline — serve internet per scaricare.',
+      crawled: (n, kb, sk) => 'Catalogate ' + n + ' voci bilingui (' + kb + ' KB)' + (sk ? ', ' + sk + ' già note' : '') + '.',
+      noresult: 'Nessun argomento chiaro trovato.', need: 'Scrivi un argomento.',
+      libh: 'Conoscenza catalogata', libhint: 'Tutto ciò che hai scaricato vive qui nel browser (IndexedDB) ed è già usato OFFLINE dall’indicizzatore web del motore. Da qui lo porti sul Cardputer.',
+      total: 'Voci', bil: 'Bilingui', kb: 'KB', cats: 'Categorie',
+      filterAll: 'Tutte', refresh: '↻ Aggiorna', clear: '🗑 Svuota tutto', clearConfirm: 'Cancellare TUTTA la conoscenza catalogata nel browser?',
+      empty: 'Niente ancora. Vai su “Esplora” e scarica un ramo.', searchPh: 'Cerca…',
+      del: 'Elimina',
+      permh: 'Permanente nel cervello (AKB5)', permhint: 'Genero un pacchetto bilingue e lo scrivo sul Cardputer. Poi un comando sul PC lo cuoce nell’indice AKB5: lo usano SIA il firmware del device SIA il motore WASM, offline, per sempre. Dedup e anti-collisione inclusi.',
+      genbtn: '📦 Genera e scrivi sul Cardputer', dlbtn: '⬇ Scarica .json',
+      permnote: 'Passo finale sul PC (deliberato, mai automatico):',
+      gen: 'Genero il pacchetto…', wrote: (n, kb) => '✓ ' + n + ' card scritte sul Cardputer (' + kb + ' KB) in ' + PACK_PATH + '. Esegui il comando qui sotto per renderle permanenti.',
+      nobil: 'Nessuna card bilingue da promuovere. Scarica prima un ramo.', writefail: 'Scrittura sul dispositivo fallita (connesso e accoppiato?).',
+      budget: (lib) => '🧠 Budget Cardputer: ' + Math.min(lib, DEVICE_CARD_BUDGET) + '/' + DEVICE_CARD_BUDGET + ' voci' + (lib > DEVICE_CARD_BUDGET ? ' · ⚠ ' + (lib - DEVICE_CARD_BUDGET) + ' eccedenti restano SOLO nel browser' : ' · spazio libero'),
+      budgetWhy: 'Il browser cresce a piacere; sul Cardputer si porta solo ciò che il suo motore offline (ESP) regge veloce e stabile: massimo ' + DEVICE_CARD_BUDGET + ' voci. Le eccedenti restano nel browser — cura la Libreria per scegliere quali portare.',
+      capped: (m) => ' · ⚠ ' + m + ' oltre il limite restano solo nel browser.',
+      teachCap: (n) => 'Invio le prime ' + DEVICE_TEACH_BUDGET + ' di ' + n + ' (il device ne tiene ~' + DEVICE_TEACH_BUDGET + ', FIFO). Per più conoscenza usa “Permanente”.',
+      quickh: 'Rapido: insegna al dispositivo (subito)', quickhint: 'Insegno ogni voce ad ANIMA sul device (“ricorda che X significa…”). Recall offline immediato, senza ricostruire l’indice. Limiti: monolingua, il device tiene le ultime ~128.',
+      teachbtn: '⚡ Insegna tutto al dispositivo', teaching: 'Insegno ad ANIMA…', taught: (o, n) => '✓ Insegnate ' + o + '/' + n + ' al dispositivo.',
+      quicknote: 'Per conoscenza permanente, ricca e bilingue usa “Permanente (AKB5)” qui sopra.',
+      foot: 'Bilingue · verbatim · zero allucinazioni', footk: 'scarica ramo',
+      netoff: '● offline', neton: '● online',
+    },
+    en: {
+      sub: 'Download knowledge from the web (offline-LLM) and copy it into the Cardputer’s brain.',
+      tab1: 'Explore', tab2: 'Library', tab3: 'Transfer',
+      crawlh: 'Download a knowledge branch', crawlhint: 'Search a topic: I download the branch (page + most relevant sub-articles), catalogue it bilingually and verbatim — no invention. Bounded so it never floods the device.',
+      topic: 'Topic / entity', topicPh: 'World War II', pages: 'Max pages', crawlbtn: '🌿 Download branch', entitybtn: '🔎 Find entity',
+      resh: 'Catalogued now',
+      pagesv: (n) => n + ' pages · ~' + (n * 1.3).toFixed(0) + ' KB max',
+      crawling: 'Downloading & cataloguing…', searching: 'Searching…', offline: 'Offline — internet is needed to download.',
+      crawled: (n, kb, sk) => 'Catalogued ' + n + ' bilingual cards (' + kb + ' KB)' + (sk ? ', ' + sk + ' already known' : '') + '.',
+      noresult: 'No clear topic found.', need: 'Type a topic.',
+      libh: 'Catalogued knowledge', libhint: 'Everything you downloaded lives here in the browser (IndexedDB) and is already used OFFLINE by the engine’s web indexer. From here you copy it onto the Cardputer.',
+      total: 'Cards', bil: 'Bilingual', kb: 'KB', cats: 'Categories',
+      filterAll: 'All', refresh: '↻ Refresh', clear: '🗑 Clear all', clearConfirm: 'Delete ALL catalogued knowledge in the browser?',
+      empty: 'Nothing yet. Go to “Explore” and download a branch.', searchPh: 'Search…',
+      del: 'Delete',
+      permh: 'Permanent in the brain (AKB5)', permhint: 'I build a bilingual pack and write it onto the Cardputer. Then one command on the PC bakes it into the AKB5 index: BOTH the device firmware AND the WASM engine use it, offline, forever. Dedup and collision-check included.',
+      genbtn: '📦 Build & write to Cardputer', dlbtn: '⬇ Download .json',
+      permnote: 'Final step on the PC (deliberate, never automatic):',
+      gen: 'Building the pack…', wrote: (n, kb) => '✓ ' + n + ' cards written to the Cardputer (' + kb + ' KB) at ' + PACK_PATH + '. Run the command below to make them permanent.',
+      nobil: 'No bilingual cards to promote. Download a branch first.', writefail: 'Write to device failed (connected and paired?).',
+      budget: (lib) => '🧠 Cardputer budget: ' + Math.min(lib, DEVICE_CARD_BUDGET) + '/' + DEVICE_CARD_BUDGET + ' cards' + (lib > DEVICE_CARD_BUDGET ? ' · ⚠ ' + (lib - DEVICE_CARD_BUDGET) + ' over-budget stay in the browser only' : ' · room to spare'),
+      budgetWhy: 'The browser grows freely; only what the Cardputer’s offline engine (ESP) can run fast & stable is poured onto it: at most ' + DEVICE_CARD_BUDGET + ' cards. The rest stays in the browser — curate the Library to choose which to send.',
+      capped: (m) => ' · ⚠ ' + m + ' beyond the limit stay in the browser only.',
+      teachCap: (n) => 'Sending the first ' + DEVICE_TEACH_BUDGET + ' of ' + n + ' (the device keeps ~' + DEVICE_TEACH_BUDGET + ', FIFO). For more, use “Permanent”.',
+      quickh: 'Quick: teach the device (now)', quickhint: 'I teach each card to ANIMA on the device (“remember that X means…”). Immediate offline recall, no index rebuild. Limits: monolingual, the device keeps the latest ~128.',
+      teachbtn: '⚡ Teach all to the device', teaching: 'Teaching ANIMA…', taught: (o, n) => '✓ Taught ' + o + '/' + n + ' to the device.',
+      quicknote: 'For permanent, rich, bilingual knowledge use “Permanent (AKB5)” above.',
+      foot: 'Bilingual · verbatim · zero hallucination', footk: 'download branch',
+      netoff: '● offline', neton: '● online',
+    },
+  };
+  const t = () => S[lang()];
+
+  // ---------------- card model ----------------
+  // The store holds records; branch records carry a full bilingual `.card`. We present a unified view.
+  function viewOf(rec) {
+    const c = rec.card;
+    if (c && c.reply) return { id: c.id, title: rec.title || c.id.replace(/^web\./, ''), cat: c.category || rec.category || 'concept',
+      it: c.reply.it || '', en: c.reply.en || '', detailIt: c.detail && c.detail.it || '', detailEn: c.detail && c.detail.en || '',
+      bilingual: !!(c.reply.it && c.reply.en), key: rec.slug, recLang: rec.lang, source: c.source };
+    return { id: rec.slug, title: rec.title || rec.slug, cat: rec.category || 'concept',
+      it: rec.lang === 'en' ? '' : (rec.reply || ''), en: rec.lang === 'en' ? (rec.reply || '') : '',
+      detailIt: '', detailEn: '', bilingual: false, key: rec.slug, recLang: rec.lang, source: rec.source };
+  }
+  async function allRecords() {
+    const it = await webStore.all('it').catch(() => []);
+    const en = await webStore.all('en').catch(() => []);
+    const seen = new Set(); const out = [];
+    for (const r of [...it, ...en]) { const v = viewOf(r); const k = v.id; if (seen.has(k)) continue; seen.add(k); out.push({ v, rec: r }); }
+    return out;
+  }
+
+  // ---------------- EXPLORE ----------------
+  function renderCardLi(v) {
+    const li = document.createElement('li'); li.className = 'kc';
+    li.innerHTML = `<div class="top"><span class="title">${esc(v.title)}</span>`
+      + `<span class="chip ${v.bilingual ? 'bi' : 'mono'}">${v.bilingual ? 'IT+EN' : (v.recLang || 'it').toUpperCase()}</span>`
+      + `<span class="chip cat">${esc(v.cat)}</span></div>`
+      + (v.it ? `<div class="reply"><span class="lang">IT</span>${esc(v.it)}</div>` : '')
+      + (v.en ? `<div class="reply en"><span class="lang">EN</span>${esc(v.en)}</div>` : '')
+      + ((v.detailIt || v.detailEn) ? `<div class="detail">${esc(v.detailIt || v.detailEn)}</div>` : '');
+    return li;
+  }
+  async function doCrawl() {
+    const topic = $('topic').value.trim(); const msg = $('cmsg');
+    if (!topic) { msg.className = 'msg err'; msg.textContent = t().need; return; }
+    if (!navigator.onLine) { msg.className = 'msg err'; msg.textContent = t().offline; return; }
+    msg.className = 'msg'; msg.textContent = t().crawling; $('crawl').disabled = true; $('entity').disabled = true;
+    const bar = $('cbar'); bar.hidden = false; bar.querySelector('i').style.width = '15%';
+    const maxPages = +$('pages').value;
+    let res = null;
+    try { res = await crawlBranch(topic, lang(), { store: webStore, now: Date.now() }, { maxPages, byteBudget: 200 * 1024 }); } catch {}
+    bar.querySelector('i').style.width = '100%'; setTimeout(() => bar.hidden = true, 400);
+    $('crawl').disabled = false; $('entity').disabled = false;
+    if (!res || !res.cards || !res.cards.length) { msg.className = 'msg err'; msg.textContent = t().noresult; return; }
+    msg.className = 'msg ok'; msg.textContent = t().crawled(res.cards.length, (res.bytes / 1024).toFixed(1), res.skipped);
+    const ul = $('results'); ul.innerHTML = ''; $('resultcard').hidden = false;
+    for (const c of res.cards) ul.appendChild(renderCardLi(viewOf({ card: c, title: c.id.replace(/^web\./, ''), slug: c.id, lang: lang() })));
+    refreshStats();
+  }
+  async function doEntity() {
+    const q = $('topic').value.trim(); const msg = $('cmsg');
+    if (!q) { msg.className = 'msg err'; msg.textContent = t().need; return; }
+    msg.className = 'msg'; msg.textContent = t().searching; $('entity').disabled = true;
+    let r = null; try { r = await webIndexAnswer(q.match(/^(chi|cosa|cos|what|who)/i) ? q : ('chi è ' + q), lang(), { store: webStore, bare: true, online: navigator.onLine !== false, now: Date.now() }); } catch {}
+    $('entity').disabled = false;
+    if (!r || !r.reply) { msg.className = 'msg err'; msg.textContent = t().noresult; return; }
+    msg.className = 'msg ok'; msg.textContent = '✓ ' + (r.title || q);
+    const ul = $('results'); ul.innerHTML = ''; $('resultcard').hidden = false;
+    const li = document.createElement('li'); li.className = 'kc';
+    li.innerHTML = `<div class="top"><span class="title">${esc(r.title || q)}</span><span class="chip cat">${esc(r.category || 'concept')}</span></div><div class="reply">${esc(r.reply)}</div>`;
+    ul.appendChild(li); refreshStats();
+  }
+
+  // ---------------- LIBRARY ----------------
+  let _records = [];
+  async function refreshStats() {
+    _records = await allRecords();
+    const total = _records.length; const bil = _records.filter(x => x.v.bilingual).length;
+    const bytes = _records.reduce((s, x) => s + (x.v.it + x.v.en + x.v.detailIt + x.v.detailEn).length, 0);
+    const cats = new Set(_records.map(x => x.v.cat));
+    $('stats').innerHTML = [[t().total, total], [t().bil, bil], [t().kb, (bytes / 1024).toFixed(1)], [t().cats, cats.size]]
+      .map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join('');
+    const f = $('filter'); const cur = f.value;
+    f.innerHTML = `<option value="">${t().filterAll}</option>` + [...cats].sort().map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    if (cur) f.value = cur;
+    refreshBudget();
+  }
+  // Live ESP budget readout in the Transfer tab: how much of the (uncapped) browser library actually fits
+  // the Cardputer's offline engine. Amber when the library exceeds the device budget (overflow stays browser-only).
+  function refreshBudget() {
+    const n = _records.length, b = $('perm-budget');
+    if (b) { b.textContent = t().budget(n); b.style.color = n > DEVICE_CARD_BUDGET ? '#ffb454' : 'var(--muted)'; }
+  }
+  function renderLib() {
+    const q = $('search').value.trim().toLowerCase(); const cat = $('filter').value;
+    const list = _records.filter(x => (!cat || x.v.cat === cat) && (!q || (x.v.title + x.v.it + x.v.en).toLowerCase().includes(q)));
+    const ul = $('lib'); ul.innerHTML = ''; $('libempty').hidden = list.length > 0; ul.hidden = list.length === 0;
+    if (!list.length) { $('libempty').textContent = t().empty; return; }
+    for (const { v } of list) {
+      const li = renderCardLi(v);
+      const btn = document.createElement('button'); btn.className = 'iconbtn'; btn.textContent = '🗑'; btn.title = t().del;
+      btn.style.cssText = 'float:right;margin:-2px 0 0 6px';
+      btn.onclick = async () => { await removeRecord(v); await refreshStats(); renderLib(); };
+      li.querySelector('.top').appendChild(btn);
+      ul.appendChild(li);
+    }
+  }
+  // webstore has no delete-by-key; emulate by reading all survivors, clearing, re-putting them (small N).
+  async function removeRecord(v) {
+    const survivors = (await allRecords()).filter(x => x.v.id !== v.id).map(x => x.rec);
+    await webStore.clear();
+    for (const r of survivors) { try { await webStore.put(r); } catch {} }
+  }
+
+  // ---------------- TRANSFER (permanent AKB5) ----------------
+  function commandText() {
+    return 'node tools/anima/web-promote.mjs ' + PACK_PATH.replace(/^\//, '') + ' --write\n'
+      + 'npm run anima:packs && npm run anima:gate\n'
+      + '# poi: deploy.ps1  +  sd-sync.ps1 -Target H:\\   (deploy deliberato)';
+  }
+  let _lastExport = null;
+  async function buildExport() {
+    const cards = await exportForPromotion(webStore);
+    _lastExport = cards; return cards;
+  }
+  async function genPack() {
+    const msg = $('pmsg'); msg.className = 'msg'; msg.textContent = t().gen; $('genpack').disabled = true;
+    const all = await buildExport();
+    if (!all.length) { $('genpack').disabled = false; msg.className = 'msg err'; msg.textContent = t().nobil; return; }
+    const cards = all.slice(0, DEVICE_CARD_BUDGET);        // HARD ESP cap: never write more cards to the device than its offline engine can run; the rest stays in the (uncapped) browser library.
+    const over = all.length - cards.length;
+    const jsonl = cards.map(c => JSON.stringify(c)).join('\n') + '\n';
+    await mkdir('/data/anima/knowledge');
+    const ok = await writeText(PACK_PATH, jsonl);
+    $('genpack').disabled = false;
+    if (!ok) { msg.className = 'msg err'; msg.textContent = t().writefail; return; }
+    msg.className = 'msg ok'; msg.textContent = t().wrote(cards.length, (jsonl.length / 1024).toFixed(1)) + (over ? t().capped(over) : '');
+    $('cmd').textContent = commandText();
+  }
+  async function dlPack() {
+    const cards = _lastExport || await buildExport();
+    if (!cards.length) { const m = $('pmsg'); m.className = 'msg err'; m.textContent = t().nobil; return; }
+    const blob = new Blob([JSON.stringify(cards, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'anima-web-export.json'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  // ---------------- TRANSFER (quick teach) ----------------
+  async function teachDevice() {
+    const allRecs = await allRecords(); const msg = $('qmsg');
+    if (!allRecs.length) { msg.className = 'msg err'; msg.textContent = t().nobil; return; }
+    const recs = allRecs.slice(0, DEVICE_TEACH_BUDGET);   // device keeps ~128 (FIFO); sending more just churns it
+    msg.className = 'msg'; msg.textContent = (allRecs.length > recs.length ? t().teachCap(allRecs.length) + ' ' : '') + t().teaching; $('teachdev').disabled = true;
+    const bar = $('qbar'); bar.hidden = false; const I = bar.querySelector('i');
+    let ok = 0; const L = lang();
+    for (let i = 0; i < recs.length; i++) {
+      const v = recs[i].v; const subj = v.title; const val = (L === 'en' ? v.en : v.it) || v.it || v.en;
+      if (subj && val) { const sent = (L === 'en' ? 'remember that ' + subj + ' means ' + val : 'ricorda che ' + subj + ' significa ' + val);
+        const j = await anima(sent); if (j && /impar|ricord|remember|got it/i.test(String(j.reply || '') + (j.intent || ''))) ok++; }
+      I.style.width = Math.round(((i + 1) / recs.length) * 100) + '%';
+    }
+    setTimeout(() => bar.hidden = true, 500); $('teachdev').disabled = false;
+    msg.className = 'msg ok'; msg.textContent = t().taught(ok, recs.length);
+  }
+
+  // ---------------- shell + i18n wiring ----------------
+  function setTab(name) {
+    for (const b of $('tabs').children) b.classList.toggle('on', b.dataset.tab === name);
+    for (const p of document.querySelectorAll('.pane')) p.classList.toggle('on', p.dataset.pane === name);
+    if (name === 'library') { refreshStats().then(renderLib); }
+  }
+  function applyStrings() {
+    const x = t(); document.documentElement.lang = lang();
+    $('t-title').textContent = 'Conoscenza ANIMA'; $('t-sub').textContent = x.sub;
+    $('t-tab1').textContent = x.tab1; $('t-tab2').textContent = x.tab2; $('t-tab3').textContent = x.tab3;
+    $('t-crawlh').textContent = x.crawlh; $('t-crawlhint').textContent = x.crawlhint;
+    $('t-topic').textContent = x.topic; $('t-pages').textContent = x.pages; $('t-crawlbtn').textContent = x.crawlbtn; $('t-entitybtn').textContent = x.entitybtn;
+    $('topic').placeholder = x.topicPh;
+    $('t-resh').textContent = x.resh; $('pagesv').textContent = x.pagesv(+$('pages').value);
+    $('t-libh').textContent = x.libh; $('t-libhint').textContent = x.libhint; $('t-refresh').textContent = x.refresh; $('t-clear').textContent = x.clear;
+    $('search').placeholder = x.searchPh;
+    $('t-permh').textContent = x.permh; $('t-permhint').textContent = x.permhint; $('t-genbtn').textContent = x.genbtn; $('t-dlbtn').textContent = x.dlbtn; $('t-permnote').textContent = x.permnote;
+    $('t-budgetwhy').textContent = x.budgetWhy; refreshBudget();
+    $('t-quickh').textContent = x.quickh; $('t-quickhint').textContent = x.quickhint; $('t-teachbtn').textContent = x.teachbtn; $('t-quicknote').textContent = x.quicknote;
+    $('t-foot').textContent = x.foot; $('t-footk').textContent = x.footk;
+    $('cmd').textContent = commandText();
+    setNet();
+  }
+  function setNet() { const x = t(); const on = navigator.onLine !== false; $('net').className = 'msg ' + (on ? 'ok' : 'err'); $('net').textContent = on ? x.neton : x.netoff; }
+  async function loadTheme() { const s = await readJSON(SETTINGS); if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
+    if (s?.ui?.language === 'it' || s?.ui?.language === 'en') localStorage.setItem('anima.lang', s.ui.language); }
+
+  async function init() {
+    await loadTheme(); applyStrings();
+    $('tabs').addEventListener('click', e => { const b = e.target.closest('button[data-tab]'); if (b) setTab(b.dataset.tab); });
+    $('pages').addEventListener('input', () => $('pagesv').textContent = t().pagesv(+$('pages').value));
+    $('crawl').addEventListener('click', doCrawl);
+    $('entity').addEventListener('click', doEntity);
+    $('topic').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doCrawl(); } });
+    $('search').addEventListener('input', renderLib); $('filter').addEventListener('change', renderLib);
+    $('refreshlib').addEventListener('click', () => refreshStats().then(renderLib));
+    $('clearlib').addEventListener('click', async () => { if (confirm(t().clearConfirm)) { await webStore.clear(); await refreshStats(); renderLib(); } });
+    $('genpack').addEventListener('click', genPack); $('dlpack').addEventListener('click', dlPack);
+    $('teachdev').addEventListener('click', teachDevice);
+    addEventListener('online', setNet); addEventListener('offline', setNet);
+    // Live OS-wide language sync: repaint when the language changes elsewhere (e.g. Settings) while open.
+    // Reuses the same re-render the app's own set-language path runs — zero behavior change.
+    I18N.onChange(() => { applyStrings(); refreshStats().then(renderLib); });
+    refreshStats();
+    $('topic').focus();
+  }
+  init();
+
+  // live: theme/language/shortcuts from the OS shell
+  window.addEventListener('message', (e) => { const d = e.data || {};
+    if (d.type === 'set-theme' && d.theme) document.documentElement.dataset.theme = d.theme;
+    if (d.type === 'set-language' && (d.lang === 'it' || d.lang === 'en')) { localStorage.setItem('anima.lang', d.lang); applyStrings(); refreshStats().then(renderLib); }
+    if (d.type === 'os-shortcut') { if (d.action === 'refresh') refreshStats().then(renderLib); }
+  });
+</script>
+</body>
+</html>

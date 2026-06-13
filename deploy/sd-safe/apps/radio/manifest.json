@@ -1,0 +1,36 @@
+{
+  "id": "radio",
+  "name": "Radio Index",
+  "version": "1.0.0",
+  "description": "Tune into free live radio. The station list is shared with the on-device Radio app.",
+  "category": "media",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/radio/",
+  "icon": "/apps/radio/icon.svg",
+  "permissions": [
+    "storage.shared",
+    "device.audio"
+  ],
+  "handles": { "role": "none", "extensions": [] },
+  "mounts": {
+    "app": "/apps/radio/data"
+  },
+  "intents": [],
+  "subscribes": [
+    "fs.changed"
+  ],
+  "publishes": [
+    "media.state"
+  ],
+  "power": {
+    "budget_class": "high",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

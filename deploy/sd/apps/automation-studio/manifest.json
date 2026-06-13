@@ -1,0 +1,54 @@
+{
+  "id": "automation-studio",
+  "name": "Automation Studio",
+  "version": "0.1.0",
+  "description": "Create event-to-action rules running on a sandboxed micro-VM.",
+  "category": "tools",
+  "runtime": "service",
+  "entry_service": "automation_main",
+  "web_route": "/apps/automation-studio/",
+  "permissions": [
+    "storage.app",
+    "system.events",
+    "system.notify",
+    "device.keyboard",
+    "device.ir",
+    "power.budget"
+  ],
+  "mounts": {
+    "app": "/apps/automation-studio/data",
+    "rules": "/apps/automation-studio/rules"
+  },
+  "handles": {
+    "role": "editor",
+    "extensions": [
+      "rule",
+      "auto",
+      "flow"
+    ]
+  },
+  "subscribes": [
+    "system.boot",
+    "wifi.status",
+    "storage.changed",
+    "ir.received",
+    "fs.open"
+  ],
+  "publishes": [
+    "automation.rule_fired"
+  ],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "timer",
+      "keyboard",
+      "ir"
+    ]
+  },
+  "mesh": {
+    "exposes": [
+      "automation.rule_fired"
+    ],
+    "consumes": []
+  }
+}

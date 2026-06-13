@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Terminal</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff;
+      --line:#2a3a5e; --field:#0b1220; --ok:#2fd07a; --err:#e2576b; --warn:#f5b13d; }
+    html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86;
+      --accent:#2b6fd6; --line:#cdd8ee; --field:#f4f7fe; --ok:#1c9d5b; --err:#c83e52; --warn:#c2820f; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+      font: 13px/1.45 ui-monospace, "Cascadia Code", Consolas, monospace; }
+    header { display: flex; align-items: center; gap: 6px; padding: 4px 8px; flex: none;
+      background: var(--panel); border-bottom: 1px solid var(--line); }
+    header .t { flex: 1; font-weight: 600; font-size: 12px; letter-spacing: .3px; }
+    header .cwd { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; max-width: 45%; }
+    header button { border: 1px solid var(--line); background: #80808018; color: var(--text);
+      border-radius: 6px; padding: 2px 9px; cursor: pointer; font: inherit; font-size: 11px; }
+    header button:hover { background: #80808033; }
+    #out { flex: 1; overflow: auto; padding: 6px 8px; white-space: pre-wrap; word-break: break-word; }
+    #out .line { display: block; }
+    #out .cmd { color: var(--accent); }
+    #out .dim { color: var(--muted); }
+    #out .ok { color: var(--ok); } #out .err { color: var(--err); } #out .warn { color: var(--warn); }
+    #out .dir { color: var(--accent); }
+    .prompt { display: flex; align-items: center; gap: 6px; padding: 5px 8px; flex: none;
+      background: var(--field); border-top: 1px solid var(--line); }
+    .prompt .ps { color: var(--ok); flex: none; }
+    .prompt input { flex: 1; min-width: 0; border: 0; background: none; outline: none;
+      color: var(--text); font: inherit; }
+    /* thin scrollbar so the tiny screen keeps its width */
+    #out::-webkit-scrollbar { width: 6px; } #out::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="t">&gt;_ Terminal</span>
+    <span class="cwd" id="cwd">/</span>
+    <button id="clr" title="Clear (Ctrl+L)">clear</button>
+  </header>
+  <div id="out"></div>
+  <div class="prompt">
+    <span class="ps" id="ps">/ $</span>
+    <input id="in" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="type 'help'…">
+  </div>
+
+  <script type="module">
+    const out = document.getElementById('out');
+    const input = document.getElementById('in');
+    const cwdEl = document.getElementById('cwd');
+    const psEl = document.getElementById('ps');
+    const SETTINGS = '/system/config/settings.json';
+
+    // ---- device file API (degrades gracefully outside the OS) -----------------
+    const api = (op, path, opts) => fetch(`/api/fs/${op}?path=` + encodeURIComponent(path), opts);
+    async function readJSON(path) {
+      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+        return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; }
+    }
+
+    // ---- working directory (normalised, absolute) -----------------------------
+    let cwd = '/';
+    const envVars = { SHELL: '/bin/sh', PATH: '/apps/bin', USER: 'admin', OS: 'NucleoOS', TERM: 'xterm-color', CWD: '/' };
+    const norm = (p) => {
+      const abs = p.startsWith('/') ? p : cwd + '/' + p;
+      const parts = []; for (const seg of abs.split('/')) {
+        if (!seg || seg === '.') continue;
+        if (seg === '..') parts.pop(); else parts.push(seg);
+      }
+      return '/' + parts.join('/');
+    };
+    const setCwd = (p) => { cwd = p || '/'; cwdEl.textContent = cwd; psEl.textContent = cwd + ' $'; envVars.CWD = cwd; };
+
+    // ---- output helpers --------------------------------------------------------
+    function emit(text, cls) {
+      const el = document.createElement('span');
+      el.className = 'line' + (cls ? ' ' + cls : '');
+      el.textContent = text;
+      out.appendChild(el);
+      out.scrollTop = out.scrollHeight;
+    }
+    const fmtBytes = (b) => b >= 1e9 ? (b/1e9).toFixed(2)+' GB' : b >= 1e6 ? (b/1e6).toFixed(1)+' MB'
+      : b >= 1e3 ? (b/1e3).toFixed(1)+' KB' : b + ' B';
+
+    // ---- commands --------------------------------------------------------------
+    const COMMANDS = {
+      help() {
+        emit('Commands:', 'dim');
+        emit('  ls [path]      list a directory', 'dim');
+        emit('  cd <path>      change directory   (cd ..  cd /data)', 'dim');
+        emit('  pwd            print working directory', 'dim');
+        emit('  cat <file>     print a file', 'dim');
+        emit('  cp <src> <dst> copy a file', 'dim');
+        emit('  mv <src> <dst> move or rename a file', 'dim');
+        emit('  mkdir <dir>    create a directory', 'dim');
+        emit('  touch <file>   create an empty file', 'dim');
+        emit('  rm <path>      delete a file or directory', 'dim');
+        emit('  echo <text> > <file>   write text to a file', 'dim');
+        emit('  open <file>    open in the default app', 'dim');
+        emit('  grep <pat> <f> search pattern in a file', 'dim');
+        emit('  find <pat>     find files recursively', 'dim');
+        emit('  wc <file>      count lines, words, and bytes', 'dim');
+        emit('  head <file>    show first lines of a file', 'dim');
+        emit('  tail <file>    show last lines of a file', 'dim');
+        emit('  df             display disk space usage', 'dim');
+        emit('  uptime         show device uptime', 'dim');
+        emit('  dmesg          print device kernel/system logs', 'dim');
+        emit('  reboot         reboot the Cardputer', 'dim');
+        emit('  ping [host]    ping Cardputer or external host', 'dim');
+        emit('  curl <url>     fetch and display URL content', 'dim');
+        emit('  wget <url>     download URL content to file', 'dim');
+        emit('  sleep <sec>    delay execution for N seconds', 'dim');
+        emit('  env            show environment variables', 'dim');
+        emit('  export [V=val] set environment variable', 'dim');
+        emit('  man <command>  show manual page for a command', 'dim');
+        emit('  history        show command history', 'dim');
+        emit('  uname [-a]     print system information', 'dim');
+        emit('  status         system + storage + network', 'dim');
+        emit('  free           free heap memory', 'dim');
+        emit('  date           device / local time', 'dim');
+        emit('  theme [dark|light]   read or switch theme', 'dim');
+        emit('  clear          clear the screen   (Ctrl+L)', 'dim');
+        emit('History: ↑ / ↓ recalls previous commands.', 'dim');
+      },
+      async ls(arg) {
+        const path = arg ? norm(arg) : cwd;
+        let r;
+        try { r = await api('list', path); }
+        catch { emit('ls: cannot reach the file API (running outside the OS?)', 'err'); return; }
+        if (!r.ok) {
+          if (r.status === 404) emit('ls: no such directory: ' + path, 'err');
+          else emit('ls: failed to list directory (status ' + r.status + ')', 'err');
+          return;
+        }
+        let j;
+        try { j = await r.json(); }
+        catch { emit('ls: invalid response from server', 'err'); return; }
+        const entries = (j.entries || []).sort((a, b) =>
+          a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1);
+        if (!entries.length) { emit('(empty)', 'dim'); return; }
+        for (const e of entries) {
+          if (e.type === 'dir') emit('  ' + e.name + '/', 'dir');
+          else emit('  ' + e.name.padEnd(28) + fmtBytes(e.size || 0).padStart(10), '');
+        }
+        emit(`${entries.length} item${entries.length === 1 ? '' : 's'}`, 'dim');
+      },
+      async cd(arg) {
+        if (!arg) { setCwd('/'); return; }
+        const path = norm(arg);
+        try { const r = await api('list', path); if (!r.ok) throw 0; await r.json(); setCwd(path); }
+        catch { emit('cd: no such directory: ' + path, 'err'); }
+      },
+      pwd() { emit(cwd); },
+      async cat(arg) {
+        if (!arg) { emit('cat: missing file', 'err'); return; }
+        try { const r = await api('read', norm(arg)); if (!r.ok) throw 0;
+          const t = await r.text(); emit(t.length ? t.replace(/\n$/, '') : '(empty file)', t.length ? '' : 'dim'); }
+        catch { emit('cat: cannot read ' + norm(arg), 'err'); }
+      },
+      async cp(arg) {
+        const m = arg && arg.match(/^(".*?"|\S+)\s+(".*?"|\S+)$/);
+        if (!m) { emit('usage: cp <source> <dest>', 'dim'); return; }
+        const src = norm(m[1].replace(/^"|"$/g, ''));
+        const dest = norm(m[2].replace(/^"|"$/g, ''));
+        try {
+          emit(`copying ${src} to ${dest} ...`, 'dim');
+          const rRead = await api('read', src);
+          if (!rRead.ok) { emit('cp: cannot read source ' + src, 'err'); return; }
+          const buf = await rRead.arrayBuffer();
+          const rWrite = await api('write', dest, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: buf
+          });
+          if (rWrite.ok) emit('copied successfully', 'ok');
+          else emit('cp: failed to write destination ' + dest, 'err');
+        } catch { emit('cp: file API unavailable', 'err'); }
+      },
+      async mv(arg) {
+        const m = arg && arg.match(/^(".*?"|\S+)\s+(".*?"|\S+)$/);
+        if (!m) { emit('usage: mv <source> <dest>', 'dim'); return; }
+        const src = norm(m[1].replace(/^"|"$/g, ''));
+        const dest = norm(m[2].replace(/^"|"$/g, ''));
+        try {
+          emit(`moving ${src} to ${dest} ...`, 'dim');
+          const rRead = await api('read', src);
+          if (!rRead.ok) { emit('mv: cannot read source ' + src, 'err'); return; }
+          const buf = await rRead.arrayBuffer();
+          const rWrite = await api('write', dest, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: buf
+          });
+          if (!rWrite.ok) { emit('mv: failed to write destination ' + dest, 'err'); return; }
+          const rDel = await api('delete', src, { method: 'POST' });
+          if (rDel.ok) emit('moved successfully', 'ok');
+          else emit('mv: copied to destination but failed to delete source', 'warn');
+        } catch { emit('mv: file API unavailable', 'err'); }
+      },
+      async mkdir(arg) {
+        if (!arg) { emit('mkdir: missing name', 'err'); return; }
+        try { const r = await api('mkdir', norm(arg), { method: 'POST' });
+          emit(r.ok ? 'created ' + norm(arg) : 'mkdir: failed', r.ok ? 'ok' : 'err'); }
+        catch { emit('mkdir: file API unavailable', 'err'); }
+      },
+      async touch(arg) {
+        if (!arg) { emit('touch: missing name', 'err'); return; }
+        try { const r = await api('write', norm(arg), { method: 'POST', body: '' });
+          emit(r.ok ? 'created ' + norm(arg) : 'touch: failed', r.ok ? 'ok' : 'err'); }
+        catch { emit('touch: file API unavailable', 'err'); }
+      },
+      async rm(arg) {
+        if (!arg) { emit('rm: missing path', 'err'); return; }
+        try { const r = await api('delete', norm(arg), { method: 'POST' });
+          emit(r.ok ? 'removed ' + norm(arg) : 'rm: failed', r.ok ? 'ok' : 'err'); }
+        catch { emit('rm: file API unavailable', 'err'); }
+      },
+      async echo(arg) {
+        const m = arg && arg.match(/^(.*?)\s*>\s*(.+?)\s*$/);
+        if (!m) { emit(arg || ''); return; }                       // plain echo
+        const body = m[1].replace(/^"|"$/g, ''), path = norm(m[2].replace(/^"|"$/g, ''));
+        try { const r = await api('write', path, { method: 'POST', body });
+          emit(r.ok ? 'wrote ' + path : 'echo: write failed', r.ok ? 'ok' : 'err'); }
+        catch { emit('echo: file API unavailable', 'err'); }
+      },
+      open(arg) {
+        if (!arg) { emit('open: missing file', 'err'); return; }
+        const p = norm(arg);
+        try { parent.postMessage({ type: 'open-file', path: p }, '*'); emit('opening ' + p + ' …', 'dim'); }
+        catch { emit('open: shell not reachable', 'err'); }
+      },
+      async grep(arg) {
+        const m = arg && arg.match(/^(".*?"|\S+)\s+(.+)$/);
+        if (!m) { emit('usage: grep <pattern> <file>', 'dim'); return; }
+        const pattern = m[1].replace(/^"|"$/g, '');
+        const file = norm(m[2].replace(/^"|"$/g, ''));
+        try {
+          const r = await api('read', file);
+          if (!r.ok) { emit('grep: cannot read ' + file, 'err'); return; }
+          const txt = await r.text();
+          const lines = txt.split(/\r?\n/);
+          let found = 0;
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].includes(pattern)) {
+              emit(`${i + 1}: ${lines[i]}`);
+              found++;
+            }
+          }
+          if (found === 0) emit('(no matches)', 'dim');
+        } catch { emit('grep: file API unavailable', 'err'); }
+      },
+      async find(arg) {
+        let path = cwd;
+        let pattern = '';
+        const m = arg && arg.match(/^(.*?)\s*-name\s+(.+)$/);
+        if (m) {
+          path = m[1] ? norm(m[1].trim()) : cwd;
+          pattern = m[2].replace(/^"|"$/g, '').trim();
+        } else {
+          pattern = (arg || '').replace(/^"|"$/g, '').trim();
+        }
+        if (!pattern) { emit('usage: find [path] -name <pattern>', 'dim'); return; }
+        emit(`searching for "${pattern}" under ${path} ...`, 'dim');
+        let count = 0;
+        const scan = async (dirPath) => {
+          let r;
+          try { r = await api('list', dirPath); } catch { return; }
+          if (!r.ok) return;
+          let j; try { j = await r.json(); } catch { return; }
+          const entries = j.entries || [];
+          for (const e of entries) {
+            const full = dirPath === '/' ? '/' + e.name : dirPath + '/' + e.name;
+            if (e.name.toLowerCase().includes(pattern.toLowerCase())) {
+              emit(full, e.type === 'dir' ? 'dir' : '');
+              count++;
+            }
+            if (e.type === 'dir' && e.name !== '.' && e.name !== '..') {
+              await scan(full);
+            }
+          }
+        };
+        await scan(path);
+        emit(`found ${count} item(s)`, 'dim');
+      },
+      async wc(arg) {
+        if (!arg) { emit('usage: wc <file>', 'dim'); return; }
+        const file = norm(arg.replace(/^"|"$/g, ''));
+        try {
+          const r = await api('read', file);
+          if (!r.ok) { emit('wc: cannot read ' + file, 'err'); return; }
+          const txt = await r.text();
+          const lines = txt.split(/\r?\n/).length;
+          const words = txt.trim().split(/\s+/).filter(Boolean).length;
+          const bytes = new Blob([txt]).size;
+          emit(`  ${lines} lines, ${words} words, ${bytes} bytes for ${file}`);
+        } catch { emit('wc: file API unavailable', 'err'); }
+      },
+      async head(arg) {
+        let file = '';
+        let n = 10;
+        const m = arg && arg.match(/^-n\s+(\d+)\s+(.+)$/);
+        if (m) {
+          n = parseInt(m[1]);
+          file = norm(m[2].replace(/^"|"$/g, ''));
+        } else if (arg) {
+          file = norm(arg.replace(/^"|"$/g, ''));
+        }
+        if (!file) { emit('usage: head [-n <lines>] <file>', 'dim'); return; }
+        try {
+          const r = await api('read', file);
+          if (!r.ok) { emit('head: cannot read ' + file, 'err'); return; }
+          const txt = await r.text();
+          const lines = txt.split(/\r?\n/).slice(0, n);
+          emit(lines.join('\n'));
+        } catch { emit('head: file API unavailable', 'err'); }
+      },
+      async tail(arg) {
+        let file = '';
+        let n = 10;
+        const m = arg && arg.match(/^-n\s+(\d+)\s+(.+)$/);
+        if (m) {
+          n = parseInt(m[1]);
+          file = norm(m[2].replace(/^"|"$/g, ''));
+        } else if (arg) {
+          file = norm(arg.replace(/^"|"$/g, ''));
+        }
+        if (!file) { emit('usage: tail [-n <lines>] <file>', 'dim'); return; }
+        try {
+          const r = await api('read', file);
+          if (!r.ok) { emit('tail: cannot read ' + file, 'err'); return; }
+          const txt = await r.text();
+          const allLines = txt.split(/\r?\n/);
+          const lines = allLines.slice(Math.max(0, allLines.length - n));
+          emit(lines.join('\n'));
+        } catch { emit('tail: file API unavailable', 'err'); }
+      },
+      async df() {
+        let s;
+        try {
+          const r = await fetch('/api/status', { cache: 'no-store' });
+          s = r.ok ? await r.json() : null;
+        } catch {}
+        if (!s || !s.storage || !s.storage.mounted) { emit('df: storage not mounted or unreachable', 'err'); return; }
+        const total = s.storage.total_bytes || 0;
+        const free = s.storage.free_bytes || 0;
+        const used = total - free;
+        const pct = total ? Math.round((used / total) * 100) : 0;
+        emit('Filesystem      Size      Used     Avail  Use%  Mounted on');
+        emit(`SDCard          ${fmtBytes(total).padEnd(9)} ${fmtBytes(used).padEnd(9)} ${fmtBytes(free).padEnd(8)}  ${pct}%   /data`);
+      },
+      async uptime() {
+        let s;
+        try {
+          const r = await fetch('/api/status', { cache: 'no-store' });
+          s = r.ok ? await r.json() : null;
+        } catch {}
+        if (!s) { emit('uptime: device unreachable', 'err'); return; }
+        const secs = s.uptime_s || 0;
+        const hrs = Math.floor(secs / 3600);
+        const mins = Math.floor((secs % 3600) / 60);
+        const remainingSecs = secs % 60;
+        emit(`up ${hrs}h ${mins}m ${remainingSecs}s, heap free: ${fmtBytes(s.free_heap || 0)}`);
+      },
+      async ping(arg) {
+        let target = '/api/status';
+        let isDevice = true;
+        if (arg) {
+          target = arg.trim();
+          if (!/^https?:\/\//i.test(target)) target = 'https://' + target;
+          isDevice = false;
+        }
+        emit(`PING ${isDevice ? 'Cardputer' : target} ...`, 'dim');
+        const count = 4;
+        let sent = 0, received = 0;
+        const times = [];
+        for (let i = 0; i < count; i++) {
+          const start = performance.now();
+          try {
+            const url = isDevice ? `${target}?_cb=${start}` : target;
+            await fetch(url, { method: 'HEAD', cache: 'no-store', mode: 'no-cors' });
+            const end = performance.now();
+            const rtt = Math.round(end - start);
+            times.push(rtt);
+            emit(`  Reply from ${isDevice ? 'Cardputer' : target}: time=${rtt}ms`);
+            received++;
+          } catch (err) {
+            emit(`  Request timeout or CORS blocked for ${target}`, 'warn');
+          }
+          sent++;
+          await new Promise(r => setTimeout(r, 500));
+        }
+        if (received > 0) {
+          const min = Math.min(...times);
+          const max = Math.max(...times);
+          const avg = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+          emit(`Packets: Sent = ${sent}, Received = ${received}, Lost = ${sent - received} (${Math.round((sent-received)/sent*100)}% loss)`, 'dim');
+          emit(`Approximate round trip times: Min = ${min}ms, Max = ${max}ms, Average = ${avg}ms`, 'ok');
+        } else {
+          emit(`Packets: Sent = ${sent}, Received = 0, Lost = ${sent} (100% loss)`, 'err');
+        }
+      },
+      async curl(arg) {
+        if (!arg) { emit('usage: curl <url>', 'dim'); return; }
+        let url = arg.trim();
+        if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+        emit(`fetching ${url} ...`, 'dim');
+        try {
+          const r = await fetch(url);
+          if (!r.ok) { emit(`curl: failed (status ${r.status})`, 'err'); return; }
+          const text = await r.text();
+          emit(text);
+        } catch (err) {
+          emit('curl: failed (network error or CORS blocked)', 'err');
+        }
+      },
+      async wget(arg) {
+        if (!arg) { emit('usage: wget <url> [-O outfile]', 'dim'); return; }
+        let url = '';
+        let outPath = '';
+        const m = arg.match(/^(.*?)\s*-O\s+(\S+)\s*$/);
+        if (m) {
+          url = m[1].trim();
+          outPath = norm(m[2].replace(/^"|"$/g, ''));
+        } else {
+          url = arg.trim();
+          const parts = url.split('/');
+          let filename = parts[parts.length - 1] || 'downloaded_file';
+          filename = filename.split('?')[0];
+          outPath = norm(filename);
+        }
+        if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+        emit(`downloading ${url} ...`, 'dim');
+        try {
+          const r = await fetch(url);
+          if (!r.ok) { emit(`wget: failed (status ${r.status})`, 'err'); return; }
+          const buf = await r.arrayBuffer();
+          emit(`writing to ${outPath} ...`, 'dim');
+          const rWrite = await api('write', outPath, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: buf
+          });
+          if (rWrite.ok) emit(`saved successfully to ${outPath}`, 'ok');
+          else emit(`wget: failed to write destination ${outPath}`, 'err');
+        } catch (err) {
+          emit('wget: failed (network error or CORS blocked)', 'err');
+        }
+      },
+      async sleep(arg) {
+        const secs = parseFloat(arg) || 1;
+        emit(`sleeping for ${secs}s ...`, 'dim');
+        await new Promise(r => setTimeout(r, secs * 1000));
+      },
+      async dmesg() {
+        try {
+          const r = await fetch('/api/logs', { cache: 'no-store' });
+          if (!r.ok) { emit('dmesg: failed to read logs', 'err'); return; }
+          const text = await r.text();
+          emit(text);
+        } catch {
+          emit('dmesg: device unreachable', 'err');
+        }
+      },
+      async reboot() {
+        emit('rebooting Cardputer ...', 'warn');
+        try {
+          const r = await fetch('/api/reboot', { method: 'POST' });
+          if (r.ok) emit('Reboot command sent.', 'ok');
+          else emit('reboot: failed', 'err');
+        } catch {
+          emit('reboot: failed (device unreachable)', 'err');
+        }
+      },
+      env() {
+        for (const [k, v] of Object.entries(envVars)) {
+          emit(`${k}=${v}`);
+        }
+      },
+      export(arg) {
+        if (!arg) {
+          for (const [k, v] of Object.entries(envVars)) emit(`declare -x ${k}="${v}"`);
+          return;
+        }
+        const m = arg.match(/^(\w+)\s*=\s*(.+)$/);
+        if (!m) { emit('usage: export NAME=value', 'dim'); return; }
+        const name = m[1];
+        const val = m[2].replace(/^"|"$/g, '');
+        envVars[name] = val;
+        emit(`${name}="${val}"`, 'ok');
+      },
+      async man(arg) {
+        if (!arg) {
+          const isIt = (envVars.LANG || (typeof navigator !== 'undefined' ? navigator.language : 'en') || 'en').startsWith('it');
+          emit(isIt ? 'Quale pagina di manuale desideri?' : 'What manual page do you want?', 'warn');
+          return;
+        }
+        const cmd = arg.trim().toLowerCase();
+        const lang = (envVars.LANG || (typeof navigator !== 'undefined' ? navigator.language : 'en') || 'en').startsWith('it') ? 'it' : 'en';
+        let entry = await readJSON(`/system/manual/${cmd}.info`);
+        if (entry && entry[lang]) {
+          const loc = entry[lang];
+          emit(`${cmd.toUpperCase()}(1) - ${loc.synopsis}`);
+          emit('\nDescription:', 'dim');
+          emit(`  ${loc.description}`);
+          if (loc.details) {
+            emit('\nDetails:', 'dim');
+            emit(`  ${loc.details}`);
+          }
+        } else {
+          const minimal = {
+            help: {
+              it: 'HELP(1) - Mostra i comandi disponibili.',
+              en: 'HELP(1) - Display available commands.'
+            },
+            clear: {
+              it: 'CLEAR(1) - Pulisce la schermata del terminale.',
+              en: 'CLEAR(1) - Clear the terminal screen.'
+            }
+          };
+          const fb = minimal[cmd];
+          if (fb && fb[lang]) emit(fb[lang]);
+          else {
+            emit(lang === 'it' ? `Nessuna voce di manuale per ${cmd}` : `No manual entry for ${cmd}`, 'warn');
+          }
+        }
+      },
+      history() {
+        if (!hist.length) { emit('(empty history)', 'dim'); return; }
+        hist.forEach((cmd, i) => emit(`  ${i + 1}  ${cmd}`));
+      },
+      async uname(arg) {
+        const wantAll = arg && arg.trim().includes('-a');
+        let s;
+        try {
+          const r = await fetch('/api/status', { cache: 'no-store' });
+          s = r.ok ? await r.json() : null;
+        } catch {}
+        const osName = s?.os || 'NucleoOS';
+        const version = s?.version || '0.1.0';
+        if (wantAll) {
+          emit(`${osName} cardputer ${version} esp32s3 generic xtensa`);
+        } else {
+          emit(osName);
+        }
+      },
+      async status() {
+        let s = null;
+        try {
+          const r = await fetch('/api/status', { cache: 'no-store' });
+          if (r.ok) s = await r.json();
+        } catch {}
+        if (!s) { emit('status: device unreachable', 'err'); return; }
+        emit(`${s.os || 'NucleoOS'} v${s.version || '?'}  ·  up ${s.uptime_s ?? '?'}s`);
+        if (s.free_heap != null) emit('heap free  ' + fmtBytes(s.free_heap));
+        if (s.storage) emit(`storage    ${s.storage.fs} · ${fmtBytes(s.storage.free_bytes)} free / ${fmtBytes(s.storage.total_bytes)}`);
+        if (s.apps) emit('apps       ' + s.apps.installed + ' installed');
+        const n = s.network;
+        if (n) emit('network    ' + (n.time_synced ? 'NTP-synced' : 'no NTP') + (n.ssid ? ' · ' + n.ssid : ''),
+          n.time_synced ? 'ok' : 'warn');
+      },
+      async free() {
+        const s = await (async () => { try { const r = await fetch('/api/status', { cache: 'no-store' }); return r.ok ? r.json() : null; } catch { return null; } })();
+        if (s?.free_heap != null) emit('free heap: ' + fmtBytes(s.free_heap), 'ok');
+        else emit('free: status unavailable', 'err');
+      },
+      date() {
+        emit('local:  ' + new Date().toString());
+      },
+      async theme(arg) {
+        const want = (arg || '').trim().toLowerCase();
+        if (want !== 'dark' && want !== 'light') {
+          emit('theme: ' + (document.documentElement.dataset.theme || 'dark'));
+          emit('usage: theme dark | theme light', 'dim'); return;
+        }
+        document.documentElement.dataset.theme = want;
+        const s = await readJSON(SETTINGS) || {}; s.ui = s.ui || {}; s.ui.theme = want;
+        try { await fetch('/api/fs/write?path=' + encodeURIComponent(SETTINGS),
+          { method: 'POST', body: JSON.stringify(s, null, 2) }); emit('theme set to ' + want, 'ok'); }
+        catch { emit('theme: applied locally (device unreachable)', 'warn'); }
+      },
+      clear() { out.innerHTML = ''; },
+    };
+
+    // ---- runner ----------------------------------------------------------------
+    async function run(raw) {
+      const cmd = raw.trim();
+      emit(cwd + ' $ ' + cmd, 'cmd');
+      if (!cmd) return;
+      const expanded = cmd.replace(/\$(\w+)/g, (_, name) => envVars[name] || '');
+      const sp = expanded.indexOf(' ');
+      const name = (sp < 0 ? expanded : expanded.slice(0, sp)).toLowerCase();
+      const arg = sp < 0 ? '' : expanded.slice(sp + 1).trim();
+      const fn = COMMANDS[name];
+      if (!fn) { emit(name + ': command not found — type "help"', 'err'); return; }
+      try { await fn(arg); } catch (e) { emit(name + ': ' + (e?.message || e), 'err'); }
+    }
+
+    // ---- history + key handling ------------------------------------------------
+    const hist = []; let hi = -1;
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const v = input.value; input.value = '';
+        if (v.trim()) { hist.push(v); if (hist.length > 100) hist.shift(); }
+        hi = hist.length; run(v);
+      } else if (e.key === 'ArrowUp') {
+        if (hi > 0) { hi--; input.value = hist[hi]; e.preventDefault();
+          requestAnimationFrame(() => input.setSelectionRange(input.value.length, input.value.length)); }
+      } else if (e.key === 'ArrowDown') {
+        if (hi < hist.length - 1) { hi++; input.value = hist[hi]; }
+        else { hi = hist.length; input.value = ''; }
+        e.preventDefault();
+      } else if (e.key === 'l' && e.ctrlKey) { e.preventDefault(); COMMANDS.clear(); }
+    });
+    document.getElementById('clr').onclick = () => { COMMANDS.clear(); input.focus(); };
+    out.addEventListener('click', () => input.focus());
+
+    // ---- live: OS theme changes ------------------------------------------------
+    window.addEventListener('message', (e) => {
+      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
+      if (e.data?.t === 'fs.changed' && e.data.d?.path?.endsWith('settings.json')) loadTheme();
+    });
+    async function loadTheme() {
+      const s = await readJSON(SETTINGS);
+      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
+    }
+
+    // ---- boot ------------------------------------------------------------------
+    async function init() {
+      await loadTheme();
+      emit('NucleoOS Terminal — type "help" for commands.', 'dim');
+      setCwd('/');
+      input.focus();
+    }
+    init();
+  </script>
+</body>
+</html>

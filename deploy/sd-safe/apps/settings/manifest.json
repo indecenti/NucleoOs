@@ -1,0 +1,41 @@
+{
+  "id": "settings",
+  "name": "Settings",
+  "version": "0.1.0",
+  "description": "Configure device, network, power, UI and security; edit file associations.",
+  "category": "system",
+  "entry_service": "settings_main",
+  "web_route": "/apps/settings/",
+  "permissions": [
+    "system.events",
+    "net.wifi",
+    "net.ble",
+    "power.budget"
+  ],
+  "mounts": {
+    "app": "/apps/settings/data"
+  },
+  "handles": {
+    "role": "none",
+    "extensions": []
+  },
+  "subscribes": [
+    "registry.settings_changed",
+    "registry.association_changed",
+    "wifi.status"
+  ],
+  "publishes": [
+    "registry.settings_changed",
+    "registry.association_changed"
+  ],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

@@ -1,0 +1,10 @@
+# Vendored M4 runtime libs are BYTE-EXACT artifacts. Their size + sha256 are pinned in lib-manifest.json
+# and checked by the air-gap integrity probe. A line-ending normalization on checkout (autocrlf) would
+# inflate the byte count of the TEXT libs (web-llm.js, wllama.mjs) and falsely flag them 'oversize'/corrupt.
+# Treat everything here as binary so git never touches the bytes.
+* -text
+*.js  binary
+*.mjs binary
+*.json binary
+*.wasm binary
+*.gz  binary

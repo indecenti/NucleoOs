@@ -1,0 +1,26 @@
+{
+  "id": "dj",
+  "name": "DJ Mix",
+  "version": "0.1.0",
+  "description": "Auto-DJ with beatmatch, harmonic mixing and live crossfades (Web Audio). [WIP: not in registry/apps.json installed yet — register when the web phase lands; gates: npm run dj:test]",
+  "category": "media",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/dj/",
+  "permissions": [
+    "storage.shared",
+    "device.audio",
+    "power.budget"
+  ],
+  "handles": {
+    "role": "player",
+    "extensions": ["mp3", "wav"]
+  },
+  "subscribes": ["fs.open"],
+  "publishes": ["media.state"],
+  "power": {
+    "budget_class": "high",
+    "wants_wakeup": ["keyboard"]
+  },
+  "mesh": { "exposes": [], "consumes": [] }
+}

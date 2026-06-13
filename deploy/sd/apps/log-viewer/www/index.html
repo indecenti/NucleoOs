@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Log Viewer</title>
+<style>
+  :root { --bg:#0b1220; --panel:#18233a; --panel2:#1f2d4a; --accent:#4ea1ff;
+          --text:#e8eefc; --muted:#8aa0c8; --line:#2a3a5e; --ok:#3ddc97; --warn:#ffb454; --crit:#ff6b81; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 13px/1.4 system-ui, "Segoe UI", Roboto, sans-serif; color: var(--text);
+         background: var(--bg); display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; flex-wrap: wrap;
+           background: var(--panel2); border-bottom: 1px solid var(--line); flex: none; }
+  header .title { font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  header .spacer { flex: 1; }
+  input[type=text] { flex: none; width: 150px; height: 28px; padding: 0 9px; border: 1px solid var(--line);
+           background: #ffffff0d; color: var(--text); border-radius: 14px; font: inherit; font-size: 12px; outline: none; }
+  input[type=text]:focus { border-color: var(--accent); background: #ffffff14; }
+  button { border: 1px solid var(--line); background: #ffffff10; color: var(--text);
+           border-radius: 7px; padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+  button:hover { background: #ffffff1f; }
+  button.on { border-color: var(--accent); color: var(--accent); }
+  button.primary { border-color: var(--accent); background: #1c4a7a; color: #cfe6ff; font-weight: 600; }
+  button.primary:hover { background: #205a96; }
+  label.chk { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; cursor: pointer; }
+  #log { flex: 1; overflow: auto; padding: 4px 0; font-family: "Cascadia Code", ui-monospace, "Consolas", monospace; }
+  .ev { display: flex; align-items: baseline; gap: 8px; padding: 2px 10px; border-bottom: 1px solid #ffffff08; white-space: nowrap; }
+  .ev:hover { background: #ffffff0a; }
+  .ev.lvl-warn { background: #ffb4540f; }
+  .ev.lvl-crit { background: #ff6b8114; }
+  .ev .seq { color: var(--muted); font-size: 11px; width: 46px; text-align: right; flex: none; }
+  .ev .time { color: var(--muted); font-size: 11px; width: 64px; flex: none; }
+  .ev .t { font-weight: 600; flex: none; padding: 1px 7px; border-radius: 5px; font-size: 11px; }
+  .ev .d { color: var(--text); overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; opacity: .85; }
+  /* category colours — solid self-consistent chips */
+  .c-system { background:#1c4a7a; color:#cfe6ff; }
+  .c-health { background:#0f5132; color:#bff0dc; }
+  .c-anima  { background:#3a2f6e; color:#d9d0ff; }
+  .c-voice  { background:#4a3a7a; color:#e2d4ff; }
+  .c-fs     { background:#13624a; color:#bff0dc; }
+  .c-rec    { background:#4a3a7a; color:#e2d4ff; }
+  .c-storage{ background:#6e4e16; color:#ffe6bf; }
+  .c-net    { background:#16566e; color:#cdeeff; }
+  .c-error  { background:#7a2230; color:#ffcfd6; }
+  .c-other  { background:#ffffff14; color:var(--muted); }
+  .bar { padding: 6px 10px; color: var(--muted); font-size: 11px; background: var(--panel);
+         border-top: 1px solid var(--line); display: flex; gap: 12px; flex: none; align-items: center; }
+  .bar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .bar .dot.live { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  .empty { display: grid; place-items: center; height: 100%; color: var(--muted); text-align: center; padding: 20px; }
+  /* diagnosis modal */
+  .modal { position: fixed; inset: 0; background: #06080fcc; display: none; place-items: center; padding: 18px; z-index: 50; }
+  .modal.show { display: grid; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: min(820px, 100%);
+          max-height: 92%; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 18px 50px #0009; }
+  .card h2 { margin: 0; padding: 13px 16px; font-size: 14px; display: flex; align-items: center; gap: 8px;
+             border-bottom: 1px solid var(--line); background: var(--panel2); }
+  .card h2 .sub { font-weight: 400; color: var(--muted); font-size: 11.5px; }
+  .card .body { padding: 12px 16px; overflow: auto; }
+  textarea#digest { width: 100%; height: 46vh; min-height: 240px; resize: vertical; border: 1px solid var(--line);
+           background: #0a0f1c; color: #d6e2ff; border-radius: 8px; padding: 10px;
+           font: 12px/1.5 "Cascadia Code", ui-monospace, "Consolas", monospace; white-space: pre; outline: none; }
+  .card .foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); align-items: center; }
+  .card .foot .spacer { flex: 1; }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #0f5132; color: #d6ffe9;
+           padding: 8px 14px; border-radius: 20px; font-size: 12px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 60; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="title">📜 <span data-i18n="app_title">Log Viewer</span></span>
+    <span class="spacer"></span>
+    <input id="filter" type="text" data-i18n-attr="placeholder:filter_ph" placeholder="Filter type/data" autocomplete="off" spellcheck="false">
+    <button id="diag" class="primary" data-i18n-attr="title:diag_hint" title="Build a health digest to paste to an AI"><span data-i18n="btn_diag">🩺 Diagnose</span></button>
+    <button id="health" class="on" data-i18n-attr="title:health_hint" title="Live health probe">💓 <span data-i18n="btn_health">Health</span></button>
+    <button id="pause">⏸ <span data-i18n="btn_pause">Pause</span></button>
+    <button id="history" data-i18n-attr="title:history_hint" title="Read the event journal from the SD card (on demand)">↧ <span data-i18n="btn_history">History</span></button>
+    <button id="clear" data-i18n="btn_clear">Clear</button>
+    <label class="chk"><input id="follow" type="checkbox" checked> <span data-i18n="follow">Follow</span></label>
+  </header>
+  <div id="log"><div class="empty" id="placeholder" data-i18n-html="empty_state">Listening for live events…</div></div>
+  <div class="bar"><span class="dot" id="livedot"></span><span id="stat">0 events</span><span id="src"></span></div>
+
+  <!-- Diagnosis modal: the compact AI digest, copy-ready -->
+  <div class="modal" id="modal">
+    <div class="card">
+      <h2>🩺 <span data-i18n="diag_title">Health diagnosis</span> <span class="sub" data-i18n="diag_sub">Copy this and paste it to an AI.</span></h2>
+      <div class="body"><textarea id="digest" readonly spellcheck="false"></textarea></div>
+      <div class="foot">
+        <button id="copy" class="primary" data-i18n="btn_copy">📋 Copy</button>
+        <button id="regen" data-i18n="btn_regen">↻ Regenerate</button>
+        <span class="spacer"></span>
+        <button id="close" data-i18n="btn_close">Close</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script>
+  // The journal lives on the SD card (event-sourced, append-only NDJSON). To keep the ESP idle we DON'T
+  // read it on open — we live-tail events the shell forwards over the WS, and additionally run a gentle,
+  // visibility-gated health probe that SYNTHESIZES rows entirely client-side (one tiny read-only GET per
+  // tick, never during a heavy job). The device pays nothing at rest; the intelligence lives here.
+  const JOURNAL = '/journal/events.ndjson';
+  const CAP = 600;                      // bounded view — never grows without limit
+  const events = [];                    // newest at the end (device events carry ts in EPOCH SECONDS)
+  let paused = false, follow = true, filterStr = '';
+
+  // diag.js (pure diagnosis engine) is loaded lazily so the live tail never blocks on it.
+  let Diag = null;
+  const diagReady = import('./diag.js').then((m) => { Diag = m.default || m; }).catch(() => { Diag = null; });
+
+  const T_FALLBACK = {
+    events: '{count} events', events_of: ' (of {total})', status_paused: ' · paused',
+    src_journal: 'journal: {lines} lines on SD', src_none: 'no journal on SD yet',
+    src_error: 'journal unavailable', btn_pause: 'Pause', btn_resume: 'Resume', btn_history: 'History',
+    gathering: 'Gathering diagnostics…', diag_err: 'Diagnostics unavailable', copied: 'Copied ✓',
+  };
+  const t = (key, args) => {
+    let s = (window.__t ? window.__t(key, args) : null);
+    if (s == null || s === key) {
+      s = T_FALLBACK[key] != null ? T_FALLBACK[key] : key;
+      if (args) for (const k in args) s = s.replace(new RegExp('\\{' + k + '\\}', 'g'), args[k]);
+    }
+    return s;
+  };
+
+  const logEl = document.getElementById('log');
+  const statEl = document.getElementById('stat');
+  const srcEl = document.getElementById('src');
+  const liveDot = document.getElementById('livedot');
+
+  const category = (tp) => {
+    const p = String(tp || '').split(/[.\/]/)[0];
+    if (/error|warn|fail|panic|crash|oom|brownout|wdt/i.test(tp)) return 'error';
+    if (p === 'health') return 'health';
+    if (p === 'anima') return 'anima';
+    if (p === 'voice') return 'voice';
+    if (p === 'system') return 'system';
+    if (p === 'fs') return 'fs';
+    if (p === 'rec') return 'rec';
+    if (p === 'storage') return 'storage';
+    if (p === 'net' || p === 'wifi' || p === 'ble' || p === 'mesh') return 'net';
+    return 'other';
+  };
+  // Device events stamp ts in epoch SECONDS; tolerate ms too (anything ≥ 1e12 is already ms).
+  const fmtTime = (ts) => {
+    if (!ts) return '—';
+    try { const d = new Date(ts < 1e12 ? ts * 1000 : ts);
+      return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0'); }
+    catch { return '—'; }
+  };
+  const compact = (d) => { if (d == null) return ''; if (typeof d === 'string') return d; try { return JSON.stringify(d); } catch { return String(d); } };
+  const matches = (e) => !filterStr || (e.t + ' ' + compact(e.d)).toLowerCase().includes(filterStr);
+  const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  function rowHtml(e) {
+    const cat = category(e.t);
+    const lvl = e.d && e.d.lvl;
+    const lvlCls = lvl === 'critical' || lvl === 'crit' ? ' lvl-crit' : lvl === 'warn' ? ' lvl-warn' : '';
+    return '<div class="ev' + lvlCls + '">' +
+      '<span class="seq">' + (e.seq != null ? '#' + e.seq : (e._h ? '◆' : '')) + '</span>' +
+      '<span class="time">' + fmtTime(e.ts) + '</span>' +
+      '<span class="t c-' + cat + '">' + escapeHtml(e.t) + '</span>' +
+      '<span class="d">' + escapeHtml(compact(e.d)) + '</span></div>';
+  }
+
+  function render() {
+    const shown = events.filter(matches);
+    statEl.textContent = t('events', { count: shown.length }) +
+      (events.length !== shown.length ? t('events_of', { total: events.length }) : '') + (paused ? t('status_paused') : '');
+    if (!events.length) { logEl.innerHTML = '<div class="empty">' + t('empty_state') + '</div>'; return; }
+    logEl.innerHTML = shown.map(rowHtml).join('');
+    if (follow) logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function add(e) {
+    if (!e || !e.t) return;
+    events.push(e);
+    if (events.length > CAP) events.splice(0, events.length - CAP);   // bound memory
+  }
+  // Synthetic local row from the health probe (kept distinct from device events via _h).
+  function addLocal(tp, d, lvl) {
+    add({ t: tp, ts: Math.floor(Date.now() / 1000), seq: null, _h: true, d: lvl ? { ...d, lvl } : d });
+  }
+
+  async function loadHistory() {
+    const btn = document.getElementById('history');
+    btn.disabled = true; btn.textContent = '…';
+    const restoreBtn = () => { btn.disabled = false; btn.innerHTML = '↧ <span>' + t('btn_history') + '</span>'; };
+    try {
+      const r = await fetch('/api/fs/read?path=' + encodeURIComponent(JOURNAL), { cache: 'no-store' });
+      if (r.ok) {
+        const text = await r.text();
+        const lines = text.split('\n').filter((l) => l.trim());
+        const hist = [];
+        for (const line of lines.slice(-CAP)) { try { hist.push(JSON.parse(line)); } catch {} }
+        const seen = new Set(hist.map((h) => h.seq));
+        const live = events.filter((e) => e.seq == null || !seen.has(e.seq));
+        events.length = 0; events.push(...hist, ...live);
+        if (events.length > CAP) events.splice(0, events.length - CAP);
+        srcEl.textContent = t('src_journal', { lines: lines.length });
+      } else { srcEl.textContent = t('src_none'); }
+    } catch { srcEl.textContent = t('src_error'); }
+    restoreBtn();
+    render();
+  }
+
+  // ── Live tail: the shell forwards every device event into this iframe as a postMessage ──────────
+  window.addEventListener('message', (e) => {
+    const m = e.data;
+    if (!m || typeof m.t !== 'string') return;
+    if (m.type === 'os-shortcut') {
+      if (m.action === 'refresh') loadHistory();
+      return;
+    }
+    if (paused) return;
+    add(m); render();
+  });
+
+  // ── Adaptive health probe: prefers /api/diag (rich), falls back to /api/status. Visibility-gated,
+  //    skips while a heavy job holds the arbiter, backs off when nothing changes. Never on the hot path.
+  const probe = { on: true, mode: null, prev: null, timer: null };
+  function setLive(on) { liveDot.classList.toggle('live', on); }
+
+  function bandsDelta(prev, u) {
+    // Emit a synthetic row for every meaningful state CHANGE. Returns the number emitted (drives backoff).
+    let n = 0;
+    const D = Diag; if (!D) return 0;
+    const m = u.mem || {}, net = u.net || {}, a = u.anima || {}, arb = u.arb || {}, o = u.oom || {}, sys = u.sys || {};
+    if (!prev) {                                  // first tick → a single snapshot so the log isn't empty
+      addLocal('health.snapshot', {
+        free: D.fmtKB(m.free), min: D.fmtKB(m.min), frag: m.frag != null ? m.frag + '%' : '?',
+        rssi: net.rssi ?? null, ip: net.ip || null, up: D.fmtUptime(sys.uptime_s),
+      });
+      return 1;
+    }
+    const pm = prev.mem || {}, pn = prev.net || {}, pa = prev.anima || {}, parb = prev.arb || {}, po = prev.oom || {};
+    if (D.heapBand(m.min) !== D.heapBand(pm.min) || Math.abs((m.free || 0) - (pm.free || 0)) > 12288)
+      { addLocal('health.mem', { free: D.fmtKB(m.free), min: D.fmtKB(m.min), frag: (m.frag ?? '?') + '%', band: D.heapBand(m.min) }, D.heapBand(m.min) === 'crit' ? 'critical' : D.heapBand(m.min) === 'low' ? 'warn' : null); n++; }
+    if (net.rssi != null && D.rssiBand(net.rssi) !== D.rssiBand(pn.rssi))
+      { addLocal('health.wifi', { rssi: net.rssi, band: D.rssiBand(net.rssi) }, D.rssiBand(net.rssi) === 'bad' ? 'warn' : null); n++; }
+    if ((arb.denials || 0) > (parb.denials || 0))
+      { addLocal('health.arb', { denials: arb.denials, hfmin: D.fmtKB(arb.hfmin) }, 'warn'); n++; }
+    if (o.known && (o.count || 0) > (po.count || 0))
+      { addLocal('health.oom', { count: o.count, last: o.last_size }, 'critical'); n++; }
+    if (a.known) {
+      if (a.l1_serving !== pa.l1_serving) { addLocal('health.anima', { l1: a.l1_serving ? 'serving' : 'standby' }); n++; }
+      if (a.online_avail !== pa.online_avail) { addLocal('health.anima', { online: a.online_avail ? 'reachable' : 'unreachable' }, a.online_avail ? null : 'warn'); n++; }
+      if ((a.q || 0) > 0 && Math.floor((a.q || 0) / 20) > Math.floor((pa.q || 0) / 20)) {
+        const ab = a.q ? Math.round((a.none / a.q) * 100) : 0;
+        addLocal('health.anima', { q: a.q, abstain: ab + '%', last: a.last }); n++;
+      }
+    }
+    if ((net.clients ?? -1) !== (pn.clients ?? -1) && net.clients != null)
+      { addLocal('health.clients', { n: net.clients }); n++; }
+    return n;
+  }
+
+  async function probeTick() {
+    if (!probe.on || document.visibilityState !== 'visible') { setLive(false); schedule(20000); return; }
+    await diagReady;
+    let raw = null, partial = false;
+    try {
+      if (probe.mode !== 'status') {
+        const r = await fetch('/api/diag', { cache: 'no-store' });
+        if (r.ok) { raw = { diag: await r.json() }; probe.mode = 'diag'; }
+        else if (r.status === 404) probe.mode = 'status';       // older firmware → fall back permanently
+      }
+      if (!raw) {
+        const r = await fetch('/api/status', { cache: 'no-store' });
+        if (r.ok) { raw = { status: await r.json() }; partial = true; }
+      }
+    } catch { /* offline → just back off */ }
+
+    if (!raw || !Diag) { setLive(false); schedule(15000); return; }
+    setLive(true);
+    const u = Diag.normalize(raw);
+    // Don't add probe load while a heavy job holds the single arbiter token — count silently, emit later.
+    let emitted = 0;
+    if (!(u.arb && u.arb.busy)) { emitted = bandsDelta(probe.prev, u); if (emitted && !paused) render(); }
+    probe.prev = u;
+    // Backoff: something changed → look again soon; idle → ease off (cap 15 s); heavy job → 12 s.
+    const next = (u.arb && u.arb.busy) ? 12000 : emitted ? 5000 : 12000;
+    schedule(next);
+  }
+  function schedule(ms) { clearTimeout(probe.timer); probe.timer = setTimeout(probeTick, ms); }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && probe.on) schedule(400); });
+
+  // ── Diagnosis modal ─────────────────────────────────────────────────────────────────────────────
+  const modal = document.getElementById('modal');
+  const digestEl = document.getElementById('digest');
+  const toastEl = document.getElementById('toast');
+  let toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg; toastEl.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+  }
+
+  async function gather() {
+    const out = { events: events.slice(), nowSec: Math.floor(Date.now() / 1000) };
+    try { const r = await fetch('/api/diag', { cache: 'no-store' }); if (r.ok) out.diag = await r.json(); } catch {}
+    if (!out.diag) {     // legacy device → assemble from the three classic read-only endpoints
+      const grab = (p) => fetch(p, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      const [s, h, c] = await Promise.all([grab('/api/status'), grab('/api/heap'), grab('/api/cpu')]);
+      out.status = s; out.heap = h; out.cpu = c;
+    }
+    try { const r = await fetch('/api/logs', { cache: 'no-store' }); if (r.ok) out.logsText = await r.text(); } catch {}
+    return out;
+  }
+
+  async function openDiagnose() {
+    modal.classList.add('show');
+    digestEl.value = t('gathering');
+    await diagReady;
+    if (!Diag) { digestEl.value = t('diag_err'); return; }
+    try {
+      const data = await gather();
+      digestEl.value = Diag.buildDigest(data);
+    } catch (err) {
+      digestEl.value = t('diag_err') + '\n' + (err && err.message ? err.message : '');
+    }
+    digestEl.scrollTop = 0;
+  }
+  function closeDiagnose() { modal.classList.remove('show'); }
+  async function copyDigest() {
+    const text = digestEl.value;
+    try { await navigator.clipboard.writeText(text); }
+    catch { digestEl.focus(); digestEl.select(); try { document.execCommand('copy'); } catch {} }
+    toast(t('copied'));
+  }
+
+  // ── Wiring ───────────────────────────────────────────────────────────────────────────────────────
+  document.getElementById('filter').addEventListener('input', (e) => { filterStr = e.target.value.trim().toLowerCase(); render(); });
+  document.getElementById('pause').addEventListener('click', (e) => {
+    paused = !paused; e.currentTarget.classList.toggle('on', paused);
+    e.currentTarget.innerHTML = paused ? '▶ <span>' + t('btn_resume') + '</span>' : '⏸ <span>' + t('btn_pause') + '</span>';
+    render();
+  });
+  document.getElementById('health').addEventListener('click', (e) => {
+    probe.on = !probe.on; e.currentTarget.classList.toggle('on', probe.on);
+    setLive(false);
+    if (probe.on) schedule(300); else clearTimeout(probe.timer);
+  });
+  document.getElementById('history').addEventListener('click', loadHistory);
+  document.getElementById('clear').addEventListener('click', () => { events.length = 0; srcEl.textContent = ''; render(); });
+  document.getElementById('follow').addEventListener('change', (e) => { follow = e.target.checked; if (follow) render(); });
+  document.getElementById('diag').addEventListener('click', openDiagnose);
+  document.getElementById('copy').addEventListener('click', copyDigest);
+  document.getElementById('regen').addEventListener('click', openDiagnose);
+  document.getElementById('close').addEventListener('click', closeDiagnose);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeDiagnose(); });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('show')) { e.stopPropagation(); closeDiagnose(); } });
+
+  window.__logRender = render;   // let the i18n bootstrap re-paint the imperative status bar on language change
+
+  render();
+  schedule(600);                 // kick the health probe shortly after open
+</script>
+<script type="module">
+  // Centralized OS i18n: paints [data-i18n] DOM, auto-translates DOM added later, live-switches.
+  import I18N from '/nucleo-i18n.js';
+  const t = await I18N.init('log-viewer');
+  window.__t = t;
+  I18N.onChange(() => { try { window.__logRender && window.__logRender(); } catch {} });
+</script>
+</body>
+</html>

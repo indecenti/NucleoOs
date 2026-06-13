@@ -1,0 +1,282 @@
+[
+ {
+  "app": "app_anima.cpp (ANIMA native on-device assistant)",
+  "weight": "heavy",
+  "uses": false,
+  "should": false,
+  "flags": "Do NOT add nucleo_exclusive. If anything were ever added it could ONLY be a partial/conditional NX_DISCOVERY (mDNS, ~10KB) while a query is in flight — and NEVER NX_HTTPD, NX_ANIMA_L1, NX_VOICE, or NX_WIFI. Rationale below; net recommendation = leave imperative canvas+L1 management as-is.",
+  "verdict": "confirm",
+  "nissues": 4,
+  "confidence": "high"
+ },
+ {
+  "app": "app_beacon.cpp (Beacon Spam — UI per nucleo_wifiatk beacon engine)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "Nessuno (non usare nucleo_exclusive in questa app). Se in futuro si volesse centralizzare il reclaim, l'unico guadagno extra sarebbe NX_ANIMA_L1 (~31KB) + NX_VOICE rispetto a ciò che il motore già libera (HTTPD+DISCOVERY) — MA va fatto nel MOTORE, non nell'app, e MAI NX_WIFI/NX_DEEP_OFFLINE (il beacon usa la radio in raw-TX, esp_wifi_stop la spegnerebbe).",
+  "verdict": "confirm",
+  "nissues": 5,
+  "confidence": "high"
+ },
+ {
+  "app": "app_calc.cpp (Calculator)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "Nessuno (exclusive_flags = 0). L'app non deve usare la modalita esclusiva.",
+  "verdict": "",
+  "nissues": 0,
+  "confidence": "high"
+ },
+ {
+  "app": "app_calendar.cpp",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "nessuno (0). L'app e' light: non alloca buffer grandi persistenti, non crea task, non usa rete ne' decoder. Entrare in esclusiva sospenderebbe httpd/L1/mDNS/voce per un semplice viewer, senza alcun beneficio e rompendo la rete per niente.",
+  "verdict": "reject",
+  "nissues": 3,
+  "confidence": "high"
+ },
+ {
+  "app": "app_clock.cpp (Clock)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "Nessuno (0). L'app NON deve usare nucleo_exclusive: non alloca buffer grandi, non crea task, non usa decoder/TLS, non rischia OOM. Sospendere httpd/ANIMA-L1/mDNS/voice per mostrare un orologio significherebbe staccare rete/AI/UI senza alcun guadagno utile (~70KB liberati per nulla) e degradare l'esperienza (niente web/voce mentre guardi l'ora). Tantomeno NX_WIFI.",
+  "verdict": "reject",
+  "nissues": 3,
+  "confidence": "high"
+ },
+ {
+  "app": "app_evilportal.cpp (Evil Portal) — UI driver per l'engine nucleo_evilportal + nucleo_wifiatk",
+  "weight": "medium",
+  "uses": false,
+  "should": true,
+  "flags": "NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY | NX_VOICE (la maschera canonica delle 3 app di-rete; MAI NX_WIFI — l'Evil Portal vive interamente sul radio Wi-Fi: SoftAP + DNS + deauth). Implementazione consigliata: NON un enter dichiarativo per tutta la vita dell'app (la app passa molto tempo in CONSENT/CONFIG/SCAN dove non serve), ma un enter IMPERATIVO dentro l'engine in start_impl() PRIMA delle stop manuali, e un exit in nucleo_evilportal_stop(). In pratica: sostituire le tre chiamate manuali (nucleo_setup_suspend/httpd_stop/discovery_stop) con nucleo_exclusive_enter(NX_HTTPD|NX_ANIMA_L1|NX_DISCOVERY|NX_VOICE, &inf) — guadagno netto = i ~31KB di ANIMA L1 + voice oggi NON liberati, proprio mentre si avvia l'httpd captive da 8KB. Attenzione: nucleo_exclusive_enter NON chiama nucleo_setup_suspend né esp_wifi_stop, quindi va MANTENUTO nucleo_setup_suspend() accanto all'enter (l'enter ferma httpd ma non l'auto-reconnect STA). All'uscita: nucleo_exclusive_exit() riavvia httpd/discovery/voice; resta da chiamare nucleo_setup_apply_network() (l'exit con NX_WIFI assente non la chiama).",
+  "verdict": "confirm",
+  "nissues": 5,
+  "confidence": "med"
+ },
+ {
+  "app": "app_files.cpp (Files — native SD card browser)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "nessuno (exclusive_flags = 0). Non includere MAI alcun flag, in particolare NX_WIFI/NX_HTTPD: l'app è light, offline-FATFS, e sospendere httpd/L1/mDNS/voice per sfogliare una cartella sarebbe overkill dannoso (perderebbe rete/UI senza guadagno reale dato il footprint ~6 KB).",
+  "verdict": "reject",
+  "nissues": 3,
+  "confidence": "high"
+ },
+ {
+  "app": "app_info.cpp (\"info\" / \"Connection\" built-in app)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "nessuno (exclusive_flags=0 anche in un eventuale modello dichiarativo)",
+  "verdict": "",
+  "nissues": 0,
+  "confidence": "high"
+ },
+ {
+  "app": "app_ir.cpp (native on-device IR Remote)",
+  "weight": "medium",
+  "uses": false,
+  "should": false,
+  "flags": "Nessuno per il funzionamento normale. Mitigazione OOM PIU' MIRATA dell'esclusiva = liberare il canvas 32KB durante il caricamento: nucleo_app_release_buffers() all'inizio di enter() prima di load_catalog, e lasciare che il run loop lo ri-acquisisca lazy dopo (l'app non rilascia/usa il canvas oggi). Se in futuro presets.json crescesse e si vedessero davvero fallimenti di apertura, l'opzione difensiva (NON il default) sarebbe nucleo_exclusive_enter(NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY | NX_VOICE, &inf) SOLO attorno alla finestra di load (enter), con exit subito dopo aver liberato buf+cJSON. MAI NX_WIFI (regola, anche se l'IR e' offline: non ce n'e' bisogno e l'app puo' coesistere col web). MA la fix corretta a monte e' lo streaming/cap del parse (vedi optimizations), non sospendere i servizi.",
+  "verdict": "confirm",
+  "nissues": 3,
+  "confidence": "high"
+ },
+ {
+  "app": "app_notepad.cpp (Notes / \"notepad\")",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "Nessuno (exclusive_flags = 0). L'app e' light, offline, senza buffer dinamici ne' task ne' decoder; entrare in esclusiva sospenderebbe httpd/L1/mDNS/voice (~70KB, oltre a degradare l'esperienza web/AI) senza alcun beneficio, dato che il footprint runtime e' praticamente nullo. MAI NX_WIFI.",
+  "verdict": "confirm",
+  "nissues": 2,
+  "confidence": "high"
+ },
+ {
+  "app": "app_notify.cpp (Notification Center nativo)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "nessuno (NX = 0)",
+  "verdict": "confirm",
+  "nissues": 2,
+  "confidence": "high"
+ },
+ {
+  "app": "app_photos.cpp (Photos — native SD image viewer)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "Nessuno (exclusive_flags = 0). MAI NX_WIFI (irrilevante comunque: app offline). Se in futuro si volessero precaricare immagini molto grandi e si osservasse OOM sul largest-free-block durante il decode, l'unica leva sensata resta quella gia' usata (release canvas + direct draw, righe 76-77/84-85); l'esclusiva (~70KB di httpd/L1/mDNS/voice) sarebbe sovradimensionata e non aiuta un decoder streaming.",
+  "verdict": "confirm",
+  "nissues": 3,
+  "confidence": "high"
+ },
+ {
+  "app": "app_player.cpp (Music player — MP3/WAV folder browser + Now Playing)",
+  "weight": "medium",
+  "uses": false,
+  "should": true,
+  "flags": "NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY | NX_VOICE (the canonical 4-flag net-app mask, ~70KB, Wi-Fi STA stays up). NEVER NX_WIFI: although Music plays from local SD, the music_db and OS context expect the network up, and the app shares the launcher's connectivity; deep-offline would needlessly drop STA. Enter at play-start (in play_q / before MP3InitDecoder), exit when playback fully stops (queue done / stop / leave). Pair with the existing canvas-release. Optional and lower priority than for SSH: the 32KB canvas-release lever already covers the decoder's contiguous-block need on the now_playing path; exclusive mainly helps the browser-side play paths (autoplay/skip) that do NOT release the canvas.",
+  "verdict": "confirm",
+  "nissues": 5,
+  "confidence": "med"
+ },
+ {
+  "app": "app_player_db.cpp (music_db backend per app_player / Music)",
+  "weight": "heavy",
+  "uses": false,
+  "should": false,
+  "flags": "N/A per questo modulo (e' un backend DB, non un'app con on_enter/on_exit). NON serve nucleo_exclusive qui. La soluzione e' eliminare l'allocazione monolitica da 64KB (vedi optimizations), non sospendere sottosistemi. Semmai l'esclusiva andrebbe valutata a livello di app_player.cpp durante il PLAYBACK (decoder Helix MP3 vuole il blocco da 32KB del canvas via nucleo_app_release_buffers, gia' pattern audio noto), ma e' fuori da questo file e ortogonale al bug.",
+  "verdict": "reject",
+  "nissues": 7,
+  "confidence": "high"
+ },
+ {
+  "app": "radio (app_radio.cpp — \"Radio Index\", id \"radio\", Media)",
+  "weight": "heavy",
+  "uses": false,
+  "should": false,
+  "flags": "None. Do NOT add nucleo_exclusive to radio. If RAM pressure is ever measured during streaming, the correct (and already-used) axis is the canvas release, not exclusive. Were one ever to add it, the ONLY admissible mask would be NX_ANIMA_L1 (free ~31KB L1 index, which the launcher owns and radio doesn't need while streaming) — and absolutely NEVER NX_WIFI (radio streams over the network; killing Wi-Fi kills the stream) and NOT NX_HTTPD (web-twin radio list stays useful). But even NX_ANIMA_L1 is redundant: open_app_def already calls nucleo_anima_l1_unload_if_idle() on every app entry, so L1 is freed the moment radio opens. Net recommendation: keep it as-is.",
+  "verdict": "reject",
+  "nissues": 3,
+  "confidence": "high"
+ },
+ {
+  "app": "app_recorder.cpp (Voice Recorder)",
+  "weight": "heavy",
+  "uses": true,
+  "should": true,
+  "flags": "NX_HTTPD | NX_DISCOVERY | NX_VOICE | NX_ANIMA_L1 (keep current 4-flag net-app mask; NEVER add NX_WIFI — the upload needs Wi-Fi). Pass &inf (not nullptr) and abort gracefully if inf.largest_after < ~34*1024 like app_ssh does.",
+  "verdict": "confirm",
+  "nissues": 5,
+  "confidence": "high"
+ },
+ {
+  "app": "app_remote.cpp (Remote Control)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "Nessuno (exclusive_flags = 0). L'app non deve usare la modalita esclusiva.",
+  "verdict": "",
+  "nissues": 0,
+  "confidence": "high"
+ },
+ {
+  "app": "app_ssh.cpp",
+  "weight": "heavy",
+  "uses": true,
+  "should": true,
+  "flags": "NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY | NX_VOICE (la maschera attuale e' corretta). MAI NX_WIFI / NX_DEEP_OFFLINE: l'app vive di rete. Opzionale aggiungere NX_RECORDER (SSH non e' il recorder, quindi non si auto-uccide) per recuperare RAM se una registrazione e' in corso; equivale a NX_ALL. Consiglio di estrarre una costante condivisa NX_NET_APP per le tre app di-rete ed eliminare divergenze d'ordine/refusi.",
+  "verdict": "confirm",
+  "nissues": 5,
+  "confidence": "high"
+ },
+ {
+  "app": "app_sysmon.cpp (System Status)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "nessuno (exclusive_flags=0 / non usare nucleo_exclusive)",
+  "verdict": "reject",
+  "nissues": 5,
+  "confidence": "high"
+ },
+ {
+  "app": "app_torch.cpp",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "Nessuno (mask = 0). Non aggiungere nucleo_exclusive_* a questa app.",
+  "verdict": "reject",
+  "nissues": 2,
+  "confidence": "high"
+ },
+ {
+  "app": "app_ui.cpp (shared focused-list UI widget, NOT an app)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "Nessuna (N/A). E' una libreria di disegno stateless usata dalle app di lista (Files/Music/Photos/Notes); l'esclusiva e' un concetto di ciclo-vita dell'app, irrilevante qui. L'eventuale esclusiva spetta all'app chiamante (es. Music che fa release_buffers prima del decoder), non a questo helper.",
+  "verdict": "confirm",
+  "nissues": 2,
+  "confidence": "high"
+ },
+ {
+  "app": "app_usb.cpp (USB Drive / USB Mass-Storage launcher)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "NESSUN flag. Non aggiungere nucleo_exclusive_enter a questa app.",
+  "verdict": "reject",
+  "nissues": 2,
+  "confidence": "high"
+ },
+ {
+  "app": "app_usbkbd.cpp (USB Keyboard, id \"usbkbd\")",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "Nessuna esclusiva. (Eventuale e OPZIONALE, non raccomandata: se in futuro l'install TinyUSB dovesse fallire per frammentazione con ~18KB liberi, si potrebbe valutare un enter MINIMALE solo attorno a nucleo_usbhid_start, es. NX_DISCOVERY|NX_ANIMA_L1, MAI NX_WIFI - ma oggi non serve e introdurrebbe il problema 'quando uscire' dato che il driver resta resident.)",
+  "verdict": "reject",
+  "nissues": 3,
+  "confidence": "high"
+ },
+ {
+  "app": "app_video.cpp (Video — native .nfv player)",
+  "weight": "heavy",
+  "uses": true,
+  "should": true,
+  "flags": "NX_HTTPD | NX_DISCOVERY | NX_VOICE | NX_ANIMA_L1 (gli attuali — corretti). Mantenere imperativo legato a play_from (non dichiarativo per-app): video deve liberare RAM solo MENTRE riproduce, non mentre si sfoglia la lista. MAI aggiungere NX_WIFI (l'OS resta servito/raggiungibile; il decoder usa SD, non rete, ma staccare il Wi-Fi non serve e romperebbe il pattern net-app).",
+  "verdict": "confirm",
+  "nissues": 3,
+  "confidence": "high"
+ },
+ {
+  "app": "app_voice.cpp (Voice Trainer / AVCEB)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "Nessun flag esclusivo. L'app e' offline e leggera: in foreground tiene solo un task da 16KB; i ~38KB pesanti vivono nell'engine solo durante il PTT e sono gia' protetti da un heap-gate reclaim-aware (block 26KB/free 44KB, nucleo_voice.c:115-116). Entrare in esclusiva NON ha senso: (a) NX_VOICE si auto-sospenderebbe il sottosistema che l'app vuole USARE; (b) l'app non avvia decoder/TLS/httpd-killer. Se in futuro il PTT-in-training fallisse per OOM con OS pieno, la leva corretta NON e' l'esclusiva ma il release del canvas 32KB (gia' fatto dal loop UI in PTT via release_buffers se !s_app_direct) — l'app non deve duplicarlo.",
+  "verdict": "reject",
+  "nissues": 3,
+  "confidence": "high"
+ },
+ {
+  "app": "app_voicelab.cpp (\"Voce\" — console nativa di prova/diagnosi del riconoscitore vocale on-device AVCEB)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "Nessuna maschera esclusiva. L'app è light e, soprattutto, il sottosistema che le serve è proprio VOICE: usare l'esclusiva sarebbe controproducente. In particolare NX_VOICE spegnerebbe il motore che l'app tiene acceso (auto-sabotaggio), e NX_ANIMA_L1 toglierebbe l'indice usato per risolvere il comando in test mode. L'app non usa rete/decoder/TLS, quindi non c'è nulla da reclaimare per farla partire. Il reclaim necessario (i ~38KB per sessione PTT) è già gestito internamente da nucleo_voice con i suoi guard a 2 sbarre + canvas-release del PTT (display blank durante la sessione). Lasciare imperativo/zero-esclusiva è corretto.",
+  "verdict": "confirm",
+  "nissues": 2,
+  "confidence": "high"
+ },
+ {
+  "app": "app_wifi.cpp (Impostazioni / Wi-Fi manager)",
+  "weight": "light",
+  "uses": false,
+  "should": false,
+  "flags": "nessuno (NON usare l'esclusiva)",
+  "verdict": "reject",
+  "nissues": 3,
+  "confidence": "high"
+ },
+ {
+  "app": "app_wifiatk.cpp (Deauth Flood UI) + engine nucleo_wifiatk.c",
+  "weight": "medium",
+  "uses": false,
+  "should": true,
+  "flags": "NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY | NX_VOICE (la maschera canonica a 4 flag delle app-di-rete). MAI NX_WIFI: l'app POSSIEDE la radio per iniettare 802.11, staccarla la ucciderebbe. Includere NX_RECORDER e' opzionale/innocuo (l'app non e' il recorder) ma non necessario; lasciarlo se si vuole liberare anche un'eventuale registrazione in corso. In pratica: sostituire il teardown manuale (setup_suspend+httpd_stop+discovery_stop) con nucleo_exclusive_enter(maschera, &inf) e il ripristino con nucleo_exclusive_exit(), aggiungendo cosi' il reclaim di VOICE e ANIMA_L1 (~31KB L1 + voice) oggi mancanti.",
+  "verdict": "confirm",
+  "nissues": 5,
+  "confidence": "high"
+ }
+]

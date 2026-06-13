@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DOS Importer</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff; --line:#2a3a5e; --ok:#4cd07d; --danger:#ff8093; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+      font: 14px system-ui, "Segoe UI", sans-serif; }
+    header { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: var(--panel);
+      border-bottom: 1px solid var(--line); font-weight: 600; }
+    header .sub { color: var(--muted); font-weight: 400; font-size: 12px; }
+    main { flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+    .drop { border: 2px dashed var(--line); border-radius: 12px; padding: 26px; text-align: center; color: var(--muted);
+      transition: border-color .15s, background .15s; cursor: pointer; }
+    .drop.over { border-color: var(--accent); background: #4ea1ff14; color: var(--text); }
+    .drop .big { font-size: 34px; }
+    .drop b { color: var(--text); }
+    .drop input { display: none; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    .card.hidden { display: none; }
+    h3 { margin: 0 0 10px; font-size: 14px; }
+    .files { max-height: 150px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--field, #0b1426); }
+    .files .row { display: flex; gap: 8px; padding: 4px 10px; border-bottom: 1px solid #ffffff08; font-size: 12px; }
+    .files .row:last-child { border-bottom: 0; }
+    .files .row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .files .row .sz { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .files .row.exe .nm { color: var(--accent); }
+    .grid { display: grid; grid-template-columns: 120px 1fr; gap: 9px 12px; align-items: center; margin-top: 6px; }
+    label.k { color: var(--muted); font-size: 13px; }
+    input[type=text], select { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+      border-radius: 7px; padding: 7px 9px; font: inherit; }
+    .check { display: flex; align-items: center; gap: 7px; }
+    .row-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+    button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: #ffffff10;
+      color: var(--text); border-radius: 8px; padding: 9px 16px; cursor: pointer; font: inherit; }
+    button:hover { background: #ffffff1f; }
+    button.primary { background: var(--accent); color: #07101f; border-color: var(--accent); font-weight: 600; }
+    button.primary:disabled { opacity: .5; cursor: default; }
+    button.ghost { padding: 7px 12px; }
+    .status { font-size: 13px; min-height: 18px; }
+    .status.ok { color: var(--ok); } .status.err { color: var(--danger); } .status.busy { color: var(--accent); }
+    .hint2 { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    code { background: #ffffff14; padding: 1px 5px; border-radius: 4px; color: var(--text); }
+  </style>
+</head>
+<body>
+  <header>🕹️ DOS Importer <span class="sub">— build a js-dos bundle &amp; install it to the SD</span></header>
+  <main>
+    <label class="drop" id="drop">
+      <div class="big">📥</div>
+      <div>Drop a DOS program here — a <b>folder</b>, a single <b>.exe/.com/.bat</b>, a <b>.zip</b>, or a ready <b>.jsdos</b></div>
+      <div class="hint2" style="margin-top:6px">…or click to choose files. Files never leave your network — the bundle is built in your browser and written to the device SD.</div>
+      <input id="picker" type="file" multiple webkitdirectory>
+    </label>
+
+    <div class="card hidden" id="config">
+      <h3 id="title">Program</h3>
+      <div class="files" id="filelist"></div>
+      <div class="grid" id="opts">
+        <label class="k">Install name</label>
+        <input type="text" id="name" autocomplete="off" spellcheck="false" placeholder="e.g. prince">
+        <label class="k" id="runk">Run</label>
+        <select id="run"></select>
+        <label class="k">Profile</label>
+        <select id="profile">
+          <option value="auto">Auto — most games</option>
+          <option value="fast">386/486 fast (VGA/VESA)</option>
+          <option value="dos4gw">486 + 64 MB (DOS4GW / protected mode)</option>
+          <option value="vga286">286 VGA classic</option>
+          <option value="ega">EGA (late 80s)</option>
+          <option value="cga">CGA (early 80s)</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <label class="k">CPU speed</label>
+        <select id="cycles">
+          <option value="auto">auto (most games)</option>
+          <option value="fixed 3000">slow — 8088/old (3000)</option>
+          <option value="fixed 12000">286 (12000)</option>
+          <option value="fixed 20000">386 (20000)</option>
+          <option value="fixed 60000">486 (60000)</option>
+          <option value="max">max — fastest (modern)</option>
+        </select>
+        <label class="k">Memory</label>
+        <select id="mem">
+          <option value="16">16 MB (default)</option>
+          <option value="32">32 MB</option>
+          <option value="64">64 MB (DOS4GW)</option>
+        </select>
+        <label class="k">Machine</label>
+        <select id="machine">
+          <option value="svga_s3">SVGA S3 + VESA (default)</option>
+          <option value="vesa_nolfb">VESA (no LFB)</option>
+          <option value="vgaonly">VGA only</option>
+          <option value="ega">EGA</option>
+          <option value="cga">CGA</option>
+          <option value="tandy">Tandy</option>
+          <option value="hercules">Hercules (mono)</option>
+        </select>
+        <label class="k">Sound</label>
+        <div class="check"><input type="checkbox" id="sound" checked> <span class="hint2">Sound Blaster 16 + Adlib (OPL3)</span></div>
+      </div>
+      <div class="row-actions">
+        <button class="primary" id="install">⬇ Install to device</button>
+        <button class="ghost" id="reset">Clear</button>
+        <span class="status" id="status"></span>
+      </div>
+      <div class="hint2" id="dest" style="margin-top:8px"></div>
+    </div>
+
+    <div class="hint2">
+      Bundles install to <code>/data/DOS</code>. Open them from the <b>DOS Box</b> app — it picks up new games each time you open it (no refresh needed).
+    </div>
+  </main>
+
+  <script type="module">
+    const DEST_DIR = '/data/DOS';
+    const RUNNABLE = /\.(exe|com|bat)$/i;
+    const $ = (id) => document.getElementById(id);
+    const enc = new TextEncoder(), dec = new TextDecoder();
+    const fmt = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? (b / 1024).toFixed(0) + ' KB' : b + ' B';
+
+    let state = { files: [], isBundle: false, bundleBytes: null };  // files: [{name, data:Uint8Array}]
+
+    // ---- CRC-32 + ZIP "store" writer (mirrors tools/make-jsdos.mjs, in the browser) ----
+    const CRC = (() => { const t = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+    function crc32(u8) { let c = 0xffffffff; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+
+    function buildJsdos(entries) {
+      const sorted = [...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      const locals = [], central = []; let offset = 0;
+      for (const { name, data } of sorted) {
+        const nb = enc.encode(name); const crc = crc32(data);
+        const lh = new DataView(new ArrayBuffer(30));
+        lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(8, 0, true);
+        lh.setUint16(10, 0, true); lh.setUint16(12, 0x21, true);
+        lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+        lh.setUint16(26, nb.length, true); lh.setUint16(28, 0, true);
+        locals.push(new Uint8Array(lh.buffer), nb, data);
+        const ch = new DataView(new ArrayBuffer(46));
+        ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+        ch.setUint16(12, 0, true); ch.setUint16(14, 0x21, true);
+        ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+        ch.setUint16(28, nb.length, true); ch.setUint32(42, offset, true);
+        central.push(new Uint8Array(ch.buffer), nb);
+        offset += 30 + nb.length + data.length;
+      }
+      const localBuf = concat(locals), centralBuf = concat(central);
+      const end = new DataView(new ArrayBuffer(22));
+      end.setUint32(0, 0x06054b50, true); end.setUint16(8, sorted.length, true); end.setUint16(10, sorted.length, true);
+      end.setUint32(12, centralBuf.length, true); end.setUint32(16, localBuf.length, true);
+      return concat([localBuf, centralBuf, new Uint8Array(end.buffer)]);
+    }
+    function concat(arrs) { let n = 0; for (const a of arrs) n += a.length; const o = new Uint8Array(n); let p = 0; for (const a of arrs) { o.set(a, p); p += a.length; } return o; }
+
+    // ---- minimal ZIP reader (store + deflate) for dropped .zip / .jsdos ----
+    async function unzip(u8) {
+      const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+      let p = u8.length - 22;
+      while (p >= 0 && dv.getUint32(p, true) !== 0x06054b50) p--;
+      if (p < 0) throw new Error('not a valid ZIP archive');
+      const count = dv.getUint16(p + 10, true); let cd = dv.getUint32(p + 16, true);
+      const out = [];
+      for (let i = 0; i < count; i++) {
+        if (dv.getUint32(cd, true) !== 0x02014b50) break;
+        const method = dv.getUint16(cd + 10, true);
+        const csize = dv.getUint32(cd + 20, true);
+        const nlen = dv.getUint16(cd + 28, true), elen = dv.getUint16(cd + 30, true), clen = dv.getUint16(cd + 32, true);
+        const lho = dv.getUint32(cd + 42, true);
+        const name = dec.decode(u8.subarray(cd + 46, cd + 46 + nlen));
+        const lnlen = dv.getUint16(lho + 26, true), lelen = dv.getUint16(lho + 28, true);
+        const start = lho + 30 + lnlen + lelen;
+        const comp = u8.subarray(start, start + csize);
+        if (!name.endsWith('/')) {
+          let data;
+          if (method === 0) data = comp.slice();
+          else if (method === 8) data = await inflateRaw(comp);
+          else throw new Error('unsupported compression in ' + name);
+          out.push({ name, data });
+        }
+        cd += 46 + nlen + elen + clen;
+      }
+      return out;
+    }
+    async function inflateRaw(u8) {
+      if (typeof DecompressionStream !== 'function') throw new Error('this browser cannot unzip — drop the extracted folder instead');
+      const stream = new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    }
+
+    // ---- dosbox.conf generator (mirrors tools/add-dos.mjs) ----
+    function runParts(full) { const dir = full.includes('/') ? full.slice(0, full.lastIndexOf('/')) : '';
+      return { dir, exe: full.slice(full.lastIndexOf('/') + 1), bat: /\.bat$/i.test(full) }; }
+    function genConf() {
+      const run = runParts($('run').value);
+      const ax = ['@echo off', 'mount c .', 'c:'];
+      if (run.dir) ax.push('cd ' + run.dir.replace(/\//g, '\\'));
+      ax.push((run.bat ? 'call ' : '') + run.exe);
+      const mem = $('mem') ? $('mem').value : '16';
+      const L = [
+        '[sdl]', 'autolock=false', '',
+        // memsize feeds XMS/EMS — bump it for 386/486-era and DOS4GW protected-mode apps.
+        '[dosbox]', 'machine=' + $('machine').value, 'memsize=' + mem, '',
+        '[cpu]', 'core=auto', 'cputype=auto', 'cycles=' + $('cycles').value, '',
+      ];
+      if ($('sound').checked) L.push('[mixer]', 'nosound=false', 'rate=44100', '',
+        '[sblaster]', 'sbtype=sb16', 'irq=7', 'dma=1', 'hdma=5', 'oplmode=auto', 'oplrate=44100', '');
+      // Extended/expanded memory + UMBs: required by most post-1990 DOS software.
+      L.push('[dos]', 'xms=true', 'ems=true', 'umb=true', '');
+      L.push('[autoexec]', ...ax, '');
+      return L.join('\n');
+    }
+
+    // ---- drag & drop collection ----
+    const sanitize = (s) => (s || 'dos-program').replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._-]/g, '_') || 'dos-program';
+
+    async function entriesFromDataTransfer(dt) {
+      const items = dt.items ? [...dt.items] : [];
+      const roots = items.map((it) => it.webkitGetAsEntry && it.webkitGetAsEntry()).filter(Boolean);
+      const out = [];
+      const readFile = (entry, prefix) => new Promise((res) => entry.file(async (f) => { out.push({ name: prefix + entry.name, data: new Uint8Array(await f.arrayBuffer()) }); res(); }, () => res()));
+      const walk = (entry, prefix) => new Promise((res) => {
+        if (entry.isFile) return readFile(entry, prefix).then(res);
+        const rd = entry.createReader(); const acc = [];
+        const batch = () => rd.readEntries(async (es) => { if (!es.length) { for (const c of acc) await walk(c, prefix + entry.name + '/'); res(); } else { acc.push(...es); batch(); } }, () => res());
+        batch();
+      });
+      let topName = null;
+      for (const r of roots) { if (!topName) topName = r.name; await walk(r, ''); }
+      if (!out.length && dt.files) for (const f of dt.files) { out.push({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) }); if (!topName) topName = f.name; }
+      return { files: out, topName };
+    }
+
+    async function ingest(filesObj) {
+      let { files, topName } = filesObj;
+      // strip any pre-existing .jsdos control dir (we regenerate it)
+      files = files.filter((f) => !f.name.toLowerCase().startsWith('.jsdos/'));
+      // single ready bundle → passthrough
+      if (files.length === 1 && /\.jsdos$/i.test(files[0].name)) {
+        state = { files: [], isBundle: true, bundleBytes: files[0].data };
+        showConfig(sanitize(files[0].name), [], true); return;
+      }
+      // single .zip → unzip
+      if (files.length === 1 && /\.zip$/i.test(files[0].name)) {
+        setStatus('busy', 'Unzipping…');
+        try { const inner = await unzip(files[0].data); state = { files: inner, isBundle: false, bundleBytes: null }; showConfig(sanitize(files[0].name), inner, false); setStatus('', ''); }
+        catch (e) { setStatus('err', e.message); }
+        return;
+      }
+      if (!files.length) { setStatus('err', 'No files found.'); return; }
+      state = { files, isBundle: false, bundleBytes: null };
+      showConfig(sanitize(topName), files, false);
+    }
+
+    function showConfig(name, files, isBundle) {
+      $('config').classList.remove('hidden');
+      $('name').value = name;
+      $('title').textContent = isBundle ? 'Ready bundle' : 'Program files';
+      const fl = $('filelist'); fl.innerHTML = '';
+      if (isBundle) { fl.innerHTML = `<div class="row"><span class="nm">${name}.jsdos</span><span class="sz">${fmt(state.bundleBytes.length)} · already a js-dos bundle</span></div>`; }
+      else {
+        for (const f of files) { const exe = RUNNABLE.test(f.name); const r = document.createElement('div'); r.className = 'row' + (exe ? ' exe' : ''); r.innerHTML = `<span class="nm">${esc(f.name)}</span><span class="sz">${fmt(f.data.length)}</span>`; fl.appendChild(r); }
+      }
+      // run picker
+      const exes = files.filter((f) => RUNNABLE.test(f.name)).map((f) => f.name)
+        .sort((a, b) => a.split('/').length - b.split('/').length);
+      const runRow = $('run'), runK = $('runk');
+      const showRun = !isBundle;
+      runRow.style.display = runK.style.display = showRun ? '' : 'none';
+      runRow.innerHTML = '';
+      for (const e of exes) { const o = document.createElement('option'); o.value = e; o.textContent = e; runRow.appendChild(o); }
+      // default-select the shallowest single executable
+      if (exes.length) runRow.value = exes[0];
+      // options visibility for bundle passthrough
+      ['profile', 'cycles', 'mem', 'machine', 'sound'].forEach((id) => { const el = $(id); el.disabled = isBundle; });
+      $('install').disabled = !isBundle && exes.length === 0;
+      setStatus(exes.length === 0 && !isBundle ? 'err' : '', exes.length === 0 && !isBundle ? 'No .exe/.com/.bat found — this folder has no runnable DOS program.' : '');
+      updateDest();
+    }
+    function updateDest() { $('dest').textContent = 'Will write to  ' + DEST_DIR + '/' + sanitize($('name').value) + '.jsdos'; }
+    $('name').addEventListener('input', updateDest);
+
+    // One-click compatibility profiles set CPU/memory/machine together. Tweaking any of those
+    // flips the profile to "Custom" so the chosen values are respected.
+    const PROFILES = {
+      auto:   { cycles: 'auto',        mem: '16', machine: 'svga_s3' },
+      fast:   { cycles: 'max',         mem: '32', machine: 'svga_s3' },
+      dos4gw: { cycles: 'max',         mem: '64', machine: 'svga_s3' },
+      vga286: { cycles: 'fixed 12000', mem: '16', machine: 'svga_s3' },
+      ega:    { cycles: 'fixed 3000',  mem: '16', machine: 'ega' },
+      cga:    { cycles: 'fixed 3000',  mem: '16', machine: 'cga' },
+    };
+    $('profile').addEventListener('change', () => {
+      const p = PROFILES[$('profile').value]; if (!p) return;
+      $('cycles').value = p.cycles; $('mem').value = p.mem; $('machine').value = p.machine;
+    });
+    ['cycles', 'mem', 'machine'].forEach((id) => $(id).addEventListener('change', () => { $('profile').value = 'custom'; }));
+
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    function setStatus(cls, msg) { const s = $('status'); s.className = 'status ' + cls; s.textContent = msg; }
+
+    // ---- install: build bundle (or passthrough) and write to the SD ----
+    async function ensureDir() { for (const p of ['/data', DEST_DIR]) { try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent(p), { method: 'POST' }); } catch {} } }
+    async function install() {
+      const name = sanitize($('name').value);
+      let bytes;
+      try {
+        if (state.isBundle) bytes = state.bundleBytes;
+        else {
+          const entries = state.files.filter((f) => !f.name.toLowerCase().startsWith('.jsdos/')).slice();
+          entries.push({ name: '.jsdos/dosbox.conf', data: enc.encode(genConf()) });
+          bytes = buildJsdos(entries);
+        }
+      } catch (e) { setStatus('err', 'Build failed: ' + e.message); return; }
+
+      $('install').disabled = true; setStatus('busy', `Installing ${fmt(bytes.length)}…`);
+      try {
+        await ensureDir();
+        const path = DEST_DIR + '/' + name + '.jsdos';
+        const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: bytes });
+        if (!r.ok) throw new Error((await r.text().catch(() => '')) || ('HTTP ' + r.status));
+        setStatus('ok', `✓ Installed to ${path} (${fmt(bytes.length)}). Open DOS Box to play.`);
+        window.parent.postMessage({ type: 'open-app', id: 'dosbox' }, '*');   // best-effort: shell may surface DOS Box
+      } catch (e) { setStatus('err', 'Install failed: ' + e.message); }
+      finally { $('install').disabled = false; }
+    }
+
+    function reset() { state = { files: [], isBundle: false, bundleBytes: null }; $('config').classList.add('hidden'); setStatus('', ''); $('picker').value = ''; }
+
+    // ---- wire up drop zone + picker ----
+    const drop = $('drop');
+    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); if (ev !== 'dragover') drop.classList.remove('over'); }));
+    drop.addEventListener('drop', async (e) => { setStatus('busy', 'Reading…'); try { await ingest(await entriesFromDataTransfer(e.dataTransfer)); if (state.files.length || state.isBundle) setStatus('', ''); } catch (err) { setStatus('err', err.message); } });
+    $('picker').addEventListener('change', async (e) => {
+      const fs = [...e.target.files]; if (!fs.length) return;
+      setStatus('busy', 'Reading…');
+      const files = []; let topName = null;
+      for (const f of fs) { const rel = f.webkitRelativePath || f.name; files.push({ name: rel, data: new Uint8Array(await f.arrayBuffer()) }); if (!topName) topName = (f.webkitRelativePath ? f.webkitRelativePath.split('/')[0] : f.name); }
+      await ingest({ files, topName }); setStatus('', '');
+    });
+    $('install').addEventListener('click', install);
+    $('reset').addEventListener('click', reset);
+  </script>
+</body>
+</html>

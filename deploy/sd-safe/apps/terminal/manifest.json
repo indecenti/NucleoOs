@@ -1,0 +1,21 @@
+{
+  "id": "terminal",
+  "name": "Terminal",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "A keyboard-first console for the filesystem and system status.",
+  "category": "system",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/terminal/",
+  "icon": "assets/icon.svg",
+  "permissions": ["storage.shared", "system.events", "device.keyboard"],
+  "mounts": { "app": "/apps/terminal/data" },
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": ["fs.changed"],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

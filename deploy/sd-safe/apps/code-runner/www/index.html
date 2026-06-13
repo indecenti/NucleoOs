@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Code Runner</title>
+<style>
+  :root{
+    --bg:#0b0f17; --bg2:#0e131d; --panel:#131a26; --line:#1f2937; --line2:#273345;
+    --text:#e8eefc; --dim:#8aa0c8; --accent:#7c5cff; --accent2:#4ea1ff;
+    --ok:#5ad19b; --warn:#ffb454; --err:#ff8a9c; --code-bg:#0a0e16; --accent-on:#fff;
+    --tok-kw:var(--accent); --tok-str:var(--ok); --tok-num:var(--accent2); --tok-com:var(--dim); --tok-bool:var(--warn);
+    --r:8px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{display:flex;flex-direction:column;background:var(--bg);color:var(--text);
+    font:14px/1.45 system-ui,"Segoe UI",sans-serif;user-select:none;overflow:hidden}
+  header{display:flex;align-items:center;gap:6px;padding:7px 9px;background:linear-gradient(180deg,var(--bg2),transparent);
+    border-bottom:1px solid var(--line);flex:none}
+  .title{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+  .glyph{width:22px;height:22px;border-radius:6px;flex:none;display:grid;place-items:center;color:#fff;font-size:13px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 14px color-mix(in srgb,var(--accent) 40%,transparent)}
+  .fname{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw}
+  .fname small{color:var(--dim);font-weight:400}
+  .dirty{color:var(--warn)}
+  .badge{font-size:11px;color:var(--accent2);border:1px solid var(--line2);border-radius:999px;padding:1px 8px}
+  .caps{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:1px 8px;cursor:help}
+  .sp{flex:1}
+  button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line2);border-radius:var(--r);
+    padding:5px 11px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  button:hover{border-color:var(--accent2)}
+  button:disabled{opacity:.45;cursor:default}
+  button.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:var(--accent-on);font-weight:600}
+  button.danger{color:var(--err);border-color:color-mix(in srgb,var(--err) 50%,var(--line2))}
+  .wrap{flex:1;display:flex;flex-direction:column;min-height:0}
+  .pane{flex:1;display:flex;flex-direction:column;min-height:0}
+  .editor-wrap{flex:3;min-height:0;display:flex;position:relative}
+  #editor{flex:1;resize:none;border:0;outline:0;background:var(--code-bg);color:var(--text);
+    font:13px/1.5 "Cascadia Code",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:12px 14px;
+    tab-size:2;white-space:pre;overflow:auto;user-select:text;caret-color:var(--accent2)}
+  .gutter{display:flex;align-items:center;gap:8px;padding:5px 12px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    background:var(--bg2);font-size:11px;color:var(--dim);flex:none}
+  .gutter .seg{display:inline-flex;align-items:center;gap:5px}
+  .gutter select{font:inherit;background:var(--panel);color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:2px 4px}
+  .console{flex:2;min-height:96px;overflow:auto;background:var(--bg);padding:8px 12px 16px;
+    font:12.5px/1.5 "Cascadia Code",ui-monospace,Consolas,monospace;user-select:text}
+  .ln{white-space:pre-wrap;word-break:break-word;border-left:2px solid transparent;padding:1px 0 1px 9px;margin:0}
+  .ln.log{color:var(--text)} .ln.info{color:var(--accent2)} .ln.debug{color:var(--dim)}
+  .ln.warn{color:var(--warn);border-left-color:var(--warn)} .ln.err{color:var(--err);border-left-color:var(--err)}
+  .ln.sys{color:var(--dim);font-style:italic;border-left-color:var(--line2)}
+  .ln.ret{color:var(--ok);border-left-color:var(--ok)}
+  .ln.ret b{color:var(--dim);font-weight:400;font-style:italic}
+  .ln .stk{color:var(--dim);font-size:11px}
+  .empty{color:var(--dim);padding:6px 9px}
+  kbd{font:11px ui-monospace,monospace;background:var(--panel);border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:0 4px}
+  .toast{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line2);
+    border-radius:8px;padding:7px 14px;font-size:13px;box-shadow:0 8px 30px #0008;opacity:0;transition:opacity .18s;pointer-events:none}
+  .toast.show{opacity:1}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .pulse.run{background:var(--warn);box-shadow:0 0 8px var(--warn);animation:bl .8s infinite}
+  @keyframes bl{50%{opacity:.3}}
+</style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <div class="glyph">▶</div>
+      <div class="fname" id="fname">scratch.js <small id="fdir"></small></div>
+      <span class="dirty" id="dirty" hidden>●</span>
+      <span class="badge" id="lang">js</span>
+    </div>
+    <span class="caps" id="caps" title="">sandbox</span>
+    <span class="sp"></span>
+    <button class="primary" id="run" title="Esegui (Ctrl+Invio)">▶ Esegui</button>
+    <button class="danger" id="stop" disabled title="Ferma">■</button>
+    <button id="save" title="Salva (Ctrl+S)">🖫 Salva</button>
+    <button id="clear" title="Pulisci console">⟲</button>
+  </header>
+
+  <div class="wrap">
+    <div class="editor-wrap">
+      <textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="// JavaScript — gira nel browser, in sandbox.&#10;// console.log(...) o `return` per mostrare un valore. await libero.&#10;// API: os.fs.read/write/list · os.http.get · os.anima(domanda) · os.notify(testo)&#10;&#10;console.log('Ciao da NucleoOS');"></textarea>
+    </div>
+    <div class="gutter">
+      <span class="seg"><span class="pulse" id="pulse"></span><span id="status">pronto</span></span>
+      <span class="sp" style="flex:1"></span>
+      <span class="seg">esempi
+        <select id="examples">
+          <option value="">—</option>
+          <option value="hello">Ciao + valore</option>
+          <option value="fib">Fibonacci</option>
+          <option value="fs">Leggi/scrivi file SD</option>
+          <option value="list">Elenca una cartella</option>
+          <option value="anima">Chiedi ad ANIMA</option>
+          <option value="http">Fetch JSON</option>
+        </select>
+      </span>
+      <span class="seg"><kbd>Ctrl</kbd>+<kbd>↵</kbd> esegui · <kbd>Ctrl</kbd>+<kbd>S</kbd> salva</span>
+    </div>
+    <div class="console" id="console"><div class="empty">La console è vuota. Premi ▶ Esegui.</div></div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script type="module">
+import { createRunner } from './nucleo-run.js';
+
+const $ = (id) => document.getElementById(id);
+const editor = $('editor'), cons = $('console');
+const qs = new URLSearchParams(location.search);
+let path = qs.get('path') || '';            // SD absolute path, or '' for a scratch buffer
+let savedText = '';                          // last-saved content (for the dirty marker)
+let dirty = false, running = false;
+
+const basename = (p) => (p || '').split('/').pop() || p;
+const dirname  = (p) => { const i = (p || '').lastIndexOf('/'); return i > 0 ? p.slice(0, i) : '/'; };
+const cwd = () => path ? dirname(path) : '/data';
+
+// ---- runtime (the shared engine) ----
+const rt = createRunner({
+  cwd: cwd(), lang: (navigator.language || 'it').slice(0, 2) === 'en' ? 'en' : 'it', timeoutMs: 6000,
+  onLog: (level, text) => { if (level === 'clear') clearConsole(); else line(level === 'info' ? 'info' : level === 'warn' ? 'warn' : level === 'error' ? 'err' : level === 'debug' ? 'debug' : 'log', text); },
+  onNotify: (text) => { line('sys', '🔔 ' + text); try { window.parent.postMessage({ type: 'notify', text }, '*'); } catch {} },
+});
+$('caps').title = 'Esegue nel browser, in sandbox (Web Worker, niente DOM).\nPermessi attivi: filesystem SD · rete (http) · ANIMA · notifiche.\nLimite tempo: 6 s.';
+
+// ---- console output ----
+function clearConsole(){ cons.innerHTML = ''; }
+function line(kind, text){
+  if (cons.querySelector('.empty')) cons.innerHTML = '';
+  const d = document.createElement('div'); d.className = 'ln ' + kind; d.textContent = text;
+  cons.appendChild(d); cons.scrollTop = cons.scrollHeight; return d;
+}
+function sysLine(text){ return line('sys', text); }
+
+// ---- run ----
+async function runCode(){
+  if (running) return;
+  running = true; setRunning(true);
+  rt.setCwd(cwd());
+  const t = new Date();
+  sysLine('▶ ' + (path ? basename(path) : 'scratch') + ' · ' + t.toLocaleTimeString());
+  let r;
+  try { r = await rt.run(editor.value, { args: [] }); }
+  catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+  if (r.ok){
+    if (r.hasValue){ const d = line('ret', ''); d.innerHTML = '<b>⇐ </b>'; d.appendChild(document.createTextNode(r.value)); }
+    sysLine('✓ completato in ' + Math.round(r.ms || 0) + ' ms');
+  } else if (r.timeout){ line('err', '⏱ ' + r.error); }
+  else if (r.stopped){ sysLine('■ interrotto'); }
+  else {
+    line('err', '✖ ' + (r.error || 'errore'));
+    if (r.stack){ const s = String(r.stack).split('\n').slice(0, 4).join('\n'); const d = line('err', ''); const sp = document.createElement('span'); sp.className = 'stk'; sp.textContent = s; d.appendChild(sp); }
+  }
+  running = false; setRunning(false);
+}
+function setRunning(on){
+  $('run').disabled = on; $('stop').disabled = !on;
+  $('pulse').className = 'pulse' + (on ? ' run' : '');
+  $('status').textContent = on ? 'in esecuzione…' : 'pronto';
+}
+function stopCode(){ if (running){ rt.stop(); } }
+
+// ---- file load / save ----
+async function load(){
+  if (!path){ setTitle(); editor.value = ''; savedText = ''; markDirty(false); maybeAutorun(); return; }
+  setTitle();
+  try {
+    const res = await fetch('/api/fs/read?path=' + encodeURIComponent(path));
+    if (res.ok){ editor.value = await res.text(); savedText = editor.value; markDirty(false); }
+    else { sysLine('⚠ impossibile leggere ' + path + ' (' + res.status + ')'); }
+  } catch (e){ sysLine('⚠ ' + e.message); }
+  detectLang(); maybeAutorun();
+}
+async function save(){
+  if (!path){
+    const name = prompt('Salva come (percorso SD):', '/data/scratch.js');
+    if (!name) return; path = name; setTitle(); rt.setCwd(cwd());
+  }
+  try {
+    const res = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: editor.value });
+    if (res.ok){ savedText = editor.value; markDirty(false); toast('Salvato'); }
+    else toast('Salvataggio fallito (' + res.status + ')');
+  } catch (e){ toast('Errore: ' + e.message); }
+}
+function maybeAutorun(){ if (qs.get('autorun') === '1' && editor.value.trim()) setTimeout(runCode, 120); }
+
+// ---- ui helpers ----
+function setTitle(){
+  $('fname').firstChild.textContent = (path ? basename(path) : 'scratch.js') + ' ';
+  $('fdir').textContent = path ? dirname(path) : 'non salvato';
+  try { window.parent.postMessage({ type: 'set-window-title', title: 'Code Runner — ' + (path ? basename(path) : 'scratch') }, '*'); } catch {}
+}
+function markDirty(on){ dirty = on; $('dirty').hidden = !on; }
+function detectLang(){ const e = (basename(path).split('.').pop() || 'js').toLowerCase(); $('lang').textContent = e; }
+let toastT = null;
+function toast(msg){ const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 1600); }
+
+// ---- examples ----
+const EXAMPLES = {
+  hello: "// Ritorna un valore e logga\nconsole.log('NucleoOS', { time: new Date().toISOString() });\nreturn 6 * 7;",
+  fib: "function fib(n){ return n < 2 ? n : fib(n-1) + fib(n-2); }\nfor (let i = 0; i < 12; i++) console.log('fib', i, '=', fib(i));\nreturn fib(20);",
+  fs: "// Scrive e rilegge un file sulla SD (cwd = cartella corrente)\nawait os.fs.write('runner-demo.txt', 'ciao dal Code Runner\\n' + Date.now());\nconst t = await os.fs.read('runner-demo.txt');\nconsole.log('riletto:', t);\nreturn (await os.fs.exists('runner-demo.txt'));",
+  list: "const entries = await os.fs.list('/data');\nfor (const e of entries) console.log((e.type === 'dir' ? '📁' : '📄'), e.name, e.size + ' B');\nreturn entries.length + ' voci';",
+  anima: "const a = await os.anima('quanto fa la radice di 144?');\nconsole.log('ANIMA:', a.reply);\nreturn a.tier;",
+  http: "const r = await os.http.json('/api/status');\nconsole.log('stato OS:', r.json);\nreturn r.ok;",
+};
+$('examples').addEventListener('change', (e) => {
+  const k = e.target.value; if (!k || !EXAMPLES[k]) return;
+  editor.value = EXAMPLES[k]; markDirty(editor.value !== savedText); e.target.value = '';
+  editor.focus();
+});
+
+// ---- wiring ----
+$('run').addEventListener('click', runCode);
+$('stop').addEventListener('click', stopCode);
+$('save').addEventListener('click', save);
+$('clear').addEventListener('click', () => { clearConsole(); cons.innerHTML = '<div class="empty">Console pulita.</div>'; });
+editor.addEventListener('input', () => markDirty(editor.value !== savedText));
+editor.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab'){ e.preventDefault(); const s = editor.selectionStart, en = editor.selectionEnd;
+    editor.value = editor.value.slice(0, s) + '  ' + editor.value.slice(en); editor.selectionStart = editor.selectionEnd = s + 2; }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); runCode(); }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')){ e.preventDefault(); save(); }
+});
+// OS-level shortcuts forwarded by the shell (work even when the textarea isn't focused).
+window.addEventListener('message', (e) => {
+  const d = e.data; if (!d) return;
+  if (d.type === 'os-shortcut'){ if (d.action === 'save'){ save(); } else if (d.action === 'run'){ runCode(); } }
+});
+window.addEventListener('keydown', (e) => {   // global guard so the browser's Ctrl+S never steals focus-out cases
+  if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')){ e.preventDefault(); save(); }
+}, true);
+
+setTitle(); detectLang(); load();
+</script>
+</body>
+</html>

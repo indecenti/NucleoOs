@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Updates</title>
+<style>
+  :root { --bg:#0b1220; --panel:#18233a; --panel2:#1f2d4a; --accent:#4ea1ff;
+          --text:#e8eefc; --muted:#8aa0c8; --line:#2a3a5e;
+          /* Status hues mixed toward --text so they stay readable in BOTH OS themes
+             (bright on dark, auto-darkened on a light panel). */
+          --ok:color-mix(in srgb, #3ddc97 60%, var(--text));
+          --warn:color-mix(in srgb, #ffc466 60%, var(--text));
+          --err:color-mix(in srgb, #ff8093 60%, var(--text)); }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 14px/1.5 system-ui, "Segoe UI", Roboto, sans-serif; color: var(--text);
+         background: var(--bg); padding: 16px; overflow-y: auto; }
+  h1 { font-size: 17px; margin: 0 0 14px; display: flex; align-items: center; gap: 8px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 0 0 10px; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+  .row .k { color: var(--muted); } .row .v { font-variant-numeric: tabular-nums; text-align: right; }
+  .pill { padding: 1px 8px; border-radius: 10px; font-size: 12px; }
+  .pill.ok { background:#3ddc9722; color:var(--ok); } .pill.warn { background:#ffc46622; color:var(--warn); }
+  .pill.err { background:#ff809322; color:var(--err); } .pill.muted { background:#ffffff14; color:var(--muted); }
+  button { border: 1px solid var(--line); background: #ffffff10; color: var(--text); border-radius: 8px;
+           padding: 8px 14px; cursor: pointer; font: inherit; font-size: 13px; }
+  button:hover:not(:disabled) { background: #ffffff1f; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); color: #07101f; border-color: var(--accent); font-weight: 600; }
+  .file { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }
+  .file input { flex: 1; min-width: 160px; color: var(--muted); font-size: 12px; }
+  .note { color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .note b { color: var(--text); }
+  .bar { height: 8px; background: #ffffff14; border-radius: 5px; overflow: hidden; margin: 10px 0 4px; display: none; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .status-msg { font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .status-msg.ok { color: var(--ok); } .status-msg.warn { color: var(--warn); } .status-msg.err { color: var(--err); }
+  code { background:#ffffff10; padding:1px 5px; border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+  <h1>🔄 <span data-i18n="app_title">Updates</span></h1>
+
+  <div class="card">
+    <h2 data-i18n="system">System</h2>
+    <div class="row"><span class="k" data-i18n="version">Version</span><span class="v" id="version">…</span></div>
+    <div class="row"><span class="k" data-i18n="fw_slot">Firmware slot</span><span class="v" id="slot">…</span></div>
+    <div class="row"><span class="k" data-i18n="image_state">Image state</span><span class="v" id="state">…</span></div>
+    <div class="row"><span class="k" data-i18n="free_memory">Free memory</span><span class="v" id="heap">…</span></div>
+    <div class="row"><span class="k" data-i18n="storage">Storage</span><span class="v" id="storage">…</span></div>
+    <div class="row"><span class="k" data-i18n="network">Network</span><span class="v" id="net">…</span></div>
+    <div style="margin-top:10px"><button id="refresh" data-i18n="refresh">Refresh</button></div>
+  </div>
+
+  <div class="card">
+    <h2 data-i18n="fw_update_title">Firmware update (over the air)</h2>
+    <p class="note" data-i18n-html="fw_update_desc">Pick a <code>nucleoos.bin</code> and install it wirelessly — no USB cable. The image is written to the
+      <b>spare flash slot</b> and only booted if it is valid; if the new firmware fails to start, the device
+      <b>automatically rolls back</b> to this one. So it always stays bootable.</p>
+    <div class="file">
+      <input id="bin" type="file" accept=".bin,application/octet-stream">
+      <button id="install" class="primary" disabled data-i18n="install_fw">Install firmware</button>
+    </div>
+    <div class="bar" id="bar"><i id="barfill"></i></div>
+    <div class="status-msg" id="msg"></div>
+    <p class="note" data-i18n="keep_powered">⚠ Keep the device powered during the update. It reboots automatically when done.</p>
+  </div>
+
+  <div class="card">
+    <h2 data-i18n="app_shell_title">App &amp; shell updates</h2>
+    <p class="note" data-i18n-html="app_shell_desc">The shell and apps live on the SD card, so they update independently of the firmware — either by
+      syncing the card from a PC (<code>deploy.ps1 -To &lt;sd&gt;</code>) or over the network with
+      <code>npm run push-ota -- --host http://&lt;ip&gt;</code>. After a web update, just reload the shell.</p>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  // i18n: defer to the OS engine once it boots; passthrough fallback before then.
+  const t = (k, a) => (window.__nucleoT ? window.__nucleoT(k, a) : k);
+  const fmtSize = (b) => (!b && b !== 0) ? '—' : b >= 1e9 ? (b/1e9).toFixed(1)+' GB' : b >= 1e6 ? (b/1e6).toFixed(0)+' MB' : (b/1e3).toFixed(0)+' KB';
+  const stateClass = { valid:'ok', pending:'warn', new:'warn', invalid:'err', aborted:'err' };
+  // Translated labels for the OTA image-state pill (raw API values are the keys).
+  const stateLabel = (s) => ({ valid:t('state_valid'), pending:t('state_pending'), new:t('state_new'), invalid:t('state_invalid'), aborted:t('state_aborted') }[s] || t('unknown'));
+
+  let lastStatus = null;
+  async function loadStatus() {
+    try {
+      const s = await (await fetch('/api/status', { cache: 'no-store' })).json();
+      lastStatus = s;
+      renderStatus(s);
+      return true;
+    } catch { return false; }
+  }
+
+  function renderStatus(s) {
+    $('version').textContent = 'v' + (s.version || '?');
+    const ota = s.ota || {};
+    $('slot').textContent = ota.running || '?';
+    const cls = stateClass[ota.state] || 'muted';
+    $('state').innerHTML = '<span class="pill ' + cls + '">' + (ota.state ? stateLabel(ota.state) : t('unknown')) + '</span>' +
+      (ota.rollback_enabled ? ' <span class="pill ok">' + t('rollback_on') + '</span>' : '');
+    $('heap').textContent = t('amount_free', { amount: fmtSize(s.free_heap) });
+    const st = s.storage || {};
+    $('storage').textContent = st.mounted ? (st.fs + ' · ' + t('amount_free', { amount: fmtSize(st.free_bytes) })) : t('not_mounted');
+    const n = s.network || {};
+    $('net').textContent = n.mode === 'sta' ? ('Wi-Fi ' + (n.ssid || '') + (n.ip ? ' · ' + n.ip : '')) : ('AP ' + (n.ssid || ''));
+  }
+
+  let file = null;
+  $('bin').addEventListener('change', (e) => {
+    file = e.target.files[0] || null;
+    $('install').disabled = !file;
+    if (file) { lastMsg = { key: '__file' }; setMsg(selectedFileMsg(), ''); } else { lastMsg = null; setMsg('', ''); }
+  });
+
+  function selectedFileMsg() { return file ? (file.name + ' · ' + fmtSize(file.size)) : ''; }
+
+  // Remember the last message's key+args+kind so it can be re-rendered after a live language switch.
+  let lastMsg = null;
+  function setMsg(text, kind) { const m = $('msg'); m.textContent = text; m.className = 'status-msg' + (kind ? ' ' + kind : ''); }
+  function setMsgKey(key, args, kind) { lastMsg = { key, args, kind }; setMsg(t(key, args), kind); }
+  function reRenderMsg() {
+    if (!lastMsg) return;
+    if (lastMsg.key === '__file') setMsg(selectedFileMsg(), '');
+    else setMsg(t(lastMsg.key, lastMsg.args), lastMsg.kind);
+  }
+
+  $('install').addEventListener('click', () => {
+    if (!file) return;
+    if (!/\.bin$/i.test(file.name)) { setMsgKey('err_pick_bin', null, 'err'); return; }
+    $('install').disabled = true; $('bin').disabled = true; $('refresh').disabled = true;
+    $('bar').style.display = 'block';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/ota');
+    xhr.upload.onprogress = (ev) => {
+      if (!ev.lengthComputable) return;
+      const pct = Math.round(ev.loaded / ev.total * 100);
+      $('barfill').style.width = pct + '%';
+      setMsg(t('uploading', { pct }), '');
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) { setMsgKey('image_written', null, 'ok'); waitForReboot(); }
+      else { setMsgKey('update_rejected', { reason: (xhr.responseText || ('HTTP ' + xhr.status)) }, 'err'); resetControls(); }
+    };
+    // The device reboots right after responding, so the socket may drop — treat that as "rebooting".
+    xhr.onerror = () => { setMsgKey('upload_done_rebooting', null, 'ok'); waitForReboot(); };
+    xhr.ontimeout = () => { setMsgKey('rebooting_short', null, 'ok'); waitForReboot(); };
+    xhr.send(file);
+  });
+
+  function resetControls() { $('install').disabled = !file; $('bin').disabled = false; $('refresh').disabled = false; $('bar').style.display = 'none'; $('barfill').style.width = '0'; }
+
+  // Poll /api/status until the device is back, then show the new state.
+  function waitForReboot() {
+    $('barfill').style.width = '100%';
+    let tries = 0;
+    const iv = setInterval(async () => {
+      tries++;
+      const ok = await loadStatus();
+      if (ok) { clearInterval(iv); setMsgKey('update_complete', null, 'ok'); resetControls(); file = null; $('bin').value = ''; }
+      else if (tries > 40) { clearInterval(iv); setMsgKey('reboot_timeout', null, 'warn'); resetControls(); }
+      else setMsgKey('reboot_waiting', { tries }, 'warn');
+    }, 2000);
+  }
+
+  // Re-render imperatively-built strings (status rows + current message) in the active language.
+  window.__updatesRepaint = () => { if (lastStatus) renderStatus(lastStatus); reRenderMsg(); };
+
+  $('refresh').addEventListener('click', loadStatus);
+  loadStatus();
+</script>
+<script type="module">
+  import I18N from '/nucleo-i18n.js';
+  const t = await I18N.init('updates');
+  window.__nucleoT = t;                          // hand the live translator to the inline script
+  // The inline script may have already painted imperative bits with the passthrough fallback; repaint now.
+  if (window.__updatesRepaint) window.__updatesRepaint();
+  // And repaint again after every live language switch.
+  I18N.onChange(() => { if (window.__updatesRepaint) window.__updatesRepaint(); });
+</script>
+</body>
+</html>

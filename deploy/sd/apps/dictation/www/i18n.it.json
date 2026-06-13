@@ -1,0 +1,65 @@
+{
+  "_lang": "it",
+
+  "title": "Trascrizione",
+  "subtitle": "mic Cardputer · on-device",
+
+  "set_title": "Impostazioni ASR",
+  "set_engine_label": "Motore di trascrizione",
+  "eng_auto": "Automatico (Vosk con fallback Groq)",
+  "eng_vosk": "Solo Vosk (100% Offline)",
+  "eng_groq": "Solo Groq (Online ultra-preciso)",
+  "set_key_label": "API Key (Groq)",
+  "set_key_hint": "Condivisa con AI Chat e memorizzata in localStorage o letta da /data/anima/teacher.json.",
+  "set_base_label": "Endpoint URL (Groq)",
+  "set_forget": "Dimentica Chiave",
+  "set_forgotten": "Chiave API dimenticata.",
+
+  "sum_title": "Riassunto AI",
+  "sum_copied": "Copiato!",
+  "sum_working": "Riassumo...",
+  "sum_btn": "Riassumi",
+  "sum_empty": "Nessun testo da riassumere.",
+  "sum_no_key": "Imposta la tua API Key Groq nelle impostazioni (⚙) per poter usare la funzione di riassunto.",
+  "sum_failed": "Impossibile generare il riassunto.",
+  "sum_error": "Errore durante la generazione del riassunto: {msg}",
+  "copy_failed": "Impossibile copiare il testo.",
+
+  "load_title": "Caricamento Modello...",
+  "load_sub": "Potrebbe richiedere qualche secondo, il sistema sta preparando l'AI.",
+
+  "placeholder": "Parla nel microfono del Cardputer — il testo apparirà qui.",
+
+  "exit_btn": "Esci",
+  "new_confirm": "Iniziare una nuova trascrizione? Quella attuale è già salvata.",
+
+  "screen_off": "Schermo OFF",
+  "screen_on": "Schermo ON",
+  "screen_title": "Schermo del Cardputer",
+  "save_now_title": "Salva ora",
+  "new_title": "Nuova trascrizione",
+  "summary_title": "Riassumi la trascrizione con AI",
+  "exit_title": "Riaccendi il display ed esci",
+  "foot_hint": "All'avvio il display del Cardputer si spegne; si riaccende quando esci (anche se chiudi la scheda).",
+
+  "wordCount": { "one": "{count} parola", "other": "{count} parole" },
+  "saved_as": "salvato · {file}",
+  "unsaved": "non salvato…",
+
+  "st_starting": "avvio…",
+  "st_loading_model": "carico modello…",
+  "st_listening": "Ascolto",
+  "st_reconnecting": "Riconnetto…",
+  "st_paused": "In pausa",
+  "st_mic_busy": "mic occupato",
+  "st_not_paired": "non accoppiato",
+  "st_no_model": "modello assente",
+  "st_audio_error": "errore audio",
+  "st_mic_in_use_by": "mic in uso da {holder}",
+
+  "notice_auth": "<b>Dispositivo non accoppiato.</b> Apri NucleoOS, inserisci il PIN mostrato sul Cardputer, poi riapri questa app.",
+  "notice_busy": "<b>Microfono occupato.</b> Il mic del Cardputer è in uso da <b>{holder}</b>. Fermala e riprova.",
+  "notice_busy_other": "un'altra app",
+  "notice_model": "<b>Modello vocale non disponibile.</b> Serve internet (prima volta) o i modelli Vosk su SD.",
+  "notice_exit": "<b>Display riacceso.</b> Trascrizione salvata. Puoi chiudere la finestra."
+}

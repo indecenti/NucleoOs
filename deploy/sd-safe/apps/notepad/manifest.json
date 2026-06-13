@@ -1,0 +1,72 @@
+{
+  "id": "notepad",
+  "name": "Notepad",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Lightweight text editor and viewer for plain-text and code files.",
+  "category": "productivity",
+  "entry_service": "notepad_main",
+  "web_route": "/apps/notepad/",
+  "permissions": [
+    "storage.shared",
+    "system.events",
+    "device.keyboard"
+  ],
+  "mounts": {
+    "app": "/apps/notepad/data"
+  },
+  "handles": {
+    "role": "editor",
+    "extensions": [
+      "txt",
+      "md",
+      "log",
+      "json",
+      "csv",
+      "ini",
+      "cfg",
+      "yaml",
+      "yml",
+      "toml",
+      "xml",
+      "html",
+      "c",
+      "h",
+      "cpp",
+      "py",
+      "sh"
+    ]
+  },
+  "intents": [
+    {
+      "action": "edit",
+      "extensions": [
+        "txt",
+        "md",
+        "log",
+        "json",
+        "csv"
+      ]
+    }
+  ],
+  "subscribes": [
+    "fs.open"
+  ],
+  "publishes": [
+    "fs.changed"
+  ],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

@@ -1,0 +1,791 @@
+[
+  {
+    "id": "api-anima",
+    "path": "/api/anima",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/anima - Query Assistente ANIMA",
+      "description": "Interroga il motore NLP offline locale di ANIMA. Esegue la cosine similarity e restituisce una risposta strutturata contenente testo, intenti rilevati, livelli di confidenza e azioni di sistema.",
+      "synopsis": "GET /api/anima?q=<domanda>&lang=<lingua>&reset=<0|1>",
+      "details": "La risposta JSON contiene:\n- query: domanda inserita\n- confidence: punteggio di pertinenza\n- action: tipo di azione (launch, system, answer, tool, none)\n- arg: argomento dell'azione (es. nome app o nome variabile)\n- reply: testo tradotto della risposta da mostrare in chat\n- domain: categoria semantica rilevata (calc, knowledge, app...)"
+    },
+    "en": {
+      "title": "GET /api/anima - Query ANIMA Assistant",
+      "description": "Queries the local offline NLP assistant ANIMA. Evaluates similarity indices and returns parsed responses containing texts, intent domains, scores, and system tool directives.",
+      "synopsis": "GET /api/anima?q=<query>&lang=<lang>&reset=<0|1>",
+      "details": "JSON response schema:\n- query: input phrase\n- confidence: match score\n- action: execution directive (launch, system, answer, tool, none)\n- arg: target argument (e.g. app name, system variable key)\n- reply: localized string response to output in GUI chat bubbles\n- domain: resolved semantic sector (calc, knowledge, app...)"
+    },
+    "params": [
+      {
+        "name": "q",
+        "type": "text",
+        "required": true,
+        "default": "che ora è",
+        "it": {
+          "description": "Frase o domanda da porre all'assistente locale"
+        },
+        "en": {
+          "description": "Natural language query for the local NLP engine"
+        }
+      },
+      {
+        "name": "lang",
+        "type": "text",
+        "required": false,
+        "default": "it",
+        "it": {
+          "description": "Forza la lingua dell'assistente ('it' o 'en')"
+        },
+        "en": {
+          "description": "Overrides active assistant language ('it' or 'en')"
+        }
+      },
+      {
+        "name": "reset",
+        "type": "text",
+        "required": false,
+        "default": "0",
+        "it": {
+          "description": "Imposta a 1 per cancellare la memoria contestuale temporanea del dialogo"
+        },
+        "en": {
+          "description": "Set to 1 to clean temporary conversation context buffers"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-anima-verify",
+    "path": "/api/anima/verify",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/anima/verify - Verifica Affermazione (ANIMA Forge)",
+      "description": "Verifica un'affermazione contro la conoscenza locale di ANIMA (verifica grounded cross-substrato della Forge): conferma, contraddice o resta incerta, restituendo l'evidenza usata.",
+      "synopsis": "GET /api/anima/verify?kind=<tipo>&key=<entità>&asserted=<valore>&lang=<it|en>",
+      "details": "Risposta JSON: { \"checks\": [ { \"status\": \"confirmed\"|\"contradicted\"|\"unknown\", \"evidence\": \"...\" } ] }. Usato dall'editor agentico per far giudicare l'output di un substrato (es. M1 giudica M4) a partire dai fatti del cervello locale."
+    },
+    "en": {
+      "title": "GET /api/anima/verify - Verify Claim (ANIMA Forge)",
+      "description": "Checks an assertion against ANIMA's local knowledge (the Forge's cross-substrate grounded verify): confirms, contradicts, or stays unknown, returning the evidence used.",
+      "synopsis": "GET /api/anima/verify?kind=<kind>&key=<entity>&asserted=<value>&lang=<it|en>",
+      "details": "JSON response: { \"checks\": [ { \"status\": \"confirmed\"|\"contradicted\"|\"unknown\", \"evidence\": \"...\" } ] }. Used by the agentic editor to have one substrate judge another's output (e.g. M1 judges M4) from local brain facts."
+    },
+    "params": [
+      {
+        "name": "kind",
+        "type": "text",
+        "required": false,
+        "default": "fact",
+        "it": {
+          "description": "Tipo di affermazione da verificare"
+        },
+        "en": {
+          "description": "Kind of claim being verified"
+        }
+      },
+      {
+        "name": "key",
+        "type": "text",
+        "required": true,
+        "default": "einstein",
+        "it": {
+          "description": "Entità/soggetto su cui verificare"
+        },
+        "en": {
+          "description": "Entity/subject to verify against"
+        }
+      },
+      {
+        "name": "asserted",
+        "type": "text",
+        "required": true,
+        "default": "fisico",
+        "it": {
+          "description": "Valore affermato da confrontare con la conoscenza locale"
+        },
+        "en": {
+          "description": "Asserted value to compare against local knowledge"
+        }
+      },
+      {
+        "name": "lang",
+        "type": "text",
+        "required": false,
+        "default": "it",
+        "it": {
+          "description": "Lingua dell'evidenza ('it' o 'en')"
+        },
+        "en": {
+          "description": "Evidence language ('it' or 'en')"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-apps",
+    "path": "/api/apps",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/apps - Applicazioni Installate",
+      "description": "Ottiene l'indice completo delle applicazioni grafiche installate e registrate nel sistema per il caricamento nel launcher e nel menu Start.",
+      "synopsis": "GET /api/apps",
+      "details": "Ritorna un elenco di oggetti contenenti:\n- id: identificatore univoco dell'applicazione\n- name: nome visualizzato\n- route: percorso URL dell'applicazione\n- icon: percorso dell'icona grafica\n- enabled: flag booleano di attivazione"
+    },
+    "en": {
+      "title": "GET /api/apps - Installed Apps",
+      "description": "Fetches the full index of installed graphical applications registered in the OS, used to populate the desktop launcher and Start menu.",
+      "synopsis": "GET /api/apps",
+      "details": "Returns a list of application records:\n- id: unique application identifier\n- name: display label\n- route: HTTP entry point route\n- icon: file path to icon asset\n- enabled: boolean activation flag"
+    },
+    "params": []
+  },
+  {
+    "id": "api-associations",
+    "path": "/api/associations",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/associations - Associazioni File",
+      "description": "Restituisce le regole di associazione file-applicazione lette da /system/registry/file-associations.json. Utilizzato dalla shell per decidere quale app lanciare al doppio clic su un file.",
+      "synopsis": "GET /api/associations",
+      "details": "Restituisce una mappa JSON dove le chiavi sono le estensioni (es. \"txt\", \"png\", \"info\") e i valori sono gli ID delle app predefinite."
+    },
+    "en": {
+      "title": "GET /api/associations - File Associations",
+      "description": "Serves the file association rules read from /system/registry/file-associations.json. Used by the shell to map file extensions to their default graphical viewer apps.",
+      "synopsis": "GET /api/associations",
+      "details": "Returns a JSON map matching file extensions (e.g. \"txt\", \"png\", \"info\") to default handler application IDs."
+    },
+    "params": []
+  },
+  {
+    "id": "api-auth-status",
+    "path": "/api/auth/status",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/auth/status - Stato Associazione",
+      "description": "Restituisce lo stato dell'autenticazione del browser corrente rispetto al server HTTP di NucleoOS.",
+      "synopsis": "GET /api/auth/status",
+      "details": "Ritorna un oggetto JSON: { \"required\": true|false, \"paired\": true|false }. Endpoint pubblico, non richiede autenticazione."
+    },
+    "en": {
+      "title": "GET /api/auth/status - Authentication Status",
+      "description": "Returns the connection authentication variables for the querying browser client against the NucleoOS HTTP server.",
+      "synopsis": "GET /api/auth/status",
+      "details": "Serves a JSON body: { \"required\": true|false, \"paired\": true|false }. Public endpoint (no authorization headers needed)."
+    },
+    "params": []
+  },
+  {
+    "id": "api-fs-list",
+    "path": "/api/fs/list",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/fs/list - Elenca Directory",
+      "description": "Restituisce l'elenco dei file e delle sottocartelle presenti nel percorso SD specificato. Ciascun elemento include nome, tipo (file/dir) e dimensione in byte.",
+      "synopsis": "GET /api/fs/list?path=<percorso>",
+      "details": "Rifiuta tentativi di directory traversal (uso di \"..\"). Ritorna 404 se la directory non esiste."
+    },
+    "en": {
+      "title": "GET /api/fs/list - List Folder Contents",
+      "description": "Lists all file and folder child elements under a target SD Card directory. Provides names, file size bytes, and type keys.",
+      "synopsis": "GET /api/fs/list?path=<path>",
+      "details": "Prunes directory traversal patterns (\"..\"). Serves 404 HTTP errors if the folder is missing."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/",
+        "it": {
+          "description": "Percorso della directory da scansionare (es. /, /data, /system)"
+        },
+        "en": {
+          "description": "SD Card target folder path to list (e.g. /, /data, /system)"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-fs-read",
+    "path": "/api/fs/read",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/fs/read - Leggi File",
+      "description": "Scarica o legge il contenuto binario o testuale del file indicato. Gestisce intestazioni di caching intelligenti (7 giorni per immagini/audio/video, no-store per JSON/config).",
+      "synopsis": "GET /api/fs/read?path=<percorso_file>",
+      "details": "Se viene richiesto un file config JSON mancante sotto /system/config/, ritorna un oggetto vuoto {} con stato 200 anziché un errore 404, prevenendo avvisi in console browser."
+    },
+    "en": {
+      "title": "GET /api/fs/read - Read File Payload",
+      "description": "Downloads or reads the text or binary contents of a specified file. Configures custom HTTP caching headers (7-day cache for media files, no-store for settings/JSON).",
+      "synopsis": "GET /api/fs/read?path=<file_path>",
+      "details": "Requests to missing JSON files in /system/config/ default to an empty structure {} with a 200 status to avoid polluting browser console logs."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/system/config/settings.json",
+        "it": {
+          "description": "Percorso del file da leggere sulla scheda SD"
+        },
+        "en": {
+          "description": "SD Card file path to query"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-heap",
+    "path": "/api/heap",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/heap - Diagnostica Heap",
+      "description": "Ottiene le statistiche dettagliate sull'allocazione della memoria heap del chip ESP32S3 suddivise per regioni (INTERNAL per la RAM interna, DMA per i trasferimenti hardware, DEFAULT). Permette di valutare la frammentazione (frag_pct) e prevenire crash OOM.",
+      "synopsis": "GET /api/heap",
+      "details": "Parametri diagnostici forniti per ciascuna regione:\n- total_bytes: memoria totale\n- free_bytes: memoria libera corrente\n- allocated_bytes: memoria occupata\n- largest_free_block: blocco contiguo più grande (critico per allocazioni consistenti)\n- min_free_bytes: picco minimo di memoria libera registrato dal boot\n- frag_pct: percentuale di frammentazione (100 * [1 - block/free])"
+    },
+    "en": {
+      "title": "GET /api/heap - Heap Diagnostics",
+      "description": "Fetches detailed memory allocation analytics for ESP32S3 heap pools (INTERNAL SRAM, DMA buffers, DEFAULT malloc pool). Helps investigate fragmentation metrics (frag_pct) and prevent Out-Of-Memory exceptions.",
+      "synopsis": "GET /api/heap",
+      "details": "Diagnostic variables returned per heap region:\n- total_bytes: total segment size\n- free_bytes: currently available memory\n- allocated_bytes: currently busy memory\n- largest_free_block: largest contiguous block size (crucial for big allocations)\n- min_free_bytes: absolute minimum free bytes recorded since startup\n- frag_pct: fragmentation percentage (100 * [1 - block/free])"
+    },
+    "params": []
+  },
+  {
+    "id": "api-llm-get",
+    "path": "/api/llm",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/llm - Proxy LLM (elenco modelli)",
+      "description": "Inoltra lato server una richiesta GET a un endpoint LLM compatibile OpenAI (es. Groq) e ne ritrasmette la risposta. Same-origin, così l'app chat aggira il muro CORS (come /api/proxy). L'header Authorization: Bearer <chiave> del chiamante viene rilanciato così com'è — la chiave vive nel browser, il dispositivo la inoltra soltanto.",
+      "synopsis": "GET /api/llm?url=<endpoint_https_codificato>",
+      "details": "Solo https:// (altri → 400). Host interni bloccati (SSRF → 403). Stessa disciplina heap-TLS di /api/proxy (scarica L1, 503 se la memoria è insufficiente). Tipicamente usato per GET /v1/models."
+    },
+    "en": {
+      "title": "GET /api/llm - LLM Proxy (model list)",
+      "description": "Forwards a server-side GET to an OpenAI-compatible LLM endpoint (e.g. Groq) and streams the response back. Same-origin, so the chat app dodges the CORS wall (like /api/proxy). The caller's Authorization: Bearer <key> header is relayed as-is — the key lives in the browser, the device only passes it through.",
+      "synopsis": "GET /api/llm?url=<encoded_https_endpoint>",
+      "details": "https:// only (else 400). Internal hosts blocked (SSRF → 403). Same TLS-heap discipline as /api/proxy (unloads L1, 503 if memory too tight). Typically used for GET /v1/models."
+    },
+    "params": [
+      {
+        "name": "url",
+        "type": "text",
+        "required": true,
+        "default": "https://api.groq.com/openai/v1/models",
+        "it": {
+          "description": "Endpoint LLM https compatibile OpenAI"
+        },
+        "en": {
+          "description": "OpenAI-compatible https LLM endpoint"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-logs",
+    "path": "/api/logs",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/logs - Log di Sistema",
+      "description": "Scarica lo stream testuale grezzo dei messaggi di logging emessi dal kernel e dai driver del firmware (ring buffer in RAM di 4KB). Accessibile anche a scheda SD non montata.",
+      "synopsis": "GET /api/logs",
+      "details": "Il formato restituito è testo semplice grezzo (text/plain). Mostra l'output in tempo reale inviato tramite le macro ESP_LOGx sul chip."
+    },
+    "en": {
+      "title": "GET /api/logs - System Logs",
+      "description": "Retrieves the raw text stream of logger entries written by the kernel and hardware drivers to the 4KB circular buffer in RAM. Operates even when the SD Card is offline.",
+      "synopsis": "GET /api/logs",
+      "details": "Serves raw text lines (text/plain) containing kernel events emitted via ESP_LOGx firmware instructions."
+    },
+    "params": []
+  },
+  {
+    "id": "api-proxy",
+    "path": "/api/proxy",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/proxy - Proxy Web Same-Origin",
+      "description": "Recupera lato server una pagina http(s) e ne ritrasmette il corpo in streaming. Poiché l'app Browser è servita DA questo dispositivo, un endpoint same-origin aggira il muro CORS del browser senza proxy di terze parti. Lo streaming a piccoli chunk evita di bufferizzare l'intera pagina (RAM scarsa).",
+      "synopsis": "GET /api/proxy?url=<url_codificato>",
+      "details": "Solo schemi http:// e https:// (altri → 400). Gli host interni/privati sono bloccati (filtro SSRF → 403). Su questo chip senza PSRAM, prima dell'handshake TLS l'indice L1 di ANIMA viene scaricato per liberare heap; se la memoria è ancora insufficiente risponde 503 \"retry\" invece di crashare. Segue fino a 5 redirect."
+    },
+    "en": {
+      "title": "GET /api/proxy - Same-Origin Web Proxy",
+      "description": "Fetches an http(s) page server-side and streams its body back. Because the Browser app is served BY this device, a same-origin endpoint sidesteps the browser's CORS wall with no third-party proxy. Small-chunk streaming avoids buffering a whole page (RAM is scarce).",
+      "synopsis": "GET /api/proxy?url=<encoded_url>",
+      "details": "http:// and https:// only (else 400). Internal/private hosts are blocked (SSRF filter → 403). On this PSRAM-less chip, ANIMA's L1 index is unloaded before the TLS handshake to free heap; if memory is still too tight it returns 503 \"retry\" instead of crashing. Follows up to 5 redirects."
+    },
+    "params": [
+      {
+        "name": "url",
+        "type": "text",
+        "required": true,
+        "default": "https://example.com",
+        "it": {
+          "description": "URL http(s) assoluto da recuperare (verrà codificato)"
+        },
+        "en": {
+          "description": "Absolute http(s) URL to fetch (will be URL-encoded)"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-rec-status",
+    "path": "/api/rec/status",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/rec/status - Stato Registratore",
+      "description": "Ottiene i parametri operativi del registratore vocale di sistema: se sta registrando, il percorso del file WAV in scrittura, i secondi registrati e il picco audio RMS corrente (0..100).",
+      "synopsis": "GET /api/rec/status",
+      "details": "Restituisce un payload JSON strutturato. Richiede autenticazione PIN."
+    },
+    "en": {
+      "title": "GET /api/rec/status - Audio Recorder Status",
+      "description": "Retrieves active operational variables for the system voice recorder (recording state, WAV file path, elapsed duration, peak RMS mic meter 0..100).",
+      "synopsis": "GET /api/rec/status",
+      "details": "Returns a structured JSON payload. Gated by security PIN auth."
+    },
+    "params": []
+  },
+  {
+    "id": "api-rec-stream",
+    "path": "/api/rec/stream",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/rec/stream - Streaming Microfono Live",
+      "description": "Apre il microfono PDM e trasmette PCM grezzo (16kHz Mono int16 little-endian) in chunked HTTP finché il client resta connesso. Pensato per la dettatura: il browser alimenta i campioni direttamente nel proprio riconoscitore vocale (Vosk WASM), senza cloud e senza permesso microfono del browser.",
+      "synopsis": "GET /api/rec/stream",
+      "details": "Richiede autenticazione PIN. Il mic è esclusivo: restituisce HTTP 409 se una registrazione o un altro stream è in corso. Termina alla disconnessione del client o dopo un cap di sicurezza. Il web server è single-task, quindi lo stream lo occupa per la durata della sessione."
+    },
+    "en": {
+      "title": "GET /api/rec/stream - Live Mic Stream",
+      "description": "Opens the PDM mic and streams raw PCM (16kHz Mono int16 little-endian) over chunked HTTP until the client disconnects. Built for dictation: the browser feeds the samples straight into its own speech recognizer (Vosk WASM) — no cloud, no browser-mic permission, no secure-context requirement.",
+      "synopsis": "GET /api/rec/stream",
+      "details": "Gated by security PIN auth. The mic is exclusive: returns HTTP 409 if a recording or another stream is active. Ends on client disconnect or after a safety cap. The web server is single-task, so the stream holds it for the session."
+    },
+    "params": []
+  },
+  {
+    "id": "api-status",
+    "path": "/api/status",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/status - Stato Dispositivo",
+      "description": "Restituisce informazioni diagnostiche in tempo reale sul sistema, inclusi la versione del sistema operativo, il tempo di attività (uptime), lo stato dell'heap, l'utilizzo dello storage SD, lo stato della connettività Wi-Fi e le informazioni sulle partizioni OTA.",
+      "synopsis": "GET /api/status",
+      "details": "Dettagli della risposta JSON:\n- os: stringa \"NucleoOS\"\n- version: versione del firmware\n- uptime_s: secondi dal boot\n- free_heap: RAM libera totale in byte\n- storage: stato del montaggio della SD, tipo filesystem, spazio totale e libero\n- network: modalità (\"sta\" o \"ap\"), SSID, IP assegnato ed epoca UTC\n- ota: partizione corrente e partizione del prossimo slot d'avvio."
+    },
+    "en": {
+      "title": "GET /api/status - Device Status",
+      "description": "Retrieves live diagnostic details from the microcontroller, covering operating system version, uptime clocks, memory heaps, SD card usage partitions, active network SSIDs/IPs, and partition slots for OTA updates.",
+      "synopsis": "GET /api/status",
+      "details": "JSON Response structure:\n- os: always \"NucleoOS\"\n- version: active firmware version\n- uptime_s: seconds elapsed since boot\n- free_heap: total default free RAM\n- storage: SD mount flag, FS type, total/free capacity\n- network: wifi mode (\"sta\" | \"ap\"), SSID, IP address, epoch timestamp\n- ota: active slot partition label and standby boot partition."
+    },
+    "params": []
+  },
+  {
+    "id": "api-transcribe",
+    "path": "/api/transcribe",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/transcribe - Trascrivi Registrazione (Whisper)",
+      "description": "Trascrive un file audio in /data/Recordings/ tramite Whisper online e, opzionalmente, ne genera un riassunto. Salva accanto all'audio un .txt con il testo (e un .sum.txt col riassunto).",
+      "synopsis": "GET /api/transcribe?path=<file>&lang=<auto|it|en>&summarize=<0|1>",
+      "details": "Richiede autenticazione PIN (attiva chiamate cloud a pagamento). Il path deve stare sotto /data/Recordings/ ed essere .mp3 o .wav (altrimenti {\"ok\":false}). Risposta: { ok, text, language, summary }. Se manca la chiave Whisper online ritorna ok:false con errore."
+    },
+    "en": {
+      "title": "GET /api/transcribe - Transcribe Recording (Whisper)",
+      "description": "Transcribes an audio file under /data/Recordings/ via online Whisper and optionally summarizes it. Writes a .txt with the text next to the audio (and a .sum.txt with the summary).",
+      "synopsis": "GET /api/transcribe?path=<file>&lang=<auto|it|en>&summarize=<0|1>",
+      "details": "Gated by security PIN auth (triggers paid cloud calls). The path must be under /data/Recordings/ and end in .mp3 or .wav (else {\"ok\":false}). Response: { ok, text, language, summary }. If the online Whisper key is missing it returns ok:false with an error."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/data/Recordings/rec.mp3",
+        "it": {
+          "description": "File audio sotto /data/Recordings/ (.mp3 o .wav)"
+        },
+        "en": {
+          "description": "Audio file under /data/Recordings/ (.mp3 or .wav)"
+        }
+      },
+      {
+        "name": "lang",
+        "type": "text",
+        "required": false,
+        "default": "auto",
+        "it": {
+          "description": "Lingua attesa ('auto', 'it', 'en'...)"
+        },
+        "en": {
+          "description": "Expected language ('auto', 'it', 'en'...)"
+        }
+      },
+      {
+        "name": "summarize",
+        "type": "text",
+        "required": false,
+        "default": "1",
+        "it": {
+          "description": "1 per generare anche il riassunto, 0 per la sola trascrizione"
+        },
+        "en": {
+          "description": "1 to also generate the summary, 0 for transcription only"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-fs-delete",
+    "path": "/api/fs/delete",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/fs/delete - Rimuovi Risorsa",
+      "description": "Rimuove definitivamente dal filesystem SD card un file (via unlink) o una directory vuota (via rmdir).",
+      "synopsis": "POST /api/fs/delete?path=<percorso>",
+      "details": "Richiede autenticazione PIN. Ritorna 404 se l'elemento specificato non è presente."
+    },
+    "en": {
+      "title": "POST /api/fs/delete - Delete File or Folder",
+      "description": "Permanently deletes a file (using POSIX unlink) or an empty directory (POSIX rmdir) from the SD Card.",
+      "synopsis": "POST /api/fs/delete?path=<path>",
+      "details": "Gated by security PIN auth. Returns 404 if the target resource does not exist."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/data/test_write.txt",
+        "it": {
+          "description": "Percorso del file o della cartella vuota da rimuovere"
+        },
+        "en": {
+          "description": "SD Card target path to delete"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-fs-mkdir",
+    "path": "/api/fs/mkdir",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/fs/mkdir - Crea Cartella",
+      "description": "Crea una nuova cartella vuota sul filesystem SD card in corrispondenza del percorso specificato.",
+      "synopsis": "POST /api/fs/mkdir?path=<percorso_cartella>",
+      "details": "Richiede autenticazione PIN. Restituisce HTTP 500 in caso di scheda SD protetta da scrittura o spazio esaurito."
+    },
+    "en": {
+      "title": "POST /api/fs/mkdir - Create Folder Directory",
+      "description": "Instantiates a new empty folder structure on the SD Card using POSIX mkdir.",
+      "synopsis": "POST /api/fs/mkdir?path=<dir_path>",
+      "details": "Gated by security PIN auth. Returns HTTP 500 if the SD partition is write-locked or full."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/data/nuova_cartella",
+        "it": {
+          "description": "Percorso assoluto della cartella da creare"
+        },
+        "en": {
+          "description": "Absolute SD Card folder path to create"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-fs-move",
+    "path": "/api/fs/move",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/fs/move - Sposta/Rinomina",
+      "description": "Sposta o rinomina un file o una cartella all'interno della SD (rename atomico sullo stesso volume FATFS). Per sicurezza rifiuta di sovrascrivere una destinazione esistente, a meno di overwrite=1.",
+      "synopsis": "POST /api/fs/move?from=<origine>&to=<destinazione>&overwrite=<0|1>",
+      "details": "Richiede autenticazione PIN. Crea al volo la cartella padre della destinazione (un livello, best-effort). Se la destinazione esiste e overwrite≠1 → 400 \"destination exists\". Ritorna {\"ok\":true}."
+    },
+    "en": {
+      "title": "POST /api/fs/move - Move/Rename",
+      "description": "Moves or renames a file or folder within the SD (atomic rename on the same FATFS volume). For safety it refuses to clobber an existing destination unless overwrite=1.",
+      "synopsis": "POST /api/fs/move?from=<src>&to=<dst>&overwrite=<0|1>",
+      "details": "Gated by security PIN auth. Best-effort creates the destination's immediate parent folder (one level). If the destination exists and overwrite≠1 → 400 \"destination exists\". Returns {\"ok\":true}."
+    },
+    "params": [
+      {
+        "name": "from",
+        "type": "text",
+        "required": true,
+        "default": "/data/old.txt",
+        "it": {
+          "description": "Percorso di origine da spostare/rinominare"
+        },
+        "en": {
+          "description": "Source path to move/rename"
+        }
+      },
+      {
+        "name": "to",
+        "type": "text",
+        "required": true,
+        "default": "/data/new.txt",
+        "it": {
+          "description": "Percorso di destinazione"
+        },
+        "en": {
+          "description": "Destination path"
+        }
+      },
+      {
+        "name": "overwrite",
+        "type": "text",
+        "required": false,
+        "default": "0",
+        "it": {
+          "description": "1 per sovrascrivere una destinazione esistente"
+        },
+        "en": {
+          "description": "1 to overwrite an existing destination"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-fs-write",
+    "path": "/api/fs/write",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/fs/write - Scrivi File",
+      "description": "Scrive o sovrascrive un file memorizzando i byte inviati nel corpo della richiesta POST. L'operazione è atomica: scrive su un file temporaneo `.tmp` e rinomina solo a fine caricamento.",
+      "synopsis": "POST /api/fs/write?path=<percorso_file>",
+      "details": "Autenticato tramite PIN. Limita le dimensioni ad un massimo di 640 MB per impedire la saturazione del disco. Se il file riscritto è /system/registry/apps.json, ricarica a caldo il registro delle app nel firmware."
+    },
+    "en": {
+      "title": "POST /api/fs/write - Write File Contents",
+      "description": "Saves or overrides a file using the binary stream payload sent in the HTTP POST request body. Writes to a temporary `.tmp` file and swaps names on complete transaction.",
+      "synopsis": "POST /api/fs/write?path=<file_path>",
+      "details": "Gated by security PIN auth. Maximum upload size capped at 640MB. Rewriting /system/registry/apps.json triggers an automated registry reload in the OS firmware."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/data/test_write.txt",
+        "it": {
+          "description": "Percorso di destinazione in cui salvare il file"
+        },
+        "en": {
+          "description": "SD Card target write path"
+        }
+      },
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": false,
+        "default": "Scrittura di test da Mini Swagger!",
+        "it": {
+          "description": "Contenuto da salvare nel file"
+        },
+        "en": {
+          "description": "Raw content bytes/string to write to the file"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-llm-post",
+    "path": "/api/llm",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/llm - Proxy LLM (chat completions)",
+      "description": "Inoltra lato server una richiesta POST (JSON di chat) a un endpoint LLM compatibile OpenAI e ritrasmette la risposta in streaming (SSE). Same-origin per aggirare il CORS. L'header Authorization del chiamante è rilanciato così com'è.",
+      "synopsis": "POST /api/llm?url=<endpoint_https_codificato>",
+      "details": "Solo https:// (altri → 400). Host interni bloccati (SSRF → 403). Il corpo (cronologia chat) è limitato a 32 KB per non esaurire l'heap. Stessa disciplina heap-TLS di /api/proxy (scarica L1, 503 se insufficiente)."
+    },
+    "en": {
+      "title": "POST /api/llm - LLM Proxy (chat completions)",
+      "description": "Forwards a server-side POST (chat JSON) to an OpenAI-compatible LLM endpoint and streams the (SSE) response back. Same-origin to dodge CORS. The caller's Authorization header is relayed as-is.",
+      "synopsis": "POST /api/llm?url=<encoded_https_endpoint>",
+      "details": "https:// only (else 400). Internal hosts blocked (SSRF → 403). The body (chat history) is capped at 32 KB so it can't exhaust the heap. Same TLS-heap discipline as /api/proxy (unloads L1, 503 if too tight)."
+    },
+    "params": [
+      {
+        "name": "url",
+        "type": "text",
+        "required": true,
+        "default": "https://api.groq.com/openai/v1/chat/completions",
+        "it": {
+          "description": "Endpoint chat completions https compatibile OpenAI"
+        },
+        "en": {
+          "description": "OpenAI-compatible https chat completions endpoint"
+        }
+      },
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": false,
+        "default": "{\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"ciao\"}]\n}",
+        "it": {
+          "description": "Corpo JSON della richiesta di chat (max 32 KB)"
+        },
+        "en": {
+          "description": "Chat request JSON body (max 32 KB)"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-ota",
+    "path": "/api/ota",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/ota - Aggiornamento Firmware OTA",
+      "description": "Carica una nuova immagine firmware (.bin) e la scrive nella partizione OTA inattiva, poi imposta lo slot di boot e riavvia. Il corpo della richiesta è il binario grezzo dell'immagine ESP.",
+      "synopsis": "POST /api/ota  (corpo = immagine .bin)",
+      "details": "Richiede autenticazione PIN. Il primo byte deve essere 0xE9 (magic dell'immagine ESP), altrimenti l'upload viene rifiutato subito (400). A scrittura completa imposta la partizione di boot, risponde {\"ok\":true,\"bytes\":N,\"slot\":\"...\",\"reboot\":true} e riavvia dopo 800 ms. NB: l'OTA è inaffidabile su questo dispositivo — preferire il flash seriale."
+    },
+    "en": {
+      "title": "POST /api/ota - OTA Firmware Update",
+      "description": "Uploads a new firmware image (.bin) into the inactive OTA partition, sets it as the boot slot, and reboots. The POST body is the raw ESP image binary.",
+      "synopsis": "POST /api/ota  (body = .bin image)",
+      "details": "Gated by security PIN auth. The first byte must be 0xE9 (ESP image magic) or the upload is rejected immediately (400). On a complete write it sets the boot partition, returns {\"ok\":true,\"bytes\":N,\"slot\":\"...\",\"reboot\":true}, and reboots after 800 ms. Note: OTA is unreliable on this device — prefer serial flashing."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "",
+        "it": {
+          "description": "Immagine firmware binaria grezza (inviare un file .bin, non testo)"
+        },
+        "en": {
+          "description": "Raw binary firmware image (send a .bin file, not text)"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-pair",
+    "path": "/api/pair",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/pair - Associa PIN Client",
+      "description": "Invia il PIN visualizzato sullo schermo del Cardputer per associare il client. In caso di successo, restituisce un token di sessione casuale di 24 byte (in esadecimale) all'interno dell'header Cookie nucleo_session.",
+      "synopsis": "POST /api/pair",
+      "details": "Richiede un payload JSON {\"pin\": \"123456\"}. Limita i tentativi a 5, dopodiché applica un blocco di sicurezza (HTTP 429) di 30 secondi per impedire attacchi brute-force."
+    },
+    "en": {
+      "title": "POST /api/pair - Pair Client PIN",
+      "description": "Verifies the security PIN printed on the Cardputer LCD display to authorize the browser. On success, stores a 24-byte random session hex key under the Cookie HTTP header.",
+      "synopsis": "POST /api/pair",
+      "details": "Requires a JSON body {\"pin\": \"123456\"}. Limits tries to 5 failed attempts, after which a 30s lockout (HTTP 429) is applied."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"pin\": \"000000\"\n}",
+        "it": {
+          "description": "Corpo JSON contenente la chiave \"pin\" di 6 cifre"
+        },
+        "en": {
+          "description": "JSON payload containing the 6-digit PIN string parameter"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-reboot",
+    "path": "/api/reboot",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/reboot - Riavvia il Dispositivo",
+      "description": "Invia una richiesta per chiudere in sicurezza il filesystem SD card ed eseguire l'istruzione hardware esp_restart() per riavviare immediatamente il microcontrollore.",
+      "synopsis": "POST /api/reboot",
+      "details": "Richiede l'autenticazione tramite PIN (sessione attiva). Ritorna {\"ok\":true,\"reboot\":true} e avvia il reset hardware dopo 800 millisecondi."
+    },
+    "en": {
+      "title": "POST /api/reboot - Reboot Cardputer",
+      "description": "Issues a shutdown sequence to flush SD Card handles and invokes a hardware esp_restart() signal to reboot the microcontroller instantly.",
+      "synopsis": "POST /api/reboot",
+      "details": "Gated by security PIN auth. Returns {\"ok\":true,\"reboot\":true} and triggers a CPU reset sequence after an 800ms flushing delay."
+    },
+    "params": []
+  },
+  {
+    "id": "api-rec-start",
+    "path": "/api/rec/start",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/rec/start - Avvia Registrazione",
+      "description": "Crea una cartella /data/Recordings/ ed avvia un thread FreeRTOS prioritario di cattura dati dal microfono PDM a 16kHz Mono 16-bit. Scrive asincronamente un file WAV.",
+      "synopsis": "POST /api/rec/start",
+      "details": "Richiede autenticazione PIN. Invia eventi rec.started ed eventi periodici rec.level sul bus di sistema. Restituisce HTTP 409 Conflict se una registrazione è già attiva."
+    },
+    "en": {
+      "title": "POST /api/rec/start - Start Audio Recording",
+      "description": "Creates `/data/Recordings/` and spins a FreeRTOS capture thread to record audio from the onboard PDM mic at 16kHz Mono 16-bit, outputting a WAV file.",
+      "synopsis": "POST /api/rec/start",
+      "details": "Gated by security PIN auth. Publishes system level changes via `rec.started` and periodic `rec.level` events. Returns HTTP 409 Conflict if a recording is already busy."
+    },
+    "params": []
+  },
+  {
+    "id": "api-rec-stop",
+    "path": "/api/rec/stop",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/rec/stop - Ferma Registrazione",
+      "description": "Interrompe la cattura del microfono, calcola la dimensione dei byte scritti, patcha retroattivamente gli header WAV delle dimensioni (RIFF e data length) e chiude il file in sicurezza.",
+      "synopsis": "POST /api/rec/stop",
+      "details": "Richiede autenticazione PIN. Invia l'evento rec.stopped sul bus con i byte e la durata finale."
+    },
+    "en": {
+      "title": "POST /api/rec/stop - Stop Audio Recording",
+      "description": "Signals the active task to stop capture, computes written byte counts, patches the initial WAV headers to declare physical sizes, and flushes file descriptors.",
+      "synopsis": "POST /api/rec/stop",
+      "details": "Gated by security PIN auth. Triggers a system-wide `rec.stopped` event with final recording metrics."
+    },
+    "params": []
+  }
+]

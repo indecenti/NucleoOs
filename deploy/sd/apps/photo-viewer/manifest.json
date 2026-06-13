@@ -1,0 +1,57 @@
+{
+  "id": "photo-viewer",
+  "name": "Photo Viewer",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "View image files on the display and in the web shell.",
+  "category": "media",
+  "entry_service": "photo_viewer_main",
+  "web_route": "/apps/photo-viewer/",
+  "permissions": [
+    "storage.shared",
+    "device.display"
+  ],
+  "mounts": {
+    "app": "/apps/photo-viewer/data"
+  },
+  "handles": {
+    "role": "viewer",
+    "extensions": [
+      "jpg",
+      "jpeg",
+      "png",
+      "bmp",
+      "gif"
+    ]
+  },
+  "intents": [
+    {
+      "action": "view",
+      "extensions": [
+        "jpg",
+        "jpeg",
+        "png",
+        "bmp",
+        "gif"
+      ]
+    }
+  ],
+  "subscribes": [
+    "fs.open"
+  ],
+  "publishes": [],
+  "power": {
+    "budget_class": "medium",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

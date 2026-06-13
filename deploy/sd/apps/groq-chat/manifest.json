@@ -1,0 +1,34 @@
+{
+  "id": "groq-chat",
+  "name": "AI Chat",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Chat with a cloud LLM via Groq (OpenAI-compatible). Bring your own API key, pick a model. Online only; the model answers directly \u2014 no on-device ANIMA in the loop yet.",
+  "category": "productivity",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/groq-chat/",
+  "icon": "/apps/groq-chat/icon.svg",
+  "permissions": [
+    "system.events",
+    "device.keyboard"
+  ],
+  "handles": {
+    "role": "none",
+    "extensions": []
+  },
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

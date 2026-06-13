@@ -1,0 +1,18 @@
+{
+  "id": "anima",
+  "name": "ANIMA",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Offline Italian assistant. Type a command or a question; it answers and opens apps, fully on-device.",
+  "category": "productivity",
+  "runtime": "web",
+  "entry_service": "anima_web",
+  "web_route": "/apps/anima/",
+  "icon": "assets/icon.svg",
+  "permissions": ["system.events", "device.keyboard"],
+  "handles": { "role": "none", "extensions": [] },
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

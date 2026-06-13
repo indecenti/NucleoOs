@@ -1,0 +1,48 @@
+{
+  "id": "media-player",
+  "name": "Media Player",
+  "version": "0.1.0",
+  "description": "Play audio files through the I2S speaker.",
+  "category": "media",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/media-player/",
+  "permissions": [
+    "storage.shared"
+  ],
+  "mounts": {
+    "app": "/apps/media-player/data"
+  },
+  "handles": {
+    "role": "player",
+    "extensions": [
+      "mp3",
+      "wav"
+    ]
+  },
+  "intents": [
+    {
+      "action": "play",
+      "extensions": [
+        "mp3",
+        "wav"
+      ]
+    }
+  ],
+  "subscribes": [
+    "fs.open"
+  ],
+  "publishes": [
+    "media.state"
+  ],
+  "power": {
+    "budget_class": "high",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

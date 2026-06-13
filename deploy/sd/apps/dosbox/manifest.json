@@ -1,0 +1,60 @@
+{
+  "id": "dosbox",
+  "name": "DOS Box",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Run classic DOS programs and games. Emulation runs in the client browser (js-dos / DOSBox WASM); the device only stores and streams the disk image from SD.",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/dosbox/",
+  "permissions": [
+    "storage.shared"
+  ],
+  "mounts": {
+    "app": "/apps/dosbox/data"
+  },
+  "handles": {
+    "role": "player",
+    "extensions": [
+      "jsdos",
+      "zip",
+      "img",
+      "ima",
+      "exe",
+      "com",
+      "bat"
+    ]
+  },
+  "intents": [
+    {
+      "action": "play",
+      "extensions": [
+        "jsdos",
+        "img",
+        "ima",
+        "exe",
+        "com",
+        "bat"
+      ]
+    }
+  ],
+  "subscribes": [
+    "fs.open"
+  ],
+  "publishes": [],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

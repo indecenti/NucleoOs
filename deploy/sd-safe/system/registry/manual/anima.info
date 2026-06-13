@@ -1,0 +1,16 @@
+{
+  "id": "anima",
+  "category": "guide",
+  "it": {
+    "title": "Guida dell'Assistente ANIMA",
+    "synopsis": "anima",
+    "description": "Manuale d'uso dell'assistente vocale/testuale offline locale di NucleoOS.",
+    "details": "NOME\n  anima - Guida dell'assistente AI locale offline di NucleoOS.\n\nDESCRIZIONE\n  ANIMA è l'assistente offline ed on-device integrato di NucleoOS:\n\n  1. ARCHITETTURA RETRIEVAL LOCALE (TIPO L0/L1):\n     - Funziona al 100% offline sull'hardware ESP32S3. Non dipende da server esterni o connessione internet. Nessun dato lascia mai la scheda.\n     - L'algoritmo NLP normalizza la frase inserita rimuovendo gli accenti e convertendo il testo in ASCII minuscolo.\n     - Calcola la cosine similarity contro l'indice semantico pre-generato sulla SD card in '/data/anima/anima-it-index.bin'.\n     - Dialogic Clarify Band: Se il punteggio di corrispondenza semantica della risposta migliore è compreso nella fascia d'incertezza [0.50, 0.66) e un secondo candidato è vicino, ANIMA propone una scelta all'utente ('intendevi 1 o 2?') per prevenire risposte errate o allucinazioni.\n\n  2. AZIONI E COMANDI SUPPORTATI:\n     - Avvio App: 'apri calcolatrice', 'avvia le note', 'apri la galleria'.\n     - Stato Sistema: 'quanta batteria rimane', 'che ora è', 'spazio libero su disco'.\n     - Assistenza e FAQ: risponde a domande su hardware ESP32, elettronica, programmazione in C e sul funzionamento del sistema.\n     - Gestione file: 'crea un file nota.txt' (ANIMA chiederà conferma o guiderà l'utente nel posizionamento del file)."
+  },
+  "en": {
+    "title": "ANIMA AI Assistant Guide",
+    "synopsis": "anima",
+    "description": "Instruction manual for the local, offline AI assistant on NucleoOS.",
+    "details": "NAME\n  anima - NucleoOS Local Offline AI Assistant Guide.\n\nDESCRIPTION\n  ANIMA is the built-in offline assistant for NucleoOS:\n\n  1. LOCAL RETRIEVAL PIPELINE (L0/L1 TIER):\n     - Operates 100% offline on the ESP32S3 hardware. Does not depend on external servers or active internet. No data leaves the device.\n     - The NLP engine normalizes input strings by stripping accents and folding characters to lowercase ASCII.\n     - Computes cosine similarity scores against a pre-compiled semantic index saved on the SD card in '/data/anima/anima-it-index.bin'.\n     - Dialogic Clarify Band: If the best match falls in the uncertainty range [0.50, 0.66) and a second candidate is close, ANIMA prompts the user with a decision ('did you mean 1 or 2?') to prevent wrong assertions or hallucinations.\n\n  2. SUPPORTED COMMANDS & SKILLS:\n     - App Launching: 'open the calculator', 'start notepad', 'show photos'.\n     - System Status: 'what is the battery level', 'what time is it', 'tell me disk space'.\n     - Technical Help: answers queries about ESP32 hardware, electronics, C programming, and OS features.\n     - File Manipulation: 'create a file note.txt' (ANIMA will prompt for options or folder placement)."
+  }
+}

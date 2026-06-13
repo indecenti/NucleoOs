@@ -1,0 +1,56 @@
+{
+  "id": "spreadsheet",
+  "name": "Spreadsheet",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Foglio di calcolo con formule, formattazione e salvataggio CSV",
+  "category": "productivity",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/spreadsheet/",
+  "icon": "/apps/spreadsheet/icon.svg",
+  "permissions": [
+    "storage.shared",
+    "system.events",
+    "device.keyboard"
+  ],
+  "mounts": {
+    "app": "/apps/spreadsheet/data"
+  },
+  "handles": {
+    "role": "editor",
+    "extensions": [
+      "csv",
+      "tsv"
+    ]
+  },
+  "intents": [
+    {
+      "action": "edit",
+      "extensions": [
+        "csv",
+        "tsv"
+      ]
+    }
+  ],
+  "subscribes": [
+    "fs.open"
+  ],
+  "publishes": [
+    "fs.changed"
+  ],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}
