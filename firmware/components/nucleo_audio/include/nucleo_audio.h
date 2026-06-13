@@ -50,6 +50,14 @@ void nucleo_audio_stop(void);
 void nucleo_audio_wait_idle(uint32_t max_ms);
 void nucleo_audio_toggle_pause(void);
 
+// Optional reclaim hook. On this PSRAM-less chip the player task needs a CONTIGUOUS heap block for
+// its stack; under fragmentation (e.g. the offline ANIMA index resident) xTaskCreate fails and the
+// play is dropped in SILENCE — the "offline no voice" bug. If the first spawn fails, start_play calls
+// this hook to hand a block back (the app layer registers nucleo_anima_l1_unload_if_idle), THEN
+// retries. Step-wise: free, then play. nucleo_audio stays layer-clean (it never names ANIMA).
+typedef void (*nucleo_audio_reclaim_fn)(void);
+void nucleo_audio_set_reclaim_cb(nucleo_audio_reclaim_fn fn);
+
 bool        nucleo_audio_is_playing(void);
 bool        nucleo_audio_is_paused(void);
 const char *nucleo_audio_path(void);       // currently/last played file path

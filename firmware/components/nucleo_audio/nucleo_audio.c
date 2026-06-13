@@ -323,6 +323,11 @@ static void player_task(void *arg)
 }
 
 // ---- public API ----
+// Reclaim hook (see nucleo_audio.h): the app layer registers a "free a contiguous block" callback
+// (nucleo_anima_l1_unload_if_idle) so a tight heap doesn't silently drop the voice. NULL = no-op.
+static nucleo_audio_reclaim_fn s_reclaim_cb = NULL;
+void nucleo_audio_set_reclaim_cb(nucleo_audio_reclaim_fn fn) { s_reclaim_cb = fn; }
+
 static esp_err_t start_play_window(const char *path, uint32_t start_ms, uint32_t duration_ms,
                                    uint32_t file_off, uint32_t file_len)
 {
@@ -358,6 +363,7 @@ static esp_err_t start_play_window(const char *path, uint32_t start_ms, uint32_t
     if (ok != pdPASS) {
         ESP_LOGW(TAG, "audio task create retry (heap tight: largest %u B)",
                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+        if (s_reclaim_cb) s_reclaim_cb();   // step-wise: free a contiguous block (unload the idle L1 index) THEN retry
         vTaskDelay(pdMS_TO_TICKS(20));      // let IDLE reclaim deferred-freed task stacks
         ok = xTaskCreatePinnedToCore(player_task, "audio", stack, NULL, 5, &s_task, 1);
     }

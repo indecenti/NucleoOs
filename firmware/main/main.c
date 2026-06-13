@@ -19,6 +19,7 @@
 #include "nucleo_app.h"
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
+#include "nucleo_audio.h"
 #include "nucleo_log.h"
 #include "nucleo_power.h"
 #include "nucleo_usbmsc.h"
@@ -29,6 +30,10 @@
 #include "nucleo_board.h"   // HLOG(): compile-time-gated heap tracing (see NUCLEO_HEAPLOG)
 
 static const char *TAG = "nucleoos";
+
+// void-returning shim so nucleo_anima_l1_unload_if_idle (returns bool) matches the audio reclaim hook
+// signature (void(*)(void)). Calling through a mismatched function-pointer type is UB, hence the wrap.
+static void nucleo_anima_l1_unload_if_idle_void(void) { (void)nucleo_anima_l1_unload_if_idle(); }
 
 // Human label for the last reset cause. This is THE first question when a device reboots on its own:
 // PANIC/abort = a crash or a failed assert (often heap OOM downstream); INT/TASK_WDT = a hang (a task
@@ -169,6 +174,10 @@ void app_main(void)
     // ANIMA: offline assistant. L0 orchestrator is ready; higher tiers plug in later.
     nucleo_anima_init("it");
     if (sd_ok) nucleo_tts_init("it");            // voce offline concatenativa (no-op se /data/tts/it manca)
+    // Voce a step su heap minuscolo (no PSRAM): se il task audio non trova lo stack contiguo, il player
+    // libera l'indice L1 offline (se inattivo) e ritenta -> niente piu' "offline niente voce". main e'
+    // l'unico punto che puo' dipendere sia da nucleo_audio sia da nucleo_anima, quindi cabliamo qui.
+    nucleo_audio_set_reclaim_cb(nucleo_anima_l1_unload_if_idle_void);
 #if CONFIG_NUCLEO_ANIMA_BENCH
     nucleo_anima_benchmark();                // Phase 0: log the three numbers (opt-in)
 #endif
