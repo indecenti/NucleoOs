@@ -1,0 +1,42 @@
+{
+  "chunkBytes": 94371840,
+  "generated": "oversized-assets/make-parts.mjs",
+  "assets": [
+    {
+      "id": "qwen-coder-gguf",
+      "path": "deploy/sd-safe/apps/anima/www/forge/models/Qwen2.5-Coder-0.5B-Instruct-GGUF/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf",
+      "what": "Modello Qwen2.5-Coder 0.5B Instruct (GGUF q4_k_m) usato da ANIMA Forge (path wllama/llama.cpp).",
+      "bytes": 491400064,
+      "sha256": "1d9614638d18024d0fbb36575a15f1302a3adf044df10345688ec4f6e1c4ff32",
+      "parts": 6,
+      "partPrefix": "oversized-assets/parts/qwen-coder-gguf/qwen-coder-gguf."
+    },
+    {
+      "id": "teacher-npy",
+      "path": "tools/anima/.cache/teacher_200000_192.npy",
+      "what": "Cache NumPy degli embedding \"teacher\" (200k campioni x 192 dim) della pipeline encoder ANIMA.",
+      "bytes": 153600128,
+      "sha256": "d5047194494bb4a43daa52edbcce725d875cda7df3da377de41e394e1cc51432",
+      "parts": 2,
+      "partPrefix": "oversized-assets/parts/teacher-npy/teacher-npy."
+    },
+    {
+      "id": "tts-it-clips",
+      "path": "deploy/sd-safe/data/tts/it/clips.pcm",
+      "what": "Banco clip audio del TTS concatenativo italiano (nucleo_tts).",
+      "bytes": 436665974,
+      "sha256": "5b3f9b41042fe279b8af2158646f6b0d993858b18bc788e7a53fbe24e27d640a",
+      "parts": 5,
+      "partPrefix": "oversized-assets/parts/tts-it-clips/tts-it-clips."
+    },
+    {
+      "id": "tts-en-clips",
+      "path": "deploy/sd-safe/data/tts/en/clips.pcm",
+      "what": "Banco clip audio del TTS concatenativo inglese (nucleo_tts).",
+      "bytes": 405088094,
+      "sha256": "24b8325f5c32e9089b3773702fba6cbc3b27a576f57abccc53af8943d564d878",
+      "parts": 5,
+      "partPrefix": "oversized-assets/parts/tts-en-clips/tts-en-clips."
+    }
+  ]
+}
