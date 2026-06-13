@@ -1,0 +1,584 @@
+﻿## CATEGORIA: CALC (Arithmetic / Basic Operations)
+- **Esempio IT**: `5 + 3 = 8.`
+- **Esempio EN**: `5 + 3 = 8.`
+- **Simboli densi**: Contiene `=` (lettera/operatore che richiede pronuncia)
+- **Esempio IT**: `Non posso dividere per zero.`
+- **Esempio EN**: `I can't divide by zero.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `5 + 3 + 7 = 15.`
+- **Esempio EN**: `5 + 3 + 7 = 15.`
+- **Simboli densi**: `+` (operatore, pronunciabile come "piÃ¹")
+## CATEGORIA: PERCENT
+- **Esempio IT**: `Il 25%% di 100 = 25.`
+- **Esempio EN**: `25%% of 100 = 25.`
+- **Simboli densi**: Contiene `%%` (simbolo %, da pronunciare come "percento")
+## CATEGORIA: POWER & ROOTS
+- **Esempio IT**: `2 elevato 3 = 8.`
+- **Esempio EN**: `2^3 = 8.`
+- **Simboli densi**: EN contiene `^` (da pronunciare come "alla"), IT no
+- **Esempio IT**: `3 elevato 2 = 9.`
+- **Esempio EN**: `3^2 = 9.`
+- **Simboli densi**: EN contiene `^`
+- **Esempio IT**: `radice di 16 = 4.`
+- **Esempio EN**: `sqrt(16) = 4.`
+- **Simboli densi**: `sqrt(` contiene parentesi
+## CATEGORIA: UNITS & CONVERSION
+- **Esempio IT**: `5 km = 5000 m.`
+- **Esempio EN**: `5 km = 5000 m.`
+- **Simboli densi**: Contiene `=` (ma Ã¨ standard)
+- **Esempio IT**: `10^9 = 1000000000.`
+- **Esempio EN**: `10^9 = 1000000000.`
+- **Simboli densi**: `^` (operatore potenza)
+- **Esempio IT**: `Imparato: 1 spanna = 22 cm (lunghezza).`
+- **Esempio EN**: `Learned: 1 spanna = 22 cm (length).`
+- **Simboli densi**: Contiene `=`
+- **Esempio IT**: `20 C = 68 F.`
+- **Esempio EN**: `20 C = 68 F.`
+- **Simboli densi**: Contiene `=`
+- **Esempio IT**: `Non posso convertire: kg Ã¨ massa, litri Ã¨ volume (dimensioni diverse).`
+- **Esempio EN**: `Can't convert: kg is mass, litres is volume (different dimensions).`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Non posso convertire: kg Ã¨ massa, litri Ã¨ volume (dimensioni diverse). Acqua: 50 kg â‰ˆ 50 litri.`
+- **Esempio EN**: `Can't convert: kg is mass, litres is volume (different dimensions). Water: 50 kg â‰ˆ 50 litres.`
+- **Simboli densi**: Contiene `â‰ˆ` (simbolo "circa", da pronunciare come "circa")
+## CATEGORIA: OHM'S LAW
+- **Esempio IT**: `Legge di Ohm: V = I * R (tensione = corrente * resistenza). Quindi I = V / R e R = V / I. Potenza: P = V * I.`
+- **Esempio EN**: `Ohm's law: V = I * R (voltage = current * resistance). So I = V / R and R = V / I. Power: P = V * I.`
+- **Simboli densi**: `*` `/` `=` (tutti operatori, da pronunciare)
+- **Esempio IT**: `V=12 V, I=2 A, R=6 ohm, P=24 W.`
+- **Esempio EN**: `V=12 V, I=2 A, R=6 ohm, P=24 W.`
+- **Simboli densi**: `=` `,` (virgola come separatore, da leggere)
+## CATEGORIA: ABS / MOD
+- **Esempio IT**: `valore assoluto di -5 = 5.`
+- **Esempio EN**: `abs(-5) = 5.`
+- **Simboli densi**: EN contiene `(` `)` (parentesi)
+- **Esempio IT**: `17 modulo 5 = 2.`
+- **Esempio EN**: `17 mod 5 = 2.`
+- **Simboli densi**: Nessuno denso (parole, non simboli)
+## CATEGORIA: FACTORIAL
+- **Esempio IT**: `5! = 120.`
+- **Esempio EN**: `5! = 120.`
+- **Simboli densi**: `!` (fattoriale, da pronunciare come "fattoriale")
+- **Esempio IT**: `Il fattoriale Ã¨ definito solo per interi non negativi.`
+- **Esempio EN**: `Factorial is only defined for non-negative integers.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `25! Ã¨ troppo grande per calcolarlo con esattezza qui (arrivo fino a 20!).`
+- **Esempio EN**: `25! is too large to compute exactly here (I go up to 20!).`
+- **Simboli densi**: `!` (fattoriale)
+## CATEGORIA: GCD / LCM
+- **Esempio IT**: `mcd(12, 8) = 4.`
+- **Esempio EN**: `gcd(12, 8) = 4.`
+- **Simboli densi**: `,` `(` `)` (parentesi e virgola)
+- **Esempio IT**: `mcm(4, 6) = 12.`
+- **Esempio EN**: `lcm(4, 6) = 12.`
+- **Simboli densi**: `,` `(` `)` 
+## CATEGORIA: AVERAGE / MEDIAN
+- **Esempio IT**: `La media e 5.2.`
+- **Esempio EN**: `The average is 5.2.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `La mediana e 6.`
+- **Esempio EN**: `The median is 6.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `La media si calcola sommando i valori e dividendo per quanti sono.`
+- **Esempio EN**: `The average (mean) = sum of the values divided by how many there are.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: BASE CONVERSION
+- **Esempio IT**: `255 in base 2 = 11111111.`
+- **Esempio EN**: `255 in base 2 = 11111111.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `FF (base 16) = 11111111 (base 2).`
+- **Esempio EN**: `FF (base 16) = 11111111 (base 2).`
+- **Simboli densi**: `(` `)` (parentesi)
+## CATEGORIA: ROMAN NUMERALS
+- **Esempio IT**: `24 in numeri romani = XXIV.`
+- **Esempio EN**: `24 in roman numerals = XXIV.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `XLII = 42.`
+- **Esempio EN**: `XLII = 42.`
+- **Simboli densi**: `=` (operatore di conversione)
+## CATEGORIA: SCALE OPERATIONS (Double, Half, Triple, Square, Cube, Reciprocal, Opposite)
+- **Esempio IT (Double)**: `doppio di 5 = 10.`
+- **Esempio IT (Half)**: `meta di 20 = 10.`
+- **Esempio IT (Square)**: `quadrato di 3 = 9.`
+- **Esempio IT (Cube)**: `cubo di 2 = 8.`
+- **Esempio IT (Reciprocal)**: `reciproco di 4 = 0.25.`
+- **Esempio IT (Opposite)**: `opposto di -5 = 5.`
+- **Esempio EN (Double)**: `double of 5 = 10.`
+- **Esempio EN (Half)**: `half of 20 = 10.`
+- **Esempio EN (Square)**: `square of 3 = 9.`
+- **Esempio EN (Cube)**: `cube of 2 = 8.`
+- **Esempio EN (Reciprocal)**: `reciprocal of 4 = 0.25.`
+- **Esempio EN (Opposite)**: `opposite of -5 = 5.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: FUNCTIONS (Log, Ln, Log2, Cbrt, Round, Floor, Ceil, Sin, Cos, Tan, Exp)
+- **Esempio IT**: `log base 2 di 8 = 3.`
+- **Esempio EN**: `log base 2 of 8 = 3.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `log(100) = 2.`
+- **Esempio EN**: `log(100) = 2.`
+- **Simboli densi**: `(` `)` (parentesi)
+- **Esempio IT**: `ln(2.718) = 1.`
+- **Esempio EN**: `ln(2.718) = 1.`
+- **Simboli densi**: `(` `)` 
+- **Esempio IT**: `log2(16) = 4.`
+- **Esempio EN**: `log2(16) = 4.`
+- **Simboli densi**: `(` `)` `2` (come suffisso, da pronunciare "due")
+- **Esempio IT**: `radice cubica di 27 = 3.`
+- **Esempio EN**: `cube root of 27 = 3.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `round(3.7) = 4.`
+- **Esempio EN**: `round(3.7) = 4.`
+- **Simboli densi**: `(` `)`
+- **Esempio IT**: `floor(3.9) = 3.`
+- **Esempio EN**: `floor(3.9) = 3.`
+- **Simboli densi**: `(` `)`
+- **Esempio IT**: `ceil(3.1) = 4.`
+- **Esempio EN**: `ceil(3.1) = 4.`
+- **Simboli densi**: `(` `)`
+- **Esempio IT (Sin in gradi)**: `sin(30) (gradi) = 0.5.`
+- **Esempio IT (Cos in radianti)**: `cos(0) (radianti) = 1.`
+- **Esempio IT (Tan)**: `tan(45) (gradi) = 1.`
+- **Esempio EN (Sin in degrees)**: `sin(30) (deg) = 0.5.`
+- **Esempio EN (Cos in radians)**: `cos(0) (rad) = 1.`
+- **Esempio EN (Tan)**: `tan(45) (deg) = 1.`
+- **Simboli densi**: `(` `)` + testo lingua
+- **Esempio IT**: `exp(1) = 2.71828.`
+- **Esempio EN**: `exp(1) = 2.71828.`
+- **Simboli densi**: `(` `)`
+- **Esempio IT**: `Non calcolo la radice di un numero negativo.`
+- **Esempio EN**: `I don't compute the root of a negative number.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Il logaritmo di un numero negativo non Ã¨ definito (nei numeri reali).`
+- **Esempio EN**: `The logarithm of a negative number is undefined (in the reals).`
+- **Simboli densi**: Nessuno
+## CATEGORIA: PRIME NUMBERS & FIBONACCI
+- **Esempio IT**: `Fibonacci(7) = 13.`
+- **Esempio EN**: `Fibonacci(7) = 13.`
+- **Simboli densi**: `(` `)`
+- **Esempio IT**: `17 e primo? Si.`
+- **Esempio EN**: `Is 17 prime? Yes.`
+- **Simboli densi**: `?` (domanda, da pronunciare con tono interrogativo)
+- **Esempio IT**: `12 e primo? No (12 = 3 x 4).`
+- **Esempio EN**: `Is 12 prime? No (12 = 3 x 4).`
+- **Simboli densi**: `?` `(` `)` `x` (moltiplicazione) `=`
+- **Esempio IT**: `10 e primo? No.`
+- **Esempio EN**: `Is 10 prime? No.`
+- **Simboli densi**: `?`
+- **Esempio IT**: `La primalitÃ  riguarda solo numeri interi, quindi 3.5 non Ã¨ nÃ© primo nÃ© composto.`
+- **Esempio EN**: `Primality only applies to whole numbers, so 3.5 is neither prime nor composite.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: GEOMETRY (Circles, Squares, Rectangles, Triangles, Trapezoids, Rhombus, Parallelogram, Cube, Sphere, Cylinder, Cone)
+- **Esempio IT**: `Pi greco (Ï€) = 3.14159265.`
+- **Esempio EN**: `pi (Ï€) = 3.14159265.`
+- **Simboli densi**: `Ï€` (lettera greca, da pronunciare come "pi greco/pi")
+- **Esempio IT**: `Area del cerchio: A = Ï€Â·rÂ².`
+- **Esempio EN**: `Circle area: A = Ï€Â·rÂ².`
+- **Simboli densi**: `Ï€` (pi greco) `Â·` (moltiplicazione) `Â²` (quadrato)
+- **Esempio IT**: `Area del cerchio = Ï€Â·3Â² = 28.27.`
+- **Esempio EN**: `Circle area = Ï€Â·3Â² = 28.27.`
+- **Simboli densi**: `Ï€` (pi greco) `Â·` (moltiplicazione) `Â²` (quadrato) `=`
+- **Esempio IT**: `Circonferenza: C = 2Â·Ï€Â·r.`
+- **Esempio EN**: `Circumference: C = 2Â·Ï€Â·r.`
+- **Simboli densi**: `Ï€` `Â·` `=`
+- **Esempio IT**: `Circonferenza = 2Â·Ï€Â·5 = 31.42.`
+- **Esempio EN**: `Circumference = 2Â·Ï€Â·5 = 31.42.`
+- **Simboli densi**: `Ï€` `Â·` `=`
+- **Esempio IT**: `Diametro: d = 2Â·r.`
+- **Esempio EN**: `Diameter: d = 2Â·r.`
+- **Simboli densi**: `Â·` `=`
+- **Esempio IT**: `Cerchio r=5: area 78.54, circonferenza 31.42.`
+- **Esempio EN**: `Circle r=5: area 78.54, circumference 31.42.`
+- **Simboli densi**: `=` `,`
+- **Esempio IT**: `Area del quadrato: A = lÂ².`
+- **Esempio EN**: `Square area: A = lÂ².`
+- **Simboli densi**: `Â²` `=`
+- **Esempio IT**: `Area del quadrato = 4Â² = 16.`
+- **Esempio EN**: `Square area = 4Â² = 16.`
+- **Simboli densi**: `Â²` `=`
+- **Esempio IT**: `Perimetro del quadrato: P = 4Â·l.`
+- **Esempio EN**: `Square perimeter: P = 4Â·l.`
+- **Simboli densi**: `Â·` `=`
+- **Esempio IT**: `Perimetro = 4Â·5 = 20.`
+- **Esempio EN**: `Perimeter = 4Â·5 = 20.`
+- **Simboli densi**: `Â·` `=`
+- **Esempio IT**: `Diagonale del quadrato: d = lÂ·âˆš2.`
+- **Esempio EN**: `Square diagonal: d = lÂ·âˆš2.`
+- **Simboli densi**: `Â·` `âˆš` (radice quadrata) `=`
+- **Esempio IT**: `Diagonale = 5Â·âˆš2 = 7.07.`
+- **Esempio EN**: `Diagonal = 5Â·âˆš2 = 7.07.`
+- **Simboli densi**: `Â·` `âˆš` `=`
+- **Esempio IT**: `Quadrato l=4: area 16, perimetro 16.`
+- **Esempio EN**: `Square l=4: area 16, perimeter 16.`
+- **Simboli densi**: `=` `,`
+- **Esempio IT**: `Area del rettangolo: A = bÂ·h.`
+- **Esempio EN**: `Rectangle area: A = bÂ·h.`
+- **Simboli densi**: `Â·` `=`
+- **Esempio IT**: `Area del rettangolo = 5Â·3 = 15.`
+- **Esempio EN**: `Rectangle area = 5Â·3 = 15.`
+- **Simboli densi**: `Â·` `=`
+- **Esempio IT**: `Perimetro del rettangolo: P = 2Â·(b+h).`
+- **Esempio EN**: `Rectangle perimeter: P = 2Â·(b+h).`
+- **Simboli densi**: `Â·` `(` `)` `+` `=`
+- **Esempio IT**: `Perimetro = 2Â·(5+3) = 16.`
+- **Esempio EN**: `Perimeter = 2Â·(5+3) = 16.`
+- **Simboli densi**: `Â·` `(` `)` `+` `=`
+- **Esempio IT**: `Diagonale del rettangolo: d = âˆš(bÂ²+hÂ²).`
+- **Esempio EN**: `Rectangle diagonal: d = âˆš(bÂ²+hÂ²).`
+- **Simboli densi**: `âˆš` `(` `)` `Â²` `+` `=`
+- **Esempio IT**: `Diagonale = âˆš(5Â²+3Â²) = 5.83.`
+- **Esempio EN**: `Diagonal = âˆš(5Â²+3Â²) = 5.83.`
+- **Simboli densi**: `âˆš` `(` `)` `Â²` `+` `=`
+- **Esempio IT**: `Rettangolo 5Ã—3: area 15.`
+- **Esempio EN**: `Rectangle 5Ã—3: area 15.`
+- **Simboli densi**: `Ã—` (moltiplicazione, da pronunciare "per")
+- **Esempio IT**: `Area del triangolo: A = (bÂ·h)/2.`
+- **Esempio EN**: `Triangle area: A = (bÂ·h)/2.`
+- **Simboli densi**: `Â·` `/` `(` `)` `=`
+- **Esempio IT**: `Area del triangolo = (6Â·4)/2 = 12.`
+- **Esempio EN**: `Triangle area = (6Â·4)/2 = 12.`
+- **Simboli densi**: `(` `)` `Â·` `/` `=`
+- **Esempio IT**: `Area del triangolo (Erone) = 9.2.`
+- **Esempio EN**: `Triangle area (Heron) = 9.2.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Non esiste un triangolo di lati 1, 2 e 5: la somma dei due lati minori non supera il maggiore (disuguaglianza triangolare).`
+- **Esempio EN**: `No triangle has sides 1, 2 and 5: the two shorter sides don't exceed the longest (triangle inequality).`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Perimetro = 3+4+5 = 12.`
+- **Esempio EN**: `Perimeter = 3+4+5 = 12.`
+- **Simboli densi**: `+` `=`
+- **Esempio IT**: `Pitagora: c = âˆš(aÂ²+bÂ²).`
+- **Esempio EN**: `Pythagoras: c = âˆš(aÂ²+bÂ²).`
+- **Simboli densi**: `âˆš` `(` `)` `Â²` `+` `=`
+- **Esempio IT**: `Ipotenusa = âˆš(3Â²+4Â²) = 5.`
+- **Esempio EN**: `Hypotenuse = âˆš(3Â²+4Â²) = 5.`
+- **Simboli densi**: `âˆš` `(` `)` `Â²` `+` `=`
+- **Esempio IT**: `Cateto = âˆš(5Â²-3Â²) = 4.`
+- **Esempio EN**: `Leg = âˆš(5Â²-3Â²) = 4.`
+- **Simboli densi**: `âˆš` `(` `)` `Â²` `-` `=`
+- **Esempio IT**: `Area del trapezio: A = (B+b)Â·h/2.`
+- **Esempio EN**: `Trapezoid area: A = (B+b)Â·h/2.`
+- **Simboli densi**: `(` `)` `+` `Â·` `/` `=`
+- **Esempio IT**: `Area del trapezio = (8+4)Â·3/2 = 18.`
+- **Esempio EN**: `Trapezoid area = (8+4)Â·3/2 = 18.`
+- **Simboli densi**: `(` `)` `+` `Â·` `/` `=`
+- **Esempio IT**: `Area del rombo: A = (d1Â·d2)/2.`
+- **Esempio EN**: `Rhombus area: A = (d1Â·d2)/2.`
+- **Simboli densi**: `(` `)` `Â·` `/` `=`
+- **Esempio IT**: `Area del rombo = (6Â·8)/2 = 24.`
+- **Esempio EN**: `Rhombus area = (6Â·8)/2 = 24.`
+- **Simboli densi**: `(` `)` `Â·` `/` `=`
+- **Esempio IT**: `Perimetro = 4Â·5 = 20.`
+- **Esempio EN**: `Perimeter = 4Â·5 = 20.`
+- **Simboli densi**: `Â·` `=`
+- **Esempio IT**: `Area del parallelogramma: A = bÂ·h.`
+- **Esempio EN**: `Parallelogram area: A = bÂ·h.`
+- **Simboli densi**: `Â·` `=`
+- **Esempio IT**: `Area del parallelogramma = 5Â·4 = 20.`
+- **Esempio EN**: `Parallelogram area = 5Â·4 = 20.`
+- **Simboli densi**: `Â·` `=`
+- **Esempio IT**: `Volume del cubo: V = lÂ³.`
+- **Esempio EN**: `Cube volume: V = lÂ³.`
+- **Simboli densi**: `Â³` (cubo) `=`
+- **Esempio IT**: `Volume del cubo = 3Â³ = 27.`
+- **Esempio EN**: `Cube volume = 3Â³ = 27.`
+- **Simboli densi**: `Â³` `=`
+- **Esempio IT**: `Superficie del cubo: S = 6Â·lÂ².`
+- **Esempio EN**: `Cube surface: S = 6Â·lÂ².`
+- **Simboli densi**: `Â·` `Â²` `=`
+- **Esempio IT**: `Superficie del cubo = 6Â·3Â² = 54.`
+- **Esempio EN**: `Cube surface = 6Â·3Â² = 54.`
+- **Simboli densi**: `Â·` `Â²` `=`
+- **Esempio IT**: `Volume della sfera: V = (4/3)Â·Ï€Â·rÂ³.`
+- **Esempio EN**: `Sphere volume: V = (4/3)Â·Ï€Â·rÂ³.`
+- **Simboli densi**: `(` `)` `/` `Â·` `Ï€` `Â³` `=`
+- **Esempio IT**: `Volume della sfera = (4/3)Â·Ï€Â·5Â³ = 523.6.`
+- **Esempio EN**: `Sphere volume = (4/3)Â·Ï€Â·5Â³ = 523.6.`
+- **Simboli densi**: `(` `)` `/` `Â·` `Ï€` `Â³` `=`
+- **Esempio IT**: `Superficie della sfera: S = 4Â·Ï€Â·rÂ².`
+- **Esempio EN**: `Sphere surface: S = 4Â·Ï€Â·rÂ².`
+- **Simboli densi**: `Â·` `Ï€` `Â²` `=`
+- **Esempio IT**: `Superficie della sfera = 4Â·Ï€Â·5Â² = 314.16.`
+- **Esempio EN**: `Sphere surface = 4Â·Ï€Â·5Â² = 314.16.`
+- **Simboli densi**: `Â·` `Ï€` `Â²` `=`
+- **Esempio IT**: `Volume del cilindro: V = Ï€Â·rÂ²Â·h.`
+- **Esempio EN**: `Cylinder volume: V = Ï€Â·rÂ²Â·h.`
+- **Simboli densi**: `Ï€` `Â·` `Â²` `=`
+- **Esempio IT**: `Volume del cilindro = Ï€Â·3Â²Â·5 = 141.37.`
+- **Esempio EN**: `Cylinder volume = Ï€Â·3Â²Â·5 = 141.37.`
+- **Simboli densi**: `Ï€` `Â·` `Â²` `=`
+- **Esempio IT**: `Superficie del cilindro: S = 2Â·Ï€Â·rÂ·(r+h).`
+- **Esempio EN**: `Cylinder surface: S = 2Â·Ï€Â·rÂ·(r+h).`
+- **Simboli densi**: `Â·` `Ï€` `(` `)` `+` `=`
+- **Esempio IT**: `Superficie cilindro = 2Â·Ï€Â·3Â·(3+5) = 150.8.`
+- **Esempio EN**: `Cylinder surface = 2Â·Ï€Â·3Â·(3+5) = 150.8.`
+- **Simboli densi**: `Â·` `Ï€` `(` `)` `+` `=`
+- **Esempio IT**: `Volume del cono: V = (1/3)Â·Ï€Â·rÂ²Â·h.`
+- **Esempio EN**: `Cone volume: V = (1/3)Â·Ï€Â·rÂ²Â·h.`
+- **Simboli densi**: `(` `)` `/` `Â·` `Ï€` `Â²` `=`
+- **Esempio IT**: `Volume del cono = (1/3)Â·Ï€Â·3Â²Â·5 = 47.12.`
+- **Esempio EN**: `Cone volume = (1/3)Â·Ï€Â·3Â²Â·5 = 47.12.`
+- **Simboli densi**: `(` `)` `/` `Â·` `Ï€` `Â²` `=`
+## CATEGORIA: PHYSICS (Speed, Force, Newton, Weight, Kinetic/Potential Energy, Momentum, Density, Pressure, Work, Power, Frequency, Period)
+- **Esempio IT**: `Peso: P = mÂ·g  (g = 9.81 m/sÂ²).`
+- **Esempio EN**: `Weight: P = mÂ·g  (g = 9.81 m/sÂ²).`
+- **Simboli densi**: `Â·` `=` `(` `)` `/` `Â²` (quadrato e divisione)
+- **Esempio IT**: `P = mÂ·g = 10Â·9.81 = 98.1 N.`
+- **Esempio EN**: `P = mÂ·g = 10Â·9.81 = 98.1 N.`
+- **Simboli densi**: `Â·` `=` (operatori)
+- **Esempio IT**: `m = P/g = 98.1/9.81 = 10 kg.`
+- **Esempio EN**: `m = P/g = 98.1/9.81 = 10 kg.`
+- **Simboli densi**: `=` `/`
+- **Esempio IT**: `VelocitÃ : v = spazio / tempo.`
+- **Esempio EN**: `Speed: v = distance / time.`
+- **Simboli densi**: `/` `=`
+- **Esempio IT**: `v = s/t = 100/5 = 20 m/s.`
+- **Esempio EN**: `v = s/t = 100/5 = 20 m/s.`
+- **Simboli densi**: `=` `/`
+- **Esempio IT**: `s = vÂ·t = 20Â·5 = 100 m.`
+- **Esempio EN**: `s = vÂ·t = 20Â·5 = 100 m.`
+- **Simboli densi**: `=` `Â·`
+- **Esempio IT**: `t = s/v = 100/20 = 5 s.`
+- **Esempio EN**: `t = s/v = 100/20 = 5 s.`
+- **Simboli densi**: `=` `/`
+- **Esempio IT**: `2Âª legge di Newton: F = mÂ·a.`
+- **Esempio EN**: `Newton's 2nd law: F = mÂ·a.`
+- **Simboli densi**: `Â·` `=` `Âª` (ordinale, da pronunciare)
+- **Esempio IT**: `F = mÂ·a = 5Â·2 = 10 N.`
+- **Esempio EN**: `F = mÂ·a = 5Â·2 = 10 N.`
+- **Simboli densi**: `=` `Â·`
+- **Esempio IT**: `m = F/a = 10/2 = 5 kg.`
+- **Esempio EN**: `m = F/a = 10/2 = 5 kg.`
+- **Simboli densi**: `=` `/`
+- **Esempio IT**: `a = F/m = 10/5 = 2 m/sÂ².`
+- **Esempio EN**: `a = F/m = 10/5 = 2 m/sÂ².`
+- **Simboli densi**: `=` `/` `Â²` (quadrato)
+- **Esempio IT**: `Energia cinetica: Ec = Â½Â·mÂ·vÂ².`
+- **Esempio EN**: `Kinetic energy: Ec = Â½Â·mÂ·vÂ².`
+- **Simboli densi**: `Â½` (frazione, da pronunciare "mezzo") `Â·` `Â²` `=`
+- **Esempio IT**: `Ec = Â½Â·mÂ·vÂ² = Â½Â·10Â·5Â² = 125 J.`
+- **Esempio EN**: `Ec = Â½Â·mÂ·vÂ² = Â½Â·10Â·5Â² = 125 J.`
+- **Simboli densi**: `=` `Â½` `Â·` `Â²`
+- **Esempio IT**: `v = âˆš(2Â·Ec/m) = âˆš(2Â·125/10) = 5 m/s.`
+- **Esempio EN**: `v = âˆš(2Â·Ec/m) = âˆš(2Â·125/10) = 5 m/s.`
+- **Simboli densi**: `=` `âˆš` `(` `)` `/` `Â·`
+- **Esempio IT**: `Energia potenziale: Ep = mÂ·gÂ·h.`
+- **Esempio EN**: `Potential energy: Ep = mÂ·gÂ·h.`
+- **Simboli densi**: `Â·` `=`
+- **Esempio IT**: `Ep = mÂ·gÂ·h = 10Â·9.81Â·5 = 490.5 J.`
+- **Esempio EN**: `Ep = mÂ·gÂ·h = 10Â·9.81Â·5 = 490.5 J.`
+- **Simboli densi**: `=` `Â·`
+- **Esempio IT**: `QuantitÃ  di moto: q = mÂ·v.`
+- **Esempio EN**: `Momentum: q = mÂ·v.`
+- **Simboli densi**: `Â·` `=`
+- **Esempio IT**: `q = mÂ·v = 10Â·5 = 50 kgÂ·m/s.`
+- **Esempio EN**: `q = mÂ·v = 10Â·5 = 50 kgÂ·m/s.`
+- **Simboli densi**: `=` `Â·` `/`
+- **Esempio IT**: `DensitÃ : Ï = m/V.`
+- **Esempio EN**: `Density: Ï = m/V.`
+- **Simboli densi**: `Ï` (rho greca, da pronunciare) `/` `=`
+- **Esempio IT**: `Ï = m/V = 100/5 = 20 kg/mÂ³.`
+- **Esempio EN**: `Ï = m/V = %s/%s = %s kg/mÂ³.`
+- **Simboli densi**: `=` `/` `Ï` `Â³`
+- **Esempio IT**: `m = ÏÂ·V = 20Â·5 = 100 kg.`
+- **Esempio EN**: `m = ÏÂ·V = 20Â·5 = 100 kg.`
+- **Simboli densi**: `=` `Ï` `Â·`
+- **Esempio IT**: `V = m/Ï = 100/20 = 5 mÂ³.`
+- **Esempio EN**: `V = m/Ï = %s/%s = %s mÂ³.`
+- **Simboli densi**: `=` `/` `Ï` `Â³`
+- **Esempio IT**: `Pressione: p = F/A.`
+- **Esempio EN**: `Pressure: p = F/A.`
+- **Simboli densi**: `/` `=`
+- **Esempio IT**: `p = F/A = 100/10 = 10 Pa.`
+- **Esempio EN**: `p = F/A = 100/10 = 10 Pa.`
+- **Simboli densi**: `=` `/`
+- **Esempio IT**: `F = pÂ·A = 10Â·10 = 100 N.`
+- **Esempio EN**: `F = pÂ·A = 10Â·10 = 100 N.`
+- **Simboli densi**: `=` `Â·`
+- **Esempio IT**: `Lavoro: L = FÂ·s.`
+- **Esempio EN**: `Work: L = FÂ·s.`
+- **Simboli densi**: `Â·` `=`
+- **Esempio IT**: `L = FÂ·s = 50Â·20 = 1000 J.`
+- **Esempio EN**: `L = FÂ·s = 50Â·20 = 1000 J.`
+- **Simboli densi**: `=` `Â·`
+- **Esempio IT**: `Potenza: P = lavoro / tempo.`
+- **Esempio EN**: `Power: P = work / time.`
+- **Simboli densi**: `/` `=`
+- **Esempio IT**: `P = L/t = 1000/10 = 100 W.`
+- **Esempio EN**: `P = L/t = 1000/10 = 100 W.`
+- **Simboli densi**: `=` `/`
+- **Esempio IT**: `E = PÂ·t = 100Â·10 = 1000 J.`
+- **Esempio EN**: `E = PÂ·t = 100Â·10 = 1000 J.`
+- **Simboli densi**: `=` `Â·`
+- **Esempio IT**: `Frequenza: f = 1/T.`
+- **Esempio EN**: `Frequency: f = 1/T.`
+- **Simboli densi**: `/` `=`
+- **Esempio IT**: `T = 1/f = 1/50 = 0.02 s.`
+- **Esempio EN**: `T = 1/f = 1/50 = 0.02 s.`
+- **Simboli densi**: `=` `/`
+- **Esempio IT**: `f = 1/T = 1/0.02 = 50 Hz.`
+- **Esempio EN**: `f = 1/T = 1/0.02 = 50 Hz.`
+- **Simboli densi**: `=` `/`
+## CATEGORIA: VECTORS
+- **Esempio IT**: `Prodotto scalare = 2Â·3 + 4Â·5 = 26.`
+- **Esempio EN**: `vÂ·w = 2Â·3 + 4Â·5 = 26.`
+- **Simboli densi**: `Â·` `+` `=` (operatori)
+- **Esempio IT**: `Modulo |v| = âˆš(9+16) = 5.`
+- **Esempio EN**: `|v| = âˆš(9+16) = 5.`
+- **Simboli densi**: `|` (modulo/assoluto) `âˆš` `(` `)` `+` `=`
+## CATEGORIA: SPREADSHEET / FORMULAS
+- **Esempio IT**: `Ecco la formula richiesta:\n\`=SUM(A1:A10)\``
+- **Esempio EN**: `Use this formula:\n\`=SUM(A1:A10)\``
+- **Simboli densi**: `` ` `` (backtick) `:` `/` `(` `)` `=` (formula con operatori)
+## CATEGORIA: DATE ARITHMETIC
+- **Esempio IT**: `Oggi Ã¨ lunedÃ¬ 11 giugno 2026.`
+- **Esempio EN**: `Today is Wednesday, June 11, 2026.`
+- **Simboli densi**: Nessuno (data in parole)
+- **Esempio IT**: `Domani Ã¨ martedÃ¬ 12 giugno 2026.`
+- **Esempio EN**: `Tomorrow is Thursday, June 12, 2026.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Dopodomani Ã¨ mercoledÃ¬ 13 giugno 2026.`
+- **Esempio EN**: `The day after tomorrow is Friday, June 13, 2026.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Ieri era domenica 10 giugno 2026.`
+- **Esempio EN**: `Yesterday was Tuesday, June 10, 2026.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Fra 7 giorni sarÃ  lunedÃ¬ 18 giugno 2026.`
+- **Esempio EN**: `In 7 days it will be Wednesday, June 18, 2026.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `5 giorni fa era giovedÃ¬ 6 giugno 2026.`
+- **Esempio EN**: `5 days ago it was Friday, June 6, 2026.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Non so calcolare il giorno della settimana di una data qualsiasi del calendario: conto solo i giorni a partire da oggi.`
+- **Esempio EN**: `I can't work out the weekday of an arbitrary calendar date offline â€” I only count days from today.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: EQUATION SOLVING
+- **Esempio IT**: `Ãˆ una sola equazione con 2 incognite: non puÃ² avere una soluzione unica (ne servirebbero 2).`
+- **Esempio EN**: `That's one equation with 2 unknowns â€” it can't have a single solution (you'd need 2 equations).`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Risolvo equazioni di primo e secondo grado; questa Ã¨ di grado superiore.`
+- **Esempio EN**: `I solve first- and second-degree equations; this one is higher degree.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Va bene qualunque x: infinite soluzioni (Ã¨ un'identitÃ ).`
+- **Esempio EN**: `Any value of x works â€” infinitely many solutions (an identity).`
+- **Simboli densi**: `%c` (incognita, letterale)
+- **Esempio IT**: `Nessuna soluzione: si riduce a un'uguaglianza falsa.`
+- **Esempio EN**: `No solution â€” it reduces to a false statement.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `x = 3.  âœ“ (sostituendo torna 0)`
+- **Esempio EN**: `x = 3.  âœ“ (substituting back gives 0)`
+- **Simboli densi**: `âœ“` (spunta/check mark, da pronunciare come "verificato")
+- **Esempio IT**: `Î” = 4 > 0 â†’ due soluzioni reali: x = 3 oppure x = 1.  âœ“ (verificate)`
+- **Esempio EN**: `Î” = 4 > 0 â†’ two real solutions: x = 3 or x = 1.  âœ“ (both verified)`
+- **Simboli densi**: `Î”` (delta, discriminante) `=` `>` (maggiore) `âœ“`
+- **Esempio IT**: `Î” = 0 â†’ una soluzione doppia: x = 2.  âœ“`
+- **Esempio EN**: `Î” = 0 â†’ one double solution: x = 2.  âœ“`
+- **Simboli densi**: `Î”` `=` `âœ“`
+- **Esempio IT**: `Î” = -8 < 0 â†’ nessuna soluzione reale. Nei numeri complessi: x = 1 Â± 1.41i.`
+- **Esempio EN**: `Î” = -8 < 0 â†’ no real solution. In the complex numbers: x = 1 Â± 1.41i.`
+- **Simboli densi**: `Î”` `=` `<` (minore) `Â±` (plus-minus) `i` (unitÃ  immaginaria)
+## CATEGORIA: TOOL - CREATE FILE
+- **Esempio IT**: `Creo appunti.txt in Home.`
+- **Esempio EN**: `Creating notes.txt in Documents.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `memo.txt esiste gia: non lo sovrascrivo.`
+- **Esempio EN**: `memo.txt exists already: I won't overwrite it.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Come deve chiamarsi il file? Per esempio: "crea un file nota.txt".`
+- **Esempio EN**: `What should the file be called? E.g. "create a file note.txt".`
+- **Simboli densi**: `"` (virgolette, da pronunciare se enfatiche)
+- **Esempio IT**: `Ho creato memo.txt con il contenuto.`
+- **Esempio EN**: `Created memo.txt with the content.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Ho creato appunti.txt.`
+- **Esempio EN**: `Created notes.txt.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Non riesco a creare memo.txt.`
+- **Esempio EN**: `I can't create memo.txt.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: TOOL - BRIGHTNESS/VOLUME
+- **Esempio IT (Volume)**: `Imposto il volume al 75%%.`
+- **Esempio IT (Brightness)**: `Imposto la luminositÃ  al 50%%.`
+- **Esempio EN (Volume)**: `Setting the volume to 75%%.`
+- **Esempio EN (Brightness)**: `Setting the brightness to 50%%.`
+- **Simboli densi**: `%%` (percentuale, da pronunciare come "percento")
+- **Esempio IT (Raise)**: `Alzo il volume.`
+- **Esempio IT (Lower)**: `Abbasso la luminositÃ .`
+- **Esempio EN (Raise)**: `Raising the volume.`
+- **Esempio EN (Lower)**: `Lowering the brightness.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: TOOL - ADD EVENT (Reminder)
+- **Esempio IT (Today)**: `Promemoria "Riunione" oggi alle 14:30.`
+- **Esempio IT (Future)**: `Promemoria "Comprare latte" domani alle 09:00.`
+- **Esempio EN (Today)**: `Reminder "Meeting" today at 2:30 PM.`
+- **Esempio EN (Future)**: `Reminder "Buy milk" tomorrow at 9:00 AM.`
+- **Simboli densi**: `"` (virgolette) `:` (orario)
+- **Esempio IT**: `Non sono riuscito ad aggiungere il promemoria.`
+- **Esempio EN**: `I couldn't add the reminder.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: TOOL - OPEN FILE / APP
+- **Esempio IT (File)**: `Apro memo.txt.`
+- **Esempio IT (App)**: `Apro Musica.`
+- **Esempio EN (File)**: `Opening notes.txt.`
+- **Esempio EN (App)**: `Opening Music Player.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Chiudo il browser.`
+- **Esempio EN**: `Closing the browser.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Non posso aprire video.mkv sul dispositivo.`
+- **Esempio EN**: `I can't open video.mkv on the device.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Percorso file non valido.`
+- **Esempio EN**: `Invalid file path.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Quale dei due apro, Editor di testo o Microsoft Word?`
+- **Esempio EN**: `Which one â€” Text Editor or Microsoft Word?`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Gmail Ã¨ disponibile solo nell'app web.`
+- **Esempio EN**: `Gmail is only available in the web app.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: COURTESY
+- **Esempio IT**: `Prego, quando vuoi!`
+- **Esempio EN**: `You're welcome!`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Scusa: prova a riformulare e ci riprovo.`
+- **Esempio EN**: `Sorry â€” try rephrasing and I'll have another go.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: CLARIFY
+- **Esempio IT**: `Dimmi quale parte e riprovo a spiegarla.`
+- **Esempio EN**: `Tell me which part and I'll try again.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: LEARN
+- **Esempio IT**: `Imparato â€” ricorderÃ²: La capitale del Giappone Ã¨ Tokyo.`
+- **Esempio EN**: `Got it â€” I'll remember: The capital of Japan is Tokyo.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Non riesco a impararlo ora.`
+- **Esempio EN**: `I can't learn that right now.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Non memorizzo informazioni temporanee.`
+- **Esempio EN**: `I won't store that â€” it's temporary information.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: SESSION & CONTEXT
+- **Esempio IT**: `Eravamo su matematica. Continuo da lÃ¬?`
+- **Esempio EN**: `We were on math. Continue from there?`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Finora siamo stati su: calcolo, geometria e conversioni.`
+- **Esempio EN**: `So far we've been on: calculations, geometry, and conversions.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Appena iniziato con le equazioni.`
+- **Esempio EN**: `Just started with equations.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: CONFIDENCE
+- **Esempio IT**: `SÃ¬, Ã¨ esatto.`
+- **Esempio EN**: `Yes, exactly.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Abbastanza sicuro.`
+- **Esempio EN**: `Fairly sure.`
+- **Simboli densi**: Nessuno
+## CATEGORIA: OTHER TEMPLATED RESPONSES
+- **Esempio IT**: `Su questo non ho altri dettagli.`
+- **Esempio EN**: `That's all I have on that.`
+- **Simboli densi**: Nessuno
+- **Esempio IT**: `Perfetto â€” forniscimi i dati e faccio il calcolo.`
+- **Esempio EN**: `Great â€” give me the data and I'll compute it.`
+- **Simboli densi**: Nessuno
+**CATEGORIE CON SIMBOLI DENSI (richiedono sostituzione parole):**

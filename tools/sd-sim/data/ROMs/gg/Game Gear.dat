@@ -1,0 +1,1790 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.logiqx.com/Dats/datafile.dtd">
+<datafile>
+  <header>
+    <name>Sega Game Gear</name>
+    <description>Information from ScreenScraper.fr database</description>
+    <version>1.0</version>
+    <date>06/10/2023 23:21</date>
+    <author>Skraper</author>
+    <url>http://www.screenscraper.fr</url>
+  </header>
+  <game name="Double Dragon: The Revenge of Billy Lee">
+    <description>SCONTRATI CONTRO I MIGLIORI, MUORI COME GLI ALTRI&#xD;
+&#xD;
+Questo è il motto dei Signori dei Draghi: il più cattivo. gang di strada più rude in circolazione. I fratelli Billy e Jimmy Lee hanno appena scoperto a proprie spese che uscire da questa banda è ancora più difficile che entrarci. Solo uno ne è uscito con la sua vita. Da ampi calci laterali al combattimento di strada più sporco che si possa immaginare, sarai fino al collo nell'azione delle arti marziali mentre assumi il ruolo di Billy per vendicare la morte di tuo fratello.&#xD;
+&#xD;
+Peccato che i Signori dei Draghi ti abbiano insegnato tutto quello che sai. Ora è il momento di mostrare loro che hanno scelto il fratello sbagliato con cui scherzare!</description>
+    <year>1993</year>
+    <manufacturer>Virgin</manufacturer>
+    <rom name="Double Dragon (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="GP Rider">
+    <description>Questa versione portatile è diversa dalle altre versioni per console in termini di grafica mentre il gameplay è sempre lo stesso. Il giocatore prende il controllo di un motociclista professionista in 15 diversi percorsi in tutto il mondo, affronta oltre una dozzina di avversari diversi nel tentativo di vincere la gara e passare al livello successivo.
+I giocatori devono evitare di colpire altri ciclisti per evitare di distruggere la loro moto. Se un giocatore urta un altro pilota da dietro, può scappare a lato della strada o perdere il controllo e far volare il proprio pilota in aria. Ci sono quattro diverse modalità di gioco tra cui scegliere, come Exhibition e Grand Prix.
+Due amici possono anche sfidarsi usando il cavo di collegamento.</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="GP Rider (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="The Terminator">
+    <description>The Terminator licensed game for the Sega consoles was a fairly standard side-scrolling platform game. However, the game's six levels mirror the story-line of The Terminator movie very closely as you take on the role of Kyle Reese and his quest to save Sarah Connor from termination.
+
+Because the game follows the movie so closely, the first mission which involves blowing up the SkyNet computer and escaping through time is one of the hardest and something that most players remember with love/hate.</description>
+    <year>1992</year>
+    <manufacturer>Virgin</manufacturer>
+    <rom name="Terminator, The (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Spider-Man and the X-Men in Arcade's Revenge">
+    <description>Spider-Man and members of the X-Men have teamed up in this side-scrolling action game to fight against Arcade, who has built a giant amusement park for the sole purpose of trapping and destroying the super-heroes. You first play as Spider-Man, who sees the X-Men get kidnapped by Arcade and follows them. Once you make it inside Arcade's park you can choose to play as Spider-Man, Cyclops, Storm, Gambit, or Wolverine, each of whom are trapped in a different part of Arcade's maze of deadly traps. You must navigate all five of them safely out, using their different skills and abilities while defeating baddies and bosses along the way.&#xD;</description>
+    <year>1994</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Spider-Man and the X-Men in Arcade's Revenge (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Taz-mania">
+    <description>One evening, Taz's father is telling an intriguing tale. Somewhere on Tazmania is a Lost Valley, and in that valley nests a huge seabird, so huge that one of it's eggs could feed a family for a year! Just think of the omelette one of those could make!
+
+Thus Taz becomes fascinated and leaves in search of one of those eggs before his Dad has even finished the story...
+
+Taz can Jump, perform a Spinning Jump and a Spin Attack. Munch roast chickens to replenish life. Gain extra points by moving quickly through the levels - there are six stages and each stage has two rounds.
+
+There are a few other items and pickups such as:
+
+1. Spring: boings Taz up to high ledges.
+2. Blocks: destructible.
+3. 1-UP: extra life.
+4. Star: invulnerability. Unless you run into a bomb.
+5. Bomb: does what it says on the tin.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Taz-Mania - The Search for the Lost Seabirds (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Sensible Soccer : European Champions">
+    <description>Con l'originale Sensible Soccer che ha venduto enormemente, questa versione aggiornata è stata rilasciata alcuni mesi dopo (e quindi utilizzata come base per le versioni successive per console). Aggiornate le squadre, incluse le squadre presenti nei tornei europei 92-93 e aggiornati i nomi dei giocatori per tenere conto dei trasferimenti.
+
+Il gioco è stato riordinato e modificato in una serie di aree. Il cambiamento più significativo è l'aggiunta di cartellini rossi e gialli per disciplina (2 infrazioni per cartellino giallo o un "fallo professionale" (negare all'avversario una chiara opportunità di segnare) comporta l'espulsione di quel giocatore). I portieri sono stati migliorati in abilità ed è stato aggiunto il torneo di qualificazione ai Mondiali del 1994.</description>
+    <year>1993</year>
+    <manufacturer>Sony Imagesoft</manufacturer>
+    <rom name="Sensible Soccer (Europe).gg" size="131072" />
+  </game>
+  <game name="Cool Spot">
+    <description>Cool Spot è un platform solido e colorato con SPOT, la mascotte della 7up come eroe. L'obiettivo del gioco è abbastanza semplice; devi raccogliere un numero sufficiente di bonus in ogni livello per trovare i punti intrappolati.</description>
+    <year>1993</year>
+    <manufacturer>Virgin Interactive</manufacturer>
+    <rom name="Cool Spot (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Mighty Morphin Power Rangers : The Movie">
+    <description>Basato sul blockbuster di questa estate, Power Rangers The Movie offre azione, combattimento e avventura! Ivan Ooze è emerso dopo seimila anni ed è di pessimo umore! Sta a te e ai Power Rangers fermarlo prima che scateni un flusso costante di distruzione su un universo ignaro. Presentazione per la prima volta - White Ranger! È tempo di Morphin!</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Mighty Morphin Power Rangers - The Movie (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="TaleSpin">
+    <description>Baloo the Bear is the chief and only pilot at the always struggling air-frieght company of Higher for Hire. With his cargo plane, the Sea Duck and the young orphan, Kit Cloudkicker... Baloo is ready to take to the sky and face down air pirates, bad weather and the ruthless Shere Khan.&#xD;</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Tale Spin (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Captain America and The Avengers">
+    <description>Una conversione dell'omonimo gioco arcade, Captain America e The Avengers è un picchiaduro a scorrimento laterale per uno o due giocatori (simultaneo) in cui quattro eroi con licenza Marvel Comics (Captain America, Iron Man, Occhio di Falco e Vision) affronta il malvagio Teschio Rosso (che "assemblando una squadra di supercriminali cerca di conquistare il mondo"). Non è sempre così?</description>
+    <year>1993</year>
+    <manufacturer>Mindscape</manufacturer>
+    <rom name="Captain America and the Avengers (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Micro Machines 2 : Turbo Tournament">
+    <description>Il secondo gioco della serie Micro Machines. Come nel suo predecessore, sei al volante di un'auto estremamente piccola. Corri in luoghi interessanti, come un tavolo, una casa sull'albero e molti altri. Il controllo delle vetture a volte è piuttosto difficile, soprattutto se non si conoscono i tracciati (la visuale dall'alto non è molto chiara). La versione CD-ROM dispone inoltre di musica CD-Audio e un editor di tracce.</description>
+    <year>1995</year>
+    <manufacturer>Codemasters</manufacturer>
+    <rom name="Micro Machines 2 - Turbo Tournament (Europe).gg" size="524288" />
+  </game>
+  <game name="Sports Trivia : Championship Edition">
+    <description>Sports Trivia: Championship Edition is a Sega Game Gear sports quiz game released exclusively in North America. It is an update(?) to Sports Trivia.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Sports Trivia - Championship Edition (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Defenders of Oasis">
+    <description>Tanto, tanto tempo fa, il leggendario re Jamseed sconfisse il malvagio Ahriman, lo spirito delle tenebre. Ma poco prima, Ahriman è riuscito a mandare al mondo il suo servo più terrificante: il drago Zahhark. Sono passati anni, Zahhark è stato sconfitto dai discendenti di Jamseed, ma i suoi discendenti hanno continuato a minacciare il regno di Shanadar. Molte generazioni dopo, tu, il giovane principe di Shanadar, devi affrontare il male. I figli di Zahhark pianificano di distruggere il regno e il principe deve prima cercare aiuto in un paese vicino, accompagnato da una bellissima principessa, dal genio di una lampada e da altri amici.&#xD;
+Questo è un gioco di ruolo tradizionale in stile giapponese. Controlli il Principe e i membri del suo gruppo, visiti vari luoghi, acquisti e trovi oggetti e combatti nemici e boss casuali in un combattimento a turni visto dalla prospettiva in prima persona.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Defenders of Oasis (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="True Lies">
+    <description>I giocatori controllano l'agente segreto Harry Tasker, che cerca di salvare il mondo libero dal malvagio Aziz, leader del gruppo terroristico islamico Crimson Jihad. Tutti i livelli sono basati su scene d'azione del film e comprendono l'infiltrazione nel castello, l'inseguimento di Aziz nel centro commerciale e nel parco e lo scontro finale nell'edificio degli uffici. In ogni livello, Harry deve svolgere un compito specifico: collegare un modem a un computer per scaricare dati, trovare Aziz o disarmare un dispositivo nucleare. Orde di terroristi lo ostacolano e devono essere eliminate con varie armi. Harry inizia un livello con una pistola standard che ha munizioni illimitate ma deve essere ricaricata dopo 15 colpi. Deve procurarsi armi più potenti come la mitragliatrice, il fucile a pompa, le granate e le mine.</description>
+    <year>1995</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="True Lies (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Disney's Aladdin">
+    <description>I sistemi a 8 bit di Sega hanno ricevuto un adattamento unico del film d'animazione Disney del 1992 Aladdin.&#xD;
+Come altre versioni, è un gioco d'azione a scorrimento laterale. Il giocatore controlla Aladdin, facendosi strada attraverso una varietà di luoghi, tra cui le strade di Agrabah, la Grotta delle Meraviglie, il palazzo del Sultano e altro ancora. Il gioco assume diverse forme: alcuni livelli sono inseguimenti, in cui Aladdin corre automaticamente, ma deve essere fatto per saltare oltre voragini o rotolare pietre e barili, schivare oggetti che cadono ed evitare di essere catturato da una guardia. Altri livelli sono questioni platform: Aladdin deve correre, saltare e arrampicarsi, trovare chiavi o interruttori per aprire le porte mentre cerca l'uscita. Le rocce possono essere raccolte ed essere lanciate per eliminare i nemici o premere pulsanti altrimenti fuori portata. Infine, ci sono anche diverse corse sul tappeto magico nel gioco, in cui il livello scorre automaticamente e il giocatore deve assicurarsi di evitare qualsiasi ostacolo sulla strada.</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Aladdin (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Frank Thomas Big Hurt Baseball">
+    <description>Il giocatore di baseball Frank Thomas ha ottenuto in licenza uno dei primi giochi di baseball per utilizzare la grafica 3D catturata dal movimento e più angoli di ripresa. 28 stadi sono stati renderizzati in 3D e ognuno ha le sue differenze visibili e significative.&#xD;
+&#xD;
+Ci sono 6 modalità di gioco distinte, che consentono partite singole di esibizione e stagioni complete nei playoff. C'è anche una modalità Home Run Derby, che consente al giocatore di lanciare la palla fuori dal terreno per ottenere punti.</description>
+    <year>1995</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="Frank Thomas Big Hurt Baseball (USA).gg" size="524288" />
+  </game>
+  <game name="Global Gladiators">
+    <description>Global Gladiators è un gioco platform abbastanza standard con il fatto più notevole che i personaggi sono stati creati e concessi in licenza da McDonalds (sì, THE McDonalds).&#xD;
+&#xD;
+Durante l'esplorazionee dei 12 livelli del gioco, noterai i loghi di McDonald's, gli hamburger e ogni sorta di roba tipo ristorante familiare mentre porti Mick e Mack (i protagonisti del gioco) in un viaggio per ripulire "Monsters of Slime World", "Toxi- Città" e altro ancora.</description>
+    <year>1993</year>
+    <manufacturer>Virgin</manufacturer>
+    <rom name="Mick &amp; Mack as the Global Gladiators (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Chakan">
+    <description>Il gioco narra la storia di un uomo così sicuro della sua abilità marziale da sfidare la morte. Evidentemente, la Morte apparì e sfidò Chakan con una proposta: se Chakan l'avesse sconfitta, avrebbe ricevuto la vita eterna. Se Chakan fosse stato sconfitto, sarebbe diventato un servitore della morte per l'eternità.&#xD;
+La battaglia durò giorni. I due si sconfissero a vicenda, quindi, la morte diede a Chakan il compito di eliminare tutti i mali soprannaturali. Quindi, Chakan non poté riposare finché il suo compito non fosse finito. &#xD;
+Basato sul fumetto creato da RAK (Robert A. Kraus) Chakan the forever man.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Chakan (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="The Smurfs">
+    <description>The evil Gargamel has captured three of the smurfs, so that he can have them for dinner (Once again). One of the smurfs must go out on a dangerous journey and rescue the captured smurfs. Beat the first two bosses to rescue the first two smurfs, then you can take on Gargamel. Make your way through forests, swamps, mountains, mines and more. Also ride storks, mine carts and logs to defeat Gargamel and his minions and to rescue the missing smurfs. 
+
+On each level you must collect five stars in order to get access to the bonus level. (You don't have to collect the five stars in order to get through the main level) On the bonus level, try to collect as many bonuses as possible before the time runs out. There are three bonus levels: "The Dam", "The Mushrooms" and "The Butterflies".</description>
+    <year>1994</year>
+    <manufacturer>Infogrames</manufacturer>
+    <rom name="Smurfs, The (Europe) (En,Fr,De,Es).gg" size="262144" />
+  </game>
+  <game name="Alien Syndrome">
+    <description>Gli alieni in questo gioco sono tutt'altro che amichevoli. Sono mostri viscidi che tengono prigionieri i coloni spaziali a bordo di sette astronavi aliene. Questo super gioco d'azione ti sfida a liberare gli ostaggi indifesi. Esplora gli stadi mortali di ogni nave, usando lanciafiamme e cannoni laser per vaporizzare la feccia aliena. Cerca le mappe che ti aiutino a trovare la strada. Dopo aver salvato tutti i prigionieri da una nave, devi distruggere il tuo potente leader prima di poter avanzare alla nave successiva. Ricorda, per gli alieni, sei una melma. E ti vogliono ben morto!</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Alien Syndrome (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Sonic the Hedgehog">
+    <description>La mascotte di SEGA Sonic the Hedgehog ha fatto il suo debutto in un famoso titolo di Genesis, ma i sistemi a 8 bit di Sega hanno ottenuto la propria versione del platform, con la stessa storia e stile di gioco, ma livelli diversi. Per fermare il malvagio Dr. Robotnik, Sonic deve attraversare sei zone composte da tre livelli ciascuna. La maggior parte delle zone è basata su quelle del gioco originale, ma alcune sono completamente nuove. Anche i nemici e i potenziamenti sono per lo più gli stessi. Sonic può raccogliere anelli d'oro per protezione (se colpito, perde semplicemente tutti i suoi anelli invece di una vita) e bonus: 100 anelli danno a Sonic una vita extra e 50 anelli rimanenti alla fine di un livello consentono l'accesso al flipper- prove speciali a tema ricche di paraurti e molle. Il livello finale di una zona è sempre uno scontro con un boss contro Robotnik. Sonic dovrebbe anche raccogliere i sei Chaos Emerald per evitare che cadano nelle mani di Robotnik.</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Sonic the Hedgehog (World) (v1.1).gg" size="262144" />
+  </game>
+  <game name="The Addams Family">
+    <description>The Addams Family è un platform a scorrimento laterale basato sul film con lo stesso nome. Il giocatore assume il ruolo di Gomez che cerca i suoi familiari scomparsi. Per trovarli deve esplorare sei diverse parti della villa, ad es. i boschi, che sono livelli di piattaforma di base: il giocatore si muove da sinistra a destra saltando molto ed evitando i nemici. Alcuni di loro possono essere eliminati con un salto in testa.
+La differenza principale rispetto alle altre versioni di questo gioco è un design dei livelli unico. C'è anche un misuratore di vita che permette di essere colpiti più spesso prima di morire.</description>
+    <year>1994</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Addams Family, The (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Sonic Spinball">
+    <description>Il malvagio dottore Robotnik ha un nuovo piano per conquistare il mondo. Ha costruito una nuova arma, la Veg-O-Fortress sul Monte Mobius e con essa sta trasformando tutte le creature in robot. Sonic si intrufola nella fortezza e cerca di fermare Robotnik.
+Usa Sonic come un flipper in 4 livelli pericolosi. Guadagna punti, ottieni anelli, raccogli Chaos Emerald e distruggi il boss alla fine di ogni livello.</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Sonic Spinball (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Kawasaki Superbikes">
+    <description>nnPartecipa alla leggendaria gara "Team Green" di Kawasaki sui circuiti più emozionanti del mondo con la ZXR750R nel Campionato Mondiale Superbike 750cc. Sviluppato in stretta collaborazione con Kawasaki per garantire precisione e realismo totali, Kawasaki Superbikes è il gioco di corse motociclistiche che lascia tutti gli altri alle spalle.</description>
+    <year>1995</year>
+    <manufacturer>Domark</manufacturer>
+    <rom name="Kawasaki Superbike Challenge (USA).gg" size="262144" />
+  </game>
+  <game name="Poker Face Paul's Blackjack">
+    <description>Poker Faced Paul's è una serie di quattro videogiochi per Game Gear che simulano diversi giochi di carte, tutti pubblicati nel 1994. I singoli giochi sono Blackjack, Solitaire, Poker e Gin.</description>
+    <year>1993</year>
+    <manufacturer>Adrenalin</manufacturer>
+    <rom name="Poker Faced Paul's Blackjack (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Ultimate Soccer">
+    <description>Ultimate Soccer è un gioco di calcio (europeo) composto da 64 squadre internazionali (senza licenza), ognuna con i propri valori per la corsa, il controllo di palla e la forza. Ci sono cinque modalità di gioco (amichevole, rigori, torneo, playoff e campionato), ma la mancanza di password o batteria integrata significa che ognuna di esse deve essere completata in una sola volta.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Ultimate Soccer (Japan, Europe) (En,Fr,De,Es,It).gg" size="262144" />
+  </game>
+  <game name="NBA Jam : Tournament Edition">
+    <description>NBA Jam: Tournament Edition su Game Gear riprende il principio di NBA Jam rilasciato qualche mese prima aggiungendo una modalità torneo. Le partite si giocano sempre due contro due, con regole allentate a favore dell'azione. L'interesse della modalità torneo risiede nei bonus da sbloccare, ovvero due nuovi giocatori per quasi tutte le squadre oltre a una modalità di difficoltà maggiore.</description>
+    <year>1995</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="NBA Jam Tournament Edition (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Madden 96">
+    <description>John Madden torna per la stagione '96 di Madden NFL.
+Gioca a esibizioni, Super Bowl, playoff o l'intera stagione con una qualsiasi delle squadre del 1995 o tutte le squadre di Madden.
+Mentre puoi ancora selezionare il tempo e ci sono oltre 100 infortuni, questa versione aggiunge voci fuori campo e la possibilità di disegnare e creare giocatori e vedere se vengono scelti.
+Include ancora passaggi senza finestra, tutte le nuove strategie progettate da Madden e l'abbinamento di squadra che mostra come i tuoi giocatori si accumulano rispetto all'altra squadra nella loro posizione.</description>
+    <year>1995</year>
+    <manufacturer>Black Pearl Software</manufacturer>
+    <rom name="Madden NFL '96 (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Side Pocket">
+    <description>The main objective is to cross different USA cities and reach the predetermined scores to go ahead. But remember: you'll have only 16 balls and every error can be lethal!
+
+The game also comes with modes for 2 players with two variants: 2P Pocket Game (the traditional mode) and 2P 9-Ball Game, where the premise is to sink 9 balls before the other player makes them first. If you prefer, test your target in Trick Game or even hear your favorite song in Jukebox.
+
+After each stage completed (and some luck), a bonus stage will appear, as well as the chance to earn extra balls. You will only need a good target in the parquet block!</description>
+    <year>1994</year>
+    <manufacturer>Data East</manufacturer>
+    <rom name="Side Pocket (USA).gg" size="262144" />
+  </game>
+  <game name="FIFA Soccer 96">
+    <description>Il calcio di nuova generazione è qui! Le caratteristiche includono: lettori modellati Silicon Graphics che utilizzano la tecnologia di animazione Motion Design. Nuove mosse tra cui 1-2 passaggi, palleggio veloce, raffiche, manichini, falsi e noce moscata! Oltre 3.500 giocatori reali con precisi punti di forza e di debolezza. Trasferisci giocatori reali e personalizzati per creare la squadra dei tuoi sogni. 12 leghe internazionali, tra cui inglese, scozzese, italiano, tedesco e francese.</description>
+    <year>1995</year>
+    <manufacturer>Black Pearl Software</manufacturer>
+    <rom name="FIFA Soccer 96 (USA, Europe) (En,Fr,De,Es).gg" size="524288" />
+  </game>
+  <game name="The Ottifants">
+    <description>"The Ottifants", il gioco, è basato sull'omonimo cartone animato di 13 episodi, trasmesso su RTL, in Germania, nel 1993. Anche questo è tratto da un fumetto creato negli anni '70 da Otto Waalkes.
+
+Bruno, il piccolo Ottifant, è molto annoiato. Suo padre è stato rapito da estranei! Almeno questo è quello che pensa, seguendo la scia di caramelle cadute dal tovagliolo di suo padre, sulla strada per l'ufficio (a proposito, lo sai che un livello si svolge in cantina?). Prima di completare la sua missione di salvataggio, dovrà affrontare un esercito mutante di giocattoli, macchine e piante mostro negli occhi del piccolo Otti.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Ottifants, The (Europe) (En,Fr,De,Es,It).gg" size="262144" />
+  </game>
+  <game name="Rise of the Robots">
+    <description>Sei un tuttofare cyborg in un lontano futuro inviato in un'enorme megacorporazione dove un'intelligenza artificiale malvagia ha preso il controllo dei robot dell'azienda. Hai il compito di affrontare questi robot in combattimento ed eliminarli uno per uno per raggiungere il nucleo e disattivare l'IA.&#xD;
+Per quanto riguarda il gameplay, questo è un picchiaduro standard con una grafica meravigliosa. Ha alcune limitazioni fastidiose come non essere in grado di saltare sopra il tuo nemico e un solo pulsante di fuoco.</description>
+    <year>1994</year>
+    <manufacturer>Time Warner Interactive</manufacturer>
+    <rom name="Rise of the Robots (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="The Chessmaster">
+    <description>The Chessmaster è un gioco in cui il giocatore ha la possibilità di giocare contro il Chessmaster controllato dalla CPU in una partita a scacchi standard.
+Per giocare il giocatore deve raccogliere i pezzi degli scacchi con il cursore della mano e posizionarli nella posizione desiderata, secondo le regole di un gioco di scacchi standard. Ci sono 16 diversi livelli di difficoltà che includono 2 livelli per principianti, 13 livelli standard (che vanno da una media di 5 secondi a 4,5 minuti per tiro a seconda del livello) e un livello infinito che continuerà a pensare a un tiro fino a quando non sarà possibile ottenere un tiro perfetto. fatto o è costretto a muoversi. C'è anche una modalità didattica che mostra al giocatore tutte le possibili mosse con il pezzo selezionato. Due giocatori possono giocare l'uno contro l'altro con due controller e c'è anche un'opzione per far giocare il Chessmaster stesso.</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Chessmaster, The (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Mighty Morphin Power Rangers">
+    <description>Questo è un gioco di combattimento uno contro uno per uno o due giocatori.
+
+I giocatori singoli scelgono un Ranger (rosso, rosa, blu, giallo, nero o il verde sbloccabile) e lo guidano attraverso una serie di battaglie contro i mostri di Rita. Dopo una normale battaglia, il mostro diventa molto grande, quindi è il momento di eliminare MegaZord.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Mighty Morphin Power Rangers (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="PGA Tour Golf II">
+    <description>PGA Tour Golf II è un gioco di golf. Rispetto all'opera precedente, questa versione aggiunge dieci giocatori professionisti per arrivare a un totale di sessanta. Anche la fisica della palla ha subito diversi miglioramenti e le statistiche dei giocatori sono state aggiornate. Non meno di cinque diversi tornei ti aspettano su sette percorsi completi. Il gameplay si basa ancora su un indicatore a tre fasi e un tempismo per abbinare potenza e precisione.</description>
+    <year>1995</year>
+    <manufacturer>Time Warner Interactive</manufacturer>
+    <rom name="PGA Tour Golf II (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Superman : The Man of Steel">
+    <description>Lois Lane has been kidnapped by Braniac. The Doom Star orbits the Earth. The deadliest adversaries Superman has ever encountered are running amok. What greater challenge for The Man of Steel, his Heat Vision, and the might of his Super Punch?</description>
+    <year>1993</year>
+    <manufacturer>Virgin</manufacturer>
+    <rom name="Superman - The Man of Steel (Europe).gg" size="262144" />
+  </game>
+  <game name="Sonic Blast">
+    <description>Sonic Blast è stato rilasciato per Game Gear insieme a Sonic 3D Blast (alias Sonic 3D: Flickies' Island) per Genesis/MD e Saturn. Vantava sprite di personaggi resi in modo simile e sfondi colorati. Il gioco era l'ennesima aggiunta alla serie, inoltre Sega aveva sperato che sarebbe stato una spinta alla selezione del titolo del Game Gear morente in quel momento. TecToy, con sede in Brasile, ha ripubblicato il gioco per Sega Master System nel 1997, un anno dopo il rilascio iniziale (mentre molti potrebbero pensare che si tratti di un titolo piratato, TecToy è infatti autorizzato a produrre e rilasciare giochi con il nome Sega).</description>
+    <year>1996</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Sonic Blast (World).gg" size="1048576" />
+  </game>
+  <game name="World Series Baseball">
+    <description>Questo gioco soddisferà se sei un appassionato di baseball. È dotato di una modalità stagione di varie lunghezze, una modalità mostra e una modalità di gioco di collegamento. Quando giochi alle esibizioni puoi scegliere tra 3 stadi. Un'altra caratteristica interessante di questo gioco è che puoi creare e nominare la tua squadra e usarli durante i giochi di esibizione.
+
+Le statistiche utilizzate in questo gioco risalgono alla stagione 1992.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="World Series Baseball (USA, Europe) (v1.1).gg" size="262144" />
+  </game>
+  <game name="Surf Ninjas">
+    <description>Surf Ninjas was created as a tie-on for the 1993 New Line Cinema movie of the same name and is loosely based on its content. The entire introduction of how the surfers discover they are the sons of a Patusani king is not mentioned and instead the player is thrown in the story as a ninja trainee right away. Colonel Chi wants to overthrow the kingdom and kill the last heirs, so he sends troops of ninjas to kill the two brothers.
+
+Players control one of the brothers as he travels through different locations such as the Palace restaurant, the docks at Venice (California), the island of Patu San and more. The 2D side-scrolling platforms missions contains platforms, enemies and ninjas and various hazards. One button is used to jump while the other, in combination with the D-pad, launches punches, kicks, throws and various combos. Attacks can also be performed from the air or using very high jumps.
+
+During gameplay an options screen can be accessed to review the statistics (health, strength, reflex and fight), get a hint through Adam's Game Gear, call the ninja Zatch to launch a powerful attack or select a weapon such as shurikens, fireballs, a knife and a sword. By defeating enemies coins are collected to be spent on bonus time on the clock, Zatch power-ups, a bonus life, complete regeneration, a hint, a weapon or a continue.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Surf Ninjas (USA).gg" size="524288" />
+  </game>
+  <game name="Crystal Warriors">
+    <description>Il regno di Tyramus è minacciato dall'invasione dell'Impero di Jyn che vuole usare il potere dei Quattro Cristalli per fini disastrosi. In Crystal Warriors su Game Gear, il tuo compito è scortare la principessa Iris, detentrice di uno dei cristalli, e rovesciare l'esercito nemico in battaglie a turni. Usa saggiamente i tuoi guerrieri, maghi e guaritori.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Crystal Warriors (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Iron Man X-O Manowar in Heavy Metal">
+    <description>I titani del metal Iron Man e X-O Manowar si uniscono per la prima volta per affrontare una crisi cosmica ad alte prestazioni. È una fusione apocalittica di azione furiosa, con il massimo del potere e del realismo dei supereroi! Dotato di potenza di fuoco bidirezionale, esplosioni del raggio toracico, combo multi-colpo e tiro sull'asse Z, battaglie con i boss finali!</description>
+    <year>1996</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="Iron Man X-O Manowar in Heavy Metal (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Poker Face Paul's Poker">
+    <description>Approfitta delle sue possibilità attraverso alti e bassi, giocando a Five Card Stud o Video Poker. Prova il brivido di una mano mostruosa! La tensione cresce man mano che pescate la vostra ultima carta. Asso... una scala reale! Hai vinto!
+
+In Stud Poker, taglia il mazzo con altri tre giocatori dal computer. Varia il numero di mani giocate da 10 a infinito.
+
+Conserva le tue carte migliori, poi fai un'altra estrazione a Video Poker. Scegli saggiamente di disegnare una mano vincente.
+
+La funzione di aiuto ti dà la mossa migliore. Guarda le probabilità e ottieni il via libera per quando vantarti.</description>
+    <year>1994</year>
+    <manufacturer>Adrenalin</manufacturer>
+    <rom name="Poker Faced Paul's Poker (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="World Series Baseball '95">
+    <description>Nomo Hideo no World Series Baseball è un gioco di baseball per Sega Game Gear rilasciato come parte della serie World Series Baseball in Giappone. Include la superstar giapponese Nomo Hideo ed è una conversione dell'unico gioco statunitense World Series Baseball</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="World Series Baseball '95 (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="OutRun Europa">
+    <description>Il terzo gioco della serie OutRun, che ha rivoluzionato lo stile di prospettiva in terza persona dei giochi di corse. I livelli sono ambientati in tutta Europa, mentre cerchi di scappare dalla polizia. A differenza dei predecessori, usi un veicolo diverso in ogni livello, con moto e moto d'acqua che aggiungono varietà e richiedono abilità diverse da usare. Devi completare ogni livello entro i rigidi limiti di tempo e le strade sono perseguitate da altre auto per evitare e sorpassare. Puoi scegliere tra effetti sonori o musica.</description>
+    <year>1991</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="Out Run Europa (USA, Europe).gg" size="262656" />
+  </game>
+  <game name="Riddick Bowe Boxing">
+    <description>Riddick Bowe Boxing è un altro dei tanti giochi di boxe usciti all'epoca, ma con sottili differenze. L'HUD contiene misuratori di danni ed energia insieme a un anello in miniatura nella parte superiore dello schermo, utile per vedere la posizione del giocatore sul ring in modo da non rientrare facilmente in un angolo.&#xD;
+I giocatori possono competere nella modalità standard, 1 giocatore contro CPU, 1 giocatore contro 2 giocatori o anche una modalità carriera, dove ci sono quattro combattenti preimpostati tra cui scegliere insieme a un'opzione per creare pugili clienti. La carriera inizia alla posizione n. 25 della classifica e i giocatori salgono lentamente la scala, andando in palestra tra un incontro e l'altro per accumulare statistiche e infine affrontare "Big Daddy" in persona, Riddick Bowe.</description>
+    <year>1994</year>
+    <manufacturer>Extreme Entertainment</manufacturer>
+    <rom name="Riddick Bowe Boxing (USA).gg" size="262144" />
+  </game>
+  <game name="Arch Rivals">
+    <description>Arch Rivals è una conversione del famoso gioco arcade Midway. È una partita di basket 2 contro 2 che si distingue dalla massa per il suo approccio "senza regole". Imbrattare altri giocatori è più che accettato, è incoraggiato. Scegli tra dodici diverse squadre e otto giocatori, ognuno con le proprie caratteristiche e personalità.</description>
+    <year>1992</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Arch Rivals (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Zoop">
+    <description>Gioco di puzzle d'azione dal ritmo veloce in cui il giocatore elimina le forme colorate che si avvicinano al suo alter ego, un'altra forma colorata, prima che raggiungano la cima, ala Tetris.&#xD;
+Per eliminare le altre forme, devi puntare il tuo pezzo su di esso e "sparare". Se la forma è dello stesso colore del tuo pezzo, la forma viene eliminata, così come tutte le forme dello stesso colore dietro di essa, finché il tuo pezzo non colpisce un pezzo di un colore diverso. Se la forma è di un colore diverso o viene colpita durante la raccolta di una linea di forme simili, il tuo pezzo scambia i colori con la forma.</description>
+    <year>1995</year>
+    <manufacturer>Viacom New Media</manufacturer>
+    <rom name="Zoop (USA).gg" size="131072" />
+  </game>
+  <game name="Wizard Pinball">
+    <description>Wizard Pinball è un gioco di flipper che offre un tavolo con un tema fantasy, con maghi, draghi, fantasmi e scheletri. Due giocatori possono giocare a turno, ciascuno a partire da cinque palline. Il tavolo presenta vari segreti e bonus, inclusi diversi livelli extra nascosti e una funzione multi-biglia. È disponibile un elenco dei punteggi migliori, ma non è possibile salvarlo alla disattivazione.</description>
+    <year>1995</year>
+    <manufacturer>Domark</manufacturer>
+    <rom name="Wizard Pinball (Europe).gg" size="262144" />
+  </game>
+  <game name="Choplifter III">
+    <description>Il sergente Wallen è stato abbattuto dai guerriglieri la scorsa notte mentre pattugliava le linee nemiche. È ferito, non dorme e cerca disperatamente aiuto. Non c'è tempo per la diplomazia: ENTRA IN AZIONE!</description>
+    <year>1994</year>
+    <manufacturer>Extreme Entertainment</manufacturer>
+    <rom name="Choplifter III (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Wheel of Fortune">
+    <description>Il game show preferito d'America è ora più grande e migliore che mai su Sega Game Gear.™ Questa nuovissima versione presenta la bellissima Vanna White e oltre 4.500 nuovi puzzle. Scegli il concorrente che vuoi essere, gioca contro il computer o contro un massimo di due amici. Gira la ruota, compra una vocale o prova a risolvere il puzzle. Solo Vanna White sa cosa c'è dietro le piastrelle. Guardare il tuo programma televisivo preferito è divertente, ma GAMETEK'S WHEEL OF FORTUNE® ti mette direttamente sul palco.</description>
+    <year>1992</year>
+    <manufacturer>GameTek</manufacturer>
+    <rom name="Wheel of Fortune (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Chuck Rock">
+    <description>Chuck Rock è il tipico uomo delle caverne medio. Gli piace passare le domeniche pomeriggio guardando il calcio e bevendo birra. Sfortunatamente, la sua pacifica esistenza viene interrotta un giorno quando sua moglie, Ophelia Rock, viene rapita dallo strambo del villaggio, Gary Gritter. Quindi, Chuck è piuttosto arrabbiato per l'intera situazione e devi aiutarlo a sistemare le cose.&#xD;
+Il gioco è un platform a scorrimento laterale. Chuck combatte contro una varietà di dinosauri usando il suo attacco di pancia e un calcio in salto. Di tanto in tanto deve raccogliere e lanciare sassi per sconfiggere i nemici e permettergli di saltare ad altezze maggiori.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Chuck Rock (World).gg" size="262144" />
+  </game>
+  <game name="Sports Illustrated Championship Football &amp; Baseball">
+    <description>Sports Illustrated: Championship Football &amp; Baseball is a Sports game, developed by Unexpected Development and published by Black Pearl, which was released in 1993.</description>
+    <year>1995</year>
+    <manufacturer>Black Pearl Software</manufacturer>
+    <rom name="Sports Illustrated Championship Football &amp; Baseball (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="RoboCop Versus The Terminator">
+    <description>Nel prossimo futuro, i mondi di RoboCop e Terminator si fonderanno in un'unica realtà. Sei Robocop e devi salvare l'umanità distruggendo il Supercomputer Skynet in un possibile futuro in cui le macchine governano la Terra e Skynet è il Capo Supremo.</description>
+    <year>1993</year>
+    <manufacturer>Virgin</manufacturer>
+    <rom name="RoboCop versus The Terminator (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Ristar">
+    <description>Il malvagio Re della Disperazione governa la costellazione di Valjee sotto il dominio del terrore, causando miseria e oscurità. Ma dal profondo dello spazio arriva Ristar, una stella cadente destinata alla grandezza. Solo con i suoi poteri speciali e le braccia elastiche può ripristinare la felicità attraverso tutti i 6 livelli.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Ristar - The Shooting Star (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Pac-Attack">
+    <description>Pac-Attack è un gioco in stile Tetris su Game Gear con il personaggio Pac-Man. Scendono blocchi di forme diverse, composti da pezzi di linea monocolore, fantasmi e il famoso Pac-Man. L'obiettivo è quello di creare linee con i pezzi, mentre divora con Pac-Man i fantasmi che si frappongono. Una modalità Versus ti permette di affrontare il computer o un altro giocatore.</description>
+    <year>1994</year>
+    <manufacturer>Namco</manufacturer>
+    <rom name="Pac-Attack (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="RoboCop 3">
+    <description>RoboCop 3 è uno sparatutto platform a scorrimento laterale. Ottieni missioni (come salvare i tuoi colleghi che sono tenuti in ostaggio), che sono divise in diversi sottolivelli&#xD;
+. I livelli di solito consistono in diverse piattaforme e sono densamente popolati da nemici che ti sparano. Puoi raccogliere kit di riparazione speciali, che verranno utilizzati per ripristinare la tua salute dopo aver completato un livello. "RoboCop 3" è più uno sparatutto rispetto ai suoi predecessori, avendo nemici sempre più forti.</description>
+    <year>1993</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="RoboCop 3 (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="PGA Tour 96">
+    <description>PGA Tour 96 è una simulazione di golf che ha la particolarità di utilizzare la licenza ufficiale di questo sport, dandoti l'opportunità di giocare su campi e con giocatori di golf realmente esistenti.</description>
+    <year>1996</year>
+    <manufacturer>Black Pearl Software</manufacturer>
+    <rom name="PGA Tour 96 (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Super Star Wars : Return of the Jedi">
+    <description>You select your character from the movie (Luke Skywalker, Han Solo, Princess Leia, or Chewbacca) before each level, as each one has different abilities, and go try to beat levels based on the movie's scenes brandishing lightsabers, blasters or crossbows, etc. depending on your choice of character.
+
+Gameplay consists of standard platform action spiced up with some slightly different (gameplay-wise) sequences. Race to Jabba the Hutt's palace in a speeder, fight your way through Jabba the Hutt's minions before killing Jabba himself, control speeder bikes and the Millennium Falcon, and much more.&#xD;</description>
+    <year>1995</year>
+    <manufacturer>Black Pearl Software</manufacturer>
+    <rom name="Super Return of the Jedi (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Mortal Kombat 3">
+    <description>Shao Kahn ha vinto. Il regno terrestre non esiste più. Per far rivivere la sua regina Sindel, l'imperatore Shao Kahn ha usato il Torneo Outworld di Mortal Kombat 2 come diversivo mentre i suoi Sacerdoti Ombra fanno rivivere la sua Regina caduta sulla Terra. Una volta emanato, il ponte dimensionale tra i due regni si connette, consentendo alle squadre di sterminio di Kahn di invadere e distruggere la Terra e schiavizzare le anime della popolazione.</description>
+    <year>1996</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="Mortal Kombat 3 (Europe).gg" size="524288" />
+  </game>
+  <game name="Ariel the Little Mermaid">
+    <description>Aiuta Ariel, la gioiosa sirenetta, o Tritone, suo padre, a sventare la malvagia Ursula, che ha trasformato tutti in piccole creature verdi simili a vermi, incluso il personaggio che inizialmente non scegli.
+Il salvataggio richiede di nuotare semplicemente nelle sfortunate piccole vittime mentre si aggirano in luoghi fissi nel mondo acquoso; mentre ti difendi e schiva nemici come anguille, vongole, squali e molti altri cattivi marini. Anche amici come Flounder e Sebastian possono essere convocati per un piccolo aiuto.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Ariel the Little Mermaid (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Dragon : The Bruce Lee Story">
+    <description>Basato sull'omonimo film del 1993, Dragon: The Bruce Lee Story fa scoprire a Bruce Lee che è nato in America e parte per esplorare questa nuova terra. Tuttavia è un posto pericoloso e deve lottare per sopravvivere.&#xD;
+Dragon: The Bruce Lee Story è un gioco d'azione a scorrimento laterale. Bruce Lee viaggia attraverso varie località e ingaggia i nemici nelle arti marziali. Nei panni di Bruce Lee, il giocatore può saltare e attaccare. Il pulsante direzionale premuto al momento dell'attacco determina se Bruce eseguirà un pugno, un calcio circolare o un calcio basso. I potenziamenti sono sparsi per i livelli e possono essere attivati attaccandoli. Bruce ha un misuratore di salute nella parte superiore dello schermo, quando è esaurito perdi una vita.</description>
+    <year>1994</year>
+    <manufacturer>Virgin Interactive</manufacturer>
+    <rom name="Dragon - The Bruce Lee Story (USA).gg" size="262144" />
+  </game>
+  <game name="Micro Machines">
+    <description>MicroMachines su Game Gear ti offre di guidare i piccoli veicoli del marchio, in gare divertenti e varie nel mezzo di una vasca da bagno, una scrivania o un tavolo da pranzo. Gare che includono fino a 4 concorrenti. Se uno di loro cade dal circuito dove è troppo indietro, perde un punto.</description>
+    <year>1993</year>
+    <manufacturer>Codemasters</manufacturer>
+    <rom name="Micro Machines (Europe).gg" size="262144" />
+  </game>
+  <game name="Andre Agassi Tennis">
+    <description>Il dritto esplosivo di Andre Agassi è tuo! Sii Agassi o gioca contro Agassi. Per la prima volta, guadagna molti soldi con le partite "skin", dove le scommesse raddoppiano ad ogni ritorno. Con 4 campi, 8 giocatori entusiasmanti, ognuno con stili di gioco diversi e un arbitro che chiama ogni mossa, Andre Agassi Tennis non può essere battuto.</description>
+    <year>1993</year>
+    <manufacturer>Tecmagik</manufacturer>
+    <rom name="Andre Agassi Tennis (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Tails Adventure">
+    <description>Il gioco platform Tails Adventure disponibile su Game Gear racconta la storia del compagno più famoso di Sonic the Hedgehog: Tails the Flying Squirrel. Mentre il nostro eroe riposa sulla sua isola, viene improvvisamente attaccato da un intero esercito di anatre. Armato solo di bombe all'inizio, Tails sarà in grado di recuperare molti gadget in seguito come un piccolo robot telecomandato, così come i famosi Chaos Emerald per aumentare il suo indicatore di volo.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Tails Adventures (Japan, USA) (En,Ja).gg" size="524288" />
+  </game>
+  <game name="Virtua Fighter Animation">
+    <description>Virtua Fighter Animation è un gioco di combattimento in 2D basato sulla serie di anime Virtua Fighter. Ha due modalità di gioco: storia e versus.
+
+Nella modalità storia, il giocatore segue la trama dell'anime, con scene in stile anime prima e dopo ogni combattimento. La storia è divisa in atti, ognuno dei quali corrisponde a un combattimento. Il giocatore inizia a controllare Akira Yuki, mentre batte i suoi avversari, ognuno di loro si unisce al suo gruppo, in modo che possano essere scelti nei combattimenti successivi. Oltre ad Akira, gli altri personaggi disponibili sono Pai Chan, Jacky Bryant, Wolf Hawkfield, Kage-Maru, Sarah Bryant e Lau Chan. Nell'atto finale, il giocatore deve combattere Dural.</description>
+    <year>1996</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Virtua Fighter Animation (USA).gg" size="1048576" />
+  </game>
+  <game name="Sports Trivia">
+    <description>Sports Trivia is a Sega Game Gear sports quiz game released exclusively in North America. This particular version of the game is not fully understood - it is thought to have only been distributed as a pack-in with Game Gear consoles. A separate, updated(?) version exists in the form of Sports Trivia: Championship Edition.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Sports Trivia (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Prince of Persia">
+    <description>Il Gran Visir Jaffar ti ha gettato in una prigione oscura e ha intenzione di sposare la ragazza dei tuoi sogni in un'ora. Non lascerai che accada, vero? Prova a fuggire dal dungeon, elimina le guardie di Jaffar, trova la strada attraverso il palazzo del Sultano e sconfiggi Jaffar stesso. Ora vai, hai 60 minuti!
+
+Prince of Persia è un platform 2D con gameplay corri e salta. Il tuo eroe deve evitare trappole mortali, risolvere alcuni semplici enigmi e ingaggiare duelli con la spada con le guardie. Il giocatore ha un numero infinito di vite, ma deve ricominciare dall'inizio di un livello ogni volta che muore e deve completare il gioco entro un'ora. Un aspetto particolarmente degno di nota del gioco è l'animazione molto fluida del tuo personaggio.</description>
+    <year>1992</year>
+    <manufacturer>Domark</manufacturer>
+    <rom name="Prince of Persia (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Casino Funpak">
+    <description>In Casino FunPak, ti aggiri in un casinò, partecipando a una moltitudine di giochi e partecipando a tornei per guadagnare più soldi che puoi. Puoi giocare a roulette, video poker, slot machine, blackjack e craps. La modalità torneo contiene un ampio tour dei cinque giochi.</description>
+    <year>1994</year>
+    <manufacturer>Interplay</manufacturer>
+    <rom name="Casino Funpak (USA).gg" size="262144" />
+  </game>
+  <game name="James Pond 3 : Operation Starfish">
+    <description>Il sinistro Dr. Maybe è tornato e solo il nostro agente speciale più scaltro, James Pond, può fermarlo. L'agente speciale Finnius Frog può aiutarti a raggiungere quei luoghi difficili da raggiungere con le sue potenti abilità di salto. Esplora più di 100 livelli di divertimento oltraggioso! Vinci usando un oceano di gadget FI5H: stivali a ventosa, la pistola della frutta, specifiche a raggi X, un'unità di propulsione, stivali a molla e un intelligente travestimento da frutta. Usa uno speciale pacchetto di razzi FI5H per sconfiggere il Dr. Forse! Friggi oltre 40 nemici diversi sotto il controllo del Dr. Maybe ed evita le pistole montate e i lanciamissili di Maybe!</description>
+    <year>1994</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="James Pond 3 - Operation Starfi5h (Europe).gg" size="524288" />
+  </game>
+  <game name="Zool no Yume Bouken">
+    <description>Il suo nome è Zool. È un Ninja nella 2345a dimensione, 6 mondi ciascuno con 3 stage.&#xD;
+In questo platform puoi correre, saltare, arrampicarti sui muri e sparare ai nemici. Nei livelli ci sono anche alcuni power-up per Zool. Ci sono cuori che spendono la vita, bombe intelligenti, scudi, abilità di salto più potenti e uno Zool gemello. Questo "gemello" fa tutti i tuoi movimenti pochi secondi dopo di te.&#xD;
+Nelle opzioni puoi cambiare la difficoltà e la velocità di gioco due volte, il continuo e la musica di sottofondo (Rock o Funk).</description>
+    <year>1994</year>
+    <manufacturer>Gremlin Graphics Software</manufacturer>
+    <rom name="Zool (USA).gg" size="262144" />
+  </game>
+  <game name="Paperboy 2">
+    <description>Sei un ragazzo di carta. Sali sulla tua bicicletta. Evita gli ostacoli sulla strada, come cani, macchine e praticamente tutto ciò che puoi immaginare. Diavolo, alcune persone ti sparano palle di cannone! E faresti meglio a essere molto sicuro di lanciare carte solo nelle case giuste! (e con le persone, è divertente :)</description>
+    <year>1993</year>
+    <manufacturer>Tengen</manufacturer>
+    <rom name="Paperboy II (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Mortal Kombat">
+    <description>Cinquecento anni fa, un antico e rispettato torneo di combattimento Shaolin, tenuto ogni 50 anni, fu corrotto da uno stregone malvagio e anziano di nome Shang Tsung. Shang era accompagnato dal principe Goro, un guerriero della razza Shokan (un mezzo umano / mezzo drago a quattro braccia). Sapendo che se dieci tornei di fila fossero stati vinti dal campione Outworld, il Regno della Terra sarebbe stato conquistato dal male e sarebbe caduto nell'oscurità, Shang entrò nel torneo di Goro e lo fece sconfiggere il grande Kung Lao. Goro regna supremo come campione di combattimento imbattuto da cinquecento anni. Mentre si avvicina l'ultimo torneo richiesto, Raiden, Dio del Tuono e protettore del Regno della Terra, mette in atto un piano per far pendere la bilancia a favore degli umani, Sette combattenti entrano nell'arena sull'isola misteriosa di Shang Tsung: il guerriero Shaolin Liu Kang, forze speciali l'agente Sonya Blade, il delinquente mercenario Kano, l'attore in cerca di fama Johnny Cage, il guerriero Lin Kuei Sub-Zero con il ghiaccio e il suo avversario non morto Scorpion, e lo stesso Raiden.</description>
+    <year>1993</year>
+    <manufacturer>Arena Entertainment</manufacturer>
+    <rom name="Mortal Kombat (USA, Europe) (v2.6).gg" size="524288" />
+  </game>
+  <game name="Desert Strike : Return to the Gulf">
+    <description>Desert Strike: Return to the Gulf su Game Gear è il primo gioco della serie Strike. La storia si svolge un anno dopo la Guerra del Golfo, quando un generale tirannico minaccia il Medio Oriente e gli Stati Uniti. Il presidente ti ordina di abbattere il generale Kilbaba ei suoi terroristi, prima che si impegnino in un conflitto nucleare globale. Piloti un elicottero Apache e i tuoi obiettivi sono diversi: salvare, distruggere obiettivi, deviare missili.</description>
+    <year>1994</year>
+    <manufacturer>Domark</manufacturer>
+    <rom name="Desert Strike - Return to the Gulf (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="The Majors Pro Baseball">
+    <description>The Majors: Pro Baseball is a Sports game, developed and published by Sega, which was released in 1992.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Majors Pro Baseball, The (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Tengen World Cup Soccer">
+    <description>World Cup Soccer lets the player choose from 24 International soccer teams where the player can enter in the World Cup tournament.  The player will compete in an Elimination League where the player must earn enough points, either through victories or draws, to qualify for the World Cup tournament where the games are a Sudden Death format.  Friends can also compete head-to-head in an Exhibition mode using the Gear-to-Gear cable.</description>
+    <year>1993</year>
+    <manufacturer>Tengen</manufacturer>
+    <rom name="Tengen World Cup Soccer (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="World Class Leader Board">
+    <description>Prima della lunga serie di Links, Access ha prodotto il lignaggio del Leader Board, che si conclude qui. Vento, scatto e potenza sono le considerazioni principali mentre schivi i bunker, l'acqua e il rough che rendono i percorsi più complessi rispetto alle versioni a 8 bit dell'originale.&#xD;
+Viene fornito un editor del corso. I corsi forniti includono corsi reali come St. Andrews, un design immaginario come The Gauntlet, che come suggerisce il nome è progettato per spingere al massimo le tue abilità.&#xD;
+La versione per PC ha rivoluzionato l'uso dell'altoparlante per PC per riprodurre campioni vocali tramite il loro processo brevettato "RealSound". Scherzi come "Non ci sono dubbi, è immerso nella trappola di sabbia", "Dritto sul fairway" e "Sembra che abbia colpito l'albero, Jim". sono usati per fornire commenti in esecuzione sul gameplay.</description>
+    <year>1991</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="World Class Leader Board (USA).gg" size="262144" />
+  </game>
+  <game name="Tom and Jerry : The Movie">
+    <description>Tom &amp; Jerry: The Movie è un gioco di Tom &amp; Jerry che è praticamente solo Tom che insegue Jerry mentre negozia un mucchio di piattaforme posizionate veramente in modo ridicolo!</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Tom and Jerry - The Movie (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Cliffhanger">
+    <description>Basato sul film d'azione e avventura da brivido con Sylvester Stallone, Cliffhanger ti sfida ad affrontare valanghe tonanti, scogliere ghiacciate e le vette da capogiro delle Montagne Rocciose mentre combatti un feroce gruppo di fuggitivi ben armati ed estremamente pericolosi. Resisterai per tutta la vita attraverso livelli emozionanti che richiedono tutta la tua forza e abilità solo per sopravvivere. Sperimenta nuove forme selvagge di gioco come l'arrampicata in montagna e l'esplorazione di grotte, insieme a tutta l'eccitazione di tutte le incredibili azioni di combattimento corpo a corpo e armate. L'avventura non finisce finché non trovi 100 milioni di dollari di bottino rubato, sconfiggi i fuggitivi e ti riunisci con i tuoi amici!</description>
+    <year>1993</year>
+    <manufacturer>Sony Imagesoft</manufacturer>
+    <rom name="Cliffhanger (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Evander Holyfield's 'Real Deal' Boxing">
+    <description>"Real Deal" Boxing di Evander Holyfield è una simulazione di boxe su Game Gear. Scegli una partita veloce in modalità esibizione o scegli la modalità carriera in cui guidi il tuo puledro attraverso tutte le fasi per affrontare Evander Holyfield. Valuta bene la fatica e i colpi ricevuti dal tuo pugile e manda al tappeto il tuo avversario per raggiungere la gloria.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Evander Holyfield Boxing (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Shining Force II : The Sword of Hajya">
+    <description>This is not a sequel to the game  Shining Force: The Legacy of Great Intention for Genesis, but a sequel to a  Shining Force Gaiden, which was released only in Japan.
+
+After a prolonged war, the kingdoms of Cypress and Gardiana decided to join forces fighting the evil empire of Iom. Nick, the Prince of Cypress, that was conquered by Iom, had his hand turned into stone during the last battle, and therefore cannot wield his legendary Sword of Hajya. Nevertheless, he tries to recruit people who would help him to gain his kingdom back.
+
+The game is a strategy RPG. You command a large party composed of several units, and most of the game is spent in battles. The turn-based battles occupy the entire location; during your turn, you command your troops to move around and to attack. Your main heroes gain levels in a RPG fashion.&#xD;</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Shining Force II - The Sword of Hajya (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Sonic Labyrinth">
+    <description>Un giorno, Sonic si è svegliato da un pisolino e ha scoperto che le sue classiche scarpe da ginnastica rosse sono state sostituite con la nuova invenzione del Dr. Eggman, gli Speed Down Boots. maledizioni! Per rimuoverli, Sonic deve attraversare il grande labirinto di Eggman e recuperare i Chaos Emerald.
+Come il successivo Sonic 3D Blast, questo gioco utilizza una vista isometrica di 3/4. Attraversa quattro zone principali, ciascuna divisa in quattro fasi. Per completare un livello, devi trovare le tre chiavi e aprire l'uscita prima che scada il tempo.
+Ma attenzione! I nemici vogliono ostacolare i tuoi progressi. Eliminali con il tuo Spin Dash. E fai attenzione agli ostacoli come paraurti, pinne, teletrasporti, punte e nastri trasportatori. Raccogli potenziamenti per aumentare le tue possibilità di successo.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Sonic Labyrinth (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Dragon Crystal">
+    <description>Dragon Crystal su Game Gear è un gioco di ruolo. Combatti i tuoi nemici a turni, attraversando livelli in cui l'obiettivo iniziale è trovare un teletrasporto che ti porterà al livello successivo. Un uovo ti accompagna, sta a te coccolarlo affinché diventi un potente drago!</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Dragon Crystal (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Primal Rage">
+    <description>Una meteora colpì la Terra e causò un grande caos. Sette divinità dei tempi antichi si sono svegliati e ora stanno tentando di prendere il controllo del mondo post-apocalittico.&#xD;
+Primal Rage è un gioco di combattimento uno contro uno con dinosauri e scimmie giganti come combattenti. La grafica è realizzata con animazione stop-motion digitalizzata. Il gameplay è simile a Mortal Kombat in quanto è visto da una prospettiva laterale e presenta mosse finali mortali alla fine della partita.</description>
+    <year>1995</year>
+    <manufacturer>Time Warner Interactive</manufacturer>
+    <rom name="Primal Rage (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Star Trek : Generations : Beyond the Nexus">
+    <description>Beyond the Nexus is based on the seventh Star Trek movie and its story: Captains Kirk and Picard must team up to stop a mad scientist from destroying an inhabited planet so that he might reenter the mysterious Nexus energy ribbon.
+
+The game has several different playing modes. The first is starship combat: seen from the main screen of the Enterprise (both the -B or the -D version) you navigate the ship through space, firing phasers or photon torpedoes at enemies like Tholians, Klingons and Romulans. Another mode has you navigating the ship to its destination by flying through rectangles in space.
+
+On away missions, the view switches to a top-down perspective where you control a single character and can fire your phaser at enemies.
+
+Finally, the game has two puzzle modes. In the first one, frequencies must be decoded: this is done by putting symbols into the right order. One can only guess the order at first, but after an attempt the game reveals how many of the selected symbols are part of the combination and how many are in the right place. Using logic, the right order can be determined, but there are only a limited number of tries.
+
+The second puzzle mode is used to reroute power from one system to another. To do so, a path must be built on a grid for the energy to flow through. The path must be built out of randomly assigned pieces that don't always fit together, similar to the concept of Pipe Mania.&#xD;</description>
+    <year>1994</year>
+    <manufacturer>Absolute Entertainment</manufacturer>
+    <rom name="Star Trek Generations - Beyond the Nexus (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="R.C. Grand Prix">
+    <description>RC Grand Prix è un R.C. gioco di corse con opzioni personalizzabili. Puoi aggiornare la tua auto, aggiungendo batterie di capacità maggiore e rapporti di trasmissione oltre ai soliti elementi da corsa come sospensioni, pneumatici e motori migliori. Gareggia contro altri 3 avversari in questo gioco da corsa in testa a 3/4.</description>
+    <year>1993</year>
+    <manufacturer>Absolute Entertainment</manufacturer>
+    <rom name="R.C. Grand Prix (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Pete Sampras Tennis">
+    <description>Gioca partite dimostrative in singolo e doppio, tornei a eliminazione diretta o partecipa a un tour mondiale. Scegli tra 30 giocatori diversi tra cui il seme numero 1 mondiale, Pete Sampras.
+
+Le azioni sono viste dal tradizionale punto di vista in terza persona. Viene fornita una modalità tutorial per aiutarti ad abituarti ai colpi di dritto, pallonetto e drop offerti. È possibile giocare su diversi campi da tutto il mondo, su campi in cemento, erba e terra battuta.
+
+La versione Game Gear di questo gioco permetteva a due giocatori di condividere un Game Gear oa quattro giocatori di giocare in doppio collegando due palmari.</description>
+    <year>1994</year>
+    <manufacturer>Codemasters</manufacturer>
+    <rom name="Pete Sampras Tennis (Europe).gg" size="262144" />
+  </game>
+  <game name="Magical Puzzle Popils">
+    <description>Rapita dallo stregone Popils, la bella principessa chiede il tuo aiuto. Mentre cammina devi distruggere i blocchi colpendoli, calciando e colpendoli alla testa nell'ordine corretto e al momento giusto per raggiungerli.</description>
+    <year>1991</year>
+    <manufacturer>Tengen</manufacturer>
+    <rom name="Magical Puzzle Popils (World) (En,Ja).gg" size="131072" />
+  </game>
+  <game name="Sega Game Pack 4 in 1">
+    <description>Sono inclusi quattro giochi senza titolo: un clone di colonne, in cui il giocatore mira a gruppi di quattro pezzi invece di linee di tre, un semplice gioco di calci di rigore, un gioco di rally di base e un semplice gioco di tennis.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Sega Game Pack 4 in 1 (Europe).gg" size="262144" />
+  </game>
+  <game name="Road Rash">
+    <description>Road Rash su Game Gear è un gioco di moto che esce dai sentieri battuti. Competerai in gare nel continente americano, il più delle volte su strada, dove hai la possibilità di infliggere la peggior sporcizia ai tuoi avversari. Le vittorie ti faranno guadagnare soldi che ti permetteranno di pagare per una moto più potente.</description>
+    <year>1994</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="Road Rash (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Wimbledon Tennis">
+    <description>Smash eccezionali, servizi impetuosi, passanti, un modo di allenamento e quattro tornei prestigiosi, tutto in questo gioco.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Wimbledon (Japan, Europe).gg" size="131072" />
+  </game>
+  <game name="Pinball Dreams">
+    <description>Il primo di una serie di giochi di flipper del 21° secolo e Digital Illusions, con quattro tavoli che trattano temi come il selvaggio west per Steel Wheel, i razzi spaziali per Ignition, un cimitero infestato per Nightmare e la musica pop per Beat Box.
+
+Le versioni portatili per Game Boy e Game Gear hanno solo 3 dei 4 tavoli originali con la rimozione del Beat Box.
+
+La versione per iPhone include grafica aggiornata (opzionale) e gameplay sia con orientamento verticale che orizzontale.</description>
+    <year>1995</year>
+    <manufacturer>GameTek</manufacturer>
+    <rom name="Pinball Dreams (USA).gg" size="131072" />
+  </game>
+  <game name="Batter Up">
+    <description>Batter Up, noto come Gear Stadium in Giappone, è un gioco di baseball sviluppato e pubblicato da Namco per Sega Game Gear. È una voce portatile nella serie World Stadium di Namco, a sua volta ispirata alla precedente serie Family Stadium per Famicom, la cui prima voce, Pro Yakyuu Family Stadium, risale al 1986. Ha una modalità a due giocatori che utilizza il Gear -to-Gear Cavo periferico. Una versione aggiornata intitolata Gear Stadium Heiseiban è stata rilasciata in Giappone nel 1995.</description>
+    <year>1991</year>
+    <manufacturer>Namco</manufacturer>
+    <rom name="Batter Up (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Clutch Hitter">
+    <description>Clutch Hitter è un tipico gioco di baseball basato sulla versione arcade con lo stesso nome. Ha tutte le squadre della Major League e le loro statistiche per la stagione 1991. Tuttavia, non ha nomi di giocatori o nomi di squadre. L'aspetto del gioco è simile a R.B.I. Baseball ed è basato su Sports Talk Baseball for the Genesis. Puoi anche collegarti a un altro Game Gear e giocare contro un amico. La lunghezza degli inning può essere determinata per scegliere da cinque, sette, fino a nove inning completi e quando si batte lo schermo si divide per vedere sia la prima che la terza base per tenere d'occhio i baserunner.</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Clutch Hitter (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Streets of Rage">
+    <description>Streets of Rage, la risposta di Sega a Final Fight, segue la storia di tre giovani agenti di polizia (Adam Hunter, Axel Stone e Blaze Fielding) in una città controllata da un sindacato criminale guidato da un "Mr. X" dove il crimine è dilagante, che porta i tre eroi a fare un patto per lasciare la forza e rovesciare il sindacato da soli.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Streets of Rage (World).gg" size="262144" />
+  </game>
+  <game name="The Adventures of Batman &amp; Robin">
+    <description>Il gioco è basato sulla famosa serie animata degli anni '90 con lo stesso nome. Il giocatore prende il controllo esclusivamente di Batman, poiché il Joker ha rapito Robin per attirare Batman in un gioco. Inoltre, i Jolly consentono ai criminali più temuti di Gotham di competere tra loro per distrarre Batman. Naturalmente, Batman deve prendersi cura anche degli altri maestri criminali, mentre cerca di liberare Robin.
+Le avventure di Batman &amp; Robin è un platform / picchiaduro 2D. L'obiettivo in ogni fase e livello è camminare da sinistra a destra per raggiungere il (sub) boss e la fine del livello. Per sconfiggere i suoi nemici, Batman usa pugni e calci nel combattimento ravvicinato e diverse armi per brevi distanze. Batman ha una scorta illimitata di Batarang sin dall'inizio e ci sono altre quattro armi disponibili. Oltre al semplice salto, Batman può anche eseguire un doppio salto per raggiungere luoghi più alti e può aggrapparsi alle sporgenze.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Adventures of Batman &amp; Robin, The (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Taz in Escape from Mars">
+    <description>You play as Taz, the famous cartoon-character. Taz is captured by Marvin the Martian and transfered to his intergalactic Zoo! Now it is your job to aid Taz in his great escape from the Zoo-prison and also find a way back home to Earth. To make the escape a little easier, there are items placed here and there, such as cakes which make regain your health. You also find gas tanks, which you can eat and then breath fire.
+
+You will travel trough the Zoo, and a big wasteland and many other hostile zones with lots of weird enemies and bizarre bosses.</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Taz in Escape from Mars (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="NBA Action Starring David Robinson">
+    <description>NBA Action Starring David Robinson è una versione della versione Genesis di NBA Action '94 che presenta le formazioni standard cinque contro cinque e ha un'intera stagione di 82 partite o, se vuoi, una stagione di 26 partite, escludendo il gioco -off giochi. Presenta anche tutte le 27 squadre NBA dell'epoca e richiede un po' di strategia e know-how nel basket. È approvato e presenta la superstar dei San Antonio Spurs David Robinson.</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="NBA Action (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="The Lucky Dime Caper Starring Donald Duck">
+    <description>Maga Amelia ha rapito Qui, Quo e Qua! E come se non bastasse, ha anche rubato la moneta numero 1 di Zio Paperone! Unisciti a Paperino in questa avventura e dimostra che Maga non può competere con te. Viaggia attraverso sette mondi pieni di magia e pericolo, quindi invade il castello infestato di Maga per salvare i tuoi nipoti e recuperare la moneta di Zio Paperone.</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Lucky Dime Caper, The (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Krusty's Fun House">
+    <description>La casa dei divertimenti di Krusty il Clown è stata invasa dai topi. Devi aiutarlo a radunare i topi nelle macchine trappole per eliminarli. Per fare ciò, Krusty deve manipolare il suo ambiente per creare percorsi in modo che i topi si dirigano nella giusta direzione. Gli oggetti che Krusty sposta includono blocchi, ventagli e pezzi di tubo.
+Le trappole sono gestite da altri personaggi riconoscibili di Simpson: Bart, Homer, Telespalla Mel e Caporale Massimo Pestaggio.</description>
+    <year>1993</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Krusty's Fun House (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="NFL Quarterback Club">
+    <description>NFL Quarterback Club '95 per Game Gear è una versione delle altre versioni a 16 bit di Acclaim, con lo stesso numero di squadre, 28 in tutto, e ha anche preseason, playoff e una modalità stagione, ma manca la modalità simulazione, Sfida QB e la modalità QB "Crea il tuo proprietario" che caratterizzano le versioni console. Ha anche solo 20 diverse corse e passaggi per squadra.</description>
+    <year>1994</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="NFL Quarterback Club (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Fantasy Zone">
+    <description>Prendi il comando dell'astronave Opa-Opa e fatti strada attraverso vari livelli fantastici mentre cerchi di eliminare tutte le basi nemiche in ogni fase. Dopo aver distrutto le basi, dovrai battere il boss del livello per passare al livello successivo. Usando le tue pistole e le tue bombe con saggezza, sarai in grado di abbattere i tuoi nemici ed esplorare ciascuno degli ambienti folli in questo scorrimento laterale. Puoi anche acquistare armi potenziate per la tua nave accedendo al negozio.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Fantasy Zone Gear (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Home Alone">
+    <description>Macaulay Culkin è diventato per breve tempo una star bambino dopo il film Home Alone, in cui interpretava Kevin McCallister, che viene accidentalmente lasciato indietro dalla sua famiglia quando vanno in vacanza. Durante questo periodo, i ladri tentano di irrompere e Kevin deve sventarli.
+Nei panni di Kevin, inizi sulla sua fidata slitta, ma il compito principale è raggiungere la casa e renderla a prova di ladro. Ciò comporta l'impostazione di trappole in tutta la casa. Oggetti utili come balestra, filo metallico e pepe possono essere combinati per creare armi diaboliche. Devi anche mettere sotto chiave tutti gli oggetti di valore che trovi, per evitare che la famiglia li perda.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Home Alone (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Jeopardy!">
+    <description>Jeopardy!  è una versione per videogiochi dell'omonimo game show (In Italia conosciuto come RISCHIATUTTO) pubblicato da GameTek su diversi sistemi.
+La versione Mega Drive supporta fino a tre giocatori umani e assomiglia allo spettacolo originale (durante l'uscita del gioco), tuttavia la versione Game Gear è piuttosto ridotta, con solo due concorrenti in un gioco, nessun gioco CPU contro CPU, e grafica di qualità inferiore.
+Entrambi i giochi hanno ricevuto aggiornamenti in Jeopardy! Sports Edition e la versione Mega Drive ne hanno ricevuto uno in Jeopardy!: Deluxe Edition.</description>
+    <year>1992</year>
+    <manufacturer>GameTek</manufacturer>
+    <rom name="Jeopardy! (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Batman Returns">
+    <description>Grossi guai! Gothan City è dominata dalle bande di Penguin e Catwoman. È ora di attivare il bat segnale e chiamare il più grande di tutti gli eroi: Batman, il cavaliere oscuro. Solo che questa volta avrà disperatamente bisogno di un bat compagno. E sei stato scelto tu!!Ci saranno cinque fasi piene di azione e avventura, ei tuoi nemici faranno di tutto per sconfiggerti. Per affrontarli utilizzerai la Bat-mobile, la Bat-barca e tutti gli accessori per pipistrelli che conosci. Preparati bene, poiché la battaglia inizierà. E non sarà affatto bat facile!!</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Batman Returns (World).gg" size="262144" />
+  </game>
+  <game name="Wonder Boy : The Dragon's Trap">
+    <description>Wonder Boy III: La trappola del drago è un sequel diretto di Wonder Boy in Monster Land. Quando Tom-Tom sconfigge il drago MEKA, la bestia ferita lancia un incantesimo su di lui, trasformandolo in un Lizard-Man. Per riguadagnare la tua forma umana originale, devi trovare la Salamander Cross, nascosta dal drago vampiro in Monster Land.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Wonder Boy - The Dragon's Trap (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Battletoads">
+    <description>La Regina Oscura ha attaccato e rapito (rosprapito?) Il tuo migliore amico. A peggiorare le cose, ha catturato la ragazza più bella in circolazione! Allora, cosa farai? Piangere? Piagnucolare? Nascondere? Chiamare gli Starcops? NO! Perché sei un Battletoad! I Battletoad non piangono, non si nascondono e non chiedono aiuto! E di certo non piagnucolano! Diventano PAZZI poi diventano ANCHE! Quindi prendi il tuo blaster, salta sul Toadster e vai a prenderli!&#xD;
+Potrai controllare un carico di battaglia attraverso vari livelli. Alcuni sono picchiaduro a scorrimento laterale, altri sono discese verticali lungo un albero, combattendo mentre procedi, altri ti fanno cavalcare un razzo o una tavola da surf, sparando o evitando nemici. Alla fine di ogni area, c'è un boss. In alcune aree, circa a metà, potresti avere un mini-boss.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Battletoads (USA).gg" size="262144" />
+  </game>
+  <game name="Jurassic Park">
+    <description>Uno dei tanti giochi basati sul blockbuster Jurassic Park del 1993, la versione per i sistemi a 8 bit di Sega combina azione di tiro a scorrimento laterale e livelli platform.&#xD;
+&#xD;
+In ciascuna delle cinque fasi del gioco, una specie di dinosauro fuggita deve essere riconquistata. Ogni livello inizia con una sezione di guida a scorrimento laterale. I dinosauri attaccano l'auto e devono essere respinti sparando loro con un mirino. Se il giocatore sopravvive abbastanza a lungo, segue una battaglia contro un dinosauro particolarmente potente.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Jurassic Park (Europe).gg" size="524288" />
+  </game>
+  <game name="Dynamite Headdy">
+    <description>Dynamite Headdy su Game Gear presenta un giocattolo che ha la particolarità di combattere con la sua testa rimovibile. Lancialo contro i tuoi avversari per sbarazzartene in questo gioco platform da cartone animato e sconfiggi il malvagio Demone Oscuro che cerca di trasformare i giocattoli della città in scagnozzi al suo soldo. Combatti anche la tua nemesi, l'orso Trouble Bruin, e libera la città dal giogo demoniaco.</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Dynamite Headdy (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Fred Couples' Golf">
+    <description>IN BUCA AL PRIMO COLPO!!! Inizia contro le coppie "Boom Boom" di Fred, per due volte PGA Tour Player of the Year, o gioca come Fred e lancia la palla oltre 300 iarde! Consigli personali di Fred Couples, grafica incredibile! realizza il sogno di questo golfista!</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Fred Couples' Golf (USA).gg" size="524288" />
+  </game>
+  <game name="MLBPA Baseball">
+    <description>Mai prima d'ora è stato creato un gioco di baseball che cattura i dettagli di questo sport come MLBPA Baseball. Run-down realistici, cut-off precisi, il doppio interruttore, molteplici allineamenti difensivi, snap tiri, anche brutti salti e palle avviate. Mettici tutti i giocatori, da Alamar a Zeile, e avrai l'unico gioco di baseball che vale la pena giocare per il Game Gear.</description>
+    <year>1995</year>
+    <manufacturer>EA Sports</manufacturer>
+    <rom name="MLBPA Baseball (USA).gg" size="524288" />
+  </game>
+  <game name="Hook">
+    <description>In questo adattamento videoludico del film di Steven Spielberg Hook, il giocatore assume il ruolo di un Peter Pan adulto, i cui figli sono stati rapiti da Capitan Uncino. Trilli riporta Peter a Neverland, dove Pan deve tornare e reclamare i suoi figli.</description>
+    <year>1993</year>
+    <manufacturer>Sony Electronic Publishing</manufacturer>
+    <rom name="Hook (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Monster Truck Wars">
+    <description>Mettiti al volante e schiaccia la concorrenza! Sei fragorosi Monster Truck polverizzano tutto ciò che incontrano sui circuiti più difficili d'America! Guida turboforce, esplosioni di nitro esplosive e 1500 cavalli di potenza accendono la tua cattivissima monster machine!!</description>
+    <year>1993</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="Monster Truck Wars (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Arcade Classics">
+    <description>Arcade Classics offre tre titoli Atari classici. Include i seguenti giochi:nn1. Missile Command Centipede Pong (Ultrapong: sia Pong che Hockey)nnTutti i giochi hanno opzioni di difficoltà selezionabili. Contengono una modalità classica e una modalità Genesis (modalità SEGA nella versione Game Gear), che migliora la grafica e aggiunge nuovi effetti sonori.</description>
+    <year>1996</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Arcade Classics (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Hurricanes">
+    <description>Quindi pensavi che i palloni da calcio servissero per giocare... ripensaci! Parti per un viaggio sulle montagne russe in questa avventura platform attraverso inquietanti città minerarie, foreste terrificanti e mortali e giungle infestate. Tutto questo per cercare nello stadio - e la tua unica arma - un pallone da calcio!</description>
+    <year>1994</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="Hurricanes (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Chicago Syndicate">
+    <description>Chicago 1920: la corruzione e la violenza si sono impadronite del ciyu. Sei capi gangster controllano le strade. Larcen Tyler deve prendere il controllo di Chicago da solo, o morire provandoci!&#xD;
+Con Larcen Tyler di Eternal Champions nel suo ruolo più grande di sempre, da gangster esperto a crociato delle pulizie!&#xD;
+Usa la gamma completa di armi di Larcens e 60 diverse mosse di combattimento per combattere i gangster più duri di Chicago in sei territori cittadini!&#xD;
+Il tuo piano di attacco dipende da ciò che sta accadendo attualmente in ciascun territorio. Tieniti aggiornato sulle prossime mosse sindacali attraverso informatori ed eventi locali per pianificare strategicamente il tuo attacco!</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Chicago Syndicate (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Streets of Rage 2">
+    <description>After Axel Stone, Blaze Fielding and Adam Hunter destroyed the evil Syndicate leader, Mr. X, the city became a peaceful place to live, and each one of them followed their own paths. One year later, after their reunion, Adam's brother Sammy returned from school to find their apartment in a mess, and Adam nowhere to be seen, and after calling his two friends, one of them notices a photo of Adam chained to a wall, next to someone they knew very well - Mr. X, who returned to turn the peaceful city once again into a war zone. Now, Axel, Blaze, Sammy, and Axel's good friend Max, a pro wrestler, must head out to stop Mr. X once again...hopefully for good...
+
+Streets of Rage 2 differs from the previous title in several ways. There are changes in both graphics (characters now are bigger, more detailed and with more animation frames, and scenarios are less grainy) and gameplay (the rocket move was replaced by a special move that doubles in offense and defense along several new moves), along other new features such as life bars (and names) for all enemies and the radically different new characters.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Streets of Rage II (World).gg" size="524288" />
+  </game>
+  <game name="Bram Stoker's Dracula">
+    <description>Nel cuore della notte insegue le sue vittime inconsce con la passione di un principe e la grazia di una bestia. È il principe della notte e ha ipnoticamente incantato la tua adorabile Mina Murray. Tu, Jonathan Harker, devi mettere in gioco quella sanguisuga per salvare Mina da un destino peggiore della morte: essere un vampiro per sempre.</description>
+    <year>1993</year>
+    <manufacturer>Sony Imagesoft</manufacturer>
+    <rom name="Bram Stoker's Dracula (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Marko's Magic Football">
+    <description>Con l'aiuto di uno scienziato pazzo, il colonnello Brown, proprietario di una fabbrica di giocattoli, ha creato una sostanza che può trasformare persone e animali in mostri di fango mutanti. Dopo che il calcio di Marko entra in contatto con la sostanza, ottiene poteri magici e Marko si propone di fermare il colonnello Brown.
+
+Il gameplay è simile alle versioni SNES e Genesis, il che significa che Marko può sparare al suo pallone per uccidere i nemici o usarlo come trampolino, ma questa versione presenta meno mosse e un diverso design dei livelli.</description>
+    <year>1994</year>
+    <manufacturer>Domark</manufacturer>
+    <rom name="Marko's Magic Football (USA, Europe) (En,Fr,De,Es).gg" size="524288" />
+  </game>
+  <game name="Super Off Road">
+    <description>Super Off-Road is the ultimate off-road racing event. Four tough trucks speed around rough and ready tracks packed with pitfalls, power-boosters and prizes. No one knows the meaning of sportsmanship here. Have you got the skill and determination to come out on top?</description>
+    <year>1993</year>
+    <manufacturer>Virgin</manufacturer>
+    <rom name="Super Off Road (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Columns">
+    <description>Colums è liberamente derivato da Tetris, poiché implica la disposizione dei blocchi che cadono in modo tale da eliminarli. Tuttavia, nelle colonne sono gruppi di 3 blocchi (Gemme) della stessa dimensione ma di colore diverso, che devono essere disposti in sequenze di 3 o più, orizzontalmente, verticalmente o diagonalmente. Le sequenze di 4 o 5 contano per punti doppi o tripli e le sequenze diagonali ottengono il punteggio maggiore. Il vero trucco è impostare "combo", in cui una linea fa cadere altri blocchi in modo da creare altre linee.&#xD;
+&#xD;
+Oltre alla normale modalità di gioco, esiste anche una modalità 'flash', in cui lo scopo è semplicemente rimuovere un particolare blocco dalla base della pila di mattoni preformata. La difficoltà di questo può essere determinata aumentando il numero di righe complete già presenti.</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Columns (USA, Europe).gg" size="32768" />
+  </game>
+  <game name="Shaq Fu">
+    <description>Shaq brings his awesome skill and size to a multiworld fighting game! As Shaq, use your lightning-fast shuriken and other martial art techniques to prevail over a bunch of intensely evil warriors in the enforcement of justice. Summon Voodoo's bone-shattering earthquake, rebound with Rajah's shockwave sword or lash out with Sett's terrifying mummy wrap! Scores of secret power moves to discover and master!</description>
+    <year>1995</year>
+    <manufacturer>Electronic Arts</manufacturer>
+    <rom name="Shaq Fu (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Legend of Illusion Starring Mickey Mouse">
+    <description>C'era una volta un topo, un regno governato dal re egoista Pete. Un giorno, un'ombra terribile si insinuò sul regno, minacciando la vita dei suoi abitanti. Il consigliere del re ha detto che l'unico modo per fermare l'ombra sarebbe che il re stesso si sposti e cerchi la cura. Ma il re codardo Pete preferì rimanere nel castello, e mandò invece un semplice ragazzo della lavanderia di nome Topolino!
+
+Nei panni di Topolino, viaggerai attraverso vari livelli in questo gioco a piattaforme. Topolino spara una quantità illimitata di palline sui nemici, può saltare, salire sulle scale, appendersi alle corde ed eseguire altri trucchi. Topolino può anche raccogliere oggetti e metterli in un altro posto, ad esempio per accedere a un livello superiore o per aprire uno scrigno del tesoro.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Land of Illusion Starring Mickey Mouse (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="James Pond II : Codename RoboCod">
+    <description>Nella sua seconda avventura, James Pond deve recuperare i giocattoli che il dottor Forse ha rubato. Pond è stato armato con un dispositivo elastico in stile Inspector Gadget, che può usare per visualizzare le aree più alte o artigliare i soffitti in modo da scivolarci sopra.</description>
+    <year>1991</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="James Pond II - Codename RoboCod (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Cosmic Spacehead">
+    <description>Cosmic Spacehead è un gioco Platform / Adventure su Game Gear. Interpreti come Linus, un alieno che si è schiantato sul pianeta Terra. Al ritorno a casa nessuno gli crede, quindi dobbiamo aiutarlo a tornare sulla Terra per riportare le prove. Esplora i diversi livelli per raccogliere oggetti e parlare con le persone. Forse dopo questo la gente smetterà di chiamarti bugiardo!</description>
+    <year>1993</year>
+    <manufacturer>Codemasters</manufacturer>
+    <rom name="Cosmic Spacehead (Europe).gg" size="262144" />
+  </game>
+  <game name="Caesars Palace">
+    <description>Caesars Palace allunga il tuo dollaro di intrattenimento fino in fondo con più azione di gioco da casinò che mai disponibile per GameGear! Con un sacco di giochi tra cui scegliere, sperimenterai l'adrenalinica eccitazione dei giochi da casinò nel famoso Caesars Palace. Tavoli VIP solo su invito speciale: guadagna un sacco di soldi e potresti essere invitato a giocare con i grandi ragazzi. Acquisti one-stop agli sportelli automatici: preleva denaro, tieni traccia delle tue vincite e gioca al gratta e vinci in uno qualsiasi degli sportelli automatici sparsi per il casinò.</description>
+    <year>1993</year>
+    <manufacturer>Virgin</manufacturer>
+    <rom name="Caesars Palace (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Ernie Els Golf">
+    <description>Ernie Els Golf è un gioco di golf in cui giochi nei panni di Ernis Els soprannominato il "Big Easy", quattro volte campione dei tornei del Grande Slam, l'American Open nel 1994 e nel 1997 e il British Open nel 2002 e nel 2012. Puoi anche dire che non hai altra scelta che fare tutto il buco in uno.</description>
+    <year>1994</year>
+    <manufacturer>Codemasters</manufacturer>
+    <rom name="Ernie Els Golf (Europe) (En,Fr,De,Es,It).gg" size="262144" />
+  </game>
+  <game name="Slider">
+    <description>Gli Skweek vissero in armonia per secoli, un popolo pacifico per natura, fino all'arrivo di Pitark. Ha rovinato la loro terra rosa acceso togliendo il colore e solo dopo la sua morte hanno avuto l'opportunità di ripulire la terra. Il vostro compito è quello di viaggiare per i continenti e pulire ciascuno di essi.&#xD;
+Skweek può muoversi nelle quattro direzioni ed è armato di una semplice pistola, i cui colpi rimbalzano prima di colpire i nemici: gli Schnoreul (con i quali il contatto è immediatamente fatale). Alcuni riquadri contengono frecce che obbligano a prendere una direzione particolare, e ci sono anche blocchi da evitare. I blocchi bomba fanno esplodere i blocchi circostanti. I blocchi scorciatoia consentono di passare a un altro blocco di tipo teletrasporto.</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Slider (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Olympic Gold">
+    <description>Oro Olimpico: Barcelona '92 su Game Gear è il gioco ufficiale della 25a Olimpiade tenutasi a Barcellona nel 1992. Potrai gareggiare in sette discipline come: 100 m, lancio del martello, salto con l'asta, tuffi, 200 m stile libero, tiro con l'arco e finalmente i 110m ostacoli. Dovrai battere i pulsanti sulla tua scarsa console portatile il più rapidamente possibile per ottenere buone prestazioni.</description>
+    <year>1992</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="Olympic Gold (USA, Europe) (En,Fr,De,Es,It,Nl,Pt,Sv).gg" size="262144" />
+  </game>
+  <game name="Psychic World">
+    <description>Uno scienziato e le sue due assistenti, le sorelle Lucia e Cecile lavorano alla ricerca ESP in un remoto laboratorio scientifico. Un giorno, una sezione del laboratorio esplode. Si è scoperto che i mostri tenuti per gli esperimenti sono fuggiti e hanno portato con sé Cecile. Lo scienziato dà un "potenziatore ESP" a Lucia in modo che possa andare a salvarla.
+
+Lucia possiede poteri psichici che usa per spazzare via i suoi nemici. Inizi il gioco con pochi poteri e alla fine ne guadagni di più man mano che gli oggetti lasciati dai mostri vengono raccolti. Controlli poteri come fuoco, ghiaccio, onde sonore, invincibilità temporanea, levitazione e altro ancora. Premi Giù + Pulsante 2 per accedere al tuo arsenale di poteri.</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Psychic World (USA, Europe) (v1.1).gg" size="131072" />
+  </game>
+  <game name="Arena">
+    <description>Nell'anno 2026, un governo corrotto ha utilizzato una società di trasmissione televisiva chiamata Astralnet Broadcasting Company per controllare segretamente la popolazione e mantenerla sottoposta al lavaggio del cervello. Durante questi periodi un gruppo di ribelli pro-democratici, guidato da Guy Freelander, ha ottenuto un incontro segreto registrato tra alti funzionari del governo e direttori della ABC che discutevano dei loro piani diabolici. Convinti che se riproducono il nastro attraverso le trasmissioni della ABC, possono convincere la popolazione repressa a sollevarsi contro l'attuale regime. L'unico problema che si trova sulla loro strada è la strada per il centro di trasmissione, una trappola mortale soprannominata il labirinto.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Arena (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Tesserae">
+    <description>Tesserae is a 2-d combination of Rubic's Cube and the more advanced levels of Q-Bert. Simple yet colorful symbol graphics make for endless hours of gameplay... akin to how one can play MineSweeper or Tetris on end, this game got into your head. Gameplay consisted of "flipping" tesserae, or tiles, from squares over adjacent squares. The result would either create a complex tile, or cancel out, resulting in the deletion of a tile. The goal was to clear the board entirely. Higher levels were designated by added tile complexity, and larger board grid sizes.</description>
+    <year>1993</year>
+    <manufacturer>GameTek</manufacturer>
+    <rom name="Tesserae (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Joe Montana Football">
+    <description>Preparati per un'entusiasmante sfida: partecipa a un campionato di football americano insieme al miglior e più famoso difensore di tutti i tempi: Joe Montana. Hai il tuo giorno fortunato? Quindi lancia la moneta e incrocia le dita perché il gioco sta per iniziare. Joe ti aiuterà a scegliere la tua squadra, ma il resto sta a te. Studia ogni mossa, scopri le migliori strategie di attacco e corri più veloce che puoi! Effettua passaggi super precisi e lascia i tuoi avversari a terra! Avrai il fiato per resistere a questo stop?</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Joe Montana's Football (World).gg" size="262144" />
+  </game>
+  <game name="Poker Face Paul's Solitaire">
+    <description>Quattro diversi avvincenti solitari ti sfidano a distribuire le carte. Mescola il mazzo e crea un insieme promettente. Gira la carta successiva: è l'asso vincente! Più giochi meglio fai. Non è fortuna, è abilità!
+
+4 stili di solitario popolari, da Klondike Favorite a Monte Carlo, Elevens Acceleration e Ultra Challenging Calcolo!
+
+Gioca con un massimo di 4 mazzi, fino a 4 passaggi attraverso lo stack. Corri contro il tempo per una partita di 2-10 minuti o prenditi il ​​tuo tempo per sfogliare un'offerta.
+
+La funzione Aiuto speciale riassume le regole e le strategie. Le modalità traccia lampeggiano per guidarti verso una mossa vincente.</description>
+    <year>1994</year>
+    <manufacturer>Adrenalin</manufacturer>
+    <rom name="Poker Faced Paul's Solitaire (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Devilish">
+    <description>Preparati ad entrare in una nuova e strana dimensione. Un mondo governato dal malvagio Gamma, il più grande rappresentante delle forze del Male. Attraverserai 8 livelli molto difficili, pieni di ostacoli e trappole pericolose.&#xD;
+La tua unica difesa sarà una sfera di luce indistruttibile chiamata Sfera del Potere. Oltre a lei, il tuo successo dipenderà esclusivamente dalla tua abilità e coraggio. Raccogli queste armi e preparati per un viaggio che si riassume in una sola parola... Diabolico!!</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Devilish (USA).gg" size="131072" />
+  </game>
+  <game name="NFL '95">
+    <description>Questo è un gioco di calcio ufficiale con licenza NFL per Game Gear. Ha diverse funzionalità che erano piuttosto nuove per quel tempo: un presentatore commenta gli eventi sul campo, il punto di vista cambia mentre giochi, l'azione multiplayer e il roster include 1500 giocatori che sono stati presi dall'aggiornamento Roster della squadra della NFL del 1994 con tutte le 28 squadre. Non hai solo il controllo del quarterback, puoi anche essere il ricevitore.</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="NFL '95 (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Batman Forever">
+    <description>Batman Forever è il gioco con licenza ufficiale basato sul film del 1995. I cattivi questa volta sono l'Enigmista e Due Facce.&#xD;
+Questo gioco è un solito ibrido di platform a scorrimento laterale e combattente uno contro uno. Il giocatore si fa strada attraverso i livelli che includono alcuni elementi di salto dalla piattaforma, ma affronta gli avversari uno alla volta come in un gioco di combattimento. L'arsenale del giocatore include molti ingegnosi gadget per i pipistrelli e una raccolta di mosse di combattimento che vengono scatenate con speciali combinazioni di pulsanti.&#xD;
+La grafica è stata resa completamente con attori e oggetti digitalizzati, ma nessuno degli attori del film fa la sua apparizione nel gioco.</description>
+    <year>1995</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="Batman Forever (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="S.S. Lucifer : Man Overboard">
+    <description>Questa volta sei caduto in fondo al buco. La nave a vapore è in viaggio di sola andata verso il fondo del mare dopo una collisione con un iceberg. È pieno di passeggeri in preda al panico in attesa che il loro eroe, Kevin, venga in soccorso. Nei panni di Kevin, devi guidare i passeggeri attraverso alcuni dei peggiori pericoli che si trovano nei giochi moderni prima che gli scompartimenti si allaghino e il tempo scada.</description>
+    <year>1994</year>
+    <manufacturer>Codemasters</manufacturer>
+    <rom name="S.S. Lucifer - Man Overboard! (Europe).gg" size="262144" />
+  </game>
+  <game name="5 in 1 Funpak">
+    <description>5 in One Fun Pak è una raccolta di giochi famosi per Sega Game Gear. Sono incluse le versioni di scacchi, dama, backgammon, reversi e yacht (utilizzando le regole di Yahtzee) e il giocatore può scegliere se giocare contro il computer o un altro essere umano. Ogni gioco (eccetto Yacht) ha impostazioni di difficoltà.
+Il gioco è stato rilasciato esclusivamente in Nord America nel 1994.</description>
+    <year>1994</year>
+    <manufacturer>Interplay</manufacturer>
+    <rom name="5 in 1 Funpak (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Lemmings">
+    <description>Il tuo compito in Lemmings su Game Gear è salvare le piccole creature dai capelli verdi in 120 livelli. Per ogni missione ti viene indicata una percentuale di individui da mantenere in vita. Sta a te adattarti alla configurazione del campo di gioco assegnando compiti come scavare, costruire una scala o persino bloccare il passaggio per riportare in sicurezza i tuoi instancabili Lemming.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Lemmings (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Aerial Assault">
+    <description>In Aerial Assault, interpreti il Freedom Fighter che deve distruggere cinque bersagli, tra cui il Vinsk, il bombardiere CB-53, "El" e due fortezze sulla scogliera. Durante ciascuna delle cinque missioni, incontrerai jet nemici, elicotteri, sottomarini, jeep, bombe a paracadute e molti altri nemici in cui dovrai distruggere. Sparare ai caccia in rotazione o ai piccoli elicotteri volanti ti farà guadagnare un potenziamento che ti permetterà di aumentare o diminuire la tua potenza di fuoco. Sono disponibili tre impostazioni difficili: "Facile", "Normale" e "Difficile". Non sarai in grado di completare il gioco se selezioni l'impostazione "Facile".</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Aerial Assault (World) (v1.1).gg" size="131072" />
+  </game>
+  <game name="The Incredible Hulk">
+    <description>Nei panni di The Incredible Hulk devi sconfiggere le forze del male del Leader. I piani sono in corso per produrre un esercito biochimico distruttivo e The Leader ha arruolato l'assistenza dei tuoi nemici più letali: Tyrannus, Absorbing Man, Abomination e Rhino in una ricerca per il dominio del mondo! Il Capo ti aspetta!</description>
+    <year>1994</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="Incredible Hulk, The (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="The Lion King">
+    <description>Basato sull'ultimo successo della Disney, "Il re leone" porta in vita la maestà e il mistero dell'Africa attraverso gli occhi di Simba, un cucciolo di leone. Gli animatori dei Disney Studios e la musica della colonna sonora originale sono stati utilizzati per portarti a Pride Rock. Porta Simba attraverso 10 livelli fino all'ultima battaglia contro il suo malvagio zio Scar. Salta sulle iene esilaranti in Elephant's Graveyard, evita la mandria selvaggia nella versione 3D a scorrimento anteriore della scena della fuga precipitosa. Gioca con Pumbaa e Timon, gli amici di Simba in esilio, sugli schermi bonus. La collaborazione tra Disney Software e Virgin Interactive Entertainment, unita a Sega, rende questo gioco un nuovo classico dell'animazione e dell'intrattenimento interattivo.</description>
+    <year>1994</year>
+    <manufacturer>Virgin</manufacturer>
+    <rom name="Lion King, The (USA).gg" size="524288" />
+  </game>
+  <game name="X-Men">
+    <description>Magneto ha sviluppato il virus informatico più letale al mondo. Il suo unico obiettivo: distruggere gli X-Men. Wolverine, Gambit, Cyclops e Nightcrawler si uniscono a Storm, Iceman, Archangel, Jean Gray e Rogue per fermarlo. Il loro obiettivo è la base segreta di Magneto sull'asteroide M. Ma in Juggernaut, Sabretooth, Mojo e Deathbird sono in agguato. Gli artigli di adamantio di Wolverine e le carte da gioco cariche di energia di Gambit saranno sufficienti per sconfiggere le forze di Magneto? Tocca a voi.</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="X-Men (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Phantom 2040">
+    <description>Phantom 2040 è un gioco d'azione che, come suggerisce il nome, è l'adattamento videoludico del famoso cartone animato Phantom 2040 trasmesso in televisione negli anni 90. Nel XVI secolo, un vigilante noto come il fantasma fa regnare l'ordine in le pericolose strade del Bengala. È sotto questo nome che si nasconde Walker Jr, il ventiquattresimo discendente del primo Phantom, che si impegna a eliminare un enorme complotto guidato dal consorzio Madison. In questo titolo dovrai attraversare livelli infestati da nemici, che cercheranno di bloccare i tuoi progressi. Per aiutarti nella tua missione, puoi contare sul tuo rampino, ma anche su diversi tipi di armi da fuoco.</description>
+    <year>1995</year>
+    <manufacturer>Viacom New Media</manufacturer>
+    <rom name="Phantom 2040 (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Stargate">
+    <description>The handheld version of Stargate is a matching puzzle game, similar to a 3-D  Tetris. Players drop tiles into a Stargate, and try to stack three identical symbols. Doing so clears those tiles. Mismatched tiles simply build stacks higher and higher, and the player loses if the tiles reach the top of the gate. The player is also given a seven-symbol Stargate "address" along the top of the screen. Stacking three copies of a symbol listed in the address will clear the stack and counts toward completing the address.
+
+There are two game modes building on this basic concept:
+
+1. Skill Mode is a single-player challenge where the player tries to complete as many addresses as they can before being overwhelmed. Speed increases with completed addresses.
+
+Battle Mode can be played against the computer, or against a second player connected with a link cable. In Battle Mode, any stacks you clear are sent through the Stargate and appear on your opponent's side. A height level meter is added on the sides to show how close you and your opponent are to overflowing their gates. You can win by outlasting your opponent (while sending complete stacks through to make things more difficult for them) or by being the first to complete the address.</description>
+    <year>1994</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="Stargate (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Ninja Gaiden">
+    <description>Ninja Gaiden (Shadow Warriors su altri media) è un picchiaduro pubblicato su Game Gear. Sei Ryu, un ninja moderno, e devi recarti in America per scoprire chi ha ucciso tuo padre. La tua ricerca ti condurrà in uno scenario soprannaturale.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Ninja Gaiden (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Super Monaco GP">
+    <description>Super Monaco GP is a modified conversion of the arcade game, a first-person perspective racing game. As well as the famous Monaco course, others from around the world have been added, to give the game a longer shelf life. You must complete qualification sessions and the races as fast as possible.
+
+The Genesis version of Super Monaco adds a complete career mode, however.  In the career mode, your goal is to win a season of races. Unfortunately, you start with a relatively slow car.  By challenging other drivers, you can move to a better team and car, and ultimately win the F1 World Title.</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Super Monaco GP (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Klax">
+    <description>Un gioco di azione/puzzle, l'obiettivo è catturare tessere di colori assortiti che cadono e creare righe, colonne o diagonali di un singolo colore. Ogni livello richiede un modello diverso da realizzare e le tessere cadono più velocemente, più alla volta e in un numero crescente di colori man mano che il gioco procede.</description>
+    <year>1992</year>
+    <manufacturer>Tengen</manufacturer>
+    <rom name="Klax (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Halley Wars">
+    <description>La Terra è stata invasa. I terribili legionari di Lord Halley stanno facendo tutto il possibile per dominare il nostro pianeta, ma le forze di tutte le nazioni del mondo si sono unite per evitare che accada il peggio. Preparati bene, perché la battaglia sarà dura. E non puoi arrenderti finché tutti i tuoi nemici non saranno stati distrutti.</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Halley Wars (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Garfield : Caught in the Act">
+    <description>Nei panni del pigro gatto dei cartoni Garfield, sei in qualche modo intrappolato nella tua TV, ecco cosa succede quando guardi troppa TV. Vai a trovare tutti i pezzi del telecomando per uscire da quella scatola e controlla il frigorifero per cambiare. Il giocatore avanza attraverso livelli e round bonus nel tentativo di fuggire.&#xD;
+&#xD;
+A differenza della maggior parte degli altri giochi platform del suo tempo, Garfield vantava un'arte completamente unica in ciascuno dei suoi sei livelli, sia per le tessere che per i costumi dei personaggi. I livelli sono ispirati ai film classici, ma con un tocco di Garfield, come "Catsablanca" e "La maledizione di Cleofartra.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Garfield - Caught in the Act (USA).gg" size="1048576" />
+  </game>
+  <game name="Super Columns">
+    <description>Super Columns is an updated version of Columns with more options of play, but with the same setup, maneuvering falling blocks into groups of three or more to eliminate them from the screen.  Along with a Versus mode there is also a Story mode as well.
+
+An evil sorcerer by the name of Surhand has stolen a mystical amulet which brings peace and serenity to the land of Phoenicia and hopes to use it to bring death and destruction to the land.  The player must battle their way through his four guards in a series of best two-out-of-three games of Columns in order to face off against Surhand and bring peace back to the land.
+
+The Flash Mode also returns to this version as well as the new Endless Mode where the main objective is to score as many points as possible before the timer runs out.  There are also special columns throughout these modes such as Glitter Columns which eliminates all blocks of the same color on the screen at once as well as Stone Block Columns which can only be eliminated through magic power-ups that can be obtained by eliminating the base blocks.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Super Columns (USA).gg" size="131072" />
+  </game>
+  <game name="Revenge of Drancon">
+    <description>La tua ragazza è stata rapita dal malvagio re Dracon.
+Salvarla non sarà facile poiché re Dracon non è un avversario comune.
+
+Dovrai penetrare nelle profondità della Foresta Nera e attraversare i deserti di 10 terre diverse.
+Trova i rifornimenti che ti daranno la velocità e la forza di cui hai bisogno per questo viaggio.
+Dovrai combattere molti nemici come: serpenti, piranha, pipistrelli, ragni e alla fine contro le palle di fuoco di re Dracon.
+
+Sei pronto a salvare la tua ragazza e dimostrare che il bene vince sempre il male?</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Revenge of Drancon (USA).gg" size="131072" />
+  </game>
+  <game name="Chuck Rock II : Son of Chuck">
+    <description>La storia si svolge un po' di tempo dopo la fine del primo gioco. Come ricorderete, Chuck Rock ha dovuto salvare la sua ragazza, Ofelia, dal cattivo Gary Gritter. Beh, ha avuto successo nei suoi sforzi, e ora Chuck e Ofelia sono sposati. Alla fine, hanno un figlio, di nome Junior. Chuck lavora in una fabbrica, dove sviluppa una grande abilità nello scolpire automobili nella pietra. Un produttore rivale diventa geloso delle capacità di Chuck e lo rapisce. Ora tocca a Junior salvare suo padre!&#xD;
+Il gameplay in questo sequel è simile al primo gioco, ma con alcune piccole differenze poiché stai giocando come Junior, piuttosto che come Chuck. Questo è un gioco platform a scorrimento laterale con occasionali enigmi in movimento. A differenza di Chuck, Junior porta una mazza che dà ai suoi attacchi una maggiore portata.</description>
+    <year>1993</year>
+    <manufacturer>Core Design</manufacturer>
+    <rom name="Chuck Rock II - Son of Chuck (USA).gg" size="262144" />
+  </game>
+  <game name="Star Wars">
+    <description>This game is based closely on Star Wars Episode IV: A New Hope.  It combines a number of gameplay styles, but primarily it is a side scrolling run-and-jump platformer.
+
+The game begins on Tatooine, where you, as Luke Skywalker, must travel around and meet up with R2D2, C3PO, Obi-Wan, and so on. Eventually, you travel through Mos Eisley and the Death Star as well.  While most of the game has you controlling Luke, Han or Leia directly, some of the various game styles include a first-person Millennium Falcon asteroid belt sequence, and an overhead view Death Star trench run.</description>
+    <year>1993</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="Star Wars (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Indiana Jones and the Last Crusade">
+    <description>Come nel film (e nella più famosa avventura grafica), il tuo compito è trovare il Santo Graal. Prima che questo possa essere fatto devi trovare la Croce di Coronado, uno scudo e un diario.&#xD;
+Questo lo rende un'avventura arcade a quattro livelli che combina salite, esplorazione (con diversi percorsi attraverso ogni livello e alcune trappole) ed enigmi. Indy è armato della sua fidata frusta per combattere i nemici, ma può anche essere coinvolto in combattimenti corpo a corpo. Il primo livello si svolge nelle caverne sotto il Colorado, prima di raggiungere un treno da circo in movimento disseminato di trappole, uno Zeppelin pieno di guardie e scale, e poi il castello di Grunwald in Austria.</description>
+    <year>1992</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="Indiana Jones and the Last Crusade (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Sonic the Hedgehog 2">
+    <description>Di ritorno dalla vacanza che Sonic si è presa dopo aver sventato i piani del dottor Robotnik, scopre che Tails e tutti gli altri suoi amici animali sono scomparsi. Sonic trova una lettera che lo aspetta, che dice:
+
+"Caro Sonic,
+
+Robotnik è tornato e ha catturato tutti gli animali dell'isola! Mi tiene in un posto chiamato l'uovo di cristallo. Per liberarmi, devi trovare e portare i sei Chaos Emerald.
+
+Robotnik mi ha fatto scrivere questo. Dice che ti sta aspettando e ha creato sei robot davvero cattivi per "sbarazzarsi di te una volta per tutte". Non so cosa abbia pianificato, ma Sonic, per favore, stai attento!
+Cordiali saluti, Tails."nnEssendo una motivazione più che sufficiente per lui, Sonic corre per sconfiggere di nuovo Robotnik.
+La versione del sistema master è totalmente diversa da quella di Sonic 2 per Genesis. Ovviamente Tails non ti accompagna, come può fare nella versione Genesis. Inoltre, Sonic non può eseguire il suo famigerato rollio con la sega circolare semplicemente abbassandosi e premendo Salto.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Sonic the Hedgehog 2 (World).gg" size="524288" />
+  </game>
+  <game name="Spider-Man : Return of the Sinister Six">
+    <description>"Il dottor Octopus sta tramando il coronamento della sua carriera criminale... per governare il mondo.
+Ha riunito i Sinistri Sei e con questi supercriminali di nuovo insieme, nulla li ostacola - tranne Spider-Man!"
+
+Spider-Man: Return of the Sinister Six è un gioco a scorrimento laterale che ti mette nei panni di Spidey in sei livelli rispettivamente contro Electro, Sandman, Mysterio, Vulture, Hobgoblin e Doctor Octopus. Per superare alcuni livelli è necessario risolvere alcuni enigmi (come trovare una chiave). Spidey può schivare il salto, arrampicarsi sui muri, prendere a pugni, sparare ragnatele per oscillare (premendo pugno e saltare insieme) ed eseguire un calcio in salto (premendo due volte il pulsante del pugno). La raccolta di cartucce di ragnatela consente a Spidey di sparare proiettili di ragnatela limitati.</description>
+    <year>1993</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Spider-Man - Return of the Sinister Six (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="T2 : The Arcade Game">
+    <description>As the title states, this is the home conversion of the arcade rail-shooter based on the film Terminator 2: Judgement Day. Up to two players shoot through future and present levels as robotic killers reprogrammed to serve the human resistance. 
+
+Both players wield a machine gun with infinite ammo that lowers its firing rate (overheats) as it is continuously fired. A secondary weapon (missile launchers in the future, shotguns in the present) has limited ammo but deals heavy damage. Powerups inside the game world include secondary weapon ammo and coolant for the machine guns, and are shot to be collected.
+
+T2: The Arcade Game features seven levels based on specific scenes or general concepts in the film. The first four levels act as a prelude, as the player guns down waves of metal Terminators across a post-apocalyptic Battlefield, a besieged Human Hideout, and through the security checkpoints of the enemy supercomputer SkyNet. After destroying the computer, players travel back in time to protect John and Sarah Connor, while also destroying every scrap of SkyNet research at the headquarters of its manufacturer. From there, players must fend off the indestructible T-1000 until the final showdown in the Steel Mill.
+
+Assets from the movie are used when possible, such as voice clips from Arnold Schwarzenegger, and close-up digital stills of Robert Patrick for the final battle against the T-1000. The Genesis and SNES versions also support lightguns (the Menacer and Super Scope, respectively).&#xD;</description>
+    <year>1994</year>
+    <manufacturer>Arena Entertainment</manufacturer>
+    <rom name="T2 - The Arcade Game (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Sonic the Hedgehog : Triple Trouble">
+    <description>Dr. Robotnik has stolen all the Chaos Emeralds, yet again, but when the experiment for his new weapon goes wrong, the Emeralds get scattered across the island. While Sonic &amp; Tails are out searching for them, Robotnik finds the yellow emerald and convinces Knuckles the Echidna that Sonic wants to steal all the other Emeralds. While all this is happening, Nack the Weasel seizes his chance to take the emeralds for himself while everyone else is pre-occupied. Now it's a 4-way race to retrieve the emeralds.
+
+The gameplay is like the other Sonic titles, but this is only available on the Game Gear. The player can choose to play as Sonic or Tails (who can fly), and you're trying to reach the Chaos Emeralds before anyone else. A change from other Sonic games is that when hit, all rings are not lost, only a set amount (30–50 depending on the level) is lost.&#xD;</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Sonic the Hedgehog - Triple Trouble (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Bubble Bobble">
+    <description>Bubble Bobble è la storia di due umani, Bub e Bob che vagano nella misteriosa grotta dei mostri e si trasformano magicamente in dinosauri. L'unico modo per tornare indietro è raggiungere la fine della grotta.&#xD;
+Bubble Bobble è un platform, in cui ogni livello è una singola schermata. I nemici devono essere eliminati da un livello per passare a quello successivo. Con un giocatore che controlla Bub e l'altro che controlla Bob, il giocatore può saltare e raccogliere oggetti per punti (come la frutta). Il vero potere di Bub e Bob, tuttavia, è la capacità di soffiare bolle. Queste bolle possono essere piattaforme su cui saltare o intrappolare i nemici. I nemici intrappolati in una bolla devono essere scoppiati saltandoci dentro, dove si trasformeranno in frutti.</description>
+    <year>1994</year>
+    <manufacturer>Taito</manufacturer>
+    <rom name="Bubble Bobble (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="F-15 Strike Eagle">
+    <description>Le sette missioni presenti in questa simulazione del volo dell'F-15 sono tutte missioni reali in cui l'aereo è stato originariamente utilizzato. Prendono il Medio Oriente e l'Asia negli anni '70 e all'inizio degli anni '80 e hanno obiettivi aerei e terrestri da distruggere. Hai a disposizione mitragliatrici, missili guidati e bombe. C'è una modalità arcade e altri 3 livelli di difficoltà. Il gioco presenta 3 aerei nemici e 3 tipi di SAM nemici.</description>
+    <year>1993</year>
+    <manufacturer>MicroProse</manufacturer>
+    <rom name="F-15 Strike Eagle (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="World Cup USA 94">
+    <description>Per la terza Coppa del Mondo consecutiva, US Gold ha avuto la licenza per produrre il gioco ufficiale. Hanno affidato il compito a Tiertex, che ha prodotto un gioco top-down ricreando l'intero torneo. Oltre alle 24 squadre qualificate per il torneo, potrebbero essere arruolate altre importanti nazioni calcistiche come Inghilterra, Francia e Danimarca. La presentazione dei menu è in gran parte basata sulle icone, con la mascotte ufficiale in primo piano. Il contrasto è difficile e il passaggio è facile, creando uno stile di gioco fluido end-to-end.</description>
+    <year>1994</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="World Cup USA 94 (USA, Europe) (En,Fr,De,Es,It,Nl,Pt,Sv).gg" size="524288" />
+  </game>
+  <game name="Star Trek : The Next Generation, The Advanced Holodeck Tutorial">
+    <description>Star Trek: The Next Generation: The Advanced Holodeck Tutorial is a Sega Game Gear simulation game based on the Star Trek franchise. It was released exclusively in North America.</description>
+    <year>1994</year>
+    <manufacturer>Absolute Entertainment</manufacturer>
+    <rom name="Star Trek - The Next Generation (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Castle of Illusion starring Mickey Mouse">
+    <description>Oh no! Minnie è stata catturata dalla malvagia strega Mizrabel, dovrai salvarla o Mizrabel le ruberà tutta la bellezza.&#xD;
+Corri, arrampicati e salta fino al Castello dell'Illusione e raccogli tutte le gemme che trovi durante il tuo viaggio. Distruggi alberi infestati, combatti i fantasmi e affronta un potente drago.&#xD;
+Quando pensi di aver sconfitto tutti i nemici, ti troverai faccia a faccia con il tuo nemico più potente, la strega Mizrabel. Coraggio, perché Mickey ha bisogno di te.</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Castle of Illusion Starring Mickey Mouse (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="PGA Tour Golf">
+    <description>PGA Tour Golf ha introdotto molte delle convenzioni comunemente viste nel genere da allora. Il metodo di controllo a tre clic (il primo per avviare lo swing, il secondo per impostare la potenza e l'over-swing, il terzo per disegnare o dissolvere) consentiva una moltitudine di colpi diversi e richiedeva un senso del tempismo.&#xD;
+Sono inclusi quattro corsi, uno dei quali un corso di fantasia "link" progettato dai programmatori. Alcune delle buche sono diaboliche, con bunker, ostacoli d'acqua e alberi, e la necessità di pianificare strategie per ottenere il miglior approccio al green.&#xD;
+Quando si gioca un torneo ci sono 60 avversari, ognuno dei quali rappresenta i migliori giocatori di golf degli Stati Uniti - dieci di questi appaiono con consigli tattici per ogni buca.</description>
+    <year>1993</year>
+    <manufacturer>Tengen</manufacturer>
+    <rom name="PGA Tour Golf (USA) (v1.1).gg" size="262144" />
+  </game>
+  <game name="Wolfchild">
+    <description>Terroristi della Chimera hanno rapito il padre di Saul Morrow e hanno assassinato sua madre e suo fratello. Sarà sufficiente la sua capacità di trasformarsi in un guerriero licantropo (un uomo-lupo con poteri soprannaturali) per sconfiggere un intero esercito?</description>
+    <year>1993</year>
+    <manufacturer>Virgin</manufacturer>
+    <rom name="Wolfchild (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Pengo">
+    <description>In questa traduzione del classico gioco arcade "Pengo", devi sconfiggere il nemico spingendo insieme blocchi di ghiaccio per schiacciarli. Puoi anche catturarne uno se è scioccato e ha le vertigini. C'è anche un limite di tempo per renderlo un po' più difficile (devi farlo in un minuto).</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Pengo (USA, Europe).gg" size="32768" />
+  </game>
+  <game name="Vampire : Master of Darkness">
+    <description>Master of Darkness è un platform molto simile a Castlevania.&#xD;
+&#xD;
+Vesti i panni di uno psicologo cercando di sconfiggere Dracula. Ciò richiede che tu ti faccia strada attraverso diversi luoghi spettrali come cimiteri, laboratori, castelli o una casa di bambole di cera. Per sconfiggere i tuoi nemici, puoi usare diverse armi primarie e secondarie. Le armi primarie sono armi da combattimento ravvicinato che vanno dai coltelli agli stocchi e alle asce, che differiscono per portata ed efficienza. Le armi secondarie sono armi a lungo raggio (pistole, bombe, ecc.) con munizioni limitate. Il gioco presenta 5 round divisi in 3 fasi. Alla fine di ogni livello, un boss deve essere sconfitto.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Vampire - Master of Darkness (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Marble Madness">
+    <description>Una conversione del gioco arcade. L'idea è apparentemente semplice: guida una biglia lungo un percorso senza incontrare ostacoli o deviare dal percorso. Il gioco è visto da una prospettiva isometrica, il che rende più difficile rimanere concentrati sulla direzione che la palla deve seguire. Ci sono corridoi stretti da seguire e nemici da evitare. C'è una modalità a 2 giocatori in cui i giocatori devono correre fino al traguardo; altrimenti corri contro il tempo.</description>
+    <year>1992</year>
+    <manufacturer>Tengen</manufacturer>
+    <rom name="Marble Madness (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Fatal Fury Special">
+    <description>Preparati a combattere contro tutti i contendenti poiché ora hai nel tuo Game Gear il famoso gioco arcade Fatal Fury Special. Seleziona il tuo giocatore tra 9 campioni leggendari e partecipa al torneo King of Fighters, oppure collega un altro Game Gear * per un combattimento a 2 giocatori. *Venduto separatamente.</description>
+    <year>1994</year>
+    <manufacturer>Takara</manufacturer>
+    <rom name="Fatal Fury Special (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Cutthroat Island">
+    <description>In questo gioco interpreti il ruolo di una donna pirata chiamata Morgan a cui suo padre ha dato un pezzo di una mappa prima di morire. Nel gioco hai deciso di trovare più pezzi della mappa in modo da poter trovare il tesoro nascosto sepolto sull'Isola Tagliagole. Il gameplay prevede lo scorrimento lungo lo schermo e pirati che combattono con la spada e altri farabutti uno contro uno con vari attacchi diversi. Man mano che avanzi sblocchi più combo. Questo gioco è basato sull'omonimo film.</description>
+    <year>1995</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="Cutthroat Island (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Ax Battler : A Legend of Golden Axe">
+    <description>Alza la lama affilata della tua spada, poiché sei l'unico in grado di recuperare la potente Ascia d'oro dalle grinfie del diabolico Death Adder. Affronta gli orribili scheletri che sorvegliano le caverne oscure. Prova a schivare i pipistrelli giganti che ti attaccheranno nella foresta.
+Usa le tue abilità e il tuo coraggio per sconfiggere le forze del male, attraverso questo pericoloso percorso. Se fallisci, l'ira di Death Adder si abbatterà su tutta l'umanità.</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Ax Battler - A Legend of Golden Axe (USA, Europe) (v2.4).gg" size="262144" />
+  </game>
+  <game name="Winter Olympics">
+    <description>WINTER OLYMPICS, la simulazione che ti farà provare le vere emozioni che si provano in questi sport. Competerai contro i migliori atleti del mondo e...contro il tempo...per aggiudicarti la MEDAGLIA D'ORO IN 10 SPETTACOLARI EVENTI, mettendo a dura prova la tua velocità, forza, abilità e resistenza. E' la tua possibilità per vincere una MEDAGLIA D'ORO nello SPETTACOLO DEGLI SPORT INVERNALI PIU' GRANDE DEL MONDO.</description>
+    <year>1994</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="Winter Olympics - Lillehammer '94 (USA, Europe) (En,Fr,De,Es,It,Pt,Sv,No).gg" size="524288" />
+  </game>
+  <game name="X-Men : Mojo World">
+    <description>Gli X-Men affrontano la loro  più brutale avventura di tutti i tempi. Spiral, un bellissima produttrice televisiva con 6 braccia e residente a Mojo World, mette gli X-Men contro i loro nemici più duri di tutti i tempi nell'ultimo combattimento televisivo, "Le più grandi battaglie degli X-Men". Se il suo piano funzionerà, i cittadini di Mojo World si sintonizzeranno e lei diventerà la loro nuova sovrana X-Men del passato, del presente e del futuro. Fai attenzione a Mojo, Magneto, Sentinel, Chronomancer e Agent. Ti distruggeremo! Nn Avventurati attraverso New Orleans, una futuristica New York City e Mojo World!</description>
+    <year>1996</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="X-Men - Mojo World (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Beavis and Butt-head">
+    <description>Saremmo dovuti andare a questo concerto dei GWAR. Poi lo stupido cane di Anderson, ha masticato i biglietti. Ora devi aiutarci a trovare i pezzi o qualcuno pagherà per questo. Probabilmente Beavis. Van Driessen ha cercato di insegnarci, tipo, la storia. Ma lo abbiamo superato in astuzia. Regole per la pesca sul divano. A meno che non ci sia qualcosa di buono in TV o qualcosa del genere. Vorresti che le mosche andassero con quel mouseburger? Eh eh eh eh. Al Turbo Mall, puoi incontrare creature selvagge e cose del genere. Come noi.</description>
+    <year>1995</year>
+    <manufacturer>Viacom New Media</manufacturer>
+    <rom name="Beavis and Butt-head (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Journey from Darkness : Strider Returns">
+    <description>Strider has been called into action to save the people of the planet Magenta, armed with a Gyro laser and matter converter. He must fight his way through a forest, a ruined city, underground colonies, a roof-top battle, and finally the prison ship in which the Megantan leader is held.
+
+The gameplay is similar to the original, consisting of running, jumping and attacking, with a very dynamic central character. The laser gun can be used while standing still; moving attacks with the sword are still possible, with the two weapons combining similarly to the Switchblade games. Tokens can be collected, which will turn you into a robot to face the end-of-level enemies if enough are collected.&#xD;</description>
+    <year>1993</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="Journey from Darkness - Strider Returns (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Super Smash T.V.">
+    <description>L'anno è il 1999. Il programma televisivo più popolare al mondo è Smash TV, una gara ultraviolenta tra due combattenti armati fino ai denti, scatenati in una serie di arene mortali che sono piene fino a scoppiare con orde di bestie senza cervello e robot assassini. Lo scopo del gioco è quello di far saltare tutto in vista e cercare di prendere più denaro e premi rispetto all'altro ragazzo. Tostapane, videoregistratori, auto lussuose e vacanze di lusso sono lì per essere prese... per chiunque possa sopravvivere abbastanza a lungo da godersele.
+Smash TV è un folle sparatutto dal cervello di Eugene Jarvis, creatore di Robotron: 2084. Mantiene lo stile di gioco frenetico di quel gioco e il metodo di controllo a due joystick, ma aggiunge un sacco di sangue, violenza e un pizzico di satira e quell'importantissima modalità a due giocatori.</description>
+    <year>1992</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Super Smash T.V. (World).gg" size="262144" />
+  </game>
+  <game name="Jurassic Park">
+    <description>Uno dei tanti giochi basati sul blockbuster Jurassic Park del 1993, la versione per i sistemi a 8 bit di Sega combina azione di tiro a scorrimento laterale e livelli platform.&#xD;
+&#xD;
+In ciascuna delle cinque fasi del gioco, una specie di dinosauro fuggita deve essere riconquistata. Ogni livello inizia con una sezione di guida a scorrimento laterale. I dinosauri attaccano l'auto e devono essere respinti sparando loro con un mirino. Se il giocatore sopravvive abbastanza a lungo, segue una battaglia contro un dinosauro particolarmente potente.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Lost World, The - Jurassic Park (USA).gg" size="524288" />
+  </game>
+  <game name="Poker Face Paul's Gin">
+    <description>Lancia le tue carte vincenti contro un trio di professionisti e diventa Meld's Master. Se sei un genio del GIN o non hai mai mischiato un mazzo, questo gioco è un'esplosione di carte!
+
+Scegli tra 3 avversari e 3 livelli di difficoltà. Impara le stringhe GIN con Jack. Rafforza la tua strategia contro Jane. Cerca colpi di GIN ad alto numero di ottani contro Ming! Ogni gioco è veloce e divertente!
+
+Hai mai giocato a GIN prima? Grande! GIN presenta un set completo di regole e può aiutarti su ogni carta che giochi. La fortuna dell'estrazione, del conteggio delle carte e dei colpi a sorpresa sfidano anche i giocatori esperti!
+
+Personalizza il gioco! Gin Bonus, Underknock Bonus, Knock Limit e il numero di Box (giochi) necessari per vincere sono tutti regolabili.</description>
+    <year>1994</year>
+    <manufacturer>Adrenalin</manufacturer>
+    <rom name="Poker Faced Paul's Gin (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Mortal Kombat II">
+    <description>I combattenti di Mortal Kombat, più molti nuovi, tornano per un torneo organizzato dal malvagio Shang Tsung dell'Outworld. L'azione è uno contro uno come prima ed è famosa per il suo alto livello di violenza e sangue (a parte la versione sterilizzata di Nintendo). Ci sono 5 livelli di difficoltà e crediti opzionali, oltre alla solita modalità a due giocatori che include duelli con gli stessi personaggi.&#xD;
+Per vincere il torneo principale, il giocatore deve battere ciascuno degli altri giocatori umani, prima di affrontare Shang Tsung, Kintaro e infine Shao Kahn. I giocatori hanno a disposizione una vasta gamma di pugni e calci, così come calci volanti, montanti, roundhouse e mosse speciali, che variano per ogni giocatore. Questi includono lanci, montanti, proiettili a lunga distanza, calci in bicicletta e una funzione di teletrasporto.</description>
+    <year>1994</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="Mortal Kombat II (World).gg" size="524288" />
+  </game>
+  <game name="Urban Strike">
+    <description>Urban Strike è il terzo della lunga serie di giochi d'azione di elicotteri di EA. Un genio del male di nome H. R. Malone ha avviato una setta ed è riuscito a raccogliere milioni di seguaci. Malone sta usando la sua influenza e la sua ricchezza per costruire una super arma con cui rovesciare il governo. Ti vestirai di nuovo e prenderai il controllo di vari tipi di elicotteri per fermare il piano malvagio di Malone.
+
+Urban Strike è il primo e unico gioco della serie Strike a presentare combattimenti non veicolari. In alcuni livelli lascerai il tuo elicottero e proseguirai a piedi.</description>
+    <year>1995</year>
+    <manufacturer>Black Pearl Software</manufacturer>
+    <rom name="Urban Strike (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Putt &amp; Putter">
+    <description>Putt &amp; Putter è un gioco di minigolf isometrico per 1-2 giocatori. Il gioco ha diversi livelli di altezza. Poiché ci sono anche paraurti, il gioco è come un misto di un classico gioco di minigolf, un gioco di flipper e il classico gioco "Marble Madness".</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Putt &amp; Putter (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="The Simpsons : Bart vs the Space Mutants">
+    <description>Bart vs. The Space Mutants is a platform game where the player goes into the role of Bart Simpson (from the TV show The Simpsons) and must stop the Space Mutants from invading Springfield.
+
+On each of the five levels, Bart must collect (or get rid of) the ingredients that the Space Mutants are planning to use to build their machine, such as purple objects or balloons. He also has to collect enough "proof" of the aliens existence (brown coins left behind when they are jumped on), so his family members will help him when he meets a boss (characters such as Nelson and Sideshow Bob). This won't be easy since the Space Mutants are "using" human bodies as disguise. In order to discover who are the real Space Mutants, Bart must use his X-ray Specs.
+
+The ways Bart can get rid of those objects sought by the Space Mutants are numerous. For instance, in the first stage, Bart must get rid of purple objects. He can dye them red, cover them, wash them, etc. Some even involve a little puzzle solving, like playing a trick on Moe to make him get out of the bar.
+
+Bart also has some coins that can be used in many ways throughout the game, like buying things, getting devices operating, etc. Those coins are essential to solve some puzzles in the game.&#xD;</description>
+    <year>1993</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Simpsons, The - Bart vs. The Space Mutants (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="G-LOC : Air Battle">
+    <description>Nel 21° secolo, gruppi terroristici armati e altamente organizzati stanno attaccando varie installazioni militari in tutto il mondo e prendendo possesso di carri armati, armi e persino aerei da combattimento. Le Nazioni Unite hanno inviato soldati di pace ai quattro angoli del mondo, che sono riusciti a controllarne uno. la maggior parte dei terroristi. Ma uno dei gruppi, il più determinato, era ancora attivo. La soluzione trovata dai leader mondiali per porre fine a questa distruzione, è stata l'utilizzo dell'A8M "Thunder fox", un aereo da caccia di massima potenza, mai testato da Man. Il problema ora è sapere chi sarà il pilota di questo missione. E tu? Sei pronto a porre fine alla distruzione e ad assicurare il futuro del mondo? Prendi la tua decisione in fretta, poiché la tua missione sta per iniziare. Buona fortuna, pilota!</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="G-Loc Air Battle (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Predator 2">
+    <description>Predator 2 è simile alla sua controparte a 16 bit. Il giocatore controlla il tenente Mike Harrigan in una vista a scorrimento laterale (anziché isometrica) attraverso 7 livelli.
+
+Mike deve combattere contro gli spacciatori e deve salvare un certo numero di ostaggi ad ogni livello. La mira laser a tre punti del Predator è una minaccia da evitare, che può uccidere gli ostaggi o lo stesso Mike. I membri della banda uccisi rilasciano droghe che possono essere raccolte per punti (e inviate alla squadra antidroga). Alla fine di ogni livello un boss deve essere sconfitto.
+
+Mike può muoversi e sparare in tutte le 8 direzioni, ma può solo fermarsi e sparare su, giù, sinistra e destra. Oltre alla sua pistola, Mike può anche raccogliere nuove armi come granate, fucili a pompa, mitragliatrici e fucili. L'armatura può essere raccolta per la salute e kit medici per vite extra.</description>
+    <year>1992</year>
+    <manufacturer>Arena Entertainment</manufacturer>
+    <rom name="Predator 2 (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="The Excellent Dizzy Collection">
+    <description>Three complete games starring game superstar Dizzy! Enjoy the thrill of an arcade action game, a puzzle game and a complete adventure game all in one pack!&#xD;
+&#xD;
+1. Dizzy the Adventurer - Adventure Game&#xD;
+Here's Dizzy - in an amazing magical quest packed with action, mystery, surprises and lots of new interesting characters. Escape from an underground cave and wake Daisy from the endless sleep caused by pricking her finger on a cursed spinning wheel! The spell can only be broken by a kiss from a Prince! A great sense of humour and brilliant fun! A superbly crafted cartoon adventure set in a magical kingdom!&#xD;
+Brilliant graphics, music and a magical quality that will enchant players.&#xD;
+"A magical quest to wake Daisy from her endless sleep"&#xD;
+&#xD;
+2. Panic Dizzy - Puzzle Game&#xD;
+It's puzzling, challenging and mega playable! Play any of the Yolfolk and challenge friends to a choice of 3 brilliant, original puzzle games. There's shape shifter, dizzy dice and picture puzzler to boggle your mind and blow your brain. Push and shoot the descending shapes in a race against time! Fantastic fun!&#xD;
+"Put your brain &amp; reflexes in to top gear for 3 original puzzle games!"&#xD;
+&#xD;
+3. Go Dizzy Go! - Action Game&#xD;
+It's Dizzy and Daisy to the rescue in this zany arcade challenge. Zaks' treacherous worlds are jam packed with all sorts of nasties. Power-Ups and Special secrets! Take up the challenge in single mode or two player mode.&#xD;
+Classic maze style game with 5 worlds each containing 5 levels. Superb graphics, funky music and exciting gameplay!&#xD;
+"Dash around weird and wonderful worlds to free the yolkfolk!"</description>
+    <year>1994</year>
+    <manufacturer>Codemasters</manufacturer>
+    <rom name="Excellent Dizzy Collection, The (Europe).gg" size="524288" />
+  </game>
+  <game name="Spider-Man">
+    <description>Il supereroe americano, The Amazing Spider-Man, è in guai seri. Il Kingpin ha giurato di distruggere New York e ha riunito un vasto esercito di cattivi per aiutare, tra cui Dr. Octopus, The Hobgoblin, Venom, Electro, The Lizard e The Sandman! Ma Spider-Man vanta i poteri proporzionali di un super ragno! Oscilla su una linea di ragnatela attraverso voragini vertiginose che nessun altro supereroe potrebbe gestire! Pugni e calci con forza spettacolare, si arrampica sugli edifici e striscia attraverso le travi, anche a testa in giù, e usa le sue ragnatele per intrappolare i nemici e far ruotare gli scudi protettivi. Ogni cattivo ha la sua borsa di trucchi malvagi. Rettili mutanti nelle fogne - pipistrelli elettrici tra le linee ad alta potenza - entità aliene sui tetti dei grattacieli - tutto questo e molto altro affronta il lanciatore di ragnatele mentre corre per salvare la città!</description>
+    <year>1992</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Spider-Man vs. The Kingpin (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Woody Pop">
+    <description>Unisciti a Woody Pop quando lotta contro le forze del geloso Mad Machine. Preparati per le azioni di botte, salti e sbalzi quando Woody Pop si trasforma in un eroe dalla forza incredibile per rompere i mattoni!</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Woody Pop (USA, Europe) (v1.1).gg" size="32768" />
+  </game>
+  <game name="Nhl Hockey">
+    <description>Azione veloce e furiosa sul ghiaccio con tutte le squadre NHL e i giocatori NHLPA. Le modalità di gioco Regular, Playoff e Shootout insieme alle linee di modifica, ai rigori e alle funzionalità manuali del portiere danno a due giocatori la possibilità di dominare lo sport di squadra più veloce del mondo.</description>
+    <year>1995</year>
+    <manufacturer>EA Sports</manufacturer>
+    <rom name="NHL Hockey (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="The Incredible Crash Dummies">
+    <description>È un momento divertente e violento che ti farà rompere! Che si tratti di una valanga di risate sulle piste da sci, del rimbalzo del boulevard dopo un salto acrobatico o di un'esplosione di umorismo ad alta pressione per testare gli airbag, gli Incredible Crash Dummies sono un vero spasso! Potrebbero avere alcune viti allentate. . . ma The Incredible Crash Dummies si metterà fuori combattimento così potrai divertirti!</description>
+    <year>1993</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Incredible Crash Dummies, The (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Ecco the Dolphin">
+    <description>Ecco the Dolphin su Game Gear è un gioco d'azione con l'originalità di mettere il giocatore al comando di un delfino. La storia inizia quando Ecco assiste impotente alla scomparsa dell'intero ecosistema, travolto da una misteriosa tempesta. Durante 25 livelli, esplora gli abissi e risolvi innumerevoli enigmi per riportare la calma nella baia.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Ecco the Dolphin (USA).gg" size="524288" />
+  </game>
+  <game name="Dr. Robotnik's Mean Bean Machine">
+    <description>Dr. Robotnik Mean Bean Machine su Game Gear è un rompicapo in cui devi disporre i blocchi colorati in modo da farli scomparire ed eseguire sequenze che avranno la meglio sul tuo avversario. Salva gli abitanti di BeanVille dalla robotizzazione che Eggman vuole che soffrano!</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Dr. Robotnik's Mean Bean Machine (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="The Simpsons : Bartman Meets Radioactive Man">
+    <description>LISTEN UP, CRIME FIGHTERS!&#xD;
+&#xD;
+The greatest comic book hero of all time, Radioactive Man, has been kidnapped...and it's up to yours truly to save the R-Man.&#xD;
+&#xD;
+I'll put all my awesome super-powers to the best when I battle the slimy Swamp Hag, the evil Dr. Crab and the bad-tempered Lava Man. Once I wipe these villains out and restore Radioactive Man's powers, we'll take on the brains behind this ugly scheme, Brain-O The Magnificent.&#xD;
+&#xD;
+So quit reading and buy this game OR ELSE. That's an order from Bartman, man!!!&#xD;
+&#xD;
+-THIS LOOKS LIKE A JOB...FOR BARTMAN!&#xD;
+-WILL A BLAST OF COLD BREATH PUT THE FREEZE ON SWAMP HAG?&#xD;
+-THE TERRORS OF THE DEEP ARE NO  MATCH FOR THE MIGHTY BARTMAN!&#xD;
+-DANGER LURKS EVERYWHERE IN THE JUNKYARD!&#xD;
+-IT'S FIST AGAINST CLAW IN THE EVIL DR. CRAB'S LAIR!</description>
+    <year>1994</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Bartman Meets Radioactive Man (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Judge Dredd">
+    <description>Mega-City One è in rovina. La corruzione è dilagante. È tempo di prendere in mano la legge. Armati della potenza di fuoco esplosiva di Lawgiver - cercatori di calore, razzi rimbalzanti, missili incendiari e altro - affrontano Mean Machine, il robot ABC e altre brutali barriere alla giustizia. Prendi il volo con la tua motocicletta Lawmaster ad alta velocità e placa anche i malfattori più persistenti! Non sei al di sopra della legge. TU SEI la legge!</description>
+    <year>1995</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="Judge Dredd (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Mega Man">
+    <description>L'edizione Game Gear di Mega Man è un mix di episodi 4 e 5 pubblicati su Nes. La cartuccia si contraddistingue inoltre per un livello di difficoltà più elevato poiché non consente il proseguimento di una partita dopo un game over. In questo gioco d'azione platform, l'eroe deve affrontare una serie di robot da combattimento, ognuno con un potere diverso. Una volta sconfitto, Mega Man può impadronirsi di detto potere per usarlo da solo nel resto del suo viaggio.</description>
+    <year>1995</year>
+    <manufacturer>U.S. Gold</manufacturer>
+    <rom name="Mega Man (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Battleship : The Classic Naval Combat Game">
+    <description>Hai quello che serve per comandare la tua flotta di sei navi? Riuscirai a sopravvivere a combattimenti avvincenti e spietati in alto mare? Insegui il tuo nemico attraverso acque ostili. Pianifica segretamente il tuo piano di attacco. Quindi spara. È un successo! Ma resta in allerta rossa! Perché il tuo avversario vuole la vittoria tanto quanto te! Capovolgere un corriere. Demolisci un cacciatorpediniere. Affonda fino a sei navi nella flotta del tuo avversario prima che le tue vengano trovate e affondate. Fai esplodere i siluri e avanti a tutta velocità! Nascondi strategicamente le tue navi mentre elabori un astuto piano di attacco contro il tuo avversario. Divertiti con la classica strategia di gioco in questo intramontabile gioco di guerra navale preferito. Dieci nuove armi speciali con cui fare la guerra, comprese bombe di profondità, sonar e missili da crociera. Gioca ancora e ancora: ogni partita è diversa dall'ultima!</description>
+    <year>1993</year>
+    <manufacturer>Mindscape</manufacturer>
+    <rom name="Battleship (USA, Europe).gg" size="65536" />
+  </game>
+  <game name="Ecco : The Tides of Time">
+    <description>Il malvagio Vortex è tornato ed Ecco deve affrontare una pericolosa avventura. Con l'aiuto della bellissima Trellia, guida Ecco attraverso più di 16 livelli di azione acquatica, incluse splendide scene 3D. Guarda Ecco trasformarsi in un banco di pesci, una medusa e persino un gabbiano mentre combatti contro le maree del tempo!</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Ecco II - The Tides of Time (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="F1">
+    <description>F1 è un gioco ufficiale di corse di Formula 1. Sono disponibili due modalità di gioco: "Arcade", "Grand Prix". In entrambe queste modalità completi un certo numero di giri (4, 8 o 12) e selezioni su quale circuito vuoi gareggiare. I circuiti includono San Marino, Francia, Gran Bretagna, Germania, Italia, Portogallo, Giappone e Australia. Alcuni circuiti sono facili, mentre altri sono difficili.&#xD;
+&#xD;
+Ci sono lievi differenze tra le due modalità. Ad esempio, "Arcade" ti consente di selezionare il circuito nell'ordine che preferisci, mentre "Grand Prix" ti consente solo di mettere a punto la tua auto prima di iniziare una gara. Devi anche gareggiare su un circuito nell'ordine in cui appaiono nella schermata di selezione del circuito, ma puoi saltare una pista se lo desideri.</description>
+    <year>1994</year>
+    <manufacturer>Domark</manufacturer>
+    <rom name="F1 (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Terminator 2 : Judgment Day">
+    <description>Terminator 2: Judgment Day è basato sull'omonimo film. Il giocatore assume il ruolo del Terminator T-800 e deve proteggere John Connor dall'essere terminato dal Terminator T-1000.&#xD;
+&#xD;
+Il gioco è strutturato su cinque livelli con i seguenti obiettivi:&#xD;
+&#xD;
+1. Livello 1: Ottieni un'arma.&#xD;
+Livello 2: un percorso di corsa isometrica su una moto in cui il giocatore deve superare un'autocisterna che lo sta inseguendo. Questa fase è stata omessa dalla versione Game Gear.&#xD;
+Livello 3: trova e salva Sarah Connor dal manicomio di Pescadero.&#xD;
+Livello 4: piazza cariche esplosive per distruggere l'edificio Cyberdyne.&#xD;
+Livello 5: Sconfiggi il T-1000 all'interno dell'acciaieria.</description>
+    <year>1993</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Terminator 2 - Judgment Day (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Sonic Chaos">
+    <description>Unisciti a Sonic &amp; Tails in un'altra avventura per sconfiggere il malvagio Dr. Robotnik. È una distruzione di robot, la coda che brucia bene. Oh e BTW questo Gamegear è la versione giapponese, la versione inglese equivalente è Sonic the Hedgehog Chaos</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Sonic Chaos (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="The Simpsons : Bart vs. the World">
+    <description>This game is actually a compilation of smaller games belonging to different genres. Krusty the clown appears in the beginning of the game and presents a menu with five games to play (one of which is not available from the start): A jump-and-run game, where Bart must find an exit on a ship, while enemies fire at him and try to prevent him from reaching the exit; a card game, where you have five tries to find hidden cards on a board; a simple jigsaw puzzle; a series of trivia questions concerning the Simpsons; and finally, a platform-skateboard game (available only after you have completed the ship level). Needless to say all games are connected to the famous TV series "The Simpsons".&#xD;</description>
+    <year>1993</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="Simpsons, The - Bart vs. The World (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="WWF Wrestlemania Steel Cage Challenge">
+    <description>Affronta la sfida più difficile del wrestling: The Steel Cage Challenge WWF WrestleMania Steel Cage Challenge! Controlla tutte le fantastiche mosse e manovre piene di azione: Rope Throw, Elbow, Crush, Kick. Quando sei pronto per la sfida finale del wrestling, la gabbia d'acciaio è pronta per te.</description>
+    <year>1993</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="WWF Wrestlemania Steel Cage Challenge (Europe).gg" size="262144" />
+  </game>
+  <game name="Fantastic Dizzy">
+    <description>Fantastic Dizzy è un gioco di piattaforma / avventura su Game Gear. Il malvagio mago Zaks ha lanciato un incantesimo su tutti nel villaggio e rapisce la fidanzata di Dizzy. L'obiettivo del giocatore sarà ovviamente recuperarlo, ma anche salvare gli abitanti del villaggio. Il gioco si basa su un mix di piattaforme e puzzle da risolvere (scegliendo oggetti diversi e usandoli nel posto giusto).</description>
+    <year>1993</year>
+    <manufacturer>Codemasters</manufacturer>
+    <rom name="Fantastic Dizzy (Europe) (En,Fr,De,Es,It).gg" size="262144" />
+  </game>
+  <game name="Astérix and the Great Rescue">
+    <description>Il gioco è basato sulla popolare serie di fumetti francesi Astérix. È il 50 a.C. e l'intera Gallia (l'odierna Francia) viene conquistata dai Romani. Solo un villaggio rimane ancora indipendente, grazie agli incredibili poteri dei suoi due grandi guerrieri, Asterix e Obelix. Nel gioco, devono prima di tutto liberare il villaggio Orvio e salvare il loro amico Dogmatix.
+Puoi giocare come Asterix o Obelix. Ti fai strada attraverso i livelli della piattaforma, combattendo i nemici colpendoli e saltando per accedere alle aree più alte o per evitare di cadere. Ci sono anche alcuni oggetti che puoi raccogliere, come le bombe, con cui puoi superare gli ostacoli e avanzare nel gioco.</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Asterix and the Great Rescue (USA).gg" size="524288" />
+  </game>
+  <game name="Daffy Duck in Hollywood">
+    <description>Ecco a voi il famoso investigatore privato internazionale Daffy Duck: armato con la tua letale pistola a bolle, cerca nei set cinematografici di Hollywood l'Oscar dei cartoni animati di Yosemite Sam e il pazzo e spregevole professor Duck Brain.</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Daffy Duck in Hollywood (Europe) (En,Fr,De,Es,It).gg" size="524288" />
+  </game>
+  <game name="Mickey's Ultimate Challenge">
+    <description>Topolino si è addormentato mentre leggeva un libro di fiabe. Si risveglia nel Regno di Beanwick, vittima di incessanti terremoti. Nella sua grande gentilezza, il topo offre i suoi servizi per svelare il mistero. Mickey's Ultimate Challenge su Game Gear è presentato come un puzzle game in cui Topolino incontra personaggi del regno che hanno tutti un piccolo problema da risolvere. Una volta che il servizio è stato reso, ti guideranno nella tua ricerca.</description>
+    <year>1994</year>
+    <manufacturer>Hi Tech Expressions</manufacturer>
+    <rom name="Mickey's Ultimate Challenge (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Madden NFL 95">
+    <description>Madden NFL 95 su Game Gear ti dà la possibilità di giocare con tutte le squadre NFL del 1994. Puoi scegliere tra una singola partita, il campionato, i playoff o persino il Super Bowl. Il gioco ti consente anche di scegliere le condizioni meteorologiche in cui vuoi giocare. Infine, qualcosa di molto più interessante in questo tipo di simulazione, possono essere inflitte oltre 100 ferite!</description>
+    <year>1994</year>
+    <manufacturer>Electronic Arts</manufacturer>
+    <rom name="Madden NFL '95 (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Solitaire Poker">
+    <description>Solitaire Poker. Questa è certamente una strana combinazione dal suono, ma è esattamente quello che è. È ancora più interessante che ti rendi conto che c'è anche un tocco di bingo. Il tuo obiettivo è pescare carte coperte da uno dei quattro diversi mazzi e pescare queste carte in cinque diverse "mani" che vengono conteggiate come valori tradizionali del poker. Tuttavia le mani possono essere segnate in qualsiasi combinazione:verticale, orizzontale o diagonale sul tabellone (dove entra in gioco l'elemento bingo).</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Solitaire Poker (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Desert Speedtrap Starring Road Runner And Wile E. Coyote">
+    <description>Questo è un gioco platform con protagonista il famoso Road Runner di Looney Tunes (che controlli) e la nemesi Wile E. Coyote. Road Runner può saltare, mangiare mangime per ricostituire la vita e correre, ovviamente! Tenere premuto il D-pad lo accelera. Il tempo stringe e se si esaurisce il tempo si perde una meta, raccogliere le stelle aggiunge tempo all'orologio&#xD;
+Ci sono vari oggetti/potenziamenti e aree bonus&#xD;
+3 livelli di difficoltà, scelta di giocare con o senza musica e/o effetti sonori e un'opzione per riprodurre la musica del gioco mentre non si è in gioco</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Desert Speedtrap (USA).gg" size="262144" />
+  </game>
+  <game name="NFL Quarterback Club '96">
+    <description>I migliori talenti del calcio professionistico sono tornati con il meglio del pandemonio della pelle di cinghiale. È un gioco completamente nuovo poiché NFL QUARTERBACK CLUB '96 fa un passo da gigante nel futuro dei giochi di calcio con tutte le nuove squadre di espansione, nuove audaci giocate e una grafica strabiliante! Qualcuno ha detto dinastia? Tutti gli strumenti e i giocattoli sono qui, 30 squadre, oltre 40 giocate e molta azione, supportate da statistiche impressionanti e significative. I tuoi amici dicono che il loro gioco è fantastico? Sono ancora nella calca dell'anno scorso! NFL QUARTERBACK CLUB '96 termina la discussione con una commozione cerebrale! Sei legato, i cuscinetti sono a posto, le scarpette sono su. Scendi in campo!</description>
+    <year>1995</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="NFL Quarterback Club '96 (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Tempo Jr.">
+    <description>Tempo Jr. is platforming game and sequel to Tempo on the Sega 32X. The player again takes control of the cute grasshopper Tempo and guides him through various stages. The goal in each level is just to find the exit. Each level consists of two stages and a boss fight. After finishing a level, Tempo can take part in a mini game if he found coins in the completed level and win additional points or lives. Tempo can shoot notes from his hands to stun enemies, which will then automatically be kicked away on contact. He can also use his wings to move faster, float in the air or fall more slowly and more controlled.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Tempo Jr. (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Donald Duck no 4-Tsu no Hihou">
+    <description>Mettiamoci in viaggio con Paperino attraverso giungle pericolose, misteriosi relitti di navi pirate e caverne di ghiaccio abitate da abominevoli uomini delle nevi, gli Yeti! Paperino deve salvare lo zio Paperone e voi dovete aiutarlo!</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Deep Duck Trouble Starring Donald Duck (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="The Jungle Book">
+    <description>Il libro della giungla su Game Gear è un adattamento del film Disney del 1967, a sua volta basato sul libro scritto da Rudyard Kipling. Giochi nei panni di Mowgli e devi raccogliere frutta, arrampicarti sugli alberi e combattere nemici della storia come Sher Khan. Il gioco ti permette di tuffarti di nuovo nel mondo di uno dei classici Disney trovando tutti i suoi personaggi e sfondi.</description>
+    <year>1994</year>
+    <manufacturer>Virgin</manufacturer>
+    <rom name="Jungle Book, The (USA).gg" size="262144" />
+  </game>
+  <game name="Super Space Invaders">
+    <description>Super Space Invaders è un aggiornamento di Space Invaders, rilasciato per una varietà di console e computer tra cui Sega Master System e Sega Game Gear. È basato sul sequel arcade Super Space Invaders '91, noto come Majestic Twelve: The Space Invaders Part IV in Giappone e negli Stati Uniti.
+
+Il gameplay è molto simile al gioco originale, anche se ci sono stati aggiornamenti nei reparti di grafica e suono e sono stati aggiunti nuovi nemici con diversi modelli di movimento.</description>
+    <year>1992</year>
+    <manufacturer>Domark</manufacturer>
+    <rom name="Super Space Invaders (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Quest for the Shaven Yak starring Ren Hoek &amp; Stimp">
+    <description>Quest for the Shaven Yak con Ren Hoek e Stimpy su Game Gear è un gioco platform in cui il giocatore può giocare nei panni di Ren o Stimpy nella loro ricerca per riportare gli zoccoli del tosatore di Yak. Puoi scegliere all'inizio di ogni livello quale personaggio vuoi interpretare. Sapendo che Ren salta in alto e che Stimpy può sfondare gli ostacoli. Dovrai quindi mostrare lungimiranza per liberarti di questi ostacoli ed evitare le insidie. &#xD;
+</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Quest for the Shaven Yak Starring Ren Hoek &amp; Stimpy (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Jeopardy! : Sports Edition">
+    <description>Jeopardy! Sports Edition è una versione di Jeopardy! sostituendo i puzzle con puzzle a tema sportivo (sebbene le categorie siano ancora varie) e i personaggi con sprite di atleti presumibilmente immaginari. La versione Mega Drive non cambia nient'altro; il titolo e la schermata del copyright sono gli stessi di Jeopardy! (ma stranamente rimuove il logo di Park Place Productions); la versione Game Gear sfoggia una nuova schermata del titolo. Il programma in Italia si chiamava RISCHIATUTTO ed è stato condotto da Mike Bongiorno negli anni '70.</description>
+    <year>1994</year>
+    <manufacturer>GameTek</manufacturer>
+    <rom name="Jeopardy! - Sports Edition (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="NBA Jam">
+    <description>NBA Jam è un gioco di basket due contro due Puoi giocare con qualsiasi squadra NBA e puoi giocare come giocatori come Barkley, Starks, Pippen e Grant. Ogni giocatore umano controlla un singolo giocatore, quindi scegli saggiamente la tua squadra per tenere conto delle abilità dei compagni di squadra. Il gioco è orientato all'azione e i giocatori possono eseguire schiacciate irrealistiche. Le statistiche complete sulle prestazioni vengono registrate automaticamente. Si applicano il play clock e la linea dei 3 punti, ma altre regole sono in gran parte trascurate.</description>
+    <year>1994</year>
+    <manufacturer>Arena Entertainment</manufacturer>
+    <rom name="NBA Jam (USA) (v1.1).gg" size="524288" />
+  </game>
+  <game name="Last Action Hero">
+    <description>Il gioco, basato sul film omonimo, con protagonista Arnold Schwarzenegger, è molto diverso per ogni piattaforma. Per la maggior parte di loro, il gameplay può essere suddiviso in due parti: livelli di combattimento a scorrimento laterale e inseguimenti selvaggi in auto per le strade.</description>
+    <year>1993</year>
+    <manufacturer>Sony Electronic Publishing</manufacturer>
+    <rom name="Last Action Hero (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Pac-Man">
+    <description>Uno dei giochi più popolari e influenti degli anni '80, Pac-Man è interpretato da un piccolo divoratore di puntini gialli che si fa strada per cancellare un labirinto di vari punti e frutti che popolano il tabellone.&#xD;
+&#xD;
+L'obiettivo di Pac-Man è continuamente sfidato da quattro fantasmi: il timido fantasma blu Bashful (Inky), il fantasma rosso finale Shadow (Blinky), il fantasma rosa veloce Speedy (Pinky) e lo smemorato fantasma arancione Pokey (Clyde). Un tocco da uno di questi fantasmi significa una perdita di vite per Pac-Man.</description>
+    <year>1991</year>
+    <manufacturer>Namco</manufacturer>
+    <rom name="Pac-Man (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Samurai Shodown">
+    <description>Nell'antico Giappone, un uomo di nome Shiro Tokisada Amakusa predica una religione eretica. Nessuno sa che Amakusa è davvero un servitore del malvagio Ambrosia, che ha assunto il corpo di Amakusa. Ambrosia desidera avvolgere il mondo nelle tenebre.&#xD;
+Ora, scegli tra 12 guerrieri (e 3 personaggi bonus) per combattere per l'onore di distruggere Amakusa e portare a termine una missione.</description>
+    <year>1994</year>
+    <manufacturer>Takara</manufacturer>
+    <rom name="Samurai Shodown (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Bonkers Wax Up!">
+    <description>La raccapricciante Madame Who-Said ha attirato Bonkers nel suo spettrale Museo delle Cere dove sta trasformando famosi cartoni animati in statue di cera! Aiuta Bonkers a schivare, schivare e schivare attraverso 6 livelli appiccicosi per trovare il suo amico Lucky e salvare i cartoni dal diventare cera bollente!</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Bonkers Wax Up! (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="FIFA International Soccer">
+    <description>EA Sports ha stretto una partnership con l'organo di governo del calcio internazionale per offrirti il ​​gioco di calcio più realistico mai creato su GameGear. Incredibili parate del portiere: affondo o tuffati dopo tiri difficili dietro gli angoli! L'esclusiva finestra "play-finder" ti consente di concentrare il campo sui calci d'angolo e sui calci di punizione. Trova l'uomo aperto e colpisci la palla con l'obiettivo! Fai cadere il tuo avversario sull'erba con una scivolata. Fai attenzione, fai scivolare i placcaggi da dietro e potresti essere ammonito!</description>
+    <year>1994</year>
+    <manufacturer>Electronic Arts</manufacturer>
+    <rom name="FIFA International Soccer (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="The Itchy &amp; Scratchy Game">
+    <description>They fight! and fight! and fight, and fight, and fight!... Itchy &amp; Scratchy, from The Simpsons, are a cat and mouse cartoon duo. Itchy the mouse and Scratchy the cat exist only to find new and creative ways to attack and kill one another. As the latest cartoon adventures appear on the television, the violence spreads to brand new places.
+
+Itchy &amp; Scratchy is a single player platform side-scroller. The player controls Itchy, the mouse, and must defeat Scratchy, the cat, with a variety of weapons. Itchy caries a default mallet, but can pick up additional weapons on particular levels. Each of the seven levels takes place in a different fictional location and is designed as a maze of doors and platforms. After defeating Scratchy, he usually will return with a special contraption to attack Itchy, and must therefore be defeated again.</description>
+    <year>1995</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="Itchy &amp; Scratchy Game, The (Europe).gg" size="262144" />
+  </game>
+  <game name="Earthworm Jim">
+    <description>Un corvo insegue un verme di nome Jim mentre nello spazio Psy-Crow insegue una nave rinnegata. Il capitano della nave ha rubato una tuta informatica ultra-tecnologica-indistruttibile-super-spaziale e Queen Slug-for-a-Butt ha ordinato a Psy-Crow di prenderla, dal momento che può renderla più bella di Princess-What's -Il suo nome. Psy-Crow fa esplodere il capitano e la tuta cade sul pianeta Terra.&#xD;
+Tornato sulla terra, Jim si chiede se è finalmente al sicuro quando una tuta informatica ultra-tecnologica-indistruttibile-super-spaziale gli atterra addosso. Fortunatamente Jim riposa nell'anello del collo della tuta. Quindi le particelle spaziali iniziano a interagire con Jim, causando un'evoluzione alla velocità della luce. Jim si rende presto conto di avere il controllo della tuta.&#xD;
+Jim sente per caso i piani della regina per l'abito e decide di incontrare questa principessa...</description>
+    <year>1995</year>
+    <manufacturer>Virgin Interactive</manufacturer>
+    <rom name="Earthworm Jim (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Bust-A-Move">
+    <description>Il classico gioco Bubble Bobble è l'antenato di Puzzle Bobble. Il tuo obiettivo in ogni fase è quello di rompere tutte le bolle, rompendone 3 o più dello stesso colore. Il gioco contiene una modalità a due giocatori in cui ogni giocatore cerca prima di rompere tutte le bolle.</description>
+    <year>1996</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Bust-A-Move (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Space Harrier">
+    <description>Run… fly… dodge those obstacles, but return fire on wave after wave of attacking aliens. Armed with a really big gun, you have to defend yourself against the alien hordes using your wits to navigate around the screen. But watch out for those end of level bosses!</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Space Harrier (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="NHL All-Star Hockey">
+    <description>Questa versione di NHL All-Star Hockey presenta tutte le 26 squadre di hockey NHL con i rispettivi colori e loghi insieme a giocatori di grande successo come Wayne Gretzky e Jeremy Roenick tra molti altri. Il gioco presenta una modalità stagionale insieme ai playoff al meglio dei sette che possono essere ripresi in qualsiasi momento utilizzando una funzione di password e presenta molte situazioni e regole NHL della vita reale come sanzioni per il controllo, l'high-sticking, ecc. Insieme al giocatore fatica, cambi di linea, infortuni e sostituzioni. I giocatori possono cambiare manualmente le linee o lasciare che il computer le sposti automaticamente quando i giocatori iniziano a stancarsi.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="NHL All-Star Hockey (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Dropzone">
+    <description>In Dropzone su Game Gear, il giocatore assume il ruolo di un astronauta dotato di un jetpack. Devi venire in tuo aiuto evitando di cadere vittima degli alieni che usano trucchi per eliminarti. Il tuo amico potrebbe non essere chi pensi...</description>
+    <year>1994</year>
+    <manufacturer>Codemasters</manufacturer>
+    <rom name="Dropzone (USA).gg" size="131072" />
+  </game>
+  <game name="Junction">
+    <description>Junction su Game Gear si gioca in modo molto simile al suo equivalente Mega Drive, ma la vista è dall'alto verso il basso piuttosto che isometrica. L'obiettivo è ancora guidare la palla lungo un percorso verso l'uscita, spostando le tessere secondo necessità.</description>
+    <year>1991</year>
+    <manufacturer>Micronet</manufacturer>
+    <rom name="Junction (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Greendog : The Beached Surfer Dude!">
+    <description>In questo gioco interpreti il ruolo di un surfista chiamato Greendog che scopre un ciondolo d'oro mentre fa surf. Inconsapevolmente indossa il ciondolo e scopre che non si stacca. Una ragazza in bikini gli dice che il ciondolo è stato realizzato dagli Aztechi molto tempo fa e che lo hanno maledetto in modo che chiunque lo indossi venga attaccato da qualsiasi animale che si avvicina a loro. Peggio ancora, la persona che lo indossa non è in grado di navigare. L'unico modo in cui Greendog può sollevare la maledizione e rimuovere il ciondolo è trovare i sei pezzi del tesoro azteco e metterli tutti insieme e l'unica conoscenza del luogo in cui si trova il tesoro è stampigliata sul retro del ciondolo.&#xD;
+</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Greendog (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Land of Illusion Starring Mickey Mouse">
+    <description>Topolino sta leggendo un libro interessante e si ritrova improvvisamente in uno strano villaggio da sogno. gli viene detto che una maledizione è stata lanciata sul villaggio, trasformando la sua magia buona in cattiva. Il malvagio Fantasma, che vive nel castello tra le nuvole, ne è responsabile! Topolino decide di aiutare gli abitanti del villaggio e di sconfiggere il malvagio Phantom.&#xD;
+Questo è un gioco platform jump-and-run. C'è un limite di tempo per ogni livello. Topolino può saltare, abbassarsi, arrampicarsi e sconfiggere i nemici saltandoci sopra e premendo contemporaneamente la freccia giù.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Legend of Illusion Starring Mickey Mouse (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Baku Baku">
+    <description>Sei il guardiano dello zoo in un regno pazzo. Ma è meglio stare attenti: una volta che ti immergi nella tana di Baku Baku, non si torna indietro. Per vincere, abbina ogni animale al suo cibo preferito. Sfida i personaggi del computer o affronta testa a testa in modalità a 2 giocatori. Bella grafica 3D e colori abbaglianti portano il puzzle al livello successivo. La velocità variabile del gioco ti consente di andare al rallentatore o alla massima velocità. Meglio essere intelligenti: le sorprese attendono i veri maestri di Baku.</description>
+    <year>1996</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Baku Baku Animal (USA).gg" size="262144" />
+  </game>
+  <game name="VR Troopers">
+    <description>VR Troopers di Saban è basato sull'omonimo programma televisivo ed è prodotto dalla stessa società che ha prodotto i Mighty Morphin' Power Rangers. La storia vede il malvagio Grimlord trasportare i soldati VR in (ironicamente) un videogioco e spetta al giocatore (letteralmente) salvarli e riportarli nel mondo reale.
+
+Il gameplay è il gioco di combattimento standard, usando uno dei tre diversi soldati per calciare, pugni e usare abilità speciali per sconfiggere un combattente per avanzare a quello successivo. Ogni Soldato ha i propri punti di forza, debolezze e mosse speciali e ognuno ha le proprie fasi separate, a seconda di quale sceglie il giocatore. Ha anche funzionalità multi giocatore che consentono a due amici di combattere testa a testa in modalità Duello.</description>
+    <year>1995</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="VR Troopers (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Paperboy">
+    <description>Basato sul gioco arcade, l'obiettivo di Paperboy è consegnare documenti ai tuoi clienti infliggendo il maggior danno possibile alle case dei tuoi non clienti. Per rendere le cose più difficili, numerosi ostacoli si frappongono tra cui operai edili, pneumatici canaglia, skateboarder, cani e gatti, automobili e persino il tornado occasionale.</description>
+    <year>1992</year>
+    <manufacturer>Tengen</manufacturer>
+    <rom name="Paperboy (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Foreman for Real">
+    <description>No, George Foreman non è solo un venditore di barbecue in TV, ma un pugile di alto livello. In questo omonimo gioco di sport su Game Gear combatti in terza persona. Foreman for Real ti consente di eseguire una serie di successi classici dalla tavolozza ideale del pugile. Scegli tra le modalità Esibizione o Torneo, oppure passa alla modalità Carriera e prova a rubare il titolo allo stesso George Foreman!</description>
+    <year>1995</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="Foreman for Real (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="James Bond 007 : The Duel">
+    <description>Gioca a James Bond 007 e ferma un professore pazzo che ha lo stesso vecchio sogno di tutti gli altri. Dominazione del mondo. Il giocatore avrà il fidato Walther PPK e dovrà superare alcuni livelli con un cattivo alla fine di ogni livello. Come nel primo livello, alla fine il giocatore dovrà combattere Jaws. Per dirla semplicemente, questo gioco è fondamentalmente uno sparatutto a scorrimento laterale. Il giocatore può trovare donne che gli daranno una vita extra e molte altre cose.</description>
+    <year>1994</year>
+    <manufacturer>Domark</manufacturer>
+    <rom name="James Bond 007 - The Duel (Europe).gg" size="262144" />
+  </game>
+  <game name="Super Battletank">
+    <description>In February 1991, The United States of America sent troops into Kuwait and fought in armed combat against the forces of Iraq. Operation Desert Storm featured many different types of units including mobile armor. The M1 Abrams tank division is deployed in a variety of missions to destroy marked Iraqi targets.
+
+Super Battletank: War in the Gulf is a 1st person tank simulation. Players sit in the cockpit to of a M1 Abrams tank. Controls allow the player to accelerate forward, decelerate, rotate the tank's trajectory left and right, move the tank's cannon left and right, fire the weapon and check the map. The goal of the player is to travel to the location of enemy targets, line them up with the Abrams cannon and fire upon them until destroyed. Each mission covers a large area of land and the player will need to consult the real-time map to travel appropriately to target locations. The M1 Abrams tank also features 2 special weapons: The laser which is more powerful than regular cannon, and the smoke screen which allows the player to escape.</description>
+    <year>1994</year>
+    <manufacturer>Majesco</manufacturer>
+    <rom name="Super Battletank (USA).gg" size="262144" />
+  </game>
+  <game name="The Berenstain Bears' Camping Adventure">
+    <description>A bear family - Father Bear, Mother Bear, Sister Bear, and Brother Bear - decide to go camping to the nearby forest. While they sit by the fire, the two cubs decide to explore the area. Visit dangerous places, avoid or destroy the enemies, and collect things that bears like most - such as honey or fresh fish!
+
+You can play as either Sister or Brother Bear. From the beginning, you can access four different levels. Once you complete them, you'll unlock the final stage. The bears can jump, throw rocks at enemies, or swing a net to hit them. In each area there are a lot of things to gather - mostly food. After a level is completed, you'll be shown how much valuable stuff you have managed to get.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Berenstain Bears' Camping Adventure, The (USA).gg" size="262144" />
+  </game>
+  <game name="Bugs Bunny in Double Trouble">
+    <description>Il gioco è basato sui film dei cartoni animati dei Looney Tunes. Bugs Bunny si addormenta e nel suo sogno vede Yosemite Sam sviluppare un robot chiamato Gossamer. Il robot disobbedisce ai comandi del suo padrone e perde il controllo. Ora Bugs Bunny deve entrare nel mondo della TV e correggere le cose, riportando l'ordine nelle vite degli abitanti dei Looney Tunes.&#xD;
+Il gioco consiste in diversi livelli basati su piattaforme, ognuno con un obiettivo diverso (guidare un altro personaggio in un posto sicuro, sconfiggere un grosso mostro, ecc.). Bugs Bunny può saltare e correre velocemente, oltre a raccogliere oggetti e lanciarli contro nemici.</description>
+    <year>1996</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Bugs Bunny in Double Trouble (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="R.B.I. Baseball '94">
+    <description>Questa versione portatile è diversa dalla sua cugina per console in termini di contenuto. Mentre il gioco presenta ancora 28 squadre modellate sulle loro controparti MLB del 1993 nella vita reale (ad eccezione della licenza MLB), in questa versione ci sono meno giocatori. Ogni squadra ha anche precedenti squadre di Hall of Fame che risalgono agli anni '80.&#xD;
+</description>
+    <year>1994</year>
+    <manufacturer>Time Warner Interactive</manufacturer>
+    <rom name="R.B.I. Baseball '94 (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Factory Panic">
+    <description>La città di Segaville sta vivendo un periodo di miseria mai visto prima. Un crudele uomo d'affari domina tutte le buone fabbriche della città e lascia solo i rifiuti alla popolazione.&#xD;
+&#xD;
+Disperati, ti hanno chiesto di aiutarli a Invadere le fabbriche e fare di tutto per restituire i buoni prodotti a coloro che davvero lo meritano. Non sarà facile, ma se non ci riesci, nessun altro lo farà.</description>
+    <year>1991</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Factory Panic (Europe).gg" size="131072" />
+  </game>
+  <game name="Power Strike II">
+    <description>Power Strike II è un punto di riferimento degli sparatutto dell'epoca. Dopo aver selezionato l'arma che desideri nel corso del gioco, hai la possibilità di aumentarne la potenza raccogliendo i bonus che i tuoi avversari ti lasceranno una volta distrutti. Alla fine di ogni livello, dovrai trovare la scappatoia dei tanti boss del gioco.</description>
+    <year>1993</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Power Strike II (Japan, Europe).gg" size="262144" />
+  </game>
+  <game name="WWF Raw">
+    <description>WWF Raw è un gioco di wrestling professionale con 10 superstar della World Wrestling Federation. I wrestler tra cui puoi scegliere includono Bret "Hit Man" Hart, Bam Bam Bigelow, 1-2-3 Kid, Diesel, Doink, Lex Luger, Luna Vachon, Owen Hart, Razor Ramon, Shawn Michaels, Undertaker e Yokozuna.
+
+In questo gioco, tenti di immobilizzare il tuo avversario al tappeto riducendo il suo misuratore di potenza fino a quando non può più combattere. C'è un gran numero di mosse da eseguire, tra cui manovre tenditori e atti "illegali" come colpire l'avversario con una sedia pieghevole di metallo.
+
+Questo gioco supporta fino a 4 giocatori simultanei e ha le seguenti modalità di gioco: Uno contro uno, Tag Team, Bedlam, Survivor Series, Royal Rumble, Raw Endurance Match e Rematch.</description>
+    <year>1994</year>
+    <manufacturer>Acclaim</manufacturer>
+    <rom name="WWF Raw (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="George Foreman's KO Boxing">
+    <description>Siamo nell'ultimo round di una lotta raccapricciante. In palio c'è il titolo mondiale dei pesi massimi. L'aspirante è in gran forma e il campione in carica mostra già segni di stanchezza. Con una leggera svista, l'aspirante Keith "The Man" Gibson si fa avanti e colpisce con precisione: prima un dritto, poi un cross, un gancio e... questo è tutto! Abbiamo un nuovo campione dei pesi massimi!
+Ma sembra non per molto tempo. Gli altri 4 migliori aspiranti ti sfideranno. Lo stadio è gremito e la folla grida per un knockout. Non entrare in questo solo come spettatore! Guida il tuo pugile alla conquista del titolo di campioni!</description>
+    <year>1992</year>
+    <manufacturer>Flying Edge</manufacturer>
+    <rom name="George Foreman's KO Boxing (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="X-Men : GamesMaster's Legacy">
+    <description>Una piaga E una doppia croce mortale! Il Legacy Virus sta annientando il genere mutante e il GamesMaster ne tiene la chiave. Offre agli X-Men la possibilità di giocare al suo gioco e vincere il segreto, ma offre lo stesso anche ai loro acerrimi nemici con la soddisfazione AGGIUNTA di distruggere gli X-Men! Gli X-Men devono dividersi a trovare la cura o perire per sempre.</description>
+    <year>1994</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="X-Men - Gamemaster's Legacy (USA, Europe).gg" size="524288" />
+  </game>
+  <game name="Solitaire FunPak">
+    <description>Solitaire FunPak is handheld solitaire game.  There are 12 different forms of solitaire to play (Klondike, Tripeaks, Pyramid, Cruel, Freecell, Golf, Canfield, Aces Up, Scorpion, Poker, Stonewall and Florentine). It also has a tournament mode where players can go for standard games, a full championship, a custom game or a custom game with a time limit. The best scores are stored in the hall of fame.</description>
+    <year>1994</year>
+    <manufacturer>Interplay</manufacturer>
+    <rom name="Solitaire Funpak (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Alien 3">
+    <description>Gli ALIENI sono veloci, sputano acido e sono proprio dietro di te! Il motion tracker è il tuo unico avvertimento. Non c'è tempo per pensare, non c'è tempo per riprendere fiato ... CORRI! Non riesco a vedere molto lontano in questi condotti d'aria. Difficile respirare. Gli abbracci possono essere ovunque. Hai la potenza di fuoco ... fai esplodere gli ALIENI con la tua mitragliatrice, lanciafiamme e lanciagranate. Sai cosa devi fare ... salvare i prigionieri intrappolati e porre fine a questo incubo! Continua a ripeterti: "Non sta succedendo davvero. È solo un gioco!!!"</description>
+    <year>1993</year>
+    <manufacturer>Arena Entertainment</manufacturer>
+    <rom name="Alien 3 (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Gear Works">
+    <description>Questo gioco di puzzle dall'alto verso il basso inizia con uno schermo con un numero di ingranaggi rossi in diverse parti dello schermo e una griglia di pioli (che diventano meno completi nei livelli successivi). Il tuo compito in ogni livello è usare un numero di ingranaggi di una di 3 diverse dimensioni per assicurarti che tutti i pioli siano collegati insieme. Tutto questo deve essere completato prima che il motore si surriscaldi.</description>
+    <year>1993</year>
+    <manufacturer>Sony Electronic Publishing</manufacturer>
+    <rom name="Gear Works (USA, Europe).gg" size="131072" />
+  </game>
+  <game name="Ayrton Senna's Super Monaco GP II">
+    <description>Adesso è vero. Stai correndo a oltre 300 km / h nella massima categoria del motorsport mondiale. Accanto a lui, il brasiliano Ayrton Senna, tricampione del mondo di Formula 1, è il pilota più ardito degli ultimi anni.
+Curve strette, scalate di marcia e tutte le emozioni della F1 nelle tue mani. Il tutto con consigli esclusivi del nostro campione, che ha agito direttamente nello sviluppo del gioco, affinché le immagini trasmettessero perfettamente la realtà vissuta dai piloti durante le 16 gare del campionato.
+Allacciate le cinture di sicurezza, e in bocca al lupo!!!</description>
+    <year>1992</year>
+    <manufacturer>SEGA</manufacturer>
+    <rom name="Ayrton Senna's Super Monaco GP II (USA, Europe).gg" size="262144" />
+  </game>
+  <game name="Ms. Pac-Man">
+    <description>Nel 1982, è stato introdotto un sequel dell'incredibilmente popolare Pac-Man sotto forma della sua ragazza, Ms. Pac-Man. Questo sequel è proseguito con il gameplay "mangia i puntini/evita i fantasmi" del gioco originale, ma ha aggiunto nuove funzionalità per mantenere il titolo fresco.
+
+Come il suo ragazzo, Ms. Pac-Man tenta di superare quattro diversi e impegnativi labirinti pieni di puntini e frutti che rimbalzano sempre in movimento, evitando Inky, Blinky, Pinky e Sue, ognuno con la propria personalità e tattica. Un tocco da uno di questi fantasmi significa una perdita di vite umane per Ms. Pac-Man.</description>
+    <year>1993</year>
+    <manufacturer>Namco</manufacturer>
+    <rom name="Ms. Pac-Man (USA, Europe).gg" size="131072" />
+  </game>
+</datafile>
