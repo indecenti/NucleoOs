@@ -1,0 +1,53 @@
+// ANIMA reasoning layer — equation solver, multi-step chains, cross-turn registers, the conscience.
+// Drives the REAL firmware (anima.exe). Single-turn cases get a /reset; {turns:[...]} cases run as one
+// session (no reset between turns) to exercise memory. "reject":true means NO math/reason frame may claim
+// it (zero false-positives on ordinary language). Twin (serve-shell.mjs) is NOT cross-checked here — these
+// are device-first features; math-cases.jsonl still guards C<->JS parity on the shared surface.
+//
+// --- EQUATIONS: linear / quadratic, discriminant, complex, self-verification ---
+{"q":"risolvi x^2 - 5x + 6 = 0","lang":"it","expect":"x = 3"}
+{"q":"x^2 - 5x + 6 = 0","lang":"it","expect":"due soluzioni reali"}
+{"q":"risolvi 2x + 4 = 10","lang":"it","expect":"x = 3"}
+{"q":"3x = 12","lang":"it","expect":"x = 4"}
+{"q":"x = 5","lang":"it","expect":"x = 5"}
+{"q":"x^2 = 9","lang":"it","expect":"x = 3"}
+{"q":"x^2 + 1 = 0","lang":"it","expect":"complessi"}
+{"q":"x^2 - 4x + 4 = 0","lang":"it","expect":"doppia"}
+{"q":"x^2 - 2 = 0","lang":"it","expect":"1.41"}
+{"q":"0x = 5","lang":"it","expect":"Nessuna soluzione"}
+{"q":"x^3 = 8","lang":"it","expect":"grado superiore"}
+{"q":"x + y = 5","lang":"it","expect":"incognite"}
+{"q":"solve x^2 - 5x + 6 = 0","lang":"en","expect":"x = 3"}
+{"q":"solve x^2 + 9 = 0","lang":"en","expect":"complex"}
+{"q":"solve 2x + 4 = 10","lang":"en","expect":"x = 3"}
+// --- CHAINS: multi-step, threaded through context, honest stop ---
+{"q":"calcola l'area di un cerchio di raggio 5 poi moltiplica per 3","lang":"it","expect":"235.6"}
+{"q":"quanto fa 100 diviso 4 poi la radice di quello poi al quadrato","lang":"it","expect":"Risultato: 25"}
+{"q":"5 + 3 poi per 2","lang":"it","expect":"16"}
+{"q":"10 elevato 2 poi diviso 4","lang":"it","expect":"25"}
+{"q":"calcola 3 + 4 poi è primo","lang":"it","expect":"primo? Si"}
+{"q":"compute 10 * 10 then divide by 4","lang":"en","expect":"25"}
+{"q":"radice di 144 poi più 1","lang":"it","expect":"13"}
+// --- CHAINS: ordinary sentences with a connective must NOT be treated as math ---
+{"q":"vado al cinema poi a cena","lang":"it","reject":true}
+{"q":"prima studio e poi gioco","lang":"it","reject":true}
+{"q":"first i wake up then i eat","lang":"en","reject":true}
+// --- THE CONSCIENCE: impossible / out-of-domain answered honestly, never faked ---
+{"q":"il fattoriale di 3.5","lang":"it","expect":"interi"}
+{"q":"fattoriale di 25","lang":"it","expect":"troppo grande"}
+{"q":"radice di -4","lang":"it","expect":"Non calcolo la radice di un numero negativo"}
+{"q":"3.5 è primo","lang":"it","expect":"interi"}
+{"q":"area del triangolo di lati 3 4 5","lang":"it","expect":"6"}
+{"q":"perimetro del triangolo di lati 3 4 5","lang":"it","expect":"12"}
+{"q":"area del triangolo di lati 1 1 10","lang":"it","expect":"Non esiste"}
+{"q":"area of a triangle with sides 3 4 5","lang":"en","expect":"6"}
+{"q":"factorial of 2.5","lang":"en","expect":"integers"}
+// --- SELF-DESCRIPTION (more aware): knows its own scope ---
+{"q":"cosa sai calcolare","lang":"it","expect":"equazioni"}
+{"q":"what math can you do","lang":"en","expect":"equations"}
+// --- REGISTERS: named results carried across turns (multi-turn sessions) ---
+{"turns":[{"q":"12 per 12"},{"q":"chiamalo a","expect":"144"},{"q":"sia b = 30","expect":"30"},{"q":"a + b","expect":"174"},{"q":"quanto vale a","expect":"144"}],"lang":"it"}
+{"turns":[{"q":"sia r = 5"},{"q":"area di un cerchio di raggio r","expect":"78.5"}],"lang":"it"}
+{"turns":[{"q":"let x = 7"},{"q":"x times 3","expect":"21"}],"lang":"en"}
+{"turns":[{"q":"chiamalo z","expect":"da salvare"}],"lang":"it"}
+{"turns":[{"q":"sia a = 5"},{"q":"a casa mia","reject":true}],"lang":"it"}

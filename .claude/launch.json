@@ -1,0 +1,107 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "shell",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/serve-shell.mjs"],
+      "port": 5599
+    },
+    {
+      "name": "device-real",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/dev-device-proxy.mjs"],
+      "port": 5602
+    },
+    {
+      "name": "device",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5601", "--directory", "web/device"],
+      "port": 5601
+    },
+    {
+      "name": "studio",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/nfv/studio.mjs"],
+      "port": 5577
+    },
+    {
+      "name": "video-studio-tile",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5604", "--directory", "apps/video-studio/www"],
+      "port": 5604
+    },
+    {
+      "name": "forge-demo",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5610", "--bind", "127.0.0.1"],
+      "port": 5610
+    },
+    {
+      "name": "forge-payload",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5611", "--bind", "127.0.0.1", "--directory", "deploy/sd-safe"],
+      "port": 5611
+    },
+    {
+      "name": "paint",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8731", "--directory", "apps/paint/www"],
+      "port": 8731
+    },
+    {
+      "name": "repo",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5620"],
+      "port": 5620
+    },
+    {
+      "name": "sysmon",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5612", "--directory", "apps/system-monitor/www"],
+      "port": 5612
+    },
+    {
+      "name": "dj",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5613", "--directory", "apps/dj/www"],
+      "port": 5613
+    },
+    {
+      "name": "settings",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5615", "--directory", "apps/settings/www"],
+      "port": 5615
+    },
+    {
+      "name": "tts-samples",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5616", "--directory", "tools/nucleo-tts/_samples"],
+      "port": 5616
+    },
+    {
+      "name": "anima-voce",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5617", "--directory", "tools/nucleo-tts/_samples_anima"],
+      "port": 5617
+    },
+    {
+      "name": "anima",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5614", "--directory", "apps/anima/www"],
+      "port": 5614
+    },
+    {
+      "name": "pong3d",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/pong3d-verify/server.js"],
+      "port": 8099
+    },
+    {
+      "name": "clock",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5618", "--directory", "apps/clock/www"],
+      "port": 5618
+    }
+  ]
+}

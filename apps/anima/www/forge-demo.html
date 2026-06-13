@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ANIMA Forge — agentic coder</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --bd:#30363d; --fg:#e6edf3; --dim:#8b949e; --acc:#58a6ff; --ok:#3fb950; --warn:#d29922; --bad:#f85149; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; padding:18px; }
+  h1 { font-size:18px; margin:0 0 2px; } .sub { color:var(--dim); margin:0 0 14px; font-size:12px; }
+  .panel { background:var(--panel); border:1px solid var(--bd); border-radius:10px; padding:12px 14px; margin-bottom:14px; }
+  .panel h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:0 0 8px; }
+  #cap-note { color:var(--fg); }
+  .dial { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  .seg { border:1px solid var(--bd); border-radius:999px; padding:4px 10px; font-size:12px; color:var(--dim); }
+  .seg.cur { border-color:var(--acc); color:var(--acc); } .seg.off { opacity:.45; text-decoration:line-through; }
+  .engines { display:flex; gap:8px; flex-wrap:wrap; }
+  label.eng { border:1px solid var(--bd); border-radius:8px; padding:8px 10px; font-size:12px; cursor:pointer; display:flex; gap:7px; align-items:center; }
+  label.eng:hover { border-color:var(--acc); } label.eng.off { opacity:.45; cursor:not-allowed; }
+  label.eng .nm { font-weight:600; } label.eng .nt { color:var(--dim); }
+  input[type=radio]{ accent-color:var(--acc); }
+  .prompts { display:flex; gap:8px; flex-wrap:wrap; }
+  button { background:#21262d; color:var(--fg); border:1px solid var(--bd); border-radius:8px; padding:8px 12px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--acc); } button:disabled { opacity:.5; cursor:default; }
+  .step { display:flex; gap:8px; align-items:flex-start; padding:3px 0; border-bottom:1px solid #1c2129; }
+  .st { color:var(--acc); min-width:120px; font-weight:600; }
+  .st.FIX,.st.REJECTED,.st.ABORT,.st.ERROR { color:var(--warn); } .st.DONE { color:var(--ok); }
+  .det { color:var(--dim); }
+  .chip { display:inline-block; border:1px solid var(--bd); border-radius:999px; padding:1px 9px; font-size:12px; margin-right:6px; }
+  .chip.ok { border-color:var(--ok); color:var(--ok); } .chip.warn { border-color:var(--warn); color:var(--warn); } .chip.bad { border-color:var(--bad); color:var(--bad); }
+  pre.code { background:#0b0f14; border:1px solid var(--bd); border-radius:8px; padding:12px; overflow:auto; color:#c9d1d9; }
+  .followups button { font-size:12px; padding:5px 10px; } .muted { color:var(--dim); }
+</style>
+</head>
+<body>
+  <h1>ANIMA Forge — agentic coder</h1>
+  <p class="sub">Writes code, writes &amp; runs its own tests on a real in-browser sandbox (Web Worker), fixes wrong results, verifies, and proposes follow-ups. <b>You choose the engine</b> — runs with no GPU too (CPU/WASM), or fully scripted Demo anywhere.</p>
+
+  <div class="panel">
+    <h2>Engine &amp; fallback (auto)</h2>
+    <div id="cap-note" class="muted">probing…</div>
+    <div class="dial" id="dial"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Engine — your choice</h2>
+    <div class="engines" id="engines"></div>
+    <div class="muted" id="eng-status" style="margin-top:8px"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Air-gap readiness <span class="muted" id="ag-line" style="font-weight:400"></span></h2>
+    <div class="muted" id="ag-hint">Can each engine run with the network cut? <b>✈</b> air-gapped (size-verified on SD) · <b>↓</b> one download away · <b>◌</b> needs weights · <b>!</b> SD copy incomplete (re-sync) · <b>☁</b> cloud · <b>⊘</b> unavailable here.</div>
+    <div id="readiness" style="margin-top:10px"></div>
+    <div style="margin-top:10px"><button id="verify-sd">Verify SD (deep SHA)</button> <span class="muted" id="verify-status">size-verified above; click to checksum-verify each lib (bounded, scheduler-gated reads)</span></div>
+  </div>
+
+  <div class="panel">
+    <h2>Models — download (Settings)</h2>
+    <div class="muted" id="dl-policy">Manual &amp; one at a time. Source: <b>online (CDN) first</b>; if there's no connection, <b>from the Cardputer SD</b>. Each shard is SHA-verified. Nothing downloads automatically.</div>
+    <div id="models" style="margin-top:10px"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Try a task</h2>
+    <div class="prompts" id="prompts"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Run</h2>
+    <div id="trace"><span class="muted">pick an engine + a task…</span></div>
+    <div id="result"></div>
+  </div>
+
+<script type="module">
+import { runAgent } from './forge/loop.js';
+import { MockEngine } from './forge/engine.js';
+import { planEngine, capabilityNote } from './forge/engine-policy.js';
+import { dialModel } from './forge/transcript.js';
+import { verdictChip, combineVerdict } from './forge/verify.js';
+import { extract } from './forge/extract.js';
+import { assess as capAssess } from './forge/capguard.js';
+import { probeWebGPU } from './forge/webllm-engine.js';
+import { engineOptions, defaultEngine, loadEngine } from './forge/engine-loader.js';
+import { makeModelStore, REGISTRY, modelById } from './forge/model-store.js';
+import { webllmAppConfig, resolveLib, makeHeadProbe, makeRangeProbe, expectedBytesFromManifest } from './forge/lib-resolver.js';
+import { readinessMatrix, readinessSummary, classBadge, ENGINE_DEPS } from './forge/readiness.js';
+import { deepVerifyAll } from './forge/lib-verify.js';
+import * as provenance from './forge/provenance.js';
+import { createRunner, checkSyntax } from '/apps/code-runner/nucleo-run.js';
+
+const $ = (id) => document.getElementById(id);
+const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
+const fence = (s) => '```js\n' + s + '\n```';
+const stripFence = (t) => { const m = /```(?:[a-z]+)?\s*([\s\S]*?)```/i.exec(String(t || '')); return (m ? m[1] : String(t || '')).trim(); };
+const MLC_ID = 'Qwen2.5-Coder-0.5B-Instruct-q4f16_1-MLC';
+const GGUF_DIR = '/apps/anima/forge/models/Qwen2.5-Coder-0.5B-Instruct-GGUF/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf';
+
+let caps = { webgpu: false, wasm: typeof WebAssembly !== 'undefined', online: navigator.onLine, hasKey: false, coderCached: false, deviceBrain: true };
+
+// ---- real in-browser sandbox (Web Worker) ----
+const sandbox = {
+  run: async (code, opts = {}) => {
+    if (opts.mode === 'check') return checkSyntax(code);
+    const logs = [];
+    const rt = createRunner({ fs: false, http: false, anima: false, notify: false, timeoutMs: 4000, onLog: (l, t) => { if (t) logs.push(t); } });
+    try { const r = await rt.run(code); return { ok: !!r.ok, error: r.error, logs, value: r.value }; }
+    catch (e) { return { ok: false, error: String(e && e.message || e), logs }; } finally { rt.dispose(); }
+  },
+};
+const mkFs = () => { const s = new Map(); return { store: s,
+  read: async (p) => s.has(p) ? { ok: true, content: s.get(p) } : { ok: false, error: 'nf' }, list: async () => ({ ok: true, entries: [] }),
+  write: async (p, c) => { s.set(p, c); return { ok: true }; }, append: async (p, c) => { s.set(p, (s.get(p) || '') + c); return { ok: true }; },
+  edit: async (p, o, n) => { s.set(p, String(s.get(p) || '').replace(o, n)); return { ok: true }; }, del: async (p) => { s.delete(p); return { ok: true }; }, mkdir: async () => ({ ok: true }), move: async () => ({ ok: true }) }; };
+
+// ---- real engine factories: EVERYTHING offline-first (device SD), online (CDN) fallback ----
+// The same policy the model weights use, now extended to the runtime libs. A fully-provisioned SD runs
+// the model with ZERO network; a partially-provisioned one still works online. resolveLib() HEAD-probes
+// the SD url and only uses it when actually present, so this degrades cleanly. See forge/vendor/NOTES.md.
+const probe = makeHeadProbe();
+const SD_LIB = location.origin + '/apps/anima/forge/vendor/';
+const importWebLLM = async () => { try { return await import('./forge/vendor/web-llm.js'); } catch (e) { return await import('https://esm.run/@mlc-ai/web-llm'); } };
+const createWebLLM = async (modelId, opts) => {
+  const webllm = await importWebLLM();
+  // Weights AND the per-model model_lib .wasm: SD-first → CDN. (model_lib is vendored at vendor/<lib>.wasm.)
+  const { appConfig, weightsSource, libSource } = await webllmAppConfig(webllm.prebuiltAppConfig, modelId, {
+    sdModelBase: location.origin + '/apps/anima/forge/models/' + modelId + '/',
+    hfModel: 'https://huggingface.co/mlc-ai/' + modelId,
+    localModelLib: SD_LIB + 'Qwen2-0.5B-Instruct-q4f16_1_cs1k-webgpu.wasm',
+    cdnModelLib: 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_84/base/Qwen2-0.5B-Instruct-q4f16_1_cs1k-webgpu.wasm',
+  }, probe);
+  if (opts && opts.onSource) opts.onSource({ weights: weightsSource, lib: libSource });
+  return webllm.CreateMLCEngine(modelId, { initProgressCallback: opts && opts.initProgressCallback, appConfig });
+};
+const createWasm = async (_modelId, opts) => {
+  // wllama ESM module: SD-vendored first, CDN fallback. (Full vendoring pending; loader future-proof.)
+  let Wllama;
+  try { ({ Wllama } = await import('./forge/vendor/wllama.mjs')); }
+  catch (e) { ({ Wllama } = await import('https://esm.run/@wllama/wllama')); }
+  // wllama runtime .wasm (single/multi-thread): SD-first → CDN, per file.
+  const CDN = 'https://esm.run/@wllama/wllama/esm/';
+  const st = await resolveLib(SD_LIB + 'wllama/single-thread/wllama.wasm', CDN + 'single-thread/wllama.wasm', probe);
+  const mt = await resolveLib(SD_LIB + 'wllama/multi-thread/wllama.wasm', CDN + 'multi-thread/wllama.wasm', probe);
+  if (opts && opts.onSource) opts.onSource({ lib: st.source });
+  const w = new Wllama({ 'single-thread/wllama.wasm': st.url, 'multi-thread/wllama.wasm': mt.url });
+  await w.loadModelFromUrl(location.origin + GGUF_DIR, { progressCallback: opts && opts.onProgress });
+  return { createChatCompletion: (messages, o) => w.createChatCompletion(messages, { nPredict: (o && o.n_predict) || 512, sampling: { temp: 0.2 } }) };
+};
+const deviceTransport = async (q, { mode }) => { try { const r = await fetch('/api/anima?q=' + encodeURIComponent(q) + '&lang=en&mode=' + (mode || 'on')); return await r.json(); } catch { return { reply: '(device unreachable in this preview)' }; } };
+
+// ---- model download manager: MANUAL, one-at-a-time, online(CDN)→SD, SHA-verified, never auto ----
+const sha256hex = async (u8) => { const b = await crypto.subtle.digest('SHA-256', u8); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join(''); };
+const MODEL_CACHE = 'anima-forge-models';
+const cacheHas = async (id, name) => { const c = await caches.open(MODEL_CACHE); return !!(await c.match('/fc/' + id + '/' + name)); };
+const cachePut = async (id, name, u8) => { const c = await caches.open(MODEL_CACHE); await c.put('/fc/' + id + '/' + name, new Response(u8)); };
+const store = makeModelStore({
+  getManifest: async (id) => await (await fetch(modelById(id).sdBase + 'manifest.json', { cache: 'no-store' })).json(),
+  fetchWhole: async (url) => { try { const r = await fetch(url); return r.ok ? { ok: true, status: r.status, bytes: new Uint8Array(await r.arrayBuffer()) } : { ok: false, status: r.status }; } catch { return { ok: false, status: 0 }; } },
+  fetchRange: async (url, rg) => { try { const r = await fetch(url, { headers: { Range: `bytes=${rg.start}-${rg.end}` } }); return (r.ok || r.status === 206) ? { ok: true, status: r.status, bytes: new Uint8Array(await r.arrayBuffer()) } : { ok: false, status: r.status }; } catch { return { ok: false, status: 0 }; } },
+  sha256: sha256hex, cacheHas, cachePut,
+  isOnline: () => navigator.onLine,
+  telemetry: () => ({ freeHeap: 200 * 1024, largestBlock: 300 * 1024, verifyInFlight: false }),
+});
+let dlBusy = false;
+async function renderModels() {
+  const box = $('models'); box.textContent = '';
+  for (const m of REGISTRY) {
+    let st = 'absent', note = '';
+    try { st = await store.status(m.id); } catch (e) { note = ' (manifest not found here)'; }
+    const row = el('div', 'step');
+    row.appendChild(el('span', 'st', st === 'cached' ? '✓ ready' : '• ' + m.kind));
+    row.appendChild(el('span', 'det', m.label));
+    const prog = el('span', 'det', st === 'cached' ? ' cached in browser' : note);
+    const btn = el('button', null, st === 'cached' ? 're-download' : 'Download'); btn.disabled = dlBusy;   // one-at-a-time
+    btn.addEventListener('click', async () => {
+      if (dlBusy) return; dlBusy = true; await renderModels(); prog.textContent = ' starting…';
+      try { const r = await store.download(m.id, { onProgress: (p) => { prog.textContent = p.total ? ` ${p.source || ''} ${p.done}/${p.total}` : (p.phase === 'fallback' ? ' CDN failed → trying SD…' : ' …'); } }); prog.textContent = ' ✓ downloaded from ' + r.source; }
+      catch (e) { prog.textContent = ' ✗ ' + String(e.message || e); }
+      finally { dlBusy = false; await renderModels(); await renderReadiness(); }
+    });
+    row.appendChild(btn); row.appendChild(prog); box.appendChild(row);
+  }
+}
+
+// ---- Air-gap readiness: per-engine "can it run with the cable pulled?" over the real SD probe ----
+const TONE = { ok: '#36d399', warn: '#fbbd23', bad: '#f87272', net: '#60a5fa', off: '#9aa' };
+let _libManifest = null;
+async function libManifest() {
+  if (_libManifest) return _libManifest;
+  try { _libManifest = await (await fetch(SD_LIB + 'lib-manifest.json', { cache: 'no-store' })).json(); } catch { _libManifest = { libs: [] }; }
+  return _libManifest;
+}
+// weights load with NO network if cached (model-store: all shards SHA-verified) OR every shard is whole
+// on the device SD (served by webfs). NOT just manifest presence — a partially-synced model (manifest
+// there, some shards missing/truncated) must NOT be reported air-gapped, so we integrity-probe each shard.
+async function weightsReady(id) {
+  try { if ((await store.status(id)) === 'cached') return true; } catch {}
+  const m = modelById(id); if (!m) return false;
+  try {
+    const man = await (await fetch(location.origin + m.sdBase + 'manifest.json', { cache: 'no-store' })).json();
+    const files = [...(man.shards || []), ...(man.aux || [])];
+    if (!files.length) return false;
+    const probe = makeRangeProbe(undefined, (url) => { const f = files.find((x) => url.endsWith('/' + x.name)); return f ? f.bytes : null; });
+    for (const f of files) { const r = await probe(location.origin + m.sdBase + f.name); if (!r.ok) return false; }  // any missing/truncated shard → not ready
+    return true;
+  } catch { return false; }
+}
+async function renderReadiness() {
+  const man = await libManifest();
+  // CRITICAL: the expected-size map keys are built with SD_LIB (origin-prefixed), so readiness MUST probe
+  // with the SAME base — pass base: SD_LIB. Otherwise the lookup misses, the probe degrades to presence-only,
+  // and a truncated SD lib would falsely read as air-gapped (integrity silently off).
+  const probeDetail = makeRangeProbe(undefined, expectedBytesFromManifest(man, SD_LIB));
+  const rcaps = { ...caps, crossOriginIsolated: !!self.crossOriginIsolated, online: navigator.onLine, deviceBrain: true };
+  const ids = ['webgpu', 'wasm', 'cloud', 'device', 'demo'];
+  const matrix = await readinessMatrix(ids, { probeDetail, weightsReady, caps: rcaps, base: SD_LIB });
+  const sum = readinessSummary(matrix);
+  $('ag-line').textContent = '— ' + sum.line;
+  const labelOf = Object.fromEntries(engineOptions(rcaps).map((o) => [o.id, o.label]));
+  const box = $('readiness'); box.textContent = '';
+  for (const r of matrix) {
+    const b = classBadge(r.klass);
+    const row = el('div', 'step');
+    const badge = el('span', 'st', b.icon + ' ' + b.text); badge.style.color = TONE[b.tone] || '#9aa'; badge.style.fontWeight = '600'; badge.style.minWidth = '7.5em';
+    row.appendChild(badge);
+    row.appendChild(el('span', 'det', labelOf[r.id] || r.id));
+    const bits = [];
+    for (const m of r.missing) bits.push(m.kind === 'weights' ? 'weights' : (m.kind === 'capability' ? (m.note || 'capability') : (m.path + (m.reason && m.reason !== 'absent' ? ' (' + m.reason + ')' : ''))));
+    const detail = bits.length ? 'needs: ' + bits.join(', ') : (r.notes[0] || b.hint);
+    const d = el('span', 'det', ' · ' + detail); d.style.opacity = '.8'; row.appendChild(d);
+    box.appendChild(row);
+  }
+}
+const dlFetchRange = async (url, rg) => { try { const r = await fetch(url, { headers: { Range: `bytes=${rg.start}-${rg.end}` } }); return (r.ok || r.status === 206) ? { ok: true, status: r.status, bytes: new Uint8Array(await r.arrayBuffer()) } : { ok: false, status: r.status }; } catch { return { ok: false, status: 0 }; } };
+async function runDeepVerify() {
+  const btn = $('verify-sd'), st = $('verify-status'); btn.disabled = true; st.textContent = ' verifying…';
+  try {
+    const man = await libManifest(); const total = (man.libs || []).length; let done = 0;
+    const res = await deepVerifyAll(man, SD_LIB, { fetchRange: dlFetchRange, sha256: sha256hex, telemetry: () => ({ freeHeap: 200 * 1024, largestBlock: 300 * 1024, verifyInFlight: false }) },
+      (row) => { st.textContent = ` ${++done}/${total} · ${row.path} ${row.ok ? '✓' : '✗ ' + row.reason}`; });
+    const bad = res.filter((r) => !r.ok);
+    st.textContent = bad.length ? `✗ ${bad.length}/${res.length} FAILED: ${bad.map((b) => b.path + ' (' + b.reason + ')').join(', ')} — re-sync the SD` : `✓ checksum-verified: all ${res.length} libs match the manifest (SHA-256), not just size`;
+  } catch (e) { st.textContent = '✗ ' + String(e.message || e); }
+  finally { btn.disabled = false; }
+}
+
+// ---- dial + engine picker ----
+function renderDial() {
+  $('cap-note').textContent = capabilityNote(caps);
+  const dial = $('dial'); dial.textContent = '';
+  for (const seg of dialModel('auto', caps)) { const s = el('span', 'seg' + (seg.current ? ' cur' : '') + (seg.available ? '' : ' off'), (seg.icon ? seg.icon + ' ' : '') + (seg.label || seg.id)); if (seg.reason) s.title = seg.reason; dial.appendChild(s); }
+  const p = planEngine(caps); dial.appendChild(el('span', 'seg cur', '→ ' + p.selected + (p.private ? ' (private)' : '')));
+}
+let chosen = 'demo';
+function renderEngines() {
+  const opts = engineOptions(caps); chosen = defaultEngine(caps);
+  const box = $('engines'); box.textContent = '';
+  for (const o of opts) {
+    const lab = el('label', 'eng' + (o.available ? '' : ' off')); if (!o.available) lab.title = 'unavailable: needs ' + o.need;
+    const r = el('input'); r.type = 'radio'; r.name = 'eng'; r.value = o.id; r.disabled = !o.available; r.checked = o.id === chosen;
+    r.addEventListener('change', () => { chosen = o.id; $('eng-status').textContent = o.note; });
+    lab.appendChild(r); lab.appendChild(el('span', 'nm', o.label)); lab.appendChild(el('span', 'nt', ' · ' + o.note));
+    box.appendChild(lab);
+  }
+  $('eng-status').textContent = (opts.find((o) => o.id === chosen) || {}).note || '';
+}
+
+// ---- scripted Demo tasks (full agentic loop with MockEngine) ----
+const TASKS = {
+  debounce: { label: 'Write a debounce', test: false, spec: 'a debounce(fn,ms) function in javascript', path: 'debounce.js', synth: () => 'const debounce=(fn,ms)=>{let t;return (...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);};};console.log(typeof debounce(()=>{},10));' },
+  factorial: { label: 'Factorial (buggy → self-fix)', test: true, spec: 'a factorial(n) function in javascript', path: 'factorial.js', synth: (n) => n === 1 ? 'const fact=n=>n<=1?1:n*fact(n-2);console.log(fact(5));' : 'const fact=n=>n<=1?1:n*fact(n-1);console.log(fact(5));', tests: () => 'if(fact(5)!==120)throw new Error("fact(5)="+fact(5));if(fact(0)!==1)throw new Error("fact(0)");' },
+  fizzbuzz: { label: 'FizzBuzz (buggy → self-fix)', test: true, spec: 'a fizzbuzz(n) function in javascript', path: 'fizzbuzz.js', synth: (n) => n === 1 ? 'const fb=n=>n%3===0?"Fizz":n%5===0?"Buzz":n%15===0?"FizzBuzz":String(n);console.log(fb(15));' : 'const fb=n=>n%15===0?"FizzBuzz":n%3===0?"Fizz":n%5===0?"Buzz":String(n);console.log(fb(15));', tests: () => 'if(fb(15)!=="FizzBuzz")throw new Error("15="+fb(15));if(fb(3)!=="Fizz")throw 0;if(fb(5)!=="Buzz")throw 0;' },
+  danger: { label: 'Dangerous eval (vetoed → safe)', test: false, spec: 'parse user input in javascript', path: 'danger.js', synth: (n) => n === 1 ? 'eval(userInput)' : 'console.log("safe: no eval, no dynamic code");' },
+};
+
+let busy = false;
+function setBusy(b) { busy = b; for (const x of document.querySelectorAll('#prompts button')) x.disabled = b; }
+const stepRow = (s) => { const row = el('div', 'step'); row.appendChild(el('span', 'st ' + s.state, s.state)); const bits = []; for (const k of ['verdict', 'ok', 'reason', 'output', 'path', 'candidates', 'id']) if (s[k] !== undefined) bits.push(k + '=' + s[k]); row.appendChild(el('span', 'det', bits.join('  ·  '))); return row; };
+
+async function runDemo(t) {
+  const trace = $('trace'); trace.textContent = ''; $('result').textContent = '';
+  let synthN = 0;
+  const engine = new MockEngine((m, o) => { if (o.phase === 'plan') return JSON.stringify({ actions: [{ op: 'synthesize', spec: t.label, path: t.path }] }); if (o.phase === 'synthesize') { synthN++; return fence(t.synth(synthN)); } if (o.phase === 'test') return fence(t.tests ? t.tests() : ''); return ''; });
+  const fs = mkFs();
+  const r = await runAgent(t.label, { engine, fs, sandbox, approve: async () => true, deviceVerify: null, provenance, ledger: [], staged: [], cards: [], log: (s) => trace.appendChild(stepRow(s)) }, { budget: 8, candidates: 1, test: t.test, model: 'mock', revision: 'demo', ts: 1, lang: 'en' });
+  showResult(r, fs.store.get(t.path));
+}
+
+async function runReal(t, engineId) {
+  const trace = $('trace'); trace.textContent = ''; $('result').textContent = '';
+  // NO auto-download from the device: a local engine requires its model to be downloaded first
+  // (Models panel, manual). We never silently pull weights from the Cardputer on a run.
+  if (engineId === 'webgpu' || engineId === 'wasm') {
+    const mid = (REGISTRY.find((m) => m.kind === engineId) || {}).id;
+    if (mid && !(await store.isCached(mid))) { trace.appendChild(stepRow({ state: 'ERROR', reason: 'model not downloaded — open “Models (Settings)” and download it first (no auto-download from the device)' })); return; }
+  }
+  trace.appendChild(stepRow({ state: 'LOAD', reason: 'loading ' + engineId + ' …' }));
+  let engine;
+  try { engine = await loadEngine(engineId, { caps, createWebLLM, createWasm, deviceTransport, mlcModelId: MLC_ID, ggufModelId: GGUF_DIR, onProgress: (p) => { $('eng-status').textContent = (p && p.text) || 'loading…'; } }); }
+  catch (e) { trace.appendChild(stepRow({ state: 'ERROR', reason: String(e.message || e) })); return; }
+  trace.appendChild(stepRow({ state: 'SYNTHESIZE', reason: t.spec }));
+  let code = '';
+  try { const out = await engine.chat([{ role: 'system', content: 'Reply with ONE ```js block, no prose.' }, { role: 'user', content: 'Write ' + t.spec + '. Include a console.log demonstrating it.' }], { phase: 'synthesize', n_predict: 512 }); code = stripFence(out.text); }
+  catch (e) { trace.appendChild(stepRow({ state: 'ERROR', reason: 'generation failed: ' + (e.message || e) })); return; }
+  const chk = await sandbox.run(code, { mode: 'check' });
+  const cg = capAssess(code, { allowNetwork: false });
+  const ex = extract({ code });
+  const verdict = combineVerdict({ run: chk, coverage: ex.coverage, capguard: cg });
+  trace.appendChild(stepRow({ state: 'VERIFY', verdict: verdict.verdict, reason: verdict.reasons.join('; ') }));
+  let out = '';
+  if (verdict.verdict !== 'veto') { const obs = await sandbox.run(code, {}); out = (obs.logs || []).join('\n'); trace.appendChild(stepRow({ state: 'RUN', ok: obs.ok, output: out, reason: obs.error })); }
+  showResult({ trace: [{ state: 'VERIFY', verdict: verdict.verdict }], status: verdict.verdict === 'veto' ? 'vetoed' : 'done', followups: ['run', 'improve', 'add-tests', 'explain'] }, code, out);
+}
+
+function showResult(r, code, out) {
+  const res = $('result'); res.textContent = '';
+  const v = [...r.trace].reverse().find((s) => s.state === 'VERIFY');
+  if (v) { const c = verdictChip({ verdict: v.verdict }); res.appendChild(el('span', 'chip ' + c.tone, c.icon + ' ' + c.label)); }
+  res.appendChild(el('span', 'chip', 'status: ' + r.status));
+  if (code) { res.appendChild(el('div', 'muted', 'code:')); res.appendChild(el('pre', 'code', code)); }
+  else { res.appendChild(el('div', 'muted', 'nothing written (vetoed / not approved)')); }
+  if (r.followups && r.followups.length) { const fu = el('div', 'followups'); fu.appendChild(el('span', 'muted', 'next: ')); for (const f of r.followups) fu.appendChild(el('button', null, f)); res.appendChild(fu); }
+}
+
+async function runTask(key) {
+  if (busy) return; setBusy(true);
+  try { const t = TASKS[key]; if (chosen === 'demo') await runDemo(t); else await runReal(t, chosen); }
+  catch (e) { $('trace').appendChild(stepRow({ state: 'ERROR', reason: String(e.message || e) })); }
+  finally { setBusy(false); }
+}
+
+for (const [key, t] of Object.entries(TASKS)) { const b = el('button', 'demo-prompt', t.label); b.id = 'demo-' + key; b.addEventListener('click', () => runTask(key)); $('prompts').appendChild(b); }
+
+$('verify-sd').addEventListener('click', runDeepVerify);
+(async () => { const gpu = await probeWebGPU(); caps = { ...caps, webgpu: gpu.supported, vramMB: gpu.vramMB || 0 }; renderDial(); renderEngines(); await renderModels(); await renderReadiness(); window.__forgeReady = true; })();
+</script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+// eval_skills8_en.jsonl — NEW GENUINE SKILL TRIGGERS round 3 (EN): never-tested phrasings, emphasis on app
+// opening + calendar + actions. expect = intent anima.exe emits. Judge: skill-probe.mjs. All validated on the exe.
+// === app opening (new names and verbs) ===
+{"q":"open paint","lang":"en","expect":"open_app"}
+{"q":"open the photo viewer","lang":"en","expect":"open_app"}
+{"q":"open the gallery","lang":"en","expect":"open_app"}
+{"q":"open files","lang":"en","expect":"open_app"}
+{"q":"open music","lang":"en","expect":"open_app"}
+{"q":"open the recorder","lang":"en","expect":"open_app"}
+{"q":"open the recycle bin","lang":"en","expect":"open_app"}
+{"q":"open the spreadsheet","lang":"en","expect":"open_app"}
+{"q":"open excel","lang":"en","expect":"open_app"}
+{"q":"open the notes app","lang":"en","expect":"open_app"}
+{"q":"open the music app","lang":"en","expect":"open_app"}
+{"q":"open the photo gallery","lang":"en","expect":"open_app"}
+{"q":"open tasks","lang":"en","expect":"open_app"}
+{"q":"open the updates","lang":"en","expect":"open_app"}
+{"q":"open the log viewer","lang":"en","expect":"open_app"}
+{"q":"open the system monitor app","lang":"en","expect":"open_app"}
+{"q":"open the clock","lang":"en","expect":"open_app"}
+{"q":"launch paint","lang":"en","expect":"open_app"}
+{"q":"launch the calculator","lang":"en","expect":"open_app"}
+{"q":"start the radio","lang":"en","expect":"open_app"}
+{"q":"start the browser","lang":"en","expect":"open_app"}
+{"q":"show me the photos","lang":"en","expect":"open_app"}
+{"q":"show me the videos","lang":"en","expect":"open_app"}
+// === closing apps ===
+{"q":"close paint","lang":"en","expect":"close_app"}
+{"q":"exit the browser","lang":"en","expect":"close_app"}
+// === calendar / reminders (new phrasings) ===
+{"q":"remind me to pay the bill on the 15th","lang":"en","expect":"add_event"}
+{"q":"add an event dentist thursday at 10","lang":"en","expect":"add_event"}
+{"q":"set a reminder for 6pm","lang":"en","expect":"add_event"}
+{"q":"remind me of the doctor wednesday","lang":"en","expect":"add_event"}
+{"q":"don't forget to call mom","lang":"en","expect":"add_event"}
+{"q":"remind me of the payment tomorrow","lang":"en","expect":"add_event"}
+{"q":"remind me to take my medicine at 8","lang":"en","expect":"add_event"}
+{"q":"remind me of the exam on the 20th","lang":"en","expect":"add_event"}
+{"q":"dont let me forget anna's birthday","lang":"en","expect":"add_event"}
+{"q":"remind me to walk the dog","lang":"en","expect":"add_event"}
+{"q":"remind me to buy groceries saturday","lang":"en","expect":"add_event"}
+{"q":"remind me to take the trash out tonight","lang":"en","expect":"add_event"}
+// === agenda (read schedule) ===
+{"q":"whats on my schedule","lang":"en","expect":"agenda"}
+{"q":"any appointments today","lang":"en","expect":"agenda"}
+{"q":"schedule a call with the client tomorrow","lang":"en","expect":"agenda"}
+{"q":"schedule the haircut friday at 4pm","lang":"en","expect":"agenda"}
+// === file ===
+{"q":"jot down a note buy bread","lang":"en","expect":"create_file"}
+// === audio / screen ===
+{"q":"mute the audio","lang":"en","expect":"set_volume"}
+{"q":"set volume to zero","lang":"en","expect":"set_volume"}
+{"q":"volume up","lang":"en","expect":"set_volume"}
+{"q":"volume down","lang":"en","expect":"set_volume"}
+{"q":"turn the volume to max","lang":"en","expect":"set_volume"}
+{"q":"volume to 100 percent","lang":"en","expect":"set_volume"}
+{"q":"turn off the audio","lang":"en","expect":"set_volume"}
+{"q":"decrease the volume","lang":"en","expect":"set_volume"}
+{"q":"set the volume to 25 percent","lang":"en","expect":"set_volume"}
+{"q":"set brightness to max","lang":"en","expect":"set_brightness"}
+{"q":"brightness to 30 percent","lang":"en","expect":"set_brightness"}
+{"q":"set brightness to half","lang":"en","expect":"set_brightness"}
+{"q":"set brightness to 20 percent","lang":"en","expect":"set_brightness"}
+{"q":"increase the brightness","lang":"en","expect":"set_brightness"}
+{"q":"max brightness","lang":"en","expect":"set_brightness"}
+// === arithmetic ===
+{"q":"cube root of 27","lang":"en","expect":"calc"}
+{"q":"what is 256 divided by 4","lang":"en","expect":"calc"}
+{"q":"12 cubed","lang":"en","expect":"calc"}
+{"q":"half of 50","lang":"en","expect":"calc"}
+{"q":"what is 99 plus 1","lang":"en","expect":"calc"}
+{"q":"quadruple of 5","lang":"en","expect":"calc"}
+{"q":"square root of 81","lang":"en","expect":"calc"}
+{"q":"what is 7 cubed","lang":"en","expect":"calc"}
+{"q":"what is 1000 minus 1","lang":"en","expect":"calc"}
+// === conversion ===
+{"q":"20 pounds to kilos","lang":"en","expect":"convert"}
+{"q":"1 mile to meters","lang":"en","expect":"convert"}
+{"q":"100 fahrenheit to celsius","lang":"en","expect":"convert"}
+{"q":"60 minutes to seconds","lang":"en","expect":"convert"}
+{"q":"500 meters to kilometers","lang":"en","expect":"convert"}
+{"q":"10 ounces to grams","lang":"en","expect":"convert"}
+{"q":"convert 3 days to hours","lang":"en","expect":"convert"}
+{"q":"2 meters to millimeters","lang":"en","expect":"convert"}
+{"q":"45 km to meters","lang":"en","expect":"convert"}
+{"q":"90 seconds to minutes","lang":"en","expect":"convert"}
+{"q":"30 inches to centimeters","lang":"en","expect":"convert"}
+{"q":"2 gallons to liters","lang":"en","expect":"convert"}
+{"q":"5 km to miles","lang":"en","expect":"convert"}
+// === bases / roman / prime / geometry / physics ===
+{"q":"200 in binary","lang":"en","expect":"base"}
+{"q":"128 in hexadecimal","lang":"en","expect":"base"}
+{"q":"1024 in binary","lang":"en","expect":"base"}
+{"q":"is 37 prime","lang":"en","expect":"prime"}
+{"q":"63 in roman numerals","lang":"en","expect":"roman"}
+{"q":"area of a circle radius 10","lang":"en","expect":"geo"}
+{"q":"force with mass 8 and acceleration 9","lang":"en","expect":"phys"}
+// === translation / profile / date ===
+{"q":"translate tree to italian","lang":"en","expect":"translate"}
+{"q":"my birthday is may 5th","lang":"en","expect":"profile"}
+{"q":"what day of the week is it","lang":"en","expect":"date"}
+// === knowledge ===
+{"q":"who was napoleon","lang":"en","expect":"l1|hdc"}
+{"q":"what is the capital of germany","lang":"en","expect":"l1|hdc"}
+{"q":"what is dna","lang":"en","expect":"l1"}
+{"q":"capital of spain","lang":"en","expect":"l1|hdc"}
+{"q":"capital of portugal","lang":"en","expect":"l1|hdc"}
+{"q":"what is oxygen","lang":"en","expect":"l1"}
+{"q":"what is the internet","lang":"en","expect":"l1"}
+{"q":"what is a planet","lang":"en","expect":"l1"}
+{"q":"what is electricity","lang":"en","expect":"l1"}

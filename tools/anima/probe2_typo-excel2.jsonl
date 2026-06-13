@@ -1,0 +1,35 @@
+{"q":"sumthe cells a1 to a10","lang":"en","expect":"spreadsheet"}
+{"q":"avg of cells a1 to a20","lang":"en","expect":"spreadsheet"}
+{"q":"avarage column c","lang":"en","expect":"spreadsheet"}
+{"q":"maximmum of a1 to a9","lang":"en","expect":"spreadsheet"}
+{"q":"maxium in cells a1 to a9","lang":"en","expect":"spreadsheet"}
+{"q":"minumum of cells a1 to a30","lang":"en","expect":"spreadsheet"}
+{"q":"cuncatenate a1 and b1","lang":"en","expect":"spreadsheet"}
+{"q":"concatentae a1 and b1","lang":"en","expect":"spreadsheet"}
+{"q":"vlookip a1","lang":"en","expect":"spreadsheet"}
+{"q":"summ cells a1 to a10","lang":"en","expect":"spreadsheet"}
+{"q":"sume celle da a1 a a10","lang":"it","expect":"spreadsheet"}
+{"q":"massiimo della colonna a","lang":"it","expect":"spreadsheet"}
+{"q":"minim della colonna e","lang":"it","expect":"spreadsheet|abstain"}
+{"q":"cnta le celle da a1 a a100","lang":"it","expect":"spreadsheet"}
+{"q":"conncatena a1 e b1","lang":"it","expect":"spreadsheet"}
+{"q":"prodtto delle celle da a1 a a5","lang":"it","expect":"spreadsheet"}
+{"q":"mediaan delle celle da a1 a a20","lang":"it","expect":"spreadsheet"}
+{"q":"arrotnda a1 a 2 decimali","lang":"it","expect":"spreadsheet"}
+{"q":"mediaa colonna b","lang":"it","expect":"spreadsheet"}
+{"q":"somma colonna a del foglio excel","lang":"it","expect":"spreadsheet"}
+{"q":"=SOMMA(A1:A10)","lang":"it","expect":"spreadsheet|answer"}
+{"q":"=MEDIA(B1:B20)","lang":"it","expect":"spreadsheet|answer"}
+{"q":"=MAX(A1:A9)","lang":"en","expect":"spreadsheet|answer"}
+{"q":"=CONCATENA(A1;B1)","lang":"it","expect":"spreadsheet|answer"}
+{"q":"=AVERAGE(B1:B20)","lang":"en","expect":"spreadsheet|answer"}
+{"q":"come funziona =CERCA.VERT(A1;B1:C10;2)","lang":"it","expect":"spreadsheet|answer"}
+{"q":"a cosa serve =SOMMA(A1:A10)","lang":"it","expect":"spreadsheet|answer"}
+{"q":"cosa significa =CONTA.SE(A1:A10;\">5\")","lang":"it","expect":"spreadsheet|answer"}
+{"q":"che fa la formula SOMMA","lang":"it","expect":"spreadsheet|answer"}
+{"q":"spiega =VLOOKUP(A1,B1:C10,2)","lang":"en","expect":"spreadsheet|answer"}
+{"q":"qual e la capitale della francia","lang":"it","expect":"abstain"}
+{"q":"raccontami una barzelletta sui fogli excel","lang":"it","expect":"abstain"}
+{"q":"qnale e il senso della vita","lang":"it","expect":"abstain"}
+{"q":"=BANANA(A1:A10)","lang":"it","expect":"abstain"}
+{"q":"somma","lang":"it","expect":"spreadsheet|abstain"}

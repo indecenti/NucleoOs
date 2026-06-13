@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "events": {
+    "2026-06-03": [
+      {
+        "id": "e1-2026-06-03",
+        "time": "09:30",
+        "text": "Stand-up team firmware"
+      },
+      {
+        "id": "e2-2026-06-03",
+        "time": "15:00",
+        "text": "Review agenda ANIMA"
+      }
+    ],
+    "2026-06-10": [
+      {
+        "id": "e1-2026-06-10",
+        "time": "",
+        "text": "Consegna build OTA"
+      }
+    ],
+    "2026-06-07": [
+      {
+        "time": "",
+        "text": "numero di mamma è 333 123 4567"
+      },
+      {
+        "time": "",
+        "text": "numero di mamma è 333 123 4567"
+      },
+      {
+        "time": "",
+        "text": "mamma di Marco è Anna"
+      },
+      {
+        "time": "",
+        "text": "mamma di Marco è Anna"
+      },
+      {
+        "time": "",
+        "text": "papà di Luca è Marco"
+      }
+    ]
+  }
+}

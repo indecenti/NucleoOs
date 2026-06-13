@@ -1,0 +1,188 @@
+// REALISTIC programmatic NL requests (workflow-generated, exe-validated, NO LLM tier). kind:skill→intent fires; kind:knowledge→knowledge-or-abstain, never a compute skill, never a fabrication. Run by realistic.mjs.
+{"q":"least common multiple of 9 and 12","lang":"en","kind":"skill","expect":"calc"}
+{"q":"gcd of 81 and 27","lang":"en","kind":"skill","expect":"calc"}
+{"q":"lcm of 14 nad 21","lang":"en","kind":"skill","expect":"calc","typo":true}
+{"q":"what is 255 in hexadecimal","lang":"en","kind":"skill","expect":"base"}
+{"q":"convert FF from base 16 to base 10","lang":"en","kind":"skill","expect":"base"}
+{"q":"what is 1f in decimal from hex","lang":"en","kind":"skill","expect":"base"}
+{"q":"what is MCMLXXXIV in decimal","lang":"en","kind":"knowledge"}
+{"q":"convert 3888 to roman numerals","lang":"en","kind":"skill","expect":"roman"}
+{"q":"what does MMXIX equal in arabic numerals","lang":"en","kind":"knowledge"}
+{"q":"the square of 9","lang":"en","kind":"skill","expect":"calc"}
+{"q":"the cube of 6","lang":"en","kind":"skill","expect":"calc"}
+{"q":"half of 150","lang":"en","kind":"skill","expect":"calc"}
+{"q":"cube root of 64","lang":"en","kind":"skill","expect":"calc"}
+{"q":"absolute value of -45","lang":"en","kind":"skill","expect":"calc"}
+{"q":"19 mod 4","lang":"en","kind":"skill","expect":"calc"}
+{"q":"product of 8 and 9","lang":"en","kind":"skill","expect":"calc"}
+{"q":"sum of 230 and 470","lang":"en","kind":"skill","expect":"calc"}
+{"q":"is 51 prime","lang":"en","kind":"skill","expect":"prime"}
+{"q":"is 97 a prime number","lang":"en","kind":"skill","expect":"prime"}
+{"q":"is 113 prmie","lang":"en","kind":"knowledge","typo":true}
+{"q":"factorial of 5","lang":"en","kind":"skill","expect":"calc"}
+{"q":"list all the divisors of 36","lang":"en","kind":"knowledge"}
+{"q":"who composed the four seasons","lang":"en","kind":"knowledge"}
+{"q":"how many moons does Neptune have","lang":"en","kind":"knowledge"}
+{"q":"sum of 1024 and 2048","lang":"en","kind":"skill","expect":"calc"}
+{"q":"convert 100 kelvin to celsius","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert -40 fahrenheit to celsius","lang":"en","kind":"skill","expect":"convert"}
+{"q":"how many kilometers in 26 miles","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 150 pounds to kg","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 6 feet to meters","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 2048 KB to MB","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 500 megabyte to gigabtye","lang":"en","kind":"knowledge","typo":true}
+{"q":"convert 4 terabytes to megabytes","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 100 horsepower to kilowatts","lang":"en","kind":"skill","expect":"convert"}
+{"q":"how many watts in 3 kilowatts","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 60 mph to km/h","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 50 knots to km/h","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 101325 pascal to atmospheres","lang":"en","kind":"skill","expect":"convert"}
+{"q":"conver 760 mmHg to bar","lang":"en","kind":"skill","expect":"convert","typo":true}
+{"q":"convert 5 gallons to liters","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 3 cups to milliliters","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 1 tablespoon to milliliters","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 10 nautical miles to kilometers","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 72 inhces to feet","lang":"en","kind":"knowledge","typo":true}
+{"q":"convert 250 grams to ounces","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert 32 fahrenheit to kelvin","lang":"en","kind":"skill","expect":"convert"}
+{"q":"open the calendar app","lang":"en","kind":"skill","expect":"open_app"}
+{"q":"open the noteapd","lang":"en","kind":"knowledge","typo":true}
+{"q":"start the voice recorder","lang":"en","kind":"skill","expect":"open_app"}
+{"q":"make a new note called ideas","lang":"en","kind":"skill","expect":"create_file"}
+{"q":"make a file named todo.txt","lang":"en","kind":"skill","expect":"create_file"}
+{"q":"set volume to 50","lang":"en","kind":"skill","expect":"set_volume"}
+{"q":"turn the brightness down a bit","lang":"en","kind":"skill","expect":"set_brightness"}
+{"q":"set the volume to maximum","lang":"en","kind":"knowledge"}
+{"q":"what do I have scheduled today","lang":"en","kind":"skill","expect":"agenda"}
+{"q":"remind me to call mom tomorrow","lang":"en","kind":"skill","expect":"add_event"}
+{"q":"my name is Marcus","lang":"en","kind":"skill","expect":"profile"}
+{"q":"how old am I","lang":"en","kind":"skill","expect":"profile"}
+{"q":"remember that my car is blue","lang":"en","kind":"skill","expect":"teach"}
+{"q":"how do you say grazie in english","lang":"en","kind":"skill","expect":"translate"}
+{"q":"what time is it","lang":"en","kind":"skill","expect":"time"}
+{"q":"what day is it today","lang":"en","kind":"skill","expect":"date"}
+{"q":"what is 15 percent of 240","lang":"en","kind":"skill","expect":"percent"}
+{"q":"is 91 a prime number","lang":"en","kind":"skill","expect":"prime"}
+{"q":"what is the chemical symbol for tungsten","lang":"en","kind":"knowledge"}
+{"q":"who painted Guernica","lang":"en","kind":"knowledge"}
+{"q":"how many bones are in the human body","lang":"en","kind":"knowledge"}
+{"q":"what is 15% of 320","lang":"en","kind":"skill","expect":"percent"}
+{"q":"convert 180 pounds to kilograms","lang":"en","kind":"skill","expect":"convert"}
+{"q":"convert the number 47 to binary","lang":"en","kind":"skill","expect":"base"}
+{"q":"is 113 a prime number","lang":"en","kind":"skill","expect":"prime"}
+{"q":"volume of a sphere with radius 5","lang":"en","kind":"skill","expect":"geo"}
+{"q":"what current flows with 12 volts and 4 ohms","lang":"en","kind":"skill","expect":"ohm"}
+{"q":"open the music player","lang":"en","kind":"skill","expect":"open_app"}
+{"q":"set brightness to 40 percent","lang":"en","kind":"skill","expect":"set_brightness"}
+{"q":"remind me to call mom tomorrow at 6pm","lang":"en","kind":"skill","expect":"add_event"}
+{"q":"translate good morning to italian","lang":"en","kind":"skill","expect":"translate"}
+{"q":"how old am i if i was born and i told you i am 28","lang":"en","kind":"skill","expect":"profile"}
+{"q":"standard deviation of 2 4 4 4 5 5 7 9","lang":"en","kind":"knowledge"}
+{"q":"what is the boiling point of water","lang":"en","kind":"knowledge"}
+{"q":"how many continents are there","lang":"en","kind":"knowledge"}
+{"q":"what does HTTP stand for","lang":"en","kind":"knowledge"}
+{"q":"what year did the Berlin Wall fall","lang":"en","kind":"knowledge"}
+{"q":"how many hearts does an octopus have","lang":"en","kind":"knowledge"}
+{"q":"what is the chemical symbol for silver","lang":"en","kind":"knowledge"}
+{"q":"what is a kernel in an operating system","lang":"en","kind":"knowledge"}
+{"q":"how many legs does a centipede have","lang":"en","kind":"knowledge"}
+{"q":"what is the smallest planet in the solar system","lang":"en","kind":"knowledge"}
+{"q":"what is photosynthesis","lang":"en","kind":"knowledge"}
+{"q":"at what temperature does water freeze","lang":"en","kind":"knowledge"}
+{"q":"what does CPU stand for","lang":"en","kind":"knowledge"}
+{"q":"what is the tallest animal in the world","lang":"en","kind":"knowledge"}
+{"q":"how many chambers does the human heart have","lang":"en","kind":"knowledge"}
+{"q":"what gas do plants absorb from the air","lang":"en","kind":"knowledge"}
+{"q":"what is open source software","lang":"en","kind":"knowledge"}
+{"q":"what is the largest ocean on earth","lang":"en","kind":"knowledge"}
+{"q":"what is the boiling poiunt of water in fahrenheit","lang":"en","kind":"knowledge","typo":true}
+{"q":"what is the hardest natural material on earth","lang":"en","kind":"knowledge"}
+{"q":"how meny planets are in the solar system","lang":"en","kind":"knowledge","typo":true}
+{"q":"what is the speed of light","lang":"en","kind":"knowledge"}
+{"q":"what languge is spoken in brazil","lang":"en","kind":"knowledge","typo":true}
+{"q":"what organ produces insulin","lang":"en","kind":"knowledge"}
+{"q":"how many strings does a violin have","lang":"en","kind":"knowledge"}
+{"q":"what is the freezing point of nitrogen","lang":"en","kind":"knowledge"}
+
+// WEAK-SPOT STRESS (kind:robust) — real requests with STRANGE phrasing / deliberate LOGICAL typos / worded numbers, targeting the cascade weak spots. robust = may handle OR safely degrade, but NEVER fabricate or misroute to a wrong skill. Knowledge ones = answer-or-abstain.
+{"q":"of the numbers twelve and eighteen, what is the greatest common divisor?","lang":"en","kind":"robust","expect":"calc"}
+{"q":"of the square root of one hundred forty four, tell me the value please","lang":"en","kind":"robust","expect":"calc"}
+{"q":"convert 5 kilomters to meters, would you?","lang":"en","kind":"robust","expect":"convert","typo":true}
+{"q":"what's twenty percent of eighty, if you can work it out?","lang":"en","kind":"robust","expect":"percent"}
+{"q":"for a circle whose radius is ten, what would the circumference be?","lang":"en","kind":"robust","expect":"geo"}
+{"q":"convert the decimal number 100 into hexadecimal for me, thanks","lang":"en","kind":"robust","expect":"base"}
+{"q":"in roman numerals, the number eighty eight, how is it written?","lang":"en","kind":"robust","expect":"roman"}
+{"q":"given a resistance of one hundred ohms and a current of 2 amperes, find the voltage","lang":"en","kind":"robust","expect":"ohm"}
+{"q":"a car going thirty metres in three seconds, what's its speed?","lang":"en","kind":"robust","expect":"phys"}
+{"q":"how many fahrenheit are thirty seven degrees celsius, would you convert it?","lang":"en","kind":"robust","expect":"convert"}
+{"q":"tell me, of two hundred fifty grams, how many ounces that comes to","lang":"en","kind":"robust","expect":"convert"}
+{"q":"of a rectngle with sides 8 and 3, what's the perimeter?","lang":"en","kind":"robust","expect":"geo","typo":true}
+{"q":"what is the squrae root of one hundred forty four","lang":"en","kind":"robust","expect":"calc","typo":true}
+{"q":"convert 5 kilomters to meters","lang":"en","kind":"robust","expect":"convert","typo":true}
+{"q":"waht is the capital of japan","lang":"en","kind":"knowledge","typo":true}
+{"q":"convert 3 kilogrmas to grams","lang":"en","kind":"robust","expect":"convert","typo":true}
+{"q":"calclate twenty five percent of two hundred","lang":"en","kind":"robust","expect":"percent","typo":true}
+{"q":"what is the cuberoot of sixtyfour please","lang":"en","kind":"robust","expect":"calc","typo":true}
+{"q":"how mny meters are in 4 kilometers","lang":"en","kind":"robust","expect":"convert","typo":true}
+{"q":"whta is the boiling point of water in fahrenheit","lang":"en","kind":"knowledge","typo":true}
+{"q":"convert 2 huors to minutes","lang":"en","kind":"robust","expect":"convert","typo":true}
+{"q":"calcualte 13 times 7 for me","lang":"en","kind":"robust","expect":"calc","typo":true}
+{"q":"what is the atomic numbr of oxygen","lang":"en","kind":"knowledge","typo":true}
+{"q":"convert 250 grams to onuces","lang":"en","kind":"robust","expect":"convert","typo":true}
+{"q":"convert nine fett to inches","lang":"en","kind":"robust","expect":"convert","typo":true}
+{"q":"convert 1010 from binary to decimal","lang":"en","kind":"robust","expect":"base"}
+{"q":"please turn 255 into hexadeimal for me","lang":"en","kind":"robust","expect":"base","typo":true}
+{"q":"what is MCMLXXXIV in decimal numbers","lang":"en","kind":"robust","expect":"roman"}
+{"q":"convert XL to a normal number please","lang":"en","kind":"robust","expect":"roman"}
+{"q":"the factorial of one hundred, what would that be","lang":"en","kind":"robust","expect":"answer-or-abstain"}
+{"q":"the square root of one hundred forty four, can you tell me","lang":"en","kind":"robust","expect":"calc"}
+{"q":"give me the cube of three","lang":"en","kind":"robust","expect":"calc"}
+{"q":"what is the median of two four six and eight","lang":"en","kind":"robust","expect":"calc"}
+{"q":"least common multiple of 4 6 and 8","lang":"en","kind":"robust","expect":"calc"}
+{"q":"how much is 17 modulo 5","lang":"en","kind":"robust","expect":"calc"}
+{"q":"convert 350 fahrenheit to celsius","lang":"en","kind":"robust","expect":"convert"}
+{"q":"how many joules in 2 kilowatt hours","lang":"en","kind":"robust","expect":"convert"}
+{"q":"how many US dollars is 200 british pounds today","lang":"en","kind":"knowledge"}
+{"q":"convert 90 km/h to miles per hour","lang":"en","kind":"robust","expect":"convert"}
+{"q":"the boiling point of water at sea level, what is it exactly?","lang":"en","kind":"knowledge"}
+{"q":"how many bones does the body of a grown adult actually have?","lang":"en","kind":"knowledge"}
+{"q":"capitle of austraila, do you happen to know it?","lang":"en","kind":"knowledge","typo":true}
+{"q":"what is the chemical symbol for the element gold, if you know?","lang":"en","kind":"knowledge"}
+{"q":"the speed of light in a vacuum, roughly how fast is that?","lang":"en","kind":"knowledge"}
+{"q":"how many legs does a comon spider actually have?","lang":"en","kind":"knowledge","typo":true}
+{"q":"who was it that wrote the play Hamlet, do you recall?","lang":"en","kind":"knowledge"}
+{"q":"the tallest mountain on planet Earth, which one is it?","lang":"en","kind":"knowledge"}
+{"q":"how many planets orbt the Sun in our solar system?","lang":"en","kind":"knowledge","typo":true}
+{"q":"in what yaer did the second world war finally come to an end?","lang":"en","kind":"knowledge","typo":true}
+{"q":"what gas do plants take in during the prcess of photosynthesis?","lang":"en","kind":"knowledge","typo":true}
+{"q":"the brightness please, could you turn it down a bit","lang":"en","kind":"robust","expect":"set_brightness"}
+{"q":"open me the calendr app would you","lang":"en","kind":"robust","expect":"open_app","typo":true}
+{"q":"convert five kilomters to meters for me","lang":"en","kind":"robust","expect":"convert","typo":true}
+{"q":"the square root of one hundred forty four, what would it be?","lang":"en","kind":"robust","expect":"calc"}
+{"q":"remind me, if you could, to water the plants tomorrow","lang":"en","kind":"robust","expect":"add_event"}
+{"q":"translate this into italian please: thank you","lang":"en","kind":"robust","expect":"translate"}
+{"q":"whats todays date please","lang":"en","kind":"robust","expect":"date","typo":true}
+{"q":"the volume turn it up just a little","lang":"en","kind":"robust","expect":"set_volume"}
+{"q":"create a file named groceries for me would you","lang":"en","kind":"robust","expect":"create_file"}
+{"q":"how much battry do i have left right now","lang":"en","kind":"robust","expect":"battery","typo":true}
+{"q":"what time is it over there in the world right now","lang":"en","kind":"robust","expect":"time"}
+{"q":"convert 100 fahrenheit to celsius if you don't mind","lang":"en","kind":"robust","expect":"convert"}
+{"q":"is two hundred and fifty seven a prime numbr?","lang":"en","kind":"robust","expect":"prime","typo":true}
+{"q":"who was the third president of Iceland do you happen to know","lang":"en","kind":"knowledge"}
+{"q":"what's the boiling point of ethanol at high altitude","lang":"en","kind":"knowledge"}
+{"q":"what year are we in right now if you know","lang":"en","kind":"robust","expect":"year"}
+{"q":"what is fifteen percent off of eighty euros","lang":"en","kind":"robust","expect":"percent"}
+{"q":"the meteo for tomorrow in Milan, what's it like?","lang":"en","kind":"robust","expect":"weather"}
+
+// NATURAL-LANGUAGE + OFFLINE BOUNDARY — colloquial openers, definitions, and LIVE-DATA the fully-offline engine MUST abstain on (no internet → no fabrication). Validated against anima.exe.
+{"q":"hey what's 234 times 56","lang":"en","kind":"skill","expect":"calc"}
+{"q":"could you tell me the square root of 400","lang":"en","kind":"skill","expect":"calc"}
+{"q":"what is 18 percent of 350","lang":"en","kind":"skill","expect":"percent"}
+{"q":"can you explain in short what gravity is","lang":"en","kind":"knowledge"}
+{"q":"what does the acronym HTTP stand for","lang":"en","kind":"knowledge"}
+{"q":"remember that i am allergic to peanuts","lang":"en","kind":"robust","expect":"teach"}
+{"q":"what is the latest news today","lang":"en","kind":"halluc"}
+{"q":"who won the game last night","lang":"en","kind":"halluc"}
+{"q":"how much is bitcoin worth right now","lang":"en","kind":"halluc"}
+{"q":"what movies are playing tonight","lang":"en","kind":"halluc"}
+{"q":"what is trending online right now","lang":"en","kind":"halluc"}

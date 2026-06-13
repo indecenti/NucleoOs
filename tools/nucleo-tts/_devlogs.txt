@@ -1,0 +1,19 @@
+﻿W (453) nucleoos: DIAG last-reset=POWERON (cold boot) anima_phase=0x20 anima_stage=0xD939E7C7
+E (643) oom: alloc fail: 32404 B caps=0x404 in heap_caps_malloc
+E (683) vfs_fat_sdmmc: sdmmc_card_init failed (0x107).
+E (803) vfs_fat_sdmmc: sdmmc_card_init failed (0x107).
+E (923) vfs_fat_sdmmc: sdmmc_card_init failed (0x107).
+E (1223) sdmmc_sd: sdmmc_init_sd_if_cond: send_if_cond (1) returned 0x108
+E (1223) vfs_fat_sdmmc: sdmmc_card_init failed (0x108).
+E (1523) sdmmc_sd: sdmmc_init_sd_if_cond: send_if_cond (1) returned 0x108
+E (1523) vfs_fat_sdmmc: sdmmc_card_init failed (0x108).
+E (1623) storage: mount failed: UNKNOWN ERROR (no card / unformatted / unsupported FS)
+E (1623) nucleoos: no usable SD card
+W (3093) anima.l1: no encoder (flash partition or /sd/data/anima/anima-it-encoder.bin) â L1 disabled
+W (4643) anima.l1: no encoder (flash partition or /sd/data/anima/anima-it-encoder.bin) â L1 disabled
+W (9733) anima.l1: no encoder (flash partition or /sd/data/anima/anima-it-encoder.bin) â L1 disabled
+W (14853) tts: voce it non installata
+W (20523) anima.l1: no encoder (flash partition or /sd/data/anima/anima-it-encoder.bin) â L1 disabled
+W (21673) tts: voce it non installata
+W (33673) tts: voce it non installata
+

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NucleoOS — Cardputer screen</title>
+  <link rel="stylesheet" href="device.css">
+</head>
+<body>
+  <div class="stage">
+    <div class="device">
+      <div class="brand">M5Cardputer · NucleoOS</div>
+      <div class="screen-wrap">
+        <!-- Logical 240x135 framebuffer, integer-scaled and pixelated for an authentic feel -->
+        <canvas id="screen" width="240" height="135"></canvas>
+      </div>
+      <div class="kb-hint">physical keyboard ↓</div>
+    </div>
+
+    <aside class="help">
+      <h1>On-device launcher</h1>
+      <p>A Wear OS-style, keyboard-only home for the Cardputer's 240×135 screen. This is a
+         faithful pixel simulator of the firmware UI (<code>nucleo_app</code>).</p>
+      <table>
+        <tr><th>Key</th><th>Action</th></tr>
+        <tr><td><kbd>;</kbd> / <kbd>.</kbd> <span class="alt">or ↑ ↓</span></td><td>Move focus (wraps)</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>Open menu / launch app</td></tr>
+        <tr><td><kbd>/</kbd> <span class="alt">or →</span></td><td>App context menu (icons)</td></tr>
+        <tr><td><kbd>Esc</kbd> / <kbd>`</kbd> <span class="alt">or ←</span></td><td>Back · clear filter</td></tr>
+        <tr><td><kbd>1</kbd>–<kbd>9</kbd></td><td>Jump &amp; open the n-th item</td></tr>
+        <tr><td><kbd>a</kbd>–<kbd>z</kbd></td><td>Type-to-filter</td></tr>
+      </table>
+      <p class="log-label">Last event</p>
+      <pre id="log">—</pre>
+    </aside>
+  </div>
+  <script type="module" src="device.js"></script>
+</body>
+</html>

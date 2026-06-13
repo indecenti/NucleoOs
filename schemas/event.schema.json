@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nucleoos/event.schema.json",
+  "title": "NucleoOS Event Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["t", "seq", "ts", "d"],
+  "properties": {
+    "t": { "type": "string", "pattern": "^[a-z0-9]+(\\.[a-z0-9_*]+)+$" },
+    "seq": { "type": "integer", "minimum": 0 },
+    "ts": { "type": "integer", "minimum": 0 },
+    "src": { "type": "string" },
+    "d": { "type": "object" }
+  }
+}

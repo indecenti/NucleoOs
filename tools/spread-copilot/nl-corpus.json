@@ -1,0 +1,1640 @@
+[
+ {
+  "text": "fai la somma della colonna B poi ordina per la C decrescente",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "sort"
+  ],
+  "note": "sum of B then sort desc by C"
+ },
+ {
+  "text": "calcola la media in A e poi evidenzia i valori maggiori di 100",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "highlight"
+  ],
+  "note": "average then highlight gt 100"
+ },
+ {
+  "text": "aggiungi la riga dei totali quindi ordina per colonna D crescente",
+  "lang": "it",
+  "expected": [
+   "total",
+   "sort"
+  ],
+  "note": "totals row then sort asc"
+ },
+ {
+  "text": "evidenzia i duplicati nella colonna A, poi ordina per B",
+  "lang": "it",
+  "expected": [
+   "highlight",
+   "sort"
+  ],
+  "note": "highlight duplicates then sort"
+ },
+ {
+  "text": "somma la colonna prezzo poi fammi un grafico a barre della quantità",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "chart"
+  ],
+  "note": "sum then bar chart"
+ },
+ {
+  "text": "ordina per colonna C decrescente e poi evidenzia il massimo",
+  "lang": "it",
+  "expected": [
+   "sort",
+   "highlight"
+  ],
+  "note": "sort desc then highlight max"
+ },
+ {
+  "text": "fai i totali, poi la media della colonna B, infine evidenzia i negativi",
+  "lang": "it",
+  "expected": [
+   "total",
+   "aggregate",
+   "highlight"
+  ],
+  "note": "3-step total/avg/highlight negative"
+ },
+ {
+  "text": "conta i valori della colonna A quindi ordina per quella colonna in ordine crescente",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "sort"
+  ],
+  "note": "count then sort asc"
+ },
+ {
+  "text": "evidenzia le celle vuote in B poi calcola il massimo della C",
+  "lang": "it",
+  "expected": [
+   "highlight",
+   "aggregate"
+  ],
+  "note": "highlight empty then max"
+ },
+ {
+  "text": "ordina per A crescente, dopodiché evidenzia i valori sotto 50 e fai la somma della D",
+  "lang": "it",
+  "expected": [
+   "sort",
+   "highlight",
+   "aggregate"
+  ],
+  "note": "sort/highlight lt 50/sum"
+ },
+ {
+  "text": "somma la colonna vendite e poi i totali in fondo",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "total"
+  ],
+  "note": "sum then totals row"
+ },
+ {
+  "text": "evidenzia il minimo della colonna B poi ordina decrescente per la stessa",
+  "lang": "it",
+  "expected": [
+   "highlight",
+   "sort"
+  ],
+  "note": "highlight min then sort desc"
+ },
+ {
+  "text": "calcola la mediana in C, poi evidenzia i valori uguali a zero, quindi ordina per B",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "highlight",
+   "sort"
+  ],
+  "note": "median/highlight eq 0/sort"
+ },
+ {
+  "text": "fai un grafico a linee della colonna A e poi evidenzia i picchi sopra 200",
+  "lang": "it",
+  "expected": [
+   "chart",
+   "highlight"
+  ],
+  "note": "line chart then highlight gt 200"
+ },
+ {
+  "text": "ordina la tabella per colonna prezzo crescente poi aggiungi i totali",
+  "lang": "it",
+  "expected": [
+   "sort",
+   "total"
+  ],
+  "note": "sort asc then totals"
+ },
+ {
+  "text": "calcola la deviazione standard di B quindi evidenzia i valori maggiori della media",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "highlight"
+  ],
+  "note": "stdev then highlight (gt-style)"
+ },
+ {
+  "text": "evidenzia i positivi nella colonna C, poi somma la D, infine ordina per A decrescente",
+  "lang": "it",
+  "expected": [
+   "highlight",
+   "aggregate",
+   "sort"
+  ],
+  "note": "highlight positive/sum/sort desc"
+ },
+ {
+  "text": "fai la media della colonna B e la somma della C poi i totali",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "aggregate",
+   "sort"
+  ],
+  "note": "avg+sum+... wait totals → total"
+ },
+ {
+  "text": "trova il valore massimo della colonna A poi ordina per B crescente",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "sort"
+  ],
+  "note": "max then sort asc"
+ },
+ {
+  "text": "ordina per colonna D decrescente, evidenzia i duplicati e poi fai un grafico a barre",
+  "lang": "it",
+  "expected": [
+   "sort",
+   "highlight",
+   "chart"
+  ],
+  "note": "sort/highlight dup/bar chart"
+ },
+ {
+  "text": "somma la colonna A, ordina per B crescente, dopodiché evidenzia le celle vuote",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "sort",
+   "highlight"
+  ],
+  "note": "sum/sort asc/highlight empty"
+ },
+ {
+  "text": "calcola il prodotto della colonna B poi ordina decrescente per la C",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "sort"
+  ],
+  "note": "product then sort desc"
+ },
+ {
+  "text": "evidenzia i valori minori o uguali a 10 in A e poi conta quanti sono nella stessa",
+  "lang": "it",
+  "expected": [
+   "highlight",
+   "aggregate"
+  ],
+  "note": "highlight le 10 then count"
+ },
+ {
+  "text": "fai i totali poi ordina per la colonna fatturato decrescente e evidenzia il massimo",
+  "lang": "it",
+  "expected": [
+   "total",
+   "sort",
+   "highlight"
+  ],
+  "note": "total/sort desc/highlight max"
+ },
+ {
+  "text": "ordina per A crescente e poi un grafico a linee della B",
+  "lang": "it",
+  "expected": [
+   "sort",
+   "chart"
+  ],
+  "note": "sort asc then line chart"
+ },
+ {
+  "text": "calcola il minimo della colonna C, evidenzia i negativi, infine somma la D",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "highlight",
+   "aggregate"
+  ],
+  "note": "min/highlight negative/sum"
+ },
+ {
+  "text": "evidenzia i valori sopra la media in B poi ordina crescente per A poi i totali",
+  "lang": "it",
+  "expected": [
+   "highlight",
+   "sort",
+   "total"
+  ],
+  "note": "highlight/sort asc/total"
+ },
+ {
+  "text": "somma la colonna spese quindi grafico a barre delle entrate",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "chart"
+  ],
+  "note": "sum then bar chart"
+ },
+ {
+  "text": "ordina per colonna B decrescente, dopodiché evidenzia i maggiori di 1000 e fai la media della C",
+  "lang": "it",
+  "expected": [
+   "sort",
+   "highlight",
+   "aggregate"
+  ],
+  "note": "sort desc/highlight gt 1000/avg"
+ },
+ {
+  "text": "evidenzia il massimo della A e il minimo della B poi ordina per C crescente",
+  "lang": "it",
+  "expected": [
+   "highlight",
+   "highlight",
+   "sort"
+  ],
+  "note": "highlight max/highlight min/sort"
+ },
+ {
+  "text": "chi era Leonardo da Vinci e poi calcola la somma della colonna A",
+  "lang": "it",
+  "expected": [
+   "knowledge",
+   "aggregate"
+  ],
+  "note": "knowledge then sheet op - tricky mixed"
+ },
+ {
+  "text": "qual è la capitale del Giappone",
+  "lang": "it",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "pure knowledge, no sheet op"
+ },
+ {
+  "text": "conta i valori in A, calcola la media in B e fai un grafico a barre della C",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "aggregate",
+   "chart"
+  ],
+  "note": "count/avg/bar chart"
+ },
+ {
+  "text": "ordina per colonna A crescente poi evidenzia i valori minori di 0 quindi aggiungi i totali in fondo",
+  "lang": "it",
+  "expected": [
+   "sort",
+   "highlight",
+   "total"
+  ],
+  "note": "sort asc/highlight negative-lt0/total"
+ },
+ {
+  "text": "fai la somma della B, poi il massimo della C, evidenzia i duplicati e infine ordina per A decrescente",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "aggregate",
+   "highlight",
+   "sort"
+  ],
+  "note": "4-step sum/max/highlight dup/sort desc"
+ },
+ {
+  "text": "togli le righe vuote poi rimuovi i duplicati",
+  "lang": "it",
+  "expected": [
+   "rmempty",
+   "dedupe"
+  ],
+  "note": "rmempty then dedupe, classic cleanup"
+ },
+ {
+  "text": "pulisci gli spazi e poi metti i nomi in maiuscolo",
+  "lang": "it",
+  "expected": [
+   "clean",
+   "transform"
+  ],
+  "note": "clean (trim) then transform upper"
+ },
+ {
+  "text": "elimina i duplicati, togli le righe vuote e fai la somma della colonna C",
+  "lang": "it",
+  "expected": [
+   "dedupe",
+   "rmempty",
+   "aggregate"
+  ],
+  "note": "3-op flow ending in sum"
+ },
+ {
+  "text": "rimuovi gli spazi superflui poi ordina per cognome crescente",
+  "lang": "it",
+  "expected": [
+   "clean",
+   "sort"
+  ],
+  "note": "clean then sort asc"
+ },
+ {
+  "text": "metti la colonna prezzo in formato valuta e poi fai i totali",
+  "lang": "it",
+  "expected": [
+   "numfmt",
+   "total"
+  ],
+  "note": "numfmt currency then totals row"
+ },
+ {
+  "text": "deduplica le righe quindi calcola la media della colonna età",
+  "lang": "it",
+  "expected": [
+   "dedupe",
+   "aggregate"
+  ],
+  "note": "dedupe then average"
+ },
+ {
+  "text": "pulisci i dati, togli i doppioni e ordina per data decrescente",
+  "lang": "it",
+  "expected": [
+   "clean",
+   "dedupe",
+   "sort"
+  ],
+  "note": "clean, dedupe, sort desc"
+ },
+ {
+  "text": "trasforma le città in minuscolo poi rimuovi le righe duplicate",
+  "lang": "it",
+  "expected": [
+   "transform",
+   "dedupe"
+  ],
+  "note": "transform lower then dedupe"
+ },
+ {
+  "text": "formatta in grassetto l'intestazione e metti i ricavi come percentuale",
+  "lang": "it",
+  "expected": [
+   "format",
+   "numfmt"
+  ],
+  "note": "format bold then numfmt percent"
+ },
+ {
+  "text": "togli le righe vuote, pulisci gli spazi, poi metti i cognomi con l'iniziale maiuscola",
+  "lang": "it",
+  "expected": [
+   "rmempty",
+   "clean",
+   "transform"
+  ],
+  "note": "rmempty, clean, transform proper"
+ },
+ {
+  "text": "ordina per fatturato decrescente e poi evidenzia i valori sopra 1000",
+  "lang": "it",
+  "expected": [
+   "sort",
+   "highlight"
+  ],
+  "note": "sort desc then highlight gt"
+ },
+ {
+  "text": "rimuovi i duplicati poi conta quante righe restano",
+  "lang": "it",
+  "expected": [
+   "dedupe",
+   "aggregate"
+  ],
+  "note": "dedupe then count"
+ },
+ {
+  "text": "metti gli importi col separatore delle migliaia, poi fai la somma e i totali",
+  "lang": "it",
+  "expected": [
+   "numfmt",
+   "aggregate",
+   "total"
+  ],
+  "note": "numfmt comma, sum, total"
+ },
+ {
+  "text": "pulisci la colonna email e dopodiché elimina le righe vuote",
+  "lang": "it",
+  "expected": [
+   "clean",
+   "rmempty"
+  ],
+  "note": "clean then rmempty"
+ },
+ {
+  "text": "trasforma i codici in maiuscolo, togli i doppioni e ordina in ordine alfabetico",
+  "lang": "it",
+  "expected": [
+   "transform",
+   "dedupe",
+   "sort"
+  ],
+  "note": "transform upper, dedupe, sort asc"
+ },
+ {
+  "text": "formatta in corsivo le note poi cerca il valore mancante",
+  "lang": "it",
+  "expected": [
+   "format",
+   "find"
+  ],
+  "note": "format italic then find"
+ },
+ {
+  "text": "deduplica, poi evidenzia i duplicati rimasti e fai la media",
+  "lang": "it",
+  "expected": [
+   "dedupe",
+   "highlight",
+   "aggregate"
+  ],
+  "note": "dedupe, highlight duplicates, average"
+ },
+ {
+  "text": "togli gli spazi a inizio e fine, metti i prezzi in euro e poi crea un grafico a barre",
+  "lang": "it",
+  "expected": [
+   "clean",
+   "numfmt",
+   "chart"
+  ],
+  "note": "clean, numfmt currency, chart bar"
+ },
+ {
+  "text": "rimuovi righe vuote e duplicate quindi mostrami le statistiche",
+  "lang": "it",
+  "expected": [
+   "rmempty",
+   "dedupe",
+   "describe"
+  ],
+  "note": "rmempty, dedupe, describe"
+ },
+ {
+  "text": "metti i nomi col formato proprio poi ordina per nome crescente",
+  "lang": "it",
+  "expected": [
+   "transform",
+   "sort"
+  ],
+  "note": "transform proper then sort asc"
+ },
+ {
+  "text": "pulisci i dati e poi trovami eventuali anomalie",
+  "lang": "it",
+  "expected": [
+   "clean",
+   "insights"
+  ],
+  "note": "clean then insights"
+ },
+ {
+  "text": "elimina i doppioni, formatta la colonna sconto come percentuale e fai i totali",
+  "lang": "it",
+  "expected": [
+   "dedupe",
+   "numfmt",
+   "total"
+  ],
+  "note": "dedupe, numfmt percent, total"
+ },
+ {
+  "text": "ordina per quantità decrescente, evidenzia i negativi poi calcola il massimo",
+  "lang": "it",
+  "expected": [
+   "sort",
+   "highlight",
+   "aggregate"
+  ],
+  "note": "sort desc, highlight negative, max"
+ },
+ {
+  "text": "normalizza gli spazi nella colonna indirizzo dopodiché rimuovi le righe duplicate e ordina per CAP",
+  "lang": "it",
+  "expected": [
+   "clean",
+   "dedupe",
+   "sort"
+  ],
+  "note": "clean, dedupe, sort asc"
+ },
+ {
+  "text": "trasforma in minuscolo le categorie, togli le righe vuote e conta i valori",
+  "lang": "it",
+  "expected": [
+   "transform",
+   "rmempty",
+   "aggregate"
+  ],
+  "note": "transform lower, rmempty, count"
+ },
+ {
+  "text": "metti il fatturato in valuta, evidenzia il massimo e poi crea un grafico a linee",
+  "lang": "it",
+  "expected": [
+   "numfmt",
+   "highlight",
+   "chart"
+  ],
+  "note": "numfmt currency, highlight max, chart line"
+ },
+ {
+  "text": "pulisci tutto, deduplica e poi riempi la serie numerica",
+  "lang": "it",
+  "expected": [
+   "clean",
+   "dedupe",
+   "fill"
+  ],
+  "note": "clean, dedupe, fill series"
+ },
+ {
+  "text": "togli i duplicati poi compila la colonna capitale dalle tue conoscenze",
+  "lang": "it",
+  "expected": [
+   "dedupe",
+   "enrich"
+  ],
+  "note": "dedupe then enrich from offline knowledge"
+ },
+ {
+  "text": "rimuovi le righe vuote, metti gli importi col separatore migliaia e fai la somma se la colonna A supera 100",
+  "lang": "it",
+  "expected": [
+   "rmempty",
+   "numfmt",
+   "formula"
+  ],
+  "note": "rmempty, numfmt comma, conditional formula"
+ },
+ {
+  "text": "formatta in grassetto i totali, metti le percentuali e ordina per margine decrescente",
+  "lang": "it",
+  "expected": [
+   "format",
+   "numfmt",
+   "sort"
+  ],
+  "note": "format bold, numfmt percent, sort desc"
+ },
+ {
+  "text": "pulisci gli spazi, poi spiegami la formula di questa cella",
+  "lang": "it",
+  "expected": [
+   "clean",
+   "explain"
+  ],
+  "note": "clean then explain formula"
+ },
+ {
+  "text": "deduplica le righe, calcola la mediana e mostrami le statistiche complete",
+  "lang": "it",
+  "expected": [
+   "dedupe",
+   "aggregate",
+   "describe"
+  ],
+  "note": "dedupe, median, describe"
+ },
+ {
+  "text": "togli i doppioni e le righe vuote, metti i nomi in maiuscolo e ordina alfabeticamente",
+  "lang": "it",
+  "expected": [
+   "dedupe",
+   "rmempty",
+   "transform",
+   "sort"
+  ],
+  "note": "4-op: dedupe, rmempty, transform upper, sort asc"
+ },
+ {
+  "text": "chi ha inventato il foglio di calcolo",
+  "lang": "it",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "general knowledge, not a sheet op"
+ },
+ {
+  "text": "fammi vedere come si fa la fotosintesi poi ordina la tabella",
+  "lang": "it",
+  "expected": [
+   "knowledge",
+   "sort"
+  ],
+  "note": "knowledge question chained with a real sort op"
+ },
+ {
+  "text": "clean up the whitespace then remove duplicate rows",
+  "lang": "en",
+  "expected": [
+   "clean",
+   "dedupe"
+  ],
+  "note": "clean→dedupe"
+ },
+ {
+  "text": "sum column C and then add a totals row",
+  "lang": "en",
+  "expected": [
+   "aggregate",
+   "total"
+  ],
+  "note": "aggregate sum + total"
+ },
+ {
+  "text": "sort by revenue descending, then highlight the top value",
+  "lang": "en",
+  "expected": [
+   "sort",
+   "highlight"
+  ],
+  "note": "sort desc + highlight max"
+ },
+ {
+  "text": "trim the names, then make them proper case and bold them",
+  "lang": "en",
+  "expected": [
+   "clean",
+   "transform",
+   "format"
+  ],
+  "note": "3-op chain"
+ },
+ {
+  "text": "remove empty rows then dedupe and give me a quick describe",
+  "lang": "en",
+  "expected": [
+   "rmempty",
+   "dedupe",
+   "describe"
+  ],
+  "note": "cleanup then summary"
+ },
+ {
+  "text": "average the scores then chart them as a bar",
+  "lang": "en",
+  "expected": [
+   "aggregate",
+   "chart"
+  ],
+  "note": "avg + bar chart"
+ },
+ {
+  "text": "find the max in column D, after that highlight anything over 1000",
+  "lang": "en",
+  "expected": [
+   "aggregate",
+   "highlight"
+  ],
+  "note": "max agg + highlight gt"
+ },
+ {
+  "text": "format the prices as currency and then add a totals row at the bottom",
+  "lang": "en",
+  "expected": [
+   "numfmt",
+   "total"
+  ],
+  "note": "currency + total"
+ },
+ {
+  "text": "fill the index series down, then sort ascending by it",
+  "lang": "en",
+  "expected": [
+   "fill",
+   "sort"
+  ],
+  "note": "fill + sort asc"
+ },
+ {
+  "text": "enrich a capital column for each country, then sort by capital A to Z",
+  "lang": "en",
+  "expected": [
+   "enrich",
+   "sort"
+  ],
+  "note": "enrich + sort asc"
+ },
+ {
+  "text": "clean the data; dedupe it; then chart sales as a line",
+  "lang": "en",
+  "expected": [
+   "clean",
+   "dedupe",
+   "chart"
+  ],
+  "note": "semicolons, 3 ops"
+ },
+ {
+  "text": "highlight the negatives in column E and then sort it descending",
+  "lang": "en",
+  "expected": [
+   "highlight",
+   "sort"
+  ],
+  "note": "highlight negative + sort desc"
+ },
+ {
+  "text": "give me the median of column B, then the standard deviation too",
+  "lang": "en",
+  "expected": [
+   "aggregate",
+   "aggregate"
+  ],
+  "note": "two aggregates"
+ },
+ {
+  "text": "uppercase the codes, after that find the value SKU-200",
+  "lang": "en",
+  "expected": [
+   "transform",
+   "find"
+  ],
+  "note": "upper + find"
+ },
+ {
+  "text": "run the insights, then chart the trend column as a line",
+  "lang": "en",
+  "expected": [
+   "insights",
+   "chart"
+  ],
+  "note": "insights + line chart"
+ },
+ {
+  "text": "make a formula that sums column A where B is greater than 10, then total the results",
+  "lang": "en",
+  "expected": [
+   "formula",
+   "total"
+  ],
+  "note": "conditional formula + total"
+ },
+ {
+  "text": "count the non-empty cells in C and then describe the whole block",
+  "lang": "en",
+  "expected": [
+   "aggregate",
+   "describe"
+  ],
+  "note": "count + describe"
+ },
+ {
+  "text": "remove duplicate rows, sort by date ascending, and add totals",
+  "lang": "en",
+  "expected": [
+   "dedupe",
+   "sort",
+   "total"
+  ],
+  "note": "3 ops, commas+and"
+ },
+ {
+  "text": "highlight duplicates in the email column then clean the whitespace",
+  "lang": "en",
+  "expected": [
+   "highlight",
+   "clean"
+  ],
+  "note": "highlight duplicates + clean"
+ },
+ {
+  "text": "format the margin column as a percent and then highlight anything below 0.1",
+  "lang": "en",
+  "expected": [
+   "numfmt",
+   "highlight"
+  ],
+  "note": "percent + highlight lt"
+ },
+ {
+  "text": "lowercase the tags, dedupe, then sort them alphabetically",
+  "lang": "en",
+  "expected": [
+   "transform",
+   "dedupe",
+   "sort"
+  ],
+  "note": "3 ops"
+ },
+ {
+  "text": "sum the quarter columns, italicize the header, and format as currency",
+  "lang": "en",
+  "expected": [
+   "aggregate",
+   "format",
+   "numfmt"
+  ],
+  "note": "3 ops"
+ },
+ {
+  "text": "explain this cell's formula then highlight the empty cells nearby",
+  "lang": "en",
+  "expected": [
+   "explain",
+   "highlight"
+  ],
+  "note": "explain + highlight empty"
+ },
+ {
+  "text": "who was Alan Turing? then average column F",
+  "lang": "en",
+  "expected": [
+   "knowledge",
+   "aggregate"
+  ],
+  "note": "knowledge mixed with sheet op"
+ },
+ {
+  "text": "clean the names, make them proper case, dedupe, and finally sort ascending",
+  "lang": "en",
+  "expected": [
+   "clean",
+   "transform",
+   "dedupe",
+   "sort"
+  ],
+  "note": "4-op flow"
+ },
+ {
+  "text": "add thousands separators to the population column then enrich it with each country's capital",
+  "lang": "en",
+  "expected": [
+   "numfmt",
+   "enrich"
+  ],
+  "note": "comma + enrich"
+ },
+ {
+  "text": "find ACME in the vendor column and then bold that row",
+  "lang": "en",
+  "expected": [
+   "find",
+   "format"
+  ],
+  "note": "find + bold"
+ },
+ {
+  "text": "fill the dates series, then format them, then add a totals row",
+  "lang": "en",
+  "expected": [
+   "fill",
+   "numfmt",
+   "total"
+  ],
+  "note": "fill + numfmt + total"
+ },
+ {
+  "text": "highlight the max in revenue, highlight the min in cost, then chart both as bars",
+  "lang": "en",
+  "expected": [
+   "highlight",
+   "highlight",
+   "chart"
+  ],
+  "note": "two highlights + chart"
+ },
+ {
+  "text": "describe the block, run insights, and then sort by the outlier column descending",
+  "lang": "en",
+  "expected": [
+   "describe",
+   "insights",
+   "sort"
+  ],
+  "note": "3 ops"
+ },
+ {
+  "text": "remove empty rows, then make a formula counting rows where status equals shipped",
+  "lang": "en",
+  "expected": [
+   "rmempty",
+   "formula"
+  ],
+  "note": "rmempty + conditional formula"
+ },
+ {
+  "text": "product of column G then describe everything",
+  "lang": "en",
+  "expected": [
+   "aggregate",
+   "describe"
+  ],
+  "note": "product agg + describe"
+ },
+ {
+  "text": "enrich the country column with capitals, format as proper case, then sort A-Z",
+  "lang": "en",
+  "expected": [
+   "enrich",
+   "transform",
+   "sort"
+  ],
+  "note": "3 ops"
+ },
+ {
+  "text": "highlight positives in the balance column and then add a totals row",
+  "lang": "en",
+  "expected": [
+   "highlight",
+   "total"
+  ],
+  "note": "highlight positive + total"
+ },
+ {
+  "text": "what's the capital of Australia, and then highlight duplicates in column A",
+  "lang": "en",
+  "expected": [
+   "knowledge",
+   "highlight"
+  ],
+  "note": "knowledge + highlight duplicates"
+ },
+ {
+  "text": "fai la somma della colonna B",
+  "lang": "it",
+  "expected": [
+   "aggregate"
+  ],
+  "note": "single aggregate(sum)"
+ },
+ {
+  "text": "average of column Price",
+  "lang": "en",
+  "expected": [
+   "aggregate"
+  ],
+  "note": "single aggregate(average)"
+ },
+ {
+  "text": "qual è il valore massimo nella colonna vendite",
+  "lang": "it",
+  "expected": [
+   "aggregate"
+  ],
+  "note": "aggregate(max)"
+ },
+ {
+  "text": "count the rows",
+  "lang": "en",
+  "expected": [
+   "aggregate"
+  ],
+  "note": "count is aggregate fn; 'quante righe' near-miss intended as count"
+ },
+ {
+  "text": "quante righe ci sono",
+  "lang": "it",
+  "expected": [
+   "aggregate"
+  ],
+  "note": "count of rows -> aggregate(count); near-miss vs knowledge"
+ },
+ {
+  "text": "aggiungi una riga dei totali in fondo",
+  "lang": "it",
+  "expected": [
+   "total"
+  ],
+  "note": "total row"
+ },
+ {
+  "text": "add a totals row",
+  "lang": "en",
+  "expected": [
+   "total"
+  ],
+  "note": "total"
+ },
+ {
+  "text": "descrivi i dati con le statistiche",
+  "lang": "it",
+  "expected": [
+   "describe"
+  ],
+  "note": "describe"
+ },
+ {
+  "text": "give me a statistical summary of the block",
+  "lang": "en",
+  "expected": [
+   "describe"
+  ],
+  "note": "describe"
+ },
+ {
+  "text": "trova anomalie e tendenze nei dati",
+  "lang": "it",
+  "expected": [
+   "insights"
+  ],
+  "note": "insights"
+ },
+ {
+  "text": "show correlations and outliers",
+  "lang": "en",
+  "expected": [
+   "insights"
+  ],
+  "note": "insights"
+ },
+ {
+  "text": "fai un grafico a barre della colonna C",
+  "lang": "it",
+  "expected": [
+   "chart"
+  ],
+  "note": "chart(bar)"
+ },
+ {
+  "text": "plot column revenue as a line chart",
+  "lang": "en",
+  "expected": [
+   "chart"
+  ],
+  "note": "chart(line)"
+ },
+ {
+  "text": "evidenzia i valori maggiori di 100",
+  "lang": "it",
+  "expected": [
+   "highlight"
+  ],
+  "note": "highlight gt 100"
+ },
+ {
+  "text": "highlight duplicates in column A",
+  "lang": "en",
+  "expected": [
+   "highlight"
+  ],
+  "note": "highlight duplicates"
+ },
+ {
+  "text": "ordina per colonna B in ordine decrescente",
+  "lang": "it",
+  "expected": [
+   "sort"
+  ],
+  "note": "sort desc"
+ },
+ {
+  "text": "sort by date ascending",
+  "lang": "en",
+  "expected": [
+   "sort"
+  ],
+  "note": "sort asc"
+ },
+ {
+  "text": "riempi la serie numerica fino a 100",
+  "lang": "it",
+  "expected": [
+   "fill"
+  ],
+  "note": "fill series"
+ },
+ {
+  "text": "rimuovi gli spazi e normalizza il testo",
+  "lang": "it",
+  "expected": [
+   "clean"
+  ],
+  "note": "clean/trim"
+ },
+ {
+  "text": "remove duplicate rows",
+  "lang": "en",
+  "expected": [
+   "dedupe"
+  ],
+  "note": "dedupe"
+ },
+ {
+  "text": "elimina le righe vuote",
+  "lang": "it",
+  "expected": [
+   "rmempty"
+  ],
+  "note": "rmempty"
+ },
+ {
+  "text": "make the names uppercase",
+  "lang": "en",
+  "expected": [
+   "transform"
+  ],
+  "note": "transform(upper)"
+ },
+ {
+  "text": "metti in grassetto la colonna A",
+  "lang": "it",
+  "expected": [
+   "format"
+  ],
+  "note": "format(bold)"
+ },
+ {
+  "text": "format column total as currency",
+  "lang": "en",
+  "expected": [
+   "numfmt"
+  ],
+  "note": "numfmt currency"
+ },
+ {
+  "text": "trova il valore Rossi nella tabella",
+  "lang": "it",
+  "expected": [
+   "find"
+  ],
+  "note": "find"
+ },
+ {
+  "text": "explain the formula in this cell",
+  "lang": "en",
+  "expected": [
+   "explain"
+  ],
+  "note": "explain"
+ },
+ {
+  "text": "riempi la colonna con la capitale di ogni paese",
+  "lang": "it",
+  "expected": [
+   "enrich"
+  ],
+  "note": "enrich from offline knowledge"
+ },
+ {
+  "text": "somma la colonna importo solo se la colonna stato è 'pagato'",
+  "lang": "it",
+  "expected": [
+   "formula"
+  ],
+  "note": "conditional formula (sumif)"
+ },
+ {
+  "text": "fai i totali poi ordina per colonna B decrescente",
+  "lang": "it",
+  "expected": [
+   "total",
+   "sort"
+  ],
+  "note": "compound 2"
+ },
+ {
+  "text": "clean the text, then remove duplicates and make it proper case",
+  "lang": "en",
+  "expected": [
+   "clean",
+   "dedupe",
+   "transform"
+  ],
+  "note": "compound 3"
+ },
+ {
+  "text": "calcola la media della colonna C e poi fai un grafico a linee",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "chart"
+  ],
+  "note": "compound 2"
+ },
+ {
+  "text": "evidenzia i negativi, ordina crescente e infine metti in valuta",
+  "lang": "it",
+  "expected": [
+   "highlight",
+   "sort",
+   "numfmt"
+  ],
+  "note": "compound 3"
+ },
+ {
+  "text": "remove empty rows then dedupe and add a totals row",
+  "lang": "en",
+  "expected": [
+   "rmempty",
+   "dedupe",
+   "total"
+  ],
+  "note": "compound 3"
+ },
+ {
+  "text": "quanti paesi ci sono in Europa",
+  "lang": "it",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "knowledge near-miss vs count"
+ },
+ {
+  "text": "chi era Napoleone",
+  "lang": "it",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "history knowledge"
+ },
+ {
+  "text": "what is the speed of light",
+  "lang": "en",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "science knowledge"
+ },
+ {
+  "text": "cosa significa fotosintesi",
+  "lang": "it",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "definition knowledge"
+ },
+ {
+  "text": "who wrote Romeo and Juliet",
+  "lang": "en",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "knowledge"
+ },
+ {
+  "text": "qual è la capitale del Giappone",
+  "lang": "it",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "knowledge near-miss vs enrich (no column)"
+ },
+ {
+  "text": "how many planets are in the solar system",
+  "lang": "en",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "knowledge near-miss vs count"
+ },
+ {
+  "text": "la cella rossa",
+  "lang": "it",
+  "expected": [],
+  "note": "colour word, NO highlight verb or threshold — not a command, just a noun phrase describing an existing cell"
+ },
+ {
+  "text": "evidenzia le celle rosse maggiori di 100",
+  "lang": "it",
+  "expected": [
+   "highlight"
+  ],
+  "note": "real highlight verb + threshold gt 100; colour word is decoration"
+ },
+ {
+  "text": "qual è il valore della cella B2?",
+  "lang": "it",
+  "expected": [
+   "find"
+  ],
+  "note": "'valore' as trap; asking the value of a specific cell = find, not aggregate"
+ },
+ {
+  "text": "somma i valori della colonna A",
+  "lang": "it",
+  "expected": [
+   "aggregate"
+  ],
+  "note": "'valori' decoy plural; clear sum aggregate"
+ },
+ {
+  "text": "values in column C",
+  "lang": "en",
+  "expected": [],
+  "note": "bare 'values in column C' — no verb, no intent; should NOT fabricate an op"
+ },
+ {
+  "text": "per favore potresti fare la media della colonna prezzo?",
+  "lang": "it",
+  "expected": [
+   "aggregate"
+  ],
+  "note": "polite filler wraps a genuine average request"
+ },
+ {
+  "text": "per favore",
+  "lang": "it",
+  "expected": [],
+  "note": "pure polite filler with no actual task"
+ },
+ {
+  "text": "média e somma di A",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "aggregate"
+  ],
+  "note": "accent on média + ambiguous 'e' here is a real AND of two aggregates on same column"
+ },
+ {
+  "text": "media o somma di A",
+  "lang": "it",
+  "expected": [],
+  "note": "'o' (or) makes it an undecidable choice, not a chained command — must not guess"
+ },
+ {
+  "text": "sommando le colonne e poi ordinando per data",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "sort"
+  ],
+  "note": "-ing gerund verbs (sommando/ordinando) chained with poi"
+ },
+ {
+  "text": "highlighting the negative values please",
+  "lang": "en",
+  "expected": [
+   "highlight"
+  ],
+  "note": "-ing verb + 'values' decoy; negative is a real highlight test"
+ },
+ {
+  "text": "ordina per colonna B in ordine decrescente",
+  "lang": "it",
+  "expected": [
+   "sort"
+  ],
+  "note": "'ordine' noun vs 'ordina' verb near-collision trap"
+ },
+ {
+  "text": "che ore sono?",
+  "lang": "it",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "non-sheet general question"
+ },
+ {
+  "text": "chi ha inventato il foglio di calcolo?",
+  "lang": "it",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "mentions 'foglio di calcolo' to bait a sheet op, but it's trivia"
+ },
+ {
+  "text": "elimina le righe duplicate poi togli quelle vuote",
+  "lang": "it",
+  "expected": [
+   "dedupe",
+   "rmempty"
+  ],
+  "note": "two cleanup ops chained with poi"
+ },
+ {
+  "text": "rimuovi i duplicati nella colonna evidenzia",
+  "lang": "it",
+  "expected": [
+   "dedupe"
+  ],
+  "note": "data 'evidenzia' is a column NAME that looks like the highlight verb — must treat as column, single dedupe"
+ },
+ {
+  "text": "trova la riga dove scrive 'totale generale'",
+  "lang": "it",
+  "expected": [
+   "find"
+  ],
+  "note": "search string contains 'totale' which looks like the total command — it's literal data to find"
+ },
+ {
+  "text": "fai i totali",
+  "lang": "it",
+  "expected": [
+   "total"
+  ],
+  "note": "clean totals-row request"
+ },
+ {
+  "text": "somma le prime tre colonne",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "aggregate",
+   "aggregate"
+  ],
+  "note": "numbers-as-words 'prime tre' = three separate column sums"
+ },
+ {
+  "text": "metti in grassetto la parola corsivo",
+  "lang": "it",
+  "expected": [
+   "format"
+  ],
+  "note": "format bold; 'corsivo'(italic) is the literal text content, a decoy for italic"
+ },
+ {
+  "text": "grafico a barre della colonna vendite e linea del trend",
+  "lang": "it",
+  "expected": [
+   "chart",
+   "chart"
+  ],
+  "note": "ambiguous 'e' chains two charts (bar then line)"
+ },
+ {
+  "text": "puliscile",
+  "lang": "it",
+  "expected": [
+   "clean"
+  ],
+  "note": "clitic-suffixed verb 'puliscile' (clean them) — trim/normalise"
+ },
+ {
+  "text": "describe i dati e poi mostra gli insight",
+  "lang": "it",
+  "expected": [
+   "describe",
+   "insights"
+  ],
+  "note": "mixed IT/EN: English 'describe'/'insight' inside Italian sentence"
+ },
+ {
+  "text": "converti in maiuscolo la colonna nome please then sort ascending",
+  "lang": "it",
+  "expected": [
+   "transform",
+   "sort"
+  ],
+  "note": "mixed IT/EN compound, polite 'please', transform upper + sort asc"
+ },
+ {
+  "text": "formatta come valuta la colonna importo",
+  "lang": "it",
+  "expected": [
+   "numfmt"
+  ],
+  "note": "numfmt currency; 'formatta' could mislead toward format(bold)"
+ },
+ {
+  "text": "rendi più carino il foglio",
+  "lang": "it",
+  "expected": [],
+  "note": "vague aesthetic request — no concrete op, must not invent"
+ },
+ {
+  "text": "riempi la serie da 1 a 100",
+  "lang": "it",
+  "expected": [
+   "fill"
+  ],
+  "note": "fill numeric series; numbers present"
+ },
+ {
+  "text": "scrivimi una poesia sulle celle",
+  "lang": "it",
+  "expected": [
+   "knowledge"
+  ],
+  "note": "creative non-sheet request mentioning 'celle' as bait"
+ },
+ {
+  "text": "completa la colonna capitale con la capitale di ogni stato",
+  "lang": "it",
+  "expected": [
+   "enrich"
+  ],
+  "note": "enrich from offline knowledge (capital per country)"
+ },
+ {
+  "text": "somma la colonna A se la colonna B è maggiore di 10",
+  "lang": "it",
+  "expected": [
+   "formula"
+  ],
+  "note": "conditional aggregate → formula, not plain aggregate"
+ },
+ {
+  "text": "spiega questa formula",
+  "lang": "it",
+  "expected": [
+   "explain"
+  ],
+  "note": "explain current cell formula"
+ },
+ {
+  "text": "evidenzia i duplicati, poi rimuovili, infine fai i totali",
+  "lang": "it",
+  "expected": [
+   "highlight",
+   "dedupe",
+   "total"
+  ],
+  "note": "3-op chain with mixed connectors comma/infine"
+ },
+ {
+  "text": "trova il massimo della colonna età",
+  "lang": "it",
+  "expected": [
+   "aggregate"
+  ],
+  "note": "'massimo' = max aggregate; trap vs highlight(max)"
+ },
+ {
+  "text": "evidenzia il valore massimo",
+  "lang": "it",
+  "expected": [
+   "highlight"
+  ],
+  "note": "same 'massimo' but with evidenzia → highlight(max), contrast to previous case"
+ },
+ {
+  "text": "ò bisogno di sommare àncora la colonna è",
+  "lang": "it",
+  "expected": [
+   "aggregate"
+  ],
+  "note": "garbled accents (ò/àncora/è) typos but intent = sum a column"
+ },
+ {
+  "text": "the cell is red",
+  "lang": "en",
+  "expected": [],
+  "note": "English colour statement, declarative not imperative — no op"
+ },
+ {
+  "text": "counting the rows then charting them as a line",
+  "lang": "en",
+  "expected": [
+   "aggregate",
+   "chart"
+  ],
+  "note": "-ing gerunds: count aggregate + line chart, chained with then"
+ },
+ {
+  "text": "qual è la mediana e la deviazione standard della colonna punteggio",
+  "lang": "it",
+  "expected": [
+   "aggregate",
+   "aggregate"
+  ],
+  "note": "ambiguous 'e' chains median + stdev aggregates"
+ },
+ {
+  "text": "ordina alfabeticamente il nome",
+  "lang": "it",
+  "expected": [
+   "sort"
+  ],
+  "note": "sort asc implied by alfabeticamente on a text column"
+ },
+ {
+  "text": "200, comando, esegui sum",
+  "lang": "it",
+  "expected": [
+   "aggregate"
+  ],
+  "note": "data-that-looks-like-noise (number + word 'comando') but ends with a real 'sum' aggregate intent"
+ }
+]

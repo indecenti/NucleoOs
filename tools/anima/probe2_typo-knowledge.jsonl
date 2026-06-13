@@ -1,0 +1,75 @@
+// PROGRAMMING — typos, expect known
+{"q":"cos'e una varibile","lang":"it","expect":"l1|hdc|answer"}
+{"q":"cosa e una varaible","lang":"it","expect":"l1|hdc|answer"}
+{"q":"che cos'e una funzine","lang":"it","expect":"l1|hdc|answer"}
+{"q":"cos e un algoritno","lang":"it","expect":"l1|hdc|answer"}
+{"q":"cos'e un algoritmo","lang":"it","expect":"l1|hdc|answer"}
+{"q":"che cos e pythno","lang":"it","expect":"l1|hdc|answer"}
+{"q":"cos e pyhton","lang":"it","expect":"l1|hdc|answer"}
+{"q":"cosa e javascrpt","lang":"it","expect":"l1|hdc|answer"}
+{"q":"spiegami cos e una funzone","lang":"it","expect":"l1|hdc|answer"}
+{"q":"what is a varible","lang":"en","expect":"l1|hdc|answer"}
+{"q":"what is an algoritm","lang":"en","expect":"l1|hdc|answer"}
+{"q":"whats a functon","lang":"en","expect":"l1|hdc|answer"}
+{"q":"what is pyhton","lang":"en","expect":"l1|hdc|answer"}
+{"q":"definisci variabile","lang":"it","expect":"l1|hdc|answer"}
+{"q":"mi spieghi cos e un algoritmo","lang":"it","expect":"l1|hdc|answer"}
+// SCIENCE — typos, expect known
+{"q":"spiegami la fotosintsi","lang":"it","expect":"l1|hdc|answer"}
+{"q":"spiegami la fotosintesy","lang":"it","expect":"l1|hdc|answer"}
+{"q":"cos e la fotosintesy","lang":"it","expect":"l1|hdc|answer"}
+{"q":"cos'e la gravta","lang":"it","expect":"l1|hdc|answer"}
+{"q":"cosa e la gravita'","lang":"it","expect":"l1|hdc|answer"}
+{"q":"che cos e la fotosintesi clorofilliana","lang":"it","expect":"l1|hdc|answer"}
+{"q":"explain photosintesis","lang":"en","expect":"l1|hdc|answer"}
+{"q":"what is gravty","lang":"en","expect":"l1|hdc|answer"}
+{"q":"what is graviy","lang":"en","expect":"l1|hdc|answer"}
+{"q":"cos e l energia","lang":"it","expect":"l1|hdc|answer"}
+{"q":"cosa e un atono","lang":"it","expect":"l1|hdc|answer"}
+{"q":"cos'e un atomo","lang":"it","expect":"l1|hdc|answer"}
+// GEOGRAPHY — typos, expect known
+{"q":"capitale dela francia","lang":"it","expect":"l1|hdc|answer"}
+{"q":"capitale della franci","lang":"it","expect":"l1|hdc|answer"}
+{"q":"qual e la capitale dela francia","lang":"it","expect":"l1|hdc|answer"}
+{"q":"capitale dell italai","lang":"it","expect":"l1|hdc|answer"}
+{"q":"capitale dela germania","lang":"it","expect":"l1|hdc|answer"}
+{"q":"capitale della spahna","lang":"it","expect":"l1|hdc|answer"}
+{"q":"in che continente e il brasle","lang":"it","expect":"l1|hdc|answer"}
+{"q":"in che continete e il brasile","lang":"it","expect":"l1|hdc|answer"}
+{"q":"dove si trova il brasle","lang":"it","expect":"l1|hdc|answer"}
+{"q":"capital of frace","lang":"en","expect":"l1|hdc|answer"}
+{"q":"what is the capital of itay","lang":"en","expect":"l1|hdc|answer"}
+{"q":"capitla of germany","lang":"en","expect":"l1|hdc|answer"}
+{"q":"qual e la capitale del giapone","lang":"it","expect":"l1|hdc|answer"}
+{"q":"capitale del giappne","lang":"it","expect":"l1|hdc|answer"}
+// PEOPLE — typos, expect known
+{"q":"chi e albert einstien","lang":"it","expect":"l1|hdc|answer"}
+{"q":"chi e albrt einstein","lang":"it","expect":"l1|hdc|answer"}
+{"q":"chi era albert einstien","lang":"it","expect":"l1|hdc|answer"}
+{"q":"chi e leonardo da vinic","lang":"it","expect":"l1|hdc|answer"}
+{"q":"chi e leonrdo da vinci","lang":"it","expect":"l1|hdc|answer"}
+{"q":"quando e nato dant","lang":"it","expect":"l1|hdc|answer"}
+{"q":"quando e nato dnate","lang":"it","expect":"l1|hdc|answer"}
+{"q":"chi era dante alighieri","lang":"it","expect":"l1|hdc|answer"}
+{"q":"who was albert einstien","lang":"en","expect":"l1|hdc|answer"}
+{"q":"who is leonardo da vinic","lang":"en","expect":"l1|hdc|answer"}
+{"q":"chi e isaac newtn","lang":"it","expect":"l1|hdc|answer"}
+{"q":"chi e isac newton","lang":"it","expect":"l1|hdc|answer"}
+// ADVERSARIAL — fiction, must abstain
+{"q":"chi e gandalf","lang":"it","expect":"abstain"}
+{"q":"chi e gandlaf","lang":"it","expect":"abstain"}
+{"q":"chi e frodo baggins","lang":"it","expect":"abstain"}
+{"q":"chi e harry potter","lang":"it","expect":"abstain"}
+{"q":"quando e nato sherlock holmes","lang":"it","expect":"abstain"}
+{"q":"chi e darth vader","lang":"it","expect":"abstain"}
+{"q":"who is gandalf","lang":"en","expect":"abstain"}
+// ADVERSARIAL — false premise / nonsense location, must abstain
+{"q":"capitale della luna","lang":"it","expect":"abstain"}
+{"q":"capitale di marte","lang":"it","expect":"abstain"}
+{"q":"capitale del oceano pacifico","lang":"it","expect":"abstain"}
+{"q":"in che continente e atlantide","lang":"it","expect":"abstain"}
+// ADVERSARIAL — scoped superlatives WITH typos, must abstain (no fact known)
+{"q":"il fiume piu lngo della siberia","lang":"it","expect":"abstain"}
+{"q":"la montagna piu alta del molise","lang":"it","expect":"abstain"}
+{"q":"il lago piu profndo del belgio","lang":"it","expect":"abstain"}
+{"q":"qual e il vulcano piu altp dell islanda","lang":"it","expect":"abstain"}

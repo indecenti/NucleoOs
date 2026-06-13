@@ -1,0 +1,43 @@
+{"q":"cos'è una variabile","lang":"it","expect":"answer"}
+{"q":"cos'è un algoritmo","lang":"it","expect":"answer"}
+{"q":"cos'è la fotosintesi","lang":"it","expect":"answer"}
+{"q":"cos'è la ricorsione","lang":"it","expect":"answer"}
+{"q":"cos'è un sistema operativo","lang":"it","expect":"answer"}
+{"q":"cos'è il DNA","lang":"it","expect":"answer"}
+{"q":"cos'è un linguaggio di programmazione","lang":"it","expect":"answer"}
+{"q":"definisci la ricorsione","lang":"it","expect":"answer"}
+{"q":"what is an algorithm","lang":"en","expect":"answer"}
+{"q":"what is a variable","lang":"en","expect":"answer"}
+{"q":"what is recursion","lang":"en","expect":"answer"}
+{"q":"what is photosynthesis","lang":"en","expect":"answer"}
+{"q":"what is gravity","lang":"en","expect":"answer"}
+{"q":"what is a database","lang":"en","expect":"answer"}
+{"q":"what is dna","lang":"en","expect":"answer"}
+{"q":"capitale della francia","lang":"it","expect":"answer"}
+{"q":"capitale del giappone","lang":"it","expect":"answer"}
+{"q":"capitale della germania","lang":"it","expect":"answer"}
+{"q":"capital of japan","lang":"en","expect":"answer"}
+{"q":"capital of italy","lang":"en","expect":"answer"}
+{"q":"chi è Albert Einstein","lang":"it","expect":"answer"}
+{"q":"chi è Leonardo da Vinci","lang":"it","expect":"answer"}
+{"q":"chi era Albert Einstein","lang":"it","expect":"answer"}
+{"q":"who is Isaac Newton","lang":"en","expect":"answer"}
+{"q":"who is Leonardo da Vinci","lang":"en","expect":"answer"}
+{"q":"quando è nato Einstein","lang":"it","expect":"answer"}
+{"q":"when was Einstein born","lang":"en","expect":"answer"}
+{"q":"in che continente è il Brasile","lang":"it","expect":"answer"}
+{"q":"quanti pianeti ci sono nel sistema solare","lang":"it","expect":"answer"}
+{"q":"cos'è una varaible","lang":"it","expect":"answer"}
+{"q":"capitale dela francia","lang":"it","expect":"answer"}
+{"q":"cos'è la fotosntesi","lang":"it","expect":"answer"}
+{"q":"capitale del giapone","lang":"it","expect":"answer"}
+{"q":"what is an algoritm","lang":"en","expect":"answer"}
+{"q":"what is teh internet","lang":"en","expect":"answer"}
+{"q":"chi è Gandalf","lang":"it","expect":"abstain"}
+{"q":"who is Sherlock Holmes","lang":"en","expect":"abstain"}
+{"q":"chi è Sauron","lang":"it","expect":"abstain"}
+{"q":"quanti continenti ha Giove","lang":"it","expect":"abstain"}
+{"q":"quanti continenti ha la Luna","lang":"it","expect":"abstain"}
+{"q":"capitale della Baviera","lang":"it","expect":"abstain"}
+{"q":"capital of Texas","lang":"en","expect":"abstain"}
+{"q":"capitale di Marte","lang":"it","expect":"abstain"}

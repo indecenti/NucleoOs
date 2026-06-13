@@ -1,0 +1,21 @@
+{
+  "id": "recycle-bin",
+  "name": "Recycle Bin",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "View, restore or permanently delete files moved to the trash by File Commander.",
+  "category": "system",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/recycle-bin/",
+  "icon": "assets/icon.svg",
+  "permissions": ["storage.shared", "system.events"],
+  "mounts": { "app": "/apps/recycle-bin/data" },
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": ["fs.changed"],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

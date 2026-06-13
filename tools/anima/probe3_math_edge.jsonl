@@ -1,0 +1,35 @@
+{"q":"quanto fa 9 al quadrato","lang":"it","expect":"calc"}
+{"q":"radice quadrata di 169","lang":"it","expect":"calc"}
+{"q":"quanto e la radice quadrata di 256","lang":"it","expect":"calc"}
+{"q":"qunato fa 25 per 4","lang":"it","expect":"calc"}
+{"q":"il 50% di 360","lang":"it","expect":"percent"}
+{"q":"50 percent of 360","lang":"en","expect":"percent"}
+{"q":"how much is 7 times 6","lang":"en","expect":"calc"}
+{"q":"cube root of 125","lang":"en","expect":"calc"}
+{"q":"5 alla terza","lang":"it","expect":"calc"}
+{"q":"10 alla seconda","lang":"it","expect":"calc"}
+{"q":"area del triangolo base 6 altezza 4","lang":"it","expect":"geo"}
+{"q":"area of a triangle base 10 height 5","lang":"en","expect":"geo"}
+{"q":"circonferenza di un cerchio raggio 5","lang":"it","expect":"geo"}
+{"q":"perimetro di un quadrato lato 7","lang":"it","expect":"geo"}
+{"q":"area di un rettangolo 4 per 6","lang":"it","expect":"geo"}
+{"q":"100 fahrenheit in celsius","lang":"it","expect":"convert"}
+{"q":"3 km in metri","lang":"it","expect":"convert"}
+{"q":"how many minutes in 3 hours","lang":"en","expect":"convert"}
+{"q":"convert 5 km to miles","lang":"en","expect":"convert"}
+{"q":"1000 grammi in chili","lang":"it","expect":"convert"}
+{"q":"radice quadrata di un gatto","lang":"it","expect":"abstain"}
+{"q":"area di un cerchio raggio felicita","lang":"it","expect":"abstain"}
+{"q":"quanto fa amore per due","lang":"it","expect":"abstain"}
+{"q":"square root of happiness","lang":"en","expect":"abstain"}
+{"q":"convert love to kilometers","lang":"en","expect":"abstain"}
+{"q":"radice quadrata di meno 4","lang":"it","expect":"calc|abstain"}
+{"q":"144 diviso 0","lang":"it","expect":"calc|abstain"}
+{"q":"5 fattoriale","lang":"it","expect":"calc|abstain"}
+{"q":"log di 100","lang":"it","expect":"calc|abstain"}
+{"q":"seno di 90","lang":"it","expect":"calc|abstain"}
+{"q":"il 200% di 50","lang":"it","expect":"percent"}
+{"q":"15 mod 4","lang":"it","expect":"calc|abstain"}
+{"q":"qaunto fa 8 piu 8","lang":"it","expect":"calc"}
+{"q":"valore assoluto di -7","lang":"it","expect":"calc|abstain"}
+{"q":"diagonale di un quadrato lato 5","lang":"it","expect":"geo|abstain"}

@@ -1,0 +1,206 @@
+/* NucleoOS desktop shell — lightweight, no framework. */
+:root {
+  --bg: #0b1220; --bg2: #101826; --panel: #18233a; --panel2: #1f2d4a;
+  --accent: #4ea1ff; --text: #e8eefc; --muted: #8aa0c8; --line: #2a3a5e;
+  --taskbar-h: 44px;
+}
+/* Light theme — driven by the device setting (ui.theme), applied on <html>. */
+html[data-theme="light"] {
+  --bg: #eef2fb; --bg2: #e6ecf8; --panel: #ffffff; --panel2: #e6ecf8;
+  --accent: #2b6fd6; --text: #10203a; --muted: #5a6a86; --line: #cdd8ee;
+}
+html[data-theme="light"] body {
+  background: radial-gradient(1200px 800px at 70% -10%, #dfe7f7 0%, var(--bg) 60%);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font: 14px/1.4 system-ui, "Segoe UI", Roboto, sans-serif;
+  color: var(--text); overflow: hidden; user-select: none;
+  background: radial-gradient(1200px 800px at 70% -10%, #16233f 0%, var(--bg) 60%);
+}
+.hidden { display: none !important; }
+
+/* Pairing overlay — covers the whole OS until this browser is paired with the device. */
+.pair-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(900px 600px at 50% -10%, #16233f 0%, var(--bg) 70%);
+}
+.pair-card {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  width: min(340px, 88vw); padding: 30px 28px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  box-shadow: 0 18px 50px #0008; text-align: center;
+}
+.pair-logo { color: var(--accent); }
+.pair-card h1 { margin: 0; font-size: 19px; }
+.pair-sub { margin: 0; color: var(--muted); font-size: 13px; }
+.pair-card input {
+  width: 100%; margin-top: 4px; padding: 12px; text-align: center;
+  font: 600 26px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 8px;
+  color: var(--text); background: var(--bg2); border: 1px solid var(--line); border-radius: 10px;
+}
+.pair-card input:focus { outline: none; border-color: var(--accent); }
+.pair-msg { min-height: 16px; font-size: 12px; color: #ff8b8b; }
+.pair-card button {
+  width: 100%; padding: 11px; border: 0; border-radius: 10px; cursor: pointer;
+  font: 600 14px system-ui; color: #fff; background: var(--accent);
+}
+.pair-card button:disabled { opacity: .6; cursor: default; }
+
+/* Desktop icons */
+#desktop {
+  position: absolute; inset: 0 0 var(--taskbar-h) 0; overflow: hidden;
+}
+.icon {
+  position: absolute; width: 84px; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; border-radius: 10px; cursor: pointer; padding: 8px; text-align: center;
+  touch-action: none;            /* let pointer-drag work on touch/DeX */
+  transition: background .12s ease, transform .08s ease;
+}
+.icon:hover, .icon:focus { background: #ffffff14; outline: none; }
+.icon:active { transform: scale(.93); }
+.icon.dragging { opacity: .8; z-index: 5; background: #ffffff1f; }
+.icon.sel { background: #2b6fd64d; outline: 1px solid #4ea1ff66; }
+.icon.sel:hover { background: #2b6fd666; }
+.marquee { position: fixed; z-index: 4; border: 1px solid var(--accent);
+  background: #4ea1ff22; pointer-events: none; }
+.icon .glyph { font-size: 30px; line-height: 1; }
+.icon .label { font-size: 12px; color: var(--text); max-width: 84px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Windows */
+@keyframes winIn { from { opacity: 0; transform: scale(.965) translateY(8px); } to { opacity: 1; transform: none; } }
+.win {
+  position: absolute; min-width: 240px; min-height: 160px; width: 520px; height: 360px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 18px 50px #000a; display: flex; flex-direction: column; overflow: hidden;
+  resize: both;                  /* drag the bottom-right corner to resize (real-OS feel) */
+  animation: winIn .15s ease-out; transition: box-shadow .15s ease, border-color .15s ease;
+}
+.win.active { border-color: var(--accent); }
+.win.max { left: 0 !important; top: 0 !important; width: 100vw !important;
+  height: calc(100vh - 44px) !important; border-radius: 0; box-shadow: none; }
+.win .bar {
+  height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 8px;
+  background: var(--panel2); cursor: move; flex: none;
+}
+.win .bar .t { font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.win .bar button { width: 26px; height: 22px; border: 0; border-radius: 5px;
+  background: #ffffff10; color: var(--text); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; }
+.win .bar button:hover { background: #ffffff24; }
+.win .bar .close:hover svg { stroke: #fff; }
+.win .bar .close:hover { background: #e0556b; }
+.win .body { flex: 1; background: var(--bg2); }
+.win .body iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+.win .placeholder { display: grid; place-items: center; height: 100%; color: var(--muted);
+  text-align: center; padding: 20px; }
+
+/* Taskbar */
+#taskbar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: var(--taskbar-h);
+  display: flex; align-items: center; gap: 6px; padding: 0 8px;
+  background: #0a1020e6; border-top: 1px solid var(--line); backdrop-filter: blur(6px);
+}
+#start-btn { width: 38px; height: 32px; border: 0; border-radius: 7px; flex: none;
+  background: var(--accent); color: #07101f; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; }
+#start-btn:hover { filter: brightness(1.12); }
+#start-btn:active { transform: scale(.94); }
+
+/* Taskbar search box (apps + SD files) */
+#search { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; flex: none;
+  width: 190px; border: 1px solid var(--line); border-radius: 16px; background: #ffffff0d; color: var(--muted);
+  transition: width .15s, border-color .15s, background .15s; }
+#search:focus-within { width: 240px; border-color: var(--accent); background: #ffffff14; color: var(--text); }
+#search svg { flex: none; }
+#search-input { flex: 1; min-width: 0; border: 0; background: none; outline: none; color: var(--text);
+  font: inherit; font-size: 13px; }
+#search-input::placeholder { color: var(--muted); }
+.search-panel {
+  position: absolute; left: 8px; bottom: calc(var(--taskbar-h) + 8px); width: 340px; max-height: 56vh;
+  overflow: auto; background: #0e1830f5; border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 18px 50px #000b; padding: 8px; z-index: 9999; }
+html[data-theme="light"] .search-panel { background: #ffffff; }
+.search-panel .sp-cat { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted);
+  padding: 6px 8px 4px; }
+.search-panel .sp-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px;
+  cursor: pointer; }
+.search-panel .sp-item:hover, .search-panel .sp-item.sel { background: #ffffff16; }
+.search-panel .sp-item .g { font-size: 18px; width: 22px; text-align: center; flex: none; }
+.search-panel .sp-item .t { flex: 1; overflow: hidden; }
+.search-panel .sp-item .t .n { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-panel .sp-item .t .p { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-panel .sp-empty { padding: 14px 10px; color: var(--muted); font-size: 13px; text-align: center; }
+
+.task-zone { display: flex; gap: 4px; align-items: center; }
+#task-running { flex: 1; }
+.task-btn {
+  display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px;
+  border: 1px solid transparent; border-radius: 7px; background: #ffffff0f;
+  color: var(--text); cursor: pointer; font-size: 12px; max-width: 180px;
+  transition: background .12s ease, border-color .12s ease;
+}
+.task-btn:hover { background: #ffffff1c; }
+.task-btn.running { border-color: var(--line); }
+.task-btn.focus { border-color: var(--accent); }
+.task-btn .glyph { font-size: 16px; }
+.task-btn .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tray { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px;
+  padding-right: 4px; }
+#tray > span { display: inline-flex; align-items: center; gap: 5px; }
+#tray svg { flex: none; opacity: .9; }
+#tray #tray-net { cursor: default; }
+#tray .v { white-space: nowrap; }
+#clock { color: var(--text); font-variant-numeric: tabular-nums; padding-left: 2px; }
+
+/* Start menu */
+#start-menu {
+  position: absolute; left: 8px; bottom: calc(var(--taskbar-h) + 8px); width: 360px;
+  max-height: 60vh; background: #0e1830f2; border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: 0 18px 50px #000b; padding: 12px; z-index: 9999;
+  display: flex; flex-direction: column;
+}
+#start-menu header { font-weight: 600; margin-bottom: 10px; }
+#start-menu header span { color: var(--muted); font-weight: 400; font-size: 12px; }
+#start-menu header .sm-device { margin-right: 6px; }
+#start-menu footer { margin-top: 10px; color: var(--muted); font-size: 12px;
+  border-top: 1px solid var(--line); padding-top: 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#sm-download { color: var(--accent); text-decoration: none; white-space: nowrap; }
+#sm-download:hover { text-decoration: underline; }
+.sm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; overflow: auto; }
+.sm-item { display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 6px; border-radius: 9px; cursor: pointer; text-align: center; }
+.sm-item:hover { background: #ffffff14; }
+.sm-item .glyph { font-size: 26px; }
+.sm-item .label { font-size: 12px; }
+
+/* Right-click context menu */
+.ctx {
+  position: fixed; z-index: 10000; min-width: 184px; padding: 6px;
+  background: var(--bg2); border: 1px solid #ffffff1f; border-radius: 10px;
+  box-shadow: 0 18px 50px #000c; font-size: 13px; user-select: none;
+}
+.ctx.hidden { display: none; }
+.ctx-item { display: flex; align-items: center; gap: 9px; padding: 7px 10px;
+  border-radius: 6px; cursor: pointer; color: var(--text); white-space: nowrap; }
+.ctx-item:hover { background: #ffffff16; }
+.ctx-item .g { width: 18px; text-align: center; }
+.ctx-item.danger { color: #ff8093; }
+.ctx-item.danger:hover { background: #e0556b22; }
+.ctx-item.disabled { opacity: .4; cursor: default; }
+.ctx-item.disabled:hover { background: none; }
+.ctx-sep { height: 1px; margin: 5px 6px; background: #ffffff14; }
+
+/* Modern pop-in for floating panels (Start, search, context menu). */
+@keyframes popIn { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+#start-menu:not(.hidden), .search-panel:not(.hidden), .ctx:not(.hidden) { animation: popIn .12s ease-out; }
+
+/* Respect users who prefer reduced motion — disable all the cosmetic animation. */
+@media (prefers-reduced-motion: reduce) {
+  .win, #start-menu, .search-panel, .ctx, .icon, .task-btn { animation: none !important; transition: none !important; }
+}

@@ -1,0 +1,3 @@
+{"q":"chi e einstein","lang":"it","expect":"l1|hdc"}
+{"q":"capitale della francia","lang":"it","expect":"l1|hdc"}
+{"q":"capitale di wakanda","lang":"it","expect":"abstain"}

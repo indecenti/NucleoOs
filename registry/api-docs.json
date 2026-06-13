@@ -1,0 +1,1136 @@
+{
+  "_comment": "Hand-authored prose for the Help app's Mini Swagger. Keyed by 'METHOD /path'. The route list itself is NOT edited here — it is discovered from the firmware C source by tools/gen-api-spec.mjs, which merges this prose and writes registry/web-api-spec.json. Add a 'hidden': true to a value to keep it documented but unpublished. Run: npm run gen:api (or npm run gen:api:check to detect drift).",
+
+  "GET /api/status": {
+    "it": {
+      "title": "GET /api/status - Stato Dispositivo",
+      "description": "Restituisce informazioni diagnostiche in tempo reale sul sistema, inclusi la versione del sistema operativo, il tempo di attività (uptime), lo stato dell'heap, l'utilizzo dello storage SD, lo stato della connettività Wi-Fi e le informazioni sulle partizioni OTA.",
+      "synopsis": "GET /api/status",
+      "details": "Dettagli della risposta JSON:\n- os: stringa \"NucleoOS\"\n- version: versione del firmware\n- uptime_s: secondi dal boot\n- free_heap: RAM libera totale in byte\n- storage: stato del montaggio della SD, tipo filesystem, spazio totale e libero\n- network: modalità (\"sta\" o \"ap\"), SSID, IP assegnato ed epoca UTC\n- ota: partizione corrente e partizione del prossimo slot d'avvio."
+    },
+    "en": {
+      "title": "GET /api/status - Device Status",
+      "description": "Retrieves live diagnostic details from the microcontroller, covering operating system version, uptime clocks, memory heaps, SD card usage partitions, active network SSIDs/IPs, and partition slots for OTA updates.",
+      "synopsis": "GET /api/status",
+      "details": "JSON Response structure:\n- os: always \"NucleoOS\"\n- version: active firmware version\n- uptime_s: seconds elapsed since boot\n- free_heap: total default free RAM\n- storage: SD mount flag, FS type, total/free capacity\n- network: wifi mode (\"sta\" | \"ap\"), SSID, IP address, epoch timestamp\n- ota: active slot partition label and standby boot partition."
+    },
+    "params": []
+  },
+
+  "GET /api/apps": {
+    "it": {
+      "title": "GET /api/apps - Applicazioni Installate",
+      "description": "Ottiene l'indice completo delle applicazioni grafiche installate e registrate nel sistema per il caricamento nel launcher e nel menu Start.",
+      "synopsis": "GET /api/apps",
+      "details": "Ritorna un elenco di oggetti contenenti:\n- id: identificatore univoco dell'applicazione\n- name: nome visualizzato\n- route: percorso URL dell'applicazione\n- icon: percorso dell'icona grafica\n- enabled: flag booleano di attivazione"
+    },
+    "en": {
+      "title": "GET /api/apps - Installed Apps",
+      "description": "Fetches the full index of installed graphical applications registered in the OS, used to populate the desktop launcher and Start menu.",
+      "synopsis": "GET /api/apps",
+      "details": "Returns a list of application records:\n- id: unique application identifier\n- name: display label\n- route: HTTP entry point route\n- icon: file path to icon asset\n- enabled: boolean activation flag"
+    },
+    "params": []
+  },
+
+  "GET /api/associations": {
+    "it": {
+      "title": "GET /api/associations - Associazioni File",
+      "description": "Restituisce le regole di associazione file-applicazione lette da /system/registry/file-associations.json. Utilizzato dalla shell per decidere quale app lanciare al doppio clic su un file.",
+      "synopsis": "GET /api/associations",
+      "details": "Restituisce una mappa JSON dove le chiavi sono le estensioni (es. \"txt\", \"png\", \"info\") e i valori sono gli ID delle app predefinite."
+    },
+    "en": {
+      "title": "GET /api/associations - File Associations",
+      "description": "Serves the file association rules read from /system/registry/file-associations.json. Used by the shell to map file extensions to their default graphical viewer apps.",
+      "synopsis": "GET /api/associations",
+      "details": "Returns a JSON map matching file extensions (e.g. \"txt\", \"png\", \"info\") to default handler application IDs."
+    },
+    "params": []
+  },
+
+  "GET /api/logs": {
+    "it": {
+      "title": "GET /api/logs - Log di Sistema",
+      "description": "Scarica lo stream testuale grezzo dei messaggi di logging emessi dal kernel e dai driver del firmware (ring buffer in RAM di 4KB). Accessibile anche a scheda SD non montata.",
+      "synopsis": "GET /api/logs",
+      "details": "Il formato restituito è testo semplice grezzo (text/plain). Mostra l'output in tempo reale inviato tramite le macro ESP_LOGx sul chip."
+    },
+    "en": {
+      "title": "GET /api/logs - System Logs",
+      "description": "Retrieves the raw text stream of logger entries written by the kernel and hardware drivers to the 4KB circular buffer in RAM. Operates even when the SD Card is offline.",
+      "synopsis": "GET /api/logs",
+      "details": "Serves raw text lines (text/plain) containing kernel events emitted via ESP_LOGx firmware instructions."
+    },
+    "params": []
+  },
+
+  "GET /api/heap": {
+    "it": {
+      "title": "GET /api/heap - Diagnostica Heap",
+      "description": "Ottiene le statistiche dettagliate sull'allocazione della memoria heap del chip ESP32S3 suddivise per regioni (INTERNAL per la RAM interna, DMA per i trasferimenti hardware, DEFAULT). Permette di valutare la frammentazione (frag_pct) e prevenire crash OOM.",
+      "synopsis": "GET /api/heap",
+      "details": "Parametri diagnostici forniti per ciascuna regione:\n- total_bytes: memoria totale\n- free_bytes: memoria libera corrente\n- allocated_bytes: memoria occupata\n- largest_free_block: blocco contiguo più grande (critico per allocazioni consistenti)\n- min_free_bytes: picco minimo di memoria libera registrato dal boot\n- frag_pct: percentuale di frammentazione (100 * [1 - block/free])"
+    },
+    "en": {
+      "title": "GET /api/heap - Heap Diagnostics",
+      "description": "Fetches detailed memory allocation analytics for ESP32S3 heap pools (INTERNAL SRAM, DMA buffers, DEFAULT malloc pool). Helps investigate fragmentation metrics (frag_pct) and prevent Out-Of-Memory exceptions.",
+      "synopsis": "GET /api/heap",
+      "details": "Diagnostic variables returned per heap region:\n- total_bytes: total segment size\n- free_bytes: currently available memory\n- allocated_bytes: currently busy memory\n- largest_free_block: largest contiguous block size (crucial for big allocations)\n- min_free_bytes: absolute minimum free bytes recorded since startup\n- frag_pct: fragmentation percentage (100 * [1 - block/free])"
+    },
+    "params": []
+  },
+
+  "GET /api/cpu": {
+    "it": {
+      "title": "GET /api/cpu - Carico CPU per Core",
+      "description": "Restituisce un'istantanea del carico CPU per ciascun core dell'ESP32-S3 (medie levigate del probe idle-hook auto-calibrante), insieme al numero di task FreeRTOS attivi e alla frequenza di clock. Alimenta la scheda CPU in tempo reale dell'app System Monitor.",
+      "synopsis": "GET /api/cpu",
+      "details": "Endpoint pubblico leggero (come /api/status). Risposta JSON:\n- uptime_s: secondi dal boot\n- cores: numero di core della CPU\n- freq_mhz: frequenza di clock configurata in MHz\n- tasks: numero di task FreeRTOS attivi\n- load: array con la percentuale di carico per core (1 decimale)\n- load_avg: media del carico su tutti i core"
+    },
+    "en": {
+      "title": "GET /api/cpu - Per-Core CPU Load",
+      "description": "Returns a per-core CPU load snapshot for the ESP32-S3 (smoothed averages from the self-calibrating idle-hook probe), plus the live FreeRTOS task count and clock frequency. Feeds the System Monitor's realtime CPU tab.",
+      "synopsis": "GET /api/cpu",
+      "details": "Tiny public endpoint (like /api/status). JSON response:\n- uptime_s: seconds since boot\n- cores: CPU core count\n- freq_mhz: configured clock frequency in MHz\n- tasks: active FreeRTOS task count\n- load: array of per-core load percentages (1 decimal)\n- load_avg: average load across all cores"
+    },
+    "params": []
+  },
+
+  "GET /api/diag": {
+    "it": {
+      "title": "GET /api/diag - Diagnosi Salute Consolidata",
+      "description": "Istantanea di salute completa in un'unica chiamata: causa dell'ultimo reset, build del firmware, heap e frammentazione, qualità del link Wi-Fi, arbitro heavy-work, carico CPU, contatore OOM e telemetria dei tier di ANIMA. È il digest \"Diagnosi\" del Log Viewer: tutto ciò che serve a un'IA remota (o a un umano) per giudicare la salute del Cardputer in un solo fetch.",
+      "synopsis": "GET /api/diag",
+      "details": "Endpoint pubblico, in sola lettura e on-demand (nessun task, nessuna scrittura SD, nessun TLS: costa solo quando interrogato). Sezioni della risposta JSON:\n- v, ts: versione del payload ed epoca corrente\n- sys: versione/build firmware, versione IDF, uptime, causa dell'ultimo reset (POWERON/SW/PANIC/BROWNOUT/WDT...), slot OTA e suo stato, SD montata e spazio\n- mem: heap interno libero, minimo storico, blocco contiguo massimo, frammentazione %, DMA libero, watermark dello stack httpd\n- net: modalità, SSID, IP, RSSI, sync orario, client WebSocket connessi\n- anima: interruttori online, teacher configurato (provider/modello), policy e stato L1, contatori per tier (none/cmd/fact/stitch/remote), ultima confidenza e ultimo intento\n- arb: token heavy-work (busy, job, grants/denials/yields, minimo heap registrato)\n- cpu: core, frequenza, task, carico per core\n- oom: allocazioni rifiutate dal boot, con dimensione e caps dell'ultima"
+    },
+    "en": {
+      "title": "GET /api/diag - Consolidated Health Snapshot",
+      "description": "One-call, on-demand health snapshot: last reset cause, firmware build, heap and fragmentation watermarks, Wi-Fi link quality, the heavy-work arbiter, CPU load, the OOM counter, and ANIMA's tier telemetry. Powers the Log Viewer's \"Diagnose\" digest — everything a remote AI (or a human) needs to judge Cardputer health in a single fetch.",
+      "synopsis": "GET /api/diag",
+      "details": "Public, read-only, pull-based endpoint (no task, no SD write, no TLS: it only costs when asked). JSON response sections:\n- v, ts: payload version and current epoch\n- sys: firmware version/build, IDF version, uptime, last reset cause (POWERON/SW/PANIC/BROWNOUT/WDT...), OTA slot and its state, SD mount flag and space\n- mem: free internal heap, all-time minimum, largest contiguous block, fragmentation %, free DMA, httpd task stack watermark\n- net: mode, SSID, IP, RSSI, time sync, connected WebSocket clients\n- anima: online switches, configured teacher (provider/model), L1 policy and state, per-tier counters (none/cmd/fact/stitch/remote), last confidence and last intent\n- arb: heavy-work token (busy, job, grants/denials/yields, recorded heap floor)\n- cpu: cores, frequency, tasks, per-core load\n- oom: rejected allocations since boot, with the last one's size and caps"
+    },
+    "params": []
+  },
+
+  "GET /api/wifi/scan": {
+    "it": {
+      "title": "GET /api/wifi/scan - Scansione Reti Wi-Fi",
+      "description": "Esegue una scansione attiva delle reti Wi-Fi visibili e restituisce gli access point trovati. Usa lo stesso motore di scansione dell'app Wi-Fi nativa: chiamata bloccante (~1-2 s), risultati de-duplicati e ordinati per RSSI, serializzata così i due chiamanti non scansionano in parallelo.",
+      "synopsis": "GET /api/wifi/scan",
+      "details": "Endpoint diagnostico same-origin (come /api/status), nessuna autenticazione. Risposta JSON {\"networks\": [...]} dove ogni elemento contiene:\n- ssid: nome della rete\n- rssi: potenza del segnale in dBm\n- channel: canale radio\n- auth: etichetta del tipo di autenticazione (es. open, WPA2)"
+    },
+    "en": {
+      "title": "GET /api/wifi/scan - Wi-Fi Network Scan",
+      "description": "Runs an active scan for visible Wi-Fi networks and returns the access points found. Drives the same scan engine as the native Wi-Fi app: blocking call (~1-2 s), results de-duped and sorted by RSSI, serialized so the two callers can't scan in parallel.",
+      "synopsis": "GET /api/wifi/scan",
+      "details": "Same-origin diagnostic endpoint (like /api/status), no auth gate. JSON response {\"networks\": [...]} where each item contains:\n- ssid: network name\n- rssi: signal strength in dBm\n- channel: radio channel\n- auth: authentication type label (e.g. open, WPA2)"
+    },
+    "params": []
+  },
+
+  "GET /api/wifi/known": {
+    "it": {
+      "title": "GET /api/wifi/known - Reti Wi-Fi Salvate",
+      "description": "Restituisce l'elenco delle reti Wi-Fi memorizzate (lo store multi-rete). NucleoOS ricorda ogni rete a cui si è connesso e al boot/alla caduta sceglie automaticamente la migliore in portata (priorità manuale, poi segnale più forte).",
+      "synopsis": "GET /api/wifi/known",
+      "details": "Richiede autenticazione (configurazione utente). Espone solo SSID e priorità, mai le password. Risposta {\"networks\":[{\"ssid\",\"priority\",\"current\"}],\"mode\":\"sta|ap\",\"ssid\":\"...\"}."
+    },
+    "en": {
+      "title": "GET /api/wifi/known - Saved Wi-Fi Networks",
+      "description": "Returns the saved Wi-Fi networks (the multi-network store). NucleoOS remembers every network it has joined and, at boot and on any drop, auto-picks the best in-range one (manual priority first, then strongest signal).",
+      "synopsis": "GET /api/wifi/known",
+      "details": "Auth-gated (user configuration). Exposes SSID and priority only, never passwords. Response {\"networks\":[{\"ssid\",\"priority\",\"current\"}],\"mode\":\"sta|ap\",\"ssid\":\"...\"}."
+    },
+    "params": []
+  },
+
+  "POST /api/wifi/join": {
+    "it": {
+      "title": "POST /api/wifi/join - Connetti e Memorizza Rete",
+      "description": "Si connette a una rete Wi-Fi e la memorizza nello store delle reti note (così il dispositivo la riaggancia automaticamente in seguito). Chiamata bloccante (fino a ~12 s per il DHCP).",
+      "synopsis": "POST /api/wifi/join  {\"ssid\":\"..\",\"pass\":\"..\"}",
+      "details": "Richiede autenticazione (modifica la radio e salva credenziali). Password vuota/assente = rete aperta; per una rete già salvata la password memorizzata viene riusata. Risposta {\"ok\":true,\"ip\":\"...\"} o {\"ok\":false}."
+    },
+    "en": {
+      "title": "POST /api/wifi/join - Join and Remember Network",
+      "description": "Joins a Wi-Fi network and stores it in the known-networks store (so the device auto-rejoins it later). Blocking call (up to ~12 s for DHCP).",
+      "synopsis": "POST /api/wifi/join  {\"ssid\":\"..\",\"pass\":\"..\"}",
+      "details": "Auth-gated (mutates the radio and stores credentials). Empty/absent password = open network; for an already-saved network the stored password is reused. Response {\"ok\":true,\"ip\":\"...\"} or {\"ok\":false}."
+    },
+    "params": [
+      { "name": "ssid", "type": "text", "required": true, "default": "",
+        "it": { "description": "Nome della rete (SSID)" }, "en": { "description": "Network name (SSID)" } },
+      { "name": "pass", "type": "text", "required": false, "default": "",
+        "it": { "description": "Password (vuota per rete aperta o rete già salvata)" }, "en": { "description": "Password (empty for an open or already-saved network)" } }
+    ]
+  },
+
+  "POST /api/wifi/forget": {
+    "it": {
+      "title": "POST /api/wifi/forget - Dimentica Rete",
+      "description": "Dimentica una rete salvata. Se è quella attualmente connessa, il dispositivo ne sceglie automaticamente un'altra nota (o ripiega sull'hotspot). Con {\"all\":true} dimentica tutte le reti e passa in modalità Access Point.",
+      "synopsis": "POST /api/wifi/forget  {\"ssid\":\"..\"}  |  {\"all\":true}",
+      "details": "Richiede autenticazione. Risposta {\"ok\":true}."
+    },
+    "en": {
+      "title": "POST /api/wifi/forget - Forget Network",
+      "description": "Forgets one saved network. If it is the one currently joined, the device auto-selects another known network (or falls back to the hotspot). {\"all\":true} forgets every network and drops to Access Point mode.",
+      "synopsis": "POST /api/wifi/forget  {\"ssid\":\"..\"}  |  {\"all\":true}",
+      "details": "Auth-gated. Response {\"ok\":true}."
+    },
+    "params": [
+      { "name": "ssid", "type": "text", "required": false, "default": "",
+        "it": { "description": "SSID della rete da dimenticare" }, "en": { "description": "SSID of the network to forget" } },
+      { "name": "all", "type": "checkbox", "required": false, "default": "",
+        "it": { "description": "Se vero, dimentica tutte le reti salvate" }, "en": { "description": "If true, forget all saved networks" } }
+    ]
+  },
+
+  "POST /api/ota": {
+    "it": {
+      "title": "POST /api/ota - Aggiornamento Firmware OTA",
+      "description": "Carica una nuova immagine firmware (.bin) e la scrive nella partizione OTA inattiva, poi imposta lo slot di boot e riavvia. Il corpo della richiesta è il binario grezzo dell'immagine ESP.",
+      "synopsis": "POST /api/ota  (corpo = immagine .bin)",
+      "details": "Richiede autenticazione PIN. Il primo byte deve essere 0xE9 (magic dell'immagine ESP), altrimenti l'upload viene rifiutato subito (400). A scrittura completa imposta la partizione di boot, risponde {\"ok\":true,\"bytes\":N,\"slot\":\"...\",\"reboot\":true} e riavvia dopo 800 ms. NB: l'OTA è inaffidabile su questo dispositivo — preferire il flash seriale."
+    },
+    "en": {
+      "title": "POST /api/ota - OTA Firmware Update",
+      "description": "Uploads a new firmware image (.bin) into the inactive OTA partition, sets it as the boot slot, and reboots. The POST body is the raw ESP image binary.",
+      "synopsis": "POST /api/ota  (body = .bin image)",
+      "details": "Gated by security PIN auth. The first byte must be 0xE9 (ESP image magic) or the upload is rejected immediately (400). On a complete write it sets the boot partition, returns {\"ok\":true,\"bytes\":N,\"slot\":\"...\",\"reboot\":true}, and reboots after 800 ms. Note: OTA is unreliable on this device — prefer serial flashing."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "",
+        "it": { "description": "Immagine firmware binaria grezza (inviare un file .bin, non testo)" },
+        "en": { "description": "Raw binary firmware image (send a .bin file, not text)" }
+      }
+    ]
+  },
+
+  "POST /api/reboot": {
+    "it": {
+      "title": "POST /api/reboot - Riavvia il Dispositivo",
+      "description": "Invia una richiesta per chiudere in sicurezza il filesystem SD card ed eseguire l'istruzione hardware esp_restart() per riavviare immediatamente il microcontrollore.",
+      "synopsis": "POST /api/reboot",
+      "details": "Richiede l'autenticazione tramite PIN (sessione attiva). Ritorna {\"ok\":true,\"reboot\":true} e avvia il reset hardware dopo 800 millisecondi."
+    },
+    "en": {
+      "title": "POST /api/reboot - Reboot Cardputer",
+      "description": "Issues a shutdown sequence to flush SD Card handles and invokes a hardware esp_restart() signal to reboot the microcontroller instantly.",
+      "synopsis": "POST /api/reboot",
+      "details": "Gated by security PIN auth. Returns {\"ok\":true,\"reboot\":true} and triggers a CPU reset sequence after an 800ms flushing delay."
+    },
+    "params": []
+  },
+
+  "GET /api/anima": {
+    "it": {
+      "title": "GET /api/anima - Query Assistente ANIMA",
+      "description": "Interroga il motore NLP offline locale di ANIMA. Esegue la cosine similarity e restituisce una risposta strutturata contenente testo, intenti rilevati, livelli di confidenza e azioni di sistema.",
+      "synopsis": "GET /api/anima?q=<domanda>&lang=<lingua>&reset=<0|1>",
+      "details": "La risposta JSON contiene:\n- query: domanda inserita\n- confidence: punteggio di pertinenza\n- action: tipo di azione (launch, system, answer, tool, none)\n- arg: argomento dell'azione (es. nome app o nome variabile)\n- reply: testo tradotto della risposta da mostrare in chat\n- domain: categoria semantica rilevata (calc, knowledge, app...)"
+    },
+    "en": {
+      "title": "GET /api/anima - Query ANIMA Assistant",
+      "description": "Queries the local offline NLP assistant ANIMA. Evaluates similarity indices and returns parsed responses containing texts, intent domains, scores, and system tool directives.",
+      "synopsis": "GET /api/anima?q=<query>&lang=<lang>&reset=<0|1>",
+      "details": "JSON response schema:\n- query: input phrase\n- confidence: match score\n- action: execution directive (launch, system, answer, tool, none)\n- arg: target argument (e.g. app name, system variable key)\n- reply: localized string response to output in GUI chat bubbles\n- domain: resolved semantic sector (calc, knowledge, app...)"
+    },
+    "params": [
+      {
+        "name": "q",
+        "type": "text",
+        "required": true,
+        "default": "che ora è",
+        "it": { "description": "Frase o domanda da porre all'assistente locale" },
+        "en": { "description": "Natural language query for the local NLP engine" }
+      },
+      {
+        "name": "lang",
+        "type": "text",
+        "required": false,
+        "default": "it",
+        "it": { "description": "Forza la lingua dell'assistente ('it' o 'en')" },
+        "en": { "description": "Overrides active assistant language ('it' or 'en')" }
+      },
+      {
+        "name": "reset",
+        "type": "text",
+        "required": false,
+        "default": "0",
+        "it": { "description": "Imposta a 1 per cancellare la memoria contestuale temporanea del dialogo" },
+        "en": { "description": "Set to 1 to clean temporary conversation context buffers" }
+      }
+    ]
+  },
+
+  "GET /api/anima/verify": {
+    "it": {
+      "title": "GET /api/anima/verify - Verifica Affermazione (ANIMA Forge)",
+      "description": "Verifica un'affermazione contro la conoscenza locale di ANIMA (verifica grounded cross-substrato della Forge): conferma, contraddice o resta incerta, restituendo l'evidenza usata.",
+      "synopsis": "GET /api/anima/verify?kind=<tipo>&key=<entità>&asserted=<valore>&lang=<it|en>",
+      "details": "Risposta JSON: { \"checks\": [ { \"status\": \"confirmed\"|\"contradicted\"|\"unknown\", \"evidence\": \"...\" } ] }. Usato dall'editor agentico per far giudicare l'output di un substrato (es. M1 giudica M4) a partire dai fatti del cervello locale."
+    },
+    "en": {
+      "title": "GET /api/anima/verify - Verify Claim (ANIMA Forge)",
+      "description": "Checks an assertion against ANIMA's local knowledge (the Forge's cross-substrate grounded verify): confirms, contradicts, or stays unknown, returning the evidence used.",
+      "synopsis": "GET /api/anima/verify?kind=<kind>&key=<entity>&asserted=<value>&lang=<it|en>",
+      "details": "JSON response: { \"checks\": [ { \"status\": \"confirmed\"|\"contradicted\"|\"unknown\", \"evidence\": \"...\" } ] }. Used by the agentic editor to have one substrate judge another's output (e.g. M1 judges M4) from local brain facts."
+    },
+    "params": [
+      {
+        "name": "kind",
+        "type": "text",
+        "required": false,
+        "default": "fact",
+        "it": { "description": "Tipo di affermazione da verificare" },
+        "en": { "description": "Kind of claim being verified" }
+      },
+      {
+        "name": "key",
+        "type": "text",
+        "required": true,
+        "default": "einstein",
+        "it": { "description": "Entità/soggetto su cui verificare" },
+        "en": { "description": "Entity/subject to verify against" }
+      },
+      {
+        "name": "asserted",
+        "type": "text",
+        "required": true,
+        "default": "fisico",
+        "it": { "description": "Valore affermato da confrontare con la conoscenza locale" },
+        "en": { "description": "Asserted value to compare against local knowledge" }
+      },
+      {
+        "name": "lang",
+        "type": "text",
+        "required": false,
+        "default": "it",
+        "it": { "description": "Lingua dell'evidenza ('it' o 'en')" },
+        "en": { "description": "Evidence language ('it' or 'en')" }
+      }
+    ]
+  },
+
+  "GET /api/anima/caps": {
+    "it": {
+      "title": "GET /api/anima/caps - Capacità IA Configurate",
+      "description": "Dice alla UI web quale teacher cloud è configurato SENZA rivelare la chiave: presenza della chiave, disponibilità del tier online, provider e modello, più la policy del cervello offline L1. Permette a shell e app di guidare l'onboarding e scegliere il motore Cloud senza mai leggere la chiave grezza dalla SD.",
+      "synopsis": "GET /api/anima/caps",
+      "details": "Endpoint pubblico in sola lettura (nessun segreto: stessa esposizione di /api/status). Risposta JSON:\n- hasKey: true se una chiave teacher è configurata\n- online: il tier online di ANIMA è disponibile\n- enabled: interruttore online attivo\n- provider, model: presenti solo se hasKey (es. \"anthropic\", \"openai\") — la chiave non viene mai esposta\n- l1Mode: policy del cervello offline (\"auto\" | \"on\" | \"off\")\n- l1Serving: true se l'indice L1 offline sta effettivamente servendo"
+    },
+    "en": {
+      "title": "GET /api/anima/caps - Configured AI Capabilities",
+      "description": "Tells the web UI which cloud teacher is configured WITHOUT revealing the key: key presence, online tier availability, provider and model, plus the offline L1 brain policy. Lets the shell and apps drive onboarding and pick the Cloud engine without ever reading the raw key off the SD.",
+      "synopsis": "GET /api/anima/caps",
+      "details": "Public read-only endpoint (no secret: same exposure as /api/status). JSON response:\n- hasKey: true if a teacher key is configured\n- online: ANIMA's online tier is available\n- enabled: online master switch state\n- provider, model: only present when hasKey (e.g. \"anthropic\", \"openai\") — the key itself is never exposed\n- l1Mode: offline brain policy (\"auto\" | \"on\" | \"off\")\n- l1Serving: true if the offline L1 index is actually serving"
+    },
+    "params": []
+  },
+
+  "POST /api/anima/l1": {
+    "it": {
+      "title": "POST /api/anima/l1 - Policy Cervello Offline L1",
+      "description": "Imposta la policy del cervello offline L1 di ANIMA dall'app web: forzato acceso, spento, oppure AUTO (si fa da parte quando è disponibile un cervello più forte). Se la policy spegne L1 l'indice viene liberato immediatamente, così l'heap è recuperato nell'istante in cui si passa all'online o a un LLM nel browser.",
+      "synopsis": "POST /api/anima/l1",
+      "details": "Same-origin (lo chiamano solo le pagine servite dal dispositivo), nessuna autenticazione. Corpo JSON (max 256 byte, entrambi i campi opzionali):\n- mode: \"auto\" | \"on\" | \"off\" — override utente: \"on\" forza il cervello offline acceso, \"off\" non serve mai, \"auto\" (default) lo mette in stand-by quando c'è un motore più forte\n- browserLLM: true quando un LLM generativo nel browser è il motore attivo, così AUTO libera la RAM di L1\nRisposta: { l1Mode, l1Serving } risultanti dopo l'applicazione."
+    },
+    "en": {
+      "title": "POST /api/anima/l1 - Offline L1 Brain Policy",
+      "description": "Sets the policy of ANIMA's offline L1 brain from the web app: forced on, off, or AUTO (stands down whenever a stronger brain is available). If the policy turns L1 off, the index is freed immediately, so the heap is reclaimed the instant the user goes online or to a browser LLM.",
+      "synopsis": "POST /api/anima/l1",
+      "details": "Same-origin (only the device's own pages call it), no auth gate. JSON body (max 256 bytes, both fields optional):\n- mode: \"auto\" | \"on\" | \"off\" — user override: \"on\" forces the offline brain on, \"off\" never serves, \"auto\" (default) stands it down when a stronger engine is available\n- browserLLM: true when a browser-hosted generative LLM is the active engine, so AUTO frees L1's RAM\nResponse: the resulting { l1Mode, l1Serving } after applying the policy."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": false,
+        "default": "{\n  \"mode\": \"auto\"\n}",
+        "it": { "description": "Corpo JSON con mode (\"auto\"|\"on\"|\"off\") e/o browserLLM (bool)" },
+        "en": { "description": "JSON body with mode (\"auto\"|\"on\"|\"off\") and/or browserLLM (bool)" }
+      }
+    ]
+  },
+
+  "GET /api/tts": {
+    "it": {
+      "title": "GET /api/tts - Stato Voce On-Device",
+      "description": "Legge lo stato dell'interruttore \"parla quando interrogato dal Cardputer\" (la voce offline on-device) e se il motore vocale è effettivamente disponibile sul dispositivo.",
+      "synopsis": "GET /api/tts",
+      "details": "Preferenza di dispositivo same-origin (come /api/anima/l1): nessuna autenticazione. Risposta JSON:\n- enabled: l'interruttore voce è attivo\n- available: il motore TTS è pronto a parlare su questo dispositivo"
+    },
+    "en": {
+      "title": "GET /api/tts - On-Device Voice Status",
+      "description": "Reads the state of the \"speak when queried from the Cardputer\" switch (the offline on-device voice) and whether the speech engine is actually available on the device.",
+      "synopsis": "GET /api/tts",
+      "details": "Same-origin device preference (like /api/anima/l1): no auth gate. JSON response:\n- enabled: the voice switch is on\n- available: the TTS engine is ready to speak on this device"
+    },
+    "params": []
+  },
+
+  "POST /api/tts": {
+    "it": {
+      "title": "POST /api/tts - Imposta/Test Voce On-Device",
+      "description": "Imposta l'interruttore della voce on-device e/o fa parlare subito il dispositivo (test o azione dal web). Stessa rotta del GET, con un corpo JSON di comando.",
+      "synopsis": "POST /api/tts",
+      "details": "Nessuna autenticazione (preferenza di dispositivo: niente di pagato o distruttivo). Corpo JSON (max 1 KB, tutti i campi opzionali):\n- enabled: bool — attiva/disattiva la voce alle risposte del Cardputer\n- say: stringa — testo da far pronunciare immediatamente al dispositivo\n- lang: \"it\" | \"en\" — lingua del testo di say\nRisposta (identica al GET): {\"enabled\": bool, \"available\": bool}."
+    },
+    "en": {
+      "title": "POST /api/tts - Set/Test On-Device Voice",
+      "description": "Sets the on-device voice switch and/or makes the device speak right away (web-side test or action). Same route as the GET, with a JSON command body.",
+      "synopsis": "POST /api/tts",
+      "details": "No auth gate (device preference: nothing paid or destructive). JSON body (max 1 KB, all fields optional):\n- enabled: bool — turns voice on Cardputer replies on/off\n- say: string — text the device should speak immediately\n- lang: \"it\" | \"en\" — language of the say text\nResponse (same as the GET): {\"enabled\": bool, \"available\": bool}."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": false,
+        "default": "{\n  \"say\": \"ciao\",\n  \"lang\": \"it\"\n}",
+        "it": { "description": "Corpo JSON con enabled (bool), say (testo da pronunciare) e lang (\"it\"|\"en\")" },
+        "en": { "description": "JSON body with enabled (bool), say (text to speak) and lang (\"it\"|\"en\")" }
+      }
+    ]
+  },
+
+  "GET /api/proxy": {
+    "it": {
+      "title": "GET /api/proxy - Proxy Web Same-Origin",
+      "description": "Recupera lato server una pagina http(s) e ne ritrasmette il corpo in streaming. Poiché l'app Browser è servita DA questo dispositivo, un endpoint same-origin aggira il muro CORS del browser senza proxy di terze parti. Lo streaming a piccoli chunk evita di bufferizzare l'intera pagina (RAM scarsa).",
+      "synopsis": "GET /api/proxy?url=<url_codificato>",
+      "details": "Solo schemi http:// e https:// (altri → 400). Gli host interni/privati sono bloccati (filtro SSRF → 403). Su questo chip senza PSRAM, prima dell'handshake TLS l'indice L1 di ANIMA viene scaricato per liberare heap; se la memoria è ancora insufficiente risponde 503 \"retry\" invece di crashare. Segue fino a 5 redirect."
+    },
+    "en": {
+      "title": "GET /api/proxy - Same-Origin Web Proxy",
+      "description": "Fetches an http(s) page server-side and streams its body back. Because the Browser app is served BY this device, a same-origin endpoint sidesteps the browser's CORS wall with no third-party proxy. Small-chunk streaming avoids buffering a whole page (RAM is scarce).",
+      "synopsis": "GET /api/proxy?url=<encoded_url>",
+      "details": "http:// and https:// only (else 400). Internal/private hosts are blocked (SSRF filter → 403). On this PSRAM-less chip, ANIMA's L1 index is unloaded before the TLS handshake to free heap; if memory is still too tight it returns 503 \"retry\" instead of crashing. Follows up to 5 redirects."
+    },
+    "params": [
+      {
+        "name": "url",
+        "type": "text",
+        "required": true,
+        "default": "https://example.com",
+        "it": { "description": "URL http(s) assoluto da recuperare (verrà codificato)" },
+        "en": { "description": "Absolute http(s) URL to fetch (will be URL-encoded)" }
+      }
+    ]
+  },
+
+  "GET /api/llm": {
+    "it": {
+      "title": "GET /api/llm - Proxy LLM (elenco modelli)",
+      "description": "Inoltra lato server una richiesta GET a un endpoint LLM compatibile OpenAI (es. Groq) e ne ritrasmette la risposta. Same-origin, così l'app chat aggira il muro CORS (come /api/proxy). L'header Authorization: Bearer <chiave> del chiamante viene rilanciato così com'è — la chiave vive nel browser, il dispositivo la inoltra soltanto.",
+      "synopsis": "GET /api/llm?url=<endpoint_https_codificato>",
+      "details": "Solo https:// (altri → 400). Host interni bloccati (SSRF → 403). Stessa disciplina heap-TLS di /api/proxy (scarica L1, 503 se la memoria è insufficiente). Tipicamente usato per GET /v1/models."
+    },
+    "en": {
+      "title": "GET /api/llm - LLM Proxy (model list)",
+      "description": "Forwards a server-side GET to an OpenAI-compatible LLM endpoint (e.g. Groq) and streams the response back. Same-origin, so the chat app dodges the CORS wall (like /api/proxy). The caller's Authorization: Bearer <key> header is relayed as-is — the key lives in the browser, the device only passes it through.",
+      "synopsis": "GET /api/llm?url=<encoded_https_endpoint>",
+      "details": "https:// only (else 400). Internal hosts blocked (SSRF → 403). Same TLS-heap discipline as /api/proxy (unloads L1, 503 if memory too tight). Typically used for GET /v1/models."
+    },
+    "params": [
+      {
+        "name": "url",
+        "type": "text",
+        "required": true,
+        "default": "https://api.groq.com/openai/v1/models",
+        "it": { "description": "Endpoint LLM https compatibile OpenAI" },
+        "en": { "description": "OpenAI-compatible https LLM endpoint" }
+      }
+    ]
+  },
+
+  "POST /api/llm": {
+    "it": {
+      "title": "POST /api/llm - Proxy LLM (chat completions)",
+      "description": "Inoltra lato server una richiesta POST (JSON di chat) a un endpoint LLM compatibile OpenAI e ritrasmette la risposta in streaming (SSE). Same-origin per aggirare il CORS. L'header Authorization del chiamante è rilanciato così com'è.",
+      "synopsis": "POST /api/llm?url=<endpoint_https_codificato>",
+      "details": "Solo https:// (altri → 400). Host interni bloccati (SSRF → 403). Il corpo (cronologia chat) è limitato a 32 KB per non esaurire l'heap. Stessa disciplina heap-TLS di /api/proxy (scarica L1, 503 se insufficiente)."
+    },
+    "en": {
+      "title": "POST /api/llm - LLM Proxy (chat completions)",
+      "description": "Forwards a server-side POST (chat JSON) to an OpenAI-compatible LLM endpoint and streams the (SSE) response back. Same-origin to dodge CORS. The caller's Authorization header is relayed as-is.",
+      "synopsis": "POST /api/llm?url=<encoded_https_endpoint>",
+      "details": "https:// only (else 400). Internal hosts blocked (SSRF → 403). The body (chat history) is capped at 32 KB so it can't exhaust the heap. Same TLS-heap discipline as /api/proxy (unloads L1, 503 if too tight)."
+    },
+    "params": [
+      {
+        "name": "url",
+        "type": "text",
+        "required": true,
+        "default": "https://api.groq.com/openai/v1/chat/completions",
+        "it": { "description": "Endpoint chat completions https compatibile OpenAI" },
+        "en": { "description": "OpenAI-compatible https chat completions endpoint" }
+      },
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": false,
+        "default": "{\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"ciao\"}]\n}",
+        "it": { "description": "Corpo JSON della richiesta di chat (max 32 KB)" },
+        "en": { "description": "Chat request JSON body (max 32 KB)" }
+      }
+    ]
+  },
+
+  "GET /api/transcribe": {
+    "it": {
+      "title": "GET /api/transcribe - Trascrivi Registrazione (Whisper)",
+      "description": "Trascrive un file audio in /data/Recordings/ tramite Whisper online e, opzionalmente, ne genera un riassunto. Salva accanto all'audio un .txt con il testo (e un .sum.txt col riassunto).",
+      "synopsis": "GET /api/transcribe?path=<file>&lang=<auto|it|en>&summarize=<0|1>",
+      "details": "Richiede autenticazione PIN (attiva chiamate cloud a pagamento). Il path deve stare sotto /data/Recordings/ ed essere .mp3 o .wav (altrimenti {\"ok\":false}). Risposta: { ok, text, language, summary }. Se manca la chiave Whisper online ritorna ok:false con errore."
+    },
+    "en": {
+      "title": "GET /api/transcribe - Transcribe Recording (Whisper)",
+      "description": "Transcribes an audio file under /data/Recordings/ via online Whisper and optionally summarizes it. Writes a .txt with the text next to the audio (and a .sum.txt with the summary).",
+      "synopsis": "GET /api/transcribe?path=<file>&lang=<auto|it|en>&summarize=<0|1>",
+      "details": "Gated by security PIN auth (triggers paid cloud calls). The path must be under /data/Recordings/ and end in .mp3 or .wav (else {\"ok\":false}). Response: { ok, text, language, summary }. If the online Whisper key is missing it returns ok:false with an error."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/data/Recordings/rec.mp3",
+        "it": { "description": "File audio sotto /data/Recordings/ (.mp3 o .wav)" },
+        "en": { "description": "Audio file under /data/Recordings/ (.mp3 or .wav)" }
+      },
+      {
+        "name": "lang",
+        "type": "text",
+        "required": false,
+        "default": "auto",
+        "it": { "description": "Lingua attesa ('auto', 'it', 'en'...)" },
+        "en": { "description": "Expected language ('auto', 'it', 'en'...)" }
+      },
+      {
+        "name": "summarize",
+        "type": "text",
+        "required": false,
+        "default": "1",
+        "it": { "description": "1 per generare anche il riassunto, 0 per la sola trascrizione" },
+        "en": { "description": "1 to also generate the summary, 0 for transcription only" }
+      }
+    ]
+  },
+
+  "GET /api/fs/list": {
+    "it": {
+      "title": "GET /api/fs/list - Elenca Directory",
+      "description": "Restituisce l'elenco dei file e delle sottocartelle presenti nel percorso SD specificato. Ciascun elemento include nome, tipo (file/dir) e dimensione in byte.",
+      "synopsis": "GET /api/fs/list?path=<percorso>",
+      "details": "Rifiuta tentativi di directory traversal (uso di \"..\"). Ritorna 404 se la directory non esiste."
+    },
+    "en": {
+      "title": "GET /api/fs/list - List Folder Contents",
+      "description": "Lists all file and folder child elements under a target SD Card directory. Provides names, file size bytes, and type keys.",
+      "synopsis": "GET /api/fs/list?path=<path>",
+      "details": "Prunes directory traversal patterns (\"..\"). Serves 404 HTTP errors if the folder is missing."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/",
+        "it": { "description": "Percorso della directory da scansionare (es. /, /data, /system)" },
+        "en": { "description": "SD Card target folder path to list (e.g. /, /data, /system)" }
+      }
+    ]
+  },
+
+  "GET /api/link/peers": {
+    "it": { "title": "GET /api/link/peers - Dispositivi Vicini", "description": "Elenca i dispositivi scoperti via ESP-NOW dall'app Vicino, più il nome e il canale di questo device.", "synopsis": "GET /api/link/peers", "details": "Avvia il motore ESP-NOW al primo accesso. Ogni peer riporta indice, nome, MAC e protocollo ('nucleo' o 'bruce')." },
+    "en": { "title": "GET /api/link/peers - Nearby Devices", "description": "Lists the devices discovered over ESP-NOW by the Vicino app, plus this device's name and channel.", "synopsis": "GET /api/link/peers", "details": "Lazily starts the ESP-NOW engine on first call. Each peer carries index, name, MAC and protocol ('nucleo' or 'bruce')." },
+    "params": []
+  },
+
+  "GET /api/link/status": {
+    "it": { "title": "GET /api/link/status - Stato Trasferimento", "description": "Stato del trasferimento in corso: direzione, protocollo, stato, byte fatti/totali, velocità, nome file e peer.", "synopsis": "GET /api/link/status", "details": "Campo state: 2/3 = in corso, 4 = completato, 5 = errore (con reason)." },
+    "en": { "title": "GET /api/link/status - Transfer Status", "description": "Live status of the current transfer: direction, protocol, state, done/total bytes, rate, file name and peer.", "synopsis": "GET /api/link/status", "details": "state field: 2/3 = running, 4 = done, 5 = failed (with reason)." },
+    "params": []
+  },
+
+  "GET /api/link/offer": {
+    "it": { "title": "GET /api/link/offer - Offerta in Arrivo", "description": "Restituisce l'eventuale offerta di file in arrivo in attesa di decisione (nome, mittente, dimensione).", "synopsis": "GET /api/link/offer", "details": "{ pending, name, from, size }. Rispondi con POST /api/link/offer." },
+    "en": { "title": "GET /api/link/offer - Incoming Offer", "description": "Returns the pending incoming file offer awaiting a decision (name, sender, size), if any.", "synopsis": "GET /api/link/offer", "details": "{ pending, name, from, size }. Answer with POST /api/link/offer." },
+    "params": []
+  },
+
+  "GET /api/link/cmd": {
+    "it": { "title": "GET /api/link/cmd - Comando in Arrivo", "description": "Restituisce l'eventuale comando remoto in arrivo in attesa di conferma (testo e mittente).", "synopsis": "GET /api/link/cmd", "details": "{ pending, cmd, from }. I comandi NON vengono eseguiti senza una conferma esplicita (POST /api/link/cmd/confirm)." },
+    "en": { "title": "GET /api/link/cmd - Incoming Command", "description": "Returns the pending incoming remote command awaiting confirmation (text and sender), if any.", "synopsis": "GET /api/link/cmd", "details": "{ pending, cmd, from }. Commands NEVER run without an explicit confirm (POST /api/link/cmd/confirm)." },
+    "params": []
+  },
+
+  "POST /api/link/discover": {
+    "it": { "title": "POST /api/link/discover - Cerca Dispositivi", "description": "Invia un ping di discovery in broadcast; i dispositivi vicini rispondono e popolano l'elenco peer.", "synopsis": "POST /api/link/discover", "details": "Autenticato tramite PIN. Corpo JSON opzionale { proto }." },
+    "en": { "title": "POST /api/link/discover - Discover Devices", "description": "Broadcasts a discovery ping; nearby devices answer and populate the peer list.", "synopsis": "POST /api/link/discover", "details": "Gated by PIN auth. Optional JSON body { proto }." },
+    "params": [ { "name": "proto", "type": "text", "required": false, "default": "nucleo", "it": { "description": "Protocollo: 'nucleo' (evoluto) o 'bruce' (compatibile)" }, "en": { "description": "Protocol: 'nucleo' (evolved) or 'bruce' (compatible)" } } ]
+  },
+
+  "POST /api/link/listen": {
+    "it": { "title": "POST /api/link/listen - Ascolta", "description": "Mette il device in ricezione: un'offerta in arrivo verrà segnalata da GET /api/link/offer.", "synopsis": "POST /api/link/listen", "details": "Autenticato tramite PIN. Le offerte in arrivo si rilevano automaticamente per formato (Nucleo o Bruce)." },
+    "en": { "title": "POST /api/link/listen - Listen", "description": "Arms the device for receiving: an incoming offer is surfaced via GET /api/link/offer.", "synopsis": "POST /api/link/listen", "details": "Gated by PIN auth. Inbound offers auto-detect by format (Nucleo or Bruce)." },
+    "params": [ { "name": "proto", "type": "text", "required": false, "default": "nucleo", "it": { "description": "Protocollo preferito" }, "en": { "description": "Preferred protocol" } } ]
+  },
+
+  "POST /api/link/send": {
+    "it": { "title": "POST /api/link/send - Invia File", "description": "Avvia l'invio di un file dalla SD a un peer scelto, in streaming (mai l'intero file in RAM).", "synopsis": "POST /api/link/send", "details": "Autenticato tramite PIN. Corpo JSON { peer, path, proto }. Ritorna { ok:false } se occupato o file illeggibile." },
+    "en": { "title": "POST /api/link/send - Send File", "description": "Starts sending a file from SD to a chosen peer, streamed (never the whole file in RAM).", "synopsis": "POST /api/link/send", "details": "Gated by PIN auth. JSON body { peer, path, proto }. Returns { ok:false } if busy or file unreadable." },
+    "params": [
+      { "name": "peer", "type": "number", "required": true, "default": "0", "it": { "description": "Indice del peer (da GET /api/link/peers)" }, "en": { "description": "Peer index (from GET /api/link/peers)" } },
+      { "name": "path", "type": "text", "required": true, "default": "/data/foto.jpg", "it": { "description": "Percorso del file SD da inviare" }, "en": { "description": "SD file path to send" } },
+      { "name": "proto", "type": "text", "required": false, "default": "nucleo", "it": { "description": "'nucleo' o 'bruce'" }, "en": { "description": "'nucleo' or 'bruce'" } }
+    ]
+  },
+
+  "POST /api/link/cmd": {
+    "it": { "title": "POST /api/link/cmd - Invia Comando", "description": "Invia un comando testuale a un peer. Il ricevente DEVE confermarlo prima dell'esecuzione (no exec arbitrario).", "synopsis": "POST /api/link/cmd", "details": "Autenticato tramite PIN. Corpo JSON { peer, command, proto }." },
+    "en": { "title": "POST /api/link/cmd - Send Command", "description": "Sends a text command to a peer. The receiver MUST confirm before it runs (no arbitrary exec).", "synopsis": "POST /api/link/cmd", "details": "Gated by PIN auth. JSON body { peer, command, proto }." },
+    "params": [
+      { "name": "peer", "type": "number", "required": true, "default": "0", "it": { "description": "Indice del peer" }, "en": { "description": "Peer index" } },
+      { "name": "command", "type": "text", "required": true, "default": "apri musica", "it": { "description": "Testo del comando" }, "en": { "description": "Command text" } },
+      { "name": "proto", "type": "text", "required": false, "default": "nucleo", "it": { "description": "'nucleo' o 'bruce'" }, "en": { "description": "'nucleo' or 'bruce'" } }
+    ]
+  },
+
+  "POST /api/link/cmd/confirm": {
+    "it": { "title": "POST /api/link/cmd/confirm - Conferma Comando", "description": "Conferma (esegue via ANIMA) o scarta il comando remoto in attesa.", "synopsis": "POST /api/link/cmd/confirm", "details": "Autenticato tramite PIN. Corpo JSON { ok: true|false }." },
+    "en": { "title": "POST /api/link/cmd/confirm - Confirm Command", "description": "Confirms (runs via ANIMA) or discards the pending remote command.", "synopsis": "POST /api/link/cmd/confirm", "details": "Gated by PIN auth. JSON body { ok: true|false }." },
+    "params": [ { "name": "ok", "type": "boolean", "required": true, "default": "true", "it": { "description": "true = esegui, false = scarta" }, "en": { "description": "true = run, false = discard" } } ]
+  },
+
+  "POST /api/link/offer": {
+    "it": { "title": "POST /api/link/offer - Rispondi all'Offerta", "description": "Accetta o rifiuta l'offerta di file in arrivo. Se accettata, riprende un eventuale trasferimento interrotto dal prefisso già ricevuto.", "synopsis": "POST /api/link/offer", "details": "Autenticato tramite PIN. Corpo JSON { accept: true|false }." },
+    "en": { "title": "POST /api/link/offer - Answer Offer", "description": "Accepts or rejects the pending incoming file offer. If accepted, resumes an interrupted transfer from the already-received prefix.", "synopsis": "POST /api/link/offer", "details": "Gated by PIN auth. JSON body { accept: true|false }." },
+    "params": [ { "name": "accept", "type": "boolean", "required": true, "default": "true", "it": { "description": "true = accetta, false = rifiuta" }, "en": { "description": "true = accept, false = reject" } } ]
+  },
+
+  "POST /api/link/cancel": {
+    "it": { "title": "POST /api/link/cancel - Annulla", "description": "Annulla il trasferimento in corso (invio o ricezione).", "synopsis": "POST /api/link/cancel", "details": "Autenticato tramite PIN." },
+    "en": { "title": "POST /api/link/cancel - Cancel", "description": "Cancels the current transfer (send or receive).", "synopsis": "POST /api/link/cancel", "details": "Gated by PIN auth." },
+    "params": []
+  },
+
+  "GET /api/fs/read": {
+    "it": {
+      "title": "GET /api/fs/read - Leggi File",
+      "description": "Scarica o legge il contenuto binario o testuale del file indicato. Gestisce intestazioni di caching intelligenti (7 giorni per immagini/audio/video, no-store per JSON/config).",
+      "synopsis": "GET /api/fs/read?path=<percorso_file>",
+      "details": "Se viene richiesto un file config JSON mancante sotto /system/config/, ritorna un oggetto vuoto {} con stato 200 anziché un errore 404, prevenendo avvisi in console browser."
+    },
+    "en": {
+      "title": "GET /api/fs/read - Read File Payload",
+      "description": "Downloads or reads the text or binary contents of a specified file. Configures custom HTTP caching headers (7-day cache for media files, no-store for settings/JSON).",
+      "synopsis": "GET /api/fs/read?path=<file_path>",
+      "details": "Requests to missing JSON files in /system/config/ default to an empty structure {} with a 200 status to avoid polluting browser console logs."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/system/config/settings.json",
+        "it": { "description": "Percorso del file da leggere sulla scheda SD" },
+        "en": { "description": "SD Card file path to query" }
+      }
+    ]
+  },
+
+  "POST /api/fs/write": {
+    "it": {
+      "title": "POST /api/fs/write - Scrivi File",
+      "description": "Scrive o sovrascrive un file memorizzando i byte inviati nel corpo della richiesta POST. L'operazione è atomica: scrive su un file temporaneo `.tmp` e rinomina solo a fine caricamento.",
+      "synopsis": "POST /api/fs/write?path=<percorso_file>",
+      "details": "Autenticato tramite PIN. Limita le dimensioni ad un massimo di 640 MB per impedire la saturazione del disco. Se il file riscritto è /system/registry/apps.json, ricarica a caldo il registro delle app nel firmware."
+    },
+    "en": {
+      "title": "POST /api/fs/write - Write File Contents",
+      "description": "Saves or overrides a file using the binary stream payload sent in the HTTP POST request body. Writes to a temporary `.tmp` file and swaps names on complete transaction.",
+      "synopsis": "POST /api/fs/write?path=<file_path>",
+      "details": "Gated by security PIN auth. Maximum upload size capped at 640MB. Rewriting /system/registry/apps.json triggers an automated registry reload in the OS firmware."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/data/test_write.txt",
+        "it": { "description": "Percorso di destinazione in cui salvare il file" },
+        "en": { "description": "SD Card target write path" }
+      },
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": false,
+        "default": "Scrittura di test da Mini Swagger!",
+        "it": { "description": "Contenuto da salvare nel file" },
+        "en": { "description": "Raw content bytes/string to write to the file" }
+      }
+    ]
+  },
+
+  "POST /api/fs/delete": {
+    "it": {
+      "title": "POST /api/fs/delete - Rimuovi Risorsa",
+      "description": "Rimuove definitivamente dal filesystem SD card un file (via unlink) o una directory vuota (via rmdir).",
+      "synopsis": "POST /api/fs/delete?path=<percorso>",
+      "details": "Richiede autenticazione PIN. Ritorna 404 se l'elemento specificato non è presente."
+    },
+    "en": {
+      "title": "POST /api/fs/delete - Delete File or Folder",
+      "description": "Permanently deletes a file (using POSIX unlink) or an empty directory (POSIX rmdir) from the SD Card.",
+      "synopsis": "POST /api/fs/delete?path=<path>",
+      "details": "Gated by security PIN auth. Returns 404 if the target resource does not exist."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/data/test_write.txt",
+        "it": { "description": "Percorso del file o della cartella vuota da rimuovere" },
+        "en": { "description": "SD Card target path to delete" }
+      }
+    ]
+  },
+
+  "POST /api/fs/mkdir": {
+    "it": {
+      "title": "POST /api/fs/mkdir - Crea Cartella",
+      "description": "Crea una nuova cartella vuota sul filesystem SD card in corrispondenza del percorso specificato.",
+      "synopsis": "POST /api/fs/mkdir?path=<percorso_cartella>",
+      "details": "Richiede autenticazione PIN. Restituisce HTTP 500 in caso di scheda SD protetta da scrittura o spazio esaurito."
+    },
+    "en": {
+      "title": "POST /api/fs/mkdir - Create Folder Directory",
+      "description": "Instantiates a new empty folder structure on the SD Card using POSIX mkdir.",
+      "synopsis": "POST /api/fs/mkdir?path=<dir_path>",
+      "details": "Gated by security PIN auth. Returns HTTP 500 if the SD partition is write-locked or full."
+    },
+    "params": [
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/data/nuova_cartella",
+        "it": { "description": "Percorso assoluto della cartella da creare" },
+        "en": { "description": "Absolute SD Card folder path to create" }
+      }
+    ]
+  },
+
+  "POST /api/fs/move": {
+    "it": {
+      "title": "POST /api/fs/move - Sposta/Rinomina",
+      "description": "Sposta o rinomina un file o una cartella all'interno della SD (rename atomico sullo stesso volume FATFS). Per sicurezza rifiuta di sovrascrivere una destinazione esistente, a meno di overwrite=1.",
+      "synopsis": "POST /api/fs/move?from=<origine>&to=<destinazione>&overwrite=<0|1>",
+      "details": "Richiede autenticazione PIN. Crea al volo la cartella padre della destinazione (un livello, best-effort). Se la destinazione esiste e overwrite≠1 → 400 \"destination exists\". Ritorna {\"ok\":true}."
+    },
+    "en": {
+      "title": "POST /api/fs/move - Move/Rename",
+      "description": "Moves or renames a file or folder within the SD (atomic rename on the same FATFS volume). For safety it refuses to clobber an existing destination unless overwrite=1.",
+      "synopsis": "POST /api/fs/move?from=<src>&to=<dst>&overwrite=<0|1>",
+      "details": "Gated by security PIN auth. Best-effort creates the destination's immediate parent folder (one level). If the destination exists and overwrite≠1 → 400 \"destination exists\". Returns {\"ok\":true}."
+    },
+    "params": [
+      {
+        "name": "from",
+        "type": "text",
+        "required": true,
+        "default": "/data/old.txt",
+        "it": { "description": "Percorso di origine da spostare/rinominare" },
+        "en": { "description": "Source path to move/rename" }
+      },
+      {
+        "name": "to",
+        "type": "text",
+        "required": true,
+        "default": "/data/new.txt",
+        "it": { "description": "Percorso di destinazione" },
+        "en": { "description": "Destination path" }
+      },
+      {
+        "name": "overwrite",
+        "type": "text",
+        "required": false,
+        "default": "0",
+        "it": { "description": "1 per sovrascrivere una destinazione esistente" },
+        "en": { "description": "1 to overwrite an existing destination" }
+      }
+    ]
+  },
+
+  "GET /api/rec/status": {
+    "it": {
+      "title": "GET /api/rec/status - Stato Registratore",
+      "description": "Ottiene i parametri operativi del registratore vocale di sistema: se sta registrando, il percorso del file WAV in scrittura, i secondi registrati e il picco audio RMS corrente (0..100).",
+      "synopsis": "GET /api/rec/status",
+      "details": "Restituisce un payload JSON strutturato. Richiede autenticazione PIN."
+    },
+    "en": {
+      "title": "GET /api/rec/status - Audio Recorder Status",
+      "description": "Retrieves active operational variables for the system voice recorder (recording state, WAV file path, elapsed duration, peak RMS mic meter 0..100).",
+      "synopsis": "GET /api/rec/status",
+      "details": "Returns a structured JSON payload. Gated by security PIN auth."
+    },
+    "params": []
+  },
+
+  "POST /api/rec/start": {
+    "it": {
+      "title": "POST /api/rec/start - Avvia Registrazione",
+      "description": "Crea una cartella /data/Recordings/ ed avvia un thread FreeRTOS prioritario di cattura dati dal microfono PDM a 16kHz Mono 16-bit. Scrive asincronamente un file WAV.",
+      "synopsis": "POST /api/rec/start",
+      "details": "Richiede autenticazione PIN. Invia eventi rec.started ed eventi periodici rec.level sul bus di sistema. Restituisce HTTP 409 Conflict se una registrazione è già attiva."
+    },
+    "en": {
+      "title": "POST /api/rec/start - Start Audio Recording",
+      "description": "Creates `/data/Recordings/` and spins a FreeRTOS capture thread to record audio from the onboard PDM mic at 16kHz Mono 16-bit, outputting a WAV file.",
+      "synopsis": "POST /api/rec/start",
+      "details": "Gated by security PIN auth. Publishes system level changes via `rec.started` and periodic `rec.level` events. Returns HTTP 409 Conflict if a recording is already busy."
+    },
+    "params": []
+  },
+
+  "POST /api/rec/stop": {
+    "it": {
+      "title": "POST /api/rec/stop - Ferma Registrazione",
+      "description": "Interrompe la cattura del microfono, calcola la dimensione dei byte scritti, patcha retroattivamente gli header WAV delle dimensioni (RIFF e data length) e chiude il file in sicurezza.",
+      "synopsis": "POST /api/rec/stop",
+      "details": "Richiede autenticazione PIN. Invia l'evento rec.stopped sul bus con i byte e la durata finale."
+    },
+    "en": {
+      "title": "POST /api/rec/stop - Stop Audio Recording",
+      "description": "Signals the active task to stop capture, computes written byte counts, patches the initial WAV headers to declare physical sizes, and flushes file descriptors.",
+      "synopsis": "POST /api/rec/stop",
+      "details": "Gated by security PIN auth. Triggers a system-wide `rec.stopped` event with final recording metrics."
+    },
+    "params": []
+  },
+
+  "GET /api/rec/stream": {
+    "it": {
+      "title": "GET /api/rec/stream - Streaming Microfono Live",
+      "description": "Apre il microfono PDM e trasmette PCM grezzo (16kHz Mono int16 little-endian) in chunked HTTP finché il client resta connesso. Pensato per la dettatura: il browser alimenta i campioni direttamente nel proprio riconoscitore vocale (Vosk WASM), senza cloud e senza permesso microfono del browser.",
+      "synopsis": "GET /api/rec/stream",
+      "details": "Richiede autenticazione PIN. Non bloccante: il request viene affidato a un task worker (API async di ESP-IDF) così il web server resta libero di servire altre richieste durante la dettatura (salvataggio trascrizione, controllo display). Il mic è esclusivo: restituisce HTTP 409 se una registrazione o un altro stream è in corso. Termina alla disconnessione del client o dopo un cap di sicurezza."
+    },
+    "en": {
+      "title": "GET /api/rec/stream - Live Mic Stream",
+      "description": "Opens the PDM mic and streams raw PCM (16kHz Mono int16 little-endian) over chunked HTTP until the client disconnects. Built for dictation: the browser feeds the samples straight into its own speech recognizer (Vosk WASM) — no cloud, no browser-mic permission, no secure-context requirement.",
+      "synopsis": "GET /api/rec/stream",
+      "details": "Gated by security PIN auth. Non-blocking: the request is handed to a worker task (ESP-IDF async API) so the web server stays free to serve other requests during dictation (saving the transcript, display control). The mic is exclusive: returns HTTP 409 if a recording or another stream is active. Ends on client disconnect or after a safety cap."
+    },
+    "params": []
+  },
+
+  "POST /api/voice/learn": {
+    "it": {
+      "title": "POST /api/voice/learn - Arma Apprendimento Vocale",
+      "description": "Arma il motore voce on-device in modalità apprendimento: la PROSSIMA parola pronunciata non viene confrontata con i template esistenti ma salvata come nuovo template vocale (MFCC) sotto /sd/voice/, così il riconoscitore impara la voce dell'utente.",
+      "synopsis": "POST /api/voice/learn",
+      "details": "Richiede autenticazione PIN. Corpo JSON obbligatorio (max 256 byte): {\"word\": \"apri\"} — la parola/nome con cui salvare il template della prossima utterance. Risposta: {\"ok\": true} se la modalità apprendimento è stata armata, {\"ok\": false} altrimenti. 400 se il corpo manca, non è JSON valido o non contiene \"word\"."
+    },
+    "en": {
+      "title": "POST /api/voice/learn - Arm Voice Learning",
+      "description": "Arms the on-device voice engine for learning mode: the NEXT spoken word is not matched against existing templates but saved as a new (MFCC) voice template under /sd/voice/, so the recognizer learns the user's voice.",
+      "synopsis": "POST /api/voice/learn",
+      "details": "Gated by security PIN auth. Required JSON body (max 256 bytes): {\"word\": \"apri\"} — the word/name to store the next utterance's template under. Response: {\"ok\": true} if learning mode was armed, {\"ok\": false} otherwise. 400 if the body is missing, not valid JSON, or lacks \"word\"."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"word\": \"apri\"\n}",
+        "it": { "description": "Corpo JSON con la parola da apprendere alla prossima utterance" },
+        "en": { "description": "JSON body with the word to learn from the next utterance" }
+      }
+    ]
+  },
+
+  "POST /api/voice/always": {
+    "it": {
+      "title": "POST /api/voice/always - Voce Sempre Attiva",
+      "description": "Attiva o disattiva l'ascolto vocale \"always-on\": applica subito la scelta (il motore voce parte o si ferma immediatamente) E persiste voice.alwaysOn in settings.json, così sopravvive al riavvio senza che il chiamante debba salvare il file.",
+      "synopsis": "POST /api/voice/always",
+      "details": "Richiede autenticazione PIN. Corpo JSON (max 64 byte): {\"on\": true|false}. Risposta: {\"ok\": true, \"on\": true|false}. 400 se il corpo manca o non è JSON valido."
+    },
+    "en": {
+      "title": "POST /api/voice/always - Voice Always-On Toggle",
+      "description": "Turns \"always-on\" voice listening on or off: live-applies the choice (the voice engine spins up or down immediately) AND persists voice.alwaysOn to settings.json, so it survives reboot without the caller having to save the file.",
+      "synopsis": "POST /api/voice/always",
+      "details": "Gated by security PIN auth. JSON body (max 64 bytes): {\"on\": true|false}. Response: {\"ok\": true, \"on\": true|false}. 400 if the body is missing or not valid JSON."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"on\": true\n}",
+        "it": { "description": "Corpo JSON con \"on\" booleano (true = ascolto sempre attivo)" },
+        "en": { "description": "JSON body with boolean \"on\" (true = always listening)" }
+      }
+    ]
+  },
+
+  "POST /api/display": {
+    "it": {
+      "title": "POST /api/display - Controllo Display",
+      "description": "Accende o spegne il display (retroilluminazione) del Cardputer da remoto. Spegnere mette la retroilluminazione a 0 (schermo nero) senza alterare la luminosità impostata; accendere ripristina la luminosità utente. Usato dall'app di trascrizione per spegnere lo schermo durante l'uso e riaccenderlo all'uscita.",
+      "synopsis": "POST /api/display?on=0|1",
+      "details": "Richiede autenticazione PIN. Parametro on=1 accende (ripristina la % utente), on=0 spegne (retroilluminazione 0). Effetto immediato, nessun riavvio. Risposta JSON { ok, on, brightness }."
+    },
+    "en": {
+      "title": "POST /api/display - Display Control",
+      "description": "Turns the Cardputer display (backlight) off or on remotely. Off drives the backlight to 0 (black screen) without changing the stored brightness; on restores the user's brightness. Used by the transcription app to blank the screen during use and re-light it on exit.",
+      "synopsis": "POST /api/display?on=0|1",
+      "details": "Gated by security PIN auth. on=1 turns the display on (restores the user %), on=0 turns it off (backlight 0). Immediate, no reboot. JSON response { ok, on, brightness }."
+    },
+    "params": [
+      {
+        "name": "on",
+        "type": "text",
+        "required": true,
+        "default": "1",
+        "it": { "description": "1 accende il display, 0 lo spegne" },
+        "en": { "description": "1 turns the display on, 0 turns it off" }
+      }
+    ]
+  },
+
+  "POST /api/time/set": {
+    "it": {
+      "title": "POST /api/time/set - Imposta Orologio",
+      "description": "Il browser spinge il proprio orologio al dispositivo quando NTP non ha ancora sincronizzato (captive portal, nessuna connessione internet). NTP sovrascriverà comunque l'orario appena la rete torna disponibile.",
+      "synopsis": "POST /api/time/set",
+      "details": "Nessuna autenticazione richiesta: un orario sbagliato è a basso rischio e NTP lo corregge appena possibile. Corpo JSON: {\"ts\": <epoch_secondi_UTC>}. Risposta: {\"ok\": true, \"time\": <epoch corrente del dispositivo>}. 400 se il corpo manca, il JSON è invalido o ts non è un numero positivo."
+    },
+    "en": {
+      "title": "POST /api/time/set - Set Device Clock",
+      "description": "The browser pushes its own clock to the device when NTP hasn't synced yet (captive portal, no internet). NTP will override the time anyway as soon as connectivity returns.",
+      "synopsis": "POST /api/time/set",
+      "details": "No auth required: a wrong time is low-risk and NTP corrects it as soon as possible. JSON body: {\"ts\": <UTC_epoch_seconds>}. Response: {\"ok\": true, \"time\": <device's current epoch>}. 400 if the body is missing, the JSON is invalid, or ts is not a positive number."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"ts\": 1749500000\n}",
+        "it": { "description": "Corpo JSON con \"ts\" = epoch UNIX in secondi (UTC)" },
+        "en": { "description": "JSON body with \"ts\" = UNIX epoch in seconds (UTC)" }
+      }
+    ]
+  },
+
+  "GET /api/gpio": {
+    "it": {
+      "title": "GET /api/gpio - Leggi Pin GPIO",
+      "description": "Legge il livello logico di un pin GPIO tra quelli ammessi dalla allowlist di sicurezza. Il pin viene configurato come input e campionato. Tutti gli altri pin (SD, display, tastiera, LED IR, mic, strapping) sono rifiutati.",
+      "synopsis": "GET /api/gpio?pin=<n>",
+      "details": "Sola lettura, nessuna autenticazione (come /api/status). Pin leggibili: 0 (BtnA/G0), 1 e 2 (Grove G1/G2). Risposta: {\"ok\": true, \"pin\": N, \"value\": 0|1}. 400 se manca il parametro pin, 403 se il pin non è nella allowlist."
+    },
+    "en": {
+      "title": "GET /api/gpio - Read GPIO Pin",
+      "description": "Reads the logic level of a GPIO pin from the safety allowlist. The pin is configured as an input and sampled. Every other pin (SD, display, keyboard matrix, IR LED, mic, strapping) is rejected.",
+      "synopsis": "GET /api/gpio?pin=<n>",
+      "details": "Read-only, no auth gate (like /api/status). Readable pins: 0 (BtnA/G0), 1 and 2 (Grove G1/G2). Response: {\"ok\": true, \"pin\": N, \"value\": 0|1}. 400 if the pin parameter is missing, 403 if the pin is not on the allowlist."
+    },
+    "params": [
+      {
+        "name": "pin",
+        "type": "text",
+        "required": true,
+        "default": "0",
+        "it": { "description": "Numero del pin da leggere (ammessi: 0, 1, 2)" },
+        "en": { "description": "Pin number to read (allowed: 0, 1, 2)" }
+      }
+    ]
+  },
+
+  "POST /api/gpio": {
+    "it": {
+      "title": "POST /api/gpio - Scrivi Pin GPIO",
+      "description": "Imposta il livello logico di un pin GPIO di uscita tra quelli ammessi dalla allowlist di sicurezza — la più stretta: solo i pin Grove accessibili all'utente. Il pin viene resettato, configurato come output e portato al livello richiesto.",
+      "synopsis": "POST /api/gpio",
+      "details": "Richiede autenticazione PIN. Corpo JSON (max 256 byte): {\"pin\": 2, \"value\": 1} — value è normalizzato a 0/1. Pin scrivibili: 1 e 2 (Grove G1/G2); tutto il resto (SD, display, tastiera, LED IR, strapping/flash) → 403. Risposta: {\"ok\": true, \"pin\": N, \"value\": 0|1}."
+    },
+    "en": {
+      "title": "POST /api/gpio - Write GPIO Pin",
+      "description": "Sets the logic level of an output GPIO pin from the safety allowlist — the tightest one: only the user-accessible Grove pins. The pin is reset, configured as an output, and driven to the requested level.",
+      "synopsis": "POST /api/gpio",
+      "details": "Gated by security PIN auth. JSON body (max 256 bytes): {\"pin\": 2, \"value\": 1} — value is normalized to 0/1. Writable pins: 1 and 2 (Grove G1/G2); everything else (SD, display, keyboard, IR LED, strapping/flash pins) → 403. Response: {\"ok\": true, \"pin\": N, \"value\": 0|1}."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"pin\": 2,\n  \"value\": 1\n}",
+        "it": { "description": "Corpo JSON con pin (1 o 2) e value (0 o 1)" },
+        "en": { "description": "JSON body with pin (1 or 2) and value (0 or 1)" }
+      }
+    ]
+  },
+
+  "GET /api/ir/db": {
+    "it": {
+      "title": "GET /api/ir/db - Capacità Trasmettitore IR",
+      "description": "Restituisce le capacità statiche del trasmettitore infrarossi per la UI: i protocolli codificabili, la dimensione della tabella TV-B-Gone integrata con le regioni disponibili e il GPIO del LED IR. Il database grande dei dispositivi vive nell'app web (estendibile senza riflash): qui solo la capability.",
+      "synopsis": "GET /api/ir/db",
+      "details": "Nessuna autenticazione (sola lettura). Risposta JSON:\n- ready: true se il canale RMT è inizializzato\n- gpio: pin del LED IR (44 sul Cardputer)\n- protocols: protocolli codificabili (nec, necext, samsung, sony12, sony15, sony20, rc5, jvc)\n- tvbgone: { count: numero di codici TV power integrati, regions: [\"all\", \"us\", \"eu\", \"asia\"] }"
+    },
+    "en": {
+      "title": "GET /api/ir/db - IR Transmitter Capabilities",
+      "description": "Returns the IR transmitter's static capability info for the UI: encodable protocols, the size of the built-in TV-B-Gone table with its regions, and the IR LED GPIO. The large device database lives in the web app (extensible without reflashing): this is just the capability sheet.",
+      "synopsis": "GET /api/ir/db",
+      "details": "No auth gate (read-only). JSON response:\n- ready: true if the RMT channel is initialized\n- gpio: IR LED pin (44 on the Cardputer)\n- protocols: encodable protocols (nec, necext, samsung, sony12, sony15, sony20, rc5, jvc)\n- tvbgone: { count: number of built-in TV power codes, regions: [\"all\", \"us\", \"eu\", \"asia\"] }"
+    },
+    "params": []
+  },
+
+  "POST /api/ir/send": {
+    "it": {
+      "title": "POST /api/ir/send - Trasmetti Comando IR",
+      "description": "Trasmette un comando infrarosso dal LED IR (RMT con portante modulata): come protocollo noto (protocol/address/command) oppure come sequenza RAW di durate mark/space in microsecondi (il formato dei file .ir Flipper).",
+      "synopsis": "POST /api/ir/send",
+      "details": "Richiede autenticazione PIN. Corpo JSON (max 8 KB) in una di due forme alternative:\n- Protocollo: {\"protocol\": \"nec\", \"address\": 4, \"command\": 8, \"repeats\": N} — protocolli: nec, necext, samsung, sony12, sony15, sony20, rc5, jvc (alias: sony, nec-ext); repeats assente/0 = default del protocollo (es. SIRC ne richiede almeno 3)\n- RAW: {\"raw\": [9000, 4500, 560, ...], \"carrier\": 38000, \"repeats\": N} — durate alternate mark/space in µs (max 700 valori), portante default 38 kHz\nRisposta: {\"ok\": true}, oppure {\"ok\": false} (400) se i parametri sono invalidi."
+    },
+    "en": {
+      "title": "POST /api/ir/send - Transmit IR Command",
+      "description": "Transmits an infrared command from the IR LED (RMT with modulated carrier): either as a known protocol (protocol/address/command) or as a RAW sequence of mark/space durations in microseconds (the Flipper .ir file format).",
+      "synopsis": "POST /api/ir/send",
+      "details": "Gated by security PIN auth. JSON body (max 8 KB) in one of two alternative shapes:\n- Protocol: {\"protocol\": \"nec\", \"address\": 4, \"command\": 8, \"repeats\": N} — protocols: nec, necext, samsung, sony12, sony15, sony20, rc5, jvc (aliases: sony, nec-ext); repeats absent/0 = the protocol's default (e.g. SIRC needs at least 3)\n- RAW: {\"raw\": [9000, 4500, 560, ...], \"carrier\": 38000, \"repeats\": N} — alternating mark/space durations in µs (max 700 values), carrier defaults to 38 kHz\nResponse: {\"ok\": true}, or {\"ok\": false} (400) on invalid parameters."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"protocol\": \"nec\",\n  \"address\": 4,\n  \"command\": 8\n}",
+        "it": { "description": "Corpo JSON: protocollo (protocol/address/command) oppure RAW (raw/carrier), più repeats opzionale" },
+        "en": { "description": "JSON body: protocol form (protocol/address/command) or RAW form (raw/carrier), plus optional repeats" }
+      }
+    ]
+  },
+
+  "GET /api/ir/tvbgone": {
+    "it": {
+      "title": "GET /api/ir/tvbgone - Stato Sweep TV-B-Gone",
+      "description": "Legge l'avanzamento dello sweep TV-B-Gone: se sta girando e quanti codici di spegnimento TV sono stati inviati sul totale previsto per la regione scelta.",
+      "synopsis": "GET /api/ir/tvbgone",
+      "details": "Nessuna autenticazione (sola lettura). Risposta JSON: {\"running\": true|false, \"sent\": N, \"total\": N}. Usato dall'app IR per la barra di avanzamento durante lo sweep."
+    },
+    "en": {
+      "title": "GET /api/ir/tvbgone - TV-B-Gone Sweep Status",
+      "description": "Reads the TV-B-Gone sweep progress: whether it is running and how many TV power-off codes have been sent out of the total planned for the chosen region.",
+      "synopsis": "GET /api/ir/tvbgone",
+      "details": "No auth gate (read-only). JSON response: {\"running\": true|false, \"sent\": N, \"total\": N}. Used by the IR app to draw the progress bar during a sweep."
+    },
+    "params": []
+  },
+
+  "POST /api/ir/tvbgone": {
+    "it": {
+      "title": "POST /api/ir/tvbgone - Avvia/Ferma TV-B-Gone",
+      "description": "Avvia (o ferma) lo sweep TV-B-Gone: un task in background trasmette in sequenza i codici di spegnimento TV integrati per la regione scelta, con una pausa tra un codice e l'altro per dare a ogni TV il tempo di reagire.",
+      "synopsis": "POST /api/ir/tvbgone",
+      "details": "Richiede autenticazione PIN. Corpo JSON opzionale: {\"action\": \"start\"|\"stop\", \"region\": \"all\"|\"us\"|\"eu\"|\"asia\"} (default: start, all). Risposta: {\"ok\": true, \"running\": true|false}; se uno sweep è già in corso → 400 {\"ok\": false, \"err\": \"busy\"}. Monitorare l'avanzamento con GET /api/ir/tvbgone."
+    },
+    "en": {
+      "title": "POST /api/ir/tvbgone - Start/Stop TV-B-Gone",
+      "description": "Starts (or stops) the TV-B-Gone sweep: a background task transmits the built-in TV power-off codes for the chosen region in sequence, pacing between codes so each TV has time to react.",
+      "synopsis": "POST /api/ir/tvbgone",
+      "details": "Gated by security PIN auth. Optional JSON body: {\"action\": \"start\"|\"stop\", \"region\": \"all\"|\"us\"|\"eu\"|\"asia\"} (defaults: start, all). Response: {\"ok\": true, \"running\": true|false}; if a sweep is already running → 400 {\"ok\": false, \"err\": \"busy\"}. Poll progress with GET /api/ir/tvbgone."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": false,
+        "default": "{\n  \"action\": \"start\",\n  \"region\": \"all\"\n}",
+        "it": { "description": "Corpo JSON con action (start|stop) e region (all|us|eu|asia)" },
+        "en": { "description": "JSON body with action (start|stop) and region (all|us|eu|asia)" }
+      }
+    ]
+  },
+
+  "POST /api/ir/jammer": {
+    "it": {
+      "title": "POST /api/ir/jammer - Avvia/Ferma Jammer IR",
+      "description": "Avvia (o ferma) il jammer infrarosso: un task in background satura la banda IR con burst continui di portante e pause minime, così l'AGC dei ricevitori vicini non si riprende mai. Tre modalità di rumore: sweep, constant, random. Solo per test autorizzati sui propri dispositivi.",
+      "synopsis": "POST /api/ir/jammer",
+      "details": "Richiede autenticazione PIN. Corpo JSON opzionale: {\"action\": \"start\"|\"stop\", \"mode\": \"sweep\"|\"constant\"|\"random\"} (default: start, sweep). Risposta: {\"ok\": true, \"running\": true|false}; se il jammer o uno sweep TV-B-Gone è già attivo → 400 {\"ok\": false, \"err\": \"busy\"}."
+    },
+    "en": {
+      "title": "POST /api/ir/jammer - Start/Stop IR Jammer",
+      "description": "Starts (or stops) the infrared jammer: a background task floods the IR band with continuous carrier bursts and tiny gaps so nearby receivers' AGC never recovers. Three noise modes: sweep, constant, random. For authorized testing on your own devices only.",
+      "synopsis": "POST /api/ir/jammer",
+      "details": "Gated by security PIN auth. Optional JSON body: {\"action\": \"start\"|\"stop\", \"mode\": \"sweep\"|\"constant\"|\"random\"} (defaults: start, sweep). Response: {\"ok\": true, \"running\": true|false}; if the jammer or a TV-B-Gone sweep is already active → 400 {\"ok\": false, \"err\": \"busy\"}."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": false,
+        "default": "{\n  \"action\": \"start\",\n  \"mode\": \"sweep\"\n}",
+        "it": { "description": "Corpo JSON con action (start|stop) e mode (sweep|constant|random)" },
+        "en": { "description": "JSON body with action (start|stop) and mode (sweep|constant|random)" }
+      }
+    ]
+  },
+
+  "GET /api/auth/status": {
+    "it": {
+      "title": "GET /api/auth/status - Stato Associazione",
+      "description": "Restituisce lo stato dell'autenticazione del browser corrente rispetto al server HTTP di NucleoOS.",
+      "synopsis": "GET /api/auth/status",
+      "details": "Ritorna un oggetto JSON: { \"required\": true|false, \"paired\": true|false }. Endpoint pubblico, non richiede autenticazione."
+    },
+    "en": {
+      "title": "GET /api/auth/status - Authentication Status",
+      "description": "Returns the connection authentication variables for the querying browser client against the NucleoOS HTTP server.",
+      "synopsis": "GET /api/auth/status",
+      "details": "Serves a JSON body: { \"required\": true|false, \"paired\": true|false }. Public endpoint (no authorization headers needed)."
+    },
+    "params": []
+  },
+
+  "POST /api/pair": {
+    "it": {
+      "title": "POST /api/pair - Associa PIN Client",
+      "description": "Invia il PIN visualizzato sullo schermo del Cardputer per associare il client. In caso di successo, restituisce un token di sessione casuale di 24 byte (in esadecimale) all'interno dell'header Cookie nucleo_session.",
+      "synopsis": "POST /api/pair",
+      "details": "Richiede un payload JSON {\"pin\": \"123456\"}. Limita i tentativi a 5, dopodiché applica un blocco di sicurezza (HTTP 429) di 30 secondi per impedire attacchi brute-force."
+    },
+    "en": {
+      "title": "POST /api/pair - Pair Client PIN",
+      "description": "Verifies the security PIN printed on the Cardputer LCD display to authorize the browser. On success, stores a 24-byte random session hex key under the Cookie HTTP header.",
+      "synopsis": "POST /api/pair",
+      "details": "Requires a JSON body {\"pin\": \"123456\"}. Limits tries to 5 failed attempts, after which a 30s lockout (HTTP 429) is applied."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"pin\": \"000000\"\n}",
+        "it": { "description": "Corpo JSON contenente la chiave \"pin\" di 6 cifre" },
+        "en": { "description": "JSON payload containing the 6-digit PIN string parameter" }
+      }
+    ]
+  }
+}

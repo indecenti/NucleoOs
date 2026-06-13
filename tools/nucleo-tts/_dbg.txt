@@ -1,0 +1,22 @@
+﻿W (461) nucleoos: DIAG last-reset=POWERON (cold boot) anima_phase=0x30 anima_stage=0xCB39E7C5
+E (641) oom: alloc fail: 32404 B caps=0x404 in heap_caps_malloc
+W (3481) applaunch: enter 'anima' free=34304 largest=21504
+W (3541) applaunch: enter 'anima' DONE free=35808
+W (6451) anima.vkl: facets.it.jsonl integrity FAILED (tampered SD?) -> abstaining
+W (11381) applaunch: enter 'anima' free=34176 largest=21504
+W (11441) applaunch: enter 'anima' DONE free=35648
+W (23591) applaunch: enter 'anima' free=33956 largest=21504
+W (23651) applaunch: enter 'anima' DONE free=35428
+W (56581) applaunch: enter 'anima' free=65836 largest=30720
+W (56631) applaunch: enter 'anima' DONE free=34536
+E (133011) vfs_fat: open: no free file descriptors
+E (133011) tts: open out failed
+E (217041) vfs_fat: open: no free file descriptors
+E (217041) tts: open out failed
+W (250951) tts: "Cosa traduco? es. "traduci cane in inglese".": 2 clip scoperte [traduco, traduci] -> read_it (pacchetto voce incompleto?)
+E (250971) vfs_fat: open: no free file descriptors
+E (250971) tts: open out failed
+W (281691) tts: "book, phloem": 1 clip scoperte [phloem] -> read_it (pacchetto voce incompleto?)
+E (366881) vfs_fat: open: no free file descriptors
+W (449831) tts: "V uguale a 68 V, I uguale a 2 A, R uguale a 34 ohm, P uguale a 136 W.": 5 clip scoperte [v, v, r, p, w] -> read_it (pacchetto voce incompleto?W (507551) tts: "v  uguale a  s/t  uguale a  90000/3600  uguale a  25 m/s.": 1 clip scoperte [v] -> read_it (pacchetto voce incompleto?)
+

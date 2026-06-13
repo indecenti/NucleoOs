@@ -1,0 +1,7 @@
+# Generati/scratch: la "voce vera" tracciata = script (*.py/*.ps1) + lexicon.*.txt + freq.*.txt.
+# Tutto il resto si rigenera (clip wav, blob di prova, player, log) -> fuori dal repo.
+_wav/
+_samples/
+_samples_anima/
+__pycache__/
+*.log

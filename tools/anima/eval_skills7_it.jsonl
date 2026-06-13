@@ -1,0 +1,68 @@
+// eval_skills7_it.jsonl — TRIGGER SKILL GENUINI NUOVI (IT), frasi mai testate prima. Giudice: skill-probe.mjs.
+// === calcolo: parentesi, potenze, varianti ===
+{"q":"quanto fa (3+4) per 2","lang":"it","expect":"calc"}
+{"q":"10 elevato alla 3","lang":"it","expect":"calc"}
+{"q":"il doppio di 21","lang":"it","expect":"calc"}
+{"q":"quanto fa 144 diviso 12","lang":"it","expect":"calc"}
+{"q":"la meta di 90","lang":"it","expect":"calc"}
+{"q":"quanto fa 8 più 9 più 10","lang":"it","expect":"calc"}
+// === percentuali: frasi nuove ===
+{"q":"quanto fa il 30 per cento di 90","lang":"it","expect":"percent"}
+{"q":"il 5 per cento di 1000","lang":"it","expect":"percent"}
+// === conversioni: famiglie nuove (velocita, tempo, volume, massa) ===
+{"q":"90 km/h in miglia orarie","lang":"it","expect":"convert"}
+{"q":"500 grammi in chili","lang":"it","expect":"convert"}
+{"q":"2 giorni in ore","lang":"it","expect":"convert"}
+{"q":"1 litro in millilitri","lang":"it","expect":"convert"}
+{"q":"10 metri al secondo in km orari","lang":"it","expect":"convert"}
+// === basi: direzioni nuove ===
+{"q":"1010 in decimale","lang":"it","expect":"base"}
+{"q":"20 in esadecimale","lang":"it","expect":"base"}
+// === romani: nuovi ===
+{"q":"44 in numeri romani","lang":"it","expect":"roman"}
+{"q":"mmxxiv in decimale","lang":"it","expect":"roman"}
+// === primi: nuovi ===
+{"q":"23 è primo","lang":"it","expect":"prime"}
+{"q":"il numero 51 è primo","lang":"it","expect":"prime"}
+// === geometria: forme nuove ===
+{"q":"area del rettangolo base 5 altezza 8","lang":"it","expect":"geo"}
+{"q":"circonferenza del cerchio raggio 2","lang":"it","expect":"geo"}
+{"q":"perimetro del rettangolo base 3 altezza 7","lang":"it","expect":"geo"}
+// === fisica: grandezze nuove ===
+{"q":"accelerazione con forza 20 e massa 4","lang":"it","expect":"phys"}
+// === foglio: funzioni nuove ===
+{"q":"conta le celle da a1 a a20","lang":"it","expect":"spreadsheet"}
+{"q":"il massimo tra b1 e b10","lang":"it","expect":"spreadsheet"}
+{"q":"concatena a1 e b1","lang":"it","expect":"spreadsheet"}
+// === file: frasi nuove ===
+{"q":"crea un file lista.txt","lang":"it","expect":"create_file"}
+{"q":"crea un appunto con scritto chiamare il capo","lang":"it","expect":"create_file"}
+// === calendario: frasi nuove ===
+{"q":"ricordami l'appuntamento dal medico martedì alle 15","lang":"it","expect":"add_event"}
+{"q":"metti in agenda palestra domani alle 18","lang":"it","expect":"add_event"}
+// === apri app: nomi nuovi ===
+{"q":"apri le foto","lang":"it","expect":"open_app"}
+{"q":"apri il blocco note","lang":"it","expect":"open_app"}
+{"q":"avvia il lettore musicale","lang":"it","expect":"open_app"}
+{"q":"apri il monitor di sistema","lang":"it","expect":"open_app"}
+{"q":"apri la radio","lang":"it","expect":"open_app"}
+{"q":"apri il calendario","lang":"it","expect":"open_app"}
+// === traduzione: parole nuove ===
+{"q":"traduci libro in inglese","lang":"it","expect":"translate"}
+{"q":"come si dice acqua in inglese","lang":"it","expect":"translate"}
+{"q":"traduci sole in inglese","lang":"it","expect":"translate"}
+// === profilo: campi nuovi (set + recall) ===
+{"q":"abito a milano","lang":"it","expect":"profile"}
+{"q":"il mio lavoro è programmatore","lang":"it","expect":"profile"}
+{"q":"dove abito","lang":"it","expect":"profile"}
+{"q":"la mia email è mario@esempio.it","lang":"it","expect":"profile"}
+// === conoscenza: domande nuove (L1/L2) ===
+{"q":"qual è la capitale del giappone","lang":"it","expect":"l1|hdc"}
+{"q":"qual è la capitale dell'italia","lang":"it","expect":"l1|hdc"}
+{"q":"cos è la gravità","lang":"it","expect":"l1"}
+{"q":"cos è un atomo","lang":"it","expect":"l1"}
+{"q":"quanti pianeti ci sono nel sistema solare","lang":"it","expect":"l1|answer"}
+{"q":"chi era leonardo da vinci","lang":"it","expect":"l1|hdc"}
+// === meta / capabilities: frasi nuove ===
+{"q":"che cosa puoi fare per me","lang":"it","expect":"capabilities"}
+{"q":"presentati","lang":"it","expect":"whoami"}

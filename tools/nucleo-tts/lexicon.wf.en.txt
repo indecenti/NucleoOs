@@ -1,0 +1,592 @@
+# Lessico autorato dal workflow tts-coverage (grounded sul parlato reale di ANIMA, verificato).
+I'm ANIMA, NucleoOS's offline assistant. I work with no internet, on the device.
+I'm ANIMA, NucleoOS's offline assistant.
+I work with no internet, right on the device.
+I'm ANIMA.
+Hi, I'm ANIMA.
+Hi!
+Hello!
+Hi, how can I help?
+Good morning!
+Good evening!
+Good night!
+Hey, I'm here.
+Here I am.
+I'm here.
+Go ahead.
+How can I help?
+How can I help you?
+What do you need?
+I'm ready.
+You're welcome!
+My pleasure.
+Don't mention it.
+No problem.
+Anytime.
+Glad to help.
+Thank you.
+See you soon!
+See you!
+Until next time!
+Talk later!
+Yes.
+No.
+All right.
+Sure.
+Certainly.
+Of course.
+Perfect.
+Agreed.
+Okay.
+Done.
+Done, here you go.
+There you go.
+Got it.
+Understood.
+Exactly.
+Right.
+Naturally.
+Gladly.
+With pleasure.
+Right away.
+One moment.
+Just a second.
+Give me a moment.
+I'm thinking.
+Hold on a second.
+Try again.
+Try again shortly.
+Sorry, try rephrasing and I'll have another go.
+Sorry, I didn't quite catch that.
+I didn't understand, can you repeat?
+Could you say that another way?
+Rephrase it and I'll try again.
+Tell me which part and I'll try again.
+I'm not sure I understood.
+I'm sorry.
+Sorry.
+My apologies.
+No worries.
+It's fine.
+That's perfectly fine.
+Whatever you prefer.
+Yes, I'm confident.
+Yes, I'm sure.
+No, I'm not sure.
+I don't know.
+That's all I have on that.
+I have no more details on that.
+We just started.
+We were talking about this.
+Great, give me the data and I'll compute it.
+Go ahead and give me the data.
+Go right ahead.
+I'll do that now.
+I'll get started.
+Cancelled.
+Cancelling.
+All clear.
+All set.
+Good.
+Great.
+Excellent.
+Thanks.
+Thank you so much.
+Have a good day!
+Have a good evening!
+Battery.
+Battery at eighty percent.
+Battery at one hundred percent.
+Battery low.
+Charging.
+Battery charging.
+Battery full.
+It's two thirty.
+It's a quarter past eight.
+It's a quarter to ten.
+It's seven o'clock.
+Noon.
+Midnight.
+SD space.
+SD space two and a half gigabytes.
+Gigabytes free.
+Free space.
+Free space on the card.
+Today is June fifteenth.
+June fifteenth twenty twenty-six.
+It's twenty twenty-six.
+It's summer.
+It's spring.
+It's autumn.
+It's winter.
+Running version two point one point zero.
+Up for two hours.
+Up for three and a half hours.
+Up for two days.
+Up for a few minutes.
+percent
+degrees
+hours
+minutes
+days
+seconds
+gigabytes
+megabytes
+free
+o'clock
+half past
+a quarter past
+noon
+midnight
+spring
+summer
+autumn
+winter
+January
+February
+March
+April
+May
+June
+July
+August
+September
+October
+November
+December
+Monday
+Tuesday
+Wednesday
+Thursday
+Friday
+Saturday
+Sunday
+one
+two
+three
+four
+five
+six
+seven
+eight
+nine
+ten
+eleven
+twelve
+twenty twenty-six
+version
+charged
+low
+Opening photo viewer.
+Opening paint.
+Opening notepad.
+Opening file commander.
+Opening media player.
+Opening radio.
+Opening video player.
+Opening spreadsheet.
+Opening calculator.
+Opening terminal.
+Opening clock.
+Opening calendar.
+Opening settings.
+Opening browser.
+Opening tasks.
+Opening system monitor.
+Opening remote.
+Opening log viewer.
+Opening swarm.
+Opening automation studio.
+Opening recorder.
+Opening dictation.
+Opening recycle bin.
+Opening updates.
+Opening emulator.
+Opening code runner.
+Opening my facts.
+Closing photo viewer.
+Closing media player.
+Closing notepad.
+Opening
+Closing
+photo viewer
+paint
+notepad
+file commander
+media player
+radio
+video player
+spreadsheet
+calculator
+terminal
+clock
+calendar
+settings
+browser
+tasks
+recorder
+dictation
+updates
+emulator
+my facts
+file manager
+music player
+photo
+video
+Which one, photo viewer or paint?
+Which one, media player or radio?
+Which one, video player or photo viewer?
+Which one should I open?
+Tell me which app you want to open.
+You have nothing scheduled today.
+You have one thing scheduled today.
+You have two things scheduled today.
+You have three things scheduled today.
+You have several things scheduled today.
+You have no appointments scheduled.
+You have an appointment today.
+You have an appointment tomorrow.
+Your next appointment is today.
+Your next appointment is tomorrow.
+Reminder
+Reminder set
+Reminder saved
+I've set the reminder.
+Okay, I'll remind you.
+today
+tomorrow
+the day after tomorrow
+yesterday
+this morning
+this afternoon
+this evening
+tonight
+at
+at ten
+at half past ten
+in an hour
+in two hours
+in ten minutes
+in half an hour
+this week
+next week
+this month
+next month
+Closing calendar.
+Closing tasks.
+It's
+It is half past two.
+Today is
+Today is the fifteenth of June twenty twenty-six.
+first
+second
+third
+fourth
+fifth
+sixth
+seventh
+eighth
+ninth
+tenth
+fifteenth
+twentieth
+twenty-fifth
+thirtieth
+thirty-first
+a quarter to
+in the morning
+in the afternoon
+in the evening
+Got it, I'll remember.
+I'll remember.
+I won't store that, it's temporary information.
+What should the file be called?
+Tell me the file name and I'll create it.
+Which folder should the file go in?
+Documents, Pictures, Music or Videos?
+Tell me the folder and I'll save it.
+I haven't created the file yet, I need a name.
+I can't create the file without a name.
+I can't learn that right now.
+Online-only mode, no internet connection.
+Online-only mode, but the online model gave no answer.
+There's no internet connection.
+I'm offline, I can't reach the internet.
+Tell me which one you'd prefer.
+Enter all six digits.
+Enter the six digit code.
+Wrong code, check the screen and retry.
+The code is not correct.
+Look at the code on the device screen.
+Too many attempts, wait a moment and try again.
+Network error, is the device on?
+The device isn't responding.
+Pairing is needed before you continue.
+You need to pair the device to use your data.
+The microphone is busy.
+The microphone is already in use.
+I'll try again in a moment.
+Reconnecting.
+I'm listening.
+I couldn't do it, please retry.
+Something went wrong, please retry.
+Please try again.
+I couldn't find what you're looking for.
+Cancelling, the content was empty.
+per cent
+degrees Celsius
+degrees Fahrenheit
+hours minutes
+weeks
+months
+years
+of
+half
+double
+triple
+hundred
+thousand
+one million
+about
+exactly
+Setting the volume to
+Setting the brightness to
+SD space
+kilobytes
+bytes
+terabytes
+Running
+It's twenty twenty-seven.
+Up for two days and three hours.
+Up for one hour.
+now
+right now
+midday
+minute
+one hour
+day
+week
+month
+year
+and
+thirteen
+fourteen
+fifteen
+sixteen
+seventeen
+eighteen
+nineteen
+twenty
+thirty
+Reminder saved for tomorrow.
+Reminder saved for today.
+Running.
+Opening.
+Closing.
+Creating.
+Setting the volume to.
+Setting the brightness to.
+Raising the volume.
+Lowering the volume.
+Raising the brightness.
+Lowering the brightness.
+Reminder.
+Which one.
+So far.
+Honestly, I didn't know that one, I wouldn't rely on it.
+Yes, it's an exact calculation, I can't get it wrong.
+Yes, I worked it out by combining facts I know.
+Yes, it's something I know with good confidence.
+Fairly, it's the most likely answer, but not one hundred percent.
+Online-only mode: no internet connection.
+is
+am
+are
+we are
+have
+has
+we have
+I open
+I close
+I create
+I set
+I raise
+I lower
+running
+I find
+I do
+I put
+you want
+I can
+I can't
+I'm able
+I know
+I knew
+I'll remember
+I compute
+I worked out
+I remember
+I store
+we were
+the
+to
+for
+with
+on
+in
+or
+not
+but
+if
+that
+as
+when
+which
+of the two
+the value
+the answer
+the model
+the data
+up to
+
+# --- gap-fill from anima:tts-replies ---
+create
+folder
+folders
+videos
+divide
+computing
+average
+cube
+rectangle
+triangle
+sphere
+cylinder
+area
+perimeter
+side
+base
+height
+radius
+diameter
+raised
+lowered
+saved
+deleted
+moved
+copied
+renamed
+fairly
+gb	gigabytes
+volume
+volumes
+example
+calculation
+calculations
+
+# --- gap-fill 2 from anima:tts-replies (state/solver, IT parity) ---
+nucleoos	NucleoOS
+ram
+kb	kilobytes
+equals
+median
+absolute
+mod
+meters
+centimeters
+kilometers
+brightness
+not available
+days and
+hours and
+to the power of
+
+# --- gap-fill 3: exhaustive deterministic coverage (solver/equations/tools) ---
+plus
+log
+cube root
+reciprocal
+square
+sum
+values
+divided
+fahrenheit
+equation
+equations
+unknowns
+degree
+solution
+solutions
+infinitely
+single
+reduces
+compute
+root
+primality
+applies
+whole
+integers
+composite
+invalid
+overwrite
+conversions
+x	ex
+
+# --- gap-fill 4: wider speech (courtesy + connectives + status) for more natural gists ---
+certainly
+gladly
+sure
+sorry
+perfect
+great
+understood
+alright
+exactly
+well
+then
+also
+indeed
+therefore
+while
+during
+before
+after
+always
+often
+together
+especially
+generally
+usually
+currently
+probably
+surely
+simply
+really
+however
+instead
+maybe
+perhaps
+of course
+naturally
+obviously
+battery charged
+battery low
+charging
+connected
+disconnected
+signal
+update
+restart
+completed
+cancelled
+in progress
+ready
+is located
+is called
+is used
+is part of
+derives from
+represents
+depends on
+consists of
+belongs to

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Pong 3D — verify</title>
+<style>
+  html,body { margin:0; background:#05070d; }
+  #boardWrap { position:relative; width:1280px; height:720px; }
+  canvas { width:100%; height:100%; display:block; }
+</style>
+</head>
+<body>
+<div id="boardWrap"><canvas id="board"></canvas></div>
+<script type="module">
+window.__errors = [];
+window.onerror = (m) => window.__errors.push('' + m);
+window.addEventListener('unhandledrejection', e => window.__errors.push('rej: ' + (e.reason && e.reason.message || e.reason)));
+
+import game from '/apps/games/games/pong.js';
+import { createPongRenderer } from '/apps/games/games/pong3d.js';
+
+const GEOM = { FW: 200, FH: 120, PH: 26, PW: 4, R: 3, X0: 8, X1: 192 };
+const canvas = document.getElementById('board');
+const api = { get width() { return canvas.width; }, get height() { return canvas.height; }, mySeat: () => 0, roster: () => [], isHost: () => true, rng: Math.random, now: () => performance.now(), cursor: () => null, setCursor() {} };
+
+// Both seats AI → a self-playing rally that's great for a screenshot. mente:'llm' shows the LLM badge.
+let st = game.setup([{ seat: 0, name: 'TU', ai: true }, { seat: 1, name: 'GROK', ai: true }], 1, { punti: '11', livello: 'medio', mente: 'llm', bonus: true });
+st.persona = { 0: 'Il Muro' };                  // seat 0 is the AI in this both-AI demo
+st.combo = 6;                                   // pre-load a rally + orbs so the first frames are rich
+st.orbs = [{ id: 1, x: 124, y: 38, kind: 'fast', born: 0 }, { id: 2, x: 78, y: 84, kind: 'grow', born: 0 }];
+st.scores = [3, 5];
+st.brain = { status: 'live', label: 'Grok (grok-2-latest)', ms: 412 };   // demo the verified green badge
+// flip this to test the red blocked state:  st.brain = { status: 'down', label: 'Grok' };
+
+const r = await createPongRenderer(canvas, api, GEOM);
+window.__r = r; window.__mode = r.mode;
+function fit() { const b = document.getElementById('boardWrap').getBoundingClientRect(); r.resize(b.width || 1280, b.height || 720); }
+fit(); addEventListener('resize', fit);
+
+let frames = 0;
+setInterval(() => { st = game.tick(st, 33); window.__st = st; }, 33);     // host physics @30Hz
+setInterval(() => { r.frame(st, api); window.__frames = ++frames; }, 16); // render (interval, not rAF — survives headless)
+window.__ready = true;
+</script>
+</body>
+</html>

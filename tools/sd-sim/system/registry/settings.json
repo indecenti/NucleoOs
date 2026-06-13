@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "device": {
+    "name": "nucleo-01",
+    "locale": "en-US",
+    "timezone": "UTC"
+  },
+  "network": {
+    "wifi": { "enabled": true, "ssid": "", "autoconnect": true },
+    "ble":  { "enabled": true, "advertise_name": "NucleoOS" },
+    "swarm": { "enabled": true, "channel": 1, "peers": [] }
+  },
+  "power": {
+    "profile": "balanced",
+    "sleep_timeout_s": 60,
+    "display_brightness": 70,
+    "transport_profile": "auto"
+  },
+  "ui": {
+    "theme": "dark",
+    "default_transport": "auto",
+    "keyboard_mouse_first": true
+  },
+  "security": {
+    "require_pairing": true,
+    "verify_bundle_signatures": true
+  }
+}

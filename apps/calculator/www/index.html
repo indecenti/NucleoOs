@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="title">Calculator</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --accent:#4ea1ff; --line:#2a3a5e; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { background: var(--bg); color: var(--text); font: 16px system-ui, sans-serif; display: flex; flex-direction: column; }
+    /* --field is injected by the OS theme (light/dark); fallback keeps it readable standalone.
+       Hardcoding a dark bg here made the digits invisible under the light theme (dark text). */
+    #disp { padding: 18px 16px; font-size: 30px; text-align: right; min-height: 64px; word-break: break-all;
+      font-variant-numeric: tabular-nums; background: var(--field, #0b1220); color: var(--text);
+      border-bottom: 1px solid var(--line); }
+    .pad { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); }
+    button { border: 0; background: var(--panel); color: var(--text); font-size: 20px; cursor: pointer; }
+    button:hover { background: var(--panel2, #25324f); }
+    button.op { color: var(--accent); } button.eq { background: var(--accent); color: #07101f; }
+    button.fn { color: #e0556b; }
+  </style>
+</head>
+<body>
+  <div id="disp">0</div>
+  <div class="pad" id="pad"></div>
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    const t = await I18N.init('calculator');
+    const disp = document.getElementById('disp');
+    let expr = '';
+    const render = () => disp.textContent = expr || '0';
+    const ERR = () => t('error');
+    function input(k) {
+      if (k === 'C') { expr = ''; }
+      else if (k === '⌫') { expr = expr.slice(0, -1); }
+      else if (k === '=') { try { expr = String(evaluate(expr)); } catch { expr = ERR(); } }
+      else { if (expr === ERR()) expr = ''; expr += k; }
+      render();
+    }
+    // Safe arithmetic evaluator (no eval): shunting-yard over + - * / and parentheses.
+    function evaluate(s) {
+      const toks = s.match(/(\d+\.?\d*|[+\-*/()])/g) || [];
+      const out = [], ops = [], pr = { '+': 1, '-': 1, '*': 2, '/': 2 };
+      const apply = () => { const b = out.pop(), a = out.pop(), o = ops.pop();
+        out.push(o === '+' ? a + b : o === '-' ? a - b : o === '*' ? a * b : a / b); };
+      for (const tok of toks) {
+        if (/\d/.test(tok)) out.push(parseFloat(tok));
+        else if (tok === '(') ops.push(tok);
+        else if (tok === ')') { while (ops.length && ops.at(-1) !== '(') apply(); ops.pop(); }
+        else { while (ops.length && pr[ops.at(-1)] >= pr[tok]) apply(); ops.push(tok); }
+      }
+      while (ops.length) apply();
+      return Math.round(out[0] * 1e9) / 1e9;
+    }
+    const keys = ['C', '(', ')', '⌫', '7', '8', '9', '/', '4', '5', '6', '*', '1', '2', '3', '-', '0', '.', '=', '+'];
+    const pad = document.getElementById('pad');
+    for (const k of keys) {
+      const b = document.createElement('button');
+      b.textContent = k;
+      if ('+-*/'.includes(k)) b.className = 'op';
+      else if (k === '=') b.className = 'eq';
+      else if (k === 'C' || k === '⌫') b.className = 'fn';
+      b.onclick = () => input(k);
+      pad.appendChild(b);
+    }
+    // ---- OS integration: copy the result / paste a number, like a real desktop calculator ----
+    const inShell = window.parent && window.parent !== window;
+    function flash() { disp.style.transition = 'background .15s'; disp.style.background = '#15325a'; setTimeout(() => { disp.style.background = ''; }, 180); }
+    function copyResult() {
+      const t = disp.textContent || '0';
+      try { navigator.clipboard && navigator.clipboard.writeText(t); } catch {}
+      try { if (inShell) window.parent.postMessage({ type: 'clipboard-write', kind: 'text', data: t }, '*'); } catch {}
+      flash();
+    }
+    function pasteNumber(text) { const m = String(text || '').match(/-?\d+\.?\d*/); if (!m) return; if (expr === ERR()) expr = ''; expr += m[0]; render(); }
+
+    addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey) {                    // leave Ctrl combos to the OS bridge in-shell
+        const k = e.key.toLowerCase();
+        if (!inShell && k === 'c') { e.preventDefault(); copyResult(); }
+        else if (!inShell && k === 'v') { e.preventDefault(); try { navigator.clipboard && navigator.clipboard.readText().then(pasteNumber); } catch {} }
+        return;
+      }
+      if (/[\d+\-*/().]/.test(e.key)) input(e.key);
+      else if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); input('='); }
+      else if (e.key === 'Backspace') input('⌫');
+      else if (e.key === 'Escape') input('C');
+    });
+
+    // OS keyboard bridge: the shell routes Ctrl+C/V/A here as {type:'os-shortcut'} when focused.
+    window.addEventListener('message', (e) => {
+      const d = e.data; if (!d || d.type !== 'os-shortcut') return;
+      if (d.action === 'copy' || d.action === 'selectAll') copyResult();
+      else if (d.action === 'paste') {
+        if (d.clip && d.clip.kind === 'text') pasteNumber(d.clip.data);
+        else { try { navigator.clipboard && navigator.clipboard.readText().then(pasteNumber); } catch {} }
+      }
+    });
+    render();
+  </script>
+</body>
+</html>

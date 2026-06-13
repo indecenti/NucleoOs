@@ -1,0 +1,14 @@
+{
+  "appId": "com.nucleoos.app",
+  "appName": "NucleoOS",
+  "webDir": "dist",
+  "server": {
+    "url": "http://192.168.0.166",
+    "cleartext": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true
+    }
+  }
+}

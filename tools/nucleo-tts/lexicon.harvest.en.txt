@@ -1,0 +1,2 @@
+# Parole raccolte dai MISS reali del device (flywheel harvest). gen_all.ps1 le genera.
+translating

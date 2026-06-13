@@ -1,0 +1,7 @@
+﻿W (451) nucleoos: DIAG last-reset=POWERON (cold boot) anima_phase=0x20 anima_stage=0xCB39E745
+E (631) oom: alloc fail: 32404 B caps=0x404 in heap_caps_malloc
+W (6741) anima.vkl: facets.it.jsonl integrity FAILED (tampered SD?) -> abstaining
+W (7271) tts: "Non conosco l'ora: l'orologio non e' impostato.": 1 clip scoperte [impostato] -> read_it (pacchetto voce incompleto?)
+W (41341) voice: PTT refused: arbiter/heap busy (block 10240, free 34012)
+W (45481) voice: PTT refused: arbiter/heap busy (block 10240, free 34012)
+

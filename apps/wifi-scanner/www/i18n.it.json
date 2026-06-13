@@ -1,0 +1,36 @@
+{
+  "_lang": "it",
+  "title": "Gestione WiFi",
+  "btn_auto": "Auto",
+  "auto_hint": "Aggiornamento automatico ogni 8s",
+  "connect": "Connetti",
+  "reconnect": "Riconnetti",
+  "forget": "Dimentica",
+  "password": "Password",
+  "password_keep": "Password (vuota = usa salvata)",
+  "saved": "salvata",
+  "saved_hint": "Rete salvata — riconnessione automatica",
+  "priority": "priorità",
+  "connecting": "Connessione a {ssid}…",
+  "connected_to": "Connesso a {ssid}",
+  "connect_failed": "Connessione fallita — controlla la password",
+  "forgotten": "Rete dimenticata",
+  "need_pair": "Accoppia il dispositivo per gestire le reti",
+  "src_idle": "inattivo",
+  "empty_msg": "Nessuna rete trovata.<br>Premi <b>Scansiona</b> per cercare di nuovo.",
+  "count": {
+    "one": "{count} rete",
+    "other": "{count} reti"
+  },
+  "count_open": {
+    "one": "{count} aperta",
+    "other": "{count} aperte"
+  },
+  "ch": "can {ch}",
+  "sec_open": "aperta",
+  "sec_open_hint": "Rete aperta",
+  "hidden_ssid": "(nascosta)",
+  "src_connected_only": "solo AP connesso — API di scansione in arrivo",
+  "src_demo": "dati demo — dispositivo offline",
+  "src_live": "scansione live"
+}

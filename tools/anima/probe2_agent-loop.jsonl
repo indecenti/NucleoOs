@@ -1,0 +1,67 @@
+{"q":"crea una nota con 12*8","lang":"it","expect":"create_file"}
+{"q":"crea una nota con 15+27","lang":"it","expect":"create_file"}
+{"q":"scrivi un file con 100/4","lang":"it","expect":"create_file"}
+{"q":"crea una nota con 200-50","lang":"it","expect":"create_file"}
+{"q":"crea un file con la radice di 144","lang":"it","expect":"create_file"}
+{"q":"crea una nota con 9*9","lang":"it","expect":"create_file"}
+{"q":"crea una nota con 2^10","lang":"it","expect":"create_file"}
+{"q":"crea una nota con il 20% di 150","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la capitale della francia","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la capitale dell'italia","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la capitale della germania","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la capitale della spagna","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la capitale del giappone","lang":"it","expect":"create_file"}
+{"q":"scrivi un file con la definizione di variabile","lang":"it","expect":"create_file"}
+{"q":"scrivi un file con la definizione di algoritmo","lang":"it","expect":"create_file"}
+{"q":"crea una nota con scritto ciao mamma","lang":"it","expect":"create_file"}
+{"q":"crea una nota con scritto cosa e una variabile","lang":"it","expect":"create_file"}
+{"q":"crea una nota con scritto comprare il latte","lang":"it","expect":"create_file"}
+{"q":"crea una nota con il testo riunione alle 15","lang":"it","expect":"create_file"}
+{"q":"crea un file chiamato spesa.txt","lang":"it","expect":"create_file"}
+{"q":"crea una nota chiamata todo con comprare il latte","lang":"it","expect":"create_file"}
+{"q":"crea un file note.txt","lang":"it","expect":"create_file"}
+{"q":"crea un file spesa.txt con scritto latte","lang":"it","expect":"create_file"}
+{"q":"scrivii un file con 200-50","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la capitlae della germania","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la password del wifi","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la capitale del wakanda","lang":"it","expect":"create_file"}
+{"q":"crea un file diario.txt con scritto oggi sole","lang":"it","expect":"create_file"}
+{"q":"crea una nota con scritto domani piove","lang":"it","expect":"create_file"}
+{"q":"crea una nota con scritto promemoria meteo di domani","lang":"it","expect":"create_file"}
+{"q":"make a note with 7*6","lang":"en","expect":"create_file"}
+{"q":"create a file with the capital of france","lang":"en","expect":"create_file"}
+{"q":"write a file with the definition of variable","lang":"en","expect":"create_file"}
+{"q":"create a note that says hello world","lang":"en","expect":"create_file"}
+{"q":"make a file called todo.txt","lang":"en","expect":"create_file"}
+{"q":"create a note that says today is sunny","lang":"en","expect":"create_file"}
+{"q":"alza il volume","lang":"it","expect":"set_volume"}
+{"q":"abbassa il volume","lang":"it","expect":"set_volume"}
+{"q":"metti il volume al massimo","lang":"it","expect":"set_volume"}
+{"q":"alza il volume di poco","lang":"it","expect":"set_volume"}
+{"q":"metti il volume al 50","lang":"it","expect":"set_volume"}
+{"q":"imposta il volume al 50 percento","lang":"it","expect":"set_volume"}
+{"q":"aza il volume","lang":"it","expect":"set_volume"}
+{"q":"abassa il volume","lang":"it","expect":"set_volume"}
+{"q":"muta il volume","lang":"it","expect":"set_volume"}
+{"q":"silenzia il volume","lang":"it","expect":"set_volume"}
+{"q":"azzera il volume","lang":"it","expect":"set_volume"}
+{"q":"volume al 50 percento","lang":"it","expect":"set_volume"}
+{"q":"turn up the volume","lang":"en","expect":"set_volume"}
+{"q":"set volume to 30","lang":"en","expect":"set_volume"}
+{"q":"mute the volume","lang":"en","expect":"set_volume"}
+{"q":"alza la luminosita","lang":"it","expect":"set_brightness"}
+{"q":"abbassa la luminosita","lang":"it","expect":"set_brightness"}
+{"q":"metti la luminosita al massimo","lang":"it","expect":"set_brightness"}
+{"q":"fai piu chiaro","lang":"it","expect":"set_brightness"}
+{"q":"fai piu scuro","lang":"it","expect":"set_brightness"}
+{"q":"metti la luminosita al 70","lang":"it","expect":"set_brightness"}
+{"q":"metti lo schermo piu luminoso","lang":"it","expect":"set_brightness"}
+{"q":"alza la luminosit","lang":"it","expect":"set_brightness"}
+{"q":"fai piu kiaro","lang":"it","expect":"set_brightness"}
+{"q":"luminosita al 70 percento","lang":"it","expect":"set_brightness"}
+{"q":"increase brightness","lang":"en","expect":"set_brightness"}
+{"q":"set brightness to max","lang":"en","expect":"set_brightness"}
+{"q":"lower the brightness","lang":"en","expect":"set_brightness"}
+{"q":"dim the screen","lang":"en","expect":"set_brightness"}
+{"q":"make the screen brighter","lang":"en","expect":"set_brightness"}
+{"q":"brighten the screen","lang":"en","expect":"set_brightness"}

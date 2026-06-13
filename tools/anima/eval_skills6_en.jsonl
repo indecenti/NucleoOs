@@ -1,0 +1,81 @@
+// eval_skills6_en.jsonl — GENUINE SKILL TRIGGERS (EN): confirms every offline skill fires on the real exe.
+// expect = the intent string anima.exe emits (intent=...). Judge: skill-probe.mjs.
+// Adversarial anti-hallucination twin: eval_halluc6_en.jsonl (judge halluc-probe.mjs).
+// === arithmetic ===
+{"q":"how much is 12 times 8","lang":"en","expect":"calc"}
+{"q":"square root of 144","lang":"en","expect":"calc"}
+{"q":"what is 100 minus 37","lang":"en","expect":"calc"}
+{"q":"7 squared","lang":"en","expect":"calc"}
+{"q":"what is 15 divided by 4","lang":"en","expect":"calc"}
+{"q":"2+2","lang":"en","expect":"calc"}
+{"q":"how much is 9 tiems 9","lang":"en","expect":"calc"}
+// === percentages ===
+{"q":"25 percent of 200","lang":"en","expect":"percent"}
+{"q":"what is 15% of 80","lang":"en","expect":"percent"}
+{"q":"10 percent of 1500","lang":"en","expect":"percent"}
+// === unit conversion ===
+{"q":"convert 100 km to miles","lang":"en","expect":"convert"}
+{"q":"50 celsius to fahrenheit","lang":"en","expect":"convert"}
+{"q":"5 kilos to pounds","lang":"en","expect":"convert"}
+{"q":"2 meters to centimeters","lang":"en","expect":"convert"}
+{"q":"3 hours in minutes","lang":"en","expect":"convert"}
+// === number bases ===
+{"q":"12 in binary","lang":"en","expect":"base"}
+{"q":"255 in hexadecimal","lang":"en","expect":"base"}
+{"q":"32 in binary","lang":"en","expect":"base"}
+// === roman numerals ===
+{"q":"99 in roman numerals","lang":"en","expect":"roman"}
+{"q":"49 in roman numerals","lang":"en","expect":"roman"}
+{"q":"2024 in roman numerals","lang":"en","expect":"roman"}
+// === primes ===
+{"q":"is 17 a prime number","lang":"en","expect":"prime"}
+{"q":"is 100 prime","lang":"en","expect":"prime"}
+// === geometry ===
+{"q":"area of a triangle base 10 height 5","lang":"en","expect":"geo"}
+{"q":"volume of a sphere radius 3","lang":"en","expect":"geo"}
+{"q":"area of a circle radius 4","lang":"en","expect":"geo"}
+{"q":"perimeter of a square side 6","lang":"en","expect":"geo"}
+// === physics ===
+{"q":"force with mass 5 and acceleration 2","lang":"en","expect":"phys"}
+{"q":"speed with distance 100 and time 5","lang":"en","expect":"phys"}
+// === spreadsheet ===
+{"q":"sum cells a1 to a10","lang":"en","expect":"spreadsheet"}
+{"q":"find the minimum in cells a1 to a9","lang":"en","expect":"spreadsheet"}
+{"q":"average of cells b2 to b8","lang":"en","expect":"spreadsheet"}
+// === files ===
+{"q":"create a file todo.txt","lang":"en","expect":"create_file"}
+{"q":"write a note saying hello world","lang":"en","expect":"create_file"}
+{"q":"create a document shopping.txt","lang":"en","expect":"create_file"}
+// === calendar / reminders ===
+{"q":"remind me to call mom tomorrow at 9","lang":"en","expect":"add_event"}
+{"q":"schedule a meeting next monday","lang":"en","expect":"add_event"}
+{"q":"remind me to take out the trash at 8pm","lang":"en","expect":"add_event"}
+// === settings audio/screen ===
+{"q":"turn up the volume","lang":"en","expect":"set_volume"}
+{"q":"set volume to 50 percent","lang":"en","expect":"set_volume"}
+{"q":"turn down the volume","lang":"en","expect":"set_volume"}
+{"q":"set brightness to 70 percent","lang":"en","expect":"set_brightness"}
+{"q":"dim the screen","lang":"en","expect":"set_brightness"}
+// === open / close apps ===
+{"q":"open the calculator","lang":"en","expect":"open_app"}
+{"q":"open settings","lang":"en","expect":"open_app"}
+{"q":"launch the browser","lang":"en","expect":"open_app"}
+{"q":"close the calculator","lang":"en","expect":"close_app"}
+{"q":"close the calendar","lang":"en","expect":"close_app"}
+// === translation ===
+{"q":"translate dog to italian","lang":"en","expect":"translate"}
+{"q":"how do you say cat in italian","lang":"en","expect":"translate"}
+{"q":"translate house to italian","lang":"en","expect":"translate"}
+// === profile / personal memory ===
+{"q":"my name is John","lang":"en","expect":"profile"}
+{"q":"i am 30 years old","lang":"en","expect":"profile"}
+{"q":"how old am i","lang":"en","expect":"profile"}
+{"q":"remember that my car is a fiat","lang":"en","expect":"teach"}
+// === system state (emit {value} on host, intent is correct) ===
+{"q":"what time is it","lang":"en","expect":"time"}
+{"q":"what is today's date","lang":"en","expect":"date"}
+{"q":"who are you","lang":"en","expect":"whoami"}
+// === knowledge (L1/L2) ===
+{"q":"who is albert einstein","lang":"en","expect":"l1|hdc"}
+{"q":"what is photosynthesis","lang":"en","expect":"l1"}
+{"q":"what is the capital of france","lang":"en","expect":"l1|hdc"}

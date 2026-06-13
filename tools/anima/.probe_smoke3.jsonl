@@ -1,0 +1,14 @@
+{"q":"fattorizza 24","lang":"it","expect":"answer"}
+{"q":"scomponi 24 in fattori primi","lang":"it","expect":"answer"}
+{"q":"factors of 24","lang":"en","expect":"answer"}
+{"q":"divisori di 36","lang":"it","expect":"answer"}
+{"q":"fattori primi di 60","lang":"it","expect":"answer"}
+{"q":"prime factors of 60","lang":"en","expect":"answer"}
+{"q":"quanto fa 7 per 8","lang":"it","expect":"answer"}
+{"q":"7+8","lang":"it","expect":"answer"}
+{"q":"sqrt(2)","lang":"it","expect":"answer"}
+{"q":"3^4","lang":"it","expect":"answer"}
+{"q":"il doppio di 21","lang":"it","expect":"answer"}
+{"q":"meta di 50","lang":"it","expect":"answer"}
+{"q":"quadrato di 9","lang":"it","expect":"answer"}
+{"q":"cubo di 3","lang":"it","expect":"answer"}

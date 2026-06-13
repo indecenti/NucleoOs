@@ -1,0 +1,16 @@
+{
+  "id": "tail",
+  "category": "terminal",
+  "it": {
+    "title": "tail - Mostra fine del file",
+    "synopsis": "tail [-n lines] <file>",
+    "description": "Visualizza le ultime righe di un file di testo.",
+    "details": "NOME\n  tail - Mostra le ultime righe di un file.\n\nSINTASSI\n  tail [-n <righe>] <file>\n\nDESCRIZIONE\n  Stampa le ultime righe di un file (10 di default).\n\nOPZIONI\n  -n <righe>\n    Numero di righe da stampare (es. '-n 5').\n  <file>\n    Il file da leggere.\n\nARCHITETTURA E BASSO LIVELLO\n  Scarica il file tramite GET a '/api/fs/read'. Splitta il testo per righe e ne seleziona un sottoinsieme limitato in memoria tramite l'helper 'slice(allLines.length - n)'. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo.\n  1\n    Errore di lettura o argomenti non validi.\n  404\n    File non esistente.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  head(1), cat(1), web_api(7)\n\nESEMPI AVANZATI\n  tail logs.txt\n  tail -n 3 /data/net.cfg"
+  },
+  "en": {
+    "title": "tail - Show last lines of a file",
+    "synopsis": "tail [-n lines] <file>",
+    "description": "Output the last part (default 10 lines) of a file.",
+    "details": "NAME\n  tail - Output last lines of a file.\n\nSYNOPSIS\n  tail [-n <lines>] <file>\n\nDESCRIPTION\n  Prints the trailing segment of a file (defaults to 10 lines).\n\nOPTIONS\n  -n <lines>\n    Specify the exact count of lines to print (e.g. '-n 5').\n  <file>\n    The target file path.\n\nSYSTEM ARCHITECTURE\n  Downloads file contents via GET '/api/fs/read'. Parses lines in memory and isolates the bottom elements using array slicing ('slice(allLines.length - n)'). See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    Read error or invalid parameter formatting.\n  404\n    Target file not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  head(1), cat(1), web_api(7)\n\nADVANCED EXAMPLES\n  tail logs.txt\n  tail -n 3 /data/net.cfg"
+  }
+}

@@ -1,0 +1,144 @@
+// OUT-OF-DISTRIBUTION probe: queries about knowledge ANIMA ALREADY has, phrased deliberately
+// UNLIKE any card's `ask` list (different vocabulary, colloquial, indirect). This measures real
+// generalization / NLU, not memorization. DO NOT add these phrasings to the cards to "pass" it —
+// that defeats the purpose. A low score here is the honest signal, not a bug to tune away.
+{"q":"in cosa salvo un numero che mi serve dopo","lang":"it","expect":"prog.variable"}
+{"q":"come faccio a ripetere qualcosa un tot di volte","lang":"it","expect":"prog.for-loop"}
+{"q":"come raggruppo del codice da riusare","lang":"it","expect":"prog.function"}
+{"q":"quando una procedura richiama se stessa come si chiama","lang":"it","expect":"prog.recursion"}
+{"q":"come tengo insieme una fila di numeri","lang":"it","expect":"prog.array"}
+{"q":"quella cosa che tiene l'indirizzo di un'altra variabile","lang":"it","expect":"c.pointer"}
+{"q":"come chiedo memoria mentre il programma gira","lang":"it","expect":"c.malloc"}
+{"q":"come metto campi diversi sotto un nome solo","lang":"it","expect":"c.struct"}
+{"q":"perche il mio programma crasha leggendo la memoria","lang":"it","expect":"c.segfault"}
+{"q":"come si rappresenta del testo nel linguaggio c","lang":"it","expect":"c.string"}
+{"q":"come faccio consumare pochissimo al chip quando non lavora","lang":"it","expect":"esp.deep-sleep"}
+{"q":"come attacco tanti sensori usando solo due fili dati","lang":"it","expect":"esp.i2c"}
+{"q":"come faccio variare quanto e acceso un led","lang":"it","expect":"esp.pwm"}
+{"q":"a cosa servono i piedini che posso pilotare da codice","lang":"it","expect":"esp.gpio"}
+{"q":"come leggo una tensione che cambia con continuita","lang":"it","expect":"esp.adc"}
+{"q":"cosa permette al chip di fare piu cose in parallelo","lang":"it","expect":"esp.freertos"}
+{"q":"il cosino si puo collegare a internet senza fili","lang":"it","expect":["esp.wifi","os.wifi"]}
+{"q":"quale componente accumula carica elettrica","lang":"it","expect":"elec.capacitor"}
+{"q":"perche i led si bruciano senza qualcosa che limiti","lang":"it","expect":"elec.led"}
+{"q":"how do i read a sensor that gives a varying voltage","lang":"en","expect":"esp.adc"}
+{"q":"asking the system for memory while it runs","lang":"en","expect":"c.malloc"}
+{"q":"what makes a program repeat the same step many times","lang":"en","expect":"prog.for-loop"}
+{"q":"come impedisco che un valore venga modificato dopo averlo impostato","lang":"it","expect":"c.const"}
+{"q":"il bus seriale veloce a quattro fili per sd e display","lang":"it","expect":"esp.spi"}
+{"q":"il componente che fa passare corrente in un solo verso","lang":"it","expect":"elec.diode"}
+{"q":"il componente che funziona da interruttore comandato da un segnale","lang":"it","expect":"elec.transistor"}
+{"q":"puo comunicare in bluetooth a basso consumo","lang":"it","expect":"esp.ble"}
+{"q":"come ripeto un blocco finche una condizione resta vera","lang":"it","expect":"prog.while-loop"}
+{"q":"how do i stop a value from changing once set","lang":"en","expect":"c.const"}
+{"q":"the component that lets current flow only one way","lang":"en","expect":"elec.diode"}
+// --- Claude-authored held-out expansion (geo/sci/math/os/assistant + reasoning) ---
+{"q": "in che citta ha sede il governo francese", "lang": "it", "expect": "geo.capital.francia"}
+{"q": "dove si trova la sede del governo giapponese", "lang": "it", "expect": "geo.capital.giappone"}
+{"q": "la citta politicamente piu importante della germania", "lang": "it", "expect": "geo.capital.germania"}
+{"q": "what city is the seat of government in spain", "lang": "en", "expect": "geo.capital.spagna"}
+{"q": "qual e il capoluogo del nostro paese, l'italia", "lang": "it", "expect": "geo.capital.italia"}
+{"q": "la montagna piu alta del pianeta", "lang": "it", "expect": "geo.highest-mountain"}
+{"q": "qual e il corso d'acqua piu lungo del mondo", "lang": "it", "expect": "geo.longest-river"}
+{"q": "la distesa di sabbia piu estesa della terra", "lang": "it", "expect": "geo.largest-desert"}
+{"q": "quale mare e il piu grande di tutti", "lang": "it", "expect": "geo.largest-ocean"}
+{"q": "how many continents does the earth have", "lang": "en", "expect": "geo.continents"}
+{"q": "la nazione con piu territorio al mondo", "lang": "it", "expect": "geo.largest-country"}
+{"q": "la stella attorno a cui ruota la terra", "lang": "it", "expect": "sci.sun"}
+{"q": "qual e il pianeta piu grosso del sistema solare", "lang": "it", "expect": "sci.largest-planet"}
+{"q": "come fanno le piante a produrre nutrimento dalla luce", "lang": "it", "expect": "sci.photosynthesis"}
+{"q": "perche gli oggetti cadono sempre verso il basso", "lang": "it", "expect": "sci.gravity"}
+{"q": "la piu piccola unita di cui e fatta la materia", "lang": "it", "expect": "sci.atom"}
+{"q": "la molecola che contiene le istruzioni genetiche", "lang": "it", "expect": "sci.dna"}
+{"q": "che forma ha realmente il nostro pianeta", "lang": "it", "expect": "sci.earth-shape"}
+{"q": "at what temperature does water start to boil", "lang": "en", "expect": "sci.water-boil"}
+{"q": "quanti mondi orbitano intorno al sole", "lang": "it", "expect": "sci.planets-count"}
+{"q": "how fast does light actually travel", "lang": "en", "expect": "sci.speed-light"}
+{"q": "quanti minuti ci sono dentro un'ora", "lang": "it", "expect": "math.hour-minutes"}
+{"q": "un numero divisibile solo per uno e per se stesso", "lang": "it", "expect": "math.prime"}
+{"q": "il rapporto tra la circonferenza e il diametro di un cerchio", "lang": "it", "expect": "math.pi"}
+{"q": "come si calcola l'area di un rettangolo", "lang": "it", "expect": "math.rectangle-area"}
+{"q": "come trovo il valore medio di un gruppo di numeri", "lang": "it", "expect": "math.average"}
+{"q": "quanti pezzi fanno una dozzina", "lang": "it", "expect": "math.dozen"}
+{"q": "how many days are there in one year", "lang": "en", "expect": "math.year-days"}
+{"q": "un numero che si divide esattamente per due", "lang": "it", "expect": "math.even-odd"}
+{"q": "che apparecchietto e quello su cui gira tutto questo", "lang": "it", "expect": "os.device"}
+{"q": "perche qui non riesco a far girare modelli di ai grandi", "lang": "it", "expect": "os.no-psram"}
+{"q": "come abbino il telefono o un altro dispositivo", "lang": "it", "expect": "os.pairing"}
+{"q": "come porto il sistema all'ultima versione disponibile", "lang": "it", "expect": "os.update"}
+{"q": "funziona anche quando non c'e connessione a internet", "lang": "it", "expect": ["os.offline", "assistant.offline"]}
+{"q": "come scrivo qualcosa se non ho uno schermo touch", "lang": "it", "expect": "os.keyboard"}
+{"q": "how do i open the interface from my computer's browser", "lang": "en", "expect": "os.connect-browser"}
+{"q": "chi e che ti ha programmato e costruito", "lang": "it", "expect": "assistant.maker"}
+{"q": "che genere di cose riesci a fare per me", "lang": "it", "expect": "assistant.capabilities"}
+{"q": "con chi sto parlando di preciso", "lang": "it", "expect": "assistant.identity"}
+{"q": "riesci a capire piu di una lingua", "lang": "it", "expect": "assistant.language"}
+{"q": "differenza tra la memoria che si libera da sola e quella che gestisco io", "lang": "it", "expect": "c.stack-heap"}
+{"q": "come do un nome piu corto e leggibile a un tipo complicato", "lang": "it", "expect": "c.typedef"}
+{"q": "a cosa serve quel valore speciale che significa 'niente'", "lang": "it", "expect": "c.null"}
+{"q": "how do i turn a pin on or off directly from code", "lang": "en", "expect": "esp.digitalwrite"}
+{"q": "il componente che si oppone al passaggio della corrente", "lang": "it", "expect": "elec.resistor"}
+{"q": "two parts wired so the same current flows through both", "lang": "en", "expect": "elec.series"}
+// --- Claude expansion 2: stable cards (prog/c/sci/math-extra) + OUT-OF-SCOPE for FP testing ---
+{"q": "come faccio in modo che il programma decida da solo cosa fare", "lang": "it", "expect": "prog.if-else"}
+{"q": "come memorizzo una risposta si oppure no", "lang": "it", "expect": "prog.boolean"}
+{"q": "un numero tondo senza parte dopo la virgola", "lang": "it", "expect": "prog.integer"}
+{"q": "il risultato che una funzione manda indietro a chi la chiama", "lang": "it", "expect": "prog.return"}
+{"q": "una cosa che tiene insieme dati e le azioni che gli appartengono", "lang": "it", "expect": "prog.object"}
+{"q": "il modello di partenza per fabbricare tanti oggetti simili", "lang": "it", "expect": "prog.class"}
+{"q": "il modo in cui due software si scambiano servizi", "lang": "it", "expect": "prog.api"}
+{"q": "le regole con cui il browser scarica una pagina web", "lang": "it", "expect": "prog.http"}
+{"q": "il programma che trasforma il sorgente in eseguibile", "lang": "it", "expect": "prog.compiler"}
+{"q": "una ricetta di passi per arrivare a un risultato", "lang": "it", "expect": "prog.algorithm"}
+{"q": "un difetto che fa comportare male il programma", "lang": "it", "expect": "prog.bug"}
+{"q": "cercare dove si nasconde l'errore e sistemarlo", "lang": "it", "expect": "prog.debug"}
+{"q": "text in the code that is only for humans and not executed", "lang": "en", "expect": "prog.comment"}
+{"q": "a number with digits after the decimal point", "lang": "en", "expect": "prog.float"}
+{"q": "come accedo al valore puntato da un puntatore", "lang": "it", "expect": "c.dereference"}
+{"q": "il file con le dichiarazioni da mettere in cima", "lang": "it", "expect": "c.header"}
+{"q": "come porto dentro un altro file nel mio sorgente c", "lang": "it", "expect": "c.include"}
+{"q": "come do un nome a una costante col preprocessore", "lang": "it", "expect": "c.define"}
+{"q": "come scopro quanti byte occupa un tipo", "lang": "it", "expect": "c.sizeof"}
+{"q": "un insieme di nomi per valori interi costanti", "lang": "it", "expect": "c.enum"}
+{"q": "che differenza c'e tra compilare e collegare", "lang": "it", "expect": "c.compile-link"}
+{"q": "cosa succede al puntatore se gli sommo uno", "lang": "it", "expect": "c.pointer-arith"}
+{"q": "a sequence of elements of the same type in c", "lang": "en", "expect": ["c.array", "prog.array"]}
+{"q": "la grandezza che si misura in joule e fa funzionare tutto", "lang": "it", "expect": "sci.energy"}
+{"q": "cio che spinge o tira e cambia il movimento di un corpo", "lang": "it", "expect": "sci.force"}
+{"q": "l'oggetto che attira i chiodi di ferro", "lang": "it", "expect": "sci.magnet"}
+{"q": "le onde che le orecchie trasformano in cio che sentiamo", "lang": "it", "expect": "sci.sound"}
+{"q": "l'energia che fluisce spontaneamente dal caldo al freddo", "lang": "it", "expect": "sci.heat"}
+{"q": "solido liquido e gassoso, come si chiamano queste forme", "lang": "it", "expect": "sci.states-matter"}
+{"q": "la particella negativa il cui flusso fa la corrente", "lang": "it", "expect": "sci.electron"}
+{"q": "il gas che i polmoni prendono dall'aria per vivere", "lang": "it", "expect": "sci.oxygen"}
+{"q": "il satellite che con la sua gravita provoca le maree", "lang": "it", "expect": "sci.moon"}
+{"q": "il meccanismo per cui le specie si adattano nei millenni", "lang": "it", "expect": "sci.evolution"}
+{"q": "the particle with a negative charge inside an atom", "lang": "en", "expect": "sci.electron"}
+{"q": "come scrivo tre quarti di una quantita", "lang": "it", "expect": "math.fraction"}
+{"q": "l'operazione che annulla l'elevamento al quadrato", "lang": "it", "expect": "math.square-root"}
+{"q": "due elevato alla quinta quanto vale", "lang": "it", "expect": "math.power"}
+{"q": "a cosa serve base per altezza diviso due", "lang": "it", "expect": "math.triangle-area"}
+{"q": "la formula con pi greco e il raggio al quadrato", "lang": "it", "expect": "math.circle-area"}
+{"q": "la somma delle lunghezze di tutti i lati", "lang": "it", "expect": "math.perimeter"}
+{"q": "spartire dodici biscotti in tre parti uguali", "lang": "it", "expect": "math.division"}
+{"q": "un valore piu piccolo di zero", "lang": "it", "expect": "math.negative"}
+{"q": "how do i compute the area of a circle from its radius", "lang": "en", "expect": "math.circle-area"}
+{"q": "raccontami una barzelletta divertente", "lang": "it", "expect": "none"}
+{"q": "che tempo fara domani in citta", "lang": "it", "expect": "none"}
+{"q": "dammi la ricetta della carbonara", "lang": "it", "expect": "none"}
+{"q": "chi ha vinto i mondiali di calcio nel 2006", "lang": "it", "expect": "none"}
+{"q": "scrivimi una poesia sull'amore", "lang": "it", "expect": "none"}
+{"q": "what is the meaning of life", "lang": "en", "expect": "none"}
+{"q": "qual e il prezzo dell'oro in questo momento", "lang": "it", "expect": "none"}
+{"q": "traduci la parola ciao in giapponese", "lang": "it", "expect": "none"}
+{"q": "consigliami un buon film da vedere stasera", "lang": "it", "expect": "none"}
+{"q": "qual e il tuo colore preferito", "lang": "it", "expect": "none"}
+// --- Claude expansion 3: Ohm's law + math knowledge (the new levers) ---
+{"q": "come ricavo la corrente sapendo la tensione e la resistenza", "lang": "it", "expect": "elec.ohm-law"}
+{"q": "la formula che lega volt, ampere e ohm", "lang": "it", "expect": "elec.ohm-law"}
+{"q": "the relationship between voltage current and resistance", "lang": "en", "expect": "elec.ohm-law"}
+{"q": "se conosco i volt e gli ohm come trovo gli ampere", "lang": "it", "expect": "elec.ohm-law"}
+{"q": "quanto vale la potenza in un circuito da tensione e corrente", "lang": "it", "expect": "elec.power"}
+{"q": "l'inverso del fare un quadrato di un numero", "lang": "it", "expect": "math.square-root"}
+{"q": "quanta superficie ha un cerchio dato il raggio", "lang": "it", "expect": "math.circle-area"}
+{"q": "come trovo la media di una serie di valori", "lang": "it", "expect": "math.average"}

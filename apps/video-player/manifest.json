@@ -1,0 +1,55 @@
+{
+  "id": "video-player",
+  "name": "Video Player",
+  "version": "3.0.0",
+  "version_code": 3,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Play video files. Decoding runs in the client browser; the device only streams bytes.",
+  "category": "media",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/video-player/",
+  "permissions": [
+    "storage.shared"
+  ],
+  "mounts": {
+    "app": "/apps/video-player/data"
+  },
+  "handles": {
+    "role": "player",
+    "extensions": [
+      "mp4",
+      "webm",
+      "mov",
+      "mkv"
+    ]
+  },
+  "intents": [
+    {
+      "action": "play",
+      "extensions": [
+        "mp4",
+        "webm",
+        "mov",
+        "mkv"
+      ]
+    }
+  ],
+  "subscribes": [
+    "fs.open"
+  ],
+  "publishes": [],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

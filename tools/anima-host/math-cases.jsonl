@@ -1,0 +1,548 @@
+// ANIMA Math Engine v2 — correctness + anti-drift corpus. Each line: {q, lang, expect} (the
+// reply must contain `expect`, case-insensitive) OR {q, lang, reject:true} (no math frame may
+// claim it — guards against false positives). Drives the REAL firmware (anima.exe) and, if the
+// mock is up, cross-checks the JS twin (serve-shell.mjs). Run: node tools/anima-host/math-check.mjs
+//
+// --- plain arithmetic (calc parser, incl. the "4x4" glued-x fix) ---
+{"q":"4x4","lang":"it","expect":"16"}
+{"q":"4x4","lang":"en","expect":"16"}
+{"q":"10x10","lang":"it","expect":"100"}
+{"q":"3x3x3","lang":"it","expect":"27"}
+{"q":"quanto fa 7 per 8","lang":"it","expect":"56"}
+{"q":"how much is 7 times 8","lang":"en","expect":"56"}
+{"q":"5 diviso 3?","lang":"it","expect":"1.6667"}
+{"q":"5 divided by 3","lang":"en","expect":"1.6667"}
+{"q":"(2+3)*4","lang":"it","expect":"20"}
+{"q":"2^10","lang":"it","expect":"1024"}
+{"q":"100 - 1","lang":"it","expect":"99"}
+{"q":"12 + 8 - 5","lang":"it","expect":"15"}
+{"q":"6 × 7","lang":"it","expect":"42"}
+{"q":"20 ÷ 4","lang":"it","expect":"5"}
+{"q":"3,5 + 1,5","lang":"it","expect":"5"}
+{"q":"quanto fa 9 meno 4","lang":"it","expect":"5"}
+{"q":"2 piu 2","lang":"it","expect":"4"}
+{"q":"12 diviso 0","lang":"it","expect":"zero"}
+{"q":"12 divided by 0","lang":"en","expect":"zero"}
+// --- base / radix conversion (the headline skill) ---
+{"q":"converti 24 in binario","lang":"it","expect":"11000"}
+{"q":"convert 24 to binary","lang":"en","expect":"11000"}
+{"q":"converti 10 in base 2","lang":"it","expect":"1010"}
+{"q":"10 in base 2","lang":"it","expect":"1010"}
+{"q":"converti 243 in base 10","lang":"it","expect":"243 in base 10 = 243"}
+{"q":"654 in base 16?","lang":"it","expect":"28E"}
+{"q":"654 in hex","lang":"en","expect":"28E"}
+{"q":"255 in esadecimale","lang":"it","expect":"FF"}
+{"q":"255 in hex","lang":"en","expect":"FF"}
+{"q":"converti 100 in esadecimale","lang":"it","expect":"64"}
+{"q":"converti 8 in binario","lang":"it","expect":"1000"}
+{"q":"32 in ottale","lang":"it","expect":"40"}
+{"q":"64 in octal","lang":"en","expect":"100"}
+{"q":"converti 1010 da binario","lang":"it","expect":"= 10"}
+{"q":"1111 da binario a decimale","lang":"it","expect":"= 15"}
+{"q":"FF da esadecimale a decimale","lang":"it","expect":"255"}
+{"q":"converti FF in decimale","lang":"it","expect":"255"}
+{"q":"convert FF to decimal","lang":"en","expect":"255"}
+{"q":"converti AB in decimale","lang":"it","expect":"171"}
+{"q":"0xFF in decimale","lang":"it","expect":"255"}
+{"q":"0x1A in decimale","lang":"it","expect":"26"}
+{"q":"0b1010 in decimale","lang":"it","expect":"= 10"}
+{"q":"converti 100 in base 16","lang":"it","expect":"64"}
+{"q":"255 in base 2","lang":"it","expect":"11111111"}
+{"q":"converti 1000 in base 16","lang":"it","expect":"3E8"}
+{"q":"7 in binario","lang":"it","expect":"111"}
+{"q":"16 in hex","lang":"en","expect":"10"}
+{"q":"convert 30 to base 16","lang":"en","expect":"1E"}
+// --- natural-language word problems ---
+{"q":"se tolgo 10 da 20 quanto resta?","lang":"it","expect":"= 10"}
+{"q":"se tolgo 7 da 15","lang":"it","expect":"= 8"}
+{"q":"subtract 10 from 20","lang":"en","expect":"= 10"}
+{"q":"take 4 from 9","lang":"en","expect":"= 5"}
+{"q":"aggiungi 5 a 3","lang":"it","expect":"= 8"}
+{"q":"add 5 to 3","lang":"en","expect":"= 8"}
+{"q":"somma di 3 e 4","lang":"it","expect":"= 7"}
+{"q":"sum of 3 and 4","lang":"en","expect":"= 7"}
+{"q":"la somma di 12 e 30","lang":"it","expect":"= 42"}
+{"q":"differenza tra 10 e 3","lang":"it","expect":"= 7"}
+{"q":"difference between 10 and 3","lang":"en","expect":"= 7"}
+{"q":"prodotto di 6 e 7","lang":"it","expect":"= 42"}
+{"q":"product of 6 and 7","lang":"en","expect":"= 42"}
+{"q":"quoziente di 20 e 4","lang":"it","expect":"= 5"}
+{"q":"quotient of 20 and 5","lang":"en","expect":"= 4"}
+{"q":"quanto manca da 3 a 10","lang":"it","expect":"= 7"}
+// --- named scale ops ---
+{"q":"il doppio di 8","lang":"it","expect":"16"}
+{"q":"double of 8","lang":"en","expect":"16"}
+{"q":"la meta di 10","lang":"it","expect":"= 5"}
+{"q":"half of 10","lang":"en","expect":"= 5"}
+{"q":"il triplo di 5","lang":"it","expect":"15"}
+{"q":"triple of 5","lang":"en","expect":"15"}
+{"q":"il quadruplo di 3","lang":"it","expect":"12"}
+{"q":"il quadrato di 7","lang":"it","expect":"49"}
+{"q":"square of 7","lang":"en","expect":"49"}
+{"q":"7 al quadrato","lang":"it","expect":"49"}
+{"q":"il cubo di 3","lang":"it","expect":"27"}
+{"q":"cube of 3","lang":"en","expect":"27"}
+{"q":"3 al cubo","lang":"it","expect":"27"}
+{"q":"il reciproco di 4","lang":"it","expect":"0.25"}
+{"q":"reciprocal of 4","lang":"en","expect":"0.25"}
+{"q":"l'opposto di 5","lang":"it","expect":"-5"}
+{"q":"un terzo di 9","lang":"it","expect":"= 3"}
+{"q":"a quarter of 8","lang":"en","expect":"= 2"}
+// --- functions ---
+{"q":"radice di 9","lang":"it","expect":"= 3"}
+{"q":"square root of 49","lang":"en","expect":"= 7"}
+{"q":"radice di 144","lang":"it","expect":"12"}
+{"q":"radice cubica di 27","lang":"it","expect":"cubica di 27 = 3"}
+{"q":"cube root of 8","lang":"en","expect":"cube root of 8 = 2"}
+// cube-root typos must resolve to cbrt (or abstain) — never the default sqrt branch (the worst failure
+// class: a confident wrong number). "cubica" is fuzzy-matched next to "radice"; a worse garble abstains.
+{"q":"radice cuboca di 8","lang":"it","expect":"cubica di 8 = 2"}
+{"q":"radice cubika di 27","lang":"it","expect":"cubica di 27 = 3"}
+{"q":"radice qubica di 27","lang":"it","expect":"cubica di 27 = 3"}
+{"q":"radice cubbicca di 8","lang":"it","reject":true}
+{"q":"log di 1000","lang":"it","expect":"= 3"}
+{"q":"log of 100","lang":"en","expect":"= 2"}
+{"q":"ln di 1","lang":"it","expect":"= 0"}
+{"q":"log2 di 8","lang":"it","expect":"= 3"}
+{"q":"logaritmo in base 2 di 8","lang":"it","expect":"= 3"}
+{"q":"logaritmo naturale di 1","lang":"it","expect":"= 0"}
+{"q":"arrotonda 3.7","lang":"it","expect":"= 4"}
+{"q":"round 3.2","lang":"en","expect":"= 3"}
+{"q":"pavimento di 3.9","lang":"it","expect":"= 3"}
+{"q":"soffitto di 3.1","lang":"it","expect":"= 4"}
+{"q":"floor of 9.9","lang":"en","expect":"= 9"}
+{"q":"ceil of 9.1","lang":"en","expect":"= 10"}
+{"q":"seno di 30 gradi","lang":"it","expect":"0.5"}
+{"q":"sin of 90 degrees","lang":"en","expect":"= 1"}
+{"q":"coseno di 60 gradi","lang":"it","expect":"0.5"}
+{"q":"cos of 0 degrees","lang":"en","expect":"= 1"}
+{"q":"tangente di 45 gradi","lang":"it","expect":"= 1"}
+{"q":"esponenziale di 0","lang":"it","expect":"= 1"}
+{"q":"2 elevato a 10","lang":"it","expect":"1024"}
+{"q":"2 to the power of 5","lang":"en","expect":"32"}
+// --- number properties ---
+{"q":"7 e primo?","lang":"it","expect":"Si"}
+{"q":"is 7 prime?","lang":"en","expect":"Yes"}
+{"q":"9 e primo?","lang":"it","expect":"3 x 3"}
+{"q":"is 9 prime?","lang":"en","expect":"No"}
+{"q":"97 e primo?","lang":"it","expect":"Si"}
+{"q":"100 e primo?","lang":"it","expect":"No"}
+{"q":"is 13 prime","lang":"en","expect":"Yes"}
+{"q":"fibonacci di 10","lang":"it","expect":"55"}
+{"q":"fibonacci of 20","lang":"en","expect":"6765"}
+{"q":"fibonacci di 0","lang":"it","expect":"= 0"}
+{"q":"fibonacci di 1","lang":"it","expect":"= 1"}
+// --- roman numerals ---
+{"q":"24 in numeri romani","lang":"it","expect":"XXIV"}
+{"q":"24 in roman numerals","lang":"en","expect":"XXIV"}
+{"q":"2024 in numeri romani","lang":"it","expect":"MMXXIV"}
+{"q":"4 in numeri romani","lang":"it","expect":"IV"}
+{"q":"converti 40 in numeri romani","lang":"it","expect":"XL"}
+{"q":"3999 in roman numerals","lang":"en","expect":"MMMCMXCIX"}
+{"q":"quanto vale XIV","lang":"it","expect":"= 14"}
+{"q":"XXVII in decimale","lang":"it","expect":"= 27"}
+// --- existing solver regressions (must still pass) ---
+{"q":"il 15% di 240","lang":"it","expect":"36"}
+{"q":"20% of 50","lang":"en","expect":"10"}
+{"q":"3 km in metri","lang":"it","expect":"3000"}
+{"q":"100 cm in metri","lang":"it","expect":"1 metri"}
+{"q":"1 ora in minuti","lang":"it","expect":"60"}
+{"q":"5 volt e 1000 ohm","lang":"it","expect":"5 mA"}
+{"q":"valore assoluto di -8","lang":"it","expect":"8"}
+{"q":"10 modulo 3","lang":"it","expect":"1"}
+{"q":"fattoriale di 5","lang":"it","expect":"120"}
+{"q":"mcd di 12 e 18","lang":"it","expect":"6"}
+{"q":"mcm di 4 e 6","lang":"it","expect":"12"}
+{"q":"media di 4 e 6","lang":"it","expect":"5"}
+// --- false-positive guards: a math frame must NOT claim these ---
+{"q":"cos e un numero decimale","lang":"it","reject":true}
+{"q":"differenza tra mele e pere","lang":"it","reject":true}
+{"q":"apri la calcolatrice","lang":"it","reject":true}
+{"q":"il doppio gioco del portiere","lang":"it","reject":true}
+{"q":"converti il video in mp4","lang":"it","reject":true}
+{"q":"cos'e la radice quadrata","lang":"it","reject":true}
+// === GEOMETRY skill =========================================================
+// --- circle (area / circumference / diameter) ---
+{"q":"area del cerchio con raggio 5","lang":"it","expect":"78.5398"}
+{"q":"area del cerchio raggio 10","lang":"it","expect":"314.159"}
+{"q":"circonferenza con raggio 5","lang":"it","expect":"31.4159"}
+{"q":"qual e il diametro del cerchio con raggio 4","lang":"it","expect":"= 8"}
+{"q":"area of circle radius 5","lang":"en","expect":"78.5398"}
+{"q":"circumference radius 5","lang":"en","expect":"31.4159"}
+// --- square (area / perimeter / diagonal: side 5 -> 25 / 20 / 7.07107) ---
+{"q":"area del quadrato lato 5","lang":"it","expect":"25"}
+{"q":"perimetro del quadrato lato 5","lang":"it","expect":"= 20"}
+{"q":"diagonale del quadrato lato 5","lang":"it","expect":"7.07107"}
+{"q":"square area side 5","lang":"en","expect":"25"}
+// --- rectangle (4 x 6 -> area 24 / perimeter 20 / diagonal 7.2111) ---
+{"q":"area del rettangolo base 4 altezza 6","lang":"it","expect":"24"}
+{"q":"perimetro del rettangolo base 4 altezza 6","lang":"it","expect":"= 20"}
+{"q":"diagonale del rettangolo base 4 altezza 6","lang":"it","expect":"7.2111"}
+{"q":"rectangle area base 4 height 6","lang":"en","expect":"24"}
+// --- triangle area + Pythagoras (both directions) ---
+{"q":"area del triangolo base 10 altezza 4","lang":"it","expect":"= 20"}
+{"q":"ipotenusa con cateti 3 e 4","lang":"it","expect":"= 5"}
+{"q":"ipotenusa con cateti 6 e 8","lang":"it","expect":"= 10"}
+{"q":"cateto con ipotenusa 13 e cateto 5","lang":"it","expect":"= 12"}
+{"q":"hypotenuse of legs 3 and 4","lang":"en","expect":"= 5"}
+{"q":"triangle area base 10 height 4","lang":"en","expect":"= 20"}
+// --- trapezoid / rhombus / parallelogram ---
+{"q":"area del trapezio 6 4 altezza 3","lang":"it","expect":"= 15"}
+{"q":"area del rombo diagonali 6 e 8","lang":"it","expect":"= 24"}
+{"q":"area del parallelogramma base 5 altezza 4","lang":"it","expect":"= 20"}
+// --- solids (cube / sphere / cylinder / cone) ---
+{"q":"volume del cubo lato 3","lang":"it","expect":"27"}
+{"q":"superficie del cubo lato 3","lang":"it","expect":"54"}
+{"q":"volume della sfera raggio 2","lang":"it","expect":"33.5103"}
+{"q":"superficie della sfera raggio 2","lang":"it","expect":"50.2655"}
+{"q":"volume del cilindro raggio 2 altezza 5","lang":"it","expect":"62.8319"}
+{"q":"volume del cono raggio 3 altezza 9","lang":"it","expect":"84.823"}
+{"q":"cube volume side 3","lang":"en","expect":"27"}
+{"q":"sphere volume radius 2","lang":"en","expect":"33.5103"}
+{"q":"cylinder volume radius 2 height 5","lang":"en","expect":"62.8319"}
+{"q":"cone volume radius 3 height 9","lang":"en","expect":"84.823"}
+// --- pi ---
+{"q":"quanto vale pi greco","lang":"it","expect":"3.14159265"}
+{"q":"pigreco","lang":"it","expect":"3.14159265"}
+{"q":"value of pi","lang":"en","expect":"3.14159265"}
+// --- TEACH mode (no numbers -> the formula) ---
+{"q":"formula area del cerchio","lang":"it","expect":"Area del cerchio: A"}
+{"q":"qual e la formula del volume della sfera","lang":"it","expect":"Volume della sfera: V"}
+{"q":"teorema di pitagora","lang":"it","expect":"Pitagora: c"}
+{"q":"perimetro del quadrato","lang":"it","expect":"Perimetro del quadrato: P"}
+// --- geometry false-positive guards ---
+{"q":"alza il volume","lang":"it","reject":true}
+{"q":"ho 3 cerchi","lang":"it","reject":true}
+{"q":"area 51","lang":"it","reject":true}
+{"q":"il triangolo delle bermuda","lang":"it","reject":true}
+{"q":"che area di lavoro","lang":"it","reject":true}
+{"q":"ho visto tre triangoli","lang":"it","reject":true}
+// === PHYSICS skill ==========================================================
+// --- kinematics v = s/t (rearranges) ---
+{"q":"velocita con spazio 100 e tempo 20","lang":"it","expect":"= 5 m/s"}
+{"q":"spazio con velocita 5 tempo 10","lang":"it","expect":"= 50 m"}
+{"q":"tempo con spazio 100 velocita 25","lang":"it","expect":"= 4 s"}
+{"q":"speed distance 100 time 20","lang":"en","expect":"= 5 m/s"}
+// --- Newton F = m·a (rearranges) ---
+{"q":"forza con massa 10 e accelerazione 2","lang":"it","expect":"= 20 N"}
+{"q":"massa con forza 20 accelerazione 4","lang":"it","expect":"= 5 kg"}
+{"q":"accelerazione con forza 20 massa 4","lang":"it","expect":"= 5 m/s"}
+{"q":"force mass 10 acceleration 2","lang":"en","expect":"= 20 N"}
+// --- weight P = m·g ---
+{"q":"peso di massa 5","lang":"it","expect":"49.05 N"}
+{"q":"peso con massa 10","lang":"it","expect":"98.1 N"}
+{"q":"weight mass 5","lang":"en","expect":"49.05 N"}
+// --- energy (kinetic / potential) ---
+{"q":"energia cinetica massa 2 velocita 3","lang":"it","expect":"= 9 J"}
+{"q":"energia cinetica massa 4 velocita 5","lang":"it","expect":"= 50 J"}
+{"q":"energia potenziale massa 2 altezza 5","lang":"it","expect":"98.1 J"}
+{"q":"energia potenziale massa 3 altezza 10","lang":"it","expect":"294.3 J"}
+{"q":"kinetic energy mass 2 speed 3","lang":"en","expect":"= 9 J"}
+// --- momentum / density / pressure ---
+{"q":"quantita di moto massa 2 velocita 3","lang":"it","expect":"6 kg"}
+{"q":"densita massa 100 volume 50","lang":"it","expect":"= 2 kg/m"}
+{"q":"densita massa 200 volume 50","lang":"it","expect":"= 4 kg/m"}
+{"q":"pressione forza 100 area 5","lang":"it","expect":"20 Pa"}
+{"q":"pressure force 100 area 5","lang":"en","expect":"20 Pa"}
+// --- work / power ---
+{"q":"lavoro forza 10 spostamento 3","lang":"it","expect":"= 30 J"}
+{"q":"lavoro forza 20 spostamento 5","lang":"it","expect":"= 100 J"}
+{"q":"potenza lavoro 100 tempo 5","lang":"it","expect":"= 20 W"}
+{"q":"potenza energia 200 tempo 4","lang":"it","expect":"= 50 W"}
+{"q":"work force 10 distance 3","lang":"en","expect":"= 30 J"}
+// --- waves f = 1/T ---
+{"q":"frequenza periodo 0.5","lang":"it","expect":"2 Hz"}
+{"q":"periodo frequenza 4","lang":"it","expect":"0.25 s"}
+// --- physics TEACH mode ---
+{"q":"formula della velocita","lang":"it","expect":"v = spazio / tempo"}
+{"q":"formula della forza","lang":"it","expect":"legge di Newton"}
+{"q":"qual e la formula dell'energia cinetica","lang":"it","expect":"Energia cinetica: Ec"}
+{"q":"formula della densita","lang":"it","expect":"= m/V"}
+// --- physics false-positive guards ---
+{"q":"ho trovato lavoro","lang":"it","reject":true}
+{"q":"forza juve","lang":"it","reject":true}
+{"q":"che velocita","lang":"it","reject":true}
+{"q":"alza la pressione","lang":"it","reject":true}
+{"q":"la mia massa muscolare","lang":"it","reject":true}
+{"q":"energia rinnovabile","lang":"it","reject":true}
+// === VECTOR skill (magnitude / dot product) =================================
+{"q":"modulo del vettore 3 4","lang":"it","expect":"= 5"}
+{"q":"modulo del vettore 1 2 2","lang":"it","expect":"= 3"}
+{"q":"magnitude of vector 6 8","lang":"en","expect":"= 10"}
+{"q":"prodotto scalare vettori 1 2 e 3 4","lang":"it","expect":"= 11"}
+{"q":"dot product vectors 1 2 and 3 4","lang":"en","expect":"= 11"}
+{"q":"vettore aereo","lang":"it","reject":true}
+{"q":"il vettore di trasporto merci","lang":"it","reject":true}
+// === regression locks: 3D "area" = surface area, weight verb "pesa" ==========
+{"q":"surface area of a sphere with radius 5","lang":"en","expect":"314.159"}
+{"q":"area del cubo lato 3","lang":"it","expect":"54"}
+{"q":"area superficie del cilindro raggio 2 altezza 5","lang":"it","expect":"87.9646"}
+{"q":"quanto pesa una massa di 7 kg","lang":"it","expect":"68.67"}
+// === PHYSICS — natural-language problems (unit-role inference, SI) =========
+// --- kinematics v = s/t : worded, with units ---
+{"q":"un'auto percorre 100 metri in 20 secondi, qual è la velocità?","lang":"it","expect":"= 5 m/s"}
+{"q":"una moto percorre 240 metri in 30 secondi, che velocità ha?","lang":"it","expect":"= 8 m/s"}
+{"q":"quanto spazio percorre un'auto a 20 m/s in 5 secondi?","lang":"it","expect":"= 100 m"}
+{"q":"viaggio a 30 m/s per 10 secondi, quanta strada faccio?","lang":"it","expect":"= 300 m"}
+{"q":"una macchina viaggia a 50 km/h per 3 ore, quanto spazio percorre?","lang":"it","expect":"= 150000 m"}
+{"q":"un treno percorre 300 km in 4 ore, qual è la velocità?","lang":"it","expect":"= 20.8333 m/s"}
+{"q":"quanto tempo impiega a 10 m/s per percorrere 100 metri?","lang":"it","expect":"= 10 s"}
+{"q":"un ciclista pedala a 8 m/s per 60 secondi, che distanza copre?","lang":"it","expect":"= 480 m"}
+{"q":"il suono viaggia a 340 m/s, quanto spazio in 5 secondi?","lang":"it","expect":"= 1700 m"}
+{"q":"ho corso 5 km in 30 minuti, a che velocità?","lang":"it","expect":"= 2.77778 m/s"}
+{"q":"un aereo vola a 250 m/s per 120 secondi, che distanza percorre?","lang":"it","expect":"= 30000 m"}
+{"q":"quanto vale la velocità con spazio 1000 e tempo 40","lang":"it","expect":"= 25 m/s"}
+{"q":"a runner covers 100 m in 10 s, what is the speed?","lang":"en","expect":"= 10 m/s"}
+{"q":"a car travels 150 km in 2 hours, what is its speed?","lang":"en","expect":"= 20.8333 m/s"}
+{"q":"how far does a car at 25 m/s travel in 8 seconds?","lang":"en","expect":"= 200 m"}
+{"q":"a sprinter runs 200 m in 25 s, what is the speed?","lang":"en","expect":"= 8 m/s"}
+{"q":"speed of a 400 m run in 50 s","lang":"en","expect":"= 8 m/s"}
+// --- Newton F = m·a : worded ---
+{"q":"una forza di 20 N agisce su una massa di 4 kg, qual è l'accelerazione?","lang":"it","expect":"= 5 m/s²"}
+{"q":"che forza serve per accelerare 10 kg a 3 m/s2?","lang":"it","expect":"= 30 N"}
+{"q":"una massa di 5 kg subisce una forza di 10 N, qual è l'accelerazione?","lang":"it","expect":"= 2 m/s²"}
+{"q":"quanta forza per dare 2 m/s2 a una massa di 50 kg?","lang":"it","expect":"= 100 N"}
+{"q":"una forza di 100 N su 25 kg, che accelerazione produce?","lang":"it","expect":"= 4 m/s²"}
+{"q":"calcola la massa se una forza di 50 N dà 10 m/s2","lang":"it","expect":"= 5 kg"}
+{"q":"una forza di 12 N e una massa di 3 kg, accelerazione?","lang":"it","expect":"= 4 m/s²"}
+{"q":"un razzo accelera a 30 m/s2, massa 2000 kg, che forza?","lang":"it","expect":"= 60000 N"}
+{"q":"una forza di 0.5 kn su 100 kg, accelerazione?","lang":"it","expect":"= 5 m/s²"}
+{"q":"forza con massa 8 e accelerazione 5","lang":"it","expect":"= 40 N"}
+{"q":"what force accelerates 2 kg at 5 m/s2?","lang":"en","expect":"= 10 N"}
+{"q":"a 6 kg mass under a 18 N force, what is the acceleration?","lang":"en","expect":"= 3 m/s²"}
+// --- weight P = m·g ---
+{"q":"quanto pesa un oggetto di 10 kg?","lang":"it","expect":"= 98.1 N"}
+{"q":"qual è il peso di 50 kg?","lang":"it","expect":"= 490.5 N"}
+{"q":"un sacco di 25 kg, quanto pesa?","lang":"it","expect":"= 245.25 N"}
+{"q":"il peso di un corpo di 2 kg","lang":"it","expect":"= 19.62 N"}
+{"q":"quanto pesa una massa di 3.5 kg?","lang":"it","expect":"= 34.335 N"}
+{"q":"una massa pesa 500 N, quanto vale la massa?","lang":"it","expect":"= 50.9684 kg"}
+{"q":"how much does a 10 kg object weigh?","lang":"en","expect":"= 98.1 N"}
+{"q":"what is the weight of a 3 kg mass?","lang":"en","expect":"= 29.43 N"}
+{"q":"how much does 80 kg weigh?","lang":"en","expect":"= 784.8 N"}
+// --- kinetic energy Ec = ½·m·v² ---
+{"q":"calcola l'energia cinetica di un corpo di 2 kg che viaggia a 10 m/s","lang":"it","expect":"= 100 J"}
+{"q":"energia cinetica di una massa di 4 kg a 5 m/s","lang":"it","expect":"= 50 J"}
+{"q":"un corpo di 1 kg si muove a 10 m/s, energia cinetica?","lang":"it","expect":"= 50 J"}
+{"q":"un'auto di 1000 kg a 20 m/s, che energia cinetica ha?","lang":"it","expect":"= 200000 J"}
+{"q":"una palla di 0.5 kg lanciata a 12 m/s, energia cinetica?","lang":"it","expect":"= 36 J"}
+{"q":"quanta energia cinetica ha una massa di 8 kg a 0.5 m/s?","lang":"it","expect":"= 1 J"}
+{"q":"kinetic energy of a 3 kg body at 2 m/s","lang":"en","expect":"= 6 J"}
+{"q":"what is the kinetic energy of 10 kg at 3 m/s?","lang":"en","expect":"= 45 J"}
+{"q":"a 1000 kg car travels at 20 m/s, what is its kinetic energy?","lang":"en","expect":"= 200000 J"}
+// --- potential energy Ep = m·g·h ---
+{"q":"energia potenziale di 2 kg a 5 metri di altezza","lang":"it","expect":"= 98.1 J"}
+{"q":"energia potenziale di una massa di 3 kg a quota 10 m","lang":"it","expect":"= 294.3 J"}
+{"q":"un oggetto di 2 kg sollevato a un'altezza di 20 metri, energia potenziale?","lang":"it","expect":"= 392.4 J"}
+{"q":"energia potenziale massa 10 altezza 2","lang":"it","expect":"= 196.2 J"}
+{"q":"potential energy of a 2 kg object at a height of 10 m","lang":"en","expect":"= 196.2 J"}
+{"q":"potential energy of 5 kg at height 4 m","lang":"en","expect":"= 196.2 J"}
+// --- momentum q = m·v ---
+{"q":"quantità di moto di una massa di 2 kg a 3 m/s","lang":"it","expect":"= 6 kg"}
+{"q":"un'auto da 1200 kg a 30 m/s, quantità di moto?","lang":"it","expect":"= 36000 kg"}
+{"q":"quantità di moto massa 10 velocita 2","lang":"it","expect":"= 20 kg"}
+{"q":"momentum of a 5 kg mass at 4 m/s","lang":"en","expect":"= 20 kg"}
+{"q":"a 2 kg object at 8 m/s, what is its momentum?","lang":"en","expect":"= 16 kg"}
+// --- density ρ = m/V ---
+{"q":"qual è la densità di 100 kg in 50 litri?","lang":"it","expect":"= 2000 kg/m"}
+{"q":"densità di una massa di 200 g e volume 100 cm3","lang":"it","expect":"= 2000 kg/m"}
+{"q":"densità di 1 kg in 1 litro","lang":"it","expect":"= 1000 kg/m"}
+{"q":"massa di un corpo con densità 1000 kg/m3 e volume 2 m3","lang":"it","expect":"= 2000 kg"}
+{"q":"volume di 500 kg con densità 250 kg/m3","lang":"it","expect":"= 2 m³"}
+{"q":"density of 600 kg in 2 m3","lang":"en","expect":"= 300 kg/m"}
+// --- pressure p = F/A ---
+{"q":"pressione di una forza di 100 N su un'area di 5 m2","lang":"it","expect":"= 20 Pa"}
+{"q":"che forza esercita una pressione di 10 Pa su 3 m2?","lang":"it","expect":"= 30 N"}
+{"q":"pressure of 200 N over 4 m2","lang":"en","expect":"= 50 Pa"}
+{"q":"pressure of 60 N on 12 m2","lang":"en","expect":"= 5 Pa"}
+// --- work L = F·s ---
+{"q":"lavoro di una forza di 10 N su uno spostamento di 3 m","lang":"it","expect":"= 30 J"}
+{"q":"quanto lavoro fa una forza di 50 N per 2 metri?","lang":"it","expect":"= 100 J"}
+{"q":"work done by 20 N over 5 m","lang":"en","expect":"= 100 J"}
+{"q":"work of 100 N over 10 m","lang":"en","expect":"= 1000 J"}
+// --- power P = L/t  and  E = P·t ---
+{"q":"potenza con lavoro 100 J in 5 secondi","lang":"it","expect":"= 20 W"}
+{"q":"una lampada da 60 W accesa per 2 ore, quanta energia consuma?","lang":"it","expect":"= 432000 J"}
+{"q":"un motore da 1000 W per 60 secondi, quanta energia?","lang":"it","expect":"= 60000 J"}
+{"q":"una pompa da 2 kw per 10 secondi, energia erogata?","lang":"it","expect":"= 20000 J"}
+{"q":"power of 200 J in 4 s","lang":"en","expect":"= 50 W"}
+{"q":"a 500 W heater running for 120 s uses how much energy?","lang":"en","expect":"= 60000 J"}
+// --- waves f = 1/T ---
+{"q":"frequenza con periodo 0.5 s","lang":"it","expect":"= 2 Hz"}
+{"q":"periodo di un'onda con frequenza 4 Hz","lang":"it","expect":"= 0.25 s"}
+{"q":"period of a 10 Hz wave","lang":"en","expect":"= 0.1 s"}
+{"q":"frequency with period 2 s","lang":"en","expect":"= 0.5 Hz"}
+{"q":"frequency of a wave with period 0.25 s","lang":"en","expect":"= 4 Hz"}
+// --- teach mode (no values -> symbolic formula) ---
+{"q":"qual è la formula della velocità","lang":"it","expect":"v = spazio / tempo"}
+{"q":"formula della forza","lang":"it","expect":"legge di Newton"}
+{"q":"formula dell'energia cinetica","lang":"it","expect":"Energia cinetica: Ec"}
+{"q":"formula dell'energia potenziale","lang":"it","expect":"Energia potenziale: Ep"}
+{"q":"formula della densità","lang":"it","expect":"= m/V"}
+{"q":"formula della pressione","lang":"it","expect":"p = F/A"}
+{"q":"formula del lavoro","lang":"it","expect":"Lavoro: L = F"}
+{"q":"formula della potenza","lang":"it","expect":"lavoro / tempo"}
+{"q":"formula della frequenza","lang":"it","expect":"f = 1/T"}
+{"q":"qual è la formula del peso","lang":"it","expect":"P = m·g"}
+{"q":"come si calcola la quantità di moto","lang":"it","expect":"q = m·v"}
+{"q":"what is the formula for kinetic energy?","lang":"en","expect":"Kinetic energy: Ec"}
+{"q":"formula for force","lang":"en","expect":"Newton's 2nd law"}
+{"q":"what is the formula for power?","lang":"en","expect":"work / time"}
+// --- false-positive guards: these must NOT be claimed by a math frame ---
+{"q":"ho corso 5 km","lang":"it","reject":true}
+{"q":"ho dormito 8 ore","lang":"it","reject":true}
+{"q":"quanta strada hai fatto","lang":"it","reject":true}
+{"q":"la potenza del motore","lang":"it","reject":true}
+{"q":"che bella forza di volontà","lang":"it","reject":true}
+{"q":"energia solare","lang":"it","reject":true}
+{"q":"pressione alta","lang":"it","reject":true}
+{"q":"la massa critica","lang":"it","reject":true}
+{"q":"ho 10 anni e 2 fratelli","lang":"it","reject":true}
+{"q":"il movimento dei pianeti","lang":"it","reject":true}
+{"q":"quanto sei veloce","lang":"it","reject":true}
+{"q":"a lot of energy today","lang":"en","reject":true}
+// --- potential energy: lone length = height (no explicit altezza/height keyword) ---
+{"q":"una gru solleva 100 kg a 12 metri, energia potenziale?","lang":"it","expect":"= 11772 J"}
+{"q":"a 2 kg mass lifted to 5 m, potential energy?","lang":"en","expect":"= 98.1 J"}
+// === UNIT ENGINE — dimensional-analysis conversions (natural language) =======
+// --- length ---
+{"q":"converti 5 km in cm","lang":"it","expect":"= 500000 cm"}
+{"q":"2 metri in mm","lang":"it","expect":"= 2000 mm"}
+{"q":"3 miglia in metri","lang":"it","expect":"= 4828.03 metri"}
+{"q":"10 pollici in cm","lang":"it","expect":"= 25.4 cm"}
+{"q":"6 piedi in metri","lang":"it","expect":"= 1.8288 metri"}
+{"q":"50 cm in dm","lang":"it","expect":"= 5 dm"}
+{"q":"quanti metri in 1 miglio","lang":"it","expect":"= 1609.34 metri"}
+{"q":"convert 10 miles to km","lang":"en","expect":"= 16.0934 km"}
+// --- mass ---
+{"q":"2.5 kg in g","lang":"it","expect":"= 2500 g"}
+{"q":"500 g in kg","lang":"it","expect":"= 0.5 kg"}
+{"q":"4 once in grammi","lang":"it","expect":"= 113.398 grammi"}
+{"q":"2 libbre in kg","lang":"it","expect":"= 0.907184 kg"}
+{"q":"3 tonnellate in kg","lang":"it","expect":"= 3000 kg"}
+{"q":"5 etti in grammi","lang":"it","expect":"= 500 grammi"}
+{"q":"how many grams in 2 kg","lang":"en","expect":"= 2000 g"}
+// --- time ---
+{"q":"2 ore in minuti","lang":"it","expect":"= 120 minuti"}
+{"q":"3 giorni in ore","lang":"it","expect":"= 72 ore"}
+{"q":"1 settimana in giorni","lang":"it","expect":"= 7 giorni"}
+{"q":"90 minuti in ore","lang":"it","expect":"= 1.5 ore"}
+{"q":"convert 2 hours to seconds","lang":"en","expect":"= 7200 seconds"}
+// --- volume ---
+{"q":"2 litri in ml","lang":"it","expect":"= 2000 ml"}
+{"q":"3 galloni in litri","lang":"it","expect":"= 11.3562 litri"}
+{"q":"1 m3 in litri","lang":"it","expect":"= 1000 litri"}
+{"q":"250 ml in litri","lang":"it","expect":"= 0.25 litri"}
+{"q":"quanti litri in 5 galloni","lang":"it","expect":"= 18.9271 litri"}
+// --- area ---
+{"q":"2 m2 in cm2","lang":"it","expect":"= 20000 cm2"}
+{"q":"1 ettaro in m2","lang":"it","expect":"= 10000 m2"}
+{"q":"2 km2 in m2","lang":"it","expect":"= 2000000 m2"}
+// --- speed ---
+{"q":"100 km/h in m/s","lang":"it","expect":"= 27.7778 m/s"}
+{"q":"30 m/s in km/h","lang":"it","expect":"= 108 km/h"}
+{"q":"convert 60 mph to km/h","lang":"en","expect":"= 96.5606 km/h"}
+// --- temperature (affine) ---
+{"q":"20 celsius in fahrenheit","lang":"it","expect":"= 68 fahrenheit"}
+{"q":"100 celsius in kelvin","lang":"it","expect":"= 373.15 kelvin"}
+{"q":"98.6 fahrenheit in celsius","lang":"it","expect":"= 37 celsius"}
+{"q":"300 kelvin in celsius","lang":"it","expect":"= 26.85 celsius"}
+{"q":"20 gradi in fahrenheit","lang":"it","expect":"= 68 fahrenheit"}
+{"q":"convert 32 fahrenheit to celsius","lang":"en","expect":"= 0 celsius"}
+// --- data ---
+{"q":"2 gb in mb","lang":"it","expect":"= 2048 mb"}
+{"q":"1024 mb in gb","lang":"it","expect":"= 1 gb"}
+{"q":"8 bit in byte","lang":"it","expect":"= 1 byte"}
+{"q":"1 byte in bit","lang":"it","expect":"= 8 bit"}
+{"q":"convert 500 mb to kb","lang":"en","expect":"= 512000 kb"}
+// --- energy / power / pressure / frequency / angle ---
+{"q":"500 kcal in joule","lang":"it","expect":"= 2092000 joule"}
+{"q":"1 kwh in joule","lang":"it","expect":"= 3600000 joule"}
+{"q":"2 kw in watt","lang":"it","expect":"= 2000 watt"}
+{"q":"1 cv in watt","lang":"it","expect":"= 735.499 watt"}
+{"q":"1 atm in pascal","lang":"it","expect":"= 101325 pascal"}
+{"q":"2 bar in pascal","lang":"it","expect":"= 200000 pascal"}
+{"q":"1 atm in bar","lang":"it","expect":"= 1.01325 bar"}
+{"q":"2 ghz in mhz","lang":"it","expect":"= 2000 mhz"}
+{"q":"90 gradi in radianti","lang":"it","expect":"= 1.5708 radianti"}
+{"q":"1 giro in gradi","lang":"it","expect":"= 360 gradi"}
+// --- SI prefixes (spelled) ---
+{"q":"5 megajoule in kj","lang":"it","expect":"= 5000 kj"}
+{"q":"2000 millisecondi in secondi","lang":"it","expect":"= 2 secondi"}
+{"q":"3 chilometri in metri","lang":"it","expect":"= 3000 metri"}
+// --- powers of ten ---
+{"q":"10 alla 9","lang":"it","expect":"10^9 = 1000000000"}
+{"q":"10 alla 3","lang":"it","expect":"10^3 = 1000"}
+{"q":"quanto fa 2 alla 10","lang":"it","expect":"2^10 = 1024"}
+// --- dimension MISMATCH: honest refusal (+ water bridge for mass<->volume) ---
+{"q":"5 kg in litri","lang":"it","expect":"dimensioni diverse"}
+{"q":"3 metri in secondi","lang":"it","expect":"dimensioni diverse"}
+{"q":"10 watt in metri","lang":"it","expect":"dimensioni diverse"}
+{"q":"2 litri in kg","lang":"it","expect":"Acqua: 2 litri"}
+{"q":"convert 5 kg to metres","lang":"en","expect":"different dimensions"}
+// --- learned units (define then use; persisted) ---
+{"q":"1 spanna = 22 cm","lang":"it","expect":"Imparato: 1 spanna = 22 cm"}
+{"q":"3 spanne in cm","lang":"it","expect":"= 66 cm"}
+{"q":"2 spanne in pollici","lang":"it","expect":"= 17.3228 pollici"}
+{"q":"definisci pertica come 3 metri","lang":"it","expect":"Imparato: 1 pertica = 3 metri"}
+{"q":"5 pertiche in metri","lang":"it","expect":"= 15 metri"}
+// --- false-positive guards: NOT a conversion ---
+{"q":"ho 5 litri di benzina","lang":"it","reject":true}
+{"q":"in bocca al lupo","lang":"it","reject":true}
+{"q":"vado a roma in treno","lang":"it","reject":true}
+{"q":"5 stelle michelin","lang":"it","reject":true}
+{"q":"quanti anni hai","lang":"it","reject":true}
+// === UNIT/SKILL HARMONY — articulated NL, electrical, cross-skill collision guards ===========
+// --- articulated conversions (IT) ---
+{"q":"puoi convertire 3.5 metri in centimetri per favore","lang":"it","expect":"= 350 centimetri"}
+{"q":"quanti grammi ci sono in 1.5 chili","lang":"it","expect":"= 1500 grammi"}
+{"q":"convertimi 5 miglia in chilometri","lang":"it","expect":"= 8.04672 chilometri"}
+{"q":"ho camminato per 3 miglia, quanti chilometri sono","lang":"it","expect":"= 4.82803 chilometri"}
+{"q":"vorrei sapere quanti millilitri sono in 0.75 litri","lang":"it","expect":"= 750 millilitri"}
+{"q":"vorrei trasformare 90 minuti in ore","lang":"it","expect":"= 1.5 ore"}
+{"q":"quanto pesano 10 once in grammi","lang":"it","expect":"= 283.495 grammi"}
+// --- articulated conversions (EN) ---
+{"q":"could you convert 10 kilometers to miles","lang":"en","expect":"= 6.21371 miles"}
+{"q":"how many centimeters are there in 2 feet","lang":"en","expect":"= 60.96 centimeters"}
+{"q":"what is 100 fahrenheit in celsius","lang":"en","expect":"= 37.7778 celsius"}
+{"q":"convert 1 gigabyte to megabytes","lang":"en","expect":"= 1000 megabytes"}
+{"q":"please convert 2.5 hours into minutes","lang":"en","expect":"= 150 minutes"}
+{"q":"how many liters are in 3 gallons","lang":"en","expect":"= 11.3562 liters"}
+// --- electrical conversions (the converter does the scaling; ohm keeps the laws) ---
+{"q":"2 ampere in milliampere","lang":"it","expect":"= 2000 milliampere"}
+{"q":"12 volt in millivolt","lang":"it","expect":"= 12000 millivolt"}
+{"q":"2 kiloohm in ohm","lang":"it","expect":"= 2000 ohm"}
+{"q":"500 milliampere in ampere","lang":"it","expect":"= 0.5 ampere"}
+{"q":"1.5 kilovolt in volt","lang":"it","expect":"= 1500 volt"}
+{"q":"convert 3 amps to milliampere","lang":"en","expect":"= 3000 milliampere"}
+{"q":"3 ampere in newton","lang":"it","expect":"dimensioni diverse"}
+// --- COLLISION GUARDS: each must route to the RIGHT skill, never steal from another ---
+{"q":"5 volt e 1000 ohm","lang":"it","expect":"5 mA"}
+{"q":"calcola la potenza con 12 volt e 2 ampere","lang":"it","expect":"P=24 W"}
+{"q":"quanti watt con 230 volt e 10 ampere","lang":"it","expect":"2300 W"}
+{"q":"convert 12 volt and 3 ampere to watt","lang":"en","expect":"P=36 W"}
+{"q":"una lampada da 60 W accesa per 2 ore quanta energia consuma","lang":"it","expect":"= 432000 J"}
+{"q":"potenza con lavoro 100 J in 5 secondi","lang":"it","expect":"= 20 W"}
+{"q":"converti 24 in binario","lang":"it","expect":"11000"}
+{"q":"il 20% di 50","lang":"it","expect":"= 10"}
+{"q":"area del quadrato con lato 5","lang":"it","expect":"= 25"}
+{"q":"10 alla 6","lang":"it","expect":"10^6 = 1000000"}
+{"q":"5 alla 3","lang":"it","expect":"5^3 = 125"}
+{"q":"un'auto percorre 100 metri in 20 secondi qual è la velocità","lang":"it","expect":"= 5 m/s"}
+// --- reject: units/math must NOT fire (idioms, narrative, time/date) ---
+{"q":"5 km a piedi ogni giorno","lang":"it","reject":true}
+{"q":"ho bevuto 2 litri d'acqua","lang":"it","reject":true}
+{"q":"ci vediamo tra 2 ore","lang":"it","reject":true}
+{"q":"vado a roma in treno","lang":"it","reject":true}
+{"q":"ho 3 metri di corda","lang":"it","reject":true}
+{"q":"abito a 5 minuti da qui","lang":"it","reject":true}
+// --- EN "how many X is/are Y" + value bound to the source unit (distractor numbers) ---
+{"q":"how many kilometers is 10 miles?","lang":"en","expect":"= 16.0934 kilometers"}
+{"q":"how many grams are 5 ounces?","lang":"en","expect":"= 141.748 grams"}
+{"q":"how many milliliters are 2 liters?","lang":"en","expect":"= 2000 milliliters"}
+{"q":"ho una password lunga 12 caratteri, e se fosse 5 kg in litri","lang":"it","expect":"Acqua: 5 kg"}
+{"q":"sono le 8, converti 3 km in metri","lang":"it","expect":"3 km = 3000 metri"}
+{"q":"area del cerchio raggio 5","lang":"it","expect":"78.5398"}
+{"q":"area del cerchio","lang":"it","expect":"Area del cerchio"}
+{"q":"volume del cubo lato 3","lang":"it","expect":"27"}
+{"q":"circle area radius 5","lang":"en","expect":"78.5398"}

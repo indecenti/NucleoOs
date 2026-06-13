@@ -1,0 +1,57 @@
+// Cross-lingual recall eval: the SAME concept asked in EN and IT, with `must` = root substrings the
+// correct reply contains in EITHER language (the wiki cards reply in Italian, so IT roots usually suffice).
+// xling-check measures, per concept where the IT query succeeds (the card EXISTS), whether the EN query
+// also reaches it. EN failures where IT works = the pure cross-lingual gap a dictionary/encoder can't fix
+// but enriched EN asks/replies can. Queries are NATURAL paraphrases (not the indexed ask phrasings).
+{"concept":"encryption","q":"what is encryption","lang":"en","must":["cifr","encrypt","cipher","crittograf","crypto","hidden writing"]}
+{"concept":"encryption","q":"cos'è la crittografia","lang":"it","must":["cifr","crittograf"]}
+{"concept":"firewall","q":"what is a firewall","lang":"en","must":["firewall","rete","network","traffico","traffic"]}
+{"concept":"firewall","q":"cos'è un firewall","lang":"it","must":["firewall","rete","traffico"]}
+{"concept":"pointer","q":"what is a pointer in programming","lang":"en","must":["puntator","pointer","indirizzo","address","memoria","memory"]}
+{"concept":"pointer","q":"cos'è un puntatore","lang":"it","must":["puntator","indirizzo","memoria"]}
+{"concept":"variable","q":"what is a variable","lang":"en","must":["variabil","variable","valore","value"]}
+{"concept":"variable","q":"cos'è una variabile","lang":"it","must":["variabil","valore"]}
+{"concept":"recursion","q":"what is recursion","lang":"en","must":["ricorsion","recursion","se stess","itself","richiama"]}
+{"concept":"recursion","q":"cos'è la ricorsione","lang":"it","must":["ricorsion","se stess","richiama"]}
+{"concept":"array","q":"what is an array","lang":"en","must":["array","element","element","sequenza","vettore","collezione"]}
+{"concept":"array","q":"cos'è un array","lang":"it","must":["array","element","sequenza","vettore"]}
+{"concept":"function","q":"what is a function in programming","lang":"en","must":["funzion","function","blocco","block","codice","code"]}
+{"concept":"function","q":"cos'è una funzione","lang":"it","must":["funzion","blocco","codice","istruzion"]}
+{"concept":"compiler","q":"what is a compiler","lang":"en","must":["compilat","compiler","traduc","translat","codice","linguaggio"]}
+{"concept":"compiler","q":"cos'è un compilatore","lang":"it","must":["compilat","traduc","linguaggio","codice"]}
+{"concept":"algorithm","q":"what is an algorithm","lang":"en","must":["algoritm","algorithm","passi","steps","istruzion","procedur"]}
+{"concept":"algorithm","q":"cos'è un algoritmo","lang":"it","must":["algoritm","passi","istruzion","procedur"]}
+{"concept":"database","q":"what is a database","lang":"en","must":["database","dati","data","archivio","collezione"]}
+{"concept":"database","q":"cos'è un database","lang":"it","must":["database","dati","archivio","collezione"]}
+{"concept":"transistor","q":"what is a transistor","lang":"en","must":["transistor","semicondutt","semiconduct","amplific","segnal","signal"]}
+{"concept":"transistor","q":"cos'è un transistor","lang":"it","must":["transistor","semicondutt","amplific","segnal"]}
+{"concept":"resistor","q":"what is a resistor","lang":"en","must":["resist","corrente","current","ohm"]}
+{"concept":"resistor","q":"cos'è una resistenza elettrica","lang":"it","must":["resist","corrente","ohm"]}
+{"concept":"capacitor","q":"what is a capacitor","lang":"en","must":["condensat","capacit","capacitor","carica","charge"]}
+{"concept":"capacitor","q":"cos'è un condensatore","lang":"it","must":["condensat","capacit","carica"]}
+{"concept":"voltage","q":"what is electrical voltage","lang":"en","must":["tension","voltage","potenzial","potential","volt"]}
+{"concept":"voltage","q":"cos'è la tensione elettrica","lang":"it","must":["tension","potenzial","volt"]}
+{"concept":"cpu","q":"what is a cpu","lang":"en","must":["cpu","process","unità","unit","calcol","comput"]}
+{"concept":"cpu","q":"cos'è la cpu","lang":"it","must":["cpu","process","unità","calcol"]}
+{"concept":"dns","q":"what is dns","lang":"en","must":["dns","dominio","domain","nome","name","indirizzo"]}
+{"concept":"dns","q":"cos'è il dns","lang":"it","must":["dns","dominio","nome","indirizzo"]}
+{"concept":"atom","q":"what is an atom","lang":"en","must":["atom","atomo","materia","matter","element","nucleo"]}
+{"concept":"atom","q":"cos'è un atomo","lang":"it","must":["atom","materia","element","nucleo"]}
+{"concept":"gravity","q":"what is gravity","lang":"en","must":["gravit","forza","force","massa","mass","attra"]}
+{"concept":"gravity","q":"cos'è la gravità","lang":"it","must":["gravit","forza","massa","attra"]}
+{"concept":"energy","q":"what is energy","lang":"en","must":["energ","energy","lavoro","work","capacit"]}
+{"concept":"energy","q":"cos'è l'energia","lang":"it","must":["energ","lavoro","capacit"]}
+{"concept":"photosynthesis","q":"what is photosynthesis","lang":"en","must":["fotosintes","photosynth","clorofil","chlorophyll","luce","light"]}
+{"concept":"photosynthesis","q":"cos'è la fotosintesi","lang":"it","must":["fotosintes","clorofil","luce"]}
+{"concept":"dna","q":"what is dna","lang":"en","must":["dna","acido","acid","genetic","cromosom","chromosom"]}
+{"concept":"dna","q":"cos'è il dna","lang":"it","must":["dna","acido","genetic","cromosom"]}
+{"concept":"derivative","q":"what is a derivative","lang":"en","must":["derivat","derivative","funzion","variazion","rate","tangent"]}
+{"concept":"derivative","q":"cos'è la derivata","lang":"it","must":["derivat","funzion","variazion","tangent"]}
+{"concept":"prime","q":"what is a prime number","lang":"en","must":["primo","prime","divis","divisor","intero","integer"]}
+{"concept":"prime","q":"cos'è un numero primo","lang":"it","must":["primo","divis","intero"]}
+{"concept":"democracy","q":"what is democracy","lang":"en","must":["democra","popolo","people","potere","power","govern"]}
+{"concept":"democracy","q":"cos'è la democrazia","lang":"it","must":["democra","popolo","potere","govern"]}
+{"concept":"inflation","q":"what is inflation in economics","lang":"en","must":["inflazion","inflation","prezzi","prices","aumento","increase"]}
+{"concept":"inflation","q":"cos'è l'inflazione","lang":"it","must":["inflazion","prezzi","aumento"]}
+{"concept":"operating-system","q":"what is an operating system","lang":"en","must":["sistema operativo","operating system","software","hardware","risors","resourc"]}
+{"concept":"operating-system","q":"cos'è un sistema operativo","lang":"it","must":["sistema operativo","software","hardware","risors"]}

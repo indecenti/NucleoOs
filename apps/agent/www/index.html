@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agenti</title>
+<style>
+  :root{ --bg:#0b0e16; --panel:#10131c; --panel2:#161b27; --line:#232d44; --ink:#e7ecf6; --dim:#8ea0c0;
+    --accent:#6aa8ff; --accent2:#9b7bff; --ok:#6aee9f; --warn:#ffcf6a; --err:#ff8a8a; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
+  body{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  header{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+  .logo{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:16px;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .ttl{font-weight:650}.ttl small{display:block;font-weight:400;font-size:11px;color:var(--dim)}
+  .dot{width:9px;height:9px;border-radius:50%;background:#445;flex:0 0 auto}.dot.ok{background:var(--ok)}.dot.busy{background:var(--warn);animation:pulse 1s infinite}.dot.err{background:var(--err)}
+  @keyframes pulse{50%{opacity:.4}}
+  .status{font-size:12px;color:var(--dim);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+  .hdr-ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .ws{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--dim)}
+  .ws input{background:var(--bg);border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:5px 8px;font:12px var(--mono);width:150px}
+  .tog{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);cursor:pointer;user-select:none}
+  .tog input{accent-color:var(--accent)}
+  main{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+  .msg{max-width:min(760px,92%);padding:10px 13px;border-radius:13px;white-space:pre-wrap;word-wrap:break-word}
+  .msg.user{align-self:flex-end;background:#1b2740;border:1px solid #2c3a5c}
+  .msg.bot{align-self:flex-start;background:var(--panel2);border:1px solid var(--line)}
+  .msg.sys{align-self:center;background:transparent;border:1px dashed var(--line);color:var(--dim);font-size:12.5px;max-width:90%}
+  .msg b{color:#fff}.msg code{background:#0c0f17;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font:12px var(--mono)}
+  .msg pre{background:#0c0f17;border:1px solid var(--line);border-radius:9px;padding:10px;overflow:auto;font:12px var(--mono);margin:6px 0}
+  .msg a{color:#7fb2ff}
+  .tool{align-self:flex-start;max-width:min(760px,92%);background:#0e1422;border:1px solid var(--line);border-radius:11px;padding:8px 11px;font-size:12.5px}
+  .tool .th{display:flex;align-items:center;gap:7px;font-weight:600}
+  .tool .ti{font-size:14px}.tool .tn{font:12px var(--mono);color:var(--accent)}
+  .tool .tp{color:var(--dim);font:11px var(--mono);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40%}
+  .tool .tr{margin-top:5px;color:var(--dim);font:11.5px var(--mono);white-space:pre-wrap;max-height:140px;overflow:auto}
+  .tool.err{border-color:#5a2b2b}.tool.err .tn{color:var(--err)}
+  .tool.run{border-color:#3a4a6e}
+  footer{border-top:1px solid var(--line);background:var(--panel);padding:10px 12px}
+  .inp{display:flex;gap:8px;align-items:flex-end}
+  textarea{flex:1;resize:none;min-height:42px;max-height:160px;background:var(--bg);border:1px solid var(--line);border-radius:11px;color:var(--ink);padding:10px 12px;font:14px system-ui}
+  textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(106,168,255,.18)}
+  button.send,button.stop{border:none;border-radius:11px;padding:0 16px;height:42px;font-weight:600;cursor:pointer;color:#0a0d16}
+  button.send{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  button.stop{background:var(--err);display:none}
+  button:disabled{opacity:.5;cursor:default}
+  .hint{font-size:11px;color:var(--dim);margin-top:6px}
+  /* approval overlay */
+  #ovl{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;background:rgba(6,8,14,.7);backdrop-filter:blur(4px)}
+  #ovl.show{display:flex}
+  .appr{width:min(560px,94vw);max-height:88vh;overflow:auto;background:var(--panel);border:1px solid var(--accent);border-radius:15px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .appr h3{margin:0;padding:16px 18px 6px;font-size:15px}.appr h3 .op{font:12px var(--mono);color:var(--warn)}
+  .appr .pth{padding:0 18px;color:var(--dim);font:12px var(--mono);word-break:break-all}
+  .appr pre{margin:12px 18px;background:#0c0f17;border:1px solid var(--line);border-radius:9px;padding:10px;max-height:300px;overflow:auto;font:12px var(--mono);white-space:pre-wrap}
+  .appr .add{color:var(--ok)}.appr .del{color:var(--err)}
+  .appr .btns{display:flex;gap:10px;justify-content:flex-end;padding:8px 18px 18px}
+  .appr button{border-radius:9px;padding:9px 16px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--ink)}
+  .appr button.allow{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#0a0d16}
+  .appr button.deny{border-color:#5a2b2b;color:var(--err)}
+  /* unavailable / setup screen */
+  #gate{position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:20px;text-align:center;background:var(--bg)}
+  #gate.show{display:flex}
+  .gate-card{max-width:440px}.gate-card .gi{font-size:42px}.gate-card h2{margin:10px 0 6px}.gate-card p{color:var(--dim)}
+  .gate-card button{margin-top:14px;border:none;border-radius:10px;padding:10px 18px;font-weight:600;cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0d16}
+  .gate-card .ghost{background:var(--panel2);color:var(--ink);border:1px solid var(--line);margin-left:8px}
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">◆</div>
+    <div class="ttl"><span data-i18n="app_title">Agenti</span><small id="model-line" data-i18n="subtitle">multi-agente · Claude</small></div>
+    <span class="dot" id="dot"></span>
+    <div class="status" id="status" data-i18n="st_ready">pronto</div>
+    <div class="hdr-ctl">
+      <label class="ws" data-i18n-attr="title:ws_hint">📁 <input id="ws" value="/data/agent" spellcheck="false"></label>
+      <label class="tog" data-i18n-attr="title:web_hint"><input type="checkbox" id="web" checked> <span data-i18n="web_label">web</span></label>
+      <label class="tog" data-i18n-attr="title:auto_hint"><input type="checkbox" id="auto"> <span data-i18n="auto_label">auto-approva</span></label>
+    </div>
+  </header>
+
+  <main id="log"></main>
+
+  <footer>
+    <div class="inp">
+      <textarea id="q" data-i18n-attr="placeholder:input_ph" placeholder="Dai un compito: crea/modifica file, calcola, cerca… (⏎ invia, ⇧⏎ a capo)"></textarea>
+      <button class="send" id="send" data-i18n="send">Invia</button>
+      <button class="stop" id="stop" data-i18n="stop">Stop</button>
+    </div>
+    <div class="hint" id="hint" data-i18n="hint">Gli agenti girano nel browser e chiamano Claude direttamente: il Cardputer non viene caricato. Le azioni distruttive chiedono conferma.</div>
+  </footer>
+
+  <div id="ovl"><div class="appr" id="appr"></div></div>
+
+  <div id="gate"><div class="gate-card" id="gate-card"></div></div>
+
+  <script type="module" src="agent.js"></script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+# PRIMARY-SENSE override (hand-curated, high-confidence). Loaded FIRST so these lead BOTH dictionaries —
+# the bulk FreeDict sometimes orders a rare/noun sense before the everyday one ("run"->periodo, "drink"->
+# bevanda). Bare EN forms (not just "to run") so a bare query "translate run to italian" matches. IT<TAB>EN.
+# Keep ONLY translations that are unambiguously the primary everyday sense (a wrong override = a hallucination).
+correre	run
+camminare	walk
+mangiare	eat
+bere	drink
+dormire	sleep
+lavorare	work
+giocare	play
+leggere	read
+scrivere	write
+parlare	speak; talk
+vedere	see
+sentire	hear; feel
+guardare	look; watch
+volere	want
+amare	love
+piacere	like
+dare	give
+prendere	take
+fare	do; make
+ottenere	get
+trovare	find
+sapere	know
+conoscere	know
+pensare	think
+dire	say; tell
+chiedere	ask
+chiamare	call
+partire	leave
+venire	come
+andare	go
+mettere	put
+tenere	keep; hold
+cominciare	begin
+iniziare	start
+fermare	stop
+aprire	open
+chiudere	close
+comprare	buy
+vendere	sell
+pagare	pay
+vivere	live
+morire	die
+vincere	win
+perdere	lose
+imparare	learn
+insegnare	teach
+aiutare	help
+usare	use
+provare	try
+cambiare	change
+muovere	move
+girare	turn
+portare	bring; carry
+inviare	send
+mandare	send
+incontrare	meet
+seguire	follow
+mostrare	show
+aspettare	wait
+saltare	jump
+cadere	fall
+volare	fly
+nuotare	swim
+guidare	drive
+cucinare	cook
+pulire	clean
+lavare	wash
+costruire	build
+rompere	break
+tagliare	cut
+disegnare	draw
+dipingere	paint
+cantare	sing
+ballare	dance
+ridere	laugh
+piangere	cry
+sorridere	smile
+respirare	breathe
+capire	understand
+ricordare	remember
+dimenticare	forget

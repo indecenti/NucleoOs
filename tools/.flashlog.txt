@@ -1,0 +1,207 @@
+
+=== ANIMA regression gate (host) ===
+[2mensuring anima.exe is up to date ...[0m[1m=== ANIMA unified gate ===[0m
+
+  [2mrunning pack-coherence ...[0m  [32mPASS[0m  pack-coherence         [2mPACK COHERENT — every tree: encoder.dim == index.D, ASIG present.[0m
+  [2mrunning regress (corpus+L1) ...[0m  [32mPASS[0m  regress (corpus+L1)    [2mALL GATES PASS[0m
+  [2mrunning route-check ...[0m  [32mPASS[0m  route-check            [2m[snapshot] no routing changes vs golden ✓[0m
+  [2mrunning l1-parity (prefilter) ...[0m  [32mPASS[0m  l1-parity (prefilter)  [2mparity diffs: 0   expect misses: 0   (expect skipped, online-only: 8)[0m
+  [2mrunning l1-recall (asym) ...[0m  [32mPASS[0m  l1-recall (asym)       [2mdevice recall@gate  fast 50/178=28.1%   exact 50/178=28.1%[0m
+  [2mrunning agent-check ...[0m  [32mPASS[0m  agent-check            [2mALL GREEN — compose-then-act, content channel, settings, naming guard, and t[0m
+  [2mrunning math-check ...[0m  [32mPASS[0m  math-check             [2mALL GREEN — 469/469 exact, twin in sync.[0m
+  [2mrunning ood-check (safety) ...[0m  [32mPASS[0m  ood-check (safety)     [2mout-of-scope (10): refused(good) 10  clarify(meh) 0  FALSE-POSITIVE(bad) 0[0m
+  [2mrunning reliability (traps) ...[0m  [32mPASS[0m  reliability (traps)    [2mout-of-scope (23): refused(good) 23  clarify(meh) 0  FALSE-POSITIVE(bad) 0[0m
+  [2mrunning halluc-stress ...[0m  [32mPASS[0m  halluc-stress          [2mTOTAL HALLUCINATIONS: 0/441[0m
+  [2mrunning halluc-battery (NL) ...[0m  [32mPASS[0m  halluc-battery (NL)    [2m[halluc-suite] 8 files · 587 adversarial traps · 0 fabrication(s) (HARD: mus[0m
+  [2mrunning realistic (NL) ...[0m  [32mPASS[0m  realistic (NL)         [2m[realistic] 476 programmatic requests (99 with QWERTY typos) — 476/476 pass[0m
+  [2mrunning skill<->knowledge boundary ...[0m  [32mPASS[0m  skill<->knowledge boundary [2m[boundary] 35 skill∩knowledge homographs · 385 definition + 70 compute + 18 [0m
+  [2mrunning metamorph (NL) ...[0m  [32mPASS[0m  metamorph (NL)         [2m[metamorph] 485 unanswerable seeds × 8 safe operators -> 2313 derived mutant[0m
+  [2mrunning nl-stress (offline) ...[0m  [32mPASS[0m  nl-stress (offline)    [2mTOTAL HALLUCINATIONS: 0 (adversarial 0 + x-turn 0)  cross-skill misroutes: 0[0m
+  [2mrunning fluency-grounded (L2) ...[0m  [32mPASS[0m  fluency-grounded (L2)  [2mstitched 86/140 | uplift avg +209% (min +89%) | additive 86/86 | grounded 86[0m
+  [2mrunning describe-stress (NL) ...[0m  [32mPASS[0m  describe-stress (NL)   [2m[describe-stress] 170 cases | fabrications 0 (HARD: must be 0) | recall 74.1[0m
+  [2mrunning skill-routing ...[0m  [32mPASS[0m  skill-routing          [2m[skill-probe] eval_skills.jsonl — 66/66 pass (100.0%)[0m
+  [2mrunning skill-routing-2 ...[0m  [32mPASS[0m  skill-routing-2        [2m[skill-probe] eval_skills2.jsonl — 462/462 pass (100.0%)[0m
+  [2mrunning false-positives (NL) ...[0m  [32mPASS[0m  false-positives (NL)   [2m[skill-probe] eval_skills3.jsonl — 103/103 pass (100.0%)[0m
+  [2mrunning false-positives-2 (NL) ...[0m  [32mPASS[0m  false-positives-2 (NL) [2m[skill-probe] eval_skills4.jsonl — 98/98 pass (100.0%)[0m
+  [2mrunning cross-topic halluc (NL) ...[0m  [32mPASS[0m  cross-topic halluc (NL) [2m[skill-probe] eval_skills5.jsonl — 103/103 pass (100.0%)[0m
+  [2mrunning halluc-probe IT ...[0m  [32mPASS[0m  halluc-probe IT        [2mhonestly abstained (100.0%)[0m
+  [2mrunning halluc-probe EN ...[0m  [32mPASS[0m  halluc-probe EN        [2mhonestly abstained (100.0%)[0m
+  [2mrunning skill-isolation (paint) ...[0m  [32mPASS[0m  skill-isolation (paint) [2m[skill-probe] eval_paint_decline.jsonl — 39/39 pass (100.0%)[0m
+  [2mrunning image-gen stress (NL) ...[0m  [32mPASS[0m  image-gen stress (NL)  [2m[skill-probe] eval_paint_stress.jsonl — 115/115 pass (100.0%)[0m
+  [2mrunning action-tier (false-act) ...[0m  [32mPASS[0m  action-tier (false-act) [2m[skill-probe] eval_action.jsonl — 34/34 pass (100.0%)[0m
+  [2mrunning cross-skill (xskill) ...[0m  [32mPASS[0m  cross-skill (xskill)   [2m[skill-probe] eval_xskill.jsonl — 45/45 pass (100.0%)[0m
+  [2mrunning teach-loop (learn) ...[0m  [32mPASS[0m  teach-loop (learn)     [2m[teach-check] offline learn loop — 13/13 pass (100.0%)[0m
+  [2mrunning profile (personal) ...[0m  [32mPASS[0m  profile (personal)     [2m[profile-check] personal profile — 109/109 pass (100.0%)  [IT 64 / EN 45][0m
+  [2mrunning dict-sync (translate) ...[0m  [32mPASS[0m  dict-sync (translate)  [2m[gen_dicts] +52276 pairs from seed.freedict.en-it.tsv[0m
+  [2mrunning translate (IT<->EN) ...[0m  [32mPASS[0m  translate (IT<->EN)    [2m[translate-check] 36/36 pass[0m
+  [2mrunning dict-stress (bulk IT<->EN) ...[0m  [32mPASS[0m  dict-stress (bulk IT<->EN) [2m[dict-stress] recall 59/59 (floor 51)  |  junk 0  |  weather 0  |  homograph[0m
+  [2mrunning kge-eval ...[0m  [32mPASS[0m  kge-eval               [2mfatti entailed dedotti:  recall 0/9  →  KGE 9/9   (deduzioni che il recall N[0m
+  [2mrunning hdc-eval ...[0m  [32mPASS[0m  hdc-eval               [2mrecall offline:   +7 domande (1→8 su 8, 88% in più senza rete)[0m
+  [2mrunning combinator-eval ...[0m  [32mPASS[0m  combinator-eval        [2mrisposte composte:  baseline 0/9  →  combinatori 9/9  (calcolate componendo [0m
+  [2mrunning typed-facets (KG) ...[0m  [32mPASS[0m  typed-facets (KG)      [2m[typed-check] PASS  occupation=826  gender=454  died=38  isa=1324  (spot-che[0m
+  [2mrunning typed-nl (facet) ...[0m  [32mPASS[0m  typed-nl (facet)       [2m[typed-nl] 295/295 pass  {"occ":75,"gen":52,"died":3,"abstain":27,"refuse_pe[0m
+  [2mrunning entity-detect (online) ...[0m  [32mPASS[0m  entity-detect (online) [2m[entity] generic extraction: 440/440 (100.0%) over 44 patterns × 10 names[0m
+  [2mrunning clean-extract (wiki) ...[0m  [32mPASS[0m  clean-extract (wiki)   [2m[clean-extract] 7/7 pass[0m
+  [2mrunning auto-evolution (VKL) ...[0m  [32mPASS[0m  auto-evolution (VKL)   [2m[evolution] auto-evoluzione + soundness + prova + immutabilità ancorata: TUT[0m
+  [2mrunning ledger-attack (VKL) ...[0m  [32mPASS[0m  ledger-attack (VKL)    [2m[ledger-attack] tutti gli attacchi (forgery/provenance/certainty/canonical/s[0m
+  [2mrunning akb5-content (sharded) ...[0m  [32mPASS[0m  akb5-content (sharded) [2m[akb5-content] recall 18/18  |  false-premise abstained 21/21  |  HALLUCINAT[0m
+  [2mrunning arbiter (concurrency) ...[0m  [32mPASS[0m  arbiter (concurrency)  [2m[arb-check] 5/5 tests pass (mutual-exclusion, fg-preempt, never-block, heap-[0m
+  [2mrunning unit tests ...[0m  [32mPASS[0m  unit tests             [2mtests[0m
+
+[32m[1mALL 45 GATES PASS[0m
+Setting up ESP-IDF environment...
+
+Done! You can now compile ESP-IDF projects.
+Go to the project directory and run:
+
+  idf.py build
+
+CPU cores=12, free RAM=35,8 GB -> starting with -j 12
+Build attempt 1 (idf.py build)...
+Executing action: all (aliases: build)
+Running ninja in directory G:\Nucleo\firmware\build
+Executing "ninja all"...
+[1/11] Performing build step for 'bootloader'
+[1/1] C:\WINDOWS\system32\cmd.exe /C "cd /D G:\Nucleo\firmware\build\bootloader\esp-idf\esptool_py && C:\Users\indecenti\.espressif\python_env\idf5.4_py3.12_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 G:/Nucleo/firmware/build/bootloader/bootloader.bin"
+Bootloader binary size 0x4d50 bytes. 0x32b0 bytes (40%) free.
+[2/11] No install step for 'bootloader'
+[3/11] Completed 'bootloader'
+[4/11] Building C object esp-idf/nucleo_webfs/CMakeFiles/__idf_nucleo_webfs.dir/nucleo_webfs.c.obj
+[5/11] Linking C static library esp-idf\nucleo_webfs\libnucleo_webfs.a
+[6/11] Building C object esp-idf/nucleo_fsapi/CMakeFiles/__idf_nucleo_fsapi.dir/nucleo_fsapi.c.obj
+[7/11] Linking C static library esp-idf\nucleo_fsapi\libnucleo_fsapi.a
+[8/11] Generating ld/sections.ld
+[9/11] Linking CXX executable nucleoos.elf
+[10/11] Generating binary image from built executable
+esptool.py v4.11.0
+Creating esp32s3 image...
+Merged 3 ELF sections
+Successfully created esp32s3 image.
+Generated G:/Nucleo/firmware/build/nucleoos.bin
+[11/11] C:\WINDOWS\system32\cmd.exe /C "cd /D G:\Nucleo\firmware\build\esp-idf\esptool_py && C:\Users\indecenti\.espressif\python_env\idf5.4_py3.12_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app G:/Nucleo/firmware/build/partition_table/partition-table.bin G:/Nucleo/firmware/build/nucleoos.bin"
+nucleoos.bin binary size 0x179b20 bytes. Smallest app partition is 0x240000 bytes. 0xc64e0 bytes (34%) free.
+
+Project build complete. To flash, run:
+ idf.py flash
+or
+ idf.py -p PORT flash
+or
+ python -m esptool --chip esp32s3 -b 460800 --before default_reset --after hard_reset write_flash --flash_mode dio --flash_size 8MB --flash_freq 80m 0x0 build\bootloader\bootloader.bin 0x8000 build\partition_table\partition-table.bin 0xf000 build\ota_data_initial.bin 0x20000 build\nucleoos.bin
+or from the "G:\Nucleo\firmware\build" directory
+ python -m esptool --chip esp32s3 -b 460800 --before default_reset --after hard_reset write_flash "@flash_args"
+Build OK -- nucleoos.bin = 1511 KB
+Flashing to COM3...
+Executing action: flash
+Running ninja in directory G:\Nucleo\firmware\build
+Executing "ninja flash"...
+[1/5] C:\WINDOWS\system32\cmd.exe /C "cd /D G:\Nucleo\firmware\build\esp-idf\esptool_py && C:\Users\indecenti\.espressif\python_env\idf5.4_py3.12_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app G:/Nucleo/firmware/build/partition_table/partition-table.bin G:/Nucleo/firmware/build/nucleoos.bin"
+nucleoos.bin binary size 0x179b20 bytes. Smallest app partition is 0x240000 bytes. 0xc64e0 bytes (34%) free.
+[2/5] Performing build step for 'bootloader'
+[1/1] C:\WINDOWS\system32\cmd.exe /C "cd /D G:\Nucleo\firmware\build\bootloader\esp-idf\esptool_py && C:\Users\indecenti\.espressif\python_env\idf5.4_py3.12_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 G:/Nucleo/firmware/build/bootloader/bootloader.bin"
+Bootloader binary size 0x4d50 bytes. 0x32b0 bytes (40%) free.
+[3/5] No install step for 'bootloader'
+[4/5] Completed 'bootloader'
+[4/5] C:\WINDOWS\system32\cmd.exe /C "cd /D C:\esp\esp-idf\components\esptool_py && C:\Users\indecenti\.espressif\tools\cmake\3.30.2\bin\cmake.exe -D IDF_PATH=C:/esp/esp-idf -D SERIAL_TOOL=C:/Users/indecenti/.espressif/python_env/idf5.4_py3.12_env/Scripts/python.exe;;C:/esp/esp-idf/components/esptool_py/esptool/esptool.py;--chip;esp32s3 -D SERIAL_TOOL_ARGS=--before=default_reset;--after=hard_reset;write_flash;@flash_args -D WORKING_DIRECTORY=G:/Nucleo/firmware/build -P C:/esp/esp-idf/components/esptool_py/run_serial_tool.cmake"
+esptool.py --chip esp32s3 -p COM3 -b 460800 --before=default_reset --after=hard_reset write_flash --flash_mode dio --flash_freq 80m --flash_size 8MB 0x0 bootloader/bootloader.bin 0x20000 nucleoos.bin 0x8000 partition_table/partition-table.bin 0xf000 ota_data_initial.bin
+esptool.py v4.11.0
+Serial port COM3
+Connecting...
+Chip is ESP32-S3 (QFN56) (revision v0.2)
+Features: WiFi, BLE, Embedded Flash 8MB (GD)
+Crystal is 40MHz
+USB mode: USB-Serial/JTAG
+MAC: d0:cf:13:0e:bd:cc
+Uploading stub...
+Running stub...
+Stub running...
+Changing baud rate to 460800
+Changed.
+Configuring flash size...
+Flash will be erased from 0x00000000 to 0x00004fff...
+Flash will be erased from 0x00020000 to 0x00199fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+Flash will be erased from 0x0000f000 to 0x00010fff...
+SHA digest in image updated
+Compressed 19792 bytes to 12748...
+Writing at 0x00000000... (100 %)
+Wrote 19792 bytes (12748 compressed) at 0x00000000 in 0.3 seconds (effective 485.9 kbit/s)...
+Hash of data verified.
+Compressed 1547040 bytes to 1017719...
+Writing at 0x00020000... (1 %)
+Writing at 0x000299a9... (3 %)
+Writing at 0x000338c7... (4 %)
+Writing at 0x00041ead... (6 %)
+Writing at 0x0004c484... (7 %)
+Writing at 0x0005396a... (9 %)
+Writing at 0x00059988... (11 %)
+Writing at 0x000629a5... (12 %)
+Writing at 0x0006ab0a... (14 %)
+Writing at 0x000707d5... (15 %)
+Writing at 0x00076bc6... (17 %)
+Writing at 0x0007c5da... (19 %)
+Writing at 0x00081d07... (20 %)
+Writing at 0x000886b5... (22 %)
+Writing at 0x0008e3e4... (23 %)
+Writing at 0x00093872... (25 %)
+Writing at 0x00099039... (26 %)
+Writing at 0x0009e793... (28 %)
+Writing at 0x000a3ef1... (30 %)
+Writing at 0x000a9400... (31 %)
+Writing at 0x000aea02... (33 %)
+Writing at 0x000b47d0... (34 %)
+Writing at 0x000b9dc2... (36 %)
+Writing at 0x000bf399... (38 %)
+Writing at 0x000c48d0... (39 %)
+Writing at 0x000c9e11... (41 %)
+Writing at 0x000cf03b... (42 %)
+Writing at 0x000d460f... (44 %)
+Writing at 0x000da260... (46 %)
+Writing at 0x000df657... (47 %)
+Writing at 0x000e4e0b... (49 %)
+Writing at 0x000ea917... (50 %)
+Writing at 0x000f04a6... (52 %)
+Writing at 0x000f60ae... (53 %)
+Writing at 0x000fb450... (55 %)
+Writing at 0x00100831... (57 %)
+Writing at 0x00105d7c... (58 %)
+Writing at 0x0010b385... (60 %)
+Writing at 0x00110ac4... (61 %)
+Writing at 0x00115c34... (63 %)
+Writing at 0x0011b221... (65 %)
+Writing at 0x001206ca... (66 %)
+Writing at 0x00125bee... (68 %)
+Writing at 0x0012ab80... (69 %)
+Writing at 0x0012fa64... (71 %)
+Writing at 0x00134e13... (73 %)
+Writing at 0x0013a225... (74 %)
+Writing at 0x0013f49d... (76 %)
+Writing at 0x0014467b... (77 %)
+Writing at 0x00149c42... (79 %)
+Writing at 0x0014f638... (80 %)
+Writing at 0x001546dc... (82 %)
+Writing at 0x0015981a... (84 %)
+Writing at 0x0015f038... (85 %)
+Writing at 0x00164683... (87 %)
+Writing at 0x0016a2bd... (88 %)
+Writing at 0x0016fa13... (90 %)
+Writing at 0x001778b5... (92 %)
+Writing at 0x00180fe0... (93 %)
+Writing at 0x001879c2... (95 %)
+Writing at 0x0018d38c... (96 %)
+Writing at 0x00193a3b... (98 %)
+Writing at 0x00198c81... (100 %)
+Wrote 1547040 bytes (1017719 compressed) at 0x00020000 in 10.8 seconds (effective 1146.4 kbit/s)...
+Hash of data verified.
+Compressed 3072 bytes to 190...
+Writing at 0x00008000... (100 %)
+Wrote 3072 bytes (190 compressed) at 0x00008000 in 0.1 seconds (effective 380.7 kbit/s)...
+Hash of data verified.
+Compressed 8192 bytes to 31...
+Writing at 0x0000f000... (100 %)
+Wrote 8192 bytes (31 compressed) at 0x0000f000 in 0.1 seconds (effective 681.6 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
+Done
+Done.

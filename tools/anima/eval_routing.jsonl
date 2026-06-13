@@ -1,0 +1,69 @@
+// Routing eval: each query must reach the RIGHT mechanism (domain), not just a high cosine.
+// Tests the cascade end-to-end over HTTP (mock or device). Lines with "tier":"l1" need the
+// AKB2 retrieval pack -> device only (the mock is L0-only); skip them with --no-l1.
+// domain: calc | system | app | faq | tool | knowledge | none
+{"q":"quanto fa 7 per 8","lang":"it","domain":"calc"}
+{"q":"what's 12 times 5","lang":"en","domain":"calc"}
+{"q":"(2+3)*4","lang":"it","domain":"calc"}
+{"q":"100 diviso 4","lang":"it","domain":"calc"}
+{"q":"how much is 144 divided by 12","lang":"en","domain":"calc"}
+{"q":"5 diviso 0","lang":"it","domain":"calc"}
+{"q":"che ore sono","lang":"it","domain":"system"}
+{"q":"what time is it","lang":"en","domain":"system"}
+{"q":"quanto spazio libero sull'sd","lang":"it","domain":"system"}
+{"q":"apri le foto","lang":"it","domain":"app"}
+{"q":"open the music player","lang":"en","domain":"app"}
+{"q":"avvia la calcolatrice","lang":"it","domain":"app"}
+{"q":"chi sei","lang":"it","domain":"faq"}
+{"q":"what can you do","lang":"en","domain":"faq"}
+{"q":"crea un file note.txt","lang":"it","domain":"tool"}
+{"q":"create a file todo.md","lang":"en","domain":"tool"}
+{"q":"raccontami una barzelletta","lang":"it","domain":"none"}
+{"q":"tell me a joke","lang":"en","domain":"none"}
+{"q":"qual e il senso della vita","lang":"it","domain":"none"}
+{"q":"what is the price of bitcoin today","lang":"en","domain":"none"}
+{"q":"cos'e una variabile","lang":"it","domain":"knowledge","tier":"l1"}
+{"q":"what is ohm's law","lang":"en","domain":"knowledge","tier":"l1"}
+{"q":"cos'e il deep sleep","lang":"it","domain":"knowledge","tier":"l1"}
+{"q":"qual e la capitale del giappone","lang":"it","domain":"knowledge","tier":"l1"}
+{"q":"come funziona un transistor","lang":"it","domain":"knowledge","tier":"l1"}
+{"q":"how does the i2c bus work","lang":"en","domain":"knowledge","tier":"l1"}
+{"q":"come alloco memoria dinamica in c","lang":"it","domain":"knowledge","tier":"l1"}
+{"q":"quanto spazio libero rimane","lang":"it","domain":"system"}
+// --- math levers (calc) + Ohm/math knowledge routing ---
+{"q": "quanto viene 9 per 6", "lang": "it", "domain": "calc"}
+{"q": "fai 250 diviso 5", "lang": "it", "domain": "calc"}
+{"q": "12 piu 30 meno 7", "lang": "it", "domain": "calc"}
+{"q": "what is 15 plus 27", "lang": "en", "domain": "calc"}
+{"q": "how much is 8 times 9", "lang": "en", "domain": "calc"}
+{"q": "come ricavo la corrente da tensione e resistenza", "lang": "it", "domain": "knowledge", "tier": "l1"}
+{"q": "a cosa serve la radice quadrata", "lang": "it", "domain": "knowledge", "tier": "l1"}
+{"q": "come si calcola l'area di un cerchio", "lang": "it", "domain": "calc", "tier": "l0"}
+// --- evolved calc (^/%/sqrt/percent) + new math concept cards ---
+{"q": "quanto fa il 15% di 240", "lang": "it", "domain": "calc"}
+{"q": "radice quadrata di 144", "lang": "it", "domain": "calc"}
+{"q": "2 elevato a 10", "lang": "it", "domain": "calc"}
+{"q": "(3+4)*2", "lang": "it", "domain": "calc"}
+{"q": "what is 20% of 50", "lang": "en", "domain": "calc"}
+{"q": "square root of 81", "lang": "en", "domain": "calc"}
+{"q": "come si fa una sottrazione", "lang": "it", "domain": "knowledge", "tier": "l1"}
+{"q": "cos'e un numero decimale", "lang": "it", "domain": "knowledge", "tier": "l1"}
+// --- evolved system queries: network / RAM / version / uptime (computed-from-state) ---
+{"q": "sei connesso a internet", "lang": "it", "domain": "system"}
+{"q": "a che wifi sei collegato", "lang": "it", "domain": "system"}
+{"q": "che ip hai", "lang": "it", "domain": "system"}
+{"q": "qual e la mia rete", "lang": "it", "domain": "system"}
+{"q": "are you connected", "lang": "en", "domain": "system"}
+{"q": "what's my ip address", "lang": "en", "domain": "system"}
+{"q": "quanta ram libera", "lang": "it", "domain": "system"}
+{"q": "quanta memoria disponibile", "lang": "it", "domain": "system"}
+{"q": "how much free ram", "lang": "en", "domain": "system"}
+{"q": "che versione hai", "lang": "it", "domain": "system"}
+{"q": "what version is this", "lang": "en", "domain": "system"}
+{"q": "da quanto sei acceso", "lang": "it", "domain": "system"}
+{"q": "quanti gigabyte liberi", "lang": "it", "domain": "system"}
+// --- FP guards: these are DEFINITIONS, must reach L1 knowledge (NOT system) ---
+{"q": "cos'e il wifi", "lang": "it", "domain": "knowledge", "tier": "l1"}
+{"q": "what is internet", "lang": "en", "domain": "knowledge", "tier": "l1"}
+{"q": "cos'e la ram", "lang": "it", "domain": "knowledge", "tier": "l1"}
+{"q": "differenza tra ram e flash", "lang": "it", "domain": "knowledge", "tier": "l1"}

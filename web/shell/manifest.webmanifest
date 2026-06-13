@@ -1,0 +1,17 @@
+{
+  "name": "NucleoOS",
+  "short_name": "NucleoOS",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#101826",
+  "description": "NucleoOS desktop shell for the M5Stack Cardputer.",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

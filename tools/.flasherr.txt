@@ -1,0 +1,7 @@
+Activating ESP-IDF 5.4
+* Checking python version ... 3.12.3
+* Checking python dependencies ... OK
+* Deactivating the current ESP-IDF environment (if any) ... OK
+* Establishing a new ESP-IDF environment ... OK
+* Identifying shell ... powershell.exe
+* Detecting outdated tools in system ... OK - no outdated tools found

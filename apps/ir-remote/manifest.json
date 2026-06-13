@@ -1,0 +1,21 @@
+{
+  "id": "ir-remote",
+  "name": "IR Remote",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Universal infrared remote: TV-B-Gone, brand remotes, macros and .ir import — drives the Cardputer IR LED.",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/ir-remote/",
+  "icon": "/apps/ir-remote/icon.svg",
+  "permissions": ["device.ir", "storage.app", "system.events"],
+  "mounts": { "app": "/apps/ir-remote/data" },
+  "handles": { "role": "editor", "extensions": ["ir"] },
+  "subscribes": ["fs.open", "ir.sweep"],
+  "publishes": ["ir.sent"],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard", "ir"] },
+  "mesh": { "exposes": ["ir.sent"], "consumes": [] }
+}

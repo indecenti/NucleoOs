@@ -1,0 +1,632 @@
+# Lessico autorato dal workflow tts-coverage (grounded sul parlato reale di ANIMA, verificato).
+Sono ANIMA, l'assistente offline di NucleoOS. Funziono senza internet, sul dispositivo.
+Sono ANIMA, l'assistente offline di NucleoOS.
+Funziono senza internet, direttamente sul dispositivo.
+Sono ANIMA.
+Ciao, sono ANIMA.
+Ciao!
+Ciao, come posso aiutarti?
+Salve!
+Buongiorno!
+Buonasera!
+Buonanotte!
+Ehi, ci sono.
+Eccomi.
+Sono qui.
+Dimmi pure.
+Come posso aiutarti?
+In cosa posso aiutarti?
+Cosa ti serve?
+Sono pronto.
+Prego, quando vuoi!
+Prego!
+Di niente.
+Figurati.
+Non c'è di che.
+È stato un piacere.
+Quando vuoi.
+Grazie a te.
+A presto!
+Ci vediamo!
+Alla prossima!
+A dopo!
+Sì.
+No.
+Va bene.
+Certo.
+Certamente.
+Senz'altro.
+Perfetto.
+D'accordo.
+Ok.
+Fatto.
+Fatto, ecco qui.
+Ecco fatto.
+Capito.
+Ho capito.
+Esatto.
+Giusto.
+Naturalmente.
+Volentieri.
+Con piacere.
+Subito.
+Un momento.
+Un attimo.
+Dammi un istante.
+Sto pensando.
+Aspetta un secondo.
+Riprova.
+Riprova tra poco.
+Scusa: prova a riformulare e ci riprovo.
+Scusa, non ho capito bene.
+Non ho capito, puoi ripetere?
+Puoi dirlo in un altro modo?
+Riformula e ci riprovo.
+Dimmi quale parte e riprovo a spiegarla.
+Non sono sicuro di aver capito.
+Mi dispiace.
+Scusa.
+Chiedo scusa.
+Nessun problema.
+Tranquillo.
+Va benissimo.
+Come preferisci.
+Sì, ne sono sicuro.
+Sì, ne sono certo.
+No, non saprei.
+Non lo so.
+Su questo non ho altri dettagli.
+Non ho altri dettagli su questo.
+Abbiamo appena iniziato.
+Eravamo a parlare di questo.
+Perfetto, dammi i dati e lo calcolo.
+Dimmi pure i dati.
+Vai pure.
+Procedo.
+Procedo subito.
+Annullato.
+Annullo.
+Ricevuto.
+Tutto chiaro.
+Tutto a posto.
+Bene.
+Benissimo.
+Ottimo.
+Grazie.
+Grazie mille.
+Buona giornata!
+Buona serata!
+Batteria.
+Batteria all'ottanta per cento.
+Batteria al cento per cento.
+Batteria scarica.
+In carica.
+Batteria in carica.
+Batteria carica.
+Sono le due e trenta.
+Sono le otto e un quarto.
+Sono le dieci meno un quarto.
+Sono le sette in punto.
+Mezzogiorno.
+Mezzanotte.
+Spazio SD.
+Spazio SD due giga e mezzo.
+Giga liberi.
+Spazio disponibile.
+Spazio libero sulla scheda.
+Oggi è il quindici giugno.
+Quindici giugno duemilaventisei.
+Siamo nel duemilaventisei.
+Siamo in estate.
+Siamo in primavera.
+Siamo in autunno.
+Siamo in inverno.
+Eseguo la versione due punto uno punto zero.
+Acceso da due ore.
+Acceso da tre ore e mezzo.
+Acceso da due giorni.
+Acceso da pochi minuti.
+per cento
+gradi
+ore
+minuti
+giorni
+secondi
+giga
+megabyte
+liberi
+in punto
+e mezzo
+e un quarto
+mezzogiorno
+mezzanotte
+primavera
+estate
+autunno
+inverno
+gennaio
+febbraio
+marzo
+aprile
+maggio
+giugno
+luglio
+agosto
+settembre
+ottobre
+novembre
+dicembre
+lunedì
+martedì
+mercoledì
+giovedì
+venerdì
+sabato
+domenica
+uno
+due
+tre
+quattro
+cinque
+sei
+sette
+otto
+nove
+dieci
+undici
+dodici
+duemilaventisei
+versione
+carica
+scarica
+Apro foto.
+Apro disegno.
+Apro blocco note.
+Apro file.
+Apro musica.
+Apro radio.
+Apro video.
+Apro foglio di calcolo.
+Apro calcolatrice.
+Apro terminale.
+Apro orologio.
+Apro calendario.
+Apro impostazioni.
+Apro browser.
+Apro attività.
+Apro monitor.
+Apro telecomando.
+Apro log.
+Apro sciame.
+Apro automazioni.
+Apro registratore.
+Apro trascrizione.
+Apro cestino.
+Apro aggiornamenti.
+Apro emulatore.
+Apro runner.
+Apro i miei fatti.
+Chiudo foto.
+Chiudo musica.
+Chiudo blocco note.
+Apro
+Chiudo
+foto
+disegno
+blocco note
+file
+musica
+radio
+video
+foglio di calcolo
+calcolatrice
+terminale
+orologio
+calendario
+impostazioni
+browser
+attività
+monitor
+telecomando
+automazioni
+sciame
+registratore
+trascrizione
+cestino
+aggiornamenti
+emulatore
+i miei fatti
+gestore file
+lettore musicale
+lettore video
+visualizzatore foto
+monitor di sistema
+studio automazioni
+Quale apro?
+Quale dei due apro?
+Dimmi quale app vuoi aprire.
+Dimmi quale dei due preferisci.
+Oggi non hai impegni.
+Oggi hai un impegno.
+Oggi hai due impegni.
+Oggi hai tre impegni.
+Oggi hai diversi impegni.
+Non hai appuntamenti in programma.
+Hai un appuntamento oggi.
+Hai un appuntamento domani.
+Il tuo prossimo appuntamento è oggi.
+Il tuo prossimo appuntamento è domani.
+Promemoria
+Ho impostato il promemoria.
+Va bene, te lo ricordo.
+oggi
+domani
+dopodomani
+ieri
+stamattina
+questa mattina
+questo pomeriggio
+stasera
+questa notte
+alle
+alle dieci
+alle dieci e mezza
+tra un'ora
+tra due ore
+tra dieci minuti
+tra mezz'ora
+questa settimana
+la prossima settimana
+questo mese
+il prossimo mese
+Apro il calendario.
+Chiudo calendario.
+Chiudo attività.
+È l'ora
+Sono le
+Sono le quattordici e trenta.
+Oggi è
+Oggi è il quindici giugno duemilaventisei.
+primo
+quindici
+venti
+venticinque
+trenta
+trentuno
+e mezza
+meno un quarto
+del mattino
+del pomeriggio
+di sera
+Imparato, ricorderò.
+Ricorderò.
+Non lo memorizzo, è un'informazione temporanea.
+Come vuoi chiamare il file?
+Dimmi il nome del file e lo creo.
+In quale cartella metto il file?
+Documenti, Immagini, Musica o Video?
+Dimmi la cartella e lo salvo.
+Non ho ancora creato il file, mi serve il nome.
+Non posso creare il file senza un nome.
+Non riesco a impararlo ora.
+Modalità solo online, nessuna connessione a internet.
+Modalità solo online, ma il modello online non ha risposto.
+Non c'è connessione a internet.
+Sono offline, non riesco a raggiungere internet.
+Scusa, prova a riformulare e ci riprovo.
+Non ho trovato quello che cerchi.
+Annullo, il contenuto era vuoto.
+gradi Celsius
+gradi centigradi
+gradi Fahrenheit
+metri
+metro
+centimetri
+millimetri
+chilometri
+chilometro
+decimetri
+grammi
+grammo
+chilogrammi
+chilogrammo
+milligrammi
+tonnellate
+litri
+litro
+millilitri
+centilitri
+decilitri
+ore minuti
+settimane
+mesi
+anni
+secondo
+terzo
+quarto
+quinto
+sesto
+settimo
+ottavo
+nono
+decimo
+metà
+doppio
+triplo
+quadruplo
+centimetri cubi
+metri quadrati
+metri cubi
+chilometri orari
+chilometri all'ora
+metri al secondo
+cento
+mille
+un milione
+circa
+esattamente
+Imposto il volume al
+Imposto la luminosità al
+Spazio SD
+gigabyte
+chilobyte
+byte
+terabyte
+watt
+volt
+ampere
+ohm
+Eseguo
+Siamo nel duemilaventisette.
+Acceso da due giorni e tre ore.
+Acceso da un'ora.
+adesso
+o
+ora
+stanotte
+minuto
+un'ora
+giorno
+settimana
+mese
+anno
+e
+tredici
+quattordici
+sedici
+diciassette
+diciotto
+diciannove
+siamo nel
+siamo in
+Acceso da
+Creo
+Creo con
+in
+con
+Fa
+Alzo il volume
+Abbasso il volume
+Alzo la luminosità
+Abbasso la luminosità
+Non lo memorizzo: è un'informazione temporanea.
+Quale dei due apro
+Eravamo su
+Finora
+A dire il vero non lo sapevo: non mi fiderei.
+Sì: è un calcolo esatto, non posso sbagliarlo.
+Sì: l'ho calcolata componendo fatti che conosco.
+Sì: è una cosa che so con buona certezza.
+Abbastanza: è la risposta più probabile, ma non al cento per cento.
+Modalità solo online: il modello online non ha risposto.
+Modalità solo online: nessuna connessione a internet.
+è
+sono
+siamo
+ho
+hai
+ha
+abbiamo
+apro
+chiudo
+creo
+imposto
+alzo
+abbasso
+eseguo
+trovo
+faccio
+fa
+metto
+vuoi
+posso
+non posso
+riesco
+non riesco
+so
+sapevo
+conosco
+ricorderò
+calcolo
+ho calcolato
+ricordo
+memorizzo
+eravamo
+del
+della
+dei
+al
+ai
+su
+non
+ma
+se
+che
+come
+quando
+quale
+dei due
+il valore
+la risposta
+il modello
+i dati
+fino a
+
+# --- gap-fill da anima:tts-replies (parole utili emerse in verifica) ---
+crea
+cartella
+cartelle
+dividere
+diviso
+capitale
+italia
+cerchio
+quadrato
+rettangolo
+triangolo
+cubo
+sfera
+cilindro
+area
+perimetro
+lato
+base
+altezza
+raggio
+diametro
+elevato
+radice
+alzato
+abbassato
+salvato
+eliminato
+spostato
+copiato
+rinominato
+gb	gigabyte
+volume
+volumi
+esempio
+
+# --- gap-fill 2 da anima:tts-replies (stato/solver bilingui) ---
+nucleoos	NucleoOS
+ram
+kb	kilobyte
+disponibile
+non disponibile
+mediana
+assoluto
+valore assoluto
+modulo
+luminosità
+giorni e
+ore e
+uguale a
+impostato
+l'orologio non è impostato
+
+# --- gap-fill 3: copertura esaustiva deterministica (solver/equazioni/strumenti) ---
+più
+cubica
+radice cubica
+log
+reciproco
+opposto
+quadrato
+metà
+sommando
+dividendo
+valori
+calcola
+equazione
+equazioni
+incognite
+risolvo
+soluzione
+soluzioni
+infinite
+unica
+riduce
+uguaglianza
+falsa
+grado
+superiore
+qualunque
+negativo
+primalità
+interi
+composto
+percorso
+valido
+aggiungere
+chiamarsi
+contenuto
+sovrascrivo
+riuscito
+matematica
+conversioni
+x	ics
+
+# --- gap-fill 4: ampliamento parlato (cortesia + connettivi + stato) per gist piu' naturali ---
+certo
+volentieri
+prego
+scusa
+scusami
+un attimo
+perfetto
+ottimo
+capito
+va bene
+d'accordo
+esatto
+vediamo
+allora
+dunque
+inoltre
+infatti
+quindi
+mentre
+durante
+prima
+dopo
+sempre
+spesso
+insieme
+soprattutto
+generalmente
+solitamente
+attualmente
+probabilmente
+sicuramente
+semplicemente
+davvero
+comunque
+tuttavia
+invece
+oppure
+magari
+naturalmente
+ovviamente
+batteria carica
+batteria scarica
+in carica
+connesso
+disconnesso
+segnale
+aggiornamento
+riavvio
+completato
+annullato
+in corso
+pronto
+si trova
+si chiama
+viene usato
+serve per
+permette di
+fa parte
+deriva da
+rappresenta
+dipende da
+si tratta di

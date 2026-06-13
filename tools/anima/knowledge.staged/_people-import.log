@@ -1,0 +1,25 @@
+[people] Q901 scientist (1/24) … 364 rows
+[people] Q169470 physicist (2/24) … 1000 rows
+[people] Q170790 mathematician (3/24) … 1000 rows
+[people] Q593644 chemist (4/24) … 875 rows
+[people] Q864503 biologist (5/24) … 328 rows
+[people] Q11063 astronomer (6/24) … 854 rows
+[people] Q36180 writer (7/24) … ERR HTTP 504
+[people] Q49757 poet (8/24) … 1000 rows
+[people] Q4964182 philosopher (9/24) … 1000 rows
+[people] Q201788 historian (10/24) … 1000 rows
+[people] Q1028181 painter (11/24) … 1000 rows
+[people] Q36834 composer (12/24) … 1000 rows
+[people] Q205375 inventor (13/24) … 844 rows
+[people] Q188094 economist (14/24) … 1000 rows
+[people] Q11631 astronaut (15/24) … 483 rows
+[people] Q1234713 theologian (16/24) … 827 rows
+[people] Q3242115 mathematician (17/24) … 331 rows
+[people] Q14467526 explorer (18/24) … 692 rows
+[people] Q82955 politician (19/24) … 1000 rows
+[people] Q372436 statesperson (20/24) … 493 rows
+[people] Q116 monarch (21/24) … 1000 rows
+[people] Q1097498 engineer (22/24) … 589 rows
+[people] Q82594 computer scientist (23/24) … 429 rows
+[people] Q5482740 programmer (24/24) … 129 rows
+[people] 25612 grounded people cards -> G:\Nucleo\tools\anima\knowledge.staged\people-wd.jsonl  (min sitelinks 25, 24 occupations)

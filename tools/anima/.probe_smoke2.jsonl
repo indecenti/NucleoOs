@@ -1,0 +1,16 @@
+{"q":"velocita di 100 metri in 10 secondi","lang":"it","expect":"answer"}
+{"q":"forza di 10 kg a 2 m/s2","lang":"it","expect":"answer"}
+{"q":"e' primo 17","lang":"it","expect":"answer"}
+{"q":"fattori di 24","lang":"it","expect":"answer"}
+{"q":"2 alla quinta","lang":"it","expect":"answer"}
+{"q":"5 fattoriale","lang":"it","expect":"answer"}
+{"q":"perimetro di un quadrato lato 5","lang":"it","expect":"answer"}
+{"q":"volume di una sfera raggio 2","lang":"it","expect":"answer"}
+{"q":"convert 10 kg to pounds","lang":"en","expect":"answer"}
+{"q":"square root of 81","lang":"en","expect":"answer"}
+{"q":"15 percent of 200","lang":"en","expect":"answer"}
+{"q":"area of a triangle base 4 height 6","lang":"en","expect":"answer"}
+{"q":"mcd di 12 e 18","lang":"it","expect":"answer"}
+{"q":"mcm di 4 e 6","lang":"it","expect":"answer"}
+{"q":"log di 100","lang":"it","expect":"answer"}
+{"q":"seno di 30 gradi","lang":"it","expect":"answer"}

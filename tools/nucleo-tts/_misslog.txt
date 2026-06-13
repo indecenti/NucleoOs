@@ -1,0 +1,6 @@
+﻿W (463) nucleoos: DIAG last-reset=POWERON (cold boot) anima_phase=0x20 anima_stage=0xDB39E745
+E (653) oom: alloc fail: 32404 B caps=0x404 in heap_caps_malloc
+W (3233) applaunch: enter 'anima' free=45352 largest=21504
+W (3293) applaunch: enter 'anima' DONE free=46788
+W (86343) anima.vkl: facets.it.jsonl integrity FAILED (tampered SD?) -> abstaining
+

@@ -1,0 +1,395 @@
+{"text":"Can you sum column A for me?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"what's the total of column b","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"How much is the sum of all the numbers?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"can you give me the grand total?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"Hey, what's the total of cell A1:A100?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"how do i get the total of a whole column?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"hi, can you sum up all the numbers please?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"What's the total of the numbers in C","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"sum up all the values in my spreadsheet","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"Can you give me the total sum of column A, please?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"sum column a please","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"how do i total this column?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"can you do a sum for me on column c?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"sum all the numbers in column b","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"what's the formula to get total of column a","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"can you give me the total of this range 1 to 5?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"get the sum of the numbers in column b, pls","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"what's the total of column d?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"add up all the numbers in column c","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"can i have the total of the selection please?","lang":"en","intent":"agg_sum","src":"groq"}
+{"text":"Calcola somma di colonna A","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"totalizzo il campo con i numeri","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Ecco, il totalizzatore della colonna B","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Somma dei numeri nella colonna C, per favore","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"calcola il totale in A","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Il totale è A12-A1","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Mi aiuti a totalizzare i dati nella colonna B","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"La somma dei numeri nella colonna A, per piacere","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"somma della colonna B, è un po' complicato","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Quanto vale la somma della riga 5 alle 7?","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Facciamo la somma di tutta la colonna A, per favore!","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Come fare a sommare questi dati?","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"C'è modo di calcolare la somma di questi valori?","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Posso avere il totale della colonna A?","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Fai la somma di tutti questi numeri, per favore.","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Come posso ottenere la somma dei valori selezionati?","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Il totale è... ? (la somma della colonna)","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Sommiamo A!","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Posso sapere quale è la somma di questi dati?","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Calcola il totale di tutti i valori, dài!","lang":"it","intent":"agg_sum","src":"groq"}
+{"text":"Come faccio ad avere la media di tutta la colonna C?","lang":"it","intent":"agg_avg","src":"groq"}
+{"text":"Voglio sapere la media dei dati della colonna B per favore.","lang":"it","intent":"agg_avg","src":"groq"}
+{"text":"Ecco il calcolo delle medie: il valore medio di una cella specifica è ?","lang":"it","intent":"agg_avg","src":"groq"}
+{"text":"C'è un modo per trovare la media di una parte di una colonna?","lang":"it","intent":"agg_avg","src":"groq"}
+{"text":"La media di A è ?","lang":"it","intent":"agg_avg","src":"groq"}
+{"text":"Dovrei scrivere una formula per trovare la media di più celle","lang":"it","intent":"agg_avg","src":"groq"}
+{"text":"Qual è la media dei valori di tutta la colonna A? Grazie","lang":"it","intent":"agg_avg","src":"groq"}
+{"text":"Voglio la media dei dati per ogni colonna, è tanto facile?","lang":"it","intent":"agg_avg","src":"groq"}
+{"text":"Come posso avere la media di una selezione di celle per colonna A?","lang":"it","intent":"agg_avg","src":"groq"}
+{"text":"Posso usare uno strumento per avere la media dei dati selezionati, per favore?","lang":"it","intent":"agg_avg","src":"groq"}
+{"text":"what's the average of column A","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"can you average this selection for me?","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"mean of column B plz","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"avg of column C","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"can you tell me the average?","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"what's the average value in this range?","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"i need the average of this selection can you do it for me?","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"average of column A and B","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"can u pls avg it for me?","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"what's the mean of column D?","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"whass the min value in column A","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"what's the smallest value in C","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"what is minimum value A column","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"hi, what's the lowest number in B","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"can you tell me the min value of col a","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"what's the least in column 3","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"hey what is the minimum value of column a","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"minimum value of A plz","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"what's the lowest value in a column","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"can you gimme the min value of column B","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"Cosa è il valore minimo della colonna A?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Mi servono i dati minimi A","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Il valore più basso della colonna è?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Come posso vedere il minimo di C?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Qual è il minimo dell'intera tabella?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Che valore si trova in fondo a D?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Minimo della colonna B per favore","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Come faccio a trovare il minimo di A?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Il più piccolo valore della colonna è dove?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Posso sapere il valore più basso di A?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"what's the lowest value in column A","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"find me the minimum value in column b","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"hey, what's the minimum of column c?","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"can you tell me the lowest number in this one column","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"minimum value in column A please","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"low value in column a, what's that?","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"find the lowest value without the max","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"minimum value of this column A","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"i need the smallest number in column B, thanks","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"lowest value in column please, what's it?","lang":"en","intent":"agg_min","src":"groq"}
+{"text":"What's the average value of column A?","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"Avg out the numbers in range B2:B10 please","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"Can you give me the mean of col C?","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"Ave out the sales","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"Average column D","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"Wut's the avrage of the selection?","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"Give me the mean of this dataset","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"What's the mean of column A and B?","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"Can u avrage column E for me?","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"avg values in cells G1:G5","lang":"en","intent":"agg_avg","src":"groq"}
+{"text":"Cosa è la minima valutazione nella colonna B?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Mi serve la minima cifra nella colonna A per confrontarla con l'ultimo valore","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Il minimo valore presente nella colonna C di queste cifre è?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Ecco la colonna D, posso sapere il minimo valore che esiste?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"La più piccola cifra nella colonna E è","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Qual è il minimo valore nella colonna A?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Il minimo valore della colonna B è di quanti soldi?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Il minimo della colonna C è di quanti punti per favore?","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"La colonna F ha il minimo valore","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Posso sapere la cifra minima della colonna A per avere una visione complessiva","lang":"it","intent":"agg_min","src":"groq"}
+{"text":"Cosa è il valore più alto della colonna A?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Quando posso trovare il valore massimo del campo B?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Ehi, posso avere il valore max della colonna?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Qual è il massimo di tutta la colonna A?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Come posso trovare il campo B di maggiore valore?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Posso sapere il valore A più alto della tabella?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Ecco, posso vedere il campo C più alto?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Sono alla ricerca del valore massimo della colonna!","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Cosa dice la colonna A al punto di massimo?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Mi può dirmi qual è il valore di max della colonna B?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"what's the highest number in column A","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"max value of the 'scores' column","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"find me the maximum value for column B","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"show me the top number in column C","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"get me the highest value in that one column","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"maximum value of A","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"what's the max value of scores","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"i want the highest score in column A","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"max value of column b","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"find the max in column c please","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"What's the highest number in column A?","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"Find the max number in column A for me","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"show me the max value in col A","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"what is A","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"can you tell me the maximum value in column B?","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"the highest value in column C please","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"get me the max in col B","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"hi, could you please return the max value of a column?","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"max in col c please, thanks!","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"hey, what's the largest value in the B column?","lang":"en","intent":"agg_max","src":"groq"}
+{"text":"Cosa ci sono in cella A?","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Quale è il valore massimo della colonna A?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Contami quanti dati ci sono qua.","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Per favore conta le righe da B1 a B15.","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Quant'è la somma di A1,A2?","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Come faccio a sapere quanti valori ci sono in colonna C?","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Voglio contare le celle con valore in A.","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Come posso vedere quanti dati ci sono in questo foglio?","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Sei capace di contare quanti valori ci sono tra A1 e B10?","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Per favore calcola la media dei dati in B2,B3.","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Come faccio a contare in automatico i dati presenti?","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Cosa fa MAXimo nella colonna A?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Quanto è il valore più alto della colonna?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Come posso vedere il valore più alto di tutti nella colonna A?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Quante punti in più fa la colonna con valore A?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Cosa c'è al massimo nella colonna A?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Il valore MAX di A è:","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Posso sapere il max della colonna B?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Cerco il valore più alto della colonna C. Posso aiutarmi?","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Qual è il valore più alto della colonna? Credo sia... B","lang":"it","intent":"agg_max","src":"groq"}
+{"text":"Hey AI count how many values in col A","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"how many cells r in this spreadsheet","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"can u tell me the total count of rows in this table?","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"hi how many cells r in range a1:b10?","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"hey how many values are in column b?","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"what's the total number of rows in this sheet?","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"hey i need to know how many rows are there in this table","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"how many values are in range c4:c10?","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"yo i need count of all values in range a1:c10","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"hi please tell me the total row count for this sheet","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"hey can u count how many cells are selected?","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"hi, can u count the values in column A","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"what's the row count?","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"pls tell me the total numbers i have","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"how many entries in my sheet","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"can u do a cell count for me?","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"i want to know the total count of values in column B","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"hey, can u count the values in this sheet","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"how many rows have data","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"can u count the number of cell values?","lang":"en","intent":"agg_count","src":"groq"}
+{"text":"Contami quanti valori ci sono nella colonna B","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Quante righe ho qui","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Contami gli elementi della lista","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Che numero mi dà la conta di valori nella cella A1?","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Quanto è alto il mio database?","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Dimmi quanti ce la ho, sono una grande lista qui dentro!","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Quanti valori c'è nella zona A5:A10?","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Ho bisogno di contare i valori in A/B","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Quant'è lunga la mia lista di nomi?","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"C'è un modo per sapere quanti elementi ho qui dentro?","lang":"it","intent":"agg_count","src":"groq"}
+{"text":"Fallo con tutti i valori","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Vuoi fare il prodotto di tutte le colonne A?","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Clicca sul prodotto A e B","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Cambiare in prodotto tutti i valori","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Moltiplica tutti i numeri","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Poi mi racconti come fare il prodotto di tutto?","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Multiplicare tutti i valori della A e della B","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Produrre i valori della colonna A","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Quindi devi fare il prodotto dei tutti i valori","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Come posso fare un prodotto di tutti i dati?","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Multiply per favore tutti i valori","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Ho una colonna B da produrre con A","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Il mio errore è che non ho fatto il prodotto dei valori","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Vorrei anche che mi insegni a fare il prodotto di tutti i numeri","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"C'è modo di moltiplicare tutte queste colonne?","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Multiplica tutti quanti","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Fallo per tutti","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Sì, moltiplica A e poi B","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Moltiplica tutti i valori per favore","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"Prodotti di tutti i valori","lang":"it","intent":"agg_product","src":"groq"}
+{"text":"quanti valori ci sono nella colonna A","lang":"it","intent":"agg_count","src":"ollama"}
+{"text":"conta le celle non vuote","lang":"it","intent":"agg_count","src":"ollama"}
+{"text":"quant'è il totale delle righe","lang":"it","intent":"agg_count","src":"ollama"}
+{"text":"fare una conta dei dati","lang":"it","intent":"agg_count","src":"ollama"}
+{"text":"quante celle ho riempito","lang":"it","intent":"agg_count","src":"ollama"}
+{"text":"conta quanti numeri ci sono","lang":"it","intent":"agg_count","src":"ollama"}
+{"text":"qual è il conteggio delle celle","lang":"it","intent":"agg_count","src":"ollama"}
+{"text":"quantità di valori nella tabella","lang":"it","intent":"agg_count","src":"ollama"}
+{"text":"how many rows are in this sheet","lang":"en","intent":"agg_count","src":"ollama"}
+{"text":"count cells in column A","lang":"en","intent":"agg_count","src":"ollama"}
+{"text":"what's the total number of values here","lang":"en","intent":"agg_count","src":"ollama"}
+{"text":"can u tell me how many rows i have","lang":"en","intent":"agg_count","src":"ollama"}
+{"text":"how many entries do i have in B column","lang":"en","intent":"agg_count","src":"ollama"}
+{"text":"count all the data points","lang":"en","intent":"agg_count","src":"ollama"}
+{"text":"what's the row count please","lang":"en","intent":"agg_count","src":"ollama"}
+{"text":"how many cells with info are there","lang":"en","intent":"agg_count","src":"ollama"}
+{"text":"puoi fare la somma della colonna A?","lang":"it","intent":"agg_sum","src":"ollama"}
+{"text":"somma tutto il contenuto di B","lang":"it","intent":"agg_sum","src":"ollama"}
+{"text":"calcola totale C1 a C10","lang":"it","intent":"agg_sum","src":"ollama"}
+{"text":"fare la somma di questa selezione","lang":"it","intent":"agg_sum","src":"ollama"}
+{"text":"mi serve il totale delle celle","lang":"it","intent":"agg_sum","src":"ollama"}
+{"text":"quanto viene se sommo tutto?","lang":"it","intent":"agg_sum","src":"ollama"}
+{"text":"potresti fare la somma della colonna da 1 a 100?","lang":"it","intent":"agg_sum","src":"ollama"}
+{"text":"fai la somma della colonna B","lang":"it","intent":"agg_sum","src":"ollama"}
+{"text":"can you add up all the numbers in column a please","lang":"en","intent":"agg_sum","src":"ollama"}
+{"text":"total up column b","lang":"en","intent":"agg_sum","src":"ollama"}
+{"text":"what's the sum of values in c1:c10","lang":"en","intent":"agg_sum","src":"ollama"}
+{"text":"add column d","lang":"en","intent":"agg_sum","src":"ollama"}
+{"text":"could you get the total for row 5","lang":"en","intent":"agg_sum","src":"ollama"}
+{"text":"sum all the numbers in this range","lang":"en","intent":"agg_sum","src":"ollama"}
+{"text":"how much is everything in column e","lang":"en","intent":"agg_sum","src":"ollama"}
+{"text":"please total column f","lang":"en","intent":"agg_sum","src":"ollama"}
+{"text":"puoi mettere una riga totale con le somme sotto i dati?","lang":"it","intent":"total","src":"ollama"}
+{"text":"aggiungi la somma delle colonne A e B per favore","lang":"it","intent":"total","src":"ollama"}
+{"text":"metti una riga con i totali sotto la tabella","lang":"it","intent":"total","src":"ollama"}
+{"text":"calcola le somme delle colonne da C a F","lang":"it","intent":"total","src":"ollama"}
+{"text":"voglio una riga con i totali in fondo","lang":"it","intent":"total","src":"ollama"}
+{"text":"puoi fare una somma totale delle celle?","lang":"it","intent":"total","src":"ollama"}
+{"text":"inserisci una riga di totale con le somme","lang":"it","intent":"total","src":"ollama"}
+{"text":"fammi una colonna con i totali sotto i dati","lang":"it","intent":"total","src":"ollama"}
+{"text":"can u add a total row at the bottom with sums for each column please","lang":"en","intent":"total","src":"ollama"}
+{"text":"put a sum row under the data block for all columns","lang":"en","intent":"total","src":"ollama"}
+{"text":"add totals for each column at the end of the table","lang":"en","intent":"total","src":"ollama"}
+{"text":"could you please insert a row with sums under this data","lang":"en","intent":"total","src":"ollama"}
+{"text":"sum up all the rows and add a total line at bottom","lang":"en","intent":"total","src":"ollama"}
+{"text":"please add a row with totals for A through E columns","lang":"en","intent":"total","src":"ollama"}
+{"text":"make a total row with sums under this spreadsheet data","lang":"en","intent":"total","src":"ollama"}
+{"text":"add a row at end with sum of each column","lang":"en","intent":"total","src":"ollama"}
+{"text":"cancella le righe duplicate per favore","lang":"it","intent":"dedupe","src":"ollama"}
+{"text":"rimuovi i duplicati dalla colonna A","lang":"it","intent":"dedupe","src":"ollama"}
+{"text":"puoi eliminare le righe che si ripetono?","lang":"it","intent":"dedupe","src":"ollama"}
+{"text":"ciao aiutami a togliere le copie nelle celle","lang":"it","intent":"dedupe","src":"ollama"}
+{"text":"elimina le righe identiche in B","lang":"it","intent":"dedupe","src":"ollama"}
+{"text":"scusa ma non so come fare per cancellare i doppi","lang":"it","intent":"dedupe","src":"ollama"}
+{"text":"voglio rimuovere le righe uguali","lang":"it","intent":"dedupe","src":"ollama"}
+{"text":"mi puoi aiutare a pulire i dati da duplicati?","lang":"it","intent":"dedupe","src":"ollama"}
+{"text":"hey can u delete duplicates in column A please","lang":"en","intent":"dedupe","src":"ollama"}
+{"text":"remove all duplicate rows from this sheet","lang":"en","intent":"dedupe","src":"ollama"}
+{"text":"can you get rid of the repeated rows for me","lang":"en","intent":"dedupe","src":"ollama"}
+{"text":"delete rows that appear more than once in column B","lang":"en","intent":"dedupe","src":"ollama"}
+{"text":"how do i eliminate duplicate entries in my data","lang":"en","intent":"dedupe","src":"ollama"}
+{"text":"please clean up the duplicates in column C","lang":"en","intent":"dedupe","src":"ollama"}
+{"text":"get rid of any row that matches another row","lang":"en","intent":"dedupe","src":"ollama"}
+{"text":"remove duplicate values in the whole spreadsheet","lang":"en","intent":"dedupe","src":"ollama"}
+{"text":"cancella le righe vuote","lang":"it","intent":"rmempty","src":"ollama"}
+{"text":"elimina righe senza dati nella colonna A","lang":"it","intent":"rmempty","src":"ollama"}
+{"text":"togli le righe che non hanno niente","lang":"it","intent":"rmempty","src":"ollama"}
+{"text":"rimuovi le celle vuote","lang":"it","intent":"rmempty","src":"ollama"}
+{"text":"pulisci le righe senza informazioni","lang":"it","intent":"rmempty","src":"ollama"}
+{"text":"cancella le righe bianche","lang":"it","intent":"rmempty","src":"ollama"}
+{"text":"leva tutte le righe vuote","lang":"it","intent":"rmempty","src":"ollama"}
+{"text":"elimina le righe che non contengono nulla","lang":"it","intent":"rmempty","src":"ollama"}
+{"text":"hey can u delete all the blank rows in column A please","lang":"en","intent":"rmempty","src":"ollama"}
+{"text":"remove empty rows from my data sheet","lang":"en","intent":"rmempty","src":"ollama"}
+{"text":"clean up the spreadsheet by deleting rows with no info","lang":"en","intent":"rmempty","src":"ollama"}
+{"text":"get rid of any rows where column B is empty","lang":"en","intent":"rmempty","src":"ollama"}
+{"text":"please trim out all the blank rows in this table","lang":"en","intent":"rmempty","src":"ollama"}
+{"text":"delete rows that have nothing in them","lang":"en","intent":"rmempty","src":"ollama"}
+{"text":"remove any rows with no values in column C","lang":"en","intent":"rmempty","src":"ollama"}
+{"text":"cuz this is messy, just delete the empty rows","lang":"en","intent":"rmempty","src":"ollama"}
+{"text":"pulisci la colonna A da spazi in più","lang":"it","intent":"clean","src":"ollama"}
+{"text":"rimuovi gli spazi bianchi dalla colonna B","lang":"it","intent":"clean","src":"ollama"}
+{"text":"metti tutto normale nella colonna C","lang":"it","intent":"clean","src":"ollama"}
+{"text":"pulisci lo spazio tra le parole","lang":"it","intent":"clean","src":"ollama"}
+{"text":"togli i doppi spazi da A","lang":"it","intent":"clean","src":"ollama"}
+{"text":"normalizza lo spazio in B","lang":"it","intent":"clean","src":"ollama"}
+{"text":"pulisci i testi in C","lang":"it","intent":"clean","src":"ollama"}
+{"text":"leva gli spazi extra","lang":"it","intent":"clean","src":"ollama"}
+{"text":"Hey can you clean up column A please? Trim all the extra spaces","lang":"en","intent":"clean","src":"ollama"}
+{"text":"Please normalize whitespace in B column","lang":"en","intent":"clean","src":"ollama"}
+{"text":"Clean text in C column, remove trailing spaces","lang":"en","intent":"clean","src":"ollama"}
+{"text":"Hey AI, can you clean column A? Remove all extra spaces","lang":"en","intent":"clean","src":"ollama"}
+{"text":"Please trim spaces in column B","lang":"en","intent":"clean","src":"ollama"}
+{"text":"Clean up column C text, normalize whitespace","lang":"en","intent":"clean","src":"ollama"}
+{"text":"Hey, can you clean column A? Remove leading and trailing spaces","lang":"en","intent":"clean","src":"ollama"}
+{"text":"Please normalize column B text, remove extra whitespace","lang":"en","intent":"clean","src":"ollama"}
+{"text":"puoi aggiungere le capitali nei paesi della colonna A?","lang":"it","intent":"enrich","src":"ollama"}
+{"text":"metti le date di nascita di queste persone","lang":"it","intent":"enrich","src":"ollama"}
+{"text":"calcola l'età di ognuno","lang":"it","intent":"enrich","src":"ollama"}
+{"text":"inserisci la capitale di ogni nazione","lang":"it","intent":"enrich","src":"ollama"}
+{"text":"voglio sapere quando è nato ciascuno","lang":"it","intent":"enrich","src":"ollama"}
+{"text":"aggiungi l'anno di nascita di ogni persona","lang":"it","intent":"enrich","src":"ollama"}
+{"text":"posso avere le città capoluogo delle nazioni?","lang":"it","intent":"enrich","src":"ollama"}
+{"text":"qual è la data di nascita di ognuno?","lang":"it","intent":"enrich","src":"ollama"}
+{"text":"can u add the capital cities to column a please","lang":"en","intent":"enrich","src":"ollama"}
+{"text":"hey AI, fill in the birth years for everyone in column b","lang":"en","intent":"enrich","src":"ollama"}
+{"text":"what's the timezone for each country in a1:a100","lang":"en","intent":"enrich","src":"ollama"}
+{"text":"add the population of each city in column c","lang":"en","intent":"enrich","src":"ollama"}
+{"text":"could you get the currency for each country in column a","lang":"en","intent":"enrich","src":"ollama"}
+{"text":"put the founding year of each company in column b","lang":"en","intent":"enrich","src":"ollama"}
+{"text":"give me the continent for each country in column a","lang":"en","intent":"enrich","src":"ollama"}
+{"text":"how about adding the official language to column c","lang":"en","intent":"enrich","src":"ollama"}
+{"text":"evidenzia le celle con valori superiori a 100 nella colonna A","lang":"it","intent":"highlight","src":"ollama"}
+{"text":"metti in grassetto le righe dove B è vuoto","lang":"it","intent":"highlight","src":"ollama"}
+{"text":"puoi colorare le celle che hanno il massimo valore?","lang":"it","intent":"highlight","src":"ollama"}
+{"text":"seleziona solo le celle con duplicati in colonna C","lang":"it","intent":"highlight","src":"ollama"}
+{"text":"highlight delle celle vuote nella colonna B","lang":"it","intent":"highlight","src":"ollama"}
+{"text":"cerca le celle con valori maggiori di 50 e colorale","lang":"it","intent":"highlight","src":"ollama"}
+{"text":"voglio evidenziare le celle che sono il massimo in ogni riga","lang":"it","intent":"highlight","src":"ollama"}
+{"text":"puoi markare le celle con valori nulli in colonna A","lang":"it","intent":"highlight","src":"ollama"}
+{"text":"can u highlight cells in column A that are > 100 please","lang":"en","intent":"highlight","src":"ollama"}
+{"text":"make cells yellow where value equals 50","lang":"en","intent":"highlight","src":"ollama"}
+{"text":"hey can u bold the max value in each row","lang":"en","intent":"highlight","src":"ollama"}
+{"text":"highlight all empty cells in column B","lang":"en","intent":"highlight","src":"ollama"}
+{"text":"color code duplicates in column C","lang":"en","intent":"highlight","src":"ollama"}
+{"text":"please mark cells with values less than 0","lang":"en","intent":"highlight","src":"ollama"}
+{"text":"can u make the highest number in A1:A10 stand out","lang":"en","intent":"highlight","src":"ollama"}
+{"text":"show me which cells in column B are blank","lang":"en","intent":"highlight","src":"ollama"}
+{"text":"Quanto fa 15 per 7?","lang":"it","intent":"knowledge","src":"ollama"}
+{"text":"Che ore sono?","lang":"it","intent":"knowledge","src":"ollama"}
+{"text":"Chi è stato Einstein?","lang":"it","intent":"knowledge","src":"ollama"}
+{"text":"Qual è la capitale della Francia?","lang":"it","intent":"knowledge","src":"ollama"}
+{"text":"Quanto è 25 diviso 5?","lang":"it","intent":"knowledge","src":"ollama"}
+{"text":"A cosa serve la colonna B?","lang":"it","intent":"knowledge","src":"ollama"}
+{"text":"Chi ha scoperto la gravità?","lang":"it","intent":"knowledge","src":"ollama"}
+{"text":"Quanto fa 99 meno 42?","lang":"it","intent":"knowledge","src":"ollama"}
+{"text":"what's the population of japan","lang":"en","intent":"knowledge","src":"ollama"}
+{"text":"how many ounces in a cup","lang":"en","intent":"knowledge","src":"ollama"}
+{"text":"what's 15% of 240","lang":"en","intent":"knowledge","src":"ollama"}
+{"text":"who invented the telephone","lang":"en","intent":"knowledge","src":"ollama"}
+{"text":"what time does the sun rise","lang":"en","intent":"knowledge","src":"ollama"}
+{"text":"how much is 7 times 9","lang":"en","intent":"knowledge","src":"ollama"}
+{"text":"what's the capital of brazil","lang":"en","intent":"knowledge","src":"ollama"}
+{"text":"how many seconds in an hour","lang":"en","intent":"knowledge","src":"ollama"}
+{"text":"ciao come stai","lang":"it","intent":"chitchat","src":"ollama"}
+{"text":"qual è il tempo oggi","lang":"it","intent":"chitchat","src":"ollama"}
+{"text":"fammi una pizza","lang":"it","intent":"chitchat","src":"ollama"}
+{"text":"come va?","lang":"it","intent":"chitchat","src":"ollama"}
+{"text":"hai fame?","lang":"it","intent":"chitchat","src":"ollama"}
+{"text":"A1 dimmi una barzelletta","lang":"it","intent":"chitchat","src":"ollama"}
+{"text":"mi puoi fare il caffè?","lang":"it","intent":"chitchat","src":"ollama"}
+{"text":"salve come si va a roma","lang":"it","intent":"chitchat","src":"ollama"}
+{"text":"hey there how's your day going","lang":"en","intent":"chitchat","src":"ollama"}
+{"text":"can u make me a sandwich","lang":"en","intent":"chitchat","src":"ollama"}
+{"text":"what's the weather like today","lang":"en","intent":"chitchat","src":"ollama"}
+{"text":"A1 what's up","lang":"en","intent":"chitchat","src":"ollama"}
+{"text":"do you have any jokes","lang":"en","intent":"chitchat","src":"ollama"}
+{"text":"how are you doing today","lang":"en","intent":"chitchat","src":"ollama"}
+{"text":"B2 please tell me a story","lang":"en","intent":"chitchat","src":"ollama"}
+{"text":"make me some coffee","lang":"en","intent":"chitchat","src":"ollama"}
+{"text":"Ciao trova il valore 100 nella colonna A per favore","lang":"it","intent":"find","src":"ollama"}
+{"text":"Ehi AI, cerca testo 'rosso' in tutto il foglio","lang":"it","intent":"find","src":"ollama"}
+{"text":"Scusa ma dove c'è 'maggio' nella colonna B?","lang":"it","intent":"find","src":"ollama"}
+{"text":"Qualcuno sa dove è 'cliente X' in questo documento?","lang":"it","intent":"find","src":"ollama"}
+{"text":"AI, trova tutti i numeri maggiori di 500 nella colonna C","lang":"it","intent":"find","src":"ollama"}
+{"text":"Esercizio: cerca 'spesa' in qualsiasi cella","lang":"it","intent":"find","src":"ollama"}
+{"text":"Vorrei sapere se c'è '2023' in colonna D","lang":"it","intent":"find","src":"ollama"}
+{"text":"Hey, trova 'confermato' in tutto il foglio","lang":"it","intent":"find","src":"ollama"}
+{"text":"Hey can u search for john in column a please","lang":"en","intent":"find","src":"ollama"}
+{"text":"what cell has the value 500","lang":"en","intent":"find","src":"ollama"}
+{"text":"look up orange in sheet","lang":"en","intent":"find","src":"ollama"}
+{"text":"find where 12345 shows up","lang":"en","intent":"find","src":"ollama"}
+{"text":"search for bob in row 3","lang":"en","intent":"find","src":"ollama"}
+{"text":"what's in cell c7","lang":"en","intent":"find","src":"ollama"}
+{"text":"is there a 999 anywhere","lang":"en","intent":"find","src":"ollama"}
+{"text":"show me where abc appears","lang":"en","intent":"find","src":"ollama"}
+{"text":"calcola la somma di A quando è maggiore di 10","lang":"it","intent":"formula","src":"ollama"}
+{"text":"quanti valori in colonna B superano 5?","lang":"it","intent":"formula","src":"ollama"}
+{"text":"fai la somma di C dove è > 20","lang":"it","intent":"formula","src":"ollama"}
+{"text":"conta quanti numeri in A sono più grandi di 15","lang":"it","intent":"formula","src":"ollama"}
+{"text":"puoi fare la media di B se > 10?","lang":"it","intent":"formula","src":"ollama"}
+{"text":"somma tutti i valori in colonna D che superano 30","lang":"it","intent":"formula","src":"ollama"}
+{"text":"quante celle in colonna A hanno valore maggiore di 5?","lang":"it","intent":"formula","src":"ollama"}
+{"text":"fai la somma di E dove è più grande di 100","lang":"it","intent":"formula","src":"ollama"}
+{"text":"Hey can u sum column C where values are over 100","lang":"en","intent":"formula","src":"ollama"}

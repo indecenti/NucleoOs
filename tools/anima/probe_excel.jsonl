@@ -1,0 +1,76 @@
+{"q":"in excel =SOMMA(A1:A10)","lang":"it","expect":"spreadsheet"}
+{"q":"somma le celle da A1 a A10","lang":"it","expect":"spreadsheet"}
+{"q":"somma A1:A10","lang":"it","expect":"spreadsheet"}
+{"q":"fammi la somma delle celle da A1 a A20","lang":"it","expect":"spreadsheet"}
+{"q":"come sommo le celle da A1 a A10 in excel","lang":"it","expect":"spreadsheet"}
+{"q":"media di A1:A20","lang":"it","expect":"spreadsheet"}
+{"q":"calcola la media delle celle da B1 a B30","lang":"it","expect":"spreadsheet"}
+{"q":"media della colonna C","lang":"it","expect":"spreadsheet"}
+{"q":"massimo tra A1 e A50","lang":"it","expect":"spreadsheet"}
+{"q":"trova il minimo nelle celle da C1 a C9","lang":"it","expect":"spreadsheet"}
+{"q":"conta le celle da A1 a A100","lang":"it","expect":"spreadsheet"}
+{"q":"quante celle non vuote da A1 a A30","lang":"it","expect":"spreadsheet"}
+{"q":"prodotto delle celle A1 e A2","lang":"it","expect":"spreadsheet"}
+{"q":"mediana di A1:A11","lang":"it","expect":"spreadsheet"}
+{"q":"arrotonda la cella A1 a 2 decimali","lang":"it","expect":"spreadsheet"}
+{"q":"radice quadrata della cella A1","lang":"it","expect":"spreadsheet"}
+{"q":"potenza della cella A1 elevato 3","lang":"it","expect":"spreadsheet"}
+{"q":"resto della cella A1","lang":"it","expect":"spreadsheet"}
+{"q":"lunghezza del testo nella cella A1","lang":"it","expect":"spreadsheet"}
+{"q":"metti in maiuscolo la cella A1","lang":"it","expect":"spreadsheet"}
+{"q":"minuscolo della cella B2","lang":"it","expect":"spreadsheet"}
+{"q":"concatena A1 e B1","lang":"it","expect":"spreadsheet"}
+{"q":"cerca il valore di A1 con cerca.vert","lang":"it","expect":"spreadsheet"}
+{"q":"usa cerca.vert sulla cella A2","lang":"it","expect":"spreadsheet"}
+{"q":"vlookup cella A1","lang":"it","expect":"spreadsheet"}
+{"q":"se la cella A1 è maggiore di 10","lang":"it","expect":"spreadsheet"}
+{"q":"formula se per la cella A1","lang":"it","expect":"spreadsheet"}
+{"q":"somma se le celle da A1 a A10 sono maggiori di 5","lang":"it","expect":"spreadsheet"}
+{"q":"conta se da A1 a A10 maggiore di 3","lang":"it","expect":"spreadsheet"}
+{"q":"in excel come faccio la media della colonna A","lang":"it","expect":"spreadsheet"}
+{"q":"formula per sommare la colonna D","lang":"it","expect":"spreadsheet"}
+{"q":"dammi la formula del foglio di calcolo per la somma di A1:A5","lang":"it","expect":"spreadsheet"}
+{"q":"quanto fa la somma delle celle A1 e A2","lang":"it","expect":"spreadsheet"}
+{"q":"voglio totalizzare le celle da A1 ad A8","lang":"it","expect":"spreadsheet"}
+{"q":"addiziona le celle A1 e A2","lang":"it","expect":"spreadsheet"}
+{"q":"sum the cells from A1 to A10","lang":"en","expect":"spreadsheet"}
+{"q":"sum A1:A10","lang":"en","expect":"spreadsheet"}
+{"q":"sum cells A1 to A10","lang":"en","expect":"spreadsheet"}
+{"q":"average of A1:A20","lang":"en","expect":"spreadsheet"}
+{"q":"average of column B","lang":"en","expect":"spreadsheet"}
+{"q":"max of A1 to A50","lang":"en","expect":"spreadsheet"}
+{"q":"find the minimum in cells A1 to A9","lang":"en","expect":"spreadsheet"}
+{"q":"count cells from A1 to A100","lang":"en","expect":"spreadsheet"}
+{"q":"product of cells A1 and A2","lang":"en","expect":"spreadsheet"}
+{"q":"median of A1:A11","lang":"en","expect":"spreadsheet"}
+{"q":"round cell A1 to 2 decimals","lang":"en","expect":"spreadsheet"}
+{"q":"square root of cell A1","lang":"en","expect":"spreadsheet"}
+{"q":"vlookup on cell A2","lang":"en","expect":"spreadsheet"}
+{"q":"vlookup in a cell","lang":"en","expect":"spreadsheet"}
+{"q":"use vlookup for cell A1","lang":"en","expect":"spreadsheet"}
+{"q":"if cell A1 is greater than 10","lang":"en","expect":"spreadsheet"}
+{"q":"sumif cells A1 to A10 greater than 5","lang":"en","expect":"spreadsheet"}
+{"q":"countif A1 to A10 greater than 3","lang":"en","expect":"spreadsheet"}
+{"q":"concatenate A1 and B1","lang":"en","expect":"spreadsheet"}
+{"q":"length of text in cell A1","lang":"en","expect":"spreadsheet"}
+{"q":"uppercase cell A1","lang":"en","expect":"spreadsheet"}
+{"q":"in excel how do I average column A","lang":"en","expect":"spreadsheet"}
+{"q":"spreadsheet formula to sum A1:A5","lang":"en","expect":"spreadsheet"}
+{"q":"give me the excel formula to count column C","lang":"en","expect":"spreadsheet"}
+{"q":"how much is the sum of cells A1 and A2","lang":"en","expect":"spreadsheet"}
+{"q":"2+2","lang":"it","expect":"percent|calc|binop|answer"}
+{"q":"quanto fa 7 per 8","lang":"it","expect":"percent|calc|binop|answer"}
+{"q":"15% di 200","lang":"it","expect":"percent|calc|answer"}
+{"q":"radice quadrata di 144","lang":"it","expect":"percent|calc|answer"}
+{"q":"apri excel","lang":"it","expect":"open_app"}
+{"q":"open the spreadsheet app","lang":"en","expect":"open_app"}
+{"q":"crea un foglio di calcolo nuovo","lang":"it","expect":"open_app|create_file|abstain"}
+{"q":"che ore sono","lang":"it","expect":"abstain"}
+{"q":"raccontami una barzelletta","lang":"it","expect":"abstain"}
+{"q":"qual è la capitale della Francia","lang":"it","expect":"l1|abstain"}
+{"q":"come si chiama il mio gatto","lang":"it","expect":"abstain"}
+{"q":"meteo a Milano","lang":"it","expect":"abstain"}
+{"q":"manda una mail al capo","lang":"it","expect":"abstain"}
+{"q":"what is the meaning of life","lang":"en","expect":"abstain"}
+{"q":"sum of my feelings","lang":"en","expect":"abstain"}
+{"q":"somma queste due ricette","lang":"it","expect":"abstain"}

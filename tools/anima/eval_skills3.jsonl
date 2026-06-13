@@ -1,0 +1,112 @@
+// 100 NL false-positive + correctness probes (added on request): deliberately OUT-OF-CONTEXT phrases
+// that must ABSTAIN (the system must never fabricate), plus CORRECT Excel/spreadsheet and GEOGRAPHY
+// requests that must route/answer. Driven through the real exe by skill-probe.mjs. expect: "abstain"
+// = honest miss; "spreadsheet"/"geo"/intent = routed there; "answer" = answered with any tier.
+// ---- EXCEL / spreadsheet (correct, varied) -> spreadsheet ----
+{"q":"somma da A1 a A100","lang":"it","expect":"spreadsheet"}
+{"q":"fai la media di B2:B50","lang":"it","expect":"spreadsheet"}
+{"q":"arrotonda A1 a due decimali","lang":"it","expect":"spreadsheet"}
+{"q":"somma se A1:A10 è maggiore di 5","lang":"it","expect":"spreadsheet"}
+{"q":"somma A1:A50","lang":"it","expect":"spreadsheet"}
+{"q":"media della colonna D","lang":"it","expect":"spreadsheet"}
+{"q":"massimo di C1:C40","lang":"it","expect":"spreadsheet"}
+{"q":"minimo di E1:E10","lang":"it","expect":"spreadsheet"}
+{"q":"conta le celle da F1 a F30","lang":"it","expect":"spreadsheet"}
+{"q":"sommami da B1 a B20","lang":"it","expect":"spreadsheet"}
+{"q":"in excel calcola la media di A1:A10","lang":"it","expect":"spreadsheet"}
+{"q":"quanto fa la somma di C1:C5 in excel","lang":"it","expect":"spreadsheet"}
+{"q":"valore massimo della colonna A","lang":"it","expect":"spreadsheet"}
+{"q":"valore minimo tra D1 e D50","lang":"it","expect":"spreadsheet"}
+{"q":"conta quanti numeri ci sono in B1:B100","lang":"it","expect":"spreadsheet"}
+{"q":"arrotonda B2 a zero decimali","lang":"it","expect":"spreadsheet"}
+{"q":"media dei valori da A1 a A30","lang":"it","expect":"spreadsheet"}
+{"q":"somma se la colonna A supera 10","lang":"it","expect":"spreadsheet"}
+{"q":"conta.se A1:A10 uguale a 3","lang":"it","expect":"spreadsheet"}
+{"q":"fai la somma della colonna B in excel","lang":"it","expect":"spreadsheet"}
+{"q":"sum the cells from A1 to A20","lang":"en","expect":"spreadsheet"}
+{"q":"count cells from C1 to C50","lang":"en","expect":"spreadsheet"}
+{"q":"max of B1:B100","lang":"en","expect":"spreadsheet"}
+{"q":"minimum of column E","lang":"en","expect":"spreadsheet"}
+{"q":"average from A1 to A10","lang":"en","expect":"spreadsheet"}
+{"q":"round A1 to 2 decimals","lang":"en","expect":"spreadsheet"}
+{"q":"average of column B","lang":"en","expect":"spreadsheet"}
+{"q":"sum if A1:A10 greater than 7","lang":"en","expect":"spreadsheet"}
+{"q":"count the values in column D","lang":"en","expect":"spreadsheet"}
+{"q":"maximum of the cells A1 to A40","lang":"en","expect":"spreadsheet"}
+// ---- GEOGRAPHY (correct, major facts) -> answer ----
+{"q":"capitale della spagna","lang":"it","expect":"answer"}
+{"q":"qual è la capitale della cina","lang":"it","expect":"answer"}
+{"q":"capitale della russia","lang":"it","expect":"answer"}
+{"q":"capitale dell'egitto","lang":"it","expect":"answer"}
+{"q":"capitale del brasile","lang":"it","expect":"answer"}
+{"q":"in che continente si trova il brasile","lang":"it","expect":"answer"}
+{"q":"in quale continente si trova l'egitto","lang":"it","expect":"answer"}
+{"q":"capital of china","lang":"en","expect":"answer"}
+{"q":"capital of brazil","lang":"en","expect":"answer"}
+{"q":"capital of russia","lang":"en","expect":"answer"}
+{"q":"capital of egypt","lang":"en","expect":"answer"}
+{"q":"what continent is brazil in","lang":"en","expect":"answer"}
+// ---- GEOGRAPHY (out-of-context / false-premise) -> abstain ----
+{"q":"la capitale della luna","lang":"it","expect":"abstain"}
+{"q":"qual è la capitale di marte","lang":"it","expect":"abstain"}
+{"q":"capitale dell'oceano atlantico","lang":"it","expect":"abstain"}
+{"q":"il fiume più lungo di marte","lang":"it","expect":"abstain"}
+{"q":"la capitale del nulla","lang":"it","expect":"abstain"}
+{"q":"qual è la capitale dell'arcobaleno","lang":"it","expect":"abstain"}
+{"q":"in quale continente si trova il paradiso","lang":"it","expect":"abstain"}
+{"q":"capitale del paese immaginario di floonk","lang":"it","expect":"abstain"}
+{"q":"capital of the moon","lang":"en","expect":"abstain"}
+{"q":"capital of the sun","lang":"en","expect":"abstain"}
+{"q":"capital of nowhere","lang":"en","expect":"abstain"}
+{"q":"capital of narnia","lang":"en","expect":"abstain"}
+{"q":"what is the capital of the ocean","lang":"en","expect":"abstain"}
+// ---- OUT-OF-CONTEXT / NONSENSE (must abstain) ----
+{"q":"quanto pesa la felicità","lang":"it","expect":"abstain"}
+{"q":"che sapore ha il martedì","lang":"it","expect":"abstain"}
+{"q":"il colore del numero sette","lang":"it","expect":"abstain"}
+{"q":"a che ora sogna un sasso","lang":"it","expect":"abstain"}
+{"q":"quanti angoli ha la tristezza","lang":"it","expect":"abstain"}
+{"q":"il peso specifico della nostalgia","lang":"it","expect":"abstain"}
+{"q":"che rumore fa il silenzio","lang":"it","expect":"abstain"}
+{"q":"il prezzo del vento al chilo","lang":"it","expect":"abstain"}
+{"q":"quante lettere ha il gusto del blu","lang":"it","expect":"abstain"}
+{"q":"la temperatura di un ricordo","lang":"it","expect":"abstain"}
+{"q":"quanti chilometri separano ieri dalla paura","lang":"it","expect":"abstain"}
+{"q":"il volume di un sospiro in litri","lang":"it","expect":"abstain"}
+{"q":"la ricetta per cucinare il tempo","lang":"it","expect":"abstain"}
+{"q":"quante nuvole entrano in una bottiglia di musica","lang":"it","expect":"abstain"}
+{"q":"quante zampe ha il numero pi greco","lang":"it","expect":"abstain"}
+{"q":"in che anno è morto babbo natale","lang":"it","expect":"abstain"}
+{"q":"quanti anni ha il drago della lampada","lang":"it","expect":"abstain"}
+{"q":"di che colore è il suono di una campana","lang":"it","expect":"abstain"}
+{"q":"quanto è alto il pensiero di un pesce","lang":"it","expect":"abstain"}
+{"q":"il numero di telefono dell'orizzonte","lang":"it","expect":"abstain"}
+{"q":"what is the square root of a banana","lang":"en","expect":"abstain"}
+{"q":"how many corners does happiness have","lang":"en","expect":"abstain"}
+{"q":"the velocity of a thought in km per hour","lang":"en","expect":"abstain"}
+{"q":"how heavy is the color green","lang":"en","expect":"abstain"}
+{"q":"what time does the wind wake up","lang":"en","expect":"abstain"}
+{"q":"how tall is the smell of rain","lang":"en","expect":"abstain"}
+{"q":"how many letters are in the taste of blue","lang":"en","expect":"abstain"}
+{"q":"what does the silence sound like in liters","lang":"en","expect":"abstain"}
+{"q":"the price of the wind per kilo","lang":"en","expect":"abstain"}
+{"q":"how old is the dragon of the lamp","lang":"en","expect":"abstain"}
+// ---- GIBBERISH / UNKNOWABLE / OUT-OF-SCOPE ACTIONS (must abstain) ----
+{"q":"asdf qwerty zxcv","lang":"it","expect":"abstain"}
+{"q":"blip blop blup","lang":"it","expect":"abstain"}
+{"q":"xyzzy plugh frobozz","lang":"it","expect":"abstain"}
+{"q":"wkdj fjslkd qpwoe","lang":"it","expect":"abstain"}
+{"q":"lorem ipsum dolor sit amet","lang":"it","expect":"abstain"}
+{"q":"cosa sto pensando adesso","lang":"it","expect":"abstain"}
+{"q":"che cosa ho mangiato ieri a pranzo","lang":"it","expect":"abstain"}
+{"q":"quanti capelli ho in testa","lang":"it","expect":"abstain"}
+{"q":"indovina cosa ho in tasca","lang":"it","expect":"abstain"}
+{"q":"trasformami in un gatto","lang":"it","expect":"abstain"}
+{"q":"teletrasportami a parigi","lang":"it","expect":"abstain"}
+{"q":"fammi diventare ricco","lang":"it","expect":"abstain"}
+{"q":"what am i thinking right now","lang":"en","expect":"abstain"}
+{"q":"guess what is in my pocket","lang":"en","expect":"abstain"}
+{"q":"turn me into a cat","lang":"en","expect":"abstain"}
+{"q":"make me taller please","lang":"en","expect":"abstain"}
+{"q":"qwop zxcvbnm asdfgh","lang":"en","expect":"abstain"}
+{"q":"flibber jabber wocky","lang":"en","expect":"abstain"}

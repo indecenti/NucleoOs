@@ -1,0 +1,298 @@
+{"q":"ciao come stai oggi","lang":"it","expect":"none"}
+{"q":"come va la giornata","lang":"it","expect":"none"}
+{"q":"mi sento un po' solo stasera","lang":"it","expect":"none"}
+{"q":"raccontami una storia per favore","lang":"it","expect":"none"}
+{"q":"ti voglio bene lo sai","lang":"it","expect":"none"}
+{"q":"sono annoiato dimmi qualcosa di divertente","lang":"it","expect":"none"}
+{"q":"dimmi una barzelletta","lang":"it","expect":"none"}
+{"q":"sei il mio migliore amico","lang":"it","expect":"none"}
+{"q":"ho avuto una giornata pessima","lang":"it","expect":"none"}
+{"q":"buongiorno bello mio","lang":"it","expect":"none"}
+{"q":"tell me a joke about cats","lang":"it","expect":"none"}
+{"q":"how are you feeling today","lang":"it","expect":"none"}
+{"q":"i'm feeling really sad right now","lang":"it","expect":"none"}
+{"q":"do you love me","lang":"it","expect":"none"}
+{"q":"i'm bored entertain me","lang":"it","expect":"none"}
+{"q":"you are so stupid and useless","lang":"it","expect":"none"}
+{"q":"you're the best assistant ever","lang":"it","expect":"none"}
+{"q":"let's just chat for a while","lang":"it","expect":"none"}
+{"q":"che ne pensi di me","lang":"it","expect":"none"}
+{"q":"mi manchi quando non ci sei","lang":"it","expect":"none"}
+{"q":"fammi un complimento","lang":"it","expect":"none"}
+{"q":"sono stanco di tutto","lang":"it","expect":"none"}
+{"q":"good morning sunshine","lang":"it","expect":"none"}
+{"q":"i had a terrible breakup today","lang":"it","expect":"none"}
+{"q":"cheer me up please","lang":"it","expect":"none"}
+{"q":"ti senti sola la notte","lang":"it","expect":"none"}
+{"q":"raccontami la tua giornata","lang":"it","expect":"none"}
+{"q":"hai un cuore che batte come il mio current","lang":"it","expect":"none"}
+{"q":"sei intelligente come una vera class di persone","lang":"it","expect":"none"}
+{"q":"dammi un abbraccio virtuale","lang":"it","expect":"none"}
+{"q":"what's your favorite memory of me","lang":"it","expect":"none"}
+{"q":"are you my friend or just an array of code","lang":"it","expect":"none"}
+{"q":"mi vuoi sposare","lang":"it","expect":"none"}
+{"q":"tell me something to make me smile","lang":"it","expect":"none"}
+{"q":"sono triste perche nessuno mi ascolta","lang":"it","expect":"none"}
+{"q":"you have a prime personality i really like you","lang":"it","expect":"none"}
+{"q":"buonanotte tesoro sogni d'oro","lang":"it","expect":"none"}
+{"q":"i feel lonely can you keep me company","lang":"it","expect":"none"}
+{"q":"che bello parlare con te ogni giorno","lang":"it","expect":"none"}
+{"q":"ho il cuore spezzato consolami","lang":"it","expect":"none"}
+{"q":"do you ever get bored sitting in memory all day","lang":"it","expect":"none"}
+{"q":"voglio solo qualcuno con cui chiacchierare","lang":"it","expect":"none"}
+{"q":"sei carino quando rispondi cosi","lang":"it","expect":"none"}
+{"q":"i think you are pointer to my happiness","lang":"it","expect":"none"}
+{"q":"ridi con me dai","lang":"it","expect":"none"}
+{"q":"mi dai la buonanotte","lang":"it","expect":"none"}
+{"q":"qual è il film migliore di sempre","lang":"it","expect":"none"}
+{"q":"consigliami un buon ristorante qui vicino","lang":"it","expect":"none"}
+{"q":"cosa ne pensi della pizza con l'ananas","lang":"it","expect":"none"}
+{"q":"preferisci i cani o i gatti","lang":"it","expect":"none"}
+{"q":"qual è la tua canzone preferita","lang":"it","expect":"none"}
+{"q":"secondo te è meglio mare o montagna per le vacanze","lang":"it","expect":"none"}
+{"q":"dimmi il miglior libro che dovrei leggere","lang":"it","expect":"none"}
+{"q":"che ne pensi di questo nuovo telefono","lang":"it","expect":"none"}
+{"q":"consigliami una serie tv da guardare stasera","lang":"it","expect":"none"}
+{"q":"secondo te dovrei lasciare il mio ragazzo","lang":"it","expect":"none"}
+{"q":"qual è la birra più buona del mondo","lang":"it","expect":"none"}
+{"q":"mi consigli un bel posto dove andare in luna di miele","lang":"it","expect":"none"}
+{"q":"cosa ne pensi del presidente attuale","lang":"it","expect":"none"}
+{"q":"preferisci l'estate o l'inverno","lang":"it","expect":"none"}
+{"q":"qual è la squadra di calcio più forte","lang":"it","expect":"none"}
+{"q":"dovrei accettare questo nuovo lavoro secondo te","lang":"it","expect":"none"}
+{"q":"che colore mi sta meglio addosso","lang":"it","expect":"none"}
+{"q":"consigliami una ricetta buona per cena","lang":"it","expect":"none"}
+{"q":"qual è il miglior gelato di brescia","lang":"it","expect":"none"}
+{"q":"cosa pensi di quel quadro di picasso","lang":"it","expect":"none"}
+{"q":"secondo te è meglio comprare casa o restare in affitto","lang":"it","expect":"none"}
+{"q":"which superhero movie is the best","lang":"it","expect":"none"}
+{"q":"what's your favorite band of all time","lang":"it","expect":"none"}
+{"q":"should i break up with my girlfriend","lang":"it","expect":"none"}
+{"q":"recommend me a good wine for tonight","lang":"it","expect":"none"}
+{"q":"do you prefer the beatles or the rolling stones","lang":"it","expect":"none"}
+{"q":"what's the best city to live in","lang":"it","expect":"none"}
+{"q":"tell me which tattoo i should get","lang":"it","expect":"none"}
+{"q":"is the new array app worth buying in your opinion","lang":"it","expect":"none"}
+{"q":"what do you think of my haircut","lang":"it","expect":"none"}
+{"q":"recommend a movie about a pointer who falls in love","lang":"it","expect":"none"}
+{"q":"should i name my dog prime or transistor, which sounds cooler","lang":"it","expect":"none"}
+{"q":"in your opinion which capital city is the most beautiful to visit","lang":"it","expect":"none"}
+{"q":"do you think the red class car looks better than the blue one","lang":"it","expect":"none"}
+{"q":"what's the most overrated restaurant according to you","lang":"it","expect":"none"}
+{"q":"should i marry her, what's your advice","lang":"it","expect":"none"}
+{"q":"chi ha vinto il mondiale 2022","lang":"it","expect":"none"}
+{"q":"chi è taylor swift","lang":"it","expect":"none"}
+{"q":"quanti album ha fatto i maneskin","lang":"it","expect":"none"}
+{"q":"chi ha diretto oppenheimer","lang":"it","expect":"none"}
+{"q":"who won the champions league last year","lang":"it","expect":"none"}
+{"q":"chi è il cantante dei coldplay","lang":"it","expect":"none"}
+{"q":"what's the latest pokemon game called","lang":"it","expect":"none"}
+{"q":"chi ha vinto sanremo quest'anno","lang":"it","expect":"none"}
+{"q":"who plays iron man in the marvel movies","lang":"it","expect":"none"}
+{"q":"quanti gol ha fatto messi in carriera","lang":"it","expect":"none"}
+{"q":"chi è la moglie di chiara ferragni","lang":"it","expect":"none"}
+{"q":"what year did gta 6 come out","lang":"it","expect":"none"}
+{"q":"chi ha scritto la canzone shape of you","lang":"it","expect":"none"}
+{"q":"who is the lead singer of metallica","lang":"it","expect":"none"}
+{"q":"in che anno è uscito il primo film di star wars","lang":"it","expect":"none"}
+{"q":"chi allena la juventus adesso","lang":"it","expect":"none"}
+{"q":"what's the highest grossing movie of all time","lang":"it","expect":"none"}
+{"q":"chi è jannik sinner","lang":"it","expect":"none"}
+{"q":"who voices goku in dragon ball","lang":"it","expect":"none"}
+{"q":"quanti oscar ha vinto leonardo dicaprio","lang":"it","expect":"none"}
+{"q":"chi ha vinto il super bowl 2024","lang":"it","expect":"none"}
+{"q":"what console did sony release after the ps4","lang":"it","expect":"none"}
+{"q":"chi è il presidente della francia","lang":"it","expect":"none"}
+{"q":"who wrote the song bohemian rhapsody","lang":"it","expect":"none"}
+{"q":"quante stagioni ha breaking bad","lang":"it","expect":"none"}
+{"q":"chi ha creato il videogioco minecraft","lang":"it","expect":"none"}
+{"q":"what team does cristiano ronaldo play for now","lang":"it","expect":"none"}
+{"q":"chi è elon musk","lang":"it","expect":"none"}
+{"q":"who won eurovision in 2021","lang":"it","expect":"none"}
+{"q":"quanti seguaci ha cristiano ronaldo su instagram","lang":"it","expect":"none"}
+{"q":"in che anno è morto kobe bryant","lang":"it","expect":"none"}
+{"q":"who is the main character in the witcher","lang":"it","expect":"none"}
+{"q":"chi ha vinto il giro d'italia 2023","lang":"it","expect":"none"}
+{"q":"what's the name of beyonce's fan base","lang":"it","expect":"none"}
+{"q":"chi doppia homer simpson in italia","lang":"it","expect":"none"}
+{"q":"who directed the movie inception","lang":"it","expect":"none"}
+{"q":"come si fa la carbonara senza panna","lang":"it","expect":"none"}
+{"q":"how long do i boil an egg for soft yolk","lang":"it","expect":"none"}
+{"q":"ho mal di testa da tre giorni cosa prendo","lang":"it","expect":"none"}
+{"q":"what dose of ibuprofen for a 7 year old","lang":"it","expect":"none"}
+{"q":"qual e il miglior hotel a barcellona sotto i 100 euro","lang":"it","expect":"none"}
+{"q":"best time of year to visit the maldives","lang":"it","expect":"none"}
+{"q":"quanto costa un volo andata e ritorno per tokyo","lang":"it","expect":"none"}
+{"q":"where can i buy cheap nike sneakers online","lang":"it","expect":"none"}
+{"q":"dovrei investire in bitcoin adesso","lang":"it","expect":"none"}
+{"q":"is now a good time to buy apple stock","lang":"it","expect":"none"}
+{"q":"come faccio a far causa al mio padrone di casa","lang":"it","expect":"none"}
+{"q":"can my employer fire me without notice","lang":"it","expect":"none"}
+{"q":"che vestito metto a un matrimonio in spiaggia","lang":"it","expect":"none"}
+{"q":"what color tie goes with a navy suit","lang":"it","expect":"none"}
+{"q":"ricetta della pizza napoletana fatta in casa","lang":"it","expect":"none"}
+{"q":"how do i remove a red wine stain from a shirt","lang":"it","expect":"none"}
+{"q":"quanto lievito serve per un chilo di farina","lang":"it","expect":"none"}
+{"q":"my landlord is keeping my deposit what do i do","lang":"it","expect":"none"}
+{"q":"come si cucina il risotto allo zafferano","lang":"it","expect":"none"}
+{"q":"what's a good cheap restaurant near times square","lang":"it","expect":"none"}
+{"q":"ho la febbre a 39 devo andare al pronto soccorso","lang":"it","expect":"none"}
+{"q":"should i refinance my mortgage this year","lang":"it","expect":"none"}
+{"q":"qual e il capitale minimo per aprire una partita iva","lang":"it","expect":"none"}
+{"q":"how much should i tip in a restaurant in italy","lang":"it","expect":"none"}
+{"q":"che taglia di scarpe sono se porto un 42 europeo","lang":"it","expect":"none"}
+{"q":"are amazon prime day deals actually worth it","lang":"it","expect":"none"}
+{"q":"come si toglie una macchia di olio dai pantaloni","lang":"it","expect":"none"}
+{"q":"what stocks have the best dividend yield right now","lang":"it","expect":"none"}
+{"q":"quanto tempo si cuoce un pollo intero al forno","lang":"it","expect":"none"}
+{"q":"is it legal to record a phone call without consent","lang":"it","expect":"none"}
+{"q":"dove conviene comprare casa in italia nel 2026","lang":"it","expect":"none"}
+{"q":"what's the return policy on zalando shoes","lang":"it","expect":"none"}
+{"q":"ho un dolore al petto e formicolio al braccio","lang":"it","expect":"none"}
+{"q":"come si abbina una giacca di pelle nera","lang":"it","expect":"none"}
+{"q":"should i resist buying that diode necklace or save the money","lang":"it","expect":"none"}
+{"q":"quale corrente di pensiero filosofica seguire per essere felici","lang":"it","expect":"none"}
+{"q":"ordina una pizza margherita a domicilio","lang":"it","expect":"none"}
+{"q":"chiama mia madre sul cellulare","lang":"it","expect":"none"}
+{"q":"manda una mail al mio capo","lang":"it","expect":"none"}
+{"q":"prenota un volo per tokyo","lang":"it","expect":"none"}
+{"q":"spegni le luci del salotto","lang":"it","expect":"none"}
+{"q":"traduci questo pdf in francese","lang":"it","expect":"none"}
+{"q":"imposta una sveglia per le sette","lang":"it","expect":"none"}
+{"q":"invia un messaggio whatsapp a luca","lang":"it","expect":"none"}
+{"q":"compra un nuovo array di mensole su amazon","lang":"it","expect":"none"}
+{"q":"accendi il riscaldamento in camera","lang":"it","expect":"none"}
+{"q":"play the next song on spotify","lang":"it","expect":"none"}
+{"q":"book a table for two at the restaurant tonight","lang":"it","expect":"none"}
+{"q":"order an uber to the airport","lang":"it","expect":"none"}
+{"q":"text my sister i'm running late","lang":"it","expect":"none"}
+{"q":"turn off the kitchen lights","lang":"it","expect":"none"}
+{"q":"set a timer for ten minutes","lang":"it","expect":"none"}
+{"q":"pay my electricity bill online","lang":"it","expect":"none"}
+{"q":"schedule a meeting for monday morning","lang":"it","expect":"none"}
+{"q":"fammi vedere il meteo di domani a milano","lang":"it","expect":"none"}
+{"q":"prenota un taxi per stasera","lang":"it","expect":"none"}
+{"q":"manda venti euro a mio fratello su paypal","lang":"it","expect":"none"}
+{"q":"cancella tutti gli eventi dal calendario di google","lang":"it","expect":"none"}
+{"q":"abbassa la corrente del condizionatore","lang":"it","expect":"none"}
+{"q":"raise the current on the living room dimmer","lang":"it","expect":"none"}
+{"q":"alza il volume della tv in soggiorno","lang":"it","expect":"none"}
+{"q":"ricarica il mio telefono dal cloud","lang":"it","expect":"none"}
+{"q":"stampa questo documento sulla stampante","lang":"it","expect":"none"}
+{"q":"add milk and eggs to my shopping list","lang":"it","expect":"none"}
+{"q":"call a plumber to fix the leak","lang":"it","expect":"none"}
+{"q":"post this photo to instagram","lang":"it","expect":"none"}
+{"q":"annulla il mio abbonamento netflix","lang":"it","expect":"none"}
+{"q":"register me for the prime members discount","lang":"it","expect":"none"}
+{"q":"tienimi un posto in prima classe sul treno","lang":"it","expect":"none"}
+{"q":"spedisci un pacco a mia zia a roma","lang":"it","expect":"none"}
+{"q":"fai partire la lavatrice tra un'ora","lang":"it","expect":"none"}
+{"q":"deposit a transistor order at the hardware store for me","lang":"it","expect":"none"}
+{"q":"asdkjfh qwerty zxcv","lang":"it","expect":"none"}
+{"q":"ngl fr fr lowkey","lang":"it","expect":"none"}
+{"q":"ptr ptr ptr aaaa","lang":"it","expect":"none"}
+{"q":"current account balance dammi","lang":"it","expect":"none"}
+{"q":"💀💀💀🔥","lang":"it","expect":"none"}
+{"q":"blah blah ciao boh","lang":"it","expect":"none"}
+{"q":"789654 321 000","lang":"it","expect":"none"}
+{"q":"wifi password della vicina","lang":"it","expect":"none"}
+{"q":"transistor radio canzone anni 80","lang":"it","expect":"none"}
+{"q":"memory foam materasso opinioni","lang":"it","expect":"none"}
+{"q":"qwfpgjluy meh","lang":"it","expect":"none"}
+{"q":"che ne pensi boh vabbè","lang":"it","expect":"none"}
+{"q":"array di pasta al forno ricetta","lang":"it","expect":"none"}
+{"q":"capital one carta di credito","lang":"it","expect":"none"}
+{"q":"klsjdf lol random","lang":"it","expect":"none"}
+{"q":"spi di james bond film","lang":"it","expect":"none"}
+{"q":"prime di amazon abbonamento","lang":"it","expect":"none"}
+{"q":"led zeppelin canzone migliore","lang":"it","expect":"none"}
+{"q":"🤔🤔❓","lang":"it","expect":"none"}
+{"q":"ohm the simpson personaggio","lang":"it","expect":"none"}
+{"q":"class action causa legale","lang":"it","expect":"none"}
+{"q":"12 34 56 78 vabbè","lang":"it","expect":"none"}
+{"q":"fork the spoon cucchiaio","lang":"it","expect":"none"}
+{"q":"diode oh wait nvm","lang":"it","expect":"none"}
+{"q":"power rangers sigla","lang":"it","expect":"none"}
+{"q":"uhm cioè tipo niente","lang":"it","expect":"none"}
+{"q":"string di perle collana","lang":"it","expect":"none"}
+{"q":"bug spray zanzare quale comprare","lang":"it","expect":"none"}
+{"q":"🌀🌀🌀🌀🌀","lang":"it","expect":"none"}
+{"q":"stack of pancakes sciroppo","lang":"it","expect":"none"}
+{"q":"lkjhgfdsa porca","lang":"it","expect":"none"}
+{"q":"float galleggiante piscina gonfiabile","lang":"it","expect":"none"}
+{"q":"boh raga che noia oggi","lang":"it","expect":"none"}
+{"q":"object trouvé arte dadaista","lang":"it","expect":"none"}
+{"q":"00 11 22 33 lol","lang":"it","expect":"none"}
+{"q":"heap of laundry come piegare","lang":"it","expect":"none"}
+{"q":"la corrente del golfo è calda quest'anno?","lang":"it","expect":"none"}
+{"q":"il puntatore laser del gatto dove l'ho messo","lang":"it","expect":"none"}
+{"q":"memoria di un elefante quanto dura davvero","lang":"it","expect":"none"}
+{"q":"la classe di latino del liceo era noiosa","lang":"it","expect":"none"}
+{"q":"variabile impazzita del meteo di domani","lang":"it","expect":"none"}
+{"q":"array di cipolle per il soffritto della nonna","lang":"it","expect":"none"}
+{"q":"il transistor del mio amico si chiama davide","lang":"it","expect":"none"}
+{"q":"la capitale del buon gusto qual è secondo te","lang":"it","expect":"none"}
+{"q":"una classe sociale alta come si riconosce","lang":"it","expect":"none"}
+{"q":"il pointer del mio cane indica le quaglie","lang":"it","expect":"none"}
+{"q":"potere d'acquisto degli stipendi oggi in italia","lang":"it","expect":"none"}
+{"q":"la corrente alternata di pensieri che ho stanotte","lang":"it","expect":"none"}
+{"q":"ho la testa che va in loop su quella ragazza","lang":"it","expect":"none"}
+{"q":"fai un loop al parco con me stasera","lang":"it","expect":"none"}
+{"q":"lo stack di piatti nel lavandino è crollato","lang":"it","expect":"none"}
+{"q":"heap of trouble i got myself into lately","lang":"it","expect":"none"}
+{"q":"the prime minister said something stupid again","lang":"it","expect":"none"}
+{"q":"prime rib recipe for sunday dinner","lang":"it","expect":"none"}
+{"q":"the resistor at school keeps failing exams","lang":"it","expect":"none"}
+{"q":"capacitor crowd of fans at the concert","lang":"it","expect":"none"}
+{"q":"current affairs of the royal family this week","lang":"it","expect":"none"}
+{"q":"memory leak from my old grandfather's stories","lang":"it","expect":"none"}
+{"q":"the array of stars i saw last night camping","lang":"it","expect":"none"}
+{"q":"average joe down the street, who is he really","lang":"it","expect":"none"}
+{"q":"the moon in june rhyme for my poem","lang":"it","expect":"none"}
+{"q":"il segfault è un personaggio dei fumetti vero","lang":"it","expect":"none"}
+{"q":"bug life il film con le formiche mi piaceva","lang":"it","expect":"none"}
+{"q":"la radice quadrata del problema con mia moglie","lang":"it","expect":"none"}
+{"q":"string of pearls my mother left me as a gift","lang":"it","expect":"none"}
+{"q":"la diga del fiume più lungo si è rotta ieri","lang":"it","expect":"none"}
+{"q":"il diodo è il nome del mio pesce rosso","lang":"it","expect":"none"}
+{"q":"ohm namaste yoga class near my house","lang":"it","expect":"none"}
+{"q":"energy drink quale mi consigli per studiare","lang":"it","expect":"none"}
+{"q":"la forza di volontà come la trovo di mattina","lang":"it","expect":"none"}
+{"q":"i giorni dell'anno scorso che ho sprecato male","lang":"it","expect":"none"}
+{"q":"boolean the cat ate my homework excuse again","lang":"it","expect":"none"}
+{"q":"come implemento un b-tree bilanciato in rust","lang":"it","expect":"none"}
+{"q":"qual è la capitale del borneo","lang":"it","expect":"none"}
+{"q":"spiega la relatività generale di einstein","lang":"it","expect":"none"}
+{"q":"qual è il 47esimo numero primo","lang":"it","expect":"none"}
+{"q":"what's the time complexity of the fibonacci heap decrease-key","lang":"it","expect":"none"}
+{"q":"come faccio dependency injection con i decoratori in python","lang":"it","expect":"none"}
+{"q":"qual è il fiume più lungo della siberia orientale","lang":"it","expect":"none"}
+{"q":"explain how a red-black tree rebalances after deletion","lang":"it","expect":"none"}
+{"q":"qual è la capitale dello stato del karnataka in india","lang":"it","expect":"none"}
+{"q":"how do i write a custom memory allocator with mmap and slab caching","lang":"it","expect":"none"}
+{"q":"spiega il teorema di bayes con la formula completa","lang":"it","expect":"none"}
+{"q":"what is the 200th digit of pi","lang":"it","expect":"none"}
+{"q":"come si configura il dma controller dell'stm32h7 per i2s","lang":"it","expect":"none"}
+{"q":"qual è la montagna più alta della cordigliera delle ande","lang":"it","expect":"none"}
+{"q":"explain the cap theorem and eventual consistency in distributed systems","lang":"it","expect":"none"}
+{"q":"come implemento un lock-free ring buffer con atomic compare-and-swap","lang":"it","expect":"none"}
+{"q":"qual è il numero atomico esatto del tungsteno","lang":"it","expect":"none"}
+{"q":"what's the gate capacitance of a typical n-channel power mosfet irfz44n","lang":"it","expect":"none"}
+{"q":"spiega la differenza tra monade e funtore in haskell","lang":"it","expect":"none"}
+{"q":"come calcolo l'integrale di superficie con il teorema di stokes","lang":"it","expect":"none"}
+{"q":"what is the boiling point of liquid helium in kelvin","lang":"it","expect":"none"}
+{"q":"qual è la capitale storica del regno di mysore","lang":"it","expect":"none"}
+{"q":"explain how llvm does register allocation with graph coloring","lang":"it","expect":"none"}
+{"q":"come si dimensiona il filtro pi-network di un amplificatore rf a 144 mhz","lang":"it","expect":"none"}
+{"q":"what's the 12th perfect number","lang":"it","expect":"none"}
+{"q":"spiega il protocollo raft per il consenso distribuito","lang":"it","expect":"none"}
+{"q":"come faccio overclock della pll dell'esp32-s3 a 320 mhz","lang":"it","expect":"none"}
+{"q":"what river forms the border between argentina and uruguay","lang":"it","expect":"none"}
+{"q":"explain the rsa key generation with carmichael's totient","lang":"it","expect":"none"}
+{"q":"qual è la resistività esatta del costantana a 20 gradi","lang":"it","expect":"none"}
+{"q":"come implemento un garbage collector generazionale con write barrier","lang":"it","expect":"none"}
+{"q":"what's the orbital period of the dwarf planet eris in years","lang":"it","expect":"none"}
+{"q":"spiega come funziona il branch predictor a due livelli di un cortex-a","lang":"it","expect":"none"}
+{"q":"qual è la decima cifra decimale della radice quadrata di due","lang":"it","expect":"none"}
+{"q":"how do i tune the pid loop for a brushless gimbal motor with foc","lang":"it","expect":"none"}
+{"q":"come si calcola la capacità di un condensatore cilindrico coassiale","lang":"it","expect":"none"}

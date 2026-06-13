@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>DJ engine test</title>
+<style>body{font:14px/1.5 monospace;background:#0c1220;color:#e8ecf4;padding:16px}
+.ok{color:#7cfc9a}.bad{color:#ff5555}h1{color:#ff7eb6;font-size:16px}</style></head>
+<body><h1>DJ engine — Web Audio render test</h1><pre id="out">running…</pre>
+<script type="module">
+import { DjEngine } from '../www/dj-engine.js';
+import { planMusicMix, genreFamily, genreEnergy } from '../www/dj-planner.js';
+
+const out = document.getElementById('out');
+const log = (s, cls) => out.innerHTML += `\n<span class="${cls||''}">${s}</span>`;
+let pass = 0, fail = 0;
+const ok = (n, c) => { if (c) { pass++; log('  ok   ' + n, 'ok'); } else { fail++; log('  FAIL ' + n, 'bad'); } };
+
+// a kick loop AudioBuffer at the given BPM (sub thump + click), `secs` long
+function kickLoop(ctx, bpm, secs, seed = 1) {
+  const sr = ctx.sampleRate, n = (secs * sr) | 0;
+  const buf = ctx.createBuffer(1, n, sr), d = buf.getChannelData(0);
+  const beat = 60 / bpm, klen = (0.18 * sr) | 0;
+  for (let t = 0.0; t < secs; t += beat) {
+    const i0 = (t * sr) | 0;
+    for (let k = 0; k < klen && i0 + k < n; k++) {
+      const tt = k / sr;
+      const f = 150 * Math.exp(-tt * 30) + 48;
+      d[i0 + k] += Math.sin(2 * Math.PI * f * tt) * Math.exp(-tt * 8);
+    }
+  }
+  let peak = 0; for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(d[i]));
+  if (peak > 0) for (let i = 0; i < n; i++) d[i] /= peak;
+  return buf;
+}
+
+function mkTrack(path, bpm, camelot) {
+  return { file_path: path, title: path, artist: path,
+    family: 'hard', energy: 3, duration_sec: 10,
+    npx: { bpm, camelot, bands: { bass: 0.6, mid: 0.3, high: 0.1 }, drop_sec: 0,
+      shape: { intro_sec: 0, outro_sec: 10, head_e: .6, tail_e: .6, head_punch: .5, tail_fade: .4 },
+      beat: { period_s: 60 / bpm, phase_s: 0, conf: .9 },
+      bars: { phrase16_period_s: 60 / bpm * 16, phrase16_phase_s: 0, bar4_period_s: 60 / bpm * 4, bar4_phase_s: 0 },
+      sections: { break_start_sec: 0, break_end_sec: 0 }, intro_sec: 0 } };
+}
+
+async function run() {
+  const sr = 44100, secs = 12;
+  const off = new OfflineAudioContext(2, sr * secs, sr);
+  const eng = new DjEngine(off);
+
+  // inject synthetic decks (bypass fetch/loadDeck)
+  eng.decks.a.buffer = kickLoop(off, 150, secs);
+  eng.decks.a.npx = mkTrack('/a', 150, '5A').npx;
+  eng.decks.b.buffer = kickLoop(off, 150, secs, 2);
+  eng.decks.b.npx = mkTrack('/b', 150, '5A').npx;
+
+  let threw = null;
+  try {
+    eng.play('a', 0, 1, 1);                       // A live
+    const p = planMusicMix(mkTrack('/a', 150, '5A'), mkTrack('/b', 150, '5A'));
+    log('plan: ' + JSON.stringify(p));
+    eng.mix(p, 'a', 'b');                          // crossfade A->B at t~0.05
+  } catch (e) { threw = e; }
+  ok('mix scheduled without throwing', !threw);
+  if (threw) { log('   ' + threw.stack, 'bad'); finish(); return; }
+
+  const rendered = await off.startRendering();
+  // measure RMS in three windows: A-only, overlap, B-only
+  const ch = rendered.getChannelData(0);
+  const win = (a, b) => { let s = 0, c = 0; for (let i = (a*sr)|0; i < (b*sr)|0 && i < ch.length; i++) { s += ch[i]*ch[i]; c++; } return Math.sqrt(s / Math.max(1,c)); };
+  const early = win(0.2, 1.0), mid = win(1.5, 3.0), late = win(8.0, 10.0);
+  log(`RMS  early=${early.toFixed(3)}  overlap=${mid.toFixed(3)}  late=${late.toFixed(3)}`);
+  ok('A produces audio', early > 0.01);
+  ok('overlap produces audio (crossfade live)', mid > 0.01);
+  ok('B still playing after fade', late > 0.01);
+  let peak = 0; for (let i = 0; i < ch.length; i++) { const a = Math.abs(ch[i]); if (a > peak) peak = a; }
+  ok('no clipping (limiter holds), peak=' + peak.toFixed(3), peak <= 1.001);
+  finish();
+}
+
+function finish() {
+  log(`\n${pass} passed, ${fail} failed`, fail ? 'bad' : 'ok');
+  document.title = fail ? 'FAIL' : 'PASS';
+  window.__done = true;
+}
+run().catch((e) => { log('FATAL ' + e.stack, 'bad'); finish(); });
+</script>
+</body></html>

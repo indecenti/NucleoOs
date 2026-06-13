@@ -1,0 +1,1854 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title data-i18n="appTitle">Aegis Browser</title>
+  <!-- Offline-first: rely on the system font stack ('Outfit', system-ui, sans-serif) instead of a
+       render-blocking remote webfont — the device often has no internet. -->
+  <style>
+    :root {
+      --bg-color: #0b0f17;
+      --panel-bg: rgba(15, 23, 42, 0.65);
+      --panel-border: rgba(255, 255, 255, 0.08);
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --accent-color: #3b82f6;
+      --accent-hover: #2563eb;
+      --success-color: #10b981;
+      --success-bg: rgba(16, 185, 129, 0.15);
+      --danger-color: #ef4444;
+      --danger-bg: rgba(239, 68, 68, 0.15);
+      --tab-bg-inactive: rgba(15, 23, 42, 0.4);
+      --tab-bg-active: rgba(30, 41, 59, 0.8);
+      --input-bg: rgba(30, 41, 59, 0.5);
+      --input-border: rgba(255, 255, 255, 0.1);
+      --glow-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+      outline: none;
+    }
+
+    body {
+      font-family: 'Outfit', system-ui, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* Glassmorphism Header */
+    header {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--panel-border);
+      padding: 6px 10px 0 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 100;
+    }
+
+    /* Tabs Bar */
+    .tabs-container {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none; /* Firefox */
+    }
+    .tabs-container::-webkit-scrollbar {
+      display: none; /* Chrome/Safari */
+    }
+
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--tab-bg-inactive);
+      border: 1px solid var(--panel-border);
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      padding: 6px 14px;
+      min-width: 120px;
+      max-width: 200px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+    .tab:hover {
+      background: rgba(30, 41, 59, 0.5);
+    }
+    .tab.active {
+      background: var(--tab-bg-active);
+      border-color: rgba(255, 255, 255, 0.15);
+      border-bottom: 2px solid var(--accent-color);
+      box-shadow: var(--glow-shadow);
+    }
+
+    .tab-title {
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    .tab-close {
+      font-size: 14px;
+      color: var(--text-secondary);
+      border: none;
+      background: transparent;
+      padding: 0 2px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      transition: all 0.15s;
+    }
+    .tab-close:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--danger-color);
+    }
+
+    .btn-new-tab {
+      background: transparent;
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      width: 28px;
+      height: 28px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      margin-bottom: 4px;
+    }
+    .btn-new-tab:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: scale(1.05);
+    }
+
+    /* Navigation Controls */
+    .nav-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 6px;
+    }
+
+    .nav-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--text-primary);
+      width: 32px;
+      height: 32px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    .nav-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--panel-border);
+    }
+    .nav-btn:disabled {
+      color: rgba(255, 255, 255, 0.25);
+      cursor: not-allowed;
+    }
+
+    .address-bar-container {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .address-bar {
+      width: 100%;
+      height: 34px;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 8px;
+      padding: 0 36px 0 12px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .address-bar:focus {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+      background: rgba(30, 41, 59, 0.8);
+    }
+
+    .address-status-icons {
+      position: absolute;
+      right: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .loading-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: var(--accent-color);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+
+
+    .panic-btn {
+      background: var(--danger-bg);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+      color: var(--danger-color);
+      width: 34px;
+      height: 34px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .panic-btn:hover {
+      background: var(--danger-color);
+      color: white;
+      transform: scale(1.05);
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+    }
+
+    /* Main Content Area */
+    .browser-body {
+      flex: 1;
+      position: relative;
+      background: #ffffff;
+    }
+
+    .iframe-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+    }
+    .iframe-wrapper.active {
+      display: block;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #ffffff;
+    }
+
+    /* Error and Loading Screens */
+    .tab-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+      z-index: 10;
+    }
+
+    .tab-overlay h2 {
+      margin-bottom: 8px;
+      font-size: 20px;
+      color: var(--text-primary);
+    }
+
+    .tab-overlay p {
+      color: var(--text-secondary);
+      max-width: 450px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .tab-overlay button {
+      background: var(--accent-color);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      padding: 8px 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-overlay button:hover {
+      background: var(--accent-hover);
+    }
+
+    .home-screen {
+      background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+    }
+
+    .home-logo {
+      font-size: 48px;
+      margin-bottom: 12px;
+      filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.4));
+    }
+
+    .home-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      background: linear-gradient(to right, #60a5fa, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .home-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 30px;
+    }
+
+    .bookmarks-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 12px;
+      max-width: 500px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .bookmark-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 14px 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      position: relative;
+    }
+    .bookmark-card:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--accent-color);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+    .bookmark-card .icon {
+      font-size: 24px;
+    }
+    .bookmark-card .label {
+      font-size: 12px;
+      font-weight: 500;
+      max-width: 90px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-primary);
+    }
+    .bookmark-delete {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 18px;
+      height: 18px;
+      background: rgba(0, 0, 0, 0.4);
+      color: var(--text-secondary);
+      border: none;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s, background 0.2s;
+    }
+    .bookmark-card:hover .bookmark-delete {
+      opacity: 1;
+    }
+    .bookmark-delete:hover {
+      background: var(--danger-color);
+      color: white;
+    }
+
+    /* Modal dialog (Settings & Tabbed Panel) */
+    .settings-modal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 110;
+      padding: 20px;
+    }
+    .settings-modal.active {
+      display: flex;
+    }
+
+    .settings-card {
+      background: #0f172a;
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 500px;
+      padding: 24px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .modal-tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 8px;
+      margin-bottom: 4px;
+    }
+    .modal-tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 12px;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.15s;
+    }
+    .modal-tab-btn:hover {
+      background: rgba(255,255,255,0.05);
+      color: var(--text-primary);
+    }
+    .modal-tab-btn.active {
+      background: var(--accent-color);
+      color: white;
+    }
+    .modal-content-section {
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 280px;
+      max-height: 360px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .modal-content-section.active {
+      display: flex;
+    }
+
+    .settings-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .settings-group label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .settings-group input, .settings-group select {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 13px;
+      width: 100%;
+    }
+    .settings-group input:focus, .settings-group select:focus {
+      border-color: var(--accent-color);
+    }
+    .settings-group input:disabled {
+      color: var(--text-secondary);
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .settings-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .settings-buttons button {
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-weight: 500;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.15s;
+    }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--panel-border);
+      color: var(--text-primary);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .btn-primary {
+      background: var(--accent-color);
+      border: none;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .history-item-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255,255,255,0.02);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .history-item-row:hover {
+      background: rgba(255,255,255,0.06);
+    }
+
+    /* Browser local toasts style */
+    .b-toast {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: auto;
+      animation: slideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.2s;
+    }
+    .b-toast.removing {
+      opacity: 0;
+      transform: translateY(10px) scale(0.9);
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- App Header -->
+  <header>
+    <!-- Tab Bar -->
+    <div class="nav-bar" style="padding-bottom: 0;">
+      <div id="tabs-bar" class="tabs-container">
+        <!-- Tabs are dynamically inserted here -->
+      </div>
+      <button class="btn-new-tab" id="btn-add-tab" title="Nuova Scheda" data-i18n-attr="title:newTab">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    </div>
+
+    <!-- Navigation & Address Bar -->
+    <div class="nav-bar">
+      <button class="nav-btn" id="btn-back" title="Indietro" disabled data-i18n-attr="title:back">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      </button>
+      <button class="nav-btn" id="btn-forward" title="Avanti" disabled data-i18n-attr="title:forward">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+      <button class="nav-btn" id="btn-reload" title="Ricarica" data-i18n-attr="title:reload">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+      <button class="nav-btn" id="btn-home" title="Pagina Iniziale" data-i18n-attr="title:homePage">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </button>
+      <button class="nav-btn" id="btn-bypass" title="Apri in una scheda esterna del browser" data-i18n-attr="title:openExternalTab">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </button>
+
+      <div class="address-bar-container">
+        <input type="text" class="address-bar" id="input-url" placeholder="Cerca con DuckDuckGo o digita un indirizzo web..." autocomplete="off" spellcheck="false" data-i18n-attr="placeholder:addressPlaceholder">
+        <div class="address-status-icons">
+          <div class="loading-spinner" id="loading-spinner"></div>
+        </div>
+      </div>
+
+      <!-- Settings button -->
+      <button class="nav-btn" id="btn-settings" title="Impostazioni, Cronologia & SD Downloader" data-i18n-attr="title:settingsBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+
+      <!-- Panic Button -->
+      <button class="panic-btn" id="btn-panic" title="PANIC BUTTON: Cancella cronologia e chiudi tutte le schede!" data-i18n-attr="title:panicBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Browser viewport container -->
+  <main class="browser-body" id="viewports-container">
+    <!-- Iframes and overlays will be dynamically added here -->
+  </main>
+
+  <!-- Settings Modal Dialog -->
+  <div class="settings-modal" id="modal-settings">
+    <div class="settings-card">
+      <div class="modal-tabs">
+        <button class="modal-tab-btn active" data-target="sec-general" data-i18n="settings">Impostazioni</button>
+        <button class="modal-tab-btn" data-target="sec-history" data-i18n="history">Cronologia</button>
+        <button class="modal-tab-btn" data-target="sec-downloader" data-i18n="downloaderTab">Downloader SD</button>
+      </div>
+      
+      <!-- Section General -->
+      <div class="modal-content-section active" id="sec-general">
+        <div class="settings-group">
+          <label for="set-search" data-i18n="defaultSearchEngine">Motore di Ricerca Predefinito</label>
+          <select id="set-search">
+            <option value="duckduckgo" data-i18n="engineDuckduckgo">DuckDuckGo (Privacy)</option>
+            <option value="searx" data-i18n="engineSearx">SearXNG (Decentrato)</option>
+            <option value="google" data-i18n="engineGoogle">Google (Standard)</option>
+          </select>
+        </div>
+
+        <div class="settings-group">
+          <label data-i18n="bookmarks">Preferiti</label>
+          <div id="settings-bookmarks-list" style="max-height: 100px; overflow-y: auto; border: 1px solid var(--panel-border); padding: 6px; border-radius: 6px; display: flex; flex-direction: column; gap: 4px;"></div>
+        </div>
+      </div>
+
+      <!-- Section History -->
+      <div class="modal-content-section" id="sec-history">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <label style="font-size: 12px; color: var(--text-secondary);" data-i18n="sessionHistory">Cronologia della sessione attiva</label>
+          <button id="btn-clear-history" style="background: var(--danger-bg); border: 1px solid rgba(239, 68, 68, 0.2); color: var(--danger-color); font-family: inherit; font-size: 11px; padding: 4px 8px; border-radius: 4px; cursor: pointer;" data-i18n="clearAll">Cancella tutto</button>
+        </div>
+        <div id="history-items-list" style="flex: 1; overflow-y: auto; border: 1px solid var(--panel-border); padding: 6px; border-radius: 6px; display: flex; flex-direction: column; gap: 4px;"></div>
+      </div>
+
+      <!-- Section Downloader -->
+      <div class="modal-content-section" id="sec-downloader">
+        <!-- Quick fill from current tab -->
+        <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 2px;">
+          <div class="settings-group" style="flex: 1; margin: 0;">
+            <label for="sd-down-url" data-i18n="dlUrlLabel">URL del file da scaricare</label>
+            <input type="text" id="sd-down-url" placeholder="https://esempio.com/file.zip" data-i18n-attr="placeholder:dlUrlPlaceholder">
+          </div>
+          <button id="btn-dl-from-tab" title="Usa la pagina corrente" style="margin-top: 16px; padding: 8px 10px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); border-radius: 6px; color: #60a5fa; font-size: 11px; cursor: pointer; white-space: nowrap;" data-i18n-attr="title:dlUseCurrentTitle" data-i18n="dlCurrentTab">Tab corrente</button>
+        </div>
+        <div class="settings-group">
+          <label for="sd-down-filename" data-i18n="dlFilenameLabel">Nome file (cartella: /data/downloads/)</label>
+          <input type="text" id="sd-down-filename" placeholder="file.zip" data-i18n-attr="placeholder:dlFilenamePlaceholder">
+        </div>
+
+        <!-- Auth status banner -->
+        <div id="dl-auth-banner" style="display: none; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #fca5a5; line-height: 1.4;" data-i18n-html="dlAuthBanner">
+          ⚠️ <b>Dispositivo non associato.</b> Il salvataggio su SD richiede il pairing. Inserisci il PIN mostrato sul Cardputer nella schermata iniziale di NucleoOS.
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 6px;">
+          <button id="btn-start-sd-download" class="btn-primary" style="flex: 1; padding: 10px; border-radius: 6px; font-family: inherit; font-weight: 600; cursor: pointer; border: none;" data-i18n="dlDownloadToSd">⬇ Scarica su SD</button>
+          <button id="btn-open-downloads-folder" title="Apri la cartella downloads in File Commander" style="padding: 10px 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); border-radius: 6px; color: var(--text-secondary); font-size: 12px; cursor: pointer; white-space: nowrap;" data-i18n-attr="title:dlOpenFolderTitle" data-i18n="dlOpenFolder">🗂 Apri cartella</button>
+        </div>
+
+        <!-- Progress bar -->
+        <div id="sd-download-status" style="font-size: 12px; color: var(--text-secondary); text-align: center; display: none; flex-direction: column; gap: 6px; margin-top: 10px;">
+          <span id="sd-down-status-text" data-i18n="dlInProgress">Download in corso...</span>
+          <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+            <div id="sd-down-bar" style="width: 0%; height: 100%; background: var(--success-color); transition: width 0.3s ease;"></div>
+          </div>
+        </div>
+
+        <!-- Download log -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; margin-bottom: 4px;">
+          <span style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;" data-i18n="dlHistoryTitle">Cronologia download</span>
+          <button id="btn-clear-dl-log" style="background: transparent; border: none; color: var(--text-secondary); font-size: 11px; cursor: pointer; padding: 2px 6px;" data-i18n="clear">Cancella</button>
+        </div>
+        <div id="dl-log-list" style="border: 1px solid var(--panel-border); border-radius: 6px; max-height: 110px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px;">
+          <div style="color: var(--text-secondary); font-size: 11px; padding: 8px; text-align: center;" data-i18n="dlNone">Nessun download ancora.</div>
+        </div>
+      </div>
+
+      <div class="settings-buttons">
+        <button class="btn-secondary" id="btn-settings-cancel" data-i18n="close">Chiudi</button>
+        <button class="btn-primary" id="btn-settings-save" data-i18n="save">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Local Toasts Container -->
+  <div id="browser-toast-container" style="position: absolute; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 150; pointer-events: none;"></div>
+
+  <script>
+    // i18n bridge for imperatively-built strings. The engine is loaded by a separate <module> below;
+    // until it resolves (or if it fails to load) we fall back to the literal Italian default passed in,
+    // so behavior never changes. Static HTML/template strings carry data-i18n and are handled by the
+    // engine's apply()/MutationObserver instead — this is only for JS that builds text on the fly.
+    function t(key, vars, fallback) {
+      try {
+        const I = window.NucleoI18N;
+        if (I) {
+          const s = I.t(key, vars, 'browser');
+          if (s != null && s !== key) return s;     // resolved string (key echo = catalog gap → fallback)
+        }
+      } catch (_e) {}
+      // Fallback: interpolate {placeholders} into the Italian literal so callers still get vars.
+      let out = (fallback != null) ? fallback : key;
+      if (vars) out = out.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
+      return out;
+    }
+
+    // HTML escaping helper (Security)
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+    }
+
+    // ===== Mini-modal helpers (sostituiscono confirm/prompt nativi) =====
+    // Il Cardputer gira il browser in un iframe: i dialog nativi sono inaffidabili.
+
+    function showInlineConfirm(message, onYes) {
+      const existing = document.getElementById('__b_confirm');
+      if (existing) existing.remove();
+      const el = document.createElement('div');
+      el.id = '__b_confirm';
+      el.style.cssText = 'position:absolute;inset:0;background:rgba(11,15,23,0.85);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;';
+      el.innerHTML = `
+        <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:20px 24px;max-width:340px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+          <p style="margin:0 0 16px;font-size:14px;color:#f8fafc;line-height:1.5;">${escapeHtml(message)}</p>
+          <div style="display:flex;justify-content:flex-end;gap:10px;">
+            <button id="__b_no" style="background:transparent;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:7px 16px;color:#94a3b8;font-family:inherit;cursor:pointer;" data-i18n="cancel">Annulla</button>
+            <button id="__b_yes" style="background:#ef4444;border:none;border-radius:6px;padding:7px 16px;color:white;font-family:inherit;font-weight:600;cursor:pointer;" data-i18n="confirm">Conferma</button>
+          </div>
+        </div>`;
+      document.body.appendChild(el);
+      el.querySelector('#__b_yes').onclick = () => { el.remove(); onYes(); };
+      el.querySelector('#__b_no').onclick = () => el.remove();
+    }
+
+    function showInlinePromptDouble(label1, label2, placeholder1, placeholder2, onConfirm) {
+      const existing = document.getElementById('__b_prompt');
+      if (existing) existing.remove();
+      const el = document.createElement('div');
+      el.id = '__b_prompt';
+      el.style.cssText = 'position:absolute;inset:0;background:rgba(11,15,23,0.85);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;';
+      el.innerHTML = `
+        <div style="background:#0f172a;border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:20px 24px;max-width:340px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+          <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#f8fafc;" data-i18n="addBookmark">Aggiungi preferito</p>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+            <input id="__b_p1" placeholder="${escapeHtml(placeholder1)}" style="background:rgba(30,41,59,0.5);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:8px 10px;color:#f8fafc;font-family:inherit;font-size:13px;width:100%;">
+            <input id="__b_p2" placeholder="${escapeHtml(placeholder2)}" style="background:rgba(30,41,59,0.5);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:8px 10px;color:#f8fafc;font-family:inherit;font-size:13px;width:100%;">
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;">
+            <button id="__b_pno" style="background:transparent;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:7px 16px;color:#94a3b8;font-family:inherit;cursor:pointer;" data-i18n="cancel">Annulla</button>
+            <button id="__b_pok" style="background:#3b82f6;border:none;border-radius:6px;padding:7px 16px;color:white;font-family:inherit;font-weight:600;cursor:pointer;" data-i18n="add">Aggiungi</button>
+          </div>
+        </div>`;
+      document.body.appendChild(el);
+      const p1 = el.querySelector('#__b_p1');
+      const p2 = el.querySelector('#__b_p2');
+      p1.focus();
+      el.querySelector('#__b_pok').onclick = () => {
+        const v1 = p1.value.trim();
+        const v2 = p2.value.trim();
+        if (v1 && v2) { el.remove(); onConfirm(v1, v2); }
+        else { p1.style.borderColor = v1 ? '' : '#ef4444'; p2.style.borderColor = v2 ? '' : '#ef4444'; }
+      };
+      el.querySelector('#__b_pno').onclick = () => el.remove();
+      [p1, p2].forEach(inp => inp.addEventListener('keydown', e => { if (e.key === 'Enter') el.querySelector('#__b_pok').click(); if (e.key === 'Escape') el.remove(); }));
+    }
+
+    // Browser dynamic toast notification
+    function showBrowserToast(msg, icon = 'ℹ️') {
+      const container = document.getElementById('browser-toast-container');
+      if (!container) return;
+      
+      const toast = document.createElement('div');
+      toast.className = 'b-toast';
+      toast.innerHTML = `<span>${icon}</span><span>${escapeHtml(msg)}</span>`;
+      container.appendChild(toast);
+      
+      const remove = () => {
+        toast.classList.add('removing');
+        setTimeout(() => toast.remove(), 200);
+      };
+      
+      toast.onclick = remove;
+      setTimeout(remove, 3500);
+    }
+
+    // YouTube to Invidious Auto-rewrite helper
+    function rewriteYoutubeUrl(url) {
+      if (!url) return url;
+      try {
+        const u = new URL(url);
+        if (u.hostname.includes('youtube.com') || u.hostname === 'youtu.be') {
+          u.hostname = 'yewtu.be';
+          return u.href;
+        }
+      } catch (e) {}
+      return url;
+    }
+
+    // Browser Application State
+    const sessionHistory = []; // Global session history: { title, url, time }
+    const state = {
+      tabs: [],
+      activeTabId: null,
+      settings: {
+        searchEngine: 'duckduckgo',
+        bookmarks: [
+          { title: 'DuckDuckGo', url: 'https://duckduckgo.com', icon: '🕵️' },
+          { title: 'Wikipedia', url: 'https://wikipedia.org', icon: '📖' },
+          { title: 'Hacker News', url: 'https://news.ycombinator.com', icon: '🧡' },
+          { title: 'GitHub', url: 'https://github.com', icon: '💻' }
+        ]
+      }
+    };
+
+    function addToSessionHistory(title, url) {
+      if (!url || url === 'home') return;
+      if (sessionHistory.length > 0 && sessionHistory[0].url === url) return;
+      
+      sessionHistory.unshift({
+        title: title || url,
+        url: url,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
+      if (sessionHistory.length > 100) sessionHistory.pop();
+    }
+
+    // Load settings from LocalStorage
+    try {
+      const saved = localStorage.getItem('aegis_browser_settings');
+      if (saved) {
+        state.settings = { ...state.settings, ...JSON.parse(saved) };
+      }
+    } catch (e) {
+      console.warn("Impossibile caricare le impostazioni", e);
+    }
+
+    // The SD Downloader fetches a remote URL through the on-device proxy: same-origin (served by
+    // this device, so no CORS) and SSRF-hardened in firmware. No third-party proxies, nothing to
+    // configure.
+    function getProxyUrl() {
+      return '/api/proxy?url=';
+    }
+
+    function saveSettings() {
+      try {
+        localStorage.setItem('aegis_browser_settings', JSON.stringify(state.settings));
+      } catch (e) {
+        console.warn("Impossibile salvare le impostazioni", e);
+      }
+    }
+
+    function generateId() {
+      return Math.random().toString(36).substring(2, 9);
+    }
+
+    function cleanUrl(input) {
+      const trimmed = input.trim();
+      if (!trimmed) return 'home';
+
+      // Check if it's a search or URL
+      const hasSpace = trimmed.includes(' ');
+      const hasDot = trimmed.includes('.');
+      const startsWithProtocol = trimmed.startsWith('http://') || trimmed.startsWith('https://');
+
+      if (!startsWithProtocol && !hasDot || hasSpace) {
+        // Search query
+        let query = encodeURIComponent(trimmed);
+        if (state.settings.searchEngine === 'google') {
+          return `https://google.com/search?q=${query}`;
+        } else if (state.settings.searchEngine === 'searx') {
+          return `https://searx.org/search?q=${query}`;
+        } else {
+          return `https://duckduckgo.com/?q=${query}`;
+        }
+      }
+
+      if (startsWithProtocol) return trimmed;
+      return `https://${trimmed}`;
+    }
+
+    // Tab Management
+    function createTab(url = 'home') {
+      const id = generateId();
+      const tab = {
+        id,
+        title: url === 'home' ? t('newTab', null, 'Nuova Scheda') : t('loading', null, 'Caricamento...'),
+        url: url,
+        history: [url],
+        historyIndex: 0,
+        isLoading: false
+      };
+
+      state.tabs.push(tab);
+      
+      // Create viewport container
+      const container = document.getElementById('viewports-container');
+      const wrapper = document.createElement('div');
+      wrapper.className = 'iframe-wrapper';
+      wrapper.id = `wrapper-${id}`;
+
+      if (url === 'home') {
+        wrapper.innerHTML = createHomeScreenHtml(id);
+      }
+      // Non-home tabs get their content from loadTabUrl() below (a new-tab handoff card).
+
+      container.appendChild(wrapper);
+      switchTab(id);
+      
+      if (url !== 'home') {
+        loadTabUrl(id, url);
+      } else {
+        document.getElementById('input-url').focus(); // Auto-focus on new blank tab
+      }
+    }
+
+    function switchTab(id) {
+      state.activeTabId = id;
+      
+      // Update UI classes
+      document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.iframe-wrapper').forEach(el => el.classList.remove('active'));
+
+      const activeTab = document.getElementById(`tab-${id}`);
+      if (activeTab) activeTab.classList.add('active');
+
+      const activeWrapper = document.getElementById(`wrapper-${id}`);
+      if (activeWrapper) activeWrapper.classList.add('active');
+
+      const tab = state.tabs.find(t => t.id === id);
+      if (tab) {
+        const inputUrl = document.getElementById('input-url');
+        inputUrl.value = tab.url === 'home' ? '' : tab.url;
+        
+        // Disable/enable nav buttons
+        document.getElementById('btn-back').disabled = tab.historyIndex <= 0;
+        document.getElementById('btn-forward').disabled = tab.historyIndex >= tab.history.length - 1;
+        
+        // Show/hide spinner
+        const spinner = document.getElementById('loading-spinner');
+        spinner.style.display = tab.isLoading ? 'block' : 'none';
+      }
+
+      renderTabs();
+    }
+
+    function closeTab(id, event) {
+      if (event) event.stopPropagation();
+
+      const tabIndex = state.tabs.findIndex(t => t.id === id);
+      if (tabIndex === -1) return;
+
+      // Clean DOM
+      const wrapper = document.getElementById(`wrapper-${id}`);
+      if (wrapper) wrapper.remove();
+
+      state.tabs.splice(tabIndex, 1);
+
+      if (state.tabs.length === 0) {
+        createTab('home');
+      } else if (state.activeTabId === id) {
+        const nextActiveIndex = Math.min(tabIndex, state.tabs.length - 1);
+        switchTab(state.tabs[nextActiveIndex].id);
+      } else {
+        renderTabs();
+      }
+    }
+
+    // Home Screen generator (Fully XSS Safe & dynamic event delegation ready)
+    function createHomeScreenHtml(tabId) {
+      let bookmarksHtml = state.settings.bookmarks.map((bm, idx) => `
+        <div class="bookmark-card" data-url="${escapeHtml(bm.url)}">
+          <button class="bookmark-delete" data-index="${idx}" title="Elimina preferito" data-i18n-attr="title:deleteBookmark">&times;</button>
+          <span class="icon">${escapeHtml(bm.icon || '🌐')}</span>
+          <span class="label">${escapeHtml(bm.title)}</span>
+        </div>
+      `).join('');
+
+      return `
+        <div class="tab-overlay home-screen">
+          <div class="home-logo">🕵️‍♂️</div>
+          <div class="home-title">Nucleo OS Browser</div>
+          <div class="home-subtitle" data-i18n="homeSubtitle">Apre i siti nel tuo browser reale — nessun proxy sul dispositivo</div>
+          
+          <div class="bookmarks-grid">
+            ${bookmarksHtml}
+            <div class="bookmark-card btn-add-bookmark" style="border-style: dashed; background: transparent;">
+              <span class="icon">+</span>
+              <span class="label" data-i18n="add">Aggiungi</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Dynamic Home Screen Event Delegator (Removes inline JS)
+    document.addEventListener('click', function(e) {
+      // 1. Click on bookmark card
+      const card = e.target.closest('.bookmark-card');
+      if (card && !e.target.closest('.bookmark-delete') && !card.classList.contains('btn-add-bookmark')) {
+        const url = card.dataset.url;
+        const activeTabId = state.activeTabId;
+        if (url && activeTabId) {
+          loadTabUrl(activeTabId, url);
+        }
+      }
+      
+      // 2. Click on bookmark delete
+      const delBtn = e.target.closest('.bookmark-delete');
+      if (delBtn) {
+        e.stopPropagation();
+        const idx = parseInt(delBtn.dataset.index);
+        const wrapper = delBtn.closest('.iframe-wrapper');
+        if (wrapper) {
+          const tabId = wrapper.id.replace('wrapper-', '');
+          if (!isNaN(idx) && tabId) {
+            deleteBookmarkDirect(tabId, idx);
+          }
+        }
+      }
+
+      // 3. Click on add quick bookmark button
+      const addBtn = e.target.closest('.btn-add-bookmark');
+      if (addBtn) {
+        const wrapper = addBtn.closest('.iframe-wrapper');
+        if (wrapper) {
+          const tabId = wrapper.id.replace('wrapper-', '');
+          if (tabId) {
+            addQuickBookmark(tabId);
+          }
+        }
+      }
+    });
+
+    window.deleteBookmarkDirect = function(tabId, index) {
+      state.settings.bookmarks.splice(index, 1);
+      saveSettings();
+      
+      const wrapper = document.getElementById(`wrapper-${tabId}`);
+      if (wrapper) {
+        wrapper.innerHTML = createHomeScreenHtml(tabId);
+      }
+      showBrowserToast(t('toastBookmarkRemoved', null, 'Preferito rimosso'), '🗑️');
+    };
+
+    function addQuickBookmark(tabId) {
+      showInlinePromptDouble(
+        t('addBookmark', null, 'Aggiungi preferito'),
+        t('addressUrl', null, 'Indirizzo URL'),
+        t('bmTitlePlaceholder', null, 'Es. Wikipedia'),
+        t('bmUrlPlaceholder', null, 'Es. wikipedia.org'),
+        (title, url) => {
+          const clean = cleanUrl(url);
+          state.settings.bookmarks.push({ title, url: clean, icon: '🔗' });
+          saveSettings();
+          const wrapper = document.getElementById(`wrapper-${tabId}`);
+          if (wrapper) wrapper.innerHTML = createHomeScreenHtml(tabId);
+          showBrowserToast(t('toastBookmarkAdded', null, 'Preferito aggiunto'), '💖');
+        }
+      );
+    }
+
+    // UI Renders
+    function renderTabs() {
+      const container = document.getElementById('tabs-bar');
+      container.innerHTML = '';
+
+      state.tabs.forEach(tab => {
+        const tabEl = document.createElement('div');
+        tabEl.className = `tab ${tab.id === state.activeTabId ? 'active' : ''}`;
+        tabEl.id = `tab-${tab.id}`;
+        tabEl.onclick = () => switchTab(tab.id);
+
+        const titleEl = document.createElement('span');
+        titleEl.className = 'tab-title';
+        titleEl.textContent = tab.title; // Securely handles title escaping
+
+        const closeEl = document.createElement('button');
+        closeEl.className = 'tab-close';
+        closeEl.innerHTML = '&times;';
+        closeEl.onclick = (e) => closeTab(tab.id, e);
+
+        tabEl.appendChild(titleEl);
+        tabEl.appendChild(closeEl);
+        container.appendChild(tabEl);
+      });
+    }
+
+    // Intercepted navigation listeners
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'browser-navigate') {
+        const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+        if (activeTab) {
+          loadTabUrl(activeTab.id, e.data.url);
+        }
+      } else if (e.data && e.data.type === 'browser-navigate-post') {
+        const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+        if (activeTab) {
+          loadTabUrlPost(activeTab.id, e.data.url, e.data.body);
+        }
+      } else if (e.data && e.data.type === 'browser-new-tab') {
+        createTab(e.data.url);
+      }
+    });
+
+    // Parent side mapping for navigation injected script (Synchronous hooks)
+    window.__aegis_navigate = function(url) {
+      const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+      if (activeTab) {
+        loadTabUrl(activeTab.id, url);
+      }
+    };
+    window.__aegis_navigate_post = function(url, body) {
+      const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+      if (activeTab) {
+        loadTabUrlPost(activeTab.id, url, body);
+      }
+    };
+    window.__aegis_new_tab = function(url) {
+      createTab(url);
+    };
+    window.__aegis_update_title = function(title) {
+      const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+      if (activeTab && title) {
+        activeTab.title = title;
+        renderTabs();
+        
+        // Update the title in our session history list dynamically
+        const histItem = sessionHistory.find(h => h.url === activeTab.url);
+        if (histItem) {
+          histItem.title = title;
+        } else {
+          addToSessionHistory(title, activeTab.url);
+        }
+      }
+    };
+
+    // Load Page Engine (Ultraviolet Proxy)
+    async function loadTabUrl(tabId, url) {
+      const tab = state.tabs.find(t => t.id === tabId);
+      if (!tab) return;
+
+      if (url === 'home') {
+        tab.url = 'home';
+        tab.title = t('newTab', null, 'Nuova Scheda');
+        tab.isLoading = false;
+        const wrapper = document.getElementById(`wrapper-${tabId}`);
+        if (wrapper) wrapper.innerHTML = createHomeScreenHtml(tabId);
+        if (tabId === state.activeTabId) switchTab(tabId);
+        return;
+      }
+
+      url = rewriteYoutubeUrl(url);
+
+      tab.url = url;
+      tab.isLoading = true;
+      if (tabId === state.activeTabId) {
+        document.getElementById('input-url').value = url;
+        document.getElementById('loading-spinner').style.display = 'block';
+      }
+
+      const wrapper = document.getElementById(`wrapper-${tabId}`);
+
+      // No on-device page proxy: external sites can't be reliably framed (X-Frame-Options/CSP)
+      // and relaying a whole page through the Cardputer would burn its scarce heap. We're already
+      // inside a real browser, so navigation hands off to a real tab. EXCEPTION: a direct file link
+      // is offered for download straight onto the Cardputer SD (single fetch via the on-device proxy,
+      // streamed to /data/downloads by /api/fs/write) — a bounded transfer, not a live page.
+      try {
+        addToSessionHistory(url, url);
+        tab.title = url;
+        const downloadable = isDownloadUrl(url);
+        let blocked = false;
+        if (!downloadable) {
+          const win = window.open(url, '_blank', 'noopener,noreferrer');
+          blocked = !win;
+        }
+        if (wrapper) {
+          wrapper.innerHTML = downloadable
+            ? createDownloadHtml(url, filenameFromUrl(url))
+            : createHandoffHtml(url, blocked);
+          wireCardButtons(wrapper, tabId, url);
+        }
+
+        if (tab.history[tab.historyIndex] !== url) {
+          tab.history = tab.history.slice(0, tab.historyIndex + 1);
+          tab.history.push(url);
+          tab.historyIndex = tab.history.length - 1;
+        }
+        tab.isLoading = false;
+        document.getElementById('loading-spinner').style.display = 'none';
+        if (tabId === state.activeTabId) switchTab(tabId);
+        renderTabs();
+      } catch (err) {
+        showIframeError(tabId, url, err.message);
+        tab.isLoading = false;
+        if (tabId === state.activeTabId) switchTab(tabId);
+      }
+    }
+
+    // Honest in-app card shown after a URL is handed off to a real browser tab.
+    // It also offers to save the target onto the Cardputer SD (single proxy fetch -> /api/fs/write).
+    function createHandoffHtml(url, blocked) {
+      return `
+        <div class="tab-overlay">
+          <h2 data-i18n="handoffTitle">🌐 Aperto in una nuova scheda</h2>
+          <p><b>${escapeHtml(url)}</b><br>
+          <span data-i18n="handoffBody">I siti esterni si aprono nel tuo browser reale — nessun proxy, nessun consumo sul dispositivo.</span>
+          ${blocked ? '<br><br><i data-i18n="handoffBlocked">Il browser ha bloccato il pop-up: usa il pulsante qui sotto.</i>' : ''}</p>
+          ${cardDownloadProgressHtml()}
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+            <button class="btn-open-ext" data-i18n="openAgain">Apri di nuovo</button>
+            <button class="btn-save-sd" style="background: var(--success-color);" data-i18n="saveToCardputer">⬇ Salva su Cardputer</button>
+            <button class="btn-secondary btn-home-load" data-i18n="homeBtn">Home</button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Shown when the URL points at a downloadable file: save it straight onto the Cardputer SD
+    // (/data/downloads, via the on-device proxy + /api/fs/write) or open it in a real tab.
+    function createDownloadHtml(url, filename) {
+      return `
+        <div class="tab-overlay">
+          <h2 data-i18n="dlCardTitle">⬇ File scaricabile</h2>
+          <p><b>${escapeHtml(filename)}</b><br>
+          <span style="font-size:12px;opacity:.75;word-break:break-all;">${escapeHtml(url)}</span><br>
+          <span data-i18n-html="dlCardBody">Salvalo sul Cardputer (SD: <code>/data/downloads/</code>) oppure aprilo nel tuo browser reale.</span></p>
+          ${cardDownloadProgressHtml()}
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+            <button class="btn-save-sd" style="background: var(--success-color);" data-i18n="saveToCardputer">⬇ Salva su Cardputer</button>
+            <button class="btn-open-ext" data-i18n="openExternal">↗ Apri in scheda esterna</button>
+            <button class="btn-secondary btn-home-load" data-i18n="homeBtn">Home</button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Inline progress strip embedded in the handoff/download cards (hidden until a save starts).
+    function cardDownloadProgressHtml() {
+      return `
+        <div class="card-dl-progress" style="display:none;flex-direction:column;gap:6px;margin-bottom:16px;width:100%;max-width:450px;">
+          <span class="card-dl-text" style="font-size:12px;color:var(--text-secondary);"></span>
+          <div style="width:100%;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+            <div class="card-dl-bar" style="width:0%;height:100%;background:var(--success-color);transition:width .3s ease;"></div>
+          </div>
+        </div>`;
+    }
+
+    // Wire whichever of the card buttons are present (handoff and download cards share classes).
+    function wireCardButtons(wrapper, tabId, url) {
+      const openBtn = wrapper.querySelector('.btn-open-ext');
+      if (openBtn) openBtn.onclick = () => window.open(url, '_blank', 'noopener,noreferrer');
+      const homeBtn = wrapper.querySelector('.btn-home-load');
+      if (homeBtn) homeBtn.onclick = () => loadTabUrl(tabId, 'home');
+      const saveBtn = wrapper.querySelector('.btn-save-sd');
+      if (saveBtn) saveBtn.onclick = () => runCardDownload(wrapper, url, filenameFromUrl(url), saveBtn);
+    }
+
+    // Save a URL to the Cardputer SD from inside a tab card, showing inline progress in the card.
+    async function runCardDownload(wrapper, url, filename, btn) {
+      const text = wrapper.querySelector('.card-dl-text');
+      const bar  = wrapper.querySelector('.card-dl-bar');
+      const prog = wrapper.querySelector('.card-dl-progress');
+      const onStep = (t, pct) => { if (text) text.textContent = t; if (bar) bar.style.width = pct + '%'; };
+      if (prog) prog.style.display = 'flex';
+      if (btn) btn.disabled = true;
+      const logEntry = { filename, url, size: 0, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), ok: false };
+      try {
+        const res = await downloadUrlToSd(url, filename, onStep);
+        logEntry.ok = true; logEntry.size = res.size;
+        showBrowserToast(t('toastSavedToSd', { name: res.filename }, `Salvato su SD: ${res.filename}`), '✅');
+      } catch (err) {
+        onStep(`❌ ${err.message}`, 0);
+        showBrowserToast(t('toastDownloadFailed', { error: err.message }, `Download fallito: ${err.message}`), '❌');
+      } finally {
+        dlLog.push(logEntry); renderDlLog();
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function loadTabUrlPost(tabId, url, bodyString) {
+      // POST requests need more complex handling with UV, but fallback to GET for now to avoid breaking.
+      // A proper UV integration would intercept this at the SW level.
+      loadTabUrl(tabId, url);
+    }
+
+    // Error UI inside iframe wrapper (Secure and dynamic)
+    function showIframeError(tabId, url, errMsg) {
+      const wrapper = document.getElementById(`wrapper-${tabId}`);
+      if (wrapper) {
+        wrapper.innerHTML = `
+          <div class="tab-overlay">
+            <h2 style="color: var(--danger-color)" data-i18n="loadFailedTitle">Caricamento fallito</h2>
+            <p><span data-i18n="loadFailedBody">Non è stato possibile caricare il sito</span> <b>${escapeHtml(url)}</b>.<br><span data-i18n="errorDetails">Dettagli errore:</span> ${escapeHtml(errMsg)}</p>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn-retry-load" data-i18n="retry">Riprova</button>
+              <button class="btn-secondary btn-home-load" data-i18n="homeBtn">Home</button>
+            </div>
+          </div>
+        `;
+
+        const retryBtn = wrapper.querySelector('.btn-retry-load');
+        const homeBtn = wrapper.querySelector('.btn-home-load');
+        
+        if (retryBtn) {
+          retryBtn.onclick = () => loadTabUrl(tabId, url);
+        }
+        if (homeBtn) {
+          homeBtn.onclick = () => loadTabUrl(tabId, 'home');
+        }
+      }
+    }
+
+    // Button actions
+    document.getElementById('btn-add-tab').onclick = () => createTab('home');
+
+    document.getElementById('btn-back').onclick = () => {
+      const tab = state.tabs.find(t => t.id === state.activeTabId);
+      if (tab && tab.historyIndex > 0) {
+        tab.historyIndex--;
+        const prevUrl = tab.history[tab.historyIndex];
+        loadTabUrl(tab.id, prevUrl);
+      }
+    };
+
+    document.getElementById('btn-forward').onclick = () => {
+      const tab = state.tabs.find(t => t.id === state.activeTabId);
+      if (tab && tab.historyIndex < tab.history.length - 1) {
+        tab.historyIndex++;
+        const nextUrl = tab.history[tab.historyIndex];
+        loadTabUrl(tab.id, nextUrl);
+      }
+    };
+
+    document.getElementById('btn-reload').onclick = () => {
+      const tab = state.tabs.find(t => t.id === state.activeTabId);
+      if (tab && tab.url !== 'home') {
+        loadTabUrl(tab.id, tab.url);
+      }
+    };
+
+    document.getElementById('btn-home').onclick = () => {
+      const tab = state.tabs.find(t => t.id === state.activeTabId);
+      if (tab) {
+        loadTabUrl(tab.id, 'home');
+      }
+    };
+
+    document.getElementById('btn-bypass').onclick = () => {
+      const tab = state.tabs.find(t => t.id === state.activeTabId);
+      if (tab && tab.url && tab.url !== 'home') {
+        window.open(tab.url, '_blank');
+        showBrowserToast(t('toastOpeningExternal', null, 'Apertura in una scheda esterna'), '🚀');
+      } else {
+        showBrowserToast(t('toastNoPageExternal', null, 'Nessuna pagina attiva da aprire all\'esterno'), '⚠️');
+      }
+    };
+
+    // Address bar: Enter opens the URL/search in a real browser tab (via loadTabUrl).
+    const inputUrl = document.getElementById('input-url');
+    inputUrl.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+        if (activeTab) {
+          const clean = cleanUrl(e.target.value);
+          loadTabUrl(activeTab.id, clean);
+        }
+      }
+    };
+
+    // Panic Button (Wipes all traces)
+    document.getElementById('btn-panic').onclick = () => {
+      showInlineConfirm(t('panicConfirm', null, 'PANIC: Chiudere tutte le schede e cancellare la cronologia?'), () => {
+        state.tabs.forEach(t => {
+          const wrapper = document.getElementById(`wrapper-${t.id}`);
+          if (wrapper) wrapper.remove();
+        });
+        sessionHistory.length = 0;
+        state.tabs = [];
+        createTab('home');
+        showBrowserToast(t('toastPanicDone', null, 'Sessione e traccia distrutte!'), '🔥');
+      });
+    };
+
+    // Modal Tab Navigation
+    document.querySelectorAll('.modal-tab-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.modal-tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.modal-content-section').forEach(s => s.classList.remove('active'));
+        
+        btn.classList.add('active');
+        const targetSection = document.getElementById(btn.dataset.target);
+        if (targetSection) targetSection.classList.add('active');
+        
+        // Show/hide save button only for settings panel
+        const saveBtn = document.getElementById('btn-settings-save');
+        if (btn.dataset.target === 'sec-general') {
+          saveBtn.style.display = 'block';
+        } else {
+          saveBtn.style.display = 'none';
+        }
+      };
+    });
+
+    // Settings & History Modal UI Sync
+    const settingsBtn = document.getElementById('btn-settings');
+    const settingsModal = document.getElementById('modal-settings'); // FIX: era usata senza dichiarazione
+
+    settingsBtn.onclick = () => {
+      // Direct click on Settings button: Reset to tab 1
+      const tab1Btn = document.querySelector('.modal-tab-btn[data-target="sec-general"]');
+      if (tab1Btn) tab1Btn.click();
+
+      document.getElementById('set-search').value = state.settings.searchEngine;
+      renderSettingsBookmarks();
+      renderHistoryList();
+      settingsModal.classList.add('active');
+    };
+
+    document.getElementById('btn-settings-cancel').onclick = () => {
+      settingsModal.classList.remove('active');
+    };
+
+    document.getElementById('btn-settings-save').onclick = () => {
+      state.settings.searchEngine = document.getElementById('set-search').value;
+      saveSettings();
+
+      settingsModal.classList.remove('active');
+      showBrowserToast(t('toastSettingsSaved', null, 'Impostazioni salvate'), '💾');
+
+      // Update current screen if on home screen
+      state.tabs.forEach(tab => {
+        if (tab.url === 'home') {
+          const wrapper = document.getElementById(`wrapper-${tab.id}`);
+          if (wrapper) {
+            wrapper.innerHTML = createHomeScreenHtml(tab.id);
+          }
+        }
+      });
+    };
+
+    // Bookmarks management
+    function renderSettingsBookmarks() {
+      const container = document.getElementById('settings-bookmarks-list');
+      container.innerHTML = '';
+      
+      state.settings.bookmarks.forEach((bm, index) => {
+        const item = document.createElement('div');
+        item.style.display = 'flex';
+        item.style.justifyContent = 'space-between';
+        item.style.alignItems = 'center';
+        item.style.background = 'rgba(255,255,255,0.02)';
+        item.style.padding = '4px 8px';
+        item.style.borderRadius = '4px';
+        item.style.fontSize = '12px';
+
+        const textSpan = document.createElement('span');
+        textSpan.innerHTML = `${escapeHtml(bm.icon || '🌐')} <b>${escapeHtml(bm.title)}</b> (${escapeHtml(bm.url)})`;
+        
+        const delBtn = document.createElement('button');
+        delBtn.innerHTML = '&times;';
+        delBtn.style.background = 'transparent';
+        delBtn.style.border = 'none';
+        delBtn.style.color = 'var(--danger-color)';
+        delBtn.style.cursor = 'pointer';
+        delBtn.style.fontSize = '14px';
+        delBtn.onclick = () => {
+          deleteBookmark(index);
+        };
+
+        item.appendChild(textSpan);
+        item.appendChild(delBtn);
+        container.appendChild(item);
+      });
+    }
+
+    window.deleteBookmark = function(index) {
+      state.settings.bookmarks.splice(index, 1);
+      saveSettings();
+      renderSettingsBookmarks();
+      showBrowserToast(t('toastBookmarkDeleted', null, 'Preferito eliminato'), '🗑️');
+    };
+
+    // History rendering
+    function renderHistoryList() {
+      const container = document.getElementById('history-items-list');
+      container.innerHTML = '';
+      
+      if (sessionHistory.length === 0) {
+        container.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 20px; font-size: 12px;" data-i18n="historyEmpty">Nessun sito visitato in questa sessione.</div>`;
+        return;
+      }
+      
+      sessionHistory.forEach((item, index) => {
+        const row = document.createElement('div');
+        row.className = 'history-item-row';
+        
+        const info = document.createElement('div');
+        info.style.display = 'flex';
+        info.style.flexDirection = 'column';
+        info.style.gap = '2px';
+        info.style.flex = '1';
+        info.style.overflow = 'hidden';
+        info.onclick = () => {
+          const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+          if (activeTab) {
+            loadTabUrl(activeTab.id, item.url);
+          }
+          settingsModal.classList.remove('active');
+        };
+        
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = item.title;
+        titleSpan.style.fontWeight = '500';
+        titleSpan.style.color = 'var(--text-primary)';
+        titleSpan.style.whiteSpace = 'nowrap';
+        titleSpan.style.overflow = 'hidden';
+        titleSpan.style.textOverflow = 'ellipsis';
+        
+        const urlSpan = document.createElement('span');
+        urlSpan.textContent = `${item.time} - ${item.url}`;
+        urlSpan.style.color = 'var(--text-secondary)';
+        urlSpan.style.fontSize = '11px';
+        urlSpan.style.whiteSpace = 'nowrap';
+        urlSpan.style.overflow = 'hidden';
+        urlSpan.style.textOverflow = 'ellipsis';
+        
+        info.appendChild(titleSpan);
+        info.appendChild(urlSpan);
+        
+        const delBtn = document.createElement('button');
+        delBtn.innerHTML = '&times;';
+        delBtn.style.background = 'transparent';
+        delBtn.style.border = 'none';
+        delBtn.style.color = 'var(--text-secondary)';
+        delBtn.style.cursor = 'pointer';
+        delBtn.style.fontSize = '14px';
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          sessionHistory.splice(index, 1);
+          renderHistoryList();
+        };
+        
+        row.appendChild(info);
+        row.appendChild(delBtn);
+        container.appendChild(row);
+      });
+    }
+
+    document.getElementById('btn-clear-history').onclick = () => {
+      showInlineConfirm(t('clearHistoryConfirm', null, 'Cancellare tutta la cronologia della sessione?'), () => {
+        sessionHistory.length = 0;
+        renderHistoryList();
+        showBrowserToast(t('toastHistoryCleared', null, 'Cronologia cancellata'), '🗑️');
+      });
+    };
+
+    // ===== SD DOWNLOADER ENGINE =====
+    const DOWNLOADS_DIR = '/data/downloads';
+    const dlLog = []; // { filename, url, size, ts, ok }
+
+    // File extensions a browser would download rather than render. Such URLs are offered for a
+    // direct save onto the Cardputer SD instead of being handed off to an external tab.
+    const DOWNLOADABLE_EXT = /\.(zip|rar|7z|tar|gz|tgz|bz2|xz|iso|img|bin|hex|exe|apk|dmg|deb|rpm|msi|pdf|epub|mobi|doc|docx|xls|xlsx|ppt|pptx|csv|tsv|json|xml|md|mp3|wav|flac|ogg|m4a|aac|opus|mp4|mkv|avi|mov|webm|nfv|png|jpe?g|gif|webp|bmp|svg|ico|ttf|otf|woff2?|wasm)$/i;
+    function isDownloadUrl(url) {
+      try { return DOWNLOADABLE_EXT.test(new URL(url).pathname.split('?')[0]); }
+      catch (_e) { return false; }
+    }
+
+    // Best-effort filename from a URL's last path segment (falls back to 'download').
+    function filenameFromUrl(url) {
+      try {
+        const p = new URL(url).pathname;
+        let f = decodeURIComponent(p.substring(p.lastIndexOf('/') + 1)).split('?')[0];
+        return (!f || f === '/') ? 'download' : f;
+      } catch (_e) { return 'download'; }
+    }
+
+    // Core engine (DOM-agnostic): fetch a remote URL through the on-device proxy (same-origin,
+    // SSRF-hardened) and stream it onto the SD at /data/downloads/<filename> via /api/fs/write.
+    // Callers pass onStep(text, pct) for progress. Resolves {ok, size, filename} or throws a
+    // human message (auth failures carry .authRequired so the pairing banner can be shown).
+    async function downloadUrlToSd(url, filename, onStep = () => {}) {
+      if (!filename) filename = filenameFromUrl(url);
+
+      onStep(t('stepAuth', null, 'Verifica autenticazione...'), 10);
+      const authSt = await checkAuthStatus();
+      if (authSt.required && !authSt.paired) {
+        const e = new Error(t('errNotPaired', null, 'Dispositivo non associato — completa il pairing prima di scaricare'));
+        e.authRequired = true; throw e;
+      }
+
+      onStep(t('stepProxy', null, 'Connessione e download tramite proxy...'), 25);
+      const response = await fetch(getProxyUrl() + encodeURIComponent(url));
+      if (!response.ok) throw new Error(t('errRemoteHttp', { status: response.status }, `Il server remoto ha risposto: HTTP ${response.status}`));
+
+      onStep(t('stepTransfer', null, 'Trasferimento in corso...'), 55);
+      const buffer = await response.arrayBuffer();
+
+      onStep(t('stepSdFolder', null, 'Preparazione cartella SD...'), 68);
+      await ensureDirectory(DOWNLOADS_DIR);
+
+      const targetPath = `${DOWNLOADS_DIR}/${filename}`;
+      onStep(t('stepWriteSd', { name: filename }, `Scrittura su SD: ${filename}...`), 80);
+      const writeResp = await fetch(`/api/fs/write?path=${encodeURIComponent(targetPath)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: buffer
+      });
+      if (writeResp.status === 401 || writeResp.status === 403) {
+        const e = new Error(t('errAccessDenied', null, 'Accesso negato — assicurati di essere associato al dispositivo'));
+        e.authRequired = true; throw e;
+      }
+      if (!writeResp.ok) {
+        const errText = await writeResp.text();
+        throw new Error(t('errSdWrite', { status: writeResp.status, detail: errText.trim() }, `Scrittura SD fallita (${writeResp.status}): ${errText.trim()}`));
+      }
+
+      onStep(t('stepSavedOk', null, '✅ Salvato con successo!'), 100);
+      return { ok: true, size: buffer.byteLength, filename };
+    }
+
+    // Pulsante: usa la pagina corrente come URL da scaricare
+    document.getElementById('btn-dl-from-tab').onclick = () => {
+      const activeTab = state.tabs.find(t => t.id === state.activeTabId);
+      if (activeTab && activeTab.url && activeTab.url !== 'home') {
+        document.getElementById('sd-down-url').value = activeTab.url;
+        // Auto-deduci il nome file
+        try {
+          const p = new URL(activeTab.url).pathname;
+          const name = p.substring(p.lastIndexOf('/') + 1);
+          if (name && name.includes('.')) {
+            document.getElementById('sd-down-filename').value = name;
+          }
+        } catch (_e) {}
+      } else {
+        showBrowserToast(t('toastNoPageToDownload', null, 'Nessuna pagina attiva da scaricare'), '⚠️');
+      }
+    };
+
+    // Pulsante: apri /data/downloads in File Commander tramite postMessage alla shell
+    document.getElementById('btn-open-downloads-folder').onclick = () => {
+      try {
+        window.parent.postMessage({
+          type: 'open-app',
+          id: 'file-commander',
+          query: 'path=' + encodeURIComponent(DOWNLOADS_DIR)
+        }, '*');
+        // Chiudi il modal dopo aver aperto il file manager
+        document.getElementById('modal-settings').classList.remove('active');
+        showBrowserToast(t('toastOpeningDownloads', null, 'Apertura cartella download...'), '🗂️');
+      } catch (err) {
+        showBrowserToast(t('toastOpenFcFailed', null, 'Impossibile aprire File Commander'), '❌');
+      }
+    };
+
+    // Cancella log download
+    document.getElementById('btn-clear-dl-log').onclick = () => {
+      dlLog.length = 0;
+      renderDlLog();
+    };
+
+    function renderDlLog() {
+      const container = document.getElementById('dl-log-list');
+      if (!container) return;
+      if (dlLog.length === 0) {
+        container.innerHTML = `<div style="color: var(--text-secondary); font-size: 11px; padding: 8px; text-align: center;" data-i18n="dlNone">Nessun download ancora.</div>`;
+        return;
+      }
+      container.innerHTML = '';
+      dlLog.slice().reverse().forEach(entry => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:4px; background:rgba(255,255,255,0.02); font-size:11px;';
+
+        const icon = document.createElement('span');
+        icon.textContent = entry.ok ? '✅' : '❌';
+
+        const info = document.createElement('div');
+        info.style.cssText = 'flex:1; overflow:hidden;';
+
+        const nameEl = document.createElement('div');
+        nameEl.style.cssText = 'font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+        nameEl.textContent = entry.filename;
+
+        const meta = document.createElement('div');
+        meta.style.cssText = 'color:var(--text-secondary); margin-top:1px;';
+        const sizeStr = entry.size >= 1048576
+          ? (entry.size / 1048576).toFixed(1) + ' MB'
+          : entry.size >= 1024
+          ? (entry.size / 1024).toFixed(0) + ' KB'
+          : entry.size + ' B';
+        meta.textContent = entry.ok ? `${sizeStr} · ${entry.ts}` : `${t('error', null, 'Errore')} · ${entry.ts}`;
+
+        info.appendChild(nameEl);
+        info.appendChild(meta);
+        row.appendChild(icon);
+        row.appendChild(info);
+        container.appendChild(row);
+      });
+    }
+
+    // Controlla stato autenticazione prima di scrivere su SD
+    async function checkAuthStatus() {
+      try {
+        const r = await fetch('/api/auth/status', { cache: 'no-store' });
+        if (!r.ok) return { required: false, paired: true }; // assume ok se API non risponde
+        const data = await r.json();
+        return data;
+      } catch (_e) {
+        return { required: false, paired: true }; // device non raggiungibile o in sim
+      }
+    }
+
+    // Crea directory garantendone l'esistenza (mkdir è idempotente nel firmware)
+    async function ensureDirectory(path) {
+      const resp = await fetch(`/api/fs/mkdir?path=${encodeURIComponent(path)}`, { method: 'POST' });
+      // 500 con corpo 'mkdir' può significare che esiste già (comportamento FATFS) — accettabile
+      if (!resp.ok) {
+        const text = await resp.text();
+        if (resp.status === 500 && text.includes('mkdir')) return; // directory già esistente
+        throw new Error(t('errMkdir', { status: resp.status, detail: text }, `Mkdir fallita (${resp.status}): ${text}`));
+      }
+    }
+
+    document.getElementById('btn-start-sd-download').onclick = async () => {
+      const urlInput = document.getElementById('sd-down-url');
+      const filenameInput = document.getElementById('sd-down-filename');
+      const authBanner = document.getElementById('dl-auth-banner');
+
+      const url = urlInput.value.trim();
+      let filename = filenameInput.value.trim();
+
+      if (!url) {
+        showBrowserToast(t('toastEnterValidUrl', null, 'Inserisci un URL valido!'), '⚠️');
+        return;
+      }
+      if (!filename) filename = filenameFromUrl(url);
+
+      const statusDiv = document.getElementById('sd-download-status');
+      const statusText = document.getElementById('sd-down-status-text');
+      const progressBar = document.getElementById('sd-down-bar');
+      const startBtn = document.getElementById('btn-start-sd-download');
+      const setStep = (text, pct) => { statusText.textContent = text; progressBar.style.width = pct + '%'; };
+
+      authBanner.style.display = 'none';
+      startBtn.disabled = true;
+      statusDiv.style.display = 'flex';
+
+      const logEntry = { filename, url, size: 0, ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), ok: false };
+
+      try {
+        const res = await downloadUrlToSd(url, filename, setStep);   // shared engine: proxy fetch -> /api/fs/write
+        logEntry.ok = true;
+        logEntry.size = res.size;
+        showBrowserToast(t('toastSaved', { name: res.filename }, `Salvato: ${res.filename}`), '✅');
+        urlInput.value = '';
+        filenameInput.value = '';
+      } catch (err) {
+        if (err.authRequired) authBanner.style.display = 'block';
+        setStep(`❌ ${err.message}`, 0);
+        showBrowserToast(t('toastDownloadFailed', { error: err.message }, `Download fallito: ${err.message}`), '❌');
+      } finally {
+        dlLog.push(logEntry);
+        renderDlLog();
+        startBtn.disabled = false;
+        setTimeout(() => {
+          statusDiv.style.display = 'none';
+          progressBar.style.width = '0%';
+        }, 5000);
+      }
+    };
+
+    // No service worker. The Ultraviolet proxy SW was removed; proactively unregister any stale
+    // copy left in this browser by an older version (it kept throwing failed-fetch errors).
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations()
+        .then(regs => regs.forEach(r => { if (r.scope.includes('/apps/browser/')) r.unregister(); }))
+        .catch(() => {});
+    }
+    if (state.tabs.length === 0) createTab('home');
+
+  </script>
+
+  <!-- Centralized OS i18n. The main script above is a classic (non-module) script, so the engine is
+       bootstrapped here as a module. init() loads core + the 'browser' catalog for the active OS
+       language, paints every [data-i18n*] element already in the document (including the home screen
+       and settings modal), and installs a MutationObserver that auto-translates nodes inserted later
+       (cards, dialogs, history/download rows). onChange repaints the JS-built bits that have no
+       declarative annotation (tab titles), so switching the language is reload-free. -->
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    await I18N.init('browser');
+    // Live language switch: declarative [data-i18n*] nodes are repainted by the engine itself; here we
+    // refresh the imperatively-set tab titles (and re-render home screens to pick up the new strings).
+    I18N.onChange(() => {
+      try {
+        if (typeof state === 'object' && Array.isArray(state.tabs)) {
+          state.tabs.forEach((tab) => {
+            if (tab.url === 'home') {
+              tab.title = I18N.t('newTab', null, 'browser');
+              const w = document.getElementById('wrapper-' + tab.id);
+              if (w) { w.innerHTML = createHomeScreenHtml(tab.id); I18N.apply(w, 'browser'); }
+            }
+          });
+          if (typeof renderTabs === 'function') renderTabs();
+        }
+      } catch (_e) {}
+    });
+  </script>
+</body>
+</html>

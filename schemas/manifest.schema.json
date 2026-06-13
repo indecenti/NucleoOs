@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nucleoos/manifest.schema.json",
+  "title": "NucleoOS App Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "version", "category", "entry_service", "web_route", "permissions", "handles", "power"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "name": { "type": "string" },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "version_code": { "type": "integer", "minimum": 1 },
+    "min_os": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "platforms": { "type": "array", "items": { "type": "string", "enum": ["esp32", "esp32s2", "esp32s3", "esp32c3", "esp32c6", "esp32p4"] } },
+    "description": { "type": "string" },
+    "category": { "type": "string", "enum": ["system", "productivity", "media", "tools", "connectivity", "games"] },
+    "runtime": { "type": "string", "enum": ["web", "vm", "service", "elf"] },
+    "entry_service": { "type": "string" },
+    "web_route": { "type": "string", "pattern": "^/" },
+    "icon": { "type": "string" },
+    "permissions": { "type": "array", "items": { "$ref": "#/$defs/capability" } },
+    "mounts": { "type": "object", "additionalProperties": { "type": "string" } },
+    "handles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "extensions"],
+      "properties": {
+        "role": { "type": "string", "enum": ["editor", "viewer", "player", "none"] },
+        "extensions": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9]+$" } }
+      }
+    },
+    "intents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action"],
+        "properties": {
+          "action": { "type": "string", "enum": ["view", "edit", "play", "share"] },
+          "extensions": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9]+$" } }
+        }
+      }
+    },
+    "subscribes": { "type": "array", "items": { "type": "string" } },
+    "publishes": { "type": "array", "items": { "type": "string" } },
+    "power": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["budget_class"],
+      "properties": {
+        "budget_class": { "type": "string", "enum": ["low", "medium", "high"] },
+        "wants_wakeup": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "mesh": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exposes": { "type": "array", "items": { "type": "string" } },
+        "consumes": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "string",
+      "enum": ["storage.app", "storage.shared", "system.events", "system.clipboard", "system.notify", "device.keyboard", "device.display", "device.ir", "device.mic", "device.audio", "net.wifi", "net.ble", "mesh.peer", "power.budget"]
+    }
+  }
+}

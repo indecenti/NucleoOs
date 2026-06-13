@@ -1,0 +1,149 @@
+# Risposte REALI deterministiche di ANIMA on-device (slot riempiti) - il gate verifica che la VOCE le
+# componga. L'harness rispecchia nucleo_tts_say(): mathspeak (= % ^ + -> parole) poi WHOLE/SPEAK/READ.
+#   SPEAK/WHOLE = pronunciata (OK).  READ(guardia) = formula densa/lunga -> "leggila" (OK, scelta voluta).
+#   READ(scoperte) = parola senza clip -> FALLIMENTO (aggiungere al lessico).
+# "# [...]" = contenuto VARIABILE (nomi file/eventi/entita) -> "leggila" o fallback say_or (corretto).
+# Obiettivo: coprire QUASI TUTTE le formulazioni deterministiche, priorita' all'uso quotidiano.
+
+# ============ STATO / SYSTEM (quotidiano) ============
+Sono le 9 e 30.
+Sono le 14 e 5.
+Sono le 7 meno un quarto.
+Mezzogiorno.
+Mezzanotte.
+Non conosco l'ora: l'orologio non e' impostato.
+Oggi e lunedi 10 giugno 2026.
+Oggi e venerdi 25 dicembre 2026.
+Spazio SD: 12.5 GB liberi su 50.0 GB.
+Siamo nel 2026.
+Siamo in estate.
+Eseguo NucleoOS 0.1.0.
+Acceso da 2 giorni e 3 ore.
+Acceso da 3 ore e 15 minuti.
+512 KB di RAM liberi.
+non connesso
+Batteria: non disponibile.
+Oggi non hai impegni.
+Oggi hai 1 impegno.
+Oggi hai 3 impegni.
+
+# ============ DATE RELATIVE (quotidiano) ============
+Domani e martedi 12 giugno 2026.
+Dopodomani e mercoledi 13 giugno 2026.
+Ieri era domenica 10 giugno 2026.
+Fra 7 giorni sara' lunedi 18 giugno 2026.
+5 giorni fa era giovedi 6 giugno 2026.
+
+# ============ CALCOLO (mathspeak = % ^ +) ============
+Fa 16.
+Fa 42.
+Fa -5.
+Fa 2,5.
+Fa 1000000.
+Non posso dividere per zero.
+5 + 3 = 8.
+5 + 3 + 7 = 15.
+Il 20% di 150 = 30.
+Il 50% di 80 = 40.
+2 elevato 3 = 8.
+5 elevato 3 = 125.
+10^9 = 1000000000.
+radice di 144 = 12.
+radice cubica di 27 = 3.
+valore assoluto di -7 = 7.
+17 modulo 5 = 2.
+La media e 7.5.
+La mediana e 8.
+La media si calcola sommando i valori e dividendo per quanti sono.
+255 in base 2 = 11111111.
+17 e primo? Si.
+23 e primo? Si.
+log base 2 di 8 = 3.
+
+# ============ OPERAZIONI SCALA (doppio/meta/quadrato/cubo/reciproco/opposto) ============
+doppio di 5 = 10.
+meta di 20 = 10.
+quadrato di 3 = 9.
+cubo di 2 = 8.
+reciproco di 4 = 0,25.
+opposto di -5 = 5.
+
+# ============ CONVERSIONI (a parole -> parlabili; abbreviazioni -> leggila) ============
+5 metri = 500 centimetri.
+2 ore = 7200 secondi.
+3 chilometri = 3000 metri.
+20 gradi celsius = 68 gradi fahrenheit.
+# traduttore: la voce dice la PAROLA tradotta nella sua lingua (EN->IT qui = "cane" nell'indice IT)
+cane
+casa
+grazie
+# [gestito da nucleo_tts_translate_word: il target e' detto nella lingua giusta] "dog" in italiano: cane.
+
+# ============ EQUAZIONI / DATE: astensioni testuali (parlabili) ============
+E' una sola equazione con 2 incognite: non puo' avere una soluzione unica.
+Risolvo equazioni di primo e secondo grado; questa e' di grado superiore.
+Va bene qualunque x: infinite soluzioni.
+Nessuna soluzione: si riduce a un'uguaglianza falsa.
+Non calcolo la radice di un numero negativo.
+La primalita' riguarda solo i numeri interi.
+
+# ============ STRUMENTI: conferme parlabili ============
+Volume al 70%.
+Volume al 100%.
+Luminosita al 50%.
+Alzo il volume.
+Abbasso la luminosita.
+Chiudo il browser.
+Percorso file non valido.
+Non riesco a creare il file.
+Non sono riuscito ad aggiungere il promemoria.
+Come deve chiamarsi il file?
+# [nome file variabile -> fallback "Fatto"] Ho creato note.txt con il contenuto.
+# [nome file variabile -> fallback "Fatto"] note.txt esiste gia: non lo sovrascrivo.
+# [evento variabile -> fallback "Fatto"] Promemoria "comprare latte" domani alle 9.
+# [app variabile] Gmail e' disponibile solo nell'app web.
+# [app variabile] Quale dei due apro, foto o disegno?
+
+# ============ CORTESIA / CHIARIMENTI / LEARN / SESSIONE / FIDUCIA ============
+Sono ANIMA, l'assistente offline di NucleoOS. Funziono senza internet, sul dispositivo.
+A dire il vero non lo sapevo, non mi fiderei.
+Non lo so.
+Non ho capito.
+Nessun risultato.
+Un momento.
+Ciao! Come posso aiutarti?
+Prego, quando vuoi!
+Grazie!
+Scusa: prova a riformulare e ci riprovo.
+Dimmi quale parte e riprovo a spiegarla.
+Va bene.
+Certo.
+Buongiorno!
+Buonasera!
+Su questo non ho altri dettagli.
+Non lo memorizzo: e' un'informazione temporanea.
+Non riesco a impararlo ora.
+Modalita' solo online: nessuna connessione a internet.
+Perfetto, dammi i dati e lo calcolo.
+Abbiamo appena iniziato.
+# [fatto variabile -> leggila] Imparato, ricorderò: Roma è la capitale d'Italia.
+# [contesto variabile -> leggila] Eravamo su: il calcolo dell'area del cerchio.
+
+# ============ FORMULA -> voce dice il RISULTATO (geometria/fisica) ============
+# (la formula a schermo e' densa; la voce dice "Il risultato e' N" via has_mathtypo+eq_result)
+Il risultato e' 78.5398.
+Il risultato e' 27.
+Il risultato e' 28.2743.
+
+# ============ FORMULE DENSE: devono LEGGERE (READ guardia, non scoperte) ============
+Area del cerchio = π·3² = 28.27.
+Volume del cubo = 3³ = 27.
+Area del triangolo = (6·4)/2 = 12.
+Ipotenusa = √(3²+4²) = 5.
+F = m·a = 5·2 = 10 N.
+Energia cinetica: Ec = ½·m·v².
+Δ = 4 > 0 → due soluzioni reali: x = 3 oppure x = 1.
+# [zuppa di lettere V/I/R/P/W -> leggila] V=10 V, I=2 A, R=5 ohm, P=20 W.
+# [risultato variabile -> leggila] 2026 in numeri romani = MMXXVI.
+# [parentesi -> leggila] mcd(12, 18) = 6.
+# [parentesi -> leggila] Fibonacci(8) = 21.

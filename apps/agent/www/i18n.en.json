@@ -1,0 +1,46 @@
+{
+  "_lang": "en",
+  "app_title": "Agents",
+  "subtitle": "multi-agent · Claude",
+  "ws_label": "Workspace",
+  "ws_hint": "Workspace: the agent operates only inside here",
+  "web_label": "web",
+  "web_hint": "Search the web via Claude (server-side)",
+  "auto_label": "auto-approve",
+  "auto_hint": "Run actions without asking for confirmation (not recommended)",
+  "input_ph": "Give a task: create/edit files, compute, search… (⏎ send, ⇧⏎ newline)",
+  "send": "Send",
+  "hint": "Agents run in the browser and call Claude directly: the Cardputer is not loaded. Destructive actions ask for confirmation.",
+
+  "st_ready": "ready",
+  "st_thinking": "thinking…",
+  "st_stopped": "stopped",
+  "st_error": "error",
+  "st_checking_key": "checking key…",
+  "st_pair_first": "pair this browser first",
+  "st_offline_reconnect": "offline — reconnect to use agents",
+  "msg_stopped": "⏹ Stopped.",
+
+  "model_anthropic": "orchestrator Haiku · workers Sonnet/Opus",
+  "model_groq": "Groq · chat only (no OS tools)",
+
+  "ready_anthropic": "🟣 Multi-agent ready. Give me a task — I can read, write and edit files in the workspace, run sandboxed code, search the web, and open results in the OS. Destructive actions ask for your approval.",
+  "ready_groq": "⚡ Groq key detected — chat only (no OS tools). Add a Claude key in Settings ▸ AI for the full multi-agent system.",
+
+  "appr_title": "Approve action",
+  "appr_allow": "Allow",
+  "appr_deny": "Deny",
+  "op_write_file": "Write file",
+  "op_edit_file": "Edit file",
+  "op_append_file": "Append to file",
+  "op_delete_file": "DELETE file",
+  "op_move_file": "Move file",
+  "op_run_js": "Run code",
+
+  "gate_offline_title": "No network",
+  "gate_offline_body": "The online agents need internet. Reconnect, or use the fully-offline ANIMA assistant instead.",
+  "gate_key_title": "Connect Claude",
+  "gate_key_body": "The multi-agent system needs a Claude (Anthropic) API key. Add one in Settings ▸ AI. Without it you can still use the offline ANIMA assistant.",
+  "gate_open_settings": "Open Settings",
+  "gate_anima": "ANIMA offline"
+}

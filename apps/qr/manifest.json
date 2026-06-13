@@ -1,0 +1,38 @@
+{
+  "id": "qr",
+  "name": "Codice QR",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Genera QR ottimizzati (URL, Wi-Fi, contatti...) e salvali sul dispositivo per l'app nativa.",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/qr/",
+  "permissions": [
+    "storage.shared",
+    "system.events"
+  ],
+  "mounts": {
+    "app": "/apps/qr/data"
+  },
+  "handles": {
+    "role": "none",
+    "extensions": []
+  },
+  "subscribes": [],
+  "publishes": [],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

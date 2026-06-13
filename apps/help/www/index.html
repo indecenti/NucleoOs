@@ -1,0 +1,1423 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>System Help & Documentation</title>
+  <!-- Offline-first: use the system font stack (see --font-sans/--font-mono fallbacks below)
+       instead of render-blocking remote webfonts — the device often has no internet. -->
+  <style>
+    :root {
+      --bg: #080c16;
+      --bg-gradient: radial-gradient(circle at 80% 20%, #171d38 0%, #080c16 100%);
+      --panel: rgba(15, 22, 38, 0.7);
+      --glass: rgba(255, 255, 255, 0.03);
+      --border: rgba(255, 255, 255, 0.07);
+      --border-focus: rgba(78, 161, 255, 0.4);
+      --text: #e8eefc;
+      --muted: #8aa0c8;
+      --dim: #546a94;
+      --accent: #4ea1ff;
+      --accent-gradient: linear-gradient(135deg, #4ea1ff, #7c5cff);
+      --accent-shadow: rgba(78, 161, 255, 0.25);
+      --code-bg: rgba(7, 10, 18, 0.6);
+      --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'Fira Code', ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+
+    [data-theme="light"] {
+      --bg: #f4f6fa;
+      --bg-gradient: radial-gradient(circle at 80% 20%, #e2e8f5 0%, #f4f6fa 100%);
+      --panel: rgba(255, 255, 255, 0.75);
+      --glass: rgba(0, 0, 0, 0.02);
+      --border: rgba(0, 0, 0, 0.08);
+      --border-focus: rgba(43, 111, 214, 0.4);
+      --text: #10203a;
+      --muted: #5a6a86;
+      --dim: #8ba0c0;
+      --accent: #2b6fd6;
+      --accent-gradient: linear-gradient(135deg, #2b6fd6, #5d3df5);
+      --accent-shadow: rgba(43, 111, 214, 0.2);
+      --code-bg: rgba(0, 0, 0, 0.04);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      background-image: var(--bg-gradient);
+      color: var(--text);
+      font-family: var(--font-sans);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    /* Top Header */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 15px;
+      padding: 12px 20px;
+      background: var(--panel);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+      flex: none;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand .logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--accent-gradient);
+      box-shadow: 0 0 15px var(--accent-shadow);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .brand h1 {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .search-box {
+      position: relative;
+      flex: 1;
+      max-width: 400px;
+    }
+
+    .search-box input {
+      width: 100%;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 12px 7px 35px;
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .search-box input:focus {
+      border-color: var(--accent);
+      background: rgba(255, 255, 255, 0.05);
+      box-shadow: 0 0 0 3px var(--accent-shadow);
+    }
+
+    .search-box svg {
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Bilingual Switch */
+    .lang-switch {
+      display: flex;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      padding: 2px;
+    }
+
+    .lang-switch button {
+      background: transparent;
+      border: 0;
+      color: var(--muted);
+      padding: 4px 10px;
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .lang-switch button.active {
+      background: var(--accent-gradient);
+      color: #fff;
+      box-shadow: 0 2px 6px var(--accent-shadow);
+    }
+
+    /* Main Container layout */
+    .container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar Navigation */
+    aside {
+      width: 280px;
+      background: var(--panel2, rgba(10, 15, 28, 0.4));
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      flex: none;
+    }
+
+    .sidebar-section {
+      padding: 10px 0 5px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    }
+
+    /* Collapsible folder header */
+    .tree-folder {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--dim);
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.15s;
+    }
+
+    .tree-folder:hover {
+      color: var(--muted);
+    }
+
+    .tree-folder .arrow {
+      font-size: 9px;
+      transition: transform 0.2s ease;
+      display: inline-block;
+    }
+
+    .tree-folder.collapsed .arrow {
+      transform: rotate(-90deg);
+    }
+
+    .tree-folder.collapsed + .sidebar-list {
+      display: none;
+    }
+
+    .sidebar-list {
+      list-style: none;
+    }
+
+    .sidebar-item {
+      padding: 7px 16px 7px 28px;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      transition: all 0.15s ease;
+    }
+
+    .sidebar-item::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--accent);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .sidebar-item:hover {
+      background: var(--glass);
+      color: var(--text);
+    }
+
+    .sidebar-item.active {
+      color: var(--text);
+      font-weight: 500;
+      background: rgba(78, 161, 255, 0.06);
+    }
+
+    .sidebar-item.active::before {
+      opacity: 1;
+    }
+
+    /* API Badges in sidebar */
+    .api-badge {
+      font-size: 8px;
+      font-weight: 800;
+      padding: 1px 4px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+      font-family: var(--font-mono);
+    }
+
+    .api-badge.get {
+      background: rgba(46, 204, 113, 0.12);
+      color: #2ecc71;
+      border: 1px solid rgba(46, 204, 113, 0.25);
+    }
+
+    .api-badge.post {
+      background: rgba(255, 161, 78, 0.12);
+      color: #ffa14e;
+      border: 1px solid rgba(255, 161, 78, 0.25);
+    }
+
+    /* Content Area */
+    main {
+      flex: 1;
+      padding: 30px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .help-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      backdrop-filter: blur(10px);
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    /* API card (Mini Swagger) */
+    .api-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      backdrop-filter: blur(10px);
+      animation: fadeIn 0.25s ease-out;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 15px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 15px;
+      margin-bottom: 20px;
+    }
+
+    .api-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 15px;
+    }
+
+    .api-header h2 {
+      font-size: 20px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      word-break: break-all;
+    }
+
+    .card-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .card-meta .category {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .card-meta h2 {
+      font-size: 22px;
+      font-weight: 600;
+    }
+
+    /* Synopsis code block */
+    .synopsis-box {
+      position: relative;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .synopsis-box code {
+      color: var(--accent);
+      word-break: break-all;
+      padding-right: 15px;
+    }
+
+    .copy-btn {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      padding: 4px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-family: var(--font-sans);
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .copy-btn:hover {
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+    }
+
+    .section-title {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .api-section-title {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      font-weight: 600;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding-bottom: 5px;
+    }
+
+    .description-text {
+      font-size: 14.5px;
+      line-height: 1.6;
+      color: var(--text);
+      margin-bottom: 20px;
+    }
+
+    .details-box {
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--muted);
+      white-space: pre-wrap;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    /* Parameters list and rows */
+    .param-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 15px;
+      background: rgba(255,255,255,0.01);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.03);
+    }
+
+    .param-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .param-label .param-name {
+      font-family: var(--font-mono);
+      color: var(--accent);
+    }
+
+    .param-label .param-type {
+      font-size: 10px;
+      color: var(--dim);
+      background: var(--code-bg);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    .param-label .param-required {
+      color: #ff6b6b;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .param-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .param-input {
+      width: 100%;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .param-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-shadow);
+    }
+
+    .param-input.textarea {
+      font-family: var(--font-mono);
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    /* Floating terminal execution button */
+    .exec-btn {
+      align-self: flex-start;
+      margin-top: 10px;
+      background: var(--accent-gradient);
+      border: 0;
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px var(--accent-shadow);
+      transition: all 0.2s;
+    }
+
+    .exec-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px var(--accent-shadow);
+    }
+
+    /* Try it out button (Mini Swagger) */
+    .try-btn {
+      align-self: flex-start;
+      background: var(--accent-gradient);
+      border: 0;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px var(--accent-shadow);
+      transition: all 0.2s;
+    }
+
+    .try-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px var(--accent-shadow);
+    }
+
+    .try-btn:active {
+      transform: translateY(1px);
+    }
+
+    /* Swagger Response blocks */
+    .response-box {
+      margin-top: 15px;
+      border-top: 1px solid var(--border);
+      padding-top: 15px;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    .response-meta {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .status-badge {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .status-badge.status-2xx {
+      background: rgba(46, 204, 113, 0.15);
+      color: #2ecc71;
+    }
+
+    .status-badge.status-4xx, .status-badge.status-5xx {
+      background: rgba(231, 76, 60, 0.15);
+      color: #e74c3c;
+    }
+
+    .response-time {
+      font-family: var(--font-mono);
+    }
+
+    .response-body {
+      /* Fixed dark console: the JSON syntax colors below (green/yellow/etc) are
+         tuned for a dark surface, so the bg must NOT flip to near-white in light theme. */
+      background: #0b1220;
+      color: #e8eefc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-height: 400px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* JSON color highlighted tags */
+    .json-key { color: var(--accent); font-weight: 500; }
+    .json-string { color: #2ecc71; }
+    .json-number { color: #f1c40f; }
+    .json-boolean { color: #9b59b6; }
+    .json-null { color: #7f8c8d; }
+
+    /* Highlight di ricerca */
+    .search-highlight {
+      background: rgba(78, 161, 255, 0.25);
+      color: inherit;
+      border-bottom: 2px solid var(--accent);
+      border-radius: 2px;
+      padding: 0 1px;
+    }
+
+    /* Welcome / Empty view */
+    .empty-view {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      text-align: center;
+      color: var(--muted);
+      gap: 15px;
+      padding: 20px;
+    }
+
+    .empty-view svg {
+      width: 48px;
+      height: 48px;
+      color: var(--dim);
+    }
+
+    .empty-view h2 {
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .empty-view p {
+      font-size: 13px;
+      max-width: 320px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">?</div>
+      <h1 id="title-text" data-i18n="title">Manuale di Sistema</h1>
+    </div>
+
+    <div class="search-box">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+      </svg>
+      <input type="text" id="search" data-i18n-attr="placeholder:search_ph" placeholder="Cerca nel manuale…">
+    </div>
+    
+    <div class="header-actions">
+      <div class="lang-switch" id="lang-switch">
+        <button data-lang="it" class="active">IT</button>
+        <button data-lang="en">EN</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <aside>
+      <div class="sidebar-section" id="sec-guides">
+        <div class="tree-folder" id="folder-guides">
+          <span id="label-guides" data-i18n="label_guides">Guide di Sistema</span>
+          <span class="arrow">▾</span>
+        </div>
+        <ul class="sidebar-list" id="list-guides"></ul>
+      </div>
+      <div class="sidebar-section" id="sec-terminal">
+        <div class="tree-folder" id="folder-terminal">
+          <span id="label-commands" data-i18n="label_commands">Comandi Terminale</span>
+          <span class="arrow">▾</span>
+        </div>
+        <ul class="sidebar-list" id="list-terminal"></ul>
+      </div>
+      <div class="sidebar-section" id="sec-api">
+        <div class="tree-folder" id="folder-api">
+          <span id="label-api" data-i18n="label_api">API Web HTTP</span>
+          <span class="arrow">▾</span>
+        </div>
+        <ul class="sidebar-list" id="list-api"></ul>
+      </div>
+    </aside>
+
+    <main id="content">
+      <div class="empty-view" id="welcome-view">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"></path>
+        </svg>
+        <h2 id="welcome-title" data-i18n="welcome_title">NucleoOS Help</h2>
+        <p id="welcome-desc" data-i18n="welcome_desc">Seleziona un argomento dalla barra laterale o usa la barra di ricerca per esplorare le guide e le funzionalità di sistema.</p>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    const t = await I18N.init('help');   // core + this app's catalog for the active OS language
+
+    // `lang` follows the OS language (the engine owns it). It still drives which it/en sub-object of
+    // each manual .info record we render, so we keep it in sync with the engine here and on change.
+    let lang = I18N.lang;
+    let activeManual = null;
+    let manualsList = [];
+
+    // Specifiche degli endpoint per il Mini Swagger (caricate in modo asincrono a runtime)
+    let apiSpecifications = [];
+
+    // Helper per leggere file JSON sul filesystem del dispositivo
+    async function readJSON(path) {
+      try {
+        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+        return r.ok ? JSON.parse(await r.text()) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    // Carica l'elenco dei manuali leggendo la directory /system/registry/manual/
+    async function fetchManuals() {
+      let entries = [];
+      try {
+        const r = await fetch('/api/fs/list?path=' + encodeURIComponent('/system/registry/manual'));
+        if (r.ok) {
+          const j = await r.json();
+          entries = (j.entries || []).filter(e => e.name.endsWith('.info'));
+        }
+      } catch {}
+
+      // Fallback statico offline per compatibilità locale o durante lo sviluppo
+      if (entries.length === 0) {
+        const fallbackIds = [
+          "ls", "cd", "pwd", "cat", "cp", "mv", "mkdir", "touch", "rm", "echo", "open", "grep",
+          "find", "wc", "head", "tail", "df", "uptime", "ping", "curl", "wget", "sleep", "env",
+          "export", "history", "uname", "status", "free", "date", "theme", "clear", "man",
+          "dmesg", "reboot", "desktop", "anima", "shortcuts", "web_api", "app_runtimes",
+          "event_bus", "security_auth", "storage_layout"
+        ];
+        entries = fallbackIds.map(id => ({ name: id + '.info' }));
+      }
+
+      const list = [];
+      for (const e of entries) {
+        const id = e.name.replace('.info', '');
+        const fileContent = await readJSON('/system/registry/manual/' + e.name);
+        if (fileContent) {
+          list.push(fileContent);
+        } else {
+          // Record finto per compatibilità offline se fallisce la lettura file singolo
+          list.push({
+            id,
+            category: ['desktop', 'anima', 'shortcuts', 'web_api', 'app_runtimes', 'event_bus', 'security_auth', 'storage_layout'].includes(id) ? 'guide' : 'terminal',
+            it: { title: id, synopsis: id, description: 'Voce offline. Raggiungi il dispositivo per dettagli.' },
+            en: { title: id, synopsis: id, description: 'Offline entry. Connect to device for details.' }
+          });
+        }
+      }
+      return list;
+    }
+
+    // Formatta la stringa JSON applicandovi colori Swagger premium
+    function syntaxHighlightJSON(jsonStr) {
+      if (typeof jsonStr !== 'string') {
+        jsonStr = JSON.stringify(jsonStr, null, 2);
+      }
+      jsonStr = jsonStr.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return jsonStr.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+        let cls = 'json-number';
+        if (/^"/.test(match)) {
+          if (/:$/.test(match)) {
+            cls = 'json-key';
+          } else {
+            cls = 'json-string';
+          }
+        } else if (/true|false/.test(match)) {
+          cls = 'json-boolean';
+        } else if (/null/.test(match)) {
+          cls = 'json-null';
+        }
+        return '<span class="' + cls + '">' + match + '</span>';
+      });
+    }
+
+    function highlightDOM(element, query) {
+      if (!query) return;
+      const walk = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+      const nodes = [];
+      let node;
+      while (node = walk.nextNode()) {
+        const parent = node.parentNode;
+        if (node.nodeValue.trim().length > 0 && parent) {
+          const name = parent.nodeName;
+          const cl = parent.classList;
+          if (name !== 'MARK' && name !== 'SPAN' && name !== 'SCRIPT' && name !== 'STYLE' &&
+              (!cl || (!cl.contains('json-key') && !cl.contains('json-string') && 
+                       !cl.contains('json-number') && !cl.contains('json-boolean')))) {
+            nodes.push(node);
+          }
+        }
+      }
+      const escapedQuery = query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const regex = new RegExp(`(${escapedQuery})`, 'gi');
+      nodes.forEach(n => {
+        const text = n.nodeValue;
+        if (regex.test(text)) {
+          const span = document.createElement('span');
+          span.innerHTML = text.replace(regex, '<mark class="search-highlight">$1</mark>');
+          n.parentNode.replaceChild(span, n);
+        }
+      });
+    }
+
+    // Renderizza la scheda del manuale standard (comandi o guide)
+    function renderStandardCard(manual, data, content) {
+      let html = `
+        <div class="help-card">
+          <div class="card-header">
+            <div class="card-meta">
+              <span class="category">${manual.category === 'guide' ? t('label_guides') : t('label_commands')}</span>
+              <h2>${data.title}</h2>
+            </div>
+            ${(manual.category !== 'guide' && manual.category !== 'system') ? `
+              <button class="exec-btn" id="exec-cmd-btn">
+                <svg fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+                <span>${t('exec')}</span>
+              </button>
+            ` : ''}
+          </div>
+
+          <div class="section-title">${t('synopsis')}</div>
+          <div class="synopsis-box">
+            <code>${data.synopsis}</code>
+            <button class="copy-btn" id="copy-synopsis">
+              <span>${t('copy')}</span>
+            </button>
+          </div>
+
+          <div class="section-title">${t('description')}</div>
+          <p class="description-text">${data.description}</p>
+      `;
+
+      if (data.details) {
+        html += `
+          <div class="section-title">${t('details')}</div>
+          <pre class="details-box">${data.details}</pre>
+        `;
+      }
+
+      html += `</div>`;
+      content.innerHTML = html;
+
+      // Gestore copia negli appunti
+      document.getElementById('copy-synopsis').onclick = () => {
+        navigator.clipboard.writeText(data.synopsis);
+        const btnText = document.querySelector('#copy-synopsis span');
+        btnText.textContent = t('copied');
+        setTimeout(() => btnText.textContent = t('copy'), 1500);
+      };
+
+      // Gestore esecuzione nel Terminale
+      const execBtn = document.getElementById('exec-cmd-btn');
+      if (execBtn) {
+        execBtn.onclick = () => {
+          try {
+            window.parent.postMessage({
+              type: 'open-app',
+              id: 'terminal',
+              query: 'cmd=' + encodeURIComponent(manual.id)
+            }, '*');
+          } catch (e) {
+            console.error(e);
+          }
+        };
+      }
+    }
+
+    // Renderizza la scheda API interattiva (Mini Swagger)
+    function renderApiCard(manual, data, content) {
+      let paramsHtml = '';
+      if (manual.params && manual.params.length > 0) {
+        manual.params.forEach(p => {
+          const desc = p[lang]?.description || p.en.description;
+          const labelRequired = p.required
+            ? `<span class="param-required">*</span>`
+            : `<span style="font-size:10.5px; color:var(--dim); font-weight:normal; margin-left:4px">(${t('optional')})</span>`;
+          
+          let inputType = '';
+          if (p.name === 'reset') {
+            inputType = `
+              <select class="param-input" id="param-${p.name}" style="background:var(--code-bg); color:var(--text); border:1px solid var(--border)">
+                <option value="0" ${p.default === '0' ? 'selected' : ''}>0 (No / Keep Context)</option>
+                <option value="1" ${p.default === '1' ? 'selected' : ''}>1 (Yes / Reset Context)</option>
+              </select>
+            `;
+          } else if (p.name === 'lang' && manual.id === 'api-anima') {
+            inputType = `
+              <select class="param-input" id="param-${p.name}" style="background:var(--code-bg); color:var(--text); border:1px solid var(--border)">
+                <option value="it" ${p.default === 'it' ? 'selected' : ''}>it (Italiano)</option>
+                <option value="en" ${p.default === 'en' ? 'selected' : ''}>en (English)</option>
+              </select>
+            `;
+          } else if (p.type === 'textarea') {
+            inputType = `<textarea class="param-input textarea" id="param-${p.name}" placeholder="${p.default || ''}">${p.default || ''}</textarea>`;
+          } else {
+            inputType = `<input type="text" class="param-input" id="param-${p.name}" value="${p.default || ''}" placeholder="${p.default || ''}">`;
+          }
+
+          paramsHtml += `
+            <div class="param-row">
+              <div class="param-label">
+                <span class="param-name">${p.name}</span>
+                <span class="param-type">${p.type === 'textarea' ? t('body_param') : t('query_param')}</span>
+                ${labelRequired}
+              </div>
+              <div class="param-desc">${desc}</div>
+              ${inputType}
+            </div>
+          `;
+        });
+      } else {
+        paramsHtml = `<p style="font-size: 13px; color: var(--dim); font-style: italic">${t('no_params')}</p>`;
+      }
+
+      content.innerHTML = `
+        <div class="api-card">
+          <div class="api-header">
+            <span class="api-badge ${manual.method.toLowerCase()}">${manual.method}</span>
+            <h2>${manual.path}</h2>
+          </div>
+
+          <div>
+            <div class="api-section-title">${t('description')}</div>
+            <p class="description-text">${data.description}</p>
+          </div>
+
+          ${data.details ? `
+            <div>
+              <div class="api-section-title">${t('details')}</div>
+              <pre class="details-box" style="margin-bottom:0">${data.details}</pre>
+            </div>
+          ` : ''}
+
+          <div>
+            <div class="api-section-title">${t('params')}</div>
+            <div id="api-params-form">${paramsHtml}</div>
+          </div>
+
+          <button class="try-btn" id="try-api-btn">
+            <svg fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+            </svg>
+            <span>${t('try_it')}</span>
+          </button>
+
+          <div id="api-response-container"></div>
+        </div>
+      `;
+
+      // Esecuzione chiamata AJAX su endpoint reale
+      document.getElementById('try-api-btn').onclick = async () => {
+        const tryBtn = document.getElementById('try-api-btn');
+        tryBtn.disabled = true;
+        tryBtn.style.opacity = '0.5';
+        tryBtn.style.cursor = 'not-allowed';
+        const tryBtnText = tryBtn.querySelector('span');
+        const oldText = tryBtnText.textContent;
+        tryBtnText.textContent = t('sending');
+
+        const responseContainer = document.getElementById('api-response-container');
+        responseContainer.innerHTML = `
+          <div class="response-box" style="display:flex; align-items:center; gap:10px; color:var(--muted)">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89H18m0 0V9M12 4v1m0 14v1m-7-7H4m16 0h-1" />
+            </svg>
+            <style>
+              @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+            </style>
+            <span>${t('waiting')}</span>
+          </div>
+        `;
+
+        let url = manual.path;
+        const queryParams = new URLSearchParams();
+        let bodyPayload = null;
+
+        if (manual.params) {
+          manual.params.forEach(p => {
+            const el = document.getElementById(`param-${p.name}`);
+            if (el) {
+              if (p.type === 'textarea') {
+                bodyPayload = el.value;
+              } else {
+                if (el.value) {
+                  queryParams.append(p.name, el.value);
+                }
+              }
+            }
+          });
+        }
+
+        const queryStr = queryParams.toString();
+        if (queryStr) {
+          url += '?' + queryStr;
+        }
+
+        const startTime = performance.now();
+        try {
+          const fetchOptions = {
+            method: manual.method,
+            cache: 'no-store'
+          };
+
+          if (manual.method === 'POST') {
+            if (bodyPayload !== null) {
+              fetchOptions.body = bodyPayload;
+              if (bodyPayload.trim().startsWith('{') || bodyPayload.trim().startsWith('[')) {
+                fetchOptions.headers = { 'Content-Type': 'application/json' };
+              } else {
+                fetchOptions.headers = { 'Content-Type': 'application/octet-stream' };
+              }
+            }
+          }
+
+          const response = await fetch(url, fetchOptions);
+          const endTime = performance.now();
+          const latency = Math.round(endTime - startTime);
+
+          let icon = '✓';
+          if (response.status >= 400 && response.status < 500) {
+            icon = response.status === 429 ? '⚠' : '✗';
+          } else if (response.status >= 500) {
+            icon = '✗';
+          }
+
+          const statusText = icon + ' ' + response.status + ' ' + response.statusText;
+          const statusClass = response.ok ? 'status-2xx' : (response.status >= 500 ? 'status-5xx' : 'status-4xx');
+
+          const ct = response.headers.get('Content-Type') || '';
+          let text = '';
+
+          try {
+            if (ct.includes('application/json')) {
+              const json = await response.json();
+              text = syntaxHighlightJSON(json);
+            } else {
+              text = await response.text();
+              if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
+                try {
+                  const json = JSON.parse(text);
+                  text = syntaxHighlightJSON(json);
+                } catch {
+                  text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                }
+              } else {
+                text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              }
+            }
+          } catch (e) {
+            text = t('read_error', { msg: e.message });
+          }
+
+          if (text === '') text = t('empty_response');
+
+          responseContainer.innerHTML = `
+            <div class="response-box">
+              <div class="api-section-title">${t('response')}</div>
+              <div class="response-meta">
+                <span>${t('status')}: <span class="status-badge ${statusClass}">${statusText}</span></span>
+                <span>${t('time')}: <span class="response-time">${latency} ms</span></span>
+                <button class="copy-btn" id="copy-res-btn" style="margin-left:auto">
+                  <span>${t('copy')}</span>
+                </button>
+              </div>
+              <pre class="response-body"><code>${text}</code></pre>
+            </div>
+          `;
+
+          document.getElementById('copy-res-btn').onclick = () => {
+            let copyText = responseContainer.querySelector('.response-body').textContent;
+            navigator.clipboard.writeText(copyText);
+            const btnSpan = document.querySelector('#copy-res-btn span');
+            btnSpan.textContent = t('copied');
+            setTimeout(() => btnSpan.textContent = t('copy'), 1500);
+          };
+
+        } catch (error) {
+          const endTime = performance.now();
+          const latency = Math.round(endTime - startTime);
+          responseContainer.innerHTML = `
+            <div class="response-box">
+              <div class="api-section-title">${t('response')}</div>
+              <div class="response-meta">
+                <span>${t('status')}: <span class="status-badge status-5xx">✗ ${t('conn_error')}</span></span>
+                <span>${t('time')}: <span class="response-time">${latency} ms</span></span>
+              </div>
+              <pre class="response-body" style="color:#ff6b6b"><code>${error.message}\n\n${t('conn_note')}</code></pre>
+            </div>
+          `;
+        } finally {
+          tryBtn.disabled = false;
+          tryBtn.style.opacity = '1';
+          tryBtn.style.cursor = 'pointer';
+          tryBtnText.textContent = oldText;
+        }
+      };
+    }
+
+    // Renderizza la scheda principale caricando le informazioni relative
+    function renderManualCard(manual) {
+      activeManual = manual;
+      const content = document.getElementById('content');
+      const data = manual[lang] || manual.en;
+
+      if (manual.category === 'api') {
+        renderApiCard(manual, data, content);
+      } else {
+        renderStandardCard(manual, data, content);
+      }
+
+      // Evidenziazione ricerca
+      const searchVal = document.getElementById('search').value;
+      if (searchVal) {
+        highlightDOM(content, searchVal);
+      }
+    }
+
+    function renderSidebar(filter = '') {
+      const listGuides = document.getElementById('list-guides');
+      const listTerminal = document.getElementById('list-terminal');
+      const listApi = document.getElementById('list-api');
+      
+      listGuides.innerHTML = '';
+      listTerminal.innerHTML = '';
+      listApi.innerHTML = '';
+
+      const query = filter.toLowerCase().trim();
+      const results = [];
+
+      manualsList.forEach(m => {
+        const data = m[lang] || m.en;
+        let score = 0;
+
+        if (query) {
+          const id = m.id.toLowerCase();
+          const title = data.title.toLowerCase();
+          const desc = data.description.toLowerCase();
+          const details = (data.details || '').toLowerCase();
+          const path = (m.path || '').toLowerCase();
+
+          if (id === query || path === query) {
+            score = 100;
+          } else if (id.includes(query) || path.includes(query)) {
+            score = 50 + (query.length / Math.max(id.length, path.length)) * 10;
+          } else if (title.includes(query)) {
+            score = 40;
+          } else if (desc.includes(query)) {
+            score = 20;
+          } else if (details.includes(query)) {
+            score = 10;
+          }
+        } else {
+          score = 1;
+        }
+
+        if (score > 0) {
+          results.push({ m, score });
+        }
+      });
+
+      if (query) {
+        results.sort((a, b) => b.score - a.score);
+      } else {
+        results.sort((a, b) => a.m.id.localeCompare(b.m.id));
+      }
+
+      results.forEach(res => {
+        const m = res.m;
+        const li = document.createElement('li');
+        li.className = 'sidebar-item';
+        if (activeManual && activeManual.id === m.id) {
+          li.classList.add('active');
+        }
+
+        if (m.category === 'api') {
+          const badge = document.createElement('span');
+          badge.className = `api-badge ${m.method.toLowerCase()}`;
+          badge.textContent = m.method;
+          li.appendChild(badge);
+
+          const pathSpan = document.createElement('span');
+          pathSpan.textContent = ' ' + m.path;
+          li.appendChild(pathSpan);
+        } else {
+          li.textContent = m.id;
+        }
+
+        li.onclick = () => {
+          document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+          li.classList.add('active');
+          renderManualCard(m);
+        };
+
+        if (m.category === 'guide') {
+          listGuides.appendChild(li);
+        } else if (m.category === 'terminal' || m.category === 'system') {
+          listTerminal.appendChild(li);
+        } else if (m.category === 'api') {
+          listApi.appendChild(li);
+        }
+      });
+
+      const countGuides = listGuides.childElementCount;
+      const countTerminal = listTerminal.childElementCount;
+      const countApi = listApi.childElementCount;
+      const totalResults = countGuides + countTerminal + countApi;
+
+      document.getElementById('label-guides').textContent = t('label_guides_count', { count: countGuides });
+      document.getElementById('label-commands').textContent = t('label_commands_count', { count: countTerminal });
+      document.getElementById('label-api').textContent = t('label_api_count', { count: countApi });
+
+      if (query) {
+        if (countGuides) document.getElementById('folder-guides').classList.remove('collapsed');
+        if (countTerminal) document.getElementById('folder-terminal').classList.remove('collapsed');
+        if (countApi) document.getElementById('folder-api').classList.remove('collapsed');
+      }
+
+      document.getElementById('sec-guides').style.display = countGuides ? 'block' : 'none';
+      document.getElementById('sec-terminal').style.display = countTerminal ? 'block' : 'none';
+      document.getElementById('sec-api').style.display = countApi ? 'block' : 'none';
+
+      // Rimuove eventuale messaggio di nessun risultato precedente
+      const noRes = document.getElementById('no-results-msg');
+      if (noRes) noRes.remove();
+
+      if (totalResults === 0) {
+        const noResDiv = document.createElement('div');
+        noResDiv.id = 'no-results-msg';
+        noResDiv.style.padding = '30px 20px';
+        noResDiv.style.textAlign = 'center';
+        noResDiv.style.color = 'var(--dim)';
+        noResDiv.style.fontSize = '13.5px';
+        noResDiv.innerHTML = `
+          <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:32px; height:32px; margin-bottom:8px; opacity:0.6; display:block; margin-left:auto; margin-right:auto;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 15.75l-2.489-2.489m0 0a3.375 3.375 0 10-4.773-4.773 3.375 3.375 0 004.774 4.774zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span>${t('no_results')}</span>
+        `;
+        document.querySelector('aside').appendChild(noResDiv);
+      }
+    }
+
+    // Allinea lo stato locale alla lingua attiva dell'OS (risolta dall'engine i18n).
+    function syncLangFromOS() {
+      lang = I18N.lang;
+      document.querySelectorAll('#lang-switch button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.lang === lang);
+      });
+    }
+
+    // Carica lo spec API (Mini Swagger) con cache intelligente versionata.
+    // Lo spec è generato a build-time dalle route reali del firmware (tools/gen-api-spec.mjs),
+    // quindi cambia SOLO a un nuovo flash/sync. Lo teniamo in localStorage con chiave = versione
+    // firmware: a cache calda non leggiamo affatto il file dalla SD del Cardputer (mai pesare sul
+    // device). /api/status è throttlato lato firmware ed è il segnale d'invalidazione più economico.
+    const API_SPEC_CACHE = 'help.apispec.v1';
+    async function loadApiSpec() {
+      let cached = null;
+      try { cached = JSON.parse(localStorage.getItem(API_SPEC_CACHE) || 'null'); } catch {}
+
+      let version = null;
+      try {
+        const r = await fetch('/api/status', { cache: 'no-store' });
+        if (r.ok) version = (await r.json()).version || null;
+      } catch {}
+
+      // Cache calda: stessa versione firmware → nessuna lettura SD dello spec.
+      if (cached && Array.isArray(cached.spec) && version && cached.version === version) {
+        return cached.spec;
+      }
+
+      // Cache fredda o versione cambiata: leggi dalla SD e ricacha sotto la versione corrente.
+      const spec = await readJSON('/system/registry/web-api-spec.json');
+      if (Array.isArray(spec)) {
+        try { localStorage.setItem(API_SPEC_CACHE, JSON.stringify({ version, spec })); } catch {}
+        return spec;
+      }
+
+      // Offline / lettura fallita: meglio una cache stale che niente.
+      return (cached && Array.isArray(cached.spec)) ? cached.spec : [];
+    }
+
+    // Inizializzazione applicazione
+    async function init() {
+      syncLangFromOS();
+
+      // Carica le specifiche delle API (cache versionata, vedi loadApiSpec)
+      const spec = await loadApiSpec();
+      if (spec && spec.length) {
+        apiSpecifications = spec;
+      }
+
+      manualsList = await fetchManuals();
+      
+      // Accoda le specifiche API virtuali nel manuale globale
+      manualsList = manualsList.concat(apiSpecifications);
+      
+      renderSidebar();
+
+      // Configura l'albero della barra laterale accordion
+      ['guides', 'terminal', 'api'].forEach(sec => {
+        const folder = document.getElementById('folder-' + sec);
+        if (folder) {
+          folder.onclick = () => {
+            folder.classList.toggle('collapsed');
+            const isOpen = !folder.classList.contains('collapsed');
+            localStorage.setItem('help_sec_' + sec, isOpen ? 'open' : 'closed');
+          };
+          const saved = localStorage.getItem('help_sec_' + sec);
+          if (saved === 'closed') {
+            folder.classList.add('collapsed');
+          }
+        }
+      });
+
+      const pathParam = new URLSearchParams(window.location.search).get('path');
+      if (pathParam) {
+        const entry = await readJSON(pathParam);
+        if (entry) {
+          if (!manualsList.some(m => m.id === entry.id)) {
+            manualsList.push(entry);
+          }
+          const item = manualsList.find(m => m.id === entry.id);
+          if (item) renderManualCard(item);
+        }
+      }
+
+      document.getElementById('search').oninput = (e) => {
+        renderSidebar(e.target.value);
+      };
+
+      // I pulsanti IT/EN cambiano la lingua di TUTTO l'OS via l'engine (persistita + live in ogni
+      // finestra). La reazione locale avviene in I18N.onChange, così click e cambi esterni sono unificati.
+      document.querySelectorAll('#lang-switch button').forEach(btn => {
+        btn.onclick = () => { I18N.setLang(btn.dataset.lang); };
+      });
+
+      // Cambio lingua OS-wide (da questi pulsanti o da Impostazioni): riallinea e ridisegna le parti
+      // costruite imperativamente (la chrome [data-i18n] la ridipinge già l'engine).
+      I18N.onChange(() => {
+        syncLangFromOS();
+        if (activeManual) renderManualCard(activeManual);
+        renderSidebar(document.getElementById('search').value);
+      });
+
+      window.addEventListener('message', async (e) => {
+        const d = e.data;
+        if (d?.type === 'os-shortcut' && d.action === 'open' && d.path) {
+          const entry = await readJSON(d.path);
+          if (entry) {
+            if (!manualsList.some(m => m.id === entry.id)) {
+              manualsList.push(entry);
+              renderSidebar();
+            }
+            renderManualCard(entry);
+          }
+        }
+        if (d?.type === 'set-theme' && d.theme) {
+          document.documentElement.dataset.theme = d.theme;
+        }
+      });
+      
+      const shellTheme = document.documentElement.dataset.theme || 'dark';
+      document.documentElement.dataset.theme = shellTheme;
+    }
+
+    init();
+  </script>
+</body>
+</html>

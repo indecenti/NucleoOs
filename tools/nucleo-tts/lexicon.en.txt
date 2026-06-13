@@ -1,0 +1,201 @@
+# Targeted lexicon for ANIMA's real spoken output (English). Covers the short/useful replies the
+# device speaks: time, battery, date, status, "opening X", identity, confirmations. Long replies fall
+# into "read it" via the guard. Numbers come from the mandatory pack. Whole phrases where prosody
+# matters; composable pieces for the variable parts (numbers/names/days).
+
+# ===== WHOLE PHRASES (natural prosody) =====
+I'm ANIMA, NucleoOS's offline assistant. I work with no internet, on the device.
+Honestly, I didn't know that one, I wouldn't rely on it.
+Hello! How can I help?
+How can I help?
+not connected
+you have no events today
+Pairing required to create files, enter the PIN.
+Pairing required to add events, enter the PIN.
+I can't create the file.
+I couldn't add the event.
+I don't know
+I didn't understand
+no results
+one moment
+Wi-Fi not connected
+
+# ===== TIME / DATE / SEASON =====
+it is
+o'clock
+noon
+midnight
+quarter past
+half past
+quarter to
+today is
+tomorrow is
+yesterday was
+it's
+up for
+running
+version
+
+# ===== BATTERY / STORAGE / STATUS =====
+battery
+the battery is at
+percent
+charging
+charged
+space
+SD space
+free
+used
+gigabytes
+megabytes
+
+# ===== CALENDAR =====
+today you have
+event
+events
+appointment
+appointments
+reminder
+today
+tomorrow
+yesterday
+now
+
+# ===== LAUNCH APP =====
+opening
+done
+
+# time units
+hour
+hours
+minute
+minutes
+second
+seconds
+day
+days
+week
+month
+year
+
+# ===== DAYS =====
+Monday
+Tuesday
+Wednesday
+Thursday
+Friday
+Saturday
+Sunday
+
+# ===== MONTHS =====
+January
+February
+March
+April
+May
+June
+July
+August
+September
+October
+November
+December
+
+# ===== SEASONS =====
+spring
+summer
+autumn
+fall
+winter
+
+# ===== APP NAMES =====
+music
+photos
+photo viewer
+images
+gallery
+notes
+text
+files
+documents
+folders
+radio
+video
+movies
+calendar
+clock
+alarm
+timer
+stopwatch
+settings
+calculator
+terminal
+browser
+paint
+recorder
+camera
+weather
+
+# ===== CONFIRMATIONS / COURTESY =====
+yes
+no
+ok
+sure
+error
+try again
+please wait
+thanks
+hi
+hello
+good morning
+good evening
+good night
+goodbye
+
+# ===== CONNECTIVES / COMMON WORDS =====
+the
+a
+an
+and
+of
+to
+in
+on
+at
+for
+with
+is
+are
+it
+not
+i
+you
+have
+degrees
+celsius
+percent
+
+# --- New Skills Vocabulary ---
+ohm
+ampere
+volt
+voltage
+power
+miles
+kilometers
+inches
+centimeters
+kilograms
+pounds
+hectares
+bytes
+kilobytes
+megabytes
+roman
+binary
+radius
+circumference
+hypotenuse
+leg
+area
+volume

@@ -1,0 +1,5 @@
+dependencies:
+  # Power-loss-safe filesystem for the internal-flash config store. LittleFS is
+  # copy-on-write with wear leveling, so a power cut mid-write cannot corrupt it the
+  # way FAT can. Used only for the small "cfg" partition; the SD stays FAT.
+  joltwallet/littlefs: "^1.14"

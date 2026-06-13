@@ -1,0 +1,4 @@
+{"ts":"2026-06-07T13:55:12","health":{"hallucinations":0,"nl_cases":6534,"route_drift":0,"green":[98,99]}}
+{"ts": "2026-06-07T16:31:00", "health": {"hallucinations": 0, "nl_cases": 5253, "route_drift": 0, "green": [96, 99]}}
+{"ts":"2026-06-07T15:08:37","health":{"hallucinations":0,"nl_cases":6698,"route_drift":0,"green":[50,50]}}
+{"ts": "2026-06-08T01:14:47", "health": {"hallucinations": 0, "nl_cases": 6702, "route_drift": 0, "green": [51, 51]}}

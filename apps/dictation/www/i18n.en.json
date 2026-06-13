@@ -1,0 +1,65 @@
+{
+  "_lang": "en",
+
+  "title": "Transcription",
+  "subtitle": "Cardputer mic · on-device",
+
+  "set_title": "ASR settings",
+  "set_engine_label": "Transcription engine",
+  "eng_auto": "Automatic (Vosk with Groq fallback)",
+  "eng_vosk": "Vosk only (100% offline)",
+  "eng_groq": "Groq only (online, ultra-accurate)",
+  "set_key_label": "API Key (Groq)",
+  "set_key_hint": "Shared with AI Chat and stored in localStorage or read from /data/anima/teacher.json.",
+  "set_base_label": "Endpoint URL (Groq)",
+  "set_forget": "Forget Key",
+  "set_forgotten": "API key forgotten.",
+
+  "sum_title": "AI Summary",
+  "sum_copied": "Copied!",
+  "sum_working": "Summarizing...",
+  "sum_btn": "Summarize",
+  "sum_empty": "No text to summarize.",
+  "sum_no_key": "Set your Groq API Key in settings (⚙) to use the summary feature.",
+  "sum_failed": "Could not generate the summary.",
+  "sum_error": "Error while generating the summary: {msg}",
+  "copy_failed": "Could not copy the text.",
+
+  "load_title": "Loading model...",
+  "load_sub": "This may take a few seconds while the system prepares the AI.",
+
+  "placeholder": "Speak into the Cardputer microphone — the text will appear here.",
+
+  "exit_btn": "Exit",
+  "new_confirm": "Start a new transcription? The current one is already saved.",
+
+  "screen_off": "Screen OFF",
+  "screen_on": "Screen ON",
+  "screen_title": "Cardputer screen",
+  "save_now_title": "Save now",
+  "new_title": "New transcription",
+  "summary_title": "Summarize the transcription with AI",
+  "exit_title": "Turn the display back on and exit",
+  "foot_hint": "On startup the Cardputer display turns off; it turns back on when you exit (even if you close the tab).",
+
+  "wordCount": { "one": "{count} word", "other": "{count} words" },
+  "saved_as": "saved · {file}",
+  "unsaved": "unsaved…",
+
+  "st_starting": "starting…",
+  "st_loading_model": "loading model…",
+  "st_listening": "Listening",
+  "st_reconnecting": "Reconnecting…",
+  "st_paused": "Paused",
+  "st_mic_busy": "mic busy",
+  "st_not_paired": "not paired",
+  "st_no_model": "model missing",
+  "st_audio_error": "audio error",
+  "st_mic_in_use_by": "mic in use by {holder}",
+
+  "notice_auth": "<b>Device not paired.</b> Open NucleoOS, enter the PIN shown on the Cardputer, then reopen this app.",
+  "notice_busy": "<b>Microphone busy.</b> The Cardputer mic is in use by <b>{holder}</b>. Stop it and try again.",
+  "notice_busy_other": "another app",
+  "notice_model": "<b>Voice model unavailable.</b> You need internet (first time) or the Vosk models on SD.",
+  "notice_exit": "<b>Display turned back on.</b> Transcription saved. You can close the window."
+}

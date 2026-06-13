@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title data-i18n="app_title">Video Studio</title>
+<style>
+  :root{--bg:#0b1020;--panel:#121a30;--panel2:#0e1526;--line:#243250;--fg:#eaf2ff;--mut:#8aa0c8;--acc:#4ea1ff;--good:#7CFC9A;--warm:#ffd166;--bad:#ff6b6b}
+  *{box-sizing:border-box}html,body{height:100%;margin:0}
+  body{background:radial-gradient(1200px 600px at 70% -10%,#16213f,#0b1020);color:var(--fg);
+       font:14px/1.5 ui-sans-serif,system-ui,"Segoe UI",sans-serif}
+  .wrap{max-width:760px;margin:0 auto;padding:20px}
+  header{display:flex;align-items:center;gap:12px}
+  .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#4ea1ff,#7C5CFF);display:grid;place-items:center;font-weight:800;color:#06122b}
+  h1{font-size:17px;margin:0;font-weight:700}
+  .sub{color:var(--mut);margin:6px 0 14px}
+  .drop{border:2px dashed #2c3c63;border-radius:14px;padding:24px;text-align:center;background:#0e1526aa;cursor:pointer;transition:.15s}
+  .drop.hot{border-color:var(--acc);background:#13203b}
+  .drop b{color:var(--fg)}.drop small{color:var(--mut)}
+  .opts{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0;align-items:center}
+  .opts label{color:var(--mut);font-size:12px}
+  select{background:#0e1526;border:1px solid var(--line);color:var(--fg);border-radius:9px;padding:7px 10px;font:13px system-ui}
+  .jobs{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+  .job{background:linear-gradient(180deg,#121a30,#0e1526);border:1px solid var(--line);border-radius:12px;padding:11px 13px}
+  .job .top{display:flex;align-items:center;gap:10px}
+  .job .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .badge{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--mut);margin-left:auto;white-space:nowrap}
+  .badge.run{color:var(--acc);border-color:#234a7a}.badge.done{color:var(--good);border-color:#244a36}.badge.err{color:var(--bad);border-color:#4a2424}
+  .bar{height:7px;background:#0a1426;border-radius:6px;margin-top:9px;overflow:hidden;border:1px solid #1a2742}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4ea1ff,#7CFC9A);transition:width .25s}
+  .stage{font-size:12px;color:var(--mut);margin-top:6px}
+  .err{color:var(--bad);font-size:12px;margin-top:6px}
+  .turbo{margin-top:16px;font-size:12px;color:var(--mut);background:#0e1526;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .turbo code{color:var(--good)}
+  .empty{color:var(--mut);text-align:center;padding:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="logo">▶</div><h1 data-i18n="app_title">NucleoOS Video Studio</h1></header>
+  <p class="sub" data-i18n-html="sub">Converte i video in <b>.nfv</b> <b>nel browser</b> (nessun programma sul PC) e li scrive direttamente sulla SD del Cardputer.</p>
+
+  <div class="drop" id="drop" data-i18n-html="drop">
+    <b>Trascina qui i video</b> — oppure clicca per sceglierli<br>
+    <small>mp4 · mov · webm · mkv · avi … la conversione gira in locale nel browser (ffmpeg.wasm)</small>
+  </div>
+
+  <div class="opts">
+    <label><span data-i18n="lbl_profile">Profilo</span> <select id="profile">
+      <option value="compat" data-i18n="prof_compat">Compat (12fps, più piccolo)</option>
+      <option value="balanced" selected data-i18n="prof_balanced">Balanced (20fps)</option>
+      <option value="quality" data-i18n="prof_quality">Quality (24fps)</option>
+    </select></label>
+    <label><span data-i18n="lbl_fps">FPS</span> <select id="fps"><option value="" data-i18n="auto">auto</option><option>12</option><option>15</option><option>18</option><option>20</option><option>24</option></select></label>
+    <label><span data-i18n="lbl_fit">Adatta</span> <select id="fit"><option value="crop" selected data-i18n="fit_crop">Crop (riempi)</option><option value="pad" data-i18n="fit_pad">Pad (bande nere)</option></select></label>
+  </div>
+
+  <div class="jobs" id="jobs"><div class="empty" data-i18n="empty_list">Nessuna conversione.</div></div>
+
+  <div class="turbo" data-i18n-html="turbo">
+    <b>Film grande o tanti video?</b> Per la conversione nativa con GPU (più veloce, regge i file enormi),
+    avvia il companion sul PC: <code>node tools/nfv/studio.mjs</code> e aprilo a <code>http://&lt;IP-del-PC&gt;:5577</code>.
+    Qui nel browser è sempre disponibile, senza installare nulla.
+  </div>
+</div>
+
+<script type="module">
+import I18N from '/nucleo-i18n.js';
+const t = await I18N.init('video-studio');
+import { convertFile, deliverToDevice } from './convert.js';
+
+const $ = (s) => document.querySelector(s);
+const jobsEl = $('#jobs');
+const esc = (s) => (s || '').replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+
+const queue = [];
+let running = false;
+
+function opts() {
+  return { profile: $('#profile').value, fps: $('#fps').value, fit: $('#fit').value };
+}
+
+function addJob(file) {
+  const id = 'j' + Math.round(performance.now()) + '-' + Math.floor(performance.now() % 1000);
+  const card = document.createElement('div');
+  card.className = 'job';
+  card.innerHTML =
+    `<div class="top"><span class="nm">${esc(file.name)}</span><span class="badge run" data-badge data-i18n="badge_queued">In coda</span></div>` +
+    `<div class="bar"><i data-bar style="width:0"></i></div>` +
+    `<div class="stage" data-stage data-i18n="stage_queued">In coda…</div>`;
+  if (jobsEl.querySelector('.empty')) jobsEl.innerHTML = '';
+  jobsEl.prepend(card);
+  const job = {
+    id, file, card,
+    badge: card.querySelector('[data-badge]'),
+    bar: card.querySelector('[data-bar]'),
+    stageEl: card.querySelector('[data-stage]'),
+    setStage(t, pct) { job.stageEl.textContent = t + (pct != null ? ' · ' + pct + '%' : ''); if (pct != null) job.bar.style.width = pct + '%'; },
+    setBadge(t, cls) { job.badge.textContent = t; job.badge.className = 'badge ' + cls; },
+    setError(m) { job.setBadge(t('badge_error'), 'err'); const e = document.createElement('div'); e.className = 'err'; e.textContent = '⚠ ' + m; job.card.appendChild(e); },
+  };
+  queue.push(job);
+  pump();
+}
+
+async function pump() {
+  if (running) return;
+  const job = queue.shift();
+  if (!job) return;
+  running = true;
+  try {
+    job.setBadge(t('badge_converting'), 'run');
+    const result = await convertFile(job.file, opts(), (s, pct) => job.setStage(s, pct));
+    const out = await deliverToDevice(result, (s, pct) => job.setStage(s, pct));
+    job.setStage(t('stage_ready', { frames: result.frames, fps: result.fps, path: out }), 100);
+    job.setBadge(t('badge_done'), 'done');
+  } catch (e) {
+    job.setError(e && e.message ? e.message : String(e));
+  } finally {
+    running = false;
+    pump();
+  }
+}
+
+// ---- input: click + full-window drag&drop ----
+const drop = $('#drop');
+drop.onclick = () => {
+  const i = document.createElement('input');
+  i.type = 'file'; i.multiple = true; i.accept = 'video/*';
+  i.onchange = () => [...i.files].forEach(addJob);
+  i.click();
+};
+const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+['dragenter', 'dragover'].forEach((ev) => document.addEventListener(ev, (e) => { if (!hasFiles(e)) return; e.preventDefault(); drop.classList.add('hot'); }));
+document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) drop.classList.remove('hot'); });
+document.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); drop.classList.remove('hot'); [...e.dataTransfer.files].forEach(addJob); });
+</script>
+</body>
+</html>

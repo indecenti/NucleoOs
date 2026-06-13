@@ -1,0 +1,3 @@
+dependencies:
+  # Helix fixed-point MP3 decoder (mp3dec.h). Fetched from the ESP Component Registry.
+  chmorgan/esp-libhelix-mp3: "^1.0.3"

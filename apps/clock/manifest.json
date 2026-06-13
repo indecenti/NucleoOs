@@ -1,0 +1,35 @@
+{
+  "id": "clock",
+  "name": "Clock",
+  "version": "0.2.0",
+  "version_code": 2,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Clock, stopwatch, timer — with analog face and NTP cascade.",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/clock/",
+  "permissions": [],
+  "mounts": {
+    "app": "/apps/clock/data"
+  },
+  "handles": {
+    "role": "none",
+    "extensions": []
+  },
+  "subscribes": [],
+  "publishes": [],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

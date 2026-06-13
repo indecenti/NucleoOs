@@ -1,0 +1,4 @@
+{"q":"possibilita che piova","lang":"it","expect":"abstain"}
+{"q":"che possibilita ho","lang":"it","expect":"abstain"}
+{"q":"quante possibilita ci sono","lang":"it","expect":"abstain"}
+{"q":"e' una possibilita remota","lang":"it","expect":"abstain"}

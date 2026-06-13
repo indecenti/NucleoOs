@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Vicino</title>
+<style>
+  :root{
+    --bg:#0c0f16; --panel:#141a25; --panel2:#1b2331; --line:#26304180; --fg:#e7edf6;
+    --muted:#8aa0bd; --dim:#5f7390; --acc:#4aa3ff; --grn:#46d39a; --amb:#ffce5a; --red:#ff6b6b; --pur:#b08bff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column}
+  header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#121826,#0c0f16)}
+  header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.3px}
+  header .badge{font-size:11px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:2px 9px}
+  .spacer{flex:1}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:20px;overflow:hidden}
+  .seg button{background:transparent;color:var(--muted);border:0;padding:5px 12px;font-size:12px;cursor:pointer}
+  .seg button.on{background:var(--acc);color:#06121f;font-weight:700}
+  nav{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--line);overflow:auto}
+  nav button{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:7px 13px;cursor:pointer;font-size:13px;white-space:nowrap}
+  nav button.on{background:var(--panel2);color:var(--fg);border-color:var(--acc)}
+  main{flex:1;overflow:auto;padding:14px;max-width:780px;width:100%;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .card h2{margin:0 0 10px;font-size:14px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  .row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;cursor:pointer}
+  .row:hover{background:var(--panel2)}
+  .row.sel{background:#16314e;outline:1px solid var(--acc)}
+  .row .nm{flex:1;font-weight:600}
+  .pill{font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--muted)}
+  .pill.nucleo{color:var(--acc);border-color:#2c4f73}
+  .pill.bruce{color:var(--pur);border-color:#4a3a6e}
+  .dir{color:var(--amb)}
+  button.act{background:var(--acc);color:#06121f;border:0;border-radius:10px;padding:9px 16px;font-weight:700;cursor:pointer}
+  button.act:disabled{opacity:.4;cursor:default}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:8px 14px;cursor:pointer}
+  .bar{height:8px;border-radius:6px;background:#0a0e15;overflow:hidden;margin-top:6px}
+  .bar>span{display:block;height:100%;background:var(--acc);transition:width .2s}
+  .muted{color:var(--muted)}.dim{color:var(--dim)}.grn{color:var(--grn)}.red{color:var(--red)}.amb{color:var(--amb)}
+  input,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:9px 11px;font:inherit;width:100%}
+  .crumb{font-size:12px;color:var(--muted);margin-bottom:8px;word-break:break-all}
+  .flex{display:flex;gap:10px;align-items:center}
+  .grow{flex:1}
+  .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--acc);padding:9px 16px;border-radius:12px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+  .chat{display:flex;flex-direction:column;gap:8px;max-height:340px;overflow:auto;margin-bottom:10px}
+  .msg{padding:8px 12px;border-radius:12px;max-width:85%}
+  .msg.u{align-self:flex-end;background:#16314e}
+  .msg.a{align-self:flex-start;background:var(--panel2)}
+  .empty{color:var(--dim);text-align:center;padding:18px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Vicino</h1>
+  <span class="badge" id="dev">…</span>
+  <span class="badge" id="chan">ch?</span>
+  <span class="spacer"></span>
+  <div class="seg" id="proto">
+    <button data-p="nucleo" class="on">Nucleo</button>
+    <button data-p="bruce">Bruce</button>
+  </div>
+</header>
+<nav id="tabs">
+  <button data-t="peers" class="on">Dispositivi</button>
+  <button data-t="send">Invia</button>
+  <button data-t="recv">Ricevi</button>
+  <button data-t="cmd">Comandi</button>
+  <button data-t="anima">ANIMA</button>
+</nav>
+<main id="view"></main>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { makeSkill } from '/apps/anima/anima-skill.js';
+import { buildNearbySpec } from './nearby-skill.js';
+
+const $ = (s, r = document) => r.querySelector(s);
+const view = $('#view');
+let proto = 'nucleo';
+let tab = 'peers';
+let peers = [];
+let target = 0;
+let dir = '/data';
+let entries = [];
+let selFile = null;
+
+const api = async (p, opts) => {
+  try { const r = await fetch(p, opts); return await r.json(); } catch (e) { return { ok: false, err: String(e) }; }
+};
+const post = (p, body) => api(p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+const toast = (m) => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1600); };
+const STATE = { 0: 'idle', 1: 'offerta', 2: 'in corso', 3: 'in corso', 4: 'completato', 5: 'errore' };
+
+// ── device ops (the seam the ANIMA skill drives) ───────────────────────────
+const ops = {
+  discover: async () => { await post('/api/link/discover', { proto }); await loadPeers(); return { ok: true, reply: 'cerco dispositivi…' }; },
+  setProto: async (p) => { setProto(p); return { ok: true, reply: 'modalità ' + p }; },
+  sendFileByName: async (file, peerName) => {
+    const pi = findPeer(peerName); if (pi < 0) return { ok: false, reply: 'nessun dispositivo "' + peerName + '"' };
+    const path = file.startsWith('/') ? file : (dir + '/' + file);
+    const r = await post('/api/link/send', { peer: pi, path, proto });
+    return r.ok ? { ok: true, reply: 'invio di ' + file + ' a ' + peers[pi].name } : { ok: false, reply: 'invio non riuscito (occupato o file assente)' };
+  },
+  sendCmdTo: async (peerName, command) => {
+    const pi = findPeer(peerName); if (pi < 0) return { ok: false, reply: 'nessun dispositivo "' + peerName + '"' };
+    const r = await post('/api/link/cmd', { peer: pi, command, proto });
+    return r.ok ? { ok: true, reply: 'comando inviato a ' + peers[pi].name + ' (deve confermare)' } : { ok: false, reply: 'invio comando non riuscito' };
+  },
+  answerOffer: async (accept) => { await post('/api/link/offer', { accept }); return { ok: true, reply: accept ? 'offerta accettata' : 'offerta rifiutata' }; },
+};
+const findPeer = (name) => { const n = String(name || '').toLowerCase(); return peers.findIndex((p) => p.name.toLowerCase().includes(n)); };
+const skill = makeSkill(buildNearbySpec(ops, { lang: 'it' }));
+
+// ── ANIMA transport (cloud → graceful offline-floor fallback) ──────────────
+async function transport({ system, user, history, actions, signal }) {
+  const ai = await import('/ai.js').catch(() => null);
+  if (!ai || !ai.cloudToolCall) throw new Error('cloud non disponibile');
+  const cfg = await ai.readTeacher();
+  const out = await ai.cloudToolCall(cfg, {
+    system, messages: [...(history || []), { role: 'user', content: user }],
+    tools: actions.map((a) => ({ type: 'function', function: { name: a.name, description: a.description, parameters: a.schema } })),
+    signal, maxTokens: 200,
+  });
+  return { action: out.tool, args: out.args || {}, reply: out.text, via: 'cloud' };
+}
+
+// ── data loaders ───────────────────────────────────────────────────────────
+async function loadPeers() { const r = await api('/api/link/peers'); peers = r.peers || []; if (r.name) $('#dev').textContent = r.name; if (r.channel) $('#chan').textContent = 'ch' + r.channel; if (target >= peers.length) target = 0; if (tab === 'peers' || tab === 'send' || tab === 'cmd') render(); }
+async function loadDir() { const r = await api('/api/fs/list?path=' + encodeURIComponent(dir)); entries = (r.entries || []).slice().sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1)); if (tab === 'send') render(); }
+function setProto(p) { proto = p; for (const b of $('#proto').children) b.classList.toggle('on', b.dataset.p === p); }
+
+// ── renders ────────────────────────────────────────────────────────────────
+function render() {
+  if (tab === 'peers') return renderPeers();
+  if (tab === 'send') return renderSend();
+  if (tab === 'recv') return renderRecv();
+  if (tab === 'cmd') return renderCmd();
+  if (tab === 'anima') return renderAnima();
+}
+function renderPeers() {
+  view.innerHTML = `<div class="card"><div class="flex"><h2 class="grow">Dispositivi vicini</h2>
+    <button class="act" id="scan">Cerca</button></div>
+    <div id="plist">${peers.length ? '' : '<div class="empty">Nessun dispositivo. Premi “Cerca”.</div>'}</div></div>`;
+  const pl = $('#plist');
+  peers.forEach((p, i) => {
+    const el = document.createElement('div'); el.className = 'row' + (i === target ? ' sel' : '');
+    el.innerHTML = `<span class="nm">${esc(p.name)}</span><span class="pill ${p.proto}">${p.proto.toUpperCase()}</span><span class="dim">${esc(p.mac)}</span>`;
+    el.onclick = () => { target = i; render(); toast('Destinatario: ' + p.name); };
+    pl.appendChild(el);
+  });
+  $('#scan').onclick = async () => { $('#scan').disabled = true; await post('/api/link/discover', { proto }); setTimeout(async () => { await loadPeers(); }, 400); };
+}
+function renderSend() {
+  const tgt = peers[target];
+  view.innerHTML = `<div class="card">
+    <div class="flex"><h2 class="grow">Invia file</h2><span class="badge">${tgt ? '→ ' + esc(tgt.name) : 'nessun destinatario'}</span></div>
+    <div class="crumb">📁 ${esc(dir)}</div>
+    <div id="flist"></div>
+    <div class="flex" style="margin-top:10px"><div class="grow muted" id="selinfo">${selFile ? 'Selezionato: ' + esc(selFile.name) : 'Scegli un file'}</div>
+      <button class="act" id="dosend" ${selFile && tgt ? '' : 'disabled'}>Invia</button></div>
+    </div>` + progressCard();
+  const fl = $('#flist');
+  if (dir !== '/' && dir !== '/data') { const up = document.createElement('div'); up.className = 'row'; up.innerHTML = `<span class="nm dir">⬆ ..</span>`; up.onclick = () => { dir = dir.replace(/\/[^/]+$/, '') || '/'; selFile = null; loadDir(); }; fl.appendChild(up); }
+  entries.forEach((e) => {
+    const el = document.createElement('div'); el.className = 'row' + (selFile && !e.isDir && selFile.name === e.name ? ' sel' : '');
+    const isDir = e.type === 'dir';
+    el.innerHTML = `<span class="nm ${isDir ? 'dir' : ''}">${isDir ? '📁 ' : '📄 '}${esc(e.name)}</span>${isDir ? '' : '<span class="dim">' + fmtSize(e.size) + '</span>'}`;
+    el.onclick = () => { if (isDir) { dir = (dir === '/' ? '' : dir) + '/' + e.name; selFile = null; loadDir(); } else { selFile = { name: e.name, path: dir + '/' + e.name }; render(); } };
+    fl.appendChild(el);
+  });
+  $('#dosend') && ($('#dosend').onclick = async () => {
+    const r = await post('/api/link/send', { peer: target, path: selFile.path, proto });
+    toast(r.ok ? 'Invio avviato' : 'Invio non riuscito');
+  });
+}
+function renderRecv() {
+  view.innerHTML = `<div class="card"><h2>Ricezione</h2>
+    <div class="muted">In ascolto di offerte in arrivo.</div>
+    <div id="offer"></div></div>` + progressCard();
+  refreshOffer();
+}
+function renderCmd() {
+  const tgt = peers[target];
+  view.innerHTML = `<div class="card"><div class="flex"><h2 class="grow">Comando remoto</h2><span class="badge">${tgt ? '→ ' + esc(tgt.name) : 'nessun destinatario'}</span></div>
+    <div class="flex"><input id="cmdin" placeholder="es. apri musica" /><button class="act" id="cmdsend" ${tgt ? '' : 'disabled'}>Invia</button></div>
+    <div class="dim" style="margin-top:8px">Il destinatario deve confermare prima dell'esecuzione.</div>
+    <div id="incoming"></div></div>`;
+  $('#cmdsend') && ($('#cmdsend').onclick = async () => { const v = $('#cmdin').value.trim(); if (!v) return; const r = await post('/api/link/cmd', { peer: target, command: v, proto }); toast(r.ok ? 'Comando inviato' : 'Invio non riuscito'); $('#cmdin').value = ''; });
+  refreshCmd();
+}
+let chat = [];
+function renderAnima() {
+  view.innerHTML = `<div class="card"><h2>ANIMA — chiedi a parole</h2>
+    <div class="chat" id="chat">${chat.length ? '' : '<div class="empty">Es. “invia foto.jpg a Bruno”, “cerca dispositivi”, “modalità bruce”.</div>'}</div>
+    <div class="flex"><input id="ain" placeholder="Scrivi un comando…" /><button class="act" id="asend">Invia</button></div></div>`;
+  const c = $('#chat'); chat.forEach((m) => { const d = document.createElement('div'); d.className = 'msg ' + m.r; d.textContent = m.t; c.appendChild(d); }); c.scrollTop = c.scrollHeight;
+  const go = async () => {
+    const v = $('#ain').value.trim(); if (!v) return; $('#ain').value = '';
+    chat.push({ r: 'u', t: v }); renderAnima();
+    const r = await skill.ask(v, { transport, lang: 'it', confirm: async (a, args) => confirm('Confermi: ' + a + ' ' + JSON.stringify(args) + ' ?') });
+    chat.push({ r: 'a', t: r.reply || (r.ok ? 'fatto' : 'non ho capito') }); renderAnima();
+  };
+  $('#asend').onclick = go; $('#ain').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+}
+function progressCard() {
+  return `<div class="card" id="progcard" style="display:none"><h2 id="pverb">Trasferimento</h2>
+    <div class="flex"><div class="grow" id="pname"></div><div class="muted" id="prate"></div></div>
+    <div class="bar"><span id="pbar" style="width:0"></span></div></div>`;
+}
+async function refreshStatus() {
+  const s = await api('/api/link/status');
+  const card = $('#progcard'); if (!card) return;
+  if (!s.active && s.state !== 4 && s.state !== 5) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  $('#pverb').textContent = (s.sending ? 'Invio' : 'Ricezione') + ' — ' + (STATE[s.state] || '');
+  $('#pverb').className = s.state === 5 ? 'red' : s.state === 4 ? 'grn' : '';
+  $('#pname').textContent = s.name + (s.peer ? '  ·  ' + s.peer : '');
+  $('#prate').textContent = s.rate ? Math.round(s.rate / 1024) + ' KB/s' : (Math.round(s.done / 1024) + '/' + Math.round(s.total / 1024) + ' KB');
+  $('#pbar').style.width = (s.total ? Math.min(100, Math.round(100 * s.done / s.total)) : 0) + '%';
+}
+async function refreshOffer() {
+  const box = $('#offer'); if (!box) return;
+  const o = await api('/api/link/offer');
+  if (!o.pending) { box.innerHTML = '<div class="dim" style="margin-top:10px">Nessuna offerta in arrivo.</div>'; return; }
+  box.innerHTML = `<div class="card" style="margin-top:10px;border-color:var(--acc)">
+    <div><b>${esc(o.from)}</b> vuole inviarti:</div><div class="amb" style="font-size:18px;margin:6px 0">${esc(o.name)} · ${fmtSize(o.size)}</div>
+    <div class="flex"><button class="act" id="acc">Accetta</button><button class="ghost" id="rej">Rifiuta</button></div></div>`;
+  $('#acc').onclick = async () => { await post('/api/link/offer', { accept: true }); toast('Accettato'); };
+  $('#rej').onclick = async () => { await post('/api/link/offer', { accept: false }); toast('Rifiutato'); };
+}
+async function refreshCmd() {
+  const box = $('#incoming'); if (!box) return;
+  const c = await api('/api/link/cmd');
+  if (!c.pending) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="card" style="margin-top:10px;border-color:var(--amb)">
+    <div><b>${esc(c.from)}</b> ha inviato un comando:</div><div class="amb" style="font-size:16px;margin:6px 0">${esc(c.cmd)}</div>
+    <div class="dim">Verrà eseguito via ANIMA se accetti.</div>
+    <div class="flex" style="margin-top:8px"><button class="act" id="cacc">Esegui</button><button class="ghost" id="crej">Scarta</button></div></div>`;
+  $('#cacc').onclick = async () => { await post('/api/link/cmd/confirm', { ok: true }); toast('Eseguito'); };
+  $('#crej').onclick = async () => { await post('/api/link/cmd/confirm', { ok: false }); toast('Scartato'); };
+}
+
+// ── helpers ────────────────────────────────────────────────────────────────
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtSize = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? Math.round(n / 1024) + ' KB' : (n | 0) + ' B';
+
+// ── wiring ─────────────────────────────────────────────────────────────────
+for (const b of $('#tabs').children) b.onclick = () => { tab = b.dataset.t; for (const x of $('#tabs').children) x.classList.toggle('on', x === b); render(); if (tab === 'send') loadDir(); };
+for (const b of $('#proto').children) b.onclick = () => setProto(b.dataset.p);
+
+await post('/api/link/listen', { proto });
+await loadPeers();
+render();
+setInterval(() => { refreshStatus(); if (tab === 'recv') refreshOffer(); if (tab === 'cmd') refreshCmd(); }, 900);
+setInterval(loadPeers, 4000);
+</script>
+</body>
+</html>

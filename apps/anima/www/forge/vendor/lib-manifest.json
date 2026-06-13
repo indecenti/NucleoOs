@@ -1,0 +1,47 @@
+{
+  "schema": "forge-lib-manifest@1",
+  "generator": "prep-lib-manifest.mjs",
+  "libs": [
+    {
+      "name": "webllm-esm",
+      "engine": "webgpu",
+      "role": "esm",
+      "path": "web-llm.js",
+      "bytes": 6086300,
+      "sha256": "262482724c8a8b0285a4efcb49175056b123dfd4709125a00452e5e7c2a0278f"
+    },
+    {
+      "name": "webllm-model-lib",
+      "engine": "webgpu",
+      "role": "model_lib",
+      "path": "Qwen2-0.5B-Instruct-q4f16_1_cs1k-webgpu.wasm",
+      "bytes": 4850160,
+      "sha256": "611b584fd44af2789416395603965a6bc074f2127188af597f4dda016fbdab19"
+    },
+    {
+      "name": "wllama-esm",
+      "engine": "wasm",
+      "role": "esm",
+      "path": "wllama.mjs",
+      "bytes": 31416,
+      "sha256": "94ed1c73db9f1bede6c144c446317c294ec7c5dcce4e9c6806e38c6d28d52b9d"
+    },
+    {
+      "name": "wllama-wasm-st",
+      "engine": "wasm",
+      "role": "wasm-st",
+      "path": "wllama/single-thread/wllama.wasm",
+      "bytes": 1608830,
+      "sha256": "ced9e66a007538224066dd30fb156501052ba917885e002251b40436906299c9"
+    },
+    {
+      "name": "wllama-wasm-mt",
+      "engine": "wasm",
+      "role": "wasm-mt",
+      "path": "wllama/multi-thread/wllama.wasm",
+      "bytes": 1625381,
+      "sha256": "957e261b786ce9494eefdb32214c88ebdd3ac62f89157b728ec8d731c34bbaf3",
+      "needsCrossOriginIsolation": true
+    }
+  ]
+}

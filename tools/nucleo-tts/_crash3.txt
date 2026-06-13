@@ -1,0 +1,3 @@
+﻿W (461) nucleoos: DIAG last-reset=POWERON (cold boot) anima_phase=0x20 anima_stage=0xDB39E745
+E (651) oom: alloc fail: 32404 B caps=0x404 in heap_caps_malloc
+

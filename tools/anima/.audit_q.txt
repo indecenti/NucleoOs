@@ -1,0 +1,127 @@
+in cosa salvo un numero che mi serve dopo
+come faccio a ripetere qualcosa un tot di volte
+come raggruppo del codice da riusare
+quando una procedura richiama se stessa come si chiama
+come tengo insieme una fila di numeri
+quella cosa che tiene l'indirizzo di un'altra variabile
+come chiedo memoria mentre il programma gira
+come metto campi diversi sotto un nome solo
+perche il mio programma crasha leggendo la memoria
+come si rappresenta del testo nel linguaggio c
+come faccio consumare pochissimo al chip quando non lavora
+come attacco tanti sensori usando solo due fili dati
+come faccio variare quanto e acceso un led
+a cosa servono i piedini che posso pilotare da codice
+come leggo una tensione che cambia con continuita
+cosa permette al chip di fare piu cose in parallelo
+il cosino si puo collegare a internet senza fili
+quale componente accumula carica elettrica
+perche i led si bruciano senza qualcosa che limiti
+how do i read a sensor that gives a varying voltage
+asking the system for memory while it runs
+what makes a program repeat the same step many times
+come impedisco che un valore venga modificato dopo averlo impostato
+il bus seriale veloce a quattro fili per sd e display
+il componente che fa passare corrente in un solo verso
+il componente che funziona da interruttore comandato da un segnale
+puo comunicare in bluetooth a basso consumo
+come ripeto un blocco finche una condizione resta vera
+how do i stop a value from changing once set
+the component that lets current flow only one way
+in che citta ha sede il governo francese
+dove si trova la sede del governo giapponese
+la citta politicamente piu importante della germania
+what city is the seat of government in spain
+qual e il capoluogo del nostro paese, l'italia
+la montagna piu alta del pianeta
+qual e il corso d'acqua piu lungo del mondo
+la distesa di sabbia piu estesa della terra
+quale mare e il piu grande di tutti
+how many continents does the earth have
+la nazione con piu territorio al mondo
+la stella attorno a cui ruota la terra
+qual e il pianeta piu grosso del sistema solare
+come fanno le piante a produrre nutrimento dalla luce
+perche gli oggetti cadono sempre verso il basso
+la piu piccola unita di cui e fatta la materia
+la molecola che contiene le istruzioni genetiche
+che forma ha realmente il nostro pianeta
+at what temperature does water start to boil
+quanti mondi orbitano intorno al sole
+how fast does light actually travel
+quanti minuti ci sono dentro un'ora
+un numero divisibile solo per uno e per se stesso
+il rapporto tra la circonferenza e il diametro di un cerchio
+come si calcola l'area di un rettangolo
+come trovo il valore medio di un gruppo di numeri
+quanti pezzi fanno una dozzina
+how many days are there in one year
+un numero che si divide esattamente per due
+che apparecchietto e quello su cui gira tutto questo
+perche qui non riesco a far girare modelli di ai grandi
+come abbino il telefono o un altro dispositivo
+come porto il sistema all'ultima versione disponibile
+funziona anche quando non c'e connessione a internet
+come scrivo qualcosa se non ho uno schermo touch
+how do i open the interface from my computer's browser
+chi e che ti ha programmato e costruito
+che genere di cose riesci a fare per me
+con chi sto parlando di preciso
+riesci a capire piu di una lingua
+differenza tra la memoria che si libera da sola e quella che gestisco io
+come do un nome piu corto e leggibile a un tipo complicato
+a cosa serve quel valore speciale che significa 'niente'
+how do i turn a pin on or off directly from code
+il componente che si oppone al passaggio della corrente
+two parts wired so the same current flows through both
+come faccio in modo che il programma decida da solo cosa fare
+come memorizzo una risposta si oppure no
+un numero tondo senza parte dopo la virgola
+il risultato che una funzione manda indietro a chi la chiama
+una cosa che tiene insieme dati e le azioni che gli appartengono
+il modello di partenza per fabbricare tanti oggetti simili
+il modo in cui due software si scambiano servizi
+le regole con cui il browser scarica una pagina web
+il programma che trasforma il sorgente in eseguibile
+una ricetta di passi per arrivare a un risultato
+un difetto che fa comportare male il programma
+cercare dove si nasconde l'errore e sistemarlo
+text in the code that is only for humans and not executed
+a number with digits after the decimal point
+come accedo al valore puntato da un puntatore
+il file con le dichiarazioni da mettere in cima
+come porto dentro un altro file nel mio sorgente c
+come do un nome a una costante col preprocessore
+come scopro quanti byte occupa un tipo
+un insieme di nomi per valori interi costanti
+che differenza c'e tra compilare e collegare
+cosa succede al puntatore se gli sommo uno
+a sequence of elements of the same type in c
+la grandezza che si misura in joule e fa funzionare tutto
+cio che spinge o tira e cambia il movimento di un corpo
+l'oggetto che attira i chiodi di ferro
+le onde che le orecchie trasformano in cio che sentiamo
+l'energia che fluisce spontaneamente dal caldo al freddo
+solido liquido e gassoso, come si chiamano queste forme
+la particella negativa il cui flusso fa la corrente
+il gas che i polmoni prendono dall'aria per vivere
+il satellite che con la sua gravita provoca le maree
+il meccanismo per cui le specie si adattano nei millenni
+the particle with a negative charge inside an atom
+come scrivo tre quarti di una quantita
+l'operazione che annulla l'elevamento al quadrato
+due elevato alla quinta quanto vale
+a cosa serve base per altezza diviso due
+la formula con pi greco e il raggio al quadrato
+la somma delle lunghezze di tutti i lati
+spartire dodici biscotti in tre parti uguali
+un valore piu piccolo di zero
+how do i compute the area of a circle from its radius
+come ricavo la corrente sapendo la tensione e la resistenza
+la formula che lega volt, ampere e ohm
+the relationship between voltage current and resistance
+se conosco i volt e gli ohm come trovo gli ampere
+quanto vale la potenza in un circuito da tensione e corrente
+l'inverso del fare un quadrato di un numero
+quanta superficie ha un cerchio dato il raggio
+come trovo la media di una serie di valori

@@ -1,0 +1,68 @@
+// eval_skills7_en.jsonl — NEW GENUINE SKILL TRIGGERS (EN), phrasings never tested before. Judge: skill-probe.mjs.
+// === arithmetic: parentheses, powers, variants ===
+{"q":"how much is (3+4) times 2","lang":"en","expect":"calc"}
+{"q":"10 to the power of 3","lang":"en","expect":"calc"}
+{"q":"double of 21","lang":"en","expect":"calc"}
+{"q":"what is 144 divided by 12","lang":"en","expect":"calc"}
+{"q":"half of 90","lang":"en","expect":"calc"}
+{"q":"what is 8 plus 9 plus 10","lang":"en","expect":"calc"}
+// === percentages: new phrasings ===
+{"q":"what is 30 percent of 90","lang":"en","expect":"percent"}
+{"q":"5 percent of 1000","lang":"en","expect":"percent"}
+// === conversion: new families (speed, time, volume, mass) ===
+{"q":"90 km/h to mph","lang":"en","expect":"convert"}
+{"q":"500 grams to kilos","lang":"en","expect":"convert"}
+{"q":"convert 2 days to hours","lang":"en","expect":"convert"}
+{"q":"1 liter to milliliters","lang":"en","expect":"convert"}
+{"q":"10 meters per second to km/h","lang":"en","expect":"convert"}
+// === bases: new directions ===
+{"q":"1010 in decimal","lang":"en","expect":"base"}
+{"q":"20 in hexadecimal","lang":"en","expect":"base"}
+// === roman: new ===
+{"q":"44 in roman numerals","lang":"en","expect":"roman"}
+{"q":"2024 to roman","lang":"en","expect":"roman"}
+// === primes: new ===
+{"q":"is 23 prime","lang":"en","expect":"prime"}
+{"q":"is the number 51 prime","lang":"en","expect":"prime"}
+// === geometry: new shapes ===
+{"q":"area of a rectangle base 5 height 8","lang":"en","expect":"geo"}
+{"q":"circumference of a circle radius 2","lang":"en","expect":"geo"}
+{"q":"perimeter of a rectangle base 3 height 7","lang":"en","expect":"geo"}
+// === physics: new quantities ===
+{"q":"acceleration with force 20 and mass 4","lang":"en","expect":"phys"}
+// === spreadsheet: new functions ===
+{"q":"count cells a1 to a20","lang":"en","expect":"spreadsheet"}
+{"q":"the maximum between b1 and b10","lang":"en","expect":"spreadsheet"}
+{"q":"concatenate a1 and b1","lang":"en","expect":"spreadsheet"}
+// === files: new phrasings ===
+{"q":"create a file list.txt","lang":"en","expect":"create_file"}
+{"q":"create a note saying call the boss","lang":"en","expect":"create_file"}
+// === calendar: new phrasings ===
+{"q":"schedule a doctor appointment tuesday at 3pm","lang":"en","expect":"add_event"}
+{"q":"remind me about gym tomorrow at 6pm","lang":"en","expect":"add_event"}
+// === open app: new names ===
+{"q":"open photos","lang":"en","expect":"open_app"}
+{"q":"open the clock","lang":"en","expect":"open_app"}
+{"q":"start the music player","lang":"en","expect":"open_app"}
+{"q":"open the file manager","lang":"en","expect":"open_app"}
+{"q":"open the radio","lang":"en","expect":"open_app"}
+{"q":"open the calendar","lang":"en","expect":"open_app"}
+// === translation: new words ===
+{"q":"translate book to italian","lang":"en","expect":"translate"}
+{"q":"how do you say water in italian","lang":"en","expect":"translate"}
+{"q":"translate sun to italian","lang":"en","expect":"translate"}
+// === profile: new fields (set + recall) ===
+{"q":"i live in milan","lang":"en","expect":"profile"}
+{"q":"i work as a programmer","lang":"en","expect":"profile"}
+{"q":"where do i live","lang":"en","expect":"profile"}
+{"q":"my email is mario@example.com","lang":"en","expect":"profile"}
+// === knowledge: new questions (L1/L2) ===
+{"q":"what is the capital of japan","lang":"en","expect":"l1|hdc"}
+{"q":"what is the capital of italy","lang":"en","expect":"l1|hdc"}
+{"q":"what is gravity","lang":"en","expect":"l1"}
+{"q":"what is an atom","lang":"en","expect":"l1"}
+{"q":"how many planets are in the solar system","lang":"en","expect":"l1|answer"}
+{"q":"who was leonardo da vinci","lang":"en","expect":"l1|hdc"}
+// === meta / capabilities: new phrasings ===
+{"q":"what are your capabilities","lang":"en","expect":"capabilities"}
+{"q":"what is your name","lang":"en","expect":"whoami|l1"}

@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>System Monitor</title>
+  <style>
+    :root{
+      --bg:#0e1830; --panel:#18233a; --field:#0b1220; --text:#e8eefc; --muted:#8aa0c8;
+      --accent:#4ea1ff; --line:#2a3a5e; --ok:#4ed39a; --warn:#ffcc66; --bad:#ff6b6b;
+    }
+    *{box-sizing:border-box} html,body{height:100%;margin:0}
+    body{background:var(--bg);color:var(--text);font:13px system-ui,sans-serif;display:flex;flex-direction:column}
+    header{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+    header .title{font-weight:600}
+    header .hint{margin-left:auto;color:var(--muted);font-size:11px}
+    header kbd{background:#ffffff14;border:1px solid var(--line);border-radius:4px;padding:0 5px;font:11px ui-monospace,monospace}
+    /* Tab bar */
+    .tabs{display:flex;gap:2px;padding:6px 8px 0;background:var(--panel)}
+    .tabs button{appearance:none;border:1px solid var(--line);border-bottom:none;background:transparent;color:var(--muted);
+      padding:6px 12px;border-radius:7px 7px 0 0;cursor:pointer;font:12px system-ui;font-weight:600}
+    .tabs button[aria-selected=true]{background:var(--bg);color:var(--text)}
+    main{flex:1;min-height:0;position:relative}
+    .page{position:absolute;inset:0;display:flex;flex-direction:column;overflow:auto;padding:10px}
+    .page[hidden]{display:none}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px}
+    .card.span{grid-column:1/3}
+    .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+    .v{font-size:18px;margin-top:3px;font-variant-numeric:tabular-nums}
+    .v.big{font-size:26px}
+    .row{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+    .sub{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+    .bar{height:7px;background:#ffffff14;border-radius:4px;margin-top:7px;overflow:hidden}
+    .bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .35s ease}
+    canvas{display:block;width:100%;height:48px;margin-top:8px;background:var(--field);border:1px solid var(--line);border-radius:6px}
+    h4{margin:10px 2px 4px;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase}
+    .feed{flex:1;min-height:90px;background:var(--field);border:1px solid var(--line);border-radius:8px;
+      overflow:auto;font:12px ui-monospace,Consolas,monospace;padding:8px}
+    .feed .ev{color:var(--ok)} .feed .t{color:var(--muted)}
+    .core{display:flex;align-items:center;gap:10px}
+    .core .lbl{width:54px;color:var(--muted);font-size:12px}
+    .core .pct{width:52px;text-align:right;font-size:16px;font-variant-numeric:tabular-nums}
+    .core .bar{flex:1;margin-top:0}
+    .dim{opacity:.45}
+  </style>
+</head>
+<body>
+  <header>
+    <span class="title">🩺 <span data-i18n="app_title">System Monitor</span></span>
+    <span class="hint"><span data-i18n="hint_pre">premi</span> <kbd>Tab</kbd> <span data-i18n="hint_post">per cambiare scheda</span></span>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="overview" aria-selected="true" data-i18n="tab_overview">Panoramica</button>
+    <button data-tab="ram" aria-selected="false" data-i18n="tab_ram">RAM</button>
+    <button data-tab="cpu" aria-selected="false" data-i18n="tab_cpu">CPU</button>
+  </nav>
+
+  <main>
+    <!-- ===== OVERVIEW ===== -->
+    <section class="page" data-page="overview">
+      <div class="grid">
+        <div class="card"><div class="k" data-i18n="os">OS</div><div class="v" id="o_os">—</div></div>
+        <div class="card"><div class="k" data-i18n="uptime">Uptime</div><div class="v" id="o_up">—</div></div>
+        <div class="card"><div class="k" data-i18n="free_heap">Free heap</div><div class="v" id="o_heap">—</div></div>
+        <div class="card"><div class="k" data-i18n="battery">Batteria</div><div class="v" id="o_bat">—</div></div>
+        <div class="card"><div class="k" data-i18n="apps_installed">App installate</div><div class="v" id="o_apps">—</div></div>
+        <div class="card span"><div class="row"><div class="k" data-i18n="storage">Storage</div><div class="sub" id="o_sd_sub">—</div></div>
+          <div class="v" id="o_sd">—</div><div class="bar"><i id="o_sdbar"></i></div></div>
+        <div class="card span"><div class="row"><div class="k" data-i18n="network">Rete</div><div class="sub" id="o_net_sub">—</div></div>
+          <div class="v" id="o_net">—</div></div>
+      </div>
+      <h4 data-i18n="live_events">Eventi live</h4>
+      <div class="feed" id="feed"></div>
+    </section>
+
+    <!-- ===== RAM ===== -->
+    <section class="page" data-page="ram" hidden>
+      <div class="card span">
+        <div class="row"><div class="k" data-i18n="internal_mem">Memoria interna (SRAM)</div><div class="sub" id="r_pct">—</div></div>
+        <div class="v big" id="r_used">—</div>
+        <div class="bar"><i id="r_bar"></i></div>
+        <canvas id="r_spark" width="320" height="48"></canvas>
+      </div>
+      <div class="grid" style="margin-top:8px">
+        <div class="card"><div class="k" data-i18n="mem_free">Libera</div><div class="v" id="r_free">—</div></div>
+        <div class="card"><div class="k" data-i18n="mem_used">Usata</div><div class="v" id="r_alloc">—</div></div>
+        <div class="card"><div class="k" data-i18n="mem_total">Totale</div><div class="v" id="r_total">—</div></div>
+        <div class="card"><div class="k" data-i18n="largest_block">Blocco max contiguo</div><div class="v" id="r_largest">—</div></div>
+        <div class="card"><div class="k" data-i18n="fragmentation">Frammentazione</div><div class="v" id="r_frag">—</div></div>
+        <div class="card"><div class="k" data-i18n="min_ever">Minimo storico</div><div class="v" id="r_min">—</div></div>
+      </div>
+    </section>
+
+    <!-- ===== CPU ===== -->
+    <section class="page" data-page="cpu" hidden>
+      <div class="card span">
+        <div class="row"><div class="k" data-i18n="avg_load">Carico medio</div><div class="sub" id="c_meta">—</div></div>
+        <div class="v big" id="c_avg">—</div>
+        <canvas id="c_spark" width="320" height="48"></canvas>
+      </div>
+      <h4 data-i18n="per_core">Per core</h4>
+      <div class="card span" id="c_cores"><div class="sub dim" data-i18n="awaiting_data">in attesa dati…</div></div>
+      <div class="grid" style="margin-top:8px">
+        <div class="card"><div class="k" data-i18n="active_tasks">Task attivi</div><div class="v" id="c_tasks">—</div></div>
+        <div class="card"><div class="k" data-i18n="clock">Clock</div><div class="v" id="c_freq">—</div></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+  import I18N from '/nucleo-i18n.js';
+  const t = await I18N.init('system-monitor');
+  const $ = (id)=>document.getElementById(id);
+  const fmt = (b)=> b>=1e9?(b/1e9).toFixed(2)+' GB' : b>=1e6?(b/1e6).toFixed(1)+' MB' : b>=1e3?(b/1e3).toFixed(0)+' KB' : (b|0)+' B';
+  const upfmt = (s)=>{ s|=0; const d=s/86400|0,h=s%86400/3600|0,m=s%3600/60|0; return d?`${d}g ${h}h`:h?`${h}h ${m}m`:m?`${m}m ${s%60}s`:`${s}s`; };
+  // Flicker-free text: touch the DOM only when the rendered value actually changes.
+  const setText = (el,v)=>{ if(!el) return; if(el.__v!==v){ el.__v=v; el.textContent=v; } };
+  const setW = (el,pct)=>{ if(!el) return; const w=Math.max(0,Math.min(100,pct)).toFixed(1)+'%'; if(el.__w!==w){ el.__w=w; el.style.width=w; } };
+  const setBg = (el,c)=>{ if(!el) return; if(el.__bg!==c){ el.__bg=c; el.style.background=c; } };
+  const css = (n)=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const loadColor=(p)=> p>=85?css('--bad') : p>=60?css('--warn') : css('--accent');
+
+  // Tiny sparkline. Self-contained on its own canvas layer (no page reflow), redrawn only when a
+  // fresh sample arrives — never per animation frame — so it costs ~nothing and cannot flicker.
+  class Spark{
+    constructor(cv,max){ this.cv=cv; this.x=cv.getContext('2d'); this.max=max; this.buf=[]; this.cap=120; this.col=css('--accent'); }
+    push(v){ this.buf.push(v); if(this.buf.length>this.cap) this.buf.shift(); this.draw(); }
+    setColor(c){ this.col=c; }
+    draw(){
+      const x=this.x,w=this.cv.width,h=this.cv.height,b=this.buf,n=b.length;
+      x.clearRect(0,0,w,h);
+      if(n<2) return;
+      const dx=w/(this.cap-1), y=(v)=>h-1-(Math.max(0,Math.min(this.max,v))/this.max)*(h-2);
+      const x0=w-(n-1)*dx;
+      // fill under the curve
+      x.beginPath(); x.moveTo(x0,h);
+      for(let i=0;i<n;i++) x.lineTo(x0+i*dx,y(b[i]));
+      x.lineTo(x0+(n-1)*dx,h); x.closePath();
+      x.fillStyle=this.col+'22'; x.fill();
+      // the line
+      x.beginPath();
+      for(let i=0;i<n;i++){ const px=x0+i*dx,py=y(b[i]); i?x.lineTo(px,py):x.moveTo(px,py); }
+      x.strokeStyle=this.col; x.lineWidth=1.5; x.stroke();
+    }
+  }
+
+  // ---- Tabs (cycled by the Tab key) -----------------------------------------
+  const ORDER=['overview','ram','cpu'];
+  const pages={}, btns={};
+  document.querySelectorAll('.page').forEach(p=>pages[p.dataset.page]=p);
+  document.querySelectorAll('#tabs button').forEach(b=>{ btns[b.dataset.tab]=b; b.onclick=()=>select(b.dataset.tab); });
+  let active='overview';
+  function select(tab){
+    if(tab===active) return;
+    active=tab;
+    for(const k of ORDER){ pages[k].hidden=(k!==tab); btns[k].setAttribute('aria-selected',k===tab); }
+    tick(true); // refresh the newly shown tab immediately so it never shows stale data
+  }
+  function cycle(dir){ const i=ORDER.indexOf(active); select(ORDER[(i+dir+ORDER.length)%ORDER.length]); }
+  // Tab / Shift+Tab cycle tabs instead of moving focus.
+  window.addEventListener('keydown',(e)=>{
+    if(e.key==='Tab'){ e.preventDefault(); cycle(e.shiftKey?-1:1); }
+    else if(e.key==='ArrowRight'){ cycle(1); } else if(e.key==='ArrowLeft'){ cycle(-1); }
+  });
+
+  // ---- Renderers (each only writes changed cells) ---------------------------
+  function renderOverview(s){
+    setText($('o_os'), s.os+' v'+s.version);
+    setText($('o_up'), upfmt(s.uptime_s));
+    setText($('o_heap'), fmt(s.free_heap));
+    const bt=s.battery||{}; const bp=bt.pct;
+    setText($('o_bat'), (bp==null||bp<0) ? '—' : (bp+'%'+(bt.mv>0 ? ` · ${(bt.mv/1000).toFixed(2)}V` : '')));
+    setText($('o_apps'), String(s.apps?.installed ?? '—'));
+    const st=s.storage||{}; const used=(st.total_bytes||0)-(st.free_bytes||0);
+    setText($('o_sd'), st.mounted ? t('sd_free',{size:fmt(st.free_bytes)}) : t('not_mounted'));
+    setText($('o_sd_sub'), st.mounted ? `${st.fs} · ${fmt(used)} / ${fmt(st.total_bytes)}` : (st.error_name||''));
+    setW($('o_sdbar'), st.total_bytes ? 100*used/st.total_bytes : 0);
+    const nt=s.network||{};
+    setText($('o_net'), nt.ip||'—');
+    setText($('o_net_sub'), `${(nt.mode||'').toUpperCase()} · ${nt.ssid||''}`);
+  }
+
+  let ramSpark;
+  function renderRam(h){
+    // /api/heap → internal region is the scarce on-chip SRAM that actually matters.
+    const r=h.internal||{}; const total=r.total_bytes||0, free=r.free_bytes||0, used=r.allocated_bytes||(total-free);
+    const pct= total? 100*used/total : 0;
+    setText($('r_used'), t('mem_used_val',{size:fmt(used)}));
+    setText($('r_pct'), pct.toFixed(1)+'%');
+    setW($('r_bar'), pct); setBg($('r_bar'), loadColor(pct));
+    setText($('r_free'), fmt(free));
+    setText($('r_alloc'), fmt(used));
+    setText($('r_total'), fmt(total));
+    setText($('r_largest'), fmt(r.largest_free_block||0));
+    setText($('r_frag'), (r.frag_pct??0)+'%');
+    setText($('r_min'), fmt(r.min_free_bytes||0));
+    if(!ramSpark){ ramSpark=new Spark($('r_spark'),100); }
+    ramSpark.setColor(loadColor(pct)); ramSpark.push(pct);
+  }
+
+  let cpuSpark, coreEls=null;
+  function buildCores(n){
+    const box=$('c_cores'); box.innerHTML=''; coreEls=[];
+    for(let i=0;i<n;i++){
+      const row=document.createElement('div'); row.className='core'; if(i) row.style.marginTop='8px';
+      const lbl=document.createElement('div'); lbl.className='lbl'; lbl.textContent=t('core_n',{n:i});
+      const bar=document.createElement('div'); bar.className='bar'; const fill=document.createElement('i'); bar.appendChild(fill);
+      const pct=document.createElement('div'); pct.className='pct'; pct.textContent='—';
+      row.append(lbl,bar,pct); box.appendChild(row); coreEls.push({fill,pct});
+    }
+  }
+  function renderCpu(c){
+    const loads=c.load||[]; const n=loads.length||c.cores||1;
+    if(!coreEls || coreEls.length!==n) buildCores(n);
+    for(let i=0;i<n;i++){ const v=loads[i]??0; setW(coreEls[i].fill,v); setBg(coreEls[i].fill,loadColor(v)); setText(coreEls[i].pct, v.toFixed(0)+'%'); }
+    const avg=c.load_avg ?? (loads.reduce((a,b)=>a+b,0)/(n||1));
+    setText($('c_avg'), avg.toFixed(1)+'%');
+    setText($('c_meta'), t('cpu_meta',{n:n,uptime:upfmt(c.uptime_s)}));
+    setText($('c_tasks'), String(c.tasks??'—'));
+    setText($('c_freq'), c.freq_mhz? c.freq_mhz+' MHz' : '—');
+    if(!cpuSpark){ cpuSpark=new Spark($('c_spark'),100); }
+    cpuSpark.setColor(loadColor(avg)); cpuSpark.push(avg);
+  }
+  function cpuUnavailable(){
+    setText($('c_avg'),t('na_short')); setText($('c_meta'),t('cpu_unavailable'));
+  }
+
+  // ---- Polling: only the visible tab fetches; paused when the window is hidden ----
+  // A minimized shell window is CSS-hidden, so document.hidden never fires inside the iframe; the
+  // shell posts os-visibility instead. Overview rides the shell's status.snapshot broadcast (no own
+  // /api/status fetch when embedded). RAM/CPU have no shell equivalent → polled here at 2 s.
+  const EMBEDDED = window.top !== window.self;
+  let osVisible = true, lastSnap = null;
+  const json = async (u)=>{ try{ const r=await fetch(u,{cache:'no-store'}); return r.ok? await r.json() : null; }catch{ return null; } };
+  let ovCount=0;
+  async function tick(force){
+    if(document.hidden || !osVisible) return;
+    if(active==='overview' && (force || (ovCount++%5)===0)){
+      // Embedded: use the shell's broadcast snapshot (saves the FAT-scan fetch). Standalone: fetch.
+      const s = EMBEDDED ? lastSnap : await json('/api/status');
+      if(s) renderOverview(s);
+    }
+    if(active==='ram'){ const h=await json('/api/heap'); if(h) renderRam(h); }
+    if(active==='cpu'){ const c=await json('/api/cpu'); if(c) renderCpu(c); else cpuUnavailable(); }
+  }
+
+  // Live event feed (shell forwards every bus event into this window).
+  window.addEventListener('message',(e)=>{
+    const ev=e.data; if(!ev||!ev.t) return;
+    if(ev.t==='os-visibility'){ osVisible = !!(ev.d && ev.d.visible); if(osVisible) tick(true); return; }
+    if(ev.t==='status.snapshot'){ lastSnap = ev.d; if(active==='overview') renderOverview(ev.d); return; }
+    const line=document.createElement('div');
+    line.innerHTML=`<span class="t">#${ev.seq??'-'}</span> <span class="ev">${ev.t}</span> ${JSON.stringify(ev.d??{})}`;
+    const feed=$('feed'); feed.prepend(line);
+    while(feed.childElementCount>80) feed.lastElementChild.remove();   // bound the DOM
+  });
+  // Repaint promptly when the tab/app becomes visible again.
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) tick(true); });
+
+  // On a live language change, force a re-render of the visible tab. Core rows are built
+  // imperatively, so drop them too — buildCores() re-labels them in the new language.
+  I18N.onChange(()=>{ coreEls=null; tick(true); });
+
+  tick(true);
+  setInterval(tick, 2000);   // 2 s: halves RAM/CPU traffic vs 1 Hz; the Spark sparkline stays smooth
+  </script>
+</body>
+</html>

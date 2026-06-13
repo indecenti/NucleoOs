@@ -1,0 +1,93 @@
+{"q":"qunato fa il 15% di 240","lang":"it","expect":"percent"}
+{"q":"quanto fa il 15% di 240","lang":"it","expect":"percent"}
+{"q":"il 20% di 150","lang":"it","expect":"percent"}
+{"q":"calcola il 30% di 80","lang":"it","expect":"percent"}
+{"q":"quanto e il 12% di 500","lang":"it","expect":"percent"}
+{"q":"il 50 per cento di 90","lang":"it","expect":"percent"}
+{"q":"il cinquanta per cento di 90","lang":"it","expect":"percent"}
+{"q":"what is 15% of 240","lang":"en","expect":"percent"}
+{"q":"whats 25% of 80","lang":"en","expect":"percent"}
+{"q":"calcualte 10% of 350","lang":"en","expect":"percent"}
+{"q":"il 7,5% di 200","lang":"it","expect":"percent"}
+{"q":"quanto fa il 100% di 42","lang":"it","expect":"percent"}
+{"q":"sommami 12 e 30 e 8","lang":"it","expect":"calc"}
+{"q":"somma 12 e 30","lang":"it","expect":"calc"}
+{"q":"sommami 12 e 30","lang":"it","expect":"calc"}
+{"q":"quanto fa 7 x 8","lang":"it","expect":"calc"}
+{"q":"quanto fa 7 per 8","lang":"it","expect":"calc"}
+{"q":"quanto fa 12 meno 5","lang":"it","expect":"calc"}
+{"q":"12 piu 30 piu 8","lang":"it","expect":"calc"}
+{"q":"quanto fa 144 diviso 12","lang":"it","expect":"calc"}
+{"q":"calcola 25 x 4","lang":"it","expect":"calc"}
+{"q":"quanot fa 9 x 9","lang":"it","expect":"calc"}
+{"q":"what is 7 times 8","lang":"en","expect":"calc"}
+{"q":"whats 144 divided by 12","lang":"en","expect":"calc"}
+{"q":"add 12 and 30","lang":"en","expect":"calc"}
+{"q":"23 + 19","lang":"it","expect":"calc"}
+{"q":"quanto fa 1000 - 1","lang":"it","expect":"calc"}
+{"q":"radice quadrata di 49","lang":"it","expect":"calc"}
+{"q":"radce quadrata di 49","lang":"it","expect":"calc"}
+{"q":"radice quadra di 81","lang":"it","expect":"calc"}
+{"q":"radce quadrta di 144","lang":"it","expect":"calc"}
+{"q":"radice cubica di 27","lang":"it","expect":"calc"}
+{"q":"radce cubica di 27","lang":"it","expect":"calc"}
+{"q":"radice cubika di 27","lang":"it","expect":"calc"}
+{"q":"radice cuboca di 8","lang":"it","expect":"calc"}
+{"q":"radice qubica di 27","lang":"it","expect":"calc"}
+{"q":"square root of 49","lang":"en","expect":"calc"}
+{"q":"squre root of 64","lang":"en","expect":"calc"}
+{"q":"cube root of 27","lang":"en","expect":"calc"}
+{"q":"cube rооt of 8","lang":"en","expect":"calc"}
+{"q":"2 alla quinta","lang":"it","expect":"calc"}
+{"q":"2 elevato a 10","lang":"it","expect":"calc"}
+{"q":"2 elevsto a 10","lang":"it","expect":"calc"}
+{"q":"5 al quadrato","lang":"it","expect":"calc"}
+{"q":"3 al cubo","lang":"it","expect":"calc"}
+{"q":"2 alla decima","lang":"it","expect":"calc"}
+{"q":"2 to the power of 10","lang":"en","expect":"calc"}
+{"q":"log di 100","lang":"it","expect":"calc"}
+{"q":"logaritmo di 1000","lang":"it","expect":"calc"}
+{"q":"loga di 1000","lang":"it","expect":"calc"}
+{"q":"log base 2 di 8","lang":"it","expect":"calc"}
+{"q":"seno di 30 gradi","lang":"it","expect":"calc"}
+{"q":"seni di 30 gradi","lang":"it","expect":"calc"}
+{"q":"coseno di 60 gradi","lang":"it","expect":"calc"}
+{"q":"tangente di 45 gradi","lang":"it","expect":"calc"}
+{"q":"sin of 30 degrees","lang":"en","expect":"calc"}
+{"q":"20 gradi in fahrenheit","lang":"it","expect":"convert"}
+{"q":"20 gradi in farenheit","lang":"it","expect":"convert"}
+{"q":"20 gradi in fahreneit","lang":"it","expect":"convert"}
+{"q":"converti 100 celsius in fahrenheit","lang":"it","expect":"convert"}
+{"q":"quanti km in 5 miglia","lang":"it","expect":"convert"}
+{"q":"qunati km in 5 miglia","lang":"it","expect":"convert"}
+{"q":"5 miglia in km","lang":"it","expect":"convert"}
+{"q":"10 km in miglia","lang":"it","expect":"convert"}
+{"q":"converti 2 kg in libbre","lang":"it","expect":"convert"}
+{"q":"5 metri in piedi","lang":"it","expect":"convert"}
+{"q":"convert 20 c to fahrenheit","lang":"en","expect":"convert"}
+{"q":"how many km in 5 miles","lang":"en","expect":"convert"}
+{"q":"how many km in 5 miels","lang":"en","expect":"convert"}
+{"q":"100 fahrenheit in celsius","lang":"it","expect":"convert"}
+{"q":"area di un cerchio di raggio 3","lang":"it","expect":"geo|geometry"}
+{"q":"area di un cerchio di ragio 3","lang":"it","expect":"geo|geometry"}
+{"q":"area del cerchio raggio 5","lang":"it","expect":"geo|geometry"}
+{"q":"area di un quadrato di lato 4","lang":"it","expect":"geo|geometry"}
+{"q":"area di un trianglo base 6 altezza 4","lang":"it","expect":"geo|geometry"}
+{"q":"area di un rettangolo 5 per 3","lang":"it","expect":"geo|geometry"}
+{"q":"perimetro di un cerchio di raggio 3","lang":"it","expect":"geo|geometry"}
+{"q":"area of a circle radius 3","lang":"en","expect":"geo|geometry"}
+{"q":"area of a circle radus 3","lang":"en","expect":"geo|geometry"}
+{"q":"volume di una sfera di raggio 2","lang":"it","expect":"geo|geometry"}
+{"q":"fattori di 24","lang":"it","expect":"answer"}
+{"q":"divisori di 36","lang":"it","expect":"answer"}
+{"q":"divisori di 12","lang":"it","expect":"answer"}
+{"q":"fattorizza 24","lang":"it","expect":"answer"}
+{"q":"factors of 24","lang":"en","expect":"answer"}
+{"q":"divisors of 36","lang":"en","expect":"answer"}
+{"q":"scomponi 24 in fattori primi","lang":"it","expect":"prime|answer"}
+{"q":"24 e primo?","lang":"it","expect":"prime|answer"}
+{"q":"is 17 prime","lang":"en","expect":"prime|answer"}
+{"q":"due alla quinta","lang":"it","expect":"calc"}
+{"q":"radice quadrata di sessantaquattro","lang":"it","expect":"calc"}
+{"q":"cinquanta per cento di 90","lang":"it","expect":"percent"}
+{"q":"somma di 12 30 e 8","lang":"it","expect":"calc"}

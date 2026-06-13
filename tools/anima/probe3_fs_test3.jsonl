@@ -1,0 +1,18 @@
+{"q":"dim it","lang":"en","expect":"set_brightness"}
+{"q":"make it brighter","lang":"en","expect":"set_brightness"}
+{"q":"make it darker","lang":"en","expect":"set_brightness"}
+{"q":"turn down the brightness","lang":"en","expect":"set_brightness"}
+{"q":"turn up the volume","lang":"en","expect":"set_volume"}
+{"q":"turn down the volume","lang":"en","expect":"set_volume"}
+{"q":"fai più chiaro lo schermo","lang":"it","expect":"set_brightness"}
+{"q":"fai più buio","lang":"it","expect":"set_brightness"}
+{"q":"alza il volume al massimo","lang":"it","expect":"set_volume"}
+{"q":"metti il volume più alto","lang":"it","expect":"set_volume"}
+{"q":"abbassa la luce","lang":"it","expect":"set_brightness"}
+{"q":"apri le impostazioni","lang":"it","expect":"open_app"}
+{"q":"open settings","lang":"en","expect":"open_app"}
+{"q":"chiudi il calendario","lang":"it","expect":"close_app"}
+{"q":"crea un file di nome appunti.txt","lang":"it","expect":"create_file"}
+{"q":"crea un file con il testo arrivederci","lang":"it","expect":"create_file"}
+{"q":"can i create a file?","lang":"en","expect":"answer"}
+{"q":"posso creare un file?","lang":"it","expect":"answer"}

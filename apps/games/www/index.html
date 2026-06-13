@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Giochi</title>
+<style>
+  :root { --bg:#0b0e13; --panel:#141a22; --panel2:#1b2330; --line:#2a3340; --txt:#e6edf3; --dim:#8b97a6; --accent:#22d3ee; --accent2:#e879f9; --good:#34d399; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--txt); font:14px/1.45 system-ui,Segoe UI,sans-serif; overflow:hidden; }
+  #app { height:100%; display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  .grow { flex:1; }
+  button { background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:7px 12px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:linear-gradient(135deg,#155e75,#0e7490); border-color:#0e7490; }
+  button.good { background:linear-gradient(135deg,#047857,#059669); border-color:#059669; }
+  button.ghost { background:transparent; }
+  button:disabled { opacity:.45; cursor:default; }
+  input,select { background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:7px 10px; font:inherit; }
+  .hidden { display:none !important; }
+  main { flex:1; overflow:auto; padding:14px; }
+  .gamercard { display:flex; align-items:center; gap:10px; background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:5px 10px; cursor:pointer; }
+  .gamercard .av { width:30px; height:30px; border-radius:8px; display:grid; place-items:center; font-size:18px; }
+  .gamercard .nm { font-weight:600; line-height:1.1; }
+  .gamercard .sub { font-size:11px; color:var(--dim); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .card h3 { margin:0 0 4px; font-size:15px; }
+  .card p { margin:0 0 10px; color:var(--dim); font-size:12px; min-height:30px; }
+  .badge { display:inline-block; font-size:11px; color:var(--dim); border:1px solid var(--line); border-radius:6px; padding:1px 6px; margin-right:4px; }
+  .chip { font-size:12px; color:var(--accent); border:1px solid var(--line); border-radius:20px; padding:2px 10px; }
+  .section-title { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:14px 2px 10px; display:flex; align-items:center; gap:8px; }
+  .rooms { display:flex; flex-direction:column; gap:8px; }
+  .room { display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .empty { color:var(--dim); padding:18px; text-align:center; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  /* room (session: waiting + playing share this shell, chat/roster persist) */
+  #room { display:none; height:100%; flex-direction:column; }
+  #room.on { display:flex; }
+  .gamebar { display:flex; align-items:center; gap:8px; padding:7px 12px; border-bottom:1px solid var(--line); background:var(--panel); }
+  .gamebar b { font-size:14px; }
+  .pip { display:flex; align-items:center; gap:5px; background:var(--panel2); border:1px solid var(--line); border-radius:20px; padding:2px 9px 2px 4px; font-size:12px; }
+  .pip .av { width:20px; height:20px; border-radius:50%; display:grid; place-items:center; font-size:13px; }
+  .pip.turn { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .gamebody { flex:1; display:flex; min-height:0; }
+  .roommain { flex:1; display:flex; min-width:0; }
+  /* waiting room (transversal) */
+  #waiting { flex:1; overflow:auto; padding:18px; }
+  #waiting h2 { margin:0 0 14px; font-size:18px; }
+  .seatcards { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin-bottom:18px; }
+  .seatcard { background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px; display:flex; flex-direction:column; align-items:center; gap:6px; min-height:120px; justify-content:center; }
+  .seatcard.empty { border-style:dashed; color:var(--dim); }
+  .seatcard .big { font-size:34px; width:54px; height:54px; border-radius:50%; display:grid; place-items:center; }
+  .seatcard .ready { font-size:12px; color:var(--good); }
+  .seatcard .ready.no { color:var(--dim); }
+  .opts { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:16px; max-width:420px; }
+  .opts h4 { margin:0 0 10px; font-size:13px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; }
+  .opt { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:8px 0; }
+  /* playing */
+  .board-wrap { flex:1; position:relative; display:flex; align-items:center; justify-content:center; min-width:0; padding:10px; }
+  canvas { background:#0e1116; border:1px solid var(--line); border-radius:12px; max-width:100%; max-height:100%; touch-action:none; }
+  /* fillViewport games (3D Pong): the canvas takes the whole board area */
+  #boardWrap.fill { padding:0; }
+  #boardWrap.fill canvas { width:100%; height:100%; max-width:none; max-height:none; border:none; border-radius:0; background:#05070d; }
+  #reacts { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+  .float { position:absolute; font-size:34px; animation:floatUp 1.8s ease-out forwards; }
+  @keyframes floatUp { 0%{ transform:translateY(0) scale(.6); opacity:0; } 15%{ opacity:1; transform:scale(1.1);} 100%{ transform:translateY(-130px) scale(1); opacity:0; } }
+  /* persistent right rail: roster + chat */
+  aside { width:250px; border-left:1px solid var(--line); display:flex; flex-direction:column; background:var(--panel); }
+  .seats { padding:8px 10px; border-bottom:1px solid var(--line); max-height:34%; overflow:auto; }
+  .seats h4 { margin:4px 2px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); }
+  .seat { display:flex; align-items:center; gap:8px; padding:3px 2px; font-size:13px; }
+  .seat .av { width:22px; height:22px; border-radius:6px; display:grid; place-items:center; font-size:14px; }
+  .chat { flex:1; display:flex; flex-direction:column; min-height:0; }
+  .msgs { flex:1; overflow:auto; padding:10px; display:flex; flex-direction:column; gap:7px; }
+  .msg { font-size:13px; display:flex; gap:6px; align-items:baseline; }
+  .msg .who { font-weight:600; flex:none; }
+  .msg.sys { color:var(--dim); font-style:italic; font-size:12px; justify-content:center; }
+  .msg.anima .who { color:var(--accent2); }
+  .typing { height:16px; padding:0 10px; font-size:11px; color:var(--dim); font-style:italic; }
+  .emotes { display:flex; gap:4px; padding:4px 8px 0; flex-wrap:wrap; }
+  .emotes button { padding:3px 7px; font-size:15px; border-radius:8px; }
+  .chat form { display:flex; gap:6px; padding:8px; }
+  .chat input { flex:1; }
+  .statusbar { padding:6px 12px; color:var(--dim); font-size:12px; border-top:1px solid var(--line); min-height:26px; display:flex; align-items:center; gap:10px; }
+  .statusbar .win { color:var(--good); font-weight:600; }
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:50; }
+  .modal-bg.on { display:flex; }
+  .modal { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px; width:320px; max-width:90vw; }
+  .modal h2 { margin:0 0 14px; font-size:17px; }
+  .picker { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 14px; }
+  .picker button { font-size:20px; padding:5px 8px; }
+  .picker button.sel { border-color:var(--accent); background:var(--panel2); }
+  .swatch { width:26px; height:26px; border-radius:50%; border:2px solid transparent; cursor:pointer; }
+  .swatch.sel { border-color:#fff; }
+  @media (max-width:560px){ aside{ width:180px; } }
+
+  /* ── lobby polish ───────────────────────────────────────────────────────── */
+  .grid { gap:14px; }
+  .card { position:relative; overflow:hidden; padding-left:18px; transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease; }
+  .card:hover { transform:translateY(-3px); border-color:var(--accent); box-shadow:0 10px 26px rgba(0,0,0,.4); }
+  .card .accent { position:absolute; top:0; bottom:0; left:0; width:4px; background:var(--accent); opacity:.85; }
+  .card.cat-arcade .accent { background:var(--accent2); }
+  .card .ico { width:46px; height:46px; border-radius:13px; display:grid; place-items:center; font-size:26px;
+    background:rgba(34,211,238,.12); border:1px solid var(--line); margin-bottom:10px; }
+  .card.cat-arcade .ico { background:rgba(232,121,249,.12); }
+  .card h3 { font-size:16px; }
+  .card .row:last-child button { flex:1; min-width:fit-content; }
+
+  /* ── immersive / fullscreen play ─────────────────────────────────────────── */
+  body.immersive { background:#05070d; }
+  body.immersive #app { background:#05070d; }
+  body.immersive > #app > header,
+  body.immersive .gamebar,
+  body.immersive .statusbar { display:none !important; }
+  body.immersive #room.on { height:100%; }
+  body.immersive .gamebody { padding:0; min-height:0; }
+  body.immersive .gamebody aside { display:none; }     /* roster+chat live in the game bar overlay */
+  body.immersive #boardWrap { padding:0; }
+  body.immersive #boardWrap canvas { border:none; border-radius:0; }
+  body.immersive #boardWrap:not(.fill) canvas { max-width:none; max-height:none; background:#0e1116; box-shadow:0 0 60px rgba(0,0,0,.5); }
+
+  /* floating menu affordance — always reachable, also for touch */
+  .fab { position:fixed; top:12px; right:14px; z-index:55; width:42px; height:42px; border-radius:50%;
+    display:none; align-items:center; justify-content:center; font-size:20px; background:rgba(20,26,34,.66);
+    border:1px solid var(--line); backdrop-filter:blur(8px); color:var(--txt); cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,.4); transition:transform .1s, border-color .1s; }
+  body.immersive .fab { display:flex; }
+  .fab:hover { border-color:var(--accent); transform:scale(1.06); }
+
+  /* ── Xbox-style game bar overlay (Tab toggles) ───────────────────────────── */
+  #gbar { position:fixed; inset:0; z-index:60; display:none; flex-direction:column;
+    background:radial-gradient(130% 90% at 50% -10%, rgba(10,16,26,.66), rgba(4,6,11,.93));
+    backdrop-filter:blur(10px) saturate(1.1); animation:gbarIn .15s ease-out; }
+  #gbar.on { display:flex; }
+  @keyframes gbarIn { from{ opacity:0; transform:scale(1.01);} to{ opacity:1; transform:none; } }
+  .gbar-top { display:flex; align-items:center; gap:12px; padding:16px 22px 10px; }
+  .gbar-top .gtitle { font-size:21px; font-weight:700; }
+  .gbar-top .gcode { font-size:12px; color:var(--accent); border:1px solid var(--line); border-radius:20px; padding:2px 10px; }
+  .gbar-score { display:flex; align-items:center; gap:10px; font-variant-numeric:tabular-nums;
+    background:rgba(18,24,32,.5); border:1px solid var(--line); border-radius:14px; padding:5px 14px; }
+  .gbar-score:empty { display:none; }
+  .gbar-score .num { font-size:24px; font-weight:800; padding:0 4px; }
+  .gbar-score .vs { opacity:.4; }
+  .gbar-result { font-size:15px; font-weight:700; padding:3px 12px; border-radius:20px; border:1px solid var(--line); }
+  .gbar-result.win { color:var(--good); border-color:var(--good); }
+  .gbar-result.lose { color:#fb7185; border-color:#fb7185; }
+  .gbar-result.draw { color:var(--dim); }
+  .gbar-actions { display:flex; gap:9px; flex-wrap:wrap; align-items:center; padding:6px 22px 14px; }
+  .gbar-actions button { padding:9px 15px; border-radius:11px; }
+  .gbar-actions button.lg { padding:11px 20px; font-weight:600; }
+  .gbar-body { flex:1; display:flex; min-height:0; padding:0 22px 14px; }
+  .gbar-slot { flex:1; min-width:0; background:rgba(18,24,32,.5); border:1px solid var(--line); border-radius:14px; display:flex; overflow:hidden; }
+  #gbar aside { width:100%; border-left:none; background:transparent; }
+  #gbar .seats { max-height:40%; }
+  .gbar-foot { padding:0 22px 16px; color:var(--dim); font-size:12px; display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+  .kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:6px; padding:1px 7px; margin-right:5px; font-size:11px; background:var(--panel2); }
+  .gbar-paused { color:var(--accent2); font-weight:600; }
+
+  /* chat toasts over the running game (bar closed) + pointer-lock hint */
+  #toasts { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:48;
+    display:flex; flex-direction:column; gap:6px; align-items:center; pointer-events:none; }
+  .toast { background:rgba(12,16,24,.85); border:1px solid var(--line); border-radius:20px; padding:6px 14px;
+    font-size:13px; max-width:80vw; backdrop-filter:blur(6px);
+    animation:toastIn .2s ease-out, toastOut .35s ease-in 3.1s forwards; }
+  @keyframes toastIn { from{ opacity:0; transform:translateY(10px);} to{ opacity:1; transform:none; } }
+  @keyframes toastOut { to{ opacity:0; transform:translateY(-6px);} }
+  .lock-hint { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:47;
+    background:rgba(12,16,24,.85); border:1px solid var(--line); border-radius:12px; padding:11px 18px;
+    font-size:14px; backdrop-filter:blur(6px); display:none; pointer-events:none; }
+  .lock-hint.on { display:block; animation:toastIn .2s ease-out; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🎮 Giochi</h1>
+    <span class="grow"></span>
+    <span class="chip hidden" id="padChip" title="Controller collegato" style="border-color:var(--good);color:var(--good)">🎮</span>
+    <div class="gamercard" id="cardBtn" title="Modifica gamercard">
+      <div class="av" id="cardAv"></div>
+      <div><div class="nm" id="cardName"></div><div class="sub" id="cardStat"></div></div>
+    </div>
+  </header>
+
+  <!-- LOBBY -->
+  <main id="lobby">
+    <div class="section-title"><span id="secCreate">Crea una partita</span></div>
+    <div class="grid" id="catalog"></div>
+    <div class="section-title">
+      <span id="secOpen">Partite aperte sulla rete</span>
+      <span class="grow"></span>
+      <input id="codeIn" placeholder="codice stanza" style="width:120px">
+      <button id="codeJoin" class="ghost">Entra con codice</button>
+      <button id="refresh" class="ghost">↻</button>
+    </div>
+    <div class="rooms" id="rooms"><div class="empty" id="roomsEmpty">Nessuna partita aperta.</div></div>
+  </main>
+
+  <!-- ROOM (waiting + playing share this; chat/roster persist across both) -->
+  <div id="room">
+    <div class="gamebar">
+      <b id="gameName"></b>
+      <span class="chip" id="roomCode" title="Codice stanza"></span>
+      <span class="grow"></span>
+      <button id="hintBtn" class="ghost hidden">💡 Hint</button>
+      <button id="inviteBtn" class="ghost">🔗 Invita</button>
+      <button id="readyBtn" class="hidden">✓ Pronto</button>
+      <button id="startBtn" class="good hidden">▶ Inizia</button>
+      <button id="offlineBtn" class="ghost hidden" style="border-color:#fb7185;color:#fb7185">▶ Gioca offline (classica)</button>
+      <button id="rematchBtn" class="primary hidden">↻ Rivincita</button>
+      <button id="toRoomBtn" class="ghost hidden">⟲ Sala</button>
+      <button id="leaveBtn" class="ghost">Esci</button>
+    </div>
+    <div class="gamebody">
+      <div class="roommain">
+        <!-- WAITING ROOM (transversal — no game writes this) -->
+        <div id="waiting">
+          <h2 id="waitTitle"></h2>
+          <div class="seatcards" id="seatCards"></div>
+          <div class="opts hidden" id="optsBox"><h4>Impostazioni</h4><div id="optsForm"></div></div>
+          <div id="waitHint" style="color:var(--dim)"></div>
+        </div>
+        <!-- PLAYING -->
+        <div class="board-wrap hidden" id="boardWrap">
+          <canvas id="board" width="480" height="480"></canvas>
+          <div id="reacts"></div>
+        </div>
+      </div>
+      <aside>
+        <div class="seats" id="seats"></div>
+        <div class="chat">
+          <div class="msgs" id="msgs"></div>
+          <div class="typing" id="typing"></div>
+          <div class="emotes" id="emotes"></div>
+          <form id="chatform"><input id="chatin" placeholder="Messaggio o @anima…" maxlength="160" autocomplete="off"><button class="primary">▶</button></form>
+        </div>
+      </aside>
+    </div>
+    <div class="statusbar"><span id="status"></span></div>
+  </div>
+
+  <!-- IMMERSIVE PLAY: floating menu + Xbox-style game bar (Tab toggles) -->
+  <button id="fabMenu" class="fab" title="Menu (Tab)">☰</button>
+  <div id="gbar">
+    <div class="gbar-top">
+      <span class="gtitle" id="gbTitle"></span>
+      <span class="gcode" id="gbCode"></span>
+      <span class="gbar-result hidden" id="gbResult"></span>
+      <span class="grow"></span>
+      <div class="gbar-score" id="gbScore"></div>
+    </div>
+    <div class="gbar-actions">
+      <button id="gbResume" class="primary lg">▶ Riprendi</button>
+      <button id="gbRematch" class="good hidden">↻ Rivincita</button>
+      <button id="gbOffline" class="ghost hidden" style="border-color:#fb7185;color:#fb7185">▶ Gioca offline</button>
+      <button id="gbToRoom" class="ghost hidden">⟲ Sala d'attesa</button>
+      <button id="gbHint" class="ghost hidden">💡 Suggerimento</button>
+      <button id="gbInvite" class="ghost">🔗 Invita</button>
+      <button id="gbFs" class="ghost">⛶ Schermo intero</button>
+      <span class="grow"></span>
+      <button id="gbLeave" class="ghost">✕ Esci dal gioco</button>
+    </div>
+    <div class="gbar-body"><div class="gbar-slot" id="gbSlot"></div></div>
+    <div class="gbar-foot">
+      <span><span class="kbd">Tab</span>menu</span>
+      <span><span class="kbd">Esc</span>chiudi</span>
+      <span id="gbCtrlHint"></span>
+      <span class="grow"></span>
+      <span class="gbar-paused hidden" id="gbPaused">⏸ In pausa</span>
+    </div>
+  </div>
+  <div id="toasts"></div>
+  <div class="lock-hint" id="lockHint">🖱 Clicca per catturare il mouse</div>
+
+  <!-- GAMERCARD MODAL -->
+  <div class="modal-bg" id="modal">
+    <div class="modal">
+      <h2>La tua gamercard</h2>
+      <input id="mName" placeholder="Nome" maxlength="16" style="width:100%">
+      <div class="picker" id="avPicker"></div>
+      <div class="picker" id="colPicker"></div>
+      <div class="row" style="justify-content:flex-end"><button id="mSave" class="primary">Salva</button></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { NucleoPlay, _fs as FS } from '/apps/games/nucleo-play.js';
+import { GameHarness, getGame } from '/apps/games/nucleo-game.js';
+import * as P from '/apps/games/profile.js';
+import * as LLM from '/apps/games/llm.js';
+import { Brain, preflightBrain, brainMode, llmSelected } from '/apps/games/llm-brain.js';
+import { GamepadManager } from '/apps/games/gamepad.js';
+import I18N from '/nucleo-i18n.js';   // OS-wide language signal: lets the app repaint live on a language change
+
+const $ = s => document.querySelector(s);
+const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
+const show = (sel, on) => $(sel).classList.toggle('hidden', !on);
+const lang = () => (localStorage.getItem('anima.lang') === 'en' ? 'en' : 'it');
+// Bilingual helper — same signal the app already reads for ANIMA (anima.lang). Pass IT first, EN second.
+// Read live (not cached) so a language change mid-session is picked up by the next render/relabel.
+const T = (it, en) => (lang() === 'en' ? en : it);
+
+let CATALOG = [], STATS = {};
+let play = null, harness = null, def = null, profile = P.getProfile();
+let phase = 'lobby', typingTimer = 0, animaBusy = false, animaLast = 0, wiredRoom = false;
+let coach = null, lastOpts = {}, ptrThrottle = 0, gamepad = null, lastAxisKey = '', boardRO = null;
+// immersive play (fullscreen + Xbox-style game bar + mouse capture)
+let immersive = false, barOpen = false, wantFs = false, fsUserOff = false, pausedByBar = false, isOver = false, lockY = 0, shownIntro = false;
+const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+const asideEl = document.querySelector('#room aside');   // stable ref; relocated into the game bar while immersive
+const fsRoot = () => document.getElementById('app');
+let brainCfg = null, grokFailRematch = false;   // verified LLM config + which start path failed
+
+// ---- ANIMA bridge (offline-first; best-effort, never blocks the game) -----------------------
+async function animaSay(q, mode = 'off') {
+  if (animaBusy) return null; animaBusy = true;
+  try { const r = await fetch('/api/anima?q=' + encodeURIComponent(q) + '&lang=' + lang() + '&mode=' + mode, { cache: 'no-store' }); const d = await r.json(); return (d && d.reply && d.tier !== 'none') ? String(d.reply).slice(0, 180) : null; }
+  catch { return null; } finally { animaBusy = false; }
+}
+
+// ---- gamercard -----------------------------------------------------------------------------
+function paintCard() {
+  $('#cardAv').textContent = profile.avatar; $('#cardAv').style.background = profile.color + '33';
+  $('#cardName').textContent = profile.name;
+  const t = P.summarize(STATS, '_total');
+  const wls = T(`${t.w}V ${t.l}S ${t.d}P`, `${t.w}W ${t.l}L ${t.d}D`);
+  $('#cardStat').textContent = t.games ? `${wls} · ${t.winRate}%${t.best > 1 ? ' · 🔥' + t.best : ''}` : T('Nessuna partita', 'No games yet');
+}
+function openCard() {
+  $('#mName').value = profile.name;
+  const ap = $('#avPicker'); ap.innerHTML = '';
+  P.AVATARS.forEach(a => { const b = el('button', a === profile.avatar ? 'sel' : '', a); b.onclick = () => { profile.avatar = a; [...ap.children].forEach(c => c.classList.toggle('sel', c.textContent === a)); }; ap.appendChild(b); });
+  const cp = $('#colPicker'); cp.innerHTML = '';
+  P.COLORS.forEach(c => { const b = el('button', 'swatch'); b.style.background = c; if (c === profile.color) b.classList.add('sel'); b.onclick = () => { profile.color = c; [...cp.children].forEach((x, i) => x.classList.toggle('sel', P.COLORS[i] === c)); }; cp.appendChild(b); });
+  $('#modal').classList.add('on');
+}
+$('#cardBtn').onclick = openCard;
+$('#mSave').onclick = async () => { profile.name = $('#mName').value.trim().slice(0, 16) || profile.name; profile = await P.setProfile(profile); $('#modal').classList.remove('on'); paintCard(); };
+
+// ---- lobby ---------------------------------------------------------------------------------
+async function loadCatalog() {
+  const cat = await FS.readJSON('/system/registry/games.json');
+  CATALOG = (cat && cat.games) || [];
+  const wrap = $('#catalog'); wrap.innerHTML = '';
+  if (!CATALOG.length) { wrap.appendChild(el('div', 'empty', T('Catalogo vuoto.', 'Catalog is empty.'))); return; }
+  for (const g of CATALOG) {
+    const card = el('div', 'card cat-' + (g.category || 'classic'));
+    card.appendChild(el('div', 'accent'));
+    card.appendChild(el('div', 'ico', g.icon || iconFor(g)));
+    card.appendChild(el('h3', null, g.name));
+    card.appendChild(el('p', null, g.desc || ''));
+    const meta = el('div', 'row');
+    meta.appendChild(el('span', 'badge', `${g.minPlayers}-${g.maxPlayers}P`));
+    if (g.ai) meta.appendChild(el('span', 'badge', 'vs ANIMA'));
+    if (g.realtime) meta.appendChild(el('span', 'badge', 'real-time'));
+    const st = P.summarize(STATS, g.id); if (st.games) meta.appendChild(el('span', 'badge', T(`${st.w}V-${st.l}S`, `${st.w}W-${st.l}L`)));
+    card.appendChild(meta);
+    const actions = el('div', 'row'); actions.style.marginTop = '12px';
+    const bHost = el('button', 'primary', '▶ ' + T('Crea', 'Create')); bHost.onclick = () => hostGame(g, false); actions.appendChild(bHost);
+    if (g.ai) { const bAI = el('button', null, '🤖 ' + T('Vs ANIMA', 'Vs ANIMA')); bAI.onclick = () => hostGame(g, true); actions.appendChild(bAI); }
+    card.appendChild(actions); wrap.appendChild(card);
+  }
+}
+function iconFor(g) { return ({ tris: '⭕', forza4: '🔴', pong: '🏓' })[g.id] || '🎮'; }
+let _loadingRooms = false;
+let _firstLoadDone = false;
+const _settleUntil = Date.now() + 3000;   // first launch: let the OS asset storm finish before we fetch
+async function loadRooms() {
+  if (_loadingRooms) return;            // a lobby fetch is already in flight — don't stack another
+  _loadingRooms = true;                 // claim the slot BEFORE the settle wait so concurrent calls drop
+  try {
+    if (!_firstLoadDone) {
+      const wait = _settleUntil - Date.now();
+      if (wait > 0) {                   // show a placeholder and wait out the boot storm, then load cleanly
+        const wrap = $('#rooms'); if (wrap) { wrap.innerHTML = ''; wrap.appendChild(el('div', 'empty', T('Carico la lobby…', 'Loading lobby…'))); }
+        await new Promise(r => setTimeout(r, wait));
+      }
+    }
+    await loadRoomsInner();
+    _firstLoadDone = true;
+  } finally { _loadingRooms = false; }
+}
+async function loadRoomsInner() {
+  const p = new NucleoPlay({ profile });
+  let rooms = []; try { rooms = await p.listRooms(); } catch {}
+  const wrap = $('#rooms'); wrap.innerHTML = '';
+  if (!rooms.length) { wrap.appendChild(el('div', 'empty', T('Nessuna partita aperta. Creane una qui sopra.', 'No open games. Create one above.'))); return; }
+  for (const r of rooms) {
+    const gd = CATALOG.find(g => g.id === r.gameId);
+    const row = el('div', 'room');
+    const av = el('div', null, r.hostAvatar || '👾'); av.style.fontSize = '20px'; row.appendChild(av);
+    const info = el('div', 'grow');
+    info.appendChild(el('div', null, r.name));
+    const sub = el('div'); sub.style.cssText = 'font-size:12px;color:var(--dim)';
+    sub.textContent = `${(gd && gd.name) || r.gameId} · ${r.seats.length}/${r.maxSeats}${r.spectators ? ' · 👁' + r.spectators : ''}`;
+    info.appendChild(sub); row.appendChild(info);
+    const full = r.seats.length >= r.maxSeats;
+    const b = el('button', full ? 'ghost' : 'primary', full ? ('👁 ' + T('Guarda', 'Watch')) : T('Entra', 'Join'));
+    b.onclick = () => joinGame(r.id, full); row.appendChild(b);
+    wrap.appendChild(row);
+  }
+}
+
+// ---- enter a room (host or guest) ----------------------------------------------------------
+async function hostGame(g, withAI) {
+  play = new NucleoPlay({ profile });
+  await play.host({ gameId: g.id, name: `${profile.name} · ${g.name}`, maxSeats: g.maxPlayers });
+  if (withAI && g.ai) play.addAI('ANIMA');
+  await setupSession(g.id);
+  gotoPhase('waiting'); play.setPhase('waiting');
+}
+async function joinGame(roomId, spectate) {
+  play = new NucleoPlay({ profile });
+  let done = false;
+  play.on('ready', async ({ isHost }) => { if (!isHost && play.gameId && !done) { done = true; await setupSession(play.gameId); gotoPhase('waiting'); } });
+  await play.join(roomId, { spectator: !!spectate });
+  sys(spectate ? T('Entri come spettatore…', 'Joining as spectator…') : T('Connessione…', 'Connecting…'));
+}
+
+const _loaded = new Set();
+async function ensureGameLoaded(gameId) {
+  if (_loaded.has(gameId) || getGame(gameId)) { _loaded.add(gameId); return; }
+  const d = CATALOG.find(g => g.id === gameId);
+  await import(d ? d.module : `/apps/games/games/${gameId}.js`);
+  _loaded.add(gameId);
+}
+
+async function setupSession(gameId) {
+  await ensureGameLoaded(gameId);
+  def = getGame(gameId);
+  harness = new GameHarness(play, def, $('#board'), {
+    onStatus: t => { $('#status').textContent = t; },
+    onStart: () => { $('#status').textContent = ''; show('#rematchBtn', false); show('#toRoomBtn', false); isOver = false; $('#gbResult').classList.add('hidden'); closeBar(); syncBarButtons(); },
+    onAiActed: () => maybeBanter(),
+    onOver: r => onGameOver(r),
+  });
+  $('#gameName').textContent = def.name;
+  $('#roomCode').textContent = '#' + play.roomId.replace(/^r_/, '');
+  wireRoomOnce();
+  wireInput($('#board'));
+  buildEmotes();
+  $('#msgs').innerHTML = '';
+  harness.start();
+  renderRoster(); renderWaiting();
+}
+
+// ---- phase machine (transversal: same screens for every game) -------------------------------
+// Visibility is driven ONLY by the .hidden class (#lobby) and .on (#room) — no inline display, so a
+// stale `display:none !important` can never strand the lobby after you leave a game (the old bug).
+function gotoPhase(p) {
+  phase = p;
+  const inLobby = (p === 'lobby');
+  show('#lobby', inLobby);
+  $('#room').classList.toggle('on', !inLobby);
+  if (inLobby) { exitImmersive(); return; }
+  const playing = (p === 'playing');
+  show('#waiting', !playing); show('#boardWrap', playing);
+  show('#hintBtn', playing && !play.spectator);
+  const host = play.isHost;
+  show('#startBtn', !playing && host);
+  show('#readyBtn', !playing && !host && !play.spectator);
+  if (!playing) { show('#rematchBtn', false); show('#toRoomBtn', false); }
+  if (playing) { enterImmersive(); lastAxisKey = ''; requestAnimationFrame(fitBoard); }
+  else { exitImmersive(); }
+  renderWaiting(); renderRoster();
+  if (barOpen) renderBar();
+}
+
+// ---- immersive play: real fullscreen + mouse capture + game bar overlay ---------------------
+// Every match runs immersive: the app chrome collapses and the game fills the screen like a native
+// title. We also try the real Fullscreen API (best-effort — the host's Start click is a user gesture;
+// guests, who start on a network event, fall back to entering FS on their next click/keypress).
+function enterImmersive() {
+  if (immersive) { requestAnimationFrame(fitBoard); return; }
+  immersive = true; fsUserOff = false;
+  document.body.classList.add('immersive');
+  $('#gbSlot').appendChild(asideEl);                 // roster + chat move into the bar
+  requestFs();                                       // works on a gesture (host Start); guests retry on input
+  if (!shownIntro) { shownIntro = true; toast('🎮 ' + (def ? def.name : T('Gioco', 'Game')) + T(' — premi Tab o ☰ per il menu', ' — press Tab or ☰ for the menu')); }
+  if (def && def.capturesPointer && !play.spectator) showLockHint(true);
+  // Re-measure after the chrome collapses (reflow) and after a 3D game finishes its async renderer
+  // load, so the board fills the screen with no first-frame flash.
+  requestAnimationFrame(fitBoard);
+  setTimeout(() => { if (phase === 'playing') fitBoard(); }, 60);
+  setTimeout(() => { if (phase === 'playing') fitBoard(); }, 240);
+}
+function exitImmersive() {
+  const was = immersive;
+  immersive = false; barOpen = false;
+  $('#gbar').classList.remove('on');
+  if (pausedByBar && harness) { try { harness.resume(); } catch {} }
+  pausedByBar = false;
+  document.body.classList.remove('immersive');
+  $('#gbPaused').classList.add('hidden');
+  showLockHint(false); releaseLock();
+  if (was) { exitFs(); shownIntro = false; }
+  const home = document.querySelector('.gamebody');                 // restore roster+chat into the room rail
+  if (asideEl && home && asideEl.parentElement !== home) home.appendChild(asideEl);
+  requestAnimationFrame(fitBoard);
+}
+function requestFs() {
+  const r = fsRoot();
+  if (document.fullscreenElement || !r || !r.requestFullscreen) { wantFs = false; return; }
+  wantFs = true;
+  r.requestFullscreen({ navigationUI: 'hide' }).then(() => { wantFs = false; }).catch(() => { /* no gesture yet — retry on next input */ });
+}
+function exitFs() { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {}); wantFs = false; }
+function toggleFs() {
+  if (document.fullscreenElement) { fsUserOff = true; exitFs(); }
+  else { fsUserOff = false; requestFs(); }
+}
+function maybeLock() {
+  if (!immersive || barOpen || !def || !def.capturesPointer || (play && play.spectator)) return;
+  const c = $('#board');
+  if (document.pointerLockElement === c || !c.requestPointerLock) return;
+  try { c.requestPointerLock(); } catch {}
+}
+function releaseLock() { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); }
+function showLockHint(on) { $('#lockHint').classList.toggle('on', !!on && barOpen === false); }
+// A gesture anywhere lets a guest (who entered playing via the network) claim real fullscreen + lock.
+function onUserGesture() {
+  if (!immersive || barOpen) return;
+  if (wantFs && !fsUserOff && !document.fullscreenElement) requestFs();
+  maybeLock();
+}
+
+// ---- game bar overlay (Xbox-guide style) ----------------------------------------------------
+function openBar() {
+  if (phase !== 'playing') return;
+  barOpen = true; $('#gbar').classList.add('on');
+  releaseLock(); showLockHint(false);
+  // Pause only when it can't hurt anyone else: host with no other connected human.
+  if (play && play.isHost && harness && typeof harness.pause === 'function') {
+    const others = (play.roster || []).filter(r => !r.ai && !r.spectator && r.peerId !== play.peerId);
+    if (others.length === 0 && !harness.isPaused()) { harness.pause(); pausedByBar = true; }
+  }
+  $('#gbPaused').classList.toggle('hidden', !pausedByBar);
+  renderBar();
+}
+function closeBar() {
+  if (!barOpen) return;
+  barOpen = false; $('#gbar').classList.remove('on');
+  if (pausedByBar && harness) { try { harness.resume(); } catch {} pausedByBar = false; }
+  $('#gbPaused').classList.add('hidden');
+  maybeLock();
+}
+function toggleBar() { barOpen ? closeBar() : openBar(); }
+function renderBar() {
+  $('#gbTitle').textContent = def ? def.name : '';
+  $('#gbCode').textContent = play ? ('#' + play.roomId.replace(/^r_/, '')) : '';
+  $('#gbCtrlHint').textContent = ctrlHintText();
+  $('#gbFs').textContent = document.fullscreenElement ? ('⛶ ' + T('Esci da schermo intero', 'Exit fullscreen')) : ('⛶ ' + T('Schermo intero', 'Fullscreen'));
+  renderBarScore(); syncBarButtons(); renderRoster();
+}
+function renderBarScore() {
+  const wrap = $('#gbScore'); wrap.innerHTML = '';
+  if (!harness || !harness.state || !play) return;
+  const st = harness.state;
+  const players = (play.roster || []).filter(r => r.seat >= 0).sort((a, b) => a.seat - b.seat);
+  if (Array.isArray(st.scores) && players.length) {
+    players.forEach((r, i) => {
+      if (i > 0) wrap.appendChild(el('span', 'vs', '—'));
+      const av = el('span', null, r.avatar || '👾'); wrap.appendChild(av);
+      wrap.appendChild(el('span', 'num', String(st.scores[i] ?? 0)));
+    });
+  } else {
+    const turnSeat = st.seats ? st.seats[st.turn] : null;
+    for (const r of players) { const pip = el('div', 'pip' + (r.seat === turnSeat ? ' turn' : '')); const av = el('div', 'av', r.avatar || '👾'); av.style.background = (r.color || '#334') + '44'; pip.appendChild(av); pip.appendChild(el('span', null, r.name + (r.seat === play.seat ? T(' (tu)', ' (you)') : ''))); wrap.appendChild(pip); }
+  }
+}
+function syncBarButtons() {
+  const host = !!(play && play.isHost), playing = phase === 'playing', spec = !!(play && play.spectator);
+  show('#gbRematch', host && isOver);
+  show('#gbToRoom', host && playing);
+  show('#gbHint', playing && !spec && !!(def && def.aiCapable));
+  $('#gbResume').textContent = isOver ? ('✓ ' + T('Chiudi menu', 'Close menu')) : ('▶ ' + T('Riprendi', 'Resume'));
+}
+function ctrlHintText() {
+  if (!def) return '';
+  if (def.capturesPointer) return '🖱 ' + T('Mouse o W/S · ↑/↓', 'Mouse or W/S · ↑/↓');
+  if (def.padMode === 'cursor') return '⌨ ' + T('Frecce / tocco · A conferma', 'Arrows / tap · A to confirm');
+  return '👆 ' + T('Tocca per giocare', 'Tap to play');
+}
+function toast(text) {
+  if (!text) return;
+  const box = $('#toasts'); const t = el('div', 'toast', String(text).slice(0, 90)); box.appendChild(t);
+  setTimeout(() => t.remove(), 3700);
+  while (box.children.length > 3) box.removeChild(box.firstChild);
+}
+
+// ---- waiting room (transversal) ------------------------------------------------------------
+function renderWaiting() {
+  if (phase !== 'waiting') return;
+  $('#waitTitle').textContent = play.spectator ? T(`Stai per guardare ${def.name}`, `You're about to watch ${def.name}`) : T(`Sala d'attesa · ${def.name}`, `Waiting room · ${def.name}`);
+  const players = (play.roster || []).filter(r => r.seat >= 0).sort((a, b) => a.seat - b.seat);
+  const cards = $('#seatCards'); cards.innerHTML = '';
+  for (let s = 0; s < play.maxSeats; s++) {
+    const r = players.find(p => p.seat === s);
+    const card = el('div', 'seatcard' + (r ? '' : ' empty'));
+    const big = el('div', 'big', r ? (r.avatar || '👾') : '＋'); if (r) big.style.background = (r.color || '#334') + '44'; card.appendChild(big);
+    card.appendChild(el('div', null, r ? (r.name + (r.ai ? ' 🤖' : '') + (r.seat === play.seat ? T(' (tu)', ' (you)') : '')) : T('Posto libero', 'Open seat')));
+    if (r && !r.ai) card.appendChild(el('div', 'ready' + (r.ready ? '' : ' no'), r.ready ? T('✓ pronto', '✓ ready') : T('… non pronto', '… not ready')));
+    if (!r && play.isHost && def.aiCapable) { const b = el('button', 'ghost', '+ ANIMA'); b.onclick = () => { play.addAI('ANIMA'); }; card.appendChild(b); }
+    cards.appendChild(card);
+  }
+  // options form (host only)
+  const ob = $('#optsBox');
+  if (play.isHost && def.options && def.options.length) {
+    show('#optsBox', true);
+    if (!ob.dataset.built) { buildOptions(); ob.dataset.built = '1'; }
+  } else show('#optsBox', false);
+  // start/ready gating
+  const ready = players.filter(r => r.seat >= 0 && !r.ai);
+  const allReady = ready.every(r => r.ready) || ready.length <= 1;
+  if (play.isHost) {
+    const enough = players.length >= def.minPlayers;
+    $('#startBtn').disabled = !enough;
+    $('#waitHint').textContent = play.spectator ? T('Attendi che la partita inizi…', 'Waiting for the game to start…')
+      : enough ? (allReady ? T('Tutti pronti — premi Inizia.', 'Everyone ready — press Start.') : T('Puoi iniziare, oppure attendi che tutti siano pronti.', 'You can start now, or wait until everyone is ready.'))
+        : T(`Servono almeno ${def.minPlayers} giocatori. Invita qualcuno o aggiungi ANIMA.`, `At least ${def.minPlayers} players needed. Invite someone or add ANIMA.`);
+  } else {
+    $('#waitHint').textContent = play.spectator ? T('Attendi che la partita inizi…', 'Waiting for the game to start…') : T("In attesa che l'host avvii la partita…", 'Waiting for the host to start the game…');
+  }
+}
+// Game options are declared (in Italian) inside each game file's defineGame(); we translate only the
+// DISPLAY label here, never the value, so game logic and stored options are untouched. Unknown labels
+// (e.g. pure numbers like "5"/"7") pass through verbatim.
+const OPT_EN = {
+  'Mente avversario': 'Opponent mind', 'Mente ANIMA': 'ANIMA mind',
+  'Classica (offline)': 'Classic (offline)', 'LLM online (Grok/Claude)': 'Online LLM (Grok/Claude)',
+  'ANIMA-LLM (online)': 'ANIMA-LLM (online)',
+  'Difficoltà ANIMA': 'ANIMA difficulty', 'Difficoltà': 'Difficulty',
+  'Facile': 'Easy', 'Medio': 'Medium', 'Difficile': 'Hard',
+  'Punti per vincere': 'Points to win', 'Power-up': 'Power-up',
+};
+const optLabel = (s) => (lang() === 'en' && OPT_EN[s] != null) ? OPT_EN[s] : s;
+function buildOptions() {
+  const form = $('#optsForm'); form.innerHTML = '';
+  for (const o of def.options) {
+    const wrap = el('div', 'opt'); wrap.appendChild(el('label', null, optLabel(o.label)));
+    let input;
+    if (o.type === 'select') { input = el('select'); (o.choices || []).forEach(c => { const op = el('option', null, optLabel(c.label)); op.value = c.value; input.appendChild(op); }); input.value = o.default; }
+    else if (o.type === 'toggle') { input = el('input'); input.type = 'checkbox'; input.checked = !!o.default; }
+    else { input = el('input'); input.type = 'number'; if (o.min != null) input.min = o.min; if (o.max != null) input.max = o.max; input.value = o.default; }
+    input.id = 'opt_' + o.key; wrap.appendChild(input); form.appendChild(wrap);
+  }
+}
+function collectOptions() {
+  const out = {};
+  for (const o of (def.options || [])) {
+    const i = $('#opt_' + o.key); if (!i) { out[o.key] = o.default; continue; }
+    out[o.key] = o.type === 'toggle' ? i.checked : (o.type === 'number' ? Number(i.value) : i.value);
+  }
+  return out;
+}
+
+// ---- room wiring (once per session) --------------------------------------------------------
+function wireRoomOnce() {
+  if (wiredRoom) return; wiredRoom = true;
+  play.on('roster', () => { renderRoster(); renderWaiting(); if (barOpen) renderBar(); });
+  play.on('peer', ({ name, spectator }) => { renderRoster(); renderWaiting(); sys(`${name} ${spectator ? T('👁 guarda', '👁 watching') : T('è entrato', 'joined')}`); if (play.isHost) { play.setPhase(phase === 'lobby' ? 'waiting' : phase); if (phase === 'playing') harness.resync(); } });
+  play.on('left', () => { renderRoster(); renderWaiting(); if (barOpen) renderBar(); sys(T('Un giocatore è uscito', 'A player left')); });
+  play.on('phase', ({ phase: p }) => { if (p && p !== phase) gotoPhase(p); });
+  play.on('message', ({ data }) => { if (data && data.k === 'state' && phase !== 'playing') gotoPhase('playing'); if (barOpen) renderBarScore(); });
+  play.on('chat', ({ name, avatar, text }) => addMsg(avatar, name, text));
+  play.on('react', ({ emoji }) => floatReact(emoji));
+  play.on('typing', ({ name, on }) => { $('#typing').textContent = on ? T(`${name} sta scrivendo…`, `${name} is typing…`) : ''; });
+  play.on('error', () => sys(T('⚠ Connessione P2P fallita (isolamento AP?).', '⚠ P2P connection failed (AP isolation?).')));
+}
+
+// ---- buttons -------------------------------------------------------------------------------
+// Start/Rematch are GATED in Grok mode: we verify the LLM with a real call first and only then begin.
+// If Grok is unreachable the match does NOT start — no silent offline opponent (the user asked for this).
+$('#startBtn').onclick = async () => { lastOpts = collectOptions(); $('#startBtn').disabled = true; await startMatchGated(lastOpts, false); $('#startBtn').disabled = false; };
+$('#rematchBtn').onclick = async () => { $('#rematchBtn').disabled = true; await startMatchGated(lastOpts, true); $('#rematchBtn').disabled = false; };
+$('#offlineBtn').onclick = () => {
+  show('#offlineBtn', false);
+  lastOpts = { ...lastOpts, mente: 'classica' };
+  const m = $('#opt_mente'); if (m) m.value = 'classica';
+  sys(T('▶ Avvio in modalità CLASSICA (offline) su tua scelta esplicita — NON è Grok.', '▶ Starting in CLASSIC mode (offline) by your explicit choice — this is NOT Grok.'));
+  doStartMatch(lastOpts, grokFailRematch);
+};
+$('#readyBtn').onclick = () => { const me = play.roster.find(r => r.peerId === play.peerId); const next = !(me && me.ready); play.setReady(next); $('#readyBtn').classList.toggle('good', next); renderWaiting(); };
+
+// Callbacks the generic Brain uses to talk to this app's chat/status (it stays game-agnostic).
+const brainUI = {
+  sys, taunt: animaMsg, note: sys,
+  ok(cfg, ms, brand) {
+    sys(T(`✅ ${LLM.providerLabel(cfg)} connesso in ${ms}ms · ${LLM.endpointHost(cfg)}.`, `✅ ${LLM.providerLabel(cfg)} connected in ${ms}ms · ${LLM.endpointHost(cfg)}.`));
+    if (brand !== 'Grok') sys(T(`ℹ︎ NB: è ${brand}, NON Grok di xAI. Per Grok vero: in teacher.json base "https://api.x.ai/v1", model "grok-2-latest", chiave xai-…`, `ℹ︎ Note: this is ${brand}, NOT xAI's Grok. For real Grok: in teacher.json set base "https://api.x.ai/v1", model "grok-2-latest", key xai-…`));
+    $('#status').textContent = `🧠 ${LLM.providerLabel(cfg)} @ ${LLM.endpointHost(cfg)}`;
+  },
+  fail: failGrok,
+};
+
+// In LLM mode, require a confirmed connection before the opponent exists. Returns false (blocked).
+// Works for ANY LLM-capable game (turn-based mover OR realtime coach) — the gate is game-agnostic.
+async function startMatchGated(opts, rematch) {
+  const llm = llmSelected(opts) && (play.roster || []).some(r => r.ai) && !!brainMode(def);
+  if (llm) { brainCfg = await preflightBrain(brainUI); if (!brainCfg) { grokFailRematch = rematch; return false; } }
+  doStartMatch(opts, rematch);
+  return true;
+}
+function doStartMatch(opts, rematch) {
+  show('#offlineBtn', false); show('#gbOffline', false); isOver = false;
+  if (rematch) { show('#rematchBtn', false); show('#toRoomBtn', false); $('#status').textContent = ''; harness.rematch(); }
+  else { play.setPhase('playing'); gotoPhase('playing'); harness.begin(opts); }
+  startCoach(opts);
+}
+function failGrok(reason) {
+  brainCfg = null;
+  sys(T(`⛔ Modalità LLM BLOCCATA: ${reason} Nessun avversario offline al posto suo: la partita non parte.`, `⛔ LLM mode BLOCKED: ${reason} No offline opponent in its place: the game won't start.`));
+  $('#status').innerHTML = `<span style="color:#fb7185">${T(`⛔ LLM non disponibile — partita bloccata. ${reason}`, `⛔ LLM unavailable — game blocked. ${reason}`)}</span>`;
+  show('#offlineBtn', true); show('#gbOffline', barOpen || immersive);
+  if (barOpen) syncBarButtons();
+  return false;
+}
+$('#toRoomBtn').onclick = () => { stopCoach(); play.setPhase('waiting'); gotoPhase('waiting'); };
+$('#hintBtn').onclick = () => doHint();
+$('#inviteBtn').onclick = async () => { const link = location.origin + '/apps/games/?join=' + play.roomId; try { await navigator.clipboard.writeText(link); sys(T('🔗 Invito copiato (codice ' + play.roomId.replace(/^r_/, '') + ')', '🔗 Invite copied (code ' + play.roomId.replace(/^r_/, '') + ')')); } catch { sys(T('Codice stanza: ', 'Room code: ') + play.roomId); } };
+$('#leaveBtn').onclick = leaveRoom;
+
+// immersive game bar — delegates to the same handlers as the top bar so the Grok gating still applies
+$('#fabMenu').onclick = openBar;
+$('#gbResume').onclick = closeBar;
+$('#gbRematch').onclick = () => $('#rematchBtn').click();
+$('#gbOffline').onclick = () => $('#offlineBtn').click();
+$('#gbToRoom').onclick = () => $('#toRoomBtn').click();
+$('#gbHint').onclick = () => doHint();
+$('#gbInvite').onclick = () => $('#inviteBtn').click();
+$('#gbLeave').onclick = leaveRoom;
+$('#gbFs').onclick = () => { toggleFs(); setTimeout(() => { if (barOpen) renderBar(); }, 60); };
+// keep bar/board in sync with real fullscreen + pointer-lock (Esc, F11, OS gestures)
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && immersive && !fsUserOff) wantFs = true; if (barOpen) renderBar(); requestAnimationFrame(fitBoard); });
+document.addEventListener('pointerlockchange', () => {
+  const locked = document.pointerLockElement === $('#board');
+  if (locked) { lockY = $('#board').height / 2; showLockHint(false); }
+  else if (immersive && !barOpen && phase === 'playing' && def && def.capturesPointer && !(play && play.spectator)) showLockHint(true);
+});
+
+// ---- gamepad/joystick (transversal: routed by phase + the game's padMode) ------------------
+function setupGamepad() {
+  const vis = sel => !$(sel).classList.contains('hidden');
+  gamepad = new GamepadManager({
+    onConnect: (g) => { $('#padChip').classList.remove('hidden'); if (phase !== 'lobby') sys(T('🎮 Controller collegato', '🎮 Controller connected') + (g.id ? ' (' + g.id.slice(0, 28) + ')' : '')); },
+    onDisconnect: () => { if (!gamepad.connected()) { $('#padChip').classList.add('hidden'); if (phase !== 'lobby') sys(T('🎮 Controller scollegato', '🎮 Controller disconnected')); } },
+    onAxis: (x, y) => {
+      if (phase !== 'playing' || barOpen || !harness || play.spectator || !def || def.padMode !== 'analog') return;
+      const key = Math.sign(x) + ',' + Math.sign(y); if (key === lastAxisKey) return; lastAxisKey = key;   // forward only on change
+      harness.feedAxis(x, y);
+    },
+    onDir: (dx, dy) => { if (phase === 'playing' && !barOpen && harness && !play.spectator && def && def.padMode === 'cursor') harness.feedPadDir(dx, dy); },
+    onButton: (name, down) => {
+      if (!down) return;
+      if (phase === 'playing') {
+        // Start/Select = the guide button: open/close the game bar (native console feel).
+        if (name === 'Start' || name === 'Select') { toggleBar(); return; }
+        if (barOpen) { if (name === 'B') closeBar(); return; }   // while the menu is up, don't drive the game
+        if (name === 'A' && def && def.padMode === 'cursor' && !play.spectator) harness.feedPadButton('A');
+      } else if (phase === 'waiting') {
+        if (name === 'Start' && play.isHost && vis('#startBtn') && !$('#startBtn').disabled) $('#startBtn').click();
+        if (name === 'A' && vis('#readyBtn')) $('#readyBtn').click();
+      }
+    },
+  });
+  gamepad.start();
+}
+
+function onGameOver(r) {
+  if (isOver) return;   // fire once per match — stopCoach()/recordResult/animaSay below must never double-run
+  isOver = true;
+  const won = r.winner === play.seat;
+  const txt = r.winner === -1 ? T('🤝 Pareggio!', '🤝 Draw!') : (won ? T('🏆 Hai vinto!', '🏆 You won!') : T(`Vince ${nameOfSeat(r.winner)}`, `${nameOfSeat(r.winner)} wins`));
+  $('#status').innerHTML = `<span class="${won ? 'win' : ''}">${txt}</span>`; sys(txt);
+  stopCoach();
+  // result banner in the game bar (the top status bar is hidden in immersive play)
+  const res = $('#gbResult'); res.textContent = txt; res.className = 'gbar-result ' + (r.winner === -1 ? 'draw' : (won ? 'win' : 'lose'));
+  releaseLock();                                    // hand the cursor back so the menu is clickable
+  if (gamepad) gamepad.rumble(won ? 260 : 120, won ? 0.85 : 0.4, won ? 0.6 : 0.2);
+  if (play.isHost) { show('#rematchBtn', true); show('#toRoomBtn', true); }
+  if (immersive) openBar(); else syncBarButtons();   // surface rematch/leave automatically
+  if (play.seat >= 0 && !play.spectator) { const o = r.winner === -1 ? 'draw' : (won ? 'win' : 'loss'); P.recordResult(def.id, o).then(s => { STATS = s; paintCard(); }); }
+  const who = r.winner === -1 ? 'pareggio' : nameOfSeat(r.winner) + ' ha vinto';
+  animaSay(`Commenta in una frase breve e simpatica la fine di una partita a ${def.name}: ${who}.`).then(line => { if (line) animaMsg(line); });
+}
+async function maybeBanter() {
+  const t = performance.now(); if (t - animaLast < 9000) return; animaLast = t;
+  const line = await animaSay(`Sei l'avversario in ${def.name}. Sfotti l'altro in una frase brevissima.`);
+  if (line) animaMsg(line);
+}
+
+// ---- input ---------------------------------------------------------------------------------
+function wireInput(canvas) {
+  const toCanvas = ev => { const r = canvas.getBoundingClientRect(); const x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left, y = (ev.touches ? ev.touches[0].clientY : ev.clientY) - r.top; return { x: x * (canvas.width / r.width), y: y * (canvas.height / r.height) }; };
+  const live = () => phase === 'playing' && harness && !play.spectator && !barOpen;
+  canvas.onpointerdown = ev => {
+    onUserGesture();                                       // a guest's first click claims fullscreen + mouse capture
+    if (!live()) return; ev.preventDefault();
+    if (document.pointerLockElement === canvas) return;    // captured: the move handler drives the paddle
+    const { x, y } = toCanvas(ev); harness.feedPointer(x, y); harness.feedPointerMove(x, y);
+  };
+  // Continuous input for real-time games. Captured (pointer-lock) → relative motion; else throttled drag (~30Hz).
+  canvas.onpointermove = ev => {
+    if (!live()) return;
+    if (document.pointerLockElement === canvas) { lockY = clamp(lockY + ev.movementY, 0, canvas.height); harness.feedPointerMove(canvas.width / 2, lockY); return; }
+    if (!(ev.buttons || ev.pointerType === 'touch')) return;
+    const now = performance.now(); if (now - ptrThrottle < 33) return; ptrThrottle = now;
+    const { x, y } = toCanvas(ev); harness.feedPointerMove(x, y);
+  };
+  window.onkeydown = ev => {
+    if (phase === 'playing') {
+      if (ev.key === 'Tab') { ev.preventDefault(); toggleBar(); return; }                 // Tab = guide / game bar
+      if (ev.key === 'Escape' && barOpen) { ev.preventDefault(); closeBar(); return; }
+      if (!barOpen) onUserGesture();                                                        // first keypress claims fullscreen/capture
+    }
+    if (phase !== 'playing' || barOpen || !harness || play.spectator || document.activeElement === $('#chatin')) return;
+    harness.feedKey(ev.key);
+  };
+  window.onkeyup = ev => { if (phase !== 'playing' || barOpen || !harness || play.spectator || document.activeElement === $('#chatin')) return; harness.feedKeyUp(ev.key); };
+}
+
+// Size the board canvas. fillViewport games (3D Pong) get the whole area at devicePixelRatio; classic
+// games keep the fixed centred 480² surface (their renderers assume it). Forwarded to custom renderers.
+function fitBoard() {
+  const wrap = $('#boardWrap'), board = $('#board');
+  if (!def) return;
+  if (def.fillViewport) {
+    wrap.classList.add('fill');
+    board.style.width = ''; board.style.height = '';
+    const r = wrap.getBoundingClientRect();
+    if (harness && r.width > 1 && r.height > 1) harness.resize(r.width, r.height);
+  } else {
+    wrap.classList.remove('fill');
+    // Immersive: blow the classic square up to fill the screen (crisp — backing store matches CSS px).
+    let size = 480, css = '';
+    if (immersive) { const r = wrap.getBoundingClientRect(); size = Math.round(clamp(Math.min(r.width, r.height) - 8, 360, 1024)); css = size + 'px'; }
+    if (board.width !== size || board.height !== size) { board.width = size; board.height = size; }
+    board.style.width = css; board.style.height = css;
+  }
+}
+function setupResize() {
+  if (boardRO) return;
+  boardRO = new ResizeObserver(() => { if (phase === 'playing') fitBoard(); });
+  boardRO.observe($('#boardWrap'));
+  window.addEventListener('resize', () => { if (phase === 'playing') fitBoard(); });
+}
+
+// ---- LLM brain (generic, game-agnostic — see llm-brain.js) ----------------------------------
+// Turn-based games: the model PLAYS the moves (mover). Realtime games: it tunes the STYLE between
+// points (coach). Either way it's the only proof the LLM is alive; on failure the match is blocked,
+// never silently handed to the local heuristic. `coach` holds the active Brain instance.
+function stopCoach() { if (coach) { coach.stop(); coach = null; } else if (harness && play && play.isHost && harness.state) harness.hostAct({ type: 'brain', brain: null }); }
+function startCoach(opts) {
+  stopCoach();
+  if (!play.isHost || !def) return;
+  const mode = brainMode(def);
+  if (!llmSelected(opts) || !mode) { if (harness && play.isHost && harness.state) harness.hostAct({ type: 'brain', brain: null }); return; }
+  if (!brainCfg) return;   // gated by preflightBrain; defensive
+  coach = new Brain({ harness, def, play, ui: brainUI, cfg: brainCfg });
+  sys(mode === 'mover'
+    ? T(`🧠 ${LLM.providerLabel(brainCfg)} gioca: sceglie ogni mossa (a turni l'LLM gioca davvero).`, `🧠 ${LLM.providerLabel(brainCfg)} is playing: it picks every move (turn-based, the LLM really plays).`)
+    : T(`🧠 ${LLM.providerLabel(brainCfg)} allena lo stile tra un punto e l'altro (in tempo reale il movimento resta locale: un LLM non può muovere a 60fps).`, `🧠 ${LLM.providerLabel(brainCfg)} coaches the style between points (in real time the movement stays local: an LLM can't move at 60fps).`));
+  coach.start(opts);
+}
+
+// ---- roster (turn/score pips live in the game bar — see renderBarScore) ----------------------
+function nameOfSeat(seat) { const r = (play.roster || []).find(x => x.seat === seat); return r ? r.name : 'Seat ' + seat; }
+function renderRoster() {
+  const wrap = $('#seats'); wrap.innerHTML = '';
+  const players = (play.roster || []).filter(r => r.seat >= 0).sort((a, b) => a.seat - b.seat);
+  const specs = (play.roster || []).filter(r => r.spectator);
+  wrap.appendChild(el('h4', null, T('Giocatori', 'Players')));
+  for (const r of players) { const row = el('div', 'seat'); const av = el('div', 'av', r.avatar || '👾'); av.style.background = (r.color || '#334') + '44'; row.appendChild(av); row.appendChild(el('span', null, r.name + (r.ai ? ' 🤖' : '') + (r.seat === play.seat ? T(' · tu', ' · you') : ''))); wrap.appendChild(row); }
+  if (specs.length) { wrap.appendChild(el('h4', null, T('Spettatori 👁', 'Spectators 👁'))); for (const r of specs) { const row = el('div', 'seat'); row.appendChild(el('div', 'av', r.avatar || '👁')); row.appendChild(el('span', null, r.name)); wrap.appendChild(row); } }
+}
+
+// ---- chat ----------------------------------------------------------------------------------
+function buildEmotes() {
+  const wrap = $('#emotes'); wrap.innerHTML = '';
+  ['👍', '😂', '🔥', '😱', '🎉', 'GG'].forEach(e => { const b = el('button', null, e); b.onclick = () => { if (e === 'GG') play.chat('GG'); else play.react(e); }; wrap.appendChild(b); });
+}
+$('#chatform').onsubmit = async e => {
+  e.preventDefault(); const raw = $('#chatin').value.trim(); if (!raw || !play) return;
+  $('#chatin').value = ''; play.typing(false);
+  if (raw === '/hint' || raw.toLowerCase().startsWith('@anima')) {
+    addMsg(profile.avatar, profile.name, raw);
+    if (raw === '/hint') return doHint();
+    const q = raw.replace(/^@anima/i, '').trim();
+    animaMsg(await animaSay(q || 'Dammi un consiglio.', 'on') || T('(ANIMA non risponde ora)', '(ANIMA is not responding now)')); return;
+  }
+  play.chat(raw);
+};
+$('#chatin').oninput = () => { if (!play) return; play.typing(true); clearTimeout(typingTimer); typingTimer = setTimeout(() => play.typing(false), 1500); };
+async function doHint() {
+  if (!harness || !harness.state || play.seat < 0) { animaMsg(T('Nessun suggerimento disponibile.', 'No hint available.')); return; }
+  let tip = null; try { tip = await def.ai(harness.state, play.seat, harness.api); } catch {}
+  if (tip == null) { animaMsg(T('Nessuna mossa suggerita.', 'No suggested move.')); return; }
+  const human = describeTip(tip);
+  animaMsg(await animaSay(`Suggerisci in una frase incoraggiante: ${human}`) || T(`Suggerimento: ${human}`, `Hint: ${human}`));
+}
+function describeTip(tip) {
+  if (def.id === 'tris' && typeof tip.cell === 'number') { return T(`gioca riga ${(tip.cell / 3 | 0) + 1}, colonna ${tip.cell % 3 + 1}.`, `play row ${(tip.cell / 3 | 0) + 1}, column ${tip.cell % 3 + 1}.`); }
+  if (def.id === 'forza4' && typeof tip.col === 'number') { return T(`lascia cadere nella colonna ${tip.col + 1}.`, `drop into column ${tip.col + 1}.`); }
+  return T('gioca la mossa evidenziata.', 'play the highlighted move.');
+}
+function addMsg(avatar, who, text) { const m = el('div', 'msg'); const a = el('span', null, avatar || '👤'); a.style.flex = 'none'; m.appendChild(a); m.appendChild(el('span', 'who', who + ':')); m.appendChild(el('span', null, text)); push(m); }
+function animaMsg(text) { const m = el('div', 'msg anima'); const a = el('span', null, '🧠'); a.style.flex = 'none'; m.appendChild(a); m.appendChild(el('span', 'who', 'ANIMA:')); m.appendChild(el('span', null, text)); push(m); }
+function sys(text) { push(el('div', 'msg sys', text)); }
+function push(node) { const box = $('#msgs'); box.appendChild(node); box.scrollTop = box.scrollHeight; if (immersive && !barOpen) toast(node.textContent); }
+function floatReact(emoji) { const layer = $('#reacts'); const f = el('div', 'float', emoji); f.style.left = (20 + Math.random() * 60) + '%'; f.style.bottom = '10%'; layer.appendChild(f); setTimeout(() => f.remove(), 1900); }
+
+// ---- leave ---------------------------------------------------------------------------------
+function leaveRoom() {
+  // Teardown is best-effort: a failure tearing down the harness or transport must NEVER strand the
+  // player in the game with no way back to the catalog (a cause of "can't return to the list").
+  try { stopCoach(); } catch {}
+  try { if (harness) harness.stop(); } catch {} harness = null;
+  try { if (play) play.leave(); } catch {} play = null;
+  wiredRoom = false; def = null; brainCfg = null; isOver = false; $('#optsBox').dataset.built = '';
+  show('#offlineBtn', false); show('#gbOffline', false); $('#gbResult').classList.add('hidden');
+  $('#msgs').innerHTML = ''; $('#typing').textContent = ''; $('#status').textContent = '';
+  gotoPhase('lobby'); loadRooms();
+}
+
+// ---- language (bilingual via anima.lang) ---------------------------------------------------
+// Static chrome carries IT defaults in the HTML; relabelStatic() overwrites every fixed label/title/
+// placeholder in the active language, and the dynamic renderers (catalog, rooms, waiting, roster,
+// gamercard, bar) read T()/lang() live, so a single relabel() repaints the whole app with no reload.
+function relabelStatic() {
+  const en = lang() === 'en';
+  document.documentElement.setAttribute('lang', en ? 'en' : 'it');
+  document.title = T('Giochi', 'Games');
+  $('#app > header h1').textContent = '🎮 ' + T('Giochi', 'Games');
+  $('#padChip').title = T('Controller collegato', 'Controller connected');
+  $('#cardBtn').title = T('Modifica gamercard', 'Edit gamercard');
+  // lobby section headers + code-join controls
+  $('#secCreate').textContent = T('Crea una partita', 'Create a game');
+  $('#secOpen').textContent = T('Partite aperte sulla rete', 'Open games on the network');
+  $('#codeIn').placeholder = T('codice stanza', 'room code');
+  $('#codeJoin').textContent = T('Entra con codice', 'Join with code');
+  const re = $('#roomsEmpty'); if (re) re.textContent = T('Nessuna partita aperta.', 'No open games.');
+  // game bar (top) buttons
+  $('#hintBtn').textContent = '💡 ' + T('Hint', 'Hint');
+  $('#inviteBtn').textContent = '🔗 ' + T('Invita', 'Invite');
+  $('#readyBtn').textContent = '✓ ' + T('Pronto', 'Ready');
+  $('#startBtn').textContent = '▶ ' + T('Inizia', 'Start');
+  $('#offlineBtn').textContent = '▶ ' + T('Gioca offline (classica)', 'Play offline (classic)');
+  $('#rematchBtn').textContent = '↻ ' + T('Rivincita', 'Rematch');
+  $('#toRoomBtn').textContent = '⟲ ' + T('Sala', 'Lobby');
+  $('#leaveBtn').textContent = T('Esci', 'Leave');
+  $('#roomCode').title = T('Codice stanza', 'Room code');
+  // options box + chat
+  $('#optsBox h4').textContent = T('Impostazioni', 'Settings');
+  $('#chatin').placeholder = T('Messaggio o @anima…', 'Message or @anima…');
+  // fab + immersive game bar
+  $('#fabMenu').title = T('Menu (Tab)', 'Menu (Tab)');
+  $('#gbResume').textContent = isOver ? ('✓ ' + T('Chiudi menu', 'Close menu')) : ('▶ ' + T('Riprendi', 'Resume'));
+  $('#gbRematch').textContent = '↻ ' + T('Rivincita', 'Rematch');
+  $('#gbOffline').textContent = '▶ ' + T('Gioca offline', 'Play offline');
+  $('#gbToRoom').textContent = '⟲ ' + T("Sala d'attesa", 'Waiting room');
+  $('#gbHint').textContent = '💡 ' + T('Suggerimento', 'Hint');
+  $('#gbInvite').textContent = '🔗 ' + T('Invita', 'Invite');
+  $('#gbFs').textContent = document.fullscreenElement ? ('⛶ ' + T('Esci da schermo intero', 'Exit fullscreen')) : ('⛶ ' + T('Schermo intero', 'Fullscreen'));
+  $('#gbLeave').textContent = '✕ ' + T('Esci dal gioco', 'Leave game');
+  // game bar footer hints
+  const foot = $('#gbar .gbar-foot');
+  foot.children[0].lastChild.textContent = T('menu', 'menu');
+  foot.children[1].lastChild.textContent = T('chiudi', 'close');
+  $('#gbCtrlHint').textContent = ctrlHintText();
+  $('#gbPaused').textContent = '⏸ ' + T('In pausa', 'Paused');
+  $('#lockHint').textContent = '🖱 ' + T('Clicca per catturare il mouse', 'Click to capture the mouse');
+  // gamercard modal
+  $('#modal h2').textContent = T('La tua gamercard', 'Your gamercard');
+  $('#mName').placeholder = T('Nome', 'Name');
+  $('#mSave').textContent = T('Salva', 'Save');
+}
+// One entry point repaints everything; called at boot and whenever the OS language changes.
+function relabel() {
+  relabelStatic();
+  paintCard();
+  // Re-translate the host options form (built once per session) so its labels follow the language too,
+  // preserving any in-progress selections (rebuild → restore the current values).
+  const ob = $('#optsBox');
+  if (ob.dataset.built && def && def.options && play && play.isHost) {
+    const cur = collectOptions(); buildOptions();
+    for (const o of (def.options || [])) { const i = $('#opt_' + o.key); if (i && cur[o.key] != null) { if (o.type === 'toggle') i.checked = !!cur[o.key]; else i.value = cur[o.key]; } }
+  }
+  if (phase === 'lobby') { loadCatalog(); loadRooms(); }
+  else { renderWaiting(); renderRoster(); }
+  if (barOpen) renderBar(); else syncBarButtons();
+}
+
+// ---- boot ----------------------------------------------------------------------------------
+(async function boot() {
+  relabelStatic();
+  STATS = await P.loadStats(); paintCard();
+  setupGamepad(); setupResize();
+  await loadCatalog();
+  loadRooms();   // self-defers ~3 s on first launch (see loadRooms) so we don't pile onto the boot storm
+  $('#codeJoin').onclick = () => { const c = $('#codeIn').value.trim(); if (c) joinGame(c.startsWith('r_') ? c : 'r_' + c, false); };
+  $('#refresh').onclick = loadRooms;
+  setInterval(() => { if (phase === 'lobby') loadRooms(); }, 4000);
+  const q = new URLSearchParams(location.search);
+  if (q.get('join')) joinGame(q.get('join'), false);
+  else if (q.get('spectate')) joinGame(q.get('spectate'), true);
+  else if (q.get('host')) { const g = CATALOG.find(x => x.id === q.get('host')); if (g) hostGame(g, false); }
+  // Live OS-wide language sync: repaint the whole app when the language is changed elsewhere (Settings,
+  // another open window) — no reload. relabel() re-reads lang() and re-runs the current renders.
+  I18N.onChange(() => relabel());
+})();
+</script>
+</div>
+</body>
+</html>

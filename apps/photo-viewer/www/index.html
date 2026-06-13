@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Photo Viewer</title>
+  <style>
+    :root { --bg:#0b0f1a; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff; --line:#2a3a5e; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: var(--bg); color: var(--text); font: 14px system-ui, sans-serif; }
+    header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+    header .name { flex: 1; color: var(--muted); font-size: 12px; }
+    button { border: 1px solid var(--line); background: #ffffff10; color: var(--text); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+    button:hover { background: #ffffff1f; }
+    .stage { flex: 1; display: grid; place-items: center; min-height: 0; padding: 8px; }
+    img { max-width: 100%; max-height: 100%; border-radius: 6px; }
+    .bar { display: flex; gap: 6px; overflow-x: auto; padding: 6px; background: var(--panel); border-top: 1px solid var(--line); }
+    .chip { padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; cursor: pointer; white-space: nowrap; font-size: 12px; }
+    .chip:hover { background: #ffffff14; }
+  </style>
+</head>
+<body>
+  <header><span class="name" id="name" data-i18n="header_name">Pictures</span><button id="wall" data-i18n="btn_wallpaper">Set as wallpaper</button></header>
+  <div class="stage"><img id="img" alt=""></div>
+  <div class="bar" id="bar"></div>
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    const t = await I18N.init('photo-viewer');
+    const DIR = '/data/Pictures';
+    const img = document.getElementById('img');
+    const name = document.getElementById('name');
+    const bar = document.getElementById('bar');
+    let current = '';
+    const src = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
+    // Showing a file = the header displays its path (not a catalog string), so drop the i18n
+    // annotation here; otherwise a live language switch would repaint the path back to "Pictures".
+    function show(path) { current = path; img.src = src(path); name.removeAttribute('data-i18n'); name.textContent = path; }
+    document.getElementById('wall').onclick = () => current && window.parent.postMessage({ type: 'set-wallpaper', path: current }, '*');
+    async function load() {
+      let data; try { data = await (await fetch('/api/fs/list?path=' + encodeURIComponent(DIR))).json(); } catch { return; }
+      const imgs = (data.entries || []).filter(e => e.type === 'file' && /\.(png|jpe?g|gif|bmp|svg)$/i.test(e.name));
+      bar.innerHTML = '';
+      imgs.forEach((im, i) => {
+        const c = document.createElement('div'); c.className = 'chip'; c.textContent = im.name;
+        c.onclick = () => show(DIR + '/' + im.name);
+        bar.appendChild(c);
+        if (i === 0 && !new URLSearchParams(location.search).get('path')) show(DIR + '/' + im.name);
+      });
+    }
+    const q = new URLSearchParams(location.search).get('path');
+    if (q) show(q);
+    load();
+  </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "_lang": "en",
+  "tab_clock": "Clock",
+  "tab_timer": "Timer",
+  "stopwatch": "Stopwatch",
+  "lap": "Lap",
+  "cfg_title": "Clock settings",
+  "opt_24h": "24-hour clock",
+  "opt_seconds": "Show seconds",
+  "opt_analog": "Analog clock",
+  "dev_init": "device clock…",
+  "dev_unreachable": "device unreachable",
+  "dev_synced": "nucleo NTP-synced · {hh}:{mm}",
+  "dev_synced_drift": "nucleo NTP-synced · drift {secs}s ({hh}:{mm})",
+  "dev_waiting": "nucleo: waiting for NTP sync",
+  "dev_browser_set": "time set from browser",
+  "timer_done": "Time's up!",
+  "save_ok": "Saved to device",
+  "save_fail": "Save failed — device unreachable"
+}

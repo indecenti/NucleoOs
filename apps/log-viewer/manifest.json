@@ -1,0 +1,20 @@
+{
+  "id": "log-viewer",
+  "name": "Log Viewer",
+  "version": "0.1.0",
+  "description": "Tail live logs and replay the event journal for time-travel debugging.",
+  "category": "tools",
+  "entry_service": "log_viewer_main",
+  "web_route": "/apps/log-viewer/",
+  "icon": "assets/icon.svg",
+  "permissions": ["storage.shared", "system.events"],
+  "mounts": { "app": "/apps/log-viewer/data", "journal": "/journal" },
+  "handles": {
+    "role": "viewer",
+    "extensions": ["evt"]
+  },
+  "subscribes": ["fs.open", "system.log", "system.event"],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

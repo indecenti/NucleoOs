@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101826">
+  <title>NucleoOS</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Pairing overlay: blocks the OS until this browser is paired with the device. The
+       6-digit code is shown on the Cardputer screen (proof of physical proximity). -->
+  <div id="pair-overlay" class="pair-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pair-title">
+    <form id="pair-form" class="pair-card">
+      <div class="pair-logo">
+        <svg viewBox="0 0 20 20" width="34" height="34" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="7" height="7" rx="2"/><rect x="11" y="2" width="7" height="7" rx="2"/><rect x="2" y="11" width="7" height="7" rx="2"/><rect x="11" y="11" width="7" height="7" rx="2"/></svg>
+      </div>
+      <h1 id="pair-title">Pair with this device</h1>
+      <p class="pair-sub">Enter the 6-digit code shown on your Cardputer screen.</p>
+      <input id="pair-pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
+             placeholder="••••••" aria-label="Pairing code" autofocus>
+      <div id="pair-msg" class="pair-msg" role="alert"></div>
+      <button id="pair-submit" type="submit">Pair</button>
+    </form>
+  </div>
+
+  <!-- Desktop: app icons live here -->
+  <main id="desktop" aria-label="Desktop"></main>
+
+  <!-- Window layer: app windows are created here by the window manager -->
+  <div id="windows"></div>
+
+  <!-- Right-click context menu (desktop icons + empty desktop) -->
+  <div id="ctxmenu" class="ctx hidden" role="menu"></div>
+
+  <!-- Start menu -->
+  <section id="start-menu" class="hidden" aria-label="Start menu">
+    <header>NucleoOS <span id="sm-device" class="sm-device"></span><span id="sm-version">v0.1.0</span></header>
+    <div id="sm-apps" class="sm-grid"></div>
+    <footer>
+      <a id="sm-download" href="/downloads/NucleoConnect.exe" download><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><line x1="8" y1="2.5" x2="8" y2="10.5" stroke-linecap="round"/><path d="M4.5 7.5 8 11l3.5-3.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="3" y1="13.5" x2="13" y2="13.5" stroke-linecap="round"/></svg> Windows app</a>
+      <span id="sm-storage">SD —</span>
+    </footer>
+  </section>
+
+  <!-- Search results (apps + SD files), popped above the taskbar search box -->
+  <section id="search-panel" class="search-panel hidden" aria-label="Search results"></section>
+
+  <!-- Taskbar -->
+  <footer id="taskbar">
+    <button id="start-btn" title="Start">
+      <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="7" height="7" rx="2"/><rect x="11" y="2" width="7" height="7" rx="2"/><rect x="2" y="11" width="7" height="7" rx="2"/><rect x="11" y="11" width="7" height="7" rx="2"/></svg>
+    </button>
+    <div id="search" title="Search apps and files">
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><line x1="10.6" y1="10.6" x2="14" y2="14" stroke-linecap="round"/></svg>
+      <input id="search-input" type="text" placeholder="Search" autocomplete="off" spellcheck="false" aria-label="Search apps and files">
+    </div>
+    <div id="task-pinned" class="task-zone"></div>
+    <div id="task-running" class="task-zone"></div>
+    <div id="tray">
+      <span id="tray-remote" title="" hidden></span>
+      <span id="tray-net" title="Network"></span>
+      <span id="tray-storage">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3.5 2.5h5L12 6v7.5H3.5z" stroke-linejoin="round"/><line x1="6" y1="2.8" x2="6" y2="5"/><line x1="8" y1="2.8" x2="8" y2="5"/><line x1="10" y1="3.4" x2="10" y2="5"/></svg>
+        <span class="v">—</span>
+      </span>
+      <span id="clock" title="">--:--</span>
+    </div>
+  </footer>
+
+  <script type="module" src="shell.js"></script>
+</body>
+</html>

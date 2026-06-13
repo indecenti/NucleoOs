@@ -1,0 +1,43 @@
+{"q":"che tempo fa a Roma","lang":"it","expect":"abstain"}
+{"q":"pioverà a Milano domani","lang":"it","expect":"abstain"}
+{"q":"temperatura a Napoli","lang":"it","expect":"abstain"}
+{"q":"ci sarà vento a Trieste","lang":"it","expect":"abstain"}
+{"q":"meteo a Brescia","lang":"it","expect":"abstain"}
+{"q":"che tempo farà domani a Genova","lang":"it","expect":"abstain"}
+{"q":"mostrami il meteo di domani","lang":"it","expect":"abstain"}
+{"q":"che temperatura c'è fuori","lang":"it","expect":"abstain"}
+{"q":"what's the weather in London","lang":"en","expect":"abstain"}
+{"q":"will it rain in Paris tomorrow","lang":"en","expect":"abstain"}
+{"q":"is it going to rain today","lang":"en","expect":"abstain"}
+{"q":"weather forecast for Berlin","lang":"en","expect":"abstain"}
+{"q":"show me the weather","lang":"en","expect":"abstain"}
+{"q":"cos'è il clima","lang":"it","expect":"answer"}
+{"q":"cos'è il sole","lang":"it","expect":"answer"}
+{"q":"cos'è la temperatura","lang":"it","expect":"answer"}
+{"q":"apri la musica","lang":"it","expect":"open_app"}
+{"q":"metti la radio","lang":"it","expect":"open_app"}
+{"q":"apri le impostazioni","lang":"it","expect":"open_app"}
+{"q":"apri il calendario","lang":"it","expect":"open_app"}
+{"q":"apri il browser","lang":"it","expect":"open_app"}
+{"q":"puoi aprire la radio","lang":"it","expect":"open_app"}
+{"q":"vorrei aprire le impostazioni","lang":"it","expect":"open_app"}
+{"q":"lancia la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"arpi la musica","lang":"it","expect":"open_app"}
+{"q":"open the settings","lang":"en","expect":"open_app"}
+{"q":"open music","lang":"en","expect":"open_app"}
+{"q":"open the radio","lang":"en","expect":"open_app"}
+{"q":"open the file manager","lang":"en","expect":"open_app"}
+{"q":"can you open the music app","lang":"en","expect":"open_app"}
+{"q":"launch the calendar","lang":"en","expect":"open_app"}
+{"q":"opne the settings","lang":"en","expect":"open_app"}
+{"q":"chiudi il calendario","lang":"it","expect":"close_app"}
+{"q":"chiudi la musica","lang":"it","expect":"close_app"}
+{"q":"chiudi il browser","lang":"it","expect":"close_app"}
+{"q":"close the calculator","lang":"en","expect":"close_app"}
+{"q":"close settings","lang":"en","expect":"close_app"}
+{"q":"close the music","lang":"en","expect":"close_app"}
+{"q":"apri","lang":"it","expect":"abstain"}
+{"q":"chiudi","lang":"it","expect":"abstain"}
+{"q":"fammi qualcosa","lang":"it","expect":"abstain"}
+{"q":"chiudi tutto","lang":"it","expect":"abstain"}
+{"q":"close everything","lang":"en","expect":"abstain"}

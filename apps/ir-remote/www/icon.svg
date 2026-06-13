@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="ir-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3a1230"/>
+      <stop offset="1" stop-color="#1a0a1e"/>
+    </linearGradient>
+    <linearGradient id="ir-body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b3a5e"/>
+      <stop offset="1" stop-color="#16203a"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#ir-bg)"/>
+  <!-- remote body -->
+  <rect x="22" y="20" width="20" height="38" rx="6" fill="url(#ir-body)" stroke="#4ea1ff" stroke-width="1.5"/>
+  <!-- IR emitter -->
+  <circle cx="32" cy="26" r="3.2" fill="#ff5a4d"/>
+  <!-- buttons -->
+  <circle cx="32" cy="36" r="2.2" fill="#8aa0c8"/>
+  <rect x="27" y="42" width="4" height="4" rx="1.2" fill="#6f86b8"/>
+  <rect x="33" y="42" width="4" height="4" rx="1.2" fill="#6f86b8"/>
+  <rect x="27" y="49" width="4" height="4" rx="1.2" fill="#6f86b8"/>
+  <rect x="33" y="49" width="4" height="4" rx="1.2" fill="#6f86b8"/>
+  <!-- IR waves -->
+  <g fill="none" stroke="#ff7a5c" stroke-width="2.4" stroke-linecap="round" opacity="0.95">
+    <path d="M40 12 q5 6 0 12"/>
+    <path d="M46 8 q9 10 0 20" opacity="0.7"/>
+    <path d="M52 4 q13 14 0 28" opacity="0.45"/>
+  </g>
+</svg>

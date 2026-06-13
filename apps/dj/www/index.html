@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DJ Mix</title>
+<style>
+  :root { --bg:#0c1220; --bg2:#111b2e; --bg3:#1a2640; --acc:#ff7eb6; --grn:#7cfc9a;
+          --org:#fd8c40; --blue:#4fb8ff; --dim:#3a4c66; --txt:#e8ecf4; --mut:#6b7fa0; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.4 'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--txt); }
+  header { display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--bg2); border-bottom:1px solid var(--bg3); }
+  header h1 { font-size:16px; margin:0; color:var(--acc); }
+  .grow { flex:1; }
+  button { background:var(--bg3); color:var(--txt); border:0; border-radius:7px; padding:7px 12px; cursor:pointer; font:inherit; }
+  button:hover { background:#243352; }
+  button.acc { background:var(--acc); color:#0c1220; font-weight:600; }
+  button.on { background:var(--grn); color:#0c1220; font-weight:600; }
+  .decks { display:flex; gap:10px; padding:12px; }
+  .deck { flex:1; background:var(--bg2); border-radius:10px; padding:10px; min-width:0; }
+  .deck h2 { margin:0 0 4px; font-size:13px; }
+  .deck.a h2 { color:var(--acc); } .deck.b h2 { color:var(--grn); }
+  .name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .meta { color:var(--mut); font-size:12px; margin-top:2px; }
+  canvas { width:100%; height:54px; display:block; margin-top:6px; background:var(--bg3); border-radius:6px; }
+  .xfader { padding:0 12px; }
+  .xbar { height:8px; background:var(--bg3); border-radius:4px; position:relative; }
+  .xknob { position:absolute; top:-3px; width:14px; height:14px; border-radius:50%; background:var(--acc); transform:translateX(-50%); }
+  .plan { margin:8px 12px; padding:8px 10px; background:var(--bg2); border-radius:8px; font-size:12px; color:var(--mut); min-height:18px; }
+  .plan b { color:var(--blue); } .plan .t { color:var(--org); font-weight:600; }
+  .controls { display:flex; gap:8px; padding:0 12px 10px; }
+  .lib { padding:0 12px 14px; }
+  .lib h3 { font-size:12px; color:var(--mut); margin:6px 0; text-transform:uppercase; letter-spacing:.05em; }
+  ul { list-style:none; margin:0; padding:0; max-height:38vh; overflow:auto; }
+  li { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:6px; cursor:pointer; }
+  li:hover { background:var(--bg2); }
+  li .b { color:var(--org); font-size:11px; min-width:34px; text-align:right; }
+  li.cued { outline:1px solid var(--grn); }
+  .badge { font-size:11px; padding:1px 6px; border-radius:5px; background:var(--bg3); color:var(--mut); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎛 <span data-i18n="app_title">DJ Mix</span></h1>
+  <span class="badge" id="status">—</span>
+  <span class="grow"></span>
+  <button id="cool" data-i18n="btn_cool">− energia</button>
+  <button id="push" data-i18n="btn_push">+ energia</button>
+  <button id="auto" data-i18n="btn_autodj">Auto-DJ</button>
+</header>
+
+<div class="decks">
+  <div class="deck a">
+    <h2 data-i18n="deck_a">A · ON AIR</h2>
+    <div class="name" id="aName" data-i18n="no_track">nessuna traccia</div>
+    <div class="meta" id="aMeta">—</div>
+    <canvas id="aWave"></canvas>
+  </div>
+  <div class="deck b">
+    <h2 data-i18n="deck_b">B · CUE</h2>
+    <div class="name" id="bName" data-i18n="empty_deck">vuoto</div>
+    <div class="meta" id="bMeta">—</div>
+    <canvas id="bWave"></canvas>
+  </div>
+</div>
+
+<div class="xfader"><div class="xbar"><div class="xknob" id="xknob" style="left:0%"></div></div></div>
+
+<div class="plan" id="plan" data-i18n-html="plan_hint">Carica due brani e premi <b>MIX</b>.</div>
+
+<div class="controls">
+  <button class="acc grow" id="mix">▶ <span data-i18n="btn_mix_now">MIX ORA</span></button>
+</div>
+
+<div class="lib">
+  <h3><span data-i18n="library">Libreria</span> · /data/Music</h3>
+  <ul id="list"><li class="meta" data-i18n="loading">Carico…</li></ul>
+</div>
+
+<script type="module">
+import I18N from '/nucleo-i18n.js';
+import { DjEngine } from './dj-engine.js';
+import { planMusicMix, genreFamily, genreEnergy } from './dj-planner.js';
+import { DjBrain } from './dj-brain.js';
+
+const t = await I18N.init('dj');
+
+const $ = (id) => document.getElementById(id);
+const DIR = '/data/Music';
+let engine = null, brain = new DjBrain();
+let deckA = null, deckB = null;     // {path, title, npx, family, energy, duration_sec}
+let lib = [], refBpm = 0, autoDJ = false, autoTimer = null;
+
+const ctxReady = () => {
+  if (!engine) engine = new DjEngine();
+  if (engine.ctx.state === 'suspended') engine.ctx.resume();
+};
+
+// derive family/energy from the filename, falling back to BPM (no genre tags on SD)
+function guessMeta(path, npx) {
+  const fam = genreFamily(path);
+  const en = genreEnergy(path);
+  if (fam !== 'pop') return { family: fam, energy: en };
+  const bpm = npx ? npx.bpm : 0;
+  if (bpm >= 150) return { family: 'hardcore', energy: 3 };
+  if (bpm >= 140) return { family: 'hard', energy: 3 };
+  if (bpm >= 120) return { family: 'electronic', energy: 2 };
+  if (bpm > 0 && bpm < 95) return { family: 'chill', energy: 1 };
+  return { family: 'pop', energy: 2 };
+}
+
+function trackOf(path, npx) {
+  const title = path.split('/').pop();
+  const m = guessMeta(title, npx);
+  return { file_path: path, path, title, artist: title, npx,
+           family: m.family, energy: m.energy,
+           duration_sec: npx ? npx.duration : 200 };
+}
+
+function fmtMMSS(s) { s = Math.max(0, s | 0); return `${(s / 60) | 0}:${('0' + (s % 60)).slice(-2)}`; }
+
+function drawWave(canvas, npx, color) {
+  const dpr = devicePixelRatio || 1, w = canvas.clientWidth, h = 54;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const g = canvas.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  if (!npx || !npx.rms) return;
+  const n = npx.rms.length;
+  g.strokeStyle = color; g.beginPath();
+  for (let x = 0; x < w; x++) { const i = Math.min(n - 1, (x * n / w) | 0); const v = npx.rms[i] * h; g.moveTo(x, h); g.lineTo(x, h - v); }
+  g.stroke();
+  // drop marker
+  if (npx.drop_sec > 0 && npx.duration > 0) { const x = npx.drop_sec / npx.duration * w; g.strokeStyle = '#4fb8ff'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); g.lineWidth = 1; }
+}
+
+function showDeck(which, tr) {
+  const nm = $(which + 'Name'), mt = $(which + 'Meta');
+  if (!tr) { nm.textContent = which === 'a' ? t('no_track') : t('empty_deck'); mt.textContent = '—'; return; }
+  nm.textContent = tr.title;
+  const x = tr.npx;
+  mt.innerHTML = x
+    ? `${x.bpm.toFixed(0)} BPM · ${x.camelot || '?'} · 🥁${x.kicks.length} · ${x.drop_sec > 0 ? '💥' + fmtMMSS(x.drop_sec) : t('no_drop')} · ${tr.family}`
+    : `${tr.family} · ${t('no_npx')}`;
+  drawWave($(which + 'Wave'), x, which === 'a' ? '#ff7eb6' : '#7cfc9a');
+}
+
+async function listLibrary() {
+  try {
+    const r = await fetch('/api/fs/list?path=' + encodeURIComponent(DIR));
+    const d = await r.json();
+    const files = (d.entries || []).filter((e) => e.type === 'file' && /\.(mp3|wav)$/i.test(e.name));
+    lib = files.map((e) => ({ path: DIR + '/' + e.name, name: e.name }));
+  } catch { lib = []; }
+  renderList();
+}
+
+function renderList() {
+  const ul = $('list');
+  if (!lib.length) { ul.innerHTML = `<li class="meta">${t('empty_library')}</li>`; return; }
+  ul.innerHTML = '';
+  for (const it of lib) {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>♪</span><span class="grow name">${it.name}</span><span class="b">${t('cue')}</span>`;
+    li.onclick = () => cueTrack(it.path, li);
+    it._li = li; ul.appendChild(li);
+  }
+}
+
+async function cueTrack(path, li) {
+  ctxReady();
+  $('status').textContent = t('st_loading_b');
+  try {
+    await engine.loadDeck('b', path);
+    deckB = trackOf(path, engine.decks.b.npx);
+    showDeck('b', deckB);
+    [...$('list').children].forEach((c) => c.classList.remove('cued'));
+    li && li.classList.add('cued');
+    previewPlan();
+    $('status').textContent = t('st_b_ready');
+  } catch (e) { $('status').textContent = t('st_b_error'); console.error(e); }
+}
+
+function dp() { return brain.context(); }
+
+function previewPlan() {
+  if (!deckA || !deckB) { return; }
+  const p = planMusicMix(deckA, deckB, dp(), refBpm || deckA.npx?.bpm || 0);
+  renderPlan(p);
+  return p;
+}
+
+function renderPlan(p) {
+  if (!p) { $('plan').textContent = '—'; return; }
+  const harm = { '2': t('harm_perfect'), '1': t('harm_compatible'), '0': '', '-1': t('harm_clash') }[String(p.harm)] || '';
+  $('plan').innerHTML =
+    `<span class="t">${p.type.toUpperCase()}</span> · ${p.xfade}s` +
+    (p.xfade_bars ? ` (${p.xfade_bars} bar)` : '') +
+    (p.fx ? ` · fx: <b>${p.fx}</b>` : '') +
+    (p.pitch !== 1 ? ` · pitch ${((p.pitch - 1) * 100).toFixed(1)}%` : '') +
+    (harm ? ` · ${harm}` : '') +
+    (p.double_drop ? ` · <b>DOUBLE DROP</b>` : '') +
+    (p.mix_in_drop ? ` · ${t('mix_in_drop')}` : '');
+}
+
+async function doMix() {
+  ctxReady();
+  if (!deckA) {                          // first play: just start B as A
+    if (!deckB) { $('status').textContent = t('st_load_track'); return; }
+    engine.play('b', deckB.npx?.intro_sec || 0, 1, 1);
+    promoteBtoA();
+    $('status').textContent = t('st_on_air');
+    if (autoDJ) scheduleAuto();
+    return;
+  }
+  if (!deckB) { $('status').textContent = t('st_cue_b'); return; }
+  const p = previewPlan();
+  engine.mix(p, 'a', 'b');
+  refBpm = p.eff_bpm_b || deckB.npx?.bpm || refBpm;
+  animateXfade(p.xfade);
+  setTimeout(promoteBtoA, (p.xfade + 0.2) * 1000);
+  $('status').textContent = t('st_mixing');
+}
+
+function promoteBtoA() {
+  // B is now the live deck. Move engine deck b -> a logically by reloading.
+  deckA = deckB; deckB = null;
+  brain.note(deckA);
+  // swap engine decks: make 'a' point at what 'b' was by re-decoding is heavy;
+  // instead we keep playing on 'b' and just relabel. Simplest: on next mix we
+  // crossfade b->a. Alternate the source deck each mix.
+  [engine.decks.a, engine.decks.b] = [engine.decks.b, engine.decks.a];
+  showDeck('a', deckA); showDeck('b', null);
+  $('xknob').style.left = '0%';
+  if (autoDJ) scheduleAuto();
+}
+
+function animateXfade(xf) {
+  const t0 = performance.now();
+  (function step() {
+    const x = Math.min(1, (performance.now() - t0) / (xf * 1000));
+    $('xknob').style.left = (x * 100) + '%';
+    if (x < 1) requestAnimationFrame(step);
+  })();
+}
+
+function scheduleAuto() {
+  clearTimeout(autoTimer);
+  if (!autoDJ || !deckA) return;
+  const dur = deckA.duration_sec || 200;
+  const pos = engine.position(deckA === deckB ? 'b' : 'a');
+  // pick next now so it's decoded in time
+  pickAndCue().then((p) => {
+    const cf = p ? p.xfade : 6;
+    const fireIn = Math.max(2, dur - pos - cf);
+    autoTimer = setTimeout(() => { if (autoDJ) doMix(); }, fireIn * 1000);
+    $('status').textContent = t('st_auto_countdown', { sec: fireIn | 0 });
+  });
+}
+
+async function pickAndCue() {
+  const libTracks = lib.map((it) => trackOf(it.path, null));
+  const next = brain.pickNext(libTracks, deckA);
+  if (!next) return null;
+  try {
+    await engine.loadDeck('b', next.path);
+    deckB = trackOf(next.path, engine.decks.b.npx);
+    showDeck('b', deckB);
+    return previewPlan();
+  } catch { return null; }
+}
+
+$('mix').onclick = doMix;
+$('auto').onclick = (e) => {
+  autoDJ = !autoDJ; e.target.classList.toggle('on', autoDJ);
+  $('status').textContent = autoDJ ? t('st_autodj_on') : t('st_autodj_off');
+  if (autoDJ) { ctxReady(); if (deckA) scheduleAuto(); else doMix(); }
+  else clearTimeout(autoTimer);
+};
+$('cool').onclick = () => { brain.energyBias = Math.max(-1, brain.energyBias - 1); $('status').textContent = t('st_energy_down'); };
+$('push').onclick = () => { brain.energyBias = Math.min(1, brain.energyBias + 1); $('status').textContent = t('st_energy_up'); };
+
+listLibrary();
+</script>
+</body>
+</html>

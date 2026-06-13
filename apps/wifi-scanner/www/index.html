@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WiFi Scanner</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff;
+      --line:#2a3a5e; --field:#0b1220; --ok:#2fd07a; --warn:#f5b13d; --err:#e2576b; }
+    html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86;
+      --accent:#2b6fd6; --line:#cdd8ee; --field:#f4f7fe; --ok:#1c9d5b; --warn:#c2820f; --err:#c83e52; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+      font: 14px system-ui, "Segoe UI", sans-serif; }
+    header { display: flex; align-items: center; gap: 6px; padding: 5px 8px; flex: none;
+      background: var(--panel); border-bottom: 1px solid var(--line); }
+    header .t { font-weight: 600; flex: 1; }
+    header .spin { width: 13px; height: 13px; border: 2px solid var(--line); border-top-color: var(--accent);
+      border-radius: 50%; animation: sp .7s linear infinite; display: none; flex: none; }
+    header.scanning .spin { display: inline-block; }
+    @keyframes sp { to { transform: rotate(360deg); } }
+    header button { border: 1px solid var(--line); background: #80808018; color: var(--text);
+      border-radius: 6px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+    header button:hover { background: #80808033; } header button.on { background: var(--accent); color: #07101f; border-color: transparent; }
+
+    main { flex: 1; overflow: auto; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+    li:hover { background: #80808012; }
+    li.cur { background: linear-gradient(90deg, #2fd07a18, transparent); }
+
+    /* signal bars */
+    .bars { display: flex; align-items: flex-end; gap: 2px; height: 18px; flex: none; width: 22px; }
+    .bars i { width: 4px; background: var(--line); border-radius: 1px; }
+    .bars i:nth-child(1){height:5px} .bars i:nth-child(2){height:9px}
+    .bars i:nth-child(3){height:13px} .bars i:nth-child(4){height:18px}
+    .bars.q4 i, .bars.q3 i:nth-child(-n+3), .bars.q2 i:nth-child(-n+2), .bars.q1 i:nth-child(1) { background: var(--sig); }
+
+    .info { flex: 1; min-width: 0; }
+    .ssid { display: flex; align-items: center; gap: 6px; font-weight: 600; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }
+    .ssid .lock { color: var(--muted); font-size: 11px; flex: none; }
+    .ssid .open { color: var(--warn); }
+    .ssid .me { font-size: 10px; font-weight: 600; color: var(--ok); border: 1px solid var(--ok);
+      border-radius: 8px; padding: 0 6px; flex: none; }
+    .meta { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rssi { text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+    .rssi .dbm { font-weight: 600; } .rssi .pct { color: var(--muted); font-size: 11px; }
+
+    .empty { color: var(--muted); text-align: center; padding: 40px 20px; line-height: 1.6; font-size: 13px; }
+    .empty .big { font-size: 30px; display: block; margin-bottom: 6px; opacity: .7; }
+
+    footer { display: flex; align-items: center; gap: 8px; padding: 5px 10px; flex: none;
+      background: var(--panel); border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+    footer .sp { flex: 1; }
+    .pill { display: inline-flex; align-items: center; gap: 5px; }
+    .pill .d { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .pill .d.live { background: var(--ok); }
+    main::-webkit-scrollbar { width: 6px; } main::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+    li { cursor: pointer; flex-wrap: wrap; }
+    .ssid .saved { font-size: 10px; font-weight: 600; color: var(--accent); border: 1px solid var(--accent);
+      border-radius: 8px; padding: 0 6px; flex: none; }
+    /* expandable action drawer under a tapped row */
+    .act { flex-basis: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 2px 2px;
+      cursor: default; }
+    .act input.pw { flex: 1; min-width: 0; background: var(--field); color: var(--text);
+      border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; }
+    .act button { border: 1px solid var(--line); background: #80808018; color: var(--text);
+      border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; flex: none; }
+    .act button.join { background: var(--accent); color: #07101f; border-color: transparent; font-weight: 600; }
+    .act button.forget { color: var(--err); border-color: var(--err); background: transparent; }
+    .act button:hover { filter: brightness(1.08); }
+    #toast { position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%); max-width: 90%;
+      background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+      padding: 8px 14px; font-size: 13px; box-shadow: 0 6px 20px #0006; opacity: 0; transition: opacity .2s;
+      pointer-events: none; z-index: 9; }
+    #toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <header id="hd">
+    <span class="t">📶 <span data-i18n="title">WiFi Scanner</span></span>
+    <span class="spin"></span>
+    <button id="auto" data-i18n="btn_auto" data-i18n-attr="title:auto_hint">Auto</button>
+    <button id="scan" class="on" data-i18n="scan">Scan</button>
+  </header>
+
+  <main><ul id="list"></ul></main>
+  <div id="toast"></div>
+
+  <footer>
+    <span id="count">—</span>
+    <span class="sp"></span>
+    <span class="pill"><span class="d" id="srcdot"></span><span id="src" data-i18n="src_idle">idle</span></span>
+  </footer>
+
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    const t = await I18N.init('wifi-scanner');
+    const $ = (id) => document.getElementById(id);
+    const SETTINGS = '/system/config/settings.json';
+
+    async function readJSON(path) {
+      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+        return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; }
+    }
+    async function loadTheme() {
+      const s = await readJSON(SETTINGS);
+      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
+    }
+
+    // ---- signal model ----------------------------------------------------------
+    // RSSI dBm → 0..100% and a 1..4 quality bucket, with a colour ramp.
+    const pct = (rssi) => Math.max(0, Math.min(100, Math.round(2 * (rssi + 100))));
+    const quality = (p) => p >= 75 ? 4 : p >= 50 ? 3 : p >= 25 ? 2 : 1;
+    const sigColor = (p) => p >= 60 ? 'var(--ok)' : p >= 35 ? 'var(--warn)' : 'var(--err)';
+    const secLabel = (s) => !s || /open|none/i.test(s) ? t('sec_open') : s.toUpperCase();
+    const isOpen = (s) => !s || /open|none/i.test(s);
+
+    let connectedSSID = null;
+    let lastNets = null, lastSrc = null;
+    let known = new Map();   // ssid -> { priority, current } (the device's saved-network store)
+
+    // ---- toast -----------------------------------------------------------------
+    let toastTimer = 0;
+    function toast(msg) {
+      const el = $('toast'); el.textContent = msg; el.classList.add('show');
+      clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+    }
+
+    // ---- saved-network store + actions -----------------------------------------
+    // /api/wifi/known is auth-gated: a 401 (unpaired session) just means we can't show/manage saved
+    // networks — the scanner still works. join/forget mutate the radio and also require pairing.
+    async function fetchKnown() {
+      try {
+        const r = await fetch('/api/wifi/known', { cache: 'no-store' });
+        if (!r.ok) { known = new Map(); return; }
+        const j = await r.json();
+        known = new Map((j.networks || []).map((n) => [n.ssid, { priority: n.priority | 0, current: !!n.current }]));
+        if (j.ssid) connectedSSID = j.ssid;
+      } catch { known = new Map(); }
+    }
+
+    async function joinNet(ssid, pass) {
+      toast(t('connecting', { ssid }));
+      closeActions();
+      try {
+        const r = await fetch('/api/wifi/join', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ssid, pass: pass || '' }) });
+        if (r.status === 401) { toast(t('need_pair')); return; }
+        const j = await r.json().catch(() => ({}));
+        if (j.ok) { connectedSSID = ssid; toast(t('connected_to', { ssid })); }
+        else toast(t('connect_failed'));
+      } catch { toast(t('connect_failed')); }
+      await fetchKnown(); scan();
+    }
+
+    async function forgetNet(ssid) {
+      closeActions();
+      try {
+        const r = await fetch('/api/wifi/forget', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ssid }) });
+        if (r.status === 401) { toast(t('need_pair')); return; }
+        toast(t('forgotten'));
+      } catch {}
+      await fetchKnown(); if (lastNets) render(lastNets);
+    }
+
+    function closeActions() { document.querySelectorAll('.act').forEach((e) => e.remove()); }
+
+    // Expand an inline action drawer under a tapped row: Connect / Reconnect (+ password if the
+    // network is secured and not yet saved) and Forget for saved networks.
+    function openActions(li, n) {
+      if (li.querySelector('.act')) { closeActions(); return; }
+      closeActions();
+      const saved = known.get(n.ssid);
+      const cur = connectedSSID && n.ssid === connectedSSID;
+      // Show a password field for any secured network. For a saved one it's optional (leave blank to
+      // reuse the stored password) — but always available so a wrong/empty stored password can be fixed.
+      const needPass = !isOpen(n.auth);
+      const act = document.createElement('div'); act.className = 'act';
+      act.innerHTML =
+        (needPass ? `<input class="pw" type="password" placeholder="${saved ? t('password_keep') : t('password')}" autocomplete="off">` : ``) +
+        `<button class="join">${cur ? t('reconnect') : t('connect')}</button>` +
+        (saved ? `<button class="forget">${t('forget')}</button>` : ``);
+      act.onclick = (e) => e.stopPropagation();
+      li.appendChild(act);
+      const pw = act.querySelector('.pw'); if (pw) pw.focus();
+      act.querySelector('.join').onclick = () => joinNet(n.ssid, pw ? pw.value : '');
+      const fb = act.querySelector('.forget'); if (fb) fb.onclick = () => forgetNet(n.ssid);
+      if (pw) pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinNet(n.ssid, pw.value); });
+    }
+
+    function render(nets) {
+      lastNets = nets;
+      const list = $('list');
+      list.innerHTML = '';
+      if (!nets.length) {
+        const li = document.createElement('li'); li.style.borderBottom = '0';
+        li.innerHTML = `<div class="empty"><span class="big">📡</span><span data-i18n-html="empty_msg"></span></div>`;
+        list.appendChild(li);
+        $('count').textContent = t('count', { count: 0 });
+        return;
+      }
+      nets.sort((a, b) => b.rssi - a.rssi);
+      for (const n of nets) {
+        const p = pct(n.rssi), q = quality(p), col = sigColor(p);
+        const cur = connectedSSID && n.ssid === connectedSSID;
+        const saved = known.get(n.ssid);
+        const li = document.createElement('li');
+        if (cur) li.className = 'cur';
+        const ch = n.channel ? t('ch', { ch: n.channel }) : '';
+        const bss = n.bssid ? n.bssid : '';
+        const band = n.channel ? (n.channel > 14 ? '5 GHz' : '2.4 GHz') : '';
+        li.innerHTML =
+          `<div class="bars q${q}" style="--sig:${col}"><i></i><i></i><i></i><i></i></div>` +
+          `<div class="info">` +
+            `<div class="ssid">` +
+              `<span class="name"></span>` +
+              (isOpen(n.auth) ? `<span class="lock open" title="${t('sec_open_hint')}">⚠ <span data-i18n="sec_open">open</span></span>`
+                              : `<span class="lock" title="${secLabel(n.auth)}">🔒 ${secLabel(n.auth)}</span>`) +
+              (saved ? `<span class="saved" title="${t('saved_hint')}">★ ${t('saved')}</span>` : ``) +
+              (cur ? `<span class="me" data-i18n="connected">connected</span>` : ``) +
+            `</div>` +
+            `<div class="meta">${[ch, band, bss].filter(Boolean).join('  ·  ')}</div>` +
+          `</div>` +
+          `<div class="rssi"><div class="dbm" style="color:${col}">${n.rssi} dBm</div><div class="pct">${p}%</div></div>`;
+        li.querySelector('.name').textContent = n.ssid || t('hidden_ssid');
+        if (n.ssid) li.onclick = () => openActions(li, n);   // hidden SSIDs aren't joinable here
+        list.appendChild(li);
+      }
+      const open = nets.filter((n) => isOpen(n.auth)).length;
+      $('count').textContent = t('count', { count: nets.length }) + (open ? ` · ${t('count_open', { count: open })}` : '');
+    }
+
+    // ---- data sources ----------------------------------------------------------
+    // setSrc resolves a catalog key (so it can re-translate on a live language switch),
+    // optionally suffixed with non-translatable text (e.g. a timestamp).
+    function setSrc(key, live, suffix) {
+      lastSrc = { key, live, suffix };
+      $('src').textContent = t(key) + (suffix || '');
+      $('srcdot').classList.toggle('live', !!live);
+    }
+
+    async function fetchStatus() {
+      try { const r = await fetch('/api/status', { cache: 'no-store' });
+        if (r.ok) { const s = await r.json(); connectedSSID = s?.network?.ssid || null; return s; } } catch {}
+      return null;
+    }
+
+    // Try the device scan endpoint; normalise a few likely field names.
+    async function deviceScan() {
+      try {
+        const r = await fetch('/api/wifi/scan', { cache: 'no-store' });
+        if (!r.ok) return null;
+        const j = await r.json();
+        const arr = Array.isArray(j) ? j : (j.networks || j.aps || j.results || null);
+        if (!Array.isArray(arr)) return null;
+        return arr.map((n) => ({
+          ssid: n.ssid ?? n.SSID ?? n.name ?? '',
+          rssi: n.rssi ?? n.RSSI ?? n.signal ?? -90,
+          channel: n.channel ?? n.ch ?? n.primary ?? null,
+          auth: n.auth ?? n.security ?? n.encryption ?? n.authmode ?? null,
+          bssid: n.bssid ?? n.BSSID ?? n.mac ?? null,
+        }));
+      } catch { return null; }
+    }
+
+    // Demo set so the app is fully explorable in preview / before the API exists.
+    function demoScan() {
+      return [
+        { ssid: 'NucleoOS-Mesh', rssi: -41, channel: 6,  auth: 'WPA2', bssid: '4C:11:AE:0B:2F:90' },
+        { ssid: 'HomeFiber-5G',  rssi: -57, channel: 36, auth: 'WPA3', bssid: '8C:DE:52:1A:77:01' },
+        { ssid: 'Cardputer-AP',  rssi: -63, channel: 1,  auth: 'WPA2', bssid: 'A0:B7:65:34:9C:12' },
+        { ssid: 'GuestZone',     rssi: -71, channel: 11, auth: 'Open', bssid: 'F8:1A:67:22:0D:88' },
+        { ssid: 'IoT-Lab',       rssi: -78, channel: 6,  auth: 'WPA2', bssid: '24:6F:28:5E:31:AA' },
+        { ssid: '',              rssi: -84, channel: 9,  auth: 'WPA2', bssid: 'DC:A6:32:11:8E:43' },
+        { ssid: 'eduroam',       rssi: -88, channel: 44, auth: 'WPA2-Enterprise', bssid: '00:0C:E6:7B:55:10' },
+      ];
+    }
+
+    // Driven from the shell when embedded: status.snapshot keeps connectedSSID fresh (no own
+    // /api/status), and os-visibility pauses the auto-scan while the window is hidden — each scan
+    // BLOCKS the single httpd task ~1.5-2 s, so scanning an invisible window starved the whole UI.
+    const EMBEDDED = window.top !== window.self;
+    let osVisible = true;
+    let scanning = false;
+    async function scan() {
+      if (scanning || !osVisible) return;
+      scanning = true; $('hd').classList.add('scanning');
+      if (!EMBEDDED) await fetchStatus();        // standalone: refresh "connected" highlight (embedded: from snapshot)
+      await fetchKnown();                        // refresh the saved-network set (cheap, no scan block)
+      let nets = await deviceScan(), live = true;
+      if (!nets) {                               // no scan API: at least show the connected AP, else demo
+        if (connectedSSID) {
+          const s = await fetchStatus();
+          nets = [{ ssid: connectedSSID, rssi: s?.network?.rssi ?? -55, channel: s?.network?.channel ?? null,
+                    auth: s?.network?.auth ?? 'WPA2', bssid: s?.network?.bssid ?? null }];
+          setSrc('src_connected_only', false);
+          live = false;
+        } else {
+          nets = demoScan(); setSrc('src_demo', false); live = false;
+          if (!known.size) { connectedSSID = 'NucleoOS-Mesh';   // seed the manager UI for offline preview
+            known = new Map([['NucleoOS-Mesh', { priority: 1, current: true }], ['HomeFiber-5G', { priority: 0 }]]); }
+        }
+      } else {
+        setSrc('src_live', true);
+      }
+      render(nets);
+      scanning = false; $('hd').classList.remove('scanning');
+      if (live) setSrc('src_live', true, ' · ' + new Date().toLocaleTimeString());
+    }
+
+    // ---- controls --------------------------------------------------------------
+    $('scan').onclick = scan;
+    let autoTimer = 0, autoOn = false;
+    $('auto').onclick = (e) => {
+      autoOn = e.target.classList.toggle('on');
+      clearInterval(autoTimer);
+      // 25 s, not 8 s: a scan freezes httpd ~1.5-2 s, so 8 s meant the server was blocked 13-25%
+      // of the time. Pushed wifi.scan events (handled below) keep the list fresh between ticks.
+      if (autoOn) { autoTimer = setInterval(scan, 25000); scan(); }
+    };
+    addEventListener('keydown', (e) => {
+      if (e.target && e.target.tagName === 'INPUT') return;     // typing a password: don't hijack keys
+      if (e.key === 'Escape') { closeActions(); return; }
+      if (e.key === 'r' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scan(); }
+    });
+
+    // ---- live: theme + pushed scan events --------------------------------------
+    window.addEventListener('message', (e) => {
+      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
+      if (e.data?.t === 'fs.changed' && e.data.d?.path?.endsWith('settings.json')) loadTheme();
+      if (e.data?.t === 'wifi.scan' && Array.isArray(e.data.d?.networks)) { setSrc('src_live', true); render(e.data.d.networks); }
+      if (e.data?.t === 'status.snapshot') connectedSSID = e.data.d?.network?.ssid || null;   // fresh highlight, no fetch
+      if (e.data?.t === 'os-visibility') {                                                     // pause scanning while hidden
+        osVisible = !!(e.data.d && e.data.d.visible);
+        if (osVisible && autoOn) scan();
+      }
+    });
+
+    // On a live language switch, re-render the imperatively-built rows + footer
+    // (the observer handles [data-i18n] nodes; these strings are set via t()).
+    I18N.onChange(() => {
+      if (lastNets) render(lastNets);
+      if (lastSrc) setSrc(lastSrc.key, lastSrc.live, lastSrc.suffix);
+    });
+
+    // ---- boot ------------------------------------------------------------------
+    async function init() {
+      await loadTheme();
+      scan();
+    }
+    init();
+  </script>
+</body>
+</html>

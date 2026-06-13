@@ -1,0 +1,16 @@
+{
+  "id": "cp",
+  "category": "terminal",
+  "it": {
+    "title": "cp - Copia file",
+    "synopsis": "cp <source> <dest>",
+    "description": "Copia un file da una sorgente a una destinazione.",
+    "details": "NOME\n  cp - Copia file.\n\nSINTASSI\n  cp <sorgente> <destinazione>\n\nDESCRIZIONE\n  Duplica un file dal percorso sorgente al percorso di destinazione. Preserva integralmente i byte binari.\n\nOPZIONI\n  <sorgente>\n    Il percorso del file originale da copiare.\n  <destinazione>\n    Il percorso di destinazione in cui scrivere la copia.\n\nARCHITETTURA E BASSO LIVELLO\n  1. Il client scarica il file da '/api/fs/read?path=sorgente' memorizzandolo come ArrayBuffer.\n  2. Il client invia una chiamata HTTP POST a '/api/fs/write?path=destinazione' trasmettendo l'ArrayBuffer come payload binario con header 'Content-Type: application/octet-stream'.\n  Questo approccio garantisce la conservazione dei metadati binari e dei file eseguibili. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo. Copia completata.\n  1\n    Errore di lettura o scrittura sul filesystem SD.\n  404\n    Il file sorgente non esiste.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  mv(1), rm(1), web_api(7)\n\nESEMPI AVANZATI\n  cp /data/orig.txt /data/dest.txt\n  cp \"mio file.txt\" \"/data/copia.txt\""
+  },
+  "en": {
+    "title": "cp - Copy file",
+    "synopsis": "cp <source> <dest>",
+    "description": "Copy a file from a source path to a destination path.",
+    "details": "NAME\n  cp - Copy file.\n\nSYNOPSIS\n  cp <source> <dest>\n\nDESCRIPTION\n  Duplicates a file from the source path to the destination path, preserving exact binary integrity.\n\nOPTIONS\n  <source>\n    The original file path to copy.\n  <dest>\n    The target path where the copy will be created.\n\nSYSTEM ARCHITECTURE\n  1. Downloads the source payload from '/api/fs/read?path=source' holding it in RAM as a binary ArrayBuffer.\n  2. Dispatches an HTTP POST to '/api/fs/write?path=dest' streaming the ArrayBuffer with 'Content-Type: application/octet-stream'.\n  This design ensures binary compatibility for executables and system binaries. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. The copy was completed.\n  1\n    Filesystem read/write I/O error.\n  404\n    The source file was not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  mv(1), rm(1), web_api(7)\n\nADVANCED EXAMPLES\n  cp /data/orig.txt /data/dest.txt\n  cp \"my file.txt\" \"/data/copy.txt\""
+  }
+}

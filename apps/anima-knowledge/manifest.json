@@ -1,0 +1,21 @@
+{
+  "id": "anima-knowledge",
+  "name": "Conoscenza ANIMA",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Scarica rami di conoscenza bilingue dal web (client, zero-LLM) e portali nel cervello offline del Cardputer. Download branches of bilingual knowledge from the web and copy them into the Cardputer's offline brain.",
+  "category": "productivity",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/anima-knowledge/",
+  "icon": "assets/icon.svg",
+  "permissions": ["storage.shared", "system.events", "device.keyboard", "net.wifi"],
+  "mounts": { "app": "/apps/anima-knowledge/data" },
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": ["fs.changed"],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

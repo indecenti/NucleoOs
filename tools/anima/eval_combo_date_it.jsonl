@@ -1,0 +1,50 @@
+// eval_combo_date_it.jsonl — GENUINI (IT): la skill di ragionamento date (combinator "nato prima/dopo")
+// e il motore EXCEL (SUM/AVERAGE/MAX/MIN/COUNT/COUNTIF/SUMIF/VLOOKUP/IF su riferimenti reali) DEVONO
+// scattare. Giudice: skill-probe.mjs. Coppia avversariale: eval_halluc_date_it.jsonl.
+// --- combinator: confronto date di nascita (dati disponibili) ---
+{"q":"chi è nato prima einstein o newton","lang":"it","expect":"combinator"}
+{"q":"chi è nato prima newton o einstein","lang":"it","expect":"combinator"}
+{"q":"chi è nato dopo tra newton e einstein","lang":"it","expect":"combinator"}
+{"q":"chi è più vecchio tra einstein e newton","lang":"it","expect":"combinator"}
+{"q":"chi è più giovane tra newton e einstein","lang":"it","expect":"combinator"}
+// --- excel: SUM su intervalli reali ---
+{"q":"somma le celle da b1 a b15","lang":"it","expect":"spreadsheet"}
+{"q":"somma da a1 a a25","lang":"it","expect":"spreadsheet"}
+{"q":"fai la somma della colonna da c1 a c30","lang":"it","expect":"spreadsheet"}
+{"q":"totalizza le celle da d2 a d40","lang":"it","expect":"spreadsheet"}
+// --- excel: AVERAGE ---
+{"q":"fai la media da c1 a c10","lang":"it","expect":"spreadsheet"}
+{"q":"media delle celle da a1 a a100","lang":"it","expect":"spreadsheet"}
+{"q":"calcola la media da b3 a b18","lang":"it","expect":"spreadsheet"}
+// --- excel: MAX / MIN ---
+{"q":"trova il massimo da a1 a a50","lang":"it","expect":"spreadsheet"}
+{"q":"il minimo tra a1 e a30","lang":"it","expect":"spreadsheet"}
+{"q":"qual è il valore massimo da e1 a e20","lang":"it","expect":"spreadsheet"}
+{"q":"il minimo da b1 a b40","lang":"it","expect":"spreadsheet"}
+// --- excel: COUNT / COUNTIF ---
+{"q":"conta le celle da d1 a d20","lang":"it","expect":"spreadsheet"}
+{"q":"conta quante celle da a1 a a60","lang":"it","expect":"spreadsheet"}
+{"q":"conta se b1 b20 uguale a sì","lang":"it","expect":"spreadsheet"}
+// --- excel: SUMIF ---
+{"q":"somma se a1 a10 maggiore di 5","lang":"it","expect":"spreadsheet"}
+{"q":"somma i valori da a1 a a50 se maggiori di 100","lang":"it","expect":"spreadsheet"}
+// --- excel: VLOOKUP / CONCAT / IF ---
+{"q":"cerca verticale di a1 nella tabella","lang":"it","expect":"spreadsheet"}
+{"q":"concatena a1 e b1","lang":"it","expect":"spreadsheet"}
+{"q":"unisci il testo di a1 e c1","lang":"it","expect":"spreadsheet"}
+{"q":"se a1 maggiore di 10 allora ok","lang":"it","expect":"spreadsheet"}
+{"q":"se b2 è vuoto scrivi assente","lang":"it","expect":"spreadsheet"}
+// --- excel: forme informali / con typo ---
+{"q":"sommami le celle da a1 a a12","lang":"it","expect":"spreadsheet"}
+{"q":"fammi la media da f1 a f9","lang":"it","expect":"spreadsheet"}
+{"q":"somam le celle da a1 a a8","lang":"it","expect":"spreadsheet"}
+{"q":"il massimo da g1 a g15","lang":"it","expect":"spreadsheet"}
+{"q":"conta le celle non vuote da a1 a a30","lang":"it","expect":"spreadsheet"}
+{"q":"media dei valori da h1 a h22","lang":"it","expect":"spreadsheet"}
+{"q":"somma le celle a1 a2 a3 a4","lang":"it","expect":"spreadsheet"}
+{"q":"prodotto delle celle da a1 a a5","lang":"it","expect":"spreadsheet"}
+{"q":"somma la riga da a1 a g1","lang":"it","expect":"spreadsheet"}
+{"q":"somma da z1 a z9","lang":"it","expect":"spreadsheet"}
+{"q":"fai la media da a1 a a7","lang":"it","expect":"spreadsheet"}
+{"q":"il massimo da c1 a c12","lang":"it","expect":"spreadsheet"}
+{"q":"conta le celle da e1 a e10","lang":"it","expect":"spreadsheet"}

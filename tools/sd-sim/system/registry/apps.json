@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "installed": [
+    { "id": "file-commander",   "version": "0.1.0", "path": "/apps/file-commander",   "enabled": true, "autostart": true,  "permissions": ["storage.shared", "storage.app", "system.events", "system.notify", "device.keyboard"] },
+    { "id": "notepad",          "version": "0.1.0", "path": "/apps/notepad",          "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard"] },
+    { "id": "photo-viewer",     "version": "0.1.0", "path": "/apps/photo-viewer",     "enabled": true, "autostart": false, "permissions": ["storage.shared", "device.display"] },
+    { "id": "media-player",     "version": "0.1.0", "path": "/apps/media-player",     "enabled": true, "autostart": false, "permissions": ["storage.shared", "device.audio", "power.budget"] },
+    { "id": "dj",               "version": "0.1.0", "path": "/apps/dj",               "enabled": true, "autostart": false, "permissions": ["storage.shared", "device.audio", "power.budget"] },
+    { "id": "video-player",     "version": "0.1.0", "path": "/apps/video-player",     "enabled": true, "autostart": false, "permissions": ["storage.shared"] },
+    { "id": "automation-studio","version": "0.1.0", "path": "/apps/automation-studio","enabled": true, "autostart": true,  "permissions": ["storage.app", "system.events", "system.notify", "device.keyboard", "device.ir", "power.budget"] },
+    { "id": "ir-remote",        "version": "0.1.0", "path": "/apps/ir-remote",        "enabled": true, "autostart": false, "permissions": ["storage.app", "system.events", "device.ir"] },
+    { "id": "swarm",            "version": "0.1.0", "path": "/apps/swarm",            "enabled": true, "autostart": true,  "permissions": ["system.events", "system.clipboard", "net.ble", "mesh.peer"] },
+    { "id": "settings",         "version": "0.1.0", "path": "/apps/settings",         "enabled": true, "autostart": false, "permissions": ["system.events", "net.wifi", "net.ble", "power.budget"] },
+    { "id": "log-viewer",       "version": "0.1.0", "path": "/apps/log-viewer",       "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events"] },
+    { "id": "system-monitor",   "version": "0.1.0", "path": "/apps/system-monitor",   "enabled": true, "autostart": false, "permissions": ["system.events"] },
+    { "id": "calculator",       "version": "0.1.0", "path": "/apps/calculator",       "enabled": true, "autostart": false, "permissions": [] },
+    { "id": "clock",            "version": "0.1.0", "path": "/apps/clock",            "enabled": true, "autostart": false, "permissions": [] },
+    { "id": "calendar",         "version": "0.1.0", "path": "/apps/calendar",         "enabled": true, "autostart": false, "permissions": ["storage.shared"] },
+    { "id": "dosbox",           "version": "0.1.0", "path": "/apps/dosbox",           "enabled": true, "autostart": false, "permissions": ["storage.shared"] },
+    { "id": "recorder",         "version": "0.1.0", "path": "/apps/recorder",         "enabled": true, "autostart": false, "permissions": ["storage.shared", "device.audio"] },
+    { "id": "recycle-bin",      "version": "0.1.0", "path": "/apps/recycle-bin",      "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events"] },
+    { "id": "updates",          "version": "0.1.0", "path": "/apps/updates",          "enabled": true, "autostart": false, "permissions": ["system.events", "net.wifi"] }
+  ]
+}

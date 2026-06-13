@@ -1,0 +1,25 @@
+{
+  "_doc": "Soundness policy for the self-growing taxonomy (docs/anima-knowledge-graph.md §self-evolution). The KGE coherence gate proves a deduction RESOLVES, not that the premises are MEANINGFUL — so a noisy/vandalized Wikidata P279 edge could otherwise certify 'Einstein is a being/subject/proto-agent/robot'. This policy is an independent guard: at ingest we DROP edges that climb into abstract upper-ontology nodes (so 'person' is the meaningful ceiling) and break cycles/self-loops; at deduction time a generalization only COUNTS if its target is a certified type. Edit this, not the code.",
+  "version": 1,
+  "certified_roots": [
+    "person", "place", "organization", "work", "event", "species", "concept",
+    "scientist", "physicist", "chemist", "mathematician", "biologist", "astronomer", "naturalist", "inventor", "engineer",
+    "artist", "painter", "sculptor", "architect", "photographer",
+    "musician", "singer", "composer", "pianist", "guitarist", "songwriter",
+    "writer", "author", "poet", "novelist", "playwright", "philosopher", "journalist", "historian",
+    "politician", "statesman", "diplomat", "monarch", "sovereign", "ruler", "emperor", "empress", "king", "queen", "pharaoh", "head-of-state",
+    "military-officer", "general", "military-personnel",
+    "athlete", "footballer", "actor", "actress", "filmmaker", "film-director", "explorer", "navigator",
+    "businessperson", "entrepreneur", "researcher", "scholar", "academic", "creator", "performer", "performing-artist"
+  ],
+  "blocklist": [
+    "individual", "organism", "physical-object", "physical-anatomical-entity", "anatomical-structure",
+    "being", "independent-continuant", "continuant", "occurrent", "entity", "object", "concrete-object",
+    "abstract-object", "spatiotemporal-entity", "subject", "proto-agent", "agent",
+    "legal-person", "person-or-organization", "natural-person", "omnivore", "mammal", "primate", "hominid",
+    "knowledge-worker", "worker", "professional", "stakeholder", "cadre", "specialist", "expert",
+    "physical-and-earth-science-professionals", "science-and-engineering-professionals",
+    "intellectual-and-scientific-professionals", "academic-professional", "academic-staff",
+    "non-fiction-writer", "subject-of-study"
+  ]
+}

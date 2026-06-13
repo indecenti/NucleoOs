@@ -1,0 +1,17 @@
+{
+  "id": "updates",
+  "name": "Updates",
+  "version": "0.1.0",
+  "description": "Update NucleoOS over the air: flash new firmware safely (auto-rollback) and check the system version.",
+  "category": "system",
+  "runtime": "web",
+  "entry_service": "",
+  "web_route": "/apps/updates/",
+  "icon": "assets/icon.svg",
+  "permissions": ["system.events", "net.wifi"],
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": ["system.boot"],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": [] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

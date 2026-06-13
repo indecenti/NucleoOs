@@ -1,0 +1,22 @@
+{
+  "_comment": "Cross-lingual enrichment work-list applied by enrich_xling.py: per card id, English ask phrasings to ADD (deduped) and an optional English reply to set when the card has none. Authored to close the EN-recall gaps xling-check measures. Grounded in the card's own Italian source — translations of the same fact, not new claims. Append ids here as the gate surfaces more gaps; re-run enrich_xling.py then build_akb2.py.",
+  "wiki.it.crittografia": {
+    "ask_en": ["what is encryption", "what is cryptography", "encryption", "cryptography", "how does encryption work", "what does encryption mean", "explain cryptography"],
+    "reply_en": "Cryptography is the branch of cryptology dealing with 'hidden writing' — the methods used to make a message unintelligible to anyone not authorized to read it, thereby ensuring, in modern terms, the confidentiality, integrity and authenticity of the information."
+  },
+  "elec.voltage": {
+    "ask_en": ["what is electrical voltage", "electrical voltage", "what is potential difference", "voltage in a circuit", "what does voltage mean"],
+    "reply_en": "Electrical voltage, often simply called voltage, is a physical quantity proportional to the amount of energy needed to move an electric charge between two points in space. By Ohm's law (V=R·I): give me any two values and I can work out the third."
+  },
+  "wiki.it.derivata": {
+    "ask_en": ["what is a derivative", "what is a derivative in calculus", "derivative", "derivative of a function", "what does the derivative measure", "explain the derivative"],
+    "reply_en": "In mathematics, the derivative is a function that represents the rate of change of a given function with respect to a certain variable — that is, the measure of how much the value of a function changes as its argument varies."
+  },
+  "civ.democracy": {
+    "ask_en": ["what is democracy", "democracy", "explain democracy", "what does democracy mean", "definition of democracy"]
+  },
+  "wiki.it.inflazione": {
+    "ask_en": ["what is inflation", "inflation", "what is inflation in economics", "what causes inflation", "explain inflation", "what does inflation mean"],
+    "reply_en": "In economics, inflation (from the Latin inflatio, 'swelling') is the increase in the general level of prices of goods and services over a given period of time."
+  }
+}

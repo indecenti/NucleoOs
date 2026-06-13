@@ -1,0 +1,92 @@
+{"q":"crea una nota con la lista della spesa","cat":"create_file"}
+{"q":"scrivi un file diario.txt con oggi è andata bene","cat":"create_file"}
+{"q":"crea un appunto con comprare il pane","cat":"create_file"}
+{"q":"make a note saying call mom","cat":"create_file"}
+{"q":"create a file todo.txt with buy milk","cat":"create_file"}
+{"q":"Crea nota di spesa","cat":"create_file"}
+{"q":"Facciamo una lista dei nostri acquisti domani","cat":"create_file"}
+{"q":"Scrivi \"cereali\" nella mia nota","cat":"create_file"}
+{"q":"Nota per la lavanderia: \"biancheria sporca\"","cat":"create_file"}
+{"q":"Ricorda di andare a prendere il farmaco","cat":"create_file"}
+{"q":"Fissa un appuntamento con Luca per martedì","cat":"create_file"}
+{"q":"Nota per il progetto: \"revisione del piano d'affari\"","cat":"create_file"}
+{"q":"Nota per l'ufficio: \"ordini da eseguire\"","cat":"create_file"}
+{"q":"Scrivi \"miele\" nella mia nota","cat":"create_file"}
+{"q":"Nota personale: \"mi sono dimenticato di pagare l'affitto\"","cat":"create_file"}
+{"q":"Ricorda di chiamare la mamma lunedì sera","cat":"create_file"}
+{"q":"Facciamo un elenco dei libri da leggere","cat":"create_file"}
+{"q":"Nota per il viaggio: \"itinerario a Parigi\"","cat":"create_file"}
+{"q":"Scrivi \"latte\" nella mia nota","cat":"create_file"}
+{"q":"imposta il volume a 40","cat":"set_volume"}
+{"q":"alza il volume","cat":"set_volume"}
+{"q":"abbassa il volume","cat":"set_volume"}
+{"q":"metti il volume al 70 percento","cat":"set_volume"}
+{"q":"turn the volume up","cat":"set_volume"}
+{"q":"Aumenta il volume","cat":"set_volume"}
+{"q":"Meno volume per favore","cat":"set_volume"}
+{"q":"Settiamo il volume al 50","cat":"set_volume"}
+{"q":"Volume più alto","cat":"set_volume"}
+{"q":"Cambia il volume sul 7","cat":"set_volume"}
+{"q":"Abbassa il volume un po'","cat":"set_volume"}
+{"q":"Porta il volume a zero","cat":"set_volume"}
+{"q":"Ingrandisci il volume","cat":"set_volume"}
+{"q":"Riduci il volume, per favore","cat":"set_volume"}
+{"q":"Settiamo il volume sulla metà","cat":"set_volume"}
+{"q":"Aumenta di cinque punti","cat":"set_volume"}
+{"q":"Cambia il volume al 9","cat":"set_volume"}
+{"q":"Volume più basso","cat":"set_volume"}
+{"q":"Inserisci il volume al 2","cat":"set_volume"}
+{"q":"imposta la luminosita a 30","cat":"set_brightness"}
+{"q":"abbassa la luminosita","cat":"set_brightness"}
+{"q":"alza la luminosita dello schermo","cat":"set_brightness"}
+{"q":"set the brightness to 50","cat":"set_brightness"}
+{"q":"Dimmolo","cat":"set_brightness"}
+{"q":"Metti buio","cat":"set_brightness"}
+{"q":"Fai più chiaro","cat":"set_brightness"}
+{"q":"Scendi la luce","cat":"set_brightness"}
+{"q":"Acquista un po'","cat":"set_brightness"}
+{"q":"Pubblica la mia luminosità","cat":"set_brightness"}
+{"q":"Cambia il livello di illuminazione","cat":"set_brightness"}
+{"q":"Basta con la luce forte","cat":"set_brightness"}
+{"q":"Ti prego, fai più bassa","cat":"set_brightness"}
+{"q":"La mia visione è troppo alta","cat":"set_brightness"}
+{"q":"Dimmolo a zero","cat":"set_brightness"}
+{"q":"Metti in modalità economia","cat":"set_brightness"}
+{"q":"Fai meno brillante","cat":"set_brightness"}
+{"q":"Cambia la quantità di luce","cat":"set_brightness"}
+{"q":"ricordami di chiamare il dottore domani alle 9","cat":"add_event"}
+{"q":"aggiungi un evento riunione dopodomani alle 15","cat":"add_event"}
+{"q":"promemoria comprare il latte","cat":"add_event"}
+{"q":"remind me to send the email tomorrow at 10","cat":"add_event"}
+{"q":"Ciao, ricorda a me domani alle cinque.","cat":"add_event"}
+{"q":"Ricordami per la riunione lunedì sera.","cat":"add_event"}
+{"q":"Sono in ritardo, metti un avviso per oggi alle 2.","cat":"add_event"}
+{"q":"Aggiungi evento: cena con amici martedì sera.","cat":"add_event"}
+{"q":"Mettimi in agenda una chiamata con il dottore mercoledì mattina.","cat":"add_event"}
+{"q":"Ricordami di comprare pane domani.","cat":"add_event"}
+{"q":"Sveglia per l'aereo venerdì alle 8.","cat":"add_event"}
+{"q":"Cosa succede tra un'ora? Ricordami.","cat":"add_event"}
+{"q":"Inserisci riunione per la settimana prossima.","cat":"add_event"}
+{"q":"Aggiorna la mia lista dei compiti con \"conferenza\" oggi.","cat":"add_event"}
+{"q":"Non dimenticare di pagare le bollette domani.","cat":"add_event"}
+{"q":"Mettimi in calendario una pausa lunedì mattina.","cat":"add_event"}
+{"q":"Chiama il ristorante per confermare l'appuntamento venerdì sera.","cat":"add_event"}
+{"q":"apri la calcolatrice","cat":"open_app"}
+{"q":"apri il calendario","cat":"open_app"}
+{"q":"metti la musica","cat":"open_app"}
+{"q":"avvia il browser","cat":"open_app"}
+{"q":"open the settings","cat":"open_app"}
+{"q":"Open calendar","cat":"open_app"}
+{"q":"Lancio musica","cat":"open_app"}
+{"q":"Launch calculator","cat":"open_app"}
+{"q":"Apro impostazioni","cat":"open_app"}
+{"q":"Apri file","cat":"open_app"}
+{"q":"Open music","cat":"open_app"}
+{"q":"Start radio","cat":"open_app"}
+{"q":"Calcolatrice now","cat":"open_app"}
+{"q":"Browser please","cat":"open_app"}
+{"q":"Apri blocco note","cat":"open_app"}
+{"q":"Musica online","cat":"open_app"}
+{"q":"Open settings","cat":"open_app"}
+{"q":"Calendario today","cat":"open_app"}
+{"q":"Radio on","cat":"open_app"}

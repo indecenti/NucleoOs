@@ -1,0 +1,16 @@
+{
+  "id": "voice-manager",
+  "name": "Comandi Vocali",
+  "version": "0.2.0",
+  "description": "Addestra il riconoscitore vocale offline del Cardputer con la tua voce: tutorial guidato, libreria di comandi nativi ancorati alle azioni reali, e prova dal vivo con telemetria. Premi-e-parla (FN), tutto on-device, nessun cloud.",
+  "category": "system",
+  "runtime": "web",
+  "entry_service": "voice-manager",
+  "web_route": "/apps/voice-manager/",
+  "icon": "/apps/voice-manager/icon.svg",
+  "permissions": ["storage.shared", "device.audio"],
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": ["voice/learned", "voice/match", "voice/state"],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

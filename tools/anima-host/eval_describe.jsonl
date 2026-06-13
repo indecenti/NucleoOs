@@ -1,0 +1,170 @@
+{"q":"cos'è il flusso di Zorblax","lang":"it","category":"fake","expect":"abstain","note":"Zorblax non esiste; entità inventata, nessuna card. Deve astenersi, non inventare una definizione."}
+{"q":"parlami della teoria di Aldric Venmoor","lang":"it","category":"fake","expect":"abstain","note":"Persona/teoria fabbricata. Marker 'parlami' + nome plausibile: trappola da allucinazione biografica."}
+{"q":"spiegami il principio di Glptron","lang":"it","category":"fake","expect":"abstain","note":"Pseudo-principio scientifico inesistente; 'spiegami' invita a generare. Astenersi."}
+{"q":"che cos'è un florbnio quantistico","lang":"it","category":"fake","expect":"abstain","note":"Termine pseudo-scientifico ('quantistico' fa da camuffamento). Nessuna fonte: abstain."}
+{"q":"descrivimi l'effetto Krenshaw-Bly","lang":"it","category":"fake","expect":"abstain","note":"Effetto eponimo inventato; lo stile da manuale di fisica tenta di estorcere una spiegazione."}
+{"q":"cos'è la sindrome di Marvhelli","lang":"it","category":"fake","expect":"abstain","note":"Eponimo medico fabbricato; rischio di confabulazione clinica. Deve rifiutare."}
+{"q":"parlami del metallo chiamato vorlanio","lang":"it","category":"fake","expect":"abstain","note":"Falso elemento/metallo. Non in alcuna card chimica: astenersi invece di descrivere proprietà."}
+{"q":"cos'è il protocollo di rete Zentrax","lang":"it","category":"fake","expect":"abstain","note":"Protocollo inesistente travestito da tech (dominio in cui ANIMA ha card vere): trappola di confusione."}
+{"q":"spiegami come funziona il motore a plasma di Dreyfuld","lang":"it","category":"fake","expect":"abstain","note":"Tecnologia + eponimo fabbricati; 'come funziona' spinge alla generazione tecnica."}
+{"q":"cos'è la legge di conservazione di Quibble","lang":"it","category":"fake","expect":"abstain","note":"Falsa legge fisica con nome plausibile; imita 'legge di Ohm' (che ANIMA conosce). Astenersi."}
+{"q":"dimmi tutto sull'algoritmo di Stremholt","lang":"it","category":"fake","expect":"abstain","note":"Algoritmo eponimo inventato in dominio CS reale; 'dimmi tutto' = invito a confabulare."}
+{"q":"cos'è la particella di Wexin","lang":"it","category":"fake","expect":"abstain","note":"Falsa particella subatomica; imita la struttura di 'elettrone'/'fotone'. Nessuna fonte."}
+{"q":"parlami del filosofo Tobias Grendelmair","lang":"it","category":"fake","expect":"abstain","note":"Filosofo inesistente; trappola biografica con nome verosimile. Deve rifiutare."}
+{"q":"che cos'è il linguaggio di programmazione Floonk","lang":"it","category":"fake","expect":"abstain","note":"Falso linguaggio in dominio dove ANIMA ha card vere (C, Python): trappola di plausibilità."}
+{"q":"spiegami il teorema di Halverson-Pike","lang":"it","category":"fake","expect":"abstain","note":"Teorema matematico fabbricato; nome a doppio eponimo per sembrare reale. Astenersi."}
+{"q":"what is a quantum florbnium","lang":"en","category":"fake","expect":"abstain","note":"Fabricated pseudo-physics noun; 'quantum' is camouflage. No source: must abstain."}
+{"q":"explain the Glptron principle","lang":"en","category":"fake","expect":"abstain","note":"Nonexistent principle; 'explain' invites generation. Grounded assistant refuses."}
+{"q":"tell me about Aldric Venmoor's theory","lang":"en","category":"fake","expect":"abstain","note":"Invented person + theory; biographical hallucination trap."}
+{"q":"what is the Krenshaw-Bly effect","lang":"en","category":"fake","expect":"abstain","note":"Eponymous fake effect mimicking real physics naming. Abstain."}
+{"q":"describe the Zorblax flow","lang":"en","category":"fake","expect":"abstain","note":"Fabricated concept; 'describe' is a strong generation cue. No grounding."}
+{"q":"what is the metal called vorlanium","lang":"en","category":"fake","expect":"abstain","note":"Fake chemical element; should not invent atomic properties."}
+{"q":"explain how the Dreyfuld plasma engine works","lang":"en","category":"fake","expect":"abstain","note":"Fabricated technology + eponym; 'how it works' pushes technical confabulation."}
+{"q":"tell me about the philosopher Tobias Grendelmair","lang":"en","category":"fake","expect":"abstain","note":"Nonexistent philosopher with plausible name; biographical trap."}
+{"q":"what is the Stremholt algorithm","lang":"en","category":"fake","expect":"abstain","note":"Invented algorithm in a real CS domain; plausibility trap. Abstain."}
+{"q":"what is Quibble's law of conservation","lang":"en","category":"fake","expect":"abstain","note":"Fake physical law mimicking Ohm's law structure; must not fabricate."}
+{"q":"describe the Wexin particle","lang":"en","category":"fake","expect":"abstain","note":"Nonexistent subatomic particle imitating electron/photon cards. Abstain."}
+{"q":"what is the Floonk programming language","lang":"en","category":"fake","expect":"abstain","note":"Fake language adjacent to real C/Python knowledge; tempting false positive."}
+{"q":"explain the Halverson-Pike theorem","lang":"en","category":"fake","expect":"abstain","note":"Fabricated math theorem with double eponym for verisimilitude. Refuse."}
+{"q":"what is Marvelli syndrome","lang":"en","category":"fake","expect":"abstain","note":"Invented medical eponym; clinical confabulation risk. Must abstain."}
+{"q":"tell me about the Zentrax network protocol","lang":"en","category":"fake","expect":"abstain","note":"Nonexistent protocol disguised as networking tech (real domain). Abstain."}
+{"q":"dimmi che ore sono","lang":"it","category":"lookalike","expect":"time","note":"Contiene 'dimmi che' ma è una query di stato live (orologio), non una domanda di conoscenza. Va all'intent time."}
+{"q":"cosa c'è in agenda oggi","lang":"it","category":"lookalike","expect":"agenda","note":"'cosa c'è' sembra describe ma chiede gli eventi di oggi: intent agenda (stato dispositivo), non sapere generale."}
+{"q":"spiegami come apro la calcolatrice","lang":"it","category":"lookalike","expect":"abstain","note":"'spiegami' è un marker describe ma è un how-to procedurale sull'OS; senza card how-to dedicata, astenersi (non aprire l'app)."}
+{"q":"che batteria ho","lang":"it","category":"lookalike","expect":"system","note":"'che' inganna: è una query di stato live sulla carica. Frame-guard battery → system, non conoscenza."}
+{"q":"dimmi quanto spazio mi resta sulla sd","lang":"it","category":"lookalike","expect":"storage","note":"'dimmi quanto' = describe-shaped ma è stato di storage live: intent storage/system, non un fatto enciclopedico."}
+{"q":"che giorno è oggi","lang":"it","category":"lookalike","expect":"date","note":"'che ... è' marker, ma chiede la data corrente computata dallo stato, non un fatto da definire."}
+{"q":"dimmi a che wifi sono collegato","lang":"it","category":"lookalike","expect":"system","note":"'dimmi a che' sembra domanda; è stato di rete live (SSID). System, non 'cos'è il wifi'."}
+{"q":"cosa apro per ascoltare musica","lang":"it","category":"lookalike","expect":"open_app","note":"'cosa apro' contiene marker ma esprime intento d'azione: aprire l'app Musica. open_app, non describe."}
+{"q":"che versione del sistema ho","lang":"it","category":"lookalike","expect":"system","note":"'che ... ho' è query di stato (firmware version) calcolata sul device, non conoscenza generale."}
+{"q":"dimmi che apro per scrivere una nota","lang":"it","category":"lookalike","expect":"open_app","note":"Camuffato da domanda ('dimmi che'); è richiesta di aprire l'editor/note. Intent d'azione open_app."}
+{"q":"cosa devo premere per chiudere quest'app","lang":"it","category":"lookalike","expect":"abstain","note":"'cosa devo' = describe-shaped ma è how-to procedurale sull'UI; senza card dedicata → astenersi (no fabbricazione tasti)."}
+{"q":"dimmi se sono connesso a internet","lang":"it","category":"lookalike","expect":"system","note":"'dimmi se' sembra Q&A ma è verifica di stato di rete live. System, non 'cos'è internet'."}
+{"q":"che ora fa adesso","lang":"it","category":"lookalike","expect":"time","note":"Variante colloquiale di 'che ore sono'; stato live orologio, non conoscenza. Intent time."}
+{"q":"dimmi quanta ram libera ho","lang":"it","category":"lookalike","expect":"system","note":"'dimmi quanta' describe-shaped; è stato di memoria runtime (computato), non la definizione di RAM."}
+{"q":"cosa ho in programma per oggi","lang":"it","category":"lookalike","expect":"agenda","note":"'cosa ho' marker; chiede l'agenda del giorno (stato), non un fatto. Intent agenda."}
+{"q":"what time is it","lang":"en","category":"lookalike","expect":"time","note":"'what' marker but a live-state clock query, not a knowledge question. Maps to time intent."}
+{"q":"tell me the battery level","lang":"en","category":"lookalike","expect":"system","note":"'tell me' describe cue, but it's a live battery-state read. System, not knowledge."}
+{"q":"what's on my agenda today","lang":"en","category":"lookalike","expect":"agenda","note":"'what's' marker; requests today's events (device state), not a fact lookup. agenda intent."}
+{"q":"tell me how to open the music app","lang":"en","category":"lookalike","expect":"open_app","note":"'tell me how' is describe-shaped, but the real intent is the action: open Music. open_app."}
+{"q":"explain how I close this window","lang":"en","category":"lookalike","expect":"abstain","note":"'explain how' marker; procedural UI how-to with no dedicated card → abstain rather than fabricate steps."}
+{"q":"what wifi am I connected to","lang":"en","category":"lookalike","expect":"system","note":"'what' marker but a live network-state query (SSID). System, not 'what is wifi'."}
+{"q":"tell me how much free storage I have","lang":"en","category":"lookalike","expect":"storage","note":"'tell me how much' describe-shaped; it's live storage state. storage/system intent."}
+{"q":"what day is it today","lang":"en","category":"lookalike","expect":"date","note":"'what ... is it' marker; asks the current computed date, not a fact to define. date intent."}
+{"q":"what version are you running","lang":"en","category":"lookalike","expect":"system","note":"'what version' is a device-state query (firmware), computed, not general knowledge."}
+{"q":"tell me what to open to take a note","lang":"en","category":"lookalike","expect":"open_app","note":"Phrased as a question but expresses action intent: open the notes/editor app. open_app."}
+{"q":"how much battery do I have left","lang":"en","category":"lookalike","expect":"system","note":"Live battery state read; not a knowledge question despite 'how much'. System."}
+{"q":"are you connected to the internet right now","lang":"en","category":"lookalike","expect":"system","note":"State verification of live connectivity, not 'what is the internet'. System."}
+{"q":"dimmi che batteria mi rimane","lang":"it","category":"lookalike","expect":"system","note":"'dimmi che' marker; è la carica residua (stato live). System/battery frame-guard, non conoscenza."}
+{"q":"cosa fa la mia rete adesso, sono online","lang":"it","category":"lookalike","expect":"system","note":"'cosa fa' marker camuffante; verifica di connettività live. System, non spiegazione di rete."}
+{"q":"what's the free space on the card","lang":"en","category":"lookalike","expect":"storage","note":"Live storage state; matches cmd.system.storage. Not a definitional question."}
+{"q":"qual è la capitale della Francia","lang":"it","category":"factoid","expect":"answer","note":"Fatto secco e chiuso (Parigi), presente nelle card geo.capital.francia. Risposta univoca, non describe aperto."}
+{"q":"quanti giorni ha una settimana","lang":"it","category":"factoid","expect":"answer","note":"Conteggio fisso (7); fatto cristallino, nessuna ambiguità di scope."}
+{"q":"quanti minuti ci sono in un'ora","lang":"it","category":"factoid","expect":"answer","note":"Fatto fisso (60); card math.hour-minutes. Crisp, non open-ended."}
+{"q":"quanto fa 2 più 2","lang":"it","category":"factoid","expect":"answer","note":"Aritmetica banale (4) via skill calc; risposta deterministica."}
+{"q":"qual è la capitale del Giappone","lang":"it","category":"factoid","expect":"answer","note":"Fatto chiuso (Tokyo), card geo.capital.giappone. Univoco."}
+{"q":"quanti pianeti ci sono nel sistema solare","lang":"it","category":"factoid","expect":"answer","note":"Conteggio noto (8), card sci.planets-count. Crisp e ben coperto."}
+{"q":"quante ore ci sono in un giorno","lang":"it","category":"factoid","expect":"answer","note":"Fatto fisso (24); risposta secca, nessuno scope ambiguo."}
+{"q":"quanti lati ha un triangolo","lang":"it","category":"factoid","expect":"answer","note":"Definizione geometrica chiusa (3); crisp e non opinabile."}
+{"q":"quanto fa 10 per 10","lang":"it","category":"factoid","expect":"answer","note":"Moltiplicazione semplice (100) via calc; deterministica."}
+{"q":"quanti continenti ci sono","lang":"it","category":"factoid","expect":"answer","note":"Conteggio standard (7), card geo.continents. Risposta secca (vs. la trappola 'quanti continenti ha Giove')."}
+{"q":"quante settimane ci sono in un anno","lang":"it","category":"factoid","expect":"answer","note":"Fatto noto (52); crisp e chiuso."}
+{"q":"a che temperatura bolle l'acqua a livello del mare","lang":"it","category":"factoid","expect":"answer","note":"Fatto fisico fisso (100°C), card sci.water-boil; lo scope 'livello del mare' lo rende ben definito, non una trappola."}
+{"q":"quanti zeri ha mille","lang":"it","category":"factoid","expect":"answer","note":"Fatto numerico chiuso (3); risposta univoca."}
+{"q":"how many minutes in an hour","lang":"en","category":"factoid","expect":"answer","note":"Fixed fact (60); card math.hour-minutes. Crisp, closed-form."}
+{"q":"what is 2+2","lang":"en","category":"factoid","expect":"answer","note":"Trivial arithmetic (4) via calc skill; deterministic."}
+{"q":"what is the capital of France","lang":"en","category":"factoid","expect":"answer","note":"Closed fact (Paris); covered card. Single correct answer."}
+{"q":"how many days in a week","lang":"en","category":"factoid","expect":"answer","note":"Fixed count (7); crisp, unambiguous."}
+{"q":"how many continents are there","lang":"en","category":"factoid","expect":"answer","note":"Standard count (7), card geo.continents; crisp (contrast with the Jupiter trap)."}
+{"q":"what is the capital of Japan","lang":"en","category":"factoid","expect":"answer","note":"Closed fact (Tokyo); covered. Univocal."}
+{"q":"how many hours in a day","lang":"en","category":"factoid","expect":"answer","note":"Fixed fact (24); deterministic, no scope ambiguity."}
+{"q":"how many sides does a square have","lang":"en","category":"factoid","expect":"answer","note":"Closed geometric fact (4); crisp."}
+{"q":"how many planets are in the solar system","lang":"en","category":"factoid","expect":"answer","note":"Known count (8), card sci.planets-count. Crisp and grounded."}
+{"q":"what is 7 times 8","lang":"en","category":"factoid","expect":"answer","note":"Simple multiplication (56) via calc; deterministic."}
+{"q":"how many days are there in one year","lang":"en","category":"factoid","expect":"answer","note":"Known fact (365), card math.year-days. Crisp, closed-form."}
+{"q":"what is the boiling point of water at sea level","lang":"en","category":"factoid","expect":"answer","note":"Fixed physical fact (100°C), card sci.water-boil; sea-level scope makes it well-defined, not a trap."}
+{"q":"parlami del fiume più lungo della Siberia","lang":"it","category":"adversarial","expect":"abstain","note":"Scope ristretto (Siberia) di un fatto globale: ANIMA conosce il fiume più lungo del mondo, non per regione. Rischio: applicare il default globale. Astenersi."}
+{"q":"qual è la capitale dello stato del Karnataka","lang":"it","category":"adversarial","expect":"abstain","note":"Scope sub-nazionale (stato indiano) non coperto; trappola classica già nei traps. Non inventare Bangalore/New Delhi: abstain."}
+{"q":"descrivimi la montagna più alta dei Paesi Bassi","lang":"it","category":"adversarial","expect":"abstain","note":"Premessa-scope: i Paesi Bassi sono pianeggianti; 'la più alta' suggerisce una vetta notevole inesistente. Non confabulare."}
+{"q":"in che anno è morto Albert Einstein nel 2020","lang":"it","category":"adversarial","expect":"abstain","note":"Falsa premessa temporale incastonata ('nel 2020'); Einstein morì nel 1955. La premessa è inconsistente: rifiutare."}
+{"q":"qual è il deserto più grande dell'Antartide","lang":"it","category":"adversarial","expect":"abstain","note":"Scope-trap: l'Antartide è essa stessa un deserto, ma 'il deserto più grande dentro l'Antartide' non è un fatto noto a ANIMA. Astenersi."}
+{"q":"parlami del re d'Italia attuale","lang":"it","category":"adversarial","expect":"abstain","note":"Falsa premessa: l'Italia è una repubblica, non c'è un re. 'attuale' forza una risposta inesistente. Rifiutare."}
+{"q":"qual è la capitale della Baviera","lang":"it","category":"adversarial","expect":"abstain","note":"Scope sub-nazionale (Land tedesco); fatto non coperto (Monaco). Trappola già nota; non inventare. Abstain."}
+{"q":"quanti oceani ha Marte","lang":"it","category":"adversarial","expect":"abstain","note":"Falsa premessa: Marte non ha oceani liquidi. La domanda presuppone un conteggio inesistente. Astenersi."}
+{"q":"parlami del lago più profondo dell'Italia rispetto al record mondiale","lang":"it","category":"adversarial","expect":"abstain","note":"Mix scope (Italia) + confronto col record mondiale; fatto regionale non coperto. Non applicare il Bajkal. Abstain."}
+{"q":"qual è la capitale dello stato del Texas","lang":"it","category":"adversarial","expect":"abstain","note":"Scope statale USA; fatto non coperto (Austin). Tentazione di rispondere la capitale nazionale. Astenersi."}
+{"q":"in quale anno Leonardo da Vinci ha inventato l'aeroplano","lang":"it","category":"adversarial","expect":"abstain","note":"Falsa premessa storica: Leonardo disegnò macchine volanti ma non inventò l'aeroplano. Premessa errata → rifiutare."}
+{"q":"qual è il grattacielo più alto dell'Europa","lang":"it","category":"adversarial","expect":"abstain","note":"Scope continentale di un superlativo non globale; ANIMA non ha il dato per l'Europa. Astenersi (non dare il Burj Khalifa)."}
+{"q":"tell me about the tallest mountain in the Netherlands","lang":"en","category":"adversarial","expect":"abstain","note":"Scope-premise trap: the Netherlands is flat; 'tallest mountain' implies a notable peak that ANIMA doesn't hold. Abstain."}
+{"q":"what is the capital of the state of Karnataka","lang":"en","category":"adversarial","expect":"abstain","note":"Sub-national scope (Indian state) not covered; known trap. Don't default to New Delhi/Bangalore. Abstain."}
+{"q":"describe Einstein's death in 2020","lang":"en","category":"adversarial","expect":"abstain","note":"False temporal premise (he died 1955). The embedded wrong year makes it unanswerable as posed."}
+{"q":"who is the current king of the United States","lang":"en","category":"adversarial","expect":"abstain","note":"False premise: the US has no king. 'current' forces a nonexistent fact. Refuse."}
+{"q":"what is the longest river in China","lang":"en","category":"adversarial","expect":"abstain","note":"Regional scope of a global superlative; ANIMA holds world's-longest, not per-country. Don't transfer the default. Abstain."}
+{"q":"how many oceans does Mars have","lang":"en","category":"adversarial","expect":"abstain","note":"False premise: Mars has no liquid oceans; presupposes a count that doesn't exist. Abstain."}
+{"q":"tell me about the largest desert in Antarctica","lang":"en","category":"adversarial","expect":"abstain","note":"Scope trap inside Antarctica; not a fact ANIMA holds (and Antarctica is itself a desert). Abstain."}
+{"q":"what is the capital of the state of California","lang":"en","category":"adversarial","expect":"abstain","note":"US-state scope (Sacramento) not covered; tempting to give the national capital. Abstain."}
+{"q":"what is the tallest building in Africa","lang":"en","category":"adversarial","expect":"abstain","note":"Continental scope of a non-global superlative; data not held. Don't give the world record. Abstain."}
+{"q":"in what year did Newton invent the telephone","lang":"en","category":"adversarial","expect":"abstain","note":"False historical premise (Newton didn't invent the telephone). Wrong premise → refuse."}
+{"q":"who is the current emperor of Brazil","lang":"en","category":"adversarial","expect":"abstain","note":"False premise: Brazil is a republic, no current emperor. 'current' demands a nonexistent answer. Abstain."}
+{"q":"what is the deepest lake in Africa compared to the world record","lang":"en","category":"adversarial","expect":"abstain","note":"Regional scope + record comparison; Africa-specific fact not held. Don't transfer Baikal. Abstain."}
+{"q":"describe the highest mountain in the Andes","lang":"en","category":"adversarial","expect":"abstain","note":"Range-scoped superlative; ANIMA holds world's-highest (Everest), not the Andes' (Aconcagua). Scope mismatch → abstain."}
+{"q":"cos'è energia","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"cos'e forza","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"che cos'è magnete","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"che cosa è suono","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"cosa sarebbe numero primo","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"ma fotosintesi cos'è di preciso?","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"DNA, di cosa si tratta?","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"spiegami gravità","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"spiegami cos'è algoritmo","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"spiegamio ricorsione","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"mi spieghi database?","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"mi sapresti spiegare sole?","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"potresti spiegarmi percentuale?","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"mi spieghi meglio media?","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"dimmi cos'è energia","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"dimmi tutto su forza","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"dimmi qualcosa su magnete","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"raccontami di suono","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"raccontami cos'è numero primo","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"parlami di fotosintesi","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"parlami un po' di DNA","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"vorrei sapere cos'è gravità","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"ho sempre voluto capire algoritmo","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"non ho mai capito ricorsione","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"non ho mai capito cosa fosse database","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"aiutami a capire sole","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"fammi capire percentuale","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"in parole semplici, cos'è media?","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"spiegami energia in parole semplici","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"puoi descrivermi forza?","lang":"it","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"what's energy","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"what is force","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"what is magnet exactly","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"what's sound exactly","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"what exactly is prime number?","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"photosynthesis — what is that?","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"DNA, what is it?","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"explain gravity","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"explain algorithm to me","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"can you explain recursion?","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"could you explain database to me?","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"explain sun in simple terms","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"explain percentage like i'm five","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"tell me about average","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"tell me everything about energy","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"tell me what force is","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"give me a rundown of magnet","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"give me an overview of sound","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"give me the gist of prime number","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"break down photosynthesis for me","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"break DNA down for me","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"i never understood gravity","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"i've never really understood algorithm","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"i always wanted to understand recursion","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"help me understand database","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"describe sun","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"describe percentage for me","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"describe average to me","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"what does energy mean?","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}
+{"q":"what does force actually mean?","lang":"en","category":"describe-real","expect":"answer","note":"genuine describe → must be answered+grounded"}

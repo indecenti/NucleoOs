@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "ui": {
+    "theme": "dark",
+    "accent": "#4ea1ff",
+    "fontSize": "14px",
+    "language": "it"
+  },
+  "device": {
+    "name": "nucleo-01",
+    "locale": "it-IT",
+    "timezone": "Europe/Rome"
+  },
+  "power": {
+    "profile": "performance",
+    "sleep_timeout_s": 0,
+    "display_brightness": 100,
+    "volume": 70
+  },
+  "network": {
+    "wifi": {
+      "enabled": true
+    },
+    "ble": {
+      "enabled": true
+    },
+    "swarm": {
+      "enabled": true
+    },
+    "ipv6": {
+      "enabled": false
+    }
+  },
+  "voice": {
+    "alwaysOn": false
+  }
+}

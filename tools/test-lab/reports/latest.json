@@ -1,0 +1,483 @@
+{
+  "ts": "2026-06-08T01:14:47",
+  "scope": "full-pc",
+  "device_ip": null,
+  "counts": {
+    "total": 51,
+    "pass": 51,
+    "fail": 0,
+    "error": 0,
+    "skip": 0
+  },
+  "health": {
+    "hallucinations": 0,
+    "nl_cases": 6702,
+    "route_drift": 0,
+    "green": [
+      51,
+      51
+    ]
+  },
+  "tests": [
+    {
+      "id": "gate-regress-corpus-l1",
+      "label": "regress (corpus+L1)",
+      "category": "nl-knowledge",
+      "status": "pass",
+      "summary": "ALL GATES PASS",
+      "duration_s": 11.05,
+      "cmd": "python tools/anima/regress.py"
+    },
+    {
+      "id": "gate-l1-parity-prefilter",
+      "label": "l1-parity (prefilter)",
+      "category": "nl-knowledge",
+      "status": "pass",
+      "summary": "[l1-parity] ✓ prefilter is answer-identical to exhaustive search on all bilingual requests",
+      "duration_s": 1.66,
+      "cmd": "node tools/anima-host/l1-parity.mjs"
+    },
+    {
+      "id": "gate-l1-recall-asym",
+      "label": "l1-recall (asym)",
+      "category": "nl-knowledge",
+      "status": "pass",
+      "summary": "[l1-recall] ✓ prefilter retains exact-path recall (no drops)",
+      "duration_s": 1.74,
+      "cmd": "node tools/anima-host/l1-recall.mjs"
+    },
+    {
+      "id": "gate-math-check",
+      "label": "math-check",
+      "category": "nl-math",
+      "status": "pass",
+      "summary": "ALL GREEN — 469/469 exact, twin in sync.",
+      "duration_s": 2.51,
+      "cmd": "node tools/anima-host/math-check.mjs"
+    },
+    {
+      "id": "gate-ood-check-safety",
+      "label": "ood-check (safety)",
+      "category": "nl-hallucination",
+      "status": "pass",
+      "summary": "out-of-scope (10): refused(good) 10  clarify(meh) 0  FALSE-POSITIVE(bad) 0",
+      "duration_s": 0.64,
+      "cmd": "node tools/anima-host/ood-check.mjs"
+    },
+    {
+      "id": "gate-reliability-traps",
+      "label": "reliability (traps)",
+      "category": "nl-hallucination",
+      "status": "pass",
+      "summary": "out-of-scope (23): refused(good) 23  clarify(meh) 0  FALSE-POSITIVE(bad) 0",
+      "duration_s": 0.25,
+      "cmd": "node tools/anima-host/ood-check.mjs tools/anima/eval_traps.jsonl"
+    },
+    {
+      "id": "gate-halluc-stress",
+      "label": "halluc-stress",
+      "category": "nl-hallucination",
+      "status": "pass",
+      "summary": "✓ zero hallucinations — every unanswerable question was honestly refused.",
+      "duration_s": 1.76,
+      "cmd": "node tools/anima-host/halluc-stress.mjs"
+    },
+    {
+      "id": "gate-halluc-battery-nl",
+      "label": "halluc-battery (NL)",
+      "category": "nl-hallucination",
+      "status": "pass",
+      "summary": "✓ zero hallucinations across the whole offline NL battery.",
+      "duration_s": 2.76,
+      "cmd": "node tools/anima-host/halluc-suite.mjs"
+    },
+    {
+      "id": "gate-realistic-nl",
+      "label": "realistic (NL)",
+      "category": "nl-skill-routing",
+      "status": "pass",
+      "summary": "request routed correctly (skills fire, knowledge stays grounded/abstains, no fabrication).",
+      "duration_s": 1.19,
+      "cmd": "node tools/anima-host/realistic.mjs"
+    },
+    {
+      "id": "gate-skill-knowledge-boundary",
+      "label": "skill<->knowledge boundary",
+      "category": "nl-skill-routing",
+      "status": "pass",
+      "summary": " never compute on a definition or a knowledge question, and every compute fires its skill.",
+      "duration_s": 2.22,
+      "cmd": "node tools/anima-host/boundary.mjs"
+    },
+    {
+      "id": "gate-metamorph-nl",
+      "label": "metamorph (NL)",
+      "category": "nl-hallucination",
+      "status": "pass",
+      "summary": "bation; detection routing stable; M1-verifier never confirms a fabrication; deterministic.",
+      "duration_s": 10.93,
+      "cmd": "node tools/anima-host/metamorph.mjs"
+    },
+    {
+      "id": "gate-nl-stress-offline",
+      "label": "nl-stress (offline)",
+      "category": "nl-hallucination",
+      "status": "pass",
+      "summary": "LLUCINATIONS: 0 (adversarial 0 + x-turn 0)  cross-skill misroutes: 0  [soft typo-drift: 1]",
+      "duration_s": 2.17,
+      "cmd": "node tools/anima-host/nl-stress.mjs"
+    },
+    {
+      "id": "gate-fluency-grounded-l2",
+      "label": "fluency-grounded (L2)",
+      "category": "nl-knowledge",
+      "status": "pass",
+      "summary": "luency-grounded] ✓ MOSAICO is fuller AND adds only verbatim grounded spans AND is safe\u001b[0m",
+      "duration_s": 1.11,
+      "cmd": "node tools/anima-host/fluency-grounded.mjs"
+    },
+    {
+      "id": "gate-describe-stress-nl",
+      "label": "describe-stress (NL)",
+      "category": "nl-knowledge",
+      "status": "pass",
+      "summary": "[describe-stress] ✓ NEVER fabricates (0/85 traps) AND recalls genuine describe queries\u001b[0m",
+      "duration_s": 0.86,
+      "cmd": "node tools/anima-host/describe-stress.mjs"
+    },
+    {
+      "id": "gate-skill-routing",
+      "label": "skill-routing",
+      "category": "nl-skill-routing",
+      "status": "pass",
+      "summary": "✓ all routed as expected",
+      "duration_s": 0.31,
+      "cmd": "node tools/anima-host/skill-probe.mjs tools/anima/eval_skills.jsonl"
+    },
+    {
+      "id": "gate-skill-routing-2",
+      "label": "skill-routing-2",
+      "category": "nl-skill-routing",
+      "status": "pass",
+      "summary": "✓ all routed as expected",
+      "duration_s": 1.04,
+      "cmd": "node tools/anima-host/skill-probe.mjs tools/anima/eval_skills2.jsonl"
+    },
+    {
+      "id": "gate-false-positives-nl",
+      "label": "false-positives (NL)",
+      "category": "nl-hallucination",
+      "status": "pass",
+      "summary": "✓ all routed as expected",
+      "duration_s": 0.53,
+      "cmd": "node tools/anima-host/skill-probe.mjs tools/anima/eval_skills3.jsonl"
+    },
+    {
+      "id": "gate-false-positives-2-nl",
+      "label": "false-positives-2 (NL)",
+      "category": "nl-hallucination",
+      "status": "pass",
+      "summary": "✓ all routed as expected",
+      "duration_s": 0.24,
+      "cmd": "node tools/anima-host/skill-probe.mjs tools/anima/eval_skills4.jsonl"
+    },
+    {
+      "id": "gate-cross-topic-halluc-nl",
+      "label": "cross-topic halluc (NL)",
+      "category": "nl-hallucination",
+      "status": "pass",
+      "summary": "✓ all routed as expected",
+      "duration_s": 0.55,
+      "cmd": "node tools/anima-host/skill-probe.mjs tools/anima/eval_skills5.jsonl"
+    },
+    {
+      "id": "gate-halluc-probe-it",
+      "label": "halluc-probe IT",
+      "category": "nl-hallucination",
+      "status": "pass",
+      "summary": "✓ zero fabrications — every unanswerable question was honestly refused.",
+      "duration_s": 0.82,
+      "cmd": "node tools/anima-host/halluc-probe.mjs tools/anima/eval_halluc_it.jsonl"
+    },
+    {
+      "id": "gate-halluc-probe-en",
+      "label": "halluc-probe EN",
+      "category": "nl-hallucination",
+      "status": "pass",
+      "summary": "✓ zero fabrications — every unanswerable question was honestly refused.",
+      "duration_s": 0.9,
+      "cmd": "node tools/anima-host/halluc-probe.mjs tools/anima/eval_halluc_en.jsonl"
+    },
+    {
+      "id": "gate-skill-isolation-paint",
+      "label": "skill-isolation (paint)",
+      "category": "nl-skill-routing",
+      "status": "pass",
+      "summary": "✓ all routed as expected",
+      "duration_s": 0.12,
+      "cmd": "node tools/anima-host/skill-probe.mjs tools/anima/eval_paint_decline.jsonl"
+    },
+    {
+      "id": "gate-image-gen-stress-nl",
+      "label": "image-gen stress (NL)",
+      "category": "nl-skill-routing",
+      "status": "pass",
+      "summary": "✓ all routed as expected",
+      "duration_s": 0.23,
+      "cmd": "node tools/anima-host/skill-probe.mjs tools/anima/eval_paint_stress.jsonl"
+    },
+    {
+      "id": "gate-action-tier-false-act",
+      "label": "action-tier (false-act)",
+      "category": "nl-skill-routing",
+      "status": "pass",
+      "summary": "✓ all routed as expected",
+      "duration_s": 0.14,
+      "cmd": "node tools/anima-host/skill-probe.mjs tools/anima/eval_action.jsonl"
+    },
+    {
+      "id": "gate-cross-skill-xskill",
+      "label": "cross-skill (xskill)",
+      "category": "nl-skill-routing",
+      "status": "pass",
+      "summary": "✓ all routed as expected",
+      "duration_s": 0.3,
+      "cmd": "node tools/anima-host/skill-probe.mjs tools/anima/eval_xskill.jsonl"
+    },
+    {
+      "id": "gate-teach-loop-learn",
+      "label": "teach-loop (learn)",
+      "category": "nl-memory",
+      "status": "pass",
+      "summary": "each → offline paraphrase recall, abstention, volatility-refusal, reminder-safety all hold",
+      "duration_s": 0.15,
+      "cmd": "node tools/anima-host/teach-check.mjs"
+    },
+    {
+      "id": "gate-profile-personal",
+      "label": "profile (personal)",
+      "category": "nl-memory",
+      "status": "pass",
+      "summary": "y, honest-unset, zero third-person hijack, teach/reminder safety, cross-feature — all hold",
+      "duration_s": 0.38,
+      "cmd": "node tools/anima-host/profile-check.mjs"
+    },
+    {
+      "id": "gate-dict-sync-translate",
+      "label": "dict-sync (translate)",
+      "category": "nl-translate",
+      "status": "pass",
+      "summary": "OK: up to date tools\\sd-sim\\data\\anima\\dict-en-it.tsv (49091 keys)",
+      "duration_s": 0.82,
+      "cmd": "python tools/anima/gen_dicts.py --check"
+    },
+    {
+      "id": "gate-translate-it-en",
+      "label": "translate (IT<->EN)",
+      "category": "nl-translate",
+      "status": "pass",
+      "summary": "✓ all translations + routing as expected",
+      "duration_s": 0.11,
+      "cmd": "node tools/anima-host/translate-check.mjs"
+    },
+    {
+      "id": "gate-kge-eval",
+      "label": "kge-eval",
+      "category": "nl-reasoning",
+      "status": "pass",
+      "summary": "32mANIMA ora DEDUCE: risponde a fatti mai memorizzati, a errore zero, restando onesta \u001b[0m",
+      "duration_s": 0.12,
+      "cmd": "node tools/anima/kge-eval.mjs"
+    },
+    {
+      "id": "gate-hdc-eval",
+      "label": "hdc-eval",
+      "category": "nl-reasoning",
+      "status": "pass",
+      "summary": "\u001b[1m=== \u001b[32mHDC migliora la copertura offline e aggiunge ragionamento, a errore zero \u001b[0m",
+      "duration_s": 0.09,
+      "cmd": "node tools/anima/hdc-eval.mjs"
+    },
+    {
+      "id": "gate-combinator-eval",
+      "label": "combinator-eval",
+      "category": "nl-reasoning",
+      "status": "pass",
+      "summary": "\u001b[1m=== \u001b[32mANIMA ora COMPONE: calcola risposte nuove da più fatti, a errore zero \u001b[0m",
+      "duration_s": 0.06,
+      "cmd": "node tools/anima/combinator-eval.mjs"
+    },
+    {
+      "id": "gate-typed-facets-kg",
+      "label": "typed-facets (KG)",
+      "category": "nl-reasoning",
+      "status": "pass",
+      "summary": " occupation=826  gender=454  died=38  isa=1324  (spot-checks, it/en parity, type-clean OK)",
+      "duration_s": 0.09,
+      "cmd": "node tools/anima-host/typed-check.mjs"
+    },
+    {
+      "id": "gate-typed-nl-facet",
+      "label": "typed-nl (facet)",
+      "category": "nl-knowledge",
+      "status": "pass",
+      "summary": "✓ typed-facet NL: all answered correctly, 0 fabrications on adversarial cases",
+      "duration_s": 2.01,
+      "cmd": "node tools/anima-host/typed-nl-check.mjs"
+    },
+    {
+      "id": "gate-entity-detect-online",
+      "label": "entity-detect (online)",
+      "category": "nl-knowledge",
+      "status": "pass",
+      "summary": "out-of-scope false-positives: 0/5",
+      "duration_s": 0.06,
+      "cmd": "node tools/anima/entity.mjs"
+    },
+    {
+      "id": "gate-clean-extract-wiki",
+      "label": "clean-extract (wiki)",
+      "category": "nl-knowledge",
+      "status": "pass",
+      "summary": "[clean-extract] 7/7 pass",
+      "duration_s": 0.06,
+      "cmd": "node tools/anima/clean-extract.mjs"
+    },
+    {
+      "id": "gate-akb5-content-sharded",
+      "label": "akb5-content (sharded)",
+      "category": "nl-knowledge",
+      "status": "pass",
+      "summary": "kb5-content] ✓ 0 hallucinations on false premises AND recalls the new encyclopedia content",
+      "duration_s": 0.59,
+      "cmd": "node tools/anima-host/akb5-content.mjs"
+    },
+    {
+      "id": "unit-test",
+      "label": "test.mjs",
+      "category": "app-spreadsheet",
+      "status": "pass",
+      "summary": "ℹ duration_ms 72.1266",
+      "duration_s": 0.13,
+      "cmd": "node --test apps/spreadsheet/test.mjs"
+    },
+    {
+      "id": "unit-forge-router",
+      "label": "forge-router.test.mjs",
+      "category": "forge-webllm",
+      "status": "pass",
+      "summary": "ℹ duration_ms 93.5233",
+      "duration_s": 0.15,
+      "cmd": "node --test tools/anima-host/forge-router.test.mjs"
+    },
+    {
+      "id": "unit-forge-verify-claim",
+      "label": "forge-verify-claim.test.mjs",
+      "category": "forge-webllm",
+      "status": "pass",
+      "summary": "ℹ duration_ms 329.5262",
+      "duration_s": 0.39,
+      "cmd": "node --test tools/anima-host/forge-verify-claim.test.mjs"
+    },
+    {
+      "id": "unit-forge-verify-nl",
+      "label": "forge-verify-nl.test.mjs",
+      "category": "forge-webllm",
+      "status": "pass",
+      "summary": "ℹ duration_ms 7635.8829",
+      "duration_s": 7.69,
+      "cmd": "node --test tools/anima-host/forge-verify-nl.test.mjs"
+    },
+    {
+      "id": "unit-paint-nlcommand",
+      "label": "paint-nlcommand.test.mjs",
+      "category": "app-paint",
+      "status": "pass",
+      "summary": "ℹ duration_ms 92.7045",
+      "duration_s": 0.15,
+      "cmd": "node --test tools/anima-host/paint-nlcommand.test.mjs"
+    },
+    {
+      "id": "unit-translate",
+      "label": "translate.test.mjs",
+      "category": "nl-translate",
+      "status": "pass",
+      "summary": "ℹ duration_ms 128.9298",
+      "duration_s": 0.19,
+      "cmd": "node --test tools/anima/translate.test.mjs"
+    },
+    {
+      "id": "unit-weather",
+      "label": "weather.test.mjs",
+      "category": "nl-weather",
+      "status": "pass",
+      "summary": "ℹ duration_ms 119.6047",
+      "duration_s": 0.18,
+      "cmd": "node --test tools/anima/weather.test.mjs"
+    },
+    {
+      "id": "unit-nl-offline",
+      "label": "nl-offline.test.mjs",
+      "category": "app-spreadsheet",
+      "status": "pass",
+      "summary": "ℹ duration_ms 102.9975",
+      "duration_s": 0.16,
+      "cmd": "node --test tools/spread-copilot/nl-offline.test.mjs"
+    },
+    {
+      "id": "unit-terminal-commands",
+      "label": "terminal-commands.test.mjs",
+      "category": "app-shell",
+      "status": "pass",
+      "summary": "ℹ duration_ms 101.2854",
+      "duration_s": 0.16,
+      "cmd": "node --test tools/terminal-commands.test.mjs"
+    },
+    {
+      "id": "extra-spread-nlu-regress",
+      "label": "spread-nlu (regress)",
+      "category": "app-spreadsheet",
+      "status": "pass",
+      "summary": "✓ all golden cases pass",
+      "duration_s": 0.07,
+      "cmd": "node tools/spread-nlu/regress.mjs"
+    },
+    {
+      "id": "extra-spreadsheet-engine",
+      "label": "spreadsheet engine",
+      "category": "app-spreadsheet",
+      "status": "pass",
+      "summary": "Tutti i controlli passati!",
+      "duration_s": 0.06,
+      "cmd": "node apps/spreadsheet/test.mjs"
+    },
+    {
+      "id": "extra-workspace-nlfs",
+      "label": "workspace · nlfs",
+      "category": "nl-skill-routing",
+      "status": "pass",
+      "summary": "all green ✓",
+      "duration_s": 0.07,
+      "cmd": "node tools/anima-host/nlfs-check.mjs"
+    },
+    {
+      "id": "extra-workspace-context",
+      "label": "workspace · context",
+      "category": "nl-memory",
+      "status": "pass",
+      "summary": "all green ✓",
+      "duration_s": 0.06,
+      "cmd": "node tools/anima-host/context-check.mjs"
+    },
+    {
+      "id": "extra-workspace-qgen",
+      "label": "workspace · qgen",
+      "category": "nl-knowledge",
+      "status": "pass",
+      "summary": "all green ✓",
+      "duration_s": 0.06,
+      "cmd": "node tools/anima-host/qgen-check.mjs"
+    }
+  ],
+  "failures": []
+}

@@ -1,0 +1,14 @@
+{
+  "_lang": "en",
+  "prev_month": "Previous month",
+  "next_month": "Next month",
+  "new_event_ph": "New event… (Enter)",
+  "pick_day": "Pick a day",
+  "empty_events": "No events. Add one below.",
+  "saved_device": "Saved to device",
+  "save_failed": "Save failed — device unreachable",
+  "more_events": {
+    "one": "+{count} more",
+    "other": "+{count} more"
+  }
+}

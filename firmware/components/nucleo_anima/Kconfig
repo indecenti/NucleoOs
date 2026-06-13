@@ -1,0 +1,22 @@
+menu "NucleoOS ANIMA"
+
+    config NUCLEO_ANIMA_BENCH
+        bool "Run the ANIMA Phase 0 benchmark at boot"
+        default n
+        help
+            Run nucleo_anima_benchmark() once during boot and log the three numbers
+            (int8 MAC throughput, Hamming/popcount rate, SD read MB/s) over the serial
+            monitor. Off by default so normal boot is unchanged. See docs/anima.md §8.
+
+    config NUCLEO_ANIMA_HDC_SELFTEST
+        bool "Run the ANIMA HDC/KGE reasoning self-test at boot"
+        default n
+        help
+            Run nucleo_anima_hdc_selftest() once during boot: the hyperdimensional
+            reasoning core (semantic atoms, key->value recall, deduction by rotation,
+            resonance-coherence honesty) proven on real silicon, plus popcount
+            throughput. Logs PASS/FAIL over the serial monitor. Off by default -> this
+            file compiles to a no-op stub and the normal firmware is byte-for-byte
+            unchanged (zero RAM/flash cost). Reference impl: tools/anima/hdc.mjs + kge.mjs.
+
+endmenu

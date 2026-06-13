@@ -1,0 +1,108 @@
+/* NucleoOS AI Copilot — the OS-wide ANIMA command/AI bar. Themed via the shell's CSS
+   variables so it follows dark/light automatically. Everything is scoped under #copilot /
+   #copilot-* so it never leaks into apps or the rest of the shell. */
+
+#copilot-scrim { position: fixed; inset: 0; z-index: 100000; background: #0007; backdrop-filter: blur(2px); }
+#copilot-scrim.hidden { display: none; }
+
+#copilot {
+  position: fixed; left: 50%; top: 11vh; transform: translateX(-50%);
+  width: 680px; max-width: 94vw; max-height: 76vh; z-index: 100001;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: #0c1426e8; border: 1px solid #ffffff26; border-radius: 16px;
+  box-shadow: 0 40px 100px #000d, 0 4px 16px #0008; backdrop-filter: blur(40px) saturate(1.7);
+  color: var(--text, #e8eefc);
+  font: 13.5px/1.55 ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  animation: cpIn .16s cubic-bezier(.1, .9, .2, 1);
+}
+#copilot.hidden { display: none; }
+@keyframes cpIn { from { opacity: 0; transform: translate(-50%, -10px) scale(.98); } to { opacity: 1; transform: translateX(-50%); } }
+html[data-theme="light"] #copilot { background: #f6f8feec; border-color: #00000018; box-shadow: 0 40px 100px #0004; }
+
+/* header */
+#copilot .cp-head { display: flex; align-items: center; gap: 9px; padding: 11px 14px; border-bottom: 1px solid var(--line, #2a3a5e); }
+#copilot .cp-spark { color: #d9a066; font-size: 16px; animation: cpTw 3.5s ease-in-out infinite; }
+@keyframes cpTw { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+#copilot .cp-title { font-weight: 700; letter-spacing: .4px; }
+#copilot .cp-sub { color: var(--muted, #8aa0c8); font-size: 11px; }
+#copilot .cp-sp { flex: 1; }
+#copilot .cp-chip { border: 1px solid var(--line); background: #ffffff0d; color: var(--muted); border-radius: 7px;
+  padding: 3px 9px; font: inherit; font-size: 11px; cursor: pointer; transition: color .12s, background .12s; }
+#copilot .cp-chip:hover { color: var(--text); background: #ffffff18; }
+#copilot .cp-chip b { color: var(--accent, #4ea1ff); font-weight: 600; }
+#copilot .cp-dot { width: 8px; height: 8px; border-radius: 50%; background: #5b6675; flex: none; transition: background .2s; }
+#copilot .cp-dot.ok { background: #5ad19b; box-shadow: 0 0 8px #5ad19b99; }
+#copilot .cp-dot.err { background: #ff8a9c; box-shadow: 0 0 8px #ff8a9c99; }
+#copilot .cp-x { border: 0; background: transparent; color: var(--muted); font-size: 15px; cursor: pointer;
+  width: 26px; height: 26px; border-radius: 6px; }
+#copilot .cp-x:hover { background: #ffffff14; color: var(--text); }
+
+/* input row */
+#copilot .cp-inputrow { display: flex; align-items: flex-end; gap: 9px; padding: 12px 14px; }
+#copilot .cp-log:not(:empty) + .cp-inputrow, #copilot .cp-inputrow { border-top: 0; }
+#copilot .cp-prompt { color: var(--accent, #4ea1ff); font-weight: 700; line-height: 1.7; flex: none; }
+#copilot textarea { flex: 1; border: 0; background: transparent; color: var(--text); font: inherit; outline: none;
+  resize: none; max-height: 120px; padding: 2px 0; }
+#copilot textarea::placeholder { color: var(--muted); }
+#copilot .cp-send { flex: none; border: 1px solid var(--line); background: #ffffff0d; color: var(--text); border-radius: 8px;
+  padding: 6px 13px; cursor: pointer; font: inherit; font-weight: 600; align-self: flex-end; }
+#copilot .cp-send:hover { background: #ffffff18; }
+#copilot .cp-send.stop { border-color: #5b2330; background: #2a131a; color: #ff9aa6; }
+
+/* transcript */
+#copilot .cp-log { overflow-y: auto; padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }
+#copilot .cp-log:empty { display: none; }
+#copilot .cp-log::-webkit-scrollbar { width: 8px; }
+#copilot .cp-log::-webkit-scrollbar-thumb { background: #ffffff14; border-radius: 8px; }
+#copilot .cp-turn { display: flex; gap: 9px; align-items: flex-start; }
+#copilot .cp-gut { flex: none; width: 14px; text-align: center; user-select: none; }
+#copilot .cp-me .cp-gut { color: var(--accent, #4ea1ff); font-weight: 700; }
+#copilot .cp-bot .cp-gut { color: #d9a066; }
+#copilot .cp-body { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; }
+#copilot .cp-me .cp-body { color: #cfe0ff; }
+html[data-theme="light"] #copilot .cp-me .cp-body { color: #1c3a6e; }
+#copilot code { background: #0a0e1688; border: 1px solid var(--line); border-radius: 5px; padding: .5px 5px; font-size: .92em; }
+#copilot a { color: var(--accent, #4ea1ff); }
+
+/* result-connector (⎿) lines + action buttons + meta tags — the Claude-Code aesthetic */
+#copilot .cp-lined { display: flex; gap: 8px; color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+#copilot .cp-lined .cor { flex: none; color: #5b6675; }
+#copilot .cp-lined b { color: var(--text); font-weight: 600; }
+#copilot .cp-lined.ok .cor { color: #5ad19b; }
+#copilot .cp-lined.warn .cor { color: #ffb454; }
+#copilot .cp-lined.dim, #copilot .cp-lined.dim .cor { color: #5b6675; }
+#copilot .cp-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+#copilot .cp-act { border: 1px solid var(--line); background: #ffffff0a; color: var(--text); border-radius: 8px;
+  padding: 5px 11px; font: inherit; font-size: 12px; cursor: pointer; transition: background .12s, border-color .12s; }
+#copilot .cp-act:hover { background: #ffffff16; border-color: var(--accent); }
+#copilot .cp-act .pfx { color: var(--accent, #4ea1ff); margin-right: 5px; }
+#copilot .cp-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+#copilot .cp-tag { border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .5px; }
+#copilot .cp-tag.dom { color: var(--accent, #4ea1ff); }
+#copilot .cp-tag.conf { color: #5ad19b; }
+#copilot .cp-tag.mem { color: #ffb454; }
+
+/* thinking + welcome */
+#copilot .cp-think { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; }
+#copilot .cp-think .sp { color: #d9a066; width: 14px; text-align: center; }
+#copilot .cp-think .el { color: #5b6675; font-size: 11px; }
+#copilot .cp-welcome { color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+#copilot .cp-welcome .lead { color: var(--text); }
+#copilot .cp-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+#copilot .cp-chips .cp-act .pfx { color: var(--accent, #4ea1ff); }
+
+/* footer hint */
+#copilot .cp-foot { padding: 9px 14px; border-top: 1px solid var(--line); color: #5b6675; font-size: 10.5px;
+  display: flex; gap: 12px; flex-wrap: wrap; }
+#copilot .cp-foot kbd { border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 9.5px; color: var(--muted); }
+
+/* taskbar entry button */
+#copilot-btn { width: 40px; height: 36px; border: 0; border-radius: 8px; flex: none; background: transparent; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; color: #d9a066; transition: background .12s, transform .08s; }
+#copilot-btn:hover { background: #ffffff16; }
+#copilot-btn:active { transform: scale(.9); }
+#copilot-btn.on { background: #ffffff1f; }
+
+@media (max-width: 560px) { #copilot { top: 4vh; width: 96vw; } #copilot .cp-foot { display: none; } }
+@media (prefers-reduced-motion: reduce) { #copilot { animation: none !important; } #copilot .cp-spark { animation: none !important; } }

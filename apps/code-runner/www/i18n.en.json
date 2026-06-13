@@ -1,0 +1,49 @@
+{
+  "_lang": "en",
+
+  "title": "Code Runner",
+  "scratch": "scratch",
+  "unsaved": "not saved",
+
+  "t_run": "Run (Ctrl+Enter)",
+  "t_stop": "Stop",
+  "t_save": "Save (Ctrl+S)",
+  "t_clear": "Clear console",
+  "btn_run": "Run",
+  "btn_save": "Save",
+  "caps": "sandbox",
+  "caps_tip": "Runs in the browser, sandboxed (Web Worker, no DOM).\nActive permissions: SD filesystem · network (http) · ANIMA · notifications · hardware (os.hw: IR/GPIO/Wi-Fi).\nTime limit: 6 s.",
+
+  "ph_editor": "// JavaScript — runs in the browser, sandboxed.\n// console.log(...) or `return` to show a value. await is free.\n// API: os.fs.read/write/list · os.http.get · os.anima(question) · os.notify(text)\n\nconsole.log('Hello from NucleoOS');",
+
+  "status_ready": "ready",
+  "status_running": "running…",
+
+  "examples_label": "examples",
+  "ex_none": "—",
+  "ex_hello": "Hello + value",
+  "ex_fib": "Fibonacci",
+  "ex_fs": "Read/write SD file",
+  "ex_list": "List a folder",
+  "ex_anima": "Ask ANIMA",
+  "ex_http": "Fetch JSON",
+  "ex_hw": "Hardware (IR+GPIO+WiFi)",
+
+  "kbd_run": "run",
+  "kbd_save": "save",
+
+  "console_empty": "The console is empty. Press ▶ Run.",
+  "console_cleared": "Console cleared.",
+
+  "run_started": "▶ {name} · {time}",
+  "run_done": "✓ done in {ms} ms",
+  "run_stopped": "■ stopped",
+  "run_error": "✖ {error}",
+  "read_failed": "⚠ could not read {path} ({status})",
+  "read_error": "⚠ {error}",
+
+  "saved": "Saved",
+  "save_failed": "Save failed ({status})",
+  "save_error": "Error: {error}",
+  "prompt_save": "Save as (SD path):"
+}

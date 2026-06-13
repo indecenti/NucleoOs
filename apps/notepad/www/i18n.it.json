@@ -1,0 +1,25 @@
+{
+  "_lang": "it",
+
+  "title_new": "Nuovo (Ctrl+N)",
+  "title_open": "Apri (Ctrl+O)",
+  "title_save": "Salva (Ctrl+S)",
+  "title_saveas": "Salva con nome (Ctrl+Shift+S)",
+  "ph_editor": "Scrivi qui…  ·  Ctrl+S salva · Ctrl+O apri · Ctrl+N nuovo",
+
+  "stats": { "one": "{chars} caratteri · {lines} riga", "other": "{chars} caratteri · {lines} righe" },
+
+  "loaded": "Caricato {name}",
+  "could_not_open": "Impossibile aprire {name}",
+  "open_hint": "Apri un file da File Commander per modificarlo qui.",
+  "saved_file": "Salvato {name}",
+  "save_failed": "Salvataggio non riuscito ({status})",
+  "save_pending": "Salvataggio in sospeso: API file dell'OS non raggiungibile.",
+
+  "dlg_saveas": "Salva con nome",
+  "dlg_open": "Apri file di testo",
+  "confirm_dirty": "Modifiche non salvate. Continuare e perderle?",
+
+  "prompt_save": "Salva come (percorso SD):",
+  "prompt_open": "Apri (percorso SD):"
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nucleoos/settings.schema.json",
+  "title": "NucleoOS System Settings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "device", "network", "power", "ui", "security"],
+  "properties": {
+    "schema": { "type": "integer", "minimum": 1 },
+    "device": {
+      "type": "object",
+      "required": ["name", "locale"],
+      "properties": {
+        "name": { "type": "string" },
+        "locale": { "type": "string" },
+        "timezone": { "type": "string" }
+      }
+    },
+    "network": {
+      "type": "object",
+      "properties": {
+        "wifi": { "type": "object" },
+        "ble": { "type": "object" },
+        "swarm": { "type": "object" }
+      }
+    },
+    "power": {
+      "type": "object",
+      "properties": {
+        "profile": { "type": "string", "enum": ["eco", "balanced", "performance"] },
+        "sleep_timeout_s": { "type": "integer", "minimum": 0 },
+        "display_brightness": { "type": "integer", "minimum": 0 },
+        "transport_profile": { "type": "string", "enum": ["auto", "wifi", "ble", "swarm", "usb"] }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "theme": { "type": "string" },
+        "default_transport": { "type": "string", "enum": ["auto", "wifi", "ble", "usb"] },
+        "keyboard_mouse_first": { "type": "boolean" }
+      }
+    },
+    "security": {
+      "type": "object",
+      "properties": {
+        "require_pairing": { "type": "boolean" },
+        "verify_bundle_signatures": { "type": "boolean" }
+      }
+    },
+    "assistant": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "lang": { "type": "string", "enum": ["it", "en"] },
+        "tier_max": { "type": "string", "enum": ["command", "fact", "stitch", "remote"] }
+      }
+    }
+  }
+}

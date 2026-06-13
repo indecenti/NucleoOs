@@ -1,0 +1,60 @@
+{"q":"somma le celle da a1 a a10","lang":"it","expect":"spreadsheet"}
+{"q":"sommma le celle da a1 a a10","lang":"it","expect":"spreadsheet"}
+{"q":"somam le celle da a1 a a10","lang":"it","expect":"spreadsheet"}
+{"q":"fammi la somma delle celle da a1 a a20","lang":"it","expect":"spreadsheet"}
+{"q":"totale delle celle da b1 a b15","lang":"it","expect":"spreadsheet"}
+{"q":"addiziona le celle da c1 a c12","lang":"it","expect":"spreadsheet"}
+{"q":"media della colonna c","lang":"it","expect":"spreadsheet"}
+{"q":"media dela colonna c","lang":"it","expect":"spreadsheet"}
+{"q":"medai della colonna c","lang":"it","expect":"spreadsheet"}
+{"q":"media delle celle da d1 a d20","lang":"it","expect":"spreadsheet"}
+{"q":"calcola la media della colonna b nel foglio","lang":"it","expect":"spreadsheet"}
+{"q":"massimo delle celle da a1 a a9","lang":"it","expect":"spreadsheet"}
+{"q":"massimo dela colonna a","lang":"it","expect":"spreadsheet"}
+{"q":"trova il massimo nelle celle da a1 a a50","lang":"it","expect":"spreadsheet"}
+{"q":"minimo della colonna e","lang":"it","expect":"spreadsheet"}
+{"q":"il minimo delle celle da f1 a f30","lang":"it","expect":"spreadsheet"}
+{"q":"conta le celle da a1 a a100","lang":"it","expect":"spreadsheet"}
+{"q":"quante celle piene da a1 a a40","lang":"it","expect":"spreadsheet"}
+{"q":"concatena a1 e b1","lang":"it","expect":"spreadsheet"}
+{"q":"cncatena a1 e b1","lang":"it","expect":"spreadsheet"}
+{"q":"concatena le celle a1 e b1","lang":"it","expect":"spreadsheet"}
+{"q":"unisci a1 e b1 nel foglio","lang":"it","expect":"spreadsheet"}
+{"q":"vlookup","lang":"it","expect":"spreadsheet"}
+{"q":"vlokup di a1","lang":"it","expect":"spreadsheet"}
+{"q":"cerca verticale di a1","lang":"it","expect":"spreadsheet|abstain"}
+{"q":"formula cercavert per a1","lang":"it","expect":"spreadsheet"}
+{"q":"somma se le celle da a1 a a10 maggiori di 5","lang":"it","expect":"spreadsheet"}
+{"q":"sumif celle da a1 a a10","lang":"it","expect":"spreadsheet"}
+{"q":"countif da b1 a b10","lang":"it","expect":"spreadsheet"}
+{"q":"arrotonda a1 a 2 decimali","lang":"it","expect":"spreadsheet"}
+{"q":"radice quadrata di a1 nel foglio","lang":"it","expect":"spreadsheet|abstain"}
+{"q":"lunghezza del testo in a1","lang":"it","expect":"spreadsheet|abstain"}
+{"q":"maiuscolo della cella a1","lang":"it","expect":"spreadsheet"}
+{"q":"mediana delle celle da a1 a a20","lang":"it","expect":"spreadsheet"}
+{"q":"prodotto delle celle da a1 a a5","lang":"it","expect":"spreadsheet"}
+{"q":"=SOMMA(A1:A10)","lang":"it","expect":"spreadsheet"}
+{"q":"=SOMMA(A1:A10) cosa fa","lang":"it","expect":"spreadsheet"}
+{"q":"spiegami la formula =MEDIA(B1:B20)","lang":"it","expect":"spreadsheet|answer"}
+{"q":"cosa fa =MEDIA(B1:B20)","lang":"it","expect":"spreadsheet|answer"}
+{"q":"=VLOOKUP(A1,B1:C10,2)","lang":"it","expect":"spreadsheet|answer"}
+{"q":"sum the cells from a1 to a10","lang":"en","expect":"spreadsheet"}
+{"q":"sum cells a1 to a10","lang":"en","expect":"spreadsheet"}
+{"q":"average of column c","lang":"en","expect":"spreadsheet"}
+{"q":"averge of column c","lang":"en","expect":"spreadsheet"}
+{"q":"find the maximum in cells a1 to a9","lang":"en","expect":"spreadsheet"}
+{"q":"find the maximun in cells a1 to a9","lang":"en","expect":"spreadsheet"}
+{"q":"minimum of cells a1 to a30","lang":"en","expect":"spreadsheet"}
+{"q":"count cells a1 to a100","lang":"en","expect":"spreadsheet"}
+{"q":"concatenate a1 and b1","lang":"en","expect":"spreadsheet"}
+{"q":"concatenate cells a1 b1","lang":"en","expect":"spreadsheet"}
+{"q":"vlookup a1 in the table","lang":"en","expect":"spreadsheet"}
+{"q":"sumif from a1 to a10 greater than 5","lang":"en","expect":"spreadsheet"}
+{"q":"round a1 to 2 decimals","lang":"en","expect":"spreadsheet"}
+{"q":"=SUM(A1:A10)","lang":"en","expect":"spreadsheet"}
+{"q":"explain the formula =AVERAGE(B1:B20)","lang":"en","expect":"spreadsheet|answer"}
+{"q":"what does =SUM(A1:A10) do","lang":"en","expect":"spreadsheet|answer"}
+{"q":"median of cells a1 to a20","lang":"en","expect":"spreadsheet"}
+{"q":"product of cells a1 to a5","lang":"en","expect":"spreadsheet"}
+{"q":"power of a1 to 3","lang":"en","expect":"spreadsheet|abstain"}
+{"q":"length of text in a1","lang":"en","expect":"spreadsheet|abstain"}

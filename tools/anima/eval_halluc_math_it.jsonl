@@ -1,0 +1,15 @@
+// ANTI-HALLUCINATION — MATH DOMAIN ERRORS (IT). The normalizer strips '-', so the solvers used to drop
+// the sign and FABRICATE a number for an undefined operation (sqrt(-4)->"2", log(-1)->"0", (-3)!->"6",
+// cbrt(-8)->"2"). The ONLY honest outcome is a DECLINE, never a confident number. Run by halluc-probe
+// (which now recognises "non calcolo / non è definito / interi non negativi" as honest declines).
+// Anti-regression guard for a_solve_domain_error in anima_solve.c.
+{"q":"radice quadrata di -4","lang":"it"}
+{"q":"radice quadrata di -100","lang":"it"}
+{"q":"radice cubica di -8","lang":"it"}
+{"q":"radice di -25","lang":"it"}
+{"q":"log di -1","lang":"it"}
+{"q":"logaritmo di -10","lang":"it"}
+{"q":"log di -0.5","lang":"it"}
+{"q":"fattoriale di -3","lang":"it"}
+{"q":"fattoriale di -1","lang":"it"}
+{"q":"quanto fa il fattoriale di -7","lang":"it"}

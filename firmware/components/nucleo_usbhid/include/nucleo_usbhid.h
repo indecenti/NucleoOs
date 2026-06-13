@@ -1,0 +1,46 @@
+// USB HID keyboard: turn the Cardputer into a keyboard for a host PC/phone over USB-C, via
+// TinyUSB (the HID class of the same esp_tinyusb stack the USB Drive uses — no new dependency).
+//
+// Unlike USB Drive (Mass Storage, a dedicated reboot mode), HID is light and touches nothing the
+// OS needs, so it runs LIVE inside the USB Keyboard app: open it, type, ESC to leave. Installing
+// TinyUSB takes the USB-OTG PHY, so the USB serial console is gone until the next reboot (OTA
+// updates over Wi-Fi still work). The driver is installed once and stays resident for the session.
+#pragma once
+#include <stdbool.h>
+#include "esp_err.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// HID modifier byte bits (USB HID spec) — pass to nucleo_usbhid_key().
+#define NK_HIDMOD_CTRL  0x01
+#define NK_HIDMOD_SHIFT 0x02
+#define NK_HIDMOD_ALT   0x04
+#define NK_HIDMOD_GUI   0x08
+
+// A few HID usage IDs the app sends directly (keys with no printable char).
+#define NK_HID_ENTER 0x28
+#define NK_HID_ESC   0x29
+#define NK_HID_BKSP  0x2A
+#define NK_HID_TAB   0x2B
+#define NK_HID_SPACE 0x2C
+#define NK_HID_RIGHT 0x4F
+#define NK_HID_LEFT  0x50
+#define NK_HID_DOWN  0x51
+#define NK_HID_UP    0x52
+
+// Install the USB HID keyboard (idempotent). Safe with no host attached.
+esp_err_t nucleo_usbhid_start(void);
+
+// True when a host is connected and ready to accept a report.
+bool nucleo_usbhid_ready(void);
+
+// Send one keystroke as press-then-release (HID modifier bitmask + HID usage id).
+void nucleo_usbhid_key(unsigned char modifier, unsigned char keycode);
+
+// Translate a printable ASCII char to {modifier, keycode}. Returns false if unmapped.
+bool nucleo_usbhid_ascii(char c, unsigned char *modifier, unsigned char *keycode);
+
+#ifdef __cplusplus
+}
+#endif

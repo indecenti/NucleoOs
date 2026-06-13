@@ -1,0 +1,4 @@
+# build output
+build/
+# local sandbox: copied L1 model + runtime session/telemetry
+sd/

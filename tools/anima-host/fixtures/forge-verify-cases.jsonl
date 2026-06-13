@@ -1,0 +1,310 @@
+{"lang":"it","kind":"fact","key":"capitale di Francia","asserted":"Parigi","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Francia","asserted":"Pechino","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of France","asserted":"Paris","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of France","asserted":"Beijing","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Germania","asserted":"Berlino","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Germania","asserted":"Tokyo","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Germany","asserted":"Berlin","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Germany","asserted":"Tokyo","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Spagna","asserted":"Madrid","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Spagna","asserted":"Atene","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Spain","asserted":"Madrid","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Spain","asserted":"Athens","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Italia","asserted":"Roma","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Italia","asserted":"Vienna","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Italy","asserted":"Rome","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Italy","asserted":"Vienna","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Portogallo","asserted":"Lisbona","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Portogallo","asserted":"Varsavia","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Portugal","asserted":"Lisbon","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Portugal","asserted":"Warsaw","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Inghilterra","asserted":"Londra","expect":"unknown"}
+{"lang":"en","kind":"fact","key":"what is the capital of England","asserted":"London","expect":"unknown"}
+{"lang":"it","kind":"fact","key":"capitale di Russia","asserted":"Mosca","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Russia","asserted":"Amsterdam","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Russia","asserted":"Moscow","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Russia","asserted":"Amsterdam","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Cina","asserted":"Pechino","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Cina","asserted":"Berna","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of China","asserted":"Beijing","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of China","asserted":"Bern","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Giappone","asserted":"Tokyo","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Giappone","asserted":"Stoccolma","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Japan","asserted":"Tokyo","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Japan","asserted":"Stockholm","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Grecia","asserted":"Atene","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Grecia","asserted":"Oslo","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Greece","asserted":"Athens","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Greece","asserted":"Oslo","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Austria","asserted":"Vienna","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Austria","asserted":"Copenaghen","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Austria","asserted":"Vienna","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Austria","asserted":"Copenhagen","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Polonia","asserted":"Varsavia","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Polonia","asserted":"Helsinki","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Poland","asserted":"Warsaw","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Poland","asserted":"Helsinki","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Belgio","asserted":"Bruxelles","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Belgio","asserted":"Dublino","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Belgium","asserted":"Brussels","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Belgium","asserted":"Dublin","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Paesi Bassi","asserted":"Amsterdam","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Paesi Bassi","asserted":"Budapest","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Netherlands","asserted":"Amsterdam","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Netherlands","asserted":"Budapest","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Svizzera","asserted":"Berna","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Svizzera","asserted":"Bucarest","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Switzerland","asserted":"Bern","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Switzerland","asserted":"Bucharest","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Svezia","asserted":"Stoccolma","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Svezia","asserted":"Praga","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Sweden","asserted":"Stockholm","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Sweden","asserted":"Prague","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Norvegia","asserted":"Oslo","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Norvegia","asserted":"Ankara","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Norway","asserted":"Oslo","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Norway","asserted":"Ankara","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Danimarca","asserted":"Copenaghen","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Danimarca","asserted":"Cairo","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Denmark","asserted":"Copenhagen","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Denmark","asserted":"Cairo","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Finlandia","asserted":"Helsinki","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Finlandia","asserted":"Rabat","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Finland","asserted":"Helsinki","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Finland","asserted":"Rabat","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Irlanda","asserted":"Dublino","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Irlanda","asserted":"Ottawa","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Ireland","asserted":"Dublin","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Ireland","asserted":"Ottawa","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Ungheria","asserted":"Budapest","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Ungheria","asserted":"Citta del Messico","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Hungary","asserted":"Budapest","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Hungary","asserted":"Mexico City","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Romania","asserted":"Bucarest","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Romania","asserted":"Brasilia","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Romania","asserted":"Bucharest","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Romania","asserted":"Brasilia","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Repubblica Ceca","asserted":"Praga","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Repubblica Ceca","asserted":"Buenos Aires","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Czechia","asserted":"Prague","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Czechia","asserted":"Buenos Aires","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Turchia","asserted":"Ankara","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Turchia","asserted":"Nuova Delhi","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Turkey","asserted":"Ankara","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Turkey","asserted":"New Delhi","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Egitto","asserted":"Cairo","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Egitto","asserted":"Canberra","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Egypt","asserted":"Cairo","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Egypt","asserted":"Canberra","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Marocco","asserted":"Rabat","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Marocco","asserted":"Avana","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Morocco","asserted":"Rabat","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Morocco","asserted":"Havana","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Canada","asserted":"Ottawa","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Canada","asserted":"Lima","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Canada","asserted":"Ottawa","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Canada","asserted":"Lima","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Messico","asserted":"Citta del Messico","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Messico","asserted":"Santiago","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Mexico","asserted":"Mexico City","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Mexico","asserted":"Santiago","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Brasile","asserted":"Brasilia","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Brasile","asserted":"Bogota","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Brazil","asserted":"Brasilia","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Brazil","asserted":"Bogota","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Argentina","asserted":"Buenos Aires","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Argentina","asserted":"Teheran","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Argentina","asserted":"Buenos Aires","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Argentina","asserted":"Tehran","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di India","asserted":"Nuova Delhi","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di India","asserted":"Baghdad","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of India","asserted":"New Delhi","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of India","asserted":"Baghdad","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Australia","asserted":"Canberra","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Australia","asserted":"Bangkok","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Australia","asserted":"Canberra","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Australia","asserted":"Bangkok","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Cuba","asserted":"Avana","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Cuba","asserted":"Hanoi","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Cuba","asserted":"Havana","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Cuba","asserted":"Hanoi","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Peru","asserted":"Lima","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Peru","asserted":"Phnom Penh","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Peru","asserted":"Lima","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Peru","asserted":"Phnom Penh","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Cile","asserted":"Santiago","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Cile","asserted":"Nairobi","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Chile","asserted":"Santiago","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Chile","asserted":"Nairobi","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Colombia","asserted":"Bogota","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Colombia","asserted":"Abuja","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Colombia","asserted":"Bogota","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Colombia","asserted":"Abuja","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Iran","asserted":"Teheran","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Iran","asserted":"Kiev","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Iran","asserted":"Tehran","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Iran","asserted":"Kyiv","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Iraq","asserted":"Baghdad","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Iraq","asserted":"Zagabria","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Iraq","asserted":"Baghdad","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Iraq","asserted":"Zagreb","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Thailandia","asserted":"Bangkok","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Thailandia","asserted":"Belgrado","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Thailand","asserted":"Bangkok","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Thailand","asserted":"Belgrade","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Vietnam","asserted":"Hanoi","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Vietnam","asserted":"Sofia","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Vietnam","asserted":"Hanoi","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Vietnam","asserted":"Sofia","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Cambogia","asserted":"Phnom Penh","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Cambogia","asserted":"Reykjavik","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Cambodia","asserted":"Phnom Penh","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Cambodia","asserted":"Reykjavik","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Kenya","asserted":"Nairobi","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Kenya","asserted":"Nicosia","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Kenya","asserted":"Nairobi","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Kenya","asserted":"Nicosia","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Nigeria","asserted":"Abuja","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Nigeria","asserted":"Beirut","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Nigeria","asserted":"Abuja","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Nigeria","asserted":"Beirut","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Ucraina","asserted":"Kiev","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Ucraina","asserted":"Gerusalemme","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Ukraine","asserted":"Kyiv","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Ukraine","asserted":"Jerusalem","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Croazia","asserted":"Zagabria","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Croazia","asserted":"Giacarta","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Croatia","asserted":"Zagreb","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Croatia","asserted":"Jakarta","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Serbia","asserted":"Belgrado","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Serbia","asserted":"Parigi","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Serbia","asserted":"Belgrade","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Serbia","asserted":"Paris","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"capitale di Bulgaria","asserted":"Sofia","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Bulgaria","asserted":"Berlino","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Bulgaria","asserted":"Sofia","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Bulgaria","asserted":"Berlin","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Islanda","asserted":"Reykjavik","expect":"unknown"}
+{"lang":"en","kind":"fact","key":"what is the capital of Iceland","asserted":"Reykjavik","expect":"unknown"}
+{"lang":"it","kind":"fact","key":"capitale di Cipro","asserted":"Nicosia","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Cipro","asserted":"Roma","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Cyprus","asserted":"Nicosia","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Cyprus","asserted":"Rome","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Libano","asserted":"Beirut","expect":"unknown"}
+{"lang":"en","kind":"fact","key":"what is the capital of Lebanon","asserted":"Beirut","expect":"unknown"}
+{"lang":"it","kind":"fact","key":"capitale di Israele","asserted":"Gerusalemme","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"capitale di Israele","asserted":"Londra","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"capital of Israel","asserted":"Jerusalem","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"capital of Israel","asserted":"London","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Indonesia","asserted":"Giacarta","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Indonesia","asserted":"Mosca","expect":"contradicted"}
+{"lang":"en","kind":"fact","key":"what is the capital of Indonesia","asserted":"Jakarta","expect":"confirmed"}
+{"lang":"en","kind":"fact","key":"what is the capital of Indonesia","asserted":"Moscow","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"in che anno e nato Albert Einstein","asserted":"1879","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"in che anno e nato Albert Einstein","asserted":"1884","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"in che anno e nato Dante Alighieri","asserted":"1265","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"in che anno e nato Dante Alighieri","asserted":"1270","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"in che anno e nato Isaac Newton","asserted":"1643","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"in che anno e nato Isaac Newton","asserted":"1648","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"in che anno e nato Napoleon","asserted":"1769","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"in che anno e nato Napoleon","asserted":"1774","expect":"contradicted"}
+{"lang":"it","kind":"fact","key":"in che anno e nato Cristoforo Colombo","asserted":"1451","expect":"confirmed"}
+{"lang":"it","kind":"fact","key":"in che anno e nato Cristoforo Colombo","asserted":"1456","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"2+2","asserted":"4","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"2*2","asserted":"4","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"2+2","asserted":"5","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"4-2","asserted":"2","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"2+2","asserted":"4","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"2*2","asserted":"4","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"2+2","asserted":"5","expect":"contradicted"}
+{"lang":"en","kind":"numeric","key":"4-2","asserted":"2","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"20+34","asserted":"54","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"20*34","asserted":"680","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"20+34","asserted":"55","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"54-34","asserted":"20","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"20+34","asserted":"54","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"20*34","asserted":"680","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"20+34","asserted":"55","expect":"contradicted"}
+{"lang":"en","kind":"numeric","key":"54-34","asserted":"20","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"53+18","asserted":"71","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"53*18","asserted":"954","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"53+18","asserted":"72","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"71-18","asserted":"53","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"53+18","asserted":"71","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"53*18","asserted":"954","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"53+18","asserted":"72","expect":"contradicted"}
+{"lang":"en","kind":"numeric","key":"71-18","asserted":"53","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"15+18","asserted":"33","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"15*18","asserted":"270","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"15+18","asserted":"34","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"33-18","asserted":"15","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"15+18","asserted":"33","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"15*18","asserted":"270","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"15+18","asserted":"34","expect":"contradicted"}
+{"lang":"en","kind":"numeric","key":"33-18","asserted":"15","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"45+18","asserted":"63","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"45*18","asserted":"810","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"45+18","asserted":"64","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"63-18","asserted":"45","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"45+18","asserted":"63","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"45*18","asserted":"810","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"45+18","asserted":"64","expect":"contradicted"}
+{"lang":"en","kind":"numeric","key":"63-18","asserted":"45","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"70+2","asserted":"72","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"70*2","asserted":"140","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"70+2","asserted":"73","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"72-2","asserted":"70","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"70+2","asserted":"72","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"70*2","asserted":"140","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"70+2","asserted":"73","expect":"contradicted"}
+{"lang":"en","kind":"numeric","key":"72-2","asserted":"70","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"96+26","asserted":"122","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"96*26","asserted":"2496","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"96+26","asserted":"123","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"122-26","asserted":"96","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"96+26","asserted":"122","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"96*26","asserted":"2496","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"96+26","asserted":"123","expect":"contradicted"}
+{"lang":"en","kind":"numeric","key":"122-26","asserted":"96","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"77+2","asserted":"79","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"77*2","asserted":"154","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"77+2","asserted":"80","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"79-2","asserted":"77","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"77+2","asserted":"79","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"77*2","asserted":"154","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"77+2","asserted":"80","expect":"contradicted"}
+{"lang":"en","kind":"numeric","key":"79-2","asserted":"77","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"50+2","asserted":"52","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"50*2","asserted":"100","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"50+2","asserted":"53","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"52-2","asserted":"50","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"50+2","asserted":"52","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"50*2","asserted":"100","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"50+2","asserted":"53","expect":"contradicted"}
+{"lang":"en","kind":"numeric","key":"52-2","asserted":"50","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"94+26","asserted":"120","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"94*26","asserted":"2444","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"94+26","asserted":"121","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"120-26","asserted":"94","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"94+26","asserted":"120","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"94*26","asserted":"2444","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"94+26","asserted":"121","expect":"contradicted"}
+{"lang":"en","kind":"numeric","key":"120-26","asserted":"94","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"2^10","asserted":"1024","expect":"confirmed"}
+{"lang":"it","kind":"numeric","key":"2^10","asserted":"1000","expect":"contradicted"}
+{"lang":"it","kind":"numeric","key":"15% di 80","asserted":"12","expect":"unknown"}
+{"lang":"it","kind":"numeric","key":"sqrt(144)","asserted":"12","expect":"unknown"}
+{"lang":"en","kind":"numeric","key":"2^10","asserted":"1024","expect":"confirmed"}
+{"lang":"en","kind":"numeric","key":"2^10","asserted":"1000","expect":"contradicted"}
+{"lang":"en","kind":"numeric","key":"15% of 80","asserted":"12","expect":"unknown"}
+{"lang":"en","kind":"numeric","key":"sqrt(144)","asserted":"12","expect":"unknown"}
+{"lang":"it","kind":"fact","key":"capitale di Atlantide","asserted":"Boopolis","expect":"unknown"}
+{"lang":"it","kind":"fact","key":"capitale di Wakanda","asserted":"Boopolis","expect":"unknown"}
+{"lang":"it","kind":"fact","key":"capitale di Floonkistan","asserted":"Boopolis","expect":"unknown"}
+{"lang":"it","kind":"fact","key":"qual e la capitale di Gondor","asserted":"Boopolis","expect":"unknown"}
+{"lang":"it","kind":"fact","key":"capitale di Narnia","asserted":"Boopolis","expect":"unknown"}
+{"lang":"en","kind":"fact","key":"capital of Atlantis","asserted":"Boopville","expect":"unknown"}
+{"lang":"en","kind":"fact","key":"capital of Wakanda","asserted":"Boopville","expect":"unknown"}
+{"lang":"en","kind":"fact","key":"capital of Floonkistan","asserted":"Boopville","expect":"unknown"}
+{"lang":"en","kind":"fact","key":"what is the capital of Gondor","asserted":"Boopville","expect":"unknown"}
+{"lang":"en","kind":"fact","key":"capital of Narnia","asserted":"Boopville","expect":"unknown"}

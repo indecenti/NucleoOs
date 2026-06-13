@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "_comment": "Pluggable catalog for the Game Center hub (apps/games). Add a game = drop a module under apps/games/www/games/<id>.js that calls defineGame(), then add an entry here. The hub reads this list to populate the catalog; no firmware change. minPlayers/maxPlayers/ai/realtime mirror the defineGame() contract so the lobby can show seats and AI options before the module is loaded.",
+  "games": [
+    {
+      "id": "tris",
+      "name": "Tris",
+      "module": "/apps/games/games/tris.js",
+      "minPlayers": 2,
+      "maxPlayers": 2,
+      "ai": true,
+      "realtime": false,
+      "category": "classic",
+      "desc": "Filetto a turni, 2 giocatori o contro ANIMA."
+    },
+    {
+      "id": "forza4",
+      "name": "Forza 4",
+      "module": "/apps/games/games/forza4.js",
+      "minPlayers": 2,
+      "maxPlayers": 2,
+      "ai": true,
+      "realtime": false,
+      "category": "classic",
+      "desc": "Allinea quattro gettoni. 2 giocatori o contro ANIMA (facile/medio)."
+    },
+    {
+      "id": "pong",
+      "name": "Pong",
+      "module": "/apps/games/games/pong.js",
+      "minPlayers": 2,
+      "maxPlayers": 2,
+      "ai": true,
+      "realtime": true,
+      "category": "arcade",
+      "desc": "Il classico in tempo reale. 1v1 umani in rete, o contro ANIMA (offline o con cervello LLM Claude/Grok)."
+    }
+  ]
+}

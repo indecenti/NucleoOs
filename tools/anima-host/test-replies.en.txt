@@ -1,0 +1,140 @@
+# Real deterministic on-device ANIMA replies (slots filled) - the gate checks the VOICE composes them.
+# Harness mirrors nucleo_tts_say(): mathspeak (= % ^ + -> words) then WHOLE/SPEAK/READ.
+#   READ(uncovered) = a word with no clip -> FAILURE. "# [...]" = variable content -> read it / say_or fallback.
+# Goal: cover almost ALL deterministic phrasings, daily-use first.
+
+# ============ STATE / SYSTEM (daily) ============
+It is 9 30.
+It is 14 5.
+It is 12 o'clock.
+It is noon.
+It is midnight.
+I don't know the time: the clock isn't set.
+Today is Monday 10 June 2026.
+Today is Friday 25 December 2026.
+SD space: 12.5 GB free of 50.0 GB.
+It's 2026.
+It's summer.
+Running NucleoOS 0.1.0.
+Up for 2 days and 3 hours.
+Up for 3 hours and 15 minutes.
+512 KB of RAM free.
+not connected
+Battery: not available.
+you have no events today
+Today you have 1 event.
+Today you have 3 events.
+
+# ============ RELATIVE DATES (daily) ============
+Tomorrow is Tuesday 12 June 2026.
+The day after tomorrow is Wednesday 13 June 2026.
+Yesterday was Sunday 10 June 2026.
+In 7 days it will be Monday 18 June 2026.
+5 days ago it was Thursday 6 June 2026.
+
+# ============ CALCULATION (mathspeak = % ^ +) ============
+It's 16.
+It's 42.
+It's -5.
+It's 2.5.
+It's 1000000.
+I can't divide by zero.
+5 + 3 = 8.
+5 + 3 + 7 = 15.
+20% of 150 = 30.
+50% of 80 = 40.
+5^3 = 125.
+2^10 = 1024.
+10^9 = 1000000000.
+The average is 7.5.
+The median is 8.
+The average (mean) = sum of the values divided by how many there are.
+Is 17 prime? Yes.
+Is 23 prime? Yes.
+log base 2 of 8 = 3.
+cube root of 27 = 3.
+
+# ============ SCALE OPS (double/half/square/cube/reciprocal/opposite) ============
+double of 5 = 10.
+half of 20 = 10.
+square of 3 = 9.
+cube of 2 = 8.
+reciprocal of 4 = 0.25.
+opposite of -5 = 5.
+
+# ============ CONVERSIONS (worded -> speakable) ============
+5 meters = 500 centimeters.
+2 hours = 7200 seconds.
+3 kilometers = 3000 meters.
+20 celsius = 68 fahrenheit.
+# translator: the voice says the TRANSLATED word in its language (IT->EN here = "dog" in the EN index)
+dog
+house
+thanks
+# [handled by nucleo_tts_translate_word: the target is spoken in the right language] "cane" in inglese: dog.
+
+# ============ EQUATIONS / DATES: textual abstentions (speakable) ============
+That's one equation with 2 unknowns: it can't have a single solution.
+I solve first and second degree equations; this one is higher degree.
+Any value of x works: infinitely many solutions.
+No solution: it reduces to a false statement.
+I don't compute the root of a negative number.
+Primality only applies to whole numbers.
+
+# ============ TOOLS: speakable confirmations ============
+Volume 70%.
+Volume 100%.
+Brightness 50%.
+Raising the volume.
+Lowering the brightness.
+Closing the browser.
+Invalid file path.
+I can't create the file.
+I couldn't add the reminder.
+# [variable file name -> fallback "Done"] Created note.txt with the content.
+# [variable file name -> fallback "Done"] note.txt exists already: I won't overwrite it.
+# [variable event -> fallback "Done"] Reminder "buy milk" tomorrow at 9.
+# [variable app] Gmail is only available in the web app.
+# [variable app] Which one, photo viewer or paint?
+
+# ============ COURTESY / CLARIFY / LEARN / SESSION / CONFIDENCE ============
+I'm ANIMA, NucleoOS's offline assistant. I work with no internet, on the device.
+Honestly, I didn't know that one, I wouldn't rely on it.
+I don't know.
+I didn't understand.
+no results
+one moment
+Hello! How can I help?
+You're welcome!
+Thanks.
+Sorry, try rephrasing and I'll have another go.
+Tell me which part and I'll try again.
+All right.
+Sure.
+Good morning!
+Good evening!
+That's all I have on that.
+I won't store that, it's temporary information.
+I can't learn that right now.
+Online-only mode: no internet connection.
+Great, give me the data and I'll compute it.
+We just started.
+# [variable fact -> read it] Got it, I'll remember: Rome is the capital of Italy.
+
+# ============ FORMULA -> voice says the RESULT (geometry/physics) ============
+The result is 78.5398.
+The result is 27.
+The result is 28.2743.
+
+# ============ DENSE FORMULAS: must READ (guard, not uncovered) ============
+Circle area = π·3² = 28.27.
+Cube volume = 3³ = 27.
+Triangle area = (6·4)/2 = 12.
+Hypotenuse = √(3²+4²) = 5.
+F = m·a = 5·2 = 10 N.
+Kinetic energy: Ec = ½·m·v².
+Δ = 4 > 0 → two real solutions: x = 3 or x = 1.
+# [letter soup V/I/R/P/W -> read it] V=10 V, I=2 A, R=5 ohm, P=20 W.
+# [variable result -> read it] 24 in roman numerals = XXIV.
+# [parens -> read it] gcd(12, 18) = 6.
+# [parens -> read it] Fibonacci(8) = 21.

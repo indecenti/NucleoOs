@@ -1,0 +1,12 @@
+{"q":"qual e il fiume piu lungo dell'antartide","lang":"it","expect":"abstain"}
+{"q":"qual e la montagna piu alta dell'antartide","lang":"it","expect":"abstain"}
+{"q":"qual e il fiume piu lungo dell'europa orientale","lang":"it","expect":"abstain"}
+{"q":"qual e la montagna piu alta dell'irlanda","lang":"it","expect":"abstain"}
+{"q":"qual e il fiume piu lungo della groenlandia","lang":"it","expect":"abstain"}
+{"q":"qual e la montagna piu alta dei paesi bassi","lang":"it","expect":"abstain"}
+{"q":"qual e il fiume piu lungo dell'arabia saudita","lang":"it","expect":"abstain"}
+{"q":"what is the longest river in antarctica","lang":"en","expect":"abstain"}
+{"q":"what is the tallest mountain in antarctica","lang":"en","expect":"abstain"}
+{"q":"qual e il vulcano piu alto dell'antartide","lang":"it","expect":"abstain"}
+{"q":"chi era il primo imperatore di Marte","lang":"it","expect":"abstain"}
+{"q":"chi era il primo faraone della groenlandia","lang":"it","expect":"abstain"}

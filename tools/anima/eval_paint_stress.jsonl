@@ -1,0 +1,131 @@
+// eval_paint_stress.jsonl — 130+ REAL adversarial NL cases that try to break the image-gen isolation:
+// genuine asks (verb+noun, polite/question forms, request "-mi"/"draw me", weather words, caps/punct) MUST
+// decline to image_gen; look-alikes (open app, create file/note/event, how-to, art knowledge, verb-without-
+// image-noun, image-noun-without-verb, translate, ambiguous) MUST route elsewhere — never image_gen.
+//
+// ===== (A) GENUINE image-generation requests → image_gen =====
+{"q":"genera un'immagine di un gatto","lang":"it","expect":"image_gen"}
+{"q":"generami un'immagine di un tramonto sul mare","lang":"it","expect":"image_gen"}
+{"q":"generami un'immagine fotorealistica di una tigre nella giungla","lang":"it","expect":"image_gen"}
+{"q":"crea un'immagine di una città futuristica di notte","lang":"it","expect":"image_gen"}
+{"q":"creami un'immagine di un robot gentile","lang":"it","expect":"image_gen"}
+{"q":"disegna un'immagine di una casa sull'albero","lang":"it","expect":"image_gen"}
+{"q":"disegnami un ritratto di una donna anziana","lang":"it","expect":"image_gen"}
+{"q":"crea un disegno di un cane che corre nel parco","lang":"it","expect":"image_gen"}
+{"q":"dipingi un paesaggio marino al tramonto","lang":"it","expect":"image_gen"}
+{"q":"dipingimi un campo di girasoli enorme","lang":"it","expect":"image_gen"}
+{"q":"genera una foto realistica di un'astronave aliena","lang":"it","expect":"image_gen"}
+{"q":"crea un'illustrazione di un castello incantato","lang":"it","expect":"image_gen"}
+{"q":"generami un'illustrazione in stile manga di una guerriera","lang":"it","expect":"image_gen"}
+{"q":"raffigura un castello medievale sotto la pioggia","lang":"it","expect":"image_gen"}
+{"q":"produci un'immagine astratta con colori caldi","lang":"it","expect":"image_gen"}
+{"q":"crea un ritratto in stile Van Gogh di un gatto","lang":"it","expect":"image_gen"}
+{"q":"genera un dipinto di una notte stellata","lang":"it","expect":"image_gen"}
+{"q":"disegna un quadro di fiori di campo","lang":"it","expect":"image_gen"}
+{"q":"generami un'icona di un razzo spaziale","lang":"it","expect":"image_gen"}
+{"q":"crea un logo per una caffetteria di montagna","lang":"it","expect":"image_gen"}
+{"q":"puoi generarmi un'immagine di un gatto nero?","lang":"it","expect":"image_gen"}
+{"q":"potresti disegnarmi un paesaggio di montagna?","lang":"it","expect":"image_gen"}
+{"q":"mi generi un'immagine di un faro sul mare?","lang":"it","expect":"abstain"}
+{"q":"mi disegni un ritratto di un samurai?","lang":"it","expect":"abstain"}
+{"q":"per favore generami un'immagine di un cane","lang":"it","expect":"image_gen"}
+{"q":"voglio che tu generi un'immagine di una foresta nebbiosa","lang":"it","expect":"abstain"}
+{"q":"ehi anima, generami un'immagine di un robot gigante","lang":"it","expect":"image_gen"}
+{"q":"disegnami un gatto","lang":"it","expect":"image_gen"}
+{"q":"disegnami un robot gigante steampunk","lang":"it","expect":"image_gen"}
+{"q":"dipingimi un tramonto rosso","lang":"it","expect":"image_gen"}
+{"q":"raffigurami un drago che sputa fuoco","lang":"it","expect":"image_gen"}
+{"q":"disegnami una bici da corsa rossa","lang":"it","expect":"image_gen"}
+{"q":"puoi disegnarmi una macchina sportiva?","lang":"it","expect":"image_gen"}
+{"q":"generami un paesaggio invernale innevato","lang":"it","expect":"image_gen"}
+{"q":"disegna una foto di pioggia sulla città","lang":"it","expect":"image_gen"}
+{"q":"genera un'immagine di un temporale sul mare","lang":"it","expect":"image_gen"}
+{"q":"crea un'illustrazione di una nevicata in montagna","lang":"it","expect":"image_gen"}
+{"q":"dipingi un cielo nuvoloso sopra il faro","lang":"it","expect":"image_gen"}
+{"q":"GENERA UN'IMMAGINE DI UN GATTO","lang":"it","expect":"image_gen"}
+{"q":"genera!!! un'immagine di un gatto???","lang":"it","expect":"image_gen"}
+{"q":"generate an image of a cat on a sofa","lang":"en","expect":"image_gen"}
+{"q":"generate a photorealistic image of a lion","lang":"en","expect":"image_gen"}
+{"q":"create a picture of a sunset over the sea","lang":"en","expect":"image_gen"}
+{"q":"create an image of a cyberpunk city at night","lang":"en","expect":"image_gen"}
+{"q":"draw an image of a snowy mountain peak","lang":"en","expect":"image_gen"}
+{"q":"make an image of an alien spaceship","lang":"en","expect":"image_gen"}
+{"q":"make a drawing of a small wooden cabin","lang":"en","expect":"image_gen"}
+{"q":"render an image of a futuristic skyline","lang":"en","expect":"image_gen"}
+{"q":"paint a portrait of a young woman","lang":"en","expect":"image_gen"}
+{"q":"paint a landscape of rolling green hills","lang":"en","expect":"image_gen"}
+{"q":"generate a photo of a friendly robot","lang":"en","expect":"image_gen"}
+{"q":"create an illustration of a red dragon","lang":"en","expect":"image_gen"}
+{"q":"produce an abstract image with warm colors","lang":"en","expect":"image_gen"}
+{"q":"can you generate an image of a black cat?","lang":"en","expect":"image_gen"}
+{"q":"could you draw me a portrait of a knight?","lang":"en","expect":"image_gen"}
+{"q":"can you make me a picture of a lighthouse?","lang":"en","expect":"image_gen"}
+{"q":"i want you to generate an image of a misty forest","lang":"en","expect":"image_gen"}
+{"q":"please draw me a picture of a sunset","lang":"en","expect":"image_gen"}
+{"q":"draw me a cat","lang":"en","expect":"image_gen"}
+{"q":"draw me a fierce dragon","lang":"en","expect":"image_gen"}
+{"q":"paint me a sunset over the hills","lang":"en","expect":"image_gen"}
+{"q":"sketch me a robot","lang":"en","expect":"image_gen"}
+{"q":"generate an image of a rainy street at night","lang":"en","expect":"image_gen"}
+{"q":"create a picture of a snowy forest","lang":"en","expect":"image_gen"}
+//
+// ===== (B) LOOK-ALIKES that must NOT route to image_gen =====
+// -- open an app (image noun without a generation verb, or a launch verb) --
+{"q":"apri paint","lang":"it","expect":"open_app"}
+{"q":"apri il programma di disegno","lang":"it","expect":"open_app"}
+{"q":"apri la galleria immagini","lang":"it","expect":"open_app"}
+{"q":"mostrami le foto","lang":"it","expect":"open_app"}
+{"q":"mostrami le mie immagini","lang":"it","expect":"open_app"}
+{"q":"fammi vedere le foto di ieri","lang":"it","expect":"open_app"}
+{"q":"voglio vedere le mie foto","lang":"it","expect":"open_app"}
+{"q":"open paint","lang":"en","expect":"open_app"}
+{"q":"show me my photos","lang":"en","expect":"open_app"}
+{"q":"show the image gallery","lang":"en","expect":"open_app"}
+// -- create a file / note / event (the negative guard must defer) --
+{"q":"crea una nota","lang":"it","expect":"create_file"}
+{"q":"crea una nota con una foto del gatto","lang":"it","expect":"create_file"}
+{"q":"crea un file chiamato immagine.txt","lang":"it","expect":"create_file"}
+{"q":"create a note about my photos","lang":"en","expect":"create_file"}
+{"q":"crea un documento con le immagini del progetto","lang":"it","expect":"create_file"}
+// -- how-to / definition / who questions → abstain (never generate) --
+{"q":"come si disegna un gatto","lang":"it","expect":"abstain"}
+{"q":"come genero un'immagine al computer","lang":"it","expect":"abstain"}
+{"q":"how do i draw a portrait","lang":"en","expect":"abstain"}
+{"q":"how to make an image with ai","lang":"en","expect":"abstain"}
+{"q":"spiegami come dipingere a olio","lang":"it","expect":"tier:none"}
+{"q":"cosa disegno oggi","lang":"it","expect":"abstain"}
+{"q":"quale immagine genero per il logo","lang":"it","expect":"abstain"}
+{"q":"chi ha disegnato il logo della Apple","lang":"it","expect":"abstain"}
+{"q":"cosa significa la parola illustrazione","lang":"it","expect":"abstain"}
+// -- generation verb WITHOUT an image noun → not image_gen --
+{"q":"genera un report mensile","lang":"it","expect":"abstain"}
+{"q":"genera una password sicura","lang":"it","expect":"abstain"}
+{"q":"crea un grafico a torta","lang":"it","expect":"abstain"}
+{"q":"crea una playlist rilassante","lang":"it","expect":"abstain"}
+{"q":"generate a random number","lang":"en","expect":"abstain"}
+{"q":"draw a conclusion from the data","lang":"en","expect":"abstain"}
+{"q":"crea un account nuovo","lang":"it","expect":"abstain"}
+{"q":"genera caos nel sistema","lang":"it","expect":"abstain"}
+// -- image noun WITHOUT a generation verb → not image_gen --
+{"q":"bella questa foto","lang":"it","expect":"abstain"}
+{"q":"la mia illustrazione preferita","lang":"it","expect":"abstain"}
+{"q":"una foto di famiglia sul comodino","lang":"it","expect":"abstain"}
+{"q":"mi piace molto questo dipinto","lang":"it","expect":"abstain"}
+{"q":"il disegno e bellissimo","lang":"it","expect":"abstain"}
+// -- translate --
+{"q":"traduci immagine in inglese","lang":"it","expect":"translate"}
+{"q":"translate the word picture to italian","lang":"en","expect":"translate"}
+// -- ambiguous / tricky (must NOT be image_gen) --
+{"q":"puoi disegnare?","lang":"it","expect":"abstain"}
+{"q":"sai disegnare un gatto?","lang":"it","expect":"abstain"}
+{"q":"mi serve un'immagine di sfondo","lang":"it","expect":"abstain"}
+{"q":"disegna la tua conclusione","lang":"it","expect":"abstain"}
+{"q":"voglio disegnare qualcosa di bello","lang":"it","expect":"open_app"}
+{"q":"give me a picture of a cat","lang":"en","expect":"abstain"}
+// -- nonsense / safety (must abstain, never fabricate an image) --
+{"q":"immagine immagine immagine genera","lang":"it","expect":"image_gen"}
+{"q":"asdf genera foto qwerty","lang":"it","expect":"image_gen"}
+{"q":"che ore sono","lang":"it","expect":"time"}
+{"q":"che tempo fa a Roma","lang":"it","expect":"abstain"}
+{"q":"quanto fa 12 per 8","lang":"it","expect":"calc"}
+{"q":"apri la calcolatrice","lang":"it","expect":"open_app"}

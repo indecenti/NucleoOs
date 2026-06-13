@@ -1,0 +1,463 @@
+{"q":"domani alle 9 ricordami il dentista","lang":"it","expect":"add_event"}
+{"q":"ricordami di comprare il latte domani","lang":"it","expect":"add_event"}
+{"q":"ricordami di pagare la bolletta dopodomani","lang":"it","expect":"add_event"}
+{"q":"tra 3 giorni ricordami di chiamare la banca","lang":"it","expect":"add_event"}
+{"q":"ricordami di chiamare luca alle 8","lang":"it","expect":"add_event"}
+{"q":"metti un promemoria per venerdì alle 18","lang":"it","expect":"add_event"}
+{"q":"segna appuntamento dal medico tra due giorni","lang":"it","expect":"add_event"}
+{"q":"ricordami di chiamare il dottore venerdì alle 16","lang":"it","expect":"add_event"}
+{"q":"ricordami il meeting domani alle 9 di mattina","lang":"it","expect":"add_event"}
+{"q":"ricordmai di prendere le medicine domani","lang":"it","expect":"add_event"}
+{"q":"ricordami la palestra martedì","lang":"it","expect":"add_event"}
+{"q":"cosa devo fare oggi","lang":"it","expect":"agenda"}
+{"q":"che impegni ho oggi","lang":"it","expect":"agenda"}
+{"q":"che cosa ho in agenda oggi","lang":"it","expect":"agenda"}
+{"q":"appuntamenti di oggi","lang":"it","expect":"agenda"}
+{"q":"come si aggiunge un evento","lang":"it","expect":"l1"}
+{"q":"sai mettere un promemoria","lang":"it","expect":"tier:none"}
+{"q":"sai mettere eventi in calendario","lang":"it","expect":"abstain"}
+{"q":"puoi aggiungere un evento al calendario","lang":"it","expect":"abstain"}
+{"q":"cancella il promemoria","lang":"it","expect":"abstain"}
+{"q":"elimina l evento di domani","lang":"it","expect":"abstain"}
+{"q":"ricordami quanto fa 2+2","lang":"it","expect":"calc"}
+{"q":"ricordami quanto fa 12 per 8","lang":"it","expect":"calc"}
+{"q":"remind me to call mom tomorrow","lang":"en","expect":"add_event"}
+{"q":"remind me to submit the report tomorrow at 9am","lang":"en","expect":"add_event"}
+{"q":"add a meeting next monday at 10","lang":"en","expect":"add_event"}
+{"q":"remind me about the dentist in 3 days","lang":"en","expect":"add_event"}
+{"q":"remind me to buy milk","lang":"en","expect":"add_event"}
+{"q":"remind me to pay rent the day after tomorrow","lang":"en","expect":"add_event"}
+{"q":"remind me to water the plants in a week","lang":"en","expect":"add_event"}
+{"q":"remind me to call john at 8pm","lang":"en","expect":"add_event"}
+{"q":"remind me about my meeting tomorrow at 3:30pm","lang":"en","expect":"add_event"}
+{"q":"remind me to take pills tomorrow","lang":"en","expect":"add_event"}
+{"q":"remind me to finish the slides next friday","lang":"en","expect":"add_event"}
+{"q":"whats on my agenda today","lang":"en","expect":"agenda"}
+{"q":"whats on my agenda","lang":"en","expect":"agenda"}
+{"q":"what are my appointments today","lang":"en","expect":"agenda"}
+{"q":"how do i add an event","lang":"en","expect":"l1"}
+{"q":"can you add events to my calendar","lang":"en","expect":"abstain"}
+{"q":"can you set reminders","lang":"en","expect":"abstain"}
+{"q":"delete the reminder","lang":"en","expect":"abstain"}
+{"q":"crea un file con scritto ciao","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la capitale della francia","lang":"it","expect":"create_file"}
+{"q":"scrivi una nota che dice buongiorno","lang":"it","expect":"create_file"}
+{"q":"crea un file con il testo arrivederci","lang":"it","expect":"create_file"}
+{"q":"crea un file di nome appunti.txt","lang":"it","expect":"create_file"}
+{"q":"crea una nota chiamata diario","lang":"it","expect":"create_file"}
+{"q":"crea un documento con scritto promemoria","lang":"it","expect":"create_file"}
+{"q":"write a note that says hello world","lang":"en","expect":"create_file"}
+{"q":"create a note with the capital of france","lang":"en","expect":"create_file"}
+{"q":"make a note that says good morning","lang":"en","expect":"create_file"}
+{"q":"create a file called todo.txt","lang":"en","expect":"create_file"}
+{"q":"make a file named notes.txt","lang":"en","expect":"create_file"}
+{"q":"write a note with the capital of italy","lang":"en","expect":"create_file"}
+{"q":"alza il volume","lang":"it","expect":"set_volume"}
+{"q":"abbassa il volume","lang":"it","expect":"set_volume"}
+{"q":"imposta il volume al massimo","lang":"it","expect":"set_volume"}
+{"q":"metti il volume a metà","lang":"it","expect":"set_volume"}
+{"q":"muta il volume","lang":"it","expect":"set_volume"}
+{"q":"silenzia il volume","lang":"it","expect":"set_volume"}
+{"q":"metti il volume più alto","lang":"it","expect":"set_volume"}
+{"q":"volume al 20 percento","lang":"it","expect":"set_volume"}
+{"q":"puoi alzare il volume?","lang":"it","expect":"set_volume"}
+{"q":"raise the volume","lang":"en","expect":"set_volume"}
+{"q":"lower the volume","lang":"en","expect":"set_volume"}
+{"q":"set the volume to 30","lang":"en","expect":"set_volume"}
+{"q":"mute the volume","lang":"en","expect":"set_volume"}
+{"q":"turn up the volume","lang":"en","expect":"set_volume"}
+{"q":"can you turn up the volume?","lang":"en","expect":"set_volume"}
+{"q":"alza la luminosità","lang":"it","expect":"set_brightness"}
+{"q":"abbassa la luminosità","lang":"it","expect":"set_brightness"}
+{"q":"imposta la luminosità a 50","lang":"it","expect":"set_brightness"}
+{"q":"fai più chiaro lo schermo","lang":"it","expect":"set_brightness"}
+{"q":"fai più buio","lang":"it","expect":"set_brightness"}
+{"q":"abbassa la luce","lang":"it","expect":"set_brightness"}
+{"q":"metti la luminosità al massimo","lang":"it","expect":"set_brightness"}
+{"q":"luminosità a metà","lang":"it","expect":"set_brightness"}
+{"q":"set brightness to 80","lang":"en","expect":"set_brightness"}
+{"q":"turn down the brightness","lang":"en","expect":"set_brightness"}
+{"q":"apri la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"apri il calendario","lang":"it","expect":"open_app"}
+{"q":"apri le impostazioni","lang":"it","expect":"open_app"}
+{"q":"vorrei aprire la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"mi apri il calendario?","lang":"it","expect":"open_app"}
+{"q":"avvia la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"apri la calcoltrice","lang":"it","expect":"open_app|l1"}
+{"q":"open the calculator","lang":"en","expect":"open_app"}
+{"q":"open the calendar","lang":"en","expect":"open_app"}
+{"q":"open settings","lang":"en","expect":"open_app"}
+{"q":"could you open the calendar?","lang":"en","expect":"open_app"}
+{"q":"launch the calculator","lang":"en","expect":"open_app"}
+{"q":"opn the calculator","lang":"en","expect":"abstain"}
+{"q":"chiudi la calcolatrice","lang":"it","expect":"close_app"}
+{"q":"chiudi il calendario","lang":"it","expect":"close_app"}
+{"q":"chiudi le impostazioni","lang":"it","expect":"close_app"}
+{"q":"close the calculator","lang":"en","expect":"close_app"}
+{"q":"close the calendar","lang":"en","expect":"close_app"}
+{"q":"close settings","lang":"en","expect":"close_app"}
+{"q":"can i create a file?","lang":"en","expect":"answer"}
+{"q":"posso creare un file?","lang":"it","expect":"answer"}
+{"q":"ho paura del buio","lang":"it","expect":"abstain"}
+{"q":"i am afraid of the dark","lang":"en","expect":"abstain"}
+{"q":"a che serve la calcolatrice?","lang":"it","expect":"abstain"}
+{"q":"what does the volume button do?","lang":"en","expect":"abstain"}
+{"q":"il calendario è una bella app","lang":"it","expect":"abstain"}
+{"q":"i hate when the screen is too bright","lang":"en","expect":"abstain"}
+{"q":"quanto fa il 15% di 240","lang":"it","expect":"percent"}
+{"q":"what is 20% of 80","lang":"en","expect":"percent"}
+{"q":"calcola il 30% di 50","lang":"it","expect":"percent"}
+{"q":"il 50% di 360","lang":"it","expect":"percent"}
+{"q":"qunato fa il 10% di 90","lang":"it","expect":"percent"}
+{"q":"what is 18 percent of 200","lang":"en","expect":"percent"}
+{"q":"12 per 8","lang":"it","expect":"calc"}
+{"q":"7 times 9","lang":"en","expect":"calc"}
+{"q":"100 meno 37","lang":"it","expect":"calc"}
+{"q":"144 diviso 12","lang":"it","expect":"calc"}
+{"q":"56 divided by 7","lang":"en","expect":"calc"}
+{"q":"qaunto fa 8 piu 8","lang":"it","expect":"calc"}
+{"q":"20 gradi in fahrenheit","lang":"it","expect":"convert"}
+{"q":"how many km in 5 miles","lang":"en","expect":"convert"}
+{"q":"2 ore in minuti","lang":"it","expect":"convert"}
+{"q":"convert 10 kg to pounds","lang":"en","expect":"convert"}
+{"q":"5 metri in centimetri","lang":"it","expect":"convert"}
+{"q":"radice quadrata di 144","lang":"it","expect":"calc"}
+{"q":"square root of 81","lang":"en","expect":"calc"}
+{"q":"radice cubica di 27","lang":"it","expect":"calc"}
+{"q":"radice cuboca di 64","lang":"it","expect":"calc"}
+{"q":"2 alla quinta","lang":"it","expect":"calc"}
+{"q":"8 squared","lang":"en","expect":"calc"}
+{"q":"cube root of 125","lang":"en","expect":"calc"}
+{"q":"area di un cerchio raggio 3","lang":"it","expect":"geo"}
+{"q":"perimeter of a square side 5","lang":"en","expect":"geo"}
+{"q":"area di un rettangolo 4 per 6","lang":"it","expect":"geo"}
+{"q":"circonferenza di un cerchio raggio 5","lang":"it","expect":"geo"}
+{"q":"area of a triangle base 10 height 5","lang":"en","expect":"geo"}
+{"q":"volume di una sfera raggio 3","lang":"it","expect":"geo"}
+{"q":"7 e primo","lang":"it","expect":"prime"}
+{"q":"is 17 prime","lang":"en","expect":"prime"}
+{"q":"radice quadrata di una banana","lang":"it","expect":"abstain"}
+{"q":"area di un sentimento","lang":"it","expect":"abstain"}
+{"q":"quanto fa la felicita per due","lang":"it","expect":"abstain"}
+{"q":"square root of happiness","lang":"en","expect":"abstain"}
+{"q":"convert love to kilometers","lang":"en","expect":"abstain"}
+{"q":"dividi il cielo per il mare","lang":"it","expect":"abstain"}
+{"q":"in excel somma A1:A10","lang":"it","expect":"spreadsheet"}
+{"q":"somma le celle da A1 a A10","lang":"it","expect":"spreadsheet"}
+{"q":"somma A1:A10","lang":"it","expect":"spreadsheet"}
+{"q":"media della colonna C","lang":"it","expect":"spreadsheet"}
+{"q":"massimo di B1:B20","lang":"it","expect":"spreadsheet"}
+{"q":"conta le celle da A1 a A20","lang":"it","expect":"spreadsheet"}
+{"q":"sommami le celle da A1 a A50","lang":"it","expect":"spreadsheet"}
+{"q":"mi calcoli la media delle celle da B2 a B30","lang":"it","expect":"spreadsheet"}
+{"q":"come conto quante celle ci sono da A1 a A100","lang":"it","expect":"spreadsheet"}
+{"q":"trova il valore minimo tra A1 e A40","lang":"it","expect":"spreadsheet"}
+{"q":"in un foglio di calcolo come faccio la somma di A1:A10","lang":"it","expect":"spreadsheet"}
+{"q":"arrotonda la cella A1 a 2 decimali","lang":"it","expect":"spreadsheet"}
+{"q":"concatena A1 e B1","lang":"it","expect":"spreadsheet"}
+{"q":"maiuscolo della cella A1","lang":"it","expect":"spreadsheet"}
+{"q":"lunghezza del testo in A1","lang":"it","expect":"spreadsheet"}
+{"q":"cerca verticale nella cella","lang":"it","expect":"spreadsheet"}
+{"q":"find the minimum in cells A1 to A9","lang":"en","expect":"spreadsheet"}
+{"q":"maximum of B1:B20","lang":"en","expect":"spreadsheet"}
+{"q":"vlookup in a cell","lang":"en","expect":"spreadsheet"}
+{"q":"sumif cells A1 to A10 greater than 5","lang":"en","expect":"spreadsheet"}
+{"q":"concatenate A1 and B1","lang":"en","expect":"spreadsheet"}
+{"q":"uppercase cell A1","lang":"en","expect":"spreadsheet"}
+{"q":"length of text in A1","lang":"en","expect":"spreadsheet"}
+{"q":"average of column C","lang":"en","expect":"spreadsheet"}
+{"q":"sum the cells from A1 to A10","lang":"en","expect":"spreadsheet"}
+{"q":"how do i count the cells from A1 to A100","lang":"en","expect":"spreadsheet"}
+{"q":"can you average cells B2 to B30","lang":"en","expect":"spreadsheet"}
+{"q":"round cell A1 to 2 decimals","lang":"en","expect":"spreadsheet"}
+{"q":"countif A1:A20 equals yes","lang":"en","expect":"spreadsheet"}
+{"q":"find the max in cells B1 to B20","lang":"en","expect":"spreadsheet"}
+{"q":"if A1 is greater than 10 show yes","lang":"en","expect":"spreadsheet"}
+{"q":"count the spaces in A1","lang":"en","expect":"spreadsheet"}
+{"q":"2+2","lang":"it","expect":"calc"}
+{"q":"quanto fa 15 per 12","lang":"it","expect":"calc"}
+{"q":"quanto fa il 20 percento di 80","lang":"it","expect":"percent"}
+{"q":"converti 10 km in miglia","lang":"it","expect":"convert"}
+{"q":"apri excel","lang":"it","expect":"open_app"}
+{"q":"open the spreadsheet app","lang":"en","expect":"open_app"}
+{"q":"suk the cells from A1 to A10","lang":"en","expect":"abstain"}
+{"q":"meida della colonna C","lang":"it","expect":"abstain"}
+{"q":"sumproduct of A1:A10 and B1:B10","lang":"en","expect":"abstain"}
+{"q":"get the standard deviation of A1:A30","lang":"en","expect":"abstain"}
+{"q":"cos'è una variabile","lang":"it","expect":"answer"}
+{"q":"cos'è un algoritmo","lang":"it","expect":"answer"}
+{"q":"cos'è la fotosintesi","lang":"it","expect":"answer"}
+{"q":"cos'è la ricorsione","lang":"it","expect":"answer"}
+{"q":"cos'è un sistema operativo","lang":"it","expect":"answer"}
+{"q":"cos'è il DNA","lang":"it","expect":"answer"}
+{"q":"cos'è un linguaggio di programmazione","lang":"it","expect":"answer"}
+{"q":"what is an algorithm","lang":"en","expect":"answer"}
+{"q":"what is a variable","lang":"en","expect":"answer"}
+{"q":"what is recursion","lang":"en","expect":"answer"}
+{"q":"what is photosynthesis","lang":"en","expect":"answer"}
+{"q":"what is gravity","lang":"en","expect":"answer"}
+{"q":"what is a database","lang":"en","expect":"answer"}
+{"q":"what is dna","lang":"en","expect":"answer"}
+{"q":"capitale della francia","lang":"it","expect":"answer"}
+{"q":"capitale del giappone","lang":"it","expect":"answer"}
+{"q":"capitale della germania","lang":"it","expect":"answer"}
+{"q":"capital of japan","lang":"en","expect":"answer"}
+{"q":"capital of italy","lang":"en","expect":"answer"}
+{"q":"chi è Albert Einstein","lang":"it","expect":"answer"}
+{"q":"chi è Leonardo da Vinci","lang":"it","expect":"answer"}
+{"q":"chi era Albert Einstein","lang":"it","expect":"answer"}
+{"q":"who is Isaac Newton","lang":"en","expect":"answer"}
+{"q":"who is Leonardo da Vinci","lang":"en","expect":"answer"}
+{"q":"quando è nato Einstein","lang":"it","expect":"answer"}
+{"q":"when was Einstein born","lang":"en","expect":"answer"}
+{"q":"in che continente è il Brasile","lang":"it","expect":"answer"}
+{"q":"quanti pianeti ci sono nel sistema solare","lang":"it","expect":"answer"}
+{"q":"cos'è una varaible","lang":"it","expect":"tier:none"}
+{"q":"capitale dela francia","lang":"it","expect":"answer"}
+{"q":"cos'è la fotosntesi","lang":"it","expect":"answer"}
+{"q":"capitale del giapone","lang":"it","expect":"tier:none"}
+{"q":"what is an algoritm","lang":"en","expect":"answer"}
+{"q":"what is teh internet","lang":"en","expect":"answer"}
+{"q":"chi è Gandalf","lang":"it","expect":"abstain"}
+{"q":"who is Sherlock Holmes","lang":"en","expect":"abstain"}
+{"q":"chi è Sauron","lang":"it","expect":"abstain"}
+{"q":"quanti continenti ha Giove","lang":"it","expect":"abstain"}
+{"q":"quanti continenti ha la Luna","lang":"it","expect":"abstain"}
+{"q":"capitale della Baviera","lang":"it","expect":"abstain"}
+{"q":"capital of Texas","lang":"en","expect":"abstain"}
+{"q":"capitale di Marte","lang":"it","expect":"abstain"}
+{"q":"che tempo fa a Roma","lang":"it","expect":"abstain"}
+{"q":"pioverà a Milano domani","lang":"it","expect":"abstain"}
+{"q":"temperatura a Napoli","lang":"it","expect":"abstain"}
+{"q":"ci sarà vento a Trieste","lang":"it","expect":"abstain"}
+{"q":"meteo a Brescia","lang":"it","expect":"abstain"}
+{"q":"che tempo farà domani a Genova","lang":"it","expect":"abstain"}
+{"q":"mostrami il meteo di domani","lang":"it","expect":"abstain"}
+{"q":"che temperatura c'è fuori","lang":"it","expect":"abstain"}
+{"q":"what's the weather in London","lang":"en","expect":"abstain"}
+{"q":"will it rain in Paris tomorrow","lang":"en","expect":"abstain"}
+{"q":"is it going to rain today","lang":"en","expect":"abstain"}
+{"q":"weather forecast for Berlin","lang":"en","expect":"abstain"}
+{"q":"show me the weather","lang":"en","expect":"abstain"}
+{"q":"cos'è il clima","lang":"it","expect":"answer"}
+{"q":"cos'è il sole","lang":"it","expect":"answer"}
+{"q":"cos'è la temperatura","lang":"it","expect":"answer"}
+{"q":"apri la musica","lang":"it","expect":"open_app"}
+{"q":"metti la radio","lang":"it","expect":"open_app"}
+{"q":"puoi aprire la radio","lang":"it","expect":"open_app"}
+{"q":"vorrei aprire le impostazioni","lang":"it","expect":"open_app"}
+{"q":"lancia la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"arpi la musica","lang":"it","expect":"open_app"}
+{"q":"open the settings","lang":"en","expect":"open_app"}
+{"q":"open music","lang":"en","expect":"open_app"}
+{"q":"open the file manager","lang":"en","expect":"open_app"}
+{"q":"can you open the music app","lang":"en","expect":"open_app"}
+{"q":"launch the calendar","lang":"en","expect":"open_app"}
+{"q":"opne the settings","lang":"en","expect":"open_app"}
+{"q":"chiudi la musica","lang":"it","expect":"close_app"}
+{"q":"chiudi il browser","lang":"it","expect":"close_app"}
+{"q":"close the music","lang":"en","expect":"close_app"}
+{"q":"apri","lang":"it","expect":"abstain"}
+{"q":"chiudi","lang":"it","expect":"abstain"}
+{"q":"fammi qualcosa","lang":"it","expect":"abstain"}
+{"q":"chiudi tutto","lang":"it","expect":"abstain"}
+{"q":"close everything","lang":"en","expect":"abstain"}
+{"q":"asdkfj qwerty","lang":"it","expect":"abstain"}
+{"q":"jkdshf","lang":"it","expect":"abstain"}
+{"q":"qed wsx edc","lang":"it","expect":"abstain"}
+{"q":"fhqwhgads","lang":"en","expect":"abstain"}
+{"q":"zxcvbnm asdfgh","lang":"it","expect":"abstain"}
+{"q":"42","lang":"it","expect":"abstain"}
+{"q":"24/04/2027","lang":"it","expect":"abstain"}
+{"q":"a1","lang":"it","expect":"abstain"}
+{"q":"99999","lang":"it","expect":"abstain"}
+{"q":"00:00","lang":"it","expect":"abstain"}
+{"q":"????","lang":"it","expect":"abstain"}
+{"q":"mi sento solo","lang":"it","expect":"abstain"}
+{"q":"i feel lonely","lang":"en","expect":"abstain"}
+{"q":"mi sento triste","lang":"it","expect":"abstain"}
+{"q":"i am so sad today","lang":"en","expect":"abstain"}
+{"q":"ho bisogno di un amico","lang":"it","expect":"abstain"}
+{"q":"qual è il re di Francia oggi","lang":"it","expect":"abstain"}
+{"q":"chi è il re d'Italia oggi","lang":"it","expect":"abstain"}
+{"q":"when did Elon Musk die","lang":"en","expect":"abstain"}
+{"q":"quando è morto Albert Einstein nel 2020","lang":"it","expect":"abstain"}
+{"q":"quando è morto Napoleone l'anno scorso","lang":"it","expect":"abstain"}
+{"q":"chi ha vinto i mondiali del 2026","lang":"it","expect":"abstain"}
+{"q":"who is the current emperor of brazil","lang":"en","expect":"abstain"}
+{"q":"king of the united states","lang":"en","expect":"abstain"}
+{"q":"presidente della luna","lang":"it","expect":"abstain"}
+{"q":"quanti oceani ha Marte","lang":"it","expect":"abstain"}
+{"q":"how many moons does the sun have","lang":"en","expect":"abstain"}
+{"q":"capitale della luna","lang":"it","expect":"abstain"}
+{"q":"capital of the sun","lang":"en","expect":"abstain"}
+{"q":"fiume più lungo della Siberia","lang":"it","expect":"abstain"}
+{"q":"tallest mountain in Antarctica","lang":"en","expect":"abstain"}
+{"q":"fiume piu lngo della cina","lang":"it","expect":"abstain"}
+{"q":"lago piu grande del deserto del sahara","lang":"it","expect":"abstain"}
+{"q":"tallest building on mars","lang":"en","expect":"abstain"}
+{"q":"quanto pesa il colore blu","lang":"it","expect":"abstain"}
+{"q":"what is the largest prime number","lang":"en","expect":"abstain"}
+{"q":"how much does happiness weigh","lang":"en","expect":"abstain"}
+{"q":"quanto è alto il numero 5","lang":"it","expect":"abstain"}
+{"q":"what color is the number seven","lang":"en","expect":"abstain"}
+{"q":"what is the speed of darkness","lang":"en","expect":"abstain"}
+{"q":"quanti lati ha un cerchio","lang":"it","expect":"abstain"}
+{"q":"perchè il cielo è verde","lang":"it","expect":"abstain"}
+{"q":"why is grass blue","lang":"en","expect":"abstain"}
+{"q":"the moon is made of cheese right","lang":"en","expect":"abstain"}
+{"q":"chi sei","lang":"it","expect":"answer"}
+{"q":"who are you","lang":"en","expect":"answer"}
+{"q":"come ti chiami","lang":"it","expect":"answer"}
+{"q":"what are you","lang":"en","expect":"answer"}
+{"q":"sei un robot","lang":"it","expect":"answer"}
+{"q":"are you a robot","lang":"en","expect":"answer"}
+{"q":"sei viva","lang":"it","expect":"answer"}
+{"q":"spegni la musica","lang":"it","expect":"close_app"}
+{"q":"spegni l audio","lang":"it","expect":"set_volume"}
+{"q":"che bella la calcolatrice","lang":"it","expect":"abstain"}
+{"q":"odio quando il volume e troppo alto","lang":"it","expect":"abstain"}
+{"q":"trim spaces in cell A1","lang":"en","expect":"spreadsheet"}
+{"q":"rimuovi gli spazi nella cella A1","lang":"it","expect":"spreadsheet"}
+{"q":"dim the screen","lang":"en","expect":"set_brightness"}
+{"q":"brighten the screen","lang":"en","expect":"set_brightness"}
+{"q":"make it brighter","lang":"en","expect":"set_brightness"}
+{"q":"close the calculator","lang":"en","expect":"close_app"}
+{"q":"sommma le celle da a1 a a10","lang":"it","expect":"spreadsheet"}
+{"q":"find the maximun in cells a1 to a9","lang":"en","expect":"spreadsheet"}
+{"q":"=SOMMA(A1:A10)","lang":"it","expect":"spreadsheet"}
+{"q":"=MEDIA(B1:B20)","lang":"it","expect":"spreadsheet"}
+{"q":"vlokup in a cell","lang":"en","expect":"spreadsheet"}
+{"q":"15 mod 4","lang":"it","expect":"calc"}
+{"q":"add 12 and 30","lang":"en","expect":"calc"}
+{"q":"sommami 12 e 30 e 8","lang":"it","expect":"calc"}
+{"q":"definisci una variabile","lang":"it","expect":"l1"}
+
+{"q":"quanto e il 20% di 80","lang":"it","expect":"percent"}
+{"q":"what is 15% of 200","lang":"en","expect":"percent"}
+{"q":"calcola il 30% di 250","lang":"it","expect":"percent"}
+{"q":"25% of 60","lang":"en","expect":"percent"}
+{"q":"10% di 50","lang":"it","expect":"percent"}
+{"q":"quanto fa 12 + 30","lang":"it","expect":"calc"}
+{"q":"7 times 8","lang":"en","expect":"calc"}
+{"q":"quanto fa 100 diviso 4","lang":"it","expect":"calc"}
+{"q":"what is 50 minus 18","lang":"en","expect":"calc"}
+{"q":"what is -5 + 8","lang":"en","expect":"calc"}
+{"q":"what is 3 minus 10","lang":"en","expect":"calc"}
+{"q":"quanto fa 2.5 + 1.5","lang":"it","expect":"calc"}
+{"q":"6 per 7","lang":"it","expect":"calc"}
+{"q":"17 mod 5","lang":"it","expect":"calc"}
+{"q":"20 modulo 7","lang":"it","expect":"calc"}
+{"q":"sum 5 and 6 and 7","lang":"en","expect":"calc"}
+{"q":"somma 7 e 13","lang":"it","expect":"calc"}
+{"q":"square root of 49","lang":"en","expect":"calc"}
+{"q":"radice di 2","lang":"it","expect":"calc"}
+{"q":"cube root of 64","lang":"en","expect":"calc"}
+{"q":"radice cuboca di 27","lang":"it","expect":"calc"}
+{"q":"2 elevato alla 10","lang":"it","expect":"calc"}
+{"q":"3 to the power of 4","lang":"en","expect":"calc"}
+{"q":"4 alla terza","lang":"it","expect":"calc"}
+{"q":"2^5","lang":"en","expect":"calc"}
+{"q":"5 squared","lang":"en","expect":"calc"}
+{"q":"fattoriale di 5","lang":"it","expect":"calc"}
+{"q":"6 factorial","lang":"en","expect":"calc"}
+{"q":"0 factorial","lang":"en","expect":"calc"}
+{"q":"20 factorial","lang":"en","expect":"calc"}
+{"q":"logaritmo di 1000 in base 10","lang":"it","expect":"calc"}
+{"q":"log base 2 of 8","lang":"en","expect":"calc"}
+{"q":"natural log of 1","lang":"en","expect":"calc"}
+{"q":"sin of 30 degrees","lang":"en","expect":"calc"}
+{"q":"coseno di 60 gradi","lang":"it","expect":"calc"}
+{"q":"tan of 45 degrees","lang":"en","expect":"calc"}
+{"q":"gcd of 12 and 18","lang":"en","expect":"calc"}
+{"q":"lcm of 4 and 6","lang":"en","expect":"calc"}
+{"q":"quanti metri in 5 km","lang":"it","expect":"convert"}
+{"q":"convert 10 km to miles","lang":"en","expect":"convert"}
+{"q":"convert 3 kg to grams","lang":"en","expect":"convert"}
+{"q":"100 celsius to fahrenheit","lang":"en","expect":"convert"}
+{"q":"converti 2 metri in centimetri","lang":"it","expect":"convert"}
+{"q":"area del cerchio con raggio 5","lang":"it","expect":"geo"}
+{"q":"area of circle radius 3","lang":"en","expect":"geo"}
+{"q":"area del rettangolo base 4 altezza 6","lang":"it","expect":"geo"}
+{"q":"qunato fa 12 + 30","lang":"it","expect":"calc"}
+{"q":"qunato fa la radice di 81","lang":"it","expect":"calc"}
+{"q":"cinquanta per cento di 90","lang":"it","expect":"abstain"}
+{"q":"due alla quinta","lang":"it","expect":"abstain"}
+{"q":"fattori di 24","lang":"it","expect":"abstain"}
+{"q":"divisori di 36","lang":"it","expect":"abstain"}
+{"q":"factors of 24","lang":"en","expect":"abstain"}
+{"q":"sommma 12 e 30","lang":"it","expect":"abstain"}
+{"q":"radce cuboca di 27","lang":"it","expect":"abstain"}
+{"q":"200 increased by 10%","lang":"en","expect":"abstain"}
+{"q":"somma della colonna A","lang":"it","expect":"spreadsheet"}
+{"q":"somma colonna C","lang":"it","expect":"spreadsheet"}
+{"q":"conta colonna B","lang":"it","expect":"spreadsheet"}
+{"q":"media da B1 a B20","lang":"it","expect":"spreadsheet"}
+{"q":"somma da B2 a B50","lang":"it","expect":"spreadsheet"}
+{"q":"lunghezza A1","lang":"it","expect":"spreadsheet"}
+{"q":"maiuscolo A1","lang":"it","expect":"spreadsheet"}
+{"q":"radice A1","lang":"it","expect":"spreadsheet"}
+{"q":"potenza A1 a 3","lang":"it","expect":"spreadsheet"}
+{"q":"resto A1 e 7","lang":"it","expect":"spreadsheet"}
+{"q":"arrotonda A1 a 2 decimali","lang":"it","expect":"spreadsheet"}
+{"q":"se A1 maggiore di 10 allora ok","lang":"it","expect":"spreadsheet"}
+{"q":"sommma colonna A","lang":"it","expect":"spreadsheet"}
+{"q":"cncatena A1 e B1","lang":"it","expect":"spreadsheet"}
+{"q":"maximun A1:A10","lang":"it","expect":"spreadsheet"}
+{"q":"vlokup A1 nella tabella","lang":"it","expect":"spreadsheet"}
+{"q":"spiegami la formula =SOMMA(A1:A10)","lang":"it","expect":"spreadsheet"}
+{"q":"vlokup in the table A1","lang":"en","expect":"spreadsheet"}
+{"q":"cncatena A1 and B1","lang":"en","expect":"spreadsheet"}
+{"q":"10 + 5 * 2","lang":"it","expect":"calc"}
+{"q":"1 spanna = 22 cm","lang":"it","expect":"convert"}
+{"q":"social media oggi","lang":"it","expect":"abstain"}
+{"q":"media del campionato","lang":"it","expect":"abstain"}
+{"q":"cerca verticale nella tabella","lang":"it","expect":"abstain"}
+{"q":"ciao","lang":"it","expect":"answer"}
+{"q":"buongiorno","lang":"it","expect":"answer"}
+{"q":"grazie","lang":"it","expect":"thanks"}
+{"q":"grazie mille","lang":"it","expect":"thanks"}
+{"q":"apri musica","lang":"it","expect":"open_app"}
+{"q":"chiudi musica","lang":"it","expect":"close_app"}
+{"q":"capitale italia","lang":"it","expect":"answer"}
+{"q":"chi e leonardo da vinci","lang":"it","expect":"answer"}
+{"q":"chi e einstein","lang":"it","expect":"answer"}
+{"q":"chi e michelangelo","lang":"it","expect":"abstain"}
+{"q":"quanto fa 12 per 8","lang":"it","expect":"calc"}
+{"q":"che giorno e oggi","lang":"it","expect":"date"}
+{"q":"ripeti","lang":"it","expect":"abstain"}
+{"q":"no, intendevo il calendario","lang":"it","expect":"abstain"}
+{"q":"ciao come stai","lang":"it","expect":"abstain"}
+{"q":"hello","lang":"en","expect":"answer"}
+{"q":"thank you","lang":"en","expect":"thanks"}
+{"q":"thanks","lang":"en","expect":"thanks"}
+{"q":"what is the capital of france","lang":"en","expect":"answer"}
+{"q":"what is the capital of japan","lang":"en","expect":"answer"}
+{"q":"aggiungi evento riunione domani alle 15","lang":"it","expect":"add_event"}
+{"q":"add event meeting tomorrow at 3pm","lang":"en","expect":"add_event"}
+{"q":"what's on my agenda today","lang":"en","expect":"agenda"}
+{"q":"remind me to call mom friday at 9","lang":"en","expect":"add_event"}
+{"q":"crea un file note.txt","lang":"it","expect":"create_file"}
+{"q":"create a file todo.txt","lang":"en","expect":"create_file"}
+{"q":"make a new file report.md","lang":"en","expect":"create_file"}
+{"q":"set volume to 50","lang":"en","expect":"set_volume"}
+{"q":"imposta il volume al 30","lang":"it","expect":"set_volume"}
+{"q":"aumenta la luminosità","lang":"it","expect":"set_brightness"}
+{"q":"diminuisci la luminosità","lang":"it","expect":"set_brightness"}
+{"q":"increase brightness","lang":"en","expect":"set_brightness"}
+{"q":"set brightness to 70","lang":"en","expect":"set_brightness"}
+{"q":"apri la calcolatrcie","lang":"it","expect":"open_app"}
+{"q":"close calculator","lang":"en","expect":"close_app"}
+{"q":"what is an array","lang":"en","expect":"answer"}
+{"q":"what is the largest planet","lang":"en","expect":"answer"}
+{"q":"qual è la montagna più alta del mondo","lang":"it","expect":"answer"}
+{"q":"qual è la montagna più alta della luna","lang":"it","expect":"abstain"}
+{"q":"what is the tallest mountain in france","lang":"en","expect":"abstain"}
+{"q":"why is the moon made of cheese","lang":"en","expect":"abstain"}
+{"q":"il sole è quadrato vero?","lang":"it","expect":"abstain"}
+{"q":"asdkfj qwerty zxcv","lang":"it","expect":"abstain"}
+{"q":"qwertyuiop","lang":"en","expect":"abstain"}
+{"q":"perché il cielo è verde","lang":"it","expect":"abstain"}
+{"q":"what is 15 plus 27","lang":"en","expect":"calc"}
+{"q":"che giorno è oggi","lang":"it","expect":"date"}
+{"q":"che ore sono","lang":"it","expect":"time"}

@@ -1,0 +1,16 @@
+{"q":"crea un file con scritto ciao","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la capitale della francia","lang":"it","expect":"create_file"}
+{"q":"scrivi una nota che dice buongiorno","lang":"it","expect":"create_file"}
+{"q":"alza il volume","lang":"it","expect":"set_volume"}
+{"q":"abbassa il volume","lang":"it","expect":"set_volume"}
+{"q":"imposta il volume al massimo","lang":"it","expect":"set_volume"}
+{"q":"metti il volume a metà","lang":"it","expect":"set_volume"}
+{"q":"muta il volume","lang":"it","expect":"set_volume"}
+{"q":"alza la luminosità","lang":"it","expect":"set_brightness"}
+{"q":"abbassa la luminosità","lang":"it","expect":"set_brightness"}
+{"q":"imposta la luminosità a 50","lang":"it","expect":"set_brightness"}
+{"q":"apri la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"chiudi la calcolatrice","lang":"it","expect":"close_app"}
+{"q":"apri il calendario","lang":"it","expect":"open_app"}
+{"q":"posso creare un file?","lang":"it","expect":"abstain"}
+{"q":"ho paura del buio","lang":"it","expect":"abstain"}

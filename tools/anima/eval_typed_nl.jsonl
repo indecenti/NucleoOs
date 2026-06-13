@@ -1,0 +1,183 @@
+{"q":"che lavoro faceva albert einstein","lang":"it","t":"occ","want":"scienziato"}
+{"q":"di cosa si occupava albert einstein","lang":"it","t":"occ","want":"scienziato"}
+{"q":"what was the occupation of albert einstein","lang":"en","t":"occ","want":"scientist"}
+{"q":"di che sesso è albert einstein","lang":"it","t":"gen","want":"uomo"}
+{"q":"what gender is albert einstein","lang":"en","t":"gen","want":"man"}
+{"q":"di cosa si occupava isaac newton","lang":"it","t":"occ","want":"scienziato"}
+{"q":"what was the job of isaac newton","lang":"en","t":"occ","want":"scientist"}
+{"q":"isaac newton è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is isaac newton a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"che mestiere faceva marie curie","lang":"it","t":"occ","want":"scienziato"}
+{"q":"di cosa si occupava marie curie","lang":"it","t":"occ","want":"scienziato"}
+{"q":"what was the profession of marie curie","lang":"en","t":"occ","want":"scientist"}
+{"q":"di che sesso è marie curie","lang":"it","t":"gen","want":"donna"}
+{"q":"what gender is marie curie","lang":"en","t":"gen","want":"woman"}
+{"q":"qual era il lavoro di charles darwin","lang":"it","t":"occ","want":"scienziato"}
+{"q":"what was the occupation of charles darwin","lang":"en","t":"occ","want":"scientist"}
+{"q":"charles darwin è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is charles darwin a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"che lavoro faceva leonardo da vinci","lang":"it","t":"occ","want":"scienziato"}
+{"q":"di cosa si occupava leonardo da vinci","lang":"it","t":"occ","want":"scienziato"}
+{"q":"what was the job of leonardo da vinci","lang":"en","t":"occ","want":"scientist"}
+{"q":"di che sesso è leonardo da vinci","lang":"it","t":"gen","want":"uomo"}
+{"q":"what gender is leonardo da vinci","lang":"en","t":"gen","want":"man"}
+{"q":"di cosa si occupava stephen hawking","lang":"it","t":"occ","want":"scienziato"}
+{"q":"what was the profession of stephen hawking","lang":"en","t":"occ","want":"scientist"}
+{"q":"stephen hawking è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is stephen hawking a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"che mestiere faceva michael jackson","lang":"it","t":"occ","want":"musicista"}
+{"q":"di cosa si occupava michael jackson","lang":"it","t":"occ","want":"musicista"}
+{"q":"what was the occupation of michael jackson","lang":"en","t":"occ","want":"musician"}
+{"q":"di che sesso è michael jackson","lang":"it","t":"gen","want":"uomo"}
+{"q":"what gender is michael jackson","lang":"en","t":"gen","want":"man"}
+{"q":"qual era il lavoro di wolfgang amadeus mozart","lang":"it","t":"occ","want":"musicista"}
+{"q":"what was the job of wolfgang amadeus mozart","lang":"en","t":"occ","want":"musician"}
+{"q":"wolfgang amadeus mozart è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is wolfgang amadeus mozart a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"che lavoro faceva ludwig van beethoven","lang":"it","t":"occ","want":"musicista"}
+{"q":"di cosa si occupava ludwig van beethoven","lang":"it","t":"occ","want":"musicista"}
+{"q":"what was the profession of ludwig van beethoven","lang":"en","t":"occ","want":"musician"}
+{"q":"di che sesso è ludwig van beethoven","lang":"it","t":"gen","want":"uomo"}
+{"q":"what gender is ludwig van beethoven","lang":"en","t":"gen","want":"man"}
+{"q":"di cosa si occupava bob marley","lang":"it","t":"occ","want":"musicista"}
+{"q":"what was the occupation of bob marley","lang":"en","t":"occ","want":"musician"}
+{"q":"bob marley è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is bob marley a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"che mestiere faceva elvis presley","lang":"it","t":"occ","want":"musicista"}
+{"q":"di cosa si occupava elvis presley","lang":"it","t":"occ","want":"musicista"}
+{"q":"what was the job of elvis presley","lang":"en","t":"occ","want":"musician"}
+{"q":"di che sesso è elvis presley","lang":"it","t":"gen","want":"uomo"}
+{"q":"what gender is elvis presley","lang":"en","t":"gen","want":"man"}
+{"q":"qual era il lavoro di david bowie","lang":"it","t":"occ","want":"musicista"}
+{"q":"what was the profession of david bowie","lang":"en","t":"occ","want":"musician"}
+{"q":"david bowie è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is david bowie a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"che lavoro faceva freddie mercury","lang":"it","t":"occ","want":"musicista"}
+{"q":"di cosa si occupava freddie mercury","lang":"it","t":"occ","want":"musicista"}
+{"q":"what was the occupation of freddie mercury","lang":"en","t":"occ","want":"musician"}
+{"q":"di che sesso è freddie mercury","lang":"it","t":"gen","want":"uomo"}
+{"q":"what gender is freddie mercury","lang":"en","t":"gen","want":"man"}
+{"q":"di cosa si occupava dante alighieri","lang":"it","t":"occ","want":"scrittore"}
+{"q":"what was the job of dante alighieri","lang":"en","t":"occ","want":"writer"}
+{"q":"dante alighieri è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is dante alighieri a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"che mestiere faceva william shakespeare","lang":"it","t":"occ","want":"scrittore"}
+{"q":"di cosa si occupava william shakespeare","lang":"it","t":"occ","want":"scrittore"}
+{"q":"what was the profession of william shakespeare","lang":"en","t":"occ","want":"writer"}
+{"q":"di che sesso è william shakespeare","lang":"it","t":"gen","want":"uomo"}
+{"q":"what gender is william shakespeare","lang":"en","t":"gen","want":"man"}
+{"q":"qual era il lavoro di cleopatra","lang":"it","t":"occ","want":"sovrano"}
+{"q":"what was the occupation of cleopatra","lang":"en","t":"occ","want":"ruler"}
+{"q":"cleopatra è uomo o donna","lang":"it","t":"gen","want":"donna"}
+{"q":"is cleopatra a man or a woman","lang":"en","t":"gen","want":"woman"}
+{"q":"che lavoro faceva pablo picasso","lang":"it","t":"occ","want":"artista"}
+{"q":"di cosa si occupava pablo picasso","lang":"it","t":"occ","want":"artista"}
+{"q":"what was the job of pablo picasso","lang":"en","t":"occ","want":"artist"}
+{"q":"di che sesso è pablo picasso","lang":"it","t":"gen","want":"uomo"}
+{"q":"what gender is pablo picasso","lang":"en","t":"gen","want":"man"}
+{"q":"di cosa si occupava vincent van gogh","lang":"it","t":"occ","want":"artista"}
+{"q":"what was the profession of vincent van gogh","lang":"en","t":"occ","want":"artist"}
+{"q":"vincent van gogh è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is vincent van gogh a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"che mestiere faceva barack obama","lang":"it","t":"occ","want":"politico"}
+{"q":"di cosa si occupava barack obama","lang":"it","t":"occ","want":"politico"}
+{"q":"what was the occupation of barack obama","lang":"en","t":"occ","want":"politician"}
+{"q":"qual era il lavoro di winston churchill","lang":"it","t":"occ","want":"politico"}
+{"q":"what was the job of winston churchill","lang":"en","t":"occ","want":"politician"}
+{"q":"winston churchill è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is winston churchill a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"che lavoro faceva abraham lincoln","lang":"it","t":"occ","want":"politico"}
+{"q":"di cosa si occupava abraham lincoln","lang":"it","t":"occ","want":"politico"}
+{"q":"what was the profession of abraham lincoln","lang":"en","t":"occ","want":"politician"}
+{"q":"di che sesso è abraham lincoln","lang":"it","t":"gen","want":"uomo"}
+{"q":"what gender is abraham lincoln","lang":"en","t":"gen","want":"man"}
+{"q":"di cosa si occupava john f kennedy","lang":"it","t":"occ","want":"politico"}
+{"q":"what was the occupation of john f kennedy","lang":"en","t":"occ","want":"politician"}
+{"q":"john f kennedy è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is john f kennedy a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"che mestiere faceva adolf hitler","lang":"it","t":"occ","want":"politico"}
+{"q":"di cosa si occupava adolf hitler","lang":"it","t":"occ","want":"politico"}
+{"q":"what was the job of adolf hitler","lang":"en","t":"occ","want":"politician"}
+{"q":"di che sesso è adolf hitler","lang":"it","t":"gen","want":"uomo"}
+{"q":"what gender is adolf hitler","lang":"en","t":"gen","want":"man"}
+{"q":"qual era il lavoro di elon musk","lang":"it","t":"occ","want":"imprenditore"}
+{"q":"what was the profession of elon musk","lang":"en","t":"occ","want":"businessperson"}
+{"q":"elon musk è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is elon musk a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"che lavoro faceva steve jobs","lang":"it","t":"occ","want":"imprenditore"}
+{"q":"di cosa si occupava steve jobs","lang":"it","t":"occ","want":"imprenditore"}
+{"q":"what was the occupation of steve jobs","lang":"en","t":"occ","want":"businessperson"}
+{"q":"di che sesso è steve jobs","lang":"it","t":"gen","want":"uomo"}
+{"q":"what gender is steve jobs","lang":"en","t":"gen","want":"man"}
+{"q":"di cosa si occupava bill gates","lang":"it","t":"occ","want":"imprenditore"}
+{"q":"what was the job of bill gates","lang":"en","t":"occ","want":"businessperson"}
+{"q":"che mestiere faceva audrey hepburn","lang":"it","t":"occ","want":"attore"}
+{"q":"di cosa si occupava audrey hepburn","lang":"it","t":"occ","want":"attore"}
+{"q":"what was the profession of audrey hepburn","lang":"en","t":"occ","want":"actor"}
+{"q":"di che sesso è audrey hepburn","lang":"it","t":"gen","want":"donna"}
+{"q":"what gender is audrey hepburn","lang":"en","t":"gen","want":"woman"}
+{"q":"qual era il lavoro di leonardo dicaprio","lang":"it","t":"occ","want":"attore"}
+{"q":"what was the occupation of leonardo dicaprio","lang":"en","t":"occ","want":"actor"}
+{"q":"che lavoro faceva tom hanks","lang":"it","t":"occ","want":"attore"}
+{"q":"di cosa si occupava tom hanks","lang":"it","t":"occ","want":"attore"}
+{"q":"what was the job of tom hanks","lang":"en","t":"occ","want":"actor"}
+{"q":"di cosa si occupava cristoforo colombo","lang":"it","t":"occ","want":"esploratore"}
+{"q":"what was the profession of cristoforo colombo","lang":"en","t":"occ","want":"explorer"}
+{"q":"cristoforo colombo è uomo o donna","lang":"it","t":"gen","want":"uomo"}
+{"q":"is cristoforo colombo a man or a woman","lang":"en","t":"gen","want":"man"}
+{"q":"quando è morto napoleon","lang":"it","t":"died","want":"1821"}
+{"q":"quando è morto prince","lang":"it","t":"died","want":"2016"}
+{"q":"quando è morto diana","lang":"it","t":"died","want":"1997"}
+{"q":"che lavoro faceva floonk","lang":"it","t":"abstain"}
+{"q":"di cosa si occupava zorblax","lang":"it","t":"abstain"}
+{"q":"che mestiere faceva il signor nessuno","lang":"it","t":"abstain"}
+{"q":"che lavoro faceva qwertyuiop","lang":"it","t":"abstain"}
+{"q":"di cosa si occupava xyzzy","lang":"it","t":"abstain"}
+{"q":"che lavoro faceva roma","lang":"it","t":"abstain"}
+{"q":"di cosa si occupava l'italia","lang":"it","t":"abstain"}
+{"q":"che lavoro faceva parigi","lang":"it","t":"abstain"}
+{"q":"di che sesso è parigi","lang":"it","t":"abstain"}
+{"q":"parigi è uomo o donna","lang":"it","t":"abstain"}
+{"q":"l'europa è uomo o donna","lang":"it","t":"abstain"}
+{"q":"la francia è uomo o donna","lang":"it","t":"abstain"}
+{"q":"di che sesso è il martedì","lang":"it","t":"abstain"}
+{"q":"che lavoro faceva il numero sette","lang":"it","t":"abstain"}
+{"q":"di cosa si occupa l'aria","lang":"it","t":"abstain"}
+{"q":"che lavoro faceva la torre eiffel","lang":"it","t":"abstain"}
+{"q":"di che sesso è la pizza","lang":"it","t":"abstain"}
+{"q":"che genere è il colore rosso","lang":"it","t":"abstain"}
+{"q":"che lavoro faceva il 1492","lang":"it","t":"abstain"}
+{"q":"what was the occupation of floonk","lang":"en","t":"abstain"}
+{"q":"what gender is berlin","lang":"en","t":"abstain"}
+{"q":"is rome a man or a woman","lang":"en","t":"abstain"}
+{"q":"what was the job of the number seven","lang":"en","t":"abstain"}
+{"q":"what was the occupation of tuesday","lang":"en","t":"abstain"}
+{"q":"what was the profession of nobody mcnobody","lang":"en","t":"abstain"}
+{"q":"what gender is the color blue","lang":"en","t":"abstain"}
+{"q":"what was the occupation of the eiffel tower","lang":"en","t":"abstain"}
+{"q":"qual è la capitale di einstein","lang":"it","t":"refuse_person"}
+{"q":"in che continente è michael jackson","lang":"it","t":"refuse_person"}
+{"q":"dove si trova cleopatra","lang":"it","t":"refuse_person"}
+{"q":"in che continente è dante alighieri","lang":"it","t":"refuse_person"}
+{"q":"qual è la capitale di napoleon","lang":"it","t":"refuse_person"}
+{"q":"what is the capital of einstein","lang":"en","t":"refuse_person"}
+{"q":"what continent is dante alighieri in","lang":"en","t":"refuse_person"}
+{"q":"where is cleopatra","lang":"en","t":"refuse_person"}
+{"q":"in che continente è la francia","lang":"it","t":"geo_ok"}
+{"q":"qual è la capitale della francia","lang":"it","t":"geo_ok"}
+{"q":"in che continente è parigi","lang":"it","t":"geo_ok"}
+{"q":"qual è la capitale del giappone","lang":"it","t":"geo_ok"}
+{"q":"in che continente è il brasile","lang":"it","t":"geo_ok"}
+{"q":"dove si trova madrid","lang":"it","t":"geo_ok"}
+{"q":"what is the capital of france","lang":"en","t":"geo_ok"}
+{"q":"what continent is japan in","lang":"en","t":"geo_ok"}
+{"q":"what is the capital of spain","lang":"en","t":"geo_ok"}
+{"q":"che lavoro faccio","lang":"it","t":"profile"}
+{"q":"qual è il mio lavoro","lang":"it","t":"profile"}
+{"q":"che lavoro faccio io","lang":"it","t":"profile"}
+{"q":"what is my job","lang":"en","t":"profile"}
+{"q":"what's my job","lang":"en","t":"profile"}
+{"q":"chi è albert einstein","lang":"it","t":"answered"}
+{"q":"parlami di cleopatra","lang":"it","t":"answered"}
+{"q":"chi era dante alighieri","lang":"it","t":"answered"}
+{"q":"who is michael jackson","lang":"en","t":"answered"}

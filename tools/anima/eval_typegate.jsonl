@@ -1,0 +1,112 @@
+{"q":"qual è la capitale della Francia?","lang":"it","t":"geo_ok"}
+{"q":"in che continente si trova il Brasile?","lang":"it","t":"geo_ok"}
+{"q":"dove si trova Tokyo?","lang":"it","t":"geo_ok"}
+{"q":"Qual e la capitale del Giappone","lang":"it","t":"geo_ok"}
+{"q":"in quale continente sta l'Egitto?","lang":"it","t":"geo_ok"}
+{"q":"dove si trova Berlino?","lang":"it","t":"geo_ok"}
+{"q":"capitale della Germania?","lang":"it","t":"geo_ok"}
+{"q":"qual è la capitale del Canada","lang":"it","t":"geo_ok"}
+{"q":"in che continente è la Cina?","lang":"it","t":"geo_ok"}
+{"q":"dove si trova Parigi?","lang":"it","t":"geo_ok"}
+{"q":"qual è la capitale dell'Australia?","lang":"it","t":"geo_ok"}
+{"q":"in quale continente si trova la Russia","lang":"it","t":"geo_ok"}
+{"q":"dove si trova Stoccolma?","lang":"it","t":"geo_ok"}
+{"q":"Qual È La Capitale Della Spagna?","lang":"it","t":"geo_ok"}
+{"q":"in che continente si trova l'Argentina?","lang":"it","t":"geo_ok"}
+{"q":"dove si trova il Portogallo?","lang":"it","t":"geo_ok"}
+{"q":"what is the capital of Japan?","lang":"en","t":"geo_ok"}
+{"q":"what continent is Brazil in?","lang":"en","t":"geo_ok"}
+{"q":"where is Paris located?","lang":"en","t":"geo_ok"}
+{"q":"What Is The Capital Of Germany","lang":"en","t":"geo_ok"}
+{"q":"which continent is Egypt on?","lang":"en","t":"geo_ok"}
+{"q":"where is Berlin?","lang":"en","t":"geo_ok"}
+{"q":"capital of France?","lang":"en","t":"geo_ok"}
+{"q":"what continent is Australia located in?","lang":"en","t":"geo_ok"}
+{"q":"where is Pretoria located?","lang":"en","t":"geo_ok"}
+{"q":"what is the capital of Canada","lang":"en","t":"geo_ok"}
+{"q":"qual è la capitale di Albert Einstein","lang":"it","t":"refuse_person"}
+{"q":"in che continente si trova Marie Curie","lang":"it","t":"refuse_person"}
+{"q":"dove si trova Dante Alighieri","lang":"it","t":"refuse_person"}
+{"q":"in che continente è Cleopatra","lang":"it","t":"refuse_person"}
+{"q":"qual è la capitale di Napoleon","lang":"it","t":"refuse_person"}
+{"q":"dimmi la capitale di Leonardo da Vinci","lang":"it","t":"refuse_person"}
+{"q":"in quale continente si trova Picasso","lang":"it","t":"refuse_person"}
+{"q":"sai dirmi dove si trova Michael Jackson","lang":"it","t":"refuse_person"}
+{"q":"di che continente fa parte Beethoven","lang":"it","t":"refuse_person"}
+{"q":"qual è la capitale di Elon","lang":"it","t":"refuse_person"}
+{"q":"dove si trova Mozart","lang":"it","t":"refuse_person"}
+{"q":"in che continente è Darwin","lang":"it","t":"refuse_person"}
+{"q":"qual è la capitale di Washington","lang":"it","t":"notrefused"}
+{"q":"dove si trova Phoenix","lang":"it","t":"refuse_person"}
+{"q":"what is the capital of Albert Einstein","lang":"en","t":"refuse_person"}
+{"q":"what continent is Isaac Newton in","lang":"en","t":"refuse_person"}
+{"q":"where is Dante Alighieri located","lang":"en","t":"refuse_person"}
+{"q":"what continent is Cleopatra on","lang":"en","t":"refuse_person"}
+{"q":"tell me the capital of Cristoforo Colombo","lang":"en","t":"refuse_person"}
+{"q":"what is the capital city of Picasso","lang":"en","t":"refuse_person"}
+{"q":"which continent is Mercury in","lang":"en","t":"refuse_person"}
+{"q":"where is Beyoncé","lang":"en","t":"refuse_person"}
+{"q":"what continent is Elvis in","lang":"en","t":"refuse_person"}
+{"q":"what is the capital of Washington","lang":"en","t":"notrefused"}
+{"q":"where is Phoenix located","lang":"en","t":"refuse_person"}
+{"q":"what continent is Bob Marley in","lang":"en","t":"refuse_person"}
+{"q":"In che continente si trova Floonk?","lang":"it","t":"unknown"}
+{"q":"Qual e la capitale di Zorblax?","lang":"it","t":"unknown"}
+{"q":"Dove si trova Qwertan?","lang":"it","t":"unknown"}
+{"q":"What continent is Glarnis in?","lang":"en","t":"unknown"}
+{"q":"What is the capital of Vundex?","lang":"en","t":"unknown"}
+{"q":"Where is Plimthor located?","lang":"en","t":"unknown"}
+{"q":"In che continente si trova il numero 42?","lang":"it","t":"unknown"}
+{"q":"Qual e la capitale di martedi?","lang":"it","t":"unknown"}
+{"q":"What continent is Wednesday in?","lang":"en","t":"unknown"}
+{"q":"What is the capital of the number seven?","lang":"en","t":"unknown"}
+{"q":"Dove si trova il colore rosso?","lang":"it","t":"unknown"}
+{"q":"What continent is the color blue in?","lang":"en","t":"unknown"}
+{"q":"Qual e la capitale di un cucchiaio?","lang":"it","t":"unknown"}
+{"q":"Where is a hammer located on the map?","lang":"en","t":"unknown"}
+{"q":"In che continente e Brixthal?","lang":"it","t":"unknown"}
+{"q":"What is the capital of Snurgle?","lang":"en","t":"unknown"}
+{"q":"Dove si trova Krenovia?","lang":"it","t":"unknown"}
+{"q":"What continent is Drakmoor in?","lang":"en","t":"unknown"}
+{"q":"Qual e la capitale del numero 100?","lang":"it","t":"unknown"}
+{"q":"Where is the weekday Friday located?","lang":"en","t":"notrefused"}
+{"q":"In che continente si trova Yumblar?","lang":"it","t":"unknown"}
+{"q":"What is the capital of green?","lang":"en","t":"notrefused"}
+{"q":"In che continente si trova Denzel Washington?","lang":"it","t":"ambiguous"}
+{"q":"What continent is Denzel Washington in?","lang":"en","t":"ambiguous"}
+{"q":"Qual è la capitale di Denzel Washington?","lang":"it","t":"ambiguous"}
+{"q":"What is the capital of Denzel Washington?","lang":"en","t":"ambiguous"}
+{"q":"Dove si trova Denzel Washington?","lang":"it","t":"ambiguous"}
+{"q":"Where is Denzel Washington located?","lang":"en","t":"ambiguous"}
+{"q":"In quale continente è Joaquin Phoenix?","lang":"it","t":"ambiguous"}
+{"q":"What continent is Joaquin Phoenix in?","lang":"en","t":"ambiguous"}
+{"q":"Qual è la capitale di Joaquin Phoenix?","lang":"it","t":"ambiguous"}
+{"q":"What is the capital of Joaquin Phoenix?","lang":"en","t":"ambiguous"}
+{"q":"Dove si trova Joaquin Phoenix?","lang":"it","t":"ambiguous"}
+{"q":"Where is Joaquin Phoenix?","lang":"en","t":"ambiguous"}
+{"q":"In che continente è la città di Denzel Washington?","lang":"it","t":"ambiguous"}
+{"q":"What continent is the capital Joaquin Phoenix on?","lang":"en","t":"ambiguous"}
+{"q":"Su quale continente si trova Washington di Denzel?","lang":"it","t":"ambiguous"}
+{"q":"Which continent is Phoenix, as in Joaquin, on?","lang":"en","t":"ambiguous"}
+{"q":"la capitale di Italia qual è?","lang":"it","t":"geo_ok"}
+{"q":"di che continente fa parte il Brasile?","lang":"it","t":"geo_ok"}
+{"q":"dimmi un po', dove si trova esattamente la Russia?","lang":"it","t":"geo_ok"}
+{"q":"what continent is Egypt actually located in?","lang":"en","t":"geo_ok"}
+{"q":"the capital of Canada, what is it again?","lang":"en","t":"geo_ok"}
+{"q":"in che continente è Abraham Lincoln?","lang":"it","t":"refuse_person"}
+{"q":"qual è la capitale di Albert Einstein?","lang":"it","t":"refuse_person"}
+{"q":"dove si trova Dante Alighieri?","lang":"it","t":"refuse_person"}
+{"q":"what is the capital of Leonardo da Vinci?","lang":"en","t":"refuse_person"}
+{"q":"what continent is Napoleon in?","lang":"en","t":"refuse_person"}
+{"q":"la capitale di Denzel Washington qual è?","lang":"it","t":"ambiguous"}
+{"q":"where is Joaquin Phoenix located?","lang":"en","t":"ambiguous"}
+{"q":"in che continente si trova Washington?","lang":"it","t":"ambiguous"}
+{"q":"dov'è il mio telefono?","lang":"it","t":"overlap"}
+{"q":"in che senso è strano?","lang":"it","t":"overlap"}
+{"q":"where is the settings menu in this app?","lang":"en","t":"overlap"}
+{"q":"dove si trova il file che ho salvato ieri?","lang":"it","t":"overlap"}
+{"q":"che lavoro faceva Leonardo da Vinci?","lang":"it","t":"overlap"}
+{"q":"is Marie Curie a man or a woman?","lang":"en","t":"overlap"}
+{"q":"what continent is Wakanda in?","lang":"en","t":"unknown"}
+{"q":"qual è la capitale di Zorblakia?","lang":"it","t":"unknown"}
+{"q":"dove si trova Glorbax?","lang":"it","t":"unknown"}

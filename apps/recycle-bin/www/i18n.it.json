@@ -1,0 +1,23 @@
+{
+  "_lang": "it",
+  "title": "Cestino",
+  "restore_all": "Ripristina tutto",
+  "empty_bin": "Svuota cestino",
+  "restore": "Ripristina",
+  "count": {
+    "one": "· {count} elemento",
+    "other": "· {count} elementi"
+  },
+  "count_empty": "· vuoto",
+  "empty_title": "Il Cestino è vuoto.",
+  "empty_hint": "I file che elimini in File Commander finiscono qui e possono essere ripristinati.",
+  "toast_restored_to": "Ripristinato in {path}",
+  "toast_restore_failed": "Ripristino non riuscito",
+  "toast_deleted_perm": "Eliminato definitivamente",
+  "toast_restored_all": "Tutto ripristinato",
+  "toast_bin_emptied": "Cestino svuotato",
+  "confirm_empty": {
+    "one": "Eliminare definitivamente {count} elemento? L'operazione non può essere annullata.",
+    "other": "Eliminare definitivamente {count} elementi? L'operazione non può essere annullata."
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NucleoOS</string>
+    <string name="title_activity_main">NucleoOS</string>
+    <string name="package_name">com.nucleoos.app</string>
+    <string name="custom_url_scheme">com.nucleoos.app</string>
+</resources>

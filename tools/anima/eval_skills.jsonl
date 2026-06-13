@@ -1,0 +1,78 @@
+// CURATED skill-routing regression (clean labels) — locks the 2026-06-06 skill-audit fixes.
+// expect: an intent name (a|b alternatives), "abstain" (honest miss on wrong/unanswerable asks), or
+// "answer". Run: node tools/anima-host/skill-probe.mjs tools/anima/eval_skills.jsonl
+// --- calendar: schedule real tasks, refuse questions/capabilities ---
+{"q":"ricordami di comprare il latte","lang":"it","expect":"add_event"}
+{"q":"ricordami di chiamare mamma domani alle 9","lang":"it","expect":"add_event"}
+{"q":"aggiungi al calendario la cena con anna domani","lang":"it","expect":"add_event"}
+{"q":"schedule a meeting next monday","lang":"en","expect":"add_event"}
+{"q":"ricordami di andare dal medico venerdi","lang":"it","expect":"add_event"}
+{"q":"remind me to take out the trash at 8pm","lang":"en","expect":"add_event"}
+{"q":"ricordami di comprare il pane tra una settimana","lang":"it","expect":"add_event"}
+{"q":"ricordami quanto fa 2+2","lang":"it","expect":"calc"}
+{"q":"ricordami che ore sono","lang":"it","expect":"time"}
+{"q":"ricordami il significato di ironia","lang":"it","expect":"abstain"}
+{"q":"sai mettere eventi nel calendario","lang":"it","expect":"abstain"}
+{"q":"cosa devo fare oggi","lang":"it","expect":"agenda"}
+// --- people / facts: answer known, refuse false-premise / fictional ---
+{"q":"in che anno e nato albert einstein","lang":"it","expect":"l1|hdc"}
+{"q":"quando e nato einstein","lang":"it","expect":"l1|hdc"}
+{"q":"in che anno mori barack obama","lang":"it","expect":"abstain"}
+{"q":"chi era il primo imperatore di marte","lang":"it","expect":"abstain"}
+{"q":"chi e taylor swift","lang":"it","expect":"l1|hdc"}
+// --- excel / spreadsheet ---
+{"q":"voglio totalizzare le celle da a1 ad a8","lang":"it","expect":"spreadsheet"}
+{"q":"find the minimum in cells a1 to a9","lang":"en","expect":"spreadsheet"}
+{"q":"concatenate a1 and b1","lang":"en","expect":"spreadsheet"}
+{"q":"vlookup in a cell","lang":"en","expect":"spreadsheet"}
+{"q":"somma le celle da a1 a a5","lang":"it","expect":"spreadsheet"}
+{"q":"2+2","lang":"it","expect":"calc"}
+// --- weather: offline = honest miss, but definitions still answer ---
+{"q":"che tempo fa a roma","lang":"it","expect":"abstain"}
+{"q":"c e il sole a bari","lang":"it","expect":"abstain"}
+{"q":"ci sara vento a trieste domani","lang":"it","expect":"abstain"}
+{"q":"cos e il clima","lang":"it","expect":"answer"}
+{"q":"cos e il sole","lang":"it","expect":"answer"}
+// --- file: literal content, compose-from-knowledge, EN write ---
+{"q":"crea un file con il testo questo e un promemoria","lang":"it","expect":"create_file"}
+{"q":"scrivi una nota che dice ricordati la riunione","lang":"it","expect":"create_file"}
+{"q":"write a note saying hello world","lang":"en","expect":"create_file"}
+{"q":"crea una nota con la capitale della francia","lang":"it","expect":"create_file"}
+// --- device settings (natural-language) ---
+{"q":"volume piu alto","lang":"it","expect":"set_volume"}
+{"q":"fai piu chiaro","lang":"it","expect":"set_brightness"}
+// --- scope / specificity traps (no hallucination) ---
+{"q":"qual e il fiume piu lungo dell'antartide","lang":"it","expect":"abstain"}
+{"q":"qual e la capitale dello stato del karnataka in india","lang":"it","expect":"abstain"}
+// --- deep audit: typo robustness, false-premise, agentic close, settings safety ---
+{"q":"radice cuboca di 8","lang":"it","expect":"calc"}
+{"q":"quanti continenti ha giove","lang":"it","expect":"abstain"}
+{"q":"quanti pianeti ha giove","lang":"it","expect":"abstain"}
+{"q":"quanti anni ha dante","lang":"it","expect":"abstain"}
+{"q":"quanti continenti ci sono","lang":"it","expect":"answer"}
+{"q":"quanti anni hai","lang":"it","expect":"answer"}
+{"q":"chiudi il calendario","lang":"it","expect":"close_app"}
+{"q":"close the calculator","lang":"en","expect":"close_app"}
+{"q":"ho paura del buio","lang":"it","expect":"abstain"}
+{"q":"ho fame oggi","lang":"it","expect":"abstain"}
+{"q":"sono triste oggi","lang":"it","expect":"abstain"}
+{"q":"crea una nota con scritto domani piove","lang":"it","expect":"create_file"}
+{"q":"ricordmai di chiamare il dottore domani alle 9","lang":"it","expect":"add_event"}
+{"q":"non farmi dimenticare la riunione domani alle 14","lang":"it","expect":"add_event"}
+{"q":"aggungi un evento riunione domani alle 10","lang":"it","expect":"add_event"}
+{"q":"cancella il promemoria","lang":"it","expect":"abstain"}
+{"q":"muta il volume","lang":"it","expect":"set_volume"}
+{"q":"volume al 50 percento","lang":"it","expect":"set_volume"}
+{"q":"volume piu basso","lang":"it","expect":"set_volume"}
+{"q":"fai piu chiaro","lang":"it","expect":"set_brightness"}
+{"q":"how do i add an event","lang":"en","expect":"l1|abstain"}
+{"q":"volume del cubo lato 3","lang":"it","expect":"geo"}
+// --- dual-channel lexical rescue: typo'd knowledge recovers; scoped-typo + junk still abstain ---
+{"q":"cos e una varaible","lang":"it","expect":"tier:none"}
+{"q":"che cos e un algoritmno","lang":"it","expect":"l1"}
+{"q":"cos e la fotosintsi","lang":"it","expect":"l1"}
+{"q":"capitale dela francia","lang":"it","expect":"l1|hdc"}
+{"q":"qual e il fiume piu lngo della siberia","lang":"it","expect":"abstain"}
+{"q":"qual e la capitale della baviera","lang":"it","expect":"abstain"}
+{"q":"asdkfj qwerty","lang":"it","expect":"abstain"}
+{"q":"cos e il senso della vita","lang":"it","expect":"abstain"}

@@ -1,0 +1,38 @@
+{"q":"quanto fa il 15% di 240","lang":"it","expect":"percent"}
+{"q":"what is 20% of 80","lang":"en","expect":"percent"}
+{"q":"calcola il 30% di 50","lang":"it","expect":"percent"}
+{"q":"il 50% di 360","lang":"it","expect":"percent"}
+{"q":"qunato fa il 10% di 90","lang":"it","expect":"percent"}
+{"q":"what is 18 percent of 200","lang":"en","expect":"percent"}
+{"q":"12 per 8","lang":"it","expect":"calc"}
+{"q":"7 times 9","lang":"en","expect":"calc"}
+{"q":"100 meno 37","lang":"it","expect":"calc"}
+{"q":"144 diviso 12","lang":"it","expect":"calc"}
+{"q":"56 divided by 7","lang":"en","expect":"calc"}
+{"q":"qaunto fa 8 piu 8","lang":"it","expect":"calc"}
+{"q":"20 gradi in fahrenheit","lang":"it","expect":"convert"}
+{"q":"how many km in 5 miles","lang":"en","expect":"convert"}
+{"q":"2 ore in minuti","lang":"it","expect":"convert"}
+{"q":"convert 10 kg to pounds","lang":"en","expect":"convert"}
+{"q":"5 metri in centimetri","lang":"it","expect":"convert"}
+{"q":"radice quadrata di 144","lang":"it","expect":"calc"}
+{"q":"square root of 81","lang":"en","expect":"calc"}
+{"q":"radice cubica di 27","lang":"it","expect":"calc"}
+{"q":"radice cuboca di 64","lang":"it","expect":"calc"}
+{"q":"2 alla quinta","lang":"it","expect":"calc"}
+{"q":"8 squared","lang":"en","expect":"calc"}
+{"q":"cube root of 125","lang":"en","expect":"calc"}
+{"q":"area di un cerchio raggio 3","lang":"it","expect":"geo"}
+{"q":"perimeter of a square side 5","lang":"en","expect":"geo"}
+{"q":"area di un rettangolo 4 per 6","lang":"it","expect":"geo"}
+{"q":"circonferenza di un cerchio raggio 5","lang":"it","expect":"geo"}
+{"q":"area of a triangle base 10 height 5","lang":"en","expect":"geo"}
+{"q":"volume di una sfera raggio 3","lang":"it","expect":"geo"}
+{"q":"7 e primo","lang":"it","expect":"prime"}
+{"q":"is 17 prime","lang":"en","expect":"prime"}
+{"q":"radice quadrata di una banana","lang":"it","expect":"abstain"}
+{"q":"area di un sentimento","lang":"it","expect":"abstain"}
+{"q":"quanto fa la felicita per due","lang":"it","expect":"abstain"}
+{"q":"square root of happiness","lang":"en","expect":"abstain"}
+{"q":"convert love to kilometers","lang":"en","expect":"abstain"}
+{"q":"dividi il cielo per il mare","lang":"it","expect":"abstain"}

@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clock</title>
+  <style>
+    :root {
+      --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8;
+      --accent:#4ea1ff; --line:#2a3a5e;
+      --ok:#2fd07a; --warn:#f5b13d; --err:#e2576b;
+    }
+    html[data-theme="light"] {
+      --bg:#eef2fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86;
+      --accent:#2b6fd6; --line:#cdd8ee;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font: 14px/1.4 system-ui, "Segoe UI", sans-serif;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* ── Tab bar ─────────────────────────────────── */
+    .tabs {
+      display: flex; align-items: stretch; flex-shrink: 0;
+      background: var(--panel); border-bottom: 1px solid var(--line);
+      padding: 0 4px; gap: 2px;
+    }
+    .tab {
+      flex: 1; padding: 11px 4px 9px;
+      border: none; border-bottom: 2px solid transparent;
+      background: none; color: var(--muted); cursor: pointer;
+      font: inherit; font-size: 13px; text-align: center;
+      border-radius: 6px 6px 0 0;
+      transition: color .15s, border-color .15s;
+    }
+    .tab.active  { color: var(--text); border-bottom-color: var(--accent); }
+    .tab:hover:not(.active) { color: var(--text); background: #80808012; }
+    #gear {
+      flex-shrink: 0; padding: 0 12px; align-self: center;
+      border: none; background: none; color: var(--muted); cursor: pointer; font-size: 18px;
+    }
+    #gear:hover { color: var(--text); }
+
+    /* ── Pages ───────────────────────────────────── */
+    .page {
+      flex: 1; display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 14px 12px; overflow-y: auto;
+    }
+    .page.active { display: flex; }
+
+    /* ── Clock page ──────────────────────────────── */
+    #time {
+      font-size: 80px; font-variant-numeric: tabular-nums;
+      letter-spacing: 2px; line-height: 1; font-weight: 100;
+    }
+    #time.nosec { font-size: 92px; }
+    #ampm { font-size: 28px; font-weight: 400; color: var(--muted); }
+    #date { color: var(--muted); margin-top: 8px; font-size: 14px; }
+    #dev {
+      display: flex; align-items: center; gap: 7px;
+      margin-top: 12px; padding: 5px 14px;
+      border-radius: 20px; background: #80808010;
+      font-size: 11px; color: var(--muted);
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    .dot.ok  { background: var(--ok); }
+    .dot.warn { background: var(--warn); }
+    .dot.err  { background: var(--err); }
+    #analog-wrap { margin-top: 18px; }
+
+    /* ── Shared buttons / rows ───────────────────── */
+    .btn-row { display: flex; gap: 10px; margin-top: 16px; }
+    .btn {
+      padding: 9px 22px; min-width: 80px;
+      border: 1px solid var(--line); background: #80808018;
+      color: var(--text); border-radius: 8px; cursor: pointer; font: inherit;
+      transition: background .15s;
+    }
+    .btn:hover { background: #80808030; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { opacity: .88; }
+
+    /* ── Stopwatch ───────────────────────────────── */
+    .big-num {
+      font-size: 62px; font-variant-numeric: tabular-nums;
+      font-weight: 100; letter-spacing: 1px; line-height: 1;
+    }
+    .frac { font-size: 34px; color: var(--muted); }
+    #laps {
+      margin-top: 14px; width: 100%; max-width: 320px;
+      max-height: 148px; overflow-y: auto;
+      border-radius: 8px; border: 1px solid var(--line);
+    }
+    .lap-row {
+      display: flex; justify-content: space-between;
+      padding: 6px 12px; font-size: 13px; font-variant-numeric: tabular-nums;
+    }
+    .lap-row:nth-child(even) { background: #80808008; }
+    .lap-num { color: var(--muted); }
+
+    /* ── Timer ───────────────────────────────────── */
+    #timer-wrap { position: relative; flex-shrink: 0; }
+    #timer-disp {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 48px; font-variant-numeric: tabular-nums; font-weight: 100;
+    }
+    #timer-done {
+      min-height: 22px; margin-top: 8px;
+      font-size: 14px; font-weight: 500; color: var(--ok);
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+    #timer-done.blink { animation: pulse 1.2s ease-in-out infinite; }
+    .adj-row { display: flex; gap: 8px; margin-top: 14px; }
+    .adj {
+      padding: 7px 16px; font: inherit; font-size: 13px;
+      border: 1px solid var(--line); background: #80808018;
+      color: var(--text); border-radius: 8px; cursor: pointer;
+    }
+    .adj:hover { background: #80808030; }
+
+    /* ── Settings overlay ────────────────────────── */
+    #cfg {
+      position: fixed; inset: 0; background: #0008;
+      display: none; align-items: center; justify-content: center; z-index: 100;
+    }
+    #cfg.open { display: flex; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; min-width: 250px; max-width: 320px; width: 90%; }
+    .card h2 { margin: 0 0 14px; font-size: 15px; color: var(--accent); }
+    .opt { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+    .opt:last-of-type { border-bottom: none; }
+    .opt label { color: var(--text); font-size: 13px; cursor: pointer; }
+    .save-msg { color: var(--muted); font-size: 11px; margin-top: 10px; min-height: 14px; }
+  </style>
+</head>
+<body>
+
+<div class="tabs">
+  <button class="tab active" data-tab="clock"  data-i18n="tab_clock">Clock</button>
+  <button class="tab"        data-tab="sw"      data-i18n="stopwatch">Stopwatch</button>
+  <button class="tab"        data-tab="timer"   data-i18n="tab_timer">Timer</button>
+  <button id="gear" title="Settings">⚙</button>
+</div>
+
+<!-- ── Clock ── -->
+<div class="page active" id="page-clock">
+  <div id="time">--:--</div>
+  <div id="date">—</div>
+  <div id="dev">
+    <span class="dot" id="dev-dot"></span>
+    <span id="dev-txt" data-i18n="dev_init"></span>
+  </div>
+  <div id="analog-wrap">
+    <svg id="analog" viewBox="0 0 200 200" width="150" height="150" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+</div>
+
+<!-- ── Stopwatch ── -->
+<div class="page" id="page-sw">
+  <div class="big-num" id="sw-disp">00:00<span class="frac">.0</span></div>
+  <div class="btn-row">
+    <button class="btn primary" id="se" data-i18n="start">Start</button>
+    <button class="btn"         id="sl" data-i18n="lap">Lap</button>
+    <button class="btn"         id="sr" data-i18n="reset">Reset</button>
+  </div>
+  <div id="laps"></div>
+</div>
+
+<!-- ── Timer ── -->
+<div class="page" id="page-timer">
+  <div id="timer-wrap">
+    <svg id="timer-svg" viewBox="0 0 200 200" width="190" height="190" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="100" cy="100" r="80" fill="none" stroke="var(--line)" stroke-width="10"/>
+      <circle id="timer-arc" cx="100" cy="100" r="80" fill="none"
+        stroke="var(--accent)" stroke-width="10" stroke-linecap="round"
+        transform="rotate(-90 100 100)"/>
+    </svg>
+    <div id="timer-disp">05:00</div>
+  </div>
+  <div id="timer-done"></div>
+  <div class="adj-row">
+    <button class="adj" id="t-m1">−1m</button>
+    <button class="adj" id="t-s10">−10s</button>
+    <button class="adj" id="t-ps10">+10s</button>
+    <button class="adj" id="t-pm1">+1m</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn primary" id="te" data-i18n="start">Start</button>
+    <button class="btn"         id="tr" data-i18n="reset">Reset</button>
+  </div>
+</div>
+
+<!-- ── Settings ── -->
+<div id="cfg">
+  <div class="card">
+    <h2 data-i18n="cfg_title">Clock settings</h2>
+    <div class="opt">
+      <label for="o24" data-i18n="opt_24h">24-hour clock</label>
+      <input type="checkbox" id="o24">
+    </div>
+    <div class="opt">
+      <label for="osec" data-i18n="opt_seconds">Show seconds</label>
+      <input type="checkbox" id="osec">
+    </div>
+    <div class="opt">
+      <label for="oanal" data-i18n="opt_analog">Analog clock</label>
+      <input type="checkbox" id="oanal">
+    </div>
+    <div class="save-msg" id="cfgsave"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px">
+      <button class="btn" id="cfgclose" data-i18n="close">Close</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import I18N from '/nucleo-i18n.js';
+const t = await I18N.init('clock');
+
+const $ = id => document.getElementById(id);
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+
+// ── Prefs ─────────────────────────────────────────────────────────────────────
+const CFG_PATH      = '/system/config/clock.json';
+const SETTINGS_PATH = '/system/config/settings.json';
+const prefs = { format24: true, showSeconds: true, analog: true };
+let locale;
+
+async function readJSON(path) {
+  try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+    return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; }
+}
+async function writeJSON(path, obj) {
+  try { return (await fetch('/api/fs/write?path=' + encodeURIComponent(path),
+    { method: 'POST', body: JSON.stringify(obj, null, 2) })).ok; } catch { return false; }
+}
+async function loadSettings() {
+  const s = await readJSON(SETTINGS_PATH);
+  if (s?.ui?.theme)     document.documentElement.dataset.theme = s.ui.theme;
+  if (s?.device?.locale) locale = s.device.locale;
+}
+async function loadPrefs() {
+  const p = await readJSON(CFG_PATH);
+  if (p && typeof p === 'object') Object.assign(prefs, p);
+  $('o24').checked  = !!prefs.format24;
+  $('osec').checked = !!prefs.showSeconds;
+  $('oanal').checked = prefs.analog !== false;
+  applyAnalog();
+}
+function applyAnalog() {
+  $('analog-wrap').style.display = prefs.analog !== false ? '' : 'none';
+}
+
+// ── Analog clock (SVG, built once) ───────────────────────────────────────────
+const NS  = 'http://www.w3.org/2000/svg';
+const svg = $('analog');
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+// Face ring
+svg.appendChild(svgEl('circle', { cx:100, cy:100, r:88, fill:'none', stroke:'var(--line)', 'stroke-width':1 }));
+
+// Tick marks
+for (let i = 0; i < 60; i++) {
+  const isHr = i % 5 === 0;
+  const g = svgEl('g', { transform: `rotate(${i * 6}, 100, 100)` });
+  g.appendChild(svgEl('line', {
+    x1:100, y1: isHr ? 18 : 21, x2:100, y2:12,
+    stroke: isHr ? 'var(--muted)' : 'var(--line)',
+    'stroke-width': isHr ? 2 : 1, 'stroke-linecap': 'round',
+  }));
+  svg.appendChild(g);
+}
+
+// Hands
+const hHand = svgEl('line', { x1:100, y1:100, x2:100, y2:50, stroke:'var(--text)', 'stroke-width':5, 'stroke-linecap':'round' });
+const mHand = svgEl('line', { x1:100, y1:100, x2:100, y2:30, stroke:'var(--text)', 'stroke-width':3, 'stroke-linecap':'round' });
+const sHand = svgEl('line', { x1:100, y1:115, x2:100, y2:24, stroke:'var(--accent)', 'stroke-width':1.5, 'stroke-linecap':'round' });
+const pivot = svgEl('circle', { cx:100, cy:100, r:4, fill:'var(--bg)', stroke:'var(--accent)', 'stroke-width':2 });
+svg.append(hHand, mHand, sHand, pivot);
+
+function updateAnalog(d) {
+  const sec = d.getSeconds(), min = d.getMinutes(), hr = d.getHours() % 12;
+  hHand.setAttribute('transform', `rotate(${(hr + min / 60) * 30}, 100, 100)`);
+  mHand.setAttribute('transform', `rotate(${(min + sec / 60) * 6}, 100, 100)`);
+  sHand.setAttribute('transform', `rotate(${sec * 6}, 100, 100)`);
+}
+
+// ── Main clock tick ───────────────────────────────────────────────────────────
+function tick() {
+  const d = new Date();
+  let h = d.getHours(), suffix = '';
+  if (!prefs.format24) { suffix = h < 12 ? ' AM' : ' PM'; h = h % 12 || 12; }
+  let ts = `${prefs.format24 ? pad(h) : h}:${pad(d.getMinutes())}`;
+  if (prefs.showSeconds) ts += `:${pad(d.getSeconds())}`;
+  const el = $('time');
+  el.innerHTML = ts + (suffix ? `<span id="ampm">${suffix}</span>` : '');
+  el.className = prefs.showSeconds ? '' : 'nosec';
+  $('date').textContent = d.toLocaleDateString(locale,
+    { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  if (prefs.analog !== false) updateAnalog(d);
+}
+
+// ── Device badge + silent browser-time push ───────────────────────────────────
+// In the shell the desktop already polls /api/status every 15 s and rebroadcasts it as a
+// status.snapshot message — we consume that instead of fetching our own copy. Only standalone
+// (opened directly, not embedded) do we poll the device ourselves.
+const EMBEDDED = window.top !== window.self;
+let timePushed = false;
+async function pollDevice(snap) {
+  try {
+    const st = snap || await (await fetch('/api/status', { cache: 'no-store' })).json();
+    const net = st?.network;
+    const dot = $('dev-dot'), txt = $('dev-txt');
+    if (!net) { dot.className = 'dot err'; txt.textContent = t('dev_unreachable'); return; }
+    if (net.time_synced && net.time) {
+      const dev  = new Date(net.time * 1000);
+      const drift = Math.abs(dev.getTime() - Date.now()) / 1000;
+      dot.className = 'dot ' + (drift > 120 ? 'warn' : 'ok');
+      const hh = pad(dev.getHours()), mm = pad(dev.getMinutes());
+      txt.textContent = drift > 120
+        ? t('dev_synced_drift', { secs: Math.round(drift), hh, mm })
+        : t('dev_synced', { hh, mm });
+    } else {
+      // Push browser clock once as best-effort fallback (no auth needed, low risk)
+      if (!timePushed) {
+        timePushed = true;
+        try {
+          const ok = (await fetch('/api/time/set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ts: Math.floor(Date.now() / 1000) }),
+          })).ok;
+          if (ok) { dot.className = 'dot ok'; txt.textContent = t('dev_browser_set'); return; }
+        } catch {}
+      }
+      dot.className = 'dot warn'; txt.textContent = t('dev_waiting');
+    }
+  } catch {
+    $('dev-dot').className = 'dot err'; $('dev-txt').textContent = t('dev_unreachable');
+  }
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.tab,.page').forEach(el => el.classList.remove('active'));
+    btn.classList.add('active');
+    $('page-' + btn.dataset.tab).classList.add('active');
+  };
+});
+
+// ── Stopwatch ─────────────────────────────────────────────────────────────────
+let swBase = 0, swStart = 0, swRunning = false, swRaf;
+let lapTimes = [], lapCum = [];
+const swDisp = $('sw-disp'), lapsEl = $('laps');
+
+function showSw(ms) {
+  const m = Math.floor(ms / 60000), s = Math.floor(ms % 60000 / 1000), f = Math.floor(ms % 1000 / 100);
+  swDisp.innerHTML = `${pad(m)}:${pad(s)}<span class="frac">.${f}</span>`;
+}
+function loopSw() { if (!swRunning) return; showSw(swBase + (performance.now() - swStart)); swRaf = requestAnimationFrame(loopSw); }
+
+$('se').onclick = () => {
+  if (swRunning) {
+    swRunning = false; swBase += performance.now() - swStart; cancelAnimationFrame(swRaf);
+    $('se').textContent = t('start'); $('se').className = 'btn primary';
+  } else {
+    swRunning = true; swStart = performance.now();
+    $('se').textContent = t('stop'); $('se').className = 'btn';
+    loopSw();
+  }
+};
+$('sl').onclick = () => {
+  const elapsed = swBase + (swRunning ? performance.now() - swStart : 0);
+  if (elapsed < 100) return;
+  const prev = lapCum.length ? lapCum[lapCum.length - 1] : 0;
+  lapCum.push(elapsed); lapTimes.unshift(elapsed - prev);
+  if (lapTimes.length > 10) { lapTimes.pop(); lapCum.shift(); }
+  lapsEl.innerHTML = lapTimes.map((ms, i) => {
+    const n = lapTimes.length - i;
+    const m = Math.floor(ms / 60000), s = Math.floor(ms % 60000 / 1000), cs = Math.floor(ms % 1000 / 10);
+    return `<div class="lap-row"><span class="lap-num">${t('lap')} ${n}</span><span>${pad(m)}:${pad(s)}.${pad(cs)}</span></div>`;
+  }).join('');
+};
+$('sr').onclick = () => {
+  swRunning = false; swBase = 0; lapTimes = []; lapCum = [];
+  cancelAnimationFrame(swRaf); lapsEl.innerHTML = ''; showSw(0);
+  $('se').textContent = t('start'); $('se').className = 'btn primary';
+};
+showSw(0);
+
+// ── Timer ─────────────────────────────────────────────────────────────────────
+const CIRCUM = 2 * Math.PI * 80;
+const timerArc  = $('timer-arc');
+const timerDisp = $('timer-disp');
+const timerDone = $('timer-done');
+timerArc.setAttribute('stroke-dasharray', CIRCUM);
+
+let timerTotal = 5 * 60 * 1000, timerBase = 0, timerStart = 0, timerRunning = false, timerRaf;
+
+function showTimer(remain) {
+  const m = Math.floor(remain / 60000), s = Math.floor(remain % 60000 / 1000);
+  timerDisp.textContent = `${pad(m)}:${pad(s)}`;
+  timerArc.setAttribute('stroke-dashoffset', CIRCUM * (1 - remain / Math.max(timerTotal, 1)));
+}
+
+function beep() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.frequency.value = 880;
+    g.gain.setValueAtTime(0.3, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1);
+    osc.start(); osc.stop(ctx.currentTime + 1);
+    setTimeout(() => ctx.close(), 1200);
+  } catch {}
+}
+
+function loopTimer() {
+  if (!timerRunning) return;
+  const remain = Math.max(0, timerTotal - timerBase - (performance.now() - timerStart));
+  showTimer(remain);
+  if (remain <= 0) {
+    timerRunning = false; timerBase = timerTotal;
+    timerDone.textContent = t('timer_done'); timerDone.classList.add('blink');
+    $('te').textContent = t('start'); $('te').className = 'btn primary';
+    beep(); return;
+  }
+  timerRaf = requestAnimationFrame(loopTimer);
+}
+
+$('te').onclick = () => {
+  if (timerRunning) {
+    timerRunning = false; timerBase += performance.now() - timerStart; cancelAnimationFrame(timerRaf);
+    $('te').textContent = t('start'); $('te').className = 'btn primary';
+  } else {
+    if (timerBase >= timerTotal) { timerBase = 0; timerDone.textContent = ''; timerDone.classList.remove('blink'); }
+    timerRunning = true; timerStart = performance.now();
+    timerDone.textContent = ''; timerDone.classList.remove('blink');
+    $('te').textContent = t('stop'); $('te').className = 'btn';
+    loopTimer();
+  }
+};
+$('tr').onclick = () => {
+  timerRunning = false; timerBase = 0; cancelAnimationFrame(timerRaf);
+  timerDone.textContent = ''; timerDone.classList.remove('blink');
+  $('te').textContent = t('start'); $('te').className = 'btn primary';
+  showTimer(timerTotal);
+};
+
+function adjustTimer(delta) {
+  if (timerRunning) return;
+  timerTotal = Math.max(10000, timerTotal + delta);
+  timerBase  = 0; timerDone.textContent = ''; timerDone.classList.remove('blink');
+  showTimer(timerTotal);
+}
+$('t-m1').onclick   = () => adjustTimer(-60000);
+$('t-s10').onclick  = () => adjustTimer(-10000);
+$('t-ps10').onclick = () => adjustTimer( 10000);
+$('t-pm1').onclick  = () => adjustTimer( 60000);
+
+showTimer(timerTotal);
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+$('gear').onclick     = () => $('cfg').classList.add('open');
+$('cfgclose').onclick = () => $('cfg').classList.remove('open');
+
+async function onPrefChange() {
+  prefs.format24    = $('o24').checked;
+  prefs.showSeconds = $('osec').checked;
+  prefs.analog      = $('oanal').checked;
+  tick(); applyAnalog();
+  $('cfgsave').textContent = t('saving');
+  $('cfgsave').textContent = (await writeJSON(CFG_PATH, prefs)) ? t('save_ok') : t('save_fail');
+}
+$('o24').onchange   = onPrefChange;
+$('osec').onchange  = onPrefChange;
+$('oanal').onchange = onPrefChange;
+
+window.addEventListener('message', e => {
+  if (e.data?.t === 'fs.changed' && typeof e.data.d?.path === 'string') {
+    if (e.data.d.path.endsWith('settings.json')) loadSettings().then(tick);
+    if (e.data.d.path.endsWith('clock.json'))    loadPrefs().then(tick);
+  }
+  if (e.data?.type === 'set-theme' && e.data.theme)
+    document.documentElement.dataset.theme = e.data.theme;
+});
+I18N.onChange(() => {
+  $('se').textContent = swRunning    ? t('stop') : t('start');
+  $('te').textContent = timerRunning ? t('stop') : t('start');
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await loadSettings();
+  await loadPrefs();
+  tick(); setInterval(tick, 250);
+  if (EMBEDDED) {
+    // Driven by the shell's status.snapshot broadcast — no own /api/status poll.
+    window.addEventListener('message', (e) => { if (e.data && e.data.t === 'status.snapshot') pollDevice(e.data.d); });
+  } else {
+    pollDevice(); setInterval(pollDevice, 15000);
+  }
+}
+init();
+</script>
+</body>
+</html>

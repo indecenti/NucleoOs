@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recycle Bin</title>
+<style>
+  :root { --bg:#0b1220; --panel:#18233a; --panel2:#1f2d4a; --accent:#4ea1ff;
+          --text:#e8eefc; --muted:#8aa0c8; --line:#2a3a5e; --danger:#ff8093; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 14px/1.4 system-ui, "Segoe UI", Roboto, sans-serif; color: var(--text);
+         background: var(--bg); display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+           background: var(--panel2); border-bottom: 1px solid var(--line); flex: none; }
+  header .title { font-weight: 600; flex: 1; display: flex; align-items: center; gap: 8px; }
+  header .count { color: var(--muted); font-weight: 400; font-size: 12px; }
+  button { border: 1px solid var(--line); background: #ffffff10; color: var(--text);
+           border-radius: 7px; padding: 6px 11px; cursor: pointer; font: inherit; font-size: 12px; }
+  button:hover { background: #ffffff1f; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.danger { color: var(--danger); border-color: #e0556b55; }
+  button.danger:hover { background: #e0556b22; }
+  #list { flex: 1; overflow: auto; padding: 8px; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 9px; }
+  .row:hover { background: #ffffff0d; }
+  .row .g { font-size: 22px; width: 26px; text-align: center; flex: none; }
+  .row .info { flex: 1; min-width: 0; }
+  .row .name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .orig { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .when { font-size: 11px; color: var(--muted); flex: none; }
+  .row .acts { display: flex; gap: 6px; flex: none; }
+  .empty { display: grid; place-items: center; height: 100%; color: var(--muted); text-align: center; padding: 20px; }
+  .empty .big { font-size: 44px; opacity: .5; margin-bottom: 8px; }
+  .toast { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+           background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+           padding: 8px 14px; font-size: 12px; box-shadow: 0 10px 30px #0008; opacity: 0;
+           transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="title">♻️ <span data-i18n="title">Recycle Bin</span> <span class="count" id="count"></span></span>
+    <button id="restore-all" data-i18n="restore_all">Restore all</button>
+    <button id="empty" class="danger" data-i18n="empty_bin">Empty bin</button>
+  </header>
+  <div id="list"></div>
+  <div class="toast" id="toast"></div>
+
+<script type="module">
+  import I18N from '/nucleo-i18n.js';
+  const t = await I18N.init('recycle-bin');
+  // The trash is written by File Commander; we read/operate on the same canonical files.
+  const TRASH_DB = '/system/config/trash.json';
+  const api = (op, path, opts = {}) =>
+    fetch('/api/fs/' + op + '?path=' + encodeURIComponent(path), opts);
+  const GLYPH = { txt:'📄', md:'📄', json:'📄', log:'📜', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️',
+                  mp3:'🎵', wav:'🎵', mp4:'🎬', webm:'🎬', pdf:'📕', zip:'🗜️', jsdos:'🕹️' };
+  const glyph = (n) => GLYPH[(n.split('.').pop() || '').toLowerCase()] || '📄';
+  const fmtWhen = (ts) => { try { return new Date(ts).toLocaleString(); } catch { return ''; } };
+
+  let toastTimer = null;
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  async function loadDb() {
+    try { const r = await api('read', TRASH_DB); if (r.ok) { const d = JSON.parse(await r.text()); if (Array.isArray(d.items)) return d; } } catch {}
+    return { items: [] };
+  }
+  const saveDb = (db) => api('write', TRASH_DB, { method: 'POST', body: JSON.stringify(db) });
+
+  async function restore(item) {
+    try {
+      const buf = await (await api('read', item.trash)).arrayBuffer();
+      await api('write', item.orig, { method: 'POST', body: buf });
+      await api('delete', item.trash, { method: 'POST' });
+      const db = await loadDb(); db.items = db.items.filter((i) => i.trash !== item.trash); await saveDb(db);
+      toast(t('toast_restored_to', { path: item.orig }));
+    } catch { toast(t('toast_restore_failed')); }
+    render();
+  }
+  async function purge(item) {
+    try { await api('delete', item.trash, { method: 'POST' }); } catch {}
+    const db = await loadDb(); db.items = db.items.filter((i) => i.trash !== item.trash); await saveDb(db);
+    toast(t('toast_deleted_perm')); render();
+  }
+  async function restoreAll() {
+    const db = await loadDb();
+    for (const item of [...db.items]) {
+      try {
+        const buf = await (await api('read', item.trash)).arrayBuffer();
+        await api('write', item.orig, { method: 'POST', body: buf });
+        await api('delete', item.trash, { method: 'POST' });
+      } catch {}
+    }
+    await saveDb({ items: [] }); toast(t('toast_restored_all')); render();
+  }
+  async function empty() {
+    const db = await loadDb();
+    if (db.items.length && !confirm(t('confirm_empty', { count: db.items.length }))) return;
+    for (const item of db.items) { try { await api('delete', item.trash, { method: 'POST' }); } catch {} }
+    await saveDb({ items: [] }); toast(t('toast_bin_emptied')); render();
+  }
+
+  function row(item) {
+    const el = document.createElement('div');
+    el.className = 'row';
+    el.innerHTML =
+      '<span class="g">' + glyph(item.name) + '</span>' +
+      '<span class="info"><div class="name"></div><div class="orig"></div></span>' +
+      '<span class="when">' + fmtWhen(item.ts) + '</span>' +
+      '<span class="acts"></span>';
+    el.querySelector('.name').textContent = item.name;
+    el.querySelector('.orig').textContent = item.orig;
+    const acts = el.querySelector('.acts');
+    const rb = document.createElement('button'); rb.textContent = t('restore'); rb.onclick = () => restore(item);
+    const db = document.createElement('button'); db.textContent = t('delete'); db.className = 'danger'; db.onclick = () => purge(item);
+    acts.append(rb, db);
+    return el;
+  }
+
+  async function render() {
+    const db = await loadDb();
+    const list = document.getElementById('list');
+    const items = db.items || [];
+    document.getElementById('count').textContent = items.length ? t('count', { count: items.length }) : t('count_empty');
+    document.getElementById('restore-all').disabled = !items.length;
+    document.getElementById('empty').disabled = !items.length;
+    list.innerHTML = '';
+    if (!items.length) {
+      list.innerHTML = '<div class="empty"><div><div class="big">♻️</div><span data-i18n="empty_title">The Recycle Bin is empty.</span><br><span data-i18n="empty_hint">Files you delete in File Commander land here and can be restored.</span></div></div>';
+      return;
+    }
+    for (const item of items) list.appendChild(row(item));
+  }
+
+  document.getElementById('restore-all').onclick = restoreAll;
+  document.getElementById('empty').onclick = empty;
+  // Live refresh when the trash changes on the device (shell forwards fs.changed events).
+  window.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d) return;
+    if (d.t === 'fs.changed' && d.d && typeof d.d.path === 'string' && d.d.path.endsWith('trash.json')) render();
+    if (d.type === 'os-shortcut' && d.action === 'refresh') render();
+  });
+  // Re-render so imperatively-built strings (count, row buttons) follow a live language switch.
+  I18N.onChange(render);
+  render();
+</script>
+</body>
+</html>

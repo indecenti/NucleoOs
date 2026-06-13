@@ -1,0 +1,2766 @@
+{
+  "generated": "tools/gen-test-registry.mjs",
+  "categories": [
+    {
+      "id": "nl-hallucination",
+      "label": "NL · Anti-allucinazione",
+      "nl": true,
+      "desc": "Trappole avversariali: ogni risposta confidente a una richiesta inananswerabile è un fallimento. Il cuore della sicurezza.",
+      "anima": true
+    },
+    {
+      "id": "nl-skill-routing",
+      "label": "NL · Routing skill",
+      "nl": true,
+      "desc": "La richiesta giusta raggiunge lo strumento giusto; la skill non pesta mai i piedi alla conoscenza e viceversa.",
+      "anima": true
+    },
+    {
+      "id": "nl-knowledge",
+      "label": "NL · Conoscenza & recupero",
+      "nl": true,
+      "desc": "Retrieval L1/L2, definizioni, descrizioni, entità: risposte fondate o astensione onesta, mai fabbricate.",
+      "anima": true
+    },
+    {
+      "id": "nl-reasoning",
+      "label": "NL · Ragionamento",
+      "nl": true,
+      "desc": "Deduzione KGE, recall HDC, composizione: fatti dedotti, mai memorizzati né inventati.",
+      "anima": true
+    },
+    {
+      "id": "nl-math",
+      "label": "NL · Matematica & calcolo",
+      "nl": true,
+      "desc": "Ogni risposta matematica esatta + parità col gemello JS.",
+      "anima": true
+    },
+    {
+      "id": "nl-memory",
+      "label": "NL · Memoria & profilo",
+      "nl": true,
+      "desc": "Apprendimento utente e profilo personale tipato: recall per parafrasi, zero misattribuzioni.",
+      "anima": true
+    },
+    {
+      "id": "nl-translate",
+      "label": "NL · Traduzione",
+      "nl": true,
+      "desc": "Traduttore offline IT↔EN via dizionario: tradotti fondati, decline onesto, zero falsi positivi.",
+      "anima": true
+    },
+    {
+      "id": "nl-weather",
+      "label": "NL · Meteo",
+      "nl": true,
+      "desc": "NLU meteo: estrazione luogo/data, tier offline/ibrida/online.",
+      "anima": true
+    },
+    {
+      "id": "cascade-infra",
+      "label": "Cascata · Infrastruttura",
+      "nl": false,
+      "desc": "Orchestratore, loop agentico, coerenza dei pacchetti indice/encoder.",
+      "anima": true
+    },
+    {
+      "id": "knowledge-graph",
+      "label": "Knowledge Graph & Ledger",
+      "nl": false,
+      "desc": "Auto-evoluzione tassonomia (Wikidata) e libro mastro verificabile immutabile.",
+      "anima": true
+    },
+    {
+      "id": "forge-webllm",
+      "label": "ANIMA Forge / WebLLM (M4)",
+      "nl": false,
+      "desc": "Editor agentico nel browser: firewall azioni, verifica cross-substrato, download/engine, provenienza.",
+      "anima": false
+    },
+    {
+      "id": "app-spreadsheet",
+      "label": "App · Foglio di calcolo",
+      "nl": true,
+      "desc": "Motore formule Excel-class + NL→formula del copilot.",
+      "anima": false
+    },
+    {
+      "id": "app-paint",
+      "label": "App · Paint",
+      "nl": false,
+      "desc": "Imaging e comandi NL della Paint Atelier.",
+      "anima": false
+    },
+    {
+      "id": "app-shell",
+      "label": "App · Shell & tool",
+      "nl": false,
+      "desc": "Browser, scorciatoie, terminale, percorsi file, NFV video.",
+      "anima": false
+    },
+    {
+      "id": "app-device",
+      "label": "App · Device & HW",
+      "nl": false,
+      "desc": "UI device e bridge USB-HID.",
+      "anima": false
+    },
+    {
+      "id": "device-load",
+      "label": "Device · Carico & RAM",
+      "nl": false,
+      "desc": "Stress concorrente del web server su device reale: l'arbitro heavy-work serializza il TLS, l'heap regge sopra il floor, zero crash. Richiede un device flashato (SKIP se assente).",
+      "anima": false
+    },
+    {
+      "id": "connect-transfer",
+      "label": "Connessione · Trasferimento (Vicino)",
+      "nl": false,
+      "desc": "Scambio file/comandi device-to-device via ESP-NOW: protocollo affidabile host-testato (finestra+ACK+CRC32+resume sotto perdita/riordino/duplicazione, codec Bruce wire-compatibile) e skill ANIMA gated (schema chiuso, azioni mutanti fail-closed).",
+      "anima": false
+    },
+    {
+      "id": "security",
+      "label": "Sicurezza · Attacchi (test autorizzati)",
+      "nl": false,
+      "desc": "Strumenti offensivi per test autorizzati: il core dei frame dell'engine Ethernet L2/L3 (W5500 MACRAW — ARP/DHCP/TCP build+parse, checksum IP/UDP/TCP, subnet, MAC random, OUI) host-testato. Pura logica C, nessun device. Un byte sbagliato = un attacco morto.",
+      "anima": false
+    },
+    {
+      "id": "build-lint",
+      "label": "Build & lint",
+      "nl": false,
+      "desc": "Validazione asset/manifest e drift dello spec API.",
+      "anima": false
+    }
+  ],
+  "tests": [
+    {
+      "id": "gate-pack-coherence",
+      "label": "pack-coherence",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima/check_pack.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-regress-corpus-l1",
+      "label": "regress (corpus+L1)",
+      "category": "nl-knowledge",
+      "kind": "gate",
+      "cmd": "python",
+      "args": [
+        "tools/anima/regress.py"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-route-check",
+      "label": "route-check",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/route-check.mjs",
+        "--snapshot"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "diffs",
+          "re": "(\\d+) routing change"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-l1-parity-prefilter",
+      "label": "l1-parity (prefilter)",
+      "category": "nl-knowledge",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/l1-parity.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-l1-recall-asym",
+      "label": "l1-recall (asym)",
+      "category": "nl-knowledge",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/l1-recall.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-agent-check",
+      "label": "agent-check",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/agent-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-math-check",
+      "label": "math-check",
+      "category": "nl-math",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/math-check.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "(\\d+)/\\d+ exact"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-reason-check",
+      "label": "reason-check",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/reason-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-ood-check-safety",
+      "label": "ood-check (safety)",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/ood-check.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "halluc",
+          "re": "FALSE-POSITIVE\\(bad\\)\\s+(\\d+)"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-reliability-traps",
+      "label": "reliability (traps)",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/ood-check.mjs",
+        "tools/anima/eval_traps.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "halluc",
+          "re": "FALSE-POSITIVE\\(bad\\)\\s+(\\d+)"
+        },
+        {
+          "k": "cases",
+          "re": "out-of-scope \\((\\d+)\\)"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-halluc-stress",
+      "label": "halluc-stress",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/halluc-stress.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "HALLUCINATIONS:\\s*\\d+/(\\d+)"
+        },
+        {
+          "k": "halluc",
+          "re": "HALLUCINATIONS:\\s*(\\d+)/"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-halluc-battery-nl",
+      "label": "halluc-battery (NL)",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/halluc-suite.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "(\\d+)\\s*adversarial traps"
+        },
+        {
+          "k": "halluc",
+          "re": "traps\\s*\\u00b7\\s*(\\d+)\\s*fabrication"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-realistic-nl",
+      "label": "realistic (NL)",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/realistic.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "(\\d+)\\s*programmatic requests"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-skill-knowledge-boundary",
+      "label": "skill<->knowledge boundary",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/boundary.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "(\\d+) definition \\+ (\\d+) compute \\+ (\\d+) reverse",
+          "agg": "sum"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-metamorph-nl",
+      "label": "metamorph (NL)",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/metamorph.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "->\\s*(\\d+)\\s*derived mutants"
+        },
+        {
+          "k": "halluc",
+          "re": "(\\d+)\\s*invariance break"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-nl-stress-offline",
+      "label": "nl-stress (offline)",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/nl-stress.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "halluc",
+          "re": "TOTAL HALLUCINATIONS:\\s*(\\d+)"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-fluency-grounded-l2",
+      "label": "fluency-grounded (L2)",
+      "category": "nl-knowledge",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/fluency-grounded.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-describe-stress-nl",
+      "label": "describe-stress (NL)",
+      "category": "nl-knowledge",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/describe-stress.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "(\\d+) cases"
+        },
+        {
+          "k": "halluc",
+          "re": "fabrications (\\d+)"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-skill-routing",
+      "label": "skill-routing",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_skills.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-skill-routing-2",
+      "label": "skill-routing-2",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_skills2.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-false-positives-nl",
+      "label": "false-positives (NL)",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_skills3.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-false-positives-2-nl",
+      "label": "false-positives-2 (NL)",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_skills4.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-cross-topic-halluc-nl",
+      "label": "cross-topic halluc (NL)",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_skills5.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-halluc-probe-it",
+      "label": "halluc-probe IT",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/halluc-probe.mjs",
+        "tools/anima/eval_halluc_it.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "(\\d+) honestly abstained"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-halluc-probe-en",
+      "label": "halluc-probe EN",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/halluc-probe.mjs",
+        "tools/anima/eval_halluc_en.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "(\\d+) honestly abstained"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-skill-isolation-paint",
+      "label": "skill-isolation (paint)",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_paint_decline.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-image-gen-stress-nl",
+      "label": "image-gen stress (NL)",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_paint_stress.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-action-tier-false-act",
+      "label": "action-tier (false-act)",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_action.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-cross-skill-xskill",
+      "label": "cross-skill (xskill)",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_xskill.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-skill-coverage-it-s6",
+      "label": "skill-coverage IT (s6)",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_skills6_it.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-skill-coverage-en-s6",
+      "label": "skill-coverage EN (s6)",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_skills6_en.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-skill-coverage-it-s7",
+      "label": "skill-coverage IT (s7)",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_skills7_it.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-skill-coverage-en-s7",
+      "label": "skill-coverage EN (s7)",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_skills7_en.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-skill-coverage-it-s8",
+      "label": "skill-coverage IT (s8)",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_skills8_it.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-skill-coverage-en-s8",
+      "label": "skill-coverage EN (s8)",
+      "category": "nl-skill-routing",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_skills8_en.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-date-excel-halluc-it",
+      "label": "date/excel halluc IT",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/halluc-probe.mjs",
+        "tools/anima/eval_halluc_date_it.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "(\\d+) honestly abstained"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-date-excel-halluc-en",
+      "label": "date/excel halluc EN",
+      "category": "nl-hallucination",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/halluc-probe.mjs",
+        "tools/anima/eval_halluc_date_en.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "(\\d+) honestly abstained"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-combinator-excel-it",
+      "label": "combinator+excel IT",
+      "category": "nl-reasoning",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_combo_date_it.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-combinator-excel-en",
+      "label": "combinator+excel EN",
+      "category": "nl-reasoning",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_combo_date_en.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*\\d+/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-math-dialog-it",
+      "label": "math-dialog IT",
+      "category": "nl-math",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/math-dialog.mjs",
+        "tools/anima/eval_mathdlg_it.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\d+/(\\d+) turns correct"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-math-dialog-en",
+      "label": "math-dialog EN",
+      "category": "nl-math",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/math-dialog.mjs",
+        "tools/anima/eval_mathdlg_en.jsonl"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\d+/(\\d+) turns correct"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-teach-loop-learn",
+      "label": "teach-loop (learn)",
+      "category": "nl-memory",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/teach-check.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-profile-personal",
+      "label": "profile (personal)",
+      "category": "nl-memory",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/profile-check.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-dict-sync-translate",
+      "label": "dict-sync (translate)",
+      "category": "nl-translate",
+      "kind": "gate",
+      "cmd": "python",
+      "args": [
+        "tools/anima/gen_dicts.py",
+        "--check"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-translate-it-en",
+      "label": "translate (IT<->EN)",
+      "category": "nl-translate",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/translate-check.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-dict-stress-bulk-it-en",
+      "label": "dict-stress (bulk IT<->EN)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/dict-stress.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-kge-eval",
+      "label": "kge-eval",
+      "category": "nl-reasoning",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima/kge-eval.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-hdc-eval",
+      "label": "hdc-eval",
+      "category": "nl-reasoning",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima/hdc-eval.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-combinator-eval",
+      "label": "combinator-eval",
+      "category": "nl-reasoning",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima/combinator-eval.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-pcg-eval",
+      "label": "pcg-eval",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima/pcg-eval.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-typed-facets-kg",
+      "label": "typed-facets (KG)",
+      "category": "nl-reasoning",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/typed-check.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-typed-nl-facet",
+      "label": "typed-nl (facet)",
+      "category": "nl-knowledge",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/typed-nl-check.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "(\\d+)/(\\d+) pass"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-entity-detect-online",
+      "label": "entity-detect (online)",
+      "category": "nl-knowledge",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima/entity.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-clean-extract-wiki",
+      "label": "clean-extract (wiki)",
+      "category": "nl-knowledge",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima/clean-extract.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-auto-evolution-vkl",
+      "label": "auto-evolution (VKL)",
+      "category": "knowledge-graph",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/evolution-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-ledger-attack-vkl",
+      "label": "ledger-attack (VKL)",
+      "category": "knowledge-graph",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/ledger-attack-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-contradiction-facts",
+      "label": "contradiction (facts)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/contradiction-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-akb5-content-sharded",
+      "label": "akb5-content (sharded)",
+      "category": "nl-knowledge",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/akb5-content.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "recall \\d+/(\\d+)"
+        },
+        {
+          "k": "halluc",
+          "re": "HALLUCINATIONS (\\d+)"
+        }
+      ],
+      "anima": true
+    },
+    {
+      "id": "gate-arbiter-concurrency",
+      "label": "arbiter (concurrency)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/arb-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-offline-installer",
+      "label": "offline-installer",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-model-store.test.mjs",
+        "tools/anima-host/forge-install-flow.test.mjs",
+        "tools/anima-host/forge-install-integration.test.mjs",
+        "tools/anima-host/forge-model-url-map.test.mjs",
+        "tools/anima-host/forge-local-models.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-tts-voice-plan-index",
+      "label": "tts (voice plan+index)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/tts-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-hw-manifest-nexus",
+      "label": "hw-manifest (NEXUS)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/hw-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-link-proto-espnow",
+      "label": "link-proto (espnow)",
+      "category": "connect-transfer",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/link-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "gate-eth-frames-wired",
+      "label": "eth-frames (wired)",
+      "category": "security",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/eth-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "gate-nearby-skill-scoped",
+      "label": "nearby-skill (scoped)",
+      "category": "connect-transfer",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/nearby-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "gate-app-skill-scoped",
+      "label": "app-skill (scoped)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/skill-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-agent-helpers-anima-code",
+      "label": "agent-helpers (ANIMA Code)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/agent-helpers.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "unit-test",
+      "label": "test.mjs",
+      "category": "app-spreadsheet",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "apps/spreadsheet/test.mjs"
+      ],
+      "verifies": "Spreadsheet ANIMA copilot integration: formula extraction regex and C solver simulation logic",
+      "nl": true,
+      "lang": "it",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-agent-helpers",
+      "label": "agent-helpers.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/agent-helpers.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-actions",
+      "label": "forge-actions.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-actions.test.mjs"
+      ],
+      "verifies": "Action schema firewall blocks unknown ops, out-of-root paths, and garbage without leaking executables outside closed set.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-agent-complex",
+      "label": "forge-agent-complex.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-agent-complex.test.mjs"
+      ],
+      "verifies": "Agentic loop with real execution sandbox: 20 algorithm tasks self-test/fix + 12 behavior tests (syntax error recovery, runtime fix, capguard veto, budget, best-of-N, rejection, multi-step, learning, output capture).",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-capguard",
+      "label": "forge-capguard.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-capguard.test.mjs"
+      ],
+      "verifies": "Capability inference and danger scanning: eval/dynamic-Function blocks, mutation-in-loop block, network exfil policy, severity assessment (ok/warn/block).",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-client",
+      "label": "forge-client.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-client.test.mjs"
+      ],
+      "verifies": "Client routing (off/on/only/local/auto modes), substrate stamping (M1-M4-local), local-provider honesty, translation escalation ladder, mode→substrate mapping.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-delivery",
+      "label": "forge-delivery.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-delivery.test.mjs"
+      ],
+      "verifies": "Weight shard delivery over HTTP Range: bounded windows, reassembly, SHA-256 verification over real socket.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-diffusion-engine",
+      "label": "forge-diffusion-engine.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-diffusion-engine.test.mjs"
+      ],
+      "verifies": "Paint Atelier CLIP tokenizer, WebGPU/WASM probe, MockEngine and ONNX pipeline: seed-deterministic image generation with sketch conditioning.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-download-manager",
+      "label": "forge-download-manager.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-download-manager.test.mjs"
+      ],
+      "verifies": "Download FSM: bounded Range requests, SD 503 backoff and window shrink, verifyInFlight pause, heap-floor pause, SHA retry/recover, cache idempotence, throttle-to-MIN_WINDOW serial.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-download",
+      "label": "forge-download.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-download.test.mjs"
+      ],
+      "verifies": "Download FSM + manifest + bounded Range planning: every shard request is bounded-window Range, never whole-file GET, resume is idempotent.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-engine-loader",
+      "label": "forge-engine-loader.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-engine-loader.test.mjs"
+      ],
+      "verifies": "Engine selection and loading: all options listed (user can see every choice), NO-GPU gets real WASM not cloud, load via injected factories, refuse unavailable with honest reason.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-engine-policy",
+      "label": "forge-engine-policy.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-engine-policy.test.mjs"
+      ],
+      "verifies": "Intelligent fallback chain: local/online/device tiers ordered offline-first, privacy invariant (no cloud leak when target is local), honesty checks (reason accuracy), exhaustive 128-combo coverage, device floor as always-reachable.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-envelope",
+      "label": "forge-envelope.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-envelope.test.mjs"
+      ],
+      "verifies": "Envelope v1 normalization and validation: substrate mapping (mode→M1-M4), all inputs normalize renderer-safe, provenance (grounded flag), numeric/bool coercion.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-extract",
+      "label": "forge-extract.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-extract.test.mjs"
+      ],
+      "verifies": "Claim extraction from code/prose: literals checkable, patterns checkable, bare assertions uncovered, coverage counts (found/checkable/uncovered) honest.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-grammar",
+      "label": "forge-grammar.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-grammar.test.mjs"
+      ],
+      "verifies": "Grammar derived from action schema, no drift between GBNF rule definitions and runtime operations",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-install-flow",
+      "label": "forge-install-flow.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-install-flow.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-install-integration",
+      "label": "forge-install-integration.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-install-integration.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-integration",
+      "label": "forge-integration.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-integration.test.mjs"
+      ],
+      "verifies": "End-to-end session flow: synthesis, verification, approval, application, provenance, learning, and promotion gates all compose safely",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-learn",
+      "label": "forge-learn.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-learn.test.mjs"
+      ],
+      "verifies": "Silent learning flywheel: only certain (pass+approved+ran) artifacts become staged cards; deduplication, collision detection, and empty specs rejected",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-lib-manifest",
+      "label": "forge-lib-manifest.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-lib-manifest.test.mjs"
+      ],
+      "verifies": "Vendored runtime-lib manifest integrity: every entry points to real file with matching size and SHA-256, no drift before flash",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-lib-resolver",
+      "label": "forge-lib-resolver.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-lib-resolver.test.mjs"
+      ],
+      "verifies": "Runtime lib resolution policy: offline-first (SD) with CDN fallback, integrity probes detect truncated files, range probes distinguish device transport states",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-lib-verify",
+      "label": "forge-lib-verify.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-lib-verify.test.mjs"
+      ],
+      "verifies": "Deep SHA verification reads whole SD files in bounded Range windows, detects bit-rot, retries transient errors, backs off on low heap",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-local-models",
+      "label": "forge-local-models.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-local-models.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-loop",
+      "label": "forge-loop.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-loop.test.mjs"
+      ],
+      "verifies": "Agentic loop enforces security invariants: no mutation without approval, vetoed artifacts never applied, loop bounded, firewall blocks unknown ops",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-model-fetch",
+      "label": "forge-model-fetch.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-model-fetch.test.mjs"
+      ],
+      "verifies": "Model download enforces: single-download lock, idempotent SHA verify, bounded windows only, cross-reload resume, scheduler-driven pause on tight device",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-model-manifest",
+      "label": "forge-model-manifest.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-model-manifest.test.mjs"
+      ],
+      "verifies": "Staged LLM model integrity: manifest well-formed, every shard/aux file exists with correct size, SHA hashes are real (spot-check smallest file)",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-model-store",
+      "label": "forge-model-store.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-model-store.test.mjs"
+      ],
+      "verifies": "Model store never auto-downloads, fetches online first with fallback to SD, enforces one-at-a-time downloads, detects SHA mismatches, skips cached shards",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-model-url-map",
+      "label": "forge-model-url-map.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-model-url-map.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-promote",
+      "label": "forge-promote.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-promote.test.mjs"
+      ],
+      "verifies": "Build-time learning gatekeeper: only certain+useful recipes shipped; detects duplicates, collisions, syntax errors, missing provenance, id conflicts",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-provenance",
+      "label": "forge-provenance.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-provenance.test.mjs"
+      ],
+      "verifies": "Provenance hash-chain appends link each artifact, verification detects tampering, off-chain anchor defeats internal re-sealing forgery attacks",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-readiness",
+      "label": "forge-readiness.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-readiness.test.mjs"
+      ],
+      "verifies": "Air-gap readiness classifier correctly rates engine availability across network/capability/cache states with corrupt detection",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-router",
+      "label": "forge-router.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-router.test.mjs"
+      ],
+      "verifies": "Two-stage request router deterministically routes slash/file/code/knowledge/translate requests with VRAM-aware model planning",
+      "nl": true,
+      "lang": "it",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-sandbox",
+      "label": "forge-sandbox.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-sandbox.test.mjs"
+      ],
+      "verifies": "Syntax parser safely validates code without execution or side effects",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-scheduler",
+      "label": "forge-scheduler.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-scheduler.test.mjs"
+      ],
+      "verifies": "MCU coexistence scheduler prevents model pulls from starving verifier or exceeding heap limits",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-sd-model-loader",
+      "label": "forge-sd-model-loader.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-sd-model-loader.test.mjs"
+      ],
+      "verifies": "Chunked SD model reassembler correctly reassembles parts, validates checksums, retries transients, and detects corruption",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-selfcheck",
+      "label": "forge-selfcheck.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-selfcheck.test.mjs"
+      ],
+      "verifies": "Best-of-N selection picks candidate with best test pass rate by executed signal with tie-breakers on capability/size",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-verify-claim",
+      "label": "forge-verify-claim.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-verify-claim.test.mjs"
+      ],
+      "verifies": "Device verifier (M1) judges numeric and fact claims on real firmware cascade, rejecting false/unknown with abstention",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-verify-nl",
+      "label": "forge-verify-nl.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-verify-nl.test.mjs"
+      ],
+      "verifies": "Cross-substrate NL verifier reproduces 100+ Italian and 100+ English claims (capitals/years/arithmetic/entities) with correct verdicts",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-verify",
+      "label": "forge-verify.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-verify.test.mjs"
+      ],
+      "verifies": "Verdict combiner enforces honesty contract: absence-of-evidence→WARN, failed dry-run/contradicted→VETO, full coverage confirmed→PASS",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-wasm-engine",
+      "label": "forge-wasm-engine.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-wasm-engine.test.mjs"
+      ],
+      "verifies": "WASM engine adapter (wllama) probes WebAssembly availability, sizes models by RAM, builds prompt chains, and runs on injected fake engine",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-forge-webllm",
+      "label": "forge-webllm.test.mjs",
+      "category": "forge-webllm",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/forge-webllm.test.mjs"
+      ],
+      "verifies": "WebLLM engine adapter probes WebGPU+VRAM, chooses model plan, embeds GBNF grammar, and runs on injected fake createEngine",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-gemini-provider",
+      "label": "gemini-provider.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/gemini-provider.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-paint-diffusion-engine",
+      "label": "paint-diffusion-engine.test.mjs",
+      "category": "app-paint",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/paint-diffusion-engine.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-paint-imaging",
+      "label": "paint-imaging.test.mjs",
+      "category": "app-paint",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/paint-imaging.test.mjs"
+      ],
+      "verifies": "Paint pixel-processing ops (background removal, alpha, adjustments, filters, transforms) match user-requested specs",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-paint-nlcommand",
+      "label": "paint-nlcommand.test.mjs",
+      "category": "app-paint",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/paint-nlcommand.test.mjs"
+      ],
+      "verifies": "Paint NL command parser routes Italian/English editing phrases and generation requests with correct op/style/prompt extraction",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-paint-online-image",
+      "label": "paint-online-image.test.mjs",
+      "category": "app-paint",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/paint-online-image.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-paint-pipeline",
+      "label": "paint-pipeline.test.mjs",
+      "category": "app-paint",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/paint-pipeline.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-paint-prompt-enhance",
+      "label": "paint-prompt-enhance.test.mjs",
+      "category": "app-paint",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/paint-prompt-enhance.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-paint-providers",
+      "label": "paint-providers.test.mjs",
+      "category": "app-paint",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/paint-providers.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-translate",
+      "label": "translate.test.mjs",
+      "category": "nl-translate",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima/translate.test.mjs"
+      ],
+      "verifies": "Offline translate.mjs JS twin maintains content/routing/zero-false-positive parity with C skill on eval cases",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "unit-weather",
+      "label": "weather.test.mjs",
+      "category": "nl-weather",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima/weather.test.mjs"
+      ],
+      "verifies": "Weather NLU parser extracts city, relative/absolute dates, aspects (rain/sun/temp/snow) from Italian/English queries",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "unit-web-promote",
+      "label": "web-promote.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima/web-promote.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-app-shortcuts",
+      "label": "app-shortcuts.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/app-shortcuts.test.mjs"
+      ],
+      "verifies": "OS keyboard shortcuts resolve correctly per app context (editable vs. not, window focused vs. not) via VM sandbox simulation",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-browser-check",
+      "label": "browser-check.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/browser-check.test.mjs"
+      ],
+      "verifies": "Browser app cleaned of Ultraviolet proxy; source and deploy copies have matching gzipped assets",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-calc-eval",
+      "label": "calc-eval.test.mjs",
+      "category": "nl-math",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/calc-eval.test.mjs"
+      ],
+      "verifies": "Calculator evaluator (JS twin of firmware C) handles operators, precedence, parentheses, decimals, errors correctly",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "unit-control-center-actions",
+      "label": "control-center-actions.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/control-center-actions.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-control-center-poller",
+      "label": "control-center-poller.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/control-center-poller.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-control-center-presets",
+      "label": "control-center-presets.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/control-center-presets.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-control-center-scenes",
+      "label": "control-center-scenes.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/control-center-scenes.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-control-center-selftest",
+      "label": "control-center-selftest.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/control-center-selftest.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-control-center-settings-merge",
+      "label": "control-center-settings-merge.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/control-center-settings-merge.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-device-ui",
+      "label": "device-ui.test.mjs",
+      "category": "app-device",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/device-ui.test.mjs"
+      ],
+      "verifies": "On-device launcher navigation state machine (menu traversal, filtering, context menus, key handling) covers all installed apps",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-files-path",
+      "label": "files-path.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/files-path.test.mjs"
+      ],
+      "verifies": "Files browser path helpers (joinPath, parentPath) mirror firmware navigation logic",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-log-viewer-diag",
+      "label": "log-viewer-diag.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/log-viewer-diag.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-nfv",
+      "label": "nfv.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/nfv/nfv.test.mjs"
+      ],
+      "verifies": "NFV video format writer/reader round-trip: frame chain, index, headers, dirty-frame trimming match spec",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-shell-busy",
+      "label": "shell-busy.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-busy.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-shortcuts",
+      "label": "shortcuts.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shortcuts.test.mjs"
+      ],
+      "verifies": "OS keyboard shortcut resolver fires doc/edit/native actions correctly per window state and editability",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-sim-endpoint-coverage",
+      "label": "sim-endpoint-coverage.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/sim-endpoint-coverage.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-cloud-plan",
+      "label": "cloud-plan.test.mjs",
+      "category": "app-spreadsheet",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/spread-copilot/cloud-plan.test.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-copilot",
+      "label": "copilot.test.mjs",
+      "category": "app-spreadsheet",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/spread-copilot/copilot.test.mjs"
+      ],
+      "verifies": "Spreadsheet copilot firewall, GBNF grammar, offline-first router, recompute verdict, learn/recall, end-to-end orchestration with MockEngine",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-nl-offline",
+      "label": "nl-offline.test.mjs",
+      "category": "app-spreadsheet",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/spread-copilot/nl-offline.test.mjs"
+      ],
+      "verifies": "Spreadsheet planner anti-fabrication on knowledge questions and deterministic op decomposition of Italian/English compound requests",
+      "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-terminal-commands",
+      "label": "terminal-commands.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/terminal-commands.test.mjs"
+      ],
+      "verifies": "Terminal app commands (ls, grep, find, cp, mv, etc.) execute and output correctly via VM DOM/fetch mocks",
+      "nl": true,
+      "lang": "it",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-usb-hid",
+      "label": "usb-hid.test.mjs",
+      "category": "app-device",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/usb-hid.test.mjs"
+      ],
+      "verifies": "USB keyboard HID translation (ASCII→keycode, modifiers, Fn layer) mirrors firmware nucleo_usbhid.c spec",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "extra-spread-nlu-regress",
+      "label": "spread-nlu (regress)",
+      "category": "app-spreadsheet",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "tools/spread-nlu/regress.mjs"
+      ],
+      "verifies": "Regressione NLU del foglio di calcolo (NL→formula).",
+      "nl": true,
+      "lang": "na",
+      "in_gate": false,
+      "anima": false
+    },
+    {
+      "id": "extra-spreadsheet-engine",
+      "label": "spreadsheet engine",
+      "category": "app-spreadsheet",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "apps/spreadsheet/test.mjs"
+      ],
+      "verifies": "Motore formule Excel-class (SUMIFS/VLOOKUP/IF annidato…).",
+      "nl": true,
+      "lang": "na",
+      "in_gate": false,
+      "anima": false
+    },
+    {
+      "id": "extra-api-spec-drift",
+      "label": "api-spec drift",
+      "category": "build-lint",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "tools/gen-api-spec.mjs",
+        "--check"
+      ],
+      "verifies": "Lo Swagger è rigenerato dalle route REALI del firmware (anti-drift).",
+      "nl": false,
+      "lang": "na",
+      "in_gate": false,
+      "anima": false
+    },
+    {
+      "id": "extra-workspace-nlfs",
+      "label": "workspace · nlfs",
+      "category": "nl-skill-routing",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/nlfs-check.mjs"
+      ],
+      "verifies": "ANIMA Workspace: comandi NL sul filesystem (crea/leggi/sposta) della \"Claude Code offline\".",
+      "nl": true,
+      "lang": "na",
+      "in_gate": false,
+      "anima": true
+    },
+    {
+      "id": "extra-workspace-context",
+      "label": "workspace · context",
+      "category": "nl-memory",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/context-check.mjs"
+      ],
+      "verifies": "ANIMA Workspace: compattazione del contesto della sessione.",
+      "nl": true,
+      "lang": "na",
+      "in_gate": false,
+      "anima": true
+    },
+    {
+      "id": "extra-workspace-qgen",
+      "label": "workspace · qgen",
+      "category": "nl-knowledge",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/qgen-check.mjs"
+      ],
+      "verifies": "ANIMA Workspace: pipeline di generazione domande (qgen).",
+      "nl": true,
+      "lang": "na",
+      "in_gate": false,
+      "anima": true
+    },
+    {
+      "id": "extra-arbiter-load-device",
+      "label": "arbiter load (device)",
+      "category": "device-load",
+      "kind": "extra",
+      "cmd": "python",
+      "args": [
+        "tools/test_arbiter_load.py"
+      ],
+      "verifies": "Carico concorrente sul web server reale: liveness (mai irraggiungibile), heap floor, degrado grazioso (503 non crash). Richiede device flashato; SKIP se assente.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": false,
+      "anima": false
+    },
+    {
+      "id": "extra-games-foundation-p2p-brain",
+      "label": "games · foundation+P2P+brain",
+      "category": "app-shell",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "tools/games-host/all.mjs"
+      ],
+      "verifies": "Game Center: SDK host-authoritative, trasporto P2P/mailbox, logica Tris/Forza4/Pong, cervello LLM. (tools/games-host/)",
+      "nl": false,
+      "lang": "na",
+      "in_gate": false,
+      "anima": false
+    },
+    {
+      "id": "extra-dj-planner-npx",
+      "label": "dj · planner+npx",
+      "category": "app-shell",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "apps/dj/test/all.mjs"
+      ],
+      "verifies": "DJ engine: planner beatmatch/armonico/energia + decode .npx (apps/dj/test/). App WIP, non installata.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": false,
+      "anima": false
+    },
+    {
+      "id": "extra-gz-freshness",
+      "label": "gz freshness",
+      "category": "build-lint",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "tools/check-gz.mjs"
+      ],
+      "verifies": "Ogni .gz servito (web/shell, apps/*/www) è in sync col sorgente — niente codice vecchio/orfano spedito al device (gotcha .gz shadowing).",
+      "nl": false,
+      "lang": "na",
+      "in_gate": false,
+      "anima": false
+    }
+  ],
+  "health": [
+    {
+      "id": "hallucinations",
+      "label": "Allucinazioni",
+      "metric": "halluc",
+      "agg": "sum",
+      "goal": 0,
+      "critical": true,
+      "hint": "Fabbricazioni + falsi-positivi su tutte le trappole avversariali. DEVE essere 0."
+    },
+    {
+      "id": "nl_cases",
+      "label": "Casi NL coperti",
+      "metric": "cases",
+      "agg": "sum",
+      "hint": "Quante richieste in linguaggio naturale ANIMA è verificata a gestire (somma di tutte le suite NL)."
+    },
+    {
+      "id": "route_drift",
+      "label": "Drift routing",
+      "metric": "diffs",
+      "agg": "sum",
+      "goal": 0,
+      "hint": "Cambi di instradamento rispetto allo snapshot golden. 0 = nessuna regressione di routing."
+    },
+    {
+      "id": "green",
+      "label": "Test verdi",
+      "special": "green",
+      "hint": "Test passati sul totale (escludendo gli skip intenzionali)."
+    }
+  ]
+}

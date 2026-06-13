@@ -1,0 +1,14 @@
+{
+  "format": "ANE2",
+  "rows": 16384,
+  "dim": 192,
+  "ngrams": [
+    3,
+    4,
+    5
+  ],
+  "word_n": 2,
+  "scale": 0.00545912934100534,
+  "teacher": "intfloat/multilingual-e5-small",
+  "aug": false
+}

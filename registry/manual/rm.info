@@ -1,0 +1,16 @@
+{
+  "id": "rm",
+  "category": "terminal",
+  "it": {
+    "title": "rm - Rimuovi file o directory",
+    "synopsis": "rm <path>",
+    "description": "Rimuove definitivamente un file o una directory vuota dal disco.",
+    "details": "NOME\n  rm - Rimuovi file o directory.\n\nSINTASSI\n  rm <percorso>\n\nDESCRIZIONE\n  Elimina definitivamente il file o la cartella vuota dal disco. Non è possibile recuperare il file dal Cestino grafico dopo questa chiamata.\n\nOPZIONI\n  <percorso>\n    La risorsa da rimuovere permanentemente.\n\nARCHITETTURA E BASSO LIVELLO\n  Invia una richiesta POST a '/api/fs/delete?path=<percorso>'. Il firmware effettua la chiamata POSIX 'unlink(path)' per rimuovere i blocchi associati sul filesystem FAT, svincolando i relativi cluster di dati. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo. Elemento eliminato.\n  1\n    Errore di eliminazione (I/O, directory non vuota o permessi).\n  404\n    L'elemento da rimuovere non esiste.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  cp(1), mv(1), web_api(7)\n\nESEMPI AVANZATI\n  rm /data/temp_log.txt\n  rm /data/empty_dir"
+  },
+  "en": {
+    "title": "rm - Remove file or directory",
+    "synopsis": "rm <path>",
+    "description": "Permanently delete a file or an empty directory.",
+    "details": "NAME\n  rm - Remove file or directory.\n\nSYNOPSIS\n  rm <path>\n\nDESCRIPTION\n  Deletes the file or directory empty node permanently. The resource cannot be recovered from the Recycle Bin.\n\nOPTIONS\n  <path>\n    The target resource to delete.\n\nSYSTEM ARCHITECTURE\n  Sends a POST request to '/api/fs/delete?path=<path>'. The firmware calls POSIX 'unlink(path)' to free the sector blocks and clear the entry from the FAT filesystem cluster allocation map. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. File deleted.\n  1\n    Deletion failed (I/O error, folder is not empty, or write locks).\n  404\n    The specified resource does not exist.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  cp(1), mv(1), web_api(7)\n\nADVANCED EXAMPLES\n  rm /data/temp_log.txt\n  rm /data/empty_dir"
+  }
+}

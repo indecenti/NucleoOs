@@ -1,0 +1,2 @@
+{"q":"chi è einstein","lang":"it","expect":"l1|hdc"}
+{"q":"chi e\u0301 einstein","lang":"it","expect":"l1|hdc"}

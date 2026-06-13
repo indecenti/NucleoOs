@@ -1,0 +1,117 @@
+// eval_skills8_it.jsonl — TRIGGER SKILL GENUINI round 3 (IT): frasi MAI testate, enfasi su apertura app +
+// calendario + azioni. expect = intent emesso da anima.exe. Giudice: skill-probe.mjs. Tutte validate sull'exe.
+// === apertura app (nomi e verbi nuovi) ===
+{"q":"apri paint","lang":"it","expect":"open_app"}
+{"q":"apri il visualizzatore foto","lang":"it","expect":"open_app"}
+{"q":"apri la galleria","lang":"it","expect":"open_app"}
+{"q":"apri gestione file","lang":"it","expect":"open_app"}
+{"q":"apri i file","lang":"it","expect":"open_app"}
+{"q":"apri i video","lang":"it","expect":"open_app"}
+{"q":"apri la musica","lang":"it","expect":"open_app"}
+{"q":"apri il registratore","lang":"it","expect":"open_app"}
+{"q":"apri la dettatura","lang":"it","expect":"open_app"}
+{"q":"apri il cestino","lang":"it","expect":"open_app"}
+{"q":"apri gli aggiornamenti","lang":"it","expect":"open_app"}
+{"q":"apri le attività","lang":"it","expect":"open_app"}
+{"q":"apri il foglio di calcolo","lang":"it","expect":"open_app"}
+{"q":"apri excel","lang":"it","expect":"open_app"}
+{"q":"apri le note","lang":"it","expect":"open_app"}
+{"q":"apri appunti","lang":"it","expect":"open_app"}
+{"q":"mostrami le foto","lang":"it","expect":"open_app"}
+{"q":"mostrami il calendario","lang":"it","expect":"open_app"}
+{"q":"mostrami i video","lang":"it","expect":"open_app"}
+{"q":"fammi vedere le impostazioni","lang":"it","expect":"open_app"}
+{"q":"voglio aprire le impostazioni","lang":"it","expect":"open_app"}
+{"q":"vai alle impostazioni","lang":"it","expect":"open_app"}
+{"q":"vai al calendario","lang":"it","expect":"open_app"}
+{"q":"portami alle foto","lang":"it","expect":"open_app"}
+{"q":"portami alle impostazioni","lang":"it","expect":"open_app"}
+{"q":"lancia paint","lang":"it","expect":"open_app"}
+{"q":"lancia la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"avvia le foto","lang":"it","expect":"open_app"}
+{"q":"avvia il browser","lang":"it","expect":"open_app"}
+// === chiusura app ===
+{"q":"chiudi paint","lang":"it","expect":"close_app"}
+{"q":"chiudi le impostazioni","lang":"it","expect":"close_app"}
+{"q":"chiudi la musica","lang":"it","expect":"close_app"}
+{"q":"esci dal browser","lang":"it","expect":"close_app"}
+// === calendario / promemoria (frasi nuove) ===
+{"q":"segna sul calendario il compleanno di luca sabato","lang":"it","expect":"add_event"}
+{"q":"ricordami di pagare la bolletta il 15","lang":"it","expect":"add_event"}
+{"q":"promemoria chiamare l'idraulico lunedì mattina","lang":"it","expect":"add_event"}
+{"q":"aggiungi un evento dentista giovedì alle 10","lang":"it","expect":"add_event"}
+{"q":"ricordami di annaffiare le piante stasera","lang":"it","expect":"add_event"}
+{"q":"metti un promemoria per le 18","lang":"it","expect":"add_event"}
+{"q":"ricordami il dottore mercoledì","lang":"it","expect":"add_event"}
+{"q":"non dimenticare di chiamare mamma","lang":"it","expect":"add_event"}
+{"q":"ricordami fra un'ora di uscire","lang":"it","expect":"add_event"}
+{"q":"segna la riunione di lavoro venerdì","lang":"it","expect":"add_event"}
+{"q":"ricordami il pagamento domani","lang":"it","expect":"add_event"}
+{"q":"ricordami di prendere le medicine alle 8","lang":"it","expect":"add_event"}
+{"q":"metti in agenda la chiamata con il cliente domani","lang":"it","expect":"add_event"}
+{"q":"ricordami l'esame il 20","lang":"it","expect":"add_event"}
+{"q":"ricordami di portare fuori il cane","lang":"it","expect":"add_event"}
+// === agenda (lettura impegni) ===
+{"q":"che impegni ho oggi","lang":"it","expect":"agenda"}
+{"q":"cosa ho in agenda","lang":"it","expect":"agenda"}
+{"q":"ho appuntamenti oggi","lang":"it","expect":"agenda"}
+{"q":"ho un appuntamento domani ricordamelo","lang":"it","expect":"agenda"}
+// === file ===
+{"q":"crea un file vuoto appunti.txt","lang":"it","expect":"create_file"}
+// === audio / schermo ===
+{"q":"silenzia l'audio","lang":"it","expect":"set_volume"}
+{"q":"metti il volume a zero","lang":"it","expect":"set_volume"}
+{"q":"alza il volume al massimo","lang":"it","expect":"set_volume"}
+{"q":"volume al 100 percento","lang":"it","expect":"set_volume"}
+{"q":"alza la luminosità al massimo","lang":"it","expect":"set_brightness"}
+{"q":"schermo più scuro","lang":"it","expect":"set_brightness"}
+{"q":"abbassa lo schermo","lang":"it","expect":"set_brightness"}
+{"q":"luminosità al 30 percento","lang":"it","expect":"set_brightness"}
+{"q":"metti la luminosità a metà","lang":"it","expect":"set_brightness"}
+{"q":"imposta la luminosità al 20 percento","lang":"it","expect":"set_brightness"}
+// === calcolo ===
+{"q":"quanto fa 3 alla quarta","lang":"it","expect":"calc"}
+{"q":"il triplo di 12","lang":"it","expect":"calc"}
+{"q":"la radice cubica di 27","lang":"it","expect":"calc"}
+{"q":"quanto fa 256 diviso 4","lang":"it","expect":"calc"}
+{"q":"12 al cubo","lang":"it","expect":"calc"}
+{"q":"metà di 50","lang":"it","expect":"calc"}
+{"q":"quanto fa 99 più 1","lang":"it","expect":"calc"}
+{"q":"il quadruplo di 5","lang":"it","expect":"calc"}
+{"q":"radice quadrata di 81","lang":"it","expect":"calc"}
+// === conversioni ===
+{"q":"20 libbre in chili","lang":"it","expect":"convert"}
+{"q":"1 miglio in metri","lang":"it","expect":"convert"}
+{"q":"100 fahrenheit in celsius","lang":"it","expect":"convert"}
+{"q":"60 minuti in secondi","lang":"it","expect":"convert"}
+{"q":"2 settimane in giorni","lang":"it","expect":"convert"}
+{"q":"500 metri in chilometri","lang":"it","expect":"convert"}
+{"q":"10 once in grammi","lang":"it","expect":"convert"}
+{"q":"3 giorni in ore","lang":"it","expect":"convert"}
+{"q":"2 metri in millimetri","lang":"it","expect":"convert"}
+{"q":"45 km in metri","lang":"it","expect":"convert"}
+{"q":"90 secondi in minuti","lang":"it","expect":"convert"}
+// === basi / romani / primi / geometria / fisica ===
+{"q":"200 in binario","lang":"it","expect":"base"}
+{"q":"128 in esadecimale","lang":"it","expect":"base"}
+{"q":"1024 in binario","lang":"it","expect":"base"}
+{"q":"37 è primo","lang":"it","expect":"prime"}
+{"q":"63 in numeri romani","lang":"it","expect":"roman"}
+{"q":"vii in decimale","lang":"it","expect":"roman"}
+{"q":"volume del cilindro raggio 2 altezza 5","lang":"it","expect":"geo"}
+{"q":"area del cerchio raggio 10","lang":"it","expect":"geo"}
+{"q":"forza con massa 8 e accelerazione 9","lang":"it","expect":"phys"}
+// === traduzione / profilo / data ===
+{"q":"traduci albero in inglese","lang":"it","expect":"translate"}
+{"q":"il mio nome è luca","lang":"it","expect":"profile"}
+{"q":"il mio compleanno è il 5 maggio","lang":"it","expect":"profile"}
+{"q":"che giorno della settimana è oggi","lang":"it","expect":"date"}
+// === conoscenza ===
+{"q":"chi era napoleone","lang":"it","expect":"l1|hdc"}
+{"q":"qual è la capitale della germania","lang":"it","expect":"l1|hdc"}
+{"q":"cos'è il dna","lang":"it","expect":"l1"}
+{"q":"qual è la capitale della spagna","lang":"it","expect":"l1|hdc"}
+{"q":"cos'è un vulcano","lang":"it","expect":"l1"}
+{"q":"qual è la capitale del portogallo","lang":"it","expect":"l1|hdc"}
+{"q":"cos'è l'ossigeno","lang":"it","expect":"l1"}
+{"q":"cos'è internet","lang":"it","expect":"l1"}

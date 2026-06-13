@@ -1,0 +1,16 @@
+{
+  "_lang": "en",
+  "app_title": "Tasks",
+  "filter_active": "Active",
+  "add_ph": "Add a task and press Enter…",
+  "priority": "Priority",
+  "clear_done": "Clear done",
+  "saving": "Saving…",
+  "saved_locally": "Saved locally",
+  "copied": "Copied",
+  "empty_done": "No completed tasks yet.",
+  "empty_active": "Nothing to do — all clear! 🎉",
+  "empty_all": "No tasks yet.<br>Type above and press Enter.",
+  "toggle": "Toggle",
+  "count": "{active} active · {total} total"
+}

@@ -1,0 +1,17 @@
+{
+  "name": "nucleo-ssh-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted WebSocket↔SSH bridge for the NucleoOS web SSH app (no third-party services).",
+  "type": "commonjs",
+  "bin": { "nucleo-ssh-bridge": "index.js" },
+  "scripts": { "start": "node index.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "ssh2": "^1.15.0",
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "bonjour-service": "^1.2.1"
+  }
+}

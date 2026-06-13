@@ -1,0 +1,1 @@
+export const _fs = { mkdir: async()=>{}, writeJSON: async()=>{}, readJSON: async()=>null }; export default {};

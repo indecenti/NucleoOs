@@ -1,0 +1,84 @@
+// ===== CORRECT add_event (IT) — imperative / colloquial / indirect =====
+{"q":"ricordami di chiamare mario domani alle 9","lang":"it","expect":"add_event"}
+{"q":"ricordami di prendere le medicine alle 8","lang":"it","expect":"add_event"}
+{"q":"ricordami di comprare il latte","lang":"it","expect":"add_event"}
+{"q":"aggiungi un evento riunione domani alle 10","lang":"it","expect":"add_event"}
+{"q":"aggiungi al calendario la cena con anna domani","lang":"it","expect":"add_event"}
+{"q":"crea un promemoria per la palestra alle 18","lang":"it","expect":"add_event"}
+{"q":"metti un promemoria per pagare le bollette dopodomani","lang":"it","expect":"add_event"}
+{"q":"mettimi un promemoria per domani alle 15","lang":"it","expect":"add_event"}
+{"q":"fammi ricordare di comprare il pane","lang":"it","expect":"add_event"}
+{"q":"tra 3 giorni ricordami di pagare le bollette","lang":"it","expect":"add_event"}
+{"q":"ricordami di annaffiare le piante tra due giorni","lang":"it","expect":"add_event"}
+{"q":"ricordami di portare fuori il cane alle 7:30","lang":"it","expect":"add_event"}
+{"q":"ricordami la riunione di lavoro domani alle 9:00","lang":"it","expect":"add_event"}
+{"q":"segnami un appuntamento dal medico dopodomani","lang":"it","expect":"add_event"}
+{"q":"voglio un promemoria per chiamare la banca domani","lang":"it","expect":"add_event"}
+{"q":"ho bisogno di un promemoria per pagare le tasse domani","lang":"it","expect":"add_event"}
+{"q":"ricordami di spedire il pacco alle 11","lang":"it","expect":"add_event"}
+{"q":"ricordami di studiare stasera alle 21","lang":"it","expect":"add_event"}
+{"q":"per favore ricordami di chiamare la nonna domani","lang":"it","expect":"add_event"}
+{"q":"non farmi dimenticare la riunione domani alle 14","lang":"it","expect":"add_event"}
+// ===== add_event with WEEKDAY / week-relative (IT) — schedule-date correctness =====
+{"q":"ricordami di andare dal medico venerdi","lang":"it","expect":"add_event"}
+{"q":"ricordami di andare dal medico venerdi alle 15:30","lang":"it","expect":"add_event"}
+{"q":"ricordami la riunione lunedi prossimo","lang":"it","expect":"add_event"}
+{"q":"ricordami di comprare il pane tra una settimana","lang":"it","expect":"add_event"}
+{"q":"ricordami l'appuntamento sabato alle 10","lang":"it","expect":"add_event"}
+// ===== CORRECT add_event (EN) =====
+{"q":"remind me to call mom tomorrow at 9","lang":"en","expect":"add_event"}
+{"q":"remind me to buy milk","lang":"en","expect":"add_event"}
+{"q":"remind me to take out the trash at 8pm","lang":"en","expect":"add_event"}
+{"q":"remind me to call john in 3 days","lang":"en","expect":"add_event"}
+{"q":"remind me to renew my passport in 2 days","lang":"en","expect":"add_event"}
+{"q":"remind me tomorrow to send the report","lang":"en","expect":"add_event"}
+{"q":"add a reminder to water the plants the day after tomorrow","lang":"en","expect":"add_event"}
+{"q":"set a reminder to water the plants the day after tomorrow","lang":"en","expect":"add_event"}
+{"q":"add event dentist friday at 15:30","lang":"en","expect":"add_event"}
+{"q":"remind me to call the dentist on friday","lang":"en","expect":"add_event"}
+{"q":"add a reminder for next tuesday to pay rent","lang":"en","expect":"add_event"}
+{"q":"please remind me to take my pills at 8","lang":"en","expect":"add_event"}
+{"q":"create a reminder to pick up the kids at 16:00","lang":"en","expect":"add_event"}
+{"q":"dont let me forget the meeting tomorrow at 14","lang":"en","expect":"add_event"}
+{"q":"i need a reminder to pay the bills tomorrow","lang":"en","expect":"add_event"}
+// ===== AGENDA (IT + EN) =====
+{"q":"cosa devo fare oggi","lang":"it","expect":"agenda"}
+{"q":"che impegni ho","lang":"it","expect":"agenda"}
+{"q":"che impegni ho oggi","lang":"it","expect":"agenda"}
+{"q":"cosa ho in programma domani","lang":"it","expect":"agenda"}
+{"q":"mostrami la mia agenda","lang":"it","expect":"agenda"}
+{"q":"quali sono i miei appuntamenti","lang":"it","expect":"agenda"}
+{"q":"whats on my agenda today","lang":"en","expect":"agenda"}
+{"q":"what do i have to do today","lang":"en","expect":"agenda"}
+{"q":"show me my schedule","lang":"en","expect":"agenda"}
+// ===== WRONG / must NOT schedule — knowledge questions containing 'ricordami' =====
+{"q":"ricordami come si crea un file","lang":"it","expect":"l1|abstain"}
+{"q":"ricordami chi era napoleone","lang":"it","expect":"l1|abstain"}
+{"q":"ricordami quanto fa 2+2","lang":"it","expect":"calc|percent|binop|abstain"}
+{"q":"ricordami quanto fa 5 per 3","lang":"it","expect":"calc|percent|binop|abstain"}
+{"q":"ricordami che ore sono","lang":"it","expect":"date|abstain"}
+{"q":"ricordami quanti anni ha la torre eiffel","lang":"it","expect":"l1|abstain"}
+{"q":"ricordami il significato di ironia","lang":"it","expect":"l1|abstain"}
+{"q":"remind me what 2 plus 2 is","lang":"en","expect":"calc|percent|binop|abstain"}
+{"q":"remind me who invented the telephone","lang":"en","expect":"l1|abstain"}
+{"q":"remind me how to create a file","lang":"en","expect":"l1|abstain"}
+// ===== WRONG / how-to & capability — must NOT route to add_event =====
+{"q":"come aggiungo un evento","lang":"it","expect":"l1|abstain"}
+{"q":"come funziona il calendario","lang":"it","expect":"l1|abstain"}
+{"q":"come metto un promemoria","lang":"it","expect":"l1|abstain"}
+{"q":"posso mettere un promemoria?","lang":"it","expect":"abstain"}
+{"q":"posso aggiungere un promemoria?","lang":"it","expect":"abstain"}
+{"q":"sai mettere eventi nel calendario?","lang":"it","expect":"abstain|capabilities"}
+{"q":"puoi gestire i miei appuntamenti?","lang":"it","expect":"abstain|capabilities"}
+{"q":"che cosa e un promemoria","lang":"it","expect":"l1|abstain"}
+{"q":"how do i add an event","lang":"en","expect":"l1|abstain"}
+{"q":"can you set reminders?","lang":"en","expect":"abstain|capabilities"}
+// ===== WRONG / unrelated or nonsense =====
+{"q":"ricordami quanto e bello il mare","lang":"it","expect":"abstain"}
+{"q":"cancella il promemoria","lang":"it","expect":"abstain"}
+{"q":"delete my reminder","lang":"en","expect":"abstain"}
+{"q":"remind me","lang":"en","expect":"abstain"}
+{"q":"ricordami","lang":"it","expect":"abstain"}
+{"q":"che tempo fa domani","lang":"it","expect":"weather|abstain"}
+{"q":"schedule a meeting next monday","lang":"en","expect":"add_event"}
+{"q":"set an alarm to wake up at 7","lang":"en","expect":"add_event|abstain"}

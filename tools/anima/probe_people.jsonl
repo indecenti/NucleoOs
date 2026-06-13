@@ -1,0 +1,82 @@
+{"q":"chi è Albert Einstein","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Michael Jackson","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Madonna","lang":"it","expect":"l1|hdc"}
+{"q":"chi era Bob Marley","lang":"it","expect":"l1|hdc"}
+{"q":"parlami di David Bowie","lang":"it","expect":"l1|hdc"}
+{"q":"cosa sai di Elvis Presley","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Freddie Mercury","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Taylor Swift","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Barack Obama","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Donald Trump","lang":"it","expect":"l1|hdc"}
+{"q":"chi era Nelson Mandela","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Mahatma Gandhi","lang":"it","expect":"l1|hdc"}
+{"q":"chi era Winston Churchill","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Napoleone","lang":"it","expect":"l1|hdc"}
+{"q":"chi era Cleopatra","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Dante Alighieri","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Leonardo da Vinci","lang":"it","expect":"l1|hdc"}
+{"q":"chi è William Shakespeare","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Isaac Newton","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Charles Darwin","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Marie Curie","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Stephen Hawking","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Pablo Picasso","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Vincent van Gogh","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Cristiano Ronaldo","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Lionel Messi","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Roger Federer","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Usain Bolt","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Steve Jobs","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Elon Musk","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Bill Gates","lang":"it","expect":"l1|hdc"}
+{"q":"chi è Beyonce","lang":"it","expect":"l1|hdc"}
+{"q":"who is Albert Einstein","lang":"en","expect":"l1|hdc"}
+{"q":"who was Michael Jackson","lang":"en","expect":"l1|hdc"}
+{"q":"tell me about David Bowie","lang":"en","expect":"l1|hdc"}
+{"q":"who is Barack Obama","lang":"en","expect":"l1|hdc"}
+{"q":"who is Cristiano Ronaldo","lang":"en","expect":"l1|hdc"}
+{"q":"who is William Shakespeare","lang":"en","expect":"l1|hdc"}
+{"q":"who is Marie Curie","lang":"en","expect":"l1|hdc"}
+{"q":"dove è nato Albert Einstein","lang":"it","expect":"l1|hdc"}
+{"q":"quando è nato Albert Einstein","lang":"it","expect":"l1|hdc"}
+{"q":"di che nazionalità è Michael Jackson","lang":"it","expect":"l1|hdc"}
+{"q":"capitale della Francia","lang":"it","expect":"l1|hdc"}
+{"q":"capitale del Giappone","lang":"it","expect":"l1|hdc"}
+{"q":"capitale della Germania","lang":"it","expect":"l1|hdc"}
+{"q":"capitale del Brasile","lang":"it","expect":"l1|hdc"}
+{"q":"capitale dell'Egitto","lang":"it","expect":"l1|hdc"}
+{"q":"in che continente si trova il Giappone","lang":"it","expect":"l1|hdc"}
+{"q":"what is the capital of France","lang":"en","expect":"l1|hdc"}
+{"q":"chi è Harry Potter","lang":"it","expect":"abstain"}
+{"q":"chi è Frodo Baggins","lang":"it","expect":"abstain"}
+{"q":"chi è Sherlock Holmes","lang":"it","expect":"abstain"}
+{"q":"chi è Darth Vader","lang":"it","expect":"abstain"}
+{"q":"chi è James Bond","lang":"it","expect":"abstain"}
+{"q":"chi è Spider-Man","lang":"it","expect":"abstain"}
+{"q":"chi è Mickey Mouse","lang":"it","expect":"abstain"}
+{"q":"chi è il presidente di Wakanda","lang":"it","expect":"abstain"}
+{"q":"chi è Asdrubale Frittenghen","lang":"it","expect":"abstain"}
+{"q":"chi è Xkjqwer Nonsensovich","lang":"it","expect":"abstain"}
+{"q":"capitale di Wakanda","lang":"it","expect":"abstain"}
+{"q":"capitale di Gondor","lang":"it","expect":"abstain"}
+{"q":"capitale di Narnia","lang":"it","expect":"abstain"}
+{"q":"capitale di Atlantide","lang":"it","expect":"abstain"}
+{"q":"capitale dello stato del Karnataka","lang":"it","expect":"abstain"}
+{"q":"capitale dello stato della California","lang":"it","expect":"abstain"}
+{"q":"capitale della contea di Yorkshire","lang":"it","expect":"abstain"}
+{"q":"quando è morto Barack Obama","lang":"it","expect":"abstain"}
+{"q":"quando è morto Cristiano Ronaldo","lang":"it","expect":"abstain"}
+{"q":"quando è morto Elon Musk","lang":"it","expect":"abstain"}
+{"q":"quando è morto Lionel Messi","lang":"it","expect":"abstain"}
+{"q":"in che anno morì Barack Obama","lang":"it","expect":"abstain"}
+{"q":"in che anno è morto Elon Musk","lang":"it","expect":"abstain"}
+{"q":"in quale anno è morto Lionel Messi","lang":"it","expect":"abstain"}
+{"q":"who is Gandalf","lang":"en","expect":"abstain"}
+{"q":"who is Bilbo Baggins","lang":"en","expect":"abstain"}
+{"q":"who is Voldemort","lang":"en","expect":"abstain"}
+{"q":"who is Walter White","lang":"en","expect":"abstain"}
+{"q":"capital of Mordor","lang":"en","expect":"abstain"}
+{"q":"capital of Westeros","lang":"en","expect":"abstain"}
+{"q":"when did Taylor Swift die","lang":"en","expect":"abstain"}
+{"q":"what year did Barack Obama die","lang":"en","expect":"abstain"}
+{"q":"who is Xkjqwer Nonsensovich","lang":"en","expect":"abstain"}

@@ -1,0 +1,103 @@
+﻿Setting up ESP-IDF environment...
+powershell.exe : Activating ESP-IDF 5.4
+In riga:1 car:43
++ ... build.log"; & powershell -ExecutionPolicy Bypass -File "G:\Nucleo\too ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Activating ESP-IDF 5.4:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+* Checking python version ... 3.12.3
+* Checking python dependencies ... OK
+* Deactivating the current ESP-IDF environment (if any) ... OK
+* Establishing a new ESP-IDF environment ... OK
+* Identifying shell ... powershell.exe
+* Detecting outdated tools in system ... OK - no outdated tools found
+
+Done! You can now compile ESP-IDF projects.
+Go to the project directory and run:
+
+  idf.py build
+
+CPU cores=12, free RAM=36,3 GB -> starting with -j 12
+Build attempt 1 (idf.py build)...
+Executing action: all (aliases: build)
+Running ninja in directory G:\Nucleo\firmware\build
+Executing "ninja all"...
+[1/17] Performing build step for 'bootloader'
+
+[1/1] C:\WINDOWS\system32\cmd.exe /C "cd /D G:\Nucleo\firmware\build\bootloader\esp-idf\esptool_py && C:\Users\indecenti\.espressif\python_env\idf5.4_py3.12_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 G:/Nucleo/firmware/build/bootloader/bootloader.bin"
+
+
+Bootloader binary size 0x4d50 bytes. 0x32b0 bytes (40%) free.
+
+
+
+[2/17] No install step for 'bootloader'
+
+[3/17] Completed 'bootloader'
+
+[4/17] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/main.c.obj
+
+[5/17] Building C object esp-idf/nucleo_setup/CMakeFiles/__idf_nucleo_setup.dir/nucleo_setup.c.obj
+
+[6/17] Building C object esp-idf/nucleo_httpd/CMakeFiles/__idf_nucleo_httpd.dir/nucleo_httpd.c.obj
+
+[7/17] Linking C static library esp-idf\nucleo_setup\libnucleo_setup.a
+
+[8/17] Building C object esp-idf/nucleo_anima/CMakeFiles/__idf_nucleo_anima.dir/nucleo_anima_online.c.obj
+
+G:/Nucleo/firmware/components/nucleo_anima/nucleo_anima_online.c: In function 'vec_sync':
+
+G:/Nucleo/firmware/components/nucleo_anima/nucleo_anima_online.c:563:29: warning: comparison is always false due to limited range of data type [-Wtype-limits]
+
+  563 |             if (d == 0 || d > RECALL_DIM) { if (fseek(in, d, SEEK_CUR) != 0) break; continue; }
+
+      |                             ^
+
+[9/17] Building CXX object esp-idf/nucleo_app/CMakeFiles/__idf_nucleo_app.dir/app_wifi.cpp.obj
+
+[10/17] Linking C static library esp-idf\nucleo_app\libnucleo_app.a
+
+[11/17] Linking C static library esp-idf\nucleo_httpd\libnucleo_httpd.a
+
+[12/17] Linking C static library esp-idf\nucleo_anima\libnucleo_anima.a
+
+[13/17] Linking C static library esp-idf\main\libmain.a
+
+[14/17] Generating ld/sections.ld
+
+[15/17] Linking CXX executable nucleoos.elf
+
+[16/17] Generating binary image from built executable
+
+esptool.py v4.11.0
+
+
+Creating esp32s3 image...
+
+
+Merged 3 ELF sections
+
+
+Successfully created esp32s3 image.
+
+
+Generated G:/Nucleo/firmware/build/nucleoos.bin
+
+[17/17] C:\WINDOWS\system32\cmd.exe /C "cd /D G:\Nucleo\firmware\build\esp-idf\esptool_py && C:\Users\indecenti\.espressif\python_env\idf5.4_py3.12_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app G:/Nucleo/firmware/build/partition_table/partition-table.bin G:/Nucleo/firmware/build/nucleoos.bin"
+
+nucleoos.bin binary size 0x1bc850 bytes. Smallest app partition is 0x240000 bytes. 0x837b0 bytes (23%) free.
+
+
+
+
+Project build complete. To flash, run:
+ idf.py flash
+or
+ idf.py -p PORT flash
+or
+ python -m esptool --chip esp32s3 -b 460800 --before default_reset --after hard_reset write_flash --flash_mode dio --flash_size 8MB --flash_freq 80m 0x0 build\bootloader\bootloader.bin 0x8000 build\partition_table\partition-table.bin 0xf000 build\ota_data_initial.bin 0x20000 build\nucleoos.bin
+or from the "G:\Nucleo\firmware\build" directory
+ python -m esptool --chip esp32s3 -b 460800 --before default_reset --after hard_reset write_flash "@flash_args"
+Build OK -- nucleoos.bin = 1778 KB
+Done.

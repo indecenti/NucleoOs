@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="app_title">Archive Manager</title>
+  <style>
+    :root {
+      --bg: #0e1830;
+      --panel: #18233a;
+      --text: #e8eefc;
+      --muted: #8aa0c8;
+      --accent: #4ea1ff;
+      --line: #2a3a5e;
+      --danger: #ff8093;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font: 14px system-ui, "Segoe UI", sans-serif;
+      display: flex; flex-direction: column; user-select: none;
+    }
+    header {
+      display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+      background: var(--panel); border-bottom: 1px solid var(--line); flex: none;
+    }
+    header h1 { font-size: 16px; margin: 0; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+    .sp { flex: 1; }
+    button {
+      display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line);
+      background: #ffffff10; color: var(--text); border-radius: 6px; padding: 5px 12px; cursor: pointer; font: inherit;
+    }
+    button:hover { background: #ffffff1f; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.primary { background: var(--accent); color: #07101f; border-color: var(--accent); font-weight: 500; }
+    button.primary:hover { background: #6eb3ff; }
+
+    .main { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
+    
+    .status-bar {
+      padding: 6px 12px; font-size: 12px; color: var(--muted); background: var(--panel);
+      border-bottom: 1px solid var(--line); flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .status-bar input {
+      background: var(--field, #0b1220); border: 1px solid var(--line); color: var(--text);
+      border-radius: 4px; padding: 3px 6px; font: inherit; font-size: 12px; width: 150px;
+    }
+    
+    .file-list {
+      flex: 1; overflow: auto; list-style: none; margin: 0; padding: 0;
+    }
+    .file-list li {
+      display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+      border-bottom: 1px solid #ffffff0a;
+    }
+    .file-list li:hover { background: #ffffff12; }
+    .file-list .glyph { width: 20px; text-align: center; flex: none; }
+    .file-list .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-list .size { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+    
+    .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+    .empty .icon { font-size: 40px; margin-bottom: 10px; opacity: 0.7; }
+    
+    .overlay {
+      position: absolute; inset: 0; background: #000a; display: grid; place-items: center; z-index: 10;
+      backdrop-filter: blur(3px);
+    }
+    .overlay.hidden { display: none; }
+    .progress-box {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+      padding: 20px; width: 300px; text-align: center; box-shadow: 0 10px 40px #000a;
+    }
+    .progress-bar { height: 6px; background: #ffffff14; border-radius: 4px; margin: 15px 0 10px; overflow: hidden; }
+    .progress-bar > div { height: 100%; width: 0%; background: var(--accent); transition: width 0.1s; }
+    .progress-text { font-size: 12px; color: var(--muted); }
+  </style>
+  <script src="jszip.min.js"></script>
+</head>
+<body>
+
+  <header>
+    <h1><span style="font-size:18px">🗜️</span> <span data-i18n="app_title">Archive Manager</span></h1>
+    <span class="sp"></span>
+    <button id="btn-action" class="primary" disabled>
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 12V3M4 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 14h12" stroke-linecap="round"/></svg>
+      <span id="btn-label" data-i18n="extract_here">Extract Here</span>
+    </button>
+  </header>
+
+  <div class="main">
+    <div class="status-bar" id="status" data-i18n="status_idle">No archive loaded. Waiting for an archive...</div>
+    <ul class="file-list" id="list">
+      <div class="empty">
+        <div class="icon">📂</div>
+        <div data-i18n="empty_open_hint">Open a .zip file from the File Commander</div>
+      </div>
+    </ul>
+
+    <div id="overlay" class="overlay hidden">
+      <div class="progress-box">
+        <div id="prog-title" style="font-weight:500;margin-bottom:5px" data-i18n="working">Working...</div>
+        <div class="progress-bar"><div id="prog-fill"></div></div>
+        <div id="prog-text" class="progress-text" data-i18n="prog_files" data-i18n-args='{"done":0,"total":0,"count":0}'>0 / 0 files</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // i18n bridge: the bootstrap module (below) installs the real translator via
+    // window.__amI18n. Until it's ready, fall back to the embedded English strings
+    // so first paint never breaks. onReady re-runs imperative redraws on language switch.
+    const I18N_FALLBACK = {
+      status_idle: "No archive loaded. Waiting for an archive...",
+      extract_here: "Extract Here", compress: "Compress",
+      err_parse_compress: "Error parsing files to compress.",
+      loading_file: "Loading {path}...", loading_archive: "Loading archive...",
+      items_in: "{count} items in {path}", error_x: "Error: {msg}",
+      open_failed: "Failed to open archive.", archive_empty: "This archive is empty.",
+      extracting_to: "Extracting to {dir}", extracting_file: "Extracting {name}... ({done}/{total})",
+      extract_complete: "Extraction Complete!", files_extracted: "{count} files extracted.",
+      extract_error: "Extraction Error", create_in: "Create archive in {dir}",
+      name_label: "Name:", preparing: "Preparing files...", scanning: "Scanning directories...",
+      compressing: "Compressing...", reading_file: "Reading {name}... ({i}/{total})",
+      generating_zip: "Generating .zip file...", saving_archive: "Saving archive...",
+      compress_complete: "Compression Complete!", saved_x: "Saved {name}",
+      compress_error: "Compression Error", no_files: "No files to compress"
+    };
+    const t = (key, args) => {
+      if (window.__amI18n) return window.__amI18n(key, args);
+      let s = I18N_FALLBACK[key] || key;
+      if (args) for (const k in args) s = s.replace(new RegExp('\\{' + k + '\\}', 'g'), args[k]);
+      return s;
+    };
+    let __amRedraw = null; // set by views that need re-render on language change
+    window.__amOnI18n = (cb) => { __amRedraw = cb; };
+
+    const api = (op, path, opts) => fetch(`/api/fs/${op}?path=` + encodeURIComponent(path), opts);
+    const parent = (p) => p.replace(/\/[^/]+\/?$/, '') || '/';
+    const fmt = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? (b / 1024).toFixed(0) + ' KB' : b + ' B';
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    let mode = 'extract'; // 'extract' or 'compress'
+    let currentZipPath = null;
+    let currentZipObj = null;
+    let zipEntries = []; // Per extract
+    let sourcePaths = []; // Per compress (absolute paths)
+    let destDir = ''; // Per compress
+
+    const statusEl = document.getElementById('status');
+    const listEl = document.getElementById('list');
+    const btnAction = document.getElementById('btn-action');
+    const btnLabel = document.getElementById('btn-label');
+    const overlay = document.getElementById('overlay');
+    const progTitle = document.getElementById('prog-title');
+    const progFill = document.getElementById('prog-fill');
+    const progText = document.getElementById('prog-text');
+
+    // Parse query params al caricamento
+    const urlParams = new URLSearchParams(window.location.search);
+    const compressParam = urlParams.get('compress');
+    
+    if (compressParam) {
+      mode = 'compress';
+      try {
+        sourcePaths = JSON.parse(compressParam);
+        if (sourcePaths.length > 0) {
+          destDir = parent(sourcePaths[0]);
+          initCompressMode();
+        }
+      } catch(e) {
+        statusEl.removeAttribute('data-i18n');
+        statusEl.textContent = t('err_parse_compress');
+      }
+    }
+
+    // Handle open-file event from the OS (modalità estrazione)
+    window.addEventListener('message', async (e) => {
+      const d = e.data;
+      if (d && d.type === 'open-file' && d.path) {
+        if (d.path.toLowerCase().endsWith('.zip')) {
+          mode = 'extract';
+          await loadZip(d.path);
+        }
+      }
+    });
+
+    // ==========================================
+    // EXTRACT MODE
+    // ==========================================
+    async function loadZip(path) {
+      statusEl.removeAttribute('data-i18n');
+      statusEl.innerHTML = t('loading_file', { path: esc(path) });
+      listEl.innerHTML = `<div class="empty">${esc(t('loading_archive'))}</div>`;
+      btnAction.disabled = true;
+      btnLabel.setAttribute('data-i18n', 'extract_here');
+      btnLabel.textContent = t('extract_here');
+
+      try {
+        const res = await api('read', path);
+        if (!res.ok) throw new Error('Failed to read file');
+        const blob = await res.blob();
+        
+        currentZipObj = new JSZip();
+        await currentZipObj.loadAsync(blob);
+        currentZipPath = path;
+
+        zipEntries = [];
+        currentZipObj.forEach((relativePath, zipEntry) => {
+          zipEntries.push(zipEntry);
+        });
+
+        zipEntries.sort((a, b) => {
+          if (a.dir === b.dir) return a.name.localeCompare(b.name);
+          return a.dir ? -1 : 1;
+        });
+
+        renderExtractList();
+        statusEl.removeAttribute('data-i18n');
+        statusEl.innerHTML = t('items_in', { count: zipEntries.length, path: esc(path) });
+        btnAction.disabled = zipEntries.length === 0;
+      } catch (err) {
+        statusEl.removeAttribute('data-i18n');
+        statusEl.textContent = t('error_x', { msg: err.message });
+        listEl.innerHTML = `<div class="empty" style="color:var(--danger)">${esc(t('open_failed'))}<br><small>${esc(err.message)}</small></div>`;
+      }
+    }
+
+    function renderExtractList() {
+      listEl.innerHTML = '';
+      if (zipEntries.length === 0) {
+        listEl.innerHTML = `<div class="empty">${esc(t('archive_empty'))}</div>`;
+        return;
+      }
+
+      zipEntries.forEach(entry => {
+        const li = document.createElement('li');
+        const isDir = entry.dir;
+        const glyph = isDir ? '📁' : '📄';
+        const sizeStr = isDir ? '' : fmt(entry._data ? entry._data.uncompressedSize : 0);
+        
+        li.innerHTML = `<span class="glyph">${glyph}</span><span class="name">${esc(entry.name)}</span><span class="size">${sizeStr}</span>`;
+        listEl.appendChild(li);
+      });
+    }
+
+    async function executeExtract() {
+      if (!currentZipObj || !currentZipPath) return;
+      const targetDir = parent(currentZipPath);
+      overlay.classList.remove('hidden');
+      progTitle.removeAttribute('data-i18n');
+      progText.removeAttribute('data-i18n'); progText.removeAttribute('data-i18n-args');
+      progTitle.textContent = t('extracting_to', { dir: targetDir });
+
+      let totalFiles = zipEntries.filter(e => !e.dir).length;
+      let doneFiles = 0;
+      
+      try {
+        for (let i = 0; i < zipEntries.length; i++) {
+          const entry = zipEntries[i];
+          const fullPath = targetDir === '/' ? `/${entry.name}` : `${targetDir}/${entry.name}`;
+          
+          if (entry.dir) {
+            await api('mkdir', fullPath, { method: 'POST' });
+          } else {
+            progText.textContent = t('extracting_file', { name: entry.name, done: doneFiles, total: totalFiles });
+            const arrayBuffer = await entry.async("arraybuffer");
+            const res = await api('write', fullPath, { method: 'POST', body: arrayBuffer });
+            if (!res.ok) throw new Error(`Failed to write ${entry.name}`);
+            
+            doneFiles++;
+            progFill.style.width = Math.floor((doneFiles / totalFiles) * 100) + '%';
+          }
+        }
+        
+        progTitle.textContent = t('extract_complete');
+        progText.textContent = t('files_extracted', { count: doneFiles });
+        window.parent.postMessage({ type: 'fs.changed' }, '*');
+
+        setTimeout(() => { overlay.classList.add('hidden'); }, 1500);
+      } catch (err) {
+        progTitle.textContent = t('extract_error');
+        progText.textContent = err.message;
+        progFill.style.background = 'var(--danger)';
+        setTimeout(() => { overlay.classList.add('hidden'); progFill.style.background = 'var(--accent)'; }, 3000);
+      }
+    }
+
+    // ==========================================
+    // COMPRESS MODE
+    // ==========================================
+    function initCompressMode() {
+      btnLabel.setAttribute('data-i18n', 'compress');
+      btnLabel.textContent = t('compress');
+      btnAction.disabled = false;
+
+      // Preserve a name the user may have already typed across a language switch.
+      const existing = document.getElementById('zip-name');
+      let defaultName;
+      if (existing && existing.value.trim()) {
+        defaultName = existing.value;
+      } else {
+        // Default archive name (es. cartella corrente o primo file)
+        defaultName = sourcePaths.length === 1 ? sourcePaths[0].split('/').pop() : 'archive';
+        const lastDot = defaultName.lastIndexOf('.');
+        if (lastDot > 0) defaultName = defaultName.slice(0, lastDot);
+        defaultName += '.zip';
+      }
+
+      statusEl.removeAttribute('data-i18n');
+      statusEl.innerHTML = `
+        <span class="sp">${t('create_in', { dir: esc(destDir) })}</span>
+        <label>${t('name_label')} <input type="text" id="zip-name" value="${esc(defaultName)}"></label>
+      `;
+      // Re-render this view when the OS language switches (imperative DOM).
+      window.__amOnI18n(initCompressMode);
+
+      listEl.innerHTML = '';
+      sourcePaths.forEach(p => {
+        const name = p.split('/').pop();
+        const li = document.createElement('li');
+        li.innerHTML = `<span class="glyph">📦</span><span class="name">${esc(p)}</span>`;
+        listEl.appendChild(li);
+      });
+    }
+
+    async function walkDir(dirPath, filesOut) {
+      const res = await api('list', dirPath);
+      if (!res.ok) throw new Error("Failed to list " + dirPath);
+      const data = await res.json();
+      for (const e of (data.entries || [])) {
+        const full = dirPath === '/' ? `/${e.name}` : `${dirPath}/${e.name}`;
+        if (e.type === 'dir') {
+          await walkDir(full, filesOut);
+        } else {
+          filesOut.push({ path: full, size: e.size });
+        }
+      }
+    }
+
+    async function executeCompress() {
+      const inputEl = document.getElementById('zip-name');
+      let zipName = inputEl ? inputEl.value.trim() : 'archive.zip';
+      if (!zipName.toLowerCase().endsWith('.zip')) zipName += '.zip';
+      
+      overlay.classList.remove('hidden');
+      progTitle.removeAttribute('data-i18n');
+      progText.removeAttribute('data-i18n'); progText.removeAttribute('data-i18n-args');
+      progTitle.textContent = t('preparing');
+      progText.textContent = t('scanning');
+      progFill.style.width = '0%';
+      
+      try {
+        // 1. Gather all files
+        let filesToZip = []; // { path: string, relative: string }
+        for (const sp of sourcePaths) {
+          const sName = sp.split('/').pop();
+          // To know if it's a dir, try to read it. If it fails or is a dir, use list
+          try {
+            const listRes = await api('list', sp);
+            if (listRes.ok) {
+              // It's a directory
+              const subFiles = [];
+              await walkDir(sp, subFiles);
+              subFiles.forEach(sf => {
+                const relative = sName + sf.path.slice(sp.length);
+                filesToZip.push({ path: sf.path, relative });
+              });
+            } else {
+              // It's a file
+              filesToZip.push({ path: sp, relative: sName });
+            }
+          } catch(e) {
+            // Assume file if list fails
+            filesToZip.push({ path: sp, relative: sName });
+          }
+        }
+
+        if (filesToZip.length === 0) throw new Error(t('no_files'));
+
+        // 2. Read and add to JSZip
+        const zip = new JSZip();
+        let total = filesToZip.length;
+        for (let i = 0; i < total; i++) {
+          const f = filesToZip[i];
+          progTitle.textContent = t('compressing');
+          progText.textContent = t('reading_file', { name: f.relative, i: i, total: total });
+          progFill.style.width = Math.floor((i / total) * 50) + '%'; // First 50% is reading
+          
+          const r = await api('read', f.path);
+          if (!r.ok) throw new Error("Cannot read " + f.path);
+          const buf = await r.arrayBuffer();
+          zip.file(f.relative, buf);
+        }
+
+        // 3. Generate ZIP buffer
+        progText.textContent = t('generating_zip');
+        progFill.style.width = '60%';
+        const zipBlob = await zip.generateAsync({
+          type: "blob", 
+          compression: "DEFLATE", 
+          compressionOptions: { level: 6 }
+        }, (meta) => {
+          progFill.style.width = Math.floor(60 + (meta.percent * 0.3)) + '%';
+        });
+
+        // 4. Upload ZIP to Cardputer
+        progText.textContent = t('saving_archive');
+        progFill.style.width = '95%';
+        const outPath = destDir === '/' ? `/${zipName}` : `${destDir}/${zipName}`;
+        const wRes = await fetch(`/api/fs/write?path=` + encodeURIComponent(outPath), {
+          method: 'POST', body: zipBlob
+        });
+        if (!wRes.ok) throw new Error("Failed to save " + zipName);
+
+        progFill.style.width = '100%';
+        progTitle.textContent = t('compress_complete');
+        progText.textContent = t('saved_x', { name: zipName });
+        window.parent.postMessage({ type: 'fs.changed' }, '*');
+
+        setTimeout(() => { overlay.classList.add('hidden'); }, 1500);
+
+      } catch(err) {
+        progTitle.textContent = t('compress_error');
+        progText.textContent = err.message;
+        progFill.style.background = 'var(--danger)';
+        setTimeout(() => { overlay.classList.add('hidden'); progFill.style.background = 'var(--accent)'; }, 3000);
+      }
+    }
+
+    // ==========================================
+    // ACTION BUTTON
+    // ==========================================
+    btnAction.onclick = () => {
+      if (mode === 'extract') executeExtract();
+      else if (mode === 'compress') executeCompress();
+    };
+
+  </script>
+
+  <script type="module">
+    // Centralized OS i18n: paints all [data-i18n] DOM, auto-translates DOM added later,
+    // and live-switches with the OS language. We also expose t() to the (non-module)
+    // app script above for its imperatively-built strings, and re-run its registered
+    // redraw on language change so views built in JS follow the switch too.
+    import I18N from '/nucleo-i18n.js';
+    const t = await I18N.init('archive-manager');
+    window.__amI18n = t;
+    const redraw = () => { if (typeof window.__amRedraw === 'function') window.__amRedraw(); };
+    redraw();                 // translate any imperative DOM rendered before init finished
+    I18N.onChange(redraw);    // and again on every live language switch
+  </script>
+</body>
+</html>

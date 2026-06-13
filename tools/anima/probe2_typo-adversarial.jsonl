@@ -1,0 +1,117 @@
+{"q":"asdf","lang":"it","expect":"abstain"}
+{"q":"qwerty","lang":"en","expect":"abstain"}
+{"q":"sdkfj","lang":"it","expect":"abstain"}
+{"q":"asdfgh jkl","lang":"it","expect":"abstain"}
+{"q":"zxcvbnm","lang":"en","expect":"abstain"}
+{"q":"wertyuio","lang":"it","expect":"abstain"}
+{"q":"lkjhgfdsa","lang":"it","expect":"abstain"}
+{"q":"poiuy","lang":"en","expect":"abstain"}
+{"q":"qazwsx","lang":"it","expect":"abstain"}
+{"q":"fjdksla","lang":"it","expect":"abstain"}
+{"q":"aaaa bbbb cccc","lang":"it","expect":"abstain"}
+{"q":"xyzzy plugh","lang":"en","expect":"abstain"}
+{"q":"hjkl uiop","lang":"it","expect":"abstain"}
+{"q":"grblfx mnqpt","lang":"it","expect":"abstain"}
+{"q":"vbnm wqer tyui","lang":"en","expect":"abstain"}
+{"q":"mi sento solo","lang":"it","expect":"abstain|answer"}
+{"q":"mi snto solo","lang":"it","expect":"abstain|answer"}
+{"q":"raccontami una barzelletta","lang":"it","expect":"abstain|answer"}
+{"q":"raccntami una barzelletta","lang":"it","expect":"abstain|answer"}
+{"q":"sono triste oggi","lang":"it","expect":"abstain|answer"}
+{"q":"i feel lonely","lang":"en","expect":"abstain|answer"}
+{"q":"i feel lonley","lang":"en","expect":"abstain|answer"}
+{"q":"tell me a joke","lang":"en","expect":"abstain|answer"}
+{"q":"tell me a jke","lang":"en","expect":"abstain|answer"}
+{"q":"sing me a song","lang":"en","expect":"abstain|answer"}
+{"q":"ho paura del buio","lang":"it","expect":"abstain|answer"}
+{"q":"voglio piangere","lang":"it","expect":"abstain|answer"}
+{"q":"24/04/2027","lang":"it","expect":"abstain"}
+{"q":"24/04/0227","lang":"it","expect":"abstain"}
+{"q":"42","lang":"it","expect":"abstain"}
+{"q":"4r","lang":"it","expect":"abstain"}
+{"q":"a1","lang":"it","expect":"abstain"}
+{"q":"z9","lang":"en","expect":"abstain"}
+{"q":"99999","lang":"it","expect":"abstain"}
+{"q":"3.14159","lang":"it","expect":"abstain"}
+{"q":"-17","lang":"it","expect":"abstain"}
+{"q":"12:45","lang":"it","expect":"abstain"}
+{"q":"2027","lang":"it","expect":"abstain"}
+{"q":"#$%^&","lang":"it","expect":"abstain"}
+{"q":"...","lang":"it","expect":"abstain"}
+{"q":"???","lang":"it","expect":"abstain"}
+{"q":"!!!","lang":"en","expect":"abstain"}
+{"q":"chi e il presidente della luna","lang":"it","expect":"abstain"}
+{"q":"chi e il presidnte della luna","lang":"it","expect":"abstain"}
+{"q":"qual e la capitale di marte","lang":"it","expect":"abstain"}
+{"q":"qual e la capitle di marte","lang":"it","expect":"abstain"}
+{"q":"who is the king of the united states","lang":"en","expect":"abstain"}
+{"q":"who is the kign of the united states","lang":"en","expect":"abstain"}
+{"q":"quanti continenti ha giove","lang":"it","expect":"abstain"}
+{"q":"in che anno e morto napoleone nel 3000","lang":"it","expect":"abstain"}
+{"q":"chi ha vinto i mondiali del 2050","lang":"it","expect":"abstain"}
+{"q":"chi ha vinto i mndiali del 2050","lang":"it","expect":"abstain"}
+{"q":"when did dinosaurs invent the internet","lang":"en","expect":"abstain"}
+{"q":"what color is the number seven","lang":"en","expect":"abstain"}
+{"q":"how much does the color blue weigh","lang":"en","expect":"abstain"}
+{"q":"quanto pesa il colore blu","lang":"it","expect":"abstain"}
+{"q":"il sole gira intorno alla terra in quanto tempo","lang":"it","expect":"abstain"}
+{"q":"qual e il piu grande numero primo","lang":"it","expect":"abstain"}
+{"q":"qual e il piu grnde numero primo","lang":"it","expect":"abstain"}
+{"q":"what is the largest prime number","lang":"en","expect":"abstain"}
+{"q":"qual e il pianeta piu intelligente","lang":"it","expect":"abstain"}
+{"q":"chi e la persona piu alta del mondo nel 2099","lang":"it","expect":"abstain"}
+{"q":"what is the best country","lang":"en","expect":"abstain|answer"}
+{"q":"chi sei","lang":"it","expect":"answer"}
+{"q":"chi sie","lang":"it","expect":"answer"}
+{"q":"cosa sei","lang":"it","expect":"answer"}
+{"q":"cosa puoi fare","lang":"it","expect":"answer"}
+{"q":"cosa pui fare","lang":"it","expect":"answer"}
+{"q":"come ti chiami","lang":"it","expect":"answer"}
+{"q":"come ti chimai","lang":"it","expect":"answer"}
+{"q":"what are you","lang":"en","expect":"answer"}
+{"q":"who are you","lang":"en","expect":"answer"}
+{"q":"who are yuo","lang":"en","expect":"answer"}
+{"q":"what can you do","lang":"en","expect":"answer"}
+{"q":"sei un robot","lang":"it","expect":"abstain|answer"}
+{"q":"sei viva","lang":"it","expect":"abstain|answer"}
+{"q":"hai dei sentimenti","lang":"it","expect":"abstain|answer"}
+{"q":"qwfp arst","lang":"it","expect":"abstain"}
+{"q":"blah blah blah","lang":"en","expect":"abstain"}
+{"q":"bla bla bla","lang":"it","expect":"abstain"}
+{"q":"test test test","lang":"it","expect":"abstain|answer"}
+{"q":"ok ok ok","lang":"it","expect":"abstain|answer"}
+{"q":"asdfasdf asdf","lang":"it","expect":"abstain"}
+{"q":"mmmmm","lang":"it","expect":"abstain"}
+{"q":"hmmmm","lang":"en","expect":"abstain"}
+{"q":"uhm boh","lang":"it","expect":"abstain"}
+{"q":"boh","lang":"it","expect":"abstain"}
+{"q":"nessuna idea","lang":"it","expect":"abstain"}
+{"q":"qiando e nato","lang":"it","expect":"abstain"}
+{"q":"perche perche perche","lang":"it","expect":"abstain"}
+{"q":"the the the the","lang":"en","expect":"abstain"}
+{"q":"jdshf kjdsh fkjds","lang":"it","expect":"abstain"}
+{"q":"weoiur woieur","lang":"en","expect":"abstain"}
+{"q":"meteo","lang":"it","expect":"abstain"}
+{"q":"meto","lang":"it","expect":"abstain"}
+{"q":"che tempo fa su plutone","lang":"it","expect":"abstain"}
+{"q":"che tmepo fa su plutone","lang":"it","expect":"abstain"}
+{"q":"colore","lang":"it","expect":"abstain"}
+{"q":"cosa","lang":"it","expect":"abstain"}
+{"q":"perche","lang":"it","expect":"abstain"}
+{"q":"why","lang":"en","expect":"abstain"}
+{"q":"chi","lang":"it","expect":"abstain"}
+{"q":"dove","lang":"it","expect":"abstain"}
+{"q":"qiandk","lang":"it","expect":"abstain"}
+{"q":"lorem ipsum dolor sit amet","lang":"en","expect":"abstain"}
+{"q":"foo bar baz","lang":"en","expect":"abstain"}
+{"q":"null undefined NaN","lang":"en","expect":"abstain"}
+{"q":"select * from users","lang":"en","expect":"abstain"}
+{"q":"rm -rf /","lang":"en","expect":"abstain"}
+{"q":"01010101","lang":"it","expect":"abstain"}
+{"q":"ababab","lang":"it","expect":"abstain"}
+{"q":"il quadrato rotondo quanto misura","lang":"it","expect":"abstain"}
+{"q":"how loud is the smell of red","lang":"en","expect":"abstain"}
+{"q":"cosa sogna un sasso","lang":"it","expect":"abstain"}
+{"q":"chi ha inventato il nulla","lang":"it","expect":"abstain"}
+{"q":"qunado","lang":"it","expect":"abstain"}
+{"q":"adesss","lang":"it","expect":"abstain"}

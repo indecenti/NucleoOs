@@ -1,0 +1,21 @@
+{
+  "id": "dos-importer",
+  "name": "DOS Importer",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Drag-and-drop a DOS program (folder, .exe/.com/.bat, or .zip) to build a js-dos bundle in the browser and install it onto the SD for the DOS Box app — no PC tools, no SD removal.",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/dos-importer/",
+  "icon": "/apps/dos-importer/icon.svg",
+  "permissions": ["storage.shared", "system.notify"],
+  "mounts": { "app": "/apps/dos-importer/data" },
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": [],
+  "publishes": ["fs.changed"],
+  "power": { "budget_class": "low" },
+  "mesh": { "exposes": [], "consumes": [] }
+}

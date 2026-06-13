@@ -1,0 +1,327 @@
+// REALISTIC programmatic NL requests (workflow-generated, exe-validated, NO LLM tier). kind:skill→intent fires; kind:knowledge→knowledge-or-abstain, never a compute skill, never a fabrication. Run by realistic.mjs.
+{"q":"massimo comune divisore di 24 e 36","lang":"it","kind":"skill","expect":"calc"}
+{"q":"mcd tra 48 e 60","lang":"it","kind":"skill","expect":"calc"}
+{"q":"qual e il mcm di 4 e 6","lang":"it","kind":"skill","expect":"calc"}
+{"q":"mcd di 100 e 75","lang":"it","kind":"skill","expect":"calc"}
+{"q":"mcm di 8 e 10","lang":"it","kind":"skill","expect":"calc"}
+{"q":"converti 42 in binario","lang":"it","kind":"skill","expect":"base"}
+{"q":"scrivi 200 in esadecimale","lang":"it","kind":"skill","expect":"base"}
+{"q":"converti 1010 da binario a decimale","lang":"it","kind":"skill","expect":"base"}
+{"q":"111010 in decimale partendo dal binario","lang":"it","kind":"skill","expect":"base"}
+{"q":"converti 64 in ottale","lang":"it","kind":"skill","expect":"base"}
+{"q":"cnoverti 30 in binario","lang":"it","kind":"skill","expect":"base","typo":true}
+{"q":"converti 1000000 in esadecimale","lang":"it","kind":"skill","expect":"base"}
+{"q":"77 in binario","lang":"it","kind":"skill","expect":"base"}
+{"q":"scrivi 2024 in numeri romani","lang":"it","kind":"skill","expect":"roman"}
+{"q":"scrivi 49 in numeri romani","lang":"it","kind":"skill","expect":"roman"}
+{"q":"quanto vale XCIV in decimale","lang":"it","kind":"skill","expect":"roman"}
+{"q":"scirvi 777 in numeri romani","lang":"it","kind":"skill","expect":"roman","typo":true}
+{"q":"il doppio di 17","lang":"it","kind":"skill","expect":"calc"}
+{"q":"meta di 90","lang":"it","kind":"skill","expect":"calc"}
+{"q":"il reciproco di 4","lang":"it","kind":"skill","expect":"calc"}
+{"q":"triplo di 12","lang":"it","kind":"skill","expect":"calc"}
+{"q":"il quadruplo di 25","lang":"it","kind":"skill","expect":"calc"}
+{"q":"un quarto di 88","lang":"it","kind":"skill","expect":"calc"}
+{"q":"l inverso di 8","lang":"it","kind":"skill","expect":"calc"}
+{"q":"la meta di 256","lang":"it","kind":"skill","expect":"calc"}
+{"q":"il doppoi di 33","lang":"it","kind":"knowledge","typo":true}
+{"q":"2 alla decima","lang":"it","kind":"skill","expect":"calc"}
+{"q":"radice cubica di 27","lang":"it","kind":"skill","expect":"calc"}
+{"q":"5 al cubo","lang":"it","kind":"skill","expect":"calc"}
+{"q":"3 elevato alla quarta","lang":"it","kind":"knowledge"}
+{"q":"radice quadrata di 144","lang":"it","kind":"skill","expect":"calc"}
+{"q":"4 alla quinta","lang":"it","kind":"skill","expect":"calc"}
+{"q":"radcie cubica di 8","lang":"it","kind":"skill","expect":"calc","typo":true}
+{"q":"7 al quadrato","lang":"it","kind":"skill","expect":"calc"}
+{"q":"valore assoluto di -12","lang":"it","kind":"skill","expect":"calc"}
+{"q":"23 modulo 7","lang":"it","kind":"skill","expect":"calc"}
+{"q":"il resto di 100 diviso 9","lang":"it","kind":"skill","expect":"calc"}
+{"q":"valore assulto di -7","lang":"it","kind":"knowledge","typo":true}
+{"q":"somma 45 e 67","lang":"it","kind":"skill","expect":"calc"}
+{"q":"qual e la differenza tra 100 e 37","lang":"it","kind":"skill","expect":"calc"}
+{"q":"il prodotto di 13 e 7","lang":"it","kind":"skill","expect":"calc"}
+{"q":"il quoziente di 144 e 12","lang":"it","kind":"skill","expect":"calc"}
+{"q":"somma 12 e 30 e 8","lang":"it","kind":"skill","expect":"calc"}
+{"q":"somam 19 e 21","lang":"it","kind":"knowledge","typo":true}
+{"q":"differenza fra 88 e 19","lang":"it","kind":"skill","expect":"calc"}
+{"q":"47 e primo","lang":"it","kind":"skill","expect":"prime"}
+{"q":"91 e un numero primo","lang":"it","kind":"skill","expect":"prime"}
+{"q":"il numero 143 e primo","lang":"it","kind":"skill","expect":"prime"}
+{"q":"fattoriale di 6","lang":"it","kind":"skill","expect":"calc"}
+{"q":"i divisori di 28","lang":"it","kind":"knowledge"}
+{"q":"qual e il numero atomico del tungsteno","lang":"it","kind":"knowledge"}
+{"q":"in che anno e stata fondata la citta di cartagine","lang":"it","kind":"knowledge"}
+{"q":"il valroe assoluto del numero -3.5","lang":"it","kind":"skill","expect":"calc","typo":true}
+{"q":"qual e il fattoriale di 0","lang":"it","kind":"skill","expect":"calc"}
+{"q":"converti 256 in base 16","lang":"it","kind":"skill","expect":"base"}
+{"q":"chi e stato il primo re del belgio","lang":"it","kind":"knowledge"}
+{"q":"quanti gradi fahrenheit sono 30 celsius","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 37 gradi celsius in farenheit","lang":"it","kind":"knowledge","typo":true}
+{"q":"quanti kelvin sono 25 gradi celsius","lang":"it","kind":"skill","expect":"convert"}
+{"q":"5 miglia in chilometri","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 80 chili in libbre","lang":"it","kind":"skill","expect":"convert"}
+{"q":"12 pollici in cm","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 3 metri in piedi","lang":"it","kind":"skill","expect":"convert"}
+{"q":"15 chilometir in miglia","lang":"it","kind":"knowledge","typo":true}
+{"q":"quanti grammi sono 2 once","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 500 metri in yard","lang":"it","kind":"skill","expect":"convert"}
+{"q":"quanti megabyte in 3 gigabyte","lang":"it","kind":"skill","expect":"convert"}
+{"q":"quanti gigabyte sono 1 terabyte","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 8 bit in byte","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 500 calorie in joule","lang":"it","kind":"skill","expect":"convert"}
+{"q":"1.5 kilowatt in cavalli","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 2000 joule in calorie","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 1 kilocaloria in joule","lang":"it","kind":"skill","expect":"convert"}
+{"q":"100 km/h in mph","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 30 metri al secondo in km/h","lang":"it","kind":"skill","expect":"convert"}
+{"q":"2 atmosfere in pascal","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 3 bar in psi","lang":"it","kind":"skill","expect":"convert"}
+{"q":"3 litri in galloni","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 750 millilitri in litri","lang":"it","kind":"skill","expect":"convert"}
+{"q":"quanti centilitri sono 2 litri","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 250 grammi in once","lang":"it","kind":"skill","expect":"convert"}
+{"q":"2 tazze in millilitri","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 1 libbra in grammi","lang":"it","kind":"skill","expect":"convert"}
+{"q":"convetri 200 celsius in fahrenheit","lang":"it","kind":"skill","expect":"convert","typo":true}
+{"q":"converti 90 chilometri orari in metri al secondo","lang":"it","kind":"skill","expect":"convert"}
+{"q":"quanti chilogrammi sono 500 grammi","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 1000 watt in cavalli vapore","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 4 gallloni in litri","lang":"it","kind":"knowledge","typo":true}
+{"q":"quanti pollici sono 50 centimetri","lang":"it","kind":"skill","expect":"convert"}
+{"q":"apri la calcolatrice","lang":"it","kind":"skill","expect":"open_app"}
+{"q":"lancia il browser web","lang":"it","kind":"skill","expect":"open_app"}
+{"q":"metti un po di musica","lang":"it","kind":"skill","expect":"open_app"}
+{"q":"apri il file manager","lang":"it","kind":"skill","expect":"open_app"}
+{"q":"lancia la radio","lang":"it","kind":"skill","expect":"open_app"}
+{"q":"apri la calcolatirce","lang":"it","kind":"skill","expect":"open_app","typo":true}
+{"q":"apri le impostazioni","lang":"it","kind":"skill","expect":"open_app"}
+{"q":"apri il foglio di calcolo","lang":"it","kind":"skill","expect":"open_app"}
+{"q":"lancia il lettore video","lang":"it","kind":"skill","expect":"clarify"}
+{"q":"crea un file chiamato spesa.txt","lang":"it","kind":"skill","expect":"create_file"}
+{"q":"scrivi una nota","lang":"it","kind":"skill","expect":"create_file"}
+{"q":"crea un nuovo documento di lavoro","lang":"it","kind":"skill","expect":"create_file"}
+{"q":"crea un file chiamato ricetta.md","lang":"it","kind":"skill","expect":"create_file"}
+{"q":"scivi una nota per la riunione","lang":"it","kind":"knowledge","typo":true}
+{"q":"crea un file chaimato appunti","lang":"it","kind":"skill","expect":"create_file","typo":true}
+{"q":"alza il volume","lang":"it","kind":"skill","expect":"set_volume"}
+{"q":"abbassa la luminosità","lang":"it","kind":"skill","expect":"set_brightness"}
+{"q":"metti lo schermo al massimo","lang":"it","kind":"skill","expect":"set_brightness"}
+{"q":"alza la luminosità al 70 percento","lang":"it","kind":"skill","expect":"set_brightness"}
+{"q":"abbassa il volume a 3","lang":"it","kind":"skill","expect":"set_volume"}
+{"q":"alza il volmue per favore","lang":"it","kind":"knowledge","typo":true}
+{"q":"abbasa la luminosita","lang":"it","kind":"knowledge","typo":true}
+{"q":"metti il volume a sette","lang":"it","kind":"knowledge"}
+{"q":"che impegni ho oggi","lang":"it","kind":"skill","expect":"agenda"}
+{"q":"ricordami di chiamare il dentista domani","lang":"it","kind":"skill","expect":"add_event"}
+{"q":"cosa devo fare oggi","lang":"it","kind":"skill","expect":"agenda"}
+{"q":"ricordami di comprare il pane stasera","lang":"it","kind":"skill","expect":"add_event"}
+{"q":"ricordmai di pagare la bolletta","lang":"it","kind":"skill","expect":"add_event","typo":true}
+{"q":"che appuntamenti ho domani","lang":"it","kind":"skill","expect":"date"}
+{"q":"mi chiamo Federica","lang":"it","kind":"skill","expect":"profile"}
+{"q":"ho 34 anni","lang":"it","kind":"skill","expect":"profile"}
+{"q":"come mi chiamo","lang":"it","kind":"skill","expect":"profile"}
+{"q":"abito a Bologna","lang":"it","kind":"skill","expect":"profile"}
+{"q":"cosa sai di me","lang":"it","kind":"skill","expect":"profile"}
+{"q":"mi chaimo Stefano","lang":"it","kind":"knowledge","typo":true}
+{"q":"abtio a Verona","lang":"it","kind":"knowledge","typo":true}
+{"q":"ricorda che la mia bici è rossa","lang":"it","kind":"skill","expect":"teach"}
+{"q":"ricordati che il wifi di casa è veloce","lang":"it","kind":"skill","expect":"teach"}
+{"q":"ricorda che il mio gatto si chiama Otto","lang":"it","kind":"skill","expect":"add_event"}
+{"q":"ricrda che la password del garage è 4471","lang":"it","kind":"skill","expect":"teach","typo":true}
+{"q":"come si dice gatto in inglese","lang":"it","kind":"skill","expect":"translate"}
+{"q":"traduci casa in inglese","lang":"it","kind":"skill","expect":"translate"}
+{"q":"come si dice finestra in inglese","lang":"it","kind":"skill","expect":"translate"}
+{"q":"traduci cane in ingleese","lang":"it","kind":"skill","expect":"translate","typo":true}
+{"q":"come si dice albero in inlgese","lang":"it","kind":"skill","expect":"translate","typo":true}
+{"q":"che ore sono","lang":"it","kind":"skill","expect":"time"}
+{"q":"che giorno è oggi","lang":"it","kind":"skill","expect":"date"}
+{"q":"quanta batteria ho","lang":"it","kind":"skill","expect":"battery"}
+{"q":"che versione hai","lang":"it","kind":"skill","expect":"version"}
+{"q":"che ofe sono","lang":"it","kind":"knowledge","typo":true}
+{"q":"quanta batteira mi rimane","lang":"it","kind":"knowledge","typo":true}
+{"q":"in che anno siamo","lang":"it","kind":"skill","expect":"year"}
+{"q":"quanto fa 47 per 89","lang":"it","kind":"skill","expect":"calc"}
+{"q":"calcola la radice quadrata di 729","lang":"it","kind":"skill","expect":"calc"}
+{"q":"converti 5 km in metri","lang":"it","kind":"skill","expect":"convert"}
+{"q":"area di un cerchio di raggio 6","lang":"it","kind":"skill","expect":"geo"}
+{"q":"converti 25 gradi celsius in fahrenheit","lang":"it","kind":"skill","expect":"convert"}
+{"q":"quanto fa 18 piu 27","lang":"it","kind":"skill","expect":"calc"}
+{"q":"converti il numero 255 in binario","lang":"it","kind":"skill","expect":"base"}
+{"q":"calcla 144 diviso 12","lang":"it","kind":"skill","expect":"calc","typo":true}
+{"q":"resistenza con 12 volt e 4 ohm","lang":"it","kind":"skill","expect":"ohm"}
+{"q":"qual è la capitale dello Sri Lanka","lang":"it","kind":"knowledge"}
+{"q":"chi ha scritto Il Gattopardo","lang":"it","kind":"knowledge"}
+{"q":"quanti continenti ci sono","lang":"it","kind":"knowledge"}
+{"q":"qual è il fiume più lungo del mondo","lang":"it","kind":"knowledge"}
+{"q":"in che anno è caduto il muro di Berlino","lang":"it","kind":"knowledge"}
+{"q":"qual è la valuta del Giappone","lang":"it","kind":"knowledge"}
+{"q":"quanto fa 847 diviso 13","lang":"it","kind":"skill","expect":"calc"}
+{"q":"calcola la radice quadrata di 1764","lang":"it","kind":"skill","expect":"calc"}
+{"q":"quanto è il 22 per cento di 950","lang":"it","kind":"skill","expect":"percent"}
+{"q":"converti 7 chilometri in miglia","lang":"it","kind":"skill","expect":"convert"}
+{"q":"converti 255 in esadecimale","lang":"it","kind":"skill","expect":"base"}
+{"q":"il numero 91 è primo?","lang":"it","kind":"skill","expect":"prime"}
+{"q":"area di un cerchio con raggio 9","lang":"it","kind":"skill","expect":"geo"}
+{"q":"calcola la forza con massa 12 kg e accelerazione 3 m/s2","lang":"it","kind":"skill","expect":"phys"}
+{"q":"resistenza con tensione 9V e corrente 0.5A","lang":"it","kind":"skill","expect":"ohm"}
+{"q":"converti 30 gradi celsius in fahrenheit","lang":"it","kind":"skill","expect":"convert"}
+{"q":"che ore sono adeso","lang":"it","kind":"knowledge","typo":true}
+{"q":"arpi le impostazioni","lang":"it","kind":"skill","expect":"open_app","typo":true}
+{"q":"alza il volume al 70","lang":"it","kind":"skill","expect":"set_volume"}
+{"q":"abbassa la luminosita al 25","lang":"it","kind":"skill","expect":"set_brightness"}
+{"q":"aggiungi un evento dentista domani alle 15","lang":"it","kind":"skill","expect":"add_event"}
+{"q":"crea un file chiamato note.txt","lang":"it","kind":"skill","expect":"create_file"}
+{"q":"come si dice grazie in inglese","lang":"it","kind":"skill","expect":"translate"}
+{"q":"qaunto fa 56 per 24","lang":"it","kind":"skill","expect":"calc","typo":true}
+{"q":"qual è la mediana di 4 8 15 16 23 42","lang":"it","kind":"skill","expect":"calc"}
+{"q":"massimo comune divisore tra 48 e 36","lang":"it","kind":"skill","expect":"calc"}
+{"q":"scala una ricetta da 4 a 6 porzioni con 200g di farina","lang":"it","kind":"knowledge"}
+{"q":"convert 50 dollari in euro","lang":"it","kind":"knowledge"}
+{"q":"quanto dista la Terra dal Sole","lang":"it","kind":"knowledge"}
+{"q":"quanti lati ha un esagono","lang":"it","kind":"knowledge"}
+{"q":"chi ha scritto la Divina Commedia","lang":"it","kind":"knowledge"}
+{"q":"qual è la capitale dell'Australia","lang":"it","kind":"knowledge"}
+{"q":"cos'è la fotosintesi","lang":"it","kind":"knowledge"}
+{"q":"chi è il presidente della Repubblica italiana","lang":"it","kind":"knowledge"}
+{"q":"quanti abitanti ha la Mongolia","lang":"it","kind":"knowledge"}
+{"q":"qual è il fiume piu lungo del mondo","lang":"it","kind":"knowledge"}
+{"q":"quante zampe ha un polpo","lang":"it","kind":"knowledge"}
+{"q":"qual è il simbolo chimico delloro","lang":"it","kind":"knowledge","typo":true}
+{"q":"cos'è un compilatore","lang":"it","kind":"knowledge"}
+{"q":"capitale dell'australa","lang":"it","kind":"knowledge","typo":true}
+{"q":"quante ossa ha il corpo umano","lang":"it","kind":"knowledge"}
+{"q":"quante zmape ha un ragno","lang":"it","kind":"knowledge","typo":true}
+{"q":"qual è il pianeta più grande del sistema solare","lang":"it","kind":"knowledge"}
+{"q":"di cosa è fatto il vetro","lang":"it","kind":"knowledge"}
+{"q":"a che temperatura bolle l'acqua","lang":"it","kind":"knowledge"}
+{"q":"cos'è la RAM di un computer","lang":"it","kind":"knowledge"}
+{"q":"qaul è l'animale più veloce del mondo","lang":"it","kind":"knowledge","typo":true}
+{"q":"quanti denti ha un adulto","lang":"it","kind":"knowledge"}
+{"q":"di che colore è il sangue di un calamaro","lang":"it","kind":"knowledge"}
+{"q":"cos'è un algoritmo","lang":"it","kind":"knowledge"}
+{"q":"quanti anni dura un secolo","lang":"it","kind":"knowledge"}
+{"q":"cos'è il DNA","lang":"it","kind":"knowledge"}
+{"q":"quante corde ha una chitarra","lang":"it","kind":"knowledge"}
+{"q":"cos'è una proteina","lang":"it","kind":"knowledge"}
+{"q":"qual è il metallo più leggero","lang":"it","kind":"knowledge"}
+{"q":"quante zampe ha un'ape","lang":"it","kind":"knowledge"}
+{"q":"cos'è un byte","lang":"it","kind":"knowledge"}
+{"q":"a quanti gradi si scioglie il ghiaccio","lang":"it","kind":"knowledge"}
+{"q":"qual è la stella più vicina alla terra","lang":"it","kind":"knowledge"}
+{"q":"di cosa si nutrono i panda","lang":"it","kind":"knowledge","typo":true}
+
+// WEAK-SPOT STRESS (kind:robust) — real requests with STRANGE phrasing / deliberate LOGICAL typos / worded numbers, targeting the cascade weak spots. robust = may handle OR safely degrade, but NEVER fabricate or misroute to a wrong skill. Knowledge ones = answer-or-abstain.
+{"q":"del 144 mi diresti la radice quadrata?","lang":"it","kind":"robust","expect":"calc"}
+{"q":"se non ti dispiace, dimmi quanto fa diciassette per ventitré","lang":"it","kind":"robust","expect":"calc"}
+{"q":"dei numeri 12 e 18, qual e il massimo comune divisore?","lang":"it","kind":"robust","expect":"calc"}
+{"q":"se ho un quadrato di lato 5, l'area me la calcoli?","lang":"it","kind":"robust","expect":"geo"}
+{"q":"in pascal, quanto sono 2 atmosfere?","lang":"it","kind":"robust","expect":"convert"}
+{"q":"calcoal la raduce quadrata di 81 per favore","lang":"it","kind":"robust","expect":"calc","typo":true}
+{"q":"il 15 per cento di 200, sapresti dirmelo?","lang":"it","kind":"robust","expect":"percent"}
+{"q":"di un cerchio con raggio 7, l'area quanto verrebbe?","lang":"it","kind":"robust","expect":"geo"}
+{"q":"il numero 255 in binario come si scriverebbe?","lang":"it","kind":"robust","expect":"base"}
+{"q":"il numero romano per 49, me lo scriveresti?","lang":"it","kind":"robust","expect":"roman"}
+{"q":"con una resistenza di 220 ohm e 0.5 ampere, la tensione me la trovi?","lang":"it","kind":"robust","expect":"ohm"}
+{"q":"se una scala e 1 a 100, 250 cm reali in disegno quanto sono?","lang":"it","kind":"robust","expect":"calc"}
+{"q":"se ho percorso 100 km in 2 ore, la velocita media me la calcoli?","lang":"it","kind":"robust","expect":"phys"}
+{"q":"del numero 144, la radice quadrata quanto sarebbe e poi il doppio?","lang":"it","kind":"robust","expect":"calc"}
+{"q":"tre elevato alla quarta potenza, quanto mi viene?","lang":"it","kind":"robust","expect":"calc"}
+{"q":"di un trinagolo con base 6 e altezza 4, l'area sarebbe?","lang":"it","kind":"robust","expect":"geo","typo":true}
+{"q":"quanto fa la radice cubica di 27 se non ti scoccia dirmelo?","lang":"it","kind":"robust","expect":"calc"}
+{"q":"calcoal la radice quadrata di 169","lang":"it","kind":"robust","expect":"calc","typo":true}
+{"q":"convreti 10 km in metri","lang":"it","kind":"robust","expect":"convert","typo":true}
+{"q":"quanto fa il 25 per ecnto di 80","lang":"it","kind":"robust","expect":"percent|calc","typo":true}
+{"q":"raidce cubica di 27","lang":"it","kind":"robust","expect":"calc","typo":true}
+{"q":"qaunto fa diciassette per ventitre","lang":"it","kind":"robust","expect":"calc","typo":true}
+{"q":"convertimi 3 chilogarmmi in grammi","lang":"it","kind":"robust","expect":"convert","typo":true}
+{"q":"qual e la capitlae della Francia","lang":"it","kind":"knowledge","typo":true}
+{"q":"dimmi quanto fa 144 diviiso 12","lang":"it","kind":"robust","expect":"calc","typo":true}
+{"q":"converti 500 grmmi in chilogrammi","lang":"it","kind":"robust","expect":"convert","typo":true}
+{"q":"quanti centimetri sono 2 metr","lang":"it","kind":"robust","expect":"convert","typo":true}
+{"q":"calcola la radcie quadrata di duecentocinquantasei","lang":"it","kind":"robust","expect":"calc","typo":true}
+{"q":"in che anno e morto Leonadro da Vinci","lang":"it","kind":"knowledge","typo":true}
+{"q":"convreti 90 gradi in radianti","lang":"it","kind":"robust","expect":"convert","typo":true}
+{"q":"quanto fa 17 piu venttre","lang":"it","kind":"robust","expect":"calc","typo":true}
+{"q":"quanto e il 30 per ecnto di trecento","lang":"it","kind":"robust","expect":"percent|calc","typo":true}
+{"q":"converti cinquecento megabyte in gigabyte","lang":"it","kind":"robust","expect":"convert"}
+{"q":"se non ti dispiace, dimmi quanti metri sono cinque kilomtri","lang":"it","kind":"robust","expect":"convert","typo":true}
+{"q":"del numero 1010, se lo leggi come binario in decimale quanto fa?","lang":"it","kind":"robust","expect":"base"}
+{"q":"quanto vale FF se lo converti da base 16 a base 10?","lang":"it","kind":"robust","expect":"base"}
+{"q":"il numero 2026, scritto in numeri romani come sarebbe?","lang":"it","kind":"robust","expect":"roman"}
+{"q":"calcoal il fattoriale di sette","lang":"it","kind":"robust","expect":"calc","typo":true}
+{"q":"del numero 144, la radice quadrata quanto sarebbe?","lang":"it","kind":"robust","expect":"calc"}
+{"q":"calcola la raduce cubica di 27","lang":"it","kind":"robust","expect":"calc","typo":true}
+{"q":"il triplo del reciproco di 4","lang":"it","kind":"robust","expect":"calc"}
+{"q":"qual e il reciproco di otto","lang":"it","kind":"robust","expect":"calc"}
+{"q":"la meta di centottanta quanto fa","lang":"it","kind":"robust","expect":"calc"}
+{"q":"mediana di 7 3 9 1 5","lang":"it","kind":"robust","expect":"calc"}
+{"q":"trova la media di 12 18 e 24","lang":"it","kind":"robust","expect":"calc"}
+{"q":"qual e la moda di 2 2 3 4 4 4 5","lang":"it","kind":"robust","expect":"answer-or-abstain"}
+{"q":"il massimo comune divisore tra 48 e 36 quanto e","lang":"it","kind":"robust","expect":"calc"}
+{"q":"il valore assoluto di meno trentadue","lang":"it","kind":"robust","expect":"calc"}
+{"q":"se non ti dispiace, dimmi quanto fa due elevato alla decima","lang":"it","kind":"robust","expect":"calc"}
+{"q":"converti due tazze in millilitri","lang":"it","kind":"robust","expect":"convert"}
+{"q":"quanti cavalli sono 100 kilowatt","lang":"it","kind":"robust","expect":"convert"}
+{"q":"converti 500 euro in dollari per favore","lang":"it","kind":"knowledge"}
+{"q":"quanti bit ci sono in 3 byte","lang":"it","kind":"robust","expect":"convert"}
+{"q":"mi sai dire, di grazia, quante zampe ha un ragno?","lang":"it","kind":"knowledge"}
+{"q":"a che temperatura, di preciso, bolle l'acqua a livello del mare?","lang":"it","kind":"knowledge"}
+{"q":"di cosa e fatto il vetro, lo sai per caso?","lang":"it","kind":"knowledge"}
+{"q":"quante ossa ha in totale il corpo di un essere umano adulto?","lang":"it","kind":"knowledge"}
+{"q":"il nuemro atomico dell'oro, sapresti dirmelo?","lang":"it","kind":"knowledge","typo":true}
+{"q":"quanti satelliti naturali ha il pianeta Marte, lo conosci?","lang":"it","kind":"knowledge"}
+{"q":"a quale velocita viaggia la luce nel vuoto, all'incirca?","lang":"it","kind":"knowledge"}
+{"q":"chi e che ha dipinto la Gioconda, te lo ricordi?","lang":"it","kind":"knowledge"}
+{"q":"in che anno di preciso e affondato il Titanic, lo sai?","lang":"it","kind":"knowledge"}
+{"q":"di che colroe diventa la carta di tornasole in un acido?","lang":"it","kind":"knowledge","typo":true}
+{"q":"quanti cuori ha un polpo, mi e venuta la curiosita","lang":"it","kind":"knowledge"}
+{"q":"il volume, me lo alzeresti per favore?","lang":"it","kind":"robust","expect":"set_volume"}
+{"q":"una nota creala con nome spesa per favore","lang":"it","kind":"robust","expect":"create_file"}
+{"q":"ricordami, se non ti dispiace, di chiamare il dentita domani mattina","lang":"it","kind":"robust","expect":"add_event","typo":true}
+{"q":"aprimi la calcolatirce grazie","lang":"it","kind":"robust","expect":"open_app","typo":true}
+{"q":"trasalo in inglese: gatto","lang":"it","kind":"robust","expect":"translate","typo":true}
+{"q":"quanta carcia di batteria mi resta adesso?","lang":"it","kind":"robust","expect":"battery","typo":true}
+{"q":"se non ti dispiace, dimmi quanto fa diciassette per ventitre","lang":"it","kind":"robust","expect":"calc"}
+{"q":"la luminosita dello schermo, abbassala un po'","lang":"it","kind":"robust","expect":"set_brightness"}
+{"q":"5 chilomtri in metri me li converti?","lang":"it","kind":"robust","expect":"convert","typo":true}
+{"q":"che giorno e oggi, lo sai dirmi?","lang":"it","kind":"robust","expect":"date"}
+{"q":"mi chiamo Marco, te lo dico cosi lo ricordi","lang":"it","kind":"robust","expect":"profile"}
+{"q":"che ore sono adesso di preciso?","lang":"it","kind":"robust","expect":"time"}
+{"q":"il 15 percento di 240, quanto verrebbe fuori?","lang":"it","kind":"robust","expect":"percent"}
+{"q":"aprimi per cortesia l'app delle impostaizoni","lang":"it","kind":"robust","expect":"open_app","typo":true}
+{"q":"ricordami fra due ore di spegnere il forno se puoi","lang":"it","kind":"robust","expect":"add_event"}
+{"q":"in numero romano, il 2024 come si scrive?","lang":"it","kind":"robust","expect":"roman"}
+{"q":"se 12 ohm con 3 ampere, la tensione quanto fa?","lang":"it","kind":"robust","expect":"ohm"}
+{"q":"il 73 e un numero primo o no?","lang":"it","kind":"robust","expect":"prime"}
+{"q":"del trianoglo con base 6 e altezza 4, l'area quale sarebbe?","lang":"it","kind":"robust","expect":"geo","typo":true}
+{"q":"il numero 255 in binario come diventa?","lang":"it","kind":"robust","expect":"base"}
+{"q":"qual e la capitale del Burkina Faso, lo sai?","lang":"it","kind":"knowledge"}
+{"q":"in che anno e stato fondato il comune di Soncino?","lang":"it","kind":"knowledge"}
+{"q":"trasimi 'good morning' in italiano per favore","lang":"it","kind":"robust","expect":"translate","typo":true}
+{"q":"cosa sai di me, te ne ricordi qualcosa?","lang":"it","kind":"robust","expect":"profile"}
+{"q":"ho 34 anni, segnatelo da qualche parte","lang":"it","kind":"robust","expect":"profile"}
+{"q":"in che stagione siamo di preciso adesso?","lang":"it","kind":"robust","expect":"season"}
+{"q":"che anno e questo, me lo ricordi?","lang":"it","kind":"robust","expect":"year"}
+{"q":"una cella con dentro la somma di A1 e B1 me la fai?","lang":"it","kind":"robust","expect":"spreadsheet"}
+{"q":" apri pure il lettore mussica per cortesia","lang":"it","kind":"robust","expect":"open_app","typo":true}
+{"q":"che tempo fara domani a Napoli secondo te?","lang":"it","kind":"robust","expect":"weather"}
+
+// NATURAL-LANGUAGE + OFFLINE BOUNDARY — colloquial openers, definitions, and LIVE-DATA the fully-offline engine MUST abstain on (no internet → no fabrication). Validated against anima.exe (29/29 with the EN twin).
+{"q":"ehi quanto fa 234 per 56","lang":"it","kind":"skill","expect":"calc"}
+{"q":"scusa mi calcoli la radice quadrata di 400","lang":"it","kind":"skill","expect":"calc"}
+{"q":"senti quanto fa 1000 diviso 8","lang":"it","kind":"skill","expect":"calc"}
+{"q":"mi sapresti dire quanto fa il 18 per cento di 350","lang":"it","kind":"skill","expect":"percent"}
+{"q":"ho 80 euro e tolgo il 20 per cento quanto mi resta","lang":"it","kind":"robust","expect":"percent|calc"}
+{"q":"mi spieghi in breve cos'è la gravità","lang":"it","kind":"knowledge"}
+{"q":"che cosa vuol dire la sigla HTTP","lang":"it","kind":"knowledge"}
+{"q":"spiegami cos'è un buco nero","lang":"it","kind":"knowledge"}
+{"q":"segnati che sono allergico alle noci","lang":"it","kind":"robust","expect":"teach"}
+{"q":"che giorno della settimana è oggi","lang":"it","kind":"skill","expect":"date"}
+{"q":"come si traduce libro in inglese","lang":"it","kind":"skill","expect":"translate"}
+{"q":"quali sono le ultime notizie di oggi","lang":"it","kind":"halluc"}
+{"q":"chi ha vinto la partita di ieri sera","lang":"it","kind":"halluc"}
+{"q":"quanto vale il bitcoin in questo momento","lang":"it","kind":"halluc"}
+{"q":"qual è il prezzo della benzina oggi","lang":"it","kind":"halluc"}
+{"q":"che film danno al cinema stasera","lang":"it","kind":"halluc"}
+{"q":"cosa è di tendenza online proprio adesso","lang":"it","kind":"halluc"}
+{"q":"quanti messaggi non letti ho ricevuto","lang":"it","kind":"halluc"}

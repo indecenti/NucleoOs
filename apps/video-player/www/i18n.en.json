@@ -1,0 +1,92 @@
+{
+  "_lang": "en",
+
+  "noFilePlaying": "— No file playing",
+  "sdStatusTooltip": "MicroSD status",
+  "sdDash": "SD —",
+  "sdVideoCount": { "one": "{count} video", "other": "{count} videos" },
+  "sdReady": "SD ready",
+  "sdOffline": "SD offline",
+
+  "menuMedia": "Media",
+  "openLocal": "Open local file…",
+  "openSd": "Open from MicroSD…",
+  "closeMedia": "Close media",
+
+  "menuPlayback": "Playback",
+  "playPause": "Play / Pause",
+  "kbdSpace": "Space",
+  "stopPlayback": "Stop",
+  "back10": "Back 10s",
+  "fwd10": "Forward 10s",
+  "prevTrack": "Previous",
+  "nextTrack": "Next",
+  "mute": "Mute",
+  "speed": "Speed",
+  "rateNormal": "Normal (1×)",
+
+  "menuView": "View",
+  "fullscreen": "Fullscreen",
+  "loopPlaylist": "Repeat playlist",
+  "showPlaylist": "Show playlist",
+
+  "menuSubs": "Subtitles",
+  "loadSubFile": "Load subtitle file…",
+  "subToggle": "Toggle on / off",
+  "subBigger": "Increase size",
+  "subSmaller": "Decrease size",
+  "subReset": "Default size",
+
+  "keyboardShortcuts": "Keyboard shortcuts",
+  "aboutItem": "About",
+
+  "welcomeDesc": "Play local videos or from the MicroSD. Decoding happens in the browser: the device only streams the bytes.",
+  "openLocalBtn": "Open local file",
+  "browseSd": "Browse MicroSD",
+  "dragHint": "…or drag a video file into this window",
+
+  "tipPlayPause": "Play/Pause (Space)",
+  "tipStop": "Stop (S)",
+  "tipBack": "Back 10s (←)",
+  "tipFwd": "Forward 10s (→)",
+  "tipMute": "Mute (M)",
+  "tipAudio": "Audio tracks",
+  "tipSub": "Subtitles (C)",
+  "tipRate": "Playback speed",
+  "tipPip": "Picture-in-Picture (I)",
+  "tipPlaylist": "Playlist (P)",
+  "tipFullscreen": "Fullscreen (F)",
+
+  "dragDrop": "Drop a video — or an .srt/.vtt file while playing",
+
+  "playlistTitle": "PLAYLIST — {dir}",
+  "hide": "Hide",
+  "plSdError": "MicroSD not mounted or folder unreadable.",
+  "plEmpty": "No videos in this folder.",
+
+  "searchFolder": "Search in the current folder…",
+  "sdReadError": "Cannot read the MicroSD.",
+  "parentDir": ".. (Parent folder)",
+  "noVideoOrFolder": "No videos or folders.",
+
+  "subOff": "Off",
+  "loadFile": "Load file…",
+  "sizeLabel": "Size",
+  "audioTrack": "Audio track",
+  "singleTrack": "Single track",
+  "trackN": "Track {n}",
+
+  "localFile": "Local file",
+  "localTag": "local",
+
+  "aboutVersion": "Version 3.0 — NucleoOS",
+  "aboutDesc": "Professional media player for NucleoOS. Hardware decoding in the browser and segmented loading (HTTP Range) from the device MicroSD.",
+  "colCommand": "Command",
+  "colShortcut": "Shortcut",
+  "skip10": "Skip ±10 seconds",
+  "prevNext": "Previous / Next",
+  "volumePct": "Volume ±10%",
+  "subOnOff": "Subtitles on/off",
+  "subSize": "Subtitle size",
+  "showPlaylistShort": "Show Playlist"
+}

@@ -1,0 +1,17 @@
+{"q":"write a note that says hello world","lang":"en","expect":"create_file"}
+{"q":"create a note with the capital of france","lang":"en","expect":"create_file"}
+{"q":"make a note that says good morning","lang":"en","expect":"create_file"}
+{"q":"create a file called todo.txt","lang":"en","expect":"create_file"}
+{"q":"raise the volume","lang":"en","expect":"set_volume"}
+{"q":"lower the volume","lang":"en","expect":"set_volume"}
+{"q":"set the volume to 30","lang":"en","expect":"set_volume"}
+{"q":"mute the volume","lang":"en","expect":"set_volume"}
+{"q":"dim the screen","lang":"en","expect":"set_brightness"}
+{"q":"brighten the screen","lang":"en","expect":"set_brightness"}
+{"q":"set brightness to 80","lang":"en","expect":"set_brightness"}
+{"q":"open the calculator","lang":"en","expect":"open_app"}
+{"q":"close the calculator","lang":"en","expect":"close_app"}
+{"q":"open the calendar","lang":"en","expect":"open_app"}
+{"q":"close the calendar","lang":"en","expect":"close_app"}
+{"q":"can i create a file?","lang":"en","expect":"abstain"}
+{"q":"i am afraid of the dark","lang":"en","expect":"abstain"}

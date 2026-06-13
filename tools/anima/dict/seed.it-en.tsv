@@ -1,0 +1,419 @@
+# ANIMA offline translation seed — Italian <-> English.
+# Single source of truth, hand-curated for QUALITY (grounded, zero hallucination).
+# Format:  <it terms>\t<en terms>   — synonyms within a cell separated by ';'.
+#   Lines starting with '#' and blank lines are ignored.
+#   gen_dicts.py normalizes the SOURCE side of each direction exactly like the device
+#   tokenizer (lowercase + Italian accent fold) and emits sorted dict-it-en.tsv /
+#   dict-en-it.tsv. Keep translations human-readable (accents/case preserved).
+#   Scope is word + common-phrase — this is a dictionary/phrasebook, not a sentence MT.
+
+# --- greetings & courtesy (phrases) ---
+ciao	hi; hello; bye
+salve	hello
+buongiorno	good morning
+buonasera	good evening
+buonanotte	good night
+arrivederci	goodbye
+a presto	see you soon
+benvenuto	welcome
+per favore	please
+per piacere	please
+prego	you're welcome
+grazie	thank you; thanks
+grazie mille	thank you very much
+mi dispiace	I'm sorry; sorry
+scusa	excuse me; sorry
+scusi	excuse me
+sì	yes
+no	no
+forse	maybe; perhaps
+va bene	all right; okay
+come stai	how are you
+come va	how's it going
+bene	well; fine; good
+molto bene	very well
+così così	so-so
+e tu	and you
+piacere	nice to meet you
+come ti chiami	what's your name
+mi chiamo	my name is
+non capisco	I don't understand
+non lo so	I don't know
+puoi aiutarmi	can you help me
+parli inglese	do you speak English
+parli italiano	do you speak Italian
+non parlo italiano	I don't speak Italian
+ti amo	I love you
+ti voglio bene	I love you
+buona fortuna	good luck
+a dopo	see you later
+di niente	you're welcome
+non importa	never mind; it doesn't matter
+che ore sono	what time is it
+che ora è	what time is it
+
+# --- question words ---
+chi	who
+cosa	what
+che cosa	what
+quando	when
+dove	where
+perché	why; because
+come	how; as; like
+quale	which
+quanto	how much
+quanti	how many
+
+# --- people & family ---
+uomo	man
+donna	woman
+bambino	child; boy
+bambina	girl
+ragazzo	boy
+ragazza	girl
+persona	person
+gente	people
+amico	friend
+amica	friend
+famiglia	family
+madre	mother
+padre	father
+mamma	mum; mom
+papà	dad
+figlio	son
+figlia	daughter
+fratello	brother
+sorella	sister
+nonno	grandfather
+nonna	grandmother
+marito	husband
+moglie	wife
+
+# --- pronouns & basics ---
+io	I
+tu	you
+lui	he
+lei	she
+noi	we
+voi	you
+loro	they
+questo	this
+quello	that
+qui	here
+là	there
+e	and
+o	or
+ma	but
+con	with
+senza	without
+anche	also; too
+
+# --- time ---
+oggi	today
+domani	tomorrow
+ieri	yesterday
+adesso	now
+ora	now; hour
+dopo	after; later
+prima	before
+sempre	always
+mai	never
+giorno	day
+notte	night
+mattina	morning
+pomeriggio	afternoon
+sera	evening
+settimana	week
+mese	month
+anno	year
+tempo	time; weather
+minuto	minute
+ora	hour
+lunedì	Monday
+martedì	Tuesday
+mercoledì	Wednesday
+giovedì	Thursday
+venerdì	Friday
+sabato	Saturday
+domenica	Sunday
+gennaio	January
+febbraio	February
+marzo	March
+aprile	April
+maggio	May
+giugno	June
+luglio	July
+agosto	August
+settembre	September
+ottobre	October
+novembre	November
+dicembre	December
+
+# --- numbers ---
+zero	zero
+uno	one
+due	two
+tre	three
+quattro	four
+cinque	five
+sei	six
+sette	seven
+otto	eight
+nove	nine
+dieci	ten
+undici	eleven
+dodici	twelve
+tredici	thirteen
+quattordici	fourteen
+quindici	fifteen
+sedici	sixteen
+diciassette	seventeen
+diciotto	eighteen
+diciannove	nineteen
+venti	twenty
+trenta	thirty
+quaranta	forty
+cinquanta	fifty
+sessanta	sixty
+settanta	seventy
+ottanta	eighty
+novanta	ninety
+cento	one hundred
+mille	one thousand
+
+# --- colors ---
+colore	color; colour
+rosso	red
+arancione	orange
+giallo	yellow
+verde	green
+blu	blue
+azzurro	light blue
+viola	purple
+rosa	pink
+marrone	brown
+nero	black
+bianco	white
+grigio	grey; gray
+
+# --- food & drink ---
+cibo	food
+acqua	water
+pane	bread
+vino	wine
+birra	beer
+caffè	coffee
+tè	tea
+latte	milk
+zucchero	sugar
+sale	salt
+pepe	pepper
+olio	oil
+burro	butter
+formaggio	cheese
+uovo	egg
+carne	meat
+pesce	fish
+pollo	chicken
+frutta	fruit
+mela	apple
+verdura	vegetable
+riso	rice
+pasta	pasta
+pizza	pizza
+zuppa	soup
+insalata	salad
+dolce	dessert; sweet
+gelato	ice cream
+colazione	breakfast
+pranzo	lunch
+cena	dinner
+ristorante	restaurant
+conto	bill; check
+
+# --- travel & places ---
+casa	house; home
+città	city; town
+paese	country; village
+strada	road; street
+via	street; way
+piazza	square
+stazione	station
+aeroporto	airport
+treno	train
+autobus	bus
+macchina	car
+auto	car
+bicicletta	bicycle
+taxi	taxi
+albergo	hotel
+hotel	hotel
+ospedale	hospital
+farmacia	pharmacy
+banca	bank
+negozio	shop; store
+mercato	market
+chiesa	church
+museo	museum
+spiaggia	beach
+mare	sea
+montagna	mountain
+lago	lake
+fiume	river
+biglietto	ticket
+passaporto	passport
+valigia	suitcase
+bagaglio	luggage
+sinistra	left
+destra	right
+dritto	straight
+vicino	near; close
+lontano	far
+
+# --- common verbs ---
+essere	to be
+avere	to have
+fare	to do; to make
+andare	to go
+venire	to come
+vedere	to see
+sentire	to hear; to feel
+parlare	to speak; to talk
+dire	to say; to tell
+mangiare	to eat
+bere	to drink
+dormire	to sleep
+camminare	to walk
+correre	to run
+comprare	to buy
+pagare	to pay
+aprire	to open
+chiudere	to close
+leggere	to read
+scrivere	to write
+capire	to understand
+sapere	to know
+potere	to be able to; can
+volere	to want
+dovere	to have to; must
+amare	to love
+piacere	to like
+aiutare	to help
+cercare	to look for; to search
+trovare	to find
+lavorare	to work
+giocare	to play
+aspettare	to wait
+partire	to leave; to depart
+arrivare	to arrive
+
+# --- adjectives ---
+buono	good
+cattivo	bad
+grande	big; large
+piccolo	small; little
+nuovo	new
+vecchio	old
+giovane	young
+bello	beautiful; nice
+brutto	ugly
+caldo	hot; warm
+freddo	cold
+facile	easy
+difficile	difficult; hard
+veloce	fast; quick
+lento	slow
+forte	strong; loud
+debole	weak
+alto	tall; high
+basso	short; low
+lungo	long
+corto	short
+pieno	full
+vuoto	empty
+pulito	clean
+sporco	dirty
+felice	happy
+triste	sad
+stanco	tired
+ricco	rich
+povero	poor
+caro	expensive; dear
+economico	cheap
+
+# --- body & health ---
+corpo	body
+testa	head
+occhio	eye
+naso	nose
+bocca	mouth
+orecchio	ear
+mano	hand
+braccio	arm
+gamba	leg
+piede	foot
+cuore	heart
+schiena	back
+stomaco	stomach
+dottore	doctor
+medico	doctor
+medicina	medicine
+malato	sick; ill
+dolore	pain; ache
+
+# --- useful phrases (emergency & daily) ---
+aiuto	help
+attenzione	careful; watch out
+emergenza	emergency
+polizia	police
+quanto costa	how much does it cost
+dov'è il bagno	where is the bathroom
+non mi sento bene	I don't feel well
+ho fame	I'm hungry
+ho sete	I'm thirsty
+sono stanco	I'm tired
+ho bisogno di aiuto	I need help
+mi sono perso	I'm lost
+chiama un medico	call a doctor
+a che ora	at what time
+quanto tempo	how long
+va tutto bene	everything is fine
+
+# --- weather & nature ---
+sole	sun
+pioggia	rain
+neve	snow
+vento	wind
+nuvola	cloud
+cielo	sky
+stella	star
+luna	moon
+fuoco	fire
+terra	earth; ground
+aria	air
+albero	tree
+fiore	flower
+animale	animal
+cane	dog
+gatto	cat
+uccello	bird
+
+# --- home & objects ---
+porta	door
+finestra	window
+tavolo	table
+sedia	chair
+letto	bed
+cucina	kitchen
+bagno	bathroom
+camera	room; bedroom
+chiave	key
+telefono	phone
+computer	computer
+libro	book
+penna	pen
+carta	paper
+soldi	money
+lavoro	work; job
+scuola	school
+ufficio	office

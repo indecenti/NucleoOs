@@ -1,0 +1,1507 @@
+{
+ "_doc": "Immutable Wikidata (CC0) enrichment cache. Provenance for ANIMA self-evolution.",
+ "entities": {
+  "Q937": {
+   "qid": "Q937",
+   "label_it": "Albert Einstein",
+   "label_en": "Albert Einstein",
+   "occupations": [
+    {
+     "qid": "Q19350898",
+     "it": "fisico teorico",
+     "en": "theoretical physicist"
+    },
+    {
+     "qid": "Q901",
+     "it": "scienziato",
+     "en": "scientist"
+    },
+    {
+     "qid": "Q36180",
+     "it": "scrittore",
+     "en": "writer"
+    }
+   ],
+   "edges": [
+    {
+     "child": "Q19350898",
+     "child_en": "theoretical physicist",
+     "parent": "Q169470",
+     "parent_en": "physicist"
+    },
+    {
+     "child": "Q19350898",
+     "child_en": "theoretical physicist",
+     "parent": "Q18931911",
+     "parent_en": "theorist"
+    },
+    {
+     "child": "Q169470",
+     "child_en": "physicist",
+     "parent": "Q901",
+     "parent_en": "scientist"
+    },
+    {
+     "child": "Q169470",
+     "child_en": "physicist",
+     "parent": "Q124637774",
+     "parent_en": "physical scientist"
+    },
+    {
+     "child": "Q18931911",
+     "child_en": "theorist",
+     "parent": "Q901",
+     "parent_en": "scientist"
+    },
+    {
+     "child": "Q901",
+     "child_en": "scientist",
+     "parent": "Q1650915",
+     "parent_en": "researcher"
+    },
+    {
+     "child": "Q901",
+     "child_en": "scientist",
+     "parent": "Q20826540",
+     "parent_en": "scholar"
+    },
+    {
+     "child": "Q124637774",
+     "child_en": "physical scientist",
+     "parent": "Q18805",
+     "parent_en": "naturalist"
+    },
+    {
+     "child": "Q124637774",
+     "child_en": "physical scientist",
+     "parent": "Q108289376",
+     "parent_en": "physical and earth science professionals"
+    },
+    {
+     "child": "Q1650915",
+     "child_en": "researcher",
+     "parent": "Q15980158",
+     "parent_en": "non-fiction writer"
+    },
+    {
+     "child": "Q1650915",
+     "child_en": "researcher",
+     "parent": "Q66666685",
+     "parent_en": "academic professional"
+    },
+    {
+     "child": "Q20826540",
+     "child_en": "scholar",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q18805",
+     "child_en": "naturalist",
+     "parent": "Q901",
+     "parent_en": "scientist"
+    },
+    {
+     "child": "Q108289376",
+     "child_en": "physical and earth science professionals",
+     "parent": "Q108289028",
+     "parent_en": "science and engineering professionals"
+    },
+    {
+     "child": "Q15980158",
+     "child_en": "non-fiction writer",
+     "parent": "Q482980",
+     "parent_en": "author"
+    },
+    {
+     "child": "Q66666685",
+     "child_en": "academic professional",
+     "parent": "Q1914017",
+     "parent_en": "knowledge worker"
+    },
+    {
+     "child": "Q66666685",
+     "child_en": "academic professional",
+     "parent": "Q3400985",
+     "parent_en": "academic"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q795052",
+     "parent_en": "individual"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q3778211",
+     "parent_en": "legal person"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q482980",
+     "child_en": "author",
+     "parent": "Q2500638",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q1914017",
+     "child_en": "knowledge worker",
+     "parent": "Q327055",
+     "parent_en": "worker"
+    },
+    {
+     "child": "Q3400985",
+     "child_en": "academic",
+     "parent": "Q901",
+     "parent_en": "scientist"
+    },
+    {
+     "child": "Q3400985",
+     "child_en": "academic",
+     "parent": "Q20826540",
+     "parent_en": "scholar"
+    },
+    {
+     "child": "Q795052",
+     "child_en": "individual",
+     "parent": "Q7239",
+     "parent_en": "organism"
+    },
+    {
+     "child": "Q795052",
+     "child_en": "individual",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q3778211",
+     "child_en": "legal person",
+     "parent": "Q106559804",
+     "parent_en": "person or organization"
+    },
+    {
+     "child": "Q24229398",
+     "child_en": "being",
+     "parent": "Q53617489",
+     "parent_en": "independent continuant"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q12777906",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q134480019",
+     "parent_en": "proto-agent"
+    },
+    {
+     "child": "Q327055",
+     "child_en": "worker",
+     "parent": "Q129586023",
+     "parent_en": "person with an activity"
+    },
+    {
+     "child": "Q36180",
+     "child_en": "writer",
+     "parent": "Q482980",
+     "parent_en": "author"
+    },
+    {
+     "child": "Q36180",
+     "child_en": "writer",
+     "parent": "Q483501",
+     "parent_en": "artist"
+    },
+    {
+     "child": "Q36180",
+     "child_en": "writer",
+     "parent": "Q108762424",
+     "parent_en": "penman"
+    },
+    {
+     "child": "Q483501",
+     "child_en": "artist",
+     "parent": "Q2500638",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q108762424",
+     "child_en": "penman",
+     "parent": "Q2500638",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q12777906",
+     "child_en": "creator",
+     "parent": "Q830077",
+     "parent_en": "subject"
+    },
+    {
+     "child": "Q12777906",
+     "child_en": "creator",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q830077",
+     "child_en": "subject",
+     "parent": "Q53617489",
+     "parent_en": "independent continuant"
+    }
+   ]
+  },
+  "Q935": {
+   "qid": "Q935",
+   "label_it": "Isaac Newton",
+   "label_en": "Isaac Newton",
+   "occupations": [
+    {
+     "qid": "Q170790",
+     "it": "matematico",
+     "en": "mathematician"
+    },
+    {
+     "qid": "Q4964182",
+     "it": "filosofo",
+     "en": "philosopher"
+    }
+   ],
+   "edges": [
+    {
+     "child": "Q170790",
+     "child_en": "mathematician",
+     "parent": "Q901",
+     "parent_en": "scientist"
+    },
+    {
+     "child": "Q170790",
+     "child_en": "mathematician",
+     "parent": "Q108289378",
+     "parent_en": "mathematicians, actuaries and statisticians"
+    },
+    {
+     "child": "Q901",
+     "child_en": "scientist",
+     "parent": "Q1650915",
+     "parent_en": "researcher"
+    },
+    {
+     "child": "Q901",
+     "child_en": "scientist",
+     "parent": "Q20826540",
+     "parent_en": "scholar"
+    },
+    {
+     "child": "Q108289378",
+     "child_en": "mathematicians, actuaries and statisticians",
+     "parent": "Q108289028",
+     "parent_en": "science and engineering professionals"
+    },
+    {
+     "child": "Q1650915",
+     "child_en": "researcher",
+     "parent": "Q15980158",
+     "parent_en": "non-fiction writer"
+    },
+    {
+     "child": "Q1650915",
+     "child_en": "researcher",
+     "parent": "Q66666685",
+     "parent_en": "academic professional"
+    },
+    {
+     "child": "Q20826540",
+     "child_en": "scholar",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q108289028",
+     "child_en": "science and engineering professionals",
+     "parent": "Q110281945",
+     "parent_en": "intellectual and scientific professionals"
+    },
+    {
+     "child": "Q15980158",
+     "child_en": "non-fiction writer",
+     "parent": "Q482980",
+     "parent_en": "author"
+    },
+    {
+     "child": "Q66666685",
+     "child_en": "academic professional",
+     "parent": "Q1914017",
+     "parent_en": "knowledge worker"
+    },
+    {
+     "child": "Q66666685",
+     "child_en": "academic professional",
+     "parent": "Q3400985",
+     "parent_en": "academic"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q795052",
+     "parent_en": "individual"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q3778211",
+     "parent_en": "legal person"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q110281945",
+     "child_en": "intellectual and scientific professionals",
+     "parent": "Q702269",
+     "parent_en": "professional"
+    },
+    {
+     "child": "Q4964182",
+     "child_en": "philosopher",
+     "parent": "Q16727193",
+     "parent_en": "humanities scholar"
+    },
+    {
+     "child": "Q16727193",
+     "child_en": "humanities scholar",
+     "parent": "Q901",
+     "parent_en": "scientist"
+    },
+    {
+     "child": "Q16727193",
+     "child_en": "humanities scholar",
+     "parent": "Q20826540",
+     "parent_en": "scholar"
+    },
+    {
+     "child": "Q795052",
+     "child_en": "individual",
+     "parent": "Q7239",
+     "parent_en": "organism"
+    },
+    {
+     "child": "Q795052",
+     "child_en": "individual",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q3778211",
+     "child_en": "legal person",
+     "parent": "Q106559804",
+     "parent_en": "person or organization"
+    },
+    {
+     "child": "Q24229398",
+     "child_en": "being",
+     "parent": "Q53617489",
+     "parent_en": "independent continuant"
+    }
+   ]
+  },
+  "Q7186": {
+   "qid": "Q7186",
+   "label_it": "",
+   "label_en": "Marie Sklodowska-Curie",
+   "occupations": [
+    {
+     "qid": "Q169470",
+     "it": "fisico",
+     "en": "physicist"
+    },
+    {
+     "qid": "Q593644",
+     "it": "chimico",
+     "en": "chemist"
+    },
+    {
+     "qid": "Q1622272",
+     "it": "professore universitario",
+     "en": "university teacher"
+    }
+   ],
+   "edges": [
+    {
+     "child": "Q169470",
+     "child_en": "physicist",
+     "parent": "Q901",
+     "parent_en": "scientist"
+    },
+    {
+     "child": "Q169470",
+     "child_en": "physicist",
+     "parent": "Q124637774",
+     "parent_en": "physical scientist"
+    },
+    {
+     "child": "Q901",
+     "child_en": "scientist",
+     "parent": "Q1650915",
+     "parent_en": "researcher"
+    },
+    {
+     "child": "Q901",
+     "child_en": "scientist",
+     "parent": "Q20826540",
+     "parent_en": "scholar"
+    },
+    {
+     "child": "Q124637774",
+     "child_en": "physical scientist",
+     "parent": "Q18805",
+     "parent_en": "naturalist"
+    },
+    {
+     "child": "Q124637774",
+     "child_en": "physical scientist",
+     "parent": "Q108289376",
+     "parent_en": "physical and earth science professionals"
+    },
+    {
+     "child": "Q1650915",
+     "child_en": "researcher",
+     "parent": "Q15980158",
+     "parent_en": "non-fiction writer"
+    },
+    {
+     "child": "Q1650915",
+     "child_en": "researcher",
+     "parent": "Q66666685",
+     "parent_en": "academic professional"
+    },
+    {
+     "child": "Q20826540",
+     "child_en": "scholar",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q18805",
+     "child_en": "naturalist",
+     "parent": "Q901",
+     "parent_en": "scientist"
+    },
+    {
+     "child": "Q108289376",
+     "child_en": "physical and earth science professionals",
+     "parent": "Q108289028",
+     "parent_en": "science and engineering professionals"
+    },
+    {
+     "child": "Q15980158",
+     "child_en": "non-fiction writer",
+     "parent": "Q482980",
+     "parent_en": "author"
+    },
+    {
+     "child": "Q66666685",
+     "child_en": "academic professional",
+     "parent": "Q1914017",
+     "parent_en": "knowledge worker"
+    },
+    {
+     "child": "Q66666685",
+     "child_en": "academic professional",
+     "parent": "Q3400985",
+     "parent_en": "academic"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q795052",
+     "parent_en": "individual"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q3778211",
+     "parent_en": "legal person"
+    },
+    {
+     "child": "Q593644",
+     "child_en": "chemist",
+     "parent": "Q108289376",
+     "parent_en": "physical and earth science professionals"
+    },
+    {
+     "child": "Q593644",
+     "child_en": "chemist",
+     "parent": "Q124637774",
+     "parent_en": "physical scientist"
+    },
+    {
+     "child": "Q108289028",
+     "child_en": "science and engineering professionals",
+     "parent": "Q110281945",
+     "parent_en": "intellectual and scientific professionals"
+    },
+    {
+     "child": "Q110281945",
+     "child_en": "intellectual and scientific professionals",
+     "parent": "Q702269",
+     "parent_en": "professional"
+    },
+    {
+     "child": "Q702269",
+     "child_en": "professional",
+     "parent": "Q327055",
+     "parent_en": "worker"
+    },
+    {
+     "child": "Q1622272",
+     "child_en": "university teacher",
+     "parent": "Q37226",
+     "parent_en": "teacher"
+    },
+    {
+     "child": "Q1622272",
+     "child_en": "university teacher",
+     "parent": "Q5428874",
+     "parent_en": "academic staff"
+    },
+    {
+     "child": "Q37226",
+     "child_en": "teacher",
+     "parent": "Q974144",
+     "parent_en": "educator"
+    },
+    {
+     "child": "Q37226",
+     "child_en": "teacher",
+     "parent": "Q3400985",
+     "parent_en": "academic"
+    },
+    {
+     "child": "Q37226",
+     "child_en": "teacher",
+     "parent": "Q11448772",
+     "parent_en": "school staff"
+    },
+    {
+     "child": "Q5428874",
+     "child_en": "academic staff",
+     "parent": "Q4359236",
+     "parent_en": "cadre"
+    },
+    {
+     "child": "Q974144",
+     "child_en": "educator",
+     "parent": "Q93918935",
+     "parent_en": "educational personnel"
+    },
+    {
+     "child": "Q974144",
+     "child_en": "educator",
+     "parent": "Q108284914",
+     "parent_en": "teaching professionals"
+    },
+    {
+     "child": "Q3400985",
+     "child_en": "academic",
+     "parent": "Q901",
+     "parent_en": "scientist"
+    },
+    {
+     "child": "Q3400985",
+     "child_en": "academic",
+     "parent": "Q20826540",
+     "parent_en": "scholar"
+    },
+    {
+     "child": "Q11448772",
+     "child_en": "school staff",
+     "parent": "Q703534",
+     "parent_en": "employee"
+    },
+    {
+     "child": "Q11448772",
+     "child_en": "school staff",
+     "parent": "Q4359236",
+     "parent_en": "cadre"
+    },
+    {
+     "child": "Q11448772",
+     "child_en": "school staff",
+     "parent": "Q93918935",
+     "parent_en": "educational personnel"
+    },
+    {
+     "child": "Q4359236",
+     "child_en": "cadre",
+     "parent": "Q28640",
+     "parent_en": "profession"
+    },
+    {
+     "child": "Q4359236",
+     "child_en": "cadre",
+     "parent": "Q43845",
+     "parent_en": "businessperson"
+    },
+    {
+     "child": "Q93918935",
+     "child_en": "educational personnel",
+     "parent": "Q327055",
+     "parent_en": "worker"
+    }
+   ]
+  },
+  "Q254": {
+   "qid": "Q254",
+   "label_it": "Wolfgang Amadeus Mozart",
+   "label_en": "Wolfgang Amadeus Mozart",
+   "occupations": [
+    {
+     "qid": "Q486748",
+     "it": "pianista",
+     "en": "pianist"
+    },
+    {
+     "qid": "Q639669",
+     "it": "musicista",
+     "en": "musician"
+    },
+    {
+     "qid": "Q765778",
+     "it": "organista",
+     "en": "organist"
+    }
+   ],
+   "edges": [
+    {
+     "child": "Q486748",
+     "child_en": "pianist",
+     "parent": "Q1075651",
+     "parent_en": "keyboardist"
+    },
+    {
+     "child": "Q1075651",
+     "child_en": "keyboardist",
+     "parent": "Q1278335",
+     "parent_en": "instrumentalist"
+    },
+    {
+     "child": "Q1278335",
+     "child_en": "instrumentalist",
+     "parent": "Q639669",
+     "parent_en": "musician"
+    },
+    {
+     "child": "Q639669",
+     "child_en": "musician",
+     "parent": "Q483501",
+     "parent_en": "artist"
+    },
+    {
+     "child": "Q483501",
+     "child_en": "artist",
+     "parent": "Q2500638",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q12777906",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q134480019",
+     "parent_en": "proto-agent"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q795052",
+     "parent_en": "individual"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q3778211",
+     "parent_en": "legal person"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q12777906",
+     "child_en": "creator",
+     "parent": "Q830077",
+     "parent_en": "subject"
+    },
+    {
+     "child": "Q12777906",
+     "child_en": "creator",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q795052",
+     "child_en": "individual",
+     "parent": "Q7239",
+     "parent_en": "organism"
+    },
+    {
+     "child": "Q795052",
+     "child_en": "individual",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q3778211",
+     "child_en": "legal person",
+     "parent": "Q106559804",
+     "parent_en": "person or organization"
+    },
+    {
+     "child": "Q24229398",
+     "child_en": "being",
+     "parent": "Q53617489",
+     "parent_en": "independent continuant"
+    },
+    {
+     "child": "Q830077",
+     "child_en": "subject",
+     "parent": "Q53617489",
+     "parent_en": "independent continuant"
+    },
+    {
+     "child": "Q765778",
+     "child_en": "organist",
+     "parent": "Q639669",
+     "parent_en": "musician"
+    },
+    {
+     "child": "Q765778",
+     "child_en": "organist",
+     "parent": "Q1075651",
+     "parent_en": "keyboardist"
+    }
+   ]
+  },
+  "Q5593": {
+   "qid": "Q5593",
+   "label_it": "Pablo Picasso",
+   "label_en": "Pablo Picasso",
+   "occupations": [
+    {
+     "qid": "Q483501",
+     "it": "artista",
+     "en": "artist"
+    },
+    {
+     "qid": "Q644687",
+     "it": "illustratore",
+     "en": "illustrator"
+    },
+    {
+     "qid": "Q739437",
+     "it": "cartellonista",
+     "en": "poster artist"
+    }
+   ],
+   "edges": [
+    {
+     "child": "Q483501",
+     "child_en": "artist",
+     "parent": "Q2500638",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q12777906",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q134480019",
+     "parent_en": "proto-agent"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q795052",
+     "parent_en": "individual"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q3778211",
+     "parent_en": "legal person"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q12777906",
+     "child_en": "creator",
+     "parent": "Q830077",
+     "parent_en": "subject"
+    },
+    {
+     "child": "Q12777906",
+     "child_en": "creator",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q795052",
+     "child_en": "individual",
+     "parent": "Q7239",
+     "parent_en": "organism"
+    },
+    {
+     "child": "Q795052",
+     "child_en": "individual",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q3778211",
+     "child_en": "legal person",
+     "parent": "Q106559804",
+     "parent_en": "person or organization"
+    },
+    {
+     "child": "Q24229398",
+     "child_en": "being",
+     "parent": "Q53617489",
+     "parent_en": "independent continuant"
+    },
+    {
+     "child": "Q830077",
+     "child_en": "subject",
+     "parent": "Q53617489",
+     "parent_en": "independent continuant"
+    },
+    {
+     "child": "Q7239",
+     "child_en": "organism",
+     "parent": "Q223557",
+     "parent_en": "physical object"
+    },
+    {
+     "child": "Q7239",
+     "child_en": "organism",
+     "parent": "Q66394244",
+     "parent_en": "physical anatomical entity"
+    },
+    {
+     "child": "Q644687",
+     "child_en": "illustrator",
+     "parent": "Q1925963",
+     "parent_en": "graphic artist"
+    },
+    {
+     "child": "Q644687",
+     "child_en": "illustrator",
+     "parent": "Q15296811",
+     "parent_en": "draftsperson"
+    },
+    {
+     "child": "Q1925963",
+     "child_en": "graphic artist",
+     "parent": "Q3391743",
+     "parent_en": "visual artist"
+    },
+    {
+     "child": "Q15296811",
+     "child_en": "draftsperson",
+     "parent": "Q1925963",
+     "parent_en": "graphic artist"
+    },
+    {
+     "child": "Q15296811",
+     "child_en": "draftsperson",
+     "parent": "Q3391743",
+     "parent_en": "visual artist"
+    },
+    {
+     "child": "Q3391743",
+     "child_en": "visual artist",
+     "parent": "Q2500638",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q3391743",
+     "child_en": "visual artist",
+     "parent": "Q108289408",
+     "parent_en": "creative and performing artist"
+    },
+    {
+     "child": "Q108289408",
+     "child_en": "creative and performing artist",
+     "parent": "Q108289030",
+     "parent_en": "legal, social and cultural professionals"
+    },
+    {
+     "child": "Q108289030",
+     "child_en": "legal, social and cultural professionals",
+     "parent": "Q110281945",
+     "parent_en": "intellectual and scientific professionals"
+    },
+    {
+     "child": "Q739437",
+     "child_en": "poster artist",
+     "parent": "Q627325",
+     "parent_en": "graphic designer"
+    },
+    {
+     "child": "Q739437",
+     "child_en": "poster artist",
+     "parent": "Q3391743",
+     "parent_en": "visual artist"
+    },
+    {
+     "child": "Q627325",
+     "child_en": "graphic designer",
+     "parent": "Q5322166",
+     "parent_en": "designer"
+    },
+    {
+     "child": "Q5322166",
+     "child_en": "designer",
+     "parent": "Q4453355",
+     "parent_en": "creative professional"
+    },
+    {
+     "child": "Q4453355",
+     "child_en": "creative professional",
+     "parent": "Q2500638",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q110281945",
+     "child_en": "intellectual and scientific professionals",
+     "parent": "Q702269",
+     "parent_en": "professional"
+    }
+   ]
+  },
+  "Q692": {
+   "qid": "Q692",
+   "label_it": "",
+   "label_en": "William Shakespeare",
+   "occupations": [
+    {
+     "qid": "Q214917",
+     "it": "drammaturgo",
+     "en": "playwright"
+    },
+    {
+     "qid": "Q487596",
+     "it": "drammaturgo",
+     "en": "dramaturge"
+    },
+    {
+     "qid": "Q2259451",
+     "it": "attore teatrale",
+     "en": "stage actor"
+    }
+   ],
+   "edges": [
+    {
+     "child": "Q214917",
+     "child_en": "playwright",
+     "parent": "Q36180",
+     "parent_en": "writer"
+    },
+    {
+     "child": "Q36180",
+     "child_en": "writer",
+     "parent": "Q482980",
+     "parent_en": "author"
+    },
+    {
+     "child": "Q36180",
+     "child_en": "writer",
+     "parent": "Q483501",
+     "parent_en": "artist"
+    },
+    {
+     "child": "Q36180",
+     "child_en": "writer",
+     "parent": "Q108762424",
+     "parent_en": "penman"
+    },
+    {
+     "child": "Q482980",
+     "child_en": "author",
+     "parent": "Q2500638",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q483501",
+     "child_en": "artist",
+     "parent": "Q2500638",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q108762424",
+     "child_en": "penman",
+     "parent": "Q2500638",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q12777906",
+     "parent_en": "creator"
+    },
+    {
+     "child": "Q2500638",
+     "child_en": "creator",
+     "parent": "Q134480019",
+     "parent_en": "proto-agent"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q795052",
+     "parent_en": "individual"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q3778211",
+     "parent_en": "legal person"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q12777906",
+     "child_en": "creator",
+     "parent": "Q830077",
+     "parent_en": "subject"
+    },
+    {
+     "child": "Q12777906",
+     "child_en": "creator",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q487596",
+     "child_en": "dramaturge",
+     "parent": "Q36180",
+     "parent_en": "writer"
+    },
+    {
+     "child": "Q2259451",
+     "child_en": "stage actor",
+     "parent": "Q33999",
+     "parent_en": "actor"
+    },
+    {
+     "child": "Q2259451",
+     "child_en": "stage actor",
+     "parent": "Q47492700",
+     "parent_en": "theatre maker"
+    },
+    {
+     "child": "Q33999",
+     "child_en": "actor",
+     "parent": "Q713200",
+     "parent_en": "performing artist"
+    },
+    {
+     "child": "Q33999",
+     "child_en": "actor",
+     "parent": "Q108289408",
+     "parent_en": "creative and performing artist"
+    },
+    {
+     "child": "Q47492700",
+     "child_en": "theatre maker",
+     "parent": "Q483501",
+     "parent_en": "artist"
+    },
+    {
+     "child": "Q713200",
+     "child_en": "performing artist",
+     "parent": "Q483501",
+     "parent_en": "artist"
+    },
+    {
+     "child": "Q108289408",
+     "child_en": "creative and performing artist",
+     "parent": "Q108289030",
+     "parent_en": "legal, social and cultural professionals"
+    },
+    {
+     "child": "Q108289030",
+     "child_en": "legal, social and cultural professionals",
+     "parent": "Q110281945",
+     "parent_en": "intellectual and scientific professionals"
+    },
+    {
+     "child": "Q110281945",
+     "child_en": "intellectual and scientific professionals",
+     "parent": "Q702269",
+     "parent_en": "professional"
+    }
+   ]
+  },
+  "Q635": {
+   "qid": "Q635",
+   "label_it": "Cleopatra",
+   "label_en": "Cleopatra",
+   "occupations": [
+    {
+     "qid": "Q116",
+     "it": "monarca",
+     "en": "monarch"
+    },
+    {
+     "qid": "Q2304859",
+     "it": "sovrano",
+     "en": "sovereign"
+    }
+   ],
+   "edges": [
+    {
+     "child": "Q116",
+     "child_en": "monarch",
+     "parent": "Q2304859",
+     "parent_en": "sovereign"
+    },
+    {
+     "child": "Q116",
+     "child_en": "monarch",
+     "parent": "Q16744001",
+     "parent_en": "noble"
+    },
+    {
+     "child": "Q2304859",
+     "child_en": "sovereign",
+     "parent": "Q48352",
+     "parent_en": "head of state"
+    },
+    {
+     "child": "Q16744001",
+     "child_en": "noble",
+     "parent": "Q2478141",
+     "parent_en": "aristocrat"
+    },
+    {
+     "child": "Q48352",
+     "child_en": "head of state",
+     "parent": "Q372436",
+     "parent_en": "statesperson"
+    },
+    {
+     "child": "Q48352",
+     "child_en": "head of state",
+     "parent": "Q1251441",
+     "parent_en": "leader"
+    },
+    {
+     "child": "Q2478141",
+     "child_en": "aristocrat",
+     "parent": "Q129586023",
+     "parent_en": "person with an activity"
+    },
+    {
+     "child": "Q372436",
+     "child_en": "statesperson",
+     "parent": "Q82955",
+     "parent_en": "politician"
+    },
+    {
+     "child": "Q1251441",
+     "child_en": "leader",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q129586023",
+     "child_en": "person with an activity",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q82955",
+     "child_en": "politician",
+     "parent": "Q702269",
+     "parent_en": "professional"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q795052",
+     "parent_en": "individual"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q3778211",
+     "parent_en": "legal person"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q702269",
+     "child_en": "professional",
+     "parent": "Q327055",
+     "parent_en": "worker"
+    },
+    {
+     "child": "Q795052",
+     "child_en": "individual",
+     "parent": "Q7239",
+     "parent_en": "organism"
+    },
+    {
+     "child": "Q795052",
+     "child_en": "individual",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q3778211",
+     "child_en": "legal person",
+     "parent": "Q106559804",
+     "parent_en": "person or organization"
+    },
+    {
+     "child": "Q24229398",
+     "child_en": "being",
+     "parent": "Q53617489",
+     "parent_en": "independent continuant"
+    }
+   ]
+  },
+  "Q517": {
+   "qid": "Q517",
+   "label_it": "Napoleone Bonaparte",
+   "label_en": "Napoleon",
+   "occupations": [
+    {
+     "qid": "Q82955",
+     "it": "politico",
+     "en": "politician"
+    },
+    {
+     "qid": "Q189290",
+     "it": "ufficiale",
+     "en": "military officer"
+    },
+    {
+     "qid": "Q372436",
+     "it": "statista",
+     "en": "statesperson"
+    }
+   ],
+   "edges": [
+    {
+     "child": "Q82955",
+     "child_en": "politician",
+     "parent": "Q702269",
+     "parent_en": "professional"
+    },
+    {
+     "child": "Q702269",
+     "child_en": "professional",
+     "parent": "Q327055",
+     "parent_en": "worker"
+    },
+    {
+     "child": "Q327055",
+     "child_en": "worker",
+     "parent": "Q129586023",
+     "parent_en": "person with an activity"
+    },
+    {
+     "child": "Q327055",
+     "child_en": "worker",
+     "parent": "Q134480019",
+     "parent_en": "proto-agent"
+    },
+    {
+     "child": "Q129586023",
+     "child_en": "person with an activity",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q795052",
+     "parent_en": "individual"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q3778211",
+     "parent_en": "legal person"
+    },
+    {
+     "child": "Q215627",
+     "child_en": "person",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q189290",
+     "child_en": "military officer",
+     "parent": "Q47064",
+     "parent_en": "military personnel"
+    },
+    {
+     "child": "Q189290",
+     "child_en": "military officer",
+     "parent": "Q61022630",
+     "parent_en": "officer"
+    },
+    {
+     "child": "Q47064",
+     "child_en": "military personnel",
+     "parent": "Q212238",
+     "parent_en": "civil servant"
+    },
+    {
+     "child": "Q47064",
+     "child_en": "military personnel",
+     "parent": "Q703534",
+     "parent_en": "employee"
+    },
+    {
+     "child": "Q47064",
+     "child_en": "military personnel",
+     "parent": "Q1250916",
+     "parent_en": "warrior"
+    },
+    {
+     "child": "Q61022630",
+     "child_en": "officer",
+     "parent": "Q1251441",
+     "parent_en": "leader"
+    },
+    {
+     "child": "Q212238",
+     "child_en": "civil servant",
+     "parent": "Q3796928",
+     "parent_en": "public employee"
+    },
+    {
+     "child": "Q703534",
+     "child_en": "employee",
+     "parent": "Q327055",
+     "parent_en": "worker"
+    },
+    {
+     "child": "Q703534",
+     "child_en": "employee",
+     "parent": "Q852998",
+     "parent_en": "stakeholder"
+    },
+    {
+     "child": "Q1250916",
+     "child_en": "warrior",
+     "parent": "Q1414937",
+     "parent_en": "combatant"
+    },
+    {
+     "child": "Q1251441",
+     "child_en": "leader",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q3796928",
+     "child_en": "public employee",
+     "parent": "Q703534",
+     "parent_en": "employee"
+    },
+    {
+     "child": "Q852998",
+     "child_en": "stakeholder",
+     "parent": "Q24229398",
+     "parent_en": "being"
+    },
+    {
+     "child": "Q1414937",
+     "child_en": "combatant",
+     "parent": "Q215627",
+     "parent_en": "person"
+    },
+    {
+     "child": "Q24229398",
+     "child_en": "being",
+     "parent": "Q53617489",
+     "parent_en": "independent continuant"
+    },
+    {
+     "child": "Q795052",
+     "child_en": "individual",
+     "parent": "Q7239",
+     "parent_en": "organism"
+    },
+    {
+     "child": "Q372436",
+     "child_en": "statesperson",
+     "parent": "Q82955",
+     "parent_en": "politician"
+    }
+   ]
+  }
+ }
+}

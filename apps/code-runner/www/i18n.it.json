@@ -1,0 +1,49 @@
+{
+  "_lang": "it",
+
+  "title": "Code Runner",
+  "scratch": "scratch",
+  "unsaved": "non salvato",
+
+  "t_run": "Esegui (Ctrl+Invio)",
+  "t_stop": "Ferma",
+  "t_save": "Salva (Ctrl+S)",
+  "t_clear": "Pulisci console",
+  "btn_run": "Esegui",
+  "btn_save": "Salva",
+  "caps": "sandbox",
+  "caps_tip": "Esegue nel browser, in sandbox (Web Worker, niente DOM).\nPermessi attivi: filesystem SD · rete (http) · ANIMA · notifiche · hardware (os.hw: IR/GPIO/Wi-Fi).\nLimite tempo: 6 s.",
+
+  "ph_editor": "// JavaScript — gira nel browser, in sandbox.\n// console.log(...) o `return` per mostrare un valore. await libero.\n// API: os.fs.read/write/list · os.http.get · os.anima(domanda) · os.notify(testo)\n\nconsole.log('Ciao da NucleoOS');",
+
+  "status_ready": "pronto",
+  "status_running": "in esecuzione…",
+
+  "examples_label": "esempi",
+  "ex_none": "—",
+  "ex_hello": "Ciao + valore",
+  "ex_fib": "Fibonacci",
+  "ex_fs": "Leggi/scrivi file SD",
+  "ex_list": "Elenca una cartella",
+  "ex_anima": "Chiedi ad ANIMA",
+  "ex_http": "Fetch JSON",
+  "ex_hw": "Hardware (IR+GPIO+WiFi)",
+
+  "kbd_run": "esegui",
+  "kbd_save": "salva",
+
+  "console_empty": "La console è vuota. Premi ▶ Esegui.",
+  "console_cleared": "Console pulita.",
+
+  "run_started": "▶ {name} · {time}",
+  "run_done": "✓ completato in {ms} ms",
+  "run_stopped": "■ interrotto",
+  "run_error": "✖ {error}",
+  "read_failed": "⚠ impossibile leggere {path} ({status})",
+  "read_error": "⚠ {error}",
+
+  "saved": "Salvato",
+  "save_failed": "Salvataggio fallito ({status})",
+  "save_error": "Errore: {error}",
+  "prompt_save": "Salva come (percorso SD):"
+}

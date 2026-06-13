@@ -1,0 +1,51 @@
+// eval_paint_decline.jsonl — ANIMA must DECLINE image-generation requests with a grounded redirect to
+// Paint's Atelier (intent=image_gen), and must NOT false-positive on look-alike requests that really mean
+// open-an-app, create-a-file, translate, or a how-to knowledge question. Drives the REAL exe via skill-probe.
+// expect="image_gen" -> the decline+redirect tool fired.  Other expects -> the request routed elsewhere.
+//
+// --- (A) GENUINE image-generation asks: MUST route to image_gen (verb AND image-noun, no question) ---
+{"q":"genera un'immagine di un gatto","lang":"it","expect":"image_gen"}
+{"q":"generami un'immagine di un tramonto sul mare","lang":"it","expect":"image_gen"}
+{"q":"crea un'immagine di una montagna innevata","lang":"it","expect":"image_gen"}
+{"q":"disegna un'immagine di una casa sull'albero","lang":"it","expect":"image_gen"}
+{"q":"disegnami un ritratto di una donna anziana","lang":"it","expect":"image_gen"}
+{"q":"crea un disegno di un cane che corre","lang":"it","expect":"image_gen"}
+{"q":"dipingi un paesaggio marino al tramonto","lang":"it","expect":"image_gen"}
+{"q":"genera una foto realistica di un robot","lang":"it","expect":"image_gen"}
+{"q":"generami una illustrazione di un drago rosso","lang":"it","expect":"image_gen"}
+{"q":"crea un'illustrazione fantasy di un castello","lang":"it","expect":"image_gen"}
+{"q":"raffigura un castello medievale in un'immagine","lang":"it","expect":"image_gen"}
+{"q":"produci un'immagine astratta colorata","lang":"it","expect":"image_gen"}
+{"q":"crea una foto di un paesaggio di montagna","lang":"it","expect":"image_gen"}
+{"q":"generate an image of a cat sitting on a sofa","lang":"en","expect":"image_gen"}
+{"q":"create a picture of a sunset over the ocean","lang":"en","expect":"image_gen"}
+{"q":"draw me a picture of a running dog","lang":"en","expect":"image_gen"}
+{"q":"draw an image of a snowy mountain","lang":"en","expect":"image_gen"}
+{"q":"make an image of a spaceship in orbit","lang":"en","expect":"image_gen"}
+{"q":"generate a photo of a friendly robot","lang":"en","expect":"image_gen"}
+{"q":"create an illustration of a red dragon","lang":"en","expect":"image_gen"}
+{"q":"render an image of a futuristic city","lang":"en","expect":"image_gen"}
+{"q":"paint a portrait of a young woman","lang":"en","expect":"image_gen"}
+{"q":"make a drawing of a small house","lang":"en","expect":"image_gen"}
+//
+// --- (B) LOOK-ALIKES that must NOT route to image_gen ---
+// open-an-app: an image NOUN with no generation verb, or a launch verb -> open_app, not image_gen
+{"q":"apri paint","lang":"it","expect":"open_app"}
+{"q":"apri il disegno","lang":"it","expect":"open_app"}
+{"q":"voglio disegnare qualcosa","lang":"it","expect":"open_app"}
+{"q":"mostrami le foto","lang":"it","expect":"open_app"}
+{"q":"apri la galleria immagini","lang":"it","expect":"open_app"}
+{"q":"open paint","lang":"en","expect":"open_app"}
+{"q":"show me my photos","lang":"en","expect":"open_app"}
+// create-a-file/note/event: the negative guard (note/file/event word) must defer to those tools
+{"q":"crea una nota","lang":"it","expect":"create_file"}
+{"q":"crea un file chiamato appunti.txt","lang":"it","expect":"create_file"}
+{"q":"create a note","lang":"en","expect":"create_file"}
+// how-to KNOWLEDGE questions (have a question word) must NOT generate -> abstain
+{"q":"come si disegna un gatto","lang":"it","expect":"abstain"}
+{"q":"come genero un'immagine","lang":"it","expect":"abstain"}
+{"q":"how do i draw a portrait","lang":"en","expect":"abstain"}
+// verb without an image noun -> not image_gen (must not steal these)
+{"q":"genera un report mensile","lang":"it","expect":"abstain"}
+{"q":"crea un grafico a torta","lang":"it","expect":"abstain"}
+{"q":"generate a random number","lang":"en","expect":"abstain"}

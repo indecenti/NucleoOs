@@ -1,0 +1,49 @@
+{
+  "id": "nearby",
+  "name": "Vicino",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Scambia file e comandi con dispositivi vicini (Nucleo o Bruce) via ESP-NOW.",
+  "category": "connect",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/nearby/",
+  "permissions": [
+    "storage.shared",
+    "system.events",
+    "system.notify",
+    "mesh.peer",
+    "net.wifi"
+  ],
+  "mounts": {
+    "app": "/apps/nearby/data"
+  },
+  "handles": {
+    "role": "none",
+    "extensions": []
+  },
+  "subscribes": [
+    "system.boot"
+  ],
+  "publishes": [
+    "fs.changed"
+  ],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [
+      "link.transfer"
+    ],
+    "consumes": [
+      "link.transfer"
+    ]
+  }
+}

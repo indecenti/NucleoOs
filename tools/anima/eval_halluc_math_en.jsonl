@@ -1,0 +1,14 @@
+// ANTI-HALLUCINATION — MATH DOMAIN ERRORS (EN). sqrt/even-root, log and factorial of a NEGATIVE operand
+// are undefined in the reals; the sign-stripping normalizer used to fabricate a number. ONLY honest
+// outcome = a DECLINE (recognised by halluc-probe: "root of a negative / undefined / non-negative integer").
+// Anti-regression guard for a_solve_domain_error in anima_solve.c.
+{"q":"square root of -9","lang":"en"}
+{"q":"square root of -49","lang":"en"}
+{"q":"cube root of -27","lang":"en"}
+{"q":"what is the square root of -1","lang":"en"}
+{"q":"log of -5","lang":"en"}
+{"q":"logarithm of -100","lang":"en"}
+{"q":"log of -0.5","lang":"en"}
+{"q":"factorial of -2","lang":"en"}
+{"q":"factorial of -10","lang":"en"}
+{"q":"what is the factorial of -4","lang":"en"}

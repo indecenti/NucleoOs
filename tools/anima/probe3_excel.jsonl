@@ -1,0 +1,42 @@
+{"q":"in excel somma A1:A10","lang":"it","expect":"spreadsheet"}
+{"q":"somma le celle da A1 a A10","lang":"it","expect":"spreadsheet"}
+{"q":"somma A1:A10","lang":"it","expect":"spreadsheet"}
+{"q":"media della colonna C","lang":"it","expect":"spreadsheet"}
+{"q":"massimo di B1:B20","lang":"it","expect":"spreadsheet"}
+{"q":"conta le celle da A1 a A20","lang":"it","expect":"spreadsheet"}
+{"q":"sommami le celle da A1 a A50","lang":"it","expect":"spreadsheet"}
+{"q":"mi calcoli la media delle celle da B2 a B30","lang":"it","expect":"spreadsheet"}
+{"q":"come conto quante celle ci sono da A1 a A100","lang":"it","expect":"spreadsheet"}
+{"q":"trova il valore minimo tra A1 e A40","lang":"it","expect":"spreadsheet"}
+{"q":"in un foglio di calcolo come faccio la somma di A1:A10","lang":"it","expect":"spreadsheet"}
+{"q":"arrotonda la cella A1 a 2 decimali","lang":"it","expect":"spreadsheet"}
+{"q":"concatena A1 e B1","lang":"it","expect":"spreadsheet"}
+{"q":"maiuscolo della cella A1","lang":"it","expect":"spreadsheet"}
+{"q":"lunghezza del testo in A1","lang":"it","expect":"spreadsheet"}
+{"q":"cerca verticale nella cella","lang":"it","expect":"spreadsheet"}
+{"q":"find the minimum in cells A1 to A9","lang":"en","expect":"spreadsheet"}
+{"q":"maximum of B1:B20","lang":"en","expect":"spreadsheet"}
+{"q":"vlookup in a cell","lang":"en","expect":"spreadsheet"}
+{"q":"sumif cells A1 to A10 greater than 5","lang":"en","expect":"spreadsheet"}
+{"q":"concatenate A1 and B1","lang":"en","expect":"spreadsheet"}
+{"q":"uppercase cell A1","lang":"en","expect":"spreadsheet"}
+{"q":"length of text in A1","lang":"en","expect":"spreadsheet"}
+{"q":"average of column C","lang":"en","expect":"spreadsheet"}
+{"q":"sum the cells from A1 to A10","lang":"en","expect":"spreadsheet"}
+{"q":"how do i count the cells from A1 to A100","lang":"en","expect":"spreadsheet"}
+{"q":"can you average cells B2 to B30","lang":"en","expect":"spreadsheet"}
+{"q":"round cell A1 to 2 decimals","lang":"en","expect":"spreadsheet"}
+{"q":"countif A1:A20 equals yes","lang":"en","expect":"spreadsheet"}
+{"q":"find the max in cells B1 to B20","lang":"en","expect":"spreadsheet"}
+{"q":"if A1 is greater than 10 show yes","lang":"en","expect":"spreadsheet"}
+{"q":"count the spaces in A1","lang":"en","expect":"spreadsheet"}
+{"q":"2+2","lang":"it","expect":"calc"}
+{"q":"quanto fa 15 per 12","lang":"it","expect":"calc"}
+{"q":"quanto fa il 20 percento di 80","lang":"it","expect":"percent"}
+{"q":"converti 10 km in miglia","lang":"it","expect":"convert"}
+{"q":"apri excel","lang":"it","expect":"open_app"}
+{"q":"open the spreadsheet app","lang":"en","expect":"open_app"}
+{"q":"suk the cells from A1 to A10","lang":"en","expect":"abstain"}
+{"q":"meida della colonna C","lang":"it","expect":"abstain"}
+{"q":"sumproduct of A1:A10 and B1:B10","lang":"en","expect":"abstain"}
+{"q":"get the standard deviation of A1:A30","lang":"en","expect":"abstain"}

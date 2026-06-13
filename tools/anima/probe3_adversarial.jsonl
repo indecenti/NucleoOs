@@ -1,0 +1,51 @@
+{"q":"asdkfj qwerty","lang":"it","expect":"abstain"}
+{"q":"jkdshf","lang":"it","expect":"abstain"}
+{"q":"qed wsx edc","lang":"it","expect":"abstain"}
+{"q":"fhqwhgads","lang":"en","expect":"abstain"}
+{"q":"zxcvbnm asdfgh","lang":"it","expect":"abstain"}
+{"q":"42","lang":"it","expect":"abstain"}
+{"q":"24/04/2027","lang":"it","expect":"abstain"}
+{"q":"a1","lang":"it","expect":"abstain"}
+{"q":"99999","lang":"it","expect":"abstain"}
+{"q":"00:00","lang":"it","expect":"abstain"}
+{"q":"????","lang":"it","expect":"abstain"}
+{"q":"mi sento solo","lang":"it","expect":"abstain"}
+{"q":"i feel lonely","lang":"en","expect":"abstain"}
+{"q":"mi sento triste","lang":"it","expect":"abstain"}
+{"q":"i am so sad today","lang":"en","expect":"abstain"}
+{"q":"ho bisogno di un amico","lang":"it","expect":"abstain"}
+{"q":"qual è il re di Francia oggi","lang":"it","expect":"abstain"}
+{"q":"chi è il re d'Italia oggi","lang":"it","expect":"abstain"}
+{"q":"when did Elon Musk die","lang":"en","expect":"abstain"}
+{"q":"quando è morto Albert Einstein nel 2020","lang":"it","expect":"abstain"}
+{"q":"quando è morto Napoleone l'anno scorso","lang":"it","expect":"abstain"}
+{"q":"chi ha vinto i mondiali del 2026","lang":"it","expect":"abstain"}
+{"q":"who is the current emperor of brazil","lang":"en","expect":"abstain"}
+{"q":"king of the united states","lang":"en","expect":"abstain"}
+{"q":"presidente della luna","lang":"it","expect":"abstain"}
+{"q":"quanti oceani ha Marte","lang":"it","expect":"abstain"}
+{"q":"how many moons does the sun have","lang":"en","expect":"abstain"}
+{"q":"capitale della luna","lang":"it","expect":"abstain"}
+{"q":"capital of the sun","lang":"en","expect":"abstain"}
+{"q":"fiume più lungo della Siberia","lang":"it","expect":"abstain"}
+{"q":"tallest mountain in Antarctica","lang":"en","expect":"abstain"}
+{"q":"fiume piu lngo della cina","lang":"it","expect":"abstain"}
+{"q":"lago piu grande del deserto del sahara","lang":"it","expect":"abstain"}
+{"q":"tallest building on mars","lang":"en","expect":"abstain"}
+{"q":"quanto pesa il colore blu","lang":"it","expect":"abstain"}
+{"q":"what is the largest prime number","lang":"en","expect":"abstain"}
+{"q":"how much does happiness weigh","lang":"en","expect":"abstain"}
+{"q":"quanto è alto il numero 5","lang":"it","expect":"abstain"}
+{"q":"what color is the number seven","lang":"en","expect":"abstain"}
+{"q":"what is the speed of darkness","lang":"en","expect":"abstain"}
+{"q":"quanti lati ha un cerchio","lang":"it","expect":"abstain"}
+{"q":"perchè il cielo è verde","lang":"it","expect":"abstain"}
+{"q":"why is grass blue","lang":"en","expect":"abstain"}
+{"q":"the moon is made of cheese right","lang":"en","expect":"abstain"}
+{"q":"chi sei","lang":"it","expect":"answer"}
+{"q":"who are you","lang":"en","expect":"answer"}
+{"q":"come ti chiami","lang":"it","expect":"answer"}
+{"q":"what are you","lang":"en","expect":"answer"}
+{"q":"sei un robot","lang":"it","expect":"answer"}
+{"q":"are you a robot","lang":"en","expect":"answer"}
+{"q":"sei viva","lang":"it","expect":"answer"}

@@ -1,0 +1,7 @@
+Target 'H:\' non trovato. Inserisci la SD e controlla la lettera di unita'.
+In G:\Nucleo\tools\sd-sync.ps1:31 car:33
++ ... $Target)) { throw "Target '$Target' non trovato. Inserisci la SD e co ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (Target 'H:\' no...tera di unita'.:String) [], RuntimeException
+    + FullyQualifiedErrorId : Target 'H:\' non trovato. Inserisci la SD e controlla la lettera di unita'.
+ 

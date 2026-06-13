@@ -1,0 +1,23 @@
+{"i": 0, "q": "crea un file note.txt", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "command", "intent": "create_file", "confidence": 90, "ms": null, "reply": "Per creare file devo essere associato (inserisci il PIN)."}
+{"i": 1, "q": "scrivi una nota con la lista della spesa", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "command", "intent": "create_file", "confidence": 90, "ms": null, "reply": "Per creare file devo essere associato (inserisci il PIN)."}
+{"i": 2, "q": "ho bisogno di creare un file diario.txt", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "command", "intent": "create_file", "confidence": 90, "ms": null, "reply": "Per creare file devo essere associato (inserisci il PIN)."}
+{"i": 3, "q": "alza il volume", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "command", "intent": "set_volume", "confidence": 88, "ms": null, "reply": "Alzo il volume."}
+{"i": 4, "q": "abbassa la luminosità", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "command", "intent": "set_brightness", "confidence": 88, "ms": null, "reply": "Abbasso la luminosita."}
+{"i": 5, "q": "metti il volume al massimo", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "command", "intent": "set_volume", "confidence": 88, "ms": null, "reply": "Imposto il volume al 100%."}
+{"i": 6, "q": "aumenta la luminosità", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "command", "intent": "set_brightness", "confidence": 88, "ms": null, "reply": "Alzo la luminosita."}
+{"i": 7, "q": "ricordami di comprare il latte domani", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "command", "intent": "add_event", "confidence": 86, "ms": null, "reply": "Per aggiungere eventi devo essere associato (inserisci il PIN)."}
+{"i": 8, "q": "create a file todo.txt", "lang": "en", "src": "eval_action.jsonl", "http": 200, "tier": "command", "intent": "create_file", "confidence": 90, "ms": null, "reply": "Pairing required to create files (enter the PIN)."}
+{"i": 9, "q": "turn up the volume", "lang": "en", "src": "eval_action.jsonl", "http": 200, "tier": "command", "intent": "set_volume", "confidence": 88, "ms": null, "reply": "Raising the volume."}
+{"i": 10, "q": "ho creato un file ieri", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}
+{"i": 11, "q": "creato un file", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}
+{"i": 12, "q": "ho creato una nota", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}
+{"i": 13, "q": "ho generato un file", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}
+{"i": 14, "q": "ho preparato un documento", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}
+{"i": 15, "q": "ho già abbassato la luce", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}
+{"i": 16, "q": "ho alzato il volume", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}
+{"i": 17, "q": "ho aumentato la luminosità", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}
+{"i": 18, "q": "ho aggiunto un evento", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "command", "intent": "weather", "confidence": 45, "ms": null, "reply": "Mi serve internet per controllare il meteo."}
+{"i": 19, "q": "non voglio creare un file", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}
+{"i": 20, "q": "non aumentare il volume", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}
+{"i": 21, "q": "non abbassare la luminosità", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}
+{"i": 22, "q": "non creare nessun file", "lang": "it", "src": "eval_action.jsonl", "http": 200, "tier": "none", "intent": "", "confidence": 0, "ms": null, "reply": ""}

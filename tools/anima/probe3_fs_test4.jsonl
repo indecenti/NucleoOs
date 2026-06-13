@@ -1,0 +1,18 @@
+{"q":"apri la calcoltrice","lang":"it","expect":"open_app"}
+{"q":"alza il volme","lang":"it","expect":"set_volume"}
+{"q":"opn the calculator","lang":"en","expect":"open_app"}
+{"q":"raies the volume","lang":"en","expect":"set_volume"}
+{"q":"puoi alzare il volume?","lang":"it","expect":"set_volume"}
+{"q":"can you turn up the volume?","lang":"en","expect":"set_volume"}
+{"q":"vorrei aprire la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"mi apri il calendario?","lang":"it","expect":"open_app"}
+{"q":"silenzia il volume","lang":"it","expect":"set_volume"}
+{"q":"metti la luminosità al massimo","lang":"it","expect":"set_brightness"}
+{"q":"crea una nota con scritto lista della spesa","lang":"it","expect":"create_file"}
+{"q":"write a note with the capital of italy","lang":"en","expect":"create_file"}
+{"q":"odio quando il volume è troppo alto","lang":"it","expect":"abstain"}
+{"q":"i hate when the screen is too bright","lang":"en","expect":"abstain"}
+{"q":"che bella la calcolatrice","lang":"it","expect":"abstain"}
+{"q":"set the volume to 100","lang":"en","expect":"set_volume"}
+{"q":"chiudi le impostazioni","lang":"it","expect":"close_app"}
+{"q":"close settings","lang":"en","expect":"close_app"}

@@ -1,0 +1,240 @@
+# Lessico MIRATO al parlato reale di ANIMA (estratto dal firmware). Copre le risposte brevi/utili che
+# il device pronuncia: ore, batteria, data, stato, "apro X", identita', conferme. Le risposte lunghe
+# (capacita'/skill) cadono in "leggila" per la guardia. I numeri li fa il pacchetto obbligatorio.
+# Frasi intere dove la prosodia conta; pezzi componibili per le parti variabili (numeri/nomi/giorni).
+#   riga = "testo"  (slug auto = fold accenti+minuscolo, parole unite da _)
+
+# ===== FRASI INTERE (prosodia naturale) =====
+Sono ANIMA, l'assistente offline di NucleoOS. Funziono senza internet, sul dispositivo.
+A dire il vero non lo sapevo, non mi fiderei.
+Ciao! Come posso aiutarti?
+Come posso aiutarti?
+non connesso
+oggi non hai impegni
+Per creare file devo essere associato, inserisci il PIN.
+Per aggiungere eventi devo essere associato, inserisci il PIN.
+Non riesco a creare il file.
+Non sono riuscito ad aggiungere l'evento.
+non lo so
+non ho capito
+nessun risultato
+un momento
+Wi-Fi non connesso
+
+# ===== ORA / DATA / STAGIONE =====
+sono le
+in punto
+mezzogiorno
+mezzanotte
+e un quarto
+e mezza
+meno un quarto
+oggi è
+domani è
+ieri era
+siamo nel
+siamo in
+acceso da
+eseguo
+versione
+
+# ===== BATTERIA / SPAZIO / STATO =====
+batteria
+la batteria è al
+per cento
+carica
+in carica
+spazio
+spazio sd
+libero
+liberi
+occupato
+giga
+gigabyte
+mega
+megabyte
+
+# ===== CALENDARIO =====
+oggi hai
+impegno
+impegni
+appuntamento
+appuntamenti
+evento
+eventi
+promemoria
+domani
+oggi
+ieri
+adesso
+
+# ===== LANCIO APP =====
+apro
+apro la
+apro il
+chiudo
+fatto
+
+# unita' di tempo
+ora
+ore
+minuto
+minuti
+secondo
+secondi
+giorno
+giorni
+settimana
+mese
+anno
+
+# ===== GIORNI =====
+lunedì
+martedì
+mercoledì
+giovedì
+venerdì
+sabato
+domenica
+
+# ===== MESI =====
+gennaio
+febbraio
+marzo
+aprile
+maggio
+giugno
+luglio
+agosto
+settembre
+ottobre
+novembre
+dicembre
+
+# ===== STAGIONI =====
+primavera
+estate
+autunno
+inverno
+
+# ===== NOMI APP (cosa dice dopo "apro") — alias italiani + id =====
+musica
+foto
+fotografie
+immagini
+galleria
+note
+appunti
+testo
+file
+documenti
+cartelle
+radio
+video
+film
+filmati
+calendario
+agenda
+orologio
+sveglia
+timer
+cronometro
+impostazioni
+calcolatrice
+terminale
+browser
+paint
+disegno
+registratore
+fotocamera
+meteo
+photos
+music
+notes
+files
+calendar
+clock
+calculator
+settings
+recorder
+camera
+terminal
+
+# ===== CONFERME / CORTESIA =====
+sì
+no
+ok
+certo
+va bene
+errore
+posso aiutarti
+riprova
+attendi
+prego
+grazie
+buongiorno
+buonasera
+buonanotte
+ciao
+arrivederci
+
+# ===== CONNETTIVI / PAROLE COMUNI (per comporre) =====
+e
+ed
+è
+il
+lo
+la
+i
+gli
+le
+un
+uno
+una
+di
+del
+della
+da
+in
+con
+su
+per
+tra
+a
+al
+alla
+ai
+ci
+non
+ho
+hai
+ha
+abbiamo
+sono
+gradi
+celsius
+
+# --- Ampliamento Skill IDEE (Scientifico, Conversioni, Geometria) ---
+ohm
+ampere
+volt
+tensione
+potenza
+miglia
+chilometri
+pollici
+centimetri
+chilogrammi
+libbre
+ettari
+byte
+kilobyte
+megabyte
+romani
+binario
+raggio
+circonferenza
+ipotenusa
+cateto
+area
+volume

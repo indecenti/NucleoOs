@@ -1,0 +1,49 @@
+// eval_combo_date_en.jsonl — GENUINE (EN): the date-reasoning skill (combinator "born first/after") and the
+// EXCEL engine (SUM/AVERAGE/MAX/MIN/COUNT/COUNTIF/SUMIF/VLOOKUP/CONCAT over real refs) MUST fire.
+// Judge: skill-probe.mjs. Adversarial twin: eval_halluc_date_en.jsonl.
+// --- combinator: birth-date comparison (data available) ---
+{"q":"who was born first einstein or newton","lang":"en","expect":"combinator"}
+{"q":"who was born first newton or einstein","lang":"en","expect":"combinator"}
+{"q":"who is older newton or einstein","lang":"en","expect":"combinator"}
+{"q":"who is older einstein or newton","lang":"en","expect":"combinator"}
+{"q":"who is younger newton or einstein","lang":"en","expect":"combinator"}
+// --- excel: SUM over real ranges ---
+{"q":"sum from b1 to b15","lang":"en","expect":"spreadsheet"}
+{"q":"sum cells a1 to a25","lang":"en","expect":"spreadsheet"}
+{"q":"sum the column from c1 to c30","lang":"en","expect":"spreadsheet"}
+{"q":"sum the cells from d2 to d40","lang":"en","expect":"spreadsheet"}
+// --- excel: AVERAGE ---
+{"q":"average from c1 to c10","lang":"en","expect":"spreadsheet"}
+{"q":"average of cells a1 to a100","lang":"en","expect":"spreadsheet"}
+{"q":"compute the average from b3 to b18","lang":"en","expect":"spreadsheet"}
+// --- excel: MAX / MIN ---
+{"q":"max from a1 to a50","lang":"en","expect":"spreadsheet"}
+{"q":"find the minimum in cells a1 to a9","lang":"en","expect":"spreadsheet"}
+{"q":"the maximum value from e1 to e20","lang":"en","expect":"spreadsheet"}
+{"q":"minimum from b1 to b40","lang":"en","expect":"spreadsheet"}
+// --- excel: COUNT / COUNTIF ---
+{"q":"count cells d1 to d20","lang":"en","expect":"spreadsheet"}
+{"q":"count the cells from a1 to a60","lang":"en","expect":"spreadsheet"}
+{"q":"countif b1 b20 equals yes","lang":"en","expect":"spreadsheet"}
+// --- excel: SUMIF ---
+{"q":"sumif a1 a10 greater than 5","lang":"en","expect":"spreadsheet"}
+{"q":"sum the values from a1 to a50 if greater than 100","lang":"en","expect":"spreadsheet"}
+// --- excel: VLOOKUP / CONCAT ---
+{"q":"vlookup a1 in the table","lang":"en","expect":"spreadsheet"}
+{"q":"concatenate a1 and b1","lang":"en","expect":"spreadsheet"}
+{"q":"concatenate a1 and c1","lang":"en","expect":"spreadsheet"}
+// --- excel: informal / typo forms ---
+{"q":"sum me the cells from a1 to a12","lang":"en","expect":"spreadsheet"}
+{"q":"gimme the average from f1 to f9","lang":"en","expect":"spreadsheet"}
+{"q":"sum teh cells from a1 to a8","lang":"en","expect":"spreadsheet"}
+{"q":"the max from g1 to g15","lang":"en","expect":"spreadsheet"}
+{"q":"count the non empty cells from a1 to a30","lang":"en","expect":"spreadsheet"}
+{"q":"average of the values from h1 to h22","lang":"en","expect":"spreadsheet"}
+{"q":"sum cells a1 a2 a3 a4","lang":"en","expect":"spreadsheet"}
+{"q":"sum the row from a1 to g1","lang":"en","expect":"spreadsheet"}
+{"q":"minimum between a1 and a30","lang":"en","expect":"spreadsheet"}
+{"q":"sum from z1 to z9","lang":"en","expect":"spreadsheet"}
+{"q":"average from a1 to a7","lang":"en","expect":"spreadsheet"}
+{"q":"the max from c1 to c12","lang":"en","expect":"spreadsheet"}
+{"q":"count cells e1 to e10","lang":"en","expect":"spreadsheet"}
+{"q":"min from f1 to f20","lang":"en","expect":"spreadsheet"}

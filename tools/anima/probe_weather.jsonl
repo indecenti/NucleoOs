@@ -1,0 +1,64 @@
+// WEATHER probe — host network tier is STUBBED OFFLINE, so real weather Q&A returns tier=none.
+// expect "abstain" => pass if honest miss (not misrouted to capabilities/agenda/a wrong fact).
+// A DEFECT here = a weather phrasing MISROUTED to a wrong intent. Adversarial cases at the end.
+// ---- IT: classic city + relative date ----
+{"q":"che tempo fa a Brescia","lang":"it","expect":"abstain"}
+{"q":"che tempo fa a Roma oggi","lang":"it","expect":"abstain"}
+{"q":"meteo Milano","lang":"it","expect":"abstain"}
+{"q":"meteo Napoli domani","lang":"it","expect":"abstain"}
+{"q":"che tempo fara domani a Torino","lang":"it","expect":"abstain"}
+{"q":"meteo Napoli dopodomani","lang":"it","expect":"abstain"}
+{"q":"previsioni Bologna","lang":"it","expect":"abstain"}
+{"q":"previsioni meteo per Firenze","lang":"it","expect":"abstain"}
+{"q":"che tempo fara questo weekend a Roma","lang":"it","expect":"abstain"}
+{"q":"meteo a Venezia fra 3 giorni","lang":"it","expect":"abstain"}
+{"q":"che tempo fara lunedi a Palermo","lang":"it","expect":"abstain"}
+{"q":"meteo Brescia 24 febbraio","lang":"it","expect":"abstain"}
+{"q":"vorrei sapere il meteo di Genova per domani","lang":"it","expect":"abstain"}
+{"q":"puoi dirmi il meteo a Bari per favore","lang":"it","expect":"abstain"}
+{"q":"mi dici se piove domani a Milano","lang":"it","expect":"abstain"}
+// ---- IT: aspect (rain/sun/snow/wind/temp) ----
+{"q":"piovera a Milano?","lang":"it","expect":"abstain"}
+{"q":"domani a Brescia piove?","lang":"it","expect":"abstain"}
+{"q":"ci sara il sole domani a Roma","lang":"it","expect":"abstain"}
+{"q":"nevica a Cortina?","lang":"it","expect":"abstain"}
+{"q":"nevichera a Livigno questo weekend","lang":"it","expect":"abstain"}
+{"q":"ci sara vento a Trieste domani","lang":"it","expect":"abstain"}
+{"q":"temperatura a Roma","lang":"it","expect":"abstain"}
+{"q":"quanti gradi ci sono a Napoli","lang":"it","expect":"abstain"}
+{"q":"fa caldo a Palermo?","lang":"it","expect":"abstain"}
+{"q":"fara freddo a Bolzano domani?","lang":"it","expect":"abstain"}
+{"q":"mi serve l ombrello domani a Genova?","lang":"it","expect":"abstain"}
+{"q":"fa bel tempo a Napoli?","lang":"it","expect":"abstain"}
+{"q":"c'e il sole a Bari?","lang":"it","expect":"abstain"}
+// ---- IT: no-preposition / multiword city ----
+{"q":"meteo reggio emilia","lang":"it","expect":"abstain"}
+{"q":"meteo san giovanni rotondo","lang":"it","expect":"abstain"}
+{"q":"previsioni reggio calabria sabato","lang":"it","expect":"abstain"}
+{"q":"piove a san marino?","lang":"it","expect":"abstain"}
+{"q":"neve sulle dolomiti domani","lang":"it","expect":"abstain"}
+// ---- IT: city missing (still weather, must not misroute) ----
+{"q":"che tempo fa","lang":"it","expect":"abstain"}
+{"q":"meteo domani","lang":"it","expect":"abstain"}
+{"q":"piove?","lang":"it","expect":"abstain"}
+// ---- EN ----
+{"q":"what's the weather in London","lang":"en","expect":"abstain"}
+{"q":"weather in New York tomorrow","lang":"en","expect":"abstain"}
+{"q":"will it rain in Paris tomorrow?","lang":"en","expect":"abstain"}
+{"q":"is it sunny in Madrid","lang":"en","expect":"abstain"}
+{"q":"forecast for Berlin in 5 days","lang":"en","expect":"abstain"}
+{"q":"temperature in Tokyo","lang":"en","expect":"abstain"}
+{"q":"do i need an umbrella in London tomorrow","lang":"en","expect":"abstain"}
+{"q":"how hot will it be in Seville on saturday","lang":"en","expect":"abstain"}
+{"q":"is it going to snow in Helsinki","lang":"en","expect":"abstain"}
+{"q":"what is the weather like in Dublin","lang":"en","expect":"abstain"}
+{"q":"how cold is it in Oslo right now","lang":"en","expect":"abstain"}
+// ---- typos / colloquial ----
+{"q":"meto brescia domani","lang":"it","expect":"abstain"}
+{"q":"che temppo fa a roma","lang":"it","expect":"abstain"}
+{"q":"wether in london","lang":"en","expect":"abstain"}
+// ---- ADVERSARIAL: weather-ish words but NOT weather requests (must abstain, must NOT hallucinate) ----
+{"q":"cos'e il clima","lang":"it","expect":"abstain"}
+{"q":"what is rain","lang":"en","expect":"abstain"}
+{"q":"quanto tempo ci vuole per arrivare a Roma","lang":"it","expect":"abstain"}
+{"q":"che ora e","lang":"it","expect":"abstain"}

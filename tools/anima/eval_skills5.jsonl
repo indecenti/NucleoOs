@@ -1,0 +1,116 @@
+// 100 ADVERSARIAL NL probes: CROSS-TOPIC hallucination traps (attribute one entity's property to a
+// different-domain entity, category errors, false premises) that MUST abstain — the prize is catching a
+// fabrication. Plus a few DELIBERATE typos that the spellfix should still rescue, and clean controls.
+// Driven by skill-probe.mjs over the real exe.
+// ---- CROSS-TOPIC: sport/arts/science attributes on the WRONG entity (must abstain) ----
+{"q":"quanti gol ha segnato Einstein","lang":"it","expect":"abstain"}
+{"q":"in che squadra gioca Leonardo da Vinci","lang":"it","expect":"answer"}
+{"q":"quante poesie ha scritto Maradona","lang":"it","expect":"abstain"}
+{"q":"qual è il numero di maglia di Dante","lang":"it","expect":"abstain"}
+{"q":"che film ha diretto Pitagora","lang":"it","expect":"abstain"}
+{"q":"quanti album ha pubblicato Napoleone","lang":"it","expect":"abstain"}
+{"q":"in che anno Galileo ha vinto il Pallone d'Oro","lang":"it","expect":"abstain"}
+{"q":"quante medaglie olimpiche ha vinto Shakespeare","lang":"it","expect":"abstain"}
+{"q":"in che film ha recitato Archimede","lang":"it","expect":"abstain"}
+{"q":"quante canzoni ha cantato Giulio Cesare","lang":"it","expect":"abstain"}
+{"q":"in che campionato gioca Mozart","lang":"it","expect":"abstain"}
+{"q":"chi ha allenato la squadra di Beethoven","lang":"it","expect":"abstain"}
+{"q":"how many goals did Beethoven score","lang":"en","expect":"abstain"}
+{"q":"which football team does Napoleon play for","lang":"en","expect":"abstain"}
+{"q":"what year did Mozart win the World Cup","lang":"en","expect":"abstain"}
+{"q":"how many Oscars did Julius Caesar win","lang":"en","expect":"abstain"}
+{"q":"how many albums did Aristotle release","lang":"en","expect":"abstain"}
+{"q":"which team does Shakespeare play for","lang":"en","expect":"abstain"}
+// ---- CROSS-TOPIC: conflated entities / false attribution (must abstain) ----
+{"q":"quando Einstein ha dipinto la Gioconda","lang":"it","expect":"abstain"}
+{"q":"in che anno Colombo ha inventato il telefono","lang":"it","expect":"abstain"}
+{"q":"qual è la velocità massima della Monna Lisa","lang":"it","expect":"abstain"}
+{"q":"quanto pesa la teoria della relatività in chili","lang":"it","expect":"abstain"}
+{"q":"quando ha twittato Cristoforo Colombo","lang":"it","expect":"abstain"}
+{"q":"quando Cleopatra ha mandato la prima email","lang":"it","expect":"abstain"}
+{"q":"che videogioco preferisce Aristotele","lang":"it","expect":"abstain"}
+{"q":"when did Cleopatra send her first email","lang":"en","expect":"abstain"}
+{"q":"what smartphone did Napoleon use","lang":"en","expect":"abstain"}
+// ---- CATEGORY ERRORS on real entities (must abstain) ----
+{"q":"qual è la capitale del Monte Everest","lang":"it","expect":"abstain"}
+{"q":"qual è la capitale del fiume Nilo","lang":"it","expect":"abstain"}
+{"q":"quando è morto il Monte Bianco","lang":"it","expect":"abstain"}
+{"q":"che lingua parla il Colosseo","lang":"it","expect":"abstain"}
+{"q":"in che squadra gioca il Monte Everest","lang":"it","expect":"abstain"}
+{"q":"qual è il segno zodiacale di Roma","lang":"it","expect":"abstain"}
+{"q":"quando si laurea il fiume Tevere","lang":"it","expect":"abstain"}
+{"q":"chi è il presidente dell'oceano Pacifico","lang":"it","expect":"abstain"}
+{"q":"qual è la capitale del continente Africa","lang":"it","expect":"abstain"}
+{"q":"la montagna più alta dell'oceano","lang":"it","expect":"abstain"}
+{"q":"what is the capital of Mount Everest","lang":"en","expect":"abstain"}
+{"q":"what is the capital of the river Nile","lang":"en","expect":"abstain"}
+{"q":"when did the Pacific Ocean die","lang":"en","expect":"answer"}
+{"q":"what is the capital of the continent Asia","lang":"en","expect":"abstain"}
+{"q":"who is the president of the Atlantic Ocean","lang":"en","expect":"abstain"}
+{"q":"what language does the Colosseum speak","lang":"en","expect":"abstain"}
+// ---- FALSE-PREMISE inventions/discoveries (must abstain) ----
+{"q":"chi ha inventato la gravità","lang":"it","expect":"abstain"}
+{"q":"in che anno è stata inventata l'acqua","lang":"it","expect":"abstain"}
+{"q":"chi ha scoperto il numero cinque","lang":"it","expect":"abstain"}
+{"q":"quando è nato il colore rosso","lang":"it","expect":"abstain"}
+{"q":"chi ha inventato il martedì","lang":"it","expect":"abstain"}
+{"q":"in che anno hanno costruito l'aria","lang":"it","expect":"abstain"}
+{"q":"what year was water invented","lang":"en","expect":"abstain"}
+{"q":"who discovered the number five","lang":"en","expect":"abstain"}
+{"q":"who invented gravity","lang":"en","expect":"abstain"}
+{"q":"who invented Tuesday","lang":"en","expect":"abstain"}
+// ---- SCIENCE-DOMAIN crosses (must abstain) ----
+{"q":"qual è la formula chimica della musica","lang":"it","expect":"abstain"}
+{"q":"quanti protoni ha la parola amore","lang":"it","expect":"abstain"}
+{"q":"a che temperatura bolle la matematica","lang":"it","expect":"abstain"}
+{"q":"qual è il DNA della lingua italiana","lang":"it","expect":"abstain"}
+{"q":"qual è il sapore della radice quadrata","lang":"it","expect":"answer"}
+{"q":"quanti chilometri corre la tabellina del sette","lang":"it","expect":"abstain"}
+{"q":"che lavoro fa la fotosintesi","lang":"it","expect":"answer"}
+{"q":"what is the chemical formula of music","lang":"en","expect":"abstain"}
+{"q":"how many protons are in the word love","lang":"en","expect":"abstain"}
+{"q":"what flavor is the square root of nine","lang":"en","expect":"abstain"}
+{"q":"what job does photosynthesis have","lang":"en","expect":"answer"}
+// ---- LEADING / PRESUPPOSITION (false premise baked in -> must abstain) ----
+{"q":"perché Marte è abitato dai dinosauri","lang":"it","expect":"abstain"}
+{"q":"quando gli unicorni si sono estinti","lang":"it","expect":"abstain"}
+{"q":"qual è la ricetta preferita di Zeus","lang":"it","expect":"abstain"}
+{"q":"perché il Sole è quadrato","lang":"it","expect":"abstain"}
+{"q":"perché i gatti parlano francese di notte","lang":"it","expect":"abstain"}
+{"q":"quanto è profonda l'ombra di un numero","lang":"it","expect":"abstain"}
+{"q":"why is Mars inhabited by dinosaurs","lang":"en","expect":"abstain"}
+{"q":"when did unicorns go extinct","lang":"en","expect":"abstain"}
+{"q":"why is the sun a cube","lang":"en","expect":"answer"}
+{"q":"what is Zeus's favorite recipe","lang":"en","expect":"abstain"}
+// ---- ABSURD STATS on abstractions (must abstain) ----
+{"q":"quanti anni ha il numero sette","lang":"it","expect":"abstain"}
+{"q":"qual è l'altezza della parola gatto","lang":"it","expect":"abstain"}
+{"q":"quanti followers ha il Medioevo","lang":"it","expect":"abstain"}
+{"q":"qual è la password del Rinascimento","lang":"it","expect":"abstain"}
+{"q":"che dieta segue il triangolo","lang":"it","expect":"abstain"}
+{"q":"quanto costa affittare il teorema di Pitagora","lang":"it","expect":"abstain"}
+{"q":"how tall is the word cat","lang":"en","expect":"abstain"}
+{"q":"how many followers does the Middle Ages have","lang":"en","expect":"abstain"}
+{"q":"what is the password of the Renaissance","lang":"en","expect":"abstain"}
+{"q":"what diet does a triangle follow","lang":"en","expect":"abstain"}
+{"q":"what is the zodiac sign of Paris","lang":"en","expect":"abstain"}
+// ---- DELIBERATE TYPOS of valid queries (spellfix should still route/answer) ----
+{"q":"cos'è una varaible","lang":"it","expect":"tier:none"}
+{"q":"cos'è una funzine","lang":"it","expect":"tier:none"}
+{"q":"capitlae del giappone","lang":"it","expect":"abstain"}
+{"q":"capitale dela francia","lang":"it","expect":"answer"}
+{"q":"che ore sno","lang":"it","expect":"time"}
+{"q":"apri la calcolatirce","lang":"it","expect":"open_app"}
+{"q":"what is a varible","lang":"en","expect":"abstain"}
+{"q":"capitl of france","lang":"en","expect":"abstain"}
+// ---- CLEAN CONTROLS (valid -> must answer/route) ----
+{"q":"capitale della francia","lang":"it","expect":"answer"}
+{"q":"cos'è un array","lang":"it","expect":"answer"}
+{"q":"quanto fa 25 per 4","lang":"it","expect":"calc"}
+{"q":"il 10 per cento di 200","lang":"it","expect":"percent"}
+{"q":"apri il calendario","lang":"it","expect":"open_app"}
+{"q":"che giorno è oggi","lang":"it","expect":"date"}
+{"q":"converti 100 cm in metri","lang":"it","expect":"convert"}
+{"q":"capital of france","lang":"en","expect":"answer"}
+{"q":"what is a function","lang":"en","expect":"answer"}
+{"q":"alza il volume","lang":"it","expect":"set_volume"}

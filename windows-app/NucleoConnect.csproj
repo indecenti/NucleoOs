@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>NucleoConnect</AssemblyName>
+    <RootNamespace>NucleoConnect</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Cosmetic WindowsBase WinForms/WPF unification from the WebView2 package. -->
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WebView2 control. Runtime ships with Windows 11; only the SDK is needed to build. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.*" />
+  </ItemGroup>
+
+</Project>

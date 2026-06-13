@@ -1,0 +1,21 @@
+{
+  "id": "miei-fatti",
+  "name": "I Miei Fatti",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Capture personal and world facts and teach them to ANIMA on the device — recallable later in natural language, fully offline.",
+  "category": "productivity",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/miei-fatti/",
+  "icon": "/apps/miei-fatti/icon.svg",
+  "permissions": ["storage.shared", "system.events", "device.keyboard"],
+  "mounts": { "app": "/apps/miei-fatti/data" },
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": ["fs.changed"],
+  "publishes": ["fs.changed"],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>I Miei Fatti</title>
+<style>
+  :root { --bg:#0e1830; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc; --muted:#8aa0c8;
+    --accent:#8a5cff; --accent2:#21d4c4; --line:#2a3a5e; --field:#0b1220; --ok:#2fd07a; --hi:#e2576b; --med:#f5b13d; }
+  html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --panel2:#e9edf8; --text:#10203a; --muted:#5a6a86;
+    --accent:#6b43e0; --accent2:#119d92; --line:#cdd8ee; --field:#f4f7fe; --ok:#1c9d5b; --hi:#c83e52; --med:#c2820f; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  header { padding:10px 14px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; flex:0 0 auto; }
+  header .logo { width:26px; height:26px; color:var(--accent); flex:0 0 auto; }
+  header h1 { font-size:16px; margin:0; font-weight:650; letter-spacing:.2px; }
+  header .sub { font-size:11.5px; color:var(--muted); }
+  main { flex:1 1 auto; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .card.star { border-color:color-mix(in srgb,var(--accent) 55%,var(--line)); box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 22%,transparent) inset; }
+  .card h2 { margin:0 0 4px; font-size:13.5px; font-weight:650; display:flex; align-items:center; gap:8px; }
+  .card .hint { color:var(--muted); font-size:11.5px; margin:0 0 12px; }
+  label { display:block; font-size:11px; color:var(--muted); margin:0 0 4px; text-transform:uppercase; letter-spacing:.4px; }
+  input, select, textarea { width:100%; background:var(--field); color:var(--text); border:1px solid var(--line);
+    border-radius:8px; padding:9px 10px; font:inherit; outline:none; }
+  input:focus, select:focus { border-color:var(--accent); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; }
+  .row > div { flex:1 1 160px; min-width:0; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; margin-bottom:12px; }
+  .seg button { border:0; border-radius:0; background:transparent; padding:7px 16px; font-weight:600; color:var(--muted); }
+  .seg button.on { background:var(--accent); color:#fff; }
+  .preview { margin:10px 0 12px; padding:9px 11px; background:var(--panel2); border:1px dashed var(--line);
+    border-radius:8px; font-size:12.5px; color:var(--muted); }
+  .preview b { color:var(--text); font-weight:600; }
+  .btns { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  button { cursor:pointer; border:1px solid var(--line); background:var(--panel2); color:var(--text);
+    border-radius:8px; padding:8px 13px; font:inherit; font-weight:600; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.ghost { background:transparent; }
+  button.icon { padding:6px 9px; font-weight:500; }
+  button:disabled { opacity:.5; cursor:default; }
+  ul.facts { list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:8px; }
+  li.fact { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 11px;
+    display:flex; gap:10px; align-items:flex-start; }
+  li.fact.ded { border-style:dashed; border-color:color-mix(in srgb,var(--accent2) 60%,var(--line)); }
+  li.fact .body { flex:1; min-width:0; }
+  li.fact .subj { font-weight:600; }
+  li.fact .val { color:var(--muted); word-break:break-word; }
+  li.fact .actions { display:flex; gap:6px; flex:0 0 auto; }
+  .tag { display:inline-block; font-size:10px; font-weight:700; padding:1px 6px; border-radius:5px; margin-left:6px;
+    background:var(--field); color:var(--muted); text-transform:uppercase; letter-spacing:.3px; vertical-align:middle; }
+  .chip { display:inline-block; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:20px;
+    text-transform:uppercase; letter-spacing:.4px; vertical-align:middle; }
+  .chip.new { background:color-mix(in srgb,var(--med) 22%,transparent); color:var(--med); }
+  .chip.taught { background:color-mix(in srgb,var(--accent) 22%,transparent); color:var(--accent); }
+  .chip.verified { background:color-mix(in srgb,var(--ok) 22%,transparent); color:var(--ok); }
+  .chip.volatile,.chip.fail { background:color-mix(in srgb,var(--hi) 22%,transparent); color:var(--hi); }
+  .chain { color:var(--muted); font-size:11.5px; margin-top:3px; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .chain span { display:block; }
+  .empty { color:var(--muted); text-align:center; padding:18px 10px; font-size:13px; }
+  .profile-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  @media (max-width:520px){ .profile-grid { grid-template-columns:1fr; } }
+  #graph { width:100%; height:240px; display:block; background:var(--field); border:1px solid var(--line); border-radius:10px; }
+  #graph text { fill:var(--text); font:11px system-ui,sans-serif; }
+  #graph line.rel { stroke:var(--accent); stroke-width:1.6; }
+  #graph line.ded { stroke:var(--accent2); stroke-width:1.4; stroke-dasharray:4 3; }
+  #graph circle { fill:var(--panel2); stroke:var(--accent); stroke-width:1.6; }
+  #graph .elabel { fill:var(--muted); font-size:9.5px; }
+  footer { flex:0 0 auto; border-top:1px solid var(--line); padding:7px 14px; display:flex; gap:12px;
+    align-items:center; font-size:11.5px; color:var(--muted); }
+  footer .save { min-width:74px; }
+  footer kbd { background:var(--field); border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:11px; }
+  .spacer { flex:1; }
+  .ask { margin-top:8px; font-size:12.5px; color:var(--muted); white-space:pre-wrap; }
+  .ask b { color:var(--text); } .err { color:var(--hi); } [hidden]{ display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="9" cy="8" r="3"/><path d="M4 19c0-2.8 2.2-5 5-5s5 2.2 5 5"/>
+    <path d="M17 3.5l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3L13.6 6.7l2.3-.9z"/>
+  </svg>
+  <div>
+    <h1 id="t-title">I Miei Fatti</h1>
+    <div class="sub" id="t-sub"></div>
+  </div>
+  <div class="spacer"></div>
+</header>
+
+<main>
+  <!-- ADD -->
+  <section class="card">
+    <div class="seg" id="seg">
+      <button type="button" data-mode="flat" class="on" id="t-mfact">Fatto</button>
+      <button type="button" data-mode="rel" id="t-mrel">Relazione</button>
+    </div>
+
+    <!-- mode: flat fact -->
+    <div id="m-flat">
+      <p class="hint" id="t-addhint"></p>
+      <div class="row">
+        <div style="flex:0 0 160px"><label id="t-cat">Categoria</label>
+          <select id="cat"></select></div>
+        <div><label id="t-subj">Soggetto</label><input id="subj" autocomplete="off" spellcheck="false"></div>
+        <div><label id="t-val">Valore</label><input id="val" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="preview" id="preview"></div>
+      <div class="btns"><button class="primary" id="teach" type="button">🧠 <span id="t-teach"></span></button>
+        <span class="ask" id="addmsg"></span></div>
+    </div>
+
+    <!-- mode: relation -->
+    <div id="m-rel" hidden>
+      <p class="hint" id="t-relhint"></p>
+      <div class="row">
+        <div><label id="t-rela">Entità A</label><input id="rel-a" autocomplete="off" spellcheck="false"></div>
+        <div style="flex:0 0 190px"><label id="t-relr">Relazione</label><select id="rel-r"></select></div>
+        <div><label id="t-relb">Entità B</label><input id="rel-b" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="preview" id="rel-preview"></div>
+      <div class="btns"><button class="primary" id="addrel" type="button">🔗 <span id="t-addrel"></span></button>
+        <span class="ask" id="relmsg"></span></div>
+    </div>
+  </section>
+
+  <!-- DEDUCTIONS (the star) -->
+  <section class="card star" id="ded-card" hidden>
+    <h2>💡 <span id="t-dedh"></span></h2>
+    <p class="hint" id="t-dedhint"></p>
+    <div class="btns" style="margin-bottom:4px">
+      <button class="primary icon" id="teachded" type="button">🧠 <span id="t-teachded"></span></button>
+      <button class="ghost icon" id="togglegraph" type="button">🕸 <span id="t-graph"></span></button>
+      <span class="ask" id="dedmsg"></span>
+    </div>
+    <svg id="graph" hidden viewBox="0 0 600 240" preserveAspectRatio="xMidYMid meet"></svg>
+    <ul class="facts" id="deds"></ul>
+  </section>
+
+  <!-- STORED -->
+  <section class="card">
+    <h2>📚 <span id="t-listh"></span></h2>
+    <p class="hint" id="t-listhint"></p>
+    <div class="btns" style="margin-bottom:6px">
+      <button class="ghost icon" id="reteach" type="button">↻ <span id="t-reteach"></span></button>
+      <button class="ghost icon" id="verifyall" type="button">✓ <span id="t-verifyall"></span></button>
+    </div>
+    <ul class="facts" id="facts"></ul>
+    <div class="empty" id="empty" hidden></div>
+  </section>
+
+  <!-- PROFILE -->
+  <section class="card">
+    <h2>🪪 <span id="t-profh"></span></h2>
+    <p class="hint" id="t-profhint"></p>
+    <div class="profile-grid">
+      <div><label id="t-p-name"></label><input id="p-name" autocomplete="off"></div>
+      <div><label id="t-p-age"></label><input id="p-age" inputmode="numeric" autocomplete="off"></div>
+      <div><label id="t-p-city"></label><input id="p-city" autocomplete="off"></div>
+      <div><label id="t-p-job"></label><input id="p-job" autocomplete="off"></div>
+      <div><label id="t-p-email"></label><input id="p-email" autocomplete="off"></div>
+      <div><label id="t-p-birthday"></label><input id="p-birthday" autocomplete="off"></div>
+    </div>
+    <div class="btns" style="margin-top:12px">
+      <button class="primary" id="saveprof" type="button">🧠 <span id="t-saveprof"></span></button>
+      <button class="ghost" id="askprof" type="button"><span id="t-askprof"></span></button>
+    </div>
+    <div class="ask" id="profmsg"></div>
+  </section>
+</main>
+
+<footer>
+  <span class="save" id="save"></span>
+  <span id="t-foot"></span>
+  <span class="spacer"></span>
+  <span><kbd>/</kbd> <span id="t-footk"></span> · <kbd>Enter</kbd> <span id="t-footk2"></span></span>
+</footer>
+
+<script type="module">
+  const FILE = '/data/miei-fatti.json';
+  const SETTINGS = '/system/config/settings.json';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const lang = () => (localStorage.getItem('anima.lang') === 'en' ? 'en' : 'it');
+
+  // ---- ANIMA teach grammar (matches firmware tool_teach: LEAD + copula è/sono/significa) -----
+  const LEAD = { it:'ricorda che ', en:'remember that ' };
+  const COPW = { is:{it:'è',en:'is'}, are:{it:'sono',en:'are'}, means:{it:'significa',en:'means'} };
+  // NB: derived subjects must never contain a standalone copula word (è/sono/significa | is/are/means),
+  // because tool_teach splits on the FIRST copula. All templates below are copula-free in the subject.
+  function sentence(subject, value, cop, l){ return LEAD[l] + subject.trim() + ' ' + COPW[cop][l] + ' ' + value.trim(); }
+
+  // flat-fact category -> copula + placeholders
+  const copulaForCat = (cat) => (cat === 'define' ? 'means' : 'is');
+
+  // relation type -> { picker label, derived fact (subject/value/cop), graph kind }
+  // graph kinds: loc | parent(g) | sib  used by the deduction engine
+  const REL = {
+    loc:   { kind:'loc',      lab:{it:'si trova / è in', en:'is located in'},
+             fact:(a,b,l)=> l==='en'?{s:`the location of ${a}`,v:b,c:'is'}:{s:`dove si trova ${a}`,v:b,c:'is'} },
+    abita: { kind:'loc',      lab:{it:'abita a / vive a', en:'lives in'},
+             fact:(a,b,l)=> l==='en'?{s:`where ${a} lives`,v:b,c:'is'}:{s:`dove abita ${a}`,v:b,c:'is'} },
+    mamma: { kind:'parent', g:'f', lab:{it:'è la mamma di', en:'is the mother of'},
+             fact:(a,b,l)=> l==='en'?{s:`the mother of ${b}`,v:a,c:'is'}:{s:`la mamma di ${b}`,v:a,c:'is'} },
+    papa:  { kind:'parent', g:'m', lab:{it:'è il papà di', en:'is the father of'},
+             fact:(a,b,l)=> l==='en'?{s:`the father of ${b}`,v:a,c:'is'}:{s:`il papà di ${b}`,v:a,c:'is'} },
+    fratelli:{ kind:'sib',  lab:{it:'è fratello/sorella di', en:'is a sibling of'},
+             fact:(a,b,l)=> l==='en'?{s:`${a} and ${b}`,v:'siblings',c:'are'}:{s:`${a} e ${b}`,v:'fratelli',c:'are'} },
+    sposati:{ kind:'pair',  lab:{it:'è sposato/a con', en:'is married to'},
+             fact:(a,b,l)=> l==='en'?{s:`${a} and ${b}`,v:'married',c:'are'}:{s:`${a} e ${b}`,v:'sposati',c:'are'} },
+    amici: { kind:'pair',   lab:{it:'è amico/a di', en:'is a friend of'},
+             fact:(a,b,l)=> l==='en'?{s:`${a} and ${b}`,v:'friends',c:'are'}:{s:`${a} e ${b}`,v:'amici',c:'are'} },
+  };
+  const REL_ORDER = ['loc','abita','mamma','papa','fratelli','sposati','amici'];
+
+  // ---- i18n ------------------------------------------------------------------
+  const S = {
+    it: { sub:'Insegna fatti ad ANIMA — e ANIMA ne deduce di nuovi.',
+      mfact:'Fatto', mrel:'Relazione',
+      addhint:'ANIMA imparerà questo fatto sul dispositivo e potrai chiederglielo a parole tue.',
+      relhint:'Collega due entità: ANIMA impara la relazione E deduce i fatti che ne derivano.',
+      cat:'Categoria', subj:'Soggetto', val:'Valore', teach:'Insegna ad ANIMA',
+      rela:'Entità A', relr:'Relazione', relb:'Entità B', addrel:'Aggiungi relazione',
+      dedh:'Deduzioni di ANIMA', dedhint:'Fatti che ANIMA NON gli hai detto, dedotti dalle tue relazioni (logica deterministica, zero invenzioni). Insegnali e ANIMA li ricorderà.',
+      teachded:'Insegna tutte le deduzioni', graph:'Grafo',
+      listh:'Memorizzati', reteach:'Re-insegna tutto', verifyall:'Verifica tutti',
+      profh:'Chi sono', profhint:'Dati personali deterministici: ANIMA li richiama esatti (nome, età, città…).',
+      saveprof:'Salva e insegna profilo', askprof:'Cosa sa ANIMA di me?',
+      p:{name:'Nome',age:'Età',city:'Città',job:'Lavoro',email:'Email',birthday:'Compleanno'},
+      foot:'Offline · sul dispositivo', footk:'cerca', footk2:'insegna',
+      empty:'Nessun fatto ancora. Aggiungi un fatto o una relazione qui sopra.',
+      listhint:(n)=>`${n}/128 fatti insegnabili ad ANIMA. Oltre, i più vecchi vengono dimenticati dal dispositivo (la lista qui resta).`,
+      cats:{person:'👤 Persona / Contatto',place:'📍 Luogo / Oggetto',define:'📖 Definizione',generic:'🔖 Generico'},
+      ph:{ person:['il numero di mamma','333 123 4567'], place:['il passaporto','nel cassetto blu'],
+           define:['HTTP','HyperText Transfer Protocol'], generic:['la mia auto','una Fiat Panda rossa'] },
+      phrel:{a:'Marco', b:'Anna'},
+      willlearn:'ANIMA imparerà:', dedwill:'Deduzione:', needboth:'Inserisci soggetto e valore.', needrel:'Inserisci entità A e B.',
+      teaching:'Insegno ad ANIMA…', taught:'Imparato! ANIMA ora lo ricorda.', relAdded:'Relazione aggiunta e insegnata.',
+      volatile:'ANIMA non lo memorizza: sembra temporaneo (oggi/adesso/meteo…).',
+      failteach:'ANIMA non è riuscita a impararlo ora.', noconn:'Dispositivo non raggiungibile.',
+      verifying:'Verifico con ANIMA…', vok:'✓ ANIMA risponde:', vno:'✗ ANIMA non l’ha ricordato.',
+      del:'Elimina', edit:'Modifica', verify:'Verifica', teach1:'Insegna',
+      reteachDone:(o,n)=>`Re-insegnati ${o}/${n}.`, verifyDone:(o,n)=>`Verificati ${o}/${n}.`,
+      dedDone:(o,n)=>`Insegnate ${o}/${n} deduzioni.`, profSaved:'Profilo salvato e insegnato.', asking:'Chiedo ad ANIMA…',
+      noded:'Aggiungi più relazioni (es. due genitori, o due luoghi collegati) e qui appariranno le deduzioni.',
+      chip:{new:'da insegnare',taught:'insegnato',verified:'verificato',volatile:'temporaneo',fail:'errore'},
+      tagRel:'relazione', tagDed:'dedotto', because:'perché' },
+    en: { sub:'Teach facts to ANIMA — and ANIMA deduces new ones.',
+      mfact:'Fact', mrel:'Relation',
+      addhint:'ANIMA learns this fact on the device; ask it back in your own words.',
+      relhint:'Link two entities: ANIMA learns the relation AND deduces the facts that follow.',
+      cat:'Category', subj:'Subject', val:'Value', teach:'Teach ANIMA',
+      rela:'Entity A', relr:'Relation', relb:'Entity B', addrel:'Add relation',
+      dedh:'ANIMA’s deductions', dedhint:'Facts you never told ANIMA, deduced from your relations (deterministic logic, no guessing). Teach them and ANIMA will remember them.',
+      teachded:'Teach all deductions', graph:'Graph',
+      listh:'Stored', reteach:'Re-teach all', verifyall:'Verify all',
+      profh:'About me', profhint:'Deterministic personal data: ANIMA recalls these exactly (name, age, city…).',
+      saveprof:'Save & teach profile', askprof:'What does ANIMA know about me?',
+      p:{name:'Name',age:'Age',city:'City',job:'Job',email:'Email',birthday:'Birthday'},
+      foot:'Offline · on device', footk:'search', footk2:'teach',
+      empty:'No facts yet. Add a fact or a relation above.',
+      listhint:(n)=>`${n}/128 facts teachable to ANIMA. Beyond that the device forgets the oldest (this list stays).`,
+      cats:{person:'👤 Person / Contact',place:'📍 Place / Object',define:'📖 Definition',generic:'🔖 General'},
+      ph:{ person:['mum’s phone number','333 123 4567'], place:['the passport','in the blue drawer'],
+           define:['HTTP','HyperText Transfer Protocol'], generic:['my car','a red Fiat Panda'] },
+      phrel:{a:'Marco', b:'Anna'},
+      willlearn:'ANIMA will learn:', dedwill:'Deduction:', needboth:'Enter a subject and a value.', needrel:'Enter entity A and B.',
+      teaching:'Teaching ANIMA…', taught:'Learned! ANIMA now remembers it.', relAdded:'Relation added and taught.',
+      volatile:'ANIMA won’t store it: looks temporary (today/now/weather…).',
+      failteach:'ANIMA could not learn it now.', noconn:'Device unreachable.',
+      verifying:'Verifying with ANIMA…', vok:'✓ ANIMA answers:', vno:'✗ ANIMA didn’t recall it.',
+      del:'Delete', edit:'Edit', verify:'Verify', teach1:'Teach',
+      reteachDone:(o,n)=>`Re-taught ${o}/${n}.`, verifyDone:(o,n)=>`Verified ${o}/${n}.`,
+      dedDone:(o,n)=>`Taught ${o}/${n} deductions.`, profSaved:'Profile saved and taught.', asking:'Asking ANIMA…',
+      noded:'Add more relations (e.g. two parents, or two linked places) and deductions will appear here.',
+      chip:{new:'to teach',taught:'taught',verified:'verified',volatile:'temporary',fail:'error'},
+      tagRel:'relation', tagDed:'deduced', because:'because' }
+  };
+  const t = () => S[lang()];
+
+  // ---- storage ---------------------------------------------------------------
+  let state = { schema:2, profile:{name:'',age:'',city:'',job:'',email:'',birthday:''}, facts:[], rels:[] };
+  let seq = 1, mode = 'flat', dirty = false, saveTimer = 0;
+  const nextId = () => seq++;
+
+  async function readJSON(p){ try{ const r=await fetch('/api/fs/read?path='+encodeURIComponent(p),{cache:'no-store'}); return r.ok?JSON.parse(await r.text()):null; }catch{ return null; } }
+  async function writeJSON(p,o){ try{ const r=await fetch('/api/fs/write?path='+encodeURIComponent(p),{method:'POST',body:JSON.stringify(o,null,2)}); return r.ok; }catch{ return false; } }
+  async function anima(q){ try{ const r=await fetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang(),{cache:'no-store'}); return r.ok?await r.json():null; }catch{ return null; } }
+
+  function scheduleSave(){ dirty=true; $('save').textContent=t().teaching?'…':''; $('save').textContent='…'; clearTimeout(saveTimer);
+    saveTimer=setTimeout(async()=>{ const ok=await writeJSON(FILE,state); dirty=false; $('save').textContent=ok?'✓':'⚠'; setTimeout(()=>{ if(!dirty)$('save').textContent=''; },1400); },350); }
+  async function flushSave(){ clearTimeout(saveTimer); const ok=await writeJSON(FILE,state); dirty=false; $('save').textContent=ok?'✓':'⚠'; setTimeout(()=>{ if(!dirty)$('save').textContent=''; },1400); }
+
+  // ---- teach / verify engine -------------------------------------------------
+  function classify(j){
+    if(!j) return 'noconn';
+    const reply=String(j.reply||'').toLowerCase();
+    if(/temporane|temporary/.test(reply)) return 'volatile';
+    if(/non riesc|can.?t learn|couldn.?t learn/.test(reply)) return 'fail';
+    if(j.intent==='teach'||j.intent==='profile'||/impara|ricord|got it|i.?ll remember|remember/.test(reply)) return 'ok';
+    return 'fail';
+  }
+  function replyHasValue(reply,value){ const r=String(reply||'').toLowerCase();
+    const toks=String(value||'').toLowerCase().split(/[\s,]+/).filter(x=>x.length>=2); return toks.length>0 && toks.every(x=>r.includes(x)); }
+  // teach an item that exposes {subject,value,cop,status}
+  async function teachItem(it){ const j=await anima(sentence(it.subject,it.value,it.cop,lang())); const k=classify(j);
+    it.status = k==='ok'?'taught' : k==='volatile'?'volatile' : k==='noconn'?(it.status||'new') : 'fail'; return {k,reply:j&&j.reply}; }
+  async function verifyItem(it){ const j=await anima(it.subject); const ok=j&&replyHasValue(j.reply,it.value);
+    if(ok) it.status='verified'; else if(it.status==='verified') it.status='taught'; return {ok,reply:j&&j.reply}; }
+
+  // ---- model helpers: a unified "fact view" over flat facts + relations ------
+  const norm = (s)=>String(s||'').trim().toLowerCase();
+  function relFact(r,l){ const d=REL[r.type].fact(r.a.trim(),r.b.trim(),l); return {s:d.s,v:d.v,c:d.c}; }
+  // make a teachable view object bound to a stored record (flat fact or relation)
+  function viewOf(rec,l){
+    if(rec.kind==='rel'){ const f=relFact(rec,l); return { ref:rec, isRel:true, subject:f.s, value:f.v, cop:f.c,
+        get status(){return rec.status;}, set status(x){rec.status=x;} }; }
+    return { ref:rec, isRel:false, subject:rec.subject, value:rec.value, cop:rec.cop||copulaForCat(rec.cat),
+        get status(){return rec.status;}, set status(x){rec.status=x;} };
+  }
+  function allViews(){ const l=lang(); return [...state.rels.map(r=>viewOf(r,l)), ...state.facts.map(f=>viewOf(f,l))]; }
+
+  // ---- DEDUCTION ENGINE (sound symbolic rules; abstains otherwise) -----------
+  // Produces derived facts {subject,value,cop,chain[]} not already present.
+  function deduce(){
+    const l=lang(); const out=[]; const seen=new Set();
+    const loc=[], parent=[], sib=[];
+    for(const r of state.rels){ const k=REL[r.type].kind;
+      if(k==='loc') loc.push({a:r.a.trim(),b:r.b.trim()});
+      else if(k==='parent') parent.push({a:r.a.trim(),b:r.b.trim(),g:REL[r.type].g});
+      else if(k==='sib') sib.push([r.a.trim(),r.b.trim()]); }
+    // exclude facts already stored (by normalized subject|value)
+    const stored=new Set(allViews().map(v=>norm(v.subject)+'|'+norm(v.value)));
+    const locSubj=(a)=> l==='en'?`the location of ${a}`:`dove si trova ${a}`;
+    const because = t().because;
+    const add=(s,v,c,chain)=>{ const key=norm(s)+'|'+norm(v); if(seen.has(key)||stored.has(key))return; seen.add(key); out.push({subject:s,value:v,cop:c,chain}); };
+    const line=(s,v,c)=> sentence(s,v,c,l).slice(LEAD[l].length); // human premise text without the lead
+
+    // 1) Location transitivity: loc(A,B) ∧ loc(B,C) ⟹ loc(A,C)
+    for(const e1 of loc) for(const e2 of loc){
+      if(norm(e1.b)===norm(e2.a) && norm(e1.a)!==norm(e2.b)){
+        add(locSubj(e1.a), e2.b, 'is', [`${e1.a} → ${e1.b}`, `${e1.b} → ${e2.b}`]);
+      }
+    }
+    // 2) Grandparent: parent(A,B) ∧ parent(B,C) ⟹ grandparent(A,C); gender from A's parent relation
+    for(const p1 of parent) for(const p2 of parent){
+      if(norm(p1.b)===norm(p2.a) && norm(p1.a)!==norm(p2.b)){
+        const gw = p1.g==='f' ? (l==='en'?'grandmother':'la nonna') : (l==='en'?'grandfather':'il nonno');
+        const subj = l==='en'? `the ${gw} of ${p2.b}` : `${gw} di ${p2.b}`;
+        const pw = (g)=> g==='f'?(l==='en'?'mother':'mamma'):(l==='en'?'father':'papà');
+        add(subj, p1.a, 'is', [`${p1.a} = ${pw(p1.g)} (${p1.b})`, `${p1.b} = ${pw(p2.g)} (${p2.b})`]);
+      }
+    }
+    // 3) Sibling transitivity (component closure): emit unordered pairs not directly stated
+    if(sib.length){
+      const ents=[...new Set(sib.flatMap(p=>[norm(p[0]),norm(p[1])]))];
+      const disp={}; sib.forEach(p=>{disp[norm(p[0])]=p[0]; disp[norm(p[1])]=p[1];});
+      const par={}; ents.forEach(e=>par[e]=e); const find=x=>par[x]===x?x:(par[x]=find(par[x]));
+      const uni=(a,b)=>{par[find(a)]=find(b);};
+      const direct=new Set(); sib.forEach(([a,b])=>{ uni(norm(a),norm(b)); direct.add(norm(a)+'|'+norm(b)); direct.add(norm(b)+'|'+norm(a)); });
+      for(let i=0;i<ents.length;i++) for(let j=i+1;j<ents.length;j++){ const a=ents[i],b=ents[j];
+        if(find(a)===find(b) && !direct.has(a+'|'+b)){
+          const subj=l==='en'?`${disp[a]} and ${disp[b]}`:`${disp[a]} e ${disp[b]}`;
+          add(subj, l==='en'?'siblings':'fratelli', 'are', [`${disp[a]} ⋈ … ⋈ ${disp[b]}`]);
+        } }
+    }
+    return out;
+  }
+
+  // ---- rendering -------------------------------------------------------------
+  let deds = [];   // current deductions (recomputed on change)
+  function actionsHtml(){ return `<div class="actions">
+    <button class="icon ghost" data-act="verify" title="${t().verify}">✓</button>
+    <button class="icon ghost" data-act="edit" title="${t().edit}">✎</button>
+    <button class="icon ghost" data-act="del" title="${t().del}">🗑</button></div>`; }
+
+  function render(){
+    const views = allViews();
+    // stored list
+    const ul=$('facts'), n=views.length;
+    $('t-listhint').textContent=t().listhint(n);
+    $('empty').hidden=n>0; ul.hidden=n===0;
+    ul.innerHTML='';
+    for(const v of views){ const ch=v.status||'new';
+      const li=document.createElement('li'); li.className='fact'; li.dataset.id=v.ref.id;
+      li.innerHTML=`<div class="body">
+        <div class="subj">${esc(v.subject)} <span class="chip ${ch}">${t().chip[ch]||ch}</span>${v.isRel?`<span class="tag">${t().tagRel}</span>`:(v.ref.src==='deduced'?`<span class="tag">${t().tagDed}</span>`:'')}</div>
+        <div class="val">${esc(v.value)}</div><div class="ask" data-role="msg"></div></div>${actionsHtml()}`;
+      ul.appendChild(li);
+    }
+    if(n===0) $('empty').textContent=t().empty;
+    // deductions
+    deds = deduce();
+    $('ded-card').hidden = state.rels.length===0;
+    const dl=$('deds'); dl.innerHTML='';
+    if(state.rels.length){
+      if(!deds.length){ const li=document.createElement('li'); li.className='empty'; li.textContent=t().noded; dl.appendChild(li); }
+      deds.forEach((d,i)=>{ const li=document.createElement('li'); li.className='fact ded'; li.dataset.idx=i;
+        li.innerHTML=`<div class="body"><div class="subj">${esc(d.subject)} <span class="tag">${t().tagDed}</span></div>
+          <div class="val">${esc(d.value)}</div>
+          <div class="chain">${d.chain.map(c=>`<span>⎿ ${esc(c)}</span>`).join('')}</div>
+          <div class="ask" data-role="msg"></div></div>
+          <div class="actions"><button class="icon primary" data-act="teachded" title="${t().teach1}">🧠</button></div>`;
+        dl.appendChild(li); });
+      $('teachded').disabled = deds.length===0;
+    }
+    if(!$('graph').hidden) renderGraph();
+  }
+
+  function renderGraph(){
+    const g=$('graph'); const ents=[]; const idx={};
+    const addE=(e)=>{ const k=norm(e); if(!(k in idx)){ idx[k]=ents.length; ents.push(e.trim()); } return idx[k]; };
+    const edges=[]; state.rels.forEach(r=>{ edges.push([addE(r.a),addE(r.b),'rel']); });
+    deds.forEach(d=>{ /* draw deduced loc edges if both endpoints exist */ });
+    const N=ents.length; const W=600,H=240,cx=W/2,cy=H/2,R=Math.min(W,H)/2-40;
+    const pos=ents.map((_,i)=>({x:cx+R*Math.cos(2*Math.PI*i/Math.max(N,1)-Math.PI/2), y:cy+R*Math.sin(2*Math.PI*i/Math.max(N,1)-Math.PI/2)}));
+    let s='';
+    edges.forEach(([a,b])=>{ s+=`<line class="rel" x1="${pos[a].x}" y1="${pos[a].y}" x2="${pos[b].x}" y2="${pos[b].y}"/>`; });
+    pos.forEach((p,i)=>{ s+=`<circle cx="${p.x}" cy="${p.y}" r="6"/><text x="${p.x}" y="${p.y-10}" text-anchor="middle">${esc(ents[i])}</text>`; });
+    g.innerHTML=s || `<text x="300" y="120" text-anchor="middle" class="elabel">—</text>`;
+  }
+
+  // ---- flat-fact form --------------------------------------------------------
+  function applyPlaceholders(){ const ph=t().ph[$('cat').value]; $('subj').placeholder=ph[0]; $('val').placeholder=ph[1]; }
+  function renderPreview(){ const subj=$('subj').value.trim(), val=$('val').value.trim(), cat=$('cat').value;
+    if(!subj&&!val){ $('preview').innerHTML=`<span style="opacity:.7">${t().willlearn}</span>`; return; }
+    $('preview').innerHTML=`${t().willlearn} <b>«${esc(sentence(subj||'…',val||'…',copulaForCat(cat),lang()))}»</b>`; }
+  async function doTeach(){
+    const subject=$('subj').value.trim(), value=$('val').value.trim(), cat=$('cat').value, msg=$('addmsg');
+    if(!subject||!value){ msg.className='ask err'; msg.textContent=t().needboth; return; }
+    msg.className='ask'; msg.textContent=t().teaching; $('teach').disabled=true;
+    const rec={ id:nextId(), kind:'flat', cat, subject, value, cop:copulaForCat(cat), status:'new', ts:Date.now() };
+    const {k,reply}=await teachItem(viewOf(rec,lang())); $('teach').disabled=false;
+    if(k==='noconn'){ msg.className='ask err'; msg.textContent=t().noconn; return; }
+    state.facts.unshift(rec); scheduleSave(); render();
+    $('subj').value=''; $('val').value=''; renderPreview(); $('subj').focus();
+    if(k==='ok'){ msg.className='ask'; msg.innerHTML='<b>'+t().taught+'</b>'; }
+    else if(k==='volatile'){ msg.className='ask err'; msg.textContent=t().volatile; }
+    else { msg.className='ask err'; msg.textContent=t().failteach+(reply?(' — '+reply):''); }
+  }
+
+  // ---- relation form ---------------------------------------------------------
+  function renderRelPreview(){ const a=$('rel-a').value.trim(), b=$('rel-b').value.trim(), type=$('rel-r').value;
+    if(!a&&!b){ $('rel-preview').innerHTML=`<span style="opacity:.7">${t().willlearn}</span>`; return; }
+    const f=REL[type].fact(a||'A',b||'B',lang()); $('rel-preview').innerHTML=`${t().willlearn} <b>«${esc(sentence(f.s,f.v,f.c,lang()))}»</b>`; }
+  async function addRel(){
+    const a=$('rel-a').value.trim(), b=$('rel-b').value.trim(), type=$('rel-r').value, msg=$('relmsg');
+    if(!a||!b){ msg.className='ask err'; msg.textContent=t().needrel; return; }
+    msg.className='ask'; msg.textContent=t().teaching; $('addrel').disabled=true;
+    const rec={ id:nextId(), kind:'rel', type, a, b, status:'new', ts:Date.now() };
+    const {k,reply}=await teachItem(viewOf(rec,lang())); $('addrel').disabled=false;
+    if(k==='noconn'){ msg.className='ask err'; msg.textContent=t().noconn; return; }
+    state.rels.unshift(rec); scheduleSave(); render();
+    $('rel-a').value=''; $('rel-b').value=''; renderRelPreview(); $('rel-a').focus();
+    if(k==='ok'||k==='taught'){ msg.className='ask'; msg.innerHTML='<b>'+t().relAdded+'</b>'; }
+    else if(k==='volatile'){ msg.className='ask err'; msg.textContent=t().volatile; }
+    else { msg.className='ask err'; msg.textContent=t().failteach+(reply?(' — '+reply):''); }
+  }
+
+  // ---- list / deduction actions ---------------------------------------------
+  async function onListClick(e){
+    const btn=e.target.closest('button[data-act]'); if(!btn) return;
+    const li=e.target.closest('li.fact'); const id=Number(li.dataset.id);
+    const rec = state.rels.find(x=>x.id===id) || state.facts.find(x=>x.id===id); if(!rec) return;
+    const v=viewOf(rec,lang());
+    if(btn.dataset.act==='del'){ state.rels=state.rels.filter(x=>x.id!==id); state.facts=state.facts.filter(x=>x.id!==id); scheduleSave(); render(); return; }
+    if(btn.dataset.act==='edit'){
+      if(rec.kind==='rel'){ setMode('rel'); $('rel-a').value=rec.a; $('rel-r').value=rec.type; $('rel-b').value=rec.b; renderRelPreview(); $('rel-a').focus(); }
+      else { setMode('flat'); $('cat').value=rec.cat; applyPlaceholders(); $('subj').value=rec.subject; $('val').value=rec.value; renderPreview(); $('subj').focus(); }
+      state.rels=state.rels.filter(x=>x.id!==id); state.facts=state.facts.filter(x=>x.id!==id); scheduleSave(); render(); return;
+    }
+    if(btn.dataset.act==='verify'){ const msg=li.querySelector('[data-role="msg"]'); msg.className='ask'; msg.textContent=t().verifying; btn.disabled=true;
+      const {ok,reply}=await verifyItem(v); btn.disabled=false; scheduleSave(); render();
+      const m2=$('facts').querySelector(`li[data-id="${id}"] [data-role="msg"]`); if(m2){ m2.className=ok?'ask':'ask err'; m2.innerHTML=ok?(t().vok+' '+esc(reply)):t().vno; } return; }
+  }
+  async function onDedClick(e){
+    const btn=e.target.closest('button[data-act="teachded"]'); if(!btn) return;
+    const li=e.target.closest('li.fact'); const idx=Number(li.dataset.idx); const d=deds[idx]; if(!d) return;
+    const msg=li.querySelector('[data-role="msg"]'); msg.className='ask'; msg.textContent=t().teaching; btn.disabled=true;
+    const rec={ id:nextId(), kind:'flat', cat:'generic', subject:d.subject, value:d.value, cop:d.cop, status:'new', src:'deduced', ts:Date.now() };
+    const {k,reply}=await teachItem(viewOf(rec,lang())); btn.disabled=false;
+    if(k==='noconn'){ msg.className='ask err'; msg.textContent=t().noconn; return; }
+    state.facts.unshift(rec); scheduleSave(); render(); // recompute removes it from deds (now stored)
+  }
+  async function teachAllDeds(){ if(!deds.length) return; $('teachded').disabled=true; let ok=0; const snapshot=[...deds];
+    for(const d of snapshot){ const rec={ id:nextId(), kind:'flat', cat:'generic', subject:d.subject, value:d.value, cop:d.cop, status:'new', src:'deduced', ts:Date.now() };
+      const r=await teachItem(viewOf(rec,lang())); if(r.k==='ok') ok++; state.facts.unshift(rec); }
+    scheduleSave(); render(); flash($('dedmsg'), t().dedDone(ok,snapshot.length)); }
+  async function reteachAll(){ const vs=allViews(); if(!vs.length) return; $('reteach').disabled=true; let ok=0;
+    for(const v of vs){ const r=await teachItem(v); if(r.k==='ok') ok++; } $('reteach').disabled=false; scheduleSave(); render(); flash($('addmsg'),t().reteachDone(ok,vs.length)); }
+  async function verifyAll(){ const vs=allViews(); if(!vs.length) return; $('verifyall').disabled=true; let ok=0;
+    for(const v of vs){ const r=await verifyItem(v); if(r.ok) ok++; } $('verifyall').disabled=false; scheduleSave(); render(); flash($('addmsg'),t().verifyDone(ok,vs.length)); }
+  function flash(el,txt){ el.className='ask'; el.textContent=txt; setTimeout(()=>{ if(el.textContent===txt) el.textContent=''; },4000); }
+
+  // ---- profile ---------------------------------------------------------------
+  const PF=['name','age','city','job','email','birthday'];
+  function loadProfileInputs(){ for(const k of PF) $('p-'+k).value=state.profile[k]||''; }
+  function profileSentence(field,value,l){ value=value.trim(); if(!value) return null;
+    const it={name:`mi chiamo ${value}`,age:`ho ${value} anni`,city:`abito a ${value}`,job:`il mio lavoro è ${value}`,email:`la mia email è ${value}`,birthday:`il mio compleanno è ${value}`};
+    const en={name:`my name is ${value}`,age:`i am ${value} years old`,city:`i live in ${value}`,job:`my job is ${value}`,email:`my email is ${value}`,birthday:`my birthday is ${value}`};
+    return (l==='en'?en:it)[field]||null; }
+  async function saveProfile(){ $('saveprof').disabled=true; const msg=$('profmsg'); msg.className='ask'; msg.textContent=t().teaching;
+    for(const k of PF){ const v=$('p-'+k).value.trim(); state.profile[k]=v; const s=profileSentence(k,v,lang()); if(s) await anima(s); }
+    scheduleSave(); $('saveprof').disabled=false; msg.innerHTML='<b>'+t().profSaved+'</b>'; }
+  async function askProfile(){ const msg=$('profmsg'); msg.className='ask'; msg.textContent=t().asking;
+    const j=await anima(lang()==='en'?'what do you know about me':'cosa sai di me'); msg.textContent=j?(j.reply||''):t().noconn; }
+
+  // ---- mode + i18n -----------------------------------------------------------
+  function setMode(m){ mode=m; $('m-flat').hidden=m!=='flat'; $('m-rel').hidden=m!=='rel';
+    [...$('seg').children].forEach(b=>b.classList.toggle('on', b.dataset.mode===m)); }
+  function buildSelects(){ const x=t();
+    const cat=$('cat'); cat.innerHTML=''; for(const k of ['person','place','define','generic']){ const o=document.createElement('option'); o.value=k; o.textContent=x.cats[k]; cat.appendChild(o); }
+    const rr=$('rel-r'); const cur=rr.value; rr.innerHTML=''; for(const k of REL_ORDER){ const o=document.createElement('option'); o.value=k; o.textContent=REL[k].lab[lang()]; rr.appendChild(o); } if(cur) rr.value=cur;
+  }
+  function applyStrings(){ const x=t(); document.documentElement.lang=lang();
+    $('t-title').textContent='I Miei Fatti'; $('t-sub').textContent=x.sub;
+    $('t-mfact').textContent=x.mfact; $('t-mrel').textContent=x.mrel;
+    $('t-addhint').textContent=x.addhint; $('t-relhint').textContent=x.relhint;
+    $('t-cat').textContent=x.cat; $('t-subj').textContent=x.subj; $('t-val').textContent=x.val; $('t-teach').textContent=x.teach;
+    $('t-rela').textContent=x.rela; $('t-relr').textContent=x.relr; $('t-relb').textContent=x.relb; $('t-addrel').textContent=x.addrel;
+    $('t-dedh').textContent=x.dedh; $('t-dedhint').textContent=x.dedhint; $('t-teachded').textContent=x.teachded; $('t-graph').textContent=x.graph;
+    $('t-listh').textContent=x.listh; $('t-reteach').textContent=x.reteach; $('t-verifyall').textContent=x.verifyall;
+    $('t-profh').textContent=x.profh; $('t-profhint').textContent=x.profhint; $('t-saveprof').textContent=x.saveprof; $('t-askprof').textContent=x.askprof;
+    for(const k of PF) $('t-p-'+k).textContent=x.p[k];
+    $('t-foot').textContent=x.foot; $('t-footk').textContent=x.footk; $('t-footk2').textContent=x.footk2;
+    buildSelects(); applyPlaceholders(); $('rel-a').placeholder=x.phrel.a; $('rel-b').placeholder=x.phrel.b;
+    renderPreview(); renderRelPreview(); render();
+  }
+  async function loadTheme(){ const s=await readJSON(SETTINGS); if(s?.ui?.theme) document.documentElement.dataset.theme=s.ui.theme;
+    if(s?.ui?.language==='it'||s?.ui?.language==='en') localStorage.setItem('anima.lang',s.ui.language); }
+
+  // ---- boot ------------------------------------------------------------------
+  async function load(){ const d=await readJSON(FILE);
+    if(d&&typeof d==='object'&&Array.isArray(d.facts)){ state={ schema:2, profile:{name:'',age:'',city:'',job:'',email:'',birthday:''}, facts:[], rels:[], ...d };
+      state.profile={name:'',age:'',city:'',job:'',email:'',birthday:'',...(d.profile||{})}; state.rels=Array.isArray(d.rels)?d.rels:[]; }
+    seq=[...state.facts,...state.rels].reduce((m,x)=>Math.max(m,(x.id|0)+1),1); }
+  async function init(){ await loadTheme(); await load(); applyStrings(); loadProfileInputs();
+    $('seg').addEventListener('click',(e)=>{ const b=e.target.closest('button[data-mode]'); if(b) setMode(b.dataset.mode); });
+    $('cat').addEventListener('change',()=>{ applyPlaceholders(); renderPreview(); });
+    $('subj').addEventListener('input',renderPreview); $('val').addEventListener('input',renderPreview);
+    $('subj').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('val').focus(); }});
+    $('val').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); doTeach(); }});
+    $('teach').addEventListener('click',doTeach);
+    ['rel-a','rel-b'].forEach(id=>$(id).addEventListener('input',renderRelPreview)); $('rel-r').addEventListener('change',renderRelPreview);
+    $('rel-b').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); addRel(); }});
+    $('addrel').addEventListener('click',addRel);
+    $('facts').addEventListener('click',onListClick); $('deds').addEventListener('click',onDedClick);
+    $('teachded').addEventListener('click',teachAllDeds);
+    $('togglegraph').addEventListener('click',()=>{ const g=$('graph'); g.hidden=!g.hidden; if(!g.hidden) renderGraph(); });
+    $('reteach').addEventListener('click',reteachAll); $('verifyall').addEventListener('click',verifyAll);
+    $('saveprof').addEventListener('click',saveProfile); $('askprof').addEventListener('click',askProfile);
+    $('subj').focus();
+  }
+  init();
+
+  // Single re-render entry for an external language switch: repaint all labels + reload profile fields.
+  // Reused by the OS-wide i18n live-sync hook below (and harmless if called any time).
+  window.__mieiFattiRelang = () => { applyStrings(); loadProfileInputs(); };
+
+  // ---- live: theme, language, external edits, OS shortcuts -------------------
+  window.addEventListener('message',(e)=>{ const d=e.data||{};
+    if(d.type==='set-theme'&&d.theme) document.documentElement.dataset.theme=d.theme;
+    if(d.type==='set-language'&&(d.lang==='it'||d.lang==='en')){ localStorage.setItem('anima.lang',d.lang); applyStrings(); loadProfileInputs(); }
+    if(d.t==='fs.changed'&&typeof d.d?.path==='string'){ if(d.d.path.endsWith('settings.json')) loadTheme().then(applyStrings); else if(d.d.path===FILE&&!dirty) load().then(()=>{ loadProfileInputs(); render(); }); }
+    if(d.type==='os-shortcut'){ const a=d.action; if(a==='new') (mode==='flat'?$('subj'):$('rel-a')).focus(); else if(a==='save') flushSave(); else if(a==='refresh') load().then(()=>{ loadProfileInputs(); render(); }); }
+  });
+  addEventListener('keydown',(e)=>{ if(e.key==='/'&&!/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName||'')){ e.preventDefault(); (mode==='flat'?$('subj'):$('rel-a')).focus(); } });
+</script>
+
+<!-- OS-wide live language sync: repaint when the language changes elsewhere (Settings, another app),
+     not just at load. The engine watches the canonical anima.lang signal (storage event across iframes
+     + same-frame relay); onChange re-runs this app's own label repaint. Zero behavior change otherwise. -->
+<script type="module">
+  import I18N from '/nucleo-i18n.js';
+  I18N.onChange(() => { try { window.__mieiFattiRelang && window.__mieiFattiRelang(); } catch {} });
+</script>
+</body>
+</html>

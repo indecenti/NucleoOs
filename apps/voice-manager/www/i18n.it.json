@@ -1,0 +1,95 @@
+{
+  "_lang": "it",
+  "app_title": "Comandi Vocali",
+  "ws_connecting": "Connessione…",
+  "mic": "Mic",
+
+  "tab_tutorial": "Tutorial",
+  "tab_commands": "Comandi",
+  "tab_test": "Prova",
+  "tab_custom": "Custom",
+
+  "prog_label": { "one": "1 comando addestrato", "other": "{count} comandi addestrati" },
+  "prog_cap": "max {count}",
+
+  "t0_title": "Insegna al Cardputer la tua voce",
+  "t0_intro": "Questo strumento addestra il riconoscitore vocale <b>nativo</b> del Cardputer: gira interamente <b>offline</b>, sul dispositivo, e impara <b>la tua</b> voce. Più lo usi, più diventa preciso — ogni comando riconosciuto affina da solo il proprio modello.",
+  "t0_tip1": "Funziona a <b>premi-e-parla</b>: tieni premuto <span class=\"keycap\">FN</span> (o <span class=\"keycap\">G0</span>) sul Cardputer, pronuncia il comando, rilascia.",
+  "t0_tip2": "Il dispositivo riconosce la <b>parola</b>; ANIMA la trasforma nell'azione (aprire un'app, dire l'ora…).",
+  "t0_tip3": "Nessun cloud, nessuna chiave: l'audio non lascia mai il dispositivo.",
+  "t0_next": "Iniziamo →",
+
+  "t1_title": "Come pronunciare bene",
+  "t1_intro": "Poche regole fanno una differenza enorme sulla precisione:",
+  "t1_tip1": "<b>Ambiente silenzioso</b> e distanza costante dal microfono (~20 cm).",
+  "t1_tip2": "Premi <span class=\"keycap\">FN</span> <b>prima</b> di parlare, rilascia <b>subito dopo</b>. Una sola parola/frase per registrazione.",
+  "t1_tip3": "Parla in modo <b>naturale e costante</b> — come lo dirai poi nell'uso reale.",
+  "t1_tip4": "Scegli comandi <b>distinti</b> e di più sillabe. Evita monosillabi e parole quasi uguali tra loro.",
+  "t1_next": "Ho capito →",
+
+  "back_arrow": "← Indietro",
+  "next_arrow": "Avanti →",
+
+  "t2_title": "Addestra i comandi essenziali",
+  "t2_intro": "Partiamo da un set di base distinto e utile. Premi <b>Addestra</b>, poi tieni <span class=\"keycap\">FN</span> e pronuncia il comando mostrato.",
+
+  "t3_title": "Provalo",
+  "t3_intro": "Mettiamo alla prova quello che hai addestrato. Tieni <span class=\"keycap\">FN</span> e pronuncia uno dei comandi: vedrai in tempo reale <b>cosa è stato riconosciuto</b> e con quanta sicurezza. Nota come il <b>raggio</b> si stringe man mano: è il modello che impara te.",
+  "t3_goto_test": "Vai alla Prova",
+
+  "t4_title": "Pronto!",
+  "t4_intro": "Hai le basi. Da qui puoi:",
+  "t4_tip1": "Aggiungere altri comandi dalla scheda <b>Comandi</b> (fino a 20).",
+  "t4_tip2": "Creare frasi tue dalla scheda <b>Custom</b>.",
+  "t4_tip3": "Tornare alla <b>Prova</b> quando vuoi: ogni uso migliora il riconoscimento.",
+  "t4_goto_commands": "Vai ai Comandi →",
+
+  "cmd_library": "Libreria comandi",
+  "cmd_sub": "Comandi nativi pronti all'uso. 🟢 = già addestrato con la tua voce. Il dispositivo ne gestisce fino a <b>20</b>: scegli i tuoi preferiti.",
+
+  "test_title": "Prova dal vivo",
+  "test_sub": "Tieni <span class=\"keycap\">FN</span> sul Cardputer e pronuncia un comando addestrato.",
+  "test_hint": "Ogni riconoscimento mostra <b>distanza</b> (più bassa = più simile), <b>margine</b> sul 2° candidato e il <b>raggio</b> auto-tarante della parola. Verde = ottimo, giallo = accettabile.",
+  "test_waiting": "In attesa… premi FN e parla.",
+
+  "custom_title": "Comando personalizzato",
+  "custom_sub": "Registra una frase tua non presente nel curriculum. Falla breve e distinta.",
+  "custom_ph": "es: accendi luce",
+  "custom_start": "Inizia addestramento",
+  "custom_yours": "I tuoi comandi custom",
+  "custom_empty": "Nessun comando custom salvato.",
+
+  "rec_title": "Sul Cardputer: tieni FN e parla",
+  "rec_hold_say": "Tieni premuto <span class=\"keycap\">FN</span> (o <span class=\"keycap\">G0</span>) e pronuncia:",
+  "rec_then_release": "poi <b>rilascia</b>.",
+  "rec_waiting": "In attesa del Cardputer…",
+  "rec_recording": "🔴 Registrazione in corso… rilascia FN per salvare.",
+  "rec_processing": "Elaborazione…",
+  "rec_too_short": "⚠️ Troppo corto o silenzio — riprova: tieni FN e parla chiaro.",
+  "rec_timeout": "⚠️ Nessuna risposta dal Cardputer. Verifica di tener premuto <b>FN</b> mentre parli (la registrazione avviene sul dispositivo, non nel browser) e che il firmware vocale sia aggiornato.",
+  "rec_stop": "Ferma",
+
+  "ok_trained": "Addestrato!",
+  "ok_msg": "“{word}” registrato con la tua voce.",
+  "ok_next_cmd": "Prossimo comando →",
+
+  "badge_trained": "Addestrato",
+  "cap_reached": "limite raggiunto",
+  "btn_train": "Addestra",
+
+  "confirm_delete": "Eliminare il comando “{word}”?",
+  "err_delete": "Errore durante l'eliminazione",
+  "err_network": "Errore di rete",
+  "alert_cap": "Hai raggiunto il limite di {max} comandi. Rimuovine uno prima.",
+  "err_arm": "Impossibile armare il motore (dispositivo occupato?)",
+  "err_connect": "Errore di connessione al Cardputer",
+
+  "conf_excellent": "Ottimo",
+  "conf_good": "Buono",
+  "conf_fair": "Discreto",
+  "conf_weak": "Debole",
+
+  "meta_dist": "dist",
+  "meta_second": "2°",
+  "meta_radius": "raggio"
+}

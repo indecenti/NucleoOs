@@ -1,0 +1,7 @@
+{"q":"percentuale di possibilita che piova domani","lang":"it","expect":"abstain"}
+{"q":"percentuale di possibilita","lang":"it","expect":"abstain"}
+{"q":"possibilita che piova domani","lang":"it","expect":"abstain"}
+{"q":"percentuale che piova domani","lang":"it","expect":"abstain"}
+{"q":"percentuale di possibilita che piova","lang":"it","expect":"abstain"}
+{"q":"di possibilita che piova domani","lang":"it","expect":"abstain"}
+{"q":"percentuale possibilita piova domani","lang":"it","expect":"abstain"}

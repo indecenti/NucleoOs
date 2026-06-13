@@ -1,0 +1,42 @@
+// OUT-OF-DISTRIBUTION probe for the SWE/CS knowledge pack (knowledge/swe.jsonl). Each query is
+// phrased deliberately UNLIKE the card's `ask` list — indirect, use-case framed, colloquial — to
+// measure real generalization, not memorization. A low score here is the honest signal. The `none`
+// lines are out-of-scope: the cascade MUST refuse them (a confident hit there is a false positive).
+{"q":"come gestisco la funzione annulla tornando all'ultima azione fatta","lang":"it","expect":"cs.stack"}
+{"q":"how do i implement undo stepping back through the last actions","lang":"en","expect":"cs.stack"}
+{"q":"voglio una lista d'attesa equa dove chi arriva prima viene servito prima","lang":"it","expect":"cs.queue"}
+{"q":"ho bisogno di infilare elementi in mezzo di continuo senza spostare tutti gli altri","lang":"it","expect":"cs.linked-list"}
+{"q":"voglio ritrovare al volo il numero di telefono di una persona dal suo nome","lang":"it","expect":"cs.hash-map"}
+{"q":"how do i instantly fetch a value given its label without scanning everything","lang":"en","expect":"cs.hash-map"}
+{"q":"come rappresento cartelle dentro cartelle in modo gerarchico","lang":"it","expect":"cs.tree"}
+{"q":"come modello chi è amico di chi in un social network","lang":"it","expect":"cs.graph"}
+{"q":"perché il mio programma diventa lentissimo quando i dati raddoppiano","lang":"it","expect":"cs.big-o"}
+{"q":"why does my code crawl to a halt when the input size doubles","lang":"en","expect":"cs.big-o"}
+{"q":"voglio stilare una classifica di punteggi dal più alto al più basso","lang":"it","expect":"cs.sorting"}
+{"q":"perché cercare guardando sempre l'elemento di mezzo è così rapido","lang":"it","expect":"cs.binary-search"}
+{"q":"come sfrutto i due core del processore per lavorare in parallelo","lang":"it","expect":"cs.thread"}
+{"q":"come scarico dati dalla rete senza che l'app si congeli nell'attesa","lang":"it","expect":"cs.async"}
+{"q":"due parti del programma incrementano lo stesso contatore e il totale risulta sbagliato","lang":"it","expect":"cs.race-condition"}
+{"q":"due attività si bloccano a vicenda aspettando ognuna la risorsa dell'altra","lang":"it","expect":"cs.deadlock"}
+{"q":"voglio che cane e gatto riusino il comportamento comune della classe animale","lang":"it","expect":"oop.inheritance"}
+{"q":"chiamo il metodo verso e ogni animale emette il suo suono senza che io controlli il tipo","lang":"it","expect":"oop.polymorphism"}
+{"q":"come impedisco che il saldo di un conto venga modificato senza passare da controlli","lang":"it","expect":"oop.encapsulation"}
+{"q":"guido l'auto senza sapere come è fatto il motore, in programmazione come si chiama","lang":"it","expect":"oop.abstraction"}
+{"q":"come obbligo ogni classe di pagamento a fornire per forza il metodo paga","lang":"it","expect":"oop.interface"}
+{"q":"uno strumento per non perdere mai nessuna versione del progetto nel tempo","lang":"it","expect":"swe.git"}
+{"q":"ho finito una modifica e voglio fissarla nella storia con una breve nota","lang":"it","expect":"swe.commit"}
+{"q":"how do i save my current work into history with a short note","lang":"en","expect":"swe.commit"}
+{"q":"voglio una linea separata dove sperimentare in pace senza toccare la versione stabile","lang":"it","expect":"swe.branch"}
+{"q":"git mi avvisa che io e un collega abbiamo toccato le stesse righe, cosa è successo","lang":"it","expect":"swe.merge"}
+{"q":"come faccio in modo che il computer verifichi da solo che le mie funzioni siano corrette","lang":"it","expect":"swe.unit-test"}
+{"q":"how do i get the machine to automatically check my functions are right","lang":"en","expect":"swe.unit-test"}
+{"q":"ha senso scrivere la verifica prima ancora di scrivere il codice vero","lang":"it","expect":"swe.tdd"}
+{"q":"come riduco la duplicazione e rendo i nomi più chiari nel codice già scritto","lang":"it","expect":"swe.refactoring"}
+{"q":"come chiedo a un database l'elenco di tutti gli utenti maggiorenni","lang":"it","expect":"swe.sql"}
+{"q":"esiste un catalogo di soluzioni collaudate ai problemi ricorrenti di progettazione","lang":"it","expect":"swe.design-pattern"}
+{"q":"come evito di riscaricare ogni volta la stessa pagina tenendone una copia pronta","lang":"it","expect":"swe.cache"}
+{"q":"conviene di più richiamare la funzione su se stessa o usare un ciclo","lang":"it","expect":"cs.recursion-vs-iteration"}
+{"q":"qual è il modo migliore di organizzare in memoria una grande quantità di dati","lang":"it","expect":"cs.data-structure"}
+{"q":"come si prepara un buon tiramisù","lang":"it","expect":"none"}
+{"q":"chi ha vinto i mondiali di calcio del 2006","lang":"it","expect":"none"}
+{"q":"che tempo farà domani a Napoli","lang":"it","expect":"none"}

@@ -1,0 +1,1612 @@
+{
+ "Italia": {
+  "name_it": "Italia",
+  "name_en": "Italy",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Roma",
+  "capital_en": "Rome",
+  "demonym_it": "italiano",
+  "demonym_en": "Italian"
+ },
+ "Francia": {
+  "name_it": "Francia",
+  "name_en": "France",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Parigi",
+  "capital_en": "Paris",
+  "demonym_it": "francese",
+  "demonym_en": "French"
+ },
+ "Spagna": {
+  "name_it": "Spagna",
+  "name_en": "Spain",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Madrid",
+  "capital_en": "Madrid",
+  "demonym_it": "spagnolo",
+  "demonym_en": "Spanish"
+ },
+ "Germania": {
+  "name_it": "Germania",
+  "name_en": "Germany",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Berlino",
+  "capital_en": "Berlin",
+  "demonym_it": "tedesco",
+  "demonym_en": "German"
+ },
+ "Regno Unito": {
+  "name_it": "Regno Unito",
+  "name_en": "United Kingdom",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Londra",
+  "capital_en": "London",
+  "demonym_it": "britannico",
+  "demonym_en": "British"
+ },
+ "Russia": {
+  "name_it": "Russia",
+  "name_en": "Russia",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Mosca",
+  "capital_en": "Moscow",
+  "demonym_it": "russo",
+  "demonym_en": "Russian"
+ },
+ "Grecia": {
+  "name_it": "Grecia",
+  "name_en": "Greece",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Atene",
+  "capital_en": "Athens",
+  "demonym_it": "greco",
+  "demonym_en": "Greek"
+ },
+ "Portogallo": {
+  "name_it": "Portogallo",
+  "name_en": "Portugal",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Lisbona",
+  "capital_en": "Lisbon",
+  "demonym_it": "portoghese",
+  "demonym_en": "Portuguese"
+ },
+ "Svizzera": {
+  "name_it": "Svizzera",
+  "name_en": "Switzerland",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Berna",
+  "capital_en": "Bern",
+  "demonym_it": "svizzero",
+  "demonym_en": "Swiss"
+ },
+ "Austria": {
+  "name_it": "Austria",
+  "name_en": "Austria",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Vienna",
+  "capital_en": "Vienna",
+  "demonym_it": "austriaco",
+  "demonym_en": "Austrian"
+ },
+ "Paesi Bassi": {
+  "name_it": "Paesi Bassi",
+  "name_en": "Netherlands",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Amsterdam",
+  "capital_en": "Amsterdam",
+  "demonym_it": "olandese",
+  "demonym_en": "Dutch"
+ },
+ "Belgio": {
+  "name_it": "Belgio",
+  "name_en": "Belgium",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Bruxelles",
+  "capital_en": "Brussels",
+  "demonym_it": "belga",
+  "demonym_en": "Belgian"
+ },
+ "Norvegia": {
+  "name_it": "Norvegia",
+  "name_en": "Norway",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Oslo",
+  "capital_en": "Oslo",
+  "demonym_it": "norvegese",
+  "demonym_en": "Norwegian"
+ },
+ "Svezia": {
+  "name_it": "Svezia",
+  "name_en": "Sweden",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Stoccolma",
+  "capital_en": "Stockholm",
+  "demonym_it": "svedese",
+  "demonym_en": "Swedish"
+ },
+ "Danimarca": {
+  "name_it": "Danimarca",
+  "name_en": "Denmark",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Copenaghen",
+  "capital_en": "Copenhagen",
+  "demonym_it": "danese",
+  "demonym_en": "Danish"
+ },
+ "Finlandia": {
+  "name_it": "Finlandia",
+  "name_en": "Finland",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Helsinki",
+  "capital_en": "Helsinki",
+  "demonym_it": "finlandese",
+  "demonym_en": "Finnish"
+ },
+ "Polonia": {
+  "name_it": "Polonia",
+  "name_en": "Poland",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Varsavia",
+  "capital_en": "Warsaw",
+  "demonym_it": "polacco",
+  "demonym_en": "Polish"
+ },
+ "Irlanda": {
+  "name_it": "Irlanda",
+  "name_en": "Ireland",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Dublino",
+  "capital_en": "Dublin",
+  "demonym_it": "irlandese",
+  "demonym_en": "Irish"
+ },
+ "Ungheria": {
+  "name_it": "Ungheria",
+  "name_en": "Hungary",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Budapest",
+  "capital_en": "Budapest",
+  "demonym_it": "ungherese",
+  "demonym_en": "Hungarian"
+ },
+ "Repubblica Ceca": {
+  "name_it": "Repubblica Ceca",
+  "name_en": "Czech Republic",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Praga",
+  "capital_en": "Prague",
+  "demonym_it": "ceco",
+  "demonym_en": "Czech"
+ },
+ "Romania": {
+  "name_it": "Romania",
+  "name_en": "Romania",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Bucarest",
+  "capital_en": "Bucharest",
+  "demonym_it": "rumeno",
+  "demonym_en": "Romanian"
+ },
+ "Ucraina": {
+  "name_it": "Ucraina",
+  "name_en": "Ukraine",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Kiev",
+  "capital_en": "Kyiv",
+  "demonym_it": "ucraino",
+  "demonym_en": "Ukrainian"
+ },
+ "Croazia": {
+  "name_it": "Croazia",
+  "name_en": "Croatia",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Zagabria",
+  "capital_en": "Zagreb",
+  "demonym_it": "croato",
+  "demonym_en": "Croatian"
+ },
+ "Serbia": {
+  "name_it": "Serbia",
+  "name_en": "Serbia",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Belgrado",
+  "capital_en": "Belgrade",
+  "demonym_it": "serbo",
+  "demonym_en": "Serbian"
+ },
+ "Slovenia": {
+  "name_it": "Slovenia",
+  "name_en": "Slovenia",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Lubiana",
+  "capital_en": "Ljubljana",
+  "demonym_it": "sloveno",
+  "demonym_en": "Slovenian"
+ },
+ "Giappone": {
+  "name_it": "Giappone",
+  "name_en": "Japan",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Tokyo",
+  "capital_en": "Tokyo",
+  "demonym_it": "giapponese",
+  "demonym_en": "Japanese"
+ },
+ "Cina": {
+  "name_it": "Cina",
+  "name_en": "China",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Pechino",
+  "capital_en": "Beijing",
+  "demonym_it": "cinese",
+  "demonym_en": "Chinese"
+ },
+ "India": {
+  "name_it": "India",
+  "name_en": "India",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Nuova Delhi",
+  "capital_en": "New Delhi",
+  "demonym_it": "indiano",
+  "demonym_en": "Indian"
+ },
+ "Corea del Sud": {
+  "name_it": "Corea del Sud",
+  "name_en": "South Korea",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Seul",
+  "capital_en": "Seoul",
+  "demonym_it": "sudcoreano",
+  "demonym_en": "South Korean"
+ },
+ "Turchia": {
+  "name_it": "Turchia",
+  "name_en": "Turkey",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Ankara",
+  "capital_en": "Ankara",
+  "demonym_it": "turco",
+  "demonym_en": "Turkish"
+ },
+ "Thailandia": {
+  "name_it": "Thailandia",
+  "name_en": "Thailand",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Bangkok",
+  "capital_en": "Bangkok",
+  "demonym_it": "thailandese",
+  "demonym_en": "Thai"
+ },
+ "Indonesia": {
+  "name_it": "Indonesia",
+  "name_en": "Indonesia",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Giacarta",
+  "capital_en": "Jakarta",
+  "demonym_it": "indonesiano",
+  "demonym_en": "Indonesian"
+ },
+ "Israele": {
+  "name_it": "Israele",
+  "name_en": "Israel",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Gerusalemme",
+  "capital_en": "Jerusalem",
+  "demonym_it": "israeliano",
+  "demonym_en": "Israeli"
+ },
+ "Pakistan": {
+  "name_it": "Pakistan",
+  "name_en": "Pakistan",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Islamabad",
+  "capital_en": "Islamabad",
+  "demonym_it": "pakistano",
+  "demonym_en": "Pakistani"
+ },
+ "Egitto": {
+  "name_it": "Egitto",
+  "name_en": "Egypt",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Il Cairo",
+  "capital_en": "Cairo",
+  "demonym_it": "egiziano",
+  "demonym_en": "Egyptian"
+ },
+ "Sudafrica": {
+  "name_it": "Sudafrica",
+  "name_en": "South Africa",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Pretoria",
+  "capital_en": "Pretoria",
+  "demonym_it": "sudafricano",
+  "demonym_en": "South African"
+ },
+ "Marocco": {
+  "name_it": "Marocco",
+  "name_en": "Morocco",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Rabat",
+  "capital_en": "Rabat",
+  "demonym_it": "marocchino",
+  "demonym_en": "Moroccan"
+ },
+ "Stati Uniti": {
+  "name_it": "Stati Uniti",
+  "name_en": "United States",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Washington",
+  "capital_en": "Washington",
+  "demonym_it": "statunitense",
+  "demonym_en": "American"
+ },
+ "Brasile": {
+  "name_it": "Brasile",
+  "name_en": "Brazil",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Brasilia",
+  "capital_en": "Brasilia",
+  "demonym_it": "brasiliano",
+  "demonym_en": "Brazilian"
+ },
+ "Canada": {
+  "name_it": "Canada",
+  "name_en": "Canada",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Ottawa",
+  "capital_en": "Ottawa",
+  "demonym_it": "canadese",
+  "demonym_en": "Canadian"
+ },
+ "Messico": {
+  "name_it": "Messico",
+  "name_en": "Mexico",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Citta del Messico",
+  "capital_en": "Mexico City",
+  "demonym_it": "messicano",
+  "demonym_en": "Mexican"
+ },
+ "Argentina": {
+  "name_it": "Argentina",
+  "name_en": "Argentina",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Buenos Aires",
+  "capital_en": "Buenos Aires",
+  "demonym_it": "argentino",
+  "demonym_en": "Argentine"
+ },
+ "Giamaica": {
+  "name_it": "Giamaica",
+  "name_en": "Jamaica",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Kingston",
+  "capital_en": "Kingston",
+  "demonym_it": "giamaicano",
+  "demonym_en": "Jamaican"
+ },
+ "Colombia": {
+  "name_it": "Colombia",
+  "name_en": "Colombia",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Bogota",
+  "capital_en": "Bogota",
+  "demonym_it": "colombiano",
+  "demonym_en": "Colombian"
+ },
+ "Cuba": {
+  "name_it": "Cuba",
+  "name_en": "Cuba",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "L'Avana",
+  "capital_en": "Havana",
+  "demonym_it": "cubano",
+  "demonym_en": "Cuban"
+ },
+ "Cile": {
+  "name_it": "Cile",
+  "name_en": "Chile",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Santiago",
+  "capital_en": "Santiago",
+  "demonym_it": "cileno",
+  "demonym_en": "Chilean"
+ },
+ "Venezuela": {
+  "name_it": "Venezuela",
+  "name_en": "Venezuela",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Caracas",
+  "capital_en": "Caracas",
+  "demonym_it": "venezuelano",
+  "demonym_en": "Venezuelan"
+ },
+ "Australia": {
+  "name_it": "Australia",
+  "name_en": "Australia",
+  "continent_it": "Oceania",
+  "continent_en": "Oceania",
+  "capital_it": "Canberra",
+  "capital_en": "Canberra",
+  "demonym_it": "australiano",
+  "demonym_en": "Australian"
+ },
+ "Nuova Zelanda": {
+  "name_it": "Nuova Zelanda",
+  "name_en": "New Zealand",
+  "continent_it": "Oceania",
+  "continent_en": "Oceania",
+  "capital_it": "Wellington",
+  "capital_en": "Wellington",
+  "demonym_it": "neozelandese",
+  "demonym_en": "New Zealander"
+ },
+ "Afghanistan": {
+  "name_it": "Afghanistan",
+  "name_en": "Afghanistan",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Kabul",
+  "capital_en": "Kabul",
+  "demonym_it": "afghano",
+  "demonym_en": "Afghan"
+ },
+ "Albania": {
+  "name_it": "Albania",
+  "name_en": "Albania",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Tirana",
+  "capital_en": "Tirana",
+  "demonym_it": "albanese",
+  "demonym_en": "Albanian"
+ },
+ "Algeria": {
+  "name_it": "Algeria",
+  "name_en": "Algeria",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Algeri",
+  "capital_en": "Algiers",
+  "demonym_it": "algerino",
+  "demonym_en": "Algerian"
+ },
+ "Andorra": {
+  "name_it": "Andorra",
+  "name_en": "Andorra",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Andorra la Vella",
+  "capital_en": "Andorra la Vella",
+  "demonym_it": "andorrano",
+  "demonym_en": "Andorran"
+ },
+ "Angola": {
+  "name_it": "Angola",
+  "name_en": "Angola",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Luanda",
+  "capital_en": "Luanda",
+  "demonym_it": "angolano",
+  "demonym_en": "Angolan"
+ },
+ "Antigua e Barbuda": {
+  "name_it": "Antigua e Barbuda",
+  "name_en": "Antigua and Barbuda",
+  "continent_it": "America",
+  "continent_en": "North America",
+  "capital_it": "San Giacomo d'Antigua",
+  "capital_en": "St. John's",
+  "demonym_it": "antiguo-barbudano",
+  "demonym_en": "Antiguan and Barbudan"
+ },
+ "Armenia": {
+  "name_it": "Armenia",
+  "name_en": "Armenia",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Erevan",
+  "capital_en": "Yerevan",
+  "demonym_it": "armeno",
+  "demonym_en": "Armenian"
+ },
+ "Azerbaigian": {
+  "name_it": "Azerbaigian",
+  "name_en": "Azerbaijan",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Baku",
+  "capital_en": "Baku",
+  "demonym_it": "azero",
+  "demonym_en": "Azerbaijani"
+ },
+ "Bahrein": {
+  "name_it": "Bahrein",
+  "name_en": "Bahrain",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Manama",
+  "capital_en": "Manama",
+  "demonym_it": "bahreinita",
+  "demonym_en": "Bahraini"
+ },
+ "Bangladesh": {
+  "name_it": "Bangladesh",
+  "name_en": "Bangladesh",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Dacca",
+  "capital_en": "Dhaka",
+  "demonym_it": "bengalese",
+  "demonym_en": "Bengali"
+ },
+ "Barbados": {
+  "name_it": "Barbados",
+  "name_en": "Barbados",
+  "continent_it": "America",
+  "continent_en": "North America",
+  "capital_it": "Bridgetown",
+  "capital_en": "Bridgetown",
+  "demonym_it": "barbadiano",
+  "demonym_en": "Barbadian"
+ },
+ "Belize": {
+  "name_it": "Belize",
+  "name_en": "Belize",
+  "continent_it": "America",
+  "continent_en": "North America",
+  "capital_it": "Belmopan",
+  "capital_en": "Belmopan",
+  "demonym_it": "beliziano",
+  "demonym_en": "Belizean"
+ },
+ "Benin": {
+  "name_it": "Benin",
+  "name_en": "Benin",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Porto-Novo",
+  "capital_en": "Porto-Novo",
+  "demonym_it": "beninese",
+  "demonym_en": "Beninese"
+ },
+ "Bhutan": {
+  "name_it": "Bhutan",
+  "name_en": "Bhutan",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Thimphu",
+  "capital_en": "Thimphu",
+  "demonym_it": "bhutano",
+  "demonym_en": "Bhutanese"
+ },
+ "Bielorussia": {
+  "name_it": "Bielorussia",
+  "name_en": "Belarus",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Minsk",
+  "capital_en": "Minsk",
+  "demonym_it": "bielorusso",
+  "demonym_en": "Belarusian"
+ },
+ "Birmania": {
+  "name_it": "Birmania",
+  "name_en": "Myanmar",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Naypyidaw",
+  "capital_en": "Naypyidaw",
+  "demonym_it": "birmano",
+  "demonym_en": "Burmese"
+ },
+ "Bolivia": {
+  "name_it": "Bolivia",
+  "name_en": "Bolivia",
+  "continent_it": "America",
+  "continent_en": "South America",
+  "capital_it": "Sucre",
+  "capital_en": "Sucre",
+  "demonym_it": "boliviano",
+  "demonym_en": "Bolivian"
+ },
+ "Bosnia ed Erzegovina": {
+  "name_it": "Bosnia ed Erzegovina",
+  "name_en": "Bosnia and Herzegovina",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Sarajevo",
+  "capital_en": "Sarajevo",
+  "demonym_it": "bosniaco-erzegovino",
+  "demonym_en": "Bosniak and Herzegovinian"
+ },
+ "Botswana": {
+  "name_it": "Botswana",
+  "name_en": "Botswana",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Gaborone",
+  "capital_en": "Gaborone",
+  "demonym_it": "botswano",
+  "demonym_en": "Botswanan"
+ },
+ "Brunei": {
+  "name_it": "Brunei",
+  "name_en": "Brunei",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Bandar Seri Begawen",
+  "capital_en": "Bandar Seri Begawan",
+  "demonym_it": "bruneiano",
+  "demonym_en": "Bruneian"
+ },
+ "Bulgaria": {
+  "name_it": "Bulgaria",
+  "name_en": "Bulgaria",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Sofia",
+  "capital_en": "Sofia",
+  "demonym_it": "Bulgari",
+  "demonym_en": "Bulgarian"
+ },
+ "Burkina Faso": {
+  "name_it": "Burkina Faso",
+  "name_en": "Burkina Faso",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Ouagadougou",
+  "capital_en": "Ouagadougou",
+  "demonym_it": "Burkinabè",
+  "demonym_en": "Burkinabè"
+ },
+ "Burundi": {
+  "name_it": "Burundi",
+  "name_en": "Burundi",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Gitega",
+  "capital_en": "Gitega",
+  "demonym_it": "Burundese",
+  "demonym_en": "Burundian"
+ },
+ "Cambogia": {
+  "name_it": "Cambogia",
+  "name_en": "Cambodia",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Phnom Penh",
+  "capital_en": "Phnom Penh",
+  "demonym_it": "Cambogiani",
+  "demonym_en": "Cambodian"
+ },
+ "Cameroon": {
+  "name_it": "Cameroon",
+  "name_en": "Cameroon",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Yaoundé",
+  "capital_en": "Yaoundé",
+  "demonym_it": "Cameroonesi",
+  "demonym_en": "Cameroonian"
+ },
+ "Cape Verde": {
+  "name_it": "Cape Verde",
+  "name_en": "Cape Verde",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Praia",
+  "capital_en": "Praia",
+  "demonym_it": "Capoverdiani",
+  "demonym_en": "Cape Verdean"
+ },
+ "Centrafrica": {
+  "name_it": "Centrafrica",
+  "name_en": "Central African Republic",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Bangui",
+  "capital_en": "Bangui",
+  "demonym_it": "Centrafricani",
+  "demonym_en": "Central African"
+ },
+ "Cipro": {
+  "name_it": "Cipro",
+  "name_en": "Cyprus",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Nicosia",
+  "capital_en": "Nicosia",
+  "demonym_it": "Ciprioti",
+  "demonym_en": "Cypriot"
+ },
+ "Comore": {
+  "name_it": "Comore",
+  "name_en": "Comoros",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Moroni",
+  "capital_en": "Moroni",
+  "demonym_it": "Comoriani",
+  "demonym_en": "Comorian"
+ },
+ "Costa d'Avorio": {
+  "name_it": "Costa d'Avorio",
+  "name_en": "Côte d'Ivoire",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Yamoussoukro",
+  "capital_en": "Yamoussoukro",
+  "demonym_it": "Ivoriani",
+  "demonym_en": "Ivorian"
+ },
+ "Costa Rica": {
+  "name_it": "Costa Rica",
+  "name_en": "Costa Rica",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "San José",
+  "capital_en": "San José",
+  "demonym_it": "Costaricani",
+  "demonym_en": "Costa Rican"
+ },
+ "Dominica": {
+  "name_it": "Dominica",
+  "name_en": "Dominica",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Roseau",
+  "capital_en": "Roseau",
+  "demonym_it": "Dominicani",
+  "demonym_en": "Dominican"
+ },
+ "Ecuador": {
+  "name_it": "Ecuador",
+  "name_en": "Ecuador",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Quito",
+  "capital_en": "Quito",
+  "demonym_it": "Ecuaforiani",
+  "demonym_en": "Ecuadorian"
+ },
+ "El Salvador": {
+  "name_it": "El Salvador",
+  "name_en": "El Salvador",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "San Salvador",
+  "capital_en": "San Salvador",
+  "demonym_it": "Salvadoreni",
+  "demonym_en": "Salvadoran"
+ },
+ "Emirati Arabi Uniti": {
+  "name_it": "Emirati Arabi Uniti",
+  "name_en": "United Arab Emirates",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Abu Dhabi",
+  "capital_en": "Abu Dhabi",
+  "demonym_it": "Emiratini",
+  "demonym_en": "Emirati"
+ },
+ "Eritrea": {
+  "name_it": "Eritrea",
+  "name_en": "Eritrea",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Asmara",
+  "capital_en": "Asmara",
+  "demonym_it": "Eritrei",
+  "demonym_en": "Eritrean"
+ },
+ "Estonia": {
+  "name_it": "Estonia",
+  "name_en": "Estonia",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Tallinn",
+  "capital_en": "Tallinn",
+  "demonym_it": "Estoni",
+  "demonym_en": "Estonian"
+ },
+ "Etiopia": {
+  "name_it": "Etiopia",
+  "name_en": "Ethiopia",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Addis Abeba",
+  "capital_en": "Addis Ababa",
+  "demonym_it": "Etiopi",
+  "demonym_en": "Ethiopian"
+ },
+ "Fiji": {
+  "name_it": "Fiji",
+  "name_en": "Fiji",
+  "continent_it": "Oceania",
+  "continent_en": "Oceania",
+  "capital_it": "Suva",
+  "capital_en": "Suva",
+  "demonym_it": "Figiani",
+  "demonym_en": "Fijian"
+ },
+ "Filippine": {
+  "name_it": "Filippine",
+  "name_en": "Philippines",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Manila",
+  "capital_en": "Manila",
+  "demonym_it": "Filippino",
+  "demonym_en": "Filipino"
+ },
+ "Gabon": {
+  "name_it": "Gabon",
+  "name_en": "Gabon",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Libreville",
+  "capital_en": "Libreville",
+  "demonym_it": "Gabonese",
+  "demonym_en": "Gabonese"
+ },
+ "Gambia": {
+  "name_it": "Gambia",
+  "name_en": "Gambia",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Banjul",
+  "capital_en": "Banjul",
+  "demonym_it": "Gambiano",
+  "demonym_en": "Gambian"
+ },
+ "Georgia": {
+  "name_it": "Georgia",
+  "name_en": "Georgia",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Tbilisi",
+  "capital_en": "Tbilisi",
+  "demonym_it": "Georgiano",
+  "demonym_en": "Georgian"
+ },
+ "Ghana": {
+  "name_it": "Ghana",
+  "name_en": "Ghana",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Accra",
+  "capital_en": "Accra",
+  "demonym_it": "Ghanese",
+  "demonym_en": "Ghanaian"
+ },
+ "Gibilterra": {
+  "name_it": "Gibilterra",
+  "name_en": "Gibraltar",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Gibilterra",
+  "capital_en": "Gibraltar",
+  "demonym_it": "Gibilterrino",
+  "demonym_en": "Gibraltarian"
+ },
+ "Giordania": {
+  "name_it": "Giordania",
+  "name_en": "Jordan",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Amman",
+  "capital_en": "Amman",
+  "demonym_it": "Giordano",
+  "demonym_en": "Jordanian"
+ },
+ "Grenada": {
+  "name_it": "Grenada",
+  "name_en": "Grenada",
+  "continent_it": "America",
+  "continent_en": "North America",
+  "capital_it": "San Giacomo",
+  "capital_en": "St. George's",
+  "demonym_it": "Grenadino",
+  "demonym_en": "Grenadian"
+ },
+ "Guatemala": {
+  "name_it": "Guatemala",
+  "name_en": "Guatemala",
+  "continent_it": "America",
+  "continent_en": "North America",
+  "capital_it": "Città del Guatemala",
+  "capital_en": "Guatemala City",
+  "demonym_it": "Guatemalteco",
+  "demonym_en": "Guatemalan"
+ },
+ "Guinea": {
+  "name_it": "Guinea",
+  "name_en": "Guinea",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Conakry",
+  "capital_en": "Conakry",
+  "demonym_it": "Guineano",
+  "demonym_en": "Guinean"
+ },
+ "Guinea-Bissau": {
+  "name_it": "Guinea-Bissau",
+  "name_en": "Guinea-Bissau",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Bissau",
+  "capital_en": "Bissau",
+  "demonym_it": "Guineabissauense",
+  "demonym_en": "Guinean-Bissau"
+ },
+ "Guyana": {
+  "name_it": "Guyana",
+  "name_en": "Guyana",
+  "continent_it": "America",
+  "continent_en": "South America",
+  "capital_it": "Georgetown",
+  "capital_en": "Georgetown",
+  "demonym_it": "Guyanese",
+  "demonym_en": "Guyanese"
+ },
+ "Haiti": {
+  "name_it": "Haiti",
+  "name_en": "Haiti",
+  "continent_it": "America",
+  "continent_en": "North America",
+  "capital_it": "Porto Principe",
+  "capital_en": "Port-au-Prince",
+  "demonym_it": "Haitiano",
+  "demonym_en": "Haitian"
+ },
+ "Honduras": {
+  "name_it": "Honduras",
+  "name_en": "Honduras",
+  "continent_it": "America",
+  "continent_en": "North America",
+  "capital_it": "Tegucigalpa",
+  "capital_en": "Tegucigalpa",
+  "demonym_it": "Honduregno",
+  "demonym_en": "Honduran"
+ },
+ "Iran": {
+  "name_it": "Iran",
+  "name_en": "Iran",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Teheran",
+  "capital_en": "Tehran",
+  "demonym_it": "Iraniano",
+  "demonym_en": "Iranian"
+ },
+ "Iraq": {
+  "name_it": "Iraq",
+  "name_en": "Iraq",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Baghdad",
+  "capital_en": "Baghdad",
+  "demonym_it": "Iraqita",
+  "demonym_en": "Iraqi"
+ },
+ "Kazakistan": {
+  "name_it": "Kazakistan",
+  "name_en": "Kazakhstan",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Astana",
+  "capital_en": "Astana",
+  "demonym_it": "Kazako",
+  "demonym_en": "Kazakhstani"
+ },
+ "Kenya": {
+  "name_it": "Kenya",
+  "name_en": "Kenya",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Nairobi",
+  "capital_en": "Nairobi",
+  "demonym_it": "Keniano",
+  "demonym_en": "Kenyan"
+ },
+ "Kirghizistan": {
+  "name_it": "Kirghizistan",
+  "name_en": "Kyrgyzstan",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Bishkek",
+  "capital_en": "Bishkek",
+  "demonym_it": "Kirghiso",
+  "demonym_en": "Kyrgyz"
+ },
+ "Moldavia": {
+  "name_it": "Moldavia",
+  "name_en": "Moldova",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Chișinău",
+  "capital_en": "Chișinău",
+  "demonym_it": "moldavo/a",
+  "demonym_en": "Moldovan"
+ },
+ "Mongolia": {
+  "name_it": "Mongolia",
+  "name_en": "Mongolia",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Ulaanbaatar",
+  "capital_en": "Ulaanbaatar",
+  "demonym_it": "mongolo/a",
+  "demonym_en": "Mongol"
+ },
+ "Montenegro": {
+  "name_it": "Montenegro",
+  "name_en": "Montenegro",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Podgorica",
+  "capital_en": "Podgorica",
+  "demonym_it": "montenegrino/a",
+  "demonym_en": "Montenegrin"
+ },
+ "Mozambico": {
+  "name_it": "Mozambico",
+  "name_en": "Mozambique",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Maputo",
+  "capital_en": "Maputo",
+  "demonym_it": "mozambicano/a",
+  "demonym_en": "Mozambican"
+ },
+ "Namibia": {
+  "name_it": "Namibia",
+  "name_en": "Namibia",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Windhoek",
+  "capital_en": "Windhoek",
+  "demonym_it": "namibiano/a",
+  "demonym_en": "Namibian"
+ },
+ "Nauru": {
+  "name_it": "Nauru",
+  "name_en": "Nauru",
+  "continent_it": "Oceania",
+  "continent_en": "Oceania",
+  "capital_it": "Yaren",
+  "capital_en": "Yaren",
+  "demonym_it": "nauriano/a",
+  "demonym_en": "Nauruan"
+ },
+ "Nepal": {
+  "name_it": "Nepal",
+  "name_en": "Nepal",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Katmandu",
+  "capital_en": "Kathmandu",
+  "demonym_it": "nepalese",
+  "demonym_en": "Nepali"
+ },
+ "Nicaragua": {
+  "name_it": "Nicaragua",
+  "name_en": "Nicaragua",
+  "continent_it": "America",
+  "continent_en": "North America",
+  "capital_it": "Managua",
+  "capital_en": "Managua",
+  "demonym_it": "nicaraguense",
+  "demonym_en": "Nicaraguan"
+ },
+ "Niger": {
+  "name_it": "Niger",
+  "name_en": "Niger",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Niamey",
+  "capital_en": "Niamey",
+  "demonym_it": "nigerino/a",
+  "demonym_en": "Nigerien"
+ },
+ "Nigeria": {
+  "name_it": "Nigeria",
+  "name_en": "Nigeria",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Abuja",
+  "capital_en": "Abuja",
+  "demonym_it": "nigeriano/a",
+  "demonym_en": "Nigerian"
+ },
+ "Niue": {
+  "name_it": "Niue",
+  "name_en": "Niue",
+  "continent_it": "Oceania",
+  "continent_en": "Oceania",
+  "capital_it": "Alofi",
+  "capital_en": "Alofi",
+  "demonym_it": "niuiano/a",
+  "demonym_en": "Niuean"
+ },
+ "Oman": {
+  "name_it": "Oman",
+  "name_en": "Oman",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Mascate",
+  "capital_en": "Muscat",
+  "demonym_it": "omano/a",
+  "demonym_en": "Omani"
+ },
+ "Palau": {
+  "name_it": "Palau",
+  "name_en": "Palau",
+  "continent_it": "Oceania",
+  "continent_en": "Oceania",
+  "capital_it": "Ngerulmud",
+  "capital_en": "Ngerulmud",
+  "demonym_it": "palauano/a",
+  "demonym_en": "Palauan"
+ },
+ "Panama": {
+  "name_it": "Panama",
+  "name_en": "Panama",
+  "continent_it": "America",
+  "continent_en": "North America",
+  "capital_it": "Città di Panama",
+  "capital_en": "Panama City",
+  "demonym_it": "panamense",
+  "demonym_en": "Panamanian"
+ },
+ "Papua Nuova Guinea": {
+  "name_it": "Papua Nuova Guinea",
+  "name_en": "Papua New Guinea",
+  "continent_it": "Oceania",
+  "continent_en": "Oceania",
+  "capital_it": "Port Moresby",
+  "capital_en": "Port Moresby",
+  "demonym_it": "papuano/a",
+  "demonym_en": "Papuan"
+ },
+ "Paraguay": {
+  "name_it": "Paraguay",
+  "name_en": "Paraguay",
+  "continent_it": "America",
+  "continent_en": "South America",
+  "capital_it": "Asunción",
+  "capital_en": "Asunción",
+  "demonym_it": "paraguaio/a",
+  "demonym_en": "Paraguayan"
+ },
+ "Perù": {
+  "name_it": "Perù",
+  "name_en": "Peru",
+  "continent_it": "America",
+  "continent_en": "South America",
+  "capital_it": "Lima",
+  "capital_en": "Lima",
+  "demonym_it": "peruviano/a",
+  "demonym_en": "Peruvian"
+ },
+ "Qatar": {
+  "name_it": "Qatar",
+  "name_en": "Qatar",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Doha",
+  "capital_en": "Doha",
+  "demonym_it": "qatarense",
+  "demonym_en": "Qatari"
+ },
+ "Repubblica Democratica del Congo": {
+  "name_it": "Repubblica Democratica del Congo",
+  "name_en": "Democratic Republic of the Congo",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Kinsasa",
+  "capital_en": "Kinshasa",
+  "demonym_it": "congolese",
+  "demonym_en": "Congolese"
+ },
+ "Repubblica Dominicana": {
+  "name_it": "Repubblica Dominicana",
+  "name_en": "Dominican Republic",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Santo Domingo",
+  "capital_en": "Santo Domingo",
+  "demonym_it": "dominicano/a",
+  "demonym_en": "Dominican"
+ },
+ "Rwanda": {
+  "name_it": "Rwanda",
+  "name_en": "Rwanda",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Kigali",
+  "capital_en": "Kigali",
+  "demonym_it": "ruandese",
+  "demonym_en": "Rwandan"
+ },
+ "Saint Kitts e Nevis": {
+  "name_it": "Saint Kitts e Nevis",
+  "name_en": "Saint Kitts and Nevis",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Basseterre",
+  "capital_en": "Basseterre",
+  "demonym_it": "santakittsiano/a",
+  "demonym_en": "Kittitian or Nevisian"
+ },
+ "Saint Lucia": {
+  "name_it": "Saint Lucia",
+  "name_en": "Saint Lucia",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Castries",
+  "capital_en": "Castries",
+  "demonym_it": "santaluciano/a",
+  "demonym_en": "Saint Lucian"
+ },
+ "Saint Vincent e Grenadine": {
+  "name_it": "Saint Vincent e Grenadine",
+  "name_en": "Saint Vincent and the Grenadines",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Kingstown",
+  "capital_en": "Kingstown",
+  "demonym_it": "santovinciese",
+  "demonym_en": "Vincentian"
+ },
+ "Samoa": {
+  "name_it": "Samoa",
+  "name_en": "Samoa",
+  "continent_it": "Oceania",
+  "continent_en": "Oceania",
+  "capital_it": "Apia",
+  "capital_en": "Apia",
+  "demonym_it": "samoa",
+  "demonym_en": "Samoan"
+ },
+ "San Marino": {
+  "name_it": "San Marino",
+  "name_en": "San Marino",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "San Marino",
+  "capital_en": "San Marino",
+  "demonym_it": "sanmarinese",
+  "demonym_en": "Sammarinese"
+ },
+ "Sao Tomé e Principe": {
+  "name_it": "Sao Tomé e Principe",
+  "name_en": "São Tomé and Principe",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "São Tomé",
+  "capital_en": "São Tomé",
+  "demonym_it": "santomense",
+  "demonym_en": "São Toméan"
+ },
+ "Saudita": {
+  "name_it": "Saudita",
+  "name_en": "Saudi Arabia",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Riad",
+  "capital_en": "Riyadh",
+  "demonym_it": "saudita",
+  "demonym_en": "Saudi"
+ },
+ "Senegal": {
+  "name_it": "Senegal",
+  "name_en": "Senegal",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Dakar",
+  "capital_en": "Dakar",
+  "demonym_it": "senegalese",
+  "demonym_en": "Senegalese"
+ },
+ "Seychelles": {
+  "name_it": "Seychelles",
+  "name_en": "Seychelles",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Victoria",
+  "capital_en": "Victoria",
+  "demonym_it": "seychellese",
+  "demonym_en": "Seychellois"
+ },
+ "Sierra Leone": {
+  "name_it": "Sierra Leone",
+  "name_en": "Sierra Leone",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Freetown",
+  "capital_en": "Freetown",
+  "demonym_it": "sierraleonese",
+  "demonym_en": "Sierra Leonean"
+ },
+ "Singapore": {
+  "name_it": "Singapore",
+  "name_en": "Singapore",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Singapore",
+  "capital_en": "Singapore",
+  "demonym_it": "singaporiano/a",
+  "demonym_en": "Singaporean"
+ },
+ "Slovacchia": {
+  "name_it": "Slovacchia",
+  "name_en": "Slovakia",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Bratislava",
+  "capital_en": "Bratislava",
+  "demonym_it": "slovacco/a",
+  "demonym_en": "Slovak"
+ },
+ "Somalia": {
+  "name_it": "Somalia",
+  "name_en": "Somalia",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Mogadiscio",
+  "capital_en": "Mogadishu",
+  "demonym_it": "somalo/a",
+  "demonym_en": "Somali"
+ },
+ "Sudan": {
+  "name_it": "Sudan",
+  "name_en": "Sudan",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Khartoum",
+  "capital_en": "Khartoum",
+  "demonym_it": "sudanese",
+  "demonym_en": "Sudanese"
+ },
+ "Sri Lanka": {
+  "name_it": "Sri Lanka",
+  "name_en": "Sri Lanka",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Colombo",
+  "capital_en": "Colombo",
+  "demonym_it": "srilankese",
+  "demonym_en": "Sri Lankan"
+ },
+ "Sudan del Sud": {
+  "name_it": "Sudan del Sud",
+  "name_en": "South Sudan",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Giuba",
+  "capital_en": "Juba",
+  "demonym_it": "sudanese del sud",
+  "demonym_en": "South Sudanese"
+ },
+ "Suriname": {
+  "name_it": "Suriname",
+  "name_en": "Suriname",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Paramaribo",
+  "capital_en": "Paramaribo",
+  "demonym_it": "surinamese",
+  "demonym_en": "Surinamese"
+ },
+ "Siria": {
+  "name_it": "Siria",
+  "name_en": "Syria",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Damasco",
+  "capital_en": "Damascus",
+  "demonym_it": "siriano/a",
+  "demonym_en": "Syrian"
+ },
+ "Tagikistan": {
+  "name_it": "Tagikistan",
+  "name_en": "Tajikistan",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Dushanbe",
+  "capital_en": "Dushanbe",
+  "demonym_it": "tagik",
+  "demonym_en": "Tajik"
+ },
+ "Tanzania": {
+  "name_it": "Tanzania",
+  "name_en": "Tanzania",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Dodoma",
+  "capital_en": "Dodoma",
+  "demonym_it": "tanzaniano",
+  "demonym_en": "Tanzanian"
+ },
+ "Togo": {
+  "name_it": "Togo",
+  "name_en": "Togo",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Lomè",
+  "capital_en": "Lomé",
+  "demonym_it": "togolese",
+  "demonym_en": "Togolese"
+ },
+ "Tonga": {
+  "name_it": "Tonga",
+  "name_en": "Tonga",
+  "continent_it": "Oceania",
+  "continent_en": "Oceania",
+  "capital_it": "Nuku'alofa",
+  "capital_en": "Nuku'alofa",
+  "demonym_it": "tongano",
+  "demonym_en": "Tongan"
+ },
+ "Trinidad e Tobago": {
+  "name_it": "Trinidad e Tobago",
+  "name_en": "Trinidad and Tobago",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Port of Spain",
+  "capital_en": "Port of Spain",
+  "demonym_it": "trinidadiano",
+  "demonym_en": "Trinidadian"
+ },
+ "Tuvalu": {
+  "name_it": "Tuvalu",
+  "name_en": "Tuvalu",
+  "continent_it": "Oceania",
+  "continent_en": "Oceania",
+  "capital_it": "Funafuti",
+  "capital_en": "Funafuti",
+  "demonym_it": "tuvaluano",
+  "demonym_en": "Tuvaluan"
+ },
+ "Uganda": {
+  "name_it": "Uganda",
+  "name_en": "Uganda",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Kampala",
+  "capital_en": "Kampala",
+  "demonym_it": "ugandese",
+  "demonym_en": "Ugandan"
+ },
+ "Uruguay": {
+  "name_it": "Uruguay",
+  "name_en": "Uruguay",
+  "continent_it": "America",
+  "continent_en": "America",
+  "capital_it": "Montevideo",
+  "capital_en": "Montevideo",
+  "demonym_it": "uruguaiano",
+  "demonym_en": "Uruguayan"
+ },
+ "Uzbekistan": {
+  "name_it": "Uzbekistan",
+  "name_en": "Uzbekistan",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Tashkent",
+  "capital_en": "Tashkent",
+  "demonym_it": "uzbeko",
+  "demonym_en": "Uzbek"
+ },
+ "Vanuatu": {
+  "name_it": "Vanuatu",
+  "name_en": "Vanuatu",
+  "continent_it": "Oceania",
+  "continent_en": "Oceania",
+  "capital_it": "Port Vila",
+  "capital_en": "Port Vila",
+  "demonym_it": "vanuatuano",
+  "demonym_en": "Ni-Vanuatu"
+ },
+ "Vaticano": {
+  "name_it": "Vaticano",
+  "name_en": "Vatican City",
+  "continent_it": "Europa",
+  "continent_en": "Europe",
+  "capital_it": "Città del Vaticano",
+  "capital_en": "Vatican City",
+  "demonym_it": "vaticano",
+  "demonym_en": "Vatican"
+ },
+ "Vietnam": {
+  "name_it": "Vietnam",
+  "name_en": "Vietnam",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Hanoi",
+  "capital_en": "Hanoi",
+  "demonym_it": "vietnamita",
+  "demonym_en": "Vietnamese"
+ },
+ "Yemen": {
+  "name_it": "Yemen",
+  "name_en": "Yemen",
+  "continent_it": "Asia",
+  "continent_en": "Asia",
+  "capital_it": "Sana'a",
+  "capital_en": "Sana'a",
+  "demonym_it": "yemenita",
+  "demonym_en": "Yemeni"
+ },
+ "Zambia": {
+  "name_it": "Zambia",
+  "name_en": "Zambia",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Lusaka",
+  "capital_en": "Lusaka",
+  "demonym_it": "zambeziano",
+  "demonym_en": "Zambian"
+ },
+ "Zimbabwe": {
+  "name_it": "Zimbabwe",
+  "name_en": "Zimbabwe",
+  "continent_it": "Africa",
+  "continent_en": "Africa",
+  "capital_it": "Harare",
+  "capital_en": "Harare",
+  "demonym_it": "zimbabwese",
+  "demonym_en": "Zimbabwean"
+ }
+}

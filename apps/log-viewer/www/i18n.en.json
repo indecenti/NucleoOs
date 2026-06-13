@@ -1,0 +1,33 @@
+{
+  "_lang": "en",
+  "app_title": "Log Viewer",
+  "filter_ph": "Filter type/data",
+  "btn_pause": "Pause",
+  "btn_resume": "Resume",
+  "btn_history": "History",
+  "btn_clear": "Clear",
+  "btn_diag": "🩺 Diagnose",
+  "btn_health": "Health",
+  "follow": "Follow",
+  "history_hint": "Read the event journal from the SD card (on demand — keeps the device idle otherwise)",
+  "diag_hint": "Build a compact health digest (Cardputer + ANIMA) to paste to an AI",
+  "health_hint": "Adaptive probe: synthesizes live health events (only while visible, never during heavy work)",
+  "diag_title": "Health diagnosis",
+  "diag_sub": "Copy this block and paste it to an AI for a diagnosis.",
+  "gathering": "Gathering diagnostics…",
+  "diag_err": "Diagnostics unavailable",
+  "btn_copy": "📋 Copy",
+  "btn_regen": "↻ Regenerate",
+  "btn_close": "Close",
+  "copied": "Copied to clipboard ✓",
+  "empty_state": "Listening for live events…<br><span style=\"font-size:11px\">Press <b>🩺 Diagnose</b> for a health readout, or <b>History</b> for the SD journal.</span>",
+  "events": {
+    "one": "{count} event",
+    "other": "{count} events"
+  },
+  "events_of": " (of {total})",
+  "status_paused": " · paused",
+  "src_journal": "journal: {lines} lines on SD",
+  "src_none": "no journal on SD yet",
+  "src_error": "journal unavailable"
+}

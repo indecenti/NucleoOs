@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "lang": "it",
+  "intents": [
+    { "id": "open_app", "action": "launch", "arg": null,
+      "keywords": ["apri", "avvia", "lancia", "esegui", "vai"] },
+    { "id": "battery", "action": "system", "arg": "battery", "reply": "Batteria: {value}.",
+      "keywords": ["batteria", "carica", "autonomia", "energia"] },
+    { "id": "time", "action": "system", "arg": "time", "reply": "{value}.",
+      "keywords": ["ora", "ore", "orario", "che"] },
+    { "id": "storage", "action": "system", "arg": "storage", "reply": "Spazio SD: {value}.",
+      "keywords": ["spazio", "memoria", "disco", "scheda", "sd"] },
+    { "id": "whoami", "action": "answer",
+      "reply": "Sono ANIMA, l'assistente offline di NucleoOS.",
+      "keywords": ["chi", "sei", "anima", "assistente"] },
+    { "id": "help", "action": "answer",
+      "reply": "Posso aprire le app e dirti ora, batteria e spazio. Prova: \"apri le foto\".",
+      "keywords": ["aiuto", "help", "comandi", "cosa", "puoi"] }
+  ],
+  "_app_aliases_moved_to": "registry/app-aliases.json (single source for the device firmware + host sim; this stale copy was removed)"
+}

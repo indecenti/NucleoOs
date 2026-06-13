@@ -1,0 +1,8 @@
+{"q":"percentuale di possibilita che piova domani","lang":"it","expect":"abstain"}
+{"q":"qual e' la percentuale di pioggia domani","lang":"it","expect":"abstain"}
+{"q":"metti la sveglia alle 7","lang":"it","expect":"abstain"}
+{"q":"imposta una sveglia alle 8","lang":"it","expect":"abstain"}
+{"q":"dimmi il cinquanta per cento di 90","lang":"it","expect":"answer"}
+{"q":"sommami 12 e 30 e 8","lang":"it","expect":"answer"}
+{"q":"somma 12 30 8","lang":"it","expect":"answer"}
+{"q":"12 + 30 + 8","lang":"it","expect":"answer"}

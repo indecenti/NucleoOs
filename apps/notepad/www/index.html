@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notepad</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff; --line:#2a3a5e; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+      font: 14px system-ui, "Segoe UI", sans-serif; }
+    header { display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+      background: var(--panel); border-bottom: 1px solid var(--line); }
+    header .path { flex: 1; color: var(--muted); font-size: 12px; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    header .path .dot { color: var(--accent); margin-left: 5px; }
+    button { border: 1px solid var(--line); background: #ffffff10; color: var(--text);
+      border-radius: 6px; padding: 5px 11px; cursor: pointer; font: inherit; font-size: 13px; white-space: nowrap; }
+    button:hover { background: #ffffff1f; }
+    button.primary { background: var(--accent); color: #07101f; border-color: transparent; font-weight: 600; }
+    button kbd { opacity: .6; font-size: 10px; margin-left: 5px; }
+    textarea { flex: 1; width: 100%; border: 0; resize: none; padding: 12px;
+      background: var(--field, #0b1220); color: var(--text); font: 13px/1.5 ui-monospace, Consolas, monospace; outline: none; }
+    footer { display: flex; gap: 14px; padding: 4px 12px; font-size: 12px; color: var(--muted);
+      background: var(--panel); border-top: 1px solid var(--line); }
+    footer .sp { flex: 1; }
+  </style>
+</head>
+<body>
+  <header>
+    <button id="new" data-i18n="new" data-i18n-attr="title:title_new">New</button>
+    <button id="open" data-i18n="open" data-i18n-attr="title:title_open">Open</button>
+    <button id="save" class="primary" data-i18n-attr="title:title_save"><span data-i18n="save">Save</span> <kbd>⌃S</kbd></button>
+    <button id="saveas" data-i18n="saveAs" data-i18n-attr="title:title_saveas">Save As</button>
+    <span class="path" id="path">untitled.txt</span>
+  </header>
+  <textarea id="ed" data-i18n-attr="placeholder:ph_editor" placeholder="Type here…  ·  Ctrl+S save · Ctrl+O open · Ctrl+N new" spellcheck="false"></textarea>
+  <footer><span id="status" data-i18n="ready">Ready</span><span class="sp"></span><span id="stats">0 chars · 1 line</span></footer>
+
+  <script type="module">
+    // Notepad — a real OS-integrated text editor. File I/O via the OS file API (/api/fs/*); New/
+    // Open/Save As go through the shell's central file dialog (postMessage 'os-file-dialog'). OS-wide
+    // keyboard shortcuts arrive from the shell as {type:'os-shortcut'} (Ctrl+S/Shift+S/O/N + edit
+    // verbs); a standalone keydown fallback covers running outside the shell (dev/preview).
+    import I18N from '/nucleo-i18n.js';
+    const t = await I18N.init('notepad');   // core + notepad catalog, paints [data-i18n], live-switch
+    const params = new URLSearchParams(location.search);
+    const ed = document.getElementById('ed');
+    const statusEl = document.getElementById('status');
+    const statsEl = document.getElementById('stats');
+    const pathEl = document.getElementById('path');
+    const inShell = window.parent && window.parent !== window;
+
+    let path = params.get('path') || '';
+    let dirty = false;
+    let savedValue = '';
+
+    const baseName = (p) => (p || 'untitled.txt').split('/').pop();
+    // Last status, kept so a live language switch can re-render the transient footer text.
+    let lastStatus = { key: 'ready', vars: null };
+    function setStatus(key, vars) { lastStatus = { key, vars }; statusEl.textContent = t(key, vars); }
+    function setStats() {
+      const v = ed.value; const lines = v ? v.split('\n').length : 1;
+      statsEl.textContent = t('stats', { count: lines, chars: v.length, lines });
+    }
+    function setTitle() {
+      const name = baseName(path);
+      pathEl.innerHTML = (path ? path : 'untitled.txt') + (dirty ? ' <span class="dot">●</span>' : '');
+      const title = (dirty ? '● ' : '') + name + ' — Notepad';
+      document.title = title;
+      if (inShell) try { window.parent.postMessage({ type: 'set-window-title', title: (dirty ? '● ' : '') + name }, '*'); } catch {}
+    }
+    function setDirty(d) { if (dirty === d) return; dirty = d; setTitle(); }
+    ed.addEventListener('input', () => { setDirty(ed.value !== savedValue); setStats(); });
+
+    async function load(p) {
+      if (!p) { path = ''; ed.value = ''; savedValue = ''; setDirty(false); setStats(); setTitle(); ed.focus(); return; }
+      try {
+        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(p));
+        if (r.ok) { ed.value = await r.text(); savedValue = ed.value; path = p; setDirty(false); setStats(); setTitle(); setStatus('loaded', { name: baseName(p) }); }
+        else setStatus('could_not_open', { name: baseName(p) });
+      } catch { setStatus('open_hint'); }
+      ed.focus();
+    }
+
+    async function writeTo(p) {
+      try {
+        const r = await fetch('/api/fs/write?path=' + encodeURIComponent(p), { method: 'POST', body: ed.value });
+        if (r.ok) { path = p; savedValue = ed.value; setDirty(false); setTitle(); setStatus('saved_file', { name: baseName(p) }); }
+        else setStatus('save_failed', { status: r.status });
+        return r.ok;
+      } catch { setStatus('save_pending'); return false; }
+    }
+
+    function save() { if (path) writeTo(path); else saveAs(); }
+    function saveAs() {
+      askFileDialog({ mode: 'save', title: t('dlg_saveas'), defaultName: baseName(path) || 'untitled.txt', defaultPath: '/data/Documents' })
+        .then((p) => { if (p) writeTo(p); });
+    }
+    function openDoc() {
+      askFileDialog({ mode: 'open', title: t('dlg_open'), filter: ['.txt', '.md', '.log', '.json', '.csv', '.cfg', '.ini', '.xml', '.html', '.js', '.css', '.c', '.h', '.cpp', '.py', '.sh', '.yaml', '.yml', '.toml'], defaultPath: path ? path.replace(/\/[^/]*$/, '') : '/data/Documents' })
+        .then((p) => { if (p) confirmDirty(() => load(p)); });
+    }
+    function newDoc() { confirmDirty(() => load('')); }
+    function confirmDirty(go) {
+      if (dirty && !confirm(t('confirm_dirty'))) return;
+      go();
+    }
+
+    // ---- central OS file dialog (shell) -------------------------------------------------------
+    let dlgSeq = 0; const dlgPending = {};
+    function askFileDialog(opts) {
+      if (!inShell) {                                   // standalone fallback (dev/preview): prompt
+        const p = prompt(opts.mode === 'save' ? t('prompt_save') : t('prompt_open'), (opts.defaultPath || '/data/Documents') + '/' + (opts.defaultName || ''));
+        return Promise.resolve(p && p.trim() ? p.trim() : null);
+      }
+      const id = 'np-' + (++dlgSeq);
+      return new Promise((resolve) => {
+        dlgPending[id] = resolve;
+        try { window.parent.postMessage({ type: 'os-file-dialog', id, ...opts }, '*'); } catch { resolve(null); }
+      });
+    }
+
+    // ---- OS shortcut + dialog-result bridge ---------------------------------------------------
+    window.addEventListener('message', (e) => {
+      const d = e.data; if (!d) return;
+      if (d.type === 'os-file-dialog-result') {
+        const res = dlgPending[d.id]; if (!res) return; delete dlgPending[d.id];
+        res(d.action === 'cancel' ? null : (d.path || null));
+        return;
+      }
+      if (d.type !== 'os-shortcut') return;
+      switch (d.action) {
+        case 'save': save(); break;
+        case 'saveAs': saveAs(); break;
+        case 'open': openDoc(); break;
+        case 'new': newDoc(); break;
+        case 'selectAll': ed.focus(); ed.select(); break;
+        case 'copy': case 'cut': case 'paste':
+          // text fields handle these natively; only act if focus drifted off the editor
+          if (document.activeElement !== ed) { ed.focus(); try { document.execCommand(d.action === 'paste' ? 'paste' : d.action); } catch {} }
+          break;
+      }
+    });
+
+    // ---- standalone keyboard fallback (only outside the shell, to avoid double-firing) ---------
+    if (!inShell) {
+      document.addEventListener('keydown', (e) => {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        const k = e.key.toLowerCase();
+        if (k === 's' && e.shiftKey) { e.preventDefault(); saveAs(); }
+        else if (k === 's') { e.preventDefault(); save(); }
+        else if (k === 'o') { e.preventDefault(); openDoc(); }
+        else if (k === 'n') { e.preventDefault(); newDoc(); }
+      });
+    }
+
+    document.getElementById('save').addEventListener('click', save);
+    document.getElementById('saveas').addEventListener('click', saveAs);
+    document.getElementById('open').addEventListener('click', openDoc);
+    document.getElementById('new').addEventListener('click', newDoc);
+
+    // warn before closing with unsaved changes (covers standalone + the shell's window close)
+    window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+    // Live language switch: the observer repaints [data-i18n] elements, but the footer text is built
+    // imperatively (and overwritten after init), so re-render it from the last known state.
+    I18N.onChange(() => { setStatus(lastStatus.key, lastStatus.vars); setStats(); });
+
+    setStats(); setTitle();
+    load(path);
+  </script>
+</body>
+</html>

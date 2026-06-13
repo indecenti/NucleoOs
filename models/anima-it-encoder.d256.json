@@ -1,0 +1,16 @@
+{
+  "format": "ANE2",
+  "rows": 65536,
+  "dim": 256,
+  "ngrams": [
+    3,
+    4,
+    5
+  ],
+  "word_n": 2,
+  "scale": 0.014578711329482671,
+  "teacher": "intfloat/multilingual-e5-small",
+  "bilingual": true,
+  "crosslingual_recall1": 1.0,
+  "bytes": 16777252
+}

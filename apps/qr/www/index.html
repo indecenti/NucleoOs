@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codice QR</title>
+  <style>
+    :root { --bg:#0c1424; --panel:#13203a; --text:#eaf1ff; --muted:#90a4c8; --accent:#39d98a;
+      --accent2:#4ea1ff; --line:#26375c; --field:#0a1322; --ok:#2fd07a; --warn:#f5b13d; --err:#e2576b; }
+    html[data-theme="light"] { --bg:#eef3fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86;
+      --accent:#12a05e; --accent2:#2b6fd6; --line:#dbe5f3; --field:#f3f7fe; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+      font: 14px system-ui, "Segoe UI", sans-serif; }
+    header { display: flex; align-items: center; gap: 8px; padding: 9px 12px; flex: none;
+      background: var(--panel); border-bottom: 1px solid var(--line); }
+    header .t { font-weight: 700; font-size: 15px; flex: 1; display: flex; align-items: center; gap: 7px; }
+    .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+    .pill .d { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+    .pill .d.live { background: var(--ok); }
+    main { flex: 1; overflow: auto; padding: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 620px) { main { grid-template-columns: 1fr; } }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 13px; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .chip { border: 1px solid var(--line); background: var(--field); color: var(--text);
+      border-radius: 999px; padding: 6px 13px; font: inherit; font-size: 12px; cursor: pointer; }
+    .chip.on { background: var(--accent); border-color: transparent; color: #04140c; font-weight: 700; }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+    input, select, textarea { width: 100%; background: var(--field); border: 1px solid var(--line); color: var(--text);
+      border-radius: 9px; padding: 9px 11px; font: inherit; font-size: 13px; }
+    textarea { resize: vertical; min-height: 64px; }
+    .row { display: flex; gap: 8px; } .row > * { flex: 1; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    button.btn { border: 0; border-radius: 9px; padding: 9px 14px; font: inherit; font-weight: 600; cursor: pointer;
+      background: var(--field); color: var(--text); border: 1px solid var(--line); }
+    button.btn.primary { background: var(--accent); color: #04140c; border-color: transparent; }
+    button.btn.alt { background: var(--accent2); color: #051427; border-color: transparent; }
+    button.btn:disabled { opacity: .5; cursor: default; }
+    .preview { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .qrbox { background: #fff; border-radius: 14px; padding: 16px; display: inline-flex; box-shadow: 0 6px 24px #0006; }
+    #qr { image-rendering: pixelated; width: 280px; height: 280px; max-width: 100%; }
+    .meta { font-size: 12px; color: var(--muted); text-align: center; }
+    .meta b { color: var(--text); }
+    .saved { margin-top: 4px; }
+    .saved h3 { margin: 0 0 8px; font-size: 13px; }
+    .item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border: 1px solid var(--line);
+      border-radius: 10px; margin-bottom: 7px; background: var(--field); }
+    .item .ic { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: #04140c;
+      display: grid; place-items: center; font-weight: 800; font-size: 12px; flex: none; }
+    .item .lab { flex: 1; min-width: 0; }
+    .item .lab .n { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .item .lab .s { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .item button { background: transparent; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px; }
+    .empty { color: var(--muted); font-size: 12px; padding: 6px 2px; }
+    .hint { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+    .toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--panel);
+      border: 1px solid var(--line); color: var(--text); padding: 9px 16px; border-radius: 10px; font-size: 13px;
+      box-shadow: 0 8px 28px #0007; opacity: 0; transition: opacity .2s; pointer-events: none; }
+    .toast.on { opacity: 1; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="t">◧ Codice QR</div>
+    <span class="pill"><span class="d" id="liveDot"></span><span id="liveTxt">demo</span></span>
+  </header>
+  <main>
+    <div class="card">
+      <div class="chips" id="types"></div>
+      <div id="form"></div>
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>Correzione errori</label>
+          <select id="ecc">
+            <option value="0" selected>Bassa (moduli più grandi)</option>
+            <option value="1">Media</option>
+            <option value="2">Quartile</option>
+            <option value="3">Alta (più robusto)</option>
+          </select>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+      <div class="saved card" style="margin-top:14px; background:transparent">
+        <h3>Salvati sul dispositivo</h3>
+        <div id="savedList"><div class="empty">Nessun QR salvato.</div></div>
+      </div>
+    </div>
+
+    <div class="card preview">
+      <div class="qrbox"><canvas id="qr" width="280" height="280"></canvas></div>
+      <div class="meta" id="meta">—</div>
+      <div class="actions">
+        <button class="btn primary" id="save">★ Salva sul dispositivo</button>
+        <button class="btn alt" id="png">PNG</button>
+        <button class="btn" id="svg">SVG</button>
+      </div>
+      <div class="hint">«Salva sul dispositivo» scrive il QR in <b>/data/QR/qrcodes.json</b>:
+        l'app nativa <b>Codice QR</b> (sorgente «Salvati») lo mostra grande sul Cardputer.</div>
+    </div>
+  </main>
+  <div class="toast" id="toast"></div>
+
+  <script src="qrcode.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var $ = function (s) { return document.querySelector(s); };
+    var SHARED = '/data/QR/qrcodes.json';
+
+    // ---- device fs helpers (same surface as the other web apps) ----
+    async function readJSON(path) { try { var r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' }); return r.ok ? JSON.parse(await r.text()) : null; } catch (e) { return null; } }
+    async function mkdirp(path) { try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent(path), { method: 'POST' }); } catch (e) {} }
+    async function writeText(path, body, type) { try { var r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', headers: { 'Content-Type': type || 'application/json' }, body: body }); return r.ok; } catch (e) { return false; } }
+
+    function toast(msg) { var t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(function () { t.classList.remove('on'); }, 1900); }
+
+    // ---- QR types: each builds the encoded string from a small form ----
+    function esc(s) { return String(s == null ? '' : s).replace(/([\\;,:"])/g, '\\$1'); }
+    var TYPES = {
+      link:   { icon: '↗', name: 'Link', fields: [{ k: 'url', l: 'Indirizzo web', ph: 'esempio.com', val: 'https://nucleo.os' }],
+                build: function (f) { var u = (f.url || '').trim(); if (u && !/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u; return u; },
+                label: function (f) { return (f.url || 'Link').replace(/^https?:\/\//, ''); } },
+      text:   { icon: '¶', name: 'Testo', fields: [{ k: 'text', l: 'Testo libero', ta: true, ph: 'Scrivi qui...', val: '' }],
+                build: function (f) { return f.text || ''; }, label: function (f) { return (f.text || 'Testo').slice(0, 28); } },
+      wifi:   { icon: '⌗', name: 'Wi-Fi', fields: [
+                  { k: 'ssid', l: 'Nome rete (SSID)', val: '' }, { k: 'pass', l: 'Password', val: '' },
+                  { k: 'auth', l: 'Sicurezza', sel: ['WPA', 'WEP', 'nopass'], val: 'WPA' }, { k: 'hidden', l: 'Rete nascosta', cb: true } ],
+                build: function (f) { var t = f.auth || 'WPA'; var p = t === 'nopass' ? '' : 'P:' + esc(f.pass) + ';'; return 'WIFI:T:' + t + ';S:' + esc(f.ssid) + ';' + p + (f.hidden ? 'H:true;' : '') + ';'; },
+                label: function (f) { return 'Wi-Fi ' + (f.ssid || ''); } },
+      email:  { icon: '@', name: 'Email', fields: [{ k: 'to', l: 'Destinatario', val: '' }, { k: 'sub', l: 'Oggetto', val: '' }, { k: 'body', l: 'Messaggio', ta: true, val: '' }],
+                build: function (f) { var q = []; if (f.sub) q.push('subject=' + encodeURIComponent(f.sub)); if (f.body) q.push('body=' + encodeURIComponent(f.body)); return 'mailto:' + (f.to || '') + (q.length ? '?' + q.join('&') : ''); },
+                label: function (f) { return 'Email ' + (f.to || ''); } },
+      tel:    { icon: '☏', name: 'Telefono', fields: [{ k: 'num', l: 'Numero', ph: '+39...', val: '' }],
+                build: function (f) { return 'tel:' + (f.num || '').replace(/\s+/g, ''); }, label: function (f) { return 'Tel ' + (f.num || ''); } },
+      geo:    { icon: '⌖', name: 'Mappa', fields: [{ k: 'lat', l: 'Latitudine', val: '' }, { k: 'lng', l: 'Longitudine', val: '' }],
+                build: function (f) { return 'geo:' + (f.lat || '0') + ',' + (f.lng || '0'); }, label: function (f) { return 'Geo ' + (f.lat || '') + ',' + (f.lng || ''); } },
+      vcard:  { icon: '☺', name: 'Contatto', fields: [{ k: 'name', l: 'Nome', val: '' }, { k: 'org', l: 'Organizzazione', val: '' }, { k: 'tel', l: 'Telefono', val: '' }, { k: 'email', l: 'Email', val: '' }],
+                build: function (f) { return 'BEGIN:VCARD\nVERSION:3.0\nN:' + (f.name || '') + '\nFN:' + (f.name || '') + (f.org ? '\nORG:' + f.org : '') + (f.tel ? '\nTEL:' + f.tel : '') + (f.email ? '\nEMAIL:' + f.email : '') + '\nEND:VCARD'; },
+                label: function (f) { return f.name || 'Contatto'; } },
+      pair:   { icon: '⚷', name: 'Accoppia', fields: [], note: true,
+                build: function () { return location.origin || 'http://192.168.4.1'; }, label: function () { return 'Accoppia ' + location.host; } }
+    };
+    var ORDER = ['link', 'text', 'wifi', 'email', 'tel', 'geo', 'vcard', 'pair'];
+    var cur = 'link', form = {}, lastQR = null, lastData = '', pairPin = '';
+
+    function initForm() {
+      var t = TYPES[cur]; form = {};
+      var html = '';
+      if (t.note) html += '<div class="hint">Inquadra per aprire questo NucleoOS su un altro dispositivo (' + location.host + ').' + (pairPin ? ' PIN di pairing: <b>' + pairPin + '</b>.' : '') + '</div>';
+      t.fields.forEach(function (fl) {
+        form[fl.k] = fl.val != null ? fl.val : '';
+        html += '<label>' + fl.l + '</label>';
+        if (fl.ta) html += '<textarea data-k="' + fl.k + '" placeholder="' + (fl.ph || '') + '">' + (fl.val || '') + '</textarea>';
+        else if (fl.sel) html += '<select data-k="' + fl.k + '">' + fl.sel.map(function (o) { return '<option' + (o === fl.val ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select>';
+        else if (fl.cb) html += '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input type="checkbox" data-k="' + fl.k + '" style="width:auto">' + 'Sì</label>';
+        else html += '<input data-k="' + fl.k + '" placeholder="' + (fl.ph || '') + '" value="' + (fl.val || '') + '">';
+      });
+      $('#form').innerHTML = html;
+      $('#form').querySelectorAll('[data-k]').forEach(function (el) {
+        var ev = el.type === 'checkbox' ? 'change' : 'input';
+        el.addEventListener(ev, function () { form[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value; render(); });
+      });
+      render();
+    }
+
+    function render() {
+      var data = TYPES[cur].build(form) || '';
+      lastData = data;
+      var ecc = parseInt($('#ecc').value, 10) || 0;
+      var cv = $('#qr'), ctx = cv.getContext('2d');
+      if (!data) { ctx.clearRect(0, 0, cv.width, cv.height); $('#meta').textContent = '—'; lastQR = null; $('#save').disabled = $('#png').disabled = $('#svg').disabled = true; return; }
+      var qr = NucleoQR.generate(data, { ecc: ecc });
+      lastQR = qr;
+      $('#save').disabled = $('#png').disabled = $('#svg').disabled = !qr;
+      if (!qr) { $('#meta').textContent = 'Testo troppo lungo'; return; }
+      drawQR(ctx, cv.width, qr);
+      $('#meta').innerHTML = 'Versione <b>' + qr.version + '</b> · ' + qr.size + '×' + qr.size + ' moduli · ' + (['L', 'M', 'Q', 'H'][ecc]) + ' · ' + data.length + ' caratteri';
+    }
+
+    // Crisp black-on-white with a 4-module quiet zone, scaled to the canvas.
+    function drawQR(ctx, px, qr) {
+      var quiet = 4, n = qr.size + quiet * 2, scale = Math.floor(px / n) || 1, dim = scale * n, off = ((px - dim) / 2) | 0;
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, px, px);
+      ctx.fillStyle = '#000';
+      for (var y = 0; y < qr.size; y++) for (var x = 0; x < qr.size; x++)
+        if (qr.get(x, y)) ctx.fillRect(off + (x + quiet) * scale, off + (y + quiet) * scale, scale, scale);
+    }
+
+    function buildSVG(qr) {
+      var quiet = 4, n = qr.size + quiet * 2, parts = [];
+      for (var y = 0; y < qr.size; y++) for (var x = 0; x < qr.size; x++)
+        if (qr.get(x, y)) parts.push('M' + (x + quiet) + ' ' + (y + quiet) + 'h1v1h-1z');
+      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + n + ' ' + n + '" shape-rendering="crispEdges">' +
+        '<rect width="' + n + '" height="' + n + '" fill="#fff"/><path fill="#000" d="' + parts.join('') + '"/></svg>';
+    }
+    function download(name, blob) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000); }
+
+    // ---- saved library (shared with the native app via SD) ----
+    var lib = { schema: 1, items: [] };
+    async function loadLib() { var j = await readJSON(SHARED); if (j && Array.isArray(j.items)) lib = j; renderLib(); }
+    function renderLib() {
+      var el = $('#savedList');
+      if (!lib.items.length) { el.innerHTML = '<div class="empty">Nessun QR salvato.</div>'; return; }
+      el.innerHTML = lib.items.map(function (it, i) {
+        var ic = (TYPES[it.type] || TYPES.text).icon;
+        return '<div class="item"><div class="ic">' + ic + '</div><div class="lab"><div class="n">' + escapeHtml(it.label) + '</div><div class="s">' + escapeHtml(it.data) + '</div></div>' +
+          '<button data-load="' + i + '" title="Carica">↺</button><button data-del="' + i + '" title="Elimina">✕</button></div>';
+      }).join('');
+      el.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { lib.items.splice(+b.dataset.del, 1); persist('Eliminato'); }; });
+      el.querySelectorAll('[data-load]').forEach(function (b) { b.onclick = function () { var it = lib.items[+b.dataset.load]; loadItem(it); }; });
+    }
+    function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function loadItem(it) {
+      if (it.type === 'text' || !TYPES[it.type]) { cur = 'text'; setChips(); initForm(); form.text = it.data; $('#form').querySelector('[data-k="text"]').value = it.data; }
+      else { cur = 'text'; setChips(); initForm(); form.text = it.data; var ta = $('#form').querySelector('[data-k="text"]'); if (ta) ta.value = it.data; }
+      render(); toast('Caricato: ' + it.label);
+    }
+    async function persist(msg) {
+      await mkdirp('/data/QR');
+      var ok = await writeText(SHARED, JSON.stringify(lib, null, 0));
+      renderLib();
+      toast(ok ? (msg || 'Salvato') : 'Salvataggio non riuscito (dispositivo offline?)');
+    }
+    function saveCurrent() {
+      if (!lastQR || !lastData) return;
+      var t = TYPES[cur];
+      lib.items.unshift({ id: 'q' + Date.now().toString(36), label: (t.label(form) || t.name).slice(0, 40), type: cur, data: lastData, ecc: parseInt($('#ecc').value, 10) || 0, ts: Date.now() });
+      if (lib.items.length > 50) lib.items.length = 50;
+      persist('Salvato sul dispositivo');
+    }
+
+    // ---- chips ----
+    function setChips() {
+      $('#types').innerHTML = ORDER.map(function (k) { return '<button class="chip' + (k === cur ? ' on' : '') + '" data-t="' + k + '">' + TYPES[k].icon + ' ' + TYPES[k].name + '</button>'; }).join('');
+      $('#types').querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { cur = b.dataset.t; setChips(); initForm(); }; });
+    }
+
+    // ---- live device detection (pairing PIN if exposed) ----
+    async function probe() {
+      try {
+        var r = await fetch('/api/status', { cache: 'no-store' });
+        if (r.ok) { var j = await r.json(); pairPin = j.pin || j.pairPin || ''; $('#liveDot').classList.add('live'); $('#liveTxt').textContent = 'dispositivo'; }
+      } catch (e) {}
+    }
+
+    $('#ecc').addEventListener('change', render);
+    $('#save').addEventListener('click', saveCurrent);
+    $('#png').addEventListener('click', function () { if (!lastQR) return; var c = document.createElement('canvas'); c.width = c.height = (lastQR.size + 8) * 10; drawQR(c.getContext('2d'), c.width, lastQR); c.toBlob(function (b) { download('qr.png', b); }, 'image/png'); });
+    $('#svg').addEventListener('click', function () { if (!lastQR) return; download('qr.svg', new Blob([buildSVG(lastQR)], { type: 'image/svg+xml' })); });
+
+    setChips(); initForm(); loadLib(); probe();
+  })();
+  </script>
+</body>
+</html>

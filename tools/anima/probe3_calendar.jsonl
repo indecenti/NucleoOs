@@ -1,0 +1,41 @@
+{"q":"domani alle 9 ricordami il dentista","lang":"it","expect":"add_event"}
+{"q":"ricordami di comprare il latte domani","lang":"it","expect":"add_event"}
+{"q":"ricordami di pagare la bolletta dopodomani","lang":"it","expect":"add_event"}
+{"q":"tra 3 giorni ricordami di chiamare la banca","lang":"it","expect":"add_event"}
+{"q":"ricordami di chiamare luca alle 8","lang":"it","expect":"add_event"}
+{"q":"metti un promemoria per venerdì alle 18","lang":"it","expect":"add_event"}
+{"q":"segna appuntamento dal medico tra due giorni","lang":"it","expect":"add_event"}
+{"q":"ricordami di chiamare il dottore venerdì alle 16","lang":"it","expect":"add_event"}
+{"q":"ricordami il meeting domani alle 9 di mattina","lang":"it","expect":"add_event"}
+{"q":"ricordmai di prendere le medicine domani","lang":"it","expect":"add_event"}
+{"q":"ricordami la palestra martedì","lang":"it","expect":"add_event"}
+{"q":"cosa devo fare oggi","lang":"it","expect":"agenda"}
+{"q":"che impegni ho oggi","lang":"it","expect":"agenda"}
+{"q":"che cosa ho in agenda oggi","lang":"it","expect":"agenda"}
+{"q":"appuntamenti di oggi","lang":"it","expect":"agenda"}
+{"q":"come si aggiunge un evento","lang":"it","expect":"l1"}
+{"q":"sai mettere un promemoria","lang":"it","expect":"l1"}
+{"q":"sai mettere eventi in calendario","lang":"it","expect":"abstain"}
+{"q":"puoi aggiungere un evento al calendario","lang":"it","expect":"abstain"}
+{"q":"cancella il promemoria","lang":"it","expect":"abstain"}
+{"q":"elimina l evento di domani","lang":"it","expect":"abstain"}
+{"q":"ricordami quanto fa 2+2","lang":"it","expect":"calc"}
+{"q":"ricordami quanto fa 12 per 8","lang":"it","expect":"calc"}
+{"q":"remind me to call mom tomorrow","lang":"en","expect":"add_event"}
+{"q":"remind me to submit the report tomorrow at 9am","lang":"en","expect":"add_event"}
+{"q":"add a meeting next monday at 10","lang":"en","expect":"add_event"}
+{"q":"remind me about the dentist in 3 days","lang":"en","expect":"add_event"}
+{"q":"remind me to buy milk","lang":"en","expect":"add_event"}
+{"q":"remind me to pay rent the day after tomorrow","lang":"en","expect":"add_event"}
+{"q":"remind me to water the plants in a week","lang":"en","expect":"add_event"}
+{"q":"remind me to call john at 8pm","lang":"en","expect":"add_event"}
+{"q":"remind me about my meeting tomorrow at 3:30pm","lang":"en","expect":"add_event"}
+{"q":"remind me to take pills tomorrow","lang":"en","expect":"add_event"}
+{"q":"remind me to finish the slides next friday","lang":"en","expect":"add_event"}
+{"q":"whats on my agenda today","lang":"en","expect":"agenda"}
+{"q":"whats on my agenda","lang":"en","expect":"agenda"}
+{"q":"what are my appointments today","lang":"en","expect":"agenda"}
+{"q":"how do i add an event","lang":"en","expect":"l1"}
+{"q":"can you add events to my calendar","lang":"en","expect":"abstain"}
+{"q":"can you set reminders","lang":"en","expect":"abstain"}
+{"q":"delete the reminder","lang":"en","expect":"abstain"}

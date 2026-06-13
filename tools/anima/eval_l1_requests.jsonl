@@ -1,0 +1,153 @@
+// ANIMA bilingual request set (EN/IT) — new, diverse user requests exercising the L1 retrieval
+// fast path. Driven by tools/anima-host/l1-parity.mjs which runs each query BOTH with the AKB4
+// popcount prefilter and with the brute-force exact path (ANIMA_L1_EXACT=1) and asserts identical
+// routing+reply (the prefilter must change nothing), plus a characterization golden + optional
+// `expect` substring (accent/case-insensitive) for high-confidence answers. >100 items.
+//
+// --- IT · knowledge · capitals ----------------------------------------------------------------
+{"q":"qual è la capitale della Francia","lang":"it","expect":"Parigi"}
+{"q":"capitale della Germania","lang":"it","expect":"Berlino"}
+{"q":"qual è la capitale della Spagna","lang":"it","expect":"Madrid"}
+{"q":"capitale del Regno Unito","lang":"it","expect":"Londra"}
+{"q":"qual è la capitale del Giappone","lang":"it","expect":"Tokyo"}
+{"q":"capitale della Cina","lang":"it","expect":"Pechino"}
+{"q":"qual è la capitale della Russia","lang":"it","expect":"Mosca"}
+{"q":"capitale del Canada","lang":"it","expect":"Ottawa"}
+{"q":"qual è la capitale degli Stati Uniti","lang":"it","expect":"Washington"}
+{"q":"capitale del Portogallo","lang":"it","expect":"Lisbona"}
+{"q":"qual è la capitale dell'Australia","lang":"it","expect":"Canberra"}
+{"q":"capitale del Brasile","lang":"it","expect":"Brasilia"}
+{"q":"mi sai dire la capitale francese","lang":"it"}
+{"q":"dimmi qual è la città capitale della Germania","lang":"it"}
+{"q":"che città è la capitale spagnola","lang":"it"}
+// --- IT · knowledge · regions ------------------------------------------------------------------
+{"q":"qual è il capoluogo della Lombardia","lang":"it","expect":"Milano"}
+{"q":"capoluogo del Veneto","lang":"it","expect":"Venezia"}
+{"q":"capoluogo della Toscana","lang":"it","expect":"Firenze"}
+{"q":"qual è il capoluogo della Sicilia","lang":"it","expect":"Palermo"}
+{"q":"capoluogo del Piemonte","lang":"it","expect":"Torino"}
+{"q":"qual è il capoluogo della Campania","lang":"it","expect":"Napoli"}
+{"q":"capoluogo della Liguria","lang":"it","expect":"Genova"}
+// --- IT · knowledge · facts / science ----------------------------------------------------------
+{"q":"qual è la montagna più alta del mondo","lang":"it","expect":"Everest"}
+{"q":"qual è l'oceano più grande","lang":"it","expect":"Pacifico"}
+{"q":"qual è il pianeta più grande del sistema solare","lang":"it","expect":"Giove"}
+{"q":"quanti metri ci sono in un chilometro","lang":"it","expect":"1000"}
+{"q":"quanti minuti ci sono in un'ora","lang":"it","expect":"60"}
+{"q":"di cosa è fatta l'acqua","lang":"it"}
+{"q":"il monte più elevato della Terra qual è","lang":"it"}
+{"q":"la montagna più alta del pianeta","lang":"it"}
+{"q":"cos'è la fotosintesi","lang":"it"}
+{"q":"che cos'è la gravità","lang":"it"}
+{"q":"spiegami cos'è un vulcano","lang":"it"}
+{"q":"cos'è il sole","lang":"it"}
+{"q":"quanti giorni dura un anno","lang":"it"}
+{"q":"chi era Leonardo da Vinci","lang":"it"}
+{"q":"chi ha scritto la Divina Commedia","lang":"it"}
+{"q":"cos'è la intelligenza artificiale","lang":"it"}
+{"q":"che cosa è un algoritmo","lang":"it"}
+{"q":"cos'è la memoria RAM","lang":"it"}
+// --- IT · self / capabilities ------------------------------------------------------------------
+{"q":"chi sei","lang":"it","expect":"ANIMA"}
+{"q":"come ti chiami","lang":"it"}
+{"q":"cosa sai fare","lang":"it"}
+{"q":"quali comandi conosci","lang":"it"}
+{"q":"presentati","lang":"it"}
+// --- IT · commands -----------------------------------------------------------------------------
+{"q":"apri le foto","lang":"it"}
+{"q":"fammi vedere le immagini","lang":"it"}
+{"q":"apri la musica","lang":"it"}
+{"q":"voglio ascoltare un po' di musica","lang":"it"}
+{"q":"apri la calcolatrice","lang":"it"}
+{"q":"devo fare un calcolo","lang":"it"}
+{"q":"apri i file","lang":"it"}
+{"q":"mostrami i documenti","lang":"it"}
+{"q":"apri le impostazioni","lang":"it"}
+{"q":"apri il calendario","lang":"it"}
+{"q":"apri l'orologio","lang":"it"}
+{"q":"apri il registratore","lang":"it"}
+// --- IT · system -------------------------------------------------------------------------------
+{"q":"che ore sono","lang":"it"}
+{"q":"che ora è","lang":"it"}
+{"q":"dimmi l'orario","lang":"it"}
+{"q":"quanto spazio libero ho sulla scheda","lang":"it"}
+{"q":"quanta memoria resta","lang":"it"}
+// --- IT · math / skills ------------------------------------------------------------------------
+{"q":"quanto fa 23 per 47","lang":"it","expect":"1081"}
+{"q":"quanto fa 144 diviso 12","lang":"it","expect":"12"}
+{"q":"calcola il 15 percento di 240","lang":"it","expect":"36"}
+{"q":"converti 5 chilometri in metri","lang":"it","expect":"5000"}
+{"q":"quanto fa la radice quadrata di 81","lang":"it","expect":"9"}
+{"q":"quanto fanno 100 meno 37","lang":"it","expect":"63"}
+// --- IT · typos --------------------------------------------------------------------------------
+{"q":"qual è la capitale della Frnacia","lang":"it"}
+{"q":"apri la calcoaltrice","lang":"it"}
+{"q":"cos'è una varaible","lang":"it"}
+{"q":"qaul è la mntagna più alta","lang":"it"}
+// --- IT · out-of-scope (must refuse / not fabricate) -------------------------------------------
+{"q":"qual è il senso della vita","lang":"it"}
+{"q":"raccontami un segreto","lang":"it"}
+{"q":"asdkjfh qwerty zzz","lang":"it"}
+{"q":"qual è il tuo colore preferito","lang":"it"}
+{"q":"quanti continenti ha Giove","lang":"it"}
+{"q":"qual è la capitale di Marte","lang":"it"}
+// --- EN · knowledge · capitals -----------------------------------------------------------------
+{"q":"what is the capital of France","lang":"en"}
+{"q":"what's the capital of Germany","lang":"en"}
+{"q":"capital of Japan","lang":"en"}
+{"q":"what is the capital of China","lang":"en"}
+{"q":"what is the capital of Russia","lang":"en"}
+{"q":"what is the capital of the United States","lang":"en"}
+{"q":"capital of Spain","lang":"en"}
+{"q":"what is the capital of Canada","lang":"en"}
+{"q":"tell me the capital of Portugal","lang":"en"}
+{"q":"what is the capital of Australia","lang":"en"}
+// --- EN · knowledge · facts / science ----------------------------------------------------------
+{"q":"what is the tallest mountain in the world","lang":"en"}
+{"q":"what is the largest ocean","lang":"en"}
+{"q":"what is the biggest planet in the solar system","lang":"en"}
+{"q":"how many meters are in a kilometer","lang":"en"}
+{"q":"how many minutes are in an hour","lang":"en"}
+{"q":"what is water made of","lang":"en"}
+{"q":"what is photosynthesis","lang":"en"}
+{"q":"what is gravity","lang":"en"}
+{"q":"what is a volcano","lang":"en"}
+{"q":"who was Leonardo da Vinci","lang":"en"}
+{"q":"who wrote the Divine Comedy","lang":"en"}
+{"q":"what is artificial intelligence","lang":"en"}
+{"q":"what is an algorithm","lang":"en"}
+{"q":"what is RAM memory","lang":"en"}
+{"q":"what is the longest river in the world","lang":"en"}
+// --- EN · self / capabilities ------------------------------------------------------------------
+{"q":"who are you","lang":"en"}
+{"q":"what is your name","lang":"en"}
+{"q":"what can you do","lang":"en"}
+{"q":"introduce yourself","lang":"en"}
+// --- EN · commands -----------------------------------------------------------------------------
+{"q":"open the photos","lang":"en"}
+{"q":"show me the pictures","lang":"en"}
+{"q":"open the music player","lang":"en"}
+{"q":"play some music","lang":"en"}
+{"q":"open the calculator","lang":"en"}
+{"q":"open the file manager","lang":"en"}
+{"q":"open settings","lang":"en"}
+{"q":"open the calendar","lang":"en"}
+{"q":"open the clock","lang":"en"}
+// --- EN · system -------------------------------------------------------------------------------
+{"q":"what time is it","lang":"en"}
+{"q":"how much free space do I have","lang":"en"}
+// --- EN · math / skills ------------------------------------------------------------------------
+{"q":"what is 23 times 47","lang":"en","expect":"1081"}
+{"q":"what is 144 divided by 12","lang":"en","expect":"12"}
+{"q":"what is 15 percent of 240","lang":"en","expect":"36"}
+{"q":"convert 5 kilometers to meters","lang":"en","expect":"5000"}
+{"q":"what is the square root of 81","lang":"en","expect":"9"}
+// --- EN · typos --------------------------------------------------------------------------------
+{"q":"waht is the capitl of France","lang":"en"}
+{"q":"opne the calculator","lang":"en"}
+// --- EN · out-of-scope (must refuse / not fabricate) ------------------------------------------
+{"q":"what is the meaning of life","lang":"en"}
+{"q":"tell me a secret","lang":"en"}
+{"q":"what is your favorite color","lang":"en"}
+{"q":"how many continents does Jupiter have","lang":"en"}
+{"q":"what is the capital of Mars","lang":"en"}

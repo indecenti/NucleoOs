@@ -1,0 +1,30 @@
+{"q":"quanto fa il 15% di 240","lang":"it","expect":"percent"}
+{"q":"what is 20% of 80","lang":"en","expect":"percent"}
+{"q":"calcola il 30% di 50","lang":"it","expect":"percent"}
+{"q":"qunato fa il 10% di 90","lang":"it","expect":"percent"}
+{"q":"12 per 8","lang":"it","expect":"calc"}
+{"q":"7 times 9","lang":"en","expect":"calc"}
+{"q":"100 meno 37","lang":"it","expect":"calc"}
+{"q":"45 piu 55","lang":"it","expect":"calc"}
+{"q":"144 diviso 12","lang":"it","expect":"calc"}
+{"q":"what is 13 plus 28","lang":"en","expect":"calc"}
+{"q":"56 divided by 7","lang":"en","expect":"calc"}
+{"q":"20 gradi in fahrenheit","lang":"it","expect":"convert"}
+{"q":"how many km in 5 miles","lang":"en","expect":"convert"}
+{"q":"2 ore in minuti","lang":"it","expect":"convert"}
+{"q":"convert 10 kg to pounds","lang":"en","expect":"convert"}
+{"q":"5 metri in centimetri","lang":"it","expect":"convert"}
+{"q":"radice quadrata di 144","lang":"it","expect":"calc"}
+{"q":"square root of 81","lang":"en","expect":"calc"}
+{"q":"radice cubica di 27","lang":"it","expect":"calc"}
+{"q":"2 alla quinta","lang":"it","expect":"calc"}
+{"q":"3 to the power of 4","lang":"en","expect":"calc"}
+{"q":"area di un cerchio raggio 3","lang":"it","expect":"geo"}
+{"q":"perimeter of a square side 5","lang":"en","expect":"geo"}
+{"q":"area di un quadrato lato 4","lang":"it","expect":"geo"}
+{"q":"radice quadrata di una banana","lang":"it","expect":"abstain"}
+{"q":"area di un sentimento","lang":"it","expect":"abstain"}
+{"q":"radice cuboca di 64","lang":"it","expect":"calc"}
+{"q":"what is 18 percent of 200","lang":"en","expect":"percent"}
+{"q":"8 squared","lang":"en","expect":"calc"}
+{"q":"area of a circle radius 7","lang":"en","expect":"geo"}

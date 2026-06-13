@@ -1,0 +1,20 @@
+{
+  "schema": 2,
+  "default": "radio-index",
+  "_note": "Shared station list for the NucleoOS 'Radio Index' app. EDIT FROM THE WEB APP — it writes this file via /api/fs/write. The native firmware app (firmware/components/nucleo_app/app_radio.cpp) and tools/radio-check.mjs read the SAME file, so web edits show up on the device with no reflash. The Cardputer plays PLAIN HTTP MP3 only (no TLS, no redirects, direct 200), so keep stream URLs http://. 'default' = the station id the device tunes first. 'nowplaying' is optional and web-only (the device UI shows no track metadata by design).",
+  "stations": [
+    { "id": "radio-index",      "name": "Radio Index",       "genre": "Signature",            "stream": "http://radioindex-130-110-12-237.sslip.io/stream", "nowplaying": "http://radioindex-130-110-12-237.sslip.io/api/nowplaying" },
+    { "id": "soma-groovesalad", "name": "Groove Salad",      "genre": "Ambient / Downtempo",  "stream": "http://ice1.somafm.com/groovesalad-128-mp3",      "nowplaying": "http://somafm.com/songs/groovesalad.json" },
+    { "id": "soma-dronezone",   "name": "Drone Zone",        "genre": "Ambient / Space",      "stream": "http://ice1.somafm.com/dronezone-128-mp3",        "nowplaying": "http://somafm.com/songs/dronezone.json" },
+    { "id": "soma-lush",        "name": "Lush",              "genre": "Chill / Vocals",       "stream": "http://ice1.somafm.com/lush-128-mp3",             "nowplaying": "http://somafm.com/songs/lush.json" },
+    { "id": "soma-secretagent", "name": "Secret Agent",      "genre": "Lounge / Spy Jazz",    "stream": "http://ice1.somafm.com/secretagent-128-mp3",      "nowplaying": "http://somafm.com/songs/secretagent.json" },
+    { "id": "soma-indiepop",    "name": "Indie Pop Rocks!",  "genre": "Indie Pop",            "stream": "http://ice1.somafm.com/indiepop-128-mp3",         "nowplaying": "http://somafm.com/songs/indiepop.json" },
+    { "id": "soma-u80s",        "name": "Underground 80s",   "genre": "Synth / New Wave",     "stream": "http://ice1.somafm.com/u80s-128-mp3",             "nowplaying": "http://somafm.com/songs/u80s.json" },
+    { "id": "soma-beatblender", "name": "Beat Blender",      "genre": "Deep House",           "stream": "http://ice1.somafm.com/beatblender-128-mp3",      "nowplaying": "http://somafm.com/songs/beatblender.json" },
+    { "id": "soma-fluid",       "name": "Fluid",             "genre": "Instrumental Hip-Hop", "stream": "http://ice1.somafm.com/fluid-128-mp3",            "nowplaying": "http://somafm.com/songs/fluid.json" },
+    { "id": "soma-bootliquor",  "name": "Boot Liquor",       "genre": "Americana",            "stream": "http://ice1.somafm.com/bootliquor-128-mp3",       "nowplaying": "http://somafm.com/songs/bootliquor.json" },
+    { "id": "soma-poptron",     "name": "PopTron",           "genre": "Electro Pop",          "stream": "http://ice1.somafm.com/poptron-128-mp3",          "nowplaying": "http://somafm.com/songs/poptron.json" },
+    { "id": "soma-defcon",      "name": "DEF CON Radio",     "genre": "Hacker / Electro",     "stream": "http://ice1.somafm.com/defcon-128-mp3",           "nowplaying": "http://somafm.com/songs/defcon.json" }
+  ],
+  "credits": "Free stations courtesy of SomaFM (somafm.com) - listener-supported and commercial-free."
+}

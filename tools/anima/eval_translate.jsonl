@@ -1,0 +1,92 @@
+// Offline IT<->EN translator (nucleo_anima_translate.c) — content + routing + zero-false-positive gate.
+// Fields: q, lang? ("it"/"en", UI/reply language). One of:
+//   has: substring(s) the reply MUST contain (case-insensitive); implies intent must be "translate"
+//   intent: exact routed intent (for negatives that DO route elsewhere)
+//   not_translate: true  -> assert the request did NOT route to the translator (zero false positive)
+// nothas: substring(s) the reply must NOT contain.
+//
+// --- IT -> EN (explicit verb) ---
+{"q":"traduci casa in inglese","has":"house"}
+{"q":"traduci cane in inglese","has":"dog"}
+{"q":"traduci rosso in inglese","has":"red"}
+{"q":"traduci perché in inglese","has":["why","because"]}
+{"q":"traduci la parola gatto in inglese","has":"cat"}
+{"q":"traduci grazie mille in inglese","has":"thank you very much"}
+{"q":"traduci come stai in inglese","has":"how are you"}
+{"q":"traduci dov'è il bagno in inglese","has":"bathroom"}
+{"q":"traduci buongiorno in inglese","has":"good morning"}
+{"q":"traducimi acqua in inglese","has":"water"}
+// --- IT -> EN frame "come si dice" ---
+{"q":"come si dice grazie in inglese","has":["thank you","thanks"]}
+{"q":"come si dice cane in inglese","has":"dog"}
+{"q":"come si dice ti amo in inglese","has":"i love you"}
+// --- EN -> IT (en UI) ---
+{"q":"translate dog to italian","lang":"en","has":"cane"}
+{"q":"translate water to italian","lang":"en","has":"acqua"}
+{"q":"how do you say hello in italian","lang":"en","has":["ciao","salve"]}
+{"q":"how do you say thank you in italian","lang":"en","has":"grazie"}
+{"q":"translate house to italian","lang":"en","has":"casa"}
+// --- EN -> IT (it UI, target italiano) ---
+{"q":"traduci house in italiano","has":"casa"}
+{"q":"traduci dog in italiano","has":"cane"}
+// --- auto-detect direction (no target language given) ---
+{"q":"traduci casa","has":"house"}
+{"q":"traduci dog","has":"cane"}
+{"q":"traduci hello","has":["ciao","salve"]}
+// --- honest decline on a miss (word not in the dictionary) ---
+{"q":"traduci floombix in inglese","has":"dizionario","intent":"translate"}
+{"q":"traduci asdfghjkl in inglese","has":"dizionario","intent":"translate"}
+{"q":"traduci dog in inglese","has":"dizionario","intent":"translate"}
+// --- ask when there is nothing to translate ---
+{"q":"traduci","has":"Cosa traduco","intent":"translate"}
+// --- ZERO false positives: these must NOT route to the translator ---
+{"q":"che ore sono","not_translate":true}
+{"q":"come stai","not_translate":true}
+{"q":"quanto fa 5 per 8","not_translate":true}
+{"q":"crea un file note.txt","not_translate":true}
+{"q":"come si chiama il presidente","not_translate":true}
+{"q":"cos'è una traduzione","not_translate":true}
+{"q":"dimmi una parola a caso","not_translate":true}
+{"q":"apri la calcolatrice","not_translate":true}
+{"q":"how do you make a cake","lang":"en","not_translate":true}
+// ============================ HARD CASES — challenge the translator ============================
+// --- homographs: return the FULL grounded multi-sense entry, never a single hallucinated guess ---
+{"q":"traduci ancora in inglese","has":["still","again","anchor"]}
+{"q":"traduci calcio in inglese","has":["calcium","football","kick"]}
+{"q":"traduci pesca in inglese","has":["peach","fishing"]}
+{"q":"traduci riso in inglese","has":["rice","laughter"]}
+{"q":"translate bank to italian","lang":"en","has":["banca","riva"]}
+{"q":"translate book to italian","lang":"en","has":["libro","prenotare"]}
+{"q":"translate can to italian","lang":"en","has":["potere","lattina"]}
+{"q":"translate bark to italian","lang":"en","has":["corteccia","abbaiare"]}
+{"q":"how do you say book in italian","lang":"en","has":["libro","prenotare"]}
+// --- accent folding: à/è/ì/ò/ù in the source word still hits the folded dictionary key ---
+{"q":"traduci caffè in inglese","has":"coffee"}
+{"q":"traduci città in inglese","has":["city","town"]}
+// --- border-trim: leading articles / "la parola" are stripped from the phrase ---
+{"q":"traduci il cane in inglese","has":"dog"}
+{"q":"come si dice la casa in inglese","has":["house","home"]}
+{"q":"traduci la parola pesca in inglese","has":"peach"}
+// --- multi-word dictionary entries (a phrase, not just a single word) ---
+{"q":"traduci casa popolare in inglese","has":"council house"}
+{"q":"come si dice piano piano in inglese","has":"little by little"}
+{"q":"traduci collo di bottiglia in inglese","has":"bottle-neck"}
+// --- caps + punctuation are folded / treated as separators like the firmware tokenizer ---
+{"q":"TRADUCI CANE IN INGLESE","has":"dog"}
+{"q":"traduci, cane, in inglese!","has":"dog"}
+// --- NO fuzzy hallucination: a near-miss typo must DECLINE, never snap to the real word ---
+{"q":"traduci canee in inglese","has":["canee","dizionario"],"nothas":"dog"}
+{"q":"traduci casaa in inglese","has":["casaa","dizionario"],"nothas":"house"}
+// --- direction respected: an Italian-only word asked "to italian" declines (no IT->EN fallback) ---
+{"q":"traduci gatto in italiano","has":["gatto","dizionario"],"nothas":"cat"}
+// --- more EN-UI framings (how do i say / how to say / "the" article) ---
+{"q":"how do i say cat in italian","lang":"en","has":"gatto"}
+{"q":"how to say house in italian","lang":"en","has":"casa"}
+{"q":"translate the dog to italian","lang":"en","has":"cane"}
+{"q":"translate fair to italian","lang":"en","has":["bello","fiera"]}
+// --- zero false positives on translation-flavoured but non-request inputs ---
+{"q":"il libro di storia","not_translate":true}
+{"q":"mi piace il calcio","not_translate":true}
+{"q":"cosa significa ancora","not_translate":true}
+{"q":"traduttore inglese italiano","not_translate":true}
+{"q":"parlami della traduzione","not_translate":true}

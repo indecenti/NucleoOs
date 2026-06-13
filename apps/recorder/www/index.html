@@ -1,0 +1,759 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voice Recorder</title>
+  <style>
+    :root{
+      --bg:#0c1426; --bg2:#0a1020; --panel:#121d36; --panel2:#18243f;
+      --line:#243456; --text:#eaf0ff; --muted:#90a2c8; --accent:#5ea2ff; --accent2:#8b6cff;
+      --rec:#ff4d6d; --rec2:#b5179e; --ok:#46d39a; --warn:#ffc857; --radius:14px;
+      --shadow:0 8px 28px rgba(0,0,0,.38);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{
+      display:flex;flex-direction:column;color:var(--text);
+      font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;
+      background:radial-gradient(1200px 600px at 80% -10%,#1b2c52 0%,transparent 60%),
+                 radial-gradient(900px 500px at -10% 110%,#2a1846 0%,transparent 55%),var(--bg);
+    }
+    .hidden{display:none!important}
+    button{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);
+      border-radius:10px;padding:8px 12px;cursor:pointer;transition:background .15s,border-color .15s,transform .06s}
+    button:hover{background:#21345c;border-color:#33508c}
+    button:active{transform:translateY(1px)}
+    button:disabled{opacity:.4;cursor:default}
+    .ghost{background:transparent;border-color:transparent}
+    .ghost:hover{background:#ffffff0e}
+    input,select{font:inherit;color:var(--text);background:#0e1830;border:1px solid var(--line);
+      border-radius:9px;padding:7px 10px;outline:none}
+    input:focus,select:focus{border-color:var(--accent)}
+
+    /* ---- top bar ---- */
+    header{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0e1830cc;
+      backdrop-filter:blur(8px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+    .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px}
+    .brand .ic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
+      background:linear-gradient(135deg,var(--rec),var(--rec2));box-shadow:0 3px 10px #ff4d6d55}
+    .brand .ic svg{width:16px;height:16px}
+    .spacer{flex:1}
+    .srcseg{display:flex;background:#0e1830;border:1px solid var(--line);border-radius:10px;padding:2px}
+    .srcseg button{border:0;background:transparent;padding:6px 11px;border-radius:8px;color:var(--muted);font-size:13px}
+    .srcseg button.sel{background:linear-gradient(135deg,#23407a,#2d2a64);color:#fff}
+    .srcseg button:disabled{opacity:.35}
+    #animaToggle{display:flex;align-items:center;gap:7px;background:linear-gradient(135deg,#243a6e,#3a2d6e);border-color:#3a4f8a}
+
+    /* ---- layout ---- */
+    main{flex:1;display:grid;grid-template-columns:1fr 360px;min-height:0}
+    .left{display:flex;flex-direction:column;min-height:0;overflow:auto}
+    .right{border-left:1px solid var(--line);background:#0c142699;display:flex;flex-direction:column;min-height:0}
+    @media(max-width:820px){
+      main{grid-template-columns:1fr}
+      .right{position:fixed;inset:0 0 0 auto;width:min(92vw,380px);transform:translateX(101%);
+        transition:transform .25s;z-index:20;box-shadow:var(--shadow)}
+      .right.open{transform:none}
+    }
+
+    /* ---- recorder stage ---- */
+    .stage{padding:22px 16px 18px;display:flex;flex-direction:column;align-items:center;gap:14px;
+      border-bottom:1px solid var(--line)}
+    .viz{width:100%;max-width:560px;height:96px}
+    .timer{font-variant-numeric:tabular-nums;font-size:34px;font-weight:700;letter-spacing:1px}
+    .timer .sub{font-size:13px;color:var(--muted);font-weight:500;margin-left:8px;letter-spacing:0}
+    .recwrap{position:relative;width:96px;height:96px;display:grid;place-items:center}
+    .recwrap .ring{position:absolute;inset:0;border-radius:50%;border:3px solid #ffffff22}
+    .recwrap.on .ring{border-color:var(--rec);animation:pulse 1.6s ease-out infinite}
+    @keyframes pulse{0%{box-shadow:0 0 0 0 #ff4d6d66}70%{box-shadow:0 0 0 18px #ff4d6d00}100%{box-shadow:0 0 0 0 #ff4d6d00}}
+    #recBtn{width:74px;height:74px;border-radius:50%;border:0;display:grid;place-items:center;
+      background:linear-gradient(135deg,var(--rec),var(--rec2));box-shadow:0 6px 18px #ff4d6d55;cursor:pointer}
+    #recBtn.held{filter:grayscale(.7);opacity:.45;box-shadow:none;cursor:not-allowed}   /* mic Cardputer in uso da un'altra app */
+    #recBtn .glyph{width:26px;height:26px;border-radius:50%;background:#fff;transition:.18s border-radius,.18s width,.18s height}
+    .recwrap.on #recBtn .glyph{width:24px;height:24px;border-radius:5px}
+    .status{min-height:18px;color:var(--muted);font-size:13px;text-align:center}
+    .status.err{color:#ff9aa9}.status.ok{color:var(--ok)}
+    .livewrap{width:100%;max-width:560px}
+    .live{width:100%;min-height:0;max-height:120px;overflow:auto;background:#0a142a;border:1px dashed var(--line);
+      border-radius:10px;padding:8px 11px;color:#cdd8f3;font-size:13px;white-space:pre-wrap}
+    .live:empty::before{content:attr(data-ph);color:#5d6f96}
+    .chk{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12.5px;cursor:pointer;user-select:none}
+
+    /* ---- library ---- */
+    .libbar{display:flex;align-items:center;gap:8px;padding:10px 14px;position:sticky;top:0;background:#0c1426ee;z-index:2}
+    .libbar h2{font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin:0;font-weight:700}
+    .libbar .count{color:var(--muted);font-size:12px}
+    .libbar input{flex:1;min-width:60px}
+    ul{list-style:none;margin:0;padding:0 10px 18px}
+    li.rec{background:#111c34;border:1px solid var(--line);
+      border-radius:12px;padding:10px 12px;margin:8px 0;display:flex;flex-direction:column;gap:8px}
+    li.rec.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+    .rec .top{display:flex;align-items:center;gap:9px}
+    .rec .nm{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .rec .nm input{width:100%;font-weight:600}
+    .rec .badge{font-size:11px;color:var(--muted);background:#0e1830;border:1px solid var(--line);
+      padding:2px 7px;border-radius:20px;white-space:nowrap}
+    .rec .badge.mp3{color:#cdb4ff;border-color:#4a3a7a}
+    .rec .badge.wav{color:#ffd28a;border-color:#5a4a2a}
+    audio{width:100%;height:34px;filter:saturate(.9)}
+    .acts{display:flex;flex-wrap:wrap;gap:6px}
+    .acts button{padding:5px 9px;font-size:12.5px}
+    .acts .del{color:#ffb4b4}
+    .acts .ai{color:#cbb6ff;border-color:#3c3568}
+    .empty{color:var(--muted);text-align:center;padding:26px 16px;font-size:13px}
+    .badge.ai{color:#cbb6ff;border-color:#4a3a7a;background:#1a1430}
+    /* AI panel (transcript + summary) */
+    .panel{margin-top:4px;border:1px solid var(--line);border-radius:10px;background:#0e1830;overflow:hidden}
+    .ptabs{display:flex;align-items:center;gap:4px;padding:6px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+    .pt{padding:5px 10px;font-size:12.5px;background:transparent;border:1px solid transparent;border-radius:8px;color:var(--muted)}
+    .pt.sel{background:#13203b;color:var(--text);border-color:var(--line)}
+    .pt.mini{font-size:12px;padding:5px 9px}
+    .pt.ai{color:#cbb6ff}
+    .pbody{padding:10px 12px;font-size:13.5px;white-space:pre-wrap;max-height:220px;overflow:auto;line-height:1.5}
+
+    /* ---- ANIMA dock ---- */
+    .dockhead{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:1px solid var(--line)}
+    .dockhead .ic{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;font-size:14px;
+      background:linear-gradient(135deg,#3a2d6e,#243a6e)}
+    .dockhead b{font-size:14px}.dockhead .sub{color:var(--muted);font-size:11.5px}
+    .quick{display:flex;flex-wrap:wrap;gap:6px;padding:9px 11px;border-bottom:1px solid var(--line)}
+    .quick button{font-size:12px;padding:6px 9px;background:#13203b}
+    .chat{flex:1;overflow:auto;padding:12px 12px 4px;display:flex;flex-direction:column;gap:10px}
+    .msg{max-width:92%;padding:9px 11px;border-radius:12px;font-size:13.5px;white-space:pre-wrap;word-wrap:break-word}
+    .msg.u{align-self:flex-end;background:linear-gradient(135deg,#27457f,#2c2e6a);border-bottom-right-radius:4px}
+    .msg.a{align-self:flex-start;background:#13203b;border:1px solid var(--line);border-bottom-left-radius:4px}
+    .msg.a .ttl{display:flex;gap:6px;align-items:center;margin-top:8px}
+    .msg.sys{align-self:center;color:var(--muted);font-size:12px;background:transparent}
+    .msg code{background:#0a1428;padding:1px 5px;border-radius:5px}
+    .applyname{margin-top:7px;font-size:12px;background:#1c3b2c;border-color:#2e5a44;color:#9ff0c6}
+    .composer{display:flex;gap:7px;padding:10px;border-top:1px solid var(--line)}
+    .composer input{flex:1}
+    .composer .send{background:linear-gradient(135deg,var(--accent),var(--accent2));border:0}
+    .ctxchip{margin:0 11px 9px;font-size:11.5px;color:var(--muted);background:#0e1830;border:1px solid var(--line);
+      border-radius:8px;padding:6px 9px;display:flex;gap:6px;align-items:center}
+    .ctxchip b{color:#cbb6ff;font-weight:600}
+    .spin{display:inline-block;width:13px;height:13px;border:2px solid #ffffff44;border-top-color:#fff;
+      border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+    @keyframes sp{to{transform:rotate(360deg)}}
+    .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(20px);opacity:0;
+      background:#0e1830;border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:13px;
+      box-shadow:var(--shadow);transition:.22s;z-index:50;pointer-events:none}
+    .toast.show{opacity:1;transform:translateX(-50%)}
+  </style>
+</head>
+<body>
+  <header>
+    <span class="brand"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round"><rect x="9" y="2.5" width="6" height="11" rx="3" fill="#fff" stroke="none"/><path d="M6 11a6 6 0 0 0 12 0"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8.5" y1="21" x2="15.5" y2="21"/></svg></span>Voice Recorder</span>
+    <span class="spacer"></span>
+    <div class="srcseg" id="srcSeg" title="Sorgente del microfono">
+      <button data-src="device" id="srcDevice">🎙 Cardputer</button>
+      <button data-src="browser" id="srcBrowser">💻 Browser</button>
+    </div>
+    <button id="animaToggle" title="Apri/chiudi ANIMA">🧠 <span>ANIMA</span></button>
+  </header>
+
+  <main>
+    <section class="left">
+      <div class="stage">
+        <canvas class="viz" id="viz" width="560" height="96"></canvas>
+        <div class="timer"><span id="time">00:00</span><span class="sub" id="srcLbl">Cardputer · 16 kHz</span></div>
+        <div class="recwrap" id="recWrap">
+          <span class="ring"></span>
+          <button id="recBtn" aria-label="Registra"><span class="glyph"></span></button>
+        </div>
+        <div class="status" id="status">Pronto — premi per registrare. Output sempre in MP3 sul dispositivo.</div>
+        <div class="livewrap" id="liveWrap">
+          <label class="chk"><input type="checkbox" id="liveOn"> <span id="liveLbl">Trascrivi mentre registro</span> <span id="liveCap" style="color:#5d6f96"></span></label>
+          <div class="live" id="live" data-ph="La trascrizione live apparirà qui…" style="margin-top:7px" hidden></div>
+        </div>
+      </div>
+
+      <div class="libbar">
+        <h2 id="libTitle">Registrazioni</h2><span class="count" id="count"></span>
+        <span class="spacer" style="flex:1"></span>
+        <input id="search" placeholder="Cerca…" aria-label="Cerca">
+        <select id="sort" aria-label="Ordina">
+          <option value="new">Più recenti</option>
+          <option value="old">Più vecchie</option>
+          <option value="name">Nome A→Z</option>
+          <option value="size">Dimensione</option>
+        </select>
+      </div>
+      <ul id="list"></ul>
+    </section>
+
+    <aside class="right" id="dock">
+      <div class="dockhead">
+        <span class="ic">🧠</span>
+        <div style="flex:1"><b>ANIMA</b><div class="sub" id="dockSub">assistente del registratore</div></div>
+        <button class="ghost" id="dockClose" title="Chiudi" style="padding:4px 8px">✕</button>
+      </div>
+      <div class="quick">
+        <button data-act="summary" id="qSummary">📝 Riassumi</button>
+        <button data-act="todo" id="qTodo">✅ Azioni</button>
+        <button data-act="title" id="qTitle">🏷 Titolo</button>
+        <button data-act="today" id="qToday">📅 Oggi</button>
+      </div>
+      <div class="ctxchip" id="ctxChip"><span id="ctxLbl">Contesto:</span> <b id="ctxName">nessuna selezione</b></div>
+      <div class="chat" id="chat"></div>
+      <div class="composer">
+        <input id="ask" placeholder="Chiedi ad ANIMA…" aria-label="Chiedi ad ANIMA">
+        <button class="send" id="send">➤</button>
+      </div>
+    </aside>
+  </main>
+  <div class="toast" id="toast"></div>
+
+  <script src="vendor/lame.min.js"></script>
+  <script type="module">
+  // ============================================================================
+  // Voice Recorder — always-MP3-on-device. Two mic sources:
+  //   • Cardputer mic  -> firmware /api/rec writes WAV; on stop we fetch it,
+  //     transcode to MP3 in the browser (lamejs), save the MP3 to SD, delete WAV.
+  //   • Browser mic    -> getUserMedia -> 16 kHz mono PCM -> streamed lamejs MP3
+  //     -> POST /api/fs/write. The device never runs a codec ("device serves
+  //     bytes, client does the heavy lifting").
+  // ANIMA is wired in (right dock) over the same /api/anima the OS copilot uses,
+  // given the recordings + selected transcript as context — summaries, action
+  // items, smart titles. Transcripts (.txt) live next to the .mp3.
+  // ============================================================================
+  const DIR = '/data/Recordings';
+  const RATE = 16000, KBPS = 64;            // voice: 64 kbps mono -> tiny files
+  const $ = (id) => document.getElementById(id);
+  const readUrl = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
+  const enc = encodeURIComponent;
+  // System language (set in OS Settings, mirrored to localStorage 'anima.lang'); drives ANIMA + dictation
+  // AND, since this audit, every user-facing label in the recorder. We don't adopt the shell's catalog
+  // here — the app stays self-contained: `en()` reads the live OS language and labels are ternaries.
+  const sysLang = () => (localStorage.getItem('anima.lang') === 'en' ? 'en' : 'it');
+  const en = () => sysLang() === 'en';
+
+  const el = {
+    viz:$('viz'), time:$('time'), srcLbl:$('srcLbl'), recWrap:$('recWrap'), recBtn:$('recBtn'),
+    status:$('status'), list:$('list'), count:$('count'), search:$('search'), sort:$('sort'),
+    liveOn:$('liveOn'), live:$('live'), liveCap:$('liveCap'), liveWrap:$('liveWrap'), liveLbl:$('liveLbl'),
+    dock:$('dock'), chat:$('chat'), ask:$('ask'), ctxName:$('ctxName'), toast:$('toast'),
+  };
+  import { recordToSd, onMicStatus } from '/micgate.js';  // OS-wide single-owner gate for the Cardputer mic
+  let src = 'device';                        // 'device' | 'browser'
+  let recording = false, t0 = 0, timerInt = null, statusPoll = null, devRec = null;
+  let selected = null;                       // selected recording {name,path}
+  let files = [];                            // library entries
+
+  const fmtTime = (s)=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+  const fmtSize = (b)=> b<1024?b+' B':b<1048576?(b/1024).toFixed(0)+' KB':(b/1048576).toFixed(1)+' MB';
+  const stamp = ()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');
+    return `rec-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;};
+  function toast(m){el.toast.textContent=m;el.toast.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>el.toast.classList.remove('show'),2200);}
+  function setStatus(m,cls=''){el.status.textContent=m;el.status.className='status '+cls;}
+
+  // ---- bilingual UI (anima.lang) --------------------------------------------
+  // Idle/ready status text — recomputed on language change. Both forms are recognized so a live
+  // switch only repaints the IDLE message and never clobbers a transient status (e.g. "Saving…").
+  const idleStatus = () => en()
+    ? 'Ready — press to record. Output is always MP3 on the device.'
+    : 'Pronto — premi per registrare. Output sempre in MP3 sul dispositivo.';
+  const IDLE_STATUSES = new Set([
+    'Pronto — premi per registrare. Output sempre in MP3 sul dispositivo.',
+    'Ready — press to record. Output is always MP3 on the device.',
+  ]);
+  // Paint every static chrome label for the active language. Idempotent; called at init and on each
+  // OS language change. Dynamic strings (status, toasts, ANIMA replies) carry their own en() ternary.
+  function applyLang(){
+    const E = en();
+    document.documentElement.setAttribute('lang', E ? 'en' : 'it');
+    $('srcSeg').title       = E ? 'Microphone source' : 'Sorgente del microfono';
+    $('animaToggle').title  = E ? 'Open/close ANIMA' : 'Apri/chiudi ANIMA';
+    el.recBtn.setAttribute('aria-label', recording ? (E?'Stop':'Ferma') : (E?'Record':'Registra'));
+    el.liveLbl.textContent  = E ? 'Transcribe while recording' : 'Trascrivi mentre registro';
+    el.live.setAttribute('data-ph', E ? 'The live transcript will appear here…' : 'La trascrizione live apparirà qui…');
+    $('libTitle').textContent = E ? 'Recordings' : 'Registrazioni';
+    el.search.placeholder   = E ? 'Search…' : 'Cerca…';
+    el.search.setAttribute('aria-label', E ? 'Search' : 'Cerca');
+    el.sort.setAttribute('aria-label', E ? 'Sort' : 'Ordina');
+    el.sort.options[0].text = E ? 'Newest' : 'Più recenti';
+    el.sort.options[1].text = E ? 'Oldest' : 'Più vecchie';
+    el.sort.options[2].text = E ? 'Name A→Z' : 'Nome A→Z';
+    el.sort.options[3].text = E ? 'Size' : 'Dimensione';
+    $('dockSub').textContent  = E ? 'recorder assistant' : 'assistente del registratore';
+    $('dockClose').title    = E ? 'Close' : 'Chiudi';
+    $('qSummary').textContent = E ? '📝 Summarize' : '📝 Riassumi';
+    $('qTodo').textContent  = E ? '✅ Actions' : '✅ Azioni';
+    $('qTitle').textContent = E ? '🏷 Title' : '🏷 Titolo';
+    $('qToday').textContent = E ? '📅 Today' : '📅 Oggi';
+    $('ctxLbl').textContent = E ? 'Context:' : 'Contesto:';
+    if(el.ctxName.textContent==='nessuna selezione' || el.ctxName.textContent==='no selection')
+      el.ctxName.textContent = E ? 'no selection' : 'nessuna selezione';
+    el.ask.placeholder      = E ? 'Ask ANIMA…' : 'Chiedi ad ANIMA…';
+    el.ask.setAttribute('aria-label', E ? 'Ask ANIMA' : 'Chiedi ad ANIMA');
+    el.liveCap.textContent  = SR ? '' : (E ? '(not supported)' : '(non supportata)');
+    const sb=$('srcBrowser'); if(sb.disabled) sb.title = E ? 'getUserMedia unavailable (needs HTTPS or localhost)' : 'getUserMedia non disponibile (serve HTTPS o localhost)';
+    if(IDLE_STATUSES.has(el.status.textContent)) setStatus(idleStatus());
+    renderList();   // re-paint library empty-state / labels built imperatively
+  }
+
+  // ---- fs helpers ------------------------------------------------------------
+  const fs = {
+    list:  async(p)=>{try{return (await (await fetch('/api/fs/list?path='+enc(p))).json()).entries||[];}catch{return[];}},
+    write: async(p,blob)=>fetch('/api/fs/write?path='+enc(p),{method:'POST',body:blob}),
+    del:   async(p)=>fetch('/api/fs/delete?path='+enc(p),{method:'POST'}),
+    move:  async(a,b)=>fetch('/api/fs/move?from='+enc(a)+'&to='+enc(b),{method:'POST'}),
+    mkdir: async(p)=>fetch('/api/fs/mkdir?path='+enc(p),{method:'POST'}),
+    readText: async(p)=>{try{const r=await fetch(readUrl(p));return r.ok?await r.text():'';}catch{return '';}},
+  };
+  const txtPath = (mp3)=> mp3.replace(/\.mp3$/i,'.txt');
+
+  // ============================ MP3 ENCODING ==================================
+  function newEncoder(){ return new lamejs.Mp3Encoder(1, RATE, KBPS); }
+  function downsample(f32, inRate){
+    if(inRate===RATE) return f32;
+    const ratio=inRate/RATE, out=new Float32Array(Math.floor(f32.length/ratio));
+    for(let i=0;i<out.length;i++){ out[i]=f32[Math.floor(i*ratio)]; }
+    return out;
+  }
+  function f32ToI16(f32){
+    const i16=new Int16Array(f32.length);
+    for(let i=0;i<f32.length;i++){ let s=Math.max(-1,Math.min(1,f32[i])); i16[i]=s<0?s*0x8000:s*0x7fff; }
+    return i16;
+  }
+  // Encode an Int16 PCM buffer (already at RATE) to an MP3 Blob.
+  function pcmToMp3Blob(i16){
+    const e=newEncoder(), out=[], block=1152;
+    for(let i=0;i<i16.length;i+=block){
+      const d=e.encodeBuffer(i16.subarray(i,i+block));
+      if(d.length) out.push(new Int8Array(d));
+    }
+    const end=e.flush(); if(end.length) out.push(new Int8Array(end));
+    return new Blob(out,{type:'audio/mpeg'});
+  }
+  async function saveMp3(blob, base){
+    await fs.mkdir(DIR);
+    const name = base + '.mp3';
+    const r = await fs.write(DIR+'/'+name, blob);
+    if(!r.ok) throw new Error('write failed ('+r.status+')');
+    return name;
+  }
+
+  // ============================ BROWSER MIC ===================================
+  let bAudioCtx=null, bStream=null, bNode=null, bAnalyser=null, bEncoder=null, bMp3=[], bSamples=0;
+  async function browserStart(){
+    bStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+    bAudioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const srcNode = bAudioCtx.createMediaStreamSource(bStream);
+    bAnalyser = bAudioCtx.createAnalyser(); bAnalyser.fftSize=1024; srcNode.connect(bAnalyser);
+    bNode = bAudioCtx.createScriptProcessor(4096,1,1);
+    bEncoder = newEncoder(); bMp3=[]; bSamples=0;
+    const inRate = bAudioCtx.sampleRate;
+    bNode.onaudioprocess = (ev)=>{
+      const f32 = ev.inputBuffer.getChannelData(0);
+      const i16 = f32ToI16(downsample(f32, inRate));
+      bSamples += i16.length;
+      const d = bEncoder.encodeBuffer(i16); if(d.length) bMp3.push(new Int8Array(d));
+    };
+    srcNode.connect(bNode); bNode.connect(bAudioCtx.destination); // keep node alive
+    if(el.liveOn.checked) startLiveTranscribe();
+    drawBrowserViz();
+  }
+  async function browserStop(){
+    try{ bNode && (bNode.onaudioprocess=null, bNode.disconnect()); }catch{}
+    try{ bStream && bStream.getTracks().forEach(t=>t.stop()); }catch{}
+    const end = bEncoder.flush(); if(end.length) bMp3.push(new Int8Array(end));
+    const blob = new Blob(bMp3,{type:'audio/mpeg'});
+    try{ bAudioCtx && bAudioCtx.close(); }catch{}
+    bAudioCtx=bStream=bNode=bAnalyser=null;
+    if(blob.size<200) throw new Error(en()?'empty audio':'audio vuoto');
+    setStatus(en()?'Saving MP3…':'Salvataggio MP3…');
+    const base = stamp();
+    const name = await saveMp3(blob, base);
+    if(liveText.trim()){ await fs.write(DIR+'/'+base+'.txt', new Blob([liveText.trim()],{type:'text/plain'})); }
+    return name;
+  }
+
+  // ============================ DEVICE (CARDPUTER) MIC ========================
+  // Routed through the OS-wide mic gate: it holds the single-owner lock for the whole take, so no
+  // dictation/ANIMA stream can grab the mic mid-recording (and vice-versa). The gate owns start +
+  // status polling; we resolve when the user/device button is pressed and finalize the WAV after.
+  function deviceStart(){
+    return new Promise((resolve, reject) => {
+      let acked = false;
+      devRec = recordToSd({
+        label: 'Registrazione',
+        onstart(){ acked = true; resolve(); },                 // recording really started → release the button
+        onstatus(s){ if(s.level!=null) pushLevel(s.level/100); },
+        onerror(kind, who){ if(!acked) reject(new Error(
+          kind==='busy' ? ((en()?'microphone busy':'microfono occupato')+(who?(' · '+who):'')) :
+          kind==='auth' ? (en()?'device not paired':'dispositivo non accoppiato') : (en()?'mic unavailable':'mic non disponibile'))); },
+      });
+      devRec.done.then((s)=>{ devRec=null; if(s && s.path) deviceFinalize(s.path); });
+    });
+  }
+  function deviceStop(){
+    setStatus(en()?'Finalizing on the device…':'Finalizzo sul dispositivo…');
+    if(devRec) devRec.stop();                                   // gate-owned take: POSTs stop, poll resolves → finalize
+    else fetch('/api/rec/stop',{method:'POST'}).catch(()=>{});  // a recording we only adopted (e.g. started on-device)
+  }
+  let finalizing=false;
+  async function deviceFinalize(wavPath){
+    if(finalizing) return; finalizing=true;
+    clearInterval(statusPoll); statusPoll=null;
+    stopTimer(); setRecUI(false);
+    try{
+      setStatus(en()?'Transcoding WAV → MP3…':'Transcodifica WAV → MP3…');
+      const buf = await (await fetch(readUrl(wavPath))).arrayBuffer();
+      const {samples} = parseWav(buf);                 // Int16 @ device rate (16k)
+      const blob = pcmToMp3Blob(samples);
+      const base = (wavPath.split('/').pop()||stamp()).replace(/\.wav$/i,'');
+      await saveMp3(blob, base);
+      await fs.del(wavPath);                            // never keep the WAV
+      setStatus(en()?'Saved as MP3 ✓':'Salvato in MP3 ✓','ok'); toast(en()?'Recording saved':'Registrazione salvata');
+    }catch(e){
+      setStatus((en()?'Transcoding error: ':'Errore transcodifica: ')+(e.message||e)+(en()?' — the WAV was kept':' — il WAV è stato mantenuto'),'err');
+    }finally{ finalizing=false; loadList(); }
+  }
+
+  // ---- WAV parse (16-bit PCM) -> mono Int16 ---------------------------------
+  function parseWav(buf){
+    const dv=new DataView(buf);
+    let off=12,rate=RATE,ch=1,bits=16,dataOff=44,dataLen=buf.byteLength-44;
+    while(off+8<=buf.byteLength){
+      const id=dv.getUint32(off,false),sz=dv.getUint32(off+4,true);
+      if(id===0x666d7420){ch=dv.getUint16(off+10,true);rate=dv.getUint32(off+12,true);bits=dv.getUint16(off+22,true);}
+      else if(id===0x64617461){dataOff=off+8;dataLen=sz;break;}
+      off+=8+sz+(sz&1);
+    }
+    if(bits!==16) throw new Error(en()?'expected 16-bit PCM':'atteso PCM 16-bit');
+    const n=Math.floor(dataLen/2), raw=new Int16Array(buf,dataOff,n);
+    if(ch===1) return {samples:raw,rate};
+    const mono=new Int16Array(Math.floor(n/ch));
+    for(let i=0,j=0;j<mono.length;i+=ch,j++) mono[j]=raw[i];
+    return {samples:mono,rate};
+  }
+
+  // ============================ VISUALIZER ====================================
+  const vctx = el.viz.getContext('2d');
+  let levels = new Array(64).fill(0), vizRAF=null;
+  function pushLevel(v){ levels.push(Math.max(0,Math.min(1,v))); if(levels.length>96) levels.shift(); }
+  function drawViz(){
+    const w=el.viz.width,h=el.viz.height; vctx.clearRect(0,0,w,h);
+    const n=levels.length, bw=w/n;
+    for(let i=0;i<n;i++){
+      const v=levels[i], bh=Math.max(2,v*h*0.92), x=i*bw, y=(h-bh)/2;
+      const g=vctx.createLinearGradient(0,y,0,y+bh);
+      g.addColorStop(0,'#ff8aa0'); g.addColorStop(1,'#8b6cff');
+      vctx.fillStyle = recording? g : '#27365e';
+      vctx.fillRect(x+bw*0.18, y, bw*0.64, bh);
+    }
+    vizRAF = requestAnimationFrame(drawViz);
+  }
+  function drawBrowserViz(){
+    if(!bAnalyser) return;
+    const data=new Uint8Array(bAnalyser.fftSize);
+    bAnalyser.getByteTimeDomainData(data);
+    let sum=0; for(let i=0;i<data.length;i++){const d=(data[i]-128)/128; sum+=d*d;}
+    pushLevel(Math.sqrt(sum/data.length)*2.4);
+    if(recording && src==='browser') requestAnimationFrame(drawBrowserViz);
+  }
+
+  // ============================ LIVE TRANSCRIBE (browser mic) =================
+  // Best-effort live transcript via the browser SpeechRecognition API (online).
+  // Saved as a .txt sibling. Vosk-offline could plug in here later.
+  let SR = window.SpeechRecognition||window.webkitSpeechRecognition, recog=null, liveText='';
+  function startLiveTranscribe(){
+    if(!SR){ el.live.textContent=en()?'(live transcription not supported by this browser)':'(trascrizione live non supportata da questo browser)'; return; }
+    liveText=''; el.live.hidden=false; el.live.textContent='';
+    recog=new SR(); recog.lang=(sysLang()==='en'?'en-US':'it-IT'); recog.continuous=true; recog.interimResults=true;
+    recog.onresult=(e)=>{ let fin='',int='';
+      for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript;
+        if(e.results[i].isFinal) fin+=t+' '; else int+=t; }
+      if(fin) liveText+=fin;
+      el.live.textContent = (liveText+int).trim();
+      el.live.scrollTop=el.live.scrollHeight;
+    };
+    recog.onerror=()=>{}; recog.onend=()=>{ if(recording&&src==='browser'&&el.liveOn.checked){ try{recog.start();}catch{} } };
+    try{ recog.start(); }catch{}
+  }
+  function stopLiveTranscribe(){ if(recog){ try{recog.onend=null;recog.stop();}catch{} recog=null; } }
+
+  // ============================ RECORD CONTROL ================================
+  function setRecUI(on){
+    recording=on; el.recWrap.classList.toggle('on',on);
+    el.recBtn.setAttribute('aria-label', on?(en()?'Stop':'Ferma'):(en()?'Record':'Registra'));
+  }
+  function startTimer(){ t0=Date.now(); timerInt=setInterval(()=>{ el.time.textContent=fmtTime((Date.now()-t0)/1000); },200); }
+  function stopTimer(){ clearInterval(timerInt); timerInt=null; }
+
+  el.recBtn.onclick = async ()=>{
+    if(!recording){
+      try{
+        setRecUI(true); el.time.textContent='00:00'; levels=new Array(64).fill(0); startTimer();
+        setStatus((en()?'Recording… ':'Registrazione… ')+(src==='device'?(en()?'(Cardputer mic)':'(mic Cardputer)'):(en()?'(browser mic)':'(mic browser)')));
+        if(src==='device') await deviceStart(); else await browserStart();
+      }catch(e){ setRecUI(false); stopTimer(); setStatus((en()?'Start failed: ':'Avvio fallito: ')+(e.message||e),'err'); }
+    }else{
+      stopTimer(); stopLiveTranscribe();
+      if(src==='browser'){
+        setRecUI(false); setStatus(en()?'Encoding MP3…':'Codifica MP3…');
+        try{ const name=await browserStop(); setStatus((en()?'Saved ':'Salvato ')+name+' ✓','ok'); toast(en()?'Recording saved':'Registrazione salvata'); loadList(); }
+        catch(e){ setStatus((en()?'Save failed: ':'Salvataggio fallito: ')+(e.message||e),'err'); }
+      }else{
+        await deviceStop();   // deviceFinalize completes via the poll
+      }
+    }
+  };
+
+  // ============================ SOURCE SELECT =================================
+  function pickSource(s){
+    if(recording) return;
+    src=s;
+    document.querySelectorAll('.srcseg button').forEach(b=>b.classList.toggle('sel', b.dataset.src===s));
+    el.srcLbl.textContent = s==='device' ? 'Cardputer · 16 kHz' : 'Browser · 16 kHz';   // proper nouns + unit
+    el.liveWrap.style.display = s==='browser' ? '' : 'none';   // live transcript only for browser mic
+    refreshMicHeld();   // il conflitto riguarda solo il mic Cardputer: rivaluta al cambio sorgente
+  }
+  document.getElementById('srcSeg').addEventListener('click',(e)=>{ const b=e.target.closest('button'); if(b&&!b.disabled) pickSource(b.dataset.src); });
+  el.liveOn.onchange=()=>{ el.live.hidden = !el.liveOn.checked; };
+
+  // ============================ CROSS-APP MIC STATUS ==========================
+  // Trasparenza: se ANIMA/Dettatura tengono il mic Cardputer, attenua il tasto REC e dillo nella barra
+  // di stato — solo con sorgente "device" (il mic browser non confligge). Un click comunque mostra CHI.
+  let micHolder=null, micStatusShown=false;
+  function refreshMicHeld(){
+    const otherHolds = !!(micHolder && micHolder!=='Registrazione' && src==='device' && !recording);
+    el.recBtn.classList.toggle('held', otherHolds);
+    el.recBtn.title = otherHolds ? ((en()?'Cardputer mic in use by ':'Mic Cardputer in uso da ')+micHolder) : (recording?(en()?'Stop':'Ferma'):(en()?'Record':'Registra'));
+    if(otherHolds){ micStatusShown=true; setStatus((en()?'🎤 Cardputer mic in use by ':'🎤 Mic Cardputer in uso da ')+micHolder+(en()?' — free it to record':' — libera per registrare')); }
+    else if(micStatusShown){ micStatusShown=false; if(!recording) setStatus(''); }
+  }
+  onMicStatus((holder)=>{ micHolder=holder; refreshMicHeld(); });
+
+  // ============================ LIBRARY =======================================
+  let openPanel = null;   // base name whose AI panel is expanded
+  async function loadList(){
+    const entries = await fs.list(DIR);
+    const names = new Set(entries.map(e=>e.name));
+    files = entries.filter(e=>e.type==='file' && /\.(mp3|wav)$/i.test(e.name));
+    for(const f of files){ const b=f.name.replace(/\.(mp3|wav)$/i,'');
+      f._tx = names.has(b+'.txt'); f._sum = names.has(b+'.sum.txt'); f._base=b; }
+    renderList();
+  }
+  function sortFiles(arr){
+    const v=el.sort.value;
+    const byName=(a,b)=>a.name.localeCompare(b.name);
+    if(v==='name') return arr.sort(byName);
+    if(v==='old')  return arr.sort(byName);            // names are timestamps -> chronological
+    if(v==='new')  return arr.sort((a,b)=>byName(b,a));
+    if(v==='size') return arr.sort((a,b)=>(b.size||0)-(a.size||0));
+    return arr;
+  }
+  function prettyName(n){ const m=n.match(/^rec-(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d)(\d\d)/);
+    return m? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : n.replace(/\.(mp3|wav)$/i,''); }
+  function renderList(){
+    const q=el.search.value.trim().toLowerCase();
+    let arr=files.filter(f=>!q||f.name.toLowerCase().includes(q));
+    arr=sortFiles(arr.slice());
+    el.count.textContent = files.length? `${files.length} file` : '';
+    if(!arr.length){ el.list.innerHTML=`<div class="empty">${files.length?(en()?'No results.':'Nessun risultato.'):(en()?'No recordings yet — press the red button.':'Ancora nessuna registrazione — premi il tasto rosso.')}</div>`; return; }
+    el.list.innerHTML='';
+    for(const f of arr){
+      const path=DIR+'/'+f.name, isWav=/\.wav$/i.test(f.name);
+      const li=document.createElement('li'); li.className='rec'+(selected&&selected.name===f.name?' sel':'');
+      const top=document.createElement('div'); top.className='top';
+      top.innerHTML=`<span class="nm" title="${f.name}">${prettyName(f.name)}</span>`+
+        `<span class="badge ${isWav?'wav':'mp3'}">${isWav?'WAV':'MP3'}</span>`+
+        `<span class="badge">${fmtSize(f.size||0)}</span>`;
+      const audio=document.createElement('audio'); audio.controls=true; audio.preload='none'; audio.src=readUrl(path);
+      if(f._sum) top.innerHTML += `<span class="badge ai" title="${en()?'Summary available':'Riassunto disponibile'}">✨</span>`;
+      const acts=document.createElement('div'); acts.className='acts';
+      [
+        mkBtn(en()?'🏷 Rename':'🏷 Rinomina',()=>renameRec(f,top)),
+        mkBtn(en()?'⬇ Download':'⬇ Scarica',()=>download(path,f.name)),
+        f._sum ? mkBtn(en()?'📝 Summary':'📝 Riassunto',()=>togglePanel(f),'ai')
+               : mkBtn(en()?'✨ Transcribe & Summarize':'✨ Trascrivi & Riassumi',(b)=>runPipeline(f,b),'ai'),
+        isWav? mkBtn('♫ → MP3',(b)=>convertWav(path,f.name,b)) : null,
+        mkBtn('🗑',()=>delRec(path),'del'),
+      ].filter(Boolean).forEach(b=>acts.appendChild(b));
+      li.append(top,audio,acts);
+      if(openPanel===f._base){ li.appendChild(buildPanel(f)); }
+      li.onclick=(e)=>{ if(!e.target.closest('button,audio,input')) selectFor(f,false); };
+      el.list.appendChild(li);
+    }
+  }
+
+  // Run the device pipeline: Whisper transcription (auto language, fallback to system language) +
+  // cloud-teacher summary, saved as sidecars on the device. Then open the panel.
+  async function runPipeline(f, btn){
+    const o=btn.textContent; btn.disabled=true; btn.textContent=en()?'✨ Transcribing…':'✨ Trascrivo…';
+    const path=DIR+'/'+f.name;
+    const call=(lang)=> fetch('/api/transcribe?path='+enc(path)+'&lang='+lang+'&summarize=1').then(r=>r.json());
+    try{
+      let r=await call('auto');
+      if(!r||!r.ok){ btn.textContent=en()?'✨ System language…':'✨ Lingua di sistema…'; r=await call(sysLang()); }   // fallback to system language
+      if(!r||!r.ok) throw new Error((r&&r.error)||(en()?'failed':'fallita'));
+      toast(en()?'Transcript and summary ready':'Trascrizione e riassunto pronti'); openPanel=f._base; await loadList();
+    }catch(e){
+      btn.disabled=false; btn.textContent=o; toast((en()?'Transcription failed: ':'Trascrizione non riuscita: ')+(e.message||e));
+      setStatus(en()?'Transcription needs the online models (Groq Whisper). Configure the key or retry online.':'La trascrizione richiede i modelli online (Groq Whisper). Configura la chiave o riprova online.','err');
+    }
+  }
+  function togglePanel(f){ openPanel = (openPanel===f._base)? null : f._base; renderList(); }
+
+  // Expandable Summary/Transcript panel under a recording. Loads the sidecars lazily.
+  function buildPanel(f){
+    const wrap=document.createElement('div'); wrap.className='panel'; const E=en();
+    wrap.innerHTML=`<div class="ptabs"><button class="pt sel" data-t="sum">${E?'📝 Summary':'📝 Riassunto'}</button>`+
+      `<button class="pt" data-t="tx">${E?'📄 Transcript':'📄 Trascrizione'}</button><span style="flex:1"></span>`+
+      `<button class="pt mini" data-a="redo">${E?'↻ Regenerate':'↻ Rigenera'}</button><button class="pt mini ai" data-a="anima">${E?'🧠 Continue with ANIMA':'🧠 Continua con ANIMA'}</button></div>`+
+      `<div class="pbody" data-b="sum">${E?'Loading…':'Carico…'}</div><div class="pbody" data-b="tx" hidden>${E?'Loading…':'Carico…'}</div>`;
+    const showTab=(t)=>{ wrap.querySelectorAll('.pt[data-t]').forEach(b=>b.classList.toggle('sel',b.dataset.t===t));
+      wrap.querySelectorAll('.pbody').forEach(b=>b.hidden=b.dataset.b!==t); };
+    wrap.addEventListener('click',(e)=>{ const b=e.target.closest('button'); if(!b)return; e.stopPropagation();
+      if(b.dataset.t) showTab(b.dataset.t);
+      else if(b.dataset.a==='redo'){ runPipeline(f, {textContent:'',disabled:false}); }
+      else if(b.dataset.a==='anima'){ continueWithAnima(f); }
+    });
+    fs.readText(DIR+'/'+f._base+'.sum.txt').then(t=>{ wrap.querySelector('[data-b="sum"]').textContent=t||(en()?'(no summary)':'(nessun riassunto)'); });
+    fs.readText(DIR+'/'+f._base+'.txt').then(t=>{ wrap.querySelector('[data-b="tx"]').textContent=t||(en()?'(no transcript)':'(nessuna trascrizione)'); });
+    return wrap;
+  }
+  async function continueWithAnima(f){
+    selected={ name:f.name, path:DIR+'/'+f.name, base:f._base };
+    el.ctxName.textContent=prettyName(f.name);
+    const sum=await fs.readText(DIR+'/'+f._base+'.sum.txt');
+    showDock();
+    addMsg('a',(en()?'Context loaded from <b>':'Contesto caricato da <b>')+esc(prettyName(f.name))+'</b>.'+(sum?(en()?'<br><br>📝 <b>Summary:</b><br>':'<br><br>📝 <b>Riassunto:</b><br>')+fmtReply(sum):''));
+    addMsg('sys',en()?'Go ahead and ask: I can dig deeper, translate the points, extract dates/commitments, or rewrite the summary.':'Chiedi pure: posso approfondire, tradurre i punti, estrarre date/impegni, o riscrivere il riassunto.');
+  }
+  function mkBtn(label,fn,cls=''){ const b=document.createElement('button'); if(cls)b.className=cls; b.textContent=label;
+    b.onclick=(e)=>{e.stopPropagation();fn(b);}; return b; }
+
+  async function renameRec(f,topEl){
+    const nm=topEl.querySelector('.nm'); const cur=f.name.replace(/\.(mp3|wav)$/i,'');
+    const inp=document.createElement('input'); inp.value=cur;
+    nm.innerHTML=''; nm.appendChild(inp); inp.focus(); inp.select();
+    const commit=async()=>{
+      const v=inp.value.trim().replace(/[\/\\:*?"<>|]/g,'_');
+      if(v && v!==cur){ const ext=f.name.match(/\.(mp3|wav)$/i)[0];
+        const r=await fs.move(DIR+'/'+f.name, DIR+'/'+v+ext);
+        if(r.ok){ toast(en()?'Renamed':'Rinominato'); if(selected&&selected.name===f.name) selected={name:v+ext,path:DIR+'/'+v+ext,base:v}; }
+      }
+      loadList();
+    };
+    inp.onkeydown=(e)=>{ if(e.key==='Enter')commit(); if(e.key==='Escape')loadList(); };
+    inp.onblur=commit;
+  }
+  async function download(path,name){ const blob=await (await fetch(readUrl(path))).blob();
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
+  async function delRec(path){ if(!confirm(en()?'Delete this recording?':'Eliminare questa registrazione?'))return;
+    await fs.del(path); const t=txtPath(path); await fs.del(t).catch(()=>{});
+    if(selected&&selected.path===path) selectNone(); toast(en()?'Deleted':'Eliminato'); loadList(); }
+  async function convertWav(path,name,btn){ const o=btn.textContent; btn.disabled=true; btn.textContent='…';
+    try{ const buf=await (await fetch(readUrl(path))).arrayBuffer(); const {samples}=parseWav(buf);
+      const blob=pcmToMp3Blob(samples); const base=name.replace(/\.wav$/i,'');
+      await saveMp3(blob,base); await fs.del(path); toast(en()?'Converted to MP3':'Convertito in MP3'); loadList();
+    }catch(e){ btn.textContent='✗'; toast(en()?'Conversion failed':'Conversione fallita'); setTimeout(()=>{btn.textContent=o;btn.disabled=false;},1500); } }
+
+  // ============================ ANIMA DOCK ====================================
+  // Wide screens: dock is a grid column (toggle hides the column). Narrow: slide-over.
+  const wide = ()=> window.innerWidth>820;
+  function isDockShown(){ return wide() ? !el.dock.classList.contains('hidden') : el.dock.classList.contains('open'); }
+  function showDock(){ if(wide()){ el.dock.classList.remove('hidden'); document.querySelector('main').style.gridTemplateColumns='1fr 360px'; } else el.dock.classList.add('open'); }
+  function hideDock(){ if(wide()){ el.dock.classList.add('hidden'); document.querySelector('main').style.gridTemplateColumns='1fr'; } else el.dock.classList.remove('open'); }
+  $('animaToggle').onclick=()=>{ isDockShown()?hideDock():showDock(); };
+  $('dockClose').onclick=hideDock;
+
+  function selectNone(){ selected=null; el.ctxName.textContent=en()?'no selection':'nessuna selezione'; renderList(); }
+  async function selectFor(f, openDock){
+    selected={ name:f.name, path:DIR+'/'+f.name, base:f.name.replace(/\.(mp3|wav)$/i,'') };
+    el.ctxName.textContent=prettyName(f.name);
+    renderList();
+    if(openDock) showDock();
+  }
+  async function transcriptFor(sel){ return sel? (await fs.readText(txtPath(sel.path))).trim() : ''; }
+
+  function addMsg(cls,html){ const d=document.createElement('div'); d.className='msg '+cls; d.innerHTML=html;
+    el.chat.appendChild(d); el.chat.scrollTop=el.chat.scrollHeight; return d; }
+  const esc=(s)=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  function fmtReply(s){ return esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\n/g,'<br>'); }
+
+  const isOnlineTier=(r)=> r && (/online|^o\d/i.test(r.tier||'') || r.source==='online');
+  async function animaAsk(q, needsOnline=false){
+    const m=addMsg('a','<span class="spin"></span>');
+    try{
+      const r=await (await fetch('/api/anima?q='+enc(q)+'&lang='+sysLang()+'&mode=on')).json();
+      const reply=r.reply||r.answer||'';
+      if(needsOnline && !isOnlineTier(r)){
+        // Generative tasks (summary/title/actions) need the online teacher — offline ANIMA
+        // is a retrieval engine and can't summarise free text. Be honest instead of showing a wrong reply.
+        m.innerHTML=en()
+          ? '<span style="color:#ffc857">Summaries, titles and actions need <b>Hybrid/Online</b> mode (with your API key). ANIMA offline does not summarize free text.</span>'
+          : '<span style="color:#ffc857">Per riassunti, titoli e azioni serve la modalità <b>Ibrida/Online</b> (con la tua API key). ANIMA offline non riassume testo libero.</span>';
+      } else {
+        m.innerHTML=fmtReply(reply||(en()?'(no answer)':'(nessuna risposta)'));
+      }
+      return r;
+    }catch(e){ m.innerHTML='<span style="color:#ff9aa9">'+(en()?'ANIMA unreachable.':'ANIMA non raggiungibile.')+'</span>'; return null; }
+  }
+  async function quick(act){
+    const E=en();
+    if(act==='today'){
+      const today=files.filter(f=>{const m=f.name.match(/^rec-(\d{4})(\d\d)(\d\d)/);if(!m)return false;
+        const d=new Date(),p=n=>String(n).padStart(2,'0'); return m[1]+m[2]+m[3]===`${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}`;});
+      addMsg('u',E?'What did I record today?':'Cosa ho registrato oggi?');
+      addMsg('a', today.length? (E?`Today you have <b>${today.length}</b> recordings:<br>`:`Oggi hai <b>${today.length}</b> registrazioni:<br>`)+today.map(f=>'• '+esc(prettyName(f.name))).join('<br>') : (E?'No recordings today.':'Nessuna registrazione oggi.'));
+      return;
+    }
+    if(!selected){ addMsg('sys',E?'Select a recording first (tap an item or the 🧠 button).':'Seleziona prima una registrazione (tocca un elemento o il tasto 🧠).'); return; }
+    const tx=await transcriptFor(selected);
+    if(!tx){ addMsg('sys',E?'This recording has no transcript. Record it with the browser mic and "Transcribe while recording" on, or type your question manually.':'Questa registrazione non ha una trascrizione. Registrala col mic del browser e "Trascrivi mentre registro" attivo, oppure scrivi la domanda manualmente.'); return; }
+    const clip=tx.slice(0,1600);
+    if(act==='summary'){ addMsg('u',(E?'Summarize “':'Riassumi “')+prettyName(selected.name)+'”'); await animaAsk((E?'Summarize this voice note in 3-5 bullet points:\n':'Riassumi in 3-5 punti questa nota vocale:\n')+clip, true); }
+    else if(act==='todo'){ addMsg('u',E?'Extract the actions':'Estrai le azioni'); await animaAsk((E?'List the action items (to-do) in this voice note, one per line:\n':'Elenca i punti d\'azione (to-do) presenti in questa nota vocale, uno per riga:\n')+clip, true); }
+    else if(act==='title'){ addMsg('u',E?'Suggest a title':'Suggerisci un titolo');
+      const r=await animaAsk((E?'Propose ONE short title (max 5 words) for this voice note. Reply with the title only:\n':'Proponi UN titolo breve (max 5 parole) per questa nota vocale. Rispondi solo col titolo:\n')+clip, true);
+      if(isOnlineTier(r)&&(r.reply||r.answer)){ const t=(r.reply||r.answer).split('\n')[0].replace(/^["“]|["”]$/g,'').trim();
+        const b=document.createElement('button'); b.className='applyname'; b.textContent=(E?'✓ Rename to: ':'✓ Rinomina in: ')+t;
+        b.onclick=async()=>{ const v=t.replace(/[\/\\:*?"<>|]/g,'_').slice(0,48); const ext=selected.name.match(/\.(mp3|wav)$/i)[0];
+          const mv=await fs.move(selected.path, DIR+'/'+v+ext); if(mv.ok){ const tp=txtPath(selected.path); await fs.move(tp,DIR+'/'+v+'.txt').catch(()=>{});
+            toast(en()?'Renamed':'Rinominato'); selected={name:v+ext,path:DIR+'/'+v+ext,base:v}; el.ctxName.textContent=prettyName(v+ext); loadList(); b.disabled=true; } };
+        el.chat.lastChild.appendChild(document.createElement('br')); el.chat.lastChild.appendChild(b);
+      }
+    }
+  }
+  document.querySelector('.quick').addEventListener('click',(e)=>{const b=e.target.closest('button');if(b)quick(b.dataset.act);});
+  function sendAsk(){ const q=el.ask.value.trim(); if(!q)return; el.ask.value=''; addMsg('u',esc(q));
+    transcriptFor(selected).then(tx=>{ animaAsk(tx? q+(en()?'\n\n(Context — transcript of "':'\n\n(Contesto — trascrizione di "')+selected.name+'"):\n'+tx.slice(0,1400) : q); }); }
+  $('send').onclick=sendAsk;
+  el.ask.addEventListener('keydown',(e)=>{ if(e.key==='Enter') sendAsk(); });
+
+  // welcome
+  addMsg('a', en()
+    ? 'Hi! I am ANIMA. Select a recording and I can <b>summarize</b> it, extract its <b>actions</b> or suggest a <b>title</b>. Transcripts are saved next to the MP3.'
+    : 'Ciao! Sono ANIMA. Seleziona una registrazione e posso <b>riassumerla</b>, estrarne le <b>azioni</b> o proporre un <b>titolo</b>. Le trascrizioni vengono salvate accanto all\'MP3.');
+
+  // ============================ INIT ==========================================
+  el.search.oninput=renderList; el.sort.onchange=renderList;
+  drawViz();
+  // capability probe: disable browser-mic source if unavailable (applyLang paints the explanatory title)
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ $('srcBrowser').disabled=true; }
+  pickSource('device');
+  applyLang();                               // paint all static chrome for the active OS language
+  if(window.innerWidth<=820) el.dock.classList.remove('open');
+  // resume if a device recording is already running
+  (async()=>{ try{ const s=await (await fetch('/api/rec/status')).json(); if(s.recording){ src='device'; setRecUI(true); startTimer(); setStatus(en()?'Recording in progress…':'Registrazione in corso…'); statusPoll=setInterval(async()=>{ const x=await (await fetch('/api/rec/status')).json(); if(x.level!=null)pushLevel(x.level/100); if(recording&&!x.recording) deviceFinalize(x.path); },600);} }catch{} loadList(); })();
+
+  // ---- Part B: live OS-wide language sync -----------------------------------
+  // The app reads the language only at load; without this, changing it in Settings while the recorder
+  // is open would leave its labels stale. We import the centralized engine ONLY for its change signal
+  // and re-run our own applyLang() — NOT its catalog/data-i18n system (this app paints its own
+  // ternaries). init({apply:false,observe:false}) installs the cross-iframe storage/message listeners
+  // (a bare onChange() would never receive them) without scanning our DOM; we init the SW-precached
+  // 'core' namespace (no extra device read) since we use no catalog — only the change signal matters.
+  try{
+    const { default: I18N } = await import('/nucleo-i18n.js');
+    await I18N.init('core', { apply:false, observe:false });
+    I18N.onChange(()=>{ try{ applyLang(); }catch{} });
+  }catch{ /* engine unavailable (e.g. opened outside the OS) → labels still correct at load */ }
+  </script>
+</body>
+</html>

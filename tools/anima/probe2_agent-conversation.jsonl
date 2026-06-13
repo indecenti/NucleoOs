@@ -1,0 +1,13 @@
+{"q":"apri il calendario | aprilo","lang":"it","expect":"open_app (followup) PASS"}
+{"q":"apri il calendario | chiudilo","lang":"it","expect":"close follow-up -> abstain (GAP medium)"}
+{"q":"open the calendar | close it","lang":"en","expect":"close follow-up -> abstain (GAP medium)"}
+{"q":"chi e albert einstein | quando e nato?","lang":"it","expect":"birth-date -> returns BIO conf=100 (DEFECT high)"}
+{"q":"chi e albert einstein | dove e nato?","lang":"it","expect":"birthplace -> returns BIO conf=100 (DEFECT high)"}
+{"q":"who is albert einstein | when was he born?","lang":"en","expect":"birth-date -> returns BIO (DEFECT high)"}
+{"q":"apri musica | no, intendevo il calendario","lang":"it","expect":"correction -> abstain (GAP medium)"}
+{"q":"open music | no I meant the calendar","lang":"en","expect":"correction -> abstain (GAP medium)"}
+{"q":"qual e la capitale della francia | e la germania?","lang":"it","expect":"focus-shift PASS"}
+{"q":"qual e la capitale della francia | e la germnia? (typo)","lang":"it","expect":"focus-shift typo -> abstain (GAP medium)"}
+{"q":"chi era leonardo da vinci | e michelangelo?","lang":"it","expect":"subject focus-shift -> abstain (GAP medium)"}
+{"q":"quanto fa 12 per 8 | e diviso 4?","lang":"it","expect":"math continuation -> abstain (GAP medium)"}
+{"q":"converti 10 km in miglia | e in metri?","lang":"it","expect":"convert continuation -> abstain (GAP medium)"}

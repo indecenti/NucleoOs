@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="app_title">Tasks</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff;
+      --line:#2a3a5e; --field:#0b1220; --ok:#2fd07a; --hi:#e2576b; --med:#f5b13d; }
+    html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86;
+      --accent:#2b6fd6; --line:#cdd8ee; --field:#f4f7fe; --ok:#1c9d5b; --hi:#c83e52; --med:#c2820f; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+      font: 14px system-ui, "Segoe UI", sans-serif; }
+    header { display: flex; align-items: center; gap: 6px; padding: 5px 8px; flex: none;
+      background: var(--panel); border-bottom: 1px solid var(--line); }
+    header .t { font-weight: 600; flex: none; }
+    header .seg { display: flex; gap: 2px; margin-left: auto; background: var(--field);
+      border: 1px solid var(--line); border-radius: 7px; padding: 2px; }
+    header .seg button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px;
+      padding: 2px 9px; border-radius: 5px; cursor: pointer; }
+    header .seg button.on { background: var(--accent); color: #07101f; }
+
+    /* compose row */
+    .add { display: flex; align-items: center; gap: 6px; padding: 6px 8px; flex: none;
+      background: var(--panel); border-bottom: 1px solid var(--line); }
+    .add input { flex: 1; min-width: 0; background: var(--field); color: var(--text);
+      border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; font: inherit; outline: none; }
+    .add input:focus { border-color: var(--accent); }
+    .pri { display: flex; gap: 3px; flex: none; }
+    .pri button { width: 22px; height: 30px; border: 1px solid var(--line); background: var(--field);
+      color: var(--muted); border-radius: 6px; cursor: pointer; font-size: 14px; line-height: 1; }
+    .pri button.on[data-p="2"] { color: var(--hi); border-color: var(--hi); }
+    .pri button.on[data-p="1"] { color: var(--med); border-color: var(--med); }
+    .pri button.on[data-p="0"] { color: var(--accent); border-color: var(--accent); }
+    .add .go { flex: none; background: var(--accent); color: #07101f; border: 0; border-radius: 7px;
+      padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; }
+
+    main { flex: 1; overflow: auto; padding: 4px 0; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+    li:hover { background: #80808012; }
+    .box { width: 18px; height: 18px; flex: none; border: 2px solid var(--muted); border-radius: 5px;
+      cursor: pointer; position: relative; }
+    li.done .box { background: var(--ok); border-color: var(--ok); }
+    li.done .box::after { content: "✓"; position: absolute; inset: 0; color: #07101f; font-size: 13px;
+      text-align: center; line-height: 15px; font-weight: 700; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .dot.p2 { background: var(--hi); } .dot.p1 { background: var(--med); } .dot.p0 { background: var(--accent); }
+    .txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+    li.done .txt { color: var(--muted); text-decoration: line-through; }
+    .txt[contenteditable] { white-space: normal; outline: none; }
+    .del { flex: none; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 1;
+      cursor: pointer; opacity: 0; padding: 2px 4px; border-radius: 5px; }
+    li:hover .del { opacity: 1; } .del:hover { color: var(--hi); background: #80808022; }
+    .empty { color: var(--muted); text-align: center; padding: 36px 16px; font-size: 13px; line-height: 1.5; }
+
+    footer { display: flex; align-items: center; gap: 10px; padding: 5px 10px; flex: none;
+      background: var(--panel); border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+    footer .sp { flex: 1; }
+    footer button { border: 1px solid var(--line); background: #80808018; color: var(--muted);
+      border-radius: 6px; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+    footer button:hover { background: #80808033; }
+    main::-webkit-scrollbar { width: 6px; } main::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="t">✓ <span data-i18n="app_title">Tasks</span></span>
+    <div class="seg" id="filter">
+      <button data-f="all" class="on" data-i18n="all">All</button>
+      <button data-f="active" data-i18n="filter_active">Active</button>
+      <button data-f="done" data-i18n="done">Done</button>
+    </div>
+  </header>
+
+  <div class="add">
+    <input id="text" placeholder="Add a task and press Enter…" data-i18n-attr="placeholder:add_ph" autocomplete="off" spellcheck="false">
+    <div class="pri" id="pri" title="Priority" data-i18n-attr="title:priority">
+      <button data-p="2">!</button>
+      <button data-p="1">•</button>
+      <button data-p="0" class="on">–</button>
+    </div>
+    <button class="go" id="go" data-i18n="add">Add</button>
+  </div>
+
+  <main><ul id="list"></ul></main>
+
+  <footer>
+    <span id="count" data-i18n="count" data-i18n-args='{"active":0,"total":0}'>0 tasks</span>
+    <span class="sp"></span>
+    <span id="save"></span>
+    <button id="clear" data-i18n="clear_done">Clear done</button>
+  </footer>
+
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    const T = await I18N.init('tasks');   // 't' is already used for task objects; alias the translator as 'T'
+    const $ = (id) => document.getElementById(id);
+    const FILE = '/data/tasks.todo';          // shared storage so other apps can read it
+    const SETTINGS = '/system/config/settings.json';
+
+    let tasks = [];          // { id, text, done, pri (0|1|2), ts }
+    let filter = 'all';
+    let newPri = 0;
+    let dirty = false, saveTimer = 0;
+
+    // ---- device storage (graceful fallback to memory in preview) --------------
+    async function readText(path) {
+      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+        return r.ok ? await r.text() : null; } catch { return null; }
+    }
+    async function writeText(path, body) {
+      try { const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body });
+        return r.ok; } catch { return false; }
+    }
+    async function loadTheme() {
+      const t = await readText(SETTINGS);
+      try { const s = JSON.parse(t); if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme; } catch {}
+    }
+
+    function scheduleSave() {
+      dirty = true; $('save').textContent = T('saving');
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        const ok = await writeText(FILE, JSON.stringify(tasks, null, 2));
+        dirty = false; $('save').textContent = ok ? T('saved') : T('saved_locally');
+        setTimeout(() => { if (!dirty) $('save').textContent = ''; }, 1500);
+      }, 350);
+    }
+
+    // ---- rendering -------------------------------------------------------------
+    const order = (a, b) => (b.done === a.done ? 0 : a.done ? 1 : -1) || (b.pri - a.pri) || (a.ts - b.ts);
+    function render() {
+      const list = $('list');
+      const view = tasks.filter((t) =>
+        filter === 'all' ? true : filter === 'active' ? !t.done : t.done).sort(order);
+      list.innerHTML = '';
+      if (!view.length) {
+        const li = document.createElement('li'); li.style.borderBottom = '0';
+        const emptyKey = filter === 'done' ? 'empty_done' : filter === 'active' ? 'empty_active' : 'empty_all';
+        li.innerHTML = `<div class="empty" data-i18n-html="${emptyKey}"></div>`;
+        list.appendChild(li);
+      }
+      for (const t of view) {
+        const li = document.createElement('li');
+        li.className = t.done ? 'done' : '';
+        li.dataset.id = t.id;
+        li.innerHTML =
+          `<div class="box" data-i18n-attr="title:toggle" title="Toggle"></div>` +
+          `<span class="dot p${t.pri}"></span>` +
+          `<span class="txt" tabindex="0"></span>` +
+          `<button class="del" data-i18n-attr="title:delete" title="Delete">×</button>`;
+        li.querySelector('.txt').textContent = t.text;
+        li.querySelector('.box').onclick = () => { t.done = !t.done; scheduleSave(); render(); };
+        li.querySelector('.del').onclick = () => { tasks = tasks.filter((x) => x.id !== t.id); scheduleSave(); render(); };
+        const txt = li.querySelector('.txt');
+        txt.ondblclick = () => editInline(txt, t);
+        list.appendChild(li);
+      }
+      const active = tasks.filter((t) => !t.done).length;
+      $('count').textContent = T('count', { active, total: tasks.length });
+    }
+
+    function editInline(span, t) {
+      span.contentEditable = 'true'; span.focus();
+      const sel = getSelection(), range = document.createRange();
+      range.selectNodeContents(span); sel.removeAllRanges(); sel.addRange(range);
+      const finish = (save) => {
+        span.contentEditable = 'false';
+        if (save) { const v = span.textContent.trim(); if (v) { t.text = v; scheduleSave(); } }
+        render();
+      };
+      span.onblur = () => finish(true);
+      span.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      };
+    }
+
+    // ---- add -------------------------------------------------------------------
+    let idSeq = 1;
+    function add() {
+      const v = $('text').value.trim();
+      if (!v) return;
+      tasks.push({ id: 't' + (idSeq++) + '_' + tasks.length, text: v, done: false, pri: newPri, ts: tasks.length });
+      $('text').value = '';
+      scheduleSave(); render(); $('text').focus();
+    }
+    $('go').onclick = add;
+    $('text').addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
+
+    // priority selector
+    $('pri').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      newPri = +b.dataset.p;
+      for (const x of $('pri').children) x.classList.toggle('on', x === b);
+    });
+
+    // filter tabs
+    $('filter').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      filter = b.dataset.f;
+      for (const x of $('filter').children) x.classList.toggle('on', x === b);
+      render();
+    });
+
+    $('clear').onclick = () => { tasks = tasks.filter((t) => !t.done); scheduleSave(); render(); };
+
+    // global shortcut: "/" focuses the input from anywhere
+    addEventListener('keydown', (e) => {
+      if (e.key === '/' && document.activeElement !== $('text') &&
+          !(document.activeElement?.isContentEditable)) { e.preventDefault(); $('text').focus(); }
+    });
+
+    // ---- live: theme + external edits -----------------------------------------
+    window.addEventListener('message', (e) => {
+      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
+      if (e.data?.t === 'fs.changed' && typeof e.data.d?.path === 'string') {
+        if (e.data.d.path.endsWith('settings.json')) loadTheme();
+        else if (e.data.d.path === FILE && !dirty) load();   // another client changed the list
+      }
+      // OS keyboard bridge: behave like a native list app — new task, save now, copy the list, reload.
+      if (e.data?.type === 'os-shortcut') {
+        const a = e.data.action;
+        if (a === 'new') $('text').focus();
+        else if (a === 'save') flushSave();
+        else if (a === 'copy' || a === 'selectAll') copyList();
+        else if (a === 'refresh') load();
+      }
+    });
+    // Copy the whole list to the OS clipboard as a Markdown checklist (Ctrl+C off the input).
+    function copyList() {
+      const txt = tasks.map((t) => `- [${t.done ? 'x' : ' '}] ${t.text}`).join('\n');
+      try { navigator.clipboard && navigator.clipboard.writeText(txt); } catch {}
+      try { if (window.parent !== window) window.parent.postMessage({ type: 'clipboard-write', kind: 'text', data: txt }, '*'); } catch {}
+      $('save').textContent = T('copied'); setTimeout(() => { if (!dirty) $('save').textContent = ''; }, 1200);
+    }
+    // Flush the debounced autosave immediately (Ctrl+S).
+    function flushSave() {
+      clearTimeout(saveTimer);
+      writeText(FILE, JSON.stringify(tasks, null, 2)).then((ok) => {
+        dirty = false; $('save').textContent = ok ? T('saved') : T('saved_locally');
+        setTimeout(() => { if (!dirty) $('save').textContent = ''; }, 1500);
+      });
+    }
+
+    // ---- boot ------------------------------------------------------------------
+    async function load() {
+      const raw = await readText(FILE);
+      if (raw) { try { const j = JSON.parse(raw); if (Array.isArray(j)) tasks = j; } catch {} }
+      idSeq = tasks.length + 1;
+      render();
+    }
+    async function init() {
+      await loadTheme();
+      await load();
+      $('text').focus();
+    }
+    init();
+  </script>
+</body>
+</html>

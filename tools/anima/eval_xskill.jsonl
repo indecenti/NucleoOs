@@ -1,0 +1,59 @@
+// CURATED cross-skill confusion (iter3) — queries that straddle two skills; the WRONG skill firing is a
+// misroute/hallucination. expect = correct behavior. NB "tier:none" = MUST fully abstain (stricter than
+// "abstain", which tolerates L0 commands — so it catches a regression into calc/calendar/open_app, the
+// exact class of bug here). Locks the iter3 fixes (cos'è-trig, ricordami-cos'è→event, vorrei→launch,
+// quanto-sei-alto→Everest). Run: node tools/anima-host/skill-probe.mjs tools/anima/eval_xskill.jsonl
+// --- math/trig/log/unit FALSE-FRIENDS: a function name or number, but NOT math → must NOT compute ---
+{"q":"cos'è il seno","lang":"it","expect":"tier:none"}
+{"q":"cos'è il coseno","lang":"it","expect":"tier:none"}
+{"q":"spiegami il logaritmo","lang":"it","expect":"l1"}
+{"q":"cos'è la tangente","lang":"it","expect":"tier:none"}
+{"q":"il destino è già scritto","lang":"it","expect":"tier:none"}
+{"q":"tanto vale provare","lang":"it","expect":"tier:none"}
+{"q":"sino a quando aspettiamo","lang":"it","expect":"tier:none"}
+{"q":"fai il login tra poco","lang":"it","expect":"tier:none"}
+{"q":"log in al sistema","lang":"it","expect":"tier:none"}
+{"q":"what is the sine of life","lang":"en","expect":"tier:none"}
+{"q":"cos'è 42 grok plumbus","lang":"it","expect":"tier:none"}
+{"q":"il numero perfetto esiste","lang":"it","expect":"tier:none"}
+// --- identity: physical questions about ANIMA → grounded "I'm software" card, never a fact card ---
+{"q":"quanto sei alto","lang":"it","expect":"l1"}
+{"q":"quanto fa paura il buio","lang":"it","expect":"tier:none"}
+{"q":"quanto è grande l'universo","lang":"it","expect":"tier:none"}
+// --- numbers that belong to KNOWLEDGE/history, not calc (currently unknown → must abstain, not compute) ---
+{"q":"cosa successe nel 1969","lang":"it","expect":"tier:none"}
+{"q":"chi ha scritto 1984","lang":"it","expect":"tier:none"}
+{"q":"cosa accadde nel 1492","lang":"it","expect":"tier:none"}
+{"q":"what happened in 1789","lang":"en","expect":"tier:none"}
+// --- calendar/reminder vs KNOWLEDGE: "ricordami CHI/COSA/QUANDO …" must NOT create an event ---
+{"q":"ricordami chi era Galileo","lang":"it","expect":"tier:none"}
+{"q":"ricordami cos'è la fotosintesi","lang":"it","expect":"l1"}
+{"q":"ricordami quando è nato Einstein","lang":"it","expect":"tier:none"}
+{"q":"remind me who Napoleon was","lang":"en","expect":"tier:none"}
+{"q":"quando è nato Dante","lang":"it","expect":"hdc|l1"}
+{"q":"quando è morto Mozart","lang":"it","expect":"tier:none"}
+// --- calendar that IS a real reminder (must add_event, not knowledge) ---
+{"q":"ricordami di comprare il latte domani","lang":"it","expect":"add_event"}
+{"q":"remind me to call mom tomorrow","lang":"en","expect":"add_event"}
+// --- translate vs definition ---
+{"q":"come si dice cane in inglese","lang":"it","expect":"translate"}
+{"q":"cos'è un cane","lang":"it","expect":"tier:none"}
+// --- open_app vs knowledge ("vorrei/voglio sapere/capire" must NOT launch) ---
+{"q":"vorrei capire come funziona la memoria","lang":"it","expect":"tier:none"}
+{"q":"voglio sapere cos'è un puntatore","lang":"it","expect":"tier:none"}
+{"q":"vorrei sapere perché il cielo è blu","lang":"it","expect":"tier:none"}
+{"q":"voglio aprire le foto","lang":"it","expect":"open_app"}
+{"q":"voglio disegnare un gatto","lang":"it","expect":"open_app"}
+// --- "spazio" disambiguation: PHYSICAL space (knowledge) vs DISK space (storage reading) ---
+{"q":"quanto spazio occupa il Pacifico","lang":"it","expect":"l1"}
+{"q":"quanto spazio occupa il Sahara","lang":"it","expect":"l1"}
+{"q":"quanto spazio ho","lang":"it","expect":"storage"}
+{"q":"spazio libero","lang":"it","expect":"storage"}
+{"q":"quanto spazio libero c'è sul disco","lang":"it","expect":"storage"}
+// --- electronics/weather/prime/percent figurative false-friends ---
+{"q":"quanta energia hai stamattina","lang":"it","expect":"battery|abstain"}
+{"q":"che resistenza hai alle critiche","lang":"it","expect":"tier:none"}
+{"q":"che tempo perdi a pensarci","lang":"it","expect":"tier:none"}
+{"q":"sei un tipo solare","lang":"it","expect":"tier:none"}
+{"q":"sei il primo della lista","lang":"it","expect":"tier:none"}
+{"q":"cento di questi giorni","lang":"it","expect":"abstain"}

@@ -1,0 +1,106 @@
+// ===== PERCENTAGES (IT) =====
+{"q":"quanto fa il 15% di 240","lang":"it","expect":"percent"}
+{"q":"il 20 percento di 80","lang":"it","expect":"percent"}
+{"q":"calcola il 7,5% di 1200","lang":"it","expect":"percent"}
+{"q":"quant'e' il 3% di 50","lang":"it","expect":"percent"}
+{"q":"dimmi il cinquanta per cento di 90","lang":"it","expect":"percent|calc"}
+{"q":"sconto del 30% su 200 euro","lang":"it","expect":"percent|answer"}
+{"q":"qual e' il 12,5 per cento di 64","lang":"it","expect":"percent"}
+// ===== PERCENTAGES (EN) =====
+{"q":"15 percent of 200","lang":"en","expect":"percent"}
+{"q":"what is 25% of 360","lang":"en","expect":"percent"}
+{"q":"compute 8.5 percent of 1000","lang":"en","expect":"percent"}
+{"q":"how much is 40% of 75","lang":"en","expect":"percent"}
+// ===== ARITHMETIC (IT) =====
+{"q":"quanto fa 7 per 8","lang":"it","expect":"calc"}
+{"q":"7+8","lang":"it","expect":"calc"}
+{"q":"123 meno 45","lang":"it","expect":"calc"}
+{"q":"quanto fa 144 diviso 12","lang":"it","expect":"calc"}
+{"q":"(3+4)*5","lang":"it","expect":"calc"}
+{"q":"il doppio di 21","lang":"it","expect":"calc"}
+{"q":"meta di 50","lang":"it","expect":"calc"}
+{"q":"quanto fa 1000 - 1","lang":"it","expect":"calc"}
+{"q":"sommami 12 e 30 e 8","lang":"it","expect":"calc"}
+// ===== ARITHMETIC (EN) =====
+{"q":"what is 12 times 8","lang":"en","expect":"calc"}
+{"q":"calculate 256 divided by 4","lang":"en","expect":"calc"}
+{"q":"how much is 99 plus 1","lang":"en","expect":"calc"}
+{"q":"345 minus 123","lang":"en","expect":"calc"}
+// ===== POWERS / ROOTS / SPECIAL (IT+EN) =====
+{"q":"radice quadrata di 144","lang":"it","expect":"calc"}
+{"q":"sqrt(2)","lang":"it","expect":"calc"}
+{"q":"3^4","lang":"it","expect":"calc"}
+{"q":"2 alla quinta","lang":"it","expect":"calc"}
+{"q":"quadrato di 9","lang":"it","expect":"calc"}
+{"q":"cubo di 3","lang":"it","expect":"calc"}
+{"q":"square root of 81","lang":"en","expect":"calc"}
+{"q":"5 to the power of 3","lang":"en","expect":"calc"}
+{"q":"5 fattoriale","lang":"it","expect":"calc"}
+{"q":"factorial of 6","lang":"en","expect":"calc"}
+{"q":"log di 100","lang":"it","expect":"calc"}
+{"q":"seno di 30 gradi","lang":"it","expect":"calc"}
+// ===== AVERAGES =====
+{"q":"media di 10 20 30","lang":"it","expect":"calc"}
+{"q":"average of 4 8 12 16","lang":"en","expect":"calc"}
+{"q":"fai la media tra 5 10 e 15","lang":"it","expect":"calc"}
+// ===== GCD / LCM =====
+{"q":"mcd di 12 e 18","lang":"it","expect":"calc"}
+{"q":"mcm di 4 e 6","lang":"it","expect":"calc"}
+{"q":"gcd of 24 and 36","lang":"en","expect":"calc"}
+{"q":"lcm of 3 and 5","lang":"en","expect":"calc"}
+// ===== NUMBER PROPERTIES =====
+{"q":"e' primo 17","lang":"it","expect":"prime"}
+{"q":"is 91 prime","lang":"en","expect":"prime"}
+{"q":"il numero 100 e' primo?","lang":"it","expect":"prime"}
+{"q":"fattori primi di 60","lang":"it","expect":"prime"}
+{"q":"prime factors of 84","lang":"en","expect":"prime"}
+{"q":"scomponi 24 in fattori primi","lang":"it","expect":"prime"}
+{"q":"fibonacci di 10","lang":"it","expect":"calc"}
+// ===== UNIT CONVERSIONS =====
+{"q":"quanti km in 5 miglia","lang":"it","expect":"convert"}
+{"q":"20 gradi in fahrenheit","lang":"it","expect":"convert"}
+{"q":"convert 10 kg to pounds","lang":"en","expect":"convert"}
+{"q":"100 fahrenheit in celsius","lang":"it","expect":"convert"}
+{"q":"quanti metri sono 3 piedi","lang":"it","expect":"convert"}
+{"q":"5 litri in galloni","lang":"it","expect":"convert"}
+{"q":"how many cm in 2 inches","lang":"en","expect":"convert"}
+{"q":"converti 1 kg in grammi","lang":"it","expect":"convert"}
+{"q":"30 mph to km/h","lang":"en","expect":"convert"}
+// ===== GEOMETRY =====
+{"q":"area di un cerchio raggio 3","lang":"it","expect":"geo"}
+{"q":"perimetro di un quadrato lato 5","lang":"it","expect":"geo"}
+{"q":"volume di una sfera raggio 2","lang":"it","expect":"geo"}
+{"q":"area of a triangle base 4 height 6","lang":"en","expect":"geo"}
+{"q":"circonferenza di un cerchio raggio 7","lang":"it","expect":"geo"}
+{"q":"area del rettangolo base 5 altezza 3","lang":"it","expect":"geo"}
+{"q":"volume of a cube side 4","lang":"en","expect":"geo"}
+{"q":"ipotenusa con cateti 3 e 4","lang":"it","expect":"geo"}
+{"q":"quanto vale pi greco","lang":"it","expect":"geo|answer"}
+// ===== PHYSICS =====
+{"q":"velocita di 100 metri in 10 secondi","lang":"it","expect":"phys"}
+{"q":"forza di 10 kg a 2 m/s2","lang":"it","expect":"phys"}
+{"q":"energia cinetica massa 2 velocita 3","lang":"it","expect":"phys|answer"}
+{"q":"speed of 200 meters in 4 seconds","lang":"en","expect":"phys"}
+// ===== TYPOS / COLLOQUIAL =====
+{"q":"quanto fa il 15 percnto di 240","lang":"it","expect":"percent|answer"}
+{"q":"radce quadrata di 49","lang":"it","expect":"calc|answer"}
+{"q":"qunti km in 10 miglia","lang":"it","expect":"convert|answer"}
+{"q":"whats 20 percent of 50","lang":"en","expect":"percent|answer"}
+// ===== ADVERSARIAL / WRONG / UNANSWERABLE (must abstain) =====
+{"q":"quanto fa l'amore","lang":"it","expect":"abstain"}
+{"q":"calcola la felicita","lang":"it","expect":"abstain"}
+{"q":"qual e' il senso della vita","lang":"it","expect":"abstain"}
+{"q":"dividi per zero","lang":"it","expect":"abstain"}
+{"q":"quanto fa rosso piu blu","lang":"it","expect":"abstain"}
+{"q":"area di un sentimento","lang":"it","expect":"abstain"}
+{"q":"how many miles to the moon emotionally","lang":"en","expect":"abstain"}
+{"q":"the square root of a banana","lang":"en","expect":"abstain"}
+{"q":"percentuale di possibilita che piova domani","lang":"it","expect":"abstain"}
+{"q":"convert love to hate","lang":"en","expect":"abstain"}
+{"q":"is the number purple prime","lang":"en","expect":"abstain"}
+{"q":"volume della mia voce","lang":"it","expect":"abstain"}
+// ===== AMBIGUOUS NON-MATH that contain numbers (must NOT misroute to math) =====
+{"q":"ho 3 cerchi nel disegno","lang":"it","expect":"abstain"}
+{"q":"alza il volume","lang":"it","expect":"set_volume"}
+{"q":"metti la sveglia alle 7","lang":"it","expect":"add_event|abstain"}
+{"q":"raccontami una storia con 3 personaggi","lang":"it","expect":"abstain"}

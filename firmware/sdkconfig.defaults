@@ -1,0 +1,164 @@
+# NucleoOS build defaults. Override via menuconfig as needed.
+
+# Target & flash
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Custom partition table (docs/partition-table.md)
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# OTA rollback / recovery
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# FAT filesystem: long filenames (heap). For 64 GB exFAT cards, also enable exFAT
+# in menuconfig (Component config -> FAT Filesystem support). Else format FAT32.
+CONFIG_FATFS_LFN_HEAP=y
+CONFIG_FATFS_MAX_LFN=255
+# FS-lock acquisition timeout MUST stay BELOW the task watchdog (8s): on a slow/contended SD a
+# blocked write (es. calendar.json di un promemoria) deve FALLIRE a 5s, non superare il WDT -> reboot.
+CONFIG_FATFS_TIMEOUT_MS=5000
+
+# HTTP server
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# Console on the native USB-Serial/JTAG (so app logs appear on the USB COM port). The USB Drive
+# app's TinyUSB (USB-OTG) MSC shares these D+/D- pins, so it only runs in the dedicated reboot
+# mode (nucleo_usbmsc) — never alongside the console; normal boots keep the serial console.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# TinyUSB Mass Storage class: the USB Drive app exposes the SD card to a host PC. Code is only
+# active when the dedicated USB mode installs the driver; it lies dormant on a normal boot.
+CONFIG_TINYUSB_MSC_ENABLED=y
+
+# TinyUSB HID class: the USB Keyboard app turns the Cardputer into a keyboard for a host PC/phone.
+# Dormant until that app installs the driver (live mode). MSC and HID never run at once. NOTE:
+# esp_tinyusb gates HID on the COUNT symbol (not an *_ENABLED), so 1 = one HID interface.
+CONFIG_TINYUSB_HID_COUNT=1
+
+# Task Watchdog: auto-recover from a hung OS loop. We watch our own launcher task
+# explicitly (esp_task_wdt_add in nucleo_app_run) and reset the chip on timeout, so a
+# stuck loop reboots instead of leaving the device silently dead. We do NOT watch the
+# idle tasks: a long FAT scan (f_getfree on a 64 GB card) legitimately starves idle for
+# a few seconds and must not trip a panic. 8 s is generous vs the ~20 ms loop period.
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=8
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=n
+
+# Brownout detector: the IDF default for the S3 is the most sensitive level (7, ~3.0 V). On a
+# battery-powered, PSRAM-less Cardputer the Wi-Fi TX current spikes briefly dip the rail and
+# trip a brownout RESET the moment the radio comes up — the device reboot-loops with no
+# network. Drop to level 4 (lower trigger voltage) so legitimate Wi-Fi spikes no longer reset
+# the chip while still guarding flash against a genuine power collapse.
+CONFIG_ESP_BROWNOUT_DET_LVL_SEL_4=y
+
+# Power management (battery 120 mAh): dynamic frequency scaling. The CPU drops to a low
+# frequency when the launcher is idle and snaps back to 240 MHz under load — real savings
+# without touching responsiveness. Configured at runtime in nucleo_power_init(). Default
+# CPU freq is set to 240 MHz so DFS can use the full range. Light sleep stays OFF: the
+# device serves HTTP continuously and must remain reachable (and light sleep is disabled
+# under the USB-Serial/JTAG console anyway).
+CONFIG_PM_ENABLE=y
+CONFIG_FREERTOS_USE_TICKLESS_IDLE=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# mbedTLS low-memory mode: the Radio app does HTTPS on a PSRAM-less chip alongside the MP3
+# decoder. Dynamic buffers free the handshake/CA-chain RAM after the TLS handshake, which is
+# what makes a TLS connection fit next to the ~30 KB decoder. Still tight — a plain-HTTP
+# stream URL is the robust path if the live HTTPS stream stutters.
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+# Grow the TLS RX buffer to the actual record size instead of pre-allocating the full 16 KB
+# SSL_IN_CONTENT_LEN on every handshake — cuts the handshake heap spike that drove min_free to ~1.5 KB
+# (near-OOM) under a connected web client + online query. Keeps the 16 KB ceiling, so long certificate
+# chains still work; it just allocates lazily. Pairs with DYNAMIC_BUFFER (which frees buffers afterwards).
+CONFIG_MBEDTLS_SSL_VARIABLE_BUFFER_LENGTH=y
+CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA=y
+CONFIG_MBEDTLS_DYNAMIC_FREE_CA_CERT=y
+# Lower the TLS RX record CEILING from the 16 KB default to 8 KB. With VARIABLE_BUFFER it only ever
+# allocated lazily, but the 16 KB ceiling still let one big handshake record spike the heap to near-OOM
+# (measured min_free 524 B on a Groq POST), after which the device couldn't open another TLS until reboot
+# ("in solo online i modelli non rispondono dopo la prima domanda"). Real handshake records for our
+# endpoints (Groq/Cloudflare, Wikipedia, weather) are ~4-6 KB, so 8 KB keeps a safe margin while halving
+# the peak — that headroom is what lets the online tier work repeatedly on this PSRAM-less chip.
+CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN=8192
+
+# Trim the Wi-Fi buffer pool. The default (10 static RX + 32 dyn RX/TX + BA win 6) eats ~25 KB
+# of the scarce PSRAM-less SRAM, which left no contiguous block for the ~30 KB MP3 decoder or
+# the list draw-buffer (radio silent / music list flickered). MP3 streaming is low-bandwidth,
+# so smaller pools are plenty; this frees the heap the decoder + draw buffer need.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_TX_BA_WIN=3
+CONFIG_ESP_WIFI_RX_BA_WIN=3
+
+# ANIMA HDC/KGE reasoning self-test: validation diagnostic, OFF in production (Kconfig default n).
+# It ran every boot — ~8.7 KB transient heap + 30k hamming iterations — and, with the log level at
+# WARN, its PASS line was compiled out, so it couldn't even report the result it exists for. The
+# silicon proof is done; flip back to =y only to re-validate after an HDC change. (hdc-eval runs on host.)
+
+# Low-memory TLS: don't keep the peer cert chain after the handshake — frees ~4 KB of heap so a
+# large cert chain (e.g. Wikipedia) fits the fragmented contiguous heap on this PSRAM-less S3.
+# (The standalone CONFIG_MBEDTLS_DYNAMIC_FREE_PEER_CERT knob was removed in IDF 5.x and folded into
+# this one — it was an unknown-symbol no-op here, emitting a kconfig warning and saving nothing.)
+CONFIG_MBEDTLS_SSL_KEEP_PEER_CERTIFICATE=n
+
+# NOTE: data cache 32->16 KB does NOT apply on this S3 (kconfgen keeps SIZE=0x8000: 16 KB data
+# cache needs a different line/ways combo than the firmware's 32B/8-way, and XIP-PSRAM-supported
+# parts floor it at 32 KB). Tried, ineffective (DIRAM unchanged) -> removed. RAM must come from
+# .bss reduction or mmap'ing the L1 index instead. See memory cardputer-ram-budget.
+
+# --- Flash image size optimization (see map analysis: .flash.text ~1.1 MB) ---
+# Build for size (-Os) instead of debug (-Og). This is the single biggest lever: it acts on the
+# whole ~1.1 MB .text and typically reclaims 10-18% with no loss of features (only source-level
+# debugging is a touch less convenient). Frees the most flash per line changed.
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+
+# Keep asserts firing (we debug over serial) but strip their __FILE__/expression strings from the
+# merged .str1.4 string pool (~150 KB total across the image). Silent assert still aborts on a
+# failed check; it just won't print the source text. Net: tens of KB back from the string pool.
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+
+# Default log level INFO -> WARN. ESP_LOGI/D format strings of stripped levels are removed at
+# compile time (they live in the same .str1.4 pool). WARN keeps warnings + errors on the serial
+# console, so real failures still surface; only the chatty INFO spam goes. See serial-console-routing.
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+
+# Drop the human-readable esp_err_to_name() lookup table (~6 KB of rodata). Error codes print as
+# hex instead of "ESP_ERR_*" names; acceptable given WARN-level logging.
+CONFIG_ESP_ERR_TO_NAME_LOOKUP=n
+
+# CA certificate bundle: full Mozilla set (200 certs) bakes ~68 KB of rodata into flash — the
+# single largest data blob after the string pool. This device only reaches a handful of HTTPS
+# hosts (Groq API, weather), so the "common" subset (~40 most-used roots) is plenty and drops the
+# blob to ~20 KB. If a future host fails TLS, bump back to _FULL or pin a custom bundle.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_MAX_CERTS=50
+
+# Socket budget. The OS HTTP server keeps its proven 7 accepted sockets (a full browser tab opens
+# ~6 parallel connections + the persistent /ws), but the server-side fetchers (/api/proxy,
+# /api/llm) ALSO dial outbound through the same LWIP pool. At the stock cap of 10 (httpd reserves
+# 3) the outbound client and DNS had zero headroom and collided with the UI -> ERR_CONNECTION_RESET.
+# 13 gives the outbound path 3 dedicated slots without enlarging the httpd socket set. See
+# web-server-hardening / the keep_alive reaping in nucleo_httpd.
+CONFIG_LWIP_MAX_SOCKETS=13
+
+# IPv6: OFF. The whole network path is IPv4-only — nucleo_setup.c brings up only an IPv4 STA/AP,
+# esp_http_client dials IPv4 (Groq / weather / Wikipedia), and mDNS advertises fine over IPv4
+# alone. lwIP's IPv6 keeps statically-sized ND6 neighbour/router/prefix tables resident in the
+# scarce PSRAM-less SRAM for traffic we never originate, plus a few KB of flash. Compiling it out
+# reclaims that with zero feature loss (evilportal peer_ip() guards its lone AF_INET6 branch).
+# This is a BUILD option, not a runtime switch: the ND6 pools are sized at compile time, so the
+# Settings > Rete > IPv6 toggle only records the user's wish — re-enabling means flipping this
+# back to =y and rebuilding.
+CONFIG_LWIP_IPV6=n
+
+# SNTP: hold up to 4 NTP servers. nucleo_setup.c configures a 4-server cascade
+# (pool.ntp.org / cloudflare / google / apple) via ESP_NETIF_SNTP_DEFAULT_CONFIG_MULTIPLE(4, ...),
+# whose .servers array is sized by THIS symbol. The IDF default is 1, so without it pinned here a
+# config regen shrinks the array and the 4-element initializer fails to build ("excess elements").
+CONFIG_LWIP_SNTP_MAX_SERVERS=4

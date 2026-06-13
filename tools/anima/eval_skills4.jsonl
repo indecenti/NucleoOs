@@ -1,0 +1,110 @@
+// 100 MORE real NL probes (new/different from eval_skills3): broader skills (math/settings/apps/
+// calendar/file/date-time/knowledge) routed correctly, PLUS fresh out-of-context phrases that MUST
+// abstain. Driven by skill-probe.mjs over the real exe. Labels calibrated to actual routing.
+// ---- MATH: calc / percent / convert / ohm / prime ----
+{"q":"quanto fa 47 per 23","lang":"it","expect":"calc"}
+{"q":"calcola 156 diviso 12","lang":"it","expect":"calc"}
+{"q":"quanto fa 1024 meno 768","lang":"it","expect":"calc"}
+{"q":"2 alla quinta","lang":"it","expect":"calc"}
+{"q":"la radice quadrata di 144","lang":"it","expect":"calc"}
+{"q":"what is 12 times 8","lang":"en","expect":"calc"}
+{"q":"compute 360 divided by 15","lang":"en","expect":"calc"}
+{"q":"il 15 per cento di 240","lang":"it","expect":"percent"}
+{"q":"quanto è il 30 per cento di 90","lang":"it","expect":"percent"}
+{"q":"20 percent of 150","lang":"en","expect":"percent"}
+{"q":"calcola il 75% di 400","lang":"it","expect":"percent"}
+{"q":"converti 5 km in metri","lang":"it","expect":"convert"}
+{"q":"quanti grammi sono 2 kg","lang":"it","expect":"convert"}
+{"q":"15 gradi celsius in fahrenheit","lang":"it","expect":"convert"}
+{"q":"convert 10 miles to km","lang":"en","expect":"convert"}
+{"q":"quanti minuti sono 3 ore","lang":"it","expect":"convert"}
+{"q":"resistenza con 12 volt e 3 ampere","lang":"it","expect":"ohm"}
+{"q":"97 è un numero primo","lang":"it","expect":"prime"}
+// ---- SETTINGS: volume / brightness ----
+{"q":"alza il volume","lang":"it","expect":"set_volume"}
+{"q":"abbassa il volume","lang":"it","expect":"set_volume"}
+{"q":"metti il volume al 50 per cento","lang":"it","expect":"set_volume"}
+{"q":"volume a 30","lang":"it","expect":"set_volume"}
+{"q":"turn up the volume","lang":"en","expect":"set_volume"}
+{"q":"set the volume to 70","lang":"en","expect":"set_volume"}
+{"q":"abbassa la luminosità","lang":"it","expect":"set_brightness"}
+{"q":"schermo più luminoso","lang":"it","expect":"set_brightness"}
+{"q":"metti la luminosità al massimo","lang":"it","expect":"set_brightness"}
+{"q":"lower the brightness","lang":"en","expect":"set_brightness"}
+// ---- APPS: open / close ----
+{"q":"apri la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"lancia il browser","lang":"it","expect":"open_app"}
+{"q":"avvia il lettore musicale","lang":"it","expect":"open_app"}
+{"q":"apri le impostazioni","lang":"it","expect":"open_app"}
+{"q":"apri il calendario","lang":"it","expect":"open_app"}
+{"q":"open the calculator","lang":"en","expect":"open_app"}
+{"q":"launch the music player","lang":"en","expect":"open_app"}
+{"q":"chiudi il browser","lang":"it","expect":"close_app"}
+{"q":"chiudi il lettore musicale","lang":"it","expect":"close_app"}
+{"q":"close the browser","lang":"en","expect":"close_app"}
+// ---- CALENDAR: add_event / agenda ----
+{"q":"aggiungi un evento domani alle 15","lang":"it","expect":"add_event"}
+{"q":"ricordami di chiamare mario alle 10","lang":"it","expect":"add_event"}
+{"q":"metti un promemoria per le 18","lang":"it","expect":"add_event"}
+{"q":"segna riunione lunedì alle 9","lang":"it","expect":"add_event"}
+{"q":"add an event tomorrow at 3 pm","lang":"en","expect":"add_event"}
+{"q":"remind me to call anna at 11","lang":"en","expect":"add_event"}
+{"q":"cosa ho in agenda oggi","lang":"it","expect":"agenda"}
+{"q":"whats on my agenda today","lang":"en","expect":"agenda"}
+// ---- FILE: create_file ----
+{"q":"crea un file note.txt","lang":"it","expect":"create_file"}
+{"q":"crea una nota chiamata spesa","lang":"it","expect":"create_file"}
+{"q":"crea un file con scritto ciao mondo","lang":"it","expect":"create_file"}
+{"q":"create a file called todo","lang":"en","expect":"create_file"}
+{"q":"make a note named idee","lang":"en","expect":"create_file"}
+// ---- DATE / TIME ----
+{"q":"che ore sono","lang":"it","expect":"time"}
+{"q":"che ora è adesso","lang":"it","expect":"time"}
+{"q":"che giorno è oggi","lang":"it","expect":"date"}
+{"q":"what time is it","lang":"en","expect":"time"}
+{"q":"what is today's date","lang":"en","expect":"date"}
+// ---- KNOWLEDGE (in-corpus -> answer) ----
+{"q":"cos'è una variabile","lang":"it","expect":"answer"}
+{"q":"cos'è un array","lang":"it","expect":"answer"}
+{"q":"che cos'è un ciclo for","lang":"it","expect":"answer"}
+{"q":"cos'è una funzione","lang":"it","expect":"answer"}
+{"q":"what is a variable","lang":"en","expect":"answer"}
+{"q":"what is an array","lang":"en","expect":"answer"}
+{"q":"what is a for loop","lang":"en","expect":"answer"}
+// ---- OUT-OF-CONTEXT / NONSENSE (new, must abstain) ----
+{"q":"quanti secondi dura un colore","lang":"it","expect":"abstain"}
+{"q":"il numero civico della pioggia","lang":"it","expect":"abstain"}
+{"q":"quanto costa un chilo di buio","lang":"it","expect":"abstain"}
+{"q":"che forma ha l'invidia","lang":"it","expect":"abstain"}
+{"q":"a quale velocità cresce la noia","lang":"it","expect":"abstain"}
+{"q":"quante calorie ha un'idea","lang":"it","expect":"abstain"}
+{"q":"il codice postale del paradiso","lang":"it","expect":"abstain"}
+{"q":"quanti decibel fa un pensiero","lang":"it","expect":"abstain"}
+{"q":"il peso di un secondo in grammi","lang":"it","expect":"abstain"}
+{"q":"quante pagine ha il vento","lang":"it","expect":"abstain"}
+{"q":"di che materiale è fatto il coraggio","lang":"it","expect":"abstain"}
+{"q":"quanto è profondo un sorriso","lang":"it","expect":"abstain"}
+{"q":"la marca dell'aria che respiro","lang":"it","expect":"abstain"}
+{"q":"how many seconds does a color last","lang":"en","expect":"abstain"}
+{"q":"what shape is envy","lang":"en","expect":"abstain"}
+{"q":"how many calories in an idea","lang":"en","expect":"abstain"}
+{"q":"the zip code of paradise","lang":"en","expect":"abstain"}
+{"q":"how deep is a smile","lang":"en","expect":"abstain"}
+{"q":"what brand is the air i breathe","lang":"en","expect":"abstain"}
+{"q":"how many decibels does a thought make","lang":"en","expect":"abstain"}
+// ---- IMPOSSIBLE ACTIONS / PREDICTIONS / GIBBERISH (must abstain) ----
+{"q":"stampami una pizza","lang":"it","expect":"abstain"}
+{"q":"scarica il sole sul desktop","lang":"it","expect":"abstain"}
+{"q":"salva il vento in un file","lang":"it","expect":"abstain"}
+{"q":"che voto prenderò domani","lang":"it","expect":"abstain"}
+{"q":"chi vincerà la partita di stasera","lang":"it","expect":"abstain"}
+{"q":"dimmi i numeri vincenti del lotto","lang":"it","expect":"abstain"}
+{"q":"quando finirà il mondo esattamente","lang":"it","expect":"abstain"}
+{"q":"print me a sandwich","lang":"en","expect":"abstain"}
+{"q":"download more memory for yourself","lang":"en","expect":"abstain"}
+{"q":"tell me tomorrow's lottery numbers","lang":"en","expect":"abstain"}
+{"q":"who will win the match tonight","lang":"en","expect":"abstain"}
+{"q":"ghjk lpoiu mnbv","lang":"it","expect":"abstain"}
+{"q":"zzxx ccvv bbnn","lang":"it","expect":"abstain"}
+{"q":"qwwq eerr ttyy uuii","lang":"en","expect":"abstain"}
+{"q":"blarg fnord snizzle","lang":"en","expect":"abstain"}

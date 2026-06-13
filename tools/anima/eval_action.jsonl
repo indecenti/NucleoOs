@@ -1,0 +1,45 @@
+// CURATED action-tier stress (iter5) — the action-side of zero-hallucination: a STATEMENT or NEGATION
+// that merely mentions an action must NEVER execute one (a fabricated action). expect = correct intent,
+// or "tier:none" for the false-action negatives (must fully abstain — stricter than "abstain"). Locks the
+// iter5 fix: past-participle (creato~crea, abbassato~abbassa) + negation guard, robust to spellfix.
+// Run: node tools/anima-host/skill-probe.mjs tools/anima/eval_action.jsonl
+// --- real commands (must act) ---
+{"q":"crea un file note.txt","lang":"it","expect":"create_file"}
+{"q":"scrivi una nota con la lista della spesa","lang":"it","expect":"create_file"}
+{"q":"ho bisogno di creare un file diario.txt","lang":"it","expect":"create_file"}
+{"q":"alza il volume","lang":"it","expect":"set_volume"}
+{"q":"abbassa la luminosità","lang":"it","expect":"set_brightness"}
+{"q":"metti il volume al massimo","lang":"it","expect":"set_volume"}
+{"q":"aumenta la luminosità","lang":"it","expect":"set_brightness"}
+{"q":"ricordami di comprare il latte domani","lang":"it","expect":"add_event"}
+{"q":"create a file todo.txt","lang":"en","expect":"create_file"}
+{"q":"turn up the volume","lang":"en","expect":"set_volume"}
+// --- PAST-TENSE statements (describe, never execute) -> must fully abstain ---
+{"q":"ho creato un file ieri","lang":"it","expect":"tier:none"}
+{"q":"creato un file","lang":"it","expect":"tier:none"}
+{"q":"ho creato una nota","lang":"it","expect":"tier:none"}
+{"q":"ho generato un file","lang":"it","expect":"tier:none"}
+{"q":"ho preparato un documento","lang":"it","expect":"tier:none"}
+{"q":"ho già abbassato la luce","lang":"it","expect":"tier:none"}
+{"q":"ho alzato il volume","lang":"it","expect":"tier:none"}
+{"q":"ho aumentato la luminosità","lang":"it","expect":"tier:none"}
+{"q":"ho aggiunto un evento","lang":"it","expect":"tier:none"}
+// --- NEGATIONS (decline, never execute) -> must fully abstain ---
+{"q":"non voglio creare un file","lang":"it","expect":"tier:none"}
+{"q":"non aumentare il volume","lang":"it","expect":"tier:none"}
+{"q":"non abbassare la luminosità","lang":"it","expect":"tier:none"}
+{"q":"non creare nessun file","lang":"it","expect":"tier:none"}
+// --- statements/questions about settings (not commands) -> abstain ---
+{"q":"il volume va bene così","lang":"it","expect":"tier:none"}
+{"q":"che volume hai","lang":"it","expect":"tier:none"}
+{"q":"mi piace il buio","lang":"it","expect":"tier:none"}
+// --- EN past-tense statements + negations -> must fully abstain (no fabricated mutation) ---
+{"q":"i created a file yesterday","lang":"en","expect":"tier:none"}
+{"q":"i already lowered the brightness","lang":"en","expect":"tier:none"}
+{"q":"i raised the volume","lang":"en","expect":"tier:none"}
+{"q":"i don't want to create a file","lang":"en","expect":"tier:none"}
+{"q":"don't create any file","lang":"en","expect":"tier:none"}
+{"q":"don't forget the meeting tomorrow","lang":"en","expect":"add_event"}
+// --- how-to KNOWLEDGE (not an action) -> knowledge or abstain, never a create ---
+{"q":"come si crea un file","lang":"it","expect":"l1"}
+{"q":"vorrei sapere come creare un file","lang":"it","expect":"l1"}

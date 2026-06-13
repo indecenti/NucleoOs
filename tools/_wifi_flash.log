@@ -1,0 +1,326 @@
+﻿Setting up ESP-IDF environment...
+powershell.exe : Activating ESP-IDF 5.4
+In riga:1 car:43
++ ... flash.log"; & powershell -ExecutionPolicy Bypass -File "G:\Nucleo\too ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Activating ESP-IDF 5.4:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+* Checking python version ... 3.12.3
+* Checking python dependencies ... OK
+* Deactivating the current ESP-IDF environment (if any) ... OK
+* Establishing a new ESP-IDF environment ... OK
+* Identifying shell ... powershell.exe
+* Detecting outdated tools in system ... OK - no outdated tools found
+
+Done! You can now compile ESP-IDF projects.
+Go to the project directory and run:
+
+  idf.py build
+
+CPU cores=12, free RAM=33,5 GB -> starting with -j 12
+Build attempt 1 (idf.py build)...
+Executing action: all (aliases: build)
+Running ninja in directory G:\Nucleo\firmware\build
+Executing "ninja all"...
+[1/9] Performing build step for 'bootloader'
+
+[1/1] C:\WINDOWS\system32\cmd.exe /C "cd /D G:\Nucleo\firmware\build\bootloader\esp-idf\esptool_py && C:\Users\indecenti\.espressif\python_env\idf5.4_py3.12_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 G:/Nucleo/firmware/build/bootloader/bootloader.bin"
+
+
+Bootloader binary size 0x4d50 bytes. 0x32b0 bytes (40%) free.
+
+
+
+[2/9] No install step for 'bootloader'
+
+[3/9] Completed 'bootloader'
+
+[4/9] Building CXX object esp-idf/nucleo_app/CMakeFiles/__idf_nucleo_app.dir/app_recorder.cpp.obj
+
+[5/9] Linking C static library esp-idf\nucleo_app\libnucleo_app.a
+
+[6/9] Generating ld/sections.ld
+
+[7/9] Linking CXX executable nucleoos.elf
+
+[8/9] Generating binary image from built executable
+
+esptool.py v4.11.0
+
+
+Creating esp32s3 image...
+
+
+Merged 3 ELF sections
+
+
+Successfully created esp32s3 image.
+
+
+Generated G:/Nucleo/firmware/build/nucleoos.bin
+
+[9/9] C:\WINDOWS\system32\cmd.exe /C "cd /D G:\Nucleo\firmware\build\esp-idf\esptool_py && C:\Users\indecenti\.espressif\python_env\idf5.4_py3.12_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app G:/Nucleo/firmware/build/partition_table/partition-table.bin G:/Nucleo/firmware/build/nucleoos.bin"
+
+nucleoos.bin binary size 0x1bc8e0 bytes. Smallest app partition is 0x240000 bytes. 0x83720 bytes (23%) free.
+
+
+
+
+Project build complete. To flash, run:
+ idf.py flash
+or
+ idf.py -p PORT flash
+or
+ python -m esptool --chip esp32s3 -b 460800 --before default_reset --after hard_reset write_flash --flash_mode dio --flash_size 8MB --flash_freq 80m 0x0 build\bootloader\bootloader.bin 0x8000 build\partition_table\partition-table.bin 0xf000 build\ota_data_initial.bin 0x20000 build\nucleoos.bin
+or from the "G:\Nucleo\firmware\build" directory
+ python -m esptool --chip esp32s3 -b 460800 --before default_reset --after hard_reset write_flash "@flash_args"
+Build OK -- nucleoos.bin = 1778 KB
+Flashing to COM3...
+Executing action: flash
+Running ninja in directory G:\Nucleo\firmware\build
+Executing "ninja flash"...
+[1/5] C:\WINDOWS\system32\cmd.exe /C "cd /D G:\Nucleo\firmware\build\esp-idf\esptool_py && C:\Users\indecenti\.espressif\python_env\idf5.4_py3.12_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app G:/Nucleo/firmware/build/partition_table/partition-table.bin G:/Nucleo/firmware/build/nucleoos.bin"
+
+nucleoos.bin binary size 0x1bc8e0 bytes. Smallest app partition is 0x240000 bytes. 0x83720 bytes (23%) free.
+
+
+[2/5] Performing build step for 'bootloader'
+
+[1/1] C:\WINDOWS\system32\cmd.exe /C "cd /D G:\Nucleo\firmware\build\bootloader\esp-idf\esptool_py && C:\Users\indecenti\.espressif\python_env\idf5.4_py3.12_env\Scripts\python.exe C:/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 G:/Nucleo/firmware/build/bootloader/bootloader.bin"
+
+
+Bootloader binary size 0x4d50 bytes. 0x32b0 bytes (40%) free.
+
+
+
+[3/5] No install step for 'bootloader'
+
+[4/5] Completed 'bootloader'
+
+[4/5] C:\WINDOWS\system32\cmd.exe /C "cd /D C:\esp\esp-idf\components\esptool_py && C:\Users\indecenti\.espressif\tools\cmake\3.30.2\bin\cmake.exe -D IDF_PATH=C:/esp/esp-idf -D SERIAL_TOOL=C:/Users/indecenti/.espressif/python_env/idf5.4_py3.12_env/Scripts/python.exe;;C:/esp/esp-idf/components/esptool_py/esptool/esptool.py;--chip;esp32s3 -D SERIAL_TOOL_ARGS=--before=default_reset;--after=hard_reset;write_flash;@flash_args -D WORKING_DIRECTORY=G:/Nucleo/firmware/build -P C:/esp/esp-idf/components/esptool_py/run_serial_tool.cmake"
+
+esptool.py --chip esp32s3 -p COM3 -b 460800 --before=default_reset --after=hard_reset write_flash --flash_mode dio --flash_freq 80m --flash_size 8MB 0x0 bootloader/bootloader.bin 0x20000 nucleoos.bin 0x8000 partition_table/partition-table.bin 0xf000 ota_data_initial.bin
+
+esptool.py v4.11.0
+
+Serial port COM3
+
+Connecting...
+
+Chip is ESP32-S3 (QFN56) (revision v0.2)
+
+Features: WiFi, BLE, Embedded Flash 8MB (GD)
+
+Crystal is 40MHz
+
+USB mode: USB-Serial/JTAG
+
+MAC: d0:cf:13:0e:bd:cc
+
+Uploading stub...
+
+Running stub...
+
+Stub running...
+
+Changing baud rate to 460800
+
+Changed.
+
+Configuring flash size...
+
+Flash will be erased from 0x00000000 to 0x00004fff...
+
+Flash will be erased from 0x00020000 to 0x001dcfff...
+
+Flash will be erased from 0x00008000 to 0x00008fff...
+
+Flash will be erased from 0x0000f000 to 0x00010fff...
+
+SHA digest in image updated
+
+Compressed 19792 bytes to 12748...
+
+Writing at 0x00000000... (100 %)
+
+Wrote 19792 bytes (12748 compressed) at 0x00000000 in 0.3 seconds (effective 475.5 kbit/s)...
+
+Hash of data verified.
+
+Compressed 1820896 bytes to 1189398...
+
+Writing at 0x00020000... (1 %)
+
+Writing at 0x0002a342... (2 %)
+
+Writing at 0x0003402b... (4 %)
+
+Writing at 0x0003e43a... (5 %)
+
+Writing at 0x0004cee3... (6 %)
+
+Writing at 0x00057d88... (8 %)
+
+Writing at 0x0006061d... (9 %)
+
+Writing at 0x000669a2... (10 %)
+
+Writing at 0x0006cc1d... (12 %)
+
+Writing at 0x00078241... (13 %)
+
+Writing at 0x0007e2fa... (15 %)
+
+Writing at 0x0008430b... (16 %)
+
+Writing at 0x00089c2f... (17 %)
+
+Writing at 0x0008f650... (19 %)
+
+Writing at 0x00094c5a... (20 %)
+
+Writing at 0x0009b8a1... (21 %)
+
+Writing at 0x000a178b... (23 %)
+
+Writing at 0x000a6b19... (24 %)
+
+Writing at 0x000ac5b2... (26 %)
+
+Writing at 0x000b1df4... (27 %)
+
+Writing at 0x000b71f7... (28 %)
+
+Writing at 0x000bcdf2... (30 %)
+
+Writing at 0x000c233c... (31 %)
+
+Writing at 0x000c81bf... (32 %)
+
+Writing at 0x000cd5e2... (34 %)
+
+Writing at 0x000d2d8e... (35 %)
+
+Writing at 0x000d81fc... (36 %)
+
+Writing at 0x000ddb37... (38 %)
+
+Writing at 0x000e2be2... (39 %)
+
+Writing at 0x000e8169... (41 %)
+
+Writing at 0x000ed908... (42 %)
+
+Writing at 0x000f2d8d... (43 %)
+
+Writing at 0x000f826c... (45 %)
+
+Writing at 0x000fd654... (46 %)
+
+Writing at 0x001036a7... (47 %)
+
+Writing at 0x001088e8... (49 %)
+
+Writing at 0x0010dd2c... (50 %)
+
+Writing at 0x001134ab... (52 %)
+
+Writing at 0x00118e11... (53 %)
+
+Writing at 0x0011e383... (54 %)
+
+Writing at 0x001236be... (56 %)
+
+Writing at 0x0012945e... (57 %)
+
+Writing at 0x0012ee91... (58 %)
+
+Writing at 0x00134c70... (60 %)
+
+Writing at 0x0013a47a... (61 %)
+
+Writing at 0x0013f896... (63 %)
+
+Writing at 0x0014503d... (64 %)
+
+Writing at 0x0014a952... (65 %)
+
+Writing at 0x0014fc56... (67 %)
+
+Writing at 0x00155018... (68 %)
+
+Writing at 0x0015a697... (69 %)
+
+Writing at 0x0015fcff... (71 %)
+
+Writing at 0x00164dfd... (72 %)
+
+Writing at 0x00169cad... (73 %)
+
+Writing at 0x0016ed9a... (75 %)
+
+Writing at 0x0017426d... (76 %)
+
+Writing at 0x0017964d... (78 %)
+
+Writing at 0x0017e6ff... (79 %)
+
+Writing at 0x001839f6... (80 %)
+
+Writing at 0x001898c3... (82 %)
+
+Writing at 0x0018e9a9... (83 %)
+
+Writing at 0x001939f2... (84 %)
+
+Writing at 0x00198f22... (86 %)
+
+Writing at 0x0019e9ba... (87 %)
+
+Writing at 0x001a41b2... (89 %)
+
+Writing at 0x001a9d6b... (90 %)
+
+Writing at 0x001afdf6... (91 %)
+
+Writing at 0x001b9c7c... (93 %)
+
+Writing at 0x001c0fa2... (94 %)
+
+Writing at 0x001c7321... (95 %)
+
+Writing at 0x001cd2a9... (97 %)
+
+Writing at 0x001d3683... (98 %)
+
+Writing at 0x001d90f8... (100 %)
+
+Wrote 1820896 bytes (1189398 compressed) at 0x00020000 in 13.1 seconds (effective 1109.6 kbit/s)...
+
+Hash of data verified.
+
+Compressed 3072 bytes to 190...
+
+Writing at 0x00008000... (100 %)
+
+Wrote 3072 bytes (190 compressed) at 0x00008000 in 0.1 seconds (effective 396.4 kbit/s)...
+
+Hash of data verified.
+
+Compressed 8192 bytes to 31...
+
+Writing at 0x0000f000... (100 %)
+
+Wrote 8192 bytes (31 compressed) at 0x0000f000 in 0.1 seconds (effective 716.3 kbit/s)...
+
+Hash of data verified.
+
+
+
+Leaving...
+
+Hard resetting via RTS pin...
+
+Done
+Done.

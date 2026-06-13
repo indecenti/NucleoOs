@@ -1,0 +1,3 @@
+# M5GFX auto-detects the Cardputer display + backlight.
+dependencies:
+  m5stack/m5gfx: "^0.2.0"

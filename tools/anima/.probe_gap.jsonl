@@ -1,0 +1,9 @@
+{"q":"cinquanta per cento di 90","lang":"it","expect":"answer"}
+{"q":"il 50 per cento di 90","lang":"it","expect":"answer"}
+{"q":"sommami 12 e 30 e 8","lang":"it","expect":"answer"}
+{"q":"somma 12 e 30 e 8","lang":"it","expect":"answer"}
+{"q":"sommami 12 30 8","lang":"it","expect":"answer"}
+{"q":"quanto fa il 15 percnto di 240","lang":"it","expect":"answer"}
+{"q":"quanto fa il 15 percento di 240","lang":"it","expect":"answer"}
+{"q":"radce quadrata di 49","lang":"it","expect":"answer"}
+{"q":"radice quadrata di 49","lang":"it","expect":"answer"}

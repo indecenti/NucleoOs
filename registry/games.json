@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "_comment": "Pluggable catalog for the Game Center hub (apps/games). Add a game = drop a module under apps/games/www/games/<id>.js that calls defineGame(), then add an entry here. The hub reads this list to populate the catalog; no firmware change. minPlayers/maxPlayers/ai/realtime mirror the defineGame() contract so the lobby can show seats and AI options before the module is loaded.",
+  "games": [
+    {
+      "id": "tris",
+      "name": "Tris",
+      "icon": "⭕",
+      "module": "/apps/games/games/tris.js",
+      "minPlayers": 2,
+      "maxPlayers": 2,
+      "ai": true,
+      "realtime": false,
+      "category": "classic",
+      "desc": "Filetto a turni: 2 giocatori, contro ANIMA offline, oppure contro un LLM online (Grok/Claude) che gioca davvero le mosse."
+    },
+    {
+      "id": "forza4",
+      "name": "Forza 4",
+      "icon": "🔴",
+      "module": "/apps/games/games/forza4.js",
+      "minPlayers": 2,
+      "maxPlayers": 2,
+      "ai": true,
+      "realtime": false,
+      "category": "classic",
+      "desc": "Allinea quattro gettoni. 2 giocatori, contro ANIMA (facile/medio), o contro un LLM online (Grok/Claude) che sceglie ogni mossa."
+    },
+    {
+      "id": "pong",
+      "name": "Pong 3D",
+      "icon": "🏓",
+      "module": "/apps/games/games/pong.js",
+      "minPlayers": 2,
+      "maxPlayers": 2,
+      "ai": true,
+      "realtime": true,
+      "category": "arcade",
+      "desc": "Arena 3D neon (Three.js) con power-up, scia, particelle ed effetti sonori. 1v1 in rete o contro ANIMA — cervello offline o LLM online (Claude/Grok/Groq)."
+    }
+  ]
+}

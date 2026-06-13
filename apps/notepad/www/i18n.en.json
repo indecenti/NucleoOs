@@ -1,0 +1,25 @@
+{
+  "_lang": "en",
+
+  "title_new": "New (Ctrl+N)",
+  "title_open": "Open (Ctrl+O)",
+  "title_save": "Save (Ctrl+S)",
+  "title_saveas": "Save as (Ctrl+Shift+S)",
+  "ph_editor": "Type here…  ·  Ctrl+S save · Ctrl+O open · Ctrl+N new",
+
+  "stats": { "one": "{chars} chars · {lines} line", "other": "{chars} chars · {lines} lines" },
+
+  "loaded": "Loaded {name}",
+  "could_not_open": "Could not open {name}",
+  "open_hint": "Open a file from File Commander to edit it here.",
+  "saved_file": "Saved {name}",
+  "save_failed": "Save failed ({status})",
+  "save_pending": "Save pending: OS file API not reachable.",
+
+  "dlg_saveas": "Save as",
+  "dlg_open": "Open text file",
+  "confirm_dirty": "Unsaved changes. Continue and lose them?",
+
+  "prompt_save": "Save as (SD path):",
+  "prompt_open": "Open (SD path):"
+}

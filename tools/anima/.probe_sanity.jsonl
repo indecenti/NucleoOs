@@ -1,0 +1,3 @@
+{"q":"asdf qwerty","lang":"it","expect":"abstain"}
+{"q":"crea una nota della spesa","lang":"it","expect":"create_file"}
+{"q":"what time is it","lang":"en","expect":"answer"}

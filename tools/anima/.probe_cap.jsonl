@@ -1,0 +1,6 @@
+{"q":"percentuale di batteria","lang":"it","expect":"abstain"}
+{"q":"qual e' la percentuale di batteria","lang":"it","expect":"abstain"}
+{"q":"percentuale di umidita","lang":"it","expect":"abstain"}
+{"q":"percentuale di successo","lang":"it","expect":"abstain"}
+{"q":"percentuale di possibilita che piova","lang":"it","expect":"abstain"}
+{"q":"che percentuale hai","lang":"it","expect":"abstain"}

@@ -1,0 +1,6 @@
+﻿W (435) nucleoos: DIAG last-reset=TASK_WDT (task hung) anima_phase=0x03 anima_stage=0xB0
+E (645) oom: alloc fail: 32404 B caps=0x404 in heap_caps_malloc
+W (613255) httpd_txrx: httpd_sock_err: error in recv : 104
+W (677875) httpd_txrx: httpd_sock_err: error in recv : 104
+W (1016545) anima.vkl: facets.it.jsonl integrity FAILED (tampered SD?) -> abstaining
+

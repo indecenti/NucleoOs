@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nucleoos/anima-card.schema.json",
+  "title": "ANIMA Knowledge Card",
+  "description": "One unit of ANIMA's retrieval knowledge (RAG). The device embeds the user's query and cosine-matches it against the `ask` phrasings of every card; the best match above the confidence gate returns this card's frozen `reply`. Knowledge lives in these cards, never in the model. Authored as one JSON object per line (JSONL) under tools/anima/knowledge/*.jsonl, then compiled into anima-it-index.bin by tools/anima/build_akb2.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "category", "reply", "ask"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable unique identifier (dotted/kebab), e.g. geo.capital.francia. Used for dedup and provenance.",
+      "pattern": "^[a-z0-9]+([._-][a-z0-9]+)*$"
+    },
+    "category": {
+      "type": "string",
+      "description": "Knowledge domain / kind. Drives the source file and lets the corpus stay modular. Cards learned online (docs/anima-online.md) are auto-classified from the source's one-line description into a KIND so they're filed correctly, never a generic bucket: person | place | organization | work | species | event | concept.",
+      "examples": ["commands", "general", "programming", "nucleoos", "person", "place", "organization", "work", "species", "event", "concept"]
+    },
+    "action": {
+      "type": "string",
+      "description": "What the device should do when this card wins. 'answer' just speaks the reply; 'launch' opens the app named in arg; 'system' fills {value} with a live reading named in arg (time, storage).",
+      "enum": ["answer", "launch", "system"],
+      "default": "answer"
+    },
+    "arg": {
+      "type": "string",
+      "description": "Argument for the action: app id for 'launch', reading name for 'system', empty for 'answer'.",
+      "default": ""
+    },
+    "reply": {
+      "type": "object",
+      "description": "The frozen response. Provide both languages when you can; a single-language card is allowed and the compiler mirrors it to the other language. May contain {value} for system actions.",
+      "additionalProperties": false,
+      "anyOf": [
+        { "required": ["it"] },
+        { "required": ["en"] }
+      ],
+      "properties": {
+        "it": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "en": { "type": "string", "minLength": 1, "maxLength": 250 }
+      }
+    },
+    "detail": {
+      "type": "object",
+      "description": "Optional drill-down text returned on a 'tell me more' / 'dimmi di più' follow-up about this card (two-level retrieval, no generation). Longer than reply: a worked example, the gotchas, the rearranged formula. Omit it and the assistant honestly says it has nothing more.",
+      "additionalProperties": false,
+      "properties": {
+        "it": { "type": "string", "maxLength": 250 },
+        "en": { "type": "string", "maxLength": 250 }
+      }
+    },
+    "ask": {
+      "type": "object",
+      "description": "Example ways a user might ask for this card, per language. These are what the retriever matches against — more varied phrasings = better recall. 2-6 per language is a good target.",
+      "additionalProperties": false,
+      "anyOf": [
+        { "required": ["it"] },
+        { "required": ["en"] }
+      ],
+      "properties": {
+        "it": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "en": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "source": {
+      "type": "string",
+      "description": "Optional provenance, e.g. 'curated' or 'book:Atlante p.12'. Helps audit and re-ingest."
+    },
+    "lang_primary": {
+      "type": "string",
+      "description": "Language the card was authored in; 'bi' when both replies are first-class. Build-side only (not shipped to the device).",
+      "enum": ["it", "en", "bi"]
+    },
+    "tags": {
+      "type": "array",
+      "description": "Free-form labels for filtering/curation (build-side only, not shipped to the device).",
+      "items": { "type": "string" }
+    },
+    "last_updated": {
+      "type": "string",
+      "description": "ISO date (YYYY-MM-DD) of the last edit. Build-side only; useful for audits and staged re-ingest.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "ttl_days": {
+      "type": "integer",
+      "description": "Freshness window for online-learned cards (docs/anima-online.md §6). Past last_updated + ttl_days the device silently re-fetches when online; offline it serves the cached value with its date. Stable entities use a long TTL; volatile facts a short one. Curated cards omit it.",
+      "minimum": 0
+    }
+  }
+}

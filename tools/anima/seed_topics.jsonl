@@ -1,0 +1,78 @@
+// Curated topics to draft as NEW cards (seed.py). Clear names anchor the model. Facts get
+// fact-checked by a human before promotion. No real-time "current events" (offline + frozen).
+{"id":"hist.roman-empire","category":"history","it":"l'Impero Romano","en":"the Roman Empire"}
+{"id":"hist.ancient-egypt","category":"history","it":"l'antico Egitto","en":"ancient Egypt"}
+{"id":"hist.ancient-greece","category":"history","it":"l'antica Grecia","en":"ancient Greece"}
+{"id":"hist.middle-ages","category":"history","it":"il Medioevo","en":"the Middle Ages"}
+{"id":"hist.renaissance","category":"history","it":"il Rinascimento","en":"the Renaissance"}
+{"id":"hist.french-revolution","category":"history","it":"la Rivoluzione Francese","en":"the French Revolution"}
+{"id":"hist.industrial-revolution","category":"history","it":"la Rivoluzione Industriale","en":"the Industrial Revolution"}
+{"id":"hist.ww1","category":"history","it":"la Prima Guerra Mondiale","en":"World War I"}
+{"id":"hist.ww2","category":"history","it":"la Seconda Guerra Mondiale","en":"World War II"}
+{"id":"hist.cold-war","category":"history","it":"la Guerra Fredda","en":"the Cold War"}
+{"id":"hist.printing-press","category":"history","it":"l'invenzione della stampa di Gutenberg","en":"Gutenberg's printing press"}
+{"id":"hist.discovery-america","category":"history","it":"la scoperta dell'America nel 1492","en":"the discovery of America in 1492"}
+{"id":"hist.moon-landing","category":"history","it":"il primo sbarco sulla Luna nel 1969","en":"the first Moon landing in 1969"}
+{"id":"hist.fall-of-rome","category":"history","it":"la caduta dell'Impero Romano d'Occidente","en":"the fall of the Western Roman Empire"}
+{"id":"tech.ai","category":"tech","it":"l'intelligenza artificiale","en":"artificial intelligence"}
+{"id":"tech.machine-learning","category":"tech","it":"il machine learning (apprendimento automatico)","en":"machine learning"}
+{"id":"tech.internet","category":"tech","it":"internet","en":"the internet"}
+{"id":"tech.computer","category":"tech","it":"il computer","en":"the computer"}
+{"id":"tech.smartphone","category":"tech","it":"lo smartphone","en":"the smartphone"}
+{"id":"tech.gps","category":"tech","it":"il GPS","en":"GPS"}
+{"id":"tech.encryption","category":"tech","it":"la crittografia","en":"encryption"}
+{"id":"tech.database","category":"tech","it":"un database","en":"a database"}
+{"id":"tech.cloud","category":"tech","it":"il cloud computing","en":"cloud computing"}
+{"id":"tech.open-source","category":"tech","it":"il software open source","en":"open source software"}
+{"id":"tech.blockchain","category":"tech","it":"la blockchain","en":"blockchain"}
+{"id":"tech.renewable-energy","category":"tech","it":"le energie rinnovabili","en":"renewable energy"}
+{"id":"tech.electric-car","category":"tech","it":"l'auto elettrica","en":"the electric car"}
+{"id":"tech.solar-panel","category":"tech","it":"il pannello solare","en":"the solar panel"}
+{"id":"tech.robot","category":"tech","it":"un robot","en":"a robot"}
+{"id":"civ.democracy","category":"civics","it":"la democrazia","en":"democracy"}
+{"id":"civ.government","category":"civics","it":"il governo","en":"government"}
+{"id":"civ.law","category":"civics","it":"la legge","en":"law"}
+{"id":"civ.election","category":"civics","it":"le elezioni","en":"elections"}
+{"id":"civ.money","category":"civics","it":"il denaro","en":"money"}
+{"id":"civ.inflation","category":"civics","it":"l'inflazione","en":"inflation"}
+{"id":"civ.tax","category":"civics","it":"le tasse","en":"taxes"}
+{"id":"civ.bank","category":"civics","it":"una banca","en":"a bank"}
+{"id":"civ.gdp","category":"civics","it":"il PIL (prodotto interno lordo)","en":"GDP (gross domestic product)"}
+{"id":"civ.un","category":"civics","it":"l'ONU (Organizzazione delle Nazioni Unite)","en":"the United Nations"}
+{"id":"civ.eu","category":"civics","it":"l'Unione Europea","en":"the European Union"}
+{"id":"civ.human-rights","category":"civics","it":"i diritti umani","en":"human rights"}
+{"id":"sci.virus","category":"science","it":"un virus","en":"a virus"}
+{"id":"sci.bacteria","category":"science","it":"i batteri","en":"bacteria"}
+{"id":"sci.vaccine","category":"science","it":"un vaccino","en":"a vaccine"}
+{"id":"sci.gene","category":"science","it":"un gene","en":"a gene"}
+{"id":"sci.brain","category":"science","it":"il cervello","en":"the brain"}
+{"id":"sci.heart","category":"science","it":"il cuore","en":"the heart"}
+{"id":"sci.blood","category":"science","it":"il sangue","en":"blood"}
+{"id":"sci.immune-system","category":"science","it":"il sistema immunitario","en":"the immune system"}
+{"id":"sci.greenhouse-effect","category":"science","it":"l'effetto serra","en":"the greenhouse effect"}
+{"id":"sci.climate-change","category":"science","it":"il cambiamento climatico","en":"climate change"}
+{"id":"sci.ecosystem","category":"science","it":"un ecosistema","en":"an ecosystem"}
+{"id":"sci.food-chain","category":"science","it":"la catena alimentare","en":"the food chain"}
+{"id":"sci.periodic-table","category":"science","it":"la tavola periodica degli elementi","en":"the periodic table of elements"}
+{"id":"sci.molecule","category":"science","it":"una molecola","en":"a molecule"}
+{"id":"sci.galaxy","category":"science","it":"una galassia","en":"a galaxy"}
+{"id":"sci.big-bang","category":"science","it":"il Big Bang","en":"the Big Bang"}
+{"id":"sci.black-hole","category":"science","it":"un buco nero","en":"a black hole"}
+{"id":"health.nutrition","category":"health","it":"l'alimentazione sana","en":"healthy nutrition"}
+{"id":"health.vitamins","category":"health","it":"le vitamine","en":"vitamins"}
+{"id":"health.exercise","category":"health","it":"l'esercizio fisico","en":"physical exercise"}
+{"id":"health.sleep","category":"health","it":"il sonno","en":"sleep"}
+{"id":"health.hydration","category":"health","it":"l'idratazione","en":"hydration"}
+{"id":"health.calories","category":"health","it":"le calorie","en":"calories"}
+{"id":"geo.equator","category":"geography","it":"l'equatore","en":"the equator"}
+{"id":"geo.poles","category":"geography","it":"i poli (Nord e Sud)","en":"the poles (North and South)"}
+{"id":"geo.timezones","category":"geography","it":"i fusi orari","en":"time zones"}
+{"id":"geo.tectonic-plates","category":"geography","it":"le placche tettoniche","en":"tectonic plates"}
+{"id":"geo.volcano","category":"geography","it":"un vulcano","en":"a volcano"}
+{"id":"geo.earthquake","category":"geography","it":"un terremoto","en":"an earthquake"}
+{"id":"geo.climate-zones","category":"geography","it":"le zone climatiche","en":"climate zones"}
+{"id":"cult.musical-notes","category":"culture","it":"le note musicali","en":"musical notes"}
+{"id":"cult.philosophy","category":"culture","it":"la filosofia","en":"philosophy"}
+{"id":"cult.olympics","category":"culture","it":"i Giochi Olimpici","en":"the Olympic Games"}
+{"id":"cult.painting","category":"culture","it":"la pittura","en":"painting"}
+{"id":"cult.literature","category":"culture","it":"la letteratura","en":"literature"}

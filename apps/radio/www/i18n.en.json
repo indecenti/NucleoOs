@@ -1,0 +1,67 @@
+{
+  "_lang": "en",
+
+  "sub_loading": "Free live radio · syncs to your device",
+  "sub_count": {
+    "one": "Free live radio · {count} station · syncs to your device",
+    "other": "Free live radio · {count} stations · syncs to your device"
+  },
+  "btn_add": "Add station",
+  "hint": "▶ play in the browser · ★ set the device default · ✎ edit · ⌃⌄ reorder.",
+  "info_title": "About & help",
+  "info_aria": "About and help",
+
+  "np_idle": "Nothing playing",
+  "np_idle_hint": "Pick a station to start listening",
+  "vol_title": "Volume",
+  "play_pause": "Play / pause",
+  "connecting": "connecting…",
+  "live_stream": "live stream",
+
+  "empty_list": "No stations yet — add one with ＋.",
+  "support_somafm": "support SomaFM",
+
+  "badge_default": "default",
+  "badge_browser_only": "browser only",
+  "badge_browser_only_title": "https plays in the browser but not on the Cardputer",
+  "act_set_default": "Set as device default",
+  "act_move_up": "Move up",
+  "act_move_down": "Move down",
+
+  "dlg_add": "Add station",
+  "dlg_edit": "Edit station",
+  "f_name": "Name",
+  "f_name_ph": "My Station",
+  "f_genre": "Genre / tagline",
+  "f_genre_ph": "Ambient / Downtempo",
+  "f_stream": "Stream URL",
+  "note_stream": "Plain http:// MP3 plays on the Cardputer too. https:// plays here but not on the device.",
+  "note_stream_warn": "⚠ https plays in the browser but NOT on the Cardputer (no TLS). Use http:// for device support.",
+  "f_np": "Now-playing URL",
+  "optional": "(optional)",
+  "note_np": "JSON metadata for the track line — leave empty for a plain live feed.",
+
+  "err_https": "⚠ https stream blocked here — but it will play on the device if it is reachable.",
+  "err_unreachable": "⚠ stream unreachable from the browser (it may still work on the device).",
+
+  "info_lead": "Free live internet radio for NucleoOS. One station list, shared between this app and the Radio app on your Cardputer.",
+  "info_add": "<b>Add a station.</b> Tap <b>Add station</b>, give it a name and paste a direct stream URL (an MP3 stream). It joins the list everywhere instantly.",
+  "info_star": "<b>Set the device default.</b> The starred station is the one your Cardputer tunes the moment you open its Radio app.",
+  "info_listen": "<b>Listen here.</b> Play any station in the browser. If it serves track info, you'll see the artist, title and a progress bar.",
+  "info_reorder": "<b>Reorder &amp; edit.</b> Use ⌃⌄ to reorder, ✎ to edit, 🗑 to remove. Every change saves to the device the instant you make it.",
+  "info_device_note": "<b>Device note:</b> the Cardputer plays plain <b>http://</b> MP3 streams only — it has no room for HTTPS next to the audio decoder. <b>https://</b> stations are tagged <b>“browser only”</b>: they play here but won't run on the device. Curated free stations come from <b>SomaFM</b>.",
+  "keyboard": "Keyboard",
+  "keys_help": "<kbd>↑</kbd><kbd>↓</kbd> select · <kbd>Enter</kbd> play · <kbd>Space</kbd> play/pause · <kbd>n</kbd>/<kbd>p</kbd> next/prev",
+  "got_it": "Got it",
+
+  "saving": "Saving…",
+  "saved_ok": "Saved ✓",
+  "save_failed": "Save failed",
+  "toast_seeded": "seeded the default station list",
+  "toast_readonly": "Open Radio from the device shell to save changes",
+  "toast_default": "“{name}” is now the device default",
+  "toast_removed": "Removed “{name}”",
+  "toast_saved_changes": "Saved changes",
+  "toast_added": "Added “{name}”",
+  "confirm_remove": "Remove “{name}” from the station list?"
+}

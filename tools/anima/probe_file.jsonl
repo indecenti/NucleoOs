@@ -1,0 +1,80 @@
+// FILE domain probe — create_file (literal/compose/filename), open_app (file manager / open file), and adversarial NON-create asks.
+// === create_file: literal content "con scritto X" / ":" / "con il testo X" (IT) ===
+{"q":"crea una nota con scritto ciao mondo","lang":"it","expect":"create_file"}
+{"q":"crea un file con scritto la lista della spesa","lang":"it","expect":"create_file"}
+{"q":"crea una nota: comprare il latte","lang":"it","expect":"create_file"}
+{"q":"crea un file con il testo questo è un promemoria","lang":"it","expect":"create_file"}
+{"q":"scrivi una nota che dice ricordati la riunione","lang":"it","expect":"create_file"}
+{"q":"annota: chiamare il dentista","lang":"it","expect":"create_file"}
+{"q":"appunta che devo comprare il pane","lang":"it","expect":"create_file"}
+{"q":"segna una nota con scritto password wifi 1234","lang":"it","expect":"create_file"}
+{"q":"prepara un appunto con scritto idee per il progetto","lang":"it","expect":"create_file"}
+{"q":"crea documento con scritto bozza contratto","lang":"it","expect":"create_file"}
+{"q":"crea una nota con scritto buongiorno a tutti","lang":"it","expect":"create_file"}
+{"q":"nuova nota: lista cose da fare oggi","lang":"it","expect":"create_file"}
+{"q":"genera un file con scritto report mensile","lang":"it","expect":"create_file"}
+// === create_file: literal-vs-answer TRAP — "con scritto <question>" must stay LITERAL, NOT answered ===
+{"q":"crea una nota con scritto cos'è una variabile","lang":"it","expect":"create_file"}
+{"q":"crea un file con scritto chi è Dante","lang":"it","expect":"create_file"}
+{"q":"crea una nota con scritto come si fa il pane","lang":"it","expect":"create_file"}
+{"q":"scrivi un file con scritto quanto fa 2+2","lang":"it","expect":"create_file"}
+{"q":"crea una nota: quale è la capitale d'Italia","lang":"it","expect":"create_file"}
+// === create_file: compose-FROM-knowledge "con la capitale/risposta/definizione di X" ===
+{"q":"crea una nota con la capitale della Francia","lang":"it","expect":"create_file"}
+{"q":"crea un file con la definizione di fotosintesi","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la risposta a cos'è la gravità","lang":"it","expect":"create_file"}
+{"q":"crea un file con la capitale del Giappone","lang":"it","expect":"create_file"}
+// === create_file: filename specs "con nome X" / "file todo.txt" / extensions ===
+{"q":"crea un file note.txt","lang":"it","expect":"create_file"}
+{"q":"crea un file todo.md","lang":"it","expect":"create_file"}
+{"q":"crea una nota con nome spesa","lang":"it","expect":"create_file"}
+{"q":"crea un file chiamato appunti","lang":"it","expect":"create_file"}
+{"q":"crea un documento con nome relazione","lang":"it","expect":"create_file"}
+{"q":"crea un file con titolo diario","lang":"it","expect":"create_file"}
+{"q":"nuovo file lista.txt","lang":"it","expect":"create_file"}
+{"q":"crea il file readme.md","lang":"it","expect":"create_file"}
+{"q":"fammi una nota","lang":"it","expect":"create_file"}
+{"q":"crea una nota","lang":"it","expect":"create_file"}
+{"q":"crea un nuovo documento","lang":"it","expect":"create_file"}
+// === create_file: EN ===
+{"q":"create a file todo.txt","lang":"en","expect":"create_file"}
+{"q":"make a note that says buy milk","lang":"en","expect":"create_file"}
+{"q":"create a note: call the dentist","lang":"en","expect":"create_file"}
+{"q":"new file called report.md","lang":"en","expect":"create_file"}
+{"q":"create a file named shopping","lang":"en","expect":"create_file"}
+{"q":"write a note with the text remember the meeting","lang":"en","expect":"create_file"}
+{"q":"jot down a note saying call mom","lang":"en","expect":"create_file"}
+{"q":"create a note with the capital of France","lang":"en","expect":"create_file"}
+{"q":"create a note that says what is a variable","lang":"en","expect":"create_file"}
+{"q":"make a new document","lang":"en","expect":"create_file"}
+{"q":"create a file with title diary","lang":"en","expect":"create_file"}
+{"q":"draft a note with the shopping list","lang":"en","expect":"create_file"}
+// === open_app / open_file: file manager + opening files ===
+{"q":"apri il file manager","lang":"it","expect":"open_app"}
+{"q":"apri il gestore file","lang":"it","expect":"open_app"}
+{"q":"apri note.txt","lang":"it","expect":"open_app|open_file"}
+{"q":"open the file manager","lang":"en","expect":"open_app"}
+{"q":"open file commander","lang":"en","expect":"open_app"}
+{"q":"apri la cartella documenti","lang":"it","expect":"open_app|open_file"}
+{"q":"open todo.txt","lang":"en","expect":"open_app|open_file"}
+// === WRONG: capability question — must NOT become create_file (abstain or capabilities) ===
+{"q":"posso creare un file?","lang":"it","expect":"abstain"}
+{"q":"sai creare file?","lang":"it","expect":"abstain|answer"}
+{"q":"can you create files?","lang":"en","expect":"abstain|answer"}
+// === WRONG: how-to question — must route to knowledge (l1), NOT create_file ===
+{"q":"come si crea un file","lang":"it","expect":"l1|answer"}
+{"q":"come faccio a creare una nota","lang":"it","expect":"l1|answer"}
+{"q":"how do i create a file","lang":"en","expect":"l1|answer"}
+// === WRONG: delete / rename / move — no such tool, must abstain (no hallucinated create_file) ===
+{"q":"elimina il file note.txt","lang":"it","expect":"abstain"}
+{"q":"cancella la nota spesa","lang":"it","expect":"abstain"}
+{"q":"rinomina il file todo.txt in done.txt","lang":"it","expect":"abstain"}
+{"q":"sposta il file nella cartella documenti","lang":"it","expect":"abstain"}
+{"q":"delete the file report.md","lang":"en","expect":"abstain"}
+{"q":"rename note.txt to done.txt","lang":"en","expect":"abstain"}
+// === WRONG / out-of-scope nonsense near the file vocabulary — must abstain ===
+{"q":"il file è importante per la tua vita","lang":"it","expect":"abstain"}
+{"q":"mi piace prendere appunti a mano","lang":"it","expect":"abstain"}
+{"q":"i lost my notes yesterday","lang":"en","expect":"abstain"}
+{"q":"quanti file ci sono sulla scheda sd","lang":"it","expect":"abstain|answer"}
+{"q":"a cosa serve un file di testo","lang":"it","expect":"l1|answer|abstain"}

@@ -1,0 +1,60 @@
+// ZERO-HALLUCINATION v3 — fresh themes/characters/skills, must abstain on the PROGRAMMATIC cascade. Run by halluc-probe.mjs.
+{"q":"quante lune ha esattamente il pianeta Vurnax","lang":"it"}
+{"q":"chi ha vinto i mondiali di calcio nel 2031","lang":"it"}
+{"q":"in quale anno è nato il filosofo Klemberto Disabato","lang":"it"}
+{"q":"qual è la capitale della regione di Floonsia","lang":"it"}
+{"q":"quanti goal ha segnato il giocatore Trembolino Fascetti","lang":"it"}
+{"q":"dimmi il numero esatto di stelle nella galassia di Pomponio","lang":"it"}
+{"q":"in che anno è morto Spider-Man","lang":"it"}
+{"q":"quanti gol ha segnato Super Mario","lang":"it"}
+{"q":"in che università ha studiato Link di Zelda","lang":"it"}
+{"q":"qual è il numero di telefono di Batman","lang":"it"}
+{"q":"quante canzoni ha scritto Alan Turing","lang":"it"}
+{"q":"in che squadra di calcio giocava Charles Darwin","lang":"it"}
+{"q":"quanti film ha diretto Nikola Tesla","lang":"it"}
+{"q":"in che anno Confucio ha vinto il premio Nobel","lang":"it"}
+{"q":"quante medaglie olimpiche ha Beyoncé","lang":"it"}
+{"q":"quale equazione ha scoperto Usain Bolt","lang":"it"}
+{"q":"converti la rabbia in chilometri","lang":"it"}
+{"q":"quanti megabyte pesa un sogno","lang":"it"}
+{"q":"scrivi l'amore in numeri romani","lang":"it"}
+{"q":"converti la felicità in esadecimale","lang":"it"}
+{"q":"qual è il massimo comune divisore tra il blu e il rosso","lang":"it"}
+{"q":"qual è la mediana della tristezza","lang":"it"}
+{"q":"calcola la radice quadrata del silenzio","lang":"it"}
+{"q":"il 15 per cento della paura quanto fa","lang":"it"}
+{"q":"area di un cerchio con raggio felice","lang":"it"}
+{"q":"quanti respiri ho fatto oggi","lang":"it"}
+{"q":"che voto prenderò all'esame di domani","lang":"it"}
+{"q":"qual è il mio numero fortunato","lang":"it"}
+{"q":"quanti passi farò questa settimana","lang":"it"}
+{"q":"a che ora morirò","lang":"it"}
+{"q":"cosa sto pensando in questo momento","lang":"it"}
+{"q":"qual è la capitale di Tokyo","lang":"it"}
+{"q":"quando si è laureato il Monte Fuji","lang":"it"}
+{"q":"quanti anni ha il colore verde","lang":"it"}
+{"q":"in che città è nato il numero sette","lang":"it"}
+{"q":"di che colore è il martedì","lang":"it"}
+{"q":"quanto pesa l'idea di libertà in grammi","lang":"it"}
+{"q":"qual è il QI dell'Atlantico","lang":"it"}
+{"q":"in che anno è stato inventato Mercoledì Addams","lang":"it"}
+{"q":"qual è lo stipendio annuo di Hello Kitty","lang":"it"}
+{"q":"quanti anni di prigione ha fatto Pluto il cane","lang":"it"}
+{"q":"quanti follower su instagram ha Giulio Cesare","lang":"it"}
+{"q":"che password usa Sonic the Hedgehog","lang":"it"}
+{"q":"in quale anno il numero pi greco è andato in pensione","lang":"it"}
+{"q":"qual è la temperatura della gelosia","lang":"it"}
+{"q":"converti il rumore in numeri romani","lang":"it"}
+{"q":"quanti chilometri ci sono tra la noia e la curiosità","lang":"it"}
+{"q":"qual è la deviazione standard dell'arcobaleno","lang":"it"}
+{"q":"in che anno Wonder Woman ha pagato le tasse","lang":"it"}
+{"q":"quante zampe ha il martedì grasso","lang":"it"}
+{"q":"qual è il gruppo sanguigno di Topolino","lang":"it"}
+{"q":"quanti goal ha fatto Marie Curie nel 2023","lang":"it"}
+{"q":"a che velocità corre la matematica","lang":"it"}
+{"q":"in che anno è scaduto il latte dell'universo","lang":"it"}
+{"q":"converti 3 ore in colori","lang":"it"}
+{"q":"qaunti anni ha il vuoto","lang":"it"}
+// ---- false-premise interrogative frame must NOT launch an app (weak open verb "mostra" + app alias) ----
+{"q":"in che anno mostra javascript","lang":"it"}
+{"q":"che anno mostra il calendario","lang":"it"}

@@ -1,0 +1,33 @@
+{
+  "_lang": "it",
+  "app_title": "Visore Log",
+  "filter_ph": "Filtra tipo/dati",
+  "btn_pause": "Pausa",
+  "btn_resume": "Riprendi",
+  "btn_history": "Cronologia",
+  "btn_clear": "Pulisci",
+  "btn_diag": "🩺 Diagnosi",
+  "btn_health": "Salute",
+  "follow": "Segui",
+  "history_hint": "Legge il giornale eventi dalla scheda SD (su richiesta — altrimenti tiene il dispositivo a riposo)",
+  "diag_hint": "Genera un digest compatto di salute (Cardputer + ANIMA) da incollare a un'AI",
+  "health_hint": "Sonda adattiva: sintetizza eventi di salute dal vivo (solo a finestra visibile, mai durante un lavoro pesante)",
+  "diag_title": "Diagnosi di salute",
+  "diag_sub": "Copia questo blocco e incollalo a un'AI per la diagnosi.",
+  "gathering": "Raccolta diagnostica…",
+  "diag_err": "Diagnostica non disponibile",
+  "btn_copy": "📋 Copia",
+  "btn_regen": "↻ Rigenera",
+  "btn_close": "Chiudi",
+  "copied": "Copiato negli appunti ✓",
+  "empty_state": "In ascolto di eventi in tempo reale…<br><span style=\"font-size:11px\">Premi <b>🩺 Diagnosi</b> per un referto di salute, o <b>Cronologia</b> per il giornale su SD.</span>",
+  "events": {
+    "one": "{count} evento",
+    "other": "{count} eventi"
+  },
+  "events_of": " (di {total})",
+  "status_paused": " · in pausa",
+  "src_journal": "giornale: {lines} righe su SD",
+  "src_none": "nessun giornale su SD",
+  "src_error": "giornale non disponibile"
+}

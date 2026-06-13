@@ -1,0 +1,65 @@
+{"q":"crea un file con scritto ciao","lang":"it","expect":"create_file"}
+{"q":"crea una nota con la capitale della francia","lang":"it","expect":"create_file"}
+{"q":"scrivi una nota che dice buongiorno","lang":"it","expect":"create_file"}
+{"q":"crea un file con il testo arrivederci","lang":"it","expect":"create_file"}
+{"q":"crea un file di nome appunti.txt","lang":"it","expect":"create_file"}
+{"q":"crea una nota chiamata diario","lang":"it","expect":"create_file"}
+{"q":"crea un documento con scritto promemoria","lang":"it","expect":"create_file"}
+{"q":"write a note that says hello world","lang":"en","expect":"create_file"}
+{"q":"create a note with the capital of france","lang":"en","expect":"create_file"}
+{"q":"make a note that says good morning","lang":"en","expect":"create_file"}
+{"q":"create a file called todo.txt","lang":"en","expect":"create_file"}
+{"q":"make a file named notes.txt","lang":"en","expect":"create_file"}
+{"q":"write a note with the capital of italy","lang":"en","expect":"create_file"}
+{"q":"alza il volume","lang":"it","expect":"set_volume"}
+{"q":"abbassa il volume","lang":"it","expect":"set_volume"}
+{"q":"imposta il volume al massimo","lang":"it","expect":"set_volume"}
+{"q":"metti il volume a metà","lang":"it","expect":"set_volume"}
+{"q":"muta il volume","lang":"it","expect":"set_volume"}
+{"q":"silenzia il volume","lang":"it","expect":"set_volume"}
+{"q":"metti il volume più alto","lang":"it","expect":"set_volume"}
+{"q":"volume al 20 percento","lang":"it","expect":"set_volume"}
+{"q":"puoi alzare il volume?","lang":"it","expect":"set_volume"}
+{"q":"raise the volume","lang":"en","expect":"set_volume"}
+{"q":"lower the volume","lang":"en","expect":"set_volume"}
+{"q":"set the volume to 30","lang":"en","expect":"set_volume"}
+{"q":"mute the volume","lang":"en","expect":"set_volume"}
+{"q":"turn up the volume","lang":"en","expect":"set_volume"}
+{"q":"can you turn up the volume?","lang":"en","expect":"set_volume"}
+{"q":"alza la luminosità","lang":"it","expect":"set_brightness"}
+{"q":"abbassa la luminosità","lang":"it","expect":"set_brightness"}
+{"q":"imposta la luminosità a 50","lang":"it","expect":"set_brightness"}
+{"q":"fai più chiaro lo schermo","lang":"it","expect":"set_brightness"}
+{"q":"fai più buio","lang":"it","expect":"set_brightness"}
+{"q":"abbassa la luce","lang":"it","expect":"set_brightness"}
+{"q":"metti la luminosità al massimo","lang":"it","expect":"set_brightness"}
+{"q":"luminosità a metà","lang":"it","expect":"set_brightness"}
+{"q":"set brightness to 80","lang":"en","expect":"set_brightness"}
+{"q":"turn down the brightness","lang":"en","expect":"set_brightness"}
+{"q":"apri la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"apri il calendario","lang":"it","expect":"open_app"}
+{"q":"apri le impostazioni","lang":"it","expect":"open_app"}
+{"q":"vorrei aprire la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"mi apri il calendario?","lang":"it","expect":"open_app"}
+{"q":"avvia la calcolatrice","lang":"it","expect":"open_app"}
+{"q":"apri la calcoltrice","lang":"it","expect":"open_app|l1"}
+{"q":"open the calculator","lang":"en","expect":"open_app"}
+{"q":"open the calendar","lang":"en","expect":"open_app"}
+{"q":"open settings","lang":"en","expect":"open_app"}
+{"q":"could you open the calendar?","lang":"en","expect":"open_app"}
+{"q":"launch the calculator","lang":"en","expect":"open_app"}
+{"q":"opn the calculator","lang":"en","expect":"open_app|l1"}
+{"q":"chiudi la calcolatrice","lang":"it","expect":"close_app"}
+{"q":"chiudi il calendario","lang":"it","expect":"close_app"}
+{"q":"chiudi le impostazioni","lang":"it","expect":"close_app"}
+{"q":"close the calculator","lang":"en","expect":"close_app"}
+{"q":"close the calendar","lang":"en","expect":"close_app"}
+{"q":"close settings","lang":"en","expect":"close_app"}
+{"q":"can i create a file?","lang":"en","expect":"answer"}
+{"q":"posso creare un file?","lang":"it","expect":"answer"}
+{"q":"ho paura del buio","lang":"it","expect":"abstain"}
+{"q":"i am afraid of the dark","lang":"en","expect":"abstain"}
+{"q":"a che serve la calcolatrice?","lang":"it","expect":"abstain"}
+{"q":"what does the volume button do?","lang":"en","expect":"abstain"}
+{"q":"il calendario è una bella app","lang":"it","expect":"abstain"}
+{"q":"i hate when the screen is too bright","lang":"en","expect":"abstain"}

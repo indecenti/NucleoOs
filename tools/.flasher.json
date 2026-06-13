@@ -1,0 +1,5 @@
+{
+  "port": "COM3",
+  "drive": "H:\\",
+  "host": "nucleo-01.local"
+}

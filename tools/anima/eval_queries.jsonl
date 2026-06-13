@@ -1,0 +1,64 @@
+{"q":"spiegami a cosa serve definire una funzione","lang":"it","expect":"prog.function"}
+{"q":"che cos'è un ciclo for","lang":"it","expect":"prog.for-loop"}
+{"q":"cosa vuol dire ricorsione","lang":"it","expect":"prog.recursion"}
+{"q":"che cos'è un'interfaccia api","lang":"it","expect":"prog.api"}
+{"q":"a cosa serve un array","lang":"it","expect":"prog.array"}
+{"q":"differenza tra compilatore e interprete","lang":"it","expect":"prog.compiler"}
+{"q":"dimmi la capitale della francia","lang":"it","expect":"geo.capital.francia"}
+{"q":"capitale del giappone","lang":"it","expect":"geo.capital.giappone"}
+{"q":"qual è il pianeta più grosso","lang":"it","expect":"sci.largest-planet"}
+{"q":"quanti pianeti girano intorno al sole","lang":"it","expect":"sci.planets-count"}
+{"q":"perché le cose cadono per terra","lang":"it","expect":"sci.gravity"}
+{"q":"di che cosa è composta l'acqua","lang":"it","expect":"sci.water"}
+{"q":"a che temperatura bolle l'acqua","lang":"it","expect":"sci.water-boil"}
+{"q":"qual è la velocità della luce","lang":"it","expect":"sci.speed-light"}
+{"q":"quanti minuti ci sono in un'ora","lang":"it","expect":"math.hour-minutes"}
+{"q":"quanto vale pi greco","lang":"it","expect":"math.pi"}
+{"q":"voglio aprire la musica","lang":"it","expect":"cmd.launch.media-player"}
+{"q":"mi serve la calcolatrice","lang":"it","expect":"cmd.launch.calculator"}
+{"q":"fammi vedere le foto","lang":"it","expect":"cmd.launch.photo-viewer"}
+{"q":"che ore sono adesso","lang":"it","expect":"cmd.system.time"}
+{"q":"quanto spazio libero ho sulla scheda","lang":"it","expect":"cmd.system.storage"}
+{"q":"come mi collego al wifi","lang":"it","expect":"os.wifi"}
+{"q":"dove vengono salvati i file","lang":"it","expect":"os.storage"}
+{"q":"il cardputer ha la psram","lang":"it","expect":"os.no-psram"}
+{"q":"come aggiorno il sistema operativo","lang":"it","expect":"os.update"}
+{"q":"come si usa il menu","lang":"it","expect":"os.keyboard"}
+{"q":"buongiorno","lang":"it","expect":"assistant.greeting"}
+{"q":"grazie mille per l'aiuto","lang":"it","expect":"assistant.thanks"}
+{"q":"parli italiano","lang":"it","expect":"assistant.language"}
+{"q":"what is the capital of japan","lang":"en","expect":"geo.capital.giappone"}
+{"q":"open the calculator please","lang":"en","expect":"cmd.launch.calculator"}
+{"q":"what time is it right now","lang":"en","expect":"cmd.system.time"}
+{"q":"how do i connect to wifi","lang":"en","expect":"os.wifi"}
+{"q":"what is recursion in programming","lang":"en","expect":"prog.recursion"}
+{"q":"how many planets are there","lang":"en","expect":"sci.planets-count"}
+{"q":"who are you","lang":"en","expect":"assistant.identity"}
+{"q":"thank you so much","lang":"en","expect":"assistant.thanks"}
+{"q":"what can you help me with","lang":"en","expect":"assistant.capabilities"}
+{"q":"what is photosynthesis","lang":"en","expect":"sci.photosynthesis"}
+{"q":"the tallest mountain in the world","lang":"en","expect":"geo.highest-mountain"}
+{"q":"what is an array","lang":"en","expect":"prog.array"}
+{"q":"does nucleoos need internet","lang":"en","expect":"os.offline"}
+{"q":"raccontami una barzelletta","lang":"it","expect":"none"}
+{"q":"qual e il senso della vita","lang":"it","expect":"none"}
+{"q":"che tempo fa domani a roma","lang":"it","expect":"none"}
+{"q":"scrivimi una poesia sull'autunno","lang":"it","expect":"none"}
+{"q":"qual e il tuo cibo preferito","lang":"it","expect":"none"}
+{"q":"quanto fa 7 per 8","lang":"it","expect":"none"}
+{"q":"how much is 12 times 5","lang":"en","expect":"none"}
+{"q":"what is the price of bitcoin today","lang":"en","expect":"none"}
+{"q":"tell me a joke","lang":"en","expect":"none"}
+{"q":"who won the world cup in 2006","lang":"en","expect":"none"}
+{"q":"come sono legate tensione corrente e resistenza","lang":"it","expect":"elec.ohm-law"}
+{"q":"what links volts amps and ohms","lang":"en","expect":"elec.ohm-law"}
+{"q":"a cosa serve un condensatore in un circuito","lang":"it","expect":"elec.capacitor"}
+{"q":"con quale strumento misuro la tensione","lang":"it","expect":"elec.multimeter"}
+{"q":"perche il led richiede una resistenza in serie","lang":"it","expect":"elec.led"}
+{"q":"qual e il riferimento a zero volt del circuito","lang":"it","expect":"elec.ground"}
+{"q":"a cosa servono i piedini programmabili del chip","lang":"it","expect":"esp.gpio"}
+{"q":"how do i turn an analog signal into a number","lang":"en","expect":"esp.adc"}
+{"q":"come regolo via software l'intensita luminosa di un led","lang":"it","expect":"esp.pwm"}
+{"q":"come riduco i consumi quando il chip non fa nulla","lang":"it","expect":"esp.deep-sleep"}
+{"q":"two wire bus to connect sensors","lang":"en","expect":"esp.i2c"}
+{"q":"come fa il chip a eseguire piu compiti insieme","lang":"it","expect":"esp.freertos"}
