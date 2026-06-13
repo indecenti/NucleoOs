@@ -611,12 +611,25 @@ static void anima_worker(void *arg)
         // also wants (that deadlocks). With httpd down the spine lock is then uncontended. Hybrid/offline keep
         // their heap (L1 answers there); only the pure-cloud turn pays the window. The query's own online-only
         // branch still falls back to a labelled offline answer if the cloud misses even with the freed heap.
+        // Reclaim the ~70 KB dedicated window when a cloud handshake is on the table but the heap can't
+        // currently afford it. Online-only ALWAYS reclaims (every turn is pure cloud). Hybrid normally
+        // keeps its heap so the offline tiers answer locally — but with online+key the L1 brain is stood
+        // down (RAM policy [[anima-l1-online-stand-down]]), so a hybrid KNOWLEDGE turn then has neither L1
+        // (off) nor the cloud (heap-gated below the TLS bars): the dead zone where "ANIMA goes silent".
+        // So hybrid ALSO reclaims, but ONLY when the heap is actually under the shared TLS bars — heap-OK
+        // hybrid turns keep httpd/L1 up and pay nothing. The brief httpd blip on a starved hybrid turn
+        // beats no answer; the deterministic offline tiers (math/time/profile/L0) still run, and
+        // exclusive_exit() below restores httpd/L1/mDNS/voice on every path.
         bool nx = false;
-        if (s_omode == OM_ONLY && nucleo_anima_online_available()) {
+        const bool heap_under_tls =
+            heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < NUCLEO_TLS_MIN_BLOCK ||
+            heap_caps_get_free_size(MALLOC_CAP_INTERNAL)          < NUCLEO_TLS_MIN_FREE;
+        const bool want_reclaim = (s_omode == OM_ONLY) || (s_omode == OM_ON && heap_under_tls);
+        if (want_reclaim && nucleo_anima_online_available()) {
             nucleo_exclusive_info_t inf;
             nx = nucleo_exclusive_enter(NX_NET_APP, &inf);
-            ESP_LOGI(ATAG, "online-only exclusive=%d post-reclaim free=%u largest=%u",
-                     (int)nx, (unsigned)inf.free_after, (unsigned)inf.largest_after);
+            ESP_LOGI(ATAG, "reclaim omode=%d heap_under_tls=%d exclusive=%d post free=%u largest=%u",
+                     s_omode, (int)heap_under_tls, (int)nx, (unsigned)inf.free_after, (unsigned)inf.largest_after);
         }
         // Spine gate: wait (poll) up to ~8s for the cascade to be free — a concurrent web /api/anima
         // holds it only briefly. If still busy, answer "busy" rather than racing the shared L1 state.
