@@ -36,10 +36,11 @@ const SRC  = join(here, '..', 'deploy', 'sd');
 
 // Device-state that must never be clobbered (same set as sd-sync.ps1). The payload shouldn't
 // contain these, but enforce defensively so a stray file can't overwrite a key or learned card.
-const PROT_FILES = new Set(['teacher.json', 'telemetry.ndjson', 'session.txt', '.httptrace',
+const PROT_FILES = new Set(['teacher.json', 'telemetry.ndjson', 'session.txt', 'sessions.json', '.httptrace',
   'auth.json', 'volume.json', 'settings.json', 'workspace.json']);
-const PROT_EXT = ['.vec'];
-const PROT_DIRS = ['data/anima/learned', 'system/config', 'config', 'backups', 'journal'];
+const PROT_EXT = ['.vec', '.httptrace'];
+const PROT_DIRS = ['data/anima/learned', 'system/config', 'system/keys', 'system/sessions',
+  'system/log', 'system/logs', 'config', 'backups', 'journal'];
 
 const isProtected = (rel) => {
   const base = rel.split('/').pop();

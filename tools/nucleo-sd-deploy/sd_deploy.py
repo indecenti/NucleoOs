@@ -290,11 +290,19 @@ def _write_fresh_state(dst_root, dry, log, st):
         return
     anima = dst_root / "data" / "anima"
     anima.mkdir(parents=True, exist_ok=True)
-    (anima / "teacher.json").write_text(json.dumps(TEACHER_TEMPLATE, indent=2), encoding="utf-8")
+    # NEVER clobber an existing API key: write the empty template ONLY on a card that has none.
+    # 'fresh' may be run on a card that already has NucleoOS (the GUI warns), and the user's Groq/
+    # Claude key must survive — matching the dialog's promise that the key is preserved.
+    tj = anima / "teacher.json"
+    if tj.exists():
+        log("teacher.json gia' presente -> chiave API preservata (non sovrascritta)")
+    else:
+        tj.write_text(json.dumps(TEACHER_TEMPLATE, indent=2), encoding="utf-8")
+        log("teacher.json creato (template, chiave vuota)")
     (anima / "learned").mkdir(exist_ok=True)
     for d in USER_DIRS:
         (dst_root / d.replace("/", os.sep)).mkdir(parents=True, exist_ok=True)
-    log(f"Stato device fresco: teacher.json (chiave vuota), learned/ vuoto, {len(USER_DIRS)} cartelle utente")
+    log(f"Stato device fresco: learned/ + {len(USER_DIRS)} cartelle utente assicurate")
 
 def verify(root, log, master=MASTER):
     """Confronta master vs SD per hash. Ritorna (missing, diff, ok)."""

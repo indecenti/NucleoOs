@@ -46,12 +46,43 @@ const SD = join(REPO, 'deploy', 'sd');
 // Web-layer subtrees that are safe to mirror over the air.
 const DEFAULT_TREES = ['www', 'apps', 'system/registry'];
 
-// Paths the sync NEVER overwrites — device-owned user state. Create-if-missing only.
+// Paths the sync may CREATE if missing but NEVER overwrites — device-owned defaults.
 // data/anima/workspace.json ships a default ({"root":"","recents":[]}) so first run has no 404, but
 // it becomes user state the moment a workspace is opened — create-only so a later release can't reset it.
 const PROTECTED = ['system/config', 'data/anima/workspace.json'];
 // Heavy media: synced only with --include-media (large WiFi uploads are flaky; copy via the SD).
 const MEDIA = ['data/ROMs', 'data/DOS', 'data/Music', 'data/Videos'];
+
+// Device STATE — provisioned by the USER at runtime (API key, learned cards, online cache, KGE
+// triples, evolution ledger, profile, presets, sessions, telemetry, vectors, settings, keys). The
+// release must NEVER push NOR overwrite these: whatever is on the device always wins. Checked
+// INDEPENDENTLY of the staging manifest, so even a polluted manifest (a stray teacher.json or
+// learned/it.jsonl that shouldn't have been staged) can never clobber the device. Mirrors
+// deploy.ps1 Is-State, sd_deploy.py DEVICE_STATE, and firmware nucleo_fs_is_protected.
+//
+// data/anima is ALLOWLISTED like the firmware: the ONLY things deploy ships there are the system
+// knowledge (akb5 shards; anima-*/dict-*/commands* files), the firmware-hash-pinned facets seeds
+// (byte-match VKL_FACETS_* in the .bin), and the create-only workspace default. EVERYTHING ELSE
+// under data/anima — teacher.json (API key), learned caches, profile, presets, sessions, *.vec, …
+// — is user state and is never touched. New ANIMA state files are protected automatically.
+const STATE_EXACT = new Set(['auth.json', 'volume.json', 'settings.json']);
+const STATE_DIRS = ['system/config', 'system/keys', 'system/sessions', 'system/log', 'system/logs',
+                    'config', 'backups', 'journal'];
+function isDeviceState(rel) {
+  rel = rel.replace(/\\/g, '/');
+  const base = rel.split('/').pop();
+  if (rel.startsWith('data/anima/')) {                                   // allowlist the system brain; the rest is state
+    if (rel.startsWith('data/anima/akb5/')) return false;                // knowledge shards: ship
+    if (/^facets\.[a-z-]+\.jsonl$/i.test(base)) return false;            // firmware-pinned seeds: ship
+    if (/^(anima-|dict-|commands)/i.test(base)) return false;            // encoder/index/dict/command map: ship
+    if (rel === 'data/anima/workspace.json') return false;              // default workspace: create-only (PROTECTED)
+    return true;                                                         // teacher.json key, learned, profile, … : state
+  }
+  if (STATE_EXACT.has(rel)) return true;
+  if (STATE_DIRS.some((d) => rel === d || rel.startsWith(d + '/'))) return true;
+  if (/\.(vec|httptrace)$/i.test(base)) return true;
+  return false;
+}
 // Below this, a same-size file is content-verified (cheap read); above it we trust size (no download).
 const SMALL = 256 * 1024;
 
@@ -170,9 +201,10 @@ async function syncSd(host, args) {
     return false;
   }
 
-  let created = 0, updated = 0, skipped = 0, excluded = 0, unknown = 0, failed = 0, bytes = 0;
+  let created = 0, updated = 0, skipped = 0, excluded = 0, unknown = 0, failed = 0, bytes = 0, stateKept = 0;
   for (const f of staged) {
     if (prefixed(f.rel, exclude)) { excluded++; continue; }
+    if (isDeviceState(f.rel)) { stateKept++; continue; }   // device-owned state: never push / never overwrite (key, learned, settings, sessions)
     const devPath = '/' + f.rel, devDir = posix.dirname(devPath), name = posix.basename(devPath);
     const idx = await dirIndex(devDir);
     const present = idx.kind === 'ok' && idx.files.has(name);
@@ -223,8 +255,8 @@ async function syncSd(host, args) {
 
   const kb = (bytes / 1024).toFixed(1);
   console.log(args.dryRun
-    ? `\nSync dry run: ${created} create, ${updated} update (${kb} KB); ${skipped} current, ${excluded} excluded, ${unknown} unverifiable.`
-    : `\nSync: ${created} created, ${updated} updated (${kb} KB), ${skipped} current, ${excluded} excluded, ${unknown} unverifiable, ${failed} failed.`);
+    ? `\nSync dry run: ${created} create, ${updated} update (${kb} KB); ${skipped} current, ${excluded} excluded, ${stateKept} device-state preserved, ${unknown} unverifiable.`
+    : `\nSync: ${created} created, ${updated} updated (${kb} KB), ${skipped} current, ${excluded} excluded, ${stateKept} device-state preserved, ${unknown} unverifiable, ${failed} failed.`);
   if (failed) console.error('Some files failed after retries — re-run the same command to resume (it only retouches what is still wrong).');
   return failed ? 1 : 0;
 }

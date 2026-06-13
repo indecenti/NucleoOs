@@ -52,15 +52,17 @@ static int     s_mv_ema = -1; // smoothed terminal voltage (mV); -1 until the fi
 static int64_t s_next_us;     // earliest time the cache may refresh
 static SemaphoreHandle_t s_lock;
 
-// Resting single-cell LiPo discharge curve (terminal mV -> % SoC), descending. A LiPo is far
-// from linear: nearly flat from ~3.7-4.0 V then a steep knee at both ends, so a straight
-// 3.3-4.2 V map (what Bruce does) over-reports for most of the discharge. We interpolate this
-// table instead. Voltages are the de-divided terminal voltage.
+// Single-cell LiPo SoC curve (terminal mV under ACTIVE load -> % SoC), descending. Two fixes over the
+// old table, which read ~4% at 3.55 V while Bruce's linear map gives ~32% there — far closer to truth:
+// (1) the old curve was wildly pessimistic across the whole mid-range (3.80 V -> 40% vs a real ~58%);
+// (2) we sample while Wi-Fi + CPU are busy, so the terminal voltage sags ~150-250 mV below the resting
+// curve — this table is calibrated for that LOADED reading, not a resting cell. Keeps the LiPo plateau
+// shape (fairly flat 3.7-4.0 V) a straight 3.3-4.2 V line would over-report. De-divided terminal mV.
 static const struct { int mv; int pct; } LIPO[] = {
-    {4200,100},{4150, 95},{4110, 90},{4080, 85},{4020, 80},{3980, 75},
-    {3950, 70},{3910, 65},{3870, 60},{3850, 55},{3840, 50},{3820, 45},
-    {3800, 40},{3790, 35},{3770, 30},{3750, 25},{3730, 20},{3710, 15},
-    {3690, 10},{3610,  5},{3300,  0},
+    {4200,100},{4150, 96},{4100, 90},{4050, 84},{4000, 78},{3950, 72},
+    {3900, 66},{3850, 60},{3800, 54},{3750, 48},{3700, 42},{3650, 36},
+    {3600, 30},{3550, 24},{3500, 18},{3450, 12},{3400,  7},{3350,  3},
+    {3300,  0},
 };
 
 static int mv_to_pct(int mv)

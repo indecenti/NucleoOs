@@ -54,11 +54,26 @@ $STATE = @(
     'data/anima/learned/knowledge.ledger.jsonl', 'data/anima/learned/evo/*',   # evolution ledger
     'data/anima/telemetry.ndjson', 'data/anima/session.txt', 'data/anima/sessions.json',
     'data/anima/workspace.json', 'data/anima/*.httptrace',
-    'system/config/*', 'config/*',      # runtime user settings (settings.json, volume.json, ...)
-    'auth.json', 'volume.json', '*.vec'
+    'system/config/*', 'system/keys/*', 'system/sessions/*',   # runtime user settings + pairing key + sessions
+    'system/log/*', 'system/logs/*',                            # device logs
+    'config/*', 'backups/*', 'journal/*',                       # runtime config / backups / journal
+    'auth.json', 'volume.json', 'settings.json', '*.vec'        # settings.json = root-level only (system/registry/settings.json is a system default)
 )
 function Is-State($rel) {
     foreach ($p in $STATE) { if ($rel -like $p) { return $true } }
+    # ANIMA subtree is ALLOWLISTED like the firmware (nucleo_fs_is_protected): the ONLY things deploy
+    # ships under data/anima are the system knowledge (akb5 shards; anima-*/dict-*/commands* files),
+    # the firmware-pinned facets seeds, and the create-only workspace default. EVERYTHING ELSE there
+    # — teacher.json (API key), learned caches, profile, presets, sessions, *.vec — is user state and
+    # is never staged, overwritten, nor mirror-deleted. New ANIMA state files are protected for free.
+    if ($rel -like 'data/anima/*') {
+        if ($rel -like 'data/anima/akb5/*') { return $false }                                          # shards: ship
+        $b = Split-Path $rel -Leaf
+        if ($b -like 'facets.*.jsonl') { return $false }                                               # seeds: ship
+        if ($b -like 'anima-*' -or $b -like 'dict-*' -or $b -like 'commands*') { return $false }       # encoder/index/dict/commands: ship
+        if ($rel -eq 'data/anima/workspace.json') { return $false }                                    # default: create-only
+        return $true                                                                                   # else: user state
+    }
     return $false
 }
 

@@ -46,6 +46,10 @@ $xf = @('teacher.json','telemetry.ndjson','session.txt','sessions.json','.httptr
         'it.jsonl','en.jsonl','mind.it.jsonl','mind.en.jsonl','knowledge.ledger.jsonl','occ.jsonl','subclass.jsonl')
 $xd = @(
   (Join-Path $Target 'system\config'),
+  (Join-Path $Target 'system\keys'),
+  (Join-Path $Target 'system\sessions'),
+  (Join-Path $Target 'system\log'),
+  (Join-Path $Target 'system\logs'),
   (Join-Path $Target 'config'),
   (Join-Path $Target 'backups'),
   (Join-Path $Target 'journal')
