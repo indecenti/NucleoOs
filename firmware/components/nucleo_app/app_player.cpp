@@ -28,7 +28,7 @@
 #include "esp_task_wdt.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "nucleo_exclusive.h"   // dedicated-mode RAM reclaim (~70KB) while a track plays — like the video player
+#include "nucleo_exclusive.h"   // NX_NET_APP: dedicated-mode RAM reclaim (~70KB) while a track plays
 #include "freertos/task.h"
 extern "C" {
 #include "nucleo_audio.h"
@@ -337,11 +337,18 @@ static int track_at(int pos)
 
 // ── Dedicated-mode RAM window for playback ─────────────────────────────────────────────────────────
 // The Helix MP3 decoder needs a chunky contiguous working set; on this PSRAM-less, ~50%-fragmented heap
-// the idle ~24 KB free wasn't enough and MP3InitDecoder OOM'd ("non riproduce più"). So while a track
-// plays we take the SAME dedicated window the video player uses: nucleo_exclusive_enter(NX_NET_APP) frees
-// ~70 KB by suspending httpd/L1/mDNS/voice (Wi-Fi STA stays up). HELD ACROSS track changes — entered in
-// play_q, released only when playback FULLY stops (on_tick, when the queue clears playpath) — so there's
-// no httpd stop/start churn between songs. Just browsing the library (not playing) keeps the network up.
+// the idle free heap isn't enough and MP3InitDecoder OOM'd. So WHILE A TRACK PLAYS we take the same
+// dedicated window the video player uses: nucleo_exclusive_enter(NX_NET_APP) frees ~70 KB by suspending
+// httpd/L1/mDNS/voice (Wi-Fi STA stays up). HELD ACROSS track changes — entered in play_q, released only
+// when playback FULLY stops (on_tick, when the queue clears playpath) — so there's no httpd stop/start
+// churn between songs. Just browsing the library (not playing) keeps the network up.
+//
+// IMPORTANT — this is per-PLAY, NOT per-app-open, ON PURPOSE. Suspending httpd at app OPEN (and
+// restarting it at close) churns the heap on EVERY visit to Music and fragments it enough that the next
+// app needing a big contiguous block — ANIMA's 30 KB worker stack — can no longer allocate and the
+// device reboots (the "open Music, exit, open ANIMA → crash" bug). Opening Music doesn't need the
+// reclaim anyway now: the boot-time voice engine no longer hogs ~23 KB (see nucleo_voice_init), so the
+// browser fits the idle heap. We pay the exclusive-mode reclaim ONLY when a decoder actually demands it.
 static bool s_excl = false;
 static void music_excl(bool on)
 {
@@ -1413,6 +1420,9 @@ extern "C" void nucleo_register_player(void)
         "music", "Music", "Media",
         "MP3/WAV browser — Shuffle, Repeat, Autoplay. TAB=settings.",
         'M', 0xFBB6, enter, on_key, tick, draw, leave
+        // exclusive_flags deliberately 0: Music reclaims RAM per-PLAY (music_excl in play_q), NOT at app
+        // open — going exclusive at open churns httpd and fragments the heap so the next app (ANIMA's
+        // 30 KB worker) can't allocate → reboot. See the RAM-window note above play_q.
     };
     nucleo_app_register(&app);
 }
