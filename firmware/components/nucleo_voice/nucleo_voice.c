@@ -903,16 +903,18 @@ bool nucleo_voice_always_on(void) { return (s_hold & VH_PIN) != 0; }
 
 esp_err_t nucleo_voice_init(void)
 {
-    // Lazy by design: NO task and NO heap at boot — the 16 KB engine is created on
-    // demand and torn down (stack returned) when no holder remains. The ONE exception
-    // is the user's persistent "always listen" opt-in: honour it here so PTT works
-    // from the home screen for those who chose it.
-    if (voice_read_setting_always_on()) {
-        nucleo_voice_enable(true);   // pins VH_PIN → brings the engine up now
-        ESP_LOGI(TAG, "AVCEB v2: always-on (from settings.json).");
-    } else {
-        ESP_LOGI(TAG, "AVCEB v2 ready (lazy; 0 KB until needed). PTT=FN key.");
-    }
+    // Lazy by design: NO task and NO heap at boot — the 16 KB engine + ~7 KB MFCC tables are created
+    // on demand (first PTT GO-hold / when a foreground app requests voice) and torn down (stack
+    // returned) the moment the last holder leaves. RAM-FIRST POLICY on this PSRAM-less chip: we
+    // DELIBERATELY no longer honour the "always listen" opt-in AT BOOT. That opt-in used to pin the
+    // engine up here (~23 KB resident), which on a ~37 KB heap left a media app no room to even open
+    // (the music player rebooted on launch). Voice RAM is now spent ONLY while voice is actually in
+    // use, never as a permanent boot tax. The runtime toggle (nucleo_voice_set_always_on, from the
+    // Voice app) still pins the engine live within the session for zero PTT spin-up — it just no
+    // longer survives a reboot. We still READ the flag so the choice is visible in /api/logs.
+    bool opted = voice_read_setting_always_on();
+    ESP_LOGI(TAG, "AVCEB v2 ready (lazy; 0 KB at boot, on demand). PTT=GO hold.%s",
+             opted ? " [alwaysOn opt-in NOT applied at boot: RAM-first on PSRAM-less HW]" : "");
     return ESP_OK;
 }
 

@@ -95,7 +95,13 @@ uint32_t nucleo_event_publish(const char *topic, const char *payload_json)
     // sulla stessa task) teneva il lock del ring per TUTTA l'I/O -> ogni altra task che pubblica o legge un
     // evento si bloccava su s_lock (portMAX_DELAY) = FREEZE TOTALE del device, senza reboot (l'IDLE pasce il
     // WDT). Un s_jlock dedicato serializza solo i journaler; ring/lettori/httpd restano liberi durante l'I/O.
-    if (s_jlock && xSemaphoreTake(s_jlock, portMAX_DELAY) == pdTRUE) {
+    // Attesa LIMITATA, MAI portMAX_DELAY. Se un journaler e' appeso nell'I/O SD (card lenta/assente, oppure
+    // heap troppo frammentato per i buffer FATFS), gli ALTRI publisher non devono restare bloccati per sempre
+    // su s_jlock -> e' esattamente il "FREEZE TOTALE senza reboot" descritto sopra, solo spostato dal ring al
+    // journal. Scaduto il timeout saltiamo SOLO la riga su disco: il blocco si riduce alla sola task davvero
+    // ferma sull'SD, tutte le altre proseguono. Persistenza best-effort (gia' a RAM zero): l'evento esce
+    // comunque dal tail live (s_sink, sotto). NIENTE task/coda dedicata -> nessuno stack residente in ostaggio.
+    if (s_jlock && xSemaphoreTake(s_jlock, pdMS_TO_TICKS(500)) == pdTRUE) {
         event_t je; je.seq = seq; je.ts = ts_copy;
         memcpy(je.topic, t_copy, sizeof je.topic);
         memcpy(je.payload, p_copy, sizeof je.payload);
