@@ -163,6 +163,7 @@ extern "C" void nucleo_register_ir(void);
 extern "C" void nucleo_register_link(void);   // "Vicino" — device-to-device file/command transfer
 extern "C" void nucleo_register_micspec(void);
 extern "C" void nucleo_register_qr(void);
+extern "C" void nucleo_register_theme(void);   // app_theme.cpp — replaces the empty nucleo_setup.c stub
 
 // Registration order defines BOTH the category order in the root menu (by first app seen)
 // and the app order within each category. Ordered so everyday apps lead and System/Connect
@@ -173,7 +174,7 @@ void nucleo_app_register_builtins(void)
     nucleo_register_clock(); nucleo_register_torch(); nucleo_register_calc(); nucleo_register_qr(); nucleo_register_files();
     nucleo_register_calendar(); nucleo_register_notify(); nucleo_register_notepad(); nucleo_register_usb(); nucleo_register_usbkbd(); nucleo_register_ir();
     nucleo_register_radio(); nucleo_register_player(); nucleo_register_video(); nucleo_register_photos(); nucleo_register_recorder(); nucleo_register_micspec();  // Media
-    nucleo_register_info(); nucleo_register_sysmon();                            // System
+    nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme();    // System
     nucleo_register_wifi(); nucleo_register_remote(); nucleo_register_ssh(); nucleo_register_link();  // Connect
     nucleo_register_voice(); nucleo_register_voicelab();                          // Voice Control + live console
     nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_ethernet();  // Security (authorized testing)
@@ -192,6 +193,7 @@ static void (*s_app_tab)(void) = nullptr;  // foreground app's TAB handler (else
 static bool (*s_app_back)(int key) = nullptr; // foreground app's Back/Esc/Left interceptor (gets the key; else close_app)
 static bool s_app_direct = false;          // app freed the shared canvas -> draw direct, don't re-acquire
 static void (*s_app_ptt)(bool) = nullptr;  // foreground app owns the GO-hold (recorder PTT); else voice PTT
+static bool (*s_app_poll)(void) = nullptr; // live app's per-loop poll: returns true to request a blit (gates the redraw to the app's data rate, not the loop rate)
 static bool s_app_excl   = false;          // framework entered exclusive for this app (declarative) -> it restores it
 
 static int find_app(const char *id) { for (int i = 0; i < s_app_count; i++) if (!strcmp(s_apps[i].id, id)) return i; return -1; }
@@ -250,6 +252,7 @@ static void open_app_def(const nucleo_app_def_t *def)
     s_app_tab = nullptr;                        // each app starts without a TAB claim; on_enter may set one
     s_app_back = nullptr; s_app_direct = false; // ...nor a Back claim / direct-draw pin; on_enter may set them
     s_app_ptt = nullptr;                        // ...nor a GO-hold (PTT) claim; the recorder sets it on_enter
+    s_app_poll = nullptr;                       // ...nor a per-loop data poll; a live app (mic spectrum) sets it on_enter
     launcher_render_reset_hint_colors();        // default dark footer; on_enter may override (e.g. Torch)
     d.fillRect(0, 0, W, H - HINT, BG);
     if (def->on_enter) def->on_enter();
@@ -338,6 +341,7 @@ static void close_app(void)
     s_app_tab = nullptr;                        // app gone -> TAB returns to the Control Center
     s_app_back = nullptr; s_app_direct = false; // ...Back returns to close, drawing back to buffered
     s_app_ptt = nullptr;                        // ...GO-hold returns to the voice recognizer
+    s_app_poll = nullptr;                       // ...no live app polling once back at the launcher
     launcher_render_reset_hint_colors();        // restore the default dark footer for the launcher
     s_active = -1; s_stub = nullptr; s_dirty = true; s_chrome_dirty = true;
 }
@@ -370,6 +374,7 @@ void nucleo_app_set_hint_colors(unsigned short bg, unsigned short fg) { launcher
 void nucleo_app_set_tab_handler(void (*fn)(void)) { s_app_tab = fn; }
 void nucleo_app_set_back_handler(bool (*fn)(int key)) { s_app_back = fn; }
 void nucleo_app_set_ptt_handler(void (*fn)(bool on)) { s_app_ptt = fn; }
+void nucleo_app_set_poll_handler(bool (*fn)(void)) { s_app_poll = fn; }
 void nucleo_app_set_direct_draw(bool on) { s_app_direct = on; }
 int  nucleo_app_content_top(void)    { return 0; }
 int  nucleo_app_content_height(void) { return H - HINT; }
@@ -1189,6 +1194,11 @@ void nucleo_app_run(void)
             // across launcher<->app transitions, so nothing re-allocates here. Only the blocking
             // media modals (video/music) release it for the decoder, then draw direct.
             const nucleo_app_def_t *def = active_def();
+            // Live apps (mic spectrum) drive their own data source: poll it every loop (~50 Hz) and
+            // ask for a blit ONLY when a new frame actually arrived, so the full-frame composite+push
+            // runs at the data rate (~31 Hz), not the loop rate. Blitting duplicate frames at 50 Hz is
+            // exactly the cadence redraw ANTI-FLICKER.md #4 forbids. Null for ordinary apps (no change).
+            if (s_app_poll && s_app_poll()) s_dirty = true;
             if (s_dirty) {
                 s_dirty = false;
                 // Apps that freed the canvas (ANIMA) pin direct draw: don't lazily re-acquire the

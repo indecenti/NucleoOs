@@ -19,6 +19,9 @@ CONFIG_FATFS_MAX_LFN=255
 # FS-lock acquisition timeout MUST stay BELOW the task watchdog (8s): on a slow/contended SD a
 # blocked write (es. calendar.json di un promemoria) deve FALLIRE a 5s, non superare il WDT -> reboot.
 CONFIG_FATFS_TIMEOUT_MS=5000
+# RAM (chip senza PSRAM): alloca i work-buffer FATFS alla dimensione REALE del settore SD (512B)
+# invece del 4096 forzato -> mount ctx ~38KB -> ~9KB (vedi audit RAM). La SD legge/scrive identico.
+CONFIG_FATFS_USE_DYN_BUFFERS=y
 
 # HTTP server
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024

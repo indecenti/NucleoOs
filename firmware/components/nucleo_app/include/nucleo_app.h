@@ -63,6 +63,13 @@ void nucleo_app_set_back_handler(bool (*fn)(int key));
 // still toggles the torch as usual. Set in on_enter; auto-cleared on app open/close (like the Back hook).
 void nucleo_app_set_ptt_handler(void (*fn)(bool on));
 
+// Live apps that drive their own data source (e.g. the mic-spectrum DSP) register a per-loop poll.
+// The run loop calls fn() every iteration (~50 Hz) while the app is foreground; return true ONLY when
+// a new frame is ready so the framework composites+blits at the DATA rate, not the loop rate. This is
+// the high-frequency counterpart of on_tick (5 Hz, too slow for a 31 Hz analyzer) and the cure for the
+// duplicate-frame redraws ANTI-FLICKER.md #4 warns about. Set in on_enter; auto-cleared on open/close.
+void nucleo_app_set_poll_handler(bool (*fn)(void));
+
 // An app that has released the shared canvas (ANIMA frees it for its index + online worker) pins
 // itself to DIRECT drawing: the run loop then never lazily re-acquires the 32 KB canvas, which
 // would otherwise eat the very RAM the app freed. The app's on_draw must self-clear only the

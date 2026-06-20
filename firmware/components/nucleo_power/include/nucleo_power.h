@@ -14,11 +14,12 @@ extern "C" {
 void nucleo_power_init(void);
 
 // ---- Battery gauge (M5Cardputer: VBAT through a 2:1 divider on G10 / ADC1) --------------
-// Bare M5GFX gives us no power-management IC, so — like Bruce — we read the cell voltage off
-// the ADC ourselves. Improvements over a naive single analogRead: eFuse curve-fitting
-// calibration, multi-sample averaging + an EMA so the value doesn't bounce when Wi-Fi TX sags
-// the rail, a non-linear LiPo discharge curve (not a flat 3.3-4.2 V line), a ~2 s cache so the
-// UI can poll it every frame for free, and an honest "unknown" state instead of a fake 100 %.
+// Bare M5GFX gives us no power-management IC, so — like Bruce — we read the cell voltage off the
+// ADC ourselves and map it LINEARLY to a percentage (0% at 3300 mV, 100% at 4100 mV, same as
+// Bruce's getBattery()). Deliberately simple: a calibrated multi-sample read (the IDF equivalent of
+// Bruce's analogReadMilliVolts), a ~2 s cache so the UI can poll every frame for free, and an honest
+// "unknown" (-1) state before the first reading. No SoC curve or smoothing — with no fuel-gauge IC
+// and no charge-detect line this is a coarse estimate by nature (and reads ~full on USB).
 
 // True once the ADC channel has been brought up successfully and at least one reading exists.
 bool nucleo_power_battery_available(void);
