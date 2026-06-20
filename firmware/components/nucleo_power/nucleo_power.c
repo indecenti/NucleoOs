@@ -9,10 +9,31 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
+// The battery mutex lives in static storage (xSemaphoreCreateMutexStatic) so the gauge's lock costs
+// ZERO heap. Static allocation is on by default in ESP-IDF; fail the build loudly if it is ever off.
+#if !defined(CONFIG_FREERTOS_SUPPORT_STATIC_ALLOCATION)
+#error "nucleo_power: enable CONFIG_FREERTOS_SUPPORT_STATIC_ALLOCATION for the zero-heap battery mutex"
+#endif
+
 static const char *TAG = "power";
+
+// Serialises battery_mv() across the launcher (UI) task and the HTTP server task. Storage is static
+// (BSS), so creating the mutex allocates nothing on the heap.
+static StaticSemaphore_t s_lock_buf;
+static SemaphoreHandle_t s_lock;
+
+// Create the lock in place inside s_lock_buf (no heap). Called once from nucleo_power_init() while
+// the system is still single-threaded; the lazy guard only covers a battery read that beats init.
+static SemaphoreHandle_t battery_lock(void)
+{
+    if (!s_lock) s_lock = xSemaphoreCreateMutexStatic(&s_lock_buf);
+    return s_lock;
+}
 
 void nucleo_power_init(void)
 {
+    battery_lock();   // bring up the zero-heap battery mutex once, before any task can race on it
+
     // DFS only: max == the configured default CPU freq (240 MHz, set in sdkconfig.defaults),
     // min 80 MHz. We keep min at 80 (not 40) so the Wi-Fi radio stays stable while idle.
     // light_sleep_enable = false: the launcher + HTTP server must remain instantly
@@ -38,9 +59,9 @@ void nucleo_power_init(void)
 #define BAT_GPIO        10
 #define BAT_DIVIDER     2.0f      // VBAT = Vadc * 2 (matches Bruce's ANALOG_BAT_MULTIPLIER)
 #define BAT_SAMPLES     16        // raw reads averaged per refresh — kills per-read ADC jitter
-#define BAT_REFRESH_US  2000000   // re-sample at most every 2 s; UI can call us every frame
-#define BAT_EMA_DEN     4         // EMA over refreshes: smooth = (smooth*(N-1) + fresh) / N
-#define BAT_MIN_MV      3300      // anything below this we treat as flat / sensor floor
+#define BAT_REFRESH_US  2000000   // re-read at most every 2 s; the UI can call us every frame
+#define BAT_MIN_MV      3300      // Bruce's 0% anchor (de-divided terminal mV)
+#define BAT_MAX_MV      4100      // Bruce's 100% anchor (3300 + 800 mV span)
 
 static adc_oneshot_unit_handle_t s_adc;
 static adc_cali_handle_t          s_cali;
@@ -48,37 +69,20 @@ static adc_channel_t              s_chan;
 static adc_unit_t                 s_unit;
 static bool    s_adc_ok;      // channel configured -> raw reads work
 static bool    s_cali_ok;     // eFuse calibration present -> raw->mV is trustworthy
-static int     s_mv_ema = -1; // smoothed terminal voltage (mV); -1 until the first sample
+static int     s_mv = -1;     // last terminal voltage (mV); -1 until the first reading lands
 static int64_t s_next_us;     // earliest time the cache may refresh
-static SemaphoreHandle_t s_lock;
 
-// Single-cell LiPo SoC curve (terminal mV under ACTIVE load -> % SoC), descending. Two fixes over the
-// old table, which read ~4% at 3.55 V while Bruce's linear map gives ~32% there — far closer to truth:
-// (1) the old curve was wildly pessimistic across the whole mid-range (3.80 V -> 40% vs a real ~58%);
-// (2) we sample while Wi-Fi + CPU are busy, so the terminal voltage sags ~150-250 mV below the resting
-// curve — this table is calibrated for that LOADED reading, not a resting cell. Keeps the LiPo plateau
-// shape (fairly flat 3.7-4.0 V) a straight 3.3-4.2 V line would over-report. De-divided terminal mV.
-static const struct { int mv; int pct; } LIPO[] = {
-    {4200,100},{4150, 96},{4100, 90},{4050, 84},{4000, 78},{3950, 72},
-    {3900, 66},{3850, 60},{3800, 54},{3750, 48},{3700, 42},{3650, 36},
-    {3600, 30},{3550, 24},{3500, 18},{3450, 12},{3400,  7},{3350,  3},
-    {3300,  0},
-};
-
+// Bruce-style LINEAR map: terminal mV -> %, 0% at BAT_MIN_MV, 100% at BAT_MAX_MV, clamped 0..100
+// (matches getBattery() in Bruce's src/core/utils.cpp). No SoC curve, no EMA, no load-sag modelling.
+// The M5Cardputer has no fuel-gauge IC and — like Bruce — no charge-detect line, so a voltage-only
+// reading is inherently a coarse estimate and reads ~full while on USB; trying to be cleverer than
+// this only produced a confidently-wrong number. Keep it plain and honest.
 static int mv_to_pct(int mv)
 {
-    if (mv >= LIPO[0].mv) return 100;
-    int n = (int)(sizeof(LIPO) / sizeof(LIPO[0]));
-    if (mv <= LIPO[n - 1].mv) return 0;
-    for (int i = 1; i < n; i++) {
-        if (mv >= LIPO[i].mv) {
-            // Linear interpolation inside the [i-1, i] segment.
-            int dv = LIPO[i - 1].mv - LIPO[i].mv;
-            int dp = LIPO[i - 1].pct - LIPO[i].pct;
-            return LIPO[i].pct + (mv - LIPO[i].mv) * dp / dv;
-        }
-    }
-    return 0;
+    int pct = (mv - BAT_MIN_MV) * 100 / (BAT_MAX_MV - BAT_MIN_MV);
+    if (pct < 0)   pct = 0;
+    if (pct > 100) pct = 100;
+    return pct;
 }
 
 // Bring up ADC oneshot + calibration once. Cheap to leave installed for the whole session.
@@ -113,7 +117,9 @@ static void battery_setup(void)
     ESP_LOGI(TAG, "battery gauge on G%d (ADC%d ch%d, cali=%d)", BAT_GPIO, s_unit + 1, s_chan, s_cali_ok);
 }
 
-// Sample the ADC and fold the result into the EMA. Caller holds s_lock.
+// Read the ADC and cache the terminal voltage. Caller holds s_lock. This is the IDF equivalent of
+// Bruce's analogReadMilliVolts(): one calibrated reading (denoised over a few raw samples here), then
+// de-divided. No smoothing across time — the value the UI shows IS the latest reading.
 static void battery_refresh(void)
 {
     long acc = 0; int got = 0;
@@ -131,14 +137,10 @@ static void battery_refresh(void)
         // Fallback: 12-bit full scale over ~3100 mV. Coarse, but better than nothing.
         adc_mv = raw_avg * 3100 / 4095;
     }
-    int mv = (int)(adc_mv * BAT_DIVIDER + 0.5f);
-    if (mv < BAT_MIN_MV - 400) return;   // implausibly low -> no cell / bad read, don't poison the EMA
-
-    if (s_mv_ema < 0) s_mv_ema = mv;     // seed instantly so the first reading isn't lagged
-    else s_mv_ema = (s_mv_ema * (BAT_EMA_DEN - 1) + mv) / BAT_EMA_DEN;
+    s_mv = (int)(adc_mv * BAT_DIVIDER + 0.5f);   // de-divided terminal mV; mapped to % on read
 }
 
-// Lazily init, then refresh at most every BAT_REFRESH_US. Returns smoothed mV or -1.
+// Lazily init, then re-read at most every BAT_REFRESH_US. Returns the cached terminal mV, or -1.
 static int battery_mv_locked(void)
 {
     static bool tried;
@@ -146,15 +148,16 @@ static int battery_mv_locked(void)
     if (!s_adc_ok) return -1;
     int64_t now = esp_timer_get_time();
     if (now >= s_next_us) { battery_refresh(); s_next_us = now + BAT_REFRESH_US; }
-    return s_mv_ema;
+    return s_mv;
 }
 
 static int battery_mv(void)
 {
-    if (!s_lock) { s_lock = xSemaphoreCreateMutex(); if (!s_lock) return -1; }
-    if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(50)) != pdTRUE) return s_mv_ema;
+    SemaphoreHandle_t lock = battery_lock();
+    if (!lock) return s_mv;
+    if (xSemaphoreTake(lock, pdMS_TO_TICKS(50)) != pdTRUE) return s_mv;
     int mv = battery_mv_locked();
-    xSemaphoreGive(s_lock);
+    xSemaphoreGive(lock);
     return mv;
 }
 

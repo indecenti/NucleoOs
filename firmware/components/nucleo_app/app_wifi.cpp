@@ -147,18 +147,19 @@ static void draw_tabbar(bool header){
             d.drawRoundRect(x+2,3,seg-4,17,7,ACC);          // active but focus is in rows: outline
             txt(x+(seg-tw)/2,8,lab,ACC,BG,1);
         }else{
-            txt(x+(seg-tw)/2,8,lab,DIM,BG,1);
+            txt(x+(seg-tw)/2,8,lab,MUTED,BG,1);             // inactive tab: legible grey, not near-black DIM
         }
     }
     d.drawFastHLine(0,23,W,LINE);
 }
 
-// ---- generic settings row (mirrors app_video draw_set_row) -----------------
+// ---- generic settings list -------------------------------------------------
 enum { RV_TEXT=0, RV_TOGGLE, RV_SLIDER, RV_ACTION, RV_SEG };
 // Segment labels for the focused RV_SEG row (set before draw_list).
 static const char *s_seg[4]; static int s_seg_n = 0;
-#define ROWH_F 44                                           // focused row height
-#define ROWH_N 26                                           // unfocused row pitch (launcher-like)
+
+// One settings row. `val` carries the right-hand text for RV_TEXT; other kinds derive it.
+struct Row { const char *label; char val[20]; int kind; bool on; int slider; };
 
 // Compact right-aligned value text for an UNFOCUSED row (launcher style: dot + text).
 static void row_value_str(char*b,int cap,const char*val,int kind,bool on,int slider){
@@ -169,101 +170,119 @@ static void row_value_str(char*b,int cap,const char*val,int kind,bool on,int sli
     else                     snprintf(b,cap,"%.14s",val?val:"");
 }
 
-static void draw_row(int y,bool focus,const char*label,const char*val,
-                     int kind,bool on,int slider){
-    if(!focus){
-        // Launcher-style slim row: colour dot + size-1 label + size-1 value. No capsule.
-        uint16_t lc = (kind==RV_ACTION)?ACC:MUTED;
-        d.fillCircle(12,y+ROWH_N/2,2,lc);
-        txt(20,y+ROWH_N/2-3,label,MUTED,BG,1);
-        char rb[20]; row_value_str(rb,sizeof rb,val,kind,on,slider);
-        if(rb[0]){ int w=(int)strlen(rb)*6;
-            uint16_t vc = kind==RV_TOGGLE?(on?GRN:DIM):kind==RV_ACTION?ACC:DIM;
-            txt(W-12-w,y+ROWH_N/2-3,rb,vc,BG,1);
-        }
-        return;
-    }
-    // Focused row: enlarged capsule + accent rail + size-2 label + full control widget.
-    int h=ROWH_F;
-    d.fillRoundRect(4,y,W-8,h-2,9,CAP);
-    d.fillRoundRect(4,y+3,5,h-8,2,ACC);
-    txt(16,y+(h-16)/2-1,label,FG,CAP,2);
+// Decide ONCE per list whether labels can use the big size-2 font: only when the longest
+// label still leaves room for a value and the per-row pitch is tall enough. Labels are kept
+// short enough (e.g. "Dimentica", not "Dimentica tutte") that every tab — Luce/AP/ANIMA/SYS —
+// clears this check and renders the same big rows; only a genuinely long label falls back.
+static bool list_big(Row*it,int n,int pitch){
+    if(pitch<22) return false;
+    int maxlen=0; for(int i=0;i<n;i++){ int l=(int)strlen(it[i].label); if(l>maxlen)maxlen=l; }
+    return maxlen*12 + 16 + 46 <= W;            // label(size2) + left margin + min value room
+}
 
-    if(kind==RV_SEG){
-        int n=s_seg_n>0?s_seg_n:1, gap=3, pw=40, ph=20;
-        int totw=n*pw+(n-1)*gap, bx=W-10-totw, vy=y+(h-ph)/2;
-        for(int i=0;i<n;i++){
-            int px=bx+i*(pw+gap); bool sel=(i==slider);
-            d.fillRoundRect(px,vy,pw,ph,ph/2,sel?ACC:SURF);
-            const char*sl=s_seg[i]?s_seg[i]:"?"; int tw=(int)strlen(sl)*6;
-            int tx=px+(pw-tw)/2; if(tx<px+2)tx=px+2;
-            txt(tx,vy+(ph-8)/2,sl,sel?INK:MUTED,sel?ACC:SURF,1);
+// One list row of height h at top y. The SELECTED row is always the big font in a capsule
+// with the live widget; other rows follow `big` (size-2 on short lists, size-1 on long ones)
+// and show a compact value. Widgets are vertically centred so they fit any row height.
+static void draw_list_row(int y,int h,Row&r,bool big,bool sel){
+    int cy=y+h/2;
+    uint16_t bg = sel?CAP:BG;
+    if(sel){
+        d.fillRoundRect(4,y+1,W-8,h-3,8,CAP);                // focus capsule
+        d.fillRoundRect(8,y+5,4,h-11,2,ACC);                 // accent rail
+    }
+    bool lbig = sel || big;                                  // selected row is always enlarged
+    int lsz = lbig?2:1;
+    if(!lbig) d.fillCircle(12,cy,2,(r.kind==RV_ACTION)?ACC:MUTED);   // dot only on slim rows
+    int lx = lbig?16:20;
+    uint16_t labc = (sel||big)?FG:MUTED;
+    d.setTextSize(lsz); d.setTextColor(labc,bg);
+    d.setCursor(lx, cy-(lsz==2?8:3)); d.print(r.label);
+
+    if(sel){
+        if(r.kind==RV_SEG){
+            int nn=s_seg_n>0?s_seg_n:1, gap=2, pw=44, ph=20;
+            int totw=nn*pw+(nn-1)*gap, bx=W-12-totw, vy=cy-ph/2;
+            for(int i=0;i<nn;i++){
+                int px=bx+i*(pw+gap); bool s=(i==r.slider);
+                d.fillRoundRect(px,vy,pw,ph,ph/2,s?ACC:SURF);
+                const char*sl=s_seg[i]?s_seg[i]:"?"; int tw=(int)strlen(sl)*6;
+                int tx=px+(pw-tw)/2; if(tx<px+2)tx=px+2;
+                txt(tx,vy+(ph-8)/2,sl,s?INK:MUTED,s?ACC:SURF,1);
+            }
+        }else if(r.kind==RV_SLIDER){
+            int sw=92,sh=12,bx=W-12-sw,vy=cy-sh/2;
+            d.fillRoundRect(bx,vy,sw,sh,sh/2,SURF);
+            int onw=r.slider*sw/100; if(onw<0)onw=0; if(onw>sw)onw=sw;
+            if(onw>0) d.fillRoundRect(bx,vy,onw,sh,sh/2,GRN);
+            int kx=bx+onw; if(kx<bx+6)kx=bx+6; if(kx>bx+sw-6)kx=bx+sw-6;
+            d.fillCircle(kx,vy+sh/2,sh/2+2,FG);
+            char pv[8]; snprintf(pv,sizeof pv,"%d%%",r.slider);   // live % readout left of the track
+            d.setTextSize(1); d.setTextColor(FG,CAP); d.setCursor(bx-6-(int)strlen(pv)*6,cy-3); d.print(pv);
+        }else if(r.kind==RV_TOGGLE){
+            int sw=42,sh=20,bx=W-12-sw,vy=cy-sh/2;
+            d.fillRoundRect(bx,vy,sw,sh,sh/2,r.on?GRN:SURF);
+            int kx=r.on?bx+sw-sh/2-1:bx+sh/2+1;
+            d.fillCircle(kx,vy+sh/2,sh/2-3,r.on?INK:MUTED);
+        }else if(r.kind==RV_ACTION){
+            int bw=30,bh=22,bx=W-12-bw,vy=cy-bh/2;
+            d.fillRoundRect(bx,vy,bw,bh,6,ACC);
+            int ax=bx+bw/2-2;
+            d.fillTriangle(ax,cy-5,ax,cy+5,ax+5,cy,INK);
+        }else if(r.val[0]){                                  // RV_TEXT chip
+            int vw=(int)strlen(r.val)*12+12, vh=20;
+            int maxw=W-12-(16+(int)strlen(r.label)*12+8);
+            if(vw>maxw){ int mc=(maxw-12)/12; if(mc<1)mc=1; vw=mc*12+12; }
+            int bx=W-12-vw,vy=cy-vh/2;
+            d.fillRoundRect(bx,vy,vw,vh,5,SURF);
+            int mc=(vw-12)/12; if(mc>19)mc=19;
+            char b[20]; snprintf(b,sizeof b,"%.*s",mc,r.val);
+            d.setTextSize(2); d.setTextColor(FG,SURF); d.setCursor(bx+6,vy+2); d.print(b);
         }
         return;
     }
-    if(kind==RV_SLIDER){
-        int sw=96,sh=12,bx=W-10-sw,vy=y+(h-sh)/2;
-        d.fillRoundRect(bx,vy,sw,sh,sh/2,SURF);
-        int onw=slider*sw/100; if(onw<0)onw=0; if(onw>sw)onw=sw;
-        if(onw>0) d.fillRoundRect(bx,vy,onw,sh,sh/2,GRN);
-        int kx=bx+onw; if(kx<bx+6)kx=bx+6; if(kx>bx+sw-6)kx=bx+sw-6;
-        d.fillCircle(kx,vy+sh/2,sh/2+2,FG);
-        return;
-    }
-    if(kind==RV_TOGGLE){
-        int sw=42,sh=20,bx=W-10-sw,vy=y+(h-sh)/2;
-        d.fillRoundRect(bx,vy,sw,sh,sh/2,on?GRN:SURF);
-        int kx=on?bx+sw-sh/2-1:bx+sh/2+1;
-        d.fillCircle(kx,vy+sh/2,sh/2-3,on?INK:MUTED);
-        return;
-    }
-    if(kind==RV_ACTION){
-        int bw=28,bh=22,bx=W-10-bw,vy=y+(h-bh)/2;
-        d.fillRoundRect(bx,vy,bw,bh,6,ACC);
-        int ax=bx+bw/2-2,ay=vy+bh/2;
-        d.fillTriangle(ax,ay-4,ax,ay+4,ax+4,ay,INK);
-        return;
-    }
-    if(val&&val[0]){                                          // RV_TEXT chip
-        int n=(int)strlen(val); int vw=n*12+14,vh=22;
-        int maxw=W-10-(16+(int)strlen(label)*12+8);
-        if(vw>maxw){ int mc=(maxw-14)/12; if(mc<1)mc=1; vw=mc*12+14; }
-        int bx=W-10-vw,vy=y+(h-vh)/2;
-        d.fillRoundRect(bx,vy,vw,vh,6,SURF);
-        d.setTextSize(2); d.setTextColor(FG,SURF);
-        char b[20]; int mc=(vw-14)/12; if(mc>19)mc=19; snprintf(b,sizeof b,"%.*s",mc,val);
-        d.setCursor(bx+7,vy+3); d.print(b);
+    // unselected: compact, right-aligned value
+    char rb[20]; row_value_str(rb,sizeof rb,r.val,r.kind,r.on,r.slider);
+    if(rb[0]){ int w=(int)strlen(rb)*6;
+        uint16_t vc = r.kind==RV_TOGGLE?(r.on?GRN:MUTED):r.kind==RV_ACTION?ACC:(big?FG:MUTED);
+        d.setTextSize(1); d.setTextColor(vc,BG); d.setCursor(W-12-w,cy-3); d.print(rb);
     }
 }
 
-// Centred, focus-enlarged list: focused row big (size 2), others slim (launcher style).
-struct Row { const char *label; char val[20]; int kind; bool on; int slider; };
+// Adaptive, space-filling list. Few rows (Luce/AP/ANIMA) stretch to fill the band with big
+// size-2 labels; many rows (SYS) keep a compact size-1 pitch and scroll. The block is laid
+// out top-to-bottom and vertically centred, so short lists never float with empty space.
+// sel == -1 (tab header) simply means no row carries the capsule.
 static void draw_list(int ch,Row*it,int n,int sel){
-    d.setClipRect(0,24,W,ch-24);
-    if(sel<0){                                              // tab header: flat slim preview
-        int y=28;
-        for(int i=0;i<n && y<ch-6;i++){
-            draw_row(y,false,it[i].label,it[i].val,it[i].kind,it[i].on,it[i].slider);
-            y+=ROWH_N;
-        }
-        d.clearClipRect(); return;
+    if(n<=0) return;
+    const int top=26, bot=ch-3, band=bot-top;          // content band under the tab bar
+    const int HMIN=22, HMAX=40;
+    int pitch=band/n; if(pitch>HMAX)pitch=HMAX;
+    bool scroll=(pitch<HMIN); if(scroll)pitch=HMIN;
+    int visible=scroll?(band/pitch):n; if(visible>n)visible=n;
+    bool big=list_big(it,n,pitch);
+
+    // scroll window that keeps the selection on screen (roughly centred)
+    int first=0;
+    if(scroll){
+        int cur=(sel<0)?0:sel;
+        first=cur-visible/2;
+        if(first>n-visible)first=n-visible;
+        if(first<0)first=0;
     }
-    int cy=(24+ch)/2, half=ROWH_F/2;
-    for(int i=0;i<n;i++){
-        int dist=i-sel,y;
-        if(dist==0)      y=cy-half;
-        else if(dist<0)  y=cy-half+dist*ROWH_N;
-        else             y=cy+half+(dist-1)*ROWH_N;
-        int h=(dist==0)?ROWH_F:ROWH_N;
-        if(y+h>24 && y<ch)
-            draw_row(y,i==sel,it[i].label,it[i].val,it[i].kind,it[i].on,it[i].slider);
+    int shown=scroll?visible:n;
+    int y0=top+(band-shown*pitch)/2; if(y0<top)y0=top; // centre the block when it doesn't fill
+
+    d.setClipRect(0,top,W,band);
+    for(int k=0;k<shown;k++){
+        int i=first+k; if(i>=n)break;
+        draw_list_row(y0+k*pitch,pitch,it[i],big,i==sel);
     }
     d.clearClipRect();
-    // scroll knob
-    if(n>3){
-        int trk=ch-28,kh=trk*3/n; if(kh<10)kh=10;
-        int ky=27+(trk-kh)*sel/(n-1);
-        d.fillRoundRect(W-3,27,2,trk,1,LINE);
+
+    if(scroll){                                        // slim scrollbar (watch-style)
+        int trk=band-4, kh=trk*visible/n; if(kh<12)kh=12;
+        int maxoff=n-visible, ky=top+2+(maxoff>0?(trk-kh)*first/maxoff:0);
+        d.fillRoundRect(W-3,top+2,2,trk,1,LINE);
         d.fillRoundRect(W-3,ky,2,kh,1,ACC);
     }
 }
@@ -309,8 +328,8 @@ static void draw_stato(int ch){
     for(int i=0;i<ns;i++){int v=s_hist[s_histn-ns+i],bh=v*(gh-4)/100;
         d.drawFastVLine(gx+2+i,gy+gh-2-bh,bh,qcol(v));}
 
-    // complications row: PIN | SD  (kept above the hint bar)
-    int fy=ch-16;
+    // complications row: PIN | SD  (kept above the hint bar, with a small bottom margin)
+    int fy=ch-18;
     d.drawFastHLine(0,fy-3,W,LINE);
     const char*pin=nucleo_auth_pin();
     txt(8,fy+2,"PIN",MUTED,BG,1);
@@ -340,46 +359,68 @@ static void draw_rete(int ch){
     txt(12,30,n?(s_en?"Rescan networks":"Aggiorna reti"):(s_en?"Scan networks":"Cerca reti"),hf?FG:MUTED,hf?CAP:BG,1);
     if(hf) txt(W-40,30,"INVIO",ACC,CAP,1);
     if(!n){
-        txt(12,62,s_en?"No networks yet.":"Nessuna rete trovata.",DIM,BG,1);
+        txt(12,62,s_en?"No networks yet.":"Nessuna rete trovata.",MUTED,BG,1);
         txt(12,76,s_en?"Press ENTER to scan.":"Premi INVIO per cercare.",MUTED,BG,1);
         return;
     }
 
+    // Top-anchored, space-filling list: the block is centred when every network fits, and
+    // scrolls to keep the selection on screen when it doesn't — no more floating in the
+    // middle. Non-focused rows now show the SSID at size 2, so the names are easy to read.
+    int top=48, band=(ch-3)-top, HF=44, HN=28;
+    int total=0; for(int i=0;i<n;i++) total += (i==s_sel)?HF:HN;
+    int y0;
+    if(total<=band){ y0=top+(band-total)/2; }              // all fit: centre the block
+    else{                                                  // scroll so the selection stays visible
+        int selTop=0; for(int i=0;i<(s_sel<0?0:s_sel);i++) selTop+=HN;
+        int selH=(s_sel<0)?HN:HF, scroll=0;
+        if(selTop+selH>band) scroll=selTop+selH-band;
+        if(selTop<scroll)     scroll=selTop;
+        if(scroll>total-band) scroll=total-band;
+        if(scroll<0)          scroll=0;
+        y0=top-scroll;
+    }
+
     d.setClipRect(0,46,W,ch-46);
-    int cy=(50+ch)/2;
+    int y=y0;
     for(int i=0;i<n;i++){
-        int dist=i-(s_sel<0?0:s_sel),h=(i==s_sel)?44:24,y;
-        if(s_sel<0){ y=50+i*24; h=24; }           // header focused: flat preview
-        else if(dist==0) y=cy-h/2;
-        else if(dist<0)  y=cy-22+dist*24;
-        else             y=cy+22+(dist-1)*24;
-        if(y+h<=46||y>=ch) continue;
-        bool f=(i==s_sel);
-        int rssi=nucleo_setup_scan_rssi(i),q=squality(rssi);
-        bool cur=connected()&&!strcmp(nucleo_setup_scan_ssid(i),nucleo_setup_ssid());
-        bool known=nucleo_setup_net_is_known(nucleo_setup_scan_ssid(i));   // saved -> auto-rejoin
-        d.fillRoundRect(4,y,W-8,h-2,7,f?CAP:BG);
-        if(f) d.fillRoundRect(4,y+3,5,h-8,2,qcol(q));
-        // signal bars
-        int bx=14,by=y+(h-13)/2; int lit=q>=75?4:q>=50?3:q>=25?2:q>0?1:0;
-        for(int k=0;k<4;k++){int bh=3+k*3; d.fillRect(bx+k*4,by+13-bh,3,bh,k<lit?(f?qcol(q):MUTED):LINE);}
-        if(nucleo_setup_scan_secure(i)){d.drawRoundRect(34,by+2,5,5,1,f?FG:MUTED);d.fillRect(33,by+5,7,5,f?FG:MUTED);}
-        const char*ss=nucleo_setup_scan_ssid(i);
-        if(f){
-            char sb[12]; snprintf(sb,sizeof sb,"%.10s",ss[0]?ss:"(hidden)");
-            txt(46,y+6,sb,cur?GRN:FG,CAP,2);
-            char det[40]; snprintf(det,sizeof det,"%s%s  ch%d  %ddBm",
-                known?(s_en?"saved ":"salv. "):"",
-                nucleo_setup_scan_auth_label(i),nucleo_setup_scan_channel(i),rssi);
-            txt(46,y+26,det,qcol(q),CAP,1);
-            if(known) d.fillCircle(W-16,y+11,3,ACC);          // saved-network pip
-        }else{
-            char sb[24]; snprintf(sb,sizeof sb,"%.20s",ss[0]?ss:"(hidden)");
-            txt(46,y+(h-8)/2,sb,cur?GRN:MUTED,BG,1);
-            if(known) d.fillCircle(W-12,y+h/2,3,ACC);         // saved-network pip
+        bool f=(i==s_sel); int h=f?HF:HN;
+        if(y+h>46 && y<ch-2){
+            int rssi=nucleo_setup_scan_rssi(i),q=squality(rssi);
+            bool cur=connected()&&!strcmp(nucleo_setup_scan_ssid(i),nucleo_setup_ssid());
+            bool known=nucleo_setup_net_is_known(nucleo_setup_scan_ssid(i));   // saved -> auto-rejoin
+            d.fillRoundRect(4,y,W-8,h-2,7,f?CAP:BG);
+            if(f) d.fillRoundRect(4,y+3,5,h-8,2,qcol(q));
+            // signal bars
+            int bx=14,by=y+(h-13)/2; int lit=q>=75?4:q>=50?3:q>=25?2:q>0?1:0;
+            for(int k=0;k<4;k++){int bh=3+k*3; d.fillRect(bx+k*4,by+13-bh,3,bh,k<lit?(f?qcol(q):MUTED):LINE);}
+            if(nucleo_setup_scan_secure(i)){d.drawRoundRect(34,by+2,5,5,1,f?FG:MUTED);d.fillRect(33,by+5,7,5,f?FG:MUTED);}
+            const char*ss=nucleo_setup_scan_ssid(i);
+            if(f){
+                char sb[14]; snprintf(sb,sizeof sb,"%.12s",ss[0]?ss:"(hidden)");
+                txt(46,y+6,sb,cur?GRN:FG,CAP,2);
+                char det[40]; snprintf(det,sizeof det,"%s%s  ch%d  %ddBm",
+                    known?(s_en?"saved ":"salv. "):"",
+                    nucleo_setup_scan_auth_label(i),nucleo_setup_scan_channel(i),rssi);
+                txt(46,y+26,det,qcol(q),CAP,1);
+                if(known) d.fillCircle(W-16,y+11,3,ACC);          // saved-network pip
+            }else{
+                char sb[16]; snprintf(sb,sizeof sb,"%.13s",ss[0]?ss:"(hidden)");
+                txt(46,y+(h-16)/2,sb,cur?GRN:MUTED,BG,2);          // size-2 name (was tiny size-1)
+                if(known) d.fillCircle(W-12,y+h/2,3,ACC);          // saved-network pip
+            }
         }
+        y+=h;
     }
     d.clearClipRect();
+    // slim scrollbar when the list overflows
+    if(total>band){
+        int trk=band, kh=trk*band/total; if(kh<12)kh=12;
+        int scrolled=top-y0, maxs=total-band;
+        int ky=top+(maxs>0?(trk-kh)*scrolled/maxs:0);
+        d.fillRoundRect(W-3,top,2,trk,1,LINE);
+        d.fillRoundRect(W-3,ky,2,kh,1,ACC);
+    }
 }
 
 // ---- DIAG (live ANIMA telemetry) -------------------------------------------
@@ -387,17 +428,20 @@ static void draw_diag(int ch){
     anima_diag_t dg; nucleo_anima_diag(&dg);
     char b[48];
 
-    // header: total queries + online state
-    txt(8,30,s_en?"ANIMA diagnostics":"Diagnostica ANIMA",ACC,BG,1);
-    snprintf(b,sizeof b,s_en?"%lu queries":"%lu richieste",(unsigned long)dg.queries);
-    txt(8,44,b,FG,BG,2);
+    // header: total queries.  Vertical budget (content 24..121) is tight, so every band
+    // is spaced to leave the legend clear of the footer divider — no more overlap.
+    txt(8,28,s_en?"ANIMA diagnostics":"Diagnostica ANIMA",ACC,BG,1);
+    unsigned long qn=(unsigned long)dg.queries;             // compact 'k' form above 100k keeps the
+    if(qn>=100000) snprintf(b,sizeof b,s_en?"%luk queries":"%luk richieste",qn/1000); // size-2 line < 240px
+    else           snprintf(b,sizeof b,s_en?"%lu queries":"%lu richieste",qn);
+    txt(8,40,b,FG,BG,2);                                     // 40..56
 
     // tier-mix stacked bar (L0 cmd / L1 fact / L2 stitch / L3 cloud / miss)
     uint32_t parts[5]={dg.t_command,dg.t_fact,dg.t_stitch,dg.t_remote,dg.t_none};
     uint16_t cols[5]={ACC,GRN,C_PURPLE,AMB,REDC};
     const char*leg[5]={"L0","L1","L2","Cloud","Miss"};
     uint32_t tot=0; for(int i=0;i<5;i++) tot+=parts[i];
-    int bx=8,by=66,bw=W-16,bh=14;
+    int bx=8,by=60,bw=W-16,bh=14;                           // 60..74
     d.drawRoundRect(bx,by,bw,bh,3,LINE);
     if(tot>0){
         int x=bx+1,avail=bw-2;
@@ -406,27 +450,31 @@ static void draw_diag(int ch){
             if(i==4) w=bx+1+avail-x;                         // last fills remainder
             if(w>0){ d.fillRect(x,by+1,w,bh-2,cols[i]); x+=w; }
         }
-    }else txt(bx+6,by+4,s_en?"no data yet":"nessun dato",DIM,BG,1);
+    }else txt(bx+6,by+4,s_en?"no data yet":"nessun dato",MUTED,BG,1);
 
-    // legend (two short lines of chips)
-    int lx=8,ly=86;
+    // legend — two rows max (ly 80, wraps to 92), both above the footer divider at 103. Each
+    // chip wraps BEFORE it is drawn if it would not fit, so no chip (including "Miss") can ever
+    // spill past the right edge; if both rows are full the remaining chips are simply dropped.
+    int lx=8,ly=80; const int LY_MAX=92;
     for(int i=0;i<5;i++){
-        d.fillRect(lx,ly+2,7,7,cols[i]);
         snprintf(b,sizeof b,"%s %lu",leg[i],(unsigned long)parts[i]);
-        txt(lx+10,ly+1,b,MUTED,BG,1);
-        lx += 10 + (int)strlen(b)*6 + 8;
-        if(lx>W-40 && i<4){ lx=8; ly+=12; }
+        int cw=10+(int)strlen(b)*6;                          // swatch + gap + text
+        if(lx+cw>W-6 && lx>8 && ly<LY_MAX){ lx=8; ly+=12; }  // wrap to row 2 when it won't fit
+        if(lx+cw>W-6 && lx>8) continue;                       // no room left -> drop (never overflow)
+        d.fillRect(lx,ly+1,7,7,cols[i]);
+        txt(lx+10,ly,b,MUTED,BG,1);
+        lx+=cw+8;
     }
 
-    // last answer confidence + intent, L1 heap
-    int fy=ch-26;
-    d.drawFastHLine(0,fy-2,W,LINE);
+    // footer: last answer confidence + intent | L1 heap
+    int fy=ch-15;                                            // divider 103, text 107..115
+    d.drawFastHLine(0,fy-3,W,LINE);
     snprintf(b,sizeof b,s_en?"last %d%%  %.12s":"ultima %d%%  %.12s",
              dg.last_conf,dg.last_intent[0]?dg.last_intent:"-");
-    txt(8,fy+2,b,dg.last_conf>=70?GRN:dg.last_conf>=40?AMB:REDC,BG,1);
+    txt(8,fy+1,b,dg.last_conf>=70?GRN:dg.last_conf>=40?AMB:REDC,BG,1);
     size_t hb=nucleo_anima_l1_heap_bytes();
     snprintf(b,sizeof b,"L1 %uKB",(unsigned)(hb/1024));
-    txt(W-(int)strlen(b)*6-8,fy+2,b,hb?ACC:DIM,BG,1);
+    txt(W-(int)strlen(b)*6-8,fy+1,b,hb?ACC:MUTED,BG,1);
 }
 
 // ---- AP --------------------------------------------------------------------
@@ -498,7 +546,10 @@ static void build_sys(Row*it,int*n){
     it[k].label=s_en?"Theme":"Tema"; it[k].kind=RV_TEXT; snprintf(it[k].val,20,"%s",theme_name()); k++;
     it[k].label=sta?(s_en?"Disconnect":"Disconnetti"):(s_en?"Reconnect":"Riconnetti");
         it[k].kind=RV_ACTION; k++;
-    it[k].label=s_en?"Forget all":"Dimentica tutte"; it[k].kind=RV_TEXT;
+    // "Dimentica" (not "Dimentica tutte"): short enough that SYS clears list_big's width
+    // check and renders with the same big size-2 rows as the other tabs, while still
+    // leaving room for the "sicuro?" confirm chip beside it.
+    it[k].label=s_en?"Forget all":"Dimentica"; it[k].kind=RV_TEXT;
         { int nn=nucleo_setup_net_count();
           if(s_fconf) snprintf(it[k].val,20,"%s",s_en?"sure?":"sicuro?");
           else        snprintf(it[k].val,20,nn?"%d":"",nn); } k++;
@@ -531,17 +582,17 @@ static void draw_manual(int ch){
     d.fillRect(0,0,W,ch,BG);
     txt(8,4,s_en?"Settings - help":"Impostazioni - guida",ACC,BG,1);
     const char*it[]={
-        "DESTRA / TAB: cambia scheda",
+        "SX / DX / TAB: cambia scheda",
         "GIU: entra nelle voci  SU: torna su",
-        "INVIO: attiva  Esc/SX: indietro",
+        "INVIO: attiva   Esc: esci dall'app",
         "LUCE: INVIO su slider, poi < >",
         "ANIMA: Modo Auto/Offline/Online",
         "DIAG: telemetria ANIMA dal vivo",
         "SYS: tema, lingua, riavvia",0};
     const char*en[]={
-        "RIGHT / TAB: switch tab",
+        "LEFT / RIGHT / TAB: switch tab",
         "DOWN: enter rows   UP: go back up",
-        "ENTER: act   Esc/LEFT: back",
+        "ENTER: act   Esc: exit the app",
         "DISP: ENTER on slider, then < >",
         "ANIMA: Mode Auto/Offline/Online",
         "DIAG: live ANIMA telemetry",
@@ -600,8 +651,9 @@ static void on_draw(void){
         char sh[40]; for(int i=from;i<s_ilen&&k<24;i++,k++) sh[k]=mask?'*':s_ibuf[i];
         sh[k]=0; txt(vx,iy+7,sh,FG,CAP,1); d.fillRect(vx+k*6,iy+6,2,9,ACC);
     }
-    // toast
-    if(s_msg_t>0){ int iy=ch-22; d.fillRoundRect(6,iy,W-12,18,5,SURF); txt(12,iy+5,s_msg,AMB,SURF,1); }
+    // toast — sits at the bottom, but lifts above the inline editor when one is open so
+    // a validation message (e.g. "Min 8 chars") never covers the field you are typing in.
+    if(s_msg_t>0){ int iy=(s_im!=IM_NONE)?ch-48:ch-22; d.fillRoundRect(6,iy,W-12,18,5,SURF); txt(12,iy+5,s_msg,AMB,SURF,1); }
 }
 
 // ---- worker ----------------------------------------------------------------
@@ -624,14 +676,14 @@ static int tab_rows(int t);
 static void update_hint(void){
     if(s_edit){ nucleo_app_set_hint(s_en?"L/R adjust   ENTER done":"L/R regola   INVIO ok"); return; }
     if(s_sel==-1){
-        if(s_tab==T_STATO)      nucleo_app_set_hint(s_en?"RIGHT tab   ENTER ANIMA   esc":"DESTRA scheda   INVIO ANIMA   esc");
-        else if(s_tab==T_RETE)  nucleo_app_set_hint(s_en?"RIGHT tab   ENTER scan   DOWN list":"DESTRA scheda   INVIO cerca   GIU lista");
-        else if(tab_rows(s_tab)>0) nucleo_app_set_hint(s_en?"RIGHT tab   DOWN rows   esc":"DESTRA scheda   GIU voci   esc");
-        else                    nucleo_app_set_hint(s_en?"RIGHT tab   esc back":"DESTRA scheda   esc esci");
+        if(s_tab==T_STATO)      nucleo_app_set_hint(s_en?"L/R tab   ENTER ANIMA   esc":"L/R scheda   INVIO ANIMA   esc");
+        else if(s_tab==T_RETE)  nucleo_app_set_hint(s_en?"L/R tab   ENTER scan   DOWN list":"L/R scheda   INVIO cerca   GIU lista");
+        else if(tab_rows(s_tab)>0) nucleo_app_set_hint(s_en?"L/R tab   DOWN rows   esc":"L/R scheda   GIU voci   esc");
+        else                    nucleo_app_set_hint(s_en?"L/R tab   esc back":"L/R scheda   esc esci");
         return;
     }
-    if(s_tab==T_RETE) nucleo_app_set_hint(s_en?"ENTER join   DEL forget   RIGHT tab":"INVIO connetti   CANC dimentica   DESTRA scheda");
-    else              nucleo_app_set_hint(s_en?"UP/DN row   ENTER ok   RIGHT tab":"SU/GIU voce   INVIO ok   DESTRA scheda");
+    if(s_tab==T_RETE) nucleo_app_set_hint(s_en?"ENTER join   DEL forget   L/R tab":"INVIO connetti   CANC dimentica   L/R scheda");
+    else              nucleo_app_set_hint(s_en?"UP/DN row   ENTER ok   L/R tab":"SU/GIU voce   INVIO ok   L/R scheda");
 }
 
 // Forward (RIGHT / TAB) pager — keeps the row level like Video's settings_key.
@@ -643,6 +695,15 @@ static void page_tab(void){
     update_hint(); nucleo_app_request_draw();   // NB: scan is manual (ENTER on RETE header)
 }
 static void on_tab(void){ page_tab(); }
+
+// Backward (LEFT) pager — mirror of page_tab so the arrows cycle the tabs both ways.
+static void page_tab_back(void){
+    if(s_im!=IM_NONE||s_manual||s_busy) return;
+    s_tab=(s_tab+NTABS-1)%NTABS; s_edit=false; s_rconf=false; s_fconf=false;
+    int n=tab_rows(s_tab);
+    s_sel=(s_sel>=0 && n>0)?0:-1;            // stay in rows if we were in rows, else header
+    update_hint(); nucleo_app_request_draw();
+}
 
 // ---- ANIMA diagnosis -------------------------------------------------------
 static void ask_anima(void){
@@ -788,7 +849,10 @@ static void on_key(int k,char ch){
     nucleo_app_request_draw();
 }
 
-// ---- back / LEFT (mirrors app_video video_back: hierarchical pop) ----------
+// ---- back (Esc) / LEFT --------------------------------------------------------
+// Both keys land here (the framework routes Esc and Left to the back handler). LEFT
+// is a backward tab pager and never closes the app; Esc does the hierarchical pop
+// (row -> header -> close) so the launcher is reached only with Esc.
 static bool wifi_back(int key){
     if(s_manual){ s_manual=false; nucleo_app_request_draw(); return true; }
     if(s_im!=IM_NONE){ s_im=IM_NONE; memset(s_ibuf,0,sizeof s_ibuf); s_ilen=0; nucleo_app_request_draw(); return true; }
@@ -798,8 +862,12 @@ static bool wifi_back(int key){
         else { s_edit=false; update_hint(); nucleo_app_request_draw(); }   // Esc = done
         return true;
     }
+    // LEFT pages the tabs backward (mirror of RIGHT); it must never close the app —
+    // only Esc returns to the launcher.
+    if(key==NK_LEFT){ page_tab_back(); return true; }
+    // Esc: hierarchical pop — a selected row returns to the header, the header closes the app.
     if(s_sel>=0){ s_sel=-1; update_hint(); nucleo_app_request_draw(); return true; }  // row -> header
-    return false;   // header -> let the framework close the app
+    return false;   // header + Esc -> let the framework close the app
 }
 
 // ---- on_tick ---------------------------------------------------------------

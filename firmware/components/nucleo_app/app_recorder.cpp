@@ -9,8 +9,8 @@
 //             can listen while you read. Each artifact is cached next to the take as a sidecar
 //             (.txt/.sum.txt/.act.txt/.ask.txt) and generated off the UI thread, so the screen never
 //             freezes on the network.
-//  SETTINGS : TAB opens a 2-tab sheet — AI (auto-summary, auto-title, language) / INFO (Grok status,
-//             storage, take count).
+//  SETTINGS : TAB opens a 3-tab sheet — AI (auto-summary, auto-title, language) / AUDIO (playback
+//             volume) / INFO (engine, model, online, storage).
 //
 // The cloud chain (no on-device ASR exists) is WAV -> Whisper (auto-language) -> teacher LLM, shared
 // with /api/transcribe via nucleo_anima_transcribe/summarize/actions/qa/title. The take audio is kept
@@ -66,7 +66,7 @@ static const unsigned short BG = 0x0841, SURF = 0x10A2, CAP = 0x1A8B, FG = 0xFFF
 // ---- modes & tabs ---------------------------------------------------------------------------------
 enum { M_LIST = 0, M_DETAIL, M_SETTINGS, M_ASK };   // M_ASK = full-screen cross-note answer reader
 enum { T_SUMMARY = 0, T_SCRIPT, T_ACTIONS, T_ASK, T_COUNT };
-enum { ST_AI = 0, ST_INFO, ST_COUNT };
+enum { ST_AI = 0, ST_AUDIO, ST_INFO, ST_COUNT };
 // UI language flag — cached in enter() from sys_lang() (SD read, too costly in draw loops).
 // Must be declared before det_tab_label() which references it.
 static bool s_en = false;
@@ -74,7 +74,7 @@ static bool s_en = false;
 // Tab labels are language-selected at draw time via det_tab_label().
 static const char *const DET_TABS_IT[] = { "RIASSUNTO", "TESTO", "AZIONI", "CHIEDI" };
 static const char *const DET_TABS_EN[] = { "SUMMARY",   "SCRIPT", "ACTIONS", "ASK"  };
-static const char *const SET_TABS[]    = { "AI", "INFO" };
+static const char *const SET_TABS[]    = { "AI", "AUDIO", "INFO" };
 static inline const char *det_tab_label(int i) { return s_en ? DET_TABS_EN[i] : DET_TABS_IT[i]; }
 
 static int  s_mode    = M_LIST;
@@ -886,6 +886,32 @@ static void draw_opt(int y, bool focus, const char *label, const char *val, bool
     }
 }
 
+// Volume slider row for the AUDIO tab. U/D (or +/-) adjust the shared output volume — read LIVE, since
+// it's the same global the Music player drives, and applied to take playback. Slider mirrors the Music
+// player so the two media apps feel of a piece.
+static void draw_vol_row(int y, bool focus, int vol)
+{
+    const int hh = 24;
+    if (vol < 0) vol = 0;
+    if (vol > 100) vol = 100;
+    d.fillRoundRect(6, y, 228, hh, 7, focus ? CAP : SURF);
+    if (focus) d.fillRoundRect(6, y + 4, 4, hh - 8, 2, ACC);              // accent rail
+    d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1);
+    d.setTextColor(focus ? FG : MUTED, focus ? CAP : SURF); d.setCursor(16, y + 7); d.print("Volume");
+    d.setFont(&fonts::Font0);
+
+    char vb[8]; snprintf(vb, sizeof vb, "%d%%", vol);
+    int vw = (int)strlen(vb) * 6, vx = 228 - vw + 2;                      // % readout, far right (Font0 = 6px/char)
+    int sw = 78, sh = 10, bx = vx - sw - 10, vy = y + (hh - sh) / 2;
+    d.fillRoundRect(bx, vy, sw, sh, sh / 2, focus ? 0x3187 : 0x2945);     // track
+    int onw = vol * sw / 100; if (onw > sw) onw = sw;
+    if (onw > 0) d.fillRoundRect(bx, vy, onw, sh, sh / 2, GRN);           // fill
+    int kx = bx + onw; if (kx < bx + 5) kx = bx + 5; if (kx > bx + sw - 5) kx = bx + sw - 5;
+    d.fillCircle(kx, vy + sh / 2, focus ? sh / 2 + 1 : sh / 2 - 1, FG);   // knob
+    d.setTextColor(focus ? FG : MUTED, focus ? CAP : SURF);
+    d.setCursor(vx, y + 9); d.print(vb);
+}
+
 static void info_row(int y, const char *label, const char *val, unsigned short vc)
 {
     d.setTextColor(MUTED, BG); d.setCursor(12, y); d.print(label);
@@ -904,6 +930,11 @@ static void settings_draw(int top, int h)
         draw_opt(y,      s_set_row == 0, TR("Riassunto auto", "Auto summary"), nullptr, true, s_auto_summary);
         draw_opt(y + 28, s_set_row == 1, TR("Titolo auto",    "Auto title"),   nullptr, true, s_auto_title);
         draw_opt(y + 56, s_set_row == 2, TR("Lingua",         "Language"),     langv,   false, false);
+    } else if (s_set_tab == ST_AUDIO) {
+        draw_vol_row(y0 + 6, s_set_row == 0, nucleo_audio_volume());
+        d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1); d.setTextColor(DIM, BG);
+        d.setCursor(12, y0 + 44); d.print(TR("Per riascoltare le note", "Playback level for takes"));
+        d.setFont(&fonts::Font0);
     } else {
         d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1);
         bool on = nucleo_anima_online_available();
@@ -921,15 +952,25 @@ static void settings_draw(int top, int h)
 
     d.fillRect(0, footer_y, 240, 12, BG); d.drawFastHLine(0, footer_y, 240, LINE);
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, footer_y + 2);
-    d.print(s_set_tab == ST_AI
-        ? TR("su/giu riga  Invio: cambia  </> tab", "up/dn row   ent change   </> tab")
-        : TR("</> tab   Esc: indietro", "</> tab   esc back"));
+    d.print(s_set_tab == ST_AI    ? TR("su/giu riga  Invio: cambia  </> tab", "up/dn row   ent change   </> tab")
+          : s_set_tab == ST_AUDIO ? TR("su/giu: volume   </> tab",            "up/dn volume   </> tab")
+          :                          TR("</> tab   Esc: indietro",            "</> tab   esc back"));
 }
 
 static void settings_key(int key, char ch)
 {
-    (void)ch;
     if (key == NK_RIGHT) { s_set_tab = (s_set_tab + 1) % ST_COUNT; s_set_row = 0; set_hint_for_mode(); nucleo_app_request_draw(); return; }
+
+    if (s_set_tab == ST_AUDIO) {                               // single Volume slider — U/D (or +/-) step 5
+        int v = nucleo_audio_volume(), nv = v;
+        if      (key == NK_UP   || ch == '+' || ch == '=') nv = v + 5;
+        else if (key == NK_DOWN || ch == '-' || ch == '_') nv = v - 5;
+        else return;
+        if (nv < 0) nv = 0;
+        if (nv > 100) nv = 100;
+        if (nv != v) { nucleo_audio_set_volume(nv); nucleo_app_request_draw(); }
+        return;
+    }
     if (s_set_tab != ST_AI) return;                            // INFO has no rows
     if (key == NK_UP)   { if (s_set_row > 0) s_set_row--; nucleo_app_request_draw(); return; }
     if (key == NK_DOWN) { if (s_set_row < 2) s_set_row++; nucleo_app_request_draw(); return; }
@@ -1040,8 +1081,10 @@ static void set_hint_for_mode(void)
                  "</> tab  up/dn line  ,/. page  Enter make"));
         break;
     case M_SETTINGS:
-        nucleo_app_set_hint(TR("</> tab  su/giu  Invio: cambia  Esc: back",
-                              "</> tab  up/dn  Enter change  Esc back"));
+        nucleo_app_set_hint(
+            s_set_tab == ST_AUDIO ? TR("</> tab  su/giu: volume  Esc: back", "</> tab  up/dn volume  Esc back")
+          : s_set_tab == ST_AI    ? TR("</> tab  su/giu  Invio: cambia  Esc: back", "</> tab  up/dn  Enter change  Esc back")
+          :                          TR("</> tab  Esc: back", "</> tab  Esc back"));
         break;
     case M_ASK:
         nucleo_app_set_hint(TR("su/giu riga  ,/. pagina  Esc: back", "up/dn line  ,/. page  Esc back"));

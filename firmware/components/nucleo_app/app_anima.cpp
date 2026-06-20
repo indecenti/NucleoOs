@@ -625,7 +625,9 @@ static void anima_worker(void *arg)
             heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < NUCLEO_TLS_MIN_BLOCK ||
             heap_caps_get_free_size(MALLOC_CAP_INTERNAL)          < NUCLEO_TLS_MIN_FREE;
         const bool want_reclaim = (s_omode == OM_ONLY) || (s_omode == OM_ON && heap_under_tls);
-        if (want_reclaim && nucleo_anima_online_available()) {
+        // Salta se la finestra esclusiva di sessione (enter()) e' GIA' attiva: rientrare qui e poi
+        // chiamare exit() sotto la chiuderebbe a meta' sessione (il modulo non e' a refcount).
+        if (want_reclaim && nucleo_anima_online_available() && !nucleo_exclusive_active()) {
             nucleo_exclusive_info_t inf;
             nx = nucleo_exclusive_enter(NX_NET_APP, &inf);
             ESP_LOGI(ATAG, "reclaim omode=%d heap_under_tls=%d exclusive=%d post free=%u largest=%u",
@@ -669,7 +671,7 @@ static void anima_worker(void *arg)
         if (g == s_gen) {
             bool will_speak = r.reply[0] && r.action != ANIMA_ACT_LAUNCH && r.action != ANIMA_ACT_TOOL;
             bool vnx = false;
-            if (will_speak && nucleo_tts_enabled() &&
+            if (will_speak && nucleo_tts_enabled() && !nucleo_exclusive_active() &&
                 heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < NUCLEO_VOICE_MIN_BLOCK) {
                 nucleo_exclusive_info_t vi;
                 vnx = nucleo_exclusive_enter(NX_NET_APP, &vi);
@@ -1179,6 +1181,14 @@ static void submit(void)
     else                                          snprintf(s_req, sizeof(s_req), "%s", s_input);
     s_ilen = 0; s_input[0] = 0;
     s_gen = s_gen + 1;
+    if (!s_worker) {                               // on-demand: create the 30 KB worker only now, with the
+        // session reclaim window up (enter() freed httpd/L1/mDNS/voice) so the contiguous block exists.
+        BaseType_t ok = xTaskCreate(anima_worker, "anima_sh", 30720, (void *)(uintptr_t)s_worker_epoch,
+                                    tskIDLE_PRIORITY + 2, &s_worker);
+        if (ok != pdPASS) s_worker = nullptr;
+        ESP_LOGI(ATAG, "worker on-demand %s; largest=%u", ok == pdPASS ? "ready" : "FAIL",
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+    }
     if (s_worker) {                                // normal path: run the (possibly online) query off-loop
         s_busy = true; s_done = false; s_spin = 0;
         xTaskNotifyGive(s_worker);
@@ -1480,6 +1490,18 @@ static void enter(void)
     nucleo_screen_release();
     nucleo_app_set_direct_draw(true);
     nucleo_audio_stop();
+    // Recupera la RAM all'avvio come Music/Video. Questo chip senza PSRAM gira a ~5 KB liberi e, dopo
+    // un'altra app media, l'heap e' frammentato: il worker da 30 KB (e il ricarico dell'indice L1) non si
+    // allocavano e ANIMA si RIAVVIAVA all'apertura. Sospendi httpd + indice L1 + mDNS per TUTTA la sessione
+    // (Wi-Fi STA resta su per le query cloud) e ripristina in leave(). NON includere NX_VOICE: ANIMA deve
+    // poter PARLARE (TTS) durante la sessione, e sospendere il motore voce zittiva la sintesi. Il motore
+    // voce e' comunque lazy (~0 KB al boot), quindi non sospenderlo non costa RAM. Il worker per-query
+    // rinuncia al suo enter/exit quando questa finestra e' gia' attiva (vedi anima_worker).
+    nucleo_exclusive_info_t nxi;
+    nucleo_exclusive_enter(NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY, &nxi);
+    ESP_LOGI(ATAG, "enter reclaim: free %u->%u largest %u->%u",
+             (unsigned)nxi.free_before, (unsigned)nxi.free_after,
+             (unsigned)nxi.largest_before, (unsigned)nxi.largest_after);
     nucleo_anima_set_compact_reply(true);   // small screen: cloud answers short & complete (off again in leave)
     load_settings();
     nucleo_anima_init("it");
@@ -1502,24 +1524,16 @@ static void enter(void)
     s_focus_cat = 0; memset(s_focus_leaf, 0, sizeof s_focus_leaf);
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_back_handler(on_back);
-    if (!s_worker) {
-        // 30 KB stack: the offline L1 cascade (anima_query->try_cascade->l1_query->l1_encode, acc[1KB]+w
-        // on the stack) overflowed the old 16 KB and panicked on every knowledge query — same root cause
-        // fixed on the httpd task. Online HTTPS + mbedTLS cert-chain recursion needs the headroom too.
-        // Heap-backed; released when the worker self-deletes (right away on leave if idle, at the end of
-        // an in-flight query if busy — see stop_worker), so it only outlives the app by that drain.
-        BaseType_t ok = xTaskCreate(anima_worker, "anima_sh", 30720, (void *)(uintptr_t)s_worker_epoch,
-                                    tskIDLE_PRIORITY + 2, &s_worker);
-        ESP_LOGI(ATAG, "worker %s; heap=%u largest=%u", ok == pdPASS ? "ready" : "CREATE FAILED",
-                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
-                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
-        if (ok != pdPASS) s_worker = nullptr;
-    }
+    // NO worker at app open. Spawning its 30 KB stack here made it live concurrently with the UI, the L1
+    // index and the TLS buffers for the WHOLE session — on a ~14 KB heap that's exactly what panicked
+    // ANIMA on launch (worst right after another media app fragmented the heap). It's spawned ON DEMAND in
+    // submit() now, only when there's a query to run, inside the session reclaim window: a pipeline step
+    // that takes RAM, works, then is torn down — not a permanent concurrent allocation.
     refresh_complications();                       // watch-face glance card (date / SD / next event)
     if (s_mcount) rebuild_rows();                  // restored conversation -> wrap it for display
     if (s_preset[0]) {                             // seeded by another app (e.g. Wi-Fi diagnostics): auto-ask
         snprintf(s_input, sizeof s_input, "%s", s_preset); s_ilen = (int)strlen(s_input); s_preset[0] = 0;
-        if (s_worker) submit();
+        submit();   // submit() now spawns the worker on demand (or runs inline forced-offline if it can't)
     }
     nucleo_app_set_hint(s_user_sent ? chat_hint()
                                     : (s_en ? "up/dn  1-9 try   tab menu" : "su giu  1-9 prova  tab menu"));
@@ -1532,6 +1546,7 @@ static void leave(void)
     save_chat();                                   // remember the conversation for next time
     nucleo_anima_set_compact_reply(false);         // web client (full screen) keeps long answers
     stop_worker();                                 // free the worker's 30 KB heap stack for L1
+    if (nucleo_exclusive_active()) nucleo_exclusive_exit();  // ripristina httpd/L1/mDNS/voce: chiusa la finestra di sessione (come Music/Video)
     d.setFont(&fonts::Font0); d.setTextSize(1);    // restore the framework's default font for the next app
 }
 

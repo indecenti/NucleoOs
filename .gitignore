@@ -13,3 +13,6 @@ GEMINI API KEY*.txt
 # --- Bytecode Python generato (non sorgente) ---
 __pycache__/
 *.pyc
+
+# --- Log di build/flash/serial (artefatti di sviluppo) ---
+*.log

@@ -28,6 +28,7 @@ static bool  s_frozen  = false;
 static ms_snapshot_t s_snap;       // last copied frame
 static bool  s_ok      = false;    // got at least one frame
 static uint32_t s_seen = 0;        // last seq we folded into caps/history
+static bool  s_was_running = false; // last polled engine running-state (edge -> one repaint)
 
 // peak-hold caps (bars), slow fall
 static float s_cap[MS_BANDS];
@@ -69,6 +70,14 @@ static uint16_t grad(float t)
                   (int)(s[i].b + (s[i+1].b - s[i].b) * f));
 }
 static uint16_t level_col(int pct) { return pct >= 85 ? C_RED : pct >= 55 ? C_YELLOW : C_GREEN; }
+
+// 256-entry gradient LUT for the active palette. grad() does a float lerp between palette stops; the
+// waterfall calls it for EVERY cell (up to 232*32 ~= 7400 per frame), which dominated the mode's CPU
+// and made frames arrive unevenly (read as flicker). Precompute once per palette and index by the
+// 0..255 band byte instead of recomputing the lerp. Rebuilt in enter()/on_tab(), never per frame. 512 B.
+static uint16_t s_grad_lut[256];
+static void build_grad_lut(void) { for (int i = 0; i < 256; i++) s_grad_lut[i] = grad((float)i / 255.0f); }
+static inline uint16_t grad8(uint8_t v) { return s_grad_lut[v]; }
 
 // Apply manual sensitivity to a 0..255 band value.
 static inline int sens_apply(int v) { int r = v * s_sens / 100; return r > 255 ? 255 : r; }
@@ -131,8 +140,7 @@ static void draw_bars(void)
         int hgt = v * MAIN_H / 255;
         // fixed vertical gradient revealed by bar height (classic analyzer)
         for (int yy = base; yy > base - hgt; yy -= 3) {
-            float t = (float)(base - yy) / MAIN_H;
-            d.fillRect(x, yy - 2, bw, 3, grad(t));
+            d.fillRect(x, yy - 2, bw, 3, grad8((uint8_t)((base - yy) * 255 / MAIN_H)));
         }
         // peak-hold cap
         int capv = (int)s_cap[b];
@@ -154,7 +162,7 @@ static void draw_fall(void)
         int x = 4 + (W - 8 - show) + c;                 // newest at the right edge
         for (int b = 0; b < MS_BANDS; b++) {
             int yy = MAIN_B - (b + 1) * rowh;           // low freq at bottom
-            d.fillRect(x, yy, 1, rowh, grad(cell[b] / 255.0f));
+            d.fillRect(x, yy, 1, rowh, grad8(cell[b]));
         }
     }
 }
@@ -246,6 +254,23 @@ static void fold_frame(void)
     }
 }
 
+// ---- per-loop poll (framework, ~50 Hz): copy a new frame + fold it, and report whether the screen
+// needs a blit. Returning true ONLY on a fresh seq (or a running-state edge) gates the full-frame
+// redraw to the DSP's ~31 Hz output instead of the loop's 50 Hz — no duplicate-frame repaints, which
+// is the cadence redraw ANTI-FLICKER.md #4 forbids and the main source of the on-screen flicker.
+static bool poll(void)
+{
+    if (s_frozen) return false;                       // frozen: the frame is held -> never auto-redraw
+    bool run = nucleo_micspec_running();
+    if (run != s_was_running) { s_was_running = run; return true; }  // started/stopped -> repaint once (live <-> splash)
+    if (!run) return false;                           // error/idle splash is static
+    if (nucleo_micspec_get(&s_snap) && (!s_ok || s_snap.seq != s_seen)) {
+        s_ok = true; s_seen = s_snap.seq; fold_frame();
+        return true;                                  // a genuinely new analysis frame -> blit
+    }
+    return false;                                     // same seq this loop -> skip the redraw entirely
+}
+
 // ---- error / waiting splash ----
 static void draw_splash(const char *msg, uint16_t col)
 {
@@ -256,7 +281,7 @@ static void draw_splash(const char *msg, uint16_t col)
 // ---- lifecycle ----
 static void draw(void)
 {
-    d.fillRect(0, 0, W, CONTENT_B, BG);
+    d.fillRect(0, 0, W, CONTENT_B, BG);   // self-clear; matters only on the direct-draw fallback, harmless when buffered
 
     if (!nucleo_micspec_running()) {
         int e = nucleo_micspec_last_error();
@@ -267,13 +292,8 @@ static void draw(void)
         return;
     }
 
-    if (!s_frozen) {
-        if (nucleo_micspec_get(&s_snap)) {
-            s_ok = true;
-            if (s_snap.seq != s_seen) { s_seen = s_snap.seq; fold_frame(); }
-        }
-    }
-
+    // Frame copy + caps/waterfall fold happen in poll() (framework loop), so draw() is a pure render:
+    // it runs only when poll() saw a new frame, and the blit cadence tracks the DSP, not the loop.
     draw_hud();
     if (!s_ok) { draw_splash("...", MUTED); }
     else switch (s_mode) {
@@ -283,8 +303,6 @@ static void draw(void)
         case M_TUNE:  draw_tuner(); break;
     }
     draw_pager();
-
-    if (!s_frozen) nucleo_app_request_draw();   // keep animating; freeze halts to save CPU
 }
 
 static void set_hint(void)
@@ -309,25 +327,30 @@ static bool on_back(int key)
     return false;   // Esc -> close
 }
 
-static void on_tab(void) { s_pal = (s_pal + 1) % (int)(sizeof(PALS) / sizeof(PALS[0])); nucleo_app_request_draw(); }
+static void on_tab(void) { s_pal = (s_pal + 1) % (int)(sizeof(PALS) / sizeof(PALS[0])); build_grad_lut(); nucleo_app_request_draw(); }
 
 static void on_ptt(bool holding) { s_frozen = holding; nucleo_app_request_draw(); }   // hold GO = freeze (also blocks voice PTT on our mic)
 
 static void enter(void)
 {
-    s_ok = false; s_seen = 0; s_frozen = false;
+    s_ok = false; s_seen = 0; s_frozen = false; s_was_running = false;
+    build_grad_lut();                  // palette persists across sessions; prime the LUT before the first draw
     memset(s_cap, 0, sizeof s_cap);
     s_hist_head = 0; s_hist_n = 0;
-    if (!s_hist) s_hist = (uint8_t *)malloc((size_t)HIST_W * MS_BANDS);   // 7.4 KB; NULL -> waterfall falls back to bars
-    if (s_hist) memset(s_hist, 0, (size_t)HIST_W * MS_BANDS);
 
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_ptt_handler(on_ptt);
+    nucleo_app_set_poll_handler(poll);   // drive the redraw from the DSP frame rate, not the 50 Hz loop
     set_hint();
     // Dedicated mode FIRST: NX_NET_APP suspends voice (the other GPIO43/mic owner) and frees ~70KB so the
     // DSP scratch + waterfall never starve. Wi-Fi STA stays up. Restored in on_exit() after the mic closes.
     nucleo_exclusive_enter(NX_NET_APP, nullptr);
+    // Waterfall history (7.4 KB) allocated AFTER the reclaim, when the contiguous block is large. On the
+    // PSRAM-less chip the largest free block is tiny under normal load, so allocating this BEFORE the
+    // reclaim could fail — silently dropping CASCATA to the bars fallback (they then look identical).
+    if (!s_hist) s_hist = (uint8_t *)malloc((size_t)HIST_W * MS_BANDS);   // NULL -> waterfall falls back to bars
+    if (s_hist) memset(s_hist, 0, (size_t)HIST_W * MS_BANDS);
     nucleo_micspec_start();
     nucleo_app_request_draw();
 }

@@ -54,8 +54,12 @@ extern "C" {
 
 #define MUSIC_DIR     NUCLEO_SD_MOUNT "/data/Music"
 #define SETTINGS_PATH NUCLEO_SD_MOUNT "/system/config/player.json"
-#define MAXE   96   // max entries in current folder
-#define MAXQ   64   // max queued tracks
+// Tenuti PICCOLI come il Video app (VState ~5 KB) di proposito: PState va allocato in UN blocco
+// contiguo all'apertura, e su questo heap frammentato senza PSRAM il blocco grande non c'e' (96+64
+// voci facevano ~10,5 KB -> calloc falliva -> "RAM insufficiente" e Music non apriva). 48 voci per
+// cartella + 32 in coda portano PState a ~5,3 KB, in linea col Video che apre senza problemi.
+#define MAXE   48   // max entries in current folder
+#define MAXQ   32   // max queued tracks
 #define HEAD_H 20   // list context-header height
 #define STRIP_H 22  // mini now-playing strip height
 
@@ -335,20 +339,17 @@ static int track_at(int pos)
     return s_shuffle ? st->shuf[pos] : pos;
 }
 
-// ── Dedicated-mode RAM window for playback ─────────────────────────────────────────────────────────
-// The Helix MP3 decoder needs a chunky contiguous working set; on this PSRAM-less, ~50%-fragmented heap
-// the idle free heap isn't enough and MP3InitDecoder OOM'd. So WHILE A TRACK PLAYS we take the same
-// dedicated window the video player uses: nucleo_exclusive_enter(NX_NET_APP) frees ~70 KB by suspending
-// httpd/L1/mDNS/voice (Wi-Fi STA stays up). HELD ACROSS track changes — entered in play_q, released only
-// when playback FULLY stops (on_tick, when the queue clears playpath) — so there's no httpd stop/start
-// churn between songs. Just browsing the library (not playing) keeps the network up.
+// ── Dedicated-mode RAM window — held for the WHOLE Music session ─────────────────────────────────────
+// This PSRAM-less device idles with only ~5 KB free heap (largest block ~3 KB) once the OS is up, so
+// Music can't even allocate its ~5 KB state at open, let alone run the Helix MP3 decoder (~17 KB
+// contiguous). So Music takes the SAME dedicated window the Video player uses — nucleo_exclusive_enter
+// (NX_NET_APP): suspend httpd + ANIMA L1 index + mDNS + voice to reclaim ~70 KB (Wi-Fi STA stays up) —
+// but for the ENTIRE session: entered in enter() BEFORE the first alloc, released in leave() when the
+// app closes. While Music is open there's no web UI / voice (a dedicated media app, exactly like Video).
 //
-// IMPORTANT — this is per-PLAY, NOT per-app-open, ON PURPOSE. Suspending httpd at app OPEN (and
-// restarting it at close) churns the heap on EVERY visit to Music and fragments it enough that the next
-// app needing a big contiguous block — ANIMA's 30 KB worker stack — can no longer allocate and the
-// device reboots (the "open Music, exit, open ANIMA → crash" bug). Opening Music doesn't need the
-// reclaim anyway now: the boot-time voice engine no longer hogs ~23 KB (see nucleo_voice_init), so the
-// browser fits the idle heap. We pay the exclusive-mode reclaim ONLY when a decoder actually demands it.
+// TRADE-OFF (accepted): suspending+restarting httpd churns the heap, which historically could fragment
+// it enough that the next app needing a big contiguous block (ANIMA's ~30 KB worker) failed to allocate.
+// We take that risk on purpose: the alternative is Music not opening AT ALL on the current ~5 KB heap.
 static bool s_excl = false;
 static void music_excl(bool on)
 {
@@ -371,20 +372,20 @@ static void play_q(int pos)
     int ti = track_at(pos);
     char abs[300]; snprintf(abs, sizeof abs, "%s%s", st->qdir, st->q[ti]);
 
-    music_excl(true);   // ~70 KB headroom so the Helix decoder never OOMs (held across tracks; freed in on_tick when stopped)
+    music_excl(true);   // no-op: the session-wide window is already up (entered in enter()); kept as a safety re-assert
 
     // Hand the shared ~32 KB canvas back to the heap BEFORE the Helix decoder starts: every play
     // path funnels through here (browser autoplay/skip, queue advance, now_playing), so doing it
     // once here covers them all. Idempotent — re-acquire is lazy when the list repaints.
     nucleo_app_release_buffers();
 
-    // Helix needs ~17 KB contiguous internal RAM; refuse early with honest feedback instead of a
-    // muted failure when the largest free block can't hold the decoder.
-    size_t blk = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
-    if (blk < 18 * 1024) {
-        nucleo_app_set_hint("RAM insufficiente per riprodurre");
-        return;
-    }
+    // Give the FreeRTOS IDLE task a tick to reclaim the just-ended player task's stack (freed
+    // DEFERRED after its vTaskDelete). On an auto-advance the previous "audio" task has only just
+    // self-deleted, so its ~8 KB stack is still counted as in-use right here — long enough to drop
+    // the largest free block under a rigid pre-check and SILENTLY kill the advance (the next track
+    // never plays). Yield first, then let nucleo_audio's own reclaim-cb + retry (start_play_window)
+    // make the final RAM call: it logs an honest error on real OOM and we surface it as the hint below.
+    vTaskDelay(pdMS_TO_TICKS(20));
 
     if (nucleo_audio_play(abs) == ESP_OK) {
         st->qidx = pos;
@@ -735,6 +736,19 @@ static void draw_settings_full(int ch)
     else                d.print("UP/DN row   RIGHT tab   ENTER ok");
 }
 
+// Build the music DB (genres/artists/fav/most-played index) LAZILY — never at app open. Spawning the
+// indexer task at launch raced the UI canvas for the last few KB of the ~37 KB heap and rebooted the
+// device (see enter()). The browser and playback don't need it; only the Find tab does, so we build it
+// the first time Find is opened. Idempotent: the indexer no-ops if the JSONL already exists, and a
+// failed task spawn (low RAM) is non-fatal — Find just shows empty until it can run.
+static void music_db_ensure(void)
+{
+    static bool inited = false;
+    if (inited) return;
+    inited = true;
+    music_db_init();
+}
+
 // Settings keys. NOTE: NK_LEFT and NK_BACK never arrive here — the framework routes them to
 // the back handler (player_back). So tabs cycle with RIGHT and "back" is handled hierarchically.
 static void settings_key(int key, char ch)
@@ -756,6 +770,7 @@ static void settings_key(int key, char ch)
         int a[4], na = settings_avail(a);
         s_set_tab = a[(tab_index(a, na, s_set_tab) + 1) % na];
         if (s_set_row >= 0) s_set_row = 0;
+        if (s_set_tab == 3) music_db_ensure();   // entering Find -> build the index now (async) so it's ready when used
         nucleo_app_request_draw(); return;
     }
 
@@ -790,6 +805,7 @@ static void settings_key(int key, char ch)
                 s_set_open = false; nucleo_app_request_draw(); return;
             }
         } else if (s_set_tab == 3) {                          // FIND
+            music_db_ensure();                                // make sure the index is (being) built before we read it
             if      (s_set_row == 0) { s_typing = true; if (st) st->search_query[0] = 0; }
             else if (s_set_row == 1) { s_sub_type = 1; s_sub_count = music_db_get_unique(1, &s_sub_items); s_sub_sel = 0; s_sub_list = true; }
             else if (s_set_row == 2) { s_sub_type = 2; s_sub_count = music_db_get_unique(2, &s_sub_items); s_sub_sel = 0; s_sub_list = true; }
@@ -1080,10 +1096,9 @@ static void tick(void)
 {
     update_hint();
     player_update_logic(nullptr);
-    // Release the dedicated RAM window once playback FULLY stops (queue ended / user stopped -> playpath
-    // cleared). Held across track changes (playpath stays set), so no httpd stop/start churn between songs.
-    if (!nucleo_audio_is_playing() && !nucleo_audio_is_paused() && (!st || st->playpath[0] == 0))
-        music_excl(false);
+    // NB: the dedicated RAM window is NOT released here. It's held for the WHOLE session (entered in
+    // enter(), released in leave()): the browser itself needs the reclaimed RAM to exist on this ~5 KB
+    // heap, not just the decoder. Releasing between tracks would tear httpd back up mid-session.
 
     bool active = nucleo_audio_is_playing() || nucleo_audio_is_paused();
     int s = active ? (nucleo_audio_is_paused() ? 1 : 2) : 0;
@@ -1116,12 +1131,28 @@ static void tick(void)
 
 static void enter(void)
 {
+    // Reclaim FIRST, then allocate. This PSRAM-less device idles with only ~5 KB free heap (largest
+    // block ~3 KB), so the per-app state doesn't fit and the browser can't open. So Music takes the same
+    // dedicated window the Video player uses, but for the whole session: suspend httpd/L1/mDNS/voice
+    // (~70 KB freed, Wi-Fi STA stays up) here, restore it in leave(). No background indexer at open
+    // either — the DB is built lazily on first Find use (music_db_ensure). See the note above play_q.
+    music_excl(true);
     if (!st) st = (PState *)calloc(1, sizeof(PState));
+    if (!st) {                                  // OOM even after the reclaim: bail (don't deref NULL) and restore services
+        size_t freeb = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+        size_t blk   = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+        ESP_LOGE("music", "enter OOM: PState=%u free=%u largest=%u",
+                 (unsigned)sizeof(PState), (unsigned)freeb, (unsigned)blk);
+        char h[64]; snprintf(h, sizeof h, "RAM bassa: libero %uk blocco %uk",
+                             (unsigned)(freeb / 1024), (unsigned)(blk / 1024));
+        nucleo_app_set_hint(h);
+        music_excl(false);                      // un-suspend what we just stopped — never leave services down
+        return;
+    }
+    memset(st, 0, sizeof(*st));                 // calloc zeroes a fresh block; this also re-zeroes a reused one
     load_settings();
-    music_db_init();
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_back_handler(player_back);   // hierarchical ESC/Left (else the framework closes us)
-    memset(st, 0, sizeof(*st));
     st->filter_type = -1;
     strcpy(s_path, "/"); scan();
     // "Has music" = any audio anywhere under Music (a track at root, or a folder with songs).
@@ -1134,8 +1165,16 @@ static void enter(void)
 static void leave(void)
 {
     nucleo_audio_stop();
-    music_excl(false);             // restore httpd/L1/mDNS/voice — never leave them suspended after the app closes
-    np_mq_free();                  // safety net: now_playing frees on exit, but never leak the sprite
+    music_excl(false);                                       // restore httpd/L1/mDNS/voice (paired with play_q's reclaim)
+    if (nucleo_exclusive_active()) nucleo_exclusive_exit();  // safety net like Video/Radio/SSH: never leave services suspended
+    np_mq_free();                                            // never leak the now-playing marquee sprite
+    // Free the Genres/Artists sub-list if the app is closed straight from that sheet (the back handler
+    // frees it on a normal pop, but the framework can close us from anywhere — don't leak the strdups).
+    if (s_sub_items) {
+        for (int i = 0; i < s_sub_count; i++) free(s_sub_items[i]);
+        free(s_sub_items); s_sub_items = NULL; s_sub_count = 0;
+    }
+    s_sub_list = false; s_typing = false; s_set_open = false; // reset modal flags so the next open starts clean
     if (st) { free(st); st = nullptr; }
     s_n = 0;
 }
@@ -1174,6 +1213,9 @@ static bool np_mq_acquire(void)
     cv->setColorDepth(8);
     cv->setPsram(false);   // PSRAM-less board: skip the doomed SPIRAM probe (the misleading "oom 3204 B caps=0x404") → DMA-internal directly
     if (!cv->createSprite(MQ_W, MQ_H)) { delete cv; s_mq_failed = true; return false; }
+    cv->setTextWrap(false);   // CRUCIAL: M5GFX text-wrap defaults to ON, so a long title would wrap at the
+                              // 200px sprite edge onto a 2nd (clipped) line instead of scrolling past it —
+                              // only the first ~16 chars would ever move. The marquee must NOT wrap.
     s_mq_cv = cv;
     return true;
 }
@@ -1237,14 +1279,23 @@ static void np_marquee(void)
         int x = -s_mq_off;                               // sprite-local; (0,0) maps to screen (8,4)
         cv->setCursor(x, 0);        cv->print(s_np_title);
         cv->setCursor(x + span, 0); cv->print(s_np_title);   // wrap copy for a seamless loop
+        // Own the blit's clip: pushSprite -> LGFXBase::pushImage clips to d's CURRENT clip rect, and d
+        // is a shared surface other paths leave a narrow clip on. Without this, a leaked clip shrinks
+        // the blit so a step overwrites only PART of the band, leaving the previous offset's text under
+        // it -> two superimposed copies. Clip to the exact footprint so every step fully repaints the
+        // band (still ONE opaque blit — anti-flicker preserved), mirroring the direct branches below.
+        d.setClipRect(8, 4, avail, MQ_H);
         cv->pushSprite(8, 4);
+        d.clearClipRect();
     } else {                                             // no sprite RAM -> direct (may flicker)
         d.setClipRect(8, 4, avail, MQ_H);
         d.fillRect(8, 4, avail, MQ_H, BG);
         d.setTextSize(2); d.setTextColor(ACC, BG);
-        int x = 8 - s_mq_off;
+        d.setTextWrap(false);                            // same wrap hazard on the shared target: off for the
+        int x = 8 - s_mq_off;                            // scroll, restored to the framework default below
         d.setCursor(x, 4);        d.print(s_np_title);
         d.setCursor(x + span, 4); d.print(s_np_title);
+        d.setTextWrap(true);                             // M5GFX default is wrap=ON — restore so other UI text wraps as before
         d.clearClipRect();
     }
 }
@@ -1346,7 +1397,8 @@ static void now_playing(void)
     char cur[208]; snprintf(cur, sizeof cur, "%s", st->playpath);
 
     bool back = false, started = false;
-    int last_meta = -1, last_el = -1, last_pct = -1, mq = 0;
+    int last_meta = -1, last_el = -1, last_pct = -1;
+    int64_t last_mq_ms = 0;                          // wall-clock ms of the last marquee step (esp_timer)
 
     while (!back) {
         esp_task_wdt_reset();
@@ -1398,11 +1450,19 @@ static void now_playing(void)
         } else if (el != last_el || pct != last_pct) {
             if (el  != last_el)  { last_el  = el;  np_time(); }
             if (pct != last_pct) { last_pct = pct; np_ring(playing, paused); }
-        } else if (++mq >= 3) {                          // ~150 ms marquee step
-            mq = 0;
-            if ((int)strlen(s_np_title) * 12 > MQ_W) {   // only long titles scroll
+        }
+        // Marquee scroll: TIME-BASED and OUTSIDE the if/else-if chain so a passing second/percent
+        // can't steal its turn. The old `++mq` counter only ticked on idle frames and was starved by
+        // el/pct edges (which fire ~1-2x/s and are not phase-aligned) -> the title barely moved and
+        // looked frozen. A fixed ~150 ms wall-clock step gives a constant, smooth speed for any track.
+        // Held still while paused. The blit touches only its own band (disjoint from header/ring/time
+        // redrawn above), so advancing it in the same iteration is safe and adds no full-panel repaint.
+        if ((int)strlen(s_np_title) * 12 > MQ_W && !paused) {   // only long titles scroll
+            int64_t now_ms = esp_timer_get_time() / 1000;
+            if (now_ms - last_mq_ms >= 150) {
+                last_mq_ms = now_ms;
                 s_mq_off += 3; if (s_mq_off >= (int)strlen(s_np_title) * 12 + 24) s_mq_off = 0;
-                np_marquee();                            // sprite blit only — chrome stays put
+                np_marquee();                            // one opaque blit over its band; chrome stays put
             }
         }
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -1420,9 +1480,8 @@ extern "C" void nucleo_register_player(void)
         "music", "Music", "Media",
         "MP3/WAV browser — Shuffle, Repeat, Autoplay. TAB=settings.",
         'M', 0xFBB6, enter, on_key, tick, draw, leave
-        // exclusive_flags deliberately 0: Music reclaims RAM per-PLAY (music_excl in play_q), NOT at app
-        // open — going exclusive at open churns httpd and fragments the heap so the next app (ANIMA's
-        // 30 KB worker) can't allocate → reboot. See the RAM-window note above play_q.
+        // exclusive_flags stays 0: Music drives the dedicated window itself (music_excl in enter/leave)
+        // so the reclaim is logged and paired exactly with the app lifecycle. See the note above play_q.
     };
     nucleo_app_register(&app);
 }

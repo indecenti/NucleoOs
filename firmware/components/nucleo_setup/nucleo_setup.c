@@ -773,37 +773,17 @@ static void info_app_enter(void)
     nucleo_app_set_hint("esc back");
 }
 
-static void theme_app_enter(void)
-{
-    int count = 0;
-    const nucleo_theme_t *themes = nucleo_theme_get_all(&count);
-    if (count > 0) {
-        const char *items[10];
-        for (int i = 0; i < count && i < 10; i++) {
-            items[i] = themes[i].name;
-        }
-        int pick = nucleo_ui_menu("Choose Theme", items, count);
-        if (pick >= 0) {
-            nucleo_theme_set(themes[pick].id);
-            const char *ok[] = { "Theme changed to:", themes[pick].name };
-            nucleo_ui_message("Themes", ok, 2);
-        }
-    }
-    nucleo_app_exit();
-}
-
 void nucleo_setup_register_apps(void)
 {
     static const nucleo_app_def_t app_info = {
         "device", "Device Info", "System", "Network details and web address",
         'i', 0x2D7F, info_app_enter, NULL, NULL, nucleo_setup_show_home, NULL
     };
-    static const nucleo_app_def_t app_theme = {
-        "theme", "Theme", "System", "Change UI colors and look",
-        'T', 0xFBB6, theme_app_enter, NULL, NULL, NULL, NULL
-    };
     nucleo_app_register(&app_info);
-    nucleo_app_register(&app_theme);
+    // The "theme" app now lives in nucleo_app/app_theme.cpp — a proper on_draw-based picker
+    // registered via nucleo_register_theme(). The old stub here drove the BLOCKING nucleo_ui_menu()
+    // from on_enter with on_draw == NULL, which does not render inside the app run-loop, so the
+    // app opened to an empty screen. Removed in favour of the framework app.
     // The Wi-Fi app itself is the modern tabbed app_wifi.cpp (Connect group), registered with the
     // other built-ins — the old blocking "network" wizard app was removed (it starved the app loop).
 }
