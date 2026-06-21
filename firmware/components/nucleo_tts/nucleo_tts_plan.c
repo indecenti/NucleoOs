@@ -7,9 +7,10 @@
 #include <stdio.h>
 #include <stdint.h>
 
-// RAM-safe: il testo e' gia' limitato a 140 char dalla guardia (nucleo_tts_text_speakable), quindi
-// non puo' produrre piu' di ~70 unita'/token. 96 da' margine abbondante a costo di stack/heap minimo.
-#define MAX_UNITS   96
+// RAM-safe: il testo e' limitato a 220 char dalla guardia (nucleo_tts_text_speakable), quindi non puo'
+// produrre piu' di ~160 unita'/token. u[MAX_UNITS] vive sullo stack del voice_task (16KB): 160 e' il
+// ceiling sicuro (coesiste con norm[1024]). Tenuto == TOK_MAX in nucleo_tts.c.
+#define MAX_UNITS   160
 #define MAX_PHRASE   6     // parole massime in un match a frase (MOSAICO-style)
 
 // Cardinali italiani round, pre-renderizzati come clip atomiche (pacchetto numeri obbligatorio).

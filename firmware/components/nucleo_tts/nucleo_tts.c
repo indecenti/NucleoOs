@@ -28,7 +28,9 @@ static bool say_one_clip(const char *lang, const char *slug);   // fwd: usata da
 #define SPEED_PATH TTS_DIR "/speed.cfg"
 #define VER_PATH   TTS_DIR "/fmt.ver"   // versione del formato dei WAV resi: cambia -> invalida la cache
 #define TTS_RENDER_FMT 2                // BUMP quando cambia il PCM reso (qui: +anti-click sui bordi clip)
-#define TTS_MAX_CHARS 140    // oltre -> "leggila" (offline): risposte piu' lunghe non si ascoltano bene
+#define TTS_MAX_CHARS 220    // oltre -> "leggila" (offline). Alzato 140->220; il limite e' lo stack 16KB del voice_task
+#define TTS_MAX_SKIP     2   // parole scoperte TOLLERATE in una frase (saltate); oltre -> "leggila"
+#define TTS_SKIP_PAUSE_MS 150 // micro-pausa al posto di ogni parola saltata (gap naturale, non parole appiccicate)
 
 static char s_def_lang[8] = "it";
 static bool s_enabled = true;        // "parla quando interrogato" (persistito su SD); default ON
@@ -218,7 +220,9 @@ static bool render(const char *lang, const tts_token_t *tok, int n, tts_index_t 
             data += put_silence(out, tok[i].ms, ix->rate, buf, sizeof buf);   // ms a rate BASE: si accorcia col play
         else if (tok[i].kind == TTS_TOK_CLIP && tts_index_find(ix, tok[i].slug, &off, &len))
             data += copy_clip(blob, out, off, len, buf, sizeof buf);
-        // UNKNOWN o slug assente: saltato (la coverage e' gia' decisa a monte)
+        else if (tok[i].kind == TTS_TOK_UNKNOWN)
+            data += put_silence(out, TTS_SKIP_PAUSE_MS, ix->rate, buf, sizeof buf);  // parola scoperta tollerata: micro-gap
+        // slug CLIP assente nell'indice: saltato (coverage gia' decisa a monte)
     }
     wav_header(hdr, data, out_rate);
     fseek(out, 0, SEEK_SET); fwrite(hdr, 1, 44, out);
@@ -268,7 +272,7 @@ static bool say_impl(const char *text, const char *lang, const char *fallback)
 
     // "Parlabilizza" i simboli matematici (= % ^) PRIMA di tutto: senza, '=' farebbe scattare la guardia
     // e tutta la frase finirebbe in "leggila" (era il "Fa 16 non si pronuncia"). No-op sul testo normale.
-    char mtext[416];
+    char mtext[640];   // 640 = headroom per l'espansione mathspeak di un testo fino a TTS_MAX_CHARS=220
     nucleo_tts_mathspeak(text, mtext, sizeof mtext, l);
     text = mtext;
 
@@ -290,28 +294,36 @@ static bool say_impl(const char *text, const char *lang, const char *fallback)
         return say_one_clip(l, full);
     }
 
-    // 96 token bastano (testo <=140 char dalla guardia); ~5.4KB heap, liberati subito dopo render.
-    enum { TOK_MAX = 96 };
+    // TOK_MAX == MAX_UNITS (160): tiene tutti i token di un enunciato <=220 char; ~9.6KB heap, liberati subito dopo render.
+    enum { TOK_MAX = 160 };
     tts_token_t *tok = malloc(TOK_MAX * sizeof(tts_token_t));
     if (!tok) { tts_index_close(&ix); return false; }
     int n = nucleo_tts_plan(text, l, has_clip, &ix, tok, TOK_MAX);
 
-    int unknown = 0;
-    char miss[160]; miss[0] = 0;
-    for (int i = 0; i < n; i++) if (tok[i].kind == TTS_TOK_UNKNOWN) {
+    int unknown = 0, clips = 0;
+    char miss[224]; miss[0] = 0;
+    for (int i = 0; i < n; i++) {
+        if (tok[i].kind == TTS_TOK_CLIP) { clips++; continue; }
+        if (tok[i].kind != TTS_TOK_UNKNOWN) continue;
         unknown++;
         size_t ml = strlen(miss);
         if (ml + strlen(tok[i].slug) + 3 < sizeof miss) { if (ml) strcat(miss, ", "); strcat(miss, tok[i].slug); }
     }
 
-    if (n <= 0 || unknown > 0) {
+    // TOLLERANZA: poche parole scoperte NON buttano via tutta la frase. render() le sostituisce con una
+    // micro-pausa, quindi pronunciamo la parte coperta. Si ripiega su "leggila" solo se le scoperte superano
+    // TTS_MAX_SKIP (la frase perderebbe senso) o se NESSUNA parola e' coperta (l'uscita sarebbe vuota).
+    if (n <= 0 || clips == 0 || unknown > TTS_MAX_SKIP) {
         free(tok); tts_index_close(&ix);                 // chiudi PRIMA di ripiegare (max 1 indice aperto)
         if (fallback && fallback[0]) return say_impl(fallback, l, NULL);   // conferma breve invece di "leggila"
         // DIAGNOSI: logga le clip scoperte (in /api/logs si vede ESATTAMENTE cosa manca).
-        if (unknown > 0) ESP_LOGW(TAG, "\"%s\": %d clip scoperte [%s] -> read_it (pacchetto voce incompleto?)", text, unknown, miss);
-        else             ESP_LOGW(TAG, "\"%s\": planner vuoto -> read_it", text);
+        if (unknown > TTS_MAX_SKIP) ESP_LOGW(TAG, "\"%s\": %d clip scoperte [%s] > soglia %d -> read_it", text, unknown, miss, TTS_MAX_SKIP);
+        else if (n > 0)             ESP_LOGW(TAG, "\"%s\": nessuna parola coperta -> read_it", text);
+        else                        ESP_LOGW(TAG, "\"%s\": planner vuoto -> read_it", text);
         return say_one_clip(l, "read_it");
     }
+    if (unknown > 0)                                      // 1..TTS_MAX_SKIP scoperte: tollerate, parlo il resto
+        ESP_LOGI(TAG, "\"%s\": %d parola/e scoperta/e saltata/e [%s], pronuncio la parte coperta", text, unknown, miss);
     bool r = render(l, tok, n, &ix, OUT_PATH);   // frase variabile: non memoizzabile -> file scratch
     free(tok);
     tts_index_close(&ix);

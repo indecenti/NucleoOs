@@ -816,6 +816,10 @@
                 <div class="f-tx"><label id="s-ttsspeed">Velocità voce Cardputer</label><span class="f-sub" data-i18n data-it="Quanto velocemente il Cardputer legge ad alta voce (voce on-device)." data-en="How fast the Cardputer reads aloud (on-device voice).">Quanto velocemente il Cardputer legge ad alta voce (voce on-device).</span></div>
                 <div class="f-ctl"><input type="range" id="set-ttsspeed" min="70" max="160" step="5" value="110" style="width:160px;accent-color:var(--acc)"><span class="f-sub" id="set-ttsspeed-val" style="min-width:42px;text-align:right">110%</span></div>
               </div>
+              <div class="set-field">
+                <div class="f-tx"><label id="s-webvoice">Voce browser</label><span class="f-sub" data-i18n data-it="Leggi le risposte ad alta voce con la voce del browser (anche online e lunghe)." data-en="Read replies aloud with the browser voice (also online/long replies).">Leggi le risposte ad alta voce con la voce del browser.</span></div>
+                <div class="f-ctl"><div class="seg2" id="set-webvoice"><button data-wv="0">No</button><button data-wv="1">Sì</button></div></div>
+              </div>
             </div>
           </div>
         </div>
@@ -1164,7 +1168,7 @@
         cmds:[ {c:'/help',d:'mostra i comandi'}, {c:'/guida',d:'come funziona ANIMA'}, {c:'/new',d:'nuova conversazione'}, {c:'/clear',d:'pulisci la conversazione'},
                {c:'/theme',d:'cambia tema'}, {c:'/export',d:'esporta (markdown)'}, {c:'/compact',d:'compatta il contesto'},
                {c:'/offline',d:'solo offline'}, {c:'/ibrida',d:'offline + online'}, {c:'/online',d:'solo online'},
-               {c:'/it',d:'italiano'}, {c:'/en',d:'inglese'}, {c:'/impostazioni',d:'apri le impostazioni'}, {c:'/modelli',d:'gestione modelli (download)'} ],
+               {c:'/it',d:'italiano'}, {c:'/en',d:'inglese'}, {c:'/impostazioni',d:'apri le impostazioni'}, {c:'/voce',d:'voce browser on/off'}, {c:'/modelli',d:'gestione modelli (download)'} ],
         helpText:'Comandi:\n  /help            mostra questo elenco\n  /guida           come funziona ANIMA (cervelli, cascata, privacy)\n  /new             nuova conversazione\n  /clear           pulisci la conversazione\n  /theme [nome]    cambia tema (midnight/daylight/carbon/contrast)\n  /export [md|json]  esporta la conversazione\n  /offline /ibrida /online   cambia modalità del motore\n  /it /en          cambia lingua\n  /impostazioni    apri il pannello impostazioni\n\nScorciatoie: `⌘K` tavolozza · `⌘⇧S` conversazioni · `↑/↓` cronologia input · `?` aiuto.\nEsempi: «apri le note», «quanto fa 12% di 80», «che tempo fa domani a roma», «crea diario.txt», «chi è Einstein».',
         palPlaceholder:'Cerca un comando…', palCats:{ cmd:'Comandi', conv:'Conversazione', theme:'Tema', lang:'Lingua', mode:'Modalità', nav:'Navigazione', set:'Impostazioni' },
         scTitle:'Scorciatoie da tastiera', noResults:'Nessun risultato',
@@ -1223,7 +1227,7 @@
         cmds:[ {c:'/help',d:'show commands'}, {c:'/guide',d:'how ANIMA works'}, {c:'/new',d:'new conversation'}, {c:'/clear',d:'clear the conversation'},
                {c:'/theme',d:'change theme'}, {c:'/export',d:'export (markdown)'}, {c:'/compact',d:'compact the context'},
                {c:'/offline',d:'offline only'}, {c:'/hybrid',d:'offline + online'}, {c:'/online',d:'online only'},
-               {c:'/it',d:'Italian'}, {c:'/en',d:'English'}, {c:'/settings',d:'open settings'}, {c:'/models',d:'model manager (downloads)'} ],
+               {c:'/it',d:'Italian'}, {c:'/en',d:'English'}, {c:'/settings',d:'open settings'}, {c:'/voce',d:'browser voice on/off'}, {c:'/models',d:'model manager (downloads)'} ],
         helpText:'Commands:\n  /help            show this list\n  /guide           how ANIMA works (brains, cascade, privacy)\n  /new             new conversation\n  /clear           clear the conversation\n  /theme [name]    change theme (midnight/daylight/carbon/contrast)\n  /export [md|json]  export the conversation\n  /offline /hybrid /online   change engine mode\n  /it /en          change language\n  /settings        open the settings panel\n\nShortcuts: `⌘K` palette · `⌘⇧S` conversations · `↑/↓` input history · `?` help.\nExamples: "open notes", "what is 12% of 80", "will it rain tomorrow in rome", "create diary.txt", "who is Einstein".',
         palPlaceholder:'Search for a command…', palCats:{ cmd:'Commands', conv:'Conversation', theme:'Theme', lang:'Language', mode:'Mode', nav:'Navigation', set:'Settings' },
         scTitle:'Keyboard shortcuts', noResults:'No results',
@@ -1242,11 +1246,34 @@
     let detMode = get('anima.details','1'); if(!['0','1','2'].includes(detMode)) detMode='1';   // reasoning map: '0' off · '1' collapsed (one line) · '2' expanded (tree)
     let suggOn  = get('anima.sugg','1') !== '0';
     let voiceSrc = get('anima.voiceSrc','');          // '' = auto (browser if usable, else Cardputer); else 'browser'|'cardputer'
+    let webVoice = get('anima.webvoice','0') === '1'; // OUTPUT: leggi le risposte ad alta voce col browser (speechSynthesis). Opt-in, default OFF
     let autoCompact = get('anima.autocompact','1') !== '0';   // fold old turns into a digest past the budget
     const CTX_BUDGET = 18000;                                 // ~18 KB of conversation before compaction kicks in (storage-side, byte-based; the per-mode TOKEN budgets live in contextkit)
     let useAgents = get('anima.agents','1') !== '0';          // Online: the agentic runtime is the primary engine for any non-proxy key (Claude/Groq/xAI); Gemini stays on single-call cloudAsk
     let agentAuto = get('anima.agentauto','0') === '1';       // auto-approve the agent's mutating actions (default: ask)
     let agentWeb  = get('anima.agentweb','1') !== '0';        // let the agent use web_search
+    // ── Voce browser (OUTPUT): legge la risposta FINALE con speechSynthesis. Indipendente dalla voce
+    //    ON-DEVICE del Cardputer (/api/tts): qui il vocabolario e' illimitato (adatto a risposte online/lunghe).
+    function speakReply(text){
+      try{
+        if(!webVoice || !('speechSynthesis' in window)) return;
+        let s=String(text||'')
+          .replace(/```[\s\S]*?```/g,' ')               // via i blocchi di codice (illeggibili a voce)
+          .replace(/`([^`]*)`/g,'$1')
+          .replace(/!?\[([^\]]*)\]\([^)]*\)/g,'$1')      // link/immagini -> solo il testo
+          .replace(/[*_#>~|]/g,' ').replace(/^\s*[-•]\s+/gm,'')
+          .replace(/[⚠⏳↳⋯]/g,'')     // glifi UI (warn/attesa/ecc.)
+          .replace(/\s+/g,' ').trim();
+        if(!s) return;
+        speechSynthesis.cancel();                        // interrompe l'enunciato precedente
+        const u=new SpeechSynthesisUtterance(s);
+        u.lang=lang==='en'?'en-US':'it-IT';
+        const v=speechSynthesis.getVoices().find(x=>x.lang&&x.lang.toLowerCase().startsWith(u.lang.slice(0,2)));
+        if(v) u.voice=v;
+        speechSynthesis.speak(u);
+      }catch(e){}
+    }
+    function stopSpeaking(){ try{ if('speechSynthesis' in window) speechSynthesis.cancel(); }catch(e){} }
     const sysTheme = ()=>{ try{ return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }catch{ return 'dark'; } };
     let theme   = get('anima.theme', null); if(!['dark','light','oled','hc'].includes(theme)) theme = sysTheme();
 
@@ -2392,7 +2419,7 @@
       const fintent = parseFileIntent(q);
       if(fintent){ if(fs.hasRoot()){ runFileIntent(q, fintent); return; } inviteWorkspace(q); return; }
       const sendQ = chainMath(q);   // engine-facing query (may carry the running total); visible msg stays q
-      busy=true; interrupt=false; setStop(true); closeSlash();
+      busy=true; interrupt=false; setStop(true); closeSlash(); stopSpeaking();   // un nuovo turno zittisce la risposta precedente
       addUser(q); history.push({role:'user',text:q}); persist();
       const think=startThinking();
       let r; const _t0=Date.now();   // pipeline latency: measured across the whole brain resolution (incl. fallbacks)
@@ -2482,6 +2509,7 @@
       const hidx = history.length;          // this bot turn's index after push below
       const { body, turn }=botShell(hidx, true);
       await type(body, reply);
+      speakReply(reply);   // voce browser (speechSynthesis), se attiva: legge la risposta finale per intero
 
       // accumulate a serialisable descriptor of everything we render under the reply
       const entry={ role:'bot', text:reply, engine:true,
@@ -2769,6 +2797,7 @@
       if(cmd==='it'){ chooseLang('it'); return true; }
       if(cmd==='en'){ chooseLang('en'); return true; }
       if(['impostazioni','settings','config'].includes(cmd)){ openSettings(true); return true; }
+      if(['voce','voice','speak'].includes(cmd)){ if(arg==='on'||arg==='off') webVoice=(arg==='on'); else webVoice=!webVoice; set('anima.webvoice',webVoice?'1':'0'); if(!webVoice) stopSpeaking(); applyAll(); toast(webVoice?(lang==='en'?'Browser voice ON':'Voce browser ON'):(lang==='en'?'Browser voice OFF':'Voce browser OFF'),'ok'); return true; }
       if(cmd==='compact'||cmd==='compatta'){ const n=compactSession(true); toast(n?(lang==='en'?'Context compacted in background ('+n+' turns)':'Contesto compattato in background ('+n+' turni)'):(lang==='en'?'Nothing to compact':'Niente da compattare'),'ok'); return true; }
       if(cmd==='forge'){ addUser(q); window.open('forge-demo.html','_blank'); sysLine(lang==='en'?'Opening **Forge** — the offline agentic coder (you pick the engine: GPU/CPU/cloud/device).':'Apro **Forge** — il coder agentico offline (scegli tu il motore: GPU/CPU/cloud/device).'); return true; }
       if(['models','modelli','modello'].includes(cmd)){ window.openModelManager&&window.openModelManager(); return true; }
@@ -2908,10 +2937,10 @@
         autogrow(); setTimeout(()=>input.setSelectionRange(input.value.length,input.value.length),0); return;
       }
       if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); submit(); return; }
-      if(e.key==='Escape' && busy){ interrupt=true; cancelAgent(); }
+      if(e.key==='Escape' && busy){ interrupt=true; cancelAgent(); stopSpeaking(); }
     });
     function submit(){ stopRec(); const q=input.value; input.value=''; autogrow(); closeSlash(); histIdx=-1; ask(q); }
-    $('f').addEventListener('submit',e=>{ e.preventDefault(); if(busy){ interrupt=true; cancelAgent(); return; } submit(); });
+    $('f').addEventListener('submit',e=>{ e.preventDefault(); if(busy){ interrupt=true; cancelAgent(); stopSpeaking(); return; } submit(); });
 
     // welcome cards / clarify chips delegation
     logEl.addEventListener('click',e=>{
@@ -2933,7 +2962,7 @@
         if(palScrim.classList.contains('open')){ closePalette(); return; }
         if(drawer.classList.contains('open')){ closeDrawer(); return; }
         if($('settings').classList.contains('open')){ openSettings(false); return; }
-        if(busy){ interrupt=true; cancelAgent(); }
+        if(busy){ interrupt=true; cancelAgent(); stopSpeaking(); }
       }
     });
 
@@ -3251,6 +3280,7 @@
         if(d.available && field) field.hidden=false;   // rivela solo se la voce on-device è installata
       }).catch(()=>{});
     })();
+    for(const b of $('set-webvoice').children) b.addEventListener('click',()=>{ webVoice=b.dataset.wv==='1'; set('anima.webvoice',webVoice?'1':'0'); if(!webVoice) stopSpeaking(); applyAll(); });
     for(const b of $('set-details').children) b.addEventListener('click',()=>{ detMode=b.dataset.d; set('anima.details',detMode); applyAll(); renderAll(); });
     for(const b of $('set-sugg').children)    b.addEventListener('click',()=>{ suggOn=b.dataset.g==='1'; set('anima.sugg',suggOn?'1':'0'); applyAll(); renderAll(); });
     for(const b of $('set-compact').children) b.addEventListener('click',()=>{ autoCompact=b.dataset.c==='1'; set('anima.autocompact',autoCompact?'1':'0'); applyAll(); if(autoCompact) compactSession(false); });
@@ -3319,8 +3349,10 @@
       onseg('set-speed','s',speed); onseg('set-details','d',detMode); onseg('set-sugg','g',suggOn?'1':'0'); onseg('set-compact','c',autoCompact?'1':'0');
       onseg('set-agents','a',useAgents?'1':'0'); onseg('set-agentauto','aa',agentAuto?'1':'0'); onseg('set-agentweb','aw',agentWeb?'1':'0');
       onseg('set-voicesrc','vs',curVoiceSrc());
+      onseg('set-webvoice','wv',webVoice?'1':'0');
       try{ updateMeter(); }catch{}   // refresh the token-budget meter for the active mode
       { const e=$('s-l1'); if(e) e.textContent=(lang==='en'?'Offline AI (L1)':'AI offline (L1)'); }
+      { const e=$('s-webvoice'); if(e) e.textContent=(lang==='en'?'Browser voice':'Voce browser'); }
       { const seg=$('set-l1mode'); if(seg) for(const b of seg.children) b.classList.toggle('on', b.dataset.l1===l1mode); }
       { const sb=$('set-voicesrc'); if(sb){ sb.children[0].disabled=!(voice&&voice.browserAvailable); sb.children[1].disabled=!(voice&&voice.deviceAvailable); } }
       // online-AI key panel labels (bilingual, mirrors the rest of settings)
@@ -3463,7 +3495,7 @@
       return c;   // literal fallback (offline or no engine answer)
     }
     async function runFileIntent(q, intent){
-      busy=true; interrupt=false; setStop(true); closeSlash();
+      busy=true; interrupt=false; setStop(true); closeSlash(); stopSpeaking();   // un nuovo turno zittisce la risposta precedente
       addUser(q); history.push({role:'user',text:q}); persist();
       const think=startThinking();
       let res, content;

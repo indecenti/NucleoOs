@@ -37,6 +37,18 @@
       "realtime": true,
       "category": "arcade",
       "desc": "Arena 3D neon (Three.js) con power-up, scia, particelle ed effetti sonori. 1v1 in rete o contro ANIMA — cervello offline o LLM online (Claude/Grok/Groq)."
+    },
+    {
+      "id": "constellations",
+      "name": "Costellazioni 3D",
+      "icon": "🚀",
+      "module": "/apps/games/games/constellations.js",
+      "minPlayers": 1,
+      "maxPlayers": 1,
+      "ai": false,
+      "realtime": true,
+      "category": "arcade",
+      "desc": "Mercante/cacciatore stellare in 3D (Three.js). CONTINUA la stessa run del Cardputer: universo procedurale infinito, missioni e dogfight in prima persona. Joypad, mouse o tastiera."
     }
   ]
 }

@@ -1745,6 +1745,10 @@ esp_err_t nucleo_httpd_start(void)
     // link (main pulls nucleo_app in). Same arrangement nucleo_app uses for nucleo_anima/auth.
     extern esp_err_t nucleo_app_register_display(httpd_handle_t);
     if (nucleo_app_register_display(server) != ESP_OK) ESP_LOGW(TAG, "display endpoint register failed");
+    // /api/game/costellazioni/save (cross-play campaign save <-> save.bin) — same forward-decl/final-link
+    // arrangement as the display endpoint (nucleo_app owns the Costellazioni Save struct).
+    extern esp_err_t nucleo_app_register_costellazioni_api(httpd_handle_t);
+    if (nucleo_app_register_costellazioni_api(server) != ESP_OK) ESP_LOGW(TAG, "costellazioni save endpoint register failed");
     nucleo_ws_register(server);        // /ws live deltas
     nucleo_webfs_register(server);  // serves shell + app UIs from SD (catch-all, last)
     cpu_probe_init();   // start the per-core idle-hook load probe (once per boot)
