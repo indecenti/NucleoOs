@@ -165,3 +165,25 @@ CONFIG_LWIP_IPV6=n
 # whose .servers array is sized by THIS symbol. The IDF default is 1, so without it pinned here a
 # config regen shrinks the array and the 4-element initializer fails to build ("excess elements").
 CONFIG_LWIP_SNTP_MAX_SERVERS=4
+
+# --- Flash image size optimization, round 2 (map analysis 2026-06: image grew to ~1.99 MB, .text 1.5 MB) ---
+# These three are pure code-removal of paths the firmware never executes: no feature is lost. NOTE: a
+# value already baked into the generated sdkconfig is NOT overridden by this file, so these were ALSO
+# flipped directly in sdkconfig — keep the two in sync (or delete sdkconfig to regen from here).
+
+# Drop the mbedTLS error-string table (~12-15 KB rodata). Nothing calls mbedtls_strerror(): esp_tls and
+# our HTTPS/SSH paths report failures by numeric code, not formatted text (esp_err_to_name is already
+# off). TLS works identically; only the human-readable "MBEDTLS_ERR_*" strings are gone. Bump to =y to
+# get them back when debugging a handshake.
+CONFIG_MBEDTLS_ERROR_STRINGS=n
+
+# Drop the on-chip GDB stub (~2-6 KB). Already dead weight here: panic is PRINT_REBOOT (not gdbstub),
+# runtime gdbstub is off, and this battery device is never attached to JTAG / `idf.py gdb`. Crashes
+# still print a backtrace and reboot on the serial console. Flip to =y only to debug live over GDB.
+CONFIG_ESP_GDBSTUB_ENABLED=n
+
+# Drop the WPA2/WPA3-Enterprise (802.1X / EAP) supplicant (~12-28 KB). The firmware has NO EAP path
+# (no esp_eap_client / esp_wifi_sta_wpa2_ent_*), so enterprise networks were never connectable anyway.
+# WPA2/WPA3-Personal and OWE stay fully enabled — STA/AP join, scan auth-mode labels, evilportal and
+# wifiatk are unaffected. Flip to =y only if a real 802.1X login flow is ever added.
+CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT=n

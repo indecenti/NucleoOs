@@ -109,6 +109,11 @@ enum { R_META = 0, R_USER = 1, R_ANIMA = 2 };
 typedef struct { char text[MSG_TEXT]; unsigned short col, accent; unsigned char role; } Msg;
 static Msg s_msg[MSG_MAX];
 static int s_mhead, s_mcount;
+// "Risposta corrente INTERA": il ring tiene copie accorciate a MSG_TEXT (cronologia, RAM bassa); l'ultima
+// risposta di ANIMA si mostra invece per intero da qui (fino al cap del motore, ~1KB di .bss). s_full_idx
+// = slot del ring di quel messaggio (-1 = nessuno) -> rebuild_rows wrappa quel messaggio da s_full.
+static char s_full[1024];
+static int  s_full_idx = -1;
 
 // Wrapped display rows (derived). A row points into a message's text (valid until the next
 // rebuild, which every push triggers after writing the message).
@@ -205,10 +210,12 @@ enum { TAB_IDEE = 0, TAB_OGGI = 1, TAB_GUIDA = 2, TAB_IA = 3, TAB_STATO = 4 };
 // IA (settings) tab rows — fixed order; SLIDER rows (Velocita voce/Volume/Luce) entrano in L/R adjust.
 enum { IA_ONLINE = 0, IA_LANG, IA_TEXT, IA_VOICE, IA_SPEED, IA_VOL, IA_BRI, IA_CLEAR };
 #define IA_ROWS 8
-#define GUIDE_N 5                                 // pages in the GUIDA manual (also its "row" count)
+#define GUIDE_N 8                                 // cards in the GUIDA manual (also its "row" count)
 static bool s_menu_open;                          // the tabbed menu is up (modal over the chat)
 static int  s_tab;                                // active tab (TAB_*)
 static int  s_mrow;                                // focused row: -1 = tab bar, 0..n-1 = content row
+static int  s_list_scroll;                         // natural-scroll pixel offset for the active list tab
+                                                   // (IDEE/OGGI/IA); only moves when the focus hits an edge
 static bool s_edit;                               // a slider row (IA Volume/Luce) is in adjust mode
 
 // ---- IDEE skill tree (smartwatch-style drill-down) --------------------------
@@ -317,7 +324,7 @@ static void emit_row(const char *p, int len, unsigned short col, unsigned short 
 
 // Greedy word-wrap one message into rows, measuring with its font. Honours '\n', hard-splits a word
 // too long to ever fit, and guarantees at least one (possibly blank) row so the message stays visible.
-static void wrap_msg(const Msg *m)
+static void wrap_msg(const Msg *m, const char *override_text)
 {
     // ANIMA answers use a BOLD face in big mode (stronger on this low-DPI panel); questions stay regular.
     unsigned char font = (m->role == R_META)  ? (unsigned char)F_SMALL
@@ -327,7 +334,7 @@ static void wrap_msg(const Msg *m)
     // User rows are right-aligned with a min-x of 22, so their usable width is 232-22=210; ANIMA rows
     // start at x=11 (210..225 region) so 214. Wrapping must match the render budget or a full line clips.
     const int availw = (m->role == R_META) ? 224 : (m->role == R_USER) ? 210 : 214;
-    const char *text = m->text;
+    const char *text = override_text ? override_text : m->text;   // risposta corrente: testo pieno da s_full
     int before = s_rown, first = 1;
     if (!text[0]) { emit_row(text, 0, m->col, m->accent, m->role, font, 1); return; }
     const char *ls = text, *p = text;
@@ -356,13 +363,15 @@ static void wrap_msg(const Msg *m)
 static void rebuild_rows(void)
 {
     s_rown = 0;
-    for (int i = 0; i < s_mcount; i++) { int idx = (s_mhead - s_mcount + i + MSG_MAX) % MSG_MAX; wrap_msg(&s_msg[idx]); }
+    for (int i = 0; i < s_mcount; i++) { int idx = (s_mhead - s_mcount + i + MSG_MAX) % MSG_MAX;
+        wrap_msg(&s_msg[idx], idx == s_full_idx ? s_full : NULL); }   // slot corrente: wrappa dal testo pieno
     d.setFont(&fonts::Font0); d.setTextSize(1);   // leave the global font at the framework default
     s_scroll = 0; s_d_body = true;                // any new content snaps the view to the bottom
 }
 
 static void push_msg(unsigned char role, unsigned short col, unsigned short accent, const char *text)
 {
+    if (s_mhead == s_full_idx) s_full_idx = -1;   // lo slot del messaggio "intero" viene riusato -> torna accorciato
     Msg *m = &s_msg[s_mhead];
     ascii_fold(text, m->text, MSG_TEXT);
     m->col = col; m->accent = accent; m->role = role;
@@ -948,7 +957,7 @@ static bool chain_math(const char *in, char *out, size_t n)
 // Turn the just-returned result into transcript messages (and queue a launch if asked).
 static void present_result(void)
 {
-    char reply[416];
+    char reply[1024];   // pieno fino al cap del motore (s_res.reply[1024]): la risposta corrente si mostra INTERA
     bool launched = false;
     bool tool_ok = true;            // esito dell'operazione TOOL -> conferma vocale "Fatto"/"Errore"
     bool _tool_write = s_res.action == ANIMA_ACT_TOOL &&
@@ -1038,8 +1047,11 @@ static void present_result(void)
     } else {
         snprintf(reply, sizeof(reply), "%s", s_res.reply[0] ? s_res.reply : (s_en ? "I don't know." : "Non lo so."));
     }
-    // Tiny screen: keep a long online answer SHORT on the device (the web shows it in full). Clip at a
-    // clean boundary — the longest complete sentence within the limit, else a whole word; never mid-word.
+    // La risposta CORRENTE si mostra INTERA: salva il testo pieno (foldato) in s_full; quel messaggio verra'
+    // wrappato da li' (vedi rebuild_rows). Nel ring va solo la copia accorciata qui sotto (cronologia, RAM bassa).
+    ascii_fold(reply, s_full, sizeof s_full);
+    // Tiny screen: keep a long answer SHORT in the HISTORY ring (the current one shows full, scroll to read).
+    // Clip at a clean boundary — the longest complete sentence within the limit, else a whole word; never mid-word.
     if ((int)strlen(reply) > NATIVE_REPLY_MAX) {
         int cut = 0;
         for (int i = 0; i < NATIVE_REPLY_MAX && reply[i]; i++)
@@ -1049,7 +1061,10 @@ static void present_result(void)
         reply[cut] = 0;
     }
     // The answer bubble: amber rail when ANIMA is asking a follow-up (awaiting a reply), else violet.
-    push_anima(reply, s_res.awaiting ? AMBER : ACC);
+    s_full_idx = -1;                                  // il rebuild dentro push_anima NON deve applicare s_full allo slot vecchio
+    push_anima(reply, s_res.awaiting ? AMBER : ACC);  // copia accorciata nel ring (cronologia)
+    s_full_idx = (s_mhead - 1 + MSG_MAX) % MSG_MAX;   // marca lo slot appena scritto: mostralo INTERO da s_full
+    rebuild_rows();                                   // ri-wrappa quel messaggio dal testo pieno
     if (s_res.corrected[0] && !launched) { char c[80]; snprintf(c, sizeof(c), s_en ? "(understood: %s)" : "(ho inteso: %s)", s_res.corrected); push_meta(c, DIM); }
     // Reasoning trace (Claude-Code-style steps): only for genuine multi-step agent turns (those whose
     // trace has a step separator). Single-tier answers stay clean — the badge already shows tier+conf.
@@ -1479,9 +1494,10 @@ static void slider_adjust(int delta);         // nudge the focused IA slider (Vo
 static void menu_key(int key, char ch);       // route a key while the tabbed menu is open
 static void menu_hint(void);                  // footer hint for the current menu tab/row
 static void draw_menu(int ch);                // paint the tabbed menu (tab bar + active tab body)
+static int  list_scroll_y0(int top, int avail, int n, int f);   // natural-scroll layout (used by draw_ia, defined later)
 
 // Collapse the IDEE tree back to its category list (called when the menu (re)opens or pages away).
-static void reset_idee(void) { s_idee_cat = -1; s_form_leaf = -1; s_form_slot = 0; }
+static void reset_idee(void) { s_idee_cat = -1; s_form_leaf = -1; s_form_slot = 0; s_list_scroll = 0; }
 
 static void enter(void)
 {
@@ -1580,7 +1596,7 @@ static void menu_hint(void)
             else                nucleo_app_set_hint(s_en ? "up/dn  enter send  esc back" : "su giu  invio invia  esc su");
             break;
         case TAB_OGGI:  nucleo_app_set_hint(s_en ? "up/dn scroll   l/r tab"      : "su giu scorri  sx/dx scheda");  break;
-        case TAB_GUIDA: nucleo_app_set_hint(s_en ? "up/dn page  1-5 jump  l/r"   : "su giu pag  1-5  sx/dx sch");   break;
+        case TAB_GUIDA: nucleo_app_set_hint(s_en ? "up/dn page  1-8 jump  l/r"   : "su giu pag  1-8  sx/dx sch");   break;
         case TAB_IA:    nucleo_app_set_hint(s_en ? "up/dn  enter change  l/r tab" : "su giu  invio cambia sx/dx"); break;
         default:        nucleo_app_set_hint(s_en ? "l/r tab   esc close"          : "sx/dx scheda  esc chiudi");
     }
@@ -1619,7 +1635,7 @@ static bool on_back(int key)
     // watch "back" gesture) instead of paging tabs — only at the top category list does Left page.
     if (s_tab == TAB_IDEE && (s_form_leaf >= 0 || s_idee_cat >= 0)) {
         if (s_form_leaf >= 0) s_form_leaf = -1;             // form -> back to its leaf list
-        else { s_mrow = s_idee_cat; s_idee_cat = -1; }      // leaves -> back to categories (land on it)
+        else { s_mrow = s_idee_cat; s_idee_cat = -1; s_list_scroll = 0; }   // leaves -> back to categories (land on it)
         menu_hint(); nucleo_app_request_draw(); return true;
     }
     if (key == NK_LEFT) {                                   // Left = page tabs backward (mirror of Right)
@@ -1653,7 +1669,7 @@ static void enter_cat(int c)
     s_focus_cat = c;
     int n = cat_leaf_count(c), row = s_focus_leaf[c];          // resume the last leaf you used here
     if (row < 0 || row >= n) row = 0;
-    s_idee_cat = c; s_mrow = row; s_form_leaf = -1;
+    s_idee_cat = c; s_mrow = row; s_form_leaf = -1; s_list_scroll = 0;   // fresh scroll for the new leaf list
     menu_hint(); nucleo_app_request_draw();
 }
 // Fire a leaf: ready prompts send immediately and close the menu; parametric ones open the form so
@@ -2115,64 +2131,66 @@ static int draw_wrapped(const char *text, int x, int y, int maxw, unsigned char 
 }
 
 // ---- the navigable manual (GUIDA tab) ---------------------------------------
-// A compact handbook: intro, keys, what to ask, modes, tricks. UP/DOWN flip pages, 1-5 jump. Every
-// body is hand-fit to <=5 lines so it always clears the 240x97 body region — no clipped text.
+// A smartwatch-style card carousel: one topic per card, a BIG bold title + a few BIG FreeSans lines,
+// with page dots at the foot showing position. UP/DOWN flip cards, 1-8 jump. Content is hand-verified
+// against the real app (no invented features) and each body is hand-fit to <=3 short lines so the big
+// type always clears the 240x99 body region — no clipped text.
 typedef struct { const char *title, *body; } GuidePage;
-// Each line is hand-kept <=21 chars so it never wraps in proportional Font2 (~9-11px/char, 224px
-// budget) and every page stays <=5 lines — fits y in [42,118), below the title rule, above the footer.
+// Each \n-segment is hand-kept short (<=~20 chars) so it stays one line in the big proportional FreeSans
+// (~9-11px/char, 224px budget) and every card is <=3 lines — fits below the title rule, above the dots.
 static const GuidePage GUIDE_IT[GUIDE_N] = {
-    { "ANIMA",         "Assistente offline.\nScrivi e premi Invio.\nRisponde senza rete.\nIbrido/Online: piu'." },
-    { "Tasti",         "Invio invia\n-> completa la riga\nSu/Giu scorre chat\nCtrl+Su = storico\nTAB menu  Esc esci" },
-    { "Cosa chiedere", "Ora, meteo, apri app,\ncalcoli, promemoria.\nNon sai? Apri IDEE:\nil catalogo di tutto\ncio' che so fare." },
-    { "Modalita",      "Offline: solo qui.\nIbrido: offline poi\nonline se serve.\nOnline: solo rete.\nCambi con Destra." },
-    { "Trucchi",       "TAB: catalogo skill.\nInvio entra, Esc su.\n\"...\" chiede i dati.\nG0 1.5s: ovunque.\nAmbra = attendo te." },
+    { "ANIMA",         "Assistente offline.\nScrivi e premi Invio.\nVa anche senza rete." },
+    { "Tasti",         "Invio: invia.\nSu/Giu: scorri.\nDestra: completa." },
+    { "Menu",          "TAB apre il menu.\nInvio apri, Esc su.\nDx/Sx cambia scheda." },
+    { "Cosa chiedere", "Ora, meteo, calcoli,\npromemoria, traduzioni.\n\"Apri Musica\" e altro." },
+    { "IDEE",          "Catalogo di cio' che\nso fare. Invio entra.\n\"...\" chiede i dati." },
+    { "Modalita",      "Offline: solo qui.\nIbrido: poi il cloud.\nSolo online: cloud." },
+    { "Solo online",   "Usa un LLM nel cloud.\nServe Wi-Fi e una\nchiave API (da web)." },
+    { "Voce",          "Legge le risposte.\nAmbra = aspetto una\ntua risposta." },
 };
 static const GuidePage GUIDE_EN[GUIDE_N] = {
-    { "ANIMA",        "Offline assistant.\nType and press Enter.\nWorks with no net.\nHybrid/Online: more." },
-    { "Keys",         "Enter sends\n-> complete the line\nUp/Down scroll chat\nCtrl+Up = history\nTAB menu  Esc back" },
-    { "What to ask",  "Time, weather, apps,\nmath, reminders.\nUnsure? Open IDEAS:\nthe catalog of all\nI can do." },
-    { "Modes",        "Offline: device only.\nHybrid: offline then\nonline if needed.\nOnline: net only.\nSwitch with Right." },
-    { "Tips",         "TAB: skill catalog.\nEnter opens, Esc up.\n\"...\" asks for input.\nG0 1.5s: anywhere.\nAmber = waiting." },
+    { "ANIMA",         "Offline assistant.\nType and press Enter.\nWorks with no network." },
+    { "Keys",          "Enter: send.\nUp/Down: scroll.\nRight: complete." },
+    { "Menu",          "TAB opens the menu.\nEnter opens, Esc back.\nLeft/Right switch tab." },
+    { "What to ask",   "Time, weather, math,\nreminders, translate.\n\"Open Music\" and more." },
+    { "IDEAS",         "Catalog of all I\ncan do. Enter to open.\n\"...\" asks for input." },
+    { "Modes",         "Offline: device only.\nHybrid: then cloud.\nOnline: cloud only." },
+    { "Online only",   "Uses a cloud LLM.\nNeeds Wi-Fi and an\nAPI key (from web)." },
+    { "Voice",         "Reads answers aloud.\nAmber = waiting for\nyour reply." },
 };
+// A guide card: BIG bold violet title under a hairline, BIG anti-aliased FreeSans body, and a row of
+// carousel page dots at the foot (current = a fat ACC dot, the others small + MUTED) — the modern
+// "page N of M" affordance that replaces the old cramped "1/5" counter.
 static void draw_guide(int ch)
 {
     int pg = s_mrow < 0 ? 0 : s_mrow;
     if (pg >= GUIDE_N) pg = GUIDE_N - 1;
     const GuidePage *g = (s_en ? GUIDE_EN : GUIDE_IT) + pg;
-    d.setFont(&fonts::Font0); d.setTextSize(1);
-    d.setTextColor(ACC, BG); d.setCursor(8, 27); d.print(g->title);
-    char pgs[8]; snprintf(pgs, sizeof pgs, "%d/%d", pg + 1, GUIDE_N);
-    d.setTextColor(MUTED, BG); d.setCursor(232 - (int)strlen(pgs) * 6, 27); d.print(pgs);
-    d.drawFastHLine(8, 38, 224, LINE);
-    d.setClipRect(0, 22, 240, ch - 22);                  // never bleed past the body region
-    draw_wrapped(g->body, 8, 42, 224, F_MED, FG, 15);
+    set_font(F_BOLD); d.setTextColor(ACC, BG); d.setCursor(8, 22); d.print(g->title);   // big bold title (was a tiny 6x8)
+    d.drawFastHLine(8, 43, 224, LINE);
+    d.setClipRect(0, 45, 240, ch - 53);                  // body band, kept clear of the title and the dots
+    draw_wrapped(g->body, 8, 47, 224, F_BIG, FG, 18);    // big anti-aliased FreeSans body
     d.clearClipRect();
-    d.setFont(&fonts::Font0); d.setTextSize(1);
+    int gap = 14, span = (GUIDE_N - 1) * gap, x0 = 120 - span / 2, dy = ch - 6;          // carousel page dots
+    for (int i = 0; i < GUIDE_N; i++)
+        d.fillCircle(x0 + i * gap, dy, i == pg ? 3 : 2, i == pg ? ACC : MUTED);
+    d.setFont(&fonts::Font0); d.setTextSize(1);          // leave the global font at the framework default
 }
 
-// ---- IA tab: the settings carousel (Music/Video parity) ---------------------
-// Tab bar focused (row -1): a dimmed top-anchored preview, DOWN to engage. Engaged: the focused row
-// is centred and enlarged, neighbours peek above/below. Clipped to the body region so nothing bleeds.
+// ---- IA tab: the settings list (Music/Video parity) -------------------------
+// Same natural-scroll list as the other tabs: the focused row enlarges in place and the list scrolls
+// only when the focus reaches an edge (no centre-pinning). Clipped to the body region so nothing bleeds.
 static void draw_ia(int ch)
 {
     IAItem it[IA_ROWS]; int n = build_ia(it);
+    const int top = 24, f = s_mrow;
     d.setClipRect(0, 22, 240, ch - 22);
-    if (s_mrow == -1) {
-        int y = 26;
-        for (int i = 0; i < n && y < ch - 4; i++) {
-            draw_set_row(y, false, it[i].label, it[i].val, it[i].kind, it[i].on, it[i].slider);
-            y += 32;
-        }
-    } else {
-        int cy = (24 + ch) / 2, f = s_mrow;
-        for (int i = 0; i < n; i++) {
-            int dist = i - f, h = (dist == 0) ? 46 : 30, y;
-            if (dist == 0)     y = cy - h / 2;
-            else if (dist < 0) y = cy - 23 + dist * 30;
-            else               y = cy + 23 + (dist - 1) * 30;
-            if (y + h > 22 && y < ch)
-                draw_set_row(y, i == f, it[i].label, it[i].val, it[i].kind, it[i].on, it[i].slider);
-        }
+    int yy = list_scroll_y0(top, ch - top, n, f);
+    for (int i = 0; i < n; i++) {
+        int hh = (i == f) ? 46 : 30;
+        if (yy + hh > 22 && yy < ch)
+            draw_set_row(yy, i == f, it[i].label, it[i].val, it[i].kind, it[i].on, it[i].slider);
+        yy += hh;
     }
     d.clearClipRect();
 }
@@ -2233,11 +2251,19 @@ static void draw_stato(int ch)
     }
 }
 
-// Truncate s in place so it fits `budget` px in the CURRENT font (drops trailing chars). Keeps a long
-// prompt from bleeding past its capsule.
+// Truncate s in place so it fits `budget` px in the CURRENT font. When it actually has to cut it ends
+// with a ".." ellipsis (the GFX ASCII fonts have no "…" glyph) — the modern "clipped, there's more"
+// affordance instead of a stop mid-word. Never writes past the original NUL, so it's safe even on a
+// full fixed buffer. Keeps a long prompt from bleeding past its capsule.
 static void fit_w(char *s, int budget)
 {
-    int n = (int)strlen(s);
+    int L = (int)strlen(s);
+    if (L == 0 || (int)d.textWidth(s) <= budget) return;          // already fits — leave it untouched
+    for (int n = L - 2; n > 0; n--) {                             // longest "<prefix>.." that fits, first
+        s[n] = '.'; s[n + 1] = '.'; s[n + 2] = 0;                 // n+2 <= L: stays inside the buffer
+        if ((int)d.textWidth(s) <= budget) return;
+    }
+    int n = (int)strlen(s);                                       // pathologically narrow budget: hard clip
     while (n > 0 && (int)d.textWidth(s) > budget) s[--n] = 0;
 }
 
@@ -2248,8 +2274,8 @@ static void fit_w(char *s, int budget)
 static void list_row_focus(int y, int rh, bool foc, unsigned short unfocused_col)
 {
     if (foc) {
-        d.fillRoundRect(4, y - 1, 232, rh, 4, CAP);     // raised capsule (matches the IA settings rows)
-        d.fillRect(6, y + 1, 3, rh - 4, ACC);           // violet accent rail
+        d.fillRoundRect(4, y - 1, 232, rh, 6, CAP);     // raised capsule, softened to match the IA settings rows
+        d.fillRoundRect(6, y + 1, 3, rh - 4, 1, ACC);   // violet accent rail, rounded ends (parity with draw_set_row)
         d.setTextColor(FG, CAP);
     } else {
         d.setTextColor(unfocused_col, BG);
@@ -2308,39 +2334,86 @@ static void draw_list_scroll(int ty0, int avail, int total, int first, int shown
     d.fillRect(236, ty0 + tyo, 3, th, MUTED);
 }
 
-// Categories: "[icon] N  Label   <count> >". Icon = identity, count + chevron = "drillable".
-static void draw_idee_cats(int ch)
+// One category row, framed like an IA settings row: CAP capsule + ACC rail when focused. A subtle
+// quick-pick index (1-9) on the far left, the identity glyph, the big size-2 label, and on the right a
+// small leaf-count badge + the drill chevron. Everything is vertically centred for either row height.
+static void draw_cat_row(int y, bool focus, int i)
 {
-    d.setFont(&fonts::Font0); d.setTextSize(1);
-    const int rh = 24, y0 = 28;
-    int maxvis = (ch - y0) / rh; if (maxvis < 1) maxvis = 1;
-    int sel = s_mrow, anchor = sel < 0 ? 0 : sel;
-    int first = (anchor >= maxvis) ? anchor - maxvis + 1 : 0;
-    int shown = (CAT_N - first < maxvis) ? CAT_N - first : maxvis;
-    d.setClipRect(0, 22, 240, ch - 22);
-    int y = y0;
-    for (int i = first; i < CAT_N && i < first + maxvis; i++) {
-        bool foc = (i == sel);
-        list_row_focus(y, rh, foc, FG);
-        draw_cat_icon(i, 8, y + 4, foc ? ACC : MUTED);          // per-category glyph
-        char line[40]; snprintf(line, sizeof line, "%d  %s", i + 1, cat_label(i));
-        fit_w(line, 158);                                       // x 30..188; room for count + chevron
-        d.setTextSize(foc ? 2 : 1);
-        d.setTextColor(FG, foc ? CAP : BG); d.setCursor(30, foc ? y + 4 : y + 8); d.print(line);
-        char cnt[6]; snprintf(cnt, sizeof cnt, "%d", cat_leaf_count(i));
-        d.setTextSize(1);
-        d.setTextColor(foc ? FG : MUTED, foc ? CAP : BG);
-        d.setCursor(210 - (int)strlen(cnt) * 6, y + 8); d.print(cnt);
-        int axx = 224, ayy = y + rh / 2;
-        d.fillTriangle(axx, ayy - 4, axx, ayy + 4, axx + 5, ayy, foc ? ACC : MUTED);
-        y += rh;
-    }
-    d.clearClipRect();
-    draw_list_scroll(y0, maxvis * rh, CAT_N, first, shown);
+    int h = focus ? 46 : 30;
+    d.fillRoundRect(4, y, 232, h - 2, 9, focus ? CAP : BG);
+    if (focus) d.fillRoundRect(4, y + 3, 5, h - 8, 2, ACC);                  // accent rail
+    unsigned short bg = focus ? CAP : BG, ink = focus ? FG : MUTED;
+    int cy = y + h / 2, ty = y + (h - 16) / 2;
+    char num[4]; snprintf(num, sizeof num, "%d", i + 1);                     // quick-pick index, subtle
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(focus ? MUTED : DIM, bg);
+    d.setCursor(11, cy - 3); d.print(num);
+    draw_cat_icon(i, 22, ty, focus ? ACC : MUTED);                          // identity glyph
+    d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(ink, bg);     // big label
+    char line[40]; snprintf(line, sizeof line, "%s", cat_label(i));
+    fit_w(line, 150);                                                        // ".." if longer; room for badge + chevron
+    d.setCursor(44, ty - 1); d.print(line);
+    char cnt[6]; snprintf(cnt, sizeof cnt, "%d", cat_leaf_count(i));         // leaf-count badge, right of the label
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(focus ? FG : MUTED, bg);
+    d.setCursor(206 - (int)strlen(cnt) * 6, cy - 3); d.print(cnt);
+    d.fillTriangle(222, cy - 4, 222, cy + 4, 227, cy, focus ? ACC : MUTED);  // drill chevron
 }
 
-// Leaves of the open category, under a "[icon] < Category   N" breadcrumb (the icon carries down so the
-// drill feels continuous). A trailing "..." marks leaves that open a fill-in form.
+// One leaf row, framed like an IA settings row: a subtle quick-pick index on the left, the big size-2
+// label, and — for leaves that open a fill-in form — a "..." badge on the right (the "needs input" cue).
+static void draw_leaf_row(int y, bool focus, int c, int i)
+{
+    int h = focus ? 46 : 30;
+    d.fillRoundRect(4, y, 232, h - 2, 9, focus ? CAP : BG);
+    if (focus) d.fillRoundRect(4, y + 3, 5, h - 8, 2, ACC);
+    const Leaf *L = &LEAVES[cat_leaf_at(c, i)];
+    unsigned short bg = focus ? CAP : BG, ink = focus ? FG : MUTED;
+    bool form = L->slots > 0;
+    int cy = y + h / 2, ty = y + (h - 16) / 2;
+    char num[4]; snprintf(num, sizeof num, "%d", i + 1);                     // quick-pick index, subtle
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(focus ? MUTED : DIM, bg);
+    d.setCursor(11, cy - 3); d.print(num);
+    d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(ink, bg);     // big label
+    char line[44]; snprintf(line, sizeof line, "%s", s_en ? L->l_en : L->l_it);
+    fit_w(line, form ? 152 : 188);                                           // ".." if longer; room for the form badge
+    d.setCursor(34, ty - 1); d.print(line);
+    if (form) { d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(focus ? ACC : MUTED, bg);
+                d.setCursor(202, ty - 1); d.print("..."); }
+}
+
+// Natural list scroll shared by the IDEE/OGGI/IA lists. A persistent pixel offset (s_list_scroll) that
+// only moves when the focused row would fall outside the viewport — so the selection scrolls like a
+// normal list (riding the top/bottom edge), NOT pinned to the vertical centre. Rows are 30px, the
+// focused one 46px. Returns row 0's y (top - scroll). f < 0 (tab bar focused) = anchored at the top.
+static int list_scroll_y0(int top, int avail, int n, int f)
+{
+    if (f < 0) { s_list_scroll = 0; return top; }
+    int content = n * 30 + 16;                               // the focused row is 46 (= 30 + 16)
+    int maxs = content > avail ? content - avail : 0;
+    int ftop = f * 30, fbot = ftop + 46;                     // focused row in content coords (rows above are 30)
+    if (ftop - s_list_scroll < 0)     s_list_scroll = ftop;          // above the viewport -> reveal its top
+    if (fbot - s_list_scroll > avail) s_list_scroll = fbot - avail;  // below the viewport -> reveal its bottom
+    if (s_list_scroll < 0)    s_list_scroll = 0;
+    if (s_list_scroll > maxs) s_list_scroll = maxs;
+    return top - s_list_scroll;
+}
+
+// Categories: a top-packed list with natural scroll (the focused category enlarges in place; the list
+// scrolls only when it reaches an edge). A partly-clipped row at an edge is itself the "more" cue.
+static void draw_idee_cats(int ch)
+{
+    const int top = 24, f = s_mrow;
+    d.setClipRect(0, 22, 240, ch - 22);
+    int yy = list_scroll_y0(top, ch - top, CAT_N, f);
+    for (int i = 0; i < CAT_N; i++) {
+        int hh = (i == f) ? 46 : 30;
+        if (yy + hh > 22 && yy < ch) draw_cat_row(yy, i == f, i);
+        yy += hh;
+    }
+    d.clearClipRect();
+}
+
+// Leaves of the open category: a slim "[icon] < Category   N" breadcrumb, then the same naturally-
+// scrolling list below it (focused leaf enlarged in place).
 static void draw_idee_leaves(int ch)
 {
     int c = s_idee_cat, n = cat_leaf_count(c);
@@ -2352,26 +2425,15 @@ static void draw_idee_leaves(int ch)
     d.setTextColor(MUTED, BG); d.setCursor(232 - (int)strlen(cc) * 6, 27); d.print(cc);
     d.drawFastHLine(8, 40, 224, LINE);
 
-    d.setFont(&fonts::Font0); d.setTextSize(1);
-    const int rh = 24, y0 = 44;
-    int maxvis = (ch - y0) / rh; if (maxvis < 1) maxvis = 1;
-    int sel = s_mrow, anchor = sel < 0 ? 0 : sel;
-    int first = (anchor >= maxvis) ? anchor - maxvis + 1 : 0;
-    int shown = (n - first < maxvis) ? n - first : maxvis;
+    const int top = 44, f = s_mrow;
     d.setClipRect(0, 42, 240, ch - 42);
-    int y = y0;
-    for (int i = first; i < n && i < first + maxvis; i++) {
-        const Leaf *L = &LEAVES[cat_leaf_at(c, i)];
-        bool foc = (i == sel);
-        list_row_focus(y, rh, foc, FG);
-        char line[44]; snprintf(line, sizeof line, "%d  %s%s", i + 1, s_en ? L->l_en : L->l_it, L->slots ? " ..." : "");
-        fit_w(line, 216);
-        d.setTextSize(foc ? 2 : 1);
-        d.setTextColor(FG, foc ? CAP : BG); d.setCursor(12, foc ? y + 4 : y + 8); d.print(line);
-        y += rh;
+    int yy = list_scroll_y0(top, ch - top, n, f);
+    for (int i = 0; i < n; i++) {
+        int hh = (i == f) ? 46 : 30;
+        if (yy + hh > 42 && yy < ch) draw_leaf_row(yy, i == f, c, i);
+        yy += hh;
     }
     d.clearClipRect();
-    draw_list_scroll(y0, maxvis * rh, n, first, shown);
 }
 
 // The fill-in form, redesigned as a full-screen FOCUS wizard (one field at a time, BIG type): a slim
@@ -2565,31 +2627,66 @@ static void today_key(int key, char ch)
     menu_hint(); nucleo_app_request_draw();
 }
 
-// OGGI tab: the OS calendar at a glance — today's events + the next upcoming one, under the tab bar.
+// One agenda row, framed like an IA settings row: the time/date in an accent colour, the title in big
+// size-2 type — the modern agenda look (glanceable time, readable title). The focused event expands to
+// two lines (time on top, full-width title below, less truncation); the rest are one compact line. The
+// "next upcoming" peek (i >= s_today_count) is drawn dimmer. Splits "prefix  title" on the double space.
+static void draw_event_row(int y, bool focus, int i)
+{
+    int h = focus ? 46 : 30;
+    bool future = (i >= s_today_count);
+    d.fillRoundRect(4, y, 232, h - 2, 9, focus ? CAP : BG);
+    if (focus) d.fillRoundRect(4, y + 3, 5, h - 8, 2, future ? MUTED : ACC);     // accent rail
+    unsigned short bg = focus ? CAP : BG;
+    unsigned short tcol = future ? MUTED : (focus ? FG : MUTED);                 // title colour
+    unsigned short acol = future ? MUTED : (focus ? GRN : ACC);                  // time/date accent
+    const char *sep = strstr(s_today[i], "  ");
+    char pre[24] = ""; const char *title = s_today[i];
+    if (sep && sep != s_today[i]) { int pl = (int)(sep - s_today[i]); if (pl > 23) pl = 23;
+                                    memcpy(pre, s_today[i], pl); pre[pl] = 0; title = sep + 2; }
+    char t[64]; snprintf(t, sizeof t, "%s", title);
+    if (focus) {                                                                // expanded: time on top, BIG title below
+        if (pre[0]) { d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(acol, bg); d.setCursor(16, y + 6); d.print(pre); }
+        d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(tcol, bg);
+        fit_w(t, 214);                                                          // ".." if longer than the row
+        d.setCursor(16, pre[0] ? y + 22 : y + (h - 16) / 2 - 1); d.print(t);
+    } else {                                                                    // compact: small time accent + big title
+        int x = 16;
+        if (pre[0]) { d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(acol, bg);
+                      d.setCursor(x, y + (h - 8) / 2); d.print(pre); x += (int)d.textWidth(pre) + 8; }
+        d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(tcol, bg);
+        fit_w(t, 232 - x);                                                      // ".." if longer than the room left
+        d.setCursor(x, y + (h - 16) / 2 - 1); d.print(t);
+    }
+}
+
+// OGGI tab: today's agenda as a naturally-scrolling list (same look & motion as the IA/IDEE tabs) — the
+// focused event enlarges in place and the list scrolls only when it reaches an edge. A bigger accented
+// header + a friendly, readable empty state.
 static void draw_today(int ch)
 {
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(MUTED, BG);
-    d.setCursor(8, 27); d.print(s_today_hdr[0] ? s_today_hdr : (s_en ? "Today" : "Oggi"));
-    d.drawFastHLine(8, 38, 224, LINE);
-    const int y0 = 42;
-    if (s_today_n == 0) {
-        d.setFont(&fonts::Font2); d.setTextSize(1); d.setTextColor(MUTED, BG);
-        d.setCursor(10, y0 + 8); d.print(s_en ? "No events today" : "Nessun impegno oggi");
-        d.setTextColor(DIM, BG); d.setCursor(10, y0 + 30);
-        d.print(s_en ? "Ask: remind me ..." : "Chiedi: ricordami ...");
+    set_font(F_MED); d.setTextColor(ACC, BG);                                   // bigger, accented date header
+    d.setCursor(8, 24); d.print(s_today_hdr[0] ? s_today_hdr : (s_en ? "Today" : "Oggi"));
+    if (s_today_count > 0) { char cb[6]; snprintf(cb, sizeof cb, "%d", s_today_count);
+        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(MUTED, BG);
+        d.setCursor(232 - (int)strlen(cb) * 6, 28); d.print(cb); }
+    d.drawFastHLine(8, 42, 224, LINE);
+    const int top = 44, f = s_mrow;
+    if (s_today_n == 0) {                                                       // friendly, bigger empty state
+        set_font(F_BIG); d.setTextColor(MUTED, BG);
+        d.setCursor(10, top + 10); d.print(s_en ? "No events today" : "Niente in agenda oggi");
+        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(DIM, BG);
+        d.setCursor(10, top + 36); d.print(s_en ? "Try: remind me ..." : "Prova: ricordami ...");
         return;
     }
-    d.setFont(&fonts::Font2); d.setTextSize(1);
-    const int rh = 18; int sel = s_mrow, maxvis = (ch - y0) / rh; if (maxvis < 1) maxvis = 1;
-    int anchor = sel < 0 ? 0 : sel;
-    int first = (anchor >= maxvis) ? anchor - maxvis + 1 : 0;
-    int y = y0;
-    for (int i = first; i < s_today_n && i < first + maxvis; i++) {
-        bool foc = (i == sel);
-        list_row_focus(y, rh, foc, i >= s_today_count ? MUTED : FG);          // the "next" peek is dimmer
-        d.setCursor(12, y + 1); d.print(s_today[i]);
-        y += rh;
+    d.setClipRect(0, top, 240, ch - top);
+    int yy = list_scroll_y0(top, ch - top, s_today_n, f);
+    for (int i = 0; i < s_today_n; i++) {
+        int hh = (i == f) ? 46 : 30;
+        if (yy + hh > top && yy < ch) draw_event_row(yy, i == f, i);
+        yy += hh;
     }
+    d.clearClipRect();
 }
 
 // ---- chat: region painters (direct draw; each self-clears its own box) -------
@@ -2667,6 +2764,8 @@ static void draw_deck(int ty0, int avail)
         d.setCursor(12, yy + 1); d.print(line);
         yy += rh;
     }
+    int shown = (SUG_N - first < maxvis) ? SUG_N - first : maxvis;
+    draw_list_scroll(top_y, maxvis * rh, SUG_N, first, shown);    // scroll cue when the deck overflows
 }
 
 static void render_row(int y, const Row *r)

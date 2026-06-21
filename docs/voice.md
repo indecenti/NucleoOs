@@ -79,7 +79,7 @@ multi-syllable words; avoid monosyllables and minimal pairs. 10–15 commands ar
 comfortable; ~20 with good word choice.
 
 ## Incompatible templates
-On load, any `.tpl` not in the current `VTP2` format is auto-renamed to
+On load, any `.tpl` not in the current `VTP3` format is auto-renamed to
 `.tpl.old` (so the web app stops showing it as trained). Re-train it.
 
 ## Template format

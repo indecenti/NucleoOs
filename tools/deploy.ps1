@@ -154,6 +154,15 @@ function Report($label, $stat) {
     "{0}: {1} copied ({2:N0} KB), {3} unchanged, {4} removed" -f $label, $stat.copied, ($stat.bytes / 1KB), $stat.skipped, $stat.deleted
 }
 
+# 0) Codegen: mirror the firmware's Costellazioni content tables into the web game (single source of
+#    truth). Runs BEFORE staging so the generated apps/games/www/games/constellations-content.js ships.
+$gen = Join-Path $PSScriptRoot 'gen-constellations-content.mjs'
+if (Test-Path $gen) {
+    Write-Host "Codegen: constellations content ->" -NoNewline
+    & node $gen
+    if ($LASTEXITCODE -ne 0) { throw "gen-constellations-content.mjs failed ($LASTEXITCODE)" }
+}
+
 # 1) Assemble repo -> deploy/sd (incremental)
 $man = Load-Manifest $sd; $seen = @{}; $stat = @{ copied = 0; skipped = 0; deleted = 0; bytes = 0 }
 Sync-Dir "$repo\registry"          $sd 'system/registry'        $man $seen $stat

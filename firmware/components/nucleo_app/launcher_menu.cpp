@@ -9,8 +9,11 @@
 int                       nucleo_app_count(void);
 const nucleo_app_def_t   *nucleo_app_at(int i);
 
-#define MAX_APPS 40
-#define MAX_CATS 8
+// Caps raised (were 40/8) so app/category growth is effectively uncapped; kept static (no heap)
+// to respect the RAM rule. MAX_APPS must match nucleo_app.cpp. s_cat_items[MAX_CATS][MAX_APPS+1]
+// is the largest array: 16*65 ptrs ≈ 4 KB .bss — negligible, not heap.
+#define MAX_APPS 64
+#define MAX_CATS 16
 #define MAX_DEPTH 6
 
 // ---- shared per-app context actions ----------------------------------------

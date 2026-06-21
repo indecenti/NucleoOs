@@ -121,7 +121,9 @@ extern "C" esp_err_t nucleo_app_register_display(httpd_handle_t server)
 }
 
 // ---- registered foreground apps --------------------------------------------
-#define MAX_APPS 40
+// Cap raised well above the real app count (was 40) so adding native apps/games is never gated.
+// Kept as a static array (no heap) to honour the no-hoarding RAM rule; must match launcher_menu.cpp.
+#define MAX_APPS 64
 static nucleo_app_def_t s_apps[MAX_APPS];
 static int s_app_count;
 
@@ -164,6 +166,10 @@ extern "C" void nucleo_register_link(void);   // "Vicino" — device-to-device f
 extern "C" void nucleo_register_micspec(void);
 extern "C" void nucleo_register_qr(void);
 extern "C" void nucleo_register_theme(void);   // app_theme.cpp — replaces the empty nucleo_setup.c stub
+extern "C" void nucleo_register_reactor(void); // app_reactor.cpp — Games: reactor-management game
+extern "C" void nucleo_register_constellations(void); // app_constellations.cpp — Games: space-trader
+extern "C" void nucleo_register_sandgarden(void);     // app_sandgarden.cpp — Games: falling-sand garden
+extern "C" void nucleo_register_slots(void);          // app_slots.cpp — Games: slot machine
 
 // Registration order defines BOTH the category order in the root menu (by first app seen)
 // and the app order within each category. Ordered so everyday apps lead and System/Connect
@@ -174,6 +180,7 @@ void nucleo_app_register_builtins(void)
     nucleo_register_clock(); nucleo_register_torch(); nucleo_register_calc(); nucleo_register_qr(); nucleo_register_files();
     nucleo_register_calendar(); nucleo_register_notify(); nucleo_register_notepad(); nucleo_register_usb(); nucleo_register_usbkbd(); nucleo_register_ir();
     nucleo_register_radio(); nucleo_register_player(); nucleo_register_video(); nucleo_register_photos(); nucleo_register_recorder(); nucleo_register_micspec();  // Media
+    nucleo_register_reactor(); nucleo_register_constellations(); nucleo_register_sandgarden(); nucleo_register_slots();   // Games
     nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme();    // System
     nucleo_register_wifi(); nucleo_register_remote(); nucleo_register_ssh(); nucleo_register_link();  // Connect
     nucleo_register_voice(); nucleo_register_voicelab();                          // Voice Control + live console

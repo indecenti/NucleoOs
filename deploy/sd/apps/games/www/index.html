@@ -309,7 +309,7 @@ let play = null, harness = null, def = null, profile = P.getProfile();
 let phase = 'lobby', typingTimer = 0, animaBusy = false, animaLast = 0, wiredRoom = false;
 let coach = null, lastOpts = {}, ptrThrottle = 0, gamepad = null, lastAxisKey = '', boardRO = null;
 // immersive play (fullscreen + Xbox-style game bar + mouse capture)
-let immersive = false, barOpen = false, wantFs = false, fsUserOff = false, pausedByBar = false, isOver = false, lockY = 0, shownIntro = false;
+let immersive = false, barOpen = false, wantFs = false, fsUserOff = false, pausedByBar = false, isOver = false, lockX = 0, lockY = 0, shownIntro = false;
 const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
 const asideEl = document.querySelector('#room aside');   // stable ref; relocated into the game bar while immersive
 const fsRoot = () => document.getElementById('app');
@@ -481,7 +481,7 @@ function enterImmersive() {
   $('#gbSlot').appendChild(asideEl);                 // roster + chat move into the bar
   requestFs();                                       // works on a gesture (host Start); guests retry on input
   if (!shownIntro) { shownIntro = true; toast('🎮 ' + (def ? def.name : T('Gioco', 'Game')) + T(' — premi Tab o ☰ per il menu', ' — press Tab or ☰ for the menu')); }
-  if (def && def.capturesPointer && !play.spectator) showLockHint(true);
+  if (wantsLock() && !play.spectator) showLockHint(true);   // only when the game actually wants the mouse now (combat), not the hub
   // Re-measure after the chrome collapses (reflow) and after a 3D game finishes its async renderer
   // load, so the board fills the screen with no first-frame flash.
   requestAnimationFrame(fitBoard);
@@ -513,8 +513,11 @@ function toggleFs() {
   if (document.fullscreenElement) { fsUserOff = true; exitFs(); }
   else { fsUserOff = false; requestFs(); }
 }
+// Hybrid games (e.g. Costellazioni: hub menu vs dogfight) expose wantsPointerLock(state) so the pointer
+// locks ONLY when they ask — the menu keeps a visible, clickable cursor. Others keep the static flag.
+const wantsLock = () => !!(def && (typeof def.wantsPointerLock === 'function' ? (harness && harness.state && def.wantsPointerLock(harness.state)) : def.capturesPointer));
 function maybeLock() {
-  if (!immersive || barOpen || !def || !def.capturesPointer || (play && play.spectator)) return;
+  if (!immersive || barOpen || !wantsLock() || (play && play.spectator)) return;
   const c = $('#board');
   if (document.pointerLockElement === c || !c.requestPointerLock) return;
   try { c.requestPointerLock(); } catch {}
@@ -738,8 +741,8 @@ $('#gbFs').onclick = () => { toggleFs(); setTimeout(() => { if (barOpen) renderB
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && immersive && !fsUserOff) wantFs = true; if (barOpen) renderBar(); requestAnimationFrame(fitBoard); });
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === $('#board');
-  if (locked) { lockY = $('#board').height / 2; showLockHint(false); }
-  else if (immersive && !barOpen && phase === 'playing' && def && def.capturesPointer && !(play && play.spectator)) showLockHint(true);
+  if (locked) { lockX = $('#board').width / 2; lockY = $('#board').height / 2; showLockHint(false); }
+  else if (immersive && !barOpen && phase === 'playing' && wantsLock() && !(play && play.spectator)) showLockHint(true);
 });
 
 // ---- gamepad/joystick (transversal: routed by phase + the game's padMode) ------------------
@@ -753,7 +756,7 @@ function setupGamepad() {
       const key = Math.sign(x) + ',' + Math.sign(y); if (key === lastAxisKey) return; lastAxisKey = key;   // forward only on change
       harness.feedAxis(x, y);
     },
-    onDir: (dx, dy) => { if (phase === 'playing' && !barOpen && harness && !play.spectator && def && def.padMode === 'cursor') harness.feedPadDir(dx, dy); },
+    onDir: (dx, dy) => { if (phase === 'playing' && !barOpen && harness && !play.spectator && def && (def.padMode === 'cursor' || def.padMode === 'analog')) harness.feedPadDir(dx, dy); },
     onButton: (name, down) => {
       if (!down) return;
       if (phase === 'playing') {
@@ -761,6 +764,8 @@ function setupGamepad() {
         if (name === 'Start' || name === 'Select') { toggleBar(); return; }
         if (barOpen) { if (name === 'B') closeBar(); return; }   // while the menu is up, don't drive the game
         if (name === 'A' && def && def.padMode === 'cursor' && !play.spectator) harness.feedPadButton('A');
+        // analog games (e.g. Costellazioni) drive their own menus with the face buttons + d-pad.
+        if (def && def.padMode === 'analog' && !play.spectator && (name === 'A' || name === 'B' || name === 'X' || name === 'Y')) harness.feedPadButton(name);
       } else if (phase === 'waiting') {
         if (name === 'Start' && play.isHost && vis('#startBtn') && !$('#startBtn').disabled) $('#startBtn').click();
         if (name === 'A' && vis('#readyBtn')) $('#readyBtn').click();
@@ -797,16 +802,28 @@ async function maybeBanter() {
 function wireInput(canvas) {
   const toCanvas = ev => { const r = canvas.getBoundingClientRect(); const x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left, y = (ev.touches ? ev.touches[0].clientY : ev.clientY) - r.top; return { x: x * (canvas.width / r.width), y: y * (canvas.height / r.height) }; };
   const live = () => phase === 'playing' && harness && !play.spectator && !barOpen;
+  canvas.oncontextmenu = ev => ev.preventDefault();        // right-click drives the secondary weapon, not the browser menu
   canvas.onpointerdown = ev => {
     onUserGesture();                                       // a guest's first click claims fullscreen + mouse capture
     if (!live()) return; ev.preventDefault();
-    if (document.pointerLockElement === canvas) return;    // captured: the move handler drives the paddle
+    const alt = ev.button === 2 && def && def.pointerAxes === 'xy';   // RIGHT mouse = secondary fire (missile) for Costellazioni
+    if (document.pointerLockElement === canvas) {           // captured: the move handler drives aim…
+      if (def && def.pointerAxes === 'xy') { if (alt) harness.feedKey('m'); else if (ev.button === 0) harness.feedPointer(lockX, lockY); }   // L = laser, R = missile
+      return;
+    }
+    if (alt) { harness.feedKey('m'); return; }
+    if (ev.button !== 0) return;
     const { x, y } = toCanvas(ev); harness.feedPointer(x, y); harness.feedPointerMove(x, y);
   };
   // Continuous input for real-time games. Captured (pointer-lock) → relative motion; else throttled drag (~30Hz).
   canvas.onpointermove = ev => {
     if (!live()) return;
-    if (document.pointerLockElement === canvas) { lockY = clamp(lockY + ev.movementY, 0, canvas.height); harness.feedPointerMove(canvas.width / 2, lockY); return; }
+    if (document.pointerLockElement === canvas) {
+      lockY = clamp(lockY + ev.movementY, 0, canvas.height);
+      if (def && def.pointerAxes === 'xy') { lockX = clamp(lockX + ev.movementX, 0, canvas.width); harness.feedPointerMove(lockX, lockY); }
+      else harness.feedPointerMove(canvas.width / 2, lockY);   // default captured games (e.g. 3D Pong) use vertical only
+      return;
+    }
     if (!(ev.buttons || ev.pointerType === 'touch')) return;
     const now = performance.now(); if (now - ptrThrottle < 33) return; ptrThrottle = now;
     const { x, y } = toCanvas(ev); harness.feedPointerMove(x, y);
@@ -818,7 +835,9 @@ function wireInput(canvas) {
       if (!barOpen) onUserGesture();                                                        // first keypress claims fullscreen/capture
     }
     if (phase !== 'playing' || barOpen || !harness || play.spectator || document.activeElement === $('#chatin')) return;
+    const wantedBefore = wantsLock();
     harness.feedKey(ev.key);
+    if (!barOpen && !wantedBefore && wantsLock()) maybeLock();   // this key just flipped the game into a lock-wanting phase (hub->combat) — grab the mouse on the same gesture
   };
   window.onkeyup = ev => { if (phase !== 'playing' || barOpen || !harness || play.spectator || document.activeElement === $('#chatin')) return; harness.feedKeyUp(ev.key); };
 }
