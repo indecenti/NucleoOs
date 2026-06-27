@@ -118,6 +118,7 @@ struct Tank {
     int   respawn_ms; // bots: ms until respawn (0 = alive/none)
     int   behav;      // bots: behaviour personality (BB_*)
     int   aim_ms;     // bots: reaction/pause gate between shots (no continuous fire)
+    bool  is_boss;    // bots: boss variant (stronger, different looks)
 };
 // bot personalities
 enum { BB_RUSHER=0, BB_SNIPER, BB_FLANKER, BB_BRAWLER, BB_COUNT };
@@ -568,7 +569,9 @@ static void damage_tank(int id, int dmg, int owner, float hx, float hy){
         t.hp=0; t.alive=false; shake_set(14.0f); boom(t.x,t.y,tank_col(id)); sfx_play(3);
         if(id_is_bot(id)){
             t.respawn_ms=2600; s_bot_kills++;
-            if(owner<2) earn(owner,BOT_KILL_CREDITS);
+            int kill_reward=BOT_KILL_CREDITS;
+            if(t.is_boss){ kill_reward*=3; shake_set(20.0f); }  // boss kill bonus + extra shake
+            if(owner<2) earn(owner,kill_reward);
             if(s_bot_kills>=(s_bot_level+1)*5 && s_bot_level<10) s_bot_level++;
         } else earn(owner,15);
     } else { ring_add(hx,hy,COL_WHITE,200); ring_add(hx,hy,mix(tank_col(id),COL_WHITE,100),180); sfx_play(2); }
@@ -1347,18 +1350,22 @@ static void bot_spawn(int i){
         tx=cx; ty=cy; break;
     }
     int lvl=s_bot_level;
+    bool is_boss=(s_bot_kills>0&&s_bot_kills%5==0);  // boss every 5 kills
+    b.is_boss=is_boss;
     { int r=(int)(xr()%6);                                // mostly stand-off types, few rushers
-      b.behav=(r==0)?BB_RUSHER:(r==1)?BB_SNIPER:(r<4)?BB_BRAWLER:BB_FLANKER; }
+      b.behav=is_boss?BB_SNIPER:(r==0)?BB_RUSHER:(r==1)?BB_SNIPER:(r<4)?BB_BRAWLER:BB_FLANKER; }
     b.aim_ms=300+(int)(xr()%500);
-    b.type=(int)(xr()%TT_COUNT);                          // varied chassis silhouette
+    b.type=is_boss?TT_CRUSHER:(int)(xr()%TT_COUNT);      // boss always uses CRUSHER
     b.dir=2; b.fx=0; b.fy=1; b.alive=true; b.in_shop=false; b.shop_ms=0;
-    b.pu=PU_NONE; b.pu_ms=0; b.fire_cd=0; b.credits=0;
+    b.pu=is_boss?PU_SHIELD:PU_NONE; b.pu_ms=0; b.fire_cd=0; b.credits=0;
     b.flash_ms=0; b.tread=0; b.hurt_ms=0; b.respawn_ms=0;
-    b.hp=b.hp_max=2+(lvl>8?2:lvl/3);                      // tougher each tier (reduced: bots die faster)
-    b.armor=(lvl>=6)?1:0;
-    b.spd=0.050f+lvl*0.0026f; if(b.spd>0.092f) b.spd=0.092f;
-    // higher tiers field nastier weapons; snipers prefer the railgun
-    if(b.behav==BB_SNIPER) b.weapon=(lvl>=3)?WP_RAIL:WP_CANNON;
+    int base_hp=2+(lvl>8?2:lvl/3);
+    b.hp=b.hp_max=is_boss?(base_hp*3):base_hp;         // boss has 3x HP
+    b.armor=is_boss?3:(lvl>=6)?1:0;                    // boss has max armor
+    b.spd=is_boss?0.035f:(0.050f+lvl*0.0026f); if(b.spd>0.092f) b.spd=0.092f;
+    // boss uses powerful weapons; regular bots depend on level
+    if(is_boss) b.weapon=WP_ROCKET;
+    else if(b.behav==BB_SNIPER) b.weapon=(lvl>=3)?WP_RAIL:WP_CANNON;
     else if(lvl>=4 && (xr()&1)) b.weapon=WP_MG;
     else if(lvl>=6 && (xr()&1)) b.weapon=WP_SHOT;
     else b.weapon=WP_CANNON;
@@ -1697,13 +1704,21 @@ static void draw_tank_sprite(const Tank &t, uint16_t col, bool bot=false){
     }
     // ---- BOT markings: angular spikes + glowing red visor → unmistakably an enemy
     if(bot){
-        uint16_t spike=rgb(40,8,12);
+        Tank &bt=s_bots[id-BOT_OWNER0];
+        uint16_t spike=bt.is_boss?rgb(255,100,20):rgb(40,8,12);  // boss: gold spikes
         d.drawLine(sx-7,sy-7,sx-10,sy-10,spike); d.drawLine(sx+7,sy-7,sx+10,sy-10,spike);
         d.drawLine(sx-7,sy+7,sx-10,sy+10,spike); d.drawLine(sx+7,sy+7,sx+10,sy+10,spike);
         d.fillRect(sx-4,sy-7,9,2,rgb(10,10,12));               // dark band
-        uint16_t eye=((s_anim>>1)&1)?rgb(255,80,80):rgb(255,180,60);
-        d.drawFastHLine(sx-3,sy-6,7,eye);                       // hostile visor
+        uint16_t eye=bt.is_boss?(((s_anim>>1)&1)?rgb(255,200,80):rgb(255,255,160)):
+                                (((s_anim>>1)&1)?rgb(255,80,80):rgb(255,180,60));
+        d.drawFastHLine(sx-3,sy-6,7,eye);                       // hostile visor (gold if boss)
         d.drawPixel(sx-3,sy-6,COL_WHITE); d.drawPixel(sx+3,sy-6,COL_WHITE);
+        if(bt.is_boss){
+            // boss crown: triple peaks
+            d.drawLine(sx-6,sy-9,sx-4,sy-11,rgb(255,200,80));
+            d.drawLine(sx,sy-9,sx,sy-12,rgb(255,200,80));
+            d.drawLine(sx+6,sy-9,sx+4,sy-11,rgb(255,200,80));
+        }
     }
 }
 
@@ -1880,6 +1895,7 @@ static void draw_hud(void){
         d.fillRect(gx,gy,2,2,((s_anim>>2)&1)?COL_GREEN:rgb(40,120,60));
     }
     // bots on the minimap (red), so you can read the horde around you
+    // boss appears as bright gold dot
     for(int i=0;i<s_nbots;i++){
         if(!s_bots[i].alive) continue;
         int dx=mmx+(int)(s_bots[i].x*mmw/WORLD_W);
@@ -1888,7 +1904,9 @@ static void draw_hud(void){
         if(dx>mmx+mmw-1) dx=mmx+mmw-1;
         if(dy<mmy) dy=mmy;
         if(dy>mmy+mmh-1) dy=mmy+mmh-1;
-        d.drawPixel(dx,dy,tank_col(BOT_OWNER0+i));
+        uint16_t bot_col=s_bots[i].is_boss?COL_GOLD:tank_col(BOT_OWNER0+i);
+        d.drawPixel(dx,dy,bot_col);
+        if(s_bots[i].is_boss) d.drawPixel(dx,dy-1,mix(bot_col,COL_WHITE,100));  // extra glow
     }
     for(int p=0;p<s_nplayers;p++){
         if(p!=s_local&&s_tanks[p].in_shop) continue;
