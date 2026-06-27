@@ -445,26 +445,35 @@ static void ring_add(float x,float y,uint16_t col,int life){
         if(s_rings[i].life>0) continue;
         s_rings[i]={x,y,life,life,col}; return;
     }
-    s_rings[0]={x,y,life,life,col}; // overwrite oldest slot 0
+    // all slots full: find oldest ring and overwrite
+    int oldest=0;
+    for(int i=1;i<MAX_RINGS;i++) if(s_rings[i].life<s_rings[oldest].life) oldest=i;
+    s_rings[oldest]={x,y,life,life,col};
 }
 // big explosion: ring + flash + colored sparks + embers
 static void boom(float x,float y,uint16_t col){
-    ring_add(x,y,COL_WHITE,360);
-    ring_add(x,y,col,420);
-    spark_burst(x,y,16,col);
-    spark_burst(x,y,8,COL_GOLD);
-    if(s_flash<140) s_flash=140;
+    ring_add(x,y,COL_WHITE,380);
+    ring_add(x,y,col,460);
+    ring_add(x,y,mix(col,COL_BLACK,100),520);  // extra ring wave
+    spark_burst(x,y,24,col);      // more sparks
+    spark_burst(x,y,16,COL_GOLD); // more embers
+    spark_burst(x,y,8,COL_WHITE); // white core flares
+    if(s_flash<180) s_flash=180;  // brighter flash
 }
 static void sparks_step(int dt){
     for(int i=0;i<MAX_SPARKS;i++){
         if(s_sparks[i].life<=0) continue;
         s_sparks[i].x+=s_sparks[i].vx*dt;
         s_sparks[i].y+=s_sparks[i].vy*dt;
-        s_sparks[i].vx*=0.92f; s_sparks[i].vy*=0.92f; // drag
+        s_sparks[i].vx*=0.88f; s_sparks[i].vy*=0.88f; // more drag for slower fallout
         s_sparks[i].life-=dt;
     }
-    for(int i=0;i<MAX_RINGS;i++) if(s_rings[i].life>0) s_rings[i].life-=dt;
-    if(s_flash>0){ s_flash-=dt*2; if(s_flash<0) s_flash=0; }
+    for(int i=0;i<MAX_RINGS;i++){
+        if(s_rings[i].life<=0) continue;
+        s_rings[i].life-=dt;
+        // fade out more smoothly
+    }
+    if(s_flash>0){ s_flash-=dt*1.5f; if(s_flash<0) s_flash=0; }  // slower fade
 }
 static void shake_set(float a){ if(a>s_shake) s_shake=a; }
 
@@ -534,11 +543,13 @@ static void fire_owner(Tank &t, int owner){
         }
     }
     t.fire_cd=fire_cd_for(wp)*burst;
-    t.flash_ms=70;
+    t.flash_ms=100;  // longer flash
     // rocket kickback — shove the tank backwards if there's room
     float rc=wp_recoil(wp);
-    if(rc>0){ float nx=t.x-fx*rc, ny=t.y-fy*rc; if(cell_free(nx,ny)){ t.x=nx; t.y=ny; } shake_set(5.0f); }
-    spark_burst(t.x+fx*11,t.y+fy*11,wp==WP_FLAK?6:3,COL_GOLD);
+    if(rc>0){ float nx=t.x-fx*rc, ny=t.y-fy*rc; if(cell_free(nx,ny)){ t.x=nx; t.y=ny; } shake_set(7.0f); }
+    int muzzle_sparks=(wp==WP_FLAK)?12:(wp==WP_ROCKET)?8:(wp==WP_MINIGUN)?4:5;
+    spark_burst(t.x+fx*11,t.y+fy*11,muzzle_sparks,COL_GOLD);
+    if(wp==WP_ROCKET||wp==WP_SNIPER) spark_burst(t.x+fx*13,t.y+fy*13,4,COL_WHITE);
     if(owner==s_local) sfx_play(1);
 }
 static void tank_fire(int who){ fire_owner(s_tanks[who], who); }
@@ -551,20 +562,20 @@ static void damage_tank(int id, int dmg, int owner, float hx, float hy){
     // arcade fairness: bot hits on humans deal reduced damage
     if(id_is_bot(owner)&&!id_is_bot(id)) dmg=(dmg+1)/2;
     int dd=dmg-t.armor; if(dd<1) dd=1;
-    t.hp-=dd; t.hurt_ms=160; earn(owner,2);
-    shake_set(4.0f); spark_burst(hx,hy,9,tank_col(id));
+    t.hp-=dd; t.hurt_ms=200; earn(owner,2);
+    shake_set(6.0f); spark_burst(hx,hy,14,tank_col(id)); spark_burst(hx,hy,6,COL_WHITE);
     if(t.hp<=0){
-        t.hp=0; t.alive=false; shake_set(8.0f); boom(t.x,t.y,tank_col(id)); sfx_play(3);
+        t.hp=0; t.alive=false; shake_set(14.0f); boom(t.x,t.y,tank_col(id)); sfx_play(3);
         if(id_is_bot(id)){
             t.respawn_ms=2600; s_bot_kills++;
             if(owner<2) earn(owner,BOT_KILL_CREDITS);
             if(s_bot_kills>=(s_bot_level+1)*5 && s_bot_level<10) s_bot_level++;
         } else earn(owner,15);
-    } else { ring_add(hx,hy,COL_WHITE,160); sfx_play(2); }
+    } else { ring_add(hx,hy,COL_WHITE,200); ring_add(hx,hy,mix(tank_col(id),COL_WHITE,100),180); sfx_play(2); }
 }
 // rocket splash: hurt everyone in range (not the shooter, respecting team rules)
 static void explode(float x,float y,int owner,int dmg,float radius){
-    boom(x,y,COL_GOLD); shake_set(7.0f); ring_add(x,y,COL_RED,420);
+    boom(x,y,COL_GOLD); shake_set(12.0f); ring_add(x,y,COL_RED,460); spark_burst(x,y,20,COL_RED);
     int nc=BOT_OWNER0+s_nbots;
     for(int id=0;id<nc;id++){
         if(!id_active(id)||id==owner||!can_hit(owner,id)) continue;
@@ -577,6 +588,11 @@ static void bullets_step(int dt){
     for(int i=0;i<MAX_BULLETS;i++){
         Bullet &b=s_bullets[i];
         if(!b.alive) continue;
+        // emit trail sparks for rockets and sniper shots
+        if((b.wp==WP_ROCKET||b.wp==WP_SNIPER)&&(xr()&3)==0)
+            spark_burst(b.x,b.y,2,mix(tank_col(b.owner),COL_BLACK,150));
+        if(b.wp==WP_LASER&&(xr()&1)==0)
+            spark_burst(b.x,b.y,1,rgb(120,255,210));
         b.x+=b.vx*dt; b.y+=b.vy*dt;
         if(b.life>0){ b.life-=dt; if(b.life<=0){ b.alive=false; spark_burst(b.x,b.y,2,COL_GOLD); continue; } }
         int tx=(int)b.x/TILE_PX, ty=(int)b.y/TILE_PX;
@@ -1666,13 +1682,18 @@ static void draw_tank_sprite(const Tank &t, uint16_t col, bool bot=false){
     d.drawLine(bx0,by0,tip_x,tip_y,barhi);
     d.drawLine(bx0-pxx,by0-pyy,tip_x-pxx,tip_y-pyy,bar);
     d.fillRect(tip_x-1,tip_y-1,4,4,rgb(110,116,130));
-    // ---- muzzle flash
+    // ---- muzzle flash (bigger, brighter, more dramatic)
     if(t.flash_ms>0){
+        int intensity=(t.flash_ms*255)/100;  // fade out
         int fxp=sx+(int)(ax*16), fyp=sy+(int)(ay*16);
-        d.fillCircle(fxp,fyp,4,COL_GOLD);
-        d.fillCircle(fxp,fyp,2,COL_WHITE);
-        d.drawLine(fxp-pxx*4,fyp-pyy*4,fxp+pxx*4,fyp+pyy*4,COL_GOLD);
-        d.drawLine(fxp+(int)(ax*4),fyp+(int)(ay*4),fxp,fyp,rgb(255,240,180));
+        uint16_t flash_col=mix(COL_GOLD,COL_WHITE,intensity/2);
+        d.fillCircle(fxp,fyp,6,flash_col);
+        d.fillCircle(fxp,fyp,3,COL_WHITE);
+        d.fillCircle(fxp,fyp,1,rgb(255,255,200));
+        d.drawLine(fxp-pxx*5,fyp-pyy*5,fxp+pxx*5,fyp+pyy*5,flash_col);
+        d.drawLine(fxp+(int)(ax*6),fyp+(int)(ay*6),fxp,fyp,mix(rgb(255,240,180),COL_GOLD,intensity/2));
+        // flash bloom outward
+        d.drawCircle(fxp,fyp,8,mix(flash_col,COL_BLACK,200));
     }
     // ---- BOT markings: angular spikes + glowing red visor → unmistakably an enemy
     if(bot){
@@ -1796,16 +1817,18 @@ static void draw_bullets(void){
 
 // ========================== draw: particles ==================================
 static void draw_sparks(void){
-    // expanding blast rings
+    // expanding blast rings — bigger, brighter, more dramatic
     for(int i=0;i<MAX_RINGS;i++){
         if(s_rings[i].life<=0) continue;
         int sx=wx2s(s_rings[i].x), sy=wy2s(s_rings[i].y);
-        if(sx<-30||sx>W+30||sy<HUD_H-30||sy>H+30) continue;
+        if(sx<-60||sx>W+60||sy<HUD_H-60||sy>H+60) continue;
         int age=s_rings[i].maxlife-s_rings[i].life;
-        int rad=2+age/14;
+        int rad=3+age/10;  // faster expansion
         int f=s_rings[i].life*256/s_rings[i].maxlife;
-        d.drawCircle(sx,sy,rad,mix(COL_BLACK,s_rings[i].col,f));
-        if(f>120) d.drawCircle(sx,sy,rad-1,mix(COL_BLACK,s_rings[i].col,f-80));
+        // triple ring: outer fade, mid-bright, inner core
+        d.drawCircle(sx,sy,rad,mix(COL_BLACK,s_rings[i].col,f/2));
+        if(f>100) d.drawCircle(sx,sy,rad-1,mix(COL_BLACK,s_rings[i].col,f));
+        if(f>180) d.drawCircle(sx,sy,rad-2,s_rings[i].col);
     }
     // sparks (size fades with life)
     for(int i=0;i<MAX_SPARKS;i++){
