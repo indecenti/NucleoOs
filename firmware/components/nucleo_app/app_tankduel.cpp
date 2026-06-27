@@ -2236,13 +2236,27 @@ static void draw_over(void){
         txr(W-22,y+6,1,COL_WHITE,st);
         if(isWin) txt(W/2-8,y+6,1,COL_GOLD,"WIN");
     }
-    // ---- co-op / survival score line
+    // ---- co-op / survival score line + stats
+    int stats_y=(coop||s_nbots==0)?94:82;
     if(s_nbots>0){
         char sc[40]; snprintf(sc,sizeof sc,"Bot eliminati: %d   Ondata: %d",s_bot_kills,s_bot_level+1);
-        txc(W/2,coop?94:96,1,COL_GOLD,sc);
+        txc(W/2,stats_y,1,COL_GOLD,sc);
+        stats_y+=12;
     }
-    // ---- disconnect notice (own line, readable)
-    if(s_peerleft) txc(W/2,s_nbots>0?104:96,1,COL_RED,"Avversario disconnesso");
+    // damage stats: P1 vs P2
+    if(!coop && s_nplayers>=2){
+        int p1dmg=s_tanks[0].hp_max-s_tanks[0].hp;
+        int p2dmg=s_tanks[1].hp_max-s_tanks[1].hp;
+        char dstr[32]; snprintf(dstr,sizeof dstr,"Danno subito: %d vs %d",p1dmg,p2dmg);
+        txc(W/2,stats_y,1,COL_WHITE,dstr);
+        stats_y+=10;
+    }
+    // match time
+    int elapsed=180000-s_match_ms;
+    char tm[32]; snprintf(tm,sizeof tm,"Tempo: %d:%02d",(elapsed/1000)/60,(elapsed/1000)%60);
+    txc(W/2,stats_y,1,COL_GREEN,tm);
+    // disconnect notice
+    if(s_peerleft) txc(W/2,stats_y+12,1,COL_RED,"Avversario disconnesso");
     // ---- footer prompt, clear of the bottom edge
     d.fillRect(0,H-12,W,12,rgb(14,17,24));
     d.drawFastHLine(0,H-12,W,rgb(34,40,54));
