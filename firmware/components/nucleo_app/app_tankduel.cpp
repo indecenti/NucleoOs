@@ -1917,10 +1917,21 @@ static void draw_hud(void){
         char w2[12]; snprintf(w2,sizeof w2,"x%d",s_bot_kills);
         txr(p2x,HUD_H-8,1,COL_GOLD,w2);
     }
-    // ---- center: weapon/powerup (top) + match timer (bottom)
-    char cent[16]; snprintf(cent,sizeof cent,"%s|%s",wp_short(s_tanks[s_local].weapon),pu_short(s_tanks[s_local].pu));
-    bool puon=(s_tanks[s_local].pu!=PU_NONE);
+    // ---- center: weapon/powerup (top) + cooldown bar + match timer (bottom)
+    Tank &lt=s_tanks[s_local];
+    char cent[16]; snprintf(cent,sizeof cent,"%s|%s",wp_short(lt.weapon),pu_short(lt.pu));
+    bool puon=(lt.pu!=PU_NONE);
     txc(W/2,1,1,puon&&((s_anim>>3)&1)?COL_GOLD:COL_MUT,cent);
+
+    // weapon cooldown bar (red when ready, dark when cooling)
+    int cd_max=fire_cd_for(lt.weapon);
+    int cd_left=lt.fire_cd;
+    int bar_w=20, bar_x=W/2-bar_w/2;
+    uint16_t cd_col=(cd_left<=0)?COL_GREEN:mix(COL_RED,COL_BLACK,cd_left*255/cd_max);
+    d.fillRect(bar_x,6,bar_w,3,rgb(20,20,30));
+    if(cd_left>0) d.fillRect(bar_x,6,(bar_w*cd_left)/cd_max,3,cd_col);
+    else d.drawRect(bar_x,6,bar_w,3,COL_GREEN);
+
     int sec=s_match_ms/1000;
     char tm[8]; snprintf(tm,sizeof tm,"%d:%02d",sec/60,sec%60);
     txc(W/2,HUD_H-8,1,sec<=10?COL_RED:COL_GREEN,tm);
