@@ -48,6 +48,17 @@ esp_err_t   nucleo_evilportal_start_twin(const char *ssid, int template_idx, con
 // web server. Idempotent; safe to call from an app's on_exit even if start failed.
 void        nucleo_evilportal_stop(void);
 
+// ---- live page cloning (F1) ------------------------------------------------
+// Clone the captive-portal login page of a nearby OPEN network into a new SD template, at runtime:
+// join `open_ssid`, fetch its served page, stream it to /sd/evilportal/portals/cloned.html. The
+// portal's wildcard POST handler captures whatever the cloned page submits, so no HTML rewriting is
+// needed. Heavy + SERIALIZED (heavy-work arbiter + exclusive mode + streamed to SD); blocks ≤~20 s.
+// Returns bytes saved (>0) or a negative error: -1 portal running, -2 already cloning, -3 bad arg,
+// -4 arbiter busy, -10 join/IP failed, -13 no captive portal (real internet), -14/-15 save failed.
+int         nucleo_evilportal_clone_page(const char *open_ssid);
+bool        nucleo_evilportal_cloning(void);
+const char *nucleo_evilportal_clone_name(void);   // template display-name to select after a clone
+
 // ---- live status (polled by the app UI) ------------------------------------
 bool          nucleo_evilportal_running(void);
 bool          nucleo_evilportal_twin(void);          // true when armed in evil-twin (clone-real) mode
