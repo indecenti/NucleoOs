@@ -34,6 +34,7 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"   // largest-free-block check before the promiscuous sniff (KARMA)
 #include "esp_random.h"
 #include "esp_rom_sys.h"           // esp_rom_delay_us — drain pacing when the TX queue backs up
 #include "freertos/FreeRTOS.h"
@@ -919,6 +920,7 @@ static volatile int  s_km_n;
 static volatile bool s_km_busy, s_km_run;
 static TaskHandle_t  s_km_task;
 static int           s_km_secs;
+static volatile int  s_km_heap;     // largest free block measured at arm — surfaced to the app UI
 
 static void karma_add(const char *ssid)
 {
@@ -991,6 +993,16 @@ int nucleo_wifiatk_karma_start(int secs)
 
     nucleo_setup_suspend();
     nucleo_exclusive_enter(NX_NET_APP, NULL);
+    // Heap guard: the promiscuous RX path + the sniff task need a real contiguous block. On the ADV's
+    // brutally tight heap this can be too small even after the exclusive reclaim — measure and ABORT
+    // GRACEFULLY (no crash) rather than let a driver malloc fail and panic. The value is surfaced to
+    // the UI so the operator (and we) can SEE how much was actually free.
+    s_km_heap = (int)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    ESP_LOGW(TAG, "karma: largest free block = %d B", s_km_heap);
+    if (s_km_heap < 16384) {
+        nucleo_setup_apply_network(); nucleo_exclusive_exit();
+        return -5;                                   // not enough heap — reported, not crashed
+    }
     // Sniff in the SAME mode the deauth flood uses and proves stable for minutes: STA + promiscuous,
     // NO mode switch and NO esp_wifi_disconnect(). Switching to AP mode panicked on the ADV's tight
     // heap; disconnecting churned the reconnect state machine and rebooted. Instead we stay put and
@@ -1018,6 +1030,7 @@ int nucleo_wifiatk_karma_start(int secs)
 }
 
 bool        nucleo_wifiatk_karma_busy(void)    { return s_km_busy; }
+int         nucleo_wifiatk_karma_heap(void)    { return s_km_heap; }   // largest free block at last arm
 int         nucleo_wifiatk_karma_count(void)   { return s_km ? s_km_n : 0; }
 const char *nucleo_wifiatk_karma_ssid(int i)   { return (s_km && i >= 0 && i < s_km_n) ? s_km[i].ssid : ""; }
 int         nucleo_wifiatk_karma_hits(int i)   { return (s_km && i >= 0 && i < s_km_n) ? s_km[i].hits : 0; }

@@ -61,6 +61,7 @@ void        nucleo_wifiatk_target_bssid_bytes(int i, unsigned char out[6]);
 // KARMA: discover the SSIDs nearby devices are probing for, to use as the portal lure (async).
 int         nucleo_wifiatk_karma_start(int secs);
 bool        nucleo_wifiatk_karma_busy(void);
+int         nucleo_wifiatk_karma_heap(void);
 int         nucleo_wifiatk_karma_count(void);
 const char *nucleo_wifiatk_karma_ssid(int i);
 int         nucleo_wifiatk_karma_hits(int i);
@@ -217,7 +218,11 @@ static void tick(void)
         if (!s_karma_started) {                          // kick off the async sniff once
             s_karma_started = true;
             int rc = nucleo_wifiatk_karma_start(8);
-            if (rc != 0) { snprintf(s_err, sizeof s_err, "Karma non disponibile (%d)", rc); go(ST_HOME); return; }
+            if (rc != 0) {
+                if (rc == -5) snprintf(s_err, sizeof s_err, "Heap troppo bassa: %d B", nucleo_wifiatk_karma_heap());
+                else          snprintf(s_err, sizeof s_err, "Karma non disponibile (%d)", rc);
+                go(ST_HOME); return;
+            }
         }
         if (nucleo_wifiatk_karma_busy()) {                // still listening — UI stays alive (1 Hz pulse)
             uint32_t t = (uint32_t)(esp_timer_get_time() / 1000000);
@@ -358,6 +363,8 @@ static void draw_home(int h)
     }
     if (nucleo_evilportal_running()) { d.setTextSize(1); d.setTextColor(EP_RED, BG); d.setCursor(10, h - 9);
                                        d.print("portale ATTIVO - invio su Loot per gestirlo"); }
+    else if (s_err[0]) { d.setTextSize(1); d.setTextColor(s_err[0] == 'P' ? GRN : YEL, BG);
+                         d.setCursor(10, h - 9); d.print(s_err); }
 }
 
 static void row_line(int y, bool sel, const char *label, const char *val, unsigned short vcol)
@@ -515,10 +522,14 @@ static void draw(void)
         case ST_LOOT:    ui_list("Loot", "", nucleo_evilportal_recent_count(), s_sel, get_loot, "ancora nulla", "salvato su /sd/evilportal/loot"); break;
         case ST_GUIDE:   draw_guide(h); break;
         case ST_SCAN:    draw_busy("Scansione...", "Cerco le reti reali vicine.", h); s_scan_armed = true; break;
-        case ST_KARMA_SCAN:
+        case ST_KARMA_SCAN: {
             draw_busy("Karma...", "Ascolto chi cerca quali reti.", h);
             if (s_pulse) d.fillCircle(220, h / 2 - 7, 4, EP_RED);
+            int hp = nucleo_wifiatk_karma_heap();      // confirm how much heap the sniff actually got
+            if (hp > 0) { char hb[24]; snprintf(hb, sizeof hb, "heap %d B", hp);
+                          d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, h - 9); d.print(hb); }
             s_karma_armed = true; break;
+        }
         case ST_CLONE:   draw_busy("Clono pagina...", "Mi unisco e scarico il login.", h); s_clone_armed = true; break;
         case ST_STOPPING:draw_busy("Arresto...", "Ripristino la rete OS.", h); s_stop_armed = true; break;
     }
