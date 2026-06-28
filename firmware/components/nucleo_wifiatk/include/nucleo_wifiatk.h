@@ -58,13 +58,18 @@ const char   *nucleo_wifiatk_cur_ssid(void);      // SSID currently being floode
 unsigned      nucleo_wifiatk_uptime_s(void);      // seconds since armed (0 when stopped)
 
 // ---- beacon spam -----------------------------------------------------------
-// Flood the air with fake open-network beacons (a wall of bogus SSIDs). Owns the radio like the
-// deauth flood. ESP_ERR_INVALID_STATE if the deauth flood is already running.
-esp_err_t     nucleo_wifiatk_beacon_start(void);
+// Flood the air with fake beacon frames (a wall of bogus SSIDs). Owns the radio like the deauth
+// flood. ESP_ERR_INVALID_STATE if the deauth flood is already running. Three modes:
+#define NUCLEO_BEACON_FUNNY  0   // curated wall of plausible/joke SSIDs (mixed open + WPA2)
+#define NUCLEO_BEACON_RANDOM 1   // a session of randomly generated, real-looking SSIDs
+#define NUCLEO_BEACON_CLONE  2   // twins of the real APs around you (runs a scan first)
+esp_err_t     nucleo_wifiatk_beacon_start(int mode);
 void          nucleo_wifiatk_beacon_stop(void);
 bool          nucleo_wifiatk_beacon_running(void);
 unsigned long nucleo_wifiatk_beacon_frames(void);   // beacon frames TX'd this session
 int           nucleo_wifiatk_beacon_count(void);    // number of fake SSIDs broadcast
+int           nucleo_wifiatk_beacon_mode(void);     // active mode (NUCLEO_BEACON_*)
+int           nucleo_wifiatk_beacon_health(void);   // % of beacon TX attempts the driver accepted
 unsigned      nucleo_wifiatk_beacon_uptime_s(void); // seconds since armed (0 when stopped)
 
 #ifdef __cplusplus

