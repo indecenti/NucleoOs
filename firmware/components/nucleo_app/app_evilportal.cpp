@@ -30,6 +30,8 @@ const char *nucleo_evilportal_ssid_preset(int idx);
 int         nucleo_evilportal_start(const char *ssid, int template_idx);   // esp_err_t (0 == ok)
 void        nucleo_evilportal_stop(void);
 bool        nucleo_evilportal_running(void);
+int         nucleo_evilportal_clone_page(const char *open_ssid);   // F1: clone a real open AP's login page
+const char *nucleo_evilportal_clone_name(void);
 const char *nucleo_evilportal_ssid(void);
 int         nucleo_evilportal_clients(void);
 int         nucleo_evilportal_captures(void);
@@ -65,11 +67,12 @@ static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x44
                             LINE = 0x2945, INK = 0x0000, EP_RED = 0xF96B, GRN = 0x8FF3,
                             YEL = 0xFE8C, PANEL = 0x18E3, EP_CYAN = 0x5C9F;
 
-enum { ST_CONSENT, ST_CONFIG, ST_SCAN, ST_RUNNING, ST_STOPPING };
+enum { ST_CONSENT, ST_CONFIG, ST_SCAN, ST_CLONE, ST_RUNNING, ST_STOPPING };
 #define CFG_ROWS 4                        // Modo, SSID/Rete, Pagina, AVVIA
 static int  s_state;
 static bool s_stop_armed;                // set once the "Arresto..." screen has been painted
 static bool s_scan_armed;                // set once the "Scansione..." screen has been painted
+static bool s_clone_armed;               // set once the "Clono pagina..." screen has been painted
 static bool s_consented;                 // skip the consent screen after the first accept this boot
 static int  s_mode;                      // 0 = Civetta (fake SSID), 1 = Gemello cattura (open), 2 = Gemello coerente (WPA2)
 static int  s_ap_idx, s_ap_n;            // selected/scanned real AP (Gemello mode)
@@ -95,9 +98,11 @@ static void set_hint(void)
     if (s_panel)                     nucleo_app_set_hint("tab: chiudi pannello");
     else if (s_state == ST_CONSENT)  nucleo_app_set_hint("invio accetto   esc esci");
     else if (s_state == ST_SCAN)     nucleo_app_set_hint("scansione reti...");
+    else if (s_state == ST_CLONE)    nucleo_app_set_hint("clono la pagina...");
     else if (s_state == ST_STOPPING) nucleo_app_set_hint("arresto in corso...");
     else if (s_state == ST_RUNNING)  nucleo_app_set_hint("invio: ferma  esc: lascia on  tab: loot");
-    else                             nucleo_app_set_hint("su/giu destra cambia  invio avvia  r riscan");
+    else if (s_mode != 0)            nucleo_app_set_hint("su/giu destra cambia  invio avvia  r riscan  c clona");
+    else                             nucleo_app_set_hint("su/giu destra cambia  invio avvia  scrivi=SSID");
 }
 
 static void enter(void)
@@ -136,6 +141,25 @@ static void tick(void)
         s_state = ST_CONFIG;
         set_hint();
         nucleo_app_request_draw();
+        return;
+    }
+    // Deferred clone: blocks ~≤20s (join the open AP + fetch its login page). Only after the
+    // "Clono pagina..." screen has been painted, so the operator sees feedback first.
+    if (s_state == ST_CLONE) {
+        if (!s_clone_armed) return;
+        int rc = nucleo_evilportal_clone_page(nucleo_wifiatk_target_ssid(s_ap_idx));
+        s_tpl_n = nucleo_evilportal_template_count();      // a new template may have appeared
+        if (rc > 0) {
+            for (int i = 0; i < s_tpl_n; i++)              // auto-select the freshly cloned page
+                if (!strcmp(nucleo_evilportal_template_name(i), nucleo_evilportal_clone_name())) { s_tpl_idx = i; break; }
+            snprintf(s_err, sizeof s_err, "Pagina clonata (%d B)", rc);
+        } else {
+            const char *m = rc == -13 ? "Nessun captive portal" : rc == -10 ? "Join fallito"
+                          : rc == -4  ? "Occupato: riprova"      : rc == -1  ? "Portale gia attivo"
+                          : "Clone fallito";
+            snprintf(s_err, sizeof s_err, "%s", m);
+        }
+        s_state = ST_CONFIG; set_hint(); nucleo_app_request_draw();
         return;
     }
     // Deferred teardown: only after the "Arresto..." screen has actually been painted, so the
@@ -214,7 +238,7 @@ static void on_key(int key, char ch)
         if (key == NK_ENTER) { s_consented = true; s_state = ST_CONFIG; set_hint(); nucleo_app_request_draw(); }
         return;
     }
-    if (s_state == ST_SCAN || s_state == ST_STOPPING) return;   // busy: ignore keys
+    if (s_state == ST_SCAN || s_state == ST_CLONE || s_state == ST_STOPPING) return;   // busy: ignore keys
     if (s_state == ST_RUNNING) {
         // Enter = ferma e chiudi: paint the "Arresto..." screen, the actual stop runs in tick().
         if (key == NK_ENTER) { s_state = ST_STOPPING; s_stop_armed = false; set_hint(); nucleo_app_request_draw(); }
@@ -245,6 +269,12 @@ static void on_key(int key, char ch)
         case NK_CHAR:
             if ((ch == 'r' || ch == 'R') && s_mode != 0) {   // rescan real APs (no custom typing in Gemello)
                 s_state = ST_SCAN; s_scan_armed = false; set_hint(); nucleo_app_request_draw(); return;
+            }
+            if ((ch == 'c' || ch == 'C') && s_mode != 0) {   // clone the selected open AP's login page
+                if (s_ap_n <= 0)        snprintf(s_err, sizeof s_err, "Scansiona prima: premi R");
+                else if (twin_encrypted()) snprintf(s_err, sizeof s_err, "Rete non aperta: no portale");
+                else { s_state = ST_CLONE; s_clone_armed = false; set_hint(); nucleo_app_request_draw(); return; }
+                nucleo_app_request_draw(); return;
             }
             if (s_row == 1 && s_mode == 0 && ch > ' ' && ch < 127) { int l = strlen(s_custom); if (l < 32) { s_custom[l] = ch; s_custom[l + 1] = 0; } }
             break;
@@ -338,6 +368,17 @@ static void draw_scan(int h)
     d.setTextSize(2); d.setTextColor(FG, BG);    d.setCursor(10, h / 2 - 14); d.print("Scansione...");
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, h / 2 + 6);  d.print("Cerco le reti reali vicine.");
     s_scan_armed = true;
+}
+
+static void draw_clone(int h)
+{
+    app_ui_title("Evil Portal", EP_RED, "");
+    d.setTextSize(2); d.setTextColor(FG, BG);    d.setCursor(10, h / 2 - 18); d.print("Clono pagina...");
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, h / 2 + 4);
+    char l[40]; snprintf(l, sizeof l, "Mi unisco a %.16s", nucleo_wifiatk_target_ssid(s_ap_idx));
+    d.print(l);
+    d.setTextColor(DIM, BG); d.setCursor(10, h / 2 + 16); d.print("scarico il login (max ~20s).");
+    s_clone_armed = true;
 }
 
 // Hero counter: tiny label + a big size-3 number, centred in a half-width column.
@@ -461,6 +502,7 @@ static void draw(void)
     if (s_panel)                     draw_panel(top, h);
     else if (s_state == ST_CONSENT)  draw_consent(top, h);
     else if (s_state == ST_SCAN)     draw_scan(h);
+    else if (s_state == ST_CLONE)    draw_clone(h);
     else if (s_state == ST_STOPPING) draw_stopping(top, h);
     else if (s_state == ST_RUNNING)  draw_running(top, h);
     else                             draw_config(top, h);
