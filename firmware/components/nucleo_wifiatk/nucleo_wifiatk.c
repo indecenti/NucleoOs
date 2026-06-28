@@ -982,11 +982,14 @@ static void karma_write_recon(void)
 static void karma_task(void *arg)
 {
     (void)arg;
-    static const uint8_t CH[] = { 1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13 };
+    // 1/6/11 carry most traffic and most devices probe there, so weight them ~2x; the rest are swept
+    // so an SSID probed on an odd channel is still caught.
+    static const uint8_t CH[] = { 1, 6, 11, 1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13 };
+    const int nch = (int)sizeof CH;
     int64_t end = esp_timer_get_time() + (int64_t)s_km_secs * 1000000;
     int ci = 0;
     while (s_km_run && esp_timer_get_time() < end) {
-        uint8_t ch = CH[ci % 13];
+        uint8_t ch = CH[ci % nch];
         esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
         vTaskDelay(pdMS_TO_TICKS(10));             // settle
         // The still-associated STA may bounce us back to the home channel; force it back, exactly like

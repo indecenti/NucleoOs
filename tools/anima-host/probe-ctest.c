@@ -61,11 +61,19 @@ int main(void)
         int len = build_probe(f, 0x80, "HomeNet", 7, 0);
         CHECK(wifiatk_probe_ssid(f, len, out, sizeof out) == -1, "non-probe rejected");
     }
-    // 5) Non-printable SSID byte -> rejected (hidden/garbage).
+    // 5) Control byte in SSID -> rejected (hidden/garbage).
     {
         char bad[4] = { 'A', 0x01, 'C', 0 };
         int len = build_probe(f, 0x40, bad, 3, 0);
-        CHECK(wifiatk_probe_ssid(f, len, out, sizeof out) == -1, "non-printable rejected");
+        CHECK(wifiatk_probe_ssid(f, len, out, sizeof out) == -1, "control byte rejected");
+    }
+    // 5b) UTF-8 SSID (high bytes) -> ACCEPTED (was wrongly dropped before).
+    {
+        unsigned char utf[] = { 'C', 'a', 'f', 'f', 0xC3, 0xA8 };   // "Caffè"
+        int len = build_probe(f, 0x40, (const char *)utf, 6, 0);
+        int r = wifiatk_probe_ssid(f, len, out, sizeof out);
+        CHECK(r == 6, "utf8 ssid accepted");
+        CHECK((unsigned char)out[4] == 0xC3 && (unsigned char)out[5] == 0xA8, "utf8 bytes preserved");
     }
     // 6) Max-length 32-char SSID -> full copy.
     {

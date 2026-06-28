@@ -18,9 +18,11 @@ int wifiatk_probe_ssid(const uint8_t *f, int len, char *out, int cap)
             if (tlen == 0 || tlen > 32) return -1; // wildcard probe / illegal length
             if (tlen > cap - 1) return -1;
             for (int i = 0; i < tlen; i++) {
-                char c = (char)ie[2 + i];
-                if (c < 32 || c > 126) return -1;  // non-printable -> hidden/garbage, skip
-                out[i] = c;
+                unsigned char c = ie[2 + i];
+                // Reject only CONTROL bytes (hidden/garbage). Accept 0x20..0x7E AND high bytes
+                // 0x80..0xFF so UTF-8 SSIDs ("Caffè", emoji names) are captured, not dropped.
+                if (c < 0x20 || c == 0x7F) return -1;
+                out[i] = (char)c;
             }
             out[tlen] = 0;
             return tlen;

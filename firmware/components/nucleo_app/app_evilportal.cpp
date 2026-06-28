@@ -251,7 +251,7 @@ static void tick(void)
         if (!s_karma_started) {                          // kick off the async sniff once
             s_karma_started = true;
             karma_free_screen();                         // +32 KB contiguous BEFORE the sniff measures heap
-            int rc = nucleo_wifiatk_karma_start(8);
+            int rc = nucleo_wifiatk_karma_start(12);      // probes are sporadic -> a longer listen catches more
             if (rc != 0) {
                 karma_restore_screen();
                 if (rc == -5) snprintf(s_err, sizeof s_err, "Heap troppo bassa: %d B", nucleo_wifiatk_karma_heap());
