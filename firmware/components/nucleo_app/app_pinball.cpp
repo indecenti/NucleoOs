@@ -361,9 +361,12 @@ static void sfx(int id)
     }
     const char *nm = sfx_name(id);
     char p[80];
-    snprintf(p, sizeof p, DIRR "/pack/%s.wav", nm);            // arcade pack WAV only
+    snprintf(p, sizeof p, DIRR "/pack/%s.wav", nm);
     FILE *f = fopen(p, "rb");
-    if (!f) return;                                             // WAV missing -> silent (no synth fallback)
+    if (!f) {
+        fprintf(stderr, "[sfx] NOT FOUND: %s\n", p);          // debug: log missing files
+        return;
+    }
     fclose(f);
     if (important || snappy) nucleo_audio_stop();              // grab the channel for an immediate, punchy hit
     nucleo_audio_play(p);
