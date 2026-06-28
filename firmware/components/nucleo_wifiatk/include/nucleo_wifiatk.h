@@ -57,13 +57,16 @@ int           nucleo_wifiatk_cur_channel(void);   // channel currently being flo
 const char   *nucleo_wifiatk_cur_ssid(void);      // SSID currently being flooded ("" when idle)
 unsigned      nucleo_wifiatk_uptime_s(void);      // seconds since armed (0 when stopped)
 
-// ---- WPA handshake capture (rides on the deauth flood) ---------------------
-// While the deauth flood runs it also sniffs the EAPOL 4-way handshake the kicked clients re-emit and
-// writes it to /sd/handshakes/<bssid>.pcap on stop (crack offline, hashcat -m 22000). Single-AP focus.
-int           nucleo_wifiatk_handshake_msgmask(void); // bitmask: bit m set once message m (1..4) seen
-bool          nucleo_wifiatk_handshake_ready(void);   // true once a crackable pair (1+2 or 3+4) is in
-bool          nucleo_wifiatk_handshake_pmkid(void);   // true once a PMKID (clientless) is captured
-const char   *nucleo_wifiatk_handshake_path(void);    // .pcap path after stop ("" if none captured)
+// ---- WPA handshake + PMKID capture (rides on the deauth flood, MULTI-AP) ----
+// While the deauth flood runs it also sniffs the EAPOL handshakes the kicked clients re-emit, across
+// ALL APs in scope (flood-all harvests many at once), and writes one /sd/handshakes/<bssid>.pcap per
+// AP on stop (crack offline: hashcat -m 22000 / -m 16800 for the PMKID).
+int           nucleo_wifiatk_handshake_aps(void);     // APs we've heard any EAPOL from
+int           nucleo_wifiatk_handshake_count(void);   // APs with a crackable handshake (1+2 or 3+4)
+int           nucleo_wifiatk_handshake_pmkidn(void);  // APs with a captured PMKID
+bool          nucleo_wifiatk_handshake_ready(void);   // any usable handshake captured
+bool          nucleo_wifiatk_handshake_pmkid(void);   // any PMKID captured
+const char   *nucleo_wifiatk_handshake_path(void);    // last .pcap path after stop ("" if none)
 
 // ---- beacon spam -----------------------------------------------------------
 // Flood the air with fake beacon frames (a wall of bogus SSIDs). Owns the radio like the deauth

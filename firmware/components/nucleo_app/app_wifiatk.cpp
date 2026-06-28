@@ -42,7 +42,9 @@ int         nucleo_wifiatk_targets_active(void);
 int         nucleo_wifiatk_cur_channel(void);
 const char *nucleo_wifiatk_cur_ssid(void);
 unsigned    nucleo_wifiatk_uptime_s(void);
-int         nucleo_wifiatk_handshake_msgmask(void);   // WPA handshake captured alongside the flood
+int         nucleo_wifiatk_handshake_aps(void);       // WPA handshakes captured alongside the flood (multi-AP)
+int         nucleo_wifiatk_handshake_count(void);
+int         nucleo_wifiatk_handshake_pmkidn(void);
 bool        nucleo_wifiatk_handshake_ready(void);
 bool        nucleo_wifiatk_handshake_pmkid(void);
 }
@@ -285,10 +287,12 @@ static void draw_running(int top, int h)
 
     // Status line: live effectiveness inputs. Signal turns amber when too weak (move closer). When a
     // WPA handshake is coming in, append which of the 4 EAPOL messages we've grabbed (e.g. "HS12").
-    int hm = nucleo_wifiatk_handshake_msgmask();
-    char hs[18] = "";
-    if (hm) snprintf(hs, sizeof hs, " HS%s%s%s%s%s", (hm & 2) ? "1" : "", (hm & 4) ? "2" : "",
-                     (hm & 8) ? "3" : "", (hm & 16) ? "4" : "", nucleo_wifiatk_handshake_pmkid() ? "+PMKID" : "");
+    int hsaps = nucleo_wifiatk_handshake_aps();
+    int hsok = nucleo_wifiatk_handshake_count();
+    int hspm = nucleo_wifiatk_handshake_pmkidn();
+    char hs[28] = "";
+    if (hsaps && hspm) snprintf(hs, sizeof hs, " HS%d/%d PMKID%d", hsok, hsaps, hspm);
+    else if (hsaps)    snprintf(hs, sizeof hs, " HS%d/%d", hsok, hsaps);
     d.drawFastHLine(10, 84, 220, LINE);
     char st[64]; snprintf(st, sizeof st, "att %d  rec %u  ch%d  %ddB%s",
                           act, recon, nucleo_wifiatk_cur_channel(), rssi, hs);
@@ -297,8 +301,8 @@ static void draw_running(int top, int h)
 
     // Honest live verdict (the never-blind part): derived from injection health + measured effect.
     const char *vd; unsigned short vc;
-    if (nucleo_wifiatk_handshake_pmkid()) { vd = "PMKID CATTURATO"; vc = GRN; }
-    else if (nucleo_wifiatk_handshake_ready()) { vd = "HANDSHAKE CATTURATO"; vc = GRN; }
+    static char vbuf[34];
+    if (hsok > 0 || hspm > 0)   { snprintf(vbuf, sizeof vbuf, "CATTURATI: %d HS, %d PMKID", hsok, hspm); vd = vbuf; vc = GRN; }
     else if (inj < 50)          { vd = "INIEZIONE DEBOLE"; vc = ATK; }
     else if (seen == 0)         { vd = (up < 6) ? "avvio..." : "nessun client"; vc = MUTED; }
     else if (kick > 0 || recon) { vd = "EFFICACE"; vc = GRN; }

