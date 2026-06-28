@@ -260,6 +260,11 @@ const gates = [
     // the offline IT<->EN dictionaries (dict-*.tsv on SD + host) must be regenerated from the seed
     // (tools/anima/dict/seed.it-en.tsv). Fails if someone edited the seed but forgot to run gen_dicts.py.
     ok: (code) => code === 0, summary: (o) => lastLine(o) },
+  { name: 'factory-games (sd)', cmd: 'python', args: ['tools/gen-factory-manifests.py', '--check'],
+    // the bundled DOS/ROMs games are pinned against deletion by a per-folder .factory manifest the
+    // firmware reads (nucleo_fsfactory.h). Fails if someone added/removed a bundled game but forgot to
+    // regenerate the manifests — which would leave a new game unprotected, or a removed one falsely listed.
+    ok: (code) => code === 0, summary: (o) => lastLine(o) },
   { name: 'translate (IT<->EN)', cmd: 'node', args: ['tools/anima-host/translate-check.mjs'],
     // the offline dictionary translator (nucleo_anima_translate.c): word/phrase IT<->EN via EXACT SD
     // lookup — grounded translations, honest decline on a miss, and ZERO false positives (a non-translation
@@ -333,6 +338,12 @@ const gates = [
     // FG-preempts-BG yielding, the never-block try-acquire (the httpd task must never stall), and
     // the teardown heap-floor sentinel. Guards the OOM-race fix against any future drift.
     ok: (code) => code === 0, summary: (o) => (o.match(/\[arb-check\] \d+\/\d+[^\n]*/) || [lastLine(o)])[0] },
+  { name: 'online-stability (TWDT)', cmd: 'node', args: ['tools/anima-host/online-stability-check.mjs'],
+    // docs/anima-native.md §stability: locks the 2026-06-24 anti-reboot fix in nucleo_anima_online.c so it
+    // can't silently regress — per-attempt TLS timeout stays < the 8 s Task-WDT, the chat paths bind the
+    // HTTP_TIMEOUT symbol (no raw literal dodge), the wall-clock turn budget + WDT-pet + heap-state failure
+    // logging are present, and nucleo_exclusive_enter returns per-call ownership. Source-invariant, no exe.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[online-stability\][^\n]*/) || [lastLine(o)])[0] },
   { name: 'offline-installer', cmd: 'node', args: ['--test', 'tools/anima-host/forge-model-store.test.mjs', 'tools/anima-host/forge-install-flow.test.mjs', 'tools/anima-host/forge-install-integration.test.mjs', 'tools/anima-host/forge-model-url-map.test.mjs', 'tools/anima-host/forge-local-models.test.mjs'],
     // First-class regression guard for the OFFLINE-MODEL INSTALLER (apps/anima/www/forge — the "scarica dal
     // Cardputer → gira offline nel browser" core path). Two suites: the download CONTROLLER's hard invariants
@@ -360,12 +371,56 @@ const gates = [
     // RESUME from the contiguous prefix, where Bruce's naive share would corrupt the file. Also asserts the
     // Bruce-codec stays wire-compatible (248-byte Message layout). Pure C, no device.
     ok: (code) => code === 0, summary: (o) => (o.match(/RESULT:[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'mesh-seam (swarm)', cmd: 'node', args: ['tools/anima-host/mesh-check.mjs'],
+    // The MESH gossip seam (firmware/components/nucleo_mesh), host-compiled with MinGW: extends the
+    // event bus across ESP-NOW peers. Asserts the ADR invariants (docs/swarm-architecture.md) — only
+    // mesh.*/chorus.* topics gossip, foreign events are NEVER re-forwarded (loop prevention), and
+    // de-dup by (origin id, seq) never injects any event twice through a lossy/reordering channel.
+    ok: (code) => code === 0, summary: (o) => (o.match(/RESULT:[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'chorus-dir (swarm)', cmd: 'node', args: ['tools/anima-host/chorus-check.mjs'],
+    // The CHORUS capability directory (firmware/components/nucleo_mesh/nucleo_chorus.c) running over
+    // the MESH seam: a 3-node swarm gossips self-manifests through a lossy channel and must CONVERGE,
+    // then content-route by capability+domain (tie-broken by advertised free_kb), reroute around a
+    // busy peer, and drop peers past the TTL. The "bulletin board, not a boss" model — no leases.
+    ok: (code) => code === 0, summary: (o) => (o.match(/RESULT:[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'swarm-sec (gate)', cmd: 'node', args: ['tools/anima-host/swarm-sec-check.mjs'],
+    // The swarm security gate (firmware/components/nucleo_mesh/nucleo_swarm_sec.c): demux by magic,
+    // HMAC seal/open (hash fn injected; constant-time verify) and MAC trust-pin. The MANDATORY auth
+    // the open ESP-NOW transport lacks — a tampered/forged/wrong-key/truncated frame must NOT open.
+    ok: (code) => code === 0, summary: (o) => (o.match(/RESULT:[^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'eth-frames (wired)', cmd: 'node', args: ['tools/anima-host/eth-check.mjs'],
     // The wired-attack frame core (firmware/components/nucleo_eth/eth_frames.c), host-compiled with
     // MinGW: ARP/DHCP/TCP build+parse, IP/UDP/TCP checksums, subnet math, random-MAC properties (LAA/
     // unicast), OUI vendor lookup, host-table dedup — 47 assertions. Pure C, no device. The regression
     // guard for the W5500 L2/L3 engine's frame layout/byte-order/checksums (a wrong byte = a dead attack).
     ok: (code) => code === 0, summary: (o) => (o.match(/== \d+ passed[^\n]*==/) || [lastLine(o)])[0].trim() },
+  { name: 'ble-adv (spam/beacon)', cmd: 'node', args: ['tools/anima-host/ble-check.mjs'],
+    // The BLE advertisement payload core (firmware/components/nucleo_ble/nucleo_ble_adv.c), host-compiled
+    // with MinGW: Apple Continuity / Microsoft Swift Pair / Google Fast Pair / iBeacon AD framing — company
+    // IDs, type bytes, rotating model placement — and the HARD <=31-byte adv invariant. Pure C, no device,
+    // no NimBLE. A wrong byte = a payload the controller rejects or an OS ignores. FOR AUTHORIZED TESTING.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\d+ passed[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'probe-ssid (KARMA)', cmd: 'node', args: ['tools/anima-host/probe-check.mjs'],
+    // The KARMA probe-request SSID parser (firmware/components/nucleo_wifiatk/nucleo_wifiatk_probe.c),
+    // host-compiled with MinGW: 802.11 subtype gate, IE walk, SSID extraction, and the broadcast /
+    // non-printable / malformed / tiny-buffer rejections. Pure C, no radio. A wrong byte = the lure
+    // mislists or crashes on a crafted frame. FOR AUTHORIZED TESTING.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\d+ passed[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'portal-clone (F2)', cmd: 'node', args: ['tools/anima-host/portalclone-check.mjs'],
+    // The Evil Portal page-cloner asset rewriter (firmware/components/nucleo_evilportal/
+    // nucleo_evilportal_clone.c), host-compiled with MinGW: same-origin detection, absolute/root/doc-
+    // relative URL resolution, the extension filter, the in-place shrink-only rewrite, and the cross-
+    // origin / data: / unknown-ext rejections. Pure C, no networking. FOR AUTHORIZED TESTING.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\d+ passed[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'ducky (payloads)', cmd: 'node', args: ['tools/anima-host/ducky-check.mjs'],
+    // The DuckyScript engine (firmware/components/nucleo_ducky/nucleo_ducky.c), host-compiled with MinGW:
+    // command parsing (STRING/STRINGLN/DELAY/DEFAULT_DELAY/REPEAT/combos), US+IT keyboard layout maps, and
+    // the dry-run analysis. Pure C, no USB/BLE/device. A wrong keycode = a payload that mistypes on the host.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\d+ passed[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'weather (meteo)', cmd: 'node', args: ['tools/anima-host/weather-check.mjs'],
+    // The pure weather core (firmware/components/nucleo_weather/weather_wmo.c): WMO code -> icon class +
+    // Italian label, and date -> weekday. Pure C, no network. Guards the app's icon/label/forecast mapping.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\d+ passed[^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'nearby-skill (scoped)', cmd: 'node', args: ['--test', 'tools/anima-host/nearby-check.mjs'],
     // The Vicino ANIMA skill (apps/nearby/www/nearby-skill.js): the IT/EN floor parses transfer commands,
     // the CLOSED action schema rejects off-app verbs, and the device-touching verbs (send file/command,
@@ -383,6 +438,28 @@ const gates = [
     // tag neutralised), and VALID Gemini model ids (guards the dead 'gemini-3.5-flash' regression).
     // (Also swept by 'unit tests'; named here so a regression is attributed, not buried.)
     ok: (code) => code === 0, summary: (o) => (o.match(/[#ℹ] pass \d+/) || ['tests']).concat(o.match(/[#ℹ] fail \d+/) || []).join('  ') },
+  { name: 'agent-contract (multi-provider)', cmd: 'node', args: ['tools/anima-host/agent-contract-check.mjs'],
+    // The online multi-agent's tool contract (apps/agent): tool schema ↔ OpenAI mapping (so Groq/Grok/Gemini
+    // get the SAME OS tools as Claude), the tool-use loop threading, the deterministic plan guard, and the
+    // app-creation tools (scaffold/publish/manage) present + gated. Locks the cross-provider parity surface.
+    ok: (code) => code === 0, summary: (o) => lastLine(o) },
+  { name: 'app-publish (create-app safety)', cmd: 'node', args: ['tools/anima-host/app-publish-check.mjs'],
+    // The "agent builds a NucleoOS app" core: id/manifest/scaffold + the ANTI-DESTRUCTIVE registry planner
+    // (a null/unreadable registry REFUSES — never wipes the other apps), the anti-traversal path guard, the
+    // size cap, and the enable/disable lifecycle. The safety net for everything written to /apps + the registry.
+    ok: (code) => code === 0, summary: (o) => lastLine(o) },
+  { name: 'app-ops (publish integration)', cmd: 'node', args: ['tools/anima-host/app-ops-check.mjs'],
+    // End-to-end publish/scaffold/manage against an IN-MEMORY device: proves the anti-destructive ORDERING
+    // (lint before any write, registry written LAST, zero writes on any refusal — no-wipe / traversal / size).
+    ok: (code) => code === 0, summary: (o) => lastLine(o) },
+  { name: 'app-review (advisory)', cmd: 'node', args: ['tools/anima-host/app-review-check.mjs'],
+    // The cross-provider review core: ADVISORY-safety (a non-parsable/empty reply degrades to {ok,issues:[]}
+    // so a reviewer hiccup can never falsely block a valid app) + the prompt builder (manifest+html, truncated).
+    ok: (code) => code === 0, summary: (o) => lastLine(o) },
+  { name: 'device-queue (cardputer-safe)', cmd: 'node', args: ['tools/anima-host/device-queue-check.mjs'],
+    // The single device queue: light reads pooled, heavy ops (writes + Gemini /api/llm proxy) EXCLUSIVE, FIFO
+    // no-starvation. Locks the discipline that keeps the PSRAM-less board from being hit by concurrent requests.
+    ok: (code) => code === 0, summary: (o) => lastLine(o) },
   { name: 'unit tests', cmd: 'node', args: ['--test', 'tools/**/*.test.mjs'], ok: (code) => code === 0,
     summary: (o) => (o.match(/[#ℹ] pass \d+/) || ['tests']).concat(o.match(/[#ℹ] fail \d+/) || []).join('  ') },
 ];

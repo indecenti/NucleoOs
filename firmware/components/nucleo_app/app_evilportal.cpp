@@ -59,6 +59,11 @@ const char *nucleo_wifiatk_target_auth(int i);
 int         nucleo_wifiatk_target_authmode(int i);
 const char *nucleo_wifiatk_target_fingerprint(int i);
 void        nucleo_wifiatk_target_bssid_bytes(int i, unsigned char out[6]);
+// KARMA: discover the SSIDs nearby devices are probing for, to use as the portal lure.
+int         nucleo_wifiatk_karma_scan(int secs);
+int         nucleo_wifiatk_karma_count(void);
+const char *nucleo_wifiatk_karma_ssid(int i);
+int         nucleo_wifiatk_karma_hits(int i);
 }
 
 #include "app_gfx.h"
@@ -67,12 +72,14 @@ static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x44
                             LINE = 0x2945, INK = 0x0000, EP_RED = 0xF96B, GRN = 0x8FF3,
                             YEL = 0xFE8C, PANEL = 0x18E3, EP_CYAN = 0x5C9F;
 
-enum { ST_CONSENT, ST_CONFIG, ST_SCAN, ST_CLONE, ST_RUNNING, ST_STOPPING };
+enum { ST_CONSENT, ST_CONFIG, ST_SCAN, ST_CLONE, ST_KARMA_SCAN, ST_KARMA_PICK, ST_RUNNING, ST_STOPPING };
 #define CFG_ROWS 4                        // Modo, SSID/Rete, Pagina, AVVIA
 static int  s_state;
 static bool s_stop_armed;                // set once the "Arresto..." screen has been painted
 static bool s_scan_armed;                // set once the "Scansione..." screen has been painted
 static bool s_clone_armed;               // set once the "Clono pagina..." screen has been painted
+static bool s_karma_armed;               // set once the "Karma..." screen has been painted
+static int  s_km_sel;                    // highlighted SSID in the KARMA pick list
 static bool s_consented;                 // skip the consent screen after the first accept this boot
 static int  s_mode;                      // 0 = Civetta (fake SSID), 1 = Gemello cattura (open), 2 = Gemello coerente (WPA2)
 static int  s_ap_idx, s_ap_n;            // selected/scanned real AP (Gemello mode)
@@ -99,10 +106,12 @@ static void set_hint(void)
     else if (s_state == ST_CONSENT)  nucleo_app_set_hint("invio accetto   esc esci");
     else if (s_state == ST_SCAN)     nucleo_app_set_hint("scansione reti...");
     else if (s_state == ST_CLONE)    nucleo_app_set_hint("clono la pagina...");
+    else if (s_state == ST_KARMA_SCAN) nucleo_app_set_hint("ascolto le probe...");
+    else if (s_state == ST_KARMA_PICK) nucleo_app_set_hint("su/giu scegli  invio usa  esc esci");
     else if (s_state == ST_STOPPING) nucleo_app_set_hint("arresto in corso...");
     else if (s_state == ST_RUNNING)  nucleo_app_set_hint("invio: ferma  esc: lascia on  tab: loot");
-    else if (s_mode != 0)            nucleo_app_set_hint("su/giu destra cambia  invio avvia  r riscan  c clona");
-    else                             nucleo_app_set_hint("su/giu destra cambia  invio avvia  scrivi=SSID");
+    else if (s_mode != 0)            nucleo_app_set_hint("destra cambia  invio avvia  r scan  c clona  k karma");
+    else                             nucleo_app_set_hint("su/giu destra cambia  invio avvia  k karma  scrivi=SSID");
 }
 
 static void enter(void)
@@ -141,6 +150,16 @@ static void tick(void)
         s_state = ST_CONFIG;
         set_hint();
         nucleo_app_request_draw();
+        return;
+    }
+    // Deferred KARMA listen: sniff probe requests for ~8s, then show the pick list. Only after the
+    // "Karma..." screen has been painted (it blocks while sniffing).
+    if (s_state == ST_KARMA_SCAN) {
+        if (!s_karma_armed) return;
+        int n = nucleo_wifiatk_karma_scan(8);
+        if (n > 0) { s_km_sel = 0; s_state = ST_KARMA_PICK; }
+        else { snprintf(s_err, sizeof s_err, n < 0 ? "Karma non disponibile" : "Nessuna probe sentita"); s_state = ST_CONFIG; }
+        set_hint(); nucleo_app_request_draw();
         return;
     }
     // Deferred clone: blocks ~≤20s (join the open AP + fetch its login page). Only after the
@@ -238,7 +257,19 @@ static void on_key(int key, char ch)
         if (key == NK_ENTER) { s_consented = true; s_state = ST_CONFIG; set_hint(); nucleo_app_request_draw(); }
         return;
     }
-    if (s_state == ST_SCAN || s_state == ST_CLONE || s_state == ST_STOPPING) return;   // busy: ignore keys
+    if (s_state == ST_KARMA_PICK) {                // choose a probed SSID to wear as the lure
+        int n = nucleo_wifiatk_karma_count();
+        if (key == NK_UP)        { s_km_sel = (s_km_sel + (n ? n : 1) - 1) % (n ? n : 1); nucleo_app_request_draw(); }
+        else if (key == NK_DOWN) { s_km_sel = (s_km_sel + 1) % (n ? n : 1); nucleo_app_request_draw(); }
+        else if (key == NK_ENTER && n > 0) {       // adopt it as a Civetta SSID and return to config
+            snprintf(s_custom, sizeof s_custom, "%s", nucleo_wifiatk_karma_ssid(s_km_sel));
+            s_mode = 0; s_row = 1;                  // Civetta, focus the SSID row
+            snprintf(s_err, sizeof s_err, "Karma: %.20s", s_custom);
+            s_state = ST_CONFIG; set_hint(); nucleo_app_request_draw();
+        }
+        return;
+    }
+    if (s_state == ST_SCAN || s_state == ST_CLONE || s_state == ST_KARMA_SCAN || s_state == ST_STOPPING) return;   // busy: ignore keys
     if (s_state == ST_RUNNING) {
         // Enter = ferma e chiudi: paint the "Arresto..." screen, the actual stop runs in tick().
         if (key == NK_ENTER) { s_state = ST_STOPPING; s_stop_armed = false; set_hint(); nucleo_app_request_draw(); }
@@ -275,6 +306,9 @@ static void on_key(int key, char ch)
                 else if (twin_encrypted()) snprintf(s_err, sizeof s_err, "Rete non aperta: no portale");
                 else { s_state = ST_CLONE; s_clone_armed = false; set_hint(); nucleo_app_request_draw(); return; }
                 nucleo_app_request_draw(); return;
+            }
+            if ((ch == 'k' || ch == 'K') && !(s_mode == 0 && s_row == 1)) {   // KARMA: listen for probed SSIDs
+                s_state = ST_KARMA_SCAN; s_karma_armed = false; set_hint(); nucleo_app_request_draw(); return;
             }
             if (s_row == 1 && s_mode == 0 && ch > ' ' && ch < 127) { int l = strlen(s_custom); if (l < 32) { s_custom[l] = ch; s_custom[l + 1] = 0; } }
             break;
@@ -368,6 +402,38 @@ static void draw_scan(int h)
     d.setTextSize(2); d.setTextColor(FG, BG);    d.setCursor(10, h / 2 - 14); d.print("Scansione...");
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, h / 2 + 6);  d.print("Cerco le reti reali vicine.");
     s_scan_armed = true;
+}
+
+static void draw_karma_scan(int h)
+{
+    app_ui_title("Evil Portal", EP_RED, "KARMA");
+    d.setTextSize(2); d.setTextColor(FG, BG);    d.setCursor(10, h / 2 - 14); d.print("Karma...");
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, h / 2 + 6);
+    d.print("Ascolto chi cerca quali reti.");
+    s_karma_armed = true;
+}
+
+static void draw_karma_pick(int top, int h)
+{
+    (void)top;
+    app_ui_title("Karma: reti cercate", EP_RED, "");
+    int n = nucleo_wifiatk_karma_count();
+    if (n == 0) { d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, 40); d.print("nessuna probe."); return; }
+    // Up to 6 rows; keep the selection visible with a simple window.
+    int rows = 6, first = s_km_sel - rows / 2;
+    if (first < 0) first = 0;
+    if (first > n - rows) first = (n > rows) ? n - rows : 0;
+    for (int i = 0; i < rows && first + i < n; i++) {
+        int idx = first + i, y = 24 + i * 16;
+        bool sel = (idx == s_km_sel);
+        if (sel) d.fillRoundRect(6, y - 2, 228, 16, 4, PANEL);
+        d.setTextSize(1); d.setTextColor(sel ? FG : MUTED, sel ? PANEL : BG);
+        char row[40]; snprintf(row, sizeof row, "%.24s", nucleo_wifiatk_karma_ssid(idx));
+        d.setCursor(12, y + 2); d.print(row);
+        char hb[10]; snprintf(hb, sizeof hb, "x%d", nucleo_wifiatk_karma_hits(idx));
+        d.setTextColor(sel ? YEL : DIM, sel ? PANEL : BG); d.setCursor(210, y + 2); d.print(hb);
+    }
+    d.setTextSize(1); d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print("invio: usa come SSID civetta");
 }
 
 static void draw_clone(int h)
@@ -503,6 +569,8 @@ static void draw(void)
     else if (s_state == ST_CONSENT)  draw_consent(top, h);
     else if (s_state == ST_SCAN)     draw_scan(h);
     else if (s_state == ST_CLONE)    draw_clone(h);
+    else if (s_state == ST_KARMA_SCAN) draw_karma_scan(h);
+    else if (s_state == ST_KARMA_PICK) draw_karma_pick(top, h);
     else if (s_state == ST_STOPPING) draw_stopping(top, h);
     else if (s_state == ST_RUNNING)  draw_running(top, h);
     else                             draw_config(top, h);

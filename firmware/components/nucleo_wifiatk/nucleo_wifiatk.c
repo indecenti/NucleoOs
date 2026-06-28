@@ -39,6 +39,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nucleo_exclusive.h"   // NX_NET_APP reclaim (~70KB); symbols resolve at link like the externs below
+#include "nucleo_wifiatk_probe.h"   // pure probe-request SSID parser (KARMA lure)
 
 // Restore the saved network on stop (resolved at final link — same no-cycle arrangement the Evil
 // Portal uses: a hard REQUIRES on nucleo_setup would cycle, and we only need this one symbol).
@@ -898,3 +899,86 @@ unsigned      nucleo_wifiatk_beacon_uptime_s(void)
 {
     return s_bcn_run ? (unsigned)((esp_timer_get_time() - s_bcn_start_us) / 1000000) : 0;
 }
+
+// ---- KARMA: probe-request discovery -----------------------------------------
+// Devices constantly emit DIRECTED probe requests for the networks in their saved list ("is CasaX
+// here?"). KARMA listens for those and reports which SSIDs people nearby are looking for, so the
+// operator can stand up the Evil Portal AP wearing one of those names — the device then recognises
+// "its" network and associates on its own, no deauth needed. We only SNIFF + LIST here (the operator
+// picks the lure); standing up the AP is the portal engine's job. Channel-hops the whole 2.4 GHz band
+// for the scan window. AUTHORIZED testing only. The SSID parse is the host-tested wifiatk_probe_ssid.
+#define KARMA_MAX 24
+typedef struct { char ssid[33]; int hits; int64_t last; } km_t;
+static km_t s_km[KARMA_MAX];
+static volatile int s_km_n;
+
+static void karma_add(const char *ssid)
+{
+    int64_t now = esp_timer_get_time();
+    taskENTER_CRITICAL(&s_mux);
+    for (int i = 0; i < s_km_n; i++)
+        if (strcmp(s_km[i].ssid, ssid) == 0) { s_km[i].hits++; s_km[i].last = now; taskEXIT_CRITICAL(&s_mux); return; }
+    if (s_km_n < KARMA_MAX) {
+        snprintf(s_km[s_km_n].ssid, sizeof s_km[s_km_n].ssid, "%s", ssid);
+        s_km[s_km_n].hits = 1; s_km[s_km_n].last = now; s_km_n++;
+    }
+    taskEXIT_CRITICAL(&s_mux);
+}
+
+static void karma_cb(void *buf, wifi_promiscuous_pkt_type_t type)
+{
+    if (type != WIFI_PKT_MGMT) return;
+    const wifi_promiscuous_pkt_t *pkt = (const wifi_promiscuous_pkt_t *)buf;
+    char ss[33];
+    if (wifiatk_probe_ssid(pkt->payload, pkt->rx_ctrl.sig_len, ss, sizeof ss) > 0) karma_add(ss);
+}
+
+// Listen `secs` seconds (clamped 2..30) for probe requests across the band; fill the KARMA list,
+// sorted most-requested first. Owns the radio for the window (STA + promiscuous, association dropped
+// so channel-hopping is free). Returns the number of distinct SSIDs heard, or <0 on failure.
+int nucleo_wifiatk_karma_scan(int secs)
+{
+    if (s_run || s_bcn_run) return -1;             // an attack already owns the radio
+    if (secs < 2) secs = 2;
+    if (secs > 30) secs = 30;
+    s_km_n = 0;
+
+    nucleo_setup_suspend();
+    nucleo_exclusive_enter(NX_NET_APP, NULL);
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_start();
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    esp_wifi_disconnect();                          // free the channel from the home-AP association
+    esp_wifi_set_promiscuous_rx_cb(karma_cb);
+    wifi_promiscuous_filter_t filt = { .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT };
+    esp_wifi_set_promiscuous_filter(&filt);
+    if (esp_wifi_set_promiscuous(true) != ESP_OK) {
+        esp_wifi_set_promiscuous_rx_cb(NULL);
+        nucleo_setup_apply_network(); nucleo_exclusive_exit();
+        return -2;
+    }
+
+    static const uint8_t CH[] = { 1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13 };
+    int dwell = 120;                               // ms/channel; probes are sporadic, keep moving
+    int passes = (secs * 1000) / (13 * dwell); if (passes < 1) passes = 1;
+    for (int p = 0; p < passes; p++)
+        for (int i = 0; i < 13; i++) { esp_wifi_set_channel(CH[i], WIFI_SECOND_CHAN_NONE); vTaskDelay(pdMS_TO_TICKS(dwell)); }
+
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_promiscuous_rx_cb(NULL);
+    nucleo_setup_apply_network();
+    nucleo_exclusive_exit();
+
+    // Insertion sort by hit count, most-requested first (a short list — cheap).
+    for (int i = 1; i < s_km_n; i++) {
+        km_t key = s_km[i]; int j = i - 1;
+        while (j >= 0 && s_km[j].hits < key.hits) { s_km[j + 1] = s_km[j]; j--; }
+        s_km[j + 1] = key;
+    }
+    ESP_LOGI(TAG, "karma: %d SSID(s) probed", s_km_n);
+    return s_km_n;
+}
+
+int         nucleo_wifiatk_karma_count(void)   { return s_km_n; }
+const char *nucleo_wifiatk_karma_ssid(int i)   { return (i >= 0 && i < s_km_n) ? s_km[i].ssid : ""; }
+int         nucleo_wifiatk_karma_hits(int i)   { return (i >= 0 && i < s_km_n) ? s_km[i].hits : 0; }

