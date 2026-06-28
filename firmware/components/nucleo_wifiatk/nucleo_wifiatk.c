@@ -954,8 +954,14 @@ static void karma_task(void *arg)
     int64_t end = esp_timer_get_time() + (int64_t)s_km_secs * 1000000;
     int ci = 0;
     while (s_km_run && esp_timer_get_time() < end) {
-        esp_wifi_set_channel(CH[ci++ % 13], WIFI_SECOND_CHAN_NONE);
-        vTaskDelay(pdMS_TO_TICKS(120));            // probes are sporadic; keep moving, yield to IDLE
+        uint8_t ch = CH[ci++ % 13];
+        esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+        vTaskDelay(pdMS_TO_TICKS(10));             // settle
+        // The still-associated STA may bounce us back to the home channel; force it back, exactly like
+        // the deauth flood does to reach clients on every channel. Then dwell to catch sporadic probes.
+        uint8_t pch = 0; wifi_second_chan_t sch;
+        if (esp_wifi_get_channel(&pch, &sch) == ESP_OK && pch != ch) esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+        vTaskDelay(pdMS_TO_TICKS(140));            // yield to IDLE; probes are sporadic
     }
     esp_wifi_set_promiscuous(false);
     esp_wifi_set_promiscuous_rx_cb(NULL);
@@ -985,17 +991,12 @@ int nucleo_wifiatk_karma_start(int secs)
 
     nucleo_setup_suspend();
     nucleo_exclusive_enter(NX_NET_APP, NULL);
-    // Sniff in AP mode (the Bruce/Marauder approach): a hidden throwaway AP. Critically, there is NO
-    // STA association — so esp_wifi_set_channel() hops FREELY (a connected STA pins the monitor to the
-    // home channel, which is why "no disconnect" heard nothing) AND there is no STA reconnect state
-    // machine to fight (which is why "disconnect" rebooted after a few seconds). Free + stable.
-    wifi_config_t apc;
-    memset(&apc, 0, sizeof apc);
-    memcpy(apc.ap.ssid, "nucleo-rx", 9); apc.ap.ssid_len = 9;
-    apc.ap.channel = 1; apc.ap.ssid_hidden = 1; apc.ap.max_connection = 1;
-    apc.ap.beacon_interval = 200; apc.ap.authmode = WIFI_AUTH_OPEN;
-    esp_wifi_set_mode(WIFI_MODE_AP);
-    esp_wifi_set_config(WIFI_IF_AP, &apc);
+    // Sniff in the SAME mode the deauth flood uses and proves stable for minutes: STA + promiscuous,
+    // NO mode switch and NO esp_wifi_disconnect(). Switching to AP mode panicked on the ADV's tight
+    // heap; disconnecting churned the reconnect state machine and rebooted. Instead we stay put and
+    // RE-ASSERT the monitor channel each hop (karma_task) — exactly how deauth reaches clients on
+    // every channel while still associated. Zero extra allocation, proven stable.
+    esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_start();
     esp_wifi_set_ps(WIFI_PS_NONE);
     esp_wifi_set_promiscuous_rx_cb(karma_cb);
