@@ -106,8 +106,8 @@ typedef struct {
     bool             wps;       // WPS advertised in the beacon
 } ap_t;
 
-static ap_t s_targets[MAX_TARGETS];
-static int  s_ntargets;
+static ap_t *s_targets;   // lazy calloc on first scan; kept until reboot
+static int   s_ntargets;
 
 // PMF (802.11w) is effectively mandatory on these, so clients ignore deauth/disassoc — attacking
 // them is wasted airtime. WPA2/WPA3 transitional is deliberately NOT here: it still carries
@@ -140,7 +140,7 @@ static const char *authmode_short(wifi_auth_mode_t a)
 // Flat table keyed by (bssid, mac); filled by the promiscuous RX callback while armed.
 #define MAX_STA 48
 typedef struct { uint8_t bssid[6]; uint8_t mac[6]; int64_t last_us; } sta_t;
-static sta_t s_sta[MAX_STA];
+static sta_t *s_sta;           // calloc in deauth_start; kept until reboot
 static volatile int s_nsta;
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -159,7 +159,7 @@ static int target_index(const uint8_t *bssid)
 
 static void add_station(const uint8_t *bssid, const uint8_t *mac)
 {
-    if (!mac_unicast(mac) || mac_eq(mac, bssid)) return;
+    if (!s_sta || !mac_unicast(mac) || mac_eq(mac, bssid)) return;
     int64_t now = esp_timer_get_time();
     taskENTER_CRITICAL(&s_mux);
     int slot = -1;
@@ -307,6 +307,7 @@ int nucleo_wifiatk_scan(void)
     if (!recs) return s_ntargets;
     esp_wifi_scan_get_ap_records(&num, recs);
 
+    if (!s_targets) { s_targets = calloc(MAX_TARGETS, sizeof(ap_t)); if (!s_targets) { free(recs); return 0; } }
     s_ntargets = 0;
     for (int i = 0; i < num && s_ntargets < MAX_TARGETS; i++) {
         bool dup = false;                        // de-dup by BSSID (multi-radio APs repeat)
@@ -617,6 +618,7 @@ esp_err_t nucleo_wifiatk_deauth_start(int target_idx)
     s_tx_try = 0; s_tx_fail = 0; s_pace_us = 0; s_ok_run = 0;
     s_reconnects = 0;
     s_nsta = 0;
+    if (!s_sta) s_sta = calloc(MAX_STA, sizeof(sta_t));
     s_cur_ch = 0; s_cur_rssi = 0;
     s_cur_ssid[0] = 0;
     s_start_us = esp_timer_get_time();
