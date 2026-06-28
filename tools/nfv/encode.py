@@ -82,8 +82,12 @@ def trim_args(ss, dur):
 
 
 def encode_audio(ff, src, out_mp3, ar, ab, ss=None, dur=None):
+    # -map_metadata -1 + -id3v2_version 0: emit a BARE MP3 stream (no ID3v2 tag, no copied source
+    # metadata/cover art). The player seeks audio by a CBR byte map (rel = total*ms/dur); an ID3 tag
+    # at the front offsets that map and, with a big cover-art tag, an early resume could land INSIDE
+    # the tag -> wrong position. A tagless stream makes the byte map exact.
     cmd = [ff, "-y"] + trim_args(ss, dur) + ["-i", src, "-vn", "-ac", "1", "-ar", str(ar),
-           "-c:a", "libmp3lame", "-b:a", ab, out_mp3]
+           "-c:a", "libmp3lame", "-b:a", ab, "-map_metadata", "-1", "-id3v2_version", "0", out_mp3]
     print("audio:", " ".join(cmd))
     subprocess.run(cmd, check=True)
 

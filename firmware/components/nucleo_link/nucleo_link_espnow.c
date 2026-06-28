@@ -277,8 +277,11 @@ bool nlink_svc_start(void) {
     if (s_inited) return true;
     s_lock = xSemaphoreCreateRecursiveMutex();
     s_rxq  = xQueueCreate(16, sizeof(rxpkt_t));
-    if (!s_lock || !s_rxq) { ESP_LOGE(TAG, "alloc"); return false; }
-    if (esp_now_init() != ESP_OK) { ESP_LOGE(TAG, "esp_now_init"); return false; }
+    if (!s_lock || !s_rxq) { ESP_LOGE(TAG, "alloc"); goto fail; }
+    // esp_now is a global singleton: another component (the Swarm app, or our own web-API path) may
+    // have left it inited — treat EXIST as success and just (re)claim the single recv callback.
+    { esp_err_t e = esp_now_init();
+      if (e != ESP_OK && e != ESP_ERR_ESPNOW_EXIST) { ESP_LOGE(TAG, "esp_now_init %s", esp_err_to_name(e)); goto fail; } }
     esp_now_register_recv_cb(recv_cb);
     ensure_peer(BCAST);
     lock_channel();
@@ -286,8 +289,18 @@ bool nlink_svc_start(void) {
     memset(&s_st, 0, sizeof s_st);
     s_npeers = 0; s_offer_pending = s_cmd_pending = false;
     s_inited = true; s_run = true;
-    xTaskCreate(svc_task, "vicino", 4096, NULL, tskIDLE_PRIORITY + 2, &s_task);
+    // svc_task STREAMS files through SD (fopen/fwrite/fread + CRC) and builds the protocol frames on its
+    // stack: FATFS needs real headroom (cf. nucleo_eth's 6144). 4096 overflows mid-transfer -> the device
+    // looks frozen. Keep it generous; the app is exclusive so RAM is free.
+    if (xTaskCreate(svc_task, "vicino", 7168, NULL, tskIDLE_PRIORITY + 2, &s_task) != pdPASS) {
+        ESP_LOGE(TAG, "svc task"); s_inited = false; s_run = false;
+        esp_now_unregister_recv_cb(); esp_now_deinit(); goto fail;
+    }
     return true;
+fail:
+    if (s_rxq)  { vQueueDelete(s_rxq);  s_rxq = NULL; }
+    if (s_lock) { vSemaphoreDelete(s_lock); s_lock = NULL; }
+    return false;
 }
 void nlink_svc_stop(void) {
     if (!s_inited) return;

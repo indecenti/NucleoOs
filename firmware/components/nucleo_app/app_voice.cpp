@@ -26,6 +26,8 @@ extern "C" {
 }
 
 #include "app_gfx.h"
+#include "nucleo_exclusive.h"   // free RAM on enter so the recognizer's ~38 KB heap gate can pass
+#include "nucleo_i18n.h"        // TR(it,en): UI labels follow the system language
 
 // Palette — verde elettrico / dark come il motore
 static const unsigned short
@@ -49,7 +51,7 @@ extern "C" int nucleo_ws_client_count(void);
 // ── State ────────────────────────────────────────────────────────────────────
 static int  s_tab  = 0;     // 0=triggers 1=record 2=status
 static int  s_sel  = 0;
-static char s_tpl_names[MAX_TPLS][32];
+static char (*s_tpl_names)[32] = nullptr;   // [MAX_TPLS][32], heap-allocated on enter (zero RAM at boot)
 static int  s_tpl_count = 0;
 static bool s_tpl_overflow = false;   // more than MAX_TPLS templates on SD (only first MAX shown/matched)
 
@@ -63,6 +65,7 @@ static void scan_tpls(void)
 {
     s_tpl_count = 0;
     s_tpl_overflow = false;
+    if (!s_tpl_names) return;   // buffer freed (app not active) — nothing to scan into
     mkdir(TPL_PATH, 0775);
     DIR *dir = opendir(TPL_PATH);
     if (!dir) return;
@@ -93,11 +96,16 @@ static void on_tab(void)
 
 static void enter(void)
 {
+    // Free ~64 KB (httpd + ANIMA L1 + mDNS) BUT keep the voice engine up (no NX_VOICE): the
+    // recognizer needs ~38 KB contiguous on PTT, which the loaded heap can't spare. Without this the
+    // PTT heap gate (nucleo_voice.c) silently refuses every press — the app looks dead. Wi-Fi stays.
+    nucleo_exclusive_enter(NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY, nullptr);
     nucleo_app_set_tab_handler(on_tab);
-    nucleo_app_set_hint("TAB schede  R aggiungi  Del elimina");
+    nucleo_app_set_hint(TR("TAB schede  R aggiungi  Del elimina", "TAB tabs  R add  Del remove"));
     s_tab = 0; s_sel = 0;
     nucleo_voice_set_test_mode(true);   // recognize but DON'T act: a stray GO here must not fire a real command
     nucleo_voice_request(true);         // hold the lazy engine up while training/testing here
+    if (!s_tpl_names) s_tpl_names = (char (*)[32])calloc(MAX_TPLS, sizeof *s_tpl_names);
     scan_tpls();
 }
 
@@ -108,6 +116,9 @@ static void exit_app(void)
     // Release the app hold. The engine frees its 16 KB UNLESS the user explicitly
     // pinned "always listen" (STATUS tab) — that opt-in survives leaving the app.
     nucleo_voice_request(false);
+    if (nucleo_exclusive_active()) nucleo_exclusive_exit();   // bring httpd / L1 / mDNS back (guarded, like app_anima)
+    free(s_tpl_names); s_tpl_names = nullptr;   // zero RAM while the app is closed
+    s_tpl_count = 0;
 }
 
 static void tick(void)
@@ -162,7 +173,7 @@ static void on_key(int key, char ch)
             // Prompt for the word name, pre-filled if we arrived via 'R' on a selected template.
             char word[32] = "";
             snprintf(word, sizeof(word), "%s", s_rec_word);
-            nucleo_ui_input("Nome parola (es: registratore)", word, sizeof(word), 0);
+            nucleo_ui_input(TR("Nome parola (es: registratore)", "Word name (e.g. recorder)"), word, sizeof(word), 0);
             if (!word[0]) { nucleo_app_request_draw(); return; }
             snprintf(s_rec_word, sizeof(s_rec_word), "%s", word);
             nucleo_voice_arm_learning_mode(s_rec_word);
@@ -193,26 +204,35 @@ static void on_key(int key, char ch)
 }
 
 // ── Draw helpers ──────────────────────────────────────────────────────────────
+static const char *tab_label(int i)
+{
+    switch (i) {
+        case 0:  return TR("MODELLI",  "TEMPLATES");
+        case 1:  return TR("ADDESTRA", "TRAIN");
+        default: return "INFO";
+    }
+}
+
 static void draw_tabs(int top_y)
 {
-    static const char *LABELS[] = { "TEMPLATES", "ADDESTRA", "INFO" };
     int tw = 240 / 3;
     for (int i = 0; i < 3; i++) {
+        const char *lab = tab_label(i);
         bool active = (i == s_tab);
         unsigned short bg = active ? ACC : BG;
         unsigned short fg = active ? BG  : DIM;
-        
+
         d.fillRoundRect(i * tw + 4, top_y + 2, tw - 8, 18, 6, bg);
         d.setTextColor(fg, bg);
         d.setTextSize(1);
-        int lx = i * tw + 4 + (tw - 8 - strlen(LABELS[i])*6)/2;
+        int lx = i * tw + 4 + (tw - 8 - (int)strlen(lab)*6)/2;
         d.setCursor(lx, top_y + 7);
-        d.print(LABELS[i]);
+        d.print(lab);
     }
     d.drawFastHLine(0, top_y + 22, W, LINE);
 }
 
-static const char *tl_label(int i, void *) { return s_tpl_names[i]; }
+static const char *tl_label(int i, void *) { return s_tpl_names ? s_tpl_names[i] : ""; }
 
 static void draw_triggers(int top_y)
 {
@@ -222,10 +242,10 @@ static void draw_triggers(int top_y)
 
     if (s_tpl_count == 0) {
         d.setTextSize(1); d.setTextColor(DIM, BG);
-        d.setCursor(12, y0 + 14); d.print("Nessun template salvato.");
+        d.setCursor(12, y0 + 14); d.print(TR("Nessun modello salvato.", "No templates saved."));
         d.fillRoundRect(12, y0 + 34, 240-24, 22, 6, ACC);
         d.setTextColor(BG, ACC);
-        d.setCursor(W/2 - 60, y0 + 41); d.print("Premi R per Addestrare");
+        d.setCursor(W/2 - 60, y0 + 41); d.print(TR("Premi R per addestrare", "Press R to train"));
         return;
     }
     app_ui_list(y0, h, s_tpl_count, s_sel, tl_label, nullptr, nullptr, nullptr);
@@ -236,9 +256,9 @@ static void draw_triggers(int top_y)
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     if (s_tpl_count > 0 && s_sel < s_tpl_count) {
         d.setCursor(8, fy + 4);
-        d.print("Premi ");
+        d.print(TR("Premi ", "Press "));
         d.setTextColor(C_RED, BG); d.print("Del");
-        d.setTextColor(MUTED, BG); d.print(" per eliminare");
+        d.setTextColor(MUTED, BG); d.print(TR(" per eliminare", " to delete"));
     }
 }
 
@@ -251,55 +271,62 @@ static void draw_record(int top_y)
     case RS_IDLE:
         d.fillRoundRect(8, y, 240 - 16, 80, 8, 0x10A2); // Box scuro
         d.setTextColor(FG, 0x10A2); d.setCursor(16, y + 8); d.setTextSize(2);
-        d.print("Nuova Parola");
+        d.print(TR("Nuova Parola", "New Word"));
         d.setTextSize(1); d.setTextColor(ACC, 0x10A2); d.setCursor(16, y + 30);
-        d.print("1. Premi Invio e scrivi nome");
+        d.print(TR("1. Premi Invio e scrivi nome", "1. Press Enter, type a name"));
         d.setTextColor(DIM, 0x10A2); d.setCursor(16, y + 46);
-        d.print("2. Tieni premuto GO e parla");
+        d.print(TR("2. Tieni premuto GO e parla", "2. Hold GO and speak"));
         d.setTextColor(DIM, 0x10A2); d.setCursor(16, y + 62);
-        d.print("100% Offline (nessun WAV)");
+        d.print(TR("100% Offline (nessun WAV)", "100% offline (no WAV)"));
         break;
 
     case RS_WAITING_FN: {
-        d.fillRoundRect(8, y, W - 16, 80, 8, 0x2000); // Box rosso tenue
-        d.setTextColor(ACC2, 0x2000); d.setTextSize(2); d.setCursor(16, y + 8);
-        d.print("IN ASCOLTO...");
-        
-        d.setTextSize(1); d.setTextColor(FG, 0x2000); d.setCursor(16, y + 30);
-        d.print("Parola selezionata:");
-        
-        d.setTextColor(ACC, 0x2000); d.setTextSize(2); d.setCursor(16, y + 44);
+        // Honest state: the engine is only truly capturing while GO is held (is_listening). Until
+        // then we tell the user to HOLD GO instead of a misleading "listening" with a fake pulse.
+        bool listening = nucleo_voice_is_listening();
+        unsigned short box = listening ? 0x2000 : 0x10A2;   // red-ish while capturing, dark while waiting
+        d.fillRoundRect(8, y, W - 16, 80, 8, box);
+        d.setTextColor(listening ? ACC2 : ACC, box); d.setTextSize(2); d.setCursor(16, y + 8);
+        d.print(listening ? TR("IN ASCOLTO...", "LISTENING...") : TR("TIENI GO e parla", "HOLD GO & speak"));
+
+        d.setTextSize(1); d.setTextColor(FG, box); d.setCursor(16, y + 30);
+        d.print(TR("Parola:", "Word:"));
+        d.setTextColor(ACC, box); d.setTextSize(2); d.setCursor(16, y + 44);
         d.print(s_rec_word);
-        
-        // Animated mic icon
-        int64_t t = esp_timer_get_time() / 200000;
-        int radius = 10 + (t % 4);
-        unsigned short pulse = (t & 1) ? C_RED : ACC2;
-        d.fillCircle(W - 30, y + 40, radius, pulse);
-        d.fillCircle(W - 30, y + 40, 6, FG);
-        d.setTextColor(BG); d.setTextSize(1);
+
+        // Mic icon pulses ONLY while truly capturing (real feedback); a static ring while it waits.
+        if (listening) {
+            int64_t t = esp_timer_get_time() / 200000;
+            int radius = 10 + (t % 4);
+            unsigned short pulse = (t & 1) ? C_RED : ACC2;
+            d.fillCircle(W - 30, y + 40, radius, pulse);
+            d.fillCircle(W - 30, y + 40, 6, FG);
+        } else {
+            d.drawCircle(W - 30, y + 40, 11, MUTED);
+            d.fillCircle(W - 30, y + 40, 5, DIM);
+        }
         break;
     }
 
     case RS_DONE:
         d.fillRoundRect(8, y, W - 16, 80, 8, 0x03E0); // Box verde tenue
         d.setTextSize(2); d.setTextColor(ACC, 0x03E0); d.setCursor(16, y + 16);
-        d.print("SALVATO!");
+        d.print(TR("SALVATO!", "SAVED!"));
         d.setTextSize(1); d.setTextColor(FG, 0x03E0); d.setCursor(16, y + 44);
-        char msg2[48]; snprintf(msg2, sizeof(msg2), "'%s.tpl' creato.", s_rec_word);
+        char msg2[48]; snprintf(msg2, sizeof(msg2), TR("'%s.tpl' creato.", "'%s.tpl' created."), s_rec_word);
         d.print(msg2);
         d.setTextColor(MUTED, 0x03E0); d.setCursor(16, y + 60);
-        d.print("Premi un tasto.");
+        d.print(TR("Premi un tasto.", "Press any key."));
         break;
 
     case RS_TOO_SHORT:
         d.fillRoundRect(8, y, W - 16, 80, 8, 0x5800); // Box rosso/arancio
         d.setTextSize(2); d.setTextColor(C_RED, 0x5800); d.setCursor(16, y + 12);
-        d.print("ERRORE AUDIO");
+        d.print(TR("ERRORE AUDIO", "AUDIO ERROR"));
         d.setTextSize(1); d.setTextColor(FG, 0x5800); d.setCursor(16, y + 36);
-        d.print("Troppo corto o silenzio.");
+        d.print(TR("Troppo corto o silenzio.", "Too short or silent."));
         d.setTextColor(MUTED, 0x5800); d.setCursor(16, y + 54);
-        d.print("Tieni GO piu a lungo.");
+        d.print(TR("Tieni GO piu a lungo.", "Hold GO longer."));
         break;
     }
 }
@@ -312,11 +339,11 @@ static void draw_status(int top_y)
 
     bool aon = nucleo_voice_always_on();
     struct { const char *k; const char *v; unsigned short col; } rows[] = {
-        { "TEMPLATE",  nullptr,          ACC   },
+        { TR("MODELLI","TEMPLATES"),  nullptr,          ACC   },
         { "WS CLIENT", nullptr,          ws > 0 ? ACC : MUTED },
-        { "ROUTING",   ws > 0 ? "Web" : "Locale", ws > 0 ? ACC2 : ACC },
-        { "LINGUA",    "IT/EN (Anima)", MUTED  },
-        { "SEMPRE ON", aon ? "Si" : "No", aon ? ACC2 : MUTED },
+        { "ROUTING",   ws > 0 ? "Web" : TR("Locale","Local"), ws > 0 ? ACC2 : ACC },
+        { TR("LINGUA","LANGUAGE"),    "IT/EN (Anima)", MUTED  },
+        { TR("SEMPRE ON","ALWAYS ON"), aon ? TR("Si","Yes") : "No", aon ? ACC2 : MUTED },
     };
     const int NROWS = (int)(sizeof(rows) / sizeof(rows[0]));
     // Fill dynamic fields
@@ -339,7 +366,7 @@ static void draw_status(int top_y)
     // Hint: how to toggle the persistent always-on opt-in.
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     d.setCursor(16, y + 12 + NROWS * 16 + 6);
-    d.print("A = Sempre attiva (PTT da home)");
+    d.print(TR("A = Sempre attiva (PTT da home)", "A = Always on (PTT from home)"));
 }
 
 static void draw(void)
@@ -359,7 +386,7 @@ extern "C" void nucleo_register_voice(void)
 {
     static const nucleo_app_def_t app = {
         "voice", "Voice Trainer", "Voice",
-        "Addestratore vocale locale",
+        "Local offline voice trainer",
         'V', ACC, enter, on_key, tick, draw, exit_app
     };
     nucleo_app_register(&app);

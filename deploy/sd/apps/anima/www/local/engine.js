@@ -86,9 +86,9 @@ async function cachePutText(key, s) { await cachePut(key, new TextEncoder().enco
 function hashBytes(b) { let h = 5381; for (let i = 0; i < b.length; i++) h = ((h << 5) + h + b[i]) >>> 0; return h.toString(36); }
 
 // ---- streaming fetch with byte-progress (smooth bar for the ~8 MB index) --------------------------
-async function fetchBytes(url, onChunk) {
+async function fetchBytes(url, onChunk, signal) {
   let resp;
-  try { resp = await fetch(url, { cache: 'no-store' }); } catch { return null; }
+  try { resp = await fetch(url, { cache: 'no-store', signal }); } catch { return null; }
   if (!resp.ok) return null;
   if (resp.body && resp.body.getReader) {
     const reader = resp.body.getReader();
@@ -184,8 +184,12 @@ export function createAnimaLocal(opts = {}) {
   function flush() { if (_idbfs && M) { try { M.FS.syncfs(false, () => {}); } catch {} } }
   function scheduleFlush() { if (!_idbfs) return; clearTimeout(_flushTimer); _flushTimer = setTimeout(flush, 600); }
 
-  async function _load(onProgress) {
+  async function _load(onProgress, opts = {}) {
+    const { signal, cachedOnly } = opts;
+    const aborted = () => !!(signal && signal.aborted);
+    const ckAbort = () => { if (aborted()) throw Object.assign(new Error('cancelled'), { code: 'CANCELLED' }); };
     const note = (o) => { try { onProgress && onProgress(o); } catch {} };
+    ckAbort();
     note({ phase: 'wasm' });
     const { default: AnimaLocal } = await import(new URL('./anima-local.mjs', here).href);
     M = await AnimaLocal();
@@ -203,61 +207,85 @@ export function createAnimaLocal(opts = {}) {
       _idbfs = true;
     } catch { _idbfs = false; }
 
-    // ---- AUTO-SYNC: keep the local brain in lockstep with the Cardputer. A cheap signature (every brain
-    // file's size from /api/fs/list + a hash of the index provenance sidecar) is compared to the cached one;
-    // if the device's brain changed (rebuilt index, edited cards, facts taught ON the device) the stale pack
-    // is dropped so the loop below re-downloads it. Offline (device unreachable) -> sig null -> cache kept.
-    // The browser's OWN taught facts live in IDBFS (/sd/.../rw, a SEPARATE DB) and are never touched here.
-    note({ phase: 'sync' });
-    let sig = null;
-    try {
-      const parts = [];
-      for (const dir of ['/data/anima', '/data/anima/learned', '/data/anima/akb5']) {
-        const r = await fetch(fsListUrl(dir), { cache: 'no-store' });
-        if (r.ok) { const j = await r.json(); for (const e of (j.entries || [])) if (e.type !== 'dir') parts.push(dir + '/' + e.name + ':' + e.size); }
+    // CACHED-ONLY mount (silent path): touch NO network. Restore exactly the set the last full download
+    // saved in `__packlist__` (so even dynamically-enumerated AKB5 shards come back from IndexedDB) and
+    // skip the auto-sync entirely. This is what GUARANTEES a cached mount can never start a download.
+    let items;
+    if (cachedOnly) {
+      let list = null;
+      try { const t = await cacheGetText('__packlist__'); if (t) list = JSON.parse(t); } catch {}
+      items = (Array.isArray(list) && list.length)
+        ? list.map((p) => ({ p, req: PACK.some((x) => x.p === p && x.req) }))
+        : PACK.slice();
+    } else {
+      // ---- AUTO-SYNC: keep the local brain in lockstep with the Cardputer. A cheap signature (every brain
+      // file's size from /api/fs/list + a hash of the index provenance sidecar) is compared to the cached one;
+      // if the device's brain changed (rebuilt index, edited cards, facts taught ON the device) the stale pack
+      // is dropped so the loop below re-downloads it. Offline (device unreachable) -> sig null -> cache kept.
+      // The browser's OWN taught facts live in IDBFS (/sd/.../rw, a SEPARATE DB) and are never touched here.
+      // Only runs on a CONSENTED full download — NEVER on the silent cached mount above.
+      note({ phase: 'sync' });
+      let sig = null;
+      try {
+        const parts = [];
+        for (const dir of ['/data/anima', '/data/anima/learned', '/data/anima/akb5']) {
+          ckAbort();
+          const r = await fetch(fsListUrl(dir), { cache: 'no-store', signal });
+          if (r.ok) { const j = await r.json(); for (const e of (j.entries || [])) if (e.type !== 'dir') parts.push(dir + '/' + e.name + ':' + e.size); }
+        }
+        if (parts.length) {
+          const prov = await fetchBytes(fsReadUrl('/data/anima/anima-it-index.bin.prov'), null, signal);
+          sig = parts.sort().join('|') + (prov ? '#' + hashBytes(prov) : '');
+        }
+      } catch (e) { if (e && e.code === 'CANCELLED') throw e; }
+      if (sig) {
+        const stored = await cacheGetText('__brainsig__');
+        if (stored && stored !== sig) { note({ phase: 'update' }); await cacheClear(); }   // device/extended brain changed -> full refresh
+        await cachePutText('__brainsig__', sig);
       }
-      if (parts.length) {
-        const prov = await fetchBytes(fsReadUrl('/data/anima/anima-it-index.bin.prov'), null);
-        sig = parts.sort().join('|') + (prov ? '#' + hashBytes(prov) : '');
-      }
-    } catch {}
-    if (sig) {
-      const stored = await cacheGetText('__brainsig__');
-      if (stored && stored !== sig) { note({ phase: 'update' }); await cacheClear(); }   // device/extended brain changed -> full refresh
-      await cachePutText('__brainsig__', sig);
-    }
 
-    // Build the download list: the static PACK + every AKB5 shard (enumerated dynamically from the unified
-    // device path /data/anima/akb5). Each item downloads from `from` (or `p`) and mounts at `p`.
-    const items = PACK.slice();
-    try {
-      const r = await fetch(fsListUrl('/data/anima/akb5'), { cache: 'no-store' });
-      if (r.ok) for (const e of ((await r.json()).entries || []))
-        if (e.type !== 'dir' && e.name.endsWith('.bin'))
-          items.push({ p: 'data/anima/akb5/' + e.name, req: false });
-    } catch {}
+      // Build the download list: the static PACK + every AKB5 shard (enumerated dynamically from the unified
+      // device path /data/anima/akb5). Each item downloads from `from` (or `p`) and mounts at `p`.
+      items = PACK.slice();
+      try {
+        ckAbort();
+        const r = await fetch(fsListUrl('/data/anima/akb5'), { cache: 'no-store', signal });
+        if (r.ok) for (const e of ((await r.json()).entries || []))
+          if (e.type !== 'dir' && e.name.endsWith('.bin'))
+            items.push({ p: 'data/anima/akb5/' + e.name, req: false });
+      } catch (e) { if (e && e.code === 'CANCELLED') throw e; }
+    }
 
     const files = [];
     totalBytes = 0;
     for (let i = 0; i < items.length; i++) {
+      ckAbort();                                      // honour a cancel between files
       const f = items[i];
       const name = f.p.split('/').pop();
       note({ phase: 'fetch', name, idx: i, count: items.length, bytes: totalBytes });
       let bytes = await cacheGet(f.p);
       const fromCache = !!bytes;
-      if (!bytes) {
+      if (!bytes && !cachedOnly) {
         bytes = await fetchBytes(fsReadUrl('/' + (f.from || f.p)), (n) =>
-          note({ phase: 'fetch', name, idx: i, count: items.length, bytes: totalBytes + n, downloading: true }));
+          note({ phase: 'fetch', name, idx: i, count: items.length, bytes: totalBytes + n, downloading: true }), signal);
         if (!bytes) {
+          ckAbort();                                  // a null from an aborted fetch is a cancel, not a missing file
           if (f.req) throw Object.assign(new Error('ANIMA Local: required pack file missing: ' + (f.from || f.p)), { code: 'PACK_REQUIRED_MISSING' });
           continue;                                   // optional file absent on this device -> skip
         }
         await cachePut(f.p, bytes);
       }
+      if (!bytes) {                                   // cachedOnly: not in the cache -> skip (a missing req file is fatal)
+        if (f.req) throw Object.assign(new Error('ANIMA Local: required pack file missing: ' + (f.from || f.p)), { code: 'PACK_REQUIRED_MISSING' });
+        continue;
+      }
       totalBytes += bytes.length;
       files.push({ p: f.p, bytes, fromCache });
       note({ phase: 'fetch', name, idx: i + 1, count: items.length, bytes: totalBytes });
     }
+
+    // Remember EXACTLY what we mounted so a later cached-only mount restores the same set with no network.
+    if (!cachedOnly) { try { await cachePutText('__packlist__', JSON.stringify(files.map((f) => f.p))); } catch {} }
 
     // mount the pack into the WASM in-memory filesystem at /sd (the firmware's NUCLEO_SD_MOUNT)
     for (const { p, bytes } of files) {
@@ -279,9 +307,15 @@ export function createAnimaLocal(opts = {}) {
     // Idempotent; concurrent callers share the one in-flight load. onProgress gets {phase,name,bytes,...}.
     // The whole load (WASM module + pack files) holds the OS-wide download lock so it can never run
     // alongside another NucleoOS download (voice models, Forge weights, a second tab).
-    load(onProgress) {
+    // Full (consented) download. Pass an AbortSignal to make it CANCELLABLE: aborting rejects the
+    // returned promise with {code:'CANCELLED'} and clears the memo so a later attempt can retry cleanly.
+    load(onProgress, signal) {
       if (loaded) return Promise.resolve();
-      return (loading ||= downloadGate().then((gate) => gate(PACK_LABEL, () => _load(onProgress))));
+      if (!loading) {
+        loading = downloadGate().then((gate) => gate(PACK_LABEL, () => _load(onProgress, { signal })));
+        loading.catch(() => { loading = null; });     // a failed/cancelled load must not poison the next attempt
+      }
+      return loading;
     },
     isLoaded() { return loaded; },
     bytes() { return totalBytes; },
@@ -289,14 +323,18 @@ export function createAnimaLocal(opts = {}) {
     // cached in IndexedDB. Lets the cascade decide "browser brain or device?" without triggering a
     // download (the mid-chat silent-fallback probe). Never pulls; safe to call often.
     async ready() { return loaded || await packCached(); },
-    // Load ONLY if the pack is already cached (instant, from IndexedDB); otherwise resolve false so the
-    // caller falls back to the device instead of pulling ~14 MB mid-conversation. load() is idempotent
-    // and download-gate-safe; with the pack fully cached its body transfers nothing.
-    async loadIfCached(onProgress) {
+    // Load ONLY from the cache (cachedOnly: NO network at all), and only if the required pack is present;
+    // otherwise resolve false so the caller falls back to the device instead of pulling ~14 MB. This is
+    // the silent boot/mid-chat mount — it can never start a download.
+    async loadIfCached(onProgress, signal) {
       if (loaded) return true;
       if (!(await packCached())) return false;
-      await (loading ||= downloadGate().then((gate) => gate(PACK_LABEL, () => _load(onProgress))));
-      return true;
+      if (!loading) {
+        loading = downloadGate().then((gate) => gate(PACK_LABEL, () => _load(onProgress, { signal, cachedOnly: true })));
+        loading.catch(() => { loading = null; });
+      }
+      try { await loading; } catch {}
+      return loaded;
     },
     // Run the offline cascade. Returns the /api/anima-shaped result object.
     query(text, lang) {

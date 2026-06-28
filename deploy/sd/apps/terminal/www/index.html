@@ -58,6 +58,9 @@
 
     // ---- device file API (degrades gracefully outside the OS) -----------------
     const api = (op, path, opts) => fetch(`/api/fs/${op}?path=` + encodeURIComponent(path), opts);
+    // /proc is a firmware-served virtual filesystem (live system state as plain text), NOT real
+    // SD files — so cat/ls/cd route to it directly instead of the /api/fs layer.
+    const isProc = (p) => p === '/proc' || p.startsWith('/proc/');
     async function readJSON(path) {
       try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
         return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; }
@@ -94,7 +97,7 @@
         emit('  ls [path]      list a directory', 'dim');
         emit('  cd <path>      change directory   (cd ..  cd /data)', 'dim');
         emit('  pwd            print working directory', 'dim');
-        emit('  cat <file>     print a file', 'dim');
+        emit('  cat <file>     print a file  (try: cat /proc/meminfo)', 'dim');
         emit('  cp <src> <dst> copy a file', 'dim');
         emit('  mv <src> <dst> move or rename a file', 'dim');
         emit('  mkdir <dir>    create a directory', 'dim');
@@ -129,6 +132,15 @@
       },
       async ls(arg) {
         const path = arg ? norm(arg) : cwd;
+        if (path === '/proc') {                                  // virtual FS: list its nodes
+          try { const rp = await fetch('/proc', { cache: 'no-store' }); if (!rp.ok) throw 0;
+            const nodes = (await rp.text()).split(/\n/).filter(Boolean);
+            for (const nm of nodes) emit('  ' + nm, '');
+            emit(`${nodes.length} item${nodes.length === 1 ? '' : 's'}`, 'dim'); }
+          catch { emit('ls: cannot reach /proc', 'err'); }
+          return;
+        }
+        if (path.startsWith('/proc/')) { emit('ls: not a directory: ' + path + ' (try: cat ' + path + ')', 'err'); return; }
         let r;
         try { r = await api('list', path); }
         catch { emit('ls: cannot reach the file API (running outside the OS?)', 'err'); return; }
@@ -152,15 +164,23 @@
       async cd(arg) {
         if (!arg) { setCwd('/'); return; }
         const path = norm(arg);
+        if (path === '/proc') { setCwd('/proc'); return; }       // virtual FS root is always "there"
         try { const r = await api('list', path); if (!r.ok) throw 0; await r.json(); setCwd(path); }
         catch { emit('cd: no such directory: ' + path, 'err'); }
       },
       pwd() { emit(cwd); },
       async cat(arg) {
         if (!arg) { emit('cat: missing file', 'err'); return; }
-        try { const r = await api('read', norm(arg)); if (!r.ok) throw 0;
+        const path = norm(arg);
+        if (isProc(path)) {                                      // live system node, served as plain text
+          try { const r = await fetch(path, { cache: 'no-store' }); if (!r.ok) throw 0;
+            const t = await r.text(); emit(t.replace(/\n$/, '')); }
+          catch { emit('cat: cannot read ' + path, 'err'); }
+          return;
+        }
+        try { const r = await api('read', path); if (!r.ok) throw 0;
           const t = await r.text(); emit(t.length ? t.replace(/\n$/, '') : '(empty file)', t.length ? '' : 'dim'); }
-        catch { emit('cat: cannot read ' + norm(arg), 'err'); }
+        catch { emit('cat: cannot read ' + path, 'err'); }
       },
       async cp(arg) {
         const m = arg && arg.match(/^(".*?"|\S+)\s+(".*?"|\S+)$/);

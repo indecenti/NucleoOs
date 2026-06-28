@@ -31,9 +31,21 @@ esp_err_t nucleo_recorder_start(void);
 // Ask the writer task to finalise the current WAV (header patched asynchronously).
 void nucleo_recorder_stop(void);
 
-// Wind down a live /api/rec/stream dictation worker and wait (bounded, <=1.5 s) for it to release
+// Wind down a live /api/rec/stream dictation worker and wait (bounded, <=3.5 s) for it to release
 // its async request. MUST run before httpd stops, or the worker's send/complete is a use-after-free.
 void nucleo_recorder_stream_abort(void);
+
+// Who holds the single mic right now (the gate behind nucleo_recorder_start's CAS). Lets a caller tell
+// "my own take is still finalizing" (REC) apart from "a web dictation stream owns it" (STREAM) instead
+// of blaming the web for every refusal.
+typedef enum { NUCLEO_MIC_IDLE = 0, NUCLEO_MIC_REC = 1, NUCLEO_MIC_STREAM = 2 } nucleo_mic_owner_t;
+nucleo_mic_owner_t nucleo_recorder_owner(void);
+
+// Non-blocking preempt: the physical operator at the keyboard outranks a remote web dictation. If a
+// /api/rec/stream worker owns the mic, ask it to wind down (it releases within ~one socket-send timeout)
+// and return false; the caller then polls nucleo_recorder_owner() and starts once it reads IDLE. Returns
+// true if the mic is already free. A finalizing record-to-SD take (REC) is left alone (returns false).
+bool nucleo_recorder_release_stream(void);
 
 bool        nucleo_recorder_is_recording(void);
 // True until the mic is FULLY released (I2S RX channel closed + WAV finalized) — this lingers ~one read

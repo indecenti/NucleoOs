@@ -102,6 +102,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "5618", "--directory", "apps/clock/www"],
       "port": 5618
+    },
+    {
+      "name": "cz",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/cz-preview-server.mjs"],
+      "port": 7359
     }
   ]
 }

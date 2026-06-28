@@ -331,6 +331,20 @@
     .mic.rec{border-color:var(--danger-line);background:var(--danger-bg);color:var(--err);animation:micpulse 1.1s ease-in-out infinite}
     .mic.busy{border-color:var(--info-line);background:var(--info-bg);color:var(--accent2);cursor:progress;animation:micbusy 1.1s ease-in-out infinite}
     .mic.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line2));cursor:help}
+    /* 🌐 Web-mode toggle (mirrors .mic) */
+    .webtog{flex:none;border:1px solid var(--line2);background:var(--hover);border-radius:var(--r);
+      width:32px;height:30px;cursor:pointer;font-size:14px;align-self:flex-end;line-height:1;display:flex;align-items:center;justify-content:center;
+      filter:grayscale(1);opacity:.65;transition:background var(--t),opacity var(--t),border-color var(--t),box-shadow var(--t)}
+    .webtog:hover{opacity:1;background:var(--hover-strong)}
+    .webtog[aria-pressed="true"]{filter:none;opacity:1;border-color:var(--accent2);
+      background:color-mix(in srgb,var(--accent2) 20%,transparent);box-shadow:0 0 0 1px var(--accent2) inset}
+    /* Sources block under a web-grounded answer */
+    .sources{margin-top:9px;border-top:1px solid var(--line2);padding-top:7px}
+    .sources .lab{display:block;color:var(--muted);font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px}
+    .sources ol{margin:0;padding-left:20px}
+    .sources li{margin:2px 0;font-size:12.5px}
+    .sources a{color:var(--accent2);text-decoration:none}
+    .sources a:hover{text-decoration:underline}
     .mic.held{opacity:.5;cursor:not-allowed;border-color:var(--line2);background:var(--hover);color:var(--muted)}   /* mic Cardputer in uso da un'altra app */
     .mic.rec[data-state="reconnecting"]{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line2))}  /* riconnessione in corso */
     @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--err) 18%,transparent)}}
@@ -971,6 +985,7 @@
         <span class="prompt">›</span>
         <textarea id="q" rows="1" autocomplete="off" autofocus spellcheck="false" aria-label="Messaggio"></textarea>
         <button class="mic" id="mic" type="button" title="Detta a voce" aria-label="Detta a voce" hidden>🎤</button>
+        <button class="webtog" id="webtog" type="button" aria-pressed="false" title="Web: risposte aggiornate con fonti (Groq compound)" aria-label="Web">🌐</button>
         <button class="send" id="send" type="submit">Invia</button>
       </div>
       <div class="status">
@@ -1025,9 +1040,13 @@
     // on first use; _manGet / _fm* helpers it needs are defined further down (ready by the time it runs).
     let _forgeP=null, forgeStore=null, FORGE_MODELS=[], forgeModelById=()=>null;
     const loadForge=()=>_forgeP||(_forgeP=(async()=>{
-      const [ms,rd,lr,lv]=await Promise.all([
-        import('./forge/model-store.js'), import('./forge/readiness.js'),
-        import('./forge/lib-resolver.js'), import('./forge/lib-verify.js') ]);
+      // SERIAL (not Promise.all): these 4 dynamic imports are fetched FROM the device; a 4-parallel
+      // burst collides on the 6-socket httpd pool (see CONCURRENCY GOVERNOR below) and can lru-purge
+      // in-flight requests -> PANIC the no-PSRAM device. One at a time is gentle and exactly as correct.
+      const ms=await import('./forge/model-store.js');
+      const rd=await import('./forge/readiness.js');
+      const lr=await import('./forge/lib-resolver.js');
+      const lv=await import('./forge/lib-verify.js');
       FORGE_MODELS=ms.REGISTRY; forgeModelById=ms.modelById;
       forgeStore=ms.makeModelStore({
         getManifest:async(id)=>await _manGet(forgeModelById(id).sdBase+'manifest.json'),
@@ -1081,9 +1100,10 @@
     })();
 
     // Device presence: when this app runs STANDALONE (not inside the shell, which keeps its own /ws),
-    // open a WebSocket so the Cardputer counts a connected web client → it enters its low-power "remote"
-    // mode (frees RAM for the web OS, shows the connection face, sleeps the panel after 10s idle). The
-    // session cookie is sent automatically (same-origin). Auto-reconnects; periodic re-subscribe keeps the
+    // open a WebSocket to receive the live event stream. NOTE: only the shell connects with /ws?shell=1,
+    // so a standalone app page is tracked + gets events but does NOT put the device into its low-power
+    // "remote" handoff mode — that is intentional (a single app page isn't the web OS; only the shell
+    // blanks the device). The session cookie is sent automatically (same-origin). Auto-reconnects; periodic re-subscribe keeps the
     // socket "recently used" so the device's lru_purge doesn't evict it. Skipped in the shell iframe so an
     // embedded ANIMA never evicts the shell's /ws (firmware MAX_CLIENTS=1, last-wins). Pure presence.
     if (window.top === window.self) (function devicePresence(){
@@ -1127,6 +1147,7 @@
                     edge:'Browser: tutta la cascata offline di ANIMA gira QUI nel browser (WebAssembly) — risposte identiche al Cardputer. Se non sa, recupera dalle card web già in cache (niente rete). Il cervello si scarica una volta; poi funziona anche col Cardputer spento. Nulla lascia il dispositivo.',
                     only:'Online: LLM veri (cloud Grok/Claude → LLM del browser). Come ultima risorsa, PRIMA di scalare sul Cardputer, usa il cervello del browser e indicizza il web.' },
         edgeErr:'Non riesco a caricare ANIMA in locale: scaricamento del cervello non riuscito. Controlla la connessione al dispositivo.',
+        edgeNeedInstall:'ANIMA offline gira in questo browser (WASM), ma il cervello non è ancora installato qui. Installalo una volta da Impostazioni ▸ Modelli (poi risponde in locale anche senza Cardputer), oppure usa la modalità Ibrida/Online.',
         edge:{ lead:'Assistente di NucleoOS che gira INTERAMENTE in questo browser (WebAssembly): offline, privato e istantaneo. Apre app, fa calcoli, dà ora e data, crea file, risponde a domande e impara ciò che gli insegni — senza che nulla lasci il dispositivo.',
                mgmt:'Cervello locale', reload:'Ricarica', cached:'in cache · pronto offline', missing:'non ancora scaricato',
                ready:'ANIMA pronta — gira in locale ⚡',
@@ -1190,6 +1211,7 @@
                     edge:'Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the Cardputer. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the Cardputer off. Nothing leaves the device.',
                     only:'Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the Cardputer, it uses the browser brain and indexes the web.' },
         edgeErr:'Could not load ANIMA locally: brain download failed. Check the device connection.',
+        edgeNeedInstall:'ANIMA offline runs in this browser (WASM), but the brain isn’t installed here yet. Install it once from Settings ▸ Models (then it answers locally even without the Cardputer), or use Hybrid/Online mode.',
         edge:{ lead:"NucleoOS's assistant running ENTIRELY in this browser (WebAssembly): offline, private and instant. It opens apps, does math, tells time and date, creates files, answers questions and learns what you teach it — without anything leaving the device.",
                mgmt:'Local brain', reload:'Reload', cached:'cached · ready offline', missing:'not downloaded yet',
                ready:'ANIMA ready — running locally ⚡',
@@ -1236,6 +1258,10 @@
     const isMac = /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent);
     const mod = isMac ? '⌘' : 'Ctrl';
 
+    // 🌐 Web-mode strings (augment the UI catalog above without editing the big literal).
+    UI.it.webTog='Web: risposte aggiornate con fonti (Groq compound)'; UI.it.webSources='Fonti'; UI.it.webSearching='🌐 Sto cercando sul web…'; UI.it.webOn='Web'; UI.it.webNoKey='La modalità Web richiede una chiave Groq — impostala in Impostazioni ▸ IA.';
+    UI.en.webTog='Web: current answers with sources (Groq compound)'; UI.en.webSources='Sources'; UI.en.webSearching='🌐 Searching the web…'; UI.en.webOn='Web'; UI.en.webNoKey='Web mode needs a Groq key — set it in Settings ▸ AI.';
+
     // ---- state ----------------------------------------------------------------
     let lang    = get('anima.lang','it') === 'en' ? 'en' : 'it';
     let speed   = parseInt(get('anima.speed','14')); if(![0,6,14].includes(speed)) speed=14;
@@ -1252,6 +1278,7 @@
     let useAgents = get('anima.agents','1') !== '0';          // Online: the agentic runtime is the primary engine for any non-proxy key (Claude/Groq/xAI); Gemini stays on single-call cloudAsk
     let agentAuto = get('anima.agentauto','0') === '1';       // auto-approve the agent's mutating actions (default: ask)
     let agentWeb  = get('anima.agentweb','1') !== '0';        // let the agent use web_search
+    let webCompound = get('anima.web','0') === '1';           // 🌐 Web: route the turn to Groq's compound system (built-in web search) for current, CITED answers — Groq-only, browser-direct, overrides the mode when armed
     // ── Voce browser (OUTPUT): legge la risposta FINALE con speechSynthesis. Indipendente dalla voce
     //    ON-DEVICE del Cardputer (/api/tts): qui il vocabolario e' illimitato (adatto a risposte online/lunghe).
     function speakReply(text){
@@ -1577,7 +1604,8 @@
         kind='gpu'; icon='✦'; eng=en?'Local GPU · WebLLM':'GPU locale · WebLLM'; model=prettyModel(CODER_MODEL); host=en?'browser · WebGPU':'browser · WebGPU';
       } else if(T==='remote' || D==='online' || ['grok','teacher','cloud','online','agent','wiki','wikidata','weather','fx'].includes(I)){   // online tier (incl. the firmware online-only 'cloud' intent, code answers, and the multi-agent path)
         kind='cloud'; icon='☁';
-        if(I==='agent'){ icon='🤖'; eng=en?'Online · Multi-agent':'Online · Multi-agente'; model=(keyCfg&&keyCfg.model)||'Claude'; host=hostOf((keyCfg&&keyCfg.base)||''); }
+        if(I==='webcompound'){ icon='🌐'; eng=en?'Online · Web search':'Online · Ricerca web'; model='groq/compound'; host='api.groq.com'; }
+        else if(I==='agent'){ icon='🤖'; eng=en?'Online · Multi-agent':'Online · Multi-agente'; model=(keyCfg&&keyCfg.model)||'Claude'; host=hostOf((keyCfg&&keyCfg.base)||''); }
         else if(I==='weather'){ eng=en?'Online · Weather':'Online · Meteo'; model='Open-Meteo'; }
         else if(I==='fx'){ eng=en?'Online · Exchange':'Online · Cambio valute'; model='exchangerate'; }
         else if(I==='wiki'){ eng='Online · Wikipedia'; model='REST API'; }
@@ -1735,6 +1763,7 @@
       if(h.fileop && h.fileop.view){ renderFileView(body, h.fileop.view); body.dataset.raw=h.text||''; return; }
       if(h.fileop && h.fileop.invite){ renderMd(body, h.text||''); body.dataset.raw=h.text||''; appendInviteCard(body); return; }
       renderMd(body, h.text||''); body.dataset.raw=h.text||'';
+      if(h.sources && h.sources.length) appendSources(body, h.sources);   // 🌐 web-grounded: restore Sources on reload
       if(!h.emap && h.trace&&h.trace.length) addTrace(body, h.trace);   // legacy turns: trace tree (new turns use the engine map)
       (h.lines||[]).forEach(l=>addLined(body, l.text, l.kind));
       if(h.card) buildCard(body, cardFromDescriptor(h.card));
@@ -1969,15 +1998,19 @@
         +'.prov-act button{padding:7px 14px;border-radius:8px;border:1px solid var(--line2,#2a3344);background:var(--chip-bg,#1a2230);color:var(--text,#eaf0ff);font-size:12px;cursor:pointer}'
         +'.prov-act button.pri{background:linear-gradient(135deg,var(--accent,#5bd6c8),var(--accent2,#8ab4ff));color:#0b0f17;border:0;font-weight:700}'
         +'.prov-card.tut .prov-bar,.prov-card.tut .prov-meta{display:none}.prov-card.tut .prov-act{flex-direction:column}'
+        +'.prov-cancel{margin:12px auto 0;padding:7px 16px;border-radius:8px;border:1px solid var(--line2,#2a3344);background:var(--chip-bg,#1a2230);color:var(--text,#eaf0ff);font-size:12px;cursor:pointer}'
+        +'.prov-cancel:hover{border-color:var(--accent,#5bd6c8)}.prov-cancel:disabled{opacity:.6;cursor:default}'
         +'.tut-list{text-align:left;margin:6px 0 0;padding-left:18px;line-height:1.7;font-size:12px;color:var(--muted,#9aa7bd)}.tut-list li{margin:3px 0}';
       document.head.appendChild(css);
       const el=document.createElement('div'); el.className='prov-scrim'; el.setAttribute('role','dialog'); el.setAttribute('aria-modal','true');
       el.innerHTML='<div class="prov-card"><div class="pi">⚡</div><h3 class="pt"></h3><p class="pd"></p>'
         +'<div class="prov-bar"><i></i></div><div class="prov-meta"><span class="pf"></span><span class="pp"></span></div>'
+        +'<button class="prov-cancel" type="button" style="display:none"></button>'
         +'<div class="prov-tip"></div><div class="prov-act"><button class="pri pretry"></button><button class="pdev"></button></div></div>';
       document.body.appendChild(el); _provEl=el; return el;
     }
-    function provShow(){ const e=provEl();
+    function provShow(onCancel){ const e=provEl();
+      e.querySelector('.pi').textContent='⚡';
       e.querySelector('.pt').textContent = lang==='en'?'Setting up ANIMA on this device':'Preparo ANIMA su questo dispositivo';
       e.querySelector('.pd').textContent = lang==='en'
         ? 'Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the Cardputer off. One-time download.'
@@ -1988,6 +2021,11 @@
       e.querySelector('.prov-card').classList.remove('tut');     // reset from a prior tutorial view
       e.querySelector('.prov-act').classList.remove('on');
       e.querySelector('.prov-bar i').style.width='0'; e.querySelector('.pp').textContent=''; e.querySelector('.pf').textContent='';
+      // ALWAYS cancellable: a one-click abort that stops the in-flight download and falls back to the device.
+      const cx=e.querySelector('.prov-cancel'); cx.disabled=false;
+      cx.textContent = lang==='en'?'Cancel download':'Annulla download';
+      cx.style.display = onCancel ? '' : 'none';
+      cx.onclick = onCancel ? (()=>{ cx.disabled=true; cx.textContent = lang==='en'?'Cancelling…':'Annullo…'; try{ onCancel(); }catch{} }) : null;
       e.classList.add('on');
     }
     function provUpdate(p){
@@ -2003,16 +2041,47 @@
     }
     function provError(){
       const e=provEl(), act=e.querySelector('.prov-act');
+      e.querySelector('.prov-cancel').style.display='none';
       e.querySelector('.pd').textContent = lang==='en'
         ? 'Could not download the brain from the device. Check the connection and retry — or use the device (Hybrid) instead.'
         : 'Non riesco a scaricare il cervello dal dispositivo. Controlla la connessione e riprova — oppure usa il dispositivo (Ibrida).';
       const retry=e.querySelector('.pretry'), dev=e.querySelector('.pdev');
       retry.textContent=lang==='en'?'Retry':'Riprova'; dev.textContent=lang==='en'?'Use device':'Usa il dispositivo';
-      retry.onclick=()=>{ act.classList.remove('on'); ensureEdge(true).catch(()=>{}); };
+      retry.onclick=()=>{ act.classList.remove('on'); ensureEdge(true, true).catch(()=>{}); };   // Retry IS consent
       dev.onclick=()=>{ provHide(); chooseMode('on'); };
       act.classList.add('on');
     }
-    function provHide(){ provEl().classList.remove('on'); }
+    function provHide(){ const e=provEl(); const cx=e.querySelector('.prov-cancel'); if(cx) cx.style.display='none'; e.classList.remove('on'); }
+
+    // CONSENT GATE — the brain download (~14 MB) NEVER starts on its own; we ask first and only proceed on an
+    // explicit "Scarica". Reuses the prov-card as a QUESTION (progress bar/meter hidden via .tut). Resolves
+    // true = go ahead (caller continues into provShow()/download), false = use the device instead.
+    let _consentP=null;
+    function provConsent(){
+      if(_consentP) return _consentP;
+      _consentP=new Promise((resolve)=>{
+        const e=provEl(), card=e.querySelector('.prov-card');
+        e.querySelector('.prov-cancel').style.display='none';    // the question has its own decline button
+        card.classList.add('tut');                               // hide progress bar/meter: this is a question
+        e.querySelector('.pi').textContent='⚡';
+        e.querySelector('.pt').textContent = lang==='en'?'Download ANIMA’s offline brain?':'Scaricare il cervello offline di ANIMA?';
+        e.querySelector('.pd').textContent = lang==='en'
+          ? 'To run ANIMA locally in this browser I need to download its brain (~14 MB) from the device, once. Then it works fast, private, and with the Cardputer off.'
+          : 'Per far girare ANIMA in locale in questo browser devo scaricare il suo cervello (~14 MB) dal dispositivo, una sola volta. Poi funziona veloce, privato e anche col Cardputer spento.';
+        e.querySelector('.prov-tip').innerHTML = lang==='en'
+          ? 'Nothing downloads without your OK. You can switch to <b>Hybrid</b> (use the device) anytime.'
+          : 'Niente parte senza il tuo OK. Puoi passare a <b>Ibrida</b> (usa il dispositivo) quando vuoi.';
+        const act=e.querySelector('.prov-act'); act.classList.add('on');
+        const yes=e.querySelector('.pretry'), no=e.querySelector('.pdev');
+        yes.textContent = lang==='en'?'Download (~14 MB)':'Scarica (~14 MB)';
+        no.textContent  = lang==='en'?'Use device':'Usa il dispositivo';
+        const done=(v)=>{ _consentP=null; act.classList.remove('on'); card.classList.remove('tut'); resolve(v); };
+        yes.onclick=()=>done(true);
+        no.onclick =()=>{ provHide(); done(false); chooseMode('on'); };   // decline → fall back to the device
+        e.classList.add('on');
+      });
+      return _consentP;
+    }
 
     // First time the local engine is ready, show a one-shot tutorial in the same overlay; afterwards just
     // confirm with a toast. Reuses the two action buttons as "Start" + "Try an example".
@@ -2021,6 +2090,7 @@
       if(localStorage.getItem('anima.edge.seen')){ provHide(); toast(t.edge.ready,'ok'); return; }
       localStorage.setItem('anima.edge.seen','1');
       const e=provEl();
+      e.querySelector('.prov-cancel').style.display='none';
       e.querySelector('.prov-card').classList.add('tut');
       e.querySelector('.pi').textContent='⚡';
       e.querySelector('.pt').textContent=t.edge.tutTitle;
@@ -2080,7 +2150,7 @@
       if(!confirm(lang==='en'?"Re-download ANIMA's brain (~14 MB)?":'Riscaricare il cervello di ANIMA (~14 MB)?')) return;
       try{ const e=await edgeEngine(); await e.refresh(); }catch{}
       _edgeReady=false; _ensuring=null;
-      ensureEdge(true).then(()=>{ updateEdgeRow(); }).catch(()=>{});
+      ensureEdge(true, true).then(()=>{ updateEdgeRow(); }).catch(()=>{});   // confirm() above IS consent
     });
 
     // Settings · Engine: the in-browser GPU model picker. WebLLM downloads the chosen model from the CDN on
@@ -2121,20 +2191,48 @@
       }
     }
 
-    // Ensure the local engine is loaded. blocking=true shows the gate and resolves only when ready
-    // (on failure -> the gate offers Retry / switch to the device). Idempotent; shared in-flight load.
-    async function ensureEdge(blocking){
+    // Ensure the local engine is loaded. Two guarantees the user demanded:
+    //  1. NEVER auto-download: a network pull happens ONLY for an uncached pack and ONLY after explicit
+    //     consent (provConsent, or consented=true when this call IS the consent — Retry/Re-download). An
+    //     already-cached pack mounts SILENTLY from IndexedDB (no network, no dialog, no progress bar).
+    //  2. ALWAYS cancellable: the download runs under an AbortController whose abort is wired to the
+    //     progress modal's "Annulla" button; cancelling stops it and falls back to the device.
+    async function ensureEdge(blocking, consented){
       if(_edgeReady) return;
       if(_ensuring) return _ensuring;
-      if(blocking) provShow();
+      // Already cached → instant, silent mount. No network, nothing to download, nothing to cancel.
+      let cached=false; try{ cached = await (await edgeEngine()).ready(); }catch{}
+      if(cached){
+        _ensuring=(async()=>{ try{ const eng=await edgeEngine(); if(await eng.loadIfCached()){ _edgeReady=true; try{ applyAll(); }catch{} } }catch{} })();
+        try{ await _ensuring; } finally { _ensuring=null; }
+        return;
+      }
+      // Not cached → a real ~14 MB download. It NEVER starts on its own: ask first unless this call already
+      // carries consent. Declining throws EDGE_DECLINED so the cascade falls back to the device.
+      if(!consented){
+        if(!(await provConsent())) throw Object.assign(new Error('edge download declined'),{code:'EDGE_DECLINED'});
+        if(_edgeReady) return; if(_ensuring) return _ensuring;   // re-check after the (async) consent await
+      }
+      const ac=(typeof AbortController!=='undefined')?new AbortController():null;
+      if(blocking) provShow(ac?(()=>ac.abort()):null);   // show the cancellable progress modal
       _ensuring=(async()=>{
         const eng=await edgeEngine();
-        if(!eng.isLoaded()) await eng.load((p)=>{ if(blocking) provUpdate(p); });
+        if(!eng.isLoaded()) await eng.load((p)=>{ if(blocking) provUpdate(p); }, ac&&ac.signal);
         _edgeReady=true; if(blocking) provReady(); else provHide();
         try{ applyAll(); }catch{}                 // refresh the ⚡ pill + local-engine row now it's ready
       })();
-      try{ await _ensuring; } catch(e){ _ensuring=null; if(blocking) provError(); throw e; }
+      try{ await _ensuring; } catch(e){ _ensuring=null;
+        if(e && e.code==='CANCELLED'){ provHide(); try{ toast(lang==='en'?'Download cancelled — using the device':'Download annullato — uso il dispositivo','warn'); }catch{} try{ chooseMode('on'); }catch{} throw e; }
+        if(blocking) provError(); throw e;
+      }
       _ensuring=null;
+    }
+    // Boot-time mount: load the brain ONLY if the user already downloaded it before (cache hit → no network,
+    // no dialog). Cold cache → do nothing; the download waits for an explicit user action via the consent gate.
+    async function edgeMountIfCached(){
+      if(_edgeReady) return; if(_ensuring) return _ensuring;
+      _ensuring=(async()=>{ try{ const eng=await edgeEngine(); if(await eng.loadIfCached()){ _edgeReady=true; try{ applyAll(); }catch{} } }catch{} })();
+      try{ await _ensuring; } finally { _ensuring=null; }
     }
     async function edgeAsk(q){
       await ensureEdge(true);                 // gate (no-op if already provisioned at launch)
@@ -2196,33 +2294,6 @@
       }catch{ return null; }
     }
 
-    // BRANCH CRAWL — "scarica il ramo X": the WASM expands ANIMA's offline knowledge. A BOUNDED, targeted
-    // bilingual crawl of a topic + its top sub-articles, catalogued in the browser's persistent web store
-    // (recallable offline) and exportable for permanent promotion into the device's protected AKB5 corpus.
-    // Gated by the OS download-lock (single transfer at a time) and hard-capped so it never floods SD/RAM.
-    const BRANCH_RE = lang => /^(?:scarica(?:mi)?\s+(?:il\s+)?ramo|approfondisci|studia|cataloga|espandi|download\s+(?:the\s+)?branch|deep[\s-]?dive(?:\s+into)?|study|explore)\s+(?:su\s+|di\s+|la\s+|il\s+|lo\s+|le\s+|gli\s+|i\s+|about\s+|the\s+|on\s+)?(.+)$/i;
-    function branchTopic(q){ const m=String(q||'').trim().match(BRANCH_RE(lang)); const t=m&&m[1]?m[1].replace(/[?.!]+$/,'').trim():''; return t.length>=3?t:''; }
-    async function runBranch(topic){
-      addUser(topic?('· '+ (lang==='en'?'branch: ':'ramo: ')+topic):''); if(topic){ history.push({role:'user',text:(lang==='en'?'branch: ':'ramo: ')+topic}); persist(); }
-      if(!navigator.onLine){ sysLine(lang==='en'?'Offline — a branch crawl needs the internet.':'Offline — il crawl di un ramo richiede internet.'); return; }
-      const think=startThinking();
-      let res=null;
-      try{
-        const { w, s } = await webidxMod();
-        let gate=(label,fn)=>fn(); try{ gate=(await import('/dlgate.js')).withDownloadLock; }catch{}
-        res = await gate(lang==='en'?('ANIMA · branch '+topic):('ANIMA · ramo '+topic), ()=>
-          w.crawlBranch(topic, lang, { store:s.webStore, now:Date.now() }, { maxPages:8, byteBudget:180*1024 }));
-      }catch(e){ res=null; }
-      think.remove();
-      if(!res || !res.cards || !res.cards.length){
-        sysLine(lang==='en'?('Could not catalogue "'+topic+'" — no clear topic found.'):('Non sono riuscito a catalogare "'+topic+'" — nessun argomento chiaro.')); return; }
-      const kb=(res.bytes/1024).toFixed(1);
-      const msg = lang==='en'
-        ? ('Catalogued the **'+res.seed+'** branch: **'+res.cards.length+'** bilingual cards ('+kb+' KB'+(res.skipped?(', '+res.skipped+' already known'):'')+'). They are recallable offline now, and ready to bake into the device\'s permanent AKB5 corpus (tools/anima/web-promote.mjs).')
-        : ('Catalogato il ramo **'+res.seed+'**: **'+res.cards.length+'** voci bilingui ('+kb+' KB'+(res.skipped?(', '+res.skipped+' già note'):'')+'). Già richiamabili offline, e pronte per la promozione permanente nel corpus AKB5 del dispositivo (tools/anima/web-promote.mjs).');
-      const {body}=botShell(history.length, true); await type(body, msg); history.push({role:'bot',text:msg}); persist();
-    }
-
     // ---- browser-direct cloud: in "Online" mode the browser talks to Claude/Groq DIRECTLY, so the
     // heavy TLS handshake + token generation never touch the PSRAM-less Cardputer. The key is the one
     // stored on the device (loaded by loadKey, paired). Anthropic needs the dangerous-direct-browser
@@ -2254,6 +2325,53 @@
       const j = await resp.json().catch(()=>null);
       if(!resp.ok || !j || j.error) throw new Error((j&&j.error&&(j.error.message||j.error))||('HTTP '+resp.status));
       return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    }
+    // 🌐 WEB MODE (Groq compound). compound is GROQ-ONLY, so resolve a usable Groq creds set: the active
+    // provider if it IS Groq, else the stored 'openai' key (ai.js calls Groq the 'openai' provider). Require
+    // the base to be api.groq.com (a user could repoint 'openai' at real OpenAI, which has no compound).
+    function groqCfg(){
+      const cand = (keyCfg.provider==='openai' && keyCfg.key) ? keyCfg
+                 : (keyCfg.keys && keyCfg.keys.openai && keyCfg.keys.openai.key) ? keyCfg.keys.openai : null;
+      if(!cand || !cand.key) return null;
+      const base=(cand.base||AI.PROVIDERS.openai.base).replace(/\/+$/,'');
+      if(!/groq\.com/i.test(base)) return null;          // compound exists only on Groq
+      return { base, key:cand.key };
+    }
+    const hasGroq = () => !!groqCfg();
+    // One NON-streamed call to groq/compound: it autonomously web-searches, so we get the answer +
+    // executed_tools[].search_results back whole -> render markdown + a clean Sources list (deduped by URL).
+    // A firm system prompt suppresses compound's raw "I searched / here's a table / print(...)" process dumps.
+    async function cloudCompoundChat(q){
+      const g=groqCfg(); if(!g) return null;
+      const today=(()=>{ try{ return new Date().toISOString().slice(0,10); }catch{ return ''; } })();
+      const sys=(lang==='en'
+        ? 'You are a concise web research assistant. Search the web as needed and answer DIRECTLY in English. Use Markdown. Cite sources inline as [1], [2]… matching the order of the Sources list the UI appends. Do NOT narrate your process, do NOT print your search results as a table, and do NOT show code or its output unless explicitly asked. Keep it tight.'
+        : 'Sei un assistente di ricerca web conciso. Cerca sul web quando serve e rispondi DIRETTAMENTE in italiano. Usa Markdown. Cita le fonti inline come [1], [2]… nello stesso ordine dell\'elenco Fonti che l\'interfaccia aggiunge. NON raccontare il tuo processo, NON stampare i risultati di ricerca come tabella e NON mostrare codice o il suo output se non richiesto esplicitamente. Sii sintetico.')
+        + (today?(lang==='en'?'\nToday is '+today+'.':'\nOggi è '+today+'.'):'');
+      const msgs=history.filter(h=>h.role==='user'||h.role==='bot').slice(-8).map(h=>({role:h.role==='bot'?'assistant':'user', content:String(h.text||'')}));
+      const resp=await fetch(g.base+'/chat/completions', { method:'POST',
+        headers:{ 'content-type':'application/json', 'authorization':'Bearer '+g.key },
+        body: JSON.stringify({ model:'groq/compound', max_tokens:1024, temperature:0.3, stream:false,
+                               messages:[{role:'system',content:sys},...msgs] }) });
+      const j=await resp.json().catch(()=>null);
+      if(!resp.ok || !j || j.error) throw new Error((j&&j.error&&(j.error.message||j.error))||('HTTP '+resp.status));
+      const m=(j.choices && j.choices[0] && j.choices[0].message) || {};
+      const full=m.content||'';
+      const seen=new Set(), sources=[];
+      for(const tool of (m.executed_tools||[])){ const rs=tool.search_results && tool.search_results.results;
+        if(Array.isArray(rs)) for(const x of rs){ if(x && x.url && !seen.has(x.url)){ seen.add(x.url); sources.push({title:x.title, url:x.url}); } } }
+      if(!full) return null;
+      return { reply:full, intent:'webcompound', confidence:85, domain:'online', sources, substrate:'M3', model:'groq/compound' };
+    }
+    // Append a compact, deduped "Sources" list under a web-grounded answer (titles are textContent -> no markup injection).
+    function appendSources(bodyEl, sources){
+      if(!sources || !sources.length) return;
+      const wrap=document.createElement('div'); wrap.className='sources';
+      const lab=document.createElement('span'); lab.className='lab'; lab.textContent=UI[lang].webSources; wrap.appendChild(lab);
+      const ol=document.createElement('ol');
+      for(const s of sources){ const li=document.createElement('li'); const a=document.createElement('a');
+        a.href=s.url; a.target='_blank'; a.rel='noreferrer noopener'; a.textContent=s.title||s.url; li.appendChild(a); ol.appendChild(li); }
+      wrap.appendChild(ol); bodyEl.appendChild(wrap);
     }
     // (cloudPing lives in shell/ai.js now — the shared key manager uses AI.cloudPing for the "Prova" test.)
     // Online-only cloud chat ALWAYS goes browser-direct — even for a key stored on the device (exec='device').
@@ -2413,8 +2531,6 @@
     async function ask(q){
       q=(q||'').trim(); if(!q || busy) return;
       if(q[0]==='/' && handleSlash(q)) return;
-      // "scarica il ramo X" / "approfondisci X": targeted bilingual branch crawl that grows the offline brain.
-      { const bt=branchTopic(q); if(bt){ busy=true; setStop(true); closeSlash(); try{ await runBranch(bt); } finally { endTurn(); } return; } }
       // workspace file agent: a clear file intent runs here (the "hands"); else fall through to ANIMA.
       const fintent = parseFileIntent(q);
       if(fintent){ if(fs.hasRoot()){ runFileIntent(q, fintent); return; } inviteWorkspace(q); return; }
@@ -2423,16 +2539,23 @@
       addUser(q); history.push({role:'user',text:q}); persist();
       const think=startThinking();
       let r; const _t0=Date.now();   // pipeline latency: measured across the whole brain resolution (incl. fallbacks)
-      if(mode==='edge'){
-        // BROWSER mode: offline-first, in this browser. offlineAnswer runs the WASM brain → web index → and,
-        // only if both miss, the Cardputer. The web index is RECALL-ONLY by default (cached cards, no network:
-        // nothing leaves the device). Opt-in `anima.edgeWeb` turns it into a CERTAIN-KNOWLEDGE-ON-DEMAND hub:
-        // on a miss it fetches the grounded answer LIVE from Wikipedia and caches it, so the browser's offline
-        // knowledge GROWS through use. An edge hiccup degrades gracefully to the device instead of dead-ending.
-        r = await offlineAnswer(sendQ, lang, { prefer:'browser', silent:false, webOnline: get('anima.edgeWeb','0')==='1' });
-        if(!r){ think.remove(); const {body}=botShell(history.length, false); const msg=UI[lang].edgeErr||UI[lang].offline;
+      // 🌐 WEB: when armed, an explicit web-grounded turn via Groq compound takes precedence over the selected
+      // mode. Browser-direct, Groq-only. On no key / failure it falls through to the normal engine (never dead-ends).
+      if(webCompound){ await ensureKeyLoaded(); if(hasGroq()){ try{ r = await cloudCompoundChat(sendQ); }catch(e){ r = null; } } }
+      if(!r && mode==='edge'){
+        // BROWSER mode: offline runs ENTIRELY in this browser — WASM brain → web index. It NEVER scales onto
+        // the Cardputer (skipDevice:true): the no-PSRAM chip can't run the offline L1 cascade for a web client
+        // (it OOMs → 503) and loading it only steals the RAM the web server needs — while a web client is
+        // connected the device keeps L1 unloaded by design. The web index is RECALL-ONLY by default (cached
+        // cards, no network); opt-in `anima.edgeWeb` lets it fetch grounded answers LIVE from Wikipedia and
+        // cache them, so the browser's offline knowledge GROWS through use. If the WASM brain isn't installed
+        // yet we point the user at the existing one-time install (Settings → Models) — never an auto-download.
+        r = await offlineAnswer(sendQ, lang, { prefer:'browser', silent:false, webOnline: get('anima.edgeWeb','0')==='1', skipDevice:true });
+        if(!r){ think.remove(); const {body}=botShell(history.length, false);
+               const have = await browserProvisioned().catch(()=>false);
+               const msg = have ? (UI[lang].edgeErr||UI[lang].offline) : (UI[lang].edgeNeedInstall||UI[lang].edgeErr);
                await type(body, msg); history.push({role:'bot',text:msg}); persist(); setDot('err'); endTurn(); return; }
-      } else {
+      } else if(!r){
         // GPU-locale translation ladder: device dictionary → local browser GPU model (WebLLM) → cloud.
         if(mode==='only') await ensureKeyLoaded();   // make sure keyCfg is hydrated so browser-direct fires on the first turn too
         try{ r = await routeTranslate(q); }catch{ r = null; }
@@ -2509,12 +2632,13 @@
       const hidx = history.length;          // this bot turn's index after push below
       const { body, turn }=botShell(hidx, true);
       await type(body, reply);
+      if(r.sources && r.sources.length) appendSources(body, r.sources);   // 🌐 web-grounded: cited Sources under the answer
       speakReply(reply);   // voce browser (speechSynthesis), se attiva: legge la risposta finale per intero
 
       // accumulate a serialisable descriptor of everything we render under the reply
       const entry={ role:'bot', text:reply, engine:true,
         meta:{domain:r.domain,intent:r.intent,confidence:r.confidence,memory:r.memory,corrected:r.corrected,state:r.state,incoherent:r.incoherent},
-        trace:null, lines:[], card:null, banner:null, clarify:null };
+        trace:null, lines:[], card:null, banner:null, clarify:null, sources:(r.sources&&r.sources.length?r.sources:null) };
 
       // multi-step reasoning plan kept for export; rendered inside the engine map (below) as the "Steps" node
       if(r.trace && r.trace.includes(' > ')) entry.trace=r.trace.split(' > ');
@@ -2801,7 +2925,6 @@
       if(cmd==='compact'||cmd==='compatta'){ const n=compactSession(true); toast(n?(lang==='en'?'Context compacted in background ('+n+' turns)':'Contesto compattato in background ('+n+' turni)'):(lang==='en'?'Nothing to compact':'Niente da compattare'),'ok'); return true; }
       if(cmd==='forge'){ addUser(q); window.open('forge-demo.html','_blank'); sysLine(lang==='en'?'Opening **Forge** — the offline agentic coder (you pick the engine: GPU/CPU/cloud/device).':'Apro **Forge** — il coder agentico offline (scegli tu il motore: GPU/CPU/cloud/device).'); return true; }
       if(['models','modelli','modello'].includes(cmd)){ window.openModelManager&&window.openModelManager(); return true; }
-      if(['ramo','branch','approfondisci','studia'].includes(cmd)){ const topic=q.slice(1).replace(/^\S+\s*/,'').trim(); if(!topic){ sysLine(lang==='en'?'Usage: /branch <topic> — e.g. /branch World War II':'Uso: /ramo <argomento> — es. /ramo Seconda guerra mondiale'); return true; } busy=true; setStop(true); closeSlash(); runBranch(topic).finally(endTurn); return true; }
       return false;
     }
     const slashEl=$('slash'); let slashSel=0, slashItems=[];
@@ -3067,7 +3190,17 @@
     // checked separately (Cache API / range probes), so a cached spec can never hide a fresh download. Lets
     // the Settings panel reopen — and openSettings' double render — reuse one device fetch per manifest.
     const _manCache=new Map();
-    const _manGet=async(u)=>{ if(_manCache.has(u)) return _manCache.get(u); const j=await (await fetch(u,{cache:'no-store'})).json(); _manCache.set(u,j); return j; };
+    // Cache the NEGATIVE result too (null on 404/parse-fail): an un-provisioned model's manifest is absent
+    // on the SD by design (it resolves from the embedded registry), so without this every status/readiness
+    // re-render re-fired the same 404 at the no-PSRAM device. One probe per manifest URL per session.
+    const _manGet=async(u)=>{ if(_manCache.has(u)) return _manCache.get(u);
+      let j=null; try{ const r=await fetch(u,{cache:'no-store'}); if(r.ok) j=await r.json(); }catch{ j=null; }
+      _manCache.set(u,j); return j; };
+    // Memoize Range-probe RESULTS (one probe = one /api/fs/read on the device). Reopening Settings used to
+    // re-fire the whole burst even though SD state hadn't changed; now each shard URL is probed at most
+    // once per session. Invalidated explicitly in the install + verify finally blocks (SD may have changed).
+    const _probeMemo=new Map();
+    const _probeWrap=(probe)=>async(url)=>{ if(_probeMemo.has(url)) return _probeMemo.get(url); const r=await probe(url); _probeMemo.set(url,r); return r; };
     // forgeStore is built lazily inside loadForge() (see top) so the model-store stack stays off the boot path.
     let _fmBusy=false;
     // A row per model. The status line doubles as a live tutorial: it states whether the engine can run
@@ -3099,7 +3232,7 @@
             const dlLock = dl&&dl.withDownloadLock ? (label,fn)=>dl.withDownloadLock(label,fn) : null;
             await startInstall({ store:forgeStore, model:m, caps, lang, dlLock });   // blocking modal handles progress/cancel/errors
           }catch(e){ console.warn('[install]',e); }
-          finally{ _fmBusy=false; await renderForgeModels(); }
+          finally{ _fmBusy=false; _probeMemo.clear(); await renderForgeModels(); }   // SD state may have changed -> drop probe cache
         });
         wrap.appendChild(btn); wrap.appendChild(prog); row.appendChild(wrap); box.appendChild(row);
       }
@@ -3113,9 +3246,9 @@
       const F=await loadForge();
       try{ if((await forgeStore.status(id))==='cached') return true; }catch{}
       const m=forgeModelById(id); if(!m) return false;
-      try{ const man=await _manGet(location.origin+m.sdBase+'manifest.json');
+      try{ const man=await _manGet(location.origin+m.sdBase+'manifest.json'); if(!man) return false;
         const files=[...(man.shards||[]),...(man.aux||[])]; if(!files.length) return false;
-        const probe=F.makeRangeProbe(undefined,(url)=>{const f=files.find(x=>url.endsWith('/'+x.name));return f?f.bytes:null;});
+        const probe=_probeWrap(F.makeRangeProbe(undefined,(url)=>{const f=files.find(x=>url.endsWith('/'+x.name));return f?f.bytes:null;}));
         for(const f of files){ const r=await probe(location.origin+m.sdBase+f.name); if(!r.ok) return false; } return true;
       }catch{ return false; }
     }
@@ -3124,7 +3257,7 @@
       const F=await loadForge();
       const tok=++_agRenderTok;                                  // latest-render-wins: openSettings calls this twice (immediate + after loadKey)
       const man=await _agManifest();
-      const probeDetail=F.makeRangeProbe(undefined, F.expectedBytesFromManifest(man,_agSD));
+      const probeDetail=_probeWrap(F.makeRangeProbe(undefined, F.expectedBytesFromManifest(man,_agSD)));
       const caps={ webgpu:!!navigator.gpu, wasm:typeof WebAssembly!=='undefined', online:navigator.onLine, hasKey:!!(keyCfg&&keyCfg.key), crossOriginIsolated:!!self.crossOriginIsolated, deviceBrain:true };
       const matrix=await F.readinessMatrix(['webgpu','wasm','cloud','device','demo'],{ probeDetail, weightsReady:_agWeightsReady, caps, base:_agSD });
       if(tok!==_agRenderTok) return;                             // a newer render started → drop this stale one
@@ -3154,10 +3287,15 @@
         if(stat) stat.textContent=bad.length?('✗ '+bad.length+'/'+res.length+(lang==='en'?' FAILED — re-sync the SD: ':' FALLITE — re-sync SD: ')+bad.map(b=>b.path+' ('+b.reason+')').join(', '))
           :(lang==='en'?('✓ checksum-verified: all '+res.length+' libs match SHA-256 (not just size)'):('✓ checksum-verificate: tutte le '+res.length+' lib combaciano con SHA-256 (non solo size)'));
       }catch(e){ if(stat) stat.textContent='✗ '+String(e.message||e); }
-      finally{ _agVerifyBusy=false; if(btn) btn.disabled=false; }
+      finally{ _agVerifyBusy=false; _probeMemo.clear(); if(btn) btn.disabled=false; }   // a deep verify implies SD state may have changed
     }
     function openSettings(open){ const o = open===undefined ? !panel.classList.contains('open') : open;
-      panel.classList.toggle('open',o); scrim.classList.toggle('open',o); $('gear').classList.toggle('spin',o); if(o){ mountKeyPanel(); loadKey().then(()=>renderForgeReadiness()).catch(()=>{}); renderForgeModels(); renderForgeReadiness(); const vb=$('verify-sd-btn'); if(vb&&!vb._wired){ vb._wired=true; vb.addEventListener('click',runForgeVerify); } } }
+      panel.classList.toggle('open',o); scrim.classList.toggle('open',o); $('gear').classList.toggle('spin',o);
+      if(o){ mountKeyPanel(); renderForgeModels();
+        // One readiness render — AFTER loadKey so caps.hasKey is fresh; the old synchronous renderForgeReadiness()
+        // doubled the device Range-probe burst for nothing (computed on stale key state, then re-rendered).
+        loadKey().then(()=>renderForgeReadiness()).catch(()=>{});
+        const vb=$('verify-sd-btn'); if(vb&&!vb._wired){ vb._wired=true; vb.addEventListener('click',runForgeVerify); } } }
     $('gear').addEventListener('click',()=>openSettings());
 
     // ---- settings: tabbed navigation -----------------------------------------
@@ -3287,6 +3425,11 @@
     for(const b of $('set-agents').children)   b.addEventListener('click',()=>{ useAgents=b.dataset.a==='1'; set('anima.agents',useAgents?'1':'0'); applyAll(); });
     for(const b of $('set-agentauto').children) b.addEventListener('click',()=>{ agentAuto=b.dataset.aa==='1'; set('anima.agentauto',agentAuto?'1':'0'); applyAll(); });
     for(const b of $('set-agentweb').children)  b.addEventListener('click',()=>{ agentWeb=b.dataset.aw==='1'; set('anima.agentweb',agentWeb?'1':'0'); applyAll(); });
+    // 🌐 Web toggle: arm only if a Groq key is reachable (compound is Groq-only); otherwise point the user to Settings ▸ AI.
+    $('webtog').addEventListener('click', async ()=>{
+      if(!webCompound){ await ensureKeyLoaded(); if(!hasGroq()){ sysLine(UI[lang].webNoKey); return; } }
+      webCompound=!webCompound; set('anima.web', webCompound?'1':'0'); applyAll(); input.focus();
+    });
     $('ctx-inspect').addEventListener('click',()=>{ openSettings(false); openInspector(); });
     $('ctx-meter').addEventListener('click',()=>openInspector());
     $('q-mode').addEventListener('click',()=>chooseMode(mode==='edge'?'on':mode==='on'?'only':'edge'));
@@ -3348,6 +3491,7 @@
       onseg('set-lang','l',lang); onseg('set-mode','m',mode); onseg('set-theme','t',theme); onseg('set-size','z',fsize);
       onseg('set-speed','s',speed); onseg('set-details','d',detMode); onseg('set-sugg','g',suggOn?'1':'0'); onseg('set-compact','c',autoCompact?'1':'0');
       onseg('set-agents','a',useAgents?'1':'0'); onseg('set-agentauto','aa',agentAuto?'1':'0'); onseg('set-agentweb','aw',agentWeb?'1':'0');
+      { const wb=$('webtog'); if(wb){ wb.setAttribute('aria-pressed', webCompound?'true':'false'); wb.title=UI[lang].webTog; } }
       onseg('set-voicesrc','vs',curVoiceSrc());
       onseg('set-webvoice','wv',webVoice?'1':'0');
       try{ updateMeter(); }catch{}   // refresh the token-budget meter for the active mode
@@ -3674,13 +3818,11 @@
     loadSessions(); history=activeSession().history;
     document.documentElement.setAttribute('data-theme',theme);
     applyAll(); autogrow(); renderAll();
-    // BROWSER mode is the default, but the multi-MB edge-brain provision and the workspace read are the
-    // heaviest boot actors — run them at IDLE (after first paint) so ANIMA's fetch burst never coincides
-    // with a sibling app's launch over the shared 6-socket httpd pool (the concurrent-open reboot). On a
-    // warm IndexedDB cache ensureEdge mounts from cache cheaply; on a cold cache the multi-MB /api/fs/read
-    // loop now runs at idle behind the dlgate lock, never overlapping the launch window. edgeAsk re-gates
-    // provision on first query, so deferring boot provision is safe.
-    if(mode==='edge') idle(()=>ensureEdge(true).catch(()=>{}), 300);
+    // BROWSER mode is the default, but we NEVER auto-download the multi-MB brain at boot. At idle (after first
+    // paint) we only MOUNT it if the user already downloaded it before (warm IndexedDB cache → no network, no
+    // dialog); a cold cache does nothing. The actual download waits for an explicit user action (a query in
+    // Browser mode, or re-picking the mode), which always goes through the consent gate (provConsent) first.
+    if(mode==='edge') idle(()=>edgeMountIfCached(), 300);
     wsLoad(); wsReflect();   // restore the persisted workspace (localStorage + fs.setRoot, no socket) IN the boot tick so file-intent routing + the label are correct from the first frame
     idle(wsBoot, 500);       // defer only the DEVICE reads (refreshTree /api/fs/list + the workspace.json fallback) off the boot burst
     requestAnimationFrame(()=>document.documentElement.classList.add('themed'));   // enable theme transitions after first paint

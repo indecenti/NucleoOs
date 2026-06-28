@@ -829,6 +829,7 @@ static bool poll(void)
     if (dt < 0) dt = 0;
     if (dt > 250) dt = 250;
     s_last = s_now;
+    bool menu_glide = false;            // true only while the selection capsule is still easing
 
     if (s_screen == ST_PLAY) {
         s_simacc += dt;
@@ -844,10 +845,18 @@ static bool poll(void)
         dec(&s_over_ms, dt);
         if (s_over_ms == 0 && s_newbest && !s_bestplayed) { s_bestplayed = true; sfx(2); }
     } else if (s_screen == ST_MENU || s_screen == ST_SET) {
-        s_capY += (cap_target() - s_capY) * 0.45f;
+        float tgt = cap_target();
+        if (s_capY != tgt) {                                 // ease the capsule, then snap and rest
+            s_capY += (tgt - s_capY) * 0.45f;
+            if (fabsf(tgt - s_capY) < 0.4f) s_capY = tgt;
+            menu_glide = true;
+        }
     }
 
-    bool animated = (s_screen != ST_HELP);
+    // A settled menu is fully static: stop the ~30 Hz duplicate-frame re-blit that was the idle
+    // flicker. It repaints on input (request_draw) and while the capsule glides to a new pick.
+    bool menu = (s_screen == ST_MENU || s_screen == ST_SET);
+    bool animated = (s_screen != ST_HELP && s_screen != ST_SCORES) && (!menu || menu_glide);
     if (!animated) return false;
     if (s_now - s_frame < 33) return false;
     s_frame = s_now;

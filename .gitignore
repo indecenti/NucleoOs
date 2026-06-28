@@ -9,6 +9,9 @@ GEMINI API KEY*.txt
 # Cookie di sessione/auth (sensibili)
 /devcookie.txt
 /*cookie*.txt
+# Note di rilascio locali: host/PIN dei device (pairing) — mai committare
+tools/release.local.json
+tools/*.local.json
 
 # --- Bytecode Python generato (non sorgente) ---
 __pycache__/
@@ -16,3 +19,8 @@ __pycache__/
 
 # --- Log di build/flash/serial (artefatti di sviluppo) ---
 *.log
+
+# --- Master SD assemblato da tools/nucleo-sd-deploy (artefatto rigenerabile, ~1.7 GB) ---
+/deploy/sd-master/
+# Report auto-salvati di SD Deploy
+/tools/nucleo-sd-deploy/reports/

@@ -5,12 +5,17 @@ tells you how to release it. Mixing them up is the most common mistake.
 
 | Layer | Lives in | What it is | Update channel |
 |-------|----------|------------|----------------|
-| **Firmware** | internal flash (`factory` / `ota_0` / `ota_1`) | the C application (`nucleoos.bin`) | USB-serial flash **or** network OTA (`POST /api/ota`) |
+| **Firmware** | internal flash (`ota_0` / `ota_1`) | the C application (`nucleoos.bin`) | USB-serial flash **or** network OTA (`POST /api/ota`) |
 | **Web layer** | microSD (`/www/shell`, `/apps/*`, `/system/registry`) | shell, apps, registry — served from SD | SD sync (`deploy.ps1 -To`) **or** network push (`push-ota.mjs`) |
 
 > A firmware flash does **not** touch the SD, and a web update does **not** touch
 > the firmware. Most day-to-day changes (apps, shell, icons) are **web-layer only**
 > and never require reflashing.
+
+> **Versioning:** the firmware version auto-increments on every build and is reported identically
+> by `/api/status`, `/proc/version`, mDNS, and the serial boot banner — see
+> [versioning.md](versioning.md). `release.ps1` prints `was vX -> now vY (OTA confirmed)` as
+> deploy proof. The web layer versions separately (`sw.js` cache tag + per-app manifest).
 
 ---
 
@@ -64,6 +69,39 @@ tells you how to release it. Mixing them up is the most common mistake.
 > flashed over USB (bootstrap). From then on, every firmware update can be done over
 > Wi-Fi from the Updates app.
 
+### ⚠️ Boot-test on hardware BEFORE OTA — the gate does not measure device RAM
+The ANIMA host gate (`anima:gate`) runs on the PC and proves the *logic*, **not** that the
+firmware boots on a no-PSRAM ESP32-S3. A build can pass every gate, link cleanly, fit the
+partition — and still **reboot-loop** because `httpd` can't get a contiguous block at boot
+(see [memory-budget.md](memory-budget.md) "boot-time httpd gate"). The failure mode is a black
+screen + continuous reboots. So for **any firmware change that could affect RAM** (new static
+buffers, a new boot service, a bigger array), flash **one** unit over USB first and read the
+serial `BOOTSTEP` log — it must reach `BOOTSTEP httpd` (not `httpd-FAILED` / `abort()`), with
+`pre-httpd` `largest` block comfortably above ~10 KB. Only then OTA the rest.
+
+> **Discipline:** never allocate boot RAM for a feature an app uses — allocate it on the app's
+> `enter()` and free it on `exit()`. A 30 KB static `.bss` regression is the whole margin
+> between "boots" and "loops". See [memory-budget.md](memory-budget.md).
+
+### Serial recovery — un-brick a reboot-looping unit (no fresh build needed)
+A bad firmware in `ota_0` does **not** destroy the previous good firmware: USB-serial
+`idf.py flash` writes only `ota_0` and resets `otadata`, leaving the prior image intact in
+`ota_1`. To recover instantly, point boot back at `ota_1`:
+```powershell
+. C:\esp\esp-idf\export.ps1
+$ot = "$env:IDF_PATH\components\app_update\otatool.py"
+python $ot -p COM3 --baud 115200 switch_ota_partition --slot 1   # boot the previous good image
+```
+Two ESP32-S3 USB-Serial-JTAG gotchas (M5 Cardputer has no real RTS/DTR wired to EN/GPIO0):
+- **Stuck in download mode** after a flash (`boot:0x3 (DOWNLOAD)`, "waiting for download",
+  black screen): the `--after hard_reset` (RTS) does not release it. Force a clean app boot with
+  the RTC watchdog reset: `python -m esptool --chip esp32s3 -p COM3 --after watchdog_reset flash_id`.
+- **Reading the panic:** the console is on USB-Serial-JTAG = the same COMx as flashing
+  (`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`). Open the port at 115200 right after a watchdog reset
+  to capture the `ESP-ROM` banner → `BOOTSTEP` lines → the `abort()` backtrace.
+
+The board enumerates as **COM3↔COM4** (one per unit); detect the live port, don't assume.
+
 ---
 
 ## 2. Web layer release (shell + apps + registry)
@@ -112,6 +150,8 @@ After either, reload the shell in the browser; the bumped SW pulls the new asset
 **Firmware change (C):**
 - [ ] `flash.ps1 -BuildOnly` exit 0, binary fits the app partition
 - [ ] `ota_confirm_if_pending()` still on the healthy-boot path in `main.c`
+- [ ] **if RAM-affecting** (new static buffer / boot service / bigger array): boot-test ONE
+      unit over USB, serial `BOOTSTEP` log reaches `httpd` (not `abort()`), before OTAing others
 - [ ] delivered via Updates app (Wi-Fi) or `flash.ps1 -Port COMx` (USB)
 - [ ] `/api/status` → `ota.state: valid` after the device settles
 

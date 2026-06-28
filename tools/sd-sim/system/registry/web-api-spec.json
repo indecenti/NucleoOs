@@ -302,6 +302,69 @@
     ]
   },
   {
+    "id": "api-game-costellazioni-gentest",
+    "path": "/api/game/costellazioni/gentest",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/game/costellazioni/gentest - Parità Generatore (debug)",
+      "description": "Strumento di debug/parità: emette il settore generato proceduralmente come JSON (sistemi + missioni + hash) per confermare che i generatori C e JS siano byte-identici. Innocuo.",
+      "synopsis": "GET /api/game/costellazioni/gentest?seed=<n>&sector=<n>",
+      "details": "Richiede autenticazione. Risposta JSON: { seed, sector, systems:[{x,y,econ,faction,beacon,name}], missions:[...], h32, h3 }. Usato solo dall'harness di test per il confronto C↔JS."
+    },
+    "en": {
+      "title": "GET /api/game/costellazioni/gentest - Generator Parity (debug)",
+      "description": "Debug/parity tool: emits the procedurally generated sector as JSON (systems + missions + hashes) to confirm the C and JS generators are byte-identical. Harmless.",
+      "synopsis": "GET /api/game/costellazioni/gentest?seed=<n>&sector=<n>",
+      "details": "Auth-gated. JSON response: { seed, sector, systems:[{x,y,econ,faction,beacon,name}], missions:[...], h32, h3 }. Used only by the test harness for the C↔JS comparison."
+    },
+    "params": [
+      {
+        "name": "seed",
+        "type": "text",
+        "required": false,
+        "default": "0",
+        "it": {
+          "description": "Seed del generatore procedurale"
+        },
+        "en": {
+          "description": "Procedural generator seed"
+        }
+      },
+      {
+        "name": "sector",
+        "type": "text",
+        "required": false,
+        "default": "0",
+        "it": {
+          "description": "Indice del settore da generare"
+        },
+        "en": {
+          "description": "Sector index to generate"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-game-costellazioni-save-get",
+    "path": "/api/game/costellazioni/save",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/game/costellazioni/save - Salvataggio Costellazioni",
+      "description": "Legge il salvataggio della campagna del gioco Costellazioni dal file canonico /sd/data/costellazioni/save.bin e lo restituisce come JSON, così il Game Center web può continuare la STESSA campagna del gioco nativo (cross-play). save.bin resta l'unica fonte di verità.",
+      "synopsis": "GET /api/game/costellazioni/save",
+      "details": "Richiede autenticazione (pairing). La risposta JSON rispecchia la struct Save campo per campo (crediti, reputazione delle fazioni, progressi dei settori). Sola lettura: non tocca lo stato di gioco in RAM."
+    },
+    "en": {
+      "title": "GET /api/game/costellazioni/save - Constellations Save",
+      "description": "Reads the Constellations campaign save from the canonical /sd/data/costellazioni/save.bin file and returns it as JSON, so the web Game Center can continue the SAME campaign as the native game (cross-play). save.bin stays the single source of truth.",
+      "synopsis": "GET /api/game/costellazioni/save",
+      "details": "Auth-gated (pairing). The JSON response mirrors the Save struct field-for-field (credits, faction reputation, sector progress). Read-only: no in-RAM game state is touched."
+    },
+    "params": []
+  },
+  {
     "id": "api-gpio-get",
     "path": "/api/gpio",
     "method": "GET",
@@ -946,6 +1009,25 @@
         }
       }
     ]
+  },
+  {
+    "id": "api-game-costellazioni-save-post",
+    "path": "/api/game/costellazioni/save",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/game/costellazioni/save - Scrivi Salvataggio Costellazioni",
+      "description": "Scrive il salvataggio della campagna ricevuto come JSON nel file canonico /sd/data/costellazioni/save.bin (con clamp sugli invarianti nativi), così i progressi fatti nel Game Center web rientrano nel gioco nativo.",
+      "synopsis": "POST /api/game/costellazioni/save  { ...Save... }",
+      "details": "Richiede autenticazione. Il body JSON ha la forma della struct Save. Non modifica lo stato di gioco in RAM: (de)serializza solo il file su SD. Risposta {\"ok\":true} o {\"ok\":false}."
+    },
+    "en": {
+      "title": "POST /api/game/costellazioni/save - Write Constellations Save",
+      "description": "Writes the campaign save received as JSON into the canonical /sd/data/costellazioni/save.bin file (clamped to the native invariants), so progress made in the web Game Center flows back into the native game.",
+      "synopsis": "POST /api/game/costellazioni/save  { ...Save... }",
+      "details": "Auth-gated. The JSON body has the Save struct shape. No in-RAM game state is touched: it only (de)serializes the SD file. Response {\"ok\":true} or {\"ok\":false}."
+    },
+    "params": []
   },
   {
     "id": "api-gpio-post",

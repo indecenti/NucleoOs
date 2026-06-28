@@ -16,6 +16,7 @@ static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, ACC = 0xFE
 
 static void enter(void)
 {
+    nucleo_app_set_direct_draw(true);   // static screen: draw direct, free the 32 KB menu buffer
     nucleo_app_set_hint("enter/space connect (reboots)   esc back");
     nucleo_app_request_draw();
 }

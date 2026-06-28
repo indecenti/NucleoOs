@@ -21,7 +21,16 @@
       "properties": {
         "wifi": { "type": "object" },
         "ble": { "type": "object" },
-        "swarm": { "type": "object" }
+        "swarm": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "channel": { "type": "integer", "minimum": 0, "maximum": 14 },
+            "name": { "type": "string", "maxLength": 32 },
+            "passphrase": { "type": "string", "maxLength": 63 },
+            "peers": { "type": "array", "items": { "type": "string" } }
+          }
+        }
       }
     },
     "power": {

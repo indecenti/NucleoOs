@@ -1,0 +1,79 @@
+{
+  "$comment": "Shared project permissions. SAFE dev commands are pre-approved so they don't prompt. Anything that touches the physical device (push-ota, test:lab, tools/*.ps1 flash/deploy/ota/sd-sync) is deliberately NOT listed — those stay gated, per the never-auto-deploy rule. git write (commit/push) and rm also stay gated.",
+  "permissions": {
+    "allow": [
+      "Bash(npm run validate*)",
+      "Bash(npm run gz:check*)",
+      "Bash(npm run gen:api*)",
+      "Bash(npm run i18n:gate*)",
+      "Bash(npm run gate*)",
+      "Bash(npm run anima:*)",
+      "Bash(npm run test:unit*)",
+      "Bash(npm run test:all*)",
+      "Bash(npm run test:nl*)",
+      "Bash(npm run test:anima*)",
+      "Bash(npm run test:list*)",
+      "Bash(npm run test:registry*)",
+      "Bash(npm run ir:test*)",
+      "Bash(npm run link:test*)",
+      "Bash(npm run mesh:test*)",
+      "Bash(npm run chorus:test*)",
+      "Bash(npm run swarm:test*)",
+      "Bash(npm run eth:test*)",
+      "Bash(npm run ble:test*)",
+      "Bash(npm run ducky:test*)",
+      "Bash(npm run weather:test*)",
+      "Bash(npm run nearby:test*)",
+      "Bash(npm run hw:test*)",
+      "Bash(npm run skill:test*)",
+      "Bash(npm run radio:test*)",
+      "Bash(npm run logviewer:test*)",
+      "Bash(npm run browser:check*)",
+      "Bash(npm test*)",
+      "Bash(node tools/anima-host/*)",
+      "Bash(node tools/anima/*)",
+      "Bash(node tools/validate.mjs*)",
+      "Bash(node tools/run-tests.mjs*)",
+      "Bash(node tools/serve-shell.mjs*)",
+      "Bash(node tools/check-gz.mjs*)",
+      "Bash(node tools/gen-api-spec.mjs*)",
+      "Bash(node tools/i18n-check.mjs*)",
+      "Bash(node --test*)",
+      "Bash(python tools/anima/gen_aliases.py*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git stash list*)",
+      "Bash(git check-ignore *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"G:/Nucleo/.claude/hooks/guard-deploy.mjs\"",
+            "statusMessage": "deploy guard"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"G:/Nucleo/.claude/hooks/validate-registry.mjs\"",
+            "statusMessage": "validate registry",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

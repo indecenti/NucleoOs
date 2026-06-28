@@ -15,6 +15,17 @@ this, the UI flickered. The fix is always one of the techniques below — never 
    frame in an `M5Canvas` and `pushSprite()` it in a single blit. The panel never sees an
    intermediate state.
 
+   **The framework guarantees the canvas for you — apps need NO per-app acquire.** `open_app_def()`
+   (nucleo_app.cpp) re-acquires the shared canvas right after `on_enter()` for any app that did not
+   opt into direct draw (`!s_app_direct`), with the same ≤150 ms retry as `close_app()`. This is the
+   single owner of the invariant "a buffered app always has its back-buffer", and it covers BOTH the
+   launcher→app path and the app→app path (`launch_by_id`, e.g. ANIMA "apri tanks", which bypasses
+   `close_app`'s re-acquire). Before this, a full-screen game launched after a media/voice app that had
+   released the canvas would fall back to DIRECT draw and flicker (its whole-screen repaint clears the
+   panel every frame) — every animated game (tanks/pong/pinball/constellations/brawler…) shared the
+   bug; only yahtzee had bolted on its own acquire. Now none of them need to. Direct-draw apps
+   (ANIMA/radio/video/SSH/recorder) opt out by setting `s_app_direct` in `on_enter` and are left alone.
+
    **There is ONE shared back-buffer** (`nucleo_screen()`, defined in nucleo_ui.cpp): a single
    240×(H−HINT) canvas reused by the launcher list band AND every foreground app — they are
    mutually exclusive on screen. It is allocated **once at boot in `nucleo_ui_init`, while the

@@ -16,6 +16,7 @@ extern "C" {
 }
 
 #include "app_gfx.h"
+#include "nucleo_i18n.h"        // TR(it,en): UI labels follow the system language
 static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410, LINE = 0x2945, INK = 0x0000, ACC = 0xFE8C;
 #define PIC_DIR NUCLEO_SD_MOUNT "/data/Pictures"
 #define PIC_MAX 64
@@ -26,6 +27,8 @@ static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x44
 static char (*s_names)[56] = nullptr;
 static int s_n, s_sel;
 static bool s_view;          // false = list, true = full-screen viewer
+static char s_open_abs[256]; // full path when opened from Files ("open with"); empty = browsing PIC_DIR
+static void enter_view(void);
 
 static bool is_img(const char *n)
 {
@@ -33,6 +36,55 @@ static bool is_img(const char *n)
     return !strcasecmp(dot, ".png") || !strcasecmp(dot, ".jpg") || !strcasecmp(dot, ".jpeg");
 }
 static int cmp(const void *a, const void *b) { return strcasecmp((const char *)a, (const char *)b); }
+
+// ---- oversize guard --------------------------------------------------------------------
+// The on-device M5GFX decoder has no PSRAM to fall back on, so a camera-size photo (720p/1080p)
+// overflows RAM and crashes. We read just the intrinsic WxH from the file HEADER (no decode) and
+// refuse anything past the budget below; the file manager then points the user to the web app.
+#define IMG_MAX_DIM 1024        // longest side the decoder handles comfortably on this no-PSRAM board
+#define IMG_MAX_PIX 700000L     // ...and total pixels (~0.7 MP); 720p (0.92 MP) and 1080p exceed it
+static bool img_dims(const char *path, int *w, int *h)
+{
+    *w = *h = 0;
+    FILE *f = fopen(path, "rb"); if (!f) return false;
+    unsigned char b[26]; size_t n = fread(b, 1, sizeof b, f);
+    bool ok = false;
+    if (n >= 24 && b[0] == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') {            // PNG IHDR @16/@20 (BE)
+        *w = (b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19];
+        *h = (b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23]; ok = true;
+    } else if (n >= 10 && b[0] == 'G' && b[1] == 'I' && b[2] == 'F') {                      // GIF @6/@8 (LE)
+        *w = b[6] | (b[7] << 8); *h = b[8] | (b[9] << 8); ok = true;
+    } else if (n >= 26 && b[0] == 'B' && b[1] == 'M') {                                     // BMP @18/@22 (LE)
+        *w = b[18] | (b[19] << 8) | (b[20] << 16) | (b[21] << 24);
+        *h = b[22] | (b[23] << 8) | (b[24] << 16) | (b[25] << 24); ok = true;
+    } else if (n >= 2 && b[0] == 0xFF && b[1] == 0xD8) {                                    // JPEG: walk to a SOFn marker
+        fseek(f, 2, SEEK_SET);
+        int c;
+        while ((c = fgetc(f)) != EOF) {
+            if (c != 0xFF) continue;
+            int m; do { m = fgetc(f); } while (m == 0xFF);
+            if (m == EOF) break;
+            if (m == 0xD9 || (m >= 0xD0 && m <= 0xD7)) continue;                            // standalone marker, no length
+            int lh = fgetc(f), ll = fgetc(f); if (lh == EOF || ll == EOF) break;
+            int len = (lh << 8) | ll;
+            if (m >= 0xC0 && m <= 0xCF && m != 0xC4 && m != 0xC8 && m != 0xCC) {            // SOF0..15 (baseline/progressive)
+                fgetc(f);                                                                  // precision byte
+                int hh = fgetc(f), hl = fgetc(f), wh = fgetc(f), wl = fgetc(f);
+                if (wl != EOF) { *h = (hh << 8) | hl; *w = (wh << 8) | wl; ok = true; }
+                break;
+            }
+            fseek(f, len - 2, SEEK_CUR);
+        }
+    }
+    fclose(f);
+    return ok && *w > 0 && *h > 0;
+}
+extern "C" bool nucleo_app_image_oversize(const char *path)
+{
+    int w, h;
+    if (!img_dims(path, &w, &h)) return false;                                             // unknown header -> let it try
+    return (w > IMG_MAX_DIM || h > IMG_MAX_DIM || (long)w * h > IMG_MAX_PIX);
+}
 
 static void scan(void)
 {
@@ -50,7 +102,14 @@ static void scan(void)
 static void enter(void)
 {
     if (!s_names) s_names = (char (*)[56])malloc((size_t)PIC_MAX * 56);   // ~3.5 KB, only while open
-    scan(); nucleo_app_set_hint(";/. move  enter view  esc back");
+    scan();
+    s_open_abs[0] = 0;
+    const char *of = nucleo_app_take_open_file();
+    if (of && of[0]) {
+        if (nucleo_app_image_oversize(of)) { nucleo_app_set_hint(TR("Troppo grande: usa l'app web", "Too large: use the web app")); return; }   // safety net: never decode a giant
+        snprintf(s_open_abs, sizeof s_open_abs, "%s", of); enter_view(); return;   // opened from Files -> show THAT image
+    }
+    nucleo_app_set_hint(TR(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back"));
 }
 static void tick(void) { if (!s_view && app_ui_list_animating()) nucleo_app_request_draw(); }  // only while the list animates
 
@@ -59,7 +118,7 @@ static void tick(void) { if (!s_view && app_ui_list_animating()) nucleo_app_requ
 static void enter_view(void)
 {
     s_view = true;
-    nucleo_app_set_hint(";/. prev/next  del list  esc back");
+    nucleo_app_set_hint(TR(";/. prec/succ  del lista  esc indietro", ";/. prev/next  del list  esc back"));
     nucleo_app_release_buffers();
     nucleo_app_set_direct_draw(true);
 }
@@ -67,24 +126,37 @@ static void enter_view(void)
 static const char *ph_label(int i, void *) { return s_names[i]; }
 static unsigned short ph_color(int, void *) { return 0xFE8C; }
 
+// Open the highlighted image, unless it's too big for the no-PSRAM decoder (then warn + stay in the list).
+static void open_selected(void)
+{
+    char abs[256]; snprintf(abs, sizeof abs, "%s/%s", PIC_DIR, s_names[s_sel]);
+    if (nucleo_app_image_oversize(abs)) nucleo_app_set_hint(TR("Troppo grande: usa l'app web", "Too large: use the web app"));
+    else enter_view();
+}
+
 static void on_key(int key, char ch)
 {
     if (s_view) {
-        if (key == NK_UP)        { if (s_n) s_sel = (s_sel + s_n - 1) % s_n; }
+        if (s_open_abs[0]) {                          // external "open with" image: single file, no prev/next
+            if (key == NK_DEL) { s_open_abs[0] = 0; s_view = false; nucleo_app_set_direct_draw(false); d.releasePngMemory(); nucleo_app_set_hint(TR(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back")); }
+            else return;
+        }
+        else if (key == NK_UP)   { if (s_n) s_sel = (s_sel + s_n - 1) % s_n; }
         else if (key == NK_DOWN) { if (s_n) s_sel = (s_sel + 1) % s_n; }
-        else if (key == NK_DEL)  { 
-            s_view = false; 
-            nucleo_app_set_direct_draw(false); 
+        else if (key == NK_DEL)  {
+            s_view = false;
+            nucleo_app_set_direct_draw(false);
             d.releasePngMemory();
+            nucleo_app_set_hint(TR(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back"));
         }
         else return;
     } else {
         if (key == NK_UP)        { if (s_n) s_sel = (s_sel + s_n - 1) % s_n; }
         else if (key == NK_DOWN) { if (s_n) s_sel = (s_sel + 1) % s_n; }
-        else if (key == NK_ENTER && s_n) { enter_view(); }
+        else if (key == NK_ENTER && s_n) { open_selected(); }
         else if (key == NK_CHAR && ch >= '1' && ch <= '9') {
             int i = ch - '1';
-            if (i < s_n) { s_sel = i; enter_view(); }
+            if (i < s_n) { s_sel = i; open_selected(); }
         }
         else return;
     }
@@ -95,14 +167,21 @@ static void draw_view(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, INK);
-    char abs[200]; snprintf(abs, sizeof(abs), "%s/%s", PIC_DIR, s_names[s_sel]);
-    const char *dot = strrchr(s_names[s_sel], '.');
+    char abs[256]; const char *nm;
+    if (s_open_abs[0]) { snprintf(abs, sizeof(abs), "%s", s_open_abs); nm = strrchr(s_open_abs, '/'); nm = nm ? nm + 1 : s_open_abs; }
+    else {
+        if (s_n <= 0) return;                                 // nothing to show
+        snprintf(abs, sizeof(abs), "%s/%s", PIC_DIR, s_names[s_sel]); nm = s_names[s_sel];
+    }
+    const char *dot = strrchr(nm, '.');
     // Auto-fit to the content box, centred. scale 0 => M5GFX scales to maxWidth/Height.
     // NOTE: M5GFX file decode — verify on hardware.
     if (dot && !strcasecmp(dot, ".png")) d.drawPngFile(abs, 120, top + h / 2, 240, h - 12, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
     else                                 d.drawJpgFile(abs, 120, top + h / 2, 240, h - 12, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
     // caption strip
-    char cap[40]; snprintf(cap, sizeof(cap), "%.26s  %d/%d", s_names[s_sel], s_sel + 1, s_n);
+    char cap[44];
+    if (s_open_abs[0]) snprintf(cap, sizeof(cap), "%.34s", nm);
+    else               snprintf(cap, sizeof(cap), "%.26s  %d/%d", nm, s_sel + 1, s_n);
     d.setTextSize(1); d.setTextColor(FG, INK); d.setCursor(6, top + h - 10); d.print(cap);
 }
 
@@ -111,7 +190,7 @@ static void draw_list(void)
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     char c[16]; snprintf(c, sizeof(c), "%d image%s", s_n, s_n == 1 ? "" : "s");
     int y0 = app_ui_title("Photos", ACC, c);
-    if (s_n == 0) { d.setTextColor(DIM, BG); d.setCursor(12, y0 + 16); d.print("No images in /data/Pictures"); return; }
+    if (s_n == 0) { d.setTextColor(DIM, BG); d.setCursor(12, y0 + 16); d.print(TR("Nessuna immagine in /data/Pictures", "No images in /data/Pictures")); return; }
     app_ui_list(y0, top + h - y0, s_n, s_sel, ph_label, nullptr, ph_color, nullptr);
 }
 

@@ -1,16 +1,16 @@
 {
-  "generated": "2026-06-12T21:41:39.144Z",
+  "generated": "2026-06-24T16:53:03.155Z",
   "base": "it",
   "langs": [
     "it",
     "en"
   ],
   "surfaces": 33,
-  "totalKeys": 1603,
+  "totalKeys": 1620,
   "namespaces": {
     "core": 103,
     "shell": 129,
-    "agent": 38,
+    "agent": 48,
     "archive-manager": 31,
     "browser": 78,
     "calculator": 1,
@@ -22,7 +22,7 @@
     "dos-importer": 55,
     "dosbox": 21,
     "file-commander": 94,
-    "groq-chat": 32,
+    "groq-chat": 38,
     "help": 32,
     "ir-remote": 98,
     "log-viewer": 27,
@@ -33,7 +33,7 @@
     "recycle-bin": 14,
     "spreadsheet": 301,
     "ssh": 47,
-    "system-monitor": 32,
+    "system-monitor": 33,
     "tasks": 13,
     "terminal": 4,
     "updates": 29,

@@ -30,8 +30,10 @@
     "games": ["giochi", "gioco", "games", "game", "giocare", "partita", "multiplayer", "arcade"],
     "code-runner": ["runner", "playground", "script", "javascript", "coderunner"],
     "miei-fatti": ["fatti", "miei fatti", "i miei fatti", "i miei dati", "ricordi", "conoscenze", "facts", "my facts", "my data", "knowledge"],
-    "anima-knowledge": ["enciclopedia", "wiki", "wikipedia", "ramo", "rami", "scarica conoscenza", "scarica sapere", "encyclopedia", "knowledge branch", "download knowledge"],
-    "ethernet": ["ethernet", "lan", "w5500", "rete cablata", "cablato", "cablata", "arp", "wired", "cable"]
+    "ethernet": ["ethernet", "lan", "w5500", "rete cablata", "cablato", "cablata", "arp", "wired", "cable"],
+    "ble": ["ble", "bluetooth", "bt"],
+    "payloads": ["payload", "payloads", "ducky", "duckyscript", "badusb", "rubber ducky", "hid"],
+    "weather": ["meteo", "tempo", "previsioni", "weather", "forecast", "che tempo fa"]
   },
   "notes": {
     "spreadsheet": "Listed before calculator on purpose: \"foglio di calcolo\" must resolve to the sheet app.",

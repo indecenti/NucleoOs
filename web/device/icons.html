@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NucleoOS — launcher icon gallery</title>
+  <style>
+    html, body { margin: 0; background: #0b1020; color: #e8eefc; font: 13px system-ui, sans-serif; }
+    .wrap { padding: 18px; }
+    h1 { font-size: 15px; font-weight: 500; margin: 0 0 12px; color: #8aa0c8; }
+    canvas { display: block; image-rendering: auto; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Launcher icons — bold square badges (ink + bg cut-out). Each on a different accent to test coherence.</h1>
+    <canvas id="g"></canvas>
+  </div>
+  <script type="module">
+    const { drawIcon, iconGfx, ICON_IDS } = await import('./icons.js?ts=' + Date.now());
+
+    const COLORS = ['#4ea1ff', '#ff7eb6', '#7CFC9A', '#ffd166', '#c792ea', '#8aa0c8', '#ff5a5a'];
+    const COLS = 6, CELL = 108, BADGE = 74, R = 18, S = 25;
+    const rows = Math.ceil(ICON_IDS.length / COLS);
+    const cv = document.getElementById('g');
+    const dpr = 2;
+    cv.width = COLS * CELL * dpr; cv.height = rows * CELL * dpr;
+    cv.style.width = (COLS * CELL) + 'px'; cv.style.height = (rows * CELL) + 'px';
+    const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+    function roundRect(x, y, w, h, r, c) {
+      ctx.beginPath(); ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath(); ctx.fillStyle = c; ctx.fill();
+    }
+
+    ICON_IDS.forEach((id, i) => {
+      const col = i % COLS, row = (i / COLS) | 0;
+      const x = col * CELL, y = row * CELL;
+      const cx = x + CELL / 2, cy = y + CELL / 2 - 8;
+      const color = COLORS[i % COLORS.length];
+      roundRect(cx - BADGE / 2, cy - BADGE / 2, BADGE, BADGE, R, color);
+      const ok = drawIcon(iconGfx(ctx, '#0b1020', color), id, cx, cy, S);
+      ctx.fillStyle = '#8aa0c8'; ctx.font = '11px ui-monospace, monospace';
+      ctx.fillText(id + (ok ? '' : ' ⚠'), cx, y + CELL - 12);
+    });
+  </script>
+</body>
+</html>

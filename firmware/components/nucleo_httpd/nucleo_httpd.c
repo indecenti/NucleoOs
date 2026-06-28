@@ -17,6 +17,7 @@
 #include "nucleo_eventbus.h"
 #include "nucleo_arb.h"     // heavy-work arbiter: serialize outbound TLS so two fetches can't both OOM
 #include "nucleo_power.h"   // real battery level for /api/status
+#include "nucleo_imu.h"     // coarse motion sense (Cardputer ADV; no-op on the original) for /api/status
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,10 +33,13 @@
 #include "esp_ota_ops.h"
 #include "esp_app_desc.h"      // esp_app_get_description(): real firmware version/build for /api/diag
 #include "esp_system.h"
+#include "esp_chip_info.h"     // esp_chip_info(): silicon model/revision/cores for /proc/uname
+#include "esp_partition.h"     // esp_partition_find/next: real flash partition table for /proc/partitions
 #include "esp_http_client.h"   // /api/proxy: server-side page fetch (the browser app is same-origin -> no CORS)
 #include "esp_crt_bundle.h"    // built-in TLS trust store, for proxying HTTPS
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"      // binary semaphore: httpd handler waits on the transient ANIMA worker
 #include "esp_freertos_hooks.h"   // per-core idle hook: the CPU-load probe rides the idle loop (free cycles)
 #include "cJSON.h"
 
@@ -151,7 +155,11 @@ static esp_err_t status_get(httpd_req_t *req)
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "os", "NucleoOS");
-    cJSON_AddStringToObject(root, "version", "0.1.0");
+    // Real running-image version, straight from the app descriptor (= PROJECT_VER, composed at build
+    // time from firmware/version/* + git). Single source of truth — never a hand-edited literal.
+    const esp_app_desc_t *app = esp_app_get_description();
+    cJSON_AddStringToObject(root, "version", app ? app->version : "?");
+    cJSON_AddStringToObject(root, "built", app ? app->date : "?");
     cJSON_AddNumberToObject(root, "uptime_s", esp_timer_get_time() / 1000000);
     // Heap diagnostics. free_heap is "free right now"; the number that actually tells you
     // whether SRAM is tight is min_free_heap — the lowest the free pool has EVER dropped to
@@ -221,6 +229,21 @@ static esp_err_t status_get(httpd_req_t *req)
     cJSON_AddNumberToObject(bat, "pct", nucleo_power_battery_pct());
     cJSON_AddNumberToObject(bat, "mv", nucleo_power_battery_mv());
 
+    // IMU (Cardputer ADV only): one accel read refreshes a coarse motion class so the OS / ANIMA know if
+    // the device is at rest, in-hand, or moving. It's a blocking I2C transaction and /api/status is polled
+    // by every tab/app, so cap it to ~4 Hz HERE (not inside nucleo_imu_sample, which the pedometer/dice
+    // need at full loop rate); the cached class served between samples stays valid. No-op on the orig board.
+    static uint32_t s_imu_last_ms = 0;   // httpd serves on one task, so a function-static is race-free here
+    uint32_t imu_now = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+    if (!s_imu_last_ms || (uint32_t)(imu_now - s_imu_last_ms) >= 250) { nucleo_imu_sample(); s_imu_last_ms = imu_now; }
+    cJSON *imu = cJSON_AddObjectToObject(root, "imu");
+    bool imu_on = nucleo_imu_present();
+    cJSON_AddBoolToObject(imu, "present", imu_on);
+    if (imu_on) {
+        cJSON_AddStringToObject(imu, "motion", nucleo_imu_motion_str());
+        cJSON_AddStringToObject(imu, "orient", nucleo_imu_orient_str());
+    }
+
     char *out = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
 
@@ -273,6 +296,157 @@ static esp_err_t heap_get(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, out);   // same-origin only: no CORS header (diagnostics aren't cross-origin readable)
     cJSON_free(out);
+    return ESP_OK;
+}
+
+// --- /proc virtual filesystem ----------------------------------------------------------------
+// A read-only, Unix-flavoured view of live system state served as plain text: `cat /proc/uptime`
+// the way you would on Linux. Nothing is stored — each read formats the answer on the stack from
+// counters we already keep (heap, cpu probe, uptime, net), so the RAM cost is zero beyond one small
+// local buffer. It restates data that also lives in /api/* (status, cpu, heap) but in the shape a
+// shell expects, which is what makes the device feel like a real OS instead of a web gadget.
+//
+// Nodes: /proc (index), version, uname, bootreason, uptime, loadavg, meminfo, cpuinfo, stat, mounts, net.
+static esp_err_t proc_get(httpd_req_t *req)
+{
+    // Path after the "/proc" prefix: "" or "/" -> directory index, "/<name>" -> a node.
+    const char *p = req->uri + 5;        // skip "/proc"
+    while (*p == '/') p++;               // tolerate "/proc/" and "/proc//uptime"
+
+    char buf[768];   // sized for the largest node (/proc/partitions: one line per flash partition)
+    int n = 0;
+    long up_s = (long)(esp_timer_get_time() / 1000000);
+
+    // Aggregate cpu load once (the probe smooths per-core load in s_cpu_load[]).
+    float load_sum = 0.0f;
+    for (int c = 0; c < NUCLEO_CPU_CORES; c++) load_sum += s_cpu_load[c];
+    float load_avg = load_sum / NUCLEO_CPU_CORES;
+
+    if (*p == '\0') {
+        // Directory listing, like `ls /proc`.
+        n = snprintf(buf, sizeof buf,
+            "version\nuname\nbootreason\nuptime\nloadavg\nmeminfo\ncpuinfo\nstat\nmounts\npartitions\nnet\n");
+    } else if (!strcmp(p, "version")) {
+        const esp_app_desc_t *d = esp_app_get_description();
+        n = snprintf(buf, sizeof buf, "NucleoOS version %s (%s) SMP cores=%d\n",
+                     d ? d->version : "?", CONFIG_IDF_TARGET, NUCLEO_CPU_CORES);
+    } else if (!strcmp(p, "uname")) {
+        // Real `uname -a`: the running image's true build identity, straight from the linked app
+        // descriptor + silicon info — no fabricated strings. Format: sysname nodename release
+        // #project date time idf <ver> machine rev<n> cores=<n>.
+        const esp_app_desc_t *d = esp_app_get_description();
+        esp_chip_info_t ci; esp_chip_info(&ci);
+        n = snprintf(buf, sizeof buf,
+            "NucleoOS cardputer %s #%s %s %s idf %s %s rev%d cores=%d\n",
+            d->version, d->project_name, d->date, d->time, d->idf_ver,
+            CONFIG_IDF_TARGET, ci.revision, ci.cores);
+    } else if (!strcmp(p, "bootreason")) {
+        // Why the last boot happened — every real OS surfaces this (dmesg "Boot reason", `last
+        // reboot`). On this board it is the first thing to check after a crash: PANIC/TASK_WDT vs
+        // a clean POWERON/SW tells you if the firmware faulted or the user just power-cycled.
+        const char *rs;
+        switch (esp_reset_reason()) {
+            case ESP_RST_POWERON:   rs = "POWERON";   break;
+            case ESP_RST_EXT:       rs = "EXT";       break;
+            case ESP_RST_SW:        rs = "SW";        break;
+            case ESP_RST_PANIC:     rs = "PANIC";     break;
+            case ESP_RST_INT_WDT:   rs = "INT_WDT";   break;
+            case ESP_RST_TASK_WDT:  rs = "TASK_WDT";  break;
+            case ESP_RST_WDT:       rs = "WDT";       break;
+            case ESP_RST_DEEPSLEEP: rs = "DEEPSLEEP"; break;
+            case ESP_RST_BROWNOUT:  rs = "BROWNOUT";  break;
+            case ESP_RST_SDIO:      rs = "SDIO";      break;
+            default:                rs = "UNKNOWN";   break;
+        }
+        n = snprintf(buf, sizeof buf, "%s\n", rs);
+    } else if (!strcmp(p, "uptime")) {
+        // Linux format: "<uptime> <idle>" in seconds (with hundredths). idle ~= time all cores
+        // were not running tasks, derived from the load probe.
+        double idle = (up_s) * (double)NUCLEO_CPU_CORES * (1.0 - load_avg / 100.0);
+        if (idle < 0) idle = 0;
+        n = snprintf(buf, sizeof buf, "%ld.00 %.2f\n", up_s, idle);
+    } else if (!strcmp(p, "loadavg")) {
+        // We have no 1/5/15-min decay, so report the instantaneous smoothed load three times,
+        // then "running/total tasks" and the last pid-ish marker (uptime) — Linux field shape.
+        double l = load_avg / 100.0;
+        n = snprintf(buf, sizeof buf, "%.2f %.2f %.2f %d/%u %ld\n",
+                     l, l, l, NUCLEO_CPU_CORES,
+                     (unsigned)uxTaskGetNumberOfTasks(), up_s);
+    } else if (!strcmp(p, "meminfo")) {
+        // INTERNAL is the scarce on-chip SRAM (no PSRAM). Sizes in kB like Linux. "MemAvailable"
+        // maps to the largest contiguous block — the number that actually predicts whether a big
+        // alloc succeeds on this fragmentation-prone heap.
+        size_t total = heap_caps_get_total_size(MALLOC_CAP_INTERNAL);
+        size_t freeb = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+        size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+        size_t minfree = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+        n = snprintf(buf, sizeof buf,
+            "MemTotal:       %8u kB\n"
+            "MemFree:        %8u kB\n"
+            "MemAvailable:   %8u kB\n"
+            "MemMinFree:     %8u kB\n",
+            (unsigned)(total / 1024), (unsigned)(freeb / 1024),
+            (unsigned)(largest / 1024), (unsigned)(minfree / 1024));
+    } else if (!strcmp(p, "cpuinfo")) {
+        int off = 0;
+        for (int c = 0; c < NUCLEO_CPU_CORES && off < (int)sizeof buf - 1; c++) {
+            off += snprintf(buf + off, sizeof buf - off,
+                "processor\t: %d\n"
+                "model name\t: %s\n"
+                "cpu MHz\t\t: %d\n"
+                "load pct\t: %d\n\n",
+                c, CONFIG_IDF_TARGET, CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ,
+                (int)(s_cpu_load[c] + 0.5f));
+        }
+        n = off;
+    } else if (!strcmp(p, "stat")) {
+        n = snprintf(buf, sizeof buf,
+            "tasks %u\n"
+            "cores %d\n"
+            "btime %ld\n"
+            "load_avg %d\n",
+            (unsigned)uxTaskGetNumberOfTasks(), NUCLEO_CPU_CORES,
+            (long)time(NULL) - up_s, (int)(load_avg + 0.5f));
+    } else if (!strcmp(p, "mounts")) {
+        nucleo_storage_refresh();
+        const nucleo_storage_info_t *st = nucleo_storage_info();
+        n = snprintf(buf, sizeof buf,
+            "%s /data %s %s 0 0\n",
+            st->mounted ? "sdcard" : "none", st->mounted ? st->fs_type : "-",
+            st->mounted ? "rw" : "unmounted");
+    } else if (!strcmp(p, "partitions")) {
+        // The internal flash as a block device: every partition with its type, offset and size,
+        // and a "*" on the one we are running from. This is the device's real `/proc/partitions` —
+        // it makes the OTA slot layout (ota_0/ota_1), NVS and the data partitions visible to a shell.
+        const esp_partition_t *run = esp_ota_get_running_partition();
+        int off = snprintf(buf, sizeof buf, "label            type  sub   offset     size  run\n");
+        esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
+        while (it && off < (int)sizeof buf - 64) {
+            const esp_partition_t *pt = esp_partition_get(it);
+            off += snprintf(buf + off, sizeof buf - off, "%-16s %-4s 0x%02x 0x%06lx %7lu  %s\n",
+                            pt->label, pt->type == ESP_PARTITION_TYPE_APP ? "app" : "data",
+                            (unsigned)pt->subtype, (unsigned long)pt->address, (unsigned long)pt->size,
+                            (run && pt->address == run->address) ? "*" : "");
+            it = esp_partition_next(it);   // releases the current iterator and advances (NULL at end)
+        }
+        if (it) esp_partition_iterator_release(it);   // only if we stopped early (buffer full)
+        n = off;
+    } else if (!strcmp(p, "net")) {
+        n = snprintf(buf, sizeof buf,
+            "mode: %s\nssid: %s\nip: %s\ntime_synced: %d\n",
+            nucleo_setup_mode(), nucleo_setup_ssid(), nucleo_setup_ip(),
+            nucleo_setup_time_synced() ? 1 : 0);
+    } else {
+        httpd_resp_set_status(req, "404 Not Found");
+        httpd_resp_set_type(req, "text/plain");
+        httpd_resp_sendstr(req, "No such /proc node\n");
+        return ESP_OK;
+    }
+
+    if (n < 0) n = 0;
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_send(req, buf, n < (int)sizeof buf ? n : (int)sizeof buf - 1);
     return ESP_OK;
 }
 
@@ -405,8 +579,19 @@ static esp_err_t logs_get(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    // Optional ?level=E|W|I|D|V (or error/warn/info/debug/verbose) -> dmesg-style severity filter.
+    // Only the first letter matters, so "warn" and "W" are equivalent.
+    char min_level = 0;
+    size_t qlen = httpd_req_get_url_query_len(req);
+    if (qlen > 0 && qlen < 96) {
+        char q[96], v[16];
+        if (httpd_req_get_url_query_str(req, q, sizeof q) == ESP_OK &&
+            httpd_query_key_value(q, "level", v, sizeof v) == ESP_OK && v[0])
+            min_level = v[0];
+    }
     char buf[NUCLEO_LOG_RING_SZ + 1];                 // ~2 KB on the 30 KB httpd stack — safe
-    size_t n = nucleo_log_get(buf, sizeof buf);
+    size_t n = min_level ? nucleo_log_get_filtered(buf, sizeof buf, min_level)
+                         : nucleo_log_get(buf, sizeof buf);
     httpd_resp_send(req, buf, n);
     return ESP_OK;
 }
@@ -564,22 +749,45 @@ static esp_err_t ota_post(httpd_req_t *req)
     if (!tk) { httpd_resp_set_status(req, "503 Service Unavailable"); httpd_resp_set_hdr(req, "Retry-After", "2");
                httpd_resp_sendstr(req, "{\"busy\":true,\"job\":\"download\"}"); return ESP_FAIL; }
 
+    // Reclaim contiguous RAM for the duration of the transfer: drop the offline index (~24 KB, reloads
+    // lazily later) and suspend the voice engine (~16 KB). LWIP then has the contiguous heap it needs to
+    // receive the image without stalling on the tighter ADV heap (the "OTA times out on .104" fix). On
+    // success we reboot into the new image (no restore needed); on any failure below we put voice back.
+    //
+    // ALSO bring the device into the server-listening posture BEFORE streaming the image: the run loop
+    // launches Remote Control (frees the 32 KB canvas — the single biggest CONTIGUOUS block — plus the L1
+    // index) when we raise this flag. We then BLOCK until the loop confirms the posture is live, so the
+    // flash never starts RAM-starved (the definitive fix for "OTA only works after I open Remote Control by
+    // hand"). All resolved at final link (no httpd->app dep cycle). Bounded wait: never wedge this task.
+    extern void nucleo_app_request_remote_listen(bool on);
+    extern bool nucleo_app_remote_listen_ready(void);
+    nucleo_app_request_remote_listen(true);
+    nucleo_anima_l1_unload_if_idle();
+    nucleo_voice_suspend(true);
+    // Wait (≤4 s) for the UI task to enter Remote Control and free the canvas. The loop turns at ~40 ms, so
+    // this normally clears in <200 ms; the ceiling only guards a busy UI task and never hangs the server.
+    for (int w = 0; w < 200 && !nucleo_app_remote_listen_ready(); w++) vTaskDelay(pdMS_TO_TICKS(20));
+    if (!nucleo_app_remote_listen_ready())
+        ESP_LOGW(TAG, "OTA: listening posture not confirmed in 4s — proceeding anyway");
+    #define OTA_BAIL() do { nucleo_app_request_remote_listen(false); nucleo_voice_suspend(false); nucleo_arb_release(tk); } while (0)
+
     esp_ota_handle_t h = 0;
     esp_err_t err = esp_ota_begin(part, OTA_SIZE_UNKNOWN, &h);
-    if (err != ESP_OK) { ESP_LOGE(TAG, "ota_begin: %s", esp_err_to_name(err)); nucleo_arb_release(tk); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ota_begin"); return ESP_FAIL; }
+    if (err != ESP_OK) { ESP_LOGE(TAG, "ota_begin: %s", esp_err_to_name(err)); OTA_BAIL(); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ota_begin"); return ESP_FAIL; }
 
     char buf[1024]; int r, total = 0;
     while ((r = httpd_req_recv(req, buf, sizeof(buf))) > 0) {
         if (total == 0 && (unsigned char)buf[0] != 0xE9) {   // ESP image magic — reject junk uploads fast
-            esp_ota_abort(h); nucleo_arb_release(tk);
+            esp_ota_abort(h); OTA_BAIL();
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "not an ESP firmware image");
             return ESP_FAIL;
         }
-        if (esp_ota_write(h, buf, r) != ESP_OK) { esp_ota_abort(h); nucleo_arb_release(tk); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ota_write"); return ESP_FAIL; }
+        if (esp_ota_write(h, buf, r) != ESP_OK) { esp_ota_abort(h); OTA_BAIL(); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ota_write"); return ESP_FAIL; }
         total += r;
     }
-    if (r < 0 || esp_ota_end(h) != ESP_OK) { nucleo_arb_release(tk); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "incomplete/invalid image"); return ESP_FAIL; }
-    if (esp_ota_set_boot_partition(part) != ESP_OK) { nucleo_arb_release(tk); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "set_boot"); return ESP_FAIL; }
+    if (r < 0 || esp_ota_end(h) != ESP_OK) { OTA_BAIL(); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "incomplete/invalid image"); return ESP_FAIL; }
+    if (esp_ota_set_boot_partition(part) != ESP_OK) { OTA_BAIL(); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "set_boot"); return ESP_FAIL; }
+    #undef OTA_BAIL
 
     nucleo_arb_release(tk);              // success: release the gate before the reboot (token is RAM-only)
     ESP_LOGI(TAG, "OTA ok: %d bytes -> %s, rebooting", total, part->label);
@@ -748,6 +956,70 @@ static inline bool nucleo_tls_heap_ok(void)
 
 // GET /api/anima?q=...  -> ANIMA offline assistant (L0). Understands a typed Italian line
 // and returns an action (launch an app / answer / live system value). See docs/anima.md.
+// ---- off-thread runner for the heavy ANIMA cascade --------------------------
+// The offline L0/L1/AKB5 cascade (and verify_claim) recurse deep enough to need a ~30 KB stack. Running
+// them INLINE in this httpd task forced config.stack_size to 30 KB permanently — and on this PSRAM-less
+// chip a 30 KB CONTIGUOUS block can't be carved at boot (largest free block ~31 KB), so httpd_start()
+// failed and the device froze on the boot splash's last frame. Fix: the httpd task stays lean (18 KB —
+// enough for the TLS handshakes proxy/llm still run in-task) and each heavy ANIMA call runs on a TRANSIENT
+// 30 KB worker spawned per request and torn down right after, so the big stack exists only WHILE a query
+// runs, then returns to the heap (~12 KB recovered at idle). The caller already holds the spine lock
+// (nucleo_anima_try_lock), so at most ONE such worker is ever alive — never 2x30 KB at once.
+typedef struct { void (*fn)(void *); void *ctx; SemaphoreHandle_t done; } anima_offthread_t;
+static void anima_offthread_task(void *p)
+{
+    anima_offthread_t *j = (anima_offthread_t *)p;
+    j->fn(j->ctx);
+    xSemaphoreGive(j->done);
+    vTaskDelete(NULL);
+}
+// Run fn(ctx) on a transient 30 KB-stack task and block until it finishes. Returns false only if the
+// stack can't be allocated even after dropping the idle L1 index and retrying once (heap too tight right
+// now) — the caller then answers a lean 503 instead of overflowing the small httpd stack. MUST be called
+// holding the spine lock so this is the sole ANIMA worker alive.
+static bool anima_run_offthread(void (*fn)(void *), void *ctx)
+{
+    anima_offthread_t j = { fn, ctx, xSemaphoreCreateBinary() };
+    if (!j.done) return false;
+    BaseType_t ok = xTaskCreate(anima_offthread_task, "anima_web", 30720, &j, tskIDLE_PRIORITY + 2, NULL);
+    if (ok != pdPASS) {
+        nucleo_anima_l1_unload_if_idle();          // free ~31 KB if the offline index is idle...
+        vTaskDelay(pdMS_TO_TICKS(120));            // ...let the idle task coalesce the freed block, then retry once
+        ok = xTaskCreate(anima_offthread_task, "anima_web", 30720, &j, tskIDLE_PRIORITY + 2, NULL);
+    }
+    if (ok != pdPASS) {
+        // NEVER silent: log why (heap can't carve 30 KB right now) so a stuck query is diagnosable over
+        // WiFi (/api/logs). In practice this can't fire — L1's RAM footprint is tiny (~4 KB, streamed
+        // index) so a 30 KB block is reliably free — but if it ever does, the caller answers a logged 503.
+        ESP_LOGE(TAG, "anima worker spawn FAILED: free=%u largest=%u",
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        vSemaphoreDelete(j.done);
+        return false;
+    }
+    xSemaphoreTake(j.done, portMAX_DELAY);         // the cascade is self-bounding (internal TLS/query timeouts)
+    vSemaphoreDelete(j.done);
+    return true;
+}
+// Give the WEB SERVER the RAM to LOAD the web OS: the static handler calls this (via nucleo_webfs_set_reclaim_cb)
+// when a client pulls a UI asset under low heap — drop the idle offline index (~31 KB, reloads from SD on the
+// next query) so the shell + assets always transfer on this single-task, PSRAM-less server. Ungated by any key.
+static void httpd_webfs_reclaim(void) { (void)nucleo_anima_l1_unload_if_idle(); }
+// Thunks: the worker calls these with a pointer to a caller-stack job struct, valid because the caller
+// blocks inside anima_run_offthread until the worker signals done.
+typedef struct { const char *q; const char *lang; anima_result_t out; } anima_query_job_t;
+static void anima_query_thunk(void *p)
+{
+    anima_query_job_t *j = (anima_query_job_t *)p;
+    j->out = nucleo_anima_query(j->q, j->lang);
+}
+typedef struct { const char *kind, *key, *asserted, *lang; char *ev; size_t evcap; anima_verify_t out; } anima_verify_job_t;
+static void anima_verify_thunk(void *p)
+{
+    anima_verify_job_t *j = (anima_verify_job_t *)p;
+    j->out = nucleo_anima_verify_claim(j->kind, j->key, j->asserted, j->lang, j->ev, j->evcap);
+}
+
 static esp_err_t anima_get(httpd_req_t *req)
 {
     char q[160] = { 0 };
@@ -823,7 +1095,24 @@ static esp_err_t anima_get(httpd_req_t *req)
     else if (mode_ov == 2) { nucleo_anima_set_online(true);  nucleo_anima_set_online_only(false); }
     else if (mode_ov == 3) { nucleo_anima_set_online(true);  nucleo_anima_set_online_only(true); }
 
-    anima_result_t r = nucleo_anima_query(q, lang);
+    // Run the cascade on a transient 30 KB worker (NOT in this lean httpd task — see anima_run_offthread).
+    anima_query_job_t qj = { .q = q, .lang = lang };
+    if (!anima_run_offthread(anima_query_thunk, &qj)) {
+        // Heap too fragmented to spawn the worker right now -> restore the mode override + spine and 503.
+        if (mode_ov) {
+            bool want_online = (mode_ov != 1), want_only = (mode_ov == 3);
+            if (nucleo_anima_online_enabled() == want_online && nucleo_anima_online_only_enabled() == want_only) {
+                nucleo_anima_set_online(saved_online); nucleo_anima_set_online_only(saved_only);
+            }
+        }
+        nucleo_anima_unlock();
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_hdr(req, "Retry-After", "1");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"busy\":true,\"retry_after_ms\":250}");
+        return ESP_OK;
+    }
+    anima_result_t r = qj.out;
 
     if (mode_ov) {
         // Compare-and-restore: restore the saved mode ONLY if the globals still hold OUR override.
@@ -936,7 +1225,8 @@ static esp_err_t anima_get(httpd_req_t *req)
             unsigned kb = (unsigned)(heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / 1024);
             snprintf(value, sizeof(value), en ? "%u KB of RAM free" : "%u KB di RAM liberi", kb);
         } else if (!strcmp(r.arg, "version")) {
-            snprintf(value, sizeof(value), "NucleoOS 0.1.0");
+            const esp_app_desc_t *d = esp_app_get_description();
+            snprintf(value, sizeof(value), "NucleoOS %s", d ? d->version : "?");
         } else if (!strcmp(r.arg, "uptime")) {
             long s = (long)(esp_timer_get_time() / 1000000);
             int dd = (int)(s / 86400), hh = (int)((s % 86400) / 3600), mm = (int)((s % 3600) / 60);
@@ -1094,8 +1384,18 @@ static esp_err_t anima_verify_get(httpd_req_t *req)
         httpd_resp_sendstr(req, "{\"busy\":true,\"retry_after_ms\":250}");
         return ESP_OK;
     }
-    char ev[256];
-    anima_verify_t vr = nucleo_anima_verify_claim(kind, key, asserted, lang, ev, sizeof ev);
+    char ev[256] = { 0 };
+    // verify_claim walks L1/HDC (deep stack) — run it on the transient 30 KB worker, not this lean task.
+    anima_verify_job_t vj = { .kind = kind, .key = key, .asserted = asserted, .lang = lang, .ev = ev, .evcap = sizeof ev };
+    if (!anima_run_offthread(anima_verify_thunk, &vj)) {
+        nucleo_anima_unlock();
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_hdr(req, "Retry-After", "1");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"busy\":true,\"retry_after_ms\":250}");
+        return ESP_OK;
+    }
+    anima_verify_t vr = vj.out;
     nucleo_anima_unlock();
     const char *st = vr == ANIMA_VERIFY_CONFIRMED ? "confirmed" : vr == ANIMA_VERIFY_CONTRADICTED ? "contradicted" : "unknown";
     cJSON *root = cJSON_CreateObject();
@@ -1112,9 +1412,20 @@ static esp_err_t anima_verify_get(httpd_req_t *req)
     return ESP_OK;
 }
 
+// Free the idle offline index if contiguous heap is tight, so a boot-time API burst (the desktop shell
+// fires /api/apps + /api/associations + several /api/fs reads as it loads) has the RAM to respond FAST
+// instead of 503-ing or queuing on the single-task server. Mirrors the webfs static-serve reclaim; the
+// index reloads from SD on the next ANIMA query. No-op once already reclaimed; ungated by any key.
+static void api_reclaim_if_low(void)
+{
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < (40 * 1024))
+        (void)nucleo_anima_l1_unload_if_idle();
+}
+
 // GET /api/apps -> installed apps with display fields for the desktop shell.
 static esp_err_t apps_get(httpd_req_t *req)
 {
+    api_reclaim_if_low();          // the shell awaits THIS to draw the desktop — never let it starve
     const nucleo_app_t *apps = nucleo_registry_apps();
     int n = nucleo_registry_count();
 
@@ -1204,8 +1515,9 @@ static esp_err_t proxy_get(httpd_req_t *req)
     if (!nucleo_tls_heap_ok()) nucleo_anima_l1_unload_if_idle();
     if (!nucleo_tls_heap_ok()) {
         httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_hdr(req, "Retry-After", "3");
         httpd_resp_sendstr(req, "low memory for TLS fetch, retry");
-        return ESP_FAIL;
+        return ESP_OK;   // pre-stream: ESP_OK keeps the socket alive -> a clean retriable 503, not a reset
     }
 
     proxy_ctx_t ctx = { .req = req, .started = false, .ctype = { 0 } };
@@ -1226,7 +1538,8 @@ static esp_err_t proxy_get(httpd_req_t *req)
     // tell the client to retry — same graceful 503 as the low-heap bail above.
     uint32_t tk = nucleo_arb_acquire(ARB_FG, "proxy", 0);
     if (!tk) { httpd_resp_set_status(req, "503 Service Unavailable");
-               httpd_resp_sendstr(req, "busy with another TLS fetch, retry"); return ESP_FAIL; }
+               httpd_resp_set_hdr(req, "Retry-After", "1");
+               httpd_resp_sendstr(req, "busy with another TLS fetch, retry"); return ESP_OK; }
 
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) { nucleo_arb_release(tk); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "client init"); return ESP_FAIL; }
@@ -1406,8 +1719,9 @@ static esp_err_t llm_proxy(httpd_req_t *req)
     if (!nucleo_tls_heap_ok()) nucleo_anima_l1_unload_if_idle();
     if (!nucleo_tls_heap_ok()) {
         httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_hdr(req, "Retry-After", "3");
         httpd_resp_sendstr(req, "low memory for TLS fetch, retry");
-        return ESP_FAIL;
+        return ESP_OK;   // pre-stream: ESP_OK keeps the socket alive -> a clean retriable 503, not a reset
     }
 
     proxy_ctx_t ctx = { .req = req, .started = false, .ctype = { 0 } };
@@ -1424,7 +1738,8 @@ static esp_err_t llm_proxy(httpd_req_t *req)
     // Heavy-work budget across the TLS window (see /api/proxy). try-only: never block the httpd task.
     uint32_t tk = nucleo_arb_acquire(ARB_FG, "llm", 0);
     if (!tk) { httpd_resp_set_status(req, "503 Service Unavailable");
-               httpd_resp_sendstr(req, "busy with another TLS fetch, retry"); return ESP_FAIL; }
+               httpd_resp_set_hdr(req, "Retry-After", "1");
+               httpd_resp_sendstr(req, "busy with another TLS fetch, retry"); return ESP_OK; }
 
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) { nucleo_arb_release(tk); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "client init"); return ESP_FAIL; }
@@ -1517,6 +1832,16 @@ static esp_err_t transcribe_get(httpd_req_t *req)
 
     char *text = malloc(4096); char detlang[16] = {0};
     if (!text) { httpd_resp_sendstr(req, "{\"ok\":false,\"error\":\"oom\"}"); return ESP_OK; }
+    // Headroom for the cloud TLS: this runs on the httpd task (can't free httpd), so on a tight unit the
+    // held L1 index (~24 KB) + launcher canvas (32 KB) starve it to ~20 KB free → the Whisper/teacher
+    // handshake never clears the heap gate ("skip POST: free <34816"). Drop L1 (lazy-reloads) AND ask the
+    // app task to hand back the 32 KB canvas, then proceed — together that frees ~50 KB for the handshake.
+    extern bool   nucleo_anima_l1_unload_if_idle(void);
+    extern size_t nucleo_webfs_reclaim_canvas(void);
+    nucleo_anima_l1_unload_if_idle();
+    size_t big = nucleo_webfs_reclaim_canvas();
+    ESP_LOGI("transcribe", "pre-TLS reclaim: largest=%u free=%u", (unsigned)big,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     int tl = nucleo_anima_transcribe(abs, lang, text, 4096, detlang, sizeof detlang);
 
     cJSON *root = cJSON_CreateObject();
@@ -1640,7 +1965,16 @@ esp_err_t nucleo_httpd_start(void)
     if (s_server) return ESP_OK;                     // already running (idempotent)
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_open_sockets = 6;                     // 4->6. (Tried 8 to dodge lru-purge of the persistent /ws, but a realistic-load stress then drove min_free internal heap to 156 B — near-OOM — because each extra concurrent keep-alive socket holds httpd scratch buffers that fragment the scarce heap. 6 keeps min_free ~10-13 KB and still gives 0 WS flaps under a single real browser; the rare flap under heavy parallel load is the lesser evil vs near-OOM on this PSRAM-less, battery-powered chip.)
+    // 6->3->4: SEQUENCE the cold-load burst so the device never saturates its ~15 KB heap. The COLD shell
+    // load (incognito / first visit, no SW yet) fired a burst of parallel asset GETs; with 6 sockets the
+    // device served them all at once and OOM-reset the connections mid-serve ("web OS doesn't always load").
+    // Capping concurrent serves makes extra requests queue (lru_purge recycles idle sockets) instead of
+    // flooding. 3 fixed the cold load but was too tight for the PERSISTENT /ws: being mostly idle, the WS
+    // was the oldest-idle socket lru_purge evicted whenever a 3rd request (status poll / crawl / query)
+    // arrived — so on a weak-Wi-Fi link (slower serves hold sockets longer) the handoff socket flapped.
+    // 4 reserves breathing room for the idle /ws (SW MAX_INFLIGHT=2 + status/crawl + the persistent WS)
+    // while keeping the cold-load burst well below the flooding 6. Still strictly raises min_free vs 6.
+    config.max_open_sockets = 4;
     config.uri_match_fn = httpd_uri_match_wildcard;  // enable the "/*" static catch-all
     // Sized to the ACTUAL route count, with small headroom. We register 55 handlers below: 26 explicit
     // here + auth(2) + fs(6) + rec(4) + ir(4) + gpio(1) + link(9) + display(1) + ws(1) + webfs catch-all(1).
@@ -1656,11 +1990,14 @@ esp_err_t nucleo_httpd_start(void)
     // recycles the oldest idle socket instead of refusing/resetting new ones — this (plus the
     // throttled /api/status FAT scan) stops the ERR_CONNECTION_RESET seen in the browser.
     config.lru_purge_enable = true;
-    config.stack_size = 30720;                       // 16K->24K->30K: the offline L1 cascade (l1_encode's acc[1KB]+w atop anima_query->try_cascade->l1_query) overflowed 16K -> panic on every knowledge query; 24K fixed flat-L1, 30K covers the deeper AKB5 re-entrant (akb5_query -> re-entrant l1_query per shard). HWM in /api/heap. ANIMA runs the whole L0/L1 cascade IN this task,
-                                                     // then a TLS handshake whose X.509 chain verify is
-                                                     // deeply recursive — Wikipedia's long cert chain
-                                                     // overflowed the old 8 KB stack (silent ~60s hang);
-                                                     // groq/open-meteo's shorter chains fit. 16 KB clears it.
+    // 18 KB: sized to the deepest thing that STILL runs in this task — a TLS handshake whose X.509 chain
+    // verify recurses (proxy/llm/online-fetch; Wikipedia's long chain overflowed the old 8 KB stack in a
+    // silent ~60 s hang — 16 KB clears it, 18 KB is margin). The offline L0/L1/AKB5 cascade (and
+    // verify_claim) NO LONGER run here: they need ~30 KB and used to force this task to 30 KB, which on this
+    // PSRAM-less chip can't be carved contiguously at boot (largest free block ~31 KB) — httpd_start() then
+    // failed and froze the device on the splash. anima_get/anima_verify now dispatch the cascade to a
+    // transient 30 KB worker (anima_run_offthread); keeping httpd lean is what lets it boot. HWM in /api/heap.
+    config.stack_size = 18432;
     // Large drag-and-drop uploads (up to 640 MB) can pause mid-stream while the SD card
     // flushes a block. A 5 s socket timeout would abort them; 30 s gives generous slack,
     // and the upload handler additionally forgives a bounded run of these timeouts.
@@ -1686,6 +2023,8 @@ esp_err_t nucleo_httpd_start(void)
     httpd_uri_t diag = { .uri = "/api/diag", .method = HTTP_GET, .handler = diag_get };   // consolidated health snapshot
     httpd_uri_t heap = { .uri = "/api/heap", .method = HTTP_GET, .handler = heap_get };
     httpd_uri_t cpu = { .uri = "/api/cpu", .method = HTTP_GET, .handler = cpu_get };
+    httpd_uri_t proc      = { .uri = "/proc",   .method = HTTP_GET, .handler = proc_get };   // /proc index
+    httpd_uri_t proc_node = { .uri = "/proc/*", .method = HTTP_GET, .handler = proc_get };   // /proc/<node>
     httpd_uri_t wifiscan = { .uri = "/api/wifi/scan", .method = HTTP_GET, .handler = wifi_scan_get };
     httpd_uri_t wifiknown  = { .uri = "/api/wifi/known",  .method = HTTP_GET,  .handler = wifi_known_get };   // saved networks
     httpd_uri_t wifijoin   = { .uri = "/api/wifi/join",   .method = HTTP_POST, .handler = wifi_join_post };   // join + remember
@@ -1711,6 +2050,8 @@ esp_err_t nucleo_httpd_start(void)
     httpd_register_uri_handler(server, &diag);       // /api/diag (Log Viewer "Diagnose" digest)
     httpd_register_uri_handler(server, &heap);
     httpd_register_uri_handler(server, &cpu);
+    httpd_register_uri_handler(server, &proc);        // /proc (Unix-style virtual FS index)
+    httpd_register_uri_handler(server, &proc_node);   // /proc/<node> (uptime, meminfo, loadavg, ...)
     httpd_register_uri_handler(server, &wifiscan);   // /api/wifi/scan (web WiFi Scanner app)
     httpd_register_uri_handler(server, &wifiknown);  // /api/wifi/known  (saved networks)
     httpd_register_uri_handler(server, &wifijoin);   // /api/wifi/join   (join + remember)
@@ -1751,6 +2092,7 @@ esp_err_t nucleo_httpd_start(void)
     if (nucleo_app_register_costellazioni_api(server) != ESP_OK) ESP_LOGW(TAG, "costellazioni save endpoint register failed");
     nucleo_ws_register(server);        // /ws live deltas
     nucleo_webfs_register(server);  // serves shell + app UIs from SD (catch-all, last)
+    nucleo_webfs_set_reclaim_cb(httpd_webfs_reclaim);  // client loading the web OS -> free heap for the server
     cpu_probe_init();   // start the per-core idle-hook load probe (once per boot)
     s_server = server;
     ESP_LOGI(TAG, "HTTP server up — free=%u min=%u largest=%u",

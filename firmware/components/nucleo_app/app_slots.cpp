@@ -165,8 +165,9 @@ static unsigned s_anim;
 
 static int   s_msel, s_setsel, s_help, s_betsel;
 static float s_capY;
-static int   s_msg_ms;                          // transient toast (e.g. "lower the bet")
+static int   s_msg_ms;                          // transient toast (e.g. "bet auto-lowered")
 static const char *s_msg;
+static char  s_msgbuf[28];                      // backing store for dynamic toasts
 
 // reels
 static uint8_t s_strip[NREEL][SLEN];
@@ -312,11 +313,19 @@ static void sfx(int id)
 {
     if (!g_audio || id <= 0) return;
     if (!sfx_important(id) && nucleo_audio_is_playing()) return;
+    const char *nm = sfx_name(id);
     char p[80];
-    snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
+    snprintf(p, sizeof p, DIRR "/pack/%s.wav", nm);           // 1) deployed arcade pack (best, zero synth CPU)
     FILE *f = fopen(p, "rb");
     if (f) fclose(f);
-    else { notify_voice_t v[8]; int nv = build_voices(id, v); if (nv <= 0 || notify_synth_voices_wav(v, nv, p, 12000) != 0) return; }
+    else {
+        snprintf(p, sizeof p, DIRR "/sfx/%s.wav", nm);        // 2) on-device synth cache (legacy)
+        f = fopen(p, "rb");
+        if (f) fclose(f);
+        else return;   // 3) NEVER synth at runtime: the inline synth ran on the UI task and, on a cold/incomplete
+                       // pack, blocked it past the 8 s Task-WDT -> reboot when opening Slots. A missing clip is now
+                       // simply SILENT. The deployed /pack/ WAVs are the sound source (ship them; never synth live).
+    }
     if (sfx_important(id)) nucleo_audio_stop();
     nucleo_audio_play(p);
 }
@@ -331,19 +340,6 @@ static void sfx_cache_check(void)
     for (int id = 1; id <= NSFX; id++) { char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id)); remove(p); }
     f = fopen(DIRR "/sfx/ver.bin", "wb");
     if (f) { int vv = SFX_VER; fwrite(&vv, sizeof vv, 1, f); fclose(f); }
-}
-static void presynth(void)
-{
-    if (!g_audio) return;
-    notify_voice_t v[8];
-    for (int id = 1; id <= NSFX; id++) {
-        char p[80];
-        snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-        FILE *f = fopen(p, "rb");
-        if (f) { fclose(f); continue; }
-        int nv = build_voices(id, v);
-        if (nv > 0) notify_synth_voices_wav(v, nv, p, 12000);
-    }
 }
 
 // ============================ reels: build / read ============================
@@ -656,12 +652,29 @@ static void reset_win_marks(void)
     for (int r = 0; r < NREEL; r++) for (int w = 0; w < NROW; w++) s_cellwin[r][w] = false;
     for (int i = 0; i < 5; i++) s_linewin[i] = false;
 }
+// Auto-fit the wager to the bankroll: pick the LARGEST affordable total bet (<= balance), preferring more
+// active lines on a tie. Lets the player keep spinning as the credits grind down instead of nagging to lower.
+static void fit_bet(void)
+{
+    int bestLi = g_lines_idx, bestBi = g_bet_idx, bestTot = -1;
+    for (int li = 0; li < 3; li++)
+        for (int bi = 0; bi < 5; bi++) {
+            int t = LINES_OPT[li] * BET_OPT[bi];
+            if (t > g_balance) continue;
+            if (t > bestTot || (t == bestTot && LINES_OPT[li] > LINES_OPT[bestLi])) { bestTot = t; bestLi = li; bestBi = bi; }
+        }
+    if (bestTot > 0) { g_lines_idx = bestLi; g_bet_idx = bestBi; }
+}
 static void do_spin(void)
 {
     int bet = total_bet();
     if (g_balance < bet) {
         if (g_balance <= 0) { sfx(3); go(ST_OVER); return; }
-        s_msg = tx("Riduci la puntata", "Lower the bet"); s_msg_ms = 1100; sfx(13); nucleo_app_request_draw(); return;
+        fit_bet();                                                                     // auto-lower to what's affordable, then spin (no nagging)
+        bet = total_bet();
+        cfg_write();
+        snprintf(s_msgbuf, sizeof s_msgbuf, tx("Puntata ridotta a %d", "Bet lowered to %d"), bet);
+        s_msg = s_msgbuf; s_msg_ms = 900; sfx(4);
     }
     g_balance -= bet;
     reset_win_marks();
@@ -1160,6 +1173,7 @@ static bool poll(void)
     if (dt < 0) dt = 0;
     if (dt > 200) dt = 200;
     s_last = s_now;
+    bool menu_glide = false;            // true only while the selection capsule is still easing
 
     // eased credit count-up/down (the "rolling" balance)
     s_disp_bal += ((float)g_balance - s_disp_bal) * 0.18f;
@@ -1197,12 +1211,19 @@ static bool poll(void)
             if (s_auto_ms == 0) do_spin();
         }
     } else if (s_screen == ST_MENU || s_screen == ST_SET) {
-        s_capY += (cap_target() - s_capY) * 0.45f;
+        float tgt = cap_target();
+        if (s_capY != tgt) {                                 // ease the capsule, then snap and rest
+            s_capY += (tgt - s_capY) * 0.45f;
+            if (fabsf(tgt - s_capY) < 0.4f) s_capY = tgt;
+            menu_glide = true;
+        }
     }
 
     // HELP and SCORES are fully static (no s_anim/timer): don't re-composite them every frame.
     // Key presses there call nucleo_app_request_draw() for a one-shot redraw (mirrors app_reactor).
+    // A settled menu likewise goes static -> stop the ~30 Hz duplicate-frame re-blit (idle flicker).
     if (s_screen == ST_HELP) return false;
+    if ((s_screen == ST_MENU || s_screen == ST_SET) && !menu_glide) return false;
     if (s_now - s_frame < 33) return false;
     s_frame = s_now;
     s_anim++;
@@ -1215,7 +1236,10 @@ static void on_enter(void)
     build_strips();
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(85);
     sfx_cache_check();
-    presynth();
+    // NO bulk pre-synth here: sfx() already synthesizes each clip lazily on its first play (pack -> cache ->
+    // "synth now"), exactly like pinball/poker/pong. Pre-synthesizing all 24 SFX synchronously on the UI task
+    // at launch (the old presynth() call) blocked it past the 8 s Task-WDT on a cold cache (first launch /
+    // SFX_VER bump) -> TASK_WDT reset on opening Slots. Lazy synth spreads that cost one clip at a time.
     memset(s_coin, 0, sizeof s_coin);
     memset(s_fw, 0, sizeof s_fw);
     reset_win_marks();
@@ -1241,7 +1265,9 @@ extern "C" void nucleo_register_slots(void)
     static const nucleo_app_def_t app = {
         "slots", "Slot", "Games", "Slot machine: gira e vinci il jackpot",
         '7', C_YELLOW, on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_NET_APP   // dedicate RAM + free the shared I2S/mic line so the chiptune SFX reliably play
+        NX_NET_APP | NX_SOLO   // NX_SOLO: reboot into a FRESH unfragmented heap (the 32KB canvas couldn't be
+                               // re-acquired inline on the fragmented heap -> OOM/Task-WDT). NX_NET_APP bits are
+                               // no-ops in Solo (services already down at boot) but kept defensively.
     };
     nucleo_app_register(&app);
 }

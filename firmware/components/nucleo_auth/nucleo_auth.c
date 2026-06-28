@@ -144,22 +144,21 @@ static bool token_valid(const char *tok)
 // Pull the nucleo_session value out of the Cookie header.
 static bool cookie_token(httpd_req_t *req, char *out, size_t n)
 {
+    // No per-request malloc: the auth guard runs on EVERY gated /api/* call (+ the /ws handshake), so a
+    // malloc/free of the Cookie header on the hot path churned the fragmented no-PSRAM heap during the
+    // cold-load+crawl burst. A function-static buffer is race-free (httpd serves on ONE task) with zero
+    // stack growth; an implausibly long Cookie is treated as unpaired (the /pair flow re-issues a token).
     size_t len = httpd_req_get_hdr_value_len(req, "Cookie");
-    if (len == 0) return false;
-    char *cookie = malloc(len + 1);
-    if (!cookie) return false;
-    if (httpd_req_get_hdr_value_str(req, "Cookie", cookie, len + 1) != ESP_OK) { free(cookie); return false; }
-    bool found = false;
+    if (len == 0 || len >= 512) return false;
+    static char cookie[512];
+    if (httpd_req_get_hdr_value_str(req, "Cookie", cookie, sizeof cookie) != ESP_OK) return false;
     const char *p = strstr(cookie, COOKIE_NAME "=");
-    if (p) {
-        p += strlen(COOKIE_NAME "=");
-        size_t i = 0;
-        while (p[i] && p[i] != ';' && p[i] != ' ' && i < n - 1) { out[i] = p[i]; i++; }
-        out[i] = '\0';
-        found = i > 0;
-    }
-    free(cookie);
-    return found;
+    if (!p) return false;
+    p += strlen(COOKIE_NAME "=");
+    size_t i = 0;
+    while (p[i] && p[i] != ';' && p[i] != ' ' && i < n - 1) { out[i] = p[i]; i++; }
+    out[i] = '\0';
+    return i > 0;
 }
 
 bool nucleo_auth_request_ok(httpd_req_t *req)

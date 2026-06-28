@@ -235,6 +235,7 @@
     dock:$('dock'), chat:$('chat'), ask:$('ask'), ctxName:$('ctxName'), toast:$('toast'),
   };
   import { recordToSd, onMicStatus } from '/micgate.js';  // OS-wide single-owner gate for the Cardputer mic
+  import { transcribeLong, summarizeLong, isLongWav } from './longtranscribe.js';  // browser-side chunked path for long takes
   let src = 'device';                        // 'device' | 'browser'
   let recording = false, t0 = 0, timerInt = null, statusPoll = null, devRec = null;
   let selected = null;                       // selected recording {name,path}
@@ -581,18 +582,47 @@
 
   // Run the device pipeline: Whisper transcription (auto language, fallback to system language) +
   // cloud-teacher summary, saved as sidecars on the device. Then open the panel.
+  // Probe the file's total size cheaply (a 1-byte Range reply carries Content-Range: bytes 0-0/<total>).
+  async function fileSize(path){
+    try{ const r=await fetch(readUrl(path),{headers:{Range:'bytes=0-0'}});
+      const cr=r.headers.get('Content-Range'); const m=cr&&cr.match(/\/(\d+)$/); return m?+m[1]:0;
+    }catch{ return 0; }
+  }
+
   async function runPipeline(f, btn){
     const o=btn.textContent; btn.disabled=true; btn.textContent=en()?'✨ Transcribing…':'✨ Trascrivo…';
     const path=DIR+'/'+f.name;
-    const call=(lang)=> fetch('/api/transcribe?path='+enc(path)+'&lang='+lang+'&summarize=1').then(r=>r.json());
+    const isWav=/\.wav$/i.test(f.name);
+    const hasKey=!!(localStorage.getItem('groq.key')||'').trim();
     try{
+      // CLIENT-SIDE chunked path for WAV when the browser holds a Groq key: the only way long takes
+      // (>13 min hit Whisper's 25 MB cap, and the device's single-shot TLS upload is fragile). The device
+      // never touches the file — we pull it in byte ranges and transcribe segment by segment.
+      if(isWav && hasKey){
+        const prog=(p)=>{ const pct=p.total?Math.round(100*p.done/p.total):0;
+          const lbl=p.phase==='transcribe'?(en()?'Transcribing':'Trascrivo'):(en()?'Summarizing':'Riassumo');
+          btn.textContent=`✨ ${lbl} ${p.done}/${p.total}`; setStatus(`${lbl}… ${pct}%`); };
+        const text=await transcribeLong({ path, lang:'auto', onProgress:prog });
+        if(!text || !text.trim()) throw new Error(en()?'empty transcript':'trascrizione vuota');
+        await fs.write(DIR+'/'+f._base+'.txt', new Blob([text],{type:'text/plain'}));
+        let sum=''; try{ sum=await summarizeLong({ text, lang:sysLang(), onProgress:prog }); }catch(e){ /* keep transcript even if summary fails */ }
+        if(sum) await fs.write(DIR+'/'+f._base+'.sum.txt', new Blob([sum],{type:'text/plain'}));
+        setStatus(en()?'Transcript and summary ready ✓':'Trascrizione e riassunto pronti ✓','ok');
+        toast(en()?'Transcript and summary ready':'Trascrizione e riassunto pronti'); openPanel=f._base; await loadList();
+        return;
+      }
+      // DEVICE path (MP3, or no browser key): the firmware streams the file to Whisper. Works for short
+      // takes; for long ones the client path above is the answer (configure the Groq key in AI Chat).
+      const call=(lang)=> fetch('/api/transcribe?path='+enc(path)+'&lang='+lang+'&summarize=1').then(r=>r.json());
       let r=await call('auto');
       if(!r||!r.ok){ btn.textContent=en()?'✨ System language…':'✨ Lingua di sistema…'; r=await call(sysLang()); }   // fallback to system language
       if(!r||!r.ok) throw new Error((r&&r.error)||(en()?'failed':'fallita'));
       toast(en()?'Transcript and summary ready':'Trascrizione e riassunto pronti'); openPanel=f._base; await loadList();
     }catch(e){
       btn.disabled=false; btn.textContent=o; toast((en()?'Transcription failed: ':'Trascrizione non riuscita: ')+(e.message||e));
-      setStatus(en()?'Transcription needs the online models (Groq Whisper). Configure the key or retry online.':'La trascrizione richiede i modelli online (Groq Whisper). Configura la chiave o riprova online.','err');
+      const longHint = isWav&&!hasKey ? (en()?'Long recordings transcribe in the browser — set your Groq key in AI Chat, then retry.':'I vocali lunghi si trascrivono nel browser — imposta la chiave Groq in AI Chat, poi riprova.')
+        : (en()?'Transcription needs the online models (Groq Whisper). Configure the key or retry online.':'La trascrizione richiede i modelli online (Groq Whisper). Configura la chiave o riprova online.');
+      setStatus(longHint,'err');
     }
   }
   function togglePanel(f){ openPanel = (openPanel===f._base)? null : f._base; renderList(); }

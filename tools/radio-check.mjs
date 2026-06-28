@@ -9,8 +9,9 @@
 //                   and a sustained throughput >= ~100 kbps (a 128 kbps station, read live).
 //   2) nowplaying : HTTP 200 and parseable JSON with a track.
 //
-// It reads the same shared config the firmware and the web app do
-// (deploy/sd/system/config/radio.json) so it tests the exact URLs the device will use. The file is
+// It reads the in-repo seed catalog (tools/sd-sim/system/config/radio.json) — the single source kept
+// in lock-step with the web app's SEED and the firmware BUILTIN[] — so it tests the exact URLs the
+// device will use. The file is
 // schema 2 — a { "default", "stations": [ {name,stream,nowplaying}, ... ] } list — and EVERY station
 // is checked, so a bad URL added from the web app is caught here before it reaches the Cardputer.
 // A legacy schema-1 { "stream", "name" } file still works, as does --stream / --nowplaying (which
@@ -27,7 +28,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = join(fileURLToPath(import.meta.url), '..', '..');
-const CFG = join(REPO, 'deploy', 'sd', 'system', 'config', 'radio.json');
+const CFG = join(REPO, 'tools', 'sd-sim', 'system', 'config', 'radio.json');
 
 const STREAM_MIN_KBPS = 100;   // 128 kbps nominal; allow headroom for read-timing overhead
 const STREAM_SECONDS = 6;      // how long to sample the live stream

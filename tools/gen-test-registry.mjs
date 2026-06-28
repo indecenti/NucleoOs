@@ -35,7 +35,7 @@ const categories = [
   { id: 'app-device',       label: 'App · Device & HW',        nl: false, desc: 'UI device e bridge USB-HID.' },
   { id: 'device-load',      label: 'Device · Carico & RAM',    nl: false, desc: "Stress concorrente del web server su device reale: l'arbitro heavy-work serializza il TLS, l'heap regge sopra il floor, zero crash. Richiede un device flashato (SKIP se assente)." },
   { id: 'connect-transfer', label: 'Connessione · Trasferimento (Vicino)', nl: false, desc: 'Scambio file/comandi device-to-device via ESP-NOW: protocollo affidabile host-testato (finestra+ACK+CRC32+resume sotto perdita/riordino/duplicazione, codec Bruce wire-compatibile) e skill ANIMA gated (schema chiuso, azioni mutanti fail-closed).' },
-  { id: 'security',         label: 'Sicurezza · Attacchi (test autorizzati)', nl: false, desc: 'Strumenti offensivi per test autorizzati: il core dei frame dell\'engine Ethernet L2/L3 (W5500 MACRAW — ARP/DHCP/TCP build+parse, checksum IP/UDP/TCP, subnet, MAC random, OUI) host-testato. Pura logica C, nessun device. Un byte sbagliato = un attacco morto.' },
+  { id: 'security',         label: 'Sicurezza · Attacchi (test autorizzati)', nl: false, desc: 'Strumenti offensivi per test autorizzati, host-testati (pura logica C, nessun device): il core dei frame dell\'engine Ethernet L2/L3 (W5500 MACRAW — ARP/DHCP/TCP build+parse, checksum IP/UDP/TCP, subnet, MAC random, OUI) e il core advertisement BLE (Apple Continuity / Swift Pair / Fast Pair / iBeacon framing + report map HID, invariante <=31 byte). Un byte sbagliato = un attacco morto.' },
   { id: 'build-lint',       label: 'Build & lint',             nl: false, desc: 'Validazione asset/manifest e drift dello spec API.' },
 ];
 
@@ -71,6 +71,9 @@ const gateCat = {
   'arbiter (concurrency)': 'cascade-infra',
   'link-proto (espnow)': 'connect-transfer', 'nearby-skill (scoped)': 'connect-transfer',
   'eth-frames (wired)': 'security',
+  'ble-adv (spam/beacon)': 'security',
+  'ducky (payloads)': 'security',
+  'weather (meteo)': 'app-shell',
 };
 const NL_GATES = new Set(Object.entries(gateCat).filter(([, c]) => categories.find(x => x.id === c)?.nl).map(([n]) => n));
 

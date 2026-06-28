@@ -325,9 +325,11 @@ def encode_audio_blob(src, out_dir, rate, kbps, ss=None, dur=None, gpu=False, lo
     if ss:  trim += ["-ss", str(ss)]
     if dur: trim += ["-t", str(dur)]
     hw = ["-hwaccel", "cuda"] if gpu else []
+    # -map_metadata -1 + -id3v2_version 0: bare MP3, no ID3 tag (see encode.py). The embedded audio
+    # is seeked by a CBR byte map relative to audio_off; a leading ID3 tag would skew it.
     cmd = ([ff, "-hide_banner", "-loglevel", "error", "-y"] + hw + trim +
            ["-i", src, "-vn", "-ac", "1", "-ar", str(rate),
-            "-c:a", "libmp3lame", "-b:a", f"{kbps}k", tmp])
+            "-c:a", "libmp3lame", "-b:a", f"{kbps}k", "-map_metadata", "-1", "-id3v2_version", "0", tmp])
     if log:
         log("$ " + " ".join(cmd))
     flags = {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}

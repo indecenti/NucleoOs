@@ -221,8 +221,11 @@ Extends [`anima.md`](anima.md) §6:
 4. **Never ingest an unvalidated card.** Schema-validate before it touches the brain.
 5. **Never freeze a volatile fact as timeless** (see §6).
 6. **Never blur trust tiers.** `learned/` stays separate from curated until human-promoted.
-7. **Never block the UI on the network.** Fetch on core 1, hard timeout (~3–5 s), show
-   "cerco online…", fall back to honest refusal on timeout.
+7. **Never block the UI on the network, and never out-block the watchdog.** Fetch off the UI loop,
+   show "cerco online…", fall back to honest refusal on timeout. The per-attempt TLS timeout MUST stay
+   **below the 8 s Task-WDT** (it's a single un-pettable blocking call) — `HTTP_TIMEOUT=6000` + a
+   wall-clock retry budget + WDT pets, locked by the `online-stability (TWDT)` gate. Full contract and
+   the .166 reboot post-mortem: [`anima-native.md` §3](anima-native.md#stability).
 8. **Never depend on the cloud for identity.** Offline ANIMA must remain fully functional;
    online is pure augmentation.
 

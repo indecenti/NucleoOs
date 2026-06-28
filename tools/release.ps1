@@ -33,8 +33,10 @@ $node = (Get-Command node).Source
 $cfg = Join-Path $here "release.local.json"
 if (Test-Path $cfg) {
     $j = Get-Content $cfg -Raw | ConvertFrom-Json
-    if ($j.host) { $DeviceHost = $j.host }
-    if ($j.pin)  { $Pin = $j.pin }
+    # Explicit -DeviceHost/-Pin on the command line WIN over the local file (needed for dual-device
+    # releases: -DeviceHost <unit> must target that unit, not be clobbered by the file's top-level host).
+    if ($j.host -and -not $PSBoundParameters.ContainsKey('DeviceHost')) { $DeviceHost = $j.host }
+    if ($j.pin  -and -not $PSBoundParameters.ContainsKey('Pin'))        { $Pin = $j.pin }
 }
 $base = "http://$DeviceHost"
 function Step($s) { Write-Host "`n=== $s ===" -ForegroundColor Cyan }
@@ -52,7 +54,8 @@ if (-not $SkipGate) {
 Step "Device check: $base"
 try { $st = Invoke-RestMethod "$base/api/status" -TimeoutSec 8 }
 catch { Write-Error "Cannot reach $base - is the Cardputer on Wi-Fi and the IP right? ($($_.Exception.Message))"; exit 1 }
-Write-Host ("online: v{0}, {1} {2}, SD {3}" -f $st.version, $st.network.mode, $st.network.ssid,
+$beforeVer = $st.version
+Write-Host ("online: v{0}, {1} {2}, SD {3}" -f $beforeVer, $st.network.mode, $st.network.ssid,
             ($(if ($st.storage.mounted) { 'mounted' } else { 'NOT mounted' })))
 if (-not $st.storage.mounted) { Write-Error "SD not mounted on device - cannot sync files."; exit 1 }
 
@@ -87,6 +90,23 @@ if (-not $SdOnly) {
     Step "4/4 Reboot device so L1 reloads the new index"
     powershell -ExecutionPolicy Bypass -File (Join-Path $here "ota.ps1") -DeviceHost $DeviceHost -Pin $Pin
     if ($LASTEXITCODE -ne 0) { Write-Error "reboot failed"; exit 1 }
+}
+
+# Verify the device actually rebooted into the version we just shipped. /api/status.version is the
+# real app-descriptor version (semver+build.git), so a changed string here is proof the OTA took —
+# the whole point of the versioning system. Poll through the ~5s reboot window.
+Step "Verify running version"
+$afterVer = $null
+for ($i = 0; $i -lt 20 -and -not $afterVer; $i++) {
+    Start-Sleep -Seconds 2
+    try { $afterVer = (Invoke-RestMethod "$base/api/status" -TimeoutSec 5).version } catch { }
+}
+if (-not $afterVer) {
+    Write-Warning "Could not read /api/status after reboot — check the device manually."
+} elseif ($beforeVer -eq $afterVer) {
+    Write-Host ("running v{0} (unchanged — expected if firmware was not rebuilt/OTA'd)." -f $afterVer) -ForegroundColor Yellow
+} else {
+    Write-Host ("version: was v{0}  ->  now v{1}  (OTA confirmed)." -f $beforeVer, $afterVer) -ForegroundColor Green
 }
 
 Write-Host "`nRelease complete -> $DeviceHost  (firmware + full SD synced)." -ForegroundColor Green

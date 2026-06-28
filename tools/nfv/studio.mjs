@@ -310,7 +310,8 @@ async function runJob(j) {
     // 1) audio -> mono mp3
     setJob(j, { status: 'audio', stage: 'Encoding audio', pct: 2 });
     const aOk = await new Promise((res) => {
-      const a = spawn('ffmpeg', ['-y', '-i', j.input, '-vn', '-ac', '1', '-ar', String(prof.ar), '-c:a', 'libmp3lame', '-b:a', prof.ab, mp3Tmp]);
+      // -map_metadata -1 + -id3v2_version 0: bare MP3, no ID3 tag, so the player's CBR byte-map seek is exact.
+      const a = spawn('ffmpeg', ['-y', '-i', j.input, '-vn', '-ac', '1', '-ar', String(prof.ar), '-c:a', 'libmp3lame', '-b:a', prof.ab, '-map_metadata', '-1', '-id3v2_version', '0', mp3Tmp]);
       a.on('error', () => res(false)); a.on('close', (c) => res(c === 0));
       j.proc = a;
     });

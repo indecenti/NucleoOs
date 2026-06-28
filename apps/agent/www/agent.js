@@ -4,6 +4,7 @@
 // back to the offline brain — it cleanly hands off to the separate offline ANIMA app.
 
 import { createRuntime } from './runtime.js';
+import { providerOf, PROVIDERS, readTeacher } from '/ai.js';   // shared provider registry + cached vault read: Claude, Groq, Grok (xAI), Gemini
 import I18N from '/nucleo-i18n.js';
 
 // Centralized i18n: loads core + this app's catalog, paints [data-i18n] DOM, live-switches on OS
@@ -12,9 +13,10 @@ const t = await I18N.init('agent');
 
 const $ = (id) => document.getElementById(id);
 const lang = () => (localStorage.getItem('anima.lang') === 'en' ? 'en' : 'it');
-const KEY_PATH = '/data/anima/teacher.json';
 
-let cfg = null;            // active provider config for the runtime
+let cfg = null;            // active/default provider config for the runtime
+let keys = null;           // full keys{} map (all configured providers) → cross-provider routing + fallback
+let active = null;         // the user's chosen active cfg (for geminiTier + routing tiebreak)
 let rt = null;             // runtime instance
 let history = [];          // [{role:'user'|'bot', text}]
 let busy = false;
@@ -45,10 +47,10 @@ function addMsg(role, text, asMd) {
 function setStatus(s, kind) { $('status').textContent = s; const dot = $('dot'); dot.className = 'dot' + (kind ? ' ' + kind : ''); }
 
 // ---- activity log: one card per tool call ----
-const TOOL_ICON = { list_files: '📁', read_file: '📄', search_files: '🔎', make_dir: '📁', write_file: '✍️', edit_file: '✏️', append_file: '➕', delete_file: '🗑️', move_file: '🔀', run_js: '⚙️', open_in_os: '🪟', device_status: '📊', list_apps: '🧩', weather: '🌤️', web_search: '🌐' };
+const TOOL_ICON = { list_files: '📁', read_file: '📄', search_files: '🔎', make_dir: '📁', write_file: '✍️', edit_file: '✏️', append_file: '➕', delete_file: '🗑️', move_file: '🔀', run_js: '⚙️', open_in_os: '🪟', device_status: '📊', list_apps: '🧩', weather: '🌤️', web_search: '🌐', scaffold_app: '🧱', publish_app: '🚀', manage_app: '🎛️', generate_image: '🎨', transcribe: '🎙️' };
 function toolStart(ev) {
   const d = document.createElement('div'); d.className = 'tool run';
-  const p = ev.input.path || ev.input.from || ev.input.app || '';
+  const p = ev.input.path || ev.input.from || ev.input.app || ev.input.id || ev.input.name || '';
   d.innerHTML = '<div class="th"><span class="ti">' + (TOOL_ICON[ev.name] || '🔧') + '</span><span class="tn">' + esc(ev.name) + '</span><span class="tp">' + esc(p) + '</span></div><div class="tr">…</div>';
   logEl().appendChild(d); ev._el = d; scroll();
 }
@@ -66,12 +68,16 @@ function diffHtml(oldS, newS) {
 }
 function confirmTool(req) {
   return new Promise((resolve) => {
-    const labels = { write_file: t('op_write_file'), edit_file: t('op_edit_file'), append_file: t('op_append_file'), delete_file: t('op_delete_file'), move_file: t('op_move_file'), run_js: t('op_run_js') };
+    const labels = { write_file: t('op_write_file'), edit_file: t('op_edit_file'), append_file: t('op_append_file'), delete_file: t('op_delete_file'), move_file: t('op_move_file'), run_js: t('op_run_js'), scaffold_app: t('op_scaffold_app'), publish_app: t('op_publish_app'), manage_app: t('op_manage_app'), generate_image: t('op_generate_image') };
     let bodyHtml = '';
     if (req.op === 'edit_file') bodyHtml = diffHtml(req.old, req.new);
     else if (req.op === 'write_file' || req.op === 'append_file') bodyHtml = '<pre>' + esc(String(req.content || '').slice(0, 4000)) + (String(req.content || '').length > 4000 ? '\n…' : '') + '</pre>';
     else if (req.op === 'run_js') bodyHtml = '<pre>' + esc(String(req.code || '').slice(0, 4000)) + '</pre>';
     else if (req.op === 'move_file') bodyHtml = '<div class="pth">' + esc(req.from) + ' → ' + esc(req.to) + '</div>';
+    else if (req.op === 'scaffold_app') bodyHtml = '<div class="pth">' + esc(t('appr_new_app')) + ': ' + esc(req.name || req.id || '') + '</div>' + (req.description ? '<pre>' + esc(req.description) + '</pre>' : '');
+    else if (req.op === 'publish_app') bodyHtml = '<div class="pth">' + esc(t('appr_install_app')) + ': <b>' + esc(req.id || '') + '</b> → /apps/' + esc(req.id || '') + '</div>';
+    else if (req.op === 'manage_app') bodyHtml = '<div class="pth">' + esc(String(req.action || '') === 'enable' ? t('appr_enable_app') : t('appr_disable_app')) + ': <b>' + esc(req.id || '') + '</b></div>';
+    else if (req.op === 'generate_image') bodyHtml = '<div class="pth">' + esc(req.path || '') + '</div><pre>' + esc(String(req.prompt || '').slice(0, 2000)) + '</pre>';
     const pth = req.path || req.from || '';
     $('appr').innerHTML =
       '<h3>' + esc(t('appr_title')) + ' <span class="op">' + esc(labels[req.op] || req.op) + '</span></h3>' +
@@ -95,22 +101,39 @@ const ui = {
 };
 
 // ---- provider config from the device vault ----
+// Returns { cfg, keys, active } or null. `cfg`/`active` is the user's chosen provider (or the strongest
+// configured one as a default); `keys` is the FULL keys{} map so the runtime routes a subtask to the best
+// model across EVERY configured provider and falls back when one is down. Works with ANY combination:
+// only one key → just that provider; all keys → all exploited. Recognises all 4 providers incl. Grok (xai).
+function inferProvider(j) {
+  if (j.provider && PROVIDERS[j.provider]) return j.provider;
+  const b = String(j.base || '');
+  if (/anthropic/.test(b)) return 'anthropic';
+  if (/generativelanguage/.test(b)) return 'google';
+  if (/x\.ai/.test(b)) return 'xai';
+  if (j.key) return 'openai';   // bare key, Groq-style base assumed
+  return null;
+}
+function cfgFromEntry(prov, e) {
+  const p = providerOf(prov);
+  return { provider: prov, base: e.base || p.base, model: e.model || p.def, key: e.key, version: e.version || p.version, geminiTier: e.geminiTier || '' };
+}
 function pickCfg(j) {
   j = j || {};
   const keys = (j.keys && typeof j.keys === 'object') ? j.keys : {};
-  // Active Google Gemini wins (OpenAI-compat tool-use, but CORS-blocked → routed via the device /api/llm proxy).
-  if (j.provider === 'google' && j.key) return { provider: 'google', base: j.base || 'https://generativelanguage.googleapis.com/v1beta/openai', model: j.model || 'gemini-2.5-flash', key: j.key, proxy: true };
-  const anth = (keys.anthropic && keys.anthropic.key) ? keys.anthropic
-    : (j.provider === 'anthropic' && j.key ? { base: j.base, model: j.model, key: j.key, version: j.version } : null);
-  if (anth && anth.key) return { provider: 'anthropic', base: anth.base || 'https://api.anthropic.com', model: anth.model || 'claude-sonnet-4-6', key: anth.key, version: anth.version || '2023-06-01' };
-  // degraded: OpenAI-compatible (Groq) — plain chat only
-  const oa = (keys.groq && keys.groq.key) ? keys.groq : (keys.openai && keys.openai.key) ? keys.openai
-    : (j.key && (!j.provider || j.provider === 'openai') ? { base: j.base, model: j.model, key: j.key } : null);
-  if (oa && oa.key) return { provider: 'openai', base: oa.base || 'https://api.groq.com/openai/v1', model: oa.model || 'llama-3.1-8b-instant', key: oa.key };
-  // Saved Gemini key (no stronger browser-direct key) — via the device proxy.
-  const goog = (keys.google && keys.google.key) ? keys.google : (j.key && /generativelanguage/i.test(j.base || '') ? { base: j.base, model: j.model, key: j.key } : null);
-  if (goog && goog.key) return { provider: 'google', base: goog.base || 'https://generativelanguage.googleapis.com/v1beta/openai', model: goog.model || 'gemini-2.5-flash', key: goog.key, proxy: true };
-  return null;
+  // 1) the active provider chosen by the user (top-level), if it actually carries a key
+  let active = null;
+  const tp = inferProvider(j);
+  if (j.key && tp) active = cfgFromEntry(tp, j);
+  // 2) otherwise the strongest configured key in keys{} (Claude → Grok → Groq → Gemini)
+  if (!active) {
+    for (const prov of ['anthropic', 'xai', 'openai', 'google']) {
+      const e = keys[prov];
+      if (e && e.key) { active = cfgFromEntry(prov, e); break; }
+    }
+  }
+  if (!active || !active.key) return null;
+  return { cfg: active, keys, active };
 }
 
 function showGate(kind) {
@@ -128,10 +151,20 @@ function showGate(kind) {
 }
 function hideGate() { $('gate').classList.remove('show'); }
 
+function configuredProviders() { return Object.keys(keys || {}).filter((p) => keys[p] && keys[p].key && PROVIDERS[p]); }
+function modelLine() {
+  if (cfg.provider === 'anthropic') return t('model_anthropic');
+  if (configuredProviders().length > 1) return t('model_multi');
+  return (providerOf(cfg.provider).label || cfg.provider) + ' · ' + t('model_tools_suffix');
+}
+function readyMsg() {
+  if (cfg.provider === 'anthropic') return t('ready_anthropic');
+  return t('ready_generic') + (configuredProviders().length > 1 ? t('ready_multi_suffix') : '');
+}
 function rebuildRuntime() {
   const root = ($('ws').value || '/data/agent').trim() || '/data/agent';
-  rt = createRuntime({ cfg, root, lang: lang(), ui });
-  $('model-line').textContent = cfg.provider === 'anthropic' ? t('model_anthropic') : t('model_groq');
+  rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active });
+  $('model-line').textContent = modelLine();
 }
 
 async function send() {
@@ -164,15 +197,17 @@ async function boot() {
   if (!navigator.onLine) { showGate('offline'); return; }
   setStatus(t('st_checking_key'));
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(KEY_PATH), { cache: 'no-store' });
-    if (r.status === 401 || r.status === 403) { setStatus(t('st_pair_first'), 'err'); showGate('key'); return; }
-    const j = r.ok ? (JSON.parse(await r.text()) || {}) : {};
-    cfg = pickCfg(j);
-  } catch { cfg = null; }
+    // Shared cached vault read (memoised ~30s in ai.js → collapses repeated device reads). Returns the
+    // normalised cfg incl. keys{} (all providers), {unpaired:true}, or null.
+    const tc = await readTeacher({ fresh: true });
+    if (tc && tc.unpaired) { setStatus(t('st_pair_first'), 'err'); showGate('key'); return; }
+    const res = pickCfg(tc || {});
+    cfg = res && res.cfg; keys = res && res.keys; active = res && res.active;
+  } catch { cfg = null; keys = null; active = null; }
   if (!cfg) { showGate('key'); return; }
   rebuildRuntime();
   setStatus(t('st_ready'), 'ok');
-  if (!history.length) addMsg('sys', cfg.provider === 'anthropic' ? t('ready_anthropic') : t('ready_groq'));
+  if (!history.length) addMsg('sys', readyMsg());
 }
 
 // ---- wiring ----

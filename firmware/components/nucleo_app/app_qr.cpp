@@ -36,8 +36,10 @@ static int  s_prev_bright = 100;
 // SAVED: the library the web app writes to SD (read-only here; we re-encode each string on-device).
 #define QR_SAVED_MAX  24
 #define QR_SAVED_PATH NUCLEO_SD_MOUNT "/data/QR/qrcodes.json"
-static char s_sv_label[QR_SAVED_MAX][40];
-static char s_sv_data[QR_SAVED_MAX][256];
+// Saved-QR scratch (~7 KB): allocated on app enter, freed on exit — never resident at boot
+// (the QR app is rarely open). Heap-on-enter is the OS rule: no RAM for features not in use.
+static char (*s_sv_label)[40]  = nullptr;
+static char (*s_sv_data)[256]  = nullptr;
 static int  s_sv_n = 0, s_sv_sel = 0;
 
 static bool editing(void) { return s_src == SRC_TEXT || s_src == SRC_WIFI; }
@@ -45,6 +47,7 @@ static bool editing(void) { return s_src == SRC_TEXT || s_src == SRC_WIFI; }
 static void load_saved(void)
 {
     s_sv_n = 0; s_sv_sel = 0;
+    if (!s_sv_data || !s_sv_label) return;   // scratch not allocated (alloc failed / app not entered)
     FILE *f = fopen(QR_SAVED_PATH, "rb");
     if (!f) return;
     fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
@@ -146,16 +149,23 @@ static bool on_back(int key)
 
 static void enter(void)
 {
+    nucleo_app_set_direct_draw(true);   // static screen: draw direct, free the 32 KB menu buffer
     s_src = SRC_PAIR; s_len = 0; s_text[0] = 0;
     s_prev_bright = nucleo_app_brightness();
     nucleo_app_set_brightness(100);             // bright screen = easy camera lock
     nucleo_app_set_back_handler(on_back);
+    s_sv_label = (char (*)[40]) calloc(QR_SAVED_MAX, sizeof s_sv_label[0]);
+    s_sv_data  = (char (*)[256])calloc(QR_SAVED_MAX, sizeof s_sv_data[0]);
+    s_sv_n = 0; s_sv_sel = 0;
     rebuild();
 }
 
 static void on_exit(void)
 {
     nucleo_app_set_brightness(s_prev_bright);
+    free(s_sv_label); s_sv_label = nullptr;
+    free(s_sv_data);  s_sv_data  = nullptr;
+    s_sv_n = 0;
 }
 
 extern "C" void nucleo_register_qr(void)

@@ -103,6 +103,16 @@ int nucleo_anima_online_chat_ctx(const char *input, const anima_turn_t *turns, i
 // budget than chat). For "scrivimi/dammi un esempio di codice python". Returns 1 if answered, 0 if no key/offline.
 int nucleo_anima_online_code(const char *input, bool en, anima_result_t *out);
 
+// LONG-FORM in segments: returns the NEXT ~one-paragraph chunk of a complete long answer (story, essay,
+// detailed explanation), continuing from `tail` (the end of what was written so far) WITHOUT repeating
+// it. `part` is 1 for the opening paragraph. `*more` is set false when the model signals the answer is
+// complete (an [FINE]/[END] marker). A complete long answer can't fit this PSRAM-less chip's RAM, the
+// device buffers, or one max_tokens window — so the native app LOOPS this, publishing/speaking/persisting
+// each paragraph and freeing before the next, delivering a long reply with FLAT memory. Each call is a
+// fresh cloud round (L1 unloaded for the handshake). Returns 1 (out filled) or 0 on miss (no key/offline).
+int nucleo_anima_online_longform(const char *topic, const char *tail, int part, bool en,
+                                 anima_result_t *out, bool *more);
+
 // True if the query is a SPECIFIC question about an entity ("cosa ha fatto X" / "per cosa è famoso X" /
 // "what did X do") that the frozen bio can't answer — route it to the online chat (chat_ctx) when online+key.
 bool nucleo_anima_online_is_about(const char *input, bool en);

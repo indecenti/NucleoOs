@@ -10,6 +10,7 @@
 //                           public Cardputer-ADV reference; verify the layout on real ADV
 //                           hardware with the built-in keyboard diagnostic.)
 #include "nucleo_kbd.h"
+#include <string.h>
 #include "driver/gpio.h"
 #include "esp_rom_sys.h"
 #include "driver/i2c_master.h"
@@ -85,14 +86,19 @@ static uint8_t mod_for_xy(int x, int y)
 static uint8_t s_mods;         // GPIO backend: recomputed every scan
 static uint8_t s_tca_modbits;  // TCA backend: tracked across press/release events
 
+// Live pressed state of every printable key (indexed by unshifted layout char), for
+// nucleo_kbd_char_down(): GPIO backend rebuilds it each scan, TCA backend tracks press/release.
+static bool s_down[128];
+static inline void down_set(char base, bool on) { if ((unsigned char)base < 128) s_down[(unsigned char)base] = on; }
+
 // ============================================================================
 //  TCA8418 backend (Cardputer ADV)
 // ============================================================================
 #define TCA_ADDR        0x34
 #define TCA_REG_CFG     0x01
 #define TCA_REG_INT_STAT 0x02
-#define TCA_REG_KEY_EVENT_A 0x03   // FIFO: read pops one event
-#define TCA_REG_KEY_LCK_EC  0x04   // low nibble = pending event count
+#define TCA_REG_KEY_EVENT_A 0x04   // FIFO: read pops one event (Adafruit_TCA8418 / datasheet)
+#define TCA_REG_KEY_LCK_EC  0x03   // low nibble = pending event count
 #define TCA_REG_KP_GPIO1 0x1D      // rows  0..7 as keypad
 #define TCA_REG_KP_GPIO2 0x1E      // cols  0..7 as keypad
 #define TCA_REG_KP_GPIO3 0x1F      // cols  8..9 as keypad
@@ -135,6 +141,11 @@ static bool tca_init(void)
     tca_w(TCA_REG_KP_GPIO3, 0x00);
     tca_w(TCA_REG_CFG, 0x01);                 // KE_IEN: accumulate key events in the FIFO
     tca_w(TCA_REG_INT_STAT, 0x03);            // clear any stale interrupt flags
+    // Drain the key-event FIFO: a warm reset leaves the TCA8418 powered, and configuring the
+    // matrix can latch a spurious press. An undrained event makes the very first nucleo_kbd_read()
+    // report a phantom key — which silently skips the boot splash (any key cancels it) so the ADV
+    // boots to a black screen while the original (GPIO matrix, no FIFO) plays it fully.
+    for (int i = 0; (tca_r(TCA_REG_KEY_LCK_EC) & 0x0F) && i < 16; i++) tca_r(TCA_REG_KEY_EVENT_A);
     return true;
 }
 
@@ -167,11 +178,14 @@ static nucleo_key_t tca_read(void)
         if (pressed) s_tca_modbits |= b; else s_tca_modbits &= ~b;
         return (nucleo_key_t){NK_NONE, 0};
     }
+    char base = KM[y][x];                                   // unshifted char, for the live pressed-key set
     char lc = s_tca_shift ? KM_SH[y][x] : KM[y][x];
     if (!pressed) {                                          // key released
+        down_set(base, false);
         if (lc == s_tca_held) s_tca_held = 0;               // stop repeating it
         return (nucleo_key_t){NK_NONE, 0};
     }
+    down_set(base, true);
     s_tca_held = lc;                                        // fresh press: arm the repeat clock
     s_tca_rep_us = now + KEY_REPEAT_DELAY_US;
     return map_char(lc);
@@ -202,6 +216,7 @@ static char scan_char(void)
 {
     uint8_t mods = 0;
     char found = 0;
+    memset(s_down, 0, sizeof s_down);                    // rebuild the live pressed-key set each scan
     for (int i = 0; i < 8; i++) {
         set_addr(i);
         esp_rom_delay_us(15);
@@ -211,7 +226,7 @@ static char scan_char(void)
             int y = 3 - (i % 4);
             if (is_shift_xy(x, y)) mods |= NK_MOD_SHIFT;
             else if (is_mod_xy(x, y)) mods |= mod_for_xy(x, y);
-            else if (!found) found = KM[y][x];
+            else { down_set(KM[y][x], true); if (!found) found = KM[y][x]; }   // record ALL held printables
         }
     }
     s_mods = mods;                                       // published for nucleo_kbd_mods()
@@ -251,6 +266,7 @@ void nucleo_kbd_init(void)
     if (s_adv && tca_init()) {
         ESP_LOGI("kbd", "Cardputer ADV keyboard (TCA8418 @0x34)");
     } else {
+        if (s_adv) ESP_LOGW("kbd", "ADV detected but TCA8418 init failed -> GPIO fallback");
         s_adv = false;                        // original, or ADV init failed -> GPIO matrix
         gpio_init();
     }
@@ -267,3 +283,12 @@ unsigned char nucleo_kbd_mods(void)
 {
     return s_adv ? (unsigned char)((s_tca_shift ? NK_MOD_SHIFT : 0) | s_tca_modbits) : s_mods;
 }
+
+// Is a printable key physically held down right now? (see header)
+bool nucleo_kbd_char_down(char c)
+{
+    return (unsigned char)c < 128 && s_down[(unsigned char)c];
+}
+
+// Shared system I2C bus (ADV only; created by tca_init). NULL on the original board.
+void *nucleo_kbd_i2c_bus(void) { return (void *)s_bus; }

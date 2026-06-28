@@ -11,7 +11,7 @@ export const meta = {
 const GIANTS = ['browser', 'file-commander', 'video-player', 'spreadsheet'];
 // Apps that already render IT/EN from their own logic → audit any non-bilingual leftovers and make
 // them react LIVE to an OS language change. Do NOT rewrite their translation system or add catalogs.
-const BILINGUAL = ['anima-knowledge', 'games', 'miei-fatti', 'recorder', 'paint'];
+const BILINGUAL = ['games', 'miei-fatti', 'recorder', 'paint'];
 
 const SCHEMA = {
   type: 'object', additionalProperties: false,

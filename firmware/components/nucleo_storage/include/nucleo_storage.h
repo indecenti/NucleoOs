@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include "esp_err.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     bool     mounted;
     char     fs_type[8];     // "FAT32" | "exFAT" | "?"
@@ -30,7 +34,17 @@ esp_err_t nucleo_storage_refresh(void);
 // Cached capacity snapshot (valid after a successful mount + refresh).
 const nucleo_storage_info_t *nucleo_storage_info(void);
 
+// Graceful shutdown: flush + cleanly unmount the SD and the config store — the OS equivalent of
+// `sync` on the way down. Registered as an esp_register_shutdown_handler() at boot, so it runs on
+// every clean esp_restart() (OTA, /api/reboot, native reboot, Wi-Fi reset, USB-MSC), but NOT on a
+// panic. The filesystems are gone afterwards, which is fine: the device reboots immediately.
+void nucleo_storage_sync(void);
+
 // The mounted SD handle (NULL if not mounted). Used by the USB Mass Storage mode to expose the
 // card's raw blocks to a host PC. Returned as void* so callers needn't pull in the sdmmc headers
 // (cast to sdmmc_card_t* on use).
 void *nucleo_storage_card(void);
+
+#ifdef __cplusplus
+}
+#endif

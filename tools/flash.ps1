@@ -6,10 +6,22 @@
 # (silent ninja "FAILED"). idf.py 5.4 has no -j option, so we drive ninja directly and (1) cap jobs
 # by free RAM up front, (2) self-heal with escalating backoff to -j 1 — ccache makes retries cheap,
 # and the OOM-killed objects recompile alone (no contention) so they succeed.
-param([string]$Port = "COM3", [switch]$BuildOnly, [int]$Jobs = 0, [switch]$SkipGate)
+param([string]$Port = "COM3", [switch]$BuildOnly, [int]$Jobs = 0, [switch]$SkipGate, [switch]$NoBump)
 $ErrorActionPreference = 'Stop'
 $idf = "C:\esp\esp-idf"
 $fw = Join-Path (Split-Path $PSScriptRoot -Parent) "firmware"
+
+# Version: bump the build counter so EVERY build gets a new, identifiable version. The new number
+# lands in firmware/version/BUILD, which version.cmake lists as a CONFIGURE_DEPENDS -> CMake
+# reconfigures and bakes it into the app descriptor (esp_app_get_description()->version), surfaced by
+# /api/status, /proc/version, mDNS and the serial boot banner. -NoBump to rebuild the same version
+# (e.g. a ccache no-op rebuild for the second unit in a dual release). For a real semver release run
+# tools\version-bump.ps1 -Bump patch|minor|major first.
+if (-not $NoBump) {
+    Write-Host "`n=== Version bump (build counter) ===" -ForegroundColor Cyan
+    powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "version-bump.ps1")
+    if ($LASTEXITCODE -ne 0) { Write-Error "version bump failed"; exit 1 }
+}
 
 # ANIMA regression gate (host, 12 gates incl. 0-hallucination + skill-routing) must be GREEN before we
 # build firmware that ships this logic. Compiles its own host exe; independent of ESP-IDF. -SkipGate to skip.

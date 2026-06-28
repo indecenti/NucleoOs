@@ -29,13 +29,25 @@ export class Launcher {
   get top() { return this.stack[this.stack.length - 1]; }
   get depth() { return this.stack.length - 1; }
 
-  // Items in the current menu, narrowed by the active filter (case-insensitive substring).
+  // Flat list of every app in the tree (cached) — the corpus for the Home "Spotlight" search.
+  allApps() {
+    if (this._apps) return this._apps;
+    const out = [];
+    const walk = (node) => { for (const it of node.items || []) { if (it.type === 'app') out.push(it); else if (it.type === 'menu') walk(it); } };
+    walk(this.root);
+    this._apps = out;
+    return out;
+  }
+
+  // Items in the current menu, narrowed by the active filter (case-insensitive substring). At Home a
+  // filter becomes a GLOBAL "Spotlight" search across every app (flat); inside a category it narrows
+  // that category — so any app is reachable in a couple of keystrokes (the keyboard advantage).
   visibleItems() {
     const { node, filter } = this.top;
-    const all = node.items || [];
-    if (!filter) return all;
+    if (!filter) return node.items || [];
     const f = norm(filter);
-    return all.filter((it) => norm(it.label).includes(f));
+    const corpus = this.depth === 0 ? this.allApps() : (node.items || []);
+    return corpus.filter((it) => norm(it.label).includes(f));
   }
 
   // The focused item (or null when the filter excludes everything).

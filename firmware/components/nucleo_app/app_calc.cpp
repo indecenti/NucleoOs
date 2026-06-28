@@ -21,7 +21,7 @@ static bool s_error;
 // as NK_RIGHT, but both still carry the right ch, so we filter purely on ch.
 static bool is_calc_char(char c) { return c && strchr("0123456789+-*/().", c) != nullptr; }
 
-static void enter(void) { s_expr[0] = 0; s_prev[0] = 0; s_error = false; nucleo_app_set_hint("0-9 + - * / ( )   enter =   del   esc back"); }
+static void enter(void) { nucleo_app_set_direct_draw(true); s_expr[0] = 0; s_prev[0] = 0; s_error = false; nucleo_app_set_hint("0-9 + - * / ( )   enter =   del   esc back"); }   // static UI: draw direct, free the 32 KB menu buffer
 static void tick(void) {}
 
 static void evaluate(void)
@@ -50,6 +50,7 @@ static void on_key(int key, char ch)
 static void draw(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);   // direct draw: clear the whole content area (no framebuffer wipes it for us)
     app_ui_title("Calculator", ACC, nullptr);
 
     // small upper line: the source expression after '=', else a gentle prompt

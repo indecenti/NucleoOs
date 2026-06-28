@@ -21,9 +21,14 @@ export const CLIENT_TOOLS = [
   { name: 'device_status', description: 'Read the Cardputer\'s LIVE state: current date/time, free/total SD space, Wi-Fi (mode/SSID/IP), uptime and free RAM. Use for "what time is it", "how much space is left", "which Wi-Fi", "is the device healthy". Lightweight (/api/status) — does NOT wake the offline brain.', input_schema: { type: 'object', properties: {}, required: [] } },
   { name: 'list_apps', description: 'List the apps installed on the device (id + name) so you can open the right one with open_in_os. Cheap (/api/apps).', input_schema: { type: 'object', properties: {}, required: [] } },
   { name: 'weather', description: 'Current weather + today\'s min/max for a city, fetched online from Open-Meteo (no key, no device load). Use for "che tempo fa a X" / "weather in X".', input_schema: { type: 'object', properties: { city: { type: 'string', description: 'city name, e.g. Roma, London' } }, required: ['city'] } },
+  { name: 'scaffold_app', description: 'Create a NEW NucleoOS app skeleton in the workspace (a staging folder named like the id), with a complete manifest.json, a working www/index.html starter, and i18n files. Use this FIRST when the user asks to "build/create an app". Pick the `kind` closest to the goal so you start from a real working app, not a blank page. After it, EDIT <id>/www/index.html (and add JS files) with the file tools to implement the real app, then call publish_app to install it on the device. The app is a self-contained web page; you may import /nucleo-i18n.js. id is auto-kebab-cased.', input_schema: { type: 'object', properties: { id: { type: 'string', description: 'short app id, e.g. "todo" or "unit-converter"' }, name: { type: 'string', description: 'display name' }, description: { type: 'string' }, category: { type: 'string', description: 'one of: tools, productivity, media, system, connectivity, games' }, kind: { type: 'string', enum: ['blank', 'list', 'timer', 'converter'], description: 'starter template: blank (empty card), list (add/remove items, saved to localStorage), timer (countdown), converter (°C/°F). Default blank.' } }, required: ['name'] } },
+  { name: 'publish_app', description: 'INSTALL an app you scaffolded+built (its staging folder <id> in the workspace) onto NucleoOS, LIVE — it appears in the launcher with no reboot. Validates the manifest and that www/index.html exists, writes the files under /apps/<id>/, and registers it. The human approves this. Only apps you authored can be re-published (never a system app). Call this when the app is ready.', input_schema: { type: 'object', properties: { id: { type: 'string', description: 'the app id == its staging folder name in the workspace' } }, required: ['id'] } },
+  { name: 'manage_app', description: 'Hide ("disable") or restore ("enable") an app YOU created, in the launcher — the safe way to undo/redo an install (apps cannot be deleted from the device). Only apps you authored can be toggled, never a system app. The human approves this.', input_schema: { type: 'object', properties: { id: { type: 'string', description: 'the agent-created app id' }, action: { type: 'string', enum: ['disable', 'enable'], description: 'disable = hide from the launcher; enable = restore' } }, required: ['id', 'action'] } },
+  { name: 'generate_image', description: 'Generate an image from a text prompt and SAVE it to a workspace file (uses an image-capable provider — Grok/xAI). Use for "draw/make an image of …", icons, illustrations, app assets. Requires an xAI key; without one, say so honestly. The human approves the file write. After it, open_in_os({path}) shows it.', input_schema: { type: 'object', properties: { prompt: { type: 'string', description: 'what to depict' }, path: { type: 'string', description: 'workspace file to save, e.g. "art/cat.jpg" (jpg)' } }, required: ['prompt', 'path'] } },
+  { name: 'transcribe', description: 'Transcribe a workspace audio file (wav/mp3/m4a/ogg/flac) to text using a speech-capable provider (Groq Whisper). Use for "transcribe this recording / what is said in X". Requires a Groq key; without one, say so honestly. Language is auto-detected.', input_schema: { type: 'object', properties: { path: { type: 'string', description: 'workspace path of the audio file' } }, required: ['path'] } },
 ];
-export const MUTATING = new Set(['write_file', 'edit_file', 'append_file', 'delete_file', 'move_file', 'run_js']);
-export const ALWAYS_CONFIRM = new Set(['delete_file']);   // irreversible — confirm even under auto-approve
+export const MUTATING = new Set(['write_file', 'edit_file', 'append_file', 'delete_file', 'move_file', 'run_js', 'scaffold_app', 'publish_app', 'manage_app', 'generate_image']);
+export const ALWAYS_CONFIRM = new Set(['delete_file', 'publish_app', 'manage_app']);   // irreversible / system-level — confirm even under auto-approve
 
 // Groq/OpenAI model tiers, mirroring the Anthropic Haiku→Sonnet/Opus ladder: an 8B does the cheap JSON
 // triage; a capable 70B does the tool-use + code. 8B tool-calling is unreliable, so workers use 70B.
@@ -122,6 +127,30 @@ export function extractJson(text) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Bound a chat request so an oversized history, a pasted blob, or a big tool result can't trip Groq's
+// 413 (Content Too Large). Returns a COPY of `messages` (never mutates the caller's array) whose
+// serialized size is <= maxChars, shrinking the LARGEST message CONTENTS first. Roles, structure and
+// tool_call_ids are untouched, so the strict tool-call<->result pairing Groq enforces always holds; the
+// system message is never truncated, so instructions survive. A truncated context beats a hard 413.
+export function fitMessages(messages, maxChars) {
+  if (JSON.stringify(messages).length <= maxChars) return messages;
+  const out = messages.map((m) => ({ ...m }));
+  const order = out.map((m, i) => i)
+    .filter((i) => out[i].role !== 'system' && typeof out[i].content === 'string' && out[i].content.length > 400)
+    .sort((a, b) => out[b].content.length - out[a].content.length);
+  let size = JSON.stringify(out).length;
+  for (const i of order) {
+    if (size <= maxChars) break;
+    const c = out[i].content;
+    const keep = Math.max(400, c.length - (size - maxChars) - 64);
+    if (keep < c.length) {
+      out[i].content = c.slice(0, keep) + '\n…[troncato ' + (c.length - keep) + ' caratteri]';
+      size = JSON.stringify(out).length;
+    }
+  }
+  return out;
+}
+
 // One Groq/OpenAI-compatible chat call. Returns the assistant MESSAGE object (so the caller sees
 // `tool_calls`), not just text. fetchFn is injected. Retries on 429/5xx with backoff.
 export async function callOpenAIChat(fetchFn, cfg, { model, messages, tools, toolChoice, responseFormat, maxTokens = 1024, temperature = 0.4, signal }) {
@@ -129,18 +158,29 @@ export async function callOpenAIChat(fetchFn, cfg, { model, messages, tools, too
   // CORS-less providers (Gemini, cfg.proxy) are relayed through the device same-origin /api/llm proxy —
   // without this, the agentic tool loop (orchestrator + workers) on a Gemini key would be browser-blocked.
   const url = cfg.proxy ? '/api/llm?url=' + encodeURIComponent(base + '/chat/completions') : base + '/chat/completions';
-  const body = { model: model || cfg.model, max_tokens: maxTokens, temperature, messages };
-  if (tools && tools.length) { body.tools = tools; if (toolChoice) body.tool_choice = toolChoice; }
-  if (responseFormat) body.response_format = responseFormat;
+  // Budget (chars of the serialized body) kept under Groq's payload ceiling; halved on a 413 so an
+  // oversized history / pasted blob / big tool result degrades gracefully instead of failing the turn.
+  let budget = 120000;
+  const buildBody = () => {
+    const b = { model: model || cfg.model, max_tokens: maxTokens, temperature, messages: fitMessages(messages, budget) };
+    if (tools && tools.length) { b.tools = tools; if (toolChoice) b.tool_choice = toolChoice; }
+    if (responseFormat) b.response_format = responseFormat;
+    return b;
+  };
   for (let attempt = 0; attempt < 3; attempt++) {
     let resp;
     try {
       resp = await fetchFn(url, {
         method: 'POST', signal,
         headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + cfg.key },
-        body: JSON.stringify(body),
+        body: JSON.stringify(buildBody()),
       });
     } catch (e) { if (signal && signal.aborted) throw new Error('stopped'); if (attempt === 2) throw new Error('rete non raggiungibile'); await sleep(400 * (attempt + 1)); continue; }
+    if (resp.status === 413) {   // Content Too Large -> shrink the request and retry (truncated context beats a hard fail)
+      budget = Math.floor(budget / 2);
+      if (attempt < 2 && budget >= 8000) continue;
+      throw new Error('richiesta troppo grande per il modello (riduci input o contesto)');
+    }
     if (resp.status === 429 || resp.status >= 500) {
       const ra = parseInt(resp.headers.get('retry-after') || '0', 10);
       if (attempt < 2) { await sleep(ra ? ra * 1000 : 700 * (attempt + 1)); continue; }

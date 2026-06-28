@@ -29,7 +29,17 @@ static event_t s_ring[RING];
 static uint32_t s_seq;
 static SemaphoreHandle_t s_lock;     // protegge ring + seq (preso brevemente, MAI durante I/O SD)
 static SemaphoreHandle_t s_jlock;    // serializza i SOLI scrittori del journal (I/O SD fuori da s_lock)
-static nucleo_event_sink_t s_sink;
+
+#define MAX_SINKS 2                  // slot 0 = WebSocket broadcaster, slot 1 = mesh gossiper.
+static nucleo_event_sink_t s_sinks[MAX_SINKS];
+
+// Fan one event out to every registered sink. Runs OUTSIDE s_lock on the publisher's stack copy
+// (a sink may block on the WS/radio layer). Zero allocation — the static-pool lesson holds.
+static void fan_sinks(uint32_t seq, const char *topic, const char *payload, const char *src)
+{
+    for (int i = 0; i < MAX_SINKS; i++)
+        if (s_sinks[i]) s_sinks[i](seq, topic, payload, src);
+}
 
 esp_err_t nucleo_event_init(void)
 {
@@ -40,7 +50,11 @@ esp_err_t nucleo_event_init(void)
     return (s_lock && s_jlock) ? ESP_OK : ESP_ERR_NO_MEM;
 }
 
-void nucleo_event_set_sink(nucleo_event_sink_t sink) { s_sink = sink; }
+void nucleo_event_set_sink(nucleo_event_sink_t sink) { s_sinks[0] = sink; }
+void nucleo_event_add_sink(nucleo_event_sink_t sink)
+{
+    for (int i = 0; i < MAX_SINKS; i++) if (!s_sinks[i]) { s_sinks[i] = sink; return; }
+}
 uint32_t nucleo_event_current_seq(void) { return s_seq; }
 
 // High-frequency / transient topics are LIVE-ONLY: never persisted to the journal. Journaling them
@@ -109,8 +123,39 @@ uint32_t nucleo_event_publish(const char *topic, const char *payload_json)
         xSemaphoreGive(s_jlock);
     }
 
-    if (s_sink) s_sink(seq, t_copy, p_copy);
+    fan_sinks(seq, t_copy, p_copy, NULL);
     ESP_LOGD(TAG, "event #%u %s", (unsigned)seq, topic);
+    return seq;
+}
+
+uint32_t nucleo_event_inject(const char *src, const char *topic, const char *payload_json)
+{
+    if (!payload_json || !payload_json[0]) payload_json = "{}";
+    // Same discipline as publish(): assign a local seq under s_lock, take a stack copy, then fan
+    // OUTSIDE the lock. The difference is `src` is non-NULL, so a mesh sink will NOT re-forward it.
+    char t_copy[TOPIC_MAX], p_copy[PAYLOAD_MAX];
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    uint32_t seq = ++s_seq;
+    event_t *e = &s_ring[seq % RING];
+    e->seq = seq;
+    e->ts = time(NULL);
+    strncpy(e->topic, topic, TOPIC_MAX - 1); e->topic[TOPIC_MAX - 1] = '\0';
+    strncpy(e->payload, payload_json, PAYLOAD_MAX - 1); e->payload[PAYLOAD_MAX - 1] = '\0';
+    memcpy(t_copy, e->topic, TOPIC_MAX);
+    memcpy(p_copy, e->payload, PAYLOAD_MAX);
+    int64_t ts_copy = e->ts;
+    xSemaphoreGive(s_lock);
+
+    if (s_jlock && xSemaphoreTake(s_jlock, pdMS_TO_TICKS(500)) == pdTRUE) {
+        event_t je; je.seq = seq; je.ts = ts_copy;
+        memcpy(je.topic, t_copy, sizeof je.topic);
+        memcpy(je.payload, p_copy, sizeof je.payload);
+        journal_append(&je);
+        xSemaphoreGive(s_jlock);
+    }
+
+    fan_sinks(seq, t_copy, p_copy, src);
+    ESP_LOGD(TAG, "inject #%u %s (src=%s)", (unsigned)seq, topic, src ? src : "?");
     return seq;
 }
 

@@ -109,7 +109,10 @@ static const a_alias_t APP_ALIAS[] = {
     { "games",              { "giochi", "gioco", "games", "game", "giocare", "partita", "multiplayer", "arcade", NULL } },
     { "code-runner",        { "runner", "playground", "script", "javascript", "coderunner", NULL } },
     { "miei-fatti",         { "fatti", "miei fatti", "i miei fatti", "i miei dati", "ricordi", "conoscenze", "facts", "my facts", "my data", "knowledge", NULL } },
-    { "anima-knowledge",    { "enciclopedia", "wiki", "wikipedia", "ramo", "rami", "scarica conoscenza", "scarica sapere", "encyclopedia", "knowledge branch", "download knowledge", NULL } },
+    { "ethernet",           { "ethernet", "lan", "w5500", "rete cablata", "cablato", "cablata", "arp", "wired", "cable", NULL } },
+    { "ble",                { "ble", "bluetooth", "bt", NULL } },
+    { "payloads",           { "payload", "payloads", "ducky", "duckyscript", "badusb", "rubber ducky", "hid", NULL } },
+    { "weather",            { "meteo", "tempo", "previsioni", "weather", "forecast", "che tempo fa", NULL } },
 };
 // </gen:app-alias>
 
@@ -2845,11 +2848,12 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     g_anima_stage = 0xB0;                 // DIAG: entered the ANIMA query
     g_anima_phase = 0x01;                 // DIAG: cascade entry
     bool en = lang && (lang[0] == 'e' || lang[0] == 'E');
-    // RAM policy: stand the offline L1/HDC brain down for this turn whenever the cloud teacher is
-    // reachable WITH a key — the index then never loads and its heap goes to the TLS handshake. AUTO
-    // honors this; a user FORCE_ON/OFF from the apps overrides it. One push here governs every L1 call
-    // site below (the browser-LLM case is pushed separately via /api/anima/l1 -> set_external_brain).
-    nucleo_anima_l1_set_online_brain(nucleo_anima_online_available() && nucleo_anima_teacher_configured());
+    // RAM policy: stand the offline L1/HDC brain down for this turn ONLY in ONLINE-ONLY mode, where the
+    // cloud LLM is the sole brain and L1's index would be dead weight competing for the TLS handshake's
+    // heap. In HYBRID, L1 SERVES (it's half of "L1 + intelligent wiki search") so we must NOT stand it
+    // down just because a key exists. AUTO honors this; a user FORCE_ON/OFF from the apps overrides it.
+    nucleo_anima_l1_set_online_brain(nucleo_anima_online_available() && nucleo_anima_teacher_configured()
+                                     && nucleo_anima_online_only_enabled());
     s_session.turn++;
     trace_reset();        // fresh thought-log for this turn
     content_reset();      // no composed payload until a tool produces one
@@ -2997,6 +3001,14 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // online entity/Wikidata/teacher tiers, which are the only ones that can hallucinate.)
     const bool askable = a_is_askable(q);
 
+    // POLICY: the cloud LLM (chat completions: chat_ctx / code / teacher) is allowed ONLY in ONLINE-ONLY
+    // mode. HYBRID answers knowledge with L1 + INTELLIGENT WIKI SEARCH (Wikidata facts + Wikipedia bios,
+    // all `!online_llm` paths below) — deterministic, grounded, far lighter on this PSRAM-less heap than a
+    // chat completion carrying the whole transcript. (Online-only itself is handled+returned far above; so
+    // online_llm is effectively false through this hybrid section, which is exactly the intent.)
+    const bool online_llm = nucleo_anima_online_available() && nucleo_anima_teacher_configured()
+                            && nucleo_anima_online_only_enabled();
+
     // Classify once up-front: the F_* feature flags drive the live/weather routing below AND the
     // later spellfix gate. (Pure function of q; q is stable from here on.)
     anima_plan_t plan; anima_cortex_plan(q, en, &plan);
@@ -3042,7 +3054,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // card. Routed here (before the entity/L1 tiers) with a code prompt + a larger reply budget so the
     // fenced ```block isn't truncated. Online+key only; offline/no-key falls through (we never fabricate
     // code). Frees L1 first (the TLS handshake needs the contiguous heap on this PSRAM-less chip).
-    if (a_is_code_request(q) && nucleo_anima_online_available()) {
+    if (online_llm && a_is_code_request(q)) {   // LLM-only: code is generated, never wiki-searched
         nucleo_anima_l1_unload();
         if (nucleo_anima_online_code(q, en, &r)) { mem_update(&r); s_session.dirty = true; goto done; }
     }
@@ -3051,7 +3063,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // frozen bio can't answer: let Grok answer them, grounded by its knowledge. Online + key only —
     // chat_ctx returns 0 without a key, so offline/no-key falls through to the entity bio (best
     // effort). Free L1 first (TLS handshake needs the contiguous heap).
-    if (askable && nucleo_anima_online_available() && nucleo_anima_online_is_about(q, en)) {
+    if (online_llm && askable && nucleo_anima_online_is_about(q, en)) {   // LLM-only: hybrid answers "cosa ha fatto X" from the Wikipedia bio below
         nucleo_anima_l1_unload();
         // WITH conversation context: "e cosa ha fatto?" (is_about, subject-less) resolves against the
         // previous turn; "cosa ha fatto einstein" (named) works too (context is harmless).
@@ -3250,9 +3262,8 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // those structured tiers is a SEPARATE outbound TLS handshake (GET), and on this PSRAM-less chip every
     // handshake fragments the scarce heap, so doing 2-3 of them per "chi è X" was what left no contiguous
     // block for the next query ("online works once then stops"). Routing entity questions straight to the
-    // chat LLM means ONE handshake per turn. Wikipedia stays the path ONLY when no key is set (keyless,
-    // free knowledge). Offline cache/recall (network-free) below still run regardless.
-    const bool online_llm = nucleo_anima_online_available() && nucleo_anima_teacher_configured();
+    // chat LLM means ONE handshake per turn. In HYBRID (online_llm==false, defined above) Wikipedia/Wikidata
+    // IS the path — one structured GET, remembered for offline. Offline cache/recall (network-free) run regardless.
 
     // Wikidata precise facts (born/died/capital/author): deterministic, no key. Before the Wikipedia
     // bio so "capitale di X" / "quando è nato X" gives the fact, not a summary. Skipped when the LLM owns
@@ -3318,8 +3329,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // fragment). Online -> Grok with the REAL last turn as context (resolves pronouns/ellipsis). Offline
     // -> the last topic's card (the bio): it still knows what you're talking about.
     if (a_is_followup_q(q)) {
-        if (nucleo_anima_online_available() &&
-            nucleo_anima_online_chat_ctx(q, ctx, nctx, en, &r)) {
+        if (online_llm && nucleo_anima_online_chat_ctx(q, ctx, nctx, en, &r)) {   // LLM-only; hybrid resolves the follow-up against the last topic's L1 card below
             snprintf(r.state, sizeof(r.state), "followup"); mem_update(&r); s_session.dirty = true; goto done;
         }
         if (s_mem.last_topic[0] && nucleo_anima_l1_query(s_mem.last_topic, en, false, &r)) {
@@ -3347,20 +3357,18 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
         goto done;
     }
 
-    // Last resort: the cloud teacher (truth-gated: it self-classifies and VERIFIES against Wikipedia to
-    // learn). Skipped when online_llm — that Wikipedia verification is a 2nd/3rd TLS handshake we don't
-    // want (policy + RAM), and the pure chat fallback just below answers via the LLM alone. Keyless ->
-    // returns 0 anyway. See docs/anima-online.md §4.
-    if (!online_llm && nucleo_anima_online_teacher(q, en, &r)) {
+    // Last resort: the cloud teacher (LLM-backed: self-classifies via chat completions, verifies against
+    // Wikipedia, learns). It IS an LLM call, so it runs ONLY when the LLM is allowed (online-only). In
+    // HYBRID the Wikipedia/Wikidata tiers above already learned what was verifiable, with no LLM.
+    if (online_llm && nucleo_anima_online_teacher(q, en, &r)) {
         mem_update(&r);
         snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
         s_session.dirty = true;
         goto done;
     }
-    // GROK — universal "save-the-day" fallback. Any remaining miss, when online + key, gets a Grok answer
-    // WITH the last turn as real conversation context. Live, NOT cached (no ODD pollution; the truth-gated
-    // teacher above already learned what was verifiable). Offline/no-key -> honest miss.
-    if (r.tier == ANIMA_TIER_NONE && nucleo_anima_online_available() &&
+    // GROK — "save-the-day" LLM fallback. ONLY when the LLM is allowed (online-only). HYBRID has no LLM:
+    // a remaining miss after L1 + wiki is an honest "non lo so".
+    if (r.tier == ANIMA_TIER_NONE && online_llm &&
         nucleo_anima_online_chat_ctx(q, ctx, nctx, en, &r)) {
         mem_update(&r); s_session.dirty = true; goto done;
     }

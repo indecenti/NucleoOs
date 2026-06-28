@@ -15,6 +15,7 @@
 #include "launcher_theme.h"     // W/H/HINT + themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (pulls nucleo_theme.h)
 #include "nucleo_theme.h"       // theme registry: get_all / get_current / set + THEME_ACC
 #include "app_gfx.h"
+#include "nucleo_i18n.h"        // TR(it,en): UI labels follow the system language
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -35,9 +36,10 @@ static int active_index(void){
 static bool on_back(int key){ return key==NK_LEFT; }   // consume Left, let Esc fall through to close
 
 static void on_enter(void){
+    nucleo_app_set_direct_draw(true);   // static list UI: draw direct, free the 32 KB menu buffer
     s_sel = active_index();
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint("SU/GIU scegli   INVIO applica   Esc esci");
+    nucleo_app_set_hint(TR("SU/GIU scegli   INVIO applica   Esc esci", "UP/DN pick   ENTER apply   Esc exit"));
     nucleo_app_request_draw();
 }
 
@@ -81,14 +83,14 @@ static void on_draw(void){
     d.fillRect(0,0,W,ch,BG);
 
     // header: "Theme" + the active theme's name, in the live accent so it reflects the choice
-    d.setTextSize(2); d.setTextColor(THEME_ACC,BG); d.setCursor(10,4); d.print("Theme");
+    d.setTextSize(2); d.setTextColor(THEME_ACC,BG); d.setCursor(10,4); d.print(TR("Tema","Theme"));
     int c=0; const nucleo_theme_t *all=nucleo_theme_get_all(&c);
     int ai=active_index();
     if(c>0 && all[ai].name){ const char *cn=all[ai].name; int w=(int)strlen(cn)*6;
         d.setTextSize(1); d.setTextColor(MUTED,BG); d.setCursor(W-10-w,11); d.print(cn); }
     d.drawFastHLine(10,22,W-20,LINE);
 
-    if(c<=0){ d.setTextSize(1); d.setTextColor(MUTED,BG); d.setCursor(10,40); d.print("No themes"); return; }
+    if(c<=0){ d.setTextSize(1); d.setTextColor(MUTED,BG); d.setCursor(10,40); d.print(TR("Nessun tema","No themes")); return; }
 
     // adaptive list: fill the band for the few themes we ship; scroll only if it ever grows large
     int top=26, band=ch-top;

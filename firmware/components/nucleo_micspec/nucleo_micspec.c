@@ -1,6 +1,7 @@
 // Mic Spectrum DSP engine. See nucleo_micspec.h. Pure ESP-IDF + <math.h>.
 #include "nucleo_micspec.h"
 #include "nucleo_board.h"
+#include "nucleo_codec.h"             // board-aware mic HAL (PDM original / ES8311 ADC on ADV)
 #include "nucleo_recorder.h"          // mic single-owner gate (is_busy)
 #include <math.h>
 #include <string.h>
@@ -92,30 +93,9 @@ static void build_bands(void)
     }
 }
 
-static esp_err_t mic_open(void)
-{
-    i2s_chan_config_t chan = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
-    esp_err_t err = i2s_new_channel(&chan, NULL, &s_rx);
-    if (err == ESP_OK) {
-        i2s_pdm_rx_config_t cfg = {
-            .clk_cfg  = I2S_PDM_RX_CLK_DEFAULT_CONFIG(MS_RATE),
-            .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
-            .gpio_cfg = { .clk = NUCLEO_MIC_PIN_CLK, .din = NUCLEO_MIC_PIN_DATA, .invert_flags = { .clk_inv = false } },
-        };
-        err = i2s_channel_init_pdm_rx_mode(s_rx, &cfg);
-    }
-    if (err == ESP_OK) err = i2s_channel_enable(s_rx);
-    if (err != ESP_OK && s_rx) { i2s_del_channel(s_rx); s_rx = NULL; }
-    return err;
-}
-
-static void mic_close(void)
-{
-    if (!s_rx) return;
-    i2s_channel_disable(s_rx);
-    i2s_del_channel(s_rx);
-    s_rx = NULL;
-}
+// Board-aware mic HAL: PDM (original) or ES8311 standard-I2S ADC (ADV). See nucleo_codec.
+static esp_err_t mic_open(void) { return nucleo_codec_mic_open(MS_RATE, &s_rx); }
+static void mic_close(void)     { nucleo_codec_mic_close(s_rx); s_rx = NULL; }
 
 // Block until `need` samples are read (handling i2s partial-read timeouts), or the engine stops.
 static bool fill_window(int16_t *raw, int need)
@@ -123,7 +103,9 @@ static bool fill_window(int16_t *raw, int need)
     int got_total = 0;
     while (got_total < need && atomic_load(&s_run)) {
         size_t got = 0;
-        esp_err_t rd = i2s_channel_read(s_rx, (char *)(raw + got_total),
+        // Codec HAL read: on the ADV it decimates the ES8311's native 48 kHz to MS_RATE (16 kHz),
+        // so the FFT bins and pitch detection map to true frequencies. Pass-through on the PDM mic.
+        esp_err_t rd = nucleo_codec_mic_read(s_rx, (char *)(raw + got_total),
                                         (need - got_total) * sizeof(int16_t), &got, pdMS_TO_TICKS(200));
         if (got > 0) got_total += (int)(got / sizeof(int16_t));
         else if (rd != ESP_OK && rd != ESP_ERR_TIMEOUT) return false;

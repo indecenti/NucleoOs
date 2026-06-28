@@ -45,7 +45,11 @@ static const char *const TABS_EN[NTABS] = { "SEND","RECV","PEER","CMD","OPT","?"
 
 // ---- state -----------------------------------------------------------------
 static int   s_tab = T_SEND, s_sel = -1;
-static bool  s_en = false;
+// System UI language (settings.json ui.language) — shared with the Control Center + web shell, so
+// this app's existing IT/EN labels follow the global setting instead of a private toggle.
+extern "C" bool nucleo_i18n_is_en(void);
+extern "C" void nucleo_i18n_set_en(bool en);
+static bool  s_en = false;   // seeded from the system language on enter
 static int   s_proto = NLINK_PROTO_NUCLEO;   // OPZ setting
 static bool  s_auto = false;                 // auto-accept incoming (trusted)
 static int   s_peer_sel = 0;                 // chosen target peer
@@ -54,7 +58,8 @@ static char  s_msg[48]; static int s_msg_t = 0;
 
 // file browser
 struct Ent { char name[64]; bool dir; };
-static Ent s_ent[64]; static int s_nent = 0, s_fsel = 0;
+#define ENT_MAX 64
+static Ent *s_ent = nullptr; static int s_nent = 0, s_fsel = 0;
 
 // command input
 static char s_cbuf[120]; static int s_clen = 0;
@@ -167,9 +172,10 @@ static int ent_cmp(const void *a, const void *b) {
 }
 static void read_dir(void) {
     s_nent = 0; s_fsel = 0;
+    if (!s_ent) return;
     DIR *dp = opendir(s_dir); if (!dp) return;
     struct dirent *de;
-    while ((de = readdir(dp)) && s_nent < 64) {
+    while ((de = readdir(dp)) && s_nent < ENT_MAX) {
         if (de->d_name[0] == '.') continue;
         char full[224]; snprintf(full, sizeof full, "%s/%s", s_dir, de->d_name);
         struct stat stt; bool isdir = (stat(full, &stt) == 0) && S_ISDIR(stt.st_mode);
@@ -189,7 +195,7 @@ static void draw_send(int ch) {
     txt(8, 28, hd, nlink_svc_peer_count() ? GRN : DIM, BG, 1);
     char db[44]; snprintf(db, sizeof db, "%.40s", s_dir); txt(8, 40, db, MUTED, BG, 1);
     d.drawFastHLine(0, 52, W, LINE);
-    if (!s_nent) { txt(12, 70, s_en ? "Empty folder" : "Cartella vuota", DIM, BG, 1); return; }
+    if (!s_ent || !s_nent) { txt(12, 70, s_en ? "Empty folder" : "Cartella vuota", DIM, BG, 1); return; }
     d.setClipRect(0, 54, W, ch - 54 - 32);
     int cy = (58 + ch - 32) / 2;
     for (int i = 0; i < s_nent; i++) {
@@ -340,7 +346,7 @@ static void page_tab(void) {
     update_hint(); nucleo_app_request_draw();
 }
 static void send_selected(void) {
-    if (!s_nent) return;
+    if (!s_ent || !s_nent) return;
     if (s_ent[s_fsel].dir) { char nx[224]; snprintf(nx, sizeof nx, "%s/%s", s_dir, s_ent[s_fsel].name); snprintf(s_dir, sizeof s_dir, "%.159s", nx); read_dir(); return; }
     if (!nlink_svc_peer_count()) { toast("Scegli un peer", "Pick a peer"); return; }
     char path[224]; snprintf(path, sizeof path, "%s/%s", s_dir, s_ent[s_fsel].name);
@@ -351,7 +357,7 @@ static void opt_activate(int row) {
     switch (row) {
         case O_PROTO: s_proto ^= 1; toast(s_proto ? "Modo Bruce" : "Modo Nucleo", s_proto ? "Bruce mode" : "Nucleo mode"); break;
         case O_AUTO:  s_auto = !s_auto; toast(s_auto ? "Auto-accetta ON" : "Auto-accetta OFF", s_auto ? "Auto-accept ON" : "Auto-accept OFF"); break;
-        case O_LANG:  s_en = !s_en; update_hint(); break;
+        case O_LANG:  nucleo_i18n_set_en(!nucleo_i18n_is_en()); s_en = nucleo_i18n_is_en(); update_hint(); break;
         default: break;
     }
 }
@@ -426,8 +432,10 @@ static bool on_back(int key) {
 static void on_tick(void) { nucleo_app_request_draw(); }   // 5Hz refresh of progress/peers/offers
 
 static void on_enter(void) {
+    s_en = nucleo_i18n_is_en();           // follow the system language
     s_tab = T_SEND; s_sel = -1; s_clen = 0; s_cbuf[0] = 0;
     snprintf(s_dir, sizeof s_dir, "%s", NUCLEO_SD_MOUNT "/data");
+    if (!s_ent) s_ent = (Ent *)calloc(ENT_MAX, sizeof *s_ent);   // heap-resident only while open; ZERO RAM at boot
     nucleo_app_set_tab_handler(page_tab);     // TAB pages the tabs (the "tab system")
     nucleo_app_set_back_handler(on_back);
     if (!nlink_svc_start()) { toast("ESP-NOW non avviato", "ESP-NOW failed"); return; }
@@ -435,7 +443,7 @@ static void on_enter(void) {
     nlink_svc_discover(NLINK_PROTO_NUCLEO);
     read_dir(); update_hint();
 }
-static void on_exit(void) { nlink_svc_stop(); }
+static void on_exit(void) { nlink_svc_stop(); free(s_ent); s_ent = nullptr; s_nent = 0; }
 
 extern "C" void nucleo_register_link(void) {
     static const nucleo_app_def_t app = {

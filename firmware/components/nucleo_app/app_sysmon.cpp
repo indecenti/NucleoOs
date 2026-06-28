@@ -13,7 +13,8 @@ extern "C" {
 #include "esp_heap_caps.h"
 
 static uint32_t s_last_up = 0;
-static void enter(void) { nucleo_app_set_hint("esc back"); s_last_up = 0; nucleo_app_request_draw(); }
+static bool     s_first = true;   // full-clear only once; later ticks repaint just the changing regions (no flicker)
+static void enter(void) { nucleo_app_set_hint("esc back"); s_last_up = 0; s_first = true; nucleo_app_request_draw(); }
 // The finest-grained value shown is uptime in whole seconds — redraw at 1 Hz, not 5 Hz.
 static void tick(void) { uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000); if (up != s_last_up) { s_last_up = up; nucleo_app_request_draw(); } }
 
@@ -22,15 +23,17 @@ static void tick(void) { uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000
 static void gauge(int y, const char *label, const char *val, int pct, unsigned short col)
 {
     d.setTextSize(1); d.setTextColor(0x8C71, 0x0841);
-    d.setCursor(10, y); d.print(label);
-    
+    d.setCursor(10, y); d.print(label);                       // bg-backed text -> overwrites itself, no flicker
+
+    d.fillRect(96, y - 6, 134, 16, 0x0841);                   // clear ONLY the value field (handles shrinking text)
     d.setTextSize(2); d.setTextColor(col, 0x0841);
     int vw = strlen(val) * 12;
     d.setCursor(230 - vw, y - 6); d.print(val);
-    
+
     d.drawRoundRect(10, y + 12, 220, 5, 2, 0x2945);
     if (pct > 100) pct = 100;
     if (pct < 0) pct = 0;
+    d.fillRect(11, y + 13, 218, 3, 0x0841);                   // clear bar interior so a shrinking bar leaves no trail
     d.fillRoundRect(10, y + 12, 220 * pct / 100, 5, 2, col);
 }
 
@@ -38,7 +41,7 @@ static void draw(void)
 {
     int top = nucleo_app_content_top();
     int h = nucleo_app_content_height();
-    d.fillRect(0, top, 240, h, 0x0841);
+    if (s_first) { d.fillRect(0, top, 240, h, 0x0841); s_first = false; }   // clear once, not every second
 
     int y0 = app_ui_title("System Status", 0x4ED3, "Live");
 
@@ -66,6 +69,7 @@ static void draw(void)
 
     uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000);
     char us[32]; snprintf(us, sizeof(us), "%lus / %d apps", (unsigned long)up, nucleo_registry_count());
+    d.fillRect(10, y0 + 78, 220, 9, 0x0841);                  // clear the uptime line before repaint
     d.setTextSize(1); d.setTextColor(0x8C71, 0x0841);
     d.setCursor(10, y0 + 78); d.print(us);
 }

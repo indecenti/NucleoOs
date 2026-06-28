@@ -1,12 +1,15 @@
 // NucleoOS boot (device-first): the Cardputer screen is the OS home.
 //   NVS -> UI(display+keyboard) -> SD -> first-run wizard (AP or join Wi-Fi)
 //   -> network -> services -> home screen. The web UI is the rich remote companion.
+#include <stdio.h>
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_task.h"          // ESP_TASK_MAIN_PRIO for the dedicated ANIMA Solo task
 #include "esp_heap_caps.h"
 #include "nucleo_storage.h"
+#include "nucleo_i18n.h"
 #include "nucleo_registry.h"
 #include "nucleo_eventbus.h"
 #include "nucleo_ui.h"
@@ -20,12 +23,17 @@
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
 #include "nucleo_audio.h"
+#include "nucleo_kbd.h"     // system I2C bus owner (ADV) -> shared with the codec
+#include "nucleo_codec.h"   // ES8311 (Cardputer ADV); no-op on the original board
+#include "nucleo_imu.h"     // BMI270 tilt sensor (Cardputer ADV); no-op on the original board
+#include "nucleo_ble.h"     // boot-time BLE controller memory reclaim (Bluetooth OFF by default)
 #include "nucleo_log.h"
 #include "nucleo_power.h"
 #include "nucleo_usbmsc.h"
 #include "nucleo_voice.h"
 #include "nucleo_ir.h"
 #include "esp_ota_ops.h"
+#include "esp_app_desc.h"   // esp_app_get_description(): real running-image version for the boot banner
 #include "esp_system.h"     // esp_reset_reason(): why the PREVIOUS boot ended (panic vs WDT vs brownout)
 #include "nucleo_board.h"   // HLOG(): compile-time-gated heap tracing (see NUCLEO_HEAPLOG)
 
@@ -34,6 +42,18 @@ static const char *TAG = "nucleoos";
 // void-returning shim so nucleo_anima_l1_unload_if_idle (returns bool) matches the audio reclaim hook
 // signature (void(*)(void)). Calling through a mismatched function-pointer type is UB, hence the wrap.
 static void nucleo_anima_l1_unload_if_idle_void(void) { (void)nucleo_anima_l1_unload_if_idle(); }
+
+// ANIMA Solo registers ONLY the assistant (builtin registrar; not in a public header — forward-declared
+// here, mirroring how nucleo_app_register_builtins fans out to the per-app registrars internally).
+extern void nucleo_register_anima(void);
+extern void nucleo_register_recorder(void);   // Recorder Solo: dedicated boot for heavy cloud transcribe/summarize
+extern int  nucleo_app_solo_app(void);        // which Solo profile (1=ANIMA, 2=Recorder) is active
+extern bool nucleo_app_solo_needs_speech(void); // only ANIMA Solo brings up TTS+voice; others skip them
+extern bool nucleo_app_solo_is_generic(void);   // generic Solo (heavy game via NX_SOLO): register all builtins
+
+// ANIMA Solo runs nucleo_app_run() on a DEDICATED large-stack task (the 8 KB main task overflows running
+// the ANIMA UI). nucleo_app_run never returns (Esc reboots), so vTaskDelete is just defensive.
+static void anima_solo_task(void *arg) { (void)arg; nucleo_app_run(); vTaskDelete(NULL); }
 
 // Human label for the last reset cause. This is THE first question when a device reboots on its own:
 // PANIC/abort = a crash or a failed assert (often heap OOM downstream); INT/TASK_WDT = a hang (a task
@@ -81,24 +101,71 @@ static void ota_confirm_if_pending(void)
     }
 }
 
+// Boot breadcrumb: log to the serial console AND append to /sd/boot_trace.txt, so the LAST stage
+// reached before a hang is visible on the SD card (readable on a PC) even with no serial console.
+// fopen before the SD mount just returns NULL (skipped); bootmark_begin() truncates a fresh trace.
+// Steps taken BEFORE the SD mounts are buffered in RAM and flushed by bootmark_begin() (which starts
+// a fresh file at SD-mount time); after that bootmark() appends straight to the card.
+static char s_pre[480]; static int s_pre_n = 0;   // pre-mount breadcrumb buffer
+static bool s_sd_up = false;
+static void bootmark(const char *step)
+{
+    unsigned fr = (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    unsigned lg = (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+    ESP_LOGW(TAG, "BOOTSTEP %s free=%u largest=%u", step, fr, lg);
+    if (!s_sd_up) {                               // SD not mounted yet -> buffer it
+        int rem = (int)sizeof(s_pre) - s_pre_n;
+        if (rem > 1) { int w = snprintf(s_pre + s_pre_n, rem, "%s  free=%u largest=%u\n", step, fr, lg);
+                       s_pre_n += (w > 0 && w < rem) ? w : (rem - 1); }
+        return;
+    }
+    FILE *f = fopen(NUCLEO_SD_MOUNT "/boot_trace.txt", "a");
+    if (f) { fprintf(f, "%s  free=%u largest=%u\n", step, fr, lg); fclose(f); }
+}
+static void bootmark_begin(void)                  // call right after the SD mounts: fresh file + flush pre-mount log
+{
+    s_sd_up = true;
+    FILE *f = fopen(NUCLEO_SD_MOUNT "/boot_trace.txt", "w");
+    if (f) { fputs("=== boot ===\n", f); if (s_pre_n > 0) fwrite(s_pre, 1, (size_t)s_pre_n, f); fclose(f); }
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "NucleoOS booting — last reset: %s", reset_reason_str(esp_reset_reason()));
+    // Version banner — first thing on the serial console (COM), so the running image is identifiable
+    // without the network. Version == PROJECT_VER from firmware/version/* + git; matches /api/status.
+    {
+        const esp_app_desc_t *appd = esp_app_get_description();
+        ESP_LOGI(TAG, "NucleoOS %s | proj %s | built %s %s | idf %s | %s",
+                 appd ? appd->version : "?", appd ? appd->project_name : "?",
+                 appd ? appd->date : "?", appd ? appd->time : "?",
+                 appd ? appd->idf_ver : "?", CONFIG_IDF_TARGET);
+    }
     HMEM("boot-start");
+    bootmark("boot-start");
 
     esp_err_t nvs = nvs_flash_init();
     if (nvs == ESP_ERR_NVS_NO_FREE_PAGES || nvs == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ESP_ERROR_CHECK(nvs_flash_init());
     }
+    bootmark("nvs");
+
+    // Reclaim the BLE controller's idle DRAM (~tens of KB) for the OS/ANIMA on a PSRAM-less, heap-starved
+    // chip. Bluetooth is OFF by default (a niche Security tool); enabling it in the BLE app + rebooting
+    // keeps the radio. MUST run before any BLE init — BLE is on-demand, so nothing has touched it yet.
+    nucleo_ble_boot_reclaim();
+    bootmark("bt-reclaim");
 
     // Power-loss-safe config store on internal flash. Mount before networking, which
     // reads setup.json (load_config) on the very first call. Independent of the SD.
     if (nucleo_storage_mount_cfg() != ESP_OK)
         ESP_LOGW(TAG, "config store (littlefs) unavailable; setup may not persist safely");
+    bootmark("cfg");
 
     nucleo_event_init();
     nucleo_log_init();                      // start capturing logs early (RAM ring -> /api/logs)
+    bootmark("event+log");
     {   // DIAG (WiFi-visible): the boot reset cause + the ANIMA tier active at the last reset. The INFO
         // line above predates the ring and is stripped at WARN; this WARN line lands in /api/logs so a
         // crash is diagnosable over WiFi (no serial). g_anima_stage survives a warm reboot (RTC mem).
@@ -109,7 +176,10 @@ void app_main(void)
         g_anima_stage = 0; g_anima_phase = 0;   // consume the breadcrumbs for the next boot cycle
     }
     nucleo_ui_init();                       // M5GFX display + Cardputer keyboard
+    nucleo_codec_init(nucleo_kbd_i2c_bus()); // ADV: attach ES8311 to the keyboard's I2C bus (no-op on original)
+    nucleo_imu_init(nucleo_kbd_i2c_bus());   // ADV: attach BMI270 tilt sensor to the same I2C bus (no-op on original)
     HMEM("after-ui");
+    bootmark("ui-init");
 
     // USB Mass Storage mode: if the USB Drive app asked for it (flag set + reboot), run ONLY the
     // dedicated MSC loop — mount the SD to get the card handle, then hand its raw blocks to the
@@ -123,32 +193,100 @@ void app_main(void)
     // Blocks ~2.5 s on its own canvas while the heap is still clean; any key skips it. The final
     // frame stays on the panel through the SD/network bringup below until the launcher draws.
     nucleo_ui_boot_splash();
+    bootmark("after-splash");
 
     bool sd_ok = false;
     if (nucleo_storage_mount() == ESP_OK) {
         sd_ok = true;
-        nucleo_storage_provision();
-        nucleo_storage_refresh();
+        bootmark_begin();                   // SD up: start a fresh trace on the card (/sd/boot_trace.txt)
+        bootmark("sd-mounted");
+        nucleo_storage_provision();         bootmark("sd-provision");
+        nucleo_storage_refresh();           bootmark("sd-refresh");
+        nucleo_i18n_load();                 // system UI language (settings.json ui.language) for native apps
         if (nucleo_registry_load() != ESP_OK)
             ESP_LOGW(TAG, "registry not loaded");
+        bootmark("registry");
     } else {
         ESP_LOGE(TAG, "no usable SD card");
     }
 
+    // Graceful-shutdown hook: ESP-IDF runs nucleo_storage_sync() on every clean esp_restart()
+    // (OTA, /api/reboot, native SISTEMA ▸ Riavvia, Wi-Fi reset, USB-MSC) to flush + unmount the
+    // filesystems — the OS `sync` that stops FAT from corrupting on reboot. Panics skip it by design.
+    if (esp_register_shutdown_handler(nucleo_storage_sync) != ESP_OK)
+        ESP_LOGW(TAG, "could not register storage shutdown hook");
+
+    // ANIMA Solo personality (see nucleo_app.h): the user opened the assistant from the full OS, which
+    // set an RTC flag + rebooted here. Bring up ONLY what the assistant needs — display + SD + Wi-Fi +
+    // power + arbiter + ANIMA/TTS/voice — and SKIP httpd / mDNS / recorder / auth / IR / the launcher's
+    // app registry. The heap then comes up large and UNFRAGMENTED (no 18 KB httpd block carving it), the
+    // only way this PSRAM-less chip fits online TLS + L1 + voice at once. Consumed once (RTC -> latch).
+    const bool solo = nucleo_anima_solo_pending();
+    const bool solo_rec = solo && (nucleo_app_solo_app() == 2);   // Recorder profile: pure cloud transcribe, no voice/TTS
+    if (solo) ESP_LOGW(TAG, "%s Solo boot: skipping httpd/mDNS/recorder/auth/IR%s",
+                       solo_rec ? "Recorder" : "ANIMA", solo_rec ? " + TTS/voice" : "");
+
     // Bring up networking + services FIRST so the device is never bricked and the web UI
     // always works, even while the on-device keyboard is being verified/tuned.
     HMEM("after-sd");
-    nucleo_setup_apply_network();           // AP on first boot (no saved config)
-    nucleo_power_init();                     // DFS: scale CPU down when idle (battery), Wi-Fi up
-    nucleo_discovery_start(nucleo_setup_device_name());
-    if (sd_ok && nucleo_recorder_init() != ESP_OK)  // PDM mic -> WAV recorder
+    nucleo_setup_apply_network();           bootmark("network");   // AP on first boot (no saved config) — Wi-Fi stays up in Solo (cloud)
+    nucleo_power_init();                     bootmark("power");      // DFS: scale CPU down when idle (battery)
+    // mDNS (discovery) is started AFTER httpd_start (further down), NOT here: it costs ~12 KB at boot, and on
+    // the ADV that 12 KB was the difference between httpd_start fitting its ~26 KB need and OOM-failing on the
+    // ~30 KB boot heap. The failed attempt left port 80 bound, so the retry's listen() hit EADDRINUSE
+    // (errno 112) -> ESP_ERROR_CHECK -> abort -> intermittent reboot loop ("0.104 si riavvia"). Starting httpd
+    // FIRST (with mDNS's 12 KB still free) makes the boot deterministic; mDNS then comes up post-httpd
+    // (~16 KB free, fits) and advertises a few hundred ms later — functionally irrelevant, and a rare mDNS
+    // failure is non-fatal (the device stays reachable by IP), unlike the httpd abort.
+    if ((!solo || solo_rec) && sd_ok && nucleo_recorder_init() != ESP_OK)  // PDM mic — NEEDED in Recorder Solo (record IN the dedicated boot); skipped only in ANIMA Solo
         ESP_LOGW(TAG, "recorder mic init failed");
-    nucleo_auth_init();                     // generate pairing PIN + load session tokens (gates fs/ota/rec/ws)
-    nucleo_arb_init();                       // heavy-work arbiter: one TLS/SD/heap job at a time (no OOM race)
-    if (nucleo_ir_init() != ESP_OK)          // IR LED (GPIO44) via RMT; serves /api/ir/* + TV-B-Gone
+    bootmark("recorder");
+    if (!solo) nucleo_auth_init();          // pairing PIN + session tokens - not in Solo (no httpd)
+    bootmark("auth");
+    nucleo_arb_init();                       bootmark("arb");        // heavy-work arbiter (one job at a time) — KEPT: ANIMA online needs it
+    if (!solo && nucleo_ir_init() != ESP_OK) // IR LED (GPIO44) via RMT; serves /api/ir/* + TV-B-Gone — not in Solo
         ESP_LOGW(TAG, "IR init failed (GPIO busy?)");
+    bootmark("ir");
     HMEM("after-network");
-    ESP_ERROR_CHECK(nucleo_httpd_start());
+    bootmark("pre-httpd");
+    // httpd MUST come up — the web OS is not optional, so we do NOT limp on without it (a half-booted OS
+    // is worse than an honest stop). The deep ANIMA cascade is now off-loaded to a transient worker, so
+    // this task is lean (18KB) and httpd_start is deterministic. If it EVER still fails, log it to serial
+    // AND to the SD boot trace (readable without a serial console — the silent-freeze case), then halt:
+    // error logged, nothing half-starts, no fallback.
+    if (!solo) { esp_err_t he = nucleo_httpd_start();   // SKIPPED in Solo: this 18 KB task + its buffers are exactly the block that carves the heap on this no-PSRAM chip
+      if (he != ESP_OK) {
+          // ADV boot is on a knife-edge: httpd needs an ~18 KB CONTIGUOUS block and a rebuild can
+          // fragment the heap just below it (largest ~17 KB < 18432) -> start fails -> abort -> reboot
+          // loop (no degraded boot). Before giving up, free the 32 KB off-screen canvas (the launcher
+          // re-acquires it lazily; worst case a little launcher flicker) and retry: 32 KB >> 18 KB, so
+          // httpd then starts cleanly. The original board, which has more margin, never hits this path.
+          ESP_LOGW(TAG, "httpd start failed (%s) — freeing the 32 KB canvas + settle, then retrying", esp_err_to_name(he));
+          nucleo_app_release_buffers();
+          // The failed attempt can leave the port-80 listen socket bound -> the retry's listen() then hits
+          // EADDRINUSE (errno 112) -> abort. Give LWIP a moment to release it before re-listening.
+          vTaskDelay(pdMS_TO_TICKS(500));
+          he = nucleo_httpd_start();
+      }
+      if (he != ESP_OK) {
+          ESP_LOGE(TAG, "httpd start FAILED (%s) — halting (no degraded boot)", esp_err_to_name(he));
+          bootmark("httpd-FAILED");
+          ESP_ERROR_CHECK(he);   // halt: nothing else starts
+      } }
+    bootmark("httpd");
+    // mDNS — AFTER httpd so its ~12 KB stayed free for the httpd_start carve (see note above). HEAP-GATED:
+    // on a degraded/tight boot (seen on the ADV: largest block fell to ~7 KB after httpd) mDNS would alloc
+    // its responder down to a few dozen FREE bytes — leaving httpd with no working heap to serve requests
+    // (it then RESETS every connection: /api/status, /api/ota, the web OS, all dead) AND spamming
+    // "mdns_send: Cannot allocate memory". Discovery is a convenience (the device is always reachable by IP;
+    // ota.ps1 already prefers IP, and web-focus stops mDNS the moment a client connects), so when the
+    // contiguous heap is too low to run it without starving the SERVER, SKIP it and keep those bytes for httpd.
+    if (!solo) {
+        size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+        if (largest >= 14336) nucleo_discovery_start(nucleo_setup_device_name());   // ~14 KB headroom: mDNS fits without starving httpd
+        else ESP_LOGW(TAG, "mDNS SKIPPED at boot: largest free block %u < 14336 — reachable by IP, httpd keeps the heap", (unsigned)largest);
+    }
+    bootmark("discovery");
     ota_confirm_if_pending();               // healthy boot reached -> confirm OTA image, cancel rollback
     // Enrich the boot event so the journal's first line is a diagnosis seed: why the last boot ended,
     // the heap we came up with + the worst-ever watermark, and whether the SD mounted. Cheap (one
@@ -165,15 +303,17 @@ void app_main(void)
     // First-run wizard: choose Create AP or Join a Wi-Fi network (keyboard driven).
     // Setup lives on internal LittleFS (not the SD), so the wizard must run even with no SD
     // card inserted — otherwise a card-less device never gets asked how to connect.
-    if (!nucleo_setup_is_complete())
+    if (!solo && !nucleo_setup_is_complete())   // Solo is reached only from an already-configured OS -> wizard never needed
         nucleo_setup_run();
+    bootmark("setup");
 
     ESP_LOGI(TAG, "boot complete");
 
     HMEM("after-httpd");
     // ANIMA: offline assistant. L0 orchestrator is ready; higher tiers plug in later.
-    nucleo_anima_init("it");
-    if (sd_ok) nucleo_tts_init("it");            // voce offline concatenativa (no-op se /data/tts/it manca)
+    nucleo_anima_init("it");                 bootmark("anima");
+    if (sd_ok && (!solo || nucleo_app_solo_needs_speech())) nucleo_tts_init("it");   // SKIP in non-speech Solo (e.g. Recorder), save heap
+    bootmark("tts");
     // Voce a step su heap minuscolo (no PSRAM): se il task audio non trova lo stack contiguo, il player
     // libera l'indice L1 offline (se inattivo) e ritenta -> niente piu' "offline niente voce". main e'
     // l'unico punto che puo' dipendere sia da nucleo_audio sia da nucleo_anima, quindi cabliamo qui.
@@ -186,12 +326,42 @@ void app_main(void)
 #endif
     // AVCEB voice engine: PTT (FN key) → DTW template match → nucleo_anima_query() → action.
     // Initialized after anima (needs anima_try_lock) and after SD (loads .tpl templates).
-    if (nucleo_voice_init() != ESP_OK)
+    if ((!solo || nucleo_app_solo_needs_speech()) && nucleo_voice_init() != ESP_OK)   // SKIP in non-speech Solo: frees mic+task heap
         ESP_LOGW(TAG, "voice engine init failed (mic busy?)");
+    bootmark("voice");
 
     // Launch the Native OS App environment (Wear OS style) instead of the static setup loop.
     HMEM("after-anima");
-    nucleo_app_register_builtins();
-    nucleo_setup_register_apps();
-    nucleo_app_run();
+    if (solo) {
+        // Solo: register ONLY the target app. nucleo_app_run() auto-launches it and Esc reboots to the
+        // full OS. (App .bss is linked-in regardless, so this is about isolation/clarity, not RAM.)
+        if (solo_rec)                      { nucleo_register_recorder(); bootmark("app-recorder-solo"); }
+        else if (nucleo_app_solo_is_generic()) { nucleo_app_register_builtins(); bootmark("app-game-solo"); }  // heavy game (NX_SOLO): register all so launch_id finds it
+        else                               { nucleo_register_anima();    bootmark("app-anima-solo"); }
+    } else {
+        nucleo_app_register_builtins();      bootmark("app-builtins");
+        nucleo_setup_register_apps();        bootmark("app-setup");
+    }
+    bootmark("pre-app-run");
+    if (solo) {
+        // ANIMA Solo runs like the USB-MSC personality: a DEDICATED task owns the assistant with a LARGE
+        // stack. The 8 KB main task OVERFLOWS running ANIMA's UI (chat reflow + calendar/JSON parsing)
+        // while its worker reads the SD — the real cause of the "still reboots" crash. app_main then
+        // returns (its small task is deleted); only the Solo task, the on-demand query worker and the
+        // audio task remain. Nothing else (no launcher chrome, no calendar service) competes for SD/display.
+        // Stack by profile: ANIMA runs the INLINE query+TLS on this task (needs 26 KB). The Recorder runs
+        // its cloud TLS in a SEPARATE 16 KB worker (ai_task), so its UI task only hosts nucleo_app_run +
+        // the recorder draw — 16 KB is ample (the full OS runs the same on the 8 KB main task). CRITICAL:
+        // at pre-app-run the largest contiguous internal block is ~25 KB on the ADV, so a 26 KB stack
+        // FAILS to allocate -> no UI task -> black screen + hang. 16 KB fits with margin.
+        // Generic game solo (NX_SOLO): same as Recorder — UI-only, no inline TLS/query, 8 KB suffices
+        // (full OS runs nucleo_app_run on the 8 KB main task). 26 KB is for ANIMA inline-TLS only.
+        uint32_t solo_stk = (solo_rec || nucleo_app_solo_is_generic()) ? 8192 : 26624;
+        BaseType_t tcr = xTaskCreatePinnedToCore(anima_solo_task, solo_rec ? "rec-solo" : "anima-solo",
+                                                 solo_stk, NULL, ESP_TASK_MAIN_PRIO, NULL, 0);
+        if (tcr != pdPASS) ESP_LOGE(TAG, "SOLO task create FAILED (stack %u, largest %u) — halting",
+                                    (unsigned)solo_stk, (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        return;   // main task exits; the Solo task is now the app's home
+    }
+    nucleo_app_run();   // full OS: launcher loop on the 8 KB main task
 }

@@ -1630,7 +1630,7 @@ static void draw_map(void){
 }
 
 // ========================== draw: tank =======================================
-static void draw_tank_sprite(const Tank &t, uint16_t col, bool bot=false){
+static void draw_tank_sprite(const Tank &t, uint16_t col, bool bot=false, int id=-1){
     int sx=wx2s(t.x), sy=wy2s(t.y);
     int dir=t.dir;
     if(sx<-22||sx>W+12||sy<HUD_H-22||sy>H+12) return;
@@ -1703,7 +1703,7 @@ static void draw_tank_sprite(const Tank &t, uint16_t col, bool bot=false){
         d.drawCircle(fxp,fyp,8,mix(flash_col,COL_BLACK,200));
     }
     // ---- BOT markings: angular spikes + glowing red visor → unmistakably an enemy
-    if(bot){
+    if(bot&&id>=BOT_OWNER0){
         Tank &bt=s_bots[id-BOT_OWNER0];
         uint16_t spike=bt.is_boss?rgb(255,100,20):rgb(40,8,12);  // boss: gold spikes
         d.drawLine(sx-7,sy-7,sx-10,sy-10,spike); d.drawLine(sx+7,sy-7,sx+10,sy-10,spike);
@@ -1727,7 +1727,7 @@ static void draw_tanks(void){
     for(int i=0;i<s_nbots;i++){
         Tank &b=s_bots[i];
         if(!b.alive) continue;
-        draw_tank_sprite(b, tank_col(BOT_OWNER0+i), true);
+        draw_tank_sprite(b, tank_col(BOT_OWNER0+i), true, BOT_OWNER0+i);
         // tiny health pip over the bot so you can gauge it
         int sx=wx2s(b.x), sy=wy2s(b.y)-13;
         d.fillRect(sx-5,sy,10,2,rgb(40,12,14));

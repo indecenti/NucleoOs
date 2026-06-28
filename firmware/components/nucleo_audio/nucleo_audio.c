@@ -3,6 +3,7 @@
 #include "nucleo_audio.h"
 #include "nucleo_audio_priv.h"
 #include "nucleo_board.h"
+#include "nucleo_codec.h"   // ADV: power the ES8311 DAC before TX (no-op on the original NS4168)
 #include <string.h>
 #include <strings.h>
 #include <stdatomic.h>
@@ -90,6 +91,7 @@ static esp_err_t i2s_open(int rate, int chans)
     };
     err = i2s_channel_init_std_mode(s_tx, &std);
     if (err != ESP_OK) { ESP_LOGE(TAG, "init_std: %s", esp_err_to_name(err)); i2s_del_channel(s_tx); s_tx = NULL; return err; }
+    nucleo_codec_speaker(true);   // ADV: power up the ES8311 DAC so the I2S actually reaches the speaker
     i2s_channel_enable(s_tx);
     s_rate = rate; s_chans = chans;
     ESP_LOGI(TAG, "i2s TX up: %d Hz, %d ch (bclk=%d ws=%d dout=%d)", rate, chans,
@@ -100,10 +102,106 @@ static esp_err_t i2s_open(int rate, int chans)
 static void i2s_close(void)
 {
     if (!s_tx) return;
+    nucleo_codec_speaker(false);   // ADV: mute the ES8311 DAC so the idle speaker doesn't hiss (no-op on original)
     i2s_channel_disable(s_tx);
     i2s_del_channel(s_tx);
     s_tx = NULL; s_rate = 0; s_chans = 0;
 }
+
+// One-shot procedural sound effect for game feedback (a short decaying filtered-noise "clack"). Plays
+// on the speaker via the shared I2S TX, honouring the software volume. No-op while a real track is
+// playing (won't fight it). Opens the TX if idle and FREES it afterwards so it never holds the I2S pins
+// from the recorder. kind: 0 = low "throw" rumble, 1 = sharp "settle" clack. strength 5..100 scales it.
+// Integer-only (no FPU/math dependency). Blocks for ~60-90 ms — call it on discrete events, not per frame.
+void nucleo_audio_blip(int kind, int strength)
+{
+    if (atomic_load(&s_playing)) return;
+    if (strength < 5) strength = 5;
+    if (strength > 100) strength = 100;
+    bool opened = (s_tx == NULL);
+    if (nucleo_audio_i2s_rate(16000, 1) != ESP_OK) return;
+    int N = (kind == 0) ? 900 : 600;                  // short clacks (~55/40 ms): minimal blocking write
+    static int16_t b[256];
+    uint32_t rng = 0x9E3779B9u + (uint32_t)kind * 2654435761u;
+    int lp = 0;
+    for (int off = 0; off < N; ) {
+        int chunk = (N - off) < 256 ? (N - off) : 256;
+        for (int i = 0; i < chunk; i++) {
+            int idx = off + i;
+            int env = (N - idx) * 256 / N; env = env * env / 256;     // fast quadratic decay (0..256)
+            rng = rng * 1664525u + 1013904223u;
+            int white = (int)((rng >> 18) & 0x3FFF) - 8192;           // ~ -8192..8191
+            lp = (lp * 5 + white * 3) / 8;                            // 1-pole lowpass -> thud, not hiss
+            b[i] = (int16_t)(lp * env / 256 * strength / 100);
+        }
+        nucleo_audio_i2s_write(b, chunk * 2);
+        off += chunk;
+    }
+    if (opened) i2s_close();                            // release the I2S pins for the recorder/codec
+}
+
+// Loud square-wave tone (a beep). Mirrors blip()'s open/write/close so it never holds the I2S from the
+// recorder. The square wave is harsh on purpose (cuts through as an alarm); a short linear fade at the
+// ends keeps the little speaker from popping. Volume is applied downstream by nucleo_audio_i2s_write().
+void nucleo_audio_tone(int freq, int ms, int strength)
+{
+    if (atomic_load(&s_playing)) return;
+    if (freq < 100) freq = 100; else if (freq > 6000) freq = 6000;
+    if (ms < 5) ms = 5;          else if (ms > 2000) ms = 2000;
+    if (strength < 5) strength = 5; else if (strength > 100) strength = 100;
+    bool opened = (s_tx == NULL);
+    if (nucleo_audio_i2s_rate(16000, 1) != ESP_OK) return;
+    int total = 16000 * ms / 1000;             // samples
+    int half  = 8000 / freq;                   // half-period in samples (16000 / freq / 2)
+    if (half < 1) half = 1;
+    int amp = 9000 * strength / 100;           // loud but below the 16-bit clip
+    static int16_t b[256];
+    int phase = 0, level = amp;
+    for (int off = 0; off < total; ) {
+        int chunk = (total - off) < 256 ? (total - off) : 256;
+        for (int i = 0; i < chunk; i++) {
+            int idx = off + i, env = 256;
+            if (idx < 64) env = idx * 256 / 64;                       // anti-pop attack
+            else if (total - idx < 64) env = (total - idx) * 256 / 64; // anti-pop release
+            b[i] = (int16_t)(level * env / 256);
+            if (++phase >= half) { phase = 0; level = -level; }
+        }
+        nucleo_audio_i2s_write(b, chunk * 2);
+        off += chunk;
+    }
+    if (opened) i2s_close();
+}
+
+// Continuous alarm SIREN — a harsh, max-amplitude square wave WAILED 1.8->4.2 kHz with no gaps. Unlike
+// tone(), it KEEPS the I2S TX open across calls (phase + sweep persist in statics), so calling it back-to-
+// back from the alarm loop is a TRULY continuous, piercing siren: no per-call open/close click or silence.
+// Square wave + near-full amplitude on purpose -> the little speaker is driven as harsh/loud as it gets.
+// Call nucleo_audio_siren_stop() to silence and release the I2S. Blocks ~dur_ms. No-op while a track plays.
+void nucleo_audio_siren(int dur_ms)
+{
+    if (atomic_load(&s_playing)) return;
+    if (dur_ms < 20) dur_ms = 20; else if (dur_ms > 2000) dur_ms = 2000;
+    if (nucleo_audio_i2s_rate(16000, 1) != ESP_OK) return;   // opens TX if idle; LEFT OPEN on purpose
+    int total = 16000 * dur_ms / 1000;
+    static int16_t b[256];
+    static float ph = 0.0f, swp = 0.0f;                      // persist across calls -> seamless wail
+    const int amp = 20000;                                   // very loud; the tiny speaker distorts = harsher
+    for (int off = 0; off < total; ) {
+        int chunk = (total - off) < 256 ? (total - off) : 256;
+        for (int i = 0; i < chunk; i++) {
+            swp += 6.0f / 16000.0f;                          // ~3 Hz wail (triangle 0..2)
+            if (swp >= 2.0f) swp -= 2.0f;
+            float tri = swp < 1.0f ? swp : 2.0f - swp;       // 0..1..0
+            float freq = 1800.0f + tri * 2400.0f;            // sweep 1.8 -> 4.2 kHz
+            ph += freq / 16000.0f; if (ph >= 1.0f) ph -= 1.0f;
+            b[i] = (ph < 0.5f) ? amp : -amp;                 // square = packed with piercing harmonics
+        }
+        nucleo_audio_i2s_write(b, chunk * 2);
+        off += chunk;
+    }
+    // do NOT close — keep the TX open so the next call continues gaplessly; siren_stop() releases it.
+}
+void nucleo_audio_siren_stop(void) { i2s_close(); }          // silence + free the I2S pins for the mic/recorder
 
 esp_err_t nucleo_audio_i2s_rate(int rate, int chans)
 {
@@ -167,6 +265,31 @@ esp_err_t nucleo_audio_i2s_write(const int16_t *pcm, size_t bytes)
     }
     if (atomic_load(&s_muted)) vol = 0;     // hard mute overrides volume + ramp -> silence path below
 
+    // Mono output (the ADV's ES8311 and the original's NS4168 are BOTH single-channel): a stereo
+    // stream otherwise reaches the speaker as the LEFT channel only — half the mix is lost. Fold
+    // each (L,R) frame to its average and write it to BOTH I2S slots, so the codec hears the FULL
+    // mix whichever slot it latches. The frame stays stereo, so the codec clock is unchanged; cost
+    // is one add+shift per frame and no extra RAM. (Standard mono downmix; perfectly anti-phase
+    // content self-cancels, as on any mono device.)
+    if (s_chans == 2) {
+        int32_t mul = (vol >= 100) ? 65536 : (vol == 0) ? 0
+                    : nucleo_codec_present() ? (int32_t)((int64_t)vol * 65536 / 100)
+                                             : (int32_t)((int64_t)vol * vol * 65536 / 10000);
+        int16_t tmp[512];                                   // 256 stereo frames per chunk
+        size_t nsamp = bytes / sizeof(int16_t), off = 0;
+        while (off + 1 < nsamp) {
+            size_t n = nsamp - off; if (n > 512) n = 512; n &= ~(size_t)1;   // keep frames whole
+            for (size_t i = 0; i < n; i += 2) {
+                int32_t m = ((int32_t)pcm[off + i] + pcm[off + i + 1]) >> 1;
+                if (mul != 65536) m = (m * mul) >> 16;
+                tmp[i] = tmp[i + 1] = (int16_t)m;
+            }
+            i2s_channel_write(s_tx, tmp, n * sizeof(int16_t), &wrote, pdMS_TO_TICKS(300));
+            off += n;
+        }
+        return ESP_OK;
+    }
+
     if (vol >= 100) return i2s_channel_write(s_tx, pcm, bytes, &wrote, pdMS_TO_TICKS(300));
     if (vol == 0) {
         // Write silence — do NOT drop: DMA must stay fed to prevent stale frame repeat.
@@ -180,7 +303,13 @@ esp_err_t nucleo_audio_i2s_write(const int16_t *pcm, size_t bytes)
         }
         return ESP_OK;
     }
-    int32_t mul = (int32_t)((int64_t)vol * vol * 65536 / 10000);
+    // Volume -> gain. The original NS4168 distorts near full scale, so it gets a squared
+    // (perceptual) curve that holds the top end clean. The ADV's ES8311 DAC has clean
+    // headroom, so there a LINEAR map runs it hotter/fuller — and a scale <= 1.0 can never
+    // clip the 16-bit PCM, so it's safe. See nucleo_codec.
+    int32_t mul = nucleo_codec_present()
+                ? (int32_t)((int64_t)vol * 65536 / 100)
+                : (int32_t)((int64_t)vol * vol * 65536 / 10000);
     int16_t tmp[512];
     size_t nsamp = bytes / sizeof(int16_t), off = 0;
     while (off < nsamp) {
@@ -232,6 +361,9 @@ bool nucleo_audio_poll_seek(long *byte_off)
     if (!atomic_exchange(&s_seek_req, false)) return false;
     uint32_t ms = atomic_load(&s_seek_ms), dur = est_duration_ms(), total = atomic_load(&s_total);
     uint32_t base = atomic_load(&s_audio_base);            // 0 for a standalone file
+    // Can't map a non-zero target yet (total/dur not known) -> RE-ARM and retry rather than seeking to
+    // the window base: silently jumping to byte 0 is what made a resume play from 0:00.
+    if (ms > 0 && !(dur && total)) { atomic_store(&s_seek_req, true); return false; }
     long rel = 0;                                          // byte offset WITHIN the audio window
     if (dur && total) {
         rel = (long)((uint64_t)total * ms / dur);
@@ -274,6 +406,23 @@ static void play_wav(FILE *f)
     }
 }
 
+// WDT-safe absolute seek — see nucleo_audio_priv.h. FATFS (no fast-seek) walks the cluster chain
+// O(distance) inside one blocking fseek; a far resume/seek on a multi-MB MP3 froze long enough to
+// trip the watchdog and reboot. Hop forward in bounded ~2MB steps and pet the task WDT between hops
+// (only if THIS task is subscribed, so an unwatched caller doesn't log an error). A backward target
+// must restart the FATFS walk from cluster 0, so rewind and hop forward from the top.
+void nucleo_audio_seek_far(FILE *f, long off)
+{
+    if (!f) return;
+    if (off < 0) off = 0;
+    long pos = ftell(f);
+    if (pos < 0 || off < pos) { fseek(f, 0, SEEK_SET); pos = 0; }   // backward: FATFS re-walks from cluster 0
+    bool watched = (esp_task_wdt_status(NULL) == ESP_OK);
+    const long STEP = 2L * 1024 * 1024;            // ~2MB/hop: no single hop approaches the WDT window
+    while (off - pos > STEP) { fseek(f, STEP, SEEK_CUR); pos += STEP; if (watched) esp_task_wdt_reset(); }
+    fseek(f, off - pos, SEEK_CUR);
+}
+
 // ---- player task ----
 static void player_task(void *arg)
 {
@@ -302,11 +451,26 @@ static void player_task(void *arg)
                 struct stat st;
                 if (stat(s_path, &st) == 0 && st.st_size > 0) atomic_store(&s_total, (uint32_t)st.st_size);
             }
-            if (fseek(f, (long)abase, SEEK_SET) != 0) abase = 0;   // start of the window (or top)
-            uint32_t start = atomic_load(&s_start_ms);
-            if (start > 0 && atomic_load(&s_duration_ms)) {        // resume part-way -> arm a seek
-                atomic_store(&s_seek_ms, start); atomic_store(&s_seek_req, true);
+            // ONE WDT-safe positioning to the start byte (window base, or the resume offset within it).
+            // The old code did TWO naked fseek(SEEK_SET) — to abase, then to abase+rel — each an
+            // O(distance) FATFS cluster walk (no fast-seek): on a multi-MB MP3 a far resume froze past
+            // the watchdog and rebooted the device (the "resume reboot"). Compute the final target once
+            // and hop to it in bounded steps. Resume part-way is mapped here, where s_total/s_duration_ms
+            // are already known, so it's CBR-exact and can't degrade to byte 0 (which would play the audio
+            // from 0:00 while the clock read the resume point). Live (arrow) seeks still go via poll_seek.
+            uint32_t start = atomic_load(&s_start_ms), dur = atomic_load(&s_duration_ms), total = atomic_load(&s_total);
+            long target = (long)abase;                             // window base (0 for a standalone file)
+            if (start > 0 && dur && total) {
+                long rel = (long)((uint64_t)total * start / dur);
+                if (rel < 0) rel = 0;
+                if (rel > (long)total - 1) rel = (long)total - 1;
+                target = (long)abase + rel;
+                atomic_store(&s_base_ms, start);                   // elapsed continues from the resume point
+                atomic_store(&s_done, (uint32_t)rel);             // progress % is window-relative
+                ESP_LOGI(TAG, "resume: start=%ums -> byte %ld (+base %u, total %u, dur %ums)",
+                         (unsigned)start, target, (unsigned)abase, (unsigned)total, (unsigned)dur);
             }
+            nucleo_audio_seek_far(f, target);                     // bounded, WDT-safe (FATFS has no fast-seek)
             nucleo_audio_play_mp3(f);
         } else {
             play_wav(f);
@@ -331,7 +495,11 @@ void nucleo_audio_set_reclaim_cb(nucleo_audio_reclaim_fn fn) { s_reclaim_cb = fn
 static esp_err_t start_play_window(const char *path, uint32_t start_ms, uint32_t duration_ms,
                                    uint32_t file_off, uint32_t file_len)
 {
-    if (nucleo_recorder_is_busy() || nucleo_micspec_running()) return ESP_ERR_INVALID_STATE;  // shared GPIO43 (mic⊕speaker): block while the recorder/dictation OR the Spectrum app holds the mic RX
+    if (nucleo_recorder_is_busy() || nucleo_micspec_running()) {                               // shared GPIO43 (mic⊕speaker): block while the recorder/dictation OR the Spectrum app holds the mic RX
+        ESP_LOGW(TAG, "play dropped: mic busy (rec=%d spectrum=%d) -> %s",                     // last fully-silent drop path: log it so "no game audio" is a one-line diagnosis
+                 (int)nucleo_recorder_is_busy(), (int)nucleo_micspec_running(), path ? path : "?");
+        return ESP_ERR_INVALID_STATE;
+    }
     audio_lock();                                                       // single owner: no concurrent I2S/task setup
     nucleo_audio_stop();                                                // stop anything current (re-takes the recursive lock)
     snprintf(s_path, sizeof(s_path), "%s", path);
@@ -391,6 +559,10 @@ esp_err_t nucleo_audio_play_window(const char *path, uint32_t start_ms, uint32_t
     return start_play_window(path, start_ms, duration_ms, file_off, file_len);
 }
 esp_err_t nucleo_audio_play_url(const char *url) { return start_play(url, 0, 0); }   // player_task detects http://
+
+// Non-blocking: true mentre una clip/stream e' in riproduzione (per pollare un'interruzione senza
+// bloccare su wait_idle). Legge solo l'atomic gia' esistente -> zero RAM.
+bool nucleo_audio_playing(void) { return atomic_load(&s_playing); }
 
 void nucleo_audio_stop(void)
 {
