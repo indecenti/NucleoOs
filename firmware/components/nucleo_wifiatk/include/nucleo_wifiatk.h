@@ -80,6 +80,15 @@ int           nucleo_wifiatk_beacon_mode(void);     // active mode (NUCLEO_BEACO
 int           nucleo_wifiatk_beacon_health(void);   // % of beacon TX attempts the driver accepted
 unsigned      nucleo_wifiatk_beacon_uptime_s(void); // seconds since armed (0 when stopped)
 
+// ---- KARMA: probe-request discovery (for the Evil Portal lure) -------------
+// Listen `secs` (2..30) for directed probe requests across 2.4 GHz and list the SSIDs nearby devices
+// are looking for (most-requested first). Owns the radio for the window; returns the SSID count (<0
+// on failure). Then stand up the portal AP wearing one of these names so the device auto-associates.
+int         nucleo_wifiatk_karma_scan(int secs);
+int         nucleo_wifiatk_karma_count(void);
+const char *nucleo_wifiatk_karma_ssid(int i);       // "" out of range
+int         nucleo_wifiatk_karma_hits(int i);       // how many probes named this SSID
+
 #ifdef __cplusplus
 }
 #endif
