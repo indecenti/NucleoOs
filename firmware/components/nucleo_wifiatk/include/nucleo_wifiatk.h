@@ -63,7 +63,15 @@ unsigned      nucleo_wifiatk_uptime_s(void);      // seconds since armed (0 when
 #define NUCLEO_BEACON_FUNNY  0   // curated wall of plausible/joke SSIDs (mixed open + WPA2)
 #define NUCLEO_BEACON_RANDOM 1   // a session of randomly generated, real-looking SSIDs
 #define NUCLEO_BEACON_CLONE  2   // twins of the real APs around you (runs a scan first)
+#define NUCLEO_BEACON_CUSTOM 3   // operator-typed SSIDs (staged via beacon_custom_* below)
 esp_err_t     nucleo_wifiatk_beacon_start(int mode);
+
+// CUSTOM-mode staging: the app types SSIDs in before arming. clear() resets the list; add() appends
+// one (false if full/empty); count()/ssid() read it back for the entry UI. Survives until cleared.
+void          nucleo_wifiatk_beacon_custom_clear(void);
+bool          nucleo_wifiatk_beacon_custom_add(const char *ssid);
+int           nucleo_wifiatk_beacon_custom_count(void);
+const char   *nucleo_wifiatk_beacon_custom_ssid(int i);
 void          nucleo_wifiatk_beacon_stop(void);
 bool          nucleo_wifiatk_beacon_running(void);
 unsigned long nucleo_wifiatk_beacon_frames(void);   // beacon frames TX'd this session

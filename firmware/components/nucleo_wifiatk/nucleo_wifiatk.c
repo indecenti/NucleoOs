@@ -672,6 +672,29 @@ static void rand_laa_mac(uint8_t out[6])
     out[4] = (uint8_t)b;        out[5] = (uint8_t)(b >> 8);
 }
 
+// ---- CUSTOM mode: operator-typed SSID list ----------------------------------
+// Staged by the app's text-entry screen BEFORE arming, then copied into the run table by
+// beacon_populate(CUSTOM). Heap-backed (allocated once on first use); 33 B per slot.
+static char (*s_custom)[33];
+static int    s_custom_n;
+
+void nucleo_wifiatk_beacon_custom_clear(void)
+{
+    if (!s_custom) s_custom = malloc(sizeof(*s_custom) * MAX_BEACON);
+    s_custom_n = 0;
+}
+bool nucleo_wifiatk_beacon_custom_add(const char *ssid)
+{
+    if (!s_custom || s_custom_n >= MAX_BEACON || !ssid || !ssid[0]) return false;
+    snprintf(s_custom[s_custom_n++], 33, "%s", ssid);
+    return true;
+}
+int         nucleo_wifiatk_beacon_custom_count(void) { return s_custom ? s_custom_n : 0; }
+const char *nucleo_wifiatk_beacon_custom_ssid(int i)
+{
+    return (s_custom && i >= 0 && i < s_custom_n) ? s_custom[i] : "";
+}
+
 static void gen_random_name(char *out, size_t cap)
 {
     uint32_t a = esp_random(), b = esp_random();
@@ -700,6 +723,16 @@ static int beacon_populate(int mode)
             rand_laa_mac(s_bcn_bssid[n]); s_bcn_wpa[n] = (i % 5 == 0); n++;
         }
         return n;
+    }
+    if (mode == NUCLEO_BEACON_CUSTOM) {
+        for (int i = 0; i < s_custom_n && n < MAX_BEACON; i++) {
+            if (!s_custom[i][0]) continue;
+            snprintf(s_bcn_ssid[n], 33, "%s", s_custom[i]);
+            rand_laa_mac(s_bcn_bssid[n]);
+            s_bcn_wpa[n] = false;                    // operator-named nets advertised open
+            n++;
+        }
+        return n;                                    // 0 -> caller falls back to FUNNY
     }
     if (mode == NUCLEO_BEACON_RANDOM) {
         for (; n < 40 && n < MAX_BEACON; n++) {
