@@ -610,7 +610,8 @@ static void hit_flipper(Flip *f)
     // contact position along the bat: 0 at the pivot, 1 at the tip
     float sx = tx2 - f->px, sy = ty2 - f->py, sl2 = sx * sx + sy * sy;
     float t = sl2 > 0.0001f ? ((cx - f->px) * sx + (cy - f->py) * sy) / sl2 : 0.5f;
-    if (t < 0) t = 0; if (t > 1) t = 1;
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
     // kick base: 0.50 (vs 0.45), minus 0.08 per consecutive hit (capped at 0.10 min)
     float kick_damp = fmaxf(0.1f, 0.50f - f->hits * 0.08f);
     float kick = f->sw * kick_damp + (f->sv > 0.008f ? (1.25f + 1.4f * t) : 0.0f);
