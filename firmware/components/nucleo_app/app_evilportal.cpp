@@ -11,6 +11,7 @@
 //   TAB       an options menu (Loot, Guida, Ferma) — like other apps
 //   Esc/Back  steps BACK one screen (closes the app only from HOME / while running)
 #include "nucleo_app.h"
+#include "nucleo_exclusive.h"   // NX_SOLO: this RAM-heavy app runs in a fresh, unfragmented heap
 #include "app_ui.h"
 #include <M5GFX.h>
 #include <string.h>
@@ -640,7 +641,13 @@ extern "C" void nucleo_register_evilportal(void)
 {
     static const nucleo_app_def_t app = {
         "evilportal", "Evil Portal", "Security", "Captive portal for authorized Wi-Fi testing",
-        'E', EP_RED, enter, on_key, tick, draw, leave
+        'E', EP_RED, enter, on_key, tick, draw, leave,
+        // SOLO BOOT: reboot into a FRESH, unfragmented heap. This is the heaviest Security app —
+        // template in RAM + rogue AP + captive DNS + its own :80 server + live page-clone + KARMA
+        // promiscuous sniff — and on the live, fragmented OS heap (esp. the ADV) those allocations are
+        // marginal (boot Task-WDT, KARMA reboot). A clean boot makes it solid, like the games/beacon.
+        // Trade-off: leaving the app reboots to the OS, so the portal no longer runs in the background.
+        NX_SOLO
     };
     nucleo_app_register(&app);
 }

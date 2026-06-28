@@ -916,15 +916,21 @@ typedef struct { char ssid[33]; int hits; int64_t last; } km_t;
 static km_t *s_km;
 static volatile int s_km_n;
 
+// Called from the promiscuous RX callback (Wi-Fi task): the critical section MUST stay tiny — only a
+// bounded dedup scan + a tight byte copy, NEVER snprintf (a long crit-section in the radio RX path
+// trips the watchdog and reboots). `ssid` is already validated, NUL-terminated, <=32 chars.
 static void karma_add(const char *ssid)
 {
     if (!s_km) return;
     int64_t now = esp_timer_get_time();
     taskENTER_CRITICAL(&s_mux);
-    for (int i = 0; i < s_km_n; i++)
-        if (strcmp(s_km[i].ssid, ssid) == 0) { s_km[i].hits++; s_km[i].last = now; taskEXIT_CRITICAL(&s_mux); return; }
-    if (s_km_n < KARMA_MAX) {
-        snprintf(s_km[s_km_n].ssid, sizeof s_km[s_km_n].ssid, "%s", ssid);
+    int slot = -1;
+    for (int i = 0; i < s_km_n; i++) if (strcmp(s_km[i].ssid, ssid) == 0) { slot = i; break; }
+    if (slot >= 0) { s_km[slot].hits++; s_km[slot].last = now; }
+    else if (s_km_n < KARMA_MAX) {
+        char *dst = s_km[s_km_n].ssid; int j = 0;
+        while (ssid[j] && j < 32) { dst[j] = ssid[j]; j++; }
+        dst[j] = 0;
         s_km[s_km_n].hits = 1; s_km[s_km_n].last = now; s_km_n++;
     }
     taskEXIT_CRITICAL(&s_mux);
