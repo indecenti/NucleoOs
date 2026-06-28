@@ -175,8 +175,8 @@ static float s_plunge;                              // 0..1 plunger charge (visu
 static int   s_save_ms;                             // ball-save grace after launch
 static int   s_stuck_ms;                            // anti-stuck timer
 
-// flippers: pivot P, rest tip R, up tip U, swing 0..1, swing velocity, held (hold-to-flip)
-struct Flip { float px, py, rx, ry, ux, uy, sw, sv; bool held; };
+// flippers: pivot P, rest tip R, up tip U, swing 0..1, swing velocity, held (hold-to-flip), consecutive hits
+struct Flip { float px, py, rx, ry, ux, uy, sw, sv; bool held; int hits; };
 static Flip s_fl, s_fr;
 static int  s_ltap_ms, s_rtap_ms;        // tap timers (key '1' / RIGHT) — drive a momentary flip
 static uint8_t s_mods_prev;              // last modifier bitmask (OPT hold + CTRL tilt edge)
@@ -510,6 +510,7 @@ static void ball_to_lane(void)             // park the ball at the bottom of the
 {
     bx = CHX; by = BWALL - 7; vx = 0; vy = 0; s_plunge = 0; s_inchute = false; s_charging = false; s_atmax = 0; s_bp = BP_READY;
     s_targets_hit = 0;  // reset target counter for new ball
+    s_fl.hits = 0; s_fr.hits = 0;  // reset flipper consecutive hits
 }
 
 // ============================ game flow ======================================
@@ -601,20 +602,22 @@ static void hit_flipper(Flip *f)
     float tx2, ty2; flip_tip(f, &tx2, &ty2);
     float cx, cy; closest_seg(f->px, f->py, tx2, ty2, bx, by, &cx, &cy);
     float dx = bx - cx, dy = by - cy, dist = sqrtf(dx * dx + dy * dy);
-    float rr = BR + 2.8f;                                          // slightly thicker bat -> reliably catches the ball (no slip-through)
+    float rr = BR + 3.2f;                                          // wider catch zone (3.2 vs 2.8) -> harder to drain on outlanes
     if (dist > rr || dist < 0.0001f) return;
     float nx = dx / dist, ny = dy / dist;
     float vn = vx * nx + vy * ny;
     if (vn < 0) { vx -= 1.72f * vn * nx; vy -= 1.72f * vn * ny; }  // reflect off the bat face
-    // contact position along the bat: 0 at the pivot, 1 at the tip — the tip swings fastest, so it hits hardest
+    // contact position along the bat: 0 at the pivot, 1 at the tip
     float sx = tx2 - f->px, sy = ty2 - f->py, sl2 = sx * sx + sy * sy;
     float t = sl2 > 0.0001f ? ((cx - f->px) * sx + (cy - f->py) * sy) / sl2 : 0.5f;
-    if (t < 0) t = 0;
-    if (t > 1) t = 1;
-    float kick = f->sw * 0.45f + (f->sv > 0.008f ? (1.15f + 1.4f * t) : 0.0f);   // live flip, stronger toward the tip
+    if (t < 0) t = 0; if (t > 1) t = 1;
+    // kick base: 0.50 (vs 0.45), minus 0.08 per consecutive hit (capped at 0.10 min)
+    float kick_damp = fmaxf(0.1f, 0.50f - f->hits * 0.08f);
+    float kick = f->sw * kick_damp + (f->sv > 0.008f ? (1.25f + 1.4f * t) : 0.0f);
     vy -= kick; vx += (f->ux - f->rx) > 0 ? 0.3f : -0.3f;
-    bx = cx + nx * (rr + 0.35f); by = cy + ny * (rr + 0.35f);     // push fully clear so the ball never sinks into the bat
+    bx = cx + nx * (rr + 0.35f); by = cy + ny * (rr + 0.35f);
     if (vy < -3.9f) vy = -3.9f;
+    f->hits++;  // track consecutive hits
 }
 static void hit_round(Bump *o, int kick_sfx, bool is_sling)
 {
