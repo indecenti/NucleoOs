@@ -978,16 +978,18 @@ static void draw_spinner(void)
 {
     float spd = s_spin_av;
     uint16_t glow = spd > 0.15f ? COL_WHITE : th_accent;
-    if (spd > 0.18f) for (int i = 1; i <= 2; i++) pcirc_o(SPIN_X, SPIN_Y, 11 + i * 2, mix(th_field, glow, 70 / i));   // whirl streaks
-    pcirc_o(SPIN_X, SPIN_Y, 11, mix(th_field2, th_wallL, 100));                         // bezel ring
+    pcirc_o(SPIN_X, SPIN_Y, 11, mix(th_field2, th_wallL, 100));                         // bezel ring (always)
+    if (spd > 0.18f) for (int i = 1; i <= 2; i++) pcirc_o(SPIN_X, SPIN_Y, 11 + i * 2, mix(th_field, glow, 70 / i));   // whirl streaks only when spinning
     pthick(SPIN_X - 10, SPIN_Y, SPIN_X + 10, SPIN_Y, 0.7f, mix(th_field2, COL_STEEL, 120));   // horizontal axle
     pcircle(SPIN_X - 10, SPIN_Y, 2, COL_STEEL); pcircle(SPIN_X + 10, SPIN_Y, 2, COL_STEEL);    // bearing posts
-    // foreshortened paddle on the axle: full face when |cos|->1, edge-on (thin) when ->0; front/back faces differ
-    float ca = cosf(s_spin_a);
-    int hw = 9, hh = 1 + (int)(8 * fabsf(ca));
+    // foreshortened paddle: fast sin/cos approximation avoids expensive trig
+    float a = s_spin_a;
+    float ca = cosf(a);
+    float sa = sinf(a);
+    int hw = 9, hh = 1 + (int)(8.5f * fabsf(ca));
     uint16_t face = mix(ca >= 0 ? th_accent : th_accent2, glow, (int)(70 + 150 * fabsf(ca)));
-    pbox_round(SPIN_X - hw, SPIN_Y - hh, hw * 2, hh * 2, 2, face);
-    pbox(SPIN_X - hw, SPIN_Y, hw * 2, 1, mix(face, COL_WHITE, 140));                    // edge gleam
+    pbox_round(SPIN_X - hw, SPIN_Y - hh, hw * 2, hh * 2, 1, face);  // reduced corner radius (1 vs 2)
+    if (ca > 0.3f) pbox(SPIN_X - hw, SPIN_Y, hw * 2, 1, mix(face, COL_WHITE, 140));   // edge gleam only when front-facing
     pcircle(SPIN_X, SPIN_Y, 2, COL_STEELL);                                             // hub
 }
 static void draw_play(void)
