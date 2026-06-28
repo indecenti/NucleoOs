@@ -214,6 +214,7 @@ static int   s_2x_ms, s_slow_ms, s_pw_rot;
 struct Tgt { float x, y; bool lit; int hit_ms; };
 static Tgt s_tgt[NTGT];
 static int  s_ntgt = 3;                 // active targets this level (3..4)
+static int  s_targets_hit = 0;          // targets hit this ball (for multimode)
 
 // ---- procedural levels (pinball_levels.h) ----
 static PbLevel  s_lv;                    // current level config
@@ -508,6 +509,7 @@ static void apply_level(int n)
 static void ball_to_lane(void)             // park the ball at the bottom of the (invisible) launch chute
 {
     bx = CHX; by = BWALL - 7; vx = 0; vy = 0; s_plunge = 0; s_inchute = false; s_charging = false; s_atmax = 0; s_bp = BP_READY;
+    s_targets_hit = 0;  // reset target counter for new ball
 }
 
 // ============================ game flow ======================================
@@ -659,12 +661,19 @@ static void check_targets(void)
         if (dx * dx + dy * dy < (BR + 5) * (BR + 5)) {
             s_tgt[i].lit = true; s_tgt[i].hit_ms = 220; add_score(150); sfx(8);
             spark_burst(s_tgt[i].x, s_tgt[i].y, 4, COL_GOLD);
+            s_targets_hit++;
+            if (s_targets_hit == 3 && s_2x_ms <= 0) {  // 3 targets hit -> 2x bumper for 9s
+                s_2x_ms = 9000;
+                dmd_show(tx("MULTIMODE!", "MULTIMODE!"), tx("X2 BUMPERS", "X2 BUMPERS"), COL_GOLD, 1500);
+                sfx(24);  // power-up sound
+                s_targets_hit = 0;  // reset counter
+            }
             bool all = true; for (int k = 0; k < s_ntgt; k++) if (!s_tgt[k].lit) all = false;
             if (all) {
                 for (int k = 0; k < s_ntgt; k++) s_tgt[k].lit = false;
                 if (s_mult < 5) s_mult++;
                 add_score(1000);
-                grant_powerup();        // clearing the bank grants an escalating power-up
+                grant_powerup();
             }
         }
     }
@@ -980,23 +989,18 @@ static void draw_dmd(void)
 static void draw_spinner(void)
 {
     float spd = s_spin_av;
-    if (spd < 0.01f) {
-        // Static spinner: full render
-        uint16_t glow = COL_WHITE;
-        pcirc_o(SPIN_X, SPIN_Y, 11, mix(th_field2, th_wallL, 100));
-        pthick(SPIN_X - 10, SPIN_Y, SPIN_X + 10, SPIN_Y, 0.7f, mix(th_field2, COL_STEEL, 120));
-        pcircle(SPIN_X - 10, SPIN_Y, 2, COL_STEEL); pcircle(SPIN_X + 10, SPIN_Y, 2, COL_STEEL);
-        float ca = cosf(s_spin_a);
-        int hw = 9, hh = 1 + (int)(8.5f * fabsf(ca));
-        uint16_t face = mix(ca >= 0 ? th_accent : th_accent2, glow, (int)(70 + 150 * fabsf(ca)));
-        pbox_round(SPIN_X - hw, SPIN_Y - hh, hw * 2, hh * 2, 1, face);
-        pcircle(SPIN_X, SPIN_Y, 2, COL_STEELL);
-    } else {
-        // Spinning: minimal render (just bezel + fast rotating bar, no fancy effects)
-        pcirc_o(SPIN_X, SPIN_Y, 11, mix(th_field2, th_wallL, 100));
-        pthick(SPIN_X - 9, SPIN_Y - 8, SPIN_X + 9, SPIN_Y + 8, 1.5f, COL_GREEN);  // diagonal bar (avoids cosf)
-        pcircle(SPIN_X, SPIN_Y, 2, COL_STEELL);
-    }
+    uint16_t glow = spd > 0.15f ? COL_WHITE : th_accent;
+    pcirc_o(SPIN_X, SPIN_Y, 11, mix(th_field2, th_wallL, 100));  // bezel ring
+    pthick(SPIN_X - 10, SPIN_Y, SPIN_X + 10, SPIN_Y, 0.7f, mix(th_field2, COL_STEEL, 120));  // axle
+    pcircle(SPIN_X - 10, SPIN_Y, 2, COL_STEEL); pcircle(SPIN_X + 10, SPIN_Y, 2, COL_STEEL);
+    // Rotating paddle using s_spin_a (works smooth at any speed)
+    float ca = cosf(s_spin_a), sa = sinf(s_spin_a);
+    float px1 = SPIN_X + ca * 8, py1 = SPIN_Y + sa * 8;
+    float px2 = SPIN_X - ca * 8, py2 = SPIN_Y - sa * 8;
+    uint16_t paddle_col = mix(th_accent, glow, (int)(100 + 100 * fabsf(ca)));
+    pthick(px1, py1, px2, py2, 2.0f, paddle_col);
+    if (spd > 0.18f) for (int i = 1; i <= 2; i++) pcirc_o(SPIN_X, SPIN_Y, 11 + i * 2, mix(th_field, glow, 70 / i));  // whirl only when fast
+    pcircle(SPIN_X, SPIN_Y, 2, COL_STEELL);  // hub
 }
 static void draw_play(void)
 {
@@ -1022,6 +1026,12 @@ static void draw_play(void)
         const char *pp = s_charging ? tx("RILASCIA!", "RELEASE!") : tx("TIENI CTRL: CARICA", "HOLD CTRL: CHARGE");
         uint16_t ac = ((s_anim >> 2) & 1) ? COL_GOLDL : COL_GOLD;
         dmd_text((PW - dmd_width(pp, 1)) / 2.0f, BWALL - 26, pp, 1, 1, s_charging ? COL_RED : ac, 0, 0);
+    }
+    if (s_save_ms > 0) {                                                // ball saver grace period visual
+        const char *safe = "SAFE";
+        uint16_t sc = ((s_anim >> 1) & 1) ? COL_GREEN : COL_CYAN;
+        dmd_text(RWALL - 35, 13, safe, 1, 1, sc, 0, 0);
+        pbox(RWALL - 35, 21, s_save_ms * 26 / 2600, 2, sc);
     }
     draw_score_strip();
     if (s_2x_ms > 0 || s_slow_ms > 0) {                                 // active power-up badge + shrinking timer bar
