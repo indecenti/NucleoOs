@@ -92,6 +92,7 @@ int         nucleo_wifiatk_karma_heap(void);         // largest free block (B) m
 int         nucleo_wifiatk_karma_count(void);
 const char *nucleo_wifiatk_karma_ssid(int i);       // "" out of range
 int         nucleo_wifiatk_karma_hits(int i);       // how many probes named this SSID
+int         nucleo_wifiatk_karma_rssi(int i);       // strongest signal seen (dBm, ~proximity)
 
 #ifdef __cplusplus
 }
