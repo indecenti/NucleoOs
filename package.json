@@ -24,6 +24,7 @@
     "otalisten:test": "node tools/anima-host/ota-listen-check.mjs",
     "ble:test": "node tools/anima-host/ble-check.mjs",
     "probe:test": "node tools/anima-host/probe-check.mjs",
+    "eapol:test": "node tools/anima-host/eapol-check.mjs",
     "portalclone:test": "node tools/anima-host/portalclone-check.mjs",
     "ducky:test": "node tools/anima-host/ducky-check.mjs",
     "weather:test": "node tools/anima-host/weather-check.mjs",

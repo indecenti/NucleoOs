@@ -42,6 +42,8 @@ int         nucleo_wifiatk_targets_active(void);
 int         nucleo_wifiatk_cur_channel(void);
 const char *nucleo_wifiatk_cur_ssid(void);
 unsigned    nucleo_wifiatk_uptime_s(void);
+int         nucleo_wifiatk_handshake_msgmask(void);   // WPA handshake captured alongside the flood
+bool        nucleo_wifiatk_handshake_ready(void);
 }
 
 #include "app_gfx.h"
@@ -280,16 +282,22 @@ static void draw_running(int top, int h)
     unsigned recon = nucleo_wifiatk_reconnects();
     int rssi = nucleo_wifiatk_cur_rssi();
 
-    // Status line: live effectiveness inputs. Signal turns amber when too weak (move closer).
+    // Status line: live effectiveness inputs. Signal turns amber when too weak (move closer). When a
+    // WPA handshake is coming in, append which of the 4 EAPOL messages we've grabbed (e.g. "HS12").
+    int hm = nucleo_wifiatk_handshake_msgmask();
+    char hs[10] = "";
+    if (hm) snprintf(hs, sizeof hs, " HS%s%s%s%s", (hm & 2) ? "1" : "", (hm & 4) ? "2" : "",
+                     (hm & 8) ? "3" : "", (hm & 16) ? "4" : "");
     d.drawFastHLine(10, 84, 220, LINE);
-    char st[52]; snprintf(st, sizeof st, "att %d  rec %u  ch%d  %ddB",
-                          act, recon, nucleo_wifiatk_cur_channel(), rssi);
+    char st[64]; snprintf(st, sizeof st, "att %d  rec %u  ch%d  %ddB%s",
+                          act, recon, nucleo_wifiatk_cur_channel(), rssi, hs);
     bool weak = (rssi != 0 && rssi <= -80);
     d.setTextSize(1); d.setTextColor(weak ? ATK : MUTED, BG); d.setCursor(10, 92); d.print(st);
 
     // Honest live verdict (the never-blind part): derived from injection health + measured effect.
     const char *vd; unsigned short vc;
-    if (inj < 50)               { vd = "INIEZIONE DEBOLE"; vc = ATK; }
+    if (nucleo_wifiatk_handshake_ready()) { vd = "HANDSHAKE CATTURATO"; vc = GRN; }
+    else if (inj < 50)          { vd = "INIEZIONE DEBOLE"; vc = ATK; }
     else if (seen == 0)         { vd = (up < 6) ? "avvio..." : "nessun client"; vc = MUTED; }
     else if (kick > 0 || recon) { vd = "EFFICACE"; vc = GRN; }
     else if (weak)              { vd = "segnale debole: avvicinati"; vc = ATK; }

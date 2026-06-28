@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "nucleo_wifiatk.c" "nucleo_wifiatk_probe.c"
+    SRCS "nucleo_wifiatk.c" "nucleo_wifiatk_probe.c" "nucleo_wifiatk_eapol.c"
     INCLUDE_DIRS "include"
     REQUIRES esp_wifi esp_netif esp_timer nucleo_httpd
 )

