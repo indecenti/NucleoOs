@@ -907,31 +907,31 @@ unsigned      nucleo_wifiatk_beacon_uptime_s(void)
 // "its" network and associates on its own, no deauth needed. We only SNIFF + LIST here (the operator
 // picks the lure); standing up the AP is the portal engine's job. Channel-hops the whole 2.4 GHz band
 // for the scan window. AUTHORIZED testing only. The SSID parse is the host-tested wifiatk_probe_ssid.
-#define KARMA_MAX 24
-typedef struct { char ssid[33]; int hits; int64_t last; } km_t;
-// Heap-backed, allocated LAZILY on first karma scan — NOT a static .bss array. The ADV's boot heap is
-// razor-thin; ~1KB of extra resident .bss is enough to OOM it at boot (lesson: .bss bricked the ADV
-// before). Allocating on first use keeps the boot footprint at zero; kept resident after (the app
-// reads the list back to draw it).
+// RAM-tight: 33-byte SSID + a 16-bit hit count = 36 B/slot, x20 = 720 B, allocated LAZILY on first
+// scan (NOT static .bss — ~1KB of .bss bricked the ADV boot before). The sniff runs in its OWN task,
+// so the foreground/launcher loop keeps iterating and feeding its watchdog: a SYNCHRONOUS multi-second
+// scan in the app tick was what tripped the Task-WDT and rebooted (the deauth flood uses a task for
+// exactly this reason). Tiny crit-section in the RX callback; no snprintf on the radio path.
+#define KARMA_MAX 20
+typedef struct { char ssid[33]; uint16_t hits; } km_t;
 static km_t *s_km;
-static volatile int s_km_n;
+static volatile int  s_km_n;
+static volatile bool s_km_busy, s_km_run;
+static TaskHandle_t  s_km_task;
+static int           s_km_secs;
 
-// Called from the promiscuous RX callback (Wi-Fi task): the critical section MUST stay tiny — only a
-// bounded dedup scan + a tight byte copy, NEVER snprintf (a long crit-section in the radio RX path
-// trips the watchdog and reboots). `ssid` is already validated, NUL-terminated, <=32 chars.
 static void karma_add(const char *ssid)
 {
     if (!s_km) return;
-    int64_t now = esp_timer_get_time();
     taskENTER_CRITICAL(&s_mux);
     int slot = -1;
     for (int i = 0; i < s_km_n; i++) if (strcmp(s_km[i].ssid, ssid) == 0) { slot = i; break; }
-    if (slot >= 0) { s_km[slot].hits++; s_km[slot].last = now; }
+    if (slot >= 0) { if (s_km[slot].hits < 0xFFFF) s_km[slot].hits++; }
     else if (s_km_n < KARMA_MAX) {
         char *dst = s_km[s_km_n].ssid; int j = 0;
         while (ssid[j] && j < 32) { dst[j] = ssid[j]; j++; }
         dst[j] = 0;
-        s_km[s_km_n].hits = 1; s_km[s_km_n].last = now; s_km_n++;
+        s_km[s_km_n].hits = 1; s_km_n++;
     }
     taskEXIT_CRITICAL(&s_mux);
 }
@@ -944,16 +944,44 @@ static void karma_cb(void *buf, wifi_promiscuous_pkt_type_t type)
     if (wifiatk_probe_ssid(pkt->payload, pkt->rx_ctrl.sig_len, ss, sizeof ss) > 0) karma_add(ss);
 }
 
-// Listen `secs` seconds (clamped 2..30) for probe requests across the band; fill the KARMA list,
-// sorted most-requested first. Owns the radio for the window (STA + promiscuous, association dropped
-// so channel-hopping is free). Returns the number of distinct SSIDs heard, or <0 on failure.
-int nucleo_wifiatk_karma_scan(int secs)
+// Channel-hop + sniff for the window, then tear the radio down and restore the network. Runs as its
+// own task so it never blocks the UI loop. Sets s_km_busy=false only after the list is sorted and the
+// network is restored — the app polls that to know the result is ready.
+static void karma_task(void *arg)
 {
-    if (s_run || s_bcn_run) return -1;             // an attack already owns the radio
-    if (!s_km) { s_km = calloc(KARMA_MAX, sizeof(km_t)); if (!s_km) return -3; }  // lazy heap (not boot .bss)
+    (void)arg;
+    static const uint8_t CH[] = { 1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13 };
+    int64_t end = esp_timer_get_time() + (int64_t)s_km_secs * 1000000;
+    int ci = 0;
+    while (s_km_run && esp_timer_get_time() < end) {
+        esp_wifi_set_channel(CH[ci++ % 13], WIFI_SECOND_CHAN_NONE);
+        vTaskDelay(pdMS_TO_TICKS(120));            // probes are sporadic; keep moving, yield to IDLE
+    }
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_promiscuous_rx_cb(NULL);
+    nucleo_setup_apply_network();                  // network up first
+    nucleo_exclusive_exit();                        // restart httpd/mDNS/voice (no-op in Solo)
+    // Sort most-requested first (the RX cb is stopped now, so no lock needed).
+    for (int i = 1; i < s_km_n; i++) {
+        km_t key = s_km[i]; int j = i - 1;
+        while (j >= 0 && s_km[j].hits < key.hits) { s_km[j + 1] = s_km[j]; j--; }
+        s_km[j + 1] = key;
+    }
+    ESP_LOGI(TAG, "karma: %d SSID(s) probed", s_km_n);
+    s_km_task = NULL;
+    s_km_busy = false;
+    vTaskDelete(NULL);
+}
+
+// Start an asynchronous KARMA listen of `secs` (clamped 2..30). Returns 0 on success (poll
+// nucleo_wifiatk_karma_busy() until false, then read the list), or <0 on failure.
+int nucleo_wifiatk_karma_start(int secs)
+{
+    if (s_run || s_bcn_run || s_km_busy) return -1;   // radio busy
+    if (!s_km) { s_km = calloc(KARMA_MAX, sizeof(km_t)); if (!s_km) return -3; }
     if (secs < 2) secs = 2;
     if (secs > 30) secs = 30;
-    s_km_n = 0;
+    s_km_secs = secs; s_km_n = 0;
 
     nucleo_setup_suspend();
     nucleo_exclusive_enter(NX_NET_APP, NULL);
@@ -969,28 +997,17 @@ int nucleo_wifiatk_karma_scan(int secs)
         nucleo_setup_apply_network(); nucleo_exclusive_exit();
         return -2;
     }
-
-    static const uint8_t CH[] = { 1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13 };
-    int dwell = 120;                               // ms/channel; probes are sporadic, keep moving
-    int passes = (secs * 1000) / (13 * dwell); if (passes < 1) passes = 1;
-    for (int p = 0; p < passes; p++)
-        for (int i = 0; i < 13; i++) { esp_wifi_set_channel(CH[i], WIFI_SECOND_CHAN_NONE); vTaskDelay(pdMS_TO_TICKS(dwell)); }
-
-    esp_wifi_set_promiscuous(false);
-    esp_wifi_set_promiscuous_rx_cb(NULL);
-    nucleo_setup_apply_network();
-    nucleo_exclusive_exit();
-
-    // Insertion sort by hit count, most-requested first (a short list — cheap).
-    for (int i = 1; i < s_km_n; i++) {
-        km_t key = s_km[i]; int j = i - 1;
-        while (j >= 0 && s_km[j].hits < key.hits) { s_km[j + 1] = s_km[j]; j--; }
-        s_km[j + 1] = key;
+    s_km_busy = true; s_km_run = true;
+    if (xTaskCreate(karma_task, "wa_karma", 3072, NULL, 5, &s_km_task) != pdPASS) {
+        s_km_busy = false; s_km_run = false;
+        esp_wifi_set_promiscuous(false); esp_wifi_set_promiscuous_rx_cb(NULL);
+        nucleo_setup_apply_network(); nucleo_exclusive_exit();
+        return -4;
     }
-    ESP_LOGI(TAG, "karma: %d SSID(s) probed", s_km_n);
-    return s_km_n;
+    return 0;
 }
 
+bool        nucleo_wifiatk_karma_busy(void)    { return s_km_busy; }
 int         nucleo_wifiatk_karma_count(void)   { return s_km ? s_km_n : 0; }
 const char *nucleo_wifiatk_karma_ssid(int i)   { return (s_km && i >= 0 && i < s_km_n) ? s_km[i].ssid : ""; }
 int         nucleo_wifiatk_karma_hits(int i)   { return (s_km && i >= 0 && i < s_km_n) ? s_km[i].hits : 0; }
