@@ -988,7 +988,10 @@ int nucleo_wifiatk_karma_start(int secs)
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_start();
     esp_wifi_set_ps(WIFI_PS_NONE);
-    esp_wifi_disconnect();                          // free the channel from the home-AP association
+    // NOTE: do NOT esp_wifi_disconnect() here. In promiscuous mode esp_wifi_set_channel() already
+    // forces the monitor channel regardless of the STA association, so the hop works either way — and
+    // the deauth flood proves STA+promiscuous+channel-hop is stable for minutes WITHOUT disconnecting,
+    // whereas dropping the association left the driver churning and rebooting after a few seconds.
     esp_wifi_set_promiscuous_rx_cb(karma_cb);
     wifi_promiscuous_filter_t filt = { .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT };
     esp_wifi_set_promiscuous_filter(&filt);
