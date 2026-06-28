@@ -994,7 +994,7 @@ static void draw_spinner(void)
     } else {
         // Spinning: minimal render (just bezel + fast rotating bar, no fancy effects)
         pcirc_o(SPIN_X, SPIN_Y, 11, mix(th_field2, th_wallL, 100));
-        pthick(SPIN_X - 9, SPIN_Y - 8, SPIN_X + 9, SPIN_Y + 8, 1.5f, COL_ACCENT);  // diagonal bar (avoids cosf)
+        pthick(SPIN_X - 9, SPIN_Y - 8, SPIN_X + 9, SPIN_Y + 8, 1.5f, COL_GREEN);  // diagonal bar (avoids cosf)
         pcircle(SPIN_X, SPIN_Y, 2, COL_STEELL);
     }
 }
