@@ -58,8 +58,9 @@ const char *nucleo_wifiatk_target_auth(int i);
 int         nucleo_wifiatk_target_authmode(int i);
 const char *nucleo_wifiatk_target_fingerprint(int i);
 void        nucleo_wifiatk_target_bssid_bytes(int i, unsigned char out[6]);
-// KARMA: discover the SSIDs nearby devices are probing for, to use as the portal lure.
-int         nucleo_wifiatk_karma_scan(int secs);
+// KARMA: discover the SSIDs nearby devices are probing for, to use as the portal lure (async).
+int         nucleo_wifiatk_karma_start(int secs);
+bool        nucleo_wifiatk_karma_busy(void);
 int         nucleo_wifiatk_karma_count(void);
 const char *nucleo_wifiatk_karma_ssid(int i);
 int         nucleo_wifiatk_karma_hits(int i);
@@ -91,7 +92,7 @@ static int  s_ssid_n, s_tpl_n;           // cached catalog sizes
 static char s_custom[33];                // typed SSID (overrides preset when non-empty)
 static int  s_typelen;
 static char s_err[40];
-static bool s_scan_armed, s_karma_armed, s_clone_armed, s_stop_armed;
+static bool s_scan_armed, s_karma_armed, s_karma_started, s_clone_armed, s_stop_armed;
 static uint32_t s_last_refresh;
 static bool s_pulse;
 
@@ -213,9 +214,19 @@ static void tick(void)
     }
     if (s_state == ST_KARMA_SCAN) {
         if (!s_karma_armed) return;
-        int n = nucleo_wifiatk_karma_scan(8);
+        if (!s_karma_started) {                          // kick off the async sniff once
+            s_karma_started = true;
+            int rc = nucleo_wifiatk_karma_start(8);
+            if (rc != 0) { snprintf(s_err, sizeof s_err, "Karma non disponibile (%d)", rc); go(ST_HOME); return; }
+        }
+        if (nucleo_wifiatk_karma_busy()) {                // still listening — UI stays alive (1 Hz pulse)
+            uint32_t t = (uint32_t)(esp_timer_get_time() / 1000000);
+            if (t != s_last_refresh) { s_last_refresh = t; s_pulse = !s_pulse; }
+            nucleo_app_request_draw(); return;
+        }
+        int n = nucleo_wifiatk_karma_count();
         if (n > 0) { s_km_sel = 0; go(ST_KARMA); }
-        else { snprintf(s_err, sizeof s_err, n < 0 ? "Karma non disponibile" : "Nessuna probe sentita"); go(ST_HOME); }
+        else { snprintf(s_err, sizeof s_err, "Nessuna probe sentita"); go(ST_HOME); }
         return;
     }
     if (s_state == ST_CLONE) {
@@ -282,10 +293,6 @@ static const char *HOME_N[] = { "Civetta", "Gemello", "KARMA", "Loot" };
 static const char *HOME_D[] = { "AP con SSID a scelta", "clona un AP reale vicino",
                                 "esca dalle reti cercate", "credenziali catturate" };
 static const unsigned short HOME_C[] = { GRN, EP_CYAN, YEL, EP_RED };
-static void get_home(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
-{
-    snprintf(name, nc, "%s", HOME_N[i]); (void)val; (void)vc; *dot = HOME_C[i];
-}
 static void get_targets(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
 {
     const char *ss = nucleo_wifiatk_target_ssid(i);
@@ -322,10 +329,6 @@ static const char *menu_item(int i)
 }
 static int menu_count(void) { return nucleo_evilportal_running() ? 3 : 2; }
 static const char *menu_title(void) { return nucleo_evilportal_running() ? "PORTALE ATTIVO" : "MENU"; }
-static void get_menu(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
-{
-    snprintf(name, nc, "%s", menu_item(i)); (void)val; (void)vc; *dot = EP_RED;
-}
 
 // ---- drawing -----------------------------------------------------------------
 static void draw_consent(int h)
@@ -512,7 +515,10 @@ static void draw(void)
         case ST_LOOT:    ui_list("Loot", "", nucleo_evilportal_recent_count(), s_sel, get_loot, "ancora nulla", "salvato su /sd/evilportal/loot"); break;
         case ST_GUIDE:   draw_guide(h); break;
         case ST_SCAN:    draw_busy("Scansione...", "Cerco le reti reali vicine.", h); s_scan_armed = true; break;
-        case ST_KARMA_SCAN: draw_busy("Karma...", "Ascolto chi cerca quali reti.", h); s_karma_armed = true; break;
+        case ST_KARMA_SCAN:
+            draw_busy("Karma...", "Ascolto chi cerca quali reti.", h);
+            if (s_pulse) d.fillCircle(220, h / 2 - 7, 4, EP_RED);
+            s_karma_armed = true; break;
         case ST_CLONE:   draw_busy("Clono pagina...", "Mi unisco e scarico il login.", h); s_clone_armed = true; break;
         case ST_STOPPING:draw_busy("Arresto...", "Ripristino la rete OS.", h); s_stop_armed = true; break;
     }
@@ -573,7 +579,7 @@ static void on_key(int key, char ch)
             else if (key == NK_ENTER) {
                 if (s_home_sel == 0)      { s_mode = 0; build_rows(); go(ST_SETUP); }
                 else if (s_home_sel == 1) { s_mode = 1; if (s_ap_n == 0) { s_scan_armed = false; go(ST_SCAN); } else go(ST_TARGETS); }
-                else if (s_home_sel == 2) { s_karma_armed = false; go(ST_KARMA_SCAN); }
+                else if (s_home_sel == 2) { s_karma_armed = false; s_karma_started = false; go(ST_KARMA_SCAN); }
                 else                      { s_ret = ST_HOME; go(ST_LOOT); }
             }
             return;
@@ -590,7 +596,7 @@ static void on_key(int key, char ch)
                 for (int i = 0; i < s_nrows; i++) if (s_rows[i] == R_SSID) s_sel = i;
                 snprintf(s_err, sizeof s_err, "Karma: %.20s", s_custom);
                 go(ST_SETUP);
-            } else if (ch == 'r' || ch == 'R') { s_karma_armed = false; go(ST_KARMA_SCAN); }
+            } else if (ch == 'r' || ch == 'R') { s_karma_armed = false; s_karma_started = false; go(ST_KARMA_SCAN); }
             return;
         case ST_SSID:
             if (key == NK_UP || key == NK_DOWN) { list_nav(&s_sel, s_ssid_n + 1, key); nucleo_app_request_draw(); }
