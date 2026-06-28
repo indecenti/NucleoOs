@@ -362,19 +362,10 @@ static void sfx(int id)
     }
     const char *nm = sfx_name(id);
     char p[80];
-    snprintf(p, sizeof p, DIRR "/pack/%s.wav", nm);
+    snprintf(p, sizeof p, DIRR "/pack/%s.wav", nm);  // WAV arcade pack only (no fallback)
     FILE *f = fopen(p, "rb");
-    if (f) {
-        fclose(f);
-        if (important || snappy) nucleo_audio_stop();
-        nucleo_audio_play(p);
-        if (important) s_sfx_guard = now + 700;
-        return;
-    }
-    // WAV not found — fallback to synth (better than silent)
-    notify_voice_t v[8]; int nv = build_voices(id, v); if (nv <= 0) return;
-    snprintf(p, sizeof p, DIRR "/sfx/%s.wav", nm);
-    if (notify_synth_voices_wav(v, nv, p, 12000) != 0) return;
+    if (!f) return;  // silent if WAV missing (avoid synth CPU burn)
+    fclose(f);
     if (important || snappy) nucleo_audio_stop();
     nucleo_audio_play(p);
     if (important) s_sfx_guard = now + 700;
