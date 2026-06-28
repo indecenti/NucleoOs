@@ -162,7 +162,7 @@ static void set_hint(void)
         case ST_CONSENT:   nucleo_app_set_hint("invio accetto   esc esci"); break;
         case ST_HOME:      nucleo_app_set_hint("su/giu  invio apri  tab menu  esc esci"); break;
         case ST_TARGETS:   nucleo_app_set_hint("su/giu  invio scegli  r riscan  esc indietro"); break;
-        case ST_KARMA:     nucleo_app_set_hint("invio civetta  b beacona tutte  r riascolta  esc"); break;
+        case ST_KARMA:     nucleo_app_set_hint("invio config  a portale-ora  b beacona  r riascolta"); break;
         case ST_LURE:      nucleo_app_set_hint("invio: ferma esca   esc: indietro"); break;
         case ST_SSID:      nucleo_app_set_hint("su/giu  invio scegli  esc indietro"); break;
         case ST_TYPE:      nucleo_app_set_hint("scrivi  invio ok  canc  esc indietro"); break;
@@ -661,11 +661,15 @@ static void on_key(int key, char ch)
         case ST_KARMA: {
             int kn = nucleo_wifiatk_karma_count();
             if (key == NK_UP || key == NK_DOWN) { list_nav(&s_km_sel, kn, key); nucleo_app_request_draw(); }
-            else if (key == NK_ENTER && kn > 0) {            // adopt ONE as the Civetta lure
+            else if (key == NK_ENTER && kn > 0) {            // adopt ONE as the Civetta lure -> configure
                 snprintf(s_custom, sizeof s_custom, "%s", nucleo_wifiatk_karma_ssid(s_km_sel));
                 s_mode = 0; build_rows();
                 snprintf(s_err, sizeof s_err, "Karma: %.20s", s_custom);
                 go(ST_SETUP);
+            } else if ((ch == 'a' || ch == 'A') && kn > 0) { // AUTO-ARM: capture portal on this wanted SSID NOW
+                snprintf(s_custom, sizeof s_custom, "%s", nucleo_wifiatk_karma_ssid(s_km_sel));
+                s_mode = 0; build_rows();
+                start_portal();                              // straight to RUNNING (closes sniff->capture)
             } else if ((ch == 'b' || ch == 'B') && kn > 0) { // AUTO-LURE: beacon ALL the wanted SSIDs
                 nucleo_wifiatk_beacon_custom_clear();
                 for (int i = 0; i < kn; i++) nucleo_wifiatk_beacon_custom_add(nucleo_wifiatk_karma_ssid(i));
