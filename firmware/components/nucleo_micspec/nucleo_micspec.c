@@ -38,7 +38,10 @@ static SemaphoreHandle_t s_lock = NULL;
 static ms_snapshot_t     s_pub;                 // published frame (guarded by s_lock)
 static bool              s_have = false;
 
-// Per-run scratch (heap; freed on stop so the RAM is the app's only while it's open).
+// Per-run scratch: one combined 10 KB block so the allocator sees a single request, not five
+// 2 KB fragments. On the ADV (no-PSRAM, ~16 KB largest free after NX_NET_APP exclusive) five
+// separate malloc(2048) would exhaust the largest block before the task stack is created.
+static float *s_scratch = NULL;       // base of the combined block (5 * MS_FFT floats)
 static float *s_td   = NULL;          // DC-removed time window (for autocorrelation)
 static float *s_re   = NULL;          // FFT real (Hann-windowed input, then real part)
 static float *s_im   = NULL;          // FFT imag
@@ -273,9 +276,8 @@ static void dsp_task(void *arg)
 
 static void free_scratch(void)
 {
-    free(s_td);  s_td  = NULL; free(s_re);   s_re   = NULL;
-    free(s_im);  s_im  = NULL; free(s_hann); s_hann = NULL;
-    free(s_acf); s_acf = NULL;
+    free(s_scratch); s_scratch = NULL;
+    s_td = s_re = s_im = s_hann = s_acf = NULL;
 }
 
 esp_err_t nucleo_micspec_start(void)
@@ -284,14 +286,15 @@ esp_err_t nucleo_micspec_start(void)
     if (nucleo_recorder_is_busy() || nucleo_audio_is_playing()) { atomic_store(&s_err, MS_ERR_BUSY); return ESP_ERR_INVALID_STATE; }
 
     if (!s_lock) s_lock = xSemaphoreCreateMutex();
-    s_td   = (float *)malloc(sizeof(float) * MS_FFT);
-    s_re   = (float *)malloc(sizeof(float) * MS_FFT);
-    s_im   = (float *)malloc(sizeof(float) * MS_FFT);
-    s_hann = (float *)malloc(sizeof(float) * MS_FFT);
-    s_acf  = (float *)malloc(sizeof(float) * MS_FFT);
-    if (!s_lock || !s_td || !s_re || !s_im || !s_hann || !s_acf) {
+    s_scratch = (float *)malloc(sizeof(float) * MS_FFT * 5);   // one 10 KB block
+    if (!s_lock || !s_scratch) {
         atomic_store(&s_err, MS_ERR_OOM); free_scratch(); return ESP_ERR_NO_MEM;
     }
+    s_td   = s_scratch;
+    s_re   = s_scratch + MS_FFT;
+    s_im   = s_scratch + MS_FFT * 2;
+    s_hann = s_scratch + MS_FFT * 3;
+    s_acf  = s_scratch + MS_FFT * 4;
     for (int i = 0; i < MS_FFT; i++) s_hann[i] = 0.5f - 0.5f * cosf(2.0f * (float)M_PI * i / (MS_FFT - 1));
     memset(s_prevband, 0, sizeof s_prevband);
     s_agc = 1.0f; s_onset = 0.0f; s_have = false;

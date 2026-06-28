@@ -424,15 +424,17 @@ static void enter(void)
     nucleo_app_set_ptt_handler(on_ptt);
     nucleo_app_set_poll_handler(poll);   // drive the redraw from the DSP frame rate, not the 50 Hz loop
     set_hint();
-    // Dedicated mode FIRST: NX_NET_APP suspends voice (the other GPIO43/mic owner) and frees ~70KB so the
-    // DSP scratch + waterfall never starve. Wi-Fi STA stays up. Restored in on_exit() after the mic closes.
+    // Dedicated mode FIRST: NX_NET_APP suspends voice (the other GPIO43/mic owner) and frees ~47KB.
+    // Wi-Fi STA stays up. Restored in on_exit() after the mic closes.
     nucleo_exclusive_enter(NX_NET_APP, nullptr);
-    // Waterfall history (7.4 KB) allocated AFTER the reclaim, when the contiguous block is large. On the
-    // PSRAM-less chip the largest free block is tiny under normal load, so allocating this BEFORE the
-    // reclaim could fail — silently dropping CASCATA to the bars fallback (they then look identical).
+    // DSP scratch engine first — it claims the largest free contiguous block (~10 KB combined alloc +
+    // 4 KB task stack). Waterfall history (7.4 KB) is optional and allocated from whatever remains
+    // AFTER micspec_start succeeds; if it fails the display silently falls back to bars mode.
+    // On the ADV (no-PSRAM, ~16 KB largest free after exclusive) the original order (hist first)
+    // consumed 7.4 KB of the only large block, leaving < 10 KB for the scratch alloc -> MS_ERR_OOM.
+    nucleo_micspec_start();
     if (!s_hist) s_hist = (uint8_t *)malloc((size_t)HIST_W * MS_BANDS);   // NULL -> waterfall falls back to bars
     if (s_hist) memset(s_hist, 0, (size_t)HIST_W * MS_BANDS);
-    nucleo_micspec_start();
     nucleo_app_request_draw();
 }
 
