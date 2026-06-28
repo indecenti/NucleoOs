@@ -536,7 +536,8 @@ static void launch_ball(float power)
     if (power < 0.04f) power = 0.04f;
     if (power > 1.0f) power = 1.0f;
     vy = -(1.2f + power * 2.6f);            // up the chute; only a strong charge clears the top
-    vx = 0;
+    float r = (esp_random() % 1000) / 1000.0f;
+    vx = (r - 0.5f) * 0.4f;                 // tiny lateral wiggle: ±0.2 from randomness
     s_bp = BP_PLAY; s_inchute = true; s_save_ms = 2600; s_launch_ms = 280;
     s_charging = false; s_plunge = 0; s_atmax = 0;
     sfx(power > 0.6f ? 20 : 4);             // soft / hard launch
