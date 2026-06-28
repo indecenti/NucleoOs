@@ -909,11 +909,16 @@ unsigned      nucleo_wifiatk_beacon_uptime_s(void)
 // for the scan window. AUTHORIZED testing only. The SSID parse is the host-tested wifiatk_probe_ssid.
 #define KARMA_MAX 24
 typedef struct { char ssid[33]; int hits; int64_t last; } km_t;
-static km_t s_km[KARMA_MAX];
+// Heap-backed, allocated LAZILY on first karma scan — NOT a static .bss array. The ADV's boot heap is
+// razor-thin; ~1KB of extra resident .bss is enough to OOM it at boot (lesson: .bss bricked the ADV
+// before). Allocating on first use keeps the boot footprint at zero; kept resident after (the app
+// reads the list back to draw it).
+static km_t *s_km;
 static volatile int s_km_n;
 
 static void karma_add(const char *ssid)
 {
+    if (!s_km) return;
     int64_t now = esp_timer_get_time();
     taskENTER_CRITICAL(&s_mux);
     for (int i = 0; i < s_km_n; i++)
@@ -939,6 +944,7 @@ static void karma_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 int nucleo_wifiatk_karma_scan(int secs)
 {
     if (s_run || s_bcn_run) return -1;             // an attack already owns the radio
+    if (!s_km) { s_km = calloc(KARMA_MAX, sizeof(km_t)); if (!s_km) return -3; }  // lazy heap (not boot .bss)
     if (secs < 2) secs = 2;
     if (secs > 30) secs = 30;
     s_km_n = 0;
@@ -979,6 +985,6 @@ int nucleo_wifiatk_karma_scan(int secs)
     return s_km_n;
 }
 
-int         nucleo_wifiatk_karma_count(void)   { return s_km_n; }
-const char *nucleo_wifiatk_karma_ssid(int i)   { return (i >= 0 && i < s_km_n) ? s_km[i].ssid : ""; }
-int         nucleo_wifiatk_karma_hits(int i)   { return (i >= 0 && i < s_km_n) ? s_km[i].hits : 0; }
+int         nucleo_wifiatk_karma_count(void)   { return s_km ? s_km_n : 0; }
+const char *nucleo_wifiatk_karma_ssid(int i)   { return (s_km && i >= 0 && i < s_km_n) ? s_km[i].ssid : ""; }
+int         nucleo_wifiatk_karma_hits(int i)   { return (s_km && i >= 0 && i < s_km_n) ? s_km[i].hits : 0; }
