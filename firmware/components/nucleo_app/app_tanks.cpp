@@ -760,14 +760,48 @@ static void resolve_impact(Proj *p) {
             for (int s = 0; s < 14; s++) { float a = frnd(0, 6.283f); spark_burst(x + cosf(a) * 6, y + sinf(a) * 6, 1, COL_WHITE); }
             ring_spawn(x, y, 22, COL_WHITE); flash(COL_WHITE, 90); sfx(11); p->on = false; return;
         case WB_CLUSTER:
-            explode_w(x, y, p->wp);
-            // GROUND CARPET: on impact, many small bomblets skim out LOW and WIDE both ways -> a long row of
-            // little craters across the terrain (area denial). Contrast with MIRV, which splits high and rains.
+            // Parent: medium blast (bigger crater, real damage) then seeds the carpet bomblets.
+            // Each child bomblet uses the weapon's own small stats so they land close, not scatter-shot.
+            if (p->child) {
+                explode_w(x, y, p->wp);                            // bomblet: small standard hit
+            } else {
+                int pcr = 14;                                      // parent crater radius (larger than bomblets)
+                carve((int)x, (int)y, pcr);
+                for (int t = 0; t < 2; t++) {
+                    if (s_tk[t].dead) continue;
+                    float ddx = s_tk[t].x - x, ddy = s_tk[t].y - y;
+                    float dist = sqrtf(ddx * ddx + ddy * ddy), rng = (float)(pcr + 10);
+                    if (dist > rng) continue;
+                    float f = 1.0f - dist / rng; if (f < 0) f = 0;
+                    int dd = (int)(24.0f * f);
+                    if (dd > 0 && s_tk[t].shield > 0) {
+                        int eat = dd < s_tk[t].shield ? dd : s_tk[t].shield;
+                        s_tk[t].shield -= eat; dd -= eat;
+                        ring_spawn(s_tk[t].x, s_tk[t].y, 20, rgb(140, 210, 255));
+                        dmg_popup(s_tk[t].x, s_tk[t].y - 24, eat, rgb(140, 210, 255)); sfx(41);
+                    }
+                    if (dd > 0) {
+                        int pre = s_tk[t].hp;
+                        s_tk[t].hp -= dd; if (s_tk[t].hp < 0) s_tk[t].hp = 0;
+                        dmg_popup(s_tk[t].x, s_tk[t].y - 16, dd, t ? COL_P1 : COL_P0); sfx(8);
+                        if (s_mode == MODE_AI && t != s_shooter) { s_shot_hits++; award_juice(t, pre, s_tk[t].hp <= 0, x); }
+                        if (s_tk[t].hp <= 0) { s_tk[t].hp = 0; s_tk[t].dead = true; shat_spawn(s_tk[t].x, s_tk[t].y, 4.5f, t ? COL_P1 : COL_P0, 900); }
+                    }
+                }
+                spark_burst(x, y, 10, w->col);
+                shat_spawn(x, y, 2.0f, mix(th_ground, w->col, 110), 480);
+                ring_spawn(x, y, (float)(pcr * 2), w->col);
+                flash(w->col, 100, 130); shake(4.5f);
+                s_dwell_x = x; s_dwell_y = y; s_dwell_t = 360;
+                s_lava_x = (int)x; s_lava_w = pcr; s_lava_t = now_ms();
+                play_hit_sfx(p->wp);
+            }
+            // Carpet bomblets — tight scatter so they land around the impact, not across the field
             if (!p->child) for (int k = 0; k < w->count; k++) {
-                float frac = (w->count > 1) ? ((float)k / (w->count - 1)) * 2.0f - 1.0f : 0.0f;   // -1 .. +1
-                float vx = frac * 0.55f + frnd(-0.04f, 0.04f);            // WIDE horizontal scatter
-                float vy = -0.10f - frnd(0.0f, 0.07f);                    // shallow lob: they land spread out, not stacked
-                if (spawn_proj(x, y - 5, vx, vy, p->wp, p->owner, true) < 0) break;
+                float frac = (w->count > 1) ? ((float)k / (w->count - 1)) * 2.0f - 1.0f : 0.0f;
+                float vx = frac * 0.18f + frnd(-0.02f, 0.02f);    // tight horizontal: ~35px each side
+                float vy = -0.06f - frnd(0.0f, 0.03f);             // slight lob; lands close to impact
+                if (spawn_proj(x, y - 6, vx, vy, p->wp, p->owner, true) < 0) break;
             }
             p->on = false; return;
         case WB_ROLLER:
@@ -1684,28 +1718,31 @@ static void draw_over(int ch) {
     for (int i = 0; i < NRING; i++) { if (!s_rg[i].on) continue; int a = s_rg[i].life * 256 / s_rg[i].lmax; d.drawCircle((int)s_rg[i].x, (int)s_rg[i].y, (int)s_rg[i].r, mix(rgb(8,10,20), s_rg[i].col, a)); }
     for (int i = 0; i < NSPK; i++) { if (s_spk[i].life <= 0) continue; int f = s_spk[i].life * 256 / (s_spk[i].max > 0 ? s_spk[i].max : 1); d.fillCircle((int)s_spk[i].x, (int)s_spk[i].y, f > 130 ? 2 : 1, mix(rgb(8,10,20), s_spk[i].col, f)); }
     int win = s_tk[0].dead ? 1 : 0; uint16_t wc = s_draw_flag ? COL_GOLD : (win ? COL_P1 : COL_P0);
-    bool mywin = (s_mode == MODE_GUEST) ? (win == 1) : (win == 0);   // did THIS device win?
-    int swin = (s_wins[0] >= SERIES_TGT) ? 0 : (s_wins[1] >= SERIES_TGT) ? 1 : -1;   // who took the whole SERIES (-1 = round only)
+    bool mywin = (s_mode == MODE_GUEST) ? (win == 1) : (win == 0);
+    int swin = (s_wins[0] >= SERIES_TGT) ? 0 : (s_wins[1] >= SERIES_TGT) ? 1 : -1;
     bool series_over = (s_mode == MODE_AI && swin >= 0);
-    d.fillRect(0, 8, W, 40, mix(wc, COL_INK, 150)); d.fillRect(0, 8, W, 3, wc); d.fillRect(0, 45, W, 3, wc);
-    int bz = 3 + (s_anim < 14 ? (14 - (int)s_anim) / 4 : 0);   // banner slams down big -> 3
+    // Banner box — tall enough for banner + subtitle + series tag, all non-overlapping inside
+    d.fillRect(0, 6, W, 48, mix(wc, COL_INK, 150)); d.fillRect(0, 6, W, 3, wc); d.fillRect(0, 51, W, 3, wc);
+    int bz = 3 + (s_anim < 14 ? (14 - (int)s_anim) / 5 : 0);   // slams in large, settles to 3
     const char *ban = s_draw_flag         ? tx("PAREGGIO!", "DRAW!")
                     : series_over         ? (swin == 0 ? tx("SERIE VINTA!", "SERIES WON!") : tx("SERIE PERSA!", "SERIES LOST!"))
                     : (s_mode == MODE_AI) ? (win  == 0 ? tx("ROUND VINTO!", "ROUND WON!")  : tx("ROUND PERSO!", "ROUND LOST!"))
                     :                       (mywin     ? tx("VITTORIA!",    "VICTORY!")    : tx("SCONFITTA!",   "DEFEAT!"));
-    txt_c(W / 2 + 1, 15, bz, COL_INK, ban);
-    txt_c(W / 2, 14, bz, ((s_anim >> 2) & 1) ? COL_WHITE : COL_GOLD, ban);
+    txt_c(W / 2 + 1, 9, bz, COL_INK, ban);
+    txt_c(W / 2, 8, bz, ((s_anim >> 2) & 1) ? COL_WHITE : COL_GOLD, ban);
+    // subtitle and series tag — both size 1, spaced inside the box, revealed as banner shrinks
     char t[28];
     if (s_draw_flag) snprintf(t, sizeof t, "%s", tx("Distruzione totale", "Mutual destruction"));
     else if (s_mode != MODE_AI) snprintf(t, sizeof t, "%s", mywin ? tx("Hai vinto", "You win") : tx("Hai perso", "You lose"));
     else if (g_lang) snprintf(t, sizeof t, "P%d WINS", win + 1);
     else snprintf(t, sizeof t, "VINCE P%d", win + 1);
-    txt_c(W / 2, 36, s_draw_flag ? 1 : 2, wc, t);
-    // vs-CPU series: a "first to N" caption above the round tally so the score reads as a match, not a one-off.
-    if (s_mode == MODE_AI) { char cap[20]; snprintf(cap, sizeof cap, "%s %d", tx("PRIMO A", "FIRST TO"), SERIES_TGT); txt_c(W / 2, 50, 1, mix(COL_GOLD, COL_INK, 60), cap); }
-    char sc[24]; snprintf(sc, sizeof sc, "%d  -  %d", s_wins[0], s_wins[1]); txt_c(W / 2 + 1, 59, 4, COL_INK, sc); txt_c(W / 2, 58, 4, COL_WHITE, sc);
-    if (!s_draw_flag) { char hp[40]; snprintf(hp, sizeof hp, "%s %d", tx("Vita rimasta", "HP left"), s_tk[win].hp); int hw = (int)strlen(hp) * 6 + 12; d.fillRoundRect(W / 2 - hw / 2, 90, hw, 13, 4, mix(COL_GREEN, COL_INK, 200)); txt_c(W / 2, 93, 1, COL_GREEN, hp); }
-    mini_tank(W / 2 - 44, 112, (s_draw_flag || !win) ? COL_P0 : COL_DIM); mini_tank(W / 2 + 44, 112, (s_draw_flag || win) ? COL_P1 : COL_DIM);
+    txt_c(W / 2, 36, 1, wc, t);
+    if (s_mode == MODE_AI) { char cap[20]; snprintf(cap, sizeof cap, "%s %d", tx("PRIMO A", "FIRST TO"), SERIES_TGT); txt_c(W / 2, 44, 1, mix(COL_GOLD, COL_INK, 60), cap); }
+    // score (size 3) — clear gap below box before the score row
+    char sc[24]; snprintf(sc, sizeof sc, "%d  -  %d", s_wins[0], s_wins[1]); txt_c(W / 2 + 1, 61, 3, COL_INK, sc); txt_c(W / 2, 60, 3, COL_WHITE, sc);
+    // HP chip (score size 3 = 24px → ends y=84; chip at y=88, clear gap)
+    if (!s_draw_flag) { char hp[40]; snprintf(hp, sizeof hp, "%s %d", tx("Vita rimasta", "HP left"), s_tk[win].hp); int hw = (int)strlen(hp) * 6 + 12; d.fillRoundRect(W / 2 - hw / 2, 88, hw, 12, 4, mix(COL_GREEN, COL_INK, 200)); txt_c(W / 2, 90, 1, COL_GREEN, hp); }
+    // hint at content bottom — no mini-tanks here (they pushed below hint boundary)
     txt_c(W / 2, ch - 12, 1, ((s_anim >> 2) & 1) ? COL_WHITE : COL_DIM,
           s_mode != MODE_AI ? tx("INVIO menu", "ENTER menu")
           : series_over     ? tx("INVIO nuova serie   Esc menu", "ENTER new series   Esc menu")
