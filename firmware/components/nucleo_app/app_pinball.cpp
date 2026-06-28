@@ -536,12 +536,11 @@ static void launch_ball(float power)
     if (power < 0.04f) power = 0.04f;
     if (power > 1.0f) power = 1.0f;
     vy = -(1.2f + power * 2.6f);            // up the chute; only a strong charge clears the top
-    float r = (esp_random() % 1000) / 1000.0f;
-    vx = (r - 0.5f) * 0.4f;                 // tiny lateral wiggle: ±0.2 from randomness
+    vx = 0;
     s_bp = BP_PLAY; s_inchute = true; s_save_ms = 2600; s_launch_ms = 280;
     s_charging = false; s_plunge = 0; s_atmax = 0;
     sfx(power > 0.6f ? 20 : 4);             // soft / hard launch
-    // "BALL LIVE" fires only when the ball actually clears the chute (see step_ball)
+    // Random lateral vx added at chute exit (step_ball) so it's not reset to 0
 }
 static void level_up(void)
 {
@@ -688,7 +687,9 @@ static void step_ball(int dt)
             by += vy * ks;
             bx = CHX; vx = 0;                            // never leaves the rail
             if (by <= CHTOP) {                           // cleared the top -> SHOOT into the field
-                s_inchute = false; vx = -0.6f;
+                s_inchute = false;
+                float r = (esp_random() % 1000) / 1000.0f;
+                vx = -0.6f + (r - 0.5f) * 0.3f;             // base -0.6 + random ±0.15 lateral wiggle
                 float sp = sqrtf(vx * vx + vy * vy);
                 if (sp > 3.0f) { vx *= 3.0f / sp; vy *= 3.0f / sp; }
                 s_launch_ms = 280;
