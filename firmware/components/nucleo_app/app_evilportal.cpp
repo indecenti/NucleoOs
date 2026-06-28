@@ -63,6 +63,7 @@ void        nucleo_wifiatk_target_bssid_bytes(int i, unsigned char out[6]);
 // KARMA: discover the SSIDs nearby devices are probing for, to use as the portal lure (async).
 int         nucleo_wifiatk_karma_start(int secs);
 bool        nucleo_wifiatk_karma_busy(void);
+void        nucleo_wifiatk_karma_finish(void);
 int         nucleo_wifiatk_karma_heap(void);
 int         nucleo_wifiatk_karma_count(void);
 const char *nucleo_wifiatk_karma_ssid(int i);
@@ -253,6 +254,7 @@ static void tick(void)
             if (t != s_last_refresh) { s_last_refresh = t; s_pulse = !s_pulse; }
             nucleo_app_request_draw(); return;
         }
+        nucleo_wifiatk_karma_finish();                   // restore net/services on THIS (UI) task — big stack
         karma_restore_screen();                          // sniff done -> get the canvas back
         int n = nucleo_wifiatk_karma_count();
         if (n > 0) { s_km_sel = 0; go(ST_KARMA); }

@@ -986,10 +986,6 @@ static void karma_task(void *arg)
     esp_wifi_set_promiscuous(false);
     esp_wifi_set_promiscuous_rx_cb(NULL);
     km_trace("7-promisc-off", "a");
-    nucleo_setup_apply_network();                  // network up first
-    km_trace("8-apply-net", "a");
-    nucleo_exclusive_exit();                        // restart httpd/mDNS/voice (no-op in Solo)
-    km_trace("9-excl-exit", "a");
     // Sort most-requested first (the RX cb is stopped now, so no lock needed).
     for (int i = 1; i < s_km_n; i++) {
         km_t key = s_km[i]; int j = i - 1;
@@ -997,9 +993,22 @@ static void karma_task(void *arg)
         s_km[j + 1] = key;
     }
     ESP_LOGI(TAG, "karma: %d SSID(s) probed", s_km_n);
+    // DO NOT restore the network here. apply_network + exclusive_exit (STA reconfig + httpd/mDNS/voice
+    // restart) have a heavy call tree that overflows this 3KB worker stack and panics — the trace died
+    // exactly at apply_network. The caller (UI task, big stack) runs the teardown via karma_finish(),
+    // the same split the deauth flood uses (worker sniffs, the stop() caller restores).
     s_km_task = NULL;
     s_km_busy = false;
     vTaskDelete(NULL);
+}
+
+// Restore the network + OS services after a sniff. MUST run on the caller's (UI) task — its call tree
+// is too deep for the worker stack. Call once after nucleo_wifiatk_karma_busy() goes false.
+void nucleo_wifiatk_karma_finish(void)
+{
+    nucleo_setup_apply_network();                  // network up first
+    nucleo_exclusive_exit();                        // restart httpd/mDNS/voice (no-op in Solo)
+    km_trace("9-finish", "a");
 }
 
 // Start an asynchronous KARMA listen of `secs` (clamped 2..30). Returns 0 on success (poll
