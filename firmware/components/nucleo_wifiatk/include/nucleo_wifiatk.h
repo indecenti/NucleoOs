@@ -62,6 +62,7 @@ unsigned      nucleo_wifiatk_uptime_s(void);      // seconds since armed (0 when
 // writes it to /sd/handshakes/<bssid>.pcap on stop (crack offline, hashcat -m 22000). Single-AP focus.
 int           nucleo_wifiatk_handshake_msgmask(void); // bitmask: bit m set once message m (1..4) seen
 bool          nucleo_wifiatk_handshake_ready(void);   // true once a crackable pair (1+2 or 3+4) is in
+bool          nucleo_wifiatk_handshake_pmkid(void);   // true once a PMKID (clientless) is captured
 const char   *nucleo_wifiatk_handshake_path(void);    // .pcap path after stop ("" if none captured)
 
 // ---- beacon spam -----------------------------------------------------------

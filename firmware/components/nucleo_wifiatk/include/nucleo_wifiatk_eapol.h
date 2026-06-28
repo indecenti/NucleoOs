@@ -13,6 +13,10 @@ extern "C" {
 // {1,2} or {3,4} for the same AP is a crackable handshake.
 int wifiatk_eapol_msg(const uint8_t *frame, int len);
 
+// If `frame` is EAPOL-Key message 1 carrying an RSN PMKID KDE, copy the 16-byte PMKID into `out` and
+// return 1; else 0. A PMKID is clientless crackable material (hashcat -m 16800 / 22000).
+int wifiatk_eapol_pmkid(const uint8_t *frame, int len, uint8_t out[16]);
+
 #ifdef __cplusplus
 }
 #endif

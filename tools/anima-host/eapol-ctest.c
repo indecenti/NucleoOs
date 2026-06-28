@@ -33,9 +33,37 @@ static int build_eapol(uint8_t *f, uint8_t fc0, unsigned ki)
     return n;
 }
 
+// Build a proper EAPOL-Key MESSAGE 1 (AP->STA), optionally with an RSN PMKID KDE in the key data.
+static int build_m1(uint8_t *f, int with_pmkid)
+{
+    int n = 0;
+    f[n++] = 0x08; f[n++] = 0x02;                 // data frame, fromDS (AP->STA)
+    f[n++] = 0; f[n++] = 0;
+    for (int i = 0; i < 6; i++) f[n++] = 0xCC;    // addr1 = STA
+    for (int i = 0; i < 6; i++) f[n++] = 0xBB;    // addr2 = AP (BSSID)
+    for (int i = 0; i < 6; i++) f[n++] = 0xBB;    // addr3
+    f[n++] = 0; f[n++] = 0;                        // seq  -> n == 24
+    static const uint8_t snap[8] = { 0xAA, 0xAA, 0x03, 0x00, 0x00, 0x00, 0x88, 0x8E };
+    memcpy(f + n, snap, 8); n += 8;
+    f[n++] = 0x02; f[n++] = 0x03; f[n++] = 0x00; f[n++] = 0x5F;   // EAPOL ver2 type3 len
+    f[n++] = 0x02;                                // descriptor type
+    f[n++] = 0x00; f[n++] = 0x8A;                 // key info: M1 (ack set, no mic/install/secure)
+    f[n++] = 0x00; f[n++] = 0x10;                 // key length 16
+    memset(f + n, 0, 88); n += 88;                // replay(8)+nonce(32)+iv(16)+rsc(8)+id(8)+mic(16)
+    if (with_pmkid) {
+        f[n++] = 0x00; f[n++] = 0x16;             // key data length = 22
+        f[n++] = 0xDD; f[n++] = 0x14;             // KDE: type 0xDD, len 0x14 (20)
+        f[n++] = 0x00; f[n++] = 0x0F; f[n++] = 0xAC; f[n++] = 0x04;   // OUI 00-0F-AC, data type 04 = PMKID
+        for (int k = 0; k < 16; k++) f[n++] = (uint8_t)(0xA0 + k);    // the PMKID
+    } else {
+        f[n++] = 0x00; f[n++] = 0x00;             // no key data
+    }
+    return n;
+}
+
 int main(void)
 {
-    uint8_t f[160];
+    uint8_t f[256];
     printf("== nucleo_wifiatk_eapol host test ==\n");
 
     CHECK(wifiatk_eapol_msg(f, build_eapol(f, 0x08, 0x0089)) == 1, "M1 (ack)");
@@ -56,6 +84,27 @@ int main(void)
     }
     // Truncated frame -> 0.
     CHECK(wifiatk_eapol_msg(f, 20) == 0, "short frame rejected");
+
+    // PMKID: a real M1 frame is classified as message 1 and the PMKID is extracted.
+    {
+        uint8_t pm[16];
+        int len = build_m1(f, 1);
+        CHECK(wifiatk_eapol_msg(f, len) == 1, "M1 frame classified");
+        CHECK(wifiatk_eapol_pmkid(f, len, pm) == 1, "pmkid extracted");
+        int ok = 1; for (int k = 0; k < 16; k++) if (pm[k] != (uint8_t)(0xA0 + k)) ok = 0;
+        CHECK(ok, "pmkid bytes correct");
+    }
+    // M1 without a PMKID KDE -> no PMKID.
+    {
+        uint8_t pm[16];
+        int len = build_m1(f, 0);
+        CHECK(wifiatk_eapol_pmkid(f, len, pm) == 0, "no pmkid when absent");
+    }
+    // A non-M1 EAPOL (M2) never yields a PMKID.
+    {
+        uint8_t pm[16];
+        CHECK(wifiatk_eapol_pmkid(f, build_eapol(f, 0x08, 0x0109), pm) == 0, "no pmkid on M2");
+    }
 
     printf("\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
