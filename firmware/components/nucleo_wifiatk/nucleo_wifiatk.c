@@ -922,6 +922,20 @@ static TaskHandle_t  s_km_task;
 static int           s_km_secs;
 static volatile int  s_km_heap;     // largest free block measured at arm — surfaced to the app UI
 
+// Persistent step trace on SD — survives the reboot so we can read (via /api/fs) exactly which step
+// crashed and the heap there. NOT called from the RX callback (task context only). DEBUG aid.
+static void km_trace(const char *tag, const char *mode)
+{
+    FILE *f = fopen("/sd/karma.log", mode);
+    if (!f) return;
+    long long t = (long long)(esp_timer_get_time() / 1000);
+    int lblk = (int)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    int freeh = (int)heap_caps_get_free_size(MALLOC_CAP_8BIT);
+    int dma  = (int)heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
+    fprintf(f, "[%lld] %-14s lblk=%d free=%d dma=%d n=%d\n", t, tag, lblk, freeh, dma, s_km_n);
+    fclose(f);
+}
+
 static void karma_add(const char *ssid)
 {
     if (!s_km) return;
@@ -953,22 +967,29 @@ static void karma_task(void *arg)
 {
     (void)arg;
     static const uint8_t CH[] = { 1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13 };
+    km_trace("4-hop-begin", "a");
     int64_t end = esp_timer_get_time() + (int64_t)s_km_secs * 1000000;
     int ci = 0;
     while (s_km_run && esp_timer_get_time() < end) {
-        uint8_t ch = CH[ci++ % 13];
+        uint8_t ch = CH[ci % 13];
         esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
         vTaskDelay(pdMS_TO_TICKS(10));             // settle
         // The still-associated STA may bounce us back to the home channel; force it back, exactly like
         // the deauth flood does to reach clients on every channel. Then dwell to catch sporadic probes.
         uint8_t pch = 0; wifi_second_chan_t sch;
         if (esp_wifi_get_channel(&pch, &sch) == ESP_OK && pch != ch) esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+        if ((ci % 13) == 0) km_trace("5-hop", "a");   // ~once per full band sweep
+        ci++;
         vTaskDelay(pdMS_TO_TICKS(140));            // yield to IDLE; probes are sporadic
     }
+    km_trace("6-scan-end", "a");
     esp_wifi_set_promiscuous(false);
     esp_wifi_set_promiscuous_rx_cb(NULL);
+    km_trace("7-promisc-off", "a");
     nucleo_setup_apply_network();                  // network up first
+    km_trace("8-apply-net", "a");
     nucleo_exclusive_exit();                        // restart httpd/mDNS/voice (no-op in Solo)
+    km_trace("9-excl-exit", "a");
     // Sort most-requested first (the RX cb is stopped now, so no lock needed).
     for (int i = 1; i < s_km_n; i++) {
         km_t key = s_km[i]; int j = i - 1;
@@ -990,9 +1011,11 @@ int nucleo_wifiatk_karma_start(int secs)
     if (secs < 2) secs = 2;
     if (secs > 30) secs = 30;
     s_km_secs = secs; s_km_n = 0;
+    km_trace("0-enter", "w");                        // fresh log each scan
 
     nucleo_setup_suspend();
     nucleo_exclusive_enter(NX_NET_APP, NULL);
+    km_trace("1-exclusive", "a");
     // Heap guard: the promiscuous RX path + the sniff task need a real contiguous block. On the ADV's
     // brutally tight heap this can be too small even after the exclusive reclaim — measure and ABORT
     // GRACEFULLY (no crash) rather than let a driver malloc fail and panic. The value is surfaced to
@@ -1019,6 +1042,7 @@ int nucleo_wifiatk_karma_start(int secs)
         nucleo_setup_apply_network(); nucleo_exclusive_exit();
         return -2;
     }
+    km_trace("2-promisc-on", "a");
     s_km_busy = true; s_km_run = true;
     if (xTaskCreate(karma_task, "wa_karma", 3072, NULL, 5, &s_km_task) != pdPASS) {
         s_km_busy = false; s_km_run = false;
@@ -1026,6 +1050,7 @@ int nucleo_wifiatk_karma_start(int secs)
         nucleo_setup_apply_network(); nucleo_exclusive_exit();
         return -4;
     }
+    km_trace("3-task-created", "a");
     return 0;
 }
 
