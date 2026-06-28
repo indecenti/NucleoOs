@@ -364,14 +364,20 @@ static void sfx(int id)
     char p[80];
     snprintf(p, sizeof p, DIRR "/pack/%s.wav", nm);
     FILE *f = fopen(p, "rb");
-    if (!f) {
-        fprintf(stderr, "[sfx] NOT FOUND: %s\n", p);          // debug: log missing files
+    if (f) {
+        fclose(f);
+        if (important || snappy) nucleo_audio_stop();
+        nucleo_audio_play(p);
+        if (important) s_sfx_guard = now + 700;
         return;
     }
-    fclose(f);
-    if (important || snappy) nucleo_audio_stop();              // grab the channel for an immediate, punchy hit
+    // WAV not found — fallback to synth (better than silent)
+    notify_voice_t v[8]; int nv = build_voices(id, v); if (nv <= 0) return;
+    snprintf(p, sizeof p, DIRR "/sfx/%s.wav", nm);
+    if (notify_synth_voices_wav(v, nv, p, 12000) != 0) return;
+    if (important || snappy) nucleo_audio_stop();
     nucleo_audio_play(p);
-    if (important) s_sfx_guard = now + 700;                    // protect the fanfare for ~its length
+    if (important) s_sfx_guard = now + 700;
 }
 #define SFX_VER 5
 static void sfx_cache_check(void)
