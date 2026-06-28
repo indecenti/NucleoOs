@@ -8,6 +8,7 @@
 //   Consent : Enter = accept, Esc = leave
 //   Running : Enter stops the spam (Esc also stops, via on_exit)
 #include "nucleo_app.h"
+#include "nucleo_exclusive.h"   // NX_SOLO: beacon runs in a fresh, unfragmented heap (see registration)
 #include "app_ui.h"
 #include <M5GFX.h>
 #include <string.h>
@@ -16,13 +17,24 @@
 
 extern "C" {
 // Engine API (declared here, not via REQUIRES — symbols resolve at final link, like app_wifiatk).
-int           nucleo_wifiatk_beacon_start(void);   // esp_err_t (0 == ok)
+// Mode codes mirror NUCLEO_BEACON_* in nucleo_wifiatk.h.
+int           nucleo_wifiatk_beacon_start(int mode); // esp_err_t (0 == ok)
 void          nucleo_wifiatk_beacon_stop(void);
 bool          nucleo_wifiatk_beacon_running(void);
 unsigned long nucleo_wifiatk_beacon_frames(void);
 int           nucleo_wifiatk_beacon_count(void);
+int           nucleo_wifiatk_beacon_mode(void);
+int           nucleo_wifiatk_beacon_health(void);
 unsigned      nucleo_wifiatk_beacon_uptime_s(void);
 }
+
+enum { MODE_FUNNY = 0, MODE_RANDOM = 1, MODE_CLONE = 2, N_MODE = 3 };
+static const char *MODE_NAME[N_MODE]  = { "Divertenti", "Casuali", "Clona vicine" };
+static const char *MODE_BLURB[N_MODE] = {
+    "muro di SSID buffi/plausibili",
+    "reti finte generate a caso",
+    "gemelle delle reti reali qui",
+};
 
 #include "app_gfx.h"
 
@@ -37,10 +49,12 @@ static bool s_stop_armed;
 static char s_err[40];
 static uint32_t s_last_refresh;
 static bool s_pulse;
+static int  s_mode = MODE_FUNNY;  // which beacon mode the operator picked on the consent screen
+static int  s_sel  = MODE_FUNNY;  // highlighted mode in the selector
 
 static void set_hint(void)
 {
-    if (s_state == ST_CONSENT)       nucleo_app_set_hint("invio accetto   esc esci");
+    if (s_state == ST_CONSENT)       nucleo_app_set_hint("su/giu scegli  invio avvia  esc esci");
     else if (s_state == ST_ARMING)   nucleo_app_set_hint("avvio in corso...");
     else if (s_state == ST_STOPPING) nucleo_app_set_hint("arresto in corso...");
     else                             nucleo_app_set_hint("invio: ferma   esc: lascia attivo");
@@ -60,7 +74,7 @@ static void tick(void)
 {
     if (s_state == ST_ARMING) {
         if (!s_arm_armed) return;
-        int rc = nucleo_wifiatk_beacon_start();
+        int rc = nucleo_wifiatk_beacon_start(s_mode);
         if (rc == 0) { s_state = ST_RUNNING; s_err[0] = 0; }
         else { snprintf(s_err, sizeof s_err, "Avvio fallito (err %d)", rc); s_state = ST_CONSENT; }
         set_hint();
@@ -78,11 +92,20 @@ static void tick(void)
     if (t != s_last_refresh) { s_last_refresh = t; s_pulse = !s_pulse; nucleo_app_request_draw(); }
 }
 
+static void arm_selected(void)
+{
+    s_mode = s_sel; s_consented = true;
+    s_state = ST_ARMING; s_arm_armed = false;
+    set_hint(); nucleo_app_request_draw();
+}
+
 static void on_key(int key, char ch)
 {
-    (void)ch;
     if (s_state == ST_CONSENT) {
-        if (key == NK_ENTER) { s_consented = true; s_state = ST_ARMING; s_arm_armed = false; set_hint(); nucleo_app_request_draw(); }
+        if (key == NK_UP)        { s_sel = (s_sel + N_MODE - 1) % N_MODE; nucleo_app_request_draw(); }
+        else if (key == NK_DOWN) { s_sel = (s_sel + 1) % N_MODE;          nucleo_app_request_draw(); }
+        else if (ch >= '1' && ch <= '3') { s_sel = ch - '1'; arm_selected(); }   // 1-9 quick-select
+        else if (key == NK_ENTER) arm_selected();
         return;
     }
     if (s_state == ST_ARMING || s_state == ST_STOPPING) return;
@@ -92,21 +115,26 @@ static void on_key(int key, char ch)
 }
 
 // ---- drawing ----------------------------------------------------------------
+static const unsigned short HLBG = 0x10A2;   // selected-row background (dark blue-grey)
+
 static void draw_consent(void)
 {
     app_ui_title("Beacon Spam", BCN, "AUTH");
-    d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 28); d.print("Test autorizzati");
-    const char *lines[] = {
-        "Trasmette decine di reti",
-        "WiFi finte: intasa la lista",
-        "delle reti dei dispositivi.",
-        "",
-        "Solo per demo o lab (CTF).",
-    };
-    unsigned short cols[] = { FG, FG, FG, BG, MUTED };
+    d.setTextSize(1); d.setTextColor(YEL, BG); d.setCursor(10, 26); d.print("Solo test autorizzati (lab/CTF).");
+    d.setTextColor(MUTED, BG); d.setCursor(10, 38); d.print("Trasmette molte reti WiFi finte.");
+
+    for (int i = 0; i < N_MODE; i++) {
+        int y = 54 + i * 21;
+        bool sel = (i == s_sel);
+        unsigned short bg = sel ? HLBG : BG;
+        if (sel) d.fillRect(6, y - 2, 228, 19, HLBG);
+        char head[26]; snprintf(head, sizeof head, "%d  %s", i + 1, MODE_NAME[i]);
+        d.setTextSize(2); d.setTextColor(sel ? FG : MUTED, bg); d.setCursor(12, y); d.print(head);
+    }
+
     d.setTextSize(1);
-    for (int i = 0; i < 5; i++) { d.setTextColor(cols[i], BG); d.setCursor(10, 52 + i * 11); d.print(lines[i]); }
-    if (s_err[0]) { d.setTextColor(BCN, BG); d.setCursor(10, 116); d.print(s_err); }
+    if (s_err[0]) { d.setTextColor(BCN, BG); d.setCursor(10, 122); d.print(s_err); }
+    else          { d.setTextColor(GRN, BG); d.setCursor(10, 122); d.print(MODE_BLURB[s_sel]); }
 }
 
 static void draw_busy(const char *title, const char *msg)
@@ -136,7 +164,8 @@ static void draw_running(void)
     d.setTextColor(MUTED, BG); d.setCursor(238 - (int)strlen(el) * 6, 7); d.print(el);
 
     d.setTextSize(1); d.setTextColor(GRN, BG); d.setCursor(10, 28);
-    char ss[30]; snprintf(ss, sizeof ss, "%d reti finte in onda", nucleo_wifiatk_beacon_count());
+    char ss[40]; snprintf(ss, sizeof ss, "%d reti finte - %s",
+                          nucleo_wifiatk_beacon_count(), MODE_NAME[nucleo_wifiatk_beacon_mode() % N_MODE]);
     d.print(ss);
 
     char fr[12]; unsigned long f = nucleo_wifiatk_beacon_frames();
@@ -147,6 +176,12 @@ static void draw_running(void)
 
     d.drawFastHLine(10, 84, 220, LINE);
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 92); d.print("canali 1 / 6 / 11");
+    // Injection health: the honest "are the frames actually leaving the radio" readout. Green = the
+    // chip is accepting the flood; low/red = it's dropping frames (then bad reception, not a bug here).
+    int hp = nucleo_wifiatk_beacon_health();
+    unsigned short hc = hp >= 80 ? GRN : (hp >= 50 ? YEL : BCN);
+    char hs[16]; snprintf(hs, sizeof hs, "inj %d%%", hp);
+    d.setTextColor(hc, BG); d.setCursor(238 - (int)strlen(hs) * 6, 92); d.print(hs);
     d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print("invio: ferma   esc: lascia attivo");
 }
 
@@ -172,7 +207,12 @@ extern "C" void nucleo_register_beacon(void)
 {
     static const nucleo_app_def_t app = {
         "beacon", "Beacon Spam", "Security", "Fake-SSID beacon flood for authorized Wi-Fi testing",
-        'B', BCN, enter, on_key, tick, draw, leave
+        'B', BCN, enter, on_key, tick, draw, leave,
+        // SOLO BOOT: reboot into a FRESH, unfragmented heap before arming. The raw-TX/promiscuous path
+        // needs contiguous DMA-capable buffers from the Wi-Fi driver; on the live (fragmented) OS heap
+        // those allocations can fail and panic the device the instant you arm. A clean boot makes the
+        // injection rock-solid — same trick the games use. Esc reboots back to the full OS.
+        NX_SOLO
     };
     nucleo_app_register(&app);
 }
