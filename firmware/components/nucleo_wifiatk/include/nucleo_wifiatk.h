@@ -85,8 +85,9 @@ unsigned      nucleo_wifiatk_beacon_uptime_s(void); // seconds since armed (0 wh
 // never blocks (and never trips) the UI loop's watchdog. Returns 0 on success, <0 on failure; poll
 // nucleo_wifiatk_karma_busy() until false, then read the list (SSIDs nearby devices look for,
 // most-requested first). Stand up the portal AP wearing one of these names so devices auto-associate.
-int         nucleo_wifiatk_karma_start(int secs);
+int         nucleo_wifiatk_karma_start(int secs);    // <0 on failure (-5 = not enough heap, see _heap)
 bool        nucleo_wifiatk_karma_busy(void);
+int         nucleo_wifiatk_karma_heap(void);         // largest free block (B) measured at last arm
 int         nucleo_wifiatk_karma_count(void);
 const char *nucleo_wifiatk_karma_ssid(int i);       // "" out of range
 int         nucleo_wifiatk_karma_hits(int i);       // how many probes named this SSID
