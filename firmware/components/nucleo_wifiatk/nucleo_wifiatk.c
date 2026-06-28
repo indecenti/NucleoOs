@@ -985,13 +985,19 @@ int nucleo_wifiatk_karma_start(int secs)
 
     nucleo_setup_suspend();
     nucleo_exclusive_enter(NX_NET_APP, NULL);
-    esp_wifi_set_mode(WIFI_MODE_STA);
+    // Sniff in AP mode (the Bruce/Marauder approach): a hidden throwaway AP. Critically, there is NO
+    // STA association — so esp_wifi_set_channel() hops FREELY (a connected STA pins the monitor to the
+    // home channel, which is why "no disconnect" heard nothing) AND there is no STA reconnect state
+    // machine to fight (which is why "disconnect" rebooted after a few seconds). Free + stable.
+    wifi_config_t apc;
+    memset(&apc, 0, sizeof apc);
+    memcpy(apc.ap.ssid, "nucleo-rx", 9); apc.ap.ssid_len = 9;
+    apc.ap.channel = 1; apc.ap.ssid_hidden = 1; apc.ap.max_connection = 1;
+    apc.ap.beacon_interval = 200; apc.ap.authmode = WIFI_AUTH_OPEN;
+    esp_wifi_set_mode(WIFI_MODE_AP);
+    esp_wifi_set_config(WIFI_IF_AP, &apc);
     esp_wifi_start();
     esp_wifi_set_ps(WIFI_PS_NONE);
-    // NOTE: do NOT esp_wifi_disconnect() here. In promiscuous mode esp_wifi_set_channel() already
-    // forces the monitor channel regardless of the STA association, so the hop works either way — and
-    // the deauth flood proves STA+promiscuous+channel-hop is stable for minutes WITHOUT disconnecting,
-    // whereas dropping the association left the driver churning and rebooting after a few seconds.
     esp_wifi_set_promiscuous_rx_cb(karma_cb);
     wifi_promiscuous_filter_t filt = { .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT };
     esp_wifi_set_promiscuous_filter(&filt);
