@@ -406,6 +406,12 @@ const gates = [
     // non-printable / malformed / tiny-buffer rejections. Pure C, no radio. A wrong byte = the lure
     // mislists or crashes on a crafted frame. FOR AUTHORIZED TESTING.
     ok: (code) => code === 0, summary: (o) => (o.match(/\d+ passed[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'eapol-hs (WPA)', cmd: 'node', args: ['tools/anima-host/eapol-check.mjs'],
+    // The WPA 4-way-handshake classifier (firmware/components/nucleo_wifiatk/nucleo_wifiatk_eapol.c),
+    // host-compiled with MinGW: data-frame gate, QoS header shift, LLC/SNAP EtherType, and the
+    // EAPOL-Key Key-Information bit logic that labels messages 1..4. Pure C, no radio. A wrong bit =
+    // a mislabelled / missed handshake. FOR AUTHORIZED TESTING.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\d+ passed[^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'portal-clone (F2)', cmd: 'node', args: ['tools/anima-host/portalclone-check.mjs'],
     // The Evil Portal page-cloner asset rewriter (firmware/components/nucleo_evilportal/
     // nucleo_evilportal_clone.c), host-compiled with MinGW: same-origin detection, absolute/root/doc-

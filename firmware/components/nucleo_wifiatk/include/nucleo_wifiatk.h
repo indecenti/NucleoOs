@@ -57,6 +57,13 @@ int           nucleo_wifiatk_cur_channel(void);   // channel currently being flo
 const char   *nucleo_wifiatk_cur_ssid(void);      // SSID currently being flooded ("" when idle)
 unsigned      nucleo_wifiatk_uptime_s(void);      // seconds since armed (0 when stopped)
 
+// ---- WPA handshake capture (rides on the deauth flood) ---------------------
+// While the deauth flood runs it also sniffs the EAPOL 4-way handshake the kicked clients re-emit and
+// writes it to /sd/handshakes/<bssid>.pcap on stop (crack offline, hashcat -m 22000). Single-AP focus.
+int           nucleo_wifiatk_handshake_msgmask(void); // bitmask: bit m set once message m (1..4) seen
+bool          nucleo_wifiatk_handshake_ready(void);   // true once a crackable pair (1+2 or 3+4) is in
+const char   *nucleo_wifiatk_handshake_path(void);    // .pcap path after stop ("" if none captured)
+
 // ---- beacon spam -----------------------------------------------------------
 // Flood the air with fake beacon frames (a wall of bogus SSIDs). Owns the radio like the deauth
 // flood. ESP_ERR_INVALID_STATE if the deauth flood is already running. Three modes:
