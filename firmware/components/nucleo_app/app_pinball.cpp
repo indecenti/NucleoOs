@@ -630,6 +630,7 @@ static void hit_round(Bump *o, int kick_sfx, bool is_sling)
     add_score(o->score);
     spark_burst(o->x + nx * o->r, o->y + ny * o->r, 5, o->col);
     shock_spawn(o->x, o->y, 340, o->col);
+    fprintf(stderr, "[hit_round] kick_sfx=%d is_sling=%d\n", kick_sfx, is_sling);  // DEBUG
     sfx(kick_sfx);
     if (!is_sling) {
         s_combo++; s_combo_ms = 1400;
