@@ -26,14 +26,19 @@ int           nucleo_wifiatk_beacon_count(void);
 int           nucleo_wifiatk_beacon_mode(void);
 int           nucleo_wifiatk_beacon_health(void);
 unsigned      nucleo_wifiatk_beacon_uptime_s(void);
+void          nucleo_wifiatk_beacon_custom_clear(void);
+bool          nucleo_wifiatk_beacon_custom_add(const char *ssid);
+int           nucleo_wifiatk_beacon_custom_count(void);
+const char   *nucleo_wifiatk_beacon_custom_ssid(int i);
 }
 
-enum { MODE_FUNNY = 0, MODE_RANDOM = 1, MODE_CLONE = 2, N_MODE = 3 };
-static const char *MODE_NAME[N_MODE]  = { "Divertenti", "Casuali", "Clona vicine" };
+enum { MODE_FUNNY = 0, MODE_RANDOM = 1, MODE_CLONE = 2, MODE_CUSTOM = 3, N_MODE = 4 };
+static const char *MODE_NAME[N_MODE]  = { "Divertenti", "Casuali", "Clona vicine", "Personalizzate" };
 static const char *MODE_BLURB[N_MODE] = {
     "muro di SSID buffi/plausibili",
     "reti finte generate a caso",
     "gemelle delle reti reali qui",
+    "scrivi tu i nomi delle reti",
 };
 
 #include "app_gfx.h"
@@ -41,7 +46,7 @@ static const char *MODE_BLURB[N_MODE] = {
 static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410,
                             LINE = 0x2945, BCN = 0xAD5F /*violet*/, GRN = 0x8FF3, YEL = 0xFE8C;
 
-enum { ST_CONSENT, ST_ARMING, ST_RUNNING, ST_STOPPING };
+enum { ST_CONSENT, ST_CUSTOM, ST_ARMING, ST_RUNNING, ST_STOPPING };
 static int  s_state;
 static bool s_consented;
 static bool s_arm_armed;          // set once the "Avvio..." screen has been painted
@@ -51,13 +56,23 @@ static uint32_t s_last_refresh;
 static bool s_pulse;
 static int  s_mode = MODE_FUNNY;  // which beacon mode the operator picked on the consent screen
 static int  s_sel  = MODE_FUNNY;  // highlighted mode in the selector
+static char s_line[33];           // CUSTOM: the SSID being typed
+static int  s_linelen;
 
 static void set_hint(void)
 {
     if (s_state == ST_CONSENT)       nucleo_app_set_hint("su/giu scegli  invio avvia  esc esci");
+    else if (s_state == ST_CUSTOM)   nucleo_app_set_hint("invio aggiungi  canc togli  tab avvia  esc esci");
     else if (s_state == ST_ARMING)   nucleo_app_set_hint("avvio in corso...");
     else if (s_state == ST_STOPPING) nucleo_app_set_hint("arresto in corso...");
     else                             nucleo_app_set_hint("invio: ferma   esc: lascia attivo");
+}
+
+static void enter_custom(void)
+{
+    nucleo_wifiatk_beacon_custom_clear();
+    s_line[0] = 0; s_linelen = 0;
+    s_state = ST_CUSTOM; set_hint(); nucleo_app_request_draw();
 }
 
 static void enter(void)
@@ -87,7 +102,7 @@ static void tick(void)
         nucleo_app_exit();
         return;
     }
-    if (s_state != ST_RUNNING) return;
+    if (s_state != ST_RUNNING && s_state != ST_CUSTOM) return;
     uint32_t t = (uint32_t)(esp_timer_get_time() / 1000000);
     if (t != s_last_refresh) { s_last_refresh = t; s_pulse = !s_pulse; nucleo_app_request_draw(); }
 }
@@ -99,13 +114,33 @@ static void arm_selected(void)
     set_hint(); nucleo_app_request_draw();
 }
 
+// Enter the highlighted mode: CUSTOM opens the type-your-SSIDs screen, the rest arm straight away.
+static void pick_selected(void)
+{
+    if (s_sel == MODE_CUSTOM) enter_custom();
+    else                      arm_selected();
+}
+
 static void on_key(int key, char ch)
 {
     if (s_state == ST_CONSENT) {
         if (key == NK_UP)        { s_sel = (s_sel + N_MODE - 1) % N_MODE; nucleo_app_request_draw(); }
         else if (key == NK_DOWN) { s_sel = (s_sel + 1) % N_MODE;          nucleo_app_request_draw(); }
-        else if (ch >= '1' && ch <= '3') { s_sel = ch - '1'; arm_selected(); }   // 1-9 quick-select
-        else if (key == NK_ENTER) arm_selected();
+        else if (ch >= '1' && ch <= '4') { s_sel = ch - '1'; pick_selected(); }   // 1-9 quick-select
+        else if (key == NK_ENTER) pick_selected();
+        return;
+    }
+    if (s_state == ST_CUSTOM) {
+        if (key == NK_ENTER) {                       // commit the typed SSID, ready the next
+            if (s_linelen > 0 && nucleo_wifiatk_beacon_custom_add(s_line)) { s_line[0] = 0; s_linelen = 0; }
+        } else if (key == NK_DEL) {                  // backspace (NK_BACK is eaten by the launcher)
+            if (s_linelen > 0) s_line[--s_linelen] = 0;
+        } else if (key == NK_TAB) {                  // arm with the list you've built
+            if (nucleo_wifiatk_beacon_custom_count() > 0) { s_sel = MODE_CUSTOM; arm_selected(); return; }
+        } else if (ch >= 32 && ch < 127 && s_linelen < 32) {   // printable -> append
+            s_line[s_linelen++] = ch; s_line[s_linelen] = 0;
+        }
+        nucleo_app_request_draw();
         return;
     }
     if (s_state == ST_ARMING || s_state == ST_STOPPING) return;
@@ -135,6 +170,33 @@ static void draw_consent(void)
     d.setTextSize(1);
     if (s_err[0]) { d.setTextColor(BCN, BG); d.setCursor(10, 122); d.print(s_err); }
     else          { d.setTextColor(GRN, BG); d.setCursor(10, 122); d.print(MODE_BLURB[s_sel]); }
+}
+
+static void draw_custom(void)
+{
+    int h = nucleo_app_content_height();
+    int cnt = nucleo_wifiatk_beacon_custom_count();
+    app_ui_title("Personalizzate", BCN, "AUTH");
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 26);
+    char hdr[28]; snprintf(hdr, sizeof hdr, "Reti aggiunte: %d", cnt); d.print(hdr);
+
+    // The line being typed, with a blinking-ish caret.
+    d.drawRect(8, 38, 224, 18, LINE);
+    d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(12, 40);
+    d.print(s_line[0] ? s_line : "");
+    if (s_pulse) { int cx = 12 + s_linelen * 12; d.fillRect(cx, 40, 9, 14, BCN); }
+
+    // The last few committed names, newest at the bottom.
+    d.setTextSize(1);
+    int show = cnt < 5 ? cnt : 5;
+    for (int i = 0; i < show; i++) {
+        int idx = cnt - show + i;
+        d.setTextColor(GRN, BG); d.setCursor(12, 62 + i * 11);
+        char row[40]; snprintf(row, sizeof row, "%d. %s", idx + 1, nucleo_wifiatk_beacon_custom_ssid(idx));
+        d.print(row);
+    }
+    d.setTextColor(YEL, BG); d.setCursor(10, h - 9);
+    d.print(cnt > 0 ? "tab avvia   invio aggiungi" : "scrivi un nome + invio");
 }
 
 static void draw_busy(const char *title, const char *msg)
@@ -190,6 +252,7 @@ static void draw(void)
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     if (s_state == ST_CONSENT)       draw_consent();
+    else if (s_state == ST_CUSTOM)   draw_custom();
     else if (s_state == ST_ARMING)   { draw_busy("Avvio...", "Genero le reti finte."); s_arm_armed = true; }
     else if (s_state == ST_STOPPING) { draw_busy("Arresto...", "Ripristino rete OS."); s_stop_armed = true; }
     else                             draw_running();
