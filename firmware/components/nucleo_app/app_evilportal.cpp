@@ -1,16 +1,15 @@
-// Evil Portal app — the on-device UI for the authorized captive-portal engine (nucleo_evilportal).
+// Evil Portal app — on-device UI for the authorized captive-portal engine (nucleo_evilportal).
 //
-// AUTHORIZED USE ONLY. This drives a rogue-AP credential-capture harness of the same kind Bruce
-// and Marauder ship. It is for security-awareness demos, auditing networks you own or have
-// written permission to test, and CTF/lab work. The app opens on a consent screen and will not
-// arm until the operator acknowledges it. Capturing third parties' credentials without
-// authorization is illegal in most jurisdictions.
+// AUTHORIZED USE ONLY. A rogue-AP credential-capture harness of the kind Bruce/Marauder ship, for
+// security-awareness demos, auditing networks you own or have written permission to test, and CTF/lab
+// work. The app opens on a consent screen and will not arm until the operator acknowledges it.
 //
-// Controls (the launcher eats Left/Back to leave the app, so the UI uses Up/Down/Right/Enter):
-//   Consent : Enter = accept, Esc = leave
-//   Config  : Up/Down pick a field, Right changes it, type to set a custom SSID, Del backspaces,
-//             Enter arms the portal
-//   Running : Enter stops the portal (Esc also stops, via on_exit)
+// UI/UX — navigable, list-driven, discoverable (no hidden keys):
+//   HOME      a menu hub: Civetta / Gemello / KARMA / Loot
+//   lists     dedicated full-screen pickers (nearby APs, KARMA probed SSIDs, SSID presets, pages)
+//   SETUP     a clear settings list for the chosen mode + a big AVVIA
+//   TAB       an options menu (Loot, Guida, Ferma) — like other apps
+//   Esc/Back  steps BACK one screen (closes the app only from HOME / while running)
 #include "nucleo_app.h"
 #include "app_ui.h"
 #include <M5GFX.h>
@@ -21,8 +20,7 @@
 
 extern "C" {
 // Engine API. Declared here (not via REQUIRES) so nucleo_app doesn't gain a dependency on the
-// engine — the symbols resolve at final link because main pulls nucleo_evilportal in. Same
-// no-cycle arrangement app_anima.cpp uses for the setup/anima getters.
+// engine — the symbols resolve at final link because main pulls nucleo_evilportal in.
 int         nucleo_evilportal_template_count(void);
 const char *nucleo_evilportal_template_name(int idx);
 int         nucleo_evilportal_ssid_count(void);
@@ -30,7 +28,7 @@ const char *nucleo_evilportal_ssid_preset(int idx);
 int         nucleo_evilportal_start(const char *ssid, int template_idx);   // esp_err_t (0 == ok)
 void        nucleo_evilportal_stop(void);
 bool        nucleo_evilportal_running(void);
-int         nucleo_evilportal_clone_page(const char *open_ssid);   // F1: clone a real open AP's login page
+int         nucleo_evilportal_clone_page(const char *open_ssid);   // F1/F2: clone a real open AP's login page
 const char *nucleo_evilportal_clone_name(void);
 const char *nucleo_evilportal_ssid(void);
 int         nucleo_evilportal_clients(void);
@@ -43,7 +41,7 @@ unsigned    nucleo_evilportal_uptime_s(void);
 int         nucleo_evilportal_recent_count(void);
 const char *nucleo_evilportal_recent_user(int i);
 const char *nucleo_evilportal_recent_pass(int i);
-// Evil-twin (clone a real AP + deauth it). Same no-cycle link arrangement as above.
+// Evil-twin (clone a real AP + deauth it).
 int           nucleo_evilportal_start_twin(const char *ssid, int template_idx, const unsigned char bssid[6], int channel, int authmode, bool coherent);
 bool          nucleo_evilportal_twin(void);
 bool          nucleo_evilportal_twin_coherent(void);
@@ -72,145 +70,51 @@ static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x44
                             LINE = 0x2945, INK = 0x0000, EP_RED = 0xF96B, GRN = 0x8FF3,
                             YEL = 0xFE8C, PANEL = 0x18E3, EP_CYAN = 0x5C9F;
 
-enum { ST_CONSENT, ST_CONFIG, ST_SCAN, ST_CLONE, ST_KARMA_SCAN, ST_KARMA_PICK, ST_RUNNING, ST_STOPPING };
-#define CFG_ROWS 4                        // Modo, SSID/Rete, Pagina, AVVIA
-static int  s_state;
-static bool s_stop_armed;                // set once the "Arresto..." screen has been painted
-static bool s_scan_armed;                // set once the "Scansione..." screen has been painted
-static bool s_clone_armed;               // set once the "Clono pagina..." screen has been painted
-static bool s_karma_armed;               // set once the "Karma..." screen has been painted
-static int  s_km_sel;                    // highlighted SSID in the KARMA pick list
-static bool s_consented;                 // skip the consent screen after the first accept this boot
-static int  s_mode;                      // 0 = Civetta (fake SSID), 1 = Gemello cattura (open), 2 = Gemello coerente (WPA2)
-static int  s_ap_idx, s_ap_n;            // selected/scanned real AP (Gemello mode)
-static int  s_ssid_idx, s_tpl_idx, s_row;
-static int  s_ssid_n, s_tpl_n;           // cached catalog sizes (avoid per-frame SD scans)
-static char s_custom[33];                // typed SSID; overrides the preset when non-empty
+// ---- screens ----------------------------------------------------------------
+enum {
+    ST_CONSENT, ST_HOME, ST_TARGETS, ST_KARMA, ST_SSID, ST_TYPE, ST_PAGE, ST_SETUP,
+    ST_RUNNING, ST_LOOT, ST_GUIDE, ST_SCAN, ST_KARMA_SCAN, ST_CLONE, ST_STOPPING,
+};
+// s_mode mirrors the engine's three flavours: 0 = Civetta (fake SSID), 1 = Gemello cattura (clone
+// OPEN + deauth), 2 = Gemello coerente (clone WPA2 security, no login). HOME picks Civetta/Gemello;
+// the Gemello SETUP toggles cattura<->coerente.
+static int  s_mode;
+static int  s_state, s_ret;              // current screen + where ST_LOOT returns to
+static bool s_consented;
+static bool s_menu;                      // TAB options overlay open
+static int  s_menu_sel, s_home_sel, s_sel;
+static int  s_ap_idx, s_ap_n;            // selected / scanned real AP (Gemello)
+static int  s_km_sel;                    // KARMA list selection
+static int  s_ssid_idx, s_tpl_idx;       // SSID preset / page template
+static int  s_ssid_n, s_tpl_n;           // cached catalog sizes
+static char s_custom[33];                // typed SSID (overrides preset when non-empty)
+static int  s_typelen;
 static char s_err[40];
+static bool s_scan_armed, s_karma_armed, s_clone_armed, s_stop_armed;
 static uint32_t s_last_refresh;
-static bool s_pulse;                      // 1 Hz blink for the "live" REC dot
-static bool s_panel;                      // TAB overlay: loot/details (running) or help (config)
+static bool s_pulse;
 
-static void ep_tab(void);                 // TAB handler, registered in enter()
-static void twin_autopick_template(void); // defined below; used by tick()/on_key()
+// SETUP row ids (the visible rows depend on the mode).
+enum { R_SSID, R_NET, R_SEC, R_PAGE, R_CLONE, R_GO };
+static int s_rows[6], s_nrows;
 
 static const char *effective_ssid(void)
 {
     if (s_custom[0]) return s_custom;
     return (s_ssid_n > 0) ? nucleo_evilportal_ssid_preset(s_ssid_idx) : "Free WiFi";
 }
-
-static void set_hint(void)
-{
-    if (s_panel)                     nucleo_app_set_hint("tab: chiudi pannello");
-    else if (s_state == ST_CONSENT)  nucleo_app_set_hint("invio accetto   esc esci");
-    else if (s_state == ST_SCAN)     nucleo_app_set_hint("scansione reti...");
-    else if (s_state == ST_CLONE)    nucleo_app_set_hint("clono la pagina...");
-    else if (s_state == ST_KARMA_SCAN) nucleo_app_set_hint("ascolto le probe...");
-    else if (s_state == ST_KARMA_PICK) nucleo_app_set_hint("su/giu scegli  invio usa  esc esci");
-    else if (s_state == ST_STOPPING) nucleo_app_set_hint("arresto in corso...");
-    else if (s_state == ST_RUNNING)  nucleo_app_set_hint("invio: ferma  esc: lascia on  tab: loot");
-    else if (s_mode != 0)            nucleo_app_set_hint("destra cambia  invio avvia  r scan  c clona  k karma");
-    else                             nucleo_app_set_hint("su/giu destra cambia  invio avvia  k karma  scrivi=SSID");
-}
-
-static void enter(void)
-{
-    s_ssid_n = nucleo_evilportal_ssid_count();
-    s_tpl_n  = nucleo_evilportal_template_count();
-    if (s_tpl_idx >= s_tpl_n)  s_tpl_idx = 0;
-    if (s_ssid_idx >= s_ssid_n) s_ssid_idx = 0;
-    // Prefer a real SD clone over the firmware fallback (index 0) the first time we open.
-    static bool tpl_inited = false;
-    if (!tpl_inited) { tpl_inited = true; if (s_tpl_n > 1) s_tpl_idx = 1; }
-    s_err[0] = 0; s_panel = false;
-    s_state = nucleo_evilportal_running() ? ST_RUNNING : (s_consented ? ST_CONFIG : ST_CONSENT);
-    nucleo_app_set_tab_handler(ep_tab);    // claim TAB for our overlay instead of the Control Center
-    set_hint();
-    nucleo_app_request_draw();
-}
-
-// TAB toggles a readable detail panel: live loot while running, controls guide while configuring.
-static void ep_tab(void)
-{
-    if (s_state != ST_RUNNING && s_state != ST_CONFIG) return;
-    s_panel = !s_panel;
-    set_hint();
-    nucleo_app_request_draw();
-}
-
-static void tick(void)
-{
-    // Deferred scan: only after the "Scansione..." screen has been painted (it briefly blocks).
-    if (s_state == ST_SCAN) {
-        if (!s_scan_armed) return;
-        s_ap_n = nucleo_wifiatk_scan();
-        if (s_ap_idx >= s_ap_n) s_ap_idx = 0;
-        twin_autopick_template();                  // fit the portal to the cloned brand
-        s_state = ST_CONFIG;
-        set_hint();
-        nucleo_app_request_draw();
-        return;
-    }
-    // Deferred KARMA listen: sniff probe requests for ~8s, then show the pick list. Only after the
-    // "Karma..." screen has been painted (it blocks while sniffing).
-    if (s_state == ST_KARMA_SCAN) {
-        if (!s_karma_armed) return;
-        int n = nucleo_wifiatk_karma_scan(8);
-        if (n > 0) { s_km_sel = 0; s_state = ST_KARMA_PICK; }
-        else { snprintf(s_err, sizeof s_err, n < 0 ? "Karma non disponibile" : "Nessuna probe sentita"); s_state = ST_CONFIG; }
-        set_hint(); nucleo_app_request_draw();
-        return;
-    }
-    // Deferred clone: blocks ~≤20s (join the open AP + fetch its login page). Only after the
-    // "Clono pagina..." screen has been painted, so the operator sees feedback first.
-    if (s_state == ST_CLONE) {
-        if (!s_clone_armed) return;
-        int rc = nucleo_evilportal_clone_page(nucleo_wifiatk_target_ssid(s_ap_idx));
-        s_tpl_n = nucleo_evilportal_template_count();      // a new template may have appeared
-        if (rc > 0) {
-            for (int i = 0; i < s_tpl_n; i++)              // auto-select the freshly cloned page
-                if (!strcmp(nucleo_evilportal_template_name(i), nucleo_evilportal_clone_name())) { s_tpl_idx = i; break; }
-            snprintf(s_err, sizeof s_err, "Pagina clonata (%d B)", rc);
-        } else {
-            const char *m = rc == -13 ? "Nessun captive portal" : rc == -10 ? "Join fallito"
-                          : rc == -4  ? "Occupato: riprova"      : rc == -1  ? "Portale gia attivo"
-                          : "Clone fallito";
-            snprintf(s_err, sizeof s_err, "%s", m);
-        }
-        s_state = ST_CONFIG; set_hint(); nucleo_app_request_draw();
-        return;
-    }
-    // Deferred teardown: only after the "Arresto..." screen has actually been painted, so the
-    // user sees feedback before the (briefly blocking) stop + network restore runs.
-    if (s_state == ST_STOPPING) {
-        if (!s_stop_armed) return;                 // wait for one draw of the stopping screen
-        nucleo_evilportal_stop();                  // frees DNS task + web server + heap, restores net
-        nucleo_app_exit();                         // close the app -> back to launcher
-        return;
-    }
-    if (s_state != ST_RUNNING) return;
-    uint32_t t = (uint32_t)(esp_timer_get_time() / 1000000);
-    if (t != s_last_refresh) { s_last_refresh = t; s_pulse = !s_pulse; nucleo_app_request_draw(); }  // 1 Hz live refresh
-}
-
-// True if the chosen real AP is encrypted (anything but "open"): cloning it as an OPEN twin is a
-// credibility downgrade modern clients can flag — surfaced honestly in the UI.
 static bool twin_encrypted(void)
 {
     const char *a = nucleo_wifiatk_target_auth(s_ap_idx);
     return a[0] && strcmp(a, "open") != 0;
 }
-
-// Pick the SD/built-in template whose name is contained in the SSID (case-insensitive), so a clone
-// of "TIM-1234" uses tim.html etc. — a context-fitting page, not a generic one. -1 if no match.
 static int template_for_ssid(const char *ssid)
 {
     int n = nucleo_evilportal_template_count();
     for (int i = 0; i < n; i++) {
         const char *nm = nucleo_evilportal_template_name(i);
         size_t ln = nm ? strlen(nm) : 0;
-        if (ln < 3) continue;                     // skip vague names ("Default") to avoid false hits
+        if (ln < 3) continue;
         for (const char *p = ssid; *p; p++) {
             size_t k = 0;
             while (p[k] && k < ln && tolower((unsigned char)p[k]) == tolower((unsigned char)nm[k])) k++;
@@ -219,8 +123,6 @@ static int template_for_ssid(const char *ssid)
     }
     return -1;
 }
-
-// In Gemello, fit the portal to the cloned brand automatically (user can still change it after).
 static void twin_autopick_template(void)
 {
     if (s_mode == 0 || s_ap_n <= 0) return;
@@ -228,360 +130,511 @@ static void twin_autopick_template(void)
     if (t >= 0) s_tpl_idx = t;
 }
 
-static void start_portal(void)
+// Rebuild the SETUP row layout for the current mode.
+static void build_rows(void)
 {
-    int rc;
-    if (s_mode == 0) {                          // Civetta: fake SSID, channel 1, no deauth
-        rc = nucleo_evilportal_start(effective_ssid(), s_tpl_idx);
-    } else {                                    // Gemello (1=cattura/open, 2=coerente/WPA2) + deauth
-        if (s_ap_n <= 0) { snprintf(s_err, sizeof s_err, "Nessuna rete: premi R"); set_hint(); nucleo_app_request_draw(); return; }
-        unsigned char b[6]; nucleo_wifiatk_target_bssid_bytes(s_ap_idx, b);
-        rc = nucleo_evilportal_start_twin(nucleo_wifiatk_target_ssid(s_ap_idx), s_tpl_idx, b,
-                                          nucleo_wifiatk_target_channel(s_ap_idx),
-                                          nucleo_wifiatk_target_authmode(s_ap_idx),
-                                          s_mode == 2);
+    s_nrows = 0;
+    if (s_mode == 0) { s_rows[s_nrows++] = R_SSID; s_rows[s_nrows++] = R_PAGE; s_rows[s_nrows++] = R_GO; }
+    else { s_rows[s_nrows++] = R_NET; s_rows[s_nrows++] = R_SEC; s_rows[s_nrows++] = R_PAGE;
+           s_rows[s_nrows++] = R_CLONE; s_rows[s_nrows++] = R_GO; }
+    if (s_sel >= s_nrows) s_sel = 0;
+}
+
+static void set_hint(void)
+{
+    if (s_menu)                       nucleo_app_set_hint("su/giu  invio scegli  tab/esc chiudi");
+    else switch (s_state) {
+        case ST_CONSENT:   nucleo_app_set_hint("invio accetto   esc esci"); break;
+        case ST_HOME:      nucleo_app_set_hint("su/giu  invio apri  tab menu  esc esci"); break;
+        case ST_TARGETS:   nucleo_app_set_hint("su/giu  invio scegli  r riscan  esc indietro"); break;
+        case ST_KARMA:     nucleo_app_set_hint("su/giu  invio usa  r riascolta  esc indietro"); break;
+        case ST_SSID:      nucleo_app_set_hint("su/giu  invio scegli  esc indietro"); break;
+        case ST_TYPE:      nucleo_app_set_hint("scrivi  invio ok  canc  esc indietro"); break;
+        case ST_PAGE:      nucleo_app_set_hint("su/giu  invio scegli  esc indietro"); break;
+        case ST_SETUP:     nucleo_app_set_hint("su/giu  invio modifica  tab menu  esc indietro"); break;
+        case ST_RUNNING:   nucleo_app_set_hint("invio ferma  tab menu  esc lascia attivo"); break;
+        case ST_LOOT:      nucleo_app_set_hint("esc indietro"); break;
+        case ST_GUIDE:     nucleo_app_set_hint("esc indietro"); break;
+        case ST_SCAN:      nucleo_app_set_hint("scansione reti..."); break;
+        case ST_KARMA_SCAN:nucleo_app_set_hint("ascolto le probe..."); break;
+        case ST_CLONE:     nucleo_app_set_hint("clono la pagina..."); break;
+        case ST_STOPPING:  nucleo_app_set_hint("arresto in corso..."); break;
     }
-    if (rc == 0) { s_state = ST_RUNNING; s_err[0] = 0; }
-    else snprintf(s_err, sizeof s_err, "Avvio fallito (err %d)", rc);
+}
+
+static void go(int st) { s_state = st; s_sel = 0; set_hint(); nucleo_app_request_draw(); }
+
+// ---- forward decls ----------------------------------------------------------
+static void ep_tab(void);
+static bool ep_back(int key);
+
+static void enter(void)
+{
+    s_ssid_n = nucleo_evilportal_ssid_count();
+    s_tpl_n  = nucleo_evilportal_template_count();
+    if (s_tpl_idx >= s_tpl_n)  s_tpl_idx = 0;
+    if (s_ssid_idx >= s_ssid_n) s_ssid_idx = 0;
+    static bool tpl_inited = false;
+    if (!tpl_inited) { tpl_inited = true; if (s_tpl_n > 1) s_tpl_idx = 1; }   // prefer a real SD clone
+    s_err[0] = 0; s_menu = false;
+    nucleo_app_set_tab_handler(ep_tab);
+    nucleo_app_set_back_handler(ep_back);
+    s_state = nucleo_evilportal_running() ? ST_RUNNING : (s_consented ? ST_HOME : ST_CONSENT);
     set_hint();
     nucleo_app_request_draw();
 }
 
-static void on_key(int key, char ch)
+// ---- start --------------------------------------------------------------------
+static void start_portal(void)
 {
-    if (s_panel) {                                 // panel is modal: Enter closes it, rest ignored
-        if (key == NK_ENTER) { s_panel = false; set_hint(); nucleo_app_request_draw(); }
-        return;
-    }
-    if (s_state == ST_CONSENT) {
-        if (key == NK_ENTER) { s_consented = true; s_state = ST_CONFIG; set_hint(); nucleo_app_request_draw(); }
-        return;
-    }
-    if (s_state == ST_KARMA_PICK) {                // choose a probed SSID to wear as the lure
-        int n = nucleo_wifiatk_karma_count();
-        if (key == NK_UP)        { s_km_sel = (s_km_sel + (n ? n : 1) - 1) % (n ? n : 1); nucleo_app_request_draw(); }
-        else if (key == NK_DOWN) { s_km_sel = (s_km_sel + 1) % (n ? n : 1); nucleo_app_request_draw(); }
-        else if (key == NK_ENTER && n > 0) {       // adopt it as a Civetta SSID and return to config
-            snprintf(s_custom, sizeof s_custom, "%s", nucleo_wifiatk_karma_ssid(s_km_sel));
-            s_mode = 0; s_row = 1;                  // Civetta, focus the SSID row
-            snprintf(s_err, sizeof s_err, "Karma: %.20s", s_custom);
-            s_state = ST_CONFIG; set_hint(); nucleo_app_request_draw();
-        }
-        return;
-    }
-    if (s_state == ST_SCAN || s_state == ST_CLONE || s_state == ST_KARMA_SCAN || s_state == ST_STOPPING) return;   // busy: ignore keys
-    if (s_state == ST_RUNNING) {
-        // Enter = ferma e chiudi: paint the "Arresto..." screen, the actual stop runs in tick().
-        if (key == NK_ENTER) { s_state = ST_STOPPING; s_stop_armed = false; set_hint(); nucleo_app_request_draw(); }
-        return;
-    }
-    // ST_CONFIG. Rows: 0 Modo, 1 SSID(civetta)/Rete(gemello), 2 Pagina, 3 AVVIA.
-    switch (key) {
-        case NK_UP:    s_row = (s_row + CFG_ROWS - 1) % CFG_ROWS; break;
-        case NK_DOWN:  s_row = (s_row + 1) % CFG_ROWS;           break;
-        case NK_RIGHT:
-            if (s_row == 0) {
-                s_mode = (s_mode + 1) % 3;             // Civetta -> Gemello cattura -> Gemello coerente
-                if (s_mode >= 1 && s_ap_n == 0) {      // entering a Gemello mode with no scan yet -> scan
-                    s_state = ST_SCAN; s_scan_armed = false; set_hint(); nucleo_app_request_draw(); return;
-                }
-                if (s_mode >= 1) twin_autopick_template();   // entering Gemello with APs already scanned
-            } else if (s_row == 1) {
-                if (s_mode == 0) { if (s_ssid_n > 0) { s_ssid_idx = (s_ssid_idx + 1) % s_ssid_n; s_custom[0] = 0; } }
-                else             { if (s_ap_n   > 0) { s_ap_idx = (s_ap_idx + 1) % s_ap_n; twin_autopick_template(); } }
-            } else if (s_row == 2) {
-                if (s_tpl_n > 0) s_tpl_idx = (s_tpl_idx + 1) % s_tpl_n;
-            }
-            break;
-        case NK_ENTER: start_portal(); return;
-        case NK_DEL:
-            if (s_row == 1 && s_mode == 0) { int l = strlen(s_custom); if (l) s_custom[l - 1] = 0; }
-            break;
-        case NK_CHAR:
-            if ((ch == 'r' || ch == 'R') && s_mode != 0) {   // rescan real APs (no custom typing in Gemello)
-                s_state = ST_SCAN; s_scan_armed = false; set_hint(); nucleo_app_request_draw(); return;
-            }
-            if ((ch == 'c' || ch == 'C') && s_mode != 0) {   // clone the selected open AP's login page
-                if (s_ap_n <= 0)        snprintf(s_err, sizeof s_err, "Scansiona prima: premi R");
-                else if (twin_encrypted()) snprintf(s_err, sizeof s_err, "Rete non aperta: no portale");
-                else { s_state = ST_CLONE; s_clone_armed = false; set_hint(); nucleo_app_request_draw(); return; }
-                nucleo_app_request_draw(); return;
-            }
-            if ((ch == 'k' || ch == 'K') && !(s_mode == 0 && s_row == 1)) {   // KARMA: listen for probed SSIDs
-                s_state = ST_KARMA_SCAN; s_karma_armed = false; set_hint(); nucleo_app_request_draw(); return;
-            }
-            if (s_row == 1 && s_mode == 0 && ch > ' ' && ch < 127) { int l = strlen(s_custom); if (l < 32) { s_custom[l] = ch; s_custom[l + 1] = 0; } }
-            break;
-        default: return;
-    }
-    nucleo_app_request_draw();
-}
-
-// ---- drawing ----------------------------------------------------------------
-static void draw_consent(int top, int h)
-{
-    (void)top; (void)h;
-    app_ui_title("Evil Portal", EP_RED, "AUTH");
-    // Readable headline (size 2), then the explanation in size 1.
-    d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 28); d.print("Test autorizzati");
-    const char *lines[] = {
-        "AP civetta + pagina di login",
-        "clonata: salva su SD le",
-        "credenziali inviate.",
-        "",
-        "Solo su reti tue o con",
-        "permesso scritto (CTF, audit).",
-    };
-    unsigned short cols[] = { FG, FG, FG, BG, MUTED, MUTED };
-    d.setTextSize(1);
-    for (int i = 0; i < 6; i++) { d.setTextColor(cols[i], BG); d.setCursor(10, 52 + i * 11); d.print(lines[i]); }
-}
-
-// A 28px-tall setting row, smartwatch style: the focused row is a filled accent pill with a
-// size-2 (readable) label; unfocused rows are a dim size-1 line with a colour dot. The value
-// sits on the right at size 1, truncated to the space left of the label.
-static void cfg_row(int y, bool focus, const char *label, const char *value, unsigned short vcol)
-{
-    const char *v = value && value[0] ? value : "-";
-    if (focus) {
-        d.fillRoundRect(6, y, 228, 28, 6, EP_RED);
-        d.setTextSize(2); d.setTextColor(INK, EP_RED); d.setCursor(14, y + 6); d.print(label);
-        char b[26]; snprintf(b, sizeof b, "%.22s", v);
-        int w = (int)strlen(b) * 6; d.setTextSize(1); d.setTextColor(INK, EP_RED);
-        d.setCursor(226 - w, y + 18); d.print(b);
-    } else {
-        d.fillCircle(13, y + 14, 3, vcol);
-        d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(24, y + 5); d.print(label);
-        char b[26]; snprintf(b, sizeof b, "%.22s", v);
-        int w = (int)strlen(b) * 6; d.setTextColor(DIM, BG); d.setCursor(226 - w, y + 16); d.print(b);
-    }
-}
-
-static void draw_config(int top, int h)
-{
-    (void)top; (void)h;
-    const char *badge = s_mode == 0 ? "CIVETTA" : s_mode == 1 ? "GEMELLO" : "COERENTE";
-    app_ui_title("Evil Portal", EP_RED, badge);
-
-    const char *mv = s_mode == 0 ? "Civetta (finta)" : s_mode == 1 ? "Gemello (cattura)" : "Gemello (coerente)";
-    cfg_row(22, s_row == 0, "Modo", mv, s_mode == 0 ? GRN : s_mode == 1 ? YEL : EP_CYAN);
-
+    int rc;
     if (s_mode == 0) {
-        char sl[20]; snprintf(sl, sizeof sl, "SSID%s", s_custom[0] ? "*" : "");
-        cfg_row(49, s_row == 1, sl, effective_ssid(), GRN);
+        rc = nucleo_evilportal_start(effective_ssid(), s_tpl_idx);
     } else {
-        char rv[44];
-        // Show the real AP's beacon fingerprint (WPA2 CCMP bgn WPS) — what a credible twin must match.
-        if (s_ap_n > 0) snprintf(rv, sizeof rv, "%.10s c%d %s", nucleo_wifiatk_target_ssid(s_ap_idx),
-                                 nucleo_wifiatk_target_channel(s_ap_idx), nucleo_wifiatk_target_fingerprint(s_ap_idx));
-        else            snprintf(rv, sizeof rv, "(premi R)");
-        // Amber dot = cattura/open twin of an encrypted AP is a visible security downgrade; cyan =
-        // coerente (WPA2 cloned, identity matches); green = open target, nothing to downgrade.
-        bool enc = (s_ap_n > 0) && twin_encrypted();
-        unsigned short dot = (enc && s_mode == 1) ? YEL : (s_mode == 2 ? EP_CYAN : GRN);
-        cfg_row(49, s_row == 1, "Rete", rv, dot);
+        if (s_ap_n <= 0) { snprintf(s_err, sizeof s_err, "Nessuna rete: riscan"); set_hint(); nucleo_app_request_draw(); return; }
+        unsigned char b[6]; nucleo_wifiatk_target_bssid_bytes(s_ap_idx, b);
+        rc = nucleo_evilportal_start_twin(nucleo_wifiatk_target_ssid(s_ap_idx), s_tpl_idx, b,
+                                          nucleo_wifiatk_target_channel(s_ap_idx),
+                                          nucleo_wifiatk_target_authmode(s_ap_idx), s_mode == 2);
     }
-    cfg_row(76, s_row == 2, "Pagina", s_tpl_n ? nucleo_evilportal_template_name(s_tpl_idx) : "-", YEL);
+    if (rc == 0) { s_err[0] = 0; go(ST_RUNNING); }
+    else { snprintf(s_err, sizeof s_err, "Avvio fallito (err %d)", rc); set_hint(); nucleo_app_request_draw(); }
+}
 
-    // Action button — or the error message (red) drawn in its place.
-    bool go = (s_row == 3);
-    d.fillRoundRect(6, 103, 228, 16, 4, (go && !s_err[0]) ? EP_RED : PANEL);
-    if (s_err[0]) {
-        d.setTextSize(1); d.setTextColor(EP_RED, PANEL);
-        d.setCursor(120 - (int)strlen(s_err) * 3, 107); d.print(s_err);
-    } else {
-        const char *btn = "AVVIA";
-        d.setTextSize(2); d.setTextColor(go ? INK : EP_RED, go ? EP_RED : PANEL);
-        d.setCursor(120 - (int)strlen(btn) * 6, 104); d.print(btn);
+// ---- deferred (busy) work ----------------------------------------------------
+static void tick(void)
+{
+    if (s_state == ST_SCAN) {
+        if (!s_scan_armed) return;
+        s_ap_n = nucleo_wifiatk_scan();
+        if (s_ap_idx >= s_ap_n) s_ap_idx = 0;
+        go(ST_TARGETS); return;
     }
+    if (s_state == ST_KARMA_SCAN) {
+        if (!s_karma_armed) return;
+        int n = nucleo_wifiatk_karma_scan(8);
+        if (n > 0) { s_km_sel = 0; go(ST_KARMA); }
+        else { snprintf(s_err, sizeof s_err, n < 0 ? "Karma non disponibile" : "Nessuna probe sentita"); go(ST_HOME); }
+        return;
+    }
+    if (s_state == ST_CLONE) {
+        if (!s_clone_armed) return;
+        int rc = nucleo_evilportal_clone_page(nucleo_wifiatk_target_ssid(s_ap_idx));
+        s_tpl_n = nucleo_evilportal_template_count();
+        if (rc > 0) {
+            for (int i = 0; i < s_tpl_n; i++)
+                if (!strcmp(nucleo_evilportal_template_name(i), nucleo_evilportal_clone_name())) { s_tpl_idx = i; break; }
+            snprintf(s_err, sizeof s_err, "Pagina clonata (%d B)", rc);
+        } else {
+            const char *m = rc == -13 ? "Nessun captive portal" : rc == -10 ? "Join fallito"
+                          : rc == -4  ? "Occupato: riprova"      : rc == -1  ? "Portale gia attivo"
+                          : "Clone fallito";
+            snprintf(s_err, sizeof s_err, "%s", m);
+        }
+        build_rows(); go(ST_SETUP); return;
+    }
+    if (s_state == ST_STOPPING) {
+        if (!s_stop_armed) return;
+        nucleo_evilportal_stop();
+        nucleo_app_exit();
+        return;
+    }
+    if (s_state != ST_RUNNING) return;
+    uint32_t t = (uint32_t)(esp_timer_get_time() / 1000000);
+    if (t != s_last_refresh) { s_last_refresh = t; s_pulse = !s_pulse; nucleo_app_request_draw(); }
 }
 
-static void draw_scan(int h)
-{
-    app_ui_title("Evil Portal", EP_RED, "");
-    d.setTextSize(2); d.setTextColor(FG, BG);    d.setCursor(10, h / 2 - 14); d.print("Scansione...");
-    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, h / 2 + 6);  d.print("Cerco le reti reali vicine.");
-    s_scan_armed = true;
-}
+// ---- a reusable list renderer ------------------------------------------------
+typedef void (*row_get)(int idx, char *name, int nc, char *val, int vc, unsigned short *dot);
 
-static void draw_karma_scan(int h)
+static void ui_list(const char *title, const char *badge, int n, int sel, row_get get,
+                    const char *empty, const char *footer)
 {
-    app_ui_title("Evil Portal", EP_RED, "KARMA");
-    d.setTextSize(2); d.setTextColor(FG, BG);    d.setCursor(10, h / 2 - 14); d.print("Karma...");
-    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, h / 2 + 6);
-    d.print("Ascolto chi cerca quali reti.");
-    s_karma_armed = true;
-}
-
-static void draw_karma_pick(int top, int h)
-{
-    (void)top;
-    app_ui_title("Karma: reti cercate", EP_RED, "");
-    int n = nucleo_wifiatk_karma_count();
-    if (n == 0) { d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, 40); d.print("nessuna probe."); return; }
-    // Up to 6 rows; keep the selection visible with a simple window.
-    int rows = 6, first = s_km_sel - rows / 2;
-    if (first < 0) first = 0;
+    int h = nucleo_app_content_height();
+    app_ui_title(title, EP_RED, badge);
+    if (n <= 0) {
+        d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(12, 44); d.print(empty ? empty : "(vuoto)");
+    }
+    const int rows = 6;
+    int first = sel - rows / 2; if (first < 0) first = 0;
     if (first > n - rows) first = (n > rows) ? n - rows : 0;
     for (int i = 0; i < rows && first + i < n; i++) {
-        int idx = first + i, y = 24 + i * 16;
-        bool sel = (idx == s_km_sel);
-        if (sel) d.fillRoundRect(6, y - 2, 228, 16, 4, PANEL);
-        d.setTextSize(1); d.setTextColor(sel ? FG : MUTED, sel ? PANEL : BG);
-        char row[40]; snprintf(row, sizeof row, "%.24s", nucleo_wifiatk_karma_ssid(idx));
-        d.setCursor(12, y + 2); d.print(row);
-        char hb[10]; snprintf(hb, sizeof hb, "x%d", nucleo_wifiatk_karma_hits(idx));
-        d.setTextColor(sel ? YEL : DIM, sel ? PANEL : BG); d.setCursor(210, y + 2); d.print(hb);
+        int idx = first + i, y = 24 + i * 16; bool s = (idx == sel);
+        char name[40] = ""; char val[24] = ""; unsigned short dot = EP_RED;
+        get(idx, name, sizeof name, val, sizeof val, &dot);
+        if (s) d.fillRoundRect(6, y - 2, 228, 16, 4, PANEL);
+        else   d.fillCircle(13, y + 6, 3, dot);
+        d.setTextSize(1); d.setTextColor(s ? FG : MUTED, s ? PANEL : BG);
+        d.setCursor(s ? 12 : 22, y + 2); d.print(name);
+        if (val[0]) { int w = (int)strlen(val) * 6; d.setTextColor(s ? YEL : DIM, s ? PANEL : BG);
+                      d.setCursor(226 - w, y + 2); d.print(val); }
     }
-    d.setTextSize(1); d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print("invio: usa come SSID civetta");
+    if (n > rows) {   // tiny scroll hint
+        d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(228, 24); d.print("^");
+        d.setCursor(228, 24 + (rows - 1) * 16); d.print("v");
+    }
+    if (footer) { d.setTextSize(1); d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print(footer); }
 }
 
-static void draw_clone(int h)
+// ---- per-screen row getters --------------------------------------------------
+static const char *HOME_N[] = { "Civetta", "Gemello", "KARMA", "Loot" };
+static const char *HOME_D[] = { "AP con SSID a scelta", "clona un AP reale vicino",
+                                "esca dalle reti cercate", "credenziali catturate" };
+static const unsigned short HOME_C[] = { GRN, EP_CYAN, YEL, EP_RED };
+static void get_home(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
+{
+    snprintf(name, nc, "%s", HOME_N[i]); (void)val; (void)vc; *dot = HOME_C[i];
+}
+static void get_targets(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
+{
+    const char *ss = nucleo_wifiatk_target_ssid(i);
+    snprintf(name, nc, "%.18s", ss[0] ? ss : "(hidden)");
+    snprintf(val, vc, "c%d %ddB", nucleo_wifiatk_target_channel(i), nucleo_wifiatk_target_rssi(i));
+    const char *a = nucleo_wifiatk_target_auth(i);
+    *dot = (!a[0] || !strcmp(a, "open")) ? GRN : YEL;     // green = open (cloneable as open)
+}
+static void get_karma(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
+{
+    snprintf(name, nc, "%.20s", nucleo_wifiatk_karma_ssid(i));
+    snprintf(val, vc, "x%d", nucleo_wifiatk_karma_hits(i)); *dot = YEL;
+}
+static void get_ssid(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
+{
+    if (i == 0) { snprintf(name, nc, "Scrivi un nome..."); *dot = EP_CYAN; (void)val; (void)vc; return; }
+    snprintf(name, nc, "%.22s", nucleo_evilportal_ssid_preset(i - 1)); *dot = GRN; (void)val; (void)vc;
+}
+static void get_page(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
+{
+    snprintf(name, nc, "%.24s", nucleo_evilportal_template_name(i)); *dot = YEL; (void)val; (void)vc;
+}
+static void get_loot(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
+{
+    snprintf(name, nc, "%.18s", nucleo_evilportal_recent_user(i));
+    snprintf(val, vc, "%.12s", nucleo_evilportal_recent_pass(i)); *dot = EP_RED;
+}
+
+// TAB options menu (context-sensitive).
+static const char *menu_item(int i)
+{
+    if (nucleo_evilportal_running()) { static const char *R[] = { "Loot catture", "Ferma portale", "Guida" }; return R[i]; }
+    static const char *N[] = { "Loot catture", "Guida" }; return N[i];
+}
+static int menu_count(void) { return nucleo_evilportal_running() ? 3 : 2; }
+static const char *menu_title(void) { return nucleo_evilportal_running() ? "PORTALE ATTIVO" : "MENU"; }
+static void get_menu(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
+{
+    snprintf(name, nc, "%s", menu_item(i)); (void)val; (void)vc; *dot = EP_RED;
+}
+
+// ---- drawing -----------------------------------------------------------------
+static void draw_consent(int h)
+{
+    app_ui_title("Evil Portal", EP_RED, "AUTH");
+    d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 28); d.print("Test autorizzati");
+    const char *L[] = { "AP civetta + pagina di login", "clonata: salva su SD le",
+                        "credenziali inviate.", "", "Solo reti tue o con permesso", "scritto (CTF, audit)." };
+    unsigned short C[] = { FG, FG, FG, BG, MUTED, MUTED };
+    d.setTextSize(1);
+    for (int i = 0; i < 6; i++) { d.setTextColor(C[i], BG); d.setCursor(10, 52 + i * 11); d.print(L[i]); }
+    (void)h;
+}
+
+// HOME: a two-line menu (name + description) so each choice explains itself.
+static void draw_home(int h)
 {
     app_ui_title("Evil Portal", EP_RED, "");
-    d.setTextSize(2); d.setTextColor(FG, BG);    d.setCursor(10, h / 2 - 18); d.print("Clono pagina...");
-    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, h / 2 + 4);
-    char l[40]; snprintf(l, sizeof l, "Mi unisco a %.16s", nucleo_wifiatk_target_ssid(s_ap_idx));
-    d.print(l);
-    d.setTextColor(DIM, BG); d.setCursor(10, h / 2 + 16); d.print("scarico il login (max ~20s).");
-    s_clone_armed = true;
+    for (int i = 0; i < 4; i++) {
+        int y = 24 + i * 25; bool s = (i == s_home_sel);
+        if (s) d.fillRoundRect(6, y - 2, 228, 23, 6, PANEL);
+        else   d.fillCircle(13, y + 8, 3, HOME_C[i]);
+        d.setTextSize(2); d.setTextColor(s ? FG : MUTED, s ? PANEL : BG); d.setCursor(s ? 12 : 22, y); d.print(HOME_N[i]);
+        if (i == 3) { int c = nucleo_evilportal_captures(); if (c) { char b[8]; snprintf(b, sizeof b, "%d", c);
+                      d.setTextColor(s ? YEL : EP_RED, s ? PANEL : BG); d.setCursor(210, y + 2); d.print(b); } }
+        d.setTextSize(1); d.setTextColor(s ? YEL : DIM, s ? PANEL : BG); d.setCursor(s ? 12 : 22, y + 15); d.print(HOME_D[i]);
+    }
+    if (nucleo_evilportal_running()) { d.setTextSize(1); d.setTextColor(EP_RED, BG); d.setCursor(10, h - 9);
+                                       d.print("portale ATTIVO - invio su Loot per gestirlo"); }
 }
 
-// Hero counter: tiny label + a big size-3 number, centred in a half-width column.
+static void row_line(int y, bool sel, const char *label, const char *val, unsigned short vcol)
+{
+    if (sel) { d.fillRoundRect(6, y, 228, 22, 6, EP_RED);
+               d.setTextSize(2); d.setTextColor(INK, EP_RED); d.setCursor(12, y + 4); d.print(label);
+               char b[24]; snprintf(b, sizeof b, "%.20s", val && val[0] ? val : "-");
+               int w = (int)strlen(b) * 6; d.setTextSize(1); d.setTextColor(INK, EP_RED);
+               d.setCursor(226 - w, y + 13); d.print(b); }
+    else { d.fillCircle(13, y + 11, 3, vcol);
+           d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(24, y + 3); d.print(label);
+           char b[24]; snprintf(b, sizeof b, "%.20s", val && val[0] ? val : "-");
+           int w = (int)strlen(b) * 6; d.setTextColor(DIM, BG); d.setCursor(226 - w, y + 13); d.print(b); }
+}
+
+static void draw_setup(int h)
+{
+    const char *badge = s_mode == 0 ? "CIVETTA" : s_mode == 1 ? "GEMELLO" : "COERENTE";
+    app_ui_title("Configura", EP_RED, badge);
+    for (int i = 0; i < s_nrows; i++) {
+        int y = 22 + i * 19; bool s = (i == s_sel);
+        char val[40];
+        switch (s_rows[i]) {
+            case R_SSID: snprintf(val, sizeof val, "%s%s", effective_ssid(), s_custom[0] ? " *" : "");
+                         row_line(y, s, "SSID", val, GRN); break;
+            case R_NET:
+                if (s_ap_n > 0) snprintf(val, sizeof val, "%.10s %s", nucleo_wifiatk_target_ssid(s_ap_idx),
+                                         nucleo_wifiatk_target_fingerprint(s_ap_idx));
+                else snprintf(val, sizeof val, "(scegli)");
+                row_line(y, s, "Rete", val, (s_ap_n > 0 && twin_encrypted() && s_mode == 1) ? YEL : EP_CYAN); break;
+            case R_SEC: row_line(y, s, "Sicurezza", s_mode == 2 ? "Coerente (no login)" : "Cattura (open)",
+                                 s_mode == 2 ? EP_CYAN : YEL); break;
+            case R_PAGE: row_line(y, s, "Pagina", s_tpl_n ? nucleo_evilportal_template_name(s_tpl_idx) : "-", YEL); break;
+            case R_CLONE: row_line(y, s, "Clona pagina", s_ap_n > 0 && !twin_encrypted() ? "rete aperta: ok" : "serve rete aperta", GRN); break;
+            case R_GO:
+                if (s) { d.fillRoundRect(6, y, 228, 20, 6, GRN); d.setTextSize(2); d.setTextColor(INK, GRN);
+                         d.setCursor(92, y + 3); d.print("AVVIA"); }
+                else  { d.drawRoundRect(6, y, 228, 20, 6, GRN); d.setTextSize(2); d.setTextColor(GRN, BG);
+                        d.setCursor(92, y + 3); d.print("AVVIA"); }
+                break;
+        }
+    }
+    if (s_err[0]) { d.setTextSize(1); d.setTextColor(s_err[0] == 'P' ? GRN : EP_RED, BG);
+                    d.setCursor(10, h - 9); d.print(s_err); }
+}
+
+static void draw_type(int h)
+{
+    app_ui_title("Nome rete", EP_RED, "");
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 28); d.print("Scrivi l'SSID civetta:");
+    d.drawRect(8, 44, 224, 20, LINE);
+    d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(12, 47); d.print(s_custom);
+    if (s_pulse) { int cx = 12 + s_typelen * 12; d.fillRect(cx, 47, 9, 14, EP_RED); }
+    (void)h;
+}
+
+static void draw_busy(const char *title, const char *msg, int h)
+{
+    app_ui_title("Evil Portal", EP_RED, "");
+    d.setTextSize(2); d.setTextColor(FG, BG);    d.setCursor(10, h / 2 - 14); d.print(title);
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, h / 2 + 6);  d.print(msg);
+}
+
 static void tile(int cx, const char *label, const char *val, unsigned short col)
 {
-    d.setTextSize(1); d.setTextColor(MUTED, BG);
-    d.setCursor(cx - (int)strlen(label) * 3, 40); d.print(label);
-    d.setTextSize(3); d.setTextColor(col, BG);
-    d.setCursor(cx - (int)strlen(val) * 9, 52); d.print(val);     // size-3 glyphs are ~18 px wide
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(cx - (int)strlen(label) * 3, 40); d.print(label);
+    d.setTextSize(3); d.setTextColor(col, BG);   d.setCursor(cx - (int)strlen(val) * 9, 52); d.print(val);
 }
 
-static void draw_running(int top, int h)
+static void draw_running(int h)
 {
-    (void)top;
-    // Header: title + pulsing REC dot + elapsed time (readable size-2 title from app_ui_title).
     app_ui_title("Evil Portal", EP_RED, "");
     if (s_pulse) d.fillCircle(150, 9, 4, EP_RED);
     d.setTextSize(1); d.setTextColor(EP_RED, BG); d.setCursor(160, 7); d.print("REC");
-    if (nucleo_evilportal_twin()) {
-        bool coh = nucleo_evilportal_twin_coherent();
-        d.setTextColor(coh ? EP_CYAN : 0xF81F /*magenta*/, BG); d.setCursor(110, 7); d.print(coh ? "TWIN-C" : "TWIN");
-    }
+    if (nucleo_evilportal_twin()) { bool coh = nucleo_evilportal_twin_coherent();
+        d.setTextColor(coh ? EP_CYAN : 0xF81F, BG); d.setCursor(110, 7); d.print(coh ? "TWIN-C" : "TWIN"); }
     unsigned up = nucleo_evilportal_uptime_s();
     char el[10]; snprintf(el, sizeof el, "%02u:%02u", up / 60, up % 60);
     d.setTextColor(MUTED, BG); d.setCursor(238 - (int)strlen(el) * 6, 7); d.print(el);
 
-    // SSID being broadcast (green, the live "this is what they see").
     int caps = nucleo_evilportal_captures();
     char ss[26]; snprintf(ss, sizeof ss, "%.24s", nucleo_evilportal_ssid());
     d.setTextSize(1); d.setTextColor(GRN, BG); d.setCursor(10, 28); d.print(ss);
-
-    // Two big hero counters; "conf N" badge flags how many captures were re-entered identically.
     char cl[8]; snprintf(cl, sizeof cl, "%d", nucleo_evilportal_clients());
     char cp[8]; snprintf(cp, sizeof cp, "%d", caps);
-    tile(62,  "CLIENT",  cl, FG);
-    tile(178, "CATTURE", cp, caps ? EP_RED : MUTED);
+    tile(62, "CLIENT", cl, FG); tile(178, "CATTURE", cp, caps ? EP_RED : MUTED);
     int conf = nucleo_evilportal_confirmed();
-    if (conf > 0) {
-        char cf[12]; snprintf(cf, sizeof cf, "conf %d", conf);
-        d.setTextSize(1); d.setTextColor(GRN, BG);
-        d.setCursor(178 - (int)strlen(cf) * 3, 74); d.print(cf);
-    }
-
-    // Newest capture, full-width and readable; "..." prompt while empty.
+    if (conf > 0) { char cf[12]; snprintf(cf, sizeof cf, "conf %d", conf); d.setTextSize(1);
+                    d.setTextColor(GRN, BG); d.setCursor(178 - (int)strlen(cf) * 3, 74); d.print(cf); }
     d.drawFastHLine(10, 84, 220, LINE);
-    if (caps == 0) {
-        // Coherent twin can't take logins (clients need the real PSK) — say so instead of "waiting".
-        const char *empty = nucleo_evilportal_twin_coherent()
-                          ? "coerente: identita clonata, no login"
-                          : "in attesa di vittime...";
-        d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, 92); d.print(empty);
-    } else {
-        d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 90); d.print("ultima:");
-        char u[26]; snprintf(u, sizeof u, "%.24s", nucleo_evilportal_last_user());
-        char p[26]; snprintf(p, sizeof p, "%.24s", nucleo_evilportal_last_pass());
-        d.setTextColor(FG, BG);  d.setCursor(58, 90);  d.print(u);
-        d.setTextColor(EP_RED, BG); d.setCursor(10, 101); d.print(p);
-    }
-
-    // Footer: how to close. TAB = full loot. In twin mode it also shows the live deauth stats.
+    if (caps == 0) { const char *e = nucleo_evilportal_twin_coherent() ? "coerente: identita clonata, no login"
+                                                                       : "in attesa di vittime...";
+                     d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, 92); d.print(e); }
+    else { d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 90); d.print("ultima:");
+           char u[26]; snprintf(u, sizeof u, "%.24s", nucleo_evilportal_last_user());
+           char p[26]; snprintf(p, sizeof p, "%.24s", nucleo_evilportal_last_pass());
+           d.setTextColor(FG, BG); d.setCursor(58, 90); d.print(u);
+           d.setTextColor(EP_RED, BG); d.setCursor(10, 101); d.print(p); }
     d.setTextSize(1); d.setTextColor(YEL, BG); d.setCursor(10, h - 9);
-    if (nucleo_evilportal_twin()) {
-        char tf[44]; snprintf(tf, sizeof tf, "%s ch%d deauth%lu  invio:ferma",
-                              nucleo_evilportal_twin_coherent() ? "GEM-C" : "GEM",
-                              nucleo_evilportal_twin_channel(), nucleo_evilportal_deauth_frames());
-        d.print(tf);
-    } else {
-        d.print("invio: ferma   tab: loot");
-    }
+    if (nucleo_evilportal_twin()) { char tf[44]; snprintf(tf, sizeof tf, "%s ch%d deauth%lu  tab:menu",
+                                    nucleo_evilportal_twin_coherent() ? "GEM-C" : "GEM",
+                                    nucleo_evilportal_twin_channel(), nucleo_evilportal_deauth_frames()); d.print(tf); }
+    else d.print("invio: ferma   tab: menu");
 }
 
-// TAB panel — readable detail view. Running: live loot list + stats. Config: controls guide.
-static void draw_panel(int top, int h)
+static void draw_guide(int h)
 {
-    (void)top;
-    if (s_state == ST_RUNNING) {
-        app_ui_title("Loot", EP_RED, "");
-        unsigned up = nucleo_evilportal_uptime_s();
-        char s[52]; snprintf(s, sizeof s, "%02u:%02u  cli %d  catt %d  conf %d",
-                             up / 60, up % 60, nucleo_evilportal_clients(),
-                             nucleo_evilportal_captures(), nucleo_evilportal_confirmed());
-        d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 28); d.print(s);
-        int n = nucleo_evilportal_recent_count();          // up to the ring depth (6)
-        if (n == 0) { d.setTextColor(DIM, BG); d.setCursor(10, 44); d.print("nessuna cattura."); }
-        for (int i = 0; i < n; i++) {
-            char row[44];
-            snprintf(row, sizeof row, "%.18s  %.14s", nucleo_evilportal_recent_user(i), nucleo_evilportal_recent_pass(i));
-            d.setTextColor(i == 0 ? FG : MUTED, BG); d.setCursor(10, 42 + i * 11); d.print(row);
-        }
-        d.setTextColor(DIM, BG); d.setCursor(10, h - 9); d.print("salvato su /sd/evilportal/loot/");
-    } else {
-        app_ui_title("Guida", EP_RED, "");
-        const char *l[] = {
-            "Civetta: SSID finto (open+login)",
-            "Gemello cattura: clona + open",
-            " declassa WPA2->open: si rileva",
-            "Gemello coerente: clona WPA2",
-            " identita combacia, ma no login",
-            "Solo test autorizzati.",
-        };
-        unsigned short c[] = { FG, YEL, MUTED, EP_CYAN, MUTED, YEL };
-        d.setTextSize(1);
-        for (int i = 0; i < 6; i++) { d.setTextColor(c[i], BG); d.setCursor(10, 30 + i * 13); d.print(l[i]); }
-    }
+    app_ui_title("Guida", EP_RED, "");
+    const char *L[] = {
+        "Civetta: AP finto, SSID a scelta",
+        "Gemello: clona un AP reale +",
+        " deauth per spostarne i client",
+        " cattura=open (declassa, visibile)",
+        " coerente=WPA2 reale (no login)",
+        "KARMA: usa le reti che i device",
+        " cercano come esca",
+        "Clona pagina: copia il login di",
+        " un captive aperto (CSS inclusi)",
+        "Solo test autorizzati.",
+    };
+    d.setTextSize(1);
+    for (int i = 0; i < 10; i++) { d.setTextColor(i == 9 ? YEL : (L[i][0] == ' ' ? DIM : FG), BG);
+                                   d.setCursor(8, 24 + i * 11); d.print(L[i]); }
+    (void)h;
 }
 
-static void draw_stopping(int top, int h)
+static void draw_menu(int h)   // TAB overlay
 {
-    (void)top;
-    app_ui_title("Evil Portal", EP_RED, "");
-    d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(10, h / 2 - 14); d.print("Arresto...");
-    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, h / 2 + 6);
-    d.print("Chiudo AP, DNS e server; ripristino rete OS.");
-    s_stop_armed = true;                           // we've painted it -> tick() may now run stop()
+    int n = menu_count();
+    d.fillRoundRect(30, 26, 180, 18 + n * 18, 8, 0x0000);
+    d.drawRoundRect(30, 26, 180, 18 + n * 18, 8, EP_RED);
+    d.setTextSize(1); d.setTextColor(MUTED, 0x0000); d.setCursor(42, 32); d.print(menu_title());
+    for (int i = 0; i < n; i++) {
+        int y = 44 + i * 18; bool s = (i == s_menu_sel);
+        if (s) d.fillRoundRect(36, y - 2, 168, 16, 4, EP_RED);
+        d.setTextSize(1); d.setTextColor(s ? INK : FG, s ? EP_RED : 0x0000); d.setCursor(44, y + 1); d.print(menu_item(i));
+    }
+    (void)h;
 }
 
 static void draw(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
-    if (s_panel)                     draw_panel(top, h);
-    else if (s_state == ST_CONSENT)  draw_consent(top, h);
-    else if (s_state == ST_SCAN)     draw_scan(h);
-    else if (s_state == ST_CLONE)    draw_clone(h);
-    else if (s_state == ST_KARMA_SCAN) draw_karma_scan(h);
-    else if (s_state == ST_KARMA_PICK) draw_karma_pick(top, h);
-    else if (s_state == ST_STOPPING) draw_stopping(top, h);
-    else if (s_state == ST_RUNNING)  draw_running(top, h);
-    else                             draw_config(top, h);
+    switch (s_state) {
+        case ST_CONSENT: draw_consent(h); break;
+        case ST_HOME:    draw_home(h); break;
+        case ST_TARGETS: ui_list("Reti vicine", "GEMELLO", s_ap_n, s_ap_idx, get_targets, "premi R per scansionare", "verde=aperta  R riscan"); break;
+        case ST_KARMA:   ui_list("Reti cercate", "KARMA", nucleo_wifiatk_karma_count(), s_km_sel, get_karma, "nessuna probe", "invio: usa come civetta"); break;
+        case ST_SSID:    ui_list("SSID civetta", "", s_ssid_n + 1, s_sel, get_ssid, "", nullptr); break;
+        case ST_TYPE:    draw_type(h); break;
+        case ST_PAGE:    ui_list("Pagina login", "", s_tpl_n, s_sel, get_page, "nessun template", nullptr); break;
+        case ST_SETUP:   draw_setup(h); break;
+        case ST_RUNNING: draw_running(h); break;
+        case ST_LOOT:    ui_list("Loot", "", nucleo_evilportal_recent_count(), s_sel, get_loot, "ancora nulla", "salvato su /sd/evilportal/loot"); break;
+        case ST_GUIDE:   draw_guide(h); break;
+        case ST_SCAN:    draw_busy("Scansione...", "Cerco le reti reali vicine.", h); s_scan_armed = true; break;
+        case ST_KARMA_SCAN: draw_busy("Karma...", "Ascolto chi cerca quali reti.", h); s_karma_armed = true; break;
+        case ST_CLONE:   draw_busy("Clono pagina...", "Mi unisco e scarico il login.", h); s_clone_armed = true; break;
+        case ST_STOPPING:draw_busy("Arresto...", "Ripristino la rete OS.", h); s_stop_armed = true; break;
+    }
+    if (s_menu) draw_menu(h);
 }
 
-static void leave(void)
+// ---- TAB menu + Back navigation ----------------------------------------------
+static void ep_tab(void)
 {
-    // The portal keeps running in the background after you leave the app — the launcher status
-    // bar turns into a red "EVIL PORTAL ATTIVO" alert so it can't be forgotten. Reopen the app
-    // (or use that alert as the reminder) and press Enter to stop it.
+    if (s_state == ST_CONSENT || s_state == ST_SCAN || s_state == ST_KARMA_SCAN ||
+        s_state == ST_CLONE || s_state == ST_STOPPING) return;
+    s_menu = !s_menu; s_menu_sel = 0; set_hint(); nucleo_app_request_draw();
 }
+static void menu_choose(void)
+{
+    const char *it = menu_item(s_menu_sel);
+    s_menu = false;
+    if (!strcmp(it, "Loot catture"))       { s_ret = s_state; go(ST_LOOT); }
+    else if (!strcmp(it, "Ferma portale")) { s_stop_armed = false; go(ST_STOPPING); }
+    else if (!strcmp(it, "Guida"))         { s_ret = s_state; go(ST_GUIDE); }
+    else { set_hint(); nucleo_app_request_draw(); }
+}
+static bool ep_back(int key)
+{
+    (void)key;
+    if (s_menu) { s_menu = false; set_hint(); nucleo_app_request_draw(); return true; }
+    switch (s_state) {
+        case ST_SSID: case ST_PAGE: go(ST_SETUP); return true;
+        case ST_TYPE: go(ST_SSID); return true;
+        case ST_SETUP: case ST_TARGETS: case ST_KARMA: go(ST_HOME); return true;
+        case ST_LOOT: case ST_GUIDE: go(s_ret ? s_ret : ST_HOME); return true;
+        default: return false;   // HOME / RUNNING / consent / busy -> let the framework close the app
+    }
+}
+
+// ---- key handling ------------------------------------------------------------
+static void list_nav(int *sel, int n, int key)
+{
+    if (n <= 0) return;
+    if (key == NK_UP)   *sel = (*sel + n - 1) % n;
+    if (key == NK_DOWN) *sel = (*sel + 1) % n;
+}
+
+static void on_key(int key, char ch)
+{
+    if (s_menu) {
+        int n = menu_count();
+        if (key == NK_UP || key == NK_DOWN) { list_nav(&s_menu_sel, n, key); nucleo_app_request_draw(); }
+        else if (key == NK_ENTER) menu_choose();
+        return;
+    }
+    switch (s_state) {
+        case ST_CONSENT:
+            if (key == NK_ENTER) { s_consented = true; go(ST_HOME); }
+            return;
+        case ST_HOME:
+            if (key == NK_UP || key == NK_DOWN) { list_nav(&s_home_sel, 4, key); nucleo_app_request_draw(); }
+            else if (key == NK_ENTER) {
+                if (s_home_sel == 0)      { s_mode = 0; build_rows(); go(ST_SETUP); }
+                else if (s_home_sel == 1) { s_mode = 1; if (s_ap_n == 0) { s_scan_armed = false; go(ST_SCAN); } else go(ST_TARGETS); }
+                else if (s_home_sel == 2) { s_karma_armed = false; go(ST_KARMA_SCAN); }
+                else                      { s_ret = ST_HOME; go(ST_LOOT); }
+            }
+            return;
+        case ST_TARGETS:
+            if (key == NK_UP || key == NK_DOWN) { list_nav(&s_ap_idx, s_ap_n, key); nucleo_app_request_draw(); }
+            else if (key == NK_ENTER && s_ap_n > 0) { twin_autopick_template(); build_rows(); go(ST_SETUP); }
+            else if (ch == 'r' || ch == 'R') { s_scan_armed = false; go(ST_SCAN); }
+            return;
+        case ST_KARMA:
+            if (key == NK_UP || key == NK_DOWN) { list_nav(&s_km_sel, nucleo_wifiatk_karma_count(), key); nucleo_app_request_draw(); }
+            else if (key == NK_ENTER && nucleo_wifiatk_karma_count() > 0) {
+                snprintf(s_custom, sizeof s_custom, "%s", nucleo_wifiatk_karma_ssid(s_km_sel));
+                s_mode = 0; build_rows();
+                for (int i = 0; i < s_nrows; i++) if (s_rows[i] == R_SSID) s_sel = i;
+                snprintf(s_err, sizeof s_err, "Karma: %.20s", s_custom);
+                go(ST_SETUP);
+            } else if (ch == 'r' || ch == 'R') { s_karma_armed = false; go(ST_KARMA_SCAN); }
+            return;
+        case ST_SSID:
+            if (key == NK_UP || key == NK_DOWN) { list_nav(&s_sel, s_ssid_n + 1, key); nucleo_app_request_draw(); }
+            else if (key == NK_ENTER) {
+                if (s_sel == 0) { s_typelen = strlen(s_custom); go(ST_TYPE); }
+                else { s_ssid_idx = s_sel - 1; s_custom[0] = 0; go(ST_SETUP); }
+            }
+            return;
+        case ST_TYPE:
+            if (key == NK_ENTER) { go(ST_SETUP); }
+            else if (key == NK_DEL) { if (s_typelen > 0) s_custom[--s_typelen] = 0; nucleo_app_request_draw(); }
+            else if (ch >= 32 && ch < 127 && s_typelen < 32) { s_custom[s_typelen++] = ch; s_custom[s_typelen] = 0; nucleo_app_request_draw(); }
+            return;
+        case ST_PAGE:
+            if (key == NK_UP || key == NK_DOWN) { list_nav(&s_sel, s_tpl_n, key); nucleo_app_request_draw(); }
+            else if (key == NK_ENTER) { s_tpl_idx = s_sel; go(ST_SETUP); }
+            return;
+        case ST_SETUP:
+            if (key == NK_UP || key == NK_DOWN) { list_nav(&s_sel, s_nrows, key); nucleo_app_request_draw(); }
+            else if (key == NK_ENTER) {
+                switch (s_rows[s_sel]) {
+                    case R_SSID:  s_sel = 0; go(ST_SSID); break;
+                    case R_NET:   go(ST_TARGETS); break;
+                    case R_SEC:   s_mode = (s_mode == 1) ? 2 : 1; set_hint(); nucleo_app_request_draw(); break;
+                    case R_PAGE:  s_sel = s_tpl_idx; go(ST_PAGE); break;
+                    case R_CLONE:
+                        if (s_ap_n <= 0)        snprintf(s_err, sizeof s_err, "Scegli prima una rete");
+                        else if (twin_encrypted()) snprintf(s_err, sizeof s_err, "Rete non aperta: no portale");
+                        else { s_clone_armed = false; go(ST_CLONE); break; }
+                        nucleo_app_request_draw(); break;
+                    case R_GO:    start_portal(); break;
+                }
+            }
+            return;
+        case ST_RUNNING:
+            if (key == NK_ENTER) { s_stop_armed = false; go(ST_STOPPING); }
+            return;
+        case ST_LOOT:
+            if (key == NK_UP || key == NK_DOWN) { list_nav(&s_sel, nucleo_evilportal_recent_count(), key); nucleo_app_request_draw(); }
+            return;
+        default: return;   // busy screens ignore keys
+    }
+}
+
+static void leave(void) { }   // portal keeps running in the background; launcher shows the red alert
 
 extern "C" void nucleo_register_evilportal(void)
 {
