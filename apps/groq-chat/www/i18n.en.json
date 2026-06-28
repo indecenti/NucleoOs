@@ -12,6 +12,7 @@
   "refresh_models": "↻ Refresh models",
   "clear_chat": "Clear chat",
   "teacher_label": "ANIMA Teacher (device offline learning)",
+  "teacher_note": "The key above stays <b>only in this browser</b> (this chat's sandbox) and is not written to the device. To give ANIMA — the whole OS's online mind — a key, manage it in <b>Settings ▸ AI</b>: that's the only place that configures the device.",
   "teach_on_btn": "Enable with this key",
   "teach_off_btn": "Disable",
   "forget_key": "Forget the key",
@@ -31,5 +32,10 @@
   "teach_enabled": "Enabled ✓ — only verified facts land in the ODD; the rest stays ephemeral.",
   "teach_write_err_pair": "Write error (device not paired?).",
   "teach_disabled": "Disabled.",
-  "teach_write_err": "Write error."
+  "teach_write_err": "Write error.",
+  "web_toggle_title": "Web: current answers with sources (Groq compound)",
+  "web_on": "Web",
+  "web_searching": "🌐 Searching the web…",
+  "sources_label": "Sources",
+  "web_mode_hint": "Web mode on: current, sourced answers from the web via Groq compound. The model picker above is ignored."
 }

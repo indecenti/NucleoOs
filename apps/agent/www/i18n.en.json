@@ -1,16 +1,16 @@
 {
   "_lang": "en",
   "app_title": "Agents",
-  "subtitle": "multi-agent · Claude",
+  "subtitle": "multi-agent · online",
   "ws_label": "Workspace",
   "ws_hint": "Workspace: the agent operates only inside here",
   "web_label": "web",
-  "web_hint": "Search the web via Claude (server-side)",
+  "web_hint": "Search the web (server-side, available with Claude)",
   "auto_label": "auto-approve",
   "auto_hint": "Run actions without asking for confirmation (not recommended)",
   "input_ph": "Give a task: create/edit files, compute, search… (⏎ send, ⇧⏎ newline)",
   "send": "Send",
-  "hint": "Agents run in the browser and call Claude directly: the Cardputer is not loaded. Destructive actions ask for confirmation.",
+  "hint": "Agents run in the browser and call the online models directly: the Cardputer is not loaded. Destructive actions ask for confirmation.",
 
   "st_ready": "ready",
   "st_thinking": "thinking…",
@@ -22,10 +22,12 @@
   "msg_stopped": "⏹ Stopped.",
 
   "model_anthropic": "orchestrator Haiku · workers Sonnet/Opus",
-  "model_groq": "Groq · chat only (no OS tools)",
+  "model_multi": "multi-provider · OS tools",
+  "model_tools_suffix": "OS tools active",
 
   "ready_anthropic": "🟣 Multi-agent ready. Give me a task — I can read, write and edit files in the workspace, run sandboxed code, search the web, and open results in the OS. Destructive actions ask for your approval.",
-  "ready_groq": "⚡ Groq key detected — chat only (no OS tools). Add a Claude key in Settings ▸ AI for the full multi-agent system.",
+  "ready_generic": "✅ Multi-agent ready. Give me a task — I can read, write and edit files in the workspace, run sandboxed code, and open apps/results in the OS. Destructive actions ask for your approval.",
+  "ready_multi_suffix": " I automatically use the best model across your providers, with fallback if one is unavailable.",
 
   "appr_title": "Approve action",
   "appr_allow": "Allow",
@@ -36,11 +38,19 @@
   "op_delete_file": "DELETE file",
   "op_move_file": "Move file",
   "op_run_js": "Run code",
+  "op_scaffold_app": "Scaffold app",
+  "op_publish_app": "INSTALL app on the OS",
+  "op_manage_app": "Enable/disable app",
+  "op_generate_image": "Generate image",
+  "appr_new_app": "New app",
+  "appr_install_app": "Install in launcher",
+  "appr_enable_app": "Enable app",
+  "appr_disable_app": "Disable app",
 
   "gate_offline_title": "No network",
   "gate_offline_body": "The online agents need internet. Reconnect, or use the fully-offline ANIMA assistant instead.",
-  "gate_key_title": "Connect Claude",
-  "gate_key_body": "The multi-agent system needs a Claude (Anthropic) API key. Add one in Settings ▸ AI. Without it you can still use the offline ANIMA assistant.",
+  "gate_key_title": "Connect an AI provider",
+  "gate_key_body": "The multi-agent system needs an online provider API key — Claude, Groq, Grok (xAI) or Gemini. Add one in Settings ▸ AI: one is enough, but if you configure several I use them all with fallback. Without it you can still use the offline ANIMA assistant.",
   "gate_open_settings": "Open Settings",
   "gate_anima": "ANIMA offline"
 }

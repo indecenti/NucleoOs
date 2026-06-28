@@ -47,6 +47,8 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_task_wdt.h"   // pet il task-WDT prima della scrittura SD del calendario (anti-reboot)
+#include "esp_attr.h"       // RTC_NOINIT_ATTR: carry the seeded question across the ANIMA Solo reboot
+#include "esp_app_desc.h"   // esp_app_get_description(): real running-image version (single source of truth)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 extern "C" {
@@ -68,6 +70,12 @@ void nucleo_anima_set_online_only(bool on);
 // Compact-reply: while the NATIVE app is foreground (small screen), the cloud chat answers short and
 // COMPLETE so the reply fits without the render clip cutting a sentence. On at enter, off at leave.
 void nucleo_anima_set_compact_reply(bool on);
+// LONG-FORM in segments (nucleo_anima_online.c): the next ~one-paragraph chunk of a complete long answer
+// (story, essay, detailed explanation), continuing from `tail` without repeating it. part=1 = opening;
+// *more=false when the model marks it done. Looped by run_longform so a long reply is delivered with FLAT
+// RAM on this PSRAM-less chip — one paragraph in memory at a time, each spoken + shown, then freed.
+int nucleo_anima_online_longform(const char *topic, const char *tail, int part, bool en,
+                                 anima_result_t *out, bool *more);
 // Audio decoder: stop any background playback so its ~17-30 KB Helix decoder block returns to the
 // heap the moment ANIMA opens — the assistant needs that RAM. Idempotent.
 void nucleo_audio_stop(void);
@@ -114,6 +122,10 @@ static int s_mhead, s_mcount;
 // = slot del ring di quel messaggio (-1 = nessuno) -> rebuild_rows wrappa quel messaggio da s_full.
 static char s_full[1024];
 static int  s_full_idx = -1;
+static int  s_reveal   = -1;   // typewriter: -1 = mostra tutto s_full; >=0 = mostra solo i primi N byte (rivelazione graduale stile GPT)
+static bool s_exit_confirm = false;   // modale conferma uscita (Esc nel chat base): true = mostra la modale a tutto schermo
+static bool s_typing = false;         // typewriter in corso: draw_body evita la pulizia piena del corpo (anti-flicker)
+extern void launcher_render_hint_bar(void);   // ridipinge il footer SUBITO (il loop framework e' bloccato durante la query inline)
 
 // Wrapped display rows (derived). A row points into a message's text (valid until the next
 // rebuild, which every push triggers after writing the message).
@@ -145,7 +157,9 @@ static int  s_clock_min = -1;                      // header clock: last minute 
 // leaving plain Up/Down free to scroll the transcript. Session-only (.bss, reset on enter).
 #define HIST_N   8
 #define HIST_LEN 120
-static char s_hist[HIST_N][HIST_LEN];
+// Heap-on-enter (freed in leave): the input-history ring is session-only and the app is closed
+// most of the time — no reason to hold ~1 KB of .bss at boot. Null-guarded everywhere.
+static char (*s_hist)[HIST_LEN] = nullptr;
 static int  s_hist_count;                           // entries stored (<= HIST_N)
 static int  s_hist_head;                            // ring write index
 static int  s_hist_nav = -1;                        // -1 = editing the live draft; 0 = newest, up = older
@@ -154,12 +168,12 @@ static char s_hist_draft[A_INMAX];                  // the in-progress line, par
 // nav 0 = most recent. Returns NULL out of range.
 static const char *hist_at(int nav)
 {
-    if (nav < 0 || nav >= s_hist_count) return NULL;
+    if (!s_hist || nav < 0 || nav >= s_hist_count) return NULL;
     return s_hist[(s_hist_head - 1 - nav + HIST_N * 2) % HIST_N];
 }
 static void hist_push(const char *s)
 {
-    if (!s || !s[0]) return;
+    if (!s_hist || !s || !s[0]) return;
     if (s_hist_count) { const char *last = hist_at(0); if (last && !strncmp(last, s, HIST_LEN - 1)) { s_hist_nav = -1; return; } }
     snprintf(s_hist[s_hist_head], HIST_LEN, "%s", s);
     s_hist_head = (s_hist_head + 1) % HIST_N;
@@ -240,7 +254,8 @@ static signed char s_focus_leaf[9];                 // last focused leaf row per
 // mid-text cursor is overkill on this keyboard; this matches "una semplice textarea". Static (.bss).
 static bool s_ed_open;
 static char s_ed_path[80];                          // absolute SD-relative path "/data/..." (from the form slot)
-static char s_ed_buf[1024];                         // the file content being typed
+#define ED_BUF_CAP 1024
+static char *s_ed_buf = nullptr;                     // the file content being typed (heap-on-enter, freed in leave)
 static int  s_ed_len;
 static int  s_ed_scroll;                            // wrapped-rows scrolled away above the viewport (0 = caret line visible)
 
@@ -364,7 +379,14 @@ static void rebuild_rows(void)
 {
     s_rown = 0;
     for (int i = 0; i < s_mcount; i++) { int idx = (s_mhead - s_mcount + i + MSG_MAX) % MSG_MAX;
-        wrap_msg(&s_msg[idx], idx == s_full_idx ? s_full : NULL); }   // slot corrente: wrappa dal testo pieno
+        if (idx == s_full_idx) {                                  // slot corrente: wrappa dal testo pieno...
+            int len = (int)strlen(s_full);
+            if (s_reveal >= 0 && s_reveal < len) {                // ...troncato a s_reveal byte durante il typewriter
+                char saved = s_full[s_reveal]; s_full[s_reveal] = 0;
+                wrap_msg(&s_msg[idx], s_full);
+                s_full[s_reveal] = saved;
+            } else wrap_msg(&s_msg[idx], s_full);
+        } else wrap_msg(&s_msg[idx], NULL); }
     d.setFont(&fonts::Font0); d.setTextSize(1);   // leave the global font at the framework default
     s_scroll = 0; s_d_body = true;                // any new content snaps the view to the bottom
 }
@@ -387,6 +409,11 @@ static void apply_online_mode(void)
 {
     nucleo_anima_set_online(s_omode != OM_OFF);
     nucleo_anima_set_online_only(s_omode == OM_ONLY);
+    // COMPACT (short ~160-char cloud answers, max_tok=110) ONLY when the LLM is NOT the sole brain: hybrid
+    // answers from L1/wiki (already short) and offline doesn't call the cloud. In ONLINE-ONLY the user wants
+    // the model's FULL answer (stories/explanations), so drop the clamp -> max_tok=900, shown whole + read in
+    // chunks. The single source of truth for the mode, so it stays correct across live mode switches.
+    nucleo_anima_set_compact_reply(s_omode != OM_ONLY);
     s_d_hdr = true;
 }
 
@@ -512,15 +539,27 @@ static const char    *ATAG = "anima.app";
 // This routes the diagnostic THROUGH ANIMA, so it transparently uses the online tier when available.
 static char           s_preset[A_INMAX];
 extern "C" void nucleo_anima_app_ask(const char *q) { if (q) snprintf(s_preset, sizeof s_preset, "%s", q); }
+// A question seeded by another app (notify / Wi-Fi diagnostics / ESP-NOW) must survive the warm reboot
+// into ANIMA Solo, so we carry it in RTC no-init RAM across esp_restart() — cleared on a cold power-on,
+// exactly like the Solo flag itself.
+#define ANIMA_PRESET_MAGIC 0xA11A0A5Bu
+RTC_NOINIT_ATTR static uint32_t s_rtc_preset_magic;
+RTC_NOINIT_ATTR static char     s_rtc_preset[A_INMAX];
 
 // Voce on-device: pronuncia la risposta, MA non la conoscenza (tier remoto/L1/MOSAICO) ne' la
 // calcolatrice (intent "calc") -> per quelle suona "leggila sullo schermo". Le risposte non
 // interamente coperte da clip diventano comunque "leggila" dentro nucleo_tts_say().
 static void fill_system_value(const char *arg, char *out, size_t n, bool en);   // definita piu' sotto
 
-static void speak_result(const anima_result_t &r, bool en)
+// Cap di lettura vocale: oltre questa lunghezza la voce NON recita (sarebbe un monologo) ma dice UNA
+// sola volta "leggila sullo schermo". Sotto il cap legge frase per frase. Tiene la voce da chat reale.
+#define VOICE_CAP 340
+static void speak_result(const anima_result_t &r, bool en, uint32_t g0)
 {
     if (!r.reply[0]) return;
+    const bool solo = nucleo_anima_solo_active();   // poll-tastiera (stop con Invio) SOLO sul task UI (Solo inline)
+    // g0 = generazione catturata dal CHIAMANTE (il worker passa il suo `g`, l'inline Solo passa s_gen): un
+    // /stop che bumpa s_gen oltre g0 fa uscire il loop. Rileggere s_gen qui sarebbe un TOCTOU col worker.
     // LAUNCH e TOOL li vocalizza present_result: conosce il nome NATIVO dell'app (non l'id "media-player"
     // grezzo, che non e' coperto -> "leggila") e l'ESITO dell'operazione (-> conferma "Fatto"). Qui niente,
     // cosi' non si doppia la voce ne' si legge un id come fosse parlato.
@@ -528,11 +567,38 @@ static void speak_result(const anima_result_t &r, bool en)
     const char *lang = en ? "en" : "it";
     bool knowledge = r.tier == ANIMA_TIER_FACT || r.tier == ANIMA_TIER_STITCH || r.tier == ANIMA_TIER_REMOTE;
     if (knowledge) {
-        // Voce a mosaico: invece di "leggila" prova a dire il GIST BREVE (la prima frase, di solito la
-        // definizione). say() la pronuncia se il pool la copre, altrimenti ripiega su "leggila": cosi' i
-        // topic a parole comuni vengono detti brevi, i nomi/entita' rari (non coperti) restano letti.
-        char gist[160]; nucleo_tts_first_sentence(r.reply, gist, sizeof gist);
-        nucleo_tts_say(gist, lang);
+        if (!nucleo_tts_enabled()) return;   // voice off -> skip the whole loop (no useless WAV-plan attempts)
+        const char *full = nucleo_anima_long_reply();
+        const char *p = (full && full[0]) ? full : r.reply;
+        // CAP 340: una risposta lunga non si recita (monologo) — la voce dice UNA sola volta "leggila".
+        if ((int)strlen(p) > VOICE_CAP) { nucleo_tts_read_hint(lang); return; }
+        // Sotto il cap: leggi frase per frase ("un po' alla volta"), aspettando l'audio prima della
+        // successiva. Se una frase NON e' coperta dal pool clip, di' "leggila" UNA volta e fermati: MAI
+        // due "leggi" nella stessa risposta. Invio/Back fermano la voce (solo task UI); un /stop pure.
+        bool hinted = false;
+        for (int g = 0; *p && g < 24; g++) {
+            if (s_gen != g0) { nucleo_audio_stop(); return; }                                    // /stop -> taci
+            if (solo) { nucleo_key_t k = nucleo_kbd_read(); if (k.key == NK_ENTER || k.key == NK_BACK) { nucleo_audio_stop(); return; } }  // Invio = stop
+            char sent[200]; int n = 0;
+            while (p[n] && n < (int)sizeof(sent) - 1) { char c = p[n]; sent[n++] = c; if (c == '.' || c == '!' || c == '?') break; }
+            sent[n] = 0; p += n;
+            while (*p == ' ' || *p == '\n' || *p == '\t') p++;
+            bool letter = false;   // skip a punctuation-only shard (e.g. ".)") that would just trigger "leggila"
+            for (int i = 0; i < n; i++) { char c = sent[i]; if ((c|32) >= 'a' && (c|32) <= 'z') { letter = true; break; } if (c >= '0' && c <= '9') { letter = true; break; } }
+            if (!letter) continue;
+            // say_quiet parla la frase se coperta dal pool, altrimenti resta MUTO e ritorna false (niente
+            // "leggila" interno). Il read_hint parte UNA volta sola sotto -> mai due.
+            if (nucleo_tts_say_quiet(sent, lang)) {
+                if (solo) {                                  // Invio/Back ferma la voce DURANTE il play (non solo tra le frasi)
+                    while (nucleo_audio_playing()) {
+                        nucleo_key_t kk = nucleo_kbd_read();
+                        if (kk.key == NK_ENTER || kk.key == NK_BACK || s_gen != g0) { nucleo_audio_stop(); return; }
+                        vTaskDelay(pdMS_TO_TICKS(40));
+                    }
+                } else nucleo_audio_wait_idle(8000);         // worker (full OS): niente poll kbd (lo possiede il task UI)
+            }
+            else { if (!hinted) { nucleo_tts_read_hint(lang); hinted = true; } break; }          // scoperta -> una "leggila", poi stop
+        }
         return;
     }
     // Il CALCOLO non e' piu' instradato a "leggila": nucleo_tts_say() ora "parlabilizza" = % ^ (mathspeak),
@@ -563,8 +629,11 @@ static void speak_result(const anima_result_t &r, bool en)
                 p1lang = src_lang;
             }
             p1[o] = 0;
-            if (p1[0]) { nucleo_tts_say(p1, p1lang); nucleo_audio_wait_idle(2500); }
-            nucleo_tts_say(tgt, tl);
+            // MAI due "leggila": say_quiet resta muto su parola scoperta -> un solo read_hint se nessuna parte parla.
+            bool spoke = false;
+            if (p1[0] && nucleo_tts_say_quiet(p1, p1lang)) { spoke = true; nucleo_audio_wait_idle(2500); }
+            if (nucleo_tts_say_quiet(tgt, tl)) spoke = true;
+            if (!spoke) nucleo_tts_read_hint(lang);
             return;
         }
     }
@@ -601,6 +670,127 @@ static void speak_result(const anima_result_t &r, bool en)
     }
 }
 
+// True when the request asks for an ANSWER THAT WANTS LENGTH — a story/essay/poem, or an extended
+// explanation/description/walk-through. Such answers can't fit this PSRAM-less chip's RAM or one cloud
+// max_tokens window in one shot, so they take the segmented long-form path (run_longform). Conservative:
+// short factual / command / calculator / state turns stay on the normal cascade (short, fast, as before).
+// CODE requests are excluded — they route to the dedicated code tier with verbatim formatting.
+static bool want_longform(const char *q)
+{
+    if (!q || !q[0]) return false;
+    char f[200]; size_t i = 0;
+    for (const char *p = q; *p && i < sizeof(f) - 1; p++) { char c = *p; if (c >= 'A' && c <= 'Z') c += 32; f[i++] = c; }
+    f[i] = 0;
+    static const char *CODE[] = { "codic", "code", "python", "javascript", "typescript", "funzion",
+                                  "script", "programm", "html", "css", "sql", "regex", nullptr };
+    for (int k = 0; CODE[k]; k++) if (strstr(f, CODE[k])) return false;
+    static const char *LF[] = {
+        "raccont", "storia", "storie", "story", "stories", "favol", "fiab", "novell", "saga", "fab",
+        "poesi", "poem", "sceneggiat", "saggio", "essay", "articol", "tutorial", "narra", "componi",
+        "approfond", "in dettaglio", "nel dettaglio", "dettagliat", "passo passo", "step by step",
+        "spiega", "spieg", "explain", "descrivi", "descriv", "describe", "elenca tutti", "list all", nullptr };
+    for (int k = 0; LF[k]; k++) if (strstr(f, LF[k])) return true;
+    return false;
+}
+
+// Read a whole paragraph ALOUD. nucleo_tts_say only voices <=220 chars (TTS_MAX_CHARS — beyond that it
+// falls back to "read it on screen"), and playback is ASYNC (each new say cancels the one playing). So a
+// paragraph is spoken ONE SENTENCE at a time, waiting for each to finish before the next: a tiny WAV per
+// sentence keeps RAM flat AND every sentence is actually voiced. Hushes + bails the instant a newer turn
+// or a /stop supersedes this one (epoch/gen change).
+static void speak_paragraph(const char *text, bool en, uint32_t g, uint32_t epoch)
+{
+    if (!text || !text[0] || !nucleo_tts_enabled()) return;
+    const char *lang = en ? "en" : "it";
+    char sent[200];                                   // < TTS_MAX_CHARS so each sentence is spoken, not "leggila"
+    for (const char *p = text; *p; ) {
+        while (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t') p++;   // skip leading whitespace
+        if (!*p) break;
+        int n = 0;
+        while (*p && n < (int)sizeof(sent) - 1) {
+            char ch = *p++; sent[n++] = ch;
+            if (ch == '.' || ch == '!' || ch == '?' || ch == '\n') break;  // sentence boundary
+        }
+        if (n >= (int)sizeof(sent) - 1) {             // overran a long sentence: back up to a word boundary
+            int b = n; while (b > 32 && sent[b - 1] != ' ') b--;
+            if (b > 32) { p -= (n - b); n = b; }
+        }
+        sent[n] = 0;
+        bool letter = false;                          // skip a punctuation-only shard ("). " etc.)
+        for (int i = 0; i < n; i++) { char c = sent[i]; if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) { letter = true; break; } }
+        if (!letter) continue;
+        if (epoch != s_worker_epoch || g != s_gen) { nucleo_audio_stop(); return; }   // superseded -> hush now
+        nucleo_tts_say(sent, lang);
+        nucleo_audio_wait_idle(15000);                // wait for THIS sentence to finish (cap 15s) before the next
+    }
+}
+
+// LONG-FORM answer in segments. A complete long reply (story, essay, detailed explanation) can't fit this
+// PSRAM-less chip's RAM, the device buffers, or one cloud max_tokens window. So we ask the model for it ONE
+// paragraph per call: publish each paragraph to the chat (the normal s_res/s_done channel the UI already
+// renders), READ IT ALOUD in full, append it to SD — then free and fetch the next. Only one paragraph is
+// ever in RAM, so a long answer is delivered with FLAT memory. Stops on the model's completion marker, the
+// part cap, or a /stop (s_gen bump / worker epoch change). Keeps s_busy set so the spinner stays up between
+// parts; clears it at the end. Generation and speech never overlap (one heavy resource at a time).
+#define LONGFORM_PARTS_MAX 10
+#define LONGFORM_TAIL_MAX  360
+#define LONGFORM_FILE      NUCLEO_SD_MOUNT "/data/anima/last_answer.txt"
+static void run_longform(const char *topic, uint32_t g, uint32_t epoch)
+{
+    mkdir(NUCLEO_SD_MOUNT "/data", 0775);
+    mkdir(NUCLEO_SD_MOUNT "/data/anima", 0775);
+    if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
+    FILE *sf = fopen(LONGFORM_FILE, "wb"); if (sf) fclose(sf);   // fresh full-answer file (re-read beyond the ring)
+
+    char tail[LONGFORM_TAIL_MAX + 1]; tail[0] = 0;
+    char prevhead[48] = "";                         // start of the last paragraph — detect a model that loops
+    bool more = true;
+    int part = 0;
+    for (part = 1; part <= LONGFORM_PARTS_MAX && more; part++) {
+        if (epoch != s_worker_epoch || g != s_gen) return;       // cancelled / superseded mid-answer
+        anima_result_t cr; bool cont = true;
+        int ok = nucleo_anima_online_longform(topic, tail, part, s_en, &cr, &cont);
+        if (epoch != s_worker_epoch || g != s_gen) return;
+        if (ok <= 0 || !cr.reply[0]) {
+            if (part == 1) {                                     // first call failed -> don't leave the turn silent
+                memset(&cr, 0, sizeof cr); cr.tier = ANIMA_TIER_NONE; cr.action = ANIMA_ACT_ANSWER;
+                snprintf(cr.reply, sizeof cr.reply, s_en ? "I couldn't reach the model." : "Non riesco a contattare il modello.");
+                s_res = cr; s_done_gen = g; __sync_synchronize(); s_done = true;
+                for (int i = 0; i < 200 && s_done && epoch == s_worker_epoch && g == s_gen; i++) vTaskDelay(pdMS_TO_TICKS(20));
+            }
+            break;
+        }
+        if (prevhead[0] && !strncmp(cr.reply, prevhead, sizeof(prevhead) - 1)) {
+            ESP_LOGW(ATAG, "longform: repeated paragraph -> stop");   // model looped on itself
+            break;
+        }
+        snprintf(prevhead, sizeof prevhead, "%s", cr.reply);
+        more = cont;
+        if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
+        FILE *af = fopen(LONGFORM_FILE, "ab");
+        if (af) { fwrite(cr.reply, 1, strlen(cr.reply), af); fwrite("\n\n", 1, 2, af); fclose(af); }
+        { int n = (int)strlen(cr.reply); const char *s = n > LONGFORM_TAIL_MAX ? cr.reply + (n - LONGFORM_TAIL_MAX) : cr.reply; snprintf(tail, sizeof tail, "%s", s); }
+        // publish the paragraph (UI renders it via s_done in tick); keep s_busy set between parts
+        s_res = cr; s_done_gen = g; __sync_synchronize(); s_done = true;
+        for (int i = 0; i < 300 && s_done && epoch == s_worker_epoch && g == s_gen; i++) vTaskDelay(pdMS_TO_TICKS(20));
+        if (epoch != s_worker_epoch || g != s_gen) return;
+        // read THIS paragraph aloud, sentence by sentence (TTS voices <=220 chars and playback is async, so
+        // a whole paragraph must be chunked). Sequential: speech never overlaps the next generation.
+        speak_paragraph(cr.reply, s_en, g, epoch);
+    }
+    if (epoch != s_worker_epoch || g != s_gen) return;
+    if (part > LONGFORM_PARTS_MAX) ESP_LOGW(ATAG, "longform hit part cap (%d)", LONGFORM_PARTS_MAX);
+    if (part > 2 && g == s_gen) {                                // multi-paragraph: note where the full text lives
+        anima_result_t fin; memset(&fin, 0, sizeof fin);
+        fin.tier = ANIMA_TIER_NONE; fin.action = ANIMA_ACT_ANSWER;
+        snprintf(fin.reply, sizeof fin.reply, s_en ? "(full answer saved to /data/anima/last_answer.txt)"
+                                                   : "(risposta completa salvata in /data/anima/last_answer.txt)");
+        s_res = fin; s_done_gen = g; __sync_synchronize(); s_done = true;
+        for (int i = 0; i < 200 && s_done && epoch == s_worker_epoch && g == s_gen; i++) vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    if (g == s_gen) { s_busy = false; s_d_input = true; nucleo_app_request_draw(); }   // answer complete -> unblock input, drop spinner + clear "sta scrivendo"
+}
+
 static void anima_worker(void *arg)
 {
     const uint32_t epoch = (uint32_t)(uintptr_t)arg;
@@ -634,9 +824,13 @@ static void anima_worker(void *arg)
             heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < NUCLEO_TLS_MIN_BLOCK ||
             heap_caps_get_free_size(MALLOC_CAP_INTERNAL)          < NUCLEO_TLS_MIN_FREE;
         const bool want_reclaim = (s_omode == OM_ONLY) || (s_omode == OM_ON && heap_under_tls);
-        // Salta se la finestra esclusiva di sessione (enter()) e' GIA' attiva: rientrare qui e poi
-        // chiamare exit() sotto la chiuderebbe a meta' sessione (il modulo non e' a refcount).
-        if (want_reclaim && nucleo_anima_online_available() && !nucleo_exclusive_active()) {
+        // Salta se la finestra esclusiva di sessione (enter()) e' GIA' attiva. Doppia difesa: il guard
+        // !active evita perfino di chiamare enter(), e ora enter() ritorna l'OWNERSHIP (nx=true solo se
+        // QUESTA chiamata ha sospeso qualcosa) -> anche senza il guard, exit() sotto non chiuderebbe la
+        // finestra di sessione di cui non e' proprietario. nx resta false quando la sessione la possiede.
+        // In Solo there is nothing to reclaim (httpd/L1/mDNS never started) and exclusive_exit() would
+        // START them mid-session, breaking the isolation — the heap is already wide open, so skip it.
+        if (!nucleo_anima_solo_active() && want_reclaim && nucleo_anima_online_available() && !nucleo_exclusive_active()) {
             nucleo_exclusive_info_t inf;
             nx = nucleo_exclusive_enter(NX_NET_APP, &inf);
             ESP_LOGI(ATAG, "reclaim omode=%d heap_under_tls=%d exclusive=%d post free=%u largest=%u",
@@ -650,6 +844,17 @@ static void anima_worker(void *arg)
         if (!a_locked) {
             memset(&r, 0, sizeof r); r.tier = ANIMA_TIER_NONE; r.action = ANIMA_ACT_NONE;
             snprintf(r.reply, sizeof r.reply, s_en ? "Busy — try again in a moment." : "Occupato — riprova tra un istante.");
+        } else if (nucleo_anima_online_available() && want_longform(req)) {
+            // LONG-FORM (story / essay / detailed explanation): a complete long answer can't fit this
+            // PSRAM-less chip's RAM or one cloud max_tokens window. Generate it ONE paragraph per call,
+            // publishing + reading aloud + freeing each before the next (run_longform) — flat RAM. Online
+            // only; offline the normal cascade answers (short, as before). The spine lock and the reclaim
+            // window (nx) are held for the whole loop and released right here after it.
+            run_longform(req, g, epoch);
+            nucleo_anima_unlock();
+            if (nx) nucleo_exclusive_exit();
+            if (epoch != s_worker_epoch) break;
+            continue;                          // run_longform published every paragraph + cleared s_busy
         } else {
             r = nucleo_anima_query(req, s_en ? "en" : "it");
             nucleo_anima_unlock();
@@ -680,14 +885,15 @@ static void anima_worker(void *arg)
         if (g == s_gen) {
             bool will_speak = r.reply[0] && r.action != ANIMA_ACT_LAUNCH && r.action != ANIMA_ACT_TOOL;
             bool vnx = false;
-            if (will_speak && nucleo_tts_enabled() && !nucleo_exclusive_active() &&
+            // Same as the query reclaim above: skip in Solo (nothing to free; exit() would start httpd).
+            if (!nucleo_anima_solo_active() && will_speak && nucleo_tts_enabled() && !nucleo_exclusive_active() &&
                 heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < NUCLEO_VOICE_MIN_BLOCK) {
                 nucleo_exclusive_info_t vi;
                 vnx = nucleo_exclusive_enter(NX_NET_APP, &vi);
                 ESP_LOGI(ATAG, "voice reclaim: exclusive=%d free=%u largest=%u",
                          (int)vnx, (unsigned)vi.free_after, (unsigned)vi.largest_after);
             }
-            speak_result(r, s_en);
+            speak_result(r, s_en, g);   // g = generazione del worker: un /stop (s_gen++) ferma la voce
             if (vnx) nucleo_exclusive_exit();   // ridai httpd/L1/mDNS/voce: il task audio e' gia' nato con spazio
         }
     }
@@ -697,6 +903,13 @@ static void anima_worker(void *arg)
 static void stop_worker(void)
 {
     if (!s_worker) return;
+    // RIGHT-SIZE LEVER (heap): report the worker's stack high-water (min free EVER over the session) so the
+    // 30 KB can be trimmed with DATA, never a guess — a blind shrink stack-overflow-panicked before (anima L1).
+    // The worker stack is the single biggest contiguous block ANIMA holds for the whole session; every KB
+    // shaved here directly widens the heap the next worker spawn / TLS handshake must fit into. Visible in
+    // /api/logs at each session close: a steady "free" of e.g. 12 KB means ~30720 can safely drop to ~20 KB.
+    ESP_LOGW(ATAG, "worker stack high-water: %u B free of %u (right-size lever)",
+             (unsigned)(uxTaskGetStackHighWaterMark(s_worker) * sizeof(StackType_t)), (unsigned)30720);
     // NEVER vTaskDelete a worker that may be mid-online-query: it can hold the ANIMA spine lock and an
     // arb token (HTTP timeout up to 30 s) — deleting it leaked both until reboot, plus the HTTP client
     // heap. Orphan it instead: bump the epoch and wake it; an idle worker exits immediately, a busy one
@@ -742,7 +955,8 @@ static void fill_system_value(const char *arg, char *out, size_t n, bool en)
               : ((mo == 8 && dy >= 23) || mo == 9 || mo == 10 || (mo == 11 && dy <= 20)) ? 3 : 0;
         snprintf(out, n, "%s", en ? SE_EN[s] : SE_IT[s]);
     } else if (!strcmp(arg, "version")) {
-        snprintf(out, n, "NucleoOS 0.1.0");
+        const esp_app_desc_t *desc = esp_app_get_description();
+        snprintf(out, n, "NucleoOS %s", desc ? desc->version : "?");
     } else if (!strcmp(arg, "uptime")) {
         long s = (long)(esp_timer_get_time() / 1000000);
         int dd = (int)(s / 86400), hh = (int)((s % 86400) / 3600), mm = (int)((s % 3600) / 60);
@@ -757,15 +971,11 @@ static void fill_system_value(const char *arg, char *out, size_t n, bool en)
         else if (ssid && ssid[0])        snprintf(out, n, en ? "connected to \"%s\", IP %s" : "connesso a \"%s\", IP %s", ssid, ip);
         else                             snprintf(out, n, en ? "not connected" : "non connesso");
     } else if (!strcmp(arg, "capabilities")) {
-        int cnt = nucleo_registry_count(); const nucleo_app_t *apps = nucleo_registry_apps();
-        char list[80] = ""; int shown = 0;
-        for (int i = 0; i < cnt && shown < 5; i++) {
-            const char *nm = apps[i].name[0] ? apps[i].name : apps[i].id;
-            if (list[0] && strlen(list) + strlen(nm) + 3 < sizeof(list)) strncat(list, ", ", sizeof(list) - strlen(list) - 1);
-            if (strlen(list) + strlen(nm) + 1 < sizeof(list)) { strncat(list, nm, sizeof(list) - strlen(list) - 1); shown++; }
-        }
-        snprintf(out, n, en ? "I can open apps (%s...), give you time/date/space/battery, the weather of a city, manage the calendar, solve math/physics/geometry/vectors/Ohm, conversions, spreadsheet formulas, create files, and answer about NucleoOS/C/electronics"
-                            : "Posso aprire le app (%s...), darti ora/data/spazio/batteria, il meteo di una citta, gestire il calendario, risolvere matematica/fisica/geometria/vettori/Ohm, conversioni, formule del foglio di calcolo, creare file, e rispondere su NucleoOS/C/elettronica", list);
+        // ANIMA Solo: the assistant runs alone (no app launching), so capabilities advertises only the
+        // skills it can actually fulfil here — device readouts, Wi-Fi/network, weather, calendar, the
+        // math/physics solvers, conversions, spreadsheet formulas, the built-in file editor, knowledge.
+        snprintf(out, n, en ? "I can give you time/date/space/RAM/battery, your Wi-Fi/network status, the weather of a city, manage the calendar, solve math/physics/geometry/vectors/Ohm, conversions, spreadsheet formulas, create and edit files, and answer about NucleoOS/C/electronics"
+                            : "Posso darti ora/data/spazio/RAM/batteria, lo stato del Wi-Fi/rete, il meteo di una citta, gestire il calendario, risolvere matematica/fisica/geometria/vettori/Ohm, conversioni, formule del foglio di calcolo, creare e modificare file, e rispondere su NucleoOS/C/elettronica");
     } else if (!strcmp(arg, "agenda") && tm) {
         snprintf(out, n, en ? "you have no events today" : "oggi non hai impegni");
         FILE *f = fopen(NUCLEO_SD_MOUNT "/system/config/calendar.json", "rb");
@@ -954,10 +1164,15 @@ static bool chain_math(const char *in, char *out, size_t n)
     return true;
 }
 
+static void draw(void);   // fwd: the inline Solo path paints the answer SYNCHRONOUSLY before speaking it
+
 // Turn the just-returned result into transcript messages (and queue a launch if asked).
 static void present_result(void)
 {
     char reply[1024];   // pieno fino al cap del motore (s_res.reply[1024]): la risposta corrente si mostra INTERA
+    // NB: sullo stack di proposito, NON static — su ADV 1 KB di .bss in piu' spinge httpd_start oltre il filo
+    // del rasoio dell'heap di boot (abort loop in main.c). La pressione sullo stack main 8 KB e' un rischio
+    // teorico latente (mai un overflow osservato); l'heap di boot e' il vincolo reale. Vedi boot-ram-discipline.
     bool launched = false;
     bool tool_ok = true;            // esito dell'operazione TOOL -> conferma vocale "Fatto"/"Errore"
     bool _tool_write = s_res.action == ANIMA_ACT_TOOL &&
@@ -1021,20 +1236,30 @@ static void present_result(void)
         if (_w) nucleo_anima_observe("add_event", true);
         else { snprintf(reply, sizeof(reply), s_en ? "I couldn't add the reminder." : "Non sono riuscito ad aggiungere il promemoria."); nucleo_anima_observe("add_event", false); tool_ok = false; }
     } else if (s_res.action == ANIMA_ACT_TOOL && !strcmp(s_res.intent, "open_file")) {
-        // Follow-up "aprilo" on a remembered file -> open it in the matching native viewer by extension,
-        // reusing the deferred-launch path (s_pending_launch). No mapped viewer -> honest message.
+        // Follow-up "aprilo" on a remembered file. In ANIMA Solo the assistant runs alone (no viewer apps),
+        // so we can't hand the file off — point the user to the launcher instead of faking an "Opening...".
         const char *bn = strrchr(s_res.arg, '/'); bn = bn ? bn + 1 : s_res.arg;
-        const char *id = (s_res.arg[0] == '/') ? file_app(s_res.arg) : nullptr;
-        if (id) { snprintf(s_pending_launch, sizeof(s_pending_launch), "%s", id);
-                  snprintf(reply, sizeof(reply), s_en ? "Opening %s..." : "Apro %s...", bn); launched = true; }
-        else      snprintf(reply, sizeof(reply), s_en ? "I can't open %s on the device." : "Non posso aprire %s sul dispositivo.", bn);
+        if (nucleo_anima_solo_active()) {
+            snprintf(reply, sizeof(reply), s_en ? "Press Esc to leave ANIMA, then open %s from the launcher."
+                                                : "Premi Esc per uscire da ANIMA, poi apri %s dal launcher.", bn);
+        } else {
+            const char *id = (s_res.arg[0] == '/') ? file_app(s_res.arg) : nullptr;
+            if (id) { snprintf(s_pending_launch, sizeof(s_pending_launch), "%s", id);
+                      snprintf(reply, sizeof(reply), s_en ? "Opening %s..." : "Apro %s...", bn); launched = true; }
+            else      snprintf(reply, sizeof(reply), s_en ? "I can't open %s on the device." : "Non posso aprire %s sul dispositivo.", bn);
+        }
     } else if (s_res.action == ANIMA_ACT_TOOL && !strcmp(s_res.intent, "create_file")) {
         // create_file whose arg failed the absolute-path guard above -> honest error, never a silent
         // "success" via the generic reply (which would confirm a file that was never written).
         snprintf(reply, sizeof(reply), s_en ? "Invalid file path." : "Percorso file non valido.");
         nucleo_anima_observe("create_file", false); tool_ok = false;
     } else if (s_res.action == ANIMA_ACT_LAUNCH) {
-        if (is_web_only(s_res.arg)) {
+        if (nucleo_anima_solo_active()) {
+            // ANIMA Solo: the assistant runs alone — no other app is loaded, so don't fake a launch.
+            // Esc reboots back into the full OS, where the launcher opens apps. (See ANIMA Solo mode.)
+            snprintf(reply, sizeof(reply), s_en ? "I run alone in Solo mode — press Esc to return to the OS, then open the app from the launcher."
+                                                : "In modalita Solo giro da sola: premi Esc per tornare all'OS, poi apri l'app dal launcher.");
+        } else if (is_web_only(s_res.arg)) {
             snprintf(reply, sizeof(reply), s_en ? "%s is only available in the web app." : "%s e disponibile solo nell'app web.", s_res.arg);
         } else {
             const char *nat = native_app_id(s_res.arg);
@@ -1045,7 +1270,13 @@ static void present_result(void)
             launched = true;
         }
     } else {
-        snprintf(reply, sizeof(reply), "%s", s_res.reply[0] ? s_res.reply : (s_en ? "I don't know." : "Non lo so."));
+        // Show the FULL cloud answer: grok_chat keeps anything over the 360-char on-card clip on the heap
+        // overflow channel (nucleo_anima_long_reply); the engine clips s_res.reply to 360. Prefer the overflow
+        // so a long LLM answer is shown WHOLE (up to reply[1024]), read aloud in chunks. NULL for offline turns
+        // (set_long_reply(NULL) at each query start), so those fall back to s_res.reply unchanged.
+        const char *full = nucleo_anima_long_reply();
+        const char *body = (full && full[0]) ? full : (s_res.reply[0] ? s_res.reply : (s_en ? "I don't know." : "Non lo so."));
+        snprintf(reply, sizeof(reply), "%s", body);
     }
     // La risposta CORRENTE si mostra INTERA: salva il testo pieno (foldato) in s_full; quel messaggio verra'
     // wrappato da li' (vedi rebuild_rows). Nel ring va solo la copia accorciata qui sotto (cronologia, RAM bassa).
@@ -1092,21 +1323,68 @@ static void present_result(void)
     }
 
     s_d_hdr = true;
+    s_d_input = true;                              // ridipingi la riga input: toglie lo stato "sta scrivendo" quando s_busy si spegne (path worker full-OS)
     save_chat();                                   // persist the transcript so re-entry shows this turn
 }
 
 static void clear_chat(void);
 static void submit(void);
 static void refresh_complications(void);   // watch-face glance strip; used by clear_chat() above its definition
+static const char *chat_hint(void);        // footer hint (usato da cancel_query/submit prima della sua def)
 
 // Cancel the in-flight query: bump the generation so the worker's result is dropped, free the UI now.
 static void cancel_query(void)
 {
     if (!s_busy) { push_meta(s_en ? "Nothing to stop." : "Niente da fermare.", DIM); return; }
-    s_gen = s_gen + 1;
+    s_gen = s_gen + 1;                              // worker sees the bump and abandons a long-form loop mid-paragraph
+    nucleo_audio_stop();                            // hush any sentence being read aloud right now (long-form TTS)
     s_busy = false; s_spin = 0;
-    s_d_hdr = true;
+    s_d_hdr = true; s_d_input = true;   // ridipingi la riga input: toglie i puntini "pensa" (anche path NK_DEL)
+    nucleo_app_set_hint(chat_hint());   // ripristina il footer normale
     push_meta(s_en ? "(stopped)" : "(annullato)", DIM);
+}
+
+// Drena i tasti accodati mentre il loop UI era bloccato dalla query inline (Solo). True se e' stato
+// premuto STOP (Invio/Back): allora si salta la voce. I caratteri digitati a vuoto si scartano (l'input
+// e' "disabilitato" mentre ANIMA elabora, come in una chat reale). Solo task UI.
+static bool drain_stop(void)
+{
+    bool stop = false;
+    for (nucleo_key_t k = nucleo_kbd_read(); k.key != NK_NONE; k = nucleo_kbd_read())
+        if (k.key == NK_ENTER || k.key == NK_BACK) stop = true;
+    return stop;
+}
+
+// Effetto "scrittura" stile GPT/Claude: rivela la risposta corrente un po' alla volta invece di un flash,
+// cosi' e' leggibile mentre compare. Frame bounded (~1.5s a prescindere dalla lunghezza), interrompibile
+// con Invio/Back. Path inline (Solo): il loop UI e' gia' bloccato dalla submit, qui animiamo noi.
+static bool typewriter_reveal(void)   // ritorna true se l'utente ha premuto Invio/Back (stop -> salta la voce)
+{
+    if (s_full_idx < 0 || !s_full[0]) { s_reveal = -1; return false; }
+    int total = (int)strlen(s_full);
+    int wpf = (total / 6) / 40; if (wpf < 1) wpf = 1;           // parole/frame: ~40 frame max (storie lunghe non trascinano)
+    s_typing = true;
+    bool stopped = false;
+    int n = 0;
+    while (n < total) {
+        for (int w = 0; w < wpf && n < total; w++) {            // avanza wpf parole (chunk = meno frame, meno flicker)
+            while (n < total && s_full[n] == ' ') n++;
+            while (n < total && s_full[n] != ' ') n++;
+        }
+        while (n < total && ((unsigned char)s_full[n] & 0xC0) == 0x80) n++;   // non tagliare un UTF-8 a meta'
+        s_reveal = n;
+        s_spin = (s_spin + 1) & 3;                             // anima i pallini "pensa" MENTRE scrive
+        rebuild_rows();                                        // ri-wrappa il messaggio troncato
+        s_d_input = true;                                      // ridipingi anche i pallini
+        draw();
+        nucleo_key_t key = nucleo_kbd_read();
+        if (key.key == NK_ENTER || key.key == NK_BACK) { stopped = true; break; }   // Invio = STOP (salta animazione E voce)
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    s_typing = false;
+    s_reveal = -1;
+    rebuild_rows(); draw();                                     // testo pieno (il chiamante spegne s_busy + ridipinge input/header)
+    return stopped;
 }
 
 // Quick mode switch: Offline -> Ibrido -> Solo online -> ...
@@ -1159,6 +1437,8 @@ static void push_info(void)
              l1m == 1 ? "ON" : l1m == 2 ? "OFF" : "AUTO",
              nucleo_anima_l1_serving() ? (s_en ? "active" : "attiva") : (s_en ? "stood down" : "a riposo"));
     push_meta(b, MUTED);
+    if (nucleo_anima_solo_active())   // dedicated boot personality: make the (reboot-based) exit discoverable
+        push_meta(s_en ? "Solo mode - Esc returns to the OS" : "Modalita Solo - Esc torna all'OS", ACC);
 }
 
 // Handle a "/command" typed in the chat. Returns true if it was a recognised command.
@@ -1196,30 +1476,75 @@ static void submit(void)
     else                                          snprintf(s_req, sizeof(s_req), "%s", s_input);
     s_ilen = 0; s_input[0] = 0;
     s_gen = s_gen + 1;
-    if (!s_worker) {                               // on-demand: create the 30 KB worker only now, with the
-        // session reclaim window up (enter() freed httpd/L1/mDNS/voice) so the contiguous block exists.
+    // ANIMA Solo runs the query INLINE on its dedicated big-stack task — NO separate 30 KB worker. Two
+    // 30 KB stacks (UI + worker) plus the ~35 KB TLS handshake do NOT fit this PSRAM-less chip, which is
+    // why "solo online" never reached Groq. One task owning everything (like USB-MSC) hands the whole heap
+    // to the handshake -> online fits. The UI is frozen on the question for the turn (the assistant is the
+    // only thing running anyway), then paints the answer. The full OS keeps the off-loop worker so its
+    // tiny launcher stack never hosts a TLS handshake and the UI stays live.
+    bool solo = nucleo_anima_solo_active();
+    if (!solo && !s_worker) {                      // full OS only: on-demand worker (Solo never spawns one)
         BaseType_t ok = xTaskCreate(anima_worker, "anima_sh", 30720, (void *)(uintptr_t)s_worker_epoch,
                                     tskIDLE_PRIORITY + 2, &s_worker);
         if (ok != pdPASS) s_worker = nullptr;
         ESP_LOGI(ATAG, "worker on-demand %s; largest=%u", ok == pdPASS ? "ready" : "FAIL",
                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
     }
-    if (s_worker) {                                // normal path: run the (possibly online) query off-loop
+    if (s_worker) {                                // full OS: run the (possibly online) query off-loop
         s_busy = true; s_done = false; s_spin = 0;
+        nucleo_app_set_hint(s_en ? "Enter to stop" : "Invio per fermare");   // footer stop hint (loop vivo: il framework lo dipinge)
         xTaskNotifyGive(s_worker);
     } else {
-        // Low memory: the 30 KB online worker couldn't be created. Run INLINE and FORCED OFFLINE so it
-        // still answers (L0/L1 are fast, no watchdog risk) and we skip the blocking online tiers.
+        // Solo (one big task) OR full-OS low-memory fallback. Solo keeps ONLINE enabled — the heap is now
+        // free for the handshake; the full-OS fallback forces offline (its launcher stack can't host TLS).
+        s_busy = true; s_done = false;
+        nucleo_app_set_hint(s_en ? "Enter to stop" : "Invio per fermare");   // footer: come fermare durante l'esecuzione
+        launcher_render_hint_bar();                                          // ...dipinto SUBITO (il loop framework e' bloccato per tutto il turno inline)
+        // CHAT-FEEL: la query inline BLOCCA questo task UI -> senza, lo schermo resta congelato sullo stato
+        // pre-invio fino alla risposta. Dipingi SUBITO la bolla utente + i puntini "pensa".
+        s_spin = 0; s_d_body = s_d_input = s_d_hdr = true; draw();
         bool saved_online = nucleo_anima_online_enabled();
-        nucleo_anima_set_online(false);
+        if (!solo) nucleo_anima_set_online(false);
+        // The FIRST query after the Solo reboot races the Wi-Fi reconnect (~5-8 s): if online is on but the
+        // IP isn't up yet, online_available() is false -> the cascade stands UP L1 and answers offline even
+        // though there IS connectivity ("la prima domanda risponde offline"). Wait briefly for the IP so the
+        // first knowledge turn reaches the cloud. No-op once connected (later turns don't wait); WDT-fed,
+        // bounded ~5 s. Solo only — the full OS keeps its instant offline fallback.
+        if (solo && saved_online) {
+            for (int i = 0; i < 50 && !nucleo_anima_online_available(); i++) {
+                if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
+                if ((i & 3) == 0) { s_spin = (s_spin + 1) & 3; s_d_input = true; draw(); }   // anima "sta scrivendo..."
+                vTaskDelay(pdMS_TO_TICKS(100));
+            }
+        }
+        ESP_LOGW(ATAG, "inline query START solo=%d online=%d free=%u largest=%u",   // Solo heap margin + connectivity at turn start (WARN so it shows in /api/logs + serial)
+                 (int)solo, (int)nucleo_anima_online_available(),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+        esp_task_wdt_delete(NULL);                 // an online turn can run ~30s; don't let the 8s task WDT reboot mid-handshake. KEPT deleted THROUGH the voice below: a knowledge answer's TTS render reads MANY clips from SD (fseek per clip) and the ADV's slow SD makes the cumulative SD time exceed the 8s WDT -> anima-solo TWDT reboot (real backtrace: speak_result->render->tts_index_find->fseek). Re-added only after speak_result.
         s_res = nucleo_anima_query(s_req, s_en ? "en" : "it");
-        nucleo_anima_set_online(saved_online);
+        { const char *lr = nucleo_anima_long_reply();
+          ESP_LOGW(ATAG, "inline query DONE tier=%d action=%d stack_hw=%u free=%u reply_len=%u long_len=%u",   // tier 4=REMOTE; reply_len=clip, long_len=full overflow
+                 (int)s_res.tier, (int)s_res.action, (unsigned)(uxTaskGetStackHighWaterMark(NULL)*sizeof(StackType_t)),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT), (unsigned)strlen(s_res.reply), (unsigned)(lr ? strlen(lr) : 0)); }
+        if (!solo) nucleo_anima_set_online(saved_online);
         s_done_gen = s_gen;
         present_result();
-        speak_result(s_res, s_en);   // voce on-device (gated: no conoscenza/calc)
+        // TEXT BEFORE VOICE: the inline query BLOCKS this UI task, so the launcher loop can't paint until we
+        // return — meaning speak_result() (which blocks on TTS) would otherwise be HEARD before the answer is
+        // SEEN. Paint it synchronously now (ANIMA is direct-draw), THEN speak. s_d_input ripristina la riga
+        // input (toglie "sta scrivendo": s_busy ora e' false).
+        bool tw_stop = typewriter_reveal();   // rivelazione stile GPT, pallini animati mentre scrive; true = Invio premuto
+        s_busy = false;        // scrittura finita -> pallini via, prompt normale, badge -> orologio
+        s_d_input = s_d_hdr = true; draw();
+        // STOP con Invio: premuto durante l'elaborazione/scrittura -> salta la voce. Il testo resta a schermo.
+        if (tw_stop || drain_stop()) push_meta(s_en ? "(stopped)" : "(annullato)", DIM);
+        else speak_result(s_res, s_en, s_gen);   // voce on-device (gated: no conoscenza/calc), interrompibile con Invio
+        esp_task_wdt_add(NULL);                   // turn finito (query + render voce SD-lenta): ri-sottoscrivi il task WDT
+        nucleo_app_set_hint(chat_hint()); launcher_render_hint_bar();   // ripristina il footer normale
         if (s_pending_launch[0]) {
             s_launch_wait = 3;                             // defer via tick() so L1 frees + the heap settles first
-        } else if (s_res.action != ANIMA_ACT_LAUNCH) {     // a web-only launch already showed its own note
+        } else if (!solo && s_res.action != ANIMA_ACT_LAUNCH) {  // a web-only launch already showed its own note
             push_meta(s_en ? "(offline: low memory for the online model)"
                            : "(offline: memoria insufficiente per l'online)", DIM);
         }
@@ -1242,12 +1567,13 @@ static void clear_chat(void)
 
 // ---- suggestion deck (empty-state) ------------------------------------------
 // A fresh/cleared chat shows starter prompts that exercise the breadth of ANIMA AND lean on everyday
-// human life: time, weather, app launch, mental math, a calendar reminder, a unit conversion, a
-// percentage (tip/discount), capabilities. su/giu pick, Invio runs.
+// human life: time, weather, Wi-Fi/network, mental math, a calendar reminder, a unit conversion, a
+// percentage (tip/discount), capabilities. su/giu pick, Invio runs. (No "open app" prompts: ANIMA Solo
+// runs alone, so app launching was removed — see the LAUNCH handler in present_result.)
 #define SUG_N 16   // deck espanso: 16 voci scrollabili (su/giu), copre piu' skill
 static const char *SUG_IT[SUG_N] = {
     "Che ore sono", "Che giorno e oggi", "Meteo a Brescia",
-    "Quanto spazio ho sulla SD", "Apri la musica", "Quanto fa 18 x 24",
+    "Quanto spazio ho sulla SD", "A che rete sono connesso", "Quanto fa 18 x 24",
     "Quanto e il 15% di 80", "Ricordami la spesa domani alle 18", "Cosa sai fare",
     // nuovi suggerimenti
     "Radice quadrata di 144", "Converti 5 miglia in km",
@@ -1257,7 +1583,7 @@ static const char *SUG_IT[SUG_N] = {
 };
 static const char *SUG_EN[SUG_N] = {
     "What time is it", "What's today's date", "Weather in London",
-    "How much SD space is free", "Open the music", "How much is 18 x 24",
+    "How much SD space is free", "What network am I on", "How much is 18 x 24",
     "What is 15% of 80", "Remind me groceries tomorrow at 6pm", "What can you do",
     // new suggestions
     "Square root of 144", "Convert 5 miles to km",
@@ -1319,9 +1645,9 @@ static bool autocomplete(const char *pfx, char *out, int cap)
 // "ask for the numbers instead of inventing 4x4" behaviour). Stored const -> lives in flash, not RAM.
 #define CAT_N 9
 static const char *CAT_IT[CAT_N] = { "Sistema", "Calcolo", "Geometria", "Conversioni", "Meteo",
-                                     "Agenda", "App e File", "Sapere", "Traduci" };
+                                     "Agenda", "File", "Sapere", "Traduci" };
 static const char *CAT_EN[CAT_N] = { "System", "Math", "Geometry", "Conversions", "Weather",
-                                     "Agenda", "Apps & Files", "Knowledge", "Translate" };
+                                     "Agenda", "Files", "Knowledge", "Translate" };
 static const char *cat_label(int c) { return (s_en ? CAT_EN : CAT_IT)[c]; }
 
 typedef struct {
@@ -1391,13 +1717,8 @@ static const Leaf LEAVES[] = {
     { 5,0, "Impegni oggi","Today",       "Che impegni ho oggi","What are my events today",        0,0,0,0 },
     { 5,2, "Promem. domani","Tomorrow",  "Ricordami %s domani alle %s","Remind me %s tomorrow at %s","Cosa","What","Ora HH:MM","Time HH:MM" },
     { 5,2, "Promem. oggi","Today rem.",  "Ricordami %s oggi alle %s","Remind me %s today at %s",  "Cosa","What","Ora HH:MM","Time HH:MM" },
-    // -- App e File (6) --
-    { 6,0, "Apri Musica","Open Music",   "Apri la musica","Open the music",                       0,0,0,0 },
-    { 6,0, "Apri Radio","Open Radio",    "Apri la radio","Open the radio",                         0,0,0,0 },
-    { 6,0, "Apri Foto","Open Photos",    "Apri le foto","Open the photos",                        0,0,0,0 },
-    { 6,0, "Apri Calend.","Open Cal.",   "Apri il calendario","Open the calendar",               0,0,0,0 },
-    { 6,0, "Apri Note","Open Notes",     "Apri le note","Open notes",                             0,0,0,0 },
-    { 6,0, "Apri SSH","Open SSH",        "Apri SSH","Open SSH",                                   0,0,0,0 },
+    // -- File (6): ANIMA's OWN built-in editor (no app launching — see ANIMA Solo: only the assistant
+    // runs, so "apri musica/radio/..." was removed; the quick-note + create-file editor live INSIDE ANIMA).
     // NOTA RAPIDA: sentinella @note in p1 (slots=0) -> activate_leaf apre l'editor con path timestamp
     { 6,0, "Nota rapida","Quick note",   0,0,  "@note",0,  0,0 },
     // EDITOR leaf: slots=1 collects the PATH, then "@editor" (sentinel in p2) opens the full-screen
@@ -1501,23 +1822,35 @@ static void reset_idee(void) { s_idee_cat = -1; s_form_leaf = -1; s_form_slot = 
 
 static void enter(void)
 {
+    // ANIMA Solo (see nucleo_app.h): from the full OS, opening the assistant reboots into a dedicated
+    // personality where it owns a large, UNFRAGMENTED heap (httpd/mDNS/recorder/etc never start) — the
+    // only way this PSRAM-less chip fits online TLS + L1 + voice at once. If another app seeded a
+    // question (s_preset: notify / Wi-Fi diag / ESP-NOW), carry it across the warm reboot so the
+    // auto-ask still fires. A cold power-on clears the RTC flags -> you always land in the full OS.
+    if (!nucleo_anima_solo_active()) {
+        if (s_preset[0]) {                                         // carry a seeded auto-ask into Solo
+            snprintf(s_rtc_preset, sizeof s_rtc_preset, "%s", s_preset);
+            s_rtc_preset_magic = ANIMA_PRESET_MAGIC;
+        }
+        nucleo_anima_solo_request();                              // set RTC flag + esp_restart() — NEVER returns
+        return;
+    }
+    if (s_rtc_preset_magic == ANIMA_PRESET_MAGIC) {               // restore a question carried across the reboot
+        s_rtc_preset_magic = 0;
+        snprintf(s_preset, sizeof s_preset, "%s", s_rtc_preset);
+    }
+
     // ANIMA draws DIRECT to the panel, so free the launcher's ~32 KB off-screen back-buffer the
     // moment we open: that RAM belongs to the assistant while it runs (L1 index + 30 KB worker + TLS).
     nucleo_screen_release();
     nucleo_app_set_direct_draw(true);
     nucleo_audio_stop();
-    // Recupera la RAM all'avvio come Music/Video. Questo chip senza PSRAM gira a ~5 KB liberi e, dopo
-    // un'altra app media, l'heap e' frammentato: il worker da 30 KB (e il ricarico dell'indice L1) non si
-    // allocavano e ANIMA si RIAVVIAVA all'apertura. Sospendi httpd + indice L1 + mDNS per TUTTA la sessione
-    // (Wi-Fi STA resta su per le query cloud) e ripristina in leave(). NON includere NX_VOICE: ANIMA deve
-    // poter PARLARE (TTS) durante la sessione, e sospendere il motore voce zittiva la sintesi. Il motore
-    // voce e' comunque lazy (~0 KB al boot), quindi non sospenderlo non costa RAM. Il worker per-query
-    // rinuncia al suo enter/exit quando questa finestra e' gia' attiva (vedi anima_worker).
-    nucleo_exclusive_info_t nxi;
-    nucleo_exclusive_enter(NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY, &nxi);
-    ESP_LOGI(ATAG, "enter reclaim: free %u->%u largest %u->%u",
-             (unsigned)nxi.free_before, (unsigned)nxi.free_after,
-             (unsigned)nxi.largest_before, (unsigned)nxi.largest_after);
+    // In Solo httpd / L1 / mDNS were NEVER started — the heap is already wide open, so there is nothing
+    // to suspend (and calling nucleo_exclusive_exit later would START services we deliberately kept off).
+    // Just log the headroom we came up with for the boot-RAM trace.
+    ESP_LOGI(ATAG, "solo enter: free=%u largest=%u",
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
     nucleo_anima_set_compact_reply(true);   // small screen: cloud answers short & complete (off again in leave)
     load_settings();
     nucleo_anima_init("it");
@@ -1525,9 +1858,13 @@ static void enter(void)
     // foreground the device itself is the brain, so AUTO must decide L1 purely on online-key availability.
     // (An explicit user /l1 ON/OFF override still wins — set_external_brain only affects AUTO.)
     nucleo_anima_l1_set_external_brain(false);
+    // Session buffers on the heap (freed in leave): the exclusive window above just reclaimed ~32 KB,
+    // so this is cheap — and they hold ZERO .bss at boot. calloc before the resets/draw below use them.
+    if (!s_hist)   s_hist   = (char (*)[HIST_LEN])calloc(HIST_N, sizeof *s_hist);
+    if (!s_ed_buf) s_ed_buf = (char *)calloc(ED_BUF_CAP, 1);
     load_chat();                                   // restore the last conversation (empty ring if none)
     s_rown = 0; s_scroll = 0; s_ilen = 0; s_input[0] = 0;
-    s_ed_open = false; s_ed_len = 0; s_ed_buf[0] = 0; s_ed_path[0] = 0; s_ed_scroll = 0;
+    s_ed_open = false; s_ed_len = 0; if (s_ed_buf) s_ed_buf[0] = 0; s_ed_path[0] = 0; s_ed_scroll = 0;
     s_busy = false; s_done = false; s_pending_launch[0] = 0; s_launch_web[0] = 0; s_launch_wait = 0;
     s_last_conf = -1; s_last_tier = ""; s_last_subject[0] = 0;
     s_user_sent = (s_mcount > 0); s_sug_sel = 0; s_awaiting = false; s_clock_min = -1;
@@ -1562,7 +1899,15 @@ static void leave(void)
     save_chat();                                   // remember the conversation for next time
     nucleo_anima_set_compact_reply(false);         // web client (full screen) keeps long answers
     stop_worker();                                 // free the worker's 30 KB heap stack for L1
-    if (nucleo_exclusive_active()) nucleo_exclusive_exit();  // ripristina httpd/L1/mDNS/voce: chiusa la finestra di sessione (come Music/Video)
+    free(s_hist);   s_hist   = nullptr;            // session buffers back to zero RAM until next enter
+    free(s_ed_buf); s_ed_buf = nullptr;
+    // The worker self-deletes ASYNCHRONOUSLY and FreeRTOS reclaims its 30 KB stack only when the idle task
+    // runs. close_app's 150 ms canvas re-acquire fires before that, so the NEXT app (e.g. Tanks) opens with
+    // the shared 32 KB canvas still un-allocatable -> direct draw -> flicker. Yield here until the stack is
+    // back and the canvas is restored, WHILE services are still suspended (max free RAM, no httpd contention).
+    // Bounded (~700 ms); a worker busy on a long online query may outlast it -> the lazy getter heals later.
+    for (int i = 0; i < 35 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
+    if (nucleo_exclusive_active()) nucleo_exclusive_exit();  // ripristina httpd/L1/mDNS/voce: canvas gia' ripristinata
     d.setFont(&fonts::Font0); d.setTextSize(1);    // restore the framework's default font for the next app
 }
 
@@ -1619,13 +1964,17 @@ static void on_tab(void)
 // adjust -> row -> tab bar -> close menu. From the chat base, return false so the framework closes ANIMA.
 static bool on_back(int key)
 {
+    if (s_exit_confirm) { s_exit_confirm = false; mark_all_dirty(); nucleo_app_request_draw(); return true; }  // Esc nel modale = annulla (resta)
     if (s_ed_open) {                                        // editor: the launcher routes ',' (Left) and Esc here
         if (key == NK_LEFT) {                               // ',' -> type a literal comma (textarea isn't comma-blind)
-            if (s_ed_len < (int)sizeof(s_ed_buf) - 1) { s_ed_buf[s_ed_len++] = ','; s_ed_buf[s_ed_len] = 0; nucleo_app_request_draw(); }
+            if (s_ed_len < ED_BUF_CAP - 1) { s_ed_buf[s_ed_len++] = ','; s_ed_buf[s_ed_len] = 0; nucleo_app_request_draw(); }
         } else editor_cancel();                             // Esc/backtick -> cancel the editor
         return true;
     }
-    if (!s_menu_open) return false;                         // chat base: let the framework close us
+    if (!s_menu_open) {                                     // chat base
+        if (key == NK_BACK) { s_exit_confirm = true; nucleo_app_request_draw(); return true; }  // Esc -> chiedi conferma, NON chiudere subito
+        return false;                                       // Left u altro: comportamento framework di prima
+    }
     if (s_edit) {
         if (key == NK_LEFT) slider_adjust(-5);              // Left lowers the value
         else                s_edit = false;                // Esc finishes adjusting
@@ -1779,6 +2128,7 @@ static void idee_key(int key, char ch)
 // owns the whole screen — a plain textarea, exactly what the user asked for.
 static void editor_open(const char *path)
 {
+    if (!s_ed_buf) return;                          // edit buffer not allocated (alloc failed) — don't open
     while (*path == ' ') path++;
     if (path[0] == '/') snprintf(s_ed_path, sizeof s_ed_path, "%s", path);
     else                snprintf(s_ed_path, sizeof s_ed_path, "/data/%s", path);   // default to /data/
@@ -1827,11 +2177,11 @@ static void editor_key(int key, char ch)
 {
     if ((nucleo_kbd_mods() & NK_MOD_CTRL) && (ch == 's' || ch == 'S' || ch == 0x13)) { editor_save(); return; }
     if (key == NK_ENTER) {
-        if (s_ed_len < (int)sizeof(s_ed_buf) - 1) { s_ed_buf[s_ed_len++] = '\n'; s_ed_buf[s_ed_len] = 0; }
+        if (s_ed_len < ED_BUF_CAP - 1) { s_ed_buf[s_ed_len++] = '\n'; s_ed_buf[s_ed_len] = 0; }
     } else if (key == NK_DEL) {
         if (s_ed_len > 0) s_ed_buf[--s_ed_len] = 0;
     } else if (ch >= 32 && ch < 127) {
-        if (s_ed_len < (int)sizeof(s_ed_buf) - 1) { s_ed_buf[s_ed_len++] = ch; s_ed_buf[s_ed_len] = 0; }
+        if (s_ed_len < ED_BUF_CAP - 1) { s_ed_buf[s_ed_len++] = ch; s_ed_buf[s_ed_len] = 0; }
     } else return;
     nucleo_app_request_draw();
 }
@@ -1904,6 +2254,12 @@ static void menu_key(int key, char ch)
 
 static void on_key(int key, char ch)
 {
+    if (s_exit_confirm) {                                   // modale conferma uscita: Invio/S/Y = esci, altro = annulla
+        if (key == NK_ENTER || ch == 's' || ch == 'S' || ch == 'y' || ch == 'Y')
+            nucleo_app_exit();                             // conferma -> chiude (in Solo = esp_restart, NON ritorna)
+        else { s_exit_confirm = false; mark_all_dirty(); nucleo_app_request_draw(); }   // annulla -> torna alla chat
+        return;
+    }
     if (s_ed_open)   { editor_key(key, ch); return; }       // the full-screen editor owns every key
     if (s_menu_open) { menu_key(key, ch); return; }
 
@@ -1920,14 +2276,13 @@ static void on_key(int key, char ch)
         nucleo_app_request_draw(); return;
     }
 
-    // Up/Down: walk the command history (Linux style).
-    // Ctrl+Up/Down: scroll the chat view.
+    // Up/Down (FN+;/. sul Cardputer): scorri la chat. Ctrl+Up/Down: cronologia comandi (Linux style).
     if (key == NK_UP || key == NK_DOWN) {
         if (nucleo_kbd_mods() & NK_MOD_CTRL) {
+            hist_recall(key == NK_UP ? -1 : +1);
+        } else {                                            // su/giu = scorri la conversazione su/giu
             if (key == NK_UP)   { if (s_scroll < s_rown - 1) { s_scroll++; s_d_body = true; } }
             if (key == NK_DOWN) { if (s_scroll > 0)          { s_scroll--; s_d_body = true; } }
-        } else {
-            hist_recall(key == NK_UP ? -1 : +1);
         }
         nucleo_app_request_draw(); return;
     }
@@ -1940,7 +2295,7 @@ static void on_key(int key, char ch)
         }
     }
 
-    if (key == NK_ENTER)      submit();
+    if (key == NK_ENTER)     { if (s_busy) cancel_query(); else submit(); }   // Invio mentre elabora = stop (loop vivo: worker full-OS)
     else if (key == NK_DEL)  {
         if (s_ilen > 0) { s_input[--s_ilen] = 0; s_d_input = true; s_hist_nav = -1; if (s_ilen == 0 && !s_user_sent) s_d_body = true; }
         else if (s_busy) cancel_query();
@@ -1956,6 +2311,7 @@ static void on_key(int key, char ch)
 
 static void tick(void)
 {
+    if (s_exit_confirm) return;   // modale uscita statica: niente redraw periodici (era il leggero flicker)
     // Deferred app hand-off. Opening a RAM-heavy app (music/recorder) the instant the answer arrived
     // OOMs on this PSRAM-less chip: ANIMA still pins a 30 KB worker stack (+ maybe the ~18 KB L1 index)
     // while the target app needs the 32 KB launcher canvas + its decoder — and the largest free block
@@ -1987,10 +2343,12 @@ static void tick(void)
             nucleo_app_set_hint(chat_hint()); mark_all_dirty();
         }
         present_result();
+        nucleo_app_set_hint(chat_hint());          // ripristina il footer (worker finito)
         nucleo_app_request_draw();
         if (s_pending_launch[0]) {                 // a LAUNCH intent: free ANIMA's RAM, then DEFER the hand-off
-            nucleo_anima_set_compact_reply(false);  // launch bypasses leave() -> clear the flag so the web client isn't left compact
-            stop_worker();                          // launch bypasses on_exit -> orphan the worker (idle frees its 30 KB)
+            nucleo_anima_set_compact_reply(false);  // pre-clear (leave() also clears it when launch_by_id runs our on_exit)
+            stop_worker();                          // stop EARLY (not at leave()'s stop_worker): orphan the worker NOW so the
+                                                    // idle task reclaims its 30 KB DURING the settle, before the target app allocs
             s_launch_wait = 3;                      // ~0.6 s settle so the orphaned worker's stack is reclaimed first
             ESP_LOGW(ATAG, "launch armed '%s' largest=%u", s_pending_launch,   // DIAG: visible in /api/logs
                      (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
@@ -1999,7 +2357,7 @@ static void tick(void)
     }
     if (s_ed_open) { if ((++s_blink & 1) == 0) nucleo_app_request_draw(); return; }   // editor: blink the caret only
     if (s_menu_open) return;                                                // the menu is up: no chat animation
-    if (s_busy) { s_spin = (s_spin + 1) & 3; s_d_badge = true; nucleo_app_request_draw(); return; }
+    if (s_busy) { s_spin = (s_spin + 1) & 3; s_d_badge = true; s_d_input = true; nucleo_app_request_draw(); return; }   // anima sia "pensa..." (header) sia "sta scrivendo..." (input)
     time_t now = time(NULL); struct tm *tm = localtime(&now);               // header clock: repaint on a minute change
     int mn = tm ? tm->tm_min : -1;
     if (mn != s_clock_min) { s_clock_min = mn; s_d_hdr = true; nucleo_app_request_draw(); }
@@ -2788,9 +3146,8 @@ static void draw_body(int top, int h)
 {
     int inH = input_h();
     int ty0 = top + 18, body_bottom = top + h - inH - 1, avail = body_bottom - ty0;
-    d.fillRect(0, ty0, 240, avail, BG);
-    if (deck_active()) { draw_deck(ty0, avail); return; }
-    if (s_rown <= 0) return;
+    if (deck_active()) { d.fillRect(0, ty0, 240, avail, BG); draw_deck(ty0, avail); return; }
+    if (s_rown <= 0) { d.fillRect(0, ty0, 240, avail, BG); return; }
     int maxscroll = s_rown - 1;
     if (s_scroll > maxscroll) s_scroll = maxscroll;
     if (s_scroll < 0) s_scroll = 0;
@@ -2802,6 +3159,10 @@ static void draw_body(int top, int h)
         used += hh; start = i;
         if (used >= avail) break;
     }
+    // Typewriter anti-flicker: se il testo entra senza scroll (start==0) NON pulire tutto il corpo a ogni
+    // frame (era il flash) — render_row ridisegna lo sfondo per carattere e il testo cresce in area pulita.
+    // Quando scrolla (start>0) la vista si sposta -> serve la pulizia piena.
+    if (!(s_typing && start == 0 && s_scroll == 0)) d.fillRect(0, ty0, 240, avail, BG);
     int y = ty0;
     d.setClipRect(0, ty0, 240, avail);                       // keep the bottom row from bleeding onto the input's top edge
     for (int i = start; i <= bottom; i++) { render_row(y, &s_row[i]); y += row_h(&s_row[i]); }
@@ -2828,6 +3189,16 @@ static void draw_input(int top, int h)
     d.fillRect(0, in_top, 240, inH, BG);
     d.drawFastHLine(0, in_top, 240, LINE);
     set_font(chat_font());
+    if (s_busy && s_ilen == 0) {                            // pensa: onda di 4 pallini, il "picco" luminoso scorre
+        int cy = in_top + inH / 2, act = (int)(s_spin & 3);
+        for (int i = 0; i < 4; i++) {
+            int dist = i - act; if (dist < 0) dist = -dist;
+            int r = dist == 0 ? 4 : dist == 1 ? 3 : 2;
+            unsigned short col = dist == 0 ? GRN : dist == 1 ? ACC : DIM;
+            d.fillCircle(PROMPT_X + 8 + i * 14, cy, r, col);
+        }
+        return;
+    }
     int ty = in_top + 4;
     d.setTextColor(ACC, BG); d.setCursor(PROMPT_X, ty); d.print(">");
     const int x0 = input_x0(), availw = 232 - x0;
@@ -2850,14 +3221,14 @@ static void draw_input(int top, int h)
 // without touching anything else (no flicker). Hidden on the deck and while busy.
 static void draw_caret(int top, int h)
 {
-    if (deck_active() || s_menu_open) return;
+    if (deck_active() || s_menu_open || s_busy) return;     // busy: la riga input mostra i pallini -> il caret non li tocca
     int inH = input_h(), in_top = top + h - inH, ty = in_top + 4;
     set_font(chat_font());
     const int x0 = input_x0(), availw = 232 - x0;
     int startc = 0; while (s_input[startc] && (int)d.textWidth(s_input + startc) > availw) startc++;
     int cx = x0 + (int)d.textWidth(s_input + startc);
     int ch = s_big ? 16 : 13;
-    bool show = !s_busy && (s_blink & 2);
+    bool show = (s_blink & 2);
     d.fillRect(cx + 1, ty, 2, ch, show ? GRN : BG);
 }
 
@@ -2921,9 +3292,30 @@ static void draw_editor(int top, int h)
     if (nl == 0 && (s_blink & 1)) d.fillRect(5, by, 2, font_h(F_MED), ACC);
 }
 
+// Modale di conferma uscita: pannello a tutto schermo, font grandi ben visibili (REGOLA UI nativa).
+static void draw_exit_modal(void)
+{
+    int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    int bw = 212, bh = 92, bx = (240 - bw) / 2, by = top + (h - bh) / 2;
+    d.fillRoundRect(bx, by, bw, bh, 10, CAP);
+    d.drawRoundRect(bx, by, bw, bh, 10, ACC);
+    d.drawRoundRect(bx + 1, by + 1, bw - 2, bh - 2, 9, ACC);          // doppio bordo = piu' marcato
+    set_font(F_BIG); d.setTextColor(FG, CAP);
+    const char *q = s_en ? "Leave ANIMA?" : "Uscire da ANIMA?";
+    d.setCursor(120 - (int)d.textWidth(q) / 2, by + 14); d.print(q);
+    set_font(F_MED);
+    const char *yes = s_en ? "Enter = Exit" : "Invio = Esci";
+    d.setTextColor(GRN, CAP);   d.setCursor(120 - (int)d.textWidth(yes) / 2, by + 44); d.print(yes);
+    const char *no = s_en ? "Esc = Stay" : "Esc = Resta";
+    d.setTextColor(MUTED, CAP); d.setCursor(120 - (int)d.textWidth(no) / 2, by + 66); d.print(no);
+    d.setFont(&fonts::Font0); d.setTextSize(1);
+}
+
 static void draw(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    if (s_exit_confirm) { draw_exit_modal(); return; }      // modale uscita sopra a tutto
     if (s_ed_open)   { draw_editor(top, h); d.setFont(&fonts::Font0); d.setTextSize(1); return; }
     if (s_menu_open) { draw_menu(h); d.setFont(&fonts::Font0); d.setTextSize(1); return; }
 

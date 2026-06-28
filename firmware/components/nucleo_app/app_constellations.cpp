@@ -10,10 +10,11 @@
 // no-hoarding rule still holds. Laser and Shield are shipyard upgrades, tying trade money to
 // combat power; pilot rank grows with kills.
 //
-//   • RAM / exclusive-mode: ALL game state is one small static struct + static arrays (~250 B);
-//     the rich content (systems, goods, events, bilingual text) is `static const` in flash. No heap,
-//     no tasks, no decoder. So, like every other light app in the exclusive audit, exclusive_flags=0
-//     and we never call nucleo_exclusive_* — the no-hoarding rule honoured by owning nothing.
+//   • RAM / exclusive-mode: the game-state pools (systems cache + combat arrays, ~3 KB) are HEAP,
+//     allocated on enter and freed on exit (zero boot-time cost). Because that calloc must succeed in
+//     the tight, fragmented runtime heap, the app declares exclusive_flags = NX_NET_APP: the framework
+//     frees ~60 KB (httpd/mDNS/voice/L1) BEFORE on_enter, so the pools always fit (no launch OOM) and
+//     the freed I2S line makes the chiptune SFX reliable — same contract as Reactor/Slots/Sandgarden.
 //   • Flicker: we draw only with d.<...> in on_draw(); the run loop composites the whole frame into
 //     the shared canvas and blits once (ANTI-FLICKER technique 1). For smooth motion we register a
 //     ~30 Hz poll handler that animates ONLY the live screens (title / map / cinematics) and returns
@@ -32,7 +33,18 @@
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
+#include "nucleo_fx3d.h"     // reusable pseudo-3D toolkit: Mode-7 grid + flat-shaded polygon ships
+#include "nucleo_exclusive.h" // NX_NET_APP: free ~60KB before on_enter so the heap pools always allocate
+#include "nucleo_ui.h"        // nucleo_ui_is_adv(): gate the tilt setting to the ADV
 #include "notify_synth.h"     // notify_voice_t + notify_synth_voices_wav (pure inline, stdio+math)
+// BMI270 tilt seam. Forward-declared (not #include "nucleo_imu.h") so we don't pull nucleo_imu's
+// include dir into the whole nucleo_app component and recompile every sibling source. Symbols
+// resolve at final link since main already pulls nucleo_imu in — same trick as nucleo_anima_l1_unload().
+extern "C" {
+    bool nucleo_imu_present(void);
+    bool nucleo_imu_tilt(float *tx, float *ty);
+    void nucleo_imu_recenter(void);
+}
 #include "constellations_content.h"
 #include <M5GFX.h>
 #include <stdint.h>
@@ -110,11 +122,12 @@ struct Save {
 static Save g;
 // PROCEDURAL world: the current sector's NSYS systems live in this regenerated cache.
 // `#define SYSTEMS cur_sys` lets every existing `SYSTEMS[i].field` read site work unchanged.
-static Sys cur_sys[NSYS];
+static Sys *cur_sys;   // NSYS — heap, allocated on app enter / freed on exit (zero boot-time .bss)
 #define SYSTEMS cur_sys
 
 static int  g_lang  = LANG_IT;   // mirrored in the settings file so the menu remembers it
 static int  g_audio = 1;
+static int  g_tilt  = 0;         // tilt controller on/off (Cardputer ADV BMI270); persisted in cfg
 
 static int  s_screen;
 static bool s_ingame;            // a run is active (continue/new), drives autosave on exit
@@ -141,11 +154,18 @@ static char s_status[40];        // transient one-liner on market/shipyard
 #define ZCONV  140.0f                // depth where a tracer's converging line meets the rim
 #define ZWARD  200.0f                // fixed depth of the escort/defend ward
 #define RAIL    46.0f                // base forward-flight speed (starfield streak)
+// reticle glide tuning (impulse + drag; see aim_steer): KICK = instant tap response, PUSH = per-repeat
+// add so a held arrow accelerates, VMAX = terminal speed cap, FRIC = drag toward a soft inertial stop.
+#define AIM_KICK 210.0f
+#define AIM_PUSH 150.0f
+#define AIM_VMAX 240.0f
+#define AIM_FRIC   6.5f
 struct Bolt { float ex, ey, ez, tx, ty, vz; int16_t life; uint8_t on, foe, aimward; };
-struct Foe  { float ex, ey, ez, wphase, bank, engagez; int16_t hp, hpmax, firecd, strafecd; uint8_t on, kind, passed, strafe; };
-static Bolt s_bolt[NBOLT];
-static Foe  s_foe[NFOE];
-static struct { float ex, ey, ez; } s_warp[NWARP];
+struct Foe  { float ex, ey, ez, wphase, bank, engagez; int16_t hp, hpmax, firecd, strafecd, hitms; uint8_t on, kind, passed, strafe; };
+static Bolt *s_bolt;                          // NBOLT — heap, allocated on enter / freed on exit
+static Foe  *s_foe;                           // NFOE  — idem
+struct Warp { float ex, ey, ez; };
+static Warp *s_warp;                          // NWARP — forward-streaking starfield
 // ---- juice pools (all .bss, no heap) ----------------------------------------
 #define NPART 40        // debris + spark particles (shared round-robin pool)
 #define NSHK  3         // expanding shockwave rings
@@ -154,9 +174,14 @@ enum { PK_DEBRIS = 0, PK_SPARK, PK_STREAK };
 struct Part { float ex, ey, ez, vx, vy, vz; int16_t life, life0; uint8_t on, kind; uint16_t col; };
 struct Shk  { float cx_, cy_; int16_t life, life0; uint8_t on; uint16_t col; };
 struct Rip  { int x, y; int16_t life, life0; uint8_t on; };
-static Part s_part[NPART];
+static Part *s_part;                          // NPART — heap, allocated on enter / freed on exit
 static Shk  s_shk[NSHK];
 static Rip  s_rip[NRIP];
+// model-shatter deaths: a tiny pool that keeps a killed foe's pose so its FLASH model can be exploded
+// into cooling, tumbling shards for ~0.4 s (fx3d::shatter). Pose only -> ~128 B .bss, no heap.
+#define NDEATH 4
+struct Death { uint8_t on, model; int16_t x, y, r; float yaw, bank; uint16_t col; int16_t t, t0; };
+static Death s_death[NDEATH];
 static int  s_part_rr;                 // round-robin cursor
 static int64_t s_flash_until;          // brief dim full-frame flash window
 static float   s_flash_x, s_flash_y;   // core-flash centre
@@ -165,6 +190,7 @@ static int64_t s_muz_until;            // twin muzzle-flash window
 static int64_t s_hullvig_until;        // red edge vignette on a hull hit
 static int64_t s_nearmiss_ms;          // rate-limit for the pass-by whoosh
 static int64_t s_alarm_ms;             // rate-limit for the hull-critical klaxon
+static int64_t s_smoke_ms;             // rate-limit for the wounded-foe ember trail
 // the dogfight config in flight (filled from a Mission or synthesised for an ambush)
 struct CombatCfg {
     int type, foe_fac, waves, per_wave, foe_hp, foe_dmg, ace;
@@ -173,11 +199,12 @@ struct CombatCfg {
 };
 static CombatCfg s_cc;
 static float s_aimx, s_aimy;         // reticle screen position (float for smooth glide)
-static int8_t s_aim_hx, s_aim_vx;    // steer intent: horizontal / vertical (-1/0/+1)
-static int64_t s_aim_h_until, s_aim_v_until;
+static float s_aim_hv, s_aim_vv;     // reticle velocity (px/s): impulse+drag glide, see aim_steer()
+static int64_t s_aim_h_until, s_aim_v_until;   // "input recent" window per axis (gates the aim-assist)
 static int   s_throttle10;           // repurposed as BOOST 0..10
 static int   s_lock;                 // index of foe locked by the reticle, -1 = none
 static int64_t s_lock_since, s_fire_flash_until, s_pfire_ms;
+static int64_t s_hitmark_until;      // brief crosshair hitmarker window on confirmed damage (juice)
 static float s_shake, s_cy;          // screen-shake magnitude; vanishing-point y (set on reset)
 static int   s_shield, s_shieldmax, s_kills, s_mkills;
 static int   s_wave, s_wave_left;
@@ -193,9 +220,26 @@ static uint8_t s_ward_on;            // escort/defend protectee present
 static int   s_ward_hp, s_ward_max;
 static float s_ward_x, s_ward_vx;
 
+// ---- arcade layer: player missiles, power-ups, combo, per-wave look ---------
+// All .bss (no heap), like s_shk/s_rip — the no-hoarding rule kept by owning nothing.
+#define NMSL 3                       // missiles airborne at once (also the ammo cap = "max 3")
+struct Msl { float ex, ey, ez; int target; uint8_t on; };
+static Msl s_msl[NMSL];
+static int     s_msl_ammo;           // reserve missiles 0..NMSL (refills slowly)
+static float   s_msl_reload;         // ms accumulator toward the next +1 missile
+static int64_t s_rapid_until;        // rapid-fire power-up window
+#define NPU 3                        // power-ups drifting toward the cockpit at once
+enum { PU_SHIELD = 0, PU_REPAIR, PU_MISSILE, PU_RAPID, PU_KINDS };
+struct Pickup { float ex, ey, ez; int16_t life; uint8_t on, kind; };
+static Pickup s_pu[NPU];
+static int     s_combo; static int64_t s_combo_until;     // arcade kill combo
+static uint16_t s_wave_tint;         // per-wave enemy + backdrop colour (rotates each wave)
+static char    s_toast[28]; static int64_t s_toast_until; // brief power-up pickup banner
+
 // forward decls used before their definitions
 static void combat_begin_ambush(void);
 static int  eligible_missions(int *out);
+static inline uint16_t shade(uint16_t c, int num, int den);   // defined lower; draw_warp uses it earlier
 
 // ============================ tiny helpers ===================================
 static inline const char *tx(const char *it, const char *en) { return g_lang ? en : it; }
@@ -284,7 +328,7 @@ static void cfg_write(void)
     ensure_dirs();
     FILE *f = fopen(DIR "/cfg.bin", "wb");
     if (!f) return;
-    struct { uint32_t m; int l, a; } c = { CFG_MAGIC, g_lang, g_audio };
+    struct { uint32_t m; int l, a, t; } c = { CFG_MAGIC, g_lang, g_audio, g_tilt };
     fwrite(&c, sizeof c, 1, f);
     fclose(f);
 }
@@ -292,10 +336,15 @@ static void cfg_read(void)
 {
     FILE *f = fopen(DIR "/cfg.bin", "rb");
     if (!f) return;
-    struct { uint32_t m; int l, a; } c;
+    struct { uint32_t m; int l, a, t; } c;
     size_t n = fread(&c, sizeof c, 1, f);
+    if (n == 1 && c.m == CFG_MAGIC) { g_lang = c.l ? 1 : 0; g_audio = c.a ? 1 : 0; g_tilt = c.t ? 1 : 0; fclose(f); return; }
+    // Older 3-field cfg (pre-tilt): re-read just {magic,lang,audio} so the prefs survive the upgrade.
+    rewind(f);
+    struct { uint32_t m; int l, a; } o;
+    n = fread(&o, sizeof o, 1, f);
     fclose(f);
-    if (n == 1 && c.m == CFG_MAGIC) { g_lang = c.l ? 1 : 0; g_audio = c.a ? 1 : 0; }
+    if (n == 1 && o.m == CFG_MAGIC) { g_lang = o.l ? 1 : 0; g_audio = o.a ? 1 : 0; }
 }
 
 // ============================ cross-play save endpoint =======================
@@ -391,7 +440,7 @@ static inline uint32_t pg_hash3(uint32_t a, uint32_t b, uint32_t c)
     h ^= pg_hash32(b + 0xC2B2AE35u); h *= 2654435761u;
     h ^= pg_hash32(c + 0x27D4EB2Fu); return pg_hash32(h);
 }
-enum { PG_COORD = 1, PG_ECON = 2, PG_FAC = 3, PG_BEACON = 4, PG_NAME = 5, PG_MISSION = 6, PG_MCOUNT = 7 };
+enum { PG_COORD = 1, PG_ECON = 2, PG_FAC = 3, PG_BEACON = 4, PG_NAME = 5, PG_MISSION = 6, PG_MCOUNT = 7, PG_FLAVOR = 8 };
 static inline uint32_t pg_rng_sys(uint32_t seed, uint32_t sector, uint32_t idx, uint32_t dom, uint32_t salt)
 { return pg_hash3(seed ^ dom, sector, ((idx & 0xff) << 8) | (salt & 0xff)); }
 static inline uint32_t pg_rng_mis(uint32_t seed, uint32_t sector, uint32_t sysIdx, uint32_t slot, uint32_t dom, uint32_t salt)
@@ -525,33 +574,118 @@ static int entry_slot(uint32_t sector)
 }
 
 // ---- procedural missions templated into the existing Mission struct -------------------------
-static const char *MT_NAME[4][2]  = { { "Pattuglia", "Patrol" }, { "Taglia", "Bounty" }, { "Scorta", "Escort" }, { "Difesa", "Defend" } };
-static const char *MT_BRIEF[4][2] = {
-    { "Ripulisci le rotte dai predoni: ondate di caccia in arrivo.", "Sweep raiders off the lanes: fighter waves inbound." },
-    { "Un asso nemico guida lo sciame. Battilo: veloce e blindato.", "An enemy ace leads the swarm. Beat him: fast and armoured." },
-    { "Proteggi il convoglio finche' non e' al sicuro.",            "Protect the convoy until it reaches safety." },
-    { "Difendi la piattaforma del Faro a ogni costo.",              "Defend the Beacon platform at all costs." },
-};
 static const char *MT_WIN[4][2] = {
     { "Rotte ripulite. Crediti accreditati.",          "Lanes cleared. Credits paid." },
     { "L'asso e' abbattuto. Le stelle brindano a te.", "The ace is down. The stars toast you." },
     { "Convoglio al sicuro. Buon lavoro, pilota.",     "Convoy safe. Good work, pilot." },
     { "La piattaforma regge. Sei la sua sentinella.",  "The platform holds. You are its sentinel." },
 };
-static char s_mn_it[24], s_mn_en[24];      // generated mission-name buffers (IT/EN)
+
+// ---- procedural mission FLAVOR (ported from constellations-gen.js genMissionFlavor) -------------
+// A No Man's Sky-style evocative layer: named raider captains, gangs, archetypes, rarity tiers and
+// combat modifiers. It is drawn from a DEDICATED hash domain (PG_FLAVOR) that NEVER perturbs the
+// numeric draws above, so the cross-play universe stays byte-identical; the firmware was simply
+// missing the layer the web twin already had. Italian matches the JS verbatim; English is the twin.
+static const char *FV_PRE[16] = { "Vex","Krull","Mor","Zar","Drix","Nyx","Hask","Orla","Veng","Skar","Rann","Tox","Grim","Vael","Korr","Zael" };
+static const char *FV_SUF[16] = { "nor","ax","is","oth","ek","ul","ar","ix","one","ag","eth","os","un","ire","um","or" };
+static const char *FV_EPI[10][2] = {
+    { "il Rosso","the Red" }, { "Occhio-Morto","Deadeye" }, { "la Lama","the Blade" }, { "il Corvo","the Crow" },
+    { "Senza-Volto","the Faceless" }, { "il Flagello","the Scourge" }, { "Mano-Fredda","Coldhand" },
+    { "l'Avvoltoio","the Vulture" }, { "il Cremisi","the Crimson" }, { "lo Spettro","the Wraith" } };
+static const char *FV_GANG[8][2] = {
+    { "Corsari Cremisi","Crimson Corsairs" }, { "Lupi del Vuoto","Void Wolves" }, { "Sciacalli della Cenere","Ash Jackals" },
+    { "Predoni di Ferro","Iron Raiders" }, { "Flotta Fantasma","Ghost Fleet" }, { "Branco di Dramir","Dramir Pack" },
+    { "Mietitori Neri","Black Reapers" }, { "Vipere del Vuoto","Void Vipers" } };
+static const char *FV_MODS[7][2] = {
+    { "Nebulosa densa","Dense nebula" }, { "Campo di asteroidi","Asteroid field" }, { "Squadriglia d'elite","Elite squadron" },
+    { "Veterani","Veterans" }, { "Branco","Pack" }, { "Taglia maggiorata","Bounty raised" }, { "Tempesta ionica","Ion storm" } };
+static const char *FV_RARNAME[4][2] = { { "Comune","Common" }, { "Raro","Rare" }, { "Epico","Epic" }, { "Leggendario","Legendary" } };
+static uint16_t fv_rarcol(int r)   // rarity colour, matching the web (grey / cyan / purple / gold)
+{
+    switch (r) { case 1: return rgb(94,230,255); case 2: return rgb(180,107,224); case 3: return rgb(224,177,59); default: return rgb(159,176,191); }
+}
+enum { FA_PATROL = 0, FA_HUNT, FA_DUEL, FA_ESCORT, FA_SWEEP, FA_DEFEND };
+static const char *FA_NAME[6][2] = {
+    { "Pattuglia","Patrol" }, { "Caccia","Hunt" }, { "Duello","Duel" },
+    { "Scorta","Escort" }, { "Bonifica","Sweep" }, { "Difesa","Defense" } };
+
+struct Flavor { int rarity, arch, gang, mod[2], nmod; bool has_enemy; };
+static Flavor s_fv;                          // filled by cur_mission(); read by the board/brief painters
+static char s_mn_it[40], s_mn_en[40];        // generated mission title (IT/EN)
+static char s_brief_it[96], s_brief_en[96];  // flavored brief (IT/EN)
+static char s_en_it[28], s_en_en[28];        // named target (epithet differs by language)
 static Mission s_genm;
 #define NMISS_PER_SYS 4
-// Generate the mission in `slot` at the current system into the static Mission s_genm (repeatable,
-// difficulty scaled by sector). The display/combat code reads it exactly like a flash MISSIONS[] row.
+
+// Generate the mission in `slot` at the current system into s_genm, plus its flavor into s_fv. The
+// display/combat code reads s_genm exactly like a flash MISSIONS[] row; the board/brief painters read
+// s_fv for the rarity colour, named target, gang and modifiers.
 static const Mission *cur_mission(int slot)
 {
     int sf = SYSTEMS[g.sys].faction;
     GenMis gm; pg_mission(g.seed, g.sector, g.sys, slot, sf, &gm);
     int t = gm.type;
-    snprintf(s_mn_it, sizeof s_mn_it, "%s %s", MT_NAME[t][0], SYSTEMS[g.sys].name);
-    snprintf(s_mn_en, sizeof s_mn_en, "%s %s", MT_NAME[t][1], SYSTEMS[g.sys].name);
+    uint32_t h  = pg_rng_mis(g.seed, g.sector, g.sys, slot, PG_FLAVOR, 1);
+    uint32_t h2 = pg_rng_mis(g.seed, g.sector, g.sys, slot, PG_FLAVOR, 2);
+    bool ace = gm.ace != 0;
+    // named raider captain (+ epithet for aces)
+    const char *pre = FV_PRE[h % 16], *suf = FV_SUF[(h >> 5) % 16];
+    if (ace) {
+        int e = (int)((h >> 10) % 10);
+        snprintf(s_en_it, sizeof s_en_it, "%s%s %s", pre, suf, FV_EPI[e][0]);
+        snprintf(s_en_en, sizeof s_en_en, "%s%s %s", pre, suf, FV_EPI[e][1]);
+    } else {
+        snprintf(s_en_it, sizeof s_en_it, "%s%s", pre, suf);
+        snprintf(s_en_en, sizeof s_en_en, "%s%s", pre, suf);
+    }
+    s_fv.gang = (int)((h >> 16) % 8);
+    // archetype + title + brief by mission type (mirror the JS branch-for-branch)
+    const char *ti, *te, *bi, *be;
+    bool sub_name = false, sub_gang = false;
+    if (t == MT_BOUNTY) {
+        bool duel = ace && (h2 & 1u);
+        s_fv.arch = duel ? FA_DUEL : FA_HUNT;
+        ti = duel ? "Duello: %s" : "Caccia: %s"; te = duel ? "Duel: %s" : "Hunt: %s";
+        bi = duel ? "Solo tu e %s. Niente gregari, niente fughe." : "Taglia su %s: arriva con la sua scorta.";
+        be = duel ? "Just you and %s. No wingmen, no escape." : "Bounty on %s: it arrives with an escort.";
+        sub_name = true;
+    } else if (t == MT_ESCORT) {
+        s_fv.arch = FA_ESCORT;
+        ti = "Scorta convoglio"; te = "Convoy escort";
+        bi = "Tieni vivo il convoglio: i %s lo vogliono fermo.";
+        be = "Keep the convoy alive: the %s want it stopped.";
+        sub_gang = true;
+    } else if (t == MT_DEFEND) {
+        bool sweep = (h2 & 2u);
+        s_fv.arch = sweep ? FA_SWEEP : FA_DEFEND;
+        ti = sweep ? "Bonifica sciame" : "Difesa faro"; te = sweep ? "Swarm sweep" : "Beacon defense";
+        bi = sweep ? "Sciame di droni-saccheggio: tanti, fragili, ovunque." : "Proteggi il faro dai %s finche' non cedono.";
+        be = sweep ? "A swarm of scavenger drones: many, fragile, everywhere." : "Protect the beacon from the %s until they break.";
+        sub_gang = !sweep;
+    } else {
+        s_fv.arch = FA_PATROL;
+        ti = "Pattuglia"; te = "Patrol";
+        bi = "I %s battono la zona. Ricacciali indietro.";
+        be = "The %s comb the area. Drive them back.";
+        sub_gang = true;
+    }
+    s_fv.has_enemy = sub_name;
+    // title (with the named target where the archetype calls for it)
+    if (sub_name) { snprintf(s_mn_it, sizeof s_mn_it, ti, s_en_it); snprintf(s_mn_en, sizeof s_mn_en, te, s_en_en); }
+    else          { snprintf(s_mn_it, sizeof s_mn_it, "%s", ti);    snprintf(s_mn_en, sizeof s_mn_en, "%s", te); }
+    // brief (substitute the named target or the gang)
+    if (sub_name)      { snprintf(s_brief_it, sizeof s_brief_it, bi, s_en_it); snprintf(s_brief_en, sizeof s_brief_en, be, s_en_en); }
+    else if (sub_gang) { snprintf(s_brief_it, sizeof s_brief_it, bi, FV_GANG[s_fv.gang][0]); snprintf(s_brief_en, sizeof s_brief_en, be, FV_GANG[s_fv.gang][1]); }
+    else               { snprintf(s_brief_it, sizeof s_brief_it, "%s", bi); snprintf(s_brief_en, sizeof s_brief_en, "%s", be); }
+    // rarity + modifiers (mirror the JS score thresholds and modifier rolls exactly)
+    int score = gm.tier + (ace ? 2 : 0) + (gm.waves >= 5 ? 1 : 0) + (int)((h2 >> 3) % 3);
+    s_fv.rarity = score >= 9 ? 3 : score >= 7 ? 2 : score >= 5 ? 1 : 0;
+    s_fv.nmod = 0;
+    if ((h2 >> 6) % 3 == 0) s_fv.mod[s_fv.nmod++] = (int)((h2 >> 8) % 7);
+    if (gm.tier >= 4 && (h2 >> 12) % 3 == 0) { int x = (int)((h2 >> 14) % 7); if (s_fv.nmod == 0 || s_fv.mod[0] != x) s_fv.mod[s_fv.nmod++] = x; }
+
     s_genm.name[0] = s_mn_it; s_genm.name[1] = s_mn_en;
-    s_genm.brief[0] = MT_BRIEF[t][0]; s_genm.brief[1] = MT_BRIEF[t][1];
+    s_genm.brief[0] = s_brief_it; s_genm.brief[1] = s_brief_en;
     s_genm.win[0] = MT_WIN[t][0];   s_genm.win[1] = MT_WIN[t][1];
     s_genm.type = gm.type; s_genm.offer_fac = gm.offer_fac; s_genm.foe_fac = gm.foe_fac;
     s_genm.waves = gm.waves; s_genm.per_wave = gm.per_wave; s_genm.foe_hp = gm.foe_hp;
@@ -596,21 +730,23 @@ static int build_voices(int id, notify_voice_t *v)
                         notify__voice(&v[4], 1318.5f, 0.56f, 0.60f); return 5;
         case SFX_LOSE:  notify__voice(&v[0], 392, 0, 0.30f); notify__voice(&v[1], 329.63f, 0.22f, 0.30f);
                         notify__voice(&v[2], 261.63f, 0.46f, 0.70f); return 3;
-        case SFX_LASER: // twin "pew" with a downward chirp + attack tick
+        case SFX_LASER: // twin "pew" with a downward chirp + attack tick + a low snap for weight
             notify__voice(&v[0], 2100, 0.000f, 0.018f); v[0].amp = 0.50f;
             notify__voice(&v[1], 1400, 0.014f, 0.018f); v[1].amp = 0.50f;
             notify__voice(&v[2],  900, 0.026f, 0.030f); v[2].amp = 0.45f;
             notify__voice(&v[3], 2040, 0.000f, 0.018f); v[3].amp = 0.40f;
             notify__voice(&v[4], 1360, 0.014f, 0.018f); v[4].amp = 0.40f;
             notify__voice(&v[5], 3200, 0.000f, 0.008f); v[5].amp = 0.30f;
-            return 6;
-        case SFX_HIT:   // bright metallic shield ping (inharmonic partials)
+            notify__voice(&v[6],  300, 0.000f, 0.022f); v[6].amp = 0.42f;   // low snap = body
+            return 7;
+        case SFX_HIT:   // bright metallic shield ping (inharmonic partials) + a low crunch for impact
             notify__voice(&v[0], 1760, 0.000f, 0.045f); v[0].amp = 0.55f;
             notify__voice(&v[1], 2637, 0.000f, 0.040f); v[1].amp = 0.40f;
             notify__voice(&v[2], 3520, 0.004f, 0.030f); v[2].amp = 0.30f;
             notify__voice(&v[3], 4699, 0.004f, 0.022f); v[3].amp = 0.22f;
             notify__voice(&v[4], 1245, 0.000f, 0.020f); v[4].amp = 0.30f;
-            return 5;
+            notify__voice(&v[5],  210, 0.000f, 0.030f); v[5].amp = 0.46f;   // low crunch = impact body
+            return 6;
         case SFX_BOOM:  // big layered kill: low detuned rumble + dissonant crunch + decaying sparkle
             notify__voice(&v[0], 73.4f, 0.000f, 0.34f); v[0].amp = 1.00f;
             notify__voice(&v[1], 62.0f, 0.000f, 0.34f); v[1].amp = 0.95f;
@@ -660,7 +796,7 @@ static const char *sfx_path(int id)
     snprintf(p, sizeof p, DIR "/custom/%s.wav", sfx_name(id));   // player-supplied override?
     FILE *f = fopen(p, "rb");
     if (f) { fclose(f); return p; }
-    snprintf(p, sizeof p, DIR "/sfx/%s.wav", sfx_name(id));       // cached synth?
+    snprintf(p, sizeof p, DIR "/sfx/%s.v2.wav", sfx_name(id));    // cached synth (v2: bumped -> regen on first play)
     f = fopen(p, "rb");
     if (f) { fclose(f); return p; }
     notify_voice_t v[8];                                          // synth once, cache on SD
@@ -862,6 +998,28 @@ static uint16_t faction_col(int f)
         default:        return COL_PURPLE;        // Eco
     }
 }
+// Per-wave colour: enemies + backdrop shift hue every wave so each one reads distinct (arcade).
+static const uint16_t WAVE_PAL[6] = {
+    rgb(80, 140, 220), rgb(40, 180, 150), rgb(210, 110, 60),
+    rgb(170, 120, 235), rgb(225, 90, 130), rgb(120, 195, 90),
+};
+static inline uint16_t wave_col(void) { return s_wave_tint ? s_wave_tint : COL_CYAN; }
+static uint16_t pu_col(int k)
+{
+    switch (k) { case PU_SHIELD: return COL_CYAN; case PU_REPAIR: return COL_GREEN;
+                 case PU_MISSILE: return COL_AMBER; default: return COL_PURPLE; }   // PU_RAPID
+}
+// Per-kind identity tint blended into the wave colour so each foe class reads at a glance:
+// scout = pale ice, heavy = hot orange, ace = gold, fighter = neutral (wave colour only).
+static uint16_t kind_hue(int kind)
+{
+    switch (kind) {
+        case FOE_SCOUT: return rgb(206, 228, 245);
+        case FOE_HEAVY: return rgb(236, 150, 70);
+        case FOE_ACE:   return COL_AMBER;
+        default:        return 0;          // FOE_FIGHTER: no tint
+    }
+}
 static void draw_planet(int cx, int cy, int r, int sys)
 {
     uint16_t base = faction_col(SYSTEMS[sys].faction);
@@ -1046,14 +1204,18 @@ static void cine_end(void)
 static void draw_warp(int ch, float k)   // k in 0..1 intensity
 {
     int cx = W / 2, cy = ch / 2;
+    int bloom = (int)(2 + k * 8);                                  // wormhole throat: a soft central bloom
+    for (int r = bloom; r >= 1; r--) d.fillCircle(cx, cy, r, shade(COL_CYAN, bloom + 2 - r, bloom + 2));
     for (int i = 0; i < NSTAR; i++) {
         float ang = (float)(star[i].tw) * 0.0982f + i;
-        float reach = 6 + k * 120;
+        float reach = 6 + k * 130;
         float d0 = 6 + (float)((star[i].x + s_anim) % 40);
-        int x0 = cx + (int)(cosf(ang) * d0), y0 = cy + (int)(sinf(ang) * d0);
-        int x1 = cx + (int)(cosf(ang) * (d0 + reach)), y1 = cy + (int)(sinf(ang) * (d0 + reach));
-        uint16_t c = (i & 3) ? COL_CYAN : COL_WHITE;
+        float ca = cosf(ang), sa = sinf(ang);
+        int x0 = cx + (int)(ca * d0), y0 = cy + (int)(sa * d0);
+        int x1 = cx + (int)(ca * (d0 + reach)), y1 = cy + (int)(sa * (d0 + reach));
+        uint16_t c = (i & 3) ? (k > 0.7f ? COL_WHITE : COL_CYAN) : COL_WHITE;
         d.drawLine(x0, y0, x1, y1, c);
+        if (k > 0.6f && (i & 1)) d.drawLine(x0, y0 + 1, x1, y1 + 1, shade(c, 2, 5));   // thicken the fast streaks
     }
 }
 static void draw_cine(void)
@@ -1154,6 +1316,13 @@ static inline uint16_t shade(uint16_t c, int num, int den)
     int r = ((c >> 11) & 31) * num / den, g = ((c >> 5) & 63) * num / den, b = (c & 31) * num / den;
     return (uint16_t)((r << 11) | (g << 5) | b);
 }
+// blend a->b by t (0..255); cheap RGB565 lerp for hit-flash / damage tint
+static inline uint16_t cmix(uint16_t a, uint16_t b, int t)
+{
+    int ar = (a >> 11) & 31, ag = (a >> 5) & 63, ab = a & 31;
+    int br = (b >> 11) & 31, bg = (b >> 5) & 63, bb = b & 31;
+    return (uint16_t)(((ar + (br - ar) * t / 255) << 11) | ((ag + (bg - ag) * t / 255) << 5) | (ab + (bb - ab) * t / 255));
+}
 static Part *part_alloc(void)
 {
     for (int k = 0; k < NPART; k++) { int i = (s_part_rr + k) % NPART;
@@ -1179,10 +1348,17 @@ static void spawn_boom(float ex, float ey, float ez, float sc, uint16_t col, boo
         s_shk[s].life = s_shk[s].life0 = (int16_t)(big ? 420 : 320); s_shk[s].col = col;
         break;
     }
+    int ns = big ? 9 : 5;                                  // white-hot core spark burst (extra punch)
+    for (int i = 0; i < ns; i++) {
+        Part *p = part_alloc(); float a = (float)rnd(628) * 0.01f, s = 60.0f + rnd(90);
+        p->on = 1; p->kind = PK_SPARK; p->ex = ex; p->ey = ey; p->ez = ez;
+        p->vx = cosf(a) * s; p->vy = sinf(a) * s; p->vz = (float)(rnd(90) - 30);
+        p->life = p->life0 = (int16_t)(90 + rnd(120)); p->col = (i & 1) ? COL_WHITE : COL_AMBER;
+    }
     float fsx, fsy, fsc;
     if (project(ex, ey, ez, &fsx, &fsy, &fsc)) {
-        s_flash_until = s_now + (big ? 80 : 50); s_flash_x = fsx; s_flash_y = fsy;
-        int r0 = (int)(6 + 9 * sc); if (r0 > 14) r0 = 14;
+        s_flash_until = s_now + (big ? 110 : 70); s_flash_x = fsx; s_flash_y = fsy;
+        int r0 = (int)(7 + 10 * sc); if (r0 > 16) r0 = 16;
         s_flash_r0 = r0;
     }
 }
@@ -1219,10 +1395,10 @@ static void draw_tie(int x, int y, int r, int b, int kind, uint16_t col)
         d.fillRect(x - 1, y - 1, 2, 2, col);
         d.drawPixel(x, y + 1, kind == FOE_ACE ? COL_AMBER : COL_CYAN); return;
     }
+    // The per-wave colour `col` drives the hull; the class only adds a distinguishing accent.
     uint16_t panel = shade(col, 2, 5), edge = col;
-    if (kind == FOE_ACE)        { panel = shade(rgb(200, 60, 40), 2, 5); edge = COL_AMBER; }
-    else if (kind == FOE_HEAVY) { panel = shade(rgb(180, 110, 40), 2, 5); edge = rgb(230, 150, 60); }
-    else if (kind == FOE_SCOUT) { panel = shade(COL_CYAN, 2, 5); edge = COL_CYAN; }
+    uint16_t accent = (kind == FOE_ACE) ? COL_AMBER : (kind == FOE_HEAVY) ? rgb(230, 150, 60)
+                    : (kind == FOE_SCOUT) ? COL_WHITE : col;
     int bk = (b * r) / 2;                               // horizontal bank shift
     int sh = clampi(b / 2, -3, 3);                      // vertical wing shear (parallax)
     int pw = 3 + r / 6;
@@ -1249,13 +1425,13 @@ static void draw_tie(int x, int y, int r, int b, int kind, uint16_t col)
     if (r >= 8) { d.drawLine(cxp - r / 2, y, cxp + r / 2, y, edge);
                   d.drawLine(cxp, y - r / 2, cxp, y + r / 2, edge); }
     int gx = cxp - bk / 2, gy = y + br / 2 + 1;                          // engine glow
-    uint16_t glow = kind == FOE_ACE ? COL_AMBER : COL_CYAN;
+    uint16_t glow = accent;
     d.fillRect(gx - 1, gy, 2, 2, glow);
     if (r >= 6) { d.drawPixel(gx, gy + 2, shade(glow, 3, 5)); d.drawPixel(gx - bk / 4, gy + 3, COL_DIM); }
     if (kind == FOE_ACE) {
-        d.drawCircle(x, y, br + 2, COL_AMBER);
-        d.drawLine(lx, y - r + sh, lx - 2, y - r - 2 + sh, COL_AMBER);
-        d.drawLine(rx + pw, y - r - sh, rx + pw + 2, y - r - 2 - sh, COL_AMBER);
+        d.drawCircle(x, y, br + 2, accent);
+        d.drawLine(lx, y - r + sh, lx - 2, y - r - 2 + sh, accent);
+        d.drawLine(rx + pw, y - r - sh, rx + pw + 2, y - r - 2 - sh, accent);
         d.fillRect(gx + 2, gy, 2, 2, COL_RED);
     } else if (kind == FOE_HEAVY && r >= 5) {              // armoured: double hull ring
         d.drawCircle(cxp, y, br + 2, edge);
@@ -1263,9 +1439,75 @@ static void draw_tie(int x, int y, int r, int b, int kind, uint16_t col)
         d.drawLine(x, y, x, y - r - 3, edge);
     }
 }
-static void draw_target_box(int x, int y, int r)                        // green corner brackets
+// ---- 3D ship MODEL LIBRARY (the NEAR LOD tier; below ~7px we fall back to the wireframe TIE) --------
+// Four distinct silhouettes so the wing reads at a glance: a sleek SCOUT dart, the balanced FIGHTER, a
+// wide blocky HEAVY cruiser, and an ornate ACE with swept wings + dorsal fin. Each is `const` -> it
+// lives in FLASH, costing ZERO runtime RAM (the whole point on a no-PSRAM board). The mesh banks/yaws
+// with the foe's bank so every fighter tumbles as a solid shaded object instead of a flat decal.
+static const fx3d::V3 MDL_FIGHTER_V[8] = {
+    { 0.00f,  0.00f, -1.35f}, { 0.00f, -0.42f,  0.30f}, { 0.00f,  0.42f,  0.30f}, {-0.50f,  0.00f,  0.30f},
+    { 0.50f,  0.00f,  0.30f}, { 0.00f,  0.05f,  1.05f}, {-1.30f,  0.06f,  0.55f}, { 1.30f,  0.06f,  0.55f},
+};
+static const fx3d::Tri MDL_FIGHTER_T[12] = {
+    {0,1,4},{0,4,2},{0,2,3},{0,3,1}, {5,4,1},{5,2,4},{5,3,2},{5,1,3}, {3,6,2},{3,1,6}, {4,2,7},{4,7,1},
+};
+static const fx3d::Model MDL_FIGHTER = { MDL_FIGHTER_V, 8, MDL_FIGHTER_T, 12 };
+
+static const fx3d::V3 MDL_SCOUT_V[8] = {       // long sleek dart, thin fins
+    { 0.00f,  0.00f, -1.70f}, { 0.00f, -0.28f,  0.40f}, { 0.00f,  0.28f,  0.40f}, {-0.32f,  0.00f,  0.40f},
+    { 0.32f,  0.00f,  0.40f}, { 0.00f,  0.00f,  0.95f}, {-0.95f,  0.02f,  0.70f}, { 0.95f,  0.02f,  0.70f},
+};
+static const fx3d::Tri MDL_SCOUT_T[10] = {
+    {0,1,4},{0,4,2},{0,2,3},{0,3,1}, {5,4,1},{5,2,4},{5,3,2},{5,1,3}, {3,6,5},{4,5,7},
+};
+static const fx3d::Model MDL_SCOUT = { MDL_SCOUT_V, 8, MDL_SCOUT_T, 10 };
+
+static const fx3d::V3 MDL_HEAVY_V[8] = {       // wide blocky cruiser, big wings
+    { 0.00f, -0.05f, -1.15f}, {-0.75f, -0.50f,  0.15f}, { 0.75f, -0.50f,  0.15f}, {-0.75f,  0.50f,  0.15f},
+    { 0.75f,  0.50f,  0.15f}, { 0.00f,  0.00f,  1.00f}, {-1.55f,  0.12f,  0.50f}, { 1.55f,  0.12f,  0.50f},
+};
+static const fx3d::Tri MDL_HEAVY_T[10] = {
+    {0,1,2},{0,2,4},{0,4,3},{0,3,1}, {5,2,1},{5,4,2},{5,3,4},{5,1,3}, {1,6,3},{2,4,7},
+};
+static const fx3d::Model MDL_HEAVY = { MDL_HEAVY_V, 8, MDL_HEAVY_T, 10 };
+
+static const fx3d::V3 MDL_ACE_V[9] = {         // swept wings + dorsal fin
+    { 0.00f,  0.00f, -1.50f}, { 0.00f, -0.45f,  0.30f}, { 0.00f,  0.42f,  0.30f}, {-0.50f,  0.00f,  0.30f},
+    { 0.50f,  0.00f,  0.30f}, { 0.00f,  0.05f,  1.15f}, {-1.30f,  0.12f,  0.95f}, { 1.30f,  0.12f,  0.95f},
+    { 0.00f, -0.95f,  0.75f},
+};
+static const fx3d::Tri MDL_ACE_T[12] = {
+    {0,1,4},{0,4,2},{0,2,3},{0,3,1}, {5,4,1},{5,2,4},{5,3,2},{5,1,3}, {3,6,2},{4,2,7}, {1,8,5},{1,0,8},
+};
+static const fx3d::Model MDL_ACE = { MDL_ACE_V, 9, MDL_ACE_T, 12 };
+
+static const fx3d::Model *ship_model(int kind)
+{
+    switch (kind) {
+        case FOE_SCOUT: return &MDL_SCOUT;
+        case FOE_HEAVY: return &MDL_HEAVY;
+        case FOE_ACE:   return &MDL_ACE;
+        default:        return &MDL_FIGHTER;     // FOE_FIGHTER
+    }
+}
+static void draw_ship3d(int x, int y, int r, float bank, int kind, uint16_t col)
+{
+    if (r < 7) { draw_tie(x, y, r, (int)(bank * 2.0f), kind, col); return; }   // far LOD: keep the wireframe
+    float sc  = (float)r / 1.25f;
+    float bk  = fmaxf(-0.9f, fminf(0.9f, bank * 0.18f));
+    float yaw = bank * 0.32f;                                // a banking turn reads as a touch of yaw
+    int fl = r / 2 + (int)(s_anim & 1);                      // thruster flame behind the hull (flickers)
+    uint16_t flame = kind == FOE_SCOUT ? COL_CYAN : kind == FOE_HEAVY ? rgb(236, 150, 70) : COL_AMBER;
+    d.fillTriangle(x - r / 4, y + r / 2, x + r / 4, y + r / 2, x, y + r / 2 + fl, flame);
+    d.fillTriangle(x - r / 6, y + r / 2, x + r / 6, y + r / 2, x, y + r / 2 + fl * 2 / 3, COL_WHITE);
+    fx3d::draw_model(*ship_model(kind), (float)x, (float)y, sc, yaw, bk, col);
+    if (kind == FOE_ACE)        d.drawCircle(x, y, r + 2, COL_AMBER);          // ace halo
+    else if (kind == FOE_HEAVY) d.drawCircle(x, y, (r * 5) / 6, shade(col, 3, 5));
+}
+static void draw_target_box(int x, int y, int r)                        // green corner brackets (pulsing)
 {
     uint16_t gc = COL_GREEN; int L = clampi(r / 2, 4, 10);
+    r += (int)((s_anim >> 2) & 1);                                       // breathe the bracket 1px (lock juice)
     int x0 = x - r, x1 = x + r, y0 = y - r, y1 = y + r;
     d.drawFastHLine(x0, y0, L, gc);     d.drawFastVLine(x0, y0, L, gc);
     d.drawFastHLine(x1 - L, y0, L, gc); d.drawFastVLine(x1, y0, L, gc);
@@ -1289,23 +1531,58 @@ static void draw_cockpit(int ch)                                        // stati
     d.drawFastHLine(0, ch - 1, W, e);
     d.fillRect(1, ch - 4, 4, 4, COL_RED); d.fillRect(W - 5, ch - 4, 4, 4, COL_RED);
 }
-// faction-tinted deep-space backdrop: nebula bands + a banded planet low on the view
+// Per-wave deep-space backdrop — an OPEN VOID, by design. The player asked for no sun on the backdrop
+// and no horizontal scanline banding, so this draws ZERO full-width horizontal fills/lines: the flat
+// space the caller already laid stays as the base, and ALL depth comes from RADIAL cues — a few soft
+// nebula PUFFS (filled discs), faint parallax stars, and a dim bloom + tunnel rings where the warp
+// streaks converge. Per (seed,sector,system) so each sortie reads distinct; recoloured per wave.
+// Cheap (small circles + dots, no full-frame fills, no per-row sine), no heap.
 static void draw_backdrop(float top, int ch, int jx, int jy)
 {
     (void)jx; (void)jy;
-    uint16_t fc = faction_col(s_cc.foe_fac);
-    uint16_t neb = shade(fc, 1, 6);
-    int ny0 = (int)top, ny1 = (int)top + (ch - (int)top) / 3;
-    for (int y = ny0; y < ny1; y++)                       // nebula: sparse animated bands (4 on / 4 off)
-        if (((y + (int)(s_anim >> 3)) & 4)) d.drawFastHLine(0, y, W, neb);
-    int px = 150 + (int)(18.0f * sinf(s_anim * 0.004f));  // distant planet, smooth sway (no wrap jump)
-    int pr = 16, py = ch - 18;                            // sits fully above the clipped y>=121 band
-    uint16_t pc = shade(fc, 4, 5);
-    d.fillCircle(px, py, pr, pc);
-    for (int dy = -pr + 3; dy < pr - 5; dy += 4)          // latitude bands
-        d.drawFastHLine(px - pr + 2, py + dy, 2 * pr - 4, shade(pc, (dy < 0 ? 3 : 2), 5));
-    d.drawCircle(px, py, pr, shade(pc, 3, 4));
-    d.fillCircle(px + pr / 3, py - pr / 3, pr - 4, COL_SPACE);   // terminator crescent
+    uint16_t fc = wave_col();
+    int t0 = (int)top, h = ch - t0; if (h < 1) h = 1;
+    int vx = (int)CX, vy = (int)s_cy;
+    // gentle view parallax: the far field drifts opposite the reticle so panning your aim feels like
+    // turning your head in the cockpit (a few px at most). A cheap depth cue, no extra draw passes.
+    int parx = (int)((s_aimx - CX) * 0.05f), pary = (int)((s_aimy - s_cy) * 0.05f);
+
+    // (1) nebula puffs: soft filled discs (dim halo + a slightly brighter core), placed per system.
+    //     Discs, never lines -> no horizontal striping; a slow breath via s_anim keeps them alive.
+    uint32_t hh = pg_hash3(g.seed ^ 0x51A7u, g.sector, (uint32_t)g.sys);
+    int breath = (int)(2.0f * sinf(s_anim * 0.04f));
+    for (int i = 0; i < 3; i++) {
+        uint32_t hp = pg_hash3(hh, (uint32_t)i, 0x9E37u);
+        int nx = 18 + (int)(hp % (W - 36)) - parx;
+        int ny = t0 + 4 + (int)((hp >> 9) % (h > 8 ? h - 8 : 1)) - pary;
+        int nr = 14 + (int)((hp >> 18) % 16) + breath;          // ~14..30
+        d.fillCircle(nx, ny, nr, shade(fc, 1, 10));             // dim outer haze
+        d.fillCircle(nx, ny, nr * 3 / 5, shade(fc, 1, 7));      // softer core
+    }
+
+    // (2) faint parallax far stars (fixed field, drifted by the reticle) under the moving warp streaks.
+    for (int i = 0; i < NSTAR; i += 3) {
+        if (((s_anim + star[i].tw) & 63) < 2) continue;                  // occasional twinkle-out
+        int xx = ((int)star[i].x - parx) % W; if (xx < 0) xx += W;
+        int yy = t0 + ((((int)star[i].y - pary) % h) + h) % h;
+        d.drawPixel(xx, yy, star[i].layer == 2 ? COL_GREY : COL_DIM);
+    }
+
+    // (3) vanishing-point depth: a subtle radial bloom where the warp streaks converge (kept dim so it
+    //     reads as the throat of the tunnel, NOT a sun), plus two faint rings for the tunnel mouth.
+    for (int r = 16; r >= 2; r -= 2) d.fillCircle(vx, vy, r, shade(fc, 9 - r / 3, 36));
+    d.drawCircle(vx, vy, 34, shade(fc, 2, 11));
+    d.drawCircle(vx, vy, 58, shade(fc, 1, 11));
+
+    // (4) battle-deck: a dim Mode-7 energy grid fanning down from the vanishing point -> a real ground
+    //     reference that sells the 3D WITHOUT any full-width horizontal line (nh=0, so no scanline
+    //     striping). It shares the reticle parallax and flares briefly with screen-shake (hit intensity).
+    fx3d::Grid gc;
+    gc.horizon = vy; gc.bottom = ch - 1; gc.vanx = CX - (float)parx; gc.scroll = 0.0f;
+    gc.xspread = 168.0f; gc.nv = 6; gc.nh = 0;
+    gc.col = shade(fc, 3, 6); gc.glow = 0;
+    gc.intensity = 56 + (int)(s_shake * 6.0f); if (gc.intensity > 150) gc.intensity = 150;
+    fx3d::grid(gc);
 }
 static int foes_alive(void) { int n = 0; for (int i = 0; i < NFOE; i++) if (s_foe[i].on) n++; return n; }
 
@@ -1319,6 +1596,7 @@ static void spawn_foe(int kind, int hp)
         f->wphase = (float)rnd(628) * 0.01f; f->bank = 0;
         f->engagez = 40.0f + (kind == FOE_HEAVY ? 22.0f : kind == FOE_SCOUT ? -2.0f : 8.0f) + (float)rnd(10);   // hold-and-fight distance
         f->hp = f->hpmax = (int16_t)hp; f->firecd = (int16_t)(700 + rnd(900)); f->strafecd = (int16_t)(2800 + rnd(3500));
+        f->hitms = 0;
         return;
     }
 }
@@ -1334,6 +1612,7 @@ static void combat_spawn_wave(void)
     }
     if (last && s_cc.ace) spawn_foe(FOE_ACE, s_cc.foe_hp * 22 / 10 + 30);
     s_wave++; s_wave_left--;
+    s_wave_tint = WAVE_PAL[(s_wave - 1) % 6];       // each wave recolours enemies + backdrop
     s_spawn_timer = 1300.0f;                       // gap before the next wave once this one is clear
     snprintf(s_cmsg, sizeof s_cmsg, "%s %d/%d", tx("ONDATA", "WAVE"), s_wave, s_cc.waves);
     s_cmsg_until = s_now + 1400; sfx(SFX_LOCK);
@@ -1342,6 +1621,7 @@ static void combat_spawn_wave(void)
 
 static void combat_end(int result)   // 1 = win, -1 = fail/retreat, 2 = destroyed
 {
+    nucleo_app_set_fullscreen(false);    // leaving the action screen -> the hint footer comes back
     s_result = result; s_earn_cr = 0;
     g.kills += s_mkills;
     if (result == 2) { g.hull = 0; save_write(); start_cine(CINE_LOSE); return; }
@@ -1365,27 +1645,81 @@ static void combat_end(int result)   // 1 = win, -1 = fail/retreat, 2 = destroye
     go(ST_DEBRIEF);
 }
 
+// ---- arcade helpers: combo, power-up drops/pickup, missiles --------------------------------
+static void toast(const char *s) { snprintf(s_toast, sizeof s_toast, "%s", s); s_toast_until = s_now + 1300; }
+static void register_kill(void)   // arcade combo: chained kills keep the meter alive
+{
+    if (s_now < s_combo_until) { if (s_combo < 99) s_combo++; } else s_combo = 1;
+    s_combo_until = s_now + 2500;
+}
+static void maybe_drop_pickup(float ex, float ey, float ez)
+{
+    int chance = 22 + (s_combo > 1 ? s_combo * 4 : 0); if (chance > 55) chance = 55;   // combos drop more
+    if (rnd(100) >= chance) return;
+    for (int i = 0; i < NPU; i++) if (!s_pu[i].on) {
+        Pickup *p = &s_pu[i];
+        p->on = 1; p->kind = (uint8_t)rnd(PU_KINDS); p->ex = ex; p->ey = ey; p->ez = ez; p->life = 6500;
+        return;
+    }
+}
+static void apply_pickup(int kind)
+{
+    switch (kind) {
+        case PU_SHIELD:  s_shield = clampi(s_shield + 30, 0, s_shieldmax);  toast(tx("SCUDO +", "SHIELD +"));     break;
+        case PU_REPAIR:  g.hull   = clampi(g.hull + 18, 0, g.hull_max);     toast(tx("SCAFO +", "HULL +"));       break;
+        case PU_MISSILE: if (s_msl_ammo < NMSL) s_msl_ammo++;               toast(tx("MISSILE +", "MISSILE +"));  break;
+        default:         s_rapid_until = s_now + 6000;                      toast(tx("FUOCO RAPIDO", "RAPID FIRE")); break;  // PU_RAPID
+    }
+    sfx(SFX_BUY);
+}
+// kill bookkeeping shared by laser + missile: count, combo, shake, boom SFX, maybe a drop
+static void kill_foe(Foe *f, float sx, float sy, float sc, bool vis)
+{
+    if (vis) {
+        spawn_boom(f->ex, f->ey, f->ez, sc, wave_col(), f->kind == FOE_ACE);
+        int rr = clampi((int)(9.0f * sc * kind_rscale(f->kind)), 4, 60);       // shatter the flash model
+        for (int i = 0; i < NDEATH; i++) if (!s_death[i].on) {
+            s_death[i].on = 1; s_death[i].model = (uint8_t)f->kind;
+            s_death[i].x = (int16_t)sx; s_death[i].y = (int16_t)sy; s_death[i].r = (int16_t)rr;
+            uint16_t dc = wave_col(); { uint16_t kh = kind_hue(f->kind); if (kh) dc = cmix(dc, kh, 120); }
+            s_death[i].bank = f->bank; s_death[i].yaw = f->bank * 0.32f; s_death[i].col = dc;
+            s_death[i].t = s_death[i].t0 = (int16_t)(f->kind == FOE_ACE ? 520 : 360);
+            break;
+        }
+    }
+    float kx = f->ex, ky = f->ey, kz = f->ez;
+    f->on = 0; s_kills++; s_mkills++;
+    s_shake = (f->kind == FOE_ACE) ? 7.0f : 4.0f;
+    sfx(SFX_BOOM); register_kill(); maybe_drop_pickup(kx, ky, kz);
+    (void)sx; (void)sy;
+}
+static void missile_fire(void)
+{
+    if (s_msl_ammo <= 0) { sfx(SFX_DENY); return; }
+    int slot = -1; for (int i = 0; i < NMSL; i++) if (!s_msl[i].on) { slot = i; break; }
+    if (slot < 0) { sfx(SFX_DENY); return; }
+    s_msl_ammo--;
+    Msl *m = &s_msl[slot];
+    m->on = 1; m->target = (s_lock >= 0 && s_foe[s_lock].on) ? s_lock : -1;
+    m->ex = (float)(rnd(5) - 2); m->ey = 2.0f; m->ez = ZNEAR + 6.0f;   // launches just below the nose, visible at once
+    s_muz_until = s_now + 80; sfx(SFX_LAUNCH);
+}
+
 static void player_fire(void)
 {
-    int cd = 240 - g.weapon * 28; if (cd < 110) cd = 110;
+    int cd = 170 - g.weapon * 26; if (cd < 70) cd = 70;      // faster base fire than before...
+    if (s_now < s_rapid_until) cd = cd / 2 + 8;              // ...rapid-fire power-up roughly doubles the rate
     if (s_now - s_pfire_ms < cd) return;
     s_pfire_ms = s_now;
-    s_fire_flash_until = s_now + 90;                          // twin-laser FX window
-    s_muz_until = s_now + 70;                                 // gun-port muzzle flash
+    s_fire_flash_until = s_now + 80;                          // twin-laser FX window
+    s_muz_until = s_now + 60;                                 // gun-port muzzle flash
     sfx(SFX_LASER);
     if (s_lock >= 0 && s_foe[s_lock].on) {                    // targeting computer: a lock is a guaranteed hit
         Foe *f = &s_foe[s_lock];
-        f->hp -= 18 + g.weapon * 8;
-        float sx, sy, sc; bool vis = project(f->ex, f->ey, f->ez, &sx, &sy, &sc);
-        if (f->hp <= 0) {
-            if (vis) spawn_boom(f->ex, f->ey, f->ez, sc, faction_col(s_cc.foe_fac), f->kind == FOE_ACE);
-            f->on = 0; s_kills++; s_mkills++;
-            s_shake = (f->kind == FOE_ACE) ? 7.0f : 4.0f;
-            sfx(SFX_BOOM);
-        } else {
-            if (vis) spawn_sparks(f->ex, f->ey, f->ez, COL_AMBER);
-            sfx(SFX_HIT);
-        }
+        f->hp -= 18 + g.weapon * 8; f->hitms = 90; s_hitmark_until = s_now + 110;
+        float sx = 0, sy = 0, sc = 0; bool vis = project(f->ex, f->ey, f->ez, &sx, &sy, &sc);
+        if (f->hp <= 0) kill_foe(f, sx, sy, sc, vis);
+        else { if (vis) spawn_sparks(f->ex, f->ey, f->ez, COL_AMBER); sfx(SFX_HIT); }
     }
 }
 static void hurt_player(int dmg)
@@ -1414,14 +1748,22 @@ static void hurt_player(int dmg)
 
 static void combat_reset_common(void)
 {
+    nucleo_app_set_fullscreen(true);                 // combat reclaims the footer rows (bigger playfield)
     for (int i = 0; i < NBOLT; i++) s_bolt[i].on = 0;
     for (int i = 0; i < NFOE; i++)  s_foe[i].on = 0;
     for (int i = 0; i < NPART; i++) s_part[i].on = 0;
     for (int i = 0; i < NSHK; i++)  s_shk[i].on = 0;
     for (int i = 0; i < NRIP; i++)  s_rip[i].on = 0;
+    for (int i = 0; i < NDEATH; i++) s_death[i].on = 0;
+    for (int i = 0; i < NMSL; i++)  s_msl[i].on = 0;
+    for (int i = 0; i < NPU; i++)   s_pu[i].on = 0;
+    s_msl_ammo = NMSL; s_msl_reload = 0; s_rapid_until = 0;
+    s_combo = 0; s_combo_until = 0; s_toast[0] = 0; s_toast_until = 0; s_wave_tint = WAVE_PAL[0];
     s_part_rr = 0; s_flash_until = s_muz_until = s_hullvig_until = s_nearmiss_ms = s_alarm_ms = 0;
+    s_hitmark_until = s_smoke_ms = 0;
     s_cy = (pf_top() + nucleo_app_content_height()) * 0.5f;
-    s_aimx = CX; s_aimy = s_cy; s_aim_hx = s_aim_vx = 0; s_aim_h_until = s_aim_v_until = 0;
+    s_aimx = CX; s_aimy = s_cy; s_aim_hv = s_aim_vv = 0; s_aim_h_until = s_aim_v_until = 0;
+    if (g_tilt && nucleo_imu_present()) nucleo_imu_recenter();   // "hold it as you like" -> capture neutral
     s_throttle10 = 5; s_pfire_ms = 0; s_lock = -1; s_lock_since = 0; s_fire_flash_until = 0; s_shake = 0;
     for (int i = 0; i < NWARP; i++) respawn_warp(i);
     s_shieldmax = g.shield_max; s_shield = s_shieldmax; s_shield_hit_ms = 0; s_regen_acc = 0;
@@ -1469,18 +1811,69 @@ static int eligible_missions(int *out)
     return n;
 }
 
+// Reticle steering. Each arrow event is a velocity impulse; the keyboard auto-repeats a held arrow
+// (350ms, then ~11/s), so the impulses stack toward a terminal speed -> the reticle accelerates while
+// held and keeps gliding through the repeat gap instead of stop-go. A fresh press (after a lull) kicks
+// harder for an instant, responsive tap. combat_step (a) applies the drag that eases it back to rest.
+static void aim_steer(int axis, int dir)   // axis: 0 = horizontal, 1 = vertical
+{
+    float vmax  = AIM_VMAX + s_throttle10 * 9.0f;         // boost widens the speed cap
+    float  *v   = axis ? &s_aim_vv : &s_aim_hv;
+    int64_t *un = axis ? &s_aim_v_until : &s_aim_h_until;
+    bool fresh  = (s_now >= *un);                          // window lapsed -> treat as a new press
+    *v += (float)dir * (fresh ? AIM_KICK : AIM_PUSH);
+    if (*v >  vmax) *v =  vmax;
+    if (*v < -vmax) *v = -vmax;
+    *un = s_now + 220;                                     // input-recent window; aim-assist waits it out
+}
+
+// Shape a raw tilt axis (-1..1) into a steering command: a small deadzone kills rest jitter, then an
+// expo curve gives fine control near centre and full authority at the edges. ~0.45g of tilt = full.
+static float tilt_shape(float v)
+{
+    const float DZ = 0.08f, GAIN = 2.2f;
+    float s = (v < 0) ? -1.0f : 1.0f, a = v * s;          // sign + magnitude
+    if (a < DZ) return 0.0f;
+    a = (a - DZ) / (1.0f - DZ);                            // remap past the deadzone
+    a *= GAIN; if (a > 1.0f) a = 1.0f;                     // a modest tilt reaches full authority
+    a = a * (0.45f + 0.55f * a * a);                       // expo: gentle near centre
+    return s * a;
+}
+
 static void combat_step(float dt)
 {
     int   ch  = nucleo_app_content_height();
     float top = (float)pf_top();
     int   ms  = (int)(dt * 1000.0f);
 
-    // (a) reticle steering via intent windows (arrow auto-repeat keeps the window alive)
-    float retspd = 150.0f + s_throttle10 * 6.0f;
-    if (s_now < s_aim_h_until) s_aimx += s_aim_hx * retspd * dt;
-    if (s_now < s_aim_v_until) s_aimy += s_aim_vx * retspd * dt;
-    if (s_aimx < 10) s_aimx = 10; else if (s_aimx > W - 10) s_aimx = W - 10;
-    if (s_aimy < top + 10) s_aimy = top + 10; else if (s_aimy > ch - 10) s_aimy = ch - 10;
+    for (int i = 0; i < NDEATH; i++) if (s_death[i].on) { s_death[i].t -= ms; if (s_death[i].t <= 0) s_death[i].on = 0; }
+
+    // (a0) tilt controller (ADV BMI270): when the device is actively tilted, ease the reticle velocity
+    //      toward the tilt-commanded velocity. A flat device produces 0 (deadzone) -> arrows still work
+    //      unchanged, so the two input schemes coexist. Neutral was captured at combat start.
+    if (g_tilt && nucleo_imu_present()) {
+        float ttx, tty;
+        if (nucleo_imu_tilt(&ttx, &tty)) {
+            float vmax = AIM_VMAX + s_throttle10 * 9.0f;
+            float dx = tilt_shape(ttx), dy = tilt_shape(tty);
+            if (dx != 0.0f) s_aim_hv += (dx * vmax - s_aim_hv) * fminf(10.0f * dt, 1.0f);
+            if (dy != 0.0f) s_aim_vv += (dy * vmax - s_aim_vv) * fminf(10.0f * dt, 1.0f);
+        }
+    }
+
+    // (a) reticle glide: arrow impulses (aim_steer) decay under drag here -> smooth acceleration while
+    //     a key is held and a soft inertial stop on release, with no stop-go across the keyboard's
+    //     repeat gap. Drag is framerate-independent (expf), velocity settles to a true dead stop.
+    float fr = expf(-dt * AIM_FRIC);
+    s_aim_hv *= fr; s_aim_vv *= fr;
+    if (s_aim_hv > -3.0f && s_aim_hv < 3.0f) s_aim_hv = 0;
+    if (s_aim_vv > -3.0f && s_aim_vv < 3.0f) s_aim_vv = 0;
+    s_aimx += s_aim_hv * dt;
+    s_aimy += s_aim_vv * dt;
+    if      (s_aimx < 10)     { s_aimx = 10;     if (s_aim_hv < 0) s_aim_hv = 0; }   // stop dead at a wall
+    else if (s_aimx > W - 10) { s_aimx = W - 10; if (s_aim_hv > 0) s_aim_hv = 0; }
+    if      (s_aimy < top + 10) { s_aimy = top + 10; if (s_aim_vv < 0) s_aim_vv = 0; }
+    else if (s_aimy > ch - 10)  { s_aimy = ch - 10;  if (s_aim_vv > 0) s_aim_vv = 0; }
 
     // (b) screen-shake decay
     if (s_shake > 0) { s_shake -= dt * 24.0f; if (s_shake < 0) s_shake = 0; }
@@ -1494,6 +1887,8 @@ static void combat_step(float dt)
         s_regen_acc += dt * 26.0f;
         while (s_regen_acc >= 1.0f && s_shield < s_shieldmax) { s_shield++; s_regen_acc -= 1.0f; }
     }
+    // (d2) missile reserve slowly refills back up to the cap (max 3)
+    if (s_msl_ammo < NMSL) { s_msl_reload += dt * 1000.0f; if (s_msl_reload >= 6000.0f) { s_msl_reload -= 6000.0f; s_msl_ammo++; } }
 
     // (e) ward drifts laterally; its death fails the mission
     if (s_ward_on) {
@@ -1509,6 +1904,7 @@ static void combat_step(float dt)
     for (int i = 0; i < NFOE; i++) {
         Foe *f = &s_foe[i];
         if (!f->on) continue;
+        if (f->hitms > 0) f->hitms -= ms;                       // hit-flash decay
         bool huntward = (s_ward_on && (i & 1));                 // half the wing hunts the ward
         float spd = closeF * kind_speed(f->kind);
         f->wphase += dt * kind_wrate(f->kind);
@@ -1539,6 +1935,41 @@ static void combat_step(float dt)
             spawn_tracer(f, huntward);
             f->firecd = (int16_t)(kind_firems(f->kind) + 600 + rnd(600));
         }
+        if (f->hp * 3 < f->hpmax && (s_now - s_smoke_ms) > 110) {       // wounded: trails embers (damaged read)
+            s_smoke_ms = s_now;
+            Part *sp = part_alloc(); float a = (float)rnd(628) * 0.01f;
+            sp->on = 1; sp->kind = PK_SPARK; sp->ex = f->ex; sp->ey = f->ey; sp->ez = f->ez;
+            sp->vx = cosf(a) * 30.0f; sp->vy = sinf(a) * 30.0f - 10.0f; sp->vz = -(20.0f + (float)rnd(25));
+            sp->life = sp->life0 = (int16_t)(150 + rnd(140)); sp->col = rnd(2) ? COL_AMBER : rgb(210, 120, 60);
+        }
+    }
+
+    // (f1) player missiles: race downrange, home onto the locked foe, detonate on contact (big hit)
+    for (int i = 0; i < NMSL; i++) {
+        Msl *m = &s_msl[i]; if (!m->on) continue;
+        m->ez += 165.0f * dt;
+        if (m->target >= 0 && s_foe[m->target].on) {
+            Foe *f = &s_foe[m->target];
+            m->ex += (f->ex - m->ex) * 4.5f * dt;
+            m->ey += (f->ey - m->ey) * 4.5f * dt;
+            if (m->ez >= f->ez - 4.0f) {
+                float sx = 0, sy = 0, sc = 0; bool vis = project(f->ex, f->ey, f->ez, &sx, &sy, &sc);
+                f->hp -= 70 + g.weapon * 12; f->hitms = 130; s_hitmark_until = s_now + 140;
+                if (f->hp <= 0) kill_foe(f, sx, sy, sc, vis);
+                else { if (vis) spawn_boom(f->ex, f->ey, f->ez, sc * 0.7f, COL_AMBER, false); sfx(SFX_BOOM); }
+                m->on = 0;
+            }
+        } else {                                                // lock lost: fly straight out and fizz far away
+            m->target = -1;
+            if (m->ez > ZFAR) { spawn_boom(m->ex, m->ey, ZFAR - 1.0f, 0.3f, COL_AMBER, false); m->on = 0; }
+        }
+    }
+    // (f1b) power-ups drift toward the cockpit; auto-collected on arrival
+    for (int i = 0; i < NPU; i++) {
+        Pickup *p = &s_pu[i]; if (!p->on) continue;
+        p->ez -= 34.0f * dt; p->ey += 7.0f * dt; p->life -= ms;
+        if (p->ez <= ZNEAR + 2.0f) { apply_pickup(p->kind); p->on = 0; continue; }
+        if (p->life <= 0) p->on = 0;
     }
 
     // (f2) particle / shockwave / ripple advance
@@ -1561,7 +1992,7 @@ static void combat_step(float dt)
             Foe *f = &s_foe[i]; if (!f->on) continue;
             float sx, sy, sc; if (!project(f->ex, f->ey, f->ez, &sx, &sy, &sc)) continue;
             float dx = sx - s_aimx, dy = sy - s_aimy, dd = dx * dx + dy * dy;
-            float r = 10.0f + 26.0f * sc;                       // closer/bigger = easier lock
+            float r = 9.0f + 19.0f * sc;                        // lock window: forgiving enough to track weavers
             if (dd < r * r && dd < best) { best = dd; s_lock = i; }
         }
     }
@@ -1573,8 +2004,8 @@ static void combat_step(float dt)
         float sx, sy, sc;
         if (project(s_foe[s_lock].ex, s_foe[s_lock].ey, s_foe[s_lock].ez, &sx, &sy, &sc) &&
             sx > 8 && sx < W - 8 && sy > top + 8 && sy < ch - 8) {
-            if (s_now >= s_aim_h_until) s_aimx += (sx - s_aimx) * 5.0f * dt;   // ~16%/frame when idle
-            if (s_now >= s_aim_v_until) s_aimy += (sy - s_aimy) * 5.0f * dt;
+            if (s_now >= s_aim_h_until) s_aimx += (sx - s_aimx) * 2.0f * dt;   // gentle pull only (was 5.0): helps tracking, not aiming
+            if (s_now >= s_aim_v_until) s_aimy += (sy - s_aimy) * 2.0f * dt;
         }
     }
 
@@ -1605,15 +2036,31 @@ static void combat_step(float dt)
     }
 }
 
+// Off-screen enemy indicator: a small arrow pinned to the playfield frame, pointing toward a foe that
+// has slipped outside the view — a dogfight readability staple so the player always knows where to turn.
+static void draw_foe_arrow(int top, int ch, float sx, float sy, uint16_t col)
+{
+    float dx = sx - CX, dy = sy - s_cy;
+    float L = sqrtf(dx * dx + dy * dy); if (L < 1.0f) L = 1.0f;
+    float nx = dx / L, ny = dy / L;
+    int px = clampi((int)sx, 7, W - 7), py = clampi((int)sy, top + 6, ch - 8);
+    int tx_ = px + (int)(nx * 5.0f), ty_ = py + (int)(ny * 5.0f);     // tip points outward, toward the foe
+    int bx = px - (int)(nx * 4.0f), by = py - (int)(ny * 4.0f);       // base centre
+    int wx = (int)(-ny * 3.0f), wy = (int)(nx * 3.0f);               // base half-width (perpendicular)
+    d.fillTriangle(tx_, ty_, bx + wx, by + wy, bx - wx, by - wy, col);
+}
+
 static void draw_combat(void)
 {
     int ch = nucleo_app_content_height();
     float top = (float)pf_top();
     int jx = s_shake > 0 ? (rnd(3) - 1) : 0, jy = s_shake > 0 ? (rnd(3) - 1) : 0;   // hit shake
     d.fillRect(0, 0, W, ch, COL_SPACE);
-    bool flashing = (s_now < s_flash_until);
-    if (!flashing) draw_backdrop(top, ch, jx, jy);        // distant planet + nebula (hidden under a flash)
-    else d.fillRect(0, (int)top, W, ch - (int)top, rgb(120, 130, 150));   // brief DIM full-frame flash
+    // ALWAYS paint the scene. The old code hid the whole backdrop behind a flat-gray fill during each
+    // boom's s_flash_until window; with several foes dying in a wave those windows overlapped and the
+    // background strobed dark<->bright -> the "flicker in battle". The boom now reads from the LOCAL
+    // core-flash + shockwave + debris below, which are spatially anchored and never strobe.
+    draw_backdrop(top, ch, jx, jy);
 
     // 3D warp starfield: radial streaks from the vanishing point
     for (int i = 0; i < NWARP; i++) {
@@ -1658,12 +2105,52 @@ static void draw_combat(void)
         Foe *f = &s_foe[order[o]]; float sx, sy, sc;
         if (!project(f->ex, f->ey, f->ez, &sx, &sy, &sc)) continue;
         int x = (int)sx + jx, y = (int)sy + jy, r = clampi((int)(9.0f * sc * kind_rscale(f->kind)), 2, 60);
-        draw_tie(x, y, r, (int)(f->bank * 2.0f), f->kind, faction_col(s_cc.foe_fac));
+        uint16_t fcol = wave_col();
+        { uint16_t kh = kind_hue(f->kind); if (kh) fcol = cmix(fcol, kh, 120); }   // per-kind identity
+        if (f->ez > 95.0f) fcol = cmix(fcol, COL_DIM, clampi((int)((f->ez - 95.0f) * 1.1f), 0, 120));  // atmospheric haze: far foes sink into the void
+        if (f->hp * 3 < f->hpmax) fcol = cmix(fcol, COL_RED, 110);   // wounded -> reddens
+        if (f->hitms > 0)         fcol = cmix(fcol, COL_WHITE, 180);  // hit-flash
+        draw_ship3d(x, y, r, f->bank, f->kind, fcol);
+        if (f->hitms > 55 && r >= 5) fx3d::dither_disc(x, y, clampi(r + 2, 6, 20), COL_CYAN);  // dithered shield bubble (hit, bounded)
+        if (f->firecd > 0 && f->firecd < 240 && f->ez < 130.0f && !f->strafe) {    // charging to fire: telegraph
+            d.fillCircle(x, y - r / 3, 2 + (f->firecd < 120 ? 1 : 0), ((s_anim >> 1) & 1) ? COL_RED : COL_AMBER);
+        }
         if (f->hp < f->hpmax && r >= 5) {
             int w = r * 2, fw = w * f->hp / f->hpmax;
             d.drawFastHLine(x - r, y - r - 3, w, rgb(60, 30, 30));
             d.drawFastHLine(x - r, y - r - 3, fw, COL_RED);
         }
+    }
+
+    // model-shatter deaths: blow each killed foe's flash model apart into cooling, spinning shards.
+    for (int i = 0; i < NDEATH; i++) {
+        if (!s_death[i].on) continue;
+        float pr  = 1.0f - (float)s_death[i].t / (float)s_death[i].t0;
+        float dsc = (float)s_death[i].r / 1.25f;
+        fx3d::shatter(*ship_model(s_death[i].model), (float)(s_death[i].x + jx), (float)(s_death[i].y + jy),
+                      dsc, s_death[i].yaw + pr * 2.2f, s_death[i].bank, s_death[i].col, pr);
+    }
+
+    // player missiles streaking downrange (homing) with a short trail
+    for (int i = 0; i < NMSL; i++) {
+        Msl *m = &s_msl[i]; if (!m->on) continue;
+        float sx, sy, sc; if (!project(m->ex, m->ey, m->ez, &sx, &sy, &sc)) continue;
+        int x = (int)sx + jx, y = (int)sy + jy;
+        float tx2, ty2, tc; if (project(m->ex, m->ey, m->ez - 18.0f, &tx2, &ty2, &tc))
+            d.drawLine((int)tx2 + jx, (int)ty2 + jy, x, y, COL_AMBER);
+        int r = clampi((int)(3.0f * sc), 1, 4);
+        d.fillCircle(x, y, r, COL_WHITE); d.drawCircle(x, y, r + 1, COL_AMBER);
+    }
+    // power-ups: pulsing diamond, colour-coded by kind, drifting in
+    for (int i = 0; i < NPU; i++) {
+        Pickup *p = &s_pu[i]; if (!p->on) continue;
+        float sx, sy, sc; if (!project(p->ex, p->ey, p->ez, &sx, &sy, &sc)) continue;
+        int x = (int)sx + jx, y = (int)sy + jy, r = clampi((int)(6.0f * sc), 3, 11);
+        uint16_t c = pu_col(p->kind);
+        d.fillTriangle(x, y - r, x - r, y, x + r, y, c);
+        d.fillTriangle(x, y + r, x - r, y, x + r, y, shade(c, 3, 5));
+        d.drawCircle(x, y, r + 2 + ((s_anim >> 1) & 1), c);
+        d.drawPixel(x, y, COL_WHITE);
     }
 
     // explosions: 3D debris + sparks, shockwave rings, core flash
@@ -1690,8 +2177,9 @@ static void draw_combat(void)
         d.drawCircle(x, y, R, c);
         if (t < 0.5f) d.drawCircle(x, y, R - 1, c);
     }
-    if (s_now < s_flash_until) {
+    if (s_now < s_flash_until) {                          // localized boom bloom (replaces the old full-frame flash)
         int x = (int)s_flash_x + jx, y = (int)s_flash_y + jy;
+        d.fillCircle(x, y, s_flash_r0 + 4, shade(COL_AMBER, 2, 6));   // soft outer glow, anchored at the kill
         d.fillCircle(x, y, s_flash_r0, COL_AMBER);
         d.fillCircle(x, y, s_flash_r0 / 2, COL_WHITE);
     }
@@ -1705,12 +2193,15 @@ static void draw_combat(void)
         }
     }
 
-    // twin converging lasers from the cockpit gun ports to the reticle (hot triple-stroke)
+    // twin converging lasers from the cockpit gun ports to the reticle (glow -> core + impact spark)
     if (s_now < s_fire_flash_until) {
         int ax = (int)s_aimx + jx, ay = (int)s_aimy + jy;
-        d.drawLine(2, ch - 1, ax, ay, COL_RED);     d.drawLine(W - 3, ch - 1, ax, ay, COL_RED);
-        d.drawLine(3, ch - 1, ax, ay, COL_AMBER);   d.drawLine(W - 4, ch - 1, ax, ay, COL_AMBER);
-        d.drawLine(4, ch - 1, ax, ay, COL_WHITE);   d.drawLine(W - 5, ch - 1, ax, ay, COL_WHITE);
+        uint16_t gl = shade(COL_RED, 2, 5);
+        d.drawLine(1, ch - 1, ax, ay, gl);          d.drawLine(W - 2, ch - 1, ax, ay, gl);
+        d.drawLine(3, ch - 1, ax, ay, COL_RED);     d.drawLine(W - 4, ch - 1, ax, ay, COL_RED);
+        d.drawLine(4, ch - 1, ax, ay, COL_AMBER);   d.drawLine(W - 5, ch - 1, ax, ay, COL_AMBER);
+        d.drawLine(5, ch - 1, ax, ay, COL_WHITE);   d.drawLine(W - 6, ch - 1, ax, ay, COL_WHITE);
+        d.fillCircle(ax, ay, 3, COL_WHITE); d.drawCircle(ax, ay, 5, COL_AMBER);   // impact flash
     }
     if (s_now < s_muz_until) {                        // gun-port muzzle flash
         d.fillCircle(3, ch - 3, 5, COL_AMBER);   d.fillCircle(3, ch - 3, 3, COL_WHITE);
@@ -1718,6 +2209,11 @@ static void draw_combat(void)
     }
 
     draw_reticle((int)s_aimx + jx, (int)s_aimy + jy, s_lock >= 0);
+    if (s_now < s_hitmark_until) {                        // hitmarker: four ticks confirm a damaging hit
+        int ax = (int)s_aimx + jx, ay = (int)s_aimy + jy;
+        d.drawLine(ax - 8, ay - 8, ax - 4, ay - 4, COL_WHITE); d.drawLine(ax + 8, ay - 8, ax + 4, ay - 4, COL_WHITE);
+        d.drawLine(ax - 8, ay + 8, ax - 4, ay + 4, COL_WHITE); d.drawLine(ax + 8, ay + 8, ax + 4, ay + 4, COL_WHITE);
+    }
     // shield-absorb ripples on the canopy
     for (int i = 0; i < NRIP; i++) {
         if (!s_rip[i].on) continue;
@@ -1730,50 +2226,92 @@ static void draw_combat(void)
         d.drawRect(1, (int)top + 1, W - 2, ch - (int)top - 2, rgb(140, 40, 36));
     }
 
-    // HUD band (shield / hull / boost / wave|ward / kills) — steady, not jittered
+    // off-screen enemy arrows: point toward any foe outside the frame (red if it's closing fast). Steady
+    // (not jittered) and outside the foe loop so they read as instruments, not part of the chaos.
+    for (int i = 0; i < NFOE; i++) {
+        if (!s_foe[i].on) continue;
+        float fx, fy, fsc; if (!project(s_foe[i].ex, s_foe[i].ey, s_foe[i].ez, &fx, &fy, &fsc)) continue;
+        if (fx >= 6 && fx < W - 6 && fy >= top + 4 && fy < ch - 6) continue;     // on-screen -> no arrow
+        draw_foe_arrow((int)top, ch, fx, fy, s_foe[i].ez < 80.0f ? COL_RED : COL_AMBER);
+    }
+    // hull-critical: a slow red border breath (distinct from the momentary hit vignette above) — a
+    // peripheral "you're dying" cue that doesn't block the view.
+    if (g.hull_max && g.hull * 100 / g.hull_max < 25 && ((s_anim >> 2) & 3) < 2)
+        d.drawRect(0, (int)top, W, ch - (int)top, rgb(150, 30, 28));
+
+    // HUD band: shield / hull / boost / missiles / wave|ward / kills (+ combo). Bars are outlined and the
+    // shield/hull labels+bars BLINK when critical, so a glance tells you you're hurt. Steady, not jittered.
     d.fillRect(0, 0, W, 13, COL_SPACE);
     d.drawFastHLine(0, 13, W, rgb(40, 50, 80));
     char b[28];
-    text_at(4, 3, 1, COL_CYAN, "S");
+    bool blink = ((s_anim >> 2) & 1);
     int spct = s_shieldmax ? s_shield * 100 / s_shieldmax : 0;
-    mini_bar(12, 4, 30, 6, spct, COL_CYAN);
-    text_at(48, 3, 1, COL_GREY, "H");
     int hpct = g.hull_max ? g.hull * 100 / g.hull_max : 0;
-    mini_bar(56, 4, 30, 6, hpct, hpct < 30 ? COL_RED : COL_GREEN);
-    snprintf(b, sizeof b, "B%d", s_throttle10);
-    text_at(92, 3, 1, COL_AMBER, b);
+    uint16_t sc_col = (spct <= 0) ? (blink ? COL_RED : COL_DIM) : COL_CYAN;
+    uint16_t hc_col = (hpct < 30) ? (blink ? COL_RED : COL_AMBER) : COL_GREEN;
+    text_at(3, 3, 1, sc_col, "S");
+    mini_bar(11, 4, 26, 6, spct, sc_col);
+    d.drawRoundRect(11, 4, 26, 6, 1, rgb(40, 50, 80));
+    text_at(41, 3, 1, (hpct < 30 && blink) ? COL_RED : COL_GREY, "H");
+    mini_bar(49, 4, 26, 6, hpct, hc_col);
+    d.drawRoundRect(49, 4, 26, 6, 1, rgb(40, 50, 80));
+    snprintf(b, sizeof b, "B%d", s_throttle10); text_at(79, 3, 1, COL_AMBER, b);
+    for (int i = 0; i < NMSL; i++) {                       // missile pips: filled = ready to fire
+        int mx = 99 + i * 7;
+        if (i < s_msl_ammo) d.fillTriangle(mx, 3, mx, 11, mx + 5, 7, COL_AMBER);
+        else                d.drawTriangle(mx, 3, mx, 11, mx + 5, 7, COL_DIM);
+    }
+    if (s_now < s_rapid_until) d.drawFastHLine(99, 12, 19, COL_PURPLE);   // rapid-fire active
     if (s_ward_on) {
         int wpct = s_ward_max ? s_ward_hp * 100 / s_ward_max : 0;
-        text_at(114, 3, 1, COL_GREEN, s_cc.type == MT_DEFEND ? tx("FAR", "BCN") : tx("CNV", "CNV"));
-        mini_bar(138, 4, 28, 6, wpct, wpct < 35 ? COL_RED : COL_GREEN);
+        text_at(126, 3, 1, (wpct < 35 && blink) ? COL_RED : COL_GREEN, s_cc.type == MT_DEFEND ? tx("FAR", "BCN") : "CNV");
+        mini_bar(150, 4, 24, 6, wpct, wpct < 35 ? COL_RED : COL_GREEN);
+        d.drawRoundRect(150, 4, 24, 6, 1, rgb(40, 50, 80));
     } else {
-        snprintf(b, sizeof b, "%s%d", tx("O", "W"), s_wave);
-        text_at(120, 3, 1, COL_GREY, b);
+        snprintf(b, sizeof b, "%s%d/%d", tx("O", "W"), s_wave, s_cc.waves);
+        text_at(128, 3, 1, COL_GREY, b);
     }
-    snprintf(b, sizeof b, "K%d", s_kills);
-    text_at(226 - (int)strlen(b) * 6, 3, 1, COL_AMBER, b);
+    snprintf(b, sizeof b, "K%d", s_kills); text_at(226 - (int)strlen(b) * 6, 3, 1, COL_AMBER, b);
+    if (s_combo > 1 && s_now < s_combo_until) {            // arcade combo meter, under the kill count
+        snprintf(b, sizeof b, "x%d", s_combo);
+        text_at(226 - (int)strlen(b) * 6, 16, 1, blink ? COL_WHITE : COL_PURPLE, b);
+    }
 
-    if (s_cmsg[0] && s_now < s_cmsg_until) center(ch / 2 - 4, 2, COL_CYAN, s_cmsg);
+    if (s_cmsg[0]  && s_now < s_cmsg_until)  center(ch / 2 - 4, 2, COL_CYAN, s_cmsg);
+    if (s_toast[0] && s_now < s_toast_until) center(ch / 2 + 16, 1, COL_GREEN, s_toast);
+    if (s_now - s_combat_t0 < 3500)          // opening control legend (the hint footer is hidden in combat)
+        center(ch - 31, 1, COL_DIM, tx("Frecce mira  A spara  S missile  Esc fuga",
+                                       "Arrows aim  A fire  S missile  Esc flee"));
 }
 
 // ============================ screens: mission bay ===========================
 static int s_elig[NMISSIONS];   // cached eligible-mission indices (set in draw_missions)
+// `n` rarity pips (small diamonds) right-aligned ending at xr; n=0 (Common) draws nothing.
+static void draw_stars(int xr, int y, int n, uint16_t col)
+{
+    for (int i = 0; i < n; i++) {
+        int cx = xr - 3 - i * 8;
+        d.fillTriangle(cx, y, cx - 3, y + 3, cx + 3, y + 3, col);
+        d.fillTriangle(cx, y + 6, cx - 3, y + 3, cx + 3, y + 3, col);
+    }
+}
 static void miss_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
 {
-    static const char *TAG[4][2] = { { "Pattuglia", "Patrol" }, { "Taglia", "Bounty" },
-                                     { "Scorta", "Escort" }, { "Difesa", "Defend" } };
-    const Mission *m = cur_mission(s_elig[idx]);
+    const Mission *m = cur_mission(s_elig[idx]);          // also fills s_fv (rarity / archetype / target)
+    uint16_t rc = fv_rarcol(s_fv.rarity);
     int x0 = row_x0(bx), xr = row_xr(bx, bw);
     char rew[12]; snprintf(rew, sizeof rew, "%d cr", m->reward_cr);
     if (tier == TIER_FOCUS) {
-        text_at(x0, by + 2, fit_size(lp(m->name), xr - x0, 2), COL_WHITE, lp(m->name));
-        text_at(x0, by + 19, 1, COL_AMBER, rew);                       // reward
-        text_at(x0 + 46, by + 19, 1, COL_DIM, lp(TAG[m->type]));       // type tag
-        int diff = m->waves * m->per_wave + (m->ace ? 2 : 0);          // difficulty pips, right side
+        text_at(x0, by + 2, fit_size(lp(m->name), xr - x0 - 28, 2), rc, lp(m->name));   // title in rarity colour
+        draw_stars(xr, by + 4, s_fv.rarity, rc);                                        // rarity pips, top-right
+        text_at(x0, by + 19, 1, COL_AMBER, rew);                                        // reward
+        text_at(x0 + 46, by + 19, 1, COL_DIM, lp(FA_NAME[s_fv.arch]));                  // archetype tag
+        int diff = m->waves * m->per_wave + (m->ace ? 2 : 0);                           // difficulty pips, right
         for (int s = 0; s < diff && s < 8; s++) d.fillRect(xr - 3 - (7 - s) * 5, by + 21, 3, 3, COL_RED);
     } else {
         int rw = (int)strlen(rew) * 6;
-        text_vc(x0, by, bh, fit_size(lp(m->name), xr - rw - 8 - x0, 1), tier_col(tier), lp(m->name));
+        uint16_t nc = (tier == TIER_NEAR) ? rc : tier_col(tier);
+        text_vc(x0, by, bh, fit_size(lp(m->name), xr - rw - 8 - x0, 1), nc, lp(m->name));
         text_vr(xr, by, bh, 1, COL_AMBER, rew);
     }
 }
@@ -1793,21 +2331,30 @@ static void draw_brief(void)
     int ch = nucleo_app_content_height();
     d.fillRect(0, 0, W, ch, COL_SPACE);
     stars_draw(ch);
-    const Mission *m = cur_mission(s_pick);
+    const Mission *m = cur_mission(s_pick);                // also fills s_fv
+    uint16_t rc = fv_rarcol(s_fv.rarity);
     d.fillRoundRect(6, 2, 228, 116, 6, COL_PANEL);
-    d.drawRoundRect(6, 2, 228, 116, 6, COL_FOCUS2);
-    text_at(14, 7, fit_size(lp(m->name), 212, 2), COL_CYAN, lp(m->name));
-    draw_wrapped_n(14, 28, 212, 11, COL_WHITE, lp(m->brief), 4);       // clamp to 4 lines (y 28..68)
-    char b[52];
+    d.drawRoundRect(6, 2, 228, 116, 6, rc);               // panel border tinted by rarity
+    text_at(14, 5, fit_size(lp(m->name), 150, 2), rc, lp(m->name));
+    text_vr(228, 6, 8, 1, rc, lp(FV_RARNAME[s_fv.rarity]));   // rarity name, top-right
+    draw_wrapped_n(14, 24, 212, 11, COL_WHITE, lp(m->brief), 3);   // flavored brief (y24..57)
+    char b[72];
+    // intel line: named target (bounty) or gang, then any combat modifiers — clamped to the panel.
+    int li = s_fv.has_enemy ? snprintf(b, sizeof b, "%s: %s", tx("Bersaglio", "Target"), g_lang ? s_en_en : s_en_it)
+                            : snprintf(b, sizeof b, "%s: %s", tx("Banda", "Gang"), lp(FV_GANG[s_fv.gang]));
+    for (int i = 0; i < s_fv.nmod && li > 0 && li < (int)sizeof b - 1; i++)
+        li += snprintf(b + li, sizeof b - li, " . %s", lp(FV_MODS[s_fv.mod[i]]));
+    if ((int)strlen(b) > 35) b[35] = 0;                   // keep it inside the panel width
+    text_at(14, 59, 1, COL_CYAN, b);
     snprintf(b, sizeof b, "%s: %d x%d%s  vs %s", tx("Ostili", "Hostiles"),
-             m->waves, m->per_wave, m->ace ? "+ASSO" : "", lp(FAC_NAME[m->foe_fac]));
-    text_at(14, 74, 1, COL_GREY, b);
+             m->waves, m->per_wave, m->ace ? " +ASSO" : "", lp(FAC_NAME[m->foe_fac]));
+    text_at(14, 70, 1, COL_GREY, b);
     if (m->offer_fac >= 0)
         snprintf(b, sizeof b, "%s %d cr (+%d/%s)  %s +%d", tx("Paga", "Pay"), m->reward_cr,
                  m->kill_cr, tx("abb", "kill"), lp(FAC_NAME[m->offer_fac]), m->rep_gain);
     else
         snprintf(b, sizeof b, "%s %d cr (+%d/%s)", tx("Paga", "Pay"), m->reward_cr, m->kill_cr, tx("abb", "kill"));
-    text_at(14, 86, 1, COL_AMBER, b);
+    text_at(14, 81, 1, COL_AMBER, b);
     const char *opt[2] = { tx("Accetta e lancia", "Accept & launch"), tx("Annulla", "Decline") };
     int oy = 95;
     for (int i = 0; i < 2; i++) {
@@ -1851,30 +2398,64 @@ static void title_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
     int sz = fit_size(t, xr - x0, tier == TIER_FOCUS ? 2 : 1);
     text_vc(x0, by, bh, sz, tier_col(tier), t);
 }
+// Shared menu backdrop: deep-space stars + a dim Mode-7 neon floor that recedes to the horizon, panned
+// a few px by the IMU so physically tilting the Cardputer parallaxes the grid (ADV only; a harmless
+// no-op otherwise). The floor scrolls slowly toward you -> a living 3D menu, not a flat star field.
+static void menu_backdrop(int ch)
+{
+    d.fillRect(0, 0, W, ch, COL_SPACE);
+    stars_draw(ch);
+    static float s_menu_panx = 0.0f;                       // IMU read throttled to ~8 Hz (I2C; pure eye-candy)
+    if (nucleo_imu_present() && (s_anim & 3) == 0) { float ttx, tty; if (nucleo_imu_tilt(&ttx, &tty)) s_menu_panx = ttx; }
+    fx3d::Grid gc;
+    gc.horizon = (int)(ch * 0.46f); gc.bottom = ch - 1;
+    gc.vanx = (float)W * 0.5f + s_menu_panx * 80.0f;
+    gc.scroll = fmodf((float)s_anim * 0.02f, 1.0f);
+    gc.xspread = 252.0f; gc.nv = 7; gc.nh = 9;
+    gc.col = shade(COL_CYAN, 4, 6); gc.glow = shade(COL_CYAN, 2, 6);
+    gc.intensity = 110;
+    fx3d::grid(gc);
+}
 static void draw_title(void)
 {
     int ch = nucleo_app_content_height();
-    d.fillRect(0, 0, W, ch, COL_SPACE);
-    stars_draw(ch);
+    menu_backdrop(ch);                                         // Mode-7 neon floor + stars (IMU parallax)
+    center(7, 2, shade(COL_CYAN, 2, 6), "COSTELLAZIONI");       // soft drop shadow
     center(6, 2, COL_CYAN, "COSTELLAZIONI");                    // 13*12=156 -> x42..198
-    draw_ship(W / 2 + (int)(8 * sinf(s_anim * 0.06f)), 28, 2, COL_AMBER);
+    center(24, 1, COL_DIM, tx("mercante tra le stelle", "trader among the stars"));
+    d.drawFastHLine(50, 35, W - 100, shade(COL_CYAN, 2, 5));    // cyan rule with a small flagship emblem
+    d.fillCircle(W / 2 + 9, 35, 2, shade(COL_CYAN, 3, 5));      // engine glow
+    draw_ship(W / 2, 35, 1, COL_AMBER);
     int act[4]; int n = title_items(act);
     if (s_msel >= n) s_msel = n - 1;
-    list_fisheye(s_msel, n, 42, 120, title_row_fn);
+    list_fisheye(s_msel, n, 44, 120, title_row_fn);
+}
+// Settings rows. The TILT row exists only on the Cardputer ADV (it owns a BMI270); on the original
+// board it is not shown at all, so the row count and the idx->kind map both depend on is_adv().
+enum { SET_LANG = 0, SET_AUDIO, SET_TILT, SET_DELETE };
+static int set_count(void) { return nucleo_ui_is_adv() ? 4 : 3; }
+static int set_kind(int idx)
+{
+    if (nucleo_ui_is_adv()) return idx;                  // 0 lang, 1 audio, 2 tilt, 3 delete
+    return (idx >= 2) ? SET_DELETE : idx;                // base: 0 lang, 1 audio, 2 delete
 }
 static void set_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
 {
-    const char *names[3] = { tx("Lingua", "Language"), tx("Audio", "Audio"),
-                             tx("Cancella salvataggio", "Delete save") };
+    int kind = set_kind(idx);
+    const char *nm = kind == SET_LANG  ? tx("Lingua", "Language")
+                   : kind == SET_AUDIO ? tx("Audio", "Audio")
+                   : kind == SET_TILT  ? tx("Inclinazione", "Tilt control")
+                   :                      tx("Cancella salvataggio", "Delete save");
     int x0 = row_x0(bx), xr = row_xr(bx, bw);
     int vx = 150;                                               // value zone left edge
-    const char *nm = names[idx];
     int sz = fit_size(nm, vx - 8 - x0, tier == TIER_FOCUS ? 2 : 1);
     text_vc(x0, by, bh, sz, tier_col(tier), nm);
     int cy = by + bh / 2;
-    if (idx == 0 || idx == 1) {                                 // segmented toggle chips
-        const char *a = idx == 0 ? "IT" : "ON", *b = idx == 0 ? "EN" : "OFF";
-        bool left = idx == 0 ? (g_lang == 0) : (g_audio != 0);
+    if (kind == SET_LANG || kind == SET_AUDIO || kind == SET_TILT) {  // segmented toggle chips
+        // Tilt with no working IMU yet (config blob not vendored) reads "n/d" instead of a toggle.
+        if (kind == SET_TILT && !nucleo_imu_present()) { text_vr(xr, by, bh, 1, COL_AMBER, tx("n/d", "n/a")); return; }
+        const char *a = kind == SET_LANG ? "IT" : "ON", *b = kind == SET_LANG ? "EN" : "OFF";
+        bool left = kind == SET_LANG ? (g_lang == 0) : kind == SET_AUDIO ? (g_audio != 0) : (g_tilt != 0);
         d.fillRoundRect(vx,      cy - 8, 36, 16, 3, left ? COL_GREEN : COL_TRACK);
         d.fillRoundRect(vx + 40, cy - 8, 36, 16, 3, !left ? COL_GREEN : COL_TRACK);
         d.setTextSize(1);                                       // transparent bg over the chips
@@ -1890,10 +2471,9 @@ static void set_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
 static void draw_settings(void)
 {
     int ch = nucleo_app_content_height();
-    d.fillRect(0, 0, W, ch, COL_SPACE);
-    stars_draw(ch);
+    menu_backdrop(ch);
     title_band(tx("Impostazioni", "Settings"), NULL);
-    list_fisheye(s_setsel, 3, 28, 120, set_row_fn);
+    list_fisheye(s_setsel, set_count(), 28, 120, set_row_fn);
 }
 
 // ============================ screens: map ===================================
@@ -2227,7 +2807,9 @@ static void set_hint_for(int screen)
         case ST_EVENT:    nucleo_app_set_hint(tx("SU/GIU scegli  INVIO conferma", "UP/DN pick  ENTER confirm")); break;
         case ST_MISSIONS: nucleo_app_set_hint(tx("SU/GIU scegli  INVIO briefing  Esc", "UP/DN pick  ENTER brief  Esc")); break;
         case ST_BRIEF:    nucleo_app_set_hint(tx("SU/GIU  INVIO conferma  Esc", "UP/DN  ENTER confirm  Esc")); break;
-        case ST_COMBAT:   nucleo_app_set_hint(tx("Frecce mira  A/INVIO spara  Esc fuggi", "Arrows aim  A/ENTER fire  Esc flee")); break;
+        case ST_COMBAT:   nucleo_app_set_hint(g_tilt && nucleo_imu_present()
+                              ? tx("Inclina/Frecce mira  A spara  S missile  Esc fuggi", "Tilt/Arrows aim  A fire  S missile  Esc flee")
+                              : tx("Frecce mira  A spara  S missile  Esc fuggi", "Arrows aim  A fire  S missile  Esc flee")); break;
         case ST_DEBRIEF:  nucleo_app_set_hint(tx("INVIO continua", "ENTER continue")); break;
         default: break;
     }
@@ -2243,10 +2825,12 @@ static void title_enter(void)
 }
 static void settings_activate(void)
 {
-    switch (s_setsel) {
-        case 0: g_lang ^= 1; cfg_write(); sfx(SFX_OK); break;
-        case 1: g_audio ^= 1; cfg_write(); sfx(SFX_OK); break;
-        case 2: if (s_has_save) { save_wipe(); sfx(SFX_BACK); } else sfx(SFX_DENY); break;
+    switch (set_kind(s_setsel)) {
+        case SET_LANG:  g_lang ^= 1; cfg_write(); sfx(SFX_OK); break;
+        case SET_AUDIO: g_audio ^= 1; cfg_write(); sfx(SFX_OK); break;
+        case SET_TILT:  if (!nucleo_imu_present()) { sfx(SFX_DENY); break; }   // no IMU -> can't enable
+                        g_tilt ^= 1; cfg_write(); sfx(SFX_OK); break;
+        case SET_DELETE: if (s_has_save) { save_wipe(); sfx(SFX_BACK); } else sfx(SFX_DENY); break;
         default: break;
     }
     req();
@@ -2272,6 +2856,7 @@ static void hub_open(void)
 
 static void on_key(int k, char ch)
 {
+    if (!cur_sys) return;          // OOM error state: ignore input (Esc closes via on_back at ST_TITLE)
     switch (s_screen) {
         case ST_CINE: cine_end(); return;
         case ST_TITLE: {
@@ -2282,8 +2867,8 @@ static void on_key(int k, char ch)
             return;
         }
         case ST_SETTINGS:
-            if (k == NK_UP)   { s_setsel = (s_setsel + 2) % 3; sfx(SFX_MOVE); req(); }
-            else if (k == NK_DOWN) { s_setsel = (s_setsel + 1) % 3; sfx(SFX_MOVE); req(); }
+            if (k == NK_UP)   { s_setsel = (s_setsel + set_count() - 1) % set_count(); sfx(SFX_MOVE); req(); }
+            else if (k == NK_DOWN) { s_setsel = (s_setsel + 1) % set_count(); sfx(SFX_MOVE); req(); }
             else if (k == NK_ENTER || k == NK_RIGHT) settings_activate();
             return;
         case ST_MAP:
@@ -2330,9 +2915,10 @@ static void on_key(int k, char ch)
             return;
         case ST_COMBAT:
             if (s_result) return;
-            if (k == NK_RIGHT)      { s_aim_hx = 1;  s_aim_h_until = s_now + 150; }
-            else if (k == NK_UP)    { s_aim_vx = -1; s_aim_v_until = s_now + 150; }
-            else if (k == NK_DOWN)  { s_aim_vx = 1;  s_aim_v_until = s_now + 150; }
+            if (k == NK_RIGHT)      aim_steer(0, +1);
+            else if (k == NK_UP)    aim_steer(1, -1);
+            else if (k == NK_DOWN)  aim_steer(1, +1);
+            else if (ch == 's' || ch == 'S') missile_fire();                              // secondary: missile
             else if (k == NK_ENTER || ch == ' ' || ch == 'a' || ch == 'A' || ch == 'k' || ch == 'K' ||
                      ch == 'l' || ch == 'L' || ch == 'j' || ch == 'J' || ch == 'f' || ch == 'F' ||
                      ch == 'm' || ch == 'M') player_fire();
@@ -2357,7 +2943,7 @@ static bool on_back(int key)
             case ST_MARKET:   if (s_mktsel < NGOODS) { sell_good(s_mktsel); req(); } break;
             case ST_EVENT:    { const Event *e = &EVENTS[s_ev]; s_evsel = (s_evsel - 1 + e->nch) % e->nch; sfx(SFX_MOVE); req(); } break;
             case ST_BRIEF:    s_briefsel ^= 1; sfx(SFX_MOVE); req(); break;
-            case ST_COMBAT:   if (!s_result) { s_aim_hx = -1; s_aim_h_until = s_now + 150; } break;   // aim left
+            case ST_COMBAT:   if (!s_result) aim_steer(0, -1); break;   // aim left
             default: break;
         }
         return true;
@@ -2381,6 +2967,12 @@ static bool on_back(int key)
 // ============================ draw / tick / poll =============================
 static void on_draw(void)
 {
+    if (!cur_sys) {                // OOM at enter: honest message instead of dereferencing NULL pools
+        d.fillScreen(COL_SPACE);
+        d.setTextSize(1); d.setTextColor(COL_RED, COL_SPACE);
+        d.setCursor(12, H / 2 - 4); d.print(g_lang ? "Out of memory - Esc" : "Memoria insufficiente - Esc");
+        return;
+    }
     switch (s_screen) {
         case ST_TITLE:    draw_title(); break;
         case ST_SETTINGS: draw_settings(); break;
@@ -2401,8 +2993,15 @@ static void on_draw(void)
 // ~30 Hz animation only on the live screens; static screens repaint on input.
 static bool poll(void)
 {
+    if (!cur_sys) return false;
     s_now = esp_timer_get_time() / 1000;
-    bool animated = (s_screen == ST_TITLE || s_screen == ST_MAP || s_screen == ST_CINE || s_screen == ST_COMBAT);
+    // The title is a menu: it repaints on input only (request_draw / go()), so it sits perfectly
+    // still instead of re-blitting the starfield at ~30 Hz (the idle flicker). Map / cinematic /
+    // combat are motion screens and keep animating.
+    // TITLE/SETTINGS now animate too: the Mode-7 menu floor scrolls and the IMU parallax tracks live.
+    // The double buffer composites off-screen and blits once, so this is flicker-free (same as combat).
+    bool animated = (s_screen == ST_MAP || s_screen == ST_CINE || s_screen == ST_COMBAT ||
+                     s_screen == ST_TITLE || s_screen == ST_SETTINGS);
     if (!animated) return false;
     int64_t elapsed = s_now - s_last_frame;
     if (elapsed < 33) return false;
@@ -2418,10 +3017,38 @@ static bool poll(void)
     return true;
 }
 
+// EXCLUSIVE-MODE RAM: the game state (systems cache + combat pools) lives on the HEAP only while the
+// app is open — allocated here, freed in on_exit — so it costs ZERO RAM at boot (the no-hoarding rule).
+static bool cstl_alloc(void)
+{
+    cur_sys = (Sys  *)calloc(NSYS,  sizeof(Sys));
+    s_warp  = (Warp *)calloc(NWARP, sizeof(Warp));
+    s_part  = (Part *)calloc(NPART, sizeof(Part));
+    s_bolt  = (Bolt *)calloc(NBOLT, sizeof(Bolt));
+    s_foe   = (Foe  *)calloc(NFOE,  sizeof(Foe));
+    return cur_sys && s_warp && s_part && s_bolt && s_foe;
+}
+static void cstl_free(void)
+{
+    free(cur_sys); cur_sys = nullptr;
+    free(s_warp);  s_warp  = nullptr;
+    free(s_part);  s_part  = nullptr;
+    free(s_bolt);  s_bolt  = nullptr;
+    free(s_foe);   s_foe   = nullptr;
+}
+
 static void on_enter(void)
 {
     ensure_dirs();
     cfg_read();
+    if (!cstl_alloc()) {            // OOM: harmless error state (on_draw/poll/on_key guard on cur_sys)
+        cstl_free();
+        s_screen = ST_TITLE;
+        nucleo_app_set_back_handler(on_back);
+        nucleo_app_set_hint("Memoria insufficiente - Esc");
+        req();
+        return;
+    }
     s_rng ^= (uint32_t)esp_timer_get_time();
     s_has_save = save_read(&g);     // peek (g is overwritten by new/continue anyway)
     s_ingame = false;
@@ -2439,13 +3066,15 @@ static void on_exit(void)
 {
     if (s_ingame) save_write();
     nucleo_audio_stop();
+    cstl_free();                   // release the game-state heap -> back to ZERO RAM until next open
 }
 
 extern "C" void nucleo_register_constellations(void)
 {
     static const nucleo_app_def_t app = {
         "stelle", "Costellazioni", "Games", "Mercante stellare: riaccendi i Fari",
-        'C', C_BLUE, on_enter, on_key, nullptr, on_draw, on_exit
+        'C', C_BLUE, on_enter, on_key, nullptr, on_draw, on_exit,
+        NX_NET_APP   // free ~60KB (httpd/mDNS/voice/L1) before on_enter so the combat pools always fit -> no launch OOM
     };
     nucleo_app_register(&app);
 }

@@ -1,6 +1,6 @@
 // Shared Wear OS-style list widget for the native apps (Files / Music / Photos / Notes).
-// The focused row is enlarged to text size 2 with a horizontal marquee for long labels;
-// neighbours shrink and dim; the list smooth-scrolls to keep focus centred. Mirrors the
+// The focused row is a size-2 accent pill; the rows adjacent to it stay full-size + readable
+// (size 2, white), and rows further away shrink + dim for depth. Mirrors the
 // simulator helper web/device/apps/_list.js so the look matches what was verified there.
 #pragma once
 // C++ only (all callers are the app_*.cpp files); kept out of extern "C" so the row-

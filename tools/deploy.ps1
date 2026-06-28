@@ -183,6 +183,12 @@ $exe = "$repo\windows-app\dist\NucleoConnect.exe"
 if (Test-Path $exe) { Copy-IfChanged $exe (Join-Path $sd 'www\shell\downloads\NucleoConnect.exe') 'www/shell/downloads/NucleoConnect.exe' $man $seen $stat }
 else { Write-Warning "NucleoConnect.exe missing - run: dotnet publish (windows-app)" }
 
+# NucleoMind Android companion (Ollama-for-Android LLM server). Stable source = web\downloads\NucleoMind.apk;
+# refresh it from the Gradle build (nucleomind\app\build\outputs\apk\debug\app-debug.apk) when rebuilt.
+$apk = "$repo\web\downloads\NucleoMind.apk"
+if (Test-Path $apk) { Copy-IfChanged $apk (Join-Path $sd 'www\shell\downloads\NucleoMind.apk') 'www/shell/downloads/NucleoMind.apk' $man $seen $stat }
+else { Write-Warning "NucleoMind.apk missing - build nucleomind in Android Studio, then copy app-debug.apk to web\downloads\NucleoMind.apk" }
+
 Write-Host "Compressing Web App files (GZIP) to save network RAM..."
 Get-ChildItem -Path $sd -Recurse -Include *.js,*.css,*.html | ForEach-Object {
     $out = "$($_.FullName).gz"

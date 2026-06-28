@@ -1,5 +1,6 @@
 #include "nucleo_setup.h"
 #include "nucleo_board.h"
+#include <sys/stat.h>   // mkdir() for the redundant SD credential backup
 #include "nucleo_ui.h"
 #include "nucleo_storage.h"
 #include "nucleo_app.h"
@@ -89,6 +90,7 @@ static SemaphoreHandle_t s_scan_lock;
 static bool s_sntp_inited;
 static volatile bool s_time_synced;    // flips true once the first NTP reply lands
 
+
 static void on_time_sync(struct timeval *tv)
 {
     s_time_synced = true;
@@ -129,6 +131,9 @@ static void start_sntp(void)
 static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+        wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)data;
+        ESP_LOGW(TAG, "STA disconnected (reason=%d, was ip=%s) — reconnecting",
+                 d ? d->reason : -1, s_ip[0] ? s_ip : "-");   // reason code lands in the RAM ring -> /api/logs
         s_ip[0] = '\0';
         if (s_want_sta) esp_wifi_connect();          // reconnect to the saved network
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
@@ -165,6 +170,20 @@ static char *slurp(const char *path)
     if (b && fread(b, 1, n, f) == (size_t)n) b[n] = '\0'; else { free(b); b = NULL; }
     fclose(f);
     return b;
+}
+
+// Mirror a freshly-written /cfg file onto the SD as a redundant backup, so Wi-Fi credentials and setup
+// survive an internal-flash wipe (and are visible on the card). Best-effort: a silent no-op if no SD.
+static void mirror_to_sd(const char *cfg_path, const char *sd_path)
+{
+    char *txt = slurp(cfg_path);
+    if (!txt) return;
+    mkdir(NUCLEO_SD_MOUNT "/system", 0775);
+    mkdir(NUCLEO_SD_MOUNT "/system/config", 0775);
+    char tmp[160]; snprintf(tmp, sizeof tmp, "%s.tmp", sd_path);
+    FILE *f = fopen(tmp, "w");
+    if (f) { fputs(txt, f); fflush(f); fclose(f); if (rename(tmp, sd_path) != 0) remove(tmp); }
+    free(txt);
 }
 
 static void save_config(void);   // fwd: load may re-save when migrating off the SD
@@ -210,7 +229,8 @@ static void save_config(void)
             s_mode, s_ssid, s_name, s_ap_ssid, s_ap_pass);
     fflush(f);
     fclose(f);
-    if (rename(tmp, SETUP_JSON) != 0) { ESP_LOGE(TAG, "rename %s failed", SETUP_JSON); remove(tmp); }
+    if (rename(tmp, SETUP_JSON) != 0) { ESP_LOGE(TAG, "rename %s failed", SETUP_JSON); remove(tmp); return; }
+    mirror_to_sd(SETUP_JSON, SETUP_LEGACY);   // redundant SD backup (survives an internal-flash wipe)
 }
 
 // ---- known-networks store (multi-network) ----------------------------------
@@ -218,6 +238,7 @@ static void save_config(void)
 // successfully joined (SSID + password + manual priority + recency stamp) so the device can scan
 // and pick the best in-range one instead of only ever retrying the last network.
 #define NETS_JSON  NUCLEO_CFG_MOUNT "/config/networks.json"
+#define NETS_SD    NUCLEO_SD_MOUNT  "/system/config/networks.json"   // redundant SD backup of saved networks
 #define MAX_NETS   16
 typedef struct { char ssid[33]; char pass[64]; uint8_t prio; uint32_t seq; } known_net_t;
 static known_net_t s_nets[MAX_NETS];
@@ -231,8 +252,9 @@ static void load_networks(void)
 {
     if (s_nets_loaded) return;
     s_nets_loaded = true;
+    bool from_sd = false;
     char *txt = slurp(NETS_JSON);
-    if (!txt) return;
+    if (!txt) { txt = slurp(NETS_SD); if (!txt) return; from_sd = true; }   // /cfg wiped -> restore from SD backup
     cJSON *r = cJSON_Parse(txt); free(txt);
     if (!r) return;
     cJSON *seq = cJSON_GetObjectItem(r, "seq");
@@ -255,6 +277,7 @@ static void load_networks(void)
     }
     s_net_n = k;
     cJSON_Delete(r);
+    if (from_sd && s_net_n > 0) save_networks();   // rewrite the /cfg copy from the recovered SD backup
 }
 
 static void save_networks(void)
@@ -276,7 +299,7 @@ static void save_networks(void)
     if (!txt) return;
     const char *tmp = NETS_JSON ".tmp";        // atomic temp+rename (power-loss safe, see save_config)
     FILE *f = fopen(tmp, "w");
-    if (f) { fputs(txt, f); fflush(f); fclose(f); if (rename(tmp, NETS_JSON) != 0) remove(tmp); }
+    if (f) { fputs(txt, f); fflush(f); fclose(f); if (rename(tmp, NETS_JSON) != 0) remove(tmp); else mirror_to_sd(NETS_JSON, NETS_SD); }
     else ESP_LOGE(TAG, "cannot write %s", tmp);
     free(txt);
 }
@@ -311,6 +334,7 @@ static void net_remember(const char *ssid, const char *pass)
     save_networks();
 }
 
+
 bool nucleo_setup_is_complete(void) { return load_config(); }
 const char *nucleo_setup_device_name(void) { return s_name; }
 
@@ -343,7 +367,7 @@ static void wifi_ensure(void)
     if (!s_wifi_op_lock) s_wifi_op_lock = xSemaphoreCreateMutex();   // serialize join / best-known selection
     static bool sup_started = false;
     if (!sup_started) { sup_started = true;                          // background (re)join supervisor
-        xTaskCreate(wifi_supervisor, "wifisup", 4096, NULL, tskIDLE_PRIORITY + 1, NULL);
+        xTaskCreate(wifi_supervisor, "wifisup", 6144, NULL, tskIDLE_PRIORITY + 1, NULL);   // +2 KB: room for the net_trace FAT write on a silent-drop
     }
     s_wifi_ready = true;
 }
@@ -551,6 +575,19 @@ static bool connect_best_known(void)
     return ok;
 }
 
+// Append a one-line network event to /sd/net_trace.txt (best-effort, low-frequency: only a DETECTED
+// silent link loss writes here). Makes "device stuck on a stale IP" diagnosable from the SD on a PC
+// even with no serial and the web UI unreachable. No-op if no SD. Called only from the supervisor task
+// (6 KB stack) so the FAT write has stack room.
+static void net_trace(const char *what, const char *ip)
+{
+    FILE *f = fopen(NUCLEO_SD_MOUNT "/net_trace.txt", "a");
+    if (!f) return;
+    fprintf(f, "%ld %s ip=%s ssid=%s\n", (long)time(NULL), what,
+            ip && ip[0] ? ip : "-", s_ssid[0] ? s_ssid : "-");
+    fclose(f);
+}
+
 // Background Wi-Fi supervisor. While the user intends a client link (s_auto) but we have no IP,
 // periodically rescan and (re)join the best known network — and keep the device reachable on its
 // own AP between retries. The driver's on_wifi_event handles brief drops to the SAME AP; this
@@ -560,9 +597,29 @@ static void wifi_supervisor(void *arg)
 {
     TickType_t backoff = pdMS_TO_TICKS(8000);
     TickType_t next = xTaskGetTickCount();
+    int link_miss = 0;                              // consecutive "association lost" polls while s_ip is set
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(2000));
-        if (!s_auto || s_ip[0]) { backoff = pdMS_TO_TICKS(8000); continue; }
+        if (!s_auto) { backoff = pdMS_TO_TICKS(8000); continue; }
+        // We THINK we have a link (s_ip set): verify it is REALLY alive. The STA can lose the AP without
+        // WIFI_EVENT_STA_DISCONNECTED ever reaching us (beacon loss under heap pressure, the event dropped
+        // on a starved queue) -> s_ip stays stale, the launcher shows a dead IP, the web server is up but
+        // unreachable, and nothing recovers until a manual reboot. Poll the association; on repeated
+        // failure, log it (RAM ring -> /api/logs, and /sd/net_trace.txt) and force a reconnect — the
+        // disconnect handler reassociates (s_want_sta) and GOT_IP refreshes s_ip.
+        if (s_ip[0]) {
+            wifi_ap_record_t ap;
+            if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
+                link_miss = 0;
+            } else if (++link_miss >= 3) {           // ~6 s of "not associated" while we still hold an IP
+                ESP_LOGW(TAG, "STA link silently lost (stale ip=%s) — forcing reconnect", s_ip);
+                net_trace("silent-drop", s_ip);
+                link_miss = 0; s_ip[0] = '\0';
+                esp_wifi_disconnect();
+            }
+            backoff = pdMS_TO_TICKS(8000);
+            continue;
+        }
         if ((int32_t)(xTaskGetTickCount() - next) < 0) continue;
         if (connect_best_known()) {
             backoff = pdMS_TO_TICKS(8000);
@@ -593,6 +650,20 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
     return ok;
 }
 void nucleo_setup_start_ap(void)  { s_auto = false; strncpy(s_mode, "ap", sizeof(s_mode) - 1); start_ap(); save_config(); }
+
+// Turn the Access Point OFF and return to client (STA) mode — rejoin the best known network. The AP
+// toggle in Settings MUST call this, NOT apply_network() directly: apply_network() only brings STA up
+// when s_mode is ALREADY "sta" (otherwise it (re)starts the AP), so toggling "off" while s_mode=="ap"
+// just restarted the hotspot — "AP won't turn off". Flip the mode to "sta" FIRST, persist it, then
+// apply: connect_best_known() joins a known Wi-Fi. If none is in range, apply_network() falls back to
+// the AP (it never leaves the device fully offline) — but the persisted mode stays "sta", so the
+// supervisor rejoins automatically the moment a known network reappears.
+void nucleo_setup_stop_ap(void)
+{
+    strncpy(s_mode, "sta", sizeof(s_mode) - 1);
+    save_config();
+    nucleo_setup_apply_network();
+}
 
 // Forget ALL saved networks and drop to the hotspot.
 void nucleo_setup_forget(void)
@@ -831,6 +902,11 @@ esp_err_t nucleo_setup_apply_network(void)
     load_networks();
     restore_saved_time();   // best-effort approximate time before WiFi/NTP
     wifi_ensure();
+    // Restore the default STA modem-sleep here, the common chokepoint every network bring-up passes
+    // through. A Wi-Fi attack app (deauth/beacon flood) sets WIFI_PS_NONE for max injection throughput
+    // and exits via this function; without this the radio would stay at the higher PS_NONE idle draw
+    // until reboot. Idempotent on a normal boot (MIN_MODEM is already the IDF STA default).
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
     if (!strcmp(s_mode, "sta") && (s_net_n > 0 || s_ssid[0])) {
         s_auto = true;                       // intend a client link: supervisor keeps (re)joining
         ESP_LOGI(TAG, "bringing up Wi-Fi (%d saved network(s))", s_net_n);
@@ -897,4 +973,26 @@ void nucleo_setup_show_home(void)
     snprintf(l3, sizeof(l3), "Win app: %s/downloads/", base);
     const char *lines[] = { l1, l2, "", l3 };
     nucleo_ui_home("NucleoOS", lines, 4);
+}
+
+// Fast boot network start — returns in < 200 ms with no blocking connect.
+// STA mode: lets the background supervisor handle the join (s_auto=true, wakes at t+2s).
+// AP mode: identical to apply_network().
+// WiFi mode transitions are left entirely to connect_sta()/start_ap() — no mode changes here.
+void nucleo_setup_fast_start(void)
+{
+    load_config();
+    load_networks();
+    restore_saved_time();
+    wifi_ensure();
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+
+    if (!strcmp(s_mode, "sta") && (s_net_n > 0 || s_ssid[0])) {
+        s_auto = true;
+        ESP_LOGI(TAG, "fast start: STA supervisor armed (%d nets known)", s_net_n);
+    } else {
+        s_auto = false;
+        start_ap();
+        ESP_LOGI(TAG, "fast start: AP-only '%s'", s_ap_ssid);
+    }
 }

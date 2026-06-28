@@ -61,6 +61,7 @@ function build3D(THREE, canvas, gl, hud) {
     nebula.push({ s, ox, oy, ph: Math.random() * 6.28, hue: Math.random(), sz: 1.0 + Math.random() * 1.1 });
   }
   let tt = 0;   // renderer wall-clock for ambient animation
+  let nebGain = 1;   // nebula brightness, eased to 0 in combat -> no bright "sun" orb hanging behind the dogfight
 
   // ===== BIOME COLOR SYSTEM — the background changes per SECTOR (not per wave) with a smooth cross-fade,
   // and warms base->hot toward the boss wave. 8 arcade biomes; all bg below L~8% so ships/lasers pop.
@@ -173,6 +174,13 @@ function build3D(THREE, canvas, gl, hud) {
   const lasers = new THREE.LineSegments(laserGeo, laserMat); scene.add(lasers);
   const retic = new THREE.Group(); { const m = new THREE.LineBasicMaterial({ color: 0x60cee8 }); const mk = (pts) => new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.map(p => new THREE.Vector3(p[0], p[1], 0))), m); const ring = []; for (let a = 0; a <= 24; a++) ring.push([Math.cos(a / 24 * 6.28) * 0.05, Math.sin(a / 24 * 6.28) * 0.05]); retic.add(mk(ring)); const tick = [[0.03, 0], [0.07, 0]]; for (let i = 0; i < 4; i++) { const L = mk(tick); L.rotation.z = i * Math.PI / 2; retic.add(L); } scene.add(retic); }
   const lockBox = new THREE.Group(); { const gm = new THREE.LineBasicMaterial({ color: 0x76e68c }); for (let i = 0; i < 4; i++) { const L = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.06, 0.03, 0), new THREE.Vector3(-0.06, 0.06, 0), new THREE.Vector3(-0.03, 0.06, 0)]), gm); L.rotation.z = i * Math.PI / 2; lockBox.add(L); } scene.add(lockBox); }
+  // locked-target HP ring — an arc around the lock box that trims (drawRange) + recolours green->amber->red
+  // with the target's remaining hull, so you always read how close the kill is. The single best playability cue.
+  const LRSEG = 44, lockRingGeo = new THREE.BufferGeometry(); { const pts = []; for (let a = 0; a <= LRSEG; a++) { const t = a / LRSEG * 6.2832; pts.push(new THREE.Vector3(Math.cos(t) * 0.075, Math.sin(t) * 0.075, 0)); } lockRingGeo.setFromPoints(pts); }
+  const lockRingMat = new THREE.LineBasicMaterial({ color: 0x76e68c, transparent: true, opacity: 0.95 }); const lockRing = new THREE.Line(lockRingGeo, lockRingMat); lockRing.visible = false; scene.add(lockRing);
+  // hitmarker — a four-chevron flick over the reticle on every connect (white = hit, red = kill). Instant,
+  // readable shot confirmation: the highest-leverage piece of shooter game-feel.
+  const hitMark = new THREE.Group(); { const hm = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }); const seg = (a, b, c, d) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(a, b, 0), new THREE.Vector3(c, d, 0)]), hm); hitMark.add(seg(0.045, 0.045, 0.08, 0.08), seg(-0.045, 0.045, -0.08, 0.08), seg(0.045, -0.045, 0.08, -0.08), seg(-0.045, -0.045, -0.08, -0.08)); hitMark.userData.mat = hm; hitMark.visible = false; scene.add(hitMark); }
   // bridge attract planet
   const planet = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), new THREE.MeshStandardMaterial({ color: 0x2a4f80, emissive: 0x102038, metalness: 0.3, roughness: 0.7, flatShading: true })); planet.position.set(1.0, -0.2, 0); scene.add(planet);
 
@@ -180,25 +188,29 @@ function build3D(THREE, canvas, gl, hud) {
   const PMAX = 90, pool = []; for (let i = 0; i < PMAX; i++) { const s = sprite(0xffffff, 0.1, 0); s.visible = false; scene.add(s); pool.push({ s, vx: 0, vy: 0, ez: 0, life: 0, max: 1 }); } let ph = 0;
   function boom(sx, sy, big) { const n = big ? 22 : 14; for (let k = 0; k < n; k++) { const p = pool[ph++ % PMAX]; const a = Math.random() * 6.28, sp = (big ? 1.4 : 1) * (0.3 + Math.random()); p.vx = Math.cos(a) * sp; p.vy = Math.sin(a) * sp; p.life = p.max = 0.4 + Math.random() * 0.4; p.s.material.color.setHex((k & 1) ? 0xffbe40 : 0xffffff); p.s.position.set(sx, sy, 0.2); p.s.visible = true; p.s.scale.setScalar(0.08 + Math.random() * 0.08); } }
 
-  let last = performance.now(), shake = 0, lastEvClock = -1, rax = 0, ray = 0, lockPulse = 0, threatC = null;   // rax/ray = smoothed reticle; threatC = smoothed enemy colour
+  let last = performance.now(), shake = 0, lastEvClock = -1, rax = 0, ray = 0, lockPulse = 0, threatC = null, hitFlash = 0, hitKill = 0;   // rax/ray = smoothed reticle; threatC = smoothed enemy colour; hitFlash/hitKill drive the hitmarker
   let aPhase = '', aWave = -1, aScreen = '', aFlash = null;   // audio edge-trackers
   function fit(w, h) { w = Math.max(2, w | 0); h = Math.max(2, h | 0); renderer.setSize(w, h, false); asp = w / h; cam.left = -asp; cam.right = asp; cam.top = 1; cam.bottom = -1; cam.updateProjectionMatrix(); }
   fit(canvas.clientWidth || 960, canvas.clientHeight || 540);
 
   function frame(state, ctx) {
     const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const ph = state ? state.phase : 'loading';
     tt += dt;                                                          // drive the living nebula sky
     updateBiome(state, ctx, dt);                                       // biome cross-fade (per-sector) -> refresh cur.* before the nebula reads it
+    // the dogfight wants a clean deep-space backdrop: ease the bright nebula "sun" off in combat, back on elsewhere
+    nebGain += (((ph === 'combat') ? 0 : 1) - nebGain) * (1 - Math.exp(-3.2 * dt));
     for (const n of nebula) {
-      tmpc.setHSL((cur.nebHue + n.hue * 0.18 + tt * 0.012) % 1, Math.min(0.95, Math.max(0.2, cur.nebSat)), Math.min(0.62, Math.max(0.32, cur.nebLight)));
-      n.s.material.color.copy(tmpc);
-      n.s.material.opacity = cur.nebOp + 0.06 * Math.sin(tt * 0.18 + n.ph) + whoosh * 0.18;
-      n.s.position.x = n.ox + Math.sin(tt * 0.05 + n.ph) * 0.22;
-      n.s.position.y = n.oy + Math.cos(tt * 0.04 + n.ph) * 0.16;
-      n.s.material.rotation += dt * (0.03 + whoosh * 0.12);
-      n.s.scale.setScalar(n.sz * (1.4 + 0.2 * Math.sin(tt * 0.1 + n.ph)) * (1 + whoosh * 0.1));
+      if ((n.s.visible = nebGain > 0.02)) {
+        tmpc.setHSL((cur.nebHue + n.hue * 0.18 + tt * 0.012) % 1, Math.min(0.95, Math.max(0.2, cur.nebSat)), Math.min(0.62, Math.max(0.32, cur.nebLight)));
+        n.s.material.color.copy(tmpc);
+        n.s.material.opacity = (cur.nebOp + 0.06 * Math.sin(tt * 0.18 + n.ph) + whoosh * 0.18) * nebGain;
+        n.s.position.x = n.ox + Math.sin(tt * 0.05 + n.ph) * 0.22;
+        n.s.position.y = n.oy + Math.cos(tt * 0.04 + n.ph) * 0.16;
+        n.s.material.rotation += dt * (0.03 + whoosh * 0.12);
+        n.s.scale.setScalar(n.sz * (1.4 + 0.2 * Math.sin(tt * 0.1 + n.ph)) * (1 + whoosh * 0.1));
+      }
     }
-    const ph = state ? state.phase : 'loading';
     // audio edges — the renderer sees full state every frame, so drive all sound from here
     if (ph === 'combat' && aPhase !== 'combat') sfx.startDrone();
     if (ph !== 'combat' && aPhase === 'combat') sfx.stopDrone();
@@ -244,10 +256,11 @@ function build3D(THREE, canvas, gl, hud) {
     }
     starGeo.attributes.position.needsUpdate = true;
   }
-  function hideCombat() { for (const g of foeMeshes) g.visible = false; for (const t of tracers) t.material.opacity = 0; for (const m of missiles) m.material.opacity = 0; for (const s of pickupSpr) s.material.opacity = 0; }
+  function hideCombat() { for (const g of foeMeshes) g.visible = false; for (const t of tracers) t.material.opacity = 0; for (const m of missiles) m.material.opacity = 0; for (const s of pickupSpr) s.material.opacity = 0; lockRing.visible = false; hitMark.visible = false; }
   function drawCombat(st, dt) {
-    // stars warp faster in combat
-    for (const s of stars) { s.ez -= 60 * dt; if (s.ez < 6) Object.assign(s, rndStar()); } writeStars(11);   // long hyperspace streaks
+    // you HOLD station in a dogfight (foes hover at engage range), so the field is a slow parallax DRIFT —
+    // short streaks, not screen-spanning hyperspace lines that read as horizontal stripes. Warp is for jumps.
+    for (const s of stars) { s.ez -= 22 * dt; if (s.ez < 6) Object.assign(s, rndStar()); } writeStars(2.4);
     // enemy THREAT colour (sector+wave), lerped ~0.4s in the renderer closure so it never snaps at a wave change
     const tHex = threatColor(st.sector | 0, st.wave, (st.cc && st.cc.waves) || 6);
     if (!threatC) threatC = new THREE.Color(tHex);
@@ -301,26 +314,43 @@ function build3D(THREE, canvas, gl, hud) {
     retic.position.set(rax * asp, -ray, 0);
     const locked = st.lock >= 0 && st.foes[st.lock];
     if (lockPulse > 0) lockPulse = Math.max(0, lockPulse - dt * 4);
-    retic.scale.setScalar((locked ? 1 : 1 + Math.sin(st.clock / 380) * 0.06) + lockPulse * 0.5);   // breathe idle, snap on lock
+    const recoil = (st.muz && st.clock < st.muz) ? 0.14 : 0;                                            // muzzle window -> reticle kick
+    retic.scale.setScalar((locked ? 1 : 1 + Math.sin(st.clock / 380) * 0.06) + lockPulse * 0.5 + recoil);   // breathe idle, snap on lock, kick on fire
     for (const c of retic.children) c.material.color.setHex(locked ? 0xff5c50 : 0x60cee8);
-    if (locked) { const lg = foeMeshes[st.lock], f = st.foes[st.lock], p = project(f.ex, f.ey, f.ez); lockBox.visible = true; lockBox.position.set(lg.userData.sx, lg.userData.sy, 0.05); const r = Math.min(0.45, 0.07 + p.scale * 0.06); lockBox.scale.setScalar((r / 0.06) * (1 + lockPulse * 0.6)); lockBox.rotation.z += dt * 0.6; }   // track the SMOOTHED ship position
-    else lockBox.visible = false;
+    if (locked) {
+      const lg = foeMeshes[st.lock], f = st.foes[st.lock], p = project(f.ex, f.ey, f.ez);
+      lockBox.visible = true; lockBox.position.set(lg.userData.sx, lg.userData.sy, 0.05);
+      const r = Math.min(0.45, 0.07 + p.scale * 0.06), bsc = (r / 0.06) * (1 + lockPulse * 0.6);
+      lockBox.scale.setScalar(bsc); lockBox.rotation.z += dt * 0.6;                                     // track the SMOOTHED ship position
+      const frac = Math.max(0, Math.min(1, f.hp / (f.hpmax || f.hp)));                                  // remaining hull -> ring arc + colour
+      lockRing.visible = true; lockRing.position.copy(lockBox.position); lockRing.scale.setScalar(bsc);
+      lockRingGeo.setDrawRange(0, Math.max(2, Math.ceil((LRSEG + 1) * frac)));
+      lockRingMat.color.setHex(frac > 0.5 ? 0x76e68c : frac > 0.25 ? 0xffbe40 : 0xff5c50);
+    } else { lockBox.visible = false; lockRing.visible = false; }
     // twin lasers spring from the SMOOTHED reticle so bolt and crosshair never disagree
     if (st.muz && st.clock < st.muz) { const ax = rax * asp, ay = -ray; const pos = lasers.geometry.attributes.position.array; pos.set([-asp, -1, 0, ax, ay, 0, asp, -1, 0, ax, ay, 0]); lasers.geometry.attributes.position.needsUpdate = true; lasers.material.opacity = 0.95; } else lasers.material.opacity *= 0.6;
     // events -> booms + lock pulse (once per tick snapshot, not per RAF — the same state renders ~2 frames)
     if (st.clock !== lastEvClock) {
       lastEvClock = st.clock;
       for (const e of (st.ev || [])) {
-        if (e.t === 'boom') { const p = project(e.ex, e.ey, e.ez); boom(p.sx * asp, -p.sy, e.big); sfx.boom(e.big); }
+        if (e.t === 'boom') { const p = project(e.ex, e.ey, e.ez); boom(p.sx * asp, -p.sy, e.big); sfx.boom(e.big); hitFlash = 1; hitKill = 1; }   // kill -> red hitmarker
         else if (e.t === 'lock') { lockPulse = 1; sfx.lock(); }
         else if (e.t === 'laser') sfx.laser();
-        else if (e.t === 'hit') sfx.hit();
+        else if (e.t === 'hit') { sfx.hit(); hitFlash = 1; hitKill = 0; }   // connect -> white hitmarker
         else if (e.t === 'pass') sfx.strafe();
         else if (e.t === 'hurt') sfx.hurt();
         else if (e.t === 'mfire') sfx.missile();
         else if (e.t === 'pickup') sfx.powerup(e.kind);
       }
     }
+    // hitmarker over the reticle — drawn AFTER the event loop so a connect flicks the SAME frame (white = hit, red = kill)
+    if (hitFlash > 0) {
+      hitFlash = Math.max(0, hitFlash - dt * 4.5);
+      hitMark.visible = true; hitMark.position.copy(retic.position);
+      hitMark.userData.mat.opacity = Math.min(1, hitFlash * 1.3);
+      hitMark.userData.mat.color.setHex(hitKill ? 0xff5c50 : 0xffffff);
+      hitMark.scale.setScalar((hitKill ? 1.5 : 1) * (1.35 - hitFlash * 0.35));
+    } else hitMark.visible = false;
   }
   return { frame, resize: fit, dispose() { hud.dispose(); scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }); Object.values(SG).forEach(g => g.dispose()); glowTex.dispose(); renderer.dispose(); }, mode: 'webgl' };
 }
@@ -335,7 +365,7 @@ function build2D(canvas, hud) {
     const W = canvas.width, H = canvas.height, cx = W / 2, cy = H / 2, sc = Math.min(W, H) / 2;
     const ph = state ? state.phase : 'loading';
     hud.show(ph, state ? state.screen : 'bridge'); ctx.fillStyle = '#05060f'; ctx.fillRect(0, 0, W, H);
-    const warp = ph === 'combat' ? 60 : 16;
+    const warp = ph === 'combat' ? 24 : 16;   // gentle drift in combat (no hyperspace stripes)
     for (const s of stars) { s.ez -= warp * dt; if (s.ez < 6) { s.ex = (Math.random() * 2 - 1) * 1.6; s.ey = (Math.random() * 2 - 1) * 1.1; s.ez = 260; } const p = project(s.ex, s.ey, s.ez); ctx.fillStyle = 'rgba(159,196,255,.8)'; ctx.fillRect(cx + p.sx * sc, cy - p.sy * sc, 2, 2); }
     if (!state) { hud.paint(c, { phase: 'loading', screen: 'bridge', focus: {}, marketCol: 0, marketQty: 1, target: -1, clock: 0 }); return; }
     if (ph === 'combat') {

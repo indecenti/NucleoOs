@@ -30,7 +30,7 @@ deploy bugs** to fix first.
 | Filesystem | **exFAT supported** (if enabled in IDF) → **no 4 GB/file limit**; FAT32 fallback caps files at 4 GB | `storage.md:12-13` |
 | `/api/fs/read` | supports HTTP **ranged 206**; sustained reads reset ~a few MB → big assets pre-split ≤7 MiB | `nucleo_fsapi.c:191`, Vosk split |
 | L1 engine SD access | **raw FATFS fopen/fseek/fread**, NOT `/api/fs/read` | `nucleo_anima_l1.c:259` |
-| Flash | 8 MB, **full** (factory 2.5 + 2×OTA 2.25 + coredump/cfg); no `anima_enc`/`anima_brain` partition exists yet | `partition-table.md` |
+| Flash | 8 MB, **full** (2×OTA 3.5 + coredump/cfg); no `anima_enc`/`anima_brain` partition exists yet | `partition-table.md` |
 
 **Per-query budgets to defend:** keep 70–90 % of queries on L0 (0 SD reads); an L1 hit must stay
 **< ~1 s** end-to-end; **SD reads per L1 query should stay in the low tens of KB** as a few

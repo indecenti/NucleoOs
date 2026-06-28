@@ -6,6 +6,7 @@ import { resolveShortcut, resolveEscape } from './shortcuts.js';
 import { createBusyController } from './busy.js';
 import { ensureOnboarding } from './onboarding.js';   // first-boot AI setup + install tutorial
 import I18N from './nucleo-i18n.js';                  // centralized OS-wide internationalization
+import { makeFetchJSON } from './boot-fetch.js';      // resilient boot fetch (retries 503/timeout — see shell-boot-fetch.test)
 
 // Shell-namespaced translator: t(key, vars) → active-language string, falling back to core then key.
 // The catalog is loaded by I18N.init('shell') at boot; before that, calls return the key (harmless,
@@ -43,7 +44,11 @@ const glyph = (a) => {
     // A missing/404 icon file (e.g. an app whose icon.svg wasn't deployed) must NOT leave a broken
     // image — fall back to the emoji glyph in place. Resilient to any not-yet-deployed app icon.
     const safeFb = fb.replace(/['"\\<>&]/g, '');
-    return `<img src="${src}" onerror="this.onerror=null;this.replaceWith(document.createTextNode('${safeFb}'))" style="width:1em; height:1em; vertical-align:middle; pointer-events:none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));">`;
+    // loading="lazy": the device serves ~40 app icons (desktop + the hidden Start menu + recents). At cold
+    // load that fired them ALL at once — a real burst on the single-task device, in EVERY browser (the SW
+    // governor is inert over http LAN IP, so this is the only client-side throttle that actually runs).
+    // Standard attribute (Chrome/Edge/Firefox/Safari) → off-screen + hidden-menu icons fetch only when shown.
+    return `<img src="${src}" loading="lazy" onerror="this.onerror=null;this.replaceWith(document.createTextNode('${safeFb}'))" style="width:1em; height:1em; vertical-align:middle; pointer-events:none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));">`;
   }
   return fb;
 };
@@ -435,11 +440,19 @@ async function syncUiState() {
 const byId = (id) => state.apps.find((a) => a.id === id);
 const fmtSize = (b) => (!b ? '—' : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : (b / 1e6).toFixed(0) + ' MB');
 
-async function fetchJSON(path) {
-  const r = await fetch(path, { cache: 'no-store' });
-  if (!r.ok) throw new Error(r.status);
-  return r.json();
-}
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+const _bootT0 = Date.now();
+function bootLog(...a) { try { console.info('[boot +' + (Date.now() - _bootT0) + 'ms]', ...a); } catch {} }
+
+// Resilient boot/data fetch — policy lives in ./boot-fetch.js (unit-tested in tools/shell-boot-fetch.test.mjs):
+// retries 503/502/504 + timeouts + network errors with backoff so the flood-prone single-task device still
+// serves /api/apps etc.; 4xx fails fast. Wired here with the real browser deps.
+const fetchJSON = makeFetchJSON({
+  fetch: (...a) => fetch(...a),
+  sleep,
+  log: bootLog,
+  AbortSignal: (typeof AbortSignal !== 'undefined' ? AbortSignal : null),
+});
 
 // ===== pairing gate =====
 // The device requires pairing before it will serve user data (files, OTA, live events).
@@ -449,10 +462,15 @@ async function fetchJSON(path) {
 // from app iframes and the WebSocket — is authenticated automatically.
 async function ensurePaired() {
   let st;
-  // Timeout the probe: a hung connection must never trap boot on the splash screen.
-  try { st = await (await fetch('/api/auth/status', { cache: 'no-store', signal: AbortSignal.timeout(4000) })).json(); }
-  catch { return; }                              // device unreachable/slow → let boot fall back to mock
-  if (!st.required || st.paired) return;
+  // The pairing probe must actually SUCCEED to gate the OS. A single 4 s timeout under boot-load used to
+  // skip pairing SILENTLY — leaving the browser unpaired, so the live /ws handshake was rejected (401)
+  // and the client never attached. Retry it like the other boot fetches (spaced backoff) so the PIN
+  // overlay reliably appears; only fall through unpaired (degraded, no /ws) if the device is genuinely
+  // unreachable after several attempts.
+  try { st = await fetchJSON('/api/auth/status', { tries: 5, timeout: 4000 }); }
+  catch { bootLog('auth/status unreachable after retries — booting unpaired (degraded, no /ws)'); return; }
+  if (!st.required || st.paired) { bootLog('pairing: required=' + !!st.required + ' paired=' + !!st.paired); return; }
+  bootLog('pairing required → showing PIN overlay');
   await showPairing();
 }
 function showPairing() {
@@ -496,11 +514,15 @@ async function boot() {
   // taskbar, tray) whenever the OS language changes live (from Settings, any window).
   await I18N.init('shell');
   I18N.onChange(() => { try { renderStartMenu(); renderTaskbar(); setWsBadge(wsState); if (searchActive()) refreshSearchView(); } catch {} });
+  bootLog('boot start — checking pairing…');
   await ensurePaired();                          // block until this browser is paired with the device
+  bootLog('pairing ok — loading /api/apps…');
   try {
     const d = await fetchJSON('/api/apps');
     state.apps = d.apps.filter((a) => a.enabled).map((a) => ({ ...a, glyph: glyph(a) }));
-  } catch {
+    bootLog('apps loaded:', state.apps.length);
+  } catch (e) {
+    bootLog('apps FAILED after retries → using mock set', e && (e.message || e));
     state.apps = MOCK.map((a) => ({ ...a, glyph: glyph(a) }));
   }
   try {
@@ -550,13 +572,14 @@ async function boot() {
   applySettingsFromDevice();               // theme + device name are authoritative on the device too
   ensureOnboarding().catch(() => {});      // first paired boot with no AI key → curated welcome/setup (overlays the desktop)
   await restoreSession();                  // bring back the windows that were open last time
+  bootLog('desktop up (apps=' + state.apps.length + ') — attaching live socket /ws…');
   connectWS();
   // Warm the search index: instant from localStorage (if any), then revalidated against the
   // device. Repaint search results live whenever the index finishes (re)building.
   FsIndex.onUpdate(() => { if (searchActive()) refreshSearchView(); });
   FsIndex.init();
   tickClock(); setInterval(tickClock, 10000);
-  refreshStatus(); setInterval(refreshStatus, 15000);
+  doRefreshStatus(); scheduleStatus();   // adaptive: pause-when-hidden + 15s→60s error backoff (see runStatus)
   } catch (e) {
     console.error('[boot] init error — revealing UI anyway:', e);
   } finally {
@@ -612,7 +635,10 @@ function connectWS() {
   if (document.hidden) return;
   let ws;
   setWsBadge('reconnecting');
-  try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); }
+  // ?shell=1 marks us as the OS shell: only this triggers the device's "remote handoff" (suspend its UI,
+  // screen-off, reclaim RAM for the server). A standalone app page that opens /ws still gets events but
+  // won't blank the device. Older cached shells (no marker) keep working — they just don't trigger handoff.
+  try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?shell=1'); }
   catch { setWsBadge('offline'); scheduleWS(); return; }
   wsSock = ws;
   ws.onopen = () => {
@@ -683,6 +709,19 @@ document.addEventListener('visibilitychange', () => {
   if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
   wsBackoff = 3000;
   connectWS();
+  // Also revive the /api/status poll: it pauses entirely while hidden, so on return give an instant
+  // fresh snapshot (an SSID/IP change made while hidden shows at once) and reset the error backoff.
+  _statusInt = STATUS_BASE; doRefreshStatus(); scheduleStatus();
+});
+// On a real tab close / navigation, close the socket explicitly so the device reclaims it in ~4s
+// (clean FIN → the firmware's on_sock_close hook fires at once) instead of waiting out the ~20s TCP
+// keep-alive reaper while it still thinks the shell is present (screen dark, RAM handed to the server).
+// Guard on e.persisted (bfcache freeze): the tab may be restored, so leave the socket as-is — same
+// policy as the document.hidden bail above. Does NOT cover crash/force-kill (no event fires); those
+// still fall back to keep-alive, which is intentional.
+window.addEventListener('pagehide', (e) => {
+  if (e.persisted) return;
+  try { if (wsSock) wsSock.close(1000, 'unload'); } catch {}
 });
 
 // ===== OS-wide install block =====================================================================
@@ -2428,15 +2467,41 @@ async function doRefreshStatus() {
     const smStorage = document.getElementById('sm-storage');
     if (smStorage) smStorage.textContent = `${s.storage.fs} · ${txt}`;
     renderNetwork(s.network);
+    // Push browser clock to device once if it hasn't synced with NTP yet.
+    // /api/time/set needs no auth and costs zero device heap — just sets the RTC.
+    if (!s.network.time_synced && !_timePushed) {
+      _timePushed = true;
+      fetch('/api/time/set', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ts: Math.floor(Date.now() / 1000) }) }).catch(() => {});
+    }
     // Rebroadcast the snapshot to every open app so they don't each poll /api/status themselves
     // (the shell already fetches it every 15 s; N embedded apps doing the same hammered the
     // single httpd task). Same {t,d} envelope as the WS forward below, so an app consumes it
     // through the same message listener. Apps keep their own fetch only when run standalone.
     for (const w of WM.list()) { const f = w.el.querySelector('iframe'); if (f) try { f.contentWindow.postMessage({ t: 'status.snapshot', d: s }, '*'); } catch {} }
+    return true;
   } catch {
     document.querySelector('#tray-storage .v').textContent = 'offline';
     renderNetwork(null);
+    return false;
   }
+}
+
+// Adaptive /api/status polling: pause entirely while the tab is hidden (a background tab learns nothing
+// and just hammers the single-task device), and back off 15s→60s on error so a struggling device isn't
+// poll-stormed. Base stays 15s (SSID/IP/battery have no bus event, so the poll is their only live source).
+// Revived instantly on visibilitychange (see the handler below). Modeled on the WS reconnect discipline.
+const STATUS_BASE = 15000, STATUS_MAX = 60000;
+let _statusInt = STATUS_BASE, _statusTick = null, _timePushed = false;
+function scheduleStatus(ms) {
+  clearTimeout(_statusTick);
+  if (document.hidden) return;
+  _statusTick = setTimeout(runStatus, ms ?? _statusInt);
+}
+async function runStatus() {
+  const ok = await doRefreshStatus();
+  _statusInt = ok ? STATUS_BASE : Math.min(_statusInt * 2, STATUS_MAX);
+  scheduleStatus();
 }
 
 // Network indicator in the tray: connected SSID in STA mode, or the setup AP name.

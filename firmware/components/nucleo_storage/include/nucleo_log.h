@@ -21,6 +21,14 @@ void nucleo_log_init(void);
 // Copy the captured log (oldest→newest) into out (NUL-terminated). Returns bytes written.
 size_t nucleo_log_get(char *out, size_t cap);
 
+// Like nucleo_log_get(), but keep only lines whose severity is >= min_level — the dmesg-style
+// "--level" filter. min_level is the ESP_LOG level letter: 'E' error, 'W' warning, 'I' info,
+// 'D' debug, 'V' verbose (case-insensitive). A line's level is its leading character (log colors
+// are disabled in this build, so the letter is literally first). Lines that don't begin with a
+// known level letter are always kept (raw printf output is never hidden). min_level 0 or unknown
+// returns the full log. RAM cost: zero beyond the caller's buffer — it filters during the copy.
+size_t nucleo_log_get_filtered(char *out, size_t cap, char min_level);
+
 // Out-of-memory watermark. nucleo_log_init() registers a heap failed-alloc hook that records every
 // rejected allocation in static counters (alloc-free, reentrancy-safe — no journaling, no SD). The
 // diagnostics surface (/api/diag) reads it: a non-zero count is the smoking gun behind the device's

@@ -36,6 +36,7 @@ bool nucleo_exclusive_active(void) { return s_active != 0; }
 bool nucleo_exclusive_enter(uint32_t flags, nucleo_exclusive_info_t *out)
 {
     size_t fb = hfree(), lb = hlargest();
+    bool acted = false;                       // did THIS call perform the suspend? (owns the matching exit)
     if (!s_active && flags) {
         // Order: cheapest/least-disruptive first; servers + index last so the big blocks free together.
         if (flags & NX_DISCOVERY) { nucleo_discovery_stop();  s_active |= NX_DISCOVERY; }
@@ -48,11 +49,16 @@ bool nucleo_exclusive_enter(uint32_t flags, nucleo_exclusive_info_t *out)
             s_active |= NX_ANIMA_L1;
         }
         if (flags & NX_WIFI)      { nucleo_setup_suspend(); esp_wifi_stop(); s_active |= NX_WIFI; }  // network down LAST
+        acted = true;
         ESP_LOGI(TAG, "enter 0x%02x: free %u->%u, largest %u->%u",
                  (unsigned)s_active, (unsigned)fb, (unsigned)hfree(), (unsigned)lb, (unsigned)hlargest());
     }
     if (out) { out->free_before = fb; out->largest_before = lb; out->free_after = hfree(); out->largest_after = hlargest(); out->stopped = s_active; }
-    return s_active != 0;
+    // Return OWNERSHIP, not global active-ness: true only when this call actually stopped something, so a
+    // caller that pairs enter->exit tears down ONLY what it stopped. A no-op (already active, or flags==0)
+    // returns false — its exit() would otherwise restore a window another owner (e.g. the session window or
+    // the Recorder's background AI task) still needs. Callers' own !active guards become belt-and-suspenders.
+    return acted;
 }
 
 void nucleo_exclusive_exit(void)

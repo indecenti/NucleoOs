@@ -5,10 +5,12 @@
 // + the real constellations game with single-player host wiring. Delete after debugging.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { join, extname, normalize } from 'node:path';
+import { join, extname, normalize, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const WWW = 'C:/Users/niki0/Documents/nucleo/NucleoOs/apps/games/www';
-const MODELS_DIR = 'C:/Users/niki0/AppData/Local/Temp/czmodels';   // temp: candidate GLBs for the picker
+const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');   // repo root (tools/..), works on any machine
+const WWW = process.env.CZ_WWW || join(REPO, 'apps', 'games', 'www');
+const MODELS_DIR = process.env.CZ_MODELS || join(REPO, 'apps', 'games', 'www', 'games', 'models');   // GLBs for the picker
 const PORT = 7359;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.wasm': 'application/wasm', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json' };
 

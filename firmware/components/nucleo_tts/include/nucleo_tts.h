@@ -147,6 +147,11 @@ bool nucleo_tts_say(const char *text, const char *lang);
 // (aggiungi promemoria, crea file...) dove conta l'ESITO, non il testo esatto a contenuto variabile.
 bool nucleo_tts_say_or(const char *text, const char *fallback, const char *lang);
 
+// Come nucleo_tts_say(), ma se il testo NON e' interamente pronunciabile resta MUTO e ritorna false —
+// invece di suonare "leggila sullo schermo". Per chi legge piu' frasi e vuole UN solo hint di lettura:
+// chiama say_quiet per ogni frase, fa partire read_hint UNA volta quando una ritorna false, poi si ferma.
+bool nucleo_tts_say_quiet(const char *text, const char *lang);
+
 // Suona direttamente la frase "leggila sullo schermo" (clip "read_it"). I call-site la usano per le
 // risposte che NON vanno dette a voce (conoscenza, calcolatrice): l'utente sa che c'e' da leggere.
 bool nucleo_tts_read_hint(const char *lang);

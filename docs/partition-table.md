@@ -1,48 +1,58 @@
 # Partition Table (8 MB flash)
 
-Custom layout with dual OTA slots plus a minimal recovery (`factory`) partition.
-Firmware lives in flash; **all content lives on the SD card**, so app slots only hold
-the firmware image. Total = 0x800000 (8 MB).
+Dual-bank OTA layout (`ota_0` / `ota_1`), no `factory`. Firmware lives in internal
+flash; **all content lives on the SD card**, so the app banks only hold the firmware
+image. Total = 0x800000 (8 MB).
 
 ```csv
 # Name,     Type, SubType,  Offset,    Size,      Notes
 nvs,        data, nvs,      0x9000,    0x6000,    # config / key-value
-otadata,    data, ota,      0xF000,    0x2000,    # active-slot selector
+otadata,    data, ota,      0xF000,    0x2000,    # active-slot selector + rollback flag
 phy_init,   data, phy,      0x11000,   0x1000,    # RF calibration
 nvs_keys,   data, nvs_keys, 0x12000,   0x1000,    # NVS encryption keys
-factory,    app,  factory,  0x20000,   0x280000,  # 2.5 MB primary image (serial-flashed)
-ota_0,      app,  ota_0,    0x2A0000,  0x240000,  # 2.25 MB app slot A
-ota_1,      app,  ota_1,    0x4E0000,  0x240000,  # 2.25 MB app slot B
+ota_0,      app,  ota_0,    0x20000,   0x380000,  # 3.5 MB app bank A
+ota_1,      app,  ota_1,    0x3A0000,  0x380000,  # 3.5 MB app bank B
 coredump,   data, coredump, 0x720000,  0x40000,   # 256 KB crash dumps
 cfg,        data, spiffs,   0x760000,  0xA0000,   # 640 KB LittleFS config store
 ```
 
 ## Rationale
 
-- **Dual OTA (`ota_0`/`ota_1`)** must be equal size → 2.25 MB each, ample for the ~1.44 MB image
-  (≈37% headroom). This is the *smallest* app partition, so it's the size `idf.py` checks the image
-  against.
-- **`factory` (2.5 MB)** is the primary image: OTA is unreliable on this board, so serial flash is
-  the real path (see `serial-console-routing` memory). It also boots if both OTA slots fail their
-  health check — never brick. History: 1.5→2 MB in 2026-06 when TinyUSB MSC (USB Drive) pushed the
-  image past 1.5 MB; then 2→2.5 MB on 2026-06-06 for headroom after the Lua interpreter was removed
-  (−106 KB), the 0.5 MB coming from the OTA slots (2.5→2.25 MB each). `nvs`/`otadata`/`nvs_keys`/
-  `coredump`/`cfg` KEEP their exact offsets so a cable reflash preserves Wi-Fi/pairing (nvs) and OS
-  config (cfg) — no full erase needed. **Changing this table needs a full USB-cable flash**
-  (`tools\flash.ps1 -Port COM3`) — a partition-table change isn't OTA-safe.
-- **`otadata`** tracks the active slot and the rollback flag.
-- **`coredump`** captures crashes for the Log Viewer / time-travel debug.
+- **No `factory`.** The old layout carried three app banks (factory 2.5 MB + 2×OTA 2.25 MB
+  = 7 MB of the 8). But `idf.py flash` only ever writes one bank and OTA is the redundancy
+  mechanism, so `factory` was dead weight. Removing it folds 2.5 MB back into the two OTA
+  banks: **2.25 → 3.5 MB each**. The ~1.98 MB image now sits at ~55% (≈45% headroom), up from
+  the old ~14% against the 2.25 MB slot.
+- **Dual OTA (`ota_0`/`ota_1`)** must be equal size → 3.5 MB each. This is the size `idf.py`
+  checks the image against, and either bank can hold the next update. A/B rollback gives the
+  "never brick" guarantee `factory` used to provide.
+- **Serial flash writes `ota_0`.** `idf.py flash` writes the app to the first app bank and
+  rewrites `otadata` to its initial state, so a cable reflash boots `ota_0` cleanly. On a
+  healthy boot `main.c` calls `esp_ota_mark_app_valid_cancel_rollback()`; on a bad boot the
+  bootloader rolls back to the other bank. (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`.)
+- **Migration is cable-only.** `nvs`/`otadata`/`phy_init`/`nvs_keys`/`coredump`/`cfg` KEEP their
+  exact offsets, so a cable reflash preserves Wi-Fi/pairing (nvs) and OS config (cfg) — no full
+  erase needed. But a partition-table change itself is **not** OTA-safe: do the one-time switch to
+  this layout over USB cable (`tools\flash.ps1 -Port COM3`), not via `POST /api/ota`.
+- **`coredump`** captures crashes for the Log Viewer / time-travel debug (ELF, to-flash).
 - **`nvs_keys`** enables encrypted NVS for the device keypair (bundle signing, pairing).
-- **`cfg` (640 KB, LittleFS)** holds brick-class OS config (`setup.json`) on internal
-  flash. LittleFS is copy-on-write with atomic rename, so a power cut mid-write cannot
-  corrupt it the way FAT on the SD can. Mounted at `/cfg`; formatted on first boot.
-  The SD stays FAT for bulk content (media, ROMs); only power-loss-critical config moves
-  here. Subtype `spiffs` is just a valid data subtype — esp_littlefs mounts by label.
+- **`cfg` (640 KB, LittleFS)** holds brick-class OS config (`setup.json`) on internal flash.
+  LittleFS is copy-on-write with atomic rename, so a power cut mid-write cannot corrupt it the
+  way FAT on the SD can. Mounted at `/cfg`; formatted on first boot. The SD stays FAT for bulk
+  content (media, ROMs); only power-loss-critical config moves here. Subtype `spiffs` is just a
+  valid data subtype — esp_littlefs mounts by label.
 
 ## OTA + rollback flow
 
-1. New image downloaded into the inactive slot, signature verified.
-2. `otadata` set to boot the new slot with `ESP_OTA_IMG_NEW` (pending verify).
+1. New image downloaded into the inactive bank (`esp_ota_get_next_update_partition`), signature verified.
+2. `otadata` set to boot the new bank with `ESP_OTA_IMG_NEW` (pending verify).
 3. On boot, run health check; on success call `esp_ota_mark_app_valid_cancel_rollback()`.
-4. On crash or missing confirmation, bootloader rolls back to the previous valid slot.
-5. If both OTA slots are invalid, boot `factory` recovery.
+4. On crash or missing confirmation, the bootloader rolls back to the previous valid bank.
+5. If **both** banks are invalid, recover via USB-cable reflash (`tools\flash.ps1`).
+
+## Future: SD-staged single-bank OTA
+
+If the image ever outgrows ~3.5 MB, the next step is one large app bank (~6.5 MB) plus a small
+recovery bank (~0.5 MB), with the staged image and last-known-good copy held on the SD card. That
+maximises app space while keeping OTA safe, but it's a custom OTA subsystem (a dedicated recovery
+app + flash-from-SD logic + FAT-corruption handling), not a table edit — only worth it past 3.5 MB.

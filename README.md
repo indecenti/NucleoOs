@@ -30,6 +30,7 @@ tools/       Dev tooling (validator, shell preview server)
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | System layers and principles |
 | [docs/memory-budget.md](docs/memory-budget.md) | How 512 KB is divided — the riskiest bet, validated |
+| [docs/anima-native.md](docs/anima-native.md) | **Native ANIMA app baseline:** lifecycle, RAM reclaim, the online TLS anti-reboot contract, per-board (ADV), invariants |
 | [docs/partition-table.md](docs/partition-table.md) | Concrete 8 MB flash OTA layout |
 | [docs/storage.md](docs/storage.md) | SD filesystem: mount, first-boot provisioning, capacity detection |
 | [docs/setup-wizard.md](docs/setup-wizard.md) | On-device first-run wizard (Wi-Fi/AP, device name), persistent |
@@ -41,6 +42,7 @@ tools/       Dev tooling (validator, shell preview server)
 | [docs/media.md](docs/media.md) | Playing MP3/MP4 on one ESP: client-decode strategy + on-device limits |
 | [docs/registry.md](docs/registry.md) | Registry structure and file associations |
 | [docs/releasing.md](docs/releasing.md) | Releasing & OTA: firmware vs web layer, channels, rollback safety, checklist |
+| [docs/versioning.md](docs/versioning.md) | Firmware versioning: single source of truth, auto build counter, where the version shows (API/serial/mDNS) |
 | [docs/security.md](docs/security.md) | Device pairing & session auth: PIN on screen, cookie sessions, what's gated |
 | [docs/debugging.md](docs/debugging.md) | **Default dev loop:** run firmware logic on the PC (ANIMA host harness); JTAG/QEMU/Wokwi for the rest |
 

@@ -10,6 +10,16 @@ import { photosApp } from './apps/photos.js';
 import { playerApp } from './apps/player.js';
 import { videoApp } from './apps/video.js';
 import { notesApp } from './apps/notes.js';
+// Shared bold square icon set (same source the firmware ui_icon ports). Cache-bust so edits show.
+const { drawIcon, iconGfx } = await import('./icons.js?ts=' + Date.now());
+
+// Map the simulator's mock menu-data ids to the real firmware icon ids (most match directly).
+const ICON_MAP = {
+  'video-player': 'video', calculator: 'calc', dosbox: 'Games', 'automation-studio': 'Tools',
+  status: 'sysmon', network: 'info', settings: 'wifi', 'log-viewer': 'notepad',
+  companion: 'link', swarm: 'link', media: 'Media', tools: 'Tools', system: 'System', connect: 'Connect',
+};
+const iconId = (it) => ICON_MAP[it.id] || it.id;
 
 // Native apps with a real on-device implementation, keyed by menu node id. Anything
 // not listed falls back to the "open in the web companion" placeholder. Add one entry
@@ -31,6 +41,7 @@ ctx.textBaseline = 'middle';
 
 const launcher = new Launcher(ROOT);
 let running = null;          // node of the launched app, or null in the launcher
+let nowPlaying = null;       // id of the audio app "playing in the background" (drives the equalizer)
 let smoothY = 0;             // animated scroll offset (selected item index space)
 let runTime = 0;             // seconds the running app has been "open"
 
@@ -45,7 +56,8 @@ const CC_ROWS = ['Brightness', 'Volume'];
 function log(msg) { logEl.textContent = msg; }
 
 // ---- low-level helpers (mirror M5GFX) ----
-function roundRect(x, y, w, h, r, fill) {
+function rrPath(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -53,8 +65,8 @@ function roundRect(x, y, w, h, r, fill) {
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
-  ctx.fillStyle = fill; ctx.fill();
 }
+function roundRect(x, y, w, h, r, fill) { rrPath(x, y, w, h, r); ctx.fillStyle = fill; ctx.fill(); }
 function circle(x, y, r, fill) { ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = fill; ctx.fill(); }
 function text(s, x, y, color, px = 8, weight = 'normal', align = 'left') {
   ctx.fillStyle = color; ctx.textAlign = align;
@@ -65,6 +77,9 @@ function clamp(s, max) { return s.length <= max ? s : s.slice(0, max - 1) + '…
 function measure(s, px = 8, weight = 'normal') { ctx.font = `${weight} ${px}px ui-monospace, "Segoe UI", system-ui, sans-serif`; return ctx.measureText(s).width; }
 // Hard-truncate to the widest prefix that fits `w` px (mirrors firmware fit_text).
 function fit(s, w, px = 8, weight = 'normal') { if (measure(s, px, weight) <= w) return s; for (let n = s.length - 1; n > 0; n--) { const t = s.slice(0, n); if (measure(t, px, weight) <= w) return t; } return ''; }
+// Parse #rgb / #rrggbb -> [r,g,b]. Linear blend a->b by t (mirrors firmware mix565), returns rgb().
+function rgb3(s) { s = s.replace('#', ''); if (s.length === 3) s = s.split('').map((c) => c + c).join(''); return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)]; }
+function mix(a, b, t) { const A = rgb3(a), B = rgb3(b); return `rgb(${Math.round(A[0] + (B[0] - A[0]) * t)},${Math.round(A[1] + (B[1] - A[1]) * t)},${Math.round(A[2] + (B[2] - A[2]) * t)})`; }
 // Wi-Fi strength gauge: four rising bars, lit up to `lvl`. Mirrors firmware draw_wifi (19x9 box).
 function wifiBars(x, y, lvl, sta) {
   const on = sta ? COL.green : COL.amber;
@@ -77,6 +92,20 @@ function wifiBars(x, y, lvl, sta) {
 function drawStatus(filter) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, STATUS);
   const t = new Date();
+
+  if (!running && !filter && launcher.depth > 0) {       // inside a category: colour-chip breadcrumb
+    const node = launcher.top.node;
+    roundRect(2, 1, 14, 14, 3, node.color);
+    drawIcon(iconGfx(ctx, '#0b1020', node.color), iconId({ id: node.id }), 9, 8, 5.5);
+    text(clamp(node.label, 12), 20, STATUS / 2, COL.fg, 12, 'bold');
+    let rx = W - 4;
+    wifiBars(rx - 16, 4, RSSI_LVL, true); rx -= 16 + 6;
+    const cnt = (node.items || []).length;
+    if (cnt) text(cnt + ' app', rx, STATUS / 2, COL.muted, 8, 'normal', 'right');
+    ctx.strokeStyle = COL.line; ctx.beginPath(); ctx.moveTo(0, STATUS - .5); ctx.lineTo(W, STATUS - .5); ctx.stroke();
+    return;
+  }
+
   const hhmm = `${pad2(t.getHours())}:${pad2(t.getMinutes())}`;
   text(hhmm, 6, STATUS / 2, COL.fg, 12, 'bold');
   const clockR = 6 + measure(hhmm, 12, 'bold');
@@ -147,67 +176,105 @@ function ccKey(e) {
   }
 }
 
-// ---- launcher (Wear-OS hero carousel) ----
-// The selected app is a tall HERO card (icon + bold title + its description, right in the card);
-// neighbours flow above/below as slim fading rows. Mirrors firmware draw_list.
+// ---- launcher (horizontal icon carousel, smartwatch idiom) ----
+// Three icons in a row: the centered one is the big, bright SELECTED app/category; its
+// neighbours peek in smaller and dimmer on each side, so the focus reads instantly. The
+// title sits below the icon in a large font; a secondary line gives the description (apps)
+// or the item count (categories); a dot rail marks the position. The whole rail slides
+// horizontally (eased via smoothY) when you move. Mirrors firmware draw_list.
+const CAR_SLOT = 84;          // horizontal spacing between adjacent icons
+const CAR_R_C  = 32;          // centered badge radius (fills the band top-down)
+const CAR_R_S  = 19;          // side badge radius (neighbours stay prominent)
+
+function carItemColor(it, t) { return mix(COL.line, it.color, 0.40 + 0.60 * t); }
+
+// Count "rosette": a dark pill with an accent rim + white number, straddling the icon's top-right
+// corner (notification-badge idiom). Replaces the "N app" subtitle row for categories.
+function drawBadge(cx, cy, count, accent) {
+  const s = String(count), h = 17, w = Math.max(17, measure(s, 12, 'bold') + 11);
+  roundRect(cx - w / 2, cy - h / 2, w, h, h / 2, accent);                       // accent rim
+  roundRect(cx - w / 2 + 1.5, cy - h / 2 + 1.5, w - 3, h - 3, (h - 3) / 2, '#0b1020');  // dark fill
+  text(s, cx, cy + 0.5, '#ffffff', 12, 'bold', 'center');
+}
+
+// Now-playing equalizer: dark pill + 3 dancing green bars, tucked in the icon's bottom-right corner.
+function drawEq(cx, cy, r, ph) {
+  const w = r * 0.55, h = w * 0.72, base = cy + h / 2 - 2, step = (w - 4) / 3;
+  roundRect(cx - w / 2, cy - h / 2, w, h, h / 3, '#0b1020');
+  ctx.fillStyle = COL.green;
+  for (let i = 0; i < 3; i++) {
+    const bh = h * (0.3 + 0.5 * Math.abs(Math.sin(ph * 0.006 + i * 1.4)));
+    ctx.fillRect(cx - w / 2 + 3 + i * step, base - bh, 2, bh);
+  }
+}
+
+function drawDots(items, sel, cx, y, accent) {
+  const n = items.length;
+  if (n <= 1) return;
+  if (n > 13) { text(`${sel + 1} / ${n}`, cx, y, COL.muted, 8, 'normal', 'center'); return; }
+  const gap = 10, x0 = cx - (n - 1) * gap / 2;
+  for (let i = 0; i < n; i++) {
+    const dx = x0 + i * gap;
+    if (i === sel) roundRect(dx - 3.5, y - 1.5, 7, 3, 1.5, accent);   // active = capsule "you are here"
+    else circle(dx, y, 1.5, COL.dim);                                  // inactive = dot
+  }
+}
+
 function drawLauncher() {
   const s = launcher.screen();
   ctx.fillStyle = COL.bg; ctx.fillRect(0, STATUS, W, H - STATUS - HINT);
 
-  const bandTop = STATUS, bandH = H - HINT - STATUS;
+  const bandTop = STATUS, bandH = H - HINT - STATUS;       // 16 .. 121  (105 px tall)
   if (!s.items.length) {
-    text('Nessuna app', W / 2, bandTop + bandH / 2, COL.dim, 11, 'normal', 'center');
+    text('Nessuna app', W / 2, bandTop + bandH / 2, COL.dim, 12, 'normal', 'center');
     return s;
   }
 
-  const HERO_H = 38, ROW_H = 19;
-  const cy = bandTop + bandH / 2, heroTop = cy - HERO_H / 2;
+  const n = s.items.length, cx = W / 2;
+  const iconCY = bandTop + 34;                              // icon-row centre, pushed up to use the band top
+  const wrap = n >= 3;                                      // 3+ items -> infinite rail (neighbours wrap around)
+  const pos = wrap ? smoothY : Math.max(0, Math.min(n - 1, smoothY));   // continuous carousel index (eased)
+  // Signed distance from the focus to item i; for a wrapping rail, the NEAREST copy (so the last item
+  // peeks to the left of the first, and the carousel is never visually "empty" on one side).
+  const cd = (i) => { let d = i - pos; if (wrap) d -= n * Math.round(d / n); return d; };
+
+  // Draw far icons first so the centred one always lands on top, even mid-slide.
+  const slots = [];
+  for (let i = 0; i < n; i++) if (Math.abs(cd(i)) <= 1.8) slots.push(i);
+  slots.sort((a, b) => Math.abs(cd(b)) - Math.abs(cd(a)));
 
   ctx.save(); ctx.beginPath(); ctx.rect(0, bandTop, W, bandH); ctx.clip();
-  for (let i = 0; i < s.items.length; i++) {
-    const it = s.items[i], dist = i - s.sel;
-    let y0, rh;
-    if (dist === 0) { y0 = heroTop; rh = HERO_H; }
-    else if (dist < 0) { rh = ROW_H; y0 = heroTop - (-dist) * ROW_H; }
-    else { rh = ROW_H; y0 = heroTop + HERO_H + (dist - 1) * ROW_H; }
-    if (y0 + rh <= bandTop || y0 >= bandTop + bandH) continue;
-
-    if (dist === 0) {
-      roundRect(6, y0, W - 12, HERO_H, 11, it.color);
-      const bcy = y0 + HERO_H / 2;
-      circle(24, bcy, 13, '#000');
-      text(it.icon, 24, bcy, it.color, 12, 'bold', 'center');
-      // right affordance: submenu shows "N ›", apps a lone chevron
-      let rx = W - 16;
-      if (it.type === 'menu') {
-        const cnt = (it.items || []).length;
-        text('›', W - 18, bcy, '#000', 13, 'bold', 'center');
-        if (cnt) { const cw = measure(String(cnt), 8); text(String(cnt), W - 26 - cw, bcy, '#000', 8); rx = W - 26 - cw - 4; }
-        else rx = W - 24;
-      } else { text('›', W - 14, bcy, '#000', 9, 'bold', 'center'); rx = W - 18; }
-
-      const lx = 44, availw = rx - lx;
-      if (it.desc) {
-        text(fit(it.label, availw, 11, 'bold'), lx, y0 + 12, '#000', 11, 'bold');
-        text(fit(it.desc, availw, 8), lx, y0 + 28, '#000a', 8);
-      } else {
-        text(fit(it.label, availw, 11, 'bold'), lx, bcy, '#000', 11, 'bold');
-      }
-    } else {
-      const near = Math.abs(dist) === 1, ny = y0 + ROW_H / 2;
-      circle(24, ny, near ? 4 : 3, near ? it.color : COL.dim);
-      text(fit(it.label, W - 48, 8), 36, ny, near ? COL.fg : COL.dim, 8);
+  for (const i of slots) {
+    const it = s.items[i], d = cd(i);
+    const t = Math.max(0, 1 - Math.abs(d));                 // 1 centred, 0 a full slot away
+    const x = cx + d * CAR_SLOT;
+    const r = CAR_R_S + (CAR_R_C - CAR_R_S) * t;
+    const cy = iconCY + (1 - t) * 6;                        // neighbours drop a touch -> arc/depth
+    const cr = r * 0.34, badge = carItemColor(it, t);      // rounded-square corner + badge fill
+    if (t > 0.6) {                                          // soft square halo behind the focus
+      ctx.globalAlpha = (t - 0.6) / 0.4; roundRect(x - r - 4, cy - r - 4, 2 * r + 8, 2 * r + 8, cr + 3, mix(COL.bg, it.color, 0.5)); ctx.globalAlpha = 1;
     }
+    roundRect(x - r, cy - r, 2 * r, 2 * r, cr, badge);      // square icon badge (bigger than a disc)
+    if (t > 0.85) {                                         // crisp square accent ring
+      ctx.lineWidth = 2; ctx.strokeStyle = mix(it.color, '#ffffff', 0.4);
+      rrPath(x - r - 2.5, cy - r - 2.5, 2 * r + 5, 2 * r + 5, cr + 2); ctx.stroke();
+    }
+    const gs = r * 0.68, ink = t > 0.5 ? '#0b1020' : mix(COL.bg, '#ffffff', 0.62);
+    if (!drawIcon(iconGfx(ctx, ink, badge), iconId(it), x, cy, gs))     // bold vector icon (ink + badge cut-outs)
+      text(it.icon, x, cy, ink, Math.round(gs * 1.3), 'bold', 'center'); // fallback: the unicode glyph
+    if (it.type === 'menu' && t > 0.85)                    // category: count rosette on the top-right corner
+      drawBadge(x + r * 0.82, cy - r * 0.82, (it.items || []).length, it.color);
+    if (it.id === nowPlaying) drawEq(x + r * 0.6, cy + r * 0.6, r * 0.55, performance.now());   // now playing
   }
   ctx.restore();
 
-  // scroll indicator on the right edge
-  if (s.items.length > 3) {
-    const trackH = bandH - 10, kh = Math.max(10, trackH / s.items.length);
-    const ky = bandTop + 5 + (trackH - kh) * (s.sel / (s.items.length - 1));
-    roundRect(W - 4, bandTop + 5, 3, trackH, 1, COL.line);
-    roundRect(W - 4, ky, 3, kh, 1, s.color);
-  }
+  // Title only — big and centred. The category count moved to the icon rosette, so no subtitle row
+  // steals vertical space; the title gets the freed band and a roomy block of its own.
+  const cur = s.items[s.sel];
+  const tf = measure(cur.label, 22, 'bold') > W - 20 ? 14 : 22;   // shrink long names instead of overflowing
+  text(fit(cur.label, W - 12, tf, 'bold'), cx, bandTop + 84, COL.fg, tf, 'bold', 'center');
+
+  drawDots(s.items, s.sel, cx, bandTop + 102, cur.color);
   return s;
 }
 
@@ -248,9 +315,15 @@ function render() {
 
 function animate() {
   if (!running) {
-    const target = launcher.top.sel;
-    if (Math.abs(smoothY - target) > 0.01) smoothY += (target - smoothY) * 0.35;
-    else smoothY = target;
+    const n = launcher.visibleItems().length, target = launcher.top.sel;
+    if (n >= 3) {                                  // circular rail: ease along the SHORTEST way round
+      let d = target - smoothY; d -= n * Math.round(d / n);
+      if (Math.abs(d) < 0.01) smoothY = target;
+      else smoothY = (((smoothY + d * 0.3) % n) + n) % n;
+    } else {                                        // 1-2 items: plain ease, no wrap
+      const gap = Math.abs(smoothY - target);
+      if (gap > 0.01) smoothY += (target - smoothY) * 0.3; else smoothY = target;
+    }
   }
   render();
   requestAnimationFrame(animate);
@@ -260,17 +333,22 @@ function animate() {
 setInterval(() => { if (running) { runTime++; } }, 1000);
 
 // ---- keyboard ----
+// Horizontal carousel: Left/Right step the rail (prev/next); ; . and , keep working as the
+// Cardputer scroll keys. Enter opens, Esc/` go back, `/` still raises an app's options.
 const MAP = {
-  ';': 'up', '.': 'down', 'ArrowUp': 'up', 'ArrowDown': 'down',
-  'Enter': 'enter', '/': 'context', 'ArrowRight': 'context',
-  'Escape': 'back', '`': 'back', 'ArrowLeft': 'back', 'Backspace': 'backspace',
+  ';': 'up', '.': 'down', ',': 'up',
+  'ArrowUp': 'up', 'ArrowDown': 'down', 'ArrowLeft': 'up', 'ArrowRight': 'down',
+  'Enter': 'enter', '/': 'context',
+  'Escape': 'back', '`': 'back', 'Backspace': 'backspace',
 };
 
 function onLaunch(node) {
   running = node; runTime = 0; smoothY = launcher.top.sel;
+  if (node.id === 'music' || node.id === 'radio') nowPlaying = node.id;   // mock background playback
   APPS[node.id]?.enter?.();
   log(`launch → ${node.id}`);
 }
+if (typeof window !== 'undefined') window.__play = (id) => { nowPlaying = id; };   // dev hook to preview the equalizer
 
 function onAction(action, node) {
   log(`action → ${action.id} on ${node.id}`);
@@ -313,7 +391,9 @@ window.addEventListener('keydown', (e) => {
     else return;
   }
   e.preventDefault();
+  const d0 = launcher.depth;
   const ev = handleKey(launcher, key);
+  if (launcher.depth !== d0) smoothY = launcher.top.sel;   // level change: snap the rail, don't sweep
   if (ev?.type === 'launch') onLaunch(ev.node);
   else if (ev?.type === 'action') onAction(ev.action, ev.node);
 });

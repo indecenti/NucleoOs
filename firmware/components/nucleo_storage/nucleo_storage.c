@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <time.h>
 #include "esp_log.h"
+#include "esp_app_desc.h"   // esp_app_get_description(): stamp the real firmware version into volume.json
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdspi_host.h"
@@ -150,13 +151,29 @@ esp_err_t nucleo_storage_provision(void)
 
     FILE *f = fopen(VOLUME_JSON, "w");
     if (!f) { ESP_LOGE(TAG, "cannot write %s", VOLUME_JSON); return ESP_FAIL; }
+    const esp_app_desc_t *appd = esp_app_get_description();
     fprintf(f,
         "{\n  \"fs\": \"%s\",\n  \"label\": \"NUCLEO\",\n  \"total_bytes\": %llu,\n"
-        "  \"provisioned_at\": %lld,\n  \"os_version\": \"0.1.0\",\n  \"device_id\": \"nucleo-01\"\n}\n",
-        s_info.fs_type, s_info.total_bytes, (long long)time(NULL));
+        "  \"provisioned_at\": %lld,\n  \"os_version\": \"%s\",\n  \"device_id\": \"nucleo-01\"\n}\n",
+        s_info.fs_type, s_info.total_bytes, (long long)time(NULL), appd ? appd->version : "?");
     fclose(f);
     ESP_LOGI(TAG, "provisioned: system tree + %s", VOLUME_JSON);
     return ESP_OK;
+}
+
+void nucleo_storage_sync(void)
+{
+    // Runs in the esp_restart() shutdown path (scheduler still up), so the SPI unmount can talk to
+    // the card. FATFS buffers FAT + directory writes; unmounting flushes them. Without this, a
+    // reboot right after a file write could leave a truncated file or a stale free-cluster count.
+    ESP_LOGW(TAG, "system going down — syncing filesystems");
+    if (s_info.mounted && s_card) {
+        esp_err_t e = esp_vfs_fat_sdcard_unmount(NUCLEO_SD_MOUNT, s_card);
+        ESP_LOGI(TAG, "SD unmounted: %s", esp_err_to_name(e));
+        s_info.mounted = false;
+        s_card = NULL;
+    }
+    esp_vfs_littlefs_unregister(NUCLEO_CFG_LABEL);   // flush the power-loss-safe config store too
 }
 
 const nucleo_storage_info_t *nucleo_storage_info(void) { return &s_info; }

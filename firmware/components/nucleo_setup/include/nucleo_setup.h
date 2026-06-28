@@ -17,6 +17,12 @@ void nucleo_setup_run(void);
 // Bring up networking from the saved config: STA if configured, else an AP.
 esp_err_t nucleo_setup_apply_network(void);
 
+// Fast boot variant: returns in < 200 ms (no blocking connect). Starts the AP immediately
+// and lets the background supervisor handle the STA join. Use on the main boot path so
+// httpd can start right after and the API is reachable within ~1 s. apply_network() is
+// kept for the runtime reconfigure path (Wi-Fi app, first-run wizard).
+void nucleo_setup_fast_start(void);
+
 // Stop the background STA auto-reconnect. Security apps that take over the radio call this so the
 // disconnect caused by their mode switch doesn't make the device keep probing/re-associating to the
 // saved network with its real MAC mid-attack. nucleo_setup_apply_network() restores the intent.
@@ -61,6 +67,7 @@ int         nucleo_setup_scan_secure(int i);      // 1 = encrypted (not OPEN)
 const char *nucleo_setup_scan_auth_label(int i);  // "Open"/"WPA2"/"WPA3"/... (for the web scanner)
 bool        nucleo_setup_join(const char *ssid, const char *pass);  // blocking; true if it got an IP
 void        nucleo_setup_start_ap(void);          // switch to hotspot (AP) mode now
+void        nucleo_setup_stop_ap(void);           // turn AP OFF -> rejoin client (STA) mode (Settings toggle)
 void        nucleo_setup_forget(void);            // wipe ALL saved networks, drop to AP
 
 // ---- Known-networks store (multi-network, "real OS" Wi-Fi) -------------------

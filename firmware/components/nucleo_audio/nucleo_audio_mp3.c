@@ -26,7 +26,7 @@ void nucleo_audio_play_mp3(FILE *f)
     while (nucleo_audio_keep_running()) {
         long seek_off;
         if (nucleo_audio_poll_seek(&seek_off)) {             // resume-start or live seek
-            fseek(f, seek_off, SEEK_SET);
+            nucleo_audio_seek_far(f, seek_off);              // bounded, WDT-safe: a far live seek on a big MP3 is a multi-second FATFS cluster walk -> watchdog reboot
             left = 0; rp = in;                               // drop the buffer; resync below
         }
         if (left < 1441) {                                   // refill: keep at least one frame

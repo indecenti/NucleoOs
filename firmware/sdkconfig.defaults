@@ -19,9 +19,12 @@ CONFIG_FATFS_MAX_LFN=255
 # FS-lock acquisition timeout MUST stay BELOW the task watchdog (8s): on a slow/contended SD a
 # blocked write (es. calendar.json di un promemoria) deve FALLIRE a 5s, non superare il WDT -> reboot.
 CONFIG_FATFS_TIMEOUT_MS=5000
-# RAM (chip senza PSRAM): alloca i work-buffer FATFS alla dimensione REALE del settore SD (512B)
-# invece del 4096 forzato -> mount ctx ~38KB -> ~9KB (vedi audit RAM). La SD legge/scrive identico.
-CONFIG_FATFS_USE_DYN_BUFFERS=y
+# RAM (chip senza PSRAM): la sector-size del wear-levelling alza FF_MAX_SS (=MAX(512, FF_SS_WL)) e
+# quindi i buffer FATFS win[]/buf[] del mount SD. Portandola a 512 (il WL-FAT non e' nemmeno usato:
+# cfg=littlefs) FF_MAX_SS scende a 512 -> blocco di mount ~37KB -> ~5KB, niente frammentazione al
+# sd-mount. (FATFS_SECTOR_* e USE_DYN_BUFFERS NON sono la leva giusta: il primo e' per il generatore
+# di partizioni build-time, il secondo ha la dipendenza Kconfig rotta in IDF 5.4.)
+CONFIG_WL_SECTOR_SIZE_512=y
 
 # HTTP server
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
@@ -125,6 +128,16 @@ CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 # merged .str1.4 string pool (~150 KB total across the image). Silent assert still aborts on a
 # failed check; it just won't print the source text. Net: tens of KB back from the string pool.
 CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+
+# --- Bluetooth LE via NimBLE (Security > BLE suite: scan / spam / iBeacon / HID) ---
+# NimBLE host (NOT Bluedroid): roughly half the RAM and flash — mandatory on this PSRAM-less S3.
+# The controller is BLE-only on the S3 anyway. The radio is brought up ON DEMAND by the BLE app
+# (nucleo_ble_up) only INSIDE exclusive mode with Wi-Fi torn down, so there's no Wi-Fi/BT
+# coexistence to pay for and the reclaimed heap all goes to the controller. A normal boot links the
+# BT .bss but never inits the controller, so idle RAM is barely touched; nucleo_ble_down() deinits
+# it and gives the RAM back. See memory cardputer-adv-exploitation / nucleo-exclusive-mode.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
 
 # Default log level INFO -> WARN. ESP_LOGI/D format strings of stripped levels are removed at
 # compile time (they live in the same .str1.4 pool). WARN keeps warnings + errors on the serial

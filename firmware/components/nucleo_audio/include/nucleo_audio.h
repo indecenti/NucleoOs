@@ -48,6 +48,7 @@ void nucleo_audio_stop(void);
 // Lets a caller SERIALIZE a heavy RAM op (e.g. ANIMA's calendar write) after the voice so the peaks
 // don't stack. Unlike stop(), it does NOT cut the audio short.
 void nucleo_audio_wait_idle(uint32_t max_ms);
+bool nucleo_audio_playing(void);   // non-blocking: true se una clip/stream sta suonando (per pollare uno stop)
 void nucleo_audio_toggle_pause(void);
 
 // Optional reclaim hook. On this PSRAM-less chip the player task needs a CONTIGUOUS heap block for
@@ -80,6 +81,24 @@ bool nucleo_audio_is_muted(void);
 // Pop-free fade-in: ramp the effective gain 0 -> current volume over dur_ms (<=0 => 150 ms).
 // Call right after nucleo_audio_play/play_at to soften the click on the small speaker.
 void nucleo_audio_fade_in(int dur_ms);
+
+// One-shot procedural sound effect for games (short decaying noise "clack"). kind: 0 = low "throw"
+// rumble, 1 = sharp "settle" clack. strength 5..100. No-op while a track plays; frees the I2S after.
+// Blocks ~60-90 ms — call on discrete events (e.g. a dice throw/settle), never per frame.
+void nucleo_audio_blip(int kind, int strength);
+
+// One-shot square-wave TONE (a loud beep) on the speaker. freq 100..6000 Hz, ms 5..2000, strength 5..100.
+// Honours the software volume, no-op while a track plays, opens/frees the I2S like blip(). Integer-only,
+// with a short anti-pop fade. BLOCKS for ~ms — call on discrete events (alarm siren, timer beep), never
+// per frame. Alternate two freqs across calls for a two-tone siren.
+void nucleo_audio_tone(int freq, int ms, int strength);
+
+// Continuous alarm SIREN: a harsh square wave WAILED 1.8->4.2 kHz at near-full amplitude. KEEPS the I2S
+// TX open across calls (phase persists) so calling it back-to-back from an alarm loop is a TRULY gapless,
+// piercing siren — far louder/nastier than repeated tone() beeps. Honours the software volume; no-op while
+// a track plays. BLOCKS ~dur_ms. Call nucleo_audio_siren_stop() to silence and release the I2S (mic/recorder).
+void nucleo_audio_siren(int dur_ms);
+void nucleo_audio_siren_stop(void);
 
 #ifdef __cplusplus
 }

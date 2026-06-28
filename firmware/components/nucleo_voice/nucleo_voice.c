@@ -34,6 +34,7 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "nucleo_ui.h"
+#include "nucleo_codec.h"   // board-aware mic HAL (PDM original / ES8311 ADC on ADV)
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -142,7 +143,7 @@ static int32_t     s_win_radius           = 0;
 static char        s_win_label[32]        = {0};
 static char        s_tokbuf[16][32]       = {{0}};  // stable backing for this PTT's matched tokens
 
-static bool        s_is_listening         = false;
+static volatile bool s_is_listening        = false;  // written on the voice task (core 1), polled by the UI draw loop (nucleo_voice_is_listening)
 static volatile bool s_ptt_on             = false;  // GO held? set by nucleo_voice_ptt() from the UI loop
 static char        s_live_sentence[128]   = {0};
 static portMUX_TYPE s_live_mux            = portMUX_INITIALIZER_UNLOCKED;
@@ -248,32 +249,9 @@ static void tpls_quarantine_once(void)
 // ---------------------------------------------------------------------------
 // I2S helpers
 // ---------------------------------------------------------------------------
-static esp_err_t voice_mic_open(i2s_chan_handle_t *out)
-{
-    i2s_chan_handle_t rx = NULL;
-    i2s_chan_config_t chan = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
-    esp_err_t err = i2s_new_channel(&chan, NULL, &rx);
-    if (err == ESP_OK) {
-        i2s_pdm_rx_config_t cfg = {
-            .clk_cfg  = I2S_PDM_RX_CLK_DEFAULT_CONFIG(VOICE_RATE_HZ),
-            .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
-            .gpio_cfg = { .clk = NUCLEO_MIC_PIN_CLK, .din = NUCLEO_MIC_PIN_DATA,
-                          .invert_flags = { .clk_inv = false } },
-        };
-        err = i2s_channel_init_pdm_rx_mode(rx, &cfg);
-    }
-    if (err == ESP_OK) err = i2s_channel_enable(rx);
-    if (err != ESP_OK) { if (rx) i2s_del_channel(rx); return err; }
-    *out = rx;
-    return ESP_OK;
-}
-
-static void voice_mic_close(i2s_chan_handle_t rx)
-{
-    if (!rx) return;
-    i2s_channel_disable(rx);
-    i2s_del_channel(rx);
-}
+// Board-aware mic HAL: PDM (original) or ES8311 standard-I2S ADC (ADV). See nucleo_codec.
+static esp_err_t voice_mic_open(i2s_chan_handle_t *out) { return nucleo_codec_mic_open(VOICE_RATE_HZ, out); }
+static void voice_mic_close(i2s_chan_handle_t rx)       { nucleo_codec_mic_close(rx); }
 
 static int rms_i16(const int16_t *s, int n)
 {
@@ -689,7 +667,7 @@ static void voice_task(void *arg)
                 int seed = INT32_MAX;
                 for (int w = 0; w < 3 && s_ptt_on; w++) {
                     size_t cg = 0;
-                    i2s_channel_read(rx, s_pcm, VOICE_CHUNK * sizeof(int16_t), &cg, pdMS_TO_TICKS(50));
+                    nucleo_codec_mic_read(rx, s_pcm, VOICE_CHUNK * sizeof(int16_t), &cg, pdMS_TO_TICKS(50));
                     int cn = (int)(cg / sizeof(int16_t));
                     if (cn > 0) { int rr = rms_i16(s_pcm, cn); if (rr < seed) seed = rr; }
                 }
@@ -769,7 +747,7 @@ static void voice_task(void *arg)
         // ── Capture + VAD ────────────────────────────────────────────────────
         if (ptt_active && rx && s_pcm) {
             size_t got = 0;
-            i2s_channel_read(rx, s_pcm, VOICE_CHUNK * sizeof(int16_t), &got, pdMS_TO_TICKS(50));
+            nucleo_codec_mic_read(rx, s_pcm, VOICE_CHUNK * sizeof(int16_t), &got, pdMS_TO_TICKS(50));
             int n = (int)(got / sizeof(int16_t));
             if (n <= 0) continue;
 

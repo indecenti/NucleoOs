@@ -55,25 +55,22 @@ static inline const char *nucleo_fs__base(const char *rel)
     return s ? s + 1 : rel;
 }
 
-// Is `abs` (an absolute "/sd"-rooted path, as built by the fs API and the Files app) a
-// protected system file/dir?  Normalizes first so trivial evasions can't dodge the check.
-static inline bool nucleo_fs_is_protected(const char *abs)
+// Normalize an "/sd"-rooted (or already-relative) path into rel[]: strip the SD mount,
+// force a leading '/', fold backslashes, collapse runs of '/', drop "/./" segments. Shared
+// by the protect and factory gates so neither can be dodged by case/// /. tricks while the
+// other isn't. Truncation on an over-long path is harmless: classification is by the HEAD
+// segment, which survives. ('..' is already rejected upstream.)
+static inline void nucleo_fs__norm(const char *abs, char *rel, size_t relsz)
 {
-    if (!abs || !*abs) return false;
-
-    // 1) Strip the SD mount prefix ("/sd"). The mount is always written literally by the
-    //    firmware, so an exact compare is correct; only the part AFTER it is client-supplied.
+    // Strip the SD mount prefix ("/sd"). The mount is always written literally by the
+    // firmware, so an exact compare is correct; only the part AFTER it is client-supplied.
     const char *p = abs;
     size_t mlen = sizeof(NUCLEO_SD_MOUNT) - 1;
     if (strncmp(abs, NUCLEO_SD_MOUNT, mlen) == 0) p = abs + mlen;
 
-    // 2) Normalize into rel[]: force a leading '/', fold backslashes, collapse runs of '/',
-    //    and drop "/./" segments. Truncation on an over-long path is harmless: classification
-    //    is by the HEAD segment, which survives. ('..' is already rejected upstream.)
-    char rel[256];
     size_t j = 0;
     if (*p != '/') rel[j++] = '/';
-    for (size_t i = 0; p[i] && j < sizeof(rel) - 1; i++) {
+    for (size_t i = 0; p[i] && j < relsz - 1; i++) {
         char c = (p[i] == '\\') ? '/' : p[i];
         if (c == '/') {
             if (j > 0 && rel[j - 1] == '/') continue;                       // collapse "//"
@@ -87,6 +84,16 @@ static inline bool nucleo_fs_is_protected(const char *abs)
     if (j == 0) rel[j++] = '/';
     if (j > 1 && rel[j - 1] == '/') j--;   // drop a trailing '/' so the dir node itself matches
     rel[j] = '\0';
+}
+
+// Is `abs` (an absolute "/sd"-rooted path, as built by the fs API and the Files app) a
+// protected system file/dir?  Normalizes first so trivial evasions can't dodge the check.
+static inline bool nucleo_fs_is_protected(const char *abs)
+{
+    if (!abs || !*abs) return false;
+
+    char rel[256];
+    nucleo_fs__norm(abs, rel, sizeof rel);
 
     // 3) Device STATE under /system stays deletable (settings/keys/sessions/logs are
     //    regenerable and user-owned). Checked BEFORE the broad /system protect below.

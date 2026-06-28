@@ -11,6 +11,10 @@
 // previously fragmented the heap and made the band canvas fail to allocate.
 #pragma once
 
+// Apps are laid out as a single horizontal icon carousel (smartwatch idiom): one big centred badge
+// with smaller dimmer neighbours peeking on each side. Navigation is one-dimensional — every arrow
+// steps the focus by one — so nucleo_app.cpp needs no column count.
+
 // Bottom hint-bar text (also the public nucleo_app_set_hint).
 void        launcher_render_set_hint(const char *h);
 const char *launcher_render_hint(void);
@@ -32,6 +36,20 @@ void launcher_render_clock_tick(void);    // 1 Hz: overwrite only the clock digi
 // every key (anti-flicker). Latches the new signature on each true. See ANTI-FLICKER.md.
 bool launcher_render_chrome_changed(void);
 
+// Draw a launcher app/category icon (the hand-kept vector glyph set) onto a sprite. Exposed so the
+// Game front-end can reuse the real vector icons for its procedural poster fallback. M5Canvas is a
+// `using` alias of m5gfx::M5Canvas, so forward-declare it in its real namespace (a bare global
+// `class M5Canvas;` would shadow the alias and break every TU that also includes <M5GFX.h>).
+namespace m5gfx { class M5Canvas; class M5GFX; }
+using m5gfx::M5Canvas;
+using m5gfx::M5GFX;
+// Two overloads so the front-end can draw to the off-screen canvas (M5Canvas) OR straight to the
+// display (M5GFX) when the heap can't spare the canvas (low-heap direct path).
+void launcher_draw_icon(M5Canvas *c, int cx, int cy, int r, const char *id, char letter,
+                        unsigned short col, unsigned short bg);
+void launcher_draw_icon(M5GFX *c, int cx, int cy, int r, const char *id, char letter,
+                        unsigned short col, unsigned short bg);
+
 // The one buffered, animated region.
 void launcher_render_list(void);          // composite + blit the scrolling list band
 
@@ -43,6 +61,8 @@ bool launcher_render_step_scroll(void);
 void launcher_render_control_center(void);             // draw the interactive quick-settings sheet
 void launcher_render_control_center_open(void);        // reset selection + free the band when raised
 void launcher_render_control_center_close(void);       // release the sheet's off-screen canvas
-// Handle a key. Returns 0 = ignored, 1 = consumed (redraw), 2 = sheet should close (hierarchical
-// Back popped past the top level — same Esc/Left semantics as the Music/Video settings sheets).
-int  launcher_render_control_center_key(int key, char ch);
+// Handle a key. Returns CC_NONE(0)/CC_REDRAW(1)/CC_CLOSE(2)/CC_SCREEN_OFF(3)/CC_LAUNCH(4).
+// When CC_LAUNCH: call launcher_render_control_center_launch_id() for the app id to open.
+int         launcher_render_control_center_key(int key, char ch);
+const char *launcher_render_control_center_launch_id(void);
+int         launcher_render_control_center_tab(void);   // 0=RAPIDE 1=RETE 2=SISTEMA

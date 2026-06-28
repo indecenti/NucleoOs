@@ -30,11 +30,14 @@ extern "C" {
 #define NUCLEO_TLS_MIN_BLOCK (10 * 1024)   // largest contiguous internal block: with SSL_IN_CONTENT_LEN now 8 KB the
                                            // peak rx record needs <9 KB contiguous, so a 10 KB block is ample and the
                                            // fragmented ~17 KB steady-state passes with room to spare.
-#define NUCLEO_TLS_MIN_FREE  (38 * 1024)   // total internal free for the full handshake. Measured: even with the 8 KB
-                                           // rx ceiling a Groq handshake's heap SUM is still ~34 KB (CA-bundle parse +
-                                           // session + lwIP dominate, not the rx buffer), so a 34 KB gate let min_free
-                                           // dip to ~0 (near-OOM). 38 KB keeps a ~4 KB safety margin above the peak; the
-                                           // wait-and-retry in http_post_json covers transient dips below it.
+#define NUCLEO_TLS_MIN_FREE  (34 * 1024)   // total internal free for the full handshake (~34 KB measured SUM: CA-bundle
+                                           // parse + session + lwIP). Was 38 KB for a 4 KB margin, but on a tight unit the
+                                           // idle free sits at ~36 KB (L1 + canvas + httpd + Wi-Fi) and oscillates BELOW 38,
+                                           // so the gate PERMANENTLY refused transcribe/summarize ("AI fallita" even though
+                                           // Groq + key were fine — confirmed by `skip POST: free 36796<38912`). 34 KB = the
+                                           // real peak: the device survives the handshake at near-OOM (min_free seen ~340 B,
+                                           // no crash), and the wait-and-retry in http_post_json + the recorder's own retries
+                                           // cover the rest. Lower this only with /api/heap evidence.
 
 // Voice-synthesis reclaim bar. The TTS player task needs a ~5 KB CONTIGUOUS stack (+ render FDs); below
 // this the audio task can't spawn and the play is dropped in SILENCE ("offline niente voce"). When the
@@ -151,6 +154,17 @@ void nucleo_anima_note_file(const char *path);
 // transcription service for the whole OS.
 int nucleo_anima_transcribe(const char *path, const char *lang_hint, char *out_text, int tcap, char *out_lang, int lcap);
 int nucleo_anima_summarize(const char *text, const char *lang, char *out, int cap);
+
+// LONG-recording (1-2 h) chunked variants — the device twin of the browser longtranscribe.js. The
+// single-shot calls above can't handle long takes (Whisper's 25 MB cap + fragile multi-MB TLS on this
+// PSRAM-less chip). These slice the SD WAV into ~5-min segments, transcribe each over its own TLS session,
+// and stream text straight to/from SD so the full transcript never lives in RAM.
+//   transcribe_long: appends each segment's text to `sidecar_path`; returns total chars (>0) or -1.
+//   summarize_file:  map-reduce summary of a transcript file too big for RAM; writes `sum_path`.
+//   transcribe_progress: poll the segment counter for a UI ("segment done/total").
+int  nucleo_anima_transcribe_long(const char *path, const char *lang_hint, const char *sidecar_path, char *out_lang, int lcap);
+int  nucleo_anima_summarize_file(const char *txt_path, const char *lang, const char *sum_path);
+void nucleo_anima_transcribe_progress(int *done, int *total);
 
 // Further single-shot teacher (Grok/Groq) helpers over a voice-note transcript, in `lang` ("it"/"en").
 // Each relays the cloud model's reply verbatim and wraps the (untrusted) transcript in a prompt-

@@ -9,11 +9,12 @@
 int                       nucleo_app_count(void);
 const nucleo_app_def_t   *nucleo_app_at(int i);
 
-// Caps raised (were 40/8) so app/category growth is effectively uncapped; kept static (no heap)
-// to respect the RAM rule. MAX_APPS must match nucleo_app.cpp. s_cat_items[MAX_CATS][MAX_APPS+1]
-// is the largest array: 16*65 ptrs ≈ 4 KB .bss — negligible, not heap.
+// Cap a 64: ~16-24 slot liberi sopra le ~40-48 app attuali. NB: s_cat_items[MAX_CATS][MAX_APPS+1] +
+// s_dyn_apps[MAX_APPS] + s_apps[MAX_APPS] (nucleo_app.cpp) sono .bss SEMPRE residenti: 64 costa ~+1.8KB
+// di SRAM vs 48. Misurato sul device: free_heap ~16.9KB / min ~2.1KB, quindi NON alzare a cuor leggero
+// (100 sarebbe ~+5.7KB -> rischio OOM online). MAX_APPS deve combaciare con nucleo_app.cpp.
 #define MAX_APPS 64
-#define MAX_CATS 16
+#define MAX_CATS 10
 #define MAX_DEPTH 6
 
 // ---- shared per-app context actions ----------------------------------------
@@ -30,6 +31,7 @@ static const MenuNode *s_cat_items[MAX_CATS][MAX_APPS + 1];
 static const MenuNode *s_root_items[MAX_CATS + 2];   // +1 slot: ANIMA is hoisted onto Home next to the categories
 static MenuNode        ROOT;
 static int             s_cat_count = 0;
+static int             s_app_n     = 0;   // number of app nodes in s_dyn_apps (for the flat "Spotlight" search)
 
 // ---- navigation state -------------------------------------------------------
 struct Frame { const MenuNode *node; int sel; char filter[16]; };
@@ -56,6 +58,7 @@ static int get_or_create_cat(const char *name)
         else if (!strcmp(name, "System"))  c = C_GREY;
         else if (!strcmp(name, "Connect")) c = C_PURPLE;
         else if (!strcmp(name, "Security")) c = C_RED;
+        else if (!strcmp(name, "Hardware")) c = C_GREEN;
         else if (!strcmp(name, "Games"))   c = C_RED;
         s_dyn_cats[i].color = c;
         s_dyn_cats[i].kind = N_MENU;
@@ -91,6 +94,7 @@ void launcher_build_menu(void)
         s_cat_items[c][j] = &s_dyn_apps[i];
         s_cat_items[c][j + 1] = nullptr;
     }
+    s_app_n = n;                                                // every app node lives in s_dyn_apps[0..n) for Spotlight
     int r = 0;
     if (anima_node) s_root_items[r++] = anima_node;            // ANIMA leads Home, above the categories
     for (int i = 0; i < s_cat_count; i++) s_root_items[r++] = &s_dyn_cats[i];
@@ -124,8 +128,22 @@ static bool match_filter(const MenuNode *n, const char *filter)
     return strstr(a, b) != nullptr;
 }
 
+// Spotlight: at Home with a filter, search becomes GLOBAL across every app (flat) — so any of the
+// ~40 apps is reachable in a couple of keystrokes without digging into a category. Inside a category
+// the filter still narrows that category. The keyboard is the Cardputer's edge over a watch.
+static bool search_mode(void) { return s_top == 0 && s_stack[0].filter[0]; }
+
 const MenuNode *launcher_nth_visible(int idx)
 {
+    if (search_mode()) {
+        int seen = 0;
+        for (int i = 0; i < s_app_n; i++) {
+            if (!match_filter(&s_dyn_apps[i], s_stack[0].filter)) continue;
+            if (seen == idx) return &s_dyn_apps[i];
+            seen++;
+        }
+        return nullptr;
+    }
     const MenuNode *const *it = top().node->items;
     const MenuNode *found = nullptr; int seen = 0;
     for (int i = 0; it && it[i]; i++) {
@@ -138,6 +156,11 @@ const MenuNode *launcher_nth_visible(int idx)
 
 int launcher_visible_count(void)
 {
+    if (search_mode()) {
+        int total = 0;
+        for (int i = 0; i < s_app_n; i++) if (match_filter(&s_dyn_apps[i], s_stack[0].filter)) total++;
+        return total;
+    }
     const MenuNode *const *it = top().node->items;
     int total = 0;
     for (int i = 0; it && it[i]; i++)

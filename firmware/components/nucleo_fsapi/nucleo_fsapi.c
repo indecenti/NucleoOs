@@ -2,6 +2,7 @@
 #include "nucleo_auth.h"
 #include "nucleo_board.h"
 #include "nucleo_fsprotect.h"   // nucleo_fs_is_protected() — the one place the policy lives
+#include "nucleo_fsfactory.h"   // nucleo_fs_is_factory() — bundled DOS/ROMs games are pinned too
 #include "nucleo_eventbus.h"
 #include "nucleo_storage.h"
 #include "nucleo_registry.h"
@@ -110,7 +111,8 @@ static esp_err_t list_get(httpd_req_t *req)
         cJSON_AddNumberToObject(e, "size", (double)st.st_size);
         // Tell the client which entries are protected system files so it can show a lock
         // and gray out delete/rename/cut. Authoritative enforcement is server-side (above);
-        // this is only UX. Emitted only when true to keep the listing JSON small.
+        // this is only UX. Emitted only when true to keep the listing JSON small. Bundled
+        // factory games are marked in a second pass below (one streaming read of .factory).
         if (nucleo_fs_is_protected(full)) cJSON_AddBoolToObject(e, "protected", true);
         if (is_dir) {
             bool has_subdirs = false;
@@ -134,6 +136,39 @@ static esp_err_t list_get(httpd_req_t *req)
         cJSON_AddItemToArray(arr, e);
     }
     closedir(dir);
+
+    // Second pass (UX lock-flag only): inside a bundled-game folder, stream its ".factory"
+    // manifest ONCE and flag each listed game + the manifest itself as protected. One SD read
+    // per listing, no heap — the per-entry alternative would re-open .factory for every ROM in
+    // a 200+ file folder. Enforcement is authoritative server-side in delete/move regardless.
+    if (nucleo_fs_factory_scope(abs)) {
+        char fpath[300]; snprintf(fpath, sizeof(fpath), "%s/.factory", abs);
+        FILE *ff = fopen(fpath, "r");
+        if (ff) {
+            char line[160];
+            while (fgets(line, sizeof(line), ff)) {
+                cJSON *it;
+                cJSON_ArrayForEach(it, arr) {
+                    cJSON *nm = cJSON_GetObjectItem(it, "name");
+                    if (nm && nm->valuestring && nucleo_fs_factory_line_eq(line, nm->valuestring) &&
+                        !cJSON_GetObjectItem(it, "protected")) {
+                        cJSON_AddBoolToObject(it, "protected", true);
+                        break;
+                    }
+                }
+            }
+            fclose(ff);
+            cJSON *it;   // pin the ".factory" entry itself (never a manifest line, handle apart)
+            cJSON_ArrayForEach(it, arr) {
+                cJSON *nm = cJSON_GetObjectItem(it, "name");
+                if (nm && nm->valuestring && !strcasecmp(nm->valuestring, ".factory") &&
+                    !cJSON_GetObjectItem(it, "protected")) {
+                    cJSON_AddBoolToObject(it, "protected", true);
+                    break;
+                }
+            }
+        }
+    }
 
     char *out = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -344,8 +379,10 @@ static esp_err_t delete_post(httpd_req_t *req)
     char abs[256];
     if (!resolve_path(req, abs, sizeof(abs))) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "path"); return ESP_FAIL; }
     // System files (OS/shell/apps + ANIMA's offline brain) cannot be deleted by anyone —
-    // file manager, ANIMA, JS runtime, any app. See nucleo_fsprotect.h.
-    if (nucleo_fs_is_protected(abs)) {
+    // file manager, ANIMA, JS runtime, any app. See nucleo_fsprotect.h. Bundled factory games
+    // (DOS/ROMs listed in their folder's .factory) are pinned the same way; user imports there
+    // are absent from the list and stay deletable. See nucleo_fsfactory.h.
+    if (nucleo_fs_is_protected(abs) || nucleo_fs_is_factory(abs)) {
         ESP_LOGW(TAG, "blocked delete of protected system path: %s", abs);
         httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "protected system file");
         return ESP_FAIL;
@@ -395,7 +432,8 @@ static esp_err_t move_post(httpd_req_t *req)
     // refuse to clobber a protected destination. (Renaming a system file is as destructive
     // as deleting it.) In-place content updates still go through /api/fs/write, which is
     // intentionally allowed so OTA installs and config re-saves keep working.
-    if (nucleo_fs_is_protected(from) || nucleo_fs_is_protected(to)) {
+    if (nucleo_fs_is_protected(from) || nucleo_fs_is_protected(to) ||
+        nucleo_fs_is_factory(from)  || nucleo_fs_is_factory(to)) {
         ESP_LOGW(TAG, "blocked move touching protected system path: %s -> %s", from, to);
         httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "protected system file");
         return ESP_FAIL;

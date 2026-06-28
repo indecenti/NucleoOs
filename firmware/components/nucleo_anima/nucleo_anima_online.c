@@ -27,10 +27,17 @@
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"      // largest-free-block guard before a TLS handshake
+#include "esp_timer.h"          // esp_timer_get_time(): wall-clock budget across TLS retries
+#include "esp_task_wdt.h"       // pet the 8 s Task-WDT around the blocking TLS perform (no-op if caller unwatched)
 #include "nucleo_arb.h"         // heavy-work arbiter: one outbound TLS at a time (no concurrent-OOM race)
 #include "cJSON.h"
 
 static const char *TAG = "anima.online";
+
+// Reset the Task-WDT if (and only if) the CURRENT task is subscribed to it — the launcher/main task is,
+// per-app worker/httpd tasks are not. Called at every TLS retry boundary so a watched caller never trips
+// the 8 s watchdog across a multi-attempt turn; a no-op (safe) on the unwatched worker/httpd path.
+static inline void tls_wdt_pet(void) { if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset(); }
 
 // TLS heap bars: NUCLEO_TLS_MIN_BLOCK/_FREE, shared with the httpd pre-gate (one definition in
 // nucleo_anima.h — rationale and measurements live there). Callers unload the L1 index (~31 KB)
@@ -60,8 +67,18 @@ static inline bool online_tls_heap_too_low(const char *what, const char *url)
 // rate-limited harder). The Wikipedia hang was never the UA — it was an httpd-task stack overflow
 // during the long cert-chain TLS handshake (fixed: config.stack_size bumped to 16 KB).
 #define HTTP_UA      "NucleoOS-ANIMA/1.0 (https://github.com/nucleoos; on-device assistant)"
-#define HTTP_TIMEOUT 8000           // ms: one short GET; fetches complete in ~1s, this bounds a stall
-                                    // reaches the teacher (Grok) within the httpd request window.
+// STABILITY (anti-reboot): the per-attempt socket timeout MUST stay BELOW the 8 s Task-WDT
+// (CONFIG_ESP_TASK_WDT_TIMEOUT_S=8, PANIC=y). esp_http_client_perform() is ONE un-pettable blocking call,
+// so a per-attempt timeout >= 8 s is a guaranteed reboot the moment a handshake stalls on the fragmented
+// PSRAM-less heap — the exact .166 crash (chat paths were 10 s / 20 s, GET was 8 s = no margin). 6 s leaves
+// a 2 s margin and is ample for a healthy reply (~1.5 s). TLS_TURN_BUDGET_MS caps the cumulative across
+// POST retries so a stalling network can't drag a turn past the watchdog (or the user) either.
+#define HTTP_TIMEOUT       6000     // per-attempt socket timeout (ms), shared by every chat TLS path; < 8 s TWDT
+#define TLS_TURN_BUDGET_MS 10000    // total wall-clock budget per online turn across POST retries
+// Audio-upload timeout: the transcribe paths stream a multi-MB body and READ the reply in a loop that pets
+// the Task-WDT every iteration (tls_wdt_pet) — so a long socket timeout here is safe (it is NOT one
+// un-pettable blocking call like a chat perform). One symbol, shared by single-shot AND chunked upload.
+#define TRANSCRIBE_TIMEOUT_MS 30000
 #define HTTP_CAP     12288          // summary JSON (extract + thumbnails) fits; opensearch is tiny
 #define REPLY_MAX    360            // schema cap for a SAVED learned card reply.it/en (matches device buffers; was 250 -> truncated bios)
 #define REPLY_LIVE_MAX 360          // a LIVE answer may be longer (web shows it all; native clips on render)
@@ -932,7 +949,9 @@ static int http_get(const char *url, char **out)
     ESP_LOGI(TAG, "TLS GET start free=%u largest=%u",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)tls_before);
 #endif
+    tls_wdt_pet();                                       // reset the WDT right before the (<=6 s) blocking call
     esp_err_t err = esp_http_client_perform(cli);        // blocking, follows redirects, handles chunked
+    tls_wdt_pet();
 #if NUCLEO_HEAPLOG
     // mbedTLS peak: the smallest contiguous block reached DURING the handshake is the true headroom
     // test. largest_free_block now (handshake buffers freed) minus the floor ~= what TLS consumed.
@@ -947,7 +966,10 @@ static int http_get(const char *url, char **out)
         acc.buf[acc.len] = 0; *out = acc.buf; return acc.len;
     }
     free(acc.buf);
-    ESP_LOGW(TAG, "GET status %d (%s) for %s", status, esp_err_to_name(err), url);
+    ESP_LOGW(TAG, "GET FAIL status %d (%s) for %s — free=%u largest=%u",   // immediate "why": status/err + heap state
+             status, esp_err_to_name(err), url,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
     return -1;
 }
 
@@ -967,22 +989,33 @@ static int http_get(const char *url, char **out)
 static int http_post_json(const char *url, const char *auth, const char *body, char **out)
 {
     *out = NULL;
+    int64_t t0 = esp_timer_get_time();                         // wall-clock budget for the whole turn (anti-WDT, anti-drag)
     for (int attempt = 1; attempt <= POST_TRIES; attempt++) {
+        tls_wdt_pet();                                         // a watched caller must not trip the 8 s WDT between tries
+        if ((esp_timer_get_time() - t0) >= (int64_t)TLS_TURN_BUDGET_MS * 1000) {   // budget spent -> stop, honest miss
+            ESP_LOGW(TAG, "POST budget %dms spent (%d tries) -> bail free=%u largest=%u %s",
+                     TLS_TURN_BUDGET_MS, attempt - 1,
+                     (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                     (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), url);
+            return -1;
+        }
         if (online_tls_heap_too_low("POST", url)) {            // heap momentarily too tight (a prior TLS hasn't
             if (attempt < POST_TRIES) { vTaskDelay(pdMS_TO_TICKS(1500)); continue; }   // freed/coalesced yet) -> WAIT and retry, don't fail outright
             return -1;                                         // still too low after waiting -> honest miss (no OOM)
         }
         http_acc_t acc = { NULL, 0, 0, HTTP_CAP };   // buffer grown lazily in http_evt (heap note above)
         esp_http_client_config_t cfg = {
-            .url = url, .timeout_ms = 10000, .user_agent = HTTP_UA,   // per-attempt: Grok answers in ~1.5s; 10s bounds a stall, retried below
+            .url = url, .timeout_ms = HTTP_TIMEOUT, .user_agent = HTTP_UA,   // per-attempt < 8 s TWDT; Grok answers ~1.5 s, 6 s bounds a stall, retried below
             .crt_bundle_attach = esp_crt_bundle_attach, .buffer_size = 2048, .buffer_size_tx = 2048,   // 2 KB rx: Groq sends a large header block (many x-ratelimit-*); match the working proxy
             .method = HTTP_METHOD_POST, .event_handler = http_evt, .user_data = &acc,
         };
         // Serialize the TLS window via the heavy-work budget (see http_get). try-only, never blocks.
         uint32_t tk = nucleo_arb_acquire(ARB_FG, "anima-post", 0);
-        if (!tk) { free(acc.buf); return -1; }
+        if (!tk) { free(acc.buf); ESP_LOGW(TAG, "chat TLS: arbiter busy (another TLS holds it) -> bail %s", url); return -1; }
         esp_http_client_handle_t cli = esp_http_client_init(&cfg);
-        if (!cli) { nucleo_arb_release(tk); free(acc.buf); return -1; }
+        if (!cli) { nucleo_arb_release(tk); free(acc.buf);
+                    ESP_LOGW(TAG, "chat TLS: client_init OOM free=%u largest=%u",
+                      (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)); return -1; }
         esp_http_client_set_header(cli, "Content-Type", "application/json");
         if (auth && auth[0]) esp_http_client_set_header(cli, "Authorization", auth);
         if (body) esp_http_client_set_post_field(cli, body, strlen(body));
@@ -992,7 +1025,10 @@ static int http_post_json(const char *url, const char *auth, const char *body, c
         nucleo_arb_release(tk);                               // TLS down -> free the budget
         if (err == ESP_OK && status == 200 && acc.buf) { acc.buf[acc.len] = 0; *out = acc.buf; return acc.len; }
         free(acc.buf);
-        ESP_LOGW(TAG, "POST status %d (%s) for %s [try %d/%d]", status, esp_err_to_name(err), url, attempt, POST_TRIES);
+        ESP_LOGW(TAG, "POST FAIL status %d (%s) for %s [try %d/%d] free=%u largest=%u",   // immediate "why" in /api/logs
+                 status, esp_err_to_name(err), url, attempt, POST_TRIES,
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
         if (status >= 200) return -1;                        // a real HTTP response (server verdict) -> retry won't help
         if (attempt < POST_TRIES) vTaskDelay(pdMS_TO_TICKS(200));   // brief backoff, then a fresh handshake
     }
@@ -1091,19 +1127,28 @@ static bool teacher_load(teacher_cfg_t *c)
 static int http_post_anthropic(const char *url, const char *key, const char *version, const char *body, char **out)
 {
     *out = NULL;
+    int64_t t0 = esp_timer_get_time();                         // wall-clock budget for the whole turn (anti-WDT, anti-drag)
     for (int attempt = 1; attempt <= POST_TRIES; attempt++) {   // same transient-stall + heap-wait retry as http_post_json
+        tls_wdt_pet();
+        if ((esp_timer_get_time() - t0) >= (int64_t)TLS_TURN_BUDGET_MS * 1000) {
+            ESP_LOGW(TAG, "Anthropic budget %dms spent (%d tries) -> bail free=%u largest=%u %s",
+                     TLS_TURN_BUDGET_MS, attempt - 1,
+                     (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                     (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), url);
+            return -1;
+        }
         if (online_tls_heap_too_low("POST", url)) {
             if (attempt < POST_TRIES) { vTaskDelay(pdMS_TO_TICKS(1500)); continue; }
             return -1;
         }
         http_acc_t acc = { NULL, 0, 0, HTTP_CAP };
         esp_http_client_config_t cfg = {
-            .url = url, .timeout_ms = 20000, .user_agent = HTTP_UA,   // Claude answers in ~1–4s; 20s is ample
+            .url = url, .timeout_ms = HTTP_TIMEOUT, .user_agent = HTTP_UA,   // per-attempt < 8 s TWDT (was 20s = reboot); Claude ~1-4 s, retried within budget
             .crt_bundle_attach = esp_crt_bundle_attach, .buffer_size = 2048, .buffer_size_tx = 2048,
             .method = HTTP_METHOD_POST, .event_handler = http_evt, .user_data = &acc,
         };
         uint32_t tk = nucleo_arb_acquire(ARB_FG, "anima-anthropic", 0);
-        if (!tk) { free(acc.buf); return -1; }
+        if (!tk) { free(acc.buf); ESP_LOGW(TAG, "chat TLS: arbiter busy (another TLS holds it) -> bail %s", url); return -1; }
         esp_http_client_handle_t cli = esp_http_client_init(&cfg);
         if (!cli) { nucleo_arb_release(tk); free(acc.buf); return -1; }
         esp_http_client_set_header(cli, "Content-Type", "application/json");
@@ -1116,7 +1161,10 @@ static int http_post_anthropic(const char *url, const char *key, const char *ver
         nucleo_arb_release(tk);
         if (err == ESP_OK && status == 200 && acc.buf) { acc.buf[acc.len] = 0; *out = acc.buf; return acc.len; }
         free(acc.buf);
-        ESP_LOGW(TAG, "Anthropic POST status %d (%s) for %s [try %d/%d]", status, esp_err_to_name(err), url, attempt, POST_TRIES);
+        ESP_LOGW(TAG, "Anthropic POST FAIL status %d (%s) for %s [try %d/%d] free=%u largest=%u",
+                 status, esp_err_to_name(err), url, attempt, POST_TRIES,
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
         if (status >= 200) return -1;                          // real HTTP verdict -> no retry
         if (attempt < POST_TRIES) vTaskDelay(pdMS_TO_TICKS(200));
     }
@@ -1222,7 +1270,7 @@ int nucleo_anima_transcribe(const char *path, const char *lang_hint,
 
     char pre[900]; int pl = 0;
     pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n%s\r\n", bnd, wmodel);
-    pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nverbose_json\r\n", bnd);
+    pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\njson\r\n", bnd);   // json, NOT verbose_json: verbose adds a multi-KB segments[] array that overran HTTP_CAP → truncated JSON → silent cJSON parse-fail (the "fails at 2 min" bug). Plain {text} stays small.
     if (force) pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n%s\r\n", bnd, lang_hint);
     pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\nContent-Type: %s\r\n\r\n", bnd, fname, ctype);
     char post[48]; int psl = snprintf(post, sizeof post, "\r\n--%s--\r\n", bnd);
@@ -1232,14 +1280,14 @@ int nucleo_anima_transcribe(const char *path, const char *lang_hint,
     if (online_tls_heap_too_low("POST", url)) { fclose(fp); return -1; }
 
     esp_http_client_config_t cfg = {
-        .url = url, .timeout_ms = 30000, .user_agent = HTTP_UA,
+        .url = url, .timeout_ms = TRANSCRIBE_TIMEOUT_MS, .user_agent = HTTP_UA,
         .crt_bundle_attach = esp_crt_bundle_attach, .buffer_size = 2048, .buffer_size_tx = 2048,
         .method = HTTP_METHOD_POST,
     };
     // Heavy-work budget across the TLS window (transcribe streams a whole audio file over mbedTLS).
     // try-only: if another fetch holds it, bail (the caller reports "transcription unavailable, retry").
     uint32_t tk = nucleo_arb_acquire(ARB_FG, "transcribe", 0);
-    if (!tk) { fclose(fp); return -1; }
+    if (!tk) { fclose(fp); ESP_LOGW(TAG, "transcribe: arbiter busy (another TLS holds it) — bail"); return -1; }
     esp_http_client_handle_t cli = esp_http_client_init(&cfg);
     if (!cli) { nucleo_arb_release(tk); fclose(fp); return -1; }
     char ct[96]; snprintf(ct, sizeof ct, "multipart/form-data; boundary=%s", bnd);
@@ -1247,15 +1295,21 @@ int nucleo_anima_transcribe(const char *path, const char *lang_hint,
     esp_http_client_set_header(cli, "Content-Type", ct);
     esp_http_client_set_header(cli, "Authorization", bearer);
 
+    tls_wdt_pet();
     esp_err_t err = esp_http_client_open(cli, clen);   // TLS handshake + headers; body follows via write()
-    if (err != ESP_OK) { esp_http_client_cleanup(cli); nucleo_arb_release(tk); fclose(fp); ESP_LOGW(TAG, "transcribe open: %s", esp_err_to_name(err)); return -1; }
+    tls_wdt_pet();
+    if (err != ESP_OK) { esp_http_client_cleanup(cli); nucleo_arb_release(tk); fclose(fp);
+        ESP_LOGW(TAG, "transcribe open FAIL: %s free=%u largest=%u", esp_err_to_name(err),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)); return -1; }
     int wok = esp_http_client_write(cli, pre, pl);
     char buf[2048]; size_t rd;
-    while (wok >= 0 && (rd = fread(buf, 1, sizeof buf, fp)) > 0) wok = esp_http_client_write(cli, buf, (int)rd);
+    while (wok >= 0 && (rd = fread(buf, 1, sizeof buf, fp)) > 0) { wok = esp_http_client_write(cli, buf, (int)rd); tls_wdt_pet(); }   // long upload must not trip the WDT (no-op if unwatched)
     fclose(fp);
     if (wok >= 0) wok = esp_http_client_write(cli, post, psl);
     if (wok < 0) { esp_http_client_cleanup(cli); nucleo_arb_release(tk); ESP_LOGW(TAG, "transcribe write failed"); return -1; }
 
+    tls_wdt_pet();
     esp_http_client_fetch_headers(cli);
     int status = esp_http_client_get_status_code(cli);
     // Lazy-grow read (1 KB, doubling, same HTTP_CAP ceiling): the old upfront malloc(HTTP_CAP=12 KB)
@@ -1274,15 +1328,18 @@ int nucleo_anima_transcribe(const char *path, const char *lang_hint,
         }
         int n = esp_http_client_read(cli, resp + rl, (int)(rcap - 1 - rl));
         if (n <= 0) break;
-        rl += n;
+        rl += n; tls_wdt_pet();
     }
     if (resp) resp[rl] = 0;
     esp_http_client_close(cli); esp_http_client_cleanup(cli);
     nucleo_arb_release(tk);                               // TLS down -> free the budget
-    if (status != 200 || !resp || rl <= 0) { free(resp); ESP_LOGW(TAG, "transcribe status %d", status); return -1; }
+    if (status != 200 || !resp || rl <= 0) { free(resp);
+        ESP_LOGW(TAG, "transcribe FAIL status %d free=%u largest=%u", status,
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)); return -1; }
 
     cJSON *o = cJSON_Parse(resp); free(resp);
-    if (!o) return -1;
+    if (!o) { ESP_LOGW(TAG, "transcribe parse-fail (reply truncated at %d? rl=%d)", HTTP_CAP, rl); return -1; }   // no longer a silent -1
     int tl = -1;
     cJSON *t = cJSON_GetObjectItem(o, "text");
     if (cJSON_IsString(t)) { snprintf(out_text, tcap, "%s", t->valuestring); tl = (int)strlen(out_text); }
@@ -1296,6 +1353,265 @@ int nucleo_anima_transcribe(const char *path, const char *lang_hint,
     }
     cJSON_Delete(o);
     return tl;
+}
+
+// ============================================================================
+// CHUNKED transcription for LONG recordings (1-2 h) — the device equivalent of
+// the browser longtranscribe.js. The single-shot path above can't handle long
+// takes: Whisper rejects any file > 25 MB (16k mono WAV = ~1.92 MB/min → ~13 min)
+// and a multi-MB TLS upload on this PSRAM-less chip is fragile. Here we slice the
+// SD WAV into ~5-min segments, send each as its own small synthetic-header WAV
+// over an independent TLS session (heap fully recovered between chunks), and
+// APPEND each transcript straight to the SD sidecar — the full text (100k+ chars
+// for 2 h) never lives in RAM. Standalone: works on the device with no browser.
+// ============================================================================
+#define WAV_CHUNK_SEC   90                  // 90 s/segment: bounds BOTH the upload AND the transcript REPLY — a
+                                            // segment's {text} must fit the caller's RAM buffer (~4 KB) and HTTP_CAP,
+                                            // so we chunk on the REPLY size, not just Whisper's 25 MB upload cap.
+#define WAV_CHUNK_MAXB  (18 * 1024 * 1024)  // hard ceiling per request, well under Whisper's 25 MB
+
+typedef struct { uint32_t rate; uint16_t channels; uint16_t bits; long data_off; long data_len; } wav_info_t;
+
+// Parse fmt + data-chunk location from an open WAV (scans chunks so fact/LIST before data is fine).
+static bool wav_parse(FILE *fp, wav_info_t *wi)
+{
+    uint8_t h[12];
+    if (fseek(fp, 0, SEEK_SET) != 0 || fread(h, 1, 12, fp) != 12) return false;
+    if (memcmp(h, "RIFF", 4) || memcmp(h + 8, "WAVE", 4)) return false;
+    bool have_fmt = false;
+    for (int guard = 0; guard < 32; guard++) {
+        uint8_t c[8];
+        if (fread(c, 1, 8, fp) != 8) break;
+        uint32_t sz = c[4] | (c[5] << 8) | (c[6] << 16) | ((uint32_t)c[7] << 24);
+        if (!memcmp(c, "fmt ", 4)) {
+            uint8_t f[16];
+            if (fread(f, 1, 16, fp) != 16) break;
+            wi->channels = f[2] | (f[3] << 8);
+            wi->rate     = f[4] | (f[5] << 8) | (f[6] << 16) | ((uint32_t)f[7] << 24);
+            wi->bits     = f[14] | (f[15] << 8);
+            have_fmt = true;
+            if (sz > 16) fseek(fp, (long)(sz - 16), SEEK_CUR);
+        } else if (!memcmp(c, "data", 4)) {
+            wi->data_off = ftell(fp);
+            wi->data_len = (long)sz;
+            // CLAMP to the bytes actually on disk: a half-finalized take (or a wrong header) can claim more
+            // 'data' than exists; streaming that would fread past EOF and upload garbage. Trust the file.
+            fseek(fp, 0, SEEK_END);
+            long avail = ftell(fp) - wi->data_off;
+            if (wi->data_len > avail) wi->data_len = avail;
+            return have_fmt && wi->rate > 0 && wi->channels > 0 && wi->bits > 0 && wi->data_len > 0;
+        } else {
+            if (fseek(fp, (long)(sz + (sz & 1)), SEEK_CUR) != 0) break;
+        }
+    }
+    return false;
+}
+
+// Little-endian 44-byte canonical PCM WAV header for a `dlen`-byte data section (ESP32 is LE).
+static void wav_hdr44(uint8_t *b, uint32_t dlen, uint32_t rate, uint16_t ch, uint16_t bits)
+{
+    uint32_t bps = rate * ch * (bits / 8), riff = 36 + dlen, sixteen = 16; uint16_t ba = ch * (bits / 8), pcm = 1;
+    memcpy(b, "RIFF", 4);      memcpy(b + 4, &riff, 4);  memcpy(b + 8, "WAVE", 4);
+    memcpy(b + 12, "fmt ", 4); memcpy(b + 16, &sixteen, 4);
+    memcpy(b + 20, &pcm, 2);   memcpy(b + 22, &ch, 2);   memcpy(b + 24, &rate, 4);
+    memcpy(b + 28, &bps, 4);   memcpy(b + 32, &ba, 2);   memcpy(b + 34, &bits, 2);
+    memcpy(b + 36, "data", 4); memcpy(b + 40, &dlen, 4);
+}
+
+// progress (the recorder app polls these to show "segment i/N")
+static volatile int s_tx_done = 0, s_tx_total = 0;
+void nucleo_anima_transcribe_progress(int *done, int *total) { if (done) *done = s_tx_done; if (total) *total = s_tx_total; }
+
+// Upload ONE segment: a synthetic-header WAV = [44-byte header | pcm_len bytes of fp at pcm_off] streamed
+// over a fresh TLS session to Whisper. Mirrors the single-shot uploader but bounded to the slice. Returns
+// transcript length in `out`, or -1. Detected language (first segment) goes to out_lang if non-NULL.
+static int transcribe_slice(const char *base, const char *key, const char *wmodel, const char *lang_hint,
+                            FILE *fp, long pcm_off, long pcm_len, const wav_info_t *wi,
+                            char *out, int tcap, char *out_lang, int lcap)
+{
+    char url[200]; snprintf(url, sizeof url, "%s/audio/transcriptions", base);
+    if (online_tls_heap_too_low("POST", url)) return -1;
+
+    const char *bnd = "----NucleoBoundary8x2k9q";
+    bool force = lang_hint && lang_hint[0] && strcmp(lang_hint, "auto") != 0;
+    char pre[900]; int pl = 0;
+    pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n%s\r\n", bnd, wmodel);
+    pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\njson\r\n", bnd);   // json, NOT verbose_json: verbose adds a multi-KB segments[] array that overran HTTP_CAP → truncated JSON → silent cJSON parse-fail (the "fails at 2 min" bug). Plain {text} stays small.
+    if (force) pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n%s\r\n", bnd, lang_hint);
+    pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"seg.wav\"\r\nContent-Type: audio/wav\r\n\r\n", bnd);
+    char post[48]; int psl = snprintf(post, sizeof post, "\r\n--%s--\r\n", bnd);
+
+    uint8_t hdr[44]; wav_hdr44(hdr, (uint32_t)pcm_len, wi->rate, wi->channels, wi->bits);
+    long clen = (long)pl + 44 + pcm_len + psl;
+
+    esp_http_client_config_t cfg = {
+        .url = url, .timeout_ms = TRANSCRIBE_TIMEOUT_MS, .user_agent = HTTP_UA,
+        .crt_bundle_attach = esp_crt_bundle_attach, .buffer_size = 2048, .buffer_size_tx = 2048,
+        .method = HTTP_METHOD_POST,
+    };
+    uint32_t tk = nucleo_arb_acquire(ARB_FG, "transcribe", 0);
+    if (!tk) { ESP_LOGW(TAG, "slice: arbiter busy — bail"); return -1; }
+    esp_http_client_handle_t cli = esp_http_client_init(&cfg);
+    if (!cli) { nucleo_arb_release(tk); return -1; }
+    char ct[96]; snprintf(ct, sizeof ct, "multipart/form-data; boundary=%s", bnd);
+    char bearer[200]; snprintf(bearer, sizeof bearer, "Bearer %s", key);
+    esp_http_client_set_header(cli, "Content-Type", ct);
+    esp_http_client_set_header(cli, "Authorization", bearer);
+
+    tls_wdt_pet();
+    esp_err_t err = esp_http_client_open(cli, clen);
+    tls_wdt_pet();
+    if (err != ESP_OK) { esp_http_client_cleanup(cli); nucleo_arb_release(tk);
+        ESP_LOGW(TAG, "slice open FAIL: %s", esp_err_to_name(err)); return -1; }
+
+    int wok = esp_http_client_write(cli, pre, pl);
+    if (wok >= 0) wok = esp_http_client_write(cli, (const char *)hdr, 44);
+    if (fseek(fp, pcm_off, SEEK_SET) != 0) wok = -1;
+    long left = pcm_len; char buf[2048];
+    while (wok >= 0 && left > 0) {
+        size_t want = left < (long)sizeof buf ? (size_t)left : sizeof buf;
+        size_t rd = fread(buf, 1, want, fp);
+        if (rd == 0) break;
+        wok = esp_http_client_write(cli, buf, (int)rd); left -= (long)rd; tls_wdt_pet();
+    }
+    if (wok >= 0) wok = esp_http_client_write(cli, post, psl);
+    if (wok < 0) { esp_http_client_cleanup(cli); nucleo_arb_release(tk); ESP_LOGW(TAG, "slice write failed"); return -1; }
+
+    tls_wdt_pet();
+    esp_http_client_fetch_headers(cli);
+    int status = esp_http_client_get_status_code(cli);
+    size_t rcap = 1024; int rl = 0; char *resp = malloc(rcap);
+    while (resp) {
+        if ((size_t)rl + 1 >= rcap) { if (rcap >= HTTP_CAP) break;
+            size_t want = rcap * 2 > HTTP_CAP ? HTTP_CAP : rcap * 2; char *g = realloc(resp, want);
+            if (!g) break; resp = g; rcap = want; }
+        int n = esp_http_client_read(cli, resp + rl, (int)(rcap - 1 - rl));
+        if (n <= 0) break; rl += n; tls_wdt_pet();
+    }
+    if (resp) resp[rl] = 0;
+    esp_http_client_close(cli); esp_http_client_cleanup(cli); nucleo_arb_release(tk);
+    if (status != 200 || !resp || rl <= 0) { free(resp);
+        ESP_LOGW(TAG, "slice FAIL status %d free=%u largest=%u", status,
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)); return -1; }
+
+    cJSON *o = cJSON_Parse(resp); free(resp);
+    if (!o) { ESP_LOGW(TAG, "transcribe parse-fail (reply truncated at %d? rl=%d)", HTTP_CAP, rl); return -1; }   // no longer a silent -1
+    int tl = -1;
+    cJSON *t = cJSON_GetObjectItem(o, "text");
+    if (cJSON_IsString(t)) { snprintf(out, tcap, "%s", t->valuestring); tl = (int)strlen(out); }
+    if (out_lang && lcap) {
+        cJSON *lg = cJSON_GetObjectItem(o, "language");
+        if (cJSON_IsString(lg) && lg->valuestring[0]) {
+            const char *L = lg->valuestring;
+            snprintf(out_lang, lcap, "%s", !strncasecmp(L, "it", 2) ? "it" : !strncasecmp(L, "en", 2) ? "en" : L);
+        }
+    }
+    cJSON_Delete(o);
+    return tl;
+}
+
+// Transcribe a long WAV chunk-by-chunk, APPENDING each segment's text to `sidecar_path` on SD (the full
+// transcript never sits in RAM). Returns total chars written (>0), or -1 if NOTHING transcribed. Detected
+// language of the first good segment goes to out_lang. Progress via nucleo_anima_transcribe_progress().
+int nucleo_anima_transcribe_long(const char *path, const char *lang_hint, const char *sidecar_path,
+                                 char *out_lang, int lcap)
+{
+    char base[160], cmodel[80], key[160], wmodel[64] = "whisper-large-v3";
+    if (!teacher_cfg(base, sizeof base, cmodel, sizeof cmodel, key, sizeof key)) return -1;
+    { FILE *cf = fopen(NUCLEO_SD_MOUNT "/data/anima/teacher.json", "r");
+      if (cf) { char b[1536]; size_t cn = fread(b, 1, sizeof b - 1, cf); fclose(cf); b[cn] = 0;
+        cJSON *co = cJSON_Parse(b);
+        if (co) { cJSON *w = cJSON_GetObjectItem(co, "whisper");
+          if (cJSON_IsString(w) && w->valuestring[0]) snprintf(wmodel, sizeof wmodel, "%s", w->valuestring);
+          cJSON_Delete(co); } } }
+
+    FILE *fp = fopen(path, "rb"); if (!fp) return -1;
+    wav_info_t wi = {0};
+    if (!wav_parse(fp, &wi)) { fclose(fp); ESP_LOGW(TAG, "transcribe_long: not a parseable WAV"); return -1; }
+
+    long bps = (long)wi.rate * wi.channels * (wi.bits / 8), frame = wi.channels * (wi.bits / 8);
+    long chunk = (long)WAV_CHUNK_SEC * bps; if (chunk > WAV_CHUNK_MAXB) chunk = WAV_CHUNK_MAXB;
+    chunk -= chunk % (frame > 0 ? frame : 2);
+    if (chunk <= 0) { fclose(fp); return -1; }
+    int total = (int)((wi.data_len + chunk - 1) / chunk); if (total < 1) total = 1;
+    s_tx_total = total; s_tx_done = 0;
+
+    FILE *out = fopen(sidecar_path, "w"); if (!out) { fclose(fp); return -1; }
+    char *seg = malloc(4096); if (!seg) { fclose(out); fclose(fp); return -1; }
+    int written = 0; bool got_lang = false;
+    for (int i = 0; i < total; i++) {
+        s_tx_done = i;
+        long off = wi.data_off + (long)i * chunk;
+        long len = wi.data_len - (long)i * chunk; if (len > chunk) len = chunk; if (len <= 0) break;
+        nucleo_anima_l1_unload_if_idle();                 // free the offline index before each TLS slice
+        int tl = transcribe_slice(base, key, wmodel, lang_hint, fp, off, len, &wi,
+                                  seg, 4096, got_lang ? NULL : out_lang, got_lang ? 0 : lcap);
+        // The handshake peaks near OOM on the fragmented heap: a lost segment usually wins after a settle.
+        for (int rtry = 0; tl <= 0 && rtry < 3; rtry++) {
+            ESP_LOGW(TAG, "transcribe_long: seg %d/%d failed, retry %d", i + 1, total, rtry + 1);
+            vTaskDelay(pdMS_TO_TICKS(800)); nucleo_anima_l1_unload_if_idle();
+            tl = transcribe_slice(base, key, wmodel, lang_hint, fp, off, len, &wi, seg, 4096, NULL, 0);
+        }
+        if (tl > 0) {
+            if (written) fputc(' ', out);
+            fwrite(seg, 1, strlen(seg), out); written += tl;
+            if (out_lang && lcap && out_lang[0]) got_lang = true;
+            fflush(out);                                  // persist progress so a crash keeps partial text
+        }
+    }
+    free(seg); fclose(out); fclose(fp);
+    s_tx_done = total;
+    ESP_LOGI(TAG, "transcribe_long DONE %d segs, %d chars -> %s", total, written, sidecar_path);
+    return written > 0 ? written : -1;
+}
+
+// Map-reduce summary of a transcript FILE too big for RAM: summarize each ~6 KB window, then summarize
+// the joined partials. Writes the summary to `sum_path` on SD. Returns summary length, or -1.
+static int teacher_complete(const char *sys_prompt, const char *user_prompt, double temp, char *out, int cap);  // defined below
+
+int nucleo_anima_summarize_file(const char *txt_path, const char *lang, const char *sum_path)
+{
+    FILE *fp = fopen(txt_path, "rb"); if (!fp) return -1;
+    fseek(fp, 0, SEEK_END); long sz = ftell(fp); fseek(fp, 0, SEEK_SET);
+    if (sz <= 0) { fclose(fp); return -1; }
+
+    char *win = malloc(6144); char *acc = malloc(4096); char *partials = NULL;
+    if (!win || !acc) { free(win); free(acc); fclose(fp); return -1; }
+    size_t pcap = 8192, plen = 0; partials = malloc(pcap);
+    if (!partials) { free(win); free(acc); fclose(fp); return -1; }
+    partials[0] = 0;
+
+    int npieces = 0; size_t rd;
+    while ((rd = fread(win, 1, 6143, fp)) > 0) {
+        win[rd] = 0;
+        char sys[160];
+        snprintf(sys, sizeof sys, "Summarize THIS part of a long transcript in %s as terse notes (facts, decisions, action items). No preamble.",
+                 (!strcmp(lang, "en")) ? "English" : "Italian");
+        if (teacher_complete(sys, win, 0.3, acc, 4096) > 0) {              // custom-prompt completion (provider-aware)
+            size_t need = plen + strlen(acc) + 2;
+            if (need > pcap) { size_t nc = need + 2048; char *g = realloc(partials, nc); if (g) { partials = g; pcap = nc; } }
+            if (need <= pcap) { plen += snprintf(partials + plen, pcap - plen, "%s\n\n", acc); }
+            npieces++;
+        }
+        nucleo_anima_l1_unload_if_idle();
+    }
+    fclose(fp); free(win);
+
+    int rc = -1;
+    if (npieces == 0) { free(acc); free(partials); return -1; }
+    if (npieces == 1) {                                  // single window: the partial IS the summary
+        FILE *sf = fopen(sum_path, "w"); if (sf) { fwrite(partials, 1, plen, sf); fclose(sf); rc = (int)plen; }
+    } else {
+        char sys[200];
+        snprintf(sys, sizeof sys, "Merge these section notes of one recording into a single coherent summary in %s: bullet points for decisions and key facts, then an \"Action items\" list. Remove duplicates.",
+                 (!strcmp(lang, "en")) ? "English" : "Italian");
+        if (teacher_complete(sys, partials, 0.3, acc, 4096) > 0) {
+            FILE *sf = fopen(sum_path, "w"); if (sf) { int n = (int)strlen(acc); fwrite(acc, 1, n, sf); fclose(sf); rc = n; }
+        }
+    }
+    free(acc); free(partials);
+    return rc;
 }
 
 // Execute ONE completion attempt with a fully-resolved teacher_cfg_t.
@@ -2875,9 +3191,11 @@ static int grok_chat(const char *input, const anima_turn_t *turns, int nturns, b
         nucleo_anima_set_long_reply(content);
         clip_code(out->reply, sizeof out->reply, content);
     } else {
-        // Long prose (a story/essay) that won't fit out->reply[1024]: serve it verbatim via the overflow
-        // channel too (web shows it whole), and keep a sentence-clipped preview for the native screen.
-        if (strlen(content) > sizeof out->reply - 1) nucleo_anima_set_long_reply(content);
+        // Prose longer than the REPLY_LIVE_MAX (=360) on-card clip: keep the FULL text on the heap overflow
+        // channel so BOTH the web AND the native app can show it whole (the native reads it in present_result).
+        // out->reply keeps the 360-char clip for the ring/saved card. Threshold was sizeof(reply)-1 (=1023),
+        // which meant a 360-1023 char answer was clipped to 360 and the rest silently lost on-device.
+        if (strlen(content) > REPLY_LIVE_MAX) nucleo_anima_set_long_reply(content);
         clip_reply(out->reply, sizeof out->reply, content);
     }
     out->confidence = 70;
@@ -2901,4 +3219,92 @@ int nucleo_anima_online_chat_ctx(const char *input, const anima_turn_t *turns, i
 int nucleo_anima_online_code(const char *input, bool en, anima_result_t *out)
 {
     return grok_chat(input, NULL, 0, en, true, out);
+}
+
+// LONG-FORM, ONE SEGMENT PER CALL. A complete long answer (a story, an essay, a detailed explanation)
+// can't fit this PSRAM-less chip's RAM, the device buffers, or one max_tokens window. So the native app
+// asks for it one paragraph at a time: this returns the next ~paragraph, continuing from `tail` (the end
+// of what was written so far) WITHOUT repeating it. `part` is 1 for the opening paragraph. `*more` is set
+// false when the model marks the whole answer complete (an [FINE]/[END] marker, stripped before return).
+// Bounded max_tokens keeps every call cheap and the buffer small, so the caller can free between calls and
+// keep RAM flat. Independent of s_compact_reply (this path IS the way the native app does long answers).
+int nucleo_anima_online_longform(const char *topic, const char *tail, int part, bool en,
+                                 anima_result_t *out, bool *more)
+{
+    if (more) *more = false;
+    if (!topic || !*topic || !nucleo_anima_online_available()) return 0;
+    teacher_cfg_t c;
+    if (!teacher_load(&c)) return 0;            // no key -> honest miss
+    nucleo_anima_l1_unload();                   // free the L1 index so the mbedTLS handshake has a contiguous block
+
+    const char *sys = en
+        ? "You are ANIMA. Answer the user's request as a COMPLETE, well-written long-form reply, but emit it ONE paragraph per turn. Each turn = exactly ONE self-contained paragraph, about 240 characters (never over 300), with every sentence finished (never stop mid-word). Continue SEAMLESSLY from what was written before, without repeating or re-introducing it. No headings, no bullet lists, no meta-commentary. When the whole answer is COMPLETE, end that paragraph with the marker [END] on its own; while more remains, do NOT write [END]."
+        : "Sei ANIMA. Rispondi alla richiesta dell'utente con una risposta COMPLETA e ben scritta in forma estesa, ma emettila UN paragrafo per turno. Ogni turno = ESATTAMENTE un paragrafo autonomo, circa 240 caratteri (mai oltre 300), con tutte le frasi concluse (mai a meta' parola). Prosegui in modo FLUIDO da cio' che e' gia' stato scritto, senza ripeterlo ne' reintrodurlo. Niente titoli, niente elenchi puntati, niente meta-commenti. Quando l'intera risposta e' COMPLETA, termina quel paragrafo con la sigla [FINE] da sola; finche' manca dell'altro, NON scrivere [FINE].";
+
+    char user[320];
+    anima_turn_t t; int nt = 0;
+    if (part <= 1) {
+        snprintf(user, sizeof user, en ? "Request: %s\nWrite the FIRST paragraph."
+                                       : "Richiesta: %s\nScrivi il PRIMO paragrafo.", topic);
+    } else {
+        t.q = topic;                                            // keep the standing goal in view
+        t.a = (tail && tail[0]) ? tail : " ";                   // what the model already wrote (its own prior turn)
+        nt = 1;
+        snprintf(user, sizeof user, en ? "Continue with paragraph %d — do NOT repeat earlier text."
+                                       : "Continua con il paragrafo %d — NON ripetere il testo precedente.", part);
+    }
+
+    const int max_tok = 140;                    // ~one paragraph (~240 chars); small + bounded -> cheap call, flat RAM
+    char *content = NULL;
+    if (!strcmp(c.provider, "anthropic")) {
+        if (anthropic_chat(&c, sys, nt ? &t : NULL, nt, user, max_tok, &content) <= 0) return 0;
+    } else {
+        cJSON *req = cJSON_CreateObject();
+        cJSON_AddStringToObject(req, "model", c.model);
+        cJSON_AddNumberToObject(req, "temperature", 0.6);
+        cJSON_AddNumberToObject(req, "max_tokens", max_tok);
+        cJSON *msgs = cJSON_AddArrayToObject(req, "messages");
+        cJSON *m1 = cJSON_CreateObject(); cJSON_AddStringToObject(m1, "role", "system");    cJSON_AddStringToObject(m1, "content", sys); cJSON_AddItemToArray(msgs, m1);
+        if (nt) {
+            cJSON *mu = cJSON_CreateObject(); cJSON_AddStringToObject(mu, "role", "user");      cJSON_AddStringToObject(mu, "content", t.q); cJSON_AddItemToArray(msgs, mu);
+            cJSON *ma = cJSON_CreateObject(); cJSON_AddStringToObject(ma, "role", "assistant"); cJSON_AddStringToObject(ma, "content", t.a); cJSON_AddItemToArray(msgs, ma);
+        }
+        cJSON *m2 = cJSON_CreateObject(); cJSON_AddStringToObject(m2, "role", "user"); cJSON_AddStringToObject(m2, "content", user); cJSON_AddItemToArray(msgs, m2);
+        char *body = cJSON_PrintUnformatted(req); cJSON_Delete(req);
+        if (!body) return 0;
+        char bearer[200]; snprintf(bearer, sizeof bearer, "Bearer %s", c.key);
+        char url[200];    snprintf(url, sizeof url, "%s/chat/completions", c.base);
+        char *resp = NULL; int n = http_post_json(url, bearer, body, &resp);
+        free(body);
+        if (n <= 0 || !resp) { free(resp); return 0; }
+        cJSON *root = cJSON_Parse(resp); free(resp);
+        if (!root) return 0;
+        cJSON *choices = cJSON_GetObjectItem(root, "choices");
+        cJSON *c0 = choices ? cJSON_GetArrayItem(choices, 0) : NULL;
+        cJSON *msg = c0 ? cJSON_GetObjectItem(c0, "message") : NULL;
+        cJSON *cn = msg ? cJSON_GetObjectItem(msg, "content") : NULL;
+        if (cJSON_IsString(cn) && cn->valuestring[0]) content = strdup(cn->valuestring);
+        cJSON_Delete(root);
+        if (!content) return 0;
+    }
+
+    // Completion marker: [FINE]/[END] (any case) -> the answer is done. Cut it (and trailing space) out.
+    bool done = false;
+    {
+        char *mk = strstr(content, "[FINE]");
+        if (!mk) mk = strstr(content, "[END]");
+        if (!mk) mk = strstr(content, "[Fine]");
+        if (!mk) mk = strstr(content, "[End]");
+        if (mk) { done = true; *mk = 0; }
+    }
+    { int n = (int)strlen(content); while (n > 0 && (content[n-1] == ' ' || content[n-1] == '\n' || content[n-1] == '\r' || content[n-1] == '\t')) content[--n] = 0; }
+
+    memset(out, 0, sizeof(*out));
+    out->tier = ANIMA_TIER_REMOTE; out->action = ANIMA_ACT_ANSWER;
+    snprintf(out->intent, sizeof out->intent, "longform");
+    clip_reply(out->reply, sizeof out->reply, content);        // boundary-clip into the device buffer
+    out->confidence = 70;
+    free(content);
+    if (more) *more = !done && out->reply[0] != 0;             // empty reply also ends the loop
+    return out->reply[0] ? 1 : 0;
 }

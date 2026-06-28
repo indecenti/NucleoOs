@@ -9,7 +9,7 @@
 //
 // Run: npm run anima:webindex     (or: node apps/anima/local/webindex.test.mjs)
 
-import { slug, ortho, grounding, stripPronun, clip, detectIntent, classify, webIndexAnswer, crawlBranch, exportForPromotion } from '../www/local/webindex.js';
+import { slug, ortho, grounding, stripPronun, clip, detectIntent, classify, webIndexAnswer } from '../www/local/webindex.js';
 import { webStore } from '../www/local/webstore.js';
 
 let pass = 0, fail = 0; const fails = [];
@@ -103,44 +103,6 @@ eq('classify place',         classify('pianeta del sistema solare'), 'place');
   ok('sense: two cards stored', (await store.all()).length === 2);
 }
 
-// branch crawler (stubbed): bounded page cap, bilingual cards, dedup, MOSAICO shape, promotion export.
-{
-  const make = (n) => ({ query: { pages: { 1: n } } });
-  const EN = { 'Seconda guerra mondiale': 'World War II', 'Adolf Hitler': 'Adolf Hitler', 'Olocausto': 'The Holocaust', 'Winston Churchill': 'Winston Churchill' };
-  const stub = async (url) => {
-    if (url.includes('list=search')) return { ok: true, json: async () => ({ query: { search: [{ title: 'Seconda guerra mondiale', snippet: 'conflitto 1939 1945' }] } }) };
-    if (url.includes('action=opensearch')) return { ok: true, json: async () => ['x', ['Seconda guerra mondiale'], ['conflitto'], []] };
-    if (url.includes('prop=links')) return { ok: true, json: async () => make({ title: 'Seconda guerra mondiale', links: [
-      { title: 'Adolf Hitler' }, { title: 'Olocausto' }, { title: 'Lista delle battaglie' }, { title: 'Winston Churchill' }] }) };
-    const T = decodeURIComponent((url.match(/titles=([^&]+)/) || [])[1] || '').replace(/_/g, ' ');
-    if (url.includes('it.wikipedia') && url.includes('langlinks')) {
-      const en = EN[T];
-      if (!en) return { ok: true, json: async () => make({ missing: '' }) };
-      return { ok: true, json: async () => make({ title: T, description: 'evento storico', langlinks: [{ '*': en }],
-        extract: `${T} fu un fatto storico legato a ${T}. Approfondimento distinto su ${T} con dettagli ulteriori. Terza frase su ${T}.` }) };
-    }
-    if (url.includes('en.wikipedia')) return { ok: true, json: async () => make({ title: T,
-      extract: `${T} was a historical matter about ${T}. Distinct deep dive on ${T} with further detail. Third sentence on ${T}.` }) };
-    return { ok: false, json: async () => ({}) };
-  };
-  const mk = () => { const m = new Map(); return { get: async (s, l) => m.get(l + ':' + s) || null, put: async (c) => m.set(c.lang + ':' + c.slug, c), all: async (l) => [...m.values()].filter(c => (c.lang === 'en') === (l === 'en')) }; };
-  const store = mk();
-  const res = await crawlBranch('Seconda guerra mondiale', 'it', { fetch: stub, store }, { maxPages: 3 });
-  ok('branch: seed resolved',  res && res.seed === 'Seconda guerra mondiale');
-  ok('branch: capped',         res && res.cards.length === 3, res && res.cards.length);
-  ok('branch: bilingual+detail', res && res.cards.every(c => c.reply.it && c.reply.en && c.detail.it && c.detail.en), JSON.stringify(res && res.cards[1]));
-  ok('branch: list-page filtered', res && !res.cards.some(c => /lista|list/i.test(c.id)));
-  // dedup on recrawl: with a fresh store crawl ALL 4, then recrawl -> 0 new, all skipped
-  const s2 = mk();
-  await crawlBranch('Seconda guerra mondiale', 'it', { fetch: stub, store: s2 }, { maxPages: 6 });
-  const res2 = await crawlBranch('Seconda guerra mondiale', 'it', { fetch: stub, store: s2 }, { maxPages: 6 });
-  ok('branch: dedup on recrawl', res2 && res2.cards.length === 0 && res2.skipped >= 4, res2 && JSON.stringify({ c: res2.cards.length, s: res2.skipped }));
-  // promotion export: bilingual cards only, deduped by id
-  const exp = await exportForPromotion(store);
-  ok('export: bilingual cards', exp.length === res.cards.length && exp.every(c => c.reply.it && c.reply.en), 'exp=' + exp.length);
-  ok('export: ids unique',      new Set(exp.map(c => c.id)).size === exp.length);
-}
-
 console.log(`  pure: ${pass} ok, ${fail} fail`);
 
 // ---------------- LIVE ----------------
@@ -191,18 +153,6 @@ if (NET) {
     }
     // 6) Ephemeral -> not handled here (left to live/LLM tiers).
     ok('LIVE ephemeral null', (await webIndexAnswer('chi è il presidente oggi', 'it', { fetch, store: mkStore() })) === null);
-    // 7) Branch crawl: real WWII -> a small bounded set of bilingual MOSAICO cards. Flake-tolerant: if
-    //    the network dropped most fetches this run, don't fail the gate — only assert what came back.
-    {
-      const store = mkStore();
-      const r = await crawlBranch('Seconda guerra mondiale', 'it', { fetch, store }, { maxPages: 4, byteBudget: 80 * 1024 });
-      if (!r || r.cards.length === 0) { console.log('  (branch crawl skipped — network flaked)'); }
-      else {
-        ok('LIVE branch bounded', r.cards.length <= 4, '' + r.cards.length);
-        ok('LIVE branch bilingual', r.cards.every(c => c.reply.it && c.reply.en), r.cards.map(c => c.id).join(','));
-        ok('LIVE branch detail', r.cards.every(c => c.detail.it || c.detail.en));
-      }
-    }
   }
 }
 

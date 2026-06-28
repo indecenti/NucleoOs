@@ -12,6 +12,7 @@
   "refresh_models": "↻ Aggiorna modelli",
   "clear_chat": "Pulisci chat",
   "teacher_label": "Teacher ANIMA (apprendimento offline del device)",
+  "teacher_note": "La chiave qui sopra resta <b>solo in questo browser</b> (sandbox di questa chat) e non viene scritta sul device. Per dare una chiave ad ANIMA — la mente online dell'intero OS — gestiscila in <b>Impostazioni ▸ IA</b>: è l'unico posto che configura il device.",
   "teach_on_btn": "Abilita con questa key",
   "teach_off_btn": "Disabilita",
   "forget_key": "Dimentica la chiave",
@@ -31,5 +32,10 @@
   "teach_enabled": "Abilitato ✓ — solo i fatti verificati finiscono negli ODD; il resto resta effimero.",
   "teach_write_err_pair": "Errore di scrittura (device non accoppiato?).",
   "teach_disabled": "Disabilitato.",
-  "teach_write_err": "Errore di scrittura."
+  "teach_write_err": "Errore di scrittura.",
+  "web_toggle_title": "Web: risposte aggiornate con fonti (Groq compound)",
+  "web_on": "Web",
+  "web_searching": "🌐 Sto cercando sul web…",
+  "sources_label": "Fonti",
+  "web_mode_hint": "Modalità Web attiva: risposte aggiornate dal web con le fonti, via Groq compound. Il modello selezionato qui sopra viene ignorato."
 }

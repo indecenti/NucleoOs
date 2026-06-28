@@ -1,0 +1,6 @@
+# Artefatti PyInstaller
+/build/
+/dist/
+*.log
+_smoke.*
+__pycache__/

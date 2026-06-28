@@ -13,10 +13,16 @@ extern "C" {
 #endif
 
 // HID modifier byte bits (USB HID spec) — pass to nucleo_usbhid_key().
-#define NK_HIDMOD_CTRL  0x01
-#define NK_HIDMOD_SHIFT 0x02
-#define NK_HIDMOD_ALT   0x04
-#define NK_HIDMOD_GUI   0x08
+#define NK_HIDMOD_CTRL   0x01
+#define NK_HIDMOD_SHIFT  0x02
+#define NK_HIDMOD_ALT    0x04
+#define NK_HIDMOD_GUI    0x08
+#define NK_HIDMOD_ALTGR  0x40   // Right Alt (IT layout @ # [ ] { } ...)
+
+// Host LED bitmap bits (what the PC pushes back — the only PC->keyboard feedback over HID).
+#define NK_HIDLED_NUM    0x01
+#define NK_HIDLED_CAPS   0x02
+#define NK_HIDLED_SCROLL 0x04
 
 // A few HID usage IDs the app sends directly (keys with no printable char).
 #define NK_HID_ENTER 0x28
@@ -35,8 +41,14 @@ esp_err_t nucleo_usbhid_start(void);
 // True when a host is connected and ready to accept a report.
 bool nucleo_usbhid_ready(void);
 
-// Send one keystroke as press-then-release (HID modifier bitmask + HID usage id).
+// Send one keystroke as press-then-release (HID modifier bitmask + HID usage id). Guaranteed release.
 void nucleo_usbhid_key(unsigned char modifier, unsigned char keycode);
+
+// Send a chord: modifier bitmap + up to 6 simultaneous keycodes, then release.
+void nucleo_usbhid_report(unsigned char modifier, const unsigned char *keys, int n);
+
+// The host's current LED state (NK_HIDLED_* bits) — Caps/Num/Scroll lock as the PC sees them.
+unsigned char nucleo_usbhid_leds(void);
 
 // Translate a printable ASCII char to {modifier, keycode}. Returns false if unmapped.
 bool nucleo_usbhid_ascii(char c, unsigned char *modifier, unsigned char *keycode);

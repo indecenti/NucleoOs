@@ -40,19 +40,24 @@ void app_ui_list(int top, int h, int count, int sel,
     d.setClipRect(0, top, 240, h);
     if (count <= 0) { d.clearClipRect(); return; }
 
-    const int STEP = 26;
-    int center = top + h / 2;
+    const int STEP = 22;
 
-    for (int i = 0; i < count; i++) {
-        int y = center + (i - sel) * STEP;
-        if (y < top - STEP || y > top + h + STEP) continue;
+    // Top-anchored: show 1 item above selection when possible, scroll down as sel moves.
+    int vis = h / STEP;
+    int scroll = sel - 1;
+    if (scroll > count - vis) scroll = count - vis;
+    if (scroll < 0) scroll = 0;
+
+    for (int i = scroll; i < count; i++) {
+        int y = top + (i - scroll) * STEP + STEP / 2;
+        if (y > top + h) break;
         bool focus = (i == sel);
         unsigned short col = color ? color(i, ud) : ACC;
         const char *lab = label(i, ud);
         const char *rt = right ? right(i, ud) : nullptr;
 
         if (focus) {
-            const int ph = 22;
+            const int ph = STEP - 4;
             d.fillRoundRect(6, y - ph / 2, 240 - 12, ph, ph / 2, col);
             int rx = 240 - 12;
             if (rt && rt[0]) {
@@ -66,23 +71,25 @@ void app_ui_list(int top, int h, int count, int sel,
             d.setTextSize(2); d.setTextColor(INK, col);
             d.setCursor(px, y - 7); d.print(lb);
         } else {
-            bool far = abs(i - sel) > 1;
-            unsigned short dim = far ? DIM : MUTED;
-            d.fillCircle(11, y, 2, far ? DIM : col);
+            // Wear OS hierarchy: the rows ADJACENT to the focus stay big + readable (size 2, white) so
+            // you can read what's coming as you scroll; rows further away shrink + dim to give depth.
+            // Readability win, zero RAM — all drawn direct to the panel, no buffer.
+            bool near = (abs(i - sel) == 1);
+            d.fillCircle(11, y, near ? 3 : 2, near ? col : DIM);
             int rx = 233;
             if (rt && rt[0]) {
                 int w = (int)strlen(rt) * 6;
-                d.setTextSize(1); d.setTextColor(dim, BG); d.setCursor(232 - w, y - 3); d.print(rt);
+                d.setTextSize(1); d.setTextColor(near ? MUTED : DIM, BG); d.setCursor(232 - w, y - 3); d.print(rt);
                 rx = 232 - w - 6;
             }
-            int maxc = (rx - 18) / 6; if (maxc < 1) maxc = 1; if (maxc > 34) maxc = 34;
+            int tsz = near ? 2 : 1, chw = tsz * 6, ty = near ? y - 7 : y - 3;
+            int maxc = (rx - 20) / chw; if (maxc < 1) maxc = 1; if (maxc > 34) maxc = 34;
             char b[36]; snprintf(b, sizeof(b), "%.*s", maxc, lab);
-            d.setTextSize(1); d.setTextColor(dim, BG); d.setCursor(18, y - 3); d.print(b);
+            d.setTextSize(tsz); d.setTextColor(near ? FG : DIM, BG); d.setCursor(20, ty); d.print(b);
         }
     }
 
     // Scroll indicator knob.
-    int vis = h / STEP;
     if (count > vis && vis > 0) {
         int track = h - 8, kh = track * vis / count; if (kh < 10) kh = 10;
         int ky = top + 4 + (track - kh) * sel / (count - 1);

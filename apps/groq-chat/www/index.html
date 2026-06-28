@@ -6,6 +6,7 @@
   <title>AI Chat</title>
   <style>
     :root{
+      color-scheme: dark;   /* the app is a fixed dark theme -> render NATIVE controls (the <select> option popup) dark too; without this the OS draws the dropdown list on a white background and the text is unreadable */
       --bg:#0b0f17; --bg2:var(--panel2,#0e131d); --panel:#131a26; --line:#1f2937; --line2:#273345;
       --text:#e6edf3; --muted:#8b98a9; --dim:#5b6675;
       --me:#1b2740; --accent:#7c5cff; --accent2:#4ea1ff; --ok:#5ad19b; --warn:#ffb454; --err:#ff8a9c;
@@ -46,6 +47,21 @@
       vertical-align:-2px;animation:bl 1s steps(1) infinite}
     @keyframes bl{50%{opacity:0}}
     pre.code{background:var(--field,#0a0e16);border:1px solid var(--line);border-radius:8px;padding:9px 11px;overflow:auto;margin:6px 0;font-size:12.5px}
+    /* Rendered Markdown (mdBlocks). white-space:normal overrides .body's pre-wrap so blocks flow. */
+    .md{white-space:normal}
+    .md>:first-child{margin-top:0}.md>:last-child{margin-bottom:0}
+    .md p{margin:6px 0}
+    .md h1,.md h2,.md h3,.md h4{margin:12px 0 6px;line-height:1.25;font-weight:650}
+    .md h1{font-size:1.35em}.md h2{font-size:1.2em}.md h3{font-size:1.08em}.md h4{font-size:1em}
+    .md ul,.md ol{margin:6px 0;padding-left:22px}
+    .md li{margin:2px 0}
+    .md a{color:var(--accent2);text-decoration:underline}
+    .md code{background:var(--field,#0a0e16);border:1px solid var(--line);border-radius:4px;padding:.5px 4px;font-size:12.5px}
+    .md blockquote{margin:6px 0;padding:2px 0 2px 11px;border-left:3px solid var(--line2);color:var(--muted)}
+    .md hr{border:0;border-top:1px solid var(--line);margin:10px 0}
+    .md table{border-collapse:collapse;margin:8px 0;font-size:12.5px;display:block;overflow-x:auto;max-width:100%}
+    .md th,.md td{border:1px solid var(--line2);padding:4px 9px;text-align:left;vertical-align:top}
+    .md thead th{background:#ffffff0d;font-weight:650}
 
     form{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg2);border-top:1px solid var(--line)}
     .prompt{color:var(--accent);font-weight:700}
@@ -62,6 +78,24 @@
       outline:none;cursor:pointer;font:600 11.5px var(--mono);text-overflow:ellipsis}
     .modelpick:hover{color:var(--text);background:#ffffff0d}
     .modelpick:focus{border-color:var(--accent2);color:var(--text)}
+    /* The opened dropdown list: force a readable dark palette on the <option>s. Belt-and-suspenders with
+       color-scheme:dark above — Chromium on Windows honours these, so the list never falls back to white. */
+    .modelpick option,.fld select option{background:var(--panel);color:var(--text)}
+    .modelpick:disabled{opacity:.45;cursor:not-allowed}
+    /* 🌐 Web-mode toggle */
+    .webtog{flex:none;border:1px solid var(--line2);background:var(--field,#0a0e16);border-radius:7px;
+      padding:5px 9px;cursor:pointer;font-size:13px;line-height:1;filter:grayscale(1);opacity:.7}
+    .webtog:hover{opacity:1;background:#ffffff0d}
+    .webtog[aria-pressed="true"]{filter:none;opacity:1;border-color:var(--accent2);
+      background:color-mix(in srgb,var(--accent2) 22%,transparent);box-shadow:0 0 0 1px var(--accent2) inset}
+    /* Sources block under a web-grounded answer */
+    .sources{margin-top:9px;border-top:1px solid var(--line);padding-top:7px}
+    .sources .lab{display:block;color:var(--dim);font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px}
+    .sources ol{margin:0;padding-left:20px}
+    .sources li{margin:2px 0;font-size:12px}
+    .sources a{color:var(--accent2);text-decoration:none}
+    .sources a:hover{text-decoration:underline}
+    .searching{color:var(--muted);font-style:italic}
 
     .settings{position:absolute;top:46px;right:12px;width:300px;max-width:calc(100vw - 24px);background:var(--panel);
       border:1px solid var(--line2);border-radius:10px;padding:13px;box-shadow:0 14px 40px #00000088;display:none;z-index:5}
@@ -121,6 +155,7 @@
   <form id="f">
     <span class="prompt">›</span>
     <input id="q" autocomplete="off" autofocus data-i18n-attr="placeholder:input_ph" placeholder="Scrivi al modello…">
+    <button id="web" type="button" class="webtog" aria-pressed="false" data-i18n-attr="title:web_toggle_title" title="Web: risposte aggiornate con fonti (Groq compound)">🌐</button>
     <select id="model" class="modelpick" data-i18n-attr="title:model_pick_title" title="Modello della pipeline — solo AI Chat"></select>
     <button class="send" id="send" type="submit" data-i18n="send">Invia</button>
   </form>
@@ -147,7 +182,11 @@
       key:   get('groq.key', ''),
       base:  get('groq.base', DEFAULT_BASE).replace(/\/+$/, ''),
       model: get('groq.model', DEFAULT_MODEL),
+      web:   get('groq.web', '0') === '1',   // 🌐 Web mode: route the turn to Groq's agentic "compound" system (built-in web search) for current, cited answers
     };
+    // Groq's agentic system with built-in web search + code execution. Only on api.groq.com. We call it
+    // NON-streamed so executed_tools[].search_results come back whole -> clean "Sources". docs: agentic-tooling.
+    const WEB_MODEL = 'groq/compound';
     let messages = [];   // running conversation [{role, content}] — model-only, no system tricks
     let busy = false;
 
@@ -156,6 +195,48 @@
     const esc = s => (s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
     // Minimal, safe rendering: escape everything, then lift ```fenced``` blocks into <pre>.
+    // --- Minimal, SAFE Markdown renderer ----------------------------------------------------------
+    // No external lib (served by a low-heap device): a compact block+inline pass. Everything is
+    // HTML-escaped FIRST, so model output can never inject markup. Handles headings, bold/italic,
+    // inline code, links, tables, blockquotes, lists, hr — plus the fenced code blocks (handled in
+    // render() so a ``` block is kept verbatim, never markdown-parsed).
+    const mdEsc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    function mdInline(s) {
+      return mdEsc(s)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+        .replace(/(^|[^\w])_([^_\n]+)_(?=[^\w]|$)/g, '$1<em>$2</em>')
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>');
+    }
+    function mdBlocks(src) {
+      const lines = String(src).replace(/\r/g, '').split('\n');
+      let html = '', i = 0, para = [];
+      const flush = () => { if (para.length) html += '<p>' + para.map(mdInline).join('<br>') + '</p>'; para = []; };
+      while (i < lines.length) {
+        const ln = lines[i];
+        // table: header row + |---| separator
+        if (/^\s*\|.*\|\s*$/.test(ln) && i + 1 < lines.length && /-/.test(lines[i + 1]) && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1])) {
+          flush();
+          const cells = (r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+          const head = cells(ln); i += 2; const rows = [];
+          while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(cells(lines[i])); i++; }
+          html += '<table><thead><tr>' + head.map((h) => '<th>' + mdInline(h) + '</th>').join('') + '</tr></thead><tbody>'
+                + rows.map((r) => '<tr>' + r.map((c) => '<td>' + mdInline(c) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+          continue;
+        }
+        let m;
+        if ((m = /^(#{1,6})\s+(.*)$/.exec(ln))) { flush(); html += `<h${m[1].length}>${mdInline(m[2])}</h${m[1].length}>`; i++; continue; }
+        if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(ln)) { flush(); html += '<hr>'; i++; continue; }
+        if (/^\s*>\s?/.test(ln)) { flush(); const q = []; while (i < lines.length && /^\s*>\s?/.test(lines[i])) { q.push(lines[i].replace(/^\s*>\s?/, '')); i++; } html += '<blockquote>' + q.map(mdInline).join('<br>') + '</blockquote>'; continue; }
+        if (/^\s*[-*+]\s+/.test(ln)) { flush(); const it = []; while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) { it.push(lines[i].replace(/^\s*[-*+]\s+/, '')); i++; } html += '<ul>' + it.map((x) => '<li>' + mdInline(x) + '</li>').join('') + '</ul>'; continue; }
+        if (/^\s*\d+\.\s+/.test(ln)) { flush(); const it = []; while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) { it.push(lines[i].replace(/^\s*\d+\.\s+/, '')); i++; } html += '<ol>' + it.map((x) => '<li>' + mdInline(x) + '</li>').join('') + '</ol>'; continue; }
+        if (/^\s*$/.test(ln)) { flush(); i++; continue; }
+        para.push(ln); i++;
+      }
+      flush();
+      return html;
+    }
     function render(el, text) {
       const parts = String(text).split(/```/);
       el.innerHTML = '';
@@ -165,15 +246,18 @@
           pre.textContent = p.replace(/^[a-z0-9+#.-]*\n/i, '');   // drop a leading language tag line
           el.appendChild(pre);
         } else if (p) {
-          el.appendChild(document.createTextNode(p));
+          const blk = document.createElement('div'); blk.className = 'md';
+          blk.innerHTML = mdBlocks(p);
+          el.appendChild(blk);
         }
       });
     }
 
     function setStatus() {
-      $('sub').textContent = S.model + (S.key ? '' : ' · ' + t('set_key_hint'));
+      const label = S.web ? '🌐 ' + t('web_on') : S.model;
+      $('sub').textContent = label + (S.key ? '' : ' · ' + t('set_key_hint'));
       dot.className = 'dot' + (S.key ? ' ok' : ' err');
-      document.title = 'AI Chat · ' + S.model;
+      document.title = 'AI Chat · ' + label;
     }
 
     function row(kind, who) {
@@ -195,12 +279,16 @@
       if (!S.key) addSys(t('set_key_to_start'));
     }
 
-    // ---- Groq calls (via the device's same-origin /api/llm proxy) ------------
-    // The web app is served BY the device/simulator, so routing through /api/llm sidesteps the
-    // browser's CORS wall entirely (the same trick /api/proxy uses for the Browser app). The
-    // proxy forwards our Authorization header + body to `url` and streams the response back.
+    // ---- Groq calls (BROWSER-DIRECT for CORS hosts, else device proxy) -------
+    // Mirrors the shell/ai.js canon: providers that serve CORS (Groq/xAI/Anthropic) are called STRAIGHT
+    // from the browser — the no-PSRAM device never opens an mbedTLS socket (~16-40 KB contiguous heap),
+    // which is what was resetting mid-stream here (httpd errno 113 / ERR_CONNECTION_RESET). CORS-less
+    // hosts (Gemini, OpenAI) still need the same-origin /api/llm proxy, so a custom endpoint keeps
+    // working. The API key lives only in localStorage either way, so the proxy added zero security.
+    const CORS_DIRECT = /(?:\bgroq\.com|\bx\.ai|\banthropic\.com)(?:[:/]|$)/i;
     function authHeaders() { return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.key }; }
-    const LLM = (apiPath) => '/api/llm?url=' + encodeURIComponent(S.base + apiPath);
+    const LLM = (apiPath) => CORS_DIRECT.test(S.base) ? S.base + apiPath
+                                                      : '/api/llm?url=' + encodeURIComponent(S.base + apiPath);
 
     async function fetchModels() {
       const sel = $('model');
@@ -258,6 +346,50 @@
       return full;
     }
 
+    // Append a compact "Sources" list (deduped by URL) under a web-grounded answer.
+    function appendSources(bodyEl, sources) {
+      if (!sources.length) return;
+      const wrap = document.createElement('div'); wrap.className = 'sources';
+      const lab = document.createElement('span'); lab.className = 'lab'; lab.textContent = t('sources_label'); wrap.appendChild(lab);
+      const ol = document.createElement('ol');
+      for (const s of sources) {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = s.url; a.target = '_blank'; a.rel = 'noreferrer noopener';
+        a.textContent = s.title || s.url;          // textContent -> the model-supplied title can't inject markup
+        li.appendChild(a); ol.appendChild(li);
+      }
+      wrap.appendChild(ol); bodyEl.appendChild(wrap);
+    }
+
+    // 🌐 Web mode: one NON-streamed call to Groq's compound system. It autonomously web-searches, so we
+    // get the answer + executed_tools[].search_results back whole -> render markdown + a clean Sources list.
+    // A firm system prompt keeps it from dumping its search tables / code traces (the raw compound style).
+    async function compoundChat(bodyEl) {
+      const wait = document.createElement('span'); wait.className = 'searching'; wait.textContent = t('web_searching'); bodyEl.appendChild(wait);
+      const sys = { role: 'system', content:
+        'You are a concise web research assistant. Search the web as needed and answer DIRECTLY in the user\'s language. '
+        + 'Use Markdown. Cite sources inline as [1], [2]… matching the order of the Sources list the UI appends. '
+        + 'Do NOT narrate your process, do NOT print your search results as a table, and do NOT show code or its output unless explicitly asked. Keep it tight.' };
+      const resp = await fetch(LLM('/chat/completions'), {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ model: WEB_MODEL, messages: [sys, ...messages], stream: false, temperature: 0.3 }),
+      });
+      if (!resp.ok) { let d = ''; try { d = (await resp.text()).slice(0, 300); } catch {} wait.remove(); throw new Error('HTTP ' + resp.status + (d ? ' · ' + d : '')); }
+      const j = await resp.json();
+      const msg = j.choices?.[0]?.message || {};
+      const full = msg.content || '';
+      const seen = new Set(), sources = [];
+      for (const tool of (msg.executed_tools || [])) {
+        const rs = tool.search_results && tool.search_results.results;
+        if (Array.isArray(rs)) for (const r of rs) { if (r && r.url && !seen.has(r.url)) { seen.add(r.url); sources.push({ title: r.title, url: r.url }); } }
+      }
+      wait.remove();
+      render(bodyEl, full);
+      appendSources(bodyEl, sources);
+      return full;
+    }
+
     async function ask(text) {
       text = text.trim();
       if (!text || busy) return;
@@ -269,10 +401,10 @@
       const body = row('bot', '◆');
       const t0 = performance.now();
       try {
-        const full = await streamChat(body);
+        const full = S.web ? await compoundChat(body) : await streamChat(body);
         messages.push({ role: 'assistant', content: full });
         const m = document.createElement('span'); m.className = 'meta';
-        m.textContent = `${S.model} · ${Math.round(performance.now() - t0)} ms`;
+        m.textContent = `${S.web ? WEB_MODEL + ' · 🌐' : S.model} · ${Math.round(performance.now() - t0)} ms`;
         body.appendChild(m);
       } catch (e) {
         body.parentElement.remove();
@@ -303,6 +435,10 @@
     // The inline picker pins the single model the pipeline talks to. `groq.model` is private to AI
     // Chat (no other app reads it), so switching here changes ONLY this chat — never the OS/ANIMA.
     $('model').addEventListener('change', () => { S.model = $('model').value; set('groq.model', S.model); setStatus(); });
+    // 🌐 Web mode: forces the turn through Groq's compound (web-grounded) — the model picker is moot then, so dim it.
+    const webBtn = $('web');
+    function reflectWeb() { webBtn.setAttribute('aria-pressed', S.web ? 'true' : 'false'); $('model').disabled = S.web; setStatus(); }
+    webBtn.addEventListener('click', () => { S.web = !S.web; set('groq.web', S.web ? '1' : '0'); reflectWeb(); if (S.web) addSys(t('web_mode_hint')); input.focus(); });
     $('refresh').addEventListener('click', () => fetchModels());
     $('clear').addEventListener('click', () => { messages = []; panel.classList.remove('open'); hello(); input.focus(); });
     $('forget').addEventListener('click', () => { S.key = ''; del('groq.key'); $('key').value = ''; setStatus(); panel.classList.remove('open'); addSys(t('key_forgotten')); });
@@ -323,7 +459,7 @@
       el.textContent = t('teach_inactive_pure');
     }
 
-    setStatus(); hello(); fetchModels(); teachStatus(); input.focus();
+    reflectWeb(); hello(); fetchModels(); teachStatus(); input.focus();
   </script>
 </body>
 </html>

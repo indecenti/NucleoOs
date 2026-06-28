@@ -40,8 +40,8 @@ FW_BIN = os.path.join(FIRMWARE, "build", "nucleoos.bin")
 IDF_EXPORT = r"C:\esp\esp-idf\export.ps1"
 SETTINGS = os.path.join(TOOLS_DIR, ".flasher.json")
 
-# Dimensione partizione app (factory) da partitions.csv: 0x180000 = 1.5 MB.
-APP_PART_SIZE = 0x180000
+# Dimensione slot app OTA (ota_0/ota_1) da partitions.csv: 0x380000 = 3.5 MB.
+APP_PART_SIZE = 0x380000
 
 # Indizi nelle descrizioni porta che suggeriscono un ESP collegato.
 ESP_HINTS = ("usb", "serial", "cp210", "ch340", "ch910", "jtag", "uart", "esp")
@@ -412,7 +412,7 @@ class FlasherApp:
             import time
             mtime = time.strftime("%d/%m %H:%M", time.localtime(os.path.getmtime(FW_BIN)))
             warn = "  ⚠ OLTRE LA PARTIZIONE!" if size > APP_PART_SIZE else ""
-            self.fw_var.set(f"nucleoos.bin: {human(size)} — {pct:.0f}% di 1.5 MB (build {mtime}){warn}")
+            self.fw_var.set(f"nucleoos.bin: {human(size)} — {pct:.0f}% di 3.5 MB (build {mtime}){warn}")
         else:
             self.fw_var.set("nucleoos.bin: non ancora compilato")
 

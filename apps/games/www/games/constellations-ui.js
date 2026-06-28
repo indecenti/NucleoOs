@@ -93,6 +93,10 @@ const CSS = `
 .cz-fx.ignite{animation:fxign .8s ease-out}@keyframes fxign{0%{opacity:1;background:radial-gradient(circle at 50% 50%,rgba(255,190,64,.28),transparent 55%)}100%{opacity:0}}
 .cz-fx.sector{animation:fxsec 1.5s ease-out}@keyframes fxsec{0%{opacity:1;background:radial-gradient(circle,rgba(96,206,232,.42),transparent 62%)}45%{opacity:.55}100%{opacity:0}}
 .cz-fx.shake{animation:fxbad .26s ease-out}@keyframes fxbad{0%{opacity:1;box-shadow:inset 0 0 90px 14px rgba(255,92,80,.5)}100%{opacity:0}}
+.cz-danger{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:1}
+.cz-danger.on{animation:czdanger 1.05s ease-in-out infinite}
+@keyframes czdanger{0%,100%{opacity:0;box-shadow:inset 0 0 100px 16px rgba(255,46,46,0)}50%{opacity:1;box-shadow:inset 0 0 120px 30px rgba(255,46,46,.4)}}
+@keyframes killpop{0%{transform:translateX(0) scale(1)}28%{transform:scale(1.35);color:#fff;text-shadow:0 0 16px #fff}100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){[data-cz] *{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 `;
 
@@ -110,6 +114,7 @@ export function makeUI(canvas) {
     </div>
     <div data-cmb class="cz-cmb" style="display:none">
       <div class="cz-crt"></div>
+      <div class="cz-danger" data-danger></div>
       <div class="cz-frame"><i></i><i></i><i></i><i></i></div>
       <div class="cz-wave" data-wave></div>
       <div class="cz-kills">ABBATTUTI <b data-ki>0</b></div>
@@ -172,7 +177,10 @@ export function makeUI(canvas) {
     $('[data-segsh] i').style.width = shp + '%';
     $('[data-seghu] i').style.width = hhp + '%';
     $('.cz-gauge.hu').classList.toggle('low', hhp < 30);
-    $('[data-ki]').textContent = st.kills;
+    $('[data-danger]').classList.toggle('on', hhp < 30 && st.hull > 0);   // critical-hull screen vignette
+    const ki = $('[data-ki]');                                           // kill counter: punch the chip up on each new kill
+    if (ki._k !== st.kills) { if (ki._k != null && st.kills > ki._k) { const p = ki.parentElement; p.style.animation = 'none'; void p.offsetWidth; p.style.animation = 'killpop .42s ease-out'; } ki._k = st.kills; }
+    ki.textContent = st.kills;
     const tg = $('[data-tgt]'), on = st.lock >= 0; tg.textContent = on ? '● BERSAGLIO AGGANCIATO' : '○ SCANSIONE…'; tg.classList.toggle('lock', on);
     const mn = st.missiles != null ? st.missiles : 0; let mh = ''; for (let i = 0; i < 5; i++) mh += i < mn ? '◆' : '◇'; $('[data-miss]').textContent = mh;
     const wv = $('[data-wave]'), total = (st.cc && st.cc.waves) || st.wave || 0;

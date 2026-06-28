@@ -37,6 +37,7 @@ extern "C" {
 #include "cJSON.h"
 }
 #include "app_gfx.h"
+#include "nucleo_i18n.h"        // TR(it,en): UI labels follow the system language
 
 // ---- Design tokens (RGB565) — tuned for legibility on the dark panel, aligned with Radio ----
 #define BG    0x0841 // base background (void blue)
@@ -392,7 +393,7 @@ static void play_q(int pos)
         snprintf(st->playpath, sizeof st->playpath, "%s", abs);
         if (s_vol_default > 0) nucleo_audio_set_volume(s_vol_default);
     } else {
-        nucleo_app_set_hint("Riproduzione non riuscita");
+        nucleo_app_set_hint(TR("Riproduzione non riuscita", "Playback failed"));
     }
 }
 
@@ -493,9 +494,9 @@ static void draw_row(int i, int y, int h, bool focus, const char *base)
         if (fav) { heart_x = 230 - mw - 11; icon_heart(230 - mw - 10, y + (h-8)/2, RED); }
 
         int nx = 24, navail = (heart_x - 6) - nx; if (navail < 6) navail = 6;
-        int maxc = navail / 6; if (maxc < 1) maxc = 1; if (maxc > 36) maxc = 36;
-        char nb[40]; snprintf(nb, sizeof nb, "%.*s", maxc, bn);
-        d.setTextSize(1); d.setTextColor(namec, BG); d.setCursor(nx, y + (h-8)/2); d.print(nb);
+        int maxc = navail / 12; if (maxc < 1) maxc = 1; if (maxc > 18) maxc = 18;
+        char nb[20]; snprintf(nb, sizeof nb, "%.*s", maxc, bn);
+        d.setTextSize(2); d.setTextColor(namec, BG); d.setCursor(nx, y + (h-16)/2); d.print(nb);
     }
 }
 
@@ -519,15 +520,15 @@ static void draw_list(int y0, int region_h, const char *base)
 {
     if (s_sel < s_scroll) s_scroll = s_sel;
     int scan_y = 0;
-    for (int i = s_scroll; i <= s_sel; i++) scan_y += (i == s_sel) ? 28 : 15;
+    for (int i = s_scroll; i <= s_sel; i++) scan_y += (i == s_sel) ? 28 : 20;
     while (scan_y > region_h && s_scroll < s_sel) {
-        scan_y -= (s_scroll == s_sel) ? 28 : 15;
+        scan_y -= (s_scroll == s_sel) ? 28 : 20;
         s_scroll++;
     }
 
     int y = y0;
     for (int i = s_scroll; i < s_n && y < y0 + region_h; i++) {
-        int h = (i == s_sel) ? 28 : 15;
+        int h = (i == s_sel) ? 28 : 20;
         if (y + h > y0 + region_h && i != s_scroll) break;
         draw_row(i, y, h, i == s_sel, base);
         y += h;
@@ -1010,6 +1011,40 @@ static void build_queue(int sel_entry_idx)
     if (s_shuffle) st->qidx = 0;
 }
 
+// Play a file chosen in Files ("open with"). It can live in ANY folder (not only under MUSIC_DIR),
+// so we build the queue straight from the file's OWN directory: every audio sibling joins the queue
+// (so next/prev still work), positioned on the clicked track. Falls back to a single-track queue.
+static void play_external(const char *abs)
+{
+    if (!st || !abs || !abs[0]) return;
+    const char *slash = strrchr(abs, '/');
+    if (!slash) return;
+    int dlen = (int)(slash - abs) + 1;                       // keep the trailing '/'
+    if (dlen <= 0 || dlen >= (int)sizeof st->qdir) return;
+    memcpy(st->qdir, abs, dlen); st->qdir[dlen] = 0;
+    const char *fname = slash + 1;
+    st->qn = 0; int qi = 0;
+    DIR *dir = opendir(st->qdir);
+    if (dir) {
+        struct dirent *e;
+        while ((e = readdir(dir)) != NULL && st->qn < MAXQ) {
+            if (e->d_name[0] == '.' || !is_audio(e->d_name)) continue;
+            if (!strcmp(e->d_name, fname)) qi = st->qn;
+            char *dst = st->q[st->qn++];
+            size_t k = 0; for (; k < 55 && e->d_name[k]; k++) dst[k] = e->d_name[k]; dst[k] = 0;
+        }
+        closedir(dir);
+    }
+    if (st->qn == 0) {                                       // dir unreadable: queue just the clicked file
+        char *dst = st->q[0]; size_t k = 0; for (; k < 55 && fname[k]; k++) dst[k] = fname[k]; dst[k] = 0;
+        st->qn = 1; qi = 0;
+    }
+    st->qidx = qi;
+    rebuild_shuffle();
+    if (s_shuffle) st->qidx = 0;
+    play_q(st->qidx);
+}
+
 static void on_key(int key, char ch)
 {
     if (!st) return;
@@ -1161,6 +1196,8 @@ static void enter(void)
     s_set_open = false; s_set_edit = false;
     s_strip_struct = -1; s_strip_el = -1; s_strip_pct = -1; s_groove_y = -1;
     s_hint_last = -1; update_hint();    // show the browser hint in the footer
+    const char *of = nucleo_app_take_open_file();
+    if (of && of[0]) { play_external(of); now_playing(); }   // opened from Files -> play that track + jump to Now Playing
 }
 static void leave(void)
 {

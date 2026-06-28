@@ -83,7 +83,8 @@ export async function convertFile(file, opts = {}, onStage = () => {}) {
     let mp3 = null;
     stageLabel = t('stage_audio'); stageBase = 0; stageSpan = 30;
     try {
-      await ff.exec(['-i', inName, '-vn', '-ac', '1', '-ar', String(prof.ar), '-c:a', 'libmp3lame', '-b:a', prof.ab, 'a.mp3']);
+      // -map_metadata -1 + -id3v2_version 0: bare MP3, no ID3 tag, so the player's CBR byte-map seek is exact.
+      await ff.exec(['-i', inName, '-vn', '-ac', '1', '-ar', String(prof.ar), '-c:a', 'libmp3lame', '-b:a', prof.ab, '-map_metadata', '-1', '-id3v2_version', '0', 'a.mp3']);
       const d = await ff.readFile('a.mp3');
       if (d && d.length > 0) mp3 = new Blob([d], { type: 'audio/mpeg' });
     } catch { /* no audio stream — fine */ }

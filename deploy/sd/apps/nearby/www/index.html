@@ -86,6 +86,12 @@ let target = 0;
 let dir = '/data';
 let entries = [];
 let selFile = null;
+// Visibility gate: pause the poll bursts entirely while the window is hidden / the OS lost focus, and
+// slow the steady cadence (900 ms was firing 3 device fetches per second per open window — pure noise
+// when nothing is happening). Mirrors system-monitor's pattern. The discover button still does its own
+// fresh loadPeers(), and on return we refresh once so the UI is fresh without a 2.5 s stale gap.
+let osVisible = true;
+const visible = () => document.visibilityState === 'visible' && osVisible;
 
 const api = async (p, opts) => {
   try { const r = await fetch(p, opts); return await r.json(); } catch (e) { return { ok: false, err: String(e) }; }
@@ -254,8 +260,10 @@ for (const b of $('#proto').children) b.onclick = () => setProto(b.dataset.p);
 await post('/api/link/listen', { proto });
 await loadPeers();
 render();
-setInterval(() => { refreshStatus(); if (tab === 'recv') refreshOffer(); if (tab === 'cmd') refreshCmd(); }, 900);
-setInterval(loadPeers, 4000);
+setInterval(() => { if (!visible()) return; refreshStatus(); if (tab === 'recv') refreshOffer(); if (tab === 'cmd') refreshCmd(); }, 2500);
+setInterval(() => { if (!visible()) return; loadPeers(); }, 5000);
+window.addEventListener('message', (e) => { const ev = e.data; if (ev && ev.t === 'os-visibility') { osVisible = !!(ev.d && ev.d.visible); if (osVisible) { refreshStatus(); loadPeers(); } } });
+document.addEventListener('visibilitychange', () => { if (visible()) { refreshStatus(); loadPeers(); } });
 </script>
 </body>
 </html>

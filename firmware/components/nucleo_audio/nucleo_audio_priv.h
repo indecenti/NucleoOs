@@ -39,6 +39,12 @@ void nucleo_audio_add_samples(uint32_t frames, int rate);  // output frames, for
 // re-based the elapsed clock. The decode loop must fseek there and flush its input buffer.
 bool nucleo_audio_poll_seek(long *byte_off);
 
+// WDT-safe absolute file positioning. FATFS here is built WITHOUT fast-seek, so fseek(SEEK_SET) to a
+// far offset walks the cluster chain O(distance) in one uninterruptible blocking call — a multi-second
+// freeze on a multi-MB MP3 that trips the watchdog and reboots (the resume-reboot). Hop forward in
+// bounded steps, petting the WDT between hops. Mirrors the video player's seek_far.
+void nucleo_audio_seek_far(FILE *f, long off);
+
 // Decode an MP3 stream (already-open file) to the speaker. Implemented in
 // nucleo_audio_mp3.c so the Helix dependency stays isolated.
 void nucleo_audio_play_mp3(FILE *f);

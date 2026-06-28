@@ -17,6 +17,8 @@
 // WebSocket layer), so this app POLLS nucleo_voice's introspection API from on_tick.
 #include "nucleo_app.h"
 #include "app_ui.h"
+#include "nucleo_exclusive.h"   // free RAM on enter so the recognizer's heap gate can pass
+#include "nucleo_i18n.h"        // TR(it,en): UI labels follow the system language
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -51,9 +53,18 @@ static const unsigned short
 #define W 240
 
 // Confidence tiers (mirror apps/voice-manager/www/app.js classify()).
-static const char * const TIER_NAME[5] = { "non provato", "Debole", "Discreto", "Buono", "Ottimo" };
 static const unsigned short TIER_COL[5] = { MUTED, C_DEB, C_DIS, C_BUO, C_OTT };
 static const int           TIER_PCT[5]  = { 0, 25, 48, 72, 92 };
+static const char *tier_name(int t)
+{
+    switch (t) {
+        case 0:  return TR("non provato", "untested");
+        case 1:  return TR("Debole",   "Weak");
+        case 2:  return TR("Discreto", "Fair");
+        case 3:  return TR("Buono",    "Good");
+        default: return TR("Ottimo",   "Great");
+    }
+}
 
 typedef struct { int tier; int pct; unsigned short col; } conf_t;
 
@@ -116,8 +127,11 @@ static void on_tab(void)
 
 static void enter(void)
 {
+    // Free ~64 KB (httpd + L1 + mDNS) yet keep the voice engine: the recognizer needs ~38 KB on PTT,
+    // which the loaded heap can't spare — without this the PTT heap gate silently refuses every press.
+    nucleo_exclusive_enter(NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY, nullptr);
     nucleo_app_set_tab_handler(on_tab);
-    nucleo_app_set_hint("TAB schede  GO+parla per provare");
+    nucleo_app_set_hint(TR("TAB schede  GO+parla per provare", "TAB tabs  GO+speak to test"));
     s_tab = 0; s_sel = 0; s_recog = 0; s_have_m = s_have_r = false;
     nucleo_voice_request(true);       // keep the lazy engine up while we test
     nucleo_voice_set_test_mode(true); // recognize but DON'T act (no launches/TTS)
@@ -131,6 +145,7 @@ static void exit_app(void)
 {
     nucleo_voice_set_test_mode(false);
     nucleo_voice_request(false);
+    if (nucleo_exclusive_active()) nucleo_exclusive_exit();   // bring httpd / L1 / mDNS back (guarded, like app_anima)
 }
 
 static void tick(void)
@@ -169,7 +184,7 @@ static void on_key(int key, char ch)
 // ── Draw ──────────────────────────────────────────────────────────────────────
 static void draw_tabs(int top_y)
 {
-    static const char *LBL[] = { "PROVA", "DIAGNOSI" };
+    const char *LBL[2] = { TR("PROVA", "TEST"), TR("DIAGNOSI", "DIAGNOSE") };
     int tw = 240 / 2;
     for (int i = 0; i < 2; i++) {
         bool active = (i == s_tab);
@@ -196,13 +211,14 @@ static void draw_prova(int top_y)
 
     if (!s_have_m) {
         d.fillRoundRect(8, y, W - 16, 74, 8, PANEL);
-        d.setTextSize(2); d.setTextColor(ACC, PANEL); d.setCursor(16, y + 10); d.print("Tieni GO");
-        d.setTextColor(FG, PANEL); d.setCursor(16, y + 30); d.print("e parla");
+        d.setTextSize(2); d.setTextColor(ACC, PANEL); d.setCursor(16, y + 10); d.print(TR("Tieni GO", "Hold GO"));
+        d.setTextColor(FG, PANEL); d.setCursor(16, y + 30); d.print(TR("e parla", "and speak"));
         d.setTextSize(1); d.setTextColor(MUTED, PANEL); d.setCursor(16, y + 54);
-        d.print("Modo prova: riconosce ma NON agisce.");
+        d.print(TR("Modo prova: riconosce ma NON agisce.", "Test mode: recognizes but does NOT act."));
         // Footer hint.
         d.setTextColor(DIM, BG); d.setCursor(16, top_y + nucleo_app_content_height() - 14);
-        d.print(s_tpl_count > 0 ? "Pronuncia un comando addestrato." : "Nessun comando: usa Voice Trainer.");
+        d.print(s_tpl_count > 0 ? TR("Pronuncia un comando addestrato.", "Say a trained command.")
+                                : TR("Nessun comando: usa Voice Trainer.", "No command: use Voice Trainer."));
         return;
     }
 
@@ -214,7 +230,7 @@ static void draw_prova(int top_y)
     char w[20]; snprintf(w, sizeof(w), "%.16s", s_m.word);
     d.setCursor(14, y + 6); d.print(w);
     // verdict label, right-aligned
-    const char *vl = TIER_NAME[c.tier];
+    const char *vl = tier_name(c.tier);
     int vw = (int)strlen(vl) * 6 + 10;
     d.fillRoundRect(W - 8 - vw, y + 6, vw, 14, 6, c.col);
     d.setTextSize(1); d.setTextColor(BG, c.col); d.setCursor(W - 8 - vw + 5, y + 9); d.print(vl);
@@ -224,10 +240,10 @@ static void draw_prova(int top_y)
     int ry = y + 54;
     d.setTextSize(1);
     if (s_have_r) {
-        const char *verb = "Risposta";
-        if (s_r.action == ANIMA_ACT_LAUNCH)      verb = "Avvierebbe";
-        else if (s_r.action == ANIMA_ACT_SYSTEM) verb = "Stato";
-        else if (!s_r.matched)                   verb = "Nessun comando";
+        const char *verb = TR("Risposta", "Answer");
+        if (s_r.action == ANIMA_ACT_LAUNCH)      verb = TR("Avvierebbe", "Would launch");
+        else if (s_r.action == ANIMA_ACT_SYSTEM) verb = TR("Stato", "Status");
+        else if (!s_r.matched)                   verb = TR("Nessun comando", "No command");
         d.setTextColor(ACC, BG); d.setCursor(12, ry); d.print(verb);
         d.setTextColor(FG, BG);  d.setCursor(12, ry + 12);
         char rb[34]; snprintf(rb, sizeof(rb), "%.32s", s_r.matched ? s_r.reply : "—");
@@ -245,7 +261,7 @@ static void draw_prova(int top_y)
 
 // DIAGNOSI list providers.
 static const char *dg_label(int i, void *) { return s_tpl_names[i]; }
-static const char *dg_right(int i, void *) { return TIER_NAME[s_diag_tier[i]]; }
+static const char *dg_right(int i, void *) { return tier_name(s_diag_tier[i]); }
 static unsigned short dg_color(int i, void *) { return TIER_COL[s_diag_tier[i]]; }
 
 static void draw_diagnosi(int top_y)
@@ -256,8 +272,8 @@ static void draw_diagnosi(int top_y)
 
     if (s_tpl_count == 0) {
         d.setTextSize(1); d.setTextColor(DIM, BG);
-        d.setCursor(12, y0 + 14); d.print("Nessun comando addestrato.");
-        d.setCursor(12, y0 + 30); d.print("Aprire Voice Trainer per crearne.");
+        d.setCursor(12, y0 + 14); d.print(TR("Nessun comando addestrato.", "No trained command."));
+        d.setCursor(12, y0 + 30); d.print(TR("Apri Voice Trainer per crearne.", "Open Voice Trainer to create one."));
         return;
     }
     app_ui_list(y0, h, s_tpl_count, s_sel, dg_label, dg_right, dg_color, nullptr);
@@ -266,7 +282,7 @@ static void draw_diagnosi(int top_y)
     int fy = top_y + nucleo_app_content_height() - 14;
     d.fillRect(0, fy, W, 14, BG); d.drawFastHLine(0, fy, W, LINE);
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, fy + 3);
-    d.print("Prova ogni comando; rosso = ridi'");
+    d.print(TR("Prova ogni comando; rosso = riaddestra", "Test each command; red = retrain"));
 }
 
 static void draw(void)
@@ -281,8 +297,8 @@ static void draw(void)
 extern "C" void nucleo_register_voicelab(void)
 {
     static const nucleo_app_def_t app = {
-        "voicelab", "Voce", "Voice",
-        "Prova e diagnosi del riconoscimento vocale",
+        "voicelab", "Voice Lab", "Voice",
+        "Test and diagnose voice recognition",
         'P', ACC, enter, on_key, tick, draw, exit_app
     };
     nucleo_app_register(&app);

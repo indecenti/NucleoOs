@@ -218,6 +218,7 @@ static void acc_row(uint32_t id, int32_t *acc)
         for (uint32_t k = 0; k < s_D; k++) acc[k] += r[k];
         return;
     }
+    if (!s_enc) return;                         // encoder closed by unload and reopen failed -> clean miss, never fseek(NULL)
     if (s_ec_row) {
         uint32_t slot = id % (uint32_t)s_ec_slots;   // s_ec_slots>0 whenever s_ec_row!=NULL
         row = s_ec_row + (size_t)slot * s_D;
@@ -234,6 +235,16 @@ static void acc_row(uint32_t id, int32_t *acc)
     for (uint32_t k = 0; k < s_D; k++) acc[k] += row[k];
 }
 
+// Reopen the SD encoder if a prior unload closed it (we hand its FATFS per-file cache back to the heap
+// on every stand-down). Header fields (s_D/s_H/s_enc_off) persist in statics from init, so this is a
+// bare fopen — no header re-parse. No-op when flash-mapped (s_enc_map) or not yet initialized (s_D==0).
+static void ensure_encoder(void)
+{
+    if (s_enc || s_enc_map || s_D == 0) return;
+    s_enc = fopen(ENC_PATH, "rb");
+    if (!s_enc) ESP_LOGW(TAG, "encoder reopen failed (%s) — L1 query will miss this turn", ENC_PATH);
+}
+
 // Embed `text` with the device encoder -> int8 unit vector in qv[s_D]. Returns false on error.
 static bool l1_encode(const char *text, int8_t *qv)
 {
@@ -242,6 +253,7 @@ static bool l1_encode(const char *text, int8_t *qv)
     int nw = l1_words(text, w);
     if (nw == 0) return false;
 
+    ensure_encoder();                   // reopen the SD encoder if a prior unload freed its FATFS cache
     ec_cache_acquire();                 // re-grab the hot-row cache if a prior unload freed it
     int32_t acc[L1_MAXDIM]; memset(acc, 0, sizeof(int32_t) * s_D);
 
@@ -471,6 +483,10 @@ void nucleo_anima_l1_unload(void)
     free(s_cdir);      s_cdir = NULL;
     free(s_ec_row);    s_ec_row = NULL; s_ec_slots = 0;   // hand the hot-row cache back (re-acquired on next encode)
     if (s_idx) { fclose(s_idx); s_idx = NULL; }
+    // The SD encoder FILE* keeps a FATFS per-file cache (one sector) resident for as long as it stays
+    // open — pure idle RAM once a query finishes. Close it too so ANIMA holds NOTHING while you use the
+    // rest of the OS; l1_encode (ensure_encoder) reopens it on the next query. No-op when flash-mapped.
+    if (s_enc) { fclose(s_enc); s_enc = NULL; }
 #if NUCLEO_HEAPLOG
     size_t after = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
     ESP_LOGI(TAG, "unload: free %u->%u (+%u) largest=%u",
@@ -482,7 +498,7 @@ void nucleo_anima_l1_unload(void)
 // Bytes nucleo_anima_l1_unload() would hand back to the heap right now — the reclaim the online path
 // frees right before a TLS handshake. The web layer adds this to the current largest-free-block when
 // deciding whether going online is feasible, so a heap that looks tight ONLY because L1 is resident no
-// longer vetoes every online turn on this PSRAM-less chip. ~31 KB when loaded, 0 when already unloaded.
+// longer vetoes every online turn on this PSRAM-less chip. ~24 KB at a full hot-row cache (s_ec_slots*s_D up to 128*192) + ~0.7 KB directory; less when the cache fell back; 0 when already unloaded.
 size_t nucleo_anima_l1_heap_bytes(void)
 {
     return (s_cdir   ? (size_t)s_K * 2 * sizeof(uint32_t) : 0)   // tiny directory (centroids stream: 0 RAM)

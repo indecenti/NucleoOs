@@ -1,6 +1,7 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_NONE   // privacy: don't log the device's mDNS identity to the console
 #include "nucleo_discovery.h"
 #include "esp_log.h"
+#include "esp_app_desc.h"   // esp_app_get_description(): advertise the real firmware version in mDNS
 #include "mdns.h"
 #include <stdio.h>
 #include <string.h>
@@ -20,10 +21,15 @@ esp_err_t nucleo_discovery_start(const char *device_id)
     mdns_hostname_set(device_id);
     mdns_instance_name_set("NucleoOS");
 
-    // TXT records let a client identify the device before connecting.
+    // TXT records let a client identify the device before connecting. The version is the real
+    // running-image version from the app descriptor (= PROJECT_VER), copied into a static buffer
+    // so the TXT item points at storage that outlives this call.
+    static char s_ver[40];
+    const esp_app_desc_t *app = esp_app_get_description();
+    snprintf(s_ver, sizeof s_ver, "%s", app ? app->version : "?");
     mdns_txt_item_t txt[] = {
         { "os", "NucleoOS" },
-        { "ver", "0.1.0" },
+        { "ver", s_ver },
         { "api", "/api/status" },
     };
     err = mdns_service_add("NucleoOS", "_nucleoos", "_tcp", 80, txt, 3);

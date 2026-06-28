@@ -1,6 +1,8 @@
 #include "nucleo_recorder.h"
 #include "nucleo_auth.h"
 #include "nucleo_board.h"
+#include "nucleo_codec.h"   // board-aware mic HAL (PDM original / ES8311 ADC on ADV)
+#include "nucleo_storage.h" // SD free-space guard for long takes
 #include "nucleo_eventbus.h"
 #include <stdio.h>
 #include <string.h>
@@ -11,7 +13,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_timer.h"   // effective-rate measurement (ADV mic slow-audio diagnosis)
 #include "driver/i2s_pdm.h"
+#include "lwip/sockets.h"   // SO_SNDTIMEO on the stream socket: a vanished client can't pin the mic
 #include "cJSON.h"
 
 static const char *TAG = "recorder";
@@ -72,31 +76,9 @@ static void publish_rec(const char *topic, const char *extra_json)
 // 16-bit and enable it. On success *out holds the channel; on failure nothing leaks.
 // Shared by the SD recorder (record_task) and the live dictation stream (stream_get) —
 // the two are mutually exclusive, so a single helper is safe.
-static esp_err_t mic_open(i2s_chan_handle_t *out)
-{
-    i2s_chan_handle_t rx = NULL;
-    i2s_chan_config_t chan = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
-    esp_err_t err = i2s_new_channel(&chan, NULL, &rx);
-    if (err == ESP_OK) {
-        i2s_pdm_rx_config_t cfg = {
-            .clk_cfg = I2S_PDM_RX_CLK_DEFAULT_CONFIG(REC_RATE_HZ),
-            .slot_cfg = I2S_PDM_RX_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
-            .gpio_cfg = { .clk = NUCLEO_MIC_PIN_CLK, .din = NUCLEO_MIC_PIN_DATA, .invert_flags = { .clk_inv = false } },
-        };
-        err = i2s_channel_init_pdm_rx_mode(rx, &cfg);
-    }
-    if (err == ESP_OK) err = i2s_channel_enable(rx);
-    if (err != ESP_OK) { if (rx) i2s_del_channel(rx); return err; }
-    *out = rx;
-    return ESP_OK;
-}
-
-static void mic_close(i2s_chan_handle_t rx)
-{
-    if (!rx) return;
-    i2s_channel_disable(rx);
-    i2s_del_channel(rx);
-}
+// Board-aware mic HAL: PDM (original) or ES8311 standard-I2S ADC (ADV). See nucleo_codec.
+static esp_err_t mic_open(i2s_chan_handle_t *out) { return nucleo_codec_mic_open(REC_RATE_HZ, out); }
+static void mic_close(i2s_chan_handle_t rx)       { nucleo_codec_mic_close(rx); }
 
 static void record_task(void *arg)
 {
@@ -120,12 +102,29 @@ static void record_task(void *arg)
     write_wav_header(f, 0);                 // placeholder, patched at the end
     s_bytes = 0;
 
+    // SD-space guard for long (1-2 h) takes: capture free bytes at start; stop GRACEFULLY before the card
+    // fills (a failed fwrite would silently truncate/corrupt the WAV). 16 MB reserve keeps the FAT + the
+    // header patch safe. A 2 h take is ~230 MB, so this only ever fires on a near-full card.
+    const nucleo_storage_info_t *st0 = nucleo_storage_info();
+    uint64_t free0 = st0 ? st0->free_bytes : 0;
+    const uint64_t SD_RESERVE = 16ULL * 1024 * 1024;
+
     static int16_t buf[512];                // 1 KB DMA read chunk
     int meter_acc = 0, meter_n = 0;
+    int64_t rec_t0 = esp_timer_get_time();  // DIAG: measure the REAL capture rate (bytes/time) on the ADV
     while (atomic_load(&s_recording)) {
+        if (free0 && (uint64_t)s_bytes + SD_RESERVE >= free0) {   // card nearly full -> stop cleanly + notify
+            ESP_LOGW(TAG, "SD nearly full (wrote %u of ~%llu free) — stopping take", (unsigned)s_bytes, (unsigned long long)free0);
+            publish_rec("rec.lowspace", NULL);
+            atomic_store(&s_recording, false);
+            break;
+        }
         size_t got = 0;
-        esp_err_t rd = i2s_channel_read(s_rx, buf, sizeof(buf), &got, pdMS_TO_TICKS(200));
-        // i2s_channel_read returns ESP_ERR_TIMEOUT with a PARTIAL fill when it can't satisfy
+        // Read through the codec HAL, NOT i2s_channel_read directly: on the ADV it decimates the
+        // ES8311's native 48 kHz down to REC_RATE_HZ, so the WAV plays back at the right speed
+        // (a raw read there captured ~3x too slow). Pass-through on the original PDM mic.
+        esp_err_t rd = nucleo_codec_mic_read(s_rx, buf, sizeof(buf), &got, pdMS_TO_TICKS(200));
+        // it returns ESP_ERR_TIMEOUT with a PARTIAL fill when it can't satisfy
         // the whole request within the timeout — the `got` bytes are still valid audio. The
         // old code skipped on any non-ESP_OK and so discarded every partial read, recording
         // 0 bytes forever. Only a genuine zero-byte read (or a hard error) is worth skipping.
@@ -144,6 +143,11 @@ static void record_task(void *arg)
             char lv[32]; snprintf(lv, sizeof(lv), "\"level\":%d", s_level);
             publish_rec("rec.level", lv);
             meter_n = 0;
+            int64_t el = esp_timer_get_time() - rec_t0;   // DIAG: effective Hz = samples / wall-time
+            if (el > 200000)
+                ESP_LOGW(TAG, "[rec-rate] %lld samp / %lld ms = %d Hz (atteso %d)",
+                         (long long)(s_bytes / 2), (long long)(el / 1000),
+                         (int)((int64_t)(s_bytes / 2) * 1000000 / el), REC_RATE_HZ);
         }
     }
 
@@ -292,13 +296,25 @@ static void stream_worker(void *arg)
         httpd_resp_set_type(req, "application/octet-stream");
         httpd_resp_set_hdr(req, "Cache-Control", "no-store");
         httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+        // Bound the chunk send. If the client vanishes WITHOUT a TCP RST (laptop sleeps, Wi-Fi drops),
+        // httpd_resp_send_chunk() would otherwise block indefinitely — s_stream_stop is only checked at
+        // the loop top, so a wedged send pins s_streaming/s_owner past stream_abort()'s wait window. The
+        // mic then stays CLAIMED with no live client, and the native Recorder falsely reports "mic busy
+        // (web)". A 2 s send timeout guarantees the worker unwinds and releases the mic regardless.
+        int sfd = httpd_req_to_sockfd(req);
+        if (sfd >= 0) {
+            struct timeval tv = { .tv_sec = 2, .tv_usec = 0 };
+            setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+        }
         static int16_t buf[512];                 // 1 KB chunk = 32 ms of audio at 16 kHz
         uint32_t sent_ms = 0;
         ESP_LOGI(TAG, "dictation stream started");
         for (;;) {
             if (atomic_load(&s_stream_stop)) break;   // httpd is stopping: release the async req FIRST
             size_t got = 0;
-            esp_err_t rd = i2s_channel_read(rx, buf, sizeof(buf), &got, pdMS_TO_TICKS(200));
+            // Codec HAL read: decimates the ADV's 48 kHz ES8311 capture to REC_RATE_HZ so Vosk
+            // (which expects 16 kHz mono) gets correctly-paced audio. Pass-through on the PDM mic.
+            esp_err_t rd = nucleo_codec_mic_read(rx, buf, sizeof(buf), &got, pdMS_TO_TICKS(200));
             if (got == 0) {                      // partial-read timeout is normal; only log real errors
                 if (rd != ESP_OK && rd != ESP_ERR_TIMEOUT) ESP_LOGW(TAG, "stream i2s read: %s", esp_err_to_name(rd));
                 continue;
@@ -356,8 +372,24 @@ void nucleo_recorder_stream_abort(void)
 {
     if (!atomic_load(&s_streaming)) return;
     atomic_store(&s_stream_stop, true);
-    for (int i = 0; i < 75 && atomic_load(&s_streaming); i++) vTaskDelay(pdMS_TO_TICKS(20));   // <= 1.5 s
+    // Budget covers the worst case: a chunk send wedged on a dead socket unblocks after the 2 s
+    // SO_SNDTIMEO, then mic_close + async-complete. 3.5 s leaves margin so s_streaming is reliably
+    // false (the async request fully released) before httpd_stop() proceeds.
+    for (int i = 0; i < 175 && atomic_load(&s_streaming); i++) vTaskDelay(pdMS_TO_TICKS(20));   // <= 3.5 s
     if (atomic_load(&s_streaming)) ESP_LOGW(TAG, "stream worker did not wind down in time");
+}
+
+// Who holds the mic right now (s_owner is the single gate; values match nucleo_mic_owner_t).
+nucleo_mic_owner_t nucleo_recorder_owner(void) { return (nucleo_mic_owner_t)atomic_load(&s_owner); }
+
+// Non-blocking preempt for the on-device operator. Only a web dictation stream is preemptible; a
+// finalizing record-to-SD take is the device's own and is left to complete.
+bool nucleo_recorder_release_stream(void)
+{
+    int o = atomic_load(&s_owner);
+    if (o == MIC_IDLE) return true;
+    if (o == MIC_STREAM) atomic_store(&s_stream_stop, true);   // worker winds down; SO_SNDTIMEO bounds it
+    return false;
 }
 
 esp_err_t nucleo_recorder_register(httpd_handle_t server)

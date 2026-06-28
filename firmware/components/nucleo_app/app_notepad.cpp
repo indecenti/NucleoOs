@@ -25,12 +25,13 @@ static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x44
 #define MAXBUF 2048
 
 enum { M_LIST, M_VIEW, M_EDIT };
-static char s_names[48][56];
+static char (*s_names)[56] = nullptr;   // [48][56], heap-allocated on enter() (zero RAM when closed)
 static int s_n, s_sel, s_mode, s_vscroll;
 static bool s_dirty;
-static char s_buf[MAXBUF];
+static char *s_buf = nullptr;           // [MAXBUF], heap-allocated on enter()
 static int s_len;
 static char s_file[64];
+static char s_abs[256];   // full path when opened from Files ("open with"); empty = a note under NOTES_DIR
 
 static bool is_text(const char *n)
 {
@@ -42,6 +43,7 @@ static int cmp(const void *a, const void *b) { return strcasecmp((const char *)a
 static void scan(void)
 {
     s_n = 0; s_sel = 0;
+    if (!s_names) return;
     DIR *dir = opendir(NOTES_DIR);
     if (dir) {
         struct dirent *e;
@@ -54,20 +56,38 @@ static void scan(void)
 
 static void load(const char *name)
 {
+    s_abs[0] = 0;                                 // a note in NOTES_DIR (not an external "open with" file)
     snprintf(s_file, sizeof(s_file), "%s", name);
     char abs[200]; snprintf(abs, sizeof(abs), "%s/%s", NOTES_DIR, name);
     FILE *f = fopen(abs, "rb");
     s_len = 0;
-    if (f) { s_len = (int)fread(s_buf, 1, MAXBUF - 1, f); fclose(f); }
-    s_buf[s_len] = 0; s_dirty = false; s_mode = M_VIEW; s_vscroll = 0;
+    if (f) { if (s_buf) s_len = (int)fread(s_buf, 1, MAXBUF - 1, f); fclose(f); }
+    if (s_buf) s_buf[s_len] = 0;
+    s_dirty = false; s_mode = M_VIEW; s_vscroll = 0;
+    nucleo_app_set_hint(";/. scroll  enter edit");
+}
+
+// Open an arbitrary file chosen in Files ("open with"): load by ABSOLUTE path and remember it so
+// edits save back to the SAME file (not NOTES_DIR). The basename becomes the title.
+static void load_abs(const char *abs)
+{
+    snprintf(s_abs, sizeof(s_abs), "%s", abs);
+    const char *bn = strrchr(abs, '/'); bn = bn ? bn + 1 : abs;
+    snprintf(s_file, sizeof(s_file), "%s", bn);
+    FILE *f = fopen(abs, "rb");
+    s_len = 0;
+    if (f) { if (s_buf) s_len = (int)fread(s_buf, 1, MAXBUF - 1, f); fclose(f); }
+    if (s_buf) s_buf[s_len] = 0;
+    s_dirty = false; s_mode = M_VIEW; s_vscroll = 0;
     nucleo_app_set_hint(";/. scroll  enter edit");
 }
 
 static void save(void)
 {
-    if (!s_dirty || !s_file[0]) return;
-    mkdir(NOTES_DIR, 0775);
-    char abs[200]; snprintf(abs, sizeof(abs), "%s/%s", NOTES_DIR, s_file);
+    if (!s_dirty || !s_file[0] || !s_buf) return;
+    char abs[256];
+    if (s_abs[0]) snprintf(abs, sizeof(abs), "%s", s_abs);   // a file opened from Files: write it back in place
+    else { mkdir(NOTES_DIR, 0775); snprintf(abs, sizeof(abs), "%s/%s", NOTES_DIR, s_file); }
     FILE *f = fopen(abs, "wb");
     if (f) { fwrite(s_buf, 1, s_len, f); fclose(f); s_dirty = false; }
 }
@@ -75,9 +95,9 @@ static void save(void)
 static void new_note(void)
 {
     int max = 0;
-    for (int i = 0; i < s_n; i++) { int v; if (sscanf(s_names[i], "note-%d", &v) == 1 && v > max) max = v; }
+    if (s_names) for (int i = 0; i < s_n; i++) { int v; if (sscanf(s_names[i], "note-%d", &v) == 1 && v > max) max = v; }
     snprintf(s_file, sizeof(s_file), "note-%d.txt", max + 1);
-    s_len = 0; s_buf[0] = 0; s_dirty = true; s_mode = M_EDIT; s_vscroll = 0;
+    s_len = 0; if (s_buf) s_buf[0] = 0; s_dirty = true; s_mode = M_EDIT; s_vscroll = 0;
     nucleo_app_set_hint("enter newline  del bksp");
 }
 
@@ -86,15 +106,24 @@ static void new_note(void)
 static int wrapped_lines(void)
 {
     int n = 1, col = 0;
-    for (int i = 0; i < s_len; i++) { if (s_buf[i] == '\n') { n++; col = 0; } else if (++col >= WRAP) { n++; col = 0; } }
+    if (s_buf) for (int i = 0; i < s_len; i++) { if (s_buf[i] == '\n') { n++; col = 0; } else if (++col >= WRAP) { n++; col = 0; } }
     return n > 40 ? 40 : n;
 }
 
-static void enter(void) { s_mode = M_LIST; s_dirty = false; s_file[0] = 0; scan(); nucleo_app_set_hint("enter open  d delete"); }
+static void enter(void)
+{
+    nucleo_app_set_direct_draw(true);            // static UI: draw direct, free the 32 KB menu buffer
+    if (!s_names) s_names = (char (*)[56])calloc(48, sizeof *s_names);   // ~2688 B, only while open
+    if (!s_buf)   s_buf   = (char *)calloc(MAXBUF, 1);                  // ~2048 B, only while open
+    s_dirty = false; s_file[0] = 0; s_abs[0] = 0;
+    const char *of = nucleo_app_take_open_file();
+    if (of && of[0]) { load_abs(of); return; }   // opened from Files ("open with") -> show THAT file
+    s_mode = M_LIST; scan(); nucleo_app_set_hint("enter open  d delete");
+}
 static void tick(void) { if (s_mode == M_LIST && app_ui_list_animating()) nucleo_app_request_draw(); }  // only while the list animates
-static void leave(void) { save(); }
+static void leave(void) { save(); free(s_buf); s_buf = nullptr; free(s_names); s_names = nullptr; }
 
-static const char *nl_label(int i, void *) { return i == 0 ? "+ New note" : s_names[i - 1]; }
+static const char *nl_label(int i, void *) { return (i == 0 || !s_names) ? "+ New note" : s_names[i - 1]; }
 
 static void on_key(int key, char ch)
 {
@@ -118,12 +147,13 @@ static void on_key(int key, char ch)
         if (key == NK_UP)        { if (s_vscroll > 0) s_vscroll--; }
         else if (key == NK_DOWN) { if (s_vscroll < maxs) s_vscroll++; }
         else if (key == NK_ENTER) { s_mode = M_EDIT; nucleo_app_set_hint("enter newline  del bksp"); }
-        else if (key == NK_DEL) { save(); s_mode = M_LIST; scan(); nucleo_app_set_hint("enter open  d delete"); }
+        else if (key == NK_DEL) { save(); s_mode = M_LIST; scan(); s_abs[0] = 0; nucleo_app_set_hint("enter open  d delete"); }
         else return;
     } else {                                              // M_EDIT: every printable key types
+        if (!s_buf) return;
         if (key == NK_ENTER) { if (s_len < MAXBUF - 1) { s_buf[s_len++] = '\n'; s_buf[s_len] = 0; s_dirty = true; } }
         else if (key == NK_DEL) { if (s_len > 0) { s_buf[--s_len] = 0; s_dirty = true; } }
-        else if (key == NK_BACK) { save(); s_mode = M_LIST; scan(); nucleo_app_set_hint("enter open  d delete"); return; } // prevent app closing and intercept it instead!
+        else if (key == NK_BACK) { save(); s_mode = M_LIST; scan(); s_abs[0] = 0; nucleo_app_set_hint("enter open  d delete"); return; } // prevent app closing and intercept it instead!
         else if (ch >= 32 && ch < 127) { if (s_len < MAXBUF - 1) { s_buf[s_len++] = ch; s_buf[s_len] = 0; s_dirty = true; } }
         else return;
     }
@@ -160,7 +190,7 @@ static void draw_text(void)
     static char lines[MAXLINES][WRAP + 1];
     int nlines = 0, col = 0;
     bool truncated = false;
-    for (int i = 0; i < s_len; i++) {
+    for (int i = 0; s_buf && i < s_len; i++) {
         char c = s_buf[i];
         if (nlines >= MAXLINES) { truncated = true; break; }   // buffer full: stop, don't wrap
         if (c == '\n') { lines[nlines][col] = 0; nlines++; col = 0; continue; }

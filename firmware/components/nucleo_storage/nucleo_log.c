@@ -44,6 +44,46 @@ size_t nucleo_log_get(char *out, size_t cap)
     return len;
 }
 
+// Severity rank for ESP_LOG's leading level letter (higher = more severe). -1 means "not a
+// level-tagged line" (a continuation line or raw printf) — those are never filtered out.
+static int lvl_rank(char c)
+{
+    switch (c) {
+        case 'E': return 4;   // error
+        case 'W': return 3;   // warning
+        case 'I': return 2;   // info
+        case 'D': return 1;   // debug
+        case 'V': return 0;   // verbose
+        default:  return -1;
+    }
+}
+
+size_t nucleo_log_get_filtered(char *out, size_t cap, char min_level)
+{
+    if (!out || cap == 0) return 0;
+    if (min_level >= 'a' && min_level <= 'z') min_level -= 32;   // toupper
+    int minrank = lvl_rank(min_level);
+    if (minrank < 0) return nucleo_log_get(out, cap);            // no/unknown filter -> full log
+
+    // Single pass oldest->newest over the ring. The level is the first char of each line, so we
+    // decide keep/drop at the line boundary and copy (or skip) the rest of that line accordingly.
+    size_t total = s_wrapped ? RING_SZ : s_pos;
+    size_t len = 0;
+    bool line_start = true, keep = true;
+    for (size_t i = 0; i < total && len < cap - 1; i++) {
+        char c = s_ring[s_wrapped ? (s_pos + i) % RING_SZ : i];
+        if (line_start) {
+            int r = lvl_rank(c);
+            keep = (r < 0) || (r >= minrank);   // unclassified lines are always kept
+            line_start = false;
+        }
+        if (keep) out[len++] = c;
+        if (c == '\n') line_start = true;
+    }
+    out[len] = '\0';
+    return len;
+}
+
 // ── OOM watermark ────────────────────────────────────────────────────────────────────────────────
 // A heap allocation that fails is the single most useful crash precursor on this no-PSRAM board (a
 // 32 KB TLS handshake that can't find a contiguous block, the L1 index reload mid-query, etc.). The

@@ -138,6 +138,8 @@ static void battery_refresh(void)
         adc_mv = raw_avg * 3100 / 4095;
     }
     s_mv = (int)(adc_mv * BAT_DIVIDER + 0.5f);   // de-divided terminal mV; mapped to % on read
+    ESP_LOGW(TAG, "[bat-diag] raw=%d adc_mv=%d term_mv=%d pct=%d cali=%d",  // TEMP: gauge bring-up
+             raw_avg, adc_mv, s_mv, mv_to_pct(s_mv), (int)s_cali_ok);
 }
 
 // Lazily init, then re-read at most every BAT_REFRESH_US. Returns the cached terminal mV, or -1.

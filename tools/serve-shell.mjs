@@ -82,6 +82,8 @@ function simLog(line) { simState.logs.push(line); if (simState.logs.length > 60)
 simLog('I (220) boot: NucleoOS 0.1.0, reset reason POWERON');
 simLog('I (640) wifi: connected to home-wifi, ip=192.168.1.42');
 simLog('I (910) anima: L1 index loaded (AKB2), 18.2 KB free internal');
+simLog('W (1180) power: battery low (3.42 V), enable saver soon');
+simLog('E (1320) httpd: alloc fail: 32768 B caps=0x800 in tls handshake');
 const jit = (base, spread) => Math.max(0, Math.round(base + (Math.random() * 2 - 1) * spread));
 
 // Mock the firmware OTA endpoint so the Updates app can be exercised end-to-end (upload
@@ -444,6 +446,42 @@ const server = createServer(async (req, res) => {
     return sendJSON(res, { uptime_s: Math.floor((Date.now() - simState.bootMs) / 1000), cores: 2, freq_mhz: 240,
       tasks: jit(28, 3), load, load_avg: Math.round((load[0] + load[1]) / 2 * 10) / 10 });
   }
+  if (path === '/proc' || path.startsWith('/proc/')) {   // Unix-style virtual FS (mirror nucleo_httpd.c proc_get) — TEXT
+    const up = Math.floor((Date.now() - simState.bootMs) / 1000);
+    const tasks = jit(28, 3), load = (jit(13, 6) / 100);
+    const free = jit(74000, 8000), lblk = jit(40000, 7000), total = 320000, minf = simState.minFree || 12000;
+    const node = path === '/proc' ? '' : path.slice(6);
+    const k = (b) => String(Math.round(b / 1024)).padStart(8);
+    let body;
+    switch (node) {
+      case '':         body = 'version\nuname\nbootreason\nuptime\nloadavg\nmeminfo\ncpuinfo\nstat\nmounts\npartitions\nnet\n'; break;
+      case 'version':  body = 'NucleoOS version 0.1.0 (esp32s3) SMP cores=2\n'; break;
+      case 'uname':    body = 'NucleoOS cardputer 0.2.0 #nucleoos Jun 9 2026 12:00:00 idf v5.4 esp32s3 rev0 cores=2\n'; break;
+      case 'bootreason': body = 'SW\n'; break;
+      case 'uptime':   body = `${up}.00 ${(up * 2 * (1 - load)).toFixed(2)}\n`; break;
+      case 'loadavg':  body = `${load.toFixed(2)} ${load.toFixed(2)} ${load.toFixed(2)} 2/${tasks} ${up}\n`; break;
+      case 'meminfo':  body = `MemTotal:       ${k(total)} kB\nMemFree:        ${k(free)} kB\nMemAvailable:   ${k(lblk)} kB\nMemMinFree:     ${k(minf)} kB\n`; break;
+      case 'cpuinfo':  body = [0, 1].map((c) => `processor\t: ${c}\nmodel name\t: esp32s3\ncpu MHz\t\t: 240\nload pct\t: ${jit(13, 6)}\n`).join('\n') + '\n'; break;
+      case 'stat':     body = `tasks ${tasks}\ncores 2\nbtime ${Math.floor(Date.now() / 1000) - up}\nload_avg ${Math.round(load * 100)}\n`; break;
+      case 'mounts':   body = 'sdcard /data FAT rw 0 0\n'; break;
+      case 'partitions': {                                   // mirror nucleo_httpd.c + firmware/partitions.csv
+        const parts = [['nvs','data',0x02,0x9000,0x6000],['otadata','data',0x00,0xF000,0x2000],
+          ['phy_init','data',0x01,0x11000,0x1000],['nvs_keys','data',0x04,0x12000,0x1000],
+          ['ota_0','app',0x10,0x20000,0x380000],['ota_1','app',0x11,0x3A0000,0x380000],
+          ['coredump','data',0x03,0x720000,0x40000],['cfg','data',0x82,0x760000,0xA0000]];
+        body = 'label            type  sub   offset     size  run\n';
+        for (const [l, t, sub, off2, sz] of parts)
+          body += `${l.padEnd(16)} ${t.padEnd(4)} 0x${sub.toString(16).padStart(2, '0')} 0x${off2.toString(16).padStart(6, '0')} ${String(sz).padStart(7)}  ${l === 'ota_0' ? '*' : ''}\n`;
+        break;
+      }
+      case 'net':      body = 'mode: sta\nssid: home-wifi\nip: 192.168.1.42\ntime_synced: 1\n'; break;
+      default:
+        res.writeHead(404, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' });
+        return res.end('No such /proc node\n');
+    }
+    res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'access-control-allow-origin': '*', 'cache-control': 'no-store' });
+    return res.end(body);
+  }
   if (path === '/api/diag') {                       // consolidated health snapshot (mirror nucleo_httpd.c diag_get)
     const up = Math.floor((Date.now() - simState.bootMs) / 1000);
     simState.minFree = Math.max(9000, simState.minFree - (Math.random() < 0.15 ? jit(120, 100) : 0));
@@ -590,9 +628,14 @@ const server = createServer(async (req, res) => {
     if (!ALLOW_R.includes(pin)) return send(res, 403, 'application/json', JSON.stringify({ ok: false, err: 'pin not readable' }));
     return sendJSON(res, { ok: true, pin, value: simState.gpio[pin] ?? 0 });
   }
-  if (path === '/api/logs') {                        // RAM ring log — TEXT, not JSON
+  if (path === '/api/logs') {                        // RAM ring log — TEXT, not JSON (mirror logs_get)
+    let lines = simState.logs;
+    const rank = { E: 4, W: 3, I: 2, D: 1, V: 0 };
+    const lvl = (url.searchParams.get('level') || '').toUpperCase()[0];   // ?level=E|W|I|D|V — dmesg filter
+    if (lvl && rank[lvl] != null)
+      lines = lines.filter((ln) => { const r = rank[ln.trim()[0]]; return r == null || r >= rank[lvl]; });
     res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'access-control-allow-origin': '*', 'cache-control': 'no-store' });
-    return res.end(simState.logs.join('\n') + '\n');
+    return res.end(lines.join('\n') + '\n');
   }
   if (path === '/api/anima/caps') {                  // teacher provider/model (no key) + offline-brain policy
     let hasKey = false, provider, modelName;

@@ -183,11 +183,12 @@ static void fmt_mmss(char *b, size_t n, uint32_t s) { snprintf(b, n, "%u:%02u", 
 #define RESUME_MAX  48
 struct resume_ent { char name[80]; uint32_t sec; };
 
-// Scratch for the resume DB, kept in .bss — NOT on the stack. resume_save() is reached from the
+// Scratch for the resume DB, kept on the heap — NOT on the stack. resume_save() is reached from the
 // deepest call nest (nucleo_app_run->on_key->play_from->play_nfv->resume_save); a 48*84B local array
 // there overflowed the 8 KB main-task stack -> memory corruption -> the "other watchdog" reset on ESC.
 // resume_save and resume_refresh both run on the UI task and never nest, so one shared buffer is safe.
-static resume_ent s_resume_scratch[RESUME_MAX];
+// Heap-allocated on enter() and freed on leave() so it is ZERO RAM at boot when the app is closed.
+static resume_ent *s_resume_scratch = nullptr;
 
 static int resume_read_all(resume_ent *out, int max)
 {
@@ -209,7 +210,8 @@ static int resume_read_all(resume_ent *out, int max)
 
 static void resume_save(const char *key, uint32_t sec, uint32_t total_sec)
 {
-    resume_ent *e = s_resume_scratch; int n = resume_read_all(e, RESUME_MAX);   // .bss, not 4 KB of stack
+    resume_ent *e = s_resume_scratch; if (!e) return;
+    int n = resume_read_all(e, RESUME_MAX);   // heap scratch, not 4 KB of stack
     for (int i = 0; i < n; i++)                              // drop any existing entry for this clip
         if (!strcmp(e[i].name, key)) { e[i] = e[n - 1]; n--; break; }
     bool finished = total_sec && sec + 5 >= total_sec;
@@ -266,8 +268,8 @@ static int count_clips(const char *abs, int depth)
 // distinct in-progress clips recorded (for the LIBRARY tab's "Continue" counter).
 static int resume_refresh(void)
 {
-    if (!st) return 0;
-    resume_ent *e = s_resume_scratch; int n = resume_read_all(e, RESUME_MAX);   // .bss, not 4 KB of stack
+    if (!st || !s_resume_scratch) return 0;
+    resume_ent *e = s_resume_scratch; int n = resume_read_all(e, RESUME_MAX);   // heap scratch, not 4 KB of stack
     for (int i = 0; i < s_n; i++) {
         st->e[i].resume = 0;
         if (st->e[i].dir) continue;
@@ -341,12 +343,26 @@ static const int      BARH = 42, BARY = 135 - 42;
 static const unsigned short CO_BG = 0x0861, CO_LINE = 0x2945, CO_TXT = 0xFFFF, CO_MUT = 0x8C71,
                            CO_SEG = 0x10A2, CO_TRK = 0x2A4B, CO_INK = 0x0420, CO_CHIP = 0x1926, CO_WARM = 0xFE8C;
 
-// Glanceable 6-segment meter (label + bar, no number) — keeps the bar uncluttered and leaves room
-// for the mode badge. The exact value is felt via the segments + the key you just pressed.
-static void draw_meter(int x, int y, const char *label, int val, unsigned short col)
+// Tiny speaker / sun glyphs for the meters — clearer and tighter than the old "VOL"/"LUM" text.
+static void glyph_vol(int x, int y, unsigned short c)
 {
-    d.setTextSize(1); d.setTextColor(CO_MUT, CO_BG); d.setCursor(x, y + 1); d.print(label);
-    const int bx = x + 22, segs = 6, sw = 8, gap = 2, on = (val * segs + 50) / 100;
+    d.fillRect(x, y + 3, 3, 3, c); d.fillTriangle(x + 3, y, x + 3, y + 9, x + 8, y + 4, c);   // cone
+    d.drawFastVLine(x + 10, y + 2, 5, c);                                                      // one wave
+}
+static void glyph_sun(int x, int y, unsigned short c)
+{
+    d.fillCircle(x + 5, y + 4, 2, c);
+    d.drawFastVLine(x + 5, y - 1, 2, c); d.drawFastVLine(x + 5, y + 7, 2, c);
+    d.drawFastHLine(x + 1, y + 4, 2, c); d.drawFastHLine(x + 8, y + 4, 2, c);
+    d.drawPixel(x + 2, y + 1, c); d.drawPixel(x + 8, y + 1, c); d.drawPixel(x + 2, y + 7, c); d.drawPixel(x + 8, y + 7, c);
+}
+
+// Glanceable 6-segment meter with a leading icon (0 = volume, 1 = brightness). No number — the value
+// is read from the segments + the key you pressed; the icon is tighter than text, leaving room for the badge.
+static void draw_meter(int x, int y, int icon, int val, unsigned short col)
+{
+    if (icon == 1) glyph_sun(x, y, CO_MUT); else glyph_vol(x, y, CO_MUT);
+    const int bx = x + 16, segs = 6, sw = 8, gap = 2, on = (val * segs + 50) / 100;
     for (int i = 0; i < segs; i++)
         d.fillRoundRect(bx + i * (sw + gap), y, sw, 8, 1, i < on ? col : CO_SEG);
 }
@@ -373,10 +389,11 @@ static void draw_controller(const char *title, const char *next_title, uint32_t 
         glyph_next(47, BARY + 6, CO_TXT);                   // >| next clip (static)
     }
 
-    // play/pause chip (only changing transport element)
+    // play/pause chip with a real icon (triangle when paused, two bars when playing)
     d.fillRoundRect(24, BARY + 5, 16, 16, 4, paused ? CO_CHIP : ACC);
-    d.setTextColor(paused ? 0xCE7F : CO_INK, paused ? CO_CHIP : ACC);
-    d.setCursor(paused ? 30 : 28, BARY + 9); d.print(paused ? ">" : "||");
+    unsigned short pc = paused ? 0xCE7F : CO_INK;
+    if (paused) d.fillTriangle(30, BARY + 9, 30, BARY + 17, 37, BARY + 13, pc);                 // play
+    else { d.fillRect(29, BARY + 9, 3, 8, pc); d.fillRect(35, BARY + 9, 3, 8, pc); }            // pause
 
     // title + time strip (cleared as one band)
     d.fillRect(60, BARY + 7, 178, 9, CO_BG);
@@ -399,12 +416,13 @@ static void draw_controller(const char *title, const char *next_title, uint32_t 
         for (int i = 0; i < maxc && title[i]; i++) d.print(title[i]);
     }
 
-    // scrubber with playhead
+    // scrubber with chapter ticks (the 1-9 jump points) + playhead
     const int px = 6, pw = 228, py = BARY + 24;
-    d.fillRect(px - 1, py - 3, pw + 8, 9, CO_BG);
+    d.fillRect(px - 1, py - 4, pw + 8, 11, CO_BG);
     d.fillRoundRect(px, py, pw, 3, 1, CO_TRK);
     int fillw = tot_s ? (int)((int64_t)pw * cur_s / tot_s) : 0;
     if (fillw > 0) d.fillRoundRect(px, py, fillw, 3, 1, ACC);
+    for (int i = 1; i < 10; i++) d.drawFastVLine(px + pw * i / 10, py - 2, 7, CO_SEG);          // 10% chapter marks
     d.fillCircle(px + fillw, py + 1, 3, CO_TXT);
 
     // meters band (cleared as one strip): VOL (or a MUTED chip) on the left, LUM on the right,
@@ -414,13 +432,45 @@ static void draw_controller(const char *title, const char *next_title, uint32_t 
         glyph_speaker(6, BARY + 31, CO_MUT);
         d.setTextSize(1); d.setTextColor(MUTERED, CO_BG); d.setCursor(18, BARY + 31); d.print("MUTE");
     } else {
-        draw_meter(6, BARY + 31, "VOL", vol, GRN);
+        draw_meter(6, BARY + 31, 0, vol, GRN);
     }
-    draw_meter(104, BARY + 31, "LUM", bri, CO_WARM);
+    draw_meter(104, BARY + 31, 1, bri, CO_WARM);
     if (s_autoplay || s_repeat) {                            // tiny mode badge (fits in the right margin)
         const char *b = s_repeat == 1 ? "R1" : s_repeat == 2 ? "RA" : "AP";
         d.setTextSize(1); d.setTextColor(s_repeat ? ACC : GRN, CO_BG);
         d.setCursor(238 - (int)strlen(b) * 6, BARY + 31); d.print(b);
+    }
+}
+
+// Full-screen "Comandi" cheat-sheet raised with TAB during playback: makes brightness and every key
+// discoverable, and shows Luce/Volume live so you can adjust them right here and see the level change.
+static void draw_video_help(int bri, int vol, bool muted)
+{
+    d.fillScreen(CO_BG);
+    d.setTextSize(2); d.setTextColor(ACC, CO_BG); d.setCursor(10, 6); d.print("Comandi");
+    d.drawFastHLine(10, 26, 220, CO_LINE);
+
+    auto bar = [&](int y, const char *lbl, int pct, unsigned short col) {
+        d.setTextSize(1); d.setTextColor(CO_TXT, CO_BG); d.setCursor(10, y); d.print(lbl);
+        const int bx = 92, bw = 100, bh = 8;
+        d.fillRoundRect(bx, y - 1, bw, bh, 3, CO_TRK);
+        int w = pct * bw / 100; if (w < 0) w = 0; if (w > bw) w = bw;
+        if (w) d.fillRoundRect(bx, y - 1, w, bh, 3, col);
+        char v[8]; snprintf(v, sizeof v, "%d%%", pct);
+        d.setTextColor(col, CO_BG); d.setCursor(198, y); d.print(v);
+    };
+    bar(34, "- =   Luce", bri, CO_WARM);
+    if (muted) { d.setTextSize(1); d.setTextColor(MUTERED, CO_BG); d.setCursor(10, 48); d.print("; .   Volume   (MUTO: m)"); }
+    else       bar(48, "; .   Volume", vol, GRN);
+
+    static const char *const rk[6] = { ", /", "[ ]", "INVIO", "0-9", "m   t", "TAB" };
+    static const char *const rd[6] = { "indietro / avanti", "clip prec / succ", "play / pausa",
+                                       "salta al 10..90%", "muto / tempo restante", "chiudi   (ESC esci)" };
+    int y = 66;
+    for (int i = 0; i < 6; i++) {
+        d.setTextSize(1); d.setTextColor(ACC, CO_BG); d.setCursor(10, y);  d.print(rk[i]);
+        d.setTextColor(CO_TXT, CO_BG); d.setCursor(58, y); d.print(rd[i]);
+        y += 11;
     }
 }
 
@@ -650,6 +700,18 @@ static int play_nfv3(const char *vpath, const char *title, const char *reskey, i
     int64_t next_to_read = 0;
     bool    force_resync = true;       // first paint must seek to a keyframe
 
+    // WDT-safe far seek (same rationale as play_nfv's seek_far): hop in bounded steps, pet between,
+    // so a multi-second cluster-chain walk on a big v3 clip can't trip the 8s task-WDT. Rewind base is
+    // frames_begin (the v3 frame region start).
+    auto seek_far = [&](long off) {
+        if (off < frames_begin) off = frames_begin;
+        long pos = ftell(f);
+        if (pos < 0 || off < pos) { fseek(f, frames_begin, SEEK_SET); pos = frames_begin; }
+        const long STEP = 2L * 1024 * 1024;
+        while (off - pos > STEP) { fseek(f, STEP, SEEK_CUR); pos += STEP; esp_task_wdt_reset(); }
+        fseek(f, off - pos, SEEK_CUR);
+    };
+
     auto seek_keyframe = [&](int64_t target) {
         long off = frames_begin; uint32_t kf = 0;
         if (index_count) {
@@ -657,6 +719,7 @@ static int play_nfv3(const char *vpath, const char *title, const char *reskey, i
             uint8_t eb[8];
             while (L <= R) {                                   // largest keyframe idx <= target
                 int mid = (L + R) / 2;
+                esp_task_wdt_reset();                          // index probes on a big file are slow
                 fseek(f, (long)index_off + (long)mid * 8, SEEK_SET);
                 if (fread(eb, 1, 8, f) != 8) break;
                 uint32_t fi = (uint32_t)(eb[0] | (eb[1]<<8) | (eb[2]<<16) | ((uint32_t)eb[3]<<24));
@@ -668,7 +731,7 @@ static int play_nfv3(const char *vpath, const char *title, const char *reskey, i
                 off = (long)(eb[4] | (eb[5]<<8) | (eb[6]<<16) | ((uint32_t)eb[7]<<24));
             }
         }
-        fseek(f, off, SEEK_SET);
+        seek_far(off);                                         // WDT-safe positioning to the keyframe
         next_to_read = kf;
         return (int64_t)kf;
     };
@@ -698,13 +761,17 @@ static int play_nfv3(const char *vpath, const char *title, const char *reskey, i
     // repaint) or a backward move; otherwise just applies the forward deltas.
     auto advance_to = [&](int64_t target) -> bool {
         if (target == cur && !force_resync) return true;
-        if (force_resync || cur < 0 || target < cur) {
+        // Re-seek to a keyframe on a backward jump OR a BIG forward gap: replaying thousands of deltas
+        // frame-by-frame to catch a far target is a multi-second hang. <=4-frame backward jitter is
+        // tolerated (audio resync) to avoid a costly re-seek every frame.
+        if (force_resync || cur < 0 || target < cur - 4 || target > cur + 96) {
             cur = seek_keyframe(target) - 1;
             force_resync = false;
         }
         while (cur < target) {
             if (!render_one()) return false;
             cur++;
+            if ((cur & 255) == 0) esp_task_wdt_reset();        // long delta replay can't starve the WDT
         }
         return true;
     };
@@ -720,10 +787,11 @@ static int play_nfv3(const char *vpath, const char *title, const char *reskey, i
 
     int     bri = nucleo_app_brightness();
     int64_t overlay_until = esp_timer_get_time() + 2500000;
-    bool    pinned = false, paused = false, stop = false, need_full = false, ov_prev = false, ctrl_full = true;
+    bool    help = false, paused = false, stop = false, need_full = false, ov_prev = false, ctrl_full = true;
     int     result = PR_STOP;
     uint32_t ui_sig = 0xffffffff;
     int64_t  seek_hold_until = 0; int64_t hold_frame = 0;
+    int64_t  resync_until = 0;
     int      seek_step_s = 10, seek_dir = 0;
     int64_t  last_seek_us = 0, badge_until = 0;
 
@@ -735,6 +803,7 @@ static int play_nfv3(const char *vpath, const char *title, const char *reskey, i
         if (have_audio) nucleo_audio_seek((uint32_t)ms);
         t0 = esp_timer_get_time() - ms * 1000;
         hold_frame = tf; seek_hold_until = esp_timer_get_time() + 250000;
+        resync_until = esp_timer_get_time() + 1200000;        // free-run until the audio task applies the seek (elapsed_ms stale meanwhile) -> backward jump must not snap back
         force_resync = true;                                   // land on a keyframe, then replay
         overlay_until = esp_timer_get_time() + 3000000; ui_sig = 0xffffffff;
     };
@@ -750,7 +819,7 @@ static int play_nfv3(const char *vpath, const char *title, const char *reskey, i
             else if (k.ch == ']')       { result = PR_NEXT; stop = true; }
             else if (k.ch == '[')       { result = PR_PREV; stop = true; }
             else if (k.key == NK_ENTER || k.ch == ' ' || k.ch == 'p') { paused = !paused; if (have_audio) nucleo_audio_toggle_pause(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.key == NK_TAB)   { pinned = !pinned; overlay_until = pinned ? 0 : now + 3000000; }
+            else if (k.key == NK_TAB)   { help = !help; if (!help) need_full = true; ui_sig = 0xffffffff; }   // TAB = pannello Comandi
             else if (k.ch == 'm')       { nucleo_audio_set_mute(!nucleo_audio_is_muted()); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
             else if (k.ch == 't')       { s_time_rem = !s_time_rem; overlay_until = now + 3000000; ui_sig = 0xffffffff; }
             else if (k.key == NK_LEFT || k.key == NK_RIGHT) {
@@ -764,20 +833,29 @@ static int play_nfv3(const char *vpath, const char *title, const char *reskey, i
             else if (k.key == NK_DOWN)  { if (nucleo_audio_is_muted()) nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() - 10); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
             else if (k.ch == '=' || k.ch == '+') { nucleo_app_set_brightness(nucleo_app_brightness() + 10); bri = nucleo_app_brightness(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
             else if (k.ch == '-' || k.ch == '_') { nucleo_app_set_brightness(nucleo_app_brightness() - 10); bri = nucleo_app_brightness(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.ch >= '0' && k.ch <= '9' && dur_ms) seek_ms((int64_t)(k.ch - '0') * dur_ms / 10);
+            // 1-9 chapter-jump REMOVED (2026-06-21): on a huge clip a far jump COMPLETES the reposition
+            // (trace si_ok) but the draw/decode loop then hangs with the heap at ~6KB largest block (no
+            // PSRAM) — a physical limit on big jumps. Resume + arrow seeks (small hops) are safe and stay.
         }
         if (stop) break;
 
+        if (help) {                                            // TAB cheat-sheet: pause the video pass, show keys + live Luce/Volume
+            if (ui_sig) { draw_video_help(bri, nucleo_audio_volume(), nucleo_audio_is_muted()); ui_sig = 0; }
+            vTaskDelay(pdMS_TO_TICKS(16));
+            continue;
+        }
+
         int64_t now = esp_timer_get_time();
-        bool overlay_now = pinned || now < overlay_until;
+        bool overlay_now = now < overlay_until;
 
         int64_t target;
         if (now < seek_hold_until)         target = hold_frame;
-        else if (have_audio && !paused && nucleo_audio_is_playing()) {
+        else if (paused)                   target = cur < 0 ? 0 : cur;
+        else if (now < resync_until)       target = (now - t0) / period;   // post-seek free-run until the audio task applies the seek (elapsed_ms stale until then) -> backward jump must not snap back
+        else if (have_audio && nucleo_audio_is_playing()) {
             int64_t ms = (int64_t)nucleo_audio_elapsed_ms() - AUDIO_LAT_MS; if (ms < 0) ms = 0;
             target = ms * fps / 1000;
-        } else if (paused)                 target = cur < 0 ? 0 : cur;
-        else                               target = (now - t0) / period;
+        } else                             target = (now - t0) / period;
         if (frame_count && target >= (int64_t)frame_count) target = frame_count - 1;
         if (target < 0) target = 0;
 
@@ -786,11 +864,11 @@ static int play_nfv3(const char *vpath, const char *title, const char *reskey, i
         if (need_full) { force_resync = true; need_full = false; }     // repaint covered region
         if (target != cur || force_resync) {
             d.startWrite();
-            if (overlay_now) d.setClipRect(0, 0, 240, BARY);
+            d.setClipRect(0, 0, 240, overlay_now ? BARY : 135);   // ALWAYS clip: coded height (144) > panel (135), else the 3rd tile row bleeds = vertical scroll
             bool ok = advance_to(target);
-            if (overlay_now) d.clearClipRect();
+            d.clearClipRect();
             d.endWrite();
-            if (!ok) { result = PR_ENDED; break; }     // EOF or unreadable frame -> end the clip
+            if (!ok) { ESP_LOGW(V_TAG, "nfv3 end: cur=%u/%u next=%u", (unsigned)cur, (unsigned)frame_count, (unsigned)next_to_read); result = PR_ENDED; break; }
         }
 
         bool seeking = now < badge_until;
@@ -877,7 +955,10 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
         uint16_t stp = H.reserved0;
         uint32_t ioff = 0; memcpy(&ioff, H.reserved1, sizeof ioff);
         if ((H.flags & 2) && stp && (long)ioff >= (long)sizeof H && (long)ioff < fsz) {
-            idxf = f; idx_base = (long)ioff + 4; idx_stride = stp;   // inline v2 index
+            // Inline index: SHARE the frame handle. A separate fopen handle sat at byte 0 and paid a
+            // maximal 0->EOF cluster-chain walk on its FIRST index read (= the freeze), plus a ~4KB
+            // in-play FIL/sector-cache alloc. One handle + WDT-safe seeks (seek_far) is the right shape.
+            idxf = f; idx_base = (long)ioff + 4; idx_stride = stp;
         }
     }
 
@@ -914,18 +995,41 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
 
     int     bri = nucleo_app_brightness();
     int64_t overlay_until = esp_timer_get_time() + 2500000;
-    bool    pinned = false, paused = false, stop = false, need_full = false, ov_prev = false, ctrl_full = true;
+    bool    help = false, paused = false, stop = false, need_full = false, ov_prev = false, ctrl_full = true;
     int     result = PR_STOP;
     uint32_t cur = 0, next_idx = 0;
+    int64_t  cached_i = -1; long cached_foff = 0;   // 1-entry index cache: repeated 1-9 in the same stride bucket skips the walk+4B read
     uint32_t ui_sig = 0xffffffff;
     int64_t  seek_hold_until = 0; uint32_t hold_frame = 0;
+    int64_t  resync_until = 0;
     int      seek_step_s = 10, seek_dir = 0;
     int64_t  last_seek_us = 0, badge_until = 0;
+    // Video-stall self-heal: track when `cur` last advanced. If the audio clock keeps running but the
+    // frame cursor is wedged (a mis-seek or an oversize/corrupt-frame bail leaves next_idx past target,
+    // so want_load never fires again), the clip plays "audio, no video" — and on exit cur/fps==0 so the
+    // resume point is lost too. We detect the stall below and force an exact index re-seek to re-lock.
+    int64_t  cur_moved_us = esp_timer_get_time();
+    uint32_t cur_seen = 0xffffffff;
+
+    // WDT-safe far seek. FATFS without fast-seek walks the cluster chain O(distance) INSIDE one
+    // blocking fseek(); on a 300-500MB clip that exceeds the 8s task-WDT and hard-freezes the system,
+    // and a single fseek cannot be interrupted to pet the dog. So split a long move into bounded
+    // forward hops and pet between them: a slow seek degrades to "takes a moment", never a freeze.
+    // Backward targets restart the FATFS walk from cluster 0, so rewind to the header and hop forward.
+    auto seek_far = [&](FILE *fp, long off) {
+        if (off < (long)sizeof H) off = (long)sizeof H;
+        long pos = ftell(fp);
+        if (pos < 0 || off < pos) { fseek(fp, (long)sizeof H, SEEK_SET); pos = (long)sizeof H; }
+        const long STEP = 2L * 1024 * 1024;                   // ~2MB/hop (=64 clusters), no single hop can approach the 8s WDT even under W5500+audio bus contention
+        while (off - pos > STEP) { fseek(fp, STEP, SEEK_CUR); pos += STEP; esp_task_wdt_reset(); }
+        fseek(fp, off - pos, SEEK_CUR);
+    };
 
     auto load_frame = [&](uint32_t target) -> bool {
         while (next_idx < target) {
             uint32_t s; if (fread(&s, 1, 4, f) != 4) return false;
             fseek(f, s, SEEK_CUR); next_idx++;
+            if ((next_idx & 255) == 0) esp_task_wdt_reset();  // a big forward skip can't starve the WDT
         }
         uint32_t s; if (fread(&s, 1, 4, f) != 4) return false;
         if (s > maxf) { fseek(f, s, SEEK_CUR); next_idx = target + 1; return false; }
@@ -936,11 +1040,17 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
     auto seek_index = [&](uint32_t tf) -> bool {
         if (!idxf || !idx_stride) return false;
         uint32_t i = tf / idx_stride;
-        fseek(idxf, idx_base + (long)i * 4, SEEK_SET);
-        uint32_t foff;
-        if (fread(&foff, 1, 4, idxf) != 4) return false;
-        if ((long)foff < (long)sizeof H || (long)foff >= fsz) return false;
-        fseek(f, foff, SEEK_SET);
+        long foff;
+        if ((int64_t)i == cached_i) {                         // same stride bucket as last seek: skip the index walk + 4B read
+            foff = cached_foff;
+        } else {
+            seek_far(idxf, idx_base + (long)i * 4);            // WDT-safe (idxf shares f): read the offset...
+            uint32_t fo;
+            if (fread(&fo, 1, 4, idxf) != 4) return false;
+            if ((long)fo < (long)sizeof H || (long)fo >= fsz) return false;
+            foff = (long)fo; cached_i = (int64_t)i; cached_foff = foff;
+        }
+        seek_far(f, foff);                                    // ...then WDT-safe positioning to the frame
         next_idx = i * idx_stride;
         return true;
     };
@@ -949,13 +1059,15 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
         if (!H.frame_count || fsz <= (long)sizeof H) return false;
         long est = (long)sizeof H + (long)((int64_t)(fsz - (long)sizeof H) * tf / H.frame_count);
         if (est < (long)sizeof H) est = sizeof H;
-        fseek(f, est, SEEK_SET);
+        seek_far(f, est);                                     // WDT-safe (was a raw fseek to a far offset)
         int prev = -1; long pos = est, limit = (long)maxf * 4 + 64;
         for (long i = 0; i < limit; i++) {
             int c = fgetc(f); if (c < 0) break; pos++;
+            if ((i & 8191) == 8191) esp_task_wdt_reset();     // the byte-scan fallback must not starve the WDT
             if (prev == 0xFF && c == 0xD8) { fseek(f, pos - 6, SEEK_SET); next_idx = tf; return true; }
             prev = c;
         }
+        next_idx = tf;                                        // even on miss: don't leave load_frame to crawl from a stale next_idx
         return false;
     };
 
@@ -968,6 +1080,7 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
         t0 = esp_timer_get_time() - ms * 1000;
         if (!seek_index(tf)) seek_approx(tf);
         hold_frame = tf; seek_hold_until = esp_timer_get_time() + 250000;
+        resync_until = esp_timer_get_time() + 1200000;        // free-run from the seek target until the audio task applies the seek (elapsed_ms is stale meanwhile) -> a backward jump must not snap back to the old position
         cur = 0xffffffff; need_full = false;
         overlay_until = esp_timer_get_time() + 3000000; ui_sig = 0xffffffff;
     };
@@ -989,7 +1102,7 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
             else if (k.ch == ']')       { result = PR_NEXT; stop = true; }   // skip to next clip
             else if (k.ch == '[')       { result = PR_PREV; stop = true; }   // skip to previous clip
             else if (k.key == NK_ENTER || k.ch == ' ' || k.ch == 'p') { paused = !paused; if (have_audio) nucleo_audio_toggle_pause(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.key == NK_TAB)   { pinned = !pinned; overlay_until = pinned ? 0 : now + 3000000; }
+            else if (k.key == NK_TAB)   { help = !help; if (!help) need_full = true; ui_sig = 0xffffffff; }   // TAB = pannello Comandi
             else if (k.ch == 'm')       { nucleo_audio_set_mute(!nucleo_audio_is_muted()); overlay_until = now + 3000000; ui_sig = 0xffffffff; }   // mute toggle
             else if (k.ch == 't')       { s_time_rem = !s_time_rem; overlay_until = now + 3000000; ui_sig = 0xffffffff; }   // elapsed/remaining (persist via VIEW>Time; no SD write mid-play)
             else if (k.key == NK_LEFT || k.key == NK_RIGHT) {
@@ -1003,26 +1116,56 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
             else if (k.key == NK_DOWN)  { if (nucleo_audio_is_muted()) nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() - 10); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
             else if (k.ch == '=' || k.ch == '+') { nucleo_app_set_brightness(nucleo_app_brightness() + 10); bri = nucleo_app_brightness(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
             else if (k.ch == '-' || k.ch == '_') { nucleo_app_set_brightness(nucleo_app_brightness() - 10); bri = nucleo_app_brightness(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.ch >= '0' && k.ch <= '9' && dur_ms) seek_ms((int64_t)(k.ch - '0') * dur_ms / 10);
+            // 1-9 chapter-jump REMOVED (2026-06-21): on a huge clip a far jump COMPLETES the reposition
+            // (trace si_ok) but the draw/decode loop then hangs with the heap at ~6KB largest block (no
+            // PSRAM) — a physical limit on big jumps. Resume + arrow seeks (small hops) are safe and stay.
         }
         if (stop) break;
 
+        if (help) {                                            // TAB cheat-sheet: pause the video pass, show keys + live Luce/Volume
+            if (ui_sig) { draw_video_help(bri, nucleo_audio_volume(), nucleo_audio_is_muted()); ui_sig = 0; }
+            vTaskDelay(pdMS_TO_TICKS(16));
+            continue;
+        }
+
         int64_t now = esp_timer_get_time();
-        bool overlay_now = pinned || now < overlay_until;
+        bool overlay_now = now < overlay_until;
 
         uint32_t target;
         if (now < seek_hold_until)         target = hold_frame;
-        else if (have_audio && !paused && nucleo_audio_is_playing()) {
+        else if (paused)                   target = cur;
+        else if (now < resync_until)       target = (uint32_t)((now - t0) / period);   // post-seek: free-run from the seek target until the audio decoder repositions (elapsed_ms is stale until its task runs poll_seek) -> stops a big/backward jump snapping back to the pre-seek position
+        else if (have_audio && nucleo_audio_is_playing()) {
             int64_t ms = (int64_t)nucleo_audio_elapsed_ms() - AUDIO_LAT_MS; if (ms < 0) ms = 0;
             target = (uint32_t)(ms * fps / 1000);
-        } else if (paused)                 target = cur;
-        else                               target = (uint32_t)((now - t0) / period);
+        } else                             target = (uint32_t)((now - t0) / period);
         if (H.frame_count && target >= H.frame_count) target = H.frame_count - 1;
+
+        // Self-heal a wedged frame cursor (see cur_moved_us decl). The stuck signature is: audio is the
+        // live clock, the target has run ahead of cur, yet want_load is dead because next_idx overshot
+        // target (target < next_idx). If that persists past a grace window, re-lock with an exact index
+        // seek (approx fallback for index-less v1 clips) so load_frame draws the live frame again.
+        if (cur != cur_seen) { cur_seen = cur; cur_moved_us = now; }
+        else if (!paused && have_audio && nucleo_audio_is_playing()
+                 && now >= seek_hold_until && now >= resync_until
+                 && (int64_t)target > (int64_t)cur + 2 && (int64_t)target < (int64_t)next_idx
+                 && now - cur_moved_us > 1200000) {
+            if (!seek_index(target)) seek_approx(target);    // re-position f to a real frame boundary
+            cur_moved_us = now;                              // fresh grace window for the re-seek
+            ESP_LOGW(V_TAG, "nfv stall heal: cur=%u target=%u next_idx=%u", (unsigned)cur, (unsigned)target, (unsigned)next_idx);
+        }
 
         if (overlay_now != ov_prev) { if (!overlay_now) need_full = true; else ctrl_full = true; ov_prev = overlay_now; ui_sig = 0xffffffff; }
 
-        bool want_load = (target != cur);
-        if (want_load && target < next_idx && !seek_index(target)) { fseek(f, sizeof H, SEEK_SET); next_idx = 0; }
+        // FORWARD-ONLY. The loop holds (no backward walk) on small jitter — that killed the 1-9 lag.
+        // BUT a BIG forward gap must never be crawled frame-by-frame: on a 120k-frame clip that's a
+        // multi-MINUTE hang (load_frame pets the WDT, so it's not a reboot — it's a true freeze, the
+        // "video non arriva"). If the target is far ahead of the read cursor, jump there via the index
+        // in O(1) (seek_far is WDT-safe), so load_frame only skips the short remainder.
+        bool want_load = (int64_t)target >= (int64_t)next_idx;
+        if (want_load && idx_stride && (int64_t)target > (int64_t)next_idx + 4 * (int64_t)idx_stride) {
+            seek_index(target);   // big forward gap -> O(1) index jump, never crawl frame-by-frame
+        }
         if (want_load || (need_full && last_sz)) {
             bool have = want_load ? load_frame(target) : true;
             if (have) {
@@ -1033,6 +1176,7 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
                 d.endWrite();
                 cur = target; need_full = false;
             } else if (next_idx >= H.frame_count) { result = PR_ENDED; break; }
+            else { static int s_lf = 0; if (s_lf++ < 8) ESP_LOGW(V_TAG, "nfv loadfail: cur=%u target=%u next_idx=%u/%u maxf=%u", (unsigned)cur, (unsigned)target, (unsigned)next_idx, (unsigned)H.frame_count, (unsigned)maxf); }
         }
 
         bool seeking = now < badge_until;
@@ -1061,9 +1205,12 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
 
     esp_task_wdt_reset();                          // cleanup below (SD write + audio stop) must not starve the WDT
     vtrace("nfv_loopend", false);
+    ESP_LOGW(V_TAG, "nfv end: result=%d cur=%u/%u next_idx=%u maxf=%u audio=%d elapsed=%u dur=%u",
+             result, (unsigned)cur, (unsigned)H.frame_count, (unsigned)next_idx, (unsigned)maxf,
+             (int)have_audio, (unsigned)nucleo_audio_elapsed_ms(), (unsigned)dur_ms);
     // Stop the audio decoder before the SD work below: frees its RAM and nothing's left to play. (The
-    // real exit-freeze cause was a STACK overflow in resume_save — its 48-entry array, now moved to
-    // .bss as s_resume_scratch — not SD contention; this ordering is just good hygiene.)
+    // real exit-freeze cause was a STACK overflow in resume_save — its 48-entry array, now a heap
+    // scratch buffer s_resume_scratch — not SD contention; this ordering is just good hygiene.)
     if (have_audio) nucleo_audio_stop();
     vtrace("nfv_audiostop", false);
     uint32_t watched = fps ? cur / fps : 0;
@@ -1145,9 +1292,9 @@ static void draw_row(int i, int y, int h, bool focus)
             d.setTextSize(1); d.setTextColor(metac, BG); d.setCursor(230 - mw, my); d.print(mb);
         }
         int nx = 24, navail = (mb[0] ? meta_x - 6 : 230) - nx; if (navail < 6) navail = 6;
-        int maxc = navail / 6; if (maxc < 1) maxc = 1; if (maxc > 36) maxc = 36;
-        char nb[40]; snprintf(nb, sizeof nb, "%.*s", maxc, disp);
-        d.setTextSize(1); d.setTextColor(namec, BG); d.setCursor(nx, my); d.print(nb);
+        int maxc = navail / 12; if (maxc < 1) maxc = 1; if (maxc > 18) maxc = 18;
+        char nb[20]; snprintf(nb, sizeof nb, "%.*s", maxc, disp);
+        d.setTextSize(2); d.setTextColor(namec, BG); d.setCursor(nx, y + (h - 16) / 2); d.print(nb);
     }
 }
 
@@ -1155,12 +1302,12 @@ static void draw_list(int y0, int region_h)
 {
     if (s_sel < s_scroll) s_scroll = s_sel;
     int scan_y = 0;
-    for (int i = s_scroll; i <= s_sel; i++) scan_y += (i == s_sel) ? 28 : 15;
-    while (scan_y > region_h && s_scroll < s_sel) { scan_y -= (s_scroll == s_sel) ? 28 : 15; s_scroll++; }
+    for (int i = s_scroll; i <= s_sel; i++) scan_y += (i == s_sel) ? 28 : 20;
+    while (scan_y > region_h && s_scroll < s_sel) { scan_y -= (s_scroll == s_sel) ? 28 : 20; s_scroll++; }
 
     int y = y0;
     for (int i = s_scroll; i < s_n && y < y0 + region_h; i++) {
-        int h = (i == s_sel) ? 28 : 15;
+        int h = (i == s_sel) ? 28 : 20;
         if (y + h > y0 + region_h && i != s_scroll) break;
         draw_row(i, y, h, i == s_sel);
         y += h;
@@ -1571,15 +1718,12 @@ static void clip_title(int idx, char *buf, size_t n)
 // or honour the viewer's prev/next skip. ONE return_to_list() at the end -> no flash between clips.
 static void play_from(int idx, int64_t start_ms)
 {
-    // Dedicated mode: hand the whole machine to the player. Stop the HTTP server, mDNS and the voice
-    // engine and unload the ANIMA L1 index (~70 KB freed; Wi-Fi STA stays up) so the MP3 decoder + the
-    // JPEG frame buffer never OOM and playback isn't fighting web traffic for RAM/CPU. We restore it
-    // right after the last clip (and as a safety net in leave()).
-    nucleo_exclusive_info_t inf;
-    nucleo_exclusive_enter(NX_NET_APP, &inf);   // per-play reclaim; restored below + leave()/close safety-net
-    ESP_LOGI(V_TAG, "play: reclaim free %u->%u, largest %u->%u",
-             (unsigned)inf.free_before, (unsigned)inf.free_after,
-             (unsigned)inf.largest_before, (unsigned)inf.largest_after);
+    // The dedicated reclaim window (NX_NET_APP, ~70 KB; Wi-Fi STA stays up) is already held for the whole
+    // app session by enter() — like the Music player. We do NOT toggle it per-play: the old per-play
+    // enter/exit meant the FILE BROWSER ran at the ~5 KB idle heap, where scan()'s opendir/fopen OOM and
+    // the list comes up EMPTY ("non vedo i file"). Holding it from enter() gives both browser and player
+    // the headroom. (Do NOT add NX_WIFI: tearing the radio down+up is the ADV's fragile path — it left
+    // audio dead + SD flaky for an extra ~30-50KB we don't need; an .nfv plays off SD, no network.)
     vtrace("play_enter", true);
 
     for (;;) {
@@ -1599,10 +1743,20 @@ static void play_from(int idx, int64_t start_ms)
         break;                                               // PR_STOP, or ended with nothing to advance to
     }
     vtrace("pf_before_rtl", false);
-    return_to_list();         // re-acquire the 32 KB canvas while RAM is still abundant...
-    vtrace("pf_before_exit", false);
-    nucleo_exclusive_exit();  // ...THEN restart the network services (Wi-Fi never went down)
+    return_to_list();         // re-acquire the 32 KB canvas; the reclaim window stays held until leave()
     vtrace("pf_done", false);
+}
+
+// Play a single .nfv chosen in Files ("open with") — it can live OUTSIDE VIDEO_DIR. The reclaim window
+// is already held for the session by enter(); we just play the one clip, then return to the list.
+static void play_external(const char *abs)
+{
+    const char *bn = strrchr(abs, '/'); bn = bn ? bn + 1 : abs;
+    char title[72]; snprintf(title, sizeof title, "%s", bn);
+    char *dt = strrchr(title, '.'); if (dt) *dt = 0;          // hide the .nfv extension in the bar
+    play_nfv(abs, title, abs, 0, NULL);                       // reskey = abs path (unique resume key)
+    resume_refresh();
+    return_to_list();
 }
 
 static void on_key(int key, char ch)
@@ -1659,7 +1813,14 @@ static void update_hint(void)
 
 static void enter(void)
 {
+    // RAM is handled DECLARATIVELY by exclusive_flags (NX_NET_APP | NX_SOLO) — the framework applies it
+    // BEFORE this on_enter runs, so scan()'s opendir/fopen already have headroom. NX_SOLO reboots the
+    // whole app into a FRESH, UNFRAGMENTED heap (services never started), which is what finally lets the
+    // Helix MP3 decoder (~20 KB) + the JPEG frame buffer (~9 KB) + the file list coexist without OOM —
+    // the inline ~70 KB reclaim alone left the decoder short and playback was SILENT.
     if (!st) st = (VState *)calloc(1, sizeof(VState));       // ~5 KB, only while the app is open
+    if (!s_resume_scratch)                                   // ~4 KB resume scratch, only while open; before scan()
+        s_resume_scratch = (resume_ent *)calloc(RESUME_MAX, sizeof *s_resume_scratch);
     load_settings();
     nucleo_audio_set_mute(false);                            // never inherit a mute from a previous session
     nucleo_app_set_tab_handler(on_tab);
@@ -1668,6 +1829,8 @@ static void enter(void)
     strcpy(s_path, "/");
     scan();
     s_hint_last = -1; update_hint();
+    const char *of = nucleo_app_take_open_file();
+    if (of && of[0]) play_external(of);                       // opened from Files -> play that clip, then the list
 }
 // Return the RAM to ANIMA and clear mute so it never leaks to Music/Radio after we close.
 static void leave(void)
@@ -1675,6 +1838,7 @@ static void leave(void)
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();   // safety net: never leave services suspended
     nucleo_audio_set_mute(false);
     if (st) { free(st); st = nullptr; }
+    if (s_resume_scratch) { free(s_resume_scratch); s_resume_scratch = nullptr; }
     s_n = 0;
 }
 
@@ -1683,7 +1847,11 @@ extern "C" void nucleo_register_video(void)
     static const nucleo_app_def_t app = {
         "video", "Video", "Media",
         ".nfv player — prev/next, mute, autoplay, resume. TAB=settings.",
-        'V', 0x4D9C, enter, on_key, tick, draw, leave
+        'V', 0x4D9C, enter, on_key, tick, draw, leave,
+        NX_NET_APP | NX_SOLO   // SOLO: reboot into a fresh, unfragmented heap so MP3 decoder + JPEG buffer
+                               // + file list coexist (inline reclaim left the decoder short -> silent video).
+                               // NX_NET_APP bits are no-ops in Solo (services down at boot) but kept defensively
+                               // for the non-Solo fallback path. Esc reboots back to the full OS.
     };
     nucleo_app_register(&app);
 }

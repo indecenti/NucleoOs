@@ -5,8 +5,9 @@
 // The web "Radio Index" app writes that file via /api/fs/write; this native app reads it on open,
 // so stations added/edited/reordered in the browser show up on the device with NO reflash. The host
 // tool tools/radio-check.mjs validates the same file. A legacy schema-1 file ({ "stream", "name" })
-// is still accepted, and if the card has no config at all we fall back to a single built-in
-// "Radio Index" station so the app always works.
+// is still accepted, and if the card has no usable config we fall back to the FULL curated catalog
+// (BUILTIN[] below — the same stations the web app seeds), so the dial is rich out of the box and
+// never collapses to a single entry.
 //
 // Audio: http://<host>/stream  (MP3, decoded by the Helix task via nucleo_audio_play_url ->
 //        nucleo_audio_http.c). PLAIN HTTP, no TLS (this chip has no PSRAM; TLS would not fit beside
@@ -63,14 +64,51 @@ static void seed_radio_index(void)
     snprintf(s_st[0].genre,  sizeof s_st[0].genre,  "%s", "Signature");
     snprintf(s_st[0].stream, sizeof s_st[0].stream, "%s", DEFAULT_URL);
 }
-static void seed_default(void) { seed_radio_index(); s_count = 1; s_default = 0; }  // fallback if alloc fails
 
-static void load_config(void)
+// Curated free stations (plain-HTTP MP3, direct-200, verified by tools/radio-check.mjs). The SAME
+// list the web Radio app seeds, mirrored here so a card never written by the web app still shows a
+// full dial. SD /system/config/radio.json, when present, overrides this. Keep in lock-step with the
+// SEED in apps/radio/www/index.html and tools/sd-sim/system/config/radio.json.
+typedef struct { const char *name; const char *genre; const char *stream; } builtin_t;
+static const builtin_t BUILTIN[] = {
+    { "Groove Salad",     "Ambient / Downtempo",  "http://ice1.somafm.com/groovesalad-128-mp3" },
+    { "Drone Zone",       "Ambient / Space",      "http://ice1.somafm.com/dronezone-128-mp3" },
+    { "Lush",             "Chill / Vocals",       "http://ice1.somafm.com/lush-128-mp3" },
+    { "Secret Agent",     "Lounge / Spy Jazz",    "http://ice1.somafm.com/secretagent-128-mp3" },
+    { "Indie Pop Rocks!", "Indie Pop",            "http://ice1.somafm.com/indiepop-128-mp3" },
+    { "Underground 80s",  "Synth / New Wave",     "http://ice1.somafm.com/u80s-128-mp3" },
+    { "Beat Blender",     "Deep House",           "http://ice1.somafm.com/beatblender-128-mp3" },
+    { "Fluid",            "Instrumental Hip-Hop", "http://ice1.somafm.com/fluid-128-mp3" },
+    { "Boot Liquor",      "Americana",            "http://ice1.somafm.com/bootliquor-128-mp3" },
+    { "PopTron",          "Electro Pop",          "http://ice1.somafm.com/poptron-128-mp3" },
+    { "DEF CON Radio",    "Hacker / Electro",     "http://ice1.somafm.com/defcon-128-mp3" },
+    { "Folk Forward",     "Folk / Acoustic",      "http://ice1.somafm.com/folkfwd-128-mp3" },
+    { "Left Coast 70s",   "70s / Mellow",         "http://ice1.somafm.com/seventies-128-mp3" },
+    { "Seven Inch Soul",  "Vintage Soul",         "http://ice1.somafm.com/7soul-128-mp3" },
+    { "Metal Detector",   "Heavy Metal",          "http://ice1.somafm.com/metal-128-mp3" },
+    { "Space Station",    "Space / Ambient",      "http://ice1.somafm.com/spacestation-128-mp3" },
+    { "The Trip",         "Prog / Trip-Hop",      "http://ice1.somafm.com/thetrip-128-mp3" },
+    { "Sonic Universe",   "Avant-Jazz",           "http://ice1.somafm.com/sonicuniverse-128-mp3" },
+    { "ThistleRadio",     "Celtic / World",       "http://ice1.somafm.com/thistle-128-mp3" },
+};
+
+// Append the curated list after the pinned Radio Index — the device's built-in dial when the SD card
+// has no usable radio.json yet (mirrors the web app's seed so both show the same stations).
+static void seed_builtin_list(void)
 {
-    // Slot 0 is always Radio Index (pinned, never overwritten by the JSON list).
-    seed_radio_index();
-    s_count = 1; s_default = 0;                              // start with Radio Index in slot 0
+    for (int i = 0; i < (int)(sizeof BUILTIN / sizeof BUILTIN[0]) && s_count < s_cap; i++) {
+        station_t *s = &s_st[s_count];
+        snprintf(s->name,   sizeof s->name,   "%s", BUILTIN[i].name);
+        snprintf(s->genre,  sizeof s->genre,  "%s", BUILTIN[i].genre);
+        snprintf(s->stream, sizeof s->stream, "%s", BUILTIN[i].stream);
+        s_count++;
+    }
+}
 
+// Read SD /system/config/radio.json and APPEND its stations after the pinned Radio Index. Leaves the
+// list untouched on any miss (no file, no RAM, bad/empty JSON) so load_config() can fall back.
+static void load_sd_stations(void)
+{
     FILE *f = fopen(NUCLEO_SD_MOUNT "/system/config/radio.json", "rb");
     if (!f) return;
     char *buf = (char *)malloc(8192);
@@ -117,6 +155,19 @@ static void load_config(void)
     }
     cJSON_Delete(root);
     if (s_default >= s_count) s_default = 0;
+}
+
+static void load_config(void)
+{
+    // Slot 0 is always Radio Index (pinned, never overwritten by the JSON list).
+    seed_radio_index();
+    s_count = 1; s_default = 0;                              // start with Radio Index in slot 0
+
+    load_sd_stations();                                     // SD list, when present, fills the dial
+
+    // Nothing usable on the card (missing file, parse error, or an empty list) — fall back to the full
+    // curated catalog so the native dial is as rich as the web app, never just Radio Index.
+    if (s_count <= 1) seed_builtin_list();
 }
 
 // ================= ON AIR listening screen (blocking modal) =====================================
@@ -287,13 +338,19 @@ static void draw_list_band(void)
 
 static void enter(void)
 {
-    if (!s_st) { s_st = (station_t *)malloc(sizeof(station_t) * RADIO_MAX); s_cap = s_st ? RADIO_MAX : 0; }
-    if (!s_st) { s_st = &s_fallback; s_cap = 1; }                   // malloc failed -> single static slot
+    // Free the 32 KB shared canvas FIRST so the station list (228 B * 24 = ~5.5 KB CONTIGUOUS) has room.
+    // Order matters on the ADV: with the canvas still held the heap is fragmented and the malloc fell back
+    // to the 1-slot static net -> "only Radio Index" in the dial. Release, then allocate.
+    nucleo_app_set_direct_draw(true);              // run DIRECT: no 32 KB canvas, no reacquire flicker
+    nucleo_app_release_buffers();                  // hand that RAM back before we ask for the contiguous block
+    if (!s_st) {
+        s_st = (station_t *)malloc(sizeof(station_t) * RADIO_MAX); s_cap = s_st ? RADIO_MAX : 0;
+        if (!s_st) { s_st = (station_t *)malloc(sizeof(station_t) * 12); s_cap = s_st ? 12 : 0; }  // degrade to a dozen, don't collapse to 1
+    }
+    if (!s_st) { s_st = &s_fallback; s_cap = 1; }                   // last resort: single static slot
     load_config();
     s_sel = (s_default < s_count) ? s_default : 0;
     s_top = 0; clamp_scroll();
-    nucleo_app_set_direct_draw(true);              // run DIRECT: no 32 KB canvas, no reacquire flicker
-    nucleo_app_release_buffers();                  // hand that RAM to the decoder right away
     nucleo_app_set_hint("up/down  pick      enter  listen");
 }
 

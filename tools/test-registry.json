@@ -124,7 +124,7 @@
       "id": "security",
       "label": "Sicurezza · Attacchi (test autorizzati)",
       "nl": false,
-      "desc": "Strumenti offensivi per test autorizzati: il core dei frame dell'engine Ethernet L2/L3 (W5500 MACRAW — ARP/DHCP/TCP build+parse, checksum IP/UDP/TCP, subnet, MAC random, OUI) host-testato. Pura logica C, nessun device. Un byte sbagliato = un attacco morto.",
+      "desc": "Strumenti offensivi per test autorizzati, host-testati (pura logica C, nessun device): il core dei frame dell'engine Ethernet L2/L3 (W5500 MACRAW — ARP/DHCP/TCP build+parse, checksum IP/UDP/TCP, subnet, MAC random, OUI) e il core advertisement BLE (Apple Continuity / Swift Pair / Fast Pair / iBeacon framing + report map HID, invariante <=31 byte). Un byte sbagliato = un attacco morto.",
       "anima": false
     },
     {
@@ -1042,6 +1042,22 @@
       "anima": true
     },
     {
+      "id": "gate-factory-games-sd",
+      "label": "factory-games (sd)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "python",
+      "args": [
+        "tools/gen-factory-manifests.py",
+        "--check"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-translate-it-en",
       "label": "translate (IT<->EN)",
       "category": "nl-translate",
@@ -1349,6 +1365,51 @@
       "anima": false
     },
     {
+      "id": "gate-mesh-seam-swarm",
+      "label": "mesh-seam (swarm)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/mesh-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-chorus-dir-swarm",
+      "label": "chorus-dir (swarm)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/chorus-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-swarm-sec-gate",
+      "label": "swarm-sec (gate)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/swarm-sec-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-eth-frames-wired",
       "label": "eth-frames (wired)",
       "category": "security",
@@ -1356,6 +1417,51 @@
       "cmd": "node",
       "args": [
         "tools/anima-host/eth-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "gate-ble-adv-spam-beacon",
+      "label": "ble-adv (spam/beacon)",
+      "category": "security",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/ble-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "gate-ducky-payloads",
+      "label": "ducky (payloads)",
+      "category": "security",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/ducky-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "gate-weather-meteo",
+      "label": "weather (meteo)",
+      "category": "app-shell",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/weather-check.mjs"
       ],
       "verifies": "",
       "nl": false,
@@ -1404,6 +1510,81 @@
       "args": [
         "--test",
         "tools/anima-host/agent-helpers.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-agent-contract-multi-provider",
+      "label": "agent-contract (multi-provider)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/agent-contract-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-app-publish-create-app-safety",
+      "label": "app-publish (create-app safety)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/app-publish-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-app-ops-publish-integration",
+      "label": "app-ops (publish integration)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/app-ops-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-app-review-advisory",
+      "label": "app-review (advisory)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/app-review-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-device-queue-cardputer-safe",
+      "label": "device-queue (cardputer-safe)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/device-queue-check.mjs"
       ],
       "verifies": "",
       "nl": false,
@@ -2228,22 +2409,6 @@
       "anima": true
     },
     {
-      "id": "unit-web-promote",
-      "label": "web-promote.test.mjs",
-      "category": "app-shell",
-      "kind": "unit",
-      "cmd": "node",
-      "args": [
-        "--test",
-        "tools/anima/web-promote.test.mjs"
-      ],
-      "verifies": "",
-      "nl": false,
-      "lang": "na",
-      "in_gate": true,
-      "anima": false
-    },
-    {
       "id": "unit-app-shortcuts",
       "label": "app-shortcuts.test.mjs",
       "category": "app-shell",
@@ -2446,6 +2611,22 @@
         "tools/nfv/nfv.test.mjs"
       ],
       "verifies": "NFV video format writer/reader round-trip: frame chain, index, headers, dirty-frame trimming match spec",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-shell-boot-fetch",
+      "label": "shell-boot-fetch.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-boot-fetch.test.mjs"
+      ],
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,

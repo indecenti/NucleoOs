@@ -7,8 +7,8 @@
 # nucleo_session cookie for the OTA POST. Without -Pin it probes /api/auth/status and,
 # if pairing is required, tells you to read the PIN and retry.
 #
-# Usage:  powershell -ExecutionPolicy Bypass -File tools\ota.ps1 [-Host 192.168.0.166] [-Pin 123456]
-#         (defaults to nucleo-01.local; pass -Host <ip> if mDNS doesn't resolve)
+# Usage:  powershell -ExecutionPolicy Bypass -File tools\ota.ps1 [-DeviceHost 192.168.0.166] [-Pin <PIN>]
+#         (defaults to nucleo-01.local; always pass -DeviceHost <ip> — mDNS is unreliable)
 param([string]$DeviceHost = "nucleo-01.local", [string]$Pin = "")
 $ErrorActionPreference = 'Stop'
 $bin = Join-Path (Split-Path $PSScriptRoot -Parent) "firmware\build\nucleoos.bin"
@@ -40,11 +40,29 @@ if ($Pin) {
 }
 
 Write-Host "OTA -> http://$DeviceHost/api/ota  ($([math]::Round($size/1KB)) KB)"
-try {
-    $resp = Invoke-WebRequest "http://$DeviceHost/api/ota" -Method Post -InFile $bin -ContentType 'application/octet-stream' -WebSession $session -TimeoutSec 120 -UseBasicParsing
-    Write-Host "Device: $($resp.Content)"
-    Write-Host "OK - device is rebooting into the new firmware (~5s)."
-} catch {
-    Write-Error "OTA failed: $($_.Exception.Message)"
-    exit 1
+# The upload can drop TRANSIENTLY on a busy / low-contiguous-heap device (seen on the ADV unit): the
+# same image resends fine moments later. It's safe to just retry — the new image is only committed by
+# esp_ota_end's checksum + set_boot_partition, so a dropped attempt never bricks nor half-flashes; the
+# device keeps booting the current firmware until ONE complete, valid upload lands. Re-pair each round
+# (the session may have gone stale) and give it a longer per-attempt window.
+$ok = $false
+for ($attempt = 1; $attempt -le 3 -and -not $ok; $attempt++) {
+    if ($attempt -gt 1) {
+        Write-Host "Retry $attempt/3 (transient drop -> re-pair and resend)..."
+        Start-Sleep -Seconds 4
+        if ($Pin) {
+            $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            try { Invoke-WebRequest "http://$DeviceHost/api/pair" -Method Post -Body (@{ pin = $Pin } | ConvertTo-Json) `
+                    -ContentType 'application/json' -WebSession $session -TimeoutSec 15 -UseBasicParsing | Out-Null } catch {}
+        }
+    }
+    try {
+        $resp = Invoke-WebRequest "http://$DeviceHost/api/ota" -Method Post -InFile $bin -ContentType 'application/octet-stream' -WebSession $session -TimeoutSec 180 -UseBasicParsing
+        Write-Host "Device: $($resp.Content)"
+        Write-Host "OK - device is rebooting into the new firmware (~5s)."
+        $ok = $true
+    } catch {
+        Write-Warning "OTA attempt $attempt failed: $($_.Exception.Message)"
+    }
 }
+if (-not $ok) { Write-Error "OTA failed after 3 attempts. Reboot the Cardputer (fresh heap) and re-run."; exit 1 }

@@ -41,11 +41,49 @@ extern "C" {
 #include "cJSON.h"
 #include "esp_timer.h"
 #include "esp_log.h"
+#include "esp_system.h"        // esp_restart() — Recorder Solo returns to the full OS via a warm reboot
+#include "esp_task_wdt.h"      // WDT-fed wait for Wi-Fi reconnect on the Solo boot
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 }
 
 static const char *REC_TAG = "recorder";
+
+// ── Recorder Solo (dedicated-boot) ─────────────────────────────────────────────────────────────────
+// MODEL: opening the Recorder from the launcher reboots ONCE into the dedicated Solo boot (main.c brings
+// up ONLY display + SD + Wi-Fi + mic + ANIMA — no httpd/mDNS/voice/TTS/IR/launcher), so the heap is large
+// and UNFRAGMENTED. Then EVERYTHING runs INSIDE that boot with NO further reboots: record, auto-transcribe,
+// summary, title, actions, Q&A — the cloud TLS finally gets its contiguous block. Esc reboots back to the
+// full OS. (The old per-action reboot/marker design caused the "continuous reboots inside the app" — gone.)
+extern "C" bool nucleo_anima_solo_active(void);
+extern "C" void nucleo_app_solo_request(int app);   // 2 = Recorder Solo; NEVER returns (waits for the mic to idle)
+extern "C" bool nucleo_anima_online_available(void);
+
+// True while a manual take reclaimed RAM via exclusive mode (httpd+L1+mDNS+voice suspended, Wi-Fi up);
+// released in tick() once the mic is free and no AI worker is using the heap, or in exit_app().
+static bool s_rec_nx = false;
+// Open-in-dedicated-mode: when the Recorder is opened from the full OS, tick() reboots ONCE into the Solo
+// boot after a brief notice (and after the mic is idle). Inside Solo this stays 0 — no more reboots.
+static int64_t s_enter_solo_us = 0;      // 0 = none; else the notice deadline after which we reboot into Solo
+static bool    s_auto_tx_pending = false; // a just-finished take queued for AUTO transcription (Solo, inline)
+
+// Arm a manual take. The record task needs a 16 KB CONTIGUOUS stack; on the no-PSRAM Cardputer the heap
+// is so fragmented while httpd+voice run that the largest free block is often 1-3 KB (measured in the
+// device logs), so xTaskCreate fails and nucleo_recorder_start() returns ESP_FAIL — which the UI used to
+// mislabel as "mic busy (web)". Recording needs ONLY mic + SD, so on that failure we reclaim the heavy
+// subsystems (NX_NET_APP: httpd ~18 KB contiguous + L1 + mDNS + voice; Wi-Fi stays) and retry once. The
+// reclaim is skipped entirely when the first start() already succeeds, so a healthy heap keeps the web
+// UI live. Returns the raw start() result so the caller can tell busy-mic from a real OOM.
+static esp_err_t arm_record(void)
+{
+    esp_err_t rc = nucleo_recorder_start();
+    if (rc != ESP_FAIL || s_rec_nx) return rc;   // OK / busy, or we already reclaimed and still failed
+    nucleo_exclusive_info_t inf;
+    s_rec_nx = nucleo_exclusive_enter(NX_NET_APP, &inf);
+    ESP_LOGW(REC_TAG, "record reclaim nx=%d free=%u largest=%u",
+             (int)s_rec_nx, (unsigned)inf.free_after, (unsigned)inf.largest_after);
+    return nucleo_recorder_start();              // retry on the freed, contiguous heap
+}
 
 #include "app_gfx.h"
 
@@ -64,7 +102,7 @@ static const unsigned short BG = 0x0841, SURF = 0x10A2, CAP = 0x1A8B, FG = 0xFFF
 #define REC_TXTBUF 4096                 // reader buffer (fits a full transcript)
 
 // ---- modes & tabs ---------------------------------------------------------------------------------
-enum { M_LIST = 0, M_DETAIL, M_SETTINGS, M_ASK };   // M_ASK = full-screen cross-note answer reader
+enum { M_LIST = 0, M_DETAIL, M_SETTINGS, M_ASK, M_PLAY };   // M_ASK = cross-note answer reader; M_PLAY = Now-Playing card
 enum { T_SUMMARY = 0, T_SCRIPT, T_ACTIONS, T_ASK, T_COUNT };
 enum { ST_AI = 0, ST_AUDIO, ST_INFO, ST_COUNT };
 // UI language flag — cached in enter() from sys_lang() (SD read, too costly in draw loops).
@@ -83,7 +121,8 @@ static int  s_set_tab = ST_AI;
 static int  s_set_row = 0;
 
 // ---- persisted settings ---------------------------------------------------------------------------
-static bool s_auto_summary = true;      // summarize automatically after a recording
+static bool s_auto_transcribe = true;   // transcribe automatically after a recording (user pref); summary stays manual
+static bool s_auto_summary = false;     // summarize automatically — OFF: a Solo reboot per take is too invasive
 static bool s_auto_title   = false;     // also rename the take from a Grok/Claude title
 static int  s_lang         = 0;         // 0 auto, 1 it, 2 en
 
@@ -116,11 +155,29 @@ static bool  s_more = false;            // last draw reported text below the fol
 
 // ---- background AI worker (one job at a time) -----------------------------------------------------
 enum { JOB_TRANSCRIBE = 1, JOB_SUMMARY, JOB_ACTIONS, JOB_QA, JOB_TITLE, JOB_ASKALL };
+// Honest failure reason for s_job==3 — so the UI stops blaming "offline / no key" for what is really a
+// RAM shortage (the common ADV case) or a network fault. Set by ai_task before it sets s_job=3.
+enum { AIERR_NONE = 0, AIERR_OFFLINE, AIERR_RAM, AIERR_EMPTY, AIERR_FAIL };
+static volatile int s_ai_err = AIERR_NONE;
+// Honest one-liner for the current AI failure. RAM is the common ADV case — never call it "offline".
+static const char *ai_err_msg(bool en)
+{
+    switch (s_ai_err) {
+        case AIERR_OFFLINE: return en ? "AI off: enable online / key" : "AI off: attiva online/chiave";
+        case AIERR_RAM:     return en ? "Low RAM: close an app, retry" : "RAM bassa: chiudi un'app, riprova";
+        case AIERR_EMPTY:   return en ? "No speech detected"          : "Nessun parlato rilevato";
+        default:            return en ? "AI failed (network?)"        : "AI fallita (rete?)";
+    }
+}
 
 // GO-button push-to-talk state machine (hold GO to record). Sequenced from on_tick because the speaker
 // and PDM mic share the I2S word-select line (mutually exclusive): start cue -> mic -> stop -> end cue.
 enum { PTT_IDLE = 0, PTT_ARMING, PTT_RECORDING, PTT_ENDCUE };
 static int s_ptt = PTT_IDLE;
+// Manual-record (R) is non-blocking when a web dictation stream holds the mic: the physical operator
+// outranks a remote stream, so R asks it to wind down and tick() starts the take once the mic frees.
+// s_rec_wait_us is the deadline (esp_timer µs) to keep retrying; 0 = not waiting.
+static int64_t s_rec_wait_us = 0;
 static volatile int s_job = 0;          // 0 idle, 1 working, 2 done, 3 error
 static int   s_job_kind = 0;
 static char  s_jobname[48];             // take filename being processed
@@ -147,6 +204,9 @@ static void rec_tab(void);
 static bool rec_back(int key);
 static void ask_all(void);
 static int  build_corpus(char *buf, int cap);
+static void open_play(void);
+static void play_key(int key, char ch);
+static int64_t s_vol_shown_us = 0;      // Now-Playing: show a brief "Vol NN%" badge after a volume nudge
 
 // ---- settings I/O ---------------------------------------------------------------------------------
 static void load_settings(void)
@@ -156,6 +216,7 @@ static void load_settings(void)
     if (n <= 0) return;
     buf[n] = 0;
     cJSON *root = cJSON_Parse(buf); if (!root) return;
+    cJSON *x = cJSON_GetObjectItem(root, "auto_transcribe"); if (cJSON_IsBool(x)) s_auto_transcribe = cJSON_IsTrue(x);
     cJSON *a = cJSON_GetObjectItem(root, "auto_summary"); if (cJSON_IsBool(a)) s_auto_summary = cJSON_IsTrue(a);
     cJSON *t = cJSON_GetObjectItem(root, "auto_title");   if (cJSON_IsBool(t)) s_auto_title   = cJSON_IsTrue(t);
     cJSON *l = cJSON_GetObjectItem(root, "lang");         if (cJSON_IsNumber(l)) s_lang = (int)l->valuedouble;
@@ -169,8 +230,8 @@ static void save_settings(void)
     mkdir(NUCLEO_SD_MOUNT "/system/config", 0775);
     FILE *f = fopen(SETTINGS_PATH, "wb");
     if (f) {
-        fprintf(f, "{\"auto_summary\":%s,\"auto_title\":%s,\"lang\":%d}\n",
-                s_auto_summary ? "true" : "false", s_auto_title ? "true" : "false", s_lang);
+        fprintf(f, "{\"auto_transcribe\":%s,\"auto_summary\":%s,\"auto_title\":%s,\"lang\":%d}\n",
+                s_auto_transcribe ? "true" : "false", s_auto_summary ? "true" : "false", s_auto_title ? "true" : "false", s_lang);
         fclose(f);
     }
 }
@@ -411,8 +472,10 @@ static void do_title(const char *text, const char *lang)
 static void ai_task(void *arg)
 {
     (void)arg;
+    s_ai_err = AIERR_FAIL;                       // default cause until a path proves a more specific one
     char *text = (char *)malloc(4096), *out = (char *)malloc(1024); char det[16] = {0};
     if (!text || !out) {
+        s_ai_err = AIERR_RAM;
         ESP_LOGE(REC_TAG, "ai_task OOM at entry (free=%u)",
                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
         free(text); free(out); s_job = 3; vTaskDelete(NULL); return;
@@ -422,27 +485,38 @@ static void ai_task(void *arg)
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 
-    // Enter DEDICATED MODE: reclaim httpd + L1 + mDNS + voice (~70 KB) so TLS has enough heap.
+    // RAM for the cloud TLS. In SOLO we booted dedicated (no httpd/voice/mDNS) so the heap is already big
+    // and UNFRAGMENTED — skip the runtime reclaim entirely (it would also poke voice/mDNS that were never
+    // started). In the full OS, reclaim httpd + L1 + mDNS + voice (~70 KB) and gate on the real handshake
+    // need; but note this only frees, it can't defragment — which is exactly why heavy jobs go via Solo.
     bool nx = false;
-    if (nucleo_anima_online_available()) {
+    if (!nucleo_anima_online_available()) {
+        s_ai_err = AIERR_OFFLINE;
+        ESP_LOGW(REC_TAG, "ai_task: device offline — no AI possible");
+        s_job = 3; goto done;
+    }
+    if (!nucleo_anima_solo_active()) {
         nucleo_exclusive_info_t inf;
         nx = nucleo_exclusive_enter(NX_NET_APP, &inf);
         ESP_LOGI(REC_TAG, "exclusive=%d post-reclaim free=%u largest=%u",
                  (int)nx, (unsigned)inf.free_after, (unsigned)inf.largest_after);
-        // RAM gate aligned with the ACTUAL cloud-TLS need: ~38 KB free + a ~10 KB contiguous block
-        // (mbedTLS variable buffers grow as needed — same condition online_tls_heap_too_low uses
-        // successfully for the web path). The OLD "largest < 40 KB CONTIGUOUS" was ~4x stricter than the
-        // real handshake and rejected a workable heap (e.g. the just-freed 32 KB canvas block), which is
-        // exactly why the summary kept aborting. The per-request online_tls_heap_too_low gate inside
-        // transcribe/summarize is the FINAL OOM safety, so bailing here only skips a doomed attempt.
-        if (inf.free_after < 40 * 1024 || inf.largest_after < 16 * 1024) {
+        if (inf.free_after < NUCLEO_TLS_MIN_FREE || inf.largest_after < NUCLEO_TLS_MIN_BLOCK) {
+            s_ai_err = AIERR_RAM;
             ESP_LOGE(REC_TAG, "ai_task: heap too low (free=%u largest=%u) — aborting",
                      (unsigned)inf.free_after, (unsigned)inf.largest_after);
             s_job = 3; goto done;
         }
     } else {
-        ESP_LOGW(REC_TAG, "ai_task: device offline — no AI possible");
-        s_job = 3; goto done;
+        // Solo: heap should be large + contiguous, but verify (other boot init can fragment it) instead of
+        // assuming — a marginal block must fail FAST with a reason, not OOM the AES alloc mid-handshake.
+        nucleo_anima_l1_unload_if_idle();
+        size_t fr = heap_caps_get_free_size(MALLOC_CAP_INTERNAL), lb = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+        ESP_LOGI(REC_TAG, "ai_task SOLO: free=%u largest=%u", (unsigned)fr, (unsigned)lb);
+        if (fr < NUCLEO_TLS_MIN_FREE || lb < NUCLEO_TLS_MIN_BLOCK) {
+            s_ai_err = AIERR_RAM;
+            ESP_LOGE(REC_TAG, "ai_task SOLO heap too low (free=%u largest=%u) — aborting", (unsigned)fr, (unsigned)lb);
+            s_job = 3; goto done;
+        }
     }
 
     if (s_job_kind == JOB_ASKALL) {
@@ -454,29 +528,61 @@ static void ai_task(void *arg)
         }
         char p[300]; snprintf(p, sizeof p, "%s/.askall.txt", REC_PATH);
         FILE *f = fopen(p, "w"); if (f) { fprintf(f, "Q: %s\n\n", s_job_q); fwrite(out, 1, strlen(out), f); fclose(f); }
-        s_job = 2; goto done;
+        s_ai_err = AIERR_NONE; s_job = 2; goto done;
     }
 
     {
     char tpath[300]; sidecar_of(tpath, sizeof tpath, s_jobname, ".txt");
+    // Past ~4 min of 16k WAV (≈8 MB) the single-shot reply text outgrows the 4 KB RAM buffer (and a 2-min
+    // take already overran HTTP_CAP with verbose_json) — so anything longer takes the CHUNKED path: slice
+    // on SD, transcribe segment by segment, stream the text straight to the .txt sidecar (never in RAM).
+    struct stat fst; bool islong = (stat(s_jobpath, &fst) == 0 && fst.st_size > (8L * 1024 * 1024));
     int tl = load_text(tpath, text, 4096);
     if (tl <= 0) {                                               // need to transcribe first
-        ESP_LOGI(REC_TAG, "transcribing %s (lang_hint=%s)", s_jobname, lang_hint());
-        tl = nucleo_anima_transcribe(s_jobpath, lang_hint(), text, 4096, det, sizeof det);
-        if (tl < 0 && s_lang == 0) {
-            ESP_LOGW(REC_TAG, "transcribe auto failed, retrying with sys_lang=%s", sys_lang());
-            tl = nucleo_anima_transcribe(s_jobpath, sys_lang(), text, 4096, det, sizeof det);
+        if (islong) {
+            ESP_LOGI(REC_TAG, "transcribing LONG %s in chunks", s_jobname);
+            int n = nucleo_anima_transcribe_long(s_jobpath, lang_hint(), tpath, det, sizeof det);
+            if (n <= 0 && s_lang == 0) n = nucleo_anima_transcribe_long(s_jobpath, sys_lang(), tpath, det, sizeof det);
+            if (n <= 0) { s_ai_err = AIERR_FAIL; ESP_LOGE(REC_TAG, "transcribe_long FAILED %s", s_jobname); s_job = 3; goto done; }
+            tl = load_text(tpath, text, 4096);                  // head of the transcript for non-summary derivations
+        } else {
+            // The TLS handshake peaks near OOM on this fragmented PSRAM-less heap, so a single attempt is a
+            // coin-flip ("sometimes works, sometimes fails"). Retry up to 4× with a delay between: each gap
+            // lets the heap settle / the arbiter free / fragmentation shift, so a lost race usually wins next.
+            // Alternate the language hint (auto ↔ system) so a genuine auto-detect miss is also covered.
+            ESP_LOGI(REC_TAG, "transcribing %s (lang_hint=%s)", s_jobname, lang_hint());
+            // load_text returns 0 (not -1) when the .txt sidecar is absent, so the retry guard MUST be `<= 0`
+            // — a `< 0` guard skips the loop entirely for a never-transcribed take and writes an empty .txt.
+            for (int att = 0; att < 4 && tl <= 0; att++) {
+                if (att) { vTaskDelay(pdMS_TO_TICKS(800)); nucleo_anima_l1_unload_if_idle(); }
+                const char *lh = (att & 1) ? sys_lang() : lang_hint();
+                tl = nucleo_anima_transcribe(s_jobpath, lh, text, 4096, det, sizeof det);
+                if (tl <= 0) ESP_LOGW(REC_TAG, "transcribe attempt %d %s (lang=%s)", att + 1, tl < 0 ? "failed" : "empty", lh);
+                if (tl == 0) break;   // Whisper-confirmed silence (HTTP 200, empty text): deterministic — retrying only burns TLS+battery
+            }
+            if (tl <= 0) {
+                s_ai_err = (tl < 0) ? AIERR_FAIL : AIERR_EMPTY;   // <0 = transport/key/heap; ==0 = real but silent
+                ESP_LOGE(REC_TAG, "transcribe %s for %s after retries — check Whisper key/heap/audio",
+                         tl < 0 ? "FAILED" : "EMPTY", s_jobname);
+                unlink(tpath);   // drop any 0-byte ghost .txt (web/long path can leave one) so it never poisons a later job as a "cached" transcript
+                s_job = 3; goto done;
+            }
+            ESP_LOGI(REC_TAG, "transcribe OK: %d chars, lang=%s", tl, det[0] ? det : "?");
+            write_sidecar(s_jobname, ".txt", text);
         }
-        if (tl < 0) {
-            ESP_LOGE(REC_TAG, "transcribe FAILED for %s — check Whisper key/heap", s_jobname);
-            s_job = 3; goto done;
-        }
-        ESP_LOGI(REC_TAG, "transcribe OK: %d chars, lang=%s", tl, det[0] ? det : "?");
-        write_sidecar(s_jobname, ".txt", text);
     } else {
         ESP_LOGI(REC_TAG, "transcript cached (%d chars), skipping Whisper", tl);
     }
     const char *lang = det[0] ? det : (s_lang == 2 ? "en" : s_lang == 1 ? "it" : sys_lang());
+    // Long take + summary: map-reduce over the WHOLE .txt on SD (RAM holds only the head above).
+    if (islong && s_job_kind == JOB_SUMMARY) {
+        char spath[300]; sidecar_of(spath, sizeof spath, s_jobname, ".sum.txt");
+        if (nucleo_anima_summarize_file(tpath, lang, spath) <= 0) {
+            s_ai_err = AIERR_FAIL; ESP_LOGE(REC_TAG, "summarize_file FAILED"); s_job = 3; goto done;
+        }
+        if (s_auto_title) do_title(text, lang);                 // title from the head (best-effort on a long take)
+        s_ai_err = AIERR_NONE; s_job = 2; goto done;
+    }
     switch (s_job_kind) {
     case JOB_SUMMARY:
         if (nucleo_anima_summarize(text, lang, out, 1024) <= 0) {
@@ -503,7 +609,7 @@ static void ai_task(void *arg)
         break;
     default: break;
     }
-    s_job = 2;
+    s_ai_err = AIERR_NONE; s_job = 2;
     ESP_LOGI(REC_TAG, "ai_task kind=%d DONE OK", s_job_kind);
     }
 done:
@@ -535,33 +641,51 @@ static void ai_screen_restore(void)
     nucleo_app_request_draw();
 }
 
-static bool start_job(int kind, const char *q)
+// Spawn the in-place worker (used ONLY when we're already in the dedicated Solo boot — the full OS defers
+// to a Solo reboot instead, see below).
+static bool spawn_ai_worker(void)
 {
-    if (s_job == 1 || s_count == 0 || nucleo_recorder_is_recording() || s_sel >= s_count) return false;
-    snprintf(s_jobname, sizeof s_jobname, "%s", s_list[s_sel].name);
-    snprintf(s_jobpath, sizeof s_jobpath, "%s/%s", REC_PATH, s_jobname);
-    s_job_kind = kind; s_renamed[0] = 0;
-    if (q) snprintf(s_job_q, sizeof s_job_q, "%s", q); else s_job_q[0] = 0;
-    s_job = 1;
-    ai_screen_free();   // free the 32 KB canvas so the TLS gets a contiguous block (restored in tick when the job ends)
-    // 16 KB stack: the mbedTLS handshake to the cloud is stack-hungry (mirrors the ANIMA worker).
+    s_job = 1; ai_screen_free();   // free the 32 KB canvas so the TLS gets a contiguous block
     if (xTaskCreate(ai_task, "rec-ai", 16384, nullptr, tskIDLE_PRIORITY + 2, nullptr) != pdPASS) { s_job = 3; ai_screen_restore(); return false; }
     return true;
 }
 
-// Cross-note Q&A: ask one question against EVERY transcribed note at once (Claude/Grok long context).
+// Ask tick() to reboot into the dedicated Solo boot (used if an AI action is somehow reached in the full
+// OS — normally the app is already in Solo, opened that way). is_busy-guarded in tick.
+static void request_dedicated_mode(void)
+{
+    if (nucleo_anima_solo_active() || s_enter_solo_us) return;
+    s_enter_solo_us = esp_timer_get_time() + 700000;
+    nucleo_app_set_hint(TR("Apro modalità dedicata…", "Opening dedicated mode…"));
+    nucleo_app_request_draw();
+}
+
+static bool start_job(int kind, const char *q)
+{
+    if (s_job == 1 || s_enter_solo_us || s_count == 0 || nucleo_recorder_is_busy() || s_sel >= s_count) return false;
+    if (!nucleo_anima_solo_active()) { request_dedicated_mode(); return false; }   // not dedicated yet -> reboot in first
+    snprintf(s_jobname, sizeof s_jobname, "%s", s_list[s_sel].name);
+    snprintf(s_jobpath, sizeof s_jobpath, "%s/%s", REC_PATH, s_jobname);
+    s_job_kind = kind; s_renamed[0] = 0;
+    if (kind == JOB_TRANSCRIBE) s_auto_tx_pending = false;   // a manual transcribe satisfies the pending auto-one — don't re-run it after
+    if (q) snprintf(s_job_q, sizeof s_job_q, "%s", q); else s_job_q[0] = 0;
+    if (!nucleo_anima_online_available()) { s_ai_err = AIERR_OFFLINE; s_job = 3; return false; }   // offline -> honest
+    return spawn_ai_worker();                                              // dedicated boot: clean heap, run inline
+}
+
+// Cross-note Q&A: ask one question against EVERY transcribed note at once (Claude/Groq long context).
 // A second brain over your whole voice-note history — the device only gathers the text.
 static void ask_all(void)
 {
-    if (s_job == 1 || s_count == 0 || nucleo_recorder_is_recording()) return;
+    if (s_job == 1 || s_enter_solo_us || s_count == 0 || nucleo_recorder_is_busy()) return;
+    if (!nucleo_anima_solo_active()) { request_dedicated_mode(); return; }   // reboot into the dedicated boot first
     char q[160] = "";
     nucleo_ui_input(TR("Chiedi a tutte le note", "Ask across all notes"), q, sizeof q, 0);
     if (!q[0]) { nucleo_app_request_draw(); return; }
     snprintf(s_job_q, sizeof s_job_q, "%s", q);
-    s_job_kind = JOB_ASKALL; s_renamed[0] = 0; s_job = 1;
-    ai_screen_free();
-    if (xTaskCreate(ai_task, "rec-ai", 16384, nullptr, tskIDLE_PRIORITY + 2, nullptr) != pdPASS) { s_job = 3; ai_screen_restore(); }
-    nucleo_app_request_draw();
+    s_job_kind = JOB_ASKALL; s_jobname[0] = 0; s_renamed[0] = 0;           // askall has no single take
+    if (!nucleo_anima_online_available()) { s_ai_err = AIERR_OFFLINE; s_job = 3; nucleo_app_request_draw(); return; }
+    spawn_ai_worker(); nucleo_app_request_draw();
 }
 
 static int kind_for_tab(int t) { return t == T_SCRIPT ? JOB_TRANSCRIBE : t == T_SUMMARY ? JOB_SUMMARY : t == T_ACTIONS ? JOB_ACTIONS : JOB_QA; }
@@ -790,7 +914,7 @@ static void detail_draw(int top, int h)
     d.setTextSize(1);
     if (s_job == 3) {
         d.setTextColor(ACC, BG); d.setCursor(8, footer_y + 2);
-        d.print(TR("AI non disponibile (offline/chiave)", "AI failed (offline / no key)"));
+        d.print(ai_err_msg(s_en));
         return;
     }
     if (nucleo_audio_is_playing() && s_playing >= 0) { draw_transport(footer_y); return; }
@@ -866,6 +990,72 @@ static void ask_draw(int top, int h)
     d.print(TR("su/giu riga  ,/. pagina  esc: indietro", "up/dn line  ,/. page  esc back"));
 }
 
+// ---- Now Playing card (M_PLAY) --------------------------------------------------------------------
+// A focused, smartwatch-style playback screen for ONE take: the note name, a BIG elapsed clock, a
+// scrubber with knob, and live state. Reached with Enter on a library take; Esc returns to the list
+// (playback keeps running there, with the inline transport). Space play/pause, ,/. seek ±5s,
+// up/down volume, A opens the AI reader for this note.
+static void open_play(void)
+{
+    play_sel();
+    if (s_playing >= 0) set_mode(M_PLAY);
+}
+
+static void draw_play(int top, int h)
+{
+    const char *nm = (s_sel < s_count) ? s_list[s_sel].label : "";
+    uint32_t el = nucleo_audio_elapsed_ms() / 1000, dur = nucleo_audio_duration_ms() / 1000;
+    bool playing = nucleo_audio_is_playing(), paused = nucleo_audio_is_paused();
+
+    char durs[12]; snprintf(durs, sizeof durs, "%u:%02u", (unsigned)(dur / 60), (unsigned)(dur % 60));
+    char title[20]; snprintf(title, sizeof title, "%.16s", nm);   // keep clear of the right-aligned duration
+    int y0 = app_ui_title(title, GRN, dur ? durs : nullptr);
+
+    // BIG elapsed clock, centred (Font0 x5 = 30x40 px/char).
+    char els[12]; snprintf(els, sizeof els, "%u:%02u", (unsigned)(el / 60), (unsigned)(el % 60));
+    int tw = (int)strlen(els) * 30, tx = (240 - tw) / 2; if (tx < 0) tx = 0;
+    d.setFont(&fonts::Font0); d.setTextSize(5); d.setTextColor(FG, BG);
+    d.setCursor(tx, y0 + 8); d.print(els); d.setTextSize(1);
+
+    // Scrubber with knob.
+    int prog = nucleo_audio_progress(); if (prog < 0) prog = 0; if (prog > 100) prog = 100;
+    int bx = 14, bw = 212, by = y0 + 60, bh = 8;
+    d.fillRoundRect(bx, by, bw, bh, bh / 2, 0x2945);
+    int fw = bw * prog / 100; if (fw > 0) d.fillRoundRect(bx, by, fw, bh, bh / 2, GRN);
+    int kx = bx + fw; if (kx < bx + 5) kx = bx + 5; if (kx > bx + bw - 5) kx = bx + bw - 5;
+    d.fillCircle(kx, by + bh / 2, 6, FG);
+
+    // Below: state (left) + remaining (right). A recent volume nudge briefly takes the left slot.
+    d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1);
+    bool show_vol = (esp_timer_get_time() - s_vol_shown_us) < 1200000;
+    if (show_vol) {
+        char vb[16]; snprintf(vb, sizeof vb, "Vol %d%%", nucleo_audio_volume());
+        d.setTextColor(FG, BG); d.setCursor(14, by + 16); d.print(vb);
+    } else {
+        const char *st = !playing ? TR("Fine", "Ended") : paused ? TR("In pausa", "Paused") : TR("In ascolto", "Playing");
+        unsigned short sc = !playing ? MUTED : paused ? AMBER : GRN;
+        d.setTextColor(sc, BG); d.setCursor(14, by + 16);
+        d.print(playing && !paused ? ">  " : paused ? "II  " : ""); d.print(st);
+    }
+    uint32_t rem = dur > el ? dur - el : 0;
+    char rems[12]; snprintf(rems, sizeof rems, "-%u:%02u", (unsigned)(rem / 60), (unsigned)(rem % 60));
+    d.setTextColor(MUTED, BG); d.setCursor(226 - (int)d.textWidth(rems), by + 16); d.print(rems);
+    d.setFont(&fonts::Font0);
+}
+
+static void play_key(int key, char ch)
+{
+    bool playing = nucleo_audio_is_playing();
+    if (ch == ' ')        { if (playing) nucleo_audio_toggle_pause(); else play_sel(); nucleo_app_request_draw(); return; }
+    if (playing && (ch == ',' || ch == '.' || ch == '<' || ch == '>')) { seek_playing(ch == '.' || ch == '>'); return; }
+    if (key == NK_RIGHT && playing) { seek_playing(true); return; }   // ► seek +5s (Left = −5s, routed via rec_back)
+    if (key == NK_UP   || ch == '+' || ch == '=') { int v = nucleo_audio_volume() + 5; if (v > 100) v = 100; nucleo_audio_set_volume(v); s_vol_shown_us = esp_timer_get_time(); nucleo_app_request_draw(); return; }
+    if (key == NK_DOWN || ch == '-' || ch == '_') { int v = nucleo_audio_volume() - 5; if (v < 0)   v = 0;   nucleo_audio_set_volume(v); s_vol_shown_us = esp_timer_get_time(); nucleo_app_request_draw(); return; }
+    if (ch == 'a' || ch == 'A')  { open_detail(); return; }      // jump to the AI reader for this take
+    if (ch == 's' || ch == 'S')  { nucleo_audio_stop(); s_playing = -1; nucleo_app_request_draw(); return; }
+    if (key == NK_ENTER)         { if (!playing) play_sel(); else nucleo_audio_toggle_pause(); nucleo_app_request_draw(); return; }
+}
+
 // ---- settings -------------------------------------------------------------------------------------
 static void draw_opt(int y, bool focus, const char *label, const char *val, bool toggle, bool on)
 {
@@ -926,10 +1116,11 @@ static void settings_draw(int top, int h)
 
     if (s_set_tab == ST_AI) {
         const char *langv = s_lang == 1 ? "IT" : s_lang == 2 ? "EN" : "Auto";
-        int y = y0 + 6;
-        draw_opt(y,      s_set_row == 0, TR("Riassunto auto", "Auto summary"), nullptr, true, s_auto_summary);
-        draw_opt(y + 28, s_set_row == 1, TR("Titolo auto",    "Auto title"),   nullptr, true, s_auto_title);
-        draw_opt(y + 56, s_set_row == 2, TR("Lingua",         "Language"),     langv,   false, false);
+        int y = y0 + 4;
+        draw_opt(y,      s_set_row == 0, TR("Trascrizione auto", "Auto transcribe"), nullptr, true, s_auto_transcribe);
+        draw_opt(y + 26, s_set_row == 1, TR("Riassunto auto",    "Auto summary"),    nullptr, true, s_auto_summary);
+        draw_opt(y + 52, s_set_row == 2, TR("Titolo auto",       "Auto title"),      nullptr, true, s_auto_title);
+        draw_opt(y + 78, s_set_row == 3, TR("Lingua",            "Language"),        langv,   false, false);
     } else if (s_set_tab == ST_AUDIO) {
         draw_vol_row(y0 + 6, s_set_row == 0, nucleo_audio_volume());
         d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1); d.setTextColor(DIM, BG);
@@ -973,10 +1164,11 @@ static void settings_key(int key, char ch)
     }
     if (s_set_tab != ST_AI) return;                            // INFO has no rows
     if (key == NK_UP)   { if (s_set_row > 0) s_set_row--; nucleo_app_request_draw(); return; }
-    if (key == NK_DOWN) { if (s_set_row < 2) s_set_row++; nucleo_app_request_draw(); return; }
+    if (key == NK_DOWN) { if (s_set_row < 3) s_set_row++; nucleo_app_request_draw(); return; }
     if (key == NK_ENTER) {
-        if      (s_set_row == 0) s_auto_summary = !s_auto_summary;
-        else if (s_set_row == 1) s_auto_title   = !s_auto_title;
+        if      (s_set_row == 0) s_auto_transcribe = !s_auto_transcribe;
+        else if (s_set_row == 1) s_auto_summary    = !s_auto_summary;
+        else if (s_set_row == 2) s_auto_title      = !s_auto_title;
         else                     s_lang = (s_lang + 1) % 3;
         save_settings(); nucleo_app_request_draw();
     }
@@ -991,28 +1183,60 @@ static const char *rl_right(int i, void *)
 }
 static unsigned short rl_color(int i, void *) { return i == s_playing ? GRN : (s_list[i].has_ai ? VIO : ACC); }
 
+// Smartwatch-style recording hero: a breathing REC dot, a BIG centred monospace timer, a full-width
+// reactive waveform and the input meter. Stop instructions live in the system hint bar (set_hint_for_mode),
+// so the screen itself stays uncluttered and uses the whole content band. Content is 240x121 (top=0).
 static void draw_recording(void)
 {
     bool arming = (s_ptt == PTT_ARMING && !nucleo_recorder_is_recording());   // GO held, start cue playing
-    int y0 = app_ui_title(arming ? TR("Pronto…", "Ready…") : TR("Registrazione", "Recording"), ACC, nullptr);
+    int y0 = app_ui_title(arming ? TR("Pronto", "Ready") : TR("Registrazione", "Recording"), ACC, nullptr);
+    bool blink = (esp_timer_get_time() / 400000) & 1;
+
     if (arming) {                                            // the mic opens the instant the cue finishes
+        int cy = y0 + 34;                                    // pulsing record disc (matches the empty-state CTA)
+        d.fillCircle(120, cy, blink ? 30 : 26, 0x2000);
+        d.drawCircle(120, cy, 30, ACC);
+        d.fillCircle(120, cy, 16, ACC);
         d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1); d.setTextColor(GRN, BG);
-        d.setCursor(12, y0 + 34); d.print(TR("Tieni GO e parla…", "Hold GO and speak…"));
+        const char *m = TR("Tieni GO e parla...", "Hold GO and speak...");
+        d.setCursor(120 - (int)d.textWidth(m) / 2, cy + 46); d.print(m);
         d.setFont(&fonts::Font0);
         return;
     }
+
+    // Recording: breathing status dot, top-right of the title row (clear "we are live" affordance).
+    d.fillCircle(228, y0 - 13, blink ? 6 : 4, blink ? ACC : 0x6000);
+
+    // BIG timer (Font0 @ size 5 = 30x40 px/char), centred. M:SS, grows cleanly to MM:SS / H:MM:SS-wide.
     uint32_t s = nucleo_recorder_seconds();
-    char t[24]; snprintf(t, sizeof(t), "%02u:%02u", (unsigned)(s / 60), (unsigned)(s % 60));
-    bool blink = (esp_timer_get_time() / 500000) & 1;
-    d.fillCircle(18, y0 + 12, 5, blink ? ACC : 0x6000);
-    d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(34, y0 + 5); d.print("REC "); d.print(t);
-    waveform(10, y0 + 26, 220, 40);
-    meter(y0 + 70, nucleo_recorder_level());
-    char fr[24]; human_free(fr, sizeof(fr));
-    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, y0 + 84);
-    d.print(s_ptt == PTT_RECORDING ? TR("Rilascia GO per fermare", "Release GO to stop")
-                                   : TR("R/Spazio: ferma", "R/Space: stop"));
-    if (fr[0]) { d.print("   "); d.print(fr); }
+    char t[16];
+    if (s >= 3600) snprintf(t, sizeof(t), "%u:%02u:%02u", (unsigned)(s / 3600), (unsigned)((s / 60) % 60), (unsigned)(s % 60));
+    else           snprintf(t, sizeof(t), "%u:%02u", (unsigned)(s / 60), (unsigned)(s % 60));
+    int tw = (int)strlen(t) * 30, tx = (240 - tw) / 2; if (tx < 0) tx = 0;
+    int ty = y0 + 2;
+    d.setFont(&fonts::Font0);                                // monospace digits for an even timer
+    d.setTextSize(5); d.setTextColor(FG, BG); d.setCursor(tx, ty); d.print(t);
+    d.setTextSize(1);
+
+    waveform(10, ty + 44, 220, 26);                          // reactive scrolling waveform, full width
+    meter(ty + 72, nucleo_recorder_level());                 // live input meter with peak hold
+
+    // Footer: live mic coaching when it matters (clipping / too quiet), else free space (left);
+    // live take size (right). Coaching gives the same instant feedback a good wearable recorder does.
+    int lvl = nucleo_recorder_level();
+    const char *coach = nullptr; unsigned short cc = MUTED;
+    if (s >= 1) {
+        if (s_peak >= 96 || lvl >= 96)  { coach = TR("Troppo vicino",   "Too loud"); cc = ACC; }
+        else if (s_peak < 6)            { coach = TR("Parla piu' forte","Speak up"); cc = AMBER; }
+    }
+    d.setCursor(10, ty + 82);
+    if (coach) { d.setTextColor(cc, BG); d.print(coach); }
+    else { char fr[24]; human_free(fr, sizeof(fr)); if (fr[0]) { d.setTextColor(MUTED, BG); d.print(fr); } }
+    uint32_t kb = (uint32_t)(((uint64_t)s * REC_BPS) / 1024);
+    char sz[16];
+    if (kb >= 1024) snprintf(sz, sizeof(sz), "%.1f MB", kb / 1024.0);
+    else            snprintf(sz, sizeof(sz), "%u KB", (unsigned)kb);
+    d.setCursor(230 - 6 * (int)strlen(sz), ty + 82); d.print(sz);
 }
 
 static void draw_library(int top, int h)
@@ -1025,12 +1249,17 @@ static void draw_library(int top, int h)
     int y0 = app_ui_title(TR("Registratore", "Voice Recorder"), ACC, sub);
 
     if (s_count == 0) {
-        d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(12, y0 + 18);
-        d.print(TR("Nessuna registrazione", "No recordings yet"));
-        d.setTextColor(GRN, BG); d.setCursor(12, y0 + 34);
-        d.print(TR("Premi R per registrare", "Press R to record"));
+        // Smartwatch-style call to action: a big record button glyph + one clear instruction, centred.
+        int cy = y0 + 34;
+        d.fillCircle(120, cy, 26, 0x2000);                   // dim halo
+        d.drawCircle(120, cy, 26, ACC);
+        d.fillCircle(120, cy, 16, ACC);                      // the "record" disc
+        d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1);
+        const char *m1 = TR("Tieni GO o premi R", "Hold GO or press R");
+        d.setTextColor(FG, BG); d.setCursor(120 - (int)d.textWidth(m1) / 2, y0 + 70); d.print(m1);
+        d.setFont(&fonts::Font0);
         char fr[24]; human_free(fr, sizeof(fr));
-        if (fr[0]) { d.setTextColor(MUTED, BG); d.setCursor(12, y0 + 52); d.print(fr); }
+        if (fr[0]) { d.setTextColor(MUTED, BG); d.setCursor(120 - 3 * (int)strlen(fr), y0 + 88); d.print(fr); }
         return;
     }
 
@@ -1046,7 +1275,7 @@ static void draw_library(int top, int h)
     }
     if (s_job == 3) {
         d.setTextColor(ACC, BG); d.setCursor(8, footer_y + 2);
-        d.print(TR("AI non disponibile", "AI failed (offline)")); return;
+        d.print(ai_err_msg(s_en)); return;
     }
     if (nucleo_audio_is_playing() && s_playing >= 0) { draw_transport(footer_y); return; }
 
@@ -1089,9 +1318,13 @@ static void set_hint_for_mode(void)
     case M_ASK:
         nucleo_app_set_hint(TR("su/giu riga  ,/. pagina  Esc: back", "up/dn line  ,/. page  Esc back"));
         break;
+    case M_PLAY:
+        nucleo_app_set_hint(TR("Spc: play/pausa  ,/. cerca  su/giu vol  A: AI  Esc: back",
+                              "Spc play/pause  ,/. seek  up/dn vol  A: AI  Esc back"));
+        break;
     default:
-        nucleo_app_set_hint(TR("Invio play  A: AI  K: chiedi a tutte le note  1-9: vai  R: reg",
-                              "Enter play  A: AI  K: ask all notes  1-9: jump  R: rec"));
+        nucleo_app_set_hint(TR("Invio: ascolta  A: AI  K: chiedi a tutte  1-9: vai  R: reg",
+                              "Enter: play  A: AI  K: ask all  1-9: jump  R: rec"));
     }
 }
 static void set_mode(int m)
@@ -1128,21 +1361,33 @@ static void list_key(int key, char ch)
         if (s_job == 3) s_job = 0;                               // changing note clears stale error
         nucleo_app_request_draw(); return;
     }
-    else if (key == NK_ENTER)         play_sel();
+    else if (key == NK_ENTER)         { open_play(); return; }     // open the Now-Playing card
     else if (ch == 'a' || ch == 'A')  { open_detail(); return; }
     else if (ch == 'd' || ch == 'D')  delete_sel();
     else if (ch == 'n' || ch == 'N')  rename_sel();
     else if (ch == 't' || ch == 'T')  { if (s_count) start_job(JOB_TITLE, nullptr); }   // AI title + rename
     else if (ch == 'k' || ch == 'K')  { ask_all(); return; }                            // cross-note Q&A
     else if (ch == 's' || ch == 'S')  { nucleo_audio_stop(); s_playing = -1; }
-    else if (ch == ' ')               { if (playing) nucleo_audio_toggle_pause(); else { nucleo_audio_stop(); s_playing = -1; play_sel(); } }
+    else if (ch == ' ')               { if (playing) nucleo_audio_toggle_pause(); else { nucleo_audio_stop(); s_playing = -1; open_play(); } }
     else if (ch == 'r' || ch == 'R')  { nucleo_audio_stop(); s_playing = -1; wave_reset();
-        // The mic is single-owner: if a web dictation/recording stream holds it, start() refuses —
-        // say so instead of silently arming a "stop" hint for a recording that never began.
-        if (nucleo_recorder_start() == ESP_OK)
+        // The mic is single-owner. The physical operator outranks a remote web dictation: if a stream
+        // holds the mic, preempt it (non-blocking) and let tick() arm the take once it releases. Only a
+        // record-to-SD take finalizing on the device itself is left to complete.
+        esp_err_t rc = arm_record();
+        if (rc == ESP_OK) {
+            s_rec_wait_us = 0;
             nucleo_app_set_hint(TR("R/Spazio: ferma", "R/Space: stop"));
-        else
-            nucleo_app_set_hint(TR("Mic occupato (uso web)", "Mic busy (web stream)"));
+        } else if (rc == ESP_ERR_INVALID_STATE && nucleo_recorder_owner() == NUCLEO_MIC_STREAM) {
+            nucleo_recorder_release_stream();                 // a web stream owns it → preempt, retry in tick
+            s_rec_wait_us = esp_timer_get_time() + 4000000;   // poll up to 4 s for it to release
+            nucleo_app_set_hint(TR("Libero il mic dal web…", "Releasing mic from web…"));
+        } else if (rc == ESP_ERR_INVALID_STATE) {             // our own take still finalizing → brief wait
+            s_rec_wait_us = esp_timer_get_time() + 1500000;
+            nucleo_app_set_hint(TR("Mic occupato, attendo…", "Mic busy, waiting…"));
+        } else {                                              // ESP_FAIL: no contiguous RAM for the task
+            s_rec_wait_us = esp_timer_get_time() + 1500000;   // L1 just dropped; give the heap a beat, retry
+            nucleo_app_set_hint(TR("Libero memoria…", "Freeing memory…"));
+        }
     }
     else return;
     nucleo_app_request_draw();
@@ -1152,6 +1397,7 @@ static void on_key(int key, char ch)
 {
     if (s_mode == M_SETTINGS) { settings_key(key, ch); return; }
     if (s_mode == M_DETAIL)   { detail_key(key, ch);   return; }
+    if (s_mode == M_PLAY)     { play_key(key, ch);     return; }
     if (s_mode == M_ASK) {                                     // cross-note answer reader: scroll only
         if      (key == NK_UP)   { if (reader_scroll(-1)) nucleo_app_request_draw(); }
         else if (key == NK_DOWN) { if (reader_scroll(+1)) nucleo_app_request_draw(); }
@@ -1166,13 +1412,17 @@ static void on_key(int key, char ch)
 static void rec_tab(void)
 {
     if (nucleo_recorder_is_recording()) return;
-    if (s_mode == M_DETAIL || s_mode == M_SETTINGS || s_mode == M_ASK) set_mode(M_LIST);
+    if (s_mode == M_DETAIL || s_mode == M_SETTINGS || s_mode == M_ASK || s_mode == M_PLAY) set_mode(M_LIST);
     else { s_set_tab = ST_AI; s_set_row = 0; set_mode(M_SETTINGS); }
 }
 
 // Back/Left routing (framework hands us the key code): Left = previous tab, Esc/Back = pop a level.
 static bool rec_back(int key)
 {
+    if (s_mode == M_PLAY) {                                    // Left = seek −5s while playing; Esc/Back leaves to the list
+        if (key == NK_LEFT && nucleo_audio_is_playing()) { seek_playing(false); return true; }
+        set_mode(M_LIST); return true;
+    }
     if (s_mode == M_ASK) { set_mode(M_LIST); return true; }
     if (s_mode == M_DETAIL) {
         if (key == NK_LEFT) { s_tab = (s_tab + T_COUNT - 1) % T_COUNT; detail_load(); set_hint_for_mode(); nucleo_app_request_draw(); return true; }
@@ -1244,6 +1494,7 @@ static void enter(void)
     nucleo_app_set_back_handler(rec_back);
     nucleo_app_set_ptt_handler(rec_ptt);            // GO-hold = push-to-talk record while this app is open
     s_ptt = PTT_IDLE;
+    s_rec_wait_us = 0;
     rec_cue_ensure();                               // synth the start/stop cues once (cached on SD; no-op after)
     if (!s_list) s_list = (Rec *)malloc(sizeof(Rec) * REC_MAX);
     s_was_rec = nucleo_recorder_is_recording();
@@ -1251,11 +1502,24 @@ static void enter(void)
     if (s_job != 1) s_job = 0;                                 // keep a mid-flight worker's state
     wave_reset();
     scan();
-    // Cache the active cloud engine for honest UI ("Claude"/"Grok" + model). Cheap; re-read each open.
+    // Cache the active cloud engine for honest UI ("Claude"/"Groq" + model). Cheap; re-read each open.
     char prov[16] = "";
     s_eng_ready = nucleo_anima_teacher_info(prov, sizeof prov, s_eng_model, sizeof s_eng_model);
-    snprintf(s_eng_short, sizeof s_eng_short, "%s", !s_eng_ready ? "AI" : (!strcmp(prov, "anthropic") ? "Claude" : "Grok"));
+    snprintf(s_eng_short, sizeof s_eng_short, "%s", !s_eng_ready ? "AI" : (!strcmp(prov, "anthropic") ? "Claude" : "Groq"));
     set_hint_for_mode();
+    s_enter_solo_us = 0;
+
+    // Opened from the FULL-OS launcher: reboot ONCE into the dedicated Recorder Solo boot (clean, contiguous
+    // heap) where record + transcribe + summary all run with NO further reboots. tick() does it after a brief
+    // notice (and once the mic is idle). In Solo (solo_active) we stay — this is the real app home.
+    if (!nucleo_anima_solo_active()) {
+        s_enter_solo_us = esp_timer_get_time() + 700000;
+        nucleo_app_set_hint(TR("Apro modalità dedicata…", "Opening dedicated mode…"));
+    } else {
+        ESP_LOGW(REC_TAG, "Recorder Solo: ready free=%u largest=%u",
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    }
 }
 
 // Playback stops on leave; the recorder + AI worker keep running (they don't touch s_list/s_text).
@@ -1264,6 +1528,10 @@ static void exit_app(void)
     nucleo_app_set_ptt_handler(nullptr);   // release the GO-hold hook (framework also clears it on switch)
     if (s_ptt == PTT_RECORDING && nucleo_recorder_is_recording()) nucleo_recorder_stop();  // save, don't orphan, a GO-held take
     s_ptt = PTT_IDLE;
+    s_rec_wait_us = 0;
+    // If a take reclaimed RAM and we're leaving before tick() handed it back, restore now — UNLESS a
+    // background AI worker (which outlives the app) is running, since it relies on the freed heap.
+    if (s_rec_nx && s_job != 1) { nucleo_exclusive_exit(); s_rec_nx = false; }
     nucleo_audio_stop();
     if (s_list) { free(s_list); s_list = nullptr; s_count = 0; }
     close_detail();
@@ -1274,18 +1542,60 @@ static void tick(void)
 {
     bool need = false;
     bool rec = nucleo_recorder_is_recording();
-    if (s_was_rec && !rec) {                                   // recording just finished
+    if (s_was_rec && !rec) {                                   // recording just finished (is_recording went false)
         scan(); s_sel = 0;
-        if (s_auto_summary && s_job != 1) start_job(JOB_SUMMARY, nullptr);
+        if (s_mode == M_PLAY) s_mode = M_LIST;                 // a GO-record over the Now-Playing card lands on the fresh take
+        // Auto-transcription: QUEUE it. The WAV is still finalizing (is_busy true); the worker reads it, so
+        // we launch only once is_busy clears (below). We're already in the dedicated Solo boot here.
+        if (s_auto_transcribe) s_auto_tx_pending = true;
         set_hint_for_mode();
         need = true;
     }
     s_was_rec = rec;
 
+    // Open-in-dedicated-mode: reboot ONCE into the Solo boot after the brief notice and once the mic is idle
+    // (never reboot mid-WAV-finalize). After this the app lives in Solo with NO further reboots.
+    if (s_enter_solo_us && !nucleo_recorder_is_busy() && esp_timer_get_time() >= s_enter_solo_us) {
+        s_enter_solo_us = 0;
+        nucleo_app_solo_request(2);                            // NEVER returns (spin-waits is_busy defensively)
+    }
+
+    // Deferred auto-transcribe: fire once the WAV is fully finalized + the mic cue is done. Runs INLINE in
+    // the dedicated boot (clean heap) — no reboot.
+    if (s_auto_tx_pending && nucleo_anima_solo_active() && !nucleo_recorder_is_busy() &&
+        !nucleo_audio_is_playing() && s_ptt == PTT_IDLE && s_job != 1) {
+        s_auto_tx_pending = false;
+        start_job(JOB_TRANSCRIBE, nullptr);
+    }
+
+    // Pending manual take: a web stream (or our own finalizing take) held the mic when R was pressed.
+    // Retry until it frees, then arm; on deadline give up and name the real holder honestly.
+    if (s_rec_wait_us && !rec) {
+        esp_err_t rc = arm_record();
+        if (rc == ESP_OK) {
+            s_rec_wait_us = 0; wave_reset(); s_was_rec = true;
+            nucleo_app_set_hint(TR("R/Spazio: ferma", "R/Space: stop")); need = true;
+        } else if (esp_timer_get_time() >= s_rec_wait_us) {
+            s_rec_wait_us = 0;
+            const char *msg = (nucleo_recorder_owner() == NUCLEO_MIC_STREAM)
+                ? TR("Mic occupato (uso web)", "Mic busy (web stream)")
+                : (rc == ESP_ERR_INVALID_STATE) ? TR("Mic non disponibile", "Mic unavailable")
+                                                : TR("Memoria piena: chiudi un'app", "Out of memory: close an app");
+            nucleo_app_set_hint(msg); need = true;
+        }
+    }
+
+    // Hand the reclaimed subsystems back once a take that needed them is fully done: mic released and
+    // drained, no pending retry, no PTT in flight, and no AI worker (which may be using the freed heap).
+    // Restores httpd / mDNS / voice / L1 so the web UI comes back. No-op on the common (non-reclaimed) path.
+    if (s_rec_nx && !nucleo_recorder_is_busy() && s_rec_wait_us == 0 && s_ptt == PTT_IDLE && s_job != 1) {
+        nucleo_exclusive_exit(); s_rec_nx = false; need = true;
+    }
+
     // GO push-to-talk sequencing (speaker⊕mic share the I2S WS line, so the steps NEVER overlap):
     if (s_ptt == PTT_ARMING && !nucleo_audio_is_playing()) {   // start cue finished -> open the mic
-        if (nucleo_recorder_start() == ESP_OK) { s_ptt = PTT_RECORDING; wave_reset(); s_was_rec = true; set_hint_for_mode(); }
-        else                                   { s_ptt = PTT_IDLE; }   // mic busy (web dictation) -> abort cleanly
+        if (arm_record() == ESP_OK) { s_ptt = PTT_RECORDING; wave_reset(); s_was_rec = true; set_hint_for_mode(); }
+        else                        { s_ptt = PTT_IDLE; }   // mic busy or no RAM -> abort cleanly
         need = true;
     }
     if (s_ptt == PTT_ENDCUE && !nucleo_recorder_is_busy() && !nucleo_audio_is_playing()) {
@@ -1304,6 +1614,10 @@ static void tick(void)
     }
 
     if (s_ai_screen_freed && s_job != 1) { ai_screen_restore(); need = true; }   // job ended (done/error) → reclaim the canvas for the UI
+    else if (s_ai_screen_freed && s_job == 1) {                                  // job running: keep the spinner breathing (~3 Hz)
+        static int64_t last_spin = 0; int64_t now = esp_timer_get_time();
+        if (now - last_spin >= 300000) { last_spin = now; need = true; }
+    }
 
     if (s_job == 2) {                                          // a worker finished
         int kind = s_job_kind; s_job = 0; scan();
@@ -1324,7 +1638,7 @@ static void tick(void)
 
     bool playing = nucleo_audio_is_playing();
     if (!playing && s_playing != -1) { s_playing = -1; need = true; }
-    if (playing && (s_mode == M_LIST || s_mode == M_DETAIL)) {  // keep the progress bar live (~1 Hz)
+    if (playing && (s_mode == M_LIST || s_mode == M_DETAIL || s_mode == M_PLAY)) {  // keep the progress live (~1 Hz)
         static uint32_t last_el = 0; uint32_t el = nucleo_audio_elapsed_ms() / 1000;
         if (el != last_el) { last_el = el; need = true; }
     }
@@ -1344,28 +1658,57 @@ static const char *job_kind_label(int k)
     }
 }
 // Direct-draw "working" screen while the canvas is freed for the cloud TLS (drawn direct: `d` is the panel).
+// Animated (the spinner dots + ring breathe ~2.5 Hz, kept alive by a throttled redraw in tick()).
 static void draw_ai_working(int top, int h)
 {
     int cy = top + h / 2;
+    int phase = (int)((esp_timer_get_time() / 320000) % 4);   // 0..3 for the dots / ring sweep
+
+    // Lightweight activity spinner: four dots around a ring, the active one lit (no math.h needed).
+    static const int RX[4] = { 18, 0, -18, 0 }, RY[4] = { 0, 18, 0, -18 };   // E, S, W, N
+    for (int k = 0; k < 4; k++)
+        d.fillCircle(120 + RX[k], (cy - 30) + RY[k], k == phase ? 4 : 2, k == phase ? GRN : 0x3186);
+
     const char *lbl = job_kind_label(s_job_kind);
     d.setFont(&fonts::Font2); d.setTextColor(FG, BG);
-    d.setCursor(120 - (int)d.textWidth(lbl) / 2, cy - 26); d.print(lbl);
+    d.setCursor(120 - (int)d.textWidth(lbl) / 2, cy - 4); d.print(lbl);
+
+    char w1[40];
+    snprintf(w1, sizeof w1, "%s%.*s", TR("Elaborazione in corso", "Processing"), phase, "...");   // no provider brand
+    d.setFont(&fonts::FreeSans9pt7b); d.setTextColor(GRN, BG);
+    d.setCursor(120 - (int)d.textWidth(w1) / 2, cy + 22); d.print(w1);
+    // Chunked long-transcription progress, when active: "segmento 3/15".
+    int pd = 0, pt = 0; nucleo_anima_transcribe_progress(&pd, &pt);
+    if (pt > 1) {
+        char w2[40]; snprintf(w2, sizeof w2, "%s %d/%d", TR("segmento", "segment"), pd + (pd < pt ? 1 : 0), pt);
+        d.setTextColor(MUTED, BG); d.setCursor(120 - (int)d.textWidth(w2) / 2, cy + 42); d.print(w2);
+    }
     d.setFont(&fonts::Font0);
-    const char *w1 = TR("Elaboro online...", "Working online...");
-    d.setTextColor(GRN, BG); d.setCursor(120 - (int)strlen(w1) * 3, cy - 2); d.print(w1);
-    const char *w2 = TR("RAM liberata per il modello", "RAM freed for the model");
-    d.setTextColor(MUTED, BG); d.setCursor(120 - (int)strlen(w2) * 3, cy + 14); d.print(w2);
 }
 
 static void draw(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);                            // clear once -> no stale pixels across modes
+    // Opened from the full OS: about to reboot into the dedicated boot. Show a CLEAN splash, not the app
+    // home flashing for a second (which read as "the old app appearing"). The reboot follows in tick().
+    if (s_enter_solo_us) {
+        int cy = top + h / 2;
+        d.fillCircle(120, cy - 22, 13, 0x2000); d.drawCircle(120, cy - 22, 13, ACC); d.fillCircle(120, cy - 22, 5, ACC);
+        d.setFont(&fonts::FreeSans9pt7b);
+        const char *m = TR("Modalità dedicata", "Dedicated mode");
+        d.setTextColor(FG, BG); d.setCursor(120 - (int)d.textWidth(m) / 2, cy + 6); d.print(m);
+        const char *m2 = TR("preparo la RAM…", "preparing RAM…");
+        d.setTextColor(MUTED, BG); d.setCursor(120 - (int)d.textWidth(m2) / 2, cy + 26); d.print(m2);
+        d.setFont(&fonts::Font0);
+        return;
+    }
     if (s_ai_screen_freed) { draw_ai_working(top, h); return; }  // AI job in flight: canvas freed → minimal direct screen
     if (nucleo_recorder_is_recording() || s_ptt == PTT_ARMING) { draw_recording(); return; }
     if (s_mode == M_SETTINGS)           { settings_draw(top, h); return; }
     if (s_mode == M_DETAIL)             { detail_draw(top, h);   return; }
     if (s_mode == M_ASK)                { ask_draw(top, h);      return; }
+    if (s_mode == M_PLAY)               { draw_play(top, h);     return; }
     draw_library(top, h);
 }
 

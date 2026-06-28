@@ -105,31 +105,15 @@ extern "C" void nucleo_ui_init(void)
     nucleo_kbd_init();
 }
 
-// Draw the header on a canvas, including a simple battery icon.
+// Draw the header (title + hairline rule) on a canvas. The battery icon was removed: the ADC
+// reading was unreliable on this unit, so it was misleading.
 static void header(M5Canvas *canvas, const char *title)
 {
     nucleo_theme_draw_bg(canvas, W, H);
-    canvas->setTextColor(ACC, BG); 
+    canvas->setTextColor(ACC, BG);
     canvas->setTextSize(2);
-    canvas->setCursor(6, 4); 
+    canvas->setCursor(6, 4);
     canvas->print(title);
-    
-    // Battery icon: real cell level off the ADC (nucleo_power). bat < 0 => no reading yet, so we
-    // draw an empty outline with a "?" instead of faking a level. Fill colour tracks charge:
-    // red < 15 %, amber < 40 %, green above.
-    int bat = nucleo_power_battery_pct();
-    int bw = 20, bh = 10, bx = W - bw - 6, by = 6;
-    canvas->drawRect(bx, by, bw, bh, ACC);
-    canvas->fillRect(bx + bw, by + 2, 2, 6, ACC);                 // terminal nub
-    if (bat < 0) {
-        canvas->setTextSize(1); canvas->setTextColor(MUT, BG);
-        canvas->setCursor(bx + 7, by + 2); canvas->print("?");
-    } else {
-        int fill_w = (bw - 2) * bat / 100;
-        if (fill_w < 0) fill_w = 0; else if (fill_w > bw - 2) fill_w = bw - 2;
-        unsigned short col = (bat < 15) ? 0xF800 : (bat < 40) ? 0xFD20 : 0x07E0;
-        canvas->fillRect(bx + 1, by + 1, fill_w, bh - 2, col);
-    }
 
     canvas->drawFastHLine(0, 26, W, LINE);
     canvas->setTextSize(1);
@@ -145,9 +129,10 @@ static void hint(M5Canvas *canvas, const char *h)
 
 extern "C" void nucleo_ui_message(const char *title, const char *const *lines, int n)
 {
-    M5Canvas canvas(&d);
-    canvas.setPsram(false);   // PSRAM-less board: skip the doomed SPIRAM probe (false OOM) → DMA-internal directly
-    canvas.createSprite(W, H);
+    M5Canvas local(&d);
+    M5Canvas *shared = s_screen_alive ? &s_screen : nullptr;   // reuse the launcher buffer only if ALREADY up
+    if (!shared) { local.setPsram(false); local.createSprite(W, H); }   // else our own (DMA-internal), never force 32 KB
+    M5Canvas &canvas = shared ? *shared : local; // a transient modal never needs a SECOND 32 KB canvas
     
     for (;;) {
         header(&canvas, title);
@@ -167,15 +152,16 @@ extern "C" void nucleo_ui_message(const char *title, const char *const *lines, i
         esp_task_wdt_reset();   // a slow typist/idle dialog must not trip the 8s task WDT (no-op if unwatched)
         vTaskDelay(pdMS_TO_TICKS(15));
     }
-    canvas.deleteSprite();
+    if (&canvas == &local) local.deleteSprite();   // free only what WE allocated; the shared buffer persists
 }
 
 extern "C" void nucleo_ui_home(const char *title, const char *const *lines, int n)
 {
     // Home is usually static, but we'll draw it once via canvas to avoid flicker
-    M5Canvas canvas(&d);
-    canvas.setPsram(false);   // PSRAM-less board: skip the doomed SPIRAM probe (false OOM) → DMA-internal directly
-    canvas.createSprite(W, H);
+    M5Canvas local(&d);
+    M5Canvas *shared = s_screen_alive ? &s_screen : nullptr;   // reuse the launcher buffer only if ALREADY up
+    if (!shared) { local.setPsram(false); local.createSprite(W, H); }   // else our own (DMA-internal), never force 32 KB
+    M5Canvas &canvas = shared ? *shared : local; // a transient modal never needs a SECOND 32 KB canvas
     header(&canvas, title);
     canvas.setTextColor(FG, BG);
     canvas.setTextSize(1);
@@ -186,7 +172,7 @@ extern "C" void nucleo_ui_home(const char *title, const char *const *lines, int 
         y += 13; 
     }
     canvas.pushSprite(0, 0);
-    canvas.deleteSprite();
+    if (&canvas == &local) local.deleteSprite();   // free only what WE allocated; the shared buffer persists
 }
 
 // ---- animated boot splash ----------------------------------------------------------------
@@ -387,9 +373,10 @@ extern "C" int nucleo_ui_menu(const char *title, const char *const *items, int n
     float smooth_y = 0.0f;
     uint32_t frame = 0;
     
-    M5Canvas canvas(&d);
-    canvas.setPsram(false);   // PSRAM-less board: skip the doomed SPIRAM probe (false OOM) → DMA-internal directly
-    canvas.createSprite(W, H);
+    M5Canvas local(&d);
+    M5Canvas *shared = s_screen_alive ? &s_screen : nullptr;   // reuse the launcher buffer only if ALREADY up
+    if (!shared) { local.setPsram(false); local.createSprite(W, H); }   // else our own (DMA-internal), never force 32 KB
+    M5Canvas &canvas = shared ? *shared : local; // a transient modal never needs a SECOND 32 KB canvas
     
     for (;;) {
         header(&canvas, title);
@@ -436,8 +423,8 @@ extern "C" int nucleo_ui_menu(const char *title, const char *const *items, int n
         nucleo_key_t k = nucleo_kbd_read();
         if (k.key == NK_UP) { sel = (sel + n - 1) % n; frame = 0; }
         else if (k.key == NK_DOWN) { sel = (sel + 1) % n; frame = 0; }
-        else if (k.key == NK_ENTER) { canvas.deleteSprite(); return sel; }
-        else if (k.key == NK_BACK) { canvas.deleteSprite(); return -1; }
+        else if (k.key == NK_ENTER) { if (&canvas == &local) local.deleteSprite(); return sel; }
+        else if (k.key == NK_BACK) { if (&canvas == &local) local.deleteSprite(); return -1; }
         
         frame++;
         esp_task_wdt_reset();   // a slow typist/idle dialog must not trip the 8s task WDT (no-op if unwatched)
@@ -447,9 +434,10 @@ extern "C" int nucleo_ui_menu(const char *title, const char *const *items, int n
 
 extern "C" void nucleo_ui_input(const char *title, char *buf, int len, int masked)
 {
-    M5Canvas canvas(&d);
-    canvas.setPsram(false);   // PSRAM-less board: skip the doomed SPIRAM probe (false OOM) → DMA-internal directly
-    canvas.createSprite(W, H);
+    M5Canvas local(&d);
+    M5Canvas *shared = s_screen_alive ? &s_screen : nullptr;   // reuse the launcher buffer only if ALREADY up
+    if (!shared) { local.setPsram(false); local.createSprite(W, H); }   // else our own (DMA-internal), never force 32 KB
+    M5Canvas &canvas = shared ? *shared : local; // a transient modal never needs a SECOND 32 KB canvas
     int pos = (int)strlen(buf);
     
     for (;;) {
@@ -479,5 +467,5 @@ extern "C" void nucleo_ui_input(const char *title, char *buf, int len, int maske
         esp_task_wdt_reset();   // a slow typist/idle dialog must not trip the 8s task WDT (no-op if unwatched)
         vTaskDelay(pdMS_TO_TICKS(15));
     }
-    canvas.deleteSprite();
+    if (&canvas == &local) local.deleteSprite();   // free only what WE allocated; the shared buffer persists
 }

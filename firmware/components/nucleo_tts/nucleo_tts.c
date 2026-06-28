@@ -12,6 +12,8 @@
 #include "nucleo_tts_index.h"
 #include "nucleo_audio.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"   // heap diagnostics for the silent-drop log (largest/free block)
+#include "esp_task_wdt.h"   // feed il task WDT durante un render SD-lungo (SD lento ADV): molte clip = cumulato > 8s
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -216,6 +218,7 @@ static bool render(const char *lang, const tts_token_t *tok, int n, tts_index_t 
     wav_header(hdr, 0, out_rate); fwrite(hdr, 1, 44, out);
     uint32_t data = 0, off, len;
     for (int i = 0; i < n; i++) {
+        if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();   // render legge MOLTE clip da SD: su SD lento il cumulato supera l'8s WDT -> feed per token
         if (tok[i].kind == TTS_TOK_PAUSE)
             data += put_silence(out, tok[i].ms, ix->rate, buf, sizeof buf);   // ms a rate BASE: si accorcia col play
         else if (tok[i].kind == TTS_TOK_CLIP && tts_index_find(ix, tok[i].slug, &off, &len))
@@ -265,7 +268,7 @@ static bool say_one_clip(const char *lang, const char *slug)
 // Motore di say(): pianifica e, se TUTTO e' coperto, pronuncia. Se NON lo e' (codice/troppo lungo o
 // parola scoperta): con `fallback` non-NULL pronuncia QUELLO (conferma breve, es. "Fatto") invece di
 // "leggila" -> per le operazioni l'ESITO conta piu' del testo esatto (nomi file, dettagli evento).
-static bool say_impl(const char *text, const char *lang, const char *fallback)
+static bool say_impl(const char *text, const char *lang, const char *fallback, bool quiet)
 {
     if (!s_enabled || !text || !text[0]) return false;
     const char *l = (lang && lang[0]) ? lang : s_def_lang;
@@ -279,7 +282,7 @@ static bool say_impl(const char *text, const char *lang, const char *fallback)
     // Guardia OFFLINE: troppo lungo o "sa di codice" -> non leggere porzioni incomprensibili. (Gira gia'
     // sul task TTS: il ripiego a "leggila" e' SINCRONO qui, non un nuovo enqueue.)
     if (!nucleo_tts_text_speakable(text, TTS_MAX_CHARS))
-        return (fallback && fallback[0]) ? say_impl(fallback, l, NULL) : say_one_clip(l, "read_it");
+        return (fallback && fallback[0]) ? say_impl(fallback, l, NULL, false) : (quiet ? false : say_one_clip(l, "read_it"));
 
     char p[64]; idx_path(p, sizeof p, l);
     tts_index_t ix;
@@ -296,9 +299,23 @@ static bool say_impl(const char *text, const char *lang, const char *fallback)
 
     // TOK_MAX == MAX_UNITS (160): tiene tutti i token di un enunciato <=220 char; ~9.6KB heap, liberati subito dopo render.
     enum { TOK_MAX = 160 };
-    tts_token_t *tok = malloc(TOK_MAX * sizeof(tts_token_t));
-    if (!tok) { tts_index_close(&ix); return false; }
-    int n = nucleo_tts_plan(text, l, has_clip, &ix, tok, TOK_MAX);
+    // SIZE THE BUFFER TO THE ACTUAL TEXT, not the 220-char worst case. mathspeak has already expanded the
+    // symbols, and every remaining char emits AT MOST one token (digits collapse: "14"->"quattordici" = 1
+    // token), so strlen+8 is a safe upper bound. WHY IT MATTERS: the full 160-token malloc is ~9.6KB
+    // CONTIGUOUS; on this fragmented PSRAM-less heap it FAILED after the first answer fragmented things ->
+    // say_impl returned false SILENTLY (no voice, not even "leggila") -> "la prima risposta la legge, poi
+    // dal messaggio dopo smette di leggere tutto". A short reply ("Sono le 14 e 30", "Fa 16") now needs
+    // ~0.6KB, which fits even when the largest block is small. Falls back to TOK_MAX for long sentences.
+    int cap = (int)strlen(text) + 8; if (cap > TOK_MAX) cap = TOK_MAX; if (cap < 8) cap = 8;
+    tts_token_t *tok = malloc((size_t)cap * sizeof(tts_token_t));
+    if (!tok) {   // genuinely out of heap even for the small buffer — log it so /api/logs shows the silent drop
+        ESP_LOGW(TAG, "say: tok malloc FAILED cap=%d (%uB) largest=%u free=%u -> SILENT \"%.40s\"",
+                 cap, (unsigned)(cap * sizeof(tts_token_t)),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), text);
+        tts_index_close(&ix); return false;
+    }
+    int n = nucleo_tts_plan(text, l, has_clip, &ix, tok, cap);
 
     int unknown = 0, clips = 0;
     char miss[224]; miss[0] = 0;
@@ -315,12 +332,12 @@ static bool say_impl(const char *text, const char *lang, const char *fallback)
     // TTS_MAX_SKIP (la frase perderebbe senso) o se NESSUNA parola e' coperta (l'uscita sarebbe vuota).
     if (n <= 0 || clips == 0 || unknown > TTS_MAX_SKIP) {
         free(tok); tts_index_close(&ix);                 // chiudi PRIMA di ripiegare (max 1 indice aperto)
-        if (fallback && fallback[0]) return say_impl(fallback, l, NULL);   // conferma breve invece di "leggila"
+        if (fallback && fallback[0]) return say_impl(fallback, l, NULL, false);   // conferma breve invece di "leggila"
         // DIAGNOSI: logga le clip scoperte (in /api/logs si vede ESATTAMENTE cosa manca).
         if (unknown > TTS_MAX_SKIP) ESP_LOGW(TAG, "\"%s\": %d clip scoperte [%s] > soglia %d -> read_it", text, unknown, miss, TTS_MAX_SKIP);
         else if (n > 0)             ESP_LOGW(TAG, "\"%s\": nessuna parola coperta -> read_it", text);
         else                        ESP_LOGW(TAG, "\"%s\": planner vuoto -> read_it", text);
-        return say_one_clip(l, "read_it");
+        return quiet ? false : say_one_clip(l, "read_it");   // quiet: resta muto e segnala "scoperta" al chiamante
     }
     if (unknown > 0)                                      // 1..TTS_MAX_SKIP scoperte: tollerate, parlo il resto
         ESP_LOGI(TAG, "\"%s\": %d parola/e scoperta/e saltata/e [%s], pronuncio la parte coperta", text, unknown, miss);
@@ -339,5 +356,8 @@ bool nucleo_tts_read_hint(const char *lang)
     if (!s_enabled) return false;
     return say_one_clip((lang && lang[0]) ? lang : s_def_lang, "read_it");
 }
-bool nucleo_tts_say(const char *text, const char *lang)                            { return say_impl(text, lang, NULL); }
-bool nucleo_tts_say_or(const char *text, const char *fallback, const char *lang)   { return say_impl(text, lang, fallback); }
+bool nucleo_tts_say(const char *text, const char *lang)                            { return say_impl(text, lang, NULL, false); }
+bool nucleo_tts_say_or(const char *text, const char *fallback, const char *lang)   { return say_impl(text, lang, fallback, false); }
+// MUTO su scoperta: parla la frase se coperta, altrimenti ritorna false SENZA suonare "leggila". Cosi' il
+// chiamante (voce conoscenza in app_anima) emette UN solo read_hint per piu' frasi -> mai due "leggi".
+bool nucleo_tts_say_quiet(const char *text, const char *lang)                      { return say_impl(text, lang, NULL, true); }

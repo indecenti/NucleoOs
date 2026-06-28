@@ -10,7 +10,7 @@
     { "id": "video-studio",     "version": "0.1.0", "path": "/apps/video-studio",     "enabled": true, "autostart": false, "permissions": ["storage.shared"] },
     { "id": "automation-studio","version": "0.1.0", "path": "/apps/automation-studio","enabled": true, "autostart": true,  "permissions": ["storage.app", "system.events", "system.notify", "device.keyboard", "device.ir", "power.budget"] },
     { "id": "ir-remote",        "version": "0.1.0", "path": "/apps/ir-remote",        "enabled": true, "autostart": false, "permissions": ["storage.app", "system.events", "device.ir"] },
-    { "id": "swarm",            "version": "0.1.0", "path": "/apps/swarm",            "enabled": true, "autostart": true,  "permissions": ["system.events", "system.clipboard", "net.ble", "mesh.peer"] },
+    { "id": "swarm",            "version": "0.1.0", "path": "/apps/swarm",            "enabled": false, "autostart": false, "permissions": ["system.events", "system.clipboard", "net.ble", "mesh.peer"] },
     { "id": "settings",         "version": "0.1.0", "path": "/apps/settings",         "enabled": true, "autostart": false, "permissions": ["system.events", "net.wifi", "net.ble", "power.budget"] },
     { "id": "log-viewer",       "version": "0.1.0", "path": "/apps/log-viewer",       "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events"] },
     { "id": "system-monitor",   "version": "0.1.0", "path": "/apps/system-monitor",   "enabled": true, "autostart": false, "permissions": ["system.events"] },
@@ -39,7 +39,6 @@
     { "id": "archive-manager",  "version": "1.0.0", "path": "/apps/archive-manager",  "enabled": true, "autostart": false, "permissions": ["storage.shared"] },
     { "id": "miei-fatti",       "version": "0.1.0", "path": "/apps/miei-fatti",       "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard"] },
     { "id": "games",            "version": "0.1.0", "path": "/apps/games",            "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard"] },
-    { "id": "anima-knowledge",  "version": "0.1.0", "path": "/apps/anima-knowledge",  "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard", "net.wifi"] },
     { "id": "nearby",           "version": "0.1.0", "path": "/apps/nearby",           "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "system.notify", "mesh.peer", "net.wifi"] },
     { "id": "qr",               "version": "0.1.0", "path": "/apps/qr",               "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events"] }
   ]

@@ -1,16 +1,16 @@
 {
   "_lang": "it",
   "app_title": "Agenti",
-  "subtitle": "multi-agente · Claude",
+  "subtitle": "multi-agente · online",
   "ws_label": "Spazio di lavoro",
   "ws_hint": "Spazio di lavoro: l'agente opera solo qui dentro",
   "web_label": "web",
-  "web_hint": "Cerca sul web tramite Claude (server-side)",
+  "web_hint": "Cerca sul web (server-side, disponibile con Claude)",
   "auto_label": "auto-approva",
   "auto_hint": "Esegui le azioni senza chiedere conferma (sconsigliato)",
   "input_ph": "Dai un compito: crea/modifica file, calcola, cerca… (⏎ invia, ⇧⏎ a capo)",
   "send": "Invia",
-  "hint": "Gli agenti girano nel browser e chiamano Claude direttamente: il Cardputer non viene caricato. Le azioni distruttive chiedono conferma.",
+  "hint": "Gli agenti girano nel browser e chiamano i modelli online direttamente: il Cardputer non viene caricato. Le azioni distruttive chiedono conferma.",
 
   "st_ready": "pronto",
   "st_thinking": "sto ragionando…",
@@ -22,10 +22,12 @@
   "msg_stopped": "⏹ Interrotto.",
 
   "model_anthropic": "orchestratore Haiku · agenti Sonnet/Opus",
-  "model_groq": "Groq · solo chat (senza strumenti OS)",
+  "model_multi": "multi-provider · strumenti OS",
+  "model_tools_suffix": "strumenti OS attivi",
 
   "ready_anthropic": "🟣 Multi-agente pronto. Dammi un compito — posso leggere, scrivere e modificare file nello spazio di lavoro, eseguire codice in sandbox, cercare sul web e aprire i risultati nell'OS. Le azioni distruttive chiedono la tua approvazione.",
-  "ready_groq": "⚡ Chiave Groq rilevata — solo chat (senza strumenti OS). Aggiungi una chiave Claude in Impostazioni ▸ IA per il sistema multi-agente completo.",
+  "ready_generic": "✅ Multi-agente pronto. Dammi un compito — posso leggere, scrivere e modificare file nello spazio di lavoro, eseguire codice in sandbox e aprire app/risultati nell'OS. Le azioni distruttive chiedono la tua approvazione.",
+  "ready_multi_suffix": " Sfrutto automaticamente il modello migliore tra i tuoi provider, con fallback se uno non risponde.",
 
   "appr_title": "Approva azione",
   "appr_allow": "Consenti",
@@ -36,11 +38,19 @@
   "op_delete_file": "ELIMINA file",
   "op_move_file": "Sposta file",
   "op_run_js": "Esegui codice",
+  "op_scaffold_app": "Crea scheletro app",
+  "op_publish_app": "INSTALLA app nell'OS",
+  "op_manage_app": "Abilita/disabilita app",
+  "op_generate_image": "Genera immagine",
+  "appr_new_app": "Nuova app",
+  "appr_install_app": "Installa nel launcher",
+  "appr_enable_app": "Abilita app",
+  "appr_disable_app": "Disabilita app",
 
   "gate_offline_title": "Niente rete",
   "gate_offline_body": "Gli agenti online hanno bisogno di internet. Riconnettiti, oppure usa l'assistente ANIMA completamente offline.",
-  "gate_key_title": "Collega Claude",
-  "gate_key_body": "Il sistema multi-agente richiede una chiave Claude (Anthropic). Aggiungila in Impostazioni ▸ IA. Senza, puoi comunque usare l'assistente ANIMA offline.",
+  "gate_key_title": "Collega un provider IA",
+  "gate_key_body": "Il sistema multi-agente richiede la chiave API di un provider online — Claude, Groq, Grok (xAI) o Gemini. Aggiungila in Impostazioni ▸ IA: ne basta una, ma se ne configuri più di una le sfrutto tutte con fallback. Senza, puoi comunque usare l'assistente ANIMA offline.",
   "gate_open_settings": "Apri Impostazioni",
   "gate_anima": "ANIMA offline"
 }

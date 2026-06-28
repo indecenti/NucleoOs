@@ -23,17 +23,18 @@
          faithful pixel simulator of the firmware UI (<code>nucleo_app</code>).</p>
       <table>
         <tr><th>Key</th><th>Action</th></tr>
-        <tr><td><kbd>;</kbd> / <kbd>.</kbd> <span class="alt">or ↑ ↓</span></td><td>Move focus (wraps)</td></tr>
-        <tr><td><kbd>Enter</kbd></td><td>Open menu / launch app</td></tr>
-        <tr><td><kbd>/</kbd> <span class="alt">or →</span></td><td>App context menu (icons)</td></tr>
-        <tr><td><kbd>Esc</kbd> / <kbd>`</kbd> <span class="alt">or ←</span></td><td>Back · clear filter</td></tr>
-        <tr><td><kbd>1</kbd>–<kbd>9</kbd></td><td>Jump &amp; open the n-th item</td></tr>
-        <tr><td><kbd>a</kbd>–<kbd>z</kbd></td><td>Type-to-filter</td></tr>
+        <tr><td><kbd>←</kbd> <kbd>→</kbd> <span class="alt">or ; . / ↑ ↓</span></td><td>Slide the carousel (wraps)</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>Open category / launch app</td></tr>
+        <tr><td><kbd>/</kbd></td><td>App options</td></tr>
+        <tr><td><kbd>Esc</kbd> / <kbd>`</kbd></td><td>Back · clear filter</td></tr>
+        <tr><td><kbd>a</kbd>–<kbd>z</kbd> <kbd>0</kbd>–<kbd>9</kbd></td><td>Type-to-filter</td></tr>
       </table>
       <p class="log-label">Last event</p>
       <pre id="log">—</pre>
     </aside>
   </div>
-  <script type="module" src="device.js"></script>
+  <!-- Cache-bust the entry module so edits to the simulator always show on reload (dev tool;
+       relative sub-imports like ./nav.js resolve without the query, so they stay cached). -->
+  <script type="module">import('./device.js?ts=' + Date.now());</script>
 </body>
 </html>

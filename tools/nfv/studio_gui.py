@@ -678,7 +678,8 @@ class NfvStudio:
         if o["has_audio"]:
             self._log("\n[1/3] Audio MP3…", "accent")
             self._run_ff([ff, "-y"] + hw + trim + ["-i", o["src"], "-vn", "-ac", "1",
-                          "-ar", str(o["ar"]), "-c:a", "libmp3lame", "-b:a", f"{o['ab']}k", o["out_mp3"]])
+                          "-ar", str(o["ar"]), "-c:a", "libmp3lame", "-b:a", f"{o['ab']}k",
+                          "-map_metadata", "-1", "-id3v2_version", "0", o["out_mp3"]])  # bare MP3, no ID3 (exact CBR seek)
             self._log(f"  ✓ {os.path.basename(o['out_mp3'])}  {human(os.path.getsize(o['out_mp3']))}", "green")
         if self._abort.is_set(): raise InterruptedError("Interrotto.")
         self._log(f"\n[2/3] MJPEG {V2_W}×{V2_H-1} @ {o['fps']}fps q={o['q']}…", "accent")

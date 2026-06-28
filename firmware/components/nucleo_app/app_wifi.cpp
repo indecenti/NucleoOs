@@ -10,7 +10,7 @@
 //   • everything is clipped to the OS content area [0, content_height); the OS owns
 //     the hint bar below it, so nothing spills off the bottom any more.
 //
-// Tabs:  STATO · RETE · AP · LUCE · ANIMA · SYS
+// Tabs:  STATO · RETE · AP · LUCE · SYS
 
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
@@ -28,8 +28,10 @@
 
 extern "C" {
 #include "nucleo_storage.h"
-#include "nucleo_anima.h"     // ANIMA mode policy + live diagnostics (anima_diag_t)
+#include "nucleo_voice.h"
 }
+#include <dirent.h>
+#include <unistd.h>
 
 // ---- platform hooks -------------------------------------------------------
 extern "C" {
@@ -49,6 +51,7 @@ int         nucleo_setup_scan_secure(int i);
 const char *nucleo_setup_scan_auth_label(int i);
 bool        nucleo_setup_join(const char *ssid, const char *pass);
 void        nucleo_setup_start_ap(void);
+void        nucleo_setup_stop_ap(void);
 void        nucleo_setup_forget(void);
 bool        nucleo_setup_net_is_known(const char *ssid);   // saved (auto-rejoin) network?
 bool        nucleo_setup_net_has_password(const char *ssid); // saved AND has a usable password
@@ -60,7 +63,6 @@ const char *nucleo_setup_ap_pass(void);
 void        nucleo_setup_set_ap_ssid(const char *ssid);
 void        nucleo_setup_set_ap_pass(const char *pass);
 int         nucleo_setup_apply_network(void);
-void        nucleo_anima_app_ask(const char *q);   // seed ANIMA chat (app_anima.cpp)
 const char *nucleo_auth_pin(void);
 int         nucleo_audio_volume(void);
 void        nucleo_audio_set_volume(int pct);
@@ -81,19 +83,22 @@ static const unsigned short
 #define T_STATO 0
 #define T_RETE  1
 #define T_AP    2
-#define T_LUCE  3
-#define T_ANIMA 4
-#define T_DIAG  5
-#define T_SYS   6
-#define NTABS   7
-static const char *const TABS[NTABS]   = { "STATO","RETE","AP","LUCE","ANIMA","DIAG","SYS" };
-static const char *const TABS_EN[NTABS]= { "HOME","WIFI","AP","DISP","ANIMA","DIAG","SYS" };
+#define T_DISP  3
+#define T_SYS   4
+#define T_RESET 5
+#define NTABS   6
+static const char *const TABS[NTABS]   = { "STATO","RETE","AP","DISP","SYS","RESET" };
+static const char *const TABS_EN[NTABS]= { "HOME","WIFI","AP","DISP","SYS","RESET" };
 
 // ---- state -----------------------------------------------------------------
 static int  s_tab    = T_STATO;
 static int  s_sel    = -1;     // -1 = tab header (RIGHT pages, DOWN enters rows)
 static bool s_edit   = false;  // slider adjust mode (LUCE), mirrors Video s_set_edit
-static bool s_en     = false;  // English labels
+// System UI language (settings.json ui.language) — shared with the Control Center + web shell, so
+// this app's existing IT/EN labels follow the global setting instead of a private toggle.
+extern "C" bool nucleo_i18n_is_en(void);
+extern "C" void nucleo_i18n_set_en(bool en);
+static bool s_en     = false;  // English labels (seeded from the system language on enter)
 static bool s_rconf  = false;  // reboot double-confirm armed
 static bool s_fconf  = false;  // "forget all networks" double-confirm armed
 
@@ -172,7 +177,7 @@ static void row_value_str(char*b,int cap,const char*val,int kind,bool on,int sli
 
 // Decide ONCE per list whether labels can use the big size-2 font: only when the longest
 // label still leaves room for a value and the per-row pitch is tall enough. Labels are kept
-// short enough (e.g. "Dimentica", not "Dimentica tutte") that every tab — Luce/AP/ANIMA/SYS —
+// short enough (e.g. "Dimentica", not "Dimentica tutte") that every tab — Luce/AP/SYS —
 // clears this check and renders the same big rows; only a genuinely long label falls back.
 static bool list_big(Row*it,int n,int pitch){
     if(pitch<22) return false;
@@ -248,7 +253,7 @@ static void draw_list_row(int y,int h,Row&r,bool big,bool sel){
     }
 }
 
-// Adaptive, space-filling list. Few rows (Luce/AP/ANIMA) stretch to fill the band with big
+// Adaptive, space-filling list. Few rows (Luce/AP) stretch to fill the band with big
 // size-2 labels; many rows (SYS) keep a compact size-1 pitch and scroll. The block is laid
 // out top-to-bottom and vertically centred, so short lists never float with empty space.
 // sel == -1 (tab header) simply means no row carries the capsule.
@@ -423,60 +428,6 @@ static void draw_rete(int ch){
     }
 }
 
-// ---- DIAG (live ANIMA telemetry) -------------------------------------------
-static void draw_diag(int ch){
-    anima_diag_t dg; nucleo_anima_diag(&dg);
-    char b[48];
-
-    // header: total queries.  Vertical budget (content 24..121) is tight, so every band
-    // is spaced to leave the legend clear of the footer divider — no more overlap.
-    txt(8,28,s_en?"ANIMA diagnostics":"Diagnostica ANIMA",ACC,BG,1);
-    unsigned long qn=(unsigned long)dg.queries;             // compact 'k' form above 100k keeps the
-    if(qn>=100000) snprintf(b,sizeof b,s_en?"%luk queries":"%luk richieste",qn/1000); // size-2 line < 240px
-    else           snprintf(b,sizeof b,s_en?"%lu queries":"%lu richieste",qn);
-    txt(8,40,b,FG,BG,2);                                     // 40..56
-
-    // tier-mix stacked bar (L0 cmd / L1 fact / L2 stitch / L3 cloud / miss)
-    uint32_t parts[5]={dg.t_command,dg.t_fact,dg.t_stitch,dg.t_remote,dg.t_none};
-    uint16_t cols[5]={ACC,GRN,C_PURPLE,AMB,REDC};
-    const char*leg[5]={"L0","L1","L2","Cloud","Miss"};
-    uint32_t tot=0; for(int i=0;i<5;i++) tot+=parts[i];
-    int bx=8,by=60,bw=W-16,bh=14;                           // 60..74
-    d.drawRoundRect(bx,by,bw,bh,3,LINE);
-    if(tot>0){
-        int x=bx+1,avail=bw-2;
-        for(int i=0;i<5;i++){
-            int w=(int)((uint64_t)parts[i]*avail/tot);
-            if(i==4) w=bx+1+avail-x;                         // last fills remainder
-            if(w>0){ d.fillRect(x,by+1,w,bh-2,cols[i]); x+=w; }
-        }
-    }else txt(bx+6,by+4,s_en?"no data yet":"nessun dato",MUTED,BG,1);
-
-    // legend — two rows max (ly 80, wraps to 92), both above the footer divider at 103. Each
-    // chip wraps BEFORE it is drawn if it would not fit, so no chip (including "Miss") can ever
-    // spill past the right edge; if both rows are full the remaining chips are simply dropped.
-    int lx=8,ly=80; const int LY_MAX=92;
-    for(int i=0;i<5;i++){
-        snprintf(b,sizeof b,"%s %lu",leg[i],(unsigned long)parts[i]);
-        int cw=10+(int)strlen(b)*6;                          // swatch + gap + text
-        if(lx+cw>W-6 && lx>8 && ly<LY_MAX){ lx=8; ly+=12; }  // wrap to row 2 when it won't fit
-        if(lx+cw>W-6 && lx>8) continue;                       // no room left -> drop (never overflow)
-        d.fillRect(lx,ly+1,7,7,cols[i]);
-        txt(lx+10,ly,b,MUTED,BG,1);
-        lx+=cw+8;
-    }
-
-    // footer: last answer confidence + intent | L1 heap
-    int fy=ch-15;                                            // divider 103, text 107..115
-    d.drawFastHLine(0,fy-3,W,LINE);
-    snprintf(b,sizeof b,s_en?"last %d%%  %.12s":"ultima %d%%  %.12s",
-             dg.last_conf,dg.last_intent[0]?dg.last_intent:"-");
-    txt(8,fy+1,b,dg.last_conf>=70?GRN:dg.last_conf>=40?AMB:REDC,BG,1);
-    size_t hb=nucleo_anima_l1_heap_bytes();
-    snprintf(b,sizeof b,"L1 %uKB",(unsigned)(hb/1024));
-    txt(W-(int)strlen(b)*6-8,fy+1,b,hb?ACC:MUTED,BG,1);
-}
-
 // ---- AP --------------------------------------------------------------------
 static void build_ap(Row*it,int*n){
     int k=0;
@@ -487,41 +438,70 @@ static void build_ap(Row*it,int*n){
     *n=k;
 }
 
-// ---- LUCE ------------------------------------------------------------------
-static void build_luce(Row*it,int*n){
-    it[0].label=s_en?"Bright":"Luce";   it[0].kind=RV_SLIDER; it[0].slider=nucleo_app_brightness();
-    it[1].label="Volume";               it[1].kind=RV_SLIDER; it[1].slider=nucleo_audio_volume();
-    it[2].label="Mute";                 it[2].kind=RV_TOGGLE; it[2].on=nucleo_audio_is_muted();
-    *n=3;
+// ---- DISP ------------------------------------------------------------------
+#define DISP_BRIGHT 0
+#define DISP_VOL    1
+#define DISP_MUTE   2
+#define DISP_VOICE  3
+
+static void build_disp(Row*it,int*n){
+    it[DISP_BRIGHT].label=s_en?"Bright":"Luce";   it[DISP_BRIGHT].kind=RV_SLIDER; it[DISP_BRIGHT].slider=nucleo_app_brightness();
+    it[DISP_VOL].label="Volume";                  it[DISP_VOL].kind=RV_SLIDER;    it[DISP_VOL].slider=nucleo_audio_volume();
+    it[DISP_MUTE].label=s_en?"Mute":"Muto";       it[DISP_MUTE].kind=RV_TOGGLE;   it[DISP_MUTE].on=nucleo_audio_is_muted();
+    it[DISP_VOICE].label=s_en?"Voice PTT":"Voce"; it[DISP_VOICE].kind=RV_TOGGLE;  it[DISP_VOICE].on=nucleo_voice_always_on();
+    *n=4;
 }
 
-// ---- ANIMA (mode policy + actions) -----------------------------------------
-// Mode segments map 1:1 to the L1 policy:  Auto=AUTO  Offline=ON  Online=OFF.
-#define AN_MODE  0
-#define AN_PROV  1
-#define AN_MODEL 2
-#define AN_RESET 3
-#define AN_FREE  4
-#define AN_OPEN  5
-static void build_anima(Row*it,int*n){
-    char prov[20]={},mdl[20]={};
-    bool hk=nucleo_anima_teacher_info(prov,(int)sizeof prov,mdl,(int)sizeof mdl);
-    // segment labels (refreshed each draw for live language)
-    static const char* IT_SEG[3]={"Auto","Offline","Online"};
-    static const char* EN_SEG[3]={"Auto","Offline","Online"};
-    s_seg[0]=(s_en?EN_SEG:IT_SEG)[0]; s_seg[1]=(s_en?EN_SEG:IT_SEG)[1];
-    s_seg[2]=(s_en?EN_SEG:IT_SEG)[2]; s_seg_n=3;
+// ---- factory reset ---------------------------------------------------------
+static void rm_tree(const char *path){
+    DIR *dir=opendir(path);
+    if(!dir){ unlink(path); return; }
+    struct dirent *e;
+    while((e=readdir(dir))){
+        if(!strcmp(e->d_name,".")||!strcmp(e->d_name,"..")) continue;
+        char sub[256]; snprintf(sub,sizeof sub,"%s/%s",path,e->d_name);
+        rm_tree(sub);
+    }
+    closedir(dir); rmdir(path);
+}
+static void do_reset_soft(void){
+    rm_tree("/sd/system/config");
+    rm_tree("/sd/system/sessions");
+    rm_tree("/sd/system/log");
+    esp_restart();
+}
+static void do_reset_hard(void){
+    rm_tree("/sd/system/config");
+    rm_tree("/sd/system/sessions");
+    rm_tree("/sd/system/log");
+    rm_tree("/sd/system/keys");
+    rm_tree("/sd/data/anima/learned");
+    unlink("/sd/data/anima/teacher.json");
+    unlink("/sd/data/anima/telemetry.ndjson");
+    unlink("/sd/data/anima/session.txt");
+    unlink("/sd/data/anima/sessions.json");
+    unlink("/sd/data/anima/workspace.json");
+    rm_tree("/sd/config");
+    rm_tree("/sd/backups");
+    rm_tree("/sd/journal");
+    esp_restart();
+}
 
-    it[AN_MODE].label=s_en?"Mode":"Modo"; it[AN_MODE].kind=RV_SEG;
-        it[AN_MODE].slider=nucleo_anima_l1_get_mode();
-    it[AN_PROV].label="Provider"; it[AN_PROV].kind=RV_TEXT;
-        snprintf(it[AN_PROV].val,20,"%s",hk?prov:(s_en?"none":"nessuno"));
-    it[AN_MODEL].label=s_en?"Model":"Modello"; it[AN_MODEL].kind=RV_TEXT;
-        snprintf(it[AN_MODEL].val,20,"%s",hk?mdl:"-");
-    it[AN_RESET].label=s_en?"Reset chat":"Reset chat"; it[AN_RESET].kind=RV_ACTION;
-    it[AN_FREE].label=s_en?"Free RAM":"Libera RAM"; it[AN_FREE].kind=RV_ACTION;
-    it[AN_OPEN].label=s_en?"Open ANIMA":"Apri ANIMA"; it[AN_OPEN].kind=RV_ACTION;
-    *n=6;
+// ---- RESET tab -------------------------------------------------------------
+#define RST_SOFT 0
+#define RST_HARD 1
+static int s_rst_n    = 0;   // confirm counter: 0=idle, 1,2=counting
+static int s_rst_type = 0;   // 1=soft, 2=hard
+
+static void build_reset(Row*it,int*n){
+    it[RST_SOFT].label=s_en?"Reset config":"Reset config"; it[RST_SOFT].kind=RV_ACTION;
+    memset(it[RST_SOFT].val,0,20);
+    if(s_rst_type==1&&s_rst_n>0){ it[RST_SOFT].kind=RV_TEXT; snprintf(it[RST_SOFT].val,20,"x%d",3-s_rst_n); }
+
+    it[RST_HARD].label=s_en?"Factory reset":"Reset totale"; it[RST_HARD].kind=RV_ACTION;
+    memset(it[RST_HARD].val,0,20);
+    if(s_rst_type==2&&s_rst_n>0){ it[RST_HARD].kind=RV_TEXT; snprintf(it[RST_HARD].val,20,"x%d",3-s_rst_n); }
+    *n=2;
 }
 
 // ---- SYS -------------------------------------------------------------------
@@ -585,18 +565,18 @@ static void draw_manual(int ch){
         "SX / DX / TAB: cambia scheda",
         "GIU: entra nelle voci  SU: torna su",
         "INVIO: attiva   Esc: esci dall'app",
-        "LUCE: INVIO su slider, poi < >",
-        "ANIMA: Modo Auto/Offline/Online",
-        "DIAG: telemetria ANIMA dal vivo",
-        "SYS: tema, lingua, riavvia",0};
+        "DISP: INVIO su slider, poi < >",
+        "DISP: Voce=toggle sempre attiva",
+        "SYS: tema, lingua, riavvia",
+        "RESET: INVIO 3x (config o totale)",0};
     const char*en[]={
         "LEFT / RIGHT / TAB: switch tab",
         "DOWN: enter rows   UP: go back up",
         "ENTER: act   Esc: exit the app",
         "DISP: ENTER on slider, then < >",
-        "ANIMA: Mode Auto/Offline/Online",
-        "DIAG: live ANIMA telemetry",
-        "SYS: theme, language, restart",0};
+        "DISP: Voice=always-on toggle",
+        "SYS: theme, language, restart",
+        "RESET: ENTER 3x (config or full)",0};
     const char**m=s_en?en:it;
     for(int i=0;m[i];i++) txt(8,20+i*14,m[i],FG,BG,1);
 }
@@ -605,8 +585,8 @@ static void draw_manual(int ch){
 static int tab_rows(int t){
     Row it[8]; int n=0;
     if(t==T_AP) build_ap(it,&n);
-    else if(t==T_LUCE) build_luce(it,&n);
-    else if(t==T_ANIMA) build_anima(it,&n);
+    else if(t==T_DISP) build_disp(it,&n);
+    else if(t==T_RESET) build_reset(it,&n);
     else if(t==T_SYS) build_sys(it,&n);
     else if(t==T_RETE) n=nucleo_setup_scan_count();
     return n;   // T_STATO / T_DIAG = 0 (no row navigation)
@@ -631,11 +611,10 @@ static void on_draw(void){
     switch(s_tab){
     case T_STATO: draw_stato(ch); break;
     case T_RETE:  draw_rete(ch);  break;
-    case T_DIAG:  draw_diag(ch);  break;
     case T_AP:    build_ap(it,&n);    draw_list(ch,it,n,s_sel); break;
-    case T_LUCE:  build_luce(it,&n);  draw_list(ch,it,n,s_sel); break;
-    case T_ANIMA: build_anima(it,&n); draw_list(ch,it,n,s_sel); break;
-    default:      build_sys(it,&n);   draw_list(ch,it,n,s_sel); break;
+    case T_DISP:  build_disp(it,&n); draw_list(ch,it,n,s_sel); break;
+    case T_RESET: build_reset(it,&n);draw_list(ch,it,n,s_sel); break;
+    default:      build_sys(it,&n);  draw_list(ch,it,n,s_sel); break;
     }
 
     // inline editor overlay
@@ -676,10 +655,11 @@ static int tab_rows(int t);
 static void update_hint(void){
     if(s_edit){ nucleo_app_set_hint(s_en?"L/R adjust   ENTER done":"L/R regola   INVIO ok"); return; }
     if(s_sel==-1){
-        if(s_tab==T_STATO)      nucleo_app_set_hint(s_en?"L/R tab   ENTER ANIMA   esc":"L/R scheda   INVIO ANIMA   esc");
+        if(s_tab==T_STATO)      nucleo_app_set_hint(s_en?"L/R tab   esc":"L/R scheda   esc");
         else if(s_tab==T_RETE)  nucleo_app_set_hint(s_en?"L/R tab   ENTER scan   DOWN list":"L/R scheda   INVIO cerca   GIU lista");
+        else if(s_tab==T_RESET)    nucleo_app_set_hint(s_en?"L/R tab   DOWN sel   ENTER 3x confirm":"L/R scheda   GIU selezione   INVIO 3x conferma");
         else if(tab_rows(s_tab)>0) nucleo_app_set_hint(s_en?"L/R tab   DOWN rows   esc":"L/R scheda   GIU voci   esc");
-        else                    nucleo_app_set_hint(s_en?"L/R tab   esc back":"L/R scheda   esc esci");
+        else                       nucleo_app_set_hint(s_en?"L/R tab   esc back":"L/R scheda   esc esci");
         return;
     }
     if(s_tab==T_RETE) nucleo_app_set_hint(s_en?"ENTER join   DEL forget   L/R tab":"INVIO connetti   CANC dimentica   L/R scheda");
@@ -705,25 +685,6 @@ static void page_tab_back(void){
     update_hint(); nucleo_app_request_draw();
 }
 
-// ---- ANIMA diagnosis -------------------------------------------------------
-static void ask_anima(void){
-    if(!(nucleo_anima_online_available()&&nucleo_anima_teacher_configured())){
-        toast("ANIMA offline","ANIMA offline"); return;
-    }
-    char q[200];
-    if(connected())
-        snprintf(q,sizeof q,s_en
-            ?"My Wi-Fi '%s' signal %d dBm ch%d IP %s. Brief diagnosis + one tip."
-            :"Rete '%s' segnale %d dBm ch%d IP %s. Diagnosi breve + consiglio.",
-            nucleo_setup_ssid(),nucleo_setup_rssi(),nucleo_setup_channel(),nucleo_setup_ip());
-    else
-        snprintf(q,sizeof q,s_en
-            ?"Cardputer not on Wi-Fi (mode %s). Short checklist to get online."
-            :"Cardputer non connesso (modo %s). Checklist breve per andare online.",
-            nucleo_setup_mode());
-    nucleo_anima_app_ask(q); nucleo_app_launch_id("anima");
-}
-
 // ---- inline input ----------------------------------------------------------
 static void input_key(int k,char ch){
     if(k==NK_CHAR&&ch>=32&&ch<127){ if(s_ilen<(int)sizeof(s_ibuf)-1){s_ibuf[s_ilen++]=ch;s_ibuf[s_ilen]=0;} }
@@ -744,10 +705,8 @@ static void input_key(int k,char ch){
 }
 
 // ---- ENTER at a tab HEADER (s_sel == -1) -----------------------------------
-// Mirrors how Music/Video give the header a primary action; most tabs just enter rows.
 static void header_enter(void){
-    if(s_tab==T_STATO)      ask_anima();
-    else if(s_tab==T_RETE)  start_op(OP_SCAN);
+    if(s_tab==T_RETE) start_op(OP_SCAN);
 }
 
 // ---- activate (ENTER on a focused ROW, s_sel >= 0) -------------------------
@@ -762,35 +721,35 @@ static void activate(void){
         else { s_join_pass[0]=0; start_op(OP_JOIN); }
         break;
     case T_AP:
-        if(s_sel==0){ if(ap_on())nucleo_setup_apply_network(); else nucleo_setup_start_ap();
+        if(s_sel==0){ if(ap_on())nucleo_setup_stop_ap(); else nucleo_setup_start_ap();   // OFF must flip mode->sta, not re-apply "ap"
                       toast(s_en?"Done":"Fatto",s_en?"Done":"Fatto"); }
         else if(s_sel==1){ s_im=IM_APSSID; snprintf(s_ibuf,sizeof s_ibuf,"%s",nucleo_setup_ap_ssid()); s_ilen=(int)strlen(s_ibuf); }
         else if(s_sel==2){ s_im=IM_APPASS; snprintf(s_ibuf,sizeof s_ibuf,"%s",nucleo_setup_ap_pass()); s_ilen=(int)strlen(s_ibuf); }
         break;
-    case T_LUCE:
-        if(s_sel==0||s_sel==1){ s_edit=true; update_hint(); }            // slider -> adjust mode
-        else if(s_sel==2){ nucleo_audio_set_mute(!nucleo_audio_is_muted());
-                           toast(nucleo_audio_is_muted()?"Muto":"Audio",nucleo_audio_is_muted()?"Muted":"Sound"); }
+    case T_DISP:
+        if(s_sel==DISP_BRIGHT||s_sel==DISP_VOL){ s_edit=true; update_hint(); }
+        else if(s_sel==DISP_MUTE){ nucleo_audio_set_mute(!nucleo_audio_is_muted());
+                           toast(nucleo_audio_is_muted()?(s_en?"Muted":"Muto"):(s_en?"Sound":"Audio"),
+                                 nucleo_audio_is_muted()?"Muted":"Sound"); }
+        else if(s_sel==DISP_VOICE){ nucleo_voice_set_always_on(!nucleo_voice_always_on());
+                           toast(nucleo_voice_always_on()?(s_en?"Voice on":"Voce attiva"):(s_en?"Voice off":"Voce off"),
+                                 nucleo_voice_always_on()?"Voice on":"Voice off"); }
         break;
-    case T_ANIMA:
-        if(s_sel==AN_MODE){ int m=(nucleo_anima_l1_get_mode()+1)%3; nucleo_anima_l1_set_mode(m);
-                      const char*it[]={"Auto","Offline","Online"}; toast(it[m],it[m]); }
-        else if(s_sel==AN_RESET){ nucleo_anima_reset_session(); toast("Chat azzerata","Chat reset"); }
-        else if(s_sel==AN_FREE){
-            size_t kb=nucleo_anima_l1_heap_bytes()/1024;
-            bool ok=nucleo_anima_l1_unload_if_idle();
-            char m[32]; snprintf(m,sizeof m,ok?(s_en?"Freed %uKB":"Liberati %uKB"):(s_en?"Busy":"Occupato"),(unsigned)kb);
-            toast(m,m);
-        }
-        else if(s_sel==AN_OPEN) nucleo_app_launch_id("anima");
+    case T_RESET:
+        if(s_rst_n>0&&s_rst_type!=(s_sel+1)){ s_rst_n=0; s_rst_type=0; }
+        if(s_rst_n==0){      s_rst_type=s_sel+1; s_rst_n=1;
+            toast(s_en?"ENTER twice more":"INVIO ancora 2 volte",s_en?"ENTER twice more":"INVIO ancora 2 volte"); }
+        else if(s_rst_n==1){ s_rst_n=2;
+            toast(s_en?"ENTER once more":"INVIO ancora 1 volta",s_en?"ENTER once more":"INVIO ancora 1 volta"); }
+        else{ if(s_rst_type==1) do_reset_soft(); else do_reset_hard(); }
         break;
     case T_SYS:
         if(s_sel==SYS_NAME){ s_im=IM_NAME; snprintf(s_ibuf,sizeof s_ibuf,"%s",nucleo_setup_device_name()); s_ilen=(int)strlen(s_ibuf); }
-        else if(s_sel==SYS_LANG){ s_en=!s_en; update_hint(); }
+        else if(s_sel==SYS_LANG){ nucleo_i18n_set_en(!nucleo_i18n_is_en()); s_en=nucleo_i18n_is_en(); update_hint(); }
         else if(s_sel==SYS_THEME){ theme_cycle(); toast(theme_name(),theme_name()); }
         else if(s_sel==SYS_WIFI){
             if(!strcmp(nucleo_setup_mode(),"sta")) nucleo_setup_start_ap();
-            else nucleo_setup_apply_network();
+            else nucleo_setup_stop_ap();   // same fix: turning AP off must return to STA, not re-apply "ap"
             toast(s_en?"Done":"Fatto",s_en?"Done":"Fatto");
         }
         else if(s_sel==SYS_FORGET){
@@ -809,9 +768,9 @@ static void activate(void){
 
 // ---- slider adjust (LUCE edit mode) ----------------------------------------
 static void slider_adjust(int delta){
-    if(s_tab==T_LUCE){
-        if(s_sel==0)      nucleo_app_set_brightness(nucleo_app_brightness()+delta);
-        else if(s_sel==1) nucleo_audio_set_volume(nucleo_audio_volume()+delta);
+    if(s_tab==T_DISP){
+        if(s_sel==DISP_BRIGHT) nucleo_app_set_brightness(nucleo_app_brightness()+delta);
+        else if(s_sel==DISP_VOL) nucleo_audio_set_volume(nucleo_audio_volume()+delta);
     }
     nucleo_app_request_draw();
 }
@@ -824,6 +783,7 @@ static void on_key(int k,char ch){
     if(s_im!=IM_NONE){ input_key(k,ch); return; }
     if(s_rconf&&k!=NK_ENTER){ s_rconf=false; }
     if(s_fconf&&k!=NK_ENTER){ s_fconf=false; }
+    if(s_rst_n>0&&k!=NK_ENTER){ s_rst_n=0; s_rst_type=0; }
 
     if(s_edit){                                              // slider adjust mode
         if(k==NK_RIGHT||k==NK_UP) slider_adjust(+5);
@@ -900,8 +860,10 @@ static void on_tick(void){
 
 // ---- lifecycle -------------------------------------------------------------
 static void enter(void){
+    s_en = nucleo_i18n_is_en();           // follow the system language
     s_tab=T_STATO; s_sel=-1; s_im=IM_NONE; s_manual=false;
     s_msg_t=0; s_histn=0; s_skey[0]=0; s_rconf=false; s_fconf=false;
+    s_rst_n=0; s_rst_type=0;
     if(!s_task){ s_busy=false; s_op=OP_NONE; s_done=false; }
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_back_handler(wifi_back);
@@ -914,7 +876,7 @@ static void leave(void){
 
 extern "C" void nucleo_register_wifi(void){
     static const nucleo_app_def_t app={
-        "wifi","Impostazioni","System","WiFi, AP, luminosita', ANIMA, sistema",
+        "wifi","Impostazioni","System","WiFi, AP, display, voce, sistema, reset",
         'W',ACC,enter,on_key,on_tick,on_draw,leave
     };
     nucleo_app_register(&app);

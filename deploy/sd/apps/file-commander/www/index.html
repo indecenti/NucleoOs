@@ -376,7 +376,15 @@
     }
     async function listSD() {
       sdPath = cwd;                                   // remember for copy-to-SD from a local view
-      return await (await api('list', cwd)).json();
+      const j = await (await api('list', cwd)).json();
+      // Hide ".gz" shadow files: the device transparently serves <name> from <name>.gz, so a gzip
+      // sibling is an internal compression artifact, not a user file. Showing it cluttered every
+      // folder with duplicates AND each one was a dead click — opening it fired a stray /api/fs/list
+      // 404 (the fallback opener tried to list a file). A standalone .gz with no sibling is kept.
+      const entries = (j && Array.isArray(j.entries)) ? j.entries : [];
+      const names = new Set(entries.map((e) => e.name));
+      if (j) j.entries = entries.filter((e) => !(e.type !== 'dir' && /\.gz$/i.test(e.name) && names.has(e.name.slice(0, -3))));
+      return j;
     }
 
     // Show/hide toolbar affordances that only make sense for one backend.

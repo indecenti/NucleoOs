@@ -1,19 +1,17 @@
-# NucleoOS partition table (8 MB flash). See docs/partition-table.md.
+# NucleoOS partition table (8 MB flash) — dual-bank OTA, no factory. See docs/partition-table.md.
+# The 2.5 MB factory bank was redundant (idf.py flashes the app to a single slot and serial is the
+# real path). Folding it into the OTA banks takes each from 2304 -> 3584 KB: image ~1980 KB = 55%
+# used, 45% headroom, with full A/B OTA + rollback intact. idf.py flash writes the app to ota_0 and
+# resets otadata, so a serial reflash boots ota_0 cleanly; main.c confirms the image (cancel-rollback)
+# on a healthy boot, the bootloader rolls back to the other bank on a bad one. nvs/otadata/phy/
+# nvs_keys/coredump/cfg KEEP their exact offsets so a cable reflash preserves Wi-Fi/pairing (nvs) and
+# OS config (cfg). A partition-table change is NOT OTA-safe: migrate once via cable (tools\flash.ps1).
 # Name,     Type, SubType,  Offset,    Size,      Flags
 nvs,        data, nvs,      0x9000,    0x6000,
 otadata,    data, ota,      0xF000,    0x2000,
 phy_init,   data, phy,      0x11000,   0x1000,
 nvs_keys,   data, nvs_keys, 0x12000,   0x1000,    encrypted
-# factory 2.5 MB: it's the image flashed via serial (OTA is unreliable -> serial is the real path,
-# see serial-console-routing). Was 2 MB @ 30% free -> now ~44% free with the same image. OTA slots
-# 2.25 MB each: still ample for the ~1.44 MB image (38% headroom) and the A/B + rollback scheme is
-# fully preserved. nvs/otadata/nvs_keys/coredump/cfg KEEP their exact offsets so a cable reflash
-# preserves Wi-Fi/pairing (nvs) and OS config (cfg). App region 0x20000..0x720000 stays full; end at 8 MB.
-factory,    app,  factory,  0x20000,   0x280000,
-ota_0,      app,  ota_0,    0x2A0000,  0x240000,
-ota_1,      app,  ota_1,    0x4E0000,  0x240000,
+ota_0,      app,  ota_0,    0x20000,   0x380000,
+ota_1,      app,  ota_1,    0x3A0000,  0x380000,
 coredump,   data, coredump, 0x720000,  0x40000,
-# Power-loss-safe config store (LittleFS, copy-on-write) on internal flash. Holds the
-# brick-class OS config (setup.json) so a power cut mid-write can't corrupt it the way
-# FAT on the SD can. 640 KB: tiny config now, room to grow. See docs/partition-table.md.
 cfg,        data, spiffs,   0x760000,  0xA0000,

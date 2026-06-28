@@ -8,7 +8,7 @@
   "network": {
     "wifi": { "enabled": true, "ssid": "", "autoconnect": true },
     "ble":  { "enabled": true, "advertise_name": "NucleoOS" },
-    "swarm": { "enabled": true, "channel": 1, "peers": [] }
+    "swarm": { "enabled": false, "channel": 1, "name": "", "passphrase": "", "peers": [] }
   },
   "power": {
     "profile": "balanced",
