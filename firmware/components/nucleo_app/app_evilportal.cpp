@@ -18,6 +18,8 @@
 #include <stdio.h>
 #include <ctype.h>
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 extern "C" {
 // Engine API. Declared here (not via REQUIRES) so nucleo_app doesn't gain a dependency on the
@@ -204,6 +206,26 @@ static void start_portal(void)
     else { snprintf(s_err, sizeof s_err, "Avvio fallito (err %d)", rc); set_hint(); nucleo_app_request_draw(); }
 }
 
+// KARMA needs a big contiguous block for the promiscuous RX path — on the ADV the exclusive reclaim
+// alone leaves only ~16 KB largest free. Free the 32 KB launcher canvas for the duration of the sniff
+// (the same trick the Recorder/SSH/ANIMA cloud jobs use); the "Karma..." screen draws direct meanwhile.
+static bool s_km_screen_freed;
+static void karma_free_screen(void)
+{
+    if (s_km_screen_freed) return;
+    nucleo_app_set_direct_draw(true);   // launcher won't lazily re-grab the canvas mid-sniff
+    nucleo_screen_release();            // +~32 KB contiguous
+    s_km_screen_freed = true;
+}
+static void karma_restore_screen(void)
+{
+    if (!s_km_screen_freed) return;
+    s_km_screen_freed = false;
+    nucleo_app_set_direct_draw(false);
+    for (int i = 0; i < 8 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
+    nucleo_app_request_draw();
+}
+
 // ---- deferred (busy) work ----------------------------------------------------
 static void tick(void)
 {
@@ -217,8 +239,10 @@ static void tick(void)
         if (!s_karma_armed) return;
         if (!s_karma_started) {                          // kick off the async sniff once
             s_karma_started = true;
+            karma_free_screen();                         // +32 KB contiguous BEFORE the sniff measures heap
             int rc = nucleo_wifiatk_karma_start(8);
             if (rc != 0) {
+                karma_restore_screen();
                 if (rc == -5) snprintf(s_err, sizeof s_err, "Heap troppo bassa: %d B", nucleo_wifiatk_karma_heap());
                 else          snprintf(s_err, sizeof s_err, "Karma non disponibile (%d)", rc);
                 go(ST_HOME); return;
@@ -229,6 +253,7 @@ static void tick(void)
             if (t != s_last_refresh) { s_last_refresh = t; s_pulse = !s_pulse; }
             nucleo_app_request_draw(); return;
         }
+        karma_restore_screen();                          // sniff done -> get the canvas back
         int n = nucleo_wifiatk_karma_count();
         if (n > 0) { s_km_sel = 0; go(ST_KARMA); }
         else { snprintf(s_err, sizeof s_err, "Nessuna probe sentita"); go(ST_HOME); }
