@@ -317,6 +317,12 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
         IRR(cx - s, cy - s * 0.85f, 2 * s, s * 1.7f, s * 0.16f, col);
         IBX(cx - s, cy - s * 0.85f, 2 * s, s * 0.4f, col); IRR(cx - s + Tk * 0.6f, cy - s * 0.4f + Tk * 0.6f, 2 * s - Tk * 1.2f, s * 1.18f, 2, bg);
         IRR(cx - s * 0.4f, cy + s * 0.02f, s * 0.8f, s * 0.56f, 2, col); IEL(cx, cy - s * 0.05f, s * 0.26f, s * 0.26f, col);
+    } else if (!strcmp(id, "sniffer")) {
+        // radar: a source dot with concentric signal rings + a sweep line (listening to the air)
+        IEL(cx, cy, s * 0.95f, s * 0.95f, col);
+        IEL(cx, cy, s * 0.60f, s * 0.60f, col);
+        IFC(cx, cy, Tk * 0.9f, col);
+        IL(cx, cy, cx + s * 0.78f, cy - s * 0.55f, Tk * 0.55f, col);
     } else if (!strcmp(id, "weather")) {
         // a sun behind a cloud
         IFC(cx - s * 0.30f, cy - s * 0.38f, s * 0.34f, col);                                  // sun disc

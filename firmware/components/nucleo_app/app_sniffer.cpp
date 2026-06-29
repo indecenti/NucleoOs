@@ -20,6 +20,11 @@ unsigned    nucleo_wifiatk_sniffer_pkts(void);
 unsigned    nucleo_wifiatk_sniffer_drops(void);
 int         nucleo_wifiatk_sniffer_channel(void);
 const char *nucleo_wifiatk_sniffer_path(void);
+unsigned    nucleo_wifiatk_sniffer_beacons(void);
+unsigned    nucleo_wifiatk_sniffer_probes(void);
+unsigned    nucleo_wifiatk_sniffer_data(void);
+unsigned    nucleo_wifiatk_sniffer_eapol(void);
+unsigned    nucleo_wifiatk_sniffer_deauth(void);
 }
 
 #include "app_gfx.h"
@@ -166,13 +171,22 @@ static void draw_running(void)
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(12 + (int)strlen(ps) * 18, 48); d.print("pacchetti");
 
     char ds[20]; snprintf(ds, sizeof ds, "persi %u", dr);
-    d.setTextColor(dr ? YEL : DIM, BG); d.setCursor(10, 66); d.print(ds);
+    d.setTextColor(dr ? YEL : DIM, BG); d.setCursor(150, 40); d.print(ds);
 
-    d.drawFastHLine(10, 80, 220, LINE);
+    // Live breakdown: beacons / probes / data + EAPOL + deauth. EAPOL highlighted (crackable material).
+    unsigned ea = nucleo_wifiatk_sniffer_eapol();
+    char bd[44]; snprintf(bd, sizeof bd, "B%u P%u D%u X%u", nucleo_wifiatk_sniffer_beacons(),
+                          nucleo_wifiatk_sniffer_probes(), nucleo_wifiatk_sniffer_data(),
+                          nucleo_wifiatk_sniffer_deauth());
+    d.setTextColor(MUTED, BG); d.setCursor(10, 64); d.print(bd);
+    if (ea) { char es[16]; snprintf(es, sizeof es, "HS %u", ea);
+              d.setTextColor(GRN, BG); d.setCursor(170, 64); d.print(es); }
+
+    d.drawFastHLine(10, 78, 220, LINE);
     const char *p = nucleo_wifiatk_sniffer_path(); const char *base = p;
     for (const char *q = p; *q; q++) if (*q == '/') base = q + 1;
-    d.setTextColor(GRN, BG); d.setCursor(10, 88); d.print(base[0] ? base : "...");
-    d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print("invio: ferma e salva");
+    d.setTextColor(SNF, BG); d.setCursor(10, 86); d.print(base[0] ? base : "...");
+    d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print("invio: ferma  (B/P/D/X/HS = tipi)");
 }
 
 static void draw(void)

@@ -116,6 +116,11 @@ unsigned    nucleo_wifiatk_sniffer_pkts(void);      // frames written this sessi
 unsigned    nucleo_wifiatk_sniffer_drops(void);     // frames dropped (queue full / SD too slow)
 int         nucleo_wifiatk_sniffer_channel(void);   // channel currently captured
 const char *nucleo_wifiatk_sniffer_path(void);      // .pcap path ("" if not started)
+unsigned    nucleo_wifiatk_sniffer_beacons(void);   // live breakdown of captured frames
+unsigned    nucleo_wifiatk_sniffer_probes(void);
+unsigned    nucleo_wifiatk_sniffer_data(void);
+unsigned    nucleo_wifiatk_sniffer_eapol(void);     // EAPOL/handshake frames captured (crackable)
+unsigned    nucleo_wifiatk_sniffer_deauth(void);
 
 #ifdef __cplusplus
 }

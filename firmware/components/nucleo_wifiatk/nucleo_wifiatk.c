@@ -1185,27 +1185,17 @@ int         nucleo_wifiatk_karma_rssi(int i)   { return (s_km && i >= 0 && i < s
 // hidden. snaplen 256 keeps RAM bounded and still carries headers + EAPOL (so captures stay crackable).
 #define SNF_SNAPLEN 256
 #define SNF_QDEPTH  24
-typedef struct { uint8_t buf[SNF_SNAPLEN]; uint16_t len; } snf_item_t;
+typedef struct { uint8_t buf[SNF_SNAPLEN]; uint16_t len; int8_t rssi; uint8_t ch; } snf_item_t;
 static QueueHandle_t  s_snf_q;
 static TaskHandle_t   s_snf_task;
 static volatile bool  s_snf_run;
 static volatile uint32_t s_snf_pkts, s_snf_drop;
+static volatile uint32_t s_snf_beacon, s_snf_probe, s_snf_data, s_snf_eapol, s_snf_deauth;  // live breakdown
 static volatile int   s_snf_ch;
 static int            s_snf_mode;      // 0 all, 1 beacon, 2 probe, 3 EAPOL, 4 deauth/disassoc
 static bool           s_snf_hop;
 static char           s_snf_path[64];
 static FILE          *s_snf_file;      // opened/closed on the UI task; written by the writer task
-
-static bool snf_match(const uint8_t *p, int len, wifi_promiscuous_pkt_type_t type)
-{
-    if (s_snf_mode == 0) return true;                          // all
-    uint8_t sub = (p[0] >> 4) & 0xF;
-    if (s_snf_mode == 1) return type == WIFI_PKT_MGMT && sub == 0x8;             // beacon
-    if (s_snf_mode == 2) return type == WIFI_PKT_MGMT && sub == 0x4;             // probe request
-    if (s_snf_mode == 3) return type == WIFI_PKT_DATA && wifiatk_eapol_msg(p, len) > 0;  // EAPOL
-    if (s_snf_mode == 4) return type == WIFI_PKT_MGMT && (sub == 0xC || sub == 0xA);     // deauth/disassoc
-    return true;
-}
 
 static void snf_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 {
@@ -1214,19 +1204,49 @@ static void snf_cb(void *buf, wifi_promiscuous_pkt_type_t type)
     const wifi_promiscuous_pkt_t *pkt = (const wifi_promiscuous_pkt_t *)buf;
     int len = pkt->rx_ctrl.sig_len;
     if (len < 10) return;
-    if (!snf_match(pkt->payload, len, type)) return;
+    const uint8_t *p = pkt->payload;
+    uint8_t sub = (p[0] >> 4) & 0xF;
+    int kind;                                                  // 1 beacon 2 probe 3 data 4 eapol 5 deauth
+    if (type == WIFI_PKT_MGMT) kind = (sub == 0x8) ? 1 : (sub == 0x4) ? 2 : (sub == 0xC || sub == 0xA) ? 5 : 0;
+    else                       kind = (wifiatk_eapol_msg(p, len) > 0) ? 4 : 3;
+    bool match = (s_snf_mode == 0) || (s_snf_mode == 1 && kind == 1) || (s_snf_mode == 2 && kind == 2) ||
+                 (s_snf_mode == 3 && kind == 4) || (s_snf_mode == 4 && kind == 5);
+    if (!match) return;
+    switch (kind) {                                            // live breakdown counters
+        case 1: s_snf_beacon++; break; case 2: s_snf_probe++; break;
+        case 4: s_snf_eapol++;  break; case 5: s_snf_deauth++; break; default: s_snf_data++; break;
+    }
     snf_item_t it;
     int n = len > SNF_SNAPLEN ? SNF_SNAPLEN : len;
-    memcpy(it.buf, pkt->payload, n); it.len = (uint16_t)n;
+    memcpy(it.buf, p, n); it.len = (uint16_t)n;
+    it.rssi = pkt->rx_ctrl.rssi; it.ch = pkt->rx_ctrl.channel;
     if (xQueueSend(s_snf_q, &it, 0) == pdTRUE) s_snf_pkts++;    // promiscuous cb runs in the WiFi TASK
     else s_snf_drop++;                                          // queue full -> drop, count it
 }
 
 static void snf_write_global_header(FILE *f)
 {
-    uint32_t gh[] = { 0xA1B2C3D4u, 0, 0, 0, 65535u, 105u };    // magic, [ver], zone, sig, snaplen, DLT 105
+    // DLT 127 = IEEE802_11_RADIOTAP: each frame is prefixed with a radiotap header so Wireshark /
+    // hcxpcapngtool see the per-frame channel + signal (better than raw DLT 105).
+    uint32_t gh[] = { 0xA1B2C3D4u, 0, 0, 0, 65535u, 127u };    // magic, [ver], zone, sig, snaplen, DLT 127
     uint16_t ver[] = { 2, 4 };
     fwrite(&gh[0], 4, 1, f); fwrite(ver, 2, 2, f); fwrite(&gh[1], 4, 4, f);
+}
+
+// Minimal 15-byte radiotap header: Flags(1) + Channel(freq2+flags2) + dBm antenna signal(1).
+static int snf_radiotap(uint8_t *rt, int8_t rssi, uint8_t ch)
+{
+    memset(rt, 0, 15);
+    rt[0] = 0x00; rt[1] = 0x00;                 // version, pad
+    rt[2] = 15;   rt[3] = 0x00;                 // it_len = 15 (LE)
+    rt[4] = 0x2A; rt[5] = 0x00; rt[6] = 0x00; rt[7] = 0x00;   // it_present: bits 1(Flags),3(Channel),5(Signal)
+    rt[8] = 0x00;                               // Flags
+    // Channel needs 2-byte alignment -> field at offset 10 (one pad byte at 9).
+    uint16_t freq = (uint16_t)(2412 + (ch >= 1 && ch <= 13 ? (ch - 1) * 5 : 0));
+    rt[10] = (uint8_t)(freq & 0xFF); rt[11] = (uint8_t)(freq >> 8);
+    rt[12] = 0x80; rt[13] = 0x00;               // channel flags: 2 GHz
+    rt[14] = (uint8_t)rssi;                     // dBm antenna signal (signed)
+    return 15;
 }
 
 static void snf_writer(void *arg)
@@ -1238,9 +1258,12 @@ static void snf_writer(void *arg)
     snf_item_t it;
     while (s_snf_run) {
         if (xQueueReceive(s_snf_q, &it, pdMS_TO_TICKS(50)) == pdTRUE && s_snf_file) {
+            uint8_t rt[15]; int rtl = snf_radiotap(rt, it.rssi, it.ch);
             uint32_t t = (uint32_t)(esp_timer_get_time() / 1000000);
-            uint32_t rh[] = { t, 0, it.len, it.len };
+            uint32_t total = (uint32_t)(rtl + it.len);
+            uint32_t rh[] = { t, 0, total, total };               // pcap record header (radiotap + frame)
             fwrite(rh, 4, 4, s_snf_file);
+            fwrite(rt, 1, rtl, s_snf_file);
             fwrite(it.buf, 1, it.len, s_snf_file);
         }
         int64_t now = esp_timer_get_time();
@@ -1264,6 +1287,7 @@ int nucleo_wifiatk_sniffer_start(int mode, int channel)
     s_snf_hop = (channel <= 0);
     s_snf_ch = s_snf_hop ? 1 : (channel > 13 ? 13 : channel);
     s_snf_pkts = 0; s_snf_drop = 0;
+    s_snf_beacon = s_snf_probe = s_snf_data = s_snf_eapol = s_snf_deauth = 0;
 
     if (!s_snf_q) s_snf_q = xQueueCreate(SNF_QDEPTH, sizeof(snf_item_t));
     if (!s_snf_q) return -2;
@@ -1323,3 +1347,9 @@ unsigned    nucleo_wifiatk_sniffer_pkts(void)    { return s_snf_pkts; }
 unsigned    nucleo_wifiatk_sniffer_drops(void)   { return s_snf_drop; }
 int         nucleo_wifiatk_sniffer_channel(void) { return s_snf_ch; }
 const char *nucleo_wifiatk_sniffer_path(void)    { return s_snf_path; }
+// Live breakdown of the captured frames (for the running UI).
+unsigned    nucleo_wifiatk_sniffer_beacons(void) { return s_snf_beacon; }
+unsigned    nucleo_wifiatk_sniffer_probes(void)  { return s_snf_probe; }
+unsigned    nucleo_wifiatk_sniffer_data(void)    { return s_snf_data; }
+unsigned    nucleo_wifiatk_sniffer_eapol(void)   { return s_snf_eapol; }
+unsigned    nucleo_wifiatk_sniffer_deauth(void)  { return s_snf_deauth; }
