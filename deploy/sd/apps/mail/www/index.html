@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mail</title>
+  <style>
+    :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff;
+      --line:#2a3a5e; --field:#0b1220; --ok:#2fd07a; --warn:#f5b13d; --err:#e2576b; }
+    html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86;
+      --accent:#2b6fd6; --line:#cdd8ee; --field:#f4f7fe; --ok:#1c9d5b; --warn:#c2820f; --err:#c83e52; }
+    * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: var(--bg); color: var(--text);
+      font: 14px system-ui, "Segoe UI", sans-serif; }
+    header { display: flex; align-items: center; gap: 8px; padding: 6px 8px; flex: none;
+      background: var(--panel); border-bottom: 1px solid var(--line); }
+    header .t { font-weight: 600; }
+    .tabs { display: flex; gap: 4px; margin-left: auto; }
+    .tabs button { border: 1px solid var(--line); background: #80808018; color: var(--text);
+      border-radius: 6px; padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+    .tabs button.on { background: var(--accent); color: #07101f; border-color: transparent; font-weight: 600; }
+    main { flex: 1; overflow: auto; padding: 10px 12px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 9px 0 3px; }
+    input, textarea, select { width: 100%; background: var(--field); color: var(--text);
+      border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; font: inherit; }
+    input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+    input.bad { border-color: var(--err); }
+    textarea { min-height: 150px; resize: vertical; line-height: 1.45; }
+    .row { display: flex; gap: 8px; } .row > * { flex: 1; }
+    .btn { border: 1px solid var(--line); background: #80808018; color: var(--text); border-radius: 7px;
+      padding: 9px 16px; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+    .btn:hover:not(:disabled) { filter: brightness(1.08); }
+    .btn.primary { background: var(--accent); color: #07101f; border-color: transparent; font-weight: 600; }
+    .btn.danger { color: var(--err); border-color: var(--err); background: transparent; }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .spin { width: 13px; height: 13px; border: 2px solid #07101f55; border-top-color: #07101f;
+      border-radius: 50%; animation: sp .7s linear infinite; }
+    @keyframes sp { to { transform: rotate(360deg); } }
+    .bar { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+    .status { font-size: 13px; min-height: 18px; } .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); } .status.busy { color: var(--accent); }
+    .ghint { color: var(--muted); font-size: 12px; }
+    .frm { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px;
+      padding: 3px 0; } .frm b { color: var(--text); font-weight: 600; }
+    .acct { border: 1px solid var(--line); border-radius: 9px; padding: 11px; margin-bottom: 9px; background: var(--panel); }
+    .acct .top { display: flex; align-items: center; gap: 8px; }
+    .acct .nm { font-weight: 600; } .acct .em { color: var(--muted); font-size: 12px; }
+    .acct .sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .badge { font-size: 10px; font-weight: 600; color: var(--ok); border: 1px solid var(--ok); border-radius: 8px; padding: 1px 7px; }
+    .acct .acts { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+    .acct .acts .btn { padding: 5px 11px; font-size: 12px; }
+    .hint { color: var(--muted); font-size: 12px; margin: 4px 0 8px; line-height: 1.5; }
+    .hint.warn { color: var(--warn); }
+    .empty { color: var(--muted); text-align: center; padding: 38px 16px; line-height: 1.6; }
+    .empty .big { font-size: 30px; display: block; margin-bottom: 8px; opacity: .7; }
+    .sp { flex: 1; }
+    ul.sent { list-style: none; margin: 0; padding: 0; }
+    ul.sent li { padding: 9px 4px; border-bottom: 1px solid var(--line); display: flex; gap: 9px; align-items: baseline; }
+    ul.sent .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; }
+    ul.sent .dot.ok { background: var(--ok); } ul.sent .dot.err { background: var(--err); }
+    ul.sent .who { flex: 1; min-width: 0; } ul.sent .to { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    ul.sent .subj { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    ul.sent .when { color: var(--muted); font-size: 11px; flex: none; font-variant-numeric: tabular-nums; }
+    main::-webkit-scrollbar { width: 6px; } main::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="t">✉️ <span data-i18n="title">Mail</span></span>
+    <div class="tabs">
+      <button id="tabC" class="on" data-i18n="tab_compose">Compose</button>
+      <button id="tabS" data-i18n="tab_sent">Sent</button>
+      <button id="tabA" data-i18n="tab_accounts">Accounts</button>
+    </div>
+  </header>
+  <main id="view"><div class="empty" data-i18n="loading">Loading…</div></main>
+
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    const t = await I18N.init('mail');
+    const $ = (id) => document.getElementById(id);
+    const SETTINGS = '/system/config/settings.json';
+    const SENT_LOG = '/system/mail/sent.log';
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    let accounts = [], presets = [], def = -1, tab = 'compose', loaded = false;
+    let draft = { to: '', subject: '', body: '', account: -1 };
+    let editing = null;
+
+    const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    async function readText(path) {
+      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+        return r.ok ? await r.text() : null; } catch { return null; }
+    }
+    async function readJSON(path) { const s = await readText(path); try { return s ? JSON.parse(s) : null; } catch { return null; } }
+    async function loadTheme() {
+      const s = await readJSON(SETTINGS);
+      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
+    }
+
+    async function loadData() {
+      const [pa, ac] = await Promise.all([
+        fetch('/api/mail/presets', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/mail/accounts', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null),
+      ]);
+      presets = pa?.presets || [];
+      accounts = ac?.accounts || [];
+      def = (ac && typeof ac.default === 'number' && ac.default >= 0) ? ac.default : (accounts.length ? accounts[0].idx : -1);
+      if (draft.account < 0 || !accounts.some((a) => a.idx === draft.account)) draft.account = def;
+      loaded = true;
+    }
+
+    // ---- Compose -------------------------------------------------------------
+    function curAccount() { return accounts.find((a) => a.idx === draft.account) || accounts.find((a) => a.idx === def) || accounts[0]; }
+
+    function renderCompose() {
+      const v = $('view');
+      if (!accounts.length) {
+        v.innerHTML = `<div class="empty"><span class="big">✉️</span><span>${esc(t('no_account'))}</span></div>
+          <div class="bar" style="justify-content:center"><button class="btn primary" id="goAdd">+ ${esc(t('add_account'))}</button></div>`;
+        $('goAdd').onclick = () => { startAdd(); setTab('accounts'); };
+        return;
+      }
+      const acc = curAccount();
+      const fromLine = accounts.length > 1
+        ? `<label for="acc">${esc(t('from'))}</label><select id="acc">${accounts.map((a) =>
+            `<option value="${a.idx}" ${a.idx === draft.account ? 'selected' : ''}>${esc(a.name || a.host)} &lt;${esc(a.user)}&gt;</option>`).join('')}</select>`
+        : `<div class="frm">${esc(t('from'))}: <b>${esc(acc.user)}</b></div>`;
+      v.innerHTML = `
+        ${fromLine}
+        <label for="to">${esc(t('to'))}</label><input id="to" type="email" inputmode="email" autocapitalize="off"
+          spellcheck="false" placeholder="${esc(t('to_ph'))}" value="${esc(draft.to)}">
+        <label for="subj">${esc(t('subject'))}</label><input id="subj" placeholder="${esc(t('subject_ph'))}" value="${esc(draft.subject)}">
+        <label for="body">${esc(t('subject') && t('body_ph'))}</label><textarea id="body" placeholder="${esc(t('body_ph'))}">${esc(draft.body)}</textarea>
+        <div class="bar">
+          <button class="btn primary" id="send">${esc(t('send'))}</button>
+          <span class="ghint">${esc(t('send_hint'))}</span>
+          <div class="sp"></div><div class="status" id="st"></div>
+        </div>`;
+      const accSel = $('acc'); if (accSel) accSel.onchange = () => { draft.account = +accSel.value; };
+      const to = $('to'), subj = $('subj'), body = $('body');
+      to.oninput = (e) => { draft.to = e.target.value; e.target.classList.remove('bad'); clearStatus(); };
+      subj.oninput = (e) => { draft.subject = e.target.value; };
+      body.oninput = (e) => { draft.body = e.target.value; clearStatus(); };
+      $('send').onclick = send;
+    }
+
+    function clearStatus() { const s = $('st'); if (s) { s.textContent = ''; s.className = 'status'; } }
+    function setStatus(cls, msg) { const s = $('st'); if (s) { s.className = 'status ' + cls; s.textContent = msg; } }
+
+    let sending = false;
+    async function send() {
+      if (sending) return;
+      const to = draft.to.trim();
+      if (!EMAIL_RE.test(to)) { $('to')?.classList.add('bad'); setStatus('err', t('invalid_email')); return; }
+      if (!draft.body.trim()) { setStatus('err', t('missing_fields')); return; }
+      sending = true;
+      const btn = $('send'); btn.disabled = true; btn.innerHTML = `<span class="spin"></span>${esc(t('sending'))}`;
+      setStatus('busy', t('sending'));
+      try {
+        const r = await fetch('/api/mail/send', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account: draft.account, to, subject: draft.subject, body: draft.body }) });
+        if (r.status === 401) { setStatus('err', t('need_pair')); return; }
+        const j = await r.json().catch(() => ({ ok: false }));
+        if (j.ok) {
+          setStatus('ok', t('sent_ok'));
+          draft.to = draft.subject = draft.body = '';
+          setTimeout(() => { if (tab === 'compose') renderCompose(); }, 1100);
+        } else setStatus('err', t('send_fail', { err: j.error || '?' }));
+      } catch (e) { setStatus('err', t('send_fail', { err: String(e) })); }
+      finally {
+        sending = false;
+        const b = $('send'); if (b) { b.disabled = false; b.textContent = t('send'); }
+      }
+    }
+
+    // ---- Sent ----------------------------------------------------------------
+    async function renderSent() {
+      const v = $('view');
+      v.innerHTML = `<div class="empty" data-i18n="loading">${esc(t('loading'))}</div>`;
+      const raw = await readText(SENT_LOG);
+      if (tab !== 'sent') return;
+      const lines = (raw || '').split('\n').map((l) => l.trim()).filter(Boolean).reverse();
+      let html = `<div class="bar" style="margin:0 0 8px"><button class="btn" id="refresh">↻ ${esc(t('refresh'))}</button></div>`;
+      if (!lines.length) { html += `<div class="empty"><span class="big">📭</span><span>${esc(t('sent_empty'))}</span></div>`; }
+      else {
+        html += '<ul class="sent">';
+        for (const ln of lines) {
+          const p = ln.split(' | ');
+          const when = p[0] || '', ok = (p[1] || '').toUpperCase() === 'OK', to = p[2] || '', subj = p[3] || '';
+          html += `<li><span class="dot ${ok ? 'ok' : 'err'}" title="${ok ? 'OK' : esc(t('failed'))}"></span>
+            <span class="who"><div class="to">${esc(to)}</div><div class="subj">${esc(subj)}</div></span>
+            <span class="when">${esc(when)}</span></li>`;
+        }
+        html += '</ul>';
+      }
+      v.innerHTML = html;
+      $('refresh').onclick = renderSent;
+    }
+
+    // ---- Accounts ------------------------------------------------------------
+    function renderAccounts() {
+      if (editing) return renderForm();
+      const v = $('view');
+      let html = '';
+      if (!accounts.length) html += `<div class="empty"><span class="big">👤</span><span>${esc(t('no_accounts'))}</span></div>`;
+      for (const a of accounts) {
+        html += `<div class="acct"><div class="top">
+            <div><div class="nm">${esc(a.name || a.host)}</div><div class="em">&lt;${esc(a.user)}&gt;</div></div>
+            <div class="sp"></div>${a.idx === def ? `<span class="badge">${esc(t('default_badge'))}</span>` : ''}</div>
+          <div class="sub">${esc(a.host)}:${a.port} · ${a.has_pass ? '🔒 ' + esc(t('secured')) : '⚠'}</div>
+          <div class="acts">
+            <button class="btn" data-edit="${a.idx}">✎ ${esc(t('edit'))}</button>
+            ${a.idx === def ? '' : `<button class="btn" data-def="${a.idx}">${esc(t('make_default'))}</button>`}
+            <div class="sp"></div><button class="btn danger" data-del="${a.idx}">${esc(t('delete'))}</button>
+          </div></div>`;
+      }
+      html += `<div class="bar"><button class="btn primary" id="add">+ ${esc(t('add_account'))}</button>
+        <div class="sp"></div><div class="status" id="st"></div></div>`;
+      v.innerHTML = html;
+      $('add').onclick = startAdd;
+      v.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => startEdit(+b.dataset.edit));
+      v.querySelectorAll('[data-def]').forEach((b) => b.onclick = () => setDefault(+b.dataset.def));
+      v.querySelectorAll('[data-del]').forEach((b) => b.onclick = () => delAccount(+b.dataset.del));
+    }
+
+    function startAdd() {
+      const p = presets[0] || { name: '', host: '', port: 465, tls: 0, hint: '' };
+      editing = { idx: -1, name: p.name, host: p.host, port: p.port, tls: p.tls || 0, user: '', from_name: '', preset: 0 };
+      renderAccounts();
+    }
+    function startEdit(idx) {
+      const a = accounts.find((x) => x.idx === idx); if (!a) return;
+      editing = { ...a, preset: -1 };
+      renderAccounts();
+    }
+
+    function renderForm() {
+      const v = $('view');
+      const e = editing;
+      const p = e.preset >= 0 ? presets[e.preset] : null;
+      const isCustom = !p || !p.host;                 // Custom preset (empty host) or editing existing
+      const hostLocked = e.idx < 0 && !isCustom;       // a known preset for a new account → host fixed
+      const provSel = e.idx < 0 ? `<label for="prov">${esc(t('provider'))}</label><select id="prov">${
+        presets.map((pp, i) => `<option value="${i}" ${i === e.preset ? 'selected' : ''}>${esc(pp.name)}</option>`).join('')}</select>` : '';
+      const hint = (p && p.hint) ? p.hint : t('gmail_hint');
+      v.innerHTML = `
+        ${provSel}
+        <div class="hint warn">⚠ ${esc(hint)}</div>
+        <label for="nm">${esc(t('account'))}</label><input id="nm" value="${esc(e.name)}">
+        <div class="row">
+          <div><label for="host">${esc(t('host'))}</label><input id="host" value="${esc(e.host)}" ${hostLocked ? 'readonly' : ''}></div>
+          <div style="flex:0 0 84px"><label for="port">${esc(t('port'))}</label><input id="port" type="number" value="${e.port}"></div>
+        </div>
+        <label for="user">${esc(t('email'))}</label><input id="user" type="email" autocapitalize="off" spellcheck="false" value="${esc(e.user)}" placeholder="me@example.com">
+        <label for="pass">${esc(t('password'))}</label><input id="pass" type="password" value="" placeholder="${e.idx < 0 ? '' : esc(t('password_keep'))}" autocomplete="off">
+        <label for="dn">${esc(t('display_name'))}</label><input id="dn" value="${esc(e.from_name || '')}">
+        <div class="bar">
+          <button class="btn primary" id="save">${esc(t('save'))}</button>
+          <button class="btn" id="cancel">${esc(t('cancel'))}</button>
+          <div class="sp"></div><div class="status" id="st"></div>
+        </div>`;
+      const prov = $('prov');
+      if (prov) prov.onchange = () => {
+        // preserve typed fields across a provider switch
+        editing.name = $('nm').value; editing.user = $('user').value; editing.from_name = $('dn').value;
+        const pp = presets[+prov.value]; editing.preset = +prov.value;
+        if (pp.host) { editing.host = pp.host; editing.port = pp.port; }   // keep custom host if switching to Custom
+        editing.tls = pp.tls || 0;
+        if (!editing.name || presets.some((x) => x.name === editing.name)) editing.name = pp.name;
+        renderForm();
+      };
+      $('save').onclick = saveAccount;
+      $('cancel').onclick = () => { editing = null; renderAccounts(); };
+    }
+
+    async function saveAccount() {
+      const body = {
+        idx: editing.idx,
+        name: $('nm').value.trim(), host: $('host').value.trim(), port: +$('port').value || 465, tls: editing.tls || 0,
+        user: $('user').value.trim(), from_name: $('dn').value.trim(),
+      };
+      if (editing.idx < 0 && accounts.length === 0) body.default = true;
+      const pass = $('pass').value;
+      if (pass) body.pass = pass;
+      if (!body.host || !EMAIL_RE.test(body.user)) { setStatus('err', t('invalid_email')); return; }
+      if (editing.idx < 0 && !pass) { setStatus('err', t('password')); return; }
+      setStatus('busy', t('sending'));
+      try {
+        const r = await fetch('/api/mail/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (r.status === 401) { setStatus('err', t('need_pair')); return; }
+        const j = await r.json().catch(() => null);
+        if (j) { accounts = j.accounts || []; def = j.default; editing = null; renderAccounts(); }
+        else setStatus('err', t('send_fail', { err: r.status }));
+      } catch (e) { setStatus('err', t('send_fail', { err: String(e) })); }
+    }
+
+    async function setDefault(idx) {
+      const r = await fetch('/api/mail/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idx, default: true }) }).catch(() => null);
+      if (r && r.status === 401) { setStatus('err', t('need_pair')); return; }
+      await loadData(); renderAccounts();
+    }
+    async function delAccount(idx) {
+      const r = await fetch('/api/mail/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idx, delete: true }) }).catch(() => null);
+      if (r && r.status === 401) { setStatus('err', t('need_pair')); return; }
+      if (r) { const j = await r.json().catch(() => null); if (j) { accounts = j.accounts || []; def = j.default; } else await loadData(); }
+      else await loadData();
+      renderAccounts();
+    }
+
+    // ---- shell ---------------------------------------------------------------
+    function render() {
+      if (!loaded) { $('view').innerHTML = `<div class="empty">${esc(t('loading'))}</div>`; return; }
+      if (tab === 'compose') renderCompose();
+      else if (tab === 'sent') renderSent();
+      else renderAccounts();
+    }
+    function setTab(name) {
+      tab = name;
+      $('tabC').classList.toggle('on', tab === 'compose');
+      $('tabS').classList.toggle('on', tab === 'sent');
+      $('tabA').classList.toggle('on', tab === 'accounts');
+      if (tab !== 'accounts') editing = null;
+      render();
+    }
+    $('tabC').onclick = () => setTab('compose');
+    $('tabS').onclick = () => setTab('sent');
+    $('tabA').onclick = () => setTab('accounts');
+
+    // Ctrl/Cmd+Enter sends from the compose tab.
+    addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && tab === 'compose' && accounts.length) { e.preventDefault(); send(); }
+    });
+
+    window.addEventListener('message', (e) => {
+      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
+      if (e.data?.t === 'fs.changed' && e.data.d?.path?.endsWith('settings.json')) loadTheme();
+    });
+    I18N.onChange(render);
+
+    async function init() { await loadTheme(); await loadData(); render(); }
+    init();
+  </script>
+</body>
+</html>

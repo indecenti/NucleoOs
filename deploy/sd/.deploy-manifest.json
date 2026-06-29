@@ -104,6 +104,11 @@
                                          "mtime":  "639164779989931005",
                                          "hash":  "BD13D4333E05E9098968B6FB295B5D16CAD018E5C0EE71FD8FB0917E13262436"
                                      },
+    "system/registry/manual/uname.info":  {
+                                              "size":  "1941",
+                                              "mtime":  "639160333359444911",
+                                              "hash":  "77B282741AEEC7BF7893AFDEDB31AEB29C8C8BFD3A2EA04734797735CC3C705B"
+                                          },
     "apps/anima/www/forge/extract.js":  {
                                             "size":  "3347",
                                             "mtime":  "639163805697972420",
@@ -119,6 +124,11 @@
                                                    "mtime":  "639177438538023358",
                                                    "hash":  "C547A02751B58E37241E9D308C239AC2887B4F90A54DD5DE0512FEB62C39D3D5"
                                                },
+    "data/ROMs/gg/Super Return of the Jedi (USA, Europe).gg":  {
+                                                                   "size":  "524288",
+                                                                   "mtime":  "628148556940000000",
+                                                                   "hash":  "7596CD7B1281DB57CF3C4BB7DFDF2C605EA86C13240DCBCBF98C4A0249A8AF9E"
+                                                               },
     "apps/browser/manifest.json":  {
                                        "size":  "745",
                                        "mtime":  "639163437084330626",
@@ -184,11 +194,6 @@
                                                          "mtime":  "628147764000000000",
                                                          "hash":  "751837C798A7381B271C175EBAC5AA4100CF578E16769904382C0E23221579D7"
                                                      },
-    "apps/settings/www/scenes.js.gz":  {
-                                           "size":  "1361",
-                                           "mtime":  "639177438537554794",
-                                           "hash":  "52F85F32554FE735044E58ED91F802C7C32744661A37A7D24396C2834BCEAEA3"
-                                       },
     "data/anima/akb5/math.bin":  {
                                      "size":  "161962",
                                      "mtime":  "639164779974839960",
@@ -196,7 +201,7 @@
                                  },
     "www/shell/onboarding.js.gz":  {
                                        "size":  "5994",
-                                       "mtime":  "639179167820772010",
+                                       "mtime":  "639183378491401694",
                                        "hash":  "777CAC20F9FD00E28077CD75B1B4571A202D235DF89D009147486AD58FE409EB"
                                    },
     "data/ROMs/gb/Kirby\u0027s Star Stacker (USA, Europe).gb":  {
@@ -214,11 +219,6 @@
                                                                     "mtime":  "633891274060000000",
                                                                     "hash":  "8730C69CB2AA82260AC07257E0E29D61F598DE2F8FA3E65DA1D694790FA5DB16"
                                                                 },
-    "system/registry/manual/touch.info":  {
-                                              "size":  "2136",
-                                              "mtime":  "639160333359376181",
-                                              "hash":  "C8BB2CEF708CF91AAC67A5424DF8F1288F9E0CACDEB8ECE6DF5FCBD92151D31F"
-                                          },
     "data/ROMs/gg/Ottifants, The (Europe) (En,Fr,De,Es,It).gg":  {
                                                                      "size":  "262144",
                                                                      "mtime":  "629755409120000000",
@@ -349,11 +349,11 @@
                                                      "mtime":  "639179167816550908",
                                                      "hash":  "B35DF34DC8E7F3DEF1D0C9D1FD32504B250CA7ACDA855011571894285C4F8035"
                                                  },
-    "data/ROMs/gg/Last Action Hero (USA, Europe).gg":  {
-                                                           "size":  "262144",
-                                                           "mtime":  "631289697420000000",
-                                                           "hash":  "0F3A4D900BE149B057356ECB5E46D71094CF4F25D78CB57F13A0F1C70725C6B3"
-                                                       },
+    "data/ROMs/gg/Pinball Dreams (USA).gg":  {
+                                                 "size":  "131072",
+                                                 "mtime":  "629870779200000000",
+                                                 "hash":  "230D87CA97840E37BAB78230BD60CA7923974DCF2FEBAA9C02C5C61166FE9007"
+                                             },
     "data/ROMs/gg/Land of Illusion Starring Mickey Mouse (USA, Europe).gg":  {
                                                                                  "size":  "524288",
                                                                                  "mtime":  "631448869000000000",
@@ -365,9 +365,9 @@
                                  "hash":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
                              },
     "system/registry/web-api-spec.json":  {
-                                              "size":  "93535",
-                                              "mtime":  "639176739679982774",
-                                              "hash":  "E316A3E38C66FA1FACCBF40F41A905C5C5D082885B8F05FC0E4AAB439DF0B4D6"
+                                              "size":  "98576",
+                                              "mtime":  "639183212573971666",
+                                              "hash":  "C29CB27810FFF1C38162A17B08F2E43808AFFA99C47399D18B3FBBFFC86C35F4"
                                           },
     "data/ROMs/gg/Tesserae (USA, Europe).gg":  {
                                                    "size":  "131072",
@@ -399,6 +399,11 @@
                                                   "mtime":  "639166430463872417",
                                                   "hash":  "27FC95569980E0D607F8FD938AE0CA566EE4857ED7A56567CED4504F1A7322F2"
                                               },
+    "apps/ssh/www/i18n.en.json.gz":  {
+                                         "size":  "942",
+                                         "mtime":  "639177438537721753",
+                                         "hash":  "061E1EB1E369DE79E19D386679F71F7E7BDD31572CCFF388F79540E66CC80058"
+                                     },
     "apps/dosbox/www/i18n.en.json.gz":  {
                                             "size":  "591",
                                             "mtime":  "639177438536325564",
@@ -544,11 +549,11 @@
                                                 "mtime":  "639177438537943121",
                                                 "hash":  "743201E0F122417285AF2ACDD9AE9F63383CAEED31ADD3B9A6FE69FBFFF406A8"
                                             },
-    "apps/anima/local/wasm_main.c":  {
-                                         "size":  "6145",
-                                         "mtime":  "639165038830499312",
-                                         "hash":  "E49309233ECDEEB475D165784ADAE642968ADEA1A716BE0B2E0677A755A68056"
-                                     },
+    "data/anima/akb5/countries.bin":  {
+                                          "size":  "474220",
+                                          "mtime":  "639164779938018077",
+                                          "hash":  "CAD54ACFE73081E734337B1D51BF0EA660AC21BBE53E33AEDE3B7482BB4F1C8A"
+                                      },
     "apps/video-studio/www/vendor/ffmpeg/ffmpeg-core.wasm":  {
                                                                  "size":  "32129114",
                                                                  "mtime":  "639161268476538780",
@@ -594,11 +599,6 @@
                                      "mtime":  "639166773150034263",
                                      "hash":  "441CF1A46C10BC26B323CB15A12D178EC0CBD0954D8C99290A418CA721E7A710"
                                  },
-    "apps/anima/local/src/nucleo_anima_profile.h":  {
-                                                        "size":  "1580",
-                                                        "mtime":  "639163085982182647",
-                                                        "hash":  "F444B638D5A7471476827F6CC0AE4C27D4850ADF7AAF233E67385D4D18F59B63"
-                                                    },
     "apps/anima/www/local/engine.js.gz":  {
                                               "size":  "7524",
                                               "mtime":  "639179167819066141",
@@ -629,11 +629,6 @@
                                                              "mtime":  "628147764000000000",
                                                              "hash":  "1F43D100CE2D9A7FA2CD9598E6CC1BB022B8FF887E77903DE63591534D614D03"
                                                          },
-    "apps/agent/www/index.html":  {
-                                      "size":  "7523",
-                                      "mtime":  "639166772625975992",
-                                      "hash":  "693DAB9B7243BECE42BF58F566332BAF39780F2318AC83FABE88D9AEE4E7F23E"
-                                  },
     "apps/anima/www/forge/model-store.js":  {
                                                 "size":  "14077",
                                                 "mtime":  "639167217124354144",
@@ -669,14 +664,14 @@
                                 "mtime":  "639164688582531833",
                                 "hash":  "6B1B2A688F05A3235B3C74858D4180EB1D1919AF1FF29ECD5658DA72E10AE411"
                             },
-    "apps/tasks/www/i18n.it.json.gz":  {
-                                           "size":  "315",
-                                           "mtime":  "639177438537786884",
-                                           "hash":  "82C51400DB1AD4832A52ED201BB85D94E2041FFFDC32B1F12030D3ACE80A3465"
-                                       },
+    "data/ROMs/gg/Pengo (USA, Europe).gg":  {
+                                                "size":  "32768",
+                                                "mtime":  "631843633840000000",
+                                                "hash":  "03800ADA18C6F9E1E910AE4B94235C11C3231E10BBE38B75EC32C79A0CCF630A"
+                                            },
     "www/shell/notify.css.gz":  {
                                     "size":  "1483",
-                                    "mtime":  "639179167820751944",
+                                    "mtime":  "639183378491371729",
                                     "hash":  "83C5C74F08126900F245A2D7CB0757FEB7766F6A25423EBA1567037F77A163E1"
                                 },
     "apps/miei-fatti/www/index.html.gz":  {
@@ -744,11 +739,6 @@
                                                "mtime":  "639165059678424560",
                                                "hash":  "EDF02BBD4B6A81BA1F82EE85671C2871F0634F906361A1B626A317D8AFB264BB"
                                            },
-    "apps/anima/www/vosk/models/vosk-model-small-it-0.4.tar.gz.001":  {
-                                                                          "size":  "7340032",
-                                                                          "mtime":  "639169871579223554",
-                                                                          "hash":  "129F4D40C15CE9578DD31A2F8DD5564878A6F512E57B2E8DA9C59346355E9D60"
-                                                                      },
     "data/DOS/doom.jsdos":  {
                                 "size":  "12423323",
                                 "mtime":  "639163905084737853",
@@ -799,6 +789,11 @@
                                                           "mtime":  "639163951591267205",
                                                           "hash":  "5DCB2BDAEF4157E72295040D28D1D84188B8E3ECF48D69610BF82B3FBAEBD375"
                                                       },
+    "apps/clock/www/i18n.it.json.gz":  {
+                                           "size":  "388",
+                                           "mtime":  "639177438535733674",
+                                           "hash":  "50D553C6C3F0575DEC6F31D997A7E5672A06BE3D08BFB673D15635B2346D7AC6"
+                                       },
     "data/ROMs/gg/Riddick Bowe Boxing (USA).gg":  {
                                                       "size":  "262144",
                                                       "mtime":  "629870779200000000",
@@ -899,11 +894,11 @@
                                        "mtime":  "639178338837370131",
                                        "hash":  "44774302760B44593CD54BF005E2382755A086E72C05D461E49E2E533C5B945D"
                                    },
-    "apps/ir-remote/manifest.json":  {
-                                         "size":  "775",
-                                         "mtime":  "639166820974980947",
-                                         "hash":  "3C91643E17998281EDF4955BE0C40EAAFBCFE7CF2B85EC29F4D3C536D627C4D1"
-                                     },
+    "apps/browser/www/index.html.gz":  {
+                                           "size":  "17957",
+                                           "mtime":  "639177438535678530",
+                                           "hash":  "B8027292C19D6C55A98D8A2823624536C7262C6C3FAD85746EDE1A0ABE35D199"
+                                       },
     "apps/dictation/www/index.html.gz":  {
                                              "size":  "10070",
                                              "mtime":  "639177438536168565",
@@ -1056,7 +1051,7 @@
                                       },
     "www/shell/micgate.js.gz":  {
                                     "size":  "5174",
-                                    "mtime":  "639179167820736883",
+                                    "mtime":  "639183378491361730",
                                     "hash":  "696E6FC37EE074A4F8CB76EC3973C690CB6760A4F57C87D0E612E3E46531E9BB"
                                 },
     "apps/video-studio/www/convert.js":  {
@@ -1064,11 +1059,6 @@
                                              "mtime":  "639177404432417698",
                                              "hash":  "68D6059124AEEAC42E3942BB95AD17B0041ABAEDBF1488E2B891FE7898BC6433"
                                          },
-    "apps/qr/www/qrcode.js.gz":  {
-                                     "size":  "5368",
-                                     "mtime":  "639177438537357421",
-                                     "hash":  "9CCBC03B916B6372ADC1D8EB2B572F71AF21B9F0C0D97D271AA091B4A986E83C"
-                                 },
     "apps/dj/test/_test_engine.html":  {
                                            "size":  "3971",
                                            "mtime":  "639167215910464975",
@@ -1114,26 +1104,21 @@
                                           "mtime":  "639177438537741763",
                                           "hash":  "B93EA012C50FD9E562FC860430324F1BAA69E4743274887AE2A75BF7D601214C"
                                       },
+    "data/ROMs/gb/Bionic Commando (USA).gb":  {
+                                                  "size":  "262144",
+                                                  "mtime":  "633891273900000000",
+                                                  "hash":  "692E62D9E0048350256EE124D55C6EF225DC2BB54E0808FD882312D4DCAF0F28"
+                                              },
     "apps/help/manifest.json.gz":  {
                                        "size":  "327",
                                        "mtime":  "639177438536939290",
                                        "hash":  "ACD1CB19DA821545B77229F4209F6F87E7DF7FA6FD549771F2E838B11D59021C"
                                    },
-    "apps/video-studio/www/vendor/ffmpeg/ffmpeg-core.js.gz":  {
-                                                                  "size":  "30469",
-                                                                  "mtime":  "639177438537988214",
-                                                                  "hash":  "9CC41435BF000E5A53B09CF1E070A7C07A5925C9FC5594582768862371C8206B"
-                                                              },
     "apps/anima/www/forge/model-io.js.gz":  {
                                                 "size":  "2894",
                                                 "mtime":  "639179167816641049",
                                                 "hash":  "0D520BCE93F7CD0CD46C25C35164C0E8C4ACF74995F35C603611C645B253E564"
                                             },
-    "apps/agent/www/app-ops.js.gz":  {
-                                         "size":  "3904",
-                                         "mtime":  "639178338837380138",
-                                         "hash":  "5B5C3B7DF8F6C1658BD58AADC406856A9591D42B9214B003424031E7947233E2"
-                                     },
     "apps/anima/www/forge/engine.js":  {
                                            "size":  "1526",
                                            "mtime":  "639163806127808945",
@@ -1154,11 +1139,6 @@
                                              "mtime":  "639160333359418177",
                                              "hash":  "655CFC074D982EC1151E798EC24EC008CA8BE7EAD49CF37AABA32DD8EC6716C8"
                                          },
-    "apps/games/www/vendor/GLTFLoader.js.gz":  {
-                                                   "size":  "23815",
-                                                   "mtime":  "639177438536691105",
-                                                   "hash":  "E5FCB1A53F592C45C63816D06E1D3EEC44A517F6EB3D22F240E16613B046C919"
-                                               },
     "apps/settings/www/selftest.js":  {
                                           "size":  "3841",
                                           "mtime":  "639166539776052606",
@@ -1209,11 +1189,6 @@
                                                      "mtime":  "630631606500000000",
                                                      "hash":  "6EBAE288656B12612DED3ACEDA7BD24844341CD536BDAF767B61E4E8911BB369"
                                                  },
-    "data/ROMs/gg/RoboCop 3 (USA, Europe).gg":  {
-                                                    "size":  "262144",
-                                                    "mtime":  "630375156000000000",
-                                                    "hash":  "9238A8DEE1A8154900E30C69F989768584B012B1A58E3B2D096BF4059C73441A"
-                                                },
     "apps/wifi-scanner/www/i18n.it.json.gz":  {
                                                   "size":  "541",
                                                   "mtime":  "639177438538058405",
@@ -1254,11 +1229,11 @@
                                                      "mtime":  "629762032060000000",
                                                      "hash":  "E04DA0D8018AACC3C560509A5203885B41CA8E5B7C5B8A87972471B1043D347D"
                                                  },
-    "apps/anima/www/forge/envelope.js.gz":  {
-                                                "size":  "1662",
-                                                "mtime":  "639179167816581052",
-                                                "hash":  "280EEF988FDEB81B889ACA1D78FB2FFB9D51D04A31507479703ED97F0C48600F"
-                                            },
+    "apps/calendar/www/icon.svg.gz":  {
+                                          "size":  "352",
+                                          "mtime":  "639177438535713676",
+                                          "hash":  "0837EE2E4BC2F887269DEDE481F84ABDC9A39880197A3E11FE9C05C4F4B01A6B"
+                                      },
     "apps/clock/manifest.json":  {
                                      "size":  "670",
                                      "mtime":  "639166964382381503",
@@ -1370,9 +1345,9 @@
                                       "hash":  "5CF4EF6A62E7E80209597AFE9F80F7BCFD2D3B7E2EB9392806064BC7A49DB106"
                                   },
     "www/shell/i18n/coverage.json.gz":  {
-                                            "size":  "429",
-                                            "mtime":  "639179167820706861",
-                                            "hash":  "D969E1DE70169ED8C1DDD7BF1983FB82743E41C8A221FBE38BA0E5C398AE1F50"
+                                            "size":  "435",
+                                            "mtime":  "639183378491311611",
+                                            "hash":  "79666DDD6A30B93222042333A8DC62FFBD0CA371197325086F146658F7467FD8"
                                         },
     "data/ROMs/gg/Casino Funpak (USA).gg":  {
                                                 "size":  "262144",
@@ -1394,6 +1369,11 @@
                                                    "mtime":  "639177438537564807",
                                                    "hash":  "EE94465784E4A840AF06BC7EA79AB90304800BDB89692201A540038247F420AE"
                                                },
+    "data/ROMs/gg/Captain America and the Avengers (USA, Europe).gg":  {
+                                                                           "size":  "262144",
+                                                                           "mtime":  "628147764000000000",
+                                                                           "hash":  "CD23081E3742AA52A58D802368E2DEC7BEB0E324CFFCC8DC02F22D49D6F74111"
+                                                                       },
     "apps/archive-manager/www/index.html.gz":  {
                                                    "size":  "6012",
                                                    "mtime":  "639177438535573417",
@@ -1424,6 +1404,11 @@
                                              "mtime":  "639164578244609488",
                                              "hash":  "5422168EFFA2AFF6DC54E1C71F4E6372DA30E36EDE6B380DB7A69DA0D7BDAF18"
                                          },
+    "apps/mail/www/i18n.it.json.gz":  {
+                                          "size":  "687",
+                                          "mtime":  "639183378492284306",
+                                          "hash":  "855A8E35169763F35429FF2B3A127FE1E89F1320533776FE912622E9FF5635D4"
+                                      },
     "apps/anima/local/shim/esp_heap_caps.h":  {
                                                   "size":  "1203",
                                                   "mtime":  "639164450436648620",
@@ -1456,7 +1441,7 @@
                                                                             },
     "apps/games/www/games/constellations-content.js":  {
                                                            "size":  "3186",
-                                                           "mtime":  "639182330918186034",
+                                                           "mtime":  "639183379261124731",
                                                            "hash":  "45991E7F0C59DC7E5CCA022DCB0F20C8EF877165F19FD8B188D030C4B93594B3"
                                                        },
     "apps/anima/www/forge/local-models.js":  {
@@ -1474,16 +1459,16 @@
                                        "mtime":  "639176403400147464",
                                        "hash":  "AD30B6CF918C3B4168EDD99BC0459FCBCCAA21AA4BA52AD4CE63C2275258E2A5"
                                    },
-    "apps/calendar/www/icon.svg.gz":  {
-                                          "size":  "352",
-                                          "mtime":  "639177438535713676",
-                                          "hash":  "0837EE2E4BC2F887269DEDE481F84ABDC9A39880197A3E11FE9C05C4F4B01A6B"
-                                      },
-    "data/ROMs/gg/Devilish (USA).gg":  {
-                                           "size":  "131072",
-                                           "mtime":  "628148556940000000",
-                                           "hash":  "1E80A211B30F050C60F381576B98A852032F21BB87011E4A769742EC9F4747FF"
-                                       },
+    "apps/updates/www/assets/icon.svg.gz":  {
+                                                "size":  "249",
+                                                "mtime":  "639177438537842920",
+                                                "hash":  "E19A0479389FB7394797C47D31BE7028EA82FC0786436DCD1ED08BFC3586E39A"
+                                            },
+    "apps/browser/www/sw.js":  {
+                                   "size":  "436",
+                                   "mtime":  "639163357176033838",
+                                   "hash":  "AD51042B41B76BA47E02EED420BEEAC3AEA9CE459CB259130816AA45010DC72C"
+                               },
     "apps/video-studio/www/convert.js.gz":  {
                                                 "size":  "2815",
                                                 "mtime":  "639177438537913054",
@@ -1574,6 +1559,11 @@
                                     "mtime":  "639163905083611753",
                                     "hash":  "BC700562417FFB185BD00E0B7CD0FC6C68E5FA93216E611A27C0A98B4B51F6C5"
                                 },
+    "apps/dosbox/www/i18n.it.json.gz":  {
+                                            "size":  "640",
+                                            "mtime":  "639177438536335562",
+                                            "hash":  "F497ADFAEA97E350D5238949576AEC895AAC6FDB9116A52154B5CF79DB967486"
+                                        },
     "data/anima/akb5/person-letters-0.bin":  {
                                                  "size":  "7134791",
                                                  "mtime":  "639165059414554641",
@@ -1626,7 +1616,7 @@
                                               },
     "www/shell/copilot.css.gz":  {
                                      "size":  "2203",
-                                     "mtime":  "639179167820676903",
+                                     "mtime":  "639183378491271634",
                                      "hash":  "D3D6C8F8BE3E7CD1F29A4B5F9D5B445A3E1D26C1244FD8D93E6E104FC69AB882"
                                  },
     "system/registry/manual/free.info":  {
@@ -1674,6 +1664,11 @@
                                          "mtime":  "639166051101441819",
                                          "hash":  "49B4623FB6DB4625D5EB541D1E8D0C9D06789027FAB2218731E684B15CC79349"
                                      },
+    "apps/anima/local/wasm_main.c":  {
+                                         "size":  "6145",
+                                         "mtime":  "639165038830499312",
+                                         "hash":  "E49309233ECDEEB475D165784ADAE642968ADEA1A716BE0B2E0677A755A68056"
+                                     },
     "data/ROMs/gg/Fatal Fury Special (USA, Europe).gg":  {
                                                              "size":  "524288",
                                                              "mtime":  "627385752000000000",
@@ -1696,14 +1691,19 @@
                                                     },
     "www/shell/ai-keys.js.gz":  {
                                     "size":  "6370",
-                                    "mtime":  "639179167820654063",
+                                    "mtime":  "639183378491231662",
                                     "hash":  "F784FAF5EC411A480D6778C8D22879BBE69845B874E77697132AD96D362558BB"
                                 },
-    "apps/calendar/manifest.json.gz":  {
-                                           "size":  "334",
-                                           "mtime":  "639177438535703678",
-                                           "hash":  "2E07B5CADE1DE2401AE4767A52A61DF1872C334358C74FBE9002536DCF5CF565"
-                                       },
+    "data/Videos/Wallace e Gromit - Cracking Contraptions.nfv":  {
+                                                                     "size":  "103904851",
+                                                                     "mtime":  "639163878038291660",
+                                                                     "hash":  "05198634C13BB896CC0FB13481152BB3161F8C0B3DA1F36FD8BFE38B457723E0"
+                                                                 },
+    "apps/mail/www/index.html":  {
+                                     "size":  "20466",
+                                     "mtime":  "639183219167786977",
+                                     "hash":  "BFEE8B8E6ECD0AC58A18EFC5BAFFA743D6231D3512E86B5DA9DA4A46C8501CA5"
+                                 },
     "apps/anima/www/forge/learn.js.gz":  {
                                              "size":  "4435",
                                              "mtime":  "639179167816601049",
@@ -1739,11 +1739,6 @@
                                             "mtime":  "639165060520029873",
                                             "hash":  "36324F6598E34966B808852CEC837A8D3E3B06CEEB0ABF2D981F90711129A47D"
                                         },
-    "apps/anima/local/engine-contract.mjs":  {
-                                                 "size":  "4044",
-                                                 "mtime":  "639166491106844640",
-                                                 "hash":  "7C0EA98A5072287B3ADCF21D2EF128D00A1C9860F04032F38C0955CF5B912791"
-                                             },
     "data/anima/akb5/person-science-2.bin":  {
                                                  "size":  "6987775",
                                                  "mtime":  "639165060287152398",
@@ -1774,11 +1769,16 @@
                                                              "mtime":  "639163470305944218",
                                                              "hash":  "9D1C00AF3471C5AA3D162FE97AE88CDFC885B5E2597F7313DF66BFFD09C9FFCA"
                                                          },
-    "apps/browser/www/sw.js":  {
-                                   "size":  "436",
-                                   "mtime":  "639163357176033838",
-                                   "hash":  "AD51042B41B76BA47E02EED420BEEAC3AEA9CE459CB259130816AA45010DC72C"
-                               },
+    "data/ROMs/gg/Micro Machines (Europe).gg":  {
+                                                    "size":  "262144",
+                                                    "mtime":  "631455817740000000",
+                                                    "hash":  "D842C0408EF1B085BB0AC0AAED4F53F9DD5659A11A6E12DF12ADBE0FEC5C46C8"
+                                                },
+    "apps/calculator/www/i18n.it.json":  {
+                                             "size":  "47",
+                                             "mtime":  "639166771322294587",
+                                             "hash":  "EEA230ED6FB03A93F19EA482CFCFF249ECE0990691A103CA65BA779DAC4C493B"
+                                         },
     "apps/anima/www/forge/router.js.gz":  {
                                               "size":  "2305",
                                               "mtime":  "639179167816666168",
@@ -1849,11 +1849,6 @@
                                           "mtime":  "639166904624309679",
                                           "hash":  "CDD2F8F9B62B51F08C0DD52BFF7F800EAF94DE67E5BED8589DEAA8622C8150DD"
                                       },
-    "apps/anima/www/local/anima-local.wasm":  {
-                                                  "size":  "306652",
-                                                  "mtime":  "639165040761362841",
-                                                  "hash":  "E2C861D42D02322230619E701193CE0FD47308F193DBA6AA8DA5269567FA4742"
-                                              },
     "apps/anima/www/forge/wasm-engine.js":  {
                                                 "size":  "3628",
                                                 "mtime":  "639163856015138172",
@@ -1894,11 +1889,11 @@
                                                         "mtime":  "639160715966630028",
                                                         "hash":  "CB0B4A1A0DFFA52F698D223DEB48C33938C7860362F9D0A96902B16264C7CF98"
                                                     },
-    "data/ROMs/gg/Jeopardy! - Sports Edition (USA, Europe).gg":  {
-                                                                     "size":  "262144",
-                                                                     "mtime":  "628147764000000000",
-                                                                     "hash":  "95F086911756146604D61CC899C1F5362E6B8C92F76AD4B025895717B57B9C05"
-                                                                 },
+    "www/shell/micgate.js":  {
+                                 "size":  "13857",
+                                 "mtime":  "639167262130292492",
+                                 "hash":  "56D2162BEB35BFD93E9B580EFE570F6B96705EE25A3F5248A843096FA0388BD7"
+                             },
     "www/shell/downloads/NucleoMind.apk":  {
                                                "size":  "7523641",
                                                "mtime":  "639178273937285231",
@@ -2069,6 +2064,11 @@
                                           "mtime":  "633891273900000000",
                                           "hash":  "4940BF228FB2095DAA6B382D84EBD0CF05CD81FC2E6E5244A03AB458593E53F5"
                                       },
+    "apps/ir-remote/manifest.json":  {
+                                         "size":  "775",
+                                         "mtime":  "639166820974980947",
+                                         "hash":  "3C91643E17998281EDF4955BE0C40EAAFBCFE7CF2B85EC29F4D3C536D627C4D1"
+                                     },
     "data/ROMs/gb/Bomb Jack (Europe).gb":  {
                                                "size":  "32768",
                                                "mtime":  "633891273900000000",
@@ -2221,7 +2221,7 @@
                                                        },
     "www/shell/style.css.gz":  {
                                    "size":  "9886",
-                                   "mtime":  "639179167820852061",
+                                   "mtime":  "639183378491481766",
                                    "hash":  "ED05402EEC45B4F8CE49D95A8A4011F2BC7A3834B65C7773A7291FFFB1EED1CE"
                                },
     "apps/games/www/games/tris.js.gz":  {
@@ -2400,9 +2400,9 @@
                                                                      "hash":  "B1EFBD983423560707C0CA31EA9780C31FBB4F3D37A77EE1064453AD778E010D"
                                                                  },
     "system/registry/app-aliases.json":  {
-                                             "size":  "3881",
-                                             "mtime":  "639178430982302389",
-                                             "hash":  "2A435179E41010ACF5F2EC044F2EA7C9FB0BBCAC5F3396651361FAB37A4F89EB"
+                                             "size":  "5804",
+                                             "mtime":  "639183213581681700",
+                                             "hash":  "7584CE3ED0AB03BF764A447D1EBA11386D7DE038C7878E04C3652D93BBE56AC0"
                                          },
     "apps/dj/www/npx.js.gz":  {
                                   "size":  "3592",
@@ -2529,6 +2529,11 @@
                                                                               "mtime":  "639169871584153580",
                                                                               "hash":  "33168802BB83522F379C5A9999FA2CB338015884CB26AD624954802D2FC8BF7C"
                                                                           },
+    "data/ROMs/gg/Shaq Fu (USA, Europe).gg":  {
+                                                  "size":  "524288",
+                                                  "mtime":  "630786843140000000",
+                                                  "hash":  "7D890E3CF0BE2D9B6B0C6EEA6B7C04152933FF7FFD4DA480DD855F95FE88B154"
+                                              },
     "apps/spreadsheet/manifest.json.gz":  {
                                               "size":  "443",
                                               "mtime":  "639177438537564807",
@@ -2546,7 +2551,7 @@
                                 },
     "www/shell/dlgate.js.gz":  {
                                    "size":  "1682",
-                                   "mtime":  "639179167820686907",
+                                   "mtime":  "639183378491281609",
                                    "hash":  "545EE0F8B5ACC92B14F41341D917D89E0ECFD3DCA4468C240972851441CC1531"
                                },
     "data/ROMs/gg/Tempo Jr. (USA, Europe).gg":  {
@@ -2579,11 +2584,6 @@
                                "mtime":  "639160171282311362",
                                "hash":  "2DE8324907FEE45B016DB5381325610C7D4AF5D8C04F86AEFA271E05EFE0B68F"
                            },
-    "apps/voice-manager/www/icon.svg":  {
-                                            "size":  "1104",
-                                            "mtime":  "639166947662943256",
-                                            "hash":  "EA5463D97116B82B35E30283CF2CAD490E9FFADB24DDC7304C70B330C27F77EE"
-                                        },
     "apps/anima/www/forge/provenance.js":  {
                                                "size":  "2899",
                                                "mtime":  "639163813782167872",
@@ -2644,16 +2644,21 @@
                                                      "mtime":  "639160333359498787",
                                                      "hash":  "ED05765E555C60A30064370518527C683F8F97BBBA861BBD2C70724353F9F972"
                                                  },
+    "apps/anima/www/forge/vendor/lib-manifest.json.gz":  {
+                                                             "size":  "559",
+                                                             "mtime":  "639179167816696170",
+                                                             "hash":  "A51ABC577EFD052A97DF3AA67C4F9BAFCA1B4B350B7A88D99B11414C884DC6ED"
+                                                         },
     "apps/system-monitor/www/index.html":  {
                                                "size":  "15730",
                                                "mtime":  "639169758468750978",
                                                "hash":  "45DA8C092A06AB67DEA7D6A5B523DCAECB86A5C0C5A67C8669EE7CDDD458200C"
                                            },
-    "data/anima/akb5/programming.bin":  {
-                                            "size":  "285606",
-                                            "mtime":  "639164780266776946",
-                                            "hash":  "B5B39C60779CBF5F0DADBEADF33EFE654A7337383CA0CC91570F161FEB7CAB58"
-                                        },
+    "apps/tasks/www/i18n.it.json.gz":  {
+                                           "size":  "315",
+                                           "mtime":  "639177438537786884",
+                                           "hash":  "82C51400DB1AD4832A52ED201BB85D94E2041FFFDC32B1F12030D3ACE80A3465"
+                                       },
     "data/ROMs/gg/WWF Wrestlemania Steel Cage Challenge (Europe).gg":  {
                                                                            "size":  "262144",
                                                                            "mtime":  "624669336000000000",
@@ -2664,11 +2669,11 @@
                                                    "mtime":  "639179167818893894",
                                                    "hash":  "0FEA7FC2DF37EEFC601881D8E7C1C5229C2BED757BD5036217A7D7AA236408FE"
                                                },
-    "data/ir/userdata.json":  {
-                                  "size":  "202",
-                                  "mtime":  "639166847551789133",
-                                  "hash":  "CD88AC5E1BE2D0256CB8BADC9A8C46DB518C04867B16E471BB92EFC8B7B71CB3"
-                              },
+    "data/ROMs/gg/Jeopardy! - Sports Edition (USA, Europe).gg":  {
+                                                                     "size":  "262144",
+                                                                     "mtime":  "628147764000000000",
+                                                                     "hash":  "95F086911756146604D61CC899C1F5362E6B8C92F76AD4B025895717B57B9C05"
+                                                                 },
     "apps/photo-viewer/www/index.html":  {
                                              "size":  "3213",
                                              "mtime":  "639166770995197316",
@@ -2759,6 +2764,11 @@
                                                      "mtime":  "639177438537212002",
                                                      "hash":  "71AE8E7E020FACDFF19CA0F7BD8A02CE81D8763CE6B32CCE61913714E86F6FB4"
                                                  },
+    "apps/anima/www/forge/vendor/wllama/multi-thread/wllama.wasm":  {
+                                                                        "size":  "1625381",
+                                                                        "mtime":  "639163970028582470",
+                                                                        "hash":  "957E261B786CE9494EEFDB32214C88EBDD3AC62F89157B728EC8D731C34BBAF3"
+                                                                    },
     "data/anima/akb5/programming-languages.bin":  {
                                                       "size":  "56450",
                                                       "mtime":  "639164780267688191",
@@ -2834,16 +2844,16 @@
                                                      "mtime":  "630861451960000000",
                                                      "hash":  "98081DBBF91D2ECA694B3060DD90CFF833BB5CD4F4A9993D3050BA5EBAB3FCFC"
                                                  },
+    "apps/dos-importer/www/i18n.it.json":  {
+                                               "size":  "2727",
+                                               "mtime":  "639166774016891695",
+                                               "hash":  "35495EC24AFD38C6A7787988A8E57AD3DA4F130FED26611E7913C952B35975A8"
+                                           },
     "data/ROMs/gg/Greendog (USA, Europe).gg":  {
                                                    "size":  "262144",
                                                    "mtime":  "627385752000000000",
                                                    "hash":  "FE231C048DE314F57A7D6A2872A9893E4C90A2482F5B8DA89FD3C1101ABB0414"
                                                },
-    "data/Videos/Wallace e Gromit - Cracking Contraptions.nfv":  {
-                                                                     "size":  "103904851",
-                                                                     "mtime":  "639163878038291660",
-                                                                     "hash":  "05198634C13BB896CC0FB13481152BB3161F8C0B3DA1F36FD8BFE38B457723E0"
-                                                                 },
     "apps/video-player/www/index.html.gz":  {
                                                 "size":  "16883",
                                                 "mtime":  "639177438537908011",
@@ -2856,7 +2866,7 @@
                                        },
     "www/shell/fsindex.js.gz":  {
                                     "size":  "3182",
-                                    "mtime":  "639179167820686907",
+                                    "mtime":  "639183378491291643",
                                     "hash":  "207188515C39E4D0CAF56C90AE6D29E795DA3022FED7296B3BEA7D0827BB92E5"
                                 },
     "apps/ssh/www/app.js":  {
@@ -3019,6 +3029,11 @@
                                           "mtime":  "639164779897487618",
                                           "hash":  "A4AC1E1555FA7344C12315CC5139188F297B55B2C24E2D44D263C23E0A72093C"
                                       },
+    "data/ROMs/gg/Earthworm Jim (USA, Europe).gg":  {
+                                                        "size":  "524288",
+                                                        "mtime":  "630786873560000000",
+                                                        "hash":  "6D4C50F2B5042E990C4FB82E96FAB2A782B19F1C5D35B15CB0C9C5A0E53BB44E"
+                                                    },
     "apps/agent/www/app-publish.js.gz":  {
                                              "size":  "7015",
                                              "mtime":  "639178338837390152",
@@ -3034,11 +3049,11 @@
                                                "mtime":  "639164773327390855",
                                                "hash":  "46D07F41695A0C851C7D520A03020BBE7EE0912DB7B3F1E9F15072BB432C3E6E"
                                            },
-    "apps/dosbox/www/i18n.it.json.gz":  {
-                                            "size":  "640",
-                                            "mtime":  "639177438536335562",
-                                            "hash":  "F497ADFAEA97E350D5238949576AEC895AAC6FDB9116A52154B5CF79DB967486"
-                                        },
+    "apps/calendar/manifest.json.gz":  {
+                                           "size":  "334",
+                                           "mtime":  "639177438535703678",
+                                           "hash":  "2E07B5CADE1DE2401AE4767A52A61DF1872C334358C74FBE9002536DCF5CF565"
+                                       },
     "apps/anima/www/forge/engine.js.gz":  {
                                               "size":  "793",
                                               "mtime":  "639179167816570991",
@@ -3074,6 +3089,11 @@
                                                    "mtime":  "639177438537035031",
                                                    "hash":  "30AF1E0DA58DC88204102E8E9EAE97BE7CB235C7A549E0DEA6D8120BD59FFCE8"
                                                },
+    "apps/video-studio/www/i18n.it.json":  {
+                                               "size":  "1627",
+                                               "mtime":  "639166772078154566",
+                                               "hash":  "F5FF9713F1A4DD337EA817A51B2FF7512416127BBC86BFC95D964748D883664F"
+                                           },
     "apps/notepad/www/index.html":  {
                                         "size":  "9481",
                                         "mtime":  "639166771743851764",
@@ -3099,6 +3119,11 @@
                                                     "mtime":  "631294343480000000",
                                                     "hash":  "910627FF3A2144D9A138BF201DB9F7358F5DE5545F7248751D291A96B2732BC4"
                                                 },
+    "apps/spreadsheet/www/copilot/sheet-actions.js":  {
+                                                          "size":  "9365",
+                                                          "mtime":  "639163859370243483",
+                                                          "hash":  "162CA10457B7F1B8CFF59DA4414B9FA18268454F5190AC8C4243B66A1E02EA4B"
+                                                      },
     "apps/video-player/www/i18n.en.json.gz":  {
                                                   "size":  "1172",
                                                   "mtime":  "639177438537868038",
@@ -3111,7 +3136,7 @@
                           },
     "www/shell/manifest.webmanifest.gz":  {
                                               "size":  "242",
-                                              "mtime":  "639179167820736883",
+                                              "mtime":  "639183378491351695",
                                               "hash":  "DABE93A6851D0B40E0D77D2D15FA904B4F1D002D06687945C9295041CC92E712"
                                           },
     "data/ROMs/gg/Mortal Kombat II (World).gg":  {
@@ -3131,7 +3156,7 @@
                                                },
     "www/shell/copilot.js.gz":  {
                                     "size":  "6930",
-                                    "mtime":  "639179167820676903",
+                                    "mtime":  "639183378491281609",
                                     "hash":  "A450C49FA42EF5BE804DF5BFBB419166AC8D9457292D953717B1DCCDC6E74F95"
                                 },
     "apps/spreadsheet/www/copilot/sheet-engine.js":  {
@@ -3209,6 +3234,11 @@
                                             "mtime":  "639164779945486773",
                                             "hash":  "43B4402543907804500A81B6D60C1B2FB70AF4BAC6165B39F78E3688623C4757"
                                         },
+    "data/report.txt":  {
+                            "size":  "0",
+                            "mtime":  "639160277740597671",
+                            "hash":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                        },
     "apps/anima/www/vosk/recognizer-processor.js":  {
                                                         "size":  "991",
                                                         "mtime":  "639162459780528226",
@@ -3259,11 +3289,6 @@
                                                 "mtime":  "639160333359477531",
                                                 "hash":  "E69CF32110FDE1009FB9B2EFA92EAC09317F1D3F4D9FF4A51ADC10AFA04AB82D"
                                             },
-    "data/ROMs/gbc/Super Mario Bros. Deluxe (USA, Europe) (Rev B).gbs":  {
-                                                                             "size":  "8192",
-                                                                             "mtime":  "634114397960000000",
-                                                                             "hash":  "D5F56780A1D17DFD84743CA5785277519B6FAFD68185219EB93A407B497BE95F"
-                                                                         },
     "data/ROMs/gg/Battletoads (USA).gg":  {
                                               "size":  "262144",
                                               "mtime":  "630699051000000000",
@@ -3389,6 +3414,11 @@
                                                 "mtime":  "639166775410657490",
                                                 "hash":  "6C693F60190DB21CB738DF059B77DC69CBFAAEE0D3668E9B538FB703A1C0BD46"
                                             },
+    "apps/anima/www/forge/envelope.js.gz":  {
+                                                "size":  "1662",
+                                                "mtime":  "639179167816581052",
+                                                "hash":  "280EEF988FDEB81B889ACA1D78FB2FFB9D51D04A31507479703ED97F0C48600F"
+                                            },
     "system/registry/manual/pwd.info":  {
                                             "size":  "1669",
                                             "mtime":  "639160333359354020",
@@ -3480,9 +3510,9 @@
                                          "hash":  "B527A8469F004FCAC7FEFEE30A4BD7BD327E859812F92C582068F48C3DC86FAE"
                                      },
     "www/shell/sw.js.gz":  {
-                               "size":  "6707",
-                               "mtime":  "639181827210662344",
-                               "hash":  "0626988E556465F327AA2C210E2DE49335F1ACE51034DFFBB541C55782D4003A"
+                               "size":  "6877",
+                               "mtime":  "639183378491491746",
+                               "hash":  "35A2B36BF736AFDE83621298D3E63A9276E42BD08B937FD5626564BC1FF12D3B"
                            },
     "apps/archive-manager/www/icon.svg.gz":  {
                                                  "size":  "330",
@@ -3539,11 +3569,11 @@
                                                   "mtime":  "629870779200000000",
                                                   "hash":  "D3DC2F054349153AFF8E195350DE899C2F0FCA596392DEE8EC40C84D69727BA8"
                                               },
-    "data/ROMs/gb/Bionic Commando (USA).gb":  {
-                                                  "size":  "262144",
-                                                  "mtime":  "633891273900000000",
-                                                  "hash":  "692E62D9E0048350256EE124D55C6EF225DC2BB54E0808FD882312D4DCAF0F28"
-                                              },
+    "apps/mail/manifest.json.gz":  {
+                                       "size":  "362",
+                                       "mtime":  "639183378492274249",
+                                       "hash":  "2AC754BF60B13A9977C4841150775D01CFAB4240AC7E32A9036220E0C089A071"
+                                   },
     "apps/qr/manifest.json":  {
                                   "size":  "707",
                                   "mtime":  "639169809420148732",
@@ -3564,11 +3594,6 @@
                                                      "mtime":  "639167218745295215",
                                                      "hash":  "93D89FBCEF8A6EDC5BE38F2E7E6C89C70008045440989E5330D0FA49A274C765"
                                                  },
-    "apps/nearby/manifest.json":  {
-                                      "size":  "856",
-                                      "mtime":  "639176739327557307",
-                                      "hash":  "787E1CB810BED7BDF4C5714C047BBB339DB5101FBE889458F9BA270443763F11"
-                                  },
     "apps/games/www/llm-brain.js":  {
                                         "size":  "8084",
                                         "mtime":  "639166387151089682",
@@ -3674,11 +3699,11 @@
                                              "mtime":  "639179395987453454",
                                              "hash":  "A164160C9247B682E6D7E8B6E27FD601F97EDCB798C6640057DC2ED48926D93F"
                                          },
-    "data/DOS/pushover.jsdos":  {
-                                    "size":  "1353829",
-                                    "mtime":  "639163905086327843",
-                                    "hash":  "83BD772AFA08A84D9495491F35E19E89368792F6E7F02F2FF47C21EBD3D28D18"
-                                },
+    "apps/games/www/vendor/GLTFLoader.js.gz":  {
+                                                   "size":  "23815",
+                                                   "mtime":  "639177438536691105",
+                                                   "hash":  "E5FCB1A53F592C45C63816D06E1D3EEC44A517F6EB3D22F240E16613B046C919"
+                                               },
     "apps/anima/www/forge/vendor/NOTES.md":  {
                                                  "size":  "1789",
                                                  "mtime":  "639163970732450206",
@@ -3734,6 +3759,11 @@
                                                   "mtime":  "639177438537776912",
                                                   "hash":  "864D325D90E67F8145C06F16C4F6270B0279CFCCFDD81D8C7FD7E8F6CDAE2684"
                                               },
+    "apps/dictation/www/asr.js.gz":  {
+                                         "size":  "4135",
+                                         "mtime":  "639177438536138587",
+                                         "hash":  "A61368D43E61E24A33CF9EF71EE904DC30960FA6D2D850778686FDFED2D5F9C4"
+                                     },
     "apps/log-viewer/www/i18n.it.json":  {
                                              "size":  "1416",
                                              "mtime":  "639166992696748383",
@@ -3974,11 +4004,11 @@
                                            "mtime":  "639164780258869554",
                                            "hash":  "B8CB0910849CB0AE53AF408E896E49ACFEC411F0C65D0EA6F6561ED4BA3F6772"
                                        },
-    "data/ROMs/gg/Shaq Fu (USA, Europe).gg":  {
-                                                  "size":  "524288",
-                                                  "mtime":  "630786843140000000",
-                                                  "hash":  "7D890E3CF0BE2D9B6B0C6EEA6B7C04152933FF7FFD4DA480DD855F95FE88B154"
-                                              },
+    "data/ROMs/gg/Tale Spin (USA, Europe).gg":  {
+                                                    "size":  "262144",
+                                                    "mtime":  "627385752000000000",
+                                                    "hash":  "B91B04C541C3B842EA4A22B562D979C8BF2C4D48A5DEEADED4850A67E52E28B6"
+                                                },
     "apps/dj/test/_test_engine.html.gz":  {
                                               "size":  "1933",
                                               "mtime":  "639177438536193620",
@@ -4049,11 +4079,6 @@
                                     "mtime":  "639166386971346441",
                                     "hash":  "7C090981DB368862E9D0469BE7397C4A962501C2D42DF5A4C5535E1DBBB51C34"
                                 },
-    "apps/ir-remote/www/i18n.it.json.gz":  {
-                                               "size":  "1531",
-                                               "mtime":  "639177438536999968",
-                                               "hash":  "73199A8C89A0C3B113A5B801A8E3EEAC71812D56DF3876498079E0ABCC1981B8"
-                                           },
     "apps/paint/www/diffusion/webgpu-probe.js":  {
                                                      "size":  "2752",
                                                      "mtime":  "639163963105709874",
@@ -4064,6 +4089,11 @@
                                        "mtime":  "639166051470150677",
                                        "hash":  "A234D254BECA96DD0144D58E0AFEA563B6F320047FC42148C49BC08CD0722066"
                                    },
+    "apps/mail/www/icon.svg":  {
+                                   "size":  "720",
+                                   "mtime":  "639183370472147389",
+                                   "hash":  "D469891501AC050D112502D0D9ADEDB8B3F4AACA24A23A28155478F967F833A8"
+                               },
     "apps/games/www/llm.js.gz":  {
                                      "size":  "2764",
                                      "mtime":  "639177438536595929",
@@ -4139,11 +4169,11 @@
                                                      "mtime":  "628147764000000000",
                                                      "hash":  "68F9F207DBD57C087CBDD02C78716178E103FA66D613314017AF5AB4DB4A432F"
                                                  },
-    "apps/anima/www/forge/vendor/wllama/multi-thread/wllama.wasm":  {
-                                                                        "size":  "1625381",
-                                                                        "mtime":  "639163970028582470",
-                                                                        "hash":  "957E261B786CE9494EEFDB32214C88EBDD3AC62F89157B728EC8D731C34BBAF3"
-                                                                    },
+    "apps/anima/www/context.js":  {
+                                      "size":  "4402",
+                                      "mtime":  "639162965374685209",
+                                      "hash":  "3083434C91DBDFBD26B7BABA8D2E3278468F652CE029F613C0705239E537D303"
+                                  },
     "apps/paint/manifest.json.gz":  {
                                         "size":  "334",
                                         "mtime":  "639177438537170770",
@@ -4155,9 +4185,9 @@
                                                 "hash":  "5150B1A8C8CE0AF5C0CC3DE8A3ADBAFE70E7330D16F709EA3D64F19EFAE22765"
                                             },
     "www/shell/i18n/coverage.json":  {
-                                         "size":  "843",
-                                         "mtime":  "639179167831562737",
-                                         "hash":  "D8E6BBF1BF4646E27E89D02FF727B044D8D1782EBEF84C2DE2B20AADCC182577"
+                                         "size":  "859",
+                                         "mtime":  "639183214599970850",
+                                         "hash":  "61B754B09AC9B420EFADEE5E4751A0A2942A1A9DC2EE4D703165ADDCEBDB1C64"
                                      },
     "www/shell/downloads/NucleoConnect.exe":  {
                                                   "size":  "1270959",
@@ -4214,14 +4244,14 @@
                                               "mtime":  "639177438535743677",
                                               "hash":  "47B2FA582BF07E97C6D902F684A80A1F126BE71A2619A8D300076D6F8EF0645F"
                                           },
-    "apps/anima/www/context.js":  {
-                                      "size":  "4402",
-                                      "mtime":  "639162965374685209",
-                                      "hash":  "3083434C91DBDFBD26B7BABA8D2E3278468F652CE029F613C0705239E537D303"
-                                  },
+    "apps/anima/local/akb5-unify-cert.mjs":  {
+                                                 "size":  "4303",
+                                                 "mtime":  "639164764076972949",
+                                                 "hash":  "548D0499FA6530BB6435FACED299DA6C223EC06557A606FDE73FDC6BF807E383"
+                                             },
     "www/shell/boot-fetch.js.gz":  {
                                        "size":  "1297",
-                                       "mtime":  "639179167820666903",
+                                       "mtime":  "639183378491251670",
                                        "hash":  "F304D2E79880A11644F2877148B94F40FCAF5AA72566E7C636F6E9C2A56F5566"
                                    },
     "data/ROMs/gg/Spider-Man and the X-Men in Arcade\u0027s Revenge (USA, Europe).gg":  {
@@ -4329,11 +4359,6 @@
                                           "mtime":  "639177438537842920",
                                           "hash":  "B7E18187B136D85D9D950EC34B919C4F883BCC7D716C15574CF1D20D95BD1811"
                                       },
-    "data/ROMs/gg/Pengo (USA, Europe).gg":  {
-                                                "size":  "32768",
-                                                "mtime":  "631843633840000000",
-                                                "hash":  "03800ADA18C6F9E1E910AE4B94235C11C3231E10BBE38B75EC32C79A0CCF630A"
-                                            },
     "www/shell/wm.js":  {
                             "size":  "21440",
                             "mtime":  "639167259228209738",
@@ -4445,9 +4470,9 @@
                                          "hash":  "260953D30B9E9769973E43A6500C3F14CB05A59102077B1EC6CCED36910E58FF"
                                      },
     "www/shell/sw.js":  {
-                            "size":  "15164",
-                            "mtime":  "639181827157749890",
-                            "hash":  "85417A76746EFB7941ECEBBA276EEF29F0CC86C95172F2DE169F4755D0658DF7"
+                            "size":  "15495",
+                            "mtime":  "639183378421036766",
+                            "hash":  "A0ECFFDF5105ABAE21F3A6EDD066BACCD81C29E95A5BB89C909A27766C31703E"
                         },
     "system/registry/manual/reboot.info":  {
                                                "size":  "2034",
@@ -4461,12 +4486,12 @@
                                   },
     "www/shell/onboarding.css.gz":  {
                                         "size":  "1605",
-                                        "mtime":  "639179167820772010",
+                                        "mtime":  "639183378491391746",
                                         "hash":  "E0EC63ECC581C383DC99B47EA4F76EF8723D1856161EDB187EA967884E509AF0"
                                     },
     "www/shell/ai.js.gz":  {
                                "size":  "8125",
-                               "mtime":  "639179167820654063",
+                               "mtime":  "639183378491241625",
                                "hash":  "631BE39214C492551C9E7B2978396ED4A37C7DDCB0C399C46E6108F8042B4934"
                            },
     "apps/games/www/gamepad.js.gz":  {
@@ -4474,6 +4499,11 @@
                                          "mtime":  "639177438536411344",
                                          "hash":  "01E4AC169D5BDFDE47E8C8BB11F7A44695A77B82232D5F91CE513E75EE45DC42"
                                      },
+    "apps/games/www/games/pong3d.js.gz":  {
+                                              "size":  "7882",
+                                              "mtime":  "639177524099000245",
+                                              "hash":  "B29183DAF47C5D8D410E11C6DF77F321266EC76FA367DC404289720108BB6037"
+                                          },
     "data/ROMs/gg/Wonder Boy - The Dragon\u0027s Trap (USA, Europe).gg":  {
                                                                               "size":  "262144",
                                                                               "mtime":  "632097053580000000",
@@ -4569,6 +4599,11 @@
                                                                                                "mtime":  "633891273980000000",
                                                                                                "hash":  "ED42628D5CD8C73A6F8C6A8965F19674876A4FA04E616834E26B81B35963AD87"
                                                                                            },
+    "data/ROMs/gg/Devilish (USA).gg":  {
+                                           "size":  "131072",
+                                           "mtime":  "628148556940000000",
+                                           "hash":  "1E80A211B30F050C60F381576B98A852032F21BB87011E4A769742EC9F4747FF"
+                                       },
     "apps/wifi-scanner/www/icon.svg.gz":  {
                                               "size":  "355",
                                               "mtime":  "639177438538058405",
@@ -4584,11 +4619,11 @@
                                       "mtime":  "639162566180423177",
                                       "hash":  "1DCB3ED2BB312D96B006595303D7FB958C744A81C32F76E83F4FF19FE38C83EC"
                                   },
-    "data/ROMs/gg/Pinball Dreams (USA).gg":  {
-                                                 "size":  "131072",
-                                                 "mtime":  "629870779200000000",
-                                                 "hash":  "230D87CA97840E37BAB78230BD60CA7923974DCF2FEBAA9C02C5C61166FE9007"
-                                             },
+    "data/DOS/pushover.jsdos":  {
+                                    "size":  "1353829",
+                                    "mtime":  "639163905086327843",
+                                    "hash":  "83BD772AFA08A84D9495491F35E19E89368792F6E7F02F2FF47C21EBD3D28D18"
+                                },
     "apps/anima/www/forge/actions.js":  {
                                             "size":  "5393",
                                             "mtime":  "639163805317729473",
@@ -4614,11 +4649,11 @@
                                           "mtime":  "639178233089901588",
                                           "hash":  "49C1A66430542509D05A581E890BF19900D62FD75D2F14112AD3D10C9A2FE87D"
                                       },
-    "www/shell/micgate.js":  {
-                                 "size":  "13857",
-                                 "mtime":  "639167262130292492",
-                                 "hash":  "56D2162BEB35BFD93E9B580EFE570F6B96705EE25A3F5248A843096FA0388BD7"
-                             },
+    "data/ROMs/gbc/Super Mario Bros. Deluxe (USA, Europe) (Rev B).gbs":  {
+                                                                             "size":  "8192",
+                                                                             "mtime":  "634114397960000000",
+                                                                             "hash":  "D5F56780A1D17DFD84743CA5785277519B6FAFD68185219EB93A407B497BE95F"
+                                                                         },
     "apps/anima/www/index.html.gz":  {
                                          "size":  "100676",
                                          "mtime":  "639179167819024015",
@@ -4634,21 +4669,21 @@
                                                                  "mtime":  "628148556940000000",
                                                                  "hash":  "86681E751BC32B12E182449C144A6AE0ACAE953965CE9FDBACAAD1550094E4FF"
                                                              },
-    "apps/updates/www/assets/icon.svg.gz":  {
-                                                "size":  "249",
-                                                "mtime":  "639177438537842920",
-                                                "hash":  "E19A0479389FB7394797C47D31BE7028EA82FC0786436DCD1ED08BFC3586E39A"
-                                            },
+    "apps/video-studio/www/vendor/ffmpeg/ffmpeg-core.js.gz":  {
+                                                                  "size":  "30469",
+                                                                  "mtime":  "639177438537988214",
+                                                                  "hash":  "9CC41435BF000E5A53B09CF1E070A7C07A5925C9FC5594582768862371C8206B"
+                                                              },
     "apps/paint/www/diffusion/sd-loader.js":  {
                                                   "size":  "1488",
                                                   "mtime":  "639165910526244860",
                                                   "hash":  "638B03F25EB7986DAC26DA0FEF1FE3397FFF05B69E7B6C0F5C56F82FC631D67A"
                                               },
-    "apps/clock/www/i18n.it.json.gz":  {
-                                           "size":  "388",
-                                           "mtime":  "639177438535733674",
-                                           "hash":  "50D553C6C3F0575DEC6F31D997A7E5672A06BE3D08BFB673D15635B2346D7AC6"
-                                       },
+    "data/ROMs/gg/Bartman Meets Radioactive Man (USA, Europe).gg":  {
+                                                                        "size":  "262144",
+                                                                        "mtime":  "628148556940000000",
+                                                                        "hash":  "B4BDE9A50CE14E92D081C59354FC8664E290A9D40742F0C5964817F6400701F2"
+                                                                    },
     "apps/anima/manifest.json":  {
                                      "size":  "613",
                                      "mtime":  "639160075685626328",
@@ -4666,7 +4701,7 @@
                                                                           },
     "www/shell/shortcuts.js.gz":  {
                                       "size":  "1524",
-                                      "mtime":  "639179167820832090",
+                                      "mtime":  "639183378491461779",
                                       "hash":  "B78D5A2D5FD81D424B0E677A58D9BF9231D930CD09A3D6C63110CC4186664367"
                                   },
     "data/note.txt":  {
@@ -4696,7 +4731,7 @@
                                          },
     "www/shell/wm.js.gz":  {
                                "size":  "6838",
-                               "mtime":  "639179167820867174",
+                               "mtime":  "639183378491501780",
                                "hash":  "FCF5880D1F342BEF69D0960EC7A6493BFD5E0A897929CB1FAF3764FC3D0890B3"
                            },
     "apps/anima/www/forge/capguard.js":  {
@@ -4774,11 +4809,11 @@
                                                           "mtime":  "630761792440000000",
                                                           "hash":  "E715B1377EA13CA1B9BBBDF7177B13B8EF4A3602D3A4AD8AE13102E803D09FC9"
                                                       },
-    "data/ROMs/gg/Micro Machines (Europe).gg":  {
-                                                    "size":  "262144",
-                                                    "mtime":  "631455817740000000",
-                                                    "hash":  "D842C0408EF1B085BB0AC0AAED4F53F9DD5659A11A6E12DF12ADBE0FEC5C46C8"
-                                                },
+    "apps/anima/local/engine-contract.mjs":  {
+                                                 "size":  "4044",
+                                                 "mtime":  "639166491106844640",
+                                                 "hash":  "7C0EA98A5072287B3ADCF21D2EF128D00A1C9860F04032F38C0955CF5B912791"
+                                             },
     "apps/anima/www/forge/sd-model-loader.js":  {
                                                     "size":  "4432",
                                                     "mtime":  "639163959927978875",
@@ -4829,21 +4864,21 @@
                                            "mtime":  "639177438537045086",
                                            "hash":  "BFA03D40347DCA123D865995290BACE1FACF69FD449FE3BDCF3B8D9FB69E2111"
                                        },
-    "data/ROMs/gg/Bartman Meets Radioactive Man (USA, Europe).gg":  {
-                                                                        "size":  "262144",
-                                                                        "mtime":  "628148556940000000",
-                                                                        "hash":  "B4BDE9A50CE14E92D081C59354FC8664E290A9D40742F0C5964817F6400701F2"
-                                                                    },
+    "apps/ir-remote/www/i18n.it.json.gz":  {
+                                               "size":  "1531",
+                                               "mtime":  "639177438536999968",
+                                               "hash":  "73199A8C89A0C3B113A5B801A8E3EEAC71812D56DF3876498079E0ABCC1981B8"
+                                           },
     "apps/anima/local/parity.mjs":  {
                                         "size":  "5322",
                                         "mtime":  "639164728079575574",
                                         "hash":  "972FF96B33141802211EE694D1DDD9344757937DDCA48BE2AB1E332C7D700CE4"
                                     },
-    "apps/anima/www/vosk/vosk.js.gz":  {
-                                           "size":  "2348492",
-                                           "mtime":  "639179167820644056",
-                                           "hash":  "B16DA0B17CEE5BDB2860DA5342E8D183CFA06094CB1FF90E9E6844AB73E661F4"
-                                       },
+    "data/ir/userdata.json":  {
+                                  "size":  "202",
+                                  "mtime":  "639166847551789133",
+                                  "hash":  "CD88AC5E1BE2D0256CB8BADC9A8C46DB518C04867B16E471BB92EFC8B7B71CB3"
+                              },
     "apps/anima/www/forge/actions.js.gz":  {
                                                "size":  "2229",
                                                "mtime":  "639179167816525855",
@@ -4859,16 +4894,16 @@
                                                    "mtime":  "639163763799370043",
                                                    "hash":  "526FE4793C6D7734E6113CC96E319C12E402B706BDCC3DA0C61297CF15E43739"
                                                },
-    "data/ROMs/gg/Super Return of the Jedi (USA, Europe).gg":  {
-                                                                   "size":  "524288",
-                                                                   "mtime":  "628148556940000000",
-                                                                   "hash":  "7596CD7B1281DB57CF3C4BB7DFDF2C605EA86C13240DCBCBF98C4A0249A8AF9E"
-                                                               },
-    "apps/browser/www/index.html.gz":  {
-                                           "size":  "17957",
-                                           "mtime":  "639177438535678530",
-                                           "hash":  "B8027292C19D6C55A98D8A2823624536C7262C6C3FAD85746EDE1A0ABE35D199"
+    "apps/settings/www/scenes.js.gz":  {
+                                           "size":  "1361",
+                                           "mtime":  "639177438537554794",
+                                           "hash":  "52F85F32554FE735044E58ED91F802C7C32744661A37A7D24396C2834BCEAEA3"
                                        },
+    "apps/qr/www/qrcode.js.gz":  {
+                                     "size":  "5368",
+                                     "mtime":  "639177438537357421",
+                                     "hash":  "9CCBC03B916B6372ADC1D8EB2B572F71AF21B9F0C0D97D271AA091B4A986E83C"
+                                 },
     "data/anima/akb5/physics-constants.bin":  {
                                                   "size":  "54108",
                                                   "mtime":  "639164780259603754",
@@ -4929,11 +4964,6 @@
                                                  "mtime":  "639165059576057750",
                                                  "hash":  "55A0DE6AFE0F3666C5204326615D49514B8ED2DE14951C6BFB0E991643BE881B"
                                              },
-    "data/ROMs/gg/Taz in Escape from Mars (USA, Europe).gg":  {
-                                                                  "size":  "524288",
-                                                                  "mtime":  "627385752000000000",
-                                                                  "hash":  "0495BE34D90060733DF6BD6A7126E85A36B41BBD461B8E749D7EB34520B94DC2"
-                                                              },
     "data/anima/akb5/civics.bin":  {
                                        "size":  "55486",
                                        "mtime":  "639164779906724824",
@@ -4946,7 +4976,7 @@
                                                                                },
     "www/shell/i18n/core.en.json.gz":  {
                                            "size":  "965",
-                                           "mtime":  "639179167820696904",
+                                           "mtime":  "639183378491301621",
                                            "hash":  "88E3DC02BBC6AF8D2C3D4F002B90EFCA9C618DB46F3BD8F1C05B709B82B378CC"
                                        },
     "data/ROMs/gg/Mighty Morphin Power Rangers (USA, Europe).gg":  {
@@ -4984,6 +5014,11 @@
                                      "mtime":  "639162187331319076",
                                      "hash":  "FD93647101B2EBEB3E5F0C01EF19B624923CDC532838CB50DE7B3CE9311290C4"
                                  },
+    "apps/mail/www/index.html.gz":  {
+                                        "size":  "5991",
+                                        "mtime":  "639183378492304308",
+                                        "hash":  "83870E028CCE498D07551767B8CBEE07EF5437C7C78A1072B85AB86686DC8889"
+                                    },
     "apps/dos-importer/manifest.json":  {
                                             "size":  "784",
                                             "mtime":  "639163826645545218",
@@ -5000,9 +5035,9 @@
                                                                        "hash":  "CC86930C4711B59BACCCD45B49E3F4D4956D7ED461FEF2B11909D7A822489FD4"
                                                                    },
     "system/registry/api-docs.json":  {
-                                          "size":  "85969",
-                                          "mtime":  "639176739461735242",
-                                          "hash":  "563FF1B100DF2517C2996C1C78A339A6475AEEDA01EAEA374C6CC499D9CAAE8C"
+                                          "size":  "95473",
+                                          "mtime":  "639183212519211783",
+                                          "hash":  "4D9CFD29FB0479DF722DE2DF9F2D101CF1CE3F5CE6AA9FC097C7476AA62E39DB"
                                       },
     "apps/calendar/manifest.json":  {
                                         "size":  "632",
@@ -5029,11 +5064,11 @@
                                                         "mtime":  "630730101500000000",
                                                         "hash":  "1585A242A1A5A6D45A03AD3F921B77E88B1319AE009992379E3054A5462037B1"
                                                     },
-    "apps/dos-importer/www/i18n.it.json":  {
-                                               "size":  "2727",
-                                               "mtime":  "639166774016891695",
-                                               "hash":  "35495EC24AFD38C6A7787988A8E57AD3DA4F130FED26611E7913C952B35975A8"
-                                           },
+    "apps/agent/www/index.html":  {
+                                      "size":  "7523",
+                                      "mtime":  "639166772625975992",
+                                      "hash":  "693DAB9B7243BECE42BF58F566332BAF39780F2318AC83FABE88D9AEE4E7F23E"
+                                  },
     "apps/anima/www/contextkit.js.gz":  {
                                             "size":  "10561",
                                             "mtime":  "639179167816515857",
@@ -5054,11 +5089,11 @@
                                                "mtime":  "639160333359444911",
                                                "hash":  "FA5DA30C5A2A798EF775ADD881724C08311852922A909ED0F060A9B984A61906"
                                            },
-    "data/ROMs/gg/Earthworm Jim (USA, Europe).gg":  {
-                                                        "size":  "524288",
-                                                        "mtime":  "630786873560000000",
-                                                        "hash":  "6D4C50F2B5042E990C4FB82E96FAB2A782B19F1C5D35B15CB0C9C5A0E53BB44E"
-                                                    },
+    "apps/anima/www/local/anima-local.wasm":  {
+                                                  "size":  "306652",
+                                                  "mtime":  "639165040761362841",
+                                                  "hash":  "E2C861D42D02322230619E701193CE0FD47308F193DBA6AA8DA5269567FA4742"
+                                              },
     "apps/anima/www/local/cascade.js.gz":  {
                                                "size":  "2124",
                                                "mtime":  "639179167819054004",
@@ -5094,11 +5129,6 @@
                                             "mtime":  "639162187331025788",
                                             "hash":  "D74DF00B1866D5609AF04915FAC28236913DCF4C96C10CAA4E7AF8823F60390B"
                                         },
-    "apps/anima/www/forge/download-manager.js.gz":  {
-                                                        "size":  "3156",
-                                                        "mtime":  "639179167816535854",
-                                                        "hash":  "E64133BA5110F2A353B6C1DCA0A5C2630195749AF3705226EBB27D9EC14D3B9C"
-                                                    },
     "apps/media-player/www/i18n.it.json.gz":  {
                                                   "size":  "159",
                                                   "mtime":  "639177438537085098",
@@ -5110,13 +5140,13 @@
                                                   "hash":  "2FAD00D52508D73BF41D738B618C0184AD4B6A75CD657A46932E13A5C8EA45B4"
                                               },
     "www/shell/shell.js.gz":  {
-                                  "size":  "47553",
-                                  "mtime":  "639181827210642315",
-                                  "hash":  "32A22541AA777042BECB4A12D965812A2832244745374C8D8DD2E444994258EA"
+                                  "size":  "47485",
+                                  "mtime":  "639183378491461779",
+                                  "hash":  "C48CA2F60496CE06289D0D991C705C880CC67A3AE2857AC79EF0440582FA1297"
                               },
     "www/shell/i18n/shell.it.json.gz":  {
                                             "size":  "2317",
-                                            "mtime":  "639179167820716868",
+                                            "mtime":  "639183378491331694",
                                             "hash":  "0AB85C5D4D8C401B3DE30A66FDEA8605D7C8DAC1FF5DCD872E8E320018A43173"
                                         },
     "apps/browser/www/i18n.it.json":  {
@@ -5141,7 +5171,7 @@
                                                 },
     "www/shell/notify.js.gz":  {
                                    "size":  "6039",
-                                   "mtime":  "639179167820751944",
+                                   "mtime":  "639183378491371729",
                                    "hash":  "607A66A95FB8FDAEA2FF78B6A8DC4E6054BC52A36C3F0589525DAE190C91793C"
                                },
     "data/ROMs/gg/Itchy \u0026 Scratchy Game, The (Europe).gg":  {
@@ -5171,7 +5201,7 @@
                                   },
     "www/shell/i18n/core.it.json.gz":  {
                                            "size":  "1091",
-                                           "mtime":  "639179167820696904",
+                                           "mtime":  "639183378491311611",
                                            "hash":  "02124ED65EBD39A48C80C02F5BB5C75186BB087B0C56BA68D6DFCA8711EAC009"
                                        },
     "apps/games/www/games/constellations-gen.js.gz":  {
@@ -5194,11 +5224,11 @@
                                            "mtime":  "639160333359376181",
                                            "hash":  "14DA14B6E83C8FAF57D7FCEA37F9C92C5488877C2B5C3AD9901C9314607262A1"
                                        },
-    "apps/anima/www/forge/sd-model-loader.js.gz":  {
-                                                       "size":  "2006",
-                                                       "mtime":  "639179167816686178",
-                                                       "hash":  "D870960C30DC89507C75C308EBFA924293CA93D008FD0798F8B64A1BF4AF04D7"
-                                                   },
+    "data/ROMs/gg/Shining Force II - The Sword of Hajya (USA, Europe).gg":  {
+                                                                                "size":  "524288",
+                                                                                "mtime":  "628148556940000000",
+                                                                                "hash":  "6B01D9FA1ED91CEF5CFD878156CE5755A1D00522A746155AFFA05E576DD795B4"
+                                                                            },
     "apps/settings/www/actions.js.gz":  {
                                             "size":  "2199",
                                             "mtime":  "639177438537497048",
@@ -5211,17 +5241,17 @@
                              },
     "www/shell/busy.js.gz":  {
                                  "size":  "962",
-                                 "mtime":  "639179167820666903",
+                                 "mtime":  "639183378491251670",
                                  "hash":  "DAB845891A434B080CC1FAE3A60FD1A536900F7C11B6976ECEE663A13C76A5F8"
                              },
-    "data/ROMs/gg/Captain America and the Avengers (USA, Europe).gg":  {
-                                                                           "size":  "262144",
-                                                                           "mtime":  "628147764000000000",
-                                                                           "hash":  "CD23081E3742AA52A58D802368E2DEC7BEB0E324CFFCC8DC02F22D49D6F74111"
-                                                                       },
+    "apps/dj/www/dj-planner.js.gz":  {
+                                         "size":  "6194",
+                                         "mtime":  "639177438536265217",
+                                         "hash":  "791644C730C467DA86B42ED11E3A196A3D086EE7A0F9F8C1485CA6BE0AFB3366"
+                                     },
     "www/shell/index.html.gz":  {
                                     "size":  "8494",
-                                    "mtime":  "639179167820726852",
+                                    "mtime":  "639183378491351695",
                                     "hash":  "AF4221999668985175D87E3C92571FC08A9E0DB85C1510682D4A4FD8075F1350"
                                 },
     "apps/agent/www/agent.js":  {
@@ -5229,11 +5259,11 @@
                                     "mtime":  "639178332079777478",
                                     "hash":  "F80A41ACA2A073CA975990971C0EF4BF6ACE287AB1D412633D883C91D858D96F"
                                 },
-    "apps/ssh/www/i18n.en.json.gz":  {
-                                         "size":  "942",
-                                         "mtime":  "639177438537721753",
-                                         "hash":  "061E1EB1E369DE79E19D386679F71F7E7BDD31572CCFF388F79540E66CC80058"
-                                     },
+    "data/ROMs/gg/Last Action Hero (USA, Europe).gg":  {
+                                                           "size":  "262144",
+                                                           "mtime":  "631289697420000000",
+                                                           "hash":  "0F3A4D900BE149B057356ECB5E46D71094CF4F25D78CB57F13A0F1C70725C6B3"
+                                                       },
     "data/ROMs/gg/Aerial Assault (World) (v1.1).gg":  {
                                                           "size":  "131072",
                                                           "mtime":  "629906942400000000",
@@ -5259,16 +5289,16 @@
                                       "mtime":  "639178337767671204",
                                       "hash":  "9977EAC94A2B6AB6A4EB4AD295E561B03D6F4F986F84D4DBFC3BEC5B85D08189"
                                   },
-    "apps/anima/local/akb5-unify-cert.mjs":  {
-                                                 "size":  "4303",
-                                                 "mtime":  "639164764076972949",
-                                                 "hash":  "548D0499FA6530BB6435FACED299DA6C223EC06557A606FDE73FDC6BF807E383"
-                                             },
-    "apps/spreadsheet/www/copilot/sheet-actions.js":  {
-                                                          "size":  "9365",
-                                                          "mtime":  "639163859370243483",
-                                                          "hash":  "162CA10457B7F1B8CFF59DA4414B9FA18268454F5190AC8C4243B66A1E02EA4B"
-                                                      },
+    "apps/anima/www/forge/download-manager.js.gz":  {
+                                                        "size":  "3156",
+                                                        "mtime":  "639179167816535854",
+                                                        "hash":  "E64133BA5110F2A353B6C1DCA0A5C2630195749AF3705226EBB27D9EC14D3B9C"
+                                                    },
+    "apps/nearby/manifest.json":  {
+                                      "size":  "856",
+                                      "mtime":  "639176739327557307",
+                                      "hash":  "787E1CB810BED7BDF4C5714C047BBB339DB5101FBE889458F9BA270443763F11"
+                                  },
     "apps/tasks/manifest.json":  {
                                      "size":  "773",
                                      "mtime":  "639163825698219356",
@@ -5389,11 +5419,11 @@
                                             "mtime":  "639166843937733301",
                                             "hash":  "8890DA6AF463BA455AF6BA774265753CF7ACD9EB9DC3C76D1535E8759748F5B8"
                                         },
-    "data/anima/akb5/countries.bin":  {
-                                          "size":  "474220",
-                                          "mtime":  "639164779938018077",
-                                          "hash":  "CAD54ACFE73081E734337B1D51BF0EA660AC21BBE53E33AEDE3B7482BB4F1C8A"
-                                      },
+    "apps/mail/www/i18n.en.json":  {
+                                       "size":  "1393",
+                                       "mtime":  "639183219047568867",
+                                       "hash":  "025693EE2B701919D85CAE4A87515254FA2F04609A1A94A84E95E1384C111F5B"
+                                   },
     "apps/recorder/manifest.json":  {
                                         "size":  "856",
                                         "mtime":  "639163835294726536",
@@ -5504,6 +5534,11 @@
                                          "mtime":  "639166539408162760",
                                          "hash":  "E1E66D549B90EC5E1B7151281555BAD4BC82E7384F2CCDA83110479F7264926C"
                                      },
+    "apps/mail/manifest.json":  {
+                                    "size":  "626",
+                                    "mtime":  "639183212078106151",
+                                    "hash":  "FE57CC52FB6D08E9CEC2D52CE8E7C3FEB1807DD9A2C5603B4EC3BF830CA19511"
+                                },
     "apps/miei-fatti/manifest.json":  {
                                           "size":  "791",
                                           "mtime":  "639164555670334617",
@@ -5519,6 +5554,11 @@
                                               "mtime":  "639177438537933129",
                                               "hash":  "748182BB49045E4CCA9806C0971D3D09E206343422C8C6BC357D14A925CAC25B"
                                           },
+    "data/ROMs/gg/Tom and Jerry - The Movie (USA, Europe).gg":  {
+                                                                    "size":  "262144",
+                                                                    "mtime":  "629759787200000000",
+                                                                    "hash":  "7B0C81CFCED846D057BE73CD3805C0FA3E160E241531D16E862F37DEDF130204"
+                                                                },
     "apps/spreadsheet/test.mjs.gz":  {
                                          "size":  "1076",
                                          "mtime":  "639177438537574809",
@@ -5539,6 +5579,11 @@
                                        "mtime":  "639167216468247369",
                                        "hash":  "6D4E71279028557EDDAAFB1ED7FF71DFE0B422DABA1A0EE34FCA9C931D735CC4"
                                    },
+    "data/anima/akb5/programming.bin":  {
+                                            "size":  "285606",
+                                            "mtime":  "639164780266776946",
+                                            "hash":  "B5B39C60779CBF5F0DADBEADF33EFE654A7337383CA0CC91570F161FEB7CAB58"
+                                        },
     "apps/recorder/www/index.html.gz":  {
                                             "size":  "17839",
                                             "mtime":  "639181560266966274",
@@ -5565,9 +5610,9 @@
                                                                                  "hash":  "65203B3673D6C26166CBFE5D1148DF812B1F9A57F7A4CB12E165A85FA7309758"
                                                                              },
     "system/registry/apps.json":  {
-                                      "size":  "7409",
-                                      "mtime":  "639177397740402535",
-                                      "hash":  "CEBCC5863A9A4319282CB09F547C735213B276CAF5F3A775C777081D2C08C294"
+                                      "size":  "10230",
+                                      "mtime":  "639183213581566511",
+                                      "hash":  "2ECB07782061447FA5B9356D7B9F0F8280909F9380F2FFFBC8B1C7EBAACAFA05"
                                   },
     "apps/code-runner/www/nucleo-run.js":  {
                                                "size":  "16789",
@@ -5619,11 +5664,11 @@
                                              "mtime":  "633891273980000000",
                                              "hash":  "4D980CA46A83CD127312DBC445ED1A83E97ED7A8026DCE6FDD22A01B1895781B"
                                          },
-    "data/report.txt":  {
-                            "size":  "0",
-                            "mtime":  "639160277740597671",
-                            "hash":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
-                        },
+    "system/registry/manual/touch.info":  {
+                                              "size":  "2136",
+                                              "mtime":  "639160333359376181",
+                                              "hash":  "C8BB2CEF708CF91AAC67A5424DF8F1288F9E0CACDEB8ECE6DF5FCBD92151D31F"
+                                          },
     "data/ROMs/gg/Samurai Shodown (USA, Europe).gg":  {
                                                           "size":  "524288",
                                                           "mtime":  "630786856520000000",
@@ -5669,11 +5714,11 @@
                                                        "mtime":  "639163409029754441",
                                                        "hash":  "BCEF35542668983EA5EA257514312C9486C1E6B0FE520DAFE3121983901E4B01"
                                                    },
-    "apps/dj/www/dj-planner.js.gz":  {
-                                         "size":  "6194",
-                                         "mtime":  "639177438536265217",
-                                         "hash":  "791644C730C467DA86B42ED11E3A196A3D086EE7A0F9F8C1485CA6BE0AFB3366"
-                                     },
+    "data/ROMs/gg/Taz in Escape from Mars (USA, Europe).gg":  {
+                                                                  "size":  "524288",
+                                                                  "mtime":  "627385752000000000",
+                                                                  "hash":  "0495BE34D90060733DF6BD6A7126E85A36B41BBD461B8E749D7EB34520B94DC2"
+                                                              },
     "apps/games/www/nucleo-play.js.gz":  {
                                              "size":  "8324",
                                              "mtime":  "639177438536621049",
@@ -5734,11 +5779,11 @@
                                                          "mtime":  "627385752000000000",
                                                          "hash":  "B19A326E2D19697F4FBA02AB5CB0F1BBA334D4B197D247A66D5DD609F9599540"
                                                      },
-    "data/ROMs/gg/Tom and Jerry - The Movie (USA, Europe).gg":  {
-                                                                    "size":  "262144",
-                                                                    "mtime":  "629759787200000000",
-                                                                    "hash":  "7B0C81CFCED846D057BE73CD3805C0FA3E160E241531D16E862F37DEDF130204"
-                                                                },
+    "apps/agent/www/app-ops.js.gz":  {
+                                         "size":  "3904",
+                                         "mtime":  "639178338837380138",
+                                         "hash":  "5B5C3B7DF8F6C1658BD58AADC406856A9591D42B9214B003424031E7947233E2"
+                                     },
     "apps/agent/www/app-review.js":  {
                                          "size":  "3800",
                                          "mtime":  "639178330093166093",
@@ -5759,11 +5804,11 @@
                                                                                     "mtime":  "630715401600000000",
                                                                                     "hash":  "DCD5FE5F6CE3C22536C2C200A7F4C3CC43F0DE02F892FB15A5C987E12A67DAEB"
                                                                                 },
-    "system/registry/manual/uname.info":  {
-                                              "size":  "1941",
-                                              "mtime":  "639160333359444911",
-                                              "hash":  "77B282741AEEC7BF7893AFDEDB31AEB29C8C8BFD3A2EA04734797735CC3C705B"
-                                          },
+    "apps/anima/www/forge/sd-model-loader.js.gz":  {
+                                                       "size":  "2006",
+                                                       "mtime":  "639179167816686178",
+                                                       "hash":  "D870960C30DC89507C75C308EBFA924293CA93D008FD0798F8B64A1BF4AF04D7"
+                                                   },
     "apps/ssh/www/icon.svg":  {
                                   "size":  "582",
                                   "mtime":  "639166053700509601",
@@ -5771,7 +5816,7 @@
                               },
     "www/shell/i18n/shell.en.json.gz":  {
                                             "size":  "2121",
-                                            "mtime":  "639179167820706861",
+                                            "mtime":  "639183378491321636",
                                             "hash":  "5E87D54DC35D1FA3EC5532C257920ABA1A81CDBEEFFD35F23CB9193EC06DCEEE"
                                         },
     "data/ROMs/gg/Bonkers Wax Up! (USA, Europe).gg":  {
@@ -5804,21 +5849,21 @@
                                                    "mtime":  "628147764000000000",
                                                    "hash":  "FC8006C2FD43DD3FAD39AFD3544A75555BAF63395F22E38039FB5CAC2BFBAF83"
                                                },
-    "data/ROMs/gg/Tale Spin (USA, Europe).gg":  {
-                                                    "size":  "262144",
-                                                    "mtime":  "627385752000000000",
-                                                    "hash":  "B91B04C541C3B842EA4A22B562D979C8BF2C4D48A5DEEADED4850A67E52E28B6"
-                                                },
+    "apps/anima/www/vosk/vosk.js.gz":  {
+                                           "size":  "2348492",
+                                           "mtime":  "639179167820644056",
+                                           "hash":  "B16DA0B17CEE5BDB2860DA5342E8D183CFA06094CB1FF90E9E6844AB73E661F4"
+                                       },
     "apps/dj/www/_test_engine.html":  {
                                           "size":  "3961",
                                           "mtime":  "639165298453284620",
                                           "hash":  "DACFCC4510805D90129D0E0603B98B5E8ABA34D5B007F95ADB88D1EBA05B77F4"
                                       },
-    "apps/dictation/www/asr.js.gz":  {
-                                         "size":  "4135",
-                                         "mtime":  "639177438536138587",
-                                         "hash":  "A61368D43E61E24A33CF9EF71EE904DC30960FA6D2D850778686FDFED2D5F9C4"
-                                     },
+    "apps/mail/www/i18n.it.json":  {
+                                       "size":  "1486",
+                                       "mtime":  "639183219109689906",
+                                       "hash":  "EC5666C0A72F4EC88CA6B59C38571DDA19D0B6EC597EFC44DFA4EF79F16A74ED"
+                                   },
     "data/anima/akb5/electronics-reference.bin":  {
                                                       "size":  "10192",
                                                       "mtime":  "639164779953490819",
@@ -5859,21 +5904,21 @@
                                                  "mtime":  "639169758684268857",
                                                  "hash":  "0C40CCCCCC41A55999232E641CF3FF25ABC45FF208CD8044EFFA73999069869F"
                                              },
-    "apps/games/www/games/pong3d.js.gz":  {
-                                              "size":  "7882",
-                                              "mtime":  "639177524099000245",
-                                              "hash":  "B29183DAF47C5D8D410E11C6DF77F321266EC76FA367DC404289720108BB6037"
-                                          },
+    "apps/anima/www/vosk/models/vosk-model-small-it-0.4.tar.gz.001":  {
+                                                                          "size":  "7340032",
+                                                                          "mtime":  "639169871579223554",
+                                                                          "hash":  "129F4D40C15CE9578DD31A2F8DD5564878A6F512E57B2E8DA9C59346355E9D60"
+                                                                      },
     "www/shell/nucleo-i18n.js.gz":  {
                                         "size":  "7054",
-                                        "mtime":  "639179167820762011",
+                                        "mtime":  "639183378491381734",
                                         "hash":  "B17F582452E282EBA21F8EC0C4FD210FFB39EC6B729A0DDE8967668D6151F279"
                                     },
-    "apps/calculator/www/i18n.it.json":  {
-                                             "size":  "47",
-                                             "mtime":  "639166771322294587",
-                                             "hash":  "EEA230ED6FB03A93F19EA482CFCFF249ECE0990691A103CA65BA779DAC4C493B"
-                                         },
+    "data/ROMs/gg/RoboCop 3 (USA, Europe).gg":  {
+                                                    "size":  "262144",
+                                                    "mtime":  "630375156000000000",
+                                                    "hash":  "9238A8DEE1A8154900E30C69F989768584B012B1A58E3B2D096BF4059C73441A"
+                                                },
     "apps/ir-remote/www/icon.svg":  {
                                         "size":  "1310",
                                         "mtime":  "639166821086834096",
@@ -5889,11 +5934,11 @@
                                                "mtime":  "639164773327561116",
                                                "hash":  "1D8F79726FB620276CA4B2DE06DDC12F9419590D8DC1760589CB66A55D1AF359"
                                            },
-    "data/ROMs/gg/Shining Force II - The Sword of Hajya (USA, Europe).gg":  {
-                                                                                "size":  "524288",
-                                                                                "mtime":  "628148556940000000",
-                                                                                "hash":  "6B01D9FA1ED91CEF5CFD878156CE5755A1D00522A746155AFFA05E576DD795B4"
-                                                                            },
+    "apps/mail/www/i18n.en.json.gz":  {
+                                          "size":  "632",
+                                          "mtime":  "639183378492284306",
+                                          "hash":  "E10443C4D789127501D40DACCA49DC88ABE1A59D5E4FD8B9E5033A0FB63265C9"
+                                      },
     "apps/anima/local/src/anima_solve.c":  {
                                                "size":  "147216",
                                                "mtime":  "639164414854393860",
@@ -5949,11 +5994,16 @@
                                "mtime":  "639163905083941725",
                                "hash":  "BFFB5AF22BA361604AC8FBC7095F0EA8019D7F6A68D698217EDC533DE2683A58"
                            },
-    "apps/video-studio/www/i18n.it.json":  {
-                                               "size":  "1627",
-                                               "mtime":  "639166772078154566",
-                                               "hash":  "F5FF9713F1A4DD337EA817A51B2FF7512416127BBC86BFC95D964748D883664F"
-                                           },
+    "data/ROMs/gg/Asterix and the Great Rescue (USA).gg":  {
+                                                               "size":  "524288",
+                                                               "mtime":  "631826502360000000",
+                                                               "hash":  "3C16B36BAE742572914CB30E2150038AA397AA5EF32DA472EB8172D8559DE483"
+                                                           },
+    "apps/mail/www/icon.svg.gz":  {
+                                      "size":  "375",
+                                      "mtime":  "639183378492294324",
+                                      "hash":  "48BC7F5F7B8F2E079DBD1B88953835232B138A4034662532F91850506EABA9A9"
+                                  },
     "data/Videos/Wallace e Gromit - Una Fantastica Gita.nfv":  {
                                                                    "size":  "88028235",
                                                                    "mtime":  "639163877663751424",
@@ -5969,11 +6019,11 @@
                                                       "mtime":  "639166341248372076",
                                                       "hash":  "3E690AC7D180B0AADF0891BEA39EEC643E29E2D3E75C99B18689518665F69BA6"
                                                   },
-    "apps/anima/www/forge/vendor/lib-manifest.json.gz":  {
-                                                             "size":  "559",
-                                                             "mtime":  "639179167816696170",
-                                                             "hash":  "A51ABC577EFD052A97DF3AA67C4F9BAFCA1B4B350B7A88D99B11414C884DC6ED"
-                                                         },
+    "apps/anima/local/src/nucleo_anima_profile.h":  {
+                                                        "size":  "1580",
+                                                        "mtime":  "639163085982182647",
+                                                        "hash":  "F444B638D5A7471476827F6CC0AE4C27D4850ADF7AAF233E67385D4D18F59B63"
+                                                    },
     "apps/dj/www/dj-engine.js.gz":  {
                                         "size":  "4139",
                                         "mtime":  "639177438536203671",
@@ -5984,11 +6034,11 @@
                                              "mtime":  "639177438535638548",
                                              "hash":  "DBB4012BCD2F94307E681912B1969C56A43A20AE2D73E305AB53B693683E9D1D"
                                          },
-    "data/ROMs/gg/Asterix and the Great Rescue (USA).gg":  {
-                                                               "size":  "524288",
-                                                               "mtime":  "631826502360000000",
-                                                               "hash":  "3C16B36BAE742572914CB30E2150038AA397AA5EF32DA472EB8172D8559DE483"
-                                                           },
+    "apps/voice-manager/www/icon.svg":  {
+                                            "size":  "1104",
+                                            "mtime":  "639166947662943256",
+                                            "hash":  "EA5463D97116B82B35E30283CF2CAD490E9FFADB24DDC7304C70B330C27F77EE"
+                                        },
     "data/ROMs/gg/Monster Truck Wars (USA, Europe).gg":  {
                                                              "size":  "262144",
                                                              "mtime":  "630786833920000000",

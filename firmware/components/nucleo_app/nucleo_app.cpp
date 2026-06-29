@@ -257,6 +257,7 @@ extern "C" void nucleo_register_voice(void);
 extern "C" void nucleo_register_voicelab(void);
 extern "C" void nucleo_register_ssh(void);
 extern "C" void nucleo_register_wifi(void);
+extern "C" void nucleo_register_mail(void);   // SMTP mail client (Gmail/Outlook/Yahoo/iCloud)
 extern "C" void nucleo_register_ir(void);
 extern "C" void nucleo_register_link(void);   // "Vicino" — device-to-device file/command transfer
 extern "C" void nucleo_register_swarm(void);  // "Sciame" — ESP-NOW swarm presence + ping (nucleo_mesh)
@@ -293,7 +294,7 @@ void nucleo_app_register_builtins(void)
 {
     nucleo_register_anima();                                                    // hoisted to Home top-level (launcher_build_menu); its "Tools" category is ignored
     nucleo_register_clock(); nucleo_register_weather(); nucleo_register_torch(); nucleo_register_calc(); nucleo_register_qr(); nucleo_register_pixelfix(); nucleo_register_files();
-    nucleo_register_calendar(); nucleo_register_notify(); nucleo_register_notepad(); nucleo_register_usb(); nucleo_register_usbkbd(); nucleo_register_ir(); nucleo_register_alarm();  // alarm on BOTH boards (mic-only on non-ADV)
+    nucleo_register_calendar(); nucleo_register_notify(); nucleo_register_notepad(); nucleo_register_mail(); nucleo_register_usb(); nucleo_register_usbkbd(); nucleo_register_ir(); nucleo_register_alarm();  // alarm on BOTH boards (mic-only on non-ADV)
     nucleo_register_radio(); nucleo_register_player(); nucleo_register_video(); nucleo_register_photos(); nucleo_register_recorder(); nucleo_register_micspec();  // Media
     nucleo_register_reactor(); nucleo_register_constellations(); nucleo_register_sandgarden(); nucleo_register_slots(); nucleo_register_poker(); nucleo_register_pinball(); nucleo_register_pong(); nucleo_register_tanks(); nucleo_register_tankduel(); nucleo_register_brawler(); nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake();   // Games
     if (nucleo_ui_is_adv()) { nucleo_register_level(); nucleo_register_goniometer(); nucleo_register_pedometer(); }  // Hardware (ADV-only): BMI270 measuring tools

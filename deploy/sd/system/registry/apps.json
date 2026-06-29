@@ -1,45 +1,474 @@
 {
   "schema": 1,
   "installed": [
-    { "id": "file-commander",   "version": "0.1.0", "path": "/apps/file-commander",   "enabled": true, "autostart": true,  "permissions": ["storage.shared", "storage.app", "system.events", "system.notify", "device.keyboard"] },
-    { "id": "notepad",          "version": "0.1.0", "path": "/apps/notepad",          "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard"] },
-    { "id": "photo-viewer",     "version": "0.1.0", "path": "/apps/photo-viewer",     "enabled": true, "autostart": false, "permissions": ["storage.shared", "device.display"] },
-    { "id": "media-player",     "version": "0.1.0", "path": "/apps/media-player",     "enabled": true, "autostart": false, "permissions": ["storage.shared", "device.audio", "power.budget"] },
-    { "id": "radio",            "version": "1.0.0", "path": "/apps/radio",            "enabled": true, "autostart": false, "permissions": ["storage.shared", "device.audio"] },
-    { "id": "video-player",     "version": "0.1.0", "path": "/apps/video-player",     "enabled": true, "autostart": false, "permissions": ["storage.shared"] },
-    { "id": "video-studio",     "version": "0.1.0", "path": "/apps/video-studio",     "enabled": true, "autostart": false, "permissions": ["storage.shared"] },
-    { "id": "automation-studio","version": "0.1.0", "path": "/apps/automation-studio","enabled": true, "autostart": true,  "permissions": ["storage.app", "system.events", "system.notify", "device.keyboard", "device.ir", "power.budget"] },
-    { "id": "ir-remote",        "version": "0.1.0", "path": "/apps/ir-remote",        "enabled": true, "autostart": false, "permissions": ["storage.app", "system.events", "device.ir"] },
-    { "id": "swarm",            "version": "0.1.0", "path": "/apps/swarm",            "enabled": false, "autostart": false, "permissions": ["system.events", "system.clipboard", "net.ble", "mesh.peer"] },
-    { "id": "settings",         "version": "0.1.0", "path": "/apps/settings",         "enabled": true, "autostart": false, "permissions": ["system.events", "net.wifi", "net.ble", "power.budget"] },
-    { "id": "log-viewer",       "version": "0.1.0", "path": "/apps/log-viewer",       "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events"] },
-    { "id": "system-monitor",   "version": "0.1.0", "path": "/apps/system-monitor",   "enabled": true, "autostart": false, "permissions": ["system.events"] },
-    { "id": "calculator",       "version": "0.1.0", "path": "/apps/calculator",       "enabled": true, "autostart": false, "permissions": [] },
-    { "id": "clock",            "version": "0.1.0", "path": "/apps/clock",            "enabled": true, "autostart": false, "permissions": [] },
-    { "id": "calendar",         "version": "0.1.0", "path": "/apps/calendar",         "enabled": true, "autostart": false, "permissions": ["storage.shared"] },
-    { "id": "dosbox",           "version": "0.1.0", "path": "/apps/dosbox",           "enabled": true, "autostart": false, "permissions": ["storage.shared"] },
-    { "id": "dos-importer",     "version": "0.1.0", "path": "/apps/dos-importer",     "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.notify"] },
-    { "id": "recorder",         "version": "0.1.0", "path": "/apps/recorder",         "enabled": true, "autostart": false, "permissions": ["storage.shared", "device.audio"] },
-    { "id": "dictation",        "version": "0.1.0", "path": "/apps/dictation",        "enabled": true, "autostart": false, "permissions": ["storage.shared", "device.audio", "device.display"] },
-    { "id": "voice-manager",    "version": "0.2.0", "path": "/apps/voice-manager",    "enabled": true, "autostart": false, "permissions": ["storage.shared", "device.audio"] },
-    { "id": "recycle-bin",      "version": "0.1.0", "path": "/apps/recycle-bin",      "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events"] },
-    { "id": "updates",          "version": "0.1.0", "path": "/apps/updates",          "enabled": true, "autostart": false, "permissions": ["system.events", "net.wifi"] },
-    { "id": "anima",            "version": "0.1.0", "path": "/apps/anima",            "enabled": true, "autostart": false, "permissions": ["system.events", "device.keyboard"] },
-    { "id": "agent",            "version": "0.1.0", "path": "/apps/agent",            "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "system.notify", "device.keyboard"] },
-    { "id": "code-runner",      "version": "0.1.0", "path": "/apps/code-runner",      "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "system.notify", "device.keyboard"] },
-    { "id": "terminal",         "version": "0.1.0", "path": "/apps/terminal",         "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard"] },
-    { "id": "ssh",              "version": "0.1.0", "path": "/apps/ssh",              "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard"] },
-    { "id": "tasks",            "version": "0.1.0", "path": "/apps/tasks",            "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard"] },
-    { "id": "wifi-scanner",     "version": "0.1.0", "path": "/apps/wifi-scanner",     "enabled": true, "autostart": false, "permissions": ["net.wifi", "system.events", "device.display"] },
-    { "id": "help",             "version": "0.1.0", "path": "/apps/help",             "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard"] },
-    { "id": "browser",          "version": "0.1.0", "path": "/apps/browser",          "enabled": true, "autostart": false, "permissions": ["system.events"] },
-    { "id": "groq-chat",        "version": "0.1.0", "path": "/apps/groq-chat",        "enabled": true, "autostart": false, "permissions": ["system.events", "device.keyboard"] },
-    { "id": "paint",            "version": "1.0.0", "path": "/apps/paint",            "enabled": true, "autostart": false, "permissions": ["storage.shared", "device.keyboard"] },
-    { "id": "spreadsheet",      "version": "0.1.0", "path": "/apps/spreadsheet",      "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard"] },
-    { "id": "archive-manager",  "version": "1.0.0", "path": "/apps/archive-manager",  "enabled": true, "autostart": false, "permissions": ["storage.shared"] },
-    { "id": "miei-fatti",       "version": "0.1.0", "path": "/apps/miei-fatti",       "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard"] },
-    { "id": "games",            "version": "0.1.0", "path": "/apps/games",            "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "device.keyboard"] },
-    { "id": "nearby",           "version": "0.1.0", "path": "/apps/nearby",           "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events", "system.notify", "mesh.peer", "net.wifi"] },
-    { "id": "qr",               "version": "0.1.0", "path": "/apps/qr",               "enabled": true, "autostart": false, "permissions": ["storage.shared", "system.events"] }
+    {
+      "id": "file-commander",
+      "version": "0.1.0",
+      "path": "/apps/file-commander",
+      "enabled": true,
+      "autostart": true,
+      "permissions": [
+        "storage.shared",
+        "storage.app",
+        "system.events",
+        "system.notify",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "notepad",
+      "version": "0.1.0",
+      "path": "/apps/notepad",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "photo-viewer",
+      "version": "0.1.0",
+      "path": "/apps/photo-viewer",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "device.display"
+      ]
+    },
+    {
+      "id": "media-player",
+      "version": "0.1.0",
+      "path": "/apps/media-player",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "device.audio",
+        "power.budget"
+      ]
+    },
+    {
+      "id": "radio",
+      "version": "1.0.0",
+      "path": "/apps/radio",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "device.audio"
+      ]
+    },
+    {
+      "id": "video-player",
+      "version": "0.1.0",
+      "path": "/apps/video-player",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared"
+      ]
+    },
+    {
+      "id": "video-studio",
+      "version": "0.1.0",
+      "path": "/apps/video-studio",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared"
+      ]
+    },
+    {
+      "id": "automation-studio",
+      "version": "0.1.0",
+      "path": "/apps/automation-studio",
+      "enabled": true,
+      "autostart": true,
+      "permissions": [
+        "storage.app",
+        "system.events",
+        "system.notify",
+        "device.keyboard",
+        "device.ir",
+        "power.budget"
+      ]
+    },
+    {
+      "id": "ir-remote",
+      "version": "0.1.0",
+      "path": "/apps/ir-remote",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.app",
+        "system.events",
+        "device.ir"
+      ]
+    },
+    {
+      "id": "swarm",
+      "version": "0.1.0",
+      "path": "/apps/swarm",
+      "enabled": false,
+      "autostart": false,
+      "permissions": [
+        "system.events",
+        "system.clipboard",
+        "net.ble",
+        "mesh.peer"
+      ]
+    },
+    {
+      "id": "settings",
+      "version": "0.1.0",
+      "path": "/apps/settings",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "system.events",
+        "net.wifi",
+        "net.ble",
+        "power.budget"
+      ]
+    },
+    {
+      "id": "log-viewer",
+      "version": "0.1.0",
+      "path": "/apps/log-viewer",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events"
+      ]
+    },
+    {
+      "id": "system-monitor",
+      "version": "0.1.0",
+      "path": "/apps/system-monitor",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "system.events"
+      ]
+    },
+    {
+      "id": "calculator",
+      "version": "0.1.0",
+      "path": "/apps/calculator",
+      "enabled": true,
+      "autostart": false,
+      "permissions": []
+    },
+    {
+      "id": "clock",
+      "version": "0.1.0",
+      "path": "/apps/clock",
+      "enabled": true,
+      "autostart": false,
+      "permissions": []
+    },
+    {
+      "id": "calendar",
+      "version": "0.1.0",
+      "path": "/apps/calendar",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared"
+      ]
+    },
+    {
+      "id": "dosbox",
+      "version": "0.1.0",
+      "path": "/apps/dosbox",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared"
+      ]
+    },
+    {
+      "id": "dos-importer",
+      "version": "0.1.0",
+      "path": "/apps/dos-importer",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.notify"
+      ]
+    },
+    {
+      "id": "recorder",
+      "version": "0.1.0",
+      "path": "/apps/recorder",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "device.audio"
+      ]
+    },
+    {
+      "id": "dictation",
+      "version": "0.1.0",
+      "path": "/apps/dictation",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "device.audio",
+        "device.display"
+      ]
+    },
+    {
+      "id": "voice-manager",
+      "version": "0.2.0",
+      "path": "/apps/voice-manager",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "device.audio"
+      ]
+    },
+    {
+      "id": "recycle-bin",
+      "version": "0.1.0",
+      "path": "/apps/recycle-bin",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events"
+      ]
+    },
+    {
+      "id": "updates",
+      "version": "0.1.0",
+      "path": "/apps/updates",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "system.events",
+        "net.wifi"
+      ]
+    },
+    {
+      "id": "anima",
+      "version": "0.1.0",
+      "path": "/apps/anima",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "system.events",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "agent",
+      "version": "0.1.0",
+      "path": "/apps/agent",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events",
+        "system.notify",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "code-runner",
+      "version": "0.1.0",
+      "path": "/apps/code-runner",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events",
+        "system.notify",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "terminal",
+      "version": "0.1.0",
+      "path": "/apps/terminal",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "ssh",
+      "version": "0.1.0",
+      "path": "/apps/ssh",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "tasks",
+      "version": "0.1.0",
+      "path": "/apps/tasks",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "wifi-scanner",
+      "version": "0.1.0",
+      "path": "/apps/wifi-scanner",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "net.wifi",
+        "system.events",
+        "device.display"
+      ]
+    },
+    {
+      "id": "help",
+      "version": "0.1.0",
+      "path": "/apps/help",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "browser",
+      "version": "0.1.0",
+      "path": "/apps/browser",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "system.events"
+      ]
+    },
+    {
+      "id": "groq-chat",
+      "version": "0.1.0",
+      "path": "/apps/groq-chat",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "system.events",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "paint",
+      "version": "1.0.0",
+      "path": "/apps/paint",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "spreadsheet",
+      "version": "0.1.0",
+      "path": "/apps/spreadsheet",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "archive-manager",
+      "version": "1.0.0",
+      "path": "/apps/archive-manager",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared"
+      ]
+    },
+    {
+      "id": "miei-fatti",
+      "version": "0.1.0",
+      "path": "/apps/miei-fatti",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "games",
+      "version": "0.1.0",
+      "path": "/apps/games",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events",
+        "device.keyboard"
+      ]
+    },
+    {
+      "id": "nearby",
+      "version": "0.1.0",
+      "path": "/apps/nearby",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events",
+        "system.notify",
+        "mesh.peer",
+        "net.wifi"
+      ]
+    },
+    {
+      "id": "qr",
+      "version": "0.1.0",
+      "path": "/apps/qr",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.events"
+      ]
+    },
+    {
+      "id": "mail",
+      "version": "1.0.0",
+      "path": "/apps/mail",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "net.wifi",
+        "storage.shared",
+        "system.events"
+      ]
+    }
   ]
 }

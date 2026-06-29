@@ -113,6 +113,7 @@ static const a_alias_t APP_ALIAS[] = {
     { "ble",                { "ble", "bluetooth", "bt", NULL } },
     { "payloads",           { "payload", "payloads", "ducky", "duckyscript", "badusb", "rubber ducky", "hid", NULL } },
     { "weather",            { "meteo", "tempo", "previsioni", "weather", "forecast", "che tempo fa", NULL } },
+    { "mail",               { "mail", "email", "posta", "e-mail", "gmail", "invia mail", "manda mail", "scrivi mail", "send mail", "email", "smtp", NULL } },
 };
 // </gen:app-alias>
 

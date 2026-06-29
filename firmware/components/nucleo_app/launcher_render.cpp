@@ -283,6 +283,16 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
         IFC(cx, cy, s, col); IBX(cx, cy - s, s + 1, 2 * s, bg); IEL(cx, cy, s, s, col);
     } else if (!strcmp(id, "wifi")) {
         for (int i = 0; i < 3; i++) { float yy = cy - s * 0.55f + i * s * 0.55f; IBX(cx - s, yy - Tk * 0.28f, 2 * s, Tk * 0.55f, col); IFC(cx - s * 0.5f + i * s * 0.5f, yy, Tk * 0.85f, col); }
+    } else if (!strcmp(id, "mail")) {
+        // envelope: filled body + V flap drawn in the background colour
+        IRR(cx - s, cy - s * 0.66f, 2 * s, s * 1.32f, s * 0.18f, col);
+        IL(cx - s * 0.86f, cy - s * 0.46f, cx, cy + s * 0.16f, Tk * 0.6f, bg);
+        IL(cx + s * 0.86f, cy - s * 0.46f, cx, cy + s * 0.16f, Tk * 0.6f, bg);
+    } else if (!strcmp(id, "Communication")) {
+        // category: speech bubble with a tail + three dots
+        IRR(cx - s, cy - s * 0.8f, 2 * s, s * 1.28f, s * 0.34f, col);
+        ITR(cx - s * 0.5f, cy + s * 0.3f, cx - s * 0.08f, cy + s * 0.3f, cx - s * 0.62f, cy + s, col);
+        for (int i = -1; i <= 1; i++) IFC(cx + i * s * 0.42f, cy - s * 0.14f, Tk * 0.5f, bg);
     } else if (!strcmp(id, "link")) {
         float a = s * 0.78f;
         IL(cx - a, cy, cx + a, cy - a, Tk * 0.6f, col); IL(cx - a, cy, cx + a, cy + a, Tk * 0.6f, col);

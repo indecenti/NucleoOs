@@ -23,6 +23,7 @@
     "eth:test": "node tools/anima-host/eth-check.mjs",
     "otalisten:test": "node tools/anima-host/ota-listen-check.mjs",
     "ble:test": "node tools/anima-host/ble-check.mjs",
+    "mail:test": "node tools/anima-host/mail-check.mjs",
     "probe:test": "node tools/anima-host/probe-check.mjs",
     "eapol:test": "node tools/anima-host/eapol-check.mjs",
     "portalclone:test": "node tools/anima-host/portalclone-check.mjs",
