@@ -627,6 +627,11 @@ static void close_app(void)
     // the chat), then reboot into the full OS. esp_restart() runs the registered storage-sync shutdown
     // hook (FAT flush), and the cold path on the next boot brings the normal OS back up.
     if (s_solo_active) {
+        // Solo non-game apps (ANIMA, Voice Recorder) reboot on exit with httpd down, so grab their last
+        // frame off the panel here into /data/Screenshots. Games are NOT captured on exit — that would
+        // grab the exit/menu screen; their carousel cover is refreshed from live play in the run loop.
+        if (def && def->id && def->id[0] && !(def->category && !strcmp(def->category, "Games")))
+            gamefront_save_panel_screenshot(def->id);
         if (def && def->on_exit) def->on_exit();
         esp_restart();   // NEVER returns
     }
@@ -1732,11 +1737,22 @@ void nucleo_app_run(void)
                     // saved image, then arm a non-blocking confirm toast (no frozen preview).
                     if (s_shot_req) {
                         s_shot_req = false;
-                        // Full-screen shot from the canvas (which holds this frame) — works for games
-                        // and any canvas app, including in Solo boot (the app owns a fresh-heap canvas).
-                        static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq);
-                        bool ok = gamefront_save_screenshot(nm);
+                        bool ok;
+                        // A game shot updates that game's carousel cover (overwrites); anything else is a
+                        // full-screen capture into /data/Screenshots.
+                        if (def && def->category && !strcmp(def->category, "Games") && def->id && def->id[0])
+                            ok = gamefront_save_canvas_cover(def->id);
+                        else { static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq); ok = gamefront_save_screenshot(nm); }
                         s_shot_toast_ok = ok; s_shot_toast_until = now + 1200;
+                    }
+                    // Keep each game's carousel cover fresh from LIVE gameplay: while a game is foreground,
+                    // snapshot the canvas (cheap RAM read) to its cover every few seconds, skipping the
+                    // first few so the opening menu isn't what sticks. Captures real play, not the exit
+                    // screen — and works in Solo boot (the game owns a fresh-heap canvas here).
+                    if (def && def->category && !strcmp(def->category, "Games") && def->id && def->id[0]) {
+                        static int64_t s_cover_next = 0;
+                        if (s_cover_next == 0)            s_cover_next = now + 6000;   // let the menu pass
+                        else if (now >= s_cover_next)   { s_cover_next = now + 6000; gamefront_save_canvas_cover(def->id); }
                     }
 
                     // Non-blocking confirm toast: draw the pill OVER the live frame (after the save,
@@ -1775,9 +1791,11 @@ void nucleo_app_run(void)
                     // local SD write. Read it later over Wi-Fi via /api/fs once back at the launcher.
                     if (s_shot_req) {
                         s_shot_req = false;
-                        static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq);
-                        bool ok = gamefront_save_panel_screenshot(nm);
-                        nucleo_notify_post("Screenshot", ok ? "Saved to /data/Screenshots" : "Capture failed");
+                        bool ok;
+                        if (def && def->category && !strcmp(def->category, "Games") && def->id && def->id[0])
+                            ok = gamefront_save_panel_cover(def->id);
+                        else { static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq); ok = gamefront_save_panel_screenshot(nm); }
+                        nucleo_notify_post("Screenshot", ok ? "Saved" : "Capture failed");
                     }
                 }
                 // The hint bar sits below the app's clipped blit, so the app frame never

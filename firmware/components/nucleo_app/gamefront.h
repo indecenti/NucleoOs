@@ -26,6 +26,8 @@ bool gamefront_step(void);                                 // animation tick; tr
 bool gamefront_save_cover(const char *id);        // true if the BMP was written
 bool gamefront_save_screenshot(const char *name); // true if the BMP was written (reads the canvas)
 bool gamefront_save_panel_screenshot(const char *name); // reads the PHYSICAL PANEL — works for direct-draw / Solo-mode apps
+bool gamefront_save_panel_cover(const char *id);        // full-frame panel shot AS the carousel cover (/data/GameShots/<id>.bmp, overwrites)
+bool gamefront_save_canvas_cover(const char *id);       // cheap RAM-read cover from the live canvas, scaled to fit the hero box (overwrites)
 
 // Called when a game closes: refresh its .bmp cover from the last composited frame (overwrite), so
 // exiting on the frame you like sets the cover. Skips only if a curated .png/.jpg is present.
