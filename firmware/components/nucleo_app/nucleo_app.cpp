@@ -246,6 +246,7 @@ extern "C" void nucleo_register_usbkbd(void);
 extern "C" void nucleo_register_torch(void);
 extern "C" void nucleo_register_evilportal(void);
 extern "C" void nucleo_register_wifiatk(void);
+extern "C" void nucleo_register_sniffer(void);
 extern "C" void nucleo_register_beacon(void);
 extern "C" void nucleo_register_ethernet(void);
 extern "C" void nucleo_register_ble(void);
@@ -300,7 +301,7 @@ void nucleo_app_register_builtins(void)
     nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme();    // System
     nucleo_register_wifi(); nucleo_register_remote(); nucleo_register_ssh(); nucleo_register_link(); nucleo_register_swarm();  // Connect
     nucleo_register_voice(); nucleo_register_voicelab();                          // Voice Control + live console
-    nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_ethernet(); nucleo_register_ble(); nucleo_register_payloads();  // Security (authorized testing)
+    nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_sniffer(); nucleo_register_ethernet(); nucleo_register_ble(); nucleo_register_payloads();  // Security (authorized testing)
 }
 
 // ---- app lifecycle ----------------------------------------------------------

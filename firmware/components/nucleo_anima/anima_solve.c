@@ -848,13 +848,18 @@ static bool a_solve_gcdlcm(a_sitem_t *it, int n, bool en, anima_result_t *r)
             if (!strcmp(w,"mcm")||!strcmp(w,"lcm")) l = true;
             // worded forms: "massimo comune divisore", "minimo comune multiplo", "greatest common divisor",
             // "least common multiple" — natural full phrasings, not just the acronyms.
-            if (!strcmp(w,"comune")) comune = true;   if (!strcmp(w,"common")) common = true;
-            if (!strcmp(w,"divisore")) divisore = true; if (!strcmp(w,"divisor")||!strcmp(w,"divisori")) divisor = true;
-            if (!strcmp(w,"multiplo")||!strcmp(w,"multipli")) multiplo = true; if (!strcmp(w,"multiple")) multiple = true;
+            if (!strcmp(w,"comune")) comune = true;
+            if (!strcmp(w,"common")) common = true;
+            if (!strcmp(w,"divisore")) divisore = true;
+            if (!strcmp(w,"divisor")||!strcmp(w,"divisori")) divisor = true;
+            if (!strcmp(w,"multiplo")||!strcmp(w,"multipli")) multiplo = true;
+            if (!strcmp(w,"multiple")) multiple = true;
         }
     }
-    if (comune && divisore) g = true;   if (common && divisor) g = true;
-    if (comune && multiplo) l = true;   if (common && multiple) l = true;
+    if (comune && divisore) g = true;
+    if (common && divisor) g = true;
+    if (comune && multiplo) l = true;
+    if (common && multiple) l = true;
     if (!(g || l) || nn < 2) return false;
     if (nums[0] != (double)(long long)nums[0] || nums[1] != (double)(long long)nums[1]) return false;
     long long A = (long long)nums[0], B = (long long)nums[1], gg = a_gcd_ll(A, B);

@@ -105,6 +105,18 @@ const char *nucleo_wifiatk_karma_ssid(int i);       // "" out of range
 int         nucleo_wifiatk_karma_hits(int i);       // how many probes named this SSID
 int         nucleo_wifiatk_karma_rssi(int i);       // strongest signal seen (dBm, ~proximity)
 
+// ---- WiFi sniffer: promiscuous capture to a .pcap on SD --------------------
+// Start capturing 802.11 frames to /sd/sniffer/cap-NNN.pcap. mode: 0 all, 1 beacon, 2 probe,
+// 3 EAPOL (handshakes), 4 deauth/disassoc. channel: 0 = hop the band, 1..13 = fixed. Returns 0 on
+// success, <0 on failure. Open in Wireshark / hcxpcapngtool. snaplen 256 (headers + EAPOL).
+int         nucleo_wifiatk_sniffer_start(int mode, int channel);
+void        nucleo_wifiatk_sniffer_stop(void);
+bool        nucleo_wifiatk_sniffer_running(void);
+unsigned    nucleo_wifiatk_sniffer_pkts(void);      // frames written this session
+unsigned    nucleo_wifiatk_sniffer_drops(void);     // frames dropped (queue full / SD too slow)
+int         nucleo_wifiatk_sniffer_channel(void);   // channel currently captured
+const char *nucleo_wifiatk_sniffer_path(void);      // .pcap path ("" if not started)
+
 #ifdef __cplusplus
 }
 #endif

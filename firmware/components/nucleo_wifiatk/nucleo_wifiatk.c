@@ -40,6 +40,7 @@
 #include "esp_rom_sys.h"           // esp_rom_delay_us — drain pacing when the TX queue backs up
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"     // sniffer: RX callback -> queue -> writer task
 #include "nucleo_exclusive.h"   // NX_NET_APP reclaim (~70KB); symbols resolve at link like the externs below
 #include "nucleo_wifiatk_probe.h"   // pure probe-request SSID parser (KARMA lure)
 #include "nucleo_wifiatk_eapol.h"   // pure WPA 4-way-handshake classifier (handshake capture)
@@ -1175,3 +1176,150 @@ int         nucleo_wifiatk_karma_count(void)   { return s_km ? s_km_n : 0; }
 const char *nucleo_wifiatk_karma_ssid(int i)   { return (s_km && i >= 0 && i < s_km_n) ? s_km[i].ssid : ""; }
 int         nucleo_wifiatk_karma_hits(int i)   { return (s_km && i >= 0 && i < s_km_n) ? s_km[i].hits : 0; }
 int         nucleo_wifiatk_karma_rssi(int i)   { return (s_km && i >= 0 && i < s_km_n) ? s_km[i].rssi : 0; }
+
+// ---- WiFi sniffer: promiscuous -> PCAP on SD --------------------------------
+// The Bruce/Marauder-style packet sniffer. The RX callback stays ISR-light: it filters by mode and
+// pushes a snaplen-capped copy onto a queue; a dedicated writer task drains the queue to a standard
+// .pcap on SD (DLT 105) and hops channels between drains. cb never touches SD; the file is opened on
+// the UI task at start and closed there at stop (after the writer has exited). Drops are counted, not
+// hidden. snaplen 256 keeps RAM bounded and still carries headers + EAPOL (so captures stay crackable).
+#define SNF_SNAPLEN 256
+#define SNF_QDEPTH  24
+typedef struct { uint8_t buf[SNF_SNAPLEN]; uint16_t len; } snf_item_t;
+static QueueHandle_t  s_snf_q;
+static TaskHandle_t   s_snf_task;
+static volatile bool  s_snf_run;
+static volatile uint32_t s_snf_pkts, s_snf_drop;
+static volatile int   s_snf_ch;
+static int            s_snf_mode;      // 0 all, 1 beacon, 2 probe, 3 EAPOL, 4 deauth/disassoc
+static bool           s_snf_hop;
+static char           s_snf_path[64];
+static FILE          *s_snf_file;      // opened/closed on the UI task; written by the writer task
+
+static bool snf_match(const uint8_t *p, int len, wifi_promiscuous_pkt_type_t type)
+{
+    if (s_snf_mode == 0) return true;                          // all
+    uint8_t sub = (p[0] >> 4) & 0xF;
+    if (s_snf_mode == 1) return type == WIFI_PKT_MGMT && sub == 0x8;             // beacon
+    if (s_snf_mode == 2) return type == WIFI_PKT_MGMT && sub == 0x4;             // probe request
+    if (s_snf_mode == 3) return type == WIFI_PKT_DATA && wifiatk_eapol_msg(p, len) > 0;  // EAPOL
+    if (s_snf_mode == 4) return type == WIFI_PKT_MGMT && (sub == 0xC || sub == 0xA);     // deauth/disassoc
+    return true;
+}
+
+static void snf_cb(void *buf, wifi_promiscuous_pkt_type_t type)
+{
+    if (!s_snf_q) return;
+    if (type != WIFI_PKT_MGMT && type != WIFI_PKT_DATA) return;
+    const wifi_promiscuous_pkt_t *pkt = (const wifi_promiscuous_pkt_t *)buf;
+    int len = pkt->rx_ctrl.sig_len;
+    if (len < 10) return;
+    if (!snf_match(pkt->payload, len, type)) return;
+    snf_item_t it;
+    int n = len > SNF_SNAPLEN ? SNF_SNAPLEN : len;
+    memcpy(it.buf, pkt->payload, n); it.len = (uint16_t)n;
+    if (xQueueSend(s_snf_q, &it, 0) == pdTRUE) s_snf_pkts++;    // promiscuous cb runs in the WiFi TASK
+    else s_snf_drop++;                                          // queue full -> drop, count it
+}
+
+static void snf_write_global_header(FILE *f)
+{
+    uint32_t gh[] = { 0xA1B2C3D4u, 0, 0, 0, 65535u, 105u };    // magic, [ver], zone, sig, snaplen, DLT 105
+    uint16_t ver[] = { 2, 4 };
+    fwrite(&gh[0], 4, 1, f); fwrite(ver, 2, 2, f); fwrite(&gh[1], 4, 4, f);
+}
+
+static void snf_writer(void *arg)
+{
+    (void)arg;
+    static const uint8_t CH[] = { 1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13 };
+    int ci = 0;
+    int64_t last_hop = esp_timer_get_time(), last_flush = last_hop;
+    snf_item_t it;
+    while (s_snf_run) {
+        if (xQueueReceive(s_snf_q, &it, pdMS_TO_TICKS(50)) == pdTRUE && s_snf_file) {
+            uint32_t t = (uint32_t)(esp_timer_get_time() / 1000000);
+            uint32_t rh[] = { t, 0, it.len, it.len };
+            fwrite(rh, 4, 4, s_snf_file);
+            fwrite(it.buf, 1, it.len, s_snf_file);
+        }
+        int64_t now = esp_timer_get_time();
+        if (s_snf_hop && now - last_hop > 300000) {            // ~300 ms/channel
+            last_hop = now;
+            s_snf_ch = CH[ci++ % 13];
+            esp_wifi_set_channel((uint8_t)s_snf_ch, WIFI_SECOND_CHAN_NONE);
+        }
+        if (s_snf_file && now - last_flush > 2000000) { fflush(s_snf_file); last_flush = now; }
+    }
+    if (s_snf_file) fflush(s_snf_file);
+    s_snf_task = NULL;
+    vTaskDelete(NULL);
+}
+
+int nucleo_wifiatk_sniffer_start(int mode, int channel)
+{
+    if (s_run || s_bcn_run || s_km_busy || s_snf_run) return -1;
+    if (mode < 0 || mode > 4) mode = 0;
+    s_snf_mode = mode;
+    s_snf_hop = (channel <= 0);
+    s_snf_ch = s_snf_hop ? 1 : (channel > 13 ? 13 : channel);
+    s_snf_pkts = 0; s_snf_drop = 0;
+
+    if (!s_snf_q) s_snf_q = xQueueCreate(SNF_QDEPTH, sizeof(snf_item_t));
+    if (!s_snf_q) return -2;
+    xQueueReset(s_snf_q);
+
+    mkdir("/sd/sniffer", 0775);
+    for (int i = 0; i < 1000; i++) {
+        snprintf(s_snf_path, sizeof s_snf_path, "/sd/sniffer/cap-%03d.pcap", i);
+        FILE *t = fopen(s_snf_path, "rb");
+        if (!t) break;                                         // free index
+        fclose(t);
+    }
+    s_snf_file = fopen(s_snf_path, "wb");
+    if (!s_snf_file) { s_snf_path[0] = 0; return -3; }
+    snf_write_global_header(s_snf_file);
+
+    nucleo_setup_suspend();
+    nucleo_exclusive_enter(NX_NET_APP, NULL);
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    esp_wifi_start();
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    esp_wifi_set_channel((uint8_t)s_snf_ch, WIFI_SECOND_CHAN_NONE);
+    esp_wifi_set_promiscuous_rx_cb(snf_cb);
+    wifi_promiscuous_filter_t filt = { .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA };
+    esp_wifi_set_promiscuous_filter(&filt);
+    if (esp_wifi_set_promiscuous(true) != ESP_OK) {
+        esp_wifi_set_promiscuous_rx_cb(NULL);
+        fclose(s_snf_file); s_snf_file = NULL; s_snf_path[0] = 0;
+        nucleo_setup_apply_network(); nucleo_exclusive_exit();
+        return -4;
+    }
+    s_snf_run = true;
+    if (xTaskCreate(snf_writer, "wa_sniff", 4096, NULL, 5, &s_snf_task) != pdPASS) {
+        s_snf_run = false;
+        esp_wifi_set_promiscuous(false); esp_wifi_set_promiscuous_rx_cb(NULL);
+        fclose(s_snf_file); s_snf_file = NULL; s_snf_path[0] = 0;
+        nucleo_setup_apply_network(); nucleo_exclusive_exit();
+        return -5;
+    }
+    return 0;
+}
+
+void nucleo_wifiatk_sniffer_stop(void)
+{
+    if (!s_snf_run) return;
+    s_snf_run = false;
+    for (int i = 0; i < 40 && s_snf_task; i++) vTaskDelay(pdMS_TO_TICKS(25));   // writer drains + exits
+    esp_wifi_set_promiscuous(false);
+    esp_wifi_set_promiscuous_rx_cb(NULL);
+    if (s_snf_file) { fclose(s_snf_file); s_snf_file = NULL; }   // close on the UI task (writer is gone)
+    nucleo_setup_apply_network();
+    nucleo_exclusive_exit();
+}
+
+bool        nucleo_wifiatk_sniffer_running(void) { return s_snf_run; }
+unsigned    nucleo_wifiatk_sniffer_pkts(void)    { return s_snf_pkts; }
+unsigned    nucleo_wifiatk_sniffer_drops(void)   { return s_snf_drop; }
+int         nucleo_wifiatk_sniffer_channel(void) { return s_snf_ch; }
+const char *nucleo_wifiatk_sniffer_path(void)    { return s_snf_path; }
