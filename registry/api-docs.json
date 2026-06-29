@@ -1,6 +1,5 @@
 {
   "_comment": "Hand-authored prose for the Help app's Mini Swagger. Keyed by 'METHOD /path'. The route list itself is NOT edited here — it is discovered from the firmware C source by tools/gen-api-spec.mjs, which merges this prose and writes registry/web-api-spec.json. Add a 'hidden': true to a value to keep it documented but unpublished. Run: npm run gen:api (or npm run gen:api:check to detect drift).",
-
   "GET /api/status": {
     "it": {
       "title": "GET /api/status - Stato Dispositivo",
@@ -16,7 +15,6 @@
     },
     "params": []
   },
-
   "GET /api/apps": {
     "it": {
       "title": "GET /api/apps - Applicazioni Installate",
@@ -32,7 +30,6 @@
     },
     "params": []
   },
-
   "GET /api/associations": {
     "it": {
       "title": "GET /api/associations - Associazioni File",
@@ -48,7 +45,6 @@
     },
     "params": []
   },
-
   "GET /api/logs": {
     "it": {
       "title": "GET /api/logs - Log di Sistema",
@@ -64,7 +60,6 @@
     },
     "params": []
   },
-
   "GET /api/heap": {
     "it": {
       "title": "GET /api/heap - Diagnostica Heap",
@@ -80,7 +75,6 @@
     },
     "params": []
   },
-
   "GET /api/cpu": {
     "it": {
       "title": "GET /api/cpu - Carico CPU per Core",
@@ -96,7 +90,6 @@
     },
     "params": []
   },
-
   "GET /api/diag": {
     "it": {
       "title": "GET /api/diag - Diagnosi Salute Consolidata",
@@ -112,7 +105,6 @@
     },
     "params": []
   },
-
   "GET /api/wifi/scan": {
     "it": {
       "title": "GET /api/wifi/scan - Scansione Reti Wi-Fi",
@@ -128,7 +120,6 @@
     },
     "params": []
   },
-
   "GET /api/wifi/known": {
     "it": {
       "title": "GET /api/wifi/known - Reti Wi-Fi Salvate",
@@ -144,7 +135,6 @@
     },
     "params": []
   },
-
   "POST /api/wifi/join": {
     "it": {
       "title": "POST /api/wifi/join - Connetti e Memorizza Rete",
@@ -159,13 +149,32 @@
       "details": "Auth-gated (mutates the radio and stores credentials). Empty/absent password = open network; for an already-saved network the stored password is reused. Response {\"ok\":true,\"ip\":\"...\"} or {\"ok\":false}."
     },
     "params": [
-      { "name": "ssid", "type": "text", "required": true, "default": "",
-        "it": { "description": "Nome della rete (SSID)" }, "en": { "description": "Network name (SSID)" } },
-      { "name": "pass", "type": "text", "required": false, "default": "",
-        "it": { "description": "Password (vuota per rete aperta o rete già salvata)" }, "en": { "description": "Password (empty for an open or already-saved network)" } }
+      {
+        "name": "ssid",
+        "type": "text",
+        "required": true,
+        "default": "",
+        "it": {
+          "description": "Nome della rete (SSID)"
+        },
+        "en": {
+          "description": "Network name (SSID)"
+        }
+      },
+      {
+        "name": "pass",
+        "type": "text",
+        "required": false,
+        "default": "",
+        "it": {
+          "description": "Password (vuota per rete aperta o rete già salvata)"
+        },
+        "en": {
+          "description": "Password (empty for an open or already-saved network)"
+        }
+      }
     ]
   },
-
   "POST /api/wifi/forget": {
     "it": {
       "title": "POST /api/wifi/forget - Dimentica Rete",
@@ -180,13 +189,32 @@
       "details": "Auth-gated. Response {\"ok\":true}."
     },
     "params": [
-      { "name": "ssid", "type": "text", "required": false, "default": "",
-        "it": { "description": "SSID della rete da dimenticare" }, "en": { "description": "SSID of the network to forget" } },
-      { "name": "all", "type": "checkbox", "required": false, "default": "",
-        "it": { "description": "Se vero, dimentica tutte le reti salvate" }, "en": { "description": "If true, forget all saved networks" } }
+      {
+        "name": "ssid",
+        "type": "text",
+        "required": false,
+        "default": "",
+        "it": {
+          "description": "SSID della rete da dimenticare"
+        },
+        "en": {
+          "description": "SSID of the network to forget"
+        }
+      },
+      {
+        "name": "all",
+        "type": "checkbox",
+        "required": false,
+        "default": "",
+        "it": {
+          "description": "Se vero, dimentica tutte le reti salvate"
+        },
+        "en": {
+          "description": "If true, forget all saved networks"
+        }
+      }
     ]
   },
-
   "POST /api/ota": {
     "it": {
       "title": "POST /api/ota - Aggiornamento Firmware OTA",
@@ -206,12 +234,15 @@
         "type": "textarea",
         "required": true,
         "default": "",
-        "it": { "description": "Immagine firmware binaria grezza (inviare un file .bin, non testo)" },
-        "en": { "description": "Raw binary firmware image (send a .bin file, not text)" }
+        "it": {
+          "description": "Immagine firmware binaria grezza (inviare un file .bin, non testo)"
+        },
+        "en": {
+          "description": "Raw binary firmware image (send a .bin file, not text)"
+        }
       }
     ]
   },
-
   "POST /api/reboot": {
     "it": {
       "title": "POST /api/reboot - Riavvia il Dispositivo",
@@ -227,7 +258,6 @@
     },
     "params": []
   },
-
   "GET /api/anima": {
     "it": {
       "title": "GET /api/anima - Query Assistente ANIMA",
@@ -247,28 +277,39 @@
         "type": "text",
         "required": true,
         "default": "che ora è",
-        "it": { "description": "Frase o domanda da porre all'assistente locale" },
-        "en": { "description": "Natural language query for the local NLP engine" }
+        "it": {
+          "description": "Frase o domanda da porre all'assistente locale"
+        },
+        "en": {
+          "description": "Natural language query for the local NLP engine"
+        }
       },
       {
         "name": "lang",
         "type": "text",
         "required": false,
         "default": "it",
-        "it": { "description": "Forza la lingua dell'assistente ('it' o 'en')" },
-        "en": { "description": "Overrides active assistant language ('it' or 'en')" }
+        "it": {
+          "description": "Forza la lingua dell'assistente ('it' o 'en')"
+        },
+        "en": {
+          "description": "Overrides active assistant language ('it' or 'en')"
+        }
       },
       {
         "name": "reset",
         "type": "text",
         "required": false,
         "default": "0",
-        "it": { "description": "Imposta a 1 per cancellare la memoria contestuale temporanea del dialogo" },
-        "en": { "description": "Set to 1 to clean temporary conversation context buffers" }
+        "it": {
+          "description": "Imposta a 1 per cancellare la memoria contestuale temporanea del dialogo"
+        },
+        "en": {
+          "description": "Set to 1 to clean temporary conversation context buffers"
+        }
       }
     ]
   },
-
   "GET /api/anima/verify": {
     "it": {
       "title": "GET /api/anima/verify - Verifica Affermazione (ANIMA Forge)",
@@ -288,36 +329,51 @@
         "type": "text",
         "required": false,
         "default": "fact",
-        "it": { "description": "Tipo di affermazione da verificare" },
-        "en": { "description": "Kind of claim being verified" }
+        "it": {
+          "description": "Tipo di affermazione da verificare"
+        },
+        "en": {
+          "description": "Kind of claim being verified"
+        }
       },
       {
         "name": "key",
         "type": "text",
         "required": true,
         "default": "einstein",
-        "it": { "description": "Entità/soggetto su cui verificare" },
-        "en": { "description": "Entity/subject to verify against" }
+        "it": {
+          "description": "Entità/soggetto su cui verificare"
+        },
+        "en": {
+          "description": "Entity/subject to verify against"
+        }
       },
       {
         "name": "asserted",
         "type": "text",
         "required": true,
         "default": "fisico",
-        "it": { "description": "Valore affermato da confrontare con la conoscenza locale" },
-        "en": { "description": "Asserted value to compare against local knowledge" }
+        "it": {
+          "description": "Valore affermato da confrontare con la conoscenza locale"
+        },
+        "en": {
+          "description": "Asserted value to compare against local knowledge"
+        }
       },
       {
         "name": "lang",
         "type": "text",
         "required": false,
         "default": "it",
-        "it": { "description": "Lingua dell'evidenza ('it' o 'en')" },
-        "en": { "description": "Evidence language ('it' or 'en')" }
+        "it": {
+          "description": "Lingua dell'evidenza ('it' o 'en')"
+        },
+        "en": {
+          "description": "Evidence language ('it' or 'en')"
+        }
       }
     ]
   },
-
   "GET /api/game/costellazioni/save": {
     "it": {
       "title": "GET /api/game/costellazioni/save - Salvataggio Costellazioni",
@@ -333,7 +389,6 @@
     },
     "params": []
   },
-
   "POST /api/game/costellazioni/save": {
     "it": {
       "title": "POST /api/game/costellazioni/save - Scrivi Salvataggio Costellazioni",
@@ -349,7 +404,6 @@
     },
     "params": []
   },
-
   "GET /api/game/costellazioni/gentest": {
     "it": {
       "title": "GET /api/game/costellazioni/gentest - Parità Generatore (debug)",
@@ -369,20 +423,27 @@
         "type": "text",
         "required": false,
         "default": "0",
-        "it": { "description": "Seed del generatore procedurale" },
-        "en": { "description": "Procedural generator seed" }
+        "it": {
+          "description": "Seed del generatore procedurale"
+        },
+        "en": {
+          "description": "Procedural generator seed"
+        }
       },
       {
         "name": "sector",
         "type": "text",
         "required": false,
         "default": "0",
-        "it": { "description": "Indice del settore da generare" },
-        "en": { "description": "Sector index to generate" }
+        "it": {
+          "description": "Indice del settore da generare"
+        },
+        "en": {
+          "description": "Sector index to generate"
+        }
       }
     ]
   },
-
   "GET /api/anima/caps": {
     "it": {
       "title": "GET /api/anima/caps - Capacità IA Configurate",
@@ -398,7 +459,6 @@
     },
     "params": []
   },
-
   "POST /api/anima/l1": {
     "it": {
       "title": "POST /api/anima/l1 - Policy Cervello Offline L1",
@@ -418,12 +478,15 @@
         "type": "textarea",
         "required": false,
         "default": "{\n  \"mode\": \"auto\"\n}",
-        "it": { "description": "Corpo JSON con mode (\"auto\"|\"on\"|\"off\") e/o browserLLM (bool)" },
-        "en": { "description": "JSON body with mode (\"auto\"|\"on\"|\"off\") and/or browserLLM (bool)" }
+        "it": {
+          "description": "Corpo JSON con mode (\"auto\"|\"on\"|\"off\") e/o browserLLM (bool)"
+        },
+        "en": {
+          "description": "JSON body with mode (\"auto\"|\"on\"|\"off\") and/or browserLLM (bool)"
+        }
       }
     ]
   },
-
   "GET /api/tts": {
     "it": {
       "title": "GET /api/tts - Stato Voce On-Device",
@@ -439,7 +502,6 @@
     },
     "params": []
   },
-
   "POST /api/tts": {
     "it": {
       "title": "POST /api/tts - Imposta/Test Voce On-Device",
@@ -459,12 +521,15 @@
         "type": "textarea",
         "required": false,
         "default": "{\n  \"say\": \"ciao\",\n  \"lang\": \"it\"\n}",
-        "it": { "description": "Corpo JSON con enabled (bool), say (testo da pronunciare) e lang (\"it\"|\"en\")" },
-        "en": { "description": "JSON body with enabled (bool), say (text to speak) and lang (\"it\"|\"en\")" }
+        "it": {
+          "description": "Corpo JSON con enabled (bool), say (testo da pronunciare) e lang (\"it\"|\"en\")"
+        },
+        "en": {
+          "description": "JSON body with enabled (bool), say (text to speak) and lang (\"it\"|\"en\")"
+        }
       }
     ]
   },
-
   "GET /api/proxy": {
     "it": {
       "title": "GET /api/proxy - Proxy Web Same-Origin",
@@ -484,12 +549,15 @@
         "type": "text",
         "required": true,
         "default": "https://example.com",
-        "it": { "description": "URL http(s) assoluto da recuperare (verrà codificato)" },
-        "en": { "description": "Absolute http(s) URL to fetch (will be URL-encoded)" }
+        "it": {
+          "description": "URL http(s) assoluto da recuperare (verrà codificato)"
+        },
+        "en": {
+          "description": "Absolute http(s) URL to fetch (will be URL-encoded)"
+        }
       }
     ]
   },
-
   "GET /api/llm": {
     "it": {
       "title": "GET /api/llm - Proxy LLM (elenco modelli)",
@@ -509,12 +577,15 @@
         "type": "text",
         "required": true,
         "default": "https://api.groq.com/openai/v1/models",
-        "it": { "description": "Endpoint LLM https compatibile OpenAI" },
-        "en": { "description": "OpenAI-compatible https LLM endpoint" }
+        "it": {
+          "description": "Endpoint LLM https compatibile OpenAI"
+        },
+        "en": {
+          "description": "OpenAI-compatible https LLM endpoint"
+        }
       }
     ]
   },
-
   "POST /api/llm": {
     "it": {
       "title": "POST /api/llm - Proxy LLM (chat completions)",
@@ -534,20 +605,27 @@
         "type": "text",
         "required": true,
         "default": "https://api.groq.com/openai/v1/chat/completions",
-        "it": { "description": "Endpoint chat completions https compatibile OpenAI" },
-        "en": { "description": "OpenAI-compatible https chat completions endpoint" }
+        "it": {
+          "description": "Endpoint chat completions https compatibile OpenAI"
+        },
+        "en": {
+          "description": "OpenAI-compatible https chat completions endpoint"
+        }
       },
       {
         "name": "body",
         "type": "textarea",
         "required": false,
         "default": "{\n  \"model\": \"llama-3.1-8b-instant\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"ciao\"}]\n}",
-        "it": { "description": "Corpo JSON della richiesta di chat (max 32 KB)" },
-        "en": { "description": "Chat request JSON body (max 32 KB)" }
+        "it": {
+          "description": "Corpo JSON della richiesta di chat (max 32 KB)"
+        },
+        "en": {
+          "description": "Chat request JSON body (max 32 KB)"
+        }
       }
     ]
   },
-
   "GET /api/transcribe": {
     "it": {
       "title": "GET /api/transcribe - Trascrivi Registrazione (Whisper)",
@@ -567,28 +645,39 @@
         "type": "text",
         "required": true,
         "default": "/data/Recordings/rec.mp3",
-        "it": { "description": "File audio sotto /data/Recordings/ (.mp3 o .wav)" },
-        "en": { "description": "Audio file under /data/Recordings/ (.mp3 or .wav)" }
+        "it": {
+          "description": "File audio sotto /data/Recordings/ (.mp3 o .wav)"
+        },
+        "en": {
+          "description": "Audio file under /data/Recordings/ (.mp3 or .wav)"
+        }
       },
       {
         "name": "lang",
         "type": "text",
         "required": false,
         "default": "auto",
-        "it": { "description": "Lingua attesa ('auto', 'it', 'en'...)" },
-        "en": { "description": "Expected language ('auto', 'it', 'en'...)" }
+        "it": {
+          "description": "Lingua attesa ('auto', 'it', 'en'...)"
+        },
+        "en": {
+          "description": "Expected language ('auto', 'it', 'en'...)"
+        }
       },
       {
         "name": "summarize",
         "type": "text",
         "required": false,
         "default": "1",
-        "it": { "description": "1 per generare anche il riassunto, 0 per la sola trascrizione" },
-        "en": { "description": "1 to also generate the summary, 0 for transcription only" }
+        "it": {
+          "description": "1 per generare anche il riassunto, 0 per la sola trascrizione"
+        },
+        "en": {
+          "description": "1 to also generate the summary, 0 for transcription only"
+        }
       }
     ]
   },
-
   "GET /api/fs/list": {
     "it": {
       "title": "GET /api/fs/list - Elenca Directory",
@@ -608,86 +697,306 @@
         "type": "text",
         "required": true,
         "default": "/",
-        "it": { "description": "Percorso della directory da scansionare (es. /, /data, /system)" },
-        "en": { "description": "SD Card target folder path to list (e.g. /, /data, /system)" }
+        "it": {
+          "description": "Percorso della directory da scansionare (es. /, /data, /system)"
+        },
+        "en": {
+          "description": "SD Card target folder path to list (e.g. /, /data, /system)"
+        }
       }
     ]
   },
-
   "GET /api/link/peers": {
-    "it": { "title": "GET /api/link/peers - Dispositivi Vicini", "description": "Elenca i dispositivi scoperti via ESP-NOW dall'app Vicino, più il nome e il canale di questo device.", "synopsis": "GET /api/link/peers", "details": "Avvia il motore ESP-NOW al primo accesso. Ogni peer riporta indice, nome, MAC e protocollo ('nucleo' o 'bruce')." },
-    "en": { "title": "GET /api/link/peers - Nearby Devices", "description": "Lists the devices discovered over ESP-NOW by the Vicino app, plus this device's name and channel.", "synopsis": "GET /api/link/peers", "details": "Lazily starts the ESP-NOW engine on first call. Each peer carries index, name, MAC and protocol ('nucleo' or 'bruce')." },
+    "it": {
+      "title": "GET /api/link/peers - Dispositivi Vicini",
+      "description": "Elenca i dispositivi scoperti via ESP-NOW dall'app Vicino, più il nome e il canale di questo device.",
+      "synopsis": "GET /api/link/peers",
+      "details": "Avvia il motore ESP-NOW al primo accesso. Ogni peer riporta indice, nome, MAC e protocollo ('nucleo' o 'bruce')."
+    },
+    "en": {
+      "title": "GET /api/link/peers - Nearby Devices",
+      "description": "Lists the devices discovered over ESP-NOW by the Vicino app, plus this device's name and channel.",
+      "synopsis": "GET /api/link/peers",
+      "details": "Lazily starts the ESP-NOW engine on first call. Each peer carries index, name, MAC and protocol ('nucleo' or 'bruce')."
+    },
     "params": []
   },
-
   "GET /api/link/status": {
-    "it": { "title": "GET /api/link/status - Stato Trasferimento", "description": "Stato del trasferimento in corso: direzione, protocollo, stato, byte fatti/totali, velocità, nome file e peer.", "synopsis": "GET /api/link/status", "details": "Campo state: 2/3 = in corso, 4 = completato, 5 = errore (con reason)." },
-    "en": { "title": "GET /api/link/status - Transfer Status", "description": "Live status of the current transfer: direction, protocol, state, done/total bytes, rate, file name and peer.", "synopsis": "GET /api/link/status", "details": "state field: 2/3 = running, 4 = done, 5 = failed (with reason)." },
+    "it": {
+      "title": "GET /api/link/status - Stato Trasferimento",
+      "description": "Stato del trasferimento in corso: direzione, protocollo, stato, byte fatti/totali, velocità, nome file e peer.",
+      "synopsis": "GET /api/link/status",
+      "details": "Campo state: 2/3 = in corso, 4 = completato, 5 = errore (con reason)."
+    },
+    "en": {
+      "title": "GET /api/link/status - Transfer Status",
+      "description": "Live status of the current transfer: direction, protocol, state, done/total bytes, rate, file name and peer.",
+      "synopsis": "GET /api/link/status",
+      "details": "state field: 2/3 = running, 4 = done, 5 = failed (with reason)."
+    },
     "params": []
   },
-
   "GET /api/link/offer": {
-    "it": { "title": "GET /api/link/offer - Offerta in Arrivo", "description": "Restituisce l'eventuale offerta di file in arrivo in attesa di decisione (nome, mittente, dimensione).", "synopsis": "GET /api/link/offer", "details": "{ pending, name, from, size }. Rispondi con POST /api/link/offer." },
-    "en": { "title": "GET /api/link/offer - Incoming Offer", "description": "Returns the pending incoming file offer awaiting a decision (name, sender, size), if any.", "synopsis": "GET /api/link/offer", "details": "{ pending, name, from, size }. Answer with POST /api/link/offer." },
+    "it": {
+      "title": "GET /api/link/offer - Offerta in Arrivo",
+      "description": "Restituisce l'eventuale offerta di file in arrivo in attesa di decisione (nome, mittente, dimensione).",
+      "synopsis": "GET /api/link/offer",
+      "details": "{ pending, name, from, size }. Rispondi con POST /api/link/offer."
+    },
+    "en": {
+      "title": "GET /api/link/offer - Incoming Offer",
+      "description": "Returns the pending incoming file offer awaiting a decision (name, sender, size), if any.",
+      "synopsis": "GET /api/link/offer",
+      "details": "{ pending, name, from, size }. Answer with POST /api/link/offer."
+    },
     "params": []
   },
-
   "GET /api/link/cmd": {
-    "it": { "title": "GET /api/link/cmd - Comando in Arrivo", "description": "Restituisce l'eventuale comando remoto in arrivo in attesa di conferma (testo e mittente).", "synopsis": "GET /api/link/cmd", "details": "{ pending, cmd, from }. I comandi NON vengono eseguiti senza una conferma esplicita (POST /api/link/cmd/confirm)." },
-    "en": { "title": "GET /api/link/cmd - Incoming Command", "description": "Returns the pending incoming remote command awaiting confirmation (text and sender), if any.", "synopsis": "GET /api/link/cmd", "details": "{ pending, cmd, from }. Commands NEVER run without an explicit confirm (POST /api/link/cmd/confirm)." },
+    "it": {
+      "title": "GET /api/link/cmd - Comando in Arrivo",
+      "description": "Restituisce l'eventuale comando remoto in arrivo in attesa di conferma (testo e mittente).",
+      "synopsis": "GET /api/link/cmd",
+      "details": "{ pending, cmd, from }. I comandi NON vengono eseguiti senza una conferma esplicita (POST /api/link/cmd/confirm)."
+    },
+    "en": {
+      "title": "GET /api/link/cmd - Incoming Command",
+      "description": "Returns the pending incoming remote command awaiting confirmation (text and sender), if any.",
+      "synopsis": "GET /api/link/cmd",
+      "details": "{ pending, cmd, from }. Commands NEVER run without an explicit confirm (POST /api/link/cmd/confirm)."
+    },
     "params": []
   },
-
   "POST /api/link/discover": {
-    "it": { "title": "POST /api/link/discover - Cerca Dispositivi", "description": "Invia un ping di discovery in broadcast; i dispositivi vicini rispondono e popolano l'elenco peer.", "synopsis": "POST /api/link/discover", "details": "Autenticato tramite PIN. Corpo JSON opzionale { proto }." },
-    "en": { "title": "POST /api/link/discover - Discover Devices", "description": "Broadcasts a discovery ping; nearby devices answer and populate the peer list.", "synopsis": "POST /api/link/discover", "details": "Gated by PIN auth. Optional JSON body { proto }." },
-    "params": [ { "name": "proto", "type": "text", "required": false, "default": "nucleo", "it": { "description": "Protocollo: 'nucleo' (evoluto) o 'bruce' (compatibile)" }, "en": { "description": "Protocol: 'nucleo' (evolved) or 'bruce' (compatible)" } } ]
+    "it": {
+      "title": "POST /api/link/discover - Cerca Dispositivi",
+      "description": "Invia un ping di discovery in broadcast; i dispositivi vicini rispondono e popolano l'elenco peer.",
+      "synopsis": "POST /api/link/discover",
+      "details": "Autenticato tramite PIN. Corpo JSON opzionale { proto }."
+    },
+    "en": {
+      "title": "POST /api/link/discover - Discover Devices",
+      "description": "Broadcasts a discovery ping; nearby devices answer and populate the peer list.",
+      "synopsis": "POST /api/link/discover",
+      "details": "Gated by PIN auth. Optional JSON body { proto }."
+    },
+    "params": [
+      {
+        "name": "proto",
+        "type": "text",
+        "required": false,
+        "default": "nucleo",
+        "it": {
+          "description": "Protocollo: 'nucleo' (evoluto) o 'bruce' (compatibile)"
+        },
+        "en": {
+          "description": "Protocol: 'nucleo' (evolved) or 'bruce' (compatible)"
+        }
+      }
+    ]
   },
-
   "POST /api/link/listen": {
-    "it": { "title": "POST /api/link/listen - Ascolta", "description": "Mette il device in ricezione: un'offerta in arrivo verrà segnalata da GET /api/link/offer.", "synopsis": "POST /api/link/listen", "details": "Autenticato tramite PIN. Le offerte in arrivo si rilevano automaticamente per formato (Nucleo o Bruce)." },
-    "en": { "title": "POST /api/link/listen - Listen", "description": "Arms the device for receiving: an incoming offer is surfaced via GET /api/link/offer.", "synopsis": "POST /api/link/listen", "details": "Gated by PIN auth. Inbound offers auto-detect by format (Nucleo or Bruce)." },
-    "params": [ { "name": "proto", "type": "text", "required": false, "default": "nucleo", "it": { "description": "Protocollo preferito" }, "en": { "description": "Preferred protocol" } } ]
+    "it": {
+      "title": "POST /api/link/listen - Ascolta",
+      "description": "Mette il device in ricezione: un'offerta in arrivo verrà segnalata da GET /api/link/offer.",
+      "synopsis": "POST /api/link/listen",
+      "details": "Autenticato tramite PIN. Le offerte in arrivo si rilevano automaticamente per formato (Nucleo o Bruce)."
+    },
+    "en": {
+      "title": "POST /api/link/listen - Listen",
+      "description": "Arms the device for receiving: an incoming offer is surfaced via GET /api/link/offer.",
+      "synopsis": "POST /api/link/listen",
+      "details": "Gated by PIN auth. Inbound offers auto-detect by format (Nucleo or Bruce)."
+    },
+    "params": [
+      {
+        "name": "proto",
+        "type": "text",
+        "required": false,
+        "default": "nucleo",
+        "it": {
+          "description": "Protocollo preferito"
+        },
+        "en": {
+          "description": "Preferred protocol"
+        }
+      }
+    ]
   },
-
   "POST /api/link/send": {
-    "it": { "title": "POST /api/link/send - Invia File", "description": "Avvia l'invio di un file dalla SD a un peer scelto, in streaming (mai l'intero file in RAM).", "synopsis": "POST /api/link/send", "details": "Autenticato tramite PIN. Corpo JSON { peer, path, proto }. Ritorna { ok:false } se occupato o file illeggibile." },
-    "en": { "title": "POST /api/link/send - Send File", "description": "Starts sending a file from SD to a chosen peer, streamed (never the whole file in RAM).", "synopsis": "POST /api/link/send", "details": "Gated by PIN auth. JSON body { peer, path, proto }. Returns { ok:false } if busy or file unreadable." },
+    "it": {
+      "title": "POST /api/link/send - Invia File",
+      "description": "Avvia l'invio di un file dalla SD a un peer scelto, in streaming (mai l'intero file in RAM).",
+      "synopsis": "POST /api/link/send",
+      "details": "Autenticato tramite PIN. Corpo JSON { peer, path, proto }. Ritorna { ok:false } se occupato o file illeggibile."
+    },
+    "en": {
+      "title": "POST /api/link/send - Send File",
+      "description": "Starts sending a file from SD to a chosen peer, streamed (never the whole file in RAM).",
+      "synopsis": "POST /api/link/send",
+      "details": "Gated by PIN auth. JSON body { peer, path, proto }. Returns { ok:false } if busy or file unreadable."
+    },
     "params": [
-      { "name": "peer", "type": "number", "required": true, "default": "0", "it": { "description": "Indice del peer (da GET /api/link/peers)" }, "en": { "description": "Peer index (from GET /api/link/peers)" } },
-      { "name": "path", "type": "text", "required": true, "default": "/data/foto.jpg", "it": { "description": "Percorso del file SD da inviare" }, "en": { "description": "SD file path to send" } },
-      { "name": "proto", "type": "text", "required": false, "default": "nucleo", "it": { "description": "'nucleo' o 'bruce'" }, "en": { "description": "'nucleo' or 'bruce'" } }
+      {
+        "name": "peer",
+        "type": "number",
+        "required": true,
+        "default": "0",
+        "it": {
+          "description": "Indice del peer (da GET /api/link/peers)"
+        },
+        "en": {
+          "description": "Peer index (from GET /api/link/peers)"
+        }
+      },
+      {
+        "name": "path",
+        "type": "text",
+        "required": true,
+        "default": "/data/foto.jpg",
+        "it": {
+          "description": "Percorso del file SD da inviare"
+        },
+        "en": {
+          "description": "SD file path to send"
+        }
+      },
+      {
+        "name": "proto",
+        "type": "text",
+        "required": false,
+        "default": "nucleo",
+        "it": {
+          "description": "'nucleo' o 'bruce'"
+        },
+        "en": {
+          "description": "'nucleo' or 'bruce'"
+        }
+      }
     ]
   },
-
   "POST /api/link/cmd": {
-    "it": { "title": "POST /api/link/cmd - Invia Comando", "description": "Invia un comando testuale a un peer. Il ricevente DEVE confermarlo prima dell'esecuzione (no exec arbitrario).", "synopsis": "POST /api/link/cmd", "details": "Autenticato tramite PIN. Corpo JSON { peer, command, proto }." },
-    "en": { "title": "POST /api/link/cmd - Send Command", "description": "Sends a text command to a peer. The receiver MUST confirm before it runs (no arbitrary exec).", "synopsis": "POST /api/link/cmd", "details": "Gated by PIN auth. JSON body { peer, command, proto }." },
+    "it": {
+      "title": "POST /api/link/cmd - Invia Comando",
+      "description": "Invia un comando testuale a un peer. Il ricevente DEVE confermarlo prima dell'esecuzione (no exec arbitrario).",
+      "synopsis": "POST /api/link/cmd",
+      "details": "Autenticato tramite PIN. Corpo JSON { peer, command, proto }."
+    },
+    "en": {
+      "title": "POST /api/link/cmd - Send Command",
+      "description": "Sends a text command to a peer. The receiver MUST confirm before it runs (no arbitrary exec).",
+      "synopsis": "POST /api/link/cmd",
+      "details": "Gated by PIN auth. JSON body { peer, command, proto }."
+    },
     "params": [
-      { "name": "peer", "type": "number", "required": true, "default": "0", "it": { "description": "Indice del peer" }, "en": { "description": "Peer index" } },
-      { "name": "command", "type": "text", "required": true, "default": "apri musica", "it": { "description": "Testo del comando" }, "en": { "description": "Command text" } },
-      { "name": "proto", "type": "text", "required": false, "default": "nucleo", "it": { "description": "'nucleo' o 'bruce'" }, "en": { "description": "'nucleo' or 'bruce'" } }
+      {
+        "name": "peer",
+        "type": "number",
+        "required": true,
+        "default": "0",
+        "it": {
+          "description": "Indice del peer"
+        },
+        "en": {
+          "description": "Peer index"
+        }
+      },
+      {
+        "name": "command",
+        "type": "text",
+        "required": true,
+        "default": "apri musica",
+        "it": {
+          "description": "Testo del comando"
+        },
+        "en": {
+          "description": "Command text"
+        }
+      },
+      {
+        "name": "proto",
+        "type": "text",
+        "required": false,
+        "default": "nucleo",
+        "it": {
+          "description": "'nucleo' o 'bruce'"
+        },
+        "en": {
+          "description": "'nucleo' or 'bruce'"
+        }
+      }
     ]
   },
-
   "POST /api/link/cmd/confirm": {
-    "it": { "title": "POST /api/link/cmd/confirm - Conferma Comando", "description": "Conferma (esegue via ANIMA) o scarta il comando remoto in attesa.", "synopsis": "POST /api/link/cmd/confirm", "details": "Autenticato tramite PIN. Corpo JSON { ok: true|false }." },
-    "en": { "title": "POST /api/link/cmd/confirm - Confirm Command", "description": "Confirms (runs via ANIMA) or discards the pending remote command.", "synopsis": "POST /api/link/cmd/confirm", "details": "Gated by PIN auth. JSON body { ok: true|false }." },
-    "params": [ { "name": "ok", "type": "boolean", "required": true, "default": "true", "it": { "description": "true = esegui, false = scarta" }, "en": { "description": "true = run, false = discard" } } ]
+    "it": {
+      "title": "POST /api/link/cmd/confirm - Conferma Comando",
+      "description": "Conferma (esegue via ANIMA) o scarta il comando remoto in attesa.",
+      "synopsis": "POST /api/link/cmd/confirm",
+      "details": "Autenticato tramite PIN. Corpo JSON { ok: true|false }."
+    },
+    "en": {
+      "title": "POST /api/link/cmd/confirm - Confirm Command",
+      "description": "Confirms (runs via ANIMA) or discards the pending remote command.",
+      "synopsis": "POST /api/link/cmd/confirm",
+      "details": "Gated by PIN auth. JSON body { ok: true|false }."
+    },
+    "params": [
+      {
+        "name": "ok",
+        "type": "boolean",
+        "required": true,
+        "default": "true",
+        "it": {
+          "description": "true = esegui, false = scarta"
+        },
+        "en": {
+          "description": "true = run, false = discard"
+        }
+      }
+    ]
   },
-
   "POST /api/link/offer": {
-    "it": { "title": "POST /api/link/offer - Rispondi all'Offerta", "description": "Accetta o rifiuta l'offerta di file in arrivo. Se accettata, riprende un eventuale trasferimento interrotto dal prefisso già ricevuto.", "synopsis": "POST /api/link/offer", "details": "Autenticato tramite PIN. Corpo JSON { accept: true|false }." },
-    "en": { "title": "POST /api/link/offer - Answer Offer", "description": "Accepts or rejects the pending incoming file offer. If accepted, resumes an interrupted transfer from the already-received prefix.", "synopsis": "POST /api/link/offer", "details": "Gated by PIN auth. JSON body { accept: true|false }." },
-    "params": [ { "name": "accept", "type": "boolean", "required": true, "default": "true", "it": { "description": "true = accetta, false = rifiuta" }, "en": { "description": "true = accept, false = reject" } } ]
+    "it": {
+      "title": "POST /api/link/offer - Rispondi all'Offerta",
+      "description": "Accetta o rifiuta l'offerta di file in arrivo. Se accettata, riprende un eventuale trasferimento interrotto dal prefisso già ricevuto.",
+      "synopsis": "POST /api/link/offer",
+      "details": "Autenticato tramite PIN. Corpo JSON { accept: true|false }."
+    },
+    "en": {
+      "title": "POST /api/link/offer - Answer Offer",
+      "description": "Accepts or rejects the pending incoming file offer. If accepted, resumes an interrupted transfer from the already-received prefix.",
+      "synopsis": "POST /api/link/offer",
+      "details": "Gated by PIN auth. JSON body { accept: true|false }."
+    },
+    "params": [
+      {
+        "name": "accept",
+        "type": "boolean",
+        "required": true,
+        "default": "true",
+        "it": {
+          "description": "true = accetta, false = rifiuta"
+        },
+        "en": {
+          "description": "true = accept, false = reject"
+        }
+      }
+    ]
   },
-
   "POST /api/link/cancel": {
-    "it": { "title": "POST /api/link/cancel - Annulla", "description": "Annulla il trasferimento in corso (invio o ricezione).", "synopsis": "POST /api/link/cancel", "details": "Autenticato tramite PIN." },
-    "en": { "title": "POST /api/link/cancel - Cancel", "description": "Cancels the current transfer (send or receive).", "synopsis": "POST /api/link/cancel", "details": "Gated by PIN auth." },
+    "it": {
+      "title": "POST /api/link/cancel - Annulla",
+      "description": "Annulla il trasferimento in corso (invio o ricezione).",
+      "synopsis": "POST /api/link/cancel",
+      "details": "Autenticato tramite PIN."
+    },
+    "en": {
+      "title": "POST /api/link/cancel - Cancel",
+      "description": "Cancels the current transfer (send or receive).",
+      "synopsis": "POST /api/link/cancel",
+      "details": "Gated by PIN auth."
+    },
     "params": []
   },
-
   "GET /api/fs/read": {
     "it": {
       "title": "GET /api/fs/read - Leggi File",
@@ -707,12 +1016,15 @@
         "type": "text",
         "required": true,
         "default": "/system/config/settings.json",
-        "it": { "description": "Percorso del file da leggere sulla scheda SD" },
-        "en": { "description": "SD Card file path to query" }
+        "it": {
+          "description": "Percorso del file da leggere sulla scheda SD"
+        },
+        "en": {
+          "description": "SD Card file path to query"
+        }
       }
     ]
   },
-
   "POST /api/fs/write": {
     "it": {
       "title": "POST /api/fs/write - Scrivi File",
@@ -732,20 +1044,27 @@
         "type": "text",
         "required": true,
         "default": "/data/test_write.txt",
-        "it": { "description": "Percorso di destinazione in cui salvare il file" },
-        "en": { "description": "SD Card target write path" }
+        "it": {
+          "description": "Percorso di destinazione in cui salvare il file"
+        },
+        "en": {
+          "description": "SD Card target write path"
+        }
       },
       {
         "name": "body",
         "type": "textarea",
         "required": false,
         "default": "Scrittura di test da Mini Swagger!",
-        "it": { "description": "Contenuto da salvare nel file" },
-        "en": { "description": "Raw content bytes/string to write to the file" }
+        "it": {
+          "description": "Contenuto da salvare nel file"
+        },
+        "en": {
+          "description": "Raw content bytes/string to write to the file"
+        }
       }
     ]
   },
-
   "POST /api/fs/delete": {
     "it": {
       "title": "POST /api/fs/delete - Rimuovi Risorsa",
@@ -765,12 +1084,15 @@
         "type": "text",
         "required": true,
         "default": "/data/test_write.txt",
-        "it": { "description": "Percorso del file o della cartella vuota da rimuovere" },
-        "en": { "description": "SD Card target path to delete" }
+        "it": {
+          "description": "Percorso del file o della cartella vuota da rimuovere"
+        },
+        "en": {
+          "description": "SD Card target path to delete"
+        }
       }
     ]
   },
-
   "POST /api/fs/mkdir": {
     "it": {
       "title": "POST /api/fs/mkdir - Crea Cartella",
@@ -790,12 +1112,15 @@
         "type": "text",
         "required": true,
         "default": "/data/nuova_cartella",
-        "it": { "description": "Percorso assoluto della cartella da creare" },
-        "en": { "description": "Absolute SD Card folder path to create" }
+        "it": {
+          "description": "Percorso assoluto della cartella da creare"
+        },
+        "en": {
+          "description": "Absolute SD Card folder path to create"
+        }
       }
     ]
   },
-
   "POST /api/fs/move": {
     "it": {
       "title": "POST /api/fs/move - Sposta/Rinomina",
@@ -815,28 +1140,39 @@
         "type": "text",
         "required": true,
         "default": "/data/old.txt",
-        "it": { "description": "Percorso di origine da spostare/rinominare" },
-        "en": { "description": "Source path to move/rename" }
+        "it": {
+          "description": "Percorso di origine da spostare/rinominare"
+        },
+        "en": {
+          "description": "Source path to move/rename"
+        }
       },
       {
         "name": "to",
         "type": "text",
         "required": true,
         "default": "/data/new.txt",
-        "it": { "description": "Percorso di destinazione" },
-        "en": { "description": "Destination path" }
+        "it": {
+          "description": "Percorso di destinazione"
+        },
+        "en": {
+          "description": "Destination path"
+        }
       },
       {
         "name": "overwrite",
         "type": "text",
         "required": false,
         "default": "0",
-        "it": { "description": "1 per sovrascrivere una destinazione esistente" },
-        "en": { "description": "1 to overwrite an existing destination" }
+        "it": {
+          "description": "1 per sovrascrivere una destinazione esistente"
+        },
+        "en": {
+          "description": "1 to overwrite an existing destination"
+        }
       }
     ]
   },
-
   "GET /api/rec/status": {
     "it": {
       "title": "GET /api/rec/status - Stato Registratore",
@@ -852,7 +1188,6 @@
     },
     "params": []
   },
-
   "POST /api/rec/start": {
     "it": {
       "title": "POST /api/rec/start - Avvia Registrazione",
@@ -868,7 +1203,6 @@
     },
     "params": []
   },
-
   "POST /api/rec/stop": {
     "it": {
       "title": "POST /api/rec/stop - Ferma Registrazione",
@@ -884,7 +1218,6 @@
     },
     "params": []
   },
-
   "GET /api/rec/stream": {
     "it": {
       "title": "GET /api/rec/stream - Streaming Microfono Live",
@@ -900,7 +1233,6 @@
     },
     "params": []
   },
-
   "POST /api/voice/learn": {
     "it": {
       "title": "POST /api/voice/learn - Arma Apprendimento Vocale",
@@ -920,12 +1252,15 @@
         "type": "textarea",
         "required": true,
         "default": "{\n  \"word\": \"apri\"\n}",
-        "it": { "description": "Corpo JSON con la parola da apprendere alla prossima utterance" },
-        "en": { "description": "JSON body with the word to learn from the next utterance" }
+        "it": {
+          "description": "Corpo JSON con la parola da apprendere alla prossima utterance"
+        },
+        "en": {
+          "description": "JSON body with the word to learn from the next utterance"
+        }
       }
     ]
   },
-
   "POST /api/voice/always": {
     "it": {
       "title": "POST /api/voice/always - Voce Sempre Attiva",
@@ -945,12 +1280,15 @@
         "type": "textarea",
         "required": true,
         "default": "{\n  \"on\": true\n}",
-        "it": { "description": "Corpo JSON con \"on\" booleano (true = ascolto sempre attivo)" },
-        "en": { "description": "JSON body with boolean \"on\" (true = always listening)" }
+        "it": {
+          "description": "Corpo JSON con \"on\" booleano (true = ascolto sempre attivo)"
+        },
+        "en": {
+          "description": "JSON body with boolean \"on\" (true = always listening)"
+        }
       }
     ]
   },
-
   "POST /api/display": {
     "it": {
       "title": "POST /api/display - Controllo Display",
@@ -970,12 +1308,15 @@
         "type": "text",
         "required": true,
         "default": "1",
-        "it": { "description": "1 accende il display, 0 lo spegne" },
-        "en": { "description": "1 turns the display on, 0 turns it off" }
+        "it": {
+          "description": "1 accende il display, 0 lo spegne"
+        },
+        "en": {
+          "description": "1 turns the display on, 0 turns it off"
+        }
       }
     ]
   },
-
   "POST /api/time/set": {
     "it": {
       "title": "POST /api/time/set - Imposta Orologio",
@@ -995,12 +1336,15 @@
         "type": "textarea",
         "required": true,
         "default": "{\n  \"ts\": 1749500000\n}",
-        "it": { "description": "Corpo JSON con \"ts\" = epoch UNIX in secondi (UTC)" },
-        "en": { "description": "JSON body with \"ts\" = UNIX epoch in seconds (UTC)" }
+        "it": {
+          "description": "Corpo JSON con \"ts\" = epoch UNIX in secondi (UTC)"
+        },
+        "en": {
+          "description": "JSON body with \"ts\" = UNIX epoch in seconds (UTC)"
+        }
       }
     ]
   },
-
   "GET /api/gpio": {
     "it": {
       "title": "GET /api/gpio - Leggi Pin GPIO",
@@ -1020,12 +1364,15 @@
         "type": "text",
         "required": true,
         "default": "0",
-        "it": { "description": "Numero del pin da leggere (ammessi: 0, 1, 2)" },
-        "en": { "description": "Pin number to read (allowed: 0, 1, 2)" }
+        "it": {
+          "description": "Numero del pin da leggere (ammessi: 0, 1, 2)"
+        },
+        "en": {
+          "description": "Pin number to read (allowed: 0, 1, 2)"
+        }
       }
     ]
   },
-
   "POST /api/gpio": {
     "it": {
       "title": "POST /api/gpio - Scrivi Pin GPIO",
@@ -1045,12 +1392,15 @@
         "type": "textarea",
         "required": true,
         "default": "{\n  \"pin\": 2,\n  \"value\": 1\n}",
-        "it": { "description": "Corpo JSON con pin (1 o 2) e value (0 o 1)" },
-        "en": { "description": "JSON body with pin (1 or 2) and value (0 or 1)" }
+        "it": {
+          "description": "Corpo JSON con pin (1 o 2) e value (0 o 1)"
+        },
+        "en": {
+          "description": "JSON body with pin (1 or 2) and value (0 or 1)"
+        }
       }
     ]
   },
-
   "GET /api/ir/db": {
     "it": {
       "title": "GET /api/ir/db - Capacità Trasmettitore IR",
@@ -1066,7 +1416,6 @@
     },
     "params": []
   },
-
   "POST /api/ir/send": {
     "it": {
       "title": "POST /api/ir/send - Trasmetti Comando IR",
@@ -1086,12 +1435,15 @@
         "type": "textarea",
         "required": true,
         "default": "{\n  \"protocol\": \"nec\",\n  \"address\": 4,\n  \"command\": 8\n}",
-        "it": { "description": "Corpo JSON: protocollo (protocol/address/command) oppure RAW (raw/carrier), più repeats opzionale" },
-        "en": { "description": "JSON body: protocol form (protocol/address/command) or RAW form (raw/carrier), plus optional repeats" }
+        "it": {
+          "description": "Corpo JSON: protocollo (protocol/address/command) oppure RAW (raw/carrier), più repeats opzionale"
+        },
+        "en": {
+          "description": "JSON body: protocol form (protocol/address/command) or RAW form (raw/carrier), plus optional repeats"
+        }
       }
     ]
   },
-
   "GET /api/ir/tvbgone": {
     "it": {
       "title": "GET /api/ir/tvbgone - Stato Sweep TV-B-Gone",
@@ -1107,7 +1459,6 @@
     },
     "params": []
   },
-
   "POST /api/ir/tvbgone": {
     "it": {
       "title": "POST /api/ir/tvbgone - Avvia/Ferma TV-B-Gone",
@@ -1127,12 +1478,15 @@
         "type": "textarea",
         "required": false,
         "default": "{\n  \"action\": \"start\",\n  \"region\": \"all\"\n}",
-        "it": { "description": "Corpo JSON con action (start|stop) e region (all|us|eu|asia)" },
-        "en": { "description": "JSON body with action (start|stop) and region (all|us|eu|asia)" }
+        "it": {
+          "description": "Corpo JSON con action (start|stop) e region (all|us|eu|asia)"
+        },
+        "en": {
+          "description": "JSON body with action (start|stop) and region (all|us|eu|asia)"
+        }
       }
     ]
   },
-
   "POST /api/ir/jammer": {
     "it": {
       "title": "POST /api/ir/jammer - Avvia/Ferma Jammer IR",
@@ -1152,12 +1506,15 @@
         "type": "textarea",
         "required": false,
         "default": "{\n  \"action\": \"start\",\n  \"mode\": \"sweep\"\n}",
-        "it": { "description": "Corpo JSON con action (start|stop) e mode (sweep|constant|random)" },
-        "en": { "description": "JSON body with action (start|stop) and mode (sweep|constant|random)" }
+        "it": {
+          "description": "Corpo JSON con action (start|stop) e mode (sweep|constant|random)"
+        },
+        "en": {
+          "description": "JSON body with action (start|stop) and mode (sweep|constant|random)"
+        }
       }
     ]
   },
-
   "GET /api/auth/status": {
     "it": {
       "title": "GET /api/auth/status - Stato Associazione",
@@ -1173,7 +1530,6 @@
     },
     "params": []
   },
-
   "POST /api/pair": {
     "it": {
       "title": "POST /api/pair - Associa PIN Client",
@@ -1193,8 +1549,96 @@
         "type": "textarea",
         "required": true,
         "default": "{\n  \"pin\": \"000000\"\n}",
-        "it": { "description": "Corpo JSON contenente la chiave \"pin\" di 6 cifre" },
-        "en": { "description": "JSON payload containing the 6-digit PIN string parameter" }
+        "it": {
+          "description": "Corpo JSON contenente la chiave \"pin\" di 6 cifre"
+        },
+        "en": {
+          "description": "JSON payload containing the 6-digit PIN string parameter"
+        }
+      }
+    ]
+  },
+  "GET /api/mail/presets": {
+    "it": {
+      "title": "GET /api/mail/presets - Preset Provider Email",
+      "description": "Elenco statico dei preset SMTP (Gmail, Outlook/M365, Yahoo, iCloud, Custom): host, porta, modo TLS e suggerimento. Pubblico.",
+      "synopsis": "GET /api/mail/presets",
+      "details": "Nessuna autenticazione. Risposta {\"presets\":[{name,host,port,tls,hint}]}."
+    },
+    "en": {
+      "title": "GET /api/mail/presets - Email Provider Presets",
+      "description": "Static list of SMTP presets (Gmail, Outlook/M365, Yahoo, iCloud, Custom): host, port, TLS mode and hint. Public.",
+      "synopsis": "GET /api/mail/presets",
+      "details": "No auth. Response {\"presets\":[{name,host,port,tls,hint}]}."
+    }
+  },
+  "GET /api/mail/accounts": {
+    "it": {
+      "title": "GET /api/mail/accounts - Elenco Account (redatto)",
+      "description": "Elenco degli account SMTP configurati, con le password OMESSE (solo has_pass:bool) e l'indice di default.",
+      "synopsis": "GET /api/mail/accounts",
+      "details": "Richiede autenticazione. Risposta {\"accounts\":[{idx,name,host,port,tls,user,from,from_name,has_pass}],\"default\":int}."
+    },
+    "en": {
+      "title": "GET /api/mail/accounts - List Accounts (redacted)",
+      "description": "List of configured SMTP accounts with passwords OMITTED (only has_pass:bool) plus the default index.",
+      "synopsis": "GET /api/mail/accounts",
+      "details": "Auth-gated. Response {\"accounts\":[{idx,name,host,port,tls,user,from,from_name,has_pass}],\"default\":int}."
+    }
+  },
+  "POST /api/mail/accounts": {
+    "it": {
+      "title": "POST /api/mail/accounts - Salva/Elimina Account",
+      "description": "Crea o aggiorna un account SMTP (password write-only: vuota = mantiene quella memorizzata), oppure lo elimina con delete:true. Le credenziali vivono in NVS, mai su SD.",
+      "synopsis": "POST /api/mail/accounts  {idx?,name,host,port,tls,user,pass?,from,from_name,default?,delete?}",
+      "details": "Richiede autenticazione. idx assente = nuovo account. Risponde con l'elenco redatto aggiornato."
+    },
+    "en": {
+      "title": "POST /api/mail/accounts - Save/Delete Account",
+      "description": "Create or update an SMTP account (write-only password: empty = keep stored one), or delete it with delete:true. Credentials live in NVS, never on SD.",
+      "synopsis": "POST /api/mail/accounts  {idx?,name,host,port,tls,user,pass?,from,from_name,default?,delete?}",
+      "details": "Auth-gated. Absent idx = new account. Responds with the updated redacted list."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"name\": \"Gmail\",\n  \"host\": \"smtp.gmail.com\",\n  \"port\": 465,\n  \"user\": \"me@gmail.com\",\n  \"pass\": \"app-password\",\n  \"default\": true\n}",
+        "it": {
+          "description": "Corpo JSON dell'account (vedi sopra); pass vuota mantiene quella salvata; delete:true elimina idx"
+        },
+        "en": {
+          "description": "Account JSON body (see above); empty pass keeps the stored one; delete:true removes idx"
+        }
+      }
+    ]
+  },
+  "POST /api/mail/send": {
+    "it": {
+      "title": "POST /api/mail/send - Invia Email (SMTP/TLS)",
+      "description": "Invia un'email di testo tramite l'account configurato, con SMTP su TLS implicito (porta 465) e AUTH LOGIN. Chiamata bloccante per la durata dello scambio SMTP.",
+      "synopsis": "POST /api/mail/send  {account?,to,subject,body}",
+      "details": "Richiede autenticazione. account assente = account di default. Risposta {\"ok\":bool,\"error\"?:str}; errore -> HTTP 502."
+    },
+    "en": {
+      "title": "POST /api/mail/send - Send Email (SMTP/TLS)",
+      "description": "Sends a plain-text email through the configured account over implicit-TLS SMTP (port 465) with AUTH LOGIN. Blocking call for the duration of the SMTP exchange.",
+      "synopsis": "POST /api/mail/send  {account?,to,subject,body}",
+      "details": "Auth-gated. Absent account = default account. Response {\"ok\":bool,\"error\"?:str}; failure -> HTTP 502."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"to\": \"dest@example.com\",\n  \"subject\": \"Ciao da NucleoOS\",\n  \"body\": \"Inviata dal Cardputer.\"\n}",
+        "it": {
+          "description": "Corpo JSON: to (destinatario), subject (oggetto), body (testo), account (indice, opzionale)"
+        },
+        "en": {
+          "description": "JSON body: to (recipient), subject, body (text), account (index, optional)"
+        }
       }
     ]
   }

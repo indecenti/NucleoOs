@@ -14,6 +14,8 @@
 #include "nucleo_board.h"
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
+#include "nucleo_smtp.h"     // SMTP-over-TLS sender for /api/mail/send
+#include "nucleo_mailcfg.h"  // NVS account store for /api/mail/accounts
 #include "nucleo_eventbus.h"
 #include "nucleo_arb.h"     // heavy-work arbiter: serialize outbound TLS so two fetches can't both OOM
 #include "nucleo_power.h"   // real battery level for /api/status
@@ -1677,6 +1679,156 @@ static esp_err_t tts_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// ---- /api/mail/* : configure SMTP accounts and send mail from the device ----
+// Sending uses stored credentials, so every mail endpoint (except the static preset list)
+// requires a paired session. Passwords are write-only: never echoed back to clients.
+static char *mail_recv_body(httpd_req_t *req, int maxlen, int *outlen) {
+    int blen = req->content_len;
+    if (blen <= 0 || blen > maxlen) return NULL;
+    char *buf = malloc(blen + 1);
+    if (!buf) return NULL;
+    int got = 0, r;
+    while (got < blen) { r = httpd_req_recv(req, buf + got, blen - got); if (r <= 0) break; got += r; }
+    buf[got] = 0;
+    if (outlen) *outlen = got;
+    return buf;
+}
+static const char *mail_jstr(cJSON *o, const char *k) {
+    cJSON *v = cJSON_GetObjectItem(o, k);
+    return cJSON_IsString(v) ? v->valuestring : NULL;
+}
+static void mail_cpy(char *dst, size_t n, const char *src) {
+    if (!src) { dst[0] = 0; return; }
+    strncpy(dst, src, n - 1); dst[n - 1] = 0;
+}
+
+// GET /api/mail/presets -> {"presets":[{name,host,port,tls,hint}]}. Static, public.
+static esp_err_t mail_presets_get(httpd_req_t *req) {
+    cJSON *root = cJSON_CreateObject();
+    cJSON *arr = cJSON_AddArrayToObject(root, "presets");
+    for (int i = 0; i < nucleo_mailcfg_preset_count(); ++i) {
+        const smtp_preset_t *p = nucleo_mailcfg_preset(i);
+        cJSON *o = cJSON_CreateObject();
+        cJSON_AddStringToObject(o, "name", p->name);
+        cJSON_AddStringToObject(o, "host", p->host);
+        cJSON_AddNumberToObject(o, "port", p->port);
+        cJSON_AddNumberToObject(o, "tls", p->tls);
+        cJSON_AddStringToObject(o, "hint", p->hint);
+        cJSON_AddItemToArray(arr, o);
+    }
+    char *out = cJSON_PrintUnformatted(root); cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, out ? out : "{}");
+    if (out) cJSON_free(out);
+    return ESP_OK;
+}
+
+// GET  /api/mail/accounts -> redacted list + default index.
+// POST /api/mail/accounts -> save ({idx?,name,host,port,tls,user,pass?,from,from_name,default?})
+//                            or delete ({idx, delete:true}). Empty pass keeps the stored one.
+static esp_err_t mail_accounts_handler(httpd_req_t *req) {
+    NUCLEO_AUTH_GUARD(req);
+    if (req->method == HTTP_POST) {
+        int len = 0;
+        char *buf = mail_recv_body(req, 2048, &len);
+        cJSON *in = buf ? cJSON_Parse(buf) : NULL;
+        free(buf);
+        if (!in) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json"); return ESP_FAIL; }
+        cJSON *jidx = cJSON_GetObjectItem(in, "idx");
+        int idx = cJSON_IsNumber(jidx) ? jidx->valueint : -1;
+        cJSON *del = cJSON_GetObjectItem(in, "delete");
+        if (cJSON_IsTrue(del)) {
+            nucleo_mailcfg_delete(idx);
+            cJSON_Delete(in);
+        } else {
+            smtp_account_t a; memset(&a, 0, sizeof a);
+            mail_cpy(a.name, sizeof a.name, mail_jstr(in, "name"));
+            mail_cpy(a.host, sizeof a.host, mail_jstr(in, "host"));
+            mail_cpy(a.user, sizeof a.user, mail_jstr(in, "user"));
+            mail_cpy(a.pass, sizeof a.pass, mail_jstr(in, "pass"));       // empty -> keep existing
+            mail_cpy(a.from, sizeof a.from, mail_jstr(in, "from"));
+            mail_cpy(a.from_name, sizeof a.from_name, mail_jstr(in, "from_name"));
+            cJSON *jport = cJSON_GetObjectItem(in, "port");
+            a.port = cJSON_IsNumber(jport) ? jport->valueint : 465;
+            cJSON *jtls = cJSON_GetObjectItem(in, "tls");
+            a.tls = (cJSON_IsNumber(jtls) && jtls->valueint == 1) ? SMTP_TLS_STARTTLS : SMTP_TLS_IMPLICIT;
+            if (a.from[0] == 0) mail_cpy(a.from, sizeof a.from, a.user);  // default From: = login
+            int saved = nucleo_mailcfg_set(idx, &a);
+            cJSON *mkdef = cJSON_GetObjectItem(in, "default");
+            if (saved >= 0 && cJSON_IsTrue(mkdef)) nucleo_mailcfg_set_default(saved);
+            cJSON_Delete(in);
+            if (saved < 0) { httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "save failed (full?)"); return ESP_FAIL; }
+        }
+    }
+    // GET (and POST result): return the redacted list.
+    cJSON *root = cJSON_CreateObject();
+    cJSON *arr = cJSON_AddArrayToObject(root, "accounts");
+    int n = nucleo_mailcfg_count();
+    for (int i = 0; i < n; ++i) {
+        smtp_account_t a;
+        if (!nucleo_mailcfg_get(i, &a)) continue;
+        cJSON *o = cJSON_CreateObject();
+        cJSON_AddNumberToObject(o, "idx", i);
+        cJSON_AddStringToObject(o, "name", a.name);
+        cJSON_AddStringToObject(o, "host", a.host);
+        cJSON_AddNumberToObject(o, "port", a.port);
+        cJSON_AddNumberToObject(o, "tls", a.tls);
+        cJSON_AddStringToObject(o, "user", a.user);
+        cJSON_AddStringToObject(o, "from", a.from);
+        cJSON_AddStringToObject(o, "from_name", a.from_name);
+        cJSON_AddBoolToObject(o, "has_pass", a.pass[0] != 0);   // never the value
+        cJSON_AddItemToArray(arr, o);
+    }
+    cJSON_AddNumberToObject(root, "default", nucleo_mailcfg_default());
+    char *out = cJSON_PrintUnformatted(root); cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_sendstr(req, out ? out : "{}");
+    if (out) cJSON_free(out);
+    return ESP_OK;
+}
+
+// POST /api/mail/send {account?:idx, to, subject, body} -> {ok:bool, error?}.
+static esp_err_t mail_send_post(httpd_req_t *req) {
+    NUCLEO_AUTH_GUARD(req);
+    int len = 0;
+    char *buf = mail_recv_body(req, 16 * 1024, &len);
+    cJSON *in = buf ? cJSON_Parse(buf) : NULL;
+    if (!in) { free(buf); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json"); return ESP_FAIL; }
+
+    cJSON *jacc = cJSON_GetObjectItem(in, "account");
+    int idx = cJSON_IsNumber(jacc) ? jacc->valueint : nucleo_mailcfg_default();
+    const char *to = mail_jstr(in, "to");
+    const char *subject = mail_jstr(in, "subject");
+    const char *body = mail_jstr(in, "body");
+
+    smtp_account_t acc;
+    char errmsg[96] = { 0 };
+    esp_err_t e;
+    if (idx < 0 || !nucleo_mailcfg_get(idx, &acc)) {
+        e = ESP_ERR_INVALID_ARG; strcpy(errmsg, "no account configured");
+    } else if (!to || !to[0] || !body) {
+        e = ESP_ERR_INVALID_ARG; strcpy(errmsg, "missing to/body");
+    } else {
+        smtp_msg_t msg = { .to = to, .subject = subject ? subject : "", .body = body };
+        e = nucleo_smtp_send(&acc, &msg, errmsg, sizeof errmsg);
+        nucleo_mailcfg_log_sent(to, subject, e == ESP_OK);
+    }
+    cJSON_Delete(in);
+    free(buf);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "ok", e == ESP_OK);
+    if (e != ESP_OK) cJSON_AddStringToObject(root, "error", errmsg[0] ? errmsg : esp_err_to_name(e));
+    char *out = cJSON_PrintUnformatted(root); cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    if (e != ESP_OK) httpd_resp_set_status(req, "502 Bad Gateway");
+    httpd_resp_sendstr(req, out ? out : "{\"ok\":false}");
+    if (out) cJSON_free(out);
+    return ESP_OK;
+}
+
 static esp_err_t llm_proxy(httpd_req_t *req)
 {
     char query[1400], url[1100] = { 0 };
@@ -1984,7 +2136,7 @@ esp_err_t nucleo_httpd_start(void)
     // RAM cost of the bump is tiny and one-time at httpd_start: hd_calls is calloc(max, sizeof(ptr)) so the
     // 16 extra slots are +64 B, plus the 7 now-registering handlers are ~24 B each (malloc per handler).
     // WHEN YOU ADD AN ENDPOINT: bump this past the new total, or it silently drops off the end again.
-    config.max_uri_handlers = 64;   // 55 in use (2026-06-14) + 9 headroom
+    config.max_uri_handlers = 64;   // 59 in use (2026-06-29, +4 /api/mail/*) + 5 headroom
     config.close_fn = on_sock_close;                 // detect client disconnects immediately
     // The shell opens many parallel connections (assets + several /api/fs + /ws). lru_purge
     // recycles the oldest idle socket instead of refusing/resetting new ones — this (plus the
@@ -2037,6 +2189,10 @@ esp_err_t nucleo_httpd_start(void)
     httpd_uri_t anima_l1 = { .uri = "/api/anima/l1", .method = HTTP_POST, .handler = anima_l1_post };      // offline L1 brain policy
     httpd_uri_t tts_get  = { .uri = "/api/tts", .method = HTTP_GET,  .handler = tts_handler };             // voce on-device: stato
     httpd_uri_t tts_post = { .uri = "/api/tts", .method = HTTP_POST, .handler = tts_handler };             // voce on-device: set/test
+    httpd_uri_t mail_presets = { .uri = "/api/mail/presets",  .method = HTTP_GET,  .handler = mail_presets_get };
+    httpd_uri_t mail_acc_get = { .uri = "/api/mail/accounts", .method = HTTP_GET,  .handler = mail_accounts_handler };
+    httpd_uri_t mail_acc_post= { .uri = "/api/mail/accounts", .method = HTTP_POST, .handler = mail_accounts_handler };
+    httpd_uri_t mail_send    = { .uri = "/api/mail/send",     .method = HTTP_POST, .handler = mail_send_post };
     httpd_uri_t proxy = { .uri = "/api/proxy", .method = HTTP_GET, .handler = proxy_get };
     httpd_uri_t llm_get  = { .uri = "/api/llm", .method = HTTP_GET,  .handler = llm_proxy };  // model list
     httpd_uri_t llm_post = { .uri = "/api/llm", .method = HTTP_POST, .handler = llm_proxy };  // chat completions
@@ -2064,6 +2220,10 @@ esp_err_t nucleo_httpd_start(void)
     httpd_register_uri_handler(server, &anima_l1);        // /api/anima/l1 (offline L1 brain policy)
     httpd_register_uri_handler(server, &tts_get);         // /api/tts (voce on-device)
     httpd_register_uri_handler(server, &tts_post);
+    httpd_register_uri_handler(server, &mail_presets);   // /api/mail/presets (provider presets)
+    httpd_register_uri_handler(server, &mail_acc_get);    // /api/mail/accounts (list, redacted)
+    httpd_register_uri_handler(server, &mail_acc_post);   // /api/mail/accounts (save/delete)
+    httpd_register_uri_handler(server, &mail_send);       // /api/mail/send (SMTP-over-TLS)
     httpd_register_uri_handler(server, &proxy);
     httpd_register_uri_handler(server, &llm_get);
     httpd_register_uri_handler(server, &llm_post);

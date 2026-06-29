@@ -1,0 +1,20 @@
+{
+  "id": "mail",
+  "name": "Mail",
+  "version": "1.0.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Send email via Gmail / Outlook / Yahoo / iCloud or any SMTP server.",
+  "category": "connectivity",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/mail/",
+  "icon": "/apps/mail/icon.svg",
+  "permissions": ["net.wifi", "storage.shared", "system.events"],
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": [],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

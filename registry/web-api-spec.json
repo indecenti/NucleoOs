@@ -581,6 +581,44 @@
     "params": []
   },
   {
+    "id": "api-mail-accounts-get",
+    "path": "/api/mail/accounts",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/mail/accounts - Elenco Account (redatto)",
+      "description": "Elenco degli account SMTP configurati, con le password OMESSE (solo has_pass:bool) e l'indice di default.",
+      "synopsis": "GET /api/mail/accounts",
+      "details": "Richiede autenticazione. Risposta {\"accounts\":[{idx,name,host,port,tls,user,from,from_name,has_pass}],\"default\":int}."
+    },
+    "en": {
+      "title": "GET /api/mail/accounts - List Accounts (redacted)",
+      "description": "List of configured SMTP accounts with passwords OMITTED (only has_pass:bool) plus the default index.",
+      "synopsis": "GET /api/mail/accounts",
+      "details": "Auth-gated. Response {\"accounts\":[{idx,name,host,port,tls,user,from,from_name,has_pass}],\"default\":int}."
+    },
+    "params": []
+  },
+  {
+    "id": "api-mail-presets",
+    "path": "/api/mail/presets",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/mail/presets - Preset Provider Email",
+      "description": "Elenco statico dei preset SMTP (Gmail, Outlook/M365, Yahoo, iCloud, Custom): host, porta, modo TLS e suggerimento. Pubblico.",
+      "synopsis": "GET /api/mail/presets",
+      "details": "Nessuna autenticazione. Risposta {\"presets\":[{name,host,port,tls,hint}]}."
+    },
+    "en": {
+      "title": "GET /api/mail/presets - Email Provider Presets",
+      "description": "Static list of SMTP presets (Gmail, Outlook/M365, Yahoo, iCloud, Custom): host, port, TLS mode and hint. Public.",
+      "synopsis": "GET /api/mail/presets",
+      "details": "No auth. Response {\"presets\":[{name,host,port,tls,hint}]}."
+    },
+    "params": []
+  },
+  {
     "id": "api-proxy",
     "path": "/api/proxy",
     "method": "GET",
@@ -1456,6 +1494,70 @@
         },
         "en": {
           "description": "Chat request JSON body (max 32 KB)"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-mail-accounts-post",
+    "path": "/api/mail/accounts",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/mail/accounts - Salva/Elimina Account",
+      "description": "Crea o aggiorna un account SMTP (password write-only: vuota = mantiene quella memorizzata), oppure lo elimina con delete:true. Le credenziali vivono in NVS, mai su SD.",
+      "synopsis": "POST /api/mail/accounts  {idx?,name,host,port,tls,user,pass?,from,from_name,default?,delete?}",
+      "details": "Richiede autenticazione. idx assente = nuovo account. Risponde con l'elenco redatto aggiornato."
+    },
+    "en": {
+      "title": "POST /api/mail/accounts - Save/Delete Account",
+      "description": "Create or update an SMTP account (write-only password: empty = keep stored one), or delete it with delete:true. Credentials live in NVS, never on SD.",
+      "synopsis": "POST /api/mail/accounts  {idx?,name,host,port,tls,user,pass?,from,from_name,default?,delete?}",
+      "details": "Auth-gated. Absent idx = new account. Responds with the updated redacted list."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"name\": \"Gmail\",\n  \"host\": \"smtp.gmail.com\",\n  \"port\": 465,\n  \"user\": \"me@gmail.com\",\n  \"pass\": \"app-password\",\n  \"default\": true\n}",
+        "it": {
+          "description": "Corpo JSON dell'account (vedi sopra); pass vuota mantiene quella salvata; delete:true elimina idx"
+        },
+        "en": {
+          "description": "Account JSON body (see above); empty pass keeps the stored one; delete:true removes idx"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-mail-send",
+    "path": "/api/mail/send",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/mail/send - Invia Email (SMTP/TLS)",
+      "description": "Invia un'email di testo tramite l'account configurato, con SMTP su TLS implicito (porta 465) e AUTH LOGIN. Chiamata bloccante per la durata dello scambio SMTP.",
+      "synopsis": "POST /api/mail/send  {account?,to,subject,body}",
+      "details": "Richiede autenticazione. account assente = account di default. Risposta {\"ok\":bool,\"error\"?:str}; errore -> HTTP 502."
+    },
+    "en": {
+      "title": "POST /api/mail/send - Send Email (SMTP/TLS)",
+      "description": "Sends a plain-text email through the configured account over implicit-TLS SMTP (port 465) with AUTH LOGIN. Blocking call for the duration of the SMTP exchange.",
+      "synopsis": "POST /api/mail/send  {account?,to,subject,body}",
+      "details": "Auth-gated. Absent account = default account. Response {\"ok\":bool,\"error\"?:str}; failure -> HTTP 502."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"to\": \"dest@example.com\",\n  \"subject\": \"Ciao da NucleoOS\",\n  \"body\": \"Inviata dal Cardputer.\"\n}",
+        "it": {
+          "description": "Corpo JSON: to (destinatario), subject (oggetto), body (testo), account (indice, opzionale)"
+        },
+        "en": {
+          "description": "JSON body: to (recipient), subject, body (text), account (index, optional)"
         }
       }
     ]

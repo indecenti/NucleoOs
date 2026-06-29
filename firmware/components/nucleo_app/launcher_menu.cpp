@@ -57,6 +57,7 @@ static int get_or_create_cat(const char *name)
         else if (!strcmp(name, "Tools"))   c = C_YELLOW;
         else if (!strcmp(name, "System"))  c = C_GREY;
         else if (!strcmp(name, "Connect")) c = C_PURPLE;
+        else if (!strcmp(name, "Communication")) { c = C_BLUE; s_dyn_cats[i].icon = '@'; }  // distinct from Connect's 'C'
         else if (!strcmp(name, "Security")) c = C_RED;
         else if (!strcmp(name, "Hardware")) c = C_GREEN;
         else if (!strcmp(name, "Games"))   c = C_RED;

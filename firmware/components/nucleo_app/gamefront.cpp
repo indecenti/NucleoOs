@@ -97,7 +97,7 @@ template <typename T> static void round_corners(T *c, int x, int y, int w, int h
     for (int yy = 0; yy < r; yy++)
         for (int xx = 0; xx < r; xx++) {
             if ((r - xx) * (r - xx) + (r - yy) * (r - yy) <= r * r) continue;
-            uint16_t ct = bg_at(acc, y), cb = bg_at(acc, y + h - 1);
+            uint16_t ct = bg_at(acc, y + yy), cb = bg_at(acc, y + h - 1 - yy);
             c->drawPixel(x + xx, y + yy, ct);                 // TL
             c->drawPixel(x + w - 1 - xx, y + yy, ct);         // TR
             c->drawPixel(x + xx, y + h - 1 - yy, cb);         // BL
@@ -328,8 +328,8 @@ template <typename T> static void draw_hero(T *c, const nucleo_app_def_t *g)
         uint16_t gl = mix565(acc, bg_at(acc, HERO_Y), 0.62f + 0.10f * (4 - i));
         c->drawRoundRect(HERO_X - 2 - i, HERO_Y - 2 - i, HERO_W + 4 + 2 * i, HERO_H + 4 + 2 * i, 6 + i, gl);
     }
-    // Soft drop-shadow, offset down-right (EmulationStation depth).
-    c->fillRoundRect(HERO_X + 3, HERO_Y + 5, HERO_W, HERO_H, 6, mix565(BG, INK, 0.88f));
+    // Soft drop-shadow, clipped flush with image right/bottom so it never bleeds past the cover.
+    c->fillRoundRect(HERO_X + 3, HERO_Y + 5, HERO_W - 3, HERO_H - 5, 6, mix565(BG, INK, 0.88f));
 
     c->setClipRect(HERO_X, HERO_Y, HERO_W, HERO_H);
     char p[192]; bool drawn = false;

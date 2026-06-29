@@ -424,9 +424,12 @@ static void enter(void)
     nucleo_app_set_ptt_handler(on_ptt);
     nucleo_app_set_poll_handler(poll);   // drive the redraw from the DSP frame rate, not the 50 Hz loop
     set_hint();
-    // Dedicated mode FIRST: NX_NET_APP suspends voice (the other GPIO43/mic owner) and frees ~47KB.
-    // Wi-Fi STA stays up. Restored in on_exit() after the mic closes.
-    nucleo_exclusive_enter(NX_NET_APP, nullptr);
+    // We boot SOLO (NX_SOLO in the def): fresh, unfragmented heap, so the shared 32 KB canvas allocates
+    // and the analyzer draws BUFFERED (no direct-draw fallback = no flicker; this was the ADV OOM case).
+    // In Solo httpd/mDNS/L1/voice never started and the mic is already free, so skip exclusive_enter —
+    // exclusive_exit() on return would otherwise spin up httpd right before the warm reboot. Full-OS path
+    // (never taken once NX_SOLO is set, but kept correct): NX_NET_APP frees ~47KB + the mic, Wi-Fi STA stays.
+    if (!nucleo_anima_solo_active()) nucleo_exclusive_enter(NX_NET_APP, nullptr);
     // DSP scratch engine first — it claims the largest free contiguous block (~10 KB combined alloc +
     // 4 KB task stack). Waterfall history (7.4 KB) is optional and allocated from whatever remains
     // AFTER micspec_start succeeds; if it fails the display silently falls back to bars mode.
@@ -443,7 +446,7 @@ static void on_exit(void)
     nucleo_micspec_stop();                 // blocks until the mic RX is fully closed (GPIO43 released)
     nucleo_app_set_ptt_handler(nullptr);
     if (s_hist) { free(s_hist); s_hist = nullptr; }
-    nucleo_exclusive_exit();               // ...THEN restore httpd/mDNS/voice/L1 (voice won't re-grab a mic we still held)
+    if (!nucleo_anima_solo_active()) nucleo_exclusive_exit();   // restore httpd/mDNS/voice/L1 (skipped in Solo: never started; Esc reboots out)
 }
 
 extern "C" void nucleo_register_micspec(void)
@@ -451,6 +454,11 @@ extern "C" void nucleo_register_micspec(void)
     static const nucleo_app_def_t app = {
         "micspec", "Mic Spectrum", "Media", "Analizzatore audio dal microfono",
         'W', C_PURPLE, enter, on_key, nullptr, draw, on_exit,
+        // SOLO BOOT: reboot into a FRESH, unfragmented heap so the 32 KB shared canvas allocates and the
+        // analyzer draws BUFFERED. On the live (fragmented) heap — esp. the ADV, ~16 KB largest free — the
+        // canvas couldn't be carved, the run loop fell back to DIRECT draw, and the per-frame self-clear
+        // flickered. Trade-off: Esc reboots back to the OS (the mic engine stops cleanly first).
+        NX_SOLO
     };
     nucleo_app_register(&app);
 }
