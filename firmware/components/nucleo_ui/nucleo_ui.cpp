@@ -18,6 +18,19 @@ M5GFX d;
 // loop points it at an off-screen canvas for a flicker-free composite, then back to &d.
 static LovyanGFX *s_gfx_target = &d;
 LovyanGFX *nucleo_app_gfx(void)         { return s_gfx_target; }
+
+// ---- panel readback (for /api/screen) --------------------------------------
+// Read the physical ST7789 directly, so a screenshot works even when the off-screen 32 KB canvas
+// isn't allocated (the device draws direct-to-panel to save RAM on this no-PSRAM chip — the canvas
+// is the exception, not the rule). The Cardputer's panel returns BYTE-SWAPPED RGB565 on readback
+// (0x07E0 reads back as 0xE007); the caller un-swaps. Always available, no heap needed.
+extern "C" void nucleo_ui_panel_size(int *w, int *h) { if (w) *w = d.width(); if (h) *h = d.height(); }
+extern "C" bool nucleo_ui_read_row(int y, int w, uint16_t *out)
+{
+    if (!out || y < 0 || y >= d.height() || w <= 0 || w > d.width()) return false;
+    d.readRect(0, y, w, 1, out);
+    return true;
+}
 bool       nucleo_app_is_buffered(void) { return s_gfx_target != &d; }
 void       nucleo_app_set_gfx(LovyanGFX *g) { s_gfx_target = g ? g : &d; }
 

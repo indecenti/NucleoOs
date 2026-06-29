@@ -33,6 +33,12 @@ notifications, a power manager, and **two complete user interfaces** that share 
 The split is deliberate: **heavy work goes to the browser, never to the 18 KB device heap.**
 That is the single idea that lets a no‑PSRAM microcontroller host an experience this large.
 
+<div align="center">
+<img src="docs/screenshots/cardputer-menu.png" width="480" alt="NucleoOS native launcher on the Cardputer's 240×135 screen — the smartwatch‑style app carousel" />
+<br><sub>The native on‑device launcher (240×135), captured live over Wi‑Fi from the device's own
+<code>GET /api/screen</code> endpoint — it streams the physical panel as a BMP, no canvas, ~0 heap.</sub>
+</div>
+
 ---
 
 ## ⭐ Headline features

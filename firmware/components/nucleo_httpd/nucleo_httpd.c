@@ -2136,7 +2136,7 @@ esp_err_t nucleo_httpd_start(void)
     // RAM cost of the bump is tiny and one-time at httpd_start: hd_calls is calloc(max, sizeof(ptr)) so the
     // 16 extra slots are +64 B, plus the 7 now-registering handlers are ~24 B each (malloc per handler).
     // WHEN YOU ADD AN ENDPOINT: bump this past the new total, or it silently drops off the end again.
-    config.max_uri_handlers = 64;   // 59 in use (2026-06-29, +4 /api/mail/*) + 5 headroom
+    config.max_uri_handlers = 72;   // 60 in use (2026-06-29, +/api/screen) + headroom
     config.close_fn = on_sock_close;                 // detect client disconnects immediately
     // The shell opens many parallel connections (assets + several /api/fs + /ws). lru_purge
     // recycles the oldest idle socket instead of refusing/resetting new ones — this (plus the
