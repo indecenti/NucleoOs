@@ -9,6 +9,7 @@
 #include "launcher_theme.h"
 #include "launcher_render.h"
 #include "nucleo_kbd.h"
+#include "nucleo_ui.h"      // panel readback for Solo-mode / direct-draw screenshots
 #include <M5GFX.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -719,6 +720,40 @@ bool gamefront_save_screenshot(const char *name)
     ensure_dir(SHOT_DIR);
     char p[192]; snprintf(p, sizeof p, "%s/%s.bmp", SHOT_DIR, name && name[0] ? name : "shot");
     return save_bmp(c, p, c->width(), c->height(), 0, 0, c->width(), c->height());
+}
+
+// Like gamefront_save_screenshot, but reads the PHYSICAL PANEL (nucleo_ui_read_row) instead of the
+// off-screen canvas — for direct-draw screens (ANIMA) and Solo-boot apps where the canvas is gone.
+// Works with no network: it's a local SD write, so Fn+P captures even when httpd is down (Solo mode).
+bool gamefront_save_panel_screenshot(const char *name)
+{
+    int w = 0, h = 0; nucleo_ui_panel_size(&w, &h);
+    if (w <= 0 || h <= 0 || w > 320) return false;
+    ensure_dir(SHOT_DIR);
+    char p[192]; snprintf(p, sizeof p, "%s/%s.bmp", SHOT_DIR, name && name[0] ? name : "shot");
+    FILE *f = fopen(p, "wb"); if (!f) return false;
+    int rowSize = (w * 3 + 3) & ~3;
+    uint32_t imgSize = (uint32_t)rowSize * h;
+    uint8_t hd[54]; memset(hd, 0, sizeof hd);
+    hd[0] = 'B'; hd[1] = 'M'; put32(hd + 2, 54 + imgSize); put32(hd + 10, 54);
+    put32(hd + 14, 40); put32(hd + 18, w); put32(hd + 22, h);
+    put16(hd + 26, 1); put16(hd + 28, 24); put32(hd + 38, 2835); put32(hd + 42, 2835);
+    fwrite(hd, 1, 54, f);
+    static uint16_t prow[320]; static uint8_t orow[320 * 3 + 4];
+    for (int y = h - 1; y >= 0; y--) {                 // BMP rows bottom-up
+        if (!nucleo_ui_read_row(y, w, prow)) memset(prow, 0, (size_t)w * 2);
+        memset(orow, 0, rowSize);
+        for (int x = 0; x < w; x++) {
+            uint16_t raw = prow[x];
+            uint16_t pp = (uint16_t)((raw >> 8) | (raw << 8));   // un-swap the panel's readback byte order
+            orow[x * 3 + 0] = (uint8_t)(( pp        & 0x1F) * 255 / 31);   // BMP is BGR
+            orow[x * 3 + 1] = (uint8_t)(((pp >> 5)  & 0x3F) * 255 / 63);
+            orow[x * 3 + 2] = (uint8_t)(((pp >> 11) & 0x1F) * 255 / 31);
+        }
+        fwrite(orow, 1, rowSize, f);
+    }
+    fclose(f);
+    return true;
 }
 
 // Retained API (no longer auto-called on exit): grab the current frame as <id>'s cover unless a

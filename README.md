@@ -118,11 +118,30 @@ browser GPU; the device just stores the result.
 <img src="docs/screenshots/games.png" width="820" alt="Game Center — multiplayer over the network or vs ANIMA" />
 </div>
 
+**Native games, captured live from the device** (each Solo‑boots into a fresh heap, then the shot is
+read off SD over Wi‑Fi — see `GET /api/screen` / the on‑device Ctrl+P capture):
+
+<div align="center">
+<img src="docs/screenshots/cardputer-game-scorribanda.png" width="49%" alt="Scorribanda — native beat-'em-up" />
+<img src="docs/screenshots/cardputer-game-tanks.png" width="49%" alt="Nucleo Tanks — destructible-terrain artillery" />
+<img src="docs/screenshots/cardputer-game-constellations.png" width="49%" alt="Constellations — pseudo-3D space shooter" />
+<img src="docs/screenshots/cardputer-game-pong.png" width="49%" alt="Pong — Mode-7 perspective, vs CPU or ESP-NOW" />
+<img src="docs/screenshots/cardputer-game-pinball.png" width="49%" alt="Pinball — portrait table with plunger + WAV SFX" />
+<img src="docs/screenshots/cardputer-game-poker.png" width="49%" alt="Video poker — hold/draw on the green felt" />
+<img src="docs/screenshots/cardputer-game-tankduel.png" width="49%" alt="Tank Duel — top-down 1v1 arena over ESP-NOW" />
+<img src="docs/screenshots/cardputer-game-reactor.png" width="49%" alt="Reactor — gauges + control sliders sim" />
+</div>
+
 ### 🎬 Media — native player, MP3 & radio
 
 - **Film player (native)** — plays `.nfv` (MJPEG + MP3) straight off the SD with seek.
 - **MP3 player (native)** — dual‑mic aware, browses folders, reads duration from headers.
 - **Radio (native)** — multi‑station internet radio with a twin web app.
+
+<div align="center">
+<img src="docs/screenshots/cardputer-video.png" width="49%" alt="Native video player — .nfv library with durations" />
+<img src="docs/screenshots/cardputer-music.png" width="49%" alt="Native MP3 player — folder browser with track durations" />
+</div>
 
 ### 🛡️ Security lab
 
