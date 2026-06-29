@@ -24,7 +24,8 @@ bool gamefront_step(void);                                 // animation tick; tr
 // Capture the freshly-composited shared canvas to the SD. cover -> downscaled /data/GameShots/<id>.bmp;
 // screenshot -> full-res /data/Screenshots/<name>.bmp. Call right after the frame is pushed.
 bool gamefront_save_cover(const char *id);        // true if the BMP was written
-bool gamefront_save_screenshot(const char *name); // true if the BMP was written
+bool gamefront_save_screenshot(const char *name); // true if the BMP was written (reads the canvas)
+bool gamefront_save_panel_screenshot(const char *name); // reads the PHYSICAL PANEL — works for direct-draw / Solo-mode apps
 
 // Called when a game closes: refresh its .bmp cover from the last composited frame (overwrite), so
 // exiting on the frame you like sets the cover. Skips only if a curated .png/.jpg is present.

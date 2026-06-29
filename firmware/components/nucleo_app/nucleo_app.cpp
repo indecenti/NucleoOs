@@ -1732,13 +1732,10 @@ void nucleo_app_run(void)
                     // saved image, then arm a non-blocking confirm toast (no frozen preview).
                     if (s_shot_req) {
                         s_shot_req = false;
-                        bool ok;
-                        if (def && def->category && !strcmp(def->category, "Games")) {
-                            ok = gamefront_save_cover(def->id);
-                        } else {
-                            static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq);
-                            ok = gamefront_save_screenshot(nm);
-                        }
+                        // Full-screen shot from the canvas (which holds this frame) — works for games
+                        // and any canvas app, including in Solo boot (the app owns a fresh-heap canvas).
+                        static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq);
+                        bool ok = gamefront_save_screenshot(nm);
                         s_shot_toast_ok = ok; s_shot_toast_until = now + 1200;
                     }
 
@@ -1773,11 +1770,14 @@ void nucleo_app_run(void)
                     d.startWrite();
                     def->on_draw();
                     d.endWrite();
-                    // Capture needs the shared canvas (panel readback is unreliable). Direct-draw apps
-                    // freed it, so we can't grab here — tell the user instead of failing silently.
+                    // Direct-draw screen (ANIMA, or any app that freed the canvas): the frame is on the
+                    // PANEL, so grab it from there — works even in Solo boot (no httpd, no canvas), as a
+                    // local SD write. Read it later over Wi-Fi via /api/fs once back at the launcher.
                     if (s_shot_req) {
                         s_shot_req = false;
-                        nucleo_notify_post("Schermata", "Cattura non disponibile in questa schermata");
+                        static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq);
+                        bool ok = gamefront_save_panel_screenshot(nm);
+                        nucleo_notify_post("Screenshot", ok ? "Saved to /data/Screenshots" : "Capture failed");
                     }
                 }
                 // The hint bar sits below the app's clipped blit, so the app frame never
