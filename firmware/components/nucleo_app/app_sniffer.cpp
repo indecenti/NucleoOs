@@ -11,6 +11,8 @@
 #include <string.h>
 #include <stdio.h>
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 extern "C" {
 int         nucleo_wifiatk_sniffer_start(int mode, int channel);
@@ -61,19 +63,41 @@ static void enter(void)
     set_hint(); nucleo_app_request_draw();
 }
 
+// The capture queue needs ~6KB CONTIGUOUS; on the ADV the live heap leaves only ~3KB free at app
+// open, so free the 32KB launcher canvas first (same trick KARMA/Recorder use) — the running screen
+// draws direct meanwhile. Restored on stop / start-failure.
+static bool s_screen_freed;
+static void free_screen(void)
+{
+    if (s_screen_freed) return;
+    nucleo_app_set_direct_draw(true);
+    nucleo_screen_release();
+    s_screen_freed = true;
+}
+static void restore_screen(void)
+{
+    if (!s_screen_freed) return;
+    s_screen_freed = false;
+    nucleo_app_set_direct_draw(false);
+    for (int i = 0; i < 8 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
+    nucleo_app_request_draw();
+}
+
 static void tick(void)
 {
     if (s_state == ST_ARMING) {
         if (!s_arm_armed) return;
+        free_screen();                       // +32KB contiguous BEFORE the queue allocs
         int rc = nucleo_wifiatk_sniffer_start(s_mode, s_chan);
         if (rc == 0) { s_state = ST_RUNNING; s_err[0] = 0; }
-        else { snprintf(s_err, sizeof s_err, "Avvio fallito (%d)", rc); s_state = ST_CONFIG; }
+        else { restore_screen(); snprintf(s_err, sizeof s_err, "Avvio fallito (%d)", rc); s_state = ST_CONFIG; }
         set_hint(); nucleo_app_request_draw();
         return;
     }
     if (s_state == ST_STOPPING) {
         if (!s_stop_armed) return;
         nucleo_wifiatk_sniffer_stop();
+        restore_screen();
         nucleo_app_exit();
         return;
     }
@@ -125,6 +149,7 @@ static void row(int y, bool focus, const char *label, const char *val)
 
 static void draw_consent(void)
 {
+    int h = nucleo_app_content_height();
     app_ui_title("WiFi Sniffer", SNF, "AUTH");
     d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 28); d.print("Test autorizzati");
     const char *L[] = { "Cattura i pacchetti WiFi", "in aria e li salva in .pcap", "su SD (Wireshark/hashcat).",
@@ -132,19 +157,23 @@ static void draw_consent(void)
     unsigned short C[] = { FG, FG, FG, BG, MUTED };
     d.setTextSize(1);
     for (int i = 0; i < 5; i++) { d.setTextColor(C[i], BG); d.setCursor(10, 52 + i * 11); d.print(L[i]); }
-    if (s_err[0]) { d.setTextColor(SNF, BG); d.setCursor(10, 118); d.print(s_err); }
+    if (s_err[0]) { d.setTextColor(0xF800, BG); d.setCursor(10, h - 10); d.print(s_err); }
 }
 
 static void draw_config(void)
 {
-    app_ui_title("WiFi Sniffer", SNF, "");
-    char cv[12]; if (s_chan == 0) snprintf(cv, sizeof cv, "Hop"); else snprintf(cv, sizeof cv, "Canale %d", s_chan);
-    row(26, s_row == R_MODE, "Modo", MODE_NAME[s_mode]);
-    row(52, s_row == R_CHAN, "Canale", cv);
+    int h = nucleo_app_content_height();
+    app_ui_title("WiFi Sniffer", SNF, s_err[0] ? "ERR" : "");
+    char cv[12]; if (s_chan == 0) snprintf(cv, sizeof cv, "Hop banda"); else snprintf(cv, sizeof cv, "Canale %d", s_chan);
+    row(24, s_row == R_MODE, "Modo", MODE_NAME[s_mode]);
+    row(50, s_row == R_CHAN, "Canale", cv);
     bool go = (s_row == R_GO);
-    if (go) { d.fillRoundRect(6, 80, 228, 22, 6, GRN); d.setTextSize(2); d.setTextColor(INK, GRN); d.setCursor(88, 84); d.print("AVVIA"); }
-    else    { d.drawRoundRect(6, 80, 228, 22, 6, GRN); d.setTextSize(2); d.setTextColor(GRN, BG); d.setCursor(88, 84); d.print("AVVIA"); }
-    if (s_err[0]) { d.setTextSize(1); d.setTextColor(SNF, BG); d.setCursor(10, 116); d.print(s_err); }
+    if (go) { d.fillRoundRect(6, 76, 228, 22, 6, GRN); d.setTextSize(2); d.setTextColor(INK, GRN); d.setCursor(88, 80); d.print("AVVIA"); }
+    else    { d.drawRoundRect(6, 76, 228, 22, 6, GRN); d.setTextSize(2); d.setTextColor(GRN, BG); d.setCursor(88, 80); d.print("AVVIA"); }
+    // Error / hint line, kept INSIDE the content area (above the footer).
+    d.setTextSize(1);
+    if (s_err[0]) { d.setTextColor(0xF800, BG); d.setCursor(10, h - 10); d.print(s_err); }
+    else          { d.setTextColor(DIM, BG);    d.setCursor(10, h - 10); d.print("salva in /sd/sniffer/*.pcap"); }
 }
 
 static void draw_busy(const char *t, const char *m)
