@@ -33,15 +33,15 @@ const nucleo_app_def_t *nucleo_app_at(int i);
 // shadow + accent frame, procedural neighbour "peek" cards flanking it, then a row of mode badges
 // and carousel dots, over a vertical accent gradient.
 #define GF_MAX     24
-#define MARQ_H     22                 // title header band across the top
-#define HERO_W     182                // big rectangular cover, centred under the header
-#define HERO_H     72
-#define HERO_X     ((W - HERO_W) / 2) // = 29; the side gutters host the neighbour peek cards
-#define HERO_Y     25
-#define COVER_W    HERO_W             // covers captured at hero size -> drawn 1:1, no scaler needed
+#define MARQ_H     18                 // slim title header band across the top
+#define HERO_W     142                // big 16:9 cover box (matches the 240x135 screen) -> a full
+#define HERO_H     80                 // screenshot fits EXACTLY: no bars, no squish, no empty box
+#define HERO_X     ((W - HERO_W) / 2) // = 49; the side gutters host the neighbour peek cards
+#define HERO_Y     20
+#define COVER_W    HERO_W             // covers written at hero size (16:9) -> drawn 1:1, no scaler
 #define COVER_H    HERO_H
-#define BADGE_Y    (HERO_Y + HERO_H + 3)  // mode-badge row, just under the cover → y=100
-#define DOT_Y      (BADGE_Y + 15)         // carousel position dots → y=115
+#define BADGE_Y    (HERO_Y + HERO_H + 1)  // mode-badge row, just under the cover → y=101
+#define DOT_Y      (BADGE_Y + 15)         // carousel position dots → y=116
 #define FOOT       13                 // bottom footer → starts at y=122
 
 #define GF_DIR   NUCLEO_SD_MOUNT "/data/GameShots"
@@ -62,6 +62,9 @@ static const META_t META[] = {
     { "tanks",    "NUCLEO TANKS",       GM_CPU | GM_2P,  "Artiglieria a turni: terreno distruttibile, vento, 9 armi." },
     { "brawler",  "SCORRIBANDA",        GM_1P | GM_COOP, "Picchiaduro noir a scorrimento, anche in co-op." },
     { "dice",     "DADI 3D",            GM_1P,           "Tiro di dadi: scuoti il device o premi invio." },
+    { "snake",    "SNAKE DUEL",         GM_CPU | GM_LAN, "Serpente 1v1 in rete (ESP-NOW), o contro l'IA." },
+    { "tankd",    "TANK DUEL",          GM_CPU | GM_LAN, "Arena 1v1 in rete: shop conteso, 4 carri, upgrade." },
+    { "yahtzee",  "YAHTZEE",            GM_2P | GM_CPU,  "Yahtzee a turni, 1-4 giocatori + CPU, dadi 3D." },
     { nullptr, nullptr, 0, nullptr },
 };
 
@@ -324,13 +327,9 @@ template <typename T> static void draw_hero(T *c, const nucleo_app_def_t *g)
 {
     uint16_t acc = g->color;
 
-    // Accent glow halo: concentric rounded rects fading outward into the background.
-    for (int i = 4; i >= 1; i--) {
-        uint16_t gl = mix565(acc, bg_at(acc, HERO_Y), 0.62f + 0.10f * (4 - i));
-        c->drawRoundRect(HERO_X - 2 - i, HERO_Y - 2 - i, HERO_W + 4 + 2 * i, HERO_H + 4 + 2 * i, 6 + i, gl);
-    }
-    // Soft drop-shadow, clipped flush with image right/bottom so it never bleeds past the cover.
-    c->fillRoundRect(HERO_X + 3, HERO_Y + 5, HERO_W - 3, HERO_H - 5, 6, mix565(BG, INK, 0.88f));
+    // Soft NEUTRAL drop-shadow under the cover (EmulationStation-style). No coloured glow halo — that
+    // was the source of the stray accent/pink horizontal lines around the box.
+    c->fillRoundRect(HERO_X + 2, HERO_Y + 4, HERO_W, HERO_H, 6, mix565(BG, INK, 0.82f));
 
     c->setClipRect(HERO_X, HERO_Y, HERO_W, HERO_H);
     char p[192]; bool drawn = false;
@@ -339,6 +338,8 @@ template <typename T> static void draw_hero(T *c, const nucleo_app_def_t *g)
     if (!drawn) { snprintf(p, sizeof p, "%s/%s.jpg", GF_DIR, g->id);
         if (file_exists(p)) { c->drawJpgFile(p, HERO_X + HERO_W / 2, HERO_Y + HERO_H / 2, HERO_W, HERO_H, 0, 0, 0.0f, 0.0f, datum_t::middle_center); drawn = true; } }
     if (!drawn) { snprintf(p, sizeof p, "%s/%s.bmp", GF_DIR, g->id);
+        // Covers are written at the exact hero-box size (full frame, letterboxed), so draw 1:1 — it
+        // always fits perfectly inside the carousel box, no scaler, no overflow.
         if (file_exists(p)) { c->drawBmpFile(p, HERO_X, HERO_Y); drawn = true; } }
     if (!drawn) draw_poster(c, g);
     // A glossy sheen across the top third: lighten the real artwork pixels, fading out.
@@ -357,10 +358,9 @@ template <typename T> static void draw_hero(T *c, const nucleo_app_def_t *g)
 
     round_corners(c, HERO_X, HERO_Y, HERO_W, HERO_H, 5, acc);
 
-    // Double frame: a dark inset + a bright accent edge, plus a crisp top highlight.
-    c->drawRoundRect(HERO_X - 1, HERO_Y - 1, HERO_W + 2, HERO_H + 2, 5, mix565(BG, INK, 0.6f));
-    c->drawRoundRect(HERO_X - 2, HERO_Y - 2, HERO_W + 4, HERO_H + 4, 6, mix565(acc, FG, 0.4f));
-    c->drawFastHLine(HERO_X + 3, HERO_Y - 2, HERO_W - 6, mix565(acc, FG, 0.75f));
+    // Clean frame: a thin dark inset + a single MUTED accent edge. No bright/pink highlight line.
+    c->drawRoundRect(HERO_X - 1, HERO_Y - 1, HERO_W + 2, HERO_H + 2, 5, mix565(INK, BG, 0.35f));
+    c->drawRoundRect(HERO_X - 2, HERO_Y - 2, HERO_W + 4, HERO_H + 4, 6, mix565(acc, INK, 0.42f));
 }
 
 // ---- a faded procedural "peek" of a neighbour game, in a side gutter --------
@@ -722,16 +722,13 @@ bool gamefront_save_screenshot(const char *name)
     return save_bmp(c, p, c->width(), c->height(), 0, 0, c->width(), c->height());
 }
 
-// Like gamefront_save_screenshot, but reads the PHYSICAL PANEL (nucleo_ui_read_row) instead of the
-// off-screen canvas — for direct-draw screens (ANIMA) and Solo-boot apps where the canvas is gone.
-// Works with no network: it's a local SD write, so Fn+P captures even when httpd is down (Solo mode).
-bool gamefront_save_panel_screenshot(const char *name)
+// Read the PHYSICAL PANEL (nucleo_ui_read_row) into a full-frame 24-bit BMP at `path`. Works with no
+// network and no off-screen canvas (Solo boot, direct-draw apps) — a local SD write. Overwrites.
+static bool panel_bmp_to(const char *path)
 {
     int w = 0, h = 0; nucleo_ui_panel_size(&w, &h);
     if (w <= 0 || h <= 0 || w > 320) return false;
-    ensure_dir(SHOT_DIR);
-    char p[192]; snprintf(p, sizeof p, "%s/%s.bmp", SHOT_DIR, name && name[0] ? name : "shot");
-    FILE *f = fopen(p, "wb"); if (!f) return false;
+    FILE *f = fopen(path, "wb"); if (!f) return false;
     int rowSize = (w * 3 + 3) & ~3;
     uint32_t imgSize = (uint32_t)rowSize * h;
     uint8_t hd[54]; memset(hd, 0, sizeof hd);
@@ -749,6 +746,112 @@ bool gamefront_save_panel_screenshot(const char *name)
             orow[x * 3 + 0] = (uint8_t)(( pp        & 0x1F) * 255 / 31);   // BMP is BGR
             orow[x * 3 + 1] = (uint8_t)(((pp >> 5)  & 0x3F) * 255 / 63);
             orow[x * 3 + 2] = (uint8_t)(((pp >> 11) & 0x1F) * 255 / 31);
+        }
+        fwrite(orow, 1, rowSize, f);
+    }
+    fclose(f);
+    return true;
+}
+
+// Full-frame panel screenshot -> /data/Screenshots/<name>.bmp (direct-draw / Solo-boot apps).
+bool gamefront_save_panel_screenshot(const char *name)
+{
+    ensure_dir(SHOT_DIR);
+    char p[192]; snprintf(p, sizeof p, "%s/%s.bmp", SHOT_DIR, name && name[0] ? name : "shot");
+    return panel_bmp_to(p);
+}
+
+// Full-frame panel shot used AS the carousel cover -> /data/GameShots/<id>.bmp (overwrites; no history).
+// The whole panel is FIT (letterboxed, aspect preserved) into the exact hero‑box size, so it drops in
+// 1:1 and always sits perfectly inside the carousel frame — never cropped, never overflowing.
+bool gamefront_save_panel_cover(const char *id)
+{
+    if (!id || !id[0]) return false;
+    int pw = 0, ph = 0; nucleo_ui_panel_size(&pw, &ph);
+    if (pw <= 0 || ph <= 0 || pw > 320) return false;
+    ensure_dir(GF_DIR);
+    char path[192]; snprintf(path, sizeof path, "%s/%s.bmp", GF_DIR, id);
+    FILE *f = fopen(path, "wb"); if (!f) return false;
+
+    const int W = HERO_W, H = HERO_H;                 // output = exact carousel box
+    float sx = (float)W / pw, sy = (float)H / ph, s = sx < sy ? sx : sy;   // fit (letterbox)
+    int dw = (int)(pw * s + 0.5f), dh = (int)(ph * s + 0.5f);
+    if (dw > W) dw = W;
+    if (dh > H) dh = H;
+    int offX = (W - dw) / 2, offY = (H - dh) / 2;     // centred; black bars fill the rest
+
+    int rowSize = (W * 3 + 3) & ~3;
+    uint32_t imgSize = (uint32_t)rowSize * H;
+    uint8_t hd[54]; memset(hd, 0, sizeof hd);
+    hd[0] = 'B'; hd[1] = 'M'; put32(hd + 2, 54 + imgSize); put32(hd + 10, 54);
+    put32(hd + 14, 40); put32(hd + 18, W); put32(hd + 22, H);
+    put16(hd + 26, 1); put16(hd + 28, 24); put32(hd + 38, 2835); put32(hd + 42, 2835);
+    fwrite(hd, 1, 54, f);
+
+    static uint16_t prow[320]; static uint8_t orow[HERO_W * 3 + 4];
+    for (int vy = H - 1; vy >= 0; vy--) {             // BMP rows bottom-up; vy = row-from-top
+        memset(orow, 0, rowSize);                     // letterbox bars stay black
+        if (vy >= offY && vy < offY + dh) {
+            int srcY = (int)((vy - offY) / s); if (srcY < 0) srcY = 0; if (srcY >= ph) srcY = ph - 1;
+            if (nucleo_ui_read_row(srcY, pw, prow)) {
+                for (int ix = 0; ix < dw; ix++) {
+                    int srcX = (int)(ix / s); if (srcX < 0) srcX = 0; if (srcX >= pw) srcX = pw - 1;
+                    uint16_t raw = prow[srcX], pp = (uint16_t)((raw >> 8) | (raw << 8));
+                    int dx = offX + ix;
+                    orow[dx * 3 + 0] = (uint8_t)(( pp        & 0x1F) * 255 / 31);   // BGR
+                    orow[dx * 3 + 1] = (uint8_t)(((pp >> 5)  & 0x3F) * 255 / 63);
+                    orow[dx * 3 + 2] = (uint8_t)(((pp >> 11) & 0x1F) * 255 / 31);
+                }
+            }
+        }
+        fwrite(orow, 1, rowSize, f);
+    }
+    fclose(f);
+    return true;
+}
+
+// Carousel cover from the OFF-SCREEN CANVAS (RAM read — cheap, no slow panel readback). Scales the
+// live frame to the exact hero box (full frame, aspect preserved → fills a 16:9 box with no bars).
+// Used to refresh a game's cover from live gameplay while it runs. Overwrites; no history kept.
+bool gamefront_save_canvas_cover(const char *id)
+{
+    if (!id || !id[0]) return false;
+    M5Canvas *c = nucleo_screen();
+    if (!c) return false;
+    int pw = c->width(), ph = c->height();
+    if (pw <= 0 || ph <= 0 || pw > 320) return false;
+    ensure_dir(GF_DIR);
+    char path[192]; snprintf(path, sizeof path, "%s/%s.bmp", GF_DIR, id);
+    FILE *f = fopen(path, "wb"); if (!f) return false;
+
+    const int W = HERO_W, H = HERO_H;
+    float sx = (float)W / pw, sy = (float)H / ph, s = sx < sy ? sx : sy;
+    int dw = (int)(pw * s + 0.5f), dh = (int)(ph * s + 0.5f);
+    if (dw > W) dw = W;
+    if (dh > H) dh = H;
+    int offX = (W - dw) / 2, offY = (H - dh) / 2;
+
+    int rowSize = (W * 3 + 3) & ~3;
+    uint32_t imgSize = (uint32_t)rowSize * H;
+    uint8_t hd[54]; memset(hd, 0, sizeof hd);
+    hd[0] = 'B'; hd[1] = 'M'; put32(hd + 2, 54 + imgSize); put32(hd + 10, 54);
+    put32(hd + 14, 40); put32(hd + 18, W); put32(hd + 22, H);
+    put16(hd + 26, 1); put16(hd + 28, 24); put32(hd + 38, 2835); put32(hd + 42, 2835);
+    fwrite(hd, 1, 54, f);
+
+    static lgfx::rgb888_t prow[320]; static uint8_t orow[HERO_W * 3 + 4];
+    for (int vy = H - 1; vy >= 0; vy--) {
+        memset(orow, 0, rowSize);
+        if (vy >= offY && vy < offY + dh) {
+            int srcY = (int)((vy - offY) / s); if (srcY < 0) srcY = 0; if (srcY >= ph) srcY = ph - 1;
+            c->readRect(0, srcY, pw, 1, prow);          // RAM read, M5GFX expands 8bpp -> rgb888
+            for (int ix = 0; ix < dw; ix++) {
+                int srcX = (int)(ix / s); if (srcX < 0) srcX = 0; if (srcX >= pw) srcX = pw - 1;
+                int dx = offX + ix;
+                orow[dx * 3 + 0] = prow[srcX].b;        // BMP is BGR
+                orow[dx * 3 + 1] = prow[srcX].g;
+                orow[dx * 3 + 2] = prow[srcX].r;
+            }
         }
         fwrite(orow, 1, rowSize, f);
     }
