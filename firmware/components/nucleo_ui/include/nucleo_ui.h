@@ -14,6 +14,13 @@ bool nucleo_ui_is_adv(void);
 // Panel backlight, 0..255. Lets a foreground app (e.g. the video player) dim the screen.
 void nucleo_ui_set_brightness(unsigned char b);
 
+// Panel size + direct readback (for the /api/screen screenshot endpoint). nucleo_ui_read_row reads
+// one physical scanline as BYTE-SWAPPED RGB565 (the Cardputer panel's readback order); the caller
+// un-swaps. Works regardless of whether the off-screen canvas is currently allocated.
+#include <stdint.h>
+void nucleo_ui_panel_size(int *w, int *h);
+bool nucleo_ui_read_row(int y, int w, uint16_t *out);
+
 // Titled message; waits for Enter.
 void nucleo_ui_message(const char *title, const char *const *lines, int n);
 

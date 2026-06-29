@@ -30,6 +30,7 @@
 #include "driver/gpio.h"
 extern "C" {
 #include "nucleo_storage.h"    // SD free/used for the Storage face (REQUIRES already lists it)
+#include "nucleo_ui.h"         // nucleo_ui_panel_size / read_row for the /api/screen readback
 #include "nucleo_voice.h"      // Voice engine state for the PTT overlay
 #include "nucleo_anima.h"      // anima_action_t for the voice result toast (include dir via CMakeLists)
 }
@@ -195,12 +196,61 @@ static esp_err_t display_post(httpd_req_t *req)
     return ESP_OK;
 }
 
+// GET /api/screen — stream the current shared UI canvas as a 24-bit BMP, so a paired client can grab
+// the EXACT native screen over Wi-Fi. The canvas (RAM) is the trustworthy source — the ST7789 panel's
+// own readback is byte-swapped (handled below). Reads the PHYSICAL PANEL, not the off-screen canvas,
+// so it works whatever the device is doing: on this no-PSRAM chip the 32 KB canvas is usually NOT
+// allocated (apps draw direct-to-panel to save RAM), so a canvas read would almost always be empty.
+// Streamed row-by-row (one scanline buffer) → ~no heap.
+static inline void scr_put32(uint8_t *b, uint32_t v) { b[0] = v; b[1] = v >> 8; b[2] = v >> 16; b[3] = v >> 24; }
+static inline void scr_put16(uint8_t *b, uint16_t v) { b[0] = v; b[1] = v >> 8; }
+static esp_err_t screen_get(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    int w = 0, h = 0;
+    nucleo_ui_panel_size(&w, &h);
+    if (w <= 0 || h <= 0 || w > 320) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"ok\":false,\"err\":\"panel size unavailable\"}");
+        return ESP_OK;
+    }
+    int rowSize = (w * 3 + 3) & ~3;
+    uint32_t imgSize = (uint32_t)rowSize * h;
+    uint8_t hdr[54]; memset(hdr, 0, sizeof hdr);
+    hdr[0] = 'B'; hdr[1] = 'M'; scr_put32(hdr + 2, 54 + imgSize); scr_put32(hdr + 10, 54);
+    scr_put32(hdr + 14, 40); scr_put32(hdr + 18, w); scr_put32(hdr + 22, h);
+    scr_put16(hdr + 26, 1); scr_put16(hdr + 28, 24); scr_put32(hdr + 38, 2835); scr_put32(hdr + 42, 2835);
+    httpd_resp_set_type(req, "image/bmp");
+    if (httpd_resp_send_chunk(req, (const char *)hdr, 54) != ESP_OK) return ESP_FAIL;
+    static uint16_t prow[320];                // one panel scanline, byte-swapped RGB565
+    static uint8_t orow[320 * 3 + 4];
+    for (int y = h - 1; y >= 0; y--) {        // BMP rows are bottom-up
+        if (!nucleo_ui_read_row(y, w, prow)) memset(prow, 0, (size_t)w * 2);
+        memset(orow, 0, rowSize);
+        for (int x = 0; x < w; x++) {
+            uint16_t raw = prow[x];
+            uint16_t p = (uint16_t)((raw >> 8) | (raw << 8));   // un-swap the panel's readback byte order
+            uint8_t r = (uint8_t)(((p >> 11) & 0x1F) * 255 / 31);
+            uint8_t g = (uint8_t)(((p >> 5)  & 0x3F) * 255 / 63);
+            uint8_t b = (uint8_t)(( p        & 0x1F) * 255 / 31);
+            orow[x * 3 + 0] = b; orow[x * 3 + 1] = g; orow[x * 3 + 2] = r;   // BMP is BGR
+        }
+        if (httpd_resp_send_chunk(req, (const char *)orow, rowSize) != ESP_OK) return ESP_FAIL;
+    }
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
 extern "C" esp_err_t nucleo_app_register_display(httpd_handle_t server)
 {
     // Single-line designated init (fields in declaration order) so the api-spec generator
     // (tools/gen-api-spec.mjs) discovers the route from this source line.
     httpd_uri_t display = { .uri = "/api/display", .method = HTTP_POST, .handler = display_post };
-    return httpd_register_uri_handler(server, &display);
+    esp_err_t e = httpd_register_uri_handler(server, &display);
+    httpd_uri_t screen = { .uri = "/api/screen", .method = HTTP_GET, .handler = screen_get };
+    httpd_register_uri_handler(server, &screen);
+    return e;
 }
 
 // ---- registered foreground apps --------------------------------------------
