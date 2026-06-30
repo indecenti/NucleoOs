@@ -1266,10 +1266,13 @@ static void world_terrain(int ox, int oy) {
         // shaded by DEPTH below the surface instead of one flat colour. A faint elevation darkening keeps
         // lower/back ground from glaring. Drawn as a handful of vertical segments (cheap).
         int elev = (sh - GTOP) * 64 / (H - GTOP); if (elev < 0) elev = 0; if (elev > 64) elev = 64;
-        uint16_t topsoil = fx3d::scl(mix(th_ground, th_rim, 70),       256 - elev,     256);
-        uint16_t soil    = fx3d::scl(th_ground,                        256 - elev,     256);
-        uint16_t subsoil = fx3d::scl(mix(th_ground, th_ground2, 150),  256 - elev / 2, 256);
-        uint16_t rock    = th_ground2;
+        // Pocket-Tanks look: biome grass on top, BROWN dirt + dark rock below (dirt blends a touch of the
+        // biome's deep tint so night/rain stay cohesive).
+        uint16_t DIRT = mix(rgb(120, 82, 50), th_ground2, 60), ROCK = mix(rgb(64, 44, 30), th_ground2, 60);
+        uint16_t topsoil = fx3d::scl(mix(th_ground, th_rim, 70),  256 - elev,     256);
+        uint16_t soil    = fx3d::scl(mix(th_ground, DIRT, 120),   256 - elev,     256);
+        uint16_t subsoil = fx3d::scl(mix(DIRT, ROCK, 90),         256 - elev / 2, 256);
+        uint16_t rock    = ROCK;
         int y = gy, n;
         n = (gy + 3 <= H) ? 3  : H - gy; if (n > 0) { d.drawFastVLine(sx + ox, y, n, topsoil); y += n; }
         n = (y  + 8 <= H) ? 8  : H - y;  if (n > 0) { d.drawFastVLine(sx + ox, y, n, soil);    y += n; }
