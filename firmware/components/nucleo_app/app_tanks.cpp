@@ -1286,6 +1286,7 @@ static void world_terrain(int ox, int oy) {
         n = (y + 14 <= H) ? 14 : H - y;  if (n > 0) { d.drawFastVLine(sx + ox, y, n, subsoil); y += n; }
         if (y < H) d.drawFastVLine(sx + ox, y, H - y, rock);
         if (((wx * 7) & 7) == 0) { int sy2 = gy + 4 + ((wx * 13) & 7); if (sy2 < H) d.drawPixel(sx + ox, sy2, fx3d::scl(soil, 222, 256)); }  // dirt grain
+        if (((wx * 131 + 5) & 15) == 0) { int py2 = gy + 13 + ((wx * 37) & 13); if (py2 < H - 1) { uint16_t pc = ((wx * 7) & 1) ? fx3d::scl(rock, 150, 256) : mix(subsoil, th_rim, 40); d.drawPixel(sx + ox, py2, pc); d.drawPixel(sx + ox, py2 + 1, fx3d::scl(pc, 170, 256)); } }  // embedded pebbles
         d.drawFastVLine(sx + ox, gy, 1, rimc);                                                // surface line (grass or bare dirt)
         if (gy + 1 < H) d.drawPixel(sx + ox, gy + 1, outline_for(rimc));
         if (!dug && s_atmo == ATM_DAY && (wx % 11) == 0 && gy - 1 >= 0) d.drawPixel(sx + ox, gy - 1, th_accent);        // grass tufts (pristine only)
