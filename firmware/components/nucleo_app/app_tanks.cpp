@@ -1260,18 +1260,26 @@ static void world_terrain(int ox, int oy) {
     int camx = (int)(s_cam + s_camfree);
     for (int sx = 0; sx < W; sx++) {
         int wx = camx + sx; if (wx < 0 || wx >= WW) continue;
-        int sh = s_h[wx];                                       // WORLD surface row: colour/strata key must be camera-independent
-        int gy = sh + oy; if (gy < 0) gy = 0; if (gy >= H) continue;   // gy = screen row (camera offset) -> position ONLY
-        int band = ((sh - GTOP) / 20) & 3;
-        int depth = (sh - GTOP) * 256 / (H - GTOP); if (depth < 0) depth = 0; if (depth > 255) depth = 255;
-        uint16_t base = mix(th_ground, th_ground2, depth);      // tint follows terrain ELEVATION, not where the camera put it
-        uint16_t strat = fx3d::scl(base, 224 - band * 10, 255);   // gentler strata: less banding contrast = calmer ground
-        d.drawFastVLine(sx + ox, gy, H - gy, strat);
-        uint16_t cap = th_rim;
-        d.drawFastVLine(sx + ox, gy, 2, cap);
-        d.drawPixel(sx + ox, gy + 2, outline_for(cap));     // crisp surface line so the ground edge always reads
-        if (s_atmo == ATM_DAY && (wx % 13) == 0 && gy - 1 >= 0) d.drawPixel(sx + ox, gy - 1, th_accent);                // sparse grass tufts
-        else if (s_atmo == ATM_RAIN && ((wx + (s_anim >> 3)) & 15) == 0) d.drawPixel(sx + ox, gy, mix(cap, COL_WHITE, 150)); // occasional wet glint
+        int sh = s_h[wx];                                       // WORLD surface row (camera-independent colour key)
+        int gy = sh + oy; if (gy < 0) gy = 0; if (gy >= H) continue;   // gy = screen surface row
+        // Soil CROSS-SECTION (Pocket-Tanks-style): grass rim -> topsoil -> soil -> subsoil -> rock,
+        // shaded by DEPTH below the surface instead of one flat colour. A faint elevation darkening keeps
+        // lower/back ground from glaring. Drawn as a handful of vertical segments (cheap).
+        int elev = (sh - GTOP) * 64 / (H - GTOP); if (elev < 0) elev = 0; if (elev > 64) elev = 64;
+        uint16_t topsoil = fx3d::scl(mix(th_ground, th_rim, 70),       256 - elev,     256);
+        uint16_t soil    = fx3d::scl(th_ground,                        256 - elev,     256);
+        uint16_t subsoil = fx3d::scl(mix(th_ground, th_ground2, 150),  256 - elev / 2, 256);
+        uint16_t rock    = th_ground2;
+        int y = gy, n;
+        n = (gy + 3 <= H) ? 3  : H - gy; if (n > 0) { d.drawFastVLine(sx + ox, y, n, topsoil); y += n; }
+        n = (y  + 8 <= H) ? 8  : H - y;  if (n > 0) { d.drawFastVLine(sx + ox, y, n, soil);    y += n; }
+        n = (y + 14 <= H) ? 14 : H - y;  if (n > 0) { d.drawFastVLine(sx + ox, y, n, subsoil); y += n; }
+        if (y < H) d.drawFastVLine(sx + ox, y, H - y, rock);
+        if (((wx * 7) & 7) == 0) { int sy2 = gy + 4 + ((wx * 13) & 7); if (sy2 < H) d.drawPixel(sx + ox, sy2, fx3d::scl(soil, 222, 256)); }  // dirt grain
+        d.drawFastVLine(sx + ox, gy, 1, th_rim);                                              // crisp grass-rim surface line
+        if (gy + 1 < H) d.drawPixel(sx + ox, gy + 1, outline_for(th_rim));
+        if (s_atmo == ATM_DAY && (wx % 11) == 0 && gy - 1 >= 0) d.drawPixel(sx + ox, gy - 1, th_accent);                // grass tufts
+        else if (s_atmo == ATM_RAIN && ((wx + (s_anim >> 3)) & 15) == 0) d.drawPixel(sx + ox, gy, mix(th_rim, COL_WHITE, 150)); // wet glint
     }
     // napalm flames flicker on the surface
     for (int s = 0; s < NFIRE; s++) if (s_fire[s].on)
