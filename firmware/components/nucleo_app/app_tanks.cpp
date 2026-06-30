@@ -167,6 +167,7 @@ static unsigned s_anim;
 
 // terrain / theme
 static uint8_t s_h[WW];
+static uint8_t s_dug[WW];   // 1 = column was cratered/raised -> show exposed dirt, no grass rim
 static int     s_atmo;                 // current atmosphere (time of day / weather)
 static uint16_t th_skyT, th_skyM, th_skyB, th_ground, th_ground2, th_rim, th_accent, th_glow, th_sun, th_cloud;
 static int     s_starN, s_sunR, s_sunX, s_sunY; static bool s_moon, s_rain;
@@ -582,6 +583,7 @@ static void set_atmo(void) {
 }
 static void gen_terrain(void) {
     set_atmo();
+    memset(s_dug, 0, sizeof s_dug);     // fresh board = pristine grass everywhere
     float amp = (s_atmo == ATM_RAIN) ? 0.85f : (s_atmo == ATM_DAY) ? 1.1f : 1.0f;   // gentle per-atmosphere relief
     float base = 84 + h01(0, s_seed) * 18;
     for (int x = 0; x < WW; x++) {
@@ -605,7 +607,7 @@ static void carve(int cx, int cy, int r) {
         if (inside <= 0) continue;
         int dy = (int)sqrtf((float)inside), top = cy - dy, bot = cy + dy;
         if (bot <= s_h[x]) continue;
-        if (top <= s_h[x]) { int nh = clampi(bot, GTOP + 6, H - 1); if (nh > s_h[x]) s_h[x] = (uint8_t)nh; }
+        if (top <= s_h[x]) { int nh = clampi(bot, GTOP + 6, H - 1); if (nh > s_h[x]) s_h[x] = (uint8_t)nh; s_dug[x] = 1; }
     }
     s_lava_x = cx; s_lava_w = r; s_lava_t = now_ms();   // molten scar
     if (s_rec && s_nops < NOPS) s_ops[s_nops++] = { 0, (int16_t)cx, (uint8_t)clampi(cy, 0, 255), (uint8_t)clampi(r, 0, 255) };
@@ -615,6 +617,7 @@ static void raise_wall(int cx, int r, int height) {     // Builder: inverse of c
         int wx = cx + dx; if (wx < 0 || wx >= WW) continue;
         int bump = (int)(height * (1.0f - fabsf((float)dx) / (r + 1)));
         s_h[wx] = (uint8_t)clampi(surf(wx) - bump, GTOP + 6, H - 1);
+        if (bump > 0) s_dug[wx] = 1;     // raised dirt mound -> exposed soil, no grass cap
     }
     if (s_rec && s_nops < NOPS) s_ops[s_nops++] = { 1, (int16_t)cx, (uint8_t)clampi(height, 0, 255), (uint8_t)clampi(r, 0, 255) };
 }
@@ -1273,15 +1276,19 @@ static void world_terrain(int ox, int oy) {
         uint16_t soil    = fx3d::scl(mix(th_ground, DIRT, 120),   256 - elev,     256);
         uint16_t subsoil = fx3d::scl(mix(DIRT, ROCK, 90),         256 - elev / 2, 256);
         uint16_t rock    = ROCK;
+        // Cratered / raised columns expose DIRT — no grass cap, no tufts (Pocket-Tanks craters).
+        bool dug = s_dug[wx];
+        uint16_t top1 = dug ? soil : topsoil;
+        uint16_t rimc = dug ? fx3d::scl(DIRT, 205, 256) : th_rim;
         int y = gy, n;
-        n = (gy + 3 <= H) ? 3  : H - gy; if (n > 0) { d.drawFastVLine(sx + ox, y, n, topsoil); y += n; }
+        n = (gy + 3 <= H) ? 3  : H - gy; if (n > 0) { d.drawFastVLine(sx + ox, y, n, top1);   y += n; }
         n = (y  + 8 <= H) ? 8  : H - y;  if (n > 0) { d.drawFastVLine(sx + ox, y, n, soil);    y += n; }
         n = (y + 14 <= H) ? 14 : H - y;  if (n > 0) { d.drawFastVLine(sx + ox, y, n, subsoil); y += n; }
         if (y < H) d.drawFastVLine(sx + ox, y, H - y, rock);
         if (((wx * 7) & 7) == 0) { int sy2 = gy + 4 + ((wx * 13) & 7); if (sy2 < H) d.drawPixel(sx + ox, sy2, fx3d::scl(soil, 222, 256)); }  // dirt grain
-        d.drawFastVLine(sx + ox, gy, 1, th_rim);                                              // crisp grass-rim surface line
-        if (gy + 1 < H) d.drawPixel(sx + ox, gy + 1, outline_for(th_rim));
-        if (s_atmo == ATM_DAY && (wx % 11) == 0 && gy - 1 >= 0) d.drawPixel(sx + ox, gy - 1, th_accent);                // grass tufts
+        d.drawFastVLine(sx + ox, gy, 1, rimc);                                                // surface line (grass or bare dirt)
+        if (gy + 1 < H) d.drawPixel(sx + ox, gy + 1, outline_for(rimc));
+        if (!dug && s_atmo == ATM_DAY && (wx % 11) == 0 && gy - 1 >= 0) d.drawPixel(sx + ox, gy - 1, th_accent);        // grass tufts (pristine only)
         else if (s_atmo == ATM_RAIN && ((wx + (s_anim >> 3)) & 15) == 0) d.drawPixel(sx + ox, gy, mix(th_rim, COL_WHITE, 150)); // wet glint
     }
     // napalm flames flicker on the surface
