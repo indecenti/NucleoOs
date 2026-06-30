@@ -54,9 +54,9 @@ static const int8_t DX[4]={0,1,0,-1}, DY[4]={-1,0,1,0};
 #define OPP(d_) ((d_)^2)
 
 // ─── power-up ─────────────────────────────────────────────────────────────────
-enum { PU_NONE=0, PU_SPEED, PU_SLOW, PU_SHORT, PU_GHOST };
-static const uint16_t PU_COL[5]={0, C_YELLOW, C_PURPLE, C_PINK, C_GREY};
-static const char     PU_SYM[5]={' ','F','L','X','G'};
+enum { PU_NONE=0, PU_SPEED, PU_SLOW, PU_SHORT, PU_GHOST, PU_SHIELD, PU_COUNT };
+static const uint16_t PU_COL[PU_COUNT]={0, C_YELLOW, C_PURPLE, C_PINK, C_GREY, 0x07FF};
+static const char     PU_SYM[PU_COUNT]={' ','F','L','X','G','S'};
 
 // ─── stati ────────────────────────────────────────────────────────────────────
 enum { ST_MENU=0, ST_HOST, ST_BROWSE, ST_PLAY, ST_OVER, ST_HELP, ST_SCORES };
@@ -101,6 +101,8 @@ struct Snake {
     int8_t  bx[MAX_SEG], by[MAX_SEG]; // [0]=testa
     int     len;
     int8_t  dir, next_dir;
+    int8_t  inq[2];                  // input queue: up to 2 buffered turns (responsive quick turns)
+    uint8_t inq_n;
     bool    alive;
     uint8_t pu;
     int     pu_t;
@@ -198,6 +200,7 @@ static int      s_wins1, s_wins2;
 static int      s_hisc;
 static int      s_flash;
 static int      s_menu_sel;
+static int      s_menu_top;     // windowed-list scroll top (keeps the footer clear)
 static int      s_browse_sel;
 static int      s_help_pg;
 static int      s_cam_x, s_cam_y;   // top-left del viewport in celle mondo
@@ -320,7 +323,7 @@ static void spawn_free(int8_t& ox, int8_t& oy) {
 static void spawn_food(void)  { spawn_free(s_fx,s_fy); }
 static void spawn_food2(void) { spawn_free(s_fx2,s_fy2); }
 static void spawn_pu(void) {
-    s_pu_type=(uint8_t)rng_range(PU_SPEED,PU_GHOST);
+    s_pu_type=(uint8_t)rng_range(PU_SPEED,PU_SHIELD);
     spawn_free(s_pu_x,s_pu_y);
     s_pu_life=20;
 }
@@ -329,10 +332,11 @@ static void spawn_pu(void) {
 static void apply_pu(Snake& me, Snake& opp, uint8_t pu) {
     SFX(SX_PU);
     switch(pu) {
-        case PU_SPEED: me.pu=PU_SPEED; me.pu_t=PU_TICKS; break;
-        case PU_SLOW:  opp.pu=PU_SLOW; opp.pu_t=PU_TICKS; break;
-        case PU_SHORT: me.len=(me.len>9)?me.len-6:3; break;
-        case PU_GHOST: me.pu=PU_GHOST; me.pu_t=PU_TICKS; break;
+        case PU_SPEED:  me.pu=PU_SPEED;  me.pu_t=PU_TICKS; break;
+        case PU_SLOW:   opp.pu=PU_SLOW;  opp.pu_t=PU_TICKS; break;
+        case PU_SHORT:  me.len=(me.len>9)?me.len-6:3; break;
+        case PU_GHOST:  me.pu=PU_GHOST;  me.pu_t=PU_TICKS; break;
+        case PU_SHIELD: me.pu=PU_SHIELD; me.pu_t=PU_TICKS*3; break;   // lasts longer; absorbs one crash
     }
 }
 static int64_t snake_interval(const Snake& s) {
@@ -348,11 +352,22 @@ static int64_t snake_interval(const Snake& s) {
 // ─── step un serpente (HOST only) ────────────────────────────────────────────
 static bool snake_step(Snake& s, Snake& opp) {
     if(!s.alive) return false;
+    // Pop one buffered turn per step so quick double-taps (e.g. up-then-left to dodge) all register.
+    if(s.inq_n>0){ int8_t nd=s.inq[0]; s.inq[0]=s.inq[1]; s.inq_n--; if(nd!=OPP(s.dir)) s.next_dir=nd; }
     if(s.next_dir!=OPP(s.dir)) s.dir=s.next_dir;
     int8_t nx=s.bx[0]+DX[s.dir], ny=s.by[0]+DY[s.dir];
+    bool lethal=false;
     if(s.pu==PU_GHOST){nx=(nx+WORLD_W)%WORLD_W; ny=(ny+WORLD_H)%WORLD_H;}
-    else if(is_obstacle(nx,ny)){s.alive=false;return false;}
-    for(int i=0;i<s.len-1;i++) if(s.bx[i]==nx&&s.by[i]==ny){s.alive=false;return false;}
+    else if(is_obstacle(nx,ny)) lethal=true;
+    if(!lethal) for(int i=0;i<s.len-1;i++) if(s.bx[i]==nx&&s.by[i]==ny){lethal=true;break;}
+    if(lethal){
+        if(s.pu==PU_SHIELD){            // shield absorbs one crash: drop it, flash, survive in place
+            s.pu=PU_NONE; s.pu_t=0; SFX(SX_PU);
+            parts_spawn((float)(sx_(s.bx[0])+CELL/2),(float)(sy_(s.by[0])+CELL/2),0x07FF,18);
+            return true;
+        }
+        s.alive=false; return false;
+    }
     int cp=(s.len<MAX_SEG)?s.len:MAX_SEG-1;
     memmove(&s.bx[1],&s.bx[0],cp);
     memmove(&s.by[1],&s.by[0],cp);
@@ -747,6 +762,11 @@ static void draw_snake(const Snake& s, uint16_t col) {
         uint16_t sc=(i==0)?col:dim565(col,bright,8);
         int px=sx_(cx), py=sy_(cy);
         if(i==0) {
+            // Active power-up aura around the head (visual feedback).
+            int hcx=px+CELL/2, hcy=py+CELL/2;
+            if(s.pu==PU_SHIELD){ d.drawCircle(hcx,hcy,CELL/2+2,0x07FF); d.drawCircle(hcx,hcy,CELL/2+1,dim565((uint16_t)0x07FF,1,2)); }
+            else if(s.pu==PU_GHOST){ d.drawRoundRect(px-2,py-2,CELL+4,CELL+4,3,dim565((uint16_t)0xC618,1,2)); }
+            else if(s.pu==PU_SPEED){ d.drawFastHLine(px-3,hcy,2,C_YELLOW); d.drawFastHLine(px+CELL+1,hcy,2,C_YELLOW); }
             // Testa con occhi
             d.fillRoundRect(px,py,CELL,CELL,2,sc);
             d.drawRoundRect(px,py,CELL,CELL,2,dim565(sc,14,8));
@@ -862,34 +882,47 @@ static void draw_play(void) {
 static void draw_menu(void) {
     d.fillScreen(BG);
 
-    // Titolo: "SNAKE" verde + "DUEL" magenta, textSize(2)
-    d.setTextColor(C_GREEN); d.setTextSize(2);
-    d.setCursor(24,2); d.print("SNAKE");
-    d.setTextColor(0xF81F);
-    d.setCursor(96,2); d.print("DUEL");
-    d.drawFastHLine(0,20,W,LINE);
+    // Header band: a soft dark-green gradient with the wordmark + a bright accent baseline.
+    for(int y=0;y<22;y++) d.drawFastHLine(0,y,W, dim565(C_GREEN, 22-y, 64));
+    d.drawFastHLine(0,21,W, dim565(C_GREEN,1,2));
+    d.drawFastHLine(0,22,W, dim565(C_GREEN,1,4));
+    d.setTextSize(2);
+    d.setTextColor(dim565(C_GREEN,1,3)); d.setCursor(21,4); d.print("SNAKE");   // drop shadow
+    d.setTextColor(C_GREEN);             d.setCursor(20,3); d.print("SNAKE");
+    d.setTextColor(0xF81F);              d.setCursor(92,3); d.print("DUEL");
 
-    // Voci menu a textSize(2) — 5 voci × 22px = 110px (y=22..132)
-    for(int i=0;i<N_MENU;i++) {
-        int py=24+i*22;
+    // Windowed list — scrolls so the selection is always visible and the footer stays clear.
+    const int ITEM_H=18, TOP=28, VIS=5, FY=H-13;
+    int maxtop = N_MENU>VIS ? N_MENU-VIS : 0;
+    if(s_menu_sel < s_menu_top) s_menu_top=s_menu_sel;
+    if(s_menu_sel >= s_menu_top+VIS) s_menu_top=s_menu_sel-VIS+1;
+    if(s_menu_top>maxtop) s_menu_top=maxtop;
+    if(s_menu_top<0) s_menu_top=0;
+    int shown = (N_MENU-s_menu_top<VIS) ? N_MENU-s_menu_top : VIS;
+
+    for(int k=0;k<shown;k++){
+        int i=s_menu_top+k, py=TOP+k*ITEM_H;
         bool sel=(i==s_menu_sel);
-        if(sel) {
-            d.fillRoundRect(2,py-1,W-4,20,3,0x2104);
+        if(sel){
+            d.fillRoundRect(4,py-1,W-8,ITEM_H-2,4, dim565(C_GREEN,1,6));
+            d.drawRoundRect(4,py-1,W-8,ITEM_H-2,4, C_GREEN);
+            d.fillRect(4,py,3,ITEM_H-3, C_GREEN);                    // left accent bar
             d.setTextColor(FG);
-        } else {
-            d.setTextColor(MUTED);
-        }
+        } else d.setTextColor(MUTED);
         d.setTextSize(2);
-        if(sel){ d.setCursor(4,py+1); d.print(">"); }
-        d.setCursor(20,py+1); d.print(MENU_ITEMS[i]);
+        d.setCursor(15,py+1); d.print(MENU_ITEMS[i]);
     }
+    // Scroll chevrons when the list overflows the window.
+    int mid=W/2;
+    if(s_menu_top>0)          d.fillTriangle(mid-4,TOP-3, mid+4,TOP-3, mid,TOP-7, C_GREEN);
+    if(s_menu_top+VIS<N_MENU){ int yb=TOP+VIS*ITEM_H-2; d.fillTriangle(mid-4,yb, mid+4,yb, mid,yb+4, C_GREEN); }
 
-    // Striscia info in basso
-    d.drawFastHLine(0,130,W,LINE);
+    // Footer stats.
+    d.drawFastHLine(0,FY-3,W,LINE);
     d.setTextColor(DIM); d.setTextSize(1);
-    char buf[40];
-    snprintf(buf,sizeof buf,"V:%d/%d  Rec:%d  Ch:%d",s_wins1,s_wins2,s_hisc,pnet_channel());
-    d.setCursor(4,132); d.print(buf);
+    char buf[44];
+    snprintf(buf,sizeof buf,"Vinte %d-%d   Record %d   Ch.%d",s_wins1,s_wins2,s_hisc,pnet_channel());
+    d.setCursor(4,FY); d.print(buf);
 }
 
 static void draw_host(void) {
@@ -983,6 +1016,8 @@ static void draw_help(void) {
         d.setTextColor(FG);        d.print("perdi 6 segmenti");
         d.setTextColor(C_GREY);    d.setCursor(4,54); d.print("G = GHOST  ");
         d.setTextColor(FG);        d.print("attraversi i muri");
+        d.setTextColor(0x07FF);    d.setCursor(4,66); d.print("S = SCUDO  ");
+        d.setTextColor(FG);        d.print("salva da 1 schianto");
     }
     d.setTextColor(DIM); d.setCursor(4,H-12);
     d.print("TAB=pagina  ESC=indietro");
@@ -1018,8 +1053,13 @@ static void on_draw(void) {
 // ─── input ────────────────────────────────────────────────────────────────────
 static void set_dir(int8_t dir) {
     if(s_st!=ST_PLAY) return;
-    if(s_mode==MODE_GUEST){ if(dir!=OPP(s_s2.dir)) s_s2.next_dir=dir; }
-    else                  { if(dir!=OPP(s_s1.dir)) s_s1.next_dir=dir; }
+    if(s_mode==MODE_GUEST){ if(dir!=OPP(s_s2.dir)) s_s2.next_dir=dir; return; }
+    // Local snake: queue up to 2 turns vs the LAST intended heading (so rapid up-then-left both land),
+    // dropping reversals and repeats. snake_step pops one per move.
+    Snake& s=s_s1;
+    int8_t ref = s.inq_n>0 ? s.inq[s.inq_n-1] : s.next_dir;
+    if(dir==ref || dir==OPP(ref)) return;
+    if(s.inq_n<2) s.inq[s.inq_n++]=dir;
 }
 
 static void on_key(int key, char ch) {
