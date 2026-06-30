@@ -1,12 +1,12 @@
 {
-  "generated": "2026-06-29T09:17:39.987Z",
+  "generated": "2026-06-29T20:13:14.164Z",
   "base": "it",
   "langs": [
     "it",
     "en"
   ],
   "surfaces": 34,
-  "totalKeys": 1656,
+  "totalKeys": 1665,
   "namespaces": {
     "core": 103,
     "shell": 129,
@@ -24,9 +24,9 @@
     "file-commander": 94,
     "groq-chat": 38,
     "help": 32,
-    "ir-remote": 98,
+    "ir-remote": 99,
     "log-viewer": 27,
-    "mail": 36,
+    "mail": 44,
     "media-player": 3,
     "notepad": 17,
     "photo-viewer": 2,

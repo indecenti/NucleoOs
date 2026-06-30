@@ -72,6 +72,30 @@ int main(void) {
     CHECK(n == 67, "Samsung length expected 67, got %d", n);
     CHECK(d[0] == 4500 && d[1] == 4500, "Samsung header expected 4500/4500, got %u/%u", d[0], d[1]);
 
+    // ---- CRT-era power vectors (codes the expanded presets.json ships) ----------------------
+    // Sony Trinitron power = SIRC12 addr 1 / cmd 21 (0x15): header + odd length, 40 kHz.
+    n = nir_encode(NIR_PROTO_SONY12, 1, 21, d, NIR_MAX_DURATIONS, &carrier);
+    CHECK(n == 25 && carrier == 40000, "Sony Trinitron power expected 25 durs @40k, got %d @%u", n, carrier);
+    // Philips/EU RC5 power = standby cmd 12 (covers most 80s/90s RC5 CRTs), 36 kHz, starts on a mark.
+    n = nir_encode(NIR_PROTO_RC5, 0, 12, d, NIR_MAX_DURATIONS, &carrier);
+    CHECK(n > 0 && carrier == 36000, "RC5 power(12) expected >0 durs @36k, got %d @%u", n, carrier);
+    // NEC LG/Goldstar/Zenith power = addr 4 / cmd 8, 38 kHz, full 67-duration frame.
+    n = nir_encode(NIR_PROTO_NEC, 4, 8, d, NIR_MAX_DURATIONS, &carrier);
+    CHECK(n == 67 && carrier == 38000, "NEC LG power expected 67 durs @38k, got %d @%u", n, carrier);
+
+    // ---- Panasonic / Kaseikyo: 48 bits, header 3456/1728, XOR checksum byte, 37 kHz, 99 durs ---
+    n = nir_encode(NIR_PROTO_PANASONIC, 0x0080, 0x3D, d, NIR_MAX_DURATIONS, &carrier);
+    printf("PANASONIC(0x0080,0x3D) -> %d durations, carrier %u\n", n, carrier);
+    CHECK(n == 99, "Panasonic length expected 99, got %d", n);
+    CHECK(carrier == 37000, "Panasonic carrier expected 37000, got %u", carrier);
+    CHECK(d[0] == 3456 && d[1] == 1728, "Panasonic header expected 3456/1728, got %u/%u", d[0], d[1]);
+    // vendor low byte 0x02 (LSB-first): bit0=0,bit1=1 -> 2nd bit pair (idx 4,5) is a 'one' space.
+    CHECK(d[2] == 432 && d[3] == 432, "Panasonic vendor bit0 zero expected 432/432, got %u/%u", d[2], d[3]);
+    CHECK(d[4] == 432 && d[5] == 1296, "Panasonic vendor bit1 one expected 432/1296, got %u/%u", d[4], d[5]);
+    CHECK(d[98] == 432, "Panasonic stop mark expected 432, got %u", d[98]);
+    { int ok = 1; for (int i = 2; i < n; i += 2) if (d[i] != 432) ok = 0;   // every bit mark is 432
+      CHECK(ok, "Panasonic bit marks must all be 432"); }
+
     // ---- name round-trip + overflow guard ---------------------------------------------------
     CHECK(nir_proto_from_name("NEC") == NIR_PROTO_NEC, "name parse NEC failed");
     CHECK(nir_proto_from_name("sony") == NIR_PROTO_SONY12, "alias sony failed");

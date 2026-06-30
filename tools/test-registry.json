@@ -1299,6 +1299,21 @@
       "anima": true
     },
     {
+      "id": "gate-online-stability-twdt",
+      "label": "online-stability (TWDT)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/online-stability-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-offline-installer",
       "label": "offline-installer",
       "category": "cascade-infra",
@@ -1438,6 +1453,81 @@
       "lang": "both",
       "in_gate": true,
       "anima": false
+    },
+    {
+      "id": "gate-ir-encoder-nec-sony-rc5-crt",
+      "label": "ir-encoder (NEC/Sony/RC5/CRT)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/ir-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-ir-pack-low-ram-catalog",
+      "label": "ir-pack (low-RAM catalog)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/ir-pack-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-probe-ssid-karma",
+      "label": "probe-ssid (KARMA)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/probe-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-eapol-hs-wpa",
+      "label": "eapol-hs (WPA)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/eapol-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-portal-clone-f2",
+      "label": "portal-clone (F2)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/portalclone-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
     },
     {
       "id": "gate-ducky-payloads",

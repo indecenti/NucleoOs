@@ -27,6 +27,7 @@ typedef enum {
     NIR_PROTO_SONY20,    // Sony SIRC 20-bit (7 cmd + 5 addr + 8 extended)
     NIR_PROTO_RC5,       // Philips RC5 (14-bit Manchester)
     NIR_PROTO_JVC,       // JVC (16-bit, no inversion)
+    NIR_PROTO_PANASONIC, // Panasonic / Kaseikyo 48-bit (vendor 0x2002 + dev/sub/fun + XOR check)
     NIR_PROTO__COUNT
 } nir_proto_t;
 

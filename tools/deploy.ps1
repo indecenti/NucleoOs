@@ -163,12 +163,23 @@ if (Test-Path $gen) {
     if ($LASTEXITCODE -ne 0) { throw "gen-constellations-content.mjs failed ($LASTEXITCODE)" }
 }
 
+# 0b) Codegen: pack the IR preset catalog (apps/ir-remote/www/presets.json) into the fixed-width
+#     binary the firmware reads with O(1)-RAM fseek/fread (/sd/system/ir/presets.bin). Runs BEFORE
+#     staging so the freshly-built pack ships; the staged source is tools\sd-sim\system\ir.
+$irpack = Join-Path $PSScriptRoot 'ir-pack.mjs'
+if (Test-Path $irpack) {
+    Write-Host "Codegen: IR preset pack ->" -NoNewline
+    & node $irpack "$repo\apps\ir-remote\www\presets.json" "$repo\tools\sd-sim\system\ir\presets.bin"
+    if ($LASTEXITCODE -ne 0) { throw "ir-pack.mjs failed ($LASTEXITCODE)" }
+}
+
 # 1) Assemble repo -> deploy/sd (incremental)
 $man = Load-Manifest $sd; $seen = @{}; $stat = @{ copied = 0; skipped = 0; deleted = 0; bytes = 0 }
 Sync-Dir "$repo\registry"          $sd 'system/registry'        $man $seen $stat
 Sync-Dir "$repo\apps"              $sd 'apps'                   $man $seen $stat
 Sync-Dir "$repo\web\shell"         $sd 'www/shell'              $man $seen $stat
 Sync-Dir "$repo\tools\sd-sim\data" $sd 'data'                   $man $seen $stat
+Sync-Dir "$repo\tools\sd-sim\system\ir" $sd 'system/ir'         $man $seen $stat   # IR preset pack (presets.bin)
 # Staging static assets from deploy/sd-safe
 Sync-Dir "$repo\deploy\sd-safe\data\anima\akb5" $sd 'data/anima/akb5' $man $seen $stat
 if (Test-Path "$repo\deploy\sd-safe\data\anima\anima-it-akb5.bin") {

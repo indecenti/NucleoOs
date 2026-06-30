@@ -542,8 +542,8 @@ const server = createServer(async (req, res) => {
   // no pairing; the firmware gates send/tvbgone with NUCLEO_AUTH_GUARD. The sweep drives fake progress. ──
   if (path === '/api/ir/db') {
     return sendJSON(res, { ready: true, gpio: 44,
-      protocols: ['nec', 'necext', 'samsung', 'sony12', 'sony15', 'sony20', 'rc5', 'jvc'],
-      tvbgone: { count: 16, regions: ['all', 'us', 'eu', 'asia'] } });
+      protocols: ['nec', 'necext', 'samsung', 'sony12', 'sony15', 'sony20', 'rc5', 'jvc', 'panasonic'],
+      tvbgone: { count: 77, regions: ['all', 'us', 'eu', 'asia'] } });
   }
   if (path === '/api/ir/send' && req.method === 'POST') {
     let b = {}; try { b = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}

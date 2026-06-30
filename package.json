@@ -16,6 +16,8 @@
     "logviewer:test": "node --test tools/log-viewer-diag.test.mjs",
     "radio:test": "node tools/radio-check.mjs",
     "ir:test": "node tools/anima-host/ir-check.mjs",
+    "ir:pack": "node tools/ir-pack.mjs",
+    "irpack:test": "node tools/anima-host/ir-pack-check.mjs",
     "link:test": "node tools/anima-host/link-check.mjs",
     "mesh:test": "node tools/anima-host/mesh-check.mjs",
     "chorus:test": "node tools/anima-host/chorus-check.mjs",

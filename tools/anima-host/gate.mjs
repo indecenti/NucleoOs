@@ -400,6 +400,17 @@ const gates = [
     // IDs, type bytes, rotating model placement — and the HARD <=31-byte adv invariant. Pure C, no device,
     // no NimBLE. A wrong byte = a payload the controller rejects or an OS ignores. FOR AUTHORIZED TESTING.
     ok: (code) => code === 0, summary: (o) => (o.match(/\d+ passed[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'ir-encoder (NEC/Sony/RC5/CRT)', cmd: 'node', args: ['tools/anima-host/ir-check.mjs'],
+    // The pure IR protocol encoder (firmware/components/nucleo_ir/nucleo_ir_proto.c), host-compiled
+    // with MinGW: NEC/Samsung/Sony-SIRC/RC5/JVC timing vectors + the CRT-era power codes the expanded
+    // presets ship + overflow guard. Pure C, no device. A wrong duration = a code no TV decodes.
+    ok: (code) => code === 0, summary: (o) => (o.match(/IR encoder: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'ir-pack (low-RAM catalog)', cmd: 'node', args: ['tools/anima-host/ir-pack-check.mjs'],
+    // The seek-based preset-pack reader (firmware/components/nucleo_ir/nucleo_ir_pack.c) cross-checked
+    // against the JS packer (tools/ir-pack.mjs): pack -> C reader -> diff vs JS unpack, on the synthetic
+    // edge cases AND the real shipped presets.json, plus the open-fail path. Proves a huge catalog reads
+    // on O(one record) of RAM and that packer/firmware agree byte-for-byte.
+    ok: (code) => code === 0, summary: (o) => (o.match(/IR pack: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'probe-ssid (KARMA)', cmd: 'node', args: ['tools/anima-host/probe-check.mjs'],
     // The KARMA probe-request SSID parser (firmware/components/nucleo_wifiatk/nucleo_wifiatk_probe.c),
     // host-compiled with MinGW: 802.11 subtype gate, IE walk, SSID extraction, and the broadcast /
