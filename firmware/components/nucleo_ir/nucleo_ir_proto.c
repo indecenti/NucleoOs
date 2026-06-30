@@ -50,6 +50,14 @@ static void emit_pd_bits_lsb(emit_t *e, uint32_t value, int nbits,
 #define JVC_ZERO_SPACE  525
 #define JVC_ONE_SPACE  1575
 
+// Panasonic / Kaseikyo: pulse-distance, LSB-first, 48 bits, ~37 kHz.
+#define PANA_HDR_MARK  3456
+#define PANA_HDR_SPACE 1728
+#define PANA_BIT_MARK   432
+#define PANA_ZERO_SPACE 432
+#define PANA_ONE_SPACE 1296
+#define PANA_VENDOR    0x2002   // Panasonic OEM id (low byte first on the wire)
+
 // ---- NEC family (pulse-distance, LSB-first, trailing stop mark) ------------------------------
 static int enc_nec(emit_t *e, uint32_t address, uint32_t command, int extended) {
     emit(e, NEC_HDR_MARK);
@@ -86,6 +94,22 @@ static int enc_jvc(emit_t *e, uint32_t address, uint32_t command) {
     emit_pd_bits_lsb(e, address & 0xFF, 8, JVC_BIT_MARK, JVC_ZERO_SPACE, JVC_ONE_SPACE);
     emit_pd_bits_lsb(e, command & 0xFF, 8, JVC_BIT_MARK, JVC_ZERO_SPACE, JVC_ONE_SPACE);
     emit(e, JVC_BIT_MARK);
+    return e->ok ? e->n : -1;
+}
+
+// ---- Panasonic / Kaseikyo (pulse-distance, LSB-first, 48-bit + XOR checksum) -----------------
+// Frame bytes (each sent LSB-first, in order): vendor-lo, vendor-hi, device, subdevice, function,
+// checksum = device ^ subdevice ^ function. We map our (address, command) onto device = addr low,
+// subdevice = addr high, function = command — the standard Kaseikyo layout. 99 durations.
+static int enc_panasonic(emit_t *e, uint32_t address, uint32_t command) {
+    uint8_t dev = address & 0xFF, sub = (address >> 8) & 0xFF, fun = command & 0xFF;
+    uint8_t bytes[6] = { PANA_VENDOR & 0xFF, (PANA_VENDOR >> 8) & 0xFF, dev, sub, fun,
+                         (uint8_t)(dev ^ sub ^ fun) };
+    emit(e, PANA_HDR_MARK);
+    emit(e, PANA_HDR_SPACE);
+    for (int i = 0; i < 6; i++)
+        emit_pd_bits_lsb(e, bytes[i], 8, PANA_BIT_MARK, PANA_ZERO_SPACE, PANA_ONE_SPACE);
+    emit(e, PANA_BIT_MARK);   // stop bit
     return e->ok ? e->n : -1;
 }
 
@@ -164,6 +188,7 @@ int nir_encode(nir_proto_t proto, uint32_t address, uint32_t command,
         case NIR_PROTO_SONY20:  return enc_sony(&e, address, command, 20);
         case NIR_PROTO_RC5:     return enc_rc5(&e, address, command);
         case NIR_PROTO_JVC:     return enc_jvc(&e, address, command);
+        case NIR_PROTO_PANASONIC: return enc_panasonic(&e, address, command);
         case NIR_PROTO_RAW:     return 0;   // caller supplies durations
         default:                return -1;
     }
@@ -175,6 +200,7 @@ uint16_t nir_proto_carrier(nir_proto_t proto) {
         case NIR_PROTO_SONY15:
         case NIR_PROTO_SONY20: return 40000;
         case NIR_PROTO_RC5:    return 36000;
+        case NIR_PROTO_PANASONIC: return 37000;
         default:               return 38000;
     }
 }
@@ -189,7 +215,7 @@ int nir_proto_default_repeats(nir_proto_t proto) {
 }
 
 static const char *const NAMES[NIR_PROTO__COUNT] = {
-    "raw", "nec", "necext", "samsung", "sony12", "sony15", "sony20", "rc5", "jvc",
+    "raw", "nec", "necext", "samsung", "sony12", "sony15", "sony20", "rc5", "jvc", "panasonic",
 };
 
 nir_proto_t nir_proto_from_name(const char *name) {

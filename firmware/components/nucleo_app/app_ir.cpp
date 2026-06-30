@@ -3,59 +3,93 @@
 // Three views (TAB cycles): Remotes (browse the SD preset catalog, drill into a device, send a
 // button), TV-B-Gone (sweep the catalog's power codes by region) and Favourites (the SAME ⭐ the
 // web app saved to /sd/data/ir/userdata.json — so a favourite starred in the browser is one tap
-// away on the device). The big catalog + user data live on the SD card and are loaded ON DEMAND
-// when the app opens and freed on exit — they never sit in firmware RAM, honouring the rule that a
-// backgrounded native app must cost nothing while the web UI is the active surface.
+// away on the device). The catalog lives on the SD card as a packed binary (/sd/system/ir/presets.bin,
+// built from presets.json by tools/ir-pack.mjs) and is read one fixed-width record at a time with
+// fseek/fread — a catalog of thousands of remotes costs only a few hundred bytes of RAM, honouring
+// the rule that a backgrounded native app must cost nothing while the web UI is the active surface.
 //
 // Drawing goes straight through the `d` macro (app_gfx.h), tick-based and non-blocking: the
 // TV-B-Gone sweep sends one code per on_tick() so the UI stays responsive.
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "app_gfx.h"
+#include "app_ui.h"   // shared Wear-OS focused-row list + type-to-jump
 #include <M5GFX.h>
 #include "nucleo_ir.h"
 #include "nucleo_ir_proto.h"
-#include "nucleo_board.h"   // NUCLEO_SD_MOUNT
+#include "nucleo_ir_pack.h"   // low-RAM seek-based reader for the packed catalog
+#include "nucleo_board.h"     // NUCLEO_SD_MOUNT
 #include "cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define PRESETS_PATH NUCLEO_SD_MOUNT "/system/ir/presets.json"
-#define UDATA_PATH   NUCLEO_SD_MOUNT "/data/ir/userdata.json"
+#define PRESETS_BIN NUCLEO_SD_MOUNT "/system/ir/presets.bin"  // built from presets.json by tools/ir-pack.mjs
+#define UDATA_PATH  NUCLEO_SD_MOUNT "/data/ir/userdata.json"
 
 // ---- palette (RGB565) ----
 static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, LINE = 0x2945,
-                            ACC = 0x2EDA, PWR = 0xF9A6, GRN = 0x8FF3, STAR = 0xFE60, SELBG = 0x1A8B;
+                            ACC = 0x2EDA, PWR = 0xF9A6, GRN = 0x8FF3, STAR = 0xFE60, INK = 0x0000;
 
-// ---- bounded model (malloc'd on enter, freed on exit) ----
-#define MAX_REMOTES 16
-#define MAX_BTN     18
-#define MAX_TVP     48
-#define MAX_FAV     24
-
-typedef struct { char key[14]; uint32_t cmd; } ir_btn_t;
-typedef struct { char name[28]; nir_proto_t proto; uint32_t addr; int nbtn; ir_btn_t btn[MAX_BTN]; } ir_remote_t;
-typedef struct { char brand[20]; char region[8]; nir_proto_t proto; uint32_t addr, cmd; } ir_tvp_t;
+// ---- model ----
+// Remotes + TV-power codes are NOT loaded into RAM: they're read on demand from the packed SD
+// catalog (presets.bin), one fixed-width record per list row / button press, so the catalog can
+// hold thousands of devices for a few hundred bytes of working set (see nucleo_ir_pack.h). Only
+// favourites — a short, user-curated list — are parsed into RAM, and that list is bounded.
+#define MAX_FAV 24
 typedef struct { char label[30]; nir_proto_t proto; uint32_t addr, cmd; } ir_fav_t;
 
-static ir_remote_t *s_rem;  static int s_nrem;
-static ir_tvp_t    *s_tvp;  static int s_ntvp;
-static ir_fav_t    *s_fav;  static int s_nfav;
+static ir_pack_t        s_pack;     // open handle to presets.bin (valid while s_pack_ok)
+static bool             s_pack_ok;
+static ir_pack_remote_t s_curdev;   // the remote being browsed at level 1 (loaded on drill-in)
+static ir_fav_t        *s_fav; static int s_nfav;
 
 // ---- UI state ----
 static int  s_view;            // 0 = Remotes, 1 = TV-B-Gone, 2 = Favourites
-static int  s_level;           // remotes: 0 = device list, 1 = button list
+static int  s_level;           // remotes: 0 = device list, 1 = button face
 static int  s_sel;             // selection in the current list
 static int  s_dev;             // chosen device index (level 1)
 static int  s_region;          // 0=all 1=us 2=eu 3=asia
 static char s_status[40];
 
-static bool s_sweep; static int s_sweep_i, s_sweep_n; static int s_sweep_idx[MAX_TVP];
+static bool     s_sweep;        // TV-B-Gone sweep running
+static uint32_t s_sweep_i;      // next tvpower index to consider
+static int      s_sweep_done;   // codes actually sent this sweep
+static int      s_sweep_total;  // region-matching codes (for the x/n readout)
+static char     s_cur_brand[20]; // brand currently firing (big readout on the sweep screen)
 
 static const char *const REGIONS[] = { "all", "us", "eu", "asia" };
 #define NREGION 4
-static const char *const VIEW_TITLE[] = { "IR \xB7 Remotes", "IR \xB7 TV-B-Gone", "IR \xB7 Favourites" };
+static int s_regcount[NREGION];   // tvpower codes per region (precomputed once on open)
+
+enum { V_REM = 0, V_TVB, V_FIND, V_FAV };   // tab order (s_view)
+#define NTABS 4
+static const char *const TABS[NTABS] = { "REMOTES", "TV-B", "FIND", "FAVS" };
+
+// ---- Auto-Find: guided universal-remote identification (the flagship) -----------------------
+// Walks the TV-power codes one UNIQUE code at a time, firing each and asking the operator "did it
+// turn off?". A yes identifies the set and jumps straight into that brand's full remote. Dedups by
+// (proto,addr,cmd) so the dozens of EU brands that share RC5 0/12 are asked only ONCE.
+static bool        s_find;            // wizard running
+static uint32_t    s_find_i;          // next tvpower index to probe
+static int         s_find_done;       // unique codes tried
+static int         s_find_total;      // unique region-matching codes (denominator)
+static char        s_find_brand[24];  // current candidate brand (big readout)
+static nir_proto_t s_find_proto; static uint32_t s_find_addr, s_find_cmd;
+static uint32_t    s_find_seen[96]; static int s_find_nseen;
+
+static uint32_t find_key(uint8_t proto, uint32_t addr, uint32_t cmd) {
+    return ((uint32_t)proto << 24) | ((addr & 0xFF) << 8) | (cmd & 0xFF);
+}
+static bool find_seen(uint32_t key) {
+    for (int i = 0; i < s_find_nseen; i++) if (s_find_seen[i] == key) return true;
+    return false;
+}
+// Dedup key for a tv-power entry: a RAW row keys on its (large) pool offset, a protocol row on
+// (proto,addr,cmd) — the two ranges never collide (offsets are small, proto keys carry proto<<24).
+static uint32_t tvp_key(const ir_pack_tvp_t *t) {
+    return (t->proto == IRPACK_PROTO_RAW) ? ir_pack_tvp_raw_off(t) : find_key(t->proto, t->addr, t->cmd);
+}
 
 // ---- load helpers ----
 static char *slurp(const char *path, long cap) {
@@ -66,57 +100,22 @@ static char *slurp(const char *path, long cap) {
     size_t got = fread(buf, 1, sz, f); fclose(f); buf[got] = 0; return buf;
 }
 
-static void load_catalog(void) {
-    // 96 KB cap: enter() now releases the 32 KB canvas before this load, so the slurp has headroom;
-    // keep the original ceiling so large imported .ir catalogs (Flipper) aren't truncated mid-JSON.
-    char *buf = slurp(PRESETS_PATH, 96 * 1024); if (!buf) return;
-    cJSON *root = cJSON_Parse(buf); free(buf); if (!root) return;
-    s_rem = (ir_remote_t *)calloc(MAX_REMOTES, sizeof(ir_remote_t));
-    s_tvp = (ir_tvp_t *)calloc(MAX_TVP, sizeof(ir_tvp_t));
-    if (!s_rem || !s_tvp) {   // partial alloc: free whatever succeeded, leave a clean (empty) state
-        free(s_rem); free(s_tvp); s_rem = NULL; s_tvp = NULL;
-        cJSON_Delete(root);
-        snprintf(s_status, sizeof s_status, "catalog OOM");
-        return;
-    }
+// region filter: code 0 ("all") fires in every region; otherwise the selected region must match.
+static bool region_hit(uint8_t code) { return s_region == 0 || code == 0 || code == (uint8_t)s_region; }
 
-    cJSON *rem = cJSON_GetObjectItem(root, "remotes"), *it;
-    if (cJSON_IsArray(rem)) cJSON_ArrayForEach(it, rem) {
-        if (s_nrem >= MAX_REMOTES) break;
-        cJSON *nm = cJSON_GetObjectItem(it, "name"), *pr = cJSON_GetObjectItem(it, "protocol"),
-              *ad = cJSON_GetObjectItem(it, "address"), *bs = cJSON_GetObjectItem(it, "buttons");
-        if (!cJSON_IsString(nm) || !cJSON_IsString(pr) || !cJSON_IsObject(bs)) continue;
-        ir_remote_t *R = &s_rem[s_nrem];
-        snprintf(R->name, sizeof R->name, "%s", nm->valuestring);
-        R->proto = nir_proto_from_name(pr->valuestring);
-        R->addr  = cJSON_IsNumber(ad) ? (uint32_t)ad->valuedouble : 0;
-        R->nbtn  = 0;
-        cJSON *b;
-        cJSON_ArrayForEach(b, bs) {
-            if (R->nbtn >= MAX_BTN) break;
-            if (!cJSON_IsNumber(b) || !b->string) continue;
-            snprintf(R->btn[R->nbtn].key, sizeof R->btn[R->nbtn].key, "%s", b->string);
-            R->btn[R->nbtn].cmd = (uint32_t)b->valuedouble;
-            R->nbtn++;
-        }
-        if (R->proto < NIR_PROTO__COUNT && R->nbtn > 0) s_nrem++;
+static void open_pack(void) {
+    // O(1)-RAM: just read + validate the 32-byte header and keep the FILE open. Every row/button is
+    // fetched on demand from the SD pack — the catalog never sits in the heap.
+    s_pack_ok = ir_pack_open(&s_pack, PRESETS_BIN);
+    for (int r = 0; r < NREGION; r++) s_regcount[r] = 0;
+    if (!s_pack_ok) return;
+    // One pass to count codes per region tab (so the region list shows a live badge without rescanning).
+    for (uint32_t i = 0; i < s_pack.n_tvpower; i++) {
+        ir_pack_tvp_t t;
+        if (!ir_pack_tvpower(&s_pack, i, &t)) continue;
+        s_regcount[0]++;                                    // "all"
+        for (int r = 1; r < NREGION; r++) if (t.region == 0 || t.region == r) s_regcount[r]++;
     }
-    cJSON *tvp = cJSON_GetObjectItem(root, "tvpower");
-    if (cJSON_IsArray(tvp)) cJSON_ArrayForEach(it, tvp) {
-        if (s_ntvp >= MAX_TVP) break;
-        cJSON *br = cJSON_GetObjectItem(it, "brand"), *pr = cJSON_GetObjectItem(it, "protocol"),
-              *ad = cJSON_GetObjectItem(it, "address"), *cm = cJSON_GetObjectItem(it, "command"),
-              *rg = cJSON_GetObjectItem(it, "region");
-        if (!cJSON_IsString(br) || !cJSON_IsString(pr) || !cJSON_IsNumber(cm)) continue;
-        ir_tvp_t *T = &s_tvp[s_ntvp];
-        snprintf(T->brand, sizeof T->brand, "%s", br->valuestring);
-        snprintf(T->region, sizeof T->region, "%s", cJSON_IsString(rg) ? rg->valuestring : "all");
-        T->proto = nir_proto_from_name(pr->valuestring);
-        T->addr  = cJSON_IsNumber(ad) ? (uint32_t)ad->valuedouble : 0;
-        T->cmd   = (uint32_t)cm->valuedouble;
-        if (T->proto < NIR_PROTO__COUNT) s_ntvp++;
-    }
-    cJSON_Delete(root);
 }
 
 static void load_favorites(void) {
@@ -143,120 +142,326 @@ static void load_favorites(void) {
 }
 
 static void free_all(void) {
-    free(s_rem); free(s_tvp); free(s_fav);
-    s_rem = NULL; s_tvp = NULL; s_fav = NULL; s_nrem = s_ntvp = s_nfav = 0;
+    if (s_pack_ok) { ir_pack_close(&s_pack); s_pack_ok = false; }
+    free(s_fav); s_fav = NULL; s_nfav = 0;
 }
 
 // ---- helpers ----
 static int cur_count(void) {
-    if (s_view == 1) return NREGION;
-    if (s_view == 2) return s_nfav;
-    return s_level == 0 ? s_nrem : (s_dev < s_nrem ? s_rem[s_dev].nbtn : 0);
+    if (s_view == V_TVB || s_view == V_FIND) return NREGION;
+    if (s_view == V_FAV) return s_nfav;
+    if (!s_pack_ok) return 0;
+    return s_level == 0 ? (int)s_pack.n_remotes : (int)s_curdev.nbtn;
 }
 static void tx(int x, int y, const char *s, unsigned short fg, unsigned short bg, int sz) {
     d.setTextSize(sz); d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
 }
+static void tx_center(int cx, int y, const char *s, unsigned short fg, unsigned short bg, int sz) {
+    tx(cx - (int)strlen(s) * 3 * sz, y, s, fg, bg, sz);
+}
+
+// Emit one code: protocol-encoded, or — for a RAW record (proto 0) — the captured µs streamed from
+// the pack (cmd_or_off is then the RAW-pool byte offset). This is what makes any protocol sendable.
+static void ir_emit(uint8_t proto, uint32_t addr, uint32_t cmd_or_off) {
+    if (proto == IRPACK_PROTO_RAW) {
+        uint16_t car = 0; static uint16_t dur[400];
+        int n = ir_pack_raw(&s_pack, cmd_or_off, &car, dur, 400);
+        if (n > 0) nucleo_ir_send_raw(dur, n, car, 0);
+    } else {
+        nucleo_ir_send_proto((nir_proto_t)proto, addr, cmd_or_off, 0);
+    }
+}
+
+// ---- app_ui row providers (one shared scratch buffer; each label/right is consumed before the
+// next call, so a single static is safe — and every row is read straight from the SD pack) -------
+static char s_rowbuf[40];
+static const char *remote_label(int i, void *) {
+    ir_pack_remote_t r; s_rowbuf[0] = 0;
+    if (ir_pack_remote(&s_pack, (uint32_t)i, &r)) snprintf(s_rowbuf, sizeof s_rowbuf, "%s", r.name);
+    return s_rowbuf;
+}
+static const char *remote_right(int i, void *) {
+    ir_pack_remote_t r;
+    if (ir_pack_remote(&s_pack, (uint32_t)i, &r)) return nir_proto_name((nir_proto_t)r.proto);
+    return "";
+}
+static const char *btn_label(int i, void *) {
+    ir_pack_btn_t b; s_rowbuf[0] = 0;
+    if (ir_pack_button(&s_pack, &s_curdev, (uint32_t)i, &b)) snprintf(s_rowbuf, sizeof s_rowbuf, "%s", b.key);
+    return s_rowbuf;
+}
+static unsigned short btn_color(int i, void *) {
+    ir_pack_btn_t b;
+    if (ir_pack_button(&s_pack, &s_curdev, (uint32_t)i, &b) && !strcmp(b.key, "power")) return PWR;
+    return ACC;
+}
+static const char *fav_label(int i, void *) {
+    s_rowbuf[0] = 0;
+    if (i >= 0 && i < s_nfav) snprintf(s_rowbuf, sizeof s_rowbuf, "\x05 %s", s_fav[i].label);
+    return s_rowbuf;
+}
+static unsigned short fav_color(int, void *) { return STAR; }
+static const char *region_label(int i, void *) {
+    static const char *const UP[NREGION] = { "ALL", "US", "EU", "ASIA" };
+    return (i >= 0 && i < NREGION) ? UP[i] : "";
+}
+static const char *region_right(int i, void *) {
+    s_rowbuf[0] = 0;
+    if (i >= 0 && i < NREGION) snprintf(s_rowbuf, sizeof s_rowbuf, "%d", s_regcount[i]);
+    return s_rowbuf;
+}
+// pick the active list's label provider for type-to-jump (app_ui_list_key).
+static app_ui_text_fn cur_label_fn(void) {
+    if (s_view == V_TVB || s_view == V_FIND) return region_label;
+    if (s_view == V_FAV) return fav_label;
+    return s_level == 0 ? remote_label : btn_label;
+}
+
+// ---- segmented tab bar (app_wifi look): active tab = filled accent pill, others legible grey;
+// a small alert dot on TV-B-GONE while a sweep is live. Occupies [top, top+24). ----------------
+static void draw_tabbar(int top) {
+    d.fillRect(0, top, 240, 24, BG);
+    int seg = 240 / NTABS;
+    for (int i = 0; i < NTABS; i++) {
+        int x = i * seg; const char *lab = TABS[i]; int tw = (int)strlen(lab) * 6;
+        int lx = x + (seg - tw) / 2, ly = top + 8;
+        if (i == s_view) { d.fillRoundRect(x + 3, top + 3, seg - 6, 18, 8, ACC); tx(lx, ly, lab, INK, ACC, 1); }
+        else             { tx(lx, ly, lab, MUTED, BG, 1); }
+        if (i == 1 && s_sweep) d.fillCircle(x + seg - 8, top + 7, 3, PWR);   // live-sweep alert dot
+    }
+    d.drawFastHLine(0, top + 23, 240, LINE);
+}
+
+// ---- TV-B-Gone sweep screen: big brand readout + fat progress bar + counter -------------------
+static void draw_sweep(int top, int h) {
+    d.fillRect(0, top, 240, h, BG);
+    int cy = top + h / 2;
+    tx_center(120, top + 8, "SWEEPING", PWR, BG, 2);
+    // current brand, large
+    const char *b = s_cur_brand[0] ? s_cur_brand : "...";
+    tx_center(120, cy - 30, b, FG, BG, 2);
+    // fat progress bar
+    int pct = s_sweep_total ? s_sweep_done * 100 / s_sweep_total : 0;
+    int bx = 20, bw = 200, by = cy, bh = 16;
+    d.drawRoundRect(bx, by, bw, bh, 6, LINE);
+    d.fillRoundRect(bx + 2, by + 2, (bw - 4) * pct / 100, bh - 4, 4, PWR);
+    char c[24]; snprintf(c, sizeof c, "%d / %d", s_sweep_done, s_sweep_total);
+    tx_center(120, by + bh + 8, c, MUTED, BG, 2);
+    tx_center(120, top + h - 12, "Enter / Esc: stop", MUTED, BG, 1);
+}
+
+// ---- Auto-Find wizard logic ----
+static void find_send_current(void) { ir_emit((uint8_t)s_find_proto, s_find_addr, s_find_cmd); }
+
+// Advance to the next UNIQUE, region-matching power code. Returns false when the list is exhausted.
+static bool find_advance(void) {
+    while (s_find_i < s_pack.n_tvpower) {
+        ir_pack_tvp_t t; uint32_t idx = s_find_i++;
+        if (!ir_pack_tvpower(&s_pack, idx, &t) || !region_hit(t.region)) continue;
+        uint32_t key = tvp_key(&t);
+        if (find_seen(key)) continue;
+        if (s_find_nseen < (int)(sizeof s_find_seen / sizeof s_find_seen[0])) s_find_seen[s_find_nseen++] = key;
+        if (t.proto == IRPACK_PROTO_RAW) { s_find_proto = (nir_proto_t)0; s_find_addr = 0; s_find_cmd = ir_pack_tvp_raw_off(&t); }
+        else                            { s_find_proto = (nir_proto_t)t.proto; s_find_addr = t.addr; s_find_cmd = t.cmd; }
+        snprintf(s_find_brand, sizeof s_find_brand, "%s", t.brand);
+        s_find_done++;
+        return true;
+    }
+    return false;
+}
+static void start_find(void) {
+    if (!s_pack_ok) { snprintf(s_status, sizeof s_status, "no catalog"); return; }
+    // First pass: count the unique region-matching codes (the denominator).
+    s_find_nseen = 0; s_find_total = 0;
+    for (uint32_t i = 0; i < s_pack.n_tvpower; i++) {
+        ir_pack_tvp_t t;
+        if (ir_pack_tvpower(&s_pack, i, &t) && region_hit(t.region)) {
+            uint32_t k = tvp_key(&t);
+            if (!find_seen(k)) { if (s_find_nseen < 96) s_find_seen[s_find_nseen++] = k; s_find_total++; }
+        }
+    }
+    if (!s_find_total) { snprintf(s_status, sizeof s_status, "no codes"); return; }
+    s_find_nseen = 0; s_find_i = 0; s_find_done = 0; s_find = true; s_status[0] = 0; s_find_brand[0] = 0;
+    if (find_advance()) find_send_current();
+}
+static void find_no(void) {   // "didn't turn off" -> probe the next candidate
+    if (find_advance()) find_send_current();
+    else { s_find = false; snprintf(s_status, sizeof s_status, "not found (%d tried)", s_find_done); }
+    nucleo_app_request_draw();
+}
+static void find_yes(void) {  // identified -> jump straight into that brand's full remote if we have it
+    s_find = false;
+    int match = -1;
+    for (uint32_t i = 0; i < s_pack.n_remotes; i++) {
+        ir_pack_remote_t r;
+        if (ir_pack_remote(&s_pack, i, &r) && r.proto == (uint8_t)s_find_proto && r.addr == s_find_addr) { match = (int)i; break; }
+    }
+    if (match >= 0 && ir_pack_remote(&s_pack, (uint32_t)match, &s_curdev)) {
+        s_dev = match; s_view = V_REM; s_level = 1; s_sel = 0;
+        snprintf(s_status, sizeof s_status, "found: %s", s_find_brand);
+    } else {
+        snprintf(s_status, sizeof s_status, "found %s (power only)", s_find_brand);
+    }
+    nucleo_app_request_draw();
+}
+static void draw_find(int top, int h) {
+    d.fillRect(0, top, 240, h, BG);
+    tx_center(120, top + 6, "AUTO-FIND", ACC, BG, 2);
+    tx_center(120, top + h / 2 - 28, s_find_brand[0] ? s_find_brand : "...", FG, BG, 2);
+    char c[20]; snprintf(c, sizeof c, "%d / %d", s_find_done, s_find_total);
+    tx_center(120, top + h / 2 - 6, c, MUTED, BG, 1);
+    tx_center(120, top + h / 2 + 12, "TV off?", PWR, BG, 2);
+    tx_center(120, top + h - 12, "Enter: YES   >: no   Esc: stop", MUTED, BG, 1);
+}
 
 // ---- drawing ----
 static void on_draw(void) {
-    int top = nucleo_app_content_top(), h = nucleo_app_content_height();
-    d.fillRect(0, top, 240, h, BG);
-    tx(8, top + 4, VIEW_TITLE[s_view], s_view == 2 ? STAR : ACC, BG, 1);
-    if (s_view == 1) { char r[24]; snprintf(r, sizeof r, "region: %s", REGIONS[s_region]); tx(150, top + 4, r, MUTED, BG, 1); }
-    d.drawFastHLine(0, top + 16, 240, LINE);
+    int top = nucleo_app_content_top(), H = nucleo_app_content_height();
+    d.fillRect(0, top, 240, H, BG);
+    draw_tabbar(top);
+    int cy = top + 26, band = H - 26;          // content band below the tab bar
 
-    if (s_nrem == 0 && s_ntvp == 0 && s_nfav == 0) {
-        tx(8, top + h / 2 - 4, "No catalog on SD", MUTED, BG, 1);
-        tx(8, top + h / 2 + 8, "/system/ir/presets.json", MUTED, BG, 1);
-        return;
-    }
-    if (s_view == 2 && s_nfav == 0) {
-        tx(8, top + h / 2 - 4, "No favourites yet", MUTED, BG, 1);
-        tx(8, top + h / 2 + 8, "star buttons in the web app", MUTED, BG, 1);
+    if (!s_pack_ok && (s_view != V_FAV || s_nfav == 0)) {
+        tx_center(120, top + H / 2 - 10, "No catalog on SD", MUTED, BG, 2);
+        tx_center(120, top + H / 2 + 12, "build presets.bin (ir:pack)", MUTED, BG, 1);
         return;
     }
 
-    int n = cur_count(), rows = (h - 30) / 14; if (rows < 1) rows = 1;
-    int first = s_sel - rows / 2; if (first < 0) first = 0; if (n > rows && first > n - rows) first = n - rows;
-    int y = top + 22;
-    for (int i = first; i < n && i < first + rows; i++) {
-        bool foc = (i == s_sel);
-        if (foc) d.fillRoundRect(4, y - 2, 232, 14, 4, SELBG);
-        char label[44]; unsigned short col = foc ? FG : MUTED;
-        if (s_view == 1)        snprintf(label, sizeof label, "%s", REGIONS[i]);
-        else if (s_view == 2)   snprintf(label, sizeof label, "\x05 %s", s_fav[i].label);
-        else if (s_level == 0)  snprintf(label, sizeof label, "%s", s_rem[i].name);
-        else { snprintf(label, sizeof label, "%s", s_rem[s_dev].btn[i].key);
-               if (!strcmp(s_rem[s_dev].btn[i].key, "power")) col = foc ? PWR : 0xC408; }
-        tx(12, y, label, col, foc ? SELBG : BG, 1);
-        y += 14;
+    if (s_view == V_REM) {                      // REMOTES
+        if (s_level == 1) {
+            ir_pack_remote_t r; r.name[0] = 0; ir_pack_remote(&s_pack, (uint32_t)s_dev, &r);
+            const char *pn = nir_proto_name((nir_proto_t)r.proto);
+            char nm[18]; snprintf(nm, sizeof nm, "%s", r.name);   // size-2 header: cap to fit 240px
+            tx(10, cy, nm, ACC, BG, 2);
+            tx(238 - (int)strlen(pn) * 6, cy + 4, pn, MUTED, BG, 1);
+            app_ui_list(cy + 22, band - 22 - 14, (int)s_curdev.nbtn, s_sel, btn_label, nullptr, btn_color, nullptr);
+            tx_center(120, top + H - 12, s_status[0] ? s_status : "Enter: send  \xB7  1-9 quick  \xB7  Esc: back",
+                      s_status[0] ? GRN : MUTED, BG, 1);
+        } else {
+            app_ui_list(cy, band - 14, (int)s_pack.n_remotes, s_sel, remote_label, remote_right, nullptr, nullptr);
+            tx_center(120, top + H - 12, s_status[0] ? s_status : "Enter: open  \xB7  type to search",
+                      s_status[0] ? GRN : MUTED, BG, 1);
+        }
+    } else if (s_view == V_TVB) {               // TV-B-GONE
+        if (s_sweep) { draw_sweep(cy, band); return; }
+        app_ui_list(cy, band - 14, NREGION, s_sel, region_label, region_right, nullptr, nullptr);
+        tx_center(120, top + H - 12, s_status[0] ? s_status : "Enter: sweep region power-off",
+                  s_status[0] ? GRN : MUTED, BG, 1);
+    } else if (s_view == V_FIND) {              // AUTO-FIND
+        if (s_find) { draw_find(cy, band); return; }
+        app_ui_list(cy, band - 14, NREGION, s_sel, region_label, region_right, nullptr, nullptr);
+        tx_center(120, top + H - 12, s_status[0] ? s_status : "Enter: start Auto-Find wizard",
+                  s_status[0] ? GRN : MUTED, BG, 1);
+    } else {                                    // FAVS
+        if (s_nfav == 0) {
+            tx_center(120, top + H / 2 - 10, "No favourites yet", MUTED, BG, 2);
+            tx_center(120, top + H / 2 + 12, "star buttons in the web app", MUTED, BG, 1);
+            return;
+        }
+        app_ui_list(cy, band - 14, s_nfav, s_sel, fav_label, nullptr, fav_color, nullptr);
+        tx_center(120, top + H - 12, s_status[0] ? s_status : "Enter: send  \xB7  type to search",
+                  s_status[0] ? GRN : MUTED, BG, 1);
     }
-
-    const char *hint = s_status[0] ? s_status
-        : (s_view == 1 ? (s_sweep ? "sweeping  esc to stop" : "enter: sweep   tab: next")
-        :  s_view == 2 ? "enter: send   tab: next"
-        : (s_level == 0 ? "enter: open   tab: next" : "enter: send   esc: back"));
-    tx(8, top + h - 12, hint, s_status[0] ? GRN : MUTED, BG, 1);
 }
 
 // ---- actions ----
 static void start_sweep(void) {
-    s_sweep_n = 0;
-    for (int i = 0; i < s_ntvp && s_sweep_n < MAX_TVP; i++)
-        if (s_region == 0 || !strcmp(s_tvp[i].region, REGIONS[s_region])) s_sweep_idx[s_sweep_n++] = i;
-    if (!s_sweep_n) { snprintf(s_status, sizeof s_status, "no codes"); return; }
-    s_sweep_i = 0; s_sweep = true; s_status[0] = 0;
+    if (!s_pack_ok) { snprintf(s_status, sizeof s_status, "no catalog"); return; }
+    s_sweep_total = 0;
+    for (uint32_t i = 0; i < s_pack.n_tvpower; i++) {
+        ir_pack_tvp_t t;
+        if (ir_pack_tvpower(&s_pack, i, &t) && region_hit(t.region)) s_sweep_total++;
+    }
+    if (!s_sweep_total) { snprintf(s_status, sizeof s_status, "no codes"); return; }
+    s_sweep_i = 0; s_sweep_done = 0; s_sweep = true; s_status[0] = 0;
 }
 static void send_now(nir_proto_t proto, uint32_t addr, uint32_t cmd, const char *label) {
-    esp_err_t rc = nucleo_ir_send_proto(proto, addr, cmd, 0);
-    if (rc == ESP_OK) snprintf(s_status, sizeof s_status, "sent %s", label);
-    else              snprintf(s_status, sizeof s_status, "send error");
+    ir_emit((uint8_t)proto, addr, cmd);   // raw-aware (RAW button: cmd is the pool offset)
+    snprintf(s_status, sizeof s_status, "sent %s", label);
     nucleo_app_request_draw();
 }
 static void activate(void) {
-    if (s_view == 1) {
+    if (s_view == V_TVB) {
         if (s_sweep) { s_sweep = false; s_status[0] = 0; } else { s_region = s_sel; start_sweep(); }
         nucleo_app_request_draw(); return;
     }
-    if (s_view == 2) { if (s_sel < s_nfav) send_now(s_fav[s_sel].proto, s_fav[s_sel].addr, s_fav[s_sel].cmd, s_fav[s_sel].label); return; }
-    if (s_level == 0) { if (s_sel < s_nrem) { s_dev = s_sel; s_level = 1; s_sel = 0; nucleo_app_request_draw(); } return; }
-    ir_remote_t *R = &s_rem[s_dev]; if (s_sel < R->nbtn) send_now(R->proto, R->addr, R->btn[s_sel].cmd, R->btn[s_sel].key);
+    if (s_view == V_FIND) {                       // region list -> start the guided wizard
+        if (!s_find) { s_region = s_sel; start_find(); }
+        nucleo_app_request_draw(); return;
+    }
+    if (s_view == V_FAV) { if (s_sel < s_nfav) send_now(s_fav[s_sel].proto, s_fav[s_sel].addr, s_fav[s_sel].cmd, s_fav[s_sel].label); return; }
+    if (s_level == 0) {
+        if (s_pack_ok && s_sel < (int)s_pack.n_remotes && ir_pack_remote(&s_pack, s_sel, &s_curdev)) {
+            s_dev = s_sel; s_level = 1; s_sel = 0; nucleo_app_request_draw();
+        }
+        return;
+    }
+    ir_pack_btn_t b;
+    if (ir_pack_button(&s_pack, &s_curdev, s_sel, &b))
+        send_now((nir_proto_t)s_curdev.proto, s_curdev.addr, b.cmd, b.key);
 }
 
 // ---- input ----
+static void ir_tab(void);   // defined below (RIGHT also pages tabs)
 static void on_key(int k, char ch) {
-    (void)ch;
+    // While a sweep runs, only Enter stops it (Esc routes to ir_back).
+    if (s_view == V_TVB && s_sweep) { if (k == NK_ENTER) { s_sweep = false; s_status[0] = 0; nucleo_app_request_draw(); } return; }
+    // Auto-Find wizard: Enter = "yes it turned off" (identify), RIGHT = "no, next candidate".
+    if (s_view == V_FIND && s_find) { if (k == NK_ENTER) find_yes(); else if (k == NK_RIGHT) find_no(); return; }
+
+    if (k == NK_RIGHT) { ir_tab(); return; }       // RIGHT pages tabs forward (LEFT == back handler)
+    if (k == NK_ENTER) { activate(); return; }
+
+    // Remote face: 0-9 hardware keys instantly fire the matching digit button (smartwatch quick-select).
+    if (s_view == V_REM && s_level == 1 && k == NK_CHAR && ch >= '0' && ch <= '9') {
+        char want[2] = { ch, 0 }; ir_pack_btn_t b;
+        for (uint32_t j = 0; j < s_curdev.nbtn; j++)
+            if (ir_pack_button(&s_pack, &s_curdev, j, &b) && !strcmp(b.key, want)) {
+                s_sel = (int)j; send_now((nir_proto_t)s_curdev.proto, s_curdev.addr, b.cmd, b.key); return;
+            }
+        return;   // a digit with no matching button: do nothing (don't fall through to search)
+    }
+
+    // Everything else -> the shared list navigator (wrap-around UP/DOWN + type-to-jump search).
     int n = cur_count();
-    if (k == NK_UP)        { if (s_sel > 0) s_sel--; s_status[0] = 0; nucleo_app_request_draw(); }
-    else if (k == NK_DOWN) { if (s_sel < n - 1) s_sel++; s_status[0] = 0; nucleo_app_request_draw(); }
-    else if (k == NK_ENTER) activate();
+    if (app_ui_list_key(k, ch, &s_sel, n, cur_label_fn(), nullptr)) { s_status[0] = 0; nucleo_app_request_draw(); }
 }
 static bool ir_back(int key) {
     (void)key;
     if (s_sweep) { s_sweep = false; s_status[0] = 0; nucleo_app_request_draw(); return true; }
-    if (s_view == 0 && s_level == 1) { s_level = 0; s_sel = s_dev; nucleo_app_request_draw(); return true; }
+    if (s_find)  { s_find = false; s_status[0] = 0; nucleo_app_request_draw(); return true; }
+    if (s_view == V_REM && s_level == 1) { s_level = 0; s_sel = s_dev; nucleo_app_request_draw(); return true; }
     return false;   // Esc at the top level -> framework closes the app
 }
-static void ir_tab(void) { s_view = (s_view + 1) % 3; s_level = 0; s_sel = 0; s_status[0] = 0; nucleo_app_request_draw(); }
+static void ir_tab(void) {
+    s_view = (s_view + 1) % NTABS; s_level = 0; s_sel = 0; s_status[0] = 0;
+    s_sweep = false; s_find = false;   // leaving a tab cancels any live sweep/wizard
+    nucleo_app_request_draw();
+}
 
 // ---- lifecycle ----
 static void on_tick(void) {
     if (!s_sweep) return;
     if (nucleo_ir_busy()) return;
-    if (s_sweep_i >= s_sweep_n) { s_sweep = false; snprintf(s_status, sizeof s_status, "swept %d", s_sweep_n); nucleo_app_request_draw(); return; }
-    ir_tvp_t *T = &s_tvp[s_sweep_idx[s_sweep_i]];
-    nucleo_ir_send_proto(T->proto, T->addr, T->cmd, 0);
-    snprintf(s_status, sizeof s_status, "%s %d/%d", T->brand, s_sweep_i + 1, s_sweep_n);
+    // Stream the next region-matching power code straight from the SD pack (no array in RAM).
+    ir_pack_tvp_t t; bool found = false;
+    while (s_sweep_i < s_pack.n_tvpower) {
+        if (ir_pack_tvpower(&s_pack, s_sweep_i, &t) && region_hit(t.region)) { found = true; break; }
+        s_sweep_i++;
+    }
+    if (!found) { s_sweep = false; snprintf(s_status, sizeof s_status, "swept %d", s_sweep_done); nucleo_app_request_draw(); return; }
+    ir_emit(t.proto, t.addr, t.proto == IRPACK_PROTO_RAW ? ir_pack_tvp_raw_off(&t) : t.cmd);
+    s_sweep_done++;
+    snprintf(s_cur_brand, sizeof s_cur_brand, "%s", t.brand);   // big readout on the sweep screen
     s_sweep_i++;
     nucleo_app_request_draw();
 }
 static void enter(void) {
-    s_view = 0; s_level = 0; s_sel = 0; s_dev = 0; s_region = 0; s_sweep = false; s_status[0] = 0;
-    // Free the 32 KB shared canvas BEFORE parsing the SD catalog: the slurp buffer + the cJSON DOM
-    // briefly coexist, and on a full OS that peak can starve the open. The launcher re-acquires the
-    // canvas lazily on the first on_draw (this app is not direct-draw and draws nothing during load).
-    nucleo_app_release_buffers();
-    load_catalog();       // may set s_status (e.g. "catalog OOM") — keep it for on_draw
+    s_view = 0; s_level = 0; s_sel = 0; s_dev = 0; s_region = 0; s_sweep = false; s_find = false;
+    s_status[0] = 0; s_cur_brand[0] = 0; s_find_brand[0] = 0;
+    // No heavy load anymore: the catalog is read record-by-record from presets.bin, so there's no
+    // multi-KB slurp to make room for — the shared canvas can stay put.
+    open_pack();
     load_favorites();
     nucleo_app_set_back_handler(ir_back);
     nucleo_app_set_tab_handler(ir_tab);

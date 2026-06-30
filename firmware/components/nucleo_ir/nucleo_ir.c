@@ -1,6 +1,10 @@
 // nucleo_ir — RMT-driven IR transmit + HTTP surface. See nucleo_ir.h for the design rationale.
 #include "nucleo_ir.h"
+#include "nucleo_ir_pack.h"
 #include "nucleo_auth.h"
+#include "nucleo_board.h"   // NUCLEO_SD_MOUNT
+
+#define IR_PRESETS_BIN NUCLEO_SD_MOUNT "/system/ir/presets.bin"
 
 #include "driver/rmt_tx.h"
 #include "driver/rmt_encoder.h"
@@ -36,6 +40,7 @@ static volatile bool      s_sweep_running;
 static volatile int       s_sweep_sent;
 static volatile int       s_sweep_total;
 static char               s_sweep_region[12];
+static int                s_sweep_use_pack;   // 1 = stream codes from the SD pack, 0 = compiled TVDB
 
 // ---- IR jammer state (declared up here so nucleo_ir_busy can see it) -------------------------
 static TaskHandle_t  s_jam_task;
@@ -112,27 +117,56 @@ bool nucleo_ir_busy(void) {
 }
 
 // ---- built-in TV power code table ------------------------------------------------------------
-// A clean-room starter set of common TV power codes, expressed as public protocol facts
-// (brand/protocol/address/command). It is deliberately small: the web app (apps/ir-remote) holds
-// the large, user-extensible device database and can import community .ir files — no reflash.
+// Clean-room set of common TV power codes, expressed as public protocol facts
+// (brand/protocol/address/command). Kept in sync with apps/ir-remote/www/presets.json "tvpower"
+// so the engine sweep here matches the brand list the web app displays. The web app holds the
+// fuller, user-extensible device database and can import community .ir files — no reflash. (const
+// in flash, not RAM.)
 typedef struct { const char *region; const char *brand; nir_proto_t proto; uint16_t addr; uint16_t cmd; } tvcode_t;
 static const tvcode_t TVDB[] = {
-    { "asia", "Samsung",   NIR_PROTO_SAMSUNG, 0x07, 0x02 },
-    { "asia", "Sony",      NIR_PROTO_SONY12,  0x01, 0x15 },
-    { "asia", "LG",        NIR_PROTO_NEC,     0x04, 0x08 },
-    { "asia", "Toshiba",   NIR_PROTO_NEC,     0x40, 0x12 },
-    { "asia", "Hisense",   NIR_PROTO_NEC,     0x00, 0x57 },
-    { "asia", "Sharp",     NIR_PROTO_NEC,     0x02, 0x5E },
-    { "asia", "JVC",       NIR_PROTO_JVC,     0x03, 0x17 },
-    { "eu",   "Philips",   NIR_PROTO_RC5,     0x00, 0x0C },
-    { "eu",   "Grundig",   NIR_PROTO_RC5,     0x00, 0x0C },
-    { "eu",   "Loewe",     NIR_PROTO_RC5,     0x00, 0x0C },
-    { "eu",   "Vestel",    NIR_PROTO_NEC,     0x00, 0x0C },
-    { "us",   "Vizio",     NIR_PROTO_NEC,     0x00, 0x08 },
-    { "us",   "TCL",       NIR_PROTO_NEC,     0x04, 0x08 },
-    { "us",   "Insignia",  NIR_PROTO_NEC,     0x00, 0x57 },
-    { "us",   "RCA",       NIR_PROTO_NEC,     0x00, 0x3A },
-    { "us",   "Element",   NIR_PROTO_NEC,     0x00, 0x08 },
+    { "asia", "Samsung",     NIR_PROTO_SAMSUNG, 0x07, 0x02 },
+    { "asia", "Sony",        NIR_PROTO_SONY12,  0x01, 0x15 },
+    { "asia", "LG",          NIR_PROTO_NEC,     0x04, 0x08 },
+    { "asia", "Toshiba",     NIR_PROTO_NEC,     0x40, 0x12 },
+    { "asia", "Hisense",     NIR_PROTO_NEC,     0x00, 0x57 },
+    { "asia", "Sharp",       NIR_PROTO_NEC,     0x02, 0x5E },
+    { "asia", "JVC",         NIR_PROTO_JVC,     0x03, 0x17 },
+    { "asia", "Sanyo",       NIR_PROTO_NEC,     0x38, 0x49 },
+    { "asia", "Mitsubishi",  NIR_PROTO_NEC,     0x23, 0x5E },
+    { "asia", "Hitachi",     NIR_PROTO_NEC,     0x01, 0x98 },
+    { "asia", "Akai",        NIR_PROTO_NEC,     0x00, 0x08 },
+    { "asia", "Haier",       NIR_PROTO_NEC,     0x00, 0x57 },
+    { "asia", "Changhong",   NIR_PROTO_NEC,     0x00, 0x08 },
+    { "asia", "Skyworth",    NIR_PROTO_NEC,     0x00, 0x57 },
+    { "asia", "Konka",       NIR_PROTO_NEC,     0x00, 0x08 },
+    { "asia", "Pioneer",     NIR_PROTO_NEC,     0x00, 0x1A },
+    { "eu",   "Philips",     NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Grundig",     NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Loewe",       NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Telefunken",  NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Thomson",     NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Nokia",       NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Vestel",      NIR_PROTO_NEC,     0x00, 0x0C },
+    { "eu",   "Beko",        NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Saba",        NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Nordmende",   NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "ITT",         NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Blaupunkt",   NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Medion",      NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Orion",       NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Schneider",   NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Brandt",      NIR_PROTO_RC5,     0x00, 0x0C },
+    { "eu",   "Finlux",      NIR_PROTO_RC5,     0x00, 0x0C },
+    { "us",   "Vizio",       NIR_PROTO_NEC,     0x00, 0x08 },
+    { "us",   "TCL",         NIR_PROTO_NEC,     0x04, 0x08 },
+    { "us",   "Insignia",    NIR_PROTO_NEC,     0x00, 0x57 },
+    { "us",   "RCA",         NIR_PROTO_NEC,     0x00, 0x3A },
+    { "us",   "Element",     NIR_PROTO_NEC,     0x00, 0x08 },
+    { "us",   "Sceptre",     NIR_PROTO_NEC,     0x00, 0x08 },
+    { "us",   "Westinghouse",NIR_PROTO_NEC,     0x00, 0x08 },
+    { "us",   "Emerson",     NIR_PROTO_NEC,     0x00, 0x57 },
+    { "us",   "Sylvania",    NIR_PROTO_NEC,     0x00, 0x57 },
+    { "us",   "Magnavox",    NIR_PROTO_RC5,     0x00, 0x0C },
 };
 #define TVDB_N ((int)(sizeof(TVDB) / sizeof(TVDB[0])))
 
@@ -143,23 +177,66 @@ static bool region_match(const char *filter, const char *entry) {
 
 static void sweep_task(void *arg) {
     (void)arg;
-    for (int i = 0; i < TVDB_N && !s_sweep_abort; i++) {
-        if (!region_match(s_sweep_region, TVDB[i].region)) continue;
-        nucleo_ir_send_proto(TVDB[i].proto, TVDB[i].addr, TVDB[i].cmd, 0);
-        s_sweep_sent++;
-        vTaskDelay(pdMS_TO_TICKS(120));   // pace so each TV has time to react
+    if (s_sweep_use_pack) {
+        // Stream the (potentially large) SD pack one record at a time — no array in RAM.
+        ir_pack_t p;
+        if (ir_pack_open(&p, IR_PRESETS_BIN)) {
+            uint8_t rcode = ir_pack_region_code(s_sweep_region);   // "all"/unknown -> 0 = every region
+            for (uint32_t i = 0; i < p.n_tvpower && !s_sweep_abort; i++) {
+                ir_pack_tvp_t t;
+                if (!ir_pack_tvpower(&p, i, &t)) continue;
+                if (rcode != 0 && t.region != 0 && t.region != rcode) continue;
+                if (t.proto == IRPACK_PROTO_RAW) {        // universal: stream captured µs from the pool
+                    uint16_t car = 0; static uint16_t dur[400];
+                    int n = ir_pack_raw(&p, ir_pack_tvp_raw_off(&t), &car, dur, 400);
+                    if (n > 0) nucleo_ir_send_raw(dur, n, car, 0);
+                } else {
+                    nucleo_ir_send_proto((nir_proto_t)t.proto, t.addr, t.cmd, 0);
+                }
+                s_sweep_sent++;
+                vTaskDelay(pdMS_TO_TICKS(120));   // pace so each TV has time to react
+            }
+            ir_pack_close(&p);
+        }
+    } else {
+        for (int i = 0; i < TVDB_N && !s_sweep_abort; i++) {   // compiled fallback (no SD pack)
+            if (!region_match(s_sweep_region, TVDB[i].region)) continue;
+            nucleo_ir_send_proto(TVDB[i].proto, TVDB[i].addr, TVDB[i].cmd, 0);
+            s_sweep_sent++;
+            vTaskDelay(pdMS_TO_TICKS(120));
+        }
     }
     s_sweep_running = false;
     s_sweep_task = NULL;
     vTaskDelete(NULL);
 }
 
+// Count the region-matching codes in the SD pack; returns -1 if the pack is absent/unreadable.
+static int pack_sweep_count(const char *region) {
+    ir_pack_t p;
+    if (!ir_pack_open(&p, IR_PRESETS_BIN)) return -1;
+    uint8_t rcode = ir_pack_region_code(region);
+    int total = 0;
+    for (uint32_t i = 0; i < p.n_tvpower; i++) {
+        ir_pack_tvp_t t;
+        if (ir_pack_tvpower(&p, i, &t) && (rcode == 0 || t.region == 0 || t.region == rcode)) total++;
+    }
+    ir_pack_close(&p);
+    return total;
+}
+
 esp_err_t nucleo_ir_tvbgone_start(const char *region) {
     if (!s_ready) return ESP_ERR_INVALID_STATE;
     if (s_sweep_running) return ESP_ERR_INVALID_STATE;
     snprintf(s_sweep_region, sizeof s_sweep_region, "%s", region ? region : "all");
-    int total = 0;
-    for (int i = 0; i < TVDB_N; i++) if (region_match(s_sweep_region, TVDB[i].region)) total++;
+    // Prefer the SD pack (kept in sync with presets.json, grows without a reflash); fall back to the
+    // small compiled TVDB when the card has no pack.
+    int total = pack_sweep_count(s_sweep_region);
+    s_sweep_use_pack = (total > 0) ? 1 : 0;
+    if (!s_sweep_use_pack) {
+        total = 0;
+        for (int i = 0; i < TVDB_N; i++) if (region_match(s_sweep_region, TVDB[i].region)) total++;
+    }
     s_sweep_total = total; s_sweep_sent = 0; s_sweep_abort = false; s_sweep_running = true;
     if (xTaskCreate(sweep_task, "ir_sweep", 4096, NULL, 5, &s_sweep_task) != pdPASS) {
         s_sweep_running = false;
@@ -324,7 +401,8 @@ static esp_err_t db_get(httpd_req_t *req) {
     for (int i = 1; i < NIR_PROTO__COUNT; i++)   // skip RAW(0) in the human list
         cJSON_AddItemToArray(protos, cJSON_CreateString(nir_proto_name((nir_proto_t)i)));
     cJSON *tvb = cJSON_AddObjectToObject(root, "tvbgone");
-    cJSON_AddNumberToObject(tvb, "count", TVDB_N);
+    int pack_count = pack_sweep_count("all");   // reflect the SD pack's reach when present
+    cJSON_AddNumberToObject(tvb, "count", pack_count >= 0 ? pack_count : TVDB_N);
     cJSON *regions = cJSON_AddArrayToObject(tvb, "regions");
     cJSON_AddItemToArray(regions, cJSON_CreateString("all"));
     cJSON_AddItemToArray(regions, cJSON_CreateString("us"));

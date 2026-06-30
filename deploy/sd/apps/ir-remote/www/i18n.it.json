@@ -53,7 +53,7 @@
   "recents": "Ultimi usati",
   "recents_empty": "Niente inviato ancora.",
   "unstar": "Rimuovi preferito",
-  "cat_all": "Tutti", "cat_tv": "TV", "cat_soundbar": "Soundbar", "cat_projector": "Proiettore", "cat_media": "Media",
+  "cat_all": "Tutti", "cat_tv": "TV", "cat_tv-crt": "TV CRT", "cat_soundbar": "Soundbar", "cat_projector": "Proiettore", "cat_media": "Media",
   "search_ph": "Cerca marca…",
   "tvb_quick": "Rapido (device)",
   "tvb_full": "Sweep completo",

@@ -53,7 +53,7 @@
   "recents": "Recently used",
   "recents_empty": "Nothing sent yet.",
   "unstar": "Remove favorite",
-  "cat_all": "All", "cat_tv": "TV", "cat_soundbar": "Soundbar", "cat_projector": "Projector", "cat_media": "Media",
+  "cat_all": "All", "cat_tv": "TV", "cat_tv-crt": "CRT TV", "cat_soundbar": "Soundbar", "cat_projector": "Projector", "cat_media": "Media",
   "search_ph": "Search brand…",
   "tvb_quick": "Quick (device)",
   "tvb_full": "Full sweep",
