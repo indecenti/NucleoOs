@@ -17,7 +17,7 @@ lab, on‑device transcription and offline image generation.
 
 <sub>Free for noncommercial use · **commercial use requires a paid license** → niki070585@gmail.com</sub>
 
-<img src="docs/screenshots/desktop.png" width="860" alt="NucleoOS web desktop — Windows‑11‑class shell served straight off the Cardputer" />
+<img src="docs/screenshots/webos.gif" width="860" alt="NucleoOS web desktop — a Windows‑class shell (files, spreadsheet, Paint, games, monitor) served straight off the Cardputer" />
 
 </div>
 
@@ -60,10 +60,6 @@ ANIMA is NucleoOS's assistant, and it runs in **two places at once**:
   browser*: offline, private, instant. It opens apps, does math, tells time/date, creates files,
   answers questions and learns what you teach it — nothing leaves the device.
 
-<div align="center">
-<img src="docs/screenshots/anima.png" width="820" alt="ANIMA chat — offline, in‑browser WebAssembly assistant" />
-</div>
-
 **🔊 Bilingual offline voice.** ANIMA *speaks* — a concatenative TTS engine (IT/EN) that
 pre‑vocalizes a finite, grounded vocabulary on the PC and pastes the right clips at runtime:
 natural voice, ~zero RAM, completely offline. It reads the time to the exact minute, confirms
@@ -80,11 +76,6 @@ When you *do* want a frontier model, NucleoOS wires it in cleanly:
   to the provider directly — the Cardputer isn't in the loop.
 - **AI Chat** talks straight to the model; **ANIMA** stays offline. You choose per task.
 
-<div align="center">
-<img src="docs/screenshots/groq-chat.png" width="49%" alt="AI Chat — direct‑to‑model with a model picker" />
-<img src="docs/screenshots/code-runner.png" width="49%" alt="ANIMA Code — sandboxed JS runtime with os.* API" />
-</div>
-
 - **ANIMA Code** — a sandboxed JavaScript runtime in the browser with an `os.*` API
   (`os.fs`, `os.http`, `os.anima`, `os.notify`): write a script, hit Run, drive the OS.
 - **ANIMA Chat / Agents** — multi‑turn chat and a browser‑hosted multi‑agent runtime for online work.
@@ -97,20 +88,12 @@ When you *do* want a frontier model, NucleoOS wires it in cleanly:
   live to NucleoOS Web (`/api/rec/stream`) for real‑time transcription on the big screen.
 - **Mic Spectrum** — a live FFT analyzer on the native screen.
 
-<div align="center">
-<img src="docs/screenshots/dictation.png" width="820" alt="Transcription — on‑device Cardputer mic, IT/EN, summarize, screen‑off" />
-</div>
-
 ### 🎨 Offline image generation & editing (WebGPU)
 
 **Paint** is a full image editor — layers, tools, adjustments, transforms — with an **AI side
 (Atelier)** that generates and manipulates images **locally via WebGPU**, no server: *"create a cat
 icon"*, *"remove the background"*, *"brightness +20"*, *"rotate right"*. Heavy pixels live in the
 browser GPU; the device just stores the result.
-
-<div align="center">
-<img src="docs/screenshots/paint.png" width="820" alt="Paint + Atelier — offline WebGPU image generation and editing" />
-</div>
 
 ### 🎮 Games — native multiplayer + a web Game Center
 
@@ -120,20 +103,11 @@ browser GPU; the device just stores the result.
 - **Game Center (web)** — peer‑to‑peer over WebRTC with the Cardputer as signaling: Tic‑Tac‑Toe,
   Connect 4, Pong — 2‑player **or vs ANIMA** (offline brain, or an LLM brain when online).
 
-<div align="center">
-<img src="docs/screenshots/games.png" width="820" alt="Game Center — multiplayer over the network or vs ANIMA" />
-</div>
-
 ### 🎬 Media — native player, MP3 & radio
 
 - **Film player (native)** — plays `.nfv` (MJPEG + MP3) straight off the SD with seek.
 - **MP3 player (native)** — dual‑mic aware, browses folders, reads duration from headers.
 - **Radio (native)** — multi‑station internet radio with a twin web app.
-
-<div align="center">
-<img src="docs/screenshots/cardputer-video.png" width="49%" alt="Native video player — .nfv library with durations" />
-<img src="docs/screenshots/cardputer-music.png" width="49%" alt="Native MP3 player — folder browser with track durations" />
-</div>
 
 ### 🛡️ Security lab
 
@@ -158,25 +132,24 @@ Turn the Cardputer into a Swiss‑army tool: **Torch**, **Bubble Level**, **Prot
 A real SSH terminal that reaches your hosts through a tiny self‑hosted **bridge** (no third party) —
 available as a **native app** on the Cardputer *and* as a full **web terminal** with saved hosts.
 
-<div align="center">
-<img src="docs/screenshots/ssh.png" width="820" alt="SSH — real terminal via a self‑hosted bridge, native and web" />
-</div>
-
 ### 🗂️ A desktop‑class workstation in the browser
 
 File Commander, Spreadsheet (SUMIFS/VLOOKUP/IF with an ANIMA copilot), a live System Monitor,
 Settings Control Center, Notepad, Calculator, DOSBox, and more — real windows, fullscreen,
 drag‑and‑drop, Start menu and search.
 
-<div align="center">
-<img src="docs/screenshots/file-commander.png" width="49%" alt="File Commander — tree + files, Explorer‑class" />
-<img src="docs/screenshots/system-monitor.png" width="49%" alt="System Monitor — heap, storage, network, live events" />
-</div>
+---
 
-<div align="center">
-<img src="docs/screenshots/spreadsheet.png" width="49%" alt="Spreadsheet — Excel‑class with ANIMA Copilot" />
-<img src="docs/screenshots/settings.png" width="49%" alt="Settings — Control Center with live device pulse and one‑touch scenes" />
-</div>
+<details>
+<summary><b>📸 More screenshots</b> — web shell apps</summary>
+
+| | |
+|---|---|
+| ![ANIMA — offline in‑browser assistant](docs/screenshots/anima.png) | ![AI Chat — Claude/Groq/Grok/Gemini](docs/screenshots/groq-chat.png) |
+| ![Transcription — on‑device mic, IT/EN](docs/screenshots/dictation.png) | ![SSH — terminal via self‑hosted bridge](docs/screenshots/ssh.png) |
+| ![Spreadsheet — with ANIMA copilot](docs/screenshots/spreadsheet.png) | ![Settings — Control Center](docs/screenshots/settings.png) |
+
+</details>
 
 ---
 
