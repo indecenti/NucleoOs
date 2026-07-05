@@ -293,6 +293,7 @@ extern "C" void nucleo_register_notify(void);
 extern "C" void nucleo_register_radio(void);
 extern "C" void nucleo_register_anima(void);
 extern "C" void nucleo_register_usbkbd(void);
+extern "C" void nucleo_register_keydeck(void);
 extern "C" void nucleo_register_torch(void);
 extern "C" void nucleo_register_evilportal(void);
 extern "C" void nucleo_register_wifiatk(void);
@@ -350,7 +351,7 @@ void nucleo_app_register_builtins(void)
     if (nucleo_ui_is_adv()) { nucleo_register_level(); nucleo_register_goniometer(); nucleo_register_pedometer(); }  // Hardware (ADV-only): BMI270 measuring tools
     nucleo_register_screensaver();                                                  // Tools: salvaschermo
     nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme();    // System
-    nucleo_register_wifi(); nucleo_register_remote(); nucleo_register_ssh(); nucleo_register_link(); nucleo_register_swarm();  // Connect
+    nucleo_register_wifi(); nucleo_register_remote(); nucleo_register_ssh(); nucleo_register_link(); nucleo_register_swarm(); nucleo_register_keydeck();  // Connect
     nucleo_register_voice(); nucleo_register_voicelab();                          // Voice Control + live console
     nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_sniffer(); nucleo_register_ethernet(); nucleo_register_ble(); nucleo_register_payloads();  // Security (authorized testing)
 }
