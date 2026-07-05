@@ -11,6 +11,12 @@ lab, on‑device transcription and offline image generation.
 
 `ESP32‑S3 / M5StampS3` · `ESP‑IDF firmware` · `PWA web shell` · `English‑only codebase`
 
+![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
+![Platform: ESP32-S3](https://img.shields.io/badge/platform-ESP32--S3-informational)
+![Framework: ESP-IDF](https://img.shields.io/badge/firmware-ESP--IDF-red)
+
+<sub>Free for noncommercial use · **commercial use requires a paid license** → niki070585@gmail.com</sub>
+
 <img src="docs/screenshots/desktop.png" width="860" alt="NucleoOS web desktop — Windows‑11‑class shell served straight off the Cardputer" />
 
 </div>
@@ -34,9 +40,9 @@ The split is deliberate: **heavy work goes to the browser, never to the 18 KB de
 That is the single idea that lets a no‑PSRAM microcontroller host an experience this large.
 
 <div align="center">
-<img src="docs/screenshots/cardputer-menu.png" width="480" alt="NucleoOS native launcher on the Cardputer's 240×135 screen — the smartwatch‑style app carousel" />
-<br><sub>The native on‑device launcher (240×135), captured live over Wi‑Fi from the device's own
-<code>GET /api/screen</code> endpoint — it streams the physical panel as a BMP, no canvas, ~0 heap.</sub>
+<img src="docs/screenshots/cardputer.gif" width="520" alt="NucleoOS native UI on the Cardputer — launcher, music and video, on the 240×135 screen" />
+<br><sub>The native on‑device UI (240×135) — launcher → music → video — captured live over Wi‑Fi from the
+device's own <code>GET /api/screen</code> endpoint, which streams the physical panel as a BMP, no canvas, ~0 heap.</sub>
 </div>
 
 ---
@@ -381,6 +387,7 @@ at runtime, so you build once and fan out. The ANIMA gate must be green before a
 | [docs/device-ui.md](docs/device-ui.md) | Native on‑device UI: Wear‑OS‑style launcher, UX tricks |
 | [docs/i18n.md](docs/i18n.md) | OS‑wide internationalization engine (IT/EN) |
 | [docs/event-protocol.md](docs/event-protocol.md) | Delta event protocol over Wi‑Fi / BLE / WebUSB |
+| [docs/keydeck.md](docs/keydeck.md) | KeyDeck: the Cardputer as a Wi‑Fi keyboard + monitor for NucleoV2 (P4) |
 | [docs/app-manifest.md](docs/app-manifest.md) · [docs/app-runtimes.md](docs/app-runtimes.md) | App bundle manifest + multi‑runtime model |
 | [docs/registry.md](docs/registry.md) | Registry structure and file associations |
 | [docs/storage.md](docs/storage.md) · [docs/partition-table.md](docs/partition-table.md) | SD filesystem + 8 MB flash OTA layout |
@@ -388,6 +395,26 @@ at runtime, so you build once and fan out. The ANIMA gate must be green before a
 | [docs/releasing.md](docs/releasing.md) · [docs/versioning.md](docs/versioning.md) | Releasing/OTA + firmware versioning |
 | [docs/debugging.md](docs/debugging.md) · [docs/testing.md](docs/testing.md) | Default dev loop (host harness) + the test suites |
 | [docs/roadmap.md](docs/roadmap.md) | What's next to be a real, modern OS |
+
+---
+
+## Contributing
+
+PRs welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) (includes a short contributor agreement so the
+project can stay dual-licensed). Third-party components and their licenses are listed in
+[`THIRD_PARTY.md`](THIRD_PARTY.md).
+
+## License
+
+**[PolyForm Noncommercial License 1.0.0](LICENSE)** — free for any **noncommercial** use
+(personal, study, research, hobby, non-profit, education, government).
+
+**Commercial or production use requires a paid commercial license** — see
+[`COMMERCIAL.md`](COMMERCIAL.md). Want to ship NucleoOS in a product? Get in touch:
+**niki070585@gmail.com**.
+
+© 2026 indecenti. All rights reserved. NucleoOS bundles third-party components under their own
+licenses (some copyleft) — see [`THIRD_PARTY.md`](THIRD_PARTY.md).
 
 ---
 

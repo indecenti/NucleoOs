@@ -1,0 +1,21 @@
+# Make GitHub's language bar reflect the ESP-IDF firmware + ANIMA C core, not the bundled web
+# front-ends, node tooling, deployed SD copies or vendored third-party clones.
+reference/**     linguist-vendored
+deploy/**        linguist-vendored
+tools/**         linguist-vendored
+apps/**/www/**   linguist-vendored
+web/**           linguist-vendored
+android-app/**   linguist-vendored
+models/**        linguist-vendored
+nucleomind/**    linguist-vendored
+_scratch/**      linguist-vendored
+**/vendor/**     linguist-vendored
+*.min.js         linguist-vendored
+*.gz             linguist-vendored
+*.gg             linguist-generated
+*.jsonl          linguist-generated
+
+# Normalize line endings.
+* text=auto
+*.ps1 text eol=crlf
+*.sh  text eol=lf
