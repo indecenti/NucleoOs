@@ -45,6 +45,18 @@ That is the single idea that lets a no‑PSRAM microcontroller host an experienc
 device's own <code>GET /api/screen</code> endpoint, which streams the physical panel as a BMP, no canvas, ~0 heap.</sub>
 </div>
 
+## 🔌 Hardware — one firmware, both boards
+
+**NucleoOS runs on both the original M5Stack Cardputer and the newer Cardputer ADV** — a single
+universal binary auto‑detects which one you have (keymap + audio codec HAL) at boot, so you build
+once and flash either.
+
+<div align="center">
+<img src="docs/screenshots/hardware.png" width="820" alt="M5Stack Cardputer (original, left) and Cardputer ADV (right) — NucleoOS runs on both" />
+<br><sub>Left: original Cardputer (M5StampS3). Right: Cardputer ADV (Stamp‑S3A, bigger battery, IMU, 3.5 mm out).
+Product photos © M5Stack.</sub>
+</div>
+
 ---
 
 ## ⭐ Headline features

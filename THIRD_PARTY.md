@@ -13,6 +13,7 @@ below is a convenience summary of the major dependencies.
 | WebLLM / MLC | in-browser LLM (Qwen2, WebGPU) | Apache-2.0 |
 | wllama (llama.cpp) | in-browser LLM inference | MIT |
 | ONNX Runtime Web | in-browser diffusion (Paint/Atelier) | MIT |
+| libssh2 | SSH terminal (native + bridge) | BSD-style (libssh2 license) |
 | **ffmpeg.wasm** | Video Studio (in-browser transcode) | **LGPL-2.1+ / GPL** (build-dependent) |
 | **DOSBox** | in-browser DOS emulator app | **GPL-2.0** |
 
@@ -25,3 +26,6 @@ Notes:
 - Fonts, icons and small snippets carry their own upstream licenses; keep their notices.
 - If you add a new third-party dependency, list it here with its license and keep its notices.
 - This file is informational, not legal advice. When in doubt, consult each component's LICENSE.
+- The Cardputer / Cardputer ADV product photos used in the README (`docs/screenshots/hardware.png`)
+  are © M5Stack, sourced from their official product listings, used here to identify the compatible
+  hardware. They are not covered by NucleoOS's own license.

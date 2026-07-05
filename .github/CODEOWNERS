@@ -1,0 +1,4 @@
+# Every change in this repository requires review/approval from the owner.
+# Combined with branch protection ("Require review from Code Owners" on `main`),
+# nothing merges into main without @indecenti's explicit approval.
+* @indecenti
