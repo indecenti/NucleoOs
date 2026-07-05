@@ -303,8 +303,8 @@ tools/             Dev tooling: validators, the host harness, the device simulat
 tools/anima-host/  Host gates — compile the REAL firmware C and run it on the PC
 ```
 
-Start every orientation from the **docs index below** and the relevant `docs/*.md`.
-`docs/` is the source of truth — prefer reading it over re‑deriving.
+Start every orientation from the relevant file under `docs/*.md` — it's the source of truth,
+one focused engineering spec per topic; prefer reading it over re‑deriving.
 
 ---
 
@@ -343,31 +343,6 @@ tools/flash.ps1                        # gate → build → flash over USB (conf
 It's **one universal binary** — the same image auto‑detects the board (original Cardputer vs ADV)
 at runtime, so you build once and fan out. The ANIMA gate must be green before any flash
 (`release.ps1`/`flash.ps1` enforce it). See [`docs/releasing.md`](docs/releasing.md).
-
----
-
-## Docs index
-
-| File | Topic |
-|---|---|
-| [docs/architecture.md](docs/architecture.md) | System layers, principles, the ESP‑NOW swarm |
-| [docs/memory-budget.md](docs/memory-budget.md) | How 512 KB is divided — the riskiest bet, validated |
-| [docs/anima.md](docs/anima.md) · [docs/anima-native.md](docs/anima-native.md) | ANIMA: the offline assistant + native app baseline |
-| [docs/anima-cortex.md](docs/anima-cortex.md) · [docs/anima-knowledge-graph.md](docs/anima-knowledge-graph.md) | Typed planning, CRAG, and the knowledge graph |
-| [docs/anima-online.md](docs/anima-online.md) | Online providers (Claude/Groq/Grok/Gemini) + multi‑turn |
-| [docs/tts.md](docs/tts.md) · [docs/voice.md](docs/voice.md) | Offline bilingual voice + the voice keyword/PTT engine |
-| [docs/media.md](docs/media.md) | Playing MP3/video on one ESP — client‑decode strategy |
-| [docs/device-ui.md](docs/device-ui.md) | Native on‑device UI: Wear‑OS‑style launcher, UX tricks |
-| [docs/i18n.md](docs/i18n.md) | OS‑wide internationalization engine (IT/EN) |
-| [docs/event-protocol.md](docs/event-protocol.md) | Delta event protocol over Wi‑Fi / BLE / WebUSB |
-| [docs/keydeck.md](docs/keydeck.md) | KeyDeck: the Cardputer as a Wi‑Fi keyboard + monitor for NucleoV2 (P4) |
-| [docs/app-manifest.md](docs/app-manifest.md) · [docs/app-runtimes.md](docs/app-runtimes.md) | App bundle manifest + multi‑runtime model |
-| [docs/registry.md](docs/registry.md) | Registry structure and file associations |
-| [docs/storage.md](docs/storage.md) · [docs/partition-table.md](docs/partition-table.md) | SD filesystem + 8 MB flash OTA layout |
-| [docs/setup-wizard.md](docs/setup-wizard.md) · [docs/security.md](docs/security.md) | First‑run wizard + device pairing/session auth |
-| [docs/releasing.md](docs/releasing.md) · [docs/versioning.md](docs/versioning.md) | Releasing/OTA + firmware versioning |
-| [docs/debugging.md](docs/debugging.md) · [docs/testing.md](docs/testing.md) | Default dev loop (host harness) + the test suites |
-| [docs/roadmap.md](docs/roadmap.md) | What's next to be a real, modern OS |
 
 ---
 
