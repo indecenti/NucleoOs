@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+title: "NucleoOS"
+message: "If you use or reference this project, please cite it."
+type: software
+authors:
+  - alias: indecenti
+    email: niki070585@gmail.com
+repository-code: "https://github.com/indecenti/NucleoOs"
+url: "https://github.com/indecenti/NucleoOs"
+abstract: >-
+  A web-native operating system for the M5Stack Cardputer (ESP32-S3, no PSRAM, ~512 KB RAM):
+  native firmware apps plus a desktop-class browser shell, an offline AI assistant (ANIMA) with
+  a bilingual voice, native multiplayer games, a security lab, on-device transcription and
+  offline WebGPU image generation. Runs on both the original Cardputer and the Cardputer ADV.
+keywords:
+  - esp32
+  - esp32-s3
+  - cardputer
+  - m5stack
+  - esp-idf
+  - embedded
+  - firmware
+  - operating-system
+  - pwa
+  - offline-ai
+  - wasm
+  - iot
+license: "LicenseRef-PolyForm-Noncommercial-1.0.0"
+version: 0.2.0
