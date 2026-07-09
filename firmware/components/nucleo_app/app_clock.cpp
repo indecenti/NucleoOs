@@ -40,7 +40,7 @@ static void draw(void)
 extern "C" void nucleo_register_clock(void)
 {
     static const nucleo_app_def_t app = {
-        "clock", "Clock", "Tools", "Time and date",
+        "clock", "Clock", "Office", "Time and date",
         'c', 0x4D1F, enter, nullptr, tick, draw, nullptr
     };
     nucleo_app_register(&app);

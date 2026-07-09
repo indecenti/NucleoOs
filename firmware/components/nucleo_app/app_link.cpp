@@ -2,8 +2,14 @@
 //
 // Two modes (selectable in OPZ): NUCLEO (evolved: window+ACK+CRC+resume) and BRUCE (wire-compatible
 // with real Bruce devices). The engine (nucleo_link_espnow.c) owns all the radio/SD state and self-pumps
-// on its own task; this file is the UI. Visual language matches app_wifi: themed palette, a segmented
-// tab bar paged with TAB/RIGHT, focus-enlarged size-2 rows so everything stays legible on the 240x135.
+// on its own task; this file is the UI.
+//
+// Visual language is now the OS-standard native look shared with Files / Music / WiFi:
+//   • a segmented tab bar (TAB/RIGHT pages it) with a filled/outline active pill;
+//   • a size-2 accent section header + hairline underline under the bar (app_ui_title style);
+//   • scrolling lists (PEER, SEND) use the shared app_ui_list widget, so the focused row and its
+//     neighbours are the big readable size-2 pill, with the launcher's 1-9 quick-jump + type-ahead
+//     for free — no more size-1 hand-rolled rows.
 //
 // RAM: registered with exclusive_flags = NX_NET_APP, so the framework frees ~70KB (httpd/mDNS/voice/L1)
 // for Vicino's whole foreground life while Wi-Fi STA — which ESP-NOW rides — stays up.
@@ -12,6 +18,7 @@
 #include "nucleo_exclusive.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
+#include "app_ui.h"            // shared focused-list widget + type-ahead/quick-select nav
 #include <M5GFX.h>
 #include <string.h>
 #include <strings.h>
@@ -57,7 +64,7 @@ static char  s_dir[160] = NUCLEO_SD_MOUNT "/data";
 static char  s_msg[48]; static int s_msg_t = 0;
 
 // file browser
-struct Ent { char name[64]; bool dir; };
+struct Ent { char name[64]; bool dir; uint32_t size; };
 #define ENT_MAX 64
 static Ent *s_ent = nullptr; static int s_nent = 0, s_fsel = 0;
 
@@ -67,7 +74,7 @@ static char s_cbuf[120]; static int s_clen = 0;
 static void toast(const char *it, const char *en) { snprintf(s_msg, sizeof s_msg, "%s", s_en ? en : it); s_msg_t = 20; }
 static const char *tab_label(int i) { return s_en ? TABS_EN[i] : TABS[i]; }
 
-// ---- draw primitives (mirror app_wifi) -------------------------------------
+// ---- draw primitives -------------------------------------------------------
 static void txt(int x, int y, const char *s, uint16_t fg, uint16_t bg, int sz) {
     d.setTextSize(sz); d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
 }
@@ -78,12 +85,27 @@ static void draw_tabbar(bool header) {
         int x = i * seg; const char *lab = tab_label(i); int tw = (int)strlen(lab) * 6;
         if (i == s_tab && header) { d.fillRoundRect(x + 2, 3, seg - 4, 17, 7, ACC); txt(x + (seg - tw) / 2, 8, lab, INK, ACC, 1); }
         else if (i == s_tab)      { d.drawRoundRect(x + 2, 3, seg - 4, 17, 7, ACC); txt(x + (seg - tw) / 2, 8, lab, ACC, BG, 1); }
-        else                      { txt(x + (seg - tw) / 2, 8, lab, DIM, BG, 1); }
+        else                      { txt(x + (seg - tw) / 2, 8, lab, MUTED, BG, 1); }
     }
     d.drawFastHLine(0, 23, W, LINE);
 }
 
-// generic focus-enlarged settings row (RV_* like app_wifi, trimmed)
+// Section header just under the tab bar — same visual language as app_ui_title (size-2 accent
+// title + hairline + accent underline) but anchored below our 24px tab bar. Returns first content y.
+static int link_head(const char *title, const char *right) {
+    const int y = 24;
+    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(10, y + 3); d.print(title);
+    if (right && right[0]) {
+        d.setTextSize(1); d.setTextColor(MUTED, BG);
+        int rw = (int)strlen(right) * 6; d.setCursor(238 - rw, y + 8); d.print(right);
+    }
+    d.drawFastHLine(10, y + 21, 220, LINE);
+    int tw = (int)strlen(title) * 12; if (tw > 220) tw = 220;
+    d.fillRect(10, y + 21, tw, 2, ACC);
+    return y + 26;   // 50
+}
+
+// ---- OPZ settings list (focus-enlarged rows, like app_wifi) ----------------
 enum { RV_TEXT = 0, RV_TOGGLE, RV_ACTION, RV_SEG };
 struct Row { const char *label; char val[24]; int kind; bool on; int seg; };
 static const char *s_seg2[2];
@@ -131,15 +153,15 @@ static void draw_row(int y, bool focus, const Row *r) {
         d.setTextSize(2); d.setTextColor(FG, SURF); d.setCursor(bx + 7, vy + 3); d.print(b);
     }
 }
-static void draw_list(int ch, Row *it, int n, int sel) {
-    d.setClipRect(0, 24, W, ch - 24);
-    if (sel < 0) { int y = 28; for (int i = 0; i < n && y < ch - 6; i++) { draw_row(y, false, &it[i]); y += ROWH_N; } d.clearClipRect(); return; }
-    int cy = (24 + ch) / 2, half = ROWH_F / 2;
+static void draw_list(int top, int ch, Row *it, int n, int sel) {
+    d.setClipRect(0, top, W, ch - top);
+    if (sel < 0) { int y = top + 2; for (int i = 0; i < n && y < ch - 6; i++) { draw_row(y, false, &it[i]); y += ROWH_N; } d.clearClipRect(); return; }
+    int cy = (top + ch) / 2, half = ROWH_F / 2;
     for (int i = 0; i < n; i++) {
         int dist = i - sel, y;
         if (dist == 0) y = cy - half; else if (dist < 0) y = cy - half + dist * ROWH_N; else y = cy + half + (dist - 1) * ROWH_N;
         int h = (dist == 0) ? ROWH_F : ROWH_N;
-        if (y + h > 24 && y < ch) draw_row(y, i == sel, &it[i]);
+        if (y + h > top && y < ch) draw_row(y, i == sel, &it[i]);
     }
     d.clearClipRect();
 }
@@ -178,9 +200,12 @@ static void read_dir(void) {
     while ((de = readdir(dp)) && s_nent < ENT_MAX) {
         if (de->d_name[0] == '.') continue;
         char full[224]; snprintf(full, sizeof full, "%s/%s", s_dir, de->d_name);
-        struct stat stt; bool isdir = (stat(full, &stt) == 0) && S_ISDIR(stt.st_mode);
+        struct stat stt; int sr = stat(full, &stt);
+        bool isdir = (sr == 0) && S_ISDIR(stt.st_mode);
         snprintf(s_ent[s_nent].name, sizeof s_ent[s_nent].name, "%s", de->d_name);
-        s_ent[s_nent].dir = isdir; s_nent++;
+        s_ent[s_nent].dir = isdir;
+        s_ent[s_nent].size = (sr == 0 && !isdir) ? (uint32_t)stt.st_size : 0;
+        s_nent++;
     }
     closedir(dp);
     qsort(s_ent, s_nent, sizeof(Ent), ent_cmp);
@@ -188,88 +213,110 @@ static void read_dir(void) {
 static bool at_root(void) { return strcmp(s_dir, NUCLEO_SD_MOUNT) == 0 || strcmp(s_dir, NUCLEO_SD_MOUNT "/") == 0; }
 static void dir_up(void) { char *s = strrchr(s_dir, '/'); if (s && s != s_dir) { *s = 0; if (!s_dir[0]) snprintf(s_dir, sizeof s_dir, "%s", NUCLEO_SD_MOUNT); read_dir(); } }
 
+// Virtual file list: index 0 is the ".." parent row when not at the SD root, entries follow.
+static int  snd_extra(void)  { return at_root() ? 0 : 1; }
+static int  snd_count(void)  { return s_nent + snd_extra(); }
+static bool snd_is_up(int i) { return snd_extra() && i == 0; }
+static Ent *snd_at(int i)    { int e = i - snd_extra(); return (e >= 0 && e < s_nent) ? &s_ent[e] : nullptr; }
+static const char *snd_label(int i, void *) { if (snd_is_up(i)) return ".."; const Ent *e = snd_at(i); return e ? e->name : ""; }
+static const char *snd_right(int i, void *) {
+    if (snd_is_up(i)) return ">";
+    const Ent *e = snd_at(i); if (!e) return nullptr; if (e->dir) return ">";
+    static char b[12]; uint32_t kb = (e->size + 1023) / 1024;
+    if (kb < 1000) snprintf(b, sizeof b, "%uK", (unsigned)kb);
+    else           snprintf(b, sizeof b, "%u.%uM", (unsigned)(kb / 1024), (unsigned)((kb % 1024) * 10 / 1024));
+    return b;
+}
+static unsigned short snd_col(int i, void *) { if (snd_is_up(i)) return AMB; const Ent *e = snd_at(i); return (e && e->dir) ? AMB : ACC; }
+
+// ---- peer list -------------------------------------------------------------
+static const char *pr_label(int i, void *) { return nlink_svc_peer_name(i); }
+static const char *pr_right(int i, void *) { return nlink_svc_peer_proto(i) == NLINK_PROTO_BRUCE ? "BRUCE" : "NUCLEO"; }
+static unsigned short pr_col(int i, void *) {
+    if (i == s_peer_sel) return GRN;   // chosen target stands out
+    return nlink_svc_peer_proto(i) == NLINK_PROTO_BRUCE ? PUR : ACC;
+}
+// Name of the chosen send/command target, clamped in case the peer list shrank under us.
+static const char *peer_target_name(void) {
+    int n = nlink_svc_peer_count(); if (n <= 0) return s_en ? "no peer" : "nessun peer";
+    int i = s_peer_sel; if (i < 0 || i >= n) i = 0;
+    return nlink_svc_peer_name(i);
+}
+
 // ---- tab draws -------------------------------------------------------------
 static void draw_send(int ch) {
-    const char *peer = nlink_svc_peer_count() ? nlink_svc_peer_name(s_peer_sel) : (s_en ? "no peer" : "nessun peer");
-    char hd[64]; snprintf(hd, sizeof hd, "-> %.14s", peer);
-    txt(8, 28, hd, nlink_svc_peer_count() ? GRN : DIM, BG, 1);
-    char db[44]; snprintf(db, sizeof db, "%.40s", s_dir); txt(8, 40, db, MUTED, BG, 1);
-    d.drawFastHLine(0, 52, W, LINE);
-    if (!s_ent || !s_nent) { txt(12, 70, s_en ? "Empty folder" : "Cartella vuota", DIM, BG, 1); return; }
-    d.setClipRect(0, 54, W, ch - 54 - 32);
-    int cy = (58 + ch - 32) / 2;
-    for (int i = 0; i < s_nent; i++) {
-        int dist = i - s_fsel, h = (i == s_fsel) ? 30 : 22, y;
-        if (dist == 0) y = cy - h / 2; else if (dist < 0) y = cy - 15 + dist * 22; else y = cy + 15 + (dist - 1) * 22;
-        if (y + h <= 54 || y >= ch - 32) continue;
-        bool f = (i == s_fsel);
-        d.fillRoundRect(4, y, W - 8, h - 2, 6, f ? CAP : BG);
-        if (f) d.fillRoundRect(4, y + 3, 4, h - 8, 2, s_ent[i].dir ? AMB : ACC);
-        char nm[26]; snprintf(nm, sizeof nm, "%s%.20s", s_ent[i].dir ? "/" : " ", s_ent[i].name);
-        txt(14, y + (h - (f ? 16 : 8)) / 2, nm, f ? FG : MUTED, f ? CAP : BG, f ? 2 : 1);
-    }
-    d.clearClipRect();
+    char rt[24]; snprintf(rt, sizeof rt, "-> %.13s", peer_target_name());
+    const char *base = strrchr(s_dir, '/'); base = (base && base[1]) ? base + 1 : "SD";
+    int y0 = link_head(base, rt);
+    int tn = snd_count();
+    if (tn == 0) { txt(14, y0 + 12, s_en ? "Empty folder" : "Cartella vuota", DIM, BG, 1); return; }
+    app_ui_list(y0, ch - y0, tn, s_fsel, snd_label, snd_right, snd_col, nullptr);
     draw_progress(ch);
 }
 static void draw_peer(int ch) {
-    bool hf = (s_sel == -1);
-    d.fillRoundRect(4, 26, W - 8, 18, 6, hf ? CAP : BG);
-    txt(12, 30, s_en ? "Scan for peers" : "Cerca dispositivi", hf ? FG : MUTED, hf ? CAP : BG, 1);
-    if (hf) txt(W - 40, 30, "INVIO", ACC, CAP, 1);
     int n = nlink_svc_peer_count();
-    if (!n) { txt(12, 64, s_en ? "No peers yet." : "Nessun peer.", DIM, BG, 1);
-              txt(12, 78, s_en ? "ENTER to scan." : "INVIO per cercare.", MUTED, BG, 1); return; }
-    d.setClipRect(0, 46, W, ch - 46);
-    int cy = (50 + ch) / 2;
-    for (int i = 0; i < n; i++) {
-        int dist = i - (s_sel < 0 ? 0 : s_sel), h = (i == s_sel) ? 40 : 24, y;
-        if (s_sel < 0) { y = 50 + i * 24; h = 24; } else if (dist == 0) y = cy - h / 2; else if (dist < 0) y = cy - 20 + dist * 24; else y = cy + 20 + (dist - 1) * 24;
-        if (y + h <= 46 || y >= ch) continue;
-        bool f = (i == s_sel), tgt = (i == s_peer_sel);
-        bool bruce = nlink_svc_peer_proto(i) == NLINK_PROTO_BRUCE;
-        d.fillRoundRect(4, y, W - 8, h - 2, 7, f ? CAP : BG);
-        if (f) d.fillRoundRect(4, y + 3, 5, h - 8, 2, bruce ? PUR : ACC);
-        txt(14, y + (h - (f ? 16 : 8)) / 2, nlink_svc_peer_name(i), f ? FG : (tgt ? GRN : MUTED), f ? CAP : BG, f ? 2 : 1);
-        const char *badge = bruce ? "BRUCE" : "NUCLEO";
-        txt(W - 12 - (int)strlen(badge) * 6, y + (h - 8) / 2, badge, bruce ? PUR : ACC, f ? CAP : BG, 1);
-        if (tgt) d.fillCircle(W - 8, y + 8, 3, GRN);
-    }
-    d.clearClipRect();
+    char rt[16]; snprintf(rt, sizeof rt, "ch%d", nlink_svc_channel());
+    int y0 = link_head(s_en ? "Devices" : "Dispositivi", rt);
+    bool hf = (s_sel < 0);
+    d.fillRoundRect(6, y0, W - 12, 20, 7, hf ? CAP : SURF);
+    if (hf) d.fillRoundRect(6, y0 + 3, 5, 14, 2, ACC);
+    txt(16, y0 + 6, s_en ? "Scan for peers" : "Cerca dispositivi", hf ? FG : MUTED, hf ? CAP : SURF, 1);
+    txt(W - 52, y0 + 6, s_en ? "ENTER" : "INVIO", hf ? ACC : DIM, hf ? CAP : SURF, 1);
+    int ly = y0 + 24;
+    if (!n) { txt(16, ly + 8, s_en ? "No peers yet." : "Nessun peer trovato.", DIM, BG, 1);
+              txt(16, ly + 22, s_en ? "Press ENTER to scan." : "Premi INVIO per cercare.", MUTED, BG, 1);
+              draw_progress(ch); return; }
+    app_ui_list(ly, ch - ly, n, s_sel, pr_label, pr_right, pr_col, nullptr);
+    draw_progress(ch);
+}
+// Green/red decision chips, shared by RECV (offer) and CMD (command). Draw at (x,y).
+static void draw_yn_chips(int x, int y) {
+    const int bw = 78, bh = 20, gap = 8;
+    d.fillRoundRect(x, y, bw, bh, 6, GRN);        txt(x + 8, y + 6, s_en ? "Y Accept" : "Y Accetta", INK, GRN, 1);
+    d.fillRoundRect(x + bw + gap, y, bw, bh, 6, REDC); txt(x + bw + gap + 8, y + 6, s_en ? "N Reject" : "N Rifiuta", INK, REDC, 1);
 }
 static void draw_recv(int ch) {
+    const char *ib = nlink_svc_inbox(); const char *ibn = strrchr(ib, '/'); ibn = ibn ? ibn + 1 : ib;
+    int y0 = link_head(s_en ? "Receive" : "Ricevi", ibn);
     char name[64], from[40]; uint32_t sz;
-    txt(8, 28, s_en ? "Listening for offers" : "In ascolto", ACC, BG, 1);
-    char ib[48]; snprintf(ib, sizeof ib, "Inbox: %.34s", nlink_svc_inbox()); txt(8, 42, ib, MUTED, BG, 1);
-    d.drawFastHLine(0, 54, W, LINE);
     if (nlink_svc_offer_pending(name, sizeof name, from, sizeof from, &sz)) {
-        d.fillRoundRect(8, 62, W - 16, 50, 8, CAP);
-        char h[48]; snprintf(h, sizeof h, "%.14s vuole inviare:", from); if (s_en) snprintf(h, sizeof h, "%.14s wants to send:", from);
-        txt(16, 68, h, FG, CAP, 1);
-        char f[40]; snprintf(f, sizeof f, "%.18s  %uKB", name, (unsigned)(sz / 1024)); txt(16, 82, f, AMB, CAP, 2);
-        txt(16, 100, s_en ? "Y accept   N reject" : "Y accetta   N rifiuta", GRN, CAP, 1);
+        int cx = 8, cw = W - 16, cy = y0 + 2, chh = 66;
+        d.fillRoundRect(cx, cy, cw, chh, 9, CAP);
+        d.drawRoundRect(cx, cy, cw, chh, 9, ACC);
+        char h[48]; snprintf(h, sizeof h, s_en ? "%.14s wants to send:" : "%.14s vuole inviarti:", from);
+        txt(cx + 12, cy + 7, h, MUTED, CAP, 1);
+        char f[24]; snprintf(f, sizeof f, "%.16s", name); txt(cx + 12, cy + 20, f, AMB, CAP, 2);
+        char szs[20]; snprintf(szs, sizeof szs, "%u KB", (unsigned)(sz / 1024)); txt(cx + cw - 12 - (int)strlen(szs) * 6, cy + 22, szs, DIM, CAP, 1);
+        draw_yn_chips(cx + 12, cy + chh - 26);
         return;
     }
+    txt(14, y0 + 8, s_en ? "Listening for offers..." : "In ascolto di offerte...", ACC, BG, 1);
+    txt(14, y0 + 24, s_en ? "Received files land in the inbox above." : "I file ricevuti vanno nell'inbox.", DIM, BG, 1);
     draw_progress(ch);
 }
 static void draw_cmd(int ch) {
     char cmd[160], from[40];
     if (nlink_svc_cmd_pending(cmd, sizeof cmd, from, sizeof from)) {
-        d.fillRoundRect(8, 30, W - 16, 70, 8, CAP);
-        char h[48]; snprintf(h, sizeof h, s_en ? "Command from %.12s:" : "Comando da %.12s:", from); txt(16, 36, h, FG, CAP, 1);
-        char c[40]; snprintf(c, sizeof c, "%.20s", cmd); txt(16, 50, c, AMB, CAP, 2);
-        txt(16, 74, s_en ? "Runs via ANIMA on accept" : "Eseguito via ANIMA se accetti", MUTED, CAP, 1);
-        txt(16, 86, s_en ? "Y accept   N reject" : "Y accetta   N rifiuta", GRN, CAP, 1);
+        char fr[24]; snprintf(fr, sizeof fr, "%.14s", from);
+        int y0 = link_head(s_en ? "Command" : "Comando", fr);
+        int cx = 8, cw = W - 16, cy = y0 + 2, chh = 66;
+        d.fillRoundRect(cx, cy, cw, chh, 9, CAP);
+        d.drawRoundRect(cx, cy, cw, chh, 9, AMB);
+        txt(cx + 12, cy + 7, s_en ? "Requested command:" : "Comando richiesto:", MUTED, CAP, 1);
+        char c[24]; snprintf(c, sizeof c, "%.18s", cmd); txt(cx + 12, cy + 20, c, AMB, CAP, 2);
+        draw_yn_chips(cx + 12, cy + chh - 26);
         return;
     }
-    const char *peer = nlink_svc_peer_count() ? nlink_svc_peer_name(s_peer_sel) : (s_en ? "no peer" : "nessun peer");
-    char hd[48]; snprintf(hd, sizeof hd, "-> %.14s", peer); txt(8, 30, hd, nlink_svc_peer_count() ? GRN : DIM, BG, 1);
-    txt(8, 48, s_en ? "Type a command, ENTER to send:" : "Scrivi un comando, INVIO per inviare:", MUTED, BG, 1);
-    d.fillRoundRect(8, 62, W - 16, 24, 5, SURF);
-    int off = s_clen > 28 ? s_clen - 28 : 0; char sh[40]; int k = 0;
-    for (int i = off; i < s_clen && k < 28; i++, k++) sh[k] = s_cbuf[i];
-    sh[k] = 0;
-    txt(14, 69, sh, FG, SURF, 1); d.fillRect(14 + k * 6, 68, 2, 9, ACC);
-    txt(8, 96, s_en ? "Receiver confirms before it runs." : "Il ricevente conferma prima di eseguire.", DIM, BG, 1);
+    char rt[24]; snprintf(rt, sizeof rt, "-> %.13s", peer_target_name());
+    int y0 = link_head(s_en ? "Command" : "Comando", rt);
+    txt(12, y0 + 4, s_en ? "Type, ENTER to send:" : "Scrivi, INVIO per inviare:", MUTED, BG, 1);
+    int by = y0 + 18;
+    d.fillRoundRect(8, by, W - 16, 30, 7, SURF);
+    int vis = 16, off = s_clen > vis ? s_clen - vis : 0;
+    char sh[20]; int k = 0; for (int i = off; i < s_clen && k < vis; i++, k++) sh[k] = s_cbuf[i]; sh[k] = 0;
+    d.setTextSize(2); d.setTextColor(FG, SURF); d.setCursor(14, by + 8); d.print(sh);
+    d.fillRect(14 + k * 12, by + 7, 3, 16, ACC);
+    txt(12, by + 40, s_en ? "Receiver confirms before it runs." : "Il ricevente conferma prima di eseguire.", DIM, BG, 1);
 }
 #define O_PROTO 0
 #define O_AUTO  1
@@ -291,47 +338,57 @@ static void build_opt(Row *it, int *n) {
     *n = k;
 }
 static void draw_help(int ch) {
-    d.fillRect(0, 24, W, ch - 24, BG);
-    txt(8, 28, s_en ? "Vicino - help" : "Vicino - guida", ACC, BG, 1);
+    int y0 = link_head(s_en ? "Guide" : "Guida", "Vicino");
     const char *it[] = {
-        "TAB/DESTRA: cambia scheda",
+        "TAB / DESTRA: cambia scheda",
+        "1-9 salto rapido, lettere = cerca",
         "PEER: INVIO cerca, INVIO sceglie",
-        "INVIA: sfoglia, INVIO invia file",
-        "RICEVI: Y/N su offerta in arrivo",
-        "CMD: scrivi, INVIO; l'altro conferma",
-        "OPZ: Nucleo (affidabile) o Bruce",
-        "Nucleo: ACK+CRC+resume. Bruce: compat.", 0 };
+        "INVIA: sfoglia, INVIO invia il file",
+        "RICEVI / CMD: Y accetta, N rifiuta",
+        "OPZ: Nucleo affidabile / Bruce compat.", 0 };
     const char *en[] = {
-        "TAB/RIGHT: switch tab",
+        "TAB / RIGHT: switch tab",
+        "1-9 quick-jump, letters = search",
         "PEER: ENTER scan, ENTER pick target",
-        "SEND: browse, ENTER sends a file",
-        "RECV: Y/N on incoming offer",
-        "CMD: type, ENTER; peer confirms",
-        "OPT: Nucleo (reliable) or Bruce",
-        "Nucleo: ACK+CRC+resume. Bruce: compat.", 0 };
+        "SEND: browse, ENTER sends the file",
+        "RECV / CMD: Y accept, N reject",
+        "OPT: Nucleo reliable / Bruce compat.", 0 };
     const char **m = s_en ? en : it;
-    for (int i = 0; m[i]; i++) txt(8, 44 + i * 13, m[i], FG, BG, 1);
+    for (int i = 0; m[i]; i++) txt(10, y0 + 2 + i * 12, m[i], i == 0 || i == 1 ? FG : MUTED, BG, 1);
+    (void)ch;
 }
 
 static int opt_rows(void) { Row it[8]; int n; build_opt(it, &n); return n; }
 
 static void update_hint(void) {
-    if (s_sel == -1) nucleo_app_set_hint(s_en ? "TAB tab   ENTER/DOWN   esc" : "TAB scheda   INVIO/GIU   esc");
-    else             nucleo_app_set_hint(s_en ? "UP/DN   ENTER ok   TAB tab" : "SU/GIU   INVIO ok   TAB scheda");
+    const char *h;
+    switch (s_tab) {
+        case T_SEND: h = s_en ? "UP/DN  ENTER send  DEL up" : "SU/GIU  INVIO invia  DEL su"; break;
+        case T_PEER: h = (s_sel < 0) ? (s_en ? "DOWN list  ENTER scan" : "GIU lista  INVIO cerca")
+                                     : (s_en ? "UP/DN  ENTER set target" : "SU/GIU  INVIO scegli"); break;
+        case T_RECV: h = s_en ? "Y accept   N reject" : "Y accetta   N rifiuta"; break;
+        case T_CMD:  h = s_en ? "type   ENTER send   Y/N" : "scrivi   INVIO invia   Y/N"; break;
+        case T_OPT:  h = (s_sel < 0) ? (s_en ? "DOWN rows  TAB tab" : "GIU righe  TAB scheda")
+                                     : (s_en ? "UP/DN  ENTER change" : "SU/GIU  INVIO cambia"); break;
+        default:     h = s_en ? "TAB switch tab   ESC exit" : "TAB scheda   ESC esci"; break;
+    }
+    nucleo_app_set_hint(h);
 }
 
 // ---- on_draw ---------------------------------------------------------------
 static void on_draw(void) {
     int ch = nucleo_app_content_height();
     d.fillRect(0, 0, W, ch, BG);
-    draw_tabbar(s_sel == -1);
+    // Bar pill is filled only while focus is on the bar; once focus is inside a list it goes to outline.
+    bool bar_focus = !((s_tab == T_SEND) || ((s_tab == T_PEER || s_tab == T_OPT) && s_sel >= 0));
+    draw_tabbar(bar_focus);
     Row it[8]; int n;
     switch (s_tab) {
         case T_SEND: draw_send(ch); break;
         case T_RECV: draw_recv(ch); break;
         case T_PEER: draw_peer(ch); break;
         case T_CMD:  draw_cmd(ch);  break;
-        case T_OPT:  build_opt(it, &n); draw_list(ch, it, n, s_sel); break;
+        case T_OPT:  { int y0 = link_head(s_en ? "Options" : "Opzioni", nullptr); build_opt(it, &n); draw_list(y0, ch, it, n, s_sel); } break;
         default:     draw_help(ch); break;
     }
     if (s_msg_t > 0) { int iy = ch - 20; d.fillRoundRect(6, iy, W - 12, 18, 5, SURF); txt(12, iy + 5, s_msg, AMB, SURF, 1); }
@@ -346,10 +403,12 @@ static void page_tab(void) {
     update_hint(); nucleo_app_request_draw();
 }
 static void send_selected(void) {
-    if (!s_ent || !s_nent) return;
-    if (s_ent[s_fsel].dir) { char nx[224]; snprintf(nx, sizeof nx, "%s/%s", s_dir, s_ent[s_fsel].name); snprintf(s_dir, sizeof s_dir, "%.159s", nx); read_dir(); return; }
+    int tn = snd_count(); if (tn == 0) return;
+    if (snd_is_up(s_fsel)) { dir_up(); return; }
+    Ent *e = snd_at(s_fsel); if (!e) return;
+    if (e->dir) { char nx[224]; snprintf(nx, sizeof nx, "%s/%s", s_dir, e->name); snprintf(s_dir, sizeof s_dir, "%.159s", nx); read_dir(); return; }
     if (!nlink_svc_peer_count()) { toast("Scegli un peer", "Pick a peer"); return; }
-    char path[224]; snprintf(path, sizeof path, "%s/%s", s_dir, s_ent[s_fsel].name);
+    char path[224]; snprintf(path, sizeof path, "%s/%s", s_dir, e->name);
     if (nlink_svc_send_file(s_peer_sel, path, (nlink_proto_t)s_proto)) toast("Invio avviato", "Sending");
     else toast("Occupato/illeggibile", "Busy/unreadable");
 }
@@ -367,7 +426,7 @@ static void on_key(int key, char ch) {
     // global tab paging
     if (key == NK_RIGHT) { page_tab(); return; }
 
-    // Y/N answers (RECV offer, CMD pending)
+    // Y/N answers (RECV offer, CMD pending) — only when something is actually pending.
     if ((s_tab == T_RECV || s_tab == T_CMD) && (ch == 'y' || ch == 'Y' || ch == 'n' || ch == 'N')) {
         bool ok = (ch == 'y' || ch == 'Y');
         char tmp[8], tf[8];
@@ -375,7 +434,7 @@ static void on_key(int key, char ch) {
         if (s_tab == T_CMD && nlink_svc_cmd_pending(tmp, 0, tf, 0)) { nlink_svc_cmd_confirm(ok); toast(ok ? "Eseguito" : "Scartato", ok ? "Run" : "Discarded"); nucleo_app_request_draw(); return; }
     }
 
-    // CMD input typing
+    // CMD input typing (only while no command is pending confirmation)
     if (s_tab == T_CMD) {
         char p[8], f[8];
         bool pending = nlink_svc_cmd_pending(p, sizeof p, f, sizeof f);
@@ -390,24 +449,27 @@ static void on_key(int key, char ch) {
         }
     }
 
-    // list navigation per tab
+    // SEND: shared list nav (up/dn + 1-9 quick-jump + type-ahead), ENTER opens/sends, DEL goes up.
     if (s_tab == T_SEND) {
-        if (key == NK_UP)        { if (s_fsel > 0) s_fsel--; }
-        else if (key == NK_DOWN) { if (s_fsel < s_nent - 1) s_fsel++; }
-        else if (key == NK_ENTER) send_selected();
+        int tn = snd_count();
+        if (app_ui_list_key(key, ch, &s_fsel, tn, snd_label, nullptr)) { nucleo_app_request_draw(); return; }
+        if (key == NK_ENTER) send_selected();
+        else if (key == NK_DEL && !at_root()) dir_up();
         nucleo_app_request_draw(); return;
     }
+    // PEER: header row (scan) above the shared peer list.
     if (s_tab == T_PEER) {
         int n = nlink_svc_peer_count();
-        if (s_sel == -1) {
+        if (n == 0) s_sel = -1; else if (s_sel >= n) s_sel = n - 1;
+        if (s_sel < 0) {
             if (key == NK_ENTER) { nlink_svc_discover((nlink_proto_t)s_proto); toast("Cerco...", "Scanning..."); }
             else if (key == NK_DOWN && n > 0) s_sel = 0;
         } else {
-            if (key == NK_UP)   { if (s_sel > 0) s_sel--; else s_sel = -1; }
-            else if (key == NK_DOWN) { if (s_sel < n - 1) s_sel++; }
+            if (key == NK_UP && s_sel == 0) s_sel = -1;                 // back up onto the scan row
+            else if (app_ui_list_key(key, ch, &s_sel, n, pr_label, nullptr)) { /* moved */ }
             else if (key == NK_ENTER) { s_peer_sel = s_sel; toast("Peer scelto", "Peer set"); }
         }
-        nucleo_app_request_draw(); return;
+        update_hint(); nucleo_app_request_draw(); return;
     }
     if (s_tab == T_OPT) {
         int n = opt_rows();
@@ -422,14 +484,21 @@ static void on_key(int key, char ch) {
     nucleo_app_request_draw();
 }
 
-// Back/Left: inside the file browser, go up a folder instead of closing the app.
+// Back/Left: inside the file browser, go up a folder; inside a focused list, drop focus; else close.
 static bool on_back(int key) {
     if (s_tab == T_SEND && !at_root()) { dir_up(); nucleo_app_request_draw(); return true; }
     if (s_sel >= 0) { s_sel = -1; update_hint(); nucleo_app_request_draw(); return true; }
     (void)key; return false;   // let the framework close the app
 }
 
-static void on_tick(void) { nucleo_app_request_draw(); }   // 5Hz refresh of progress/peers/offers
+// 5Hz refresh, but only when something on screen actually changes (a transfer, an incoming
+// offer/command, a toast, or the peers arriving on the discovery tabs). Static tabs stay idle.
+static void on_tick(void) {
+    nlink_status_t st; nlink_svc_status(&st);
+    bool dyn = st.active || st.state == NL_ST_DONE || st.state == NL_ST_FAIL
+            || s_tab == T_PEER || s_tab == T_RECV || s_tab == T_CMD || s_msg_t > 0;
+    if (dyn) nucleo_app_request_draw();
+}
 
 static void on_enter(void) {
     s_en = nucleo_i18n_is_en();           // follow the system language
@@ -447,7 +516,7 @@ static void on_exit(void) { nlink_svc_stop(); free(s_ent); s_ent = nullptr; s_ne
 
 extern "C" void nucleo_register_link(void) {
     static const nucleo_app_def_t app = {
-        "link", "Vicino", "Connect",
+        "link", "Vicino", "Communication",
         "Scambia file e comandi con altri device (Nucleo o Bruce) via ESP-NOW",
         'V', C_BLUE,
         on_enter, on_key, on_tick, on_draw, on_exit,

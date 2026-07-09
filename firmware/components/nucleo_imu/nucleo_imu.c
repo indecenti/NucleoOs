@@ -275,6 +275,25 @@ bool nucleo_imu_tilt(float *tx, float *ty)
     return true;
 }
 
+bool nucleo_imu_gravity_screen(float *gx, float *gy, float *gz)
+{
+    if (gx) *gx = 0;
+    if (gy) *gy = 0;
+    if (gz) *gz = 0;
+    float ax, ay, az;
+    if (!read_accel(&ax, &ay, &az)) return false;
+    if (!s_lpf_seeded) { s_fx = ax; s_fy = ay; s_fz = az; s_lpf_seeded = true; }
+    else { const float A = 0.30f; s_fx += (ax - s_fx) * A; s_fy += (ay - s_fy) * A; s_fz += (az - s_fz) * A; }
+    float m = sqrtf(s_fx * s_fx + s_fy * s_fy + s_fz * s_fz);
+    if (m < 1.0f) return false;
+    float u[3] = { s_fx / m, s_fy / m, s_fz / m };
+    int zc = 3 - IMU_AXIS_X - IMU_AXIS_Y;               // the remaining (screen-normal) axis
+    if (gx) *gx = u[IMU_AXIS_X] * (float)IMU_SX;
+    if (gy) *gy = u[IMU_AXIS_Y] * (float)IMU_SY;
+    if (gz) *gz = u[zc];
+    return true;
+}
+
 bool nucleo_imu_sample(void)
 {
     // Plain single accel read (refreshes s_motion + s_step); false (no-op) when the IMU is absent. The

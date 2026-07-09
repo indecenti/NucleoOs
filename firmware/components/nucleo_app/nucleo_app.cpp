@@ -328,6 +328,8 @@ extern "C" void nucleo_register_brawler(void);        // app_brawler.cpp — Gam
 extern "C" void nucleo_register_dice(void);           // app_dice.cpp — Games: 3D dice roll (shake / ENTER); IMU shake is ADV-only
 extern "C" void nucleo_register_yahtzee(void);        // app_yahtzee.cpp — Games: Yahtzee a turni (hot-seat 1-4 + CPU), dadi 3D fx3d
 extern "C" void nucleo_register_snake(void);          // app_snake.cpp — Games: Snake Duel 1v1 in rete (ESP-NOW) o vs AI, power-up
+extern "C" void nucleo_register_vs(void);             // app_vs.cpp — Games: Orde, mini vampire-survivors (Solo boot)
+extern "C" void nucleo_register_cardler(void);        // app_cardler.cpp — Games: Cardler, mini RPG (Solo boot)
 extern "C" void nucleo_register_level(void);          // app_level.cpp — Hardware (ADV-only): BMI270 bubble level
 extern "C" void nucleo_register_goniometer(void);     // app_goniometer.cpp — Hardware (ADV-only): angle finder
 extern "C" void nucleo_register_pedometer(void);      // app_pedometer.cpp — Hardware (ADV-only): step counter
@@ -347,7 +349,7 @@ void nucleo_app_register_builtins(void)
     nucleo_register_clock(); nucleo_register_weather(); nucleo_register_torch(); nucleo_register_calc(); nucleo_register_qr(); nucleo_register_pixelfix(); nucleo_register_files();
     nucleo_register_calendar(); nucleo_register_notify(); nucleo_register_notepad(); nucleo_register_mail(); nucleo_register_usb(); nucleo_register_usbkbd(); nucleo_register_ir(); nucleo_register_alarm();  // alarm on BOTH boards (mic-only on non-ADV)
     nucleo_register_radio(); nucleo_register_player(); nucleo_register_video(); nucleo_register_photos(); nucleo_register_recorder(); nucleo_register_micspec();  // Media
-    nucleo_register_reactor(); nucleo_register_constellations(); nucleo_register_sandgarden(); nucleo_register_slots(); nucleo_register_poker(); nucleo_register_pinball(); nucleo_register_pong(); nucleo_register_tanks(); nucleo_register_tankduel(); nucleo_register_brawler(); nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake();   // Games
+    nucleo_register_reactor(); nucleo_register_constellations(); nucleo_register_sandgarden(); nucleo_register_slots(); nucleo_register_poker(); nucleo_register_pinball(); nucleo_register_pong(); nucleo_register_tanks(); nucleo_register_tankduel(); nucleo_register_brawler(); nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake(); nucleo_register_vs(); nucleo_register_cardler();   // Games
     if (nucleo_ui_is_adv()) { nucleo_register_level(); nucleo_register_goniometer(); nucleo_register_pedometer(); }  // Hardware (ADV-only): BMI270 measuring tools
     nucleo_register_screensaver();                                                  // Tools: salvaschermo
     nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme();    // System
@@ -367,7 +369,8 @@ static bool s_wake_pending  = false;       // screen was blanked by CC "screen o
 static int  s_wake_saved_bright = 80;      // brightness to restore on wake
 static bool s_gamefront     = false;       // GameFront (HyperSpin-style game launcher) state active
 static bool s_gf_return     = false;       // re-open GameFront when the game it launched closes
-static bool s_shot_req       = false;      // a screenshot was requested (Fn+P / in-game 'C') -> save next composite
+static bool s_shot_req       = false;      // Fn+P -> a real full-frame screenshot on the next composite
+static bool s_cover_req      = false;      // in-game 'C' -> refresh this game's carousel cover on the next composite
 static int64_t s_shot_toast_until = 0;     // ms deadline to keep the confirm toast overlaid (NON-blocking)
 static bool s_shot_toast_ok  = false;      // did the last capture write succeed?
 static bool s_torch = false;               // global flashlight overlay active (G0 quick-tap)
@@ -744,6 +747,10 @@ static void handle_launcher(int k, char ch)
     }
     else if (k == NK_BACK)  launcher_back();
     else if (k == NK_DEL)   launcher_filter_backspace();
+    else if (k == NK_CHAR && ch == '*') {                        // '*' = pin/unpin the focused app on Home
+        const MenuNode *f = launcher_focused();
+        if (f && f->kind == N_APP) launcher_toggle_pin(f->id);
+    }
     else if (k == NK_CHAR && ch > ' ') launcher_filter_push(ch);
     s_dirty = true;
 }
@@ -1563,15 +1570,18 @@ void nucleo_app_run(void)
             last_act = now;                      // any key counts as activity (resets the idle screen-off timer)
             // Screen-off wake: CC "screen off" action blanked the backlight; first key restores and is swallowed.
             if (s_wake_pending) { s_wake_pending = false; nucleo_app_set_brightness(s_wake_saved_bright); continue; }
-            // Capture: OS-wide screenshot on Fn+P (Ctrl was unreliable); plus a SINGLE plain 'C' while a
-            // game is foreground (= Cattura, unused by any game) to grab/overwrite that game's cover.
-            // Saved after the next composite, when the shared canvas holds the frame (panel readback is
-            // unreliable here). The key is consumed so the game never sees it; a 2 s preview confirms it.
+            // Capture: Fn+P is an OS-wide screenshot -> a real full-frame image in /data/Screenshots
+            // (EVERYWHERE, games included — it used to save only a tiny cover for games, so "screenshot"
+            // seemed broken in a game). A separate plain 'C' while a game is foreground refreshes THAT
+            // game's carousel cover. Saved after the next composite (the canvas holds the clean frame;
+            // panel readback is unreliable). The key is consumed so the game never sees it; a toast confirms.
             const nucleo_app_def_t *cap_def = active_def();
             bool cap_in_game = (cap_def && cap_def->category && !strcmp(cap_def->category, "Games"));
-            if (nk.key == NK_CHAR && ((cap_in_game && (nk.ch == 'c' || nk.ch == 'C')) ||
-                                      ((nucleo_kbd_mods() & NK_MOD_FN) && (nk.ch == 'p' || nk.ch == 'P' || nk.ch == 0x10)))) {
-                s_shot_req = true; s_dirty = true;
+            bool cap_fnp     = (nucleo_kbd_mods() & NK_MOD_FN) && (nk.ch == 'p' || nk.ch == 'P' || nk.ch == 0x10);
+            bool cap_cover   = cap_in_game && (nk.ch == 'c' || nk.ch == 'C');
+            if (nk.key == NK_CHAR && (cap_fnp || cap_cover)) {
+                if (cap_fnp) s_shot_req = true; else s_cover_req = true;   // Fn+P screenshot vs 'C' cover
+                s_dirty = true;
             } else if (s_torch) {                // flashlight overlay is up — any key turns it off
                 torch_off();
             } else if (s_notify_show) {           // a reminder banner is up — any key dismisses it
@@ -1736,24 +1746,27 @@ void nucleo_app_run(void)
                     // Pending capture (Fn+P / 'C'): the canvas now holds exactly the CLEAN frame on
                     // screen (no overlay yet). Save it FIRST so the toast pill never leaks into the
                     // saved image, then arm a non-blocking confirm toast (no frozen preview).
-                    if (s_shot_req) {
+                    if (s_shot_req) {                              // Fn+P -> real full-frame screenshot, always
                         s_shot_req = false;
-                        bool ok;
-                        // A game shot updates that game's carousel cover (overwrites); anything else is a
-                        // full-screen capture into /data/Screenshots.
-                        if (def && def->category && !strcmp(def->category, "Games") && def->id && def->id[0])
-                            ok = gamefront_save_canvas_cover(def->id);
-                        else { static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq); ok = gamefront_save_screenshot(nm); }
-                        s_shot_toast_ok = ok; s_shot_toast_until = now + 1200;
+                        static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq);
+                        s_shot_toast_ok = gamefront_save_screenshot(nm);
+                        s_shot_toast_until = now + 1200;
                     }
-                    // Keep each game's carousel cover fresh from LIVE gameplay: while a game is foreground,
-                    // snapshot the canvas (cheap RAM read) to its cover every few seconds, skipping the
-                    // first few so the opening menu isn't what sticks. Captures real play, not the exit
-                    // screen — and works in Solo boot (the game owns a fresh-heap canvas here).
+                    if (s_cover_req) {                             // 'C' in a game -> refresh its carousel cover
+                        s_cover_req = false;
+                        s_shot_toast_ok = (def && def->id && def->id[0]) ? gamefront_save_canvas_cover(def->id) : false;
+                        s_shot_toast_until = now + 1200;
+                    }
+                    // Keep each game's carousel cover fresh from LIVE gameplay — but capture ONCE per session
+                    // (~8 s in, past the opening menu), NOT every few seconds. The old 6 s cadence did a
+                    // synchronous SD write mid-fight, a periodic hitch that read as "it keeps taking
+                    // screenshots". Statics reset on each game's Solo-boot relaunch, so covers still refresh.
                     if (def && def->category && !strcmp(def->category, "Games") && def->id && def->id[0]) {
-                        static int64_t s_cover_next = 0;
-                        if (s_cover_next == 0)            s_cover_next = now + 6000;   // let the menu pass
-                        else if (now >= s_cover_next)   { s_cover_next = now + 6000; gamefront_save_canvas_cover(def->id); }
+                        static int64_t s_cover_at = 0; static bool s_cover_done = false;
+                        if (!s_cover_done) {
+                            if (s_cover_at == 0)          s_cover_at = now + 8000;   // arm once, let the menu pass
+                            else if (now >= s_cover_at) { s_cover_done = true; gamefront_save_canvas_cover(def->id); }
+                        }
                     }
 
                     // Non-blocking confirm toast: draw the pill OVER the live frame (after the save,
@@ -1790,13 +1803,16 @@ void nucleo_app_run(void)
                     // Direct-draw screen (ANIMA, or any app that freed the canvas): the frame is on the
                     // PANEL, so grab it from there — works even in Solo boot (no httpd, no canvas), as a
                     // local SD write. Read it later over Wi-Fi via /api/fs once back at the launcher.
-                    if (s_shot_req) {
+                    if (s_shot_req) {                              // Fn+P -> real full-frame screenshot from the panel
                         s_shot_req = false;
-                        bool ok;
-                        if (def && def->category && !strcmp(def->category, "Games") && def->id && def->id[0])
-                            ok = gamefront_save_panel_cover(def->id);
-                        else { static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq); ok = gamefront_save_panel_screenshot(nm); }
+                        static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq);
+                        bool ok = gamefront_save_panel_screenshot(nm);
                         nucleo_notify_post("Screenshot", ok ? "Saved" : "Capture failed");
+                    }
+                    if (s_cover_req) {                             // 'C' cover — canvas only (panel readback = wrong colours)
+                        s_cover_req = false;
+                        bool ok = (def && def->id && def->id[0]) ? gamefront_save_canvas_cover(def->id) : false;
+                        nucleo_notify_post("Screenshot", ok ? "Cover salvata" : "Cover non disponibile");
                     }
                 }
                 // The hint bar sits below the app's clipped blit, so the app frame never

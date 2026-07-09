@@ -27,7 +27,7 @@ extern "C" const char *nucleo_setup_device_name(void);
 // ---- row model ----------------------------------------------------------------------------------
 enum { RK_HEAD, RK_KV };
 struct Row { uint8_t kind; char label[18]; char val[34]; uint16_t col; };
-static Row   s_row[40];
+static Row  *s_row = nullptr;   // heap-on-enter (was .bss ~2.2 KB); rebuilt each draw, freed on exit
 static int   s_nrow;
 static float s_scroll;        // eased top-row offset
 static int   s_target;        // desired top row
@@ -35,13 +35,13 @@ static int   s_vis = 5;       // rows visible (recomputed in draw)
 
 static void add_head(const char *l, uint16_t c)
 {
-    if (s_nrow >= 40) return;
+    if (!s_row || s_nrow >= 40) return;
     Row &r = s_row[s_nrow++]; r.kind = RK_HEAD; r.col = c; r.val[0] = 0;
     snprintf(r.label, sizeof r.label, "%s", l);
 }
 static void add_kv(const char *l, const char *v, uint16_t c)
 {
-    if (s_nrow >= 40) return;
+    if (!s_row || s_nrow >= 40) return;
     Row &r = s_row[s_nrow++]; r.kind = RK_KV; r.col = c;
     snprintf(r.label, sizeof r.label, "%s", l);
     snprintf(r.val, sizeof r.val, "%s", v ? v : "");
@@ -50,6 +50,7 @@ static void add_kv(const char *l, const char *v, uint16_t c)
 static void build_rows(void)
 {
     s_nrow = 0;
+    if (!s_row) return;
     bool sta = !strcmp(nucleo_setup_mode(), "sta") && nucleo_setup_ssid()[0];
     const char *ip = nucleo_setup_ip();
     char ipb[24]; snprintf(ipb, sizeof ipb, "%s", (sta && ip[0]) ? ip : "192.168.4.1");
@@ -122,6 +123,7 @@ static bool info_poll(void)
 static void info_enter(void)
 {
     nucleo_screen_acquire();                            // buffered -> no flicker (canvas may have been freed by a media app)
+    if (!s_row) s_row = (Row *)calloc(40, sizeof *s_row);   // ~2.2 KB only while open, zero .bss at boot
     s_scroll = 0; s_target = 0;
     nucleo_app_set_poll_handler(info_poll);
     nucleo_app_set_hint("su/giu scorri   esc indietro");
@@ -174,11 +176,13 @@ static void info_draw(void)
     }
 }
 
+static void info_exit(void) { free(s_row); s_row = nullptr; }   // back to zero .bss until reopened
+
 extern "C" void nucleo_register_info(void)
 {
     static const nucleo_app_def_t app = {
         "info", "Connection", "System", "Wi-Fi, indirizzi web e info dispositivo",
-        'i', C_BLUE, info_enter, info_key, nullptr, info_draw, nullptr
+        'i', C_BLUE, info_enter, info_key, nullptr, info_draw, info_exit
     };
     nucleo_app_register(&app);
 }

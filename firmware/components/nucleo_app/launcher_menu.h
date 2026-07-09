@@ -43,3 +43,7 @@ void            launcher_open_context(void);   // open the focused app's context
 const MenuNode *launcher_enter(void);
 void            launcher_filter_push(char c);  // append a char to the filter, reset focus
 void            launcher_filter_backspace(void);
+
+// ---- pin to Home ------------------------------------------------------------
+bool            launcher_is_pinned(const char *id);   // true if this app id rides the top of Home
+void            launcher_toggle_pin(const char *id);  // pin/unpin + persist + rebuild the tree

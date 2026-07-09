@@ -42,6 +42,7 @@ static int s_cnt[TAB_COUNT];         // per-tab counts (the digest)
 static int s_tab = TAB_ALL;
 static int s_sel = 0;
 static bool s_oom = false;           // true if the ~3 KB buffer couldn't be allocated on enter
+static bool s_confirm_clr, s_clr_yes;   // pending "clear history?" confirm card
 
 // ---- helpers ---------------------------------------------------------------
 static int tab_of(const char *src)
@@ -179,6 +180,7 @@ static void draw(void)
         return;
     }
     app_ui_list(yl, (H - HINT) - yl, s_vn, s_sel, row_label, row_right, row_color, nullptr);
+    if (s_confirm_clr) app_ui_confirm("Cancella tutto?", "Elimina la cronologia notifiche", s_clr_yes);
 }
 
 // ---- input / lifecycle -----------------------------------------------------
@@ -190,13 +192,20 @@ static void cycle_tab(void)                           // TAB handler
 
 static void on_key(int key, char ch)
 {
+    if (s_confirm_clr) {                              // clear-history card is up: it owns every key
+        int r = app_ui_confirm_key(key, ch, &s_clr_yes);
+        if (r == 1) { remove(JRNL_PATH); remove(JRNL_BAK); load_journal(); build_view(); }
+        if (r >= 0) s_confirm_clr = false;
+        nucleo_app_request_draw();
+        return;
+    }
     if (key == NK_ENTER) {
         if (s_vn > 0) run_action(s_items[s_view[s_sel]].act);
         return;
     }
-    if (ch == 'c') {                                  // clear history (device + the shared store)
-        remove(JRNL_PATH); remove(JRNL_BAK);
-        load_journal(); build_view(); nucleo_app_request_draw();
+    if (ch == 'c' && s_vn > 0) {                      // clear history (device + the shared store)
+        s_confirm_clr = true; s_clr_yes = false;
+        nucleo_app_request_draw();
         return;
     }
     if (app_ui_list_key(key, ch, &s_sel, s_vn, row_label, nullptr)) nucleo_app_request_draw();
@@ -211,7 +220,7 @@ static void enter(void)
 {
     if (!s_items) s_items = (NItem *)malloc(sizeof(NItem) * MAX_N);   // ~3 KB, only while open
     s_oom = (s_items == nullptr);                                     // degrade cleanly, never deref
-    s_tab = TAB_ALL; s_sel = 0;
+    s_tab = TAB_ALL; s_sel = 0; s_confirm_clr = false;
     load_journal(); build_view();                                     // both no-op when s_items==NULL
     nucleo_app_set_tab_handler(cycle_tab);
     nucleo_app_set_hint(s_oom ? "memoria insufficiente   esc indietro"
@@ -226,7 +235,7 @@ static void leave(void)
 extern "C" void nucleo_register_notify(void)
 {
     static const nucleo_app_def_t app = {
-        "notify", "Notifiche", "Tools", "Notification center",
+        "notify", "Notifiche", "System", "Notification center",
         'n', ACC, enter, on_key, tick, draw, leave
     };
     nucleo_app_register(&app);

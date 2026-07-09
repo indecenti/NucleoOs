@@ -32,7 +32,10 @@ static const unsigned short
 struct Entry { char name[56]; bool dir; uint32_t kb; };
 static Entry *s_e    = nullptr;   // malloc on enter
 static int    s_n, s_sel;
-static int    s_del_arm = -1;
+static int    s_del_arm = -1;   // >=0: a delete-confirm card is up for that row
+static bool   s_del_yes;        // focused button on the confirm card
+static char   s_del_abs[256];   // snapshotted target path (index-independent once the card is up)
+static char   s_del_name[56];   // snapshotted display name for the card message
 static char   s_path[192] = "/";
 
 // ── History ────────────────────────────────────────────────────────────────────
@@ -409,27 +412,35 @@ static void on_key(int key, char ch)
 
     int tn = s_search_mode ? s_n : total_n();
 
-    // Delete file (D key)
+    // A delete-confirm card is up: it owns every key until the user picks Yes/No.
+    if (s_del_arm >= 0) {
+        int r = app_ui_confirm_key(key, ch, &s_del_yes);
+        if (r == 1) {
+            int keep = s_del_arm; unlink(s_del_abs); scan();
+            tn = total_n();
+            if (keep >= tn) keep = tn-1;
+            if (keep < 0)   keep = 0;
+            s_sel = keep;
+        }
+        if (r >= 0) { s_del_arm = -1; update_hint(); }
+        nucleo_app_request_draw(); return;
+    }
+
+    // Delete file (D key) -> open the shared confirm card (default focus = No).
     if ((ch=='d'||ch=='D') && !s_search_mode && s_sel < tn && !is_parent(s_sel) && !entry_at(s_sel)->dir) {
         Entry *e = entry_at(s_sel);
         char abs[256]; snprintf(abs, sizeof abs, "%s%s%s", NUCLEO_SD_MOUNT, s_path, e->name);
         if (nucleo_fs_is_protected(abs)||nucleo_fs_is_factory(abs)) {
-            s_del_arm = -1; nucleo_app_set_hint(TR("Protetto: file di sistema","Protected: system file"));
-        } else if (s_del_arm != s_sel) {
-            s_del_arm = s_sel; nucleo_app_set_hint(TR("Premi D per eliminare","Press D to delete"));
+            nucleo_app_set_hint(TR("Protetto: file di sistema","Protected: system file"));
         } else {
-            int keep = s_sel; unlink(abs); s_del_arm = -1; scan();
-            tn = total_n();
-            if (keep >= tn) keep = tn-1;
-            if (keep < 0)   keep = 0;
-            s_sel = keep; update_hint();
+            s_del_arm = s_sel; s_del_yes = false;
+            snprintf(s_del_abs,  sizeof s_del_abs,  "%s", abs);
+            snprintf(s_del_name, sizeof s_del_name, "%s", e->name);
         }
         nucleo_app_request_draw(); return;
     }
-    bool was_armed = (s_del_arm >= 0); s_del_arm = -1;
 
     if (app_ui_list_key(key, ch, &s_sel, tn, fl_label_virt, nullptr)) {
-        if (was_armed) update_hint();
     }
     else if (key == NK_DEL && !s_search_mode) { go_up(); update_hint(); }
     else if (key == NK_ENTER && s_sel < tn) {
@@ -472,7 +483,7 @@ static void on_key(int key, char ch)
             }
         }
     }
-    else { if (was_armed) { update_hint(); nucleo_app_request_draw(); } return; }
+    else { return; }
     nucleo_app_request_draw();
 }
 
@@ -661,12 +672,15 @@ static void draw(void)
 
     if (s_tab_open) draw_panel(y0, list_h);
     else            draw_list(y0, list_h);
+
+    if (s_del_arm >= 0 && !s_tab_open)
+        app_ui_confirm(TR("Elimina file?","Delete file?"), s_del_name, s_del_yes);
 }
 
 extern "C" void nucleo_register_files(void)
 {
     static const nucleo_app_def_t app = {
-        "files", "Files", "Tools", "Browse and open SD card files",
+        "files", "Files", "Office", "Browse and open SD card files",
         'f', 0xFE8C, enter, on_key, tick, draw, leave
     };
     nucleo_app_register(&app);

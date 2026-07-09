@@ -193,7 +193,9 @@ static void stars_frame(void)
 #define FCS  4           // px per cella orizzontale
 #define FCH  5           // px per cella verticale
 
-static uint8_t  fire_buf[FH][FW];
+// Heap-on-demand (was .bss ~1.7 KB): only the FIRE mode needs it, and the saver is closed at boot.
+// Allocated in fire_init(), freed on_exit; the fire_* helpers skip cleanly if the alloc failed.
+static uint8_t (*fire_buf)[FW] = nullptr;
 static uint16_t fire_pal[256];
 static bool     fire_pal_ok = false;
 static int      fire_breath = 0;     // oscillazione globale 0..8 per respiro fiamme
@@ -268,14 +270,17 @@ static void fire_step(void)
 
 static void fire_init(void)
 {
+    if (!fire_buf) fire_buf = (uint8_t (*)[FW])calloc(FH, FW);   // ~1.7 KB only while the fire runs
+    if (!fire_buf) return;
     fire_init_pal();
-    memset(fire_buf, 0, sizeof(fire_buf));
+    memset(fire_buf, 0, (size_t)FH * FW);
     fire_breath = 0;  // reset respiro
     fire_seed();
 }
 
 static void fire_frame(void)
 {
+    if (!fire_buf) return;
     fire_seed();   // sorgente sempre piena → fiamma continua al bordo inferiore
     fire_step();
     for (int y = 0; y < FHV; y++)
@@ -515,7 +520,7 @@ static void on_draw(void)
     draw_settings();
 }
 
-static void on_exit(void) { if (s_running) saver_stop(); save_settings(); }
+static void on_exit(void) { if (s_running) saver_stop(); save_settings(); free(fire_buf); fire_buf = nullptr; }
 
 // ==================== HOOK DI SISTEMA =======================================
 extern "C" bool nucleo_screensaver_should_activate(int64_t idle_ms)
@@ -528,7 +533,7 @@ extern "C" void nucleo_screensaver_set_trigger(void) { g_trigger = true; }
 extern "C" void nucleo_register_screensaver(void)
 {
     static const nucleo_app_def_t app = {
-        "screensaver", "Salvaschermo", "Tools",
+        "screensaver", "Salvaschermo", "System",
         "Schermo spento o animato dopo inattività",
         'S', C_PURPLE,
         on_enter, on_key, on_tick, on_draw, on_exit

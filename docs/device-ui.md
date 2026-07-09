@@ -97,6 +97,29 @@ and a `word` list; the top-left key is treated as Esc.)
 | **Files** | SD browser (list, open text), breadcrumb path |
 | **System status** | Battery, RAM, storage, network — thin gauges |
 
+## Shared in-app list widget (`app_ui.h`)
+
+Apps with a scrollable list should route keys through `app_ui_list_key()` and draw with
+`app_ui_list()` instead of hand-rolling a scroll loop. This gives every list the same
+smartwatch UX for free:
+- `;` / `.` move with wrap-around; a right-edge scroll knob shows position.
+- **`1`–`9` jump to the n-th row** (same shortcut as the launcher).
+- **Type-ahead**: typing letters does a time-windowed prefix search (`ra` → first `Ra…`
+  row); tapping the same single key again cycles through items starting with it.
+
+Callers today: Files, Calendar, Notes, Photos, Notify, Player, Recorder, Video, Voice,
+VoiceLab, IR. New list apps should adopt it rather than forking the widget.
+
+For destructive actions use the shared confirm card `app_ui_confirm(title, msg, yes_focus)`
++ `app_ui_confirm_key()` instead of hand-rolled "press D again" hints. It defaults focus to
+**No** so a stray Enter can't delete. Adopted in Notes (delete note), Files (delete file —
+replaced the old "press D twice" arm), Notifications (clear history) and Voice (delete trained
+template). Returns 1 = confirmed, 0 = cancelled, -1 = still open.
+
+Deliberately **not** converted: flows that already gate destructive actions their own way —
+Recorder's delete uses the blocking `nucleo_ui_menu` Cancel/Delete modal, and WiFi's factory
+reset keeps its triple-press countdown (high-friction on purpose for a whole-OS wipe).
+
 ## Framework
 
 `nucleo_app` provides the app descriptor (`onEnter/onKey/onTick/onDraw/onExit`), the

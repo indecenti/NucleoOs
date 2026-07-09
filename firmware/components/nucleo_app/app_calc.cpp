@@ -75,7 +75,7 @@ static void draw(void)
 extern "C" void nucleo_register_calc(void)
 {
     static const nucleo_app_def_t app = {
-        "calc", "Calculator", "Tools", "Type sums on the keyboard",
+        "calc", "Calculator", "Office", "Type sums on the keyboard",
         '=', 0x8FF3, enter, on_key, tick, draw, nullptr
     };
     nucleo_app_register(&app);

@@ -42,7 +42,10 @@ large headroom; profile A is the tight one and caps concurrent sessions.
   `enter()` and free on `on_exit()`** (the app already enters `nucleo_exclusive`), so the cost
   is paid only while that app is open. Pattern: declare a `static T *p = nullptr;`, `calloc`
   it in `enter()`, `free`+null it in `exit()`, and null-guard every dereference (skip cleanly
-  if alloc failed). See the conversion in `app_qr.cpp` (saved-QR scratch) as the reference.
+  if alloc failed). See the conversions in `app_qr.cpp` (saved-QR scratch) and `app_anima.cpp`
+  (the `s_msg` transcript ring + `s_row` wrap cache, ~7.4 KB) as the reference. That ANIMA
+  conversion, measured on ADV, lifted the `pre-httpd` `largest_free_block` from 23552 → 25600
+  and free heap 31968 → 36352 — a boot-gate win for RAM the closed app never needed resident.
   This is enforceable: `idf.py size --archive_details libnucleo_app.a` lists the per-symbol
   `.bss` — a multi-KB `s_*` array in an app is a red flag.
 - WebSocket/BLE payloads are **delta events only** (see `event-protocol.md`), never full state.

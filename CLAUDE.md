@@ -42,7 +42,8 @@ user to check by hand):
 node tools/serve-shell.mjs      # http://localhost:5599 — mirrors the device API + serves the apps
 ```
 Verification matrix: `npm run validate` (registry/manifest), `i18n:gate`, `gz:check`,
-`gen:api:check`, `anima:gate`, `test:all`. See `docs/debugging.md` and the skills below.
+`icons:gate` (firmware↔web launcher icon-set parity), `gen:api:check`, `anima:gate`,
+`test:all`. See `docs/debugging.md` and the skills below.
 
 **Library/API docs:** when touching a third-party API (ESP-IDF, Three.js, Vosk, js-dos, the
 LLM providers, web platform APIs), use the **context7** MCP (`.mcp.json`) — `resolve-library-id`

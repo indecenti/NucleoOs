@@ -79,11 +79,12 @@ unsigned long nucleo_wifiatk_beacon_frames(void);
 int           nucleo_wifiatk_beacon_count(void);
 }
 
+#include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
 
-static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410,
-                            LINE = 0x2945, INK = 0x0000, EP_RED = 0xF96B, GRN = 0x8FF3,
-                            YEL = 0xFE8C, PANEL = 0x18E3, EP_CYAN = 0x5C9F;
+// BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
+static const unsigned short EP_RED = C_RED, GRN = C_GREEN,
+                            YEL = C_YELLOW, PANEL = 0x18E3, EP_CYAN = 0x5C9F;
 
 // ---- screens ----------------------------------------------------------------
 enum {

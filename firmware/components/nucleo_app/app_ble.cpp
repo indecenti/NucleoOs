@@ -3,10 +3,15 @@
 // Declares exclusive_flags = NX_DEEP_OFFLINE: the framework tears Wi-Fi (+httpd/mDNS/voice/L1) down
 // BEFORE on_enter and restores it all on close — "all RAM concentrated for BLE, back to normal on
 // exit". on_enter brings the NimBLE controller up in that freed space; on_exit gives it back. A menu
-// picks the active mode (only one runs at a time). Big fonts + number-key shortcuts per the native-UI
-// rule. Back/Esc returns to the menu first, then closes the app.
+// picks the active mode (only one runs at a time).
+//
+// UI is the OS-standard native look: themed palette (launcher_theme), an app_ui_title accent header on
+// every screen, and the shared app_ui_list widget for the mode menu (size-2 focus rows, 1-8 instant
+// launch, type-ahead). Back/Esc returns to the menu first, then closes the app.
 #include "nucleo_app.h"
+#include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
+#include "app_ui.h"           // shared focused-list widget + quick-select/type-ahead nav
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -17,8 +22,8 @@ extern "C" {
 #include "nucleo_exclusive.h"
 }
 
-static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410,
-                            ACC = 0x4DDF, GRN = 0x8FF3, WARN = 0xFE8C, HL = 0x4DDF, INK = 0x0000;
+// BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
+static const unsigned short ACC = C_BLUE, GRN = C_GREEN, WARN = C_YELLOW, SURF = 0x10A2, CAP = 0x1A8B;
 
 enum Screen { MENU, SCAN, SPAM, IBEACON, HID };
 static Screen s_screen = MENU;
@@ -26,6 +31,10 @@ static int    s_sel = 0;          // menu cursor
 static nucleo_ble_spam_t s_target = NUCLEO_BLE_SPAM_IOS;
 static bool   s_up_ok = false;
 static bool   s_bt_off = false;       // boot released the radio for RAM -> show the enable prompt
+
+static void txt(int x, int y, const char *s, uint16_t fg, uint16_t bg, int sz) {
+    d.setTextSize(sz); d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
+}
 
 // Apply the Bluetooth on/off choice: persist the preference and reboot (the release happens at boot).
 static void reboot_with_bt(bool on) { nucleo_ble_set_pref(on); esp_restart(); }
@@ -43,6 +52,7 @@ static const Item MENU_ITEMS[] = {
     { "Tastiera HID","keyboard + media" },
 };
 static const int N_ITEMS = (int)(sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]));
+static const char *ble_label(int i, void *) { return MENU_ITEMS[i].label; }
 
 // ---- mode control ----------------------------------------------------------------------------------
 static void stop_all(void) { nucleo_ble_scan_stop(); nucleo_ble_spam_stop(); nucleo_ble_ibeacon_stop(); nucleo_ble_hid_stop(); }
@@ -65,6 +75,7 @@ static void activate(int idx)
 // Back/Esc: a running mode returns to the menu; from the menu, let the framework close the app.
 static bool on_back(int key)
 {
+    (void)key;
     if (s_screen != MENU) { stop_all(); s_screen = MENU; nucleo_app_request_draw(); return true; }
     return false;
 }
@@ -94,9 +105,8 @@ static void on_key(int key, char ch)
 {
     if (s_screen == MENU) {
         if (s_bt_off) { if (key == NK_ENTER) reboot_with_bt(true); return; }   // enable Bluetooth + reboot
-        if (ch >= '1' && ch <= '0' + N_ITEMS) { s_sel = ch - '1'; activate(s_sel); return; }
-        if (key == NK_UP)    { s_sel = (s_sel - 1 + N_ITEMS) % N_ITEMS; nucleo_app_request_draw(); }
-        if (key == NK_DOWN)  { s_sel = (s_sel + 1) % N_ITEMS; nucleo_app_request_draw(); }
+        if (ch >= '1' && ch <= '0' + N_ITEMS) { s_sel = ch - '1'; activate(s_sel); return; }   // number = instant launch
+        if (app_ui_list_key(key, ch, &s_sel, N_ITEMS, ble_label, nullptr)) { nucleo_app_request_draw(); return; }
         if (key == NK_ENTER) activate(s_sel);
     } else if (s_screen == HID) {
         if (key == NK_ENTER) { if (nucleo_ble_hid_ready()) nucleo_ble_hid_type("NucleoOS BLE HID\n"); }
@@ -108,90 +118,77 @@ static void on_key(int key, char ch)
 static void on_tick(void) { if (s_screen != MENU) nucleo_app_request_draw(); }
 
 // ---- drawing ---------------------------------------------------------------------------------------
-static void draw_header(int top, const char *title, unsigned short col)
-{
-    d.setTextSize(2); d.setTextColor(col, BG); d.setCursor(8, top + 6); d.print(title);
-    d.setTextSize(1);
-}
-
 static void draw_menu(int top, int h)
 {
-    draw_header(top, "BLE", ACC);
+    (void)top;
     if (s_bt_off) {   // Bluetooth disabled to reclaim RAM — offer to enable it
-        d.setTextColor(WARN, BG); d.setCursor(8, top + 30); d.print("Bluetooth spento per liberare RAM");
-        d.setTextColor(MUTED, BG); d.setCursor(8, top + 46); d.print("(~35 KB dati ad ANIMA e al sistema)");
-        d.setTextColor(FG, BG); d.setCursor(8, top + 72); d.print("INVIO: attiva e riavvia");
+        int y0 = app_ui_title("BLE", ACC, nullptr);
+        txt(10, y0 + 12, "Bluetooth spento", FG, BG, 2);
+        txt(10, y0 + 34, "Liberati ~35 KB per ANIMA e sistema.", MUTED, BG, 1);
+        txt(10, y0 + 54, "INVIO: attiva e riavvia.", WARN, BG, 1);
         return;
     }
-    d.setTextColor(WARN, BG); d.setCursor(70, top + 12); d.print("solo test autorizzati");
-    if (!s_up_ok) { d.setTextColor(WARN, BG); d.setCursor(8, top + 30); d.print("controller BLE non avviato"); return; }
-
-    int y = top + 30, rowh = 20;
-    for (int i = 0; i < N_ITEMS; i++) {
-        bool on = (i == s_sel);
-        if (on) d.fillRoundRect(4, y - 2, 232, rowh - 2, 3, 0x12B2);
-        d.setTextSize(1);
-        d.setTextColor(on ? ACC : DIM, on ? 0x12B2 : BG); d.setCursor(8, y + 1);
-        char num[3]; snprintf(num, sizeof(num), "%d", i + 1); d.print(num);
-        d.setTextColor(on ? FG : MUTED, on ? 0x12B2 : BG); d.setCursor(22, y + 1); d.print(MENU_ITEMS[i].label);
-        d.setTextColor(on ? MUTED : DIM, on ? 0x12B2 : BG); d.setCursor(120, y + 1); d.print(MENU_ITEMS[i].sub);
-        y += rowh;
-    }
+    int y0 = app_ui_title("BLE", ACC, "solo test autorizzati");
+    if (!s_up_ok) { txt(10, y0 + 14, "Controller BLE non avviato.", WARN, BG, 2); return; }
+    const int foot = 16;
+    app_ui_list(y0, h - y0 - foot, N_ITEMS, s_sel, ble_label, nullptr, nullptr, nullptr);
+    // focused-item description on a footer strip (launcher idiom: the instruction line)
+    d.fillRoundRect(6, h - foot, W - 12, foot - 2, 5, SURF);
+    txt(12, h - foot + 3, MENU_ITEMS[s_sel].sub, MUTED, SURF, 1);
 }
 
 static void draw_scan(int top, int h)
 {
-    draw_header(top, "Scansione", ACC);
-    int cnt = nucleo_ble_scan_count();
-    char ln[56];
-    d.setTextColor(nucleo_ble_is_synced() ? GRN : MUTED, BG); d.setCursor(120, top + 12);
-    d.print(nucleo_ble_is_synced() ? "attiva" : "avvio...");
-    d.setTextColor(ACC, BG); snprintf(ln, sizeof(ln), "%d device", cnt); d.setCursor(8, top + 28); d.print(ln);
-
-    int y = top + 44; nucleo_ble_dev_t dv;
-    d.setTextColor(FG, BG);
-    for (int i = 0; i < cnt && i < 9; i++) {
+    (void)top; (void)h;
+    char cb[16]; int cnt = nucleo_ble_scan_count();
+    snprintf(cb, sizeof cb, "%d device", cnt);
+    int y0 = app_ui_title("Scansione", ACC, nucleo_ble_is_synced() ? "attiva" : "avvio...");
+    txt(8, y0 + 4, cb, ACC, BG, 2);
+    int y = y0 + 26; nucleo_ble_dev_t dv; char ln[56];
+    for (int i = 0; i < cnt && i < 8; i++) {
         if (!nucleo_ble_scan_get(i, &dv)) break;
         snprintf(ln, sizeof(ln), "%-12.12s %4d  %02x:%02x:%02x", dv.name[0] ? dv.name : "(senza nome)",
                  dv.rssi, dv.addr[5], dv.addr[4], dv.addr[3]);
-        d.setCursor(8, y); d.print(ln); y += 12;
+        txt(8, y, ln, FG, BG, 1); y += 12;
     }
+    if (!cnt) txt(8, y, "Nessun dispositivo ancora.", DIM, BG, 1);
 }
 
 static void draw_spam(int top, int h)
 {
+    (void)top; (void)h;
     static const char *TN[] = { "iOS", "Android", "Windows", "Samsung", "Tutti" };
-    draw_header(top, "Spam", WARN);
-    d.setTextColor(FG, BG); d.setTextSize(2);
-    d.setCursor(8, top + 34); d.print(TN[s_target]);
-    d.setTextSize(1);
+    int y0 = app_ui_title("Spam", WARN, "burst BLE adv");
+    txt(8, y0 + 6, TN[s_target], FG, BG, 2);
     char ln[40];
-    d.setTextColor(GRN, BG); snprintf(ln, sizeof(ln), "%lu adv inviati", (unsigned long)nucleo_ble_spam_count());
-    d.setCursor(8, top + 64); d.print(ln);
-    d.setTextColor(MUTED, BG); d.setCursor(8, top + 80); d.print("MAC casuale a ogni burst");
-    d.setCursor(8, top + 92); d.print("esc per fermare");
+    snprintf(ln, sizeof(ln), "%lu adv inviati", (unsigned long)nucleo_ble_spam_count());
+    txt(8, y0 + 34, ln, GRN, BG, 2);
+    txt(8, y0 + 58, "MAC casuale a ogni burst.", MUTED, BG, 1);
+    txt(8, y0 + 72, "esc per fermare.", DIM, BG, 1);
 }
 
 static void draw_ibeacon(int top, int h)
 {
-    draw_header(top, "iBeacon", ACC);
-    d.setTextColor(nucleo_ble_ibeacon_active() ? GRN : MUTED, BG); d.setCursor(8, top + 34);
-    d.print(nucleo_ble_ibeacon_active() ? "in trasmissione" : "fermo");
-    d.setTextColor(MUTED, BG); d.setCursor(8, top + 54); d.print("UUID NUCLEOOS-BLE  1/1");
-    d.setCursor(8, top + 70); d.print("esc per fermare");
+    (void)top; (void)h;
+    bool on = nucleo_ble_ibeacon_active();
+    int y0 = app_ui_title("iBeacon", ACC, on ? "TX" : "off");
+    txt(8, y0 + 6, on ? "In trasmissione" : "Fermo", on ? GRN : MUTED, BG, 2);
+    txt(8, y0 + 34, "UUID NUCLEOOS-BLE  major 1 minor 1", MUTED, BG, 1);
+    txt(8, y0 + 50, "esc per fermare.", DIM, BG, 1);
 }
 
 static void draw_hid(int top, int h)
 {
-    draw_header(top, "Tastiera HID", ACC);
+    (void)top; (void)h;
     bool conn = nucleo_ble_hid_connected(), ready = nucleo_ble_hid_ready();
-    d.setTextColor(ready ? GRN : (conn ? WARN : MUTED), BG); d.setCursor(8, top + 30);
-    d.print(ready ? "connesso - pronto" : conn ? "connesso (subscribe...)" : "in attesa di pairing...");
-    d.setTextColor(MUTED, BG); d.setCursor(8, top + 46); d.print("appari come \"NucleoOS\" keyboard");
-    d.setTextColor(FG, BG);   d.setCursor(8, top + 64); d.print("ENTER: scrivi riga demo");
-    d.setCursor(8, top + 80); d.print("1 play  2 next  3 prev");
-    d.setCursor(8, top + 92); d.print("4 vol+  5 vol-  6 mute");
-    d.setTextColor(MUTED, BG); d.setCursor(8, top + 108); d.print("esc per fermare");
+    int y0 = app_ui_title("Tastiera HID", ACC, ready ? "pronto" : conn ? "sub..." : "pairing");
+    txt(8, y0 + 6, ready ? "Connesso, pronto" : conn ? "Connesso (subscribe...)" : "Attendo pairing...",
+        ready ? GRN : (conn ? WARN : MUTED), BG, 2);
+    txt(8, y0 + 32, "Appare come tastiera \"NucleoOS\".", MUTED, BG, 1);
+    txt(8, y0 + 48, "ENTER: scrivi una riga demo.", FG, BG, 1);
+    txt(8, y0 + 62, "1 play  2 next  3 prev", DIM, BG, 1);
+    txt(8, y0 + 74, "4 vol+  5 vol-  6 mute", DIM, BG, 1);
+    txt(8, y0 + 90, "esc per fermare.", DIM, BG, 1);
 }
 
 static void on_draw(void)

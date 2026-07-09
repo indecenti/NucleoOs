@@ -2,8 +2,10 @@
 #include "launcher_menu.h"
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
+#include "nucleo_board.h"       // NUCLEO_CFG_MOUNT for the pinned-apps store
 #include <string.h>
 #include <ctype.h>
+#include <stdio.h>
 
 // Registered foreground apps, owned by nucleo_app.cpp; read here to build the tree.
 int                       nucleo_app_count(void);
@@ -16,6 +18,7 @@ const nucleo_app_def_t   *nucleo_app_at(int i);
 #define MAX_APPS 64
 #define MAX_CATS 10
 #define MAX_DEPTH 6
+#define MAX_PIN  6            // apps pinned to Home. Store = MAX_PIN*24 = 144 B .bss (owns the id strings)
 
 // ---- shared per-app context actions ----------------------------------------
 static const MenuNode A_OPEN = { "open", "Open",        '>', C_GREEN,  N_ACTION, "Launch this app full-screen", nullptr };
@@ -28,10 +31,40 @@ static const MenuNode ACTIONS_MENU = { "ctx", "", ' ', C_BLUE, N_MENU, nullptr, 
 static MenuNode        s_dyn_cats[MAX_CATS];
 static MenuNode        s_dyn_apps[MAX_APPS];
 static const MenuNode *s_cat_items[MAX_CATS][MAX_APPS + 1];
-static const MenuNode *s_root_items[MAX_CATS + 2];   // +1 slot: ANIMA is hoisted onto Home next to the categories
+static const MenuNode *s_root_items[MAX_CATS + MAX_PIN + 2];   // ANIMA + pinned apps + categories, NULL-terminated
 static MenuNode        ROOT;
 static int             s_cat_count = 0;
 static int             s_app_n     = 0;   // number of app nodes in s_dyn_apps (for the flat "Spotlight" search)
+
+// ---- pinned-to-Home store ---------------------------------------------------
+// App ids the user pinned to the top of Home (after ANIMA), persisted to LittleFS so they survive a
+// reboot. Owns its own copies of the id strings (not app-def pointers), so a load before the apps are
+// registered is still safe. Newest pin last. Zero heap: a fixed .bss array.
+static char s_pin_buf[MAX_PIN][24];
+static int  s_pin_n = 0;
+
+#define PIN_STORE_PATH  NUCLEO_CFG_MOUNT "/config/pins.txt"
+
+static void pins_load(void)
+{
+    s_pin_n = 0;
+    FILE *f = fopen(PIN_STORE_PATH, "r");
+    if (!f) return;
+    char line[24];
+    while (s_pin_n < MAX_PIN && fgets(line, sizeof line, f)) {
+        line[strcspn(line, "\r\n")] = 0;
+        if (line[0]) snprintf(s_pin_buf[s_pin_n++], sizeof s_pin_buf[0], "%s", line);
+    }
+    fclose(f);
+}
+
+static void pins_save(void)
+{
+    FILE *f = fopen(PIN_STORE_PATH, "w");
+    if (!f) return;
+    for (int i = 0; i < s_pin_n; i++) fprintf(f, "%s\n", s_pin_buf[i]);
+    fclose(f);
+}
 
 // ---- navigation state -------------------------------------------------------
 struct Frame { const MenuNode *node; int sel; char filter[16]; };
@@ -96,9 +129,17 @@ void launcher_build_menu(void)
         s_cat_items[c][j + 1] = nullptr;
     }
     s_app_n = n;                                                // every app node lives in s_dyn_apps[0..n) for Spotlight
+    pins_load();                                                // refresh the pin set from the store before assembling Home
     int r = 0;
     if (anima_node) s_root_items[r++] = anima_node;            // ANIMA leads Home, above the categories
-    for (int i = 0; i < s_cat_count; i++) s_root_items[r++] = &s_dyn_cats[i];
+    // Pinned apps ride at the top of Home (after ANIMA), in pin order. Each still lives in its own
+    // category too (Library model), so a pin adds a shortcut without moving the app.
+    for (int p = 0; p < s_pin_n && r < MAX_CATS + MAX_PIN + 1; p++) {
+        if (!strcmp(s_pin_buf[p], "anima")) continue;          // already hoisted — never double it
+        for (int i = 0; i < n; i++)
+            if (!strcmp(s_dyn_apps[i].id, s_pin_buf[p])) { s_root_items[r++] = &s_dyn_apps[i]; break; }
+    }
+    for (int i = 0; i < s_cat_count && r < MAX_CATS + MAX_PIN + 1; i++) s_root_items[r++] = &s_dyn_cats[i];
     s_root_items[r] = nullptr;
 
     ROOT.id = "home";
@@ -233,4 +274,33 @@ void launcher_filter_backspace(void)
 {
     int l = strlen(top().filter);
     if (l) { top().filter[l - 1] = 0; top().sel = 0; }
+}
+
+// ---- pin to Home ------------------------------------------------------------
+bool launcher_is_pinned(const char *id)
+{
+    if (!id) return false;
+    for (int i = 0; i < s_pin_n; i++) if (!strcmp(s_pin_buf[i], id)) return true;
+    return false;
+}
+
+// Pin/unpin an app id at the top of Home, persist, and rebuild the tree. ANIMA is ignored (it already
+// lives at Home). A full store drops the oldest pin to make room for the new one.
+void launcher_toggle_pin(const char *id)
+{
+    if (!id || !id[0] || !strcmp(id, "anima")) return;
+    for (int i = 0; i < s_pin_n; i++) {                          // already pinned -> unpin
+        if (!strcmp(s_pin_buf[i], id)) {
+            for (int j = i; j < s_pin_n - 1; j++) memcpy(s_pin_buf[j], s_pin_buf[j + 1], sizeof s_pin_buf[0]);
+            s_pin_n--;
+            pins_save(); launcher_build_menu();
+            return;
+        }
+    }
+    if (s_pin_n >= MAX_PIN) {                                    // full -> evict the oldest
+        for (int j = 0; j < MAX_PIN - 1; j++) memcpy(s_pin_buf[j], s_pin_buf[j + 1], sizeof s_pin_buf[0]);
+        s_pin_n = MAX_PIN - 1;
+    }
+    snprintf(s_pin_buf[s_pin_n++], sizeof s_pin_buf[0], "%s", id);
+    pins_save(); launcher_build_menu();
 }

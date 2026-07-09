@@ -51,6 +51,7 @@ extern "C" int nucleo_ws_client_count(void);
 // ── State ────────────────────────────────────────────────────────────────────
 static int  s_tab  = 0;     // 0=triggers 1=record 2=status
 static int  s_sel  = 0;
+static bool s_confirm_del, s_del_yes;   // pending "delete template?" confirm card (tab 0)
 static char (*s_tpl_names)[32] = nullptr;   // [MAX_TPLS][32], heap-allocated on enter (zero RAM at boot)
 static int  s_tpl_count = 0;
 static bool s_tpl_overflow = false;   // more than MAX_TPLS templates on SD (only first MAX shown/matched)
@@ -89,6 +90,7 @@ static void scan_tpls(void)
 static void on_tab(void)
 {
     s_tab = (s_tab + 1) % 3;
+    s_confirm_del = false;
     if (s_tab == 0) scan_tpls();
     if (s_tab == 1) { s_rec_step = RS_IDLE; s_rec_word[0] = '\0'; }
     nucleo_app_request_draw();
@@ -102,7 +104,7 @@ static void enter(void)
     nucleo_exclusive_enter(NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY, nullptr);
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_hint(TR("TAB schede  R aggiungi  Del elimina", "TAB tabs  R add  Del remove"));
-    s_tab = 0; s_sel = 0;
+    s_tab = 0; s_sel = 0; s_confirm_del = false;
     nucleo_voice_set_test_mode(true);   // recognize but DON'T act: a stray GO here must not fire a real command
     nucleo_voice_request(true);         // hold the lazy engine up while training/testing here
     if (!s_tpl_names) s_tpl_names = (char (*)[32])calloc(MAX_TPLS, sizeof *s_tpl_names);
@@ -142,15 +144,22 @@ static void on_key(int key, char ch)
 {
     // ─ TAB 0: TRIGGERS ──────────────────────────────────────────────────────
     if (s_tab == 0) {
-        if (app_ui_list_key(key, ch, &s_sel, s_tpl_count, nullptr, nullptr)) {
-            // handled
-        } else if (key == NK_DEL || (ch == 'd' || ch == 'D')) {
-            if (s_tpl_count > 0 && s_sel < s_tpl_count) {
+        if (s_confirm_del) {                          // delete-template card is up: it owns every key
+            int r = app_ui_confirm_key(key, ch, &s_del_yes);
+            if (r == 1 && s_tpl_count > 0 && s_sel < s_tpl_count) {
                 char path[128];
                 snprintf(path, sizeof(path), "%s/%s.tpl", TPL_PATH, s_tpl_names[s_sel]);
                 unlink(path);
                 scan_tpls();
             }
+            if (r >= 0) s_confirm_del = false;
+            nucleo_app_request_draw();
+            return;
+        }
+        if (app_ui_list_key(key, ch, &s_sel, s_tpl_count, nullptr, nullptr)) {
+            // handled
+        } else if (key == NK_DEL || (ch == 'd' || ch == 'D')) {
+            if (s_tpl_count > 0 && s_sel < s_tpl_count) { s_confirm_del = true; s_del_yes = false; }
         } else if (ch == 'r' || ch == 'R') {
             // Jump to the RECORD tab to (re)train. Pre-fill the selected template's name so
             // re-training a command is one keypress, not retyping it.
@@ -249,6 +258,11 @@ static void draw_triggers(int top_y)
         return;
     }
     app_ui_list(y0, h, s_tpl_count, s_sel, tl_label, nullptr, nullptr, nullptr);
+
+    if (s_confirm_del && s_sel < s_tpl_count) {
+        app_ui_confirm(TR("Elimina modello?", "Delete template?"), s_tpl_names[s_sel], s_del_yes);
+        return;
+    }
 
     // Footer with selected trigger info
     int fy = nucleo_app_content_top() + nucleo_app_content_height() - 16;

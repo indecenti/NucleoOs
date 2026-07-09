@@ -10,6 +10,7 @@
 #include <time.h>
 #include "esp_system.h"      // esp_restart() for the SISTEMA > Riavvia action
 #include "esp_heap_caps.h"   // free-heap readout for the SISTEMA > RAM row
+#include "esp_timer.h"       // esp_timer_get_time() for the frame-rate-independent carousel ease
 #include "nucleo_i18n.h"     // system language (TR/it-en) for the Control Center labels
 
 // The real display (defined in nucleo_ui.cpp). The launcher always draws to it directly;
@@ -72,18 +73,34 @@ void launcher_render_update_chrome(void)
     strncpy(s_instr, desc ? desc : "", sizeof(s_instr) - 1);
     s_instr[sizeof(s_instr) - 1] = 0;
 
-    // Hint line: the controls that actually do something right now. The launcher is a 2-D tile grid,
-    // so the four arrows MOVE the focus; backtick (Esc) goes back. The context menu (`/`) is gone:
-    // its native actions were no-ops (pin/info) and ENTER already opens the app. Worst-case home hint
-    // "arrows move  enter open  esc back" is 33 chars (~198 px), well within the 240 px width.
+    // Hint line: the controls that actually do something right now. Arrows move the focus; Esc goes
+    // back; ENTER opens. When an app is focused, '*' pins/unpins it to the top of Home (ANIMA excluded,
+    // it already lives there). s_hint is 48 B; the longest string below is ~30 chars, well within 240 px.
+    bool app = cur && cur->kind == N_APP && strcmp(cur->id, "anima");
+    const char *pinw = app ? (launcher_is_pinned(cur->id) ? "* togli" : "* fissa") : "";
     if (launcher_filter()[0]) {
         snprintf(s_hint, sizeof(s_hint), "filtro \"%.12s\"   -   esc azzera", launcher_filter());
     } else if (launcher_depth() > 0) {
-        snprintf(s_hint, sizeof(s_hint), "scorri   -   invio apre   -   esc indietro");
+        if (app) snprintf(s_hint, sizeof(s_hint), "invio apre   %s   esc", pinw);
+        else     snprintf(s_hint, sizeof(s_hint), "scorri   invio apre   esc");
     } else {
-        snprintf(s_hint, sizeof(s_hint), "scorri   -   invio apre");
+        if (app) snprintf(s_hint, sizeof(s_hint), "invio apre   %s", pinw);
+        else     snprintf(s_hint, sizeof(s_hint), "invio apre   digita per cercare");   // teach Spotlight
     }
     s_hint[sizeof(s_hint) - 1] = 0;
+}
+
+// Single RSSI->bars map (0..4) so the top-bar Wi-Fi gauge, the chrome-change signature and the
+// Control Center Signal row can never disagree — they used to carry three different threshold sets
+// (the top bar and CC showed a different bar count for the same signal). rssi==0 = no reading -> 0
+// bars; callers that want an "AP mode / associating" glyph substitute a single amber bar themselves.
+static int wifi_bars(int rssi)
+{
+    if (rssi == 0)   return 0;
+    if (rssi >= -55) return 4;
+    if (rssi >= -67) return 3;
+    if (rssi >= -78) return 2;
+    return 1;
 }
 
 // Signature gate for the CHROME (status + hint bars). They are STATIC while you scroll WITHIN a menu —
@@ -101,7 +118,7 @@ bool launcher_render_chrome_changed(void)
     const MenuNode *node = launcher_node();
     bool sta  = !strcmp(nucleo_setup_mode(), "sta") && nucleo_setup_ssid()[0];
     int  rssi = nucleo_setup_rssi();
-    int  wlvl = (!sta || rssi == 0) ? 1 : rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -78 ? 2 : 1;  // same map as draw_wifi
+    int  wlvl = (!sta || rssi == 0) ? 1 : wifi_bars(rssi);   // same map as draw_wifi (shared helper)
     uint32_t sig = 2166136261u;                       // FNV-1a over the chrome-visible state
     #define MIX(v) do { sig = (sig ^ (uint32_t)(v)) * 16777619u; } while (0)
     MIX(launcher_depth());
@@ -122,6 +139,27 @@ static int node_child_count(const MenuNode *m)
     int n = 0; while (m->items[n]) n++; return n;
 }
 
+// Localized DISPLAY label for a launcher node. Category tiles carry an English id used for
+// bucketing + icon lookup (never change it); show them in the user's language here. Apps keep
+// their own name (author's choice, already per-app). Display-only — the id/glyph are untouched,
+// so this also renders "Hardware" as Sensori/Sensors without a rename. Zero RAM (flash literals).
+static const char *node_label(const MenuNode *n)
+{
+    if (!n) return "";
+    const char *id = n->id;
+    if      (!strcmp(id, "Media"))         return TR("Media", "Media");
+    else if (!strcmp(id, "Office"))        return TR("Produttivita", "Office");
+    else if (!strcmp(id, "Tools"))         return TR("Strumenti", "Tools");
+    else if (!strcmp(id, "System"))        return TR("Sistema", "System");
+    else if (!strcmp(id, "Connect"))       return TR("Connetti", "Connect");
+    else if (!strcmp(id, "Communication")) return TR("Comunicazione", "Comms");
+    else if (!strcmp(id, "Security"))      return TR("Sicurezza", "Security");
+    else if (!strcmp(id, "Hardware"))      return TR("Sensori", "Sensors");
+    else if (!strcmp(id, "Games"))         return TR("Giochi", "Games");
+    else if (!strcmp(id, "Voice"))         return TR("Voce", "Voice");
+    return n->label;
+}
+
 // Honest Wi-Fi indicator: four rising bars whose FILL tracks the real signal. STA = green, AP/setup
 // = amber; bars above the measured level are drawn dim so the glyph reads as a strength gauge (the
 // smartwatch idiom) rather than a flat icon. rssi 0 (not associated) -> 1 amber bar. There is no
@@ -130,20 +168,24 @@ static void draw_wifi(int x, int y, bool sta, int rssi)
 {
     unsigned short on = sta ? C_GREEN : C_YELLOW;
     // Map dBm to 0..4 lit bars (>=-55 full, <=-88 one). AP mode / unknown -> a single amber bar.
-    int lvl;
-    if (!sta || rssi == 0) lvl = 1;
-    else if (rssi >= -55)  lvl = 4;
-    else if (rssi >= -67)  lvl = 3;
-    else if (rssi >= -78)  lvl = 2;
-    else                   lvl = 1;
+    int lvl = (!sta || rssi == 0) ? 1 : wifi_bars(rssi);   // AP/associating -> 1 amber bar
     for (int i = 0; i < 4; i++) {
         int bh = 2 + i * 2;                                  // 2,4,6,8 px tall
         d.fillRect(x + i * 5, y + 9 - bh, 3, bh, i < lvl ? on : LINE);
     }
 }
 
-// Battery gauge removed: the ADC reading was unreliable on this unit, so showing it was misleading.
-// The date (day + month) now occupies that right-cluster space instead.
+// Tiny battery pip for the home right-cluster: 12x8 outline + proportional fill + terminal nub.
+// (The gauge is calibrated now — eFuse + EMA, see the Battery notes — so it's honest to show it.)
+// Drawn only on a real reading (pct >= 0). Colour matches the Control Center battery row.
+static void draw_battery_pip(int x, int y, int pct)
+{
+    unsigned short c = (pct < 20) ? C_RED : (pct < 50) ? C_YELLOW : C_GREEN;
+    d.drawRoundRect(x, y, 12, 8, 1, MUTED);            // body outline
+    d.fillRect(x + 12, y + 3, 2, 3, MUTED);            // + terminal nub
+    int fw = (10 * pct) / 100; if (fw < 1 && pct > 0) fw = 1; if (fw > 10) fw = 10;
+    if (fw > 0) d.fillRect(x + 1, y + 1, fw, 6, c);    // proportional fill
+}
 
 // ---- launcher icon set (bold filled silhouettes) ---------------------------------------
 // Each icon is a bold filled glyph centred at (cx,cy) inside a 2*r box, using one ink colour `col`
@@ -536,7 +578,7 @@ void launcher_render_status_bar(void)
         d.fillRoundRect(2, 1, 14, 14, 3, node->color);
         ui_icon(&d, 9, 8, 6, node->id, node->icon, INK, node->color);
         d.setFont(&fonts::Font2); d.setTextColor(FG, INK); d.setCursor(20, 0);
-        char b[16]; snprintf(b, sizeof(b), "%.12s", node->label); d.print(b);
+        char b[16]; snprintf(b, sizeof(b), "%.14s", node_label(node)); d.print(b);
         d.setFont(&fonts::Font0); d.setTextSize(1);
         int rx = W - 2;
         draw_wifi(rx - 19, 4, sta, nucleo_setup_rssi());   rx -= 19 + 6;   // signal far right
@@ -561,6 +603,8 @@ void launcher_render_status_bar(void)
             // fits. Each piece is dropped if it would crowd the clock, so nothing overlaps the time.
             int rx = W - 2;
             draw_wifi(rx - 19, 4, sta, nucleo_setup_rssi());   rx -= 19 + 6;   // antenna gauge, far right
+            int bpct = nucleo_power_battery_pct();
+            if (bpct >= 0) { draw_battery_pip(rx - 14, 4, bpct); rx -= 14 + 6; }   // pip left of the gauge
             static const char *const WD[7]  = { "dom","lun","mar","mer","gio","ven","sab" };
             static const char *const MO[12] = { "gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic" };
             char dt[16] = "";
@@ -708,17 +752,27 @@ bool launcher_render_step_scroll(void)
     // No off-screen canvas (heap fragmented after a media app): the band draws DIRECT, so an eased
     // slide would be N per-frame clear-then-draws = flicker. SNAP to target — one redraw, no anim.
     if (!s_band_buffered) { s_carousel = (target > (float)(n - 1)) ? (float)(n - 1) : target; return false; }
+    // Frame-rate-independent glide: alpha = 1 - exp(-dt/tau). The old code stepped a fixed 0.30 PER
+    // REDRAW, so the scroll sped up or dragged as the loop cadence changed (chrome ticks, app churn).
+    // tau = 56 ms reproduces exactly 0.30 at the ~50 Hz idle loop but stays constant off-cadence. A big
+    // gap (just returned from an app) is clamped so the first step is a fast catch-up, not a teleport.
+    static int64_t s_last_us = 0;
+    int64_t nowu = esp_timer_get_time();
+    float dt = s_last_us ? (float)(nowu - s_last_us) * 1e-6f : 0.020f;
+    s_last_us = nowu;
+    if (dt > 0.100f) dt = 0.100f;
+    float alpha = 1.0f - expf(-dt / 0.056f);
     if (n >= 3) {                                                            // circular: shortest way round
         float d = target - s_carousel; d -= (float)n * roundf(d / (float)n);
         if (d < 0.02f && d > -0.02f) { s_carousel = target; return false; }
-        s_carousel += d * 0.30f;
+        s_carousel += d * alpha;
         s_carousel = fmodf(s_carousel, (float)n); if (s_carousel < 0.0f) s_carousel += (float)n;
         return true;
     }
     if (target > (float)(n - 1)) target = (float)(n - 1);                    // 1-2 items: plain ease
     float d = target - s_carousel;
     if (d < 0.05f && d > -0.05f) { s_carousel = target; return false; }
-    s_carousel += d * 0.30f;
+    s_carousel += d * alpha;
     return true;
 }
 
@@ -832,6 +886,10 @@ template <typename T> static void draw_list(T *c, int base)
         ui_icon(c, x, cy, gr, it->id, it->icon, gcol, badge);
         if (it->kind == N_MENU && t > 0.85f)                            // category: count rosette on the top-right corner
             draw_badge(c, x + (int)(r * 0.82f), cy - (int)(r * 0.82f), node_child_count(it), it->color);
+        else if (it->kind == N_APP && t > 0.6f && launcher_is_pinned(it->id)) {   // pinned app: yellow dot, top-right
+            int px = x + (int)(r * 0.82f), py = cy - (int)(r * 0.82f);
+            c->fillCircle(px, py, 4, INK); c->fillCircle(px, py, 3, C_YELLOW);
+        }
         if (audio_on && ((is_stream && !strcmp(it->id, "radio")) || (!is_stream && !strcmp(it->id, "music"))))
             draw_eq(c, x + (int)(r * 0.6f), cy + (int)(r * 0.6f), (int)(r * 0.55f), s_eq_frame);   // now playing
     }
@@ -844,9 +902,10 @@ template <typename T> static void draw_list(T *c, int base)
         c->setTextSize(1); c->setTextColor(FG, BG);                     // size 1 always (defend against a leak)
         // Biggest font that still fits: short names stay bold Font4; long ones (Impostazioni, Connection)
         // drop to Font2 so they read at a sane size instead of filling the whole band.
+        const char *lab = node_label(cur);                              // localized for category tiles
         c->setFont(&fonts::Font4); int fh = 26;
-        if ((int)c->textWidth(cur->label) > W - 20) { c->setFont(&fonts::Font2); fh = 16; }
-        fit_width(c, cur->label, W - 12, buf, sizeof buf);
+        if ((int)c->textWidth(lab) > W - 20) { c->setFont(&fonts::Font2); fh = 16; }
+        fit_width(c, lab, W - 12, buf, sizeof buf);
         c->setCursor(W / 2 - (int)c->textWidth(buf) / 2, base + 84 - fh / 2); c->print(buf);   // centre at base+84
         draw_dots(c, n, sel, W / 2, base + 102, cur->color);
     }
@@ -890,10 +949,13 @@ void launcher_render_list(void)
 // pairing PIN at size-2 so they read across the room.
 //
 // Palette mirrors app_player.cpp / app_video.cpp so the sheet matches the Music/Video look.
-static const unsigned short CC_BG   = 0x0841;  // void-blue sheet background
+// Background + accent now follow the active OS theme (were fixed literals -> the sheet ignored theme
+// switches while the launcher recolored). The two surface shades stay fixed dark: every shipped theme
+// has a dark background, so they keep their contrast. Zero RAM: THEME_* are existing globals.
+#define CC_BG   THEME_BG                        // sheet background (themed)
+#define CC_ACC  THEME_ACC                       // accent: tab fill + focus rail + edit ring (themed)
 static const unsigned short CC_SURF = 0x10A2;  // raised surface / slider track
 static const unsigned short CC_CAP  = 0x1A8B;  // focused capsule background
-static const unsigned short CC_ACC  = 0x4DDF;  // bright-blue accent (tab + rail)
 static const unsigned short CC_GRN  = 0x8FF3;  // positive / playing
 
 // launcher_render_control_center_key return codes (so the launcher can pop/close hierarchically).
@@ -1153,7 +1215,7 @@ template <typename T> static void cc_set_row(T *g, int y, bool focus, const CcIt
     if (it->kind == CC_SIGNAL) {
         // 4 bars, heights 4/7/10/13px, width 4px, gap 2px; bars lit = signal strength.
         int rssi = it->slider;
-        int bars = (rssi == 0) ? 0 : (rssi >= -60) ? 4 : (rssi >= -70) ? 3 : (rssi >= -80) ? 2 : 1;
+        int bars = wifi_bars(rssi);                          // shared map: matches the top-bar gauge exactly
         unsigned short bc = (bars <= 1) ? C_RED : (bars <= 2) ? C_YELLOW : CC_GRN;
         const int bw = 4, gap = 2, bh[4] = {4, 7, 10, 13};
         int bx0 = 228 - (4 * bw + 3 * gap);
