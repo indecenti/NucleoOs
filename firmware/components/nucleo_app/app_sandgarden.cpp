@@ -60,11 +60,14 @@ static uint16_t mix(uint16_t a, uint16_t b, int t)
 #define COL_CAP   rgb(24, 52, 38)
 
 // ============================ grid + materials ===============================
-#define GW 120
-#define GH 52
-#define CELL 2
+// Chunkier 3px cells (was a 2px mush that read as noise): GW*CELL = 240 keeps the play area exactly the
+// screen width, and a coarser grid reads as a real garden — grains, plants and flowers are actually
+// visible. Fewer cells (80x34 vs 120x52) also means less sim RAM/CPU.
+#define GW 80
+#define GH 34
+#define CELL 3
 #define PLAY_Y0 16
-#define PLAY_H  (GH * CELL)              // 104; play area y = 16..120
+#define PLAY_H  (GH * CELL)              // 102; play area y = 16..118
 
 enum { M_EMPTY = 0, M_SAND, M_WATER, M_SEED, M_PLANT, M_FLOWER, M_FIRE, M_STONE, M_STEAM, M_LAVA };
 
@@ -72,6 +75,7 @@ static uint8_t *s_grid;                  // GW*GH, heap (freed on exit)
 static unsigned s_tick;
 
 static int   s_score, s_time_ms, s_round_ms, s_tool, s_bx, s_by;
+static int   s_brush;                       // 0 = fine, 1 = wide (S toggles) — precision vs. filling
 static bool  s_pour;
 
 // ============================ state ==========================================
@@ -403,7 +407,7 @@ static void emit(void)
 {
     if (!s_grid) return;
     uint8_t m = (s_tool == 0) ? M_WATER : (s_tool == 1) ? M_SEED : (s_tool == 2) ? M_STONE : M_EMPTY;
-    int rad = (s_tool == 1) ? 0 : 2;                       // seeds drop singly; others a small disc
+    int rad = (s_tool == 1) ? s_brush : (2 + s_brush * 2); // seeds drop singly/paired; others a small/big disc
     if (s_tool == 1 && (s_tick & 3)) return;               // meter seeds so they don't flood
     for (int dy = -rad; dy <= rad; dy++) for (int dx = -rad; dx <= rad; dx++) {
         if (dx * dx + dy * dy > rad * rad + 1) continue;
@@ -430,7 +434,7 @@ static void new_game(void)
     memset(s_grid, M_EMPTY, GW * GH);
     for (int y = GH - 4; y < GH; y++) for (int x = 0; x < GW; x++) gset(x, y, M_SAND);   // soil floor
     for (int i = 0; i < NPART; i++) s_part[i].life = 0;
-    s_score = 0; s_time_ms = 0; s_round_ms = 90000; s_tool = 0; s_pour = false;
+    s_score = 0; s_time_ms = 0; s_round_ms = 90000; s_tool = 0; s_pour = false; s_brush = 0;
     s_bx = GW / 2; s_by = 6; s_simacc = 0;
     s_combo = 0; s_combo_ms = 0; s_lastbloom = 0; s_flowers = 0;
     s_bee_x = W / 2; s_bee_y = PLAY_Y0 + 28; s_bee_t = 0; s_pr_ms = 0;
@@ -496,7 +500,7 @@ static void draw_garden(void)
 
     int bcx = s_bx * CELL + 1, bcy = PLAY_Y0 + s_by * CELL;
     uint16_t tc = (s_tool == 0) ? COL_CYAN : (s_tool == 1) ? COL_GREEN : (s_tool == 2) ? COL_GREY : COL_RED;
-    int rad = 6 + (s_pour ? (int)((s_anim / 2) % 3) : 0);
+    int rad = (s_brush ? 10 : 6) + (s_pour ? (int)((s_anim / 2) % 3) : 0);
     d.drawCircle(bcx, bcy, rad, s_pour ? COL_WHITE : tc);
     d.drawCircle(bcx, bcy, rad - 1, tc);
     d.drawFastHLine(bcx - 3, bcy, 7, tc); d.drawFastVLine(bcx, bcy - 3, 7, tc);
@@ -534,7 +538,9 @@ static void draw_garden(void)
     const char *tn[4] = { tx("ACQUA", "WATER"), tx("SEME", "SEED"), tx("PIETRA", "STONE"), tx("SCAVA", "DIG") };
     d.fillRoundRect(96, 2, 9, 9, 2, tc);
     text_at(108, 3, 1, tc, tn[s_tool]);
-    if (s_pour) text_at(108 + (int)strlen(tn[s_tool]) * 6 + 4, 3, 1, ((s_anim >> 2) & 1) ? COL_WHITE : COL_DIM, ">");
+    int tox = 108 + (int)strlen(tn[s_tool]) * 6 + 4;
+    d.drawCircle(tox + 3, 6, s_brush ? 3 : 2, COL_DIM);            // brush-size pip
+    if (s_pour) text_at(tox + 9, 3, 1, ((s_anim >> 2) & 1) ? COL_WHITE : COL_DIM, ">");
     int left = (s_round_ms - s_time_ms) / 1000;
     if (left < 0) left = 0;
     snprintf(b, sizeof b, "%d:%02d", left / 60, left % 60);
@@ -706,7 +712,7 @@ static void set_hint(void)
         case ST_MENU: nucleo_app_set_hint(tx("SU/GIU scegli  INVIO ok  Esc esci", "UP/DN pick  ENTER ok  Esc quit")); break;
         case ST_HELP: nucleo_app_set_hint(tx("SX/DX pagine  Esc indietro", "LEFT/RIGHT pages  Esc back")); break;
         case ST_SET:  nucleo_app_set_hint(tx("SU/GIU  INVIO cambia  Esc", "UP/DN  ENTER change  Esc")); break;
-        case ST_PLAY: nucleo_app_set_hint(tx("Frecce muovi  SPAZIO versa  W/E mat.", "Arrows move  SPACE pour  W/E mat.")); break;
+        case ST_PLAY: nucleo_app_set_hint(tx("Frecce muovi  SPAZIO versa  W/E mat.  S dim.", "Arrows move  SPACE pour  W/E mat.  S size")); break;
         case ST_OVER: nucleo_app_set_hint(tx("premi un tasto", "press any key")); break;
         case ST_SCORES: nucleo_app_set_hint(tx("Esc indietro", "Esc back")); break;
         case ST_NAME: nucleo_app_set_hint(tx("Scrivi  INVIO ok  CANC canc  Esc", "Type  ENTER ok  DEL erase  Esc")); break;
@@ -783,6 +789,7 @@ static void on_key(int k, char ch)
             else if (ch == ' ')     { s_pour = !s_pour; sfx(s_pour ? 4 : 3); nucleo_app_request_draw(); }
             else if (ch == 'e' || ch == 'E') { s_tool = (s_tool + 1) % 4; sfx(1); nucleo_app_request_draw(); }
             else if (ch == 'w' || ch == 'W') { s_tool = (s_tool + 3) % 4; sfx(1); nucleo_app_request_draw(); }
+            else if (ch == 's' || ch == 'S') { s_brush ^= 1; sfx(1); nucleo_app_request_draw(); }   // brush size
             else if (ch >= '1' && ch <= '4') { s_tool = ch - '1'; sfx(1); nucleo_app_request_draw(); }
             return;
         case ST_OVER:

@@ -112,7 +112,9 @@ struct Snake {
 };
 
 // ─── ostacoli ─────────────────────────────────────────────────────────────────
-static uint8_t s_obstacles[WORLD_H][WORLD_W];  // 0=free, 1=wall
+// Heap-on-enter (was .bss ~3.1 KB): a Solo-boot game is closed during normal OS boot, so this map
+// held boot RAM for nothing. calloc in on_enter(), freed on_exit; readers skip cleanly if null.
+static uint8_t (*s_obstacles)[WORLD_W] = nullptr;  // 0=free, 1=wall
 
 // ─── trail ────────────────────────────────────────────────────────────────────
 struct Trail { int8_t x,y; int life; };
@@ -270,7 +272,8 @@ static bool snake_has(const Snake& s, int8_t x, int8_t y, int skip=0) {
 
 // ─── mappa ostacoli ───────────────────────────────────────────────────────────
 static void gen_obstacles(void) {
-    memset(s_obstacles,0,sizeof(s_obstacles));
+    if(!s_obstacles) return;
+    memset(s_obstacles,0,(size_t)WORLD_H*WORLD_W);
     // Bordi
     for(int c=0;c<WORLD_W;c++) s_obstacles[0][c]=s_obstacles[WORLD_H-1][c]=1;
     for(int r=0;r<WORLD_H;r++) s_obstacles[r][0]=s_obstacles[r][WORLD_W-1]=1;
@@ -283,6 +286,7 @@ static void gen_obstacles(void) {
     }
 }
 static inline bool is_obstacle(int8_t x, int8_t y) {
+    if(!s_obstacles) return true;
     return (x<0||x>=WORLD_W||y<0||y>=WORLD_H) ? true : s_obstacles[y][x];
 }
 
@@ -802,7 +806,7 @@ static void draw_play(void) {
     // Ostacoli (minimale)
     for(int gx_=s_cam_x;gx_<s_cam_x+VIEW_W&&gx_<WORLD_W;gx_++) {
         for(int gy_=s_cam_y;gy_<s_cam_y+VIEW_H&&gy_<WORLD_H;gy_++) {
-            if(gx_<0||gx_>=WORLD_W||gy_<0||gy_>=WORLD_H||!s_obstacles[gy_][gx_]) continue;
+            if(!s_obstacles||gx_<0||gx_>=WORLD_W||gy_<0||gy_>=WORLD_H||!s_obstacles[gy_][gx_]) continue;
             int sx=sx_((int8_t)gx_), sy=sy_((int8_t)gy_);
             d.fillRect(sx+1,sy+1,CELL-2,CELL-2,0x6A48);
         }
@@ -1134,6 +1138,7 @@ static void on_tab(void) {
 
 // ─── ciclo vita app ───────────────────────────────────────────────────────────
 static void on_enter(void) {
+    if(!s_obstacles) s_obstacles=(uint8_t(*)[WORLD_W])calloc(WORLD_H,WORLD_W);  // ~3.1 KB only while playing
     s_st=ST_MENU; s_menu_sel=0;
     memset(s_parts,0,sizeof(s_parts));
     s_cam_x=0; s_cam_y=0;
@@ -1153,12 +1158,13 @@ static void on_exit(void) {
     }
     pnet_stop();
     nucleo_app_set_fullscreen(false);
+    free(s_obstacles); s_obstacles=nullptr;   // back to zero .bss until relaunched
 }
 
 // ─── registrazione ────────────────────────────────────────────────────────────
 extern "C" void nucleo_register_snake(void) {
     static const nucleo_app_def_t app = {
-        "snake", "Snake Duel", "Games", "Serpente 1v1 in rete (ESP-NOW) o vs AI",
+        "snake", "Snake", "Games", "Serpente 1v1 in rete (ESP-NOW) o vs AI",
         'S', C_GREEN, on_enter, on_key, nullptr, on_draw, on_exit,
         NX_SOLO
     };

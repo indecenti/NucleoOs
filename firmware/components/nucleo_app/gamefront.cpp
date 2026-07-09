@@ -29,44 +29,61 @@ int                     nucleo_app_count(void);
 const nucleo_app_def_t *nucleo_app_at(int i);
 
 // ---- layout (landscape 240x135) --------------------------------------------
-// EmulationStation-style detail view: slim title header, a large rectangular cover with a soft
-// shadow + accent frame, procedural neighbour "peek" cards flanking it, then a row of mode badges
-// and carousel dots, over a vertical accent gradient.
+// Minimal EmulationStation-style detail view: a slim system bar (GIOCHI kicker + "N / M" position),
+// a single large centred cover (wide landscape by default, tall portrait for pinball) with a soft
+// neutral shadow + clean accent frame, quiet side chevrons with a faint neighbour name in the
+// gutters, then the game TITLE on its own full-width readable line under the cover, and a compact
+// row of play-mode badges. Everything breathes; the cover art is the focal point.
 #define GF_MAX     24
-#define MARQ_H     18                 // slim title header band across the top
-#define HERO_W     142                // big 16:9 cover box (matches the 240x135 screen) -> a full
-#define HERO_H     80                 // screenshot fits EXACTLY: no bars, no squish, no empty box
-#define HERO_X     ((W - HERO_W) / 2) // = 49; the side gutters host the neighbour peek cards
-#define HERO_Y     20
-#define COVER_W    HERO_W             // covers written at hero size (16:9) -> drawn 1:1, no scaler
-#define COVER_H    HERO_H
-#define BADGE_Y    (HERO_Y + HERO_H + 1)  // mode-badge row, just under the cover → y=101
-#define DOT_Y      (BADGE_Y + 15)         // carousel position dots → y=116
+#define MARQ_H     13                 // slim system bar across the top (kicker + position only)
+#define HERO_W      128               // landscape (default) cover width -> a clean 16:9 frame
+#define HERO_W_PORT 44                // portrait cover width (pinball): tall narrow "flipper table" shape
+#define HERO_H      72                // shared by both shapes; title/badges now live BELOW the cover
+#define HERO_Y      15
+#define TITLE_Y    (HERO_Y + HERO_H + 2)   // big readable title band under the cover → y=89
+#define TITLE_H     16
+#define BADGE_Y    (TITLE_Y + TITLE_H + 1) // mode-badge row → y=106
 #define FOOT       13                 // bottom footer → starts at y=122
 
 #define GF_DIR   NUCLEO_SD_MOUNT "/data/GameShots"
 #define SHOT_DIR NUCLEO_SD_MOUNT "/data/Screenshots"
 
-// ---- per-game metadata: custom marquee title, play modes, one-line tagline ---
+// ---- per-game metadata: custom marquee title, play modes, one-line tagline, cover shape ---
 enum { GM_1P = 0x01, GM_CPU = 0x02, GM_2P = 0x04, GM_LAN = 0x08, GM_COOP = 0x10 };
+// Cover box shape: wide landscape (default, matches a real screenshot) or tall portrait — reserved
+// for games whose real-world reference is naturally vertical (pinball's flipper table).
+enum { GF_LANDSCAPE = 0, GF_PORTRAIT = 1 };
 
-typedef struct { const char *id; const char *title; unsigned modes; const char *tag; } META_t;
+typedef struct { const char *id; const char *title; unsigned modes; const char *tag; unsigned char shape; } META_t;
 static const META_t META[] = {
-    { "reactor",  "REACTOR",            GM_1P,           "Bilancia potenza e raffreddamento. Evita il meltdown." },
-    { "stelle",   "COSTELLAZIONI 3D",   GM_1P,           "Sparatutto spaziale arcade fra le stelle." },
-    { "giardino", "GIARDINO DI SABBIA", GM_1P,           "Sandbox di elementi che cadono. Relax puro." },
-    { "slots",    "SLOT MACHINE",       GM_1P,           "Tira la leva e insegui il jackpot." },
-    { "poker",    "VIDEO POKER",        GM_1P,           "5 carte: tieni le buone, punta alla scala reale." },
-    { "pinball",  "PINBALL",            GM_1P,           "Flipper verticale: respingenti, spinner, punti." },
-    { "pong",     "PONG",               GM_CPU | GM_LAN, "1v1 in rete fra due Cardputer, o contro la CPU." },
-    { "tanks",    "NUCLEO TANKS",       GM_CPU | GM_2P,  "Artiglieria a turni: terreno distruttibile, vento, 9 armi." },
-    { "brawler",  "SCORRIBANDA",        GM_1P | GM_COOP, "Picchiaduro noir a scorrimento, anche in co-op." },
-    { "dice",     "DADI 3D",            GM_1P,           "Tiro di dadi: scuoti il device o premi invio." },
-    { "snake",    "SNAKE DUEL",         GM_CPU | GM_LAN, "Serpente 1v1 in rete (ESP-NOW), o contro l'IA." },
-    { "tankd",    "TANK DUEL",          GM_CPU | GM_LAN, "Arena 1v1 in rete: shop conteso, 4 carri, upgrade." },
-    { "yahtzee",  "YAHTZEE",            GM_2P | GM_CPU,  "Yahtzee a turni, 1-4 giocatori + CPU, dadi 3D." },
-    { nullptr, nullptr, 0, nullptr },
+    { "reactor",  "REATTORE",       GM_1P,           "Bilancia potenza e raffreddamento. Evita il meltdown.", GF_LANDSCAPE },
+    { "stelle",   "COSTELLAZIONI",  GM_1P,           "Sparatutto spaziale arcade fra le stelle.", GF_LANDSCAPE },
+    { "giardino", "GIARDINO",       GM_1P,           "Sandbox di elementi che cadono. Relax puro.", GF_LANDSCAPE },
+    { "slots",    "SLOT",           GM_1P,           "Tira la leva e insegui il jackpot.", GF_LANDSCAPE },
+    { "poker",    "POKER",          GM_1P,           "5 carte: tieni le buone, punta alla scala reale.", GF_LANDSCAPE },
+    { "pinball",  "FLIPPER",        GM_1P,           "Flipper verticale: respingenti, spinner, punti.", GF_PORTRAIT },
+    { "pong",     "PONG",           GM_CPU | GM_LAN, "1v1 in rete fra due Cardputer, o contro la CPU.", GF_LANDSCAPE },
+    { "tanks",    "TANKS",          GM_CPU | GM_2P,  "Artiglieria a turni: terreno distruttibile, vento, 9 armi.", GF_LANDSCAPE },
+    { "brawler",  "SCORRIBANDA",    GM_1P | GM_COOP, "Picchiaduro noir a scorrimento, anche in co-op.", GF_LANDSCAPE },
+    { "dice",     "DADI",           GM_1P,           "Tiro di dadi: scuoti il device o premi invio.", GF_LANDSCAPE },
+    { "snake",    "SNAKE",          GM_CPU | GM_LAN, "Serpente 1v1 in rete (ESP-NOW), o contro l'IA.", GF_LANDSCAPE },
+    { "tankd",    "TANK DUEL",      GM_CPU | GM_LAN, "Arena 1v1 in rete: shop conteso, 4 carri, upgrade.", GF_LANDSCAPE },
+    { "yahtzee",  "YAHTZEE",        GM_2P | GM_CPU,  "Yahtzee a turni, 1-4 giocatori + CPU, dadi 3D.", GF_LANDSCAPE },
+    { "orde",     "ORDE",           GM_1P,           "Mini vampire-survivors: piu' armi auto-sparano, sopravvivi alle orde.", GF_LANDSCAPE },
+    { "cardler",  "CARDLER",        GM_1P,           "Mini RPG top-down: esplora il mondo, parla con gli NPC, raccogli oro.", GF_LANDSCAPE },
+    { nullptr, nullptr, 0, nullptr, GF_LANDSCAPE },
 };
+
+// A game's cover box: landscape (wide, default) sized to fill a real screenshot, or portrait
+// (narrow) for pinball's flipper table. Both shapes share the same Y/height band so the
+// header/badge/footer chrome never shifts depending on which game is focused.
+typedef struct { int x, y, w, h; } gf_box_t;
+static int gf_hero_w(unsigned shape) { return shape == GF_PORTRAIT ? HERO_W_PORT : HERO_W; }
+static gf_box_t gf_hero_box(unsigned shape)
+{
+    gf_box_t b; b.w = gf_hero_w(shape); b.h = HERO_H; b.x = (W - b.w) / 2; b.y = HERO_Y;
+    return b;
+}
 
 // ---- state ------------------------------------------------------------------
 static int  s_games[GF_MAX];     // indices into the app registry (category == "Games")
@@ -87,11 +104,12 @@ static uint16_t mix565(uint16_t a, uint16_t b, float t)
 }
 static bool file_exists(const char *p) { FILE *f = fopen(p, "rb"); if (f) { fclose(f); return true; } return false; }
 
-// Background gradient colour at row y (shared so faux-rounded corners blend into the same gradient).
+// Background gradient colour at row y. MINIMAL: only a faint accent haze at the very top that settles
+// quickly into the flat dark BG — the cover/poster is the focal colour, not the backdrop.
 static uint16_t bg_at(uint16_t acc, int y)
 {
-    uint16_t top = mix565(acc, INK, 0.5f);
-    float t = (float)y / H; if (t > 0.85f) t = 1.0f; else t /= 0.85f;
+    uint16_t top = mix565(acc, INK, 0.74f);            // deep, desaturated accent tint (was 0.5 = loud)
+    float t = (float)y / H; if (t > 0.55f) t = 1.0f; else t /= 0.55f;   // reach flat BG by ~55% height
     return mix565(top, BG, t);
 }
 
@@ -268,175 +286,138 @@ template <typename T> static void draw_badges(T *c, unsigned modes)
         if (modes & MODE_ORDER[i]) { draw_badge(c, x, BADGE_Y, MODE_ORDER[i]); x += BW + GAP; }
 }
 
-// Carousel position dots between badges and footer.
-template <typename T> static void draw_dots(T *c, int sel, int cnt, uint16_t acc)
-{
-    if (cnt <= 1) return;
-    const int D = 4, GAP = 4, MAX_D = 11;
-    int show = cnt < MAX_D ? cnt : MAX_D;
-    int start = 0;
-    if (cnt > MAX_D) {
-        start = sel - MAX_D / 2;
-        if (start < 0) start = 0;
-        if (start + MAX_D > cnt) start = cnt - MAX_D;
-    }
-    int total = show * D + (show - 1) * GAP;
-    int ox = (W - total) / 2, y = DOT_Y + 1;
-    for (int i = 0; i < show; i++) {
-        bool cur = (start + i == sel);
-        int x = ox + i * (D + GAP);
-        if (cur) {
-            c->fillRoundRect(x - 2, y - 1, D + 4, D + 2, 2, mix565(acc, FG, 0.90f));
-        } else {
-            c->fillCircle(x + D / 2, y + D / 2, D / 2 - 1, mix565(acc, INK, 0.28f));
-            c->drawCircle(x + D / 2, y + D / 2, D / 2, mix565(acc, LINE, 0.55f));
-        }
-    }
-}
-
 // ---- the cover (real screenshot) or a procedural poster ---------------------
-template <typename T> static void draw_poster(T *c, const nucleo_app_def_t *g)
+// Branded "key-art" poster shown when a game has no captured/curated cover yet. Designed to look
+// like an intentional cover (accent gradient + big glyph + title), NOT an empty "press to capture"
+// placeholder — so the carousel stays polished even before any screenshot exists.
+template <typename T> static void draw_poster(T *c, const nucleo_app_def_t *g, const gf_box_t &box)
 {
     uint16_t acc = g->color;
-    // Richer dark gradient body.
-    for (int yy = 0; yy < HERO_H; yy++) {
-        float t = (float)yy / HERO_H;
-        c->drawFastHLine(HERO_X, HERO_Y + yy, HERO_W, mix565(acc, INK, 0.44f + 0.48f * t));
+    // Vertical accent gradient body, deepening toward the bottom (poster feel).
+    for (int yy = 0; yy < box.h; yy++) {
+        float t = (float)yy / box.h;
+        c->drawFastHLine(box.x, box.y + yy, box.w, mix565(acc, INK, 0.32f + 0.50f * t));
     }
-    int cx = HERO_X + HERO_W / 2, cy = HERO_Y + HERO_H / 2;
-    // App icon shifted to upper half.
-    launcher_draw_icon(c, cx, cy - 14, 30, g->id, g->icon,
-                       mix565(acc, FG, 0.68f), mix565(acc, INK, 0.42f));
-    // Camera pictogram: body + lens + viewfinder bump.
-    uint16_t cm = mix565(acc, FG, 0.28f);
-    int bx = cx - 10, by = cy + 6;
-    c->fillRoundRect(bx + 1, by + 2, 20, 12, 2, mix565(INK, BG, 0.5f)); // shadow
-    c->fillRoundRect(bx, by, 20, 12, 2, cm);
-    c->fillCircle(cx, by + 7, 4, mix565(acc, INK, 0.72f));              // lens
-    c->fillCircle(cx, by + 7, 2, mix565(cm, FG, 0.22f));                // lens highlight
-    c->fillRect(cx - 3, by - 3, 6, 4, cm);                              // viewfinder bump
-    c->fillRect(cx - 1, by - 3, 2, 2, mix565(acc, INK, 0.72f));         // bump hole
-    // Hint.
-    c->setFont(&fonts::Font0); c->setTextSize(1);
-    c->setTextColor(mix565(acc, FG, 0.32f));
-    const char *cap = "Fn+P per catturare";
-    c->setCursor(cx - (int)c->textWidth(cap) / 2, by + 16); c->print(cap);
+    // Soft top sheen for depth.
+    int sh = box.h / 3;
+    for (int yy = 0; yy < sh; yy++) {
+        float a = 0.12f * (1.0f - (float)yy / sh);
+        if (a > 0.01f) c->drawFastHLine(box.x, box.y + yy, box.w, mix565(mix565(acc, INK, 0.32f), FG, a));
+    }
+    int cx = box.x + box.w / 2;
+    // Big game glyph, upper-center — radius clamped to the box width so a narrow portrait
+    // cover (pinball) doesn't blow past its own frame.
+    int iconR = (box.w - 16) / 2; if (iconR > 34) iconR = 34; if (iconR < 12) iconR = 12;
+    launcher_draw_icon(c, cx, box.y + iconR + 4, iconR, g->id, g->icon,
+                       mix565(acc, FG, 0.88f), mix565(acc, INK, 0.30f));
+    // Game title along the bottom, with a drop shadow for legibility over the gradient.
+    const char *t = gf_title(g);
+    c->setFont(&fonts::Font2);
+    int tw = (int)c->textWidth(t);
+    if (tw > box.w - 10) { c->setFont(&fonts::Font0); c->setTextSize(1); tw = (int)c->textWidth(t); }
+    int tx = cx - tw / 2, ty = box.y + box.h - c->fontHeight() - 5;
+    c->setTextColor(mix565(acc, INK, 0.45f)); c->setCursor(tx + 1, ty + 1); c->print(t);   // shadow
+    c->setTextColor(FG);                      c->setCursor(tx,     ty);     c->print(t);   // face
 }
 
-template <typename T> static void draw_hero(T *c, const nucleo_app_def_t *g)
+template <typename T> static void draw_hero(T *c, const nucleo_app_def_t *g, const gf_box_t &box)
 {
     uint16_t acc = g->color;
 
     // Soft NEUTRAL drop-shadow under the cover (EmulationStation-style). No coloured glow halo — that
     // was the source of the stray accent/pink horizontal lines around the box.
-    c->fillRoundRect(HERO_X + 2, HERO_Y + 4, HERO_W, HERO_H, 6, mix565(BG, INK, 0.82f));
+    c->fillRoundRect(box.x + 2, box.y + 4, box.w, box.h, 6, mix565(BG, INK, 0.82f));
 
-    c->setClipRect(HERO_X, HERO_Y, HERO_W, HERO_H);
+    c->setClipRect(box.x, box.y, box.w, box.h);
     char p[192]; bool drawn = false;
     snprintf(p, sizeof p, "%s/%s.png", GF_DIR, g->id);
-    if (file_exists(p)) { c->drawPngFile(p, HERO_X + HERO_W / 2, HERO_Y + HERO_H / 2, HERO_W, HERO_H, 0, 0, 0.0f, 0.0f, datum_t::middle_center); drawn = true; }
+    if (file_exists(p)) { c->drawPngFile(p, box.x + box.w / 2, box.y + box.h / 2, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::middle_center); drawn = true; }
     if (!drawn) { snprintf(p, sizeof p, "%s/%s.jpg", GF_DIR, g->id);
-        if (file_exists(p)) { c->drawJpgFile(p, HERO_X + HERO_W / 2, HERO_Y + HERO_H / 2, HERO_W, HERO_H, 0, 0, 0.0f, 0.0f, datum_t::middle_center); drawn = true; } }
+        if (file_exists(p)) { c->drawJpgFile(p, box.x + box.w / 2, box.y + box.h / 2, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::middle_center); drawn = true; } }
     if (!drawn) { snprintf(p, sizeof p, "%s/%s.bmp", GF_DIR, g->id);
-        // Covers are written at the exact hero-box size (full frame, letterboxed), so draw 1:1 — it
-        // always fits perfectly inside the carousel box, no scaler, no overflow.
-        if (file_exists(p)) { c->drawBmpFile(p, HERO_X, HERO_Y); drawn = true; } }
-    if (!drawn) draw_poster(c, g);
+        // Fit the BMP into the current hero box (centre, aspect-preserved). Fitting instead of a raw
+        // 1:1 blit keeps covers captured at an older box size sitting cleanly inside the new frame.
+        if (file_exists(p)) { c->drawBmpFile(p, box.x + box.w / 2, box.y + box.h / 2, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::middle_center); drawn = true; } }
+    if (!drawn) draw_poster(c, g, box);
     // A glossy sheen across the top third: lighten the real artwork pixels, fading out.
     // Read each row back (RGB565), brighten toward FG, write it again — proven readRect path.
+    // Sized to the landscape (max) width; portrait boxes just use a prefix of it.
     static uint16_t row[HERO_W];
-    int sh = HERO_H / 3;
+    int sh = box.h / 3;
     for (int yy = 0; yy < sh; yy++) {
         float a = 0.16f * (1.0f - (float)yy / sh);
         if (a <= 0.01f) continue;
-        int y = HERO_Y + yy;
-        c->readRect(HERO_X, y, HERO_W, 1, row);
-        for (int xx = 0; xx < HERO_W; xx++) row[xx] = mix565(row[xx], FG, a);
-        c->pushImage(HERO_X, y, HERO_W, 1, row);
+        int y = box.y + yy;
+        c->readRect(box.x, y, box.w, 1, row);
+        for (int xx = 0; xx < box.w; xx++) row[xx] = mix565(row[xx], FG, a);
+        c->pushImage(box.x, y, box.w, 1, row);
     }
     c->clearClipRect();
 
-    round_corners(c, HERO_X, HERO_Y, HERO_W, HERO_H, 5, acc);
+    round_corners(c, box.x, box.y, box.w, box.h, 5, acc);
 
     // Clean frame: a thin dark inset + a single MUTED accent edge. No bright/pink highlight line.
-    c->drawRoundRect(HERO_X - 1, HERO_Y - 1, HERO_W + 2, HERO_H + 2, 5, mix565(INK, BG, 0.35f));
-    c->drawRoundRect(HERO_X - 2, HERO_Y - 2, HERO_W + 4, HERO_H + 4, 6, mix565(acc, INK, 0.42f));
+    c->drawRoundRect(box.x - 1, box.y - 1, box.w + 2, box.h + 2, 5, mix565(INK, BG, 0.35f));
+    c->drawRoundRect(box.x - 2, box.y - 2, box.w + 4, box.h + 4, 6, mix565(acc, INK, 0.42f));
 }
 
-// ---- a faded procedural "peek" of a neighbour game, in a side gutter --------
-template <typename T> static void draw_peek(T *c, const nucleo_app_def_t *g, bool left)
+// ---- quiet side indicator: a chevron + a faint neighbour name in the gutter --
+// No framed card, no gradient box — just a soft directional cue so the eye stays on the cover.
+// Centred vertically on the cover, centred horizontally in the leftover gutter.
+template <typename T> static void draw_side(T *c, const nucleo_app_def_t *g, bool left, int gutter)
 {
-    const int pw = 24, ph = 58;
-    int py = HERO_Y + (HERO_H - ph) / 2;
-    int px = left ? 1 : W - 1 - pw;
     uint16_t acc = g->color;
+    int cy = HERO_Y + HERO_H / 2;
+    int cx = left ? gutter / 2 : W - (gutter + 1) / 2;
 
-    // Receding gradient body.
-    for (int yy = 0; yy < ph; yy++) {
-        float t = (float)yy / ph;
-        float fade = left ? 0.38f + 0.20f * t : 0.38f + 0.20f * t;
-        c->drawFastHLine(px, py + yy, pw, mix565(mix565(acc, INK, 0.52f), BG, fade));
-    }
+    // Chevron pointing outward (toward the neighbour).
+    uint16_t ch = mix565(acc, FG, 0.55f);
+    if (left) c->fillTriangle(cx + 3, cy - 7, cx + 3, cy + 7, cx - 5, cy, ch);
+    else      c->fillTriangle(cx - 3, cy - 7, cx - 3, cy + 7, cx + 5, cy, ch);
 
-    // Icon (slightly larger than before).
-    launcher_draw_icon(c, px + pw / 2, py + ph / 2 - 10, 16, g->id, g->icon,
-                       mix565(acc, FG, 0.55f), mix565(acc, INK, 0.45f));
-
-    // First word of title (max 5 chars) at the bottom of the card.
+    // Faint neighbour name (first word, up to 6 chars) tucked under the chevron.
     c->setFont(&fonts::Font0); c->setTextSize(1);
-    c->setTextColor(mix565(acc, FG, 0.50f));
     const char *title = gf_title(g);
-    char tb[6] = {0}; int tl = 0;
-    for (int i = 0; title[i] && tl < 5 && title[i] != ' '; i++) tb[tl++] = title[i];
-    int tw = tl * 6;
-    c->setCursor(px + (pw - tw) / 2, py + ph - 13); c->print(tb);
-
-    // Frame + inner accent edge.
-    c->drawRoundRect(px, py, pw, ph, 3, mix565(acc, INK, 0.35f));
-    c->drawFastVLine(left ? px + pw - 1 : px, py + 2, ph - 4, mix565(acc, LINE, 0.55f));
-    c->drawFastHLine(px + 2, py, pw - 4, mix565(acc, FG, 0.18f));  // top gloss
-
-    // Direction chevron.
-    int cy = py + ph - 21, cx = px + pw / 2;
-    uint16_t ch = mix565(acc, FG, 0.65f);
-    if (left)  { c->fillTriangle(cx + 4, cy - 5, cx + 4, cy + 5, cx - 4, cy, ch); }
-    else       { c->fillTriangle(cx - 4, cy - 5, cx - 4, cy + 5, cx + 4, cy, ch); }
+    char tb[7] = {0}; int tl = 0;
+    for (int i = 0; title[i] && tl < 6 && title[i] != ' '; i++) tb[tl++] = title[i];
+    int tw = tl * 6; if (tw > gutter - 2) return;     // skip label if the gutter is too tight
+    c->setTextColor(mix565(acc, FG, 0.34f));
+    c->setCursor(cx - tw / 2, cy + 14); c->print(tb);
 }
 
-// ---- title header (system bar) ----------------------------------------------
-template <typename T> static void draw_header(T *c, const nucleo_app_def_t *g, int sel, int cnt)
+// ---- slim system bar: kicker + position chip (the title now lives under the cover) ----------
+template <typename T> static void draw_topbar(T *c, uint16_t acc, int sel, int cnt)
 {
-    uint16_t acc = g->color;
-    for (int yy = 0; yy < MARQ_H; yy++)                          // glassy accent band
-        c->drawFastHLine(0, yy, W, mix565(acc, INK, 0.62f - 0.14f * (float)yy / MARQ_H));
-    c->drawFastHLine(0, 0, W, mix565(acc, FG, 0.30f));          // top glass highlight
-    c->drawFastHLine(0, MARQ_H - 2, W, mix565(acc, FG, 0.5f));   // bright accent baseline
-    c->drawFastHLine(0, MARQ_H - 1, W, mix565(acc, INK, 0.4f));
+    for (int yy = 0; yy < MARQ_H; yy++)                          // sober band, matches the minimal bg
+        c->drawFastHLine(0, yy, W, mix565(acc, INK, 0.72f - 0.10f * (float)yy / MARQ_H));
+    c->drawFastHLine(0, 0, W, mix565(acc, FG, 0.20f));          // faint top glass highlight
+    c->drawFastHLine(0, MARQ_H - 1, W, mix565(acc, FG, 0.38f));  // one clean accent baseline
 
-    // "GIOCHI" system kicker always visible top-left.
+    int ty = (MARQ_H - 8) / 2;                                  // vertical-centre the 8px Font0 glyphs
     c->setFont(&fonts::Font0); c->setTextSize(1);
-    c->setTextColor(mix565(acc, FG, 0.55f)); c->setCursor(4, 3); c->print("GIOCHI");
+    c->setTextColor(mix565(acc, FG, 0.58f)); c->setCursor(5, ty); c->print("GIOCHI");   // kicker
 
-    const char *t = gf_title(g);
-    c->setFont(&fonts::Font4);
-    if ((int)c->textWidth(t) > W - 54) c->setFont(&fonts::Font2);
-    int tw = (int)c->textWidth(t), tx = (W - tw) / 2; if (tx < 42) tx = 42;
-    int ty = (MARQ_H - 2 - c->fontHeight()) / 2 + 1;
-    c->setTextColor(mix565(acc, INK, 0.3f)); c->setCursor(tx + 1, ty + 1); c->print(t);   // shadow
-    c->setTextColor(FG);                     c->setCursor(tx,     ty);     c->print(t);   // face
-
-    c->setFont(&fonts::Font0); c->setTextSize(1);                // position / filter chip, top-right
-    if (s_filter[0]) {
+    if (s_filter[0]) {                                          // filter takes the right slot when active
         char fb[20]; snprintf(fb, sizeof fb, "/%.12s", s_filter);
         int fw = (int)strlen(fb) * 6;
-        c->fillRoundRect(W - fw - 5, 2, fw + 4, 10, 2, 0x1926);
-        c->setTextColor(C_GREEN, 0x1926); c->setCursor(W - fw - 2, 3); c->print(fb);
+        c->setTextColor(C_GREEN); c->setCursor(W - fw - 5, ty); c->print(fb);
     } else if (cnt > 0) {
-        char kn[12]; snprintf(kn, sizeof kn, "%d/%d", sel + 1, cnt);
+        char kn[12]; snprintf(kn, sizeof kn, "%d / %d", sel + 1, cnt);
         int kw = (int)strlen(kn) * 6;
-        c->fillRoundRect(W - kw - 5, 2, kw + 4, 10, 2, mix565(acc, INK, 0.45f));
-        c->setTextColor(FG); c->setCursor(W - kw - 2, 3); c->print(kn);
+        c->setTextColor(mix565(acc, FG, 0.72f)); c->setCursor(W - kw - 5, ty); c->print(kn);
     }
+}
+
+// ---- game title, on its own full-width readable line under the cover ------------------------
+template <typename T> static void draw_title(T *c, const nucleo_app_def_t *g, uint16_t acc)
+{
+    const char *t = gf_title(g);
+    c->setFont(&fonts::Font2); c->setTextSize(1);               // 16px, clean and legible
+    if ((int)c->textWidth(t) > W - 24) { c->setFont(&fonts::Font0); c->setTextSize(1); }  // safety only
+    int tw = (int)c->textWidth(t), tx = (W - tw) / 2;
+    int ty = TITLE_Y + (TITLE_H - c->fontHeight()) / 2;
+    c->setTextColor(mix565(acc, INK, 0.35f)); c->setCursor(tx + 1, ty + 1); c->print(t);   // soft shadow
+    c->setTextColor(FG);                      c->setCursor(tx,     ty);     c->print(t);   // face
 }
 
 template <typename T> static void draw_footer(T *c, const char *hint)
@@ -448,28 +429,16 @@ template <typename T> static void draw_footer(T *c, const char *hint)
     c->setCursor(hx, H - FOOT + 3); c->print(hint);
 }
 
-// ---- cinematic background: accent gradient + diagonal sheen + edge vignette --
+// ---- minimal background: a single clean accent-to-dark vertical gradient. No diagonal sheen bands, no
+// heavy vignette — the cover art is the focus, the backdrop just recedes. A whisper-thin edge fade keeps
+// the frame from feeling cut off without the old cinematic noise.
 template <typename T> static void draw_bg(T *c, uint16_t acc)
 {
     for (int y = 0; y < H; y++) c->drawFastHLine(0, y, W, bg_at(acc, y));
 
-    // Two faint diagonal light bands sweeping top-left -> bottom-right.
-    for (int k = 0; k < 2; k++) {
-        int off = k * 70;
-        for (int y = 0; y < H; y++) {
-            int x = (H - y) + off - 40;
-            if (x >= 0 && x < W) {
-                uint16_t base = bg_at(acc, y);
-                c->drawPixel(x, y, mix565(base, FG, 0.10f));
-                if (x + 1 < W) c->drawPixel(x + 1, y, mix565(base, FG, 0.06f));
-            }
-        }
-    }
-
-    // Edge vignette: darken the left/right margins to focus the eye on the cover.
-    for (int x = 0; x < 24; x++) {
-        float v = 0.22f * (1.0f - (float)x / 24);
-        for (int y = MARQ_H; y < H - FOOT; y += 1) {
+    for (int x = 0; x < 10; x++) {                     // very light edge fade (was a 24px 0.22 vignette)
+        float v = 0.10f * (1.0f - (float)x / 10);
+        for (int y = MARQ_H; y < H - FOOT; y++) {
             c->drawPixel(x, y, mix565(bg_at(acc, y), INK, v));
             c->drawPixel(W - 1 - x, y, mix565(bg_at(acc, y), INK, v));
         }
@@ -485,9 +454,9 @@ template <typename T> static void draw_gf(T *c)
     if (cnt <= 0) {
         draw_bg(c, C_RED);
         for (int yy = 0; yy < MARQ_H; yy++) c->drawFastHLine(0, yy, W, mix565(C_RED, INK, 0.6f));
-        c->drawFastHLine(0, MARQ_H - 2, W, mix565(C_RED, FG, 0.45f));
-        c->setFont(&fonts::Font2); c->setTextColor(FG, BG);
-        c->setCursor(8, (MARQ_H - 2 - c->fontHeight()) / 2 + 1); c->print("Giochi");
+        c->drawFastHLine(0, MARQ_H - 1, W, mix565(C_RED, FG, 0.45f));
+        c->setFont(&fonts::Font0); c->setTextColor(mix565(C_RED, FG, 0.58f));
+        c->setCursor(5, (MARQ_H - 8) / 2); c->print("GIOCHI");
         c->setFont(&fonts::Font2); c->setTextColor(DIM);
         const char *m = s_filter[0] ? "Nessun risultato" : "Nessun gioco";
         c->setCursor((W - (int)c->textWidth(m)) / 2, H / 2 - 8); c->print(m);
@@ -500,17 +469,19 @@ template <typename T> static void draw_gf(T *c)
     if (cur != s_tag_for) load_tag(g, cur);
     const META_t *m = gf_meta(g->id);
     unsigned modes = m ? m->modes : (unsigned)GM_1P;
+    unsigned shape = m ? m->shape : (unsigned)GF_LANDSCAPE;
+    gf_box_t box = gf_hero_box(shape);
 
     draw_bg(c, g->color);
 
-    if (cnt > 1) {                                               // carousel neighbour peeks
-        draw_peek(c, nucleo_app_at(gf_at((s_sel - 1 + cnt) % cnt)), true);
-        draw_peek(c, nucleo_app_at(gf_at((s_sel + 1) % cnt)), false);
+    if (cnt > 1) {                                               // quiet carousel neighbour cues
+        draw_side(c, nucleo_app_at(gf_at((s_sel - 1 + cnt) % cnt)), true, box.x);
+        draw_side(c, nucleo_app_at(gf_at((s_sel + 1) % cnt)), false, box.x);
     }
-    draw_hero(c, g);
-    draw_header(c, g, s_sel, cnt);
+    draw_hero(c, g, box);
+    draw_topbar(c, g->color, s_sel, cnt);
+    draw_title(c, g, g->color);
     draw_badges(c, modes);
-    draw_dots(c, s_sel, cnt, g->color);
 
     draw_footer(c, s_filter[0] ? "DEL canc   < > scegli   INVIO   ESC"
                                : "TAB info   < > gioco   INVIO   ESC");
@@ -709,9 +680,11 @@ bool gamefront_save_cover(const char *id)
     ensure_dir(GF_DIR);
     char p[192]; snprintf(p, sizeof p, "%s/%s.bmp", GF_DIR, id);
     int sw = c->width(), sh = c->height(), cw, ch;
-    if ((long)COVER_W * sh > (long)COVER_H * sw) { cw = sw; ch = (int)((long)sw * COVER_H / COVER_W); }
-    else                                         { ch = sh; cw = (int)((long)sh * COVER_W / COVER_H); }
-    return save_bmp(c, p, COVER_W, COVER_H, (sw - cw) / 2, (sh - ch) / 2, cw, ch);
+    const META_t *m = gf_meta(id);
+    int coverW = gf_hero_w(m ? m->shape : (unsigned)GF_LANDSCAPE), coverH = HERO_H;
+    if ((long)coverW * sh > (long)coverH * sw) { cw = sw; ch = (int)((long)sw * coverH / coverW); }
+    else                                       { ch = sh; cw = (int)((long)sh * coverW / coverH); }
+    return save_bmp(c, p, coverW, coverH, (sw - cw) / 2, (sh - ch) / 2, cw, ch);
 }
 
 bool gamefront_save_screenshot(const char *name)
@@ -773,7 +746,8 @@ bool gamefront_save_panel_cover(const char *id)
     char path[192]; snprintf(path, sizeof path, "%s/%s.bmp", GF_DIR, id);
     FILE *f = fopen(path, "wb"); if (!f) return false;
 
-    const int W = HERO_W, H = HERO_H;                 // output = exact carousel box
+    const META_t *m = gf_meta(id);
+    const int W = gf_hero_w(m ? m->shape : (unsigned)GF_LANDSCAPE), H = HERO_H;   // output = exact carousel box for this game's shape
     float sx = (float)W / pw, sy = (float)H / ph, s = sx < sy ? sx : sy;   // fit (letterbox)
     int dw = (int)(pw * s + 0.5f), dh = (int)(ph * s + 0.5f);
     if (dw > W) dw = W;
@@ -811,8 +785,9 @@ bool gamefront_save_panel_cover(const char *id)
 }
 
 // Carousel cover from the OFF-SCREEN CANVAS (RAM read — cheap, no slow panel readback). Scales the
-// live frame to the exact hero box (full frame, aspect preserved → fills a 16:9 box with no bars).
-// Used to refresh a game's cover from live gameplay while it runs. Overwrites; no history kept.
+// live frame to the exact hero box for this game's shape (full frame, aspect preserved → fills the
+// box with no bars). Used to refresh a game's cover from live gameplay while it runs. Overwrites;
+// no history kept.
 bool gamefront_save_canvas_cover(const char *id)
 {
     if (!id || !id[0]) return false;
@@ -824,7 +799,8 @@ bool gamefront_save_canvas_cover(const char *id)
     char path[192]; snprintf(path, sizeof path, "%s/%s.bmp", GF_DIR, id);
     FILE *f = fopen(path, "wb"); if (!f) return false;
 
-    const int W = HERO_W, H = HERO_H;
+    const META_t *m = gf_meta(id);
+    const int W = gf_hero_w(m ? m->shape : (unsigned)GF_LANDSCAPE), H = HERO_H;
     float sx = (float)W / pw, sy = (float)H / ph, s = sx < sy ? sx : sy;
     int dw = (int)(pw * s + 0.5f), dh = (int)(ph * s + 0.5f);
     if (dw > W) dw = W;

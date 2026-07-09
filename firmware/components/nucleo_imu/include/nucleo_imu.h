@@ -27,6 +27,12 @@ bool nucleo_imu_tilt(float *tx, float *ty);
 // Capture the CURRENT orientation as neutral/centre — "hold it however you like, then play".
 void nucleo_imu_recenter(void);
 
+// Low-passed UNIT gravity vector in SCREEN axes (already board-sign-mapped): *gx = screen horizontal,
+// *gy = screen vertical, *gz = screen normal. Lets a caller do proper angle math (atan2 pitch/roll)
+// that stays linear + symmetric at ANY holding angle, unlike the single-component nucleo_imu_tilt.
+// Returns false (zeros) when the IMU is absent / read fails. Shares the tilt low-pass filter.
+bool nucleo_imu_gravity_screen(float *gx, float *gy, float *gz);
+
 // --- coarse motion sense (OS-wide, neutral-independent) -------------------------------------------
 // Take one accelerometer reading to refresh the motion state, WITHOUT touching the tilt neutral.
 // For pollers that don't drive nucleo_imu_tilt() themselves (e.g. /api/status). No-op + false when

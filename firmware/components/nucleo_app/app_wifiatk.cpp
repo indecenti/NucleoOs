@@ -49,11 +49,12 @@ bool        nucleo_wifiatk_handshake_ready(void);
 bool        nucleo_wifiatk_handshake_pmkid(void);
 }
 
+#include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
 
-static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410,
-                            LINE = 0x2945, INK = 0x0000, ATK = 0xFD20 /*orange*/, GRN = 0x8FF3,
-                            YEL = 0xFE8C, PANEL = 0x18E3, PMF = 0x5C9F /*blue: PMF/immune*/;
+// BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
+static const unsigned short ATK = 0xFD20 /*orange*/, GRN = C_GREEN,
+                            YEL = C_YELLOW, PANEL = 0x18E3, PMF = 0x5C9F /*blue: PMF/immune*/;
 
 enum { ST_CONSENT, ST_SCAN, ST_LIST, ST_RUNNING, ST_STOPPING };
 static int  s_state;

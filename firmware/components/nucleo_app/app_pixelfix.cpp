@@ -237,7 +237,7 @@ static void enter(void)
 extern "C" void nucleo_register_pixelfix(void)
 {
     static const nucleo_app_def_t app = {
-        "pixel-fix", "PixelFix", "Tools", "Risana pixel bloccati e image retention LCD",
+        "pixel-fix", "PixelFix", "System", "Risana pixel bloccati e image retention LCD",
         'F', C_YELLOW, enter, on_key, nullptr, draw, on_exit, NX_NET_APP
     };
     nucleo_app_register(&app);

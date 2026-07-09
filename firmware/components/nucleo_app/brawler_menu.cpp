@@ -15,6 +15,7 @@
 #include "brawler.h"
 #include "app_gfx.h"
 #include "nucleo_kbd.h"
+#include "nucleo_app.h"     // nucleo_app_exit() for the title's "Quit" item
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -627,7 +628,7 @@ bool menu_key(int key, char ch) {
                     case 1: s_coop = 1; menu_goto(SC_COOP); break;         // co-op -> pick Host or Join first
                     case 2: menu_goto(SC_OPT);  break;
                     case 3: menu_goto(SC_HELP); break;
-                    default: return false;                                  // Quit -> let the shell/back close the app
+                    default: bsfx(BSFX_BACK); nucleo_app_exit(); break;     // Quit -> actually close the app
                 }
                 return true;
             }

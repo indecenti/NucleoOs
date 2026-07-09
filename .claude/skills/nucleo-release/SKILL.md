@@ -5,6 +5,30 @@ description: Build, gate, and ship NucleoOS to the Cardputer — firmware via OT
 
 # Releasing NucleoOS to the device
 
+> **⚠ In the Claude sandbox, do NOT call `flash.ps1` / `release.ps1` / `ota.ps1` blind.**
+> They `. export.ps1` without `IDF_TOOLS_PATH`/`IDF_PYTHON_ENV_PATH` set, so ESP-IDF activation
+> dies with *"Python virtual environment not found"* and the build never runs (the version
+> counter still bumps — harmless). **Build + serial-flash with the proven one-liner below.** Don't
+> re-read `flash.ps1` to rediscover this each time — this callout IS the answer.
+
+## Sandbox build + serial flash (proven, one PowerShell call)
+```powershell
+$env:IDF_TOOLS_PATH="$HOME\.espressif"; & 'C:\esp\esp-idf\export.ps1' *> $null
+Set-Location 'G:\Nucleo\firmware'
+idf.py build 2>&1 | Select-Object -Last 6
+if ($LASTEXITCODE -eq 0) { idf.py -p COM4 -b 921600 flash 2>&1 | Select-Object -Last 20 }
+```
+- Setting `IDF_TOOLS_PATH` first is what makes `export.ps1` succeed here (the raw script omits it).
+- `ninja <target.obj>` in `firmware\build` is the fast **compile-check** for a few changed files
+  (no version bump, no flash) — use it to prove a change builds before flashing.
+- **Port ↔ unit:** `COM4` = the **ADV** Cardputer, `COM3` = the original (both enumerate as
+  USB-Serial-JTAG, VID 303A PID 1001). Verify the live port, don't assume.
+- **Version bump:** `idf.py build` does NOT bump; `flash.ps1` did it via `version-bump.ps1`. To
+  stamp a new build counter, run `powershell -File tools\version-bump.ps1` once before `idf.py build`.
+- **Non-ANIMA UI/games/category changes:** the ANIMA gate can't regress (you didn't touch ANIMA),
+  so skipping it is fine — but you're already bypassing `flash.ps1`, so there's no gate to skip.
+  For ANIMA logic changes, run `npm run anima:gate` yourself before flashing.
+
 **Gate first.** The ANIMA host regression suite (`npm run anima:gate`, 12 gates incl.
 0-hallucination + skill-routing) must be GREEN before shipping firmware that carries that
 logic. `flash.ps1` and `release.ps1` enforce it; `-SkipGate` overrides — don't, unless the

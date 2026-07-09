@@ -119,6 +119,20 @@ static void on_key(int k, char ch)
     // move AND strike at once — on_key wouldn't deliver a J/K tap reliably while a WASD key is held.
     // Here on_key only drives the menus.
     if (g.screen == SC_PLAY && !g.paused) return;
+    // Menus accept the SAME keys as gameplay so the controls are consistent (the ;/. arrow legends
+    // still work): E/W up, S down, A left, D right, J/K/L/Space confirm. Without this the player
+    // presses the movement keys in a menu and nothing scrolls.
+    if (k == NK_CHAR) {
+        char c = (ch >= 'A' && ch <= 'Z') ? (char)(ch + 32) : ch;
+        switch (c) {
+            case 'e': case 'w': k = NK_UP;    break;
+            case 's':           k = NK_DOWN;  break;
+            case 'a':           k = NK_LEFT;  break;
+            case 'd':           k = NK_RIGHT; break;
+            case 'j': case 'k': case 'l': case ' ': k = NK_ENTER; break;
+            default: break;
+        }
+    }
     menu_key(k, ch);
 }
 

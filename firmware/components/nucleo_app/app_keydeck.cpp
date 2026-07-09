@@ -10,6 +10,7 @@
 // one-shot async discovery. Networking is pumped from on_tick (5 Hz) and inside the modal
 // typing loop (50 Hz), all on the app task; no extra FreeRTOS task.
 #include "nucleo_app.h"
+#include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
 #include <M5GFX.h>
 #include <string.h>
@@ -31,8 +32,8 @@ const char *nucleo_setup_ip(void);         // our own STA IP ("" when offline)
 
 #define TR(it_, en_) nucleo_tr((it_), (en_))
 
-static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410,
-                            ACC = 0x4DDF, GRN = 0x8FF3, WARN = 0xFE8C, INK = 0x0000;
+// BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
+static const unsigned short ACC = C_BLUE, GRN = C_GREEN, WARN = C_YELLOW, SURF = 0x10A2;
 
 enum { KD_PORT = 5588, KD_STALE_MS = 5000, KD_PING_MS = 2000, KD_CONN_TO_MS = 4000, KD_RETRY_MS = 2500 };
 
@@ -429,6 +430,18 @@ static void type_screen(unsigned char m, const char *echo)
     d.setTextColor(WARN, BG); d.setCursor(178, 116); d.print(TR("` esci", "` exit"));
 }
 
+// Composite the modal frame into the shared back-buffer and blit once — never a direct-to-panel
+// fillScreen on the redraw cadence, so the live typing view can't flicker (ANTI-FLICKER.md #1).
+static void type_paint(unsigned char m, const char *echo)
+{
+    M5Canvas *cv = nucleo_screen();
+    if (!cv) { type_screen(m, echo); return; }   // OOM fallback: direct (rare)
+    nucleo_app_set_gfx(cv);
+    type_screen(m, echo);                         // draws via `d` -> the canvas
+    nucleo_app_set_gfx(nullptr);
+    cv->pushSprite(0, 0);
+}
+
 static void type_loop(void)
 {
     char echo[26] = "";
@@ -461,7 +474,7 @@ static void type_loop(void)
             }
         }
         if (m != last_m) { last_m = m; redraw = true; }
-        if (redraw) { type_screen(m, echo); redraw = false; }
+        if (redraw) { type_paint(m, echo); redraw = false; }
         vTaskDelay(pdMS_TO_TICKS(20));
     }
     nucleo_app_request_draw();
@@ -565,12 +578,13 @@ static void tabbar(int top)
     for (int i = 0; i <= T_INFO; i++) {
         const bool on = (i == (int)s_tab);
         const int w = (int)strlen(N[i]) * 6 + 10;
-        d.fillRoundRect(x, top + 2, w, 14, 3, on ? ACC : 0x10A2);
-        d.setTextColor(on ? INK : MUTED, on ? ACC : 0x10A2);
+        d.fillRoundRect(x, top + 2, w, 14, 3, on ? ACC : SURF);
+        d.setTextColor(on ? INK : MUTED, on ? ACC : SURF);
         d.setCursor(x + 5, top + 5);
         d.print(N[i]);
         x += w + 4;
     }
+    d.drawFastHLine(0, top + 20, 240, LINE);   // launcher-consistent hairline anchor under the tabs
 }
 
 static void draw_monitor(int top)

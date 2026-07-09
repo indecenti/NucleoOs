@@ -379,6 +379,58 @@ export function drawIcon(g, id, cx, cy, s) {
       g.fc(cx - s * 0.44, cy - s * 0.76, T * 0.42, g.bg); g.fc(cx + s * 0.44, cy + s * 0.76, T * 0.42, g.bg);
       break;
 
+    case 'mail':                                     // envelope: filled body + V flap in bg
+      g.frr(cx - s, cy - s * 0.66, 2 * s, s * 1.32, s * 0.18);
+      g.ln(cx - s * 0.86, cy - s * 0.46, cx, cy + s * 0.16, T * 0.6, g.bg);
+      g.ln(cx + s * 0.86, cy - s * 0.46, cx, cy + s * 0.16, T * 0.6, g.bg);
+      break;
+
+    case 'Communication':                            // speech bubble with a tail + three dots
+      g.frr(cx - s, cy - s * 0.8, 2 * s, s * 1.28, s * 0.34);
+      g.tri(cx - s * 0.5, cy + s * 0.3, cx - s * 0.08, cy + s * 0.3, cx - s * 0.62, cy + s);
+      for (let i = -1; i <= 1; i++) g.fc(cx + i * s * 0.42, cy - s * 0.14, T * 0.5, g.bg);
+      break;
+
+    case 'weather':                                  // a sun behind a cloud
+      g.fc(cx - s * 0.30, cy - s * 0.38, s * 0.34);
+      g.ln(cx - s * 0.30, cy - s * 0.96, cx - s * 0.30, cy - s * 0.74, T * 0.7);
+      g.ln(cx - s * 0.84, cy - s * 0.38, cx - s * 0.62, cy - s * 0.38, T * 0.7);
+      g.ln(cx - s * 0.68, cy - s * 0.76, cx - s * 0.50, cy - s * 0.58, T * 0.7);
+      g.ln(cx + s * 0.06, cy - s * 0.76, cx - s * 0.10, cy - s * 0.58, T * 0.7);
+      g.fc(cx - s * 0.50, cy + s * 0.30, s * 0.34);
+      g.fc(cx + s * 0.55, cy + s * 0.30, s * 0.40);
+      g.fc(cx + s * 0.05, cy + s * 0.06, s * 0.46);
+      g.frr(cx - s * 0.85, cy + s * 0.26, s * 1.7, s * 0.55, s * 0.27);
+      break;
+
+    case 'pinball':                                  // portrait table: body, ball, two flippers
+      g.frr(cx - s * 0.62, cy - s, s * 1.24, 2 * s, s * 0.3);
+      g.frr(cx - s * 0.42, cy - s * 0.82, s * 0.84, s * 1.52, 2, g.bg);
+      g.fc(cx + s * 0.12, cy - s * 0.34, T * 0.72);
+      g.ln(cx - s * 0.3, cy + s * 0.52, cx + s * 0.02, cy + s * 0.28, T * 0.6);
+      g.ln(cx + s * 0.3, cy + s * 0.52, cx - s * 0.02, cy + s * 0.28, T * 0.6);
+      break;
+
+    case 'screensaver':                              // crescent moon + 3 stars (sleep/idle)
+      g.fc(cx - s * 0.18, cy + s * 0.08, s * 0.76);
+      g.fc(cx + s * 0.22, cy - s * 0.08, s * 0.56, g.bg);
+      g.fc(cx + s * 0.72, cy - s * 0.64, T * 0.65);
+      g.fc(cx + s * 0.80, cy + s * 0.28, T * 0.45);
+      g.fc(cx - s * 0.18, cy - s * 0.88, T * 0.50);
+      break;
+
+    case 'pixel-fix': {                              // monitor frame + 2x2 pixel grid (3 lit + 1 stuck)
+      g.frr(cx - s, cy - s * 0.82, 2 * s, s * 1.64, s * 0.2);
+      g.frr(cx - s + T, cy - s * 0.82 + T, 2 * s - 2 * T, s * 1.28, 2, g.bg);
+      g.bx(cx - T * 0.6, cy + s * 0.48, T * 1.2, s * 0.34);
+      g.bx(cx - s * 0.38, cy + s * 0.78, s * 0.76, T * 0.55);
+      const ph = s * 0.52, pw = s * 0.48, gp = T * 0.55;
+      g.bx(cx - pw - gp * 0.5, cy - ph - gp * 0.5, pw, ph);
+      g.bx(cx + gp * 0.5, cy - ph - gp * 0.5, pw, ph);
+      g.bx(cx - pw - gp * 0.5, cy + gp * 0.5, pw, ph);
+      break;                                         // bottom-right stays bg = stuck pixel
+    }
+
     default:
       return false;
   }

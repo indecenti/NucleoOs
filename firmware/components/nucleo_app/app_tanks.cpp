@@ -102,7 +102,7 @@ static const fx3d::Model CUBE = { CUBEV, 8, CUBET, 12 };
 
 // ============================ weapons ========================================
 enum { WB_BLAST = 0, WB_DIG, WB_CLUSTER, WB_RAIN, WB_MIRV, WB_ROLLER, WB_TELE,
-       WB_SHIELD, WB_BEAM, WB_DRILL, WB_WALL, WB_HOMING, WB_NAPALM };
+       WB_SHIELD, WB_BEAM, WB_DRILL, WB_WALL, WB_HOMING, WB_NAPALM, WB_UFO, WB_BOUNCE };
 struct Weap { const char *it, *en; int beh, crater, dmg, count, ammo; uint16_t col; };
 static const Weap WEAPS[] = {
     { "Standard",     "Standard",  WB_BLAST,   12, 26, 1, -1, rgb(255,230,120) }, // 0
@@ -112,7 +112,7 @@ static const Weap WEAPS[] = {
     { "Pioggia",      "Rain",      WB_RAIN,     8, 14, 6,  3, rgb(120,200,255) }, // 4
     { "Sciame",       "MIRV",      WB_MIRV,    13, 26, 3,  3, rgb(220,140,255) }, // 5  few heavy warheads, steep airburst rain
     { "Rimbalzo",     "Roller",    WB_ROLLER,  14, 30, 1,  4, rgb(120,255,210) }, // 6
-    { "Teletrasporto","Teleport",  WB_TELE,     0,  0, 1,  3, rgb(255,255,255) }, // 7
+    { "Astronave",    "Alien Ship",WB_UFO,     10, 48, 1,  3, rgb(140,255,180) }, // 7  alien saucer: fly out the barrel, hover over the foe, laser it from above
     { "Atomica",      "Nuke",      WB_BLAST,   40, 80, 1,  1, rgb(255, 90, 70) }, // 8
     { "Scudo Bolla",  "Bubble",    WB_SHIELD,   0,  0, 1,  2, rgb(120,200,255) }, // 9
     { "Riparazione",  "Med-Kit",   WB_SHIELD,   0,  0, 1,  1, rgb(120,255,150) }, // 10
@@ -124,15 +124,27 @@ static const Weap WEAPS[] = {
     { "Propulsori",   "Jump-Jets", WB_TELE,     0,  0, 1,  3, rgb(120,255,255) }, // 16
     { "Napalm",       "Napalm",    WB_NAPALM,  12, 14, 1,  3, rgb(255,120, 40) }, // 17
     { "Cecchino",     "Sniper",    WB_BLAST,    7, 40, 1,  2, rgb(230,240,255) }, // 18
+    { "Granata",      "Grenade",   WB_BOUNCE,  13, 30, 1,  4, rgb(180,230,120) }, // 19  bounces along terrain, then blows
+    { "Sventaglio",   "Spread",    WB_BLAST,    8, 12, 5,  3, rgb(255,186,110) }, // 20  five-shot muzzle fan
+    { "Bordata",      "Salvo",     WB_BLAST,   12, 20, 2,  4, rgb(255,140,150) }, // 21  twin volley
+    { "Mortaio",      "Mortar",    WB_BLAST,   16, 34, 1,  3, rgb(200,160,255) }, // 22  heavy single lob
+    { "Massiccia",    "Heavy",     WB_BLAST,   26, 62, 1,  2, rgb(255,120, 60) }, // 23  big crater, big damage
+    { "Talpa",        "Mole",      WB_DRILL,   30, 34, 1,  2, rgb(150,110, 60) }, // 24  bores deep, blasts under
+    { "Palla",        "Bowling",   WB_ROLLER,  14, 28, 1,  3, rgb(120,255,190) }, // 25  rolls to the foe
+    { "Incendio",     "Firestorm", WB_NAPALM,  12, 12, 1,  2, rgb(255,100, 30) }, // 26  wider burning patch
+    { "Grandine",     "Hail",      WB_CLUSTER,  6,  8,10,  3, rgb(150,220,255) }, // 27  dense icy carpet
+    { "Sisma",        "Quake",     WB_DIG,     34, 16, 1,  2, rgb(190,150,100) }, // 28  huge terrain shove + quake
 };
 #define NWEAP ((int)(sizeof(WEAPS)/sizeof(WEAPS[0])))
 enum { MED_WP = 10, JETS_WP = 16, SNIPE_WP = 18 };   // indices needing fire-time special-casing
 // Per-weapon audio cues (index = weapon idx). Fire 20-28/40-46, impact 30-38/47. Utility hit = unused.
-static const int fire_sfx[NWEAP] = { 20,21,22,23,24,25,26,27,28, 40,42,44,45,46,20,23,43,21,20 };
-static const int hit_sfx [NWEAP] = { 30,31,32,33,34,35,36,37,38, 30,30,30,38,30,30,33,30,47,30 };
+static const int fire_sfx[NWEAP] = { 20,21,22,23,24,25,26,27,28, 40,42,44,45,46,20,23,43,21,20,
+                                     21,23,21,21,28,45,26,46,24,22 };   // 19..28 new weapons
+static const int hit_sfx [NWEAP] = { 30,31,32,33,34,35,36,37,38, 30,30,30,38,30,30,33,30,47,30,
+                                     6, 33,31,31,38,45,36,47,33,32 };   // 19..28 new weapons
 
 // ============================ state ==========================================
-enum { ST_MENU = 0, ST_PLAY, ST_OVER, ST_HELP, ST_SCORES, ST_OPT, ST_HOST, ST_BROWSE };
+enum { ST_MENU = 0, ST_PLAY, ST_OVER, ST_HELP, ST_SCORES, ST_OPT, ST_HOST, ST_BROWSE, ST_LOADOUT };
 enum { TP_TURN = 0, TP_AIM, TP_FIRE, TP_SETTLE, TP_OVER };
 enum { ATM_DAY = 0, ATM_SUNSET, ATM_EVENING, ATM_NIGHT, ATM_RAIN, ATM_N };   // time-of-day / weather skies
 enum { MODE_AI = 0, MODE_HOST, MODE_GUEST };
@@ -192,16 +204,30 @@ static float  s_cam, s_camtgt, s_camfree, s_camY;
 // turn / phase
 static int    s_phase, s_turn_t, s_aiwait;
 static bool   s_ai_planned;
+// multiplayer turn clock: each player gets TURN_SECS to choose+fire; at 0 the shot auto-launches ("VIA").
+#define TURN_SECS 45
+static int64_t s_aim_deadline;         // now_ms() by which the local active player must have fired (net only)
+static int     s_last_tick;            // last whole-second announced (drives the 5..1 ticks + VIA cue)
 
 // settings overlay
 static int    s_optsel, s_optguide, s_opt_from = ST_MENU;
+
+// Pocket-Tanks-style loadout: the player picks 10 weapons from the full arsenal before a vs-CPU match.
+// s_ldpick = which weapons P0 has chosen; s_ldsel = cursor in the picker list. Each tank's chosen 10 are
+// flattened into s_slot[] at match start (fixed order) so the number keys / quick-bar map to real slots.
+#define LOADOUT_N 10
+static bool    s_ldpick[NWEAP];
+static int     s_ldsel;
+static uint8_t s_slot[2][LOADOUT_N];
+static int     s_nslot[2];
+static int  ld_count(void) { int n = 0; for (int w = 0; w < NWEAP; w++) if (s_ldpick[w]) n++; return n; }
 
 // manual aim entry
 static int    s_entry_field;
 static char   s_entry_ang[4], s_entry_pow[4];
 
 // projectiles
-struct Proj { bool on; float x, y, vx, vy; int wp, beh, owner; bool child, rolling, split; int fuse; int dig; };
+struct Proj { bool on; float x, y, vx, vy; int wp, beh, owner; bool child, rolling, split; int fuse; int dig; int bnc; };
 #define NPROJ 14
 static Proj   s_pr[NPROJ];
 // napalm burning patches + beam FX + impact-dwell camera
@@ -210,6 +236,11 @@ struct Fire { bool on; int x, w, ticks; };
 static Fire   s_fire[NFIRE];
 static int    s_beam_t, s_beam_x0, s_beam_y0, s_beam_x1, s_beam_y1;
 static int    s_dwell_t; static float s_dwell_x, s_dwell_y;
+// Alien saucer weapon (single, static): launched from the barrel along the shot arc; if the aim would
+// hit the foe it peels off to hover directly above and blasts it with a death-ray from above.
+enum { UF_FLYIN = 0, UF_MOVE, UF_HOVER, UF_LASER, UF_LEAVE, UF_MISS };
+struct Ufo { bool on; int phase, t; float x, y, vx, vy, hx, hy; int owner, foe, wp; bool hit; };
+static Ufo    s_ufo;
 static int    s_ai_tgtE, s_ai_tgtP;
 // terrain ops recorded during the active player's shot (packaged into the multiplayer RESULT)
 #define NOPS 8
@@ -432,28 +463,37 @@ static void presynth(void) {
 }
 
 // ============================ persistence ====================================
-#define CFG_MAGIC 0x544E4B34u   // 'TNK4' (bumped: aim-help now defaults OFF)
+#define CFG_MAGIC 0x544E4B35u   // 'TNK5' (bumped: stores the player's weapon loadout)
+struct TkCfg { uint32_t m; int lang, audio, diff, manual, aimhelp; unsigned top[NTOP]; uint8_t ld[NWEAP]; };
 static void cfg_write(void) {
     ensure_dirs();
     FILE *f = fopen(DIRR "/cfg.bin", "wb");
     if (!f) return;
-    struct { uint32_t m; int lang, audio, diff, manual, aimhelp; unsigned top[NTOP]; } c =
-        { CFG_MAGIC, g_lang, g_audio, s_diff, g_manual, g_aimhelp, { 0 } };
+    TkCfg c = { CFG_MAGIC, g_lang, g_audio, s_diff, g_manual, g_aimhelp, { 0 }, { 0 } };
     for (int i = 0; i < NTOP; i++) c.top[i] = g_top[i];
+    for (int w = 0; w < NWEAP; w++) c.ld[w] = s_ldpick[w] ? 1 : 0;
     fwrite(&c, sizeof c, 1, f);
     fclose(f);
 }
 static void cfg_read(void) {
     FILE *f = fopen(DIRR "/cfg.bin", "rb");
     if (!f) return;
-    struct { uint32_t m; int lang, audio, diff, manual, aimhelp; unsigned top[NTOP]; } c;
+    TkCfg c;
     size_t n = fread(&c, sizeof c, 1, f);
     fclose(f);
     if (n == 1 && c.m == CFG_MAGIC) {
         g_lang = c.lang ? 1 : 0; g_audio = c.audio ? 1 : 0; s_diff = clampi(c.diff, 0, 2);
         g_manual = c.manual ? 1 : 0; g_aimhelp = c.aimhelp ? 1 : 0;
         for (int i = 0; i < NTOP; i++) g_top[i] = c.top[i];
+        for (int w = 0; w < NWEAP; w++) s_ldpick[w] = c.ld[w] != 0;
     }
+}
+// Guarantee a legal 10-weapon loadout (first run, or a corrupt/old save): a varied, fun default set.
+static void ld_ensure_valid(void) {
+    if (ld_count() == LOADOUT_N) return;
+    for (int w = 0; w < NWEAP; w++) s_ldpick[w] = false;
+    static const int def[LOADOUT_N] = { 0, 1, 3, 5, 6, 11, 14, 17, 19, 23 };
+    for (int i = 0; i < LOADOUT_N; i++) if (def[i] < NWEAP) s_ldpick[def[i]] = true;
 }
 static void leaderboard_add(unsigned sc) {
     if (!sc) return;
@@ -629,9 +669,25 @@ static void start_turn(void);
 static void build_match(int mode, uint32_t seed, int wind, int t0x, int t1x, int starter) {
     s_mode = mode;
     s_seed = seed; gen_terrain(); s_wind = wind;
+    // Decide each tank's arsenal. Net: full arsenal both sides (no loadout in the START packet -> no desync).
+    // vs CPU: P0 uses the player's chosen 10; the CPU rolls a fresh offensive 10 each match (replay variety).
+    bool have[2][NWEAP];
+    for (int w = 0; w < NWEAP; w++) { have[0][w] = have[1][w] = (mode != MODE_AI); }
+    if (mode == MODE_AI) {
+        ld_ensure_valid();
+        for (int w = 0; w < NWEAP; w++) have[0][w] = s_ldpick[w];
+        static const int aipool[] = { 0,1,2,3,4,5,6,8,11,12,14,15,17,18,20,21,22,23,24,25,27,28 };  // aimable/offensive only
+        int np = (int)(sizeof(aipool) / sizeof(aipool[0])), picked = 0, guard = 0;
+        while (picked < LOADOUT_N && guard++ < 400) { int w = aipool[esp_random() % np]; if (w < NWEAP && !have[1][w]) { have[1][w] = true; picked++; } }
+    }
     for (int i = 0; i < 2; i++) {
         s_tk[i].hp = 100; s_tk[i].dead = false; s_tk[i].elev = 45; s_tk[i].power = 75; s_tk[i].shield = 0;
-        for (int w = 0; w < NWEAP; w++) s_tk[i].ammo[w] = WEAPS[w].ammo;
+        int c = 0;
+        for (int w = 0; w < NWEAP; w++) {
+            s_tk[i].ammo[w] = have[i][w] ? WEAPS[w].ammo : 0;
+            if (have[i][w] && c < LOADOUT_N) s_slot[i][c++] = (uint8_t)w;    // flatten into the fixed quick-bar
+        }
+        s_nslot[i] = c;
         s_tk[i].weap = firstweap(i);
     }
     s_tk[0].x = t0x; s_tk[1].x = t1x;
@@ -642,6 +698,7 @@ static void build_match(int mode, uint32_t seed, int wind, int t0x, int t1x, int
     memset(s_rg, 0, sizeof s_rg); memset(s_dp, 0, sizeof s_dp); memset(s_fire, 0, sizeof s_fire);
     s_shake = 0; s_flash = 0; s_nuke_t = 0; s_camfree = 0; s_camY = 0; s_lava_x = -1;
     s_beam_t = 0; s_dwell_t = 0; s_draw_flag = 0; s_resseq = 0; s_rel_on = false; s_peerleft = false;
+    s_ufo.on = false;
     s_bonus = 0; s_shooter = 0; s_shot_hits = 0; s_shot_long = false;   // fresh bonus tally each round
     s_last_rx = s_last_aim = now_ms();
     s_active = starter;
@@ -667,7 +724,9 @@ static void barrel_tip(int who, float *bx, float *by, float *dx, float *dy) {
 static int spawn_proj(float x, float y, float vx, float vy, int wp, int owner, bool child) {
     for (int i = 0; i < NPROJ; i++) {
         if (s_pr[i].on) continue;
-        s_pr[i] = { true, x, y, vx, vy, wp, WEAPS[wp].beh, owner, child, false, false, 0, 0 }; return i;
+        s_pr[i] = { true, x, y, vx, vy, wp, WEAPS[wp].beh, owner, child, false, false, 0, 0, 0 };
+        if (WEAPS[wp].beh == WB_BOUNCE) s_pr[i].bnc = 3;   // grenade: bounces before it detonates
+        return i;
     }
     return -1;
 }
@@ -747,8 +806,11 @@ static void explode_w(float x, float y, int wp) {
             if (wp == 18)      { spark_cone(x, y, 6, COL_WHITE, -1.57f, 0.35f, 1.6f, 3.0f); ring_spawn(x, y, 16, COL_WHITE); }   // Sniper: tight white crack
             else if (wp == 15) { for (int k = -1; k <= 1; k++) ring_spawn(x + k * 8, y, 12, rgb(255, 150, 210)); }               // Tripler: three pink rings
             else if (wp == 1)  { ring_spawn(x, y, w->crater * 2.0f, rgb(255, 150, 60)); spark_cone(x, y, 10, rgb(255, 185, 90), -1.57f, 1.3f, 1.2f, 2.8f); }  // Big Bomb: fireball ring + embers
+            else if (wp == 23) { ring_spawn(x, y, w->crater * 2.2f, rgb(255, 130, 60)); ring_spawn(x, y, 20, rgb(255, 200, 120)); spark_cone(x, y, 14, rgb(255, 180, 90), -1.57f, 1.5f, 1.4f, 3.2f); shake(7.0f); }  // Heavy: double fireball + big kick
+            else if (wp == 22) { ring_spawn(x, y, 26, rgb(200, 160, 255)); spark_cone(x, y, 10, rgb(210, 170, 255), -1.57f, 1.0f, 1.0f, 2.4f); }   // Mortar: violet crown
             break;
     }
+    if (wp == 28) { shake(9.0f); for (int k = -1; k <= 1; k++) ring_spawn(x + k * 22, surf((int)x + k * 22) - 2, 16, rgb(190, 150, 100)); }   // Quake: ground heaves, extra shake
     s_dwell_x = x; s_dwell_y = y; s_dwell_t = (wp == 8) ? 900 : 420;   // hold the camera on the crater
     play_hit_sfx(wp);
 }
@@ -763,48 +825,26 @@ static void resolve_impact(Proj *p) {
             for (int s = 0; s < 14; s++) { float a = frnd(0, 6.283f); spark_burst(x + cosf(a) * 6, y + sinf(a) * 6, 1, COL_WHITE); }
             ring_spawn(x, y, 22, COL_WHITE); flash(COL_WHITE, 90); sfx(11); p->on = false; return;
         case WB_CLUSTER:
-            // Parent: medium blast (bigger crater, real damage) then seeds the carpet bomblets.
-            // Each child bomblet uses the weapon's own small stats so they land close, not scatter-shot.
+            // Believable cluster munition: the shell CRACKS OPEN on contact and throws a fan of bomblets
+            // UP and OUTWARD. Each one arcs and lands on its own, so the carpet pops in a natural stagger
+            // over a wide footprint — not one fat blast with a few token sparks. Children do the real work.
             if (p->child) {
-                explode_w(x, y, p->wp);                            // bomblet: small standard hit
+                explode_w(x, y, p->wp);                            // one bomblet = its own small crater + hit
             } else {
-                int pcr = 14;                                      // parent crater radius (larger than bomblets)
-                carve((int)x, (int)y, pcr);
-                for (int t = 0; t < 2; t++) {
-                    if (s_tk[t].dead) continue;
-                    float ddx = s_tk[t].x - x, ddy = s_tk[t].y - y;
-                    float dist = sqrtf(ddx * ddx + ddy * ddy), rng = (float)(pcr + 10);
-                    if (dist > rng) continue;
-                    float f = 1.0f - dist / rng; if (f < 0) f = 0;
-                    int dd = (int)(24.0f * f);
-                    if (dd > 0 && s_tk[t].shield > 0) {
-                        int eat = dd < s_tk[t].shield ? dd : s_tk[t].shield;
-                        s_tk[t].shield -= eat; dd -= eat;
-                        ring_spawn(s_tk[t].x, s_tk[t].y, 20, rgb(140, 210, 255));
-                        dmg_popup(s_tk[t].x, s_tk[t].y - 24, eat, rgb(140, 210, 255)); sfx(41);
-                    }
-                    if (dd > 0) {
-                        int pre = s_tk[t].hp;
-                        s_tk[t].hp -= dd; if (s_tk[t].hp < 0) s_tk[t].hp = 0;
-                        dmg_popup(s_tk[t].x, s_tk[t].y - 16, dd, t ? COL_P1 : COL_P0); sfx(8);
-                        if (s_mode == MODE_AI && t != s_shooter) { s_shot_hits++; award_juice(t, pre, s_tk[t].hp <= 0, x); }
-                        if (s_tk[t].hp <= 0) { s_tk[t].hp = 0; s_tk[t].dead = true; shat_spawn(s_tk[t].x, s_tk[t].y, 4.5f, t ? COL_P1 : COL_P0, 900); }
-                    }
+                spark_cone(x, y, 12, w->col, -1.57f, 1.5f, 1.4f, 3.0f);   // burst of casing sparks up and out
+                ring_spawn(x, y, 16, w->col);
+                flash(w->col, 60, 90); shake(2.6f);
+                s_dwell_x = x; s_dwell_y = y; s_dwell_t = 340;    // hold the camera on the scatter footprint
+                int n = w->count; if (n < 1) n = 1;
+                for (int k = 0; k < n; k++) {
+                    // Fan the bomblets across an upward arc (left-up .. up .. right-up) with jittered speed,
+                    // so they spread out and rain down at different times and distances.
+                    float t01 = (n > 1) ? (float)k / (n - 1) : 0.5f;
+                    float ang = -2.60f + 1.90f * t01 + frnd(-0.14f, 0.14f);   // ~ -150deg .. -40deg
+                    float sp  = frnd(0.16f, 0.34f);
+                    if (spawn_proj(x, y - 4, cosf(ang) * sp, sinf(ang) * sp, p->wp, p->owner, true) < 0) break;
                 }
-                spark_burst(x, y, 10, w->col);
-                shat_spawn(x, y, 2.0f, mix(th_ground, w->col, 110), 480);
-                ring_spawn(x, y, (float)(pcr * 2), w->col);
-                flash(w->col, 100, 130); shake(4.5f);
-                s_dwell_x = x; s_dwell_y = y; s_dwell_t = 360;
-                s_lava_x = (int)x; s_lava_w = pcr; s_lava_t = now_ms();
                 play_hit_sfx(p->wp);
-            }
-            // Carpet bomblets — tight scatter so they land around the impact, not across the field
-            if (!p->child) for (int k = 0; k < w->count; k++) {
-                float frac = (w->count > 1) ? ((float)k / (w->count - 1)) * 2.0f - 1.0f : 0.0f;
-                float vx = frac * 0.18f + frnd(-0.02f, 0.02f);    // tight horizontal: ~35px each side
-                float vy = -0.06f - frnd(0.0f, 0.03f);             // slight lob; lands close to impact
-                if (spawn_proj(x, y - 6, vx, vy, p->wp, p->owner, true) < 0) break;
             }
             p->on = false; return;
         case WB_ROLLER:
@@ -866,7 +906,15 @@ static void step_proj_once(int dt) {
             p->on = false; continue;
         }
         if (p->x < 0 || p->x > WW - 1) { p->on = false; continue; }
-        if (p->y >= surf((int)p->x)) { p->y = surf((int)p->x); resolve_impact(p); continue; }
+        if (p->y >= surf((int)p->x)) {
+            if (p->beh == WB_BOUNCE && p->bnc > 0 && p->vy > 0) {  // grenade: hop off the ground, shedding energy
+                p->bnc--; p->y = surf((int)p->x) - 2;
+                p->vy = -fabsf(p->vy) * 0.55f; p->vx *= 0.72f;
+                spark_cone(p->x, p->y, 4, WEAPS[p->wp].col, -1.57f, 1.0f, 0.4f, 1.2f); sfx(7);
+                continue;
+            }
+            p->y = surf((int)p->x); resolve_impact(p); continue;
+        }
         for (int t = 0; t < 2; t++) {
             if (s_tk[t].dead) continue;
             // hitbox matched to the drawn tank: full hull width + turret reach upward, a touch of ground below.
@@ -901,7 +949,18 @@ static void fire_weapon(int who) {
     if (s_tk[who].ammo[wp] > 0) s_tk[who].ammo[wp]--;
     float bx, by, dx, dy; barrel_tip(who, &bx, &by, &dx, &dy);
     float v = v0_of(s_tk[who].power);
-    sfx(fire_sfx[wp]); shake(2.0f); spark_burst(bx, by, 5, w->col);
+    sfx(fire_sfx[wp]);
+    // --- muzzle blast: a bright directional flash cone + a lingering smoke puff at the barrel tip, scaled
+    //     to the shot's power so a heavy charge kicks visibly harder than a light tap. Reads as a real shot.
+    {
+        float ang = atan2f(dy, dx);
+        int kick = 3 + s_tk[who].power / 12;                     // heavier charge -> bigger flash + shake
+        spark_cone(bx, by, kick, PROJ_GLOW, ang, 0.30f, 1.2f, 2.4f + s_tk[who].power / 40.0f);
+        spark_cone(bx, by, 3, mix(w->col, COL_WHITE, 90), ang, 0.55f, 0.4f, 1.0f);   // hot core spit
+        spark_cone(bx - dx * 3, by - dy * 3, 3, rgb(150, 150, 160), ang + 3.14f, 0.7f, 0.2f, 0.7f);  // back-blast smoke
+        ring_spawn(bx, by, 8.0f, mix(w->col, COL_WHITE, 60));
+        flash(mix(w->col, COL_WHITE, 40), 40, 70); shake(1.6f + kick * 0.25f);
+    }
     // --- fire-time special weapons (no arcing projectile) ---
     if (w->beh == WB_SHIELD) {                                   // Bubble shield OR Med-Kit
         if (wp == MED_WP) { int b = s_tk[who].hp; s_tk[who].hp = clampi(s_tk[who].hp + 35, 0, 100);
@@ -928,6 +987,14 @@ static void fire_weapon(int who) {
         if (hx >= 0) { s_beam_x0 = (int)bx; s_beam_y0 = (int)by; s_beam_x1 = hx; s_beam_y1 = hy; s_beam_t = 240; explode_w(hx, hy, wp); }
         s_phase = TP_FIRE; return;
     }
+    if (w->beh == WB_UFO) {                                      // Alien saucer: fly out of the barrel, then blast from above
+        int foe = 1 - who;
+        int lx = sim_land(who, s_tk[who].elev, s_tk[who].power);  // would this angle+power land on the foe?
+        bool hit = (lx >= 0 && !s_tk[foe].dead && fabsf(lx - s_tk[foe].x) <= TANK_W / 2 + 8);
+        s_ufo = { true, UF_FLYIN, 0, bx, by, dx * v, dy * v,
+                  s_tk[foe].x, (float)(surf((int)s_tk[foe].x) - TANK_H / 2 - 42), who, foe, wp, hit };
+        s_phase = TP_FIRE; return;
+    }
     if (w->beh == WB_BLAST && w->count > 1) {                    // Tripler: 3-shot muzzle fan
         for (int s = 0; s < w->count; s++) {
             float a = atan2f(dy, dx) + (s - (w->count - 1) / 2.0f) * 0.09f;
@@ -942,6 +1009,55 @@ static void fire_weapon(int who) {
         for (int k = 0; k < w->count; k++) spawn_proj(lx + frnd(-40, 40), GTOP - 6, frnd(-0.02f, 0.02f), frnd(0.12f, 0.18f), wp, who, true);
     } else spawn_proj(bx, by, dx * v, dy * v, wp, who, false);
     s_phase = TP_FIRE;
+}
+
+// Drive the alien saucer through its attack sequence: launch out of the barrel, reposition over the foe
+// (only if the shot would have hit), charge, then rain a death-ray straight down. A miss just crash-fizzles.
+static bool ufo_active(void) { return s_ufo.on; }
+static void ufo_step(int dt) {
+    if (!s_ufo.on) return;
+    Ufo *u = &s_ufo;
+    u->t += dt;
+    float g = 0.00040f, wind = s_wind / 100.0f * WIND_ACCEL;
+    switch (u->phase) {
+        case UF_FLYIN:                                           // ballistic launch, exactly where you aimed
+            u->vy += g * dt; u->vx += wind * dt; u->x += u->vx * dt; u->y += u->vy * dt;
+            if ((s_anim & 1) == 0) spark_cone(u->x, u->y + 3, 1, rgb(150, 255, 200), 1.57f, 0.5f, 0.4f, 1.1f);
+            if (u->t >= 380) { u->phase = u->hit ? UF_MOVE : UF_MISS; u->t = 0; }
+            break;
+        case UF_MOVE: {                                          // glide over to hover above the target
+            float k = clampf(dt / 240.0f, 0, 1);
+            u->x += (u->hx - u->x) * k; u->y += (u->hy - u->y) * k;
+            if ((s_anim & 3) == 0) spark_burst(u->x + frnd(-6, 6), u->y + 8, 1, rgb(150, 255, 200));
+            if (fabsf(u->x - u->hx) < 2 && fabsf(u->y - u->hy) < 2) { u->x = u->hx; u->y = u->hy; u->phase = UF_HOVER; u->t = 0; }
+            break; }
+        case UF_HOVER:                                           // hover + charge the beam
+            u->y = u->hy + sinf(s_anim * 0.3f) * 2.0f;
+            if ((s_anim & 1) == 0) spark_cone(u->x, u->y + 6, 1, rgb(120, 255, 180), -1.57f, 0.4f, 0.3f, 0.9f);
+            if (u->t >= 520) {                                   // FIRE — death-ray from directly overhead
+                explode_w(s_tk[u->foe].x, s_tk[u->foe].y, u->wp);
+                flash(rgb(160, 255, 200), 120, 150); shake(6.0f); sfx(44);
+                u->phase = UF_LASER; u->t = 0;
+            }
+            break;
+        case UF_LASER:
+            u->y = u->hy + sinf(s_anim * 0.3f) * 2.0f;
+            if (u->t >= 420) { u->phase = UF_LEAVE; u->t = 0; }
+            break;
+        case UF_LEAVE:                                           // zip up and off
+            u->y -= 0.22f * dt; u->x += 0.02f * dt * (u->owner == 0 ? 1 : -1);
+            if (u->t >= 380 || u->y < GTOP - 30) u->on = false;
+            break;
+        case UF_MISS:                                            // no lock: keep arcing until it crash-fizzles
+            u->vy += g * dt; u->vx += wind * dt; u->x += u->vx * dt; u->y += u->vy * dt;
+            if (u->x < 2 || u->x > WW - 2 || u->y >= surf((int)clampf(u->x, 0, WW - 1))) {
+                float gx = clampf(u->x, 2, WW - 2), gy = surf((int)gx);
+                spark_burst(gx, gy, 10, rgb(150, 255, 200)); ring_spawn(gx, gy, 20, rgb(150, 255, 200));
+                flash(rgb(150, 255, 200), 60); shake(2.0f); sfx(37);
+                s_dwell_x = gx; s_dwell_y = gy; s_dwell_t = 300; u->on = false;
+            }
+            break;
+    }
 }
 
 // ============================ AI =============================================
@@ -1404,18 +1520,92 @@ static void draw_nuke(int camx, int ox, int oy) {
 static void draw_projectiles(int camx, int ox, int oy) {
     for (int i = 0; i < NPROJ; i++) {
         if (!s_pr[i].on) continue;
-        int px = (int)s_pr[i].x - camx + ox, py = (int)s_pr[i].y + oy;
-        if (px < -6 || px > W + 6) continue;
-        uint16_t wc = WEAPS[s_pr[i].wp].col;
-        for (int t = 5; t >= 1; t--) {                               // comet trail
-            int tx2 = px - (int)(s_pr[i].vx * t * 4.0f), ty2 = py - (int)(s_pr[i].vy * t * 4.0f);
-            d.fillCircle(tx2, ty2, t > 3 ? 1 : 2, mix(COL_INK, wc, 60 + (6 - t) * 30));
+        Proj *p = &s_pr[i];
+        int px = (int)p->x - camx + ox, py = (int)p->y + oy;
+        if (px < -8 || px > W + 8) continue;
+        uint16_t wc = WEAPS[p->wp].col, obg = bg_at((int)p->x, (int)p->y), olc = outline_for(obg);
+        int beh = p->beh;
+        float ang = atan2f(p->vy, p->vx);
+        int nx = (int)(cosf(ang) * 4), ny = (int)(sinf(ang) * 4);   // unit-ish heading, 4px
+
+        // --- signature TRAIL: napalm smokes fire, rockets leave exhaust, others a tinted comet streak ---
+        int tn = (beh == WB_HOMING || beh == WB_NAPALM || WEAPS[p->wp].crater >= 20) ? 6 : 5;
+        for (int t = tn; t >= 1; t--) {
+            float f = (float)t / tn;
+            int tx2 = px - (int)(p->vx * t * 3.4f), ty2 = py - (int)(p->vy * t * 3.4f);
+            uint16_t tc = (beh == WB_NAPALM) ? mix(rgb(255, 90, 20), COL_INK, (int)(f * 210))
+                        : (beh == WB_HOMING) ? mix(rgb(255, 210, 110), COL_INK, (int)(f * 210))
+                        :                      mix(COL_INK, wc, 55 + (int)((1 - f) * 150));
+            d.fillCircle(tx2, ty2, t > 3 ? 1 : 2, tc);
         }
-        d.fillCircle(px, py, 3, outline_for(bg_at((int)s_pr[i].x, (int)s_pr[i].y)));  // adaptive ring = always visible
+
+        if (beh == WB_ROLLER && p->rolling) {                        // spinning ground ball with a rotating pip
+            d.fillCircle(px, py - 2, 3, olc); d.fillCircle(px, py - 2, 2, wc);
+            float r = s_anim * 0.6f;
+            d.drawPixel(px + (int)(cosf(r) * 1.4f), py - 2 + (int)(sinf(r) * 1.4f), mix(wc, COL_INK, 150));
+            continue;
+        }
+        if (beh == WB_BOUNCE) {                                      // tumbling grenade: body + a spinning seam + pin
+            float r = s_anim * 0.5f; int ex = (int)(cosf(r) * 3), ey = (int)(sinf(r) * 3);
+            d.fillCircle(px, py, 3, olc); d.fillCircle(px, py, 2, mix(wc, COL_INK, 30));
+            d.drawLine(px - ex, py - ey, px + ex, py + ey, mix(wc, COL_WHITE, 120));
+            d.drawPixel(px + ey / 3, py - ex / 3, COL_WHITE);
+            continue;
+        }
+        if (beh == WB_HOMING) {                                      // guided rocket: flame tail + nosed body
+            int fl = 2 + ((s_anim) & 1);
+            d.fillCircle(px - nx, py - ny, fl, rgb(255, 170, 50));
+            d.fillCircle(px - nx, py - ny, 1, COL_WHITE);
+            d.fillCircle(px, py, 3, olc); d.fillCircle(px, py, 2, wc);
+            d.fillCircle(px + nx / 2, py + ny / 2, 1, COL_WHITE);
+            continue;
+        }
+        if (beh == WB_NAPALM) {                                      // fireball with a flickering hot core
+            d.fillCircle(px, py, 3, olc); d.fillCircle(px, py, 2, rgb(255, 110, 30));
+            d.fillCircle(px, py, 1, ((s_anim) & 1) ? COL_WHITE : rgb(255, 220, 120));
+            continue;
+        }
+        // default shell: adaptive outline ring + glow + hot core; heavy shells tumble a 3D cube
+        d.fillCircle(px, py, 3, olc);
         d.fillCircle(px, py, 2, PROJ_GLOW);
         d.fillCircle(px, py, 1, PROJ_CORE);
-        if (WEAPS[s_pr[i].wp].crater >= 20) fx3d::draw_model(CUBE, px, py, 2.2f, s_anim * 0.4f, s_anim * 0.25f, wc);
+        if (WEAPS[p->wp].crater >= 20) fx3d::draw_model(CUBE, px, py, 2.2f, s_anim * 0.4f, s_anim * 0.25f, wc);
     }
+}
+// The alien saucer: hull disc + glowing dome + blinking rim lights, a charging orb underneath, and the
+// vertical death-ray during the LASER phase. All primitives, no assets, RAM 0.
+static void ufo_draw(int camx, int ox, int oy) {
+    if (!s_ufo.on) return;
+    Ufo *u = &s_ufo;
+    int px = (int)u->x - camx + ox, py = (int)u->y + oy;
+    if (px < -30 || px > W + 30) return;
+    uint16_t glow = rgb(120, 255, 180), hull = rgb(92, 106, 132), hull2 = rgb(158, 178, 208);
+
+    // Death-ray: thick wobbling green column from the saucer belly straight down onto the foe.
+    if (u->phase == UF_LASER) {
+        int fx = (int)s_tk[u->foe].x - camx + ox, fy = (int)s_tk[u->foe].y + oy;
+        int top = py + 4, hgt = fy - top; if (hgt < 0) hgt = 0;
+        int bw = 5 + (int)(sinf(s_anim * 0.9f) * 1.5f);
+        for (int b = bw; b >= 1; b--) {
+            uint16_t c = (b > 2) ? mix(COL_INK, rgb(80, 255, 150), 90) : mix(glow, COL_WHITE, 120);
+            d.fillRect(px - b, top, 2 * b, hgt, c);
+        }
+        d.fillCircle(fx, fy, 6 + ((s_anim >> 1) & 3), mix(COL_INK, rgb(160, 255, 200), 120));   // impact bloom
+    }
+    // Charging orb while hovering.
+    if (u->phase == UF_HOVER) d.fillCircle(px, py + 4, 1 + u->t / 120, mix(COL_INK, glow, 120));
+
+    d.fillEllipse(px, py, 13, 5, hull);                          // saucer disc
+    d.fillEllipse(px, py - 1, 13, 4, hull2);                     // top highlight band
+    d.drawEllipse(px, py, 13, 5, mix(hull, COL_INK, 120));
+    d.fillCircle(px, py - 4, 5, mix(glow, hull2, 90));           // dome
+    d.fillCircle(px, py - 5, 3, mix(glow, COL_WHITE, 110));      // dome shine
+    for (int k = -2; k <= 2; k++) {                              // blinking rim running-lights
+        uint16_t lc = ((s_anim + k) & 3) ? mix(COL_INK, glow, 90) : rgb(255, 220, 120);
+        d.fillCircle(px + k * 5, py + 3, 1, lc);
+    }
+    if (u->phase >= UF_HOVER && u->phase <= UF_LASER)            // pulsing belly emitter
+        d.fillCircle(px, py + 4, 2, mix(glow, COL_WHITE, (s_anim & 1) ? 120 : 60));
 }
 // HUD chrome visibility: solid right after you touch the keys, then fades to hand the panel back
 // to the battlefield (smartwatch "glance, then clear"). Hidden during the action phases; while
@@ -1529,20 +1719,49 @@ static void draw_wcard(void) {     // weapon picker card: pops on weapon change 
     txt(px + 25, py + 6, 2, COL_WHITE, nm);                                       // BIG name (size 2)
     char ab[18]; if (s_tk[me].ammo[wsel] >= 0) snprintf(ab, sizeof ab, "%s x%d", tx("mun", "ammo"), s_tk[me].ammo[wsel]); else snprintf(ab, sizeof ab, "%s", tx("illimitate", "unlimited"));
     txt(px + 25, py + 22, 1, s_tk[me].ammo[wsel] == 0 ? COL_RED : HUD_TEXT2, ab);
-    char pos[10]; snprintf(pos, sizeof pos, "%d/%d", wsel + 1, NWEAP); txt_r(px + pw - 7, py + 22, 1, COL_DIM, pos);
+    int slots = s_nslot[me]; char pos[10]; snprintf(pos, sizeof pos, "%d/%d", wsel + 1, NWEAP); txt_r(px + pw - 7, py + 22, 1, COL_DIM, pos);
     uint16_t hc = ((s_anim >> 2) & 1) ? COL_WHITE : COL_DIM;                      // Q/W cycle hints
     txt(px - 9, py + 12, 1, hc, "Q"); txt(px + pw + 3, py + 12, 1, hc, "W");
-    // 1..0 quick-slot ribbon: ten pips coloured by their weapon, current highlighted -> teaches the
-    // number shortcuts and shows at a glance which slots are loaded (empties greyed).
+    // 1..0 quick-slot ribbon: the ten LOADOUT slots (fixed order), coloured by weapon, current highlighted,
+    // depleted slots greyed -> teaches the number shortcuts and shows the arsenal at a glance.
     int rx = W / 2 - 100, ry = py + 36;
-    for (int i = 0; i < 10 && i < NWEAP; i++) {
-        int cx = rx + i * 20 + 10; bool cur = (i == wsel), empty = (s_tk[me].ammo[i] == 0);
-        uint16_t pc = empty ? rgb(50, 54, 68) : WEAPS[i].col;
+    for (int i = 0; i < slots; i++) {
+        int wp = s_slot[me][i], cx = rx + i * 20 + 10; bool cur = (wp == wsel), empty = (s_tk[me].ammo[wp] == 0);
+        uint16_t pc = empty ? rgb(50, 54, 68) : WEAPS[wp].col;
         d.fillRoundRect(cx - 9, ry, 18, 15, 3, cur ? pc : mix(COL_INK, pc, 95));
         if (cur) d.drawRoundRect(cx - 10, ry - 1, 20, 17, 4, COL_WHITE);
         char dg[2] = { (char)(i < 9 ? '1' + i : '0'), 0 };
         txt_c(cx, ry + 4, 1, cur ? COL_INK : (empty ? COL_DIM : COL_WHITE), dg);
     }
+}
+// Multiplayer turn clock (net only, our turn): a calm chip while there's time, then a BIG throbbing 5..1
+// countdown that swells and pulses as the clock runs out, ending on a "VIA" beat as the shot auto-launches.
+static void draw_turn_timer(void) {
+    if (s_mode == MODE_AI || !local_active() || s_phase != TP_AIM) return;
+    int rem = (int)(s_aim_deadline - now_ms());
+    if (rem <= -400) return;                                     // shot already gone
+    int secs = rem > 0 ? (rem + 999) / 1000 : 0;
+    if (secs > 5) {                                             // calm chip, top-centre
+        char b[8]; snprintf(b, sizeof b, "0:%02d", secs);
+        uint16_t col = secs <= 10 ? COL_GOLD : COL_CYAN;
+        int bw = 34, bx = W / 2 - bw / 2, by = 24;
+        d.fillRoundRect(bx, by, bw, 14, 4, mix(COL_INK, col, 40));
+        d.drawRoundRect(bx, by, bw, 14, 4, mix(col, COL_INK, 80));
+        txt_c(W / 2, by + 3, 1, col, b);
+        return;
+    }
+    // final 5 seconds + the VIA beat: size grows as seconds fall, with a per-second heartbeat kick
+    char nb[6]; const char *lbl;
+    if (secs >= 1) { snprintf(nb, sizeof nb, "%d", secs); lbl = nb; } else lbl = "VIA";
+    int frac = rem > 0 ? (rem % 1000) : (400 + rem);            // ms remaining inside the current beat
+    int beat = (frac > 780) ? 1 : 0;                           // swell at the top of each second
+    int base = secs >= 1 ? (4 + (5 - secs)) : 7;               // 5s->4 ... 1s->8 ; VIA->7
+    int sz = clampi(base + beat, 3, 9);
+    uint16_t col = (secs == 0) ? COL_GOLD : (beat ? COL_WHITE : COL_RED);
+    int cyv = 50, cx = W / 2, cyc = cyv + sz * 4;
+    d.drawCircle(cx, cyc, beat ? 24 : 13, mix(COL_INK, col, 120));   // throbbing ring
+    txt_c(cx + 2, cyv + 2, sz, COL_INK, lbl);                       // drop shadow
+    txt_c(cx, cyv, sz, col, lbl);
 }
 // Screen-wide explosion flash. It was set by flash() but NEVER drawn, so blasts had no punch. Peak intensity
 // = solid white-out (the nuke "schermo bianco"); as it decays it dissolves into a Bayer-dithered veil so the
@@ -1581,6 +1800,7 @@ static void draw_play(void) {
         d.drawLine(s_beam_x0 - camx + ox, s_beam_y0 + oy, s_beam_x1 - camx + ox, s_beam_y1 + oy, mix(COL_INK, rgb(255, 120, 200), a));
         d.drawLine(s_beam_x0 - camx + ox, s_beam_y0 + oy - 1, s_beam_x1 - camx + ox, s_beam_y1 + oy - 1, mix(COL_INK, COL_WHITE, a / 2));
     }
+    ufo_draw(camx, ox, oy);
     for (int i = 0; i < NSHAT; i++) {
         if (!s_sh[i].on) continue;
         int px = (int)s_sh[i].x - camx + ox, py = (int)s_sh[i].y + oy;
@@ -1605,6 +1825,7 @@ static void draw_play(void) {
     }
     draw_hud();
     draw_wcard();
+    draw_turn_timer();
     // turn-change diagonal wipe in the new player's colour
     if (s_phase == TP_TURN) {
         float t = clampf((1050 - s_turn_t) / 350.0f, 0, 1);
@@ -1669,6 +1890,60 @@ static void draw_menu(int ch) {
             txt_c(W / 2, y + 1, 2, mix(COL_MUT, rgb(14, 18, 34), fade), menu_label(i));
         }
     }
+}
+// One weapon row in the picker carousel. big => the focused centre row (size-2 name, full chrome);
+// otherwise a compact neighbour. Selected weapons are unmistakable at any size: green plate + tick.
+static void ld_row(int i, int y, bool cur, bool big) {
+    const Weap *w = &WEAPS[i]; bool on = s_ldpick[i];
+    int rh = big ? 22 : 16, pad = big ? 3 : 2;
+    // row plate: green when chosen, neutral otherwise; the cursor row gets a bright animated border
+    uint16_t fillc = on ? mix(COL_GREEN, COL_INK, big ? 150 : 185) : (big ? rgb(28, 36, 60) : rgb(18, 24, 40));
+    d.fillRoundRect(8, y, W - 16, rh, 5, fillc);
+    if (cur) d.drawRoundRect(8, y, W - 16, rh, 5, ((s_anim >> 3) & 1) ? COL_WHITE : rgb(120, 150, 220));
+    else if (on) d.drawRoundRect(8, y, W - 16, rh, 5, mix(COL_GREEN, COL_INK, 90));
+    int cbx = 13, cby = y + rh / 2 - 5, cs = 10;                     // check box / tick
+    d.fillRoundRect(cbx, cby, cs, cs, 2, on ? COL_GREEN : COL_INK);
+    d.drawRoundRect(cbx, cby, cs, cs, 2, on ? COL_GREEN : rgb(60, 70, 96));
+    if (on) { d.drawLine(cbx + 2, cby + 5, cbx + 4, cby + 7, COL_INK); d.drawLine(cbx + 4, cby + 7, cbx + 8, cby + 2, COL_INK); }
+    d.fillRoundRect(28, y + pad, 5, rh - 2 * pad, 1, w->col);        // colour swatch
+    char nm[16]; snprintf(nm, sizeof nm, "%s", tx(w->it, w->en));
+    int tsz = big ? 2 : 1; if (big && (int)strlen(nm) > 11) nm[11] = 0; else if ((int)strlen(nm) > 13) nm[13] = 0;
+    uint16_t nmc = on ? COL_WHITE : (cur ? COL_WHITE : COL_MUT);
+    txt(38, y + rh / 2 - (big ? 8 : 4), tsz, nmc, nm);
+    char mt[18];
+    if (w->beh == WB_SHIELD) snprintf(mt, sizeof mt, "%s", tx("difesa", "defense"));
+    else snprintf(mt, sizeof mt, "d%d x%d", w->dmg, w->ammo);
+    txt_r(W - 14, y + rh / 2 - 3, 1, big ? mix(w->col, COL_WHITE, 60) : mix(w->col, COL_INK, 40), mt);
+}
+// Pocket-Tanks loadout picker: an INFINITE wrapping carousel (big centre row), a live strip of the ten
+// picks so you always see your set, and a bold counter. Tick exactly 10 to arm the START.
+static void draw_loadout(int ch) {
+    felt(ch);
+    int n = ld_count();
+    txt_c(W / 2 + 1, 4, 2, mix(COL_GOLD, COL_INK, 130), tx("ARSENALE", "ARSENAL"));
+    txt_c(W / 2, 3, 2, COL_GOLD, tx("ARSENALE", "ARSENAL"));
+    char cc[10]; snprintf(cc, sizeof cc, "%d/%d", n, LOADOUT_N);
+    uint16_t ccol = (n == LOADOUT_N) ? COL_GREEN : COL_GOLD;
+    int cw = (int)strlen(cc) * 12 + 8;
+    d.fillRoundRect(W - cw - 6, 2, cw + 2, 19, 4, mix(COL_INK, ccol, 55)); d.drawRoundRect(W - cw - 6, 2, cw + 2, 19, 4, ((n == LOADOUT_N && (s_anim >> 3) & 1)) ? COL_WHITE : ccol);
+    txt(W - cw - 2, 4, 2, ccol, cc);
+
+    // infinite carousel: big centre row + one neighbour each side, wraps with modulo (endless scroll)
+    ld_row((s_ldsel - 1 + NWEAP) % NWEAP, 25, false, false);
+    ld_row(s_ldsel,                        45, true,  true);
+    ld_row((s_ldsel + 1) % NWEAP,          75, false, false);
+    char nv[10]; snprintf(nv, sizeof nv, "%d/%d", s_ldsel + 1, NWEAP); txt(10, 7, 1, COL_DIM, nv);
+
+    // live loadout strip: ten slots, filled in pick order with the weapon colour, empties outlined
+    int sy = 95, sw = 20, sx = (W - LOADOUT_N * sw) / 2, filled = 0;
+    for (int w = 0; w < NWEAP && filled < LOADOUT_N; w++) if (s_ldpick[w]) {
+        int x = sx + filled * sw; d.fillRoundRect(x + 1, sy, sw - 3, 12, 3, mix(WEAPS[w].col, COL_INK, 40));
+        d.drawRoundRect(x + 1, sy, sw - 3, 12, 3, WEAPS[w].col); filled++;
+    }
+    for (int e = filled; e < LOADOUT_N; e++) { int x = sx + e * sw; d.drawRoundRect(x + 1, sy, sw - 3, 12, 3, rgb(40, 48, 72)); }
+
+    if (n == LOADOUT_N) txt_c(W / 2, ch - 9, 1, ((s_anim >> 2) & 1) ? COL_GREEN : COL_WHITE, tx("INVIO = AVVIA   SPAZIO togli", "ENTER = START   SPACE remove"));
+    else                txt_c(W / 2, ch - 9, 1, COL_DIM, tx("SU/GIU scorri   SPAZIO scegli", "UP/DN scroll   SPACE pick"));
 }
 static const char *opt_label(int i) {
     switch (i) {
@@ -1800,7 +2075,7 @@ static void draw_help(int ch) {
     txt(12, 54, 1, COL_CYAN, tx("E S A D  muovi la camera", "E S A D  pan the camera"));
     txt(12, 68, 1, HUD_TEXT, tx("1-9 0 / Q W arma - INVIO spara", "1-9 0 / Q W weapon - ENTER fire"));
     txt(12, 82, 1, COL_GOLD, tx("TAB impostazioni - occhio al VENTO", "TAB settings - mind the WIND"));
-    txt(12, 96, 1, HUD_TEXT, tx("19 armi: scudi, raggio, napalm...", "19 weapons: shields, beam, napalm..."));
+    txt(12, 96, 1, HUD_TEXT, tx("29 armi: scegli le tue 10", "29 weapons: pick your 10"));
     txt_c(W / 2, ch - 12, 1, COL_DIM, tx("Esc indietro", "Esc back"));
 }
 static void draw_host(int ch) {
@@ -1880,6 +2155,7 @@ static void set_hint(void) {
         case ST_HOST:   nucleo_app_set_hint(tx("INVIO avvia (con sfidante)  Esc", "ENTER start (with challenger)  Esc")); break;
         case ST_BROWSE: nucleo_app_set_hint(tx("SU/GIU  INVIO entra  Esc", "UP/DN  ENTER join  Esc")); break;
         case ST_SCORES: case ST_HELP: nucleo_app_set_hint(tx("Esc indietro", "Esc back")); break;
+        case ST_LOADOUT: nucleo_app_set_hint(tx("SU/GIU  SPAZIO  INVIO avvia  Esc", "UP/DN  SPACE  ENTER start  Esc")); break;
         default: break;
     }
 }
@@ -1942,13 +2218,27 @@ static void on_key(int k, char ch) {
             if (k == NK_UP)        { s_msel = (s_msel + NMENU - 1) % NMENU; sfx(1); nucleo_app_request_draw(); }
             else if (k == NK_DOWN) { s_msel = (s_msel + 1) % NMENU; sfx(1); nucleo_app_request_draw(); }
             else if (k == NK_ENTER) {
-                if (s_msel == 0)      { sfx(2); s_wins[0] = s_wins[1] = 0; new_match(); go(ST_PLAY); }   // a fresh series from the menu
+                if (s_msel == 0)      { sfx(2); ld_ensure_valid(); s_ldsel = 0; go(ST_LOADOUT); }   // pick your 10 weapons first (Pocket Tanks style)
                 else if (s_msel == 1) { sfx(2); s_mode = MODE_HOST; s_seat = 0; s_haspeer = false; s_guest_in = false; s_nroom = 0; s_last_hello = 0; go(ST_HOST); }
                 else if (s_msel == 2) { sfx(2); s_mode = MODE_GUEST; s_seat = 1; s_haspeer = false; s_join_pending = false; s_nroom = s_rsel = 0; go(ST_BROWSE); }
                 else if (s_msel == 3) { s_optsel = 0; s_optguide = 0; s_opt_from = ST_MENU; sfx(2); go(ST_OPT); }
                 else if (s_msel == 4) { sfx(2); go(ST_SCORES); }
                 else if (s_msel == 5) { sfx(2); go(ST_HELP); }
                 else nucleo_app_exit();
+            }
+            return;
+        case ST_LOADOUT:
+            if (k == NK_UP)        { s_ldsel = (s_ldsel + NWEAP - 1) % NWEAP; sfx(1); nucleo_app_request_draw(); }
+            else if (k == NK_DOWN || k == NK_RIGHT) { s_ldsel = (s_ldsel + 1) % NWEAP; sfx(1); nucleo_app_request_draw(); }
+            else if (ch == ' ') {                                      // toggle this weapon (block going over 10)
+                if (s_ldpick[s_ldsel]) { s_ldpick[s_ldsel] = false; sfx(3); }
+                else if (ld_count() < LOADOUT_N) { s_ldpick[s_ldsel] = true; sfx(2); }
+                else sfx(3);
+                nucleo_app_request_draw();
+            }
+            else if (k == NK_ENTER) {                                  // start only with a full loadout
+                if (ld_count() == LOADOUT_N) { cfg_write(); sfx(2); s_wins[0] = s_wins[1] = 0; new_match(); go(ST_PLAY); }
+                else sfx(3);
             }
             return;
         case ST_HOST:
@@ -1985,13 +2275,9 @@ static void on_key(int k, char ch) {
             else if (k == NK_RIGHT)aim_input(1, +1);
             else if (ch == 'w' || ch == 'W') cycle_weapon(+1);
             else if (ch == 'q' || ch == 'Q') cycle_weapon(-1);
-            else if (ch >= '1' && ch <= '9') {
-                int wn = ch - '1';
-                if (wn < NWEAP && s_tk[me].ammo[wn] != 0) { s_tk[me].weap = wn; s_wbar_t = now_ms() + 1700; sfx(1); }
-                else sfx(3);
-            }
-            else if (ch == '0') {
-                if (NWEAP > 9 && s_tk[me].ammo[9] != 0) { s_tk[me].weap = 9; s_wbar_t = now_ms() + 1700; sfx(1); }
+            else if ((ch >= '1' && ch <= '9') || ch == '0') {          // 1..9,0 -> the ten quick-bar slots
+                int slot = (ch == '0') ? 9 : (ch - '1');
+                if (slot < s_nslot[me] && s_tk[me].ammo[s_slot[me][slot]] != 0) { s_tk[me].weap = s_slot[me][slot]; s_wbar_t = now_ms() + 1700; sfx(1); }
                 else sfx(3);
             }
             else if (k == NK_ENTER || ch == ' ') { if (s_mode != MODE_AI) net_send_fire(); fire_weapon(me); }
@@ -2013,11 +2299,13 @@ static bool on_back(int key) {
     if (key == NK_LEFT) {
         if (s_screen == ST_PLAY && local_active() && s_phase == TP_AIM && !g_manual) aim_input(1, -1);
         else if (s_screen == ST_OPT && !s_optguide) opt_change(s_optsel, -1);
+        else if (s_screen == ST_LOADOUT) { s_ldsel = (s_ldsel + NWEAP - 1) % NWEAP; sfx(1); nucleo_app_request_draw(); }
         return true;
     }
     sfx(3);
     switch (s_screen) {
         case ST_MENU: return false;
+        case ST_LOADOUT: s_msel = 0; go(ST_MENU); return true;
         case ST_OPT: if (s_optguide) { s_optguide = 0; nucleo_app_request_draw(); return true; } go(s_opt_from); return true;
         case ST_HOST: case ST_BROWSE: net_send_bye(); s_haspeer = false; s_mode = MODE_AI; s_msel = 0; go(ST_MENU); return true;
         case ST_PLAY:
@@ -2040,6 +2328,7 @@ static void on_draw(void) {
         case ST_BROWSE: draw_browse(ch); break;
         case ST_SCORES: draw_scores(ch); break;
         case ST_HELP:   draw_help(ch); break;
+        case ST_LOADOUT: draw_loadout(ch); break;
         default: break;
     }
 }
@@ -2101,10 +2390,18 @@ static bool poll(void) {
     }
     // net: stream our aim so the opponent watches the barrel/trajectory
     if (s_mode != MODE_AI && sim_here && s_now - s_last_aim > (s_phase == TP_AIM ? 80 : 200)) { net_send_aim(); s_last_aim = s_now; }   // keepalive in ALL phases (not just aiming) so the passive peer never starves the 8s watchdog during our shot/settle
+    // net turn clock: 45s to choose+fire. Tick each of the last 5 seconds, then auto-launch ("VIA") at expiry.
+    if (s_mode != MODE_AI && local_active() && s_phase == TP_AIM) {
+        int rem = (int)(s_aim_deadline - s_now);
+        int secs = rem > 0 ? (rem + 999) / 1000 : 0;
+        if (secs != s_last_tick) { s_last_tick = secs; if (secs >= 1 && secs <= 5) sfx(1); else if (secs == 0) sfx(4); }
+        if (rem <= -400) { flash(COL_GOLD, 140, 120); shake(2.0f); net_send_fire(); fire_weapon(s_active); }   // time up -> the shot goes
+    }
     // camera target: FIRE frames shooter+shell; SETTLE dwell holds the crater; else the active tank
     if (s_phase == TP_FIRE) {
         float fx, fy;
-        if (proj_focus(&fx, &fy)) {
+        bool have = ufo_active() ? (fx = s_ufo.x, fy = s_ufo.y, true) : proj_focus(&fx, &fy);
+        if (have) {
             float w = clampf(fabsf(fx - s_tk[s_active].x) / (WW * 0.5f), 0.35f, 0.85f);
             float foc = s_tk[s_active].x + (fx - s_tk[s_active].x) * w;
             s_camtgt = clampf(foc - W / 2, 0, WW - W);
@@ -2120,7 +2417,8 @@ static bool poll(void) {
     s_cam += (s_camtgt - s_cam) * clampf(ease, 0, 1);
 
     if (s_phase == TP_TURN) {
-        s_turn_t -= dt; if (s_turn_t <= 0) s_phase = TP_AIM;
+        s_turn_t -= dt;
+        if (s_turn_t <= 0) { s_phase = TP_AIM; s_aim_deadline = s_now + TURN_SECS * 1000; s_last_tick = TURN_SECS + 1; }   // arm the net turn clock
     } else if (s_phase == TP_AIM && ai_turn) {
         if (!s_ai_planned && s_aiwait <= 0) { ai_plan(); s_ai_planned = true; s_aiwait = 700; }
         s_aiwait -= dt;
@@ -2130,12 +2428,13 @@ static bool poll(void) {
         }
         if (s_ai_planned && s_aiwait <= 0) fire_weapon(1);
     } else if (s_phase == TP_FIRE && (sim_here || s_spectate)) {
-        step_proj(dt); if (!any_proj()) s_phase = TP_SETTLE;   // spectator(passive): sim the arc for the camera, then hold for the authoritative RESULT
+        step_proj(dt); if (ufo_active()) ufo_step(dt);
+        if (!any_proj() && !ufo_active()) s_phase = TP_SETTLE;   // spectator(passive): sim the arc for the camera, then hold for the authoritative RESULT
     } else if (s_phase == TP_SETTLE && sim_here) {
         if (s_dwell_t > 0) { s_dwell_t -= dt; settle_fall_only(dt); }
         else settle(dt);
     } else if (s_phase == TP_OVER) {
-        if (!any_proj() && s_shake <= 0 && s_nuke_t <= 0) {
+        if (!any_proj() && !ufo_active() && s_shake <= 0 && s_nuke_t <= 0) {
             for (int i = 0; i < 4; i++) spark_burst(frnd(40, W - 40), frnd(20, H / 2), 12, COL_GOLD);   // confetti pop
             flash(s_tk[0].dead ? COL_P1 : COL_P0, 130); go(ST_OVER); return true;
         }
@@ -2148,6 +2447,7 @@ static bool poll(void) {
 static void on_enter(void) {
     ensure_dirs();
     cfg_read();
+    ld_ensure_valid();                         // start from a legal 10-weapon loadout (saved or default)
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(80);
     presynth();
     s_screen = ST_MENU; s_msel = 0; s_anim = 0; s_wins[0] = s_wins[1] = 0;
@@ -2166,7 +2466,7 @@ static void on_exit(void) { net_send_bye(); pnet_stop(); nucleo_audio_stop(); cf
 
 extern "C" void nucleo_register_tanks(void) {
     static const nucleo_app_def_t app = {
-        "tanks", "Nucleo Tanks", "Games", "Artiglieria a turni: terreno distruttibile, 19 armi, scudi, biomi, vs CPU",
+        "tanks", "Tanks", "Games", "Artiglieria a turni: terreno distruttibile, 19 armi, scudi, biomi, vs CPU",
         'T', C_GREEN, on_enter, on_key, nullptr, on_draw, on_exit,
         NX_NET_APP
     };

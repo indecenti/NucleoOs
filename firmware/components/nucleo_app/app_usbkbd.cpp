@@ -11,7 +11,9 @@
 //
 // Installing TinyUSB takes the USB-OTG PHY, so the serial console is gone until reboot (OTA still works).
 #include "nucleo_app.h"
+#include "launcher_theme.h"   // W/H + themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
+#include "app_ui.h"           // shared focused-list widget (macro list) + quick-select nav
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -25,8 +27,9 @@ extern "C" {
 #include "nucleo_ducky.h"
 }
 
-static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410,
-                            ACC = 0x4DDF, GRN = 0x8FF3, WARN = 0xFE8C, HL = 0x4DDF, INK = 0x0000, ORG = 0xFD20;
+// BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
+static const unsigned short ACC = C_BLUE, GRN = C_GREEN, WARN = C_YELLOW, HL = C_BLUE,
+                            ORG = 0xFD20, SURF = 0x10A2, CAP = 0x12B2;
 
 // HID usage ids not already in nucleo_usbhid.h
 #define HID_ESC   0x29
@@ -58,6 +61,7 @@ static const Macro MACROS[] = {
     { "Esc",                  0,                                HID_ESC },
 };
 static const int N_MACRO = (int)(sizeof(MACROS) / sizeof(MACROS[0]));
+static const char *mac_label(int i, void *) { return MACROS[i].name; }   // shared-list provider
 
 // ---- live typing modal ----------------------------------------------------------------------------
 static void chip(int x, int y, const char *label, bool on, unsigned short oncol)
@@ -106,6 +110,18 @@ static void echo_push(char *echo, size_t n, const char *what)
     snprintf(echo + l, n - l, "%s", what);
 }
 
+// Composite the modal frame into the shared back-buffer and blit once — never a direct-to-panel
+// fillScreen on the redraw cadence, so the live typing view can't flicker (ANTI-FLICKER.md #1).
+static void type_paint(unsigned char m, bool conn, unsigned char leds, const char *echo)
+{
+    M5Canvas *cv = nucleo_screen();
+    if (!cv) { type_screen(m, conn, leds, echo); return; }   // OOM fallback: direct (rare)
+    nucleo_app_set_gfx(cv);
+    type_screen(m, conn, leds, echo);                        // draws via `d` -> the canvas
+    nucleo_app_set_gfx(nullptr);
+    cv->pushSprite(0, 0);
+}
+
 static void type_loop(void)
 {
     char echo[28] = ""; unsigned char last_m = 0xFF; int last_conn = -1; unsigned char last_leds = 0xFF; bool first = true, back = false;
@@ -151,7 +167,7 @@ static void type_loop(void)
         }
 
         if (first || sent || m != last_m || (int)conn != last_conn || leds != last_leds) {
-            type_screen(m, conn, leds, echo);
+            type_paint(m, conn, leds, echo);
             last_m = m; last_conn = conn; last_leds = leds; first = false;
         }
         vTaskDelay(pdMS_TO_TICKS(20));
@@ -183,9 +199,8 @@ static void on_key(int key, char ch)
     switch (s_tab) {
         case T_TYPE: if (key == NK_ENTER) type_loop(); break;
         case T_MACRO:
-            if (key == NK_UP)   { s_macro = (s_macro - 1 + N_MACRO) % N_MACRO; nucleo_app_request_draw(); }
-            if (key == NK_DOWN) { s_macro = (s_macro + 1) % N_MACRO; nucleo_app_request_draw(); }
-            if (key == NK_ENTER) { nucleo_usbhid_key(MACROS[s_macro].mod, MACROS[s_macro].key); nucleo_app_request_draw(); }
+            if (app_ui_list_key(key, ch, &s_macro, N_MACRO, mac_label, nullptr)) { nucleo_app_request_draw(); }
+            else if (key == NK_ENTER) { nucleo_usbhid_key(MACROS[s_macro].mod, MACROS[s_macro].key); nucleo_app_request_draw(); }
             break;
         case T_SET:
             if (key == NK_ENTER || ch == 'l') { s_layout = (s_layout == DUCKY_LAYOUT_US) ? DUCKY_LAYOUT_IT : DUCKY_LAYOUT_US; nucleo_app_request_draw(); }
@@ -203,11 +218,12 @@ static void tabbar(int top)
     int x = 6;
     for (int i = 0; i <= T_SET; i++) {
         bool on = (i == s_tab); int w = (int)strlen(N[i]) * 6 + 10;
-        d.fillRoundRect(x, top + 2, w, 14, 3, on ? ACC : 0x10A2);
-        d.setTextColor(on ? INK : MUTED, on ? ACC : 0x10A2);
+        d.fillRoundRect(x, top + 2, w, 14, 3, on ? ACC : SURF);
+        d.setTextColor(on ? INK : MUTED, on ? ACC : SURF);
         d.setCursor(x + 5, top + 5); d.print(N[i]);
         x += w + 4;
     }
+    d.drawFastHLine(0, top + 20, 240, LINE);   // launcher-consistent hairline anchor under the tabs
 }
 
 static void draw(void)
@@ -221,20 +237,15 @@ static void draw(void)
 
     if (s_tab == T_TYPE) {
         d.setTextColor(s_usb_ok ? FG : WARN, BG); d.setCursor(8, y); d.print(s_usb_ok ? "Tastiera USB pronta." : "USB HID non installata.");
-        d.setTextColor(conn ? GRN : MUTED, BG); d.setCursor(8, y + 16); d.print(conn ? "Host collegato." : "Collega il cavo USB-C al PC.");
-        d.setTextColor(GRN, BG);   d.setCursor(8, y + 38); d.print("ENTER");
-        d.setTextColor(MUTED, BG); d.setCursor(56, y + 38); d.print("inizia a digitare");
-        d.setTextColor(DIM, BG);   d.setCursor(8, y + 58); d.print("Combo, Fn, frecce, layout IT/US.");
+        d.setTextColor(conn ? GRN : MUTED, BG); d.setCursor(8, y + 14); d.print(conn ? "Host collegato." : "Collega il cavo USB-C al PC.");
+        // big call-to-action
+        d.fillRoundRect(6, y + 34, 228, 26, 8, CAP);
+        d.setTextSize(2); d.setTextColor(GRN, CAP); d.setCursor(14, y + 39); d.print("ENTER");
+        d.setTextSize(1); d.setTextColor(FG, CAP);  d.setCursor(80, y + 45); d.print("inizia a digitare");
+        d.setTextColor(DIM, BG); d.setCursor(8, y + 70); d.print("Combo, Fn, frecce, layout IT/US.");
     } else if (s_tab == T_MACRO) {
         d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print("ENTER invia la combo al PC");
-        int yy = y + 16;
-        for (int i = 0; i < N_MACRO; i++) {
-            bool on = (i == s_macro);
-            if (on) d.fillRoundRect(4, yy - 1, 232, 13, 2, 0x12B2);
-            d.setTextColor(on ? ACC : MUTED, on ? 0x12B2 : BG); d.setCursor(10, yy + 1); d.print(on ? ">" : " ");
-            d.setTextColor(on ? FG : MUTED, on ? 0x12B2 : BG); d.setCursor(22, yy + 1); d.print(MACROS[i].name);
-            yy += 13;
-        }
+        app_ui_list(y + 14, h - (y + 14), N_MACRO, s_macro, mac_label, nullptr, nullptr, nullptr);
     } else if (s_tab == T_INFO) {
         d.setTextColor(FG, BG);
         d.setCursor(8, y);      snprintf(ln, sizeof ln, "USB HID: %s", s_usb_ok ? "installata" : "errore"); d.print(ln);
@@ -251,18 +262,21 @@ static void draw(void)
         d.setTextColor(MUTED, BG); d.setCursor(8, y + 96); d.print("Console seriale sospesa (USB presa).");
     } else { // T_SET
         d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print("ENTER / L cambia layout host");
-        d.setTextColor(s_layout == DUCKY_LAYOUT_US ? GRN : DIM, BG); d.setCursor(8, y + 22); d.print(s_layout == DUCKY_LAYOUT_US ? "> US (QWERTY)" : "  US (QWERTY)");
-        d.setTextColor(s_layout == DUCKY_LAYOUT_IT ? GRN : DIM, BG); d.setCursor(8, y + 38); d.print(s_layout == DUCKY_LAYOUT_IT ? "> IT (italiana)" : "  IT (italiana)");
-        d.setTextColor(DIM, BG);
-        d.setCursor(8, y + 60); d.print("Imposta la mappa dei simboli");
-        d.setCursor(8, y + 72); d.print("secondo il layout del PC bersaglio.");
+        bool us = (s_layout == DUCKY_LAYOUT_US);
+        d.fillRoundRect(6, y + 16, 228, 24, 8, us ? CAP : SURF);
+        if (us) d.fillRoundRect(6, y + 19, 5, 18, 2, ACC);
+        d.setTextSize(2); d.setTextColor(us ? FG : MUTED, us ? CAP : SURF); d.setCursor(16, y + 20); d.print("US  QWERTY");
+        d.fillRoundRect(6, y + 44, 228, 24, 8, !us ? CAP : SURF);
+        if (!us) d.fillRoundRect(6, y + 47, 5, 18, 2, ACC);
+        d.setTextSize(2); d.setTextColor(!us ? FG : MUTED, !us ? CAP : SURF); d.setCursor(16, y + 48); d.print("IT  italiana");
+        d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(8, y + 74); d.print("Mappa i simboli sul layout del PC.");
     }
 }
 
 extern "C" void nucleo_register_usbkbd(void)
 {
     static const nucleo_app_def_t app = {
-        "usbkbd", "USB Keyboard", "Tools", "Tastiera USB pro: layout IT/US, Fn, macro, LED del PC",
+        "usbkbd", "USB Keyboard", "Connect", "Tastiera USB pro: layout IT/US, Fn, macro, LED del PC",
         'K', 0x4DDF, on_enter, on_key, on_tick, draw, nullptr, 0
     };
     nucleo_app_register(&app);

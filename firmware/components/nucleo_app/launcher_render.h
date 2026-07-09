@@ -3,12 +3,12 @@
 //
 // Tearing fix: the list band is the ONLY animated region and is the ONLY thing buffered.
 // It is composited into a persistent off-screen canvas and pushed in a single blit, so the
-// screen never shows a cleared-then-redrawn intermediate. The canvas is allocated at full
-// colour (16bpp) when heap allows and falls back to a half-size 8bpp (RGB332) canvas under
-// memory pressure (e.g. Wi-Fi STA up) — either way the scroll stays flicker-free. Direct
-// drawing is only the last-resort path when not even the small canvas fits. The static
-// chrome is drawn directly (it does not animate), which avoids per-frame sprite churn that
-// previously fragmented the heap and made the band canvas fail to allocate.
+// screen never shows a cleared-then-redrawn intermediate. The shared canvas is 8bpp (RGB332):
+// 240x135 at 16bpp would be ~65 KB and won't fit the no-PSRAM heap, so 8bpp (~32 KB) is the
+// standing choice, not a fallback — the fine mix565() gradients in the carousel are dithered
+// down to 256 colours on push. Direct drawing is the last-resort path when not even the 8bpp
+// canvas fits (heap fragmented after a media app). The static chrome is drawn directly (it does
+// not animate), which avoids per-frame sprite churn that previously fragmented the heap.
 #pragma once
 
 // Apps are laid out as a single horizontal icon carousel (smartwatch idiom): one big centred badge

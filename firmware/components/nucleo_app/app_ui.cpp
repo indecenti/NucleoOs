@@ -6,9 +6,20 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include "esp_timer.h"
 
 #include "app_gfx.h"
-static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410, LINE = 0x2945, INK = 0x0000, ACC = 0x4D1F;
+#include "nucleo_theme.h"
+// Palette follows the active OS theme (was hardcoded literals -> the shared list widget ignored
+// theme switches while the launcher recolored). ink/fg are constant across the current all-dark
+// theme set, so contrast is preserved. Zero RAM cost: THEME_* are existing globals.
+#define BG    THEME_BG
+#define FG    THEME_FG
+#define MUTED THEME_MUTED
+#define DIM   THEME_DIM
+#define LINE  THEME_LINE
+#define INK   THEME_INK
+#define ACC   THEME_ACC
 
 // Always false: no animations exist, so no app ever needs to keep ticking for redraws.
 bool app_ui_list_animating(void) { return false; }
@@ -99,27 +110,122 @@ void app_ui_list(int top, int h, int count, int sel,
     d.clearClipRect();
 }
 
+// First alphanumeric char of a label, lowercased (skips leading glyphs/spaces). 0 if none.
+static char first_alnum(const char *lab)
+{
+    if (!lab) return 0;
+    int p = 0;
+    while (lab[p] && !isalnum((unsigned char)lab[p])) p++;
+    return lab[p] ? (char)tolower((unsigned char)lab[p]) : 0;
+}
+
+// Case-insensitive prefix match of `pre` (len n) against the label's alnum-anchored text.
+static bool prefix_match(const char *lab, const char *pre, int n)
+{
+    if (!lab) return false;
+    int p = 0;
+    while (lab[p] && !isalnum((unsigned char)lab[p])) p++;
+    for (int j = 0; j < n; j++) {
+        char c = lab[p + j];
+        if (!c || tolower((unsigned char)c) != (unsigned char)pre[j]) return false;
+    }
+    return true;
+}
+
+void app_ui_confirm(const char *title, const char *msg, bool yes_focus)
+{
+    static const unsigned short DANGER = 0xF9A6;   // warm red for the destructive choice
+    int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    const int cw = 212, chh = 90;
+    int cx = (240 - cw) / 2;
+    int cy = top + (h - chh) / 2; if (cy < top + 2) cy = top + 2;
+
+    d.fillRoundRect(cx, cy, cw, chh, 9, BG);
+    d.drawRoundRect(cx, cy, cw, chh, 9, DANGER);
+
+    d.setTextSize(2); d.setTextColor(DANGER, BG);
+    char t[19]; snprintf(t, sizeof t, "%.18s", title ? title : "");
+    d.setCursor(cx + 12, cy + 10); d.print(t);
+
+    d.setTextSize(1); d.setTextColor(MUTED, BG);
+    char m[35]; snprintf(m, sizeof m, "%.34s", msg ? msg : "");
+    d.setCursor(cx + 12, cy + 34); d.print(m);
+
+    const int bw = 90, bh = 24, by = cy + chh - bh - 10;
+    int yx = cx + 10, nx = cx + cw - 10 - bw;
+    // Yes = destructive (red); No = safe (accent). Focused button is filled.
+    d.fillRoundRect(yx, by, bw, bh, 7, yes_focus ? DANGER : BG);
+    d.drawRoundRect(yx, by, bw, bh, 7, DANGER);
+    d.setTextSize(2); d.setTextColor(yes_focus ? INK : DANGER, yes_focus ? DANGER : BG);
+    d.setCursor(yx + bw / 2 - 18, by + 4); d.print("Yes");
+    d.fillRoundRect(nx, by, bw, bh, 7, yes_focus ? BG : ACC);
+    d.drawRoundRect(nx, by, bw, bh, 7, ACC);
+    d.setTextColor(yes_focus ? FG : INK, yes_focus ? BG : ACC);
+    d.setCursor(nx + bw / 2 - 12, by + 4); d.print("No");
+}
+
+int app_ui_confirm_key(int key, char ch, bool *yes_focus)
+{
+    if (!yes_focus) return -1;
+    switch (key) {
+        case NK_UP: case NK_DOWN: case NK_LEFT: case NK_RIGHT:
+            *yes_focus = !*yes_focus; return -1;
+        case NK_ENTER:
+            return *yes_focus ? 1 : 0;
+        default: break;
+    }
+    if (ch == 'y' || ch == 'Y') return 1;
+    if (ch == 'n' || ch == 'N') return 0;
+    if (ch == ',' || ch == '/') { *yes_focus = !*yes_focus; return -1; }
+    return -1;
+}
+
 bool app_ui_list_key(int key, char ch, int *sel, int count, app_ui_text_fn label, void *ud)
 {
     if (count <= 0 || !sel || !label) return false;
 
+    // Type-ahead state: a short prefix buffer that decays after a pause, plus same-key cycling.
+    static char s_pre[24];
+    static int s_len = 0;
+    static int64_t s_last = 0;
+
     if (key == NK_UP) {
         *sel = (*sel + count - 1) % count;
+        s_len = 0;
         return true;
     }
     if (key == NK_DOWN) {
         *sel = (*sel + 1) % count;
+        s_len = 0;
         return true;
     }
     if (key == NK_CHAR && ch > ' ' && ch < 127) {
-        char lower_ch = (char)tolower((unsigned char)ch);
-        for (int i = 1; i <= count; i++) {
-            int idx = (*sel + i) % count;
+        // 1-9: direct jump to the n-th row (launcher-consistent smartwatch shortcut).
+        if (ch >= '1' && ch <= '9') {
+            int t = ch - '1';
+            s_len = 0;
+            if (t < count) { *sel = t; return true; }
+            return false;
+        }
+
+        int64_t now = esp_timer_get_time();
+        if (now - s_last > 800000) s_len = 0;   // >0.8s idle -> start a fresh search
+        s_last = now;
+        char lc = (char)tolower((unsigned char)ch);
+
+        // Same single key tapped again -> cycle to the NEXT item starting with it.
+        int start;
+        if (s_len == 1 && s_pre[0] == lc) {
+            start = 1;                            // skip current, find the next match
+        } else {
+            if (s_len < (int)sizeof(s_pre) - 1) { s_pre[s_len++] = lc; s_pre[s_len] = 0; }
+            start = 0;                            // extend prefix, keep current if it still matches
+        }
+
+        for (int i = 0; i < count; i++) {
+            int idx = (*sel + start + i) % count;
             const char *lab = label(idx, ud);
-            if (!lab) continue;
-            int p = 0;
-            while (lab[p] && !isalnum((unsigned char)lab[p])) p++;
-            if (lab[p] && tolower((unsigned char)lab[p]) == lower_ch) {
+            if (s_len == 1 ? first_alnum(lab) == lc : prefix_match(lab, s_pre, s_len)) {
                 *sel = idx;
                 return true;
             }

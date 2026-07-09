@@ -41,10 +41,11 @@ static const char *MODE_BLURB[N_MODE] = {
     "scrivi tu i nomi delle reti",
 };
 
+#include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
 
-static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410,
-                            LINE = 0x2945, BCN = 0xAD5F /*violet*/, GRN = 0x8FF3, YEL = 0xFE8C;
+// BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
+static const unsigned short BCN = 0xAD5F /*violet*/, GRN = C_GREEN, YEL = C_YELLOW;
 
 enum { ST_CONSENT, ST_CUSTOM, ST_ARMING, ST_RUNNING, ST_STOPPING };
 static int  s_state;

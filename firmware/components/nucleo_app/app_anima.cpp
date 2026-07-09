@@ -115,7 +115,10 @@ enum { R_META = 0, R_USER = 1, R_ANIMA = 2 };
                        // turns flip-flopped by ~100 bytes after fragmentation. (Online replies are steered
                        // compact, well under this.) The rare >320 L2 answer clips at a sentence boundary.
 typedef struct { char text[MSG_TEXT]; unsigned short col, accent; unsigned char role; } Msg;
-static Msg s_msg[MSG_MAX];
+// Heap-on-enter (was .bss): the transcript ring is ~5 KB and ANIMA is closed almost always, so keeping it
+// resident cost the boot RAM budget for nothing. calloc'd in enter() (inside the exclusive reclaim window),
+// freed in leave(); every access is null-guarded so an OOM-on-enter degrades to "no transcript", not a crash.
+static Msg *s_msg = nullptr;
 static int s_mhead, s_mcount;
 // "Risposta corrente INTERA": il ring tiene copie accorciate a MSG_TEXT (cronologia, RAM bassa); l'ultima
 // risposta di ANIMA si mostra invece per intero da qui (fino al cap del motore, ~1KB di .bss). s_full_idx
@@ -132,7 +135,7 @@ extern void launcher_render_hint_bar(void);   // ridipinge il footer SUBITO (il 
 enum { F_SMALL = 0 /*Font0 6x8*/, F_MED = 1 /*Font2 16px*/, F_BIG = 2 /*FreeSans9pt7b*/, F_BOLD = 3 /*FreeSansBold9pt7b*/ };
 #define ROW_MAX 120
 typedef struct { const char *p; unsigned short len, col, accent; unsigned char role, font, first; } Row;
-static Row s_row[ROW_MAX];
+static Row *s_row = nullptr;      // heap-on-enter (was .bss ~2 KB), paired with s_msg above
 static int s_rown;
 static int s_scroll;            // rows scrolled up from the bottom (0 = newest)
 
@@ -331,6 +334,7 @@ static void ascii_fold(const char *src, char *dst, int cap)
 static void emit_row(const char *p, int len, unsigned short col, unsigned short acc,
                      unsigned char role, unsigned char font, unsigned char first)
 {
+    if (!s_row) return;
     if (s_rown == ROW_MAX) { memmove(&s_row[0], &s_row[1], sizeof(Row) * (ROW_MAX - 1)); s_rown--; }
     Row *r = &s_row[s_rown++];
     r->p = p; r->len = (unsigned short)len; r->col = col; r->accent = acc;
@@ -378,6 +382,7 @@ static void wrap_msg(const Msg *m, const char *override_text)
 static void rebuild_rows(void)
 {
     s_rown = 0;
+    if (!s_msg || !s_row) return;
     for (int i = 0; i < s_mcount; i++) { int idx = (s_mhead - s_mcount + i + MSG_MAX) % MSG_MAX;
         if (idx == s_full_idx) {                                  // slot corrente: wrappa dal testo pieno...
             int len = (int)strlen(s_full);
@@ -393,6 +398,7 @@ static void rebuild_rows(void)
 
 static void push_msg(unsigned char role, unsigned short col, unsigned short accent, const char *text)
 {
+    if (!s_msg) return;
     if (s_mhead == s_full_idx) s_full_idx = -1;   // lo slot del messaggio "intero" viene riusato -> torna accorciato
     Msg *m = &s_msg[s_mhead];
     ascii_fold(text, m->text, MSG_TEXT);
@@ -461,6 +467,7 @@ static void save_settings(void)
 #define CHAT_PATH NUCLEO_SD_MOUNT "/system/config/anima_chat.dat"
 static void save_chat(void)
 {
+    if (!s_msg) return;
     mkdir(NUCLEO_SD_MOUNT "/system", 0775);
     mkdir(NUCLEO_SD_MOUNT "/system/config", 0775);
     FILE *f = fopen(CHAT_PATH, "wb");
@@ -479,6 +486,7 @@ static void save_chat(void)
 static void load_chat(void)
 {
     s_mhead = s_mcount = 0;
+    if (!s_msg) return;
     FILE *f = fopen(CHAT_PATH, "rb");
     if (!f) return;
     char magic[4]; uint8_t cnt = 0;
@@ -1862,6 +1870,8 @@ static void enter(void)
     // so this is cheap — and they hold ZERO .bss at boot. calloc before the resets/draw below use them.
     if (!s_hist)   s_hist   = (char (*)[HIST_LEN])calloc(HIST_N, sizeof *s_hist);
     if (!s_ed_buf) s_ed_buf = (char *)calloc(ED_BUF_CAP, 1);
+    if (!s_msg)    s_msg    = (Msg *)calloc(MSG_MAX, sizeof *s_msg);   // ~5 KB transcript ring — heap, not .bss
+    if (!s_row)    s_row    = (Row *)calloc(ROW_MAX, sizeof *s_row);   // ~2 KB wrapped-row cache
     load_chat();                                   // restore the last conversation (empty ring if none)
     s_rown = 0; s_scroll = 0; s_ilen = 0; s_input[0] = 0;
     s_ed_open = false; s_ed_len = 0; if (s_ed_buf) s_ed_buf[0] = 0; s_ed_path[0] = 0; s_ed_scroll = 0;
@@ -1901,6 +1911,8 @@ static void leave(void)
     stop_worker();                                 // free the worker's 30 KB heap stack for L1
     free(s_hist);   s_hist   = nullptr;            // session buffers back to zero RAM until next enter
     free(s_ed_buf); s_ed_buf = nullptr;
+    free(s_msg);    s_msg    = nullptr;            // transcript ring + row cache: ~7 KB of .bss reclaimed at boot
+    free(s_row);    s_row    = nullptr;
     // The worker self-deletes ASYNCHRONOUSLY and FreeRTOS reclaims its 30 KB stack only when the idle task
     // runs. close_app's 150 ms canvas re-acquire fires before that, so the NEXT app (e.g. Tanks) opens with
     // the shared 32 KB canvas still un-allocatable -> direct draw -> flicker. Yield here until the stack is

@@ -277,7 +277,7 @@ static void draw(void)
 extern "C" void nucleo_register_calendar(void)
 {
     static const nucleo_app_def_t app = {
-        "calendar", "Calendar", "Tools", "Day-focused agenda with reminders",
+        "calendar", "Calendar", "Office", "Day-focused agenda with reminders",
         'k', C_GREEN, enter, on_key, tick, draw, leave
     };
     nucleo_app_register(&app);

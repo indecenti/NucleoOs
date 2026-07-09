@@ -31,8 +31,13 @@ tools/release.local.json  (gitignored)
 one off the device screen (Connection → Pair), update `release.local.json` AND memory `device-pin.md`.
 
 ## Build — use idf.py directly (flash.ps1 fails in PS sandbox)
-`flash.ps1` fails in the Claude PowerShell sandbox due to ESP-IDF activation errors. Use this
-pattern instead (proven to work):
+`flash.ps1` fails in the Claude PowerShell sandbox due to ESP-IDF activation errors (it `. export.ps1`
+without `IDF_TOOLS_PATH` set). **Simplest fix — set that var and `export.ps1` activates cleanly:**
+```powershell
+$env:IDF_TOOLS_PATH="$HOME\.espressif"; & 'C:\esp\esp-idf\export.ps1' *> $null
+Set-Location 'G:\Nucleo\firmware'; idf.py build 2>&1 | Select-Object -Last 6
+```
+Then serial-flash (below) or OTA. The explicit-PATH pattern that follows is equivalent — either works:
 
 ```powershell
 # Step 1: bump version (run once before building)
