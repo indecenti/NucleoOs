@@ -1572,15 +1572,20 @@ void nucleo_app_run(void)
             if (s_wake_pending) { s_wake_pending = false; nucleo_app_set_brightness(s_wake_saved_bright); continue; }
             // Capture: Fn+P is an OS-wide screenshot -> a real full-frame image in /data/Screenshots
             // (EVERYWHERE, games included — it used to save only a tiny cover for games, so "screenshot"
-            // seemed broken in a game). A separate plain 'C' while a game is foreground refreshes THAT
-            // game's carousel cover. Saved after the next composite (the canvas holds the clean frame;
-            // panel readback is unreliable). The key is consumed so the game never sees it; a toast confirms.
+            // seemed broken in a game). While a game is foreground, Ctrl+P (or a plain 'C') instead
+            // refreshes THAT game's carousel cover -> /data/GameShots/<id>.bmp, overwriting the old one.
+            // Ctrl+P is the primary binding: games routinely use letter keys for play, so a bare 'C'
+            // gets eaten by gameplay — the Ctrl modifier keeps the cover gesture unambiguous. Saved after
+            // the next composite (the canvas holds the clean frame). Key consumed; a toast confirms.
             const nucleo_app_def_t *cap_def = active_def();
             bool cap_in_game = (cap_def && cap_def->category && !strcmp(cap_def->category, "Games"));
-            bool cap_fnp     = (nucleo_kbd_mods() & NK_MOD_FN) && (nk.ch == 'p' || nk.ch == 'P' || nk.ch == 0x10);
-            bool cap_cover   = cap_in_game && (nk.ch == 'c' || nk.ch == 'C');
-            if (nk.key == NK_CHAR && (cap_fnp || cap_cover)) {
-                if (cap_fnp) s_shot_req = true; else s_cover_req = true;   // Fn+P screenshot vs 'C' cover
+            unsigned cap_mods = nucleo_kbd_mods();
+            bool cap_is_p    = (nk.ch == 'p' || nk.ch == 'P' || nk.ch == 0x10);   // Ctrl+P may arrive as DLE (0x10)
+            bool cap_fnp     = (cap_mods & NK_MOD_FN)   && cap_is_p;              // Fn+P   -> OS-wide screenshot
+            bool cap_ctrlp   = (cap_mods & NK_MOD_CTRL) && cap_is_p;              // Ctrl+P -> game carousel cover
+            bool cap_cover   = cap_in_game && (cap_ctrlp || nk.ch == 'c' || nk.ch == 'C');
+            if (nk.key == NK_CHAR && (cap_cover || cap_fnp)) {
+                if (cap_cover) s_cover_req = true; else s_shot_req = true;   // in-game cover (Ctrl+P/'C') vs Fn+P screenshot
                 s_dirty = true;
             } else if (s_torch) {                // flashlight overlay is up — any key turns it off
                 torch_off();
@@ -1809,9 +1814,9 @@ void nucleo_app_run(void)
                         bool ok = gamefront_save_panel_screenshot(nm);
                         nucleo_notify_post("Screenshot", ok ? "Saved" : "Capture failed");
                     }
-                    if (s_cover_req) {                             // 'C' cover — canvas only (panel readback = wrong colours)
-                        s_cover_req = false;
-                        bool ok = (def && def->id && def->id[0]) ? gamefront_save_canvas_cover(def->id) : false;
+                    if (s_cover_req) {                             // Ctrl+P/'C' cover — canvas is freed here, so read the PANEL
+                        s_cover_req = false;                       // (panel_cover un-swaps the readback bytes -> correct colours)
+                        bool ok = (def && def->id && def->id[0]) ? gamefront_save_panel_cover(def->id) : false;
                         nucleo_notify_post("Screenshot", ok ? "Cover salvata" : "Cover non disponibile");
                     }
                 }
