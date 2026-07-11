@@ -331,27 +331,19 @@ template <typename T> static void draw_hero(T *c, const nucleo_app_def_t *g, con
     c->setClipRect(box.x, box.y, box.w, box.h);
     char p[192]; bool drawn = false;
     snprintf(p, sizeof p, "%s/%s.png", GF_DIR, g->id);
-    if (file_exists(p)) { c->drawPngFile(p, box.x + box.w / 2, box.y + box.h / 2, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::middle_center); drawn = true; }
+    if (file_exists(p)) { c->drawPngFile(p, box.x, box.y, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::top_left); drawn = true; }
     if (!drawn) { snprintf(p, sizeof p, "%s/%s.jpg", GF_DIR, g->id);
-        if (file_exists(p)) { c->drawJpgFile(p, box.x + box.w / 2, box.y + box.h / 2, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::middle_center); drawn = true; } }
+        if (file_exists(p)) { c->drawJpgFile(p, box.x, box.y, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::top_left); drawn = true; } }
     if (!drawn) { snprintf(p, sizeof p, "%s/%s.bmp", GF_DIR, g->id);
         // Fit the BMP into the current hero box (centre, aspect-preserved). Fitting instead of a raw
         // 1:1 blit keeps covers captured at an older box size sitting cleanly inside the new frame.
-        if (file_exists(p)) { c->drawBmpFile(p, box.x + box.w / 2, box.y + box.h / 2, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::middle_center); drawn = true; } }
+        if (file_exists(p)) { c->drawBmpFile(p, box.x, box.y, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::top_left); drawn = true; } }
     if (!drawn) draw_poster(c, g, box);
-    // A glossy sheen across the top third: lighten the real artwork pixels, fading out.
-    // Read each row back (RGB565), brighten toward FG, write it again — proven readRect path.
-    // Sized to the landscape (max) width; portrait boxes just use a prefix of it.
-    static uint16_t row[HERO_W];
-    int sh = box.h / 3;
-    for (int yy = 0; yy < sh; yy++) {
-        float a = 0.16f * (1.0f - (float)yy / sh);
-        if (a <= 0.01f) continue;
-        int y = box.y + yy;
-        c->readRect(box.x, y, box.w, 1, row);
-        for (int xx = 0; xx < box.w; xx++) row[xx] = mix565(row[xx], FG, a);
-        c->pushImage(box.x, y, box.w, 1, row);
-    }
+    // NB: no read-back "gloss" sheen here. When the 32 KB canvas can't be spared (the common case on
+    // this no-PSRAM chip), gamefront draws STRAIGHT to the panel — and reading the ST7789 back to
+    // brighten the top rows returns byte-swapped garbage, which painted corrupt magenta/green bands
+    // over the top third of every real cover. The flat cover reads clean; the sheen isn't worth a
+    // panel read-back that only works on the (often absent) canvas.
     c->clearClipRect();
 
     round_corners(c, box.x, box.y, box.w, box.h, 5, acc);
@@ -359,6 +351,28 @@ template <typename T> static void draw_hero(T *c, const nucleo_app_def_t *g, con
     // Clean frame: a thin dark inset + a single MUTED accent edge. No bright/pink highlight line.
     c->drawRoundRect(box.x - 1, box.y - 1, box.w + 2, box.h + 2, 5, mix565(INK, BG, 0.35f));
     c->drawRoundRect(box.x - 2, box.y - 2, box.w + 4, box.h + 4, 6, mix565(acc, INK, 0.42f));
+}
+
+// Full-colour cover overlay, drawn STRAIGHT to the 16bpp panel after the 8bpp carousel is blitted.
+// Why: the carousel composites into the shared 8bpp (RGB332) canvas — fine for the flat poster art,
+// but a photographic screenshot cover posterises there (2-bit blue -> washed-out banding). So we
+// redraw ONLY the real cover image on the panel at full colour, exactly like app_photos does. No
+// gloss (that needs an unreliable ST7789 readback) and no shadow/frame (already blitted underneath);
+// just the crisp image + the rounded-corner cutouts so it still sits in its frame. No-op when the
+// game has only a procedural poster (nothing to upgrade). Returns true if a real cover was drawn.
+template <typename T> static bool draw_cover_overlay(T *c, const nucleo_app_def_t *g, const gf_box_t &box)
+{
+    char p[192]; bool drawn = false;
+    c->setClipRect(box.x, box.y, box.w, box.h);
+    snprintf(p, sizeof p, "%s/%s.png", GF_DIR, g->id);
+    if (file_exists(p)) { c->drawPngFile(p, box.x, box.y, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::top_left); drawn = true; }
+    if (!drawn) { snprintf(p, sizeof p, "%s/%s.jpg", GF_DIR, g->id);
+        if (file_exists(p)) { c->drawJpgFile(p, box.x, box.y, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::top_left); drawn = true; } }
+    if (!drawn) { snprintf(p, sizeof p, "%s/%s.bmp", GF_DIR, g->id);
+        if (file_exists(p)) { c->drawBmpFile(p, box.x, box.y, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::top_left); drawn = true; } }
+    c->clearClipRect();
+    if (drawn) round_corners(c, box.x, box.y, box.w, box.h, 5, g->color);
+    return drawn;
 }
 
 // ---- quiet side indicator: a chevron + a faint neighbour name in the gutter --
@@ -605,6 +619,17 @@ void gamefront_render(void)
         draw_gf(c);
         if (s_info) { int cur = gf_at(s_sel); if (cur >= 0) draw_info(c, nucleo_app_at(cur)); }
         c->pushSprite(0, 0);
+        // 8bpp carousel -> the selected game's real cover posterises. Redraw it on the 16bpp panel at
+        // full colour (no-op for poster-only games). Skipped under the info card, which covers the hero.
+        if (!s_info) {
+            int cur = gf_at(s_sel);
+            if (cur >= 0) {
+                const nucleo_app_def_t *g = nucleo_app_at(cur);
+                const META_t *m = gf_meta(g->id);
+                gf_box_t box = gf_hero_box(m ? m->shape : (unsigned)GF_LANDSCAPE);
+                draw_cover_overlay(&d, g, box);
+            }
+        }
     } else {
         d.startWrite();
         draw_gf(&d);
@@ -763,6 +788,27 @@ bool gamefront_save_panel_cover(const char *id)
     fwrite(hd, 1, 54, f);
 
     static uint16_t prow[320]; static uint8_t orow[HERO_W * 3 + 4];
+
+    // PORTRAIT box (pinball): un-rotate the 90°-rotated portrait playfield so the cover is UPRIGHT and
+    // fills the tall box (see the matching branch in gamefront_save_canvas_cover). Column-by-column.
+    if (m && m->shape == GF_PORTRAIT) {
+        for (int oy = H - 1; oy >= 0; oy--) {           // BMP bottom-up; oy = row-from-top (0 = table top)
+            int cx = (pw - 1) - oy * pw / H; if (cx < 0) cx = 0; if (cx >= pw) cx = pw - 1;
+            d.readRect(cx, 0, 1, ph, prow);             // one panel column (byte-swapped RGB565)
+            memset(orow, 0, rowSize);
+            for (int ox = 0; ox < W; ox++) {
+                int cy = ox * ph / W; if (cy < 0) cy = 0; if (cy >= ph) cy = ph - 1;
+                uint16_t raw = prow[cy], pp = (uint16_t)((raw >> 8) | (raw << 8));
+                orow[ox * 3 + 0] = (uint8_t)(( pp        & 0x1F) * 255 / 31);   // BGR
+                orow[ox * 3 + 1] = (uint8_t)(((pp >> 5)  & 0x3F) * 255 / 63);
+                orow[ox * 3 + 2] = (uint8_t)(((pp >> 11) & 0x1F) * 255 / 31);
+            }
+            fwrite(orow, 1, rowSize, f);
+        }
+        fclose(f);
+        return true;
+    }
+
     for (int vy = H - 1; vy >= 0; vy--) {             // BMP rows bottom-up; vy = row-from-top
         memset(orow, 0, rowSize);                     // letterbox bars stay black
         if (vy >= offY && vy < offY + dh) {
@@ -816,6 +862,28 @@ bool gamefront_save_canvas_cover(const char *id)
     fwrite(hd, 1, 54, f);
 
     static lgfx::rgb888_t prow[320]; static uint8_t orow[HERO_W * 3 + 4];
+
+    // PORTRAIT box (pinball): the live playfield is a 90°-rotated portrait table on the landscape
+    // panel (app_pinball's SX/SY: screen_x = (pw-1)-ly, screen_y = lx). Un-rotate it so the cover is
+    // UPRIGHT and fills the tall box. Each output row maps to a fixed source COLUMN, so read the frame
+    // column-by-column. Verified end-to-end (round-trips the logical layout to an upright cover).
+    if (m && m->shape == GF_PORTRAIT) {
+        for (int oy = H - 1; oy >= 0; oy--) {           // BMP bottom-up; oy = row-from-top (0 = table top)
+            int cx = (pw - 1) - oy * pw / H; if (cx < 0) cx = 0; if (cx >= pw) cx = pw - 1;
+            c->readRect(cx, 0, 1, ph, prow);            // one source column, top→bottom
+            memset(orow, 0, rowSize);
+            for (int ox = 0; ox < W; ox++) {
+                int cy = ox * ph / W; if (cy < 0) cy = 0; if (cy >= ph) cy = ph - 1;
+                orow[ox * 3 + 0] = prow[cy].b;          // BGR
+                orow[ox * 3 + 1] = prow[cy].g;
+                orow[ox * 3 + 2] = prow[cy].r;
+            }
+            fwrite(orow, 1, rowSize, f);
+        }
+        fclose(f);
+        return true;
+    }
+
     for (int vy = H - 1; vy >= 0; vy--) {
         memset(orow, 0, rowSize);
         if (vy >= offY && vy < offY + dh) {
