@@ -164,11 +164,18 @@ static const char *node_label(const MenuNode *n)
 // = amber; bars above the measured level are drawn dim so the glyph reads as a strength gauge (the
 // smartwatch idiom) rather than a flat icon. rssi 0 (not associated) -> 1 amber bar. There is no
 // battery on bare M5GFX, so the top-right is spent entirely on this. Occupies a 19x9 box at (x,y).
-static void draw_wifi(int x, int y, bool sta, int rssi)
+static void draw_wifi(int x, int y, bool online, int rssi)
 {
-    unsigned short on = sta ? C_GREEN : C_YELLOW;
-    // Map dBm to 0..4 lit bars (>=-55 full, <=-88 one). AP mode / unknown -> a single amber bar.
-    int lvl = (!sta || rssi == 0) ? 1 : wifi_bars(rssi);   // AP/associating -> 1 amber bar
+    // Lit bars are GREEN when we truly have a link, RED when offline (no STA IP / not associated) — so
+    // the gauge alone tells the real state at a glance, never a green "connected" glyph on a dead link.
+    unsigned short on = online ? C_GREEN : C_RED;
+    // Map dBm to 0..4 lit bars (>=-55 full, <=-88 one). Offline / unknown -> a single (red) bar.
+    int lvl;
+    if (!online || rssi == 0) lvl = 1;
+    else if (rssi >= -55)  lvl = 4;
+    else if (rssi >= -67)  lvl = 3;
+    else if (rssi >= -78)  lvl = 2;
+    else                   lvl = 1;
     for (int i = 0; i < 4; i++) {
         int bh = 2 + i * 2;                                  // 2,4,6,8 px tall
         d.fillRect(x + i * 5, y + 9 - bh, 3, bh, i < lvl ? on : LINE);
@@ -569,7 +576,10 @@ void launcher_render_status_bar(void)
     }
     d.fillRect(0, 0, W, BAR, INK);
     d.setTextSize(1);
-    bool sta = !strcmp(nucleo_setup_mode(), "sta") && nucleo_setup_ssid()[0];
+    // "Online" = a REAL client link: STA mode AND a live IP. mode/ssid alone go stale on a drop (the
+    // old test showed the last network as if still connected); s_ip is cleared the instant the link
+    // drops, so it is the honest gate for both the gauge colour and the SSID-vs-"offline" label.
+    bool sta = !strcmp(nucleo_setup_mode(), "sta") && nucleo_setup_ip()[0];
 
     const MenuNode *node = launcher_node();
     if (launcher_depth() > 0) {
@@ -614,10 +624,12 @@ void launcher_render_status_bar(void)
                 d.setTextColor(C_YELLOW, INK); d.setCursor(rx - dw, 4); d.print(dt);
                 rx -= dw + 8;
             }
-            char net[12]; snprintf(net, sizeof net, "%.10s", sta ? nucleo_setup_ssid() : "Setup AP");
+            // Connected -> the live SSID in muted grey; not connected -> a small red "offline" right
+            // next to the gauge, so a missing/lost network reads instantly instead of a stale name.
+            char net[12]; snprintf(net, sizeof net, "%.10s", sta ? nucleo_setup_ssid() : "offline");
             int nw = (int)strlen(net) * 6;
             if (rx - nw > clock_r + 8) {
-                d.setTextColor(sta ? MUTED : C_YELLOW, INK); d.setCursor(rx - nw, 4); d.print(net);
+                d.setTextColor(sta ? MUTED : C_RED, INK); d.setCursor(rx - nw, 4); d.print(net);
             }
         }
     }
@@ -646,6 +658,15 @@ void launcher_render_clock_tick(void)
         d.setTextSize(1); d.setTextColor(INK, C_RED); d.setCursor(18, 4); d.print(alert);
         return;
     }
+    // The right cluster (Wi-Fi gauge + SSID/"offline") is normally repainted only on navigation, so a
+    // link state change while the user sits on the home screen — e.g. the background join landing a few
+    // seconds after boot, or a drop — would otherwise stay invisible until they moved. Detect the flip
+    // here (the 1 Hz tick is the only thing repainting the idle home bar) and do ONE full repaint so the
+    // gauge colour and the SSID/"offline" label update on their own. It's momentary and only on a flip,
+    // so it doesn't reintroduce the per-second black flash the in-place clock refresh was built to avoid.
+    static int s_last_online = -1;
+    int online_now = (!strcmp(nucleo_setup_mode(), "sta") && nucleo_setup_ip()[0]) ? 1 : 0;
+    if (online_now != s_last_online) { s_last_online = online_now; launcher_render_status_bar(); return; }
     char t[8]; time_t now = time(NULL); struct tm *tm = localtime(&now);
     snprintf(t, sizeof(t), "%02d:%02d", tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
     d.fillRect(0, 0, 56, BAR - 1, INK);                       // wipe the clock cell (Font2 is wider than the old 6x8)

@@ -403,13 +403,15 @@ static int scan_networks(char out[][33], int max)
     return count;
 }
 
-// Wait (up to ~12s) for a DHCP IP on the STA interface. Sets s_ip (empty on failure).
+// Wait (up to ~8s) for a DHCP IP on the STA interface. Sets s_ip (empty on failure). Only ever runs
+// in the background supervisor task now, so a slow/absent AP costs the retry loop a backoff tick, not
+// the boot. 8s comfortably covers normal DHCP while keeping rescan+rejoin snappy when a net is gone.
 static void wait_for_ip(void)
 {
     s_ip[0] = '\0';
     esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     esp_netif_ip_info_t ip = {0};
-    for (int t = 0; t < 60; t++) {
+    for (int t = 0; t < 40; t++) {
         vTaskDelay(pdMS_TO_TICKS(200));
         if (sta && esp_netif_get_ip_info(sta, &ip) == ESP_OK && ip.ip.addr != 0) {
             uint32_t a = ip.ip.addr;
@@ -528,8 +530,28 @@ const char *nucleo_setup_scan_auth_label(int i)
 static bool connect_best_known(void)
 {
     load_networks();
-    if (s_net_n == 0) return false;
     if (s_wifi_op_lock) xSemaphoreTake(s_wifi_op_lock, portMAX_DELAY);
+
+    if (s_net_n == 0) {
+        // Legacy device: networks.json not written yet, creds live only in NVS. Make one attempt with
+        // the stored NVS config, then migrate the readable creds into the store so future joins use the
+        // smart multi-network path below. Runs only in the supervisor task now (off the boot path), so
+        // its blocking wait_for_ip() never stalls startup. Migrate ONLY a non-empty password: some IDF
+        // builds return an empty one, and storing that would create a useless entry that later fails.
+        bool ok = false;
+        if (s_ssid[0]) {
+            s_want_sta = true;
+            esp_wifi_set_mode(WIFI_MODE_STA); esp_wifi_connect(); wait_for_ip();
+            if (s_ip[0]) {
+                wifi_config_t cur = {0};
+                if (esp_wifi_get_config(WIFI_IF_STA, &cur) == ESP_OK && cur.sta.ssid[0] && cur.sta.password[0])
+                    net_remember((char *)cur.sta.ssid, (char *)cur.sta.password);
+                ok = true;
+            }
+        }
+        if (s_wifi_op_lock) xSemaphoreGive(s_wifi_op_lock);
+        return ok;
+    }
 
     nucleo_setup_scan();                       // refresh s_wscan (RSSI-sorted), internally serialized
 
@@ -908,34 +930,18 @@ esp_err_t nucleo_setup_apply_network(void)
     // until reboot. Idempotent on a normal boot (MIN_MODEM is already the IDF STA default).
     esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
     if (!strcmp(s_mode, "sta") && (s_net_n > 0 || s_ssid[0])) {
+        // Client link intended — but DO NOT block the boot waiting for it. The old synchronous join
+        // stalled the whole UI + web server for up to ~12 s per saved network (≈14 s with nothing in
+        // range, far worse with several known nets that fail) before the splash even cleared. Instead:
+        // bring the setup AP up NOW (so the device + web UI are reachable instantly) and hand the first
+        // scan+join to the background wifi_supervisor, which already runs the exact same retry/backoff
+        // path used for every later reconnect. It fires its first attempt within ~2 s; on success the
+        // GOT_IP handler flips mode→"sta" and refreshes the SSID, so the header switches from "offline"
+        // to the live network on its own. Net result: instant boot AND the same auto-join behaviour.
         s_auto = true;                       // intend a client link: supervisor keeps (re)joining
-        ESP_LOGI(TAG, "bringing up Wi-Fi (%d saved network(s))", s_net_n);
-        bool ok = connect_best_known();      // scan + join the best in-range known network
-        if (!ok && s_net_n == 0 && s_ssid[0]) {
-            // Legacy device: creds live only in NVS, networks.json not yet written. Connect with the
-            // NVS creds, then migrate them into the store (read the password back) so future boots
-            // use the smart multi-network path.
-            s_want_sta = true;
-            esp_wifi_set_mode(WIFI_MODE_STA); esp_wifi_connect(); wait_for_ip();
-            if (s_ip[0]) {
-                // Migrate ONLY if we can read back a non-empty password. Some IDF builds return an
-                // empty password from get_config; storing that would create a useless saved entry
-                // that later fails and wipes the NVS creds. If empty, we keep working off NVS and
-                // simply retry the NVS path on the next boot (never poisoning networks.json).
-                wifi_config_t cur = {0};
-                if (esp_wifi_get_config(WIFI_IF_STA, &cur) == ESP_OK && cur.sta.ssid[0] && cur.sta.password[0])
-                    net_remember((char *)cur.sta.ssid, (char *)cur.sta.password);
-                ok = true;
-            }
-        }
-        if (!ok) {
-            // Nothing reachable: never leave the device offline — fall back to the setup AP so the
-            // web UI and on-device menu stay reachable. s_auto stays true, so the supervisor keeps
-            // retrying and rejoins automatically when a known Wi-Fi reappears. mode is RAM-only here.
-            ESP_LOGW(TAG, "no known network joined; Access Point fallback");
-            start_ap();
-            strncpy(s_mode, "ap", sizeof(s_mode) - 1);
-        }
+        ESP_LOGI(TAG, "Wi-Fi STA intended (%d saved network(s)) — joining in background", s_net_n);
+        start_ap();                          // reachable immediately; supervisor upgrades us to STA
+        strncpy(s_mode, "ap", sizeof(s_mode) - 1);   // RAM-only: header reads "offline" until the join lands
     } else {
         ESP_LOGI(TAG, "starting Access Point '%s'", AP_SSID);
         s_auto = false;
