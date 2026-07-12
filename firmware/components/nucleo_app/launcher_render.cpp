@@ -226,6 +226,12 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
     if (!strcmp(id, "clock")) {
         IFC(cx, cy, s, col); IFC(cx, cy, s - Tk, bg);
         IBX(cx - Tk / 2, cy - s * 0.6f, Tk, s * 0.6f, col); IBX(cx, cy - Tk / 2, s * 0.5f, Tk, col); IFC(cx, cy, Tk * 0.7f, col);
+    } else if (!strcmp(id, "chrono")) {                                        // stopwatch: dial ring + top plunger + single hand
+        IBX(cx - Tk * 0.4f, cy - s * 0.98f, Tk * 0.8f, s * 0.34f, col);        // plunger stem
+        IFC(cx, cy - s * 0.98f, Tk * 0.6f, col);                              // plunger knob
+        IFC(cx, cy + s * 0.14f, s * 0.80f, col); IFC(cx, cy + s * 0.14f, s * 0.80f - Tk, bg);   // dial body -> ring
+        IBX(cx - Tk * 0.35f, cy + s * 0.14f - s * 0.50f, Tk * 0.7f, s * 0.50f, col);            // hand (points up)
+        IFC(cx, cy + s * 0.14f, Tk * 0.8f, col);                              // centre hub
     } else if (!strcmp(id, "anima")) {
         float a = s, b = s * 0.34f;
         ITR(cx, cy - a, cx - b, cy, cx + b, cy, col); ITR(cx, cy + a, cx - b, cy, cx + b, cy, col);

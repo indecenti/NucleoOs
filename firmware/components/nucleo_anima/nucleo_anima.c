@@ -91,7 +91,8 @@ static const a_alias_t APP_ALIAS[] = {
     { "spreadsheet",        { "excel", "spreadsheet", "foglio", "fogli", "tabella", "tabelle", "celle", "sheet", "csv", NULL } },   // Listed before calculator on purpose: "foglio di calcolo" must resolve to the sheet app.
     { "calculator",         { "calcolatrice", "calcoli", "calculator", "math", NULL } },   // No "calc"/"calcolo" alias on purpose: it prefix-collides with "foglio di calcolo" (spreadsheet).
     { "terminal",           { "terminale", "terminal", "shell", "console", "prompt", "bash", "cli", NULL } },
-    { "clock",              { "orologio", "sveglia", "cronometro", "timer", "clock", "stopwatch", "alarm", NULL } },
+    { "clock",              { "orologio", "sveglia", "clock", "alarm", NULL } },
+    { "chrono",             { "cronometro", "crono", "timer", "stopwatch", NULL } },
     { "calendar",           { "calendario", "agenda", "appuntamenti", "eventi", "calendar", "events", NULL } },
     { "settings",           { "impostazioni", "settaggi", "configurazione", "opzioni", "settings", "options", "config", NULL } },
     { "browser",            { "browser", "naviga", "navigatore", "navigare", "navigazione", NULL } },

@@ -91,6 +91,14 @@ export function drawIcon(g, id, cx, cy, s) {
       g.bx(cx - T / 2, cy - s * 0.6, T, s * 0.6); g.bx(cx, cy - T / 2, s * 0.5, T); g.fc(cx, cy, T * 0.7);
       break;
 
+    case 'chrono':                                 // stopwatch: dial ring + top plunger + single hand
+      g.bx(cx - T * 0.4, cy - s * 0.98, T * 0.8, s * 0.34);
+      g.fc(cx, cy - s * 0.98, T * 0.6);
+      g.fc(cx, cy + s * 0.14, s * 0.80); g.fc(cx, cy + s * 0.14, s * 0.80 - T, g.bg);
+      g.bx(cx - T * 0.35, cy + s * 0.14 - s * 0.50, T * 0.7, s * 0.50);
+      g.fc(cx, cy + s * 0.14, T * 0.8);
+      break;
+
     case 'anima': {
       const a = s, b = s * 0.34;
       g.tri(cx, cy - a, cx - b, cy, cx + b, cy); g.tri(cx, cy + a, cx - b, cy, cx + b, cy);
