@@ -63,7 +63,7 @@ static const META_t META[] = {
     { "poker",    "POKER",          GM_1P,           "5 carte: tieni le buone, punta alla scala reale.", GF_LANDSCAPE },
     { "pinball",  "FLIPPER",        GM_1P,           "Flipper verticale: respingenti, spinner, punti.", GF_PORTRAIT },
     { "pong",     "PONG",           GM_CPU | GM_LAN, "1v1 in rete fra due Cardputer, o contro la CPU.", GF_LANDSCAPE },
-    { "tanks",    "TANKS",          GM_CPU | GM_2P,  "Artiglieria a turni: terreno distruttibile, vento, 9 armi.", GF_LANDSCAPE },
+    { "tanks",    "TANKS",          GM_CPU | GM_2P,  "Artiglieria a turni: terreno distruttibile, vento, 29 armi.", GF_LANDSCAPE },
     { "brawler",  "SCORRIBANDA",    GM_1P | GM_COOP, "Picchiaduro noir a scorrimento, anche in co-op.", GF_LANDSCAPE },
     { "dice",     "DADI",           GM_1P,           "Tiro di dadi: scuoti il device o premi invio.", GF_LANDSCAPE },
     { "snake",    "SNAKE",          GM_CPU | GM_LAN, "Serpente 1v1 in rete (ESP-NOW), o contro l'IA.", GF_LANDSCAPE },

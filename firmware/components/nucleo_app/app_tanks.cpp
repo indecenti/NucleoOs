@@ -1,6 +1,6 @@
 // app_tanks.cpp — NucleoOS "NUCLEO TANKS": turn-based artillery (Worms / Pocket Tanks lineage) with a
-// scrollable destructible battlefield, cinematic camera, hybrid 2D+3D look, biomes, 9 weapons, and a
-// 16-bit SNES audio/visual treatment. Category "Games". Single-device (vs CPU); 1v1-over-ESP-NOW later.
+// scrollable destructible battlefield, cinematic camera, hybrid 2D+3D look, biomes, 29 weapons, and a
+// 16-bit SNES audio/visual treatment. Category "Games". Plays vs CPU (best-of series) or 1v1 over ESP-NOW.
 //
 // This is the "polish v3" build: high-contrast complementary biome palettes (sky vs ground always read),
 // a multi-layer PARALLAX backdrop (the old Mode-7 sky grid is gone), a comet projectile that pops on any
@@ -71,7 +71,6 @@ static uint16_t mix(uint16_t a, uint16_t b, int t) {
 #define COL_CYAN  rgb(120, 220, 255)
 #define COL_INK   rgb(8, 10, 18)
 // projectile — outline+glow+core pops on snow-white, night-black, magenta sky, teal ground alike
-#define PROJ_OUTLINE rgb(6, 6, 12)
 #define PROJ_GLOW    rgb(255, 176, 40)
 #define PROJ_CORE    rgb(255, 255, 255)
 // HUD
@@ -106,13 +105,13 @@ enum { WB_BLAST = 0, WB_DIG, WB_CLUSTER, WB_RAIN, WB_MIRV, WB_ROLLER, WB_TELE,
 struct Weap { const char *it, *en; int beh, crater, dmg, count, ammo; uint16_t col; };
 static const Weap WEAPS[] = {
     { "Standard",     "Standard",  WB_BLAST,   12, 26, 1, -1, rgb(255,230,120) }, // 0
-    { "Bomba",        "Big Bomb",  WB_BLAST,   20, 44, 1,  6, rgb(255,150, 60) }, // 1
+    { "Bomba",        "Big Bomb",  WB_BLAST,   20, 44, 1,  4, rgb(255,150, 60) }, // 1  strong lob: ammo trimmed to its Mortar/Heavy tier (was an over-generous 6)
     { "Scavatore",    "Digger",    WB_DIG,     30, 12, 1,  5, rgb(190,150,100) }, // 2
     { "Grappolo",     "Cluster",   WB_CLUSTER,  8, 11, 8,  4, rgb(180,255,120) }, // 3  many small bomblets, wide ground carpet
     { "Pioggia",      "Rain",      WB_RAIN,     8, 14, 6,  3, rgb(120,200,255) }, // 4
     { "Sciame",       "MIRV",      WB_MIRV,    13, 26, 3,  3, rgb(220,140,255) }, // 5  few heavy warheads, steep airburst rain
     { "Rimbalzo",     "Roller",    WB_ROLLER,  14, 30, 1,  4, rgb(120,255,210) }, // 6
-    { "Astronave",    "Alien Ship",WB_UFO,     10, 48, 1,  3, rgb(140,255,180) }, // 7  alien saucer: fly out the barrel, hover over the foe, laser it from above
+    { "Astronave",    "Alien Ship",WB_UFO,     10, 48, 1,  2, rgb(140,255,180) }, // 7  near-guaranteed overhead laser if aimed right -> rarer (ammo 3->2)
     { "Atomica",      "Nuke",      WB_BLAST,   40, 80, 1,  1, rgb(255, 90, 70) }, // 8
     { "Scudo Bolla",  "Bubble",    WB_SHIELD,   0,  0, 1,  2, rgb(120,200,255) }, // 9
     { "Riparazione",  "Med-Kit",   WB_SHIELD,   0,  0, 1,  1, rgb(120,255,150) }, // 10
@@ -130,8 +129,8 @@ static const Weap WEAPS[] = {
     { "Mortaio",      "Mortar",    WB_BLAST,   16, 34, 1,  3, rgb(200,160,255) }, // 22  heavy single lob
     { "Massiccia",    "Heavy",     WB_BLAST,   26, 62, 1,  2, rgb(255,120, 60) }, // 23  big crater, big damage
     { "Talpa",        "Mole",      WB_DRILL,   30, 34, 1,  2, rgb(150,110, 60) }, // 24  bores deep, blasts under
-    { "Palla",        "Bowling",   WB_ROLLER,  14, 28, 1,  3, rgb(120,255,190) }, // 25  rolls to the foe
-    { "Incendio",     "Firestorm", WB_NAPALM,  12, 12, 1,  2, rgb(255,100, 30) }, // 26  wider burning patch
+    { "Palla",        "Bowling",   WB_ROLLER,  17, 34, 1,  2, rgb(120,255,190) }, // 25  HEAVY ball: bigger crater + more damage, fewer shots -> a distinct role from the light Roller (6)
+    { "Incendio",     "Firestorm", WB_NAPALM,  13, 12, 1,  2, rgb(255,100, 30) }, // 26  wider + longer burning patch than Napalm (see resolve_impact)
     { "Grandine",     "Hail",      WB_CLUSTER,  6,  8,10,  3, rgb(150,220,255) }, // 27  dense icy carpet
     { "Sisma",        "Quake",     WB_DIG,     34, 16, 1,  2, rgb(190,150,100) }, // 28  huge terrain shove + quake
 };
@@ -173,7 +172,7 @@ static uint8_t s_rel[120]; static int s_rel_len; static int64_t s_rel_next; stat
 static int     s_last_weap;             // weapon fired this turn (echoed in RESULT)
 
 static int    s_screen, s_msel, s_diff = 1;
-static int    g_lang = 0, g_audio = 1, g_manual = 0, g_aimhelp = 0;   // trajectory OFF in-scene by default (toggle in TAB)
+static int    g_lang = 0, g_audio = 1, g_manual = 0, g_aimhelp = 0, g_windvar = 0;   // trajectory OFF by default; windvar re-rolls wind each turn (vs CPU only)
 static int64_t s_now, s_last, s_frame;
 static unsigned s_anim;
 
@@ -207,6 +206,7 @@ static bool   s_ai_planned;
 // multiplayer turn clock: each player gets TURN_SECS to choose+fire; at 0 the shot auto-launches ("VIA").
 #define TURN_SECS 45
 static int64_t s_aim_deadline;         // now_ms() by which the local active player must have fired (net only)
+static int64_t s_yt_t;                  // "YOUR TURN" banner visible until this time (net: our turn just began)
 static int     s_last_tick;            // last whole-second announced (drives the 5..1 ticks + VIA cue)
 
 // settings overlay
@@ -218,6 +218,7 @@ static int    s_optsel, s_optguide, s_opt_from = ST_MENU;
 #define LOADOUT_N 10
 static bool    s_ldpick[NWEAP];
 static int     s_ldsel;
+static int     s_ld_go;                  // where ENTER leaves the picker: 0 = vs CPU, 1 = host, 2 = join
 static uint8_t s_slot[2][LOADOUT_N];
 static int     s_nslot[2];
 static int  ld_count(void) { int n = 0; for (int w = 0; w < NWEAP; w++) if (s_ldpick[w]) n++; return n; }
@@ -296,6 +297,34 @@ static float   frnd(float a, float b) { return a + (b - a) * ((esp_random() & 0x
 static const char *tx(const char *it, const char *en) { return g_lang ? en : it; }
 static int clampi(int v, int lo, int hi) { if (v < lo) v = lo; if (v > hi) v = hi; return v; }
 static float clampf(float v, float lo, float hi) { if (v < lo) v = lo; if (v > hi) v = hi; return v; }
+// Short one-word behaviour tag for a weapon, so the picker and the in-match card teach WHAT each gun
+// does (not just its name) — you arm your 10 informed instead of blind. Bilingual; a handful of blast
+// variants get a sharper label than a generic "blast". Pure lookup over the const arsenal: net-safe.
+static const char *weap_kind(int wp) {
+    switch (wp) {
+        case 8:  return tx("ATOMICA", "NUKE");
+        case 10: return tx("CURA", "HEAL");
+        case 16: return tx("SALTO", "JUMP");
+        case 18: return tx("PRECISO", "SNIPER");
+    }
+    switch (WEAPS[wp].beh) {
+        case WB_DIG:     return tx("SCAVA", "DIGGER");
+        case WB_CLUSTER: return tx("GRAPPOLO", "CLUSTER");
+        case WB_RAIN:    return tx("PIOGGIA", "RAIN");
+        case WB_MIRV:    return tx("SCIAME", "MIRV");
+        case WB_ROLLER:  return tx("ROTOLA", "ROLLER");
+        case WB_TELE:    return tx("SALTO", "JUMP");
+        case WB_SHIELD:  return tx("SCUDO", "SHIELD");
+        case WB_BEAM:    return tx("RAGGIO", "BEAM");
+        case WB_DRILL:   return tx("TRIVELLA", "DRILL");
+        case WB_WALL:    return tx("MURO", "WALL");
+        case WB_HOMING:  return tx("GUIDATO", "HOMING");
+        case WB_NAPALM:  return tx("FUOCO", "FIRE");
+        case WB_UFO:     return tx("ALIENO", "ALIEN");
+        case WB_BOUNCE:  return tx("RIMBALZO", "BOUNCE");
+        default:         return (WEAPS[wp].count > 1) ? tx("MULTIPLO", "MULTI") : tx("ESPLOSIVO", "BLAST");
+    }
+}
 
 // ============================ text helpers ===================================
 static void txt(int x, int y, int sz, uint16_t col, const char *s) { d.setTextSize(sz); d.setTextColor(col); d.setCursor(x, y); d.print(s); }
@@ -303,7 +332,7 @@ static void txt_c(int cx, int y, int sz, uint16_t col, const char *s) { txt(cx -
 static void txt_r(int rx, int y, int sz, uint16_t col, const char *s) { txt(rx - (int)strlen(s) * 6 * sz, y, sz, col, s); }
 
 // ============================ audio (polyphonic SNES cues) ===================
-#define NSFX 47
+#define NSFX 49
 static const char *sfx_name(int id) {
     switch (id) {
         case 1: return "nav";  case 2: return "sel";  case 3: return "back"; case 4: return "fire";
@@ -417,12 +446,14 @@ static int build_voices(int id, notify_voice_t *v) {
         case 45: notify__voice(&v[0],130.81f,0,0.18f); v[0].amp=0.9f; notify__voice(&v[1],123.47f,0.06f,0.16f); v[1].amp=0.8f; return 2;
         case 46: notify__voice(&v[0],392,0,0.08f); notify__voice(&v[1],523.25f,0.06f,0.08f); notify__voice(&v[2],659.25f,0.12f,0.16f); return 3;
         case 47: notify__voice(&v[0],82.41f,0,0.30f); v[0].amp=0.9f; notify__voice(&v[1],110,0.05f,0.22f); v[1].amp=0.6f; return 2;
+        case 48: notify__voice(&v[0],1174.66f,0,0.03f); v[0].amp=0.85f; notify__voice(&v[1],1567.98f,0.02f,0.04f); v[1].amp=0.7f; notify__voice(&v[2],587.33f,0,0.08f); v[2].amp=0.5f; return 3;   // sniper crack — sharp high snap
+        case 49: notify__voice(&v[0],659.25f,0,0.05f); v[0].amp=0.6f; notify__voice(&v[1],987.77f,0.04f,0.05f); v[1].amp=0.65f; notify__voice(&v[2],1567.98f,0.09f,0.07f); v[2].amp=0.6f; return 3;   // homing lock — rising zap
     }
     return 0;
 }
 static bool sfx_important(int id) {
     return id == 4 || id == 6 || id == 9 || id == 10 || id == 12 || id == 14
-        || (id >= 30 && id <= 38) || id == 41;
+        || (id >= 30 && id <= 38) || id == 41 || id == 48 || id == 49;
 }
 static void sfx(int id) {
     if (!g_audio || id <= 0) return;
@@ -463,13 +494,13 @@ static void presynth(void) {
 }
 
 // ============================ persistence ====================================
-#define CFG_MAGIC 0x544E4B35u   // 'TNK5' (bumped: stores the player's weapon loadout)
-struct TkCfg { uint32_t m; int lang, audio, diff, manual, aimhelp; unsigned top[NTOP]; uint8_t ld[NWEAP]; };
+#define CFG_MAGIC 0x544E4B36u   // 'TNK6' (bumped: adds the variable-wind toggle)
+struct TkCfg { uint32_t m; int lang, audio, diff, manual, aimhelp, windvar; unsigned top[NTOP]; uint8_t ld[NWEAP]; };
 static void cfg_write(void) {
     ensure_dirs();
     FILE *f = fopen(DIRR "/cfg.bin", "wb");
     if (!f) return;
-    TkCfg c = { CFG_MAGIC, g_lang, g_audio, s_diff, g_manual, g_aimhelp, { 0 }, { 0 } };
+    TkCfg c = { CFG_MAGIC, g_lang, g_audio, s_diff, g_manual, g_aimhelp, g_windvar, { 0 }, { 0 } };
     for (int i = 0; i < NTOP; i++) c.top[i] = g_top[i];
     for (int w = 0; w < NWEAP; w++) c.ld[w] = s_ldpick[w] ? 1 : 0;
     fwrite(&c, sizeof c, 1, f);
@@ -481,12 +512,11 @@ static void cfg_read(void) {
     TkCfg c;
     size_t n = fread(&c, sizeof c, 1, f);
     fclose(f);
-    if (n == 1 && c.m == CFG_MAGIC) {
-        g_lang = c.lang ? 1 : 0; g_audio = c.audio ? 1 : 0; s_diff = clampi(c.diff, 0, 2);
-        g_manual = c.manual ? 1 : 0; g_aimhelp = c.aimhelp ? 1 : 0;
-        for (int i = 0; i < NTOP; i++) g_top[i] = c.top[i];
-        for (int w = 0; w < NWEAP; w++) s_ldpick[w] = c.ld[w] != 0;
-    }
+    if (n != 1 || c.m != CFG_MAGIC) return;                // stale/foreign save -> fall back to defaults
+    g_lang = c.lang ? 1 : 0; g_audio = c.audio ? 1 : 0; s_diff = clampi(c.diff, 0, 2);
+    g_manual = c.manual ? 1 : 0; g_aimhelp = c.aimhelp ? 1 : 0; g_windvar = c.windvar ? 1 : 0;
+    for (int i = 0; i < NTOP; i++) g_top[i] = c.top[i];
+    for (int w = 0; w < NWEAP; w++) s_ldpick[w] = c.ld[w] != 0;
 }
 // Guarantee a legal 10-weapon loadout (first run, or a corrupt/old save): a varied, fun default set.
 static void ld_ensure_valid(void) {
@@ -669,16 +699,22 @@ static void start_turn(void);
 static void build_match(int mode, uint32_t seed, int wind, int t0x, int t1x, int starter) {
     s_mode = mode;
     s_seed = seed; gen_terrain(); s_wind = wind;
-    // Decide each tank's arsenal. Net: full arsenal both sides (no loadout in the START packet -> no desync).
+    // Decide each tank's arsenal.
     // vs CPU: P0 uses the player's chosen 10; the CPU rolls a fresh offensive 10 each match (replay variety).
+    // Net: each side arms its OWN tank (s_seat) from the LOCAL loadout and gives the opponent the full
+    // arsenal, so re-simming the opponent's transmitted shots never runs out of ammo. Loadouts stay LOCAL
+    // (never in the START packet) — every shot's TK_FIRE carries the weapon, so the boards can't desync.
     bool have[2][NWEAP];
-    for (int w = 0; w < NWEAP; w++) { have[0][w] = have[1][w] = (mode != MODE_AI); }
+    for (int w = 0; w < NWEAP; w++) { have[0][w] = have[1][w] = false; }
     if (mode == MODE_AI) {
         ld_ensure_valid();
         for (int w = 0; w < NWEAP; w++) have[0][w] = s_ldpick[w];
         static const int aipool[] = { 0,1,2,3,4,5,6,8,11,12,14,15,17,18,20,21,22,23,24,25,27,28 };  // aimable/offensive only
         int np = (int)(sizeof(aipool) / sizeof(aipool[0])), picked = 0, guard = 0;
         while (picked < LOADOUT_N && guard++ < 400) { int w = aipool[esp_random() % np]; if (w < NWEAP && !have[1][w]) { have[1][w] = true; picked++; } }
+    } else {
+        ld_ensure_valid();
+        for (int w = 0; w < NWEAP; w++) { have[s_seat][w] = s_ldpick[w]; have[1 - s_seat][w] = true; }
     }
     for (int i = 0; i < 2; i++) {
         s_tk[i].hp = 100; s_tk[i].dead = false; s_tk[i].elev = 45; s_tk[i].power = 75; s_tk[i].shield = 0;
@@ -703,7 +739,8 @@ static void build_match(int mode, uint32_t seed, int wind, int t0x, int t1x, int
     s_last_rx = s_last_aim = now_ms();
     s_active = starter;
     s_cam = s_camtgt = clampf(s_tk[s_active].x - W / 2, 0, WW - W);
-    if (mode != MODE_AI) { s_wins[0] = s_wins[1] = 0; }         // net match starts fresh
+    // NB: the net win tally is NOT reset here — it's zeroed once when the lobby opens (menu -> picker),
+    // so a MP "rematch" (host re-START from game-over) carries the best-of series across boards.
     start_turn();
 }
 static void new_match(void) {   // local vs CPU: random params
@@ -765,7 +802,10 @@ static void explode_w(float x, float y, int wp) {
         }
         if (s_tk[i].hp <= 0) { s_tk[i].hp = 0; s_tk[i].dead = true; shat_spawn(s_tk[i].x, s_tk[i].y, 4.5f, i ? COL_P1 : COL_P0, 900); }
     }
-    int nsp = 9; float shsc = 1.8f; uint16_t shc = mix(th_ground, w->col, 110), fc = w->col; int fms = 70; float shk = 3, ring = w->crater * 1.5f;
+    int nsp = 9; float shsc = 1.8f; uint16_t shc = mix(th_ground, w->col, 110), fc = w->col; int fms = 70; float ring = w->crater * 1.5f;
+    // per-weapon calibrated camera kick: heavier ordnance (bigger crater / more damage) shakes harder,
+    // so a pistol pop and a heavy shell no longer land with the same jolt (nuke overrides to 15 below).
+    float shk = clampf(2.2f + w->crater * 0.16f + w->dmg * 0.045f, 2.5f, 8.5f);
     int fp = w->crater >= 20 ? 150 : 110;                  // bigger craters flash a touch brighter
     if (w->beh == WB_DIG)    { nsp = 16; shsc = 2.6f; shc = th_ground2; fms = 36; }
     if (w->beh == WB_CLUSTER){ nsp = 7;  shsc = 1.5f; }
@@ -857,10 +897,12 @@ static void resolve_impact(Proj *p) {
             raise_wall((int)x, 26, 30);                                                 // build a defensive hill
             for (int s = 0; s < 12; s++) spark_burst(x + frnd(-20, 20), surf((int)x) + frnd(-6, 2), 1, w->col);
             ring_spawn(x, surf((int)x), 24, w->col); flash(w->col, 50); shake(2); sfx(46); p->on = false; return;
-        case WB_NAPALM:
+        case WB_NAPALM: {
             explode_w(x, y, p->wp);
-            for (int s = 0; s < NFIRE; s++) if (!s_fire[s].on) { s_fire[s] = { true, (int)x, 24, 4 }; break; }
+            int fw = (p->wp == 26) ? 34 : 24, ft = (p->wp == 26) ? 5 : 4;   // Firestorm burns WIDER and LONGER than Napalm (delivers its promised area-denial)
+            for (int s = 0; s < NFIRE; s++) if (!s_fire[s].on) { s_fire[s] = { true, (int)x, fw, ft }; break; }
             sfx(47); p->on = false; return;
+        }
         default:
             explode_w(x, y, p->wp); p->on = false; return;
     }
@@ -1098,24 +1140,20 @@ static void check_over(void) {
         cfg_write();
     }
 }
-static void settle_fall_only(int dt) {                          // drop tanks without ending the turn (dwell)
-    for (int i = 0; i < 2; i++) {
-        float tgt = surf((int)s_tk[i].x) - TANK_H / 2;
-        if (s_tk[i].y < tgt - 0.5f) { s_tk[i].y += 0.12f * dt; if (s_tk[i].y > tgt) s_tk[i].y = tgt; }
-        else s_tk[i].y = tgt;
-    }
-}
-static void settle(int dt) {
+static bool drop_tanks(int dt) {                                // ease both tanks down onto the terrain; true while still falling
     bool moving = false;
     for (int i = 0; i < 2; i++) {
         float tgt = surf((int)s_tk[i].x) - TANK_H / 2;
         if (s_tk[i].y < tgt - 0.5f) { s_tk[i].y += 0.12f * dt; if (s_tk[i].y > tgt) s_tk[i].y = tgt; moving = true; }
         else s_tk[i].y = tgt;
     }
-    if (!moving) {
-        if (s_mode != MODE_AI) { net_finish_turn(); return; }      // net: active controller packages+sends the result
-        check_over(); if (s_phase != TP_OVER) { s_active = 1 - s_active; start_turn(); }
-    }
+    return moving;
+}
+static void settle_fall_only(int dt) { drop_tanks(dt); }        // drop tanks during the impact dwell, without ending the turn
+static void settle(int dt) {
+    if (drop_tanks(dt)) return;                                 // still settling -> let them finish falling first
+    if (s_mode != MODE_AI) { net_finish_turn(); return; }      // net: active controller packages + sends the result
+    check_over(); if (s_phase != TP_OVER) { s_active = 1 - s_active; start_turn(); }
 }
 static void seed_entry(void) {                       // manual aim: prime the digit strings
     snprintf(s_entry_ang, sizeof s_entry_ang, "%d", s_tk[s_active].elev);
@@ -1124,7 +1162,10 @@ static void seed_entry(void) {                       // manual aim: prime the di
 }
 static void start_turn(void) {
     s_spectate = false;
-    // wind is fixed for the whole match (set once in build_match) — re-rolling it every turn felt random/unfair
+    // Wind is fixed for the match by default (set once in build_match) — re-rolling every turn felt random/unfair.
+    // Optional "variable wind" (Settings) re-rolls it each turn for a Pocket-Tanks feel. vs CPU ONLY: on the net
+    // board the wind is carried authoritatively in the RESULT, so a local re-roll here would desync the boards.
+    if (g_windvar && s_mode == MODE_AI) s_wind = (int)frnd(-70, 70);
     // napalm patches burn whoever stands in them, then age out
     for (int s = 0; s < NFIRE; s++) if (s_fire[s].on) {
         for (int t = 0; t < 2; t++) if (!s_tk[t].dead && fabsf(s_tk[t].x - s_fire[s].x) < s_fire[s].w) {
@@ -1141,6 +1182,7 @@ static void start_turn(void) {
     s_inE = s_inP = 0; s_hud_t = now_ms();             // fresh turn: clear held momentum, show the HUD chrome
     bool mine = (s_mode == MODE_AI) ? (s_active == 0) : (s_active == s_seat);
     if (mine) s_wbar_t = now_ms() + 2400;              // flash the weapon picker so you start the turn knowing your loadout
+    if (mine && s_mode != MODE_AI) { s_yt_t = now_ms() + 1300; sfx(8); }   // net: announce YOUR TURN (banner + chirp) so you never miss the handoff
     if (g_manual && s_active == s_seat) seed_entry();
 }
 
@@ -1244,14 +1286,20 @@ static void net_handle(const pnet_pkt_t *p) {
     int type = p->buf[3];
     if (type == TK_ACK) { if (s_rel_on && p->len >= 8) { uint32_t a; memcpy(&a, p->buf + 4, 4); if (a == s_resseq) s_rel_on = false; } return; }
     if (type == TK_BYE) { s_peerleft = true; return; }
+    // Rematch: the host re-STARTs from game-over while the guest sits in ST_OVER. Accept the new board
+    // right here (peer + seat already known) and drop straight back into play, ACKing like a first join.
+    if (type == TK_START && s_screen == ST_OVER && s_seat == 1 && p->len >= (int)sizeof(TkStart)) {
+        const TkStart *st = (const TkStart *)p->buf; s_haspeer = true;
+        build_match(MODE_GUEST, st->seed, st->wind, st->t0x, st->t1x, st->starter);
+        net_ack(0); go(ST_PLAY); return;
+    }
     if (s_screen == ST_BROWSE) {
         if (type == TK_HELLO && p->len >= 28) room_add(p->mac, (const char *)p->buf + 4);
         else if (type == TK_WELCOME && s_join_pending) { memcpy(s_peer, p->mac, 6); s_haspeer = true; s_join_pending = false; s_welcomed = true; sfx(2); }
         else if (type == TK_START && p->len >= (int)sizeof(TkStart)) {
             const TkStart *st = (const TkStart *)p->buf; memcpy(s_peer, p->mac, 6); s_haspeer = true; s_seat = 1;
             build_match(MODE_GUEST, st->seed, st->wind, st->t0x, st->t1x, st->starter);
-            uint8_t b[8] = { TK_M0, TK_M1, TK_VER, TK_ACK }; uint32_t z = 0; memcpy(b + 4, &z, 4); pnet_send(s_peer, b, 8);
-            go(ST_PLAY);
+            net_ack(0); go(ST_PLAY);
         }
         return;
     }
@@ -1267,7 +1315,7 @@ static void net_handle(const pnet_pkt_t *p) {
             s_tk[s_active].elev = e; s_tk[s_active].power = pw; s_last_rx = now_ms();
         } else if (type == TK_FIRE && !local_active() && s_phase == TP_AIM && p->len >= 12) {
             int16_t e, pw, wd; memcpy(&e, p->buf + 6, 2); memcpy(&pw, p->buf + 8, 2); memcpy(&wd, p->buf + 10, 2);
-            int wp = p->buf[4]; if (wp < 0 || wp >= NWEAP) wp = 0;
+            int wp = p->buf[4]; if (wp >= NWEAP) wp = 0;   // p->buf is uint8_t, so wp is already >= 0
             s_tk[s_active].weap = wp; s_tk[s_active].elev = e; s_tk[s_active].power = pw; s_wind = wd; s_last_rx = now_ms();
             if (s_tk[s_active].ammo[wp] == 0) s_tk[s_active].ammo[wp] = 9;   // keep fire_weapon from switching weapons
             s_spectate = true; fire_weapon(s_active);                        // re-simulate the shot locally so the camera follows the arc
@@ -1492,13 +1540,28 @@ static void draw_traj(int camx, int ox, int oy) {
     float e = s_tk[who].elev * (float)M_PI / 180.0f, dir = (who == 0) ? 1.0f : -1.0f, v = v0_of(s_tk[who].power);
     float x = s_tk[who].x + cosf(e) * dir * BARREL, y = s_tk[who].y - 3 - sinf(e) * BARREL;
     float vx = cosf(e) * dir * v, vy = -sinf(e) * v, g = 0.00040f, wind = s_wind / 100.0f * WIND_ACCEL;
+    float ix = x, iy = y; bool landed = false;
     for (int n = 0; n < 30; n++) {
         for (int s = 0; s < 6; s++) { vy += g * 16; vx += wind * 16; x += vx * 16; y += vy * 16; }
-        if (x < 0 || x > WW - 1 || y >= surf((int)x)) break;
+        ix = x; iy = y;
+        if (x < 0 || x > WW - 1) break;                               // flew off the field: no ground marker
+        if (y >= surf((int)x)) { iy = surf((int)x); landed = true; break; }
         int px = (int)x - camx + ox, py = (int)y + oy;
         if (px >= 0 && px < W && py >= 0 && py < H && (n & 1)) {
             d.drawPixel(px, py, outline_for(bg_at((int)x, (int)y)));   // dark on snow, light on night
             d.drawPixel(px, py - 1, mix(th_glow, COL_WHITE, 90));      // bright core
+        }
+    }
+    // predicted-impact reticle: a small crosshair where the arc meets the ground, so the aim reads as a
+    // clear TARGET instead of trailing off into pixels. Player-coloured, outlined to pop on any terrain.
+    if (landed) {
+        int mx = (int)ix - camx + ox, my = (int)iy + oy;
+        if (mx >= -6 && mx < W + 6 && my >= 0 && my < H) {
+            uint16_t mc = who ? COL_P1 : COL_P0;
+            d.drawFastHLine(mx - 5, my, 11, COL_INK); d.drawFastVLine(mx, my - 5, 11, COL_INK);   // dark cross (readable on snow)
+            d.drawFastHLine(mx - 4, my, 9, mc);       d.drawFastVLine(mx, my - 4, 9, mc);
+            d.drawCircle(mx, my, 4, COL_INK); d.drawCircle(mx, my, 3, mc);
+            d.drawPixel(mx, my, COL_WHITE);
         }
     }
 }
@@ -1694,6 +1757,7 @@ static void draw_hud(void) {
         d.fillRect(0, H - 9, W, 9, mix(gnd, HUD_BG, a));
         d.fillRect(3, H - 7, W - 6, 4, mix(gnd, rgb(40, 44, 60), a));
         d.fillRect(3, H - 7, (W - 6) * s_tk[me].power / 100, 4, mix(gnd, mix(COL_GREEN, COL_RED, s_tk[me].power * 256 / 100), a));
+        for (int q = 1; q < 4; q++) d.drawFastVLine(3 + (W - 6) * q / 4, H - 7, 4, mix(gnd, COL_INK, a));   // 25/50/75% reference ticks -> power readable at a glance
     }
     // manual numeric entry owns the bottom card; otherwise the big glance shows angle/power
     if (g_manual && local_active() && s_phase == TP_AIM) {
@@ -1719,7 +1783,7 @@ static void draw_wcard(void) {     // weapon picker card: pops on weapon change 
     txt(px + 25, py + 6, 2, COL_WHITE, nm);                                       // BIG name (size 2)
     char ab[18]; if (s_tk[me].ammo[wsel] >= 0) snprintf(ab, sizeof ab, "%s x%d", tx("mun", "ammo"), s_tk[me].ammo[wsel]); else snprintf(ab, sizeof ab, "%s", tx("illimitate", "unlimited"));
     txt(px + 25, py + 22, 1, s_tk[me].ammo[wsel] == 0 ? COL_RED : HUD_TEXT2, ab);
-    int slots = s_nslot[me]; char pos[10]; snprintf(pos, sizeof pos, "%d/%d", wsel + 1, NWEAP); txt_r(px + pw - 7, py + 22, 1, COL_DIM, pos);
+    int slots = s_nslot[me]; txt_r(px + pw - 7, py + 22, 1, mix(cw->col, COL_WHITE, 60), weap_kind(wsel));   // behaviour tag (WHAT it does) — clearer than a raw arsenal index
     uint16_t hc = ((s_anim >> 2) & 1) ? COL_WHITE : COL_DIM;                      // Q/W cycle hints
     txt(px - 9, py + 12, 1, hc, "Q"); txt(px + pw + 3, py + 12, 1, hc, "W");
     // 1..0 quick-slot ribbon: the ten LOADOUT slots (fixed order), coloured by weapon, current highlighted,
@@ -1826,6 +1890,17 @@ static void draw_play(void) {
     draw_hud();
     draw_wcard();
     draw_turn_timer();
+    // net YOUR-TURN call-out: a brief bold banner the instant the handoff lands on us, so a remote
+    // player never misses that it's their move (paired with the chirp fired in start_turn).
+    if (s_yt_t > now_ms() && s_mode != MODE_AI && local_active()) {
+        uint16_t c = (s_seat == 0) ? COL_P0 : COL_P1;
+        const char *t = tx("TOCCA A TE", "YOUR TURN");
+        int tw = (int)strlen(t) * 12, bx = W / 2 - tw / 2 - 8, by = 40;
+        d.fillRoundRect(bx, by, tw + 16, 20, 5, mix(COL_INK, c, 70));
+        d.drawRoundRect(bx, by, tw + 16, 20, 5, ((s_anim >> 2) & 1) ? COL_WHITE : c);
+        txt_c(W / 2 + 1, by + 4, 2, COL_INK, t);
+        txt_c(W / 2,     by + 3, 2, c, t);
+    }
     // turn-change diagonal wipe in the new player's colour
     if (s_phase == TP_TURN) {
         float t = clampf((1050 - s_turn_t) / 350.0f, 0, 1);
@@ -1913,7 +1988,12 @@ static void ld_row(int i, int y, bool cur, bool big) {
     char mt[18];
     if (w->beh == WB_SHIELD) snprintf(mt, sizeof mt, "%s", tx("difesa", "defense"));
     else snprintf(mt, sizeof mt, "d%d x%d", w->dmg, w->ammo);
-    txt_r(W - 14, y + rh / 2 - 3, 1, big ? mix(w->col, COL_WHITE, 60) : mix(w->col, COL_INK, 40), mt);
+    if (big) {                                                       // focused row: tag WHAT it does, then damage x ammo
+        txt_r(W - 14, y + 4,  1, mix(w->col, COL_WHITE, 40), weap_kind(i));
+        txt_r(W - 14, y + 13, 1, mix(w->col, COL_WHITE, 70), mt);
+    } else {
+        txt_r(W - 14, y + rh / 2 - 3, 1, mix(w->col, COL_INK, 40), mt);
+    }
 }
 // Pocket-Tanks loadout picker: an INFINITE wrapping carousel (big centre row), a live strip of the ten
 // picks so you always see your set, and a bold counter. Tick exactly 10 to arm the START.
@@ -1932,18 +2012,36 @@ static void draw_loadout(int ch) {
     ld_row((s_ldsel - 1 + NWEAP) % NWEAP, 25, false, false);
     ld_row(s_ldsel,                        45, true,  true);
     ld_row((s_ldsel + 1) % NWEAP,          75, false, false);
-    char nv[10]; snprintf(nv, sizeof nv, "%d/%d", s_ldsel + 1, NWEAP); txt(10, 7, 1, COL_DIM, nv);
+    // mode tag (top-left): the picker now precedes every mode, so show which match you're arming for
+    const char *modew = (s_ld_go == 1) ? tx("OSPITA", "HOST") : (s_ld_go == 2) ? tx("UNISCITI", "JOIN") : tx("vs CPU", "vs CPU");
+    uint16_t modec = (s_ld_go == 1) ? COL_P0 : (s_ld_go == 2) ? COL_P1 : COL_GOLD;
+    txt(10, 7, 1, modec, modew);
 
-    // live loadout strip: ten slots, filled in pick order with the weapon colour, empties outlined
+    // live loadout strip: ten slots filled in pick order with the weapon colour; every empty slot shows
+    // its number (1..10) so the goal reads at a glance, and the NEXT slot to fill pulses.
     int sy = 95, sw = 20, sx = (W - LOADOUT_N * sw) / 2, filled = 0;
     for (int w = 0; w < NWEAP && filled < LOADOUT_N; w++) if (s_ldpick[w]) {
         int x = sx + filled * sw; d.fillRoundRect(x + 1, sy, sw - 3, 12, 3, mix(WEAPS[w].col, COL_INK, 40));
         d.drawRoundRect(x + 1, sy, sw - 3, 12, 3, WEAPS[w].col); filled++;
     }
-    for (int e = filled; e < LOADOUT_N; e++) { int x = sx + e * sw; d.drawRoundRect(x + 1, sy, sw - 3, 12, 3, rgb(40, 48, 72)); }
+    for (int e = filled; e < LOADOUT_N; e++) {
+        int x = sx + e * sw;
+        bool nextslot = (e == filled) && (n < LOADOUT_N);          // where the next pick lands
+        uint16_t oc = nextslot ? (((s_anim >> 2) & 1) ? COL_GOLD : rgb(96, 108, 150)) : rgb(40, 48, 72);
+        d.drawRoundRect(x + 1, sy, sw - 3, 12, 3, oc);
+        char sn[3]; snprintf(sn, sizeof sn, "%d", e + 1);
+        txt_c(x + 1 + (sw - 3) / 2, sy + 3, 1, nextslot ? COL_GOLD : rgb(72, 82, 112), sn);
+    }
 
-    if (n == LOADOUT_N) txt_c(W / 2, ch - 9, 1, ((s_anim >> 2) & 1) ? COL_GREEN : COL_WHITE, tx("INVIO = AVVIA   SPAZIO togli", "ENTER = START   SPACE remove"));
-    else                txt_c(W / 2, ch - 9, 1, COL_DIM, tx("SU/GIU scorri   SPAZIO scegli", "UP/DN scroll   SPACE pick"));
+    // adaptive guidance: teach the empty picker, then count the picks down, then arm START
+    if (n == LOADOUT_N)
+        txt_c(W / 2, ch - 9, 1, ((s_anim >> 2) & 1) ? COL_GREEN : COL_WHITE, tx("INVIO avvia   SPAZIO togli", "ENTER start   SPACE remove"));
+    else if (n == 0)
+        txt_c(W / 2, ch - 9, 1, COL_GOLD, tx("SPAZIO scegli   ALT casuali", "SPACE pick   ALT random"));
+    else {
+        char g[44]; snprintf(g, sizeof g, tx("ancora %d   ALT casuali", "%d more   ALT random"), LOADOUT_N - n);
+        txt_c(W / 2, ch - 9, 1, COL_GOLD, g);
+    }
 }
 static const char *opt_label(int i) {
     switch (i) {
@@ -1952,6 +2050,7 @@ static const char *opt_label(int i) {
         case 2: return tx("Difficolta", "Difficulty");
         case 3: return tx("Mira manuale", "Manual aim");
         case 4: return tx("Aiuto mira", "Aim help");
+        case 5: return tx("Vento variabile", "Variable wind");
         default: return tx("Comandi", "Key guide");
     }
 }
@@ -1963,10 +2062,11 @@ static void opt_value(int i, char *out, int cap, uint16_t *col) {
         case 2: snprintf(out, cap, "%s", s_diff == 0 ? tx("Facile","Easy") : s_diff == 1 ? tx("Normale","Normal") : tx("Difficile","Hard")); break;
         case 3: snprintf(out, cap, "%s", g_manual ? "On" : "Off"); if (!g_manual) *col = COL_DIM; break;
         case 4: snprintf(out, cap, "%s", g_aimhelp ? "On" : "Off"); if (!g_aimhelp) *col = COL_DIM; break;
+        case 5: snprintf(out, cap, "%s", g_windvar ? "On" : "Off"); if (!g_windvar) *col = COL_DIM; break;
         default: snprintf(out, cap, "%s", tx("apri", "open")); break;
     }
 }
-#define NOPT 6
+#define NOPT 7
 static void draw_options(int ch) {
     felt(ch);
     txt_c(W / 2 + 1, 6, 3, mix(COL_GOLD, COL_INK, 130), tx("IMPOSTAZIONI", "SETTINGS"));   // drop shadow
@@ -1985,24 +2085,32 @@ static void draw_options(int ch) {
     }
     // clean fixed list: every option fits (no scroll). The selected row blooms into a labelled pill with an
     // accent bar; the rest stay compact and column-aligned. Sequential layout => nothing ever overlaps.
-    int y = 32;
+    // Adaptive row pitch: the whole list must clear the footer whatever NOPT is — at the old fixed pitch
+    // 7 options overran the 121 px content area. Derive a per-row height from the room available; the
+    // selected row is a few px taller (its size-2 label + pill). A legibility floor keeps rows readable.
+    int footer = ch - 9;
+    int y0 = 30, budget = footer - 3 - y0;
+    int perNon = (budget - 7) / NOPT; if (perNon > 14) perNon = 14; if (perNon < 10) perNon = 10;
+    int perSel = perNon + 7;
+    int y = y0;
     for (int i = 0; i < NOPT; i++) {
         bool sel = (i == s_optsel);
         char vb[16]; uint16_t vc; opt_value(i, vb, sizeof vb, &vc);
         if (sel) {
-            d.fillRoundRect(10, y, W - 20, 18, 5, rgb(30, 40, 70));
-            d.drawRoundRect(10, y, W - 20, 18, 5, ((s_anim >> 3) & 1) ? rgb(120, 150, 220) : rgb(78, 98, 158));
-            d.fillRect(12, y + 2, 3, 14, COL_GOLD);                        // accent bar
-            txt(20, y + 2, 2, COL_WHITE, opt_label(i));
+            int ph = perSel - 1;
+            d.fillRoundRect(10, y, W - 20, ph, 5, rgb(30, 40, 70));
+            d.drawRoundRect(10, y, W - 20, ph, 5, ((s_anim >> 3) & 1) ? rgb(120, 150, 220) : rgb(78, 98, 158));
+            d.fillRect(12, y + 2, 3, ph - 4, COL_GOLD);                    // accent bar
+            txt(20, y + (ph - 14) / 2, 2, COL_WHITE, opt_label(i));        // size-2 label, vertically centred
             char vv[20];
             if (i == NOPT - 1) snprintf(vv, sizeof vv, "%s", vb);          // guide row: "open"
             else               snprintf(vv, sizeof vv, "< %s >", vb);      // chevrons hint SX/DX changes it
-            txt_r(W - 16, y + 6, 1, vc == COL_DIM ? COL_MUT : vc, vv);
-            y += 22;
+            txt_r(W - 16, y + (ph - 8) / 2, 1, vc == COL_DIM ? COL_MUT : vc, vv);
+            y += perSel;
         } else {
-            txt(20, y + 3, 1, COL_MUT, opt_label(i));
-            txt_r(W - 16, y + 3, 1, mix(vc, rgb(8, 10, 20), 70), vb);
-            y += 14;
+            txt(20, y + (perNon - 8) / 2, 1, COL_MUT, opt_label(i));
+            txt_r(W - 16, y + (perNon - 8) / 2, 1, mix(vc, rgb(8, 10, 20), 70), vb);
+            y += perNon;
         }
     }
     txt_c(W / 2, ch - 9, 1, COL_DIM, tx("SU/GIU scegli  SX/DX cambia  TAB esci", "UP/DN pick  L/R change  TAB exit"));
@@ -2036,6 +2144,8 @@ static void draw_over(int ch) {
     char sc[24]; snprintf(sc, sizeof sc, "%d  -  %d", s_wins[0], s_wins[1]); txt_c(W / 2 + 1, 61, 3, COL_INK, sc); txt_c(W / 2, 60, 3, COL_WHITE, sc);
     // HP chip (score size 3 = 24px → ends y=84; chip at y=88, clear gap)
     if (!s_draw_flag) { char hp[40]; snprintf(hp, sizeof hp, "%s %d", tx("Vita rimasta", "HP left"), s_tk[win].hp); int hw = (int)strlen(hp) * 6 + 12; d.fillRoundRect(W / 2 - hw / 2, 88, hw, 12, 4, mix(COL_GREEN, COL_INK, 200)); txt_c(W / 2, 90, 1, COL_GREEN, hp); }
+    // round bonus you racked up (long shots / doubles / one-shots) — the points that feed the leaderboard
+    if (s_mode == MODE_AI && !s_draw_flag && win == 0 && s_bonus > 0) { char bb[28]; snprintf(bb, sizeof bb, "%s +%u", tx("Bonus", "Bonus"), s_bonus); txt_c(W / 2, 103, 1, COL_GOLD, bb); }
     // hint at content bottom — no mini-tanks here (they pushed below hint boundary)
     txt_c(W / 2, ch - 12, 1, ((s_anim >> 2) & 1) ? COL_WHITE : COL_DIM,
           s_mode != MODE_AI ? tx("INVIO menu", "ENTER menu")
@@ -2150,12 +2260,13 @@ static void set_hint(void) {
     switch (s_screen) {
         case ST_MENU:   nucleo_app_set_hint(tx("SU/GIU  INVIO  Esc esci", "UP/DN  ENTER  Esc quit")); break;
         case ST_OVER:   nucleo_app_set_hint(s_mode == MODE_AI ? tx("INVIO rivincita  Esc menu", "ENTER rematch  Esc menu")
-                                                              : tx("INVIO menu  Esc menu", "ENTER menu  Esc menu")); break;
+                                          : s_seat == 0        ? tx("INVIO rivincita  Esc menu", "ENTER rematch  Esc menu")
+                                                              : tx("Attendi la rivincita host  Esc menu", "Waiting for host rematch  Esc menu")); break;
         case ST_OPT:    nucleo_app_set_hint(tx("SU/GIU  INVIO  TAB chiudi", "UP/DN  ENTER  TAB close")); break;
         case ST_HOST:   nucleo_app_set_hint(tx("INVIO avvia (con sfidante)  Esc", "ENTER start (with challenger)  Esc")); break;
         case ST_BROWSE: nucleo_app_set_hint(tx("SU/GIU  INVIO entra  Esc", "UP/DN  ENTER join  Esc")); break;
         case ST_SCORES: case ST_HELP: nucleo_app_set_hint(tx("Esc indietro", "Esc back")); break;
-        case ST_LOADOUT: nucleo_app_set_hint(tx("SU/GIU  SPAZIO  INVIO avvia  Esc", "UP/DN  SPACE  ENTER start  Esc")); break;
+        case ST_LOADOUT: nucleo_app_set_hint(tx("SU/GIU  SPAZIO scegli  ALT casuali  DEL azzera  INVIO avvia  Esc", "UP/DN  SPACE pick  ALT random  DEL clear  ENTER start  Esc")); break;
         default: break;
     }
 }
@@ -2176,6 +2287,7 @@ static void opt_change(int i, int dir) {
         case 2: s_diff = (s_diff + (dir < 0 ? 2 : 1)) % 3; break;
         case 3: g_manual ^= 1; if (g_manual && local_active()) seed_entry(); break;   // seed for whoever is actually aiming (host OR guest)
         case 4: g_aimhelp ^= 1; break;
+        case 5: g_windvar ^= 1; break;
         default: s_optguide = 1; break;
     }
     cfg_write(); sfx(2); nucleo_app_request_draw();
@@ -2218,9 +2330,11 @@ static void on_key(int k, char ch) {
             if (k == NK_UP)        { s_msel = (s_msel + NMENU - 1) % NMENU; sfx(1); nucleo_app_request_draw(); }
             else if (k == NK_DOWN) { s_msel = (s_msel + 1) % NMENU; sfx(1); nucleo_app_request_draw(); }
             else if (k == NK_ENTER) {
-                if (s_msel == 0)      { sfx(2); ld_ensure_valid(); s_ldsel = 0; go(ST_LOADOUT); }   // pick your 10 weapons first (Pocket Tanks style)
-                else if (s_msel == 1) { sfx(2); s_mode = MODE_HOST; s_seat = 0; s_haspeer = false; s_guest_in = false; s_nroom = 0; s_last_hello = 0; go(ST_HOST); }
-                else if (s_msel == 2) { sfx(2); s_mode = MODE_GUEST; s_seat = 1; s_haspeer = false; s_join_pending = false; s_nroom = s_rsel = 0; go(ST_BROWSE); }
+                // Every mode picks its 10 weapons FIRST (empty picker). ENTER then routes to the match /
+                // the host room / the room browser — see the ST_LOADOUT ENTER handler.
+                if (s_msel == 0)      { sfx(2); s_ld_go = 0; for (int w = 0; w < NWEAP; w++) s_ldpick[w] = false; s_ldsel = 0; go(ST_LOADOUT); }   // vs CPU
+                else if (s_msel == 1) { sfx(2); s_ld_go = 1; for (int w = 0; w < NWEAP; w++) s_ldpick[w] = false; s_ldsel = 0; go(ST_LOADOUT); }   // host a room
+                else if (s_msel == 2) { sfx(2); s_ld_go = 2; for (int w = 0; w < NWEAP; w++) s_ldpick[w] = false; s_ldsel = 0; go(ST_LOADOUT); }   // join a room
                 else if (s_msel == 3) { s_optsel = 0; s_optguide = 0; s_opt_from = ST_MENU; sfx(2); go(ST_OPT); }
                 else if (s_msel == 4) { sfx(2); go(ST_SCORES); }
                 else if (s_msel == 5) { sfx(2); go(ST_HELP); }
@@ -2228,17 +2342,25 @@ static void on_key(int k, char ch) {
             }
             return;
         case ST_LOADOUT:
-            if (k == NK_UP)        { s_ldsel = (s_ldsel + NWEAP - 1) % NWEAP; sfx(1); nucleo_app_request_draw(); }
+            if (k == NK_UP || k == NK_LEFT)         { s_ldsel = (s_ldsel + NWEAP - 1) % NWEAP; sfx(1); nucleo_app_request_draw(); }
             else if (k == NK_DOWN || k == NK_RIGHT) { s_ldsel = (s_ldsel + 1) % NWEAP; sfx(1); nucleo_app_request_draw(); }
             else if (ch == ' ') {                                      // toggle this weapon (block going over 10)
                 if (s_ldpick[s_ldsel]) { s_ldpick[s_ldsel] = false; sfx(3); }
                 else if (ld_count() < LOADOUT_N) { s_ldpick[s_ldsel] = true; sfx(2); }
-                else sfx(3);
+                else sfx(3);                                           // loadout already full
                 nucleo_app_request_draw();
             }
-            else if (k == NK_ENTER) {                                  // start only with a full loadout
-                if (ld_count() == LOADOUT_N) { cfg_write(); sfx(2); s_wins[0] = s_wins[1] = 0; new_match(); go(ST_PLAY); }
-                else sfx(3);
+            else if (k == NK_DEL) {                                    // wipe the loadout and start the pick over
+                if (ld_count()) { for (int w = 0; w < NWEAP; w++) s_ldpick[w] = false; sfx(3); nucleo_app_request_draw(); }
+            }
+            else if (k == NK_ENTER) {                                  // ready only with a full 10-weapon loadout
+                if (ld_count() != LOADOUT_N) sfx(3);
+                else {
+                    cfg_write(); sfx(2);
+                    if (s_ld_go == 1)      { s_wins[0] = s_wins[1] = 0; s_mode = MODE_HOST;  s_seat = 0; s_haspeer = false; s_guest_in = false; s_nroom = 0; s_last_hello = 0; go(ST_HOST); }   // -> open the room (series starts 0-0)
+                    else if (s_ld_go == 2) { s_wins[0] = s_wins[1] = 0; s_mode = MODE_GUEST; s_seat = 1; s_haspeer = false; s_join_pending = false; s_nroom = s_rsel = 0; go(ST_BROWSE); }        // -> browse rooms
+                    else                   { s_mode = MODE_AI; s_wins[0] = s_wins[1] = 0; new_match(); go(ST_PLAY); }                                                  // -> straight into the CPU match
+                }
             }
             return;
         case ST_HOST:
@@ -2289,7 +2411,11 @@ static void on_key(int k, char ch) {
                     if (s_wins[0] >= SERIES_TGT || s_wins[1] >= SERIES_TGT) s_wins[0] = s_wins[1] = 0;  // series decided -> start a fresh one
                     sfx(2); new_match(); go(ST_PLAY);   // otherwise the tally carries over: next round of the same series
                 }
-                else { net_send_bye(); s_haspeer = false; s_mode = MODE_AI; s_msel = 0; go(ST_MENU); }
+                else if (s_seat == 0 && s_haspeer) {    // HOST: rematch on a FRESH board; the series tally carries over, the guest gets the new START
+                    if (s_wins[0] >= SERIES_TGT || s_wins[1] >= SERIES_TGT) s_wins[0] = s_wins[1] = 0;
+                    sfx(2); host_start_match();          // rolls a new seed, sends START, and go(ST_PLAY)
+                }
+                else sfx(3);                            // GUEST: can't initiate a rematch — waits for the host (Esc leaves)
             }
             return;
         default: return;
@@ -2362,6 +2488,21 @@ static bool poll(void) {
         if (s_now - s_frame < 33) return false;
         s_frame = s_now; s_anim++; return true;
     }
+    if (s_screen == ST_LOADOUT) {
+        // ALT = roll a fresh RANDOM 10-weapon loadout, different every press. Alt is a bare modifier
+        // (it fires no key event), so edge-detect it from the live modifier bitmask here in poll().
+        // NB: the Cardputer's PHYSICAL "alt" key reports as NK_MOD_GUI — the driver's NK_MOD_* labels
+        // are swapped vs the key legends (physical ALT->GUI, verified: app_pinball uses it for tilt).
+        static bool alt_prev = false;
+        bool alt = (nucleo_kbd_mods() & NK_MOD_GUI) != 0;
+        if (alt && !alt_prev) {
+            for (int w = 0; w < NWEAP; w++) s_ldpick[w] = false;
+            int picked = 0, guard = 0;
+            while (picked < LOADOUT_N && guard++ < 400) { int w = (int)(esp_random() % NWEAP); if (!s_ldpick[w]) { s_ldpick[w] = true; picked++; } }
+            sfx(2); nucleo_app_request_draw();
+        }
+        alt_prev = alt;
+    }
     if (s_screen != ST_PLAY) { if (s_now - s_frame < 60) return false; s_frame = s_now; s_anim++; return true; }
 
     fx_step(dt);
@@ -2394,7 +2535,7 @@ static bool poll(void) {
     if (s_mode != MODE_AI && local_active() && s_phase == TP_AIM) {
         int rem = (int)(s_aim_deadline - s_now);
         int secs = rem > 0 ? (rem + 999) / 1000 : 0;
-        if (secs != s_last_tick) { s_last_tick = secs; if (secs >= 1 && secs <= 5) sfx(1); else if (secs == 0) sfx(4); }
+        if (secs != s_last_tick) { s_last_tick = secs; if (secs >= 3 && secs <= 5) sfx(1); else if (secs >= 1 && secs <= 2) sfx(8); else if (secs == 0) sfx(4); }   // escalating urgency: soft tick -> chirp -> buzzer
         if (rem <= -400) { flash(COL_GOLD, 140, 120); shake(2.0f); net_send_fire(); fire_weapon(s_active); }   // time up -> the shot goes
     }
     // camera target: FIRE frames shooter+shell; SETTLE dwell holds the crater; else the active tank
@@ -2466,7 +2607,7 @@ static void on_exit(void) { net_send_bye(); pnet_stop(); nucleo_audio_stop(); cf
 
 extern "C" void nucleo_register_tanks(void) {
     static const nucleo_app_def_t app = {
-        "tanks", "Tanks", "Games", "Artiglieria a turni: terreno distruttibile, 19 armi, scudi, biomi, vs CPU",
+        "tanks", "Tanks", "Games", "Artiglieria a turni: terreno distruttibile, 29 armi, scudi, biomi, vs CPU",
         'T', C_GREEN, on_enter, on_key, nullptr, on_draw, on_exit,
         NX_NET_APP
     };

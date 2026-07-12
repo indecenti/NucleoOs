@@ -1,7 +1,10 @@
-// Files app: native SD browser.
-// Tab key opens a 2-page quick-panel:
-//   Page 0 – Recent: last 10 files + 5 most-visited dirs (history in /nucleo/files-hist.txt).
-//   Page 1 – Search: type query, ENTER → recursive walk → results in main list.
+// Files — native SD browser + manager.
+//   • Browse, sort (folders first), typed badges/colours, per-file size.
+//   • RIGHT opens an Actions card on the selected item: Open · Details · Rename · New folder · Delete.
+//   • LEFT/BACK is a real "back": closes the top overlay → goes up a directory → exits at root.
+//   • TAB/'/' opens a 2-page quick-panel: Recent (last 10 files + 5 top dirs) and Search (recursive).
+//   • Details shows size + modified date + path + live SD usage (statvfs).
+// Palette comes from launcher_theme.h now, so Files follows the OS theme like every other app.
 // HistRec[15] (~1.2 KB) and Entry[96] (~6 KB) are malloc'd on enter(), freed on leave() — 0 RAM at rest.
 #include "nucleo_app.h"
 #include "app_ui.h"
@@ -14,18 +17,26 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <time.h>
 extern "C" {
 #include "nucleo_board.h"
 }
 #include "nucleo_fsprotect.h"
 #include "nucleo_fsfactory.h"
 #include "nucleo_i18n.h"
+#include "launcher_theme.h"     // shared OS palette (BG/FG/MUTED/DIM/LINE/INK + C_*) — Files now follows the theme
+#include "nucleo_audio.h"       // soft clicks on discrete actions
+#include "esp_vfs_fat.h"        // esp_vfs_fat_info() for SD usage (statvfs isn't available on IDF newlib)
 #include "app_gfx.h"
 
-static const unsigned short
-    BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410,
-    LINE = 0x2945, INK = 0x0000, DIRC = 0xFE8C, ACC = 0x4D1F,
-    PNL  = 0x18C3;   // panel bg — slightly lighter than BG
+// Accents mapped onto the shared palette (same hues as the old hardcoded copy, but themed now).
+#define DIRC       C_YELLOW     // folders
+#define ACC        C_BLUE       // primary accent (files / search)
+#define PNL        INK          // panel + card background — the recessed ink Clock/Dice cards use
+#define FIELD      0x2104       // text-input field fill (neutral dark, has its own border)
+#define COL_AUDIO  C_PINK
+#define COL_IMG    C_GREEN
+#define COL_TXT    C_BLUE
 
 // ── Listing ────────────────────────────────────────────────────────────────────
 #define MAXE 96
@@ -34,6 +45,7 @@ static Entry *s_e    = nullptr;   // malloc on enter
 static int    s_n, s_sel;
 static int    s_del_arm = -1;   // >=0: a delete-confirm card is up for that row
 static bool   s_del_yes;        // focused button on the confirm card
+static bool   s_del_isdir;      // the armed target is a directory (rmdir vs unlink)
 static char   s_del_abs[256];   // snapshotted target path (index-independent once the card is up)
 static char   s_del_name[56];   // snapshotted display name for the card message
 static char   s_path[192] = "/";
@@ -52,6 +64,20 @@ static int  s_tab_page    = 0;      // 0 = Recent, 1 = Search
 static int  s_tab_sel     = 0;
 static char s_query[28]   = "";
 static bool s_search_mode = false;  // main list = search results; name = full web-path
+
+// ── Actions / input / details modals ─────────────────────────────────────────
+enum { ACT_OPEN, ACT_DETAILS, ACT_RENAME, ACT_MKDIR, ACT_DELETE, ACT_COUNT };
+static bool s_act_open;         // actions card up
+static int  s_act_sel;
+static char s_act_abs[256];     // snapshotted absolute path of the item the card acts on
+static char s_act_name[56];     // display name
+static bool s_act_isdir;
+static bool s_details_open;     // details card up (reuses the snapshot above)
+static int  s_input_mode;       // 0 none, 1 rename, 2 new folder
+static char s_input[64];        // edited text
+
+// ── SD usage (statvfs), refreshed on enter + after any mutation ───────────────
+static uint64_t s_sd_used_kb, s_sd_total_kb;
 
 // ── Sorting / scan ─────────────────────────────────────────────────────────────
 static int cmp(const void *a, const void *b)
@@ -89,6 +115,22 @@ static void go_up(void)
     char *sl = strrchr(s_path, '/');
     if (sl) sl[1] = 0; else strcpy(s_path, "/");
     scan();
+}
+
+// ── SD usage + human size ───────────────────────────────────────────────────────
+static void fmt_kb(uint64_t kb, char *out, int n)   // integer-only (nano-printf has no %f)
+{
+    if      (kb < 1000)          snprintf(out, n, "%u KB", (unsigned)kb);
+    else if (kb < 1024ull*1000)  snprintf(out, n, "%u.%u MB", (unsigned)(kb/1024), (unsigned)((kb%1024)*10/1024));
+    else                         snprintf(out, n, "%u.%u GB", (unsigned)(kb/1048576ull), (unsigned)((kb%1048576ull)*10/1048576ull));
+}
+static void sd_refresh(void)
+{
+    uint64_t total = 0, freeb = 0;
+    if (esp_vfs_fat_info(NUCLEO_SD_MOUNT, &total, &freeb) == ESP_OK && total) {
+        s_sd_total_kb = total / 1024;
+        s_sd_used_kb  = (total - freeb) / 1024;
+    } else { s_sd_total_kb = s_sd_used_kb = 0; }
 }
 
 // ── History I/O ────────────────────────────────────────────────────────────────
@@ -171,7 +213,8 @@ static void hist_record_dir(const char *web)
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────────
-static void update_hint(void);   // forward
+static void update_hint(void);      // forward
+static bool files_on_back(int key); // forward (LEFT/BACK handler, defined after on_key)
 
 static void enter(void)
 {
@@ -179,8 +222,10 @@ static void enter(void)
     if (!s_e)    s_e    = (Entry *)  malloc(sizeof(Entry)   * MAXE);
     if (!s_hist) s_hist = (HistRec *)malloc(sizeof(HistRec) * HIST_TOTAL);
     s_del_arm = -1; s_tab_open = false; s_search_mode = false; s_query[0] = 0;
-    strcpy(s_path, "/"); scan();
+    s_act_open = false; s_details_open = false; s_input_mode = 0;
+    strcpy(s_path, "/"); scan(); sd_refresh();
     if (s_hist) hist_load();
+    nucleo_app_set_back_handler(files_on_back);
     update_hint();
 }
 static void leave(void)
@@ -213,11 +258,11 @@ static unsigned short entry_col(const Entry *e)
 {
     if (e->dir) return DIRC;
     const char *dot = strrchr(e->name, '.');  if (!dot) return MUTED;
-    if (!strcasecmp(dot,".mp3")||!strcasecmp(dot,".wav")||!strcasecmp(dot,".ogg")) return 0xFBB6;
+    if (!strcasecmp(dot,".mp3")||!strcasecmp(dot,".wav")||!strcasecmp(dot,".ogg")) return COL_AUDIO;
     if (!strcasecmp(dot,".jpg")||!strcasecmp(dot,".jpeg")||!strcasecmp(dot,".png")||
-        !strcasecmp(dot,".bmp")||!strcasecmp(dot,".gif")) return 0x8FF3;
+        !strcasecmp(dot,".bmp")||!strcasecmp(dot,".gif")) return COL_IMG;
     if (!strcasecmp(dot,".txt")||!strcasecmp(dot,".md") ||!strcasecmp(dot,".json")||
-        !strcasecmp(dot,".log")||!strcasecmp(dot,".csv")||!strcasecmp(dot,".ini")) return 0x4D1F;
+        !strcasecmp(dot,".log")||!strcasecmp(dot,".csv")||!strcasecmp(dot,".ini")) return COL_TXT;
     return MUTED;
 }
 static const char *entry_right(const Entry *e)
@@ -291,7 +336,6 @@ static const char *search_parent(const char *full)
     if (!sl) { b[0]=0; return b; }
     int len = (int)(sl - full) + 1;
     if (len > 23) {
-        // Abbreviate to ".../folder/"
         const char *prev = sl-1;
         while (prev > full && *prev != '/') prev--;
         snprintf(b, sizeof b, "...%.*s", (int)(sl-prev+1), prev);
@@ -308,12 +352,12 @@ static void update_hint(void)
         static char h[52];
         snprintf(h, sizeof h, TR("'%s'  DEL=reset filtro", "'%s'  DEL=clear filter"), s_query);
         nucleo_app_set_hint(h);
-    } else if (!strcmp(s_path, "/")) {
-        nucleo_app_set_hint(TR("INVIO apri  D=del  /=recenti/cerca  ESC esci",
-                               "ENTER open  D=del  /=recent/search  ESC exit"));
+    } else if (at_root()) {
+        nucleo_app_set_hint(TR("INVIO apri  ->azioni  /=recenti  ESC esci",
+                               "ENTER open  ->actions  /=recent  ESC exit"));
     } else {
-        nucleo_app_set_hint(TR("INVIO apri/su  D=del  DEL su  /=pannello",
-                               "ENTER open/up  D=del  DEL up  /=panel"));
+        nucleo_app_set_hint(TR("INVIO apri  ->azioni  <-su  D=elimina",
+                               "ENTER open  ->actions  <-up  D=delete"));
     }
 }
 
@@ -337,20 +381,134 @@ static bool is_web_video_ext(const char *ext)
            !strcasecmp(ext,".wmv")||!strcasecmp(ext,".m4v")||!strcasecmp(ext,".mpg")||!strcasecmp(ext,".mpeg");
 }
 
-// ── Tab-panel key handler (called first from on_key) ──────────────────────────
+// ── Open the selected entry (shared by ENTER and the "Open" action) ──────────
+static void activate_selected(void)
+{
+    int tn = s_search_mode ? s_n : total_n();
+    if (s_sel >= tn) return;
+    if (!s_search_mode && is_parent(s_sel)) { go_up(); update_hint(); return; }
+
+    Entry *e = s_search_mode ? &s_e[s_sel] : entry_at(s_sel);
+    char abs[256];
+    if (s_search_mode) snprintf(abs, sizeof abs, "%s%s",   NUCLEO_SD_MOUNT, e->name);
+    else               snprintf(abs, sizeof abs, "%s%s%s", NUCLEO_SD_MOUNT, s_path, e->name);
+
+    if (!s_search_mode) {
+        if (e->dir) {
+            char web[192]; snprintf(web, sizeof web, "%s%s/", s_path, e->name);
+            hist_record_dir(web);
+            int l = (int)strlen(s_path);
+            if (l+(int)strlen(e->name)+2 < (int)sizeof(s_path)) { snprintf(s_path+l, sizeof(s_path)-l, "%s/", e->name); scan(); update_hint(); }
+            else nucleo_app_set_hint(TR("Percorso troppo lungo","Path too long"));
+            return;
+        }
+        char web[192]; snprintf(web, sizeof web, "%s%s", s_path, e->name);
+        hist_record_file(web);
+    }
+    const char *dot = strrchr(s_search_mode ? abs : e->name, '.');
+    if (dot && is_image_ext(dot)) {
+        if (nucleo_app_image_oversize(abs)) nucleo_app_set_hint(TR("Troppo grande: usa l'app web","Too large: use the web app"));
+        else nucleo_app_launch_file(abs);
+    } else if (dot && is_web_video_ext(dot)) {
+        nucleo_app_set_hint(TR("Video non .nfv: usa l'app web","Non-.nfv video: use the web app"));
+    } else if (!nucleo_app_launch_file(abs)) {
+        nucleo_app_set_hint(TR("nessuna app per questo tipo","no app for this type"));
+    }
+}
+
+// ── Actions / input / delete ────────────────────────────────────────────────────
+static void open_actions(void)
+{
+    Entry *e = entry_at(s_sel);
+    snprintf(s_act_abs,  sizeof s_act_abs,  "%s%s%s", NUCLEO_SD_MOUNT, s_path, e->name);
+    snprintf(s_act_name, sizeof s_act_name, "%s", e->name);
+    s_act_isdir = e->dir; s_act_open = true; s_act_sel = 0;
+    nucleo_audio_tone(1500, 20, 45);
+    nucleo_app_set_hint(TR("su/giu scegli  INVIO ok  <-annulla", "up/dn pick  ENTER ok  <-cancel"));
+    nucleo_app_request_draw();
+}
+
+static void start_input(int mode)   // 1 = rename, 2 = new folder
+{
+    s_input_mode = mode;
+    if (mode == 1) snprintf(s_input, sizeof s_input, "%s", s_act_name);   // prefill with the current name
+    else           s_input[0] = 0;
+    nucleo_app_set_hint(TR("digita  INVIO conferma  <-annulla", "type  ENTER confirm  <-cancel"));
+    nucleo_app_request_draw();
+}
+
+static void arm_delete_from_actions(void)
+{
+    if (nucleo_fs_is_protected(s_act_abs) || nucleo_fs_is_factory(s_act_abs)) {
+        nucleo_app_set_hint(TR("Protetto: file di sistema","Protected: system file"));
+        nucleo_app_request_draw(); return;
+    }
+    s_del_arm = s_sel; s_del_yes = false; s_del_isdir = s_act_isdir;
+    snprintf(s_del_abs,  sizeof s_del_abs,  "%s", s_act_abs);
+    snprintf(s_del_name, sizeof s_del_name, "%s", s_act_name);
+    nucleo_app_request_draw();
+}
+
+static void input_commit(void)
+{
+    if (!s_input[0]) { nucleo_app_set_hint(TR("Nome vuoto","Empty name")); return; }
+    if (s_input_mode == 1) {   // rename s_act_abs -> same dir + s_input
+        if (nucleo_fs_is_protected(s_act_abs) || nucleo_fs_is_factory(s_act_abs)) {
+            s_input_mode = 0; nucleo_app_set_hint(TR("Protetto","Protected")); nucleo_app_request_draw(); return;
+        }
+        char nab[300]; snprintf(nab, sizeof nab, "%s%s%s", NUCLEO_SD_MOUNT, s_path, s_input);
+        struct stat st; if (stat(nab, &st) == 0) { nucleo_app_set_hint(TR("Esiste gia'","Already exists")); return; }
+        nucleo_app_set_hint(rename(s_act_abs, nab) == 0 ? TR("Rinominato","Renamed") : TR("Rinomina fallita","Rename failed"));
+    } else {                   // new folder in the current dir
+        char nd[300]; snprintf(nd, sizeof nd, "%s%s%s", NUCLEO_SD_MOUNT, s_path, s_input);
+        struct stat st; if (stat(nd, &st) == 0) { nucleo_app_set_hint(TR("Esiste gia'","Already exists")); return; }
+        nucleo_app_set_hint(mkdir(nd, 0775) == 0 ? TR("Cartella creata","Folder created") : TR("Creazione fallita","Create failed"));
+    }
+    s_input_mode = 0; scan(); sd_refresh(); nucleo_app_request_draw();
+}
+
+static void act_perform(int idx)
+{
+    s_act_open = false;
+    nucleo_audio_tone(1600, 20, 45);
+    switch (idx) {
+        case ACT_OPEN:    activate_selected(); break;
+        case ACT_DETAILS: s_details_open = true; nucleo_app_set_hint(TR("un tasto per chiudere","press a key to close")); break;
+        case ACT_RENAME:  start_input(1); break;
+        case ACT_MKDIR:   start_input(2); break;
+        case ACT_DELETE:  arm_delete_from_actions(); break;
+    }
+    nucleo_app_request_draw();
+}
+
+static void actions_key(int key, char ch)
+{
+    (void)ch;
+    if (key == NK_UP)    { s_act_sel = (s_act_sel + ACT_COUNT - 1) % ACT_COUNT; nucleo_app_request_draw(); }
+    else if (key == NK_DOWN) { s_act_sel = (s_act_sel + 1) % ACT_COUNT; nucleo_app_request_draw(); }
+    else if (key == NK_ENTER) { act_perform(s_act_sel); }
+}
+
+static void input_key(int key, char ch)
+{
+    if (key == NK_ENTER) { input_commit(); return; }
+    if (key == NK_DEL)   { int l=(int)strlen(s_input); if (l) { s_input[l-1]=0; nucleo_app_request_draw(); } return; }
+    if (key == NK_CHAR && ch >= ' ' && ch < 127 && ch != '/') {
+        int l=(int)strlen(s_input); if (l < (int)sizeof(s_input)-1) { s_input[l]=ch; s_input[l+1]=0; nucleo_app_request_draw(); }
+    }
+}
+
+// ── Tab-panel key handler ────────────────────────────────────────────────────────
 static bool tab_key(int key, char ch)
 {
     if (!s_tab_open) return false;
 
-    if (ch == '/') {   // / while panel open: cycle page 0→1, page 1→close
+    if (ch == '/') {   // / while panel open: page 0→1, page 1→close
         if (s_tab_page == 0) { s_tab_page = 1; s_tab_sel = 0; }
         else                 { s_tab_open = false; update_hint(); }
         nucleo_app_request_draw(); return true;
     }
-    if (key == NK_LEFT || key == NK_RIGHT) {
-        s_tab_page ^= 1; s_tab_sel = 0;
-        nucleo_app_request_draw(); return true;
-    }
+    if (key == NK_RIGHT) { s_tab_page ^= 1; s_tab_sel = 0; nucleo_app_request_draw(); return true; }
 
     // ── Page 0: Recent ──
     if (s_tab_page == 0) {
@@ -360,10 +518,8 @@ static bool tab_key(int key, char ch)
         if (key == NK_ENTER && s_hist && s_tab_sel < n) {
             HistRec *r = &s_hist[s_tab_sel];
             if (r->is_dir) {
-                snprintf(s_path, sizeof s_path, "%s", r->path);
-                scan();
+                snprintf(s_path, sizeof s_path, "%s", r->path); scan();
             } else {
-                // Navigate to parent folder of the file
                 char parent[80]; snprintf(parent, sizeof parent, "%s", r->path);
                 char *sl = strrchr(parent, '/');
                 if (sl && sl != parent) { sl[1]=0; snprintf(s_path, sizeof s_path, "%s", parent); }
@@ -381,10 +537,7 @@ static bool tab_key(int key, char ch)
         else            { s_tab_open = false; update_hint(); }
         nucleo_app_request_draw(); return true;
     }
-    if (key == NK_DEL) {   // backspace in query
-        int l = (int)strlen(s_query); if (l) { s_query[l-1]=0; nucleo_app_request_draw(); }
-        return true;
-    }
+    if (key == NK_DEL) { int l = (int)strlen(s_query); if (l) { s_query[l-1]=0; nucleo_app_request_draw(); } return true; }
     if (key == NK_CHAR && ch >= ' ' && ch < 127 && ch != '/') {
         int l = (int)strlen(s_query);
         if (l < (int)sizeof(s_query)-1) { s_query[l]=ch; s_query[l+1]=0; nucleo_app_request_draw(); }
@@ -396,100 +549,83 @@ static bool tab_key(int key, char ch)
 // ── Main key handler ───────────────────────────────────────────────────────────
 static void on_key(int key, char ch)
 {
+    // Modal overlays own input first (LEFT/BACK are routed to files_on_back)
+    if (s_input_mode)   { input_key(key, ch); return; }
+    if (s_details_open) { s_details_open = false; update_hint(); nucleo_app_request_draw(); return; }
+    if (s_act_open)     { actions_key(key, ch); return; }
+
     if (tab_key(key, ch)) return;
 
-    if (ch == '/') {   // / opens panel (page 0); / again → page 1; / again → close
+    if (ch == '/') {   // open the quick-panel
         s_tab_open = true; s_tab_page = 0; s_tab_sel = 0;
         nucleo_app_set_hint(TR("/=pg2/chiudi  SU/GIU sel  INVIO apri", "/=pg2/close  UP/DN sel  ENTER open"));
         nucleo_app_request_draw(); return;
     }
 
-    // Reset search filter
-    if (key == NK_DEL && s_search_mode) {
-        s_search_mode = false; s_query[0] = 0;
-        scan(); update_hint(); nucleo_app_request_draw(); return;
+    if (key == NK_DEL && s_search_mode) {   // reset search filter
+        s_search_mode = false; s_query[0] = 0; scan(); update_hint(); nucleo_app_request_draw(); return;
     }
 
     int tn = s_search_mode ? s_n : total_n();
 
-    // A delete-confirm card is up: it owns every key until the user picks Yes/No.
+    // Delete-confirm card owns every key until Yes/No.
     if (s_del_arm >= 0) {
         int r = app_ui_confirm_key(key, ch, &s_del_yes);
         if (r == 1) {
-            int keep = s_del_arm; unlink(s_del_abs); scan();
+            int keep = s_del_arm;
+            int rc = s_del_isdir ? rmdir(s_del_abs) : unlink(s_del_abs);
+            if (rc != 0 && s_del_isdir) nucleo_app_set_hint(TR("Cartella non vuota","Folder not empty"));
+            scan(); sd_refresh();
             tn = total_n();
             if (keep >= tn) keep = tn-1;
             if (keep < 0)   keep = 0;
             s_sel = keep;
         }
-        if (r >= 0) { s_del_arm = -1; update_hint(); }
+        if (r >= 0) { s_del_arm = -1; if (r == 0) update_hint(); }
         nucleo_app_request_draw(); return;
     }
 
-    // Delete file (D key) -> open the shared confirm card (default focus = No).
+    // D deletes the selected FILE via the shared confirm card (default focus = No).
     if ((ch=='d'||ch=='D') && !s_search_mode && s_sel < tn && !is_parent(s_sel) && !entry_at(s_sel)->dir) {
         Entry *e = entry_at(s_sel);
         char abs[256]; snprintf(abs, sizeof abs, "%s%s%s", NUCLEO_SD_MOUNT, s_path, e->name);
         if (nucleo_fs_is_protected(abs)||nucleo_fs_is_factory(abs)) {
             nucleo_app_set_hint(TR("Protetto: file di sistema","Protected: system file"));
         } else {
-            s_del_arm = s_sel; s_del_yes = false;
+            s_del_arm = s_sel; s_del_yes = false; s_del_isdir = false;
             snprintf(s_del_abs,  sizeof s_del_abs,  "%s", abs);
             snprintf(s_del_name, sizeof s_del_name, "%s", e->name);
         }
         nucleo_app_request_draw(); return;
     }
 
+    // RIGHT opens the Actions card on the selected item (browse only).
+    if (key == NK_RIGHT && !s_search_mode && total_n() && !is_parent(s_sel)) { open_actions(); return; }
+
     if (app_ui_list_key(key, ch, &s_sel, tn, fl_label_virt, nullptr)) {
     }
     else if (key == NK_DEL && !s_search_mode) { go_up(); update_hint(); }
-    else if (key == NK_ENTER && s_sel < tn) {
-        if (!s_search_mode && is_parent(s_sel)) {
-            go_up(); update_hint();
-        } else {
-            Entry *e = s_search_mode ? &s_e[s_sel] : entry_at(s_sel);
-            char abs[256];
-            if (s_search_mode)
-                snprintf(abs, sizeof abs, "%s%s", NUCLEO_SD_MOUNT, e->name);
-            else
-                snprintf(abs, sizeof abs, "%s%s%s", NUCLEO_SD_MOUNT, s_path, e->name);
-
-            if (!s_search_mode) {
-                if (e->dir) {
-                    char web[192]; snprintf(web, sizeof web, "%s%s/", s_path, e->name);
-                    hist_record_dir(web);
-                    int l = (int)strlen(s_path);
-                    if (l+(int)strlen(e->name)+2 < (int)sizeof(s_path)) {
-                        snprintf(s_path+l, sizeof(s_path)-l, "%s/", e->name);
-                        scan(); update_hint();
-                    } else nucleo_app_set_hint(TR("Percorso troppo lungo","Path too long"));
-                    nucleo_app_request_draw(); return;
-                } else {
-                    char web[192]; snprintf(web, sizeof web, "%s%s", s_path, e->name);
-                    hist_record_file(web);
-                }
-            }
-            // Open file
-            const char *dot = strrchr(s_search_mode ? e->name : e->name, '.');
-            if (!s_search_mode) dot = strrchr(e->name, '.');
-            else                dot = strrchr(abs, '.');
-            if (dot && is_image_ext(dot)) {
-                if (nucleo_app_image_oversize(abs)) nucleo_app_set_hint(TR("Troppo grande: usa l'app web","Too large: use the web app"));
-                else nucleo_app_launch_file(abs);
-            } else if (dot && is_web_video_ext(dot)) {
-                nucleo_app_set_hint(TR("Video non .nfv: usa l'app web","Non-.nfv video: use the web app"));
-            } else if (!nucleo_app_launch_file(abs)) {
-                nucleo_app_set_hint(TR("nessuna app per questo tipo","no app for this type"));
-            }
-        }
-    }
+    else if (key == NK_ENTER && s_sel < tn)   { activate_selected(); }
     else { return; }
     nucleo_app_request_draw();
 }
 
+// LEFT + BACK: close the topmost overlay, else go up a directory, else exit the app.
+static bool files_on_back(int key)
+{
+    if (s_input_mode)   { if (key == NK_LEFT) return true; s_input_mode = 0; update_hint(); nucleo_app_request_draw(); return true; }  // BACK cancels; LEFT/comma ignored
+    if (s_details_open) { s_details_open = false; update_hint(); nucleo_app_request_draw(); return true; }
+    if (s_act_open)     { s_act_open = false; update_hint(); nucleo_app_request_draw(); return true; }
+    if (s_del_arm >= 0) { s_del_arm = -1; update_hint(); nucleo_app_request_draw(); return true; }
+    if (s_tab_open)     { s_tab_open = false; update_hint(); nucleo_app_request_draw(); return true; }
+    if (s_search_mode)  { s_search_mode = false; s_query[0] = 0; scan(); update_hint(); nucleo_app_request_draw(); return true; }
+    if (!at_root())     { go_up(); update_hint(); nucleo_app_request_draw(); return true; }
+    return false;       // at root, nothing open → let the framework close the app
+}
+
 static void tick(void) { if (app_ui_list_animating()) nucleo_app_request_draw(); }
 
-// ── Draw helpers ───────────────────────────────────────────────────────────────
+// ── Draw: main list ──────────────────────────────────────────────────────────────
 static void draw_list(int y0, int list_h)
 {
     const int STEP = 20;
@@ -569,11 +705,11 @@ static void draw_list(int y0, int list_h)
     d.clearClipRect();
 }
 
+// ── Draw: quick-panel (Recent / Search) ──────────────────────────────────────────
 static void draw_panel(int y0, int list_h)
 {
     d.fillRect(0, y0, 240, list_h, PNL);
 
-    // Tab buttons
     const int BTN_H = 14;
     bool p0 = (s_tab_page == 0);
     d.fillRoundRect(4,   y0+1, 114, BTN_H, 3, p0 ? DIRC : DIM);
@@ -588,7 +724,6 @@ static void draw_panel(int y0, int list_h)
     int content_h = list_h - BTN_H - 2;
 
     if (s_tab_page == 0) {
-        // Recent list
         if (!s_hist || s_hist_n == 0) {
             d.setTextColor(DIM, PNL); d.setTextSize(1);
             d.setCursor(10, cy+10); d.print(TR("Nessuna cronologia", "No history yet"));
@@ -600,25 +735,17 @@ static void draw_panel(int y0, int list_h)
                 bool focus = (i == s_tab_sel);
                 HistRec *r = &s_hist[i];
                 unsigned short rc = r->is_dir ? DIRC : ACC;
-                if (focus) {
-                    d.fillRoundRect(4, y-ROW/2+1, 232, ROW-2, 2, rc);
-                    d.setTextColor(INK, rc);
-                }
-                // type badge
+                if (focus) { d.fillRoundRect(4, y-ROW/2+1, 232, ROW-2, 2, rc); d.setTextColor(INK, rc); }
                 char tic[2] = {r->is_dir ? 'D' : 'F', 0};
                 unsigned short tb = focus ? INK : (r->is_dir ? DIRC : MUTED);
                 if (!focus) { d.fillRect(4, y-4, 8, 8, tb); d.setTextColor(INK, tb); }
                 d.setTextSize(1); d.setCursor(5, y-3); d.print(tic);
-
-                // label: basename for files, path for dirs
                 const char *lab2 = r->path;
                 if (!r->is_dir) { const char *sl=strrchr(r->path,'/'); if (sl) lab2=sl+1; }
                 if (!focus) d.setTextColor(r->is_dir ? DIRC : FG, PNL);
                 int maxc2 = (r->is_dir ? 26 : 30);
                 char lb2[32]; snprintf(lb2, sizeof lb2, "%.*s", maxc2, lab2);
                 d.setTextSize(1); d.setCursor(16, y-3); d.print(lb2);
-
-                // visit count for dirs
                 if (r->is_dir && r->visits > 0) {
                     char vc[6]; snprintf(vc, sizeof vc, "%d", r->visits);
                     if (!focus) d.setTextColor(DIM, PNL);
@@ -627,26 +754,94 @@ static void draw_panel(int y0, int list_h)
             }
         }
     } else {
-        // Search page
         d.setTextColor(MUTED, PNL); d.setTextSize(1);
         d.setCursor(8, cy+3); d.print(TR("Cerca ovunque:", "Search everywhere:"));
-
-        // Input box
         int bx = 8, by = cy+14, bw = 224, bh = 20;
-        d.fillRoundRect(bx, by, bw, bh, 3, 0x2104);
+        d.fillRoundRect(bx, by, bw, bh, 3, FIELD);
         d.drawRoundRect(bx, by, bw, bh, 3, s_query[0] ? DIRC : LINE);
-        // Show last 17 chars of query + blinking cursor
         int ql = (int)strlen(s_query);
         const char *qshow = s_query + (ql > 17 ? ql-17 : 0);
         char qdisp[20]; snprintf(qdisp, sizeof qdisp, "%s_", qshow);
-        d.setTextSize(2); d.setTextColor(FG, 0x2104);
+        d.setTextSize(2); d.setTextColor(FG, FIELD);
         d.setCursor(bx+4, by+2); d.print(qdisp);
-
         d.setTextSize(1); d.setTextColor(DIM, PNL);
         d.setCursor(8, by+bh+4);
-        d.print(TR("INVIO=cerca  CANC=back  /=chiudi",
-                   "ENTER=search  DEL=back  /=close"));
+        d.print(TR("INVIO=cerca  CANC=back  /=chiudi", "ENTER=search  DEL=back  /=close"));
     }
+}
+
+// ── Draw: Actions card (full content area, big rows) ─────────────────────────────
+static void draw_actions(int y0, int list_h)
+{
+    d.fillRect(0, y0, 240, list_h, BG);
+    const char *items[ACT_COUNT] = {
+        TR("Apri","Open"), TR("Dettagli","Details"), TR("Rinomina","Rename"),
+        TR("Nuova cartella","New folder"), TR("Elimina","Delete") };
+    const char icons[ACT_COUNT] = { '>', 'i', 'R', '+', 'x' };
+    const int ROW = 17;
+    for (int i = 0; i < ACT_COUNT; i++) {
+        int ry = y0 + 3 + i*ROW; bool sel = (i == s_act_sel);
+        unsigned short ac = (i == ACT_DELETE) ? C_RED : ACC;
+        if (sel) d.fillRoundRect(6, ry, 228, ROW-2, (ROW-2)/2, ac);
+        char ic[2] = { icons[i], 0 };
+        d.setTextSize(1); d.setTextColor(sel ? INK : MUTED, sel ? ac : BG);
+        d.setCursor(14, ry+5); d.print(ic);
+        d.setTextSize(2); d.setTextColor(sel ? INK : (i==ACT_DELETE ? C_RED : FG), sel ? ac : BG);
+        d.setCursor(30, ry+2); d.print(items[i]);
+    }
+}
+
+// ── Draw: Details card ───────────────────────────────────────────────────────────
+static void draw_details(int y0, int list_h)
+{
+    d.fillRect(0, y0, 240, list_h, BG);
+    struct stat st; bool ok = (stat(s_act_abs, &st) == 0);
+    int y = y0 + 6;
+    char nm[26]; snprintf(nm, sizeof nm, "%.24s", s_act_name);
+    d.setTextSize(2); d.setTextColor(s_act_isdir ? DIRC : ACC, BG); d.setCursor(8, y); d.print(nm); y += 22;
+
+    d.setTextSize(1);
+    char line[52];
+    if (ok) {
+        if (s_act_isdir) { d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(TR("Tipo: cartella","Type: folder")); y += 12; }
+        else { char sz[16]; fmt_kb((uint64_t)((st.st_size + 1023) / 1024), sz, sizeof sz);
+               snprintf(line, sizeof line, TR("Dimensione: %s","Size: %s"), sz);
+               d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(line); y += 12; }
+        time_t mt = st.st_mtime; struct tm *tm = localtime(&mt);
+        if (tm) { char db[24]; snprintf(db, sizeof db, "%02d/%02d/%04d %02d:%02d", tm->tm_mday, tm->tm_mon+1, 1900+tm->tm_year, tm->tm_hour, tm->tm_min);
+                  snprintf(line, sizeof line, TR("Modificato: %s","Modified: %s"), db);
+                  d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(line); y += 12; }
+    } else { d.setTextColor(C_RED, BG); d.setCursor(8, y); d.print(TR("Impossibile leggere","Cannot read")); y += 12; }
+
+    d.setTextColor(DIM, BG); d.setCursor(8, y); d.print(TR("Percorso:","Path:")); y += 11;
+    char pab[40]; snprintf(pab, sizeof pab, "%.38s", s_path);
+    d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(pab); y += 15;
+
+    if (s_sd_total_kb) {
+        char used[16], tot[16]; fmt_kb(s_sd_used_kb, used, sizeof used); fmt_kb(s_sd_total_kb, tot, sizeof tot);
+        snprintf(line, sizeof line, "SD: %s / %s", used, tot);
+        d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(line); y += 11;
+        int bw = 240-16, bx = 8, filled = (int)((uint64_t)bw * s_sd_used_kb / s_sd_total_kb);
+        d.fillRoundRect(bx, y, bw, 6, 3, INK);
+        d.fillRoundRect(bx, y, filled, 6, 3, filled > bw*9/10 ? C_RED : C_GREEN);
+    }
+}
+
+// ── Draw: text-input modal (rename / new folder) ─────────────────────────────────
+static void draw_input(int top, int h)
+{
+    d.fillRect(0, top, 240, h, BG);
+    const char *title = (s_input_mode == 1) ? TR("Rinomina","Rename") : TR("Nuova cartella","New folder");
+    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top+8); d.print(title);
+    int bx = 8, by = top+38, bw = 224, bh = 24;
+    d.fillRoundRect(bx, by, bw, bh, 4, FIELD);
+    d.drawRoundRect(bx, by, bw, bh, 4, s_input[0] ? ACC : LINE);
+    int ql = (int)strlen(s_input);
+    const char *show = s_input + (ql > 16 ? ql-16 : 0);
+    char disp[20]; snprintf(disp, sizeof disp, "%s_", show);
+    d.setTextSize(2); d.setTextColor(FG, FIELD); d.setCursor(bx+4, by+4); d.print(disp);
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, by+bh+8);
+    d.print(TR("INVIO conferma   <- annulla", "ENTER confirm   <- cancel"));
 }
 
 // ── Draw ───────────────────────────────────────────────────────────────────────
@@ -654,34 +849,46 @@ static void draw(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
 
-    char title[20];
-    if (s_search_mode) snprintf(title, sizeof title, TR("Risultati", "Results"));
-    else if (!strcmp(s_path, "/")) snprintf(title, sizeof title, "Files");
-    else {
-        char tmp[192]; snprintf(tmp, sizeof tmp, "%s", s_path);
-        int l=(int)strlen(tmp); if (l && tmp[l-1]=='/') tmp[l-1]=0;
-        const char *bn=strrchr(tmp,'/'); bn=bn?bn+1:tmp;
-        snprintf(title, sizeof title, "%.18s", bn);
+    if (s_input_mode) { draw_input(top, h); return; }   // full-screen modal with its own title
+
+    char title[24], cnt[12];
+    unsigned short acc;
+    if (s_act_open || s_details_open) {
+        snprintf(title, sizeof title, "%.20s", s_act_name);
+        acc = s_act_isdir ? DIRC : ACC;
+        snprintf(cnt, sizeof cnt, "%s", s_act_isdir ? TR("cart.","dir") : TR("file","file"));
+    } else {
+        if (s_search_mode) snprintf(title, sizeof title, TR("Risultati", "Results"));
+        else if (at_root()) snprintf(title, sizeof title, "Files");
+        else {
+            char tmp[192]; snprintf(tmp, sizeof tmp, "%s", s_path);
+            int l=(int)strlen(tmp); if (l && tmp[l-1]=='/') tmp[l-1]=0;
+            const char *bn=strrchr(tmp,'/'); bn=bn?bn+1:tmp;
+            snprintf(title, sizeof title, "%.18s", bn);
+        }
+        if (s_search_mode)   snprintf(cnt, sizeof cnt, "~%s", s_query[0]?s_query:"?");
+        else if (s_n>=MAXE)  snprintf(cnt, sizeof cnt, "%d+", MAXE);
+        else                 snprintf(cnt, sizeof cnt, "%d",  s_n);
+        acc = s_search_mode ? ACC : DIRC;
     }
-    char cnt[12];
-    if (s_search_mode)   snprintf(cnt, sizeof cnt, "~%s", s_query[0]?s_query:"?");
-    else if (s_n>=MAXE)  snprintf(cnt, sizeof cnt, "%d+", MAXE);
-    else                 snprintf(cnt, sizeof cnt, "%d",  s_n);
-    int y0 = app_ui_title(title, s_search_mode ? ACC : DIRC, cnt);
+    int y0 = app_ui_title(title, acc, cnt);
     int list_h = top + h - y0;
 
-    if (s_tab_open) draw_panel(y0, list_h);
-    else            draw_list(y0, list_h);
+    if      (s_details_open) draw_details(y0, list_h);
+    else if (s_act_open)     draw_actions(y0, list_h);
+    else if (s_tab_open)     draw_panel(y0, list_h);
+    else                     draw_list(y0, list_h);
 
-    if (s_del_arm >= 0 && !s_tab_open)
-        app_ui_confirm(TR("Elimina file?","Delete file?"), s_del_name, s_del_yes);
+    if (s_del_arm >= 0 && !s_tab_open && !s_act_open && !s_details_open)
+        app_ui_confirm(s_del_isdir ? TR("Elimina cartella?","Delete folder?") : TR("Elimina file?","Delete file?"),
+                       s_del_name, s_del_yes);
 }
 
 extern "C" void nucleo_register_files(void)
 {
     static const nucleo_app_def_t app = {
-        "files", "Files", "Office", "Browse and open SD card files",
-        'f', 0xFE8C, enter, on_key, tick, draw, leave
+        "files", "Files", "Office", "Browse and manage SD card files",
+        'f', C_YELLOW, enter, on_key, tick, draw, leave
     };
     nucleo_app_register(&app);
 }
