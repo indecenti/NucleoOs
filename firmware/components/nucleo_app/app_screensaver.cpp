@@ -20,6 +20,7 @@
 #include "launcher_theme.h"
 #include "app_gfx.h"
 #include "app_ui.h"
+#include "nucleo_i18n.h"    // TR(it,en): hint bar follows the system language
 #include <M5GFX.h>
 #include <time.h>
 #include <string.h>
@@ -417,7 +418,7 @@ static bool on_back(int key)
     if (s_running) {
         saver_stop();
         if (s_auto) { s_auto = false; nucleo_app_exit(); }
-        else        { nucleo_app_set_hint("TAB tab  INVIO seleziona  ESC esci"); nucleo_app_request_draw(); }
+        else        { nucleo_app_set_hint(TR("TAB cambia   invio seleziona   esc esci", "TAB switch   enter select   esc back")); nucleo_app_request_draw(); }
         return true;
     }
     return false;
@@ -468,7 +469,7 @@ static void on_enter(void)
     } else {
         s_running = false; s_auto = false;
         s_tab = 0; s_sel = g_mode; s_dirty = true;
-        nucleo_app_set_hint("TAB tab  INVIO seleziona  ESC esci");
+        nucleo_app_set_hint(TR("TAB cambia   invio seleziona   esc esci", "TAB switch   enter select   esc back"));
         nucleo_app_request_draw();
     }
 }
@@ -478,7 +479,7 @@ static void on_key(int key, char ch)
     if (s_running) {
         saver_stop();
         if (s_auto) { s_auto = false; nucleo_app_exit(); }
-        else        { nucleo_app_set_hint("TAB tab  INVIO seleziona  ESC esci"); nucleo_app_request_draw(); }
+        else        { nucleo_app_set_hint(TR("TAB cambia   invio seleziona   esc esci", "TAB switch   enter select   esc back")); nucleo_app_request_draw(); }
         return;
     }
     bool changed = false;

@@ -5,6 +5,7 @@
 #include "nucleo_app.h"
 #include "app_ui.h"
 #include "launcher_theme.h"
+#include "nucleo_i18n.h"       // TR(it,en): hint follows the system language
 #include "nucleo_imu.h"
 #include <math.h>
 #include <stdio.h>
@@ -165,7 +166,7 @@ static void enter(void)
 {
     s_settings = false;
     nucleo_imu_steps_reset(); s_steps = 0; s_cad = 0; s_last_step_us = 0;
-    nucleo_app_set_hint("cammina col device   R azzera   TAB opzioni   esc esci");
+    nucleo_app_set_hint(TR("cammina col device   R azzera   TAB opzioni   esc esci", "walk with device   R reset   TAB options   esc back"));
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(p_tab);
     nucleo_app_set_back_handler(p_back);

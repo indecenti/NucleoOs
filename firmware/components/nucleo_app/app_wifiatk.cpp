@@ -51,6 +51,7 @@ bool        nucleo_wifiatk_handshake_pmkid(void);
 
 #include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
+#include "nucleo_i18n.h"      // TR(it,en): hints follow the system language
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
 static const unsigned short ATK = 0xFD20 /*orange*/, GRN = C_GREEN,
@@ -78,12 +79,12 @@ static int total_rows(void) { return s_n + 1; }   // +1 for the "TUTTE" row
 
 static void set_hint(void)
 {
-    if (s_panel)                     nucleo_app_set_hint("su/giu pagina   invio chiudi");
-    else if (s_state == ST_CONSENT)  nucleo_app_set_hint("invio accetto  esc esci  tab guida");
-    else if (s_state == ST_SCAN)     nucleo_app_set_hint("scansione in corso...");
-    else if (s_state == ST_STOPPING) nucleo_app_set_hint("arresto in corso...");
-    else if (s_state == ST_RUNNING)  nucleo_app_set_hint("invio: ferma  esc: lascia on  tab: guida");
-    else                             nucleo_app_set_hint("su/giu avvia  r riscan  tab guida");
+    if (s_panel)                     nucleo_app_set_hint(TR("su/giu pagina   invio chiudi", "up/dn page   enter close"));
+    else if (s_state == ST_CONSENT)  nucleo_app_set_hint(TR("invio accetto   esc esci   tab guida", "enter accept   esc back   tab guide"));
+    else if (s_state == ST_SCAN)     nucleo_app_set_hint(TR("scansione in corso...", "scanning..."));
+    else if (s_state == ST_STOPPING) nucleo_app_set_hint(TR("arresto in corso...", "stopping..."));
+    else if (s_state == ST_RUNNING)  nucleo_app_set_hint(TR("invio: ferma   esc: lascia on   tab: guida", "enter: stop   esc: leave on   tab: guide"));
+    else                             nucleo_app_set_hint(TR("su/giu avvia   r riscan   tab guida", "up/dn start   r rescan   tab guide"));
 }
 
 static void enter(void)

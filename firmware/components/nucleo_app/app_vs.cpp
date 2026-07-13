@@ -20,6 +20,7 @@
 #include <M5GFX.h>               // M5Canvas (atlas decode)
 #include "game_sfx.h"            // shared SFX engine (pack WAV -> play, degrades to tone)
 #include "nucleo_imu.h"          // ADV tilt sensor (complementary control)
+#include "nucleo_i18n.h"         // TR(it,en): hints follow the system language
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -278,8 +279,8 @@ static void start_run(void)
     s_tilt_recenter = true;                            // neutral = pose at start ("hold it, then play")
     s_face = 0; s_over = false; s_gs = GS_PLAY;
     s_prev_kills = 0; s_prev_hp = s_w ? s_w->php : 100; s_wave_flash = 0; s_hit_flash = 0; s_new_record = false;
-    nucleo_app_set_hint(nucleo_imu_present() ? "W/E su A/S giu I sx O dx o INCLINA  Spazio azzera"
-                                             : "W/E su  A/S giu  I sx  O dx  (diagonali)   esc esci");
+    nucleo_app_set_hint(nucleo_imu_present() ? TR("W/E su  A/S giu  I sx  O dx  o inclina   spazio azzera", "W/E up  A/S dn  I lf  O rt  or tilt   space recenter")
+                                             : TR("W/E su  A/S giu  I sx  O dx  (diagonali)   esc esci", "W/E up  A/S dn  I lf  O rt  (diagonals)   esc back"));
     sfx(SFX_START);
 }
 
@@ -295,7 +296,7 @@ static void on_enter(void)
     s_gs = GS_MENU; s_face = 0; s_over = false; s_last_us = 0;
     nucleo_app_set_poll_handler(poll_fn);
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint(";/. scegli   Invio: ok   esc: indietro");
+    nucleo_app_set_hint(TR(";/. scegli   invio ok   esc indietro", ";/. pick   enter ok   esc back"));
     nucleo_app_request_draw();
 }
 

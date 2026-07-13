@@ -3045,7 +3045,7 @@ static void on_enter(void)
         cstl_free();
         s_screen = ST_TITLE;
         nucleo_app_set_back_handler(on_back);
-        nucleo_app_set_hint("Memoria insufficiente - Esc");
+        nucleo_app_set_hint(tx("Memoria insufficiente - Esc", "Out of memory - Esc"));
         req();
         return;
     }

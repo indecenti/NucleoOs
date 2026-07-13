@@ -21,6 +21,7 @@
 // is on, the next clip in the folder starts automatically. See docs/media.md and ANTI-FLICKER.md.
 #include "nucleo_app.h"
 #include "app_ui.h"
+#include "nucleo_i18n.h"        // TR(it,en): hints follow the system language
 #include <M5GFX.h>
 #include <string.h>
 #include <strings.h>
@@ -1805,9 +1806,9 @@ static void update_hint(void)
     if (hs == s_hint_last) return;
     s_hint_last = hs;
     switch (hs) {
-        case 1:  nucleo_app_set_hint("RIGHT tab \xb7 UP/DN row \xb7 ESC close"); break;
-        case 2:  nucleo_app_set_hint("L/R adjust \xb7 ENTER done"); break;
-        default: nucleo_app_set_hint("enter play/open \xb7 del up \xb7 TAB menu");
+        case 1:  nucleo_app_set_hint(TR("DX scheda \xb7 SU/GIU riga \xb7 ESC chiudi", "RIGHT tab \xb7 UP/DN row \xb7 ESC close")); break;
+        case 2:  nucleo_app_set_hint(TR("SX/DX regola \xb7 INVIO fatto", "L/R adjust \xb7 ENTER done")); break;
+        default: nucleo_app_set_hint(TR("invio riproduci/apri \xb7 canc su \xb7 TAB menu", "enter play/open \xb7 del up \xb7 TAB menu"));
     }
 }
 

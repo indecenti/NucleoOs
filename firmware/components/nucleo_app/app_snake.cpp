@@ -9,6 +9,7 @@
 #include "nucleo_kbd.h"
 #include "nucleo_pnet.h"
 #include "nucleo_exclusive.h"
+#include "nucleo_i18n.h"    // TR(it,en): hint bar follows the system language
 #include "esp_timer.h"
 #include <math.h>
 #include <string.h>
@@ -1143,8 +1144,8 @@ static void on_enter(void) {
     memset(s_parts,0,sizeof(s_parts));
     s_cam_x=0; s_cam_y=0;
     s_last_us=esp_timer_get_time();
-    if (!pnet_start()) nucleo_app_set_hint("ESP-NOW non avviato  Esc");
-    else nucleo_app_set_hint("\x18\x19 scegli  Invio avvia  Esc esci");
+    if (!pnet_start()) nucleo_app_set_hint(TR("ESP-NOW non avviato   esc", "ESP-NOW not started   esc"));
+    else nucleo_app_set_hint(TR("\x18\x19 scegli   invio avvia   esc esci", "\x18\x19 pick   enter start   esc back"));
     nucleo_app_set_poll_handler(poll_fn);
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_tab_handler(on_tab);

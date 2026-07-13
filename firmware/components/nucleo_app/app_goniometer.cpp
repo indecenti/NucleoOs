@@ -6,6 +6,7 @@
 #include "nucleo_app.h"
 #include "app_ui.h"
 #include "launcher_theme.h"
+#include "nucleo_i18n.h"       // TR(it,en): hint follows the system language
 #include "nucleo_imu.h"
 #include <math.h>
 #include <stdio.h>
@@ -214,7 +215,7 @@ static void enter(void)
     s_qa = INT32_MIN;                       // force the first live frame after a (re)open
     nucleo_imu_level(&s_lx, &s_ly, &s_deg);
     s_reliable = nucleo_imu_present() && s_deg > FLAT_MIN;
-    nucleo_app_set_hint("spazio azzera  F blocca  R assoluto  TAB opzioni  esc esci");
+    nucleo_app_set_hint(TR("spazio azzera   F blocca   R assoluto   TAB opzioni   esc esci", "space zero   F lock   R absolute   TAB options   esc back"));
     nucleo_app_set_tab_handler(g_tab);
     nucleo_app_set_back_handler(g_back);
     nucleo_app_set_poll_handler(poll);

@@ -10,6 +10,7 @@
 // no flicker.
 #include "nucleo_app.h"
 #include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents
+#include "nucleo_i18n.h"      // TR(it,en): hint follows the system language
 #include "app_gfx.h"
 #include "app_ui.h"           // app_ui_title accent header
 #include <M5GFX.h>
@@ -28,7 +29,7 @@ static void txt(int x, int y, const char *s, uint16_t fg, uint16_t bg, int sz) {
 static void enter(void)
 {
     nucleo_app_set_direct_draw(true);   // static screen: draw direct, free the 32 KB menu buffer
-    nucleo_app_set_hint("INVIO collega (riavvia)   esc indietro");
+    nucleo_app_set_hint(TR("invio collega (riavvia)   esc esci", "enter connect (reboot)   esc back"));
     nucleo_app_request_draw();
 }
 

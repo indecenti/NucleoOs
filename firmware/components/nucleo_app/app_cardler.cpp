@@ -19,6 +19,7 @@
 #include "cardler_world.h"       // enum C_*, MAP_W/H, BASE[]/OVR[], TIDb/SOLb/TIDo/SOLo/FLPo[128], ENT[]/NENT
 #include "tile_blit.h"           // shared blit_op/blit_key/blit_sz (8bpp RGB332), also used by Orde
 #include "nucleo_imu.h"          // ADV tilt sensor (complementary control)
+#include "nucleo_i18n.h"         // TR(it,en): hints follow the system language
 #include <M5GFX.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -164,7 +165,7 @@ static void on_enter(void)
     s_gs = GS_MENU; s_menu_sel = 0; s_last_us = 0; s_frame = 0;
     nucleo_app_set_poll_handler(poll_fn);
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint(";/. scegli   Invio: ok   esc: indietro");
+    nucleo_app_set_hint(TR(";/. scegli   invio ok   esc indietro", ";/. pick   enter ok   esc back"));
     nucleo_app_request_draw();
 }
 
@@ -517,7 +518,7 @@ static void on_key(int key, char ch)
         case GS_MENU:
             if (key == NK_UP || key == NK_DOWN || ch == 'e' || ch == 's') { s_menu_sel ^= 1; }
             else if (key == NK_ENTER) {
-                if (s_menu_sel == 0) { reset_run(); s_gs = GS_PLAY; nucleo_app_set_hint("W/A/S/D o INCLINA muovi   Invio parla/apri   Spazio azzera   esc menu"); }
+                if (s_menu_sel == 0) { reset_run(); s_gs = GS_PLAY; nucleo_app_set_hint(TR("W/A/S/D o inclina muovi   invio parla/apri   spazio azzera   esc menu", "W/A/S/D or tilt move   enter talk/open   space recenter   esc menu")); }
                 else { s_set_sel = 0; s_gs = GS_SETTINGS; }
             }
             break;

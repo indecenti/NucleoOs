@@ -46,8 +46,16 @@ extern "C" {
 }
 
 #include "app_gfx.h"
-static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410, HLINE = 0x2945,
-                            ACC = 0x4DDF, ONAIR = 0xF96B, GRN = 0x8FF3, WARM = 0xFE8C, INK = 0x0000;
+#include "nucleo_theme.h"       // themed chrome; was hardcoded classic literals -> ignored theme switches
+#include "nucleo_i18n.h"        // TR(it,en): hint follows the system language
+// Chrome follows the active theme; ACC is the app identity accent, ONAIR/GRN/WARM are content colors.
+#define BG    THEME_BG
+#define FG    THEME_FG
+#define MUTED THEME_MUTED
+#define DIM   THEME_DIM
+#define HLINE THEME_LINE
+#define INK   THEME_INK
+static const unsigned short ACC = 0x4DDF, ONAIR = 0xF96B, GRN = 0x8FF3, WARM = 0xFE8C;
 
 // ---- station list (shared with the web app via /system/config/radio.json) -------------------
 #define RADIO_MAX 24
@@ -223,7 +231,7 @@ static void draw_eq(bool live)
 static void draw_volume(void)
 {
     int vol = nucleo_audio_volume();
-    d.fillRoundRect(VB_X, VB_Y, VB_W, VB_H, 5, 0x10A2);              // track
+    d.fillRoundRect(VB_X, VB_Y, VB_W, VB_H, 5, HLINE);              // track
     int fw = VB_W * vol / 100; if (fw < 0) fw = 0; if (fw > VB_W) fw = VB_W;
     if (fw > 0) d.fillRoundRect(VB_X, VB_Y, fw, VB_H, 5, GRN);       // fill
     char vb[8]; snprintf(vb, sizeof vb, "%d%%", vol);
@@ -351,7 +359,7 @@ static void enter(void)
     load_config();
     s_sel = (s_default < s_count) ? s_default : 0;
     s_top = 0; clamp_scroll();
-    nucleo_app_set_hint("up/down  pick      enter  listen");
+    nucleo_app_set_hint(TR("su/giu scegli   invio ascolta", "up/dn pick   enter listen"));
 }
 
 // Always tear everything down — audio task (decoder + WiFi buffers) and the station array — so the

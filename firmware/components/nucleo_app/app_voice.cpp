@@ -28,17 +28,22 @@ extern "C" {
 #include "app_gfx.h"
 #include "nucleo_exclusive.h"   // free RAM on enter so the recognizer's ~38 KB heap gate can pass
 #include "nucleo_i18n.h"        // TR(it,en): UI labels follow the system language
+#include "nucleo_theme.h"       // themed chrome (BG/FG/MUTED/DIM/LINE follow the active OS theme)
 
-// Palette — verde elettrico / dark come il motore
+// Chrome follows the active theme; ACC is the app's identity accent (its registered launcher color);
+// ACC2 + the box tints below are semantic status colors (named, never bare hex in a draw call).
+#define BG    THEME_BG
+#define FG    THEME_FG
+#define MUTED THEME_MUTED
+#define DIM   THEME_DIM
+#define LINE  THEME_LINE
 static const unsigned short
-    BG   = 0x0841,
-    FG   = 0xFFFF,
-    ACC  = 0x07E0,   // verde lime
-    ACC2 = 0xFD20,   // arancio per stati attivi
-    MUTED= 0x8C71,
-    DIM  = 0x4208,
-    LINE = 0x2945,
-    C_RED = 0xF800;
+    ACC    = 0x07E0,   // verde lime — app accent (registered)
+    ACC2   = 0xFD20,   // arancio per stati attivi
+    C_RED  = 0xF800,   // status red
+    REC_BG = 0x2000,   // capture box (live recording)
+    OK_BG  = 0x03E0,   // success box (saved)
+    ERR_BG = 0x5800;   // audio-error box
 
 #define TPL_PATH NUCLEO_SD_MOUNT "/system/voice"
 #define MAX_TPLS 20
@@ -283,14 +288,14 @@ static void draw_record(int top_y)
 
     switch (s_rec_step) {
     case RS_IDLE:
-        d.fillRoundRect(8, y, 240 - 16, 80, 8, 0x10A2); // Box scuro
-        d.setTextColor(FG, 0x10A2); d.setCursor(16, y + 8); d.setTextSize(2);
+        d.fillRoundRect(8, y, 240 - 16, 80, 8, LINE); // Box scuro
+        d.setTextColor(FG, LINE); d.setCursor(16, y + 8); d.setTextSize(2);
         d.print(TR("Nuova Parola", "New Word"));
-        d.setTextSize(1); d.setTextColor(ACC, 0x10A2); d.setCursor(16, y + 30);
+        d.setTextSize(1); d.setTextColor(ACC, LINE); d.setCursor(16, y + 30);
         d.print(TR("1. Premi Invio e scrivi nome", "1. Press Enter, type a name"));
-        d.setTextColor(DIM, 0x10A2); d.setCursor(16, y + 46);
+        d.setTextColor(DIM, LINE); d.setCursor(16, y + 46);
         d.print(TR("2. Tieni premuto GO e parla", "2. Hold GO and speak"));
-        d.setTextColor(DIM, 0x10A2); d.setCursor(16, y + 62);
+        d.setTextColor(DIM, LINE); d.setCursor(16, y + 62);
         d.print(TR("100% Offline (nessun WAV)", "100% offline (no WAV)"));
         break;
 
@@ -298,7 +303,7 @@ static void draw_record(int top_y)
         // Honest state: the engine is only truly capturing while GO is held (is_listening). Until
         // then we tell the user to HOLD GO instead of a misleading "listening" with a fake pulse.
         bool listening = nucleo_voice_is_listening();
-        unsigned short box = listening ? 0x2000 : 0x10A2;   // red-ish while capturing, dark while waiting
+        unsigned short box = listening ? REC_BG : LINE;   // red-ish while capturing, dark while waiting
         d.fillRoundRect(8, y, W - 16, 80, 8, box);
         d.setTextColor(listening ? ACC2 : ACC, box); d.setTextSize(2); d.setCursor(16, y + 8);
         d.print(listening ? TR("IN ASCOLTO...", "LISTENING...") : TR("TIENI GO e parla", "HOLD GO & speak"));
@@ -323,23 +328,23 @@ static void draw_record(int top_y)
     }
 
     case RS_DONE:
-        d.fillRoundRect(8, y, W - 16, 80, 8, 0x03E0); // Box verde tenue
-        d.setTextSize(2); d.setTextColor(ACC, 0x03E0); d.setCursor(16, y + 16);
+        d.fillRoundRect(8, y, W - 16, 80, 8, OK_BG); // Box verde tenue
+        d.setTextSize(2); d.setTextColor(ACC, OK_BG); d.setCursor(16, y + 16);
         d.print(TR("SALVATO!", "SAVED!"));
-        d.setTextSize(1); d.setTextColor(FG, 0x03E0); d.setCursor(16, y + 44);
+        d.setTextSize(1); d.setTextColor(FG, OK_BG); d.setCursor(16, y + 44);
         char msg2[48]; snprintf(msg2, sizeof(msg2), TR("'%s.tpl' creato.", "'%s.tpl' created."), s_rec_word);
         d.print(msg2);
-        d.setTextColor(MUTED, 0x03E0); d.setCursor(16, y + 60);
+        d.setTextColor(MUTED, OK_BG); d.setCursor(16, y + 60);
         d.print(TR("Premi un tasto.", "Press any key."));
         break;
 
     case RS_TOO_SHORT:
-        d.fillRoundRect(8, y, W - 16, 80, 8, 0x5800); // Box rosso/arancio
-        d.setTextSize(2); d.setTextColor(C_RED, 0x5800); d.setCursor(16, y + 12);
+        d.fillRoundRect(8, y, W - 16, 80, 8, ERR_BG); // Box rosso/arancio
+        d.setTextSize(2); d.setTextColor(C_RED, ERR_BG); d.setCursor(16, y + 12);
         d.print(TR("ERRORE AUDIO", "AUDIO ERROR"));
-        d.setTextSize(1); d.setTextColor(FG, 0x5800); d.setCursor(16, y + 36);
+        d.setTextSize(1); d.setTextColor(FG, ERR_BG); d.setCursor(16, y + 36);
         d.print(TR("Troppo corto o silenzio.", "Too short or silent."));
-        d.setTextColor(MUTED, 0x5800); d.setCursor(16, y + 54);
+        d.setTextColor(MUTED, ERR_BG); d.setCursor(16, y + 54);
         d.print(TR("Tieni GO piu a lungo.", "Hold GO longer."));
         break;
     }
@@ -369,12 +374,12 @@ static void draw_status(int top_y)
     if (s_tpl_overflow) rows[0].col = ACC2;   // warn: only the first MAX_TPLS are matched
     rows[1].v = ws_str;
 
-    d.fillRoundRect(8, y, 240 - 16, 12 + NROWS * 16, 8, 0x10A2);
+    d.fillRoundRect(8, y, 240 - 16, 12 + NROWS * 16, 8, LINE);
 
     for (int i = 0; i < NROWS; i++) {
         int ry = y + 6 + i * 16;
-        d.setTextSize(1); d.setTextColor(MUTED, 0x10A2); d.setCursor(16,  ry); d.print(rows[i].k);
-        d.setTextColor(rows[i].col, 0x10A2);             d.setCursor(104, ry); d.print(rows[i].v);
+        d.setTextSize(1); d.setTextColor(MUTED, LINE); d.setCursor(16,  ry); d.print(rows[i].k);
+        d.setTextColor(rows[i].col, LINE);             d.setCursor(104, ry); d.print(rows[i].v);
     }
 
     // Hint: how to toggle the persistent always-on opt-in.

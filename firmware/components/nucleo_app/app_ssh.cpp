@@ -16,6 +16,7 @@
 #include "nucleo_exclusive.h"
 #include "nucleo_board.h"
 #include "app_gfx.h"
+#include "nucleo_theme.h"   // themed chrome palette (replaces the local classic-theme mirror)
 #include <M5GFX.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -42,14 +43,16 @@ static const char *TAG = "app.ssh";
 
 static bool s_en = false;   // default IT (bilingual strings throughout)
 
-// ── colors ──
-#define C_BG 0x0000
-#define C_DIM 0x8C71
-#define C_INK 0xFFFF
-#define C_ACC 0x6C9F
-#define C_INBG 0x10A2
-#define C_WARN 0xFD20
-#define C_ERR 0xF9A6
+// ── colors ── chrome follows the active OS theme (was a local classic-theme mirror that ignored
+// theme switches); the C_* names stay as thin aliases so the many draw calls below are untouched.
+// ACCENT = the app's registered launcher accent; WARN/ERR + the ANSI PAL are genuine content colors.
+#define C_BG   THEME_BG
+#define C_DIM  THEME_MUTED
+#define C_INK  THEME_FG
+#define C_INBG THEME_LINE
+static const unsigned short ACCENT = 0x2EE0;   // registered app accent (was C_ACC 0x6C9F)
+#define C_WARN 0xFD20   // status/warning text (semantic content color)
+#define C_ERR  0xF9A6   // error text (semantic content color)
 // 16-colour ANSI palette (RGB565): 0-7 normal, 8-15 bright
 static const unsigned short PAL[16] = {
     0x4208, 0xC000, 0x0560, 0xC560, 0x021F, 0xC018, 0x0575, 0xC618,
@@ -400,7 +403,7 @@ static void draw_text(int x, int y, const char *s, unsigned short fg, unsigned s
 }
 static void draw_form() {
     int top = nucleo_app_content_top();
-    d.fillRect(0, top, 240, nucleo_app_content_height(), 0x0841);
+    d.fillRect(0, top, 240, nucleo_app_content_height(), C_BG);
     int nf = form_nfields(); const char *lab; char val[96];
     for (int i = 0; i < nf; i++) {
         int y = top + 4 + i * 21; bool sel = (i == s_field);
@@ -410,11 +413,11 @@ static void draw_form() {
         else if (s_auth == AUTH_PW && i == 3) { lab = "Password"; int n = strlen(s_pass); for (int k = 0; k < n && k < 90; k++) val[k] = '*'; val[n < 90 ? n : 90] = 0; }
         else if (s_auth == AUTH_KEY && i == 3) { lab = s_en ? "Key" : "Chiave"; snprintf(val, sizeof val, s_keysN ? "< %s >" : "%s", s_keysN ? s_keys[s_keyIdx] : (s_en ? "(none in keys/)" : "(nessuna in keys/)")); }
         else { lab = "Passphrase"; int n = strlen(s_passph); for (int k = 0; k < n && k < 90; k++) val[k] = '*'; val[n < 90 ? n : 90] = 0; }
-        draw_text(8, y, lab, sel ? C_ACC : C_DIM, 0x0841, 1);
-        d.fillRect(64, y - 1, 168, 11, sel ? C_INBG : 0x0000);
-        draw_text(67, y, val, C_INK, sel ? C_INBG : 0x0000, 1);
+        draw_text(8, y, lab, sel ? ACCENT : C_DIM, C_BG, 1);
+        d.fillRect(64, y - 1, 168, 11, sel ? C_INBG : C_BG);
+        draw_text(67, y, val, C_INK, sel ? C_INBG : C_BG, 1);
     }
-    draw_text(8, top + 4 + nf * 21, s_status, C_WARN, 0x0841, 1);
+    draw_text(8, top + 4 + nf * 21, s_status, C_WARN, C_BG, 1);
 }
 // draw one text/colour segment, grouping equal-colour runs
 static void draw_run(int x, int y, const char *txt, const uint8_t *col, int len, int zoom) {
@@ -431,7 +434,7 @@ static void draw_shell() {
     d.startWrite();
     d.fillRect(0, top, 240, H, C_BG);
     char st[80]; snprintf(st, sizeof st, "%s %s@%s%s", s_scroll ? "^scroll" : "*", s_user, s_host, s_sbcol ? "" : " [mono]");
-    draw_text(2, top, st, s_scroll ? C_WARN : C_ACC, C_BG, 1);
+    draw_text(2, top, st, s_scroll ? C_WARN : ACCENT, C_BG, 1);
     if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
     int li = s_count - 1 - s_scroll; int y = sbTop + (rows - 1) * rowH;
     while (li >= 0 && y >= sbTop) {
@@ -449,20 +452,20 @@ static void draw_shell() {
     int iy = top + H - inH; d.fillRect(0, iy, 240, inH, C_INBG);
     int icw = 6, icols = (228 - 12) / icw, from = s_cur_x > icols ? s_cur_x - icols : 0;
     char shown[SB_W]; int k = 0; for (int i = from; i < s_linelen && k < icols; i++, k++) shown[k] = s_mask ? '*' : s_line[i]; shown[k] = 0;
-    draw_text(2, iy + 3, ">", C_ACC, C_INBG, 1); draw_text(12, iy + 3, shown, C_INK, C_INBG, 1);
-    d.fillRect(12 + (s_cur_x - from) * icw, iy + 2, 2, 10, C_ACC);
+    draw_text(2, iy + 3, ">", ACCENT, C_INBG, 1); draw_text(12, iy + 3, shown, C_INK, C_INBG, 1);
+    d.fillRect(12 + (s_cur_x - from) * icw, iy + 2, 2, 10, ACCENT);
     d.endWrite();
 }
 static void draw_connecting() {
     int top = nucleo_app_content_top();
-    d.fillRect(0, top, 240, nucleo_app_content_height(), 0x0841);
+    d.fillRect(0, top, 240, nucleo_app_content_height(), C_BG);
     char l[120]; snprintf(l, sizeof l, "SSH %s@%s", s_user, s_host);
-    draw_text(8, top + 18, l, C_INK, 0x0841, 1); draw_text(8, top + 38, s_status, C_DIM, 0x0841, 1);
+    draw_text(8, top + 18, l, C_INK, C_BG, 1); draw_text(8, top + 38, s_status, C_DIM, C_BG, 1);
 }
 static void draw_manual() {
     int top = nucleo_app_content_top(), H = nucleo_app_content_height();
-    d.fillRect(0, top, 240, H, 0x0010);
-    draw_text(8, top + 3, s_en ? "SSH - quick help" : "SSH - guida rapida", C_ACC, 0x0010, 1);
+    d.fillRect(0, top, 240, H, C_BG);
+    draw_text(8, top + 3, s_en ? "SSH - quick help" : "SSH - guida rapida", ACCENT, C_BG, 1);
     const char *it[] = { "Invio  esegui comando", "Su/Giu  cronologia", "Tab  completa (cmd+storia)",
         "Sin/Des  cursore", "Esc  cancella riga", "Fn+Su/Giu  scorri output", "Fn+Z  zoom font",
         "Fn+H  guida", "Fn+Esc  esci", "Auth: Password o Chiave", "Chiavi in /sd/data/ssh/keys",
@@ -472,7 +475,7 @@ static void draw_manual() {
         "Fn+H  help", "Fn+Esc  quit", "Auth: Password or Key", "Keys in /sd/data/ssh/keys",
         "host key trusted on 1st use", "(no full-screen editors)", nullptr };
     const char **m = s_en ? en : it;
-    for (int i = 0; m[i]; i++) draw_text(8, top + 15 + i * 8, m[i], i >= 9 ? C_DIM : C_INK, 0x0010, 1);
+    for (int i = 0; m[i]; i++) draw_text(8, top + 15 + i * 8, m[i], i >= 9 ? C_DIM : C_INK, C_BG, 1);
 }
 static void on_draw() {
     s_dirty = false;
@@ -481,9 +484,9 @@ static void on_draw() {
     else if (s_state == ST_SHELL) draw_shell();
     else if (s_state == ST_CLOSED) {
         int top = nucleo_app_content_top();
-        d.fillRect(0, top, 240, nucleo_app_content_height(), 0x0841);
-        draw_text(8, top + 18, s_status[0] ? s_status : (s_en ? "Disconnected" : "Disconnesso"), C_WARN, 0x0841, 1);
-        draw_text(8, top + 38, s_en ? "press a key for the form" : "premi un tasto per il form", C_DIM, 0x0841, 1);
+        d.fillRect(0, top, 240, nucleo_app_content_height(), C_BG);
+        draw_text(8, top + 18, s_status[0] ? s_status : (s_en ? "Disconnected" : "Disconnesso"), C_WARN, C_BG, 1);
+        draw_text(8, top + 38, s_en ? "press a key for the form" : "premi un tasto per il form", C_DIM, C_BG, 1);
     } else draw_connecting();
 }
 static void on_tick() { if (s_dirty) nucleo_app_request_draw(); }

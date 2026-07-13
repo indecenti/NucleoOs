@@ -7,6 +7,7 @@
 #include "nucleo_app.h"
 #include "app_ui.h"
 #include "launcher_theme.h"
+#include "nucleo_i18n.h"        // TR(it,en): hint follows the system language
 #include "nucleo_imu.h"
 #include <math.h>
 #include <stdio.h>
@@ -15,6 +16,9 @@
 #include "app_gfx.h"
 
 #define RAD2DEG 57.29578f
+
+// Specular glint on the vial bubble: genuine content (a white highlight), named per the UI-kit rule.
+static const unsigned short GLINT = 0xFFFF;
 
 enum { V_BULLSEYE, V_TUBE_H, V_TUBE_V, V_DIGITAL, V_SETTINGS, V_COUNT };
 static const char *VIEW_NAME[V_COUNT] = { "Mira", "Tubo", "Piombo", "Digitale", "Impostazioni" };
@@ -116,7 +120,7 @@ static void view_bullseye(int top, int h, int y0)
     int bx = vcx + (int)ox, by = vcy + (int)oy;
     d.fillCircle(bx, by, 10, level ? C_GREEN : C_YELLOW);
     d.drawCircle(bx, by, 10, INK);
-    d.fillCircle(bx - 3, by - 3, 2, 0xFFFF);
+    d.fillCircle(bx - 3, by - 3, 2, GLINT);
 
     // big number beside it on the right
     int nx = 138;
@@ -144,7 +148,7 @@ static void capillary(int x, int y, int len, int thick, bool horiz, float t, boo
         int bx = cxm + (int)(t * (len / 2 - thick));
         int br = thick / 2 - 2;
         d.fillCircle(bx, y + thick / 2, br, level ? C_GREEN : C_YELLOW);
-        d.fillCircle(bx - 2, y + thick / 2 - 2, 2, 0xFFFF);
+        d.fillCircle(bx - 2, y + thick / 2 - 2, 2, GLINT);
     } else {
         d.fillRoundRect(x, y, thick, len, thick / 2, INK);
         d.fillRoundRect(x + 2, y + 2, thick - 4, len - 4, (thick - 4) / 2, liquid);
@@ -154,7 +158,7 @@ static void capillary(int x, int y, int len, int thick, bool horiz, float t, boo
         int by = cym + (int)(t * (len / 2 - thick));
         int br = thick / 2 - 2;
         d.fillCircle(x + thick / 2, by, br, level ? C_GREEN : C_YELLOW);
-        d.fillCircle(x + thick / 2 - 2, by - 2, 2, 0xFFFF);
+        d.fillCircle(x + thick / 2 - 2, by - 2, 2, GLINT);
     }
 }
 
@@ -314,7 +318,8 @@ static void enter(void)
     s_hold = false;
     s_qx = INT32_MIN;                       // force the first live frame after a (re)open
     nucleo_imu_level(&s_lx, &s_ly, &s_deg);
-    nucleo_app_set_hint("TAB vista   G azzera   F blocca   <-/-> sfoglia   esc esci");
+    nucleo_app_set_hint(TR("tab vista   g azzera   f blocca   </> sfoglia   esc esci",
+                           "tab view   g zero   f hold   </> browse   esc back"));
     nucleo_app_set_tab_handler(tab);
     nucleo_app_set_back_handler(back);
     nucleo_app_set_poll_handler(poll);

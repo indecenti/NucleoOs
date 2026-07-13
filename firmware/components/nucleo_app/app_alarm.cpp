@@ -8,6 +8,7 @@
 #include "nucleo_app.h"
 #include "app_ui.h"
 #include "launcher_theme.h"
+#include "nucleo_i18n.h"        // TR(it,en): hint follows the system language
 #include "nucleo_imu.h"
 #include "nucleo_audio.h"
 #include "nucleo_codec.h"
@@ -24,6 +25,9 @@ extern "C" void nucleo_voice_suspend(bool suspend);   // free the mic from the v
 
 enum { ST_DISARMED, ST_ARMING, ST_ARMED, ST_TRIGGERED };
 enum { SRC_MIC = 0, SRC_MOTION = 1, SRC_BOTH = 2 };
+
+// Selected-settings-row capsule = the app's registered accent (was a stray dark tint 0x12B2).
+static const unsigned short ACCENT = C_RED;
 
 static int      s_state = ST_DISARMED;
 static int64_t  s_arm_t0, s_last_siren;
@@ -289,10 +293,10 @@ static void draw_settings(int y0, int bottom)
     int start = 0; if (s_set_sel >= maxrows) start = s_set_sel - maxrows + 1;
     for (int i = start; i < ASET_ROWS && i < start + maxrows; i++) {
         bool on = (i == s_set_sel);
-        if (on) d.fillRoundRect(4, y, W - 8, rowh - 2, 3, 0x12B2);
-        d.setTextSize(2); d.setTextColor(on ? FG : MUTED, on ? 0x12B2 : BG); d.setCursor(10, y + 2); d.print(aset_label(i));
+        if (on) d.fillRoundRect(4, y, W - 8, rowh - 2, 3, ACCENT);
+        d.setTextSize(2); d.setTextColor(on ? FG : MUTED, on ? ACCENT : BG); d.setCursor(10, y + 2); d.print(aset_label(i));
         const char *rv = aset_right(i);
-        int rw = (int)strlen(rv) * 12; d.setTextColor(on ? C_GREEN : DIM, on ? 0x12B2 : BG); d.setCursor(W - 10 - rw, y + 2); d.print(rv);
+        int rw = (int)strlen(rv) * 12; d.setTextColor(on ? C_GREEN : DIM, on ? ACCENT : BG); d.setCursor(W - 10 - rw, y + 2); d.print(rv);
         y += rowh;
     }
 }
@@ -351,7 +355,7 @@ static void enter(void)
     s_state = ST_DISARMED; s_settings = false; s_pin_edit = false;
     s_entry_len = 0; s_flash = false; s_bad = false;
     if (nucleo_imu_present() && s_src == SRC_MIC) s_src = SRC_BOTH;   // exploit the IMU when it's there
-    nucleo_app_set_hint("INVIO arma   TAB impostazioni   esc esci");
+    nucleo_app_set_hint(TR("invio arma   tab impostazioni   esc esci", "enter arm   tab settings   esc back"));
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(tab);
     nucleo_app_set_back_handler(back);
