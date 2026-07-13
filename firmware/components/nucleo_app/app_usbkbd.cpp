@@ -12,6 +12,7 @@
 // Installing TinyUSB takes the USB-OTG PHY, so the serial console is gone until reboot (OTA still works).
 #include "nucleo_app.h"
 #include "launcher_theme.h"   // W/H + themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
+#include "nucleo_i18n.h"      // TR(it,en): hint follows the system language
 #include "app_gfx.h"
 #include "app_ui.h"           // shared focused-list widget (macro list) + quick-select nav
 #include <M5GFX.h>
@@ -29,7 +30,7 @@ extern "C" {
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
 static const unsigned short ACC = C_BLUE, GRN = C_GREEN, WARN = C_YELLOW, HL = C_BLUE,
-                            ORG = 0xFD20, SURF = 0x10A2, CAP = 0x12B2;
+                            ORG = 0xFD20;   // off-state fill -> LINE, selected capsule -> ACC (both themed)
 
 // HID usage ids not already in nucleo_usbhid.h
 #define HID_ESC   0x29
@@ -67,8 +68,8 @@ static const char *mac_label(int i, void *) { return MACROS[i].name; }   // shar
 static void chip(int x, int y, const char *label, bool on, unsigned short oncol)
 {
     int w = (int)strlen(label) * 6 + 8;
-    d.fillRoundRect(x, y, w, 13, 3, on ? oncol : 0x10A2);
-    d.setTextColor(on ? INK : MUTED, on ? oncol : 0x10A2);
+    d.fillRoundRect(x, y, w, 13, 3, on ? oncol : LINE);
+    d.setTextColor(on ? INK : MUTED, on ? oncol : LINE);
     d.setCursor(x + 4, y + 3); d.print(label);
 }
 
@@ -187,7 +188,7 @@ static void on_enter(void)
     s_tab = T_TYPE; s_macro = 0;
     s_usb_ok = (nucleo_usbhid_start() == ESP_OK);     // resident for the session (takes USB PHY)
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint("1-4 tab  </> cambia  enter  ` esci");
+    nucleo_app_set_hint(TR("1-4 tab   </> cambia   invio   esc esci", "1-4 tab   </> switch   enter   esc back"));
     nucleo_app_request_draw();
 }
 
@@ -218,8 +219,8 @@ static void tabbar(int top)
     int x = 6;
     for (int i = 0; i <= T_SET; i++) {
         bool on = (i == s_tab); int w = (int)strlen(N[i]) * 6 + 10;
-        d.fillRoundRect(x, top + 2, w, 14, 3, on ? ACC : SURF);
-        d.setTextColor(on ? INK : MUTED, on ? ACC : SURF);
+        d.fillRoundRect(x, top + 2, w, 14, 3, on ? ACC : LINE);
+        d.setTextColor(on ? INK : MUTED, on ? ACC : LINE);
         d.setCursor(x + 5, top + 5); d.print(N[i]);
         x += w + 4;
     }
@@ -239,9 +240,9 @@ static void draw(void)
         d.setTextColor(s_usb_ok ? FG : WARN, BG); d.setCursor(8, y); d.print(s_usb_ok ? "Tastiera USB pronta." : "USB HID non installata.");
         d.setTextColor(conn ? GRN : MUTED, BG); d.setCursor(8, y + 14); d.print(conn ? "Host collegato." : "Collega il cavo USB-C al PC.");
         // big call-to-action
-        d.fillRoundRect(6, y + 34, 228, 26, 8, CAP);
-        d.setTextSize(2); d.setTextColor(GRN, CAP); d.setCursor(14, y + 39); d.print("ENTER");
-        d.setTextSize(1); d.setTextColor(FG, CAP);  d.setCursor(80, y + 45); d.print("inizia a digitare");
+        d.fillRoundRect(6, y + 34, 228, 26, 8, ACC);
+        d.setTextSize(2); d.setTextColor(GRN, ACC); d.setCursor(14, y + 39); d.print("ENTER");
+        d.setTextSize(1); d.setTextColor(FG, ACC);  d.setCursor(80, y + 45); d.print("inizia a digitare");
         d.setTextColor(DIM, BG); d.setCursor(8, y + 70); d.print("Combo, Fn, frecce, layout IT/US.");
     } else if (s_tab == T_MACRO) {
         d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print("ENTER invia la combo al PC");
@@ -263,12 +264,12 @@ static void draw(void)
     } else { // T_SET
         d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print("ENTER / L cambia layout host");
         bool us = (s_layout == DUCKY_LAYOUT_US);
-        d.fillRoundRect(6, y + 16, 228, 24, 8, us ? CAP : SURF);
+        d.fillRoundRect(6, y + 16, 228, 24, 8, us ? ACC : LINE);
         if (us) d.fillRoundRect(6, y + 19, 5, 18, 2, ACC);
-        d.setTextSize(2); d.setTextColor(us ? FG : MUTED, us ? CAP : SURF); d.setCursor(16, y + 20); d.print("US  QWERTY");
-        d.fillRoundRect(6, y + 44, 228, 24, 8, !us ? CAP : SURF);
+        d.setTextSize(2); d.setTextColor(us ? FG : MUTED, us ? ACC : LINE); d.setCursor(16, y + 20); d.print("US  QWERTY");
+        d.fillRoundRect(6, y + 44, 228, 24, 8, !us ? ACC : LINE);
         if (!us) d.fillRoundRect(6, y + 47, 5, 18, 2, ACC);
-        d.setTextSize(2); d.setTextColor(!us ? FG : MUTED, !us ? CAP : SURF); d.setCursor(16, y + 48); d.print("IT  italiana");
+        d.setTextSize(2); d.setTextColor(!us ? FG : MUTED, !us ? ACC : LINE); d.setCursor(16, y + 48); d.print("IT  italiana");
         d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(8, y + 74); d.print("Mappa i simboli sul layout del PC.");
     }
 }

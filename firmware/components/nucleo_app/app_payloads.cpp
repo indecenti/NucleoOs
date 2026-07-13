@@ -7,6 +7,7 @@
 // abort (backtick), and feeds the task watchdog across DELAYs so a long payload can't reboot the device.
 #include "nucleo_app.h"
 #include "app_gfx.h"
+#include "nucleo_i18n.h"       // TR(it,en): hint follows the system language
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -197,7 +198,7 @@ static void on_enter(void)
     if (!s_items)  s_items  = (Item *)malloc(sizeof(Item) * MAX_ITEMS);
     scan_items();
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint("frecce scegli  enter  esc indietro");
+    nucleo_app_set_hint(TR("frecce scegli   invio apri   esc indietro", "arrows pick   enter open   esc back"));
     nucleo_app_request_draw();
 }
 

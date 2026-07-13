@@ -18,6 +18,7 @@ extern "C" {
 #include "nucleo_exclusive.h"   // dedicated-mode RAM reclaim (~70KB) + NX_VOICE frees the mic — like music/video
 
 #include "launcher_theme.h"
+#include "nucleo_i18n.h"        // TR(it,en): hint follows the system language
 
 // ---- modes ----
 enum { M_BARS = 0, M_FALL, M_SCOPE, M_TUNE, N_MODES };
@@ -384,7 +385,7 @@ static void draw(void)
 
 static void set_hint(void)
 {
-    nucleo_app_set_hint("L/R modo  TAB tema  U/D sens  GO ferma");
+    nucleo_app_set_hint(TR("L/R modo   TAB tema   U/D sens   GO ferma", "L/R mode   TAB theme   U/D sens   GO freeze"));
 }
 
 static void on_key(int key, char ch)

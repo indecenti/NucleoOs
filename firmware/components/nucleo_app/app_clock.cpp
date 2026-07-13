@@ -96,7 +96,7 @@ static void draw_digital(int top, int h, const struct tm *tm, bool synced)
     int gx = (W - (bigw + side)) / 2;
     int ty = top + (h - 48 - 24) / 2;
 
-    d.setTextSize(big); d.setTextColor(0xFFFF, BG); d.setCursor(gx, ty); d.print(hm);   // huge white HH:MM
+    d.setTextSize(big); d.setTextColor(FG, BG); d.setCursor(gx, ty); d.print(hm);   // huge HH:MM in theme fg
     int sidex = gx + bigw + 4;
     if (s_secs) {
         char ss[4]; snprintf(ss, sizeof(ss), "%02d", tm->tm_sec);

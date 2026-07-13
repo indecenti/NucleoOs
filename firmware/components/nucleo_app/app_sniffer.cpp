@@ -7,6 +7,7 @@
 // Modes: Tutti / Beacon / Probe / Handshake (EAPOL) / Deauth. Channel: Hop the band or a fixed 1..13.
 #include "nucleo_app.h"
 #include "app_ui.h"
+#include "nucleo_i18n.h"      // TR(it,en): hints follow the system language
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -33,7 +34,7 @@ unsigned    nucleo_wifiatk_sniffer_deauth(void);
 #include "app_gfx.h"
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
-static const unsigned short SNF = 0x07FF /*cyan*/, GRN = C_GREEN, YEL = C_YELLOW;
+static const unsigned short SNF = 0x07FF /*cyan*/, GRN = C_GREEN, YEL = C_YELLOW, ERR = 0xF800 /*error text*/;
 
 enum { ST_CONSENT, ST_CONFIG, ST_RUNNING, ST_ARMING, ST_STOPPING };
 enum { R_MODE, R_CHAN, R_GO, R_NROWS };
@@ -48,11 +49,11 @@ static bool s_pulse;
 
 static void set_hint(void)
 {
-    if (s_state == ST_CONSENT)       nucleo_app_set_hint("invio accetto   esc esci");
-    else if (s_state == ST_ARMING)   nucleo_app_set_hint("avvio...");
-    else if (s_state == ST_STOPPING) nucleo_app_set_hint("salvo e chiudo...");
-    else if (s_state == ST_RUNNING)  nucleo_app_set_hint("invio: ferma e salva");
-    else                             nucleo_app_set_hint("su/giu  destra cambia  invio avvia");
+    if (s_state == ST_CONSENT)       nucleo_app_set_hint(TR("invio accetto   esc esci", "enter accept   esc back"));
+    else if (s_state == ST_ARMING)   nucleo_app_set_hint(TR("avvio...", "starting..."));
+    else if (s_state == ST_STOPPING) nucleo_app_set_hint(TR("salvo e chiudo...", "saving & closing..."));
+    else if (s_state == ST_RUNNING)  nucleo_app_set_hint(TR("invio ferma e salva", "enter stop & save"));
+    else                             nucleo_app_set_hint(TR("su/giu   > cambia   invio avvia", "up/dn   > change   enter start"));
 }
 
 static void enter(void)
@@ -158,7 +159,7 @@ static void draw_consent(void)
     unsigned short C[] = { FG, FG, FG, BG, MUTED };
     d.setTextSize(1);
     for (int i = 0; i < 5; i++) { d.setTextColor(C[i], BG); d.setCursor(10, 52 + i * 11); d.print(L[i]); }
-    if (s_err[0]) { d.setTextColor(0xF800, BG); d.setCursor(10, h - 10); d.print(s_err); }
+    if (s_err[0]) { d.setTextColor(ERR, BG); d.setCursor(10, h - 10); d.print(s_err); }
 }
 
 static void draw_config(void)
@@ -173,7 +174,7 @@ static void draw_config(void)
     else    { d.drawRoundRect(6, 76, 228, 22, 6, GRN); d.setTextSize(2); d.setTextColor(GRN, BG); d.setCursor(88, 80); d.print("AVVIA"); }
     // Error / hint line, kept INSIDE the content area (above the footer).
     d.setTextSize(1);
-    if (s_err[0]) { d.setTextColor(0xF800, BG); d.setCursor(10, h - 10); d.print(s_err); }
+    if (s_err[0]) { d.setTextColor(ERR, BG); d.setCursor(10, h - 10); d.print(s_err); }
     else          { d.setTextColor(DIM, BG);    d.setCursor(10, h - 10); d.print("salva in /sd/sniffer/*.pcap"); }
 }
 

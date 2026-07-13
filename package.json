@@ -10,6 +10,7 @@
     "gen:api": "node tools/gen-api-spec.mjs",
     "gen:api:check": "node tools/gen-api-spec.mjs --check",
     "i18n:gate": "node tools/i18n-check.mjs",
+    "ui:lint": "node tools/native-ui-lint.mjs",
     "icons:gate": "node tools/check-icons.mjs",
     "test": "node tools/anima-host/gate.mjs",
     "test:unit": "node --test \"tools/**/*.test.mjs\"",

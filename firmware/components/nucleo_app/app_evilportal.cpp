@@ -13,6 +13,7 @@
 #include "nucleo_app.h"
 #include "nucleo_exclusive.h"   // NX_SOLO: this RAM-heavy app runs in a fresh, unfragmented heap
 #include "app_ui.h"
+#include "nucleo_i18n.h"        // TR(it,en): hints follow the system language
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -84,7 +85,8 @@ int           nucleo_wifiatk_beacon_count(void);
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
 static const unsigned short EP_RED = C_RED, GRN = C_GREEN,
-                            YEL = C_YELLOW, PANEL = 0x18E3, EP_CYAN = 0x5C9F;
+                            YEL = C_YELLOW, PANEL = 0x18E3, EP_CYAN = 0x5C9F,
+                            EP_MAG = 0xF81F;   // evil-twin (non-coherent) indicator — genuine content color
 
 // ---- screens ----------------------------------------------------------------
 enum {
@@ -158,24 +160,24 @@ static void build_rows(void)
 
 static void set_hint(void)
 {
-    if (s_menu)                       nucleo_app_set_hint("su/giu  invio scegli  tab/esc chiudi");
+    if (s_menu)                       nucleo_app_set_hint(TR("su/giu   invio scegli   tab/esc chiudi", "up/dn   enter pick   tab/esc close"));
     else switch (s_state) {
-        case ST_CONSENT:   nucleo_app_set_hint("invio accetto   esc esci"); break;
-        case ST_HOME:      nucleo_app_set_hint("su/giu  invio apri  tab menu  esc esci"); break;
-        case ST_TARGETS:   nucleo_app_set_hint("su/giu  invio scegli  r riscan  esc indietro"); break;
-        case ST_KARMA:     nucleo_app_set_hint("invio config  a portale-ora  b beacona  r riascolta"); break;
-        case ST_LURE:      nucleo_app_set_hint("invio: ferma esca   esc: indietro"); break;
-        case ST_SSID:      nucleo_app_set_hint("su/giu  invio scegli  esc indietro"); break;
-        case ST_TYPE:      nucleo_app_set_hint("scrivi  invio ok  canc  esc indietro"); break;
-        case ST_PAGE:      nucleo_app_set_hint("su/giu  invio scegli  esc indietro"); break;
-        case ST_SETUP:     nucleo_app_set_hint("su/giu  invio modifica  tab menu  esc indietro"); break;
-        case ST_RUNNING:   nucleo_app_set_hint("invio ferma  tab menu  esc lascia attivo"); break;
-        case ST_LOOT:      nucleo_app_set_hint("esc indietro"); break;
-        case ST_GUIDE:     nucleo_app_set_hint("esc indietro"); break;
-        case ST_SCAN:      nucleo_app_set_hint("scansione reti..."); break;
-        case ST_KARMA_SCAN:nucleo_app_set_hint("ascolto le probe..."); break;
-        case ST_CLONE:     nucleo_app_set_hint("clono la pagina..."); break;
-        case ST_STOPPING:  nucleo_app_set_hint("arresto in corso..."); break;
+        case ST_CONSENT:   nucleo_app_set_hint(TR("invio accetto   esc esci", "enter accept   esc back")); break;
+        case ST_HOME:      nucleo_app_set_hint(TR("su/giu   invio apri   tab menu   esc esci", "up/dn   enter open   tab menu   esc back")); break;
+        case ST_TARGETS:   nucleo_app_set_hint(TR("su/giu   invio scegli   r riscan   esc indietro", "up/dn   enter pick   r rescan   esc back")); break;
+        case ST_KARMA:     nucleo_app_set_hint(TR("invio config   a portale-ora   b beacona   r riascolta", "enter config   a portal-now   b beacon   r re-listen")); break;
+        case ST_LURE:      nucleo_app_set_hint(TR("invio ferma esca   esc indietro", "enter stop lure   esc back")); break;
+        case ST_SSID:      nucleo_app_set_hint(TR("su/giu   invio scegli   esc indietro", "up/dn   enter pick   esc back")); break;
+        case ST_TYPE:      nucleo_app_set_hint(TR("scrivi   invio ok   canc   esc indietro", "type   enter ok   del   esc back")); break;
+        case ST_PAGE:      nucleo_app_set_hint(TR("su/giu   invio scegli   esc indietro", "up/dn   enter pick   esc back")); break;
+        case ST_SETUP:     nucleo_app_set_hint(TR("su/giu   invio modifica   tab menu   esc indietro", "up/dn   enter edit   tab menu   esc back")); break;
+        case ST_RUNNING:   nucleo_app_set_hint(TR("invio ferma   tab menu   esc lascia attivo", "enter stop   tab menu   esc leave running")); break;
+        case ST_LOOT:      nucleo_app_set_hint(TR("esc indietro", "esc back")); break;
+        case ST_GUIDE:     nucleo_app_set_hint(TR("esc indietro", "esc back")); break;
+        case ST_SCAN:      nucleo_app_set_hint(TR("scansione reti...", "scanning networks...")); break;
+        case ST_KARMA_SCAN:nucleo_app_set_hint(TR("ascolto le probe...", "listening for probes...")); break;
+        case ST_CLONE:     nucleo_app_set_hint(TR("clono la pagina...", "cloning the page...")); break;
+        case ST_STOPPING:  nucleo_app_set_hint(TR("arresto in corso...", "stopping...")); break;
     }
 }
 
@@ -480,7 +482,7 @@ static void draw_running(int h)
     if (s_pulse) d.fillCircle(150, 9, 4, EP_RED);
     d.setTextSize(1); d.setTextColor(EP_RED, BG); d.setCursor(160, 7); d.print("REC");
     if (nucleo_evilportal_twin()) { bool coh = nucleo_evilportal_twin_coherent();
-        d.setTextColor(coh ? EP_CYAN : 0xF81F, BG); d.setCursor(110, 7); d.print(coh ? "TWIN-C" : "TWIN"); }
+        d.setTextColor(coh ? EP_CYAN : EP_MAG, BG); d.setCursor(110, 7); d.print(coh ? "TWIN-C" : "TWIN"); }
     unsigned up = nucleo_evilportal_uptime_s();
     char el[10]; snprintf(el, sizeof el, "%02u:%02u", up / 60, up % 60);
     d.setTextColor(MUTED, BG); d.setCursor(238 - (int)strlen(el) * 6, 7); d.print(el);
@@ -552,13 +554,13 @@ static void draw_guide(int h)
 static void draw_menu(int h)   // TAB overlay
 {
     int n = menu_count();
-    d.fillRoundRect(30, 26, 180, 18 + n * 18, 8, 0x0000);
+    d.fillRoundRect(30, 26, 180, 18 + n * 18, 8, BG);
     d.drawRoundRect(30, 26, 180, 18 + n * 18, 8, EP_RED);
-    d.setTextSize(1); d.setTextColor(MUTED, 0x0000); d.setCursor(42, 32); d.print(menu_title());
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(42, 32); d.print(menu_title());
     for (int i = 0; i < n; i++) {
         int y = 44 + i * 18; bool s = (i == s_menu_sel);
         if (s) d.fillRoundRect(36, y - 2, 168, 16, 4, EP_RED);
-        d.setTextSize(1); d.setTextColor(s ? INK : FG, s ? EP_RED : 0x0000); d.setCursor(44, y + 1); d.print(menu_item(i));
+        d.setTextSize(1); d.setTextColor(s ? INK : FG, s ? EP_RED : BG); d.setCursor(44, y + 1); d.print(menu_item(i));
     }
     (void)h;
 }

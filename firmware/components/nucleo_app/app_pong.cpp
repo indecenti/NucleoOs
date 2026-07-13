@@ -1127,7 +1127,7 @@ static void on_enter(void) {
     s_nhost = s_bsel = 0; s_txseq = s_rxseq = 0;
     s_now = s_last = s_frame = now_ms();
     s_last_hello = 0;
-    if (!pnet_start()) nucleo_app_set_hint("ESP-NOW non avviato  Esc");
+    if (!pnet_start()) nucleo_app_set_hint(tx("ESP-NOW non avviato  Esc", "ESP-NOW not started  Esc"));
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_fullscreen(false);

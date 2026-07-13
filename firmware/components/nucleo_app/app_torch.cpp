@@ -16,6 +16,7 @@
 #include "app_gfx.h"
 #include <M5GFX.h>
 #include <string.h>
+#include "nucleo_i18n.h"     // TR(it,en): hint follows the system language
 
 static bool s_on;            // torch lit?
 static int  s_prev_bright;   // brightness to restore when leaving the app
@@ -35,7 +36,7 @@ static void enter(void)
     s_prev_bright = nucleo_app_brightness();   // remember so ESC restores the user's setting
     s_on = true;                               // a flashlight should light up the moment you open it
     apply_state();
-    nucleo_app_set_hint("space on/off   esc back");
+    nucleo_app_set_hint(TR("spazio on/off   esc esci", "space on/off   esc back"));
     nucleo_app_request_draw();
 }
 

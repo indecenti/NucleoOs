@@ -15,6 +15,9 @@ extern "C" {
 #include "nucleo_kbd.h"
 }
 #include "nucleo_exclusive.h"
+#include "app_ui.h"             // shared tab strip + selectable row
+#include "nucleo_theme.h"       // themed chrome palette (replaces the local classic-theme copy)
+#include "nucleo_i18n.h"        // TR(it,en): hints follow the system language
 
 // Free a big CONTIGUOUS block for the TLS handshake (httpd+L1+voice down, Wi-Fi stays up) around an
 // online fetch, then restore. Without this the largest free block is ~7KB and HTTPS always OOMs ->
@@ -23,9 +26,17 @@ static bool s_excl_was = false;
 static void net_up(void)   { s_excl_was = nucleo_exclusive_active(); nucleo_exclusive_enter(NX_NET_APP, nullptr); }
 static void net_down(void) { if (!s_excl_was) nucleo_exclusive_exit(); }
 
-static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x9CD3, DIM = 0x6B4D, ACC = 0x4DDF,
-                            GRN = 0x8FF3, WARN = 0xFE8C, HL = 0x12B2, SUN = 0xFE60, SUNHI = 0xFFF2,
-                            CLD = 0xC618, CLDHI = 0xE73C, RAIN = 0x4D9F, SNOW = 0xFFFF, INK = 0x0000;
+// Chrome follows the active theme; ACCENT is the app's identity accent (its registered launcher
+// color); the rest are semantic weather-icon / metric tints (named, never bare hex in draw calls).
+#define BG    THEME_BG
+#define FG    THEME_FG
+#define MUTED THEME_MUTED
+#define DIM   THEME_DIM
+#define INK   THEME_INK
+#define LINE  THEME_LINE
+static const unsigned short ACCENT = 0x5D9F, ACC = 0x5D9F,
+                            GRN = 0x8FF3, WARN = 0xFE8C, SUN = 0xFE60, SUNHI = 0xFFF2,
+                            CLD = 0xC618, CLDHI = 0xE73C, RAIN = 0x4D9F, SNOW = 0xFFFF;
 
 enum Tab { T_NOW, T_FCAST, T_SET };
 static Tab  s_tab = T_NOW;
@@ -163,8 +174,8 @@ static bool text_input(const char *title, char *buf, int maxlen)
             int top = nucleo_app_content_top(), h = nucleo_app_content_height();
             d.fillRect(0, top, 240, h, BG);
             d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top + 8); d.print(title);
-            d.fillRoundRect(8, top + 40, 224, 26, 4, 0x10A2);
-            d.setTextSize(2); d.setTextColor(FG, 0x10A2); d.setCursor(14, top + 46); d.print(len ? buf : "");
+            d.fillRoundRect(8, top + 40, 224, 26, 4, LINE);
+            d.setTextSize(2); d.setTextColor(FG, LINE); d.setCursor(14, top + 46); d.print(len ? buf : "");
             if (len) { int cw = 12; d.fillRect(14 + len * cw, top + 44, 2, 18, ACC); }   // caret
             d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, top + 80); d.print("digita il nome, ENTER conferma");
             d.setTextColor(DIM, BG); d.setCursor(8, top + 94); d.print("`  annulla");
@@ -204,7 +215,8 @@ static void add_city_flow(void)
 // ---- lifecycle ------------------------------------------------------------------------------------
 static bool on_back(int key)
 {
-    if (s_fav_screen) { s_fav_screen = false; nucleo_app_set_hint("1-3 tab  </>  r aggiorna  ` esci"); nucleo_app_request_draw(); return true; }
+    if (s_fav_screen) { s_fav_screen = false; nucleo_app_set_hint(TR("1-3 tab   </> cambia   r aggiorna   esc esci",
+                                                    "1-3 tab   </> switch   r refresh   esc back")); nucleo_app_request_draw(); return true; }
     if (key == NK_LEFT) { s_tab = (Tab)((s_tab + T_SET) % (T_SET + 1)); nucleo_app_request_draw(); return true; }
     return false;
 }
@@ -214,7 +226,8 @@ static void on_enter(void)
     s_tab = T_NOW; s_set_sel = 0; s_fav_screen = false; s_fav_sel = 0;
     fav_load();
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint("1-3 tab  </>  r aggiorna  ` esci");
+    nucleo_app_set_hint(TR("1-3 tab   </> cambia   r aggiorna   esc esci",
+                                                    "1-3 tab   </> switch   r refresh   esc back"));
     do_refresh(false);
 }
 
@@ -245,26 +258,13 @@ static void on_key(int key, char ch)
         if (key == NK_ENTER) {
             if (s_set_sel == 0) do_refresh(false);
             else if (s_set_sel == 1) do_refresh(true);
-            else if (s_set_sel == 2) { s_fav_screen = true; s_fav_sel = 0; nucleo_app_set_hint("enter apri/aggiungi  d elimina  ` indietro"); nucleo_app_request_draw(); }
+            else if (s_set_sel == 2) { s_fav_screen = true; s_fav_sel = 0; nucleo_app_set_hint(TR("invio apri   d elimina   esc indietro", "enter open   d delete   esc back")); nucleo_app_request_draw(); }
             else { s_units_f = !s_units_f; nucleo_app_request_draw(); }
         }
     }
 }
 
 // ---- drawing --------------------------------------------------------------------------------------
-static void tabbar(int top)
-{
-    static const char *N[] = { "Adesso", "Previsioni", "Imp" };
-    d.setTextSize(1);                                    // MUST set: otherwise a leaked size 4 (temp) blows up the tabs
-    int x = 6;
-    for (int i = 0; i <= T_SET; i++) {
-        bool on = (i == s_tab); int w = (int)strlen(N[i]) * 6 + 10;
-        d.fillRoundRect(x, top + 2, w, 14, 3, on ? ACC : 0x10A2);
-        d.setTextColor(on ? INK : MUTED, on ? ACC : 0x10A2); d.setCursor(x + 5, top + 5); d.print(N[i]);
-        x += w + 4;
-    }
-}
-
 static void draw_now(int top, int h)
 {
     char ln[40];
@@ -305,7 +305,7 @@ static void draw_fcast(int top, int h)
     int rowh = h / rows;
     for (int i = 0; i < rows; i++) {
         int y0 = top + i * rowh, cy = y0 + rowh / 2; char ln[12];
-        if (i) d.drawLine(6, y0, 234, y0, 0x18C3);                          // subtle separator
+        if (i) d.drawLine(6, y0, 234, y0, LINE);                            // subtle separator
         d.setTextSize(2); d.setTextColor(i == 0 ? SUN : FG, BG); d.setCursor(8, cy - 8);
         d.print(i == 0 ? "Oggi" : weather_dow_short(s_w.day[i].dow));
         draw_wx(86, cy, rowh * 0.27f, weather_wmo_icon(s_w.day[i].code));
@@ -326,9 +326,12 @@ static void draw_favs(int top, int h)
     int y = top + 30;
     for (int i = start; i < total && i < start + maxrows; i++) {
         bool on = (i == s_fav_sel), add = (i == s_fav_n);
-        if (on) d.fillRoundRect(4, y, 232, rowh - 2, 4, HL);
-        d.setTextSize(2); d.setTextColor(add ? GRN : (on ? FG : MUTED), on ? HL : BG); d.setCursor(14, y + 4);
-        d.print(add ? "+ Aggiungi citta" : s_fav[i].place);
+        const char *lab = add ? "+ Aggiungi citta" : s_fav[i].place;
+        if (add && !on) {                                   // green "add" affordance when not focused
+            d.setTextSize(2); d.setTextColor(GRN, BG); d.setCursor(14, y + (rowh - 16) / 2); d.print(lab);
+        } else {
+            app_ui_row(y, rowh, lab, on, ACCENT);           // shared selectable row (accent pill + INK)
+        }
         y += rowh;
     }
 }
@@ -342,9 +345,7 @@ static void draw_set(int top, int h)
     const char *items[4] = { "Aggiorna meteo", "Localizza (IP)", favln, unit };
     int y = top + 4;
     for (int i = 0; i < 4; i++) {
-        bool on = (i == s_set_sel);
-        if (on) d.fillRoundRect(4, y, 232, 22, 4, HL);
-        d.setTextSize(2); d.setTextColor(on ? FG : MUTED, on ? HL : BG); d.setCursor(14, y + 4); d.print(items[i]);
+        app_ui_row(y, 22, items[i], i == s_set_sel, ACCENT);   // shared selectable row
         y += 24;
     }
     char ln[48]; d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(8, top + h - 11);
@@ -356,8 +357,8 @@ static void on_draw(void)
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     if (s_fav_screen) { draw_favs(top, h); return; }
-    tabbar(top);
-    int ctop = top + 20, ch = h - 20;
+    static const char *const TABS[] = { "Adesso", "Previsioni", "Imp" };
+    int ctop = app_ui_tabs(top, TABS, T_SET + 1, s_tab, ACCENT), ch = h - (ctop - top);
     if (s_tab == T_NOW) draw_now(ctop, ch);
     else if (s_tab == T_FCAST) draw_fcast(ctop, ch);
     else draw_set(ctop, ch);

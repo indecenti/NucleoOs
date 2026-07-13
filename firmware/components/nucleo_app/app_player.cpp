@@ -826,10 +826,10 @@ static void update_hint(void)
     if (hs == s_hint_last) return;
     s_hint_last = hs;
     switch (hs) {
-        case 1:  nucleo_app_set_hint("Type to search \xb7 ENTER find \xb7 ESC"); break;
-        case 2:  nucleo_app_set_hint("UP/DN pick \xb7 ENTER choose \xb7 ESC"); break;
-        case 3:  nucleo_app_set_hint("L/R tab \xb7 UP/DN row \xb7 ESC close"); break;
-        default: nucleo_app_set_hint("UP/DN browse \xb7 ENTER play \xb7 TAB menu");
+        case 1:  nucleo_app_set_hint(TR("scrivi cerca   invio trova   esc", "type search   enter find   esc")); break;
+        case 2:  nucleo_app_set_hint(TR("su/giu scegli   invio conferma   esc", "up/dn pick   enter choose   esc")); break;
+        case 3:  nucleo_app_set_hint(TR("</> scheda   su/giu riga   esc chiudi", "</> tab   up/dn row   esc close")); break;
+        default: nucleo_app_set_hint(TR("su/giu sfoglia   invio riproduci   tab menu", "up/dn browse   enter play   tab menu"));
     }
 }
 
@@ -1178,7 +1178,7 @@ static void enter(void)
         size_t blk   = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
         ESP_LOGE("music", "enter OOM: PState=%u free=%u largest=%u",
                  (unsigned)sizeof(PState), (unsigned)freeb, (unsigned)blk);
-        char h[64]; snprintf(h, sizeof h, "RAM bassa: libero %uk blocco %uk",
+        char h[64]; snprintf(h, sizeof h, TR("RAM bassa: libero %uk blocco %uk", "Low RAM: free %uk block %uk"),
                              (unsigned)(freeb / 1024), (unsigned)(blk / 1024));
         nucleo_app_set_hint(h);
         music_excl(false);                      // un-suspend what we just stopped — never leave services down

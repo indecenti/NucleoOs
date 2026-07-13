@@ -33,7 +33,7 @@ const char *nucleo_setup_ip(void);         // our own STA IP ("" when offline)
 #define TR(it_, en_) nucleo_tr((it_), (en_))
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
-static const unsigned short ACC = C_BLUE, GRN = C_GREEN, WARN = C_YELLOW, SURF = 0x10A2;
+static const unsigned short ACC = C_BLUE, GRN = C_GREEN, WARN = C_YELLOW;   // off-state fill = LINE (themed)
 
 enum { KD_PORT = 5588, KD_STALE_MS = 5000, KD_PING_MS = 2000, KD_CONN_TO_MS = 4000, KD_RETRY_MS = 2500 };
 
@@ -345,8 +345,8 @@ static const char *forward_key(int key, char ch, bool fn)
 static void chip(int x, int y, const char *label, bool on, unsigned short oncol)
 {
     int w = (int)strlen(label) * 6 + 8;
-    d.fillRoundRect(x, y, w, 13, 3, on ? oncol : 0x10A2);
-    d.setTextColor(on ? INK : MUTED, on ? oncol : 0x10A2);
+    d.fillRoundRect(x, y, w, 13, 3, on ? oncol : LINE);
+    d.setTextColor(on ? INK : MUTED, on ? oncol : LINE);
     d.setCursor(x + 4, y + 3);
     d.print(label);
 }
@@ -578,8 +578,8 @@ static void tabbar(int top)
     for (int i = 0; i <= T_INFO; i++) {
         const bool on = (i == (int)s_tab);
         const int w = (int)strlen(N[i]) * 6 + 10;
-        d.fillRoundRect(x, top + 2, w, 14, 3, on ? ACC : SURF);
-        d.setTextColor(on ? INK : MUTED, on ? ACC : SURF);
+        d.fillRoundRect(x, top + 2, w, 14, 3, on ? ACC : LINE);
+        d.setTextColor(on ? INK : MUTED, on ? ACC : LINE);
         d.setCursor(x + 5, top + 5);
         d.print(N[i]);
         x += w + 4;

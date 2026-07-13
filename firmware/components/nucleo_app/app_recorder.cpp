@@ -86,11 +86,21 @@ static esp_err_t arm_record(void)
 }
 
 #include "app_gfx.h"
+#include "nucleo_theme.h"          // themed chrome (BG/FG/MUTED/DIM/LINE/INK follow the active OS theme)
 
 // ---- Design tokens (RGB565), aligned with the Music player for a cohesive look -------------------
-static const unsigned short BG = 0x0841, SURF = 0x10A2, CAP = 0x1A8B, FG = 0xFFFF, MUTED = 0x8C71,
-                            DIM = 0x52CB, LINE = 0x2945, ACC = 0xF96B /* recorder warm-red accent */,
-                            GRN = 0x8FF3, AMBER = 0xFE8C, VIO = 0xCDBF, WAVE = 0x3B6E, INK = 0x0000;
+// Chrome neutrals follow the active OS theme; ACC is the app's identity accent (registered launcher
+// color); SURF/CAP are card/selection surface tints and GRN/AMBER/VIO/WAVE/REC_* are semantic content
+// colors (waveform, meter, recording reds) — all named, never bare hex in a draw call.
+#define BG    THEME_BG
+#define FG    THEME_FG
+#define MUTED THEME_MUTED
+#define DIM   THEME_DIM
+#define LINE  THEME_LINE
+#define INK   THEME_INK
+static const unsigned short SURF = 0x10A2, CAP = 0x1A8B, ACC = 0xF96B /* recorder warm-red accent */,
+                            GRN = 0x8FF3, AMBER = 0xFE8C, VIO = 0xCDBF, WAVE = 0x3B6E,
+                            REC_DISC = 0x2000 /* record disc/halo */, REC_DIM = 0x6000 /* live-dot off phase */;
 
 #define REC_PATH      NUCLEO_SD_MOUNT "/data/Recordings"
 #define SETTINGS_PATH NUCLEO_SD_MOUNT "/system/config/recorder_ui.json"
@@ -1020,7 +1030,7 @@ static void draw_play(int top, int h)
     // Scrubber with knob.
     int prog = nucleo_audio_progress(); if (prog < 0) prog = 0; if (prog > 100) prog = 100;
     int bx = 14, bw = 212, by = y0 + 60, bh = 8;
-    d.fillRoundRect(bx, by, bw, bh, bh / 2, 0x2945);
+    d.fillRoundRect(bx, by, bw, bh, bh / 2, LINE);
     int fw = bw * prog / 100; if (fw > 0) d.fillRoundRect(bx, by, fw, bh, bh / 2, GRN);
     int kx = bx + fw; if (kx < bx + 5) kx = bx + 5; if (kx > bx + bw - 5) kx = bx + bw - 5;
     d.fillCircle(kx, by + bh / 2, 6, FG);
@@ -1067,7 +1077,7 @@ static void draw_opt(int y, bool focus, const char *label, const char *val, bool
     d.setFont(&fonts::Font0);
     if (toggle) {
         int sw = 36, sh = 16, bx = 228 - sw - 6, vy = y + (hh - sh) / 2;
-        d.fillRoundRect(bx, vy, sw, sh, sh / 2, on ? GRN : 0x4208);
+        d.fillRoundRect(bx, vy, sw, sh, sh / 2, on ? GRN : LINE);
         d.fillCircle(on ? bx + sw - sh / 2 : bx + sh / 2, vy + sh / 2, sh / 2 - 2, on ? INK : MUTED);
     } else if (val) {
         int vw = (int)strlen(val) * 6 + 10, bx = 228 - vw - 6, vy = y + (hh - 14) / 2;
@@ -1093,7 +1103,7 @@ static void draw_vol_row(int y, bool focus, int vol)
     char vb[8]; snprintf(vb, sizeof vb, "%d%%", vol);
     int vw = (int)strlen(vb) * 6, vx = 228 - vw + 2;                      // % readout, far right (Font0 = 6px/char)
     int sw = 78, sh = 10, bx = vx - sw - 10, vy = y + (hh - sh) / 2;
-    d.fillRoundRect(bx, vy, sw, sh, sh / 2, focus ? 0x3187 : 0x2945);     // track
+    d.fillRoundRect(bx, vy, sw, sh, sh / 2, focus ? DIM : LINE);          // track (lifts on focus)
     int onw = vol * sw / 100; if (onw > sw) onw = sw;
     if (onw > 0) d.fillRoundRect(bx, vy, onw, sh, sh / 2, GRN);           // fill
     int kx = bx + onw; if (kx < bx + 5) kx = bx + 5; if (kx > bx + sw - 5) kx = bx + sw - 5;
@@ -1194,7 +1204,7 @@ static void draw_recording(void)
 
     if (arming) {                                            // the mic opens the instant the cue finishes
         int cy = y0 + 34;                                    // pulsing record disc (matches the empty-state CTA)
-        d.fillCircle(120, cy, blink ? 30 : 26, 0x2000);
+        d.fillCircle(120, cy, blink ? 30 : 26, REC_DISC);
         d.drawCircle(120, cy, 30, ACC);
         d.fillCircle(120, cy, 16, ACC);
         d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1); d.setTextColor(GRN, BG);
@@ -1205,7 +1215,7 @@ static void draw_recording(void)
     }
 
     // Recording: breathing status dot, top-right of the title row (clear "we are live" affordance).
-    d.fillCircle(228, y0 - 13, blink ? 6 : 4, blink ? ACC : 0x6000);
+    d.fillCircle(228, y0 - 13, blink ? 6 : 4, blink ? ACC : REC_DIM);
 
     // BIG timer (Font0 @ size 5 = 30x40 px/char), centred. M:SS, grows cleanly to MM:SS / H:MM:SS-wide.
     uint32_t s = nucleo_recorder_seconds();
@@ -1251,7 +1261,7 @@ static void draw_library(int top, int h)
     if (s_count == 0) {
         // Smartwatch-style call to action: a big record button glyph + one clear instruction, centred.
         int cy = y0 + 34;
-        d.fillCircle(120, cy, 26, 0x2000);                   // dim halo
+        d.fillCircle(120, cy, 26, REC_DISC);                 // dim halo
         d.drawCircle(120, cy, 26, ACC);
         d.fillCircle(120, cy, 16, ACC);                      // the "record" disc
         d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1);
@@ -1667,7 +1677,7 @@ static void draw_ai_working(int top, int h)
     // Lightweight activity spinner: four dots around a ring, the active one lit (no math.h needed).
     static const int RX[4] = { 18, 0, -18, 0 }, RY[4] = { 0, 18, 0, -18 };   // E, S, W, N
     for (int k = 0; k < 4; k++)
-        d.fillCircle(120 + RX[k], (cy - 30) + RY[k], k == phase ? 4 : 2, k == phase ? GRN : 0x3186);
+        d.fillCircle(120 + RX[k], (cy - 30) + RY[k], k == phase ? 4 : 2, k == phase ? GRN : DIM);
 
     const char *lbl = job_kind_label(s_job_kind);
     d.setFont(&fonts::Font2); d.setTextColor(FG, BG);
@@ -1694,7 +1704,7 @@ static void draw(void)
     // home flashing for a second (which read as "the old app appearing"). The reboot follows in tick().
     if (s_enter_solo_us) {
         int cy = top + h / 2;
-        d.fillCircle(120, cy - 22, 13, 0x2000); d.drawCircle(120, cy - 22, 13, ACC); d.fillCircle(120, cy - 22, 5, ACC);
+        d.fillCircle(120, cy - 22, 13, REC_DISC); d.drawCircle(120, cy - 22, 13, ACC); d.fillCircle(120, cy - 22, 5, ACC);
         d.setFont(&fonts::FreeSans9pt7b);
         const char *m = TR("Modalità dedicata", "Dedicated mode");
         d.setTextColor(FG, BG); d.setCursor(120 - (int)d.textWidth(m) / 2, cy + 6); d.print(m);

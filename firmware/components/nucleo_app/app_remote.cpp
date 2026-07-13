@@ -10,6 +10,7 @@
 //   • lets the user toggle the automatic handoff on/off (persisted in NVS).
 #include "nucleo_app.h"
 #include "launcher_theme.h"
+#include "nucleo_i18n.h"                        // TR(it,en): hint follows the system language
 #include <M5GFX.h>
 #include <stdio.h>
 #include "nvs.h"                                // persist the auto-handoff toggle across reboots
@@ -70,7 +71,7 @@ static void remote_enter(void)
     nucleo_voice_suspend(true);          // free the ~16 KB voice engine — Remote Control is a server-listening
                                          // screen, it never needs the mic; hand that RAM to httpd/OTA/API too.
                                          // Restored in remote_exit (only if a holder still wants it).
-    nucleo_app_set_hint("enter: auto handoff on/off   esc: back");
+    nucleo_app_set_hint(TR("invio handoff auto on/off   esc esci", "enter auto handoff on/off   esc back"));
     s_sig = -1;
     nucleo_app_request_draw();
 }
@@ -116,7 +117,7 @@ static void remote_draw(void)
     // Device IP — open this in a browser to drive the device.
     const char *ip = nucleo_setup_ip();
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, y); d.print("Open in a browser:"); y += 11;
-    d.setTextSize(2); d.setTextColor(0xFFFF, BG); d.setCursor(10, y); d.print((ip && ip[0]) ? ip : "(no network)"); y += 22;
+    d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(10, y); d.print((ip && ip[0]) ? ip : "(no network)"); y += 22;
 
     // Pairing PIN (changes each boot).
     const char *pin = nucleo_auth_pin();

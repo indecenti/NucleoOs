@@ -12,6 +12,7 @@
 #include "nucleo_kbd.h"
 #include "nucleo_exclusive.h"
 #include "launcher_theme.h"
+#include "nucleo_i18n.h"        // TR(it,en): hints follow the system language
 #include "app_gfx.h"
 #include "notify_synth.h"
 #include "game_sfx.h"
@@ -2654,11 +2655,11 @@ static void on_enter(void){
     s_match_type=MT_DUEL; s_nbots=0; s_nplayers=2; memset(s_bots,0,sizeof s_bots);
     // Start ESP-NOW immediately (like Pong) so the lobby's HELLO discovery works the instant
     // you enter Create/Join — pnet also disables WiFi power-save so broadcasts aren't dropped.
-    if(!pnet_start()) nucleo_app_set_hint("ESP-NOW KO  ESC esci");
+    if(!pnet_start()) nucleo_app_set_hint(TR("ESP-NOW KO   esc esci", "ESP-NOW failed   esc back"));
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_fullscreen(false);
-    nucleo_app_set_hint("SU/GIU  K scegli  ESC esci");
+    nucleo_app_set_hint(TR("su/giu   K scegli   esc esci", "up/dn   K pick   esc back"));
     nucleo_app_request_draw();
 }
 static void on_exit(void){

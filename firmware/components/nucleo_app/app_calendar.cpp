@@ -22,8 +22,9 @@ extern "C" {
 #include "nucleo_board.h"
 }
 
-#include "launcher_theme.h"   // W/H + RGB565 palette (BG, FG, MUTED, DIM, LINE, INK, C_*)
+#include "launcher_theme.h"   // W/H + themed palette (BG, FG, MUTED, DIM, LINE, INK, C_*)
 #include "app_gfx.h"          // the `d` draw-target redirect (NB: never name a local `d`)
+#include "nucleo_i18n.h"      // TR(it,en): hints follow the system language
 
 #define CAL_PATH NUCLEO_SD_MOUNT "/system/config/calendar.json"
 static const unsigned short ACC = C_GREEN;
@@ -110,7 +111,8 @@ static int s_last_min = -1;
 static void set_view(int v)
 {
     s_view = v;
-    nucleo_app_set_hint(v == V_DETAIL ? "up/dn scroll   esc back" : "</> or up/dn day   enter open");
+    nucleo_app_set_hint(v == V_DETAIL ? TR("su/giu scorri   esc indietro", "up/dn scroll   esc back")
+                                      : TR("</> o su/giu giorno   invio apri", "</> or up/dn day   enter open"));
 }
 static void enter(void)
 {
@@ -200,11 +202,11 @@ static void draw_days(void)
 
     // ---- focused day card ----
     int cy = y0 + 24, ch = 50;
-    d.fillRoundRect(6, cy, W - 12, ch, 8, s_offset == 0 ? ACC : 0x18E3);
+    d.fillRoundRect(6, cy, W - 12, ch, 8, s_offset == 0 ? ACC : LINE);
     unsigned short ink = s_offset == 0 ? INK : FG;
 
     char big[24]; strftime(big, sizeof big, "%a %e %b", &focus);
-    d.setTextSize(2); d.setTextColor(ink, s_offset == 0 ? ACC : 0x18E3);
+    d.setTextSize(2); d.setTextColor(ink, s_offset == 0 ? ACC : LINE);
     d.setCursor(14, cy + 5); d.print(big);
     if (s_offset == 0) { d.setTextSize(1); d.setCursor(W - 12 - 7 * 6, cy + 6); d.print("TODAY"); }
 
@@ -213,14 +215,14 @@ static void draw_days(void)
         time_t now = time(NULL); struct tm tn; localtime_r(&now, &tn);
         int secs = tn.tm_hour * 3600 + tn.tm_min * 60 + tn.tm_sec;
         int bw = (W - 28) * secs / 86400;
-        d.fillRect(14, cy + 23, W - 28, 3, 0x0841);
+        d.fillRect(14, cy + 23, W - 28, 3, BG);
         d.fillRect(14, cy + 23, bw, 3, INK);
     }
 
     char key[12]; strftime(key, sizeof key, "%Y-%m-%d", &focus);
     cJSON *arr = day_array(key);
     int n = arr ? cJSON_GetArraySize(arr) : 0;
-    d.setTextSize(1); d.setTextColor(ink, s_offset == 0 ? ACC : 0x18E3);
+    d.setTextSize(1); d.setTextColor(ink, s_offset == 0 ? ACC : LINE);
     if (n == 0) {
         d.setCursor(14, cy + 32); d.print("No events");
     } else {

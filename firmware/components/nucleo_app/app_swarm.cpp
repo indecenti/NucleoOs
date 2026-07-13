@@ -17,6 +17,7 @@
 #include "launcher_theme.h"
 #include "app_gfx.h"
 #include "app_ui.h"            // shared focused-list widget + type-ahead/quick-select nav
+#include "nucleo_i18n.h"       // TR(it,en): hints follow the system language
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -82,8 +83,8 @@ static void on_tick(void) { nucleo_app_request_draw(); }   // 5Hz refresh of pee
 
 static void on_enter(void) {
     s_sel = 0;
-    nucleo_app_set_hint("INVIO ping   SU/GIU   esc");
-    if (!swarm_svc_start()) nucleo_app_set_hint("ESP-NOW non avviato   esc");
+    nucleo_app_set_hint(TR("invio ping   su/giu   esc", "enter ping   up/dn   esc"));
+    if (!swarm_svc_start()) nucleo_app_set_hint(TR("ESP-NOW non avviato   esc", "ESP-NOW not started   esc"));
 }
 static void on_exit(void) { swarm_svc_stop(); }
 

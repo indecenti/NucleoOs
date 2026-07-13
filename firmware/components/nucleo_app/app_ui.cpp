@@ -44,6 +44,50 @@ int app_ui_title(const char *text, unsigned short accent, const char *right)
     return top + 24;
 }
 
+int app_ui_tabs(int top, const char *const *names, int n, int active, unsigned short accent)
+{
+    d.fillRect(0, top, 240, 20, BG);
+    d.setTextSize(1);   // MUST pin: a leaked larger size from a previous draw would blow up the tabs
+    int x = 6;
+    for (int i = 0; i < n; i++) {
+        const char *nm = names[i] ? names[i] : "";
+        int w = (int)strlen(nm) * 6 + 10;
+        if (x + w > 236) break;                       // drop overflow rather than clip mid-glyph
+        bool on = (i == active);
+        d.fillRoundRect(x, top + 2, w, 15, 3, on ? accent : LINE);
+        d.setTextColor(on ? INK : MUTED, on ? accent : LINE);
+        d.setCursor(x + 5, top + 6); d.print(nm);
+        x += w + 4;
+    }
+    return top + 20;
+}
+
+void app_ui_row(int y, int h, const char *label, bool focus, unsigned short accent)
+{
+    if (focus) d.fillRoundRect(4, y, 232, h - 2, 4, accent);
+    d.setTextSize(2);
+    d.setTextColor(focus ? INK : MUTED, focus ? accent : BG);
+    int ty = y + (h - 16) / 2; if (ty < y) ty = y;    // vertically center size-2 (16px) text
+    d.setCursor(14, ty); d.print(label ? label : "");
+}
+
+void app_ui_gauge(int y, const char *label, const char *val, int pct, unsigned short col)
+{
+    d.setTextSize(1); d.setTextColor(MUTED, BG);
+    d.setCursor(10, y); d.print(label ? label : "");   // bg-backed text overwrites itself, no flicker
+
+    d.fillRect(96, y - 6, 134, 16, BG);                // clear ONLY the value field (handles shrinking text)
+    d.setTextSize(2); d.setTextColor(col, BG);
+    int vw = (int)strlen(val ? val : "") * 12;
+    d.setCursor(230 - vw, y - 6); d.print(val ? val : "");
+
+    d.drawRoundRect(10, y + 12, 220, 5, 2, LINE);
+    if (pct > 100) pct = 100;
+    if (pct < 0) pct = 0;
+    d.fillRect(11, y + 13, 218, 3, BG);                // clear bar interior so a shrinking bar leaves no trail
+    d.fillRoundRect(10, y + 12, 220 * pct / 100, 5, 2, col);
+}
+
 void app_ui_list(int top, int h, int count, int sel,
                  app_ui_text_fn label, app_ui_text_fn right, app_ui_color_fn color, void *ud)
 {

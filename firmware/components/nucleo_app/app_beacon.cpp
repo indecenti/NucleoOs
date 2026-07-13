@@ -43,6 +43,7 @@ static const char *MODE_BLURB[N_MODE] = {
 
 #include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
+#include "nucleo_i18n.h"      // TR(it,en): hints follow the system language
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
 static const unsigned short BCN = 0xAD5F /*violet*/, GRN = C_GREEN, YEL = C_YELLOW;
@@ -62,11 +63,11 @@ static int  s_linelen;
 
 static void set_hint(void)
 {
-    if (s_state == ST_CONSENT)       nucleo_app_set_hint("su/giu scegli  invio avvia  esc esci");
-    else if (s_state == ST_CUSTOM)   nucleo_app_set_hint("invio aggiungi  canc togli  tab avvia  esc esci");
-    else if (s_state == ST_ARMING)   nucleo_app_set_hint("avvio in corso...");
-    else if (s_state == ST_STOPPING) nucleo_app_set_hint("arresto in corso...");
-    else                             nucleo_app_set_hint("invio: ferma   esc: lascia attivo");
+    if (s_state == ST_CONSENT)       nucleo_app_set_hint(TR("su/giu scegli   invio avvia   esc esci", "up/dn pick   enter start   esc back"));
+    else if (s_state == ST_CUSTOM)   nucleo_app_set_hint(TR("invio aggiungi   canc togli   tab avvia   esc esci", "enter add   del remove   tab start   esc back"));
+    else if (s_state == ST_ARMING)   nucleo_app_set_hint(TR("avvio in corso...", "starting..."));
+    else if (s_state == ST_STOPPING) nucleo_app_set_hint(TR("arresto in corso...", "stopping..."));
+    else                             nucleo_app_set_hint(TR("invio: ferma   esc: lascia attivo", "enter: stop   esc: leave on"));
 }
 
 static void enter_custom(void)

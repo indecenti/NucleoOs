@@ -23,6 +23,7 @@
 #include "esp_timer.h"
 
 #include "app_gfx.h"
+#include "nucleo_i18n.h"        // TR(it,en): hints follow the system language
 
 static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410, LINE = 0x2945,
                             INK = 0x0000, ATK = 0xFD20 /*orange*/, GRN = 0x8FF3, YEL = 0xFE8C,
@@ -59,15 +60,15 @@ static const MenuItem MENU[] = {
 
 static void set_hint(void)
 {
-    if (s_panel)                       nucleo_app_set_hint("su/giu pagina   invio chiudi");
+    if (s_panel)                       nucleo_app_set_hint(TR("su/giu pagina   invio chiudi", "up/dn page   enter close"));
     else switch (s_state) {
-        case ST_CONSENT:   nucleo_app_set_hint("invio accetto  esc esci  tab guida"); break;
-        case ST_NOMODULE:  nucleo_app_set_hint("collega W5500  -  premi un tasto per rilevare"); break;
-        case ST_SCANNING:  nucleo_app_set_hint("scansione in corso..."); break;
-        case ST_STOPPING:  nucleo_app_set_hint("arresto + ripristino..."); break;
-        case ST_HOSTS:     nucleo_app_set_hint("su/giu  invio MITM  m mappa  sx indietro"); break;
-        case ST_RUNNING:   nucleo_app_set_hint("invio: ferma+ripristina   esc: lascia attivo"); break;
-        default:           nucleo_app_set_hint("su/giu  invio avvia  tab guida"); break;
+        case ST_CONSENT:   nucleo_app_set_hint(TR("invio accetto   esc esci   tab guida", "enter accept   esc back   tab guide")); break;
+        case ST_NOMODULE:  nucleo_app_set_hint(TR("collega W5500   premi un tasto per rilevare", "connect W5500   press a key to detect")); break;
+        case ST_SCANNING:  nucleo_app_set_hint(TR("scansione in corso...", "scanning...")); break;
+        case ST_STOPPING:  nucleo_app_set_hint(TR("arresto + ripristino...", "stopping + restoring...")); break;
+        case ST_HOSTS:     nucleo_app_set_hint(TR("su/giu   invio MITM   m mappa   esc indietro", "up/dn   enter MITM   m map   esc back")); break;
+        case ST_RUNNING:   nucleo_app_set_hint(TR("invio: ferma+ripristina   esc: lascia attivo", "enter: stop+restore   esc: leave on")); break;
+        default:           nucleo_app_set_hint(TR("su/giu   invio avvia   tab guida", "up/dn   enter start   tab guide")); break;
     }
 }
 

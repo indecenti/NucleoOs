@@ -4,6 +4,7 @@
 // Buffered rendering (re-acquires the shared canvas) so it never flickers.
 #include "nucleo_app.h"
 #include "launcher_theme.h"
+#include "nucleo_i18n.h"       // TR(it,en): hint follows the system language
 #include "app_gfx.h"
 #include <M5GFX.h>
 #include <string.h>
@@ -126,7 +127,7 @@ static void info_enter(void)
     if (!s_row) s_row = (Row *)calloc(40, sizeof *s_row);   // ~2.2 KB only while open, zero .bss at boot
     s_scroll = 0; s_target = 0;
     nucleo_app_set_poll_handler(info_poll);
-    nucleo_app_set_hint("su/giu scorri   esc indietro");
+    nucleo_app_set_hint(TR("su/giu scorri   esc indietro", "up/dn scroll   esc back"));
     nucleo_app_request_draw();
 }
 
@@ -162,7 +163,7 @@ static void info_draw(void)
         if (!R.val[0]) continue;
         int lw = (int)strlen(R.label) * 12, vw2 = (int)strlen(R.val) * 12;
         bool big = (8 + lw + 14 + vw2 <= W);                                      // big value only when it fits beside the label
-        if (big) { d.setTextSize(2); d.setTextColor(0xFFFF, BG); d.setCursor(W - 8 - vw2, ry + 2); d.print(R.val); }
+        if (big) { d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(W - 8 - vw2, ry + 2); d.print(R.val); }
         else     { d.setTextSize(1); d.setTextColor(MUTED, BG); int vw = (int)strlen(R.val) * 6;
                    d.setCursor(W - 8 - vw, ry + 7); d.print(R.val); }
     }

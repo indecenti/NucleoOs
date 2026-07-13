@@ -13,6 +13,7 @@
 #include "nucleo_smtp.h"
 #include "nucleo_mailcfg.h"
 #include "nucleo_exclusive.h"
+#include "nucleo_i18n.h"        // TR(it,en): hints follow the system language
 
 #include <string.h>
 #include <stdio.h>
@@ -163,12 +164,13 @@ static void start_send(void) {
 static void editor_open(const char *label, char *buf, size_t cap, bool secret, bool numeric, bool wiz, EdT t) {
     s_ed = true; s_edbuf = buf; s_edcap = cap; s_edsecret = secret; s_ednum = numeric; s_edwiz = wiz;
     s_edlabel = label; s_edt = t; s_blink = true;
-    nucleo_app_set_hint(t == ED_TO ? "Digita  TAB=contatto  OK=Invio" : "Digita  OK=Invio  Indietro=annulla");
+    nucleo_app_set_hint(t == ED_TO ? TR("scrivi   tab contatto   invio ok", "type   tab contact   enter ok")
+                                   : TR("scrivi   invio ok   esc annulla", "type   enter ok   esc cancel"));
     mark();
 }
 static void editor_close(void) {
     s_ed = false; s_edbuf = NULL; s_edt = ED_NONE;
-    nucleo_app_set_hint("TAB scheda  Esc esci"); mark();
+    nucleo_app_set_hint(TR("tab scheda   esc esci", "tab switch   esc back")); mark();
 }
 static void ed_putc(char c) {
     if (!s_ed || !s_edbuf || c < 0x20) return;
@@ -219,7 +221,7 @@ static void wiz_next(void) {
 static void wiz_back(void) {
     s_ed = false;
     if (s_wi > 0) { s_wi--; wiz_show(); }
-    else { s_wiz = false; nucleo_app_set_hint("TAB scheda  Esc esci"); mark(); }
+    else { s_wiz = false; nucleo_app_set_hint(TR("tab scheda   esc esci", "tab switch   esc back")); mark(); }
 }
 static void wiz_pick_provider(int i) {
     const smtp_preset_t *p = nucleo_mailcfg_preset(i); if (!p) return;
@@ -232,7 +234,7 @@ static void wiz_pick_provider(int i) {
 static void editor_commit(void) {
     s_ed = false;
     if (s_edt == ED_W_PORT) { int v = atoi(M->portbuf); M->edit.port = (v > 0 && v < 65536) ? v : 465; }
-    if (s_edt == ED_TO || s_edt == ED_SUBJ || s_edt == ED_BODY) { nucleo_app_set_hint("TAB scheda  Esc esci"); mark(); }
+    if (s_edt == ED_TO || s_edt == ED_SUBJ || s_edt == ED_BODY) { nucleo_app_set_hint(TR("tab scheda   esc esci", "tab switch   esc back")); mark(); }
     else wiz_next();
 }
 
@@ -528,7 +530,8 @@ static void on_enter(void) {
     s_sending = false; s_send_done = false; s_send_phase = 0; s_wfield = 0;
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint(M ? "TAB scheda  Esc esci" : "Memoria insufficiente");
+    nucleo_app_set_hint(M ? TR("tab scheda   esc esci", "tab switch   esc back")
+                          : TR("memoria insufficiente", "out of memory"));
     if (M) { reload(); load_recents(); }
     mark(); nucleo_app_request_draw();
 }

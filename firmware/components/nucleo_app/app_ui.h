@@ -14,6 +14,25 @@ typedef unsigned short (*app_ui_color_fn)(int i, void *ud);
 // optional muted right-aligned string. Returns the first usable content y below it.
 int app_ui_title(const char *text, unsigned short accent, const char *right);
 
+// Standard tab strip (see docs/native-ui-kit.md). Draws a row of pill tabs at `top`: the active
+// one is an `accent` fill with INK text, the rest are a THEME_LINE fill with MUTED text — the same
+// selection look as app_ui_list / the launcher. Fills its own 20px band (theme BG) first, so the
+// caller need not pre-clear it. Returns the first content y below the strip (top + 20). Replaces
+// every app's hand-rolled tabbar(). Tabs that would overflow 240px are dropped rather than clipped.
+int app_ui_tabs(int top, const char *const *names, int n, int active, unsigned short accent);
+
+// One selectable settings row in the band [y, y+h): focused = `accent` pill + INK text, else MUTED
+// on BG — matching app_ui_list's focused row. For a scrollable list prefer app_ui_list(); use this
+// for the handful of fixed rows a settings/tab screen shows. Does NOT clear the whole band (caller
+// fills the content area once); it only paints the pill + label.
+void app_ui_row(int y, int h, const char *label, bool focus, unsigned short accent);
+
+// Labelled value bar (battery / RAM / storage style): muted `label` (size 1) left, `val` (size 2,
+// `col`) right-aligned, and a thin `col` gauge filled to `pct` (0..100) over a THEME_LINE track.
+// Self-clears just the value field + bar interior so a shrinking value/bar leaves no trail — safe to
+// call every tick without a full-screen wipe. Lay out rows ~26px apart.
+void app_ui_gauge(int y, const char *label, const char *val, int pct, unsigned short col);
+
 // Draw `count` rows in the band [top, top+h), highlighting `sel`. Fills the band first.
 void app_ui_list(int top, int h, int count, int sel,
                  app_ui_text_fn label, app_ui_text_fn right, app_ui_color_fn color, void *ud);
