@@ -1,0 +1,51 @@
+{
+  "_lang": "it",
+
+  "app_title": "Codice QR",
+  "ecc_label": "Correzione errori",
+  "ecc_low": "Bassa (moduli più grandi)",
+  "ecc_med": "Media",
+  "ecc_quart": "Quartile",
+  "ecc_high": "Alta (più robusto)",
+  "saved_title": "Salvati sul dispositivo",
+  "saved_empty": "Nessun QR salvato.",
+  "save_to_device": "★ Salva sul dispositivo",
+  "save_hint": "«Salva sul dispositivo» scrive il QR in <b>/data/QR/qrcodes.json</b>: l'app nativa <b>Codice QR</b> (sorgente «Salvati») lo mostra grande sul Cardputer.",
+
+  "ty_link": "Link",
+  "ty_text": "Testo",
+  "ty_wifi": "Wi-Fi",
+  "ty_email": "Email",
+  "ty_tel": "Telefono",
+  "ty_geo": "Mappa",
+  "ty_vcard": "Contatto",
+  "ty_pair": "Accoppia",
+
+  "f_url": "Indirizzo web",
+  "f_text": "Testo libero",
+  "f_ssid": "Nome rete (SSID)",
+  "f_pass": "Password",
+  "f_auth": "Sicurezza",
+  "f_hidden": "Rete nascosta",
+  "f_to": "Destinatario",
+  "f_subject": "Oggetto",
+  "f_body": "Messaggio",
+  "f_num": "Numero",
+  "f_lat": "Latitudine",
+  "f_lng": "Longitudine",
+  "f_name": "Nome",
+  "f_org": "Organizzazione",
+  "ph_text": "Scrivi qui...",
+
+  "pair_note": "Inquadra per aprire questo NucleoOS su un altro dispositivo ({host}).",
+  "pair_pin": " PIN di pairing: <b>{pin}</b>.",
+
+  "meta_line": "Versione <b>{version}</b> · {size}×{size} moduli · {ecc} · {chars} caratteri",
+  "too_long": "Testo troppo lungo",
+
+  "loaded_x": "Caricato: {label}",
+  "deleted": "Eliminato",
+  "save_failed": "Salvataggio non riuscito (dispositivo offline?)",
+  "saved_to_device": "Salvato sul dispositivo",
+  "load": "Carica"
+}

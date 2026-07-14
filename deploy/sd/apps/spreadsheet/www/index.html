@@ -852,7 +852,7 @@ const gridHead = $('gridHead');
 const gridBody = $('gridBody');
 
 function buildHeader() {
-  let h = '<tr><th class="corner" id="cornerCell" title="Seleziona tutto"></th>';
+  let h = '<tr><th class="corner" id="cornerCell" data-i18n-attr="title:tt_selectAll" title="Seleziona tutto"></th>';
   for (let c = 0; c < COLS; c++)
     h += `<th class="colh" style="width:${colWidths[c]}px;min-width:${colWidths[c]}px" data-c="${c}">${colName(c)}<div class="col-resizer" data-c="${c}"></div></th>`;
   h += '</tr>';

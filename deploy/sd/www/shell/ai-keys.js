@@ -155,7 +155,7 @@ export function mountKeyManager(container, opts = {}) {
     const sel = $('model'); if (!sel) return;
     const list = (cfg.provider === 'google' && cfg.geminiModels && cfg.geminiModels.length) ? cfg.geminiModels : prov().models;
     sel.innerHTML = '';
-    for (const [v, lbl] of list) { const o = document.createElement('option'); o.value = v; o.textContent = lbl; sel.appendChild(o); }
+    for (const m of list) { const o = document.createElement('option'); o.value = m[0]; o.textContent = AI.modelLabel(m); sel.appendChild(o); }
     sel.value = (cfg.model && list.some((m) => m[0] === cfg.model)) ? cfg.model : (list[0] ? list[0][0] : prov().def);
     cfg.model = sel.value;
   }

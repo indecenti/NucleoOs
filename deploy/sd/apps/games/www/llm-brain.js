@@ -16,6 +16,8 @@
 // To make a NEW game LLM-playable: add `llm:{prompt,parse}` (turn-based) or `coach:{brief,toParams}`
 // (realtime) to its defineGame() — nothing here changes. That's the scaling story.
 import * as LLM from '/apps/games/llm.js';
+import I18N from '/nucleo-i18n.js';   // centralized i18n; the games catalog is loaded by index.html's I18N.init('games')
+const t = I18N.scope('games');
 
 // Does this game support an LLM brain at all, and in which mode?
 export function brainMode(def) {
@@ -30,13 +32,13 @@ export function llmSelected(opts) { return !!(opts && (opts.mente === 'llm' || o
 // Returns the resolved cfg on success, or null (app then blocks the Grok match — no offline substitute).
 export async function preflightBrain(ui) {
   const cfg = await LLM.loadCfg();
-  if (!cfg) { ui.fail('nessuna chiave LLM configurata (Impostazioni ▸ IA).'); return null; }
+  if (!cfg) { ui.fail(t('err_no_key')); return null; }
   const brand = LLM.brandOf(cfg);
-  ui.note(`… verifico la connessione a ${LLM.providerLabel(cfg)} (${LLM.endpointHost(cfg)})…`);
+  ui.note(t('verifying_conn', { provider: LLM.providerLabel(cfg), host: LLM.endpointHost(cfg) }));
   const t0 = performance.now();
-  const txt = await LLM.ask(cfg, 'Test di connettività. Rispondi una sola parola: OK.', 'ping', { maxTokens: 5 });
+  const txt = await LLM.ask(cfg, 'Connectivity test. Reply with a single word: OK.', 'ping', { maxTokens: 5 });
   const ms = Math.round(performance.now() - t0);
-  if (!txt) { ui.fail(`${brand} non risponde (internet assente, chiave errata o errore API).`); return null; }
+  if (!txt) { ui.fail(t('brand_no_reply', { brand })); return null; }
   ui.ok(cfg, ms, brand);
   return cfg;
 }
@@ -57,7 +59,7 @@ export class Brain {
     if (!llmSelected(opts)) { this._setBrain(null); return; }       // classic → no brain badge
     if (!(this.play.roster || []).some(r => r.ai)) return;          // no AI seat to drive
     this.mode = brainMode(this.def);
-    if (!this.mode) { this.ui.sys('Questo gioco non supporta ancora il cervello LLM.'); return; }
+    if (!this.mode) { this.ui.sys(t('game_no_llm')); return; }
     this.aiSeats = (this.play.roster || []).filter(r => r.ai).map(r => r.seat);
     this._alive = true;
     this._setBrain('connecting');
@@ -75,7 +77,7 @@ export class Brain {
   _setBrain(status, ms) { if (this.harness && this.play.isHost && this.harness.state) this.harness.hostAct({ type: 'brain', brain: status ? { status, label: this.label, ms: ms || 0, mode: this.mode } : null }); }
   _down(reason, pause) {
     this._setBrain('down');
-    this.ui.sys(`⛔ ${this.label} ${reason} — l'avversario NON gioca finché non risponde (nessun ripiego offline). Riprovo…`);
+    this.ui.sys(t('brain_down', { label: this.label, reason }));
   }
 
   // ── mover (turn-based): the model picks each move ────────────────────────────────────────────
@@ -93,14 +95,14 @@ export class Brain {
       const t0 = performance.now();
       const txt = await LLM.ask(this.cfg, req.system, req.user, { maxTokens: req.maxTokens || 120 });
       const ms = Math.round(performance.now() - t0);
-      if (!txt) { this._down('non risponde'); this._scheduleRetry(); return null; }
+      if (!txt) { this._down(t('reason_no_reply')); this._scheduleRetry(); return null; }
       const out = this.def.llm.parse(txt, state, seat);
-      if (!out || out.action == null) { this._down('ha proposto una mossa non valida'); this._scheduleRetry(); return null; }
+      if (!out || out.action == null) { this._down(t('reason_bad_move')); this._scheduleRetry(); return null; }
       this._setBrain('live', ms);
       if (out.taunt) this.ui.taunt(out.taunt);
       if (out.persona != null && this.harness.state) this.harness.hostAct({ type: 'policy', seat, params: {}, persona: out.persona });
       return out.action;                                // ← Grok's actual move
-    } catch { this._down('errore di rete'); this._scheduleRetry(); return null; }
+    } catch { this._down(t('reason_net_error')); this._scheduleRetry(); return null; }
     finally { this._busy = false; }
   }
   _scheduleRetry() { clearTimeout(this._retry); this._retry = setTimeout(() => { if (this._alive && this.harness && this.harness.state) this.harness.kickAI(); }, 2200); }
@@ -118,11 +120,11 @@ export class Brain {
           lastMs = Math.round(performance.now() - t0);
           if (txt) { okAny = true; const style = extractJson(txt); if (style) { const { params, taunt, persona } = this.def.coach.toParams(style, seat); this.harness.hostAct({ type: 'policy', seat, params, persona }); if (taunt) this.ui.taunt(taunt); } }
         }
-        if (okAny) { this._setBrain('live', lastMs); if (this.harness.isPaused()) { this.harness.resume(); this.ui.sys(`🟢 ${this.label} ririconnesso — riprendo.`); } }
+        if (okAny) { this._setBrain('live', lastMs); if (this.harness.isPaused()) { this.harness.resume(); this.ui.sys(t('coach_reconnected', { label: this.label })); } }
         else throw new Error('no-response');
       } catch {
         this._setBrain('down');
-        if (!this.harness.isPaused()) { this.harness.pause(); this.ui.sys(`⛔ ${this.label} non risponde — partita IN PAUSA (nessun avversario offline al suo posto). Riprovo…`); }
+        if (!this.harness.isPaused()) { this.harness.pause(); this.ui.sys(t('coach_paused', { label: this.label })); }
       } finally { this._busy = false; }
     };
     (async () => {

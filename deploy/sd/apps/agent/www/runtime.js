@@ -84,24 +84,24 @@ async function callAnthropic(cfg, { model, system, messages, tools, maxTokens = 
   for (let attempt = 0; attempt < 3; attempt++) {
     let resp, j;
     try { resp = await fetch(base + '/v1/messages', { method: 'POST', headers: authHeaders(cfg), body: JSON.stringify(body), signal }); }
-    catch (e) { if (signal && signal.aborted) throw new Error('stopped'); if (attempt === 2) throw new Error('rete non raggiungibile'); await wait(400 * (attempt + 1)); continue; }
+    catch (e) { if (signal && signal.aborted) throw new Error('stopped'); if (attempt === 2) throw new Error('network unreachable'); await wait(400 * (attempt + 1)); continue; }
     if (resp.status === 429 || resp.status === 529 || resp.status >= 500) {
       const ra = parseInt(resp.headers.get('retry-after') || '0', 10);
       if (attempt < 2) { await wait((ra ? ra * 1000 : 600 * (attempt + 1))); continue; }
       if (fallback && fallback !== model) { body.model = fallback; model = fallback; attempt = -1; continue; }   // give the fallback model a real attempt (the guard prevents a second swap → bounded)
-      throw new Error('servizio occupato (HTTP ' + resp.status + ')');
+      throw new Error('service busy (HTTP ' + resp.status + ')');
     }
     j = await resp.json().catch(() => null);
     if (!resp.ok || !j || j.type === 'error') throw new Error((j && j.error && j.error.message) || ('HTTP ' + resp.status));
     return j;
   }
-  throw new Error('chiamata fallita');
+  throw new Error('call failed');
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const textOf = (content) => Array.isArray(content) ? content.filter((b) => b && b.type === 'text').map((b) => b.text).join('') : '';
 
 // ───────────────────────── runtime ─────────────────────────
-export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys = null, active = null, maxSteps, maxParallel } = {}) {
+export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys = null, active = null, maxSteps, maxParallel, t = (k) => k } = {}) {
   const fs = makeFS(root);
   // ONE device queue for the whole session: light reads pooled+spaced, heavy ops (writes + the Gemini
   // /api/llm proxy) exclusive. dq.read/dq.write wrap fs+sys ops; deviceFetch routes the Gemini proxy
@@ -204,7 +204,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     readWsPlain: (rel, opts) => dq.read(() => fs.read(rel, opts)),
     treeWs: (rel, opts) => dq.read(() => fs.tree(rel, opts)),
     writeWs: (rel, c, opts) => withRetry(() => dq.write(() => fs.write(rel, c, opts))),
-    sysReadJson, sysMkdir, sysWrite, checkSyntax, wait, reviewApp,
+    sysReadJson, sysMkdir, sysWrite, checkSyntax, wait, reviewApp, t,
     notifyAppsChanged: () => { try { window.parent && window.parent.postMessage({ type: 'apps-changed' }, '*'); } catch {} },
   };
 
@@ -222,43 +222,43 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         // Surface the ABSOLUTE destination (incl. the root) so the human sees WHERE — e.g. /data/agent/x.js
         // when no workspace is open — instead of a bare basename. The path is confined by fsclient.resolve.
         let abs; try { if (input.path) abs = fs.resolve(input.path); else if (input.to) abs = fs.resolve(input.to); } catch {}
-        if (mustAsk) { const ok = await ui.confirm({ op: name, ...input, abs, root }); if (!ok) return done('❌ Azione rifiutata dall\'utente.', true); }
+        if (mustAsk) { const ok = await ui.confirm({ op: name, ...input, abs, root }); if (!ok) return done(t('rt_reject'), true); }
       }
       switch (name) {
-        case 'list_files': { const r = await withRetry(() => dq.read(() => fs.list(input.path || '.'))); if (!r.ok) return done('Errore list: ' + r.error, true);
-          return done((r.entries || []).map((e) => (e.type === 'dir' ? '📁 ' : '📄 ') + e.name + (e.type === 'file' ? ' (' + (e.size || 0) + 'b)' : '')).join('\n') || '(vuota)'); }
-        case 'read_file': { const r = await withRetry(() => dq.read(() => fs.read(input.path, { maxBytes: READ_CAP }))); if (!r.ok) return done('Errore read: ' + r.error, true);
+        case 'list_files': { const r = await withRetry(() => dq.read(() => fs.list(input.path || '.'))); if (!r.ok) return done(t('rt_err', { op: 'list', error: r.error }), true);
+          return done((r.entries || []).map((e) => (e.type === 'dir' ? '📁 ' : '📄 ') + e.name + (e.type === 'file' ? ' (' + (e.size || 0) + 'b)' : '')).join('\n') || t('rt_dir_empty')); }
+        case 'read_file': { const r = await withRetry(() => dq.read(() => fs.read(input.path, { maxBytes: READ_CAP }))); if (!r.ok) return done(t('rt_err', { op: 'read', error: r.error }), true);
           // Fence the file body as UNTRUSTED data (prompt-injection defense): instructions inside a
           // file must never be obeyed. Line numbers stay inside the fence for reference.
-          return done(fenceUntrusted('file', { path: input.path }, withLineNumbers(r.content, { offset: input.offset, limit: input.limit }) + (r.truncated ? '\n…(troncato a ' + READ_CAP + ' byte)' : ''))); }
-        case 'search_files': { const r = await withRetry(() => dq.read(() => fs.search(input.query, { glob: input.glob, maxFiles: 40, maxMatches: 80 }))); if (!r.ok) return done('Errore search: ' + r.error, true);
-          const hits = (r.matches || []).slice(0, 60).map((m) => m.path + ':' + (m.line || '?') + '  ' + (m.text || '').trim().slice(0, 120)).join('\n') || '(nessun risultato)';
+          return done(fenceUntrusted('file', { path: input.path }, withLineNumbers(r.content, { offset: input.offset, limit: input.limit }) + (r.truncated ? t('rt_truncated', { n: READ_CAP }) : ''))); }
+        case 'search_files': { const r = await withRetry(() => dq.read(() => fs.search(input.query, { glob: input.glob, maxFiles: 40, maxMatches: 80 }))); if (!r.ok) return done(t('rt_err', { op: 'search', error: r.error }), true);
+          const hits = (r.matches || []).slice(0, 60).map((m) => m.path + ':' + (m.line || '?') + '  ' + (m.text || '').trim().slice(0, 120)).join('\n') || t('rt_no_results');
           return done(fenceUntrusted('search_results', {}, hits)); }
-        case 'make_dir': { const r = await withRetry(() => dq.write(() => fs.mkdir(input.path))); return r.ok ? done('✔ creata ' + r.path) : done('Errore mkdir: ' + r.error, true); }
+        case 'make_dir': { const r = await withRetry(() => dq.write(() => fs.mkdir(input.path))); return r.ok ? done(t('rt_mkdir_ok', { path: r.path })) : done(t('rt_err', { op: 'mkdir', error: r.error }), true); }
         case 'write_file': { const r = await withRetry(() => dq.write(() => fs.write(input.path, input.content == null ? '' : String(input.content), { overwrite: true, mkdir: true })));
-          if (!r.ok) return done('Errore write: ' + r.error, true);
+          if (!r.ok) return done(t('rt_err', { op: 'write', error: r.error }), true);
           const v = verifyCode(input.path, input.content, checkSyntax);   // edit→lint loop: a broken write comes back with a ⚠
-          return done('✔ scritto ' + r.path + ' (' + r.bytes + 'b)' + (v.ok ? '' : '\n' + v.warning + ' — correggi e riscrivi.')); }
-        case 'append_file': { const r = await withRetry(() => dq.write(() => fs.append(input.path, String(input.content == null ? '' : input.content)))); return r.ok ? done('✔ aggiunto a ' + r.path) : done('Errore append: ' + r.error, true); }
-        case 'edit_file': { const r = await withRetry(() => dq.write(() => fs.edit(input.path, String(input.old || ''), String(input.new || ''), { all: false }))); if (!r.ok) return done('Errore edit: ' + r.error + (r.error && /not found/i.test(r.error) ? ' (rileggi il file: la stringa "old" deve combaciare esattamente)' : ''), true);
+          return done(t('rt_write_ok', { path: r.path, bytes: r.bytes }) + (v.ok ? '' : '\n' + v.warning + t('rt_write_fix'))); }
+        case 'append_file': { const r = await withRetry(() => dq.write(() => fs.append(input.path, String(input.content == null ? '' : input.content)))); return r.ok ? done(t('rt_append_ok', { path: r.path })) : done(t('rt_err', { op: 'append', error: r.error }), true); }
+        case 'edit_file': { const r = await withRetry(() => dq.write(() => fs.edit(input.path, String(input.old || ''), String(input.new || ''), { all: false }))); if (!r.ok) return done(t('rt_err', { op: 'edit', error: r.error }) + (r.error && /not found/i.test(r.error) ? t('rt_edit_reread') : ''), true);
           let warn = '';   // verify only code files (one cheap read-back); prose edits skip it
-          if (/\.(js|mjs|cjs|json)$/i.test(input.path)) { try { const rb = await dq.read(() => fs.read(input.path, { maxBytes: READ_CAP })); if (rb.ok) { const v = verifyCode(input.path, rb.content, checkSyntax); if (!v.ok) warn = '\n' + v.warning + ' — correggi.'; } } catch {} }
-          return done('✔ modificato ' + r.path + ' (+' + (r.added || 0) + '/-' + (r.removed || 0) + ' righe)' + warn); }
-        case 'delete_file': { const r = await withRetry(() => dq.write(() => fs.del(input.path))); return r.ok ? done('✔ eliminato ' + r.path) : done('Errore delete: ' + r.error + (/protected|403/i.test(String(r.error)) ? ' (file di sistema protetto)' : ''), true); }
-        case 'move_file': { const r = await withRetry(() => dq.write(() => fs.move(input.from, input.to, { overwrite: false }))); return r.ok ? done('✔ spostato ' + input.from + ' → ' + input.to) : done('Errore move: ' + r.error, true); }
-        case 'run_js': { const sb = await ensureSandbox(); if (!sb) return done('Sandbox non disponibile.', true);
+          if (/\.(js|mjs|cjs|json)$/i.test(input.path)) { try { const rb = await dq.read(() => fs.read(input.path, { maxBytes: READ_CAP })); if (rb.ok) { const v = verifyCode(input.path, rb.content, checkSyntax); if (!v.ok) warn = '\n' + v.warning + t('rt_edit_fix'); } } catch {} }
+          return done(t('rt_edit_ok', { path: r.path, added: (r.added || 0), removed: (r.removed || 0) }) + warn); }
+        case 'delete_file': { const r = await withRetry(() => dq.write(() => fs.del(input.path))); return r.ok ? done(t('rt_delete_ok', { path: r.path })) : done(t('rt_err', { op: 'delete', error: r.error }) + (/protected|403/i.test(String(r.error)) ? t('rt_delete_protected') : ''), true); }
+        case 'move_file': { const r = await withRetry(() => dq.write(() => fs.move(input.from, input.to, { overwrite: false }))); return r.ok ? done(t('rt_move_ok', { from: input.from, to: input.to })) : done(t('rt_err', { op: 'move', error: r.error }), true); }
+        case 'run_js': { const sb = await ensureSandbox(); if (!sb) return done(t('rt_sandbox_na'), true);
           const out = await sb.run(String(input.code || ''), {}, {});
-          if (out.timeout) return done('⏱ timeout (>5s) — lo script è stato terminato.', true);
-          if (!out.ok) return done('Errore esecuzione: ' + (out.error || 'sconosciuto') + (out.stack ? '\n' + out.stack : ''), true);
-          return done('✔ eseguito' + (out.hasValue ? ' → ' + out.value : '') + (out.ms != null ? ' (' + out.ms + 'ms)' : '')); }
+          if (out.timeout) return done(t('rt_run_timeout'), true);
+          if (!out.ok) return done(t('rt_run_err', { error: (out.error || t('rt_unknown')) }) + (out.stack ? '\n' + out.stack : ''), true);
+          return done(t('rt_run_ok') + (out.hasValue ? ' → ' + out.value : '') + (out.ms != null ? ' (' + out.ms + 'ms)' : '')); }
         case 'open_in_os': { try {
-            if (input.path) { const abs = fs.resolve(input.path); window.parent && window.parent.postMessage({ type: 'open-file', path: abs }, '*'); return done('✔ apro ' + input.path + ' nell\'OS'); }
-            if (input.app) { window.parent && window.parent.postMessage({ type: 'open-app', id: String(input.app) }, '*'); return done('✔ avvio app ' + input.app); }
-            return done('Specifica path o app.', true);
-          } catch (e) { return done('Errore open: ' + String(e.message || e), true); } }
+            if (input.path) { const abs = fs.resolve(input.path); window.parent && window.parent.postMessage({ type: 'open-file', path: abs }, '*'); return done(t('rt_open_file_ok', { path: input.path })); }
+            if (input.app) { window.parent && window.parent.postMessage({ type: 'open-app', id: String(input.app) }, '*'); return done(t('rt_open_app_ok', { app: input.app })); }
+            return done(t('rt_open_specify'), true);
+          } catch (e) { return done(t('rt_open_err', { error: String(e.message || e) }), true); } }
         case 'device_status': {
           const r = await withRetry(() => dq.read(() => fetch('/api/status', { cache: 'no-store' }).then((x) => x.json())));
-          if (!r || !r.os) return done('Stato dispositivo non disponibile.', true);
+          if (!r || !r.os) return done(t('rt_device_na'), true);
           const gb = (b) => (Number(b || 0) / 1073741824).toFixed(1);
           const t = (r.network && r.network.time) ? new Date(r.network.time * 1000) : null;
           return done({
@@ -272,14 +272,14 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         case 'list_apps': {
           const r = await withRetry(() => dq.read(() => fetch('/api/apps', { cache: 'no-store' }).then((x) => x.json())));
           const apps = (r && r.apps) || [];
-          if (!apps.length) return done('Nessuna app trovata.', true);
+          if (!apps.length) return done(t('rt_no_apps'), true);
           return done(apps.filter((a) => a.enabled !== false).map((a) => a.id + ' — ' + a.name).join('\n'));
         }
         case 'weather': {
-          const city = String(input.city || '').trim(); if (!city) return done('Specifica una città.', true);
+          const city = String(input.city || '').trim(); if (!city) return done(t('rt_weather_city'), true);
           try {
             const g = await (await fetch('https://geocoding-api.open-meteo.com/v1/search?count=1&language=' + (lang === 'en' ? 'en' : 'it') + '&name=' + encodeURIComponent(city))).json();
-            const p = g && g.results && g.results[0]; if (!p) return done('Città non trovata: ' + city, true);
+            const p = g && g.results && g.results[0]; if (!p) return done(t('rt_city_nf', { city }), true);
             const w = await (await fetch('https://api.open-meteo.com/v1/forecast?timezone=auto&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min&latitude=' + p.latitude + '&longitude=' + p.longitude)).json();
             const c = w.current || {}, d = w.daily || {};
             return done({
@@ -290,44 +290,44 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
               oggi_min_max: (d.temperature_2m_min && d.temperature_2m_max) ? (d.temperature_2m_min[0] + '° / ' + d.temperature_2m_max[0] + '°') : '?',
               fonte: 'Open-Meteo (online)',
             });
-          } catch (e) { return done('Errore meteo: ' + String(e && e.message || e), true); }
+          } catch (e) { return done(t('rt_weather_err', { error: String(e && e.message || e) }), true); }
         }
         case 'scaffold_app': { const r = await orchestrateScaffold(appIo, { input }); return done(r.message, !r.ok); }
         case 'publish_app': { const r = await orchestratePublish(appIo, { id: input.id }); return done(r.message, !r.ok); }
         case 'manage_app': { const r = await orchestrateManage(appIo, { id: input.id, action: input.action }); return done(r.message, !r.ok); }
         case 'generate_image': {
           const prompt = String(input.prompt || '').trim();
-          if (!prompt) return done('Specifica un prompt per l\'immagine.', true);
-          if (!input.path) return done('Specifica path (dove salvare l\'immagine nel workspace, es. img/foto.jpg).', true);
+          if (!prompt) return done(t('rt_img_prompt'), true);
+          if (!input.path) return done(t('rt_img_path'), true);
           const icfg = capabilityCfg('image');
-          if (!icfg) return done('Nessun provider per immagini configurato — serve una chiave xAI (Grok). Aggiungila in Impostazioni ▸ IA.', true);
-          let abs; try { abs = fs.resolve(input.path); } catch { return done('Percorso fuori dallo spazio di lavoro.', true); }
+          if (!icfg) return done(t('rt_img_no_provider'), true);
+          let abs; try { abs = fs.resolve(input.path); } catch { return done(t('rt_path_outside'), true); }
           try {
             const base = (icfg.base || 'https://api.x.ai/v1').replace(/\/+$/, '');
             const resp = await fetch(base + '/images/generations', { method: 'POST', signal: aborter && aborter.signal,
               headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + icfg.key },
               body: JSON.stringify({ model: 'grok-2-image', prompt, n: 1, response_format: 'b64_json' }) });
             const j = await resp.json().catch(() => null);
-            if (!resp.ok || !j || j.error) return done('Errore generazione immagine: ' + ((j && j.error && (j.error.message || j.error)) || ('HTTP ' + resp.status)), true);
+            if (!resp.ok || !j || j.error) return done(t('rt_img_err', { error: ((j && j.error && (j.error.message || j.error)) || ('HTTP ' + resp.status)) }), true);
             const d = (j.data && j.data[0]) || {};
             const b64 = d.b64_json || d.b64;
-            if (!b64) return done('Il provider non ha restituito un\'immagine (potrebbe aver dato solo un URL: serve b64).', true);
+            if (!b64) return done(t('rt_img_no_image'), true);
             const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
             const dir = String(input.path).split('/').slice(0, -1).join('/');   // /api/fs/write doesn't mkdir parents → create them first (like fs.write)
             if (dir) await withRetry(() => dq.write(() => fs.mkdir(dir)));
             const w = await withRetry(() => dq.write(async () => { const wr = await fetch('/api/fs/write?path=' + encodeURIComponent(abs), { method: 'POST', body: bytes, signal: aborter && aborter.signal }); return wr.ok ? { ok: true } : { ok: false, error: 'http-' + wr.status }; }));
-            if (!w.ok) return done('Immagine generata ma scrittura fallita: ' + w.error, true);
-            return done('✔ Immagine generata e salvata in ' + input.path + ' (' + Math.round(bytes.length / 1024) + ' KB, ' + (providerOf(icfg.provider).label || icfg.provider) + ')' + (d.revised_prompt ? '\nPrompt usato: ' + d.revised_prompt : '') + '. Aprila con open_in_os({path:"' + input.path + '"}).');
-          } catch (e) { return done('Errore generazione immagine: ' + String(e && e.message || e), true); }
+            if (!w.ok) return done(t('rt_img_write_fail', { error: w.error }), true);
+            return done(t('rt_img_saved', { path: input.path, kb: Math.round(bytes.length / 1024), provider: (providerOf(icfg.provider).label || icfg.provider) }) + (d.revised_prompt ? t('rt_img_revised', { revised: d.revised_prompt }) : ''));
+          } catch (e) { return done(t('rt_img_err', { error: String(e && e.message || e) }), true); }
         }
         case 'transcribe': {
-          if (!input.path) return done('Specifica path (file audio nel workspace).', true);
+          if (!input.path) return done(t('rt_tr_path'), true);
           const wcfg = capabilityCfg('whisper');
-          if (!wcfg) return done('Nessun provider per la trascrizione configurato — serve una chiave Groq. Aggiungila in Impostazioni ▸ IA.', true);
-          let abs; try { abs = fs.resolve(input.path); } catch { return done('Percorso fuori dallo spazio di lavoro.', true); }
+          if (!wcfg) return done(t('rt_tr_no_provider'), true);
+          let abs; try { abs = fs.resolve(input.path); } catch { return done(t('rt_path_outside'), true); }
           try {
             const got = await withRetry(() => dq.read(async () => { const rr = await fetch('/api/fs/read?path=' + encodeURIComponent(abs), { cache: 'no-store', signal: aborter && aborter.signal }); if (!rr.ok) return { ok: false, error: 'http-' + rr.status }; return { ok: true, buf: await rr.arrayBuffer() }; }));
-            if (!got.ok) return done('Lettura audio fallita: ' + got.error, true);
+            if (!got.ok) return done(t('rt_audio_read_fail', { error: got.error }), true);
             const nm = String(input.path).split('/').pop() || 'audio';
             const ext = (nm.split('.').pop() || '').toLowerCase();
             const MIME = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', mp4: 'audio/mp4', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', webm: 'audio/webm', flac: 'audio/flac', aac: 'audio/aac' };
@@ -339,14 +339,14 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
             const ep = (wcfg.base || 'https://api.groq.com/openai/v1').replace(/\/openai\/v1$/, '/v1').replace(/\/+$/, '') + '/audio/transcriptions';
             const resp = await fetch(ep, { method: 'POST', headers: { authorization: 'Bearer ' + wcfg.key }, body: fd, signal: aborter && aborter.signal });
             const j = await resp.json().catch(() => null);
-            if (!resp.ok || !j || j.error) return done('Errore trascrizione: ' + ((j && j.error && (j.error.message || j.error)) || ('HTTP ' + resp.status)), true);
+            if (!resp.ok || !j || j.error) return done(t('rt_tr_err', { error: ((j && j.error && (j.error.message || j.error)) || ('HTTP ' + resp.status)) }), true);
             const text = String(j.text || '').trim();
-            return done(text ? ('📝 Trascrizione (' + (providerOf(wcfg.provider).label || wcfg.provider) + '):\n' + text) : 'Trascrizione vuota.');
-          } catch (e) { return done('Errore trascrizione: ' + String(e && e.message || e), true); }
+            return done(text ? t('rt_tr_ok', { provider: (providerOf(wcfg.provider).label || wcfg.provider), text }) : t('rt_tr_empty'));
+          } catch (e) { return done(t('rt_tr_err', { error: String(e && e.message || e) }), true); }
         }
-        default: return done('Tool sconosciuto: ' + name, true);
+        default: return done(t('rt_tool_unknown', { name }), true);
       }
-    } catch (e) { if (String(e && e.message) === 'stopped') throw e; return done('Eccezione tool: ' + String(e && e.message || e), true); }
+    } catch (e) { if (String(e && e.message) === 'stopped') throw e; return done(t('rt_tool_exception', { error: String(e && e.message || e) }), true); }
   }
 
   // Groq/OpenAI worker: the SAME tool surface via OpenAI function-calling, so the multi-agent is REAL on
@@ -384,7 +384,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
       if (resp.stop_reason === 'pause_turn') { if (++pauses > MAX_PAUSE) break; step--; continue; }   // server tool (web_search) running — don't burn a tool-use step
       return textOf(resp.content) || '(nessuna risposta testuale)';
     }
-    return '(budget di passi esaurito — il compito potrebbe essere incompleto)';
+    return '(step budget exhausted — the task may be incomplete)';
   }
 
   // Run one subtask with CROSS-PROVIDER FALLBACK. routeCfg() chooses the best (cfg, model) for the spec

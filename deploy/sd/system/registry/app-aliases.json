@@ -98,11 +98,14 @@
     "clock": [
       "orologio",
       "sveglia",
-      "cronometro",
-      "timer",
       "clock",
-      "stopwatch",
       "alarm"
+    ],
+    "chrono": [
+      "cronometro",
+      "crono",
+      "timer",
+      "stopwatch"
     ],
     "calendar": [
       "calendario",
