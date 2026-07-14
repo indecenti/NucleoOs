@@ -348,28 +348,29 @@ void app_main(void)
         nucleo_setup_register_apps();        bootmark("app-setup");
     }
     bootmark("pre-app-run");
-    if (solo) {
+    // Web Client server-Solo is the ONE Solo profile that keeps httpd UP, and httpd_start carves the heap:
+    // afterwards the largest internal block is only ~7 KB on the ADV (~8.7 KB on the original). Creating a
+    // NEW 8 KB Solo UI task then FAILS to allocate on the ADV -> app_main returns with no UI task -> the
+    // screen freezes on the boot splash ("stuck at the intro", Web Client never appears). So server-Solo runs
+    // nucleo_app_run() on the MAIN task, exactly like the full OS (whose entire launcher already runs there):
+    // no extra stack to allocate, deterministic on both boards. The watch faces draw direct and there is no
+    // inline TLS on this task (httpd owns its own), so the main stack is ample.
+    if (solo && !solo_srv) {
         // ANIMA Solo runs like the USB-MSC personality: a DEDICATED task owns the assistant with a LARGE
         // stack. The 8 KB main task OVERFLOWS running ANIMA's UI (chat reflow + calendar/JSON parsing)
         // while its worker reads the SD — the real cause of the "still reboots" crash. app_main then
         // returns (its small task is deleted); only the Solo task, the on-demand query worker and the
         // audio task remain. Nothing else (no launcher chrome, no calendar service) competes for SD/display.
-        // Stack by profile: ANIMA runs the INLINE query+TLS on this task (needs 26 KB). The Recorder runs
-        // its cloud TLS in a SEPARATE 16 KB worker (ai_task), so its UI task only hosts nucleo_app_run +
-        // the recorder draw — 16 KB is ample (the full OS runs the same on the 8 KB main task). CRITICAL:
-        // at pre-app-run the largest contiguous internal block is ~25 KB on the ADV, so a 26 KB stack
-        // FAILS to allocate -> no UI task -> black screen + hang. 16 KB fits with margin.
-        // Generic game solo (NX_SOLO): same as Recorder — UI-only, no inline TLS/query, 8 KB suffices
-        // (full OS runs nucleo_app_run on the 8 KB main task). 26 KB is for ANIMA inline-TLS only.
-        // Web Client server-Solo is UI-only too (httpd runs on its OWN task; the watch faces draw direct),
-        // so it takes the same 8 KB as Recorder/generic — only ANIMA's inline TLS needs the 26 KB.
-        uint32_t solo_stk = (solo_rec || solo_srv || nucleo_app_solo_is_generic()) ? 8192 : 26624;
+        // ANIMA runs the INLINE query+TLS on this task (needs 26 KB). Recorder + generic game Solo are
+        // UI-only (no inline TLS) and SKIP httpd, so the heap stays large and 8 KB fits with margin. 26 KB is
+        // ANIMA inline-TLS only (at pre-app-run the largest block is ~25 KB on the ADV, so it fits).
+        uint32_t solo_stk = (solo_rec || nucleo_app_solo_is_generic()) ? 8192 : 26624;
         BaseType_t tcr = xTaskCreatePinnedToCore(anima_solo_task,
-                                                 solo_rec ? "rec-solo" : solo_srv ? "remote-solo" : "anima-solo",
+                                                 solo_rec ? "rec-solo" : "anima-solo",
                                                  solo_stk, NULL, ESP_TASK_MAIN_PRIO, NULL, 0);
         if (tcr != pdPASS) ESP_LOGE(TAG, "SOLO task create FAILED (stack %u, largest %u) — halting",
                                     (unsigned)solo_stk, (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
         return;   // main task exits; the Solo task is now the app's home
     }
-    nucleo_app_run();   // full OS: launcher loop on the 8 KB main task
+    nucleo_app_run();   // full OS AND Web Client server-Solo: launcher/watch loop on the main task
 }
