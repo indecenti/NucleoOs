@@ -764,15 +764,22 @@ static esp_err_t ota_post(httpd_req_t *req)
     // hand"). All resolved at final link (no httpd->app dep cycle). Bounded wait: never wedge this task.
     extern void nucleo_app_request_remote_listen(bool on);
     extern bool nucleo_app_remote_listen_ready(void);
+    extern bool nucleo_ui_is_remote(void);          // Remote Control foreground (inline handoff)
+    extern bool nucleo_app_solo_is_server(void);     // Web Client server-Solo boot
     nucleo_app_request_remote_listen(true);
     nucleo_anima_l1_unload_if_idle();
-    nucleo_voice_suspend(true);
+    // Voice: nucleo_voice_suspend() is a plain flag, NOT reference-counted. If Remote Control (inline) or
+    // server-Solo already owns the suspend for its whole session, the OTA must not restore it on bail — that
+    // would un-suspend voice mid-session and (with voice.alwaysOn or a live PTT) spin the ~16 KB engine back
+    // up on the tightest board. So the OTA only manages voice when IT is the owner (no listening posture yet).
+    bool ota_owns_voice = !nucleo_ui_is_remote() && !nucleo_app_solo_is_server();
+    if (ota_owns_voice) nucleo_voice_suspend(true);
     // Wait (≤4 s) for the UI task to enter Remote Control and free the canvas. The loop turns at ~40 ms, so
     // this normally clears in <200 ms; the ceiling only guards a busy UI task and never hangs the server.
     for (int w = 0; w < 200 && !nucleo_app_remote_listen_ready(); w++) vTaskDelay(pdMS_TO_TICKS(20));
     if (!nucleo_app_remote_listen_ready())
         ESP_LOGW(TAG, "OTA: listening posture not confirmed in 4s — proceeding anyway");
-    #define OTA_BAIL() do { nucleo_app_request_remote_listen(false); nucleo_voice_suspend(false); nucleo_arb_release(tk); } while (0)
+    #define OTA_BAIL() do { nucleo_app_request_remote_listen(false); if (ota_owns_voice) nucleo_voice_suspend(false); nucleo_arb_release(tk); } while (0)
 
     esp_ota_handle_t h = 0;
     esp_err_t err = esp_ota_begin(part, OTA_SIZE_UNKNOWN, &h);

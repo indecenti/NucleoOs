@@ -314,8 +314,14 @@ void app_main(void)
     ESP_LOGI(TAG, "boot complete");
 
     HMEM("after-httpd");
-    // ANIMA: offline assistant. L0 orchestrator is ready; higher tiers plug in later.
-    nucleo_anima_init("it");                 bootmark("anima");
+    // ANIMA: offline assistant. L0 orchestrator is ready; higher tiers plug in later. SKIPPED in Web Client
+    // server-Solo: Remote Control has zero use for the on-device assistant, and nucleo_anima_l1_init() can
+    // eagerly load the ~18 KB flat centroid slab (AKB5-absent SDs) right after httpd — exactly the contiguous
+    // heap this mode exists to keep free for the browser's first, heaviest load. Skipping it also makes the
+    // boot log honest (it already lists "L1" among the skipped subsystems). The web OS answers in its own
+    // browser brain; /api/anima degrades to a graceful "not ready" (tier none) if the shell ever asks.
+    if (!solo_srv) nucleo_anima_init("it");
+    bootmark("anima");
     if (sd_ok && (!solo || nucleo_app_solo_needs_speech())) nucleo_tts_init("it");   // SKIP in non-speech Solo (e.g. Recorder), save heap
     bootmark("tts");
     // Voce a step su heap minuscolo (no PSRAM): se il task audio non trova lo stack contiguo, il player

@@ -119,6 +119,15 @@ extern "C" bool nucleo_app_solo_is_generic(void) { return s_solo_app == SOLO_APP
 // calendar) stays down, so the browser's first, heaviest shell load meets a fresh, unfragmented heap
 // instead of the full-OS heap that was OOM-rebooting the device.
 extern "C" bool nucleo_app_solo_is_server(void) { return s_solo_app == SOLO_REMOTE; }
+// A crash reset (panic / any watchdog) on the LAST boot means a prior server-Solo attempt may have failed —
+// re-entering it (the automatic connect trigger OR the manual Web Client tile) would risk a reboot loop, so
+// BOTH entry points fall through to the safe inline posture in that case. esp_reset_reason() is constant for
+// the whole boot, so this is cheap to call from either path.
+static bool boot_was_crash_reset(void)
+{
+    esp_reset_reason_t r = esp_reset_reason();
+    return r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT || r == ESP_RST_WDT;
+}
 
 // Reopen-after-Solo: the Recorder Solo job warm-reboots back to the FULL OS; this RTC flag (set right
 // before that reboot) tells the full-OS launcher to open the Recorder straight away so the user lands on
@@ -544,6 +553,8 @@ static bool maybe_solo_launch(int idx)
     // by a warm reboot — the proven inline posture (remote_enter frees canvas + L1) still lets it through.
     if (!strcmp(a->id, "remote")) {
         if (s_force_listen) return false;                // OTA in progress: keep the inline listening posture
+        if (boot_was_crash_reset()) return false;        // last boot crashed (maybe a failed server-Solo) — open
+                                                         // INLINE so a manual tap can't re-trigger a crash loop
         nucleo_app_solo_request(SOLO_REMOTE);            // never returns (warm reboot into server Solo)
         return true;
     }
@@ -1351,8 +1362,7 @@ void nucleo_app_run(void)
     // into the lean server-Solo (connect handler below). But if THIS boot was itself a CRASH, a prior server-Solo
     // attempt may have failed — don't auto-reboot again or we'd loop; serve inline instead. A clean esp_restart
     // (our Solo request) is ESP_RST_SW, never a crash, so the healthy path always gets server-Solo.
-    esp_reset_reason_t boot_rr = esp_reset_reason();
-    bool boot_was_crash = (boot_rr == ESP_RST_PANIC || boot_rr == ESP_RST_INT_WDT || boot_rr == ESP_RST_TASK_WDT);
+    bool boot_was_crash = boot_was_crash_reset();
 
     // Watchdog the loop: if an iteration wedges >8 s the chip resets instead of freezing.
     // Tolerate ESP_ERR_INVALID_STATE if the TWDT is disabled in this build.
@@ -1428,6 +1438,20 @@ void nucleo_app_run(void)
                 continue;
             }
         }
+
+        // SAFETY — the web-OS handoff, hoisted here so it runs BEFORE the idle screen-off early-continue below
+        // and INDEPENDENT of the auto-handoff UX toggle. A web-OS shell connecting to this no-PSRAM device MUST
+        // hand serving to the lean server-Solo, or httpd serves the shell's asset+API storm on the fragmented
+        // full-OS heap and OOM-reboots (the exact bug this feature closes). Two reasons it can't live lower down:
+        //   • the device is most often IDLE-ASLEEP (IDLE_SERVE_MS) exactly when the user first opens the web UI,
+        //     and the s_disp_sleep branch below `continue`s before any lower check would run;
+        //   • the reboot is a hard requirement, not a preference, so it must ignore nucleo_remote_enabled()
+        //     (the "Auto handoff" toggle) — which only governs the watch-face UX below. The manual Web Client
+        //     tile already reboots unconditionally, so this just makes the automatic path consistent.
+        // One-shot (s_solo_active bails once we're in it), never mid-OTA (keep the inline posture) or right
+        // after a crash boot (anti-loop — a failed server-Solo must not loop). Raw shell count on purpose.
+        if (nucleo_ws_shell_count() > 0 && !s_solo_active && !s_force_listen && !boot_was_crash)
+            nucleo_app_solo_request(SOLO_REMOTE);   // never returns (warm reboot into server Solo)
 
         // Idle screen-off: while the panel sleeps we draw NOTHING (the 32 KB canvas is freed and given to
         // the web OS), but still track the web client so connect/disconnect + web-focus stay correct. Any
@@ -1566,17 +1590,12 @@ void nucleo_app_run(void)
         // composited on top until it expires (then one more redraw clears it).
         if (s_shot_toast_until && now < s_shot_toast_until + 120) s_dirty = true;
 
+        // Toggle-gated shell count — drives ONLY the watch-face UX (enter_remote/exit_remote) below. The
+        // safety warm-reboot into server-Solo is hoisted above (ungated, before the screen-off continue); by
+        // the time we reach here a fresh shell connect in the FULL OS has already rebooted us, so this branch
+        // only runs in the residual cases the safety check bails on: already in server-Solo, an in-flight OTA,
+        // or a crash-boot fallback. There the auto-handoff toggle decides whether the panel shows the watch.
         int clients = nucleo_remote_enabled() ? nucleo_ws_shell_count() : 0;
-        // Web OS shell connected while we are the FULL OS: this no-PSRAM heap cannot serve it. The launcher's
-        // 32 KB DMA canvas alone won't fit the fragmented full-OS heap, so the render path re-allocating it
-        // spins 32 KB OOMs until a critical alloc PANICs the chip (observed on .166: 171 failed 32404-byte DMA
-        // allocs -> reset "PANIC", device rebooting under the web OS). Warm-reboot into the lean Web Client
-        // server-Solo instead: a fresh, unfragmented heap with ONLY httpd + auth up (no canvas, L1, voice, TTS,
-        // IR, recorder, calendar). The shell's /ws drops and reconnects in a few seconds to a device that now
-        // has all the RAM. One-shot (s_solo_active bails once we are in it); never mid-OTA (keep the proven
-        // inline posture) or right after a crash boot (anti-loop, see boot_was_crash).
-        if (clients > 0 && !s_solo_active && !s_force_listen && !boot_was_crash)
-            nucleo_app_solo_request(SOLO_REMOTE);   // never returns (warm reboot into server Solo)
         // An in-flight OTA forces listening mode too (frees the 32 KB canvas), even with no shell client and
         // even if the auto-handoff toggle is off — a flash is the heaviest download and needs that contiguous block.
         bool listen = clients > 0 || s_force_listen;
