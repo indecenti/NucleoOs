@@ -1,5 +1,6 @@
 #include "nucleo_httpd.h"
 #include "nucleo_storage.h"
+#include "nucleo_i18n.h"       // OS-wide language signal (settings.json -> ui.language), /api/lang
 #include "nucleo_log.h"
 #include "nucleo_registry.h"
 #include "nucleo_webfs.h"
@@ -984,7 +985,12 @@ static bool anima_run_offthread(void (*fn)(void *), void *ctx)
     anima_offthread_t j = { fn, ctx, xSemaphoreCreateBinary() };
     if (!j.done) return false;
     BaseType_t ok = xTaskCreate(anima_offthread_task, "anima_web", 30720, &j, tskIDLE_PRIORITY + 2, NULL);
-    if (ok != pdPASS) {
+    if (ok != pdPASS && nucleo_anima_l1_heap_bytes() > 0) {
+        // Retry ONLY when dropping the L1 index would actually free a block worth retrying for. In the Web
+        // Client server-Solo (web OS connected) L1 is already unloaded, so the reclaim frees nothing and the
+        // retry was a futile second 30 KB allocation whose churn (unload + 120 ms settle + re-alloc) steadily
+        // FRAGMENTED the heap under the web OS — the source of the OOM drift. Skip it there and fail fast to a
+        // lean 503; the browser answers from its own brain instead.
         nucleo_anima_l1_unload_if_idle();          // free ~31 KB if the offline index is idle...
         vTaskDelay(pdMS_TO_TICKS(120));            // ...let the idle task coalesce the freed block, then retry once
         ok = xTaskCreate(anima_offthread_task, "anima_web", 30720, &j, tskIDLE_PRIORITY + 2, NULL);
@@ -2112,6 +2118,44 @@ static esp_err_t time_set_post(httpd_req_t *req)
     return ESP_OK;
 }
 
+// ── system language ──────────────────────────────────────────────────────────────────────────────
+// GET/POST /api/lang — the ONE OS-wide language signal (settings.json -> ui.language), obeyed by BOTH
+// the native on-TFT UI (via nucleo_i18n) and the web shell. POST {"lang":"en"|"it"} persists it and,
+// through nucleo_i18n, bumps the generation counter (native screens repaint live) and fires the hook
+// below, which broadcasts "system.language" over the WebSocket so EVERY connected browser switches
+// instantly — no reload. This closes the loop: set the language on the device or on the web and the
+// whole system follows. GET just reports the current value + generation.
+static void i18n_broadcast_cb(bool en)
+{
+    nucleo_event_publish("system.language", en ? "{\"lang\":\"en\"}" : "{\"lang\":\"it\"}");
+}
+
+static esp_err_t lang_handler(httpd_req_t *req)
+{
+    if (req->method == HTTP_POST) {
+        NUCLEO_AUTH_GUARD(req);                        // changing the system language is a config write -> paired only
+        char body[48];
+        int n = httpd_req_recv(req, body, sizeof(body) - 1);
+        if (n > 0) {
+            body[n] = '\0';
+            cJSON *j = cJSON_Parse(body);
+            if (j) {
+                cJSON *lg = cJSON_GetObjectItemCaseSensitive(j, "lang");
+                if (cJSON_IsString(lg) && lg->valuestring && lg->valuestring[0])
+                    nucleo_i18n_set_en((lg->valuestring[0] | 0x20) == 'e');   // "en"->true; persist + gen++ + WS broadcast
+                cJSON_Delete(j);
+            }
+        }
+    }
+    char buf[64];
+    snprintf(buf, sizeof(buf), "{\"lang\":\"%s\",\"gen\":%lu}",
+             nucleo_i18n_is_en() ? "en" : "it", (unsigned long)nucleo_i18n_gen());
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_sendstr(req, buf);
+    return ESP_OK;
+}
+
 esp_err_t nucleo_httpd_start(void)
 {
     if (s_server) return ESP_OK;                     // already running (idempotent)
@@ -2199,6 +2243,11 @@ esp_err_t nucleo_httpd_start(void)
     httpd_uri_t transcribe = { .uri = "/api/transcribe", .method = HTTP_GET, .handler = transcribe_get };  // Whisper STT + summary
     httpd_uri_t voice_learn = { .uri = "/api/voice/learn", .method = HTTP_POST, .handler = voice_learn_post };
     httpd_uri_t voice_always = { .uri = "/api/voice/always", .method = HTTP_POST, .handler = voice_always_post };
+    httpd_uri_t lang_get  = { .uri = "/api/lang", .method = HTTP_GET,  .handler = lang_handler };   // read OS language
+    httpd_uri_t lang_post = { .uri = "/api/lang", .method = HTTP_POST, .handler = lang_handler };   // set OS language (paired)
+    // The web sets the language via POST /api/lang; nucleo_i18n then broadcasts the change back to
+    // every browser. Register the broadcast hook now that the event bus + WS sink are up.
+    nucleo_i18n_set_on_change(i18n_broadcast_cb);
     httpd_register_uri_handler(server, &status);
     httpd_register_uri_handler(server, &apps);
     httpd_register_uri_handler(server, &assoc);
@@ -2230,6 +2279,8 @@ esp_err_t nucleo_httpd_start(void)
     httpd_register_uri_handler(server, &transcribe);   // /api/transcribe (Whisper STT + summary)
     httpd_register_uri_handler(server, &voice_learn);
     httpd_register_uri_handler(server, &voice_always);   // /api/voice/always (persistent always-on toggle)
+    httpd_register_uri_handler(server, &lang_get);        // /api/lang GET  (read OS language + generation)
+    httpd_register_uri_handler(server, &lang_post);       // /api/lang POST (set OS language → native repaint + WS broadcast)
     httpd_uri_t time_set = { .uri = "/api/time/set", .method = HTTP_POST, .handler = time_set_post };
     httpd_register_uri_handler(server, &time_set);        // /api/time/set (browser → device clock push)
     nucleo_auth_register(server);      // /api/pair, /api/auth/status (public; gate the rest)
