@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #define PRESETS_BIN NUCLEO_SD_MOUNT "/system/ir/presets.bin"  // built from presets.json by tools/ir-pack.mjs
 #define UDATA_PATH  NUCLEO_SD_MOUNT "/data/ir/userdata.json"
@@ -41,8 +42,15 @@ typedef struct { char label[30]; nir_proto_t proto; uint32_t addr, cmd; } ir_fav
 
 static ir_pack_t        s_pack;     // open handle to presets.bin (valid while s_pack_ok)
 static bool             s_pack_ok;
-static ir_pack_remote_t s_curdev;   // the remote being browsed at level 1 (loaded on drill-in)
+static ir_pack_remote_t s_curdev;   // the remote being browsed at level 2 (loaded on drill-in)
 static ir_fav_t        *s_fav; static int s_nfav;
+
+// Category index (v3 pack): remotes are packed SORTED by category, so each category is a contiguous
+// [start,count] range — the REMOTES view browses category -> remotes -> buttons with plain seek math.
+#define MAX_CAT 16
+static struct { char name[IRPACK_CAT_LEN]; int start, count; } s_cats[MAX_CAT];
+static int s_ncat;      // distinct categories found in the pack
+static int s_catsel;    // chosen category (level 1/2)
 
 // ---- UI state ----
 static int  s_view;            // 0 = Remotes, 1 = TV-B-Gone, 2 = Favourites
@@ -116,6 +124,18 @@ static void open_pack(void) {
         s_regcount[0]++;                                    // "all"
         for (int r = 1; r < NREGION; r++) if (t.region == 0 || t.region == r) s_regcount[r]++;
     }
+    // Build the category index. Remotes are packed sorted by category (ir-pack.mjs), so a run of the
+    // same category is one contiguous [start,count] block; a v1/v2 pack (no category) lands in "all".
+    s_ncat = 0;
+    for (uint32_t i = 0; i < s_pack.n_remotes; i++) {
+        ir_pack_remote_t r;
+        if (!ir_pack_remote(&s_pack, i, &r)) continue;
+        const char *c = r.category[0] ? r.category : "all";
+        if (s_ncat > 0 && strcmp(s_cats[s_ncat - 1].name, c) == 0) { s_cats[s_ncat - 1].count++; continue; }
+        if (s_ncat < MAX_CAT) { snprintf(s_cats[s_ncat].name, sizeof s_cats[s_ncat].name, "%s", c);
+                                s_cats[s_ncat].start = (int)i; s_cats[s_ncat].count = 1; s_ncat++; }
+        else s_cats[MAX_CAT - 1].count++;                   // overflow: lump the tail into the last bucket
+    }
 }
 
 static void load_favorites(void) {
@@ -151,7 +171,9 @@ static int cur_count(void) {
     if (s_view == V_TVB || s_view == V_FIND) return NREGION;
     if (s_view == V_FAV) return s_nfav;
     if (!s_pack_ok) return 0;
-    return s_level == 0 ? (int)s_pack.n_remotes : (int)s_curdev.nbtn;
+    if (s_level == 0) return s_ncat;                        // category list
+    if (s_level == 1) return (s_catsel >= 0 && s_catsel < s_ncat) ? s_cats[s_catsel].count : 0;  // remotes in cat
+    return (int)s_curdev.nbtn;                              // button face
 }
 static void tx(int x, int y, const char *s, unsigned short fg, unsigned short bg, int sz) {
     d.setTextSize(sz); d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
@@ -185,6 +207,22 @@ static const char *remote_right(int i, void *) {
     if (ir_pack_remote(&s_pack, (uint32_t)i, &r)) return nir_proto_name((nir_proto_t)r.proto);
     return "";
 }
+// Category list (level 0) + remotes within the chosen category (level 1, index offset into the pack).
+static const char *cat_label(int i, void *) {
+    s_rowbuf[0] = 0;
+    if (i >= 0 && i < s_ncat) { int k = 0;
+        for (const char *p = s_cats[i].name; *p && k < 30; p++) s_rowbuf[k++] = (char)toupper((unsigned char)*p);
+        s_rowbuf[k] = 0; }
+    return s_rowbuf;
+}
+static const char *cat_right(int i, void *) {
+    static char rb[8]; rb[0] = 0;
+    if (i >= 0 && i < s_ncat) snprintf(rb, sizeof rb, "%d", s_cats[i].count);
+    return rb;
+}
+static int catrem_index(int i) { return (s_catsel >= 0 && s_catsel < s_ncat) ? s_cats[s_catsel].start + i : i; }
+static const char *catrem_label(int i, void *u) { return remote_label(catrem_index(i), u); }
+static const char *catrem_right(int i, void *u) { return remote_right(catrem_index(i), u); }
 static const char *btn_label(int i, void *) {
     ir_pack_btn_t b; s_rowbuf[0] = 0;
     if (ir_pack_button(&s_pack, &s_curdev, (uint32_t)i, &b)) snprintf(s_rowbuf, sizeof s_rowbuf, "%s", b.key);
@@ -214,7 +252,7 @@ static const char *region_right(int i, void *) {
 static app_ui_text_fn cur_label_fn(void) {
     if (s_view == V_TVB || s_view == V_FIND) return region_label;
     if (s_view == V_FAV) return fav_label;
-    return s_level == 0 ? remote_label : btn_label;
+    return s_level == 0 ? cat_label : s_level == 1 ? catrem_label : btn_label;
 }
 
 // ---- segmented tab bar (app_wifi look): active tab = filled accent pill, others legible grey;
@@ -297,7 +335,9 @@ static void find_yes(void) {  // identified -> jump straight into that brand's f
         if (ir_pack_remote(&s_pack, i, &r) && r.proto == (uint8_t)s_find_proto && r.addr == s_find_addr) { match = (int)i; break; }
     }
     if (match >= 0 && ir_pack_remote(&s_pack, (uint32_t)match, &s_curdev)) {
-        s_dev = match; s_view = V_REM; s_level = 1; s_sel = 0;
+        s_dev = match; s_view = V_REM; s_level = 2; s_sel = 0;
+        s_catsel = 0;                                       // resolve which category owns the matched remote
+        for (int c = 0; c < s_ncat; c++) if (match >= s_cats[c].start && match < s_cats[c].start + s_cats[c].count) { s_catsel = c; break; }
         snprintf(s_status, sizeof s_status, "found: %s", s_find_brand);
     } else {
         snprintf(s_status, sizeof s_status, "found %s (power only)", s_find_brand);
@@ -327,8 +367,8 @@ static void on_draw(void) {
         return;
     }
 
-    if (s_view == V_REM) {                      // REMOTES
-        if (s_level == 1) {
+    if (s_view == V_REM) {                      // REMOTES: categories -> remotes -> buttons
+        if (s_level == 2) {
             ir_pack_remote_t r; r.name[0] = 0; ir_pack_remote(&s_pack, (uint32_t)s_dev, &r);
             const char *pn = nir_proto_name((nir_proto_t)r.proto);
             char nm[18]; snprintf(nm, sizeof nm, "%s", r.name);   // size-2 header: cap to fit 240px
@@ -337,9 +377,16 @@ static void on_draw(void) {
             app_ui_list(cy + 22, band - 22 - 14, (int)s_curdev.nbtn, s_sel, btn_label, nullptr, btn_color, nullptr);
             tx_center(120, top + H - 12, s_status[0] ? s_status : "Enter: send  \xB7  1-9 quick  \xB7  Esc: back",
                       s_status[0] ? GRN : MUTED, BG, 1);
+        } else if (s_level == 1) {
+            char hd[24]; snprintf(hd, sizeof hd, "\x11 %s", s_catsel < s_ncat ? cat_label(s_catsel, nullptr) : "");
+            tx(10, cy, hd, ACC, BG, 2);
+            int n = (s_catsel >= 0 && s_catsel < s_ncat) ? s_cats[s_catsel].count : 0;
+            app_ui_list(cy + 22, band - 22 - 14, n, s_sel, catrem_label, catrem_right, nullptr, nullptr);
+            tx_center(120, top + H - 12, s_status[0] ? s_status : "Enter: open  \xB7  type to search  \xB7  Esc: back",
+                      s_status[0] ? GRN : MUTED, BG, 1);
         } else {
-            app_ui_list(cy, band - 14, (int)s_pack.n_remotes, s_sel, remote_label, remote_right, nullptr, nullptr);
-            tx_center(120, top + H - 12, s_status[0] ? s_status : "Enter: open  \xB7  type to search",
+            app_ui_list(cy, band - 14, s_ncat, s_sel, cat_label, cat_right, nullptr, nullptr);
+            tx_center(120, top + H - 12, s_status[0] ? s_status : "Enter: open category  \xB7  type to search",
                       s_status[0] ? GRN : MUTED, BG, 1);
         }
     } else if (s_view == V_TVB) {               // TV-B-GONE
@@ -390,13 +437,18 @@ static void activate(void) {
         nucleo_app_request_draw(); return;
     }
     if (s_view == V_FAV) { if (s_sel < s_nfav) send_now(s_fav[s_sel].proto, s_fav[s_sel].addr, s_fav[s_sel].cmd, s_fav[s_sel].label); return; }
-    if (s_level == 0) {
-        if (s_pack_ok && s_sel < (int)s_pack.n_remotes && ir_pack_remote(&s_pack, s_sel, &s_curdev)) {
-            s_dev = s_sel; s_level = 1; s_sel = 0; nucleo_app_request_draw();
+    if (s_level == 0) {                          // pick a category
+        if (s_pack_ok && s_sel < s_ncat) { s_catsel = s_sel; s_level = 1; s_sel = 0; nucleo_app_request_draw(); }
+        return;
+    }
+    if (s_level == 1) {                          // pick a remote within the category
+        int real = catrem_index(s_sel);
+        if (s_pack_ok && real < (int)s_pack.n_remotes && ir_pack_remote(&s_pack, (uint32_t)real, &s_curdev)) {
+            s_dev = real; s_level = 2; s_sel = 0; nucleo_app_request_draw();
         }
         return;
     }
-    ir_pack_btn_t b;
+    ir_pack_btn_t b;                             // level 2: send the focused button
     if (ir_pack_button(&s_pack, &s_curdev, s_sel, &b))
         send_now((nir_proto_t)s_curdev.proto, s_curdev.addr, b.cmd, b.key);
 }
@@ -413,7 +465,7 @@ static void on_key(int k, char ch) {
     if (k == NK_ENTER) { activate(); return; }
 
     // Remote face: 0-9 hardware keys instantly fire the matching digit button (smartwatch quick-select).
-    if (s_view == V_REM && s_level == 1 && k == NK_CHAR && ch >= '0' && ch <= '9') {
+    if (s_view == V_REM && s_level == 2 && k == NK_CHAR && ch >= '0' && ch <= '9') {
         char want[2] = { ch, 0 }; ir_pack_btn_t b;
         for (uint32_t j = 0; j < s_curdev.nbtn; j++)
             if (ir_pack_button(&s_pack, &s_curdev, j, &b) && !strcmp(b.key, want)) {
@@ -430,7 +482,14 @@ static bool ir_back(int key) {
     (void)key;
     if (s_sweep) { s_sweep = false; s_status[0] = 0; nucleo_app_request_draw(); return true; }
     if (s_find)  { s_find = false; s_status[0] = 0; nucleo_app_request_draw(); return true; }
-    if (s_view == V_REM && s_level == 1) { s_level = 0; s_sel = s_dev; nucleo_app_request_draw(); return true; }
+    if (s_view == V_REM && s_level == 2) {                 // button face -> back to the category's remote list
+        s_level = 1;
+        s_sel = (s_catsel >= 0 && s_catsel < s_ncat) ? (s_dev - s_cats[s_catsel].start) : 0;
+        if (s_sel < 0) s_sel = 0;
+        nucleo_app_request_draw();
+        return true;
+    }
+    if (s_view == V_REM && s_level == 1) { s_level = 0; s_sel = s_catsel; nucleo_app_request_draw(); return true; }
     return false;   // Esc at the top level -> framework closes the app
 }
 static void ir_tab(void) {
@@ -457,7 +516,7 @@ static void on_tick(void) {
     nucleo_app_request_draw();
 }
 static void enter(void) {
-    s_view = 0; s_level = 0; s_sel = 0; s_dev = 0; s_region = 0; s_sweep = false; s_find = false;
+    s_view = 0; s_level = 0; s_sel = 0; s_dev = 0; s_catsel = 0; s_region = 0; s_sweep = false; s_find = false;
     s_status[0] = 0; s_cur_brand[0] = 0; s_find_brand[0] = 0;
     // No heavy load anymore: the catalog is read record-by-record from presets.bin, so there's no
     // multi-KB slurp to make room for — the shared canvas can stay put.

@@ -34,9 +34,10 @@ bool ir_pack_open(ir_pack_t *p, const char *path) {
     uint8_t h[IRPACK_HDR_SIZE];
     if (fread(h, 1, sizeof h, f) != sizeof h || memcmp(h, IRPACK_MAGIC, 4) != 0) { fclose(f); return false; }
     uint16_t ver = rd16(h + 4);
-    if (ver != 1 && ver != 2) { fclose(f); return false; }   // accept v1 (raw-less) and v2
+    if (ver < 1 || ver > 3) { fclose(f); return false; }     // accept v1 (raw-less), v2 (raw pool), v3 (category)
     p->f           = f;
     p->version     = ver;
+    p->rem_size    = (ver >= 3) ? IRPACK_REMOTE_SIZE : IRPACK_REMOTE_SIZE_V2;   // v3 record is 12 B longer
     p->n_remotes   = rd32(h + 8);
     p->remotes_off = rd32(h + 12);
     p->n_tvpower   = rd32(h + 16);
@@ -53,7 +54,7 @@ void ir_pack_close(ir_pack_t *p) {
 bool ir_pack_remote(ir_pack_t *p, uint32_t i, ir_pack_remote_t *out) {
     if (!p || !p->f || !out || i >= p->n_remotes) return false;
     uint8_t r[IRPACK_REMOTE_SIZE];
-    if (!read_at(p->f, p->remotes_off + i * IRPACK_REMOTE_SIZE, r, sizeof r)) return false;
+    if (!read_at(p->f, p->remotes_off + i * p->rem_size, r, p->rem_size)) return false;
     memcpy(out->name, r, IRPACK_NAME_LEN);
     out->name[IRPACK_NAME_LEN - 1] = 0;
     out->proto    = r[28];
@@ -61,6 +62,12 @@ bool ir_pack_remote(ir_pack_t *p, uint32_t i, ir_pack_remote_t *out) {
     out->nbtn     = rd16(r + 30);
     out->addr     = rd32(r + 32);
     out->data_off = rd32(r + 36);
+    if (p->rem_size >= IRPACK_REMOTE_SIZE) {     // v3: category tail at offset 40
+        memcpy(out->category, r + 40, IRPACK_CAT_LEN);
+        out->category[IRPACK_CAT_LEN - 1] = 0;
+    } else {
+        out->category[0] = 0;
+    }
     return true;
 }
 

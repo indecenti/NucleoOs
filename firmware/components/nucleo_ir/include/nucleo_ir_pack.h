@@ -10,8 +10,8 @@
 // On-disk layout (little-endian, all offsets from file start):
 //   Header (32 B):  "IRPK" | u16 version | u16 flags | u32 n_remotes | u32 remotes_off
 //                          | u32 n_tvpower | u32 tvpower_off | u32 raw_off | u32 raw_size
-//   Remote index   (40 B each, at remotes_off):  char name[28] | u8 proto | u8 region
-//                          | u16 nbtn | u32 addr | u32 data_off
+//   Remote index   (v3: 52 B each, at remotes_off):  char name[28] | u8 proto | u8 region
+//                          | u16 nbtn | u32 addr | u32 data_off | char category[12]   (v1/v2: 40 B, no category)
 //   Button block   (16 B each, at a remote's data_off):  char key[12] | u32 cmd
 //   TV-power table (28 B each, at tvpower_off):  char brand[20] | u8 region | u8 proto
 //                          | u16 addr | u16 cmd | u16 pad
@@ -34,21 +34,25 @@ extern "C" {
 #endif
 
 #define IRPACK_MAGIC    "IRPK"
-#define IRPACK_VERSION  2     // v2 adds the RAW pool; the reader still accepts a v1 (raw-less) pack
+#define IRPACK_VERSION  3     // v3 adds a category[12] tail to the remote record; v2 added the RAW pool.
+                              // The reader still accepts v1 (raw-less) and v2 (no category) packs.
 #define IRPACK_PROTO_RAW 0    // proto code that marks a RAW record
 
 #define IRPACK_NAME_LEN  28
 #define IRPACK_KEY_LEN   12
 #define IRPACK_BRAND_LEN 20
+#define IRPACK_CAT_LEN   12
 
-#define IRPACK_HDR_SIZE     32
-#define IRPACK_REMOTE_SIZE  40
-#define IRPACK_BTN_SIZE     16
-#define IRPACK_TVP_SIZE     28
+#define IRPACK_HDR_SIZE       32
+#define IRPACK_REMOTE_SIZE    52   // v3 record size (v1/v2 were 40); the open() stride adapts per version
+#define IRPACK_REMOTE_SIZE_V2 40
+#define IRPACK_BTN_SIZE       16
+#define IRPACK_TVP_SIZE       28
 
 typedef struct {
     FILE    *f;
     uint16_t version;
+    uint32_t rem_size;                // remote-record stride: 40 for v1/v2, 52 for v3 (category tail)
     uint32_t n_remotes, remotes_off;
     uint32_t n_tvpower, tvpower_off;
     uint32_t raw_off, raw_size;       // RAW pool (0/0 on a v1 pack)
@@ -61,6 +65,7 @@ typedef struct {
     uint16_t nbtn;
     uint32_t addr;
     uint32_t data_off;
+    char     category[IRPACK_CAT_LEN]; // NUL-terminated group ("tv", "audio", ...); "" on a v1/v2 pack
 } ir_pack_remote_t;
 
 typedef struct { char key[IRPACK_KEY_LEN]; uint32_t cmd; } ir_pack_btn_t;

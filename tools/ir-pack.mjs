@@ -16,8 +16,8 @@ export const PROTOS = ['raw', 'nec', 'necext', 'samsung', 'sony12', 'sony15', 's
 // region codes — KEEP IN SYNC with REGIONS in nucleo_ir_pack.c.
 export const REGIONS = ['all', 'us', 'eu', 'asia'];
 
-const HDR = 32, REM = 40, BTN = 16, TVP = 28;
-const NAME_LEN = 28, KEY_LEN = 12, BRAND_LEN = 20;
+const HDR = 32, REM = 52, BTN = 16, TVP = 28;   // REM v3: name[28]+proto+region+nbtn[2]+addr[4]+data_off[4]+category[12]
+const NAME_LEN = 28, KEY_LEN = 12, BRAND_LEN = 20, CAT_LEN = 12;
 
 const protoCode = (n) => { const i = PROTOS.indexOf(String(n || '').toLowerCase()); return i < 0 ? 0 : i; };
 const regionCode = (n) => { const i = REGIONS.indexOf(String(n || 'all').toLowerCase()); return i < 0 ? 0 : i; };
@@ -48,19 +48,22 @@ export function pack(catalog) {
     rawPool.push(e); rawMap.set(key, e); return e;
   };
 
-  // normalise remotes (a remote is uniformly RAW or protocol)
+  // normalise remotes (a remote is uniformly RAW or protocol), then SORT by category so each category
+  // occupies a contiguous index range — the device browses category -> remotes with plain seek arithmetic.
   const R = remotes.map((r) => {
+    const cat = String(r.category || '').toLowerCase();
     if (isRaw(r.protocol)) {
       const btns = Object.entries(r.buttons || {}).map(([key, v]) => {
         const arr = Array.isArray(v) ? v : (v && v.raw) || [];
         return { key, rawEntry: addRaw(arr, (v && v.carrier) || r.carrier) };
       });
-      return { name: r.name || r.id || '?', proto: 0, region: regionCode(r.region), addr: 0, btns, raw: true };
+      return { name: r.name || r.id || '?', proto: 0, region: regionCode(r.region), addr: 0, btns, raw: true, cat };
     }
     const btns = Object.entries(r.buttons || {}).map(([key, cmd]) => ({ key, cmd: cmd >>> 0 }));
     return { name: r.name || r.id || '?', proto: protoCode(r.protocol), region: regionCode(r.region),
-             addr: (r.address >>> 0) || 0, btns, raw: false };
+             addr: (r.address >>> 0) || 0, btns, raw: false, cat };
   });
+  R.sort((a, b) => (a.cat < b.cat ? -1 : a.cat > b.cat ? 1 : 0));   // stable (ES2019+): keeps in-category order
   const T = tvpower.map((t) => {
     if (isRaw(t.protocol)) return { brand: t.brand || '?', region: regionCode(t.region), proto: 0,
              rawEntry: addRaw(t.raw, t.carrier), raw: true };
@@ -81,7 +84,7 @@ export function pack(catalog) {
 
   const buf = Buffer.alloc(size);
   buf.write('IRPK', 0, 'ascii');
-  buf.writeUInt16LE(2, 4);                 // version
+  buf.writeUInt16LE(3, 4);                 // version 3: remote record carries a category[12] tail
   buf.writeUInt16LE(0, 6);                 // flags
   buf.writeUInt32LE(R.length, 8);
   buf.writeUInt32LE(remotesOff, 12);
@@ -98,6 +101,7 @@ export function pack(catalog) {
     buf.writeUInt16LE(r.btns.length, o + 30);
     buf.writeUInt32LE(r.addr, o + 32);
     buf.writeUInt32LE(r.dataOff, o + 36);
+    writeStr(buf, o + 40, r.cat, CAT_LEN);        // v3 category tail
   });
   R.forEach((r) => r.btns.forEach((b, j) => {
     const o = r.dataOff + j * BTN;
@@ -148,7 +152,7 @@ export function unpack(buf) {
       btns.push(e);
     }
     remotes.push({ name: cstr(buf, o, NAME_LEN), proto, region: buf.readUInt8(o + 29),
-                   addr: buf.readUInt32LE(o + 32), btns });
+                   addr: buf.readUInt32LE(o + 32), btns, category: ver >= 3 ? cstr(buf, o + 40, CAT_LEN) : '' });
   }
   const tvpower = [];
   for (let i = 0; i < nTvp; i++) {
