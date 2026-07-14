@@ -48,3 +48,6 @@ tools/sd-sim/data/ir/userdata.json
 tools/sd-sim/data/*.txt
 tools/sd-sim/data/*.todo
 tools/sd-sim/data/*.md
+
+# Release build output
+/dist/

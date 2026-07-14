@@ -1,0 +1,63 @@
+name: Release
+
+# Publish an installable NucleoOS build to GitHub Releases when a version tag is pushed.
+#   git tag v0.2.0.123 && git push origin v0.2.0.123
+# The job builds the ONE universal firmware in CI (ESP-IDF, esp32s3), merges it into a single
+# flash-at-0x0 image, packages a clean SD payload + a browser web-flasher manifest + install docs,
+# and creates the Release with those assets. No secrets are used beyond the automatic GITHUB_TOKEN,
+# and nothing non-distributable (ROMs / user data) is in the repo, so the artifacts are clean.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write        # create the release + upload assets (uses the built-in GITHUB_TOKEN)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1   # shallow: we only build HEAD, no history needed
+
+      - name: Read version (VERSION.BUILD)
+        id: ver
+        run: echo "full=$(cat firmware/version/VERSION).$(cat firmware/version/BUILD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build firmware (ESP-IDF v5.4, esp32s3)
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.4
+          target: esp32s3
+          path: firmware
+
+      - name: Package SD payload + install docs
+        run: node tools/package-release.mjs
+
+      - name: Merge firmware into a single flash image
+        run: |
+          python -m pip install --quiet esptool
+          python -m esptool --chip esp32s3 merge_bin \
+            -o "dist/nucleoos-${{ steps.ver.outputs.full }}.bin" \
+            --flash_mode dio --flash_freq 80m --flash_size 8MB \
+            0x0     firmware/build/bootloader/bootloader.bin \
+            0x8000  firmware/build/partition_table/partition-table.bin \
+            0xf000  firmware/build/ota_data_initial.bin \
+            0x20000 firmware/build/nucleoos.bin
+
+      - name: Zip the SD payload
+        run: cd dist && zip -qr "nucleoos-${{ steps.ver.outputs.full }}-sd.zip" sd
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: dist/RELEASE_NOTES.md
+          generate_release_notes: true          # append the auto commit/PR changelog
+          fail_on_unmatched_files: true
+          files: |
+            dist/nucleoos-${{ steps.ver.outputs.full }}.bin
+            dist/nucleoos-${{ steps.ver.outputs.full }}-sd.zip
+            dist/FLASH.md
+            dist/manifest.json
