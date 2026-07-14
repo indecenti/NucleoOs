@@ -24,3 +24,27 @@ __pycache__/
 /deploy/sd-master/
 # Report auto-salvati di SD Deploy
 /tools/nucleo-sd-deploy/reports/
+
+# --- Non-distributable device SD content (kept LOCALLY, never committed) ---
+# Copyrighted game ROMs / DOS bundles / media, and personal user data. The distributable
+# SD tree is deploy/sd-safe (manifests only); deploy/sd + tools/sd-sim are dev cards.
+deploy/sd/data/ROMs/
+deploy/sd/data/DOS/
+deploy/sd/data/Documents/
+deploy/sd/data/Notes/
+deploy/sd/data/Recordings/
+deploy/sd/data/Videos/
+deploy/sd/data/ir/userdata.json
+deploy/sd/data/*.txt
+deploy/sd/data/*.todo
+deploy/sd/data/*.md
+tools/sd-sim/data/ROMs/
+tools/sd-sim/data/DOS/
+tools/sd-sim/data/Documents/
+tools/sd-sim/data/Notes/
+tools/sd-sim/data/Recordings/
+tools/sd-sim/data/Videos/
+tools/sd-sim/data/ir/userdata.json
+tools/sd-sim/data/*.txt
+tools/sd-sim/data/*.todo
+tools/sd-sim/data/*.md

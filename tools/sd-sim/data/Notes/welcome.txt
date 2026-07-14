@@ -1,4 +1,0 @@
-Welcome to NucleoOS Notes.
-
-Type to append text. Enter adds a new line, Backspace deletes. Press Esc to save and exit.
- EDIT-OK. ok.
