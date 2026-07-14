@@ -33,6 +33,7 @@ extern "C" {
 #include "nucleo_ui.h"         // nucleo_ui_panel_size / read_row for the /api/screen readback
 #include "nucleo_voice.h"      // Voice engine state for the PTT overlay
 #include "nucleo_anima.h"      // anima_action_t for the voice result toast (include dir via CMakeLists)
+#include "nucleo_i18n.h"       // OS language flag + generation counter (live launcher repaint on a web-side change)
 }
 #include "esp_http_server.h"
 #include "esp_log.h"
@@ -375,6 +376,7 @@ static const MenuNode *s_stub = nullptr;   // app launched without a native impl
 static bool s_dirty = true;                // animated list band needs a redraw
 static bool s_chrome_dirty = true;         // status/hint chrome needs a redraw
 static bool s_hint_dirty   = true;         // bottom hint bar needs a redraw (set on hint/color change)
+static uint32_t s_lang_gen = 0;            // last-seen i18n generation; a web-side language change forces a launcher repaint
 static bool s_control_center = false;      // global Control Center overlay active
 static bool s_wake_pending  = false;       // screen was blanked by CC "screen off" — first key restores
 static int  s_wake_saved_bright = 80;      // brightness to restore on wake
@@ -1711,6 +1713,15 @@ void nucleo_app_run(void)
                     nucleo_notify_post("Voce", body);
                 }
             }
+        }
+
+        // A language change from the WEB (POST /api/lang, applied on the httpd task) flips the native
+        // flag but cannot repaint the screen from that task. Detect it here and force the launcher home
+        // to repaint so the on-TFT UI follows the new language live. One counter compare per loop; acts
+        // only on an actual change, and only touches the launcher (a running app repaints on re-enter).
+        if (nucleo_i18n_gen() != s_lang_gen) {
+            s_lang_gen = nucleo_i18n_gen();
+            if (s_active == -1) { s_chrome_dirty = true; s_hint_dirty = true; s_dirty = true; }
         }
 
         if (now - last_tick >= 200) {

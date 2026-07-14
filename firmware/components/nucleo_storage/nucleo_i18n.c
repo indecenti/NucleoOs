@@ -10,10 +10,15 @@
 static const char *TAG = "i18n";
 #define SETTINGS_JSON NUCLEO_SD_MOUNT "/system/config/settings.json"
 
-// The whole RAM cost of native i18n: one byte. Default Italian (the OS's primary language).
+// The whole RAM cost of native i18n: one flag + a small counter + one callback pointer. Default
+// Italian (the OS's primary language).
 static bool s_en = false;
+static uint32_t s_gen = 0;                 // bumped on every real change; native UIs poll it to repaint live
+static void (*s_on_change)(bool) = NULL;   // set by the HTTP layer to broadcast a change to web clients
 
 bool nucleo_i18n_is_en(void) { return s_en; }
+uint32_t nucleo_i18n_gen(void) { return s_gen; }
+void nucleo_i18n_set_on_change(void (*cb)(bool en)) { s_on_change = cb; }
 const char *nucleo_tr(const char *it, const char *en) { return s_en ? en : it; }
 
 // Load settings.json into a fresh cJSON tree (caller owns it, or NULL). Mirrors the proven sizing in
@@ -48,6 +53,7 @@ void nucleo_i18n_load(void)
 
 void nucleo_i18n_set_en(bool en)
 {
+    bool changed = (s_en != en);
     s_en = en;   // live: the next paint of any native screen already reflects the new language.
 
     // Read-modify-write so every other key the web Settings app owns is preserved.
@@ -70,4 +76,12 @@ void nucleo_i18n_set_en(bool en)
     }
     cJSON_free(out);
     ESP_LOGI(TAG, "language set: %s", en ? "en" : "it");
+
+    // Notify the rest of the system ONLY on a real change: bump the generation so native screens
+    // repaint on their next frame, and fire the hook so the HTTP layer can push the change to any
+    // connected browser (device -> web live sync). Idempotent sets stay silent (no spurious repaint).
+    if (changed) {
+        s_gen++;
+        if (s_on_change) s_on_change(en);
+    }
 }

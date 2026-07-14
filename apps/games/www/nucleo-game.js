@@ -30,6 +30,9 @@
 //   const harness = new GameHarness(play, getGame(play.gameId), canvas);
 //   harness.start();
 
+import I18N from '/nucleo-i18n.js';   // centralized i18n; the games catalog is loaded by index.html's I18N.init('games')
+const t = I18N.scope('games');
+
 const REGISTRY = new Map();
 
 export function defineGame(def) {
@@ -187,7 +190,7 @@ export class GameHarness {
     // and are not handed to setup().
     const players = this.play.roster.filter(r => r.seat >= 0).sort((a, b) => a.seat - b.seat)
       .map(r => ({ seat: r.seat, name: r.name, ai: !!r.ai }));
-    if (players.length < this.game.minPlayers) { this._onStatus(`In attesa di giocatori (${players.length}/${this.game.minPlayers})…`); return; }
+    if (players.length < this.game.minPlayers) { this._onStatus(t('waiting_players', { have: players.length, need: this.game.minPlayers })); return; }
     const seed = (this._hashRoom() ^ ((this._matchNo || 1) * 2654435761)) >>> 0;
     this._rng = mulberry32(seed);
     this.state = this.game.setup(players, seed, this._options || {});

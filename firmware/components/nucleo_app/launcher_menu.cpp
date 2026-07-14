@@ -161,13 +161,22 @@ void launcher_reset(void)
 }
 
 // ---- filtering + visible-row queries ---------------------------------------
+extern "C" const char *launcher_app_localized_name(const char *id);   // launcher_render.cpp (bilingual title)
+
 static bool match_filter(const MenuNode *n, const char *filter)
 {
     if (!filter[0]) return true;
     char a[40], b[40];
-    int i = 0; for (; n->label[i] && i < 39; i++) a[i] = (char)tolower((unsigned char)n->label[i]); a[i] = 0;
-    int j = 0; for (; filter[j] && j < 39; j++)   b[j] = (char)tolower((unsigned char)filter[j]);  b[j] = 0;
-    return strstr(a, b) != nullptr;
+    int j = 0; for (; filter[j] && j < 39; j++) b[j] = (char)tolower((unsigned char)filter[j]); b[j] = 0;
+    // Match the raw label AND the localized display name, so Spotlight finds an app by the title shown
+    // in EITHER language (e.g. typing "weather" finds "Meteo" while the OS is in English, and vice versa).
+    const char *cands[2] = { n->label, (n->kind == N_APP ? launcher_app_localized_name(n->id) : nullptr) };
+    for (int c = 0; c < 2; c++) {
+        if (!cands[c]) continue;
+        int i = 0; for (; cands[c][i] && i < 39; i++) a[i] = (char)tolower((unsigned char)cands[c][i]); a[i] = 0;
+        if (strstr(a, b) != nullptr) return true;
+    }
+    return false;
 }
 
 // Spotlight: at Home with a filter, search becomes GLOBAL across every app (flat) — so any of the

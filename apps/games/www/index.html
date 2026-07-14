@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Giochi</title>
+<title data-i18n="app_title">Giochi</title>
 <style>
   :root { --bg:#0b0e13; --panel:#141a22; --panel2:#1b2330; --line:#2a3340; --txt:#e6edf3; --dim:#8b97a6; --accent:#22d3ee; --accent2:#e879f9; --good:#34d399; }
   * { box-sizing:border-box; }
@@ -176,10 +176,10 @@
 <body>
 <div id="app">
   <header>
-    <h1>🎮 Giochi</h1>
+    <h1 data-i18n="header_title">🎮 Giochi</h1>
     <span class="grow"></span>
-    <span class="chip hidden" id="padChip" title="Controller collegato" style="border-color:var(--good);color:var(--good)">🎮</span>
-    <div class="gamercard" id="cardBtn" title="Modifica gamercard">
+    <span class="chip hidden" id="padChip" data-i18n-attr="title:pad_title" title="Controller collegato" style="border-color:var(--good);color:var(--good)">🎮</span>
+    <div class="gamercard" id="cardBtn" data-i18n-attr="title:card_edit_title" title="Modifica gamercard">
       <div class="av" id="cardAv"></div>
       <div><div class="nm" id="cardName"></div><div class="sub" id="cardStat"></div></div>
     </div>
@@ -187,32 +187,32 @@
 
   <!-- LOBBY -->
   <main id="lobby">
-    <div class="section-title"><span id="secCreate">Crea una partita</span></div>
+    <div class="section-title"><span id="secCreate" data-i18n="sec_create">Crea una partita</span></div>
     <div class="grid" id="catalog"></div>
     <div class="section-title">
-      <span id="secOpen">Partite aperte sulla rete</span>
+      <span id="secOpen" data-i18n="sec_open">Partite aperte sulla rete</span>
       <span class="grow"></span>
-      <input id="codeIn" placeholder="codice stanza" style="width:120px">
-      <button id="codeJoin" class="ghost">Entra con codice</button>
+      <input id="codeIn" data-i18n-attr="placeholder:code_ph" placeholder="codice stanza" style="width:120px">
+      <button id="codeJoin" class="ghost" data-i18n="join_with_code">Entra con codice</button>
       <button id="refresh" class="ghost">↻</button>
     </div>
-    <div class="rooms" id="rooms"><div class="empty" id="roomsEmpty">Nessuna partita aperta.</div></div>
+    <div class="rooms" id="rooms"><div class="empty" id="roomsEmpty" data-i18n="rooms_empty">Nessuna partita aperta.</div></div>
   </main>
 
   <!-- ROOM (waiting + playing share this; chat/roster persist across both) -->
   <div id="room">
     <div class="gamebar">
       <b id="gameName"></b>
-      <span class="chip" id="roomCode" title="Codice stanza"></span>
+      <span class="chip" id="roomCode" data-i18n-attr="title:room_code_title" title="Codice stanza"></span>
       <span class="grow"></span>
-      <button id="hintBtn" class="ghost hidden">💡 Hint</button>
-      <button id="inviteBtn" class="ghost">🔗 Invita</button>
-      <button id="readyBtn" class="hidden">✓ Pronto</button>
-      <button id="startBtn" class="good hidden">▶ Inizia</button>
-      <button id="offlineBtn" class="ghost hidden" style="border-color:#fb7185;color:#fb7185">▶ Gioca offline (classica)</button>
-      <button id="rematchBtn" class="primary hidden">↻ Rivincita</button>
-      <button id="toRoomBtn" class="ghost hidden">⟲ Sala</button>
-      <button id="leaveBtn" class="ghost">Esci</button>
+      <button id="hintBtn" class="ghost hidden" data-i18n="btn_hint">💡 Hint</button>
+      <button id="inviteBtn" class="ghost" data-i18n="btn_invite">🔗 Invita</button>
+      <button id="readyBtn" class="hidden" data-i18n="btn_ready">✓ Pronto</button>
+      <button id="startBtn" class="good hidden" data-i18n="btn_start">▶ Inizia</button>
+      <button id="offlineBtn" class="ghost hidden" data-i18n="btn_offline" style="border-color:#fb7185;color:#fb7185">▶ Gioca offline (classica)</button>
+      <button id="rematchBtn" class="primary hidden" data-i18n="btn_rematch">↻ Rivincita</button>
+      <button id="toRoomBtn" class="ghost hidden" data-i18n="btn_lobby">⟲ Sala</button>
+      <button id="leaveBtn" class="ghost" data-i18n="btn_leave">Esci</button>
     </div>
     <div class="gamebody">
       <div class="roommain">
@@ -220,7 +220,7 @@
         <div id="waiting">
           <h2 id="waitTitle"></h2>
           <div class="seatcards" id="seatCards"></div>
-          <div class="opts hidden" id="optsBox"><h4>Impostazioni</h4><div id="optsForm"></div></div>
+          <div class="opts hidden" id="optsBox"><h4 data-i18n="settings">Impostazioni</h4><div id="optsForm"></div></div>
           <div id="waitHint" style="color:var(--dim)"></div>
         </div>
         <!-- PLAYING -->
@@ -235,7 +235,7 @@
           <div class="msgs" id="msgs"></div>
           <div class="typing" id="typing"></div>
           <div class="emotes" id="emotes"></div>
-          <form id="chatform"><input id="chatin" placeholder="Messaggio o @anima…" maxlength="160" autocomplete="off"><button class="primary">▶</button></form>
+          <form id="chatform"><input id="chatin" data-i18n-attr="placeholder:chat_ph" placeholder="Messaggio o @anima…" maxlength="160" autocomplete="off"><button class="primary">▶</button></form>
         </div>
       </aside>
     </div>
@@ -243,7 +243,7 @@
   </div>
 
   <!-- IMMERSIVE PLAY: floating menu + Xbox-style game bar (Tab toggles) -->
-  <button id="fabMenu" class="fab" title="Menu (Tab)">☰</button>
+  <button id="fabMenu" class="fab" data-i18n-attr="title:menu_tab_title" title="Menu (Tab)">☰</button>
   <div id="gbar">
     <div class="gbar-top">
       <span class="gtitle" id="gbTitle"></span>
@@ -253,36 +253,36 @@
       <div class="gbar-score" id="gbScore"></div>
     </div>
     <div class="gbar-actions">
-      <button id="gbResume" class="primary lg">▶ Riprendi</button>
-      <button id="gbRematch" class="good hidden">↻ Rivincita</button>
-      <button id="gbOffline" class="ghost hidden" style="border-color:#fb7185;color:#fb7185">▶ Gioca offline</button>
-      <button id="gbToRoom" class="ghost hidden">⟲ Sala d'attesa</button>
-      <button id="gbHint" class="ghost hidden">💡 Suggerimento</button>
-      <button id="gbInvite" class="ghost">🔗 Invita</button>
-      <button id="gbFs" class="ghost">⛶ Schermo intero</button>
+      <button id="gbResume" class="primary lg" data-i18n="btn_resume">▶ Riprendi</button>
+      <button id="gbRematch" class="good hidden" data-i18n="btn_rematch">↻ Rivincita</button>
+      <button id="gbOffline" class="ghost hidden" data-i18n="btn_offline_short" style="border-color:#fb7185;color:#fb7185">▶ Gioca offline</button>
+      <button id="gbToRoom" class="ghost hidden" data-i18n="btn_waiting_room">⟲ Sala d'attesa</button>
+      <button id="gbHint" class="ghost hidden" data-i18n="btn_suggestion">💡 Suggerimento</button>
+      <button id="gbInvite" class="ghost" data-i18n="btn_invite">🔗 Invita</button>
+      <button id="gbFs" class="ghost" data-i18n="btn_fullscreen">⛶ Schermo intero</button>
       <span class="grow"></span>
-      <button id="gbLeave" class="ghost">✕ Esci dal gioco</button>
+      <button id="gbLeave" class="ghost" data-i18n="btn_leave_game">✕ Esci dal gioco</button>
     </div>
     <div class="gbar-body"><div class="gbar-slot" id="gbSlot"></div></div>
     <div class="gbar-foot">
-      <span><span class="kbd">Tab</span>menu</span>
-      <span><span class="kbd">Esc</span>chiudi</span>
+      <span><span class="kbd">Tab</span><span data-i18n="foot_menu">menu</span></span>
+      <span><span class="kbd">Esc</span><span data-i18n="foot_close">chiudi</span></span>
       <span id="gbCtrlHint"></span>
       <span class="grow"></span>
-      <span class="gbar-paused hidden" id="gbPaused">⏸ In pausa</span>
+      <span class="gbar-paused hidden" id="gbPaused" data-i18n="paused">⏸ In pausa</span>
     </div>
   </div>
   <div id="toasts"></div>
-  <div class="lock-hint" id="lockHint">🖱 Clicca per catturare il mouse</div>
+  <div class="lock-hint" id="lockHint" data-i18n="lock_hint">🖱 Clicca per catturare il mouse</div>
 
   <!-- GAMERCARD MODAL -->
   <div class="modal-bg" id="modal">
     <div class="modal">
-      <h2>La tua gamercard</h2>
-      <input id="mName" placeholder="Nome" maxlength="16" style="width:100%">
+      <h2 data-i18n="gamercard_title">La tua gamercard</h2>
+      <input id="mName" data-i18n-attr="placeholder:name" placeholder="Nome" maxlength="16" style="width:100%">
       <div class="picker" id="avPicker"></div>
       <div class="picker" id="colPicker"></div>
-      <div class="row" style="justify-content:flex-end"><button id="mSave" class="primary">Salva</button></div>
+      <div class="row" style="justify-content:flex-end"><button id="mSave" class="primary" data-i18n="save">Salva</button></div>
     </div>
   </div>
 </div>
@@ -299,10 +299,12 @@ import I18N from '/nucleo-i18n.js';   // OS-wide language signal: lets the app r
 const $ = s => document.querySelector(s);
 const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
 const show = (sel, on) => $(sel).classList.toggle('hidden', !on);
-const lang = () => (localStorage.getItem('anima.lang') === 'en' ? 'en' : 'it');
-// Bilingual helper — same signal the app already reads for ANIMA (anima.lang). Pass IT first, EN second.
-// Read live (not cached) so a language change mid-session is picked up by the next render/relabel.
-const T = (it, en) => (lang() === 'en' ? en : it);
+// Centralized i18n: `t(key, vars)` builds every user-facing string from the games catalog (shared
+// `core` keys fall through). `lang()` still exposes the live 'it'/'en' code for the non-UI paths that
+// need it (ANIMA `&lang=`, the option-label map). boot() awaits I18N.init('games'), which loads the
+// catalog, paints the [data-i18n] markup, installs the observer, and live-switches on an OS language change.
+const t = I18N.scope('games');
+const lang = () => I18N.lang;
 
 let CATALOG = [], STATS = {};
 let play = null, harness = null, def = null, profile = P.getProfile();
@@ -326,9 +328,9 @@ async function animaSay(q, mode = 'off') {
 function paintCard() {
   $('#cardAv').textContent = profile.avatar; $('#cardAv').style.background = profile.color + '33';
   $('#cardName').textContent = profile.name;
-  const t = P.summarize(STATS, '_total');
-  const wls = T(`${t.w}V ${t.l}S ${t.d}P`, `${t.w}W ${t.l}L ${t.d}D`);
-  $('#cardStat').textContent = t.games ? `${wls} · ${t.winRate}%${t.best > 1 ? ' · 🔥' + t.best : ''}` : T('Nessuna partita', 'No games yet');
+  const rec = P.summarize(STATS, '_total');
+  const wls = t('record', { w: rec.w, l: rec.l, d: rec.d });
+  $('#cardStat').textContent = rec.games ? `${wls} · ${rec.winRate}%${rec.best > 1 ? ' · 🔥' + rec.best : ''}` : t('no_games');
 }
 function openCard() {
   $('#mName').value = profile.name;
@@ -346,7 +348,7 @@ async function loadCatalog() {
   const cat = await FS.readJSON('/system/registry/games.json');
   CATALOG = (cat && cat.games) || [];
   const wrap = $('#catalog'); wrap.innerHTML = '';
-  if (!CATALOG.length) { wrap.appendChild(el('div', 'empty', T('Catalogo vuoto.', 'Catalog is empty.'))); return; }
+  if (!CATALOG.length) { wrap.appendChild(el('div', 'empty', t('catalog_empty'))); return; }
   for (const g of CATALOG) {
     const card = el('div', 'card cat-' + (g.category || 'classic'));
     card.appendChild(el('div', 'accent'));
@@ -357,11 +359,11 @@ async function loadCatalog() {
     meta.appendChild(el('span', 'badge', `${g.minPlayers}-${g.maxPlayers}P`));
     if (g.ai) meta.appendChild(el('span', 'badge', 'vs ANIMA'));
     if (g.realtime) meta.appendChild(el('span', 'badge', 'real-time'));
-    const st = P.summarize(STATS, g.id); if (st.games) meta.appendChild(el('span', 'badge', T(`${st.w}V-${st.l}S`, `${st.w}W-${st.l}L`)));
+    const st = P.summarize(STATS, g.id); if (st.games) meta.appendChild(el('span', 'badge', t('record_short', { w: st.w, l: st.l })));
     card.appendChild(meta);
     const actions = el('div', 'row'); actions.style.marginTop = '12px';
-    const bHost = el('button', 'primary', '▶ ' + T('Crea', 'Create')); bHost.onclick = () => hostGame(g, false); actions.appendChild(bHost);
-    if (g.ai) { const bAI = el('button', null, '🤖 ' + T('Vs ANIMA', 'Vs ANIMA')); bAI.onclick = () => hostGame(g, true); actions.appendChild(bAI); }
+    const bHost = el('button', 'primary', '▶ ' + t('create')); bHost.onclick = () => hostGame(g, false); actions.appendChild(bHost);
+    if (g.ai) { const bAI = el('button', null, '🤖 ' + t('vs_anima')); bAI.onclick = () => hostGame(g, true); actions.appendChild(bAI); }
     card.appendChild(actions); wrap.appendChild(card);
   }
 }
@@ -376,7 +378,7 @@ async function loadRooms() {
     if (!_firstLoadDone) {
       const wait = _settleUntil - Date.now();
       if (wait > 0) {                   // show a placeholder and wait out the boot storm, then load cleanly
-        const wrap = $('#rooms'); if (wrap) { wrap.innerHTML = ''; wrap.appendChild(el('div', 'empty', T('Carico la lobby…', 'Loading lobby…'))); }
+        const wrap = $('#rooms'); if (wrap) { wrap.innerHTML = ''; wrap.appendChild(el('div', 'empty', t('loading_lobby'))); }
         await new Promise(r => setTimeout(r, wait));
       }
     }
@@ -388,7 +390,7 @@ async function loadRoomsInner() {
   const p = new NucleoPlay({ profile });
   let rooms = []; try { rooms = await p.listRooms(); } catch {}
   const wrap = $('#rooms'); wrap.innerHTML = '';
-  if (!rooms.length) { wrap.appendChild(el('div', 'empty', T('Nessuna partita aperta. Creane una qui sopra.', 'No open games. Create one above.'))); return; }
+  if (!rooms.length) { wrap.appendChild(el('div', 'empty', t('rooms_empty_full'))); return; }
   for (const r of rooms) {
     const gd = CATALOG.find(g => g.id === r.gameId);
     const row = el('div', 'room');
@@ -399,7 +401,7 @@ async function loadRoomsInner() {
     sub.textContent = `${(gd && gd.name) || r.gameId} · ${r.seats.length}/${r.maxSeats}${r.spectators ? ' · 👁' + r.spectators : ''}`;
     info.appendChild(sub); row.appendChild(info);
     const full = r.seats.length >= r.maxSeats;
-    const b = el('button', full ? 'ghost' : 'primary', full ? ('👁 ' + T('Guarda', 'Watch')) : T('Entra', 'Join'));
+    const b = el('button', full ? 'ghost' : 'primary', full ? ('👁 ' + t('watch')) : t('join'));
     b.onclick = () => joinGame(r.id, full); row.appendChild(b);
     wrap.appendChild(row);
   }
@@ -418,7 +420,7 @@ async function joinGame(roomId, spectate) {
   let done = false;
   play.on('ready', async ({ isHost }) => { if (!isHost && play.gameId && !done) { done = true; await setupSession(play.gameId); gotoPhase('waiting'); } });
   await play.join(roomId, { spectator: !!spectate });
-  sys(spectate ? T('Entri come spettatore…', 'Joining as spectator…') : T('Connessione…', 'Connecting…'));
+  sys(spectate ? t('joining_spectator') : t('connecting'));
 }
 
 const _loaded = new Set();
@@ -480,7 +482,7 @@ function enterImmersive() {
   document.body.classList.add('immersive');
   $('#gbSlot').appendChild(asideEl);                 // roster + chat move into the bar
   requestFs();                                       // works on a gesture (host Start); guests retry on input
-  if (!shownIntro) { shownIntro = true; toast('🎮 ' + (def ? def.name : T('Gioco', 'Game')) + T(' — premi Tab o ☰ per il menu', ' — press Tab or ☰ for the menu')); }
+  if (!shownIntro) { shownIntro = true; toast('🎮 ' + (def ? def.name : t('game')) + t('intro_menu_hint')); }
   if (wantsLock() && !play.spectator) showLockHint(true);   // only when the game actually wants the mouse now (combat), not the hub
   // Re-measure after the chrome collapses (reflow) and after a 3D game finishes its async renderer
   // load, so the board fills the screen with no first-frame flash.
@@ -556,7 +558,7 @@ function renderBar() {
   $('#gbTitle').textContent = def ? def.name : '';
   $('#gbCode').textContent = play ? ('#' + play.roomId.replace(/^r_/, '')) : '';
   $('#gbCtrlHint').textContent = ctrlHintText();
-  $('#gbFs').textContent = document.fullscreenElement ? ('⛶ ' + T('Esci da schermo intero', 'Exit fullscreen')) : ('⛶ ' + T('Schermo intero', 'Fullscreen'));
+  $('#gbFs').textContent = document.fullscreenElement ? t('btn_exit_fullscreen') : t('btn_fullscreen');
   renderBarScore(); syncBarButtons(); renderRoster();
 }
 function renderBarScore() {
@@ -572,7 +574,7 @@ function renderBarScore() {
     });
   } else {
     const turnSeat = st.seats ? st.seats[st.turn] : null;
-    for (const r of players) { const pip = el('div', 'pip' + (r.seat === turnSeat ? ' turn' : '')); const av = el('div', 'av', r.avatar || '👾'); av.style.background = (r.color || '#334') + '44'; pip.appendChild(av); pip.appendChild(el('span', null, r.name + (r.seat === play.seat ? T(' (tu)', ' (you)') : ''))); wrap.appendChild(pip); }
+    for (const r of players) { const pip = el('div', 'pip' + (r.seat === turnSeat ? ' turn' : '')); const av = el('div', 'av', r.avatar || '👾'); av.style.background = (r.color || '#334') + '44'; pip.appendChild(av); pip.appendChild(el('span', null, r.name + (r.seat === play.seat ? t('suffix_you') : ''))); wrap.appendChild(pip); }
   }
 }
 function syncBarButtons() {
@@ -580,13 +582,13 @@ function syncBarButtons() {
   show('#gbRematch', host && isOver);
   show('#gbToRoom', host && playing);
   show('#gbHint', playing && !spec && !!(def && def.aiCapable));
-  $('#gbResume').textContent = isOver ? ('✓ ' + T('Chiudi menu', 'Close menu')) : ('▶ ' + T('Riprendi', 'Resume'));
+  $('#gbResume').textContent = isOver ? t('btn_close_menu') : t('btn_resume');
 }
 function ctrlHintText() {
   if (!def) return '';
-  if (def.capturesPointer) return '🖱 ' + T('Mouse o W/S · ↑/↓', 'Mouse or W/S · ↑/↓');
-  if (def.padMode === 'cursor') return '⌨ ' + T('Frecce / tocco · A conferma', 'Arrows / tap · A to confirm');
-  return '👆 ' + T('Tocca per giocare', 'Tap to play');
+  if (def.capturesPointer) return '🖱 ' + t('ctrl_mouse');
+  if (def.padMode === 'cursor') return '⌨ ' + t('ctrl_arrows');
+  return '👆 ' + t('ctrl_tap');
 }
 function toast(text) {
   if (!text) return;
@@ -598,15 +600,15 @@ function toast(text) {
 // ---- waiting room (transversal) ------------------------------------------------------------
 function renderWaiting() {
   if (phase !== 'waiting') return;
-  $('#waitTitle').textContent = play.spectator ? T(`Stai per guardare ${def.name}`, `You're about to watch ${def.name}`) : T(`Sala d'attesa · ${def.name}`, `Waiting room · ${def.name}`);
+  $('#waitTitle').textContent = play.spectator ? t('watch_title', { game: def.name }) : t('waiting_title', { game: def.name });
   const players = (play.roster || []).filter(r => r.seat >= 0).sort((a, b) => a.seat - b.seat);
   const cards = $('#seatCards'); cards.innerHTML = '';
   for (let s = 0; s < play.maxSeats; s++) {
     const r = players.find(p => p.seat === s);
     const card = el('div', 'seatcard' + (r ? '' : ' empty'));
     const big = el('div', 'big', r ? (r.avatar || '👾') : '＋'); if (r) big.style.background = (r.color || '#334') + '44'; card.appendChild(big);
-    card.appendChild(el('div', null, r ? (r.name + (r.ai ? ' 🤖' : '') + (r.seat === play.seat ? T(' (tu)', ' (you)') : '')) : T('Posto libero', 'Open seat')));
-    if (r && !r.ai) card.appendChild(el('div', 'ready' + (r.ready ? '' : ' no'), r.ready ? T('✓ pronto', '✓ ready') : T('… non pronto', '… not ready')));
+    card.appendChild(el('div', null, r ? (r.name + (r.ai ? ' 🤖' : '') + (r.seat === play.seat ? t('suffix_you') : '')) : t('open_seat')));
+    if (r && !r.ai) card.appendChild(el('div', 'ready' + (r.ready ? '' : ' no'), r.ready ? t('seat_ready') : t('seat_not_ready')));
     if (!r && play.isHost && def.aiCapable) { const b = el('button', 'ghost', '+ ANIMA'); b.onclick = () => { play.addAI('ANIMA'); }; card.appendChild(b); }
     cards.appendChild(card);
   }
@@ -622,25 +624,25 @@ function renderWaiting() {
   if (play.isHost) {
     const enough = players.length >= def.minPlayers;
     $('#startBtn').disabled = !enough;
-    $('#waitHint').textContent = play.spectator ? T('Attendi che la partita inizi…', 'Waiting for the game to start…')
-      : enough ? (allReady ? T('Tutti pronti — premi Inizia.', 'Everyone ready — press Start.') : T('Puoi iniziare, oppure attendi che tutti siano pronti.', 'You can start now, or wait until everyone is ready.'))
-        : T(`Servono almeno ${def.minPlayers} giocatori. Invita qualcuno o aggiungi ANIMA.`, `At least ${def.minPlayers} players needed. Invite someone or add ANIMA.`);
+    $('#waitHint').textContent = play.spectator ? t('wait_for_start')
+      : enough ? (allReady ? t('all_ready') : t('can_start'))
+        : t('need_players', { n: def.minPlayers });
   } else {
-    $('#waitHint').textContent = play.spectator ? T('Attendi che la partita inizi…', 'Waiting for the game to start…') : T("In attesa che l'host avvii la partita…", 'Waiting for the host to start the game…');
+    $('#waitHint').textContent = play.spectator ? t('wait_for_start') : t('wait_for_host');
   }
 }
 // Game options are declared (in Italian) inside each game file's defineGame(); we translate only the
-// DISPLAY label here, never the value, so game logic and stored options are untouched. Unknown labels
-// (e.g. pure numbers like "5"/"7") pass through verbatim.
-const OPT_EN = {
-  'Mente avversario': 'Opponent mind', 'Mente ANIMA': 'ANIMA mind',
-  'Classica (offline)': 'Classic (offline)', 'LLM online (Grok/Claude)': 'Online LLM (Grok/Claude)',
-  'ANIMA-LLM (online)': 'ANIMA-LLM (online)',
-  'Difficoltà ANIMA': 'ANIMA difficulty', 'Difficoltà': 'Difficulty',
-  'Facile': 'Easy', 'Medio': 'Medium', 'Difficile': 'Hard',
-  'Punti per vincere': 'Points to win', 'Power-up': 'Power-up',
+// DISPLAY label here via a fixed Italian-label → catalog-key map, never the value, so game logic and
+// stored options are untouched. Unknown labels (e.g. pure numbers like "5"/"7") pass through verbatim.
+const OPT_KEY = {
+  'Mente avversario': 'opt_mente_avversario', 'Mente ANIMA': 'opt_mente_anima',
+  'Classica (offline)': 'opt_classica_offline', 'LLM online (Grok/Claude)': 'opt_llm_online',
+  'ANIMA-LLM (online)': 'opt_anima_llm_online',
+  'Difficoltà ANIMA': 'opt_difficolta_anima', 'Difficoltà': 'opt_difficolta',
+  'Facile': 'opt_facile', 'Medio': 'opt_medio', 'Difficile': 'opt_difficile',
+  'Punti per vincere': 'opt_punti_per_vincere', 'Power-up': 'opt_powerup',
 };
-const optLabel = (s) => (lang() === 'en' && OPT_EN[s] != null) ? OPT_EN[s] : s;
+const optLabel = (s) => OPT_KEY[s] ? t(OPT_KEY[s]) : s;
 function buildOptions() {
   const form = $('#optsForm'); form.innerHTML = '';
   for (const o of def.options) {
@@ -665,14 +667,14 @@ function collectOptions() {
 function wireRoomOnce() {
   if (wiredRoom) return; wiredRoom = true;
   play.on('roster', () => { renderRoster(); renderWaiting(); if (barOpen) renderBar(); });
-  play.on('peer', ({ name, spectator }) => { renderRoster(); renderWaiting(); sys(`${name} ${spectator ? T('👁 guarda', '👁 watching') : T('è entrato', 'joined')}`); if (play.isHost) { play.setPhase(phase === 'lobby' ? 'waiting' : phase); if (phase === 'playing') harness.resync(); } });
-  play.on('left', () => { renderRoster(); renderWaiting(); if (barOpen) renderBar(); sys(T('Un giocatore è uscito', 'A player left')); });
+  play.on('peer', ({ name, spectator }) => { renderRoster(); renderWaiting(); sys(`${name} ${spectator ? t('peer_watching') : t('peer_joined')}`); if (play.isHost) { play.setPhase(phase === 'lobby' ? 'waiting' : phase); if (phase === 'playing') harness.resync(); } });
+  play.on('left', () => { renderRoster(); renderWaiting(); if (barOpen) renderBar(); sys(t('player_left')); });
   play.on('phase', ({ phase: p }) => { if (p && p !== phase) gotoPhase(p); });
   play.on('message', ({ data }) => { if (data && data.k === 'state' && phase !== 'playing') gotoPhase('playing'); if (barOpen) renderBarScore(); });
   play.on('chat', ({ name, avatar, text }) => addMsg(avatar, name, text));
   play.on('react', ({ emoji }) => floatReact(emoji));
-  play.on('typing', ({ name, on }) => { $('#typing').textContent = on ? T(`${name} sta scrivendo…`, `${name} is typing…`) : ''; });
-  play.on('error', () => sys(T('⚠ Connessione P2P fallita (isolamento AP?).', '⚠ P2P connection failed (AP isolation?).')));
+  play.on('typing', ({ name, on }) => { $('#typing').textContent = on ? t('typing', { name }) : ''; });
+  play.on('error', () => sys(t('p2p_failed')));
 }
 
 // ---- buttons -------------------------------------------------------------------------------
@@ -684,7 +686,7 @@ $('#offlineBtn').onclick = () => {
   show('#offlineBtn', false);
   lastOpts = { ...lastOpts, mente: 'classica' };
   const m = $('#opt_mente'); if (m) m.value = 'classica';
-  sys(T('▶ Avvio in modalità CLASSICA (offline) su tua scelta esplicita — NON è Grok.', '▶ Starting in CLASSIC mode (offline) by your explicit choice — this is NOT Grok.'));
+  sys(t('offline_start_notice'));
   doStartMatch(lastOpts, grokFailRematch);
 };
 $('#readyBtn').onclick = () => { const me = play.roster.find(r => r.peerId === play.peerId); const next = !(me && me.ready); play.setReady(next); $('#readyBtn').classList.toggle('good', next); renderWaiting(); };
@@ -693,8 +695,8 @@ $('#readyBtn').onclick = () => { const me = play.roster.find(r => r.peerId === p
 const brainUI = {
   sys, taunt: animaMsg, note: sys,
   ok(cfg, ms, brand) {
-    sys(T(`✅ ${LLM.providerLabel(cfg)} connesso in ${ms}ms · ${LLM.endpointHost(cfg)}.`, `✅ ${LLM.providerLabel(cfg)} connected in ${ms}ms · ${LLM.endpointHost(cfg)}.`));
-    if (brand !== 'Grok') sys(T(`ℹ︎ NB: è ${brand}, NON Grok di xAI. Per Grok vero: in teacher.json base "https://api.x.ai/v1", model "grok-2-latest", chiave xai-…`, `ℹ︎ Note: this is ${brand}, NOT xAI's Grok. For real Grok: in teacher.json set base "https://api.x.ai/v1", model "grok-2-latest", key xai-…`));
+    sys(t('llm_connected', { provider: LLM.providerLabel(cfg), ms, host: LLM.endpointHost(cfg) }));
+    if (brand !== 'Grok') sys(t('grok_note', { brand }));
     $('#status').textContent = `🧠 ${LLM.providerLabel(cfg)} @ ${LLM.endpointHost(cfg)}`;
   },
   fail: failGrok,
@@ -716,15 +718,15 @@ function doStartMatch(opts, rematch) {
 }
 function failGrok(reason) {
   brainCfg = null;
-  sys(T(`⛔ Modalità LLM BLOCCATA: ${reason} Nessun avversario offline al posto suo: la partita non parte.`, `⛔ LLM mode BLOCKED: ${reason} No offline opponent in its place: the game won't start.`));
-  $('#status').innerHTML = `<span style="color:#fb7185">${T(`⛔ LLM non disponibile — partita bloccata. ${reason}`, `⛔ LLM unavailable — game blocked. ${reason}`)}</span>`;
+  sys(t('llm_blocked', { reason }));
+  $('#status').innerHTML = `<span style="color:#fb7185">${t('llm_unavailable', { reason })}</span>`;
   show('#offlineBtn', true); show('#gbOffline', barOpen || immersive);
   if (barOpen) syncBarButtons();
   return false;
 }
 $('#toRoomBtn').onclick = () => { stopCoach(); play.setPhase('waiting'); gotoPhase('waiting'); };
 $('#hintBtn').onclick = () => doHint();
-$('#inviteBtn').onclick = async () => { const link = location.origin + '/apps/games/?join=' + play.roomId; try { await navigator.clipboard.writeText(link); sys(T('🔗 Invito copiato (codice ' + play.roomId.replace(/^r_/, '') + ')', '🔗 Invite copied (code ' + play.roomId.replace(/^r_/, '') + ')')); } catch { sys(T('Codice stanza: ', 'Room code: ') + play.roomId); } };
+$('#inviteBtn').onclick = async () => { const link = location.origin + '/apps/games/?join=' + play.roomId; try { await navigator.clipboard.writeText(link); sys(t('invite_copied', { code: play.roomId.replace(/^r_/, '') })); } catch { sys(t('room_code_label') + play.roomId); } };
 $('#leaveBtn').onclick = leaveRoom;
 
 // immersive game bar — delegates to the same handlers as the top bar so the Grok gating still applies
@@ -749,8 +751,8 @@ document.addEventListener('pointerlockchange', () => {
 function setupGamepad() {
   const vis = sel => !$(sel).classList.contains('hidden');
   gamepad = new GamepadManager({
-    onConnect: (g) => { $('#padChip').classList.remove('hidden'); if (phase !== 'lobby') sys(T('🎮 Controller collegato', '🎮 Controller connected') + (g.id ? ' (' + g.id.slice(0, 28) + ')' : '')); },
-    onDisconnect: () => { if (!gamepad.connected()) { $('#padChip').classList.add('hidden'); if (phase !== 'lobby') sys(T('🎮 Controller scollegato', '🎮 Controller disconnected')); } },
+    onConnect: (g) => { $('#padChip').classList.remove('hidden'); if (phase !== 'lobby') sys(t('pad_connected') + (g.id ? ' (' + g.id.slice(0, 28) + ')' : '')); },
+    onDisconnect: () => { if (!gamepad.connected()) { $('#padChip').classList.add('hidden'); if (phase !== 'lobby') sys(t('pad_disconnected')); } },
     onAxis: (x, y) => {
       if (phase !== 'playing' || barOpen || !harness || play.spectator || !def || def.padMode !== 'analog') return;
       const key = Math.sign(x) + ',' + Math.sign(y); if (key === lastAxisKey) return; lastAxisKey = key;   // forward only on change
@@ -779,7 +781,7 @@ function onGameOver(r) {
   if (isOver) return;   // fire once per match — stopCoach()/recordResult/animaSay below must never double-run
   isOver = true;
   const won = r.winner === play.seat;
-  const txt = r.winner === -1 ? T('🤝 Pareggio!', '🤝 Draw!') : (won ? T('🏆 Hai vinto!', '🏆 You won!') : T(`Vince ${nameOfSeat(r.winner)}`, `${nameOfSeat(r.winner)} wins`));
+  const txt = r.winner === -1 ? t('draw') : (won ? t('you_won') : t('seat_wins', { name: nameOfSeat(r.winner) }));
   $('#status').innerHTML = `<span class="${won ? 'win' : ''}">${txt}</span>`; sys(txt);
   stopCoach();
   // result banner in the game bar (the top status bar is hidden in immersive play)
@@ -789,12 +791,12 @@ function onGameOver(r) {
   if (play.isHost) { show('#rematchBtn', true); show('#toRoomBtn', true); }
   if (immersive) openBar(); else syncBarButtons();   // surface rematch/leave automatically
   if (play.seat >= 0 && !play.spectator) { const o = r.winner === -1 ? 'draw' : (won ? 'win' : 'loss'); P.recordResult(def.id, o).then(s => { STATS = s; paintCard(); }); }
-  const who = r.winner === -1 ? 'pareggio' : nameOfSeat(r.winner) + ' ha vinto';
-  animaSay(`Commenta in una frase breve e simpatica la fine di una partita a ${def.name}: ${who}.`).then(line => { if (line) animaMsg(line); });
+  const who = r.winner === -1 ? t('who_draw') : t('who_won', { name: nameOfSeat(r.winner) });
+  animaSay(t('prompt_gameover', { game: def.name, who })).then(line => { if (line) animaMsg(line); });
 }
 async function maybeBanter() {
-  const t = performance.now(); if (t - animaLast < 9000) return; animaLast = t;
-  const line = await animaSay(`Sei l'avversario in ${def.name}. Sfotti l'altro in una frase brevissima.`);
+  const now = performance.now(); if (now - animaLast < 9000) return; animaLast = now;
+  const line = await animaSay(t('prompt_banter', { game: def.name }));
   if (line) animaMsg(line);
 }
 
@@ -881,8 +883,8 @@ function startCoach(opts) {
   if (!brainCfg) return;   // gated by preflightBrain; defensive
   coach = new Brain({ harness, def, play, ui: brainUI, cfg: brainCfg });
   sys(mode === 'mover'
-    ? T(`🧠 ${LLM.providerLabel(brainCfg)} gioca: sceglie ogni mossa (a turni l'LLM gioca davvero).`, `🧠 ${LLM.providerLabel(brainCfg)} is playing: it picks every move (turn-based, the LLM really plays).`)
-    : T(`🧠 ${LLM.providerLabel(brainCfg)} allena lo stile tra un punto e l'altro (in tempo reale il movimento resta locale: un LLM non può muovere a 60fps).`, `🧠 ${LLM.providerLabel(brainCfg)} coaches the style between points (in real time the movement stays local: an LLM can't move at 60fps).`));
+    ? t('coach_mover', { provider: LLM.providerLabel(brainCfg) })
+    : t('coach_realtime', { provider: LLM.providerLabel(brainCfg) }));
   coach.start(opts);
 }
 
@@ -892,9 +894,9 @@ function renderRoster() {
   const wrap = $('#seats'); wrap.innerHTML = '';
   const players = (play.roster || []).filter(r => r.seat >= 0).sort((a, b) => a.seat - b.seat);
   const specs = (play.roster || []).filter(r => r.spectator);
-  wrap.appendChild(el('h4', null, T('Giocatori', 'Players')));
-  for (const r of players) { const row = el('div', 'seat'); const av = el('div', 'av', r.avatar || '👾'); av.style.background = (r.color || '#334') + '44'; row.appendChild(av); row.appendChild(el('span', null, r.name + (r.ai ? ' 🤖' : '') + (r.seat === play.seat ? T(' · tu', ' · you') : ''))); wrap.appendChild(row); }
-  if (specs.length) { wrap.appendChild(el('h4', null, T('Spettatori 👁', 'Spectators 👁'))); for (const r of specs) { const row = el('div', 'seat'); row.appendChild(el('div', 'av', r.avatar || '👁')); row.appendChild(el('span', null, r.name)); wrap.appendChild(row); } }
+  wrap.appendChild(el('h4', null, t('players')));
+  for (const r of players) { const row = el('div', 'seat'); const av = el('div', 'av', r.avatar || '👾'); av.style.background = (r.color || '#334') + '44'; row.appendChild(av); row.appendChild(el('span', null, r.name + (r.ai ? ' 🤖' : '') + (r.seat === play.seat ? t('suffix_you_dot') : ''))); wrap.appendChild(row); }
+  if (specs.length) { wrap.appendChild(el('h4', null, t('spectators'))); for (const r of specs) { const row = el('div', 'seat'); row.appendChild(el('div', 'av', r.avatar || '👁')); row.appendChild(el('span', null, r.name)); wrap.appendChild(row); } }
 }
 
 // ---- chat ----------------------------------------------------------------------------------
@@ -909,22 +911,22 @@ $('#chatform').onsubmit = async e => {
     addMsg(profile.avatar, profile.name, raw);
     if (raw === '/hint') return doHint();
     const q = raw.replace(/^@anima/i, '').trim();
-    animaMsg(await animaSay(q || 'Dammi un consiglio.', 'on') || T('(ANIMA non risponde ora)', '(ANIMA is not responding now)')); return;
+    animaMsg(await animaSay(q || t('prompt_advice'), 'on') || t('anima_no_reply')); return;
   }
   play.chat(raw);
 };
 $('#chatin').oninput = () => { if (!play) return; play.typing(true); clearTimeout(typingTimer); typingTimer = setTimeout(() => play.typing(false), 1500); };
 async function doHint() {
-  if (!harness || !harness.state || play.seat < 0) { animaMsg(T('Nessun suggerimento disponibile.', 'No hint available.')); return; }
+  if (!harness || !harness.state || play.seat < 0) { animaMsg(t('no_hint_available')); return; }
   let tip = null; try { tip = await def.ai(harness.state, play.seat, harness.api); } catch {}
-  if (tip == null) { animaMsg(T('Nessuna mossa suggerita.', 'No suggested move.')); return; }
+  if (tip == null) { animaMsg(t('no_move_suggested')); return; }
   const human = describeTip(tip);
-  animaMsg(await animaSay(`Suggerisci in una frase incoraggiante: ${human}`) || T(`Suggerimento: ${human}`, `Hint: ${human}`));
+  animaMsg(await animaSay(t('prompt_hint', { tip: human })) || t('hint_label', { tip: human }));
 }
 function describeTip(tip) {
-  if (def.id === 'tris' && typeof tip.cell === 'number') { return T(`gioca riga ${(tip.cell / 3 | 0) + 1}, colonna ${tip.cell % 3 + 1}.`, `play row ${(tip.cell / 3 | 0) + 1}, column ${tip.cell % 3 + 1}.`); }
-  if (def.id === 'forza4' && typeof tip.col === 'number') { return T(`lascia cadere nella colonna ${tip.col + 1}.`, `drop into column ${tip.col + 1}.`); }
-  return T('gioca la mossa evidenziata.', 'play the highlighted move.');
+  if (def.id === 'tris' && typeof tip.cell === 'number') { return t('tip_tris', { row: (tip.cell / 3 | 0) + 1, col: tip.cell % 3 + 1 }); }
+  if (def.id === 'forza4' && typeof tip.col === 'number') { return t('tip_forza4', { col: tip.col + 1 }); }
+  return t('tip_generic');
 }
 function addMsg(avatar, who, text) { const m = el('div', 'msg'); const a = el('span', null, avatar || '👤'); a.style.flex = 'none'; m.appendChild(a); m.appendChild(el('span', 'who', who + ':')); m.appendChild(el('span', null, text)); push(m); }
 function animaMsg(text) { const m = el('div', 'msg anima'); const a = el('span', null, '🧠'); a.style.flex = 'none'; m.appendChild(a); m.appendChild(el('span', 'who', 'ANIMA:')); m.appendChild(el('span', null, text)); push(m); }
@@ -945,61 +947,12 @@ function leaveRoom() {
   gotoPhase('lobby'); loadRooms();
 }
 
-// ---- language (bilingual via anima.lang) ---------------------------------------------------
-// Static chrome carries IT defaults in the HTML; relabelStatic() overwrites every fixed label/title/
-// placeholder in the active language, and the dynamic renderers (catalog, rooms, waiting, roster,
-// gamercard, bar) read T()/lang() live, so a single relabel() repaints the whole app with no reload.
-function relabelStatic() {
-  const en = lang() === 'en';
-  document.documentElement.setAttribute('lang', en ? 'en' : 'it');
-  document.title = T('Giochi', 'Games');
-  $('#app > header h1').textContent = '🎮 ' + T('Giochi', 'Games');
-  $('#padChip').title = T('Controller collegato', 'Controller connected');
-  $('#cardBtn').title = T('Modifica gamercard', 'Edit gamercard');
-  // lobby section headers + code-join controls
-  $('#secCreate').textContent = T('Crea una partita', 'Create a game');
-  $('#secOpen').textContent = T('Partite aperte sulla rete', 'Open games on the network');
-  $('#codeIn').placeholder = T('codice stanza', 'room code');
-  $('#codeJoin').textContent = T('Entra con codice', 'Join with code');
-  const re = $('#roomsEmpty'); if (re) re.textContent = T('Nessuna partita aperta.', 'No open games.');
-  // game bar (top) buttons
-  $('#hintBtn').textContent = '💡 ' + T('Hint', 'Hint');
-  $('#inviteBtn').textContent = '🔗 ' + T('Invita', 'Invite');
-  $('#readyBtn').textContent = '✓ ' + T('Pronto', 'Ready');
-  $('#startBtn').textContent = '▶ ' + T('Inizia', 'Start');
-  $('#offlineBtn').textContent = '▶ ' + T('Gioca offline (classica)', 'Play offline (classic)');
-  $('#rematchBtn').textContent = '↻ ' + T('Rivincita', 'Rematch');
-  $('#toRoomBtn').textContent = '⟲ ' + T('Sala', 'Lobby');
-  $('#leaveBtn').textContent = T('Esci', 'Leave');
-  $('#roomCode').title = T('Codice stanza', 'Room code');
-  // options box + chat
-  $('#optsBox h4').textContent = T('Impostazioni', 'Settings');
-  $('#chatin').placeholder = T('Messaggio o @anima…', 'Message or @anima…');
-  // fab + immersive game bar
-  $('#fabMenu').title = T('Menu (Tab)', 'Menu (Tab)');
-  $('#gbResume').textContent = isOver ? ('✓ ' + T('Chiudi menu', 'Close menu')) : ('▶ ' + T('Riprendi', 'Resume'));
-  $('#gbRematch').textContent = '↻ ' + T('Rivincita', 'Rematch');
-  $('#gbOffline').textContent = '▶ ' + T('Gioca offline', 'Play offline');
-  $('#gbToRoom').textContent = '⟲ ' + T("Sala d'attesa", 'Waiting room');
-  $('#gbHint').textContent = '💡 ' + T('Suggerimento', 'Hint');
-  $('#gbInvite').textContent = '🔗 ' + T('Invita', 'Invite');
-  $('#gbFs').textContent = document.fullscreenElement ? ('⛶ ' + T('Esci da schermo intero', 'Exit fullscreen')) : ('⛶ ' + T('Schermo intero', 'Fullscreen'));
-  $('#gbLeave').textContent = '✕ ' + T('Esci dal gioco', 'Leave game');
-  // game bar footer hints
-  const foot = $('#gbar .gbar-foot');
-  foot.children[0].lastChild.textContent = T('menu', 'menu');
-  foot.children[1].lastChild.textContent = T('chiudi', 'close');
-  $('#gbCtrlHint').textContent = ctrlHintText();
-  $('#gbPaused').textContent = '⏸ ' + T('In pausa', 'Paused');
-  $('#lockHint').textContent = '🖱 ' + T('Clicca per catturare il mouse', 'Click to capture the mouse');
-  // gamercard modal
-  $('#modal h2').textContent = T('La tua gamercard', 'Your gamercard');
-  $('#mName').placeholder = T('Nome', 'Name');
-  $('#mSave').textContent = T('Salva', 'Save');
-}
-// One entry point repaints everything; called at boot and whenever the OS language changes.
+// ---- language (centralized i18n engine) ----------------------------------------------------
+// Static chrome carries IT defaults + [data-i18n] annotations in the HTML; I18N.init('games') paints
+// them and its MutationObserver keeps late-inserted nodes translated. On an OS language change the
+// engine repaints every [data-i18n] BEFORE this onChange subscriber fires, so relabel() only has to
+// re-run the renderers that build strings in JS (catalog, rooms, waiting, roster, gamercard, bar).
 function relabel() {
-  relabelStatic();
   paintCard();
   // Re-translate the host options form (built once per session) so its labels follow the language too,
   // preserving any in-progress selections (rebuild → restore the current values).
@@ -1015,7 +968,7 @@ function relabel() {
 
 // ---- boot ----------------------------------------------------------------------------------
 (async function boot() {
-  relabelStatic();
+  await I18N.init('games');   // load core+games catalogs, paint [data-i18n], install observer + live-switch
   STATS = await P.loadStats(); paintCard();
   setupGamepad(); setupResize();
   await loadCatalog();
@@ -1027,8 +980,8 @@ function relabel() {
   if (q.get('join')) joinGame(q.get('join'), false);
   else if (q.get('spectate')) joinGame(q.get('spectate'), true);
   else if (q.get('host')) { const g = CATALOG.find(x => x.id === q.get('host')); if (g) hostGame(g, false); }
-  // Live OS-wide language sync: repaint the whole app when the language is changed elsewhere (Settings,
-  // another open window) — no reload. relabel() re-reads lang() and re-runs the current renders.
+  // Live OS-wide language sync: when the language changes elsewhere (Settings, another open window),
+  // the engine repaints every [data-i18n] first, then relabel() re-runs the JS-built renders — no reload.
   I18N.onChange(() => relabel());
 })();
 </script>

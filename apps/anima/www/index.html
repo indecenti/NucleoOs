@@ -832,7 +832,7 @@
               </div>
               <div class="set-field">
                 <div class="f-tx"><label id="s-webvoice">Voce browser</label><span class="f-sub" data-i18n data-it="Leggi le risposte ad alta voce con la voce del browser (anche online e lunghe)." data-en="Read replies aloud with the browser voice (also online/long replies).">Leggi le risposte ad alta voce con la voce del browser.</span></div>
-                <div class="f-ctl"><div class="seg2" id="set-webvoice"><button data-wv="0">No</button><button data-wv="1">Sì</button></div></div>
+                <div class="f-ctl"><div class="seg2" id="set-webvoice"><button data-wv="0">No</button><button data-wv="1" data-i18n data-it="Sì" data-en="Yes">Sì</button></div></div>
               </div>
             </div>
           </div>
@@ -845,7 +845,7 @@
             <div class="set-card">
               <div class="set-field">
                 <div class="f-tx"><label id="s-mode">Modalità</label><span class="f-sub" data-i18n data-it="Dove gira l’intelligenza: dispositivo, browser o online." data-en="Where the intelligence runs: device, browser or online.">Dove gira l’intelligenza: dispositivo, browser o online.</span></div>
-                <div class="f-ctl"><div class="seg2 acc" id="set-mode"><button data-m="off">Offline</button><button data-m="on">Ibrida</button><button data-m="local">GPU locale</button><button data-m="edge" title="ANIMA offline gira interamente in questo browser (WebAssembly): scarica il cervello una volta dal dispositivo, poi risponde in locale anche senza Cardputer — stesse identiche risposte.">Browser</button><button data-m="only">Online</button></div></div>
+                <div class="f-ctl"><div class="seg2 acc" id="set-mode"><button data-m="off">Offline</button><button data-m="on" data-i18n data-it="Ibrida" data-en="Hybrid">Ibrida</button><button data-m="local" data-i18n data-it="GPU locale" data-en="Local GPU">GPU locale</button><button data-m="edge" title="ANIMA offline gira interamente in questo browser (WebAssembly): scarica il cervello una volta dal dispositivo, poi risponde in locale anche senza Cardputer — stesse identiche risposte.">Browser</button><button data-m="only">Online</button></div></div>
               </div>
               <div class="set-field" style="border:none">
                 <div class="f-tx" style="flex:1"><span class="f-sub" data-i18n data-it="Catena di fallback: Online (cloud) → GPU locale → Browser (WASM + indice web) → Cardputer. Si scala sul Cardputer solo come ultima rete. Digita /guida in chat per la mappa completa." data-en="Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Cardputer. It scales onto the Cardputer only as the last net. Type /guide in chat for the full map.">Catena di fallback: Online → GPU locale → Browser (WASM + indice web) → Cardputer. Digita /guida per la mappa completa.</span></div>
@@ -879,11 +879,11 @@
               </div>
               <div class="set-field">
                 <div class="f-tx"><label id="s-sugg">Suggerimenti</label><span class="f-sub" data-i18n data-it="Mostra esempi di domanda sotto le risposte." data-en="Show example prompts under replies.">Mostra esempi di domanda sotto le risposte.</span></div>
-                <div class="f-ctl"><div class="seg2" id="set-sugg"><button data-g="0">No</button><button data-g="1">Sì</button></div></div>
+                <div class="f-ctl"><div class="seg2" id="set-sugg"><button data-g="0">No</button><button data-g="1" data-i18n data-it="Sì" data-en="Yes">Sì</button></div></div>
               </div>
               <div class="set-field">
                 <div class="f-tx"><label id="s-compact">Compatta contesto</label><span class="f-sub" data-i18n data-it="Riassume i turni vecchi per restare leggera." data-en="Summarises old turns to stay light.">Riassume i turni vecchi per restare leggera.</span></div>
-                <div class="f-ctl"><div class="seg2" id="set-compact"><button data-c="0">No</button><button data-c="1">Sì</button></div></div>
+                <div class="f-ctl"><div class="seg2" id="set-compact"><button data-c="0">No</button><button data-c="1" data-i18n data-it="Sì" data-en="Yes">Sì</button></div></div>
               </div>
             </div>
           </div>
@@ -897,15 +897,15 @@
               </div>
               <div class="set-field">
                 <div class="f-tx"><label id="s-agents" data-i18n data-it="Agenti (Online)" data-en="Agents (Online)">Agenti (Online)</label><span class="f-sub" data-i18n data-it="Per compiti complessi (file, app, web, stato device) usa il runtime multi-agente. Funziona con Claude o Grok." data-en="For complex tasks (files, apps, web, device state) use the multi-agent runtime. Works with Claude or Grok.">Per compiti complessi usa il runtime multi-agente. Funziona con Claude o Grok.</span></div>
-                <div class="f-ctl"><div class="seg2" id="set-agents"><button data-a="0">No</button><button data-a="1">Sì</button></div></div>
+                <div class="f-ctl"><div class="seg2" id="set-agents"><button data-a="0">No</button><button data-a="1" data-i18n data-it="Sì" data-en="Yes">Sì</button></div></div>
               </div>
               <div class="set-field">
                 <div class="f-tx"><label id="s-agentauto" data-i18n data-it="Auto-approva azioni agente" data-en="Auto-approve agent actions">Auto-approva azioni agente</label><span class="f-sub" data-i18n data-it="Esegue le azioni dell'agente senza chiedere conferma (sconsigliato)." data-en="Run the agent's actions without asking (not recommended).">Esegue le azioni dell'agente senza chiedere conferma.</span></div>
-                <div class="f-ctl"><div class="seg2" id="set-agentauto"><button data-aa="0">No</button><button data-aa="1">Sì</button></div></div>
+                <div class="f-ctl"><div class="seg2" id="set-agentauto"><button data-aa="0">No</button><button data-aa="1" data-i18n data-it="Sì" data-en="Yes">Sì</button></div></div>
               </div>
               <div class="set-field">
                 <div class="f-tx"><label id="s-agentweb" data-i18n data-it="Ricerca web (agente)" data-en="Web search (agent)">Ricerca web (agente)</label><span class="f-sub" data-i18n data-it="Consente all'agente di cercare sul web." data-en="Let the agent search the web.">Consente all'agente di cercare sul web.</span></div>
-                <div class="f-ctl"><div class="seg2" id="set-agentweb"><button data-aw="0">No</button><button data-aw="1">Sì</button></div></div>
+                <div class="f-ctl"><div class="seg2" id="set-agentweb"><button data-aw="0">No</button><button data-aw="1" data-i18n data-it="Sì" data-en="Yes">Sì</button></div></div>
               </div>
             </div>
           </div>
@@ -925,7 +925,7 @@
         <!-- FORGE -->
         <div class="tabpane" data-pane="forge" role="tabpanel" hidden>
           <div class="set-section">
-            <h4 id="h-models">Modelli IA — Forge</h4>
+            <h4 id="h-models" data-i18n data-it="Modelli IA — Forge" data-en="AI Models — Forge">Modelli IA — Forge</h4>
             <div class="card-note" id="s-models-hint" data-i18n data-it="Installa un modello IA una volta: poi gira nel TUO browser, offline, senza cloud. Sorgente: prima Internet (CDN); se manca la rete, la SD del Cardputer. Ogni parte è verificata (SHA-256) e conservata, quindi se la connessione cade riprende da sola. Un’installazione alla volta." data-en="Install an AI model once: it then runs in YOUR browser, offline, no cloud. Source: the internet (CDN) first; with no network, the Cardputer SD. Every part is checksum-verified (SHA-256) and kept, so a dropped connection resumes by itself. One install at a time.">Installa un modello IA una volta: poi gira nel TUO browser, offline, senza cloud. Sorgente: prima Internet (CDN); se manca la rete, la SD del Cardputer. Ogni parte è verificata (SHA-256) e conservata, quindi se la connessione cade riprende da sola. Un'installazione alla volta.</div>
             <ol class="card-note" id="s-models-steps" style="margin:8px 0 4px;padding-left:20px;line-height:1.6" data-i18n
               data-it="<li>Scegli un modello qui sotto — “GPU” richiede WebGPU (più veloce), “CPU” gira ovunque.</li><li>Premi <b>Installa</b>: durante il download il resto di NucleoOS attende — puoi solo guardare o <b>annullare</b>.</li><li>A fine installazione il modello è pronto offline: stacca pure la rete."
@@ -1961,7 +1961,7 @@
         }catch{}
       }
       const txt = await m.translateLocal(q, lang);            // GPU run (downloads the model on first use)
-      if(txt) return { reply:txt, tier:'M4-local', intent:'translate', trace:'GPU locale · WebLLM' };
+      if(txt) return { reply:txt, tier:'M4-local', intent:'translate', trace:(lang==='en'?'Local GPU · WebLLM':'GPU locale · WebLLM') };
       return null;
     }
 
@@ -2499,7 +2499,7 @@
         const seed=wsx || await wsContext(q);   // Claude-Code <env>: seed the worker with the workspace tree + @-mentioned files
         const txt=await rt.run(q, history.slice(0,-1), { seed });   // prior turns (runtime appends q as the current user)
         if(!txt) return null;
-        return { reply:txt, intent:'agent', confidence:80, domain:'online', substrate:'M2', trace:'Agenti · orchestratore → worker' };
+        return { reply:txt, intent:'agent', confidence:80, domain:'online', substrate:'M2', trace:(lang==='en'?'Agents · orchestrator → worker':'Agenti · orchestratore → worker') };
       } finally { _agentThink=null; }
     }
 
@@ -3506,6 +3506,59 @@
         const kh=$('key-hint'); if(kh) kh.innerHTML = lang==='en'
           ? 'Weather and Wikipedia already work without a key. The key powers the online AI: better understanding, anti-error verification and "Online" mode. <b>Claude</b> answers straight from the browser (it doesn’t load the Cardputer). The key stays only on your device (SD), never in logs.'
           : 'Meteo e Wikipedia funzionano già senza chiave. La chiave serve all\'IA online: comprensione migliore, verifica anti-errore e modalità "Online". <b>Claude</b> risponde direttamente dal browser (non carica il Cardputer). La chiave resta solo sul tuo dispositivo (SD), mai nei log.'; }
+      // ---- static chrome OUTSIDE the settings panel's data-i18n loop, + attribute-only tooltips the loop
+      //      can't reach (it only sets innerHTML). Localised here so they follow the live language toggle. --
+      try{ const E=lang==='en';
+        const P=(id,prop,it,en)=>{ const el=$(id); if(el) el[prop]=E?en:it; };
+        const AL=(id,it,en)=>{ const el=$(id); if(el) el.setAttribute('aria-label',E?en:it); };
+        // header
+        P('palbtn','title','Comandi (Ctrl/⌘ K)','Commands (Ctrl/⌘ K)'); AL('palbtn','Tavolozza comandi','Command palette');
+        P('wsbtn','title','Workspace / file','Workspace / files');
+        P('dot','title','motore ANIMA','ANIMA engine');
+        P('gear','title','Impostazioni','Settings'); AL('gear','Impostazioni','Settings');
+        P('jump','title','Vai in fondo','Go to bottom');
+        AL('log','Conversazione','Conversation');
+        // composer + status bar
+        AL('q','Messaggio','Message');
+        P('q-mode','title','Cambia modalità','Switch mode');
+        P('q-lang','title','Cambia lingua','Switch language');
+        P('st-session','title','Conversazioni','Conversations');
+        P('ctx-meter','title','Contesto','Context');
+        { const s=$('send'); if(s && !s.classList.contains('stop')) s.textContent=E?'Send':'Invia'; }
+        { const k=document.querySelector('footer .keys'); if(k) k.innerHTML=E
+            ? '<kbd>⏎</kbd> send · <kbd>/</kbd> commands · <kbd>⌘K</kbd> palette · <kbd>?</kbd> help'
+            : '<kbd>⏎</kbd> invia · <kbd>/</kbd> comandi · <kbd>⌘K</kbd> tavolozza · <kbd>?</kbd> aiuto'; }
+        // file drawer
+        P('fd-close','title','Chiudi','Close'); AL('fd-close','Chiudi','Close');
+        P('fd-open','textContent','Apri…','Open…');
+        P('fd-refresh','textContent','↻ Aggiorna','↻ Refresh');
+        P('fd-newdir','textContent','+ Cartella','+ Folder');
+        P('fd-leave','textContent','Chiudi workspace','Close workspace');
+        // workspace picker
+        P('wp-title','textContent','Apri un workspace','Open a workspace');
+        AL('wp-x','Chiudi','Close');
+        P('wp-newdir','textContent','+ Nuova cartella','+ New folder');
+        P('wp-cancel','textContent','Annulla','Cancel');
+        P('wp-use','textContent','Usa questa cartella','Use this folder');
+        { const w=document.querySelector('.wspick'); if(w) w.setAttribute('aria-label',E?'Choose workspace':'Scegli workspace'); }
+        // settings-panel tooltips (title= — the data-i18n loop sets innerHTML only, never attributes)
+        { const b=$('set-mode'), eb=b&&b.querySelector('[data-m="edge"]'); if(eb) eb.title=E
+            ? 'ANIMA offline runs entirely in this browser (WebAssembly): it downloads the brain once from the device, then answers locally even without the Cardputer — the exact same answers.'
+            : 'ANIMA offline gira interamente in questo browser (WebAssembly): scarica il cervello una volta dal dispositivo, poi risponde in locale anche senza Cardputer — stesse identiche risposte.'; }
+        P('s-details','title',
+          'Mostra, sotto ogni risposta, quale strumento ANIMA ha usato per ragionare (motore, modello, passi). Riga = una riga richiudibile; Albero = già espanso.',
+          'Show, under every reply, which tool ANIMA used to reason (engine, model, steps). Line = a collapsible one-liner; Tree = expanded.');
+        P('s-edge','title',
+          'Il cervello offline di ANIMA scaricato in questo browser. In cache = funziona anche senza il Cardputer.',
+          'ANIMA’s offline brain downloaded in this browser. Cached = it works even without the Cardputer.');
+        P('edge-reload','title',
+          'Riscarica il cervello dal dispositivo (se l\'hai aggiornato) e ricostruisce la cache locale.',
+          'Re-download the brain from the device (if you updated it) and rebuild the local cache.');
+        P('localmodel-get','title',
+          'Scarica/carica ora il modello nel browser (mostra il progresso). Non obbligatorio: parte da solo al primo uso.',
+          'Download/load the model in the browser now (shows progress). Optional: it starts by itself on first use.');
+        { const g=$('localmodel-get'); if(g) g.textContent=E?'Download now':'Scarica ora'; }
+      }catch{}
       syncTitle(); if(typeof wsReflect==='function') wsReflect();
     }
 
@@ -3844,6 +3897,7 @@
   (function(){
     const CATALOG='/system/registry/model-catalog.json';
     let scrim=null, listEl=null, built=false, busy=null;  // busy = id of the model currently downloading
+    const T=(it,en)=>lang==='en'?en:it;                   // bilingual helper (reads module-scoped `lang`)
     const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     const mb=n=>n>=1e9?(n/1e9).toFixed(1)+' GB':(n/1e6).toFixed(0)+' MB';
     const readJson=p=>fetch('/api/fs/read?path='+encodeURIComponent(p)+'&t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null).catch(()=>null);
@@ -3870,13 +3924,14 @@
       document.head.appendChild(s); }
 
     function build(){ injectStyle(); scrim=document.createElement('div'); scrim.className='mm-scrim';
-      scrim.innerHTML=`<div class="mm-box" onclick="event.stopPropagation()"><div class="mm-h"><span>⬇</span><h3>Gestione modelli</h3><button class="mm-x" id="mmX">×</button></div><div class="mm-body" id="mmList"></div></div>`;
+      scrim.innerHTML=`<div class="mm-box" onclick="event.stopPropagation()"><div class="mm-h"><span>⬇</span><h3>${T('Gestione modelli','Model manager')}</h3><button class="mm-x" id="mmX">×</button></div><div class="mm-body" id="mmList"></div></div>`;
       scrim.addEventListener('click',()=>close()); document.body.appendChild(scrim);
       scrim.querySelector('#mmX').onclick=close; listEl=scrim.querySelector('#mmList'); built=true; }
 
-    async function open(){ if(!built) build(); scrim.classList.add('on'); listEl.innerHTML='<div class="mm-meta">Carico il catalogo…</div>';
+    async function open(){ if(!built) build(); { const h=scrim.querySelector('.mm-h h3'); if(h) h.textContent=T('Gestione modelli','Model manager'); }   // header is built once — re-localise on every open
+      scrim.classList.add('on'); listEl.innerHTML='<div class="mm-meta">'+T('Carico il catalogo…','Loading the catalogue…')+'</div>';
       const cat=await readJson(CATALOG);
-      if(!cat||!Array.isArray(cat.models)){ listEl.innerHTML='<div class="mm-meta">Catalogo non trovato ('+esc(CATALOG)+').</div>'; return; }
+      if(!cat||!Array.isArray(cat.models)){ listEl.innerHTML='<div class="mm-meta">'+T('Catalogo non trovato','Catalogue not found')+' ('+esc(CATALOG)+').</div>'; return; }
       listEl.innerHTML=''; for(const m of cat.models) listEl.appendChild(await card(m)); }
     function close(){ if(scrim&&scrim.classList.contains('on')){ scrim.classList.remove('on'); return true; } return false; }
 
@@ -3891,21 +3946,21 @@
 
     async function card(m){ const el=document.createElement('div'); el.className='mm-card';
       const st=await getState(m);
-      const badge = st.k==='ready'?'<span class="mm-badge ready">Pronto</span>'
-        : st.k==='partial'?'<span class="mm-badge partial">Parziale '+st.present+'/'+st.total+'</span>'
-        : st.k==='bundled'?'<span class="mm-badge ready">Già su SD</span>'
-        : st.k==='provision'?'<span class="mm-badge none">Da provvedere</span>'
-        : '<span class="mm-badge dl">Scaricabile</span>';
+      const badge = st.k==='ready'?'<span class="mm-badge ready">'+T('Pronto','Ready')+'</span>'
+        : st.k==='partial'?'<span class="mm-badge partial">'+T('Parziale','Partial')+' '+st.present+'/'+st.total+'</span>'
+        : st.k==='bundled'?'<span class="mm-badge ready">'+T('Già su SD','Already on SD')+'</span>'
+        : st.k==='provision'?'<span class="mm-badge none">'+T('Da provvedere','To provision')+'</span>'
+        : '<span class="mm-badge dl">'+T('Scaricabile','Downloadable')+'</span>';
       el.innerHTML=`<div class="mm-top"><div class="nm">${esc(m.name)}<small>${esc(m.purpose||'')}</small></div>${badge}</div>
         <div class="mm-meta">${esc((m.kind||'').toUpperCase())} · ~${mb(m.sizeBytes||0)} · ${esc(m.license||'')}${m.minVramMB?' · VRAM ≥'+m.minVramMB+'MB':''}</div>
         <div class="mm-prog" data-prog><i></i></div><div class="mm-note" data-note></div><div class="mm-act" data-act></div>`;
       const act=el.querySelector('[data-act]'), prog=el.querySelector('[data-prog]'), bar=prog.querySelector('i'), note=el.querySelector('[data-note]');
       renderAct();
       function renderAct(){ act.innerHTML='';
-        if(st.k==='bundled'||st.k==='ready'){ act.innerHTML='<span class="mm-meta">Nessuna azione necessaria.</span>'; return; }
-        if(st.k==='provision'){ const b=mkBtn('Come ottenerlo','',()=>{ note.classList.toggle('on'); note.textContent=(m.provision||'')+'\n\nFonte: '+(m.source||'')+'\nEsport ONNX: '+(m.onnxExport||''); }); act.appendChild(b); return; }
+        if(st.k==='bundled'||st.k==='ready'){ act.innerHTML='<span class="mm-meta">'+T('Nessuna azione necessaria.','No action needed.')+'</span>'; return; }
+        if(st.k==='provision'){ const b=mkBtn(T('Come ottenerlo','How to get it'),'',()=>{ note.classList.toggle('on'); note.textContent=(m.provision||'')+'\n\n'+T('Fonte: ','Source: ')+(m.source||'')+'\n'+T('Esport ONNX: ','ONNX export: ')+(m.onnxExport||''); }); act.appendChild(b); return; }
         // downloadable / resumable from CDN
-        const b=mkBtn(st.k==='partial'?'Riprendi':'Scarica','pri',()=>download(m,{act,prog,bar,note,renderAct})); if(busy&&busy!==m.id) b.disabled=true; act.appendChild(b);
+        const b=mkBtn(st.k==='partial'?T('Riprendi','Resume'):T('Scarica','Download'),'pri',()=>download(m,{act,prog,bar,note,renderAct})); if(busy&&busy!==m.id) b.disabled=true; act.appendChild(b);
         const info=document.createElement('span'); info.className='mm-meta'; info.textContent=st.present?('shard '+st.present+'/'+st.total):''; act.appendChild(info); }
       return el; }
 
@@ -3918,19 +3973,19 @@
         const MF=await import('./forge/model-fetch.js'); const MIO=await import('./forge/model-io.js');
         const base=(m.cdn&&m.cdn.baseUrl||'').replace(/\/$/,'');
         const man=await fetch(base+'/manifest.json').then(r=>r.ok?r.json():null).catch(()=>null);
-        if(!man||!Array.isArray(man.shards)){ ui.note.classList.add('on'); ui.note.textContent='Manifest non raggiungibile sul CDN configurato.'; busy=null; refresh(); return; }
+        if(!man||!Array.isArray(man.shards)){ ui.note.classList.add('on'); ui.note.textContent=T('Manifest non raggiungibile sul CDN configurato.','Manifest unreachable on the configured CDN.'); busy=null; refresh(); return; }
         const key=m.id+'@'+(man.revision||'r1');
         const dl=MF.makeModelDownload({ manifest:man, source:'cdn',
           fetchRange:MIO.makeCdnRangeFetcher(base), sha256:MIO.makeSha256(), writeShard:MIO.makeSdSink(m.sdDir),
           telemetry:async()=>({}), store:MIO.makeResumeStore(key),
           onProgress:(p)=>{ ui.bar.style.width=Math.max(3,p.pct||0)+'%'; } });
         // controls
-        ui.act.innerHTML=''; const pa=mkBtn('Pausa','',()=>dl.pause()); const ca=mkBtn('Annulla','',()=>dl.cancel()); ui.act.append(pa,ca);
+        ui.act.innerHTML=''; const pa=mkBtn(T('Pausa','Pause'),'',()=>dl.pause()); const ca=mkBtn(T('Annulla','Cancel'),'',()=>dl.cancel()); ui.act.append(pa,ca);
         let r=await dl.run();
         while(r.phase==='paused' && !r.errors.some(e=>e.fail)){ // offer resume
-          ui.act.innerHTML=''; const re=mkBtn('Riprendi','pri',async()=>{ ui.act.innerHTML=''; ui.act.append(mkBtn('Pausa','',()=>dl.pause())); r=await dl.resume(); finish(r); }); ui.act.append(re, mkBtn('Annulla','',()=>dl.cancel())); return; }
+          ui.act.innerHTML=''; const re=mkBtn(T('Riprendi','Resume'),'pri',async()=>{ ui.act.innerHTML=''; ui.act.append(mkBtn(T('Pausa','Pause'),'',()=>dl.pause())); r=await dl.resume(); finish(r); }); ui.act.append(re, mkBtn(T('Annulla','Cancel'),'',()=>dl.cancel())); return; }
         finish(r);
-      }catch(e){ ui.note.classList.add('on'); ui.note.textContent='Errore: '+(e&&e.message||e); busy=null; refresh(); }
+      }catch(e){ ui.note.classList.add('on'); ui.note.textContent=T('Errore: ','Error: ')+(e&&e.message||e); busy=null; refresh(); }
       function finish(r){ busy=null; ui.prog.classList.toggle('on', r.phase!=='ready');
         if(r.phase==='ready'){ ui.bar.style.width='100%'; } refresh(); }
     }

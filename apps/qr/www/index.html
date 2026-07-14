@@ -61,7 +61,7 @@
 </head>
 <body>
   <header>
-    <div class="t">◧ Codice QR</div>
+    <div class="t">◧ <span data-i18n="app_title">Codice QR</span></div>
     <span class="pill"><span class="d" id="liveDot"></span><span id="liveTxt">demo</span></span>
   </header>
   <main>
@@ -70,19 +70,19 @@
       <div id="form"></div>
       <div class="row" style="margin-top:12px">
         <div>
-          <label>Correzione errori</label>
+          <label data-i18n="ecc_label">Correzione errori</label>
           <select id="ecc">
-            <option value="0" selected>Bassa (moduli più grandi)</option>
-            <option value="1">Media</option>
-            <option value="2">Quartile</option>
-            <option value="3">Alta (più robusto)</option>
+            <option value="0" selected data-i18n="ecc_low">Bassa (moduli più grandi)</option>
+            <option value="1" data-i18n="ecc_med">Media</option>
+            <option value="2" data-i18n="ecc_quart">Quartile</option>
+            <option value="3" data-i18n="ecc_high">Alta (più robusto)</option>
           </select>
         </div>
       </div>
       <div class="hint" id="hint"></div>
       <div class="saved card" style="margin-top:14px; background:transparent">
-        <h3>Salvati sul dispositivo</h3>
-        <div id="savedList"><div class="empty">Nessun QR salvato.</div></div>
+        <h3 data-i18n="saved_title">Salvati sul dispositivo</h3>
+        <div id="savedList"><div class="empty" data-i18n="saved_empty">Nessun QR salvato.</div></div>
       </div>
     </div>
 
@@ -90,18 +90,22 @@
       <div class="qrbox"><canvas id="qr" width="280" height="280"></canvas></div>
       <div class="meta" id="meta">—</div>
       <div class="actions">
-        <button class="btn primary" id="save">★ Salva sul dispositivo</button>
+        <button class="btn primary" id="save" data-i18n="save_to_device">★ Salva sul dispositivo</button>
         <button class="btn alt" id="png">PNG</button>
         <button class="btn" id="svg">SVG</button>
       </div>
-      <div class="hint">«Salva sul dispositivo» scrive il QR in <b>/data/QR/qrcodes.json</b>:
+      <div class="hint" data-i18n-html="save_hint">«Salva sul dispositivo» scrive il QR in <b>/data/QR/qrcodes.json</b>:
         l'app nativa <b>Codice QR</b> (sorgente «Salvati») lo mostra grande sul Cardputer.</div>
     </div>
   </main>
   <div class="toast" id="toast"></div>
 
   <script src="qrcode.js"></script>
-  <script>
+  <script type="module">
+  import I18N from '/nucleo-i18n.js';
+  // Bilingual (IT primary + EN) via the OS engine. Static markup carries data-i18n; the JS-built form,
+  // chips and messages resolve through TR() at render time so they follow a live language switch.
+  const TR = await I18N.init('qr');
   (function () {
     'use strict';
     var $ = function (s) { return document.querySelector(s); };
@@ -117,28 +121,28 @@
     // ---- QR types: each builds the encoded string from a small form ----
     function esc(s) { return String(s == null ? '' : s).replace(/([\\;,:"])/g, '\\$1'); }
     var TYPES = {
-      link:   { icon: '↗', name: 'Link', fields: [{ k: 'url', l: 'Indirizzo web', ph: 'esempio.com', val: 'https://nucleo.os' }],
+      link:   { icon: '↗', nameKey: 'ty_link', fields: [{ k: 'url', lKey: 'f_url', ph: 'example.com', val: 'https://nucleo.os' }],
                 build: function (f) { var u = (f.url || '').trim(); if (u && !/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u; return u; },
-                label: function (f) { return (f.url || 'Link').replace(/^https?:\/\//, ''); } },
-      text:   { icon: '¶', name: 'Testo', fields: [{ k: 'text', l: 'Testo libero', ta: true, ph: 'Scrivi qui...', val: '' }],
-                build: function (f) { return f.text || ''; }, label: function (f) { return (f.text || 'Testo').slice(0, 28); } },
-      wifi:   { icon: '⌗', name: 'Wi-Fi', fields: [
-                  { k: 'ssid', l: 'Nome rete (SSID)', val: '' }, { k: 'pass', l: 'Password', val: '' },
-                  { k: 'auth', l: 'Sicurezza', sel: ['WPA', 'WEP', 'nopass'], val: 'WPA' }, { k: 'hidden', l: 'Rete nascosta', cb: true } ],
+                label: function (f) { return (f.url || TR('ty_link')).replace(/^https?:\/\//, ''); } },
+      text:   { icon: '¶', nameKey: 'ty_text', fields: [{ k: 'text', lKey: 'f_text', ta: true, phKey: 'ph_text', val: '' }],
+                build: function (f) { return f.text || ''; }, label: function (f) { return (f.text || TR('ty_text')).slice(0, 28); } },
+      wifi:   { icon: '⌗', nameKey: 'ty_wifi', fields: [
+                  { k: 'ssid', lKey: 'f_ssid', val: '' }, { k: 'pass', lKey: 'f_pass', val: '' },
+                  { k: 'auth', lKey: 'f_auth', sel: ['WPA', 'WEP', 'nopass'], val: 'WPA' }, { k: 'hidden', lKey: 'f_hidden', cb: true } ],
                 build: function (f) { var t = f.auth || 'WPA'; var p = t === 'nopass' ? '' : 'P:' + esc(f.pass) + ';'; return 'WIFI:T:' + t + ';S:' + esc(f.ssid) + ';' + p + (f.hidden ? 'H:true;' : '') + ';'; },
                 label: function (f) { return 'Wi-Fi ' + (f.ssid || ''); } },
-      email:  { icon: '@', name: 'Email', fields: [{ k: 'to', l: 'Destinatario', val: '' }, { k: 'sub', l: 'Oggetto', val: '' }, { k: 'body', l: 'Messaggio', ta: true, val: '' }],
+      email:  { icon: '@', nameKey: 'ty_email', fields: [{ k: 'to', lKey: 'f_to', val: '' }, { k: 'sub', lKey: 'f_subject', val: '' }, { k: 'body', lKey: 'f_body', ta: true, val: '' }],
                 build: function (f) { var q = []; if (f.sub) q.push('subject=' + encodeURIComponent(f.sub)); if (f.body) q.push('body=' + encodeURIComponent(f.body)); return 'mailto:' + (f.to || '') + (q.length ? '?' + q.join('&') : ''); },
                 label: function (f) { return 'Email ' + (f.to || ''); } },
-      tel:    { icon: '☏', name: 'Telefono', fields: [{ k: 'num', l: 'Numero', ph: '+39...', val: '' }],
+      tel:    { icon: '☏', nameKey: 'ty_tel', fields: [{ k: 'num', lKey: 'f_num', ph: '+39...', val: '' }],
                 build: function (f) { return 'tel:' + (f.num || '').replace(/\s+/g, ''); }, label: function (f) { return 'Tel ' + (f.num || ''); } },
-      geo:    { icon: '⌖', name: 'Mappa', fields: [{ k: 'lat', l: 'Latitudine', val: '' }, { k: 'lng', l: 'Longitudine', val: '' }],
+      geo:    { icon: '⌖', nameKey: 'ty_geo', fields: [{ k: 'lat', lKey: 'f_lat', val: '' }, { k: 'lng', lKey: 'f_lng', val: '' }],
                 build: function (f) { return 'geo:' + (f.lat || '0') + ',' + (f.lng || '0'); }, label: function (f) { return 'Geo ' + (f.lat || '') + ',' + (f.lng || ''); } },
-      vcard:  { icon: '☺', name: 'Contatto', fields: [{ k: 'name', l: 'Nome', val: '' }, { k: 'org', l: 'Organizzazione', val: '' }, { k: 'tel', l: 'Telefono', val: '' }, { k: 'email', l: 'Email', val: '' }],
+      vcard:  { icon: '☺', nameKey: 'ty_vcard', fields: [{ k: 'name', lKey: 'f_name', val: '' }, { k: 'org', lKey: 'f_org', val: '' }, { k: 'tel', lKey: 'ty_tel', val: '' }, { k: 'email', lKey: 'ty_email', val: '' }],
                 build: function (f) { return 'BEGIN:VCARD\nVERSION:3.0\nN:' + (f.name || '') + '\nFN:' + (f.name || '') + (f.org ? '\nORG:' + f.org : '') + (f.tel ? '\nTEL:' + f.tel : '') + (f.email ? '\nEMAIL:' + f.email : '') + '\nEND:VCARD'; },
-                label: function (f) { return f.name || 'Contatto'; } },
-      pair:   { icon: '⚷', name: 'Accoppia', fields: [], note: true,
-                build: function () { return location.origin || 'http://192.168.4.1'; }, label: function () { return 'Accoppia ' + location.host; } }
+                label: function (f) { return f.name || TR('ty_vcard'); } },
+      pair:   { icon: '⚷', nameKey: 'ty_pair', fields: [], note: true,
+                build: function () { return location.origin || 'http://192.168.4.1'; }, label: function () { return TR('ty_pair') + ' ' + location.host; } }
     };
     var ORDER = ['link', 'text', 'wifi', 'email', 'tel', 'geo', 'vcard', 'pair'];
     var cur = 'link', form = {}, lastQR = null, lastData = '', pairPin = '';
@@ -146,14 +150,15 @@
     function initForm() {
       var t = TYPES[cur]; form = {};
       var html = '';
-      if (t.note) html += '<div class="hint">Inquadra per aprire questo NucleoOS su un altro dispositivo (' + location.host + ').' + (pairPin ? ' PIN di pairing: <b>' + pairPin + '</b>.' : '') + '</div>';
+      if (t.note) html += '<div class="hint">' + TR('pair_note', { host: location.host }) + (pairPin ? TR('pair_pin', { pin: pairPin }) : '') + '</div>';
       t.fields.forEach(function (fl) {
         form[fl.k] = fl.val != null ? fl.val : '';
-        html += '<label>' + fl.l + '</label>';
-        if (fl.ta) html += '<textarea data-k="' + fl.k + '" placeholder="' + (fl.ph || '') + '">' + (fl.val || '') + '</textarea>';
+        var ph = fl.phKey ? TR(fl.phKey) : (fl.ph || '');
+        html += '<label>' + TR(fl.lKey) + '</label>';
+        if (fl.ta) html += '<textarea data-k="' + fl.k + '" placeholder="' + ph + '">' + (fl.val || '') + '</textarea>';
         else if (fl.sel) html += '<select data-k="' + fl.k + '">' + fl.sel.map(function (o) { return '<option' + (o === fl.val ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select>';
-        else if (fl.cb) html += '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input type="checkbox" data-k="' + fl.k + '" style="width:auto">' + 'Sì</label>';
-        else html += '<input data-k="' + fl.k + '" placeholder="' + (fl.ph || '') + '" value="' + (fl.val || '') + '">';
+        else if (fl.cb) html += '<label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input type="checkbox" data-k="' + fl.k + '" style="width:auto">' + TR('yes') + '</label>';
+        else html += '<input data-k="' + fl.k + '" placeholder="' + ph + '" value="' + (fl.val || '') + '">';
       });
       $('#form').innerHTML = html;
       $('#form').querySelectorAll('[data-k]').forEach(function (el) {
@@ -172,9 +177,9 @@
       var qr = NucleoQR.generate(data, { ecc: ecc });
       lastQR = qr;
       $('#save').disabled = $('#png').disabled = $('#svg').disabled = !qr;
-      if (!qr) { $('#meta').textContent = 'Testo troppo lungo'; return; }
+      if (!qr) { $('#meta').textContent = TR('too_long'); return; }
       drawQR(ctx, cv.width, qr);
-      $('#meta').innerHTML = 'Versione <b>' + qr.version + '</b> · ' + qr.size + '×' + qr.size + ' moduli · ' + (['L', 'M', 'Q', 'H'][ecc]) + ' · ' + data.length + ' caratteri';
+      $('#meta').innerHTML = TR('meta_line', { version: qr.version, size: qr.size, ecc: (['L', 'M', 'Q', 'H'][ecc]), chars: data.length });
     }
 
     // Crisp black-on-white with a 4-module quiet zone, scaled to the canvas.
@@ -200,38 +205,38 @@
     async function loadLib() { var j = await readJSON(SHARED); if (j && Array.isArray(j.items)) lib = j; renderLib(); }
     function renderLib() {
       var el = $('#savedList');
-      if (!lib.items.length) { el.innerHTML = '<div class="empty">Nessun QR salvato.</div>'; return; }
+      if (!lib.items.length) { el.innerHTML = '<div class="empty">' + TR('saved_empty') + '</div>'; return; }
       el.innerHTML = lib.items.map(function (it, i) {
         var ic = (TYPES[it.type] || TYPES.text).icon;
         return '<div class="item"><div class="ic">' + ic + '</div><div class="lab"><div class="n">' + escapeHtml(it.label) + '</div><div class="s">' + escapeHtml(it.data) + '</div></div>' +
-          '<button data-load="' + i + '" title="Carica">↺</button><button data-del="' + i + '" title="Elimina">✕</button></div>';
+          '<button data-load="' + i + '" title="' + TR('load') + '">↺</button><button data-del="' + i + '" title="' + TR('delete') + '">✕</button></div>';
       }).join('');
-      el.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { lib.items.splice(+b.dataset.del, 1); persist('Eliminato'); }; });
+      el.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { lib.items.splice(+b.dataset.del, 1); persist(TR('deleted')); }; });
       el.querySelectorAll('[data-load]').forEach(function (b) { b.onclick = function () { var it = lib.items[+b.dataset.load]; loadItem(it); }; });
     }
     function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
     function loadItem(it) {
       if (it.type === 'text' || !TYPES[it.type]) { cur = 'text'; setChips(); initForm(); form.text = it.data; $('#form').querySelector('[data-k="text"]').value = it.data; }
       else { cur = 'text'; setChips(); initForm(); form.text = it.data; var ta = $('#form').querySelector('[data-k="text"]'); if (ta) ta.value = it.data; }
-      render(); toast('Caricato: ' + it.label);
+      render(); toast(TR('loaded_x', { label: it.label }));
     }
     async function persist(msg) {
       await mkdirp('/data/QR');
       var ok = await writeText(SHARED, JSON.stringify(lib, null, 0));
       renderLib();
-      toast(ok ? (msg || 'Salvato') : 'Salvataggio non riuscito (dispositivo offline?)');
+      toast(ok ? (msg || TR('saved')) : TR('save_failed'));
     }
     function saveCurrent() {
       if (!lastQR || !lastData) return;
       var t = TYPES[cur];
-      lib.items.unshift({ id: 'q' + Date.now().toString(36), label: (t.label(form) || t.name).slice(0, 40), type: cur, data: lastData, ecc: parseInt($('#ecc').value, 10) || 0, ts: Date.now() });
+      lib.items.unshift({ id: 'q' + Date.now().toString(36), label: (t.label(form) || TR(t.nameKey)).slice(0, 40), type: cur, data: lastData, ecc: parseInt($('#ecc').value, 10) || 0, ts: Date.now() });
       if (lib.items.length > 50) lib.items.length = 50;
-      persist('Salvato sul dispositivo');
+      persist(TR('saved_to_device'));
     }
 
     // ---- chips ----
     function setChips() {
-      $('#types').innerHTML = ORDER.map(function (k) { return '<button class="chip' + (k === cur ? ' on' : '') + '" data-t="' + k + '">' + TYPES[k].icon + ' ' + TYPES[k].name + '</button>'; }).join('');
+      $('#types').innerHTML = ORDER.map(function (k) { return '<button class="chip' + (k === cur ? ' on' : '') + '" data-t="' + k + '">' + TYPES[k].icon + ' ' + TR(TYPES[k].nameKey) + '</button>'; }).join('');
       $('#types').querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { cur = b.dataset.t; setChips(); initForm(); }; });
     }
 
@@ -239,7 +244,7 @@
     async function probe() {
       try {
         var r = await fetch('/api/status', { cache: 'no-store' });
-        if (r.ok) { var j = await r.json(); pairPin = j.pin || j.pairPin || ''; $('#liveDot').classList.add('live'); $('#liveTxt').textContent = 'dispositivo'; }
+        if (r.ok) { var j = await r.json(); pairPin = j.pin || j.pairPin || ''; $('#liveDot').classList.add('live'); $('#liveTxt').textContent = TR('device'); }
       } catch (e) {}
     }
 
@@ -249,6 +254,7 @@
     $('#svg').addEventListener('click', function () { if (!lastQR) return; download('qr.svg', new Blob([buildSVG(lastQR)], { type: 'image/svg+xml' })); });
 
     setChips(); initForm(); loadLib(); probe();
+    I18N.onChange(function () { setChips(); initForm(); renderLib(); });   // live OS-language switch
   })();
   </script>
 </body>

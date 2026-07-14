@@ -9,6 +9,10 @@
   "tab_test": "Prova",
   "tab_custom": "Custom",
 
+  "cat_apps": "🚀 Avvia app",
+  "cat_system": "📊 Sistema",
+  "cat_skill": "🌤️ Skill",
+
   "prog_label": { "one": "1 comando addestrato", "other": "{count} comandi addestrati" },
   "prog_cap": "max {count}",
 

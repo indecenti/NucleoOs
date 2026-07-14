@@ -14,16 +14,16 @@ const MAX_TPLS = 20;
 // registry/app-aliases.json, or a built-in system/skill query). Training a phrase
 // stores one template; saying it (one breath) launches the action.
 const CURRICULUM = [
-  { cat: "🚀 Avvia app", items: [
+  { cat: "🚀 Avvia app", catKey: "cat_apps", items: [
     "apri musica", "apri radio", "apri video", "apri registratore",
     "apri calcolatrice", "apri calendario", "apri orologio", "apri note",
     "apri file", "apri impostazioni", "apri terminale", "apri giochi",
     "apri browser", "apri foto", "apri monitor"
   ]},
-  { cat: "📊 Sistema", items: [
+  { cat: "📊 Sistema", catKey: "cat_system", items: [
     "che ore sono", "livello batteria", "spazio libero", "data di oggi"
   ]},
-  { cat: "🌤️ Skill", items: [
+  { cat: "🌤️ Skill", catKey: "cat_skill", items: [
     "meteo", "agenda di oggi", "cosa sai fare"
   ]},
 ];
@@ -97,7 +97,7 @@ function trainBtn(word) {
 function renderCurriculum() {
   let html = '';
   for (const c of CURRICULUM) {
-    html += `<div class="category-title">${c.cat}</div>`;
+    html += `<div class="category-title" data-i18n="${c.catKey}">${c.cat}</div>`;
     for (const item of c.items) {
       html += `<div class="trigger-item ${isSaved(item) ? 'saved' : ''}">
         <span class="trigger-name">${item}</span>${trainBtn(item)}</div>`;

@@ -163,7 +163,7 @@ function readyMsg() {
 }
 function rebuildRuntime() {
   const root = ($('ws').value || '/data/agent').trim() || '/data/agent';
-  rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active });
+  rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active, t });
   $('model-line').textContent = modelLine();
 }
 

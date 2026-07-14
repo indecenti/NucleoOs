@@ -1,6 +1,7 @@
 // System UI language for the NATIVE (C/C++ on-TFT) side of NucleoOS. See docs/i18n.md.
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,7 +20,21 @@ bool nucleo_i18n_is_en(void);
 
 // Switch language: flips the in-RAM flag AND persists ui.language to settings.json (read-modify-
 // write, every other key preserved), so the choice survives reboot and reaches the web shell.
+// On an ACTUAL change it bumps the generation counter and fires the on-change hook (below).
 void nucleo_i18n_set_en(bool en);
+
+// Monotonic generation counter — bumped on every real language change (from ANY surface: the native
+// UI, or the web via POST /api/lang). A native screen compares this against its last-painted value
+// each frame and repaints its chrome when it differs, so a language change is reflected LIVE without
+// a reboot. Zero at boot.
+uint32_t nucleo_i18n_gen(void);
+
+// Optional hook fired AFTER the flag flips and settings.json is persisted (on the caller's thread),
+// only when the language actually changed. The HTTP layer registers one that publishes a
+// "system.language" event onto the bus -> the WebSocket sink pushes it to every connected browser,
+// so a change made on the DEVICE reaches the web OS live. Kept as a callback so this low-level
+// storage module needs no dependency on the event bus / httpd. Pass NULL to clear.
+void nucleo_i18n_set_on_change(void (*cb)(bool en));
 
 // Pick the right literal for the current language. Both args are flash literals -> zero RAM cost.
 const char *nucleo_tr(const char *it, const char *en);
