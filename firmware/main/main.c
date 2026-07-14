@@ -50,6 +50,8 @@ extern void nucleo_register_recorder(void);   // Recorder Solo: dedicated boot f
 extern int  nucleo_app_solo_app(void);        // which Solo profile (1=ANIMA, 2=Recorder) is active
 extern bool nucleo_app_solo_needs_speech(void); // only ANIMA Solo brings up TTS+voice; others skip them
 extern bool nucleo_app_solo_is_generic(void);   // generic Solo (heavy game via NX_SOLO): register all builtins
+extern bool nucleo_app_solo_is_server(void);    // Web Client server-Solo: keep httpd + auth up, skip the rest
+extern void nucleo_register_remote(void);        // server Solo registers ONLY the Remote Control app
 
 // ANIMA Solo runs nucleo_app_run() on a DEDICATED large-stack task (the 8 KB main task overflows running
 // the ANIMA UI). nucleo_app_run never returns (Esc reboots), so vTaskDelete is just defensive.
@@ -223,7 +225,9 @@ void app_main(void)
     // only way this PSRAM-less chip fits online TLS + L1 + voice at once. Consumed once (RTC -> latch).
     const bool solo = nucleo_anima_solo_pending();
     const bool solo_rec = solo && (nucleo_app_solo_app() == 2);   // Recorder profile: pure cloud transcribe, no voice/TTS
-    if (solo) ESP_LOGW(TAG, "%s Solo boot: skipping httpd/mDNS/recorder/auth/IR%s",
+    const bool solo_srv = solo && nucleo_app_solo_is_server();     // Web Client: httpd + auth stay UP; everything else skipped for max heap
+    if (solo_srv)  ESP_LOGW(TAG, "Web Client Solo boot: httpd + auth + mDNS UP; skipping recorder/IR/voice/TTS/L1/calendar for max web-OS heap");
+    else if (solo) ESP_LOGW(TAG, "%s Solo boot: skipping httpd/mDNS/recorder/auth/IR%s",
                        solo_rec ? "Recorder" : "ANIMA", solo_rec ? " + TTS/voice" : "");
 
     // Bring up networking + services FIRST so the device is never bricked and the web UI
@@ -241,7 +245,7 @@ void app_main(void)
     if ((!solo || solo_rec) && sd_ok && nucleo_recorder_init() != ESP_OK)  // PDM mic — NEEDED in Recorder Solo (record IN the dedicated boot); skipped only in ANIMA Solo
         ESP_LOGW(TAG, "recorder mic init failed");
     bootmark("recorder");
-    if (!solo) nucleo_auth_init();          // pairing PIN + session tokens - not in Solo (no httpd)
+    if (!solo || solo_srv) nucleo_auth_init();  // pairing PIN + session tokens — needed whenever httpd runs (full OS + Web Client Solo)
     bootmark("auth");
     nucleo_arb_init();                       bootmark("arb");        // heavy-work arbiter (one job at a time) — KEPT: ANIMA online needs it
     if (!solo && nucleo_ir_init() != ESP_OK) // IR LED (GPIO44) via RMT; serves /api/ir/* + TV-B-Gone — not in Solo
@@ -254,7 +258,7 @@ void app_main(void)
     // this task is lean (18KB) and httpd_start is deterministic. If it EVER still fails, log it to serial
     // AND to the SD boot trace (readable without a serial console — the silent-freeze case), then halt:
     // error logged, nothing half-starts, no fallback.
-    if (!solo) { esp_err_t he = nucleo_httpd_start();   // SKIPPED in Solo: this 18 KB task + its buffers are exactly the block that carves the heap on this no-PSRAM chip
+    if (!solo || solo_srv) { esp_err_t he = nucleo_httpd_start();   // SKIPPED in Solo EXCEPT Web Client server-Solo, which exists to serve the web OS on a fresh heap (this 18 KB task is what carves the heap on this no-PSRAM chip)
       if (he != ESP_OK) {
           // ADV boot is on a knife-edge: httpd needs an ~18 KB CONTIGUOUS block and a rebuild can
           // fragment the heap just below it (largest ~17 KB < 18432) -> start fails -> abort -> reboot
@@ -281,7 +285,7 @@ void app_main(void)
     // "mdns_send: Cannot allocate memory". Discovery is a convenience (the device is always reachable by IP;
     // ota.ps1 already prefers IP, and web-focus stops mDNS the moment a client connects), so when the
     // contiguous heap is too low to run it without starving the SERVER, SKIP it and keep those bytes for httpd.
-    if (!solo) {
+    if (!solo || solo_srv) {   // Web Client Solo advertises too (heap-gated): it stops the moment a shell connects (web-focus), so it costs nothing while driving
         size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
         if (largest >= 14336) nucleo_discovery_start(nucleo_setup_device_name());   // ~14 KB headroom: mDNS fits without starving httpd
         else ESP_LOGW(TAG, "mDNS SKIPPED at boot: largest free block %u < 14336 — reachable by IP, httpd keeps the heap", (unsigned)largest);
@@ -336,6 +340,7 @@ void app_main(void)
         // Solo: register ONLY the target app. nucleo_app_run() auto-launches it and Esc reboots to the
         // full OS. (App .bss is linked-in regardless, so this is about isolation/clarity, not RAM.)
         if (solo_rec)                      { nucleo_register_recorder(); bootmark("app-recorder-solo"); }
+        else if (solo_srv)                 { nucleo_register_remote();   bootmark("app-remote-solo"); }  // Web Client: only Remote Control (the server-listening watch)
         else if (nucleo_app_solo_is_generic()) { nucleo_app_register_builtins(); bootmark("app-game-solo"); }  // heavy game (NX_SOLO): register all so launch_id finds it
         else                               { nucleo_register_anima();    bootmark("app-anima-solo"); }
     } else {
@@ -356,8 +361,11 @@ void app_main(void)
         // FAILS to allocate -> no UI task -> black screen + hang. 16 KB fits with margin.
         // Generic game solo (NX_SOLO): same as Recorder — UI-only, no inline TLS/query, 8 KB suffices
         // (full OS runs nucleo_app_run on the 8 KB main task). 26 KB is for ANIMA inline-TLS only.
-        uint32_t solo_stk = (solo_rec || nucleo_app_solo_is_generic()) ? 8192 : 26624;
-        BaseType_t tcr = xTaskCreatePinnedToCore(anima_solo_task, solo_rec ? "rec-solo" : "anima-solo",
+        // Web Client server-Solo is UI-only too (httpd runs on its OWN task; the watch faces draw direct),
+        // so it takes the same 8 KB as Recorder/generic — only ANIMA's inline TLS needs the 26 KB.
+        uint32_t solo_stk = (solo_rec || solo_srv || nucleo_app_solo_is_generic()) ? 8192 : 26624;
+        BaseType_t tcr = xTaskCreatePinnedToCore(anima_solo_task,
+                                                 solo_rec ? "rec-solo" : solo_srv ? "remote-solo" : "anima-solo",
                                                  solo_stk, NULL, ESP_TASK_MAIN_PRIO, NULL, 0);
         if (tcr != pdPASS) ESP_LOGE(TAG, "SOLO task create FAILED (stack %u, largest %u) — halting",
                                     (unsigned)solo_stk, (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));

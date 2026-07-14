@@ -1,13 +1,16 @@
 // Built-in "Remote Control" app: the control panel for the web-client handoff.
 //
-// When the OS web shell connects over WebSocket (/ws?shell=1) the run loop suspends the on-device UI,
-// blanks the panel and hands CPU+RAM to the HTTP server (see nucleo_app.cpp). This app:
+// Opening it (from the launcher list OR the Control Center "Web Client" tile) WARM-REBOOTS the device into
+// the Web Client server-Solo profile: a fresh, unfragmented heap with ONLY httpd + auth up (no offline L1,
+// voice, TTS, IR, recorder or calendar). That is the fix for "the device reboots when I open NucleoOS web"
+// — the first, heaviest shell load used to hit the fragmented full-OS heap and OOM. maybe_solo_launch()
+// (nucleo_app.cpp) owns that reboot; the OTA path is the one exception (it opens this app INLINE so an
+// in-flight image POST is never reset). Once booted, this app is the server-listening screen. It:
 //   • shows HOW to connect — the device IP + pairing PIN, big and readable;
-//   • the moment it opens, puts the device into an OPTIMIZED "listening" state (frees the 32 KB launcher
-//     canvas + the ~24 KB ANIMA L1 index, keeps mDNS + the HTTP server up) so the FIRST shell load — the
-//     heaviest, when the device is most starved — already has room. This is the manual counterpart of the
-//     automatic handoff that fires once a client is actually connected;
-//   • lets the user toggle the automatic handoff on/off (persisted in NVS).
+//   • on enter, frees the 32 KB launcher canvas + the ~24 KB ANIMA L1 index (belt-and-braces on top of the
+//     Solo boot, and the real teardown on the OTA inline path) so the FIRST shell load already has room;
+//   • lets the user toggle the automatic handoff on/off (persisted in NVS);
+//   • Esc reboots back to the full OS (standard Solo exit).
 #include "nucleo_app.h"
 #include "launcher_theme.h"
 #include "nucleo_i18n.h"                        // TR(it,en): hint follows the system language
@@ -132,7 +135,7 @@ static void remote_draw(void)
 extern "C" void nucleo_register_remote(void)
 {
     static const nucleo_app_def_t app = {
-        "remote", "Remote Control", "Connect", "Server-listening mode: shows IP + PIN, frees RAM, ready for a web client",
+        "remote", "Remote Control", "Connect", "Web Client server mode: reboots into a fresh heap (max RAM), shows IP + PIN, ready for the web OS",
         'r', C_BLUE, remote_enter, remote_key, remote_tick, remote_draw, remote_exit
     };
     nucleo_app_register(&app);

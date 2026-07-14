@@ -59,13 +59,18 @@ extern "C" void nucleo_ui_set_brightness(unsigned char b);
 // magic carries WHICH app to open: 1=ANIMA, 2=Recorder. Legacy ANIMA_SOLO_MAGIC stays for back-compat.
 #define ANIMA_SOLO_MAGIC 0xA11A5010u
 #define SOLO_MAGIC_BASE  0x5010A100u           // generic: (BASE | app-code) in the low byte
-enum { SOLO_NONE = 0, SOLO_ANIMA = 1, SOLO_RECORDER = 2, SOLO_APPID = 3 };  // 3 = open the app named in s_solo_id
+enum { SOLO_NONE = 0, SOLO_ANIMA = 1, SOLO_RECORDER = 2, SOLO_APPID = 3, SOLO_REMOTE = 4 };  // 3 = open the app named in s_solo_id; 4 = Web Client server-Solo (httpd + auth UP, everything else off)
 RTC_NOINIT_ATTR static uint32_t s_solo_req;
 RTC_NOINIT_ATTR static char     s_solo_id[24];   // SOLO_APPID target app id (e.g. "slots") — survives the warm reboot
 RTC_NOINIT_ATTR static char     s_solo_open_file[256];   // "open with" path for a Solo target (Files -> .nfv): rides the warm reboot too
 static char s_open_file[256] = "";               // "open with" handoff: Files passes the exact file; the viewer's on_enter consumes it
 static bool s_solo_active = false;
 static int  s_solo_app = SOLO_NONE;
+// Raised by httpd's ota_post the instant an OTA image starts arriving. Defined here, early, so
+// maybe_solo_launch can read it: an OTA-driven Remote Control launch must open INLINE, never warm-reboot
+// into server Solo mid-transfer (that would reset the in-flight POST). The run loop's OTA handshake and the
+// extern-C setters (further down) own the rest of the OTA state.
+static volatile bool s_force_listen = false;
 extern "C" bool nucleo_recorder_is_busy(void);   // mic lifecycle: true until the WAV is fully closed + flushed
 
 // Bounded, WDT-fed wait for the mic to FULLY release (WAV finalized) before a reboot — a Solo reboot must
@@ -108,6 +113,11 @@ extern "C" bool nucleo_app_solo_needs_speech(void) { return s_solo_app == SOLO_A
 // case so the run loop's launch_id(s_solo_id) finds the game (registration is just pointers — cheap; the
 // RAM win is from skipping httpd/mDNS, not from registering fewer apps). No speech/TTS brought up.
 extern "C" bool nucleo_app_solo_is_generic(void) { return s_solo_app == SOLO_APPID; }
+// Web Client server-Solo: unlike every other Solo profile, main.c KEEPS httpd + auth (the pairing PIN)
+// up — the web OS needs a server to talk to. Everything else (offline L1, voice, TTS, IR, recorder,
+// calendar) stays down, so the browser's first, heaviest shell load meets a fresh, unfragmented heap
+// instead of the full-OS heap that was OOM-rebooting the device.
+extern "C" bool nucleo_app_solo_is_server(void) { return s_solo_app == SOLO_REMOTE; }
 
 // Reopen-after-Solo: the Recorder Solo job warm-reboots back to the FULL OS; this RTC flag (set right
 // before that reboot) tells the full-OS launcher to open the Recorder straight away so the user lands on
@@ -524,6 +534,17 @@ static bool maybe_solo_launch(int idx)
 {
     if (s_solo_active || idx < 0) return false;
     const nucleo_app_def_t *a = &s_apps[idx];
+    // Remote Control boots a DEDICATED server-Solo profile: httpd + auth stay up, but the offline brain,
+    // voice, TTS, IR, recorder and calendar service never come up — the web OS gets a fresh, unfragmented
+    // heap (fixes the reboot when the first, heaviest shell load hit the fragmented full-OS heap). This is
+    // distinct from the generic game Solo below, which skips httpd entirely. The ONE exception is an
+    // OTA-driven launch (s_force_listen): it must open INLINE so the in-flight image POST is never reset
+    // by a warm reboot — the proven inline posture (remote_enter frees canvas + L1) still lets it through.
+    if (!strcmp(a->id, "remote")) {
+        if (s_force_listen) return false;                // OTA in progress: keep the inline listening posture
+        nucleo_app_solo_request(SOLO_REMOTE);            // never returns (warm reboot into server Solo)
+        return true;
+    }
     // Every GAME launches in Solo (fresh, unfragmented heap) — the user wants games to behave like ANIMA/
     // Recorder: reboot in, full heap, Esc reboots back to the OS. The 32KB canvas + game buffers couldn't be
     // carved inline on the fragmented running heap (OOM / Task-WDT). Category covers all games at once (and
@@ -577,7 +598,7 @@ const char *nucleo_app_native_id(const char *anima_id)
     static const struct { const char *web, *nat; } M[] = {
         {"photo-viewer","photos"}, {"media-player","music"}, {"video-player","video"},
         {"file-commander","files"}, {"calculator","calc"},  {"system-monitor","sysmon"},
-        {"ir-remote","remote"},     {"notepad","notepad"},   {"clock","clock"},
+        {"ir-remote","ir"},         {"notepad","notepad"},   {"clock","clock"},   // web "ir-remote" -> native IR app "ir" (NOT the Web Client "remote" app, which now warm-reboots into server Solo)
         {"calendar","calendar"},    {"recorder","recorder"}, {"radio","radio"},
     };
     for (int i = 0; i < (int)(sizeof(M) / sizeof(M[0])); i++)
@@ -785,7 +806,7 @@ static int  s_remote_clients = 0;
 // before streaming the image in — so the flash never starts RAM-starved. All cross-task state is plain
 // volatile bools written by one side (no shared draw, no lock). Cleared when the OTA ends; on success the
 // device reboots anyway. nucleo_app_request_remote_listen(false) also drops the ready latch.
-static volatile bool s_force_listen = false;
+// (s_force_listen itself is defined early, up with the Solo statics, so maybe_solo_launch can read it.)
 static volatile bool s_listen_ready = false;
 static bool          s_listen_owned = false;   // WE auto-launched Remote Control for an OTA -> WE close it after
 extern "C" void nucleo_app_request_remote_listen(bool on) { s_force_listen = on; if (!on) s_listen_ready = false; }
@@ -1324,6 +1345,13 @@ void nucleo_app_run(void)
     int64_t last_tick = 0, last_clock = 0, remote_gone_ms = 0, last_remote = 0, last_remote_input = 0;
     int64_t last_act = esp_timer_get_time() / 1000, focus_chk = 0;   // idle screen-off + web-focus recheck timers
 
+    // A web OS shell connecting hands the device to the server; on this no-PSRAM chip that means warm-rebooting
+    // into the lean server-Solo (connect handler below). But if THIS boot was itself a CRASH, a prior server-Solo
+    // attempt may have failed — don't auto-reboot again or we'd loop; serve inline instead. A clean esp_restart
+    // (our Solo request) is ESP_RST_SW, never a crash, so the healthy path always gets server-Solo.
+    esp_reset_reason_t boot_rr = esp_reset_reason();
+    bool boot_was_crash = (boot_rr == ESP_RST_PANIC || boot_rr == ESP_RST_INT_WDT || boot_rr == ESP_RST_TASK_WDT);
+
     // Watchdog the loop: if an iteration wedges >8 s the chip resets instead of freezing.
     // Tolerate ESP_ERR_INVALID_STATE if the TWDT is disabled in this build.
     esp_task_wdt_add(NULL);
@@ -1351,6 +1379,7 @@ void nucleo_app_run(void)
     // launcher. close_app() reboots back to the full OS instead of returning here.
     if (s_solo_active) {
         const char *sid = (s_solo_app == SOLO_RECORDER)               ? "recorder"
+                        : (s_solo_app == SOLO_REMOTE)                 ? "remote"    // Web Client server-Solo
                         : (s_solo_app == SOLO_APPID && s_solo_id[0])  ? s_solo_id   // heavy game in its fresh-heap Solo
                         :                                               "anima";
         if (s_solo_app == SOLO_APPID && s_solo_open_file[0]) {        // restore a Files "open with" handoff (e.g. a .nfv)
@@ -1536,6 +1565,16 @@ void nucleo_app_run(void)
         if (s_shot_toast_until && now < s_shot_toast_until + 120) s_dirty = true;
 
         int clients = nucleo_remote_enabled() ? nucleo_ws_shell_count() : 0;
+        // Web OS shell connected while we are the FULL OS: this no-PSRAM heap cannot serve it. The launcher's
+        // 32 KB DMA canvas alone won't fit the fragmented full-OS heap, so the render path re-allocating it
+        // spins 32 KB OOMs until a critical alloc PANICs the chip (observed on .166: 171 failed 32404-byte DMA
+        // allocs -> reset "PANIC", device rebooting under the web OS). Warm-reboot into the lean Web Client
+        // server-Solo instead: a fresh, unfragmented heap with ONLY httpd + auth up (no canvas, L1, voice, TTS,
+        // IR, recorder, calendar). The shell's /ws drops and reconnects in a few seconds to a device that now
+        // has all the RAM. One-shot (s_solo_active bails once we are in it); never mid-OTA (keep the proven
+        // inline posture) or right after a crash boot (anti-loop, see boot_was_crash).
+        if (clients > 0 && !s_solo_active && !s_force_listen && !boot_was_crash)
+            nucleo_app_solo_request(SOLO_REMOTE);   // never returns (warm reboot into server Solo)
         // An in-flight OTA forces listening mode too (frees the 32 KB canvas), even with no shell client and
         // even if the auto-handoff toggle is off — a flash is the heaviest download and needs that contiguous block.
         bool listen = clients > 0 || s_force_listen;
