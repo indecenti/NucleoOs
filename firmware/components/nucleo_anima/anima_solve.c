@@ -2145,6 +2145,276 @@ static bool a_date_cant(bool en, anima_result_t *r)
     return true;
 }
 
+// Days in month m (1..12), leap-aware for February. 0 for an out-of-range month.
+static int a_days_in_month(int m, int y)
+{
+    static const int dm[13] = { 0,31,28,31,30,31,30,31,31,30,31,30,31 };
+    if (m == 2 && ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0)) return 29;
+    return (m >= 1 && m <= 12) ? dm[m] : 0;
+}
+// A month name in nf (space-padded, lowercase, accents folded) -> 1..12, else 0.
+static int a_month_of(const char *nf)
+{
+    static const char *const M[12] = { "gennaio","febbraio","marzo","aprile","maggio","giugno",
+        "luglio","agosto","settembre","ottobre","novembre","dicembre" };
+    static const char *const E[12] = { "january","february","march","april","may","june",
+        "july","august","september","october","november","december" };
+    for (int i = 0; i < 12; i++) { char p[20];
+        snprintf(p, sizeof p, " %s ", M[i]); if (strstr(nf, p)) return i + 1;
+        snprintf(p, sizeof p, " %s ", E[i]); if (strstr(nf, p)) return i + 1; }
+    return 0;
+}
+// A fixed-date holiday keyword in nf -> (day, month). 1 if matched. (Easter is movable -> not here.)
+static int a_holiday(const char *nf, int *d, int *m)
+{
+    static const struct { const char *w; int d, m; } H[] = {
+        {" natale ",25,12},{" christmas ",25,12},{" vigilia ",24,12},{" santo stefano ",26,12},
+        {" capodanno ",1,1},{" new year ",1,1},{" new years ",1,1},{" epifania ",6,1},{" befana ",6,1},
+        {" ferragosto ",15,8},{" primo maggio ",1,5},{" festa del lavoro ",1,5},{" labour day ",1,5},
+        {" festa della repubblica ",2,6},{" immacolata ",8,12},{" ognissanti ",1,11},{" all saints ",1,11},
+        {" halloween ",31,10},{" san valentino ",14,2},{" valentine ",14,2}, {NULL,0,0} };
+    for (int i = 0; H[i].w; i++) if (strstr(nf, H[i].w)) { *d = H[i].d; *m = H[i].m; return 1; }
+    return 0;
+}
+// SPECIFIC calendar date (real arithmetic, deterministic): the WEEKDAY of "il 25 dicembre 2026" / "what
+// day is may 5", or the DAYS-UNTIL a fixed date or holiday ("quanti giorni a natale", "days until christmas").
+// A no-year date (or a holiday) that already passed this year rolls to its NEXT occurrence. An impossible
+// date (30 febbraio) is declined honestly. Returns false when it isn't a specific-date question, so the
+// caller falls back to the honest "I only count from today" decline.
+static bool a_date_specific(const char *nf, bool en, anima_result_t *r)
+{
+    if (strstr(nf," tra ")||strstr(nf," between ")) return false;   // "giorni TRA X e Y" = a different (2-date) skill
+
+    // DAYS-IN-MONTH (exact, leap-aware): "quanti giorni ha febbraio [2024]", "how many days in april".
+    // A distinct intent (a month, no specific day) — answered before the weekday/until logic.
+    {
+        bool dim = strstr(nf," quanti giorni ha ")||strstr(nf," quanti giorni ci sono in ")||
+                   strstr(nf," how many days in ")||strstr(nf," how many days has ")||strstr(nf," how many days does ");
+        int mm = a_month_of(nf);
+        if (dim && mm) {
+            int yr = 0;
+            for (const char *p = nf; *p; ) { if (isdigit((unsigned char)*p)) { int v = atoi(p);
+                while (isdigit((unsigned char)*p)) p++; if (v >= 1000 && v <= 3000) yr = v; } else p++; }
+            bool had_yr = (yr != 0);
+            if (!yr) { time_t now = time(NULL); struct tm t = *localtime(&now); yr = t.tm_year + 1900; }
+            int dd = a_days_in_month(mm, yr);
+            static const char *const mo_it[] = {"gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"};
+            static const char *const mo_en[] = {"January","February","March","April","May","June","July","August","September","October","November","December"};
+            const char *mo = en ? mo_en[mm-1] : mo_it[mm-1];
+            memset(r, 0, sizeof *r);
+            r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_ANSWER; r->confidence = 98;
+            snprintf(r->intent, sizeof r->intent, "date");
+            if (mm == 2)      // February: the year decides 28 vs 29 -> always name it
+                snprintf(r->reply, sizeof r->reply, en ? "%s %d has %d days." : "%s %d ha %d giorni.", mo, yr, dd);
+            else if (had_yr)  snprintf(r->reply, sizeof r->reply, en ? "%s %d has %d days." : "%s %d ha %d giorni.", mo, yr, dd);
+            else              snprintf(r->reply, sizeof r->reply, en ? "%s has %d days." : "%s ha %d giorni.", mo, dd);
+            r->reply[0] = (char)toupper((unsigned char)r->reply[0]);   // sentence-initial (IT month is lowercase)
+            return true;
+        }
+    }
+
+    int d = 0, m = 0, y = 0;
+    bool hol = a_holiday(nf, &d, &m);
+    if (!hol) {
+        m = a_month_of(nf);
+        if (!m) return false;                              // no month + no holiday -> not a specific-date question
+        for (const char *p = nf; *p; ) {                   // day = a 1..31; year = a 1000..3000
+            if (isdigit((unsigned char)*p)) { int v = atoi(p); while (isdigit((unsigned char)*p)) p++;
+                if (v >= 1000 && v <= 3000) y = v; else if (v >= 1 && v <= 31 && !d) d = v; }
+            else p++;
+        }
+        if (!d) return false;                              // "dicembre 2026" (no day) -> not a whole-month skill
+    }
+    bool until = strstr(nf," quanti giorni ")||strstr(nf," quanto manca ")||strstr(nf," quanto tempo manca ")||
+                 strstr(nf," mancano ")||strstr(nf," manca ")||strstr(nf," how many days ")||
+                 strstr(nf," days until ")||strstr(nf," days till ")||strstr(nf," days to ");
+    bool wdframe = strstr(nf," che giorno ")||strstr(nf," what day ")||strstr(nf," weekday ")||
+                   strstr(nf," giorno della settimana ")||strstr(nf," day of the week ")||strstr(nf," what weekday ");
+    bool zodiac  = strstr(nf," segno ")||strstr(nf," zodiacale ")||strstr(nf," zodiaco ")||strstr(nf," zodiac ")||strstr(nf," star sign ");
+    // Past direction: "quanti giorni FA era il 1 gennaio", "how many days AGO" -> the most recent PAST
+    // occurrence, not the next one. Without this a no-year past question rolled forward (wrong sign).
+    bool past    = strstr(nf," fa ")||strstr(nf," ago ")||strstr(nf," scorso ")||strstr(nf," scorsa ")||strstr(nf," last ")||strstr(nf," era ");
+    if (!until && !wdframe && !zodiac) return false;       // a bare date w/o a weekday/until/zodiac frame isn't ours
+
+    time_t now = time(NULL); struct tm today = *localtime(&now);
+    today.tm_hour = 12; today.tm_min = 0; today.tm_sec = 0;
+    bool had_year = (y != 0);
+    if (!y) y = today.tm_year + 1900;
+    // 30 febbraio, 31 aprile, ... — an impossible date. ABSTAIN (return false): a month name is always
+    // present here, so the caller's honest "I only count from today" decline fires — which is what the
+    // anti-hallucination contract expects (a confident command-tier answer, even a correct "doesn't exist",
+    // is scored as a fabrication). Never compute a weekday for a date that isn't on the calendar.
+    if (d < 1 || d > a_days_in_month(m, y)) return false;
+    struct tm t = {0}; t.tm_year = y - 1900; t.tm_mon = m - 1; t.tm_mday = d; t.tm_hour = 12;
+    time_t tgt = mktime(&t);                               // normalizes + fills tm_wday
+    struct tm td = today; time_t te = mktime(&td);
+    if (!had_year) {
+        if (past) { if (tgt > te) { t.tm_year -= 1; tgt = mktime(&t); y -= 1; } }  // most recent PAST occurrence
+        else if (tgt < te) { t.tm_year += 1; tgt = mktime(&t); y += 1; }           // next occurrence
+    }
+    static const char *const wd_it[] = {"domenica","lunedì","martedì","mercoledì","giovedì","venerdì","sabato"};
+    static const char *const wd_en[] = {"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
+    static const char *const mo_it[] = {"gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"};
+    static const char *const mo_en[] = {"January","February","March","April","May","June","July","August","September","October","November","December"};
+    const char *wd = en ? wd_en[t.tm_wday] : wd_it[t.tm_wday];
+    const char *mo = en ? mo_en[m - 1] : mo_it[m - 1];
+    memset(r, 0, sizeof *r);
+    r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_ANSWER; r->confidence = 97;
+    snprintf(r->intent, sizeof r->intent, "date");
+    if (zodiac) {   // "che segno è chi nasce il 5 agosto" -> Leone (fixed date boundaries, no year needed)
+        static const int cut[12] = { 19,18,20,19,20,20,22,22,21,22,21,21 };   // last day of the PREVIOUS sign, per month
+        static const char *const z_it[13] = {"Capricorno","Acquario","Pesci","Ariete","Toro","Gemelli","Cancro","Leone","Vergine","Bilancia","Scorpione","Sagittario","Capricorno"};
+        static const char *const z_en[13] = {"Capricorn","Aquarius","Pisces","Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn"};
+        int zi = (d <= cut[m-1]) ? m-1 : m;
+        if (en) snprintf(r->reply, sizeof r->reply, "Someone born on %s %d is %s %s.", mo, d,
+                         strchr("AEIOU", z_en[zi][0]) ? "an" : "a", z_en[zi]);
+        else    snprintf(r->reply, sizeof r->reply, "Chi nasce il %d %s è %s.", d, mo, z_it[zi]);
+        return true;
+    }
+    if (until) {
+        // Round noon-to-noon to the nearest whole day (both tm are at 12:00, so a DST shift inside the
+        // interval offsets by <=1h — plain truncation could then miscount by a day; symmetric rounding fixes it).
+        long secs = (long)(tgt - te);
+        long days = secs >= 0 ? (secs + 43200) / 86400 : -((-secs + 43200) / 86400);
+        char dt[48];
+        if (en) snprintf(dt, sizeof dt, "%s %d, %d", mo, d, y); else snprintf(dt, sizeof dt, "%d %s %d", d, mo, y);
+        if      (days == 0) snprintf(r->reply, sizeof r->reply, en ? "%s is today." : "%s è oggi.", dt);
+        else if (days == 1) snprintf(r->reply, sizeof r->reply, en ? "1 day until %s." : "Manca 1 giorno a %s.", dt);
+        else if (days > 1)  snprintf(r->reply, sizeof r->reply, en ? "%ld days until %s." : "Mancano %ld giorni a %s.", days, dt);
+        else                snprintf(r->reply, sizeof r->reply, en ? "%s was %ld days ago." : "%s è passato da %ld giorni.", dt, -days);
+    } else {
+        if (en) snprintf(r->reply, sizeof r->reply, "%s %d, %d falls on a %s.", mo, d, y, wd);
+        else    snprintf(r->reply, sizeof r->reply, "Il %d %s %d è %s.", d, mo, y, wd);
+    }
+    return true;
+}
+
+// Day-of-week (Sakamoto), 0=Sunday..6=Saturday — timezone-independent, for DST transition dates.
+static int a_dow(int y, int m, int d)
+{
+    static const int t[] = { 0,3,2,5,0,3,5,1,4,6,2,4 };
+    if (m < 3) y -= 1;
+    return (y + y/4 - y/100 + y/400 + t[m-1] + d) % 7;
+}
+static int a_nth_sunday(int y, int m, int nth) { int dow1 = a_dow(y, m, 1); int first = 1 + ((7 - dow1) % 7); return first + (nth - 1) * 7; }
+static int a_last_sunday(int y, int m) { int dim = a_days_in_month(m, y); return dim - a_dow(y, m, dim); }
+// DST active on UTC date (y,m,d)?  rule: 1=EU, 2=US, 3=AU(Sydney). Day-granularity (a few hours of slop at
+// the transition — acceptable for a spoken clock). Northern: summer=DST; AU is southern (reversed).
+static bool a_is_dst(int rule, int y, int m, int d)
+{
+    if (rule == 1) { if (m < 3 || m > 10) return false; if (m > 3 && m < 10) return true;
+                     return m == 3 ? d >= a_last_sunday(y, 3) : d < a_last_sunday(y, 10); }
+    if (rule == 2) { if (m < 3 || m > 11) return false; if (m > 3 && m < 11) return true;
+                     return m == 3 ? d >= a_nth_sunday(y, 3, 2) : d < a_nth_sunday(y, 11, 1); }
+    if (rule == 3) { if (m > 10 || m < 4) return true; if (m > 4 && m < 10) return false;
+                     return m == 10 ? d >= a_nth_sunday(y, 10, 1) : d < a_nth_sunday(y, 4, 1); }
+    return false;
+}
+
+// WORLD CLOCK (offline, from the RTC's UTC): "che ore sono a Tokyo", "what time is it in New York".
+// A closed city table (standard UTC offset in minutes + DST rule) — DST is computed, so London/New York
+// are correct year-round, not just in winter. Abstains (returns false) on an unknown city or no time cue.
+static bool a_solve_worldclock(const char *raw, bool en, anima_result_t *r)
+{
+    char nf[180]; a_norm_phrase(raw, nf, sizeof nf);
+    bool cue = strstr(nf," che ore ")||strstr(nf," che ora ")||strstr(nf," what time ")||strstr(nf," orario ")||
+               strstr(nf," ora a ")||strstr(nf," ore a ")||strstr(nf," time in ")||strstr(nf," current time ");
+    if (!cue) return false;
+    static const struct { const char *alias[3]; const char *disp_it, *disp_en; int off; int rule; } CITY[] = {
+        {{"londra","london",0},              "Londra","London",          0,   1},
+        {{"parigi","paris",0},               "Parigi","Paris",           60,  1},
+        {{"berlino","berlin",0},             "Berlino","Berlin",         60,  1},
+        {{"roma","rome",0},                  "Roma","Rome",              60,  1},
+        {{"madrid",0,0},                     "Madrid","Madrid",          60,  1},
+        {{"amsterdam",0,0},                  "Amsterdam","Amsterdam",    60,  1},
+        {{"atene","athens",0},               "Atene","Athens",           120, 1},
+        {{"lisbona","lisbon",0},             "Lisbona","Lisbon",         0,   1},
+        {{"new york","newyork",0},           "New York","New York",      -300,2},
+        {{"chicago",0,0},                    "Chicago","Chicago",        -360,2},
+        {{"denver",0,0},                     "Denver","Denver",          -420,2},
+        {{"los angeles","losangeles",0},     "Los Angeles","Los Angeles",-480,2},
+        {{"toronto",0,0},                    "Toronto","Toronto",        -300,2},
+        {{"tokyo","tokio",0},                "Tokyo","Tokyo",            540, 0},
+        {{"pechino","beijing",0},            "Pechino","Beijing",        480, 0},
+        {{"shanghai",0,0},                   "Shanghai","Shanghai",      480, 0},
+        {{"hong kong","hongkong",0},         "Hong Kong","Hong Kong",    480, 0},
+        {{"singapore",0,0},                  "Singapore","Singapore",    480, 0},
+        {{"seoul",0,0},                      "Seoul","Seoul",            540, 0},
+        {{"bangkok",0,0},                    "Bangkok","Bangkok",        420, 0},
+        {{"delhi","new delhi",0},            "Delhi","Delhi",            330, 0},
+        {{"mumbai",0,0},                     "Mumbai","Mumbai",          330, 0},
+        {{"dubai",0,0},                      "Dubai","Dubai",            240, 0},
+        {{"mosca","moscow",0},               "Mosca","Moscow",           180, 0},
+        {{"istanbul",0,0},                   "Istanbul","Istanbul",      180, 0},
+        {{"san paolo","sao paulo",0},        "San Paolo","Sao Paulo",    -180,0},
+        {{"citta del messico","mexico city",0},"Città del Messico","Mexico City",-360,0},
+        {{"sydney",0,0},                     "Sydney","Sydney",          600, 3},
+    };
+    for (size_t i = 0; i < sizeof CITY / sizeof CITY[0]; i++) {
+        bool hit = false; char p[40];
+        for (int a = 0; a < 3 && CITY[i].alias[a]; a++) { snprintf(p, sizeof p, " %s ", CITY[i].alias[a]); if (strstr(nf, p)) { hit = true; break; } }
+        if (!hit) continue;
+        time_t now = time(NULL); struct tm g = *gmtime(&now);
+        int off = CITY[i].off + (a_is_dst(CITY[i].rule, g.tm_year+1900, g.tm_mon+1, g.tm_mday) ? 60 : 0);
+        int total = (((g.tm_hour*60 + g.tm_min + off) % 1440) + 1440) % 1440;
+        memset(r, 0, sizeof *r);
+        r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_ANSWER; r->confidence = 95;
+        snprintf(r->intent, sizeof r->intent, "worldclock");
+        snprintf(r->reply, sizeof r->reply, en ? "In %s it's %02d:%02d." : "A %s sono le %02d:%02d.",
+                 en ? CITY[i].disp_en : CITY[i].disp_it, total/60, total%60);
+        return true;
+    }
+    return false;
+}
+
+// HOURS BETWEEN two clock times: "quante ore da 9 a 17" -> 8, "how many hours from 9:30 to 18:00" -> 8h30.
+// Deterministic. Overnight (end<start) wraps to the next day. Needs a duration cue AND exactly two valid
+// HH[:MM] times (0-23) — so "quante ore per 100 km a 50 kmh" (numbers aren't clock times) falls through to
+// the physics solver, and "quante ore ho dormito" (no times) abstains. Never fabricates.
+static bool a_solve_hoursbetween(const char *raw, bool en, anima_result_t *r)
+{
+    char nf[180]; a_norm_phrase(raw, nf, sizeof nf);
+    bool cue = strstr(nf," quante ore ")||strstr(nf," quanti minuti ")||strstr(nf," quanto tempo ")||
+               strstr(nf," how many hours ")||strstr(nf," how many minutes ")||strstr(nf," how long ");
+    // A RANGE lead is REQUIRED — otherwise a duration phrase ("quanto tempo, 8 o 10 minuti?", "5 o 10?")
+    // would turn two bare numbers into fake clock endpoints and fabricate a confident wrong answer.
+    bool lead = strstr(nf," da ")||strstr(nf," dalle ")||strstr(nf," dalla ")||strstr(nf," from ")||
+                strstr(nf," tra ")||strstr(nf," between ");
+    if (!cue || !lead) return false;
+    int tm[2]; int nt = 0;
+    for (const char *p = raw; *p && nt < 3; ) {
+        while (*p && !isdigit((unsigned char)*p)) p++;
+        if (!*p) break;
+        int hh = atoi(p); const char *q = p; while (isdigit((unsigned char)*q)) q++;
+        int mm = 0; if (*q == ':') { mm = atoi(q + 1); q++; while (isdigit((unsigned char)*q)) q++; }
+        const char *a2 = q; while (*a2 == ' ') a2++;                       // word right after the number
+        bool pm = tolower((unsigned char)a2[0]) == 'p' && tolower((unsigned char)a2[1]) == 'm';
+        bool am = tolower((unsigned char)a2[0]) == 'a' && tolower((unsigned char)a2[1]) == 'm';
+        // A number immediately followed by a DURATION unit ("10 minuti", "3 ore") is a length, NOT a clock
+        // time — skip it so "da 8 a 10 minuti" never becomes an interval. Case-folded next word.
+        char nx[8]; int nk = 0; for (const char *w = a2; *w && *w != ' ' && nk < 7; w++) nx[nk++] = (char)tolower((unsigned char)*w); nx[nk] = 0;
+        bool isdur = !strncmp(nx,"minut",5)||!strncmp(nx,"minute",6)||!strcmp(nx,"min")||!strcmp(nx,"ora")||
+                     !strcmp(nx,"ore")||!strncmp(nx,"hour",4)||!strncmp(nx,"second",6)||!strcmp(nx,"sec");
+        if (pm && hh >= 1 && hh < 12) hh += 12; else if (am && hh == 12) hh = 0;
+        if (!isdur && hh >= 0 && hh <= 23 && mm >= 0 && mm < 60) { if (nt < 2) tm[nt] = hh * 60 + mm; nt++; }
+        p = q;
+    }
+    if (nt != 2) return false;                                            // exactly two clock times, else abstain
+    int diff = tm[1] - tm[0]; if (diff < 0) diff += 1440;                 // overnight wraps
+    int hh = diff / 60, mi = diff % 60;
+    char from[8], to[8], dur[40];
+    snprintf(from, sizeof from, "%d:%02d", tm[0]/60, tm[0]%60);
+    snprintf(to,   sizeof to,   "%d:%02d", tm[1]/60, tm[1]%60);
+    if (hh == 0)      snprintf(dur, sizeof dur, en ? (mi == 1 ? "1 minute" : "%d minutes") : (mi == 1 ? "1 minuto" : "%d minuti"), mi);
+    else if (mi == 0) snprintf(dur, sizeof dur, en ? (hh == 1 ? "1 hour" : "%d hours") : (hh == 1 ? "1 ora" : "%d ore"), hh);
+    else              snprintf(dur, sizeof dur, en ? "%dh %dmin" : "%d ore e %d min", hh, mi);
+    memset(r, 0, sizeof *r);
+    r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_ANSWER; r->confidence = 95;
+    snprintf(r->intent, sizeof r->intent, "date");
+    snprintf(r->reply, sizeof r->reply, en ? "From %s to %s: %s." : "Da %s a %s: %s.", from, to, dur);
+    return true;
+}
+
 // "fra N giorni", "N giorni fa", "sommo N giorni a oggi". Deterministic — never needs the cloud.
 static bool a_solve_date(const char *raw, bool en, anima_result_t *r)
 {
@@ -2154,6 +2424,38 @@ static bool a_solve_date(const char *raw, bool en, anima_result_t *r)
     if (strstr(nf," converti ")||strstr(nf," in ore ")||strstr(nf," in minuti ")||strstr(nf," in secondi ")||
         strstr(nf," in giorni ")||strstr(nf," in settimane ")||strstr(nf," in mesi ")||strstr(nf," in anni ")||
         strstr(nf," in millisecondi ")) return false;   // "3 giorni in ore" is a unit conversion, not date arithmetic
+
+    // AGE from an EXPLICIT birth year: "quanti anni ha chi è nato nel 1990", "how old is someone born in 1985".
+    // Runs before the unit converter (which mis-parsed "anni"/"ha" as time/hectare). REQUIRES both an age
+    // question AND a born-cue AND a 4-digit year — so "quanti anni ha <named person>" (no year) stays an
+    // unanswerable question that abstains, never a fabricated age. Reports the ±1 range (birthday unknown).
+    {
+        bool ageq = strstr(nf," quanti anni ")||strstr(nf," che eta ")||strstr(nf," how old ")||strstr(nf," what age ");
+        bool born = strstr(nf," nato ")||strstr(nf," nata ")||strstr(nf," nati ")||strstr(nf," born ")||strstr(nf," nascita ");
+        if (ageq && born) {
+            int by = 0;
+            for (const char *p = nf; *p; ) { if (isdigit((unsigned char)*p)) { int v = atoi(p);
+                while (isdigit((unsigned char)*p)) p++; if (v >= 1000 && v <= 3000 && !by) by = v; } else p++; }
+            if (by) {
+                time_t now = time(NULL); struct tm t = *localtime(&now); int cy = t.tm_year + 1900;
+                memset(r, 0, sizeof *r);
+                r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_ANSWER; r->confidence = 90;
+                snprintf(r->intent, sizeof r->intent, "date");
+                if (by > cy)
+                    snprintf(r->reply, sizeof r->reply, en ? "Someone born in %d isn't born yet." : "Chi è nato nel %d non è ancora nato.", by);
+                else if (cy - by == 0)
+                    snprintf(r->reply, sizeof r->reply, en ? "Someone born in %d is under 1 year old in %d." : "Chi è nato nel %d ha meno di 1 anno nel %d.", by, cy);
+                else
+                    snprintf(r->reply, sizeof r->reply, en ? "Someone born in %d is %d or %d in %d (depending on the month)." :
+                                                             "Chi è nato nel %d ha %d o %d anni nel %d (dipende dal mese).", by, cy - by - 1, cy - by, cy);
+                return true;
+            }
+        }
+    }
+
+    // SPECIFIC calendar date (weekday of a fixed date, or days-until a date/holiday) — real deterministic
+    // arithmetic, checked before the relative-offset heuristics (which decline on a month name / long sentence).
+    if (a_date_specific(nf, en, r)) return true;
     bool daycue = strstr(nf," giorno ")||strstr(nf," giorni ")||strstr(nf," data ")||strstr(nf," day ")||
                   strstr(nf," date ")||strstr(nf," weekday ");
     int off = 0; bool temp = false;
@@ -2788,6 +3090,8 @@ int anima_reason(const char *raw, bool en, anima_result_t *r)
 // specific -> general; every frame is keyword-gated so plain arithmetic falls through to calc.
 int anima_solve(const char *raw, bool en, anima_result_t *r)
 {
+    if (a_solve_worldclock(raw, en, r)) return 1;    // "che ore sono a Tokyo" — city time from UTC + computed DST
+    if (a_solve_hoursbetween(raw, en, r)) return 1;  // "quante ore da 9 a 17" — before the time L0 intent
     if (a_solve_date(raw, en, r)) return 1;          // date arithmetic (no numeric items needed) — before the n==0 gate
     char norm[160]; a_norm_solve(raw, norm, sizeof(norm));
     a_sitem_t it[24]; int n = a_items(norm, it, 24);

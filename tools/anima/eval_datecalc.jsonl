@@ -1,0 +1,56 @@
+// Calendar date arithmetic (anima_solve.c a_date_specific) — the WEEKDAY of a fixed date and the DAYS-UNTIL
+// a date/holiday, real deterministic arithmetic that previously abstained ("I only count from today").
+// Positives must route to the date skill; the impossible date is an honest in-skill decline (still intent=date);
+// statements carrying a date/holiday must NOT fabricate a fact (abstain / honest decline).
+{"q":"che giorno della settimana e il 25 dicembre 2026","lang":"it","expect":"date"}
+{"q":"che giorno e il 1 gennaio 2027","lang":"it","expect":"date"}
+{"q":"che giorno cade il 14 febbraio 2027","lang":"it","expect":"date"}
+{"q":"quanti giorni mancano a natale","lang":"it","expect":"date"}
+{"q":"quanti giorni mancano al 25 dicembre","lang":"it","expect":"date"}
+{"q":"quanto manca a capodanno","lang":"it","expect":"date"}
+{"q":"quanti giorni mancano a ferragosto","lang":"it","expect":"date"}
+{"q":"che giorno e il 30 febbraio 2025","lang":"it","expect":"date"}
+{"q":"che giorno e oggi","lang":"it","expect":"date"}
+{"q":"che giorno e domani","lang":"it","expect":"date"}
+{"q":"fra 3 giorni che giorno e","lang":"it","expect":"date"}
+{"q":"what day of the week is december 25 2026","lang":"en","expect":"date"}
+{"q":"what weekday is july 4 2026","lang":"en","expect":"date"}
+{"q":"how many days until christmas","lang":"en","expect":"date"}
+{"q":"how many days until new year","lang":"en","expect":"date"}
+{"q":"how many days until halloween","lang":"en","expect":"date"}
+// days-in-month (exact, leap-aware)
+{"q":"quanti giorni ha febbraio","lang":"it","expect":"date"}
+{"q":"quanti giorni ha febbraio 2024","lang":"it","expect":"date"}
+{"q":"quanti giorni ha aprile","lang":"it","expect":"date"}
+{"q":"quanti giorni ha dicembre","lang":"it","expect":"date"}
+{"q":"how many days in april","lang":"en","expect":"date"}
+{"q":"how many days does february 2024 have","lang":"en","expect":"date"}
+// hours between two clock times (overnight wraps; numbers that aren't clock times fall through)
+{"q":"quante ore da 9 a 17","lang":"it","expect":"date"}
+{"q":"quante ore da 9:30 a 18:00","lang":"it","expect":"date"}
+{"q":"quante ore da 22 a 6","lang":"it","expect":"date"}
+{"q":"how many hours from 9am to 5pm","lang":"en","expect":"date"}
+{"q":"quante ore per 100 km a 50 kmh","lang":"it","expect":"phys"}
+{"q":"quante ore ho dormito","lang":"it","expect":"abstain"}
+{"q":"quanto tempo ci vogliono, 8 o 10 minuti per cuocere la pasta","lang":"it","expect":"abstain"}
+{"q":"how long does it take, 2 or 3 minutes to boil an egg","lang":"en","expect":"abstain"}
+{"q":"da 8 a 10 minuti per cuocere","lang":"it","expect":"abstain"}
+// zodiac sign of a birth date + past-direction days ("giorni fa")
+{"q":"che segno zodiacale e chi nasce il 5 agosto","lang":"it","expect":"date"}
+{"q":"che segno e chi nasce il 23 agosto","lang":"it","expect":"date"}
+{"q":"what star sign is someone born on march 21","lang":"en","expect":"date"}
+{"q":"quanti giorni fa era il 1 gennaio","lang":"it","expect":"date"}
+{"q":"quanti giorni fa era il 25 dicembre","lang":"it","expect":"date"}
+// age from an explicit birth year (fixes the old convert misfire)
+{"q":"quanti anni ha chi e nato nel 1990","lang":"it","expect":"date"}
+{"q":"quanti anni ha una persona nata nel 1985","lang":"it","expect":"date"}
+{"q":"che eta ha chi e nato nel 2000","lang":"it","expect":"date"}
+{"q":"how old is someone born in 1990","lang":"en","expect":"date"}
+{"q":"quanti anni ha chi e nato nel 3000","lang":"it","expect":"date"}
+// --- traps: a date/holiday inside a statement must not fabricate a fact ---
+{"q":"quanti giorni ha una settimana","lang":"it","expect":"answer"}
+{"q":"quanti anni ha oggi giulio cesare","lang":"it","expect":"abstain"}
+{"q":"quanti anni ha babbo natale","lang":"it","expect":"abstain"}
+{"q":"a natale vado in montagna","lang":"it","expect":"abstain"}
+{"q":"buon natale","lang":"it","expect":"abstain"}
+{"q":"ho comprato 25 mele a dicembre","lang":"it","expect":"abstain"}

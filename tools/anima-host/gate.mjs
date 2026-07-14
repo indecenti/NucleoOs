@@ -224,6 +224,26 @@ const gates = [
   { name: 'skill-coverage EN (s8)', cmd: 'node', args: ['tools/anima-host/skill-probe.mjs', 'tools/anima/eval_skills8_en.jsonl'],
     // GENUINE offline-skill coverage round 3 (EN): English counterpart of s8 — app-launch + calendar + settings.
     ok: (code) => code === 0, summary: (o) => (o.match(/\[skill-probe\][^\n]*/) || [lastLine(o)])[0] },
+  { name: 'timer/alarm (skill)', cmd: 'node', args: ['tools/anima-host/skill-probe.mjs', 'tools/anima/eval_timer.jsonl'],
+    // The offline TIMER/ALARM/COUNTDOWN skill (nucleo_anima.c tool_timer): "timer 5 minuti", "sveglia alle
+    // 7:30", "conto alla rovescia 90 secondi", EN "set a timer for 5 minutes"/"wake me at 7" resolve a
+    // relative duration (or clock time) to an absolute moment via the RTC and route through add_event —
+    // while unit-conversion ("converti 5 minuti in secondi") stays convert, a bare duration statement
+    // ("fra 5 minuti arrivo") abstains, and "apri la sveglia" opens the clock app. 0 fabricated timers.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[skill-probe\][^\n]*/) || [lastLine(o)])[0] },
+  { name: 'world-clock (skill)', cmd: 'node', args: ['tools/anima-host/skill-probe.mjs', 'tools/anima/eval_worldclock.jsonl'],
+    // The offline WORLD CLOCK (anima_solve.c a_solve_worldclock): "che ore sono a Tokyo", "what time is it
+    // in New York" answer from the RTC's UTC + a closed city table with COMPUTED DST (EU/US/AU rules — so
+    // London/New York are right in summer too). An unknown/fictional city, a city with no time cue (a
+    // statement), and a bare "che ore sono" (local time) never fabricate a city time.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[skill-probe\][^\n]*/) || [lastLine(o)])[0] },
+  { name: 'date-calc (skill)', cmd: 'node', args: ['tools/anima-host/skill-probe.mjs', 'tools/anima/eval_datecalc.jsonl'],
+    // The offline CALENDAR DATE arithmetic (anima_solve.c a_date_specific): the WEEKDAY of a fixed date
+    // ("che giorno è il 25 dicembre 2026", "what day is december 25 2026") and the DAYS-UNTIL a date or
+    // holiday ("quanti giorni a natale", "how many days until christmas") — real deterministic mktime math
+    // that previously abstained. An impossible date (30 febbraio) declines honestly; a date/holiday inside
+    // a STATEMENT ("ho comprato 25 mele a dicembre", "a natale vado in montagna") never fabricates a weekday.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[skill-probe\][^\n]*/) || [lastLine(o)])[0] },
   { name: 'date/excel halluc IT', cmd: 'node', args: ['tools/anima-host/halluc-probe.mjs', 'tools/anima/eval_halluc_date_it.jsonl'],
     // anti-hallucination DATE/BIO + EXCEL traps (IT): "quando è morto <vivo/fittizio>", "quanti anni ha oggi
     // <defunto>", "chi è morto prima tra X e Y", "fai la media dei miei sogni" — must abstain, never fabricate a

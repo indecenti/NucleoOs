@@ -1,0 +1,22 @@
+// World clock (anima_solve.c a_solve_worldclock) — city time from the RTC's UTC + COMPUTED DST (EU/US/AU),
+// so London/New York are correct year-round. Positives route to worldclock; an unknown/fictional city, a
+// city with no time cue (a statement), and a bare "che ore sono" (local time) must NOT fabricate a city time.
+{"q":"che ore sono a Tokyo","lang":"it","expect":"worldclock"}
+{"q":"che ore sono a Londra","lang":"it","expect":"worldclock"}
+{"q":"che ore sono a New York","lang":"it","expect":"worldclock"}
+{"q":"che ora e a Parigi","lang":"it","expect":"worldclock"}
+{"q":"che ore sono a Dubai","lang":"it","expect":"worldclock"}
+{"q":"che ore sono a Mosca","lang":"it","expect":"worldclock"}
+{"q":"che ore sono a Sydney","lang":"it","expect":"worldclock"}
+{"q":"orario a Pechino","lang":"it","expect":"worldclock"}
+{"q":"what time is it in Tokyo","lang":"en","expect":"worldclock"}
+{"q":"what time is it in New York","lang":"en","expect":"worldclock"}
+{"q":"what time is it in London","lang":"en","expect":"worldclock"}
+{"q":"what time is it in Los Angeles","lang":"en","expect":"worldclock"}
+// --- traps: never fabricate a city time ---
+{"q":"che ore sono a Marte","lang":"it","expect":"abstain"}
+{"q":"che ore sono a Gotham","lang":"it","expect":"abstain"}
+{"q":"il sushi di tokyo e buono","lang":"it","expect":"abstain"}
+{"q":"vivo a new york da dieci anni","lang":"it","expect":"abstain"}
+{"q":"che ore sono","lang":"it","expect":"time"}
+{"q":"what time is it","lang":"en","expect":"time"}
