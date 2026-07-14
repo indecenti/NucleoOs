@@ -31,6 +31,7 @@ const categories = [
   { id: 'forge-webllm',     label: 'ANIMA Forge / WebLLM (M4)', nl: false, desc: 'Editor agentico nel browser: firewall azioni, verifica cross-substrato, download/engine, provenienza.' },
   { id: 'app-spreadsheet',  label: 'App · Foglio di calcolo',  nl: true,  desc: 'Motore formule Excel-class + NL→formula del copilot.' },
   { id: 'app-paint',        label: 'App · Paint',              nl: false, desc: 'Imaging e comandi NL della Paint Atelier.' },
+  { id: 'app-converter',    label: 'App · Convertitore',       nl: true,  desc: 'Motore di conversione unità + parser comandi in linguaggio naturale (IT/EN); installazione via la pipeline dell\'agente.' },
   { id: 'app-shell',        label: 'App · Shell & tool',       nl: false, desc: 'Browser, scorciatoie, terminale, percorsi file, NFV video.' },
   { id: 'app-device',       label: 'App · Device & HW',        nl: false, desc: 'UI device e bridge USB-HID.' },
   { id: 'device-load',      label: 'Device · Carico & RAM',    nl: false, desc: "Stress concorrente del web server su device reale: l'arbitro heavy-work serializza il TLS, l'heap regge sopra il floor, zero crash. Richiede un device flashato (SKIP se assente)." },
@@ -81,6 +82,7 @@ const NL_GATES = new Set(Object.entries(gateCat).filter(([, c]) => categories.fi
 function fileCat(f) {
   if (/forge-/.test(f)) return 'forge-webllm';
   if (/paint-/.test(f)) return 'app-paint';
+  if (/unit-converter/.test(f)) return 'app-converter';
   if (/spread|spreadsheet/.test(f)) return 'app-spreadsheet';
   if (/weather\.test/.test(f)) return 'nl-weather';
   if (/translate\.test/.test(f)) return 'nl-translate';
@@ -192,6 +194,7 @@ const METRICS = {
   'gate-akb5-content-sharded':     [{ k: 'cases', re: 'recall \\d+/(\\d+)' }, { k: 'halluc', re: 'HALLUCINATIONS (\\d+)' }],
   'gate-halluc-probe-it':          [{ k: 'cases', re: '(\\d+) honestly abstained' }],
   'gate-halluc-probe-en':          [{ k: 'cases', re: '(\\d+) honestly abstained' }],
+  'unit-unit-converter':           [{ k: 'cases', re: '\\u2014\\s*(\\d+)\\s*NL cases' }],
 };
 for (const t of tests) if (METRICS[t.id]) t.metrics = METRICS[t.id];
 for (const t of tests) t.anima = ANIMA_CATS.has(t.category);   // belongs to the deterministic ANIMA cascade (no models, no apps)

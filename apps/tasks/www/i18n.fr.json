@@ -1,0 +1,16 @@
+{
+  "_lang": "fr",
+  "app_title": "Tâches",
+  "filter_active": "Actives",
+  "add_ph": "Ajoutez une tâche et appuyez sur Entrée…",
+  "priority": "Priorité",
+  "clear_done": "Effacer les terminées",
+  "saving": "Enregistrement…",
+  "saved_locally": "Enregistré localement",
+  "copied": "Copié",
+  "empty_done": "Aucune tâche terminée pour le moment.",
+  "empty_active": "Rien à faire — tout est fait ! 🎉",
+  "empty_all": "Aucune tâche pour le moment.<br>Écrivez ci-dessus et appuyez sur Entrée.",
+  "toggle": "Basculer",
+  "count": "{active} actives · {total} au total"
+}

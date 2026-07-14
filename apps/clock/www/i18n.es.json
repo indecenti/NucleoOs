@@ -1,0 +1,20 @@
+{
+  "_lang": "es",
+  "tab_clock": "Reloj",
+  "tab_timer": "Temporizador",
+  "stopwatch": "Cronómetro",
+  "lap": "Vuelta",
+  "cfg_title": "Ajustes del reloj",
+  "opt_24h": "Formato de 24 horas",
+  "opt_seconds": "Mostrar los segundos",
+  "opt_analog": "Reloj analógico",
+  "dev_init": "reloj del dispositivo…",
+  "dev_unreachable": "dispositivo no accesible",
+  "dev_synced": "nucleo sincronizado por NTP · {hh}:{mm}",
+  "dev_synced_drift": "nucleo sincronizado por NTP · desfase {secs}s ({hh}:{mm})",
+  "dev_waiting": "nucleo: esperando sincronización NTP",
+  "dev_browser_set": "hora ajustada desde el navegador",
+  "timer_done": "¡Tiempo agotado!",
+  "save_ok": "Guardado en el dispositivo",
+  "save_fail": "No se pudo guardar — dispositivo no accesible"
+}

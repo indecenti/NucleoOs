@@ -1,0 +1,7 @@
+{
+  "_lang": "es",
+  "clear": "limpiar",
+  "clr_tip": "Limpiar (Ctrl+L)",
+  "input_ph": "escribe 'help'…",
+  "boot_hint": "Terminal NucleoOS — escribe \"help\" para ver los comandos."
+}

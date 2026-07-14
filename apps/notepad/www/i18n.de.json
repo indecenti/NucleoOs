@@ -1,0 +1,25 @@
+{
+  "_lang": "de",
+
+  "title_new": "Neu (Ctrl+N)",
+  "title_open": "Öffnen (Ctrl+O)",
+  "title_save": "Speichern (Ctrl+S)",
+  "title_saveas": "Speichern unter (Ctrl+Shift+S)",
+  "ph_editor": "Hier tippen…  ·  Ctrl+S speichern · Ctrl+O öffnen · Ctrl+N neu",
+
+  "stats": { "one": "{chars} Zeichen · {lines} Zeile", "other": "{chars} Zeichen · {lines} Zeilen" },
+
+  "loaded": "{name} geladen",
+  "could_not_open": "{name} konnte nicht geöffnet werden",
+  "open_hint": "Öffne eine Datei aus File Commander, um sie hier zu bearbeiten.",
+  "saved_file": "{name} gespeichert",
+  "save_failed": "Speichern fehlgeschlagen ({status})",
+  "save_pending": "Speichern ausstehend: Datei-API des OS nicht erreichbar.",
+
+  "dlg_saveas": "Speichern unter",
+  "dlg_open": "Textdatei öffnen",
+  "confirm_dirty": "Nicht gespeicherte Änderungen. Fortfahren und verwerfen?",
+
+  "prompt_save": "Speichern unter (SD-Pfad):",
+  "prompt_open": "Öffnen (SD-Pfad):"
+}

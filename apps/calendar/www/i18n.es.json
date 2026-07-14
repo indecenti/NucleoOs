@@ -1,0 +1,14 @@
+{
+  "_lang": "es",
+  "prev_month": "Mes anterior",
+  "next_month": "Mes siguiente",
+  "new_event_ph": "Nuevo evento… (Intro)",
+  "pick_day": "Elige un día",
+  "empty_events": "Sin eventos. Añade uno abajo.",
+  "saved_device": "Guardado en el dispositivo",
+  "save_failed": "No se pudo guardar — dispositivo no accesible",
+  "more_events": {
+    "one": "+{count} más",
+    "other": "+{count} más"
+  }
+}

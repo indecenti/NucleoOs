@@ -469,6 +469,16 @@
         "storage.shared",
         "system.events"
       ]
+    },
+    {
+      "id": "unit-converter",
+      "version": "0.1.0",
+      "path": "/apps/unit-converter",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "system.clipboard"
+      ]
     }
   ]
 }

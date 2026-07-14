@@ -93,6 +93,13 @@
       "anima": false
     },
     {
+      "id": "app-converter",
+      "label": "App · Convertitore",
+      "nl": true,
+      "desc": "Motore di conversione unità + parser comandi in linguaggio naturale (IT/EN); installazione via la pipeline dell'agente.",
+      "anima": false
+    },
+    {
       "id": "app-shell",
       "label": "App · Shell & tool",
       "nl": false,
@@ -861,6 +868,54 @@
           "re": "\\u2014\\s*\\d+/(\\d+) pass"
         }
       ],
+      "anima": true
+    },
+    {
+      "id": "gate-timer-alarm-skill",
+      "label": "timer/alarm (skill)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_timer.jsonl"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-world-clock-skill",
+      "label": "world-clock (skill)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_worldclock.jsonl"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-date-calc-skill",
+      "label": "date-calc (skill)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/skill-probe.mjs",
+        "tools/anima/eval_datecalc.jsonl"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
       "anima": true
     },
     {
@@ -2464,6 +2519,28 @@
       "nl": false,
       "lang": "na",
       "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-unit-converter",
+      "label": "unit-converter.test.mjs",
+      "category": "app-converter",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/unit-converter.test.mjs"
+      ],
+      "verifies": "",
+      "nl": true,
+      "lang": "na",
+      "in_gate": true,
+      "metrics": [
+        {
+          "k": "cases",
+          "re": "\\u2014\\s*(\\d+)\\s*NL cases"
+        }
+      ],
       "anima": false
     },
     {

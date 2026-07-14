@@ -1,0 +1,25 @@
+{
+  "_lang": "fr",
+
+  "title_new": "Nouveau (Ctrl+N)",
+  "title_open": "Ouvrir (Ctrl+O)",
+  "title_save": "Enregistrer (Ctrl+S)",
+  "title_saveas": "Enregistrer sous (Ctrl+Shift+S)",
+  "ph_editor": "Écrivez ici…  ·  Ctrl+S enregistrer · Ctrl+O ouvrir · Ctrl+N nouveau",
+
+  "stats": { "one": "{chars} caractères · {lines} ligne", "other": "{chars} caractères · {lines} lignes" },
+
+  "loaded": "Chargé {name}",
+  "could_not_open": "Impossible d'ouvrir {name}",
+  "open_hint": "Ouvrez un fichier depuis File Commander pour le modifier ici.",
+  "saved_file": "Enregistré {name}",
+  "save_failed": "Échec de l'enregistrement ({status})",
+  "save_pending": "Enregistrement en attente : l'API de fichiers de l'OS est injoignable.",
+
+  "dlg_saveas": "Enregistrer sous",
+  "dlg_open": "Ouvrir un fichier texte",
+  "confirm_dirty": "Modifications non enregistrées. Continuer et les perdre ?",
+
+  "prompt_save": "Enregistrer sous (chemin SD) :",
+  "prompt_open": "Ouvrir (chemin SD) :"
+}

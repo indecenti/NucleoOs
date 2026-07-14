@@ -1,0 +1,67 @@
+{
+  "_lang": "de",
+
+  "sub_loading": "Kostenloses Live-Radio · synchronisiert mit deinem Gerät",
+  "sub_count": {
+    "one": "Kostenloses Live-Radio · {count} Sender · synchronisiert mit deinem Gerät",
+    "other": "Kostenloses Live-Radio · {count} Sender · synchronisiert mit deinem Gerät"
+  },
+  "btn_add": "Sender hinzufügen",
+  "hint": "▶ im Browser abspielen · ★ als Gerätestandard festlegen · ✎ bearbeiten · ⌃⌄ neu ordnen.",
+  "info_title": "Info & Hilfe",
+  "info_aria": "Info und Hilfe",
+
+  "np_idle": "Nichts in Wiedergabe",
+  "np_idle_hint": "Wähle einen Sender, um mit dem Hören zu beginnen",
+  "vol_title": "Lautstärke",
+  "play_pause": "Wiedergabe / Pause",
+  "connecting": "verbinde…",
+  "live_stream": "Live-Stream",
+
+  "empty_list": "Noch keine Sender — füge einen mit ＋ hinzu.",
+  "support_somafm": "SomaFM unterstützen",
+
+  "badge_default": "Standard",
+  "badge_browser_only": "nur Browser",
+  "badge_browser_only_title": "https wird im Browser abgespielt, aber nicht auf dem Cardputer",
+  "act_set_default": "Als Gerätestandard festlegen",
+  "act_move_up": "Nach oben",
+  "act_move_down": "Nach unten",
+
+  "dlg_add": "Sender hinzufügen",
+  "dlg_edit": "Sender bearbeiten",
+  "f_name": "Name",
+  "f_name_ph": "Mein Sender",
+  "f_genre": "Genre / Slogan",
+  "f_genre_ph": "Ambient / Downtempo",
+  "f_stream": "Stream-URL",
+  "note_stream": "Einfaches http://-MP3 wird auch auf dem Cardputer abgespielt. https:// spielt hier, aber nicht auf dem Gerät.",
+  "note_stream_warn": "⚠ https wird im Browser abgespielt, aber NICHT auf dem Cardputer (kein TLS). Verwende http:// für die Geräteunterstützung.",
+  "f_np": "Now-Playing-URL",
+  "optional": "(optional)",
+  "note_np": "JSON-Metadaten für die Titelzeile — leer lassen für einen einfachen Live-Feed.",
+
+  "err_https": "⚠ https-Stream hier blockiert — aber er wird auf dem Gerät abgespielt, wenn er erreichbar ist.",
+  "err_unreachable": "⚠ Stream vom Browser aus nicht erreichbar (er funktioniert möglicherweise trotzdem auf dem Gerät).",
+
+  "info_lead": "Kostenloses Live-Internetradio für NucleoOS. Eine Senderliste, geteilt zwischen dieser App und der Radio-App auf deinem Cardputer.",
+  "info_add": "<b>Füge einen Sender hinzu.</b> Tippe auf <b>Sender hinzufügen</b>, gib ihm einen Namen und füge eine direkte Stream-URL (einen MP3-Stream) ein. Er landet sofort überall in der Liste.",
+  "info_star": "<b>Lege den Gerätestandard fest.</b> Der mit dem Stern markierte Sender ist der, den dein Cardputer einstellt, sobald du seine Radio-App öffnest.",
+  "info_listen": "<b>Höre hier.</b> Spiele einen beliebigen Sender im Browser ab. Wenn er Titelinfos liefert, siehst du Interpret, Titel und einen Fortschrittsbalken.",
+  "info_reorder": "<b>Neu ordnen und bearbeiten.</b> Verwende ⌃⌄ zum Umsortieren, ✎ zum Bearbeiten, 🗑 zum Entfernen. Jede Änderung wird im selben Moment auf dem Gerät gespeichert.",
+  "info_device_note": "<b>Gerätehinweis:</b> Der Cardputer spielt nur einfache <b>http://</b>-MP3-Streams — neben dem Audio-Decoder ist kein Platz für HTTPS. <b>https://</b>-Sender sind als <b>“nur Browser”</b> gekennzeichnet: Sie spielen hier, laufen aber nicht auf dem Gerät. Kuratierte kostenlose Sender stammen von <b>SomaFM</b>.",
+  "keyboard": "Tastatur",
+  "keys_help": "<kbd>↑</kbd><kbd>↓</kbd> auswählen · <kbd>Enter</kbd> abspielen · <kbd>Leertaste</kbd> abspielen/Pause · <kbd>n</kbd>/<kbd>p</kbd> nächste/vorige",
+  "got_it": "Verstanden",
+
+  "saving": "Speichern…",
+  "saved_ok": "Gespeichert ✓",
+  "save_failed": "Speichern fehlgeschlagen",
+  "toast_seeded": "Standard-Senderliste initialisiert",
+  "toast_readonly": "Öffne Radio über die Geräte-Shell, um Änderungen zu speichern",
+  "toast_default": "“{name}” ist jetzt der Gerätestandard",
+  "toast_removed": "“{name}” entfernt",
+  "toast_saved_changes": "Änderungen gespeichert",
+  "toast_added": "“{name}” hinzugefügt",
+  "confirm_remove": "“{name}” aus der Senderliste entfernen?"
+}

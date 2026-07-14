@@ -1,0 +1,99 @@
+{
+  "_lang": "de",
+  "app_title": "Sprachbefehle",
+  "ws_connecting": "Verbindung…",
+  "mic": "Mikro",
+
+  "tab_tutorial": "Tutorial",
+  "tab_commands": "Befehle",
+  "tab_test": "Test",
+  "tab_custom": "Eigene",
+
+  "cat_apps": "🚀 Apps starten",
+  "cat_system": "📊 System",
+  "cat_skill": "🌤️ Skill",
+
+  "prog_label": { "one": "1 Befehl trainiert", "other": "{count} Befehle trainiert" },
+  "prog_cap": "max. {count}",
+
+  "t0_title": "Bring dem Cardputer deine Stimme bei",
+  "t0_intro": "Dieses Tool trainiert die <b>native</b> Spracherkennung des Cardputer: Sie läuft vollständig <b>offline</b> auf dem Gerät und lernt <b>deine</b> Stimme. Je öfter du sie nutzt, desto genauer wird sie — jeder erkannte Befehl verbessert automatisch sein eigenes Modell.",
+  "t0_tip1": "Es funktioniert per <b>Push-to-Talk</b>: Halte <span class=\"keycap\">FN</span> (oder <span class=\"keycap\">G0</span>) auf dem Cardputer gedrückt, sprich den Befehl, lass los.",
+  "t0_tip2": "Das Gerät erkennt das <b>Wort</b>; ANIMA wandelt es in die Aktion um (eine App öffnen, die Uhrzeit ansagen…).",
+  "t0_tip3": "Keine Cloud, kein Schlüssel: Das Audio verlässt das Gerät nie.",
+  "t0_next": "Los geht's →",
+
+  "t1_title": "So sprichst du deutlich",
+  "t1_intro": "Ein paar Regeln machen einen riesigen Unterschied bei der Genauigkeit:",
+  "t1_tip1": "<b>Ruhige Umgebung</b> und ein konstanter Abstand zum Mikrofon (~20 cm).",
+  "t1_tip2": "Drücke <span class=\"keycap\">FN</span> <b>vor</b> dem Sprechen, lass <b>direkt danach</b> los. Ein Wort/Satz pro Aufnahme.",
+  "t1_tip3": "Sprich <b>natürlich und gleichmäßig</b> — genau so, wie du es im echten Einsatz sagen wirst.",
+  "t1_tip4": "Wähle <b>eindeutige</b>, mehrsilbige Befehle. Vermeide Einsilber und Wörter, die fast gleich klingen.",
+  "t1_next": "Verstanden →",
+
+  "back_arrow": "← Zurück",
+  "next_arrow": "Weiter →",
+
+  "t2_title": "Trainiere die wichtigsten Befehle",
+  "t2_intro": "Beginnen wir mit einem eindeutigen, nützlichen Grundset. Drücke <b>Trainieren</b>, halte dann <span class=\"keycap\">FN</span> und sprich den angezeigten Befehl.",
+
+  "t3_title": "Probier es aus",
+  "t3_intro": "Testen wir, was du trainiert hast. Halte <span class=\"keycap\">FN</span> und sprich einen der Befehle: Du siehst in Echtzeit, <b>was erkannt wurde</b> und wie sicher. Beachte, wie sich der <b>Radius</b> mit der Zeit verengt: Das Modell lernt dich.",
+  "t3_goto_test": "Zum Test",
+
+  "t4_title": "Fertig!",
+  "t4_intro": "Du hast die Grundlagen. Von hier aus kannst du:",
+  "t4_tip1": "Weitere Befehle im Tab <b>Befehle</b> hinzufügen (bis zu 20).",
+  "t4_tip2": "Eigene Sätze im Tab <b>Eigene</b> erstellen.",
+  "t4_tip3": "Jederzeit zum <b>Test</b> zurückkehren: Jede Nutzung verbessert die Erkennung.",
+  "t4_goto_commands": "Zu den Befehlen →",
+
+  "cmd_library": "Befehlsbibliothek",
+  "cmd_sub": "Native Befehle, sofort einsatzbereit. 🟢 = bereits mit deiner Stimme trainiert. Das Gerät verwaltet bis zu <b>20</b>: Wähle deine Favoriten.",
+
+  "test_title": "Live-Test",
+  "test_sub": "Halte <span class=\"keycap\">FN</span> auf dem Cardputer und sprich einen trainierten Befehl.",
+  "test_hint": "Jede Erkennung zeigt die <b>Distanz</b> (niedriger = ähnlicher), den <b>Abstand</b> zum 2. Kandidaten und den <b>selbstkalibrierenden Radius</b> des Worts. Grün = ausgezeichnet, gelb = akzeptabel.",
+  "test_waiting": "Warte… drücke FN und sprich.",
+
+  "custom_title": "Eigener Befehl",
+  "custom_sub": "Nimm einen eigenen Satz auf, der nicht im Lehrplan ist. Halte ihn kurz und eindeutig.",
+  "custom_ph": "z. B. Licht einschalten",
+  "custom_start": "Training starten",
+  "custom_yours": "Deine eigenen Befehle",
+  "custom_empty": "Keine eigenen Befehle gespeichert.",
+
+  "rec_title": "Auf dem Cardputer: FN halten und sprechen",
+  "rec_hold_say": "Halte <span class=\"keycap\">FN</span> (oder <span class=\"keycap\">G0</span>) und sprich:",
+  "rec_then_release": "dann <b>loslassen</b>.",
+  "rec_waiting": "Warte auf den Cardputer…",
+  "rec_recording": "🔴 Aufnahme… lass FN los, um zu speichern.",
+  "rec_processing": "Verarbeitung…",
+  "rec_too_short": "⚠️ Zu kurz oder still — versuch es erneut: FN halten und deutlich sprechen.",
+  "rec_timeout": "⚠️ Keine Antwort vom Cardputer. Stelle sicher, dass du <b>FN</b> beim Sprechen gedrückt hältst (die Aufnahme erfolgt auf dem Gerät, nicht im Browser) und dass die Sprach-Firmware aktuell ist.",
+  "rec_stop": "Stopp",
+
+  "ok_trained": "Trainiert!",
+  "ok_msg": "„{word}“ mit deiner Stimme aufgenommen.",
+  "ok_next_cmd": "Nächster Befehl →",
+
+  "badge_trained": "Trainiert",
+  "cap_reached": "Limit erreicht",
+  "btn_train": "Trainieren",
+
+  "confirm_delete": "Befehl „{word}“ löschen?",
+  "err_delete": "Fehler beim Löschen",
+  "err_network": "Netzwerkfehler",
+  "alert_cap": "Du hast das Limit von {max} Befehlen erreicht. Entferne zuerst einen.",
+  "err_arm": "Engine konnte nicht scharfgeschaltet werden (Gerät ausgelastet?)",
+  "err_connect": "Verbindungsfehler zum Cardputer",
+
+  "conf_excellent": "Ausgezeichnet",
+  "conf_good": "Gut",
+  "conf_fair": "Mäßig",
+  "conf_weak": "Schwach",
+
+  "meta_dist": "Dist",
+  "meta_second": "2.",
+  "meta_radius": "Radius"
+}

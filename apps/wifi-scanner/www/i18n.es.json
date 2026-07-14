@@ -1,0 +1,36 @@
+{
+  "_lang": "es",
+  "title": "Gestor WiFi",
+  "btn_auto": "Auto",
+  "auto_hint": "Actualización automática cada 8s",
+  "connect": "Conectar",
+  "reconnect": "Reconectar",
+  "forget": "Olvidar",
+  "password": "Contraseña",
+  "password_keep": "Contraseña (vacío = usar la guardada)",
+  "saved": "guardada",
+  "saved_hint": "Red guardada — reconexión automática",
+  "priority": "prioridad",
+  "connecting": "Conectando a {ssid}…",
+  "connected_to": "Conectado a {ssid}",
+  "connect_failed": "Conexión fallida — comprueba la contraseña",
+  "forgotten": "Red olvidada",
+  "need_pair": "Vincula el dispositivo para gestionar las redes",
+  "src_idle": "inactivo",
+  "empty_msg": "No se encontraron redes.<br>Pulsa <b>Escanear</b> para buscar de nuevo.",
+  "count": {
+    "one": "{count} red",
+    "other": "{count} redes"
+  },
+  "count_open": {
+    "one": "{count} abierta",
+    "other": "{count} abiertas"
+  },
+  "ch": "can. {ch}",
+  "sec_open": "abierta",
+  "sec_open_hint": "Red abierta",
+  "hidden_ssid": "(oculta)",
+  "src_connected_only": "solo AP conectado — API de escaneo en camino",
+  "src_demo": "datos de demo — dispositivo sin conexión",
+  "src_live": "escaneo en vivo"
+}
