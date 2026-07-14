@@ -686,6 +686,13 @@ function connectWS() {
       }
       // The device handed its screen over to web clients (or reclaimed it) — reflect it.
       if (ev.t === 'system.remote' && ev.d) renderRemote(!!ev.d.active, ev.d.clients);
+      // The OS UI language changed ON THE DEVICE — the native TFT UI toggle, or another web client via
+      // POST /api/lang. Switch the whole web OS live: the engine repaints the shell chrome and, through
+      // the anima.lang storage event, every open app iframe too — no reload. Guarded so it's a no-op when
+      // we're already on that language (e.g. the client that initiated the change hears its own broadcast).
+      if (ev.t === 'system.language' && ev.d && (ev.d.lang === 'it' || ev.d.lang === 'en')) {
+        try { if (window.NucleoI18N && window.NucleoI18N.lang !== ev.d.lang) window.NucleoI18N.setLang(ev.d.lang); } catch {}
+      }
       // The heavy-work arbiter took/released its single token (one TLS/SD/heavy job at a time on the
       // PSRAM-less device) — show a subtle, debounced "busy" tray indicator. NOT a blocking overlay:
       // the arbiter already degrades gracefully (503/offline), this only tells the user the device is
@@ -782,9 +789,15 @@ function wireMessages() {
     if (d.type === 'set-wallpaper' && d.path) {
       state.wallpaper = d.path; applyWallpaper(d.path); saveUiState(); return;
     }
-    // Live system-language change from Settings: mirror into the runtime key the copilot/ANIMA read.
+    // Live system-language change from Settings: mirror into the runtime key the copilot/ANIMA read,
+    // then propagate to the DEVICE so the native TFT UI switches too and settings.json is persisted
+    // once, canonically, on the device. A change that ORIGINATED on the device (origin:'device', from
+    // the system.language WS handler) is NOT echoed back — and even without that flag the loop is
+    // self-limiting: the device only re-broadcasts on an ACTUAL change, so a same-value POST is a no-op.
     if (d.type === 'set-language' && (d.lang === 'it' || d.lang === 'en')) {
-      localStorage.setItem('anima.lang', d.lang); document.documentElement.lang = d.lang; return;
+      localStorage.setItem('anima.lang', d.lang); document.documentElement.lang = d.lang;
+      if (d.origin !== 'device') postLangToDevice(d.lang);
+      return;
     }
     // OS clipboard service: apps copy/cut into it, or request the latest entry.
     if (d.type === 'clipboard-write' && d.kind) { clipboardWrite(d.kind, d.data); return; }
@@ -908,6 +921,19 @@ function applyDeviceName(name) {
   if (el) el.textContent = name || 'NucleoOS';
 }
 // Device-owned settings (theme, name) read straight from the canonical SD file.
+// Push a WEB-initiated language change to the DEVICE: it persists to settings.json, flips the native
+// i18n flag (the on-TFT UI repaints on its next frame via the generation counter), and broadcasts
+// "system.language" to any OTHER connected browser. Fire-and-forget + credentialed (pairing cookie);
+// a failure (offline / unpaired / the simulator, which has no such route) is harmless — the local UI
+// already switched. Loop-safe: the device only re-broadcasts on an ACTUAL change, so our own echo is
+// a no-op that stops the cycle.
+function postLangToDevice(lang) {
+  try {
+    fetch('/api/lang', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ lang }), credentials: 'same-origin', cache: 'no-store' }).catch(() => {});
+  } catch {}
+}
+
 async function applySettingsFromDevice() {
   try {
     const r = await fetch('/api/fs/read?path=' + encodeURIComponent('/system/config/settings.json'), { cache: 'no-store' });

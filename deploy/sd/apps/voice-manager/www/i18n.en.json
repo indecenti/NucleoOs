@@ -9,6 +9,10 @@
   "tab_test": "Test",
   "tab_custom": "Custom",
 
+  "cat_apps": "🚀 Launch apps",
+  "cat_system": "📊 System",
+  "cat_skill": "🌤️ Skill",
+
   "prog_label": { "one": "1 command trained", "other": "{count} commands trained" },
   "prog_cap": "max {count}",
 

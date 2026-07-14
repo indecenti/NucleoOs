@@ -112,7 +112,7 @@ export function toOpenAITools(clientTools) {
 const TOOLISH = /\b(che\s+or[ae]|che\s+giorno|data\s+di\s+oggi|quanto\s+spazio|spazio\s+(libero|su)|quanta\s+ram|che\s+rete|quale\s+wi-?fi|\bssid\b|\bip\b|uptime|stato\s+del\s+(device|sistema|dispositivo)|che\s+tempo\s+fa|\bmeteo\b|\bweather\b|apri|aprimi|avvia|lancia|metti\s+(su|la|il)|\bopen\b|launch|play\s+music|leggi\s+(il\s+)?file|scrivi\s+(un\s+)?file|crea\s+(un\s+)?file|elimina\s+(il\s+)?file|sposta\s+(il\s+)?file|what\s+time|how\s+much\s+(space|ram))\b/i;
 export function guardPlan(plan, userMsg) {
   if (plan && plan.mode === 'answer' && TOOLISH.test(String(userMsg || ''))) {
-    return { ...plan, mode: 'task', hard: !!plan.hard, plan: plan.plan || '(richiede uno strumento del device)' };
+    return { ...plan, mode: 'task', hard: !!plan.hard, plan: plan.plan || '(requires a device tool)' };
   }
   return (plan && plan.mode) ? plan : { mode: 'task' };
 }
@@ -144,7 +144,7 @@ export function fitMessages(messages, maxChars) {
     const c = out[i].content;
     const keep = Math.max(400, c.length - (size - maxChars) - 64);
     if (keep < c.length) {
-      out[i].content = c.slice(0, keep) + '\n…[troncato ' + (c.length - keep) + ' caratteri]';
+      out[i].content = c.slice(0, keep) + '\n…[truncated ' + (c.length - keep) + ' characters]';
       size = JSON.stringify(out).length;
     }
   }
@@ -175,22 +175,22 @@ export async function callOpenAIChat(fetchFn, cfg, { model, messages, tools, too
         headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + cfg.key },
         body: JSON.stringify(buildBody()),
       });
-    } catch (e) { if (signal && signal.aborted) throw new Error('stopped'); if (attempt === 2) throw new Error('rete non raggiungibile'); await sleep(400 * (attempt + 1)); continue; }
+    } catch (e) { if (signal && signal.aborted) throw new Error('stopped'); if (attempt === 2) throw new Error('network unreachable'); await sleep(400 * (attempt + 1)); continue; }
     if (resp.status === 413) {   // Content Too Large -> shrink the request and retry (truncated context beats a hard fail)
       budget = Math.floor(budget / 2);
       if (attempt < 2 && budget >= 8000) continue;
-      throw new Error('richiesta troppo grande per il modello (riduci input o contesto)');
+      throw new Error('request too large for the model (reduce input or context)');
     }
     if (resp.status === 429 || resp.status >= 500) {
       const ra = parseInt(resp.headers.get('retry-after') || '0', 10);
       if (attempt < 2) { await sleep(ra ? ra * 1000 : 700 * (attempt + 1)); continue; }
-      throw new Error('servizio occupato (HTTP ' + resp.status + ')');
+      throw new Error('service busy (HTTP ' + resp.status + ')');
     }
     const j = await resp.json().catch(() => null);
     if (!resp.ok || !j || j.error) throw new Error((j && j.error && (j.error.message || j.error)) || ('HTTP ' + resp.status));
     return (j.choices && j.choices[0] && j.choices[0].message) || { role: 'assistant', content: '' };
   }
-  throw new Error('chiamata fallita');
+  throw new Error('call failed');
 }
 
 // THE worker contract loop (provider-agnostic via injected callModel + execTool). `callModel(messages)`
@@ -217,5 +217,5 @@ export async function runOpenAIToolLoop({ callModel, execTool, messages, maxStep
       if (onEvent) onEvent({ type: 'tool_result', name: fn.name, is_error: !!(r && r.is_error) });
     }
   }
-  return '(budget di passi esaurito — il compito potrebbe essere incompleto)';
+  return '(step budget exhausted — the task may be incomplete)';
 }

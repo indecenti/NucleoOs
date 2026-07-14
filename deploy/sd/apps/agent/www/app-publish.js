@@ -52,12 +52,12 @@ export function buildManifest(spec = {}) {
 const REQUIRED = ['id', 'name', 'version', 'web_route', 'runtime', 'category'];
 export function validateManifest(m) {
   const errors = [];
-  if (!m || typeof m !== 'object') return { ok: false, errors: ['manifest non è un oggetto'] };
-  for (const k of REQUIRED) if (m[k] == null || m[k] === '') errors.push('campo mancante: ' + k);
-  if (m.id && !isValidId(m.id)) errors.push('id non valido (kebab-case, inizia con lettera, 2-24 char): ' + m.id);
-  if (m.web_route && m.id && m.web_route !== '/apps/' + m.id + '/') errors.push('web_route deve essere /apps/' + m.id + '/');
-  if (m.category && !CATEGORIES.includes(m.category)) errors.push('category deve essere una di: ' + CATEGORIES.join(', '));
-  if (m.runtime && m.runtime !== 'web') errors.push('solo runtime "web" è installabile a runtime');
+  if (!m || typeof m !== 'object') return { ok: false, errors: ['manifest is not an object'] };
+  for (const k of REQUIRED) if (m[k] == null || m[k] === '') errors.push('missing field: ' + k);
+  if (m.id && !isValidId(m.id)) errors.push('invalid id (kebab-case, starts with a letter, 2-24 chars): ' + m.id);
+  if (m.web_route && m.id && m.web_route !== '/apps/' + m.id + '/') errors.push('web_route must be /apps/' + m.id + '/');
+  if (m.category && !CATEGORIES.includes(m.category)) errors.push('category must be one of: ' + CATEGORIES.join(', '));
+  if (m.runtime && m.runtime !== 'web') errors.push('only the "web" runtime is installable at runtime');
   return { ok: errors.length === 0, errors };
 }
 
@@ -239,15 +239,15 @@ export function lintApp(files, checkSyntax) {
     const path = String(f.path || ''), content = String(f.content == null ? '' : f.content);
     const ext = (/\.([a-z0-9]+)$/i.exec(path) || [])[1] || '';
     if (ext === 'json') {
-      try { JSON.parse(content); } catch (e) { errors.push(path + ': JSON non valido (' + String((e && e.message) || e) + ')'); }
+      try { JSON.parse(content); } catch (e) { errors.push(path + ': invalid JSON (' + String((e && e.message) || e) + ')'); }
     } else if ((ext === 'js' || ext === 'mjs' || ext === 'cjs') && typeof checkSyntax === 'function') {
       if (/^\s*(import|export)\s/m.test(content)) continue;                   // module body — skip (see verifyCode)
       const r = checkSyntax(content);
-      if (r && !r.ok) errors.push(path + ': errore di sintassi' + (r.line ? ' (riga ' + r.line + ')' : '') + (r.error ? ': ' + r.error : ''));
+      if (r && !r.ok) errors.push(path + ': syntax error' + (r.line ? ' (line ' + r.line + ')' : '') + (r.error ? ': ' + r.error : ''));
     } else if (ext === 'html' || ext === 'htm') {
       if (typeof checkSyntax === 'function') for (const code of inlineScripts(content)) {
         const r = checkSyntax(code);
-        if (r && !r.ok) { errors.push(path + ': <script> inline con errore di sintassi' + (r.line ? ' (riga ~' + r.line + ')' : '') + (r.error ? ': ' + r.error : '')); break; }
+        if (r && !r.ok) { errors.push(path + ': inline <script> syntax error' + (r.line ? ' (line ~' + r.line + ')' : '') + (r.error ? ': ' + r.error : '')); break; }
       }
     }
   }

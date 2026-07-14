@@ -1693,5 +1693,12 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   const aq=new URLSearchParams(location.search).get('atelier'); if(aq){ setTimeout(()=>open(aq==='1'?'text':aq),120); }
 })();
 </script>
+<script type="module">
+// Live OS-language switching: Paint keeps its inline IT/EN strings (applyLang, LT, UL), but subscribes
+// to the engine so a language change made anywhere in the OS repaints the static chrome here too —
+// without a reopen. applyLang() is a global from the classic script above.
+import I18N from '/nucleo-i18n.js';
+I18N.onChange(() => { try { window.applyLang && window.applyLang(); } catch {} });
+</script>
 </body>
 </html>

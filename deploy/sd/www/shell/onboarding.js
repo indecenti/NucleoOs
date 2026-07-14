@@ -155,7 +155,7 @@ function runWizard() {
       const stat = h('div', { class: 'nob-stat' });
       const input = h('input', { class: 'nob-input', type: 'password', placeholder: p.ph, autocomplete: 'off', spellcheck: 'false' });
       const sel = h('select', { class: 'nob-select' });
-      for (const [v, l] of p.models) sel.append(h('option', { value: v, selected: v === state.model }, l));
+      for (const m of p.models) sel.append(h('option', { value: m[0], selected: m[0] === state.model }, AI.modelLabel(m)));
       sel.addEventListener('change', () => { state.model = sel.value; });
 
       const cfg = () => ({ provider: state.provider, base: p.base, model: sel.value, key: input.value.trim(), version: p.version, exec: 'browser' });
