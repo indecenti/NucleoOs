@@ -11,6 +11,8 @@
 #include "freertos/task.h"
 #include "esp_timer.h"
 #include "esp_task_wdt.h"   // modal loops below run on the watchdog-watched launcher task
+#include "esp_log.h"
+#include "esp_heap_caps.h"  // largest-free-block probe for the splash canvas fallback
 
 M5GFX d;
 
@@ -266,8 +268,21 @@ extern "C" void nucleo_ui_boot_splash(void)
 {
     M5Canvas cv(&d);
     cv.setPsram(false);                 // PSRAM-less board: allocate DMA-internal, no false OOM
+    // The 16bpp canvas wants ~63 KB of CONTIGUOUS DMA-internal heap. With the real NimBLE stack linked
+    // (~22 KB non-releasable DRAM) the fragile ADV can't always spare that at boot -> the splash used to
+    // skip SILENTLY (no animation, no clue why). Now: try 16bpp, fall back to 8bpp (~32 KB, glows band a
+    // little but the animation shows), and if even that fails, log the largest free block so the skip is
+    // diagnosable instead of mysterious. spl_565() colours convert to the canvas depth automatically.
     cv.setColorDepth(16);               // full colour for the glows/gradients
-    if (!cv.createSprite(W, H)) return; // not enough contiguous heap right now -> skip silently
+    if (!cv.createSprite(W, H)) {
+        size_t lg = heap_caps_get_largest_free_block(MALLOC_CAP_DMA);
+        cv.setColorDepth(8);            // half the RAM (240x135x1 = ~32 KB) — keep the boot identity visible
+        if (!cv.createSprite(W, H)) {
+            ESP_LOGW("splash", "skipped: no contiguous heap for canvas (largest DMA block=%u B, need ~32K)", (unsigned)lg);
+            return;
+        }
+        ESP_LOGW("splash", "8bpp fallback: 16bpp canvas (63K) did not fit (largest DMA block=%u B)", (unsigned)lg);
+    }
 
     const float tilt[3] = { 0.f, 1.0471976f, 2.0943951f };      // 0, 60, 120 deg
     float ct[3], st[3];
