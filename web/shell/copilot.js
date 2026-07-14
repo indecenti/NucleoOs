@@ -27,11 +27,16 @@ async function aiConfig() {
 // touched — the whole point of "once in the browser, the device works less" (and it stops the on-device
 // 30 KB cascade worker from being spawned under the memory-starved server-Solo). Guarded: a missing path
 // or parse error latches false and we transparently fall back to the device engine. Import-free module.
-let _wi = null;
+let _wi = null, _wstore = null;
 async function webIndexer() {
   if (_wi === null) {
-    try { _wi = (await import('/apps/anima/local/webindex.js')).webIndexAnswer || false; }
-    catch { _wi = false; }
+    try {
+      _wi = (await import('/apps/anima/local/webindex.js')).webIndexAnswer || false;
+      // Optional learned-web store (IndexedDB, degrades to in-memory): once an entity is fetched it is
+      // recalled INSTANTLY and OFFLINE next time — fewer network round-trips and the copilot keeps
+      // answering known entities with no connectivity at all. Failure to load just disables caching.
+      try { _wstore = (await import('/apps/anima/local/webstore.js')).webStore || null; } catch { _wstore = null; }
+    } catch { _wi = false; }
   }
   return _wi || null;
 }
@@ -302,7 +307,7 @@ async function askCopilot(q) {
     if (!r && mode() !== 'off') {
       try {
         const wi = await webIndexer();
-        if (wi) { const wr = await wi(q, lang(), { fetch, online: true }); if (wr && wr.reply) r = wr; }
+        if (wi) { const wr = await wi(q, lang(), { fetch, online: true, store: _wstore || undefined }); if (wr && wr.reply) r = wr; }
       } catch { /* fall through to the device engine */ }
     }
     if (!r) r = await (await fetch('/api/anima?q=' + encodeURIComponent(q) + '&lang=' + lang() + '&mode=' + mode(), { signal: aborter.signal })).json();
