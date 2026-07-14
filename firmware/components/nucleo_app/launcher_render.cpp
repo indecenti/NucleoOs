@@ -143,6 +143,64 @@ static int node_child_count(const MenuNode *m)
 // bucketing + icon lookup (never change it); show them in the user's language here. Apps keep
 // their own name (author's choice, already per-app). Display-only — the id/glyph are untouched,
 // so this also renders "Hardware" as Sensori/Sensors without a rename. Zero RAM (flash literals).
+// App display names in BOTH languages. Registrations historically carry a single `name` (a mix of IT
+// and EN); this is the ONE place that makes the launcher title bilingual — no touching 61 app
+// registrations, zero per-app RAM (flash const), and live (node_label picks at render). Only apps whose
+// name differs by language need a row; pure proper nouns (ANIMA, Mail, SSH, Pong, BLE, Snake, Yahtzee,
+// Tanks, Tank Duel, Payloads, IR Remote, Evil Portal, Deauth Flood, WiFi Sniffer, …) fall through to
+// the app's own name.
+static const struct { const char *id; const char *it; const char *en; } APP_NAME_TR[] = {
+    { "alarm",       "Allarme",             "Alarm" },
+    { "brawler",     "Scorribanda",         "Brawl" },
+    { "calc",        "Calcolatrice",        "Calculator" },
+    { "calendar",    "Calendario",          "Calendar" },
+    { "chrono",      "Cronometro",          "Stopwatch" },
+    { "clock",       "Orologio",            "Clock" },
+    { "dice",        "Dadi",                "Dice" },
+    { "files",       "File",                "Files" },
+    { "giardino",    "Giardino",            "Sand Garden" },
+    { "goniometer",  "Goniometro",          "Protractor" },
+    { "info",        "Connessione",         "Connection" },
+    { "level",       "Livella",             "Level" },
+    { "link",        "Vicino",              "Nearby" },
+    { "micspec",     "Spettro Mic",         "Mic Spectrum" },
+    { "music",       "Musica",              "Music" },
+    { "notepad",     "Note",                "Notes" },
+    { "notify",      "Notifiche",           "Notifications" },
+    { "orde",        "Orde",                "Hordes" },
+    { "pedometer",   "Contapassi",          "Pedometer" },
+    { "photos",      "Foto",                "Photos" },
+    { "pinball",     "Flipper",             "Pinball" },
+    { "qr",          "Codice QR",           "QR Code" },
+    { "radio",       "Radio",               "Radio" },
+    { "reactor",     "Reattore",            "Reactor" },
+    { "recorder",    "Registratore vocale", "Voice Recorder" },
+    { "remote",      "Controllo remoto",    "Remote Control" },
+    { "screensaver", "Salvaschermo",        "Screensaver" },
+    { "slots",       "Slot",                "Slots" },
+    { "stelle",      "Costellazioni",       "Constellations" },
+    { "swarm",       "Sciame",              "Swarm" },
+    { "sysmon",      "Stato sistema",       "System Status" },
+    { "theme",       "Tema",                "Theme" },
+    { "torch",       "Torcia",              "Torch" },
+    { "usb",         "Unita USB",           "USB Drive" },
+    { "usbkbd",      "Tastiera USB",        "USB Keyboard" },
+    { "voice",       "Trainer vocale",      "Voice Trainer" },
+    { "voicelab",    "Laboratorio voce",    "Voice Lab" },
+    { "weather",     "Meteo",               "Weather" },
+    { "wifi",        "Impostazioni",        "Settings" },
+};
+
+// Localized launcher name for an app id in the ACTIVE language, or NULL when the app uses its own
+// (language-neutral) name. Shared with the menu filter so Spotlight search matches the name shown in
+// the current language too — not only the app's default-language spelling.
+extern "C" const char *launcher_app_localized_name(const char *id)
+{
+    for (unsigned i = 0; i < sizeof APP_NAME_TR / sizeof APP_NAME_TR[0]; i++)
+        if (!strcmp(id, APP_NAME_TR[i].id)) return TR(APP_NAME_TR[i].it, APP_NAME_TR[i].en);
+    return nullptr;
+}
+
 static const char *node_label(const MenuNode *n)
 {
     if (!n) return "";
@@ -157,7 +215,9 @@ static const char *node_label(const MenuNode *n)
     else if (!strcmp(id, "Hardware"))      return TR("Sensori", "Sensors");
     else if (!strcmp(id, "Games"))         return TR("Giochi", "Games");
     else if (!strcmp(id, "Voice"))         return TR("Voce", "Voice");
-    return n->label;
+    // app node: bilingual title from the central table above; proper-noun apps fall through to their name.
+    const char *loc = launcher_app_localized_name(id);
+    return loc ? loc : n->label;
 }
 
 // Honest Wi-Fi indicator: four rising bars whose FILL tracks the real signal. STA = green, AP/setup

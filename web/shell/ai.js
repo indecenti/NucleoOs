@@ -19,17 +19,18 @@ export const PROVIDERS = {
   anthropic: {
     label: 'Claude', base: 'https://api.anthropic.com', version: '2023-06-01',
     prefix: /^sk-ant-/, ph: 'sk-ant-…', def: 'claude-sonnet-4-6',
-    models: [['claude-sonnet-4-6', 'Sonnet 4.6 · equilibrio'], ['claude-opus-4-8', 'Opus 4.8 · massima qualità'], ['claude-haiku-4-5', 'Haiku 4.5 · veloce/economico']],
+    // model tuples are [id, it-label, en-label] — render via modelLabel() so the picker follows the OS language.
+    models: [['claude-sonnet-4-6', 'Sonnet 4.6 · equilibrio', 'Sonnet 4.6 · balanced'], ['claude-opus-4-8', 'Opus 4.8 · massima qualità', 'Opus 4.8 · top quality'], ['claude-haiku-4-5', 'Haiku 4.5 · veloce/economico', 'Haiku 4.5 · fast/cheap']],
   },
   openai: {
     label: 'Groq', base: 'https://api.groq.com/openai/v1', version: '',
     prefix: /^(gsk_|sk-)/, ph: 'gsk_…', def: 'llama-3.1-8b-instant',
-    models: [['llama-3.1-8b-instant', 'Llama 3.1 8B · veloce'], ['llama-3.3-70b-versatile', 'Llama 3.3 70B · qualità']],
+    models: [['llama-3.1-8b-instant', 'Llama 3.1 8B · veloce', 'Llama 3.1 8B · fast'], ['llama-3.3-70b-versatile', 'Llama 3.3 70B · qualità', 'Llama 3.3 70B · quality']],
   },
   xai: {
     label: 'Grok (xAI)', base: 'https://api.x.ai/v1', version: '',
     prefix: /^xai-/, ph: 'xai-…', def: 'grok-2-latest',   // OpenAI-compatible wire (Bearer + /chat/completions)
-    models: [['grok-2-latest', 'Grok 2 · latest'], ['grok-2-1212', 'Grok 2 (1212)'], ['grok-beta', 'Grok beta']],
+    models: [['grok-2-latest', 'Grok 2 · latest', 'Grok 2 · latest'], ['grok-2-1212', 'Grok 2 (1212)', 'Grok 2 (1212)'], ['grok-beta', 'Grok beta', 'Grok beta']],
   },
   google: {
     label: 'Gemini', base: 'https://generativelanguage.googleapis.com/v1beta/openai', version: '',
@@ -38,9 +39,19 @@ export const PROVIDERS = {
     // against the API: gemini-3.5-flash / gemini-3.1-pro do NOT exist (404). Real lineup: gemini-2.5-flash
     // (recommended, stable, free), gemini-flash-latest (always-current Flash), gemini-2.5-pro (paid quality),
     // gemini-2.5-flash-lite (cheap, weak — fine for quick lookups, NOT for careful code).
-    models: [['gemini-2.5-flash', 'Gemini 2.5 Flash · consigliato'], ['gemini-flash-latest', 'Gemini Flash · ultimo'], ['gemini-2.5-pro', 'Gemini 2.5 Pro · qualità (a pagamento)'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite · economico']],
+    models: [['gemini-2.5-flash', 'Gemini 2.5 Flash · consigliato', 'Gemini 2.5 Flash · recommended'], ['gemini-flash-latest', 'Gemini Flash · ultimo', 'Gemini Flash · latest'], ['gemini-2.5-pro', 'Gemini 2.5 Pro · qualità (a pagamento)', 'Gemini 2.5 Pro · quality (paid)'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite · economico', 'Gemini 2.5 Flash-Lite · cheap']],
   },
 };
+
+// Pick a model tuple's label for the active OS language. Tuples are [id, it, en]; the live Gemini
+// calibration builds [id, id] pairs (no descriptor) — those fall back to the id. Reads anima.lang
+// directly (no engine import) so ai.js stays usable from the Node host gates too.
+export function modelLabel(entry) {
+  if (!entry) return '';
+  let lang = 'it';
+  try { lang = (localStorage.getItem('anima.lang') || document.documentElement.lang || 'it').slice(0, 2); } catch {}
+  return (lang === 'en' ? (entry[2] || entry[1]) : entry[1]) || entry[1] || entry[0];
+}
 
 // What each provider can actually DO. The one source of truth for "Claude can't draw/transcribe",
 // consumed by Settings' preset engine + the which-apps panel so a feature gap is shown, not hit silently.
