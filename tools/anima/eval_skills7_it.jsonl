@@ -66,3 +66,6 @@
 // === meta / capabilities: frasi nuove ===
 {"q":"che cosa puoi fare per me","lang":"it","expect":"capabilities"}
 {"q":"presentati","lang":"it","expect":"whoami"}
+{"q":"come si scrive gatto in inglese","lang":"it","expect":"translate"}
+{"q":"come si scrive libro in inglese","lang":"it","expect":"translate"}
+{"q":"come si scrivono i cani in inglese","lang":"it","expect":"translate"}

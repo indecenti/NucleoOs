@@ -982,8 +982,8 @@ static void fill_system_value(const char *arg, char *out, size_t n, bool en)
         // ANIMA Solo: the assistant runs alone (no app launching), so capabilities advertises only the
         // skills it can actually fulfil here — device readouts, Wi-Fi/network, weather, calendar, the
         // math/physics solvers, conversions, spreadsheet formulas, the built-in file editor, knowledge.
-        snprintf(out, n, en ? "I can give you time/date/space/RAM/battery, your Wi-Fi/network status, the weather of a city, manage the calendar, solve math/physics/geometry/vectors/Ohm, conversions, spreadsheet formulas, create and edit files, and answer about NucleoOS/C/electronics"
-                            : "Posso darti ora/data/spazio/RAM/batteria, lo stato del Wi-Fi/rete, il meteo di una citta, gestire il calendario, risolvere matematica/fisica/geometria/vettori/Ohm, conversioni, formule del foglio di calcolo, creare e modificare file, e rispondere su NucleoOS/C/elettronica");
+        snprintf(out, n, en ? "I can give you time/date/space/RAM/battery, your Wi-Fi/network status, the weather of a city, the time in a world city, manage the calendar, set timers and alarms, work out the weekday of a date, days until a holiday, days in a month or age from a birth year, solve math/physics/geometry/vectors/Ohm, conversions, spreadsheet formulas, create and edit files, and answer about NucleoOS/C/electronics"
+                            : "Posso darti ora/data/spazio/RAM/batteria, lo stato del Wi-Fi/rete, il meteo di una citta, l'ora in una citta del mondo, gestire il calendario, impostare timer e sveglie, calcolare il giorno della settimana di una data, i giorni a una festa o in un mese, l'età da un anno di nascita, risolvere matematica/fisica/geometria/vettori/Ohm, conversioni, formule del foglio di calcolo, creare e modificare file, e rispondere su NucleoOS/C/elettronica");
     } else if (!strcmp(arg, "agenda") && tm) {
         snprintf(out, n, en ? "you have no events today" : "oggi non hai impegni");
         FILE *f = fopen(NUCLEO_SD_MOUNT "/system/config/calendar.json", "rb");
@@ -1674,6 +1674,13 @@ static const Leaf LEAVES[] = {
     { 0,0, "Data","Date",                "Che giorno e oggi","What is today's date",             0,0,0,0 },
     { 0,0, "Anno","Year",                "In che anno siamo","What year is it",                  0,0,0,0 },
     { 0,0, "Stagione","Season",          "In che stagione siamo","What season is it",            0,0,0,0 },
+    { 0,1, "Giorno di...","Weekday of",  "Che giorno della settimana e il %s","What day of the week is %s","Data es 25 dic 2026","Date e.g. dec 25 2026",0,0 },
+    { 0,1, "Giorni a...","Days until",   "Quanti giorni mancano a %s","How many days until %s",   "Data o festa","Date or holiday",0,0 },
+    { 0,1, "Giorni nel mese","Days in month","Quanti giorni ha %s","How many days in %s",           "Mese es febbraio","Month e.g. february",0,0 },
+    { 0,1, "Eta da anno","Age from year", "Quanti anni ha chi e nato nel %s","How old is someone born in %s","Anno nascita","Birth year",0,0 },
+    { 0,1, "Ora nel mondo","World clock", "Che ore sono a %s","What time is it in %s",                 "Citta es Tokyo","City e.g. Tokyo",0,0 },
+    { 0,1, "Segno zodiacale","Star sign", "Che segno e chi nasce il %s","What star sign is someone born on %s","Data es 5 agosto","Date e.g. august 5",0,0 },
+    { 0,2, "Ore tra orari","Hours between","Quante ore da %s a %s","How many hours from %s to %s",   "Da HH:MM","From HH:MM","A HH:MM","To HH:MM" },
     { 0,0, "Spazio SD","SD space",       "Quanto spazio ho sulla SD","How much SD space is free",0,0,0,0 },
     { 0,0, "RAM libera","Free RAM",      "Quanta RAM libera ho","How much free RAM do I have",    0,0,0,0 },
     { 0,0, "Rete","Network",             "A che rete sono connesso","What network am I on",       0,0,0,0 },
@@ -1723,6 +1730,8 @@ static const Leaf LEAVES[] = {
     { 4,1, "Domani","Tomorrow",          "Che tempo fa domani a %s","Weather tomorrow in %s",     "Citta","City",0,0 },
     // -- Agenda (5) --
     { 5,0, "Impegni oggi","Today",       "Che impegni ho oggi","What are my events today",        0,0,0,0 },
+    { 5,1, "Timer","Timer",              "Timer di %s minuti","Timer for %s minutes",             "Minuti","Minutes",0,0 },
+    { 5,1, "Sveglia","Alarm",            "Sveglia alle %s","Alarm at %s",                         "Ora HH:MM","Time HH:MM",0,0 },
     { 5,2, "Promem. domani","Tomorrow",  "Ricordami %s domani alle %s","Remind me %s tomorrow at %s","Cosa","What","Ora HH:MM","Time HH:MM" },
     { 5,2, "Promem. oggi","Today rem.",  "Ricordami %s oggi alle %s","Remind me %s today at %s",  "Cosa","What","Ora HH:MM","Time HH:MM" },
     // -- File (6): ANIMA's OWN built-in editor (no app launching — see ANIMA Solo: only the assistant

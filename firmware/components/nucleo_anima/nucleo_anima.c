@@ -1710,6 +1710,184 @@ static bool a_event_trigger(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok)
     return rem || (v && n);
 }
 
+// Small number word -> value (0 if not one). Covers the counts a timer/alarm realistically uses.
+static int a_small_num(const char *w)
+{
+    static const struct { const char *w; int n; } T[] = {
+        {"un",1},{"uno",1},{"una",1},{"one",1},{"due",2},{"two",2},{"tre",3},{"three",3},
+        {"quattro",4},{"four",4},{"cinque",5},{"five",5},{"sei",6},{"six",6},{"sette",7},{"seven",7},
+        {"otto",8},{"eight",8},{"nove",9},{"nine",9},{"dieci",10},{"ten",10},{"dodici",12},{"twelve",12},
+        {"quindici",15},{"fifteen",15},{"venti",20},{"twenty",20},{"trenta",30},{"thirty",30},
+        {"quaranta",40},{"forty",40},{"quarantacinque",45},{"cinquanta",50},{"fifty",50},
+        {"sessanta",60},{"sixty",60},{"novanta",90},{"ninety",90}, {NULL,0} };
+    for (int i = 0; T[i].w; i++) if (!strcmp(w, T[i].w)) return T[i].n;
+    return 0;
+}
+// Seconds-per-unit if `w` names a time unit (minute/second/hour), else 0.
+static int a_time_unit_sec(const char *w)
+{
+    if (!strcmp(w,"secondo")||!strcmp(w,"secondi")||!strcmp(w,"second")||!strcmp(w,"seconds")||!strcmp(w,"sec")||!strcmp(w,"secs")) return 1;
+    if (!strcmp(w,"minuto")||!strcmp(w,"minuti")||!strcmp(w,"minute")||!strcmp(w,"minutes")||!strcmp(w,"min")||!strcmp(w,"mins")) return 60;
+    if (!strcmp(w,"ora")||!strcmp(w,"ore")||!strcmp(w,"hour")||!strcmp(w,"hours")) return 3600;
+    return 0;
+}
+
+// TIMER / ALARM (offline): "timer 5 minuti", "conto alla rovescia 90 secondi", "sveglia alle 7:30",
+// "ricordami tra 10 minuti di chiamare", EN "set a timer for 5 minutes" / "wake me at 7". Resolves the
+// relative duration (or clock time) to an ABSOLUTE moment via the RTC and emits the existing add_event
+// action, so it rides the device-authoritative calendar/notification backbone — no new executor, no
+// extra RAM. A countdown crossing midnight rolls into the day offset; an alarm at a time already past
+// today rolls to tomorrow. FIRES only on an explicit timer/alarm keyword, or a duration carried by a
+// command lead (ricordami/imposta/metti/set…) — so "converti 5 minuti in secondi" and "fra 5 minuti
+// arrivo" (a statement) never fabricate a timer. Questions abstain outright.
+static int tool_timer(const char *raw, char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok, bool en, anima_result_t *r)
+{
+    (void)tok;
+    for (int t = 0; t < ntok; t++) if (a_qword(tok[t])) return 0;   // a question is never a timer to set
+
+    // Whitespace re-tokenize the RAW (keeps "7:30" whole; fold IT accents), like tool_event.
+    const char *start[A_MAX_TOKENS]; char low[A_MAX_TOKENS][24]; int n = 0;
+    for (const char *p = raw; *p && n < A_MAX_TOKENS; ) {
+        while (*p == ' ' || *p == '\t') p++;
+        if (!*p) break;
+        start[n] = p; int k = 0;
+        while (*p && *p != ' ' && *p != '\t') {
+            unsigned char uc = (unsigned char)*p;
+            if (uc == 0xC3 && p[1]) {
+                unsigned char d = (unsigned char)p[1];
+                char f = (d>=0xA0&&d<=0xA2)?'a':(d>=0xA8&&d<=0xAA)?'e':(d>=0xAC&&d<=0xAE)?'i':(d>=0xB2&&d<=0xB4)?'o':(d>=0xB9&&d<=0xBB)?'u':0;
+                if (f) { if (k < 23) low[n][k++] = f; p += 2; continue; }
+            }
+            if (k < 23) low[n][k++] = (char)tolower(uc); p++;
+        }
+        low[n][k] = 0; n++;
+    }
+    if (n == 0) return 0;
+
+    bool drop[A_MAX_TOKENS]; for (int i = 0; i < n; i++) drop[i] = false;
+
+    // Intent keyword + command lead. ("cronometro"/"stopwatch" = count-UP -> opens the app, not here.)
+    bool is_timer = false, is_alarm = false, lead_cmd = false;
+    static const char *const leadv[] = { "ricordami","ricorda","promemoria","reminder","remind","imposta",
+        "metti","avvia","start","set","fai","svegliami","wake","programma","schedule","fissa", NULL };
+    for (int i = 0; i < n; i++) {
+        if (!strcmp(low[i],"timer") || !strcmp(low[i],"countdown")) { is_timer = true; drop[i] = true; }
+        else if (a_match("sveglia", low[i]) || !strcmp(low[i],"alarm") || !strcmp(low[i],"alarms") ||
+                 !strcmp(low[i],"allarme") || !strcmp(low[i],"wake")) { is_alarm = true; drop[i] = true; }
+        else if (!strcmp(low[i],"conto") && i+2 < n && !strcmp(low[i+1],"alla") && !strcmp(low[i+2],"rovescia")) {
+            is_timer = true; drop[i]=drop[i+1]=drop[i+2]=true; }
+        for (int j = 0; leadv[j]; j++) if (a_match(leadv[j], low[i])) lead_cmd = true;
+    }
+
+    // DURATION (seconds): a number (digit or small word) then a minute/second/hour unit within 2 tokens,
+    // plus the fixed forms un'ora / mezz'ora / un quarto d'ora.
+    long dur = 0;
+    for (int i = 0; i < n && !dur; i++) {
+        if (!strcmp(low[i],"un'ora") || !strcmp(low[i],"unora")) { dur = 3600; drop[i] = true; break; }
+        if (!strcmp(low[i],"mezz'ora") || !strcmp(low[i],"mezzora")) { dur = 1800; drop[i] = true; break; }
+        int num = isdigit((unsigned char)low[i][0]) ? atoi(low[i]) : a_small_num(low[i]);
+        if (num <= 0) continue;
+        for (int u = i+1; u <= i+2 && u < n; u++) {
+            int us = a_time_unit_sec(low[u]);
+            if (us) {
+                dur = (long)num * us; drop[i] = true; drop[u] = true;
+                if (i>0 && (!strcmp(low[i-1],"tra")||!strcmp(low[i-1],"fra")||!strcmp(low[i-1],"in")||
+                            !strcmp(low[i-1],"di")||!strcmp(low[i-1],"per")||!strcmp(low[i-1],"for")||!strcmp(low[i-1],"a")))
+                    drop[i-1] = true;
+                break;
+            }
+        }
+    }
+    if (!dur) for (int i = 0; i < n; i++) if (!strcmp(low[i],"quarto")) {   // "un quarto d'ora" -> 15 min
+        dur = 900; drop[i] = true; if (i>0 && (!strcmp(low[i-1],"un")||!strcmp(low[i-1],"a"))) drop[i-1] = true; break; }
+    if (dur > 48L*3600) return 0;                                            // absurd horizon -> not a timer
+
+    // CLOCK TIME (only when no duration): "alle/ore/at HH[:MM]", bare HH:MM, or 8am/8pm.
+    int hh = -1, mm = 0;
+    if (!dur) {
+        for (int i = 0; i < n && hh < 0; i++)
+            if ((!strcmp(low[i],"alle")||!strcmp(low[i],"ore")||!strcmp(low[i],"at")) && i+1 < n && isdigit((unsigned char)low[i+1][0])) {
+                hh = atoi(low[i+1]); const char *c = strchr(low[i+1], ':'); if (c) mm = atoi(c+1);
+                if (strstr(low[i+1],"pm")) { if (hh>=1&&hh<12) hh+=12; } else if (strstr(low[i+1],"am")) { if (hh==12) hh=0; }
+                drop[i]=true; drop[i+1]=true;
+            }
+        for (int i = 0; i < n && hh < 0; i++) {
+            if (!isdigit((unsigned char)low[i][0])) continue;
+            const char *c = strchr(low[i], ':');
+            bool pm = strstr(low[i],"pm")!=NULL, am = strstr(low[i],"am")!=NULL;
+            if (c) { hh=atoi(low[i]); mm=atoi(c+1); drop[i]=true; if (pm&&hh<12) hh+=12; else if (am&&hh==12) hh=0; }
+            else if (pm||am) { hh=atoi(low[i]); if (pm) { if (hh>=1&&hh<12) hh+=12; } else if (hh==12) hh=0; drop[i]=true; }
+        }
+        if (hh > 23 || mm > 59) { hh = -1; mm = 0; }
+    }
+
+    // FIRE only on a real command: a keyword + a concrete when, or a duration carried by a command lead.
+    bool has_kw = is_timer || is_alarm;
+    if (!((has_kw && (dur || hh >= 0)) || (dur && lead_cmd))) return 0;
+
+    // Resolve to an absolute (off days, HH:MM) via the RTC.
+    int off = 0;
+    time_t now = time(NULL); struct tm lt = *localtime(&now);
+    if (dur) {
+        time_t tgt = now + dur; struct tm tt = *localtime(&tgt);
+        hh = tt.tm_hour; mm = tt.tm_min;
+        struct tm a = lt, b = tt; a.tm_hour=a.tm_min=a.tm_sec=0; b.tm_hour=b.tm_min=b.tm_sec=0;
+        off = (int)((mktime(&b) - mktime(&a)) / 86400); if (off < 0) off = 0;
+    } else if (hh < lt.tm_hour || (hh == lt.tm_hour && mm <= lt.tm_min)) {
+        off = 1;                                       // an alarm at a time already past today -> tomorrow
+    }
+
+    // BODY: surviving words after dropping the leading structural run (usually empty -> a default label).
+    static const char *const lead[] = { "imposta","metti","fai","avvia","start","set","crea","aggiungi","new",
+        "nuovo","nuova","ricordami","ricorda","promemoria","reminder","remind","me","mi","svegliami","wake",
+        "programma","schedule","fissa","of","un","uno","una","il","lo","la","the","a","di","da","per","for",
+        "tra","fra","in","con","che","to","that","up","mettimi", NULL };
+    for (int i = 0; i < n; i++) {
+        bool isLead = drop[i];
+        for (int j = 0; !isLead && lead[j]; j++) if (!strcmp(low[i], lead[j])) isLead = true;
+        if (isLead) drop[i] = true; else break;
+    }
+    char text[AG_CONTENT_MAX]; int tl = 0;
+    for (int i = 0; i < n; i++) {
+        if (drop[i]) continue;
+        const char *s = start[i]; int len = 0; while (s[len] && s[len]!=' ' && s[len]!='\t') len++;
+        if (tl && tl < (int)sizeof(text)-1) text[tl++] = ' ';
+        for (int k = 0; k < len && tl < (int)sizeof(text)-1; k++) text[tl++] = s[k];
+    }
+    text[tl] = 0;
+    const char *lab = is_alarm ? (en?"Alarm":"Sveglia") : (en?"Timer":"Timer");
+    bool has_body = text[0] != 0;
+    if (!has_body) snprintf(text, sizeof text, "%s", lab);
+    // A reminder-with-a-body reached via a lead ("ricordami … tra 10 minuti") reads as a Promemoria,
+    // not a bare Timer; an explicit timer/alarm keyword keeps its label.
+    bool is_reminder = has_body && !is_timer && !is_alarm;
+    const char *elab = is_reminder ? (en?"Reminder":"Promemoria") : lab;
+
+    snprintf(s_tool_content, sizeof s_tool_content, "off=%d;time=%02d:%02d;text=%s", off, hh, mm, text);
+    r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_TOOL; r->confidence = 87;
+    snprintf(r->intent, sizeof r->intent, "add_event");
+    snprintf(r->arg, sizeof r->arg, "add_event");
+    snprintf(r->state, sizeof r->state, "tool");
+    if (is_reminder) {
+        snprintf(r->reply, sizeof r->reply, en ? "%s \"%s\" — I'll alert you at %02d:%02d."
+                                               : "%s \"%s\" — avviso alle %02d:%02d.", elab, text, hh, mm);
+    } else if (dur) {
+        char db[24];
+        if (dur >= 3600 && dur % 3600 == 0)  snprintf(db, sizeof db, "%ldh", dur/3600);
+        else if (dur >= 3600)                snprintf(db, sizeof db, "%ldh%02ld", dur/3600, (dur%3600)/60);
+        else if (dur >= 60 && dur % 60 == 0) snprintf(db, sizeof db, "%ld min", dur/60);
+        else                                 snprintf(db, sizeof db, "%lds", dur);
+        snprintf(r->reply, sizeof r->reply, en ? "%s of %s — I'll alert you at %02d:%02d."
+                                               : "%s di %s — avviso alle %02d:%02d.", lab, db, hh, mm);
+    } else {
+        snprintf(r->reply, sizeof r->reply, en ? "%s set for %02d:%02d%s." : "%s alle %02d:%02d%s.",
+                 lab, hh, mm, off ? (en?" tomorrow":" domani") : "");
+    }
+    trace_step(en ? "plan: timer" : "piano: timer");
+    trace_step(en ? "verify: ok" : "verifica: ok");
+    return 1;
+}
+
 static int tool_event(const char *raw, char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok, bool en, anima_result_t *r)
 {
     if (!a_event_trigger(tok, ntok)) return 0;
@@ -2012,6 +2190,7 @@ static const a_tool_t TOOLS[] = {
     { "image_gen",      false, tool_image_gen },
     { "profile",        true,  tool_profile },
     { "teach",          true,  tool_teach },
+    { "timer",          true,  tool_timer },
     { "add_event",      true,  tool_event },
     { "create_file",    true,  tool_note },
     { "create_file",    true,  tool_create_file },

@@ -1,0 +1,36 @@
+// Timer / alarm / countdown skill (nucleo_anima.c tool_timer) — resolves a relative duration or a clock
+// time to an absolute moment via the RTC and rides the add_event calendar/notification backbone. Positives
+// must route to add_event; the traps must NOT fabricate a timer (unit-conversion stays convert, a bare
+// duration statement abstains, "apri la sveglia" opens the clock app, a time question answers).
+{"q":"timer 5 minuti","lang":"it","expect":"add_event"}
+{"q":"imposta un timer di 10 minuti","lang":"it","expect":"add_event"}
+{"q":"avvia un timer di 15 minuti","lang":"it","expect":"add_event"}
+{"q":"fai partire il timer di 3 minuti","lang":"it","expect":"add_event"}
+{"q":"conto alla rovescia di 90 secondi","lang":"it","expect":"add_event"}
+{"q":"metti un countdown di 45 secondi","lang":"it","expect":"add_event"}
+{"q":"timer di un'ora","lang":"it","expect":"add_event"}
+{"q":"sveglia alle 7:30","lang":"it","expect":"add_event"}
+{"q":"metti la sveglia alle 6","lang":"it","expect":"add_event"}
+{"q":"imposta una sveglia alle 06:45","lang":"it","expect":"add_event"}
+{"q":"svegliami tra due ore","lang":"it","expect":"add_event"}
+{"q":"sveglia tra mezz'ora","lang":"it","expect":"add_event"}
+{"q":"ricordami tra 10 minuti di chiamare il dentista","lang":"it","expect":"add_event"}
+{"q":"ricordami fra venti minuti di spegnere il forno","lang":"it","expect":"add_event"}
+{"q":"programma un timer di 25 minuti","lang":"it","expect":"add_event"}
+{"q":"set a timer for 5 minutes","lang":"en","expect":"add_event"}
+{"q":"start a 30 minute timer","lang":"en","expect":"add_event"}
+{"q":"timer for 2 hours","lang":"en","expect":"add_event"}
+{"q":"countdown of 90 seconds","lang":"en","expect":"add_event"}
+{"q":"wake me at 7","lang":"en","expect":"add_event"}
+{"q":"set an alarm for 6:45","lang":"en","expect":"add_event"}
+{"q":"remind me in 20 minutes to stretch","lang":"en","expect":"add_event"}
+// --- traps: these must NEVER fabricate a timer ---
+{"q":"converti 5 minuti in secondi","lang":"it","expect":"convert"}
+{"q":"quanti secondi in 5 minuti","lang":"it","expect":"convert"}
+{"q":"how many seconds in 5 minutes","lang":"en","expect":"convert"}
+{"q":"fra 5 minuti arrivo","lang":"it","expect":"abstain"}
+{"q":"5 minuti di pausa","lang":"it","expect":"abstain"}
+{"q":"aspetta un attimo","lang":"it","expect":"abstain"}
+{"q":"apri la sveglia","lang":"it","expect":"open_app"}
+{"q":"che ore sono","lang":"it","expect":"time"}
+{"q":"what time is it","lang":"en","expect":"time"}

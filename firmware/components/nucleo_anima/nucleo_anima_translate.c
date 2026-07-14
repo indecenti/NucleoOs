@@ -145,10 +145,15 @@ static int t_lookup(const char *path, const char *key, char *out, size_t cap)
 // both the translator and the detect-only entry point share one definition.
 static const char *const T_FR_csd[]  = { "come", "si", "dice", NULL };
 static const char *const T_FR_csdn[] = { "come", "si", "dicono", NULL };
+static const char *const T_FR_css[]  = { "come", "si", "scrive", NULL };    // "come si scrive X in inglese"
+static const char *const T_FR_cssn[] = { "come", "si", "scrivono", NULL };
 static const char *const T_FR_hdys[] = { "how", "do", "you", "say", NULL };
 static const char *const T_FR_hdis[] = { "how", "do", "i", "say", NULL };
 static const char *const T_FR_hts[]  = { "how", "to", "say", NULL };
-static const char *const *const T_FRAMES[] = { T_FR_csd, T_FR_csdn, T_FR_hdys, T_FR_hdis, T_FR_hts, NULL };
+static const char *const T_FR_hdyw[] = { "how", "do", "you", "spell", NULL };
+static const char *const T_FR_hdywr[]= { "how", "do", "you", "write", NULL };
+static const char *const *const T_FRAMES[] = { T_FR_csd, T_FR_csdn, T_FR_css, T_FR_cssn,
+                                               T_FR_hdys, T_FR_hdis, T_FR_hts, T_FR_hdyw, T_FR_hdywr, NULL };
 
 // Mark each present frame's tokens in `excl` (when non-NULL) and return whether any frame matched.
 static bool t_mark_frames(char tok[T_MAX_TOKENS][T_TOK_LEN], int ntok, bool *excl)

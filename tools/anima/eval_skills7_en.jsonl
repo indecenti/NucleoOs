@@ -66,3 +66,5 @@
 // === meta / capabilities: new phrasings ===
 {"q":"what are your capabilities","lang":"en","expect":"capabilities"}
 {"q":"what is your name","lang":"en","expect":"whoami|l1"}
+{"q":"how do you spell thanks in italian","lang":"en","expect":"translate"}
+{"q":"how do you write water in italian","lang":"en","expect":"translate"}
