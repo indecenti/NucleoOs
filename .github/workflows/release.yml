@@ -61,3 +61,10 @@ jobs:
             dist/nucleoos-${{ steps.ver.outputs.full }}-sd.zip
             dist/FLASH.md
             dist/manifest.json
+
+      # action-gh-release does NOT overwrite the body when the release already exists (re-run of a tag),
+      # so force it from our notes — keeps the description current on every re-publish.
+      - name: Refresh release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${{ github.ref_name }}" --notes-file dist/RELEASE_NOTES.md
