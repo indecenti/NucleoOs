@@ -1,0 +1,16 @@
+{
+  "_lang": "de",
+  "app_title": "Aufgaben",
+  "filter_active": "Aktiv",
+  "add_ph": "Aufgabe hinzufügen und Enter drücken…",
+  "priority": "Priorität",
+  "clear_done": "Erledigte löschen",
+  "saving": "Wird gespeichert…",
+  "saved_locally": "Lokal gespeichert",
+  "copied": "Kopiert",
+  "empty_done": "Noch keine erledigten Aufgaben.",
+  "empty_active": "Nichts zu tun — alles erledigt! 🎉",
+  "empty_all": "Noch keine Aufgaben.<br>Oben eingeben und Enter drücken.",
+  "toggle": "Umschalten",
+  "count": "{active} aktiv · {total} gesamt"
+}

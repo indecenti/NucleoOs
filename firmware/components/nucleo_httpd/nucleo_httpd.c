@@ -2132,9 +2132,11 @@ static esp_err_t time_set_post(httpd_req_t *req)
 // below, which broadcasts "system.language" over the WebSocket so EVERY connected browser switches
 // instantly — no reload. This closes the loop: set the language on the device or on the web and the
 // whole system follows. GET just reports the current value + generation.
-static void i18n_broadcast_cb(bool en)
+static void i18n_broadcast_cb(const char *code)
 {
-    nucleo_event_publish("system.language", en ? "{\"lang\":\"en\"}" : "{\"lang\":\"it\"}");
+    char payload[32];
+    snprintf(payload, sizeof payload, "{\"lang\":\"%s\"}", code ? code : "it");
+    nucleo_event_publish("system.language", payload);
 }
 
 static esp_err_t lang_handler(httpd_req_t *req)
@@ -2149,14 +2151,14 @@ static esp_err_t lang_handler(httpd_req_t *req)
             if (j) {
                 cJSON *lg = cJSON_GetObjectItemCaseSensitive(j, "lang");
                 if (cJSON_IsString(lg) && lg->valuestring && lg->valuestring[0])
-                    nucleo_i18n_set_en((lg->valuestring[0] | 0x20) == 'e');   // "en"->true; persist + gen++ + WS broadcast
+                    nucleo_i18n_set_lang(lg->valuestring);   // persist verbatim (it/en/es/fr/de) + gen++ + WS broadcast
                 cJSON_Delete(j);
             }
         }
     }
     char buf[64];
     snprintf(buf, sizeof(buf), "{\"lang\":\"%s\",\"gen\":%lu}",
-             nucleo_i18n_is_en() ? "en" : "it", (unsigned long)nucleo_i18n_gen());
+             nucleo_i18n_lang(), (unsigned long)nucleo_i18n_gen());
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     httpd_resp_sendstr(req, buf);

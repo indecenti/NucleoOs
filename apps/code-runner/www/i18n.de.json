@@ -1,0 +1,49 @@
+{
+  "_lang": "de",
+
+  "title": "Code Runner",
+  "scratch": "Entwurf",
+  "unsaved": "nicht gespeichert",
+
+  "t_run": "Ausführen (Ctrl+Enter)",
+  "t_stop": "Stoppen",
+  "t_save": "Speichern (Ctrl+S)",
+  "t_clear": "Konsole leeren",
+  "btn_run": "Ausführen",
+  "btn_save": "Speichern",
+  "caps": "Sandbox",
+  "caps_tip": "Läuft im Browser, in einer Sandbox (Web Worker, kein DOM).\nAktive Berechtigungen: SD-Dateisystem · Netzwerk (http) · ANIMA · Benachrichtigungen · Hardware (os.hw: IR/GPIO/Wi-Fi).\nZeitlimit: 6 s.",
+
+  "ph_editor": "// JavaScript — läuft im Browser, in einer Sandbox.\n// console.log(...) oder `return`, um einen Wert anzuzeigen. await frei.\n// API: os.fs.read/write/list · os.http.get · os.anima(Frage) · os.notify(Text)\n\nconsole.log('Hallo von NucleoOS');",
+
+  "status_ready": "bereit",
+  "status_running": "läuft…",
+
+  "examples_label": "Beispiele",
+  "ex_none": "—",
+  "ex_hello": "Hallo + Wert",
+  "ex_fib": "Fibonacci",
+  "ex_fs": "SD-Datei lesen/schreiben",
+  "ex_list": "Ordner auflisten",
+  "ex_anima": "ANIMA fragen",
+  "ex_http": "JSON abrufen",
+  "ex_hw": "Hardware (IR+GPIO+WiFi)",
+
+  "kbd_run": "ausführen",
+  "kbd_save": "speichern",
+
+  "console_empty": "Die Konsole ist leer. Drücke ▶ Ausführen.",
+  "console_cleared": "Konsole geleert.",
+
+  "run_started": "▶ {name} · {time}",
+  "run_done": "✓ fertig in {ms} ms",
+  "run_stopped": "■ gestoppt",
+  "run_error": "✖ {error}",
+  "read_failed": "⚠ {path} konnte nicht gelesen werden ({status})",
+  "read_error": "⚠ {error}",
+
+  "saved": "Gespeichert",
+  "save_failed": "Speichern fehlgeschlagen ({status})",
+  "save_error": "Fehler: {error}",
+  "prompt_save": "Speichern unter (SD-Pfad):"
+}

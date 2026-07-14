@@ -1,0 +1,33 @@
+{
+  "_lang": "de",
+  "app_title": "Log-Viewer",
+  "filter_ph": "Typ/Daten filtern",
+  "btn_pause": "Pause",
+  "btn_resume": "Fortsetzen",
+  "btn_history": "Verlauf",
+  "btn_clear": "Leeren",
+  "btn_diag": "🩺 Diagnose",
+  "btn_health": "Zustand",
+  "follow": "Folgen",
+  "history_hint": "Liest das Ereignisjournal von der SD-Karte (auf Anfrage — hält das Gerät sonst im Ruhezustand)",
+  "diag_hint": "Erstellt eine kompakte Zustandsübersicht (Cardputer + ANIMA) zum Einfügen in eine KI",
+  "health_hint": "Adaptive Sonde: erzeugt Live-Zustandsereignisse (nur bei sichtbarem Fenster, nie während schwerer Arbeit)",
+  "diag_title": "Zustandsdiagnose",
+  "diag_sub": "Kopiere diesen Block und füge ihn zur Diagnose in eine KI ein.",
+  "gathering": "Diagnosedaten werden gesammelt…",
+  "diag_err": "Diagnose nicht verfügbar",
+  "btn_copy": "📋 Kopieren",
+  "btn_regen": "↻ Neu erzeugen",
+  "btn_close": "Schließen",
+  "copied": "In die Zwischenablage kopiert ✓",
+  "empty_state": "Warte auf Live-Ereignisse…<br><span style=\"font-size:11px\">Drücke <b>🩺 Diagnose</b> für einen Zustandsbericht oder <b>Verlauf</b> für das Journal auf der SD.</span>",
+  "events": {
+    "one": "{count} Ereignis",
+    "other": "{count} Ereignisse"
+  },
+  "events_of": " (von {total})",
+  "status_paused": " · pausiert",
+  "src_journal": "Journal: {lines} Zeilen auf SD",
+  "src_none": "noch kein Journal auf SD",
+  "src_error": "Journal nicht verfügbar"
+}

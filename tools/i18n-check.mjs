@@ -17,11 +17,15 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const LANGS = ['it', 'en'];                  // keep in sync with LANGS in nucleo-i18n.js
+const LANGS = ['it', 'en'];                  // REQUIRED: complete + strict parity. Keep in sync with nucleo-i18n.js.
+const EXTRA_LANGS = ['es', 'fr', 'de'];      // tier-2: translation IN PROGRESS — optional + partial OK (runtime falls back to base).
+const ALL_LANGS = [...LANGS, ...EXTRA_LANGS];
 const BASE = 'it';
 
 const errors = [];
 const warnings = [];
+const coverage = {};                         // per tier-2 lang: { have, total } base keys translated
+for (const l of EXTRA_LANGS) coverage[l] = { have: 0, total: 0 };
 let nsCount = 0, keyCount = 0;
 
 function readJSON(path) {
@@ -41,7 +45,7 @@ function discoverNamespaces() {
   if (existsSync(shellI18n)) {
     for (const f of readdirSync(shellI18n)) {
       const m = f.match(/^([a-z0-9-]+)\.([a-z]{2})\.json$/i);
-      if (m && LANGS.includes(m[2])) add(m[1], m[2], join(shellI18n, f));
+      if (m && ALL_LANGS.includes(m[2])) add(m[1], m[2], join(shellI18n, f));
     }
   }
   const appsDir = join(ROOT, 'apps');
@@ -49,7 +53,7 @@ function discoverNamespaces() {
     for (const id of readdirSync(appsDir)) {
       const www = join(appsDir, id, 'www');
       if (!existsSync(www) || !statSync(www).isDirectory()) continue;
-      for (const lang of LANGS) {
+      for (const lang of ALL_LANGS) {
         const p = join(www, `i18n.${lang}.json`);
         if (existsSync(p)) add(id, lang, p);
       }
@@ -73,8 +77,12 @@ function loadCatalogs(map) {
   for (const [ns, byLang] of map) {
     nsCount++;
     const langs = {};
-    for (const lang of LANGS) {
-      if (!byLang[lang]) { errors.push(`[${ns}] missing ${lang} catalog (have: ${Object.keys(byLang).join(', ') || 'none'})`); continue; }
+    for (const lang of ALL_LANGS) {
+      if (!byLang[lang]) {
+        // Required languages MUST exist; tier-2 languages may be absent (translation still in progress).
+        if (LANGS.includes(lang)) errors.push(`[${ns}] missing ${lang} catalog (have: ${Object.keys(byLang).join(', ') || 'none'})`);
+        continue;
+      }
       let obj;
       try { obj = readJSON(byLang[lang]); }
       catch (e) { errors.push(`[${ns}.${lang}] invalid JSON: ${e.message}`); continue; }
@@ -84,17 +92,28 @@ function loadCatalogs(map) {
     }
     catalogs.set(ns, langs);
 
-    // (2) key-set parity across languages
+    // (2) key-set checks against the base.
     if (langs[BASE]) {
       const baseKeys = new Set(Object.keys(langs[BASE]));
       keyCount += baseKeys.size;
-      for (const lang of LANGS) {
+      // Tier-2 coverage counts EVERY namespace's base keys as the denominator, so an as-yet-untranslated
+      // namespace correctly drags the percentage down — the number reflects the WHOLE OS, not only the
+      // catalogs that happen to exist so far.
+      for (const lang of EXTRA_LANGS) coverage[lang].total += baseKeys.size;
+      for (const lang of ALL_LANGS) {
         if (lang === BASE || !langs[lang]) continue;
         const other = new Set(Object.keys(langs[lang]));
         const missing = [...baseKeys].filter((k) => !other.has(k));
         const extra = [...other].filter((k) => !baseKeys.has(k));
-        if (missing.length) errors.push(`[${ns}] keys in ${BASE} missing from ${lang}: ${missing.join(', ')}`);
+        // A key present in a translation but NOT in the base is always drift/typo — an error for EVERY language.
         if (extra.length) errors.push(`[${ns}] keys in ${lang} not in ${BASE}: ${extra.join(', ')}`);
+        if (LANGS.includes(lang)) {
+          // Required language: must be COMPLETE (every base key present).
+          if (missing.length) errors.push(`[${ns}] keys in ${BASE} missing from ${lang}: ${missing.join(', ')}`);
+        } else {
+          // Tier-2 language: partial is fine — count how many base keys this catalog covers.
+          coverage[lang].have += baseKeys.size - missing.length;
+        }
       }
     }
 
@@ -102,7 +121,7 @@ function loadCatalogs(map) {
     if (langs[BASE]) for (const key of Object.keys(langs[BASE])) {
       const baseVal = langs[BASE][key];
       const basePh = placeholders(baseVal);
-      for (const lang of LANGS) {
+      for (const lang of ALL_LANGS) {
         const v = langs[lang] && langs[lang][key];
         if (v === undefined) continue;
         if (typeof baseVal === 'object' || typeof v === 'object') {
@@ -159,16 +178,23 @@ if (errors.length) {
 // runtime scanning of every catalog on the device). Counts base-language keys per namespace.
 const nsKeyCount = {};
 for (const [ns, byLang] of catalogs) nsKeyCount[ns] = Object.keys(byLang[BASE] || {}).length;
-const coverage = {
+// Per tier-2 language: completion percentage (translated base keys / total), for the Settings panel.
+const pct = {};
+for (const l of EXTRA_LANGS) pct[l] = coverage[l].total ? Math.round((100 * coverage[l].have) / coverage[l].total) : 0;
+const manifest = {
   generated: new Date().toISOString(),
   base: BASE,
-  langs: LANGS,
+  langs: ALL_LANGS,          // full picker list (required + tier-2)
+  required: LANGS,           // the complete, parity-enforced languages
+  extra: EXTRA_LANGS,        // in-progress languages (partial catalogs, base fallback)
+  extraCoverage: pct,        // { es: 42, fr: 42, de: 42 } — % of base keys translated
   surfaces: nsCount,
   totalKeys: keyCount,
   namespaces: nsKeyCount,
 };
 try {
-  writeFileSync(join(ROOT, 'web', 'shell', 'i18n', 'coverage.json'), JSON.stringify(coverage, null, 2) + '\n');
+  writeFileSync(join(ROOT, 'web', 'shell', 'i18n', 'coverage.json'), JSON.stringify(manifest, null, 2) + '\n');
 } catch (e) { console.log('  (coverage.json not written: ' + e.message + ')'); }
 
-console.log(`✓ i18n gate OK — ${nsCount} namespaces, ${keyCount} keys, ${LANGS.length} languages, ${warnings.length} warning(s)`);
+const cov = EXTRA_LANGS.map((l) => `${l} ${pct[l]}%`).join(' · ');
+console.log(`✓ i18n gate OK — ${nsCount} namespaces, ${keyCount} base keys, ${LANGS.length} required + ${EXTRA_LANGS.length} tier-2 (${cov}), ${warnings.length} warning(s)`);

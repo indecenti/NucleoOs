@@ -19,18 +19,18 @@ export const PROVIDERS = {
   anthropic: {
     label: 'Claude', base: 'https://api.anthropic.com', version: '2023-06-01',
     prefix: /^sk-ant-/, ph: 'sk-ant-…', def: 'claude-sonnet-4-6',
-    // model tuples are [id, it-label, en-label] — render via modelLabel() so the picker follows the OS language.
-    models: [['claude-sonnet-4-6', 'Sonnet 4.6 · equilibrio', 'Sonnet 4.6 · balanced'], ['claude-opus-4-8', 'Opus 4.8 · massima qualità', 'Opus 4.8 · top quality'], ['claude-haiku-4-5', 'Haiku 4.5 · veloce/economico', 'Haiku 4.5 · fast/cheap']],
+    // model tuples are [id, it, en, es, fr, de] — render via modelLabel() so the picker follows the OS language.
+    models: [['claude-sonnet-4-6', 'Sonnet 4.6 · equilibrio', 'Sonnet 4.6 · balanced', 'Sonnet 4.6 · equilibrado', 'Sonnet 4.6 · équilibré', 'Sonnet 4.6 · ausgewogen'], ['claude-opus-4-8', 'Opus 4.8 · massima qualità', 'Opus 4.8 · top quality', 'Opus 4.8 · máxima calidad', 'Opus 4.8 · qualité maximale', 'Opus 4.8 · höchste Qualität'], ['claude-haiku-4-5', 'Haiku 4.5 · veloce/economico', 'Haiku 4.5 · fast/cheap', 'Haiku 4.5 · rápido/económico', 'Haiku 4.5 · rapide/économique', 'Haiku 4.5 · schnell/günstig']],
   },
   openai: {
     label: 'Groq', base: 'https://api.groq.com/openai/v1', version: '',
     prefix: /^(gsk_|sk-)/, ph: 'gsk_…', def: 'llama-3.1-8b-instant',
-    models: [['llama-3.1-8b-instant', 'Llama 3.1 8B · veloce', 'Llama 3.1 8B · fast'], ['llama-3.3-70b-versatile', 'Llama 3.3 70B · qualità', 'Llama 3.3 70B · quality']],
+    models: [['llama-3.1-8b-instant', 'Llama 3.1 8B · veloce', 'Llama 3.1 8B · fast', 'Llama 3.1 8B · rápido', 'Llama 3.1 8B · rapide', 'Llama 3.1 8B · schnell'], ['llama-3.3-70b-versatile', 'Llama 3.3 70B · qualità', 'Llama 3.3 70B · quality', 'Llama 3.3 70B · calidad', 'Llama 3.3 70B · qualité', 'Llama 3.3 70B · Qualität']],
   },
   xai: {
     label: 'Grok (xAI)', base: 'https://api.x.ai/v1', version: '',
     prefix: /^xai-/, ph: 'xai-…', def: 'grok-2-latest',   // OpenAI-compatible wire (Bearer + /chat/completions)
-    models: [['grok-2-latest', 'Grok 2 · latest', 'Grok 2 · latest'], ['grok-2-1212', 'Grok 2 (1212)', 'Grok 2 (1212)'], ['grok-beta', 'Grok beta', 'Grok beta']],
+    models: [['grok-2-latest', 'Grok 2 · latest', 'Grok 2 · latest', 'Grok 2 · latest', 'Grok 2 · latest', 'Grok 2 · latest'], ['grok-2-1212', 'Grok 2 (1212)', 'Grok 2 (1212)', 'Grok 2 (1212)', 'Grok 2 (1212)', 'Grok 2 (1212)'], ['grok-beta', 'Grok beta', 'Grok beta', 'Grok beta', 'Grok beta', 'Grok beta']],
   },
   google: {
     label: 'Gemini', base: 'https://generativelanguage.googleapis.com/v1beta/openai', version: '',
@@ -39,18 +39,19 @@ export const PROVIDERS = {
     // against the API: gemini-3.5-flash / gemini-3.1-pro do NOT exist (404). Real lineup: gemini-2.5-flash
     // (recommended, stable, free), gemini-flash-latest (always-current Flash), gemini-2.5-pro (paid quality),
     // gemini-2.5-flash-lite (cheap, weak — fine for quick lookups, NOT for careful code).
-    models: [['gemini-2.5-flash', 'Gemini 2.5 Flash · consigliato', 'Gemini 2.5 Flash · recommended'], ['gemini-flash-latest', 'Gemini Flash · ultimo', 'Gemini Flash · latest'], ['gemini-2.5-pro', 'Gemini 2.5 Pro · qualità (a pagamento)', 'Gemini 2.5 Pro · quality (paid)'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite · economico', 'Gemini 2.5 Flash-Lite · cheap']],
+    models: [['gemini-2.5-flash', 'Gemini 2.5 Flash · consigliato', 'Gemini 2.5 Flash · recommended', 'Gemini 2.5 Flash · recomendado', 'Gemini 2.5 Flash · recommandé', 'Gemini 2.5 Flash · empfohlen'], ['gemini-flash-latest', 'Gemini Flash · ultimo', 'Gemini Flash · latest', 'Gemini Flash · último', 'Gemini Flash · dernier', 'Gemini Flash · neueste'], ['gemini-2.5-pro', 'Gemini 2.5 Pro · qualità (a pagamento)', 'Gemini 2.5 Pro · quality (paid)', 'Gemini 2.5 Pro · calidad (de pago)', 'Gemini 2.5 Pro · qualité (payant)', 'Gemini 2.5 Pro · Qualität (kostenpflichtig)'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite · economico', 'Gemini 2.5 Flash-Lite · cheap', 'Gemini 2.5 Flash-Lite · económico', 'Gemini 2.5 Flash-Lite · économique', 'Gemini 2.5 Flash-Lite · günstig']],
   },
 };
 
-// Pick a model tuple's label for the active OS language. Tuples are [id, it, en]; the live Gemini
-// calibration builds [id, id] pairs (no descriptor) — those fall back to the id. Reads anima.lang
+// Pick a model tuple's label for the active OS language. Tuples are [id, it, en, es, fr, de]; the live
+// Gemini calibration builds [id, id] pairs (no descriptor) — those fall back to the id. Reads anima.lang
 // directly (no engine import) so ai.js stays usable from the Node host gates too.
 export function modelLabel(entry) {
   if (!entry) return '';
   let lang = 'it';
   try { lang = (localStorage.getItem('anima.lang') || document.documentElement.lang || 'it').slice(0, 2); } catch {}
-  return (lang === 'en' ? (entry[2] || entry[1]) : entry[1]) || entry[1] || entry[0];
+  const i = { it: 1, en: 2, es: 3, fr: 4, de: 5 }[lang] || 1;
+  return entry[i] || entry[2] || entry[1] || entry[0];   // active language → en → it → id
 }
 
 // What each provider can actually DO. The one source of truth for "Claude can't draw/transcribe",
@@ -200,11 +201,17 @@ export async function calibrateGemini(cfg) {
   return { tier, models, recommended, hasPro: tier === 'paid' };
 }
 
-// Honest one-line tier label for the UI (bilingual).
-export function geminiTierLabel(tier, en) {
-  if (tier === 'paid') return en ? 'Paid plan · Pro models available' : 'Piano a pagamento · modelli Pro disponibili';
-  if (tier === 'free') return en ? 'Free tier · Flash only (Pro needs billing)' : 'Free tier · solo Flash (Pro richiede billing)';
-  return en ? 'Plan not detected' : 'Piano non rilevato';
+// Honest one-line tier label for the UI. `lang` accepts a 2-letter OS code ('it'|'en'|'es'|'fr'|'de')
+// or a legacy boolean (true→en, false→it) so existing callers and host gates keep working.
+export function geminiTierLabel(tier, lang) {
+  const l = lang === true ? 'en' : (lang === false || lang == null ? 'it' : String(lang).slice(0, 2));
+  const T = {
+    paid:    { it: 'Piano a pagamento · modelli Pro disponibili', en: 'Paid plan · Pro models available', es: 'Plan de pago · modelos Pro disponibles', fr: 'Offre payante · modèles Pro disponibles', de: 'Bezahltarif · Pro-Modelle verfügbar' },
+    free:    { it: 'Free tier · solo Flash (Pro richiede billing)', en: 'Free tier · Flash only (Pro needs billing)', es: 'Nivel gratis · solo Flash (Pro requiere facturación)', fr: 'Offre gratuite · Flash uniquement (Pro requiert la facturation)', de: 'Kostenlos · nur Flash (Pro erfordert Abrechnung)' },
+    unknown: { it: 'Piano non rilevato', en: 'Plan not detected', es: 'Plan no detectado', fr: 'Offre non détectée', de: 'Tarif nicht erkannt' },
+  };
+  const row = tier === 'paid' ? T.paid : tier === 'free' ? T.free : T.unknown;
+  return row[l] || row.it;
 }
 export const maskKey = (k) => (k && k.length > 10 ? k.slice(0, 6) + '…' + k.slice(-4) : (k ? '…' : ''));
 

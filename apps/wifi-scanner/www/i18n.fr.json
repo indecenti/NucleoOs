@@ -1,0 +1,36 @@
+{
+  "_lang": "fr",
+  "title": "Gestionnaire WiFi",
+  "btn_auto": "Auto",
+  "auto_hint": "Actualisation automatique toutes les 8s",
+  "connect": "Se connecter",
+  "reconnect": "Se reconnecter",
+  "forget": "Oublier",
+  "password": "Mot de passe",
+  "password_keep": "Mot de passe (vide = utiliser l'enregistré)",
+  "saved": "enregistré",
+  "saved_hint": "Réseau enregistré — reconnexion automatique",
+  "priority": "priorité",
+  "connecting": "Connexion à {ssid}…",
+  "connected_to": "Connecté à {ssid}",
+  "connect_failed": "Échec de la connexion — vérifiez le mot de passe",
+  "forgotten": "Réseau oublié",
+  "need_pair": "Associez l'appareil pour gérer les réseaux",
+  "src_idle": "inactif",
+  "empty_msg": "Aucun réseau trouvé.<br>Appuyez sur <b>Analyser</b> pour rechercher à nouveau.",
+  "count": {
+    "one": "{count} réseau",
+    "other": "{count} réseaux"
+  },
+  "count_open": {
+    "one": "{count} ouvert",
+    "other": "{count} ouverts"
+  },
+  "ch": "canal {ch}",
+  "sec_open": "ouvert",
+  "sec_open_hint": "Réseau ouvert",
+  "hidden_ssid": "(caché)",
+  "src_connected_only": "seul l'AP connecté — API de scan à venir",
+  "src_demo": "données de démo — appareil hors ligne",
+  "src_live": "scan en direct"
+}

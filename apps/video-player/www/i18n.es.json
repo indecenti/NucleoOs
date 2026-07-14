@@ -1,0 +1,92 @@
+{
+  "_lang": "es",
+
+  "noFilePlaying": "— Ningún archivo en reproducción",
+  "sdStatusTooltip": "Estado de la MicroSD",
+  "sdDash": "SD —",
+  "sdVideoCount": { "one": "{count} vídeo", "other": "{count} vídeos" },
+  "sdReady": "SD lista",
+  "sdOffline": "SD desconectada",
+
+  "menuMedia": "Medios",
+  "openLocal": "Abrir archivo local…",
+  "openSd": "Abrir desde MicroSD…",
+  "closeMedia": "Cerrar medio",
+
+  "menuPlayback": "Reproducción",
+  "playPause": "Reproducir / Pausar",
+  "kbdSpace": "Espacio",
+  "stopPlayback": "Detener",
+  "back10": "Atrás 10 s",
+  "fwd10": "Adelante 10 s",
+  "prevTrack": "Anterior",
+  "nextTrack": "Siguiente",
+  "mute": "Silenciar",
+  "speed": "Velocidad",
+  "rateNormal": "Normal (1×)",
+
+  "menuView": "Ver",
+  "fullscreen": "Pantalla completa",
+  "loopPlaylist": "Repetir lista de reproducción",
+  "showPlaylist": "Mostrar lista de reproducción",
+
+  "menuSubs": "Subtítulos",
+  "loadSubFile": "Cargar archivo de subtítulos…",
+  "subToggle": "Activar / desactivar",
+  "subBigger": "Aumentar tamaño",
+  "subSmaller": "Reducir tamaño",
+  "subReset": "Tamaño predeterminado",
+
+  "keyboardShortcuts": "Atajos de teclado",
+  "aboutItem": "Acerca de",
+
+  "welcomeDesc": "Reproduce vídeos locales o desde la MicroSD. La decodificación ocurre en el navegador: el dispositivo solo transmite los bytes.",
+  "openLocalBtn": "Abrir archivo local",
+  "browseSd": "Explorar MicroSD",
+  "dragHint": "…o arrastra un archivo de vídeo a esta ventana",
+
+  "tipPlayPause": "Reproducir/Pausar (Espacio)",
+  "tipStop": "Detener (S)",
+  "tipBack": "Atrás 10 s (←)",
+  "tipFwd": "Adelante 10 s (→)",
+  "tipMute": "Silenciar (M)",
+  "tipAudio": "Pistas de audio",
+  "tipSub": "Subtítulos (C)",
+  "tipRate": "Velocidad de reproducción",
+  "tipPip": "Imagen en imagen (I)",
+  "tipPlaylist": "Lista de reproducción (P)",
+  "tipFullscreen": "Pantalla completa (F)",
+
+  "dragDrop": "Suelta un vídeo — o un archivo .srt/.vtt durante la reproducción",
+
+  "playlistTitle": "LISTA DE REPRODUCCIÓN — {dir}",
+  "hide": "Ocultar",
+  "plSdError": "MicroSD no montada o carpeta ilegible.",
+  "plEmpty": "No hay vídeos en esta carpeta.",
+
+  "searchFolder": "Buscar en la carpeta actual…",
+  "sdReadError": "No se puede leer la MicroSD.",
+  "parentDir": ".. (Carpeta superior)",
+  "noVideoOrFolder": "No hay vídeos ni carpetas.",
+
+  "subOff": "Desactivados",
+  "loadFile": "Cargar archivo…",
+  "sizeLabel": "Tamaño",
+  "audioTrack": "Pista de audio",
+  "singleTrack": "Pista única",
+  "trackN": "Pista {n}",
+
+  "localFile": "Archivo local",
+  "localTag": "local",
+
+  "aboutVersion": "Versión 3.0 — NucleoOS",
+  "aboutDesc": "Reproductor multimedia profesional para NucleoOS. Decodificación por hardware en el navegador y carga segmentada (HTTP Range) desde la MicroSD del dispositivo.",
+  "colCommand": "Comando",
+  "colShortcut": "Atajo",
+  "skip10": "Saltar ±10 segundos",
+  "prevNext": "Anterior / Siguiente",
+  "volumePct": "Volumen ±10 %",
+  "subOnOff": "Subtítulos activar/desactivar",
+  "subSize": "Tamaño de subtítulos",
+  "showPlaylistShort": "Mostrar lista de reproducción"
+}

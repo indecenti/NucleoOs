@@ -1,0 +1,16 @@
+{
+  "_lang": "es",
+  "app_title": "Tareas",
+  "filter_active": "Activas",
+  "add_ph": "Añade una tarea y pulsa Intro…",
+  "priority": "Prioridad",
+  "clear_done": "Borrar completadas",
+  "saving": "Guardando…",
+  "saved_locally": "Guardado localmente",
+  "copied": "Copiado",
+  "empty_done": "Aún no hay tareas completadas.",
+  "empty_active": "Nada que hacer — ¡todo listo! 🎉",
+  "empty_all": "Aún no hay tareas.<br>Escribe arriba y pulsa Intro.",
+  "toggle": "Alternar",
+  "count": "{active} activas · {total} en total"
+}

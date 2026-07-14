@@ -33,6 +33,11 @@ const LOCALE_KEY = 'nucleo.locale';              // optional regional-format ove
 export const LANGS = [
   { code: 'it', label: 'Italiano', flag: '🇮🇹', dir: 'ltr', locale: 'it-IT' },
   { code: 'en', label: 'English',  flag: '🇬🇧', dir: 'ltr', locale: 'en-US' },
+  // Tier-2 languages (translation in progress): every missing key falls back through base (it), so a
+  // partial catalog is safe. They appear in the Settings/onboarding pickers as soon as they're listed.
+  { code: 'es', label: 'Español',  flag: '🇪🇸', dir: 'ltr', locale: 'es-ES' },
+  { code: 'fr', label: 'Français', flag: '🇫🇷', dir: 'ltr', locale: 'fr-FR' },
+  { code: 'de', label: 'Deutsch',  flag: '🇩🇪', dir: 'ltr', locale: 'de-DE' },
 ];
 const LANG_CODES = LANGS.map((l) => l.code);
 const META = Object.fromEntries(LANGS.map((l) => [l.code, l]));

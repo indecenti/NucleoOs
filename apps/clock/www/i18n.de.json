@@ -1,0 +1,20 @@
+{
+  "_lang": "de",
+  "tab_clock": "Uhr",
+  "tab_timer": "Timer",
+  "stopwatch": "Stoppuhr",
+  "lap": "Runde",
+  "cfg_title": "Uhreinstellungen",
+  "opt_24h": "24-Stunden-Format",
+  "opt_seconds": "Sekunden anzeigen",
+  "opt_analog": "Analoge Uhr",
+  "dev_init": "Geräteuhr…",
+  "dev_unreachable": "Gerät nicht erreichbar",
+  "dev_synced": "nucleo per NTP synchronisiert · {hh}:{mm}",
+  "dev_synced_drift": "nucleo per NTP synchronisiert · Abweichung {secs}s ({hh}:{mm})",
+  "dev_waiting": "nucleo: warte auf NTP-Synchronisierung",
+  "dev_browser_set": "Uhrzeit vom Browser gesetzt",
+  "timer_done": "Zeit abgelaufen!",
+  "save_ok": "Auf dem Gerät gespeichert",
+  "save_fail": "Speichern fehlgeschlagen — Gerät nicht erreichbar"
+}

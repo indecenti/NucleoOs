@@ -1,0 +1,67 @@
+{
+  "_lang": "es",
+
+  "sub_loading": "Radio en vivo gratis · se sincroniza con tu dispositivo",
+  "sub_count": {
+    "one": "Radio en vivo gratis · {count} emisora · se sincroniza con tu dispositivo",
+    "other": "Radio en vivo gratis · {count} emisoras · se sincroniza con tu dispositivo"
+  },
+  "btn_add": "Añadir emisora",
+  "hint": "▶ escuchar en el navegador · ★ marcar como predeterminada del dispositivo · ✎ editar · ⌃⌄ reordenar.",
+  "info_title": "Información y ayuda",
+  "info_aria": "Información y ayuda",
+
+  "np_idle": "Nada en reproducción",
+  "np_idle_hint": "Elige una emisora para empezar a escuchar",
+  "vol_title": "Volumen",
+  "play_pause": "Reproducir / pausa",
+  "connecting": "conectando…",
+  "live_stream": "stream en vivo",
+
+  "empty_list": "Aún no hay emisoras — añade una con ＋.",
+  "support_somafm": "apoya a SomaFM",
+
+  "badge_default": "predeterminada",
+  "badge_browser_only": "solo navegador",
+  "badge_browser_only_title": "https se escucha en el navegador pero no en el Cardputer",
+  "act_set_default": "Marcar como predeterminada del dispositivo",
+  "act_move_up": "Subir",
+  "act_move_down": "Bajar",
+
+  "dlg_add": "Añadir emisora",
+  "dlg_edit": "Editar emisora",
+  "f_name": "Nombre",
+  "f_name_ph": "Mi emisora",
+  "f_genre": "Género / lema",
+  "f_genre_ph": "Ambient / Downtempo",
+  "f_stream": "URL del stream",
+  "note_stream": "El MP3 http:// simple se escucha también en el Cardputer. https:// funciona aquí pero no en el dispositivo.",
+  "note_stream_warn": "⚠ https se escucha en el navegador pero NO en el Cardputer (sin TLS). Usa http:// para el soporte en el dispositivo.",
+  "f_np": "URL de now-playing",
+  "optional": "(opcional)",
+  "note_np": "Metadatos JSON para la línea del tema — deja vacío para un feed en vivo simple.",
+
+  "err_https": "⚠ stream https bloqueado aquí — pero se reproducirá en el dispositivo si es accesible.",
+  "err_unreachable": "⚠ stream inaccesible desde el navegador (puede que aún funcione en el dispositivo).",
+
+  "info_lead": "Radio por internet en vivo y gratuita para NucleoOS. Una única lista de emisoras, compartida entre esta app y la app Radio de tu Cardputer.",
+  "info_add": "<b>Añade una emisora.</b> Toca <b>Añadir emisora</b>, dale un nombre y pega un URL de stream directo (un stream MP3). Se une a la lista en todas partes al instante.",
+  "info_star": "<b>Marca la predeterminada del dispositivo.</b> La emisora con la estrella es la que tu Cardputer sintoniza en el momento en que abres su app Radio.",
+  "info_listen": "<b>Escucha aquí.</b> Reproduce cualquier emisora en el navegador. Si ofrece información del tema, verás el artista, el título y una barra de progreso.",
+  "info_reorder": "<b>Reordena y edita.</b> Usa ⌃⌄ para reordenar, ✎ para editar, 🗑 para eliminar. Cada cambio se guarda en el dispositivo en el instante en que lo haces.",
+  "info_device_note": "<b>Nota sobre el dispositivo:</b> el Cardputer solo reproduce streams MP3 <b>http://</b> simples — no tiene espacio para HTTPS junto al decodificador de audio. Las emisoras <b>https://</b> se marcan como <b>“solo navegador”</b>: se escuchan aquí pero no funcionan en el dispositivo. Las emisoras gratuitas seleccionadas provienen de <b>SomaFM</b>.",
+  "keyboard": "Teclado",
+  "keys_help": "<kbd>↑</kbd><kbd>↓</kbd> seleccionar · <kbd>Intro</kbd> reproducir · <kbd>Espacio</kbd> reproducir/pausa · <kbd>n</kbd>/<kbd>p</kbd> sig./ant.",
+  "got_it": "Entendido",
+
+  "saving": "Guardando…",
+  "saved_ok": "Guardado ✓",
+  "save_failed": "Error al guardar",
+  "toast_seeded": "lista de emisoras predeterminada inicializada",
+  "toast_readonly": "Abre Radio desde la shell del dispositivo para guardar los cambios",
+  "toast_default": "“{name}” es ahora la predeterminada del dispositivo",
+  "toast_removed": "Eliminada “{name}”",
+  "toast_saved_changes": "Cambios guardados",
+  "toast_added": "Añadida “{name}”",
+  "confirm_remove": "¿Eliminar “{name}” de la lista de emisoras?"
+}

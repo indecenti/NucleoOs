@@ -1,12 +1,29 @@
 {
-  "generated": "2026-07-14T16:12:41.878Z",
+  "generated": "2026-07-14T20:03:25.684Z",
   "base": "it",
   "langs": [
     "it",
+    "en",
+    "es",
+    "fr",
+    "de"
+  ],
+  "required": [
+    "it",
     "en"
   ],
-  "surfaces": 37,
-  "totalKeys": 1972,
+  "extra": [
+    "es",
+    "fr",
+    "de"
+  ],
+  "extraCoverage": {
+    "es": 100,
+    "fr": 100,
+    "de": 100
+  },
+  "surfaces": 38,
+  "totalKeys": 1993,
   "namespaces": {
     "core": 103,
     "shell": 129,
@@ -40,6 +57,7 @@
     "system-monitor": 33,
     "tasks": 13,
     "terminal": 4,
+    "unit-converter": 21,
     "updates": 29,
     "video-player": 75,
     "video-studio": 27,

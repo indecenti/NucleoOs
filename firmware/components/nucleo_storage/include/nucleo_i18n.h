@@ -16,11 +16,19 @@ extern "C" {
 void nucleo_i18n_load(void);
 
 // Hot accessor: true when the system language is English. Native UIs call this while painting.
+// (The native TFT strings are IT/EN only; for es/fr/de this is false → Italian base is painted.)
 bool nucleo_i18n_is_en(void);
 
-// Switch language: flips the in-RAM flag AND persists ui.language to settings.json (read-modify-
-// write, every other key preserved), so the choice survives reboot and reaches the web shell.
-// On an ACTUAL change it bumps the generation counter and fires the on-change hook (below).
+// The active OS language code verbatim ("it","en","es","fr","de",…). settings.json -> ui.language is
+// the single OS-wide signal; this returns exactly what was set, so the web keeps the precise choice.
+const char *nucleo_i18n_lang(void);
+
+// Set the OS language to any code and persist ui.language VERBATIM (read-modify-write, other keys
+// preserved). The web calls this via POST /api/lang so a language the browser supports (es/fr/de) is
+// not collapsed to it/en on the device. On an ACTUAL change it bumps the generation + fires the hook.
+void nucleo_i18n_set_lang(const char *code);
+
+// Convenience for the native IT/EN toggle sites: equivalent to set_lang("en"|"it").
 void nucleo_i18n_set_en(bool en);
 
 // Monotonic generation counter — bumped on every real language change (from ANY surface: the native
@@ -29,12 +37,12 @@ void nucleo_i18n_set_en(bool en);
 // a reboot. Zero at boot.
 uint32_t nucleo_i18n_gen(void);
 
-// Optional hook fired AFTER the flag flips and settings.json is persisted (on the caller's thread),
-// only when the language actually changed. The HTTP layer registers one that publishes a
-// "system.language" event onto the bus -> the WebSocket sink pushes it to every connected browser,
-// so a change made on the DEVICE reaches the web OS live. Kept as a callback so this low-level
-// storage module needs no dependency on the event bus / httpd. Pass NULL to clear.
-void nucleo_i18n_set_on_change(void (*cb)(bool en));
+// Optional hook fired AFTER the language changes and settings.json is persisted (on the caller's
+// thread), only on an actual change. `code` is the new language verbatim. The HTTP layer registers one
+// that publishes a "system.language" event onto the bus -> the WebSocket sink pushes it to every
+// connected browser, so a change made on the DEVICE reaches the web OS live. Kept as a callback so this
+// low-level storage module needs no dependency on the event bus / httpd. Pass NULL to clear.
+void nucleo_i18n_set_on_change(void (*cb)(const char *code));
 
 // Pick the right literal for the current language. Both args are flash literals -> zero RAM cost.
 const char *nucleo_tr(const char *it, const char *en);

@@ -1,0 +1,92 @@
+{
+  "_lang": "de",
+
+  "noFilePlaying": "— Keine Datei wird abgespielt",
+  "sdStatusTooltip": "MicroSD-Status",
+  "sdDash": "SD —",
+  "sdVideoCount": { "one": "{count} Video", "other": "{count} Videos" },
+  "sdReady": "SD bereit",
+  "sdOffline": "SD offline",
+
+  "menuMedia": "Medien",
+  "openLocal": "Lokale Datei öffnen…",
+  "openSd": "Von MicroSD öffnen…",
+  "closeMedia": "Medium schließen",
+
+  "menuPlayback": "Wiedergabe",
+  "playPause": "Wiedergabe / Pause",
+  "kbdSpace": "Leertaste",
+  "stopPlayback": "Stopp",
+  "back10": "10 s zurück",
+  "fwd10": "10 s vor",
+  "prevTrack": "Vorheriger",
+  "nextTrack": "Nächster",
+  "mute": "Stumm",
+  "speed": "Geschwindigkeit",
+  "rateNormal": "Normal (1×)",
+
+  "menuView": "Ansicht",
+  "fullscreen": "Vollbild",
+  "loopPlaylist": "Wiedergabeliste wiederholen",
+  "showPlaylist": "Wiedergabeliste anzeigen",
+
+  "menuSubs": "Untertitel",
+  "loadSubFile": "Untertiteldatei laden…",
+  "subToggle": "Ein / aus",
+  "subBigger": "Größer",
+  "subSmaller": "Kleiner",
+  "subReset": "Standardgröße",
+
+  "keyboardShortcuts": "Tastenkürzel",
+  "aboutItem": "Über",
+
+  "welcomeDesc": "Spiele lokale Videos oder von der MicroSD ab. Die Dekodierung erfolgt im Browser: Das Gerät streamt nur die Bytes.",
+  "openLocalBtn": "Lokale Datei öffnen",
+  "browseSd": "MicroSD durchsuchen",
+  "dragHint": "…oder ziehe eine Videodatei in dieses Fenster",
+
+  "tipPlayPause": "Wiedergabe/Pause (Leertaste)",
+  "tipStop": "Stopp (S)",
+  "tipBack": "10 s zurück (←)",
+  "tipFwd": "10 s vor (→)",
+  "tipMute": "Stumm (M)",
+  "tipAudio": "Tonspuren",
+  "tipSub": "Untertitel (C)",
+  "tipRate": "Wiedergabegeschwindigkeit",
+  "tipPip": "Bild-in-Bild (I)",
+  "tipPlaylist": "Wiedergabeliste (P)",
+  "tipFullscreen": "Vollbild (F)",
+
+  "dragDrop": "Lege ein Video ab — oder eine .srt/.vtt-Datei während der Wiedergabe",
+
+  "playlistTitle": "WIEDERGABELISTE — {dir}",
+  "hide": "Ausblenden",
+  "plSdError": "MicroSD nicht eingebunden oder Ordner nicht lesbar.",
+  "plEmpty": "Keine Videos in diesem Ordner.",
+
+  "searchFolder": "Im aktuellen Ordner suchen…",
+  "sdReadError": "MicroSD kann nicht gelesen werden.",
+  "parentDir": ".. (Übergeordneter Ordner)",
+  "noVideoOrFolder": "Keine Videos oder Ordner.",
+
+  "subOff": "Aus",
+  "loadFile": "Datei laden…",
+  "sizeLabel": "Größe",
+  "audioTrack": "Tonspur",
+  "singleTrack": "Einzelne Spur",
+  "trackN": "Spur {n}",
+
+  "localFile": "Lokale Datei",
+  "localTag": "lokal",
+
+  "aboutVersion": "Version 3.0 — NucleoOS",
+  "aboutDesc": "Professioneller Mediaplayer für NucleoOS. Hardware-Dekodierung im Browser und segmentiertes Laden (HTTP Range) von der MicroSD des Geräts.",
+  "colCommand": "Befehl",
+  "colShortcut": "Kürzel",
+  "skip10": "±10 Sekunden springen",
+  "prevNext": "Vorheriger / Nächster",
+  "volumePct": "Lautstärke ±10 %",
+  "subOnOff": "Untertitel ein/aus",
+  "subSize": "Untertitelgröße",
+  "showPlaylistShort": "Wiedergabeliste anzeigen"
+}

@@ -1,0 +1,20 @@
+{
+  "_lang": "fr",
+  "tab_clock": "Horloge",
+  "tab_timer": "Minuteur",
+  "stopwatch": "Chronomètre",
+  "lap": "Tour",
+  "cfg_title": "Paramètres de l'horloge",
+  "opt_24h": "Format 24 heures",
+  "opt_seconds": "Afficher les secondes",
+  "opt_analog": "Horloge analogique",
+  "dev_init": "horloge de l'appareil…",
+  "dev_unreachable": "appareil injoignable",
+  "dev_synced": "nucleo synchronisé NTP · {hh}:{mm}",
+  "dev_synced_drift": "nucleo synchronisé NTP · dérive {secs}s ({hh}:{mm})",
+  "dev_waiting": "nucleo : en attente de synchronisation NTP",
+  "dev_browser_set": "heure définie depuis le navigateur",
+  "timer_done": "Temps écoulé !",
+  "save_ok": "Enregistré sur l'appareil",
+  "save_fail": "Échec de l'enregistrement — appareil injoignable"
+}

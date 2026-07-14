@@ -1,0 +1,65 @@
+{
+  "_lang": "es",
+
+  "title": "Transcripción",
+  "subtitle": "micro del Cardputer · en el dispositivo",
+
+  "set_title": "Ajustes de ASR",
+  "set_engine_label": "Motor de transcripción",
+  "eng_auto": "Automático (Vosk con recurso a Groq)",
+  "eng_vosk": "Solo Vosk (100% offline)",
+  "eng_groq": "Solo Groq (online, ultrapreciso)",
+  "set_key_label": "Clave API (Groq)",
+  "set_key_hint": "Compartida con AI Chat y almacenada en localStorage o leída desde /data/anima/teacher.json.",
+  "set_base_label": "URL del endpoint (Groq)",
+  "set_forget": "Olvidar clave",
+  "set_forgotten": "Clave API olvidada.",
+
+  "sum_title": "Resumen con IA",
+  "sum_copied": "¡Copiado!",
+  "sum_working": "Resumiendo...",
+  "sum_btn": "Resumir",
+  "sum_empty": "No hay texto que resumir.",
+  "sum_no_key": "Configura tu clave API de Groq en los ajustes (⚙) para usar la función de resumen.",
+  "sum_failed": "No se pudo generar el resumen.",
+  "sum_error": "Error al generar el resumen: {msg}",
+  "copy_failed": "No se pudo copiar el texto.",
+
+  "load_title": "Cargando modelo...",
+  "load_sub": "Esto puede tardar unos segundos mientras el sistema prepara la IA.",
+
+  "placeholder": "Habla al micrófono del Cardputer — el texto aparecerá aquí.",
+
+  "exit_btn": "Salir",
+  "new_confirm": "¿Iniciar una nueva transcripción? La actual ya está guardada.",
+
+  "screen_off": "Pantalla OFF",
+  "screen_on": "Pantalla ON",
+  "screen_title": "Pantalla del Cardputer",
+  "save_now_title": "Guardar ahora",
+  "new_title": "Nueva transcripción",
+  "summary_title": "Resumir la transcripción con IA",
+  "exit_title": "Volver a encender la pantalla y salir",
+  "foot_hint": "Al iniciar, la pantalla del Cardputer se apaga; se vuelve a encender cuando sales (incluso si cierras la pestaña).",
+
+  "wordCount": { "one": "{count} palabra", "other": "{count} palabras" },
+  "saved_as": "guardado · {file}",
+  "unsaved": "sin guardar…",
+
+  "st_starting": "iniciando…",
+  "st_loading_model": "cargando modelo…",
+  "st_listening": "Escuchando",
+  "st_reconnecting": "Reconectando…",
+  "st_paused": "En pausa",
+  "st_mic_busy": "micro ocupado",
+  "st_not_paired": "no emparejado",
+  "st_no_model": "modelo ausente",
+  "st_audio_error": "error de audio",
+  "st_mic_in_use_by": "micro en uso por {holder}",
+
+  "notice_auth": "<b>Dispositivo no emparejado.</b> Abre NucleoOS, introduce el PIN que se muestra en el Cardputer y vuelve a abrir esta app.",
+  "notice_busy": "<b>Micrófono ocupado.</b> El micro del Cardputer está en uso por <b>{holder}</b>. Deténlo y vuelve a intentarlo.",
+  "notice_busy_other": "otra app",
+  "notice_model": "<b>Modelo de voz no disponible.</b> Necesitas internet (la primera vez) o los modelos Vosk en la SD.",
+  "notice_exit": "<b>Pantalla reencendida.</b> Transcripción guardada. Puedes cerrar la ventana."
+}

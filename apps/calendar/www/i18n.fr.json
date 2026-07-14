@@ -1,0 +1,14 @@
+{
+  "_lang": "fr",
+  "prev_month": "Mois précédent",
+  "next_month": "Mois suivant",
+  "new_event_ph": "Nouvel événement… (Entrée)",
+  "pick_day": "Choisissez un jour",
+  "empty_events": "Aucun événement. Ajoutez-en un ci-dessous.",
+  "saved_device": "Enregistré sur l'appareil",
+  "save_failed": "Échec de l'enregistrement — appareil injoignable",
+  "more_events": {
+    "one": "+{count} autre",
+    "other": "+{count} autres"
+  }
+}
