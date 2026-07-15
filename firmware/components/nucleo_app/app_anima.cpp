@@ -1231,6 +1231,7 @@ static void present_result(void)
         if (want < 0) want = 0;
         if (want > 100) want = 100;
         if (vol) nucleo_audio_set_volume(want); else nucleo_app_set_brightness(want);
+        nucleo_app_persist_prefs();   // a spoken "set volume/brightness" is a deliberate pref -> survives reboot
         // Bilingue: e' pronunciata PER INTERO (say_or sotto), quindi in EN deve uscire in inglese o la
         // voce EN non la coprirebbe. mathspeak rende "%" -> "per cento"/"percent".
         snprintf(reply, sizeof(reply), s_en ? (vol ? "Volume %d%%." : "Brightness %d%%.")
@@ -1998,7 +1999,7 @@ static bool on_back(int key)
     }
     if (s_edit) {
         if (key == NK_LEFT) slider_adjust(-5);              // Left lowers the value
-        else                s_edit = false;                // Esc finishes adjusting
+        else              { s_edit = false; nucleo_app_persist_prefs(); }   // Esc finishes adjusting -> save volume/brightness
         menu_hint(); nucleo_app_request_draw(); return true;
     }
     // IDEE drill-down: when inside a category or a fill-form, BOTH Esc and Left climb one level (the
@@ -2223,7 +2224,7 @@ static void ia_key(int key)
     if (s_edit) {                                           // slider adjust mode
         if      (key == NK_RIGHT || key == NK_UP) slider_adjust(+5);
         else if (key == NK_DOWN)                  slider_adjust(-5);
-        else if (key == NK_ENTER)                 s_edit = false;
+        else if (key == NK_ENTER)               { s_edit = false; nucleo_app_persist_prefs(); }   // save volume/brightness on exit
         menu_hint(); nucleo_app_request_draw(); return;     // hint aggiorna il % della velocita' live
     }
     if      (key == NK_UP)   s_mrow = (s_mrow > 0) ? s_mrow - 1 : -1;   // row 0 -> back to the tab bar
