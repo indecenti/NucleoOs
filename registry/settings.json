@@ -14,6 +14,8 @@
     "profile": "balanced",
     "sleep_timeout_s": 60,
     "display_brightness": 70,
+    "volume": 80,
+    "muted": false,
     "transport_profile": "auto"
   },
   "ui": {

@@ -42,6 +42,7 @@ extern "C" int           nucleo_wifiatk_beacon_count(void);
 // Quick-settings the Control Center drives: backlight, audio, battery, system.
 extern "C" void nucleo_app_set_brightness(int pct);
 extern "C" int  nucleo_app_brightness(void);
+extern "C" void nucleo_app_persist_prefs(void);   // save brightness/volume/mute to settings.json
 extern "C" int  nucleo_audio_volume(void);
 extern "C" void nucleo_audio_set_volume(int pct);
 extern "C" bool nucleo_audio_is_muted(void);
@@ -1163,7 +1164,7 @@ int launcher_render_control_center_key(int key, char ch)
     if (s_cc_edit) {
         if      (key == NK_RIGHT || key == NK_UP)   cc_slider_adjust(+5);
         else if (key == NK_LEFT  || key == NK_DOWN) cc_slider_adjust(-5);
-        else if (key == NK_ENTER || key == NK_BACK) s_cc_edit = false;
+        else if (key == NK_ENTER || key == NK_BACK) { s_cc_edit = false; nucleo_app_persist_prefs(); }  // save the adjusted brightness/volume once, on exit
         return CC_REDRAW;
     }
 
@@ -1201,7 +1202,7 @@ int launcher_render_control_center_key(int key, char ch)
         int act = it[s_cc_row].act;
         if (it[s_cc_row].kind == CC_SLIDER) { s_cc_edit = true; return CC_REDRAW; }
         switch (act) {
-            case A_MUTE:   nucleo_audio_set_mute(!nucleo_audio_is_muted()); return CC_REDRAW;
+            case A_MUTE:   nucleo_audio_set_mute(!nucleo_audio_is_muted()); nucleo_app_persist_prefs(); return CC_REDRAW;
             case A_SCREEN:  return CC_SCREEN_OFF;
             case A_USBKBD:  s_cc_launch_id = "usbkbd"; return CC_LAUNCH;
             case A_REMOTE:  s_cc_launch_id = "remote";  return CC_LAUNCH;

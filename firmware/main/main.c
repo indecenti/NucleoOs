@@ -10,6 +10,7 @@
 #include "esp_heap_caps.h"
 #include "nucleo_storage.h"
 #include "nucleo_i18n.h"
+#include "nucleo_prefs.h"   // persistent brightness/volume/mute (settings.json power.*), applied at boot
 #include "nucleo_registry.h"
 #include "nucleo_eventbus.h"
 #include "nucleo_ui.h"
@@ -205,6 +206,21 @@ void app_main(void)
         nucleo_storage_provision();         bootmark("sd-provision");
         nucleo_storage_refresh();           bootmark("sd-refresh");
         nucleo_i18n_load();                 // system UI language (settings.json ui.language) for native apps
+
+        // Restore the user's saved display/audio prefs from the SAME settings.json the web Settings app
+        // writes (power.display_brightness / volume / muted). Without this only the language survived a
+        // reboot; brightness/volume/mute always came back at their compiled defaults. The setters just
+        // store state (+ set the backlight, already up from the splash), so this is safe pre-httpd/audio.
+        {
+            int bri = nucleo_app_brightness(), vol = nucleo_audio_volume();
+            bool mute = nucleo_audio_is_muted();
+            if (nucleo_prefs_load(&bri, &vol, &mute)) {
+                nucleo_app_set_brightness(bri);
+                nucleo_audio_set_volume(vol);
+                nucleo_audio_set_mute(mute);
+            }
+        }
+
         if (nucleo_registry_load() != ESP_OK)
             ESP_LOGW(TAG, "registry not loaded");
         bootmark("registry");

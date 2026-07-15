@@ -728,7 +728,7 @@ static void activate(void){
         break;
     case T_DISP:
         if(s_sel==DISP_BRIGHT||s_sel==DISP_VOL){ s_edit=true; update_hint(); }
-        else if(s_sel==DISP_MUTE){ nucleo_audio_set_mute(!nucleo_audio_is_muted());
+        else if(s_sel==DISP_MUTE){ nucleo_audio_set_mute(!nucleo_audio_is_muted()); nucleo_app_persist_prefs();
                            toast(nucleo_audio_is_muted()?(s_en?"Muted":"Muto"):(s_en?"Sound":"Audio"),
                                  nucleo_audio_is_muted()?"Muted":"Sound"); }
         else if(s_sel==DISP_VOICE){ nucleo_voice_set_always_on(!nucleo_voice_always_on());
@@ -788,7 +788,7 @@ static void on_key(int k,char ch){
     if(s_edit){                                              // slider adjust mode
         if(k==NK_RIGHT||k==NK_UP) slider_adjust(+5);
         else if(k==NK_DOWN)       slider_adjust(-5);
-        else if(k==NK_ENTER){ s_edit=false; update_hint(); nucleo_app_request_draw(); }
+        else if(k==NK_ENTER){ s_edit=false; nucleo_app_persist_prefs(); update_hint(); nucleo_app_request_draw(); }  // save adjusted brightness/volume on exit
         return;
     }
     if(k==NK_RIGHT){ page_tab(); return; }                   // horizontal pager from anywhere
@@ -819,7 +819,7 @@ static bool wifi_back(int key){
     if(s_busy) return true;
     if(s_edit){
         if(key==NK_LEFT) slider_adjust(-5);                  // Left = value down
-        else { s_edit=false; update_hint(); nucleo_app_request_draw(); }   // Esc = done
+        else { s_edit=false; nucleo_app_persist_prefs(); update_hint(); nucleo_app_request_draw(); }   // Esc = done (save adjusted value)
         return true;
     }
     // LEFT pages the tabs backward (mirror of RIGHT); it must never close the app —

@@ -103,6 +103,11 @@ const char *nucleo_app_native_id(const char *anima_id);
 void nucleo_app_set_brightness(int pct);
 int  nucleo_app_brightness(void);
 
+// Persist the current brightness + volume + mute to settings.json (survives reboot; boot re-applies).
+// Call from the DELIBERATE user controls only (Control Center, native settings, ANIMA), at edit-mode
+// exit or on a toggle — never from the transient game/torch/QR/video boosts.
+void nucleo_app_persist_prefs(void);
+
 // ─── ANIMA Solo mode ─────────────────────────────────────────────────────────
 // Reboot into a dedicated "ANIMA Solo" personality: the SAME firmware image, but main() brings up only
 // display + SD + Wi-Fi + arbiter + ANIMA/TTS/voice and SKIPS httpd / mDNS / recorder / auth / IR. The

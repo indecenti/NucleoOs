@@ -34,6 +34,8 @@ extern "C" {
 #include "nucleo_voice.h"      // Voice engine state for the PTT overlay
 #include "nucleo_anima.h"      // anima_action_t for the voice result toast (include dir via CMakeLists)
 #include "nucleo_i18n.h"       // OS language flag + generation counter (live launcher repaint on a web-side change)
+#include "nucleo_prefs.h"      // persist brightness/volume/mute to settings.json (survives reboot)
+#include "nucleo_audio.h"      // volume/mute getters for the prefs snapshot
 }
 #include "esp_http_server.h"
 #include "esp_log.h"
@@ -147,6 +149,16 @@ void nucleo_app_set_brightness(int pct)
     nucleo_ui_set_brightness((unsigned char)(pct * 255 / 100));
 }
 int nucleo_app_brightness(void) { return s_brightness; }
+
+// Persist the current display/audio prefs (brightness + volume + mute) to settings.json so they
+// survive a reboot; the boot path (main.c) reads them back and re-applies. Call this ONLY from the
+// deliberate user controls (Control Center, native settings app, ANIMA) — NEVER from the transient
+// boosts in games / torch / QR / video, which must not overwrite the saved baseline. One write per
+// adjustment session (call at edit-mode exit or on a toggle), so the SD is not hammered per keystroke.
+extern "C" void nucleo_app_persist_prefs(void)
+{
+    nucleo_prefs_save(s_brightness, nucleo_audio_volume(), nucleo_audio_is_muted());
+}
 
 // ---- HTTP: remote display power --------------------------------------------
 // POST /api/display?on=0|1 — blank the Cardputer screen (backlight 0) or re-light it (restore
