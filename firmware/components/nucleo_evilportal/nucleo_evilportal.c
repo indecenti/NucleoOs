@@ -163,9 +163,6 @@ typedef struct { char ip[40]; char pass[64]; uint8_t attempts; } seen_t;
 static int    s_seen_head;
 static volatile int s_confirmed;          // captures confirmed by an identical re-entry
 
-#define SAT_N 8
-static int  s_sat_head;
-
 // Large per-session buffers: heap-alloc in start_impl, free in stop. Zero .bss between sessions.
 typedef struct {
     char cur_ssid[33];
@@ -175,20 +172,8 @@ typedef struct {
     char recent_u[RECENT_N][64];
     char recent_p[RECENT_N][64];
     seen_t seen[SEEN_N];
-    char sat[SAT_N][40];
 } ep_run_t;
 static ep_run_t *s_ep;   // NULL at boot; alloc in start_impl, free in stop
-static void mark_satisfied(const char *ip)
-{
-    for (int i = 0; i < SAT_N; i++) if (s_ep->sat[i][0] && strcmp(s_ep->sat[i], ip) == 0) return;
-    snprintf(s_ep->sat[s_sat_head], sizeof s_ep->sat[0], "%s", ip);
-    s_sat_head = (s_sat_head + 1) % SAT_N;
-}
-static bool ip_satisfied(const char *ip)
-{
-    for (int i = 0; i < SAT_N; i++) if (s_ep->sat[i][0] && strcmp(s_ep->sat[i], ip) == 0) return true;
-    return false;
-}
 
 // ---- SD template enumeration ------------------------------------------------
 // Returns the Nth *.html filename (without path) in PORTAL_TPL into `out`; false if none.
@@ -728,6 +713,7 @@ static esp_err_t start_impl(const char *ssid, int template_idx, int channel,
     if (!load_template(template_idx)) {
         ESP_LOGE(TAG, "template %d unavailable", template_idx);
         nucleo_setup_apply_network(); nucleo_exclusive_exit();   // network up first, then httpd/mDNS/voice
+        free(s_ep); s_ep = NULL;                                 // don't leave the session buffer resident on a failed start
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -745,7 +731,7 @@ static esp_err_t start_impl(const char *ssid, int template_idx, int channel,
     s_twin_coherent = make_wpa2;
 
     esp_err_t err = start_ap(s_ep->cur_ssid, channel, twin ? bssid : NULL, real_auth, make_wpa2);
-    if (err != ESP_OK) { ESP_LOGE(TAG, "AP start failed: %s", esp_err_to_name(err)); nucleo_setup_apply_network(); nucleo_exclusive_exit(); return err; }
+    if (err != ESP_OK) { ESP_LOGE(TAG, "AP start failed: %s", esp_err_to_name(err)); nucleo_setup_apply_network(); nucleo_exclusive_exit(); free(s_ep); s_ep = NULL; return err; }
     offer_captive_dns();                    // DHCP hands clients 192.168.4.1 as their resolver
 
     s_dns_run = true;
@@ -756,7 +742,9 @@ static esp_err_t start_impl(const char *ssid, int template_idx, int channel,
     if (start_server() != ESP_OK) {
         ESP_LOGE(TAG, "portal HTTP server failed");
         s_dns_run = false;
+        for (int i = 0; i < 30 && s_dns_task; i++) vTaskDelay(pdMS_TO_TICKS(50));   // let the DNS task exit before we tear down
         nucleo_setup_apply_network(); nucleo_exclusive_exit();   // network up first, then httpd/mDNS/voice
+        free(s_ep); s_ep = NULL;                                 // don't leave the session buffer resident on a failed start
         return ESP_FAIL;
     }
 
