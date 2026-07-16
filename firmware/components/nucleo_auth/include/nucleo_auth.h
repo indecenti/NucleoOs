@@ -10,7 +10,9 @@
 // /api/apps, /api/associations (needed to load the shell and show the pairing overlay).
 //
 // Tokens persist in the power-loss-safe config store (/cfg/config/auth.json) so a paired
-// browser survives reboots; the PIN is regenerated each boot (only NEW pairings need it).
+// browser survives reboots. The PIN is STABLE: generated once on first boot and persisted, so it
+// stays the same across restarts (a user-chosen settings.security.pin overrides it). Pairing is
+// throttled per source IP with escalating backoff, so a hostile client can't lock everyone out.
 #pragma once
 #include "esp_http_server.h"
 #include <stdbool.h>

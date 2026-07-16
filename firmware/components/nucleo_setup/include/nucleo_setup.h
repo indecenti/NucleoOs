@@ -86,8 +86,15 @@ void        nucleo_setup_reconnect_best(void);       // rescan + join the best k
 void        nucleo_setup_set_device_name(const char *name);
 const char *nucleo_setup_ap_ssid(void);
 const char *nucleo_setup_ap_pass(void);
+bool        nucleo_setup_ap_secure(void);                 // true iff the AP is ACTUALLY WPA2 (pass >= 8); UIs must use this, not pass[0]
 void        nucleo_setup_set_ap_ssid(const char *ssid);   // edit hotspot name (persists; applies live)
 void        nucleo_setup_set_ap_pass(const char *pass);   // "" = open AP, else WPA2 (8..63 chars)
+
+// Persistence health for diagnostics (/api/diag). Reports which of the three config tiers
+// (/cfg LittleFS, NVS, SD mirror) accepted the most recent save — so "settings not saved"
+// reports are instantly triageable. tiers_ok is the count [0..3]; 0 means nothing persisted.
+typedef struct { bool cfg_ok; bool nvs_ok; bool sd_ok; int tiers_ok; } nucleo_persist_status_t;
+void        nucleo_setup_persist_status(nucleo_persist_status_t *out);
 
 #ifdef __cplusplus
 }
