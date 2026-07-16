@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS "nucleo_setup.c"
     INCLUDE_DIRS "include"
-    REQUIRES nucleo_board nucleo_ui nucleo_storage json esp_wifi esp_netif esp_event nucleo_app nucleo_kbd lwip
+    REQUIRES nucleo_board nucleo_ui nucleo_storage json esp_wifi esp_netif esp_event nucleo_app nucleo_kbd lwip nvs_flash
 )
 
 # Bounded snprintf into fixed buffers on purpose; truncation is safe here.

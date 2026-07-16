@@ -14,7 +14,7 @@ whether to join an existing Wi-Fi or create an Access Point for the client app.
                       ▸ Create an Access Point
 4a. (Join) Scan       pick SSID from a scrolled list
 4b. (Join) Password   masked text entry via the keyboard
-5a. (AP) Show AP       SSID "NucleoOS-Setup" + password (client connects here)
+5a. (AP) Show AP       per-device SSID "NucleoOS-XXXX" + password (client connects here)
 6. Device name        default "nucleo-01"  (becomes hostname / nucleo-01.local)
 7. Done               "Connect from your PC/phone:" URL + nucleo-01.local
                       -> writes setup.json, never shown again

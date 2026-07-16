@@ -16,6 +16,7 @@
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
 #include "nucleo_smtp.h"     // SMTP-over-TLS sender for /api/mail/send
+#include "smtp_proto.h"      // smtp_addr_valid() — recipient validation (header/command-injection guard)
 #include "nucleo_mailcfg.h"  // NVS account store for /api/mail/accounts
 #include "nucleo_eventbus.h"
 #include "nucleo_arb.h"     // heavy-work arbiter: serialize outbound TLS so two fetches can't both OOM
@@ -581,7 +582,9 @@ static esp_err_t wifi_forget_post(httpd_req_t *req)
 static esp_err_t logs_get(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/plain");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    // No Access-Control-Allow-Origin: the log ring is diagnostics, not a public resource. Same-origin
+    // callers (the on-device Log Viewer, curl on the LAN) still work; dropping the wildcard stops a
+    // malicious website the operator visits from reading the device's logs cross-origin.
     // Optional ?level=E|W|I|D|V (or error/warn/info/debug/verbose) -> dmesg-style severity filter.
     // Only the first letter matters, so "warn" and "W" are equivalent.
     char min_level = 0;
@@ -678,6 +681,16 @@ static esp_err_t diag_get(httpd_req_t *req)
     cJSON_AddNumberToObject(net, "rssi", nucleo_setup_rssi());
     cJSON_AddBoolToObject(net,   "tsync", nucleo_setup_time_synced());
     cJSON_AddNumberToObject(net, "clients", nucleo_ws_client_count());
+    cJSON_AddBoolToObject(net,   "ap_secure", nucleo_setup_ap_secure());   // AP actually WPA2 (not silently open)
+
+    // ── persist: which of the 3 config tiers (/cfg LittleFS, NVS, SD mirror) took the last save. This is
+    //    the "settings not saved across reboot" triage: tiers=0 means the write reached nowhere. ────────
+    nucleo_persist_status_t ps; nucleo_setup_persist_status(&ps);
+    cJSON *pj = cJSON_AddObjectToObject(root, "persist");
+    cJSON_AddNumberToObject(pj, "tiers", ps.tiers_ok);   // -1 = no save yet this boot; 0 = NOTHING persisted
+    cJSON_AddBoolToObject(pj, "cfg", ps.cfg_ok);
+    cJSON_AddBoolToObject(pj, "nvs", ps.nvs_ok);
+    cJSON_AddBoolToObject(pj, "sd",  ps.sd_ok);
 
     // ── anima: the whole point of the "ANIMA health" ask — tier mix, abstain rate, which brain is live ─
     cJSON *an = cJSON_AddObjectToObject(root, "anima");
@@ -1506,6 +1519,7 @@ static esp_err_t proxy_evt(esp_http_client_event_t *e)
 
 static esp_err_t proxy_get(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // require pairing: an open fetch-any-URL relay is an SSRF/anonymizing-proxy hole
     char query[1600], url[1100] = { 0 };
     if (httpd_req_get_url_query_len(req) == 0 ||
         httpd_req_get_url_query_str(req, query, sizeof query) != ESP_OK ||
@@ -1818,10 +1832,18 @@ static esp_err_t mail_send_post(httpd_req_t *req) {
     smtp_account_t acc;
     char errmsg[96] = { 0 };
     esp_err_t e;
+    // Reject SMTP header/command injection: a "to" with CR/LF/space/comma (smtp_addr_valid catches these)
+    // could smuggle extra RCPT lines; a subject with CR/LF could inject arbitrary headers (hidden Bcc,
+    // spoofed From). The recipient goes verbatim into "RCPT TO:" and the subject into the "Subject:" line.
+    bool subj_bad = subject && (strchr(subject, '\r') || strchr(subject, '\n'));
     if (idx < 0 || !nucleo_mailcfg_get(idx, &acc)) {
         e = ESP_ERR_INVALID_ARG; strcpy(errmsg, "no account configured");
     } else if (!to || !to[0] || !body) {
         e = ESP_ERR_INVALID_ARG; strcpy(errmsg, "missing to/body");
+    } else if (!smtp_addr_valid(to)) {
+        e = ESP_ERR_INVALID_ARG; strcpy(errmsg, "invalid recipient address");
+    } else if (subj_bad) {
+        e = ESP_ERR_INVALID_ARG; strcpy(errmsg, "invalid subject (newline)");
     } else {
         smtp_msg_t msg = { .to = to, .subject = subject ? subject : "", .body = body };
         e = nucleo_smtp_send(&acc, &msg, errmsg, sizeof errmsg);
@@ -1844,6 +1866,7 @@ static esp_err_t mail_send_post(httpd_req_t *req) {
 
 static esp_err_t llm_proxy(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // require pairing: same open-relay/SSRF exposure as /api/proxy
     char query[1400], url[1100] = { 0 };
     if (httpd_req_get_url_query_len(req) == 0 ||
         httpd_req_get_url_query_str(req, query, sizeof query) != ESP_OK ||

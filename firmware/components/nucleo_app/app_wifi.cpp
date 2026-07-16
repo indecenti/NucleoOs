@@ -60,6 +60,7 @@ int         nucleo_setup_net_count(void);                  // how many networks 
 void        nucleo_setup_set_device_name(const char *name);
 const char *nucleo_setup_ap_ssid(void);
 const char *nucleo_setup_ap_pass(void);
+bool        nucleo_setup_ap_secure(void);
 void        nucleo_setup_set_ap_ssid(const char *ssid);
 void        nucleo_setup_set_ap_pass(const char *pass);
 int         nucleo_setup_apply_network(void);
@@ -433,7 +434,8 @@ static void build_ap(Row*it,int*n){
     int k=0;
     it[k].label=s_en?"Hotspot":"Hotspot"; it[k].kind=RV_TOGGLE; it[k].on=ap_on(); k++;
     it[k].label="SSID"; it[k].kind=RV_TEXT; snprintf(it[k].val,20,"%s",nucleo_setup_ap_ssid()); k++;
-    it[k].label="Pass"; it[k].kind=RV_TEXT; snprintf(it[k].val,20,"%s",nucleo_setup_ap_pass()); k++;
+    it[k].label="Pass"; it[k].kind=RV_TEXT;
+    snprintf(it[k].val,20,"%s", nucleo_setup_ap_secure()?nucleo_setup_ap_pass():(s_en?"(open)":"(aperto)")); k++;
     it[k].label="URL";  it[k].kind=RV_TEXT; snprintf(it[k].val,20,"192.168.4.1"); k++;
     *n=k;
 }

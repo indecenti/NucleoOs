@@ -34,6 +34,10 @@ static void load_manifest_fields(nucleo_app_t *a)
     cJSON_Delete(m);
 }
 
+// Cap the read: `len` comes from ftell on an SD file that may be corrupt/oversized, and an unbounded
+// malloc on the ~18 KB heap would OOM the boot. The largest legit registry doc (apps.json) is well
+// under this ceiling.
+#define REGFILE_MAX (256 * 1024)
 static char *read_file(const char *path)
 {
     FILE *f = fopen(path, "rb");
@@ -41,6 +45,7 @@ static char *read_file(const char *path)
     fseek(f, 0, SEEK_END);
     long len = ftell(f);
     fseek(f, 0, SEEK_SET);
+    if (len < 0 || len > REGFILE_MAX) { ESP_LOGE(TAG, "%s size %ld out of range", path, len); fclose(f); return NULL; }
     char *buf = malloc(len + 1);
     if (buf && fread(buf, 1, len, f) == (size_t)len) buf[len] = '\0';
     else { free(buf); buf = NULL; }

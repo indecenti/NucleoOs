@@ -163,7 +163,7 @@ void app_main(void)
     // Power-loss-safe config store on internal flash. Mount before networking, which
     // reads setup.json (load_config) on the very first call. Independent of the SD.
     if (nucleo_storage_mount_cfg() != ESP_OK)
-        ESP_LOGW(TAG, "config store (littlefs) unavailable; setup may not persist safely");
+        ESP_LOGW(TAG, "config store (littlefs) unavailable — falling back to NVS for setup/network persistence");
     bootmark("cfg");
 
     nucleo_event_init();

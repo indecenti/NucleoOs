@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS "nucleo_auth.c"
     INCLUDE_DIRS "include"
-    REQUIRES esp_http_server json nucleo_board esp_timer
+    REQUIRES esp_http_server json nucleo_board esp_timer nvs_flash lwip
 )
 
 # Bounded snprintf into fixed buffers (PIN, cookie, JSON) — truncation is safe here.
