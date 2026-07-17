@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>            // time() — wall clock for the sliding session idle-TTL
 #include "esp_log.h"
 #include "esp_random.h"
 #include "esp_timer.h"
@@ -16,7 +17,16 @@ static const char *TAG = "auth";
 #define COOKIE_NAME   "nucleo_session"
 #define TOKEN_HEX_LEN 48                    // 24 random bytes -> 48 hex chars
 #define MAX_TOKENS    32                    // bounded ring of valid sessions (browsers + CLI tools)
-#define COOKIE_MAXAGE 31536000              // session cookie lifetime: 1 year
+#define COOKIE_MAXAGE 31536000              // browser cookie lifetime: 1 year (server-side idle-TTL is the real bound)
+
+// Sliding idle-TTL. A session that goes UNUSED for SESSION_TTL_SEC is expired server-side and dropped —
+// so a cookie sniffed on an untrusted network but never replayed dies on its own, and abandoned browsers
+// don't leave a live token forever. Actively-used sessions never expire: each request re-stamps "last
+// seen", but at most once per SESSION_REFRESH_SEC so the hot auth path stays write-free within the day.
+// (TTL bounds IDLE tokens; an actively-abused token is killed with nucleo_auth_revoke, not by TTL.)
+#define SESSION_TTL_SEC     (90LL * 24 * 3600)   // 90 days idle -> re-pair
+#define SESSION_REFRESH_SEC (24LL * 3600)        // re-persist "last seen" at most once/day per token
+#define CLOCK_VALID_EPOCH   1672531200LL         // > 2023-01-01: the wall clock is really set (not cold boot)
 #define AUTH_JSON     NUCLEO_CFG_MOUNT "/config/auth.json"
 #define SETTINGS_JSON NUCLEO_SD_MOUNT  "/system/config/settings.json"
 #define MAX_FAILS       5
@@ -28,6 +38,7 @@ static char    s_pin[7];                    // 6 digits + NUL — stable across 
 static char    s_pin_override[7];           // optional fixed PIN from settings.security.pin
 static bool    s_required = true;
 static char    s_tokens[MAX_TOKENS][TOKEN_HEX_LEN + 1];
+static int64_t s_tok_seen[MAX_TOKENS];      // wall-clock (time()) last seen; 0 = minted before the clock was set
 static int     s_token_count;               // newest at [count-1] wrapping via ring write
 static int     s_token_head;                // next write slot (ring)
 
@@ -78,7 +89,12 @@ static void save_auth(void)
     if (s_pin[0]) cJSON_AddStringToObject(root, "pin", s_pin);   // stable PIN survives reboots
     cJSON *arr = cJSON_AddArrayToObject(root, "tokens");
     for (int i = 0; i < MAX_TOKENS; i++)
-        if (s_tokens[i][0]) cJSON_AddItemToArray(arr, cJSON_CreateString(s_tokens[i]));
+        if (s_tokens[i][0]) {
+            cJSON *o = cJSON_CreateObject();                     // {t:token, s:last-seen} so the idle-TTL survives reboots
+            cJSON_AddStringToObject(o, "t", s_tokens[i]);
+            cJSON_AddNumberToObject(o, "s", (double)s_tok_seen[i]);
+            cJSON_AddItemToArray(arr, o);
+        }
     char *out = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     if (!out) return;
@@ -101,6 +117,7 @@ static void save_auth(void)
 static void load_auth(void)
 {
     memset(s_tokens, 0, sizeof(s_tokens));
+    memset(s_tok_seen, 0, sizeof(s_tok_seen));
     s_token_count = 0; s_token_head = 0;
 
     // Read /cfg first, then the NVS fallback.
@@ -123,9 +140,19 @@ static void load_auth(void)
     cJSON *arr = cJSON_GetObjectItem(root, "tokens");
     int c = cJSON_GetArraySize(arr);
     for (int i = 0; i < c && i < MAX_TOKENS; i++) {
-        cJSON *t = cJSON_GetArrayItem(arr, i);
-        if (cJSON_IsString(t) && strlen(t->valuestring) == TOKEN_HEX_LEN) {
-            strcpy(s_tokens[s_token_head], t->valuestring);
+        cJSON *e = cJSON_GetArrayItem(arr, i);
+        const char *hex = NULL; int64_t seen = 0;
+        if (cJSON_IsString(e)) {                                   // legacy format: a bare token string (pre-TTL)
+            hex = e->valuestring;
+        } else if (cJSON_IsObject(e)) {                            // new format: {t:token, s:last-seen}
+            cJSON *t = cJSON_GetObjectItem(e, "t");
+            cJSON *s = cJSON_GetObjectItem(e, "s");
+            if (cJSON_IsString(t)) hex = t->valuestring;
+            if (cJSON_IsNumber(s)) seen = (int64_t)s->valuedouble;
+        }
+        if (hex && strlen(hex) == TOKEN_HEX_LEN) {
+            strcpy(s_tokens[s_token_head], hex);
+            s_tok_seen[s_token_head] = seen;                       // legacy tokens load with seen=0 -> TTL clock starts on next use
             s_token_head = (s_token_head + 1) % MAX_TOKENS;
             if (s_token_count < MAX_TOKENS) s_token_count++;
         }
@@ -225,8 +252,24 @@ static fail_ent_t *fail_slot(uint32_t ip)
 static bool token_valid(const char *tok)
 {
     if (!tok || !*tok) return false;
-    for (int i = 0; i < MAX_TOKENS; i++)
-        if (s_tokens[i][0] && ct_equal(s_tokens[i], tok)) return true;
+    int64_t now = (int64_t)time(NULL);
+    bool clk = now > CLOCK_VALID_EPOCH;                     // only enforce/refresh the idle-TTL when the clock is really set
+    for (int i = 0; i < MAX_TOKENS; i++) {
+        if (!s_tokens[i][0] || !ct_equal(s_tokens[i], tok)) continue;
+        if (clk) {
+            if (s_tok_seen[i] == 0) {                       // first use with a known clock -> start the idle window
+                s_tok_seen[i] = now; save_auth();
+            } else if (now - s_tok_seen[i] > SESSION_TTL_SEC) {
+                s_tokens[i][0] = '\0'; s_tok_seen[i] = 0;   // unused past the TTL -> expire this session (must re-pair)
+                if (s_token_count > 0) s_token_count--;
+                save_auth();
+                return false;
+            } else if (now - s_tok_seen[i] > SESSION_REFRESH_SEC) {
+                s_tok_seen[i] = now; save_auth();           // sliding refresh, at most once/day (keeps the hot path write-free)
+            }
+        }
+        return true;
+    }
     return false;
 }
 
@@ -267,12 +310,28 @@ esp_err_t nucleo_auth_reject(httpd_req_t *req)
     return ESP_FAIL;
 }
 
+int nucleo_auth_revoke(const char *keep_token)
+{
+    int revoked = 0;
+    for (int i = 0; i < MAX_TOKENS; i++) {
+        if (!s_tokens[i][0]) continue;
+        if (keep_token && *keep_token && ct_equal(s_tokens[i], keep_token)) continue;   // spare the caller's own session
+        s_tokens[i][0] = '\0'; s_tok_seen[i] = 0; revoked++;
+    }
+    s_token_count = 0;
+    for (int i = 0; i < MAX_TOKENS; i++) if (s_tokens[i][0]) s_token_count++;
+    if (revoked) save_auth();                                                           // persist the wipe (both tiers)
+    return revoked;
+}
+
+int nucleo_auth_session_count(void) { return s_token_count; }
+
 // ---- handlers ----
 static esp_err_t status_get(httpd_req_t *req)
 {
-    char out[64];
-    snprintf(out, sizeof(out), "{\"required\":%s,\"paired\":%s}",
-             s_required ? "true" : "false", nucleo_auth_request_ok(req) ? "true" : "false");
+    char out[80];
+    snprintf(out, sizeof(out), "{\"required\":%s,\"paired\":%s,\"sessions\":%d}",
+             s_required ? "true" : "false", nucleo_auth_request_ok(req) ? "true" : "false", s_token_count);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_sendstr(req, out);
@@ -285,6 +344,8 @@ static void mint_token(char *out)
     for (int i = 0; i < TOKEN_HEX_LEN; i++) out[i] = hex[esp_random() & 0xF];
     out[TOKEN_HEX_LEN] = '\0';
     strcpy(s_tokens[s_token_head], out);             // bounded ring: oldest session is evicted
+    { int64_t now = (int64_t)time(NULL);             // stamp last-seen so the idle-TTL has a start point
+      s_tok_seen[s_token_head] = now > CLOCK_VALID_EPOCH ? now : 0; }   // 0 if clock cold -> starts on first clocked use
     s_token_head = (s_token_head + 1) % MAX_TOKENS;
     if (s_token_count < MAX_TOKENS) s_token_count++;
     save_auth();
@@ -347,12 +408,50 @@ static esp_err_t pair_post(httpd_req_t *req)
     return ESP_OK;
 }
 
+// POST /api/unpair — revoke sessions. Body {"scope":"others"|"all"} (default "others"). "others" logs
+// out every OTHER paired client (this session stays in); "all" wipes every session so everyone re-pairs.
+// Gated: only a paired client can revoke — the "a cookie may have leaked on an untrusted network -> log
+// the others out" recovery. Same-origin (the Settings/Connection UI); no CORS header, no ACAO wildcard.
+static esp_err_t revoke_post(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    httpd_resp_set_type(req, "application/json");
+
+    char body[64] = {0};
+    int total = 0, r;
+    while ((r = httpd_req_recv(req, body + total, sizeof(body) - 1 - total)) > 0) {
+        total += r;
+        if (total >= (int)sizeof(body) - 1) break;
+    }
+    body[total > 0 ? total : 0] = '\0';
+
+    bool all = false;
+    cJSON *root = cJSON_Parse(body);
+    if (root) {
+        cJSON *s = cJSON_GetObjectItem(root, "scope");
+        if (cJSON_IsString(s) && strcmp(s->valuestring, "all") == 0) all = true;
+        cJSON_Delete(root);
+    }
+
+    char keep[TOKEN_HEX_LEN + 1] = {0};
+    if (!all) cookie_token(req, keep, sizeof keep);   // spare the caller's own token on "others"
+    int n = nucleo_auth_revoke(all ? NULL : keep);
+    ESP_LOGW(TAG, "revoked %d session(s) (scope=%s)", n, all ? "all" : "others");
+
+    char out[48];
+    snprintf(out, sizeof(out), "{\"ok\":true,\"revoked\":%d}", n);
+    httpd_resp_sendstr(req, out);
+    return ESP_OK;
+}
+
 esp_err_t nucleo_auth_register(httpd_handle_t server)
 {
     httpd_uri_t status = { .uri = "/api/auth/status", .method = HTTP_GET,  .handler = status_get };
     httpd_uri_t pair   = { .uri = "/api/pair",        .method = HTTP_POST, .handler = pair_post };
+    httpd_uri_t unpair = { .uri = "/api/unpair",      .method = HTTP_POST, .handler = revoke_post };
     httpd_register_uri_handler(server, &status);
     httpd_register_uri_handler(server, &pair);
-    ESP_LOGI(TAG, "pairing API ready: /api/pair, /api/auth/status");
+    httpd_register_uri_handler(server, &unpair);
+    ESP_LOGI(TAG, "pairing API ready: /api/pair, /api/auth/status, /api/unpair");
     return ESP_OK;
 }

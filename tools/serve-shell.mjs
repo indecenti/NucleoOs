@@ -392,6 +392,20 @@ async function pairApi(req, res) {
   return send(res, 401, 'application/json', JSON.stringify({ error: 'bad pin', locked: now < AUTH.lockUntil }));
 }
 
+// POST /api/unpair — revoke sessions (mirrors nucleo_auth). Gated. Body {scope:"others"|"all"}: "others"
+// keeps the caller's own cookie token, "all" wipes every session. (The firmware also enforces a 90-day
+// sliding idle-TTL; the sim keeps tokens in RAM only, so TTL isn't modelled here.)
+async function unpairApi(req, res) {
+  if (!isAuthed(req)) return reject401(res);
+  let scope = 'others';
+  try { scope = String(JSON.parse((await readBody(req)).toString('utf8')).scope || 'others'); } catch {}
+  const keep = cookieToken(req);
+  let revoked = 0;
+  if (scope === 'all') { revoked = AUTH.tokens.size; AUTH.tokens.clear(); }
+  else { for (const t of [...AUTH.tokens]) { if (t !== keep) { AUTH.tokens.delete(t); revoked++; } } }
+  return sendJSON(res, { ok: true, revoked });
+}
+
 // ---- SAFETY GUARD: is this input worth escalating to the knowledge/entity/teacher tiers? ----
 // A bare DATE / number / time / cell-ref / code / wordless string is NOT a question. It must NEVER
 // be sent to the online teacher (which would fabricate a "fact") nor learned. The deterministic
@@ -413,8 +427,9 @@ const server = createServer(async (req, res) => {
   const path = decodeURIComponent(url.pathname);
 
   // Pairing endpoints (public by nature) + the guard for protected routes.
-  if (path === '/api/auth/status') return sendJSON(res, { required: AUTH.required, paired: isAuthed(req) });
+  if (path === '/api/auth/status') return sendJSON(res, { required: AUTH.required, paired: isAuthed(req), sessions: AUTH.tokens.size });
   if (path === '/api/pair' && req.method === 'POST') return pairApi(req, res);
+  if (path === '/api/unpair' && req.method === 'POST') return unpairApi(req, res);
   if (path === '/api/_dev/pin') return sendJSON(res, { pin: AUTH.pin });   // SIMULATOR ONLY: stands in for "read the screen"; the firmware NEVER serves the PIN over HTTP
   if ((path.startsWith('/api/fs/') || path.startsWith('/api/rec/') || path.startsWith('/api/voice/') || (path === '/api/ota') || (path === '/api/transcribe') || (path === '/api/display')) && !isAuthed(req)) return reject401(res);
 

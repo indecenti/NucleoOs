@@ -97,11 +97,18 @@ export const STR = {
     deviceNameHint: 'Il nome è usato da mDNS/Swarm e si applica al prossimo avvio.',
     maintenance: 'Manutenzione', rebootDevice: 'Riavvia dispositivo',
     maintenanceHint: 'Il riavvio ricarica firmware e indice ANIMA dalla SD. Per gli aggiornamenti firmware usa l’app <b>Aggiornamenti</b> (l’OTA è inaffidabile su questo dispositivo: preferisci il flash seriale).',
+    // security & sessions
+    security: 'Sicurezza & sessioni', activeSessions: 'Sessioni associate attive',
+    sessionsHint: 'Ogni browser associato col PIN è una sessione. Se hai perso un dispositivo o usato una rete non fidata, revoca le sessioni. Quelle inutilizzate scadono da sole dopo 90 giorni.',
+    revokeOthers: 'Revoca le altre sessioni', revokeAll: 'Revoca tutte',
+    revokeOthersDone: 'Altre sessioni revocate', revokeAllDone: 'Tutte le sessioni revocate — ri-associa col PIN',
+    revokeNone: 'Nessuna altra sessione da revocare', revokeFail: 'Revoca fallita',
+    revokeAllConfirm: 'Tocca di nuovo per revocare TUTTE le sessioni (dovrai ri-associare col PIN)',
     // diagnostics
     selfTestEndpoints: 'Self-Test endpoint', heapRegions: 'Heap (regioni)',
     heapOpenHint: 'Apri questa scheda per leggere l’heap…', systemLogs: 'Log di sistema',
     logsHint: 'Ring RAM ~2&nbsp;KB · funziona anche senza SD/seriale.', privacy: 'Privacy',
-    privacyHint: 'Alcuni endpoint diagnostici (<code>/api/status</code>, <code>/api/heap</code>, <code>/api/cpu</code>, <code>/api/logs</code>) sono <b>pubblici</b> sulla rete locale e mostrano SSID/IP, memoria e cause di reboot. Tienilo presente su reti condivise.',
+    privacyHint: 'Solo <code>/api/status</code> (discovery) resta <b>pubblico</b> sulla rete locale e mostra SSID/IP. Log e diagnostica (<code>/api/logs</code>, <code>/api/diag</code>, <code>/api/heap</code>, <code>/api/cpu</code>) ora <b>richiedono l’associazione</b>. Su reti non fidate usa l’hotspot WPA2 del dispositivo.',
     heapInternalFree: 'Internal libera', heapMaxBlock: 'Blocco max', heapDmaFree: 'DMA libera',
     heapHttpdStack: 'Stack httpd min', emptyParen: '(vuoto)',
     // about
@@ -212,11 +219,18 @@ export const STR = {
     deviceNameHint: 'The name is used by mDNS/Swarm and applies at the next boot.',
     maintenance: 'Maintenance', rebootDevice: 'Reboot device',
     maintenanceHint: 'A reboot reloads the firmware and ANIMA index from SD. For firmware updates use the <b>Updates</b> app (OTA is unreliable on this device: prefer serial flashing).',
+    // security & sessions
+    security: 'Security & sessions', activeSessions: 'Active paired sessions',
+    sessionsHint: 'Every browser paired with the PIN is a session. If a device was lost or you used an untrusted network, revoke sessions. Unused ones expire on their own after 90 days.',
+    revokeOthers: 'Revoke other sessions', revokeAll: 'Revoke all',
+    revokeOthersDone: 'Other sessions revoked', revokeAllDone: 'All sessions revoked — re-pair with the PIN',
+    revokeNone: 'No other sessions to revoke', revokeFail: 'Revoke failed',
+    revokeAllConfirm: 'Tap again to revoke ALL sessions (you will need to re-pair with the PIN)',
     // diagnostics
     selfTestEndpoints: 'Endpoint self-test', heapRegions: 'Heap (regions)',
     heapOpenHint: 'Open this tab to read the heap…', systemLogs: 'System logs',
     logsHint: 'RAM ring ~2&nbsp;KB · works even without SD/serial.', privacy: 'Privacy',
-    privacyHint: 'Some diagnostic endpoints (<code>/api/status</code>, <code>/api/heap</code>, <code>/api/cpu</code>, <code>/api/logs</code>) are <b>public</b> on the local network and show SSID/IP, memory and reboot causes. Keep this in mind on shared networks.',
+    privacyHint: 'Only <code>/api/status</code> (discovery) stays <b>public</b> on the local network and shows SSID/IP. Logs and diagnostics (<code>/api/logs</code>, <code>/api/diag</code>, <code>/api/heap</code>, <code>/api/cpu</code>) now <b>require pairing</b>. On untrusted networks use the device’s WPA2 hotspot.',
     heapInternalFree: 'Internal free', heapMaxBlock: 'Largest block', heapDmaFree: 'DMA free',
     heapHttpdStack: 'httpd stack min', emptyParen: '(empty)',
     // about
