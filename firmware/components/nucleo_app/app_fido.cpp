@@ -28,6 +28,26 @@ static bool s_key_mode = false;
 enum KM { KM_STATUS, KM_MANAGE };
 static int s_km = KM_STATUS;
 static int s_cm_sel = 0;
+static uint32_t s_last_sig = 0;   // ANTI-FLICKER: what on_draw last rendered (see on_tick/fido_sig)
+
+// Signature of everything the status/manage screen shows. In key mode the canvas can't be acquired
+// (the USB HID + CTAP2 stack leaves no room for the 32 KB buffer), so the app draws DIRECT — where the
+// framework's idle-reblit hash guard does NOT apply. An unconditional 5 Hz on_tick redraw therefore
+// clears-to-BG and repaints the panel five times a second = visible flicker. Gate the redraw on this
+// signature so we only repaint when something actually changed (PC connect, PIN/cred edit).
+static uint32_t fido_sig(void) {
+    uint32_t s = 2166136261u;
+    #define MIX(v) do { s = (s ^ (uint32_t)(v)) * 16777619u; } while (0)
+    MIX(s_key_mode ? 1 : 0); MIX(s_km); MIX(s_cm_sel);
+    if (s_key_mode) {
+        MIX(nucleo_fido_ready() ? 1 : 0);
+        MIX(nucleo_fido_pin_is_set() ? 1 : 0);
+        MIX(nucleo_fido_key_is_hardware() ? 1 : 0);
+        if (s_km == KM_MANAGE) MIX(nucleo_fido_cred_count());
+    }
+    #undef MIX
+    return s;
+}
 
 static void txt(int x, int y, const char *s, uint16_t fg, uint16_t bg, int sz) {
     d.setTextSize(sz); d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
@@ -47,8 +67,10 @@ static int fido_present(const char *rp, void *ui) {
     while (true) {
         esp_task_wdt_reset();
         nucleo_key_t k = nucleo_kbd_read();
-        if (k.key == NK_ENTER) return 1;
-        if (k.key == NK_BACK)  return 0;
+        // This modal painted over the whole screen; force one repaint of the status UI underneath on
+        // exit, since the signature-gated on_tick won't otherwise notice the screen needs restoring.
+        if (k.key == NK_ENTER) { nucleo_app_request_draw(); return 1; }
+        if (k.key == NK_BACK)  { nucleo_app_request_draw(); return 0; }
         nucleo_fido_keepalive();
         vTaskDelay(pdMS_TO_TICKS(90));
     }
@@ -68,8 +90,10 @@ static int pin_entry(const char *title, const char *sub, char *buf, int cap) {
         for (;;) {
             esp_task_wdt_reset();
             nucleo_key_t k = nucleo_kbd_read();
-            if (k.key == NK_ENTER) return n;
-            if (k.key == NK_BACK) { if (n > 0) { buf[--n] = 0; break; } return 0; }
+            // Repaint the screen underneath on exit (see fido_present): the modal covered it and the
+            // signature-gated on_tick won't restore it on its own.
+            if (k.key == NK_ENTER) { nucleo_app_request_draw(); return n; }
+            if (k.key == NK_BACK) { if (n > 0) { buf[--n] = 0; break; } nucleo_app_request_draw(); return 0; }
             if (k.key == NK_DEL)  { if (n > 0) { buf[--n] = 0; break; } }
             if (k.ch >= 32 && k.ch < 127 && n < cap - 1) { buf[n++] = k.ch; buf[n] = 0; break; }
             nucleo_fido_keepalive();
@@ -137,14 +161,21 @@ static void on_key(int key, char ch) {
     if (ch == 'm' || ch == 'M') { s_km = KM_MANAGE; s_cm_sel = 0; nucleo_app_request_draw(); return; }
     if (ch == 'p' || ch == 'P') {                                             // set / change the on-device PIN
         char pin[72];
-        int n = pin_entry(TR("Nuovo PIN", "New PIN"), TR("min 4 caratteri", "min 4 chars"), pin, sizeof pin);
-        if (n >= 4) nucleo_fido_pin_set(pin);
+        int n = pin_entry(TR("Nuovo PIN", "New PIN"), TR("4-63 caratteri", "4-63 chars"), pin, sizeof pin);
+        // pin_set() returns false on a bad length (FIDO caps the PIN at 63): don't leave the user
+        // believing UV is configured when it silently didn't take. Tell them via the hint bar.
+        if (n >= 4 && !nucleo_fido_pin_set(pin))
+            nucleo_app_set_hint(TR("PIN non valido (4-63 caratteri)", "invalid PIN (4-63 chars)"));
         memset(pin, 0, sizeof pin);
         nucleo_app_request_draw();
     }
 }
 
-static void on_tick(void) { nucleo_app_request_draw(); }
+static void on_tick(void) {
+    // Only repaint when the visible state actually changed — critical because key mode draws DIRECT
+    // (no canvas / no hash guard), so a blind 5 Hz redraw would flicker. See fido_sig().
+    if (fido_sig() != s_last_sig) nucleo_app_request_draw();
+}
 
 // On-device passkey manager: list resident credentials and delete them. No host
 // tool, no clientPIN dance — just the device screen (Poseidon has no delete).
@@ -167,6 +198,7 @@ static void draw_manage(int h) {
 }
 
 static void on_draw(void) {
+    s_last_sig = fido_sig();   // record what this frame renders, so on_tick only repaints on a real change
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     if (s_key_mode && s_km == KM_MANAGE) { draw_manage(h); return; }

@@ -27,8 +27,12 @@ static void txt(int x, int y, const char *s, uint16_t fg, uint16_t bg, int sz) {
 
 static void on_enter(void) {
     sentinel_airspace_start();
-    s_on = true;
-    nucleo_app_set_hint(TR("monitor passivo   esc esci", "passive monitor   esc back"));
+    // Be honest about whether the sniffer actually came up: it fails if another Wi-Fi radio tool
+    // (e.g. a Deauth Flood left running) already owns the radio, or if heap/promiscuous setup failed.
+    // Showing "listening / no anomalies" while doing nothing is the worst failure mode for a monitor.
+    s_on = nucleo_wifiatk_sniffer_running();
+    nucleo_app_set_hint(s_on ? TR("monitor passivo   esc esci", "passive monitor   esc back")
+                             : TR("radio occupata   esc esci", "radio busy   esc back"));
     nucleo_app_request_draw();
 }
 
@@ -55,7 +59,8 @@ static void on_draw(void) {
     if (a & SENTINEL_A_BROADCAST_DEAUTH) { txt(8, y, TR("! deauth broadcast", "! broadcast deauth"), ALERT, BG, 2); y += 20; }
     if (a & SENTINEL_A_EVIL_TWIN)        { txt(8, y, TR("! gemello malevolo", "! evil twin AP"), ALERT, BG, 2); y += 20; }
     if (a & SENTINEL_A_BEACON_FLOOD)     { txt(8, y, TR("! beacon flood", "! beacon flood"), WARN, BG, 2); y += 20; }
-    if (!a) txt(8, y, TR("Nessuna anomalia.", "No anomalies."), GOOD, BG, 2);
+    if (!s_on)   txt(8, y, TR("Non avviato (radio occupata)", "Not started (radio busy)"), WARN, BG, 2);
+    else if (!a) txt(8, y, TR("Nessuna anomalia.", "No anomalies."), GOOD, BG, 2);
 
     txt(8, h - 14, TR("solo ascolto - zero TX", "listen only - zero TX"), DIM, BG, 1);
 }
