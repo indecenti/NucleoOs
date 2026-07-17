@@ -20,6 +20,7 @@
 extern "C" {
 #include "nucleo_ble.h"
 #include "nucleo_exclusive.h"
+#include "nucleo_i18n.h"   // TR(it, en) — bilingual hint strings
 }
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
@@ -84,7 +85,7 @@ static void on_enter(void)
     s_screen = MENU; s_sel = 0;
     s_up_ok  = nucleo_ble_radio_present() && nucleo_ble_up();
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint("1-8 scegli  enter avvia  esc indietro");
+    nucleo_app_set_hint(TR("1-8 scegli  enter avvia  esc indietro", "1-8 pick  enter start  esc back"));
     nucleo_app_request_draw();
 }
 
