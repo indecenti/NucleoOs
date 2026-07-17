@@ -479,6 +479,16 @@
       "permissions": [
         "system.clipboard"
       ]
+    },
+    {
+      "id": "passkeys",
+      "version": "0.1.0",
+      "path": "/apps/passkeys",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "system.notify"
+      ]
     }
   ]
 }

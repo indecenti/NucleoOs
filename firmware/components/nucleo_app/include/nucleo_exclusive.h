@@ -35,6 +35,10 @@ extern "C" {
                             // opening it inline. The runtime NX_* reclaim frees RAM but CAN'T DEFRAGMENT;
                             // a heavy native game (slots/brawler/...) that needs a big CONTIGUOUS block (e.g.
                             // the 32KB canvas) gets it only from a clean boot. Esc reboots back to the full OS.
+#define NX_BLE       0x80   // Combined with NX_SOLO: keep the BLE controller for the Solo boot (transient,
+                            // one-shot — see nucleo_ble_keep_next_boot). Lets a BLE app (Sentinel/BLE suite)
+                            // reboot into a session with Bluetooth already up and open seamlessly, without
+                            // permanently flipping the pref. Pointless without NX_SOLO.
 #define NX_ALL       (NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY | NX_VOICE | NX_RECORDER)
 // Canonical reclaim mask for a network app (~47KB freed: httpd ~18 + L1 ~24 + mDNS ~5; voice is lazy
 // ~0KB at rest, Wi-Fi STA stays up). One source of truth so the net-app callers (SSH/Recorder/Video +

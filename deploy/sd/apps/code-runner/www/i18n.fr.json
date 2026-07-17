@@ -1,0 +1,49 @@
+{
+  "_lang": "fr",
+
+  "title": "Code Runner",
+  "scratch": "brouillon",
+  "unsaved": "non enregistré",
+
+  "t_run": "Exécuter (Ctrl+Enter)",
+  "t_stop": "Arrêter",
+  "t_save": "Enregistrer (Ctrl+S)",
+  "t_clear": "Effacer la console",
+  "btn_run": "Exécuter",
+  "btn_save": "Enregistrer",
+  "caps": "sandbox",
+  "caps_tip": "S'exécute dans le navigateur, en sandbox (Web Worker, sans DOM).\nPermissions actives : système de fichiers SD · réseau (http) · ANIMA · notifications · matériel (os.hw : IR/GPIO/Wi-Fi).\nLimite de temps : 6 s.",
+
+  "ph_editor": "// JavaScript — s'exécute dans le navigateur, en sandbox.\n// console.log(...) ou `return` pour afficher une valeur. await libre.\n// API : os.fs.read/write/list · os.http.get · os.anima(question) · os.notify(texte)\n\nconsole.log('Bonjour depuis NucleoOS');",
+
+  "status_ready": "prêt",
+  "status_running": "en cours…",
+
+  "examples_label": "exemples",
+  "ex_none": "—",
+  "ex_hello": "Bonjour + valeur",
+  "ex_fib": "Fibonacci",
+  "ex_fs": "Lire/écrire un fichier SD",
+  "ex_list": "Lister un dossier",
+  "ex_anima": "Demander à ANIMA",
+  "ex_http": "Récupérer du JSON",
+  "ex_hw": "Matériel (IR+GPIO+WiFi)",
+
+  "kbd_run": "exécuter",
+  "kbd_save": "enregistrer",
+
+  "console_empty": "La console est vide. Appuyez sur ▶ Exécuter.",
+  "console_cleared": "Console effacée.",
+
+  "run_started": "▶ {name} · {time}",
+  "run_done": "✓ terminé en {ms} ms",
+  "run_stopped": "■ arrêté",
+  "run_error": "✖ {error}",
+  "read_failed": "⚠ impossible de lire {path} ({status})",
+  "read_error": "⚠ {error}",
+
+  "saved": "Enregistré",
+  "save_failed": "Échec de l'enregistrement ({status})",
+  "save_error": "Erreur : {error}",
+  "prompt_save": "Enregistrer sous (chemin SD) :"
+}

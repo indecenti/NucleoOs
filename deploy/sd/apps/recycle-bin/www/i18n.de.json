@@ -1,0 +1,23 @@
+{
+  "_lang": "de",
+  "title": "Papierkorb",
+  "restore_all": "Alle wiederherstellen",
+  "empty_bin": "Papierkorb leeren",
+  "restore": "Wiederherstellen",
+  "count": {
+    "one": "· {count} Element",
+    "other": "· {count} Elemente"
+  },
+  "count_empty": "· leer",
+  "empty_title": "Der Papierkorb ist leer.",
+  "empty_hint": "In File Commander gelöschte Dateien landen hier und können wiederhergestellt werden.",
+  "toast_restored_to": "Wiederhergestellt in {path}",
+  "toast_restore_failed": "Wiederherstellung fehlgeschlagen",
+  "toast_deleted_perm": "Endgültig gelöscht",
+  "toast_restored_all": "Alles wiederhergestellt",
+  "toast_bin_emptied": "Papierkorb geleert",
+  "confirm_empty": {
+    "one": "{count} Element endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
+    "other": "{count} Elemente endgültig löschen? Dies kann nicht rückgängig gemacht werden."
+  }
+}

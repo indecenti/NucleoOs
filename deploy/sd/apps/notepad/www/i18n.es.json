@@ -1,0 +1,25 @@
+{
+  "_lang": "es",
+
+  "title_new": "Nuevo (Ctrl+N)",
+  "title_open": "Abrir (Ctrl+O)",
+  "title_save": "Guardar (Ctrl+S)",
+  "title_saveas": "Guardar como (Ctrl+Shift+S)",
+  "ph_editor": "Escribe aquí…  ·  Ctrl+S guardar · Ctrl+O abrir · Ctrl+N nuevo",
+
+  "stats": { "one": "{chars} caracteres · {lines} línea", "other": "{chars} caracteres · {lines} líneas" },
+
+  "loaded": "Cargado {name}",
+  "could_not_open": "No se pudo abrir {name}",
+  "open_hint": "Abre un archivo desde File Commander para editarlo aquí.",
+  "saved_file": "Guardado {name}",
+  "save_failed": "No se pudo guardar ({status})",
+  "save_pending": "Guardado pendiente: la API de archivos del SO no está accesible.",
+
+  "dlg_saveas": "Guardar como",
+  "dlg_open": "Abrir archivo de texto",
+  "confirm_dirty": "Cambios sin guardar. ¿Continuar y perderlos?",
+
+  "prompt_save": "Guardar como (ruta SD):",
+  "prompt_open": "Abrir (ruta SD):"
+}

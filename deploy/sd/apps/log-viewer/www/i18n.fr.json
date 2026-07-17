@@ -1,0 +1,33 @@
+{
+  "_lang": "fr",
+  "app_title": "Visionneuse de journaux",
+  "filter_ph": "Filtrer type/données",
+  "btn_pause": "Pause",
+  "btn_resume": "Reprendre",
+  "btn_history": "Historique",
+  "btn_clear": "Effacer",
+  "btn_diag": "🩺 Diagnostiquer",
+  "btn_health": "État",
+  "follow": "Suivre",
+  "history_hint": "Lit le journal d'événements depuis la carte SD (à la demande — sinon garde l'appareil au repos)",
+  "diag_hint": "Génère un condensé d'état compact (Cardputer + ANIMA) à coller dans une IA",
+  "health_hint": "Sonde adaptative : synthétise les événements d'état en direct (uniquement fenêtre visible, jamais pendant un travail lourd)",
+  "diag_title": "Diagnostic d'état",
+  "diag_sub": "Copiez ce bloc et collez-le dans une IA pour le diagnostic.",
+  "gathering": "Collecte des diagnostics…",
+  "diag_err": "Diagnostic indisponible",
+  "btn_copy": "📋 Copier",
+  "btn_regen": "↻ Régénérer",
+  "btn_close": "Fermer",
+  "copied": "Copié dans le presse-papiers ✓",
+  "empty_state": "À l'écoute des événements en temps réel…<br><span style=\"font-size:11px\">Appuyez sur <b>🩺 Diagnostiquer</b> pour un bilan d'état, ou <b>Historique</b> pour le journal sur SD.</span>",
+  "events": {
+    "one": "{count} événement",
+    "other": "{count} événements"
+  },
+  "events_of": " (sur {total})",
+  "status_paused": " · en pause",
+  "src_journal": "journal : {lines} lignes sur SD",
+  "src_none": "aucun journal sur SD pour l'instant",
+  "src_error": "journal indisponible"
+}

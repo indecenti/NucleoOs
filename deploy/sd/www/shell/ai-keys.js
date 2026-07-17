@@ -55,16 +55,71 @@ const STR = {
     execDevice: 'The Cardputer makes the online calls (light TLS, handled by the anti-OOM arbiter).',
     paid: 'paid · Pro available', free: 'Free tier · Flash only', noplan: 'plan not detected',
   },
+  es: {
+    checking: 'comprobando…', saving: 'guardando…', testing: 'probando…', deleting: 'eliminando…',
+    active: 'Clave activa:', nokey: 'No hay clave para este proveedor.', noset: 'Ninguna clave configurada.',
+    typefirst: 'Escribe primero una clave.', notlooklike: 'No parece una clave ', saveanyway: '. ¿Guardar de todos modos?',
+    saved: 'Guardada:', deleted: 'Clave eliminada.', delActive: 'Clave eliminada. Activa: ',
+    confirmDel: '¿Eliminar la clave ', confirmDelTail: ' de este dispositivo?',
+    pair: 'Empareja este navegador para gestionar la clave.', pairSave: 'Empareja primero este navegador (Ajustes ▸ emparejamiento).',
+    cantread: 'No se puede leer la clave.', savefail: 'Error al guardar.', delfail: 'Error al eliminar.',
+    works: '✓ La clave funciona — ', rejected: '✗ Clave rechazada.', typeortest: 'Introduce o guarda primero una clave.',
+    key: 'Clave', model: 'Modelo', exec: 'Ejecución', plan: 'Plan', detect: '🔎 Detectar plan',
+    browser: 'Navegador', device: 'Dispositivo', save: '💾 Guardar', test: '⚡ Probar', del: '🗑 Eliminar',
+    note: '🔒 La clave se guarda solo en tu dispositivo (SD), nunca se envía a otro sitio ni se registra. En Navegador permanece en tu navegador y va directa al proveedor — el Cardputer no se carga.',
+    execBrowser: 'Las superficies web llaman al proveedor directamente desde el navegador: el Cardputer no se carga.',
+    execDevice: 'El Cardputer realiza las llamadas online (TLS ligero, gestionado por el árbitro anti-OOM).',
+    paid: 'de pago · Pro disponible', free: 'Nivel gratis · solo Flash', noplan: 'plan no detectado',
+  },
+  fr: {
+    checking: 'vérification…', saving: 'enregistrement…', testing: 'test…', deleting: 'suppression…',
+    active: 'Clé active :', nokey: 'Aucune clé pour ce fournisseur.', noset: 'Aucune clé définie.',
+    typefirst: 'Saisissez d’abord une clé.', notlooklike: 'Cela ne ressemble pas à une clé ', saveanyway: '. Enregistrer quand même ?',
+    saved: 'Enregistrée :', deleted: 'Clé supprimée.', delActive: 'Clé supprimée. Active : ',
+    confirmDel: 'Supprimer la clé ', confirmDelTail: ' de cet appareil ?',
+    pair: 'Appairez ce navigateur pour gérer la clé.', pairSave: 'Appairez d’abord ce navigateur (Réglages ▸ appairage).',
+    cantread: 'Impossible de lire la clé.', savefail: 'Échec de l’enregistrement.', delfail: 'Échec de la suppression.',
+    works: '✓ La clé fonctionne — ', rejected: '✗ Clé refusée.', typeortest: 'Saisissez ou enregistrez d’abord une clé.',
+    key: 'Clé', model: 'Modèle', exec: 'Exécution', plan: 'Forfait', detect: '🔎 Détecter le forfait',
+    browser: 'Navigateur', device: 'Appareil', save: '💾 Enregistrer', test: '⚡ Tester', del: '🗑 Supprimer',
+    note: '🔒 La clé est enregistrée uniquement sur votre appareil (SD), jamais envoyée ailleurs ni journalisée. En mode Navigateur, elle reste dans votre navigateur et va directement au fournisseur — le Cardputer n’est pas sollicité.',
+    execBrowser: 'Les surfaces web appellent le fournisseur directement depuis le navigateur : le Cardputer n’est pas sollicité.',
+    execDevice: 'Le Cardputer effectue les appels en ligne (TLS léger, géré par l’arbitre anti-OOM).',
+    paid: 'payant · Pro disponible', free: 'Offre gratuite · Flash uniquement', noplan: 'forfait non détecté',
+  },
+  de: {
+    checking: 'prüfe…', saving: 'speichere…', testing: 'teste…', deleting: 'lösche…',
+    active: 'Aktiver Schlüssel:', nokey: 'Kein Schlüssel für diesen Anbieter.', noset: 'Kein Schlüssel festgelegt.',
+    typefirst: 'Gib zuerst einen Schlüssel ein.', notlooklike: 'Das sieht nicht nach einem ', saveanyway: '-Schlüssel aus. Trotzdem speichern?',
+    saved: 'Gespeichert:', deleted: 'Schlüssel gelöscht.', delActive: 'Schlüssel gelöscht. Aktiv: ',
+    confirmDel: 'Den ', confirmDelTail: '-Schlüssel von diesem Gerät löschen?',
+    pair: 'Koppele diesen Browser, um den Schlüssel zu verwalten.', pairSave: 'Koppele zuerst diesen Browser (Einstellungen ▸ Pairing).',
+    cantread: 'Schlüssel kann nicht gelesen werden.', savefail: 'Speichern fehlgeschlagen.', delfail: 'Löschen fehlgeschlagen.',
+    works: '✓ Schlüssel funktioniert — ', rejected: '✗ Schlüssel abgelehnt.', typeortest: 'Gib zuerst einen Schlüssel ein oder speichere ihn.',
+    key: 'Schlüssel', model: 'Modell', exec: 'Ausführung', plan: 'Tarif', detect: '🔎 Tarif erkennen',
+    browser: 'Browser', device: 'Gerät', save: '💾 Speichern', test: '⚡ Testen', del: '🗑 Löschen',
+    note: '🔒 Der Schlüssel wird nur auf deinem Gerät (SD) gespeichert, nie anderswohin gesendet oder protokolliert. Im Browser-Modus bleibt er in deinem Browser und geht direkt an den Anbieter — der Cardputer wird nicht belastet.',
+    execBrowser: 'Die Web-Oberflächen rufen den Anbieter direkt aus dem Browser auf: der Cardputer wird nicht belastet.',
+    execDevice: 'Der Cardputer führt die Online-Aufrufe aus (leichtes TLS, vom Anti-OOM-Arbiter verwaltet).',
+    paid: 'kostenpflichtig · Pro verfügbar', free: 'Kostenlos · nur Flash', noplan: 'Tarif nicht erkannt',
+  },
 };
 
 // One short capability hint per provider (full variant), derived from CAPMATRIX so it never drifts.
-function capHint(p, en) {
+function capHint(p, lang) {
   const c = AI.CAPMATRIX[p] || {};
+  const LBL = {
+    it: { can: 'Sa: ',    no: ' · No: ',   image: 'immagini',  whisper: 'trascrizione voce',   tools: 'strumenti OS' },
+    en: { can: 'Can: ',   no: ' · No: ',   image: 'image gen', whisper: 'voice transcription', tools: 'OS tools' },
+    es: { can: 'Puede: ', no: ' · No: ',   image: 'imágenes',  whisper: 'transcripción de voz', tools: 'herramientas del SO' },
+    fr: { can: 'Peut : ', no: ' · Non : ', image: 'images',    whisper: 'transcription vocale', tools: 'outils OS' },
+    de: { can: 'Kann: ',  no: ' · Nein: ', image: 'Bilder',    whisper: 'Sprachtranskription', tools: 'OS-Tools' },
+  };
+  const s = LBL[lang] || LBL.it;
   const can = [], cant = [];
-  (en ? [['chat', 'chat'], ['image', 'image gen'], ['whisper', 'voice transcription'], ['toolUse', 'OS tools']]
-      : [['chat', 'chat'], ['image', 'immagini'], ['whisper', 'trascrizione voce'], ['toolUse', 'strumenti OS']])
+  [['chat', 'chat'], ['image', s.image], ['whisper', s.whisper], ['toolUse', s.tools]]
     .forEach(([k, lbl]) => (c[k] ? can : cant).push(lbl));
-  return (en ? 'Can: ' : 'Sa: ') + can.join(', ') + (cant.length ? (en ? ' · No: ' : ' · No: ') + cant.join(', ') : '');
+  return s.can + can.join(', ') + (cant.length ? s.no + cant.join(', ') : '');
 }
 
 let _cssInjected = false;
@@ -106,13 +161,13 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 
 export function mountKeyManager(container, opts = {}) {
   injectCss();
-  let lang = opts.lang === 'en' ? 'en' : 'it';
+  let lang = ['en', 'es', 'fr', 'de'].includes(opts.lang) ? opts.lang : 'it';
   const variant = opts.variant === 'compact' ? 'compact' : 'full';
   const full = variant === 'full';
   const showExec = full && opts.exec !== false;
   const showTier = opts.tier !== false;
   const onChange = typeof opts.onChange === 'function' ? opts.onChange : () => {};
-  const t = () => STR[lang];
+  const t = () => STR[lang] || STR.it;
 
   // The live config (one per mount). keys{} remembers every provider's saved config so a switch is lossless.
   let cfg = { provider: 'anthropic', base: AI.PROVIDERS.anthropic.base, model: AI.PROVIDERS.anthropic.def,
@@ -163,10 +218,10 @@ export function mountKeyManager(container, opts = {}) {
     const p = prov();
     fillChips();
     if ($('key')) $('key').placeholder = p.ph;
-    if (full && $('cap')) $('cap').textContent = capHint(cfg.provider, lang === 'en');
+    if (full && $('cap')) $('cap').textContent = capHint(cfg.provider, lang);
     if (full && showTier && $('tierrow')) {
       $('tierrow').style.display = cfg.provider === 'google' ? '' : 'none';
-      if ($('tier')) $('tier').textContent = AI.geminiTierLabel(cfg.geminiTier, lang === 'en');
+      if ($('tier')) $('tier').textContent = AI.geminiTierLabel(cfg.geminiTier, lang);
     }
     if (showExec && $('exec')) {
       $('exec').querySelectorAll('.it').forEach((b) => b.classList.toggle('on', b.dataset.x === (cfg.exec || 'browser')));
@@ -288,7 +343,7 @@ export function mountKeyManager(container, opts = {}) {
 
   return {
     reload, getCfg,
-    setLang(l) { lang = l === 'en' ? 'en' : 'it'; /* re-render labels by rebuilding */ mountKeyManager(container, Object.assign({}, opts, { lang })); },
+    setLang(l) { lang = ['en', 'es', 'fr', 'de'].includes(l) ? l : 'it'; /* re-render labels by rebuilding */ mountKeyManager(container, Object.assign({}, opts, { lang })); },
     destroy() { container.innerHTML = ''; },
   };
 }

@@ -83,7 +83,12 @@ const UI_STATE_PATH = '/system/config/ui-state.json';
 //   { path, ts }. Bounded so it never bloats the SD.
 // iconSize: 'sm'|'md'|'lg' — desktop icon scale (Windows "View" submenu). autoArrange: when on,
 // every render re-flows icons into a clean grid (drag is disabled, like Windows auto-arrange).
-const UI_DEFAULTS = { pins: [], wallpaper: '/data/Pictures/wallpaper.png', desktop: null, startPins: null, recent: [], recoCollapsed: false, iconSize: 'md', autoArrange: false };
+// wallpaper: a background descriptor. A pure-CSS gradient by default so a FRESH / OFFLINE / WASM OS
+// always paints a proper desktop with ZERO device I/O (no black flash, no /api/fs round-trip). It can
+// be { type:'gradient', gradient } | { type:'color', color } | { type:'image', path, fit } — or a bare
+// path string (legacy), which normalizeWallpaper() lifts into an image descriptor.
+const DEFAULT_WALLPAPER = { type: 'gradient', gradient: 'linear-gradient(135deg, #0b1533 0%, #0f2350 50%, #16346a 100%)' };
+const UI_DEFAULTS = { pins: [], wallpaper: DEFAULT_WALLPAPER, desktop: null, startPins: null, recent: [], recoCollapsed: false, iconSize: 'md', autoArrange: false };
 const RECENT_CAP = 12;
 
 const state = { apps: [], pins: [...UI_DEFAULTS.pins], wallpaper: UI_DEFAULTS.wallpaper,
@@ -102,11 +107,13 @@ const state = { apps: [], pins: [...UI_DEFAULTS.pins], wallpaper: UI_DEFAULTS.wa
     fallback: 'file-commander'
   } };
 
-// Applica immediatamente lo sfondo in cache (se esiste) per eliminare il flash
-// visivo prima che l'OS finisca di caricare lo stato dal dispositivo via rete.
+// Apply the last-known wallpaper from the local cache immediately, before the OS finishes
+// loading state from the device over the network — kills the boot flash and makes the desktop
+// look right OFFLINE / in WASM (no live device). The cache holds the full descriptor (JSON);
+// a bare string is the legacy path format, still honoured via normalizeWallpaper().
 try {
   const cached = localStorage.getItem('nucleo.wallpaper.cache');
-  if (cached) applyWallpaper(cached);
+  if (cached) { let w; try { w = JSON.parse(cached); } catch { w = cached; } applyWallpaper(w); }
 } catch {}
 
 // Open-window session (which apps are open + their geometry) is remembered by the device
@@ -430,7 +437,9 @@ async function syncUiState() {
     if (s.iconSize === 'sm' || s.iconSize === 'md' || s.iconSize === 'lg') state.iconSize = s.iconSize;
     state.autoArrange = !!s.autoArrange;
     state.desktop = Array.isArray(s.desktop) ? s.desktop : seedDesktop();
-    if (s.wallpaper !== state.wallpaper) { state.wallpaper = s.wallpaper; applyWallpaper(s.wallpaper); }
+    // Compare by value: the wallpaper is a descriptor object now, so === would always differ and
+    // needlessly re-apply. Only repaint when another client actually changed it.
+    if (JSON.stringify(s.wallpaper) !== JSON.stringify(state.wallpaper)) { state.wallpaper = s.wallpaper; applyWallpaper(s.wallpaper); }
     applyIconSize();
     renderDesktop();
     renderStartMenu();
@@ -509,6 +518,7 @@ async function boot() {
   // response) this failsafe reveals the UI. The happy path clears it in the finally below.
   const bootFailsafe = setTimeout(hideBootScreen, 8000);
   try {
+  applyCachedTheme();                            // paint the last-known theme instantly (offline/WASM-safe, no flash)
   // Load the active language and paint the static chrome ([data-i18n] in index.html) before anything
   // is shown — including the pairing overlay. Re-render the imperatively-built surfaces (Start menu,
   // taskbar, tray) whenever the OS language changes live (from Settings, any window).
@@ -786,8 +796,12 @@ function wireMessages() {
       applyGlobalUI();
       return; 
     }   // live preview from Settings
-    if (d.type === 'set-wallpaper' && d.path) {
-      state.wallpaper = d.path; applyWallpaper(d.path); saveUiState(); return;
+    // Settings sends a full descriptor in `wallpaper`; Photo Viewer's "Set as wallpaper" sends a bare
+    // `path` (legacy). Normalise both to the canonical descriptor so the shared UI state on the device
+    // is always structured (never a raw string), then apply + persist.
+    if (d.type === 'set-wallpaper' && (d.wallpaper || d.path)) {
+      const w = normalizeWallpaper(d.wallpaper || d.path);
+      state.wallpaper = w; applyWallpaper(w); saveUiState(); return;
     }
     // Live system-language change from Settings: mirror into the runtime key the copilot/ANIMA read,
     // then propagate to the DEVICE so the native TFT UI switches too and settings.json is persisted
@@ -864,6 +878,27 @@ function applyGlobalUI() {
     const f = w.el.querySelector('iframe');
     if (f) injectGlobalTheme(f.contentDocument);
   }
+  cacheTheme();
+}
+
+// Persist the live theme locally so the NEXT boot can paint it instantly — before (or without) the
+// device round-trip in applySettingsFromDevice(). This is what makes the theme correct OFFLINE / in
+// WASM and removes the flash of the default theme for anyone not on dark/#4ea1ff.
+function cacheTheme() {
+  try { localStorage.setItem('nucleo.theme.cache', JSON.stringify(currentThemeState)); } catch {}
+}
+// Boot-time counterpart: seed currentThemeState from the local cache and paint immediately. The
+// device's settings.json remains authoritative and reconciles a moment later via applySettingsFromDevice().
+function applyCachedTheme() {
+  try {
+    const t = JSON.parse(localStorage.getItem('nucleo.theme.cache') || 'null');
+    if (t && typeof t === 'object') {
+      if (t.theme) currentThemeState.theme = t.theme;
+      if (t.accent) currentThemeState.accent = t.accent;
+      if (t.fontSize) currentThemeState.fontSize = t.fontSize;
+      applyGlobalUI();
+    }
+  } catch {}
 }
 
 function injectGlobalTheme(doc) {
@@ -1093,12 +1128,46 @@ function wireFileDrop() {
   });
 }
 
-function applyWallpaper(path) {
-  try { localStorage.setItem('nucleo.wallpaper.cache', path); } catch {}
+// Normalise any stored/received wallpaper value into one canonical descriptor shape so every code
+// path (boot cache, device state, live message, another client's sync) is handled uniformly.
+//   { type:'gradient', gradient:<css> } | { type:'color', color:<css> } | { type:'image', path, fit }
+// A bare string is the legacy "image path" format. Anything unrecognised falls back to the default.
+function normalizeWallpaper(w) {
+  if (typeof w === 'string' && w) return { type: 'image', path: w, fit: 'cover' };
+  if (w && typeof w === 'object') {
+    if (w.type === 'gradient' && w.gradient) return { type: 'gradient', gradient: String(w.gradient) };
+    if (w.type === 'color' && w.color) return { type: 'color', color: String(w.color) };
+    if (w.type === 'image' && w.path) {
+      const fit = ['cover', 'contain', 'center', 'tile'].includes(w.fit) ? w.fit : 'cover';
+      return { type: 'image', path: String(w.path), fit };
+    }
+  }
+  return DEFAULT_WALLPAPER;
+}
+
+// Paint the desktop background. Colour/gradient are pure CSS (zero network — always work offline /
+// in WASM). An image is served via /api/fs/read (the service worker keeps a DURABLE, deploy-surviving
+// copy so it loads once and works offline thereafter); an opaque base colour sits UNDER it so an
+// uncached image on an unreachable device shows a clean backdrop, never black. The full descriptor is
+// cached locally for an instant, correct first paint on the next boot.
+function applyWallpaper(w) {
+  w = normalizeWallpaper(w);
+  try { localStorage.setItem('nucleo.wallpaper.cache', JSON.stringify(w)); } catch {}
   const d = document.getElementById('desktop');
-  d.style.backgroundImage = `url("/api/fs/read?path=${encodeURIComponent(path)}")`;
-  d.style.backgroundSize = 'cover';
-  d.style.backgroundPosition = 'center';
+  if (!d) return;
+  d.style.backgroundImage = '';
+  d.style.backgroundColor = '';
+  d.style.backgroundSize = '';
+  d.style.backgroundPosition = '';
+  d.style.backgroundRepeat = '';
+  if (w.type === 'color') { d.style.backgroundColor = w.color; return; }
+  if (w.type === 'gradient') { d.style.backgroundImage = w.gradient; return; }
+  // image
+  d.style.backgroundColor = '#0a1020';   // underlay so an uncached/offline image never flashes black
+  d.style.backgroundImage = `url("/api/fs/read?path=${encodeURIComponent(w.path)}")`;
+  const fit = w.fit || 'cover';
+  if (fit === 'tile') { d.style.backgroundSize = 'auto'; d.style.backgroundPosition = 'top left'; d.style.backgroundRepeat = 'repeat'; }
+  else { d.style.backgroundSize = fit === 'center' ? 'auto' : fit; d.style.backgroundPosition = 'center'; d.style.backgroundRepeat = 'no-repeat'; }
 }
 
 // ===== Display controls — real, persisted Action Center (were dead placeholders) =====
@@ -2689,7 +2758,7 @@ async function loadOsDialogDir(path) {
     osDialogCrumbs.appendChild(span);
   }
   
-  osDialogList.innerHTML = '<div class="os-dialog-msg">Caricamento in corso...</div>';
+  osDialogList.innerHTML = '<div class="os-dialog-msg">Loading…</div>';
   osDialogFiles = [];
   try {
     const r = await fetch('/api/fs/list?path=' + encodeURIComponent(path));

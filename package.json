@@ -32,6 +32,8 @@
     "eapol:test": "node tools/anima-host/eapol-check.mjs",
     "portalclone:test": "node tools/anima-host/portalclone-check.mjs",
     "ducky:test": "node tools/anima-host/ducky-check.mjs",
+    "fido:test": "node tools/anima-host/fido-check.mjs",
+    "sentinel:test": "node tools/anima-host/sentinel-check.mjs",
     "weather:test": "node tools/anima-host/weather-check.mjs",
     "nearby:test": "node --test tools/anima-host/nearby-check.mjs",
     "hw:test": "node --test tools/anima-host/hw-check.mjs",

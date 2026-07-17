@@ -1,0 +1,67 @@
+{
+  "_lang": "fr",
+
+  "sub_loading": "Radio live gratuite · se synchronise avec ton appareil",
+  "sub_count": {
+    "one": "Radio live gratuite · {count} station · se synchronise avec ton appareil",
+    "other": "Radio live gratuite · {count} stations · se synchronise avec ton appareil"
+  },
+  "btn_add": "Ajouter une station",
+  "hint": "▶ écouter dans le navigateur · ★ définir par défaut sur l'appareil · ✎ modifier · ⌃⌄ réordonner.",
+  "info_title": "À propos et aide",
+  "info_aria": "À propos et aide",
+
+  "np_idle": "Aucune lecture",
+  "np_idle_hint": "Choisis une station pour commencer à écouter",
+  "vol_title": "Volume",
+  "play_pause": "Lecture / pause",
+  "connecting": "connexion…",
+  "live_stream": "flux live",
+
+  "empty_list": "Aucune station pour l'instant — ajoutes-en une avec ＋.",
+  "support_somafm": "soutenir SomaFM",
+
+  "badge_default": "par défaut",
+  "badge_browser_only": "navigateur uniquement",
+  "badge_browser_only_title": "https se lit dans le navigateur mais pas sur le Cardputer",
+  "act_set_default": "Définir par défaut sur l'appareil",
+  "act_move_up": "Monter",
+  "act_move_down": "Descendre",
+
+  "dlg_add": "Ajouter une station",
+  "dlg_edit": "Modifier la station",
+  "f_name": "Nom",
+  "f_name_ph": "Ma station",
+  "f_genre": "Genre / slogan",
+  "f_genre_ph": "Ambient / Downtempo",
+  "f_stream": "URL du flux",
+  "note_stream": "Le MP3 http:// simple se lit aussi sur le Cardputer. https:// se lit ici mais pas sur l'appareil.",
+  "note_stream_warn": "⚠ https se lit dans le navigateur mais PAS sur le Cardputer (pas de TLS). Utilise http:// pour la prise en charge sur l'appareil.",
+  "f_np": "URL now-playing",
+  "optional": "(facultatif)",
+  "note_np": "Métadonnées JSON pour la ligne du morceau — laisse vide pour un flux live simple.",
+
+  "err_https": "⚠ flux https bloqué ici — mais il se lira sur l'appareil s'il est accessible.",
+  "err_unreachable": "⚠ flux inaccessible depuis le navigateur (il peut quand même fonctionner sur l'appareil).",
+
+  "info_lead": "Radio internet live et gratuite pour NucleoOS. Une seule liste de stations, partagée entre cette app et l'app Radio de ton Cardputer.",
+  "info_add": "<b>Ajoute une station.</b> Touche <b>Ajouter une station</b>, donne-lui un nom et colle une URL de flux direct (un flux MP3). Elle rejoint la liste partout instantanément.",
+  "info_star": "<b>Définis la station par défaut de l'appareil.</b> La station avec l'étoile est celle que ton Cardputer syntonise dès que tu ouvres son app Radio.",
+  "info_listen": "<b>Écoute ici.</b> Lis n'importe quelle station dans le navigateur. Si elle fournit les infos du morceau, tu verras l'artiste, le titre et une barre de progression.",
+  "info_reorder": "<b>Réordonne et modifie.</b> Utilise ⌃⌄ pour réordonner, ✎ pour modifier, 🗑 pour supprimer. Chaque modification est enregistrée sur l'appareil à l'instant où tu la fais.",
+  "info_device_note": "<b>Note sur l'appareil :</b> le Cardputer ne lit que les flux MP3 <b>http://</b> simples — il n'a pas de place pour HTTPS à côté du décodeur audio. Les stations <b>https://</b> sont marquées <b>“navigateur uniquement”</b> : elles se lisent ici mais ne fonctionnent pas sur l'appareil. Les stations gratuites sélectionnées proviennent de <b>SomaFM</b>.",
+  "keyboard": "Clavier",
+  "keys_help": "<kbd>↑</kbd><kbd>↓</kbd> sélectionner · <kbd>Entrée</kbd> lecture · <kbd>Espace</kbd> lecture/pause · <kbd>n</kbd>/<kbd>p</kbd> suiv./préc.",
+  "got_it": "Compris",
+
+  "saving": "Enregistrement…",
+  "saved_ok": "Enregistré ✓",
+  "save_failed": "Échec de l'enregistrement",
+  "toast_seeded": "liste de stations par défaut initialisée",
+  "toast_readonly": "Ouvre Radio depuis la shell de l'appareil pour enregistrer les modifications",
+  "toast_default": "“{name}” est maintenant la station par défaut de l'appareil",
+  "toast_removed": "“{name}” supprimée",
+  "toast_saved_changes": "Modifications enregistrées",
+  "toast_added": "“{name}” ajoutée",
+  "confirm_remove": "Retirer “{name}” de la liste des stations ?"
+}

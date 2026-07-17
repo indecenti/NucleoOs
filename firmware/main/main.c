@@ -249,7 +249,15 @@ void app_main(void)
     // Bring up networking + services FIRST so the device is never bricked and the web UI
     // always works, even while the on-device keyboard is being verified/tuned.
     HMEM("after-sd");
-    nucleo_setup_apply_network();           bootmark("network");   // AP on first boot (no saved config) — Wi-Fi stays up in Solo (cloud)
+    // A dedicated BLE Solo boot (Sentinel / BLE suite) SKIPS Wi-Fi entirely: BLE + Wi-Fi
+    // don't fit together on this no-PSRAM chip, and bringing Wi-Fi up first fragments the
+    // heap so the NimBLE controller init OOMs. Every other boot (incl. cloud Solo) keeps it.
+    extern bool nucleo_ble_kept_once(void);
+    if (solo && nucleo_ble_kept_once()) {
+        ESP_LOGW(TAG, "BLE Solo boot: skipping Wi-Fi bringup (BLE gets the whole heap)");
+    } else {
+        nucleo_setup_apply_network();       bootmark("network");   // AP on first boot; Wi-Fi stays up otherwise (incl. cloud Solo)
+    }
     nucleo_power_init();                     bootmark("power");      // DFS: scale CPU down when idle (battery)
     // mDNS (discovery) is started AFTER httpd_start (further down), NOT here: it costs ~12 KB at boot, and on
     // the ADV that 12 KB was the difference between httpd_start fitting its ~26 KB need and OOM-failing on the

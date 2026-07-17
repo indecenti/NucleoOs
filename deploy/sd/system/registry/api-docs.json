@@ -1,5 +1,50 @@
 {
   "_comment": "Hand-authored prose for the Help app's Mini Swagger. Keyed by 'METHOD /path'. The route list itself is NOT edited here — it is discovered from the firmware C source by tools/gen-api-spec.mjs, which merges this prose and writes registry/web-api-spec.json. Add a 'hidden': true to a value to keep it documented but unpublished. Run: npm run gen:api (or npm run gen:api:check to detect drift).",
+  "GET /api/lang": {
+    "it": {
+      "title": "GET /api/lang - Lingua del Sistema",
+      "description": "Restituisce la lingua corrente dell'intero sistema operativo (una sola sorgente: settings.json -> ui.language), obbedita sia dalla UI nativa sul TFT sia dalla shell web.",
+      "synopsis": "GET /api/lang",
+      "details": "Risposta JSON:\n- lang: codice lingua attivo (\"it\" | \"en\" | \"es\" | \"fr\" | \"de\")\n- gen: contatore di generazione; incrementa a ogni cambio, così le schermate native si ridisegnano dal vivo e i client web si accorgono del cambiamento."
+    },
+    "en": {
+      "title": "GET /api/lang - System Language",
+      "description": "Returns the current OS-wide language (single source: settings.json -> ui.language), obeyed by both the native on-TFT UI and the web shell.",
+      "synopsis": "GET /api/lang",
+      "details": "JSON response:\n- lang: active language code (\"it\" | \"en\" | \"es\" | \"fr\" | \"de\")\n- gen: generation counter; bumps on every change so native screens repaint live and web clients detect the switch."
+    },
+    "params": []
+  },
+  "POST /api/lang": {
+    "it": {
+      "title": "POST /api/lang - Imposta la Lingua",
+      "description": "Imposta la lingua OS-wide e la persiste. Attraverso nucleo_i18n incrementa il contatore di generazione (le schermate native si ridisegnano dal vivo) e trasmette \"system.language\" via WebSocket, così ogni browser connesso cambia lingua all'istante senza ricaricare. Richiede l'accoppiamento (scrittura di configurazione).",
+      "synopsis": "POST /api/lang  {\"lang\":\"en\"}",
+      "details": "Corpo JSON:\n- lang: codice lingua da applicare (\"it\" | \"en\" | \"es\" | \"fr\" | \"de\").\nRisposta: stesso oggetto della GET ({lang, gen}) con il nuovo valore."
+    },
+    "en": {
+      "title": "POST /api/lang - Set Language",
+      "description": "Sets the OS-wide language and persists it. Through nucleo_i18n it bumps the generation counter (native screens repaint live) and broadcasts \"system.language\" over the WebSocket, so every connected browser switches instantly with no reload. Requires pairing (config write).",
+      "synopsis": "POST /api/lang  {\"lang\":\"en\"}",
+      "details": "JSON body:\n- lang: language code to apply (\"it\" | \"en\" | \"es\" | \"fr\" | \"de\").\nResponse: same object as GET ({lang, gen}) with the new value."
+    },
+    "params": []
+  },
+  "GET /api/screen": {
+    "it": {
+      "title": "GET /api/screen - Cattura Schermo",
+      "description": "Trasmette lo schermo nativo corrente come immagine BMP a 24 bit, così un client accoppiato può catturare via Wi-Fi esattamente ciò che è sul display. Streaming riga per riga (un solo buffer di scanline) per non gravare sull'heap. Richiede l'accoppiamento.",
+      "synopsis": "GET /api/screen",
+      "details": "Risposta: image/bmp (24 bit), dimensioni del pannello fisico.\n503 {\"ok\":false,\"err\":\"panel size unavailable\"} se la dimensione del pannello non è disponibile."
+    },
+    "en": {
+      "title": "GET /api/screen - Screen Capture",
+      "description": "Streams the current native screen as a 24-bit BMP, so a paired client can grab exactly what is on the display over Wi-Fi. Streamed row-by-row (a single scanline buffer) to spare the heap. Requires pairing.",
+      "synopsis": "GET /api/screen",
+      "details": "Response: image/bmp (24-bit), physical panel dimensions.\n503 {\"ok\":false,\"err\":\"panel size unavailable\"} if the panel size is unavailable."
+    },
+    "params": []
+  },
   "GET /api/status": {
     "it": {
       "title": "GET /api/status - Stato Dispositivo",
@@ -1641,5 +1686,80 @@
         }
       }
     ]
+  },
+  "GET /api/fido/status": {
+    "en": {
+      "description": "Reports the FIDO security key state for the Passkeys web console: whether the credential wrapping key is eFuse hardware-bound or an NVS software fallback, whether an on-device PIN is set and how many tries remain, the number of resident passkeys, and whether a USB host is connected. Requires pairing.",
+      "details": "JSON: { keyHardware, pinSet, pinRetries, credCount, connected }. Read-only; loads the store lazily without USB.",
+      "synopsis": "GET /api/fido/status",
+      "title": "GET /api/fido/status - FIDO Key Status"
+    },
+    "it": {
+      "description": "Riporta lo stato della security key FIDO per la console web Passkeys: se la chiave di wrapping è legata all'hardware eFuse o è un fallback software NVS, se un PIN on-device è impostato e quanti tentativi restano, il numero di passkey residenti e se un host USB è collegato. Richiede accoppiamento.",
+      "details": "JSON: { keyHardware, pinSet, pinRetries, credCount, connected }. Sola lettura; carica lo store in modo pigro senza USB.",
+      "synopsis": "GET /api/fido/status",
+      "title": "GET /api/fido/status - Stato Chiave FIDO"
+    },
+    "params": []
+  },
+  "GET /api/fido/creds": {
+    "en": {
+      "description": "Lists the resident (discoverable) passkeys stored on the device: relying-party id, user name and signature counter for each. The private keys never leave the device. Requires pairing.",
+      "details": "JSON array of { index, rp, user, signCount }.",
+      "synopsis": "GET /api/fido/creds",
+      "title": "GET /api/fido/creds - List Passkeys"
+    },
+    "it": {
+      "description": "Elenca le passkey residenti (discoverable) memorizzate sul dispositivo: id del relying-party, nome utente e contatore firme per ciascuna. Le chiavi private non lasciano mai il dispositivo. Richiede accoppiamento.",
+      "details": "Array JSON di { index, rp, user, signCount }.",
+      "synopsis": "GET /api/fido/creds",
+      "title": "GET /api/fido/creds - Elenca Passkey"
+    },
+    "params": []
+  },
+  "POST /api/fido/cred/delete": {
+    "en": {
+      "description": "Deletes one resident passkey by its list index. Requires pairing.",
+      "details": "Body JSON { index }. Response { ok }.",
+      "synopsis": "POST /api/fido/cred/delete",
+      "title": "POST /api/fido/cred/delete - Delete Passkey"
+    },
+    "it": {
+      "description": "Cancella una passkey residente tramite il suo indice nella lista. Richiede accoppiamento.",
+      "details": "Body JSON { index }. Risposta { ok }.",
+      "synopsis": "POST /api/fido/cred/delete",
+      "title": "POST /api/fido/cred/delete - Cancella Passkey"
+    },
+    "params": []
+  },
+  "POST /api/fido/pin": {
+    "en": {
+      "description": "Sets or changes the on-device PIN used for internal user verification. The PIN is checked only on the device; the verifier is bound to the eFuse-derived key. Requires pairing.",
+      "details": "Body JSON { pin } (4-63 chars). Response { ok } or { ok:false, err }.",
+      "synopsis": "POST /api/fido/pin",
+      "title": "POST /api/fido/pin - Set FIDO PIN"
+    },
+    "it": {
+      "description": "Imposta o cambia il PIN on-device usato per la verifica utente interna. Il PIN è verificato solo sul dispositivo; il verifier è legato alla chiave derivata da eFuse. Richiede accoppiamento.",
+      "details": "Body JSON { pin } (4-63 caratteri). Risposta { ok } oppure { ok:false, err }.",
+      "synopsis": "POST /api/fido/pin",
+      "title": "POST /api/fido/pin - Imposta PIN FIDO"
+    },
+    "params": []
+  },
+  "POST /api/fido/reset": {
+    "en": {
+      "description": "Resets the FIDO authenticator: wipes every resident passkey, clears the PIN, and zeroes the signature counter. Irreversible. Requires pairing.",
+      "details": "Response { ok }.",
+      "synopsis": "POST /api/fido/reset",
+      "title": "POST /api/fido/reset - Reset FIDO"
+    },
+    "it": {
+      "description": "Reset dell'autenticatore FIDO: cancella tutte le passkey residenti, azzera il PIN e il contatore firme. Irreversibile. Richiede accoppiamento.",
+      "details": "Risposta { ok }.",
+      "synopsis": "POST /api/fido/reset",
+      "title": "POST /api/fido/reset - Reset FIDO"
+    },
+    "params": []
   }
 }

@@ -223,10 +223,173 @@
   const readUrl = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
   const enc = encodeURIComponent;
   // System language (set in OS Settings, mirrored to localStorage 'anima.lang'); drives ANIMA + dictation
-  // AND, since this audit, every user-facing label in the recorder. We don't adopt the shell's catalog
-  // here — the app stays self-contained: `en()` reads the live OS language and labels are ternaries.
-  const sysLang = () => (localStorage.getItem('anima.lang') === 'en' ? 'en' : 'it');
-  const en = () => sysLang() === 'en';
+  // AND every user-facing label in the recorder. We don't adopt the shell's catalog here — the app stays
+  // self-contained: sysLang() reads the live OS language (it/en/es/fr/de) and labels resolve through TR().
+  const sysLang = () => { const l=(localStorage.getItem('anima.lang')||'it').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'it'; };
+  // BCP-47 tag for the browser SpeechRecognition live transcript, per OS language.
+  const SR_LOCALE = { it:'it-IT', en:'en-US', es:'es-ES', fr:'fr-FR', de:'de-DE' };
+  // Extra-language pack: es/fr/de translations of every English UI string, keyed by the ENGLISH text.
+  // it/en stay inline as TR's two arguments; TR looks es/fr/de up here and falls back to English.
+  const L10N = {
+    es: {
+      'Ready — press to record. Output is always MP3 on the device.':'Listo — pulsa para grabar. La salida siempre es MP3 en el dispositivo.',
+      'Microphone source':'Fuente del micrófono', 'Open/close ANIMA':'Abrir/cerrar ANIMA',
+      'Stop':'Detener', 'Record':'Grabar', 'Transcribe while recording':'Transcribir mientras grabo',
+      'The live transcript will appear here…':'La transcripción en vivo aparecerá aquí…', 'Recordings':'Grabaciones',
+      'Search…':'Buscar…', 'Search':'Buscar', 'Sort':'Ordenar',
+      'Newest':'Más recientes', 'Oldest':'Más antiguos', 'Name A→Z':'Nombre A→Z', 'Size':'Tamaño',
+      'recorder assistant':'asistente de la grabadora', 'Close':'Cerrar',
+      '📝 Summarize':'📝 Resumir', '✅ Actions':'✅ Acciones', '🏷 Title':'🏷 Título', '📅 Today':'📅 Hoy',
+      'Context:':'Contexto:', 'no selection':'sin selección', 'Ask ANIMA…':'Pregunta a ANIMA…', 'Ask ANIMA':'Pregunta a ANIMA',
+      '(not supported)':'(no compatible)',
+      'getUserMedia unavailable (needs HTTPS or localhost)':'getUserMedia no disponible (requiere HTTPS o localhost)',
+      'empty audio':'audio vacío', 'Saving MP3…':'Guardando MP3…',
+      'microphone busy':'micrófono ocupado', 'device not paired':'dispositivo no emparejado', 'mic unavailable':'micrófono no disponible',
+      'Finalizing on the device…':'Finalizando en el dispositivo…', 'Transcoding WAV → MP3…':'Transcodificando WAV → MP3…',
+      'Saved as MP3 ✓':'Guardado como MP3 ✓', 'Recording saved':'Grabación guardada',
+      'Transcoding error: ':'Error de transcodificación: ', ' — the WAV was kept':' — se conservó el WAV',
+      'expected 16-bit PCM':'se esperaba PCM de 16 bits',
+      '(live transcription not supported by this browser)':'(transcripción en vivo no compatible con este navegador)',
+      'Recording… ':'Grabando… ', '(Cardputer mic)':'(micrófono Cardputer)', '(browser mic)':'(micrófono del navegador)',
+      'Start failed: ':'Fallo al iniciar: ', 'Encoding MP3…':'Codificando MP3…', 'Saved ':'Guardado ', 'Save failed: ':'Fallo al guardar: ',
+      'Cardputer mic in use by ':'Micrófono Cardputer en uso por ', '🎤 Cardputer mic in use by ':'🎤 Micrófono Cardputer en uso por ',
+      ' — free it to record':' — libéralo para grabar',
+      'No results.':'Sin resultados.', 'No recordings yet — press the red button.':'Aún no hay grabaciones — pulsa el botón rojo.',
+      'Summary available':'Resumen disponible', '🏷 Rename':'🏷 Renombrar', '⬇ Download':'⬇ Descargar', '📝 Summary':'📝 Resumen',
+      '✨ Transcribe & Summarize':'✨ Transcribir y resumir', '✨ Transcribing…':'✨ Transcribiendo…',
+      'Transcribing':'Transcribiendo', 'Summarizing':'Resumiendo', 'empty transcript':'transcripción vacía',
+      'Transcript and summary ready ✓':'Transcripción y resumen listos ✓', 'Transcript and summary ready':'Transcripción y resumen listos',
+      '✨ System language…':'✨ Idioma del sistema…', 'failed':'fallida', 'Transcription failed: ':'Transcripción fallida: ',
+      'Long recordings transcribe in the browser — set your Groq key in AI Chat, then retry.':'Las grabaciones largas se transcriben en el navegador — configura tu clave Groq en AI Chat y reinténtalo.',
+      'Transcription needs the online models (Groq Whisper). Configure the key or retry online.':'La transcripción necesita los modelos en línea (Groq Whisper). Configura la clave o reinténtalo en línea.',
+      '📄 Transcript':'📄 Transcripción', '↻ Regenerate':'↻ Regenerar', '🧠 Continue with ANIMA':'🧠 Continuar con ANIMA',
+      'Loading…':'Cargando…', '(no summary)':'(sin resumen)', '(no transcript)':'(sin transcripción)',
+      'Context loaded from <b>':'Contexto cargado de <b>', '<br><br>📝 <b>Summary:</b><br>':'<br><br>📝 <b>Resumen:</b><br>',
+      'Go ahead and ask: I can dig deeper, translate the points, extract dates/commitments, or rewrite the summary.':'Adelante, pregunta: puedo profundizar, traducir los puntos, extraer fechas/compromisos o reescribir el resumen.',
+      'Renamed':'Renombrado', 'Delete this recording?':'¿Eliminar esta grabación?', 'Deleted':'Eliminado',
+      'Converted to MP3':'Convertido a MP3', 'Conversion failed':'Conversión fallida',
+      'Summaries, titles and actions need <b>Hybrid/Online</b> mode (with your API key). ANIMA offline does not summarize free text.':'Los resúmenes, títulos y acciones requieren el modo <b>Híbrido/En línea</b> (con tu clave API). ANIMA sin conexión no resume texto libre.',
+      '(no answer)':'(sin respuesta)', 'ANIMA unreachable.':'ANIMA no accesible.', 'What did I record today?':'¿Qué grabé hoy?',
+      'Today you have <b>{n}</b> recordings:<br>':'Hoy tienes <b>{n}</b> grabaciones:<br>', 'No recordings today.':'No hay grabaciones hoy.',
+      'Select a recording first (tap an item or the 🧠 button).':'Selecciona primero una grabación (toca un elemento o el botón 🧠).',
+      'This recording has no transcript. Record it with the browser mic and "Transcribe while recording" on, or type your question manually.':'Esta grabación no tiene transcripción. Grábala con el micrófono del navegador y «Transcribir mientras grabo» activado, o escribe tu pregunta manualmente.',
+      'Summarize “':'Resumir “',
+      'Summarize this voice note in 3-5 bullet points:\n':'Resume esta nota de voz en 3-5 puntos:\n',
+      'Extract the actions':'Extraer las acciones',
+      'List the action items (to-do) in this voice note, one per line:\n':'Enumera las tareas (to-do) de esta nota de voz, una por línea:\n',
+      'Suggest a title':'Sugerir un título',
+      'Propose ONE short title (max 5 words) for this voice note. Reply with the title only:\n':'Propón UN título corto (máx. 5 palabras) para esta nota de voz. Responde solo con el título:\n',
+      '✓ Rename to: ':'✓ Renombrar a: ', '\n\n(Context — transcript of "':'\n\n(Contexto — transcripción de "',
+      'Hi! I am ANIMA. Select a recording and I can <b>summarize</b> it, extract its <b>actions</b> or suggest a <b>title</b>. Transcripts are saved next to the MP3.':'¡Hola! Soy ANIMA. Selecciona una grabación y puedo <b>resumirla</b>, extraer sus <b>acciones</b> o sugerir un <b>título</b>. Las transcripciones se guardan junto al MP3.',
+      'Recording in progress…':'Grabación en curso…',
+    },
+    fr: {
+      'Ready — press to record. Output is always MP3 on the device.':'Prêt — appuie pour enregistrer. La sortie est toujours en MP3 sur l’appareil.',
+      'Microphone source':'Source du microphone', 'Open/close ANIMA':'Ouvrir/fermer ANIMA',
+      'Stop':'Arrêter', 'Record':'Enregistrer', 'Transcribe while recording':'Transcrire pendant l’enregistrement',
+      'The live transcript will appear here…':'La transcription en direct apparaîtra ici…', 'Recordings':'Enregistrements',
+      'Search…':'Rechercher…', 'Search':'Rechercher', 'Sort':'Trier',
+      'Newest':'Plus récents', 'Oldest':'Plus anciens', 'Name A→Z':'Nom A→Z', 'Size':'Taille',
+      'recorder assistant':'assistant du dictaphone', 'Close':'Fermer',
+      '📝 Summarize':'📝 Résumer', '✅ Actions':'✅ Actions', '🏷 Title':'🏷 Titre', '📅 Today':'📅 Aujourd’hui',
+      'Context:':'Contexte :', 'no selection':'aucune sélection', 'Ask ANIMA…':'Demande à ANIMA…', 'Ask ANIMA':'Demande à ANIMA',
+      '(not supported)':'(non pris en charge)',
+      'getUserMedia unavailable (needs HTTPS or localhost)':'getUserMedia indisponible (nécessite HTTPS ou localhost)',
+      'empty audio':'audio vide', 'Saving MP3…':'Enregistrement du MP3…',
+      'microphone busy':'microphone occupé', 'device not paired':'appareil non appairé', 'mic unavailable':'micro indisponible',
+      'Finalizing on the device…':'Finalisation sur l’appareil…', 'Transcoding WAV → MP3…':'Transcodage WAV → MP3…',
+      'Saved as MP3 ✓':'Enregistré en MP3 ✓', 'Recording saved':'Enregistrement sauvegardé',
+      'Transcoding error: ':'Erreur de transcodage : ', ' — the WAV was kept':' — le WAV a été conservé',
+      'expected 16-bit PCM':'PCM 16 bits attendu',
+      '(live transcription not supported by this browser)':'(transcription en direct non prise en charge par ce navigateur)',
+      'Recording… ':'Enregistrement… ', '(Cardputer mic)':'(micro Cardputer)', '(browser mic)':'(micro du navigateur)',
+      'Start failed: ':'Échec du démarrage : ', 'Encoding MP3…':'Encodage MP3…', 'Saved ':'Enregistré ', 'Save failed: ':'Échec de l’enregistrement : ',
+      'Cardputer mic in use by ':'Micro Cardputer utilisé par ', '🎤 Cardputer mic in use by ':'🎤 Micro Cardputer utilisé par ',
+      ' — free it to record':' — libère-le pour enregistrer',
+      'No results.':'Aucun résultat.', 'No recordings yet — press the red button.':'Aucun enregistrement pour l’instant — appuie sur le bouton rouge.',
+      'Summary available':'Résumé disponible', '🏷 Rename':'🏷 Renommer', '⬇ Download':'⬇ Télécharger', '📝 Summary':'📝 Résumé',
+      '✨ Transcribe & Summarize':'✨ Transcrire et résumer', '✨ Transcribing…':'✨ Transcription…',
+      'Transcribing':'Transcription', 'Summarizing':'Résumé', 'empty transcript':'transcription vide',
+      'Transcript and summary ready ✓':'Transcription et résumé prêts ✓', 'Transcript and summary ready':'Transcription et résumé prêts',
+      '✨ System language…':'✨ Langue du système…', 'failed':'échec', 'Transcription failed: ':'Échec de la transcription : ',
+      'Long recordings transcribe in the browser — set your Groq key in AI Chat, then retry.':'Les longs enregistrements se transcrivent dans le navigateur — configure ta clé Groq dans AI Chat, puis réessaie.',
+      'Transcription needs the online models (Groq Whisper). Configure the key or retry online.':'La transcription nécessite les modèles en ligne (Groq Whisper). Configure la clé ou réessaie en ligne.',
+      '📄 Transcript':'📄 Transcription', '↻ Regenerate':'↻ Régénérer', '🧠 Continue with ANIMA':'🧠 Continuer avec ANIMA',
+      'Loading…':'Chargement…', '(no summary)':'(aucun résumé)', '(no transcript)':'(aucune transcription)',
+      'Context loaded from <b>':'Contexte chargé depuis <b>', '<br><br>📝 <b>Summary:</b><br>':'<br><br>📝 <b>Résumé :</b><br>',
+      'Go ahead and ask: I can dig deeper, translate the points, extract dates/commitments, or rewrite the summary.':'Vas-y, demande : je peux approfondir, traduire les points, extraire les dates/engagements ou réécrire le résumé.',
+      'Renamed':'Renommé', 'Delete this recording?':'Supprimer cet enregistrement ?', 'Deleted':'Supprimé',
+      'Converted to MP3':'Converti en MP3', 'Conversion failed':'Échec de la conversion',
+      'Summaries, titles and actions need <b>Hybrid/Online</b> mode (with your API key). ANIMA offline does not summarize free text.':'Les résumés, titres et actions nécessitent le mode <b>Hybride/En ligne</b> (avec ta clé API). ANIMA hors ligne ne résume pas de texte libre.',
+      '(no answer)':'(aucune réponse)', 'ANIMA unreachable.':'ANIMA injoignable.', 'What did I record today?':'Qu’ai-je enregistré aujourd’hui ?',
+      'Today you have <b>{n}</b> recordings:<br>':'Aujourd’hui tu as <b>{n}</b> enregistrements :<br>', 'No recordings today.':'Aucun enregistrement aujourd’hui.',
+      'Select a recording first (tap an item or the 🧠 button).':'Sélectionne d’abord un enregistrement (touche un élément ou le bouton 🧠).',
+      'This recording has no transcript. Record it with the browser mic and "Transcribe while recording" on, or type your question manually.':'Cet enregistrement n’a pas de transcription. Enregistre-le avec le micro du navigateur et « Transcrire pendant l’enregistrement » activé, ou tape ta question manuellement.',
+      'Summarize “':'Résumer “',
+      'Summarize this voice note in 3-5 bullet points:\n':'Résume cette note vocale en 3 à 5 points :\n',
+      'Extract the actions':'Extraire les actions',
+      'List the action items (to-do) in this voice note, one per line:\n':'Liste les tâches (to-do) de cette note vocale, une par ligne :\n',
+      'Suggest a title':'Suggérer un titre',
+      'Propose ONE short title (max 5 words) for this voice note. Reply with the title only:\n':'Propose UN titre court (max 5 mots) pour cette note vocale. Réponds uniquement avec le titre :\n',
+      '✓ Rename to: ':'✓ Renommer en : ', '\n\n(Context — transcript of "':'\n\n(Contexte — transcription de "',
+      'Hi! I am ANIMA. Select a recording and I can <b>summarize</b> it, extract its <b>actions</b> or suggest a <b>title</b>. Transcripts are saved next to the MP3.':'Salut ! Je suis ANIMA. Sélectionne un enregistrement et je peux le <b>résumer</b>, en extraire les <b>actions</b> ou suggérer un <b>titre</b>. Les transcriptions sont enregistrées à côté du MP3.',
+      'Recording in progress…':'Enregistrement en cours…',
+    },
+    de: {
+      'Ready — press to record. Output is always MP3 on the device.':'Bereit — zum Aufnehmen drücken. Ausgabe immer als MP3 auf dem Gerät.',
+      'Microphone source':'Mikrofonquelle', 'Open/close ANIMA':'ANIMA öffnen/schließen',
+      'Stop':'Stopp', 'Record':'Aufnehmen', 'Transcribe while recording':'Beim Aufnehmen transkribieren',
+      'The live transcript will appear here…':'Das Live-Transkript erscheint hier…', 'Recordings':'Aufnahmen',
+      'Search…':'Suchen…', 'Search':'Suchen', 'Sort':'Sortieren',
+      'Newest':'Neueste', 'Oldest':'Älteste', 'Name A→Z':'Name A→Z', 'Size':'Größe',
+      'recorder assistant':'Rekorder-Assistent', 'Close':'Schließen',
+      '📝 Summarize':'📝 Zusammenfassen', '✅ Actions':'✅ Aktionen', '🏷 Title':'🏷 Titel', '📅 Today':'📅 Heute',
+      'Context:':'Kontext:', 'no selection':'keine Auswahl', 'Ask ANIMA…':'Frag ANIMA…', 'Ask ANIMA':'Frag ANIMA',
+      '(not supported)':'(nicht unterstützt)',
+      'getUserMedia unavailable (needs HTTPS or localhost)':'getUserMedia nicht verfügbar (benötigt HTTPS oder localhost)',
+      'empty audio':'leeres Audio', 'Saving MP3…':'MP3 wird gespeichert…',
+      'microphone busy':'Mikrofon belegt', 'device not paired':'Gerät nicht gekoppelt', 'mic unavailable':'Mikrofon nicht verfügbar',
+      'Finalizing on the device…':'Abschluss auf dem Gerät…', 'Transcoding WAV → MP3…':'WAV → MP3 wird umgewandelt…',
+      'Saved as MP3 ✓':'Als MP3 gespeichert ✓', 'Recording saved':'Aufnahme gespeichert',
+      'Transcoding error: ':'Transkodierungsfehler: ', ' — the WAV was kept':' — die WAV wurde behalten',
+      'expected 16-bit PCM':'16-Bit-PCM erwartet',
+      '(live transcription not supported by this browser)':'(Live-Transkription von diesem Browser nicht unterstützt)',
+      'Recording… ':'Aufnahme läuft… ', '(Cardputer mic)':'(Cardputer-Mikrofon)', '(browser mic)':'(Browser-Mikrofon)',
+      'Start failed: ':'Start fehlgeschlagen: ', 'Encoding MP3…':'MP3 wird kodiert…', 'Saved ':'Gespeichert ', 'Save failed: ':'Speichern fehlgeschlagen: ',
+      'Cardputer mic in use by ':'Cardputer-Mikrofon in Benutzung von ', '🎤 Cardputer mic in use by ':'🎤 Cardputer-Mikrofon in Benutzung von ',
+      ' — free it to record':' — gib es frei, um aufzunehmen',
+      'No results.':'Keine Ergebnisse.', 'No recordings yet — press the red button.':'Noch keine Aufnahmen — drück den roten Knopf.',
+      'Summary available':'Zusammenfassung verfügbar', '🏷 Rename':'🏷 Umbenennen', '⬇ Download':'⬇ Herunterladen', '📝 Summary':'📝 Zusammenfassung',
+      '✨ Transcribe & Summarize':'✨ Transkribieren & zusammenfassen', '✨ Transcribing…':'✨ Transkribiere…',
+      'Transcribing':'Transkribiere', 'Summarizing':'Fasse zusammen', 'empty transcript':'leeres Transkript',
+      'Transcript and summary ready ✓':'Transkript und Zusammenfassung bereit ✓', 'Transcript and summary ready':'Transkript und Zusammenfassung bereit',
+      '✨ System language…':'✨ Systemsprache…', 'failed':'fehlgeschlagen', 'Transcription failed: ':'Transkription fehlgeschlagen: ',
+      'Long recordings transcribe in the browser — set your Groq key in AI Chat, then retry.':'Lange Aufnahmen werden im Browser transkribiert — hinterlege deinen Groq-Schlüssel in AI Chat und versuch es erneut.',
+      'Transcription needs the online models (Groq Whisper). Configure the key or retry online.':'Die Transkription benötigt die Online-Modelle (Groq Whisper). Hinterlege den Schlüssel oder versuch es online erneut.',
+      '📄 Transcript':'📄 Transkript', '↻ Regenerate':'↻ Neu erzeugen', '🧠 Continue with ANIMA':'🧠 Mit ANIMA fortfahren',
+      'Loading…':'Lädt…', '(no summary)':'(keine Zusammenfassung)', '(no transcript)':'(kein Transkript)',
+      'Context loaded from <b>':'Kontext geladen aus <b>', '<br><br>📝 <b>Summary:</b><br>':'<br><br>📝 <b>Zusammenfassung:</b><br>',
+      'Go ahead and ask: I can dig deeper, translate the points, extract dates/commitments, or rewrite the summary.':'Frag ruhig: Ich kann vertiefen, die Punkte übersetzen, Termine/Zusagen herausziehen oder die Zusammenfassung umschreiben.',
+      'Renamed':'Umbenannt', 'Delete this recording?':'Diese Aufnahme löschen?', 'Deleted':'Gelöscht',
+      'Converted to MP3':'In MP3 umgewandelt', 'Conversion failed':'Umwandlung fehlgeschlagen',
+      'Summaries, titles and actions need <b>Hybrid/Online</b> mode (with your API key). ANIMA offline does not summarize free text.':'Zusammenfassungen, Titel und Aktionen brauchen den <b>Hybrid-/Online</b>-Modus (mit deinem API-Schlüssel). ANIMA offline fasst keinen Freitext zusammen.',
+      '(no answer)':'(keine Antwort)', 'ANIMA unreachable.':'ANIMA nicht erreichbar.', 'What did I record today?':'Was habe ich heute aufgenommen?',
+      'Today you have <b>{n}</b> recordings:<br>':'Heute hast du <b>{n}</b> Aufnahmen:<br>', 'No recordings today.':'Heute keine Aufnahmen.',
+      'Select a recording first (tap an item or the 🧠 button).':'Wähle zuerst eine Aufnahme (tippe auf einen Eintrag oder die 🧠-Taste).',
+      'This recording has no transcript. Record it with the browser mic and "Transcribe while recording" on, or type your question manually.':'Diese Aufnahme hat kein Transkript. Nimm sie mit dem Browser-Mikrofon und aktiviertem „Beim Aufnehmen transkribieren“ auf, oder tippe deine Frage manuell ein.',
+      'Summarize “':'Zusammenfassen „',
+      'Summarize this voice note in 3-5 bullet points:\n':'Fasse diese Sprachnotiz in 3-5 Stichpunkten zusammen:\n',
+      'Extract the actions':'Aktionen extrahieren',
+      'List the action items (to-do) in this voice note, one per line:\n':'Liste die Aufgaben (To-do) in dieser Sprachnotiz auf, eine pro Zeile:\n',
+      'Suggest a title':'Titel vorschlagen',
+      'Propose ONE short title (max 5 words) for this voice note. Reply with the title only:\n':'Schlage EINEN kurzen Titel (max. 5 Wörter) für diese Sprachnotiz vor. Antworte nur mit dem Titel:\n',
+      '✓ Rename to: ':'✓ Umbenennen in: ', '\n\n(Context — transcript of "':'\n\n(Kontext — Transkript von "',
+      'Hi! I am ANIMA. Select a recording and I can <b>summarize</b> it, extract its <b>actions</b> or suggest a <b>title</b>. Transcripts are saved next to the MP3.':'Hallo! Ich bin ANIMA. Wähle eine Aufnahme und ich kann sie <b>zusammenfassen</b>, ihre <b>Aktionen</b> extrahieren oder einen <b>Titel</b> vorschlagen. Transkripte werden neben der MP3 gespeichert.',
+      'Recording in progress…':'Aufnahme läuft…',
+    },
+  };
+  // Route a bilingual label through the active language: it→first arg, en→second, else the L10N pack.
+  function TR(it,en){ const l=sysLang(); if(l==='it')return it; if(l==='en')return en; return (L10N[l]&&L10N[l][en])||en; }
 
   const el = {
     viz:$('viz'), time:$('time'), srcLbl:$('srcLbl'), recWrap:$('recWrap'), recBtn:$('recBtn'),
@@ -248,47 +411,46 @@
   function toast(m){el.toast.textContent=m;el.toast.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>el.toast.classList.remove('show'),2200);}
   function setStatus(m,cls=''){el.status.textContent=m;el.status.className='status '+cls;}
 
-  // ---- bilingual UI (anima.lang) --------------------------------------------
-  // Idle/ready status text — recomputed on language change. Both forms are recognized so a live
+  // ---- multilingual UI (anima.lang) -----------------------------------------
+  // Idle/ready status text — recomputed on language change. Every language form is recognized so a live
   // switch only repaints the IDLE message and never clobbers a transient status (e.g. "Saving…").
-  const idleStatus = () => en()
-    ? 'Ready — press to record. Output is always MP3 on the device.'
-    : 'Pronto — premi per registrare. Output sempre in MP3 sul dispositivo.';
-  const IDLE_STATUSES = new Set([
-    'Pronto — premi per registrare. Output sempre in MP3 sul dispositivo.',
-    'Ready — press to record. Output is always MP3 on the device.',
-  ]);
+  const IDLE_IT = 'Pronto — premi per registrare. Output sempre in MP3 sul dispositivo.';
+  const IDLE_EN = 'Ready — press to record. Output is always MP3 on the device.';
+  const idleStatus = () => TR(IDLE_IT, IDLE_EN);
+  const IDLE_STATUSES = new Set([IDLE_IT, IDLE_EN, ...['es','fr','de'].map(l=>(L10N[l]&&L10N[l][IDLE_EN])||IDLE_EN)]);
+  // "no selection" context placeholder — recognized across all languages so applyLang can re-localize it.
+  const NOSEL_IT = 'nessuna selezione', NOSEL_EN = 'no selection';
+  const noSelText = () => TR(NOSEL_IT, NOSEL_EN);
+  const NOSEL_ALL = new Set([NOSEL_IT, NOSEL_EN, ...['es','fr','de'].map(l=>(L10N[l]&&L10N[l][NOSEL_EN])||NOSEL_EN)]);
   // Paint every static chrome label for the active language. Idempotent; called at init and on each
-  // OS language change. Dynamic strings (status, toasts, ANIMA replies) carry their own en() ternary.
+  // OS language change. Dynamic strings (status, toasts, ANIMA replies) carry their own TR() call.
   function applyLang(){
-    const E = en();
-    document.documentElement.setAttribute('lang', E ? 'en' : 'it');
-    $('srcSeg').title       = E ? 'Microphone source' : 'Sorgente del microfono';
-    $('animaToggle').title  = E ? 'Open/close ANIMA' : 'Apri/chiudi ANIMA';
-    el.recBtn.setAttribute('aria-label', recording ? (E?'Stop':'Ferma') : (E?'Record':'Registra'));
-    el.liveLbl.textContent  = E ? 'Transcribe while recording' : 'Trascrivi mentre registro';
-    el.live.setAttribute('data-ph', E ? 'The live transcript will appear here…' : 'La trascrizione live apparirà qui…');
-    $('libTitle').textContent = E ? 'Recordings' : 'Registrazioni';
-    el.search.placeholder   = E ? 'Search…' : 'Cerca…';
-    el.search.setAttribute('aria-label', E ? 'Search' : 'Cerca');
-    el.sort.setAttribute('aria-label', E ? 'Sort' : 'Ordina');
-    el.sort.options[0].text = E ? 'Newest' : 'Più recenti';
-    el.sort.options[1].text = E ? 'Oldest' : 'Più vecchie';
-    el.sort.options[2].text = E ? 'Name A→Z' : 'Nome A→Z';
-    el.sort.options[3].text = E ? 'Size' : 'Dimensione';
-    $('dockSub').textContent  = E ? 'recorder assistant' : 'assistente del registratore';
-    $('dockClose').title    = E ? 'Close' : 'Chiudi';
-    $('qSummary').textContent = E ? '📝 Summarize' : '📝 Riassumi';
-    $('qTodo').textContent  = E ? '✅ Actions' : '✅ Azioni';
-    $('qTitle').textContent = E ? '🏷 Title' : '🏷 Titolo';
-    $('qToday').textContent = E ? '📅 Today' : '📅 Oggi';
-    $('ctxLbl').textContent = E ? 'Context:' : 'Contesto:';
-    if(el.ctxName.textContent==='nessuna selezione' || el.ctxName.textContent==='no selection')
-      el.ctxName.textContent = E ? 'no selection' : 'nessuna selezione';
-    el.ask.placeholder      = E ? 'Ask ANIMA…' : 'Chiedi ad ANIMA…';
-    el.ask.setAttribute('aria-label', E ? 'Ask ANIMA' : 'Chiedi ad ANIMA');
-    el.liveCap.textContent  = SR ? '' : (E ? '(not supported)' : '(non supportata)');
-    const sb=$('srcBrowser'); if(sb.disabled) sb.title = E ? 'getUserMedia unavailable (needs HTTPS or localhost)' : 'getUserMedia non disponibile (serve HTTPS o localhost)';
+    document.documentElement.setAttribute('lang', sysLang());
+    $('srcSeg').title       = TR('Sorgente del microfono', 'Microphone source');
+    $('animaToggle').title  = TR('Apri/chiudi ANIMA', 'Open/close ANIMA');
+    el.recBtn.setAttribute('aria-label', recording ? TR('Ferma','Stop') : TR('Registra','Record'));
+    el.liveLbl.textContent  = TR('Trascrivi mentre registro', 'Transcribe while recording');
+    el.live.setAttribute('data-ph', TR('La trascrizione live apparirà qui…', 'The live transcript will appear here…'));
+    $('libTitle').textContent = TR('Registrazioni', 'Recordings');
+    el.search.placeholder   = TR('Cerca…', 'Search…');
+    el.search.setAttribute('aria-label', TR('Cerca', 'Search'));
+    el.sort.setAttribute('aria-label', TR('Ordina', 'Sort'));
+    el.sort.options[0].text = TR('Più recenti', 'Newest');
+    el.sort.options[1].text = TR('Più vecchie', 'Oldest');
+    el.sort.options[2].text = TR('Nome A→Z', 'Name A→Z');
+    el.sort.options[3].text = TR('Dimensione', 'Size');
+    $('dockSub').textContent  = TR('assistente del registratore', 'recorder assistant');
+    $('dockClose').title    = TR('Chiudi', 'Close');
+    $('qSummary').textContent = TR('📝 Riassumi', '📝 Summarize');
+    $('qTodo').textContent  = TR('✅ Azioni', '✅ Actions');
+    $('qTitle').textContent = TR('🏷 Titolo', '🏷 Title');
+    $('qToday').textContent = TR('📅 Oggi', '📅 Today');
+    $('ctxLbl').textContent = TR('Contesto:', 'Context:');
+    if(NOSEL_ALL.has(el.ctxName.textContent)) el.ctxName.textContent = noSelText();
+    el.ask.placeholder      = TR('Chiedi ad ANIMA…', 'Ask ANIMA…');
+    el.ask.setAttribute('aria-label', TR('Chiedi ad ANIMA', 'Ask ANIMA'));
+    el.liveCap.textContent  = SR ? '' : TR('(non supportata)', '(not supported)');
+    const sb=$('srcBrowser'); if(sb.disabled) sb.title = TR('getUserMedia non disponibile (serve HTTPS o localhost)', 'getUserMedia unavailable (needs HTTPS or localhost)');
     if(IDLE_STATUSES.has(el.status.textContent)) setStatus(idleStatus());
     renderList();   // re-paint library empty-state / labels built imperatively
   }
@@ -362,8 +524,8 @@
     const blob = new Blob(bMp3,{type:'audio/mpeg'});
     try{ bAudioCtx && bAudioCtx.close(); }catch{}
     bAudioCtx=bStream=bNode=bAnalyser=null;
-    if(blob.size<200) throw new Error(en()?'empty audio':'audio vuoto');
-    setStatus(en()?'Saving MP3…':'Salvataggio MP3…');
+    if(blob.size<200) throw new Error(TR('audio vuoto','empty audio'));
+    setStatus(TR('Salvataggio MP3…','Saving MP3…'));
     const base = stamp();
     const name = await saveMp3(blob, base);
     if(liveText.trim()){ await fs.write(DIR+'/'+base+'.txt', new Blob([liveText.trim()],{type:'text/plain'})); }
@@ -382,14 +544,14 @@
         onstart(){ acked = true; resolve(); },                 // recording really started → release the button
         onstatus(s){ if(s.level!=null) pushLevel(s.level/100); },
         onerror(kind, who){ if(!acked) reject(new Error(
-          kind==='busy' ? ((en()?'microphone busy':'microfono occupato')+(who?(' · '+who):'')) :
-          kind==='auth' ? (en()?'device not paired':'dispositivo non accoppiato') : (en()?'mic unavailable':'mic non disponibile'))); },
+          kind==='busy' ? (TR('microfono occupato','microphone busy')+(who?(' · '+who):'')) :
+          kind==='auth' ? TR('dispositivo non accoppiato','device not paired') : TR('mic non disponibile','mic unavailable'))); },
       });
       devRec.done.then((s)=>{ devRec=null; if(s && s.path) deviceFinalize(s.path); });
     });
   }
   function deviceStop(){
-    setStatus(en()?'Finalizing on the device…':'Finalizzo sul dispositivo…');
+    setStatus(TR('Finalizzo sul dispositivo…','Finalizing on the device…'));
     if(devRec) devRec.stop();                                   // gate-owned take: POSTs stop, poll resolves → finalize
     else fetch('/api/rec/stop',{method:'POST'}).catch(()=>{});  // a recording we only adopted (e.g. started on-device)
   }
@@ -399,16 +561,16 @@
     clearInterval(statusPoll); statusPoll=null;
     stopTimer(); setRecUI(false);
     try{
-      setStatus(en()?'Transcoding WAV → MP3…':'Transcodifica WAV → MP3…');
+      setStatus(TR('Transcodifica WAV → MP3…','Transcoding WAV → MP3…'));
       const buf = await (await fetch(readUrl(wavPath))).arrayBuffer();
       const {samples} = parseWav(buf);                 // Int16 @ device rate (16k)
       const blob = pcmToMp3Blob(samples);
       const base = (wavPath.split('/').pop()||stamp()).replace(/\.wav$/i,'');
       await saveMp3(blob, base);
       await fs.del(wavPath);                            // never keep the WAV
-      setStatus(en()?'Saved as MP3 ✓':'Salvato in MP3 ✓','ok'); toast(en()?'Recording saved':'Registrazione salvata');
+      setStatus(TR('Salvato in MP3 ✓','Saved as MP3 ✓'),'ok'); toast(TR('Registrazione salvata','Recording saved'));
     }catch(e){
-      setStatus((en()?'Transcoding error: ':'Errore transcodifica: ')+(e.message||e)+(en()?' — the WAV was kept':' — il WAV è stato mantenuto'),'err');
+      setStatus(TR('Errore transcodifica: ','Transcoding error: ')+(e.message||e)+TR(' — il WAV è stato mantenuto',' — the WAV was kept'),'err');
     }finally{ finalizing=false; loadList(); }
   }
 
@@ -422,7 +584,7 @@
       else if(id===0x64617461){dataOff=off+8;dataLen=sz;break;}
       off+=8+sz+(sz&1);
     }
-    if(bits!==16) throw new Error(en()?'expected 16-bit PCM':'atteso PCM 16-bit');
+    if(bits!==16) throw new Error(TR('atteso PCM 16-bit','expected 16-bit PCM'));
     const n=Math.floor(dataLen/2), raw=new Int16Array(buf,dataOff,n);
     if(ch===1) return {samples:raw,rate};
     const mono=new Int16Array(Math.floor(n/ch));
@@ -460,9 +622,9 @@
   // Saved as a .txt sibling. Vosk-offline could plug in here later.
   let SR = window.SpeechRecognition||window.webkitSpeechRecognition, recog=null, liveText='';
   function startLiveTranscribe(){
-    if(!SR){ el.live.textContent=en()?'(live transcription not supported by this browser)':'(trascrizione live non supportata da questo browser)'; return; }
+    if(!SR){ el.live.textContent=TR('(trascrizione live non supportata da questo browser)','(live transcription not supported by this browser)'); return; }
     liveText=''; el.live.hidden=false; el.live.textContent='';
-    recog=new SR(); recog.lang=(sysLang()==='en'?'en-US':'it-IT'); recog.continuous=true; recog.interimResults=true;
+    recog=new SR(); recog.lang=(SR_LOCALE[sysLang()]||'it-IT'); recog.continuous=true; recog.interimResults=true;
     recog.onresult=(e)=>{ let fin='',int='';
       for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript;
         if(e.results[i].isFinal) fin+=t+' '; else int+=t; }
@@ -478,7 +640,7 @@
   // ============================ RECORD CONTROL ================================
   function setRecUI(on){
     recording=on; el.recWrap.classList.toggle('on',on);
-    el.recBtn.setAttribute('aria-label', on?(en()?'Stop':'Ferma'):(en()?'Record':'Registra'));
+    el.recBtn.setAttribute('aria-label', on?TR('Ferma','Stop'):TR('Registra','Record'));
   }
   function startTimer(){ t0=Date.now(); timerInt=setInterval(()=>{ el.time.textContent=fmtTime((Date.now()-t0)/1000); },200); }
   function stopTimer(){ clearInterval(timerInt); timerInt=null; }
@@ -487,15 +649,15 @@
     if(!recording){
       try{
         setRecUI(true); el.time.textContent='00:00'; levels=new Array(64).fill(0); startTimer();
-        setStatus((en()?'Recording… ':'Registrazione… ')+(src==='device'?(en()?'(Cardputer mic)':'(mic Cardputer)'):(en()?'(browser mic)':'(mic browser)')));
+        setStatus(TR('Registrazione… ','Recording… ')+(src==='device'?TR('(mic Cardputer)','(Cardputer mic)'):TR('(mic browser)','(browser mic)')));
         if(src==='device') await deviceStart(); else await browserStart();
-      }catch(e){ setRecUI(false); stopTimer(); setStatus((en()?'Start failed: ':'Avvio fallito: ')+(e.message||e),'err'); }
+      }catch(e){ setRecUI(false); stopTimer(); setStatus(TR('Avvio fallito: ','Start failed: ')+(e.message||e),'err'); }
     }else{
       stopTimer(); stopLiveTranscribe();
       if(src==='browser'){
-        setRecUI(false); setStatus(en()?'Encoding MP3…':'Codifica MP3…');
-        try{ const name=await browserStop(); setStatus((en()?'Saved ':'Salvato ')+name+' ✓','ok'); toast(en()?'Recording saved':'Registrazione salvata'); loadList(); }
-        catch(e){ setStatus((en()?'Save failed: ':'Salvataggio fallito: ')+(e.message||e),'err'); }
+        setRecUI(false); setStatus(TR('Codifica MP3…','Encoding MP3…'));
+        try{ const name=await browserStop(); setStatus(TR('Salvato ','Saved ')+name+' ✓','ok'); toast(TR('Registrazione salvata','Recording saved')); loadList(); }
+        catch(e){ setStatus(TR('Salvataggio fallito: ','Save failed: ')+(e.message||e),'err'); }
       }else{
         await deviceStop();   // deviceFinalize completes via the poll
       }
@@ -521,8 +683,8 @@
   function refreshMicHeld(){
     const otherHolds = !!(micHolder && micHolder!=='Registrazione' && src==='device' && !recording);
     el.recBtn.classList.toggle('held', otherHolds);
-    el.recBtn.title = otherHolds ? ((en()?'Cardputer mic in use by ':'Mic Cardputer in uso da ')+micHolder) : (recording?(en()?'Stop':'Ferma'):(en()?'Record':'Registra'));
-    if(otherHolds){ micStatusShown=true; setStatus((en()?'🎤 Cardputer mic in use by ':'🎤 Mic Cardputer in uso da ')+micHolder+(en()?' — free it to record':' — libera per registrare')); }
+    el.recBtn.title = otherHolds ? (TR('Mic Cardputer in uso da ','Cardputer mic in use by ')+micHolder) : (recording?TR('Ferma','Stop'):TR('Registra','Record'));
+    if(otherHolds){ micStatusShown=true; setStatus(TR('🎤 Mic Cardputer in uso da ','🎤 Cardputer mic in use by ')+micHolder+TR(' — libera per registrare',' — free it to record')); }
     else if(micStatusShown){ micStatusShown=false; if(!recording) setStatus(''); }
   }
   onMicStatus((holder)=>{ micHolder=holder; refreshMicHeld(); });
@@ -553,7 +715,7 @@
     let arr=files.filter(f=>!q||f.name.toLowerCase().includes(q));
     arr=sortFiles(arr.slice());
     el.count.textContent = files.length? `${files.length} file` : '';
-    if(!arr.length){ el.list.innerHTML=`<div class="empty">${files.length?(en()?'No results.':'Nessun risultato.'):(en()?'No recordings yet — press the red button.':'Ancora nessuna registrazione — premi il tasto rosso.')}</div>`; return; }
+    if(!arr.length){ el.list.innerHTML=`<div class="empty">${files.length?TR('Nessun risultato.','No results.'):TR('Ancora nessuna registrazione — premi il tasto rosso.','No recordings yet — press the red button.')}</div>`; return; }
     el.list.innerHTML='';
     for(const f of arr){
       const path=DIR+'/'+f.name, isWav=/\.wav$/i.test(f.name);
@@ -563,13 +725,13 @@
         `<span class="badge ${isWav?'wav':'mp3'}">${isWav?'WAV':'MP3'}</span>`+
         `<span class="badge">${fmtSize(f.size||0)}</span>`;
       const audio=document.createElement('audio'); audio.controls=true; audio.preload='none'; audio.src=readUrl(path);
-      if(f._sum) top.innerHTML += `<span class="badge ai" title="${en()?'Summary available':'Riassunto disponibile'}">✨</span>`;
+      if(f._sum) top.innerHTML += `<span class="badge ai" title="${TR('Riassunto disponibile','Summary available')}">✨</span>`;
       const acts=document.createElement('div'); acts.className='acts';
       [
-        mkBtn(en()?'🏷 Rename':'🏷 Rinomina',()=>renameRec(f,top)),
-        mkBtn(en()?'⬇ Download':'⬇ Scarica',()=>download(path,f.name)),
-        f._sum ? mkBtn(en()?'📝 Summary':'📝 Riassunto',()=>togglePanel(f),'ai')
-               : mkBtn(en()?'✨ Transcribe & Summarize':'✨ Trascrivi & Riassumi',(b)=>runPipeline(f,b),'ai'),
+        mkBtn(TR('🏷 Rinomina','🏷 Rename'),()=>renameRec(f,top)),
+        mkBtn(TR('⬇ Scarica','⬇ Download'),()=>download(path,f.name)),
+        f._sum ? mkBtn(TR('📝 Riassunto','📝 Summary'),()=>togglePanel(f),'ai')
+               : mkBtn(TR('✨ Trascrivi & Riassumi','✨ Transcribe & Summarize'),(b)=>runPipeline(f,b),'ai'),
         isWav? mkBtn('♫ → MP3',(b)=>convertWav(path,f.name,b)) : null,
         mkBtn('🗑',()=>delRec(path),'del'),
       ].filter(Boolean).forEach(b=>acts.appendChild(b));
@@ -590,7 +752,7 @@
   }
 
   async function runPipeline(f, btn){
-    const o=btn.textContent; btn.disabled=true; btn.textContent=en()?'✨ Transcribing…':'✨ Trascrivo…';
+    const o=btn.textContent; btn.disabled=true; btn.textContent=TR('✨ Trascrivo…','✨ Transcribing…');
     const path=DIR+'/'+f.name;
     const isWav=/\.wav$/i.test(f.name);
     const hasKey=!!(localStorage.getItem('groq.key')||'').trim();
@@ -600,28 +762,28 @@
       // never touches the file — we pull it in byte ranges and transcribe segment by segment.
       if(isWav && hasKey){
         const prog=(p)=>{ const pct=p.total?Math.round(100*p.done/p.total):0;
-          const lbl=p.phase==='transcribe'?(en()?'Transcribing':'Trascrivo'):(en()?'Summarizing':'Riassumo');
+          const lbl=p.phase==='transcribe'?TR('Trascrivo','Transcribing'):TR('Riassumo','Summarizing');
           btn.textContent=`✨ ${lbl} ${p.done}/${p.total}`; setStatus(`${lbl}… ${pct}%`); };
         const text=await transcribeLong({ path, lang:'auto', onProgress:prog });
-        if(!text || !text.trim()) throw new Error(en()?'empty transcript':'trascrizione vuota');
+        if(!text || !text.trim()) throw new Error(TR('trascrizione vuota','empty transcript'));
         await fs.write(DIR+'/'+f._base+'.txt', new Blob([text],{type:'text/plain'}));
         let sum=''; try{ sum=await summarizeLong({ text, lang:sysLang(), onProgress:prog }); }catch(e){ /* keep transcript even if summary fails */ }
         if(sum) await fs.write(DIR+'/'+f._base+'.sum.txt', new Blob([sum],{type:'text/plain'}));
-        setStatus(en()?'Transcript and summary ready ✓':'Trascrizione e riassunto pronti ✓','ok');
-        toast(en()?'Transcript and summary ready':'Trascrizione e riassunto pronti'); openPanel=f._base; await loadList();
+        setStatus(TR('Trascrizione e riassunto pronti ✓','Transcript and summary ready ✓'),'ok');
+        toast(TR('Trascrizione e riassunto pronti','Transcript and summary ready')); openPanel=f._base; await loadList();
         return;
       }
       // DEVICE path (MP3, or no browser key): the firmware streams the file to Whisper. Works for short
       // takes; for long ones the client path above is the answer (configure the Groq key in AI Chat).
       const call=(lang)=> fetch('/api/transcribe?path='+enc(path)+'&lang='+lang+'&summarize=1').then(r=>r.json());
       let r=await call('auto');
-      if(!r||!r.ok){ btn.textContent=en()?'✨ System language…':'✨ Lingua di sistema…'; r=await call(sysLang()); }   // fallback to system language
-      if(!r||!r.ok) throw new Error((r&&r.error)||(en()?'failed':'fallita'));
-      toast(en()?'Transcript and summary ready':'Trascrizione e riassunto pronti'); openPanel=f._base; await loadList();
+      if(!r||!r.ok){ btn.textContent=TR('✨ Lingua di sistema…','✨ System language…'); r=await call(sysLang()); }   // fallback to system language
+      if(!r||!r.ok) throw new Error((r&&r.error)||TR('fallita','failed'));
+      toast(TR('Trascrizione e riassunto pronti','Transcript and summary ready')); openPanel=f._base; await loadList();
     }catch(e){
-      btn.disabled=false; btn.textContent=o; toast((en()?'Transcription failed: ':'Trascrizione non riuscita: ')+(e.message||e));
-      const longHint = isWav&&!hasKey ? (en()?'Long recordings transcribe in the browser — set your Groq key in AI Chat, then retry.':'I vocali lunghi si trascrivono nel browser — imposta la chiave Groq in AI Chat, poi riprova.')
-        : (en()?'Transcription needs the online models (Groq Whisper). Configure the key or retry online.':'La trascrizione richiede i modelli online (Groq Whisper). Configura la chiave o riprova online.');
+      btn.disabled=false; btn.textContent=o; toast(TR('Trascrizione non riuscita: ','Transcription failed: ')+(e.message||e));
+      const longHint = isWav&&!hasKey ? TR('I vocali lunghi si trascrivono nel browser — imposta la chiave Groq in AI Chat, poi riprova.','Long recordings transcribe in the browser — set your Groq key in AI Chat, then retry.')
+        : TR('La trascrizione richiede i modelli online (Groq Whisper). Configura la chiave o riprova online.','Transcription needs the online models (Groq Whisper). Configure the key or retry online.');
       setStatus(longHint,'err');
     }
   }
@@ -629,11 +791,11 @@
 
   // Expandable Summary/Transcript panel under a recording. Loads the sidecars lazily.
   function buildPanel(f){
-    const wrap=document.createElement('div'); wrap.className='panel'; const E=en();
-    wrap.innerHTML=`<div class="ptabs"><button class="pt sel" data-t="sum">${E?'📝 Summary':'📝 Riassunto'}</button>`+
-      `<button class="pt" data-t="tx">${E?'📄 Transcript':'📄 Trascrizione'}</button><span style="flex:1"></span>`+
-      `<button class="pt mini" data-a="redo">${E?'↻ Regenerate':'↻ Rigenera'}</button><button class="pt mini ai" data-a="anima">${E?'🧠 Continue with ANIMA':'🧠 Continua con ANIMA'}</button></div>`+
-      `<div class="pbody" data-b="sum">${E?'Loading…':'Carico…'}</div><div class="pbody" data-b="tx" hidden>${E?'Loading…':'Carico…'}</div>`;
+    const wrap=document.createElement('div'); wrap.className='panel';
+    wrap.innerHTML=`<div class="ptabs"><button class="pt sel" data-t="sum">${TR('📝 Riassunto','📝 Summary')}</button>`+
+      `<button class="pt" data-t="tx">${TR('📄 Trascrizione','📄 Transcript')}</button><span style="flex:1"></span>`+
+      `<button class="pt mini" data-a="redo">${TR('↻ Rigenera','↻ Regenerate')}</button><button class="pt mini ai" data-a="anima">${TR('🧠 Continua con ANIMA','🧠 Continue with ANIMA')}</button></div>`+
+      `<div class="pbody" data-b="sum">${TR('Carico…','Loading…')}</div><div class="pbody" data-b="tx" hidden>${TR('Carico…','Loading…')}</div>`;
     const showTab=(t)=>{ wrap.querySelectorAll('.pt[data-t]').forEach(b=>b.classList.toggle('sel',b.dataset.t===t));
       wrap.querySelectorAll('.pbody').forEach(b=>b.hidden=b.dataset.b!==t); };
     wrap.addEventListener('click',(e)=>{ const b=e.target.closest('button'); if(!b)return; e.stopPropagation();
@@ -641,8 +803,8 @@
       else if(b.dataset.a==='redo'){ runPipeline(f, {textContent:'',disabled:false}); }
       else if(b.dataset.a==='anima'){ continueWithAnima(f); }
     });
-    fs.readText(DIR+'/'+f._base+'.sum.txt').then(t=>{ wrap.querySelector('[data-b="sum"]').textContent=t||(en()?'(no summary)':'(nessun riassunto)'); });
-    fs.readText(DIR+'/'+f._base+'.txt').then(t=>{ wrap.querySelector('[data-b="tx"]').textContent=t||(en()?'(no transcript)':'(nessuna trascrizione)'); });
+    fs.readText(DIR+'/'+f._base+'.sum.txt').then(t=>{ wrap.querySelector('[data-b="sum"]').textContent=t||TR('(nessun riassunto)','(no summary)'); });
+    fs.readText(DIR+'/'+f._base+'.txt').then(t=>{ wrap.querySelector('[data-b="tx"]').textContent=t||TR('(nessuna trascrizione)','(no transcript)'); });
     return wrap;
   }
   async function continueWithAnima(f){
@@ -650,8 +812,8 @@
     el.ctxName.textContent=prettyName(f.name);
     const sum=await fs.readText(DIR+'/'+f._base+'.sum.txt');
     showDock();
-    addMsg('a',(en()?'Context loaded from <b>':'Contesto caricato da <b>')+esc(prettyName(f.name))+'</b>.'+(sum?(en()?'<br><br>📝 <b>Summary:</b><br>':'<br><br>📝 <b>Riassunto:</b><br>')+fmtReply(sum):''));
-    addMsg('sys',en()?'Go ahead and ask: I can dig deeper, translate the points, extract dates/commitments, or rewrite the summary.':'Chiedi pure: posso approfondire, tradurre i punti, estrarre date/impegni, o riscrivere il riassunto.');
+    addMsg('a',TR('Contesto caricato da <b>','Context loaded from <b>')+esc(prettyName(f.name))+'</b>.'+(sum?TR('<br><br>📝 <b>Riassunto:</b><br>','<br><br>📝 <b>Summary:</b><br>')+fmtReply(sum):''));
+    addMsg('sys',TR('Chiedi pure: posso approfondire, tradurre i punti, estrarre date/impegni, o riscrivere il riassunto.','Go ahead and ask: I can dig deeper, translate the points, extract dates/commitments, or rewrite the summary.'));
   }
   function mkBtn(label,fn,cls=''){ const b=document.createElement('button'); if(cls)b.className=cls; b.textContent=label;
     b.onclick=(e)=>{e.stopPropagation();fn(b);}; return b; }
@@ -664,7 +826,7 @@
       const v=inp.value.trim().replace(/[\/\\:*?"<>|]/g,'_');
       if(v && v!==cur){ const ext=f.name.match(/\.(mp3|wav)$/i)[0];
         const r=await fs.move(DIR+'/'+f.name, DIR+'/'+v+ext);
-        if(r.ok){ toast(en()?'Renamed':'Rinominato'); if(selected&&selected.name===f.name) selected={name:v+ext,path:DIR+'/'+v+ext,base:v}; }
+        if(r.ok){ toast(TR('Rinominato','Renamed')); if(selected&&selected.name===f.name) selected={name:v+ext,path:DIR+'/'+v+ext,base:v}; }
       }
       loadList();
     };
@@ -674,14 +836,14 @@
   async function download(path,name){ const blob=await (await fetch(readUrl(path))).blob();
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
-  async function delRec(path){ if(!confirm(en()?'Delete this recording?':'Eliminare questa registrazione?'))return;
+  async function delRec(path){ if(!confirm(TR('Eliminare questa registrazione?','Delete this recording?')))return;
     await fs.del(path); const t=txtPath(path); await fs.del(t).catch(()=>{});
-    if(selected&&selected.path===path) selectNone(); toast(en()?'Deleted':'Eliminato'); loadList(); }
+    if(selected&&selected.path===path) selectNone(); toast(TR('Eliminato','Deleted')); loadList(); }
   async function convertWav(path,name,btn){ const o=btn.textContent; btn.disabled=true; btn.textContent='…';
     try{ const buf=await (await fetch(readUrl(path))).arrayBuffer(); const {samples}=parseWav(buf);
       const blob=pcmToMp3Blob(samples); const base=name.replace(/\.wav$/i,'');
-      await saveMp3(blob,base); await fs.del(path); toast(en()?'Converted to MP3':'Convertito in MP3'); loadList();
-    }catch(e){ btn.textContent='✗'; toast(en()?'Conversion failed':'Conversione fallita'); setTimeout(()=>{btn.textContent=o;btn.disabled=false;},1500); } }
+      await saveMp3(blob,base); await fs.del(path); toast(TR('Convertito in MP3','Converted to MP3')); loadList();
+    }catch(e){ btn.textContent='✗'; toast(TR('Conversione fallita','Conversion failed')); setTimeout(()=>{btn.textContent=o;btn.disabled=false;},1500); } }
 
   // ============================ ANIMA DOCK ====================================
   // Wide screens: dock is a grid column (toggle hides the column). Narrow: slide-over.
@@ -692,7 +854,7 @@
   $('animaToggle').onclick=()=>{ isDockShown()?hideDock():showDock(); };
   $('dockClose').onclick=hideDock;
 
-  function selectNone(){ selected=null; el.ctxName.textContent=en()?'no selection':'nessuna selezione'; renderList(); }
+  function selectNone(){ selected=null; el.ctxName.textContent=noSelText(); renderList(); }
   async function selectFor(f, openDock){
     selected={ name:f.name, path:DIR+'/'+f.name, base:f.name.replace(/\.(mp3|wav)$/i,'') };
     el.ctxName.textContent=prettyName(f.name);
@@ -715,51 +877,47 @@
       if(needsOnline && !isOnlineTier(r)){
         // Generative tasks (summary/title/actions) need the online teacher — offline ANIMA
         // is a retrieval engine and can't summarise free text. Be honest instead of showing a wrong reply.
-        m.innerHTML=en()
-          ? '<span style="color:#ffc857">Summaries, titles and actions need <b>Hybrid/Online</b> mode (with your API key). ANIMA offline does not summarize free text.</span>'
-          : '<span style="color:#ffc857">Per riassunti, titoli e azioni serve la modalità <b>Ibrida/Online</b> (con la tua API key). ANIMA offline non riassume testo libero.</span>';
+        m.innerHTML='<span style="color:#ffc857">'+TR('Per riassunti, titoli e azioni serve la modalità <b>Ibrida/Online</b> (con la tua API key). ANIMA offline non riassume testo libero.','Summaries, titles and actions need <b>Hybrid/Online</b> mode (with your API key). ANIMA offline does not summarize free text.')+'</span>';
       } else {
-        m.innerHTML=fmtReply(reply||(en()?'(no answer)':'(nessuna risposta)'));
+        m.innerHTML=fmtReply(reply||TR('(nessuna risposta)','(no answer)'));
       }
       return r;
-    }catch(e){ m.innerHTML='<span style="color:#ff9aa9">'+(en()?'ANIMA unreachable.':'ANIMA non raggiungibile.')+'</span>'; return null; }
+    }catch(e){ m.innerHTML='<span style="color:#ff9aa9">'+TR('ANIMA non raggiungibile.','ANIMA unreachable.')+'</span>'; return null; }
   }
   async function quick(act){
-    const E=en();
     if(act==='today'){
       const today=files.filter(f=>{const m=f.name.match(/^rec-(\d{4})(\d\d)(\d\d)/);if(!m)return false;
         const d=new Date(),p=n=>String(n).padStart(2,'0'); return m[1]+m[2]+m[3]===`${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}`;});
-      addMsg('u',E?'What did I record today?':'Cosa ho registrato oggi?');
-      addMsg('a', today.length? (E?`Today you have <b>${today.length}</b> recordings:<br>`:`Oggi hai <b>${today.length}</b> registrazioni:<br>`)+today.map(f=>'• '+esc(prettyName(f.name))).join('<br>') : (E?'No recordings today.':'Nessuna registrazione oggi.'));
+      addMsg('u',TR('Cosa ho registrato oggi?','What did I record today?'));
+      addMsg('a', today.length? TR('Oggi hai <b>{n}</b> registrazioni:<br>','Today you have <b>{n}</b> recordings:<br>').replace('{n}',today.length)+today.map(f=>'• '+esc(prettyName(f.name))).join('<br>') : TR('Nessuna registrazione oggi.','No recordings today.'));
       return;
     }
-    if(!selected){ addMsg('sys',E?'Select a recording first (tap an item or the 🧠 button).':'Seleziona prima una registrazione (tocca un elemento o il tasto 🧠).'); return; }
+    if(!selected){ addMsg('sys',TR('Seleziona prima una registrazione (tocca un elemento o il tasto 🧠).','Select a recording first (tap an item or the 🧠 button).')); return; }
     const tx=await transcriptFor(selected);
-    if(!tx){ addMsg('sys',E?'This recording has no transcript. Record it with the browser mic and "Transcribe while recording" on, or type your question manually.':'Questa registrazione non ha una trascrizione. Registrala col mic del browser e "Trascrivi mentre registro" attivo, oppure scrivi la domanda manualmente.'); return; }
+    if(!tx){ addMsg('sys',TR('Questa registrazione non ha una trascrizione. Registrala col mic del browser e "Trascrivi mentre registro" attivo, oppure scrivi la domanda manualmente.','This recording has no transcript. Record it with the browser mic and "Transcribe while recording" on, or type your question manually.')); return; }
     const clip=tx.slice(0,1600);
-    if(act==='summary'){ addMsg('u',(E?'Summarize “':'Riassumi “')+prettyName(selected.name)+'”'); await animaAsk((E?'Summarize this voice note in 3-5 bullet points:\n':'Riassumi in 3-5 punti questa nota vocale:\n')+clip, true); }
-    else if(act==='todo'){ addMsg('u',E?'Extract the actions':'Estrai le azioni'); await animaAsk((E?'List the action items (to-do) in this voice note, one per line:\n':'Elenca i punti d\'azione (to-do) presenti in questa nota vocale, uno per riga:\n')+clip, true); }
-    else if(act==='title'){ addMsg('u',E?'Suggest a title':'Suggerisci un titolo');
-      const r=await animaAsk((E?'Propose ONE short title (max 5 words) for this voice note. Reply with the title only:\n':'Proponi UN titolo breve (max 5 parole) per questa nota vocale. Rispondi solo col titolo:\n')+clip, true);
+    if(act==='summary'){ addMsg('u',TR('Riassumi “','Summarize “')+prettyName(selected.name)+'”'); await animaAsk(TR('Riassumi in 3-5 punti questa nota vocale:\n','Summarize this voice note in 3-5 bullet points:\n')+clip, true); }
+    else if(act==='todo'){ addMsg('u',TR('Estrai le azioni','Extract the actions')); await animaAsk(TR('Elenca i punti d\'azione (to-do) presenti in questa nota vocale, uno per riga:\n','List the action items (to-do) in this voice note, one per line:\n')+clip, true); }
+    else if(act==='title'){ addMsg('u',TR('Suggerisci un titolo','Suggest a title'));
+      const r=await animaAsk(TR('Proponi UN titolo breve (max 5 parole) per questa nota vocale. Rispondi solo col titolo:\n','Propose ONE short title (max 5 words) for this voice note. Reply with the title only:\n')+clip, true);
       if(isOnlineTier(r)&&(r.reply||r.answer)){ const t=(r.reply||r.answer).split('\n')[0].replace(/^["“]|["”]$/g,'').trim();
-        const b=document.createElement('button'); b.className='applyname'; b.textContent=(E?'✓ Rename to: ':'✓ Rinomina in: ')+t;
+        const b=document.createElement('button'); b.className='applyname'; b.textContent=TR('✓ Rinomina in: ','✓ Rename to: ')+t;
         b.onclick=async()=>{ const v=t.replace(/[\/\\:*?"<>|]/g,'_').slice(0,48); const ext=selected.name.match(/\.(mp3|wav)$/i)[0];
           const mv=await fs.move(selected.path, DIR+'/'+v+ext); if(mv.ok){ const tp=txtPath(selected.path); await fs.move(tp,DIR+'/'+v+'.txt').catch(()=>{});
-            toast(en()?'Renamed':'Rinominato'); selected={name:v+ext,path:DIR+'/'+v+ext,base:v}; el.ctxName.textContent=prettyName(v+ext); loadList(); b.disabled=true; } };
+            toast(TR('Rinominato','Renamed')); selected={name:v+ext,path:DIR+'/'+v+ext,base:v}; el.ctxName.textContent=prettyName(v+ext); loadList(); b.disabled=true; } };
         el.chat.lastChild.appendChild(document.createElement('br')); el.chat.lastChild.appendChild(b);
       }
     }
   }
   document.querySelector('.quick').addEventListener('click',(e)=>{const b=e.target.closest('button');if(b)quick(b.dataset.act);});
   function sendAsk(){ const q=el.ask.value.trim(); if(!q)return; el.ask.value=''; addMsg('u',esc(q));
-    transcriptFor(selected).then(tx=>{ animaAsk(tx? q+(en()?'\n\n(Context — transcript of "':'\n\n(Contesto — trascrizione di "')+selected.name+'"):\n'+tx.slice(0,1400) : q); }); }
+    transcriptFor(selected).then(tx=>{ animaAsk(tx? q+TR('\n\n(Contesto — trascrizione di "','\n\n(Context — transcript of "')+selected.name+'"):\n'+tx.slice(0,1400) : q); }); }
   $('send').onclick=sendAsk;
   el.ask.addEventListener('keydown',(e)=>{ if(e.key==='Enter') sendAsk(); });
 
   // welcome
-  addMsg('a', en()
-    ? 'Hi! I am ANIMA. Select a recording and I can <b>summarize</b> it, extract its <b>actions</b> or suggest a <b>title</b>. Transcripts are saved next to the MP3.'
-    : 'Ciao! Sono ANIMA. Seleziona una registrazione e posso <b>riassumerla</b>, estrarne le <b>azioni</b> o proporre un <b>titolo</b>. Le trascrizioni vengono salvate accanto all\'MP3.');
+  addMsg('a', TR('Ciao! Sono ANIMA. Seleziona una registrazione e posso <b>riassumerla</b>, estrarne le <b>azioni</b> o proporre un <b>titolo</b>. Le trascrizioni vengono salvate accanto all\'MP3.',
+    'Hi! I am ANIMA. Select a recording and I can <b>summarize</b> it, extract its <b>actions</b> or suggest a <b>title</b>. Transcripts are saved next to the MP3.'));
 
   // ============================ INIT ==========================================
   el.search.oninput=renderList; el.sort.onchange=renderList;
@@ -770,7 +928,7 @@
   applyLang();                               // paint all static chrome for the active OS language
   if(window.innerWidth<=820) el.dock.classList.remove('open');
   // resume if a device recording is already running
-  (async()=>{ try{ const s=await (await fetch('/api/rec/status')).json(); if(s.recording){ src='device'; setRecUI(true); startTimer(); setStatus(en()?'Recording in progress…':'Registrazione in corso…'); statusPoll=setInterval(async()=>{ const x=await (await fetch('/api/rec/status')).json(); if(x.level!=null)pushLevel(x.level/100); if(recording&&!x.recording) deviceFinalize(x.path); },600);} }catch{} loadList(); })();
+  (async()=>{ try{ const s=await (await fetch('/api/rec/status')).json(); if(s.recording){ src='device'; setRecUI(true); startTimer(); setStatus(TR('Registrazione in corso…','Recording in progress…')); statusPoll=setInterval(async()=>{ const x=await (await fetch('/api/rec/status')).json(); if(x.level!=null)pushLevel(x.level/100); if(recording&&!x.recording) deviceFinalize(x.path); },600);} }catch{} loadList(); })();
 
   // ---- Part B: live OS-wide language sync -----------------------------------
   // The app reads the language only at load; without this, changing it in Settings while the recorder

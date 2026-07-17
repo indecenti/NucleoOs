@@ -1196,6 +1196,9 @@ static int            s_snf_mode;      // 0 all, 1 beacon, 2 probe, 3 EAPOL, 4 d
 static bool           s_snf_hop;
 static char           s_snf_path[64];
 static FILE          *s_snf_file;      // opened/closed on the UI task; written by the writer task
+static nucleo_wifiatk_frame_cb_t s_snf_obs;   // optional passive observer (Sentinel airspace monitor)
+static void          *s_snf_obs_ctx;
+void nucleo_wifiatk_sniffer_observer(nucleo_wifiatk_frame_cb_t cb, void *ctx) { s_snf_obs = cb; s_snf_obs_ctx = ctx; }
 
 static void snf_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 {
@@ -1216,6 +1219,8 @@ static void snf_cb(void *buf, wifi_promiscuous_pkt_type_t type)
         case 1: s_snf_beacon++; break; case 2: s_snf_probe++; break;
         case 4: s_snf_eapol++;  break; case 5: s_snf_deauth++; break; default: s_snf_data++; break;
     }
+    if (s_snf_obs) s_snf_obs(p, (uint16_t)len, pkt->rx_ctrl.rssi, (uint8_t)pkt->rx_ctrl.channel, s_snf_obs_ctx);
+    if (!s_snf_file) return;                                   // monitor-only (Sentinel): no pcap to enqueue
     snf_item_t it;
     int n = len > SNF_SNAPLEN ? SNF_SNAPLEN : len;
     memcpy(it.buf, p, n); it.len = (uint16_t)n;
@@ -1279,7 +1284,7 @@ static void snf_writer(void *arg)
     vTaskDelete(NULL);
 }
 
-int nucleo_wifiatk_sniffer_start(int mode, int channel)
+static int snf_start(int mode, int channel, bool write_pcap)
 {
     if (s_run || s_bcn_run || s_km_busy || s_snf_run) return -1;
     if (mode < 0 || mode > 4) mode = 0;
@@ -1293,16 +1298,19 @@ int nucleo_wifiatk_sniffer_start(int mode, int channel)
     if (!s_snf_q) return -2;
     xQueueReset(s_snf_q);
 
-    mkdir("/sd/sniffer", 0775);
-    for (int i = 0; i < 1000; i++) {
-        snprintf(s_snf_path, sizeof s_snf_path, "/sd/sniffer/cap-%03d.pcap", i);
-        FILE *t = fopen(s_snf_path, "rb");
-        if (!t) break;                                         // free index
-        fclose(t);
+    s_snf_file = NULL; s_snf_path[0] = 0;
+    if (write_pcap) {                                          // monitor-only mode skips the .pcap
+        mkdir("/sd/sniffer", 0775);
+        for (int i = 0; i < 1000; i++) {
+            snprintf(s_snf_path, sizeof s_snf_path, "/sd/sniffer/cap-%03d.pcap", i);
+            FILE *t = fopen(s_snf_path, "rb");
+            if (!t) break;                                     // free index
+            fclose(t);
+        }
+        s_snf_file = fopen(s_snf_path, "wb");
+        if (!s_snf_file) { s_snf_path[0] = 0; return -3; }
+        snf_write_global_header(s_snf_file);
     }
-    s_snf_file = fopen(s_snf_path, "wb");
-    if (!s_snf_file) { s_snf_path[0] = 0; return -3; }
-    snf_write_global_header(s_snf_file);
 
     nucleo_setup_suspend();
     nucleo_exclusive_enter(NX_NET_APP, NULL);
@@ -1315,7 +1323,7 @@ int nucleo_wifiatk_sniffer_start(int mode, int channel)
     esp_wifi_set_promiscuous_filter(&filt);
     if (esp_wifi_set_promiscuous(true) != ESP_OK) {
         esp_wifi_set_promiscuous_rx_cb(NULL);
-        fclose(s_snf_file); s_snf_file = NULL; s_snf_path[0] = 0;
+        if (s_snf_file) { fclose(s_snf_file); s_snf_file = NULL; } s_snf_path[0] = 0;
         nucleo_setup_apply_network(); nucleo_exclusive_exit();
         return -4;
     }
@@ -1323,12 +1331,15 @@ int nucleo_wifiatk_sniffer_start(int mode, int channel)
     if (xTaskCreate(snf_writer, "wa_sniff", 4096, NULL, 5, &s_snf_task) != pdPASS) {
         s_snf_run = false;
         esp_wifi_set_promiscuous(false); esp_wifi_set_promiscuous_rx_cb(NULL);
-        fclose(s_snf_file); s_snf_file = NULL; s_snf_path[0] = 0;
+        if (s_snf_file) { fclose(s_snf_file); s_snf_file = NULL; } s_snf_path[0] = 0;
         nucleo_setup_apply_network(); nucleo_exclusive_exit();
         return -5;
     }
     return 0;
 }
+
+int  nucleo_wifiatk_sniffer_start(int mode, int channel) { return snf_start(mode, channel, true); }
+int  nucleo_wifiatk_monitor_start(void)                  { return snf_start(0, 0, false); }
 
 void nucleo_wifiatk_sniffer_stop(void)
 {

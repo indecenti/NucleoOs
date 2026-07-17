@@ -122,6 +122,16 @@ unsigned    nucleo_wifiatk_sniffer_data(void);
 unsigned    nucleo_wifiatk_sniffer_eapol(void);     // EAPOL/handshake frames captured (crackable)
 unsigned    nucleo_wifiatk_sniffer_deauth(void);
 
+// ---- Passive airspace monitor (Sentinel) -----------------------------------
+// Same promiscuous capture path, but WITHOUT writing a .pcap (no SD churn) — for a
+// defensive monitor that just watches the air. Register an observer to receive
+// every matched 802.11 frame (runs in the WiFi task; keep it short). The frame
+// pointer is the raw 802.11 header. Pass NULL to detach.
+typedef void (*nucleo_wifiatk_frame_cb_t)(const uint8_t *frame, uint16_t len,
+                                          int8_t rssi, uint8_t channel, void *ctx);
+void        nucleo_wifiatk_sniffer_observer(nucleo_wifiatk_frame_cb_t cb, void *ctx);
+int         nucleo_wifiatk_monitor_start(void);   // promiscuous + channel hop, no pcap
+
 #ifdef __cplusplus
 }
 #endif

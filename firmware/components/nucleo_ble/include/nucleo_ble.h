@@ -40,6 +40,14 @@ void nucleo_ble_boot_reclaim(void);
 bool nucleo_ble_radio_present(void);   // false once boot_reclaim freed the radio (BLE unavailable until enabled + reboot)
 bool nucleo_ble_pref_enabled(void);    // persisted on/off preference (NVS), default OFF
 void nucleo_ble_set_pref(bool on);     // persist the preference; takes effect on the NEXT boot
+// Keep the BLE controller for the NEXT boot ONLY (transient, RTC), without flipping
+// the persisted pref. A BLE app that reboots into a Solo session calls this first so
+// it comes up with BLE, then the boot after (on exit) releases the RAM again.
+void nucleo_ble_keep_next_boot(void);
+// True if THIS boot kept BLE via the one-shot (a dedicated BLE Solo boot) — app_main
+// then skips Wi-Fi bringup so the NimBLE controller has the whole heap. Valid after
+// nucleo_ble_boot_reclaim() has run.
+bool nucleo_ble_kept_once(void);
 
 // Controller + NimBLE host lifecycle. up() returns false if the controller won't init (not enough
 // contiguous heap, or the radio memory was released for RAM). down() is safe to call when already down.
@@ -53,6 +61,14 @@ void nucleo_ble_scan_start(void);
 void nucleo_ble_scan_stop(void);
 int  nucleo_ble_scan_count(void);
 bool nucleo_ble_scan_get(int idx, nucleo_ble_dev_t *out);   // false if idx out of range
+
+// Raw-advertisement observer for DEFENSIVE scanning (Sentinel tracker detect).
+// Invoked on every discovery event with the full adv payload while a scan runs,
+// so a classifier can spot location trackers. Runs in the NimBLE host task —
+// keep the callback short and non-blocking. Pass NULL to detach.
+typedef void (*nucleo_ble_adv_cb_t)(const uint8_t addr[6], uint8_t addr_type,
+                                    int8_t rssi, const uint8_t *adv, uint8_t adv_len, void *ctx);
+void nucleo_ble_set_adv_observer(nucleo_ble_adv_cb_t cb, void *ctx);
 
 // Advertisement spam: rotates payload + a fresh random MAC every ~40 ms (anti-fingerprint).
 void     nucleo_ble_spam_start(nucleo_ble_spam_t target);

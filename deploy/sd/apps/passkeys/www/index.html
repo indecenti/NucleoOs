@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passkeys</title>
+<style>
+  :root { --bg:#0b1020; --card:#141a2e; --line:#243049; --fg:#e8eefc; --mut:#8aa0c8; --acc:#4ea1ff; --good:#7CFC9A; --warn:#ffd166; --bad:#ff5a5a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  .wrap { max-width:640px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; font-weight:600; margin:4px 0 2px; display:flex; align-items:center; gap:8px; }
+  h1 svg { width:22px; height:22px; }
+  .sub { color:var(--mut); font-size:12px; margin-bottom:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 0; }
+  .row + .row { border-top:1px solid var(--line); }
+  .k { color:var(--mut); }
+  .v { font-weight:600; }
+  .pill { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); }
+  .ok { color:var(--good); border-color:#2a6b45; } .no { color:var(--warn); border-color:#6b5a2a; }
+  .hw { color:var(--good); } .swk { color:var(--warn); }
+  button { font:inherit; color:var(--fg); background:#1c2540; border:1px solid var(--line); border-radius:8px; padding:7px 12px; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button.danger:hover { border-color:var(--bad); color:var(--bad); }
+  button.del { padding:4px 9px; font-size:12px; }
+  .cred { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 0; }
+  .cred + .cred { border-top:1px solid var(--line); }
+  .cred .rp { font-weight:600; } .cred .u { color:var(--mut); font-size:12px; }
+  .empty { color:var(--mut); padding:8px 0; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .msg { font-size:12px; margin-top:8px; min-height:16px; }
+  .hint { color:var(--mut); font-size:12px; margin-top:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>
+    <svg viewBox="0 0 24 24" fill="none" stroke="#4ea1ff" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="12" r="5"/><path d="M13 12h8M18 12v4M21 12v3"/></svg>
+    <span id="t-title">Passkeys</span>
+  </h1>
+  <div class="sub" id="t-sub">Manage your NucleoOS FIDO security key</div>
+
+  <div class="card" id="status">
+    <div class="row"><span class="k" id="t-key">Wrapping key</span><span class="v" id="v-key">…</span></div>
+    <div class="row"><span class="k" id="t-pin">On-device PIN</span><span class="v" id="v-pin">…</span></div>
+    <div class="row"><span class="k" id="t-usb">USB host</span><span class="v" id="v-usb">…</span></div>
+    <div class="row"><span class="k" id="t-cnt">Resident passkeys</span><span class="v" id="v-cnt">…</span></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="border:0;padding-top:0"><span class="v" id="t-list">Passkeys</span></div>
+    <div id="creds"><div class="empty" id="t-load">Loading…</div></div>
+  </div>
+
+  <div class="card">
+    <div class="actions">
+      <button id="b-pin">Set / change PIN</button>
+      <button id="b-reset" class="danger">Reset authenticator</button>
+      <button id="b-refresh">Refresh</button>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div class="hint" id="t-hint">The PIN is stored only on the device and never crosses USB. Passkey private keys never leave the Cardputer.</div>
+  </div>
+</div>
+
+<script>
+const L = (localStorage.getItem('nucleo.lang') || (navigator.language||'en').slice(0,2)) === 'it' ? 'it' : 'en';
+const T = {
+  en:{title:'Passkeys',sub:'Manage your NucleoOS FIDO security key',key:'Wrapping key',pin:'On-device PIN',usb:'USB host',cnt:'Resident passkeys',
+      list:'Passkeys',load:'Loading…',empty:'No passkeys yet.',setpin:'Set / change PIN',reset:'Reset authenticator',refresh:'Refresh',del:'Delete',
+      hw:'eFuse (hardware)',sw:'NVS (software)',set:'set',notset:'not set',conn:'connected',wait:'not connected',
+      hint:'The PIN is stored only on the device and never crosses USB. Passkey private keys never leave the Cardputer.',
+      askpin:'New PIN (4-63 characters):',pinok:'PIN updated.',pinbad:'PIN not accepted (length 4-63).',
+      askreset:'Erase ALL passkeys and the PIN? This cannot be undone.',resetok:'Authenticator reset.',delok:'Passkey deleted.',err:'Request failed.',tries:'tries left'},
+  it:{title:'Passkeys',sub:'Gestisci la security key FIDO di NucleoOS',key:'Chiave di wrapping',pin:'PIN on-device',usb:'Host USB',cnt:'Passkey residenti',
+      list:'Passkey',load:'Caricamento…',empty:'Nessuna passkey.',setpin:'Imposta / cambia PIN',reset:'Reset autenticatore',refresh:'Aggiorna',del:'Cancella',
+      hw:'eFuse (hardware)',sw:'NVS (software)',set:'impostato',notset:'non impostato',conn:'collegato',wait:'non collegato',
+      hint:'Il PIN è salvato solo sul dispositivo e non passa mai da USB. Le chiavi private delle passkey non lasciano mai il Cardputer.',
+      askpin:'Nuovo PIN (4-63 caratteri):',pinok:'PIN aggiornato.',pinbad:'PIN non accettato (lunghezza 4-63).',
+      askreset:'Cancellare TUTTE le passkey e il PIN? Operazione irreversibile.',resetok:'Autenticatore resettato.',delok:'Passkey cancellata.',err:'Richiesta fallita.',tries:'tentativi'}
+}[L];
+
+const $ = id => document.getElementById(id);
+function applyStaticText(){
+  $('t-title').textContent=T.title; $('t-sub').textContent=T.sub; $('t-key').textContent=T.key;
+  $('t-pin').textContent=T.pin; $('t-usb').textContent=T.usb; $('t-cnt').textContent=T.cnt;
+  $('t-list').textContent=T.list; $('t-load').textContent=T.load; $('t-hint').textContent=T.hint;
+  $('b-pin').textContent=T.setpin; $('b-reset').textContent=T.reset; $('b-refresh').textContent=T.refresh;
+  document.documentElement.lang=L;
+}
+async function api(path, opts){ const r = await fetch(path, Object.assign({credentials:'same-origin'}, opts)); return r.json(); }
+function msg(s, cls){ const m=$('msg'); m.textContent=s; m.style.color = cls==='bad' ? 'var(--bad)' : cls==='good' ? 'var(--good)' : 'var(--mut)'; }
+
+async function refresh(){
+  try {
+    const s = await api('/api/fido/status');
+    $('v-key').textContent = s.keyHardware ? T.hw : T.sw;
+    $('v-key').className = 'v ' + (s.keyHardware ? 'hw' : 'swk');
+    $('v-pin').textContent = s.pinSet ? (T.set + ' · ' + s.pinRetries + ' ' + T.tries) : T.notset;
+    $('v-usb').textContent = s.connected ? T.conn : T.wait;
+    $('v-cnt').textContent = s.credCount;
+    const creds = await api('/api/fido/creds');
+    const box = $('creds'); box.innerHTML = '';
+    if (!Array.isArray(creds) || !creds.length) { box.innerHTML = '<div class="empty">'+T.empty+'</div>'; return; }
+    for (const c of creds){
+      const row = document.createElement('div'); row.className='cred';
+      const left = document.createElement('div');
+      left.innerHTML = '<div class="rp"></div><div class="u"></div>';
+      left.querySelector('.rp').textContent = c.rp || '?';
+      left.querySelector('.u').textContent = (c.user || '') + '  ·  #' + c.signCount;
+      const b = document.createElement('button'); b.className='del danger'; b.textContent=T.del;
+      b.onclick = async () => { const r = await api('/api/fido/cred/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:c.index})}); msg(r.ok?T.delok:T.err, r.ok?'good':'bad'); refresh(); };
+      row.append(left, b); box.appendChild(row);
+    }
+  } catch(e){ msg(T.err,'bad'); }
+}
+
+$('b-refresh').onclick = () => { msg(''); refresh(); };
+$('b-pin').onclick = async () => {
+  const pin = prompt(T.askpin); if (pin == null) return;
+  const r = await api('/api/fido/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
+  msg(r.ok?T.pinok:T.pinbad, r.ok?'good':'bad'); refresh();
+};
+$('b-reset').onclick = async () => {
+  if (!confirm(T.askreset)) return;
+  const r = await api('/api/fido/reset',{method:'POST'});
+  msg(r.ok?T.resetok:T.err, r.ok?'good':'bad'); refresh();
+};
+
+applyStaticText();
+refresh();
+</script>
+</body>
+</html>
