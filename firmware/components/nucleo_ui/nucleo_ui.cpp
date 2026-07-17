@@ -136,10 +136,31 @@ static void header(M5Canvas *canvas, const char *title)
 
 static void hint(M5Canvas *canvas, const char *h)
 {
-    canvas->setTextColor(MUT, BG); 
+    canvas->setTextColor(MUT, BG);
     canvas->setTextSize(1);
-    canvas->setCursor(6, H - 12); 
+    canvas->setCursor(6, H - 12);
     canvas->print(h);
+}
+
+// Draw the body text of a message/home screen with READABLE, self-fitting fonts. With a handful of
+// lines (<=4) each is drawn as large as it fits (size 2) so short prompts and confirmations are easy
+// to read on the 240x135 panel; any line too wide for size 2 (URLs, long technical strings) auto-drops
+// to size 1 so it is never clipped. Dense screens (>4 lines) stay compact at size 1 to avoid overflow.
+// An empty string is a vertical spacer. Caller sets the text colour; header()/hint() own the chrome.
+static void draw_body(M5Canvas &canvas, const char *const *lines, int n)
+{
+    bool big = (n <= 4);
+    int y = 32;
+    for (int i = 0; i < n; i++) {
+        const char *ln = lines[i] ? lines[i] : "";
+        if (!ln[0]) { y += big ? 10 : 8; continue; }        // blank line = spacer
+        int sz = 1;
+        if (big) { canvas.setTextSize(2); if (canvas.textWidth(ln) <= W - 16) sz = 2; }
+        canvas.setTextSize(sz);
+        canvas.setCursor(8, y);
+        canvas.print(ln);
+        y += (sz == 2) ? 20 : 13;
+    }
 }
 
 extern "C" void nucleo_ui_message(const char *title, const char *const *lines, int n)
@@ -152,13 +173,7 @@ extern "C" void nucleo_ui_message(const char *title, const char *const *lines, i
     for (;;) {
         header(&canvas, title);
         canvas.setTextColor(FG, BG);
-        canvas.setTextSize(1);
-        int y = 34;
-        for (int i = 0; i < n; i++) { 
-            canvas.setCursor(8, y); 
-            canvas.print(lines[i]); 
-            y += 13; 
-        }
+        draw_body(canvas, lines, n);
         hint(&canvas, "[enter] continue");
         canvas.pushSprite(0, 0);
 
@@ -179,13 +194,7 @@ extern "C" void nucleo_ui_home(const char *title, const char *const *lines, int 
     M5Canvas &canvas = shared ? *shared : local; // a transient modal never needs a SECOND 32 KB canvas
     header(&canvas, title);
     canvas.setTextColor(FG, BG);
-    canvas.setTextSize(1);
-    int y = 34;
-    for (int i = 0; i < n; i++) { 
-        canvas.setCursor(8, y); 
-        canvas.print(lines[i]); 
-        y += 13; 
-    }
+    draw_body(canvas, lines, n);
     canvas.pushSprite(0, 0);
     if (&canvas == &local) local.deleteSprite();   // free only what WE allocated; the shared buffer persists
 }

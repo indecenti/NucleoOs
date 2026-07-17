@@ -19,7 +19,7 @@
   <!-- Boot Splash Screen: full-screen animated atom (Nucleo = nucleus), the web twin of the
        on-device firmware boot splash. Inline + element styles so it paints correctly DURING parse,
        before style.css/shell.js load. The IIFE stops itself when shell.js adds .hidden (saves CPU). -->
-  <div id="boot-screen" class="boot-screen" role="status" aria-label="Avvio di NucleoOS in corso"
+  <div id="boot-screen" class="boot-screen" role="status" aria-label="Starting NucleoOS"
        style="position:fixed;inset:0;z-index:999999;overflow:hidden;background:radial-gradient(circle at 50% 43%,#0a1430 0%,#05070f 55%,#02030a 100%);">
     <canvas id="boot-atom" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;display:block;"></canvas>
   </div>

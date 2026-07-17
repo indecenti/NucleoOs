@@ -21,6 +21,7 @@
 #include "freertos/semphr.h"
 #include <time.h>
 #include "nucleo_theme.h"
+#include "nucleo_i18n.h"   // first-run wizard language step + bilingual (TR) wizard strings
 #include "esp_heap_caps.h"
 
 static const char *TAG = "setup";
@@ -62,6 +63,10 @@ static char s_ip[16];   // STA IP once connected (empty if not)
 static char s_mode[4] = "ap";          // "sta" | "ap"
 static char s_ssid[33];
 static char s_name[24] = "nucleo-01";
+// "Setup done" flag. It is set true ONLY when the first-run wizard finishes — NOT as a side effect of
+// any save_config() (e.g. the AP starts and mints its per-device credentials at boot, before the wizard
+// even runs, and persisting THOSE must not mark setup complete or the wizard would be skipped forever).
+static bool s_complete = false;
 // Hotspot credentials are runtime-editable (persisted in setup.json). Empty = not yet initialised;
 // ensure_default_ap_creds() fills a per-device SSID + a RANDOM WPA2 password on first use. An empty
 // password after that means an OPEN AP; otherwise WPA2-PSK (the driver requires 8..63 chars).
@@ -307,6 +312,7 @@ static bool load_config(void)
     if (cJSON_IsString(as) && as->valuestring[0]) strncpy(s_ap_ssid, as->valuestring, sizeof(s_ap_ssid) - 1);
     if (cJSON_IsString(ap)) strncpy(s_ap_pass, ap->valuestring, sizeof(s_ap_pass) - 1);
     bool complete = cJSON_IsTrue(c);
+    s_complete = complete;                    // reflect the persisted flag so later save_config()s preserve it
     cJSON_Delete(r);
     // Recovered from NVS or the SD backup (e.g. /cfg absent on a launcher install, or the legacy
     // SD-only layout): rewrite everywhere so every available tier holds a fresh copy next boot.
@@ -323,7 +329,7 @@ static void save_config(void)
     // config resets. Then fan out best-effort (no early return: a dead /cfg must not stop NVS + SD).
     cJSON *r = cJSON_CreateObject();
     if (!r) return;
-    cJSON_AddBoolToObject(r,   "complete",    true);
+    cJSON_AddBoolToObject(r,   "complete",    s_complete);   // true only after the wizard finishes (see s_complete)
     cJSON_AddStringToObject(r, "mode",        s_mode);
     cJSON_AddStringToObject(r, "ssid",        s_ssid);
     cJSON_AddStringToObject(r, "device_name", s_name);
@@ -607,13 +613,18 @@ int nucleo_setup_scan(void)
 {
     wifi_ensure();
     if (s_scan_lock) xSemaphoreTake(s_scan_lock, portMAX_DELAY);   // serialize native-app + web scans
+    // Scanning needs STA up, so we flip to APSTA. If we entered in pure-AP mode (intentional hotspot),
+    // restore it on every exit: otherwise the STA radio stays powered after a one-off scan (wasted
+    // battery — a first-class resource here). Callers that go on to join a net (connect_sta) re-set the
+    // mode themselves, so the restore never fights them.
+    wifi_mode_t prev = WIFI_MODE_NULL; esp_wifi_get_mode(&prev);
     esp_wifi_set_mode(WIFI_MODE_APSTA);          // need STA up to scan; keep the AP for the web UI
     esp_wifi_scan_stop();
-    if (esp_wifi_scan_start(NULL, true) != ESP_OK) { s_wscan_n = 0; if (s_scan_lock) xSemaphoreGive(s_scan_lock); return 0; }
+    if (esp_wifi_scan_start(NULL, true) != ESP_OK) { s_wscan_n = 0; if (prev == WIFI_MODE_AP) esp_wifi_set_mode(WIFI_MODE_AP); if (s_scan_lock) xSemaphoreGive(s_scan_lock); return 0; }
     uint16_t num = 0; esp_wifi_scan_get_ap_num(&num);
     if (num > 40) num = 40;
     wifi_ap_record_t *recs = malloc((num ? num : 1) * sizeof(wifi_ap_record_t));
-    if (!recs) { s_wscan_n = 0; if (s_scan_lock) xSemaphoreGive(s_scan_lock); return 0; }
+    if (!recs) { s_wscan_n = 0; if (prev == WIFI_MODE_AP) esp_wifi_set_mode(WIFI_MODE_AP); if (s_scan_lock) xSemaphoreGive(s_scan_lock); return 0; }
     esp_wifi_scan_get_ap_records(&num, recs);
     s_wscan_n = 0;
     for (int i = 0; i < num && s_wscan_n < WSCAN_MAX; i++) {
@@ -635,6 +646,7 @@ int nucleo_setup_scan(void)
         while (j > 0 && s_wscan[j - 1].rssi < t.rssi) { s_wscan[j] = s_wscan[j - 1]; j--; }
         s_wscan[j] = t;
     }
+    if (prev == WIFI_MODE_AP) esp_wifi_set_mode(WIFI_MODE_AP);   // pure-AP entry: don't leave STA powered
     if (s_scan_lock) xSemaphoreGive(s_scan_lock);
     return s_wscan_n;
 }
@@ -750,6 +762,18 @@ static void net_trace(const char *what, const char *ip)
     fclose(f);
 }
 
+// True iff a client is currently associated with our soft-AP. A full-radio scan (channel hop) while
+// someone is connected deauthenticates them AND aborts their in-flight WPA2 4-way handshake, which the
+// client reports as a WRONG PASSWORD ("authentication required" / "incorrect password"). The supervisor
+// checks this before scanning so an active hotspot user is never kicked to go hunting for a saved net.
+static bool ap_has_clients(void)
+{
+    wifi_mode_t m;
+    if (esp_wifi_get_mode(&m) != ESP_OK || (m != WIFI_MODE_AP && m != WIFI_MODE_APSTA)) return false;
+    wifi_sta_list_t list;
+    return esp_wifi_ap_get_sta_list(&list) == ESP_OK && list.num > 0;
+}
+
 // Background Wi-Fi supervisor. While the user intends a client link (s_auto) but we have no IP,
 // periodically rescan and (re)join the best known network — and keep the device reachable on its
 // own AP between retries. The driver's on_wifi_event handles brief drops to the SAME AP; this
@@ -782,6 +806,10 @@ static void wifi_supervisor(void *arg)
             backoff = pdMS_TO_TICKS(8000);
             continue;
         }
+        // Someone is actively using our fallback hotspot: do NOT scan (it would deauth them and break
+        // their WPA2 handshake -> "incorrect password"). Defer the STA retry until they disconnect; the
+        // driver keeps the AP alive in the meantime, and retries resume automatically once they leave.
+        if (ap_has_clients()) { next = xTaskGetTickCount() + pdMS_TO_TICKS(8000); continue; }
         if ((int32_t)(xTaskGetTickCount() - next) < 0) continue;
         if (connect_best_known()) {
             backoff = pdMS_TO_TICKS(8000);
@@ -880,6 +908,12 @@ void        nucleo_setup_set_device_name(const char *n) { if (n && n[0]) { strnc
 const char *nucleo_setup_ap_ssid(void)           { return s_ap_ssid; }
 const char *nucleo_setup_ap_pass(void)           { return s_ap_pass; }
 bool        nucleo_setup_ap_secure(void)         { return ap_secure(); }
+// The hotspot is the user's DELIBERATE choice only when we are NOT auto-joining a client link. During a
+// STA-intended boot with a saved network out of range, apply_network() runs the AP as a reachable
+// fallback and sets s_mode="ap" in RAM (s_auto stays true) — so a raw s_mode=="ap" test makes the
+// Settings toggle read "ON" and bounce back to "ON" when tapped off. The toggle must read THIS instead,
+// so it honestly shows OFF while the device is really trying to be a client.
+bool        nucleo_setup_ap_intended(void)       { return !s_auto && !strcmp(s_mode, "ap"); }
 void nucleo_setup_persist_status(nucleo_persist_status_t *out)
 {
     if (!out) return;
@@ -995,21 +1029,91 @@ static void build_info(char *l1, char *l2, char *l3)
     snprintf(l3, 52, "Win app: %s/downloads/", base);
 }
 
+// ---- first-run wizard steps ------------------------------------------------
+
+// Step 1 — LANGUAGE, the very first thing on a fresh device. Applied INSTANTLY (nucleo_i18n_set_en),
+// so every following wizard screen — and the whole OS — is already painted in the chosen language.
+// English is the default (also on back/dismiss), matching the OS-wide English-first default.
+static void wizard_language(void)
+{
+    const char *opts[] = { "English", "Italiano" };
+    int m = nucleo_ui_menu("Language / Lingua", opts, 2);
+    nucleo_i18n_set_en(m != 1);   // index 1 = Italiano; anything else (incl. back) = English
+}
+
+// Step 3 — NETWORK, and it is BYPASSABLE. "Connect to Wi-Fi" runs the scan/join; "Skip" (and any
+// join failure / no networks / back) falls through to the Access Point so the device is ALWAYS
+// reachable, then tells the user exactly how to connect (SSID + password + URL).
+static void wizard_network(void)
+{
+    const char *opts[] = { TR("Connetti a una rete Wi-Fi", "Connect to a Wi-Fi network"),
+                           TR("Salta - usa un Access Point", "Skip - use an Access Point") };
+    int m = nucleo_ui_menu(TR("Rete", "Network"), opts, 2);
+    if (m == 0) {
+        const char *scan_msg[] = { TR("Ricerca reti Wi-Fi", "Scanning for Wi-Fi"), TR("Attendere...", "Please wait...") };
+        nucleo_ui_home(TR("Rete", "Network"), scan_msg, 2);
+        char ssids[20][33];
+        int n = scan_networks(ssids, 20);
+        if (n > 0) {
+            const char *items[20];
+            for (int i = 0; i < n; i++) items[i] = ssids[i];
+            int pick = nucleo_ui_menu(TR("Scegli la rete", "Choose Wi-Fi"), items, n);
+            if (pick >= 0) {
+                strncpy(s_ssid, ssids[pick], sizeof(s_ssid) - 1); s_ssid[sizeof(s_ssid) - 1] = 0;
+                char pass[65] = {0};
+                nucleo_ui_input(TR("Password Wi-Fi", "Wi-Fi password"), pass, sizeof(pass), 1);
+                const char *wait[] = { TR("Connessione a:", "Connecting to:"), s_ssid };
+                nucleo_ui_home(TR("Rete", "Network"), wait, 2);
+                connect_sta(s_ssid, pass);                 // remembers the net on success
+                if (s_ip[0]) {
+                    s_auto = true;
+                    strncpy(s_mode, "sta", sizeof(s_mode) - 1);
+                    save_config();
+                    char u[40]; snprintf(u, sizeof u, "http://%s/", s_ip);
+                    const char *ok[] = { TR("Connesso!", "Connected!"), s_ssid, TR("Apri nel browser:", "Open in your browser:"), u };
+                    nucleo_ui_message(TR("Rete", "Network"), ok, 4);
+                    return;                                // STA up — network step done
+                }
+                const char *fail[] = { TR("Connessione fallita.", "Could not connect."), TR("Avvio Access Point.", "Starting Access Point.") };
+                nucleo_ui_message(TR("Rete", "Network"), fail, 2);   // -> fall through to AP
+            }
+            // pick < 0 (back): fall through to AP
+        } else {
+            const char *none[] = { TR("Nessuna rete trovata.", "No networks found."), TR("Avvio Access Point.", "Starting Access Point.") };
+            nucleo_ui_message(TR("Rete", "Network"), none, 2);       // -> fall through to AP
+        }
+    }
+    // Skip, or Wi-Fi not joined: bring the Access Point up and INFORM the user how to reach the device.
+    s_auto = false;
+    strncpy(s_mode, "ap", sizeof(s_mode) - 1);
+    start_ap();                                            // mints the per-device SSID + random password
+    save_config();
+    char ssidline[56]; snprintf(ssidline, sizeof ssidline, "Wi-Fi: %s", s_ap_ssid);
+    char passline[80]; snprintf(passline, sizeof passline, "%s %s", TR("Password:", "Password:"), ap_secure() ? s_ap_pass : TR("(aperta)", "(open)"));
+    const char *info[] = { TR("Collega PC/telefono al Wi-Fi:", "Connect your PC/phone to Wi-Fi:"), ssidline, passline, "http://192.168.4.1/" };
+    nucleo_ui_message(TR("Access Point attivo", "Access Point ready"), info, 4);
+}
+
 void nucleo_setup_run(void)
 {
-    const char *welcome[] = { "Welcome to NucleoOS.", "", "Choose how to connect:", "Press Enter to begin." };
-    nucleo_ui_message("NucleoOS - Setup", welcome, 4);
+    wizard_language();                                     // step 1: language first, applied live
 
-    nucleo_setup_choose_network();
+    const char *welcome[] = { TR("Benvenuto in NucleoOS.", "Welcome to NucleoOS."), "",
+                              TR("Configuriamo il dispositivo.", "Let's set up your device."),
+                              TR("Premi Invio per iniziare.", "Press Enter to begin.") };
+    nucleo_ui_message("NucleoOS - Setup", welcome, 4);     // step 2: welcome, in the chosen language
 
-    nucleo_ui_input("Device name", s_name, sizeof(s_name), 0);
+    wizard_network();                                      // step 3: Wi-Fi (bypassable) / AP fallback
+
+    nucleo_ui_input(TR("Nome dispositivo", "Device name"), s_name, sizeof(s_name), 0);   // step 4: name
     if (!s_name[0]) strncpy(s_name, "nucleo-01", sizeof(s_name) - 1);
-    save_config();
+    s_complete = true;                                     // the wizard finished -> mark setup complete NOW
+    save_config();                                         // persists complete:true so the wizard never runs again
 
     char l1[48], l2[48], l3[52];
     build_info(l1, l2, l3);
-    const char *done[] = { "Setup complete!", l1, l2, l3 };
-    nucleo_ui_message("All set", done, 4);
+    const char *done[] = { TR("Configurazione completata!", "Setup complete!"), l1, l2, l3 };
+    nucleo_ui_message(TR("Tutto pronto", "All set"), done, 4);   // step 5: done
 }
 
 // The launcher keeps the app foregrounded until Esc; on_enter just sets the hint and the

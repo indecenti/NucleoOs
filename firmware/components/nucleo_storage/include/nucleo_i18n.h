@@ -12,7 +12,8 @@ extern "C" {
 // The single source of truth is settings.json -> ui.language ("it" | "en"), the same key the web
 // shell uses, so the two surfaces agree across a reboot.
 
-// Read the saved language from settings.json once at boot (call after the SD is mounted). Default IT.
+// Read the saved language from settings.json once at boot (call after the SD is mounted). Default EN
+// (a fresh device with no ui.language yet boots English; the first-run wizard asks the user to pick).
 void nucleo_i18n_load(void);
 
 // Hot accessor: true when the system language is English. Native UIs call this while painting.

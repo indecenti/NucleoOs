@@ -2758,7 +2758,7 @@ async function loadOsDialogDir(path) {
     osDialogCrumbs.appendChild(span);
   }
   
-  osDialogList.innerHTML = '<div class="os-dialog-msg">Caricamento in corso...</div>';
+  osDialogList.innerHTML = '<div class="os-dialog-msg">Loading…</div>';
   osDialogFiles = [];
   try {
     const r = await fetch('/api/fs/list?path=' + encodeURIComponent(path));
