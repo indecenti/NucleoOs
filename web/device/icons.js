@@ -310,6 +310,26 @@ export function drawIcon(g, id, cx, cy, s) {
       g.frr(cx - s * 0.4, cy + s * 0.02, s * 0.8, s * 0.56, 2, g.col); g.el(cx, cy - s * 0.05, s * 0.26, s * 0.26, T * 0.6, g.col);
       break;
 
+    case 'sentinel':                                 // watching shield: shield + eye cut-out
+      g.frr(cx - s, cy - s, 2 * s, s, s * 0.32);
+      g.tri(cx - s, cy - s * 0.5, cx + s, cy - s * 0.5, cx, cy + s);
+      g.el(cx, cy - s * 0.12, s * 0.46, s * 0.30, T * 0.7, g.bg);
+      g.fc(cx, cy - s * 0.12, T * 0.75, g.bg);
+      break;
+
+    case 'fido':                                     // key: ring bow + shaft + two teeth
+      g.fc(cx - s * 0.45, cy, s * 0.52); g.fc(cx - s * 0.45, cy, s * 0.52 - T, g.bg);
+      g.bx(cx - s * 0.02, cy - T * 0.45, s * 0.98, T * 0.9);
+      g.bx(cx + s * 0.58, cy, T * 0.8, s * 0.5); g.bx(cx + s * 0.86, cy, T * 0.8, s * 0.32);
+      break;
+
+    case 'airspace':                                 // concentric signal rings + centre dot
+      g.el(cx, cy, s * 0.95, s * 0.95, T * 0.7);
+      g.el(cx, cy, s * 0.62, s * 0.62, T * 0.7);
+      g.el(cx, cy, s * 0.30, s * 0.30, T * 0.7);
+      g.fc(cx, cy, T * 0.9);
+      break;
+
     case 'Security':
       g.frr(cx - s, cy - s, 2 * s, s, s * 0.32);
       g.tri(cx - s, cy - s * 0.5, cx + s, cy - s * 0.5, cx, cy + s);
@@ -450,6 +470,6 @@ export const ICON_IDS = [
   'clock', 'anima', 'calc', 'files', 'calendar', 'notepad', 'usb', 'usbkbd', 'music', 'video', 'Media',
   'photos', 'recorder', 'micspec', 'voicelab', 'info', 'Connect', 'sysmon', 'System', 'radio', 'remote',
   'ir', 'qr', 'notify', 'torch', 'theme', 'wifi', 'link', 'swarm', 'ssh', 'ethernet', 'beacon', 'wifiatk',
-  'evilportal', 'Security', 'Games', 'reactor', 'pong', 'tanks', 'stelle', 'giardino', 'slots', 'Tools', 'Office',
-  'device', 'poker',
+  'evilportal', 'sentinel', 'fido', 'airspace', 'Security', 'Games', 'reactor', 'pong', 'tanks', 'stelle',
+  'giardino', 'slots', 'Tools', 'Office', 'device', 'poker',
 ];

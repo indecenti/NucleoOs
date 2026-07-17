@@ -472,6 +472,24 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
         // a lightning bolt — keystroke injection
         ITR(cx - s * 0.30f, cy - s, cx + s * 0.40f, cy - s * 0.2f, cx - s * 0.10f, cy - s * 0.2f, col);
         ITR(cx + s * 0.30f, cy + s, cx - s * 0.40f, cy + s * 0.2f, cx + s * 0.10f, cy + s * 0.2f, col);
+    } else if (!strcmp(id, "sentinel")) {
+        // a watching shield — defensive tracker detection (a shield with an eye)
+        IRR(cx - s, cy - s, 2 * s, s, s * 0.32f, col);                                   // shield shoulders
+        ITR(cx - s, cy - s * 0.5f, cx + s, cy - s * 0.5f, cx, cy + s, col);              // shield point
+        IEL(cx, cy - s * 0.12f, s * 0.46f, s * 0.30f, bg);                              // eye outline (punched out)
+        IFC(cx, cy - s * 0.12f, Tk * 0.75f, bg);                                        // pupil
+    } else if (!strcmp(id, "fido")) {
+        // a key — the security key / passkey
+        IFC(cx - s * 0.45f, cy, s * 0.52f, col); IFC(cx - s * 0.45f, cy, s * 0.52f - Tk, bg);  // bow (ring)
+        IBX(cx - s * 0.02f, cy - Tk * 0.45f, s * 0.98f, Tk * 0.9f, col);                 // shaft
+        IBX(cx + s * 0.58f, cy, Tk * 0.8f, s * 0.5f, col);                              // tooth 1
+        IBX(cx + s * 0.86f, cy, Tk * 0.8f, s * 0.32f, col);                             // tooth 2
+    } else if (!strcmp(id, "airspace")) {
+        // concentric signal rings + a centre dot — passively watching the air
+        IEL(cx, cy, s * 0.95f, s * 0.95f, col);
+        IEL(cx, cy, s * 0.62f, s * 0.62f, col);
+        IEL(cx, cy, s * 0.30f, s * 0.30f, col);
+        IFC(cx, cy, Tk * 0.9f, col);
     } else if (!strcmp(id, "Security")) {
         IRR(cx - s, cy - s, 2 * s, s, s * 0.32f, col);
         ITR(cx - s, cy - s * 0.5f, cx + s, cy - s * 0.5f, cx, cy + s, col);

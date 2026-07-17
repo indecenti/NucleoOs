@@ -245,6 +245,18 @@
     .wp-item:hover{transform:scale(1.04)} .wp-item.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
     .wp-item .wp-name{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;
       padding:3px 6px;text-align:center;border-radius:0 0 8px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .wp-type{margin-bottom:12px}
+    .wp-pane{margin-top:4px}
+    .wp-fit-row{margin-top:12px}
+    .wp-fit-row .lr-label{margin-bottom:6px}
+    .wp-tiles{display:flex;flex-wrap:wrap;gap:10px}
+    .wp-tile{width:104px;height:64px;border-radius:10px;border:2px solid transparent;cursor:pointer;
+      transition:.15s;box-shadow:0 3px 10px rgba(0,0,0,0.1);background-size:cover;background-position:center}
+    .wp-tile:hover{transform:scale(1.04)} .wp-tile.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+    .wp-actions{margin-top:14px}
+    .wp-reset{font:600 12.5px system-ui;color:var(--ink);background:var(--panel2);border:1px solid var(--line);
+      border-radius:9px;padding:8px 14px;cursor:pointer;transition:.12s}
+    .wp-reset:hover{border-color:var(--accent);color:var(--accent)}
 
     .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .info-cell{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
@@ -401,7 +413,25 @@
           <div class="lr-preview" id="region-preview"></div>
           <div class="lr-status" id="lang-status"></div></div>
         <div class="sect"><h2><span data-t="wallpaper">Sfondo</span> <span class="badge live">Live</span></h2>
-          <div id="wp-container" class="wp-gallery"><div class="hint" style="padding:10px" data-t="wpLoadHint">Apri questa scheda per caricare gli sfondi…</div></div></div>
+          <div class="seg-row wp-type" id="wp-type">
+            <div class="seg-item" data-wptype="gradient" data-t="wpTypeGradient">Gradiente</div>
+            <div class="seg-item" data-wptype="color" data-t="wpTypeColor">Tinta unita</div>
+            <div class="seg-item" data-wptype="image" data-t="wpTypeImage">Immagine</div>
+          </div>
+          <div id="wp-pane-gradient" class="wp-pane"><div id="wp-gradients" class="wp-tiles"></div></div>
+          <div id="wp-pane-color" class="wp-pane" hidden><div id="wp-colors" class="wp-tiles"></div></div>
+          <div id="wp-pane-image" class="wp-pane" hidden>
+            <div id="wp-container" class="wp-gallery"><div class="hint" style="padding:10px" data-t="wpLoadHint">Apri questa scheda per caricare gli sfondi…</div></div>
+            <div class="wp-fit-row"><div class="lr-label" data-t="wpFit">Adattamento</div>
+              <div class="seg-row" id="wp-fit">
+                <div class="seg-item" data-wpfit="cover" data-t="wpFitCover">Riempi</div>
+                <div class="seg-item" data-wpfit="contain" data-t="wpFitContain">Adatta</div>
+                <div class="seg-item" data-wpfit="center" data-t="wpFitCenter">Centra</div>
+                <div class="seg-item" data-wpfit="tile" data-t="wpFitTile">Ripeti</div>
+              </div></div>
+          </div>
+          <div class="wp-actions"><button class="wp-reset" id="wp-reset" data-t="wpReset">Ripristina predefinito</button></div>
+        </div>
       </section>
 
       <!-- ═══════════ NETWORK ═══════════ -->
@@ -1053,22 +1083,95 @@ I18N.init('core', { observe: false, apply: false }).then(() => {
   renderLangRegion();
 });
 
-async function loadWallpapers() {
-  const container = $('wp-container'); let activeWp = '';
-  try { const uiR = await fetch('/api/fs/read?path=/system/config/ui-state.json'); if (uiR.ok) activeWp = (await uiR.json()).wallpaper || ''; } catch {}
+// ═══════════ wallpaper: structured backgrounds (gradient / colour / image+fit), live ═══════════
+// Mirrors the shell's descriptor model. Picking anything posts `set-wallpaper` to the shell, which
+// applies it live and persists it to ui-state.json (the single source of truth for the background —
+// Settings deliberately does NOT write it into settings.json). Gradients/colours are pure CSS, so the
+// desktop stays correct offline / in WASM. WP_DEFAULT MUST match DEFAULT_WALLPAPER in web/shell/shell.js.
+const WP_DEFAULT = { type: 'gradient', gradient: 'linear-gradient(135deg, #0b1533 0%, #0f2350 50%, #16346a 100%)' };
+const WP_GRADIENTS = [
+  WP_DEFAULT.gradient,
+  'linear-gradient(135deg, #1a1130 0%, #3a1c5e 55%, #6d2b8f 100%)',
+  'linear-gradient(135deg, #05231f 0%, #0c4a3e 55%, #12836a 100%)',
+  'linear-gradient(135deg, #2a1206 0%, #6e2b12 50%, #c25a1e 100%)',
+  'linear-gradient(135deg, #0a0e14 0%, #1b2430 55%, #2e3a4a 100%)',
+  'linear-gradient(160deg, #0b2a3a 0%, #124e63 45%, #1b7f8f 100%)',
+];
+const WP_COLORS = ['#0a1020', '#0e1830', '#12233f', '#1b1030', '#0f1a14', '#241a2e', '#101318'];
+let wpModel = { ...WP_DEFAULT };   // the applied descriptor
+let wpView = 'gradient';           // which pane is on screen (may differ from the applied type while browsing)
+let wpWired = false;
+
+function wpNormalize(w) {
+  if (typeof w === 'string' && w) return { type: 'image', path: w, fit: 'cover' };
+  if (w && typeof w === 'object') {
+    if (w.type === 'gradient' && w.gradient) return { type: 'gradient', gradient: String(w.gradient) };
+    if (w.type === 'color' && w.color) return { type: 'color', color: String(w.color) };
+    if (w.type === 'image' && w.path) return { type: 'image', path: String(w.path), fit: ['cover', 'contain', 'center', 'tile'].includes(w.fit) ? w.fit : 'cover' };
+  }
+  return { ...WP_DEFAULT };
+}
+function wpApply() { try { window.parent.postMessage({ type: 'set-wallpaper', wallpaper: wpModel }, '*'); } catch {} }
+function wpShowPane() {
+  for (const t of ['gradient', 'color', 'image']) { const pane = $('wp-pane-' + t); if (pane) pane.hidden = (t !== wpView); }
+  $$('#wp-type .seg-item').forEach((el) => el.classList.toggle('active', el.dataset.wptype === wpView));
+}
+function wpMarkActive() {
+  $$('#wp-gradients .wp-tile').forEach((el) => el.classList.toggle('active', wpModel.type === 'gradient' && el.dataset.grad === wpModel.gradient));
+  $$('#wp-colors .wp-tile').forEach((el) => el.classList.toggle('active', wpModel.type === 'color' && el.dataset.color === wpModel.color));
+  $$('#wp-container .wp-item').forEach((el) => el.classList.toggle('active', wpModel.type === 'image' && el.dataset.path === wpModel.path));
+  $$('#wp-fit .seg-item').forEach((el) => el.classList.toggle('active', el.dataset.wpfit === (wpModel.fit || 'cover')));
+}
+function wpRenderPresets() {
+  const g = $('wp-gradients');
+  if (g && !g.childElementCount) for (const grad of WP_GRADIENTS) {
+    const el = document.createElement('div'); el.className = 'wp-tile'; el.dataset.grad = grad; el.style.backgroundImage = grad;
+    el.addEventListener('click', () => { wpModel = { type: 'gradient', gradient: grad }; wpApply(); wpMarkActive(); });
+    g.appendChild(el);
+  }
+  const c = $('wp-colors');
+  if (c && !c.childElementCount) for (const col of WP_COLORS) {
+    const el = document.createElement('div'); el.className = 'wp-tile'; el.dataset.color = col; el.style.background = col;
+    el.addEventListener('click', () => { wpModel = { type: 'color', color: col }; wpApply(); wpMarkActive(); });
+    c.appendChild(el);
+  }
+}
+async function wpLoadGallery() {
+  const container = $('wp-container'); if (!container) return;
   try {
-    const r = await fetch('/api/fs/list?path=/data/Pictures');
+    const r = await fetch('/api/fs/list?path=/data/Pictures', { cache: 'no-store' });
     if (!r.ok) { container.innerHTML = `<div class="hint" style="padding:10px">${T('unreachable')}</div>`; return; }
-    const imgs = ((await r.json()).entries || []).filter((e) => e.type === 'file' && /\.(png|jpe?g)$/i.test(e.name));
+    const imgs = ((await r.json()).entries || []).filter((e) => e.type === 'file' && /\.(png|jpe?g|webp)$/i.test(e.name));
     if (!imgs.length) { container.innerHTML = `<div class="hint" style="padding:10px">${T('wpEmpty')}</div>`; return; }
     container.innerHTML = '';
     for (const img of imgs) {
-      const path = '/data/Pictures/' + img.name; const el = document.createElement('div'); el.className = 'wp-item' + (path === activeWp ? ' active' : '');
-      el.style.backgroundImage = `url("/api/fs/read?path=${encodeURIComponent(path)}")`; el.innerHTML = `<div class="wp-name">${img.name}</div>`;
-      el.addEventListener('click', () => { try { window.parent.postMessage({ type: 'set-wallpaper', path }, '*'); } catch {} $$('.wp-item').forEach((i) => i.classList.remove('active')); el.classList.add('active'); });
+      const path = '/data/Pictures/' + img.name;
+      const el = document.createElement('div'); el.className = 'wp-item'; el.dataset.path = path;
+      el.style.backgroundImage = `url("/api/fs/read?path=${encodeURIComponent(path)}")`;
+      el.innerHTML = `<div class="wp-name">${img.name}</div>`;
+      el.addEventListener('click', () => { wpModel = { type: 'image', path, fit: wpModel.fit || 'cover' }; wpApply(); wpMarkActive(); });
       container.appendChild(el);
     }
+    wpMarkActive();
   } catch { container.innerHTML = `<div class="hint" style="padding:10px">${T('unreachable')}</div>`; }
+}
+function wpWire() {
+  if (wpWired) return; wpWired = true;
+  $$('#wp-type .seg-item').forEach((el) => el.addEventListener('click', () => { wpView = el.dataset.wptype; wpShowPane(); wpMarkActive(); }));
+  $$('#wp-fit .seg-item').forEach((el) => el.addEventListener('click', () => {
+    if (wpModel.type !== 'image') return;                 // fit only applies to an image
+    wpModel = { ...wpModel, fit: el.dataset.wpfit }; wpApply(); wpMarkActive();
+  }));
+  const reset = $('wp-reset');
+  if (reset) reset.addEventListener('click', () => { wpModel = { ...WP_DEFAULT }; wpView = 'gradient'; wpApply(); wpShowPane(); wpMarkActive(); });
+}
+async function loadWallpapers() {          // lazy: called when the Personalization tab opens
+  wpWire(); wpRenderPresets();
+  try { const uiR = await fetch('/api/fs/read?path=/system/config/ui-state.json', { cache: 'no-store' }); if (uiR.ok) wpModel = wpNormalize((await uiR.json()).wallpaper); }
+  catch {}
+  wpView = wpModel.type;
+  wpShowPane(); wpMarkActive();
+  wpLoadGallery();
 }
 
 // ═══════════ display / device forms ═══════════

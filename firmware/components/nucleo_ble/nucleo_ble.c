@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_random.h"
 #include "esp_timer.h"
+#include "esp_attr.h"
 #include "esp_bt.h"
 #include "nvs.h"
 #include "freertos/FreeRTOS.h"
@@ -37,6 +38,20 @@ static const char *TAG = "nucleo_ble";
 #define BLE_NVS_KEY "on"
 static bool s_radio_released = false;
 
+// Transient "keep BLE for this one boot" flag (RTC_NOINIT survives the warm reboot
+// a BLE app triggers via Solo; garbage on cold boot, filtered by the magic). Lets
+// Sentinel / the BLE suite reboot INTO a BLE session and open seamlessly, WITHOUT
+// permanently flipping the pref — so the RAM-saving default is preserved. One-shot.
+static RTC_NOINIT_ATTR uint32_t s_ble_keep_once;
+#define BLE_KEEP_MAGIC 0x424C4550u   // 'BLEP'
+void nucleo_ble_keep_next_boot(void) { s_ble_keep_once = BLE_KEEP_MAGIC; }
+// True if THIS boot kept BLE via the one-shot flag (a dedicated BLE Solo boot). Lets
+// app_main skip bringing Wi-Fi up — BLE + Wi-Fi don't fit together on this chip, so a
+// BLE session needs Wi-Fi OFF from the start (not merely torn down later), or the
+// NimBLE controller init OOMs. Distinct from the permanent pref (Wi-Fi stays up there).
+static bool s_kept_via_once = false;
+bool nucleo_ble_kept_once(void) { return s_kept_via_once; }
+
 bool nucleo_ble_pref_enabled(void)
 {
     nvs_handle_t h; uint8_t on = 0;
@@ -50,7 +65,13 @@ void nucleo_ble_set_pref(bool on)
 }
 void nucleo_ble_boot_reclaim(void)
 {
-    if (nucleo_ble_pref_enabled()) { ESP_LOGI(TAG, "Bluetooth ON (pref): keeping BLE controller memory"); return; }
+    bool keep_once = (s_ble_keep_once == BLE_KEEP_MAGIC);
+    s_ble_keep_once = 0;                                            // consume the one-shot
+    s_kept_via_once = keep_once;                                    // app_main uses this to skip Wi-Fi
+    if (keep_once || nucleo_ble_pref_enabled()) {
+        ESP_LOGI(TAG, "Bluetooth ON (%s): keeping BLE controller memory", keep_once ? "this boot" : "pref");
+        return;
+    }
     esp_err_t r = esp_bt_controller_mem_release(ESP_BT_MODE_BLE);   // ~tens of KB back to the heap (irreversible until reboot)
     s_radio_released = (r == ESP_OK);
     ESP_LOGW(TAG, "Bluetooth OFF (saving RAM): BLE mem_release=%s — enable it in the BLE app + reboot to use BLE",
@@ -76,6 +97,12 @@ typedef struct { uint8_t addr[6]; int8_t rssi; char name[24]; bool used; } ble_d
 static ble_dev_t s_dev[BLE_MAX_DEV];
 static int s_dev_count = 0;
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
+
+// Optional raw-advertisement observer (Sentinel tracker detection). Set/cleared
+// from the launcher task; read + called from the NimBLE host task.
+static nucleo_ble_adv_cb_t s_adv_cb = NULL;
+static void *s_adv_ctx = NULL;
+void nucleo_ble_set_adv_observer(nucleo_ble_adv_cb_t cb, void *ctx) { s_adv_cb = cb; s_adv_ctx = ctx; }
 
 static void dev_upsert(const uint8_t *addr, int8_t rssi, const char *name, int nlen)
 {
@@ -135,6 +162,8 @@ static int gap_event(struct ble_gap_event *event, void *arg)
             memcpy(name, fields.name, nlen); name[nlen] = 0;
         }
         dev_upsert(disc->addr.val, disc->rssi, name, nlen);
+        if (s_adv_cb) s_adv_cb(disc->addr.val, disc->addr.type, disc->rssi,
+                               disc->data, disc->length_data, s_adv_ctx);
         return 0;
     }
     case BLE_GAP_EVENT_CONNECT:

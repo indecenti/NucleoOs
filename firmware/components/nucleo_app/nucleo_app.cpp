@@ -334,6 +334,10 @@ extern "C" void nucleo_register_sniffer(void);
 extern "C" void nucleo_register_beacon(void);
 extern "C" void nucleo_register_ethernet(void);
 extern "C" void nucleo_register_ble(void);
+extern "C" void nucleo_register_sentinel(void);
+extern "C" void nucleo_register_airspace(void);
+extern "C" void nucleo_ble_keep_next_boot(void);   // keep BLE for the next (Solo) boot — NX_BLE apps
+extern "C" void nucleo_register_fido(void);
 extern "C" void nucleo_register_payloads(void);
 extern "C" void nucleo_register_weather(void);
 
@@ -388,7 +392,7 @@ void nucleo_app_register_builtins(void)
     nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme();    // System
     nucleo_register_wifi(); nucleo_register_remote(); nucleo_register_ssh(); nucleo_register_link(); nucleo_register_swarm(); nucleo_register_keydeck();  // Connect
     nucleo_register_voice(); nucleo_register_voicelab();                          // Voice Control + live console
-    nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_sniffer(); nucleo_register_ethernet(); nucleo_register_ble(); nucleo_register_payloads();  // Security (authorized testing)
+    nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_sniffer(); nucleo_register_ethernet(); nucleo_register_ble(); nucleo_register_sentinel(); nucleo_register_airspace(); nucleo_register_fido(); nucleo_register_payloads();  // Security (authorized testing)
 }
 
 // ---- app lifecycle ----------------------------------------------------------
@@ -576,6 +580,10 @@ static bool maybe_solo_launch(int idx)
     // future ones); the explicit NX_SOLO flag lets a non-game opt in too.
     bool wants_solo = (a->exclusive_flags & NX_SOLO) || (a->category && !strcmp(a->category, "Games"));
     if (!wants_solo) return false;
+    // A BLE app (Sentinel / the BLE suite) reboots into a Solo session with Bluetooth
+    // kept for that one boot, so it opens seamlessly instead of the old "enable BT +
+    // reboot + reopen" dance. Transient — the RAM-saving default returns on exit.
+    if (a->exclusive_flags & NX_BLE) nucleo_ble_keep_next_boot();   // keep Bluetooth for the Solo session
     // Carry a pending "open with" path (e.g. Files -> a .nfv for the Video player) across the warm reboot;
     // s_open_file is plain RAM and would be lost. Empty for a normal menu launch -> self-clears, no stale file.
     snprintf(s_solo_open_file, sizeof s_solo_open_file, "%s", s_open_file);

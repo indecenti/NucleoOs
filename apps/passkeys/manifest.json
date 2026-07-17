@@ -1,0 +1,20 @@
+{
+  "id": "passkeys",
+  "name": "Passkeys",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Manage the FIDO security key from the browser: list and delete resident passkeys, set the on-device PIN, view key status and sign counters. Talks to the device over a small authenticated API — all UI runs in the browser, nothing heavy on the Cardputer.",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/passkeys/",
+  "icon": "icon.svg",
+  "permissions": ["system.notify"],
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": [],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": [] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

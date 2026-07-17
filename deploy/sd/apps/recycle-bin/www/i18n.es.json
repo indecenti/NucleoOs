@@ -1,0 +1,23 @@
+{
+  "_lang": "es",
+  "title": "Papelera de reciclaje",
+  "restore_all": "Restaurar todo",
+  "empty_bin": "Vaciar papelera",
+  "restore": "Restaurar",
+  "count": {
+    "one": "· {count} elemento",
+    "other": "· {count} elementos"
+  },
+  "count_empty": "· vacía",
+  "empty_title": "La papelera de reciclaje está vacía.",
+  "empty_hint": "Los archivos que eliminas en File Commander llegan aquí y se pueden restaurar.",
+  "toast_restored_to": "Restaurado en {path}",
+  "toast_restore_failed": "No se pudo restaurar",
+  "toast_deleted_perm": "Eliminado definitivamente",
+  "toast_restored_all": "Todo restaurado",
+  "toast_bin_emptied": "Papelera vaciada",
+  "confirm_empty": {
+    "one": "¿Eliminar definitivamente {count} elemento? Esta acción no se puede deshacer.",
+    "other": "¿Eliminar definitivamente {count} elementos? Esta acción no se puede deshacer."
+  }
+}

@@ -53,6 +53,17 @@ unsigned char nucleo_usbhid_leds(void);
 // Translate a printable ASCII char to {modifier, keycode}. Returns false if unmapped.
 bool nucleo_usbhid_ascii(char c, unsigned char *modifier, unsigned char *keycode);
 
+// ---- FIDO (CTAPHID) personality --------------------------------------------------------------------
+// A SECOND USB personality: instead of a keyboard, present ONE HID interface with the FIDO usage page
+// (0xF1D0) and 64-byte IN/OUT reports, which is what an OS security-key stack (Windows WebAuthn,
+// Chromium) enumerates. The TinyUSB HID class callbacks live in ONE place (this component), so FIDO is
+// wired here rather than as a second, conflicting HID owner. Use start_fido() INSTEAD OF start() —
+// only one may install the USB driver per boot (the FIDO app reboots into this personality).
+esp_err_t nucleo_usbhid_start_fido(void);
+bool      nucleo_usbhid_fido_ready(void);              // host mounted + IN endpoint free
+bool      nucleo_usbhid_fido_recv(unsigned char pkt[64]);   // dequeue one 64-byte OUT report (false if none)
+bool      nucleo_usbhid_fido_send(const unsigned char pkt[64]); // queue one 64-byte IN report
+
 #ifdef __cplusplus
 }
 #endif

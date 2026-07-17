@@ -438,13 +438,374 @@ const $ = id => document.getElementById(id);
 // canvas-clearing shortcut fires — so typing "blue rect" can't switch tools or wipe the canvas.
 function isTyping(){ const a=document.activeElement; return !!(a && (a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.isContentEditable)); }
 
-// ---- language (bilingual IT/EN) — single source: the OS language (anima.lang), same as cmdLang/tourLang.
-// Reads anima.lang first, then the document lang (kept in sync by /nucleo-i18n.js), then the browser.
-function paintLang(){ try{ return (localStorage.getItem('anima.lang')||document.documentElement.lang||navigator.language||'it').toLowerCase().slice(0,2)==='en'?'en':'it'; }catch{ return 'it'; } }
+// ---- language (IT/EN inline + es/fr/de overrides) — single source: the OS language (anima.lang).
+// Reads anima.lang first, then the document lang (kept in sync by /nucleo-i18n.js). Returns the FULL code.
+function paintLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'it').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'it'; }catch{ return 'it'; } }
 function EN(){ return paintLang()==='en'; }
 // LT(it,en): pick the right string for the active language at call time. Used by every runtime message.
 // (Named LT, not L — `L` is the pervasive per-layer variable name throughout this file.)
-function LT(it,en){ return EN()?en:it; }
+// IT + EN live inline at each call site; es/fr/de are looked up in PAINT_L10N, KEYED BY THE ENGLISH string.
+// A missing key falls back to English (never Italian), so a stray untranslated string is at worst English.
+function LT(it,en){ const l=paintLang(); if(l==='it') return it; if(l==='en') return en; return (PAINT_L10N[l]&&PAINT_L10N[l][en])||en; }
+// es/fr/de professional translations, keyed by the ENGLISH string above. UL() (Atelier) shares this table.
+// Proper nouns (Paint, Atelier, WebGPU, SDXS, ORT, ControlNet, UNet, VAE, PNG, Grok, xAI, Cardputer), file
+// paths, keyboard shortcuts and ${…} vars are intentionally NOT translated. Prefix/suffix keys keep their spaces.
+const PAINT_L10N = {
+  es:{
+    // runtime messages
+    'untitled':'sin título','Undone':'Deshecho','Redone':'Rehecho','Layer 1':'Capa 1','Layer ':'Capa ',
+    'Layer added':'Capa añadida','At least one layer is required':'Se necesita al menos una capa',' copy':' copia',
+    'No layer below':'No hay capa debajo','Layers merged':'Capas combinadas','Background':'Fondo',
+    'Image flattened':'Imagen aplanada','Show/hide':'Mostrar/ocultar','Double-click: rename':'Doble clic: renombrar',
+    'Layer name:':'Nombre de la capa:','Color picked ':'Color tomado ','Ready':'Listo','Image':'Imagen',
+    'Opened ':'Abierto ','Could not open ':'No se pudo abrir ','Image loaded: ':'Imagen cargada: ',
+    ' (save to keep it)':' (guarda para conservarla)','Saved to ':'Guardado en ','Save failed (':'Error al guardar (',
+    'Network error: ':'Error de red: ','drawing.png':'dibujo.png','Image copied to clipboard':'Imagen copiada al portapapeles',
+    'Image copy not available here (needs HTTPS or localhost)':'Copia de imagen no disponible aquí (necesita HTTPS o localhost)',
+    'Copy failed: ':'Error al copiar: ','Paste not available here (needs HTTPS or localhost)':'Pegado no disponible aquí (necesita HTTPS o localhost)',
+    'Image pasted':'Imagen pegada','No image in the clipboard':'No hay imagen en el portapapeles','Paste failed: ':'Error al pegar: ',
+    'Save image':'Guardar imagen','Open image':'Abrir imagen','New':'Nuevo','Canvas width:':'Ancho del lienzo:',
+    'Canvas height:':'Alto del lienzo:','Invalid size':'Tamaño no válido',
+    'Exit without saving? Your changes will be lost.':'¿Salir sin guardar? Se perderán los cambios.',
+    'Imaging module not loaded yet':'El módulo de imagen aún no está cargado','Operation failed: ':'Operación fallida: ',
+    'Background erased (wand)':'Fondo borrado (varita)','Selection ':'Selección ',' at (':' en (',
+    'No selection. Use the ▭ tool to select an area.':'Sin selección. Usa la herramienta ▭ para seleccionar un área.',
+    'No selection':'Sin selección','Cropped to selection':'Recortado a la selección','Area cleared':'Área vaciada',
+    'Text:':'Texto:','Text added':'Texto insertado','Adjustments applied':'Ajustes aplicados','Reset':'Restablecer',
+    'Rulers ':'Reglas ','Grid ':'Cuadrícula ','New transparent canvas':'Nuevo lienzo transparente','Empty canvas':'Lienzo vacío',
+    'Transparent borders trimmed':'Bordes transparentes recortados','Rotated 90°':'Rotado 90°','Flipped':'Volteado',
+    'Background removed (active layer)':'Fondo eliminado (capa activa)','Grayscale':'Escala de grises',
+    'Colors inverted':'Colores invertidos','Sepia':'Sepia','Blurred':'Desenfocado','Sharpened':'Enfocado','Edges':'Bordes',
+    'Commands module not loaded':'Módulo de comandos no cargado','Error: ':'Error: ','Tutorial unavailable':'Tutorial no disponible',
+    // menu bar
+    'File':'Archivo','Edit':'Editar','Adjust':'Ajustar','View':'Ver','Help':'Ayuda',
+    'Open…':'Abrir…','Save':'Guardar','Save as…':'Guardar como…','Exit':'Salir','Undo':'Deshacer','Redo':'Rehacer',
+    'Copy':'Copiar','Paste':'Pegar','Clear all':'Borrar todo','Resize canvas…':'Redimensionar lienzo…',
+    'New transparent':'Nuevo transparente','Crop to selection':'Recortar a la selección','Trim transparent borders':'Recortar bordes transparentes',
+    'Rotate 90° clockwise':'Rotar 90° a la derecha','Rotate 90° counter-clockwise':'Rotar 90° a la izquierda',
+    'Flip horizontal':'Voltear horizontal','Flip vertical':'Voltear vertical','Remove background (auto)':'Quitar fondo (auto)',
+    'Brightness / Contrast / Saturation…':'Brillo / Contraste / Saturación…','Invert colors':'Invertir colores',
+    'Blur':'Desenfocar','Sharpen':'Enfocar','Rulers':'Reglas','Grid':'Cuadrícula','Tools panel':'Panel de herramientas',
+    'Fit to window':'Ajustar a la ventana','Guided tutorial ✨':'Tutorial guiado ✨','Keyboard shortcuts':'Atajos de teclado',
+    // toolbar tooltips
+    'Brush (B)':'Pincel (B)','Line (L)':'Línea (L)','Rectangle (R)':'Rectángulo (R)','Ellipse (E)':'Elipse (E)',
+    'Eraser':'Goma','Fill bucket':'Cubo de relleno','Eyedropper':'Cuentagotas','Rectangular selection (M)':'Selección rectangular (M)',
+    'Magic wand — erase the background by clicking (W)':'Varita mágica — borra el fondo haciendo clic (W)','Text (T)':'Texto (T)',
+    'Primary color (stroke)':'Color primario (trazo)','Secondary color (fill)':'Color secundario (relleno)',
+    'Swap colors (X)':'Intercambiar colores (X)','Brush size':'Grosor del pincel','Undo (Ctrl+Z)':'Deshacer (Ctrl+Z)',
+    'Redo (Ctrl+Y)':'Rehacer (Ctrl+Y)','Show/hide panel (Tab)':'Mostrar/ocultar panel (Tab)',
+    'Atelier — generate an image with AI (WebGPU, on device)':'Atelier — genera una imagen con IA (WebGPU, en el dispositivo)',
+    // options bar
+    ' Filled (color 2)':' Relleno (color 2)','Tolerance':'Tolerancia','Size':'Tamaño',' Bold':' Negrita',
+    'Ask Paint… e.g. «remove the background», «create a cat icon», «brightness +20», «rotate right»':'Pide a Paint… p. ej. «quita el fondo», «crea un icono de gato», «brillo +20», «girar a la derecha»',
+    'Run (Enter)':'Ejecutar (Intro)','Drop to open the image':'Suelta para abrir la imagen',
+    // right panel
+    'Tools':'Herramientas','Hide panel (Tab)':'Ocultar panel (Tab)','Layers':'Capas','Brush':'Pincel','Selection':'Selección',
+    'Adjustments':'Ajustes','Transform':'Transformar','Opacity':'Opacidad','Blend':'Fusión','Brightness':'Brillo',
+    'Contrast':'Contraste','Saturation':'Saturación','Feather':'Difuminar',
+    'Normal':'Normal','Multiply':'Multiplicar','Screen':'Trama','Overlay':'Superponer','Darken':'Oscurecer',
+    'Lighten':'Aclarar','Color dodge':'Sobreexponer color','Difference':'Diferencia',
+    'New layer':'Nueva capa','Duplicate':'Duplicar','Move up':'Subir','Move down':'Bajar','Merge down':'Combinar hacia abajo','Delete':'Eliminar',
+    'The eraser cuts to transparent (real PNG alpha).':'La goma borra a transparente (alfa PNG real).',
+    'Crop':'Recortar','Clear':'Borrar','Fill':'Rellenar','✨ Generate here':'✨ Generar aquí','Deselect':'Deseleccionar',
+    'Or pick the 🪄 wand and click the background to erase.':'O elige la 🪄 varita y haz clic en el fondo para borrarlo.',
+    'Apply':'Aplicar','Gray':'Grises','Invert':'Invertir','Sharp':'Enfocar',
+    'File: ':'Archivo: ','Canvas: ':'Lienzo: ','Zoom out':'Alejar','Zoom in':'Acercar','Fit':'Ajustar',
+    // options-bar tool name + hint
+    'Line':'Línea','Rectangle':'Rectángulo','Ellipse':'Elipse','Magic wand':'Varita mágica','Text':'Texto',
+    'Drag to draw · opacity in the panel':'Arrastra para dibujar · opacidad en el panel',
+    'Erases to transparent (PNG alpha)':'Borra a transparente (alfa PNG)',
+    'Click to fill an area · tolerance here':'Haz clic para rellenar un área · tolerancia aquí',
+    'Click to pick a colour':'Haz clic para tomar un color',
+    'Drag a rectangle, then use the Selection panel':'Arrastra un rectángulo, luego usa el panel Selección',
+    'Click the background to erase':'Haz clic en el fondo para borrarlo','Click where you want to write':'Haz clic donde quieras escribir',
+    'Drag · Shift to constrain the angle':'Arrastra · Shift para restringir el ángulo','Drag · Shift for a square':'Arrastra · Shift para un cuadrado',
+    'Drag · Shift for a circle':'Arrastra · Shift para un círculo',
+    // Atelier
+    'Atelier — generate an image':'Atelier — genera una imagen','SDXS model manager':'Gestor del modelo SDXS','Model':'Modelo',
+    'Close (Esc)':'Cerrar (Esc)','Text → Image':'Texto → Imagen','Sketch → Image':'Boceto → Imagen','From image':'Desde imagen',
+    'Model — you choose who generates':'Modelo — tú eliges quién genera','Description (prompt)':'Descripción (prompt)',
+    'e.g. a red cat sitting on a sofa, warm light, watercolor style':'p. ej. un gato rojo sentado en un sofá, luz cálida, estilo acuarela',
+    'What to avoid (negative, optional)':'Qué evitar (negativo, opcional)',
+    'e.g. blurry, deformed, text, watermark, low quality':'p. ej. borroso, deforme, texto, marca de agua, baja calidad',
+    '✨ Improve the prompt with AI':'✨ Mejora el prompt con IA','(an LLM rewrites the idea into a professional prompt)':'(un LLM reescribe la idea en un prompt profesional)',
+    'Seed (reproducible)':'Semilla (reproducible)','Random seed':'Semilla aleatoria','Variants:':'Variantes:',
+    'Sketch adherence:':'Fidelidad al boceto:','Strength (img→img):':'Fuerza (img→img):','new layer':'nueva capa',
+    'save to Cardputer':'guardar en Cardputer','Generate':'Generar',
+    'Use your drawing as a guide sketch (ControlNet).':'Usa tu dibujo como boceto guía (ControlNet).',
+    'Reworks the current canvas content according to the prompt.':'Reelabora el contenido actual del lienzo según el prompt.',
+    'Generates from text only (canvas ignored).':'Genera solo a partir del texto (se ignora el lienzo).','Loading ':'Cargando ',
+    'Local · SDXS (in browser)':'Local · SDXS (en el navegador)','Preview (not AI)':'Vista previa (no IA)',' — unavailable':' — no disponible',
+    '  ·  Online: the sketch is ignored (text→image only).':'  ·  Online: se ignora el boceto (solo texto→imagen).',
+    'no online image provider — configure xAI/Grok in Settings · AI':'sin proveedor de imágenes online — configura xAI/Grok en Ajustes · IA',
+    'Procedural preview (not AI) active.':'Vista previa procedural (no IA) activa.',
+    'Procedural preview (not AI). For real images choose Online (Grok) or download the local model.':'Vista previa procedural (no IA). Para imágenes reales elige Online (Grok) o descarga el modelo local.',
+    'Checking model…':'Comprobando el modelo…','Ready · SDXS q68 on WebGPU':'Listo · SDXS q68 en WebGPU',
+    'Ready · SDXS on WebGPU':'Listo · SDXS en WebGPU','Ready · procedural preview':'Listo · vista previa procedural',
+    '✓ WebGPU active — fast generation':'✓ WebGPU activo — generación rápida',
+    '⚠ WebGPU missing — will use the CPU (slow but works)':'⚠ WebGPU ausente — usará la CPU (lento pero funciona)',
+    'Model in <b>local cache</b> — ready, instant load. No download needed.':'Modelo en <b>caché local</b> — listo, carga instantánea. No hace falta descargar.',
+    'Model <b>not cached</b>. Download it once (≈553&nbsp;MB): then it stays in the browser and starts instantly.':'Modelo <b>no en caché</b>. Descárgalo una sola vez (≈553&nbsp;MB): luego queda en el navegador y arranca al instante.',
+    'ONNX&nbsp;Runtime unavailable (needs desktop Chrome/Edge). You can still use the procedural preview.':'ONNX&nbsp;Runtime no disponible (necesita Chrome/Edge de escritorio). Aún puedes usar la vista previa procedural.',
+    'Re-download':'Volver a descargar','Download':'Descargar','Download from the Internet':'Descargar de Internet',
+    'offline — no connection':'sin conexión — no hay red','GitHub · ~553 MB · requires a connection':'GitHub · ~553 MB · requiere conexión',
+    'Download from the Cardputer':'Descargar del Cardputer','SD over local WiFi · ~553 MB':'SD por WiFi local · ~553 MB',
+    'model not present on the SD':'modelo no presente en la SD','Use procedural preview (no download)':'Usar vista previa procedural (sin descarga)',
+    'Remove from cache':'Quitar de la caché','ORT runtime (inference engine)':'Runtime ORT (motor de inferencia)',
+    'Starting engine ':'Iniciando motor ','Fused model (ControlNet + UNet + VAE)':'Modelo fusionado (ControlNet + UNet + VAE)',
+    ' · part ':' · parte ','MB done':'MB completados','compiling the model on the GPU…':'compilando el modelo en la GPU…',
+    '⚠ Operation failed':'⚠ Operación fallida','⚙ Preparing the engine':'⚙ Preparando el motor','⬇ Downloading from ':'⬇ Descargando de ',
+    'Retry':'Reintentar','Try from the Cardputer':'Probar desde el Cardputer','Try from the Internet':'Probar desde Internet','Use preview':'Usar vista previa',
+    'Almost ready — one moment. Do not close Atelier.':'Casi listo — un momento. No cierres Atelier.',
+    'Download in progress — keep Atelier open and do not drag files until it finishes. You can keep using the rest of the PC.':'Descarga en curso — mantén Atelier abierto y no arrastres archivos hasta que termine. Puedes seguir usando el resto del PC.',
+    'First time only: then startup is instant.':'Solo la primera vez: luego el arranque es inmediato.',
+    'One time only: then the model stays cached and starts instantly.':'Una sola vez: luego el modelo queda en caché y arranca al instante.',
+    'Model ready and cached — next openings are instant.':'Modelo listo y en caché — las próximas aperturas son instantáneas.',
+    'Write a description.':'Escribe una descripción.','Generating…':'Generando…','✨ Improving the prompt (':'✨ Mejorando el prompt (',
+    'Preparing the engine…':'Preparando el motor…','Variant ':'Variante ','Choose a variant below.':'Elige una variante abajo.',
+    'Prompt enhancement failed — using your original text.':'No se pudo mejorar el prompt — usando tu texto original.',
+    ' variant(s) failed: ':' variante(s) fallida(s): ','Generation failed: ':'Generación fallida: ','Image · ':'Imagen · ',
+    'Image (SDXS · in browser)':'Imagen (SDXS · en el navegador)',' · in the selection':' · en la selección',
+    ' · prompt reworked by the model':' · prompt reelaborado por el modelo',' · saved to /data/Pictures/':' · guardada en /data/Pictures/',
+    ' · save failed':' · error al guardar','✨ Improve the prompt with ':'✨ Mejora el prompt con ',
+  },
+  fr:{
+    // runtime messages
+    'untitled':'sans titre','Undone':'Annulé','Redone':'Rétabli','Layer 1':'Calque 1','Layer ':'Calque ',
+    'Layer added':'Calque ajouté','At least one layer is required':'Au moins un calque est requis',' copy':' copie',
+    'No layer below':'Aucun calque en dessous','Layers merged':'Calques fusionnés','Background':'Arrière-plan',
+    'Image flattened':'Image aplatie','Show/hide':'Afficher/masquer','Double-click: rename':'Double-clic : renommer',
+    'Layer name:':'Nom du calque :','Color picked ':'Couleur prélevée ','Ready':'Prêt','Image':'Image',
+    'Opened ':'Ouvert ','Could not open ':'Impossible d’ouvrir ','Image loaded: ':'Image chargée : ',
+    ' (save to keep it)':' (enregistrez pour la conserver)','Saved to ':'Enregistré dans ','Save failed (':'Échec de l’enregistrement (',
+    'Network error: ':'Erreur réseau : ','drawing.png':'dessin.png','Image copied to clipboard':'Image copiée dans le presse-papiers',
+    'Image copy not available here (needs HTTPS or localhost)':'Copie d’image indisponible ici (nécessite HTTPS ou localhost)',
+    'Copy failed: ':'Échec de la copie : ','Paste not available here (needs HTTPS or localhost)':'Collage indisponible ici (nécessite HTTPS ou localhost)',
+    'Image pasted':'Image collée','No image in the clipboard':'Aucune image dans le presse-papiers','Paste failed: ':'Échec du collage : ',
+    'Save image':'Enregistrer l’image','Open image':'Ouvrir l’image','New':'Nouveau','Canvas width:':'Largeur de la toile :',
+    'Canvas height:':'Hauteur de la toile :','Invalid size':'Taille non valide',
+    'Exit without saving? Your changes will be lost.':'Quitter sans enregistrer ? Vos modifications seront perdues.',
+    'Imaging module not loaded yet':'Module d’imagerie pas encore chargé','Operation failed: ':'Échec de l’opération : ',
+    'Background erased (wand)':'Fond effacé (baguette)','Selection ':'Sélection ',' at (':' à (',
+    'No selection. Use the ▭ tool to select an area.':'Aucune sélection. Utilisez l’outil ▭ pour sélectionner une zone.',
+    'No selection':'Aucune sélection','Cropped to selection':'Rogné à la sélection','Area cleared':'Zone effacée',
+    'Text:':'Texte :','Text added':'Texte ajouté','Adjustments applied':'Réglages appliqués','Reset':'Réinitialiser',
+    'Rulers ':'Règles ','Grid ':'Grille ','New transparent canvas':'Nouvelle toile transparente','Empty canvas':'Toile vide',
+    'Transparent borders trimmed':'Bords transparents rognés','Rotated 90°':'Pivoté de 90°','Flipped':'Retourné',
+    'Background removed (active layer)':'Fond supprimé (calque actif)','Grayscale':'Niveaux de gris',
+    'Colors inverted':'Couleurs inversées','Sepia':'Sépia','Blurred':'Flouté','Sharpened':'Netteté appliquée','Edges':'Contours',
+    'Commands module not loaded':'Module de commandes non chargé','Error: ':'Erreur : ','Tutorial unavailable':'Tutoriel indisponible',
+    // menu bar
+    'File':'Fichier','Edit':'Édition','Adjust':'Ajuster','View':'Affichage','Help':'Aide',
+    'Open…':'Ouvrir…','Save':'Enregistrer','Save as…':'Enregistrer sous…','Exit':'Quitter','Undo':'Annuler','Redo':'Rétablir',
+    'Copy':'Copier','Paste':'Coller','Clear all':'Tout effacer','Resize canvas…':'Redimensionner la toile…',
+    'New transparent':'Nouveau transparent','Crop to selection':'Rogner à la sélection','Trim transparent borders':'Rogner les bords transparents',
+    'Rotate 90° clockwise':'Pivoter 90° sens horaire','Rotate 90° counter-clockwise':'Pivoter 90° sens antihoraire',
+    'Flip horizontal':'Retourner horizontalement','Flip vertical':'Retourner verticalement','Remove background (auto)':'Supprimer le fond (auto)',
+    'Brightness / Contrast / Saturation…':'Luminosité / Contraste / Saturation…','Invert colors':'Inverser les couleurs',
+    'Blur':'Flou','Sharpen':'Netteté','Rulers':'Règles','Grid':'Grille','Tools panel':'Panneau d’outils',
+    'Fit to window':'Ajuster à la fenêtre','Guided tutorial ✨':'Tutoriel guidé ✨','Keyboard shortcuts':'Raccourcis clavier',
+    // toolbar tooltips
+    'Brush (B)':'Pinceau (B)','Line (L)':'Ligne (L)','Rectangle (R)':'Rectangle (R)','Ellipse (E)':'Ellipse (E)',
+    'Eraser':'Gomme','Fill bucket':'Pot de peinture','Eyedropper':'Pipette','Rectangular selection (M)':'Sélection rectangulaire (M)',
+    'Magic wand — erase the background by clicking (W)':'Baguette magique — effacez le fond en cliquant (W)','Text (T)':'Texte (T)',
+    'Primary color (stroke)':'Couleur primaire (trait)','Secondary color (fill)':'Couleur secondaire (remplissage)',
+    'Swap colors (X)':'Permuter les couleurs (X)','Brush size':'Taille du pinceau','Undo (Ctrl+Z)':'Annuler (Ctrl+Z)',
+    'Redo (Ctrl+Y)':'Rétablir (Ctrl+Y)','Show/hide panel (Tab)':'Afficher/masquer le panneau (Tab)',
+    'Atelier — generate an image with AI (WebGPU, on device)':'Atelier — générez une image avec l’IA (WebGPU, sur l’appareil)',
+    // options bar
+    ' Filled (color 2)':' Rempli (couleur 2)','Tolerance':'Tolérance','Size':'Taille',' Bold':' Gras',
+    'Ask Paint… e.g. «remove the background», «create a cat icon», «brightness +20», «rotate right»':'Demandez à Paint… ex. «supprime le fond», «crée une icône de chat», «luminosité +20», «pivoter à droite»',
+    'Run (Enter)':'Exécuter (Entrée)','Drop to open the image':'Déposez pour ouvrir l’image',
+    // right panel
+    'Tools':'Outils','Hide panel (Tab)':'Masquer le panneau (Tab)','Layers':'Calques','Brush':'Pinceau','Selection':'Sélection',
+    'Adjustments':'Réglages','Transform':'Transformer','Opacity':'Opacité','Blend':'Fusion','Brightness':'Luminosité',
+    'Contrast':'Contraste','Saturation':'Saturation','Feather':'Adoucir',
+    'Normal':'Normal','Multiply':'Produit','Screen':'Superposition','Overlay':'Incrustation','Darken':'Obscurcir',
+    'Lighten':'Éclaircir','Color dodge':'Densité couleur -','Difference':'Différence',
+    'New layer':'Nouveau calque','Duplicate':'Dupliquer','Move up':'Monter','Move down':'Descendre','Merge down':'Fusionner vers le bas','Delete':'Supprimer',
+    'The eraser cuts to transparent (real PNG alpha).':'La gomme efface en transparence (alpha PNG réel).',
+    'Crop':'Rogner','Clear':'Effacer','Fill':'Remplir','✨ Generate here':'✨ Générer ici','Deselect':'Désélectionner',
+    'Or pick the 🪄 wand and click the background to erase.':'Ou choisissez la 🪄 baguette et cliquez sur le fond à effacer.',
+    'Apply':'Appliquer','Gray':'Gris','Invert':'Inverser','Sharp':'Netteté',
+    'File: ':'Fichier : ','Canvas: ':'Toile : ','Zoom out':'Zoom arrière','Zoom in':'Zoom avant','Fit':'Ajuster',
+    // options-bar tool name + hint
+    'Line':'Ligne','Rectangle':'Rectangle','Ellipse':'Ellipse','Magic wand':'Baguette magique','Text':'Texte',
+    'Drag to draw · opacity in the panel':'Glissez pour dessiner · opacité dans le panneau',
+    'Erases to transparent (PNG alpha)':'Efface en transparence (alpha PNG)',
+    'Click to fill an area · tolerance here':'Cliquez pour remplir une zone · tolérance ici',
+    'Click to pick a colour':'Cliquez pour prélever une couleur',
+    'Drag a rectangle, then use the Selection panel':'Tracez un rectangle, puis utilisez le panneau Sélection',
+    'Click the background to erase':'Cliquez sur le fond à effacer','Click where you want to write':'Cliquez où vous voulez écrire',
+    'Drag · Shift to constrain the angle':'Glissez · Maj pour contraindre l’angle','Drag · Shift for a square':'Glissez · Maj pour un carré',
+    'Drag · Shift for a circle':'Glissez · Maj pour un cercle',
+    // Atelier
+    'Atelier — generate an image':'Atelier — générer une image','SDXS model manager':'Gestionnaire du modèle SDXS','Model':'Modèle',
+    'Close (Esc)':'Fermer (Échap)','Text → Image':'Texte → Image','Sketch → Image':'Croquis → Image','From image':'Depuis une image',
+    'Model — you choose who generates':'Modèle — vous choisissez qui génère','Description (prompt)':'Description (prompt)',
+    'e.g. a red cat sitting on a sofa, warm light, watercolor style':'ex. un chat roux assis sur un canapé, lumière chaude, style aquarelle',
+    'What to avoid (negative, optional)':'Ce qu’il faut éviter (négatif, optionnel)',
+    'e.g. blurry, deformed, text, watermark, low quality':'ex. flou, déformé, texte, filigrane, basse qualité',
+    '✨ Improve the prompt with AI':'✨ Améliorer le prompt avec l’IA','(an LLM rewrites the idea into a professional prompt)':'(un LLM réécrit l’idée en un prompt professionnel)',
+    'Seed (reproducible)':'Graine (reproductible)','Random seed':'Graine aléatoire','Variants:':'Variantes :',
+    'Sketch adherence:':'Fidélité au croquis :','Strength (img→img):':'Force (img→img) :','new layer':'nouveau calque',
+    'save to Cardputer':'enregistrer sur Cardputer','Generate':'Générer',
+    'Use your drawing as a guide sketch (ControlNet).':'Utilisez votre dessin comme croquis guide (ControlNet).',
+    'Reworks the current canvas content according to the prompt.':'Retravaille le contenu actuel de la toile selon le prompt.',
+    'Generates from text only (canvas ignored).':'Génère à partir du texte seul (toile ignorée).','Loading ':'Chargement ',
+    'Local · SDXS (in browser)':'Local · SDXS (dans le navigateur)','Preview (not AI)':'Aperçu (pas d’IA)',' — unavailable':' — indisponible',
+    '  ·  Online: the sketch is ignored (text→image only).':'  ·  En ligne : le croquis est ignoré (texte→image seulement).',
+    'no online image provider — configure xAI/Grok in Settings · AI':'aucun fournisseur d’images en ligne — configurez xAI/Grok dans Paramètres · IA',
+    'Procedural preview (not AI) active.':'Aperçu procédural (pas d’IA) actif.',
+    'Procedural preview (not AI). For real images choose Online (Grok) or download the local model.':'Aperçu procédural (pas d’IA). Pour de vraies images, choisissez En ligne (Grok) ou téléchargez le modèle local.',
+    'Checking model…':'Vérification du modèle…','Ready · SDXS q68 on WebGPU':'Prêt · SDXS q68 sur WebGPU',
+    'Ready · SDXS on WebGPU':'Prêt · SDXS sur WebGPU','Ready · procedural preview':'Prêt · aperçu procédural',
+    '✓ WebGPU active — fast generation':'✓ WebGPU actif — génération rapide',
+    '⚠ WebGPU missing — will use the CPU (slow but works)':'⚠ WebGPU absent — utilisera le CPU (lent mais fonctionne)',
+    'Model in <b>local cache</b> — ready, instant load. No download needed.':'Modèle en <b>cache local</b> — prêt, chargement instantané. Aucun téléchargement nécessaire.',
+    'Model <b>not cached</b>. Download it once (≈553&nbsp;MB): then it stays in the browser and starts instantly.':'Modèle <b>non mis en cache</b>. Téléchargez-le une seule fois (≈553&nbsp;MB) : il reste ensuite dans le navigateur et démarre instantanément.',
+    'ONNX&nbsp;Runtime unavailable (needs desktop Chrome/Edge). You can still use the procedural preview.':'ONNX&nbsp;Runtime indisponible (nécessite Chrome/Edge sur ordinateur). Vous pouvez tout de même utiliser l’aperçu procédural.',
+    'Re-download':'Retélécharger','Download':'Télécharger','Download from the Internet':'Télécharger depuis Internet',
+    'offline — no connection':'hors ligne — aucune connexion','GitHub · ~553 MB · requires a connection':'GitHub · ~553 Mo · nécessite une connexion',
+    'Download from the Cardputer':'Télécharger depuis le Cardputer','SD over local WiFi · ~553 MB':'SD via WiFi local · ~553 Mo',
+    'model not present on the SD':'modèle absent de la carte SD','Use procedural preview (no download)':'Utiliser l’aperçu procédural (sans téléchargement)',
+    'Remove from cache':'Retirer du cache','ORT runtime (inference engine)':'Runtime ORT (moteur d’inférence)',
+    'Starting engine ':'Démarrage du moteur ','Fused model (ControlNet + UNet + VAE)':'Modèle fusionné (ControlNet + UNet + VAE)',
+    ' · part ':' · partie ','MB done':'Mo terminés','compiling the model on the GPU…':'compilation du modèle sur le GPU…',
+    '⚠ Operation failed':'⚠ Échec de l’opération','⚙ Preparing the engine':'⚙ Préparation du moteur','⬇ Downloading from ':'⬇ Téléchargement depuis ',
+    'Retry':'Réessayer','Try from the Cardputer':'Essayer depuis le Cardputer','Try from the Internet':'Essayer depuis Internet','Use preview':'Utiliser l’aperçu',
+    'Almost ready — one moment. Do not close Atelier.':'Presque prêt — un instant. Ne fermez pas Atelier.',
+    'Download in progress — keep Atelier open and do not drag files until it finishes. You can keep using the rest of the PC.':'Téléchargement en cours — gardez Atelier ouvert et ne glissez pas de fichiers jusqu’à la fin. Vous pouvez continuer à utiliser le reste du PC.',
+    'First time only: then startup is instant.':'Seulement la première fois : ensuite le démarrage est immédiat.',
+    'One time only: then the model stays cached and starts instantly.':'Une seule fois : ensuite le modèle reste en cache et démarre instantanément.',
+    'Model ready and cached — next openings are instant.':'Modèle prêt et mis en cache — les prochaines ouvertures sont instantanées.',
+    'Write a description.':'Écrivez une description.','Generating…':'Génération…','✨ Improving the prompt (':'✨ Amélioration du prompt (',
+    'Preparing the engine…':'Préparation du moteur…','Variant ':'Variante ','Choose a variant below.':'Choisissez une variante ci-dessous.',
+    'Prompt enhancement failed — using your original text.':'Échec de l’amélioration du prompt — utilisation de votre texte original.',
+    ' variant(s) failed: ':' variante(s) échouée(s) : ','Generation failed: ':'Échec de la génération : ','Image · ':'Image · ',
+    'Image (SDXS · in browser)':'Image (SDXS · dans le navigateur)',' · in the selection':' · dans la sélection',
+    ' · prompt reworked by the model':' · prompt retravaillé par le modèle',' · saved to /data/Pictures/':' · enregistrée dans /data/Pictures/',
+    ' · save failed':' · échec de l’enregistrement','✨ Improve the prompt with ':'✨ Améliorer le prompt avec ',
+  },
+  de:{
+    // runtime messages
+    'untitled':'ohne Titel','Undone':'Rückgängig gemacht','Redone':'Wiederhergestellt','Layer 1':'Ebene 1','Layer ':'Ebene ',
+    'Layer added':'Ebene hinzugefügt','At least one layer is required':'Mindestens eine Ebene ist erforderlich',' copy':' Kopie',
+    'No layer below':'Keine Ebene darunter','Layers merged':'Ebenen reduziert','Background':'Hintergrund',
+    'Image flattened':'Bild reduziert','Show/hide':'Ein-/ausblenden','Double-click: rename':'Doppelklick: umbenennen',
+    'Layer name:':'Ebenenname:','Color picked ':'Farbe übernommen ','Ready':'Bereit','Image':'Bild',
+    'Opened ':'Geöffnet ','Could not open ':'Konnte nicht geöffnet werden ','Image loaded: ':'Bild geladen: ',
+    ' (save to keep it)':' (speichern zum Behalten)','Saved to ':'Gespeichert in ','Save failed (':'Speichern fehlgeschlagen (',
+    'Network error: ':'Netzwerkfehler: ','drawing.png':'zeichnung.png','Image copied to clipboard':'Bild in die Zwischenablage kopiert',
+    'Image copy not available here (needs HTTPS or localhost)':'Bildkopie hier nicht verfügbar (benötigt HTTPS oder localhost)',
+    'Copy failed: ':'Kopieren fehlgeschlagen: ','Paste not available here (needs HTTPS or localhost)':'Einfügen hier nicht verfügbar (benötigt HTTPS oder localhost)',
+    'Image pasted':'Bild eingefügt','No image in the clipboard':'Kein Bild in der Zwischenablage','Paste failed: ':'Einfügen fehlgeschlagen: ',
+    'Save image':'Bild speichern','Open image':'Bild öffnen','New':'Neu','Canvas width:':'Leinwandbreite:',
+    'Canvas height:':'Leinwandhöhe:','Invalid size':'Ungültige Größe',
+    'Exit without saving? Your changes will be lost.':'Ohne Speichern beenden? Ihre Änderungen gehen verloren.',
+    'Imaging module not loaded yet':'Bildmodul noch nicht geladen','Operation failed: ':'Vorgang fehlgeschlagen: ',
+    'Background erased (wand)':'Hintergrund gelöscht (Zauberstab)','Selection ':'Auswahl ',' at (':' bei (',
+    'No selection. Use the ▭ tool to select an area.':'Keine Auswahl. Mit dem Werkzeug ▭ einen Bereich auswählen.',
+    'No selection':'Keine Auswahl','Cropped to selection':'Auf Auswahl zugeschnitten','Area cleared':'Bereich geleert',
+    'Text:':'Text:','Text added':'Text eingefügt','Adjustments applied':'Anpassungen angewendet','Reset':'Zurücksetzen',
+    'Rulers ':'Lineale ','Grid ':'Raster ','New transparent canvas':'Neue transparente Leinwand','Empty canvas':'Leere Leinwand',
+    'Transparent borders trimmed':'Transparente Ränder beschnitten','Rotated 90°':'Um 90° gedreht','Flipped':'Gespiegelt',
+    'Background removed (active layer)':'Hintergrund entfernt (aktive Ebene)','Grayscale':'Graustufen',
+    'Colors inverted':'Farben umgekehrt','Sepia':'Sepia','Blurred':'Weichgezeichnet','Sharpened':'Geschärft','Edges':'Kanten',
+    'Commands module not loaded':'Befehlsmodul nicht geladen','Error: ':'Fehler: ','Tutorial unavailable':'Tutorial nicht verfügbar',
+    // menu bar
+    'File':'Datei','Edit':'Bearbeiten','Adjust':'Anpassen','View':'Ansicht','Help':'Hilfe',
+    'Open…':'Öffnen…','Save':'Speichern','Save as…':'Speichern unter…','Exit':'Beenden','Undo':'Rückgängig','Redo':'Wiederholen',
+    'Copy':'Kopieren','Paste':'Einfügen','Clear all':'Alles löschen','Resize canvas…':'Leinwand skalieren…',
+    'New transparent':'Neu transparent','Crop to selection':'Auf Auswahl zuschneiden','Trim transparent borders':'Transparente Ränder beschneiden',
+    'Rotate 90° clockwise':'90° im Uhrzeigersinn drehen','Rotate 90° counter-clockwise':'90° gegen den Uhrzeigersinn drehen',
+    'Flip horizontal':'Horizontal spiegeln','Flip vertical':'Vertikal spiegeln','Remove background (auto)':'Hintergrund entfernen (auto)',
+    'Brightness / Contrast / Saturation…':'Helligkeit / Kontrast / Sättigung…','Invert colors':'Farben umkehren',
+    'Blur':'Weichzeichnen','Sharpen':'Schärfen','Rulers':'Lineale','Grid':'Raster','Tools panel':'Werkzeugleiste',
+    'Fit to window':'An Fenster anpassen','Guided tutorial ✨':'Geführtes Tutorial ✨','Keyboard shortcuts':'Tastenkürzel',
+    // toolbar tooltips
+    'Brush (B)':'Pinsel (B)','Line (L)':'Linie (L)','Rectangle (R)':'Rechteck (R)','Ellipse (E)':'Ellipse (E)',
+    'Eraser':'Radierer','Fill bucket':'Farbeimer','Eyedropper':'Pipette','Rectangular selection (M)':'Rechteckige Auswahl (M)',
+    'Magic wand — erase the background by clicking (W)':'Zauberstab — Hintergrund per Klick löschen (W)','Text (T)':'Text (T)',
+    'Primary color (stroke)':'Primärfarbe (Kontur)','Secondary color (fill)':'Sekundärfarbe (Füllung)',
+    'Swap colors (X)':'Farben tauschen (X)','Brush size':'Pinselgröße','Undo (Ctrl+Z)':'Rückgängig (Ctrl+Z)',
+    'Redo (Ctrl+Y)':'Wiederholen (Ctrl+Y)','Show/hide panel (Tab)':'Panel ein-/ausblenden (Tab)',
+    'Atelier — generate an image with AI (WebGPU, on device)':'Atelier — ein Bild mit KI erzeugen (WebGPU, auf dem Gerät)',
+    // options bar
+    ' Filled (color 2)':' Gefüllt (Farbe 2)','Tolerance':'Toleranz','Size':'Größe',' Bold':' Fett',
+    'Ask Paint… e.g. «remove the background», «create a cat icon», «brightness +20», «rotate right»':'Frag Paint… z. B. «entferne den Hintergrund», «erstelle ein Katzen-Icon», «Helligkeit +20», «nach rechts drehen»',
+    'Run (Enter)':'Ausführen (Enter)','Drop to open the image':'Zum Öffnen des Bildes ablegen',
+    // right panel
+    'Tools':'Werkzeuge','Hide panel (Tab)':'Panel ausblenden (Tab)','Layers':'Ebenen','Brush':'Pinsel','Selection':'Auswahl',
+    'Adjustments':'Anpassungen','Transform':'Transformieren','Opacity':'Deckkraft','Blend':'Modus','Brightness':'Helligkeit',
+    'Contrast':'Kontrast','Saturation':'Sättigung','Feather':'Weiche Kante',
+    'Normal':'Normal','Multiply':'Multiplizieren','Screen':'Negativ multiplizieren','Overlay':'Ineinanderkopieren','Darken':'Abdunkeln',
+    'Lighten':'Aufhellen','Color dodge':'Farbig abwedeln','Difference':'Differenz',
+    'New layer':'Neue Ebene','Duplicate':'Duplizieren','Move up':'Nach oben','Move down':'Nach unten','Merge down':'Nach unten reduzieren','Delete':'Löschen',
+    'The eraser cuts to transparent (real PNG alpha).':'Der Radierer löscht zu Transparenz (echtes PNG-Alpha).',
+    'Crop':'Zuschneiden','Clear':'Löschen','Fill':'Füllen','✨ Generate here':'✨ Hier erzeugen','Deselect':'Auswahl aufheben',
+    'Or pick the 🪄 wand and click the background to erase.':'Oder wähle den 🪄 Zauberstab und klicke auf den zu löschenden Hintergrund.',
+    'Apply':'Anwenden','Gray':'Grau','Invert':'Umkehren','Sharp':'Schärfen',
+    'File: ':'Datei: ','Canvas: ':'Leinwand: ','Zoom out':'Verkleinern','Zoom in':'Vergrößern','Fit':'Anpassen',
+    // options-bar tool name + hint
+    'Line':'Linie','Rectangle':'Rechteck','Ellipse':'Ellipse','Magic wand':'Zauberstab','Text':'Text',
+    'Drag to draw · opacity in the panel':'Ziehen zum Zeichnen · Deckkraft im Panel',
+    'Erases to transparent (PNG alpha)':'Löscht zu Transparenz (PNG-Alpha)',
+    'Click to fill an area · tolerance here':'Klicken zum Füllen eines Bereichs · Toleranz hier',
+    'Click to pick a colour':'Klicken, um eine Farbe aufzunehmen',
+    'Drag a rectangle, then use the Selection panel':'Ziehe ein Rechteck, dann nutze das Auswahl-Panel',
+    'Click the background to erase':'Auf den Hintergrund klicken zum Löschen','Click where you want to write':'Klicke, wo du schreiben möchtest',
+    'Drag · Shift to constrain the angle':'Ziehen · Umschalt begrenzt den Winkel','Drag · Shift for a square':'Ziehen · Umschalt für ein Quadrat',
+    'Drag · Shift for a circle':'Ziehen · Umschalt für einen Kreis',
+    // Atelier
+    'Atelier — generate an image':'Atelier — ein Bild erzeugen','SDXS model manager':'SDXS-Modellverwaltung','Model':'Modell',
+    'Close (Esc)':'Schließen (Esc)','Text → Image':'Text → Bild','Sketch → Image':'Skizze → Bild','From image':'Aus Bild',
+    'Model — you choose who generates':'Modell — du wählst, wer generiert','Description (prompt)':'Beschreibung (Prompt)',
+    'e.g. a red cat sitting on a sofa, warm light, watercolor style':'z. B. eine rote Katze auf einem Sofa, warmes Licht, Aquarellstil',
+    'What to avoid (negative, optional)':'Was vermeiden (negativ, optional)',
+    'e.g. blurry, deformed, text, watermark, low quality':'z. B. unscharf, deformiert, Text, Wasserzeichen, niedrige Qualität',
+    '✨ Improve the prompt with AI':'✨ Prompt mit KI verbessern','(an LLM rewrites the idea into a professional prompt)':'(ein LLM formuliert die Idee zu einem professionellen Prompt um)',
+    'Seed (reproducible)':'Seed (reproduzierbar)','Random seed':'Zufälliger Seed','Variants:':'Varianten:',
+    'Sketch adherence:':'Skizzentreue:','Strength (img→img):':'Stärke (Bild→Bild):','new layer':'neue Ebene',
+    'save to Cardputer':'auf Cardputer speichern','Generate':'Erzeugen',
+    'Use your drawing as a guide sketch (ControlNet).':'Nutze deine Zeichnung als Führungsskizze (ControlNet).',
+    'Reworks the current canvas content according to the prompt.':'Überarbeitet den aktuellen Leinwandinhalt gemäß dem Prompt.',
+    'Generates from text only (canvas ignored).':'Erzeugt nur aus Text (Leinwand ignoriert).','Loading ':'Lade ',
+    'Local · SDXS (in browser)':'Lokal · SDXS (im Browser)','Preview (not AI)':'Vorschau (keine KI)',' — unavailable':' — nicht verfügbar',
+    '  ·  Online: the sketch is ignored (text→image only).':'  ·  Online: Die Skizze wird ignoriert (nur Text→Bild).',
+    'no online image provider — configure xAI/Grok in Settings · AI':'kein Online-Bildanbieter — konfiguriere xAI/Grok in Einstellungen · KI',
+    'Procedural preview (not AI) active.':'Prozedurale Vorschau (keine KI) aktiv.',
+    'Procedural preview (not AI). For real images choose Online (Grok) or download the local model.':'Prozedurale Vorschau (keine KI). Für echte Bilder wähle Online (Grok) oder lade das lokale Modell herunter.',
+    'Checking model…':'Modell wird geprüft…','Ready · SDXS q68 on WebGPU':'Bereit · SDXS q68 auf WebGPU',
+    'Ready · SDXS on WebGPU':'Bereit · SDXS auf WebGPU','Ready · procedural preview':'Bereit · prozedurale Vorschau',
+    '✓ WebGPU active — fast generation':'✓ WebGPU aktiv — schnelle Generierung',
+    '⚠ WebGPU missing — will use the CPU (slow but works)':'⚠ WebGPU fehlt — nutzt die CPU (langsam, aber funktioniert)',
+    'Model in <b>local cache</b> — ready, instant load. No download needed.':'Modell im <b>lokalen Cache</b> — bereit, sofort geladen. Kein Download nötig.',
+    'Model <b>not cached</b>. Download it once (≈553&nbsp;MB): then it stays in the browser and starts instantly.':'Modell <b>nicht im Cache</b>. Einmalig herunterladen (≈553&nbsp;MB): danach bleibt es im Browser und startet sofort.',
+    'ONNX&nbsp;Runtime unavailable (needs desktop Chrome/Edge). You can still use the procedural preview.':'ONNX&nbsp;Runtime nicht verfügbar (benötigt Desktop-Chrome/Edge). Du kannst weiterhin die prozedurale Vorschau nutzen.',
+    'Re-download':'Erneut herunterladen','Download':'Herunterladen','Download from the Internet':'Aus dem Internet herunterladen',
+    'offline — no connection':'offline — keine Verbindung','GitHub · ~553 MB · requires a connection':'GitHub · ~553 MB · benötigt eine Verbindung',
+    'Download from the Cardputer':'Vom Cardputer herunterladen','SD over local WiFi · ~553 MB':'SD über lokales WLAN · ~553 MB',
+    'model not present on the SD':'Modell nicht auf der SD vorhanden','Use procedural preview (no download)':'Prozedurale Vorschau nutzen (ohne Download)',
+    'Remove from cache':'Aus dem Cache entfernen','ORT runtime (inference engine)':'ORT-Runtime (Inferenz-Engine)',
+    'Starting engine ':'Engine wird gestartet ','Fused model (ControlNet + UNet + VAE)':'Fusioniertes Modell (ControlNet + UNet + VAE)',
+    ' · part ':' · Teil ','MB done':'MB fertig','compiling the model on the GPU…':'Modell wird auf der GPU kompiliert…',
+    '⚠ Operation failed':'⚠ Vorgang fehlgeschlagen','⚙ Preparing the engine':'⚙ Engine wird vorbereitet','⬇ Downloading from ':'⬇ Download von ',
+    'Retry':'Erneut versuchen','Try from the Cardputer':'Vom Cardputer versuchen','Try from the Internet':'Aus dem Internet versuchen','Use preview':'Vorschau verwenden',
+    'Almost ready — one moment. Do not close Atelier.':'Fast fertig — einen Moment. Atelier nicht schließen.',
+    'Download in progress — keep Atelier open and do not drag files until it finishes. You can keep using the rest of the PC.':'Download läuft — lass Atelier offen und ziehe keine Dateien, bis er fertig ist. Du kannst den Rest des PCs weiter nutzen.',
+    'First time only: then startup is instant.':'Nur beim ersten Mal: danach ist der Start sofort.',
+    'One time only: then the model stays cached and starts instantly.':'Nur einmal: danach bleibt das Modell im Cache und startet sofort.',
+    'Model ready and cached — next openings are instant.':'Modell bereit und im Cache — die nächsten Öffnungen sind sofort.',
+    'Write a description.':'Schreibe eine Beschreibung.','Generating…':'Erzeuge…','✨ Improving the prompt (':'✨ Prompt wird verbessert (',
+    'Preparing the engine…':'Engine wird vorbereitet…','Variant ':'Variante ','Choose a variant below.':'Wähle unten eine Variante.',
+    'Prompt enhancement failed — using your original text.':'Prompt-Verbesserung fehlgeschlagen — verwende deinen Originaltext.',
+    ' variant(s) failed: ':' Variante(n) fehlgeschlagen: ','Generation failed: ':'Generierung fehlgeschlagen: ','Image · ':'Bild · ',
+    'Image (SDXS · in browser)':'Bild (SDXS · im Browser)',' · in the selection':' · in der Auswahl',
+    ' · prompt reworked by the model':' · Prompt vom Modell überarbeitet',' · saved to /data/Pictures/':' · gespeichert in /data/Pictures/',
+    ' · save failed':' · Speichern fehlgeschlagen','✨ Improve the prompt with ':'✨ Prompt verbessern mit ',
+  },
+};
 
 let tool='brush', color='#000000', color2='#ffffff', size=5, brushOpacity=1, bgTransparent=false;
 let selecting=false, selStart={x:0,y:0}, sel=null;   // rectangular selection state (declared early: read by pointer handlers)
@@ -804,12 +1165,8 @@ $('colorSwap').onclick=swapColors;
 
 // ---- contextual options bar (Photoshop-style: the bar reflects the active tool) ----
 // Tool names + hints are resolved at call time so they follow the OS language live (showOpts re-runs on change).
-const TOOLNAME=()=> EN()
-  ? {brush:'Brush',line:'Line',rect:'Rectangle',ellipse:'Ellipse',eraser:'Eraser',fill:'Fill',pick:'Eyedropper',select:'Selection',wand:'Magic wand',text:'Text'}
-  : {brush:'Pennello',line:'Linea',rect:'Rettangolo',ellipse:'Ellisse',eraser:'Gomma',fill:'Secchiello',pick:'Contagocce',select:'Selezione',wand:'Bacchetta magica',text:'Testo'};
-const TOOLHINT=()=> EN()
-  ? {brush:'Drag to draw · opacity in the panel',eraser:'Erases to transparent (PNG alpha)',fill:'Click to fill an area · tolerance here',pick:'Click to pick a colour',select:'Drag a rectangle, then use the Selection panel',wand:'Click the background to erase',text:'Click where you want to write',line:'Drag · Shift to constrain the angle',rect:'Drag · Shift for a square',ellipse:'Drag · Shift for a circle'}
-  : {brush:'Trascina per disegnare · opacità nel pannello',eraser:'Cancella in trasparente (alpha PNG)',fill:'Clicca per riempire un’area · tolleranza qui',pick:'Clicca per prelevare un colore',select:'Trascina un rettangolo, poi usa il pannello Selezione',wand:'Clicca lo sfondo da cancellare',text:'Clicca dove vuoi scrivere',line:'Trascina · Shift per vincolare l’angolo',rect:'Trascina · Shift per un quadrato',ellipse:'Trascina · Shift per un cerchio'};
+const TOOLNAME=()=> ({brush:LT('Pennello','Brush'),line:LT('Linea','Line'),rect:LT('Rettangolo','Rectangle'),ellipse:LT('Ellisse','Ellipse'),eraser:LT('Gomma','Eraser'),fill:LT('Secchiello','Fill'),pick:LT('Contagocce','Eyedropper'),select:LT('Selezione','Selection'),wand:LT('Bacchetta magica','Magic wand'),text:LT('Testo','Text')});
+const TOOLHINT=()=> ({brush:LT('Trascina per disegnare · opacità nel pannello','Drag to draw · opacity in the panel'),eraser:LT('Cancella in trasparente (alpha PNG)','Erases to transparent (PNG alpha)'),fill:LT('Clicca per riempire un’area · tolleranza qui','Click to fill an area · tolerance here'),pick:LT('Clicca per prelevare un colore','Click to pick a colour'),select:LT('Trascina un rettangolo, poi usa il pannello Selezione','Drag a rectangle, then use the Selection panel'),wand:LT('Clicca lo sfondo da cancellare','Click the background to erase'),text:LT('Clicca dove vuoi scrivere','Click where you want to write'),line:LT('Trascina · Shift per vincolare l’angolo','Drag · Shift to constrain the angle'),rect:LT('Trascina · Shift per un quadrato','Drag · Shift for a square'),ellipse:LT('Trascina · Shift per un cerchio','Drag · Shift for a circle')});
 let _lastTool='brush';
 function showOpts(t){ _lastTool=t; const ot=$('optTool'); if(ot) ot.textContent=TOOLNAME()[t]||t; const oh=$('optHint'); if(oh) oh.textContent=TOOLHINT()[t]||'';
   document.querySelectorAll('#optsbar .opt-grp').forEach(g=>g.classList.toggle('show',(g.dataset.for||'').split(' ').includes(t))); }
@@ -822,44 +1179,35 @@ showOpts('brush');
 // re-runs on /nucleo-i18n.js onChange. No catalog files — strings live inline, next to the markup they fill.
 // =====================================================================================================
 function applyLang(){
-  const en=EN();
+  // Every chrome string below routes through LT(it,en) → IT/EN inline, es/fr/de from PAINT_L10N.
   // --- menu bar: top labels + each dropdown item (matched by data-menu / data-cmd) ---
-  const menuLabel={ file:en?'File':'File', edit:en?'Edit':'Modifica', image:en?'Image':'Immagine',
-    adjust:en?'Adjust':'Regola', view:en?'View':'Vista', help:en?'Help':'Aiuto' };
+  const menuLabel={ file:LT('File','File'), edit:LT('Modifica','Edit'), image:LT('Immagine','Image'),
+    adjust:LT('Regola','Adjust'), view:LT('Vista','View'), help:LT('Aiuto','Help') };
   document.querySelectorAll('.menu[data-menu]').forEach(m=>{ const l=m.querySelector(':scope>.label'); const k=m.dataset.menu;
     if(l && menuLabel[k]!=null) l.textContent=menuLabel[k]; });
-  const MI=en
-    ? { new:'New', open:'Open…', save:'Save', saveas:'Save as…', exit:'Exit', undo:'Undo', redo:'Redo',
-        copy:'Copy', paste:'Paste', clear:'Clear all', resize:'Resize canvas…', newTransparent:'New transparent',
-        cropSel:'Crop to selection', trim:'Trim transparent borders', rotcw:'Rotate 90° clockwise',
-        rotccw:'Rotate 90° counter-clockwise', fliph:'Flip horizontal', flipv:'Flip vertical',
-        removeBg:'Remove background (auto)', openAdjust:'Brightness / Contrast / Saturation…',
-        fxGray:'Grayscale', fxInvert:'Invert colors', fxSepia:'Sepia', fxBlur:'Blur', fxSharp:'Sharpen',
-        fxEdges:'Edges', toggleRulers:'Rulers', toggleGrid:'Grid', togglePanel:'Tools panel',
-        zoomReset:'Zoom 100%', fitZoom:'Fit to window', tour:'Guided tutorial ✨', shortcuts:'Keyboard shortcuts' }
-    : { new:'Nuovo', open:'Apri…', save:'Salva', saveas:'Salva con nome…', exit:'Esci', undo:'Annulla', redo:'Ripeti',
-        copy:'Copia', paste:'Incolla', clear:'Cancella tutto', resize:'Ridimensiona tela…', newTransparent:'Nuovo trasparente',
-        cropSel:'Ritaglia a selezione', trim:'Rifila bordi trasparenti', rotcw:'Ruota 90° orario',
-        rotccw:'Ruota 90° antiorario', fliph:'Rifletti orizzontale', flipv:'Rifletti verticale',
-        removeBg:'Rimuovi sfondo (auto)', openAdjust:'Luminosità / Contrasto / Saturazione…',
-        fxGray:'Scala di grigi', fxInvert:'Inverti colori', fxSepia:'Seppia', fxBlur:'Sfoca', fxSharp:'Nitidezza',
-        fxEdges:'Contorni', toggleRulers:'Righelli', toggleGrid:'Griglia', togglePanel:'Pannello strumenti',
-        zoomReset:'Zoom 100%', fitZoom:'Adatta alla finestra', tour:'Tutorial guidato ✨', shortcuts:'Scorciatoie da tastiera' };
+  const MI={ new:LT('Nuovo','New'), open:LT('Apri…','Open…'), save:LT('Salva','Save'), saveas:LT('Salva con nome…','Save as…'),
+        exit:LT('Esci','Exit'), undo:LT('Annulla','Undo'), redo:LT('Ripeti','Redo'), copy:LT('Copia','Copy'), paste:LT('Incolla','Paste'),
+        clear:LT('Cancella tutto','Clear all'), resize:LT('Ridimensiona tela…','Resize canvas…'), newTransparent:LT('Nuovo trasparente','New transparent'),
+        cropSel:LT('Ritaglia a selezione','Crop to selection'), trim:LT('Rifila bordi trasparenti','Trim transparent borders'),
+        rotcw:LT('Ruota 90° orario','Rotate 90° clockwise'), rotccw:LT('Ruota 90° antiorario','Rotate 90° counter-clockwise'),
+        fliph:LT('Rifletti orizzontale','Flip horizontal'), flipv:LT('Rifletti verticale','Flip vertical'),
+        removeBg:LT('Rimuovi sfondo (auto)','Remove background (auto)'), openAdjust:LT('Luminosità / Contrasto / Saturazione…','Brightness / Contrast / Saturation…'),
+        fxGray:LT('Scala di grigi','Grayscale'), fxInvert:LT('Inverti colori','Invert colors'), fxSepia:LT('Seppia','Sepia'),
+        fxBlur:LT('Sfoca','Blur'), fxSharp:LT('Nitidezza','Sharpen'), fxEdges:LT('Contorni','Edges'), toggleRulers:LT('Righelli','Rulers'),
+        toggleGrid:LT('Griglia','Grid'), togglePanel:LT('Pannello strumenti','Tools panel'), zoomReset:LT('Zoom 100%','Zoom 100%'),
+        fitZoom:LT('Adatta alla finestra','Fit to window'), tour:LT('Tutorial guidato ✨','Guided tutorial ✨'), shortcuts:LT('Scorciatoie da tastiera','Keyboard shortcuts') };
   // dropdown menu items carry a label <span> as first child (the <span class="k"> is the shortcut, left as-is)
   document.querySelectorAll('.dropdown .mi[data-cmd]').forEach(mi=>{ const k=mi.dataset.cmd; if(MI[k]==null) return;
     const span=mi.querySelector(':scope>span:not(.k)'); if(span) span.textContent=MI[k]; });
 
   // --- toolbar tool buttons (title attribute = tooltip) ---
-  const toolTitle=en
-    ? { brush:'Brush (B)', line:'Line (L)', rect:'Rectangle (R)', ellipse:'Ellipse (E)', eraser:'Eraser',
-        fill:'Fill bucket', pick:'Eyedropper', select:'Rectangular selection (M)',
-        wand:'Magic wand — erase the background by clicking (W)', text:'Text (T)' }
-    : { brush:'Pennello (B)', line:'Linea (L)', rect:'Rettangolo (R)', ellipse:'Ellisse (E)', eraser:'Gomma',
-        fill:'Secchiello', pick:'Contagocce', select:'Selezione rettangolare (M)',
-        wand:'Bacchetta magica — cancella sfondo cliccando (W)', text:'Testo (T)' };
+  const toolTitle={ brush:LT('Pennello (B)','Brush (B)'), line:LT('Linea (L)','Line (L)'), rect:LT('Rettangolo (R)','Rectangle (R)'),
+        ellipse:LT('Ellisse (E)','Ellipse (E)'), eraser:LT('Gomma','Eraser'), fill:LT('Secchiello','Fill bucket'), pick:LT('Contagocce','Eyedropper'),
+        select:LT('Selezione rettangolare (M)','Rectangular selection (M)'), wand:LT('Bacchetta magica — cancella sfondo cliccando (W)','Magic wand — erase the background by clicking (W)'),
+        text:LT('Testo (T)','Text (T)') };
   document.querySelectorAll('#tools .btn[data-tool]').forEach(b=>{ const t=b.dataset.tool; if(toolTitle[t]!=null) b.title=toolTitle[t]; });
-  // toolbar non-tool controls (by id / data-cmd)
-  const setTitle=(sel,it,enT)=>{ const el=document.querySelector(sel); if(el) el.title=en?enT:it; };
+  // toolbar non-tool controls (by id / data-cmd) — helper takes (it,en) and resolves via LT
+  const setTitle=(sel,it,enT)=>{ const el=document.querySelector(sel); if(el) el.title=LT(it,enT); };
   setTitle('#color','Colore primario (tratto)','Primary color (stroke)');
   setTitle('#color2','Colore secondario (riempimento)','Secondary color (fill)');
   setTitle('#colorSwap','Scambia colori (X)','Swap colors (X)');
@@ -867,73 +1215,68 @@ function applyLang(){
   setTitle('[data-cmd="undo"].btn','Annulla (Ctrl+Z)','Undo (Ctrl+Z)');
   setTitle('[data-cmd="redo"].btn','Ripeti (Ctrl+Y)','Redo (Ctrl+Y)');
   setTitle('#panelToggle','Mostra/nascondi pannello (Tab)','Show/hide panel (Tab)');
-  const atl=$('atelierBtn'); if(atl){ atl.title=en?'Atelier — generate an image with AI (WebGPU, on device)':'Atelier — genera un’immagine con l’IA (WebGPU, sul dispositivo)'; }
+  const atl=$('atelierBtn'); if(atl){ atl.title=LT('Atelier — genera un’immagine con l’IA (WebGPU, sul dispositivo)','Atelier — generate an image with AI (WebGPU, on device)'); }
 
   // --- contextual options bar (labels around the inputs) ---
-  const sf=$('shapeFill'); if(sf && sf.parentElement) sf.parentElement.lastChild.textContent=en?' Filled (color 2)':' Riempito (colore 2)';
+  const sf=$('shapeFill'); if(sf && sf.parentElement) sf.parentElement.lastChild.textContent=LT(' Riempito (colore 2)',' Filled (color 2)');
   // the Tolerance / Size / Bold labels are text nodes preceding inputs; rebuild via known structure
-  const optTol=document.querySelector('.opt-grp[data-for="fill wand"] label'); if(optTol) optTol.firstChild.textContent=en?'Tolerance':'Tolleranza';
+  const optTol=document.querySelector('.opt-grp[data-for="fill wand"] label'); if(optTol) optTol.firstChild.textContent=LT('Tolleranza','Tolerance');
   const textGrp=document.querySelector('.opt-grp[data-for="text"]');
-  if(textGrp){ const labs=textGrp.querySelectorAll('label'); if(labs[0]) labs[0].firstChild.textContent=en?'Size':'Dimensione';
-    if(labs[1]) labs[1].lastChild.textContent=en?' Bold':' Grassetto'; }
+  if(textGrp){ const labs=textGrp.querySelectorAll('label'); if(labs[0]) labs[0].firstChild.textContent=LT('Dimensione','Size');
+    if(labs[1]) labs[1].lastChild.textContent=LT(' Grassetto',' Bold'); }
 
   // --- natural-language command bar placeholder ---
-  const ci=$('cmdInput'); if(ci) ci.placeholder=en
-    ? 'Ask Paint… e.g. «remove the background», «create a cat icon», «brightness +20», «rotate right»'
-    : 'Chiedi a Paint… es. «rimuovi lo sfondo», «crea un’icona di un gatto», «luminosità +20», «ruota a destra»';
-  const cg=$('cmdGo'); if(cg) cg.title=en?'Run (Enter)':'Esegui (Invio)';
+  const ci=$('cmdInput'); if(ci) ci.placeholder=LT(
+    'Chiedi a Paint… es. «rimuovi lo sfondo», «crea un’icona di un gatto», «luminosità +20», «ruota a destra»',
+    'Ask Paint… e.g. «remove the background», «create a cat icon», «brightness +20», «rotate right»');
+  const cg=$('cmdGo'); if(cg) cg.title=LT('Esegui (Invio)','Run (Enter)');
 
   // --- drop hint ---
-  const dh=document.querySelector('.drop-hint'); if(dh) dh.textContent=en?'Drop to open the image':'Rilascia per aprire l’immagine';
+  const dh=document.querySelector('.drop-hint'); if(dh) dh.textContent=LT('Rilascia per aprire l’immagine','Drop to open the image');
 
   // --- right panel: head + section titles + labels + buttons (by data-sec / data-cmd / structure) ---
-  const ph=document.querySelector('.panel-head b'); if(ph) ph.textContent=en?'Tools':'Strumenti';
-  const phc=$('panelClose'); if(phc) phc.title=en?'Hide panel (Tab)':'Nascondi pannello (Tab)';
-  const secTitle={ layers:en?'Layers':'Livelli', brush:en?'Brush':'Pennello', sel:en?'Selection':'Selezione',
-    bg:en?'Background':'Sfondo', adj:en?'Adjustments':'Regolazioni', xf:en?'Transform':'Trasforma' };
+  const ph=document.querySelector('.panel-head b'); if(ph) ph.textContent=LT('Strumenti','Tools');
+  const phc=$('panelClose'); if(phc) phc.title=LT('Nascondi pannello (Tab)','Hide panel (Tab)');
+  const secTitle={ layers:LT('Livelli','Layers'), brush:LT('Pennello','Brush'), sel:LT('Selezione','Selection'),
+    bg:LT('Sfondo','Background'), adj:LT('Regolazioni','Adjustments'), xf:LT('Trasforma','Transform') };
   document.querySelectorAll('.psec[data-sec]').forEach(s=>{ const h=s.querySelector(':scope>h4'); const k=s.dataset.sec;
     if(h && secTitle[k]!=null) h.firstChild.textContent=secTitle[k]+' '; });   // keep the <span class="chev"> intact
   // panel row labels (Opacity / Blend / Tolerance / Feather / Brightness / Contrast / Saturation)
-  const rowLabel=(sel,it,enT)=>{ const el=document.querySelector(sel); if(el) el.textContent=en?enT:it; };
-  document.querySelectorAll('.psec[data-sec="layers"] .prow>label').forEach((el,i)=>{ el.textContent=i===0?(en?'Opacity':'Opacità'):(en?'Blend':'Fusione'); });
+  const rowLabel=(sel,it,enT)=>{ const el=document.querySelector(sel); if(el) el.textContent=LT(it,enT); };
+  document.querySelectorAll('.psec[data-sec="layers"] .prow>label').forEach((el,i)=>{ el.textContent=i===0?LT('Opacità','Opacity'):LT('Fusione','Blend'); });
   rowLabel('.psec[data-sec="brush"] .prow>label','Opacità','Opacity');
-  document.querySelectorAll('.psec[data-sec="adj"] .prow>label').forEach((el,i)=>{ el.textContent=[en?'Brightness':'Luminosità',en?'Contrast':'Contrasto',en?'Saturation':'Saturazione'][i]||el.textContent; });
-  document.querySelectorAll('.psec[data-sec="bg"] .prow>label').forEach((el,i)=>{ el.textContent=i===0?(en?'Tolerance':'Tolleranza'):(en?'Feather':'Sfuma'); });
+  document.querySelectorAll('.psec[data-sec="adj"] .prow>label').forEach((el,i)=>{ el.textContent=[LT('Luminosità','Brightness'),LT('Contrasto','Contrast'),LT('Saturazione','Saturation')][i]||el.textContent; });
+  document.querySelectorAll('.psec[data-sec="bg"] .prow>label').forEach((el,i)=>{ el.textContent=i===0?LT('Tolleranza','Tolerance'):LT('Sfuma','Feather'); });
   // blend dropdown options
-  const blendOpt=en
-    ? { normal:'Normal', multiply:'Multiply', screen:'Screen', overlay:'Overlay', darken:'Darken', lighten:'Lighten', 'color-dodge':'Color dodge', difference:'Difference' }
-    : { normal:'Normale', multiply:'Moltiplica', screen:'Scolora', overlay:'Sovrapponi', darken:'Scurisci', lighten:'Schiarisci', 'color-dodge':'Brucia', difference:'Differenza' };
+  const blendOpt={ normal:LT('Normale','Normal'), multiply:LT('Moltiplica','Multiply'), screen:LT('Scolora','Screen'), overlay:LT('Sovrapponi','Overlay'),
+    darken:LT('Scurisci','Darken'), lighten:LT('Schiarisci','Lighten'), 'color-dodge':LT('Brucia','Color dodge'), difference:LT('Differenza','Difference') };
   document.querySelectorAll('#layBlend option').forEach(o=>{ if(blendOpt[o.value]!=null) o.textContent=blendOpt[o.value]; });
   // layer toolbar button tooltips
-  const layBtnTitle=en
-    ? { layerAdd:'New layer', layerDup:'Duplicate', layerUp:'Move up', layerDown:'Move down', layerMerge:'Merge down', layerDel:'Delete' }
-    : { layerAdd:'Nuovo livello', layerDup:'Duplica', layerUp:'Sposta su', layerDown:'Sposta giù', layerMerge:'Unisci sotto', layerDel:'Elimina' };
+  const layBtnTitle={ layerAdd:LT('Nuovo livello','New layer'), layerDup:LT('Duplica','Duplicate'), layerUp:LT('Sposta su','Move up'),
+    layerDown:LT('Sposta giù','Move down'), layerMerge:LT('Unisci sotto','Merge down'), layerDel:LT('Elimina','Delete') };
   document.querySelectorAll('.psec[data-sec="layers"] .pbtn[data-cmd]').forEach(b=>{ const k=b.dataset.cmd; if(layBtnTitle[k]!=null) b.title=layBtnTitle[k]; });
   // panel hints + selection/background/adjust/transform buttons + texts (by data-cmd, with structural fallbacks)
-  const brushHint=document.querySelector('.psec[data-sec="brush"] .phint'); if(brushHint) brushHint.textContent=en?'The eraser cuts to transparent (real PNG alpha).':'La gomma cancella in trasparente (alpha PNG reale).';
+  const brushHint=document.querySelector('.psec[data-sec="brush"] .phint'); if(brushHint) brushHint.textContent=LT('La gomma cancella in trasparente (alpha PNG reale).','The eraser cuts to transparent (real PNG alpha).');
   // selection section buttons
-  const selBtns=en?{ cropSel:'Crop', clearSel:'Clear', fillSel:'Fill', genSel:'✨ Generate here', deselect:'Deselect' }
-                  :{ cropSel:'Ritaglia', clearSel:'Cancella', fillSel:'Riempi', genSel:'✨ Genera qui', deselect:'Deseleziona' };
+  const selBtns={ cropSel:LT('Ritaglia','Crop'), clearSel:LT('Cancella','Clear'), fillSel:LT('Riempi','Fill'), genSel:LT('✨ Genera qui','✨ Generate here'), deselect:LT('Deseleziona','Deselect') };
   document.querySelectorAll('.psec[data-sec="sel"] .pbtn[data-cmd]').forEach(b=>{ const k=b.dataset.cmd; if(selBtns[k]!=null) b.textContent=selBtns[k]; });
   // background section
-  const bgBtns=en?{ removeBg:'Remove background (auto)', trim:'Trim transparent borders' }
-                 :{ removeBg:'Rimuovi sfondo (auto)', trim:'Rifila bordi trasparenti' };
+  const bgBtns={ removeBg:LT('Rimuovi sfondo (auto)','Remove background (auto)'), trim:LT('Rifila bordi trasparenti','Trim transparent borders') };
   document.querySelectorAll('.psec[data-sec="bg"] .pbtn[data-cmd]').forEach(b=>{ const k=b.dataset.cmd; if(bgBtns[k]!=null) b.textContent=bgBtns[k]; });
-  const bgHint=document.querySelector('.psec[data-sec="bg"] .phint'); if(bgHint) bgHint.textContent=en?'Or pick the 🪄 wand and click the background to erase.':'Oppure scegli la 🪄 bacchetta e clicca lo sfondo da cancellare.';
+  const bgHint=document.querySelector('.psec[data-sec="bg"] .phint'); if(bgHint) bgHint.textContent=LT('Oppure scegli la 🪄 bacchetta e clicca lo sfondo da cancellare.','Or pick the 🪄 wand and click the background to erase.');
   // adjustments section buttons
-  const adjBtns=en?{ adjApply:'Apply', adjReset:'Reset', fxGray:'Gray', fxInvert:'Invert', fxSepia:'Sepia', fxBlur:'Blur', fxSharp:'Sharp', fxEdges:'Edges' }
-                  :{ adjApply:'Applica', adjReset:'Ripristina', fxGray:'Grigi', fxInvert:'Inverti', fxSepia:'Seppia', fxBlur:'Sfoca', fxSharp:'Nitido', fxEdges:'Contorni' };
+  const adjBtns={ adjApply:LT('Applica','Apply'), adjReset:LT('Ripristina','Reset'), fxGray:LT('Grigi','Gray'), fxInvert:LT('Inverti','Invert'),
+    fxSepia:LT('Seppia','Sepia'), fxBlur:LT('Sfoca','Blur'), fxSharp:LT('Nitido','Sharp'), fxEdges:LT('Contorni','Edges') };
   document.querySelectorAll('.psec[data-sec="adj"] .pbtn[data-cmd]').forEach(b=>{ const k=b.dataset.cmd; if(adjBtns[k]!=null) b.textContent=adjBtns[k]; });
-  // transform section buttons (keep the leading glyph)
-  const xfBtns=en?{ rotccw:'⟲ 90°', rotcw:'⟳ 90°', fliph:'⇄ Horiz.', flipv:'⇅ Vert.' }
-                 :{ rotccw:'⟲ 90°', rotcw:'⟳ 90°', fliph:'⇄ Orizz.', flipv:'⇅ Vert.' };
+  // transform section buttons (keep the leading glyph; ⟲/⟳ 90° are language-neutral, fliph/flipv fall back to EN abbrev.)
+  const xfBtns={ rotccw:'⟲ 90°', rotcw:'⟳ 90°', fliph:LT('⇄ Orizz.','⇄ Horiz.'), flipv:LT('⇅ Vert.','⇅ Vert.') };
   document.querySelectorAll('.psec[data-sec="xf"] .pbtn[data-cmd]').forEach(b=>{ const k=b.dataset.cmd; if(xfBtns[k]!=null) b.textContent=xfBtns[k]; });
 
   // --- status bar: the static "File:" / "Canvas:" prefixes + zoom button tooltips ---
   const stFileLabel=document.querySelector('.status>span:nth-child(1)'); // "File: <b>…</b><b>…</b>"
-  if(stFileLabel && stFileLabel.firstChild) stFileLabel.firstChild.textContent=en?'File: ':'File: ';
+  if(stFileLabel && stFileLabel.firstChild) stFileLabel.firstChild.textContent=LT('File: ','File: ');
   const stDimLabel=document.querySelector('.status>span:nth-child(2)'); // "Tela: <b>…</b>"
-  if(stDimLabel && stDimLabel.firstChild) stDimLabel.firstChild.textContent=en?'Canvas: ':'Tela: ';
+  if(stDimLabel && stDimLabel.firstChild) stDimLabel.firstChild.textContent=LT('Tela: ','Canvas: ');
   setTitle('#zoomOut','Riduci','Zoom out');
   setTitle('#zoomIn','Ingrandisci','Zoom in');
   setTitle('#zoomFit','Adatta','Fit');
@@ -944,6 +1287,7 @@ function applyLang(){
   syncTitle();
 }
 applyLang();
+setMsg(LT('Pronto','Ready'));   // translate the initial status label (static HTML default is Italian)
 
 // ---- rulers (canvas coordinates, accurate under zoom + scroll) ----
 const rTop=$('rulerTop'), rLeft=$('rulerLeft'), rtx=rTop.getContext('2d'), rlx=rLeft.getContext('2d');
@@ -1003,7 +1347,7 @@ $('layBlend').addEventListener('change', e=>setLayerBlend(e.target.value));
 // ===== NATURAL-LANGUAGE COMMAND BAR — type a phrase, Paint does it. DETERMINISTIC + OFFLINE (nlcommand.js,
 // zero hallucination). Fully ISOLATED in Paint: nothing routes through ANIMA; ANIMA still never touches images.
 let NLC=null; import('./nlcommand.js').then(m=>NLC=m).catch(()=>{});
-function cmdLang(){ try{ return (localStorage.getItem('anima.lang')||navigator.language||'it').toLowerCase().slice(0,2)==='en'?'en':'it'; }catch{ return 'it'; } }
+function cmdLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'it').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'it'; }catch{ return 'it'; } }
 function cmdResp(text,cls){ const r=$('cmdResp'); if(r){ r.textContent=text||''; r.className='cmd-resp'+(cls?' '+cls:''); } if(text) setMsg(text); }
 async function runCommand(text){ if(!text||!text.trim()) return; if(!NLC){ try{ NLC=await import('./nlcommand.js'); }catch{ cmdResp(LT('Modulo comandi non caricato','Commands module not loaded'),'warn'); return; } }
   const d=NLC.parseCommand(text, cmdLang());
@@ -1033,7 +1377,7 @@ window.addEventListener('keydown', e=>{ if(e.ctrlKey||e.metaKey||isTyping()) ret
 
 // ---- guided tutorial (tour.js) — bilingual, first-run + Aiuto menu ----
 let _tour=null;
-function tourLang(){ try{ const l=(localStorage.getItem('anima.lang')||navigator.language||'it').toLowerCase(); return l.slice(0,2)==='en'?'en':'it'; }catch{ return 'it'; } }
+function tourLang(){ try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'it').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'it'; }catch{ return 'it'; } }
 async function loadTour(){ if(!_tour) _tour=await import('./tour.js'); return _tour; }
 async function startTour(force){ try{ const m=await loadTour(); m.startTour({ lang:tourLang(), force:!!force, modelDir:'/apps/paint/models/sdxs-512-dreamshaper-sketch', inShell }); }catch(e){ setMsg(LT('Tutorial non disponibile','Tutorial unavailable')); } }
 async function showShortcuts(){ try{ const m=await loadTour(); m.showShortcuts(tourLang()); }catch{} }
@@ -1058,8 +1402,9 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   const escapeHtml = (s)=> String(s==null?'':s).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
   // Active OS language for Atelier strings. Reads anima.lang first (the canonical OS signal), then the
   // document lang (kept in sync by /nucleo-i18n.js). Mirrors the top-level paintLang().
-  const uiLang = ()=> { try{ return (localStorage.getItem('anima.lang')||document.documentElement.lang||'it').slice(0,2)==='en'?'en':'it'; }catch{ return (document.documentElement.lang||'it').slice(0,2)==='en'?'en':'it'; } };
-  const UL = (it,en)=> uiLang()==='en'?en:it;   // ternary helper, same shape as the top-level LT()
+  const uiLang = ()=> { try{ const l=(localStorage.getItem('anima.lang')||document.documentElement.lang||'it').toLowerCase().slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'it'; }catch{ return 'it'; } };
+  // Same shape + behaviour as the top-level LT(): IT/EN inline, es/fr/de from the shared PAINT_L10N table.
+  const UL = (it,en)=> { const l=uiLang(); if(l==='it') return it; if(l==='en') return en; return (PAINT_L10N[l]&&PAINT_L10N[l][en])||en; };
 
   // Lazy-load the three pure pipeline modules (providers / online-image / pipeline) once.
   async function ensurePipeline(){ if(PIPEMOD) return PIPEMOD;
@@ -1173,7 +1518,13 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
     el.strWrap.style.display = m==='img' ? '' : 'none';
     el.ctrlWrap.style.display = m==='sketch' ? '' : 'none';
     const s = window.__paintSel && window.__paintSel();
-    const selNote = s ? UL(` · genererò NELLA selezione ${s.w}×${s.h}`,` · will generate INTO the ${s.w}×${s.h} selection`) : '';
+    // word order differs per language, so build it per-language (the ${dim} var itself is never translated)
+    const _dim = s ? (s.w+'×'+s.h) : '', _sl = uiLang();
+    const selNote = !s ? '' : _sl==='it' ? ` · genererò NELLA selezione ${_dim}`
+      : _sl==='es' ? ` · generaré DENTRO la selección ${_dim}`
+      : _sl==='fr' ? ` · générera DANS la sélection ${_dim}`
+      : _sl==='de' ? ` · erzeugt IN die ${_dim}-Auswahl`
+      : ` · will generate INTO the ${_dim} selection`;
     el.hint.textContent = (m==='sketch' ? UL('Usa il tuo disegno come schizzo guida (ControlNet).','Use your drawing as a guide sketch (ControlNet).')
       : m==='img' ? UL('Rielabora il contenuto attuale della tela secondo il prompt.','Reworks the current canvas content according to the prompt.')
       : UL('Genera dal solo testo (tela ignorata).','Generates from text only (canvas ignored).')) + selNote;
@@ -1223,7 +1574,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   // The prompt-enhancer toggle appears only when a chat LLM is configured; on by default for the AI providers.
   function updateEnhanceUI(){ if(!el.enhanceWrap) return;
     if(aiCfg.chat){ const b=PIPEMOD.P.brandOf(aiCfg.chat);
-      el.enhanceWrap.style.display=''; el.enhanceLbl.textContent=(uiLang()==='en'?'✨ Improve the prompt with ':'✨ Migliora il prompt con ')+b;
+      el.enhanceWrap.style.display=''; el.enhanceLbl.textContent=UL('✨ Migliora il prompt con ','✨ Improve the prompt with ')+b;
       if(el.enhance.dataset.touched!=='1') el.enhance.checked = (selProvider!=='preview');
     } else { el.enhanceWrap.style.display='none'; el.enhance.checked=false; }
     el.enhance.onchange=()=>{ el.enhance.dataset.touched='1'; };
@@ -1454,9 +1805,9 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
     const r=await booting; booting=null; return r;
   }
   function showReady(){
-    const labels = uiLang()==='en'
-      ? {'sdxs-fused':'Ready · SDXS q68 on WebGPU','sdxs':'Ready · SDXS on WebGPU','mock':'Ready · procedural preview'}
-      : {'sdxs-fused':'Pronto · SDXS q68 su WebGPU','sdxs':'Pronto · SDXS su WebGPU','mock':'Pronto · anteprima procedurale'};
+    const labels = {'sdxs-fused':UL('Pronto · SDXS q68 su WebGPU','Ready · SDXS q68 on WebGPU'),
+                    'sdxs':UL('Pronto · SDXS su WebGPU','Ready · SDXS on WebGPU'),
+                    'mock':UL('Pronto · anteprima procedurale','Ready · procedural preview')};
     el.status.textContent=labels[engKind]||UL('Pronto','Ready'); }
 
   // ---- manager view: shows state + source choices ------------------------------------------------------
@@ -1518,7 +1869,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
       const s=dlSteps[d.id]||{state:'pending'};
       const ic=s.state==='done'?'✓':s.state==='active'?'⟳':s.state==='error'?'✕':'·';
       let sub='';
-      if(s.state==='active'&&s.bytes&&d.bytes) sub=`<span class="ss">${(s.bytes/1e6).toFixed(0)} / ${(d.bytes/1e6).toFixed(0)} MB${s.part?UL(` · parte ${s.part}/${s.parts}`,` · part ${s.part}/${s.parts}`):''}</span>`;
+      if(s.state==='active'&&s.bytes&&d.bytes) sub=`<span class="ss">${(s.bytes/1e6).toFixed(0)} / ${(d.bytes/1e6).toFixed(0)} MB${s.part?(UL(' · parte ',' · part ')+s.part+'/'+s.parts):''}</span>`;
       else if(s.state==='done'&&d.bytes) sub=`<span class="ss">${(d.bytes/1e6).toFixed(0)} ${UL('MB completati','MB done')}</span>`;
       else if(s.state==='active'&&d.id==='engine') sub=`<span class="ss">${UL('compilazione del modello sulla GPU…','compiling the model on the GPU…')}</span>`;
       return `<div class="atl-step ${s.state}"><span class="si">${ic}</span><div>${d.label}${sub}</div></div>`;
@@ -1641,7 +1992,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
           el.enhanced.innerHTML='<b>Prompt ('+escapeHtml(r.enhanced.brand||'IA')+'):</b> '+escapeHtml(r.enhanced.to);
         } else if(enhanceOn){
           el.enhanced.className='atl-enhanced warn'; el.enhanced.style.display='';
-          el.enhanced.textContent=uiLang()==='en'?'Prompt enhancement failed — using your original text.':'Miglioramento prompt non riuscito — uso il testo originale.';
+          el.enhanced.textContent=UL('Miglioramento prompt non riuscito — uso il testo originale.','Prompt enhancement failed — using your original text.');
         }
       }
       // snapshot the apply context NOW (variant clicks happen later; mode/strength/layer/selection may change)
@@ -1649,7 +2000,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
       const mapped=r.results.map(x=>({ out:{image:x.image,meta:x.meta}, seed:x.seed }));
       if(mapped.length===1){ await applyResult(mapped[0], region, applyCtx); }
       else { renderVariants(mapped, region, applyCtx); el.status.textContent=UL('Scegli una variante qui sotto.','Choose a variant below.'); }
-      if(r.errors && r.errors.length){ banner('warn', r.errors.length+(uiLang()==='en'?' variant(s) failed: ':' variante/i non riuscite: ')+r.errors[0].error); }
+      if(r.errors && r.errors.length){ banner('warn', r.errors.length+UL(' variante/i non riuscite: ',' variant(s) failed: ')+r.errors[0].error); }
     }catch(err){ setProg(null); banner('warn',UL('Generazione non riuscita: ','Generation failed: ')+(err&&err.message||err)); }
     finally{ generating=false; el.go.disabled=false; el.go.textContent=goLabel; }
   }

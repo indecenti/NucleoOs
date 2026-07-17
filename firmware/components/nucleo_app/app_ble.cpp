@@ -30,15 +30,10 @@ static Screen s_screen = MENU;
 static int    s_sel = 0;          // menu cursor
 static nucleo_ble_spam_t s_target = NUCLEO_BLE_SPAM_IOS;
 static bool   s_up_ok = false;
-static bool   s_bt_off = false;       // boot released the radio for RAM -> show the enable prompt
 
 static void txt(int x, int y, const char *s, uint16_t fg, uint16_t bg, int sz) {
     d.setTextSize(sz); d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
 }
-
-// Apply the Bluetooth on/off choice: persist the preference and reboot (the release happens at boot).
-static void reboot_with_bt(bool on) { nucleo_ble_set_pref(on); esp_restart(); }
-static void ble_tab(void) { reboot_with_bt(s_bt_off); }   // TAB toggles: off->on, on->off (then reboots)
 
 struct Item { const char *label; const char *sub; };
 static const Item MENU_ITEMS[] = {
@@ -83,28 +78,26 @@ static bool on_back(int key)
 // ---- lifecycle -------------------------------------------------------------------------------------
 static void on_enter(void)
 {
-    // Framework has already entered NX_DEEP_OFFLINE here (Wi-Fi/httpd/mDNS/voice/L1 down).
+    // Seamless: this app is NX_SOLO|NX_DEEP_OFFLINE|NX_BLE, so opening it reboots ONCE
+    // into a Solo boot with Wi-Fi skipped and Bluetooth kept — the radio is present and
+    // comes straight up. No "enable Bluetooth + reboot + reopen" dance. Esc -> normal OS.
     s_screen = MENU; s_sel = 0;
-    s_bt_off = !nucleo_ble_radio_present();          // radio freed at boot for RAM -> offer to enable
-    s_up_ok  = s_bt_off ? false : nucleo_ble_up();
+    s_up_ok  = nucleo_ble_radio_present() && nucleo_ble_up();
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_tab_handler(ble_tab);
-    nucleo_app_set_hint(s_bt_off ? "invio: attiva bluetooth e riavvia"
-                                 : "1-8 scegli  enter avvia  esc indietro  tab spegni bt");
+    nucleo_app_set_hint("1-8 scegli  enter avvia  esc indietro");
     nucleo_app_request_draw();
 }
 
 static void on_exit(void)
 {
-    if (s_bt_off) return;     // never brought the radio up -> nothing to tear down
+    if (!s_up_ok) return;     // radio never came up -> nothing to tear down
     stop_all();
-    nucleo_ble_down();        // RAM back to the heap; framework then restores Wi-Fi/httpd/etc.
+    nucleo_ble_down();        // RAM back to the heap; on Esc the framework reboots to the OS.
 }
 
 static void on_key(int key, char ch)
 {
     if (s_screen == MENU) {
-        if (s_bt_off) { if (key == NK_ENTER) reboot_with_bt(true); return; }   // enable Bluetooth + reboot
         if (ch >= '1' && ch <= '0' + N_ITEMS) { s_sel = ch - '1'; activate(s_sel); return; }   // number = instant launch
         if (app_ui_list_key(key, ch, &s_sel, N_ITEMS, ble_label, nullptr)) { nucleo_app_request_draw(); return; }
         if (key == NK_ENTER) activate(s_sel);
@@ -121,15 +114,12 @@ static void on_tick(void) { if (s_screen != MENU) nucleo_app_request_draw(); }
 static void draw_menu(int top, int h)
 {
     (void)top;
-    if (s_bt_off) {   // Bluetooth disabled to reclaim RAM — offer to enable it
-        int y0 = app_ui_title("BLE", ACC, nullptr);
-        txt(10, y0 + 12, "Bluetooth spento", FG, BG, 2);
-        txt(10, y0 + 34, "Liberati ~35 KB per ANIMA e sistema.", MUTED, BG, 1);
-        txt(10, y0 + 54, "INVIO: attiva e riavvia.", WARN, BG, 1);
+    int y0 = app_ui_title("BLE", ACC, "solo test autorizzati");
+    if (!s_up_ok) {   // rare after the BLE-Solo Wi-Fi-skip fix
+        txt(8, y0 + 14, "Bluetooth non attivo.", FG, BG, 1);
+        txt(8, y0 + 30, "Riprova ad aprire l'app.", MUTED, BG, 1);
         return;
     }
-    int y0 = app_ui_title("BLE", ACC, "solo test autorizzati");
-    if (!s_up_ok) { txt(10, y0 + 14, "Controller BLE non avviato.", WARN, BG, 2); return; }
     const int foot = 16;
     app_ui_list(y0, h - y0 - foot, N_ITEMS, s_sel, ble_label, nullptr, nullptr, nullptr);
     // focused-item description on a footer strip (launcher idiom: the instruction line)
@@ -208,7 +198,8 @@ extern "C" void nucleo_register_ble(void)
 {
     static const nucleo_app_def_t app = {
         "ble", "BLE", "Security", "Scan / spam pairing / iBeacon (test autorizzati)",
-        'B', 0x4DDF, on_enter, on_key, on_tick, on_draw, on_exit, NX_DEEP_OFFLINE
+        'B', 0x4DDF, on_enter, on_key, on_tick, on_draw, on_exit,
+        NX_SOLO | NX_DEEP_OFFLINE | NX_BLE
     };
     nucleo_app_register(&app);
 }

@@ -1,0 +1,23 @@
+{
+  "_lang": "fr",
+  "title": "Corbeille",
+  "restore_all": "Tout restaurer",
+  "empty_bin": "Vider la corbeille",
+  "restore": "Restaurer",
+  "count": {
+    "one": "· {count} élément",
+    "other": "· {count} éléments"
+  },
+  "count_empty": "· vide",
+  "empty_title": "La corbeille est vide.",
+  "empty_hint": "Les fichiers que vous supprimez dans File Commander arrivent ici et peuvent être restaurés.",
+  "toast_restored_to": "Restauré dans {path}",
+  "toast_restore_failed": "Échec de la restauration",
+  "toast_deleted_perm": "Supprimé définitivement",
+  "toast_restored_all": "Tout restauré",
+  "toast_bin_emptied": "Corbeille vidée",
+  "confirm_empty": {
+    "one": "Supprimer définitivement {count} élément ? Cette action est irréversible.",
+    "other": "Supprimer définitivement {count} éléments ? Cette action est irréversible."
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "_lang": "es",
+
+  "title": "Code Runner",
+  "scratch": "borrador",
+  "unsaved": "sin guardar",
+
+  "t_run": "Ejecutar (Ctrl+Enter)",
+  "t_stop": "Detener",
+  "t_save": "Guardar (Ctrl+S)",
+  "t_clear": "Limpiar consola",
+  "btn_run": "Ejecutar",
+  "btn_save": "Guardar",
+  "caps": "sandbox",
+  "caps_tip": "Se ejecuta en el navegador, en sandbox (Web Worker, sin DOM).\nPermisos activos: sistema de archivos SD · red (http) · ANIMA · notificaciones · hardware (os.hw: IR/GPIO/Wi-Fi).\nLímite de tiempo: 6 s.",
+
+  "ph_editor": "// JavaScript — se ejecuta en el navegador, en sandbox.\n// console.log(...) o `return` para mostrar un valor. await libre.\n// API: os.fs.read/write/list · os.http.get · os.anima(pregunta) · os.notify(texto)\n\nconsole.log('Hola desde NucleoOS');",
+
+  "status_ready": "listo",
+  "status_running": "ejecutando…",
+
+  "examples_label": "ejemplos",
+  "ex_none": "—",
+  "ex_hello": "Hola + valor",
+  "ex_fib": "Fibonacci",
+  "ex_fs": "Leer/escribir archivo SD",
+  "ex_list": "Listar una carpeta",
+  "ex_anima": "Preguntar a ANIMA",
+  "ex_http": "Obtener JSON",
+  "ex_hw": "Hardware (IR+GPIO+WiFi)",
+
+  "kbd_run": "ejecutar",
+  "kbd_save": "guardar",
+
+  "console_empty": "La consola está vacía. Pulsa ▶ Ejecutar.",
+  "console_cleared": "Consola limpiada.",
+
+  "run_started": "▶ {name} · {time}",
+  "run_done": "✓ completado en {ms} ms",
+  "run_stopped": "■ detenido",
+  "run_error": "✖ {error}",
+  "read_failed": "⚠ no se pudo leer {path} ({status})",
+  "read_error": "⚠ {error}",
+
+  "saved": "Guardado",
+  "save_failed": "Error al guardar ({status})",
+  "save_error": "Error: {error}",
+  "prompt_save": "Guardar como (ruta SD):"
+}

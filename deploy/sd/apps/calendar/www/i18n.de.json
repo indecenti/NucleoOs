@@ -1,0 +1,14 @@
+{
+  "_lang": "de",
+  "prev_month": "Vorheriger Monat",
+  "next_month": "Nächster Monat",
+  "new_event_ph": "Neuer Termin… (Enter)",
+  "pick_day": "Tag auswählen",
+  "empty_events": "Keine Termine. Unten einen hinzufügen.",
+  "saved_device": "Auf dem Gerät gespeichert",
+  "save_failed": "Speichern fehlgeschlagen — Gerät nicht erreichbar",
+  "more_events": {
+    "one": "+{count} weiterer",
+    "other": "+{count} weitere"
+  }
+}

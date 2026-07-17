@@ -17,6 +17,8 @@ lab, on‑device transcription and offline image generation.
 
 <sub>Free for noncommercial use · **commercial use requires a paid license** → niki070585@gmail.com</sub>
 
+<sub>⚠️ Includes security-testing tools — **authorized testing, research & education only**. [Read the rules ↓](#legal--responsible-use)</sub>
+
 <img src="docs/screenshots/webos.gif" width="860" alt="NucleoOS web desktop — a Windows‑class shell (files, spreadsheet, Paint, games, monitor) served straight off the Cardputer" />
 
 </div>
@@ -357,6 +359,27 @@ at runtime, so you build once and fan out. The ANIMA gate must be green before a
 (`release.ps1`/`flash.ps1` enforce it). See [`docs/releasing.md`](docs/releasing.md).
 
 ---
+
+## Legal & responsible use
+
+NucleoOS ships tools that probe and transmit on radio and wired networks — Wi-Fi (scan, deauth,
+beacon, Evil Portal, PMKID / handshake capture), Bluetooth LE, Ethernet L2/L3, infrared,
+USB-HID (BadUSB / DuckyScript), and the FIDO security-key stack. **These are provided for
+authorized security testing, research, and education only.**
+
+- Use them **only** on networks, devices, and systems you **own** or have **explicit written
+  permission** to test.
+- **You alone are responsible** for complying with every applicable law and regulation in your
+  jurisdiction — including computer-misuse, unauthorized-access, interception / wiretap, privacy,
+  and radio-spectrum rules. Active transmission (deauthentication frames, beacon / BLE floods,
+  infrared, jamming) is restricted or outright illegal in many countries.
+- Do **not** use NucleoOS against any network, device, or account without authorization.
+  Unauthorized access, disruption, or interception can be a criminal offense.
+- NucleoOS is provided **"as is", without warranty of any kind**. The authors and contributors
+  accept **no liability** for any damage, loss, or legal consequence arising from its use or misuse.
+
+By building, flashing, or running this software you accept these terms and agree to use it
+lawfully and ethically. If you do not agree, do not use it.
 
 ## Contributing
 

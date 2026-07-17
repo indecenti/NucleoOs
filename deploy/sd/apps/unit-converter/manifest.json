@@ -1,0 +1,21 @@
+{
+  "id": "unit-converter",
+  "name": "Unit Converter",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Convert length, mass, temperature, volume, data, speed and time — with a natural-language command bar in English and Italian.",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/unit-converter/",
+  "icon": "icon.svg",
+  "permissions": ["system.clipboard"],
+  "mounts": {},
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": [],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

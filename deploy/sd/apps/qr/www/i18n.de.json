@@ -1,0 +1,51 @@
+{
+  "_lang": "de",
+
+  "app_title": "QR-Code",
+  "ecc_label": "Fehlerkorrektur",
+  "ecc_low": "Niedrig (größere Module)",
+  "ecc_med": "Mittel",
+  "ecc_quart": "Quartil",
+  "ecc_high": "Hoch (robuster)",
+  "saved_title": "Auf dem Gerät gespeichert",
+  "saved_empty": "Kein QR gespeichert.",
+  "save_to_device": "★ Auf Gerät speichern",
+  "save_hint": "„Auf Gerät speichern“ schreibt den QR in <b>/data/QR/qrcodes.json</b>: die native App <b>QR-Code</b> (Quelle „Gespeichert“) zeigt ihn groß auf dem Cardputer.",
+
+  "ty_link": "Link",
+  "ty_text": "Text",
+  "ty_wifi": "Wi-Fi",
+  "ty_email": "E-Mail",
+  "ty_tel": "Telefon",
+  "ty_geo": "Karte",
+  "ty_vcard": "Kontakt",
+  "ty_pair": "Koppeln",
+
+  "f_url": "Webadresse",
+  "f_text": "Freitext",
+  "f_ssid": "Netzwerkname (SSID)",
+  "f_pass": "Passwort",
+  "f_auth": "Sicherheit",
+  "f_hidden": "Verstecktes Netzwerk",
+  "f_to": "Empfänger",
+  "f_subject": "Betreff",
+  "f_body": "Nachricht",
+  "f_num": "Nummer",
+  "f_lat": "Breitengrad",
+  "f_lng": "Längengrad",
+  "f_name": "Name",
+  "f_org": "Organisation",
+  "ph_text": "Hier eingeben...",
+
+  "pair_note": "Scanne, um dieses NucleoOS auf einem anderen Gerät zu öffnen ({host}).",
+  "pair_pin": " Kopplungs-PIN: <b>{pin}</b>.",
+
+  "meta_line": "Version <b>{version}</b> · {size}×{size} Module · {ecc} · {chars} Zeichen",
+  "too_long": "Text zu lang",
+
+  "loaded_x": "Geladen: {label}",
+  "deleted": "Gelöscht",
+  "save_failed": "Speichern fehlgeschlagen (Gerät offline?)",
+  "saved_to_device": "Auf dem Gerät gespeichert",
+  "load": "Laden"
+}

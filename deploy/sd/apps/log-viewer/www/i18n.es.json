@@ -1,0 +1,33 @@
+{
+  "_lang": "es",
+  "app_title": "Visor de registros",
+  "filter_ph": "Filtrar tipo/datos",
+  "btn_pause": "Pausar",
+  "btn_resume": "Reanudar",
+  "btn_history": "Historial",
+  "btn_clear": "Limpiar",
+  "btn_diag": "🩺 Diagnosticar",
+  "btn_health": "Estado",
+  "follow": "Seguir",
+  "history_hint": "Lee el diario de eventos desde la tarjeta SD (bajo demanda — de lo contrario mantiene el dispositivo en reposo)",
+  "diag_hint": "Genera un resumen compacto de estado (Cardputer + ANIMA) para pegar en una IA",
+  "health_hint": "Sonda adaptativa: sintetiza eventos de estado en vivo (solo con la ventana visible, nunca durante trabajo pesado)",
+  "diag_title": "Diagnóstico de estado",
+  "diag_sub": "Copia este bloque y pégalo en una IA para el diagnóstico.",
+  "gathering": "Recopilando diagnósticos…",
+  "diag_err": "Diagnóstico no disponible",
+  "btn_copy": "📋 Copiar",
+  "btn_regen": "↻ Regenerar",
+  "btn_close": "Cerrar",
+  "copied": "Copiado al portapapeles ✓",
+  "empty_state": "Escuchando eventos en tiempo real…<br><span style=\"font-size:11px\">Pulsa <b>🩺 Diagnosticar</b> para un informe de estado, o <b>Historial</b> para el diario en la SD.</span>",
+  "events": {
+    "one": "{count} evento",
+    "other": "{count} eventos"
+  },
+  "events_of": " (de {total})",
+  "status_paused": " · en pausa",
+  "src_journal": "diario: {lines} líneas en la SD",
+  "src_none": "aún no hay diario en la SD",
+  "src_error": "diario no disponible"
+}

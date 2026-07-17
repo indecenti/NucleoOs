@@ -184,11 +184,18 @@
   const SETTINGS = '/system/config/settings.json';
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const lang = () => (localStorage.getItem('anima.lang') === 'en' ? 'en' : 'it');
+  const lang = () => { const l=(localStorage.getItem('anima.lang')||'it').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'it'; };
 
   // ---- ANIMA teach grammar (matches firmware tool_teach: LEAD + copula è/sono/significa) -----
-  const LEAD = { it:'ricorda che ', en:'remember that ' };
-  const COPW = { is:{it:'è',en:'is'}, are:{it:'sono',en:'are'}, means:{it:'significa',en:'means'} };
+  const LEAD = { it:'ricorda che ', en:'remember that ', es:'recuerda que ', fr:'souviens-toi que ', de:'merke dir, dass ' };
+  const COPW = { is:{it:'è',en:'is',es:'es',fr:'est',de:'ist'}, are:{it:'sono',en:'are',es:'son',fr:'sont',de:'sind'}, means:{it:'significa',en:'means',es:'significa',fr:'signifie',de:'bedeutet'} };
+  // Per-language particles for the derived relation sentences (kept copula-free in the subject — see NB below).
+  const CONJ = { it:'e', en:'and', es:'y', fr:'et', de:'und' };                 // "A e B" / "A and B"
+  const SIBV = { it:'fratelli', en:'siblings', es:'hermanos', fr:'frères et sœurs', de:'Geschwister' };
+  const MARV = { it:'sposati', en:'married', es:'casados', fr:'mariés', de:'verheiratet' };
+  const FRIV = { it:'amici', en:'friends', es:'amigos', fr:'amis', de:'Freunde' };
+  const GW   = { it:{f:'la nonna',m:'il nonno'}, en:{f:'grandmother',m:'grandfather'}, es:{f:'la abuela',m:'el abuelo'}, fr:{f:'la grand-mère',m:'le grand-père'}, de:{f:'die Großmutter',m:'der Großvater'} };
+  const PW   = { it:{f:'mamma',m:'papà'}, en:{f:'mother',m:'father'}, es:{f:'madre',m:'padre'}, fr:{f:'mère',m:'père'}, de:{f:'Mutter',m:'Vater'} };
   // NB: derived subjects must never contain a standalone copula word (è/sono/significa | is/are/means),
   // because tool_teach splits on the FIRST copula. All templates below are copula-free in the subject.
   function sentence(subject, value, cop, l){ return LEAD[l] + subject.trim() + ' ' + COPW[cop][l] + ' ' + value.trim(); }
@@ -199,20 +206,20 @@
   // relation type -> { picker label, derived fact (subject/value/cop), graph kind }
   // graph kinds: loc | parent(g) | sib  used by the deduction engine
   const REL = {
-    loc:   { kind:'loc',      lab:{it:'si trova / è in', en:'is located in'},
-             fact:(a,b,l)=> l==='en'?{s:`the location of ${a}`,v:b,c:'is'}:{s:`dove si trova ${a}`,v:b,c:'is'} },
-    abita: { kind:'loc',      lab:{it:'abita a / vive a', en:'lives in'},
-             fact:(a,b,l)=> l==='en'?{s:`where ${a} lives`,v:b,c:'is'}:{s:`dove abita ${a}`,v:b,c:'is'} },
-    mamma: { kind:'parent', g:'f', lab:{it:'è la mamma di', en:'is the mother of'},
-             fact:(a,b,l)=> l==='en'?{s:`the mother of ${b}`,v:a,c:'is'}:{s:`la mamma di ${b}`,v:a,c:'is'} },
-    papa:  { kind:'parent', g:'m', lab:{it:'è il papà di', en:'is the father of'},
-             fact:(a,b,l)=> l==='en'?{s:`the father of ${b}`,v:a,c:'is'}:{s:`il papà di ${b}`,v:a,c:'is'} },
-    fratelli:{ kind:'sib',  lab:{it:'è fratello/sorella di', en:'is a sibling of'},
-             fact:(a,b,l)=> l==='en'?{s:`${a} and ${b}`,v:'siblings',c:'are'}:{s:`${a} e ${b}`,v:'fratelli',c:'are'} },
-    sposati:{ kind:'pair',  lab:{it:'è sposato/a con', en:'is married to'},
-             fact:(a,b,l)=> l==='en'?{s:`${a} and ${b}`,v:'married',c:'are'}:{s:`${a} e ${b}`,v:'sposati',c:'are'} },
-    amici: { kind:'pair',   lab:{it:'è amico/a di', en:'is a friend of'},
-             fact:(a,b,l)=> l==='en'?{s:`${a} and ${b}`,v:'friends',c:'are'}:{s:`${a} e ${b}`,v:'amici',c:'are'} },
+    loc:   { kind:'loc',      lab:{it:'si trova / è in', en:'is located in', es:'se encuentra en', fr:'se trouve à', de:'befindet sich in'},
+             fact:(a,b,l)=>({ s:({it:`dove si trova ${a}`,en:`the location of ${a}`,es:`la ubicación de ${a}`,fr:`l’emplacement de ${a}`,de:`der Standort von ${a}`}[l]||`the location of ${a}`), v:b, c:'is' }) },
+    abita: { kind:'loc',      lab:{it:'abita a / vive a', en:'lives in', es:'vive en', fr:'habite à', de:'wohnt in'},
+             fact:(a,b,l)=>({ s:({it:`dove abita ${a}`,en:`where ${a} lives`,es:`dónde vive ${a}`,fr:`où habite ${a}`,de:`wo ${a} wohnt`}[l]||`where ${a} lives`), v:b, c:'is' }) },
+    mamma: { kind:'parent', g:'f', lab:{it:'è la mamma di', en:'is the mother of', es:'es la madre de', fr:'est la mère de', de:'ist die Mutter von'},
+             fact:(a,b,l)=>({ s:({it:`la mamma di ${b}`,en:`the mother of ${b}`,es:`la madre de ${b}`,fr:`la mère de ${b}`,de:`die Mutter von ${b}`}[l]||`the mother of ${b}`), v:a, c:'is' }) },
+    papa:  { kind:'parent', g:'m', lab:{it:'è il papà di', en:'is the father of', es:'es el padre de', fr:'est le père de', de:'ist der Vater von'},
+             fact:(a,b,l)=>({ s:({it:`il papà di ${b}`,en:`the father of ${b}`,es:`el padre de ${b}`,fr:`le père de ${b}`,de:`der Vater von ${b}`}[l]||`the father of ${b}`), v:a, c:'is' }) },
+    fratelli:{ kind:'sib',  lab:{it:'è fratello/sorella di', en:'is a sibling of', es:'es hermano/a de', fr:'est frère/sœur de', de:'ist Geschwister von'},
+             fact:(a,b,l)=>({ s:`${a} ${CONJ[l]||'and'} ${b}`, v:(SIBV[l]||'siblings'), c:'are' }) },
+    sposati:{ kind:'pair',  lab:{it:'è sposato/a con', en:'is married to', es:'está casado/a con', fr:'est marié(e) à', de:'ist verheiratet mit'},
+             fact:(a,b,l)=>({ s:`${a} ${CONJ[l]||'and'} ${b}`, v:(MARV[l]||'married'), c:'are' }) },
+    amici: { kind:'pair',   lab:{it:'è amico/a di', en:'is a friend of', es:'es amigo/a de', fr:'est ami(e) de', de:'ist befreundet mit'},
+             fact:(a,b,l)=>({ s:`${a} ${CONJ[l]||'and'} ${b}`, v:(FRIV[l]||'friends'), c:'are' }) },
   };
   const REL_ORDER = ['loc','abita','mamma','papa','fratelli','sposati','amici'];
 
@@ -277,9 +284,99 @@
       dedDone:(o,n)=>`Taught ${o}/${n} deductions.`, profSaved:'Profile saved and taught.', asking:'Asking ANIMA…',
       noded:'Add more relations (e.g. two parents, or two linked places) and deductions will appear here.',
       chip:{new:'to teach',taught:'taught',verified:'verified',volatile:'temporary',fail:'error'},
-      tagRel:'relation', tagDed:'deduced', because:'because' }
+      tagRel:'relation', tagDed:'deduced', because:'because' },
+    es: { sub:'Enseña datos a ANIMA — y ANIMA deduce otros nuevos.',
+      mfact:'Dato', mrel:'Relación',
+      addhint:'ANIMA aprenderá este dato en el dispositivo y podrás preguntárselo con tus palabras.',
+      relhint:'Vincula dos entidades: ANIMA aprende la relación Y deduce los datos que se derivan.',
+      cat:'Categoría', subj:'Sujeto', val:'Valor', teach:'Enseñar a ANIMA',
+      rela:'Entidad A', relr:'Relación', relb:'Entidad B', addrel:'Añadir relación',
+      dedh:'Deducciones de ANIMA', dedhint:'Datos que nunca le dijiste a ANIMA, deducidos de tus relaciones (lógica determinista, sin invenciones). Enséñalos y ANIMA los recordará.',
+      teachded:'Enseñar todas las deducciones', graph:'Grafo',
+      listh:'Memorizados', reteach:'Reenseñar todo', verifyall:'Verificar todos',
+      profh:'Quién soy', profhint:'Datos personales deterministas: ANIMA los recuerda exactos (nombre, edad, ciudad…).',
+      saveprof:'Guardar y enseñar perfil', askprof:'¿Qué sabe ANIMA de mí?',
+      p:{name:'Nombre',age:'Edad',city:'Ciudad',job:'Trabajo',email:'Email',birthday:'Cumpleaños'},
+      foot:'Sin conexión · en el dispositivo', footk:'buscar', footk2:'enseñar',
+      empty:'Aún no hay datos. Añade un dato o una relación arriba.',
+      listhint:(n)=>`${n}/128 datos enseñables a ANIMA. Más allá, el dispositivo olvida los más antiguos (esta lista permanece).`,
+      cats:{person:'👤 Persona / Contacto',place:'📍 Lugar / Objeto',define:'📖 Definición',generic:'🔖 General'},
+      ph:{ person:['el número de mamá','333 123 4567'], place:['el pasaporte','en el cajón azul'],
+           define:['HTTP','HyperText Transfer Protocol'], generic:['mi coche','un Fiat Panda rojo'] },
+      phrel:{a:'Marco', b:'Anna'},
+      willlearn:'ANIMA aprenderá:', dedwill:'Deducción:', needboth:'Introduce un sujeto y un valor.', needrel:'Introduce las entidades A y B.',
+      teaching:'Enseñando a ANIMA…', taught:'¡Aprendido! ANIMA ya lo recuerda.', relAdded:'Relación añadida y enseñada.',
+      volatile:'ANIMA no lo guarda: parece temporal (hoy/ahora/tiempo…).',
+      failteach:'ANIMA no ha podido aprenderlo ahora.', noconn:'Dispositivo no accesible.',
+      verifying:'Verificando con ANIMA…', vok:'✓ ANIMA responde:', vno:'✗ ANIMA no lo ha recordado.',
+      del:'Eliminar', edit:'Editar', verify:'Verificar', teach1:'Enseñar',
+      reteachDone:(o,n)=>`Reenseñados ${o}/${n}.`, verifyDone:(o,n)=>`Verificados ${o}/${n}.`,
+      dedDone:(o,n)=>`Enseñadas ${o}/${n} deducciones.`, profSaved:'Perfil guardado y enseñado.', asking:'Preguntando a ANIMA…',
+      noded:'Añade más relaciones (p. ej. dos progenitores, o dos lugares vinculados) y aquí aparecerán las deducciones.',
+      chip:{new:'por enseñar',taught:'enseñado',verified:'verificado',volatile:'temporal',fail:'error'},
+      tagRel:'relación', tagDed:'deducido', because:'porque' },
+    fr: { sub:'Apprends des faits à ANIMA — et ANIMA en déduit de nouveaux.',
+      mfact:'Fait', mrel:'Relation',
+      addhint:'ANIMA apprendra ce fait sur l’appareil ; redemande-le avec tes propres mots.',
+      relhint:'Relie deux entités : ANIMA apprend la relation ET déduit les faits qui en découlent.',
+      cat:'Catégorie', subj:'Sujet', val:'Valeur', teach:'Apprendre à ANIMA',
+      rela:'Entité A', relr:'Relation', relb:'Entité B', addrel:'Ajouter une relation',
+      dedh:'Déductions d’ANIMA', dedhint:'Des faits que tu n’as jamais dits à ANIMA, déduits de tes relations (logique déterministe, sans invention). Apprends-les et ANIMA s’en souviendra.',
+      teachded:'Apprendre toutes les déductions', graph:'Graphe',
+      listh:'Mémorisés', reteach:'Tout réapprendre', verifyall:'Tout vérifier',
+      profh:'Qui suis-je', profhint:'Données personnelles déterministes : ANIMA les rappelle exactement (nom, âge, ville…).',
+      saveprof:'Enregistrer et apprendre le profil', askprof:'Que sait ANIMA sur moi ?',
+      p:{name:'Nom',age:'Âge',city:'Ville',job:'Travail',email:'Email',birthday:'Anniversaire'},
+      foot:'Hors ligne · sur l’appareil', footk:'rechercher', footk2:'apprendre',
+      empty:'Aucun fait pour l’instant. Ajoute un fait ou une relation ci-dessus.',
+      listhint:(n)=>`${n}/128 faits enseignables à ANIMA. Au-delà, l’appareil oublie les plus anciens (cette liste reste).`,
+      cats:{person:'👤 Personne / Contact',place:'📍 Lieu / Objet',define:'📖 Définition',generic:'🔖 Général'},
+      ph:{ person:['le numéro de maman','333 123 4567'], place:['le passeport','dans le tiroir bleu'],
+           define:['HTTP','HyperText Transfer Protocol'], generic:['ma voiture','une Fiat Panda rouge'] },
+      phrel:{a:'Marco', b:'Anna'},
+      willlearn:'ANIMA apprendra :', dedwill:'Déduction :', needboth:'Saisis un sujet et une valeur.', needrel:'Saisis les entités A et B.',
+      teaching:'Apprentissage à ANIMA…', taught:'Appris ! ANIMA s’en souvient maintenant.', relAdded:'Relation ajoutée et apprise.',
+      volatile:'ANIMA ne le mémorise pas : cela semble temporaire (aujourd’hui/maintenant/météo…).',
+      failteach:'ANIMA n’a pas pu l’apprendre maintenant.', noconn:'Appareil injoignable.',
+      verifying:'Vérification avec ANIMA…', vok:'✓ ANIMA répond :', vno:'✗ ANIMA ne s’en est pas souvenu.',
+      del:'Supprimer', edit:'Modifier', verify:'Vérifier', teach1:'Apprendre',
+      reteachDone:(o,n)=>`Réappris ${o}/${n}.`, verifyDone:(o,n)=>`Vérifiés ${o}/${n}.`,
+      dedDone:(o,n)=>`Apprises ${o}/${n} déductions.`, profSaved:'Profil enregistré et appris.', asking:'Question à ANIMA…',
+      noded:'Ajoute d’autres relations (p. ex. deux parents, ou deux lieux liés) et les déductions apparaîtront ici.',
+      chip:{new:'à apprendre',taught:'appris',verified:'vérifié',volatile:'temporaire',fail:'erreur'},
+      tagRel:'relation', tagDed:'déduit', because:'parce que' },
+    de: { sub:'Bring ANIMA Fakten bei — und ANIMA leitet neue ab.',
+      mfact:'Fakt', mrel:'Beziehung',
+      addhint:'ANIMA lernt diesen Fakt auf dem Gerät; frag ihn in deinen eigenen Worten wieder ab.',
+      relhint:'Verknüpfe zwei Entitäten: ANIMA lernt die Beziehung UND leitet die daraus folgenden Fakten ab.',
+      cat:'Kategorie', subj:'Subjekt', val:'Wert', teach:'ANIMA beibringen',
+      rela:'Entität A', relr:'Beziehung', relb:'Entität B', addrel:'Beziehung hinzufügen',
+      dedh:'ANIMAs Schlussfolgerungen', dedhint:'Fakten, die du ANIMA nie gesagt hast, abgeleitet aus deinen Beziehungen (deterministische Logik, kein Raten). Bring sie ihr bei und ANIMA merkt sie sich.',
+      teachded:'Alle Schlussfolgerungen beibringen', graph:'Graph',
+      listh:'Gespeichert', reteach:'Alles neu beibringen', verifyall:'Alle prüfen',
+      profh:'Wer ich bin', profhint:'Deterministische persönliche Daten: ANIMA ruft sie exakt ab (Name, Alter, Stadt…).',
+      saveprof:'Profil speichern und beibringen', askprof:'Was weiß ANIMA über mich?',
+      p:{name:'Name',age:'Alter',city:'Stadt',job:'Beruf',email:'E-Mail',birthday:'Geburtstag'},
+      foot:'Offline · auf dem Gerät', footk:'suchen', footk2:'beibringen',
+      empty:'Noch keine Fakten. Füge oben einen Fakt oder eine Beziehung hinzu.',
+      listhint:(n)=>`${n}/128 Fakten für ANIMA lernbar. Darüber hinaus vergisst das Gerät die ältesten (diese Liste bleibt).`,
+      cats:{person:'👤 Person / Kontakt',place:'📍 Ort / Objekt',define:'📖 Definition',generic:'🔖 Allgemein'},
+      ph:{ person:['Mamas Nummer','333 123 4567'], place:['der Reisepass','in der blauen Schublade'],
+           define:['HTTP','HyperText Transfer Protocol'], generic:['mein Auto','ein roter Fiat Panda'] },
+      phrel:{a:'Marco', b:'Anna'},
+      willlearn:'ANIMA lernt:', dedwill:'Schlussfolgerung:', needboth:'Gib ein Subjekt und einen Wert ein.', needrel:'Gib die Entitäten A und B ein.',
+      teaching:'Bringe es ANIMA bei…', taught:'Gelernt! ANIMA merkt es sich jetzt.', relAdded:'Beziehung hinzugefügt und beigebracht.',
+      volatile:'ANIMA speichert es nicht: wirkt temporär (heute/jetzt/Wetter…).',
+      failteach:'ANIMA konnte es gerade nicht lernen.', noconn:'Gerät nicht erreichbar.',
+      verifying:'Prüfe mit ANIMA…', vok:'✓ ANIMA antwortet:', vno:'✗ ANIMA hat es nicht erinnert.',
+      del:'Löschen', edit:'Bearbeiten', verify:'Prüfen', teach1:'Beibringen',
+      reteachDone:(o,n)=>`Neu beigebracht ${o}/${n}.`, verifyDone:(o,n)=>`Geprüft ${o}/${n}.`,
+      dedDone:(o,n)=>`${o}/${n} Schlussfolgerungen beigebracht.`, profSaved:'Profil gespeichert und beigebracht.', asking:'Frage ANIMA…',
+      noded:'Füge weitere Beziehungen hinzu (z. B. zwei Eltern oder zwei verbundene Orte) und hier erscheinen die Schlussfolgerungen.',
+      chip:{new:'beizubringen',taught:'beigebracht',verified:'geprüft',volatile:'temporär',fail:'Fehler'},
+      tagRel:'Beziehung', tagDed:'abgeleitet', because:'weil' }
   };
-  const t = () => S[lang()];
+  const t = () => S[lang()] || S.it;
 
   // ---- storage ---------------------------------------------------------------
   let state = { schema:2, profile:{name:'',age:'',city:'',job:'',email:'',birthday:''}, facts:[], rels:[] };
@@ -298,9 +395,9 @@
   function classify(j){
     if(!j) return 'noconn';
     const reply=String(j.reply||'').toLowerCase();
-    if(/temporane|temporary/.test(reply)) return 'volatile';
-    if(/non riesc|can.?t learn|couldn.?t learn/.test(reply)) return 'fail';
-    if(j.intent==='teach'||j.intent==='profile'||/impara|ricord|got it|i.?ll remember|remember/.test(reply)) return 'ok';
+    if(/tempor|vorübergehend/.test(reply)) return 'volatile';   // it/en/es/fr temporane*/temporary/temporal/temporaire · de temporär/vorübergehend
+    if(/non riesc|can.?t learn|couldn.?t learn|no puedo|no pude|ne peux|n.ai pas pu|kann nicht|konnte nicht/.test(reply)) return 'fail';
+    if(j.intent==='teach'||j.intent==='profile'||/impara|ricord|got it|i.?ll remember|remember|aprend|recuerd|appris|retiens|mémor|souvien|gelernt|merke|erinner/.test(reply)) return 'ok';
     return 'fail';
   }
   function replyHasValue(reply,value){ const r=String(reply||'').toLowerCase();
@@ -334,7 +431,7 @@
       else if(k==='sib') sib.push([r.a.trim(),r.b.trim()]); }
     // exclude facts already stored (by normalized subject|value)
     const stored=new Set(allViews().map(v=>norm(v.subject)+'|'+norm(v.value)));
-    const locSubj=(a)=> l==='en'?`the location of ${a}`:`dove si trova ${a}`;
+    const locSubj=(a)=> ({it:`dove si trova ${a}`,en:`the location of ${a}`,es:`la ubicación de ${a}`,fr:`l’emplacement de ${a}`,de:`der Standort von ${a}`}[l]||`the location of ${a}`);
     const because = t().because;
     const add=(s,v,c,chain)=>{ const key=norm(s)+'|'+norm(v); if(seen.has(key)||stored.has(key))return; seen.add(key); out.push({subject:s,value:v,cop:c,chain}); };
     const line=(s,v,c)=> sentence(s,v,c,l).slice(LEAD[l].length); // human premise text without the lead
@@ -348,9 +445,9 @@
     // 2) Grandparent: parent(A,B) ∧ parent(B,C) ⟹ grandparent(A,C); gender from A's parent relation
     for(const p1 of parent) for(const p2 of parent){
       if(norm(p1.b)===norm(p2.a) && norm(p1.a)!==norm(p2.b)){
-        const gw = p1.g==='f' ? (l==='en'?'grandmother':'la nonna') : (l==='en'?'grandfather':'il nonno');
-        const subj = l==='en'? `the ${gw} of ${p2.b}` : `${gw} di ${p2.b}`;
-        const pw = (g)=> g==='f'?(l==='en'?'mother':'mamma'):(l==='en'?'father':'papà');
+        const gm = GW[l]||GW.en; const gw = p1.g==='f' ? gm.f : gm.m;
+        const subj = ({it:`${gw} di ${p2.b}`,en:`the ${gw} of ${p2.b}`,es:`${gw} de ${p2.b}`,fr:`${gw} de ${p2.b}`,de:`${gw} von ${p2.b}`}[l]||`the ${gw} of ${p2.b}`);
+        const pw = (g)=>{ const m=PW[l]||PW.en; return g==='f'?m.f:m.m; };
         add(subj, p1.a, 'is', [`${p1.a} = ${pw(p1.g)} (${p1.b})`, `${p1.b} = ${pw(p2.g)} (${p2.b})`]);
       }
     }
@@ -363,8 +460,8 @@
       const direct=new Set(); sib.forEach(([a,b])=>{ uni(norm(a),norm(b)); direct.add(norm(a)+'|'+norm(b)); direct.add(norm(b)+'|'+norm(a)); });
       for(let i=0;i<ents.length;i++) for(let j=i+1;j<ents.length;j++){ const a=ents[i],b=ents[j];
         if(find(a)===find(b) && !direct.has(a+'|'+b)){
-          const subj=l==='en'?`${disp[a]} and ${disp[b]}`:`${disp[a]} e ${disp[b]}`;
-          add(subj, l==='en'?'siblings':'fratelli', 'are', [`${disp[a]} ⋈ … ⋈ ${disp[b]}`]);
+          const subj=`${disp[a]} ${CONJ[l]||'and'} ${disp[b]}`;
+          add(subj, (SIBV[l]||'siblings'), 'are', [`${disp[a]} ⋈ … ⋈ ${disp[b]}`]);
         } }
     }
     return out;
@@ -499,14 +596,19 @@
   const PF=['name','age','city','job','email','birthday'];
   function loadProfileInputs(){ for(const k of PF) $('p-'+k).value=state.profile[k]||''; }
   function profileSentence(field,value,l){ value=value.trim(); if(!value) return null;
-    const it={name:`mi chiamo ${value}`,age:`ho ${value} anni`,city:`abito a ${value}`,job:`il mio lavoro è ${value}`,email:`la mia email è ${value}`,birthday:`il mio compleanno è ${value}`};
-    const en={name:`my name is ${value}`,age:`i am ${value} years old`,city:`i live in ${value}`,job:`my job is ${value}`,email:`my email is ${value}`,birthday:`my birthday is ${value}`};
-    return (l==='en'?en:it)[field]||null; }
+    const M={
+      it:{name:`mi chiamo ${value}`,age:`ho ${value} anni`,city:`abito a ${value}`,job:`il mio lavoro è ${value}`,email:`la mia email è ${value}`,birthday:`il mio compleanno è ${value}`},
+      en:{name:`my name is ${value}`,age:`i am ${value} years old`,city:`i live in ${value}`,job:`my job is ${value}`,email:`my email is ${value}`,birthday:`my birthday is ${value}`},
+      es:{name:`me llamo ${value}`,age:`tengo ${value} años`,city:`vivo en ${value}`,job:`mi trabajo es ${value}`,email:`mi email es ${value}`,birthday:`mi cumpleaños es ${value}`},
+      fr:{name:`je m’appelle ${value}`,age:`j’ai ${value} ans`,city:`j’habite à ${value}`,job:`mon travail est ${value}`,email:`mon email est ${value}`,birthday:`mon anniversaire est ${value}`},
+      de:{name:`ich heiße ${value}`,age:`ich bin ${value} Jahre alt`,city:`ich wohne in ${value}`,job:`mein Beruf ist ${value}`,email:`meine E-Mail ist ${value}`,birthday:`mein Geburtstag ist ${value}`},
+    };
+    return (M[l]||M.en)[field]||null; }
   async function saveProfile(){ $('saveprof').disabled=true; const msg=$('profmsg'); msg.className='ask'; msg.textContent=t().teaching;
     for(const k of PF){ const v=$('p-'+k).value.trim(); state.profile[k]=v; const s=profileSentence(k,v,lang()); if(s) await anima(s); }
     scheduleSave(); $('saveprof').disabled=false; msg.innerHTML='<b>'+t().profSaved+'</b>'; }
   async function askProfile(){ const msg=$('profmsg'); msg.className='ask'; msg.textContent=t().asking;
-    const j=await anima(lang()==='en'?'what do you know about me':'cosa sai di me'); msg.textContent=j?(j.reply||''):t().noconn; }
+    const j=await anima(({it:'cosa sai di me',en:'what do you know about me',es:'qué sabes de mí',fr:'que sais-tu sur moi',de:'was weißt du über mich'}[lang()]||'cosa sai di me')); msg.textContent=j?(j.reply||''):t().noconn; }
 
   // ---- mode + i18n -----------------------------------------------------------
   function setMode(m){ mode=m; $('m-flat').hidden=m!=='flat'; $('m-rel').hidden=m!=='rel';
@@ -530,7 +632,10 @@
     renderPreview(); renderRelPreview(); render();
   }
   async function loadTheme(){ const s=await readJSON(SETTINGS); if(s?.ui?.theme) document.documentElement.dataset.theme=s.ui.theme;
-    if(s?.ui?.language==='it'||s?.ui?.language==='en') localStorage.setItem('anima.lang',s.ui.language); }
+    // Mirror the OS language to the canonical anima.lang signal, but only as a FALLBACK: localStorage is
+    // authoritative (the Settings app + i18n engine keep it live), so never clobber an already-set language.
+    const cur=localStorage.getItem('anima.lang');
+    if(!['it','en','es','fr','de'].includes(cur) && ['it','en','es','fr','de'].includes(s?.ui?.language)) localStorage.setItem('anima.lang',s.ui.language); }
 
   // ---- boot ------------------------------------------------------------------
   async function load(){ const d=await readJSON(FILE);
@@ -563,7 +668,7 @@
   // ---- live: theme, language, external edits, OS shortcuts -------------------
   window.addEventListener('message',(e)=>{ const d=e.data||{};
     if(d.type==='set-theme'&&d.theme) document.documentElement.dataset.theme=d.theme;
-    if(d.type==='set-language'&&(d.lang==='it'||d.lang==='en')){ localStorage.setItem('anima.lang',d.lang); applyStrings(); loadProfileInputs(); }
+    if(d.type==='set-language'&&['it','en','es','fr','de'].includes(d.lang)){ localStorage.setItem('anima.lang',d.lang); applyStrings(); loadProfileInputs(); }
     if(d.t==='fs.changed'&&typeof d.d?.path==='string'){ if(d.d.path.endsWith('settings.json')) loadTheme().then(applyStrings); else if(d.d.path===FILE&&!dirty) load().then(()=>{ loadProfileInputs(); render(); }); }
     if(d.type==='os-shortcut'){ const a=d.action; if(a==='new') (mode==='flat'?$('subj'):$('rel-a')).focus(); else if(a==='save') flushSave(); else if(a==='refresh') load().then(()=>{ loadProfileInputs(); render(); }); }
   });

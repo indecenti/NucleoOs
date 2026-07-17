@@ -1,0 +1,202 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title data-i18n="title">Unit Converter</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: #0e1830; color: #e8eefc;
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { margin: 0 0 12px; font-size: 22px; display: flex; align-items: center; gap: 8px; }
+  h1 .g { color: #2fa36b; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .tab { background: #16223f; border: 1px solid #243352; color: #b9c6e6; border-radius: 999px;
+    padding: 6px 13px; cursor: pointer; font-size: 14px; }
+  .tab.on { background: #2fa36b; border-color: #2fa36b; color: #fff; font-weight: 600; }
+  .card { background: #16223f; border: 1px solid #243352; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .nl { display: flex; gap: 8px; align-items: center; }
+  .nl .star { color: #2fa36b; font-size: 20px; }
+  .nl input { flex: 1; }
+  input, select { font: inherit; background: #0e1830; color: #e8eefc; border: 1px solid #2c3d63;
+    border-radius: 9px; padding: 9px 11px; }
+  input:focus, select:focus { outline: none; border-color: #2fa36b; }
+  .conv { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: end; }
+  .conv label { display: block; font-size: 12px; color: #8fa0c8; margin-bottom: 4px; }
+  .conv .col { min-width: 0; }
+  .conv .col input, .conv .col select { width: 100%; }
+  .swap { background: #23345c; border: 1px solid #33477a; color: #cfe; border-radius: 9px;
+    padding: 9px 12px; cursor: pointer; font-size: 18px; align-self: end; }
+  .swap:active { transform: translateY(1px); }
+  .out { margin-top: 16px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .out .big { font-size: 40px; font-weight: 700; letter-spacing: .5px; }
+  .out .u { font-size: 20px; color: #8fa0c8; }
+  .copy { margin-left: auto; background: #23345c; border: 1px solid #33477a; color: #cfe;
+    border-radius: 9px; padding: 7px 13px; cursor: pointer; font-size: 14px; }
+  .hint { color: #8fa0c8; font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .hint.err { color: #ff9db0; }
+  .hh { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .hh h2 { margin: 0; font-size: 14px; color: #b9c6e6; font-weight: 600; }
+  .hh button { background: none; border: 0; color: #7f8fb8; cursor: pointer; font-size: 13px; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 8px 4px; border-bottom: 1px solid #243352; cursor: pointer; font-size: 14px; color: #cdd8f2; }
+  li:last-child { border-bottom: 0; }
+  li .r { color: #2fbd7e; }
+  .muted { color: #6f7ea6; }
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    background: #2fa36b; color: #fff; padding: 8px 16px; border-radius: 10px; font-size: 14px;
+    opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <h1><span class="g">⇄</span> <span data-i18n="title">Unit Converter</span></h1>
+
+  <div class="card">
+    <div class="nl">
+      <span class="star">✦</span>
+      <input id="nl" data-i18n-ph="nl.placeholder" autocomplete="off">
+    </div>
+    <div class="hint" id="hint" data-i18n="nl.hint">Type a value, or ask in natural language.</div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="card">
+    <div class="conv">
+      <div class="col">
+        <label data-i18n="from">From</label>
+        <input id="val" type="number" inputmode="decimal" value="1">
+        <select id="from"></select>
+      </div>
+      <button class="swap" id="swap" title="Swap" data-i18n-title="swap">⇄</button>
+      <div class="col">
+        <label data-i18n="to">To</label>
+        <div class="out"><span class="big" id="big">—</span><span class="u" id="unit"></span></div>
+        <select id="to"></select>
+      </div>
+    </div>
+    <div class="out" style="margin-top:14px">
+      <button class="copy" id="copy" data-i18n="copy">Copy</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hh"><h2 data-i18n="history">Recent</h2><button id="clear" data-i18n="clear">Clear</button></div>
+    <ul id="hist"></ul>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    import { UNITS, unitsInCategory, categoryOf, convert, fmt, runCommand } from './convert.js';
+    const t = await I18N.init('unit-converter');
+    const lang = (localStorage.getItem('nucleo.lang') || document.documentElement.lang || 'it').slice(0, 2);
+
+    const $ = (id) => document.getElementById(id);
+    // Friendly display labels; anything not listed shows its canonical symbol as-is.
+    const LABEL = { C: '°C', F: '°F', K: 'K', m3: 'm³', floz: 'fl oz', mps: 'm/s', kmh: 'km/h', fps: 'ft/s', um: 'µm' };
+    const label = (u) => LABEL[u] || u;
+    const DEFAULTS = { length: ['km', 'mi'], mass: ['kg', 'lb'], temperature: ['C', 'F'],
+      volume: ['l', 'gal'], data: ['GB', 'MB'], speed: ['kmh', 'mph'], time: ['h', 'min'] };
+    const CATS = Object.keys(UNITS);
+
+    let cat = 'length', from = 'km', to = 'mi';
+
+    // ── tabs ──
+    const tabsEl = $('tabs');
+    for (const c of CATS) {
+      const b = document.createElement('button');
+      b.className = 'tab'; b.dataset.cat = c; b.textContent = t('cat.' + c);
+      b.addEventListener('click', () => selectCat(c));
+      tabsEl.appendChild(b);
+    }
+    function fillSelect(sel, current) {
+      sel.innerHTML = '';
+      for (const u of unitsInCategory(cat)) {
+        const o = document.createElement('option');
+        o.value = u; o.textContent = label(u);
+        if (u === current) o.selected = true;
+        sel.appendChild(o);
+      }
+    }
+    function selectCat(c, keep) {
+      cat = c;
+      if (!keep) { [from, to] = DEFAULTS[c] || unitsInCategory(c); }
+      for (const b of tabsEl.children) b.classList.toggle('on', b.dataset.cat === c);
+      fillSelect($('from'), from); fillSelect($('to'), to);
+      doConvert();
+    }
+
+    // ── convert ──
+    function doConvert() {
+      from = $('from').value; to = $('to').value;
+      const r = convert($('val').value, from, to);
+      $('unit').textContent = label(to);
+      $('big').textContent = r.ok ? fmt(r.value) : '—';
+    }
+    $('val').addEventListener('input', doConvert);
+    $('from').addEventListener('change', doConvert);
+    $('to').addEventListener('change', doConvert);
+    $('swap').addEventListener('click', () => {
+      const a = $('from').value, b = $('to').value;
+      from = b; to = a; fillSelect($('from'), from); fillSelect($('to'), to); doConvert();
+    });
+
+    // ── natural language ──
+    const hint = $('hint');
+    function setHint(msg, err) { hint.textContent = msg; hint.classList.toggle('err', !!err); }
+    $('nl').addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const q = e.target.value.trim();
+      if (!q) return;
+      const r = runCommand(q, lang);
+      if (!r.ok) { setHint(r.reason === 'cross-category' ? t('nl.cross') : t('nl.unknown'), true); return; }
+      selectCat(r.category, true);
+      from = r.from; to = r.to;
+      $('val').value = r.value; fillSelect($('from'), from); fillSelect($('to'), to);
+      doConvert();
+      setHint(t('nl.hint'), false);
+      pushHist(q, r);
+      e.target.value = '';
+    });
+
+    // ── history (localStorage) ──
+    const HKEY = 'uc.history';
+    const load = () => { try { return JSON.parse(localStorage.getItem(HKEY) || '[]'); } catch { return []; } };
+    const save = (h) => localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 12)));
+    function pushHist(q, r) {
+      const h = load();
+      h.unshift({ q, value: r.value, from: r.from, to: r.to, cat: r.category, result: r.result });
+      save(h); renderHist();
+    }
+    function renderHist() {
+      const h = load(), ul = $('hist'); ul.innerHTML = '';
+      if (!h.length) { const li = document.createElement('li'); li.className = 'muted'; li.textContent = t('empty'); ul.appendChild(li); return; }
+      for (const e of h) {
+        const li = document.createElement('li');
+        li.innerHTML = `${e.value} ${label(e.from)} → <span class="r">${fmt(e.result)} ${label(e.to)}</span>`;
+        li.addEventListener('click', () => { selectCat(e.cat, true); from = e.from; to = e.to; $('val').value = e.value; fillSelect($('from'), from); fillSelect($('to'), to); doConvert(); });
+        ul.appendChild(li);
+      }
+    }
+    $('clear').addEventListener('click', () => { save([]); renderHist(); });
+
+    // ── copy ──
+    const toast = $('toast');
+    let toastT = null;
+    function showToast(msg) { toast.textContent = msg; toast.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toast.classList.remove('show'), 1400); }
+    $('copy').addEventListener('click', async () => {
+      const txt = $('big').textContent + ' ' + $('unit').textContent;
+      try { await navigator.clipboard.writeText(txt); } catch { /* clipboard may be gated; ignore */ }
+      showToast(t('copied'));
+    });
+
+    // ── boot ──
+    selectCat('length');
+    renderHist();
+  </script>
+</body>
+</html>
