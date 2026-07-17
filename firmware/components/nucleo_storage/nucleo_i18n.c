@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>        // strncasecmp
+#include <sys/stat.h>       // mkdir — ensure the config dir exists before the first settings.json write
 
 static const char *TAG = "i18n";
 #define SETTINGS_JSON NUCLEO_SD_MOUNT "/system/config/settings.json"
@@ -15,8 +16,10 @@ static const char *TAG = "i18n";
 // single OS-wide signal ("it","en","es","fr","de",…), and it is stored VERBATIM here so a language the
 // web supports is never lost on a round-trip through the device. The native TFT strings themselves are
 // only IT/EN (nucleo_tr picks between two flash literals), so nucleo_i18n_is_en() is true ONLY for
-// "en"; every other non-English code falls back to Italian (the base) when painting native screens.
-static char s_lang[6] = "it";              // active OS language code (default Italian, the base)
+// "en"; every other non-English code falls back to Italian when painting native screens.
+// DEFAULT IS ENGLISH: a fresh device (no settings.json / no ui.language yet) boots in English, and the
+// first-run wizard asks the user to pick their language as its very first step.
+static char s_lang[6] = "en";              // active OS language code (default English)
 static uint32_t s_gen = 0;                 // bumped on every real change; native UIs poll it to repaint live
 static void (*s_on_change)(const char *) = NULL;   // set by the HTTP layer to broadcast a change to web clients
 
@@ -28,7 +31,7 @@ static void norm_lang(char *dst, size_t cap, const char *code)
         dst[1] = (char)(code[1] | 0x20);
         dst[2] = '\0';
     } else {
-        snprintf(dst, cap, "it");
+        snprintf(dst, cap, "en");   // invalid/empty -> the English default
     }
 }
 
@@ -89,6 +92,8 @@ void nucleo_i18n_set_lang(const char *code)
     char *out = cJSON_Print(root);
     cJSON_Delete(root);
     if (!out) return;
+    mkdir(NUCLEO_SD_MOUNT "/system", 0775);          // first-boot: the config subtree may not exist yet
+    mkdir(NUCLEO_SD_MOUNT "/system/config", 0775);
     char tmp[160]; snprintf(tmp, sizeof tmp, "%s.tmp", SETTINGS_JSON);
     FILE *w = fopen(tmp, "wb");
     if (w) {

@@ -61,6 +61,7 @@ void        nucleo_setup_set_device_name(const char *name);
 const char *nucleo_setup_ap_ssid(void);
 const char *nucleo_setup_ap_pass(void);
 bool        nucleo_setup_ap_secure(void);
+bool        nucleo_setup_ap_intended(void);
 void        nucleo_setup_set_ap_ssid(const char *ssid);
 void        nucleo_setup_set_ap_pass(const char *pass);
 int         nucleo_setup_apply_network(void);
@@ -130,7 +131,7 @@ static int squality(int rssi) {
 }
 static uint16_t qcol(int q)   { return q >= 60 ? GRN : q >= 33 ? AMB : REDC; }
 static bool     connected(void){ return !strcmp(nucleo_setup_mode(),"sta") && nucleo_setup_ip()[0]; }
-static bool     ap_on(void)    { return !strcmp(nucleo_setup_mode(),"ap"); }
+static bool     ap_on(void)    { return nucleo_setup_ap_intended(); }   // honest: OFF during a transient STA fallback, not just raw mode=="ap"
 static const char *tab_label(int i){ return s_en ? TABS_EN[i] : TABS[i]; }
 
 static void txt(int x,int y,const char*s,uint16_t fg,uint16_t bg,int sz){
@@ -750,8 +751,8 @@ static void activate(void){
         else if(s_sel==SYS_LANG){ nucleo_i18n_set_en(!nucleo_i18n_is_en()); s_en=nucleo_i18n_is_en(); update_hint(); }
         else if(s_sel==SYS_THEME){ theme_cycle(); toast(theme_name(),theme_name()); }
         else if(s_sel==SYS_WIFI){
-            if(!strcmp(nucleo_setup_mode(),"sta")) nucleo_setup_start_ap();
-            else nucleo_setup_stop_ap();   // same fix: turning AP off must return to STA, not re-apply "ap"
+            if(nucleo_setup_ap_intended()) nucleo_setup_stop_ap();   // hotspot ON -> back to STA
+            else nucleo_setup_start_ap();                            // STA (or transient fallback) -> hotspot ON
             toast(s_en?"Done":"Fatto",s_en?"Done":"Fatto");
         }
         else if(s_sel==SYS_FORGET){

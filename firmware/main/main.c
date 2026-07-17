@@ -336,9 +336,9 @@ void app_main(void)
     // heap this mode exists to keep free for the browser's first, heaviest load. Skipping it also makes the
     // boot log honest (it already lists "L1" among the skipped subsystems). The web OS answers in its own
     // browser brain; /api/anima degrades to a graceful "not ready" (tier none) if the shell ever asks.
-    if (!solo_srv) nucleo_anima_init("it");
+    if (!solo_srv) nucleo_anima_init(nucleo_i18n_lang());   // follow the system language (default English), not a hardcoded IT
     bootmark("anima");
-    if (sd_ok && (!solo || nucleo_app_solo_needs_speech())) nucleo_tts_init("it");   // SKIP in non-speech Solo (e.g. Recorder), save heap
+    if (sd_ok && (!solo || nucleo_app_solo_needs_speech())) nucleo_tts_init(nucleo_i18n_lang());   // SKIP in non-speech Solo (e.g. Recorder), save heap
     bootmark("tts");
     // Voce a step su heap minuscolo (no PSRAM): se il task audio non trova lo stack contiguo, il player
     // libera l'indice L1 offline (se inattivo) e ritenta -> niente piu' "offline niente voce". main e'

@@ -48,9 +48,9 @@ export const PROVIDERS = {
 // directly (no engine import) so ai.js stays usable from the Node host gates too.
 export function modelLabel(entry) {
   if (!entry) return '';
-  let lang = 'it';
-  try { lang = (localStorage.getItem('anima.lang') || document.documentElement.lang || 'it').slice(0, 2); } catch {}
-  const i = { it: 1, en: 2, es: 3, fr: 4, de: 5 }[lang] || 1;
+  let lang = 'en';
+  try { lang = (localStorage.getItem('anima.lang') || document.documentElement.lang || 'en').slice(0, 2); } catch {}
+  const i = { it: 1, en: 2, es: 3, fr: 4, de: 5 }[lang] || 2;
   return entry[i] || entry[2] || entry[1] || entry[0];   // active language → en → it → id
 }
 

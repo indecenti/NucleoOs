@@ -87,6 +87,7 @@ void        nucleo_setup_set_device_name(const char *name);
 const char *nucleo_setup_ap_ssid(void);
 const char *nucleo_setup_ap_pass(void);
 bool        nucleo_setup_ap_secure(void);                 // true iff the AP is ACTUALLY WPA2 (pass >= 8); UIs must use this, not pass[0]
+bool        nucleo_setup_ap_intended(void);               // true iff the hotspot is the USER'S choice (not a transient STA fallback); the Settings toggle must read THIS
 void        nucleo_setup_set_ap_ssid(const char *ssid);   // edit hotspot name (persists; applies live)
 void        nucleo_setup_set_ap_pass(const char *pass);   // "" = open AP, else WPA2 (8..63 chars)
 

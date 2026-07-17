@@ -10,7 +10,7 @@ import * as AI from './ai.js';
 
 const ONB_KEY = 'nucleo.onboarded';
 const CODES = ['it', 'en', 'es', 'fr', 'de'];
-const lang = () => { const l = String(localStorage.getItem('anima.lang') || 'it').slice(0, 2); return CODES.includes(l) ? l : 'it'; };
+const lang = () => { const l = String(localStorage.getItem('anima.lang') || 'en').slice(0, 2); return CODES.includes(l) ? l : 'en'; };
 // es/fr/de overlays, keyed by the ENGLISH UI string. it/en render inline via the TR ternaries below;
 // TR(it, en): it→it, en→en, otherwise L10N[lang][en] (falling back to the English text if a key is missing).
 const L10N = {

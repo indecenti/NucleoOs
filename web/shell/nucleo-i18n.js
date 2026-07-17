@@ -24,7 +24,7 @@
 //   I18N.apply();                               // fills [data-i18n] in the document
 //   I18N.onChange(() => repaintDynamicBits());  // re-render anything t() built imperatively
 
-const BASE = 'it';                               // primary language; the fallback floor for every key
+const BASE = 'en';                               // default + fallback floor for every key (English-first OS)
 const RUNTIME_KEY = 'anima.lang';                // the localStorage key the whole OS already reads
 const LOCALE_KEY = 'nucleo.locale';              // optional regional-format override (display lang ≠ format)
 
@@ -72,7 +72,8 @@ function resolveLang() {
   let l = null;
   try { l = normalize(localStorage.getItem(RUNTIME_KEY)); } catch {}
   if (!l) l = normalize(document.documentElement.getAttribute('lang'));
-  if (!l) l = normalize(navigator.language);
+  // No navigator.language auto-detect: the OS is English-first by default, and the first-run wizard
+  // asks the user to pick — so an unset preference resolves to English (BASE), not the browser locale.
   activeLang = l || BASE;
   return activeLang;
 }
