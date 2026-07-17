@@ -2562,8 +2562,9 @@ async function doRefreshStatus() {
     const smStorage = document.getElementById('sm-storage');
     if (smStorage) smStorage.textContent = `${s.storage.fs} · ${txt}`;
     renderNetwork(s.network);
-    // Push browser clock to device once if it hasn't synced with NTP yet.
-    // /api/time/set needs no auth and costs zero device heap — just sets the RTC.
+    // Push browser clock to device once if it hasn't synced with NTP yet. Runs from the post-pairing
+    // status loop, so the same-origin pairing cookie rides along automatically (the route is paired-only);
+    // costs zero device heap — just sets the RTC. Harmless if it 401s on a degraded/unpaired session.
     if (!s.network.time_synced && !_timePushed) {
       _timePushed = true;
       fetch('/api/time/set', { method: 'POST', headers: { 'Content-Type': 'application/json' },

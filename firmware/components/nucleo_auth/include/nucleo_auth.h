@@ -34,8 +34,16 @@ esp_err_t nucleo_auth_reject(httpd_req_t *req);
 // The 6-digit pairing PIN (NUL-terminated), for display on the device screen only.
 const char *nucleo_auth_pin(void);
 
-// Register /api/pair (POST) and /api/auth/status (GET) on the HTTP server.
+// Register /api/pair (POST), /api/auth/status (GET) and /api/unpair (POST) on the HTTP server.
 esp_err_t nucleo_auth_register(httpd_handle_t server);
+
+// Revoke sessions. keep_token = the caller's own cookie token to spare (NULL/empty -> revoke ALL,
+// forcing every client to re-pair). Returns how many were revoked. Persists immediately.
+// This is the "a cookie may have leaked on an untrusted network -> log everyone out" recovery.
+int nucleo_auth_revoke(const char *keep_token);
+
+// Number of live paired sessions (for the UI's "N active sessions" + revoke button).
+int nucleo_auth_session_count(void);
 
 // Drop-in guard for a protected handler: 401s and returns when unpaired.
 #define NUCLEO_AUTH_GUARD(req) do { if (!nucleo_auth_request_ok(req)) return nucleo_auth_reject(req); } while (0)

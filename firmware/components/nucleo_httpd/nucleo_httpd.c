@@ -122,6 +122,7 @@ int nucleo_cpu_load_pct(int core)
 // like /api/status: just the smoothed loads, an average, task count and clock.
 static esp_err_t cpu_get(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // diagnostics -> paired only (System Monitor runs post-pairing)
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "uptime_s", esp_timer_get_time() / 1000000);
     cJSON_AddNumberToObject(root, "cores", NUCLEO_CPU_CORES);
@@ -281,11 +282,13 @@ static void add_heap_region(cJSON *parent, const char *key, uint32_t caps)
     cJSON_AddNumberToObject(r, "frag_pct", frag);
 }
 
-// GET /api/heap -> per-region heap diagnostics (fragmentation investigation). Public + read-only,
-// like /api/status. INTERNAL is the scarce SRAM to watch on this no-PSRAM board; DMA is the
-// subset usable for peripheral transfers; DEFAULT is what generic malloc() draws from.
+// GET /api/heap -> per-region heap diagnostics (fragmentation investigation). Read-only but
+// paired-only: it fingerprints internal memory layout and isn't needed before pairing. INTERNAL is
+// the scarce SRAM to watch on this no-PSRAM board; DMA is the subset usable for peripheral transfers;
+// DEFAULT is what generic malloc() draws from.
 static esp_err_t heap_get(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // memory-layout fingerprint -> paired only
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "uptime_s", esp_timer_get_time() / 1000000);
     add_heap_region(root, "internal", MALLOC_CAP_INTERNAL);
@@ -313,6 +316,7 @@ static esp_err_t heap_get(httpd_req_t *req)
 // Nodes: /proc (index), version, uname, bootreason, uptime, loadavg, meminfo, cpuinfo, stat, mounts, net.
 static esp_err_t proc_get(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // restates status/cpu/heap internals (version, partitions, meminfo) -> paired only
     // Path after the "/proc" prefix: "" or "/" -> directory index, "/<name>" -> a node.
     const char *p = req->uri + 5;        // skip "/proc"
     while (*p == '/') p++;               // tolerate "/proc/" and "/proc//uptime"
@@ -460,6 +464,7 @@ static esp_err_t proc_get(httpd_req_t *req)
 // can't scan in parallel). Same-origin diagnostic like /api/status -> no auth gate, no CORS header.
 static esp_err_t wifi_scan_get(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // triggers a radio scan (heavy, and can deauth soft-AP clients) + leaks nearby APs -> paired only
     int n = nucleo_setup_scan();
     cJSON *root = cJSON_CreateObject();
     cJSON *arr  = cJSON_AddArrayToObject(root, "networks");
@@ -581,10 +586,12 @@ static esp_err_t wifi_forget_post(httpd_req_t *req)
 // real boot/crash log — restored here so reboots are diagnosable over Wi-Fi.)
 static esp_err_t logs_get(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // the ring can hold SSIDs, ANIMA query text, file paths and pairing events ->
+                             // a paired session only. (The on-device Log Viewer runs after pairing and carries the cookie.)
     httpd_resp_set_type(req, "text/plain");
-    // No Access-Control-Allow-Origin: the log ring is diagnostics, not a public resource. Same-origin
-    // callers (the on-device Log Viewer, curl on the LAN) still work; dropping the wildcard stops a
-    // malicious website the operator visits from reading the device's logs cross-origin.
+    // No Access-Control-Allow-Origin: the log ring is diagnostics, not a public resource. The pairing
+    // cookie now gates it outright; dropping the wildcard additionally stops a malicious website the
+    // operator visits from reading the device's logs cross-origin.
     // Optional ?level=E|W|I|D|V (or error/warn/info/debug/verbose) -> dmesg-style severity filter.
     // Only the first letter matters, so "warn" and "W" are equivalent.
     char min_level = 0;
@@ -632,9 +639,11 @@ static const char *diag_reset_str(esp_reset_reason_t r)
 // reset cause, real firmware build, heap/fragmentation watermarks, Wi-Fi link quality, the heavy-work
 // arbiter, CPU load, the OOM watermark, and ANIMA's tier/abstain telemetry. Pull-based and read-only:
 // it costs nothing at rest (no task, no SD write, no TLS) — the device only pays when the user asks.
-// Same-origin diagnostic like /api/heap (the Log Viewer is served from the device) -> no auth, no CORS.
+// Paired-only: it discloses the joined SSID, IP, the configured ANIMA provider/model and full internals
+// — reconnaissance for anyone on the LAN. The Log Viewer's "Diagnose" runs after pairing (carries the cookie).
 static esp_err_t diag_get(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // SSID + provider + internals disclosure -> paired only
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "v", 1);
     cJSON_AddNumberToObject(root, "ts", (double)time(NULL));
@@ -1050,6 +1059,8 @@ static void anima_verify_thunk(void *p)
 
 static esp_err_t anima_get(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // an ANIMA turn spawns the 30 KB worker and can reach PAID cloud (teacher/weather/wiki);
+                             // reject before any of that so an unpaired LAN client can't drain credits or the heap.
     char q[160] = { 0 };
     char lang[4] = "it";
     char query[208];
@@ -1392,6 +1403,7 @@ static esp_err_t anima_get(httpd_req_t *req)
 // wrapper compiles only under ESP-IDF — confirm on the next flash to the .166.
 static esp_err_t anima_verify_get(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // same worker/heavy-op exposure as anima_get -> paired only
     char kind[16] = { 0 }, key[160] = { 0 }, asserted[128] = { 0 }, lang[4] = "it";
     char query[440];
     if (httpd_req_get_url_query_len(req) > 0 &&
@@ -1596,6 +1608,7 @@ static esp_err_t proxy_get(httpd_req_t *req)
 // no secret) — same exposure as /api/status.
 static esp_err_t anima_caps_get(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // reveals the configured teacher provider/model + online posture -> config recon, paired only
     char provider[16] = "", model[64] = "";
     bool has_key = nucleo_anima_teacher_info(provider, sizeof provider, model, sizeof model);
     cJSON *root = cJSON_CreateObject();
@@ -1616,8 +1629,8 @@ static esp_err_t anima_caps_get(httpd_req_t *req)
     return ESP_OK;
 }
 
-// POST /api/anima/l1 — set the offline L1 brain policy from the ANIMA web app (same-origin; no secret,
-// so no CORS header — only the device's own pages call it). Body: {"mode":"auto|on|off"?, "browserLLM":bool?}.
+// POST /api/anima/l1 — set the offline L1 brain policy from the ANIMA web app. A config write, so it
+// needs a paired session (the device's own pages carry the cookie). Body: {"mode":"auto|on|off"?, "browserLLM":bool?}.
 //   mode       — user override: "on" forces the offline brain on, "off" never serves, "auto" (default)
 //                stands it down whenever a stronger brain is available.
 //   browserLLM — true when a browser-hosted generative LLM is the active engine, so AUTO frees L1's RAM.
@@ -1625,6 +1638,7 @@ static esp_err_t anima_caps_get(httpd_req_t *req)
 // the policy turns L1 off, so the heap is reclaimed the instant the user goes online/local-LLM.
 static esp_err_t anima_l1_post(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // changes the offline-brain policy (a config write) -> paired only, not "same-origin"
     // Spine gate: set_mode/set_external_brain can free the L1 index — doing that while the native
     // worker is mid-query is the same use-after-free anima_get guards against. Try-only, never block.
     if (!nucleo_anima_try_lock()) {
@@ -1666,11 +1680,13 @@ static esp_err_t anima_l1_post(httpd_req_t *req)
 // GET  -> {"enabled":bool,"available":bool,"speed":int%,"speed_min/max/step":int}.
 // POST body {"enabled":bool}? imposta l'interruttore; {"speed":int%}? imposta la velocita' (clampata,
 // persistita, invalida la cache); {"say":"testo","lang":"it|en"}? fa parlare subito il device (test/azione
-// web — usa la velocita' gia' impostata in questo POST). Same-origin device UI (come /api/anima/l1):
-// preferenza di dispositivo, niente di pagato/distruttivo -> no auth.
+// web — usa la velocita' gia' impostata in questo POST). GET (stato) e' pubblico; il POST e' un'azione
+// (parla + persiste la velocita') quindi richiede una sessione associata.
 static esp_err_t tts_handler(httpd_req_t *req)
 {
     if (req->method == HTTP_POST) {
+        NUCLEO_AUTH_GUARD(req);   // POST makes the device SPEAK arbitrary text + persists the speed -> paired only.
+                                 // GET (read-only status) stays public. Mirrors lang_handler's POST-only gate.
         int blen = req->content_len;
         if (blen > 0 && blen < 1024) {
             char buf[1024]; int got = 0, r;
@@ -2129,6 +2145,7 @@ static void on_sock_close(httpd_handle_t hd, int sockfd)
 // No auth required: wrong time is low-risk and NTP will override it as soon as internet is available.
 static esp_err_t time_set_post(httpd_req_t *req)
 {
+    NUCLEO_AUTH_GUARD(req);   // writes the device clock; a skewed clock breaks TLS cert validity + alarms/calendar -> paired only
     char body[48];
     int n = httpd_req_recv(req, body, sizeof(body) - 1);
     if (n <= 0) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no body"); return ESP_FAIL; }
@@ -2212,7 +2229,7 @@ esp_err_t nucleo_httpd_start(void)
     // RAM cost of the bump is tiny and one-time at httpd_start: hd_calls is calloc(max, sizeof(ptr)) so the
     // 16 extra slots are +64 B, plus the 7 now-registering handlers are ~24 B each (malloc per handler).
     // WHEN YOU ADD AN ENDPOINT: bump this past the new total, or it silently drops off the end again.
-    config.max_uri_handlers = 72;   // 60 in use (2026-06-29, +/api/screen) + headroom
+    config.max_uri_handlers = 72;   // 61 in use (2026-07-17, +/api/unpair) + headroom
     config.close_fn = on_sock_close;                 // detect client disconnects immediately
     // The shell opens many parallel connections (assets + several /api/fs + /ws). lru_purge
     // recycles the oldest idle socket instead of refusing/resetting new ones — this (plus the
@@ -2333,6 +2350,9 @@ esp_err_t nucleo_httpd_start(void)
     // arrangement as the display endpoint (nucleo_app owns the Costellazioni Save struct).
     extern esp_err_t nucleo_app_register_costellazioni_api(httpd_handle_t);
     if (nucleo_app_register_costellazioni_api(server) != ESP_OK) ESP_LOGW(TAG, "costellazioni save endpoint register failed");
+    // /api/fido/* (passkey/PIN web console) — forward-decl/final-link, like the display endpoint.
+    extern esp_err_t nucleo_fido_register_api(httpd_handle_t);
+    if (nucleo_fido_register_api(server) != ESP_OK) ESP_LOGW(TAG, "fido web console endpoints register failed");
     nucleo_ws_register(server);        // /ws live deltas
     nucleo_webfs_register(server);  // serves shell + app UIs from SD (catch-all, last)
     nucleo_webfs_set_reclaim_cb(httpd_webfs_reclaim);  // client loading the web OS -> free heap for the server

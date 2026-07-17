@@ -189,13 +189,13 @@
       "title": "GET /api/auth/status - Stato Associazione",
       "description": "Restituisce lo stato dell'autenticazione del browser corrente rispetto al server HTTP di NucleoOS.",
       "synopsis": "GET /api/auth/status",
-      "details": "Ritorna un oggetto JSON: { \"required\": true|false, \"paired\": true|false }. Endpoint pubblico, non richiede autenticazione."
+      "details": "Ritorna un oggetto JSON: { \"required\": true|false, \"paired\": true|false, \"sessions\": N }. 'sessions' e' il numero di sessioni associate attive (per la UI di revoca). Endpoint pubblico, non richiede autenticazione."
     },
     "en": {
       "title": "GET /api/auth/status - Authentication Status",
       "description": "Returns the connection authentication variables for the querying browser client against the NucleoOS HTTP server.",
       "synopsis": "GET /api/auth/status",
-      "details": "Serves a JSON body: { \"required\": true|false, \"paired\": true|false }. Public endpoint (no authorization headers needed)."
+      "details": "Serves a JSON body: { \"required\": true|false, \"paired\": true|false, \"sessions\": N }. 'sessions' is the count of live paired sessions (for the revoke UI). Public endpoint (no authorization headers needed)."
     },
     "params": []
   },
@@ -234,6 +234,44 @@
       "description": "One-call, on-demand health snapshot: last reset cause, firmware build, heap and fragmentation watermarks, Wi-Fi link quality, the heavy-work arbiter, CPU load, the OOM counter, and ANIMA's tier telemetry. Powers the Log Viewer's \"Diagnose\" digest — everything a remote AI (or a human) needs to judge Cardputer health in a single fetch.",
       "synopsis": "GET /api/diag",
       "details": "Public, read-only, pull-based endpoint (no task, no SD write, no TLS: it only costs when asked). JSON response sections:\n- v, ts: payload version and current epoch\n- sys: firmware version/build, IDF version, uptime, last reset cause (POWERON/SW/PANIC/BROWNOUT/WDT...), OTA slot and its state, SD mount flag and space\n- mem: free internal heap, all-time minimum, largest contiguous block, fragmentation %, free DMA, httpd task stack watermark\n- net: mode, SSID, IP, RSSI, time sync, connected WebSocket clients\n- anima: online switches, configured teacher (provider/model), L1 policy and state, per-tier counters (none/cmd/fact/stitch/remote), last confidence and last intent\n- arb: heavy-work token (busy, job, grants/denials/yields, recorded heap floor)\n- cpu: cores, frequency, tasks, per-core load\n- oom: rejected allocations since boot, with the last one's size and caps"
+    },
+    "params": []
+  },
+  {
+    "id": "api-fido-creds",
+    "path": "/api/fido/creds",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "description": "Elenca le passkey residenti (discoverable) memorizzate sul dispositivo: id del relying-party, nome utente e contatore firme per ciascuna. Le chiavi private non lasciano mai il dispositivo. Richiede accoppiamento.",
+      "details": "Array JSON di { index, rp, user, signCount }.",
+      "synopsis": "GET /api/fido/creds",
+      "title": "GET /api/fido/creds - Elenca Passkey"
+    },
+    "en": {
+      "description": "Lists the resident (discoverable) passkeys stored on the device: relying-party id, user name and signature counter for each. The private keys never leave the device. Requires pairing.",
+      "details": "JSON array of { index, rp, user, signCount }.",
+      "synopsis": "GET /api/fido/creds",
+      "title": "GET /api/fido/creds - List Passkeys"
+    },
+    "params": []
+  },
+  {
+    "id": "api-fido-status",
+    "path": "/api/fido/status",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "description": "Riporta lo stato della security key FIDO per la console web Passkeys: se la chiave di wrapping è legata all'hardware eFuse o è un fallback software NVS, se un PIN on-device è impostato e quanti tentativi restano, il numero di passkey residenti e se un host USB è collegato. Richiede accoppiamento.",
+      "details": "JSON: { keyHardware, pinSet, pinRetries, credCount, connected }. Sola lettura; carica lo store in modo pigro senza USB.",
+      "synopsis": "GET /api/fido/status",
+      "title": "GET /api/fido/status - Stato Chiave FIDO"
+    },
+    "en": {
+      "description": "Reports the FIDO security key state for the Passkeys web console: whether the credential wrapping key is eFuse hardware-bound or an NVS software fallback, whether an on-device PIN is set and how many tries remain, the number of resident passkeys, and whether a USB host is connected. Requires pairing.",
+      "details": "JSON: { keyHardware, pinSet, pinRetries, credCount, connected }. Read-only; loads the store lazily without USB.",
+      "synopsis": "GET /api/fido/status",
+      "title": "GET /api/fido/status - FIDO Key Status"
     },
     "params": []
   },
@@ -921,6 +959,63 @@
         }
       }
     ]
+  },
+  {
+    "id": "api-fido-cred-delete",
+    "path": "/api/fido/cred/delete",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "description": "Cancella una passkey residente tramite il suo indice nella lista. Richiede accoppiamento.",
+      "details": "Body JSON { index }. Risposta { ok }.",
+      "synopsis": "POST /api/fido/cred/delete",
+      "title": "POST /api/fido/cred/delete - Cancella Passkey"
+    },
+    "en": {
+      "description": "Deletes one resident passkey by its list index. Requires pairing.",
+      "details": "Body JSON { index }. Response { ok }.",
+      "synopsis": "POST /api/fido/cred/delete",
+      "title": "POST /api/fido/cred/delete - Delete Passkey"
+    },
+    "params": []
+  },
+  {
+    "id": "api-fido-pin",
+    "path": "/api/fido/pin",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "description": "Imposta o cambia il PIN on-device usato per la verifica utente interna. Il PIN è verificato solo sul dispositivo; il verifier è legato alla chiave derivata da eFuse. Richiede accoppiamento.",
+      "details": "Body JSON { pin } (4-63 caratteri). Risposta { ok } oppure { ok:false, err }.",
+      "synopsis": "POST /api/fido/pin",
+      "title": "POST /api/fido/pin - Imposta PIN FIDO"
+    },
+    "en": {
+      "description": "Sets or changes the on-device PIN used for internal user verification. The PIN is checked only on the device; the verifier is bound to the eFuse-derived key. Requires pairing.",
+      "details": "Body JSON { pin } (4-63 chars). Response { ok } or { ok:false, err }.",
+      "synopsis": "POST /api/fido/pin",
+      "title": "POST /api/fido/pin - Set FIDO PIN"
+    },
+    "params": []
+  },
+  {
+    "id": "api-fido-reset",
+    "path": "/api/fido/reset",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "description": "Reset dell'autenticatore FIDO: cancella tutte le passkey residenti, azzera il PIN e il contatore firme. Irreversibile. Richiede accoppiamento.",
+      "details": "Risposta { ok }.",
+      "synopsis": "POST /api/fido/reset",
+      "title": "POST /api/fido/reset - Reset FIDO"
+    },
+    "en": {
+      "description": "Resets the FIDO authenticator: wipes every resident passkey, clears the PIN, and zeroes the signature counter. Irreversible. Requires pairing.",
+      "details": "Response { ok }.",
+      "synopsis": "POST /api/fido/reset",
+      "title": "POST /api/fido/reset - Reset FIDO"
+    },
+    "params": []
   },
   {
     "id": "api-fs-delete",
@@ -1800,6 +1895,38 @@
         },
         "en": {
           "description": "JSON body with enabled (bool), say (text to speak) and lang (\"it\"|\"en\")"
+        }
+      }
+    ]
+  },
+  {
+    "id": "api-unpair",
+    "path": "/api/unpair",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/unpair - Revoca Sessioni",
+      "description": "Revoca le sessioni associate. Serve come recupero quando un cookie di sessione potrebbe essere trapelato su una rete non fidata: disconnette gli altri client (o tutti).",
+      "synopsis": "POST /api/unpair",
+      "details": "Corpo JSON {\"scope\":\"others\"|\"all\"} (default \"others\"). \"others\" revoca ogni ALTRA sessione lasciando attiva quella corrente; \"all\" revoca tutte (tutti devono ri-associarsi col PIN). Richiede una sessione associata. Risposta: {\"ok\":true,\"revoked\":N}."
+    },
+    "en": {
+      "title": "POST /api/unpair - Revoke Sessions",
+      "description": "Revokes paired sessions. The recovery path for when a session cookie may have leaked on an untrusted network: log out the other clients (or all of them).",
+      "synopsis": "POST /api/unpair",
+      "details": "JSON body {\"scope\":\"others\"|\"all\"} (default \"others\"). \"others\" revokes every OTHER session and keeps the caller signed in; \"all\" revokes every session (everyone must re-pair with the PIN). Requires a paired session. Response: {\"ok\":true,\"revoked\":N}."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": false,
+        "default": "{\n  \"scope\": \"others\"\n}",
+        "it": {
+          "description": "Corpo JSON opzionale con \"scope\": \"others\" (default) o \"all\""
+        },
+        "en": {
+          "description": "Optional JSON body with \"scope\": \"others\" (default) or \"all\""
         }
       }
     ]
