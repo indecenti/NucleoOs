@@ -57,6 +57,13 @@ operator console in any browser.
 
 **You need:** a Cardputer, a USB-C cable, and a **microSD card** (formatted **FAT32**).
 
+> **⚠️ Not for M5Launcher / M5Burner.** \`${binName}\` is a **full flash image** (bootloader +
+> partition table + app) — write it at offset **0x0** as described below. A launcher's
+> "Install firmware" cannot install it, and flashing it **replaces** any launcher on the device
+> (NucleoOS brings its own bootloader and partition table).
+> \`${sdZip}\` is the **SD-card payload, not firmware** — never select it in a launcher; extract
+> it to the card root (Step 2).
+
 ---
 
 ## Step 1 — Flash the firmware ( \`${binName}\` )
@@ -127,6 +134,9 @@ DOS bundles to \`data/DOS/\`.
 ---
 
 ## Troubleshooting
+- **A launcher shows a red \`Need 0x…\` size error:** you selected \`${sdZip}\` in its "Install
+  firmware" menu — that file is the SD payload, not firmware, and can never fit in flash. Flash
+  \`${binName}\` at 0x0 (Step 1) and extract the zip onto the SD card (Step 2) instead.
 - **No apps / blank desktop:** the microSD isn't inserted, isn't FAT32, or the zip wasn't extracted to the card root.
 - **Web flasher won't connect:** use Chrome/Edge on desktop; try a different USB-C cable/port; close other serial monitors.
 - **A model won't download:** check the device (or your browser) has internet the first time; downloads are one-at-a-time.
@@ -138,10 +148,13 @@ An installable build of NucleoOS — a web-native appliance OS — for the **M5S
 (ESP32-S3). One universal firmware runs on both the **original** and the **ADV** board.
 
 ### Download
-- **\`${binName}\`** — the firmware. Flash it at offset **0x0** with a browser web flasher (uses
-  \`manifest.json\`) or \`esptool write_flash 0x0\`.
-- **\`${sdZip}\`** — the microSD payload (desktop + apps + system + the offline knowledge base). Extract
-  it to the root of a **FAT32** card and insert it before boot.
+- **\`${binName}\`** — the firmware: a **full flash image**, written at offset **0x0** with a browser web
+  flasher (uses \`manifest.json\`) or \`esptool write_flash 0x0\`. **Not installable via M5Launcher /
+  M5Burner** "Install firmware" — flashing it replaces any launcher (NucleoOS has its own bootloader
+  and partition table).
+- **\`${sdZip}\`** — the microSD payload (desktop + apps + system + the offline knowledge base) — **not
+  firmware, never select it in a launcher**. Extract it to the root of a **FAT32** card and insert it
+  before boot.
 
 ### Install
 See **[FLASH.md](FLASH.md)** for step-by-step instructions, including **how to add the optional AI models**
