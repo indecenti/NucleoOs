@@ -64,6 +64,14 @@ bool        nucleo_audio_is_paused(void);
 const char *nucleo_audio_path(void);       // currently/last played file path
 uint32_t    nucleo_audio_elapsed(void);    // seconds played so far
 uint32_t    nucleo_audio_elapsed_ms(void); // milliseconds played so far (sample-accurate; A/V master clock)
+int         nucleo_audio_current_rate(void); // live I2S sample rate (Hz); 0 if the output is closed/idle
+// Silent-clip diagnostics (why a play made no sound). drop: 0=ok 1=mic-busy 2=task-create-fail.
+// init: 0=not-reached 1=decoder-ok 2=MP3InitDecoder-fail 3=fopen-fail 9=wav. err: first MP3Decode error.
+int         nucleo_audio_dbg_drop(void);
+int         nucleo_audio_dbg_init(void);
+int         nucleo_audio_dbg_err(void);
+int         nucleo_audio_dbg_frames(void);
+int         nucleo_audio_dbg_srate(void);
 uint32_t    nucleo_audio_duration_ms(void); // ms total: exact when set (play_at), else estimated
                                             // from the running byte/time rate; 0 until playback warms up
 int         nucleo_audio_progress(void);    // 0..100 (by decoded file position)

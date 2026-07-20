@@ -931,11 +931,18 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
     if (H.version == 3) { fclose(f); return play_nfv3(vpath, title, reskey, start_ms, next_title); }   // tile-delta path
 
     uint16_t fps = H.fps ? H.fps : 12;
+    // Frame-buffer cap — the load-bearing number for sibling audio. The buffer is carved out of the
+    // ONE ~32 KB block freed by release_buffers(); the Helix MP3 decoder then needs ~20-24 KB CONTIGUOUS
+    // for its 8 allocations out of what's left. Measured on-device (/data/.vtrace audiochk): a 5 KB
+    // buffer (short clips) leaves 27 KB and the decoder inits fine; an 11.5 KB buffer (the big Ghibli
+    // films at 16 kHz) leaves only 20.5 KB and MP3InitDecoder OOMs (init=2) -> the clip plays SILENT.
+    // Cap at 8 KB so the decoder always gets >=24 KB. Frames larger than the cap are skipped cleanly by
+    // load_frame() (the previous frame holds for one beat) — a rare, minor visual hitch on high-detail
+    // frames, traded for audio that actually plays. Real encoded frames average ~5-6 KB, so most are
+    // unaffected. (The true fix for zero dropped frames is the v3 tile-delta format's tiny buffer.)
+    #define NFV_FRAMEBUF_CAP 8192u
     uint32_t maxf = H.max_frame_bytes;
-    if (maxf < 1024 || maxf > 32768) maxf = 32768;             // sanity clamp on the buffer
-    // Free the 32 KB shared UI canvas, then malloc a RIGHT-SIZED JPEG frame buffer. Real frames
-    // are ~8 KB, so this hands the big contiguous block to the Helix MP3 decoder — without it the
-    // sibling audio's MP3InitDecoder OOMs and the clip plays SILENT.
+    if (maxf < 1024 || maxf > NFV_FRAMEBUF_CAP) maxf = NFV_FRAMEBUF_CAP;
     nucleo_app_release_buffers();
     size_t bufcap = maxf;
     uint8_t *buf = (uint8_t *)malloc(bufcap);
@@ -1199,7 +1206,16 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
             }
         }
 
-        if (have_audio && !paused && cur >= H.frame_count - 1 && nucleo_audio_elapsed_ms() > H.duration_ms) { result = PR_ENDED; break; }
+        // End of clip. Audio-live: wait for the audio clock to pass the duration (A/V-accurate). Not
+        // audio-live (no audio, or the decoder failed to start — then elapsed_ms() is frozen forever):
+        // fall back to the wall-clock timer, else the modal HANGS on the last frame (v2 had only the
+        // audio check; v3 already has this fallback). Fixes "silent big film never returns to the list".
+        if (!paused && cur >= H.frame_count - 1) {
+            bool audio_live = have_audio && nucleo_audio_is_playing();
+            bool done = audio_live ? (nucleo_audio_elapsed_ms() > H.duration_ms)
+                                   : ((now - t0) / period >= (int64_t)H.frame_count);
+            if (done) { result = PR_ENDED; break; }
+        }
 
         vTaskDelay((want_load || seeking) ? 1 : pdMS_TO_TICKS(8));
     }
@@ -1231,7 +1247,11 @@ static void return_to_list(void)
 {
     for (int i = 0; i < 8 && !nucleo_screen_acquire(); i++) { esp_task_wdt_reset(); vTaskDelay(pdMS_TO_TICKS(20)); }
     d.fillScreen(BG);
-    nucleo_app_request_draw();
+    // Playback drew DIRECT to the panel while the canvas was freed, so the run loop's per-band hash
+    // cache still describes the pre-playback list. A plain request_draw would repaint the canvas but
+    // the diff-blit would skip every band that matches that stale hash, leaving the black video frame
+    // on the panel (only the row that changed — the new resume mark — would show). Force a full blit.
+    nucleo_app_force_repaint();
 }
 
 // ---- dense fisheye list rendering (mirrors the Music browser) -------------------------------
@@ -1784,7 +1804,7 @@ static void on_key(int key, char ch)
                     char vpath[256], title[72], key2[200];
                     clip_paths(s_sel, vpath, sizeof vpath, title, sizeof title, key2, sizeof key2);
                     int64_t rr = resume_prompt(vpath, title, r->resume);
-                    if (rr < 0) { d.fillScreen(BG); nucleo_app_request_draw(); return; }
+                    if (rr < 0) { d.fillScreen(BG); nucleo_app_force_repaint(); return; }   // resume_prompt drew direct-to-panel: force a full re-blit (same as return_to_list)
                     start_ms = rr;
                 } else if (s_resume_mode == 1) start_ms = (int64_t)r->resume * 1000;
             }

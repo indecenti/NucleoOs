@@ -768,6 +768,18 @@ void nucleo_app_set_fullscreen(bool on)
     if (!on) s_hint_dirty = true;    // leaving fullscreen -> repaint the footer over the reclaimed rows
 }
 void nucleo_app_request_draw(void)   { s_dirty = true; }
+// Invalidate the idle-reblit cache so the next composite pushes EVERY band, not just the changed
+// ones. Needed whenever the PANEL no longer matches what our canvas hashes say it does — i.e. after
+// an app drew direct-to-panel behind the run loop (a blocking playback modal that freed the canvas).
+// Without this, bands identical to the pre-modal frame are skipped and the direct-drawn residue
+// (a black video frame) stays on screen — the "black film list on exit" bug. See ANTI-FLICKER.md.
+void nucleo_app_force_repaint(void)
+{
+    s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true;
+    s_fg_was_fg = false;                          // makes the next blit force=true (see the run loop)
+    s_fg_last_hash = 0;                           // whole-canvas gate can't short-circuit either
+    for (int i = 0; i < BLIT_BANDS; i++) s_band_hash[i] = 0;   // no band can hash-match a stale frame
+}
 
 // Audio apps (radio, music) call this before starting playback: free the 32 KB shared canvas so
 // the Helix MP3 decoder can grab the contiguous block it needs (else MP3InitDecoder fails OOM and

@@ -13,8 +13,17 @@ static const char *TAG = "audio.mp3";
 
 void nucleo_audio_play_mp3(FILE *f)
 {
+    // Helix allocates ~20 KB across 8 small blocks. On a fragmented heap the last one can fail. Don't
+    // give up silently (the old behaviour = "clip plays with no sound"): free a contiguous block (unload
+    // the idle L1 index, etc.) and retry once before conceding.
     HMP3Decoder dec = MP3InitDecoder();
-    if (!dec) { ESP_LOGE(TAG, "MP3InitDecoder failed (out of RAM?)"); return; }
+    if (!dec) {
+        ESP_LOGW(TAG, "MP3InitDecoder OOM — reclaiming + retrying");
+        nucleo_audio_do_reclaim();
+        dec = MP3InitDecoder();
+    }
+    if (!dec) { ESP_LOGE(TAG, "MP3InitDecoder failed (out of RAM?) — clip will be SILENT"); nucleo_audio_dbg_set_init(2); return; }
+    nucleo_audio_dbg_set_init(1);
 
     uint8_t *in = nucleo_audio_in;        // shared scratch — file & radio decoders never run at once
     int16_t *out = nucleo_audio_out;
@@ -51,11 +60,13 @@ void nucleo_audio_play_mp3(FILE *f)
                 }
                 nucleo_audio_i2s_write(out, (size_t)fi.outputSamps * sizeof(int16_t));
                 nucleo_audio_add_samples((uint32_t)(fi.outputSamps / (fi.nChans < 1 ? 1 : fi.nChans)), fi.samprate);
+                nucleo_audio_dbg_frame(fi.samprate);
                 frames++;
             }
         } else if (err == ERR_MP3_INDATA_UNDERFLOW || err == ERR_MP3_MAINDATA_UNDERFLOW) {
             left = 0;                                         // need more bytes -> refill
         } else {
+            nucleo_audio_dbg_set_err(err);                    // first hard decode error (diagnostics)
             if (left > 0) { rp++; left--; }                  // skip a byte past the bad frame
         }
     }

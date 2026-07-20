@@ -1425,7 +1425,7 @@ static void now_playing(void)
     if (st->playpath[0] == 0) {  // failed to start
         np_mq_free();
         for (int i = 0; i < 8 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
-        d.fillScreen(BG); nucleo_app_request_draw(); return;
+        d.fillScreen(BG); nucleo_app_force_repaint(); return;   // now_playing drew direct-to-panel: force a full re-blit or the list stays black (stale band-hash)
     }
 
     d.fillScreen(BG);
@@ -1508,7 +1508,7 @@ static void now_playing(void)
     if (st->playpath[0] == 0)
         for (int i = 0; i < 8 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
     d.fillScreen(BG);
-    nucleo_app_request_draw();
+    nucleo_app_force_repaint();   // now_playing drew direct-to-panel: force a full re-blit or the browser list stays black
 }
 
 extern "C" void nucleo_register_player(void)
