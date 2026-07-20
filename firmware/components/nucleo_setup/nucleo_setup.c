@@ -23,8 +23,15 @@
 #include "nucleo_theme.h"
 #include "nucleo_i18n.h"   // first-run wizard language step + bilingual (TR) wizard strings
 #include "esp_heap_caps.h"
+#include "wifi_policy.h"   // supervisor decision core (pure C, host-tested by `npm run wifi:test`)
+#include <assert.h>
 
 static const char *TAG = "setup";
+
+// wp_mode_t mirrors wifi_mode_t so the two cast directly; if IDF ever renumbers, fail the build.
+static_assert((int)WP_MODE_NULL == (int)WIFI_MODE_NULL && (int)WP_MODE_STA == (int)WIFI_MODE_STA &&
+              (int)WP_MODE_AP == (int)WIFI_MODE_AP && (int)WP_MODE_APSTA == (int)WIFI_MODE_APSTA,
+              "wp_mode_t must mirror wifi_mode_t");
 
 // Privacy (OPT-IN): join networks with a locally-administered RANDOM MAC instead of the burned-in
 // Espressif one, so a network can't fingerprint/track this device.
@@ -81,6 +88,19 @@ static bool s_want_sta = false;        // true while we intend to stay on STA (d
 static bool s_auto = false;
 static SemaphoreHandle_t s_wifi_op_lock;   // serialize join / best-known selection (one connect attempt at a time)
 static void wifi_supervisor(void *arg);    // background (re)join task; defined after the scan helpers
+// Supervisor decision core (wifi_policy.c). Owns retry scheduling, the soft-AP busy/grace guard
+// and the radio-mode rules; the code here only samples inputs and executes the returned actions.
+static wp_state_t s_wp;
+static uint32_t wp_now(void) { return (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS); }
+// Stations currently associated with our soft-AP (0 if the AP interface is down). A client mid
+// WPA2 handshake is already in this list — association precedes the key exchange.
+static int ap_sta_count(void)
+{
+    wifi_mode_t m;
+    if (esp_wifi_get_mode(&m) != ESP_OK || !wp_ap_iface_up((wp_mode_t)m)) return 0;
+    wifi_sta_list_t list;
+    return esp_wifi_ap_get_sta_list(&list) == ESP_OK ? list.num : 0;
+}
 // One scan at a time. The native Wi-Fi app drives nucleo_setup_scan() from a worker task and the web
 // scanner (/api/wifi/scan) drives it from the httpd task; two esp_wifi_scan_start() calls in parallel
 // destabilize the driver, so all callers serialize on this. Created once in wifi_ensure() (boot,
@@ -149,6 +169,13 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
                  d ? d->reason : -1, s_ip[0] ? s_ip : "-");   // reason code lands in the RAM ring -> /api/logs
         s_ip[0] = '\0';
         if (s_want_sta) esp_wifi_connect();          // reconnect to the saved network
+    } else if (base == WIFI_EVENT && (id == WIFI_EVENT_AP_STACONNECTED || id == WIFI_EVENT_AP_STADISCONNECTED)) {
+        // Soft-AP client activity: opens the policy's grace window so the supervisor stays off
+        // the radio while someone is joining/using the hotspot — including a phone whose WPA2
+        // handshake just failed and is about to retry (it must find quiet, on-channel air).
+        wp_ap_activity(&s_wp, wp_now());
+        ESP_LOGI(TAG, "AP: client %s (n=%d)",
+                 id == WIFI_EVENT_AP_STACONNECTED ? "associated" : "left", ap_sta_count());
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
         uint32_t a = e->ip_info.ip.addr;
@@ -473,6 +500,7 @@ static void wifi_ensure(void)
     WIFI_TRY(esp_wifi_start());
     if (!s_scan_lock)    s_scan_lock    = xSemaphoreCreateMutex();   // serialize scans (see s_scan_lock)
     if (!s_wifi_op_lock) s_wifi_op_lock = xSemaphoreCreateMutex();   // serialize join / best-known selection
+    wp_init(&s_wp, wp_now());                                        // policy state before the supervisor runs
     static bool sup_started = false;
     if (!sup_started) { sup_started = true;                          // background (re)join supervisor
         xTaskCreate(wifi_supervisor, "wifisup", 6144, NULL, tskIDLE_PRIORITY + 1, NULL);   // +2 KB: room for the net_trace FAT write on a silent-drop
@@ -534,6 +562,12 @@ static void wait_for_ip(void)
 }
 
 // Connect as STA with explicit credentials, then wait for an IP.
+// Invariant I2 (wifi_policy.h): if the fallback hotspot is up, the attempt runs in APSTA so the
+// AP keeps beaconing through it — the old unconditional WIFI_MODE_STA took the hotspot DOWN for
+// up to ~8 s per candidate, which a phone mid-join reported as "couldn't connect / authenticate".
+// On success the AP is deliberately LEFT up: the supervisor drops it (WP_ACT_DROP_AP) only once
+// it has been idle past the grace window, so a web-UI user who drove this join from the hotspot
+// keeps their session alive instead of being kicked before the response even flushes.
 static void connect_sta(const char *ssid, const char *pass)
 {
     s_want_sta = true;                  // keep this link up (auto-reconnect on any drop)
@@ -541,7 +575,9 @@ static void connect_sta(const char *ssid, const char *pass)
     strncpy((char *)wc.sta.ssid, ssid, sizeof(wc.sta.ssid) - 1);
     strncpy((char *)wc.sta.password, pass, sizeof(wc.sta.password) - 1);
     WIFI_TRY(esp_wifi_set_config(WIFI_IF_STA, &wc));
-    WIFI_TRY(esp_wifi_set_mode(WIFI_MODE_STA));
+    wifi_mode_t cur = WIFI_MODE_NULL;
+    esp_wifi_get_mode(&cur);
+    WIFI_TRY(esp_wifi_set_mode((wifi_mode_t)wp_join_mode((wp_mode_t)cur)));
     esp_wifi_connect();
     wait_for_ip();
     if (s_ip[0]) net_remember(ssid, pass);   // every successful join is added to the known list
@@ -691,9 +727,11 @@ static bool connect_best_known(void)
         // its blocking wait_for_ip() never stalls startup. Migrate ONLY a non-empty password: some IDF
         // builds return an empty one, and storing that would create a useless entry that later fails.
         bool ok = false;
-        if (s_ssid[0]) {
+        if (s_ssid[0] && !wp_ap_busy(&s_wp, ap_sta_count(), wp_now())) {
             s_want_sta = true;
-            esp_wifi_set_mode(WIFI_MODE_STA); esp_wifi_connect(); wait_for_ip();
+            wifi_mode_t m = WIFI_MODE_NULL; esp_wifi_get_mode(&m);
+            esp_wifi_set_mode((wifi_mode_t)wp_join_mode((wp_mode_t)m));   // I2: keep a live AP beaconing
+            esp_wifi_connect(); wait_for_ip();
             if (s_ip[0]) {
                 wifi_config_t cur = {0};
                 if (esp_wifi_get_config(WIFI_IF_STA, &cur) == ESP_OK && cur.sta.ssid[0] && cur.sta.password[0])
@@ -729,13 +767,16 @@ static bool connect_best_known(void)
 
     bool ok = false;
     for (int a = 0; a < m && a < 4 && !ok; a++) {     // try the top few in preference order
+        // Mid-cycle abort (I1): a client may have started using the hotspot while we were
+        // scanning or trying the previous candidate — stop the cycle instead of fighting them.
+        if (wp_ap_busy(&s_wp, ap_sta_count(), wp_now())) { ESP_LOGI(TAG, "join cycle paused: hotspot in use"); break; }
         int i = order[a];
         ESP_LOGI(TAG, "auto-join '%s' (prio %u, %d dBm)", s_nets[i].ssid, s_nets[i].prio, rssi[a]);
         connect_sta(s_nets[i].ssid, s_nets[i].pass);
         if (s_ip[0]) { strncpy(s_ssid, s_nets[i].ssid, sizeof(s_ssid)-1); s_ssid[sizeof(s_ssid)-1] = 0;
                        strncpy(s_mode, "sta", sizeof(s_mode)-1); save_config(); ok = true; }
     }
-    if (!ok && m == 0) {                       // nothing visible matched: blind retry of the most recent
+    if (!ok && m == 0 && !wp_ap_busy(&s_wp, ap_sta_count(), wp_now())) {   // nothing visible matched: blind retry of the most recent
         int r = -1; for (int j = 0; j < s_net_n; j++)   // ...that actually has a stored password
             if (s_nets[j].pass[0] && (r < 0 || s_nets[j].seq > s_nets[r].seq)) r = j;
         if (r >= 0) {
@@ -762,62 +803,65 @@ static void net_trace(const char *what, const char *ip)
     fclose(f);
 }
 
-// True iff a client is currently associated with our soft-AP. A full-radio scan (channel hop) while
-// someone is connected deauthenticates them AND aborts their in-flight WPA2 4-way handshake, which the
-// client reports as a WRONG PASSWORD ("authentication required" / "incorrect password"). The supervisor
-// checks this before scanning so an active hotspot user is never kicked to go hunting for a saved net.
-static bool ap_has_clients(void)
-{
-    wifi_mode_t m;
-    if (esp_wifi_get_mode(&m) != ESP_OK || (m != WIFI_MODE_AP && m != WIFI_MODE_APSTA)) return false;
-    wifi_sta_list_t list;
-    return esp_wifi_ap_get_sta_list(&list) == ESP_OK && list.num > 0;
-}
-
 // Background Wi-Fi supervisor. While the user intends a client link (s_auto) but we have no IP,
 // periodically rescan and (re)join the best known network — and keep the device reachable on its
-// own AP between retries. The driver's on_wifi_event handles brief drops to the SAME AP; this
-// recovers when that AP is gone (another saved net in range) and rejoins the home Wi-Fi after a
-// fallback. Exponential backoff up to 60 s so we never scan in a tight loop.
+// own AP between retries. ALL scheduling/guard decisions live in wifi_policy.c (host-tested,
+// `npm run wifi:test`); this loop samples the live state and executes the returned action:
+//   DEFER      hotspot in use (or client activity within the grace window): stay off the radio
+//   TRY_JOIN   run one scan+join cycle, then settle the radio back to a beaconing AP on failure
+//   RECONNECT  held IP but silently dead link: force a driver reconnect (net_trace'd)
+//   DROP_AP    joined + hotspot idle past grace: stop beaconing (battery)
 static void wifi_supervisor(void *arg)
 {
-    TickType_t backoff = pdMS_TO_TICKS(8000);
-    TickType_t next = xTaskGetTickCount();
-    int link_miss = 0;                              // consecutive "association lost" polls while s_ip is set
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(2000));
-        if (!s_auto) { backoff = pdMS_TO_TICKS(8000); continue; }
-        // We THINK we have a link (s_ip set): verify it is REALLY alive. The STA can lose the AP without
-        // WIFI_EVENT_STA_DISCONNECTED ever reaching us (beacon loss under heap pressure, the event dropped
-        // on a starved queue) -> s_ip stays stale, the launcher shows a dead IP, the web server is up but
-        // unreachable, and nothing recovers until a manual reboot. Poll the association; on repeated
-        // failure, log it (RAM ring -> /api/logs, and /sd/net_trace.txt) and force a reconnect — the
-        // disconnect handler reassociates (s_want_sta) and GOT_IP refreshes s_ip.
-        if (s_ip[0]) {
-            wifi_ap_record_t ap;
-            if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
-                link_miss = 0;
-            } else if (++link_miss >= 3) {           // ~6 s of "not associated" while we still hold an IP
-                ESP_LOGW(TAG, "STA link silently lost (stale ip=%s) — forcing reconnect", s_ip);
-                net_trace("silent-drop", s_ip);
-                link_miss = 0; s_ip[0] = '\0';
-                esp_wifi_disconnect();
+        wifi_mode_t cur = WIFI_MODE_NULL;
+        esp_wifi_get_mode(&cur);
+        wifi_ap_record_t ap;
+        wp_tick_in_t in = {
+            .auto_join        = s_auto,
+            .have_ip          = s_ip[0] != 0,
+            .link_alive       = esp_wifi_sta_get_ap_info(&ap) == ESP_OK,
+            .driver_sta_count = ap_sta_count(),
+            .mode             = (wp_mode_t)cur,
+        };
+        switch (wp_tick(&s_wp, &in, wp_now())) {
+        case WP_ACT_RECONNECT:
+            // Stale IP: the STA lost the AP without WIFI_EVENT_STA_DISCONNECTED ever landing
+            // (beacon loss under heap pressure, event dropped on a starved queue). Log it (RAM
+            // ring -> /api/logs, plus /sd/net_trace.txt) and force a reconnect — the disconnect
+            // handler reassociates (s_want_sta) and GOT_IP refreshes s_ip.
+            ESP_LOGW(TAG, "STA link silently lost (stale ip=%s) — forcing reconnect", s_ip);
+            net_trace("silent-drop", s_ip);
+            s_ip[0] = '\0';
+            esp_wifi_disconnect();
+            break;
+        case WP_ACT_DROP_AP:
+            ESP_LOGI(TAG, "joined and hotspot idle — dropping the fallback AP");
+            esp_wifi_set_mode(WIFI_MODE_STA);
+            break;
+        case WP_ACT_TRY_JOIN: {
+            bool joined = connect_best_known();
+            wp_cycle_done(&s_wp, joined, wp_now());
+            if (!joined) {
+                // Invariant I3: after a failed cycle the device MUST end up on a beaconing AP.
+                // Decide from the ACTUAL driver mode — the old `strcmp(s_mode,"ap")` guard read
+                // the intent string, which is already "ap" in the standard fallback, so the
+                // restore never ran and the hotspot stayed DOWN for the whole backoff window.
+                wifi_mode_t m = WIFI_MODE_NULL;
+                esp_wifi_get_mode(&m);
+                if (wp_need_ap_restore((wp_mode_t)m)) {
+                    start_ap();                                  // radio has no AP interface: bring the hotspot up
+                } else if (m == WIFI_MODE_APSTA && !wp_ap_busy(&s_wp, ap_sta_count(), wp_now())) {
+                    esp_wifi_set_mode(WIFI_MODE_AP);             // drop the idle STA radio between retries (battery)
+                }
+                strncpy(s_mode, "ap", sizeof(s_mode) - 1);       // header shows the fallback honestly (RAM only)
             }
-            backoff = pdMS_TO_TICKS(8000);
-            continue;
+            break;
         }
-        // Someone is actively using our fallback hotspot: do NOT scan (it would deauth them and break
-        // their WPA2 handshake -> "incorrect password"). Defer the STA retry until they disconnect; the
-        // driver keeps the AP alive in the meantime, and retries resume automatically once they leave.
-        if (ap_has_clients()) { next = xTaskGetTickCount() + pdMS_TO_TICKS(8000); continue; }
-        if ((int32_t)(xTaskGetTickCount() - next) < 0) continue;
-        if (connect_best_known()) {
-            backoff = pdMS_TO_TICKS(8000);
-        } else {
-            if (strcmp(s_mode, "ap")) { start_ap(); strncpy(s_mode, "ap", sizeof(s_mode)-1); }   // stay reachable
-            if (backoff < pdMS_TO_TICKS(60000)) backoff *= 2;
+        default:      // WP_ACT_IDLE / WP_ACT_DEFER: nothing to execute
+            break;
         }
-        next = xTaskGetTickCount() + backoff;
     }
 }
 
@@ -826,7 +870,7 @@ static void wifi_supervisor(void *arg)
 bool nucleo_setup_join(const char *ssid, const char *pass)
 {
     if (s_wifi_op_lock) xSemaphoreTake(s_wifi_op_lock, portMAX_DELAY);
-    s_auto = true;
+    bool prev_auto = s_auto;
     // Reconnecting to a saved network without re-typing the password: if none was supplied, reuse
     // the stored one (an open network simply has an empty stored password).
     const char *use_pass = pass ? pass : "";
@@ -835,7 +879,15 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
     strncpy(s_ssid, ssid, sizeof(s_ssid) - 1); s_ssid[sizeof(s_ssid) - 1] = 0;
     connect_sta(ssid, use_pass);               // remembers the net on success
     bool ok = s_ip[0] != 0;
+    // Invariant I4: a FAILED one-shot join must never arm the background retry loop. The old
+    // unconditional `s_auto = true` did exactly that — one wrong password put the supervisor
+    // into an eternal scan/join loop that kept knocking the hotspot over ("AP keeps
+    // disconnecting", phones failing to authenticate). Failure keeps the previous intent.
+    s_auto = wp_join_result_auto(prev_auto, ok);
     if (ok) { strncpy(s_mode, "sta", sizeof(s_mode) - 1); save_config(); }
+    else if (!prev_auto) start_ap();           // was an intentional hotspot: put it back, stable
+                                               // (also clears s_want_sta -> stops the driver
+                                               //  retrying the bad credentials in background)
     if (s_wifi_op_lock) xSemaphoreGive(s_wifi_op_lock);
     return ok;
 }

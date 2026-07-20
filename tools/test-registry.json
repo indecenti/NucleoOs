@@ -1495,6 +1495,21 @@
       "anima": false
     },
     {
+      "id": "gate-wifi-policy-supervisor-hotspot",
+      "label": "wifi-policy (supervisor/hotspot)",
+      "category": "connect-transfer",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/wifi-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "gate-ble-adv-spam-beacon",
       "label": "ble-adv (spam/beacon)",
       "category": "security",

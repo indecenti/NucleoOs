@@ -25,6 +25,7 @@
     "chorus:test": "node tools/anima-host/chorus-check.mjs",
     "swarm:test": "node tools/anima-host/swarm-sec-check.mjs",
     "eth:test": "node tools/anima-host/eth-check.mjs",
+    "wifi:test": "node tools/anima-host/wifi-check.mjs",
     "otalisten:test": "node tools/anima-host/ota-listen-check.mjs",
     "ble:test": "node tools/anima-host/ble-check.mjs",
     "mail:test": "node tools/anima-host/mail-check.mjs",

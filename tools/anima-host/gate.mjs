@@ -414,6 +414,14 @@ const gates = [
     // unicast), OUI vendor lookup, host-table dedup — 47 assertions. Pure C, no device. The regression
     // guard for the W5500 L2/L3 engine's frame layout/byte-order/checksums (a wrong byte = a dead attack).
     ok: (code) => code === 0, summary: (o) => (o.match(/== \d+ passed[^\n]*==/) || [lastLine(o)])[0].trim() },
+  { name: 'wifi-policy (supervisor/hotspot)', cmd: 'node', args: ['tools/anima-host/wifi-check.mjs'],
+    // The Wi-Fi supervisor decision core (firmware/components/nucleo_setup/wifi_policy.c), host-compiled
+    // with MinGW: the four anti-flap invariants behind GitHub issue #3 (hotspot "authentication required"
+    // / "incorrect password", AP flapping/left down) — never disturb a hotspot in use (client list + 90 s
+    // grace), APSTA joins so the AP keeps beaconing, AP always restored from the ACTUAL driver mode after
+    // a failed cycle, and a failed one-shot join never arms the retry loop. 160 assertions incl. a full
+    // replay of the issue story and uint32 ms wraparound. Pure C, no device.
+    ok: (code) => code === 0, summary: (o) => (o.match(/wifi-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'ble-adv (spam/beacon)', cmd: 'node', args: ['tools/anima-host/ble-check.mjs'],
     // The BLE advertisement payload core (firmware/components/nucleo_ble/nucleo_ble_adv.c), host-compiled
     // with MinGW: Apple Continuity / Microsoft Swift Pair / Google Fast Pair / iBeacon AD framing — company

@@ -71,6 +71,7 @@ const gateCat = {
   'auto-evolution (VKL)': 'knowledge-graph', 'ledger-attack (VKL)': 'knowledge-graph', 'akb5-content (sharded)': 'nl-knowledge',
   'arbiter (concurrency)': 'cascade-infra',
   'link-proto (espnow)': 'connect-transfer', 'nearby-skill (scoped)': 'connect-transfer',
+  'wifi-policy (supervisor/hotspot)': 'connect-transfer',
   'eth-frames (wired)': 'security',
   'ble-adv (spam/beacon)': 'security',
   'ducky (payloads)': 'security',
