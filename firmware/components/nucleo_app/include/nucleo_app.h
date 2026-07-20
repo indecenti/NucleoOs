@@ -44,6 +44,11 @@ void nucleo_app_set_hint_colors(unsigned short bg, unsigned short fg);  // overr
 int  nucleo_app_content_top(void);             // first usable content y
 int  nucleo_app_content_height(void);          // usable content height
 void nucleo_app_request_draw(void);            // ask for a redraw next loop
+// Force a FULL panel re-blit next loop (not just the band-dirty diff). Call after an app has drawn
+// DIRECT to the panel behind the run loop's back — e.g. a blocking playback/preview modal that freed
+// and re-acquired the shared canvas: the per-band hashes still describe the PRE-modal frame, so the
+// normal diff would leave the stale direct-drawn pixels on screen. This invalidates that cache.
+void nucleo_app_force_repaint(void);
 void nucleo_app_release_buffers(void);         // free launcher off-screen buffers (reclaim RAM)
 // Heavy one-shot HTTP downloads (OTA) raise this so the run loop LAUNCHES Remote Control from the UI task
 // — the RAM-listening posture (frees the 32 KB canvas + L1) that lets a flash through, but automatic.

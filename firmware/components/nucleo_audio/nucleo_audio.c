@@ -473,11 +473,13 @@ static void player_task(void *arg)
             nucleo_audio_seek_far(f, target);                     // bounded, WDT-safe (FATFS has no fast-seek)
             nucleo_audio_play_mp3(f);
         } else {
+            nucleo_audio_dbg_set_init(9);                          // WAV path (diagnostics)
             play_wav(f);
         }
         fclose(f);
     } else {
         ESP_LOGE(TAG, "open %s failed", s_path);
+        nucleo_audio_dbg_set_init(3);                             // fopen failed (diagnostics)
     }
     i2s_close();
     atomic_store(&s_playing, false);
@@ -491,13 +493,25 @@ static void player_task(void *arg)
 // (nucleo_anima_l1_unload_if_idle) so a tight heap doesn't silently drop the voice. NULL = no-op.
 static nucleo_audio_reclaim_fn s_reclaim_cb = NULL;
 void nucleo_audio_set_reclaim_cb(nucleo_audio_reclaim_fn fn) { s_reclaim_cb = fn; }
+void nucleo_audio_do_reclaim(void) { if (s_reclaim_cb) s_reclaim_cb(); }
+
+// Silent-clip diagnostics — captured across the decode task, read by the video player's SD breadcrumb.
+// Declared here (ahead of start_play_window) so that function can reset/set them. 0=ok defaults.
+static atomic_int s_dbg_drop   = 0;   // start_play_window verdict: 0=ok 1=mic-busy 2=task-create-fail
+static atomic_int s_dbg_init   = 0;   // decode task: 0=not-reached 1=decoder-ok 2=MP3InitDecoder-fail 3=fopen-fail 9=wav-path
+static atomic_int s_dbg_err    = 0;   // first non-OK MP3Decode() error code (0 = none seen)
+static atomic_int s_dbg_frames = 0;   // PCM frames emitted (0 = decoded nothing)
+static atomic_int s_dbg_srate  = 0;   // sample rate the decoder reported on its first frame
 
 static esp_err_t start_play_window(const char *path, uint32_t start_ms, uint32_t duration_ms,
                                    uint32_t file_off, uint32_t file_len)
 {
+    atomic_store(&s_dbg_drop, 0); atomic_store(&s_dbg_init, 0);          // fresh diagnostics for this play
+    atomic_store(&s_dbg_err, 0);  atomic_store(&s_dbg_frames, 0); atomic_store(&s_dbg_srate, 0);
     if (nucleo_recorder_is_busy() || nucleo_micspec_running()) {                               // shared GPIO43 (mic⊕speaker): block while the recorder/dictation OR the Spectrum app holds the mic RX
         ESP_LOGW(TAG, "play dropped: mic busy (rec=%d spectrum=%d) -> %s",                     // last fully-silent drop path: log it so "no game audio" is a one-line diagnosis
                  (int)nucleo_recorder_is_busy(), (int)nucleo_micspec_running(), path ? path : "?");
+        atomic_store(&s_dbg_drop, 1);
         return ESP_ERR_INVALID_STATE;
     }
     audio_lock();                                                       // single owner: no concurrent I2S/task setup
@@ -538,6 +552,7 @@ static esp_err_t start_play_window(const char *path, uint32_t start_ms, uint32_t
     if (ok != pdPASS) {
         ESP_LOGE(TAG, "audio task create FAILED (free %u, largest %u) -> play dropped",
                  (unsigned)esp_get_free_heap_size(), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+        atomic_store(&s_dbg_drop, 2);
         atomic_store(&s_playing, false); audio_unlock(); return ESP_FAIL;
     }
     audio_unlock();
@@ -563,6 +578,20 @@ esp_err_t nucleo_audio_play_url(const char *url) { return start_play(url, 0, 0);
 // Non-blocking: true mentre una clip/stream e' in riproduzione (per pollare un'interruzione senza
 // bloccare su wait_idle). Legge solo l'atomic gia' esistente -> zero RAM.
 bool nucleo_audio_playing(void) { return atomic_load(&s_playing); }
+// Live I2S output rate (Hz) — the rate the decoder actually latched via nucleo_audio_i2s_rate();
+// 0 when the TX channel is closed. Used to diagnose "decodes but silent" (wrong-rate) reports.
+int nucleo_audio_current_rate(void) { return s_rate; }
+
+// --- silent-clip diagnostics (read by the video player's audiochk breadcrumb) --------------------
+// (s_dbg_* live near the top of the file so start_play_window, defined earlier, can set them.)
+int nucleo_audio_dbg_drop(void)   { return atomic_load(&s_dbg_drop); }
+int nucleo_audio_dbg_init(void)   { return atomic_load(&s_dbg_init); }
+int nucleo_audio_dbg_err(void)    { return atomic_load(&s_dbg_err); }
+int nucleo_audio_dbg_frames(void) { return atomic_load(&s_dbg_frames); }
+int nucleo_audio_dbg_srate(void)  { return atomic_load(&s_dbg_srate); }
+void nucleo_audio_dbg_set_init(int v)   { atomic_store(&s_dbg_init, v); }
+void nucleo_audio_dbg_set_err(int v)    { if (!atomic_load(&s_dbg_err)) atomic_store(&s_dbg_err, v); }
+void nucleo_audio_dbg_frame(int srate)  { atomic_fetch_add(&s_dbg_frames, 1); if (srate) atomic_store(&s_dbg_srate, srate); }
 
 void nucleo_audio_stop(void)
 {

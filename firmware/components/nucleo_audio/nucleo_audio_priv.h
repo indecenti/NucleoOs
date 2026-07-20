@@ -45,6 +45,16 @@ bool nucleo_audio_poll_seek(long *byte_off);
 // bounded steps, petting the WDT between hops. Mirrors the video player's seek_far.
 void nucleo_audio_seek_far(FILE *f, long off);
 
+// Best-effort "free a contiguous block" hook (unloads the idle ANIMA L1 index, etc.). Used by the
+// decode loop to recover from an MP3InitDecoder() OOM before giving up. No-op if none registered.
+void nucleo_audio_do_reclaim(void);
+
+// Silent-clip diagnostics — the decode loop reports its progress so a "no sound" play is debuggable
+// from the video player's SD breadcrumb (RAM logs are wiped by the Solo-boot reboot on exit).
+void nucleo_audio_dbg_set_init(int v);   // 1=decoder-ok 2=MP3InitDecoder-fail 3=fopen-fail 9=wav-path
+void nucleo_audio_dbg_set_err(int v);    // first non-OK MP3Decode() error code
+void nucleo_audio_dbg_frame(int srate);  // one PCM frame emitted (srate = decoder's reported rate)
+
 // Decode an MP3 stream (already-open file) to the speaker. Implemented in
 // nucleo_audio_mp3.c so the Helix dependency stays isolated.
 void nucleo_audio_play_mp3(FILE *f);
