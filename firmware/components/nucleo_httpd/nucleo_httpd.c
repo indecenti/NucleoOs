@@ -2221,15 +2221,17 @@ esp_err_t nucleo_httpd_start(void)
     // while keeping the cold-load burst well below the flooding 6. Still strictly raises min_free vs 6.
     config.max_open_sockets = 4;
     config.uri_match_fn = httpd_uri_match_wildcard;  // enable the "/*" static catch-all
-    // Sized to the ACTUAL route count, with small headroom. We register 55 handlers below: 26 explicit
-    // here + auth(2) + fs(6) + rec(4) + ir(4) + gpio(1) + link(9) + display(1) + ws(1) + webfs catch-all(1).
-    // At 48 the last 7 silently failed (httpd_uri: "no slots left") — the casualties were the TAIL of the
-    // list: 4x /api/link/*, /api/display, /ws, and the webfs "/*" catch-all that serves the whole shell +
-    // app UIs from SD, i.e. the web layer went dark while early routes (/api/status etc.) still answered.
-    // RAM cost of the bump is tiny and one-time at httpd_start: hd_calls is calloc(max, sizeof(ptr)) so the
-    // 16 extra slots are +64 B, plus the 7 now-registering handlers are ~24 B each (malloc per handler).
-    // WHEN YOU ADD AN ENDPOINT: bump this past the new total, or it silently drops off the end again.
-    config.max_uri_handlers = 72;   // 61 in use (2026-07-17, +/api/unpair) + headroom
+    // Sized to the ACTUAL route count, with headroom. We register 77 handlers: main(34) + auth(3) +
+    // fs(6) + rec(4) + ir(5) + gpio(2) + link(11) + display(1) + screen(1) + costellazioni(2) + fido(5) +
+    // ws(1) + webfs catch-all(1). NOTE: GET+POST on the SAME uri (tts, mail/accounts, lang, llm, anima…)
+    // each cost TWO slots — that quiet doubling is what crept the total past the old 72 cap.
+    // At 72 the last handlers silently failed (httpd_uri: "no slots left") — the casualties were the TAIL of
+    // the list: /api/fido/*, /ws, and the webfs "/*" catch-all that serves the whole shell + app UIs from SD,
+    // i.e. the web layer went dark (http://<dev>/ -> 404 "Nothing matches the given URI") while early routes
+    // (/api/status etc.) still answered. RAM cost of the bump is tiny and one-time at httpd_start: hd_calls
+    // is calloc(max, sizeof(ptr)) so the extra slots are +4 B each, plus ~24 B/handler for the ones that now
+    // register. WHEN YOU ADD AN ENDPOINT: bump this past the new total, or it silently drops off the end again.
+    config.max_uri_handlers = 96;   // 77 in use (2026-07-21) + 19 headroom
     config.close_fn = on_sock_close;                 // detect client disconnects immediately
     // The shell opens many parallel connections (assets + several /api/fs + /ws). lru_purge
     // recycles the oldest idle socket instead of refusing/resetting new ones — this (plus the
