@@ -6,6 +6,7 @@
 #include "nucleo_board.h"
 #include "esp_log.h"
 #include <string.h>   // memmove for the decimation carry
+#include <stdlib.h>   // malloc/free for the heap-on-open native-rate scratch
 
 #define ES8311_ADDR 0x18
 // The ES8311 on the ADV has NO dedicated MCLK wire: it derives its master clock from the BCLK pin
@@ -24,7 +25,12 @@ static i2c_master_dev_handle_t s_dev;   // NULL = codec absent (original Cardput
 // the recorder, voice stream and Spectrum are mutually exclusive). s_decim = native/requested
 // (3 for 48k->16k, 1 for the PDM path = no resampling). See nucleo_codec_mic_read.
 static int     s_decim = 1;
-static int16_t s_nat[1536];     // native-rate scratch: holds up to 512 output samples worth at 3x
+// Native-rate scratch (ADV decimation path only). Was a permanent 3 KB .bss array; now allocated
+// heap-on-open (nucleo_codec_mic_open) and freed on close, so it costs ZERO RAM while idle — and
+// NOTHING on the original Cardputer, whose PDM path (s_decim == 1) never touches it. Freeing 3 KB of
+// always-resident .bss matters on this no-PSRAM chip where the web OS already grazes the heap floor.
+#define NAT_CAP 1536            // holds up to 512 output samples worth at 3x decimation
+static int16_t *s_nat = NULL;
 static int     s_nat_rem = 0;   // native samples carried over from the previous read (keeps phase)
 
 // One {reg,val} write. Short timeout: a wedged bus must never stall audio start.
@@ -139,6 +145,11 @@ esp_err_t nucleo_codec_mic_open(int rate, i2s_chan_handle_t *out)
         err = i2s_channel_init_std_mode(rx, &std);
         s_decim = (rate > 0) ? (ES8311_NATIVE_RATE + rate / 2) / rate : 1;   // 48000/16000 = 3
         if (s_decim < 1) s_decim = 1;
+        // Grab the native-rate scratch only when we'll actually decimate. Freed in mic_close.
+        if (s_decim > 1 && !s_nat) {
+            s_nat = malloc(NAT_CAP * sizeof(int16_t));   // internal RAM (no PSRAM on this chip)
+            if (!s_nat) err = ESP_ERR_NO_MEM;            // the shared cleanup below deletes the channel
+        }
     } else {
         // Original Cardputer: PDM mic (SPM1423) on CLK43/DIN46 — clocks fine at the requested rate.
         i2s_pdm_rx_config_t cfg = {
@@ -166,12 +177,12 @@ esp_err_t nucleo_codec_mic_read(i2s_chan_handle_t rx, void *out, size_t out_cap,
     if (got) *got = 0;
     if (!rx || !out || out_cap < 2) return ESP_ERR_INVALID_ARG;
     int factor = s_decim < 1 ? 1 : s_decim;
-    if (factor == 1)                                  // PDM / original: byte-for-byte unchanged
+    if (factor == 1 || !s_nat)                        // PDM / original, or scratch unavailable: byte-for-byte
         return i2s_channel_read(rx, out, out_cap, got, ticks);
 
     int16_t *o = (int16_t *)out;
     int out_cap_s = (int)(out_cap / 2);               // output samples wanted
-    int budget_s = (int)(sizeof(s_nat) / sizeof(s_nat[0])) / factor;   // max output a scratch holds
+    int budget_s = NAT_CAP / factor;                  // max output the scratch holds
     if (out_cap_s > budget_s) out_cap_s = budget_s;
     int want_nat = out_cap_s * factor;                // native samples needed for this chunk
 
@@ -197,6 +208,8 @@ esp_err_t nucleo_codec_mic_read(i2s_chan_handle_t rx, void *out, size_t out_cap,
 
 void nucleo_codec_mic_close(i2s_chan_handle_t rx)
 {
+    if (s_nat) { free(s_nat); s_nat = NULL; }   // release the 3 KB native-rate scratch (heap-on-open)
+    s_nat_rem = 0;
     if (!rx) return;
     i2s_channel_disable(rx);
     i2s_del_channel(rx);
