@@ -44,14 +44,63 @@ const glyph = (a) => {
     // A missing/404 icon file (e.g. an app whose icon.svg wasn't deployed) must NOT leave a broken
     // image — fall back to the emoji glyph in place. Resilient to any not-yet-deployed app icon.
     const safeFb = fb.replace(/['"\\<>&]/g, '');
-    // loading="lazy": the device serves ~40 app icons (desktop + the hidden Start menu + recents). At cold
-    // load that fired them ALL at once — a real burst on the single-task device, in EVERY browser (the SW
-    // governor is inert over http LAN IP, so this is the only client-side throttle that actually runs).
-    // Standard attribute (Chrome/Edge/Firefox/Safari) → off-screen + hidden-menu icons fetch only when shown.
-    return `<img src="${src}" loading="lazy" onerror="this.onerror=null;this.replaceWith(document.createTextNode('${safeFb}'))" style="width:1em; height:1em; vertical-align:middle; pointer-events:none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));">`;
+    // Emitted WITHOUT src: the NucleoIcon pool (below) sets data-src -> src at most a few at a time and
+    // only once the icon nears the viewport. This is the throttle that ACTUALLY runs on the real device
+    // link (plain http LAN IP), where the service-worker gate is inert — so the ~26 file icons never hit
+    // the single-task PSRAM-less httpd as one 26-wide GET burst at first paint. alt="" = no broken-image
+    // flash before hydration; data-fb carries the emoji fallback the pool swaps in on a 404.
+    return `<img data-src="${src}" data-fb="${safeFb}" alt="" width="16" height="16" decoding="async" style="width:1em; height:1em; vertical-align:middle; pointer-events:none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));">`;
   }
   return fb;
 };
+
+// Cold-load icon throttle — the one client-side governor that runs over a plain http LAN IP (a service
+// worker needs a secure context, so the SW MAX_INFLIGHT gate never registers on http://<device>/). File
+// app icons are emitted as <img data-src> (see glyph); this pool assigns src to at most ICON_MAX at a
+// time, and only once an icon scrolls near view, so the desktop's first paint can't flood the device's
+// 4-socket single-task server. Repeat loads come from the browser HTTP cache (webfs serves image/* with
+// max-age=604800), so this only ever runs on the first cold paint. A MutationObserver hydrates icons at
+// EVERY inject site (desktop, Start menu, taskbar, recents) — callers just emit the markup.
+const NucleoIcon = (() => {
+  const ICON_MAX = 3;                       // <= device max_open_sockets(4): leave one socket for API/ws
+  let active = 0;
+  const q = [];
+  const pump = () => {
+    while (active < ICON_MAX && q.length) {
+      const img = q.shift();
+      if (!img.isConnected || img.__st !== 'q') continue;
+      img.__st = 'l'; active++;
+      img.addEventListener('load', () => { if (img.__st === 'l') { active--; img.__st = 'd'; pump(); } }, { once: true });
+      img.addEventListener('error', () => {
+        if (img.__st === 'l') { active--; img.__st = 'd'; }
+        img.replaceWith(document.createTextNode(img.getAttribute('data-fb') || '▦'));   // 404 -> emoji, in place
+        pump();
+      }, { once: true });
+      img.src = img.dataset.src;             // triggers the fetch (from HTTP cache on a repeat load)
+    }
+  };
+  const io = ('IntersectionObserver' in window)
+    ? new IntersectionObserver((es) => {
+        for (const e of es) if (e.isIntersecting) { io.unobserve(e.target); const img = e.target; if (img.__st === 'idle') { img.__st = 'q'; q.push(img); } }
+        pump();
+      }, { rootMargin: '150px' })
+    : null;
+  const hydrate = (img) => {
+    if (img.__st) return;                    // already handled
+    img.__st = 'idle';
+    if (io) io.observe(img);                 // hidden Start-menu icons stay unloaded until shown (keeps the old lazy win)
+    else { img.__st = 'q'; q.push(img); pump(); }
+  };
+  const mo = new MutationObserver((muts) => {
+    for (const m of muts) for (const n of m.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      if (n.matches && n.matches('img[data-src]')) hydrate(n);
+      else if (n.querySelectorAll) n.querySelectorAll('img[data-src]').forEach(hydrate);
+    }
+  });
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+  return { hydrate };
+})();
 
 // Inline SVG icons for OS chrome (theme via currentColor). Keeping them here avoids
 // shipping icon files to the device — the same weight trick as the emoji app glyphs.
@@ -140,6 +189,23 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
   }
 }
 
+// Small config writes (session / ui-state / clipboard) are tiny JSON saved to SD. Over a plain http
+// LAN IP the service-worker's exclusive-write gate is INERT (no secure context), so without this they
+// race the app-iframe load AND each other — each pins one of the device's scarce sockets (max 4, no
+// PSRAM) with NO timeout, so a stalled write hangs for the full TCP window (the ERR_CONNECTION_TIMED_OUT
+// seen when opening an app while a save is in flight) and starves the iframe → blank window. Fix: run
+// these writes through a SERIAL chain (one in flight) with a short timeout, so a stuck save frees its
+// socket fast instead of choking the open. Large drag-and-drop uploads keep the raw untimed path.
+let cfgWriteChain = Promise.resolve();
+function saveConfig(path, body) {
+  const run = cfgWriteChain.then(async () => {
+    try { await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body, signal: AbortSignal.timeout(8000) }); }
+    catch {}   // timeout / reset: the next debounced save will retry; never break the chain
+  });
+  cfgWriteChain = run.catch(() => {});
+  return run;
+}
+
 let restoring = false, sessTimer = null;
 // Per-app window geometry that OUTLIVES a close: { appId -> {x,y,w,h,max,snap} }. The session's
 // `windows` array says what was open; `geom` lets a freshly-reopened app reclaim its last size.
@@ -149,8 +215,9 @@ function saveSession() {
   clearTimeout(sessTimer);
   sessTimer = setTimeout(() => {
     const body = JSON.stringify({ windows: WM.serialize(), geom: winGeom });
-    fetchWithRetry('/api/fs/write?path=' + encodeURIComponent(SESSION_PATH), { method: 'POST', body }).catch(() => {});
-  }, 500);
+    saveConfig(SESSION_PATH, body);   // serialized + timed-out (see saveConfig)
+  }, 1200);   // 500->1200: let a freshly-opened app's iframe finish loading before we write, so the
+              // save never competes for the device's sockets while the app is still streaming in
 }
 async function restoreSession() {
   let saved;
@@ -194,7 +261,7 @@ async function loadClipboard() {
 function saveClipboard() {
   clearTimeout(clipTimer);
   clipTimer = setTimeout(() => {
-    fetchWithRetry('/api/fs/write?path=' + encodeURIComponent(CLIP_PATH), { method: 'POST', body: JSON.stringify({ items: clip.items }) }).catch(() => {});
+    saveConfig(CLIP_PATH, JSON.stringify({ items: clip.items }));   // serialized + timed-out
   }, 400);
 }
 function clipboardWrite(kind, data) {
@@ -403,7 +470,7 @@ function saveUiState() {
   lastSaved = body;              // remember our own write so we can ignore its echo
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    fetchWithRetry('/api/fs/write?path=' + encodeURIComponent(UI_STATE_PATH), { method: 'POST', body }).catch(() => {});
+    saveConfig(UI_STATE_PATH, body);   // serialized + timed-out
   }, 400);
 }
 
