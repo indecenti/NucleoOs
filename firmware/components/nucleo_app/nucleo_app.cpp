@@ -69,6 +69,17 @@ RTC_NOINIT_ATTR static char     s_solo_open_file[256];   // "open with" path for
 static char s_open_file[256] = "";               // "open with" handoff: Files passes the exact file; the viewer's on_enter consumes it
 static bool s_solo_active = false;
 static int  s_solo_app = SOLO_NONE;
+// Did the PREVIOUS boot run the Web Client server-Solo profile? A crash lands in the full OS (see the
+// ESP_RST_SW gate in nucleo_anima_solo_pending), so the reset reason ALONE can't tell whether server-Solo
+// itself failed or the full OS did. Blanket-suppressing server-Solo after ANY crash was the bug: it stranded
+// a full-OS crash in the RAM-heavy launcher that CAUSED the crash → more OOM → more crashes (the death spiral
+// on this no-PSRAM unit). This RTC mark is set while server-Solo is the live profile and captured into
+// s_prev_server_solo at the next boot, so we suppress server-Solo ONLY when server-Solo was what crashed —
+// a full-OS crash now correctly PREFERS the lean server-Solo (the safe mode) on the next client connect.
+// Magic-guarded: RTC_NOINIT is garbage on a cold boot, but a cold boot isn't a crash so it can't mis-suppress.
+#define SERVER_SOLO_MARK 0x53525653u    // 'SRVS'
+RTC_NOINIT_ATTR static uint32_t s_server_solo_mark;
+static bool s_prev_server_solo = false;   // captured once at boot (nucleo_anima_solo_pending)
 // Raised by httpd's ota_post the instant an OTA image starts arriving. Defined here, early, so
 // maybe_solo_launch can read it: an OTA-driven Remote Control launch must open INLINE, never warm-reboot
 // into server Solo mid-transfer (that would reset the in-flight POST). The run loop's OTA handshake and the
@@ -99,12 +110,16 @@ extern "C" void nucleo_app_solo_request_id(const char *id)
 }
 extern "C" bool nucleo_anima_solo_pending(void)
 {
+    // Capture the PREVIOUS session's profile (was it server-Solo?) before we overwrite the mark for THIS one.
+    s_prev_server_solo = (s_server_solo_mark == SERVER_SOLO_MARK);
+    s_server_solo_mark = 0;                       // default: this boot is NOT server-Solo (set below if it is)
     // Honor the Solo latch ONLY on a clean software reboot (our esp_restart). A COLD boot / brownout leaves
     // RTC_NOINIT as garbage (could match a magic -> spurious Solo), and a PANIC/WDT during Solo would else
     // re-enter Solo -> reboot loop. ESP_RST_SW gates both: a crash lands in the FULL OS, deterministically.
     if (esp_reset_reason() != ESP_RST_SW) { s_solo_req = 0; return false; }
     if (s_solo_req == ANIMA_SOLO_MAGIC) { s_solo_req = 0; s_solo_active = true; s_solo_app = SOLO_ANIMA; }   // consume once, latch
     else if ((s_solo_req & 0xFFFFFF00u) == SOLO_MAGIC_BASE) { s_solo_app = (int)(s_solo_req & 0xFF); s_solo_req = 0; s_solo_active = true; }
+    if (s_solo_active && s_solo_app == SOLO_REMOTE) s_server_solo_mark = SERVER_SOLO_MARK;   // this boot IS server-Solo
     return s_solo_active;
 }
 extern "C" bool nucleo_anima_solo_active(void) { return s_solo_active; }
@@ -569,8 +584,9 @@ static bool maybe_solo_launch(int idx)
     // by a warm reboot — the proven inline posture (remote_enter frees canvas + L1) still lets it through.
     if (!strcmp(a->id, "remote")) {
         if (s_force_listen) return false;                // OTA in progress: keep the inline listening posture
-        if (boot_was_crash_reset()) return false;        // last boot crashed (maybe a failed server-Solo) — open
-                                                         // INLINE so a manual tap can't re-trigger a crash loop
+        if (boot_was_crash_reset() && s_prev_server_solo) return false;   // suppress ONLY if server-Solo ITSELF
+                                                         // crashed last boot (avoid its reboot loop); a full-OS
+                                                         // crash must NOT strand a manual tap in the heavy inline posture
         nucleo_app_solo_request(SOLO_REMOTE);            // never returns (warm reboot into server Solo)
         return true;
     }
@@ -1480,9 +1496,11 @@ void nucleo_app_run(void)
         //   • the reboot is a hard requirement, not a preference, so it must ignore nucleo_remote_enabled()
         //     (the "Auto handoff" toggle) — which only governs the watch-face UX below. The manual Web Client
         //     tile already reboots unconditionally, so this just makes the automatic path consistent.
-        // One-shot (s_solo_active bails once we're in it), never mid-OTA (keep the inline posture) or right
-        // after a crash boot (anti-loop — a failed server-Solo must not loop). Raw shell count on purpose.
-        if (nucleo_ws_shell_count() > 0 && !s_solo_active && !s_force_listen && !boot_was_crash)
+        // One-shot (s_solo_active bails once we're in it), never mid-OTA (keep the inline posture). Anti-loop:
+        // suppress ONLY if server-Solo ITSELF crashed last boot (boot_was_crash && s_prev_server_solo) — a
+        // full-OS crash must PREFER the lean server-Solo, not stay stranded in the RAM-heavy launcher that
+        // caused it. Raw shell count on purpose.
+        if (nucleo_ws_shell_count() > 0 && !s_solo_active && !s_force_listen && !(boot_was_crash && s_prev_server_solo))
             nucleo_app_solo_request(SOLO_REMOTE);   // never returns (warm reboot into server Solo)
 
         // Idle screen-off: while the panel sleeps we draw NOTHING (the 32 KB canvas is freed and given to
