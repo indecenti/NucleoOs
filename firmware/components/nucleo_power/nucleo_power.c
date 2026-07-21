@@ -138,7 +138,7 @@ static void battery_refresh(void)
         adc_mv = raw_avg * 3100 / 4095;
     }
     s_mv = (int)(adc_mv * BAT_DIVIDER + 0.5f);   // de-divided terminal mV; mapped to % on read
-    ESP_LOGW(TAG, "[bat-diag] raw=%d adc_mv=%d term_mv=%d pct=%d cali=%d",  // TEMP: gauge bring-up
+    ESP_LOGD(TAG, "[bat-diag] raw=%d adc_mv=%d term_mv=%d pct=%d cali=%d",  // gauge bring-up: debug-only so it stops flooding the log ring every poll (was drowning OOM/serve diagnostics)
              raw_avg, adc_mv, s_mv, mv_to_pct(s_mv), (int)s_cali_ok);
 }
 
