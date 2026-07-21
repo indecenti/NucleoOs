@@ -72,10 +72,10 @@ Pick **one** of the two methods.
 
 ### A) Web flasher (easiest — no software to install)
 1. Use **Chrome** or **Edge** on a desktop (Web Serial isn't supported on Firefox/Safari/mobile).
-2. Open an ESP Web Tools flasher page (e.g. <https://web.esphome.io> → **Prepare for first use** /
-   **Connect**) — or any page that loads the included \`manifest.json\`.
-3. Plug the Cardputer into USB-C, click **Connect**, choose its serial port, then **Install**.
-   \`${binName}\` is a full merged image (bootloader + partition table + app) written at offset 0 — that's all it needs.
+2. Open the official 1-click installer: <https://indecenti.github.io/NucleoOs/>
+3. Plug the Cardputer into USB-C, click **Connect & install NucleoOS**, choose its serial port, and confirm.
+   It flashes the latest \`${binName}\` (a full merged image — bootloader + partition table + app — at
+   offset 0) for you. When it finishes, **press the Cardputer's reset button** to boot it.
 
 ### B) esptool (command line)
 Requires Python: \`pip install esptool\`. Then, with the Cardputer connected:
