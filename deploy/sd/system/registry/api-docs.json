@@ -1565,13 +1565,13 @@
       "title": "GET /api/auth/status - Stato Associazione",
       "description": "Restituisce lo stato dell'autenticazione del browser corrente rispetto al server HTTP di NucleoOS.",
       "synopsis": "GET /api/auth/status",
-      "details": "Ritorna un oggetto JSON: { \"required\": true|false, \"paired\": true|false }. Endpoint pubblico, non richiede autenticazione."
+      "details": "Ritorna un oggetto JSON: { \"required\": true|false, \"paired\": true|false, \"sessions\": N }. 'sessions' e' il numero di sessioni associate attive (per la UI di revoca). Endpoint pubblico, non richiede autenticazione."
     },
     "en": {
       "title": "GET /api/auth/status - Authentication Status",
       "description": "Returns the connection authentication variables for the querying browser client against the NucleoOS HTTP server.",
       "synopsis": "GET /api/auth/status",
-      "details": "Serves a JSON body: { \"required\": true|false, \"paired\": true|false }. Public endpoint (no authorization headers needed)."
+      "details": "Serves a JSON body: { \"required\": true|false, \"paired\": true|false, \"sessions\": N }. 'sessions' is the count of live paired sessions (for the revoke UI). Public endpoint (no authorization headers needed)."
     },
     "params": []
   },
@@ -1599,6 +1599,34 @@
         },
         "en": {
           "description": "JSON payload containing the 6-digit PIN string parameter"
+        }
+      }
+    ]
+  },
+  "POST /api/unpair": {
+    "it": {
+      "title": "POST /api/unpair - Revoca Sessioni",
+      "description": "Revoca le sessioni associate. Serve come recupero quando un cookie di sessione potrebbe essere trapelato su una rete non fidata: disconnette gli altri client (o tutti).",
+      "synopsis": "POST /api/unpair",
+      "details": "Corpo JSON {\"scope\":\"others\"|\"all\"} (default \"others\"). \"others\" revoca ogni ALTRA sessione lasciando attiva quella corrente; \"all\" revoca tutte (tutti devono ri-associarsi col PIN). Richiede una sessione associata. Risposta: {\"ok\":true,\"revoked\":N}."
+    },
+    "en": {
+      "title": "POST /api/unpair - Revoke Sessions",
+      "description": "Revokes paired sessions. The recovery path for when a session cookie may have leaked on an untrusted network: log out the other clients (or all of them).",
+      "synopsis": "POST /api/unpair",
+      "details": "JSON body {\"scope\":\"others\"|\"all\"} (default \"others\"). \"others\" revokes every OTHER session and keeps the caller signed in; \"all\" revokes every session (everyone must re-pair with the PIN). Requires a paired session. Response: {\"ok\":true,\"revoked\":N}."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": false,
+        "default": "{\n  \"scope\": \"others\"\n}",
+        "it": {
+          "description": "Corpo JSON opzionale con \"scope\": \"others\" (default) o \"all\""
+        },
+        "en": {
+          "description": "Optional JSON body with \"scope\": \"others\" (default) or \"all\""
         }
       }
     ]

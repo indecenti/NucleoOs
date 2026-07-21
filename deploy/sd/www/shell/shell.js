@@ -2524,6 +2524,7 @@ function toggleStart() {
   const sm = document.getElementById('start-menu');
   const opening = sm.classList.contains('hidden');
   sm.classList.toggle('hidden');
+  document.getElementById('start-btn').setAttribute('aria-expanded', String(opening));  // drives the lit Start button
   if (opening) {
     closeSearch();                                   // don't leave the taskbar popover open behind Start
     resetStartView();
@@ -2534,6 +2535,7 @@ function toggleStart() {
 }
 function closeStart() {
   document.getElementById('start-menu').classList.add('hidden');
+  document.getElementById('start-btn').setAttribute('aria-expanded', 'false');
   resetStartView();
   if (SEARCH.target === 'start') { SEARCH.results = []; SEARCH.target = null; }
 }
@@ -2562,8 +2564,9 @@ async function doRefreshStatus() {
     const smStorage = document.getElementById('sm-storage');
     if (smStorage) smStorage.textContent = `${s.storage.fs} · ${txt}`;
     renderNetwork(s.network);
-    // Push browser clock to device once if it hasn't synced with NTP yet.
-    // /api/time/set needs no auth and costs zero device heap — just sets the RTC.
+    // Push browser clock to device once if it hasn't synced with NTP yet. Runs from the post-pairing
+    // status loop, so the same-origin pairing cookie rides along automatically (the route is paired-only);
+    // costs zero device heap — just sets the RTC. Harmless if it 401s on a degraded/unpaired session.
     if (!s.network.time_synced && !_timePushed) {
       _timePushed = true;
       fetch('/api/time/set', { method: 'POST', headers: { 'Content-Type': 'application/json' },

@@ -44,6 +44,10 @@ export function buildActionRegistry(ctx) {
       () => ctx.api('/api/tts', { method: 'POST', body: { enabled: true } })),
     a('tts-off', 'Voce on-device: OFF', 'On-device voice: OFF', ['voce', 'muto', 'tts'], ['voice', 'mute', 'tts'], 'action',
       () => ctx.api('/api/tts', { method: 'POST', body: { enabled: false } })),
+    a('revoke-others', 'Revoca altre sessioni', 'Revoke other sessions', ['revoca', 'sessioni', 'sicurezza', 'logout', 'associazione'], ['revoke', 'sessions', 'security', 'logout', 'pairing'], 'action',
+      () => ctx.api('/api/unpair', { method: 'POST', body: { scope: 'others' } })),
+    a('revoke-all', 'Revoca TUTTE le sessioni (ri-associa)', 'Revoke ALL sessions (re-pair)', ['revoca', 'tutte', 'sessioni', 'sicurezza'], ['revoke', 'all', 'sessions', 'security'], 'danger',
+      () => ctx.api('/api/unpair', { method: 'POST', body: { scope: 'all' } })),
 
     // ── orchestration ────────────────────────────────────────────────────────
     a('selftest', 'Esegui Self-Test', 'Run Self-Test', ['test', 'diagnostica', 'battito', 'salute'], ['test', 'selftest', 'health', 'check'], 'action',
