@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Install NucleoOS — web flasher</title>
+<meta name="description" content="Install NucleoOS on your M5Stack Cardputer straight from the browser — no software, one click." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E" />
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#111a33; --card:#141d38; --card2:#0f1730;
+    --fg:#eaf0ff; --muted:#9fb0d4; --line:#233156;
+    --accent:#38bdf8; --accent2:#6366f1; --good:#34d399; --warn:#fbbf24;
+    --shadow:0 12px 40px rgba(0,0,0,.45);
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f4f7ff; --bg2:#e9eefc; --card:#ffffff; --card2:#f5f8ff;
+      --fg:#101833; --muted:#4c5b7a; --line:#dbe3f4;
+      --shadow:0 12px 40px rgba(30,50,110,.14);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--fg);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(99,102,241,.20), transparent 60%),
+      radial-gradient(900px 500px at -10% 10%, rgba(56,189,248,.16), transparent 55%),
+      var(--bg);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:820px;margin:0 auto;padding:40px 20px 64px}
+  header{text-align:center;margin-bottom:28px}
+  .logo{
+    display:inline-flex;align-items:center;gap:10px;
+    font-weight:800;font-size:15px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);
+  }
+  .logo .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 0 14px var(--accent)}
+  h1{font-size:clamp(30px,6vw,46px);line-height:1.1;margin:14px 0 8px;letter-spacing:-.02em}
+  h1 .grad{background:linear-gradient(120deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{color:var(--muted);font-size:clamp(15px,2.4vw,18px);max-width:56ch;margin:0 auto}
+  .ver{display:inline-block;margin-top:14px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;font-size:13px;color:var(--muted);background:var(--card2)}
+  .ver b{color:var(--fg)}
+
+  .card{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:var(--shadow);margin:22px 0}
+  .install{text-align:center}
+  .install h2{margin:0 0 4px;font-size:20px}
+  .install p.small{color:var(--muted);font-size:14px;margin:0 0 18px}
+  esp-web-install-button{--esp-tools-button-color:#04121f;--esp-tools-button-background-color:var(--accent)}
+  .btn-fallback{display:none}
+  .reqs{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:18px}
+  .req{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:7px 12px}
+  .req b{color:var(--fg);font-weight:600}
+
+  ol.steps{list-style:none;counter-reset:s;margin:0;padding:0}
+  ol.steps>li{counter-increment:s;position:relative;padding:0 0 22px 52px;margin:0}
+  ol.steps>li::before{
+    content:counter(s);position:absolute;left:0;top:0;
+    width:34px;height:34px;border-radius:50%;
+    display:grid;place-items:center;font-weight:700;
+    color:#04121f;background:linear-gradient(135deg,var(--accent),var(--accent2));
+  }
+  ol.steps>li::after{content:"";position:absolute;left:16px;top:38px;bottom:6px;width:2px;background:var(--line)}
+  ol.steps>li:last-child::after{display:none}
+  ol.steps h3{margin:4px 0 6px;font-size:17px}
+  ol.steps p{margin:0 0 6px;color:var(--muted)}
+  ol.steps code{background:var(--card2);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px;color:var(--fg)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .dl{display:inline-flex;align-items:center;gap:8px;margin-top:6px;padding:9px 15px;border:1px solid var(--line);border-radius:10px;background:var(--card2);color:var(--fg);font-weight:600;font-size:14px}
+  .dl:hover{border-color:var(--accent);text-decoration:none}
+
+  .note{border-left:3px solid var(--warn);background:color-mix(in srgb,var(--warn) 10%, var(--card));padding:12px 16px;border-radius:0 10px 10px 0;margin:18px 0 0;font-size:14px}
+  .note b{color:var(--warn)}
+  footer{text-align:center;color:var(--muted);font-size:13px;margin-top:34px}
+  footer a{color:var(--muted);text-decoration:underline}
+  h2.section{font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="logo"><span class="dot"></span>NucleoOS</span>
+    <h1>Install <span class="grad">NucleoOS</span></h1>
+    <p class="tag">The web-native OS for the M5Stack Cardputer — flashed straight from your browser. One universal build runs on both the original Cardputer and the ADV.</p>
+    <div class="ver">Latest release: <b id="ver">loading…</b></div>
+  </header>
+
+  <section class="card install">
+    <h2>1-click firmware install</h2>
+    <p class="small">Chrome or Edge on a desktop, Cardputer plugged in via USB-C.</p>
+
+    <esp-web-install-button manifest="./manifest.json">
+      <button slot="activate" class="dl" style="border-color:var(--accent);background:var(--accent);color:#04121f;font-size:16px;padding:13px 22px">⚡ Connect &amp; install NucleoOS</button>
+      <span slot="unsupported" class="note" style="display:block;margin-top:0">Your browser can't flash over USB. Use <b>Chrome</b> or <b>Edge</b> on a desktop computer (Web Serial isn't available on Firefox, Safari, or phones).</span>
+      <span slot="not-allowed" class="note" style="display:block;margin-top:0">This page needs to be served over HTTPS to access the serial port.</span>
+    </esp-web-install-button>
+
+    <div class="reqs">
+      <span class="req">🔌 <b>USB-C</b> cable</span>
+      <span class="req">💾 <b>microSD</b> (FAT32)</span>
+      <span class="req">🌐 <b>Chrome / Edge</b> desktop</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 class="section">Full setup — 3 steps</h2>
+    <ol class="steps">
+      <li>
+        <h3>Flash the firmware</h3>
+        <p>Click <b>Connect &amp; install NucleoOS</b> above, pick the Cardputer's serial port, and confirm. It writes the latest firmware for you.</p>
+        <p>When it finishes, <b>press the Cardputer's reset button</b> (or unplug/replug USB) to start it. You can't brick it — the previous firmware stays safe and you can always re-flash.</p>
+      </li>
+      <li>
+        <h3>Prepare the microSD card</h3>
+        <p>NucleoOS serves all its apps and data from the card. Format a microSD as <b>FAT32</b>, then extract the SD payload to its <b>root</b> — you should end up with <code>/apps</code> <code>/www</code> <code>/system</code> <code>/data</code>. Insert it <b>before powering on</b>.</p>
+        <a class="dl" id="sd" href="https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest-sd.zip" rel="noopener">⬇ Download the SD payload (.zip)</a>
+      </li>
+      <li>
+        <h3>First boot</h3>
+        <p>The Cardputer guides you: choose a <b>language</b>, join your <b>Wi-Fi</b> (typed on the keyboard), set a <b>name</b>. Then the screen shows an <b>IP address</b> — open it in a browser on the <b>same Wi-Fi</b> for the full desktop console.</p>
+        <p>Skipped Wi-Fi? The Cardputer starts its own network <code>NucleoOS-xxxx</code> with a password shown on screen — connect a phone or PC to it and open the address displayed.</p>
+      </li>
+    </ol>
+
+    <div class="note"><b>Heads up:</b> the <code>-sd.zip</code> is the SD-card payload, <b>not firmware</b> — it goes on the microSD, never into a flasher. This installer flashes only the firmware image.</div>
+  </section>
+
+  <footer>
+    <p>
+      <a href="https://github.com/indecenti/NucleoOs" rel="noopener">Source &amp; docs</a> ·
+      <a href="https://github.com/indecenti/NucleoOs/releases/latest" rel="noopener">Release notes &amp; FLASH.md</a> ·
+      <a href="https://github.com/indecenti/NucleoOs/blob/main/README.md#legal--responsible-use" rel="noopener">Responsible use</a>
+    </p>
+    <p>NucleoOS — free for noncommercial use (PolyForm Noncommercial 1.0.0). Includes security-testing tools; authorized testing, research &amp; education only.</p>
+  </footer>
+</div>
+
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<script>
+  // Show the current release tag (best-effort; unauthenticated GitHub API, graceful on failure/rate-limit).
+  fetch('https://api.github.com/repos/indecenti/NucleoOs/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      var el = document.getElementById('ver');
+      if (d && d.tag_name) { el.textContent = d.tag_name; }
+      else { el.textContent = 'see releases →'; el.parentElement.style.cursor = 'pointer'; }
+      if (d && d.html_url) { document.querySelector('.ver').outerHTML = '<a class="ver" href="' + d.html_url + '" style="text-decoration:none">Latest release: <b>' + d.tag_name + '</b></a>'; }
+    })
+    .catch(function () { document.getElementById('ver').textContent = 'see releases →'; });
+</script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+name: Deploy web flasher (Pages)
+
+# Publishes the one-click browser installer (web/flash/) to GitHub Pages.
+#   https://indecenti.github.io/NucleoOs/
+#
+# WHY the firmware is republished here instead of linked from the Release:
+# ESP Web Tools fetch()es the .bin, and GitHub Release assets send NO CORS headers, so a browser
+# cross-origin fetch of a release asset is BLOCKED. The fix is to serve the firmware SAME-ORIGIN as
+# the flasher page. A server-side download in CI has no CORS constraint (that's a browser rule), so
+# this job pulls the latest release firmware and ships it alongside index.html — the browser then
+# fetches ./nucleoos-latest.bin same-origin (no CORS). It refreshes on every published release.
+#
+# One-time setup: repo Settings -> Pages -> Source = "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/flash/**'
+      - '.github/workflows/pages.yml'
+  release:
+    types: [published]      # a new release -> republish so the served firmware is the latest
+  workflow_dispatch:
+
+# Least privilege: read the repo, mint the Pages deployment.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two Pages deploys at once; a newer push supersedes an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1   # shallow: we only publish the current web/flash tree
+
+      - name: Assemble the flasher site (+ latest firmware, served same-origin)
+        run: |
+          mkdir -p _site
+          cp web/flash/index.html web/flash/manifest.json _site/
+          # Republish the latest firmware SAME-ORIGIN (see header note). Server-side, so CORS is a
+          # non-issue; the manifest points at the relative ./nucleoos-latest.bin. Fails loudly if the
+          # asset is missing (no release has run the patched release.yml yet — see bootstrap docs).
+          curl -fSL --retry 3 -o _site/nucleoos-latest.bin \
+            https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest.bin
+          ls -la _site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
