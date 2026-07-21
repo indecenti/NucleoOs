@@ -2524,6 +2524,7 @@ function toggleStart() {
   const sm = document.getElementById('start-menu');
   const opening = sm.classList.contains('hidden');
   sm.classList.toggle('hidden');
+  document.getElementById('start-btn').setAttribute('aria-expanded', String(opening));  // drives the lit Start button
   if (opening) {
     closeSearch();                                   // don't leave the taskbar popover open behind Start
     resetStartView();
@@ -2534,6 +2535,7 @@ function toggleStart() {
 }
 function closeStart() {
   document.getElementById('start-menu').classList.add('hidden');
+  document.getElementById('start-btn').setAttribute('aria-expanded', 'false');
   resetStartView();
   if (SEARCH.target === 'start') { SEARCH.results = []; SEARCH.target = null; }
 }

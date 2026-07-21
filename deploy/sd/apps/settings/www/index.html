@@ -524,6 +524,12 @@
             <button id="dev-selftest">🩺 <span data-t="selfTest">Self-Test</span></button>
             <button class="danger" id="btn-reboot">🔄 <span data-t="rebootDevice">Riavvia dispositivo</span></button></div>
           <div class="hint" style="margin-top:10px" data-t-html="maintenanceHint">Il riavvio ricarica firmware e indice ANIMA dalla SD. Per gli aggiornamenti firmware usa l'app <b>Aggiornamenti</b> (l'OTA è inaffidabile su questo dispositivo: preferisci il flash seriale).</div></div>
+        <div class="sect"><h2><span data-t="security">Sicurezza & sessioni</span> <span class="badge">PIN</span></h2>
+          <div class="row"><label data-t="activeSessions">Sessioni associate attive</label><div class="ctl"><span class="iv" id="sec-sessions">—</span></div></div>
+          <div class="ctl" style="gap:10px;flex-wrap:wrap;margin-top:8px">
+            <button id="sec-revoke-others">🚪 <span data-t="revokeOthers">Revoca le altre sessioni</span></button>
+            <button class="danger" id="sec-revoke-all">🧹 <span data-t="revokeAll">Revoca tutte</span></button></div>
+          <div class="hint" style="margin-top:10px" data-t="sessionsHint">Ogni browser associato col PIN è una sessione. Se hai perso un dispositivo o usato una rete non fidata, revoca le sessioni. Quelle inutilizzate scadono da sole dopo 90 giorni.</div></div>
       </section>
 
       <!-- ═══════════ DIAGNOSTICS ═══════════ -->
@@ -538,7 +544,7 @@
           <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl"><button id="logs-refresh">⟳ <span data-t="refresh">Aggiorna</span></button><span class="hint" data-t-html="logsHint">Ring RAM ~2&nbsp;KB · funziona anche senza SD/seriale.</span></div></div>
           <div class="logbox" id="logbox">—</div></div>
         <div class="sect"><h2><span data-t="privacy">Privacy</span> <span class="badge ro" data-t="badgeNote">Nota</span></h2>
-          <div class="hint" data-t-html="privacyHint">Alcuni endpoint diagnostici (<code>/api/status</code>, <code>/api/heap</code>, <code>/api/cpu</code>, <code>/api/logs</code>) sono <b>pubblici</b> sulla rete locale e mostrano SSID/IP, memoria e cause di reboot. Tienilo presente su reti condivise.</div></div>
+          <div class="hint" data-t-html="privacyHint">Solo <code>/api/status</code> (discovery) resta <b>pubblico</b> sulla rete locale e mostra SSID/IP. Log e diagnostica (<code>/api/logs</code>, <code>/api/diag</code>, <code>/api/heap</code>, <code>/api/cpu</code>) ora <b>richiedono l'associazione</b>. Su reti non fidate usa l'hotspot WPA2 del dispositivo.</div></div>
       </section>
 
       <!-- ═══════════ ABOUT ═══════════ -->
@@ -653,6 +659,7 @@ function selectTab(id) {
 function onTabFirstOpen(id) {
   if (id === 'personalization') loadWallpapers();
   if (id === 'diagnostics') { refreshHeapDetail(); refreshLogs(); }
+  if (id === 'device') refreshSessions();
 }
 
 // ═══════════ live data poller (the ONLY timer) ═══════════
@@ -1220,6 +1227,31 @@ function closeReboot() { clearInterval(rebootTimer); $('reboot-modal').classList
 $('btn-reboot').addEventListener('click', openReboot);
 $('reboot-cancel').addEventListener('click', closeReboot);
 $('reboot-confirm').addEventListener('click', async () => { closeReboot(); status(T('rebooting')); try { await fetch('/api/reboot', { method: 'POST' }); } catch {} status(T('rebootDoneMsg'), false); });
+
+// ═══════════ security / sessions (revoke) ═══════════
+// /api/auth/status reports the live paired-session count; /api/unpair revokes others/all.
+async function refreshSessions() {
+  const a = await apiJson('/api/auth/status');
+  const el = $('sec-sessions'); if (el) el.textContent = (a && typeof a.sessions === 'number') ? String(a.sessions) : '—';
+}
+$('sec-revoke-others') && $('sec-revoke-others').addEventListener('click', async () => {
+  status(T('revokeOthers') + '…');
+  const r = await apiJson('/api/unpair', { method: 'POST', body: { scope: 'others' } });
+  if (r && r.ok) status(r.revoked ? T('revokeOthersDone') + ' (' + r.revoked + ')' : T('revokeNone'), false);
+  else status(T('revokeFail'), true);
+  refreshSessions();
+});
+// Two-tap confirm for the destructive "revoke all" — robust inside the sandboxed app iframe (no native confirm()).
+let _revokeAllArmed = 0;
+$('sec-revoke-all') && $('sec-revoke-all').addEventListener('click', async () => {
+  const now = Date.now();
+  if (now - _revokeAllArmed > 3500) { _revokeAllArmed = now; status(T('revokeAllConfirm'), true); return; }
+  _revokeAllArmed = 0;
+  const r = await apiJson('/api/unpair', { method: 'POST', body: { scope: 'all' } });
+  if (r && r.ok) status(T('revokeAllDone') + (r.revoked ? ' (' + r.revoked + ')' : ''), false);
+  else status(T('revokeFail'), true);
+  refreshSessions();
+});
 
 // ═══════════ ANIMA caps (L1) ═══════════
 function paintL1() { $$('#l1-policy .seg-item').forEach((el) => el.classList.toggle('active', el.dataset.m === caps.l1Mode));
