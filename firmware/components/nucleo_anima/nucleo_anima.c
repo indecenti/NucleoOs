@@ -93,6 +93,7 @@ static const a_alias_t APP_ALIAS[] = {
     { "terminal",           { "terminale", "terminal", "shell", "console", "prompt", "bash", "cli", NULL } },
     { "clock",              { "orologio", "sveglia", "clock", "alarm", NULL } },
     { "chrono",             { "cronometro", "crono", "timer", "stopwatch", NULL } },
+    { "pomodoro",           { "pomodoro", "pomodori", "focus", "concentrazione", "concentrarsi", "concentrati", "focus timer", "pomodoro technique", "tecnica del pomodoro", NULL } },
     { "calendar",           { "calendario", "agenda", "appuntamenti", "eventi", "calendar", "events", NULL } },
     { "settings",           { "impostazioni", "settaggi", "configurazione", "opzioni", "settings", "options", "config", NULL } },
     { "browser",            { "browser", "naviga", "navigatore", "navigare", "navigazione", NULL } },
@@ -115,6 +116,7 @@ static const a_alias_t APP_ALIAS[] = {
     { "payloads",           { "payload", "payloads", "ducky", "duckyscript", "badusb", "rubber ducky", "hid", NULL } },
     { "weather",            { "meteo", "tempo", "previsioni", "weather", "forecast", "che tempo fa", NULL } },
     { "mail",               { "mail", "email", "posta", "e-mail", "gmail", "invia mail", "manda mail", "scrivi mail", "send mail", "email", "smtp", NULL } },
+    { "unit-converter",     { "convertitore", "convertire", "converti", "conversione", "conversioni", "convert", "converter", "unita di misura", "unit converter", NULL } },
 };
 // </gen:app-alias>
 
