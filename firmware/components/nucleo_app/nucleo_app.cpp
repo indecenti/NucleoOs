@@ -326,6 +326,7 @@ const nucleo_app_def_t *nucleo_app_at(int i)   { return &s_apps[i]; }
 extern "C" void nucleo_register_info(void);
 extern "C" void nucleo_register_clock(void);
 extern "C" void nucleo_register_chrono(void);         // app_chrono.cpp — Office: stopwatch + countdown timer
+extern "C" void nucleo_register_pomodoro(void);       // app_pomodoro.cpp — Office: Pomodoro focus timer (cycles + stats)
 extern "C" void nucleo_register_sysmon(void);
 extern "C" void nucleo_register_calc(void);
 extern "C" void nucleo_register_recorder(void);
@@ -398,7 +399,7 @@ extern "C" bool nucleo_ui_is_adv(void);               // Cardputer ADV? (M5GFX b
 void nucleo_app_register_builtins(void)
 {
     nucleo_register_anima();                                                    // hoisted to Home top-level (launcher_build_menu); its "Tools" category is ignored
-    nucleo_register_clock(); nucleo_register_chrono(); nucleo_register_weather(); nucleo_register_torch(); nucleo_register_calc(); nucleo_register_qr(); nucleo_register_pixelfix(); nucleo_register_files();
+    nucleo_register_clock(); nucleo_register_chrono(); nucleo_register_pomodoro(); nucleo_register_weather(); nucleo_register_torch(); nucleo_register_calc(); nucleo_register_qr(); nucleo_register_pixelfix(); nucleo_register_files();
     nucleo_register_calendar(); nucleo_register_notify(); nucleo_register_notepad(); nucleo_register_mail(); nucleo_register_usb(); nucleo_register_usbkbd(); nucleo_register_ir(); nucleo_register_alarm();  // alarm on BOTH boards (mic-only on non-ADV)
     nucleo_register_radio(); nucleo_register_player(); nucleo_register_video(); nucleo_register_photos(); nucleo_register_recorder(); nucleo_register_micspec();  // Media
     nucleo_register_reactor(); nucleo_register_constellations(); nucleo_register_sandgarden(); nucleo_register_slots(); nucleo_register_poker(); nucleo_register_pinball(); nucleo_register_pong(); nucleo_register_tanks(); nucleo_register_tankduel(); nucleo_register_brawler(); nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake(); nucleo_register_vs(); nucleo_register_cardler();   // Games
@@ -758,7 +759,15 @@ static void torch_on(void)
 static void toggle_torch(void) { if (s_torch) torch_off(); else torch_on(); }
 
 // ---- helpers apps draw with --------------------------------------------------
-void nucleo_app_set_hint(const char *h) { launcher_render_set_hint(h); s_hint_dirty = true; }
+// Idempotent: only dirty the footer when the text actually changes. Apps call this every draw()
+// (often every animation frame); the run loop repaints the hint bar DIRECT to the panel whenever
+// s_hint_dirty, so an unconditional dirty made the footer re-blit ~10-50x/s during any animation
+// (exactly the "footer flickers" the run-loop comment warns about). Real chrome changes (theme,
+// fullscreen exit, control center) set s_hint_dirty on their own paths, so guarding here is safe.
+void nucleo_app_set_hint(const char *h) {
+    const char *n = h ? h : "";
+    if (strcmp(launcher_render_hint(), n) != 0) { launcher_render_set_hint(n); s_hint_dirty = true; }
+}
 void nucleo_app_set_hint_colors(unsigned short bg, unsigned short fg) { launcher_render_set_hint_colors(bg, fg); s_hint_dirty = true; }
 void nucleo_app_set_tab_handler(void (*fn)(void)) { s_app_tab = fn; }
 void nucleo_app_set_back_handler(bool (*fn)(int key)) { s_app_back = fn; }

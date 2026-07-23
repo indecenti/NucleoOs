@@ -293,6 +293,13 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
         IFC(cx, cy + s * 0.14f, s * 0.80f, col); IFC(cx, cy + s * 0.14f, s * 0.80f - Tk, bg);   // dial body -> ring
         IBX(cx - Tk * 0.35f, cy + s * 0.14f - s * 0.50f, Tk * 0.7f, s * 0.50f, col);            // hand (points up)
         IFC(cx, cy + s * 0.14f, Tk * 0.8f, col);                              // centre hub
+    } else if (!strcmp(id, "pomodoro")) {                                     // tomato: round body + leafy crown + shine
+        IFC(cx, cy + s * 0.16f, s * 0.86f, col);                             // body
+        IFC(cx - s * 0.34f, cy - s * 0.12f, s * 0.20f, bg);                  // shine cut-out
+        IBX(cx - Tk * 0.4f, cy - s * 0.95f, Tk * 0.8f, s * 0.30f, col);      // stem
+        ITR(cx, cy - s * 0.95f, cx - s * 0.42f, cy - s * 0.34f, cx + s * 0.42f, cy - s * 0.34f, col);          // centre leaf
+        ITR(cx - s * 0.66f, cy - s * 0.30f, cx - s * 0.06f, cy - s * 0.44f, cx - s * 0.20f, cy - s * 0.02f, col); // left leaf
+        ITR(cx + s * 0.66f, cy - s * 0.30f, cx + s * 0.06f, cy - s * 0.44f, cx + s * 0.20f, cy - s * 0.02f, col); // right leaf
     } else if (!strcmp(id, "anima")) {
         float a = s, b = s * 0.34f;
         ITR(cx, cy - a, cx - b, cy, cx + b, cy, col); ITR(cx, cy + a, cx - b, cy, cx + b, cy, col);

@@ -99,6 +99,15 @@ export function drawIcon(g, id, cx, cy, s) {
       g.fc(cx, cy + s * 0.14, T * 0.8);
       break;
 
+    case 'pomodoro':                               // tomato: round body + leafy crown + shine
+      g.fc(cx, cy + s * 0.16, s * 0.86);
+      g.fc(cx - s * 0.34, cy - s * 0.12, s * 0.20, g.bg);
+      g.bx(cx - T * 0.4, cy - s * 0.95, T * 0.8, s * 0.30);
+      g.tri(cx, cy - s * 0.95, cx - s * 0.42, cy - s * 0.34, cx + s * 0.42, cy - s * 0.34);
+      g.tri(cx - s * 0.66, cy - s * 0.30, cx - s * 0.06, cy - s * 0.44, cx - s * 0.20, cy - s * 0.02);
+      g.tri(cx + s * 0.66, cy - s * 0.30, cx + s * 0.06, cy - s * 0.44, cx + s * 0.20, cy - s * 0.02);
+      break;
+
     case 'anima': {
       const a = s, b = s * 0.34;
       g.tri(cx, cy - a, cx - b, cy, cx + b, cy); g.tri(cx, cy + a, cx - b, cy, cx + b, cy);
