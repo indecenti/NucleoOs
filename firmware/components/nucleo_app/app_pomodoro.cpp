@@ -11,18 +11,21 @@
 //
 // Audio: gentle *earcons* — short arpeggios built from musical notes at moderate strength, never the
 // harsh single square-beep. Distinct motifs announce focus vs break vs long break, reward a completed
-// pomodoro, and celebrate the daily goal; the final three seconds tick softly. All gated by the Sound
-// setting and the OS volume.
+// pomodoro, and celebrate the daily goal; the final three seconds tick softly.
 //
-// Style: native UI kit — app_ui_tabs / app_ui_list, per-phase accent, every string bilingual via TR().
-// Anti-flicker is the canvas+blit default: a poll handler asks for a redraw only while a phase runs or
-// a banner blinks (breaths animate a touch faster), so an idle screen never repaints. Monotonic
+// Language: the OS native TFT engine is IT/EN only (docs/i18n.md) — but this app speaks all FIVE OS
+// languages via the local PT() helper, reading nucleo_i18n_lang(). es/fr/de are accent-folded because
+// the TFT font (Font0) is ASCII, matching the launcher's own accent-free native strings; every literal
+// lives in flash, so five languages cost zero per-string RAM. (The web twin can carry full accents.)
+//
+// Style: native UI kit — app_ui_tabs / app_ui_list, per-phase accent. Anti-flicker is the canvas+blit
+// default: a poll handler asks for a redraw only while a phase runs or a banner blinks. Monotonic
 // esp_timer drives the clock; wall-clock time() only rolls the daily stats. Zero heap — all state .bss.
 #include "nucleo_app.h"
 #include "app_ui.h"
 #include "launcher_theme.h"
 #include "nucleo_audio.h"     // procedural tones we compose earcons from
-#include "nucleo_i18n.h"      // TR("it","en")
+#include "nucleo_i18n.h"      // nucleo_i18n_lang() — the OS-wide language signal
 #include "nucleo_notify.h"    // phase-change notifications -> web Notification Center + on-screen banner
 #include "esp_timer.h"
 #include <stdio.h>
@@ -34,6 +37,21 @@
 
 // Tomato identity (also the registered launcher accent). Focus is red, breaks cool.
 static const unsigned short TOMATO = C_RED;
+
+// Five-language string pick. The native engine only offers TR(it,en); this covers the other three OS
+// languages the web shell supports, so a device set to es/fr/de shows Pomodoro in that language instead
+// of the Italian base. Accent-folded (Font0 is ASCII). All args are flash literals -> zero RAM.
+static const char *PT(const char *it, const char *en, const char *es, const char *fr, const char *de)
+{
+    const char *l = nucleo_i18n_lang();
+    switch (l[0]) {
+        case 'i': return it;
+        case 'e': return l[1] == 's' ? es : en;   // "es" vs "en"
+        case 'f': return fr;
+        case 'd': return de;
+        default:  return en;
+    }
+}
 
 // ── tabs ──────────────────────────────────────────────────────────────────────
 enum { TAB_TIMER, TAB_STATS, TAB_SETUP, NTAB };
@@ -105,9 +123,12 @@ static void chime_reject(void)     { note(330, 60, 38); }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 static unsigned short phase_col(int ph) { return ph == PH_FOCUS ? TOMATO : ph == PH_SHORT ? C_GREEN : C_BLUE; }
-static const char    *phase_name(int ph) { return ph == PH_FOCUS ? TR("FOCUS", "FOCUS")
-                                                : ph == PH_SHORT ? TR("PAUSA", "BREAK")
-                                                                 : TR("PAUSA LUNGA", "LONG BREAK"); }
+static const char    *phase_name(int ph)
+{
+    return ph == PH_FOCUS ? PT("FOCUS", "FOCUS", "FOCUS", "FOCUS", "FOKUS")
+         : ph == PH_SHORT ? PT("PAUSA", "BREAK", "DESCANSO", "PAUSE", "PAUSE")
+                          : PT("PAUSA LUNGA", "LONG BREAK", "DESCANSO LARGO", "PAUSE LONGUE", "LANGE PAUSE");
+}
 static int phase_min(int ph) { return ph == PH_FOCUS ? s_focus_min : ph == PH_SHORT ? s_short_min : s_long_min; }
 static int phase_set_ms(void) { return phase_min(s_phase) * 60000; }
 
@@ -237,19 +258,19 @@ static void complete_phase(void)
         if (next == PH_LONG) s_completed = 0;                          // fresh set after the long break
 
         nucleo_notify_emit("pomodoro", NOTIFY_SUCCESS, "pomodoro",
-                           TR("Pomodoro completato", "Pomodoro complete"),
-                           next == PH_LONG ? TR("Pausa lunga: stacca!", "Long break: step away!")
-                                           : TR("Pausa breve", "Short break"),
+                           PT("Pomodoro completato", "Pomodoro complete", "Pomodoro completado", "Pomodoro termine", "Pomodoro fertig"),
+                           next == PH_LONG ? PT("Pausa lunga: stacca!", "Long break: step away!", "Descanso largo: desconecta!", "Pause longue: coupez!", "Lange Pause: abschalten!")
+                                           : PT("Pausa breve", "Short break", "Descanso corto", "Pause courte", "Kurze Pause"),
                            "app:pomodoro");
         if (goal_now)
             nucleo_notify_emit("pomodoro", NOTIFY_SUCCESS, "pomodoro-goal",
-                               TR("Obiettivo raggiunto!", "Daily goal reached!"),
-                               TR("Ottimo lavoro oggi", "Great work today"), "app:pomodoro");
+                               PT("Obiettivo raggiunto!", "Daily goal reached!", "Meta diaria alcanzada!", "Objectif du jour atteint!", "Tagesziel erreicht!"),
+                               PT("Ottimo lavoro oggi", "Great work today", "Buen trabajo hoy", "Bon travail", "Gute Arbeit heute"), "app:pomodoro");
     } else {
         next = PH_FOCUS;
         nucleo_notify_emit("pomodoro", NOTIFY_INFO, "pomodoro",
-                           TR("Pausa finita", "Break over"),
-                           TR("Torna alla concentrazione", "Back to focus"), "app:pomodoro");
+                           PT("Pausa finita", "Break over", "Descanso terminado", "Pause finie", "Pause vorbei"),
+                           PT("Torna alla concentrazione", "Back to focus", "Vuelve a concentrarte", "Retour au focus", "Zurueck zum Fokus"), "app:pomodoro");
     }
 
     if (finished == PH_FOCUS) { if (goal_now) chime_goal(); else chime_focus_done(); }
@@ -290,29 +311,31 @@ static void cf_adjust(int field, int delta)
 static const char *cf_label(int i, void *)
 {
     switch (i) {
-        case CF_FOCUS:  return TR("Concentrazione", "Focus");
-        case CF_SHORT:  return TR("Pausa breve", "Short break");
-        case CF_LONG:   return TR("Pausa lunga", "Long break");
-        case CF_EVERY:  return TR("Lunga ogni", "Long every");
-        case CF_GOAL:   return TR("Obiettivo/giorno", "Daily goal");
-        case CF_AUTO:   return TR("Auto-avvio", "Auto-start");
-        case CF_SOUND:  return TR("Suono", "Sound");
-        case CF_BREATH: return TR("Guida respiro", "Breathing guide");
+        case CF_FOCUS:  return PT("Concentrazione", "Focus", "Concentracion", "Concentration", "Fokus");
+        case CF_SHORT:  return PT("Pausa breve", "Short break", "Descanso corto", "Pause courte", "Kurze Pause");
+        case CF_LONG:   return PT("Pausa lunga", "Long break", "Descanso largo", "Pause longue", "Lange Pause");
+        case CF_EVERY:  return PT("Lunga ogni", "Long every", "Larga cada", "Longue toutes", "Lang alle");
+        case CF_GOAL:   return PT("Obiettivo/giorno", "Daily goal", "Meta diaria", "Objectif/jour", "Tagesziel");
+        case CF_AUTO:   return PT("Auto-avvio", "Auto-start", "Auto-inicio", "Auto-demarrage", "Auto-Start");
+        case CF_SOUND:  return PT("Suono", "Sound", "Sonido", "Son", "Ton");
+        case CF_BREATH: return PT("Guida respiro", "Breathing guide", "Guia respiracion", "Guide respiration", "Atemhilfe");
     }
     return "";
 }
 static const char *cf_value(int i, void *)
 {
     static char b[16];
+    const char *on  = PT("SI", "ON", "SI", "OUI", "EIN");
+    const char *off = PT("NO", "OFF", "NO", "NON", "AUS");
     switch (i) {
         case CF_FOCUS:  snprintf(b, sizeof b, "%d min", s_focus_min); break;
         case CF_SHORT:  snprintf(b, sizeof b, "%d min", s_short_min); break;
         case CF_LONG:   snprintf(b, sizeof b, "%d min", s_long_min);  break;
         case CF_EVERY:  snprintf(b, sizeof b, "x%d", s_long_every);   break;
         case CF_GOAL:   snprintf(b, sizeof b, "%d", s_goal);          break;
-        case CF_AUTO:   snprintf(b, sizeof b, "%s", s_autostart ? TR("SI", "ON") : TR("NO", "OFF")); break;
-        case CF_SOUND:  snprintf(b, sizeof b, "%s", s_sound     ? TR("SI", "ON") : TR("NO", "OFF")); break;
-        case CF_BREATH: snprintf(b, sizeof b, "%s", s_breath    ? TR("SI", "ON") : TR("NO", "OFF")); break;
+        case CF_AUTO:   snprintf(b, sizeof b, "%s", s_autostart ? on : off); break;
+        case CF_SOUND:  snprintf(b, sizeof b, "%s", s_sound     ? on : off); break;
+        case CF_BREATH: snprintf(b, sizeof b, "%s", s_breath    ? on : off); break;
     }
     return b;
 }
@@ -338,7 +361,7 @@ static void draw_focus_view(int y0)
     bool flashing = (s_flash_until > esp_timer_get_time());
     draw_centered(phase_name(s_phase), 2, y0 + 2, (flashing && !flash_phase()) ? MUTED : col);
 
-    char od[16]; snprintf(od, sizeof od, "%s %d", TR("oggi", "today"), s_today_pomos);
+    char od[16]; snprintf(od, sizeof od, "%s %d", PT("oggi", "today", "hoy", "auj", "heute"), s_today_pomos);
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     d.setCursor(238 - (int)strlen(od) * 6, y0 + 6); d.print(od);
 
@@ -389,10 +412,10 @@ static void draw_banner(int y0)   // phase finished, autostart off: what ended, 
     unsigned short col = phase_col(s_phase);
     bool on = flash_phase();
     draw_centered(phase_name(s_phase), 2, y0 + 2, on ? col : MUTED);
-    draw_centered(TR("FINITO!", "DONE!"), 3, y0 + 26, on ? col : MUTED);
-    char sub[40]; snprintf(sub, sizeof sub, "%s %s", TR("prossima:", "next:"), phase_name(s_pending));
+    draw_centered(PT("FINITO!", "DONE!", "LISTO!", "TERMINE!", "FERTIG!"), 3, y0 + 26, on ? col : MUTED);
+    char sub[40]; snprintf(sub, sizeof sub, "%s %s", PT("prossima:", "next:", "sig:", "suiv:", "nachste:"), phase_name(s_pending));
     draw_centered(sub, 1, y0 + 58, MUTED);
-    draw_centered(TR("premi un tasto", "press any key"), 1, y0 + 72, on ? col : DIM);
+    draw_centered(PT("premi un tasto", "press any key", "pulsa una tecla", "appuyez", "Taste druecken"), 1, y0 + 72, on ? col : DIM);
 }
 
 static void draw_timer_tab(int y0, int bottom)
@@ -423,18 +446,18 @@ static void draw_stats_tab(int y0, int bottom)
     char g[12]; snprintf(g, sizeof g, "/ %d", s_goal);
     d.setCursor(cx - (int)strlen(g) * 3, cy + 14); d.print(g);
     if (hit) {
-        const char *gm = TR("obiettivo!", "goal!");
+        const char *gm = PT("obiettivo!", "goal!", "meta!", "objectif!", "Ziel!");
         d.setTextColor(C_YELLOW, BG); d.setCursor(cx - (int)strlen(gm) * 3, cy + r + 2); d.print(gm);
     }
 
     int rx = 108, ry = y0 + 6, step = 26;
     struct { const char *lab; char val[16]; unsigned short col; } rows[3];
     snprintf(rows[0].val, sizeof rows[0].val, "%dh %02dm", s_today_focus_min / 60, s_today_focus_min % 60);
-    rows[0].lab = TR("Focus oggi", "Focus today"); rows[0].col = C_GREEN;
+    rows[0].lab = PT("Focus oggi", "Focus today", "Focus hoy", "Focus auj", "Fokus heute"); rows[0].col = C_GREEN;
     snprintf(rows[1].val, sizeof rows[1].val, "%d", s_total_pomos);
-    rows[1].lab = TR("Totale", "Total");           rows[1].col = C_BLUE;
-    snprintf(rows[2].val, sizeof rows[2].val, "%d %s", s_streak, TR("gg", "d"));
-    rows[2].lab = TR("Serie", "Streak");           rows[2].col = C_YELLOW;
+    rows[1].lab = PT("Totale", "Total", "Total", "Total", "Gesamt");                         rows[1].col = C_BLUE;
+    snprintf(rows[2].val, sizeof rows[2].val, "%d %s", s_streak, PT("gg", "d", "d", "j", "T"));
+    rows[2].lab = PT("Serie", "Streak", "Racha", "Serie", "Serie");                          rows[2].col = C_YELLOW;
     for (int i = 0; i < 3; i++) {
         int yy = ry + i * step;
         d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(rx, yy); d.print(rows[i].lab);
@@ -446,14 +469,14 @@ static void set_hint(void)
 {
     const char *hint;
     if (s_tab == TAB_TIMER) {
-        if (s_done)             hint = TR("un tasto = prossima   TAB schede", "any key = next   TAB tabs");
-        else if (s_run)         hint = TR("INVIO pausa  S salta  R azzera", "ENTER pause  S skip  R reset");
-        else if (s_rem_ms > 0)  hint = TR("INVIO riprendi  R azzera  TAB schede", "ENTER resume  R reset  TAB tabs");
-        else                    hint = TR("INVIO avvia  S salta  TAB schede", "ENTER start  S skip  TAB tabs");
+        if (s_done)             hint = PT("un tasto = prossima   TAB schede", "any key = next   TAB tabs", "tecla = sig   TAB pest.", "touche = suiv   TAB ongl.", "Taste = nachste   TAB Tabs");
+        else if (s_run)         hint = PT("INVIO pausa  S salta  R azzera", "ENTER pause  S skip  R reset", "ENTER pausa  S saltar  R reinic", "ENTREE pause  S passer  R remise", "ENTER Pause  S weiter  R Reset");
+        else if (s_rem_ms > 0)  hint = PT("INVIO riprendi  R azzera  TAB", "ENTER resume  R reset  TAB", "ENTER seguir  R reinic  TAB", "ENTREE reprendre  R remise", "ENTER weiter  R Reset  TAB");
+        else                    hint = PT("INVIO avvia  S salta  TAB schede", "ENTER start  S skip  TAB tabs", "ENTER iniciar  S saltar  TAB", "ENTREE demarrer  S passer  TAB", "ENTER Start  S weiter  TAB");
     } else if (s_tab == TAB_STATS) {
-        hint = TR("TAB schede   esc esci", "TAB tabs   esc back");
+        hint = PT("TAB schede   esc esci", "TAB tabs   esc back", "TAB pestanas   esc salir", "TAB onglets   esc retour", "TAB Tabs   esc zurueck");
     } else {
-        hint = TR("su/giu scegli  </> cambia  TAB schede", "up/dn pick  </> change  TAB tabs");
+        hint = PT("su/giu scegli  </> cambia  TAB", "up/dn pick  </> change  TAB", "arr/ab elegir  </> cambiar", "haut/bas  </> changer  TAB", "hoch/runter  </> andern  TAB");
     }
     nucleo_app_set_hint(hint);
 }
@@ -464,9 +487,9 @@ static void draw(void)
     d.fillRect(0, top, W, bottom - top, BG);
 
     static const char *names[NTAB];
-    names[TAB_TIMER] = TR("Timer", "Timer");
-    names[TAB_STATS] = TR("Statistiche", "Stats");
-    names[TAB_SETUP] = TR("Setup", "Setup");
+    names[TAB_TIMER] = PT("Timer", "Timer", "Timer", "Minuteur", "Timer");
+    names[TAB_STATS] = PT("Statistiche", "Stats", "Estadisticas", "Stats", "Statistik");
+    names[TAB_SETUP] = PT("Setup", "Setup", "Ajustes", "Reglages", "Setup");
     int y0 = app_ui_tabs(top, names, NTAB, s_tab, TOMATO);
 
     if      (s_tab == TAB_TIMER) draw_timer_tab(y0, bottom);
@@ -517,7 +540,7 @@ static void on_tab(void)
     nucleo_app_request_draw();
 }
 
-// Redraw pacing: ~14 fps while a break breathes (smooth pulse), 4 Hz otherwise for the countdown /
+// Redraw pacing: ~10 fps while a break breathes (smooth pulse), 4 Hz otherwise for the countdown /
 // banner, nothing while idle. Also where a running phase is detected crossing zero.
 static bool poll(void)
 {
