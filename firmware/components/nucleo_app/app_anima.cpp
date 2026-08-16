@@ -2290,7 +2290,7 @@ static void on_key(int key, char ch)
         else if (key == NK_DOWN)  { if (s_sug_sel < SUG_N - 1) { s_sug_sel++; s_d_body = true; } }
         else if (key == NK_ENTER) { run_suggestion(); return; }
         else if (key == NK_RIGHT) cycle_mode();
-        else if (ch >= '1' && ch <= '0' + SUG_N) { s_sug_sel = ch - '1'; run_suggestion(); return; }  // 1-9 jump+send
+        else if (ch >= '1' && ch <= '9' && ch <= '0' + SUG_N) { s_sug_sel = ch - '1'; run_suggestion(); return; }  // digit 1-9 jump+send (never punctuation past '9')
         else if (ch >= 32 && ch < 127) {                   // start typing -> the deck steps aside
             if (s_ilen < A_INMAX - 1) { s_input[s_ilen++] = ch; s_input[s_ilen] = 0; }
             s_d_input = true; s_d_body = true;

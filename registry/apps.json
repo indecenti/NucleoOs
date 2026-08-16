@@ -489,6 +489,36 @@
       "permissions": [
         "system.notify"
       ]
+    },
+    {
+      "id": "weather",
+      "version": "1.0.0",
+      "path": "/apps/weather",
+      "enabled": true,
+      "autostart": false,
+      "permissions": []
+    },
+    {
+      "id": "authenticator",
+      "version": "1.0.0",
+      "path": "/apps/authenticator",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.clipboard"
+      ]
+    },
+    {
+      "id": "contacts",
+      "version": "1.0.0",
+      "path": "/apps/contacts",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.clipboard"
+      ]
     }
   ]
 }

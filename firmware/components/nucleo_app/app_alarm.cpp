@@ -367,7 +367,7 @@ static void on_exit(void) { mic_stop(); nucleo_audio_siren_stop(); siren_vol_rel
 extern "C" void nucleo_register_alarm(void)
 {
     static const nucleo_app_def_t app = {
-        "alarm", "Allarme", "Tools", "Antifurto: microfono + movimento, sirena",
+        "alarm", "Allarme", "Office", "Antifurto: microfono + movimento, sirena",
         '!', C_RED, enter, on_key, nullptr, draw, on_exit, 0
     };
     nucleo_app_register(&app);

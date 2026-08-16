@@ -404,7 +404,7 @@ static void draw(void)
 extern "C" void nucleo_register_voice(void)
 {
     static const nucleo_app_def_t app = {
-        "voice", "Voice Trainer", "Voice",
+        "voice", "Voice Trainer", "System",
         "Local offline voice trainer",
         'V', ACC, enter, on_key, tick, draw, exit_app
     };

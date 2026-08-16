@@ -60,6 +60,12 @@ const lastLine = (out) => out.trim().split(/\r?\n/).filter((l) => l.trim()).pop(
 
 // Each gate: {name, cmd, args, ok(code,out)->bool, summary(out)->string}
 const gates = [
+  { name: 'corpus-text (lint)', cmd: 'node', args: ['tools/anima/fix-corpus-text.mjs', '--check'],
+    // ANIMA relays corpus fields VERBATIM (that is the 0-hallucination contract), so anything wrong in
+    // the corpus reaches the screen unedited. Two defects that no other check can see, because both are
+    // valid text: double-encoded UTF-8 ("una percentuale Ã¨ un numero") and Wikipedia math residue
+    // ("{\displaystyle {\frac {x}{100}}}", whose braces also trip the leaked-{template} guard).
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[fix-corpus-text\][^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'pack-coherence', cmd: 'node', args: ['tools/anima/check_pack.mjs'],
     // encoder.dim == index.D across EVERY shipped SD tree + a valid ASIG trailer (prefilter ON).
     // Catches the "stale index at the old dim" (load_index rejects → L1 silently disabled) and the
@@ -142,6 +148,26 @@ const gates = [
     // answers must get FULLER (uplift) by appending ONLY verbatim card spans (grounded, additive) and
     // never answer a describe-shaped question about a fabricated entity (safety). The gate that un-defers L2.
     ok: (code) => code === 0, summary: (o) => (o.match(/stitched[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'stitch-dedup (L2)', cmd: 'node', args: ['tools/anima-host/stitch-dedup.mjs'],
+    // MOSAICO must never say the same thing twice. Unit half drives the real dedup helpers with the
+    // shapes that caused the defect (a reworded restatement slipping past the 40-char head check);
+    // sweep half asserts the invariant over eval_describe, so a future index can't reintroduce it.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[stitch-dedup\] sweep[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'decline (honest abstain)', cmd: 'node', args: ['tools/anima-host/decline-check.mjs'],
+    // An abstention must SAY so: no query returns an empty reply, tier=NONE still means NONE (so the
+    // hallucination gates are untouched), the refusal follows the session language, and it never
+    // replaces a real answer or a pending clarifying question.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[decline\][^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'working memory (follow-ups)', cmd: 'node', args: ['tools/anima-host/wmem-check.mjs'],
+    // Entity slots + topic-frame carry-over ("chi era einstein" / "e newton?"), each paired with the
+    // guard that stops it becoming a hallucination engine: cold session, stale frame, /reset, unknown
+    // entity and self-contained question must all REFUSE to resolve.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[wmem\][^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'encoder quality (ANE2)', cmd: 'node', args: ['tools/anima-host/enc-quality.mjs'],
+    // The distillation step-1 gate, made permanent: Spearman(cosine, gold relatedness) per language and
+    // cross-lingual recall@1, measured on the SHIPPED encoder via anima.exe --cos. Catches a bad/stale/
+    // truncated encoder export, which every other gate can survive because the index alone carries recall.
+    ok: (code) => code === 0, summary: (o) => (o.match(/cross-lingual recall@1[^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'describe-stress (NL)', cmd: 'node', args: ['tools/anima-host/describe-stress.mjs'],
     // 170 IT+EN describe/MOSAICO cases (correct / misleading / deliberately-trap): the HARD property is
     // ZERO fabricated knowledge on fake/adversarial/lookalike (never invents); recall is coverage-floored.

@@ -164,7 +164,10 @@ static uint16_t make_cred(const fido_ctap2_cfg *cfg, const uint8_t *req, uint16_
 
     CborValue rp; if (fcbor_map_enter(&map, 2, &rp)) return err(out, CTAP2_ERR_MISSING_PARAMETER);
     char rpid[128]; size_t rpidl = sizeof rpid;                        // 2 rp.id
-    if (submap_text(&rp, "id", rpid, &rpidl)) return err(out, CTAP2_ERR_MISSING_PARAMETER);
+    // tinycbor copies but does NOT NUL-terminate when the text exactly fills the buffer (len == cap).
+    // Reject that case and terminate otherwise, so strlen()/sha256()/UI below never read past rpid[].
+    if (submap_text(&rp, "id", rpid, &rpidl) || rpidl >= sizeof rpid) return err(out, CTAP2_ERR_MISSING_PARAMETER);
+    rpid[rpidl] = 0;
     uint8_t rpIdHash[32];
     if (cfg->cy->sha256((const uint8_t *)rpid, strlen(rpid), rpIdHash, cfg->cy->ctx))
         return err(out, CTAP1_ERR_OTHER);
@@ -237,7 +240,9 @@ static uint16_t get_assert(const fido_ctap2_cfg *cfg, const uint8_t *req, uint16
     if (fcbor_get_map(req + 1, len - 1, &p, &map)) return err(out, CTAP2_ERR_INVALID_CBOR);
 
     char rpid[128]; size_t rpidl = sizeof rpid;                        // 1 rpId
-    if (fcbor_map_text(&map, 1, rpid, &rpidl)) return err(out, CTAP2_ERR_MISSING_PARAMETER);
+    // tinycbor leaves rpid un-terminated when the text exactly fills the buffer — reject that, else NUL it.
+    if (fcbor_map_text(&map, 1, rpid, &rpidl) || rpidl >= sizeof rpid) return err(out, CTAP2_ERR_MISSING_PARAMETER);
+    rpid[rpidl] = 0;
     uint8_t rpIdHash[32];
     if (cfg->cy->sha256((const uint8_t *)rpid, strlen(rpid), rpIdHash, cfg->cy->ctx))
         return err(out, CTAP1_ERR_OTHER);

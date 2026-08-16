@@ -1,0 +1,93 @@
+// ENCODER STS FIXTURE — bilingual semantic-relatedness pairs with a gold label, used by
+// tools/anima-host/enc-quality.mjs to score the SHIPPED on-device encoder (ANE2) directly.
+//
+// Why a gold-labelled fixture and not distill.py's Spearman(student vs e5): that number needs the
+// teacher model loaded, so it can only ever be printed at distillation time and can never gate a
+// build. These pairs are teacher-free, so the SAME check runs in the normal gate on any machine —
+// and it scores the encoder's ABSOLUTE semantic quality, not just its fidelity to one teacher.
+//
+// gold, on the usual STS 0-4 scale:
+//   4 = same meaning (paraphrase)          2 = same topic, different claim
+//   3 = closely related, different focus   1 = same broad domain only        0 = unrelated
+//
+// Fields: lang ("it"|"en"), a, b, gold.
+{"lang":"it","a":"qual è la capitale del Giappone","b":"quale città è la capitale giapponese","gold":4}
+{"lang":"it","a":"cos'è la fotosintesi","b":"come funziona la fotosintesi clorofilliana","gold":4}
+{"lang":"it","a":"chi era Albert Einstein","b":"parlami del fisico Albert Einstein","gold":4}
+{"lang":"it","a":"cos'è un transistor","b":"spiegami che cos'è un transistor","gold":4}
+{"lang":"it","a":"cos'è il DNS","b":"a cosa serve il DNS","gold":4}
+{"lang":"it","a":"quanto dista la Luna dalla Terra","b":"qual è la distanza fra Terra e Luna","gold":4}
+{"lang":"it","a":"come si calcola l'area di un cerchio","b":"formula per l'area del cerchio","gold":4}
+{"lang":"it","a":"che tempo fa oggi","b":"com'è il meteo oggi","gold":4}
+{"lang":"it","a":"apri il blocco note","b":"avvia l'applicazione blocco note","gold":4}
+{"lang":"it","a":"quanti anni ha il pianeta Terra","b":"qual è l'età della Terra","gold":4}
+{"lang":"it","a":"cos'è la fotosintesi","b":"perché le foglie sono verdi","gold":3}
+{"lang":"it","a":"chi era Albert Einstein","b":"in cosa consiste la teoria della relatività","gold":3}
+{"lang":"it","a":"cos'è un transistor","b":"come funziona un circuito integrato","gold":3}
+{"lang":"it","a":"qual è la capitale del Giappone","b":"quanti abitanti ha Tokyo","gold":3}
+{"lang":"it","a":"cos'è il DNS","b":"come si risolve un nome di dominio in indirizzo IP","gold":3}
+{"lang":"it","a":"quanto dista la Luna dalla Terra","b":"quanto tempo impiega la luce ad arrivare dalla Luna","gold":3}
+{"lang":"it","a":"cos'è un buco nero","b":"cosa succede all'orizzonte degli eventi","gold":3}
+{"lang":"it","a":"come si calcola l'area di un cerchio","b":"come si calcola la circonferenza di un cerchio","gold":3}
+{"lang":"it","a":"qual è la capitale del Giappone","b":"qual è la capitale della Francia","gold":2}
+{"lang":"it","a":"chi era Albert Einstein","b":"chi era Isaac Newton","gold":2}
+{"lang":"it","a":"cos'è la fotosintesi","b":"cos'è la respirazione cellulare","gold":2}
+{"lang":"it","a":"cos'è un transistor","b":"cos'è un condensatore","gold":2}
+{"lang":"it","a":"cos'è il DNS","b":"cos'è il protocollo HTTP","gold":2}
+{"lang":"it","a":"quanto dista la Luna dalla Terra","b":"quanto dista Marte dal Sole","gold":2}
+{"lang":"it","a":"apri il blocco note","b":"chiudi la calcolatrice","gold":2}
+{"lang":"it","a":"che tempo fa oggi","b":"che ore sono adesso","gold":2}
+{"lang":"it","a":"cos'è la fotosintesi","b":"cos'è un buco nero","gold":1}
+{"lang":"it","a":"chi era Albert Einstein","b":"qual è la capitale del Giappone","gold":1}
+{"lang":"it","a":"cos'è un transistor","b":"come si calcola l'area di un cerchio","gold":1}
+{"lang":"it","a":"cos'è il DNS","b":"quanto dista la Luna dalla Terra","gold":1}
+{"lang":"it","a":"che tempo fa oggi","b":"chi era Isaac Newton","gold":1}
+{"lang":"it","a":"cos'è la fotosintesi","b":"apri il blocco note","gold":0}
+{"lang":"it","a":"qual è la capitale del Giappone","b":"imposta un timer di dieci minuti","gold":0}
+{"lang":"it","a":"chi era Albert Einstein","b":"alza il volume dell'altoparlante","gold":0}
+{"lang":"it","a":"cos'è un transistor","b":"che tempo fa domani a Milano","gold":0}
+{"lang":"it","a":"cos'è il DNS","b":"ricetta della carbonara","gold":0}
+{"lang":"it","a":"quanto dista la Luna dalla Terra","b":"crea un file di appunti","gold":0}
+{"lang":"it","a":"come si calcola l'area di un cerchio","b":"chi ha vinto il campionato di calcio","gold":0}
+{"lang":"it","a":"apri il blocco note","b":"cos'è la teoria della relatività","gold":0}
+{"lang":"it","a":"cos'è un buco nero","b":"spegni lo schermo del dispositivo","gold":0}
+{"lang":"en","a":"what is the capital of Japan","b":"which city is the Japanese capital","gold":4}
+{"lang":"en","a":"what is photosynthesis","b":"how does photosynthesis work","gold":4}
+{"lang":"en","a":"who was Albert Einstein","b":"tell me about the physicist Albert Einstein","gold":4}
+{"lang":"en","a":"what is a transistor","b":"explain what a transistor is","gold":4}
+{"lang":"en","a":"what is DNS","b":"what is DNS used for","gold":4}
+{"lang":"en","a":"how far is the Moon from the Earth","b":"what is the distance between Earth and the Moon","gold":4}
+{"lang":"en","a":"how do you compute the area of a circle","b":"formula for the area of a circle","gold":4}
+{"lang":"en","a":"what is the weather today","b":"how is the weather today","gold":4}
+{"lang":"en","a":"open the notepad","b":"launch the notepad application","gold":4}
+{"lang":"en","a":"how old is planet Earth","b":"what is the age of the Earth","gold":4}
+{"lang":"en","a":"what is photosynthesis","b":"why are leaves green","gold":3}
+{"lang":"en","a":"who was Albert Einstein","b":"what is the theory of relativity about","gold":3}
+{"lang":"en","a":"what is a transistor","b":"how does an integrated circuit work","gold":3}
+{"lang":"en","a":"what is the capital of Japan","b":"how many people live in Tokyo","gold":3}
+{"lang":"en","a":"what is DNS","b":"how is a domain name resolved to an IP address","gold":3}
+{"lang":"en","a":"how far is the Moon from the Earth","b":"how long does light take to reach us from the Moon","gold":3}
+{"lang":"en","a":"what is a black hole","b":"what happens at the event horizon","gold":3}
+{"lang":"en","a":"how do you compute the area of a circle","b":"how do you compute the circumference of a circle","gold":3}
+{"lang":"en","a":"what is the capital of Japan","b":"what is the capital of France","gold":2}
+{"lang":"en","a":"who was Albert Einstein","b":"who was Isaac Newton","gold":2}
+{"lang":"en","a":"what is photosynthesis","b":"what is cellular respiration","gold":2}
+{"lang":"en","a":"what is a transistor","b":"what is a capacitor","gold":2}
+{"lang":"en","a":"what is DNS","b":"what is the HTTP protocol","gold":2}
+{"lang":"en","a":"how far is the Moon from the Earth","b":"how far is Mars from the Sun","gold":2}
+{"lang":"en","a":"open the notepad","b":"close the calculator","gold":2}
+{"lang":"en","a":"what is the weather today","b":"what time is it now","gold":2}
+{"lang":"en","a":"what is photosynthesis","b":"what is a black hole","gold":1}
+{"lang":"en","a":"who was Albert Einstein","b":"what is the capital of Japan","gold":1}
+{"lang":"en","a":"what is a transistor","b":"how do you compute the area of a circle","gold":1}
+{"lang":"en","a":"what is DNS","b":"how far is the Moon from the Earth","gold":1}
+{"lang":"en","a":"what is the weather today","b":"who was Isaac Newton","gold":1}
+{"lang":"en","a":"what is photosynthesis","b":"open the notepad","gold":0}
+{"lang":"en","a":"what is the capital of Japan","b":"set a ten minute timer","gold":0}
+{"lang":"en","a":"who was Albert Einstein","b":"turn up the speaker volume","gold":0}
+{"lang":"en","a":"what is a transistor","b":"what is the weather tomorrow in Milan","gold":0}
+{"lang":"en","a":"what is DNS","b":"recipe for carbonara","gold":0}
+{"lang":"en","a":"how far is the Moon from the Earth","b":"create a notes file","gold":0}
+{"lang":"en","a":"how do you compute the area of a circle","b":"who won the football championship","gold":0}
+{"lang":"en","a":"open the notepad","b":"what is the theory of relativity","gold":0}
+{"lang":"en","a":"what is a black hole","b":"turn off the device screen","gold":0}

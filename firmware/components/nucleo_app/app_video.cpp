@@ -676,7 +676,7 @@ static int play_nfv3(const char *vpath, const char *title, const char *reskey, i
 
     // ---- audio: embedded window (preferred) or sibling .mp3 (fallback) ----
     char apath[256]; snprintf(apath, sizeof apath, "%s", vpath);
-    { char *dot = strrchr(apath, '.'); if (dot) snprintf(dot, 5, ".mp3"); }
+    { char *dot = strrchr(apath, '.'); if (dot) snprintf(dot, sizeof apath - (size_t)(dot - apath), ".mp3"); }  // bound to remaining space (no overflow on a late dot)
     bool have_audio = false;
     if (audio_len) {
         nucleo_audio_play_window(vpath, (uint32_t)start_ms, dur_ms, audio_off, audio_len);
@@ -922,7 +922,7 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
                     const char *next_title)
 {
     char apath[256]; snprintf(apath, sizeof apath, "%s", vpath);
-    char *dot = strrchr(apath, '.'); if (dot) snprintf(dot, 5, ".mp3");
+    char *dot = strrchr(apath, '.'); if (dot) snprintf(dot, sizeof apath - (size_t)(dot - apath), ".mp3");  // bound to remaining space: a late dot near apath[256] would overflow a fixed 5
 
     FILE *f = fopen(vpath, "rb");
     if (!f) return PR_STOP;

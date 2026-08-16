@@ -339,16 +339,29 @@ static void draw_favs(int top, int h)
 static void draw_set(int top, int h)
 {
     if (s_fav_screen) { draw_favs(top, h); return; }
-    char favln[40], unit[24];
-    snprintf(favln, sizeof favln, "Citta preferite (%d)", s_fav_n);
-    snprintf(unit, sizeof unit, "Unita: %s", s_units_f ? "Fahrenheit" : "Celsius");
-    const char *items[4] = { "Aggiorna meteo", "Localizza (IP)", favln, unit };
+    // Labels localized (5 languages) AND kept short enough to fit a 232px row at size 2 — the German
+    // "Einheit: Fahrenheit" overflowed the right edge, so the unit word is trimmed per language.
+    char favln[40], unit[28];
+    snprintf(favln, sizeof favln, TR5("Preferite (%d)", "Favourites (%d)", "Favoritas (%d)",
+                                      "Favoris (%d)", "Favoriten (%d)"), s_fav_n);
+    snprintf(unit, sizeof unit, TR5("Unita: %s", "Units: %s", "Unidad: %s", "Unite: %s", "Grad: %s"),
+             s_units_f ? "Fahrenheit" : "Celsius");
+    const char *items[4] = {
+        TR5("Aggiorna", "Refresh", "Actualizar", "Actualiser", "Aktualisieren"),
+        TR5("Localizza (IP)", "Locate (IP)", "Localizar (IP)", "Localiser (IP)", "Orten (IP)"),
+        favln, unit
+    };
+    // Fit all four rows ABOVE the coordinates footer: derive the row pitch from the space actually
+    // available instead of a fixed 24 px (which ran the last row into the footer line). foot reserves
+    // the bottom status line; the pitch is clamped so rows never look stretched or cramped.
+    const int foot = 13;
+    int step = (h - 4 - foot) / 4;
+    if (step > 24) step = 24;
+    if (step < 18) step = 18;
+    const int rowh = step - 2;
     int y = top + 4;
-    for (int i = 0; i < 4; i++) {
-        app_ui_row(y, 22, items[i], i == s_set_sel, ACCENT);   // shared selectable row
-        y += 24;
-    }
-    char ln[48]; d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(8, top + h - 11);
+    for (int i = 0; i < 4; i++) { app_ui_row(y, rowh, items[i], i == s_set_sel, ACCENT); y += step; }
+    char ln[48]; d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(8, top + h - 10);
     snprintf(ln, sizeof ln, "%s  %.2f,%.2f", s_w.place[0] ? s_w.place : "-", s_w.lat, s_w.lon); d.print(ln);
 }
 
@@ -357,7 +370,9 @@ static void on_draw(void)
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     if (s_fav_screen) { draw_favs(top, h); return; }
-    static const char *const TABS[] = { "Adesso", "Previsioni", "Imp" };
+    const char *TABS[] = { TR5("Adesso", "Now", "Ahora", "Maint.", "Jetzt"),
+                           TR5("Previsioni", "Forecast", "Prevision", "Previsions", "Vorhersage"),
+                           TR5("Imp", "Set", "Ajus", "Regl", "Einst") };
     int ctop = app_ui_tabs(top, TABS, T_SET + 1, s_tab, ACCENT), ch = h - (ctop - top);
     if (s_tab == T_NOW) draw_now(ctop, ch);
     else if (s_tab == T_FCAST) draw_fcast(ctop, ch);

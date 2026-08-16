@@ -11,6 +11,10 @@ bool nucleo_anima_l1_init(void);
 // the next query transparently reloads it from SD. Call it when a foreground app opens.
 void nucleo_anima_l1_unload(void);
 
+// Hand L1 the turn's query AS TYPED (with capitalisation). The cascade normalizes before retrieval,
+// which disarms the proper-noun guard; this restores the signal. Call once per turn, before querying.
+void nucleo_anima_l1_note_raw(const char *raw);
+
 // Semantic match. Fills `out` (reply in EN if `en`, else IT) and returns 1 on a confident hit.
 // want_detail returns the card's drill-down text (the "tell me more" follow-up) instead of the
 // short reply, and returns 0 if that card has no detail.
@@ -26,7 +30,7 @@ int  nucleo_anima_l1_akb5_query(const char *text, bool en, bool want_detail, ani
 // moderately similar and a runner-up competes, fills `out` with a "did you mean X or Y?" question
 // and returns the two candidate answer offsets via ans1/ans2 (returns 1); else 0. A clarify is a
 // question, never an asserted fact (zero false positives). See tools/anima/band_eval.py.
-int  nucleo_anima_l1_band(bool en, anima_result_t *out, long *ans1, long *ans2);
+int  nucleo_anima_l1_band(const char *query, bool en, anima_result_t *out, long *ans1, long *ans2);
 
 // Resolve a clarify pick: read the full answer at one of the offered offsets into `out`.
 int  nucleo_anima_l1_read(long ansoff, bool en, anima_result_t *out);

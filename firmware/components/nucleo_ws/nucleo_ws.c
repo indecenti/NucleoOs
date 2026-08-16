@@ -186,7 +186,8 @@ static esp_err_t ws_handler(httpd_req_t *req)
     add_client(fd, false);   // re-track defensively; preserves the shell bit set at the GET handshake
     if (strstr((char *)buf, "\"subscribe\"")) {
         const char *p = strstr((char *)buf, "\"since\"");
-        uint32_t since = p ? (uint32_t)strtoul(strchr(p, ':') + 1, NULL, 10) : 0;
+        const char *colon = p ? strchr(p, ':') : NULL;   // a "since" token with no ':' -> strchr NULL; never deref NULL+1
+        uint32_t since = colon ? (uint32_t)strtoul(colon + 1, NULL, 10) : 0;
         // static (not stack): these ~2 KB buffers on the tight httpd task stack risked an
         // overflow -> reboot when the shell sent "subscribe". Safe: httpd serves on one task.
         static char out[1024];

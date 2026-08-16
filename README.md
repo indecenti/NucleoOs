@@ -279,8 +279,16 @@ Every demanding feature respects a tight set of RAM tricks, validated on hardwar
 | **Creativity & media** | Paint + Atelier (WebGPU image gen) · Video Studio · Video Player · Media Player · Radio · QR |
 | **Productivity** | File Commander · Spreadsheet (+ANIMA copilot) · Notepad · Calculator · Calendar · Tasks · Archive Manager · Mail |
 | **Dev & system** | Code Runner · Terminal · SSH · System Monitor · Settings · Log Viewer · Updates · Recycle Bin · Help · Browser |
+| **Tools** | Weather (Open‑Meteo, browser‑direct: 6‑day forecast, geolocation, offline cache) · Authenticator (2FA TOTP/HOTP, pure‑JS — works over http LAN & offline) · Unit Converter · Passkeys · IR Remote |
+| **Personal** | Contacts (address book — email/phone/org, favorites, vCard export, one‑click Compose in Mail) · Tasks · Calendar · Miei Fatti |
 | **Voice** | Transcription (Vosk WASM, on‑device + remote realtime) · Recorder · Voice Manager · Dictation |
 | **Play & connect** | Game Center (WebRTC P2P) · Games · DJ · DOSBox (+ DOS Importer) · Nearby · Swarm |
+
+> The **desktop shell** is a real workstation: window snapping (drag‑to‑edge + Snap Layouts), Alt‑Tab,
+> a global search that also asks ANIMA, an OS clipboard with history, a Notification Center (Do‑Not‑Disturb
+> + quiet hours), taskbar **widgets** (weather + device pulse + recents, all browser‑side), **night light**,
+> a **lock screen** (Ctrl+Alt+L) and a keyboard‑shortcuts sheet — all in 5 languages, all costing the
+> Cardputer ~0 RAM.
 
 > Apps are capability‑scoped (each declares its permissions) and most cost **~0 device RAM** — they
 > are files on the SD, rendered by your browser. The registry is the single source of truth.

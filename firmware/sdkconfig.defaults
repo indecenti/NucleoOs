@@ -200,3 +200,4 @@ CONFIG_ESP_GDBSTUB_ENABLED=n
 # WPA2/WPA3-Personal and OWE stay fully enabled — STA/AP join, scan auth-mode labels, evilportal and
 # wifiatk are unaffected. Flip to =y only if a real 802.1X login flow is ever added.
 CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT=n
+CONFIG_TINYUSB_NET_MODE_NCM=y

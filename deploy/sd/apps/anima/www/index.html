@@ -4024,7 +4024,13 @@
         }
       }
       setDot('ok'); think.remove();
-      const reply = r.reply || UI[lang].dontknow;
+      // The engine now fills a bare refusal on an abstention ("Non lo so." / "I don't know.") instead
+      // of returning an empty string, so the runtimes that had NO fallback (voice, host CLI) stop going
+      // silent. The shell keeps its own for that case: ours is fully localized (es/fr/de included —
+      // the engine only speaks it/en) and it also tells the user what ANIMA *can* do, which a bare
+      // refusal doesn't. Matching on the exact template only, so a real answer is never swallowed.
+      const bareDecline = /^(non lo so\.?|i don'?t know\.?)$/i;
+      const reply = (!r.reply || bareDecline.test(r.reply.trim())) ? UI[lang].dontknow : r.reply;
       const hidx = history.length;          // this bot turn's index after push below
       const { body, turn }=botShell(hidx, true);
       await type(body, reply);

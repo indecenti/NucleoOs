@@ -389,7 +389,9 @@ static bool map_encoder_from_flash(void)
       for (int i = 0; i < s_ncharn; i++) { s_charn[i] = RDU32(q); q += 4; }
       q += 4;                                  // scale (f32) — unused for ranking
       s_enc_off = (long)(q - m);               // table offset within the mapping
-      if (s_enc_off + (long)s_H * s_D > (long)p->size) goto fail;   // table must fit the partition
+      // 64-bit math: on this 32-bit target `long` is 32 bits, so a corrupt header with a huge s_H could
+      // overflow s_H*s_D and slip past the fit check, leaving s_enc_map pointing past the mapping (OOB).
+      if ((uint64_t)s_enc_off + (uint64_t)s_H * s_D > (uint64_t)p->size) goto fail;   // table must fit the partition
       s_enc_map = (const int8_t *)(m + s_enc_off);
       ESP_LOGI(TAG, "encoder MMAP'd from flash '%s' %ux%u — fast L1 (no SD reads)", p->label, (unsigned)s_H, (unsigned)s_D);
       return true; }
@@ -570,15 +572,71 @@ static int l1_read_answer(long ansoff, bool en, bool want_detail, anima_result_t
 // Read a clarify candidate: fill `out` with a short label (reply up to the first sentence) and
 // return its action (ANIMA_ACT_NONE on read error). The band uses the action to keep ONLY
 // knowledge (answer) cards — launch/system cards make nonsensical "did you mean Apro X?" options.
-static anima_action_t l1_label(long ansoff, bool en, char *out, int cap)
+static bool l1_scope_covered(const char *query, const char *reply);   // fwd: both defined below
+static bool l1_word_in(const char *hay, const char *word);
+
+// The QUALIFIER of a question: its last content word — "qual è la capitale della CALIFORNIA", "il lago
+// più grande dell'AFRICA". Returns false when the question has none short enough to trust (a bare
+// "cos'è la ram"), which the caller must treat as "no opinion", never as a rejection.
+static bool l1_qualifier(const char *query, char *out, int cap)
 {
-    static anima_result_t tmp;
+    char q[160]; size_t i;
+    for (i = 0; query[i] && i + 1 < sizeof q; i++) q[i] = (char)tolower((unsigned char)query[i]);
+    q[i] = 0;
+    // Words that are part of a question's SHAPE, never of its subject. Superlative adjectives belong
+    // here too: "grande" is what is being asked, not what it is being asked about.
+    static const char *const shape[] = {
+        "qual","quale","quali","cosa","cos","che","come","dove","quando","chi","quanto","quanta","quanti",
+        "piu","pi\xc3\xb9","grande","grandi","grosso","alto","alta","lungo","lunga","profondo","piccolo",
+        "massimo","minimo","maggiore","migliore","mondo","terra",
+        "what","which","where","when","who","how","most","largest","biggest","tallest","longest","deepest",
+        "highest","greatest","smallest","world","earth", NULL };
+    char tok[28][24]; int nt = 0;
+    for (const char *p = q; *p && nt < 28; ) {
+        while (*p == ' ' || *p == '\'') p++;
+        if (!*p) break;
+        int k = 0; while (*p && *p != ' ' && *p != '\'' && k < 23) tok[nt][k++] = *p++; tok[nt][k] = 0; nt++;
+    }
+    for (int t = nt - 1; t >= 0; t--) {
+        if (strlen(tok[t]) < 4) continue;
+        bool sh = false;
+        for (int s = 0; shape[s] && !sh; s++) if (!strcmp(shape[s], tok[t])) sh = true;
+        if (sh) continue;
+        snprintf(out, (size_t)cap, "%s", tok[t]);
+        return true;
+    }
     out[0] = 0;
-    if (!l1_read_answer(ansoff, en, false, &tmp)) return ANIMA_ACT_NONE;
+    return false;
+}
+
+// Read a clarify CANDIDATE and decide whether it may be offered at all. Two things disqualify it:
+// it isn't a knowledge answer, or it doesn't actually address the question. The latter is what made
+// the band hallucinate — "qual è il lago più grande dell'Africa" was offered "1) Il deserto caldo più
+// grande…", "qual è la capitale della California" was offered "1) La capitale di Cina…". Neither is
+// an alternative ANSWER; each is a different QUESTION, and presenting them as choices asserts that
+// one of them is right. So a candidate must clear the same scope guard the answer path uses, AND
+// must mention the question's qualifier.
+// `out` gets its first clause — the text shown in the "did you mean" prompt.
+static bool l1_band_option(long ansoff, const char *query, bool en, char *out, int cap)
+{
+    static anima_result_t cand;       // static on purpose: two anima_result_t on an MCU stack is ~3 KB
+    out[0] = 0;
+    if (!l1_read_answer(ansoff, en, false, &cand)) return false;
+    if (cand.action != ANIMA_ACT_ANSWER) return false;
+    if (query && query[0]) {
+        if (!l1_scope_covered(query, cand.reply)) return false;
+        char qual[24];
+        if (l1_qualifier(query, qual, sizeof qual)) {
+            char low[400]; size_t i;
+            for (i = 0; cand.reply[i] && i + 1 < sizeof low; i++) low[i] = (char)tolower((unsigned char)cand.reply[i]);
+            low[i] = 0;
+            if (!l1_word_in(low, qual)) return false;
+        }
+    }
     int i = 0;
-    for (; tmp.reply[i] && i < cap - 1 && tmp.reply[i] != '.' && tmp.reply[i] != '\n'; i++) out[i] = tmp.reply[i];
+    for (; cand.reply[i] && i < cap - 1 && cand.reply[i] != '.' && cand.reply[i] != '\n'; i++) out[i] = cand.reply[i];
     out[i] = 0;
-    return tmp.action;
+    return out[0] != 0;
 }
 
 // Top-2 DISTINCT candidates (distinct answer offset) from the most recent query — the substrate
@@ -691,8 +749,25 @@ static bool l1_word_in_fuzzy(const char *hay, const char *w)
 // "parlami di Aldric Venmoor" -> a generic bio). A genuine entity question is answered by a card that
 // NAMES the entity. Returns true => uncovered (caller abstains). Skipped when the user title-cased the
 // whole query (capitalization then carries no proper-noun signal). `query`=RAW cased text; `clow`=lower answer.
+// The turn's query AS THE USER TYPED IT. The cascade hands L1 a normalized, lowercased topic (see
+// a_topic_strip), which silently disarms the capitalisation signal l1_proper_noun_uncovered depends
+// on: with no caps to trust it falls back to "a content word of 7+ chars", so a SHORT invented name
+// slipped through — "che cos'è il linguaggio di programmazione Floonk" (6) was answered with the
+// generic "programming language" card, while "Floonkium" (9) correctly abstained. Same module-scope
+// per-turn pattern as s_band; set once per turn by the cascade, single-threaded.
+static char s_raw_q[160];
+void nucleo_anima_l1_note_raw(const char *raw)
+{
+    snprintf(s_raw_q, sizeof s_raw_q, "%s", raw ? raw : "");
+}
+
 static bool l1_proper_noun_uncovered(const char *query, const char *clow)
 {
+    // Prefer the raw query: it still carries the capitalisation. Only when it plainly belongs to
+    // this same question, so a stale value can never veto an answer — the normalized `query` is a
+    // substring-ish of it, which we approximate by requiring the raw to be at least as long.
+    if (s_raw_q[0] && strlen(s_raw_q) >= strlen(query)) query = s_raw_q;
+
     int words = 0, caps = 0;                            // pass 1: detect title-casing
     bool has_internal_caps = false;
     int word_idx = 0;
@@ -743,6 +818,29 @@ static bool l1_proper_noun_uncovered(const char *query, const char *clow)
     return false;
 }
 
+// The word following the first of `heads` present in `low` (one article skipped). Both strings are
+// already lowercased by the caller. On an equal position the LONGER head wins, so "capitale della X"
+// isn't matched as "capitale del " + "la X".
+static bool l1_next_word_after(const char *low, const char *const *heads, char *out, int cap)
+{
+    out[0] = 0;
+    const char *p = NULL; size_t hl = 0;
+    for (int i = 0; heads[i]; i++) {
+        const char *f = strstr(low, heads[i]);
+        size_t L = strlen(heads[i]);
+        if (f && (!p || f < p || (f == p && L > hl))) { p = f; hl = L; }
+    }
+    if (!p) return false;
+    p += hl;
+    while (*p == ' ') p++;
+    static const char *const art[] = { "il ","lo ","la ","i ","gli ","le ","un ","uno ","una ","the ","a ", NULL };
+    for (int i = 0; art[i]; i++) { size_t L = strlen(art[i]); if (!strncmp(p, art[i], L)) { p += L; break; } }
+    int k = 0;
+    while (*p && *p != ' ' && *p != ',' && *p != '.' && *p != '?' && *p != '!' && k + 1 < cap) out[k++] = *p++;
+    out[k] = 0;
+    return k > 0;
+}
+
 static bool l1_scope_covered(const char *query, const char *reply)
 {
     char q[160], c[256]; size_t i;
@@ -754,11 +852,18 @@ static bool l1_scope_covered(const char *query, const char *reply)
     // PREMISE/RELATION: a DATE question ("quando è morto/nato X") answered by a card holding NO year is
     // a biography, not a date — a relation mismatch, often a FALSE PREMISE (the person is alive). The
     // KGE died/born tier owns real dates (and carries a year); a yearless L1 bio here -> abstain.
-    bool death_q = l1_word_in(q,"morto") || l1_word_in(q,"morta") || l1_word_in(q,"died") || l1_word_in(q,"death");
+    // "die"/"dies"/"dead" belong here as well as "died": without them "when did cristiano ronaldo die"
+    // wasn't recognised as a death question at all and was answered with his (living) biography. They
+    // are mirrored into the answer side below, so a card genuinely about dying — or about a
+    // semiconductor die — still satisfies the guard instead of being wrongly refused.
+    bool death_q = l1_word_in(q,"morto") || l1_word_in(q,"morta") || l1_word_in(q,"died") || l1_word_in(q,"death")
+                || l1_word_in(q,"die") || l1_word_in(q,"dies") || l1_word_in(q,"dead");
     bool birth_q = l1_word_in(q,"nato") || l1_word_in(q,"nata") || l1_word_in(q,"nascita") || l1_word_in(q,"born") || l1_word_in(q,"birth");
     if (death_q) {   // the answer must ASSERT a death, not be a generic bio (Ronaldo's bio carries numbers but no death)
         bool death_a = l1_word_in(c,"morto") || l1_word_in(c,"morta") || l1_word_in(c,"died") ||
-                       l1_word_in(c,"deceduto") || l1_word_in(c,"scomparso");
+                       l1_word_in(c,"deceduto") || l1_word_in(c,"scomparso") ||
+                       l1_word_in(c,"die") || l1_word_in(c,"dies") || l1_word_in(c,"dead") ||
+                       l1_word_in(c,"death") || l1_word_in(c,"morte");
         if (!death_a) return false;
     }
     if (birth_q) {
@@ -807,10 +912,26 @@ static bool l1_scope_covered(const char *query, const char *reply)
         bool mine = l1_word_in(q,"mia")||l1_word_in(q,"mio")||l1_word_in(q,"miei")||l1_word_in(q,"mie")||l1_word_in(q,"my");
         if (mine && (l1_word_in(q,"password")||l1_word_in(q,"pin")||l1_word_in(q,"email")||l1_word_in(q,"fiscale"))) return false;
         static const char *const attrw[] = { "password","fiscale","gemello","gemella","gemelli","twin",
-            "cugino","cugina","cousin","maratona","maratone","marathon","marathons", NULL };
+            "cugino","cugina","cousin","maratona","maratone","marathon","marathons",
+            // EN counterparts of "codice fiscale" — the IT side was covered, the EN side was not, so
+            // "what is leonardo da vinci's tax id number" was answered with Leonardo's biography.
+            "tax","vat","ssn", NULL };
         for (int a = 0; attrw[a]; a++) if (l1_word_in(q, attrw[a]) && !l1_word_in(c, attrw[a])) return false;
         if ((l1_word_in(q,"temperatura")||l1_word_in(q,"temperature")) &&
             !(l1_word_in(c,"temperatura")||l1_word_in(c,"temperature")||strstr(c,"gradi")||strstr(c,"celsius")||strstr(c,"kelvin")||strstr(c,"fahrenheit"))) return false;
+    }
+
+    // CAPITAL INVERSION (false premise). "qual è la capitale di TOKYO" was answered with "La capitale
+    // di Giappone è Tokyo" — a true sentence that inverts the relation the question asked for: Tokyo
+    // IS the capital, it does not HAVE one. The card's subject must be the entity asked about.
+    {
+        static const char *const cap_head[] = { "capitale di ", "capitale del ", "capitale dello ",
+            "capitale della ", "capitale dell ", "capitale dei ", "capitale degli ", "capitale delle ",
+            "capital of the ", "capital of ", NULL };
+        char qx[40], rx[40];
+        if (l1_next_word_after(q, cap_head, qx, sizeof qx) &&
+            l1_next_word_after(c, cap_head, rx, sizeof rx) &&
+            strcmp(qx, rx) != 0) return false;
     }
 
     static const char *const sup[] = { "piu", "pi\xc3\xb9", "massim", "minim", "maggior", "miglior",
@@ -1349,22 +1470,23 @@ int nucleo_anima_l1_query(const char *text, bool en, bool want_detail, anima_res
 // (margin < MARGIN), fill `out` with a "did you mean X or Y?" question and hand back the two
 // answer offsets so the caller can resolve the pick. Returns 0 (caller refuses honestly) otherwise.
 // Safe by construction: a clarify is a question, never an asserted fact -> zero false positives.
-int nucleo_anima_l1_band(bool en, anima_result_t *out, long *ans1, long *ans2)
+int nucleo_anima_l1_band(const char *query, bool en, anima_result_t *out, long *ans1, long *ans2)
 {
     if (!s_ready || s_band.a1 < 0 || s_band.a2 < 0) return 0;
     if (!(s_band.c1 >= L1_COS_LO && s_band.c1 < L1_COS_MIN)) return 0;
     if (s_band.c2 < L1_COS_LO) return 0;                            // BOTH options must be plausible
     if ((s_band.c1 - s_band.c2) >= L1_BAND_MARGIN) return 0;        // not genuinely competing
     // The cascade unloads L1 before the HDC/online tiers; the band runs AFTER them, so the index
-    // (s_idx) is closed by now and l1_label would read nothing. Reload it to read the two labels —
-    // cheap and rare, and the heavy tiers that needed the contiguous heap have already finished.
+    // (s_idx) is closed by now and the candidates would read as nothing. Reload it — cheap and rare,
+    // and the heavy tiers that needed the contiguous heap have already finished.
     if (!ensure_index()) return 0;
     char la[64], lb[64];
-    // Knowledge disambiguation only: both candidates must be answer cards (not app/system), else a
-    // typo'd launch ("apri le ofto") or an off-topic query offers nonsense ("did you mean Apro X?").
-    if (l1_label(s_band.a1, en, la, sizeof(la)) != ANIMA_ACT_ANSWER) return 0;
-    if (l1_label(s_band.a2, en, lb, sizeof(lb)) != ANIMA_ACT_ANSWER) return 0;
-    if (!la[0] || !lb[0]) return 0;
+    // Knowledge disambiguation only, and only between options that actually answer the QUESTION
+    // (l1_band_option). Without the second half an off-topic near-tie offered nonsense as a choice,
+    // which is a fabrication with extra steps: "did you mean 1) the largest hot desert…?" asserts that
+    // one of the two IS the answer.
+    if (!l1_band_option(s_band.a1, query, en, la, sizeof(la))) return 0;
+    if (!l1_band_option(s_band.a2, query, en, lb, sizeof(lb))) return 0;
     memset(out, 0, sizeof(*out));
     out->tier = ANIMA_TIER_FACT;
     out->action = ANIMA_ACT_ANSWER;
@@ -1421,6 +1543,114 @@ static void l1_join(char *buf, size_t cap, const char *glue, const char *span)
     snprintf(buf + n, cap - n, "%s%s", glue, span);
 }
 
+// ---- span-level redundancy (the MOSAICO "said it twice" guard) ----------------------------------
+// l1_head_in only compares the span's first ~40 chars, so a drill-down that RESTATES the lead further
+// in ("... e funziona offline" after a lead already saying it works offline) slipped through and the
+// stitched answer repeated itself. The helpers below drop redundant SENTENCES instead: they never
+// rewrite one, so MOSAICO's "every sentence is a verbatim corpus field" invariant still holds.
+
+// Lowercase, single-space, punctuation-free word stream with ' ' sentinels at both ends, so a
+// whole-word test is a plain strstr(" word "). Bytes >= 0x80 pass through verbatim: both sides go
+// through this same function, so accented text compares consistently without a folding table.
+static void l1_norm_words(char *d, size_t cap, const char *s)
+{
+    if (cap < 3) { if (cap) d[0] = 0; return; }
+    size_t o = 0;
+    d[o++] = ' ';
+    for (const unsigned char *p = (const unsigned char *)s; *p && o + 2 < cap; p++) {
+        unsigned char c = *p;
+        if (c >= 'A' && c <= 'Z')                                      d[o++] = (char)(c + 32);
+        else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c >= 0x80) d[o++] = (char)c;
+        else if (d[o-1] != ' ')                                        d[o++] = ' ';
+    }
+    if (d[o-1] != ' ') d[o++] = ' ';
+    d[o] = 0;
+}
+
+// Does `sent` add nothing over the normalized word stream `have`? Verbatim containment catches an
+// exact restatement; the content-word overlap catches a reworded one (the real defect).
+#define L1_REDUND_FRAC 0.80f
+static bool l1_sent_redundant(const char *have, const char *sent)
+{
+    char ns[400]; l1_norm_words(ns, sizeof ns, sent);
+    if (!ns[1]) return true;                                   // empty sentence: nothing to add
+    if (strlen(ns) > 3 && strstr(have, ns + 1)) return true;   // verbatim (drop the leading sentinel)
+    int total = 0, seen = 0, k = 0;
+    char tok[64];
+    for (const char *p = ns; ; p++) {
+        if (*p && *p != ' ') { if (k < 63) tok[k++] = *p; continue; }
+        if (k >= 4) {
+            tok[k] = 0;
+            char pat[68]; snprintf(pat, sizeof pat, " %s ", tok);
+            total++; if (strstr(have, pat)) seen++;
+        }
+        k = 0;
+        if (!*p) break;
+    }
+    if (total < 3) return false;                               // too short to judge: keep it
+    return (float)seen >= L1_REDUND_FRAC * (float)total;
+}
+
+// Cheap language vote over unambiguous function words: -1 unknown, 0 Italian, 1 English. Counts
+// DISTINCT words present, not occurrences, so a two-line span is classified as reliably as a
+// paragraph. Ambiguous words shared by both languages ("in", "a", "e") are deliberately absent, and a
+// thin margin returns "unknown" — the caller must treat that as permission, never as a verdict.
+static int l1_lang_vote(const char *text)
+{
+    static const char *const IT[] = { "il","lo","la","le","gli","del","dello","della","dei","degli",
+        "delle","che","un","una","uno","per","con","non","sono","essere","nel","nella","alla","come",
+        "anche","questo","questa","suo","sua","piu","molto","dove","quando", NULL };
+    static const char *const EN[] = { "the","of","and","is","are","was","were","to","that","for",
+        "with","it","as","on","by","from","which","this","these","has","have","can","its","or",
+        "they","their","when","where","but", NULL };
+    char nw[512]; l1_norm_words(nw, sizeof nw, text);
+    int it = 0, en = 0;
+    char pat[24];
+    for (int i = 0; IT[i]; i++) { snprintf(pat, sizeof pat, " %s ", IT[i]); if (strstr(nw, pat)) it++; }
+    for (int i = 0; EN[i]; i++) { snprintf(pat, sizeof pat, " %s ", EN[i]); if (strstr(nw, pat)) en++; }
+    if (it >= en + 2) return 0;
+    if (en >= it + 2) return 1;
+    return -1;
+}
+
+// May `span` be stapled onto an answer already written in `lead`'s language? Only when they don't
+// demonstrably DISAGREE — an undecidable short span is allowed through, so this can only ever remove
+// a genuinely bilingual paragraph, never a terse one.
+static bool l1_lang_agrees(const char *lead, const char *span)
+{
+    int a = l1_lang_vote(lead), b = l1_lang_vote(span);
+    return a < 0 || b < 0 || a == b;
+}
+
+// Copy into `out` only the sentences of `span` that say something `buf` doesn't already say.
+// Returns true if anything survived. Kept sentences are folded back in, so the span can't
+// duplicate itself either.
+static bool l1_span_new(char *out, size_t cap, const char *buf, const char *span)
+{
+    char have[512]; l1_norm_words(have, sizeof have, buf);
+    size_t o = 0; out[0] = 0;
+    for (const char *s = span; *s; ) {
+        while (*s == ' ') s++;
+        if (!*s) break;
+        const char *e = s;
+        while (*e && !((*e == '.' || *e == '!' || *e == '?') && (e[1] == 0 || e[1] == ' '))) e++;
+        size_t len = (size_t)(e - s) + (*e ? 1 : 0);
+        char sent[400];
+        if (len >= sizeof sent) len = sizeof sent - 1;
+        memcpy(sent, s, len); sent[len] = 0;
+        if (!l1_sent_redundant(have, sent)) {
+            if (o && o + 2 < cap) { out[o++] = ' '; out[o] = 0; }
+            o += (size_t)snprintf(out + o, cap - o, "%s", sent);
+            if (o >= cap - 1) { o = cap - 1; out[o] = 0; break; }
+            char add[400]; l1_norm_words(add, sizeof add, sent);       // fold in: later sentences see it
+            size_t hl = strlen(have);
+            if (hl + strlen(add) < sizeof have) snprintf(have + hl, sizeof have - hl, "%s", add + 1);
+        }
+        s = e + (*e ? 1 : 0);
+    }
+    return out[0] != 0;
+}
+
 int nucleo_anima_l1_stitch(const char *query, bool en, anima_result_t *io)
 {
     if (!s_ready || !io || io->action != ANIMA_ACT_ANSWER) return 0;
@@ -1435,23 +1665,31 @@ int nucleo_anima_l1_stitch(const char *query, bool en, anima_result_t *io)
     int stitched = 0;
 
     // SPAN 1 — the SAME card's drill-down detail (deeper text on the very entity just answered).
+    // Only the sentences that ADD something get stapled on (l1_span_new): a detail that restates the
+    // lead in other words used to slip past l1_head_in and make MOSAICO repeat itself.
     anima_result_t d;
-    if (l1_read_answer(a1, en, /*want_detail*/true, &d) && d.reply[0] && !l1_head_in(buf, d.reply)) {
+    char span[400];
+    if (l1_read_answer(a1, en, /*want_detail*/true, &d) && d.reply[0] && !l1_head_in(buf, d.reply)
+        && l1_lang_agrees(buf, d.reply) && l1_span_new(span, sizeof span, buf, d.reply)) {
         char ec = buf[strlen(buf) - 1];
         const char *glue = (ec == '.' || ec == '!' || ec == '?') ? " " : ". ";
-        if (strlen(buf) + strlen(glue) + strlen(d.reply) < 360) { l1_join(buf, sizeof buf, glue, d.reply); stitched++; }
+        if (strlen(buf) + strlen(glue) + strlen(span) < 360) { l1_join(buf, sizeof buf, glue, span); stitched++; }
     }
 
     // SPAN 2 — a topically-coherent runner-up card: high cosine AND shares a query word AND passes the
-    // same scope guard AND isn't a duplicate. Strict so MOSAICO never bolts on an off-topic fact.
+    // same scope guard AND isn't a duplicate AND speaks the same language. Strict so MOSAICO never
+    // bolts on an off-topic fact — and never produces a BILINGUAL paragraph, which it did: "what is
+    // force" answered with an Italian lead and then stapled on "Also, A force is a push or pull that
+    // can change an object's motion." Two correct cards, one unreadable answer.
     if (a2 >= 0 && a2 != a1 && c2 >= stitch_c2) {
         anima_result_t r2;
         if (l1_read_answer(a2, en, /*want_detail*/false, &r2) && r2.action == ANIMA_ACT_ANSWER && r2.reply[0]
-            && l1_shares_token(query, r2.reply) && l1_scope_covered(query, r2.reply) && !l1_head_in(buf, r2.reply)) {
+            && l1_shares_token(query, r2.reply) && l1_scope_covered(query, r2.reply) && !l1_head_in(buf, r2.reply)
+            && l1_lang_agrees(buf, r2.reply) && l1_span_new(span, sizeof span, buf, r2.reply)) {
             char ec = buf[strlen(buf) - 1];
             const char *glue = (ec == '.' || ec == '!' || ec == '?') ? (en ? " Also, " : " Inoltre, ")
                                                                       : (en ? ". Also, " : ". Inoltre, ");
-            if (strlen(buf) + strlen(glue) + strlen(r2.reply) < 360) { l1_join(buf, sizeof buf, glue, r2.reply); stitched++; }
+            if (strlen(buf) + strlen(glue) + strlen(span) < 360) { l1_join(buf, sizeof buf, glue, span); stitched++; }
         }
     }
 

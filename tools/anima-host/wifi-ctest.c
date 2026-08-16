@@ -36,6 +36,18 @@ static void t_mode_rules(void)
     CHECK(wp_join_mode(WP_MODE_AP)    == WP_MODE_APSTA, "I2: AP up -> join in APSTA");
     CHECK(wp_join_mode(WP_MODE_APSTA) == WP_MODE_APSTA, "I2: APSTA -> join stays APSTA");
 
+    // I5: the join mode ALWAYS carries the STA interface, from EVERY starting mode. connect_sta()
+    // depends on this: it sets this mode and only then writes the credentials, because
+    // esp_wifi_set_config(WIFI_IF_STA) is documented to FAIL when the interface isn't enabled — and
+    // it fails silently as far as the join is concerned, so the attempt proceeds with whatever stale
+    // config is in NVS and dies as WIFI_REASON_NO_AP_FOUND. That was a real, self-sustaining lockout:
+    // one failed cycle parked the radio in AP-only and no correct password could get in afterwards.
+    // If this property ever stops holding, the credentials silently stop reaching the driver again.
+    for (int m = 0; m <= (int)WP_MODE_APSTA; m++) {
+        wp_mode_t j = wp_join_mode((wp_mode_t)m);
+        CHECK(j == WP_MODE_STA || j == WP_MODE_APSTA, "I5: join mode always enables STA");
+    }
+
     CHECK(!wp_ap_iface_up(WP_MODE_NULL) && !wp_ap_iface_up(WP_MODE_STA), "AP iface down states");
     CHECK(wp_ap_iface_up(WP_MODE_AP) && wp_ap_iface_up(WP_MODE_APSTA),   "AP iface up states");
 

@@ -15,8 +15,18 @@ const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL:', m); 
 // Minimal browser globals some modules touch lazily.
 globalThis.localStorage = { _d: {}, getItem(k) { return this._d[k] ?? null; }, setItem(k, v) { this._d[k] = String(v); } };
 
+// A Node stand-in for the browser-absolute '/nucleo-i18n.js' module (which Node can't resolve).
+// Passthrough t() returns the key — enough for the harness tests, which check behaviour not copy.
+writeFileSync(join(T, 'nucleo-i18n.mjs'),
+  'const t = (key) => key;\n' +
+  'const I18N = { t, scope: () => t, init: async () => t, onChange() {}, ' +
+  'fmtNumber: (n) => String(n), fmtDate: (d) => String(d) };\n' +
+  'export default I18N;\nexport { t };\n');
+
 function load(relSrc, repl) {
   let src = readFileSync(join(root, relSrc), 'utf8');
+  // Always shim the OS-wide absolute i18n import so any loaded module resolves it under Node.
+  src = src.split("'/nucleo-i18n.js'").join("'./nucleo-i18n.mjs'");
   for (const [from, to] of repl) src = src.split(from).join(to);
   const out = join(T, relSrc.split('/').pop().replace('.js', '.mjs'));
   writeFileSync(out, src);

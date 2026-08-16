@@ -80,7 +80,7 @@ static void ingest_line(const char *line)
 {
     cJSON *o = cJSON_Parse(line);
     if (!o) return;
-    NItem it;
+    NItem it = {};   // zero the tail bytes get_str leaves past each string's NUL (the whole struct is copied)
     get_str(o, "src", it.src, sizeof it.src, "system");
     get_str(o, "lvl", it.lvl, sizeof it.lvl, "info");
     get_str(o, "ttl", it.ttl, sizeof it.ttl, "(notifica)");

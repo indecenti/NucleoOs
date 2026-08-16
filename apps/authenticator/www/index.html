@@ -1,0 +1,298 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title data-i18n="title">Authenticator</title>
+<style>
+  :root { color-scheme: dark; --bg:#0e1830; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc;
+    --muted:#8aa0c8; --line:#2a3a5e; --field:#0b1220; --accent:#4ea1ff; --ok:#5ee0a0; --bad:#ff6b6b; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); display: flex; flex-direction: column;
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 9px; padding: 11px 14px; flex: none; }
+  header h1 { font-size: 17px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  header .g { color: var(--accent); }
+  header .sp { flex: 1; }
+  .iconbtn { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 9px;
+    padding: 7px 12px; cursor: pointer; font: inherit; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  .iconbtn:hover { border-color: var(--accent); }
+  .iconbtn.primary { background: linear-gradient(135deg, rgba(94,224,160,.22), rgba(106,168,255,.14));
+    border-color: rgba(94,224,160,.4); font-weight: 600; }
+  .search { flex: 1; max-width: 260px; }
+  .search input { width: 100%; background: var(--field); border: 1px solid var(--line); color: var(--text);
+    border-radius: 9px; padding: 7px 12px; font: inherit; }
+  .search input:focus { outline: none; border-color: var(--accent); }
+  main { flex: 1; overflow: auto; padding: 4px 14px 16px; }
+  .list { display: flex; flex-direction: column; gap: 9px; max-width: 560px; margin: 0 auto; }
+  .tok { display: flex; align-items: center; gap: 13px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 12px 15px; cursor: pointer; transition: border-color .15s, transform .1s; }
+  .tok:hover { border-color: var(--accent); }
+  .tok:active { transform: scale(.995); }
+  .tok .av { width: 40px; height: 40px; border-radius: 11px; flex: none; display: grid; place-items: center;
+    font-size: 17px; font-weight: 700; color: #06121f; }
+  .tok .mid { flex: 1; min-width: 0; }
+  .tok .iss { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tok .acc { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tok .code { font: 700 26px/1 ui-monospace, "SF Mono", Consolas, monospace; letter-spacing: 3px;
+    font-variant-numeric: tabular-nums; color: var(--accent); }
+  .tok.copied .code { color: var(--ok); }
+  .tok.expiring .code { color: var(--bad); }
+  .ring { width: 30px; height: 30px; flex: none; position: relative; }
+  .ring svg { transform: rotate(-90deg); }
+  .ring .rt { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px;
+    font-variant-numeric: tabular-nums; color: var(--muted); }
+  .del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px;
+    border-radius: 7px; flex: none; }
+  .del:hover { color: var(--bad); background: rgba(255,107,107,.1); }
+  .empty { text-align: center; color: var(--muted); margin: 12vh auto 0; max-width: 380px; padding: 20px; }
+  .empty .big { font-size: 44px; margin-bottom: 10px; }
+  .empty h2 { font-size: 17px; margin: 0 0 6px; color: var(--text); }
+  .empty p { font-size: 13px; line-height: 1.6; }
+  .copied-hint { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    background: var(--ok); color: #06121f; padding: 8px 16px; border-radius: 10px; font-size: 13px;
+    font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .copied-hint.show { opacity: 1; }
+  .hidden { display: none !important; }
+  /* add sheet */
+  .scrim { position: fixed; inset: 0; background: rgba(6,10,22,.7); backdrop-filter: blur(5px);
+    display: none; align-items: center; justify-content: center; padding: 16px; z-index: 40; }
+  .scrim.show { display: flex; }
+  .sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px;
+    width: 100%; max-width: 420px; box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+  .sheet h2 { margin: 0 0 4px; font-size: 16px; }
+  .sheet .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 14px; line-height: 1.5; }
+  .fld { margin-bottom: 11px; }
+  .fld label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+  .fld input, .fld select { width: 100%; background: var(--field); border: 1px solid var(--line); color: var(--text);
+    border-radius: 9px; padding: 9px 12px; font: inherit; }
+  .fld input:focus, .fld select:focus { outline: none; border-color: var(--accent); }
+  .fld.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .paste-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .paste-row input { flex: 1; background: var(--field); border: 1px solid var(--line); color: var(--text);
+    border-radius: 9px; padding: 9px 12px; font: inherit; }
+  .paste-row input:focus { outline: none; border-color: var(--accent); }
+  .adv-toggle { font-size: 12px; color: var(--accent); cursor: pointer; user-select: none; margin: 2px 0 10px; }
+  .adv { display: none; } .adv.show { display: block; }
+  .sheet-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 6px; }
+  .msg { font-size: 12px; color: var(--bad); min-height: 16px; margin-top: 2px; }
+  .divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 1px; margin: 14px 0; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+  .note { background: var(--field); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
+    font-size: 11.5px; color: var(--muted); line-height: 1.5; max-width: 560px; margin: 14px auto 0; }
+  .note b { color: var(--text); }
+</style>
+</head>
+<body>
+  <header>
+    <h1><span class="g">🔐</span> <span data-i18n="title">Authenticator</span></h1>
+    <div class="sp"></div>
+    <div class="search"><input id="search" data-i18n-attr="placeholder:search_ph" autocomplete="off" spellcheck="false"></div>
+    <button class="iconbtn primary" id="add">＋ <span data-i18n="add">Aggiungi</span></button>
+  </header>
+
+  <main>
+    <div id="list" class="list"></div>
+    <div id="empty" class="empty hidden">
+      <div class="big">🔐</div>
+      <h2 data-i18n="empty_title">Nessun account 2FA</h2>
+      <p data-i18n="empty_body">Aggiungi un account per generare i codici di verifica a 6 cifre. Incolla un link <code>otpauth://</code> (dal QR del sito) o la chiave segreta.</p>
+    </div>
+    <div class="note" data-i18n-html="privacy_note">🔒 <b>Tutto in locale.</b> I codici sono calcolati nel browser (nessun segreto lascia il dispositivo). Le chiavi sono salvate sulla SD del Cardputer, protette dall'associazione: revoca le sessioni in Impostazioni se perdi un dispositivo.</div>
+  </main>
+
+  <!-- add sheet -->
+  <div class="scrim" id="scrim">
+    <div class="sheet">
+      <h2 data-i18n="add_title">Aggiungi account</h2>
+      <div class="sub" data-i18n="add_sub">Incolla il link otpauth:// (dal QR) — riempie tutto da solo. Oppure inserisci i campi a mano.</div>
+      <div class="paste-row">
+        <input id="uri" data-i18n-attr="placeholder:uri_ph" autocomplete="off" spellcheck="false">
+        <button class="iconbtn" id="paste" data-i18n="paste">Incolla</button>
+      </div>
+      <div class="divider" data-i18n="or_manual">oppure a mano</div>
+      <div class="fld"><label data-i18n="f_issuer">Servizio</label><input id="f-issuer" placeholder="GitHub" autocomplete="off"></div>
+      <div class="fld"><label data-i18n="f_account">Account</label><input id="f-account" placeholder="alice@example.com" autocomplete="off"></div>
+      <div class="fld"><label data-i18n="f_secret">Chiave segreta (Base32)</label><input id="f-secret" placeholder="JBSW Y3DP EHPK 3PXP" autocomplete="off" spellcheck="false"></div>
+      <div class="adv-toggle" id="adv-toggle" data-i18n="adv_more">▸ Opzioni avanzate</div>
+      <div class="adv" id="adv">
+        <div class="fld two">
+          <div><label data-i18n="f_digits">Cifre</label><select id="f-digits"><option>6</option><option>8</option></select></div>
+          <div><label data-i18n="f_period">Periodo (s)</label><input id="f-period" type="number" value="30" min="5" max="120"></div>
+        </div>
+        <div class="fld"><label data-i18n="f_algo">Algoritmo</label><select id="f-algo"><option>SHA1</option><option>SHA256</option></select></div>
+      </div>
+      <div class="msg" id="msg"></div>
+      <div class="sheet-actions">
+        <button class="iconbtn" id="cancel" data-i18n="cancel">Annulla</button>
+        <button class="iconbtn primary" id="save" data-i18n="save">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="copied-hint" id="copied"></div>
+
+<script type="module">
+import I18N from '/nucleo-i18n.js';
+import { totp, secondsRemaining, parseOtpauth, isValidBase32 } from './otp.js';
+const t = await I18N.init('authenticator');
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ── persistence: one JSON on the SD (follows the user across paired browsers), via the file API.
+// The serial nature of the device is respected: we read once on load and write once per change.
+const PATH = '/system/config/authenticator.json';
+let tokens = [];   // [{ id, type, issuer, account, secret, digits, period, algorithm, counter }]
+
+async function loadTokens() {
+  try {
+    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store' });
+    if (r.ok) { const t = await r.text(); const j = t ? JSON.parse(t) : {}; if (Array.isArray(j.tokens)) tokens = j.tokens; }
+  } catch {}
+  // Local fallback so the app still works with no device (offline / WASM): last-known set.
+  if (!tokens.length) { try { const l = JSON.parse(localStorage.getItem('authenticator.cache') || '{}'); if (Array.isArray(l.tokens)) tokens = l.tokens; } catch {} }
+}
+let saveChain = Promise.resolve();
+function saveTokens() {
+  try { localStorage.setItem('authenticator.cache', JSON.stringify({ tokens })); } catch {}
+  const body = JSON.stringify({ schema: 1, tokens }, null, 2);
+  saveChain = saveChain.then(() => fetch('/api/fs/write?path=' + encodeURIComponent(PATH),
+    { method: 'POST', body, signal: (() => { try { return AbortSignal.timeout(9000); } catch { return undefined; } })() }).catch(() => {}));
+  return saveChain;
+}
+
+// ── stable per-issuer colour for the avatar (hashed, so the same service always looks the same)
+function avatarColor(s) {
+  let h = 0; for (const c of String(s || '?')) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const hue = h % 360; return `hsl(${hue} 70% 62%)`;
+}
+const initial = (tok) => (tok.issuer || tok.account || '?').trim().charAt(0).toUpperCase() || '?';
+
+// ── render ──────────────────────────────────────────────────────────────────
+let query = '';
+function codeFor(tok) {
+  try { return totp(tok.secret, { digits: tok.digits, period: tok.period, algorithm: tok.algorithm }); }
+  catch { return '—'.repeat(tok.digits || 6); }
+}
+const grouped = (code) => code.length === 6 ? code.slice(0, 3) + ' ' + code.slice(3) : code.slice(0, 4) + ' ' + code.slice(4);
+
+function render() {
+  const list = $('list'), q = query.toLowerCase();
+  const shown = tokens.filter((tk) => !q || (tk.issuer + ' ' + tk.account).toLowerCase().includes(q));
+  $('empty').classList.toggle('hidden', tokens.length > 0);
+  list.innerHTML = '';
+  for (const tk of shown) {
+    const el = document.createElement('div');
+    el.className = 'tok'; el.dataset.id = tk.id;
+    el.innerHTML =
+      `<div class="av" style="background:${avatarColor(tk.issuer || tk.account)}">${esc(initial(tk))}</div>` +
+      `<div class="mid"><div class="iss">${esc(tk.issuer || tk.account || '—')}</div>` +
+      (tk.issuer ? `<div class="acc">${esc(tk.account || '')}</div>` : '') + '</div>' +
+      `<div class="code">${grouped(codeFor(tk))}</div>` +
+      `<div class="ring"><svg width="30" height="30"><circle cx="15" cy="15" r="12" fill="none" stroke="var(--line)" stroke-width="3"/>` +
+        `<circle class="rp" cx="15" cy="15" r="12" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-dasharray="75.4" stroke-dashoffset="0"/></svg>` +
+        `<span class="rt"></span></div>` +
+      `<button class="del" title="${esc(t('delete'))}">🗑</button>`;
+    el.addEventListener('click', (e) => { if (e.target.closest('.del')) return; copyCode(tk, el); });
+    el.querySelector('.del').addEventListener('click', (e) => { e.stopPropagation(); removeToken(tk.id); });
+    list.appendChild(el);
+  }
+  tick();   // paint rings + expiring state immediately
+}
+
+// One timer for the whole app: repaints codes at each window rollover, rings every second. Zero device cost.
+let lastWindow = -1;
+function tick() {
+  const now = Date.now();
+  for (const el of $('list').children) {
+    const tk = tokens.find((x) => x.id === el.dataset.id); if (!tk) continue;
+    const period = tk.period || 30;
+    const rem = secondsRemaining(period, now);
+    const rt = el.querySelector('.rt'); if (rt) rt.textContent = rem;
+    const rp = el.querySelector('.rp');
+    if (rp) { const C = 2 * Math.PI * 12; rp.style.strokeDasharray = C.toFixed(1); rp.style.strokeDashoffset = (C * (1 - rem / period)).toFixed(1); }
+    el.classList.toggle('expiring', rem <= 5);
+    // refresh the code exactly when its window rolls over
+    const win = Math.floor((now / 1000) / period);
+    if (el.__win !== win) { el.__win = win; const c = el.querySelector('.code'); if (c && !el.classList.contains('copied')) c.textContent = grouped(codeFor(tk)); }
+  }
+}
+setInterval(tick, 1000);
+
+// ── copy (OS clipboard + native) ──────────────────────────────────────────────
+let copyTimer = null;
+function copyCode(tk, el) {
+  const code = codeFor(tk);
+  try { navigator.clipboard && navigator.clipboard.writeText(code); } catch {}
+  try { window.parent.postMessage({ type: 'clipboard-write', kind: 'text', data: code }, '*'); } catch {}
+  el.classList.add('copied');
+  const hint = $('copied'); hint.textContent = t('copied'); hint.classList.add('show');
+  clearTimeout(copyTimer); copyTimer = setTimeout(() => { hint.classList.remove('show'); el.classList.remove('copied'); }, 1300);
+}
+
+// ── add / remove ──────────────────────────────────────────────────────────────
+function openSheet() {
+  $('scrim').classList.add('show');
+  ['uri', 'f-issuer', 'f-account', 'f-secret'].forEach((id) => $(id).value = '');
+  $('f-digits').value = '6'; $('f-period').value = '30'; $('f-algo').value = 'SHA1';
+  $('adv').classList.remove('show'); $('adv-toggle').textContent = t('adv_more');
+  $('msg').textContent = ''; setTimeout(() => $('uri').focus(), 40);
+}
+function closeSheet() { $('scrim').classList.remove('show'); }
+function applyUri() {
+  const p = parseOtpauth($('uri').value);
+  if (!p) { $('msg').textContent = t('err_uri'); return; }
+  $('f-issuer').value = p.issuer; $('f-account').value = p.account; $('f-secret').value = p.secret;
+  $('f-digits').value = String(p.digits); $('f-period').value = String(p.period); $('f-algo').value = p.algorithm;
+  $('msg').textContent = '';
+}
+function saveToken() {
+  // A pasted URI that wasn't "applied" yet still works: parse it here too.
+  const uri = $('uri').value.trim();
+  if (uri) { const p = parseOtpauth(uri); if (p) { $('f-issuer').value = p.issuer; $('f-account').value = p.account; $('f-secret').value = p.secret; $('f-digits').value = String(p.digits); $('f-period').value = String(p.period); $('f-algo').value = p.algorithm; } }
+  const secret = $('f-secret').value.replace(/\s/g, '');
+  if (!secret || !isValidBase32(secret)) { $('msg').textContent = t('err_secret'); return; }
+  const tok = {
+    id: 'tok-' + Date.now() + '-' + Math.floor(Math.random() * 1e4),
+    type: 'totp', issuer: $('f-issuer').value.trim(), account: $('f-account').value.trim(),
+    secret, digits: parseInt($('f-digits').value, 10) === 8 ? 8 : 6,
+    period: Math.max(5, Math.min(120, parseInt($('f-period').value, 10) || 30)),
+    algorithm: $('f-algo').value === 'SHA256' ? 'SHA256' : 'SHA1',
+  };
+  tokens.push(tok); saveTokens(); render(); closeSheet();
+}
+async function removeToken(id) {
+  const tk = tokens.find((x) => x.id === id);
+  const label = tk ? (tk.issuer || tk.account || '') : '';
+  if (!confirm(t('confirm_del', { name: label }))) return;
+  tokens = tokens.filter((x) => x.id !== id); saveTokens(); render();
+}
+
+$('add').addEventListener('click', openSheet);
+$('cancel').addEventListener('click', closeSheet);
+$('save').addEventListener('click', saveToken);
+$('paste').addEventListener('click', async () => {
+  try { const txt = await navigator.clipboard.readText(); if (txt) { $('uri').value = txt.trim(); applyUri(); } }
+  catch { $('msg').textContent = t('err_clip'); }
+});
+$('uri').addEventListener('input', () => { if ($('uri').value.includes('otpauth://')) applyUri(); });
+$('adv-toggle').addEventListener('click', () => { const a = $('adv').classList.toggle('show'); $('adv-toggle').textContent = a ? t('adv_less') : t('adv_more'); });
+$('scrim').addEventListener('mousedown', (e) => { if (e.target === $('scrim')) closeSheet(); });
+$('search').addEventListener('input', (e) => { query = e.target.value.trim(); render(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('scrim').classList.contains('show')) closeSheet(); });
+I18N.onChange(() => render());
+
+// An external "add this account" (e.g. from a QR scan handoff) can arrive as ?otpauth=…
+(function fromQuery() {
+  const q = new URLSearchParams(location.search).get('otpauth');
+  if (q) { const p = parseOtpauth(q); if (p) { tokens.push({ id: 'tok-' + Date.now(), type: 'totp', ...p }); } }
+})();
+
+// ── boot ──
+await loadTokens();
+render();
+</script>
+</body>
+</html>

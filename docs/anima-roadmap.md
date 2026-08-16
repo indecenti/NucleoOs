@@ -31,6 +31,34 @@ same size → zero extra device RAM. Output: `models/anima-it-encoder.bin` (now 
 **Gate:** held-out student-vs-e5 Spearman ≥ ~0.45 on *both* languages, and cross-lingual
 recall@1 (EN→IT translation) clearly above chance. Report the numbers.
 
+**Status: gate closed, and made permanent.** `distill.py` prints its student-vs-e5 Spearman at
+distillation time, which means the number exists for one minute and can never guard a build: nothing
+re-checks that the weights actually *exported* to `sd/data/anima/anima-it-encoder.bin` still behave.
+A bad export, a truncated file or a stale copy on the SD passes every other gate, because the index
+alone carries recall. So the gate now lives in the normal suite as `npm run anima:enc`
+(`tools/anima-host/enc-quality.mjs`), measuring the **shipped** encoder through `anima.exe --cos`
+— the real C encoder, not a reimplementation that could drift from it.
+
+One deliberate substitution: the teacher is gone (it can't be a build dependency), so the correlation
+is against **gold relatedness labels** (`tools/anima/eval_encoder_sts.jsonl`, 40 IT + 40 EN pairs on
+the usual STS 0–4 scale) rather than against e5's cosines. That measures the embedding space's
+absolute quality instead of its fidelity to one teacher — a stricter thing to ask, and one that runs
+anywhere. Cross-lingual recall@1 is scored exactly as `distill.py` does it, on 30 IT↔EN translation
+pairs (`tools/anima/eval_encoder_xling.jsonl`).
+
+Measured on the shipped ANE2 encoder:
+
+| Metric | Result | Floor |
+|---|---|---|
+| Spearman(cosine, gold relatedness) **IT** | **0.742** (n=40) | 0.45 |
+| Spearman(cosine, gold relatedness) **EN** | **0.775** (n=40) | 0.45 |
+| Cross-lingual recall@1 EN→IT | **83%** (25/30) | 70% |
+| Mean cos(translation pair) | 0.531 | — |
+
+The five cross-lingual misses are all near-synonym confusions inside the same domain (`what is a
+capacitor` → `cos'è il DNS`, `what time is it now` → `che tempo fa oggi`), i.e. the residual gap a
+stronger teacher in Step 7 would close — not a broken export.
+
 ### Step 2 — Tool layer + `create_file` (agentic)
 Typed tool registry `{name, schema, extract, validate, run}`. First tool: `create_file(path)`
 → empty text file on SD (atomic). Slot extraction + path/extension validation; refuse on no
@@ -61,6 +89,38 @@ Session ring (last ~8 turns) + entity slots (last app/file/topic) + **context-bi
 retrieval** for short follow-ups (`emb = α·query + (1-α)·prev`) + extractive template
 "summary"; persisted via the existing event journal, reloaded at boot. No generation.
 **Gate:** "apri le foto" → "no, la musica"; "che batteria ho?" → "e lo spazio?" resolve.
+
+**Status: gate closed** (`npm run anima:wmem`, `tools/anima-host/wmem-check.mjs` — 15 scenarios).
+The ring and the entity slots were already there; what was missing was resolving a follow-up whose
+thread had no *structured* focus. The conversational-focus shift only fires when the KGE reasoner
+declared a `(subject, relation)`, and an L1 card answer declares neither — so `chi era einstein` /
+`e newton?` abstained on a question whose meaning was obvious.
+
+**Topic-frame carry-over** closes it, and note what it is *not*: no context-biased embedding
+(`α·query + (1-α)·prev`), which mixes two questions into a vector that answers neither and is
+untraceable when it goes wrong. Instead the previous turn is remembered with its **entity punched
+out** — a reusable frame — and the follow-up's entity is dropped into the hole:
+
+| previous turn | frame kept | follow-up | re-asked as |
+|---|---|---|---|
+| `chi era einstein` | `chi era` + _ | `e newton?` | `chi era newton` |
+| `apri le foto` | `apri le` + _ | `no, la musica` | `apri le musica` |
+| `che batteria ho?` | `che` + _ + `ho` | `e lo spazio?` | `che spazio ho` |
+
+The entity can sit in the middle of the turn, hence a prefix *and* a suffix. The rebuilt turn then
+goes through the **ordinary cascade**, which is the whole safety argument: every retrieval and
+routing guard still applies, the re-aim is visible to the user (it comes back as `corrected`), and a
+re-aim that retrieves nothing stays an honest miss instead of borrowing the previous answer.
+
+A follow-up mechanism that fires too eagerly is a hallucination engine, so each capability is paired
+in the gate with the guard that stops it: a **cold** session can't resolve one (no frame), a **stale**
+frame (past the 8-turn window) can't, `/reset` forgets, an **unknown entity** abstains rather than
+borrowing, a **self-contained** question is never re-aimed, and a command frame never launches a
+bogus app. A bare continuation has no substantive frame of its own — its tokens are all connectors,
+corrections or articles — so it can never overwrite the frame it is reusing.
+
+Still open from the original wording: the extractive "summary" template, and persisting the frame
+through the event journal (it is RAM-only today, so it does not survive a reboot).
 
 ### Step 7 — Hot-reload + polish
 Reload packs without reboot (so new RAGs/knowledge apply live); smooth-scroll/flicker polish;

@@ -28,14 +28,14 @@ const PAT = /<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|
 
 function getPairs(word) {
   const pairs = new Set();
-  for (let i = 0; i < word.length - 1; i++) pairs.add(word[i] + '' + word[i + 1]);
+  for (let i = 0; i < word.length - 1; i++) pairs.add(word[i] + '\u0000' + word[i + 1]);
   return pairs;
 }
 
 export function makeClipTokenizer({ vocab, merges, bos = 49406, eos = 49407, pad, maxLen = 77 } = {}) {
   if (!vocab || typeof vocab !== 'object') throw new Error('vocab required');
   const ranks = new Map();
-  (merges || []).forEach((m, i) => { const [a, b] = Array.isArray(m) ? m : String(m).split(/\s+/); ranks.set(a + '' + b, i); });
+  (merges || []).forEach((m, i) => { const [a, b] = Array.isArray(m) ? m : String(m).split(/\s+/); ranks.set(a + '\u0000' + b, i); });
   const padId = pad == null ? eos : pad;
   const unk = vocab['<|endoftext|>'] != null ? vocab['<|endoftext|>'] : eos;
 
@@ -49,7 +49,7 @@ export function makeClipTokenizer({ vocab, merges, bos = 49406, eos = 49407, pad
       let best = null, bestRank = Infinity;
       for (const p of pairs) { const r = ranks.get(p); if (r !== undefined && r < bestRank) { bestRank = r; best = p; } }
       if (best === null) break;
-      const [a, b] = best.split('');
+      const [a, b] = best.split('\u0000');
       const next = []; let i = 0;
       while (i < word.length) {
         const j = word.indexOf(a, i);

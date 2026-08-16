@@ -422,8 +422,9 @@ void nucleo_eth_stop(void)
 {
     if (s_op != ETH_OP_NONE || s_task) {
         s_run = false;
-        for (int i = 0; i < 200 && s_task; i++) vTaskDelay(pdMS_TO_TICKS(5));   // join (op heals before exit)
-        if (s_pcap) { fclose(s_pcap); s_pcap = NULL; }
+        for (int i = 0; i < 400 && s_task; i++) vTaskDelay(pdMS_TO_TICKS(5));   // ~2 s join; the worker owns fclose(s_pcap)
+        // Do NOT fclose(s_pcap) here: op_pcap closes its own FILE* on exit. Closing it from this task
+        // races the worker (a slow SD write can outlast the join) -> use-after-free + double fclose.
         s_op = ETH_OP_NONE;
     }
     nucleo_exclusive_exit();   // always release the reclaim (safe/no-op if not active)

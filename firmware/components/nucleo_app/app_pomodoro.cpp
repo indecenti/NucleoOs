@@ -451,7 +451,7 @@ static void draw_stats_tab(int y0, int bottom)
     }
 
     int rx = 108, ry = y0 + 6, step = 26;
-    struct { const char *lab; char val[16]; unsigned short col; } rows[3];
+    struct { const char *lab; char val[16]; unsigned short col; } rows[3] = {};
     snprintf(rows[0].val, sizeof rows[0].val, "%dh %02dm", s_today_focus_min / 60, s_today_focus_min % 60);
     rows[0].lab = PT("Focus oggi", "Focus today", "Focus hoy", "Focus auj", "Fokus heute"); rows[0].col = C_GREEN;
     snprintf(rows[1].val, sizeof rows[1].val, "%d", s_total_pomos);

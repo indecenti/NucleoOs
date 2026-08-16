@@ -91,3 +91,20 @@ test('a fetch error eases off (widens interval) and reports via onError', async 
   assert.equal(errs, 1);
   assert.equal(p.interval, 4500);
 });
+
+test('prime() sweeps every source once, sequentially, in order', async () => {
+  const seen = [];
+  const p = createPoller({ fetchJson: async (s) => { seen.push(s); return {}; }, sources: ['status', 'heap', 'cpu'] });
+  await p.prime();
+  assert.deepEqual(seen, ['status', 'heap', 'cpu'], 'one pass over all sources');
+  await p.tick();
+  assert.deepEqual(seen.at(-1), 'status', 'rotation continues after the sweep');
+});
+
+test('prime() stops at the first skipped tick (frozen/hidden)', async () => {
+  let calls = 0, hidden = false;
+  const p = createPoller({ fetchJson: async () => { calls++; if (calls === 1) hidden = true; return {}; },
+    hidden: () => hidden, sources: ['status', 'heap', 'cpu'] });
+  await p.prime();
+  assert.equal(calls, 1, 'the sweep does not push through a hidden page');
+});

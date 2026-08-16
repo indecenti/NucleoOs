@@ -42,7 +42,7 @@ export function drawIcon(g, id, cx, cy, s) {
       g.fc(cx, cy, T * 1.15);
       break;
 
-    case 'Hardware':                               // DIP microchip: body + side legs + pin-1 dot
+    case 'Measure':                               // DIP microchip: body + side legs + pin-1 dot
       g.frr(cx - s * 0.56, cy - s * 0.72, s * 1.12, s * 1.44, s * 0.12);
       g.frr(cx - s * 0.28, cy - s * 0.44, s * 0.56, s * 0.9, 2, g.bg);
       for (let i = -1; i <= 1; i++) {
@@ -149,6 +149,14 @@ export function drawIcon(g, id, cx, cy, s) {
       g.bx(cx - s * 0.5, cy + s * 0.12, s, T * 0.55, g.bg);
       break;
 
+    case 'usbweb':                                   // globe (web) over a plug stub (cable)
+      g.el(cx, cy - s * 0.28, s * 0.62, s * 0.62, T * 0.7);
+      g.el(cx, cy - s * 0.28, s * 0.26, s * 0.62, T * 0.7);
+      g.ln(cx - s * 0.62, cy - s * 0.28, cx + s * 0.62, cy - s * 0.28, T * 0.7);
+      g.bx(cx - T * 0.5, cy + s * 0.34, T, s * 0.4);
+      g.frr(cx - s * 0.3, cy + s * 0.72, s * 0.6, s * 0.34, 2);
+      break;
+
     case 'usbkbd':
       g.frr(cx - s, cy - s * 0.6, 2 * s, s * 1.2, s * 0.22);
       for (let r = 0; r < 2; r++) for (let c = 0; c < 4; c++)
@@ -166,6 +174,11 @@ export function drawIcon(g, id, cx, cy, s) {
       g.frr(cx - s, cy - s * 0.75, 2 * s, s * 1.5, s * 0.22);
       g.tri(cx - s * 0.3, cy - s * 0.42, cx - s * 0.3, cy + s * 0.42, cx + s * 0.5, cy, g.bg);
       break;
+    case 'Web OS':                                   // globe: outline + one meridian + equator
+      g.el(cx, cy, s * 0.92, s * 0.92, T * 0.7);
+      g.el(cx, cy, s * 0.4, s * 0.92, T * 0.7);
+      g.ln(cx - s * 0.92, cy, cx + s * 0.92, cy, T * 0.7);
+      break;
     case 'Media':
       g.tri(cx - s * 0.7, cy - s, cx - s * 0.7, cy + s, cx + s, cy);
       break;
@@ -178,7 +191,7 @@ export function drawIcon(g, id, cx, cy, s) {
       g.tri(cx - s * 0.05, cy + s * 0.62, cx + s * 0.45, cy + s * 0.05, cx + s * 0.85, cy + s * 0.62, g.col);
       break;
 
-    case 'recorder': case 'voice': case 'Voice':
+    case 'recorder': case 'voice':
       g.frr(cx - T * 1.15, cy - s, T * 2.3, s * 1.25, T * 1.15);
       g.ln(cx - s * 0.58, cy, cx - s * 0.58, cy + s * 0.22, T * 0.6); g.ln(cx + s * 0.58, cy, cx + s * 0.58, cy + s * 0.22, T * 0.6);
       g.ln(cx - s * 0.58, cy + s * 0.2, cx, cy + s * 0.5, T * 0.6); g.ln(cx + s * 0.58, cy + s * 0.2, cx, cy + s * 0.5, T * 0.6);
@@ -422,7 +435,7 @@ export function drawIcon(g, id, cx, cy, s) {
       g.ln(cx + s * 0.86, cy - s * 0.46, cx, cy + s * 0.16, T * 0.6, g.bg);
       break;
 
-    case 'Communication':                            // speech bubble with a tail + three dots
+    case 'Messaging':                            // speech bubble with a tail + three dots
       g.frr(cx - s, cy - s * 0.8, 2 * s, s * 1.28, s * 0.34);
       g.tri(cx - s * 0.5, cy + s * 0.3, cx - s * 0.08, cy + s * 0.3, cx - s * 0.62, cy + s);
       for (let i = -1; i <= 1; i++) g.fc(cx + i * s * 0.42, cy - s * 0.14, T * 0.5, g.bg);
@@ -476,7 +489,7 @@ export function drawIcon(g, id, cx, cy, s) {
 
 // The id list this set covers, for the gallery and for sanity checks.
 export const ICON_IDS = [
-  'clock', 'anima', 'calc', 'files', 'calendar', 'notepad', 'usb', 'usbkbd', 'music', 'video', 'Media',
+  'clock', 'anima', 'calc', 'files', 'calendar', 'notepad', 'usb', 'usbweb', 'usbkbd', 'music', 'video', 'Media',
   'photos', 'recorder', 'micspec', 'voicelab', 'info', 'Connect', 'sysmon', 'System', 'radio', 'remote',
   'ir', 'qr', 'notify', 'torch', 'theme', 'wifi', 'link', 'swarm', 'ssh', 'ethernet', 'beacon', 'wifiatk',
   'evilportal', 'sentinel', 'fido', 'airspace', 'Security', 'Games', 'reactor', 'pong', 'tanks', 'stelle',

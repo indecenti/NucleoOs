@@ -10,7 +10,7 @@
 //   T4 never-block   under a held token, 5000 try-acquires all return 0 and finish ~instantly
 //   T5 heap-floor    the lowest free heap at release is recorded for the /api/status teardown sentinel
 #include "nucleo_arb.h"
-#include <windows.h>
+#include "arb_host_compat.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -51,7 +51,7 @@ static void t1_logic(void)
 
 // ---------------------------------------------------------------------------- T2: FG preempts BG
 static volatile uint32_t t2_fg_token = 0;
-static DWORD WINAPI t2_fg_thread(LPVOID p)
+static AH_THREAD_RET t2_fg_thread(AH_THREAD_PARAM p)
 {
     (void)p;
     // Wait up to 1s for the BG holder to step aside; this also raises the yield flag.
@@ -64,19 +64,18 @@ static void t2_fg_preempts_bg(void)
     CHECK(bg != 0, "T2 BG acquire");
     CHECK(!nucleo_arb_should_yield(bg), "T2 no yield requested yet");
 
-    HANDLE th = CreateThread(NULL, 0, t2_fg_thread, NULL, 0, NULL);
+    ah_thread_t th; AH_THREAD_CREATE(th, t2_fg_thread, NULL);
 
     // The FG thread is now waiting -> the BG holder must be asked to yield within a short window.
     int saw_yield = 0;
     for (int i = 0; i < 200; i++) {           // up to ~600 ms
         if (nucleo_arb_should_yield(bg)) { saw_yield = 1; break; }
-        Sleep(3);
+        AH_SLEEP_MS(3);
     }
     CHECK(saw_yield, "T2 BG holder must see should_yield()==true once FG waits");
 
     nucleo_arb_release(bg);                    // good citizen yields
-    WaitForSingleObject(th, 2000);
-    CloseHandle(th);
+    AH_THREAD_JOIN(th);
 
     CHECK(t2_fg_token != 0, "T2 FG must obtain the token after BG yields");
     nucleo_arb_release(t2_fg_token);
@@ -85,34 +84,33 @@ static void t2_fg_preempts_bg(void)
 // ---------------------------------------------------------------------------- T3: mutual exclusion
 #define T3_THREADS 12
 #define T3_ITERS   400
-static volatile LONG t3_inside = 0;            // must NEVER exceed 1 -> proves single holder
-static volatile LONG t3_violations = 0;
-static volatile LONG t3_acquired = 0;
-static DWORD WINAPI t3_worker(LPVOID p)
+static ah_atomic_t t3_inside = 0;              // must NEVER exceed 1 -> proves single holder
+static ah_atomic_t t3_violations = 0;
+static ah_atomic_t t3_acquired = 0;
+static AH_THREAD_RET t3_worker(AH_THREAD_PARAM p)
 {
     (void)p;
     for (int i = 0; i < T3_ITERS; i++) {
         uint32_t tk = nucleo_arb_acquire(ARB_FG, "x", 1000);
         if (!tk) continue;                     // timed out under heavy contention -> retry next iter
-        InterlockedIncrement(&t3_acquired);
-        LONG now = InterlockedIncrement(&t3_inside);
-        if (now != 1) InterlockedIncrement(&t3_violations);   // a second holder got in -> RACE
+        AH_INC(t3_acquired);
+        long now = AH_INC(t3_inside);
+        if (now != 1) AH_INC(t3_violations);   // a second holder got in -> RACE
         // tiny hold to widen any race window
         for (volatile int s = 0; s < 50; s++) { }
-        InterlockedDecrement(&t3_inside);
+        AH_DEC(t3_inside);
         nucleo_arb_release(tk);
     }
     return 0;
 }
 static void t3_mutual_exclusion(void)
 {
-    HANDLE th[T3_THREADS];
-    for (int i = 0; i < T3_THREADS; i++) th[i] = CreateThread(NULL, 0, t3_worker, NULL, 0, NULL);
-    WaitForMultipleObjects(T3_THREADS, th, TRUE, 30000);
-    for (int i = 0; i < T3_THREADS; i++) CloseHandle(th[i]);
-    CHECK(t3_violations == 0, "T3 mutual exclusion: two threads must never hold the token at once");
-    CHECK(t3_acquired > 0, "T3 some acquisitions happened");
-    printf("  T3: %ld grants across %d threads, 0 overlap\n", (long)t3_acquired, T3_THREADS);
+    ah_thread_t th[T3_THREADS];
+    for (int i = 0; i < T3_THREADS; i++) AH_THREAD_CREATE(th[i], t3_worker, NULL);
+    for (int i = 0; i < T3_THREADS; i++) AH_THREAD_JOIN(th[i]);
+    CHECK(AH_LOAD(t3_violations) == 0, "T3 mutual exclusion: two threads must never hold the token at once");
+    CHECK(AH_LOAD(t3_acquired) > 0, "T3 some acquisitions happened");
+    printf("  T3: %ld grants across %d threads, 0 overlap\n", (long)AH_LOAD(t3_acquired), T3_THREADS);
 }
 
 // ---------------------------------------------------------------------------- T4: never block
@@ -120,10 +118,10 @@ static void t4_never_block(void)
 {
     uint32_t held = nucleo_arb_acquire(ARB_FG, "holder", 0);
     CHECK(held != 0, "T4 setup acquire");
-    DWORD t0 = GetTickCount();
+    uint32_t t0 = AH_TICK_MS();
     int zeros = 0;
     for (int i = 0; i < 5000; i++) if (nucleo_arb_acquire(ARB_FG, "probe", 0) == 0) zeros++;
-    DWORD dt = GetTickCount() - t0;
+    uint32_t dt = AH_TICK_MS() - t0;
     CHECK(zeros == 5000, "T4 every try-acquire on a held token returns 0");
     CHECK(dt < 1000, "T4 5000 try-acquires must be near-instant (never block the httpd task)");
     printf("  T4: 5000 try-acquires in %lu ms, all denied (non-blocking)\n", (unsigned long)dt);

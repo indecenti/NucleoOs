@@ -290,6 +290,7 @@ static int32_t tpl_match_sd(const vdsp_template obs, int32_t *second, bool *foun
         int32_t radius = VDSP_RADIUS_INIT;
         if (fread(&magic, sizeof(magic), 1, f) != 1 || magic != TPL_MAGIC) { fclose(f); continue; }
         if (fread(hdr, 1, 32, f) != 32 || fread(s_scan, sizeof(vdsp_template), 1, f) != 1) { fclose(f); continue; }
+        hdr[31] = 0;   // a full 32-byte header field carries no NUL: terminate before snprintf("%s", hdr) below over-reads
         if (fread(&radius, sizeof(radius), 1, f) != 1 ||
             radius < VDSP_RADIUS_MIN || radius > VDSP_RADIUS_MAX) radius = VDSP_RADIUS_INIT;
         fclose(f);

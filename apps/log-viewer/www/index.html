@@ -304,9 +304,11 @@
     const out = { events: events.slice(), nowSec: Math.floor(Date.now() / 1000) };
     try { const r = await fetch('/api/diag', { cache: 'no-store' }); if (r.ok) out.diag = await r.json(); } catch {}
     if (!out.diag) {     // legacy device → assemble from the three classic read-only endpoints
+      // One at a time: three parallel reads would flood the single-task PSRAM-less httpd.
       const grab = (p) => fetch(p, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-      const [s, h, c] = await Promise.all([grab('/api/status'), grab('/api/heap'), grab('/api/cpu')]);
-      out.status = s; out.heap = h; out.cpu = c;
+      out.status = await grab('/api/status');
+      out.heap = await grab('/api/heap');
+      out.cpu = await grab('/api/cpu');
     }
     try { const r = await fetch('/api/logs', { cache: 'no-store' }); if (r.ok) out.logsText = await r.text(); } catch {}
     return out;

@@ -5,11 +5,12 @@
 // SKIPS cleanly when no model is staged (the weights are a large optional artifact, not always present).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, statSync, existsSync, createReadStream, readFileSync } from 'node:fs';
+import { statSync, existsSync, createReadStream, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { verifyManifest } from '../../apps/anima/www/forge/download.js';
+import { listStagedModels } from './forge-staged.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const modelsDir = join(here, '..', '..', 'deploy', 'sd-safe', 'apps', 'anima', 'www', 'forge', 'models');
@@ -17,9 +18,8 @@ const modelsDir = join(here, '..', '..', 'deploy', 'sd-safe', 'apps', 'anima', '
 function sha256(path) {
   return new Promise((res, rej) => { const h = createHash('sha256'); const s = createReadStream(path); s.on('data', (c) => h.update(c)); s.on('end', () => res(h.digest('hex'))); s.on('error', rej); });
 }
-const staged = existsSync(modelsDir)
-  ? readdirSync(modelsDir).filter((d) => existsSync(join(modelsDir, d, 'manifest.json')))
-  : [];
+// Only models whose weights are fully present on disk (not just a manifest.json + LFS pointer stubs).
+const staged = listStagedModels(modelsDir);
 
 test('staged LLM models: manifest + files are consistent (or none staged → skip)', { skip: staged.length === 0 ? 'no model staged under deploy/sd-safe (optional large artifact)' : false }, async () => {
   for (const id of staged) {

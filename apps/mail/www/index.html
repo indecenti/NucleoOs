@@ -84,7 +84,9 @@
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     let accounts = [], presets = [], def = -1, tab = 'compose', loaded = false;
-    let draft = { to: '', subject: '', body: '', account: -1 };
+    // A recipient can be handed in via ?to= (e.g. Contacts → "Write email"): open straight into Compose.
+    const _q = new URLSearchParams(location.search);
+    let draft = { to: (_q.get('to') || '').trim(), subject: (_q.get('subject') || '').trim(), body: (_q.get('body') || '').trim(), account: -1 };
     let editing = null;
 
     const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -100,10 +102,11 @@
     }
 
     async function loadData() {
-      const [pa, ac] = await Promise.all([
-        fetch('/api/mail/presets', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/mail/accounts', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null),
-      ]);
+      // Sequential, never parallel: the device is a single-task PSRAM-less httpd — two concurrent
+      // reads at app-open compete for its 4 sockets and fragmented heap.
+      const grab = (p) => fetch(p, { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null);
+      const pa = await grab('/api/mail/presets');
+      const ac = await grab('/api/mail/accounts');
       presets = pa?.presets || [];
       accounts = ac?.accounts || [];
       def = (ac && typeof ac.default === 'number' && ac.default >= 0) ? ac.default : (accounts.length ? accounts[0].idx : -1);

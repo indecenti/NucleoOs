@@ -1142,14 +1142,18 @@ static void net_handle(const pnet_pkt_t *p){
             s_tanks[0].pu=st->p1pu;      s_tanks[1].pu=st->p2pu;
             s_tanks[0].pu_ms=st->p1pums*64; s_tanks[1].pu_ms=st->p2pums*64;
             memset(s_bullets,0,sizeof s_bullets);
-            for(int i=0;i<(int)st->nbul&&i<MAX_BULLETS;i++){
+            // Bound by the WIRE array size (bul[12]), not MAX_BULLETS(14): a peer-controlled nbul>12
+            // must never read st->bul past its 12 slots (OOB read of the received packet).
+            for(int i=0;i<(int)st->nbul&&i<(int)(sizeof(st->bul)/sizeof(st->bul[0]));i++){
                 s_bullets[i].x=(float)st->bul[i].x; s_bullets[i].y=(float)st->bul[i].y;
                 s_bullets[i].vx=st->bul[i].vx/100.0f; s_bullets[i].vy=st->bul[i].vy/100.0f;
                 s_bullets[i].owner=st->bul[i].ow; s_bullets[i].wp=st->bul[i].wp;
                 s_bullets[i].alive=true;
             }
             memset(s_shops,0,sizeof s_shops);
-            for(int i=0;i<(int)st->nshop;i++){ s_shops[i].active=true; s_shops[i].tx=st->shop[i].tx; s_shops[i].ty=st->shop[i].ty; s_shops[i].life_ms=10000; }
+            // Bound by the WIRE array size (shop[2]): a peer-controlled nshop had NO array bound here —
+            // nshop>2 overran s_shops[2] (OOB read of the packet AND OOB write of static memory).
+            for(int i=0;i<(int)st->nshop&&i<(int)(sizeof(st->shop)/sizeof(st->shop[0]));i++){ s_shops[i].active=true; s_shops[i].tx=st->shop[i].tx; s_shops[i].ty=st->shop[i].ty; s_shops[i].life_ms=10000; }
             memset(s_picks,0,sizeof s_picks);
             for(int i=0;i<(int)st->npick&&i<MAX_PICKS;i++){ s_picks[i].active=true; s_picks[i].tx=st->pick[i].tx; s_picks[i].ty=st->pick[i].ty; s_picks[i].kind=(st->pick[i].type&0x80)?PK_WEAPON:PK_PU; s_picks[i].type=st->pick[i].type&0x7F; s_picks[i].life_ms=10000; }
             // bots (render only on guest; host is authoritative)

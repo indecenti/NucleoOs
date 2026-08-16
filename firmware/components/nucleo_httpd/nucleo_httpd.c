@@ -580,6 +580,48 @@ static esp_err_t wifi_forget_post(httpd_req_t *req)
     return ESP_OK;
 }
 
+// POST /api/wifi/priority {"ssid":"..","priority":N} -> pin/unpin a saved network. Higher priority
+// wins the auto-connect race (the supervisor picks the highest-priority in-range known net, then the
+// strongest signal). The store clamps N to 0..9 (0 = normal). Auth-gated: it changes which known
+// network the device auto-joins.
+static esp_err_t wifi_priority_post(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    int blen = req->content_len;
+    if (blen <= 0 || blen > 256) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad body"); return ESP_FAIL; }
+    char body[257] = {0};
+    int got = 0, r;
+    while (got < blen) {
+        r = httpd_req_recv(req, body + got, blen - got);
+        if (r <= 0) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "recv"); return ESP_FAIL; }
+        got += r;
+    }
+    cJSON *root = cJSON_Parse(body);
+    if (!root) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad json"); return ESP_FAIL; }
+    cJSON *cs = cJSON_GetObjectItem(root, "ssid");
+    cJSON *cp = cJSON_GetObjectItem(root, "priority");
+    if (!cJSON_IsString(cs) || !cs->valuestring[0] || !cJSON_IsNumber(cp)) {
+        cJSON_Delete(root); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing ssid/priority"); return ESP_FAIL;
+    }
+    nucleo_setup_net_set_priority(cs->valuestring, cp->valueint);   // store clamps to 0..9
+    cJSON_Delete(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+// POST /api/wifi/reconnect -> rescan and (re)join the best in-range known network now (blocking, like
+// /api/wifi/join). Drops to the hotspot if none is reachable. Auth-gated (mutates the radio). Lets the
+// user apply a priority change or recover a dropped link on demand without waiting for the supervisor.
+static esp_err_t wifi_reconnect_post(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    nucleo_setup_reconnect_best();
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, nucleo_setup_ip()[0] ? "{\"ok\":true}" : "{\"ok\":false}");
+    return ESP_OK;
+}
+
 // GET /api/logs -> recent console log (the nucleo_log RAM ring: ESP_LOGx incl. reset cause, panic,
 // OOM), so the device can be debugged over HTTP even with no SD card and no serial. Plain text,
 // oldest->newest. (This used to serve a stale /sd/dj_log.txt left by an old DJ build, which hid the
@@ -1463,30 +1505,45 @@ static void api_reclaim_if_low(void)
 }
 
 // GET /api/apps -> installed apps with display fields for the desktop shell.
+//
+// STREAMED one app at a time (chunked), never built as one big buffer. The old version serialized all
+// ~46 apps into a single ~10-20 KB contiguous string via cJSON_PrintUnformatted; on this PSRAM-less
+// chip, once Wi-Fi + httpd had fragmented the heap (largest free block ~7-15 KB) that alloc FAILED and
+// the handler sent an EMPTY 200 -> the shell drew a desktop with NO apps ("le app sono sparite"). Here
+// each app is serialized on its own (a ~200-byte object) and flushed as a chunk, so the peak allocation
+// is one small app object regardless of how many are installed -> it works even at a few KB free.
 static esp_err_t apps_get(httpd_req_t *req)
 {
     api_reclaim_if_low();          // the shell awaits THIS to draw the desktop — never let it starve
     const nucleo_app_t *apps = nucleo_registry_apps();
     int n = nucleo_registry_count();
 
-    cJSON *root = cJSON_CreateObject();
-    cJSON *arr = cJSON_AddArrayToObject(root, "apps");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    if (httpd_resp_send_chunk(req, "{\"apps\":[", 9) != ESP_OK) return ESP_FAIL;
+
+    bool first = true;
     for (int i = 0; i < n; i++) {
         cJSON *a = cJSON_CreateObject();
+        if (!a) continue;          // out of heap for even one object: skip it rather than abort the stream
         cJSON_AddStringToObject(a, "id", apps[i].id);
         cJSON_AddStringToObject(a, "name", apps[i].name);
         cJSON_AddStringToObject(a, "route", apps[i].web_route);
         cJSON_AddStringToObject(a, "icon", apps[i].icon);
         cJSON_AddBoolToObject(a, "enabled", apps[i].enabled);
-        cJSON_AddItemToArray(arr, a);
+        char *one = cJSON_PrintUnformatted(a);   // small: a single app object (~150-250 bytes)
+        cJSON_Delete(a);
+        if (!one) continue;
+        esp_err_t e = ESP_OK;
+        if (!first) e = httpd_resp_send_chunk(req, ",", 1);   // never a zero-length chunk (that would end the response)
+        if (e == ESP_OK) e = httpd_resp_send_chunk(req, one, strlen(one));
+        cJSON_free(one);
+        if (e != ESP_OK) return ESP_FAIL;                     // client gone
+        first = false;
     }
 
-    char *out = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_sendstr(req, out);
-    cJSON_free(out);
+    if (httpd_resp_send_chunk(req, "]}", 2) != ESP_OK) return ESP_FAIL;
+    httpd_resp_send_chunk(req, NULL, 0);   // terminate the chunked response
     return ESP_OK;
 }
 
@@ -2276,6 +2333,8 @@ esp_err_t nucleo_httpd_start(void)
     httpd_uri_t wifiknown  = { .uri = "/api/wifi/known",  .method = HTTP_GET,  .handler = wifi_known_get };   // saved networks
     httpd_uri_t wifijoin   = { .uri = "/api/wifi/join",   .method = HTTP_POST, .handler = wifi_join_post };   // join + remember
     httpd_uri_t wififorget = { .uri = "/api/wifi/forget", .method = HTTP_POST, .handler = wifi_forget_post }; // forget one/all
+    httpd_uri_t wifiprio   = { .uri = "/api/wifi/priority",  .method = HTTP_POST, .handler = wifi_priority_post };  // pin/unpin a saved net
+    httpd_uri_t wifirecon  = { .uri = "/api/wifi/reconnect", .method = HTTP_POST, .handler = wifi_reconnect_post }; // rejoin best known now
     httpd_uri_t ota = { .uri = "/api/ota", .method = HTTP_POST, .handler = ota_post };
     httpd_uri_t reboot = { .uri = "/api/reboot", .method = HTTP_POST, .handler = reboot_post };
     httpd_uri_t anima = { .uri = "/api/anima", .method = HTTP_GET, .handler = anima_get };
@@ -2312,6 +2371,8 @@ esp_err_t nucleo_httpd_start(void)
     httpd_register_uri_handler(server, &wifiknown);  // /api/wifi/known  (saved networks)
     httpd_register_uri_handler(server, &wifijoin);   // /api/wifi/join   (join + remember)
     httpd_register_uri_handler(server, &wififorget); // /api/wifi/forget (forget one/all)
+    httpd_register_uri_handler(server, &wifiprio);   // /api/wifi/priority  (pin/unpin a saved net)
+    httpd_register_uri_handler(server, &wifirecon);  // /api/wifi/reconnect (rejoin best known now)
     httpd_register_uri_handler(server, &ota);
     httpd_register_uri_handler(server, &reboot);
     httpd_register_uri_handler(server, &anima);

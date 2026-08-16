@@ -1762,9 +1762,9 @@
         "--test",
         "apps/spreadsheet/test.mjs"
       ],
-      "verifies": "Spreadsheet ANIMA copilot integration: formula extraction regex and C solver simulation logic",
+      "verifies": "",
       "nl": true,
-      "lang": "it",
+      "lang": "na",
       "in_gate": true,
       "anima": false
     },
@@ -1794,7 +1794,7 @@
         "--test",
         "tools/anima-host/forge-actions.test.mjs"
       ],
-      "verifies": "Action schema firewall blocks unknown ops, out-of-root paths, and garbage without leaking executables outside closed set.",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1810,7 +1810,7 @@
         "--test",
         "tools/anima-host/forge-agent-complex.test.mjs"
       ],
-      "verifies": "Agentic loop with real execution sandbox: 20 algorithm tasks self-test/fix + 12 behavior tests (syntax error recovery, runtime fix, capguard veto, budget, best-of-N, rejection, multi-step, learning, output capture).",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1826,7 +1826,7 @@
         "--test",
         "tools/anima-host/forge-capguard.test.mjs"
       ],
-      "verifies": "Capability inference and danger scanning: eval/dynamic-Function blocks, mutation-in-loop block, network exfil policy, severity assessment (ok/warn/block).",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1842,7 +1842,7 @@
         "--test",
         "tools/anima-host/forge-client.test.mjs"
       ],
-      "verifies": "Client routing (off/on/only/local/auto modes), substrate stamping (M1-M4-local), local-provider honesty, translation escalation ladder, mode→substrate mapping.",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1858,7 +1858,7 @@
         "--test",
         "tools/anima-host/forge-delivery.test.mjs"
       ],
-      "verifies": "Weight shard delivery over HTTP Range: bounded windows, reassembly, SHA-256 verification over real socket.",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1874,7 +1874,7 @@
         "--test",
         "tools/anima-host/forge-diffusion-engine.test.mjs"
       ],
-      "verifies": "Paint Atelier CLIP tokenizer, WebGPU/WASM probe, MockEngine and ONNX pipeline: seed-deterministic image generation with sketch conditioning.",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1890,7 +1890,7 @@
         "--test",
         "tools/anima-host/forge-download-manager.test.mjs"
       ],
-      "verifies": "Download FSM: bounded Range requests, SD 503 backoff and window shrink, verifyInFlight pause, heap-floor pause, SHA retry/recover, cache idempotence, throttle-to-MIN_WINDOW serial.",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1906,7 +1906,7 @@
         "--test",
         "tools/anima-host/forge-download.test.mjs"
       ],
-      "verifies": "Download FSM + manifest + bounded Range planning: every shard request is bounded-window Range, never whole-file GET, resume is idempotent.",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1922,7 +1922,7 @@
         "--test",
         "tools/anima-host/forge-engine-loader.test.mjs"
       ],
-      "verifies": "Engine selection and loading: all options listed (user can see every choice), NO-GPU gets real WASM not cloud, load via injected factories, refuse unavailable with honest reason.",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1938,7 +1938,7 @@
         "--test",
         "tools/anima-host/forge-engine-policy.test.mjs"
       ],
-      "verifies": "Intelligent fallback chain: local/online/device tiers ordered offline-first, privacy invariant (no cloud leak when target is local), honesty checks (reason accuracy), exhaustive 128-combo coverage, device floor as always-reachable.",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1954,7 +1954,7 @@
         "--test",
         "tools/anima-host/forge-envelope.test.mjs"
       ],
-      "verifies": "Envelope v1 normalization and validation: substrate mapping (mode→M1-M4), all inputs normalize renderer-safe, provenance (grounded flag), numeric/bool coercion.",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1970,7 +1970,7 @@
         "--test",
         "tools/anima-host/forge-extract.test.mjs"
       ],
-      "verifies": "Claim extraction from code/prose: literals checkable, patterns checkable, bare assertions uncovered, coverage counts (found/checkable/uncovered) honest.",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -1986,7 +1986,7 @@
         "--test",
         "tools/anima-host/forge-grammar.test.mjs"
       ],
-      "verifies": "Grammar derived from action schema, no drift between GBNF rule definitions and runtime operations",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2034,7 +2034,7 @@
         "--test",
         "tools/anima-host/forge-integration.test.mjs"
       ],
-      "verifies": "End-to-end session flow: synthesis, verification, approval, application, provenance, learning, and promotion gates all compose safely",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2050,7 +2050,7 @@
         "--test",
         "tools/anima-host/forge-learn.test.mjs"
       ],
-      "verifies": "Silent learning flywheel: only certain (pass+approved+ran) artifacts become staged cards; deduplication, collision detection, and empty specs rejected",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2066,7 +2066,7 @@
         "--test",
         "tools/anima-host/forge-lib-manifest.test.mjs"
       ],
-      "verifies": "Vendored runtime-lib manifest integrity: every entry points to real file with matching size and SHA-256, no drift before flash",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2082,7 +2082,7 @@
         "--test",
         "tools/anima-host/forge-lib-resolver.test.mjs"
       ],
-      "verifies": "Runtime lib resolution policy: offline-first (SD) with CDN fallback, integrity probes detect truncated files, range probes distinguish device transport states",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2098,7 +2098,7 @@
         "--test",
         "tools/anima-host/forge-lib-verify.test.mjs"
       ],
-      "verifies": "Deep SHA verification reads whole SD files in bounded Range windows, detects bit-rot, retries transient errors, backs off on low heap",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2130,7 +2130,7 @@
         "--test",
         "tools/anima-host/forge-loop.test.mjs"
       ],
-      "verifies": "Agentic loop enforces security invariants: no mutation without approval, vetoed artifacts never applied, loop bounded, firewall blocks unknown ops",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2146,7 +2146,7 @@
         "--test",
         "tools/anima-host/forge-model-fetch.test.mjs"
       ],
-      "verifies": "Model download enforces: single-download lock, idempotent SHA verify, bounded windows only, cross-reload resume, scheduler-driven pause on tight device",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2162,7 +2162,7 @@
         "--test",
         "tools/anima-host/forge-model-manifest.test.mjs"
       ],
-      "verifies": "Staged LLM model integrity: manifest well-formed, every shard/aux file exists with correct size, SHA hashes are real (spot-check smallest file)",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2178,7 +2178,7 @@
         "--test",
         "tools/anima-host/forge-model-store.test.mjs"
       ],
-      "verifies": "Model store never auto-downloads, fetches online first with fallback to SD, enforces one-at-a-time downloads, detects SHA mismatches, skips cached shards",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2210,7 +2210,7 @@
         "--test",
         "tools/anima-host/forge-promote.test.mjs"
       ],
-      "verifies": "Build-time learning gatekeeper: only certain+useful recipes shipped; detects duplicates, collisions, syntax errors, missing provenance, id conflicts",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2226,7 +2226,7 @@
         "--test",
         "tools/anima-host/forge-provenance.test.mjs"
       ],
-      "verifies": "Provenance hash-chain appends link each artifact, verification detects tampering, off-chain anchor defeats internal re-sealing forgery attacks",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2242,7 +2242,7 @@
         "--test",
         "tools/anima-host/forge-readiness.test.mjs"
       ],
-      "verifies": "Air-gap readiness classifier correctly rates engine availability across network/capability/cache states with corrupt detection",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2258,9 +2258,9 @@
         "--test",
         "tools/anima-host/forge-router.test.mjs"
       ],
-      "verifies": "Two-stage request router deterministically routes slash/file/code/knowledge/translate requests with VRAM-aware model planning",
-      "nl": true,
-      "lang": "it",
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
       "in_gate": true,
       "anima": false
     },
@@ -2274,7 +2274,7 @@
         "--test",
         "tools/anima-host/forge-sandbox.test.mjs"
       ],
-      "verifies": "Syntax parser safely validates code without execution or side effects",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2290,7 +2290,7 @@
         "--test",
         "tools/anima-host/forge-scheduler.test.mjs"
       ],
-      "verifies": "MCU coexistence scheduler prevents model pulls from starving verifier or exceeding heap limits",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2306,7 +2306,7 @@
         "--test",
         "tools/anima-host/forge-sd-model-loader.test.mjs"
       ],
-      "verifies": "Chunked SD model reassembler correctly reassembles parts, validates checksums, retries transients, and detects corruption",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2322,7 +2322,7 @@
         "--test",
         "tools/anima-host/forge-selfcheck.test.mjs"
       ],
-      "verifies": "Best-of-N selection picks candidate with best test pass rate by executed signal with tie-breakers on capability/size",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2338,9 +2338,9 @@
         "--test",
         "tools/anima-host/forge-verify-claim.test.mjs"
       ],
-      "verifies": "Device verifier (M1) judges numeric and fact claims on real firmware cascade, rejecting false/unknown with abstention",
-      "nl": true,
-      "lang": "both",
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
       "in_gate": true,
       "anima": false
     },
@@ -2354,9 +2354,9 @@
         "--test",
         "tools/anima-host/forge-verify-nl.test.mjs"
       ],
-      "verifies": "Cross-substrate NL verifier reproduces 100+ Italian and 100+ English claims (capitals/years/arithmetic/entities) with correct verdicts",
-      "nl": true,
-      "lang": "both",
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
       "in_gate": true,
       "anima": false
     },
@@ -2370,7 +2370,7 @@
         "--test",
         "tools/anima-host/forge-verify.test.mjs"
       ],
-      "verifies": "Verdict combiner enforces honesty contract: absence-of-evidence→WARN, failed dry-run/contradicted→VETO, full coverage confirmed→PASS",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2386,7 +2386,7 @@
         "--test",
         "tools/anima-host/forge-wasm-engine.test.mjs"
       ],
-      "verifies": "WASM engine adapter (wllama) probes WebAssembly availability, sizes models by RAM, builds prompt chains, and runs on injected fake engine",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2402,7 +2402,7 @@
         "--test",
         "tools/anima-host/forge-webllm.test.mjs"
       ],
-      "verifies": "WebLLM engine adapter probes WebGPU+VRAM, chooses model plan, embeds GBNF grammar, and runs on injected fake createEngine",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2450,7 +2450,7 @@
         "--test",
         "tools/anima-host/paint-imaging.test.mjs"
       ],
-      "verifies": "Paint pixel-processing ops (background removal, alpha, adjustments, filters, transforms) match user-requested specs",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2466,9 +2466,9 @@
         "--test",
         "tools/anima-host/paint-nlcommand.test.mjs"
       ],
-      "verifies": "Paint NL command parser routes Italian/English editing phrases and generation requests with correct op/style/prompt extraction",
-      "nl": true,
-      "lang": "both",
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
       "in_gate": true,
       "anima": false
     },
@@ -2568,9 +2568,9 @@
         "--test",
         "tools/anima/translate.test.mjs"
       ],
-      "verifies": "Offline translate.mjs JS twin maintains content/routing/zero-false-positive parity with C skill on eval cases",
+      "verifies": "",
       "nl": true,
-      "lang": "both",
+      "lang": "na",
       "in_gate": true,
       "anima": true
     },
@@ -2584,9 +2584,9 @@
         "--test",
         "tools/anima/weather.test.mjs"
       ],
-      "verifies": "Weather NLU parser extracts city, relative/absolute dates, aspects (rain/sun/temp/snow) from Italian/English queries",
+      "verifies": "",
       "nl": true,
-      "lang": "both",
+      "lang": "na",
       "in_gate": true,
       "anima": true
     },
@@ -2600,7 +2600,23 @@
         "--test",
         "tools/app-shortcuts.test.mjs"
       ],
-      "verifies": "OS keyboard shortcuts resolve correctly per app context (editable vs. not, window focused vs. not) via VM sandbox simulation",
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-authenticator-otp",
+      "label": "authenticator-otp.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/authenticator-otp.test.mjs"
+      ],
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2616,7 +2632,7 @@
         "--test",
         "tools/browser-check.test.mjs"
       ],
-      "verifies": "Browser app cleaned of Ultraviolet proxy; source and deploy copies have matching gzipped assets",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2632,8 +2648,8 @@
         "--test",
         "tools/calc-eval.test.mjs"
       ],
-      "verifies": "Calculator evaluator (JS twin of firmware C) handles operators, precedence, parentheses, decimals, errors correctly",
-      "nl": false,
+      "verifies": "",
+      "nl": true,
       "lang": "na",
       "in_gate": true,
       "anima": true
@@ -2744,7 +2760,7 @@
         "--test",
         "tools/device-ui.test.mjs"
       ],
-      "verifies": "On-device launcher navigation state machine (menu traversal, filtering, context menus, key handling) covers all installed apps",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2760,7 +2776,7 @@
         "--test",
         "tools/files-path.test.mjs"
       ],
-      "verifies": "Files browser path helpers (joinPath, parentPath) mirror firmware navigation logic",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2792,7 +2808,7 @@
         "--test",
         "tools/nfv/nfv.test.mjs"
       ],
-      "verifies": "NFV video format writer/reader round-trip: frame chain, index, headers, dirty-frame trimming match spec",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2840,7 +2856,7 @@
         "--test",
         "tools/shortcuts.test.mjs"
       ],
-      "verifies": "OS keyboard shortcut resolver fires doc/edit/native actions correctly per window state and editability",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,
@@ -2888,8 +2904,8 @@
         "--test",
         "tools/spread-copilot/copilot.test.mjs"
       ],
-      "verifies": "Spreadsheet copilot firewall, GBNF grammar, offline-first router, recompute verdict, learn/recall, end-to-end orchestration with MockEngine",
-      "nl": false,
+      "verifies": "",
+      "nl": true,
       "lang": "na",
       "in_gate": true,
       "anima": false
@@ -2904,9 +2920,9 @@
         "--test",
         "tools/spread-copilot/nl-offline.test.mjs"
       ],
-      "verifies": "Spreadsheet planner anti-fabrication on knowledge questions and deterministic op decomposition of Italian/English compound requests",
+      "verifies": "",
       "nl": true,
-      "lang": "both",
+      "lang": "na",
       "in_gate": true,
       "anima": false
     },
@@ -2920,9 +2936,9 @@
         "--test",
         "tools/terminal-commands.test.mjs"
       ],
-      "verifies": "Terminal app commands (ls, grep, find, cp, mv, etc.) execute and output correctly via VM DOM/fetch mocks",
-      "nl": true,
-      "lang": "it",
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
       "in_gate": true,
       "anima": false
     },
@@ -2936,7 +2952,7 @@
         "--test",
         "tools/usb-hid.test.mjs"
       ],
-      "verifies": "USB keyboard HID translation (ASCII→keycode, modifiers, Fn layer) mirrors firmware nucleo_usbhid.c spec",
+      "verifies": "",
       "nl": false,
       "lang": "na",
       "in_gate": true,

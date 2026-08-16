@@ -1,5 +1,5 @@
 {
-  "generated": "2026-07-20T21:09:03.799Z",
+  "generated": "2026-08-15T16:37:21.669Z",
   "base": "it",
   "langs": [
     "it",
@@ -22,18 +22,20 @@
     "fr": 100,
     "de": 100
   },
-  "surfaces": 38,
-  "totalKeys": 1993,
+  "surfaces": 41,
+  "totalKeys": 2148,
   "namespaces": {
     "core": 103,
-    "shell": 129,
+    "shell": 189,
     "agent": 123,
     "archive-manager": 31,
+    "authenticator": 27,
     "browser": 78,
     "calculator": 1,
     "calendar": 8,
     "clock": 17,
     "code-runner": 37,
+    "contacts": 27,
     "dictation": 52,
     "dj": 31,
     "dos-importer": 55,
@@ -62,6 +64,7 @@
     "video-player": 75,
     "video-studio": 27,
     "voice-manager": 78,
+    "weather": 41,
     "wifi-scanner": 27
   }
 }

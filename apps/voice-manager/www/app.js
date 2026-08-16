@@ -100,7 +100,7 @@ function renderCurriculum() {
     html += `<div class="category-title" data-i18n="${c.catKey}">${c.cat}</div>`;
     for (const item of c.items) {
       html += `<div class="trigger-item ${isSaved(item) ? 'saved' : ''}">
-        <span class="trigger-name">${item}</span>${trainBtn(item)}</div>`;
+        <span class="trigger-name">${escH(item)}</span>${trainBtn(item)}</div>`;
     }
   }
   $('curriculum-list').innerHTML = html;
@@ -110,7 +110,7 @@ function renderCustom() {
   const custom = savedTriggers.filter(w => !ALL_KNOWN.includes(w));
   let html = '';
   for (const item of custom) {
-    html += `<div class="trigger-item saved"><span class="trigger-name">${item}</span>
+    html += `<div class="trigger-item saved"><span class="trigger-name">${escH(item)}</span>
       <div class="trigger-actions">
         <button class="act" onclick="startRecord('${esc(item)}')">↻</button>
         <button class="act del" onclick="deleteTrigger('${esc(item)}')" data-i18n="delete">Elimina</button></div></div>`;
@@ -122,13 +122,14 @@ function renderCustom() {
 function renderStarter() {
   let html = '';
   for (const w of STARTER) {
-    html += `<div class="trigger-item ${isSaved(w) ? 'saved' : ''}"><span class="trigger-name">${w}</span>${trainBtn(w)}</div>`;
+    html += `<div class="trigger-item ${isSaved(w) ? 'saved' : ''}"><span class="trigger-name">${escH(w)}</span>${trainBtn(w)}</div>`;
   }
   const el = $('starter-list');
   if (el) el.innerHTML = html;
 }
 
 function esc(s) { return s.replace(/'/g, "\\'"); }
+function escH(s) { return String(s).replace(/[&<>"\']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }  // HTML-escape for text rendered into innerHTML (esc() only handles JS-string quotes)
 
 async function deleteTrigger(word) {
   if (!confirm(t('confirm_delete', { word }, `Eliminare il comando “${word}”?`))) return;
@@ -238,7 +239,7 @@ function classify(dist, second, radius) {
   const ratio  = radius > 0 ? dist / radius : 1;        // <1 = inside radius
   if (ratio <= 0.6 || margin <= 0.45) return { label: t('conf_excellent', null, 'Ottimo'), color: '#18e06a', pct: 92 };
   if (ratio <= 1.0 || margin <= 0.65) return { label: t('conf_good', null, 'Buono'),  color: '#7ad32f', pct: 72 };
-  if (margin <= 0.75)                 return { label: t('conf_fair', null, 'Discreto'), color: '#fd20', pct: 48 };
+  if (margin <= 0.75)                 return { label: t('conf_fair', null, 'Discreto'), color: '#ffdd22', pct: 48 };
   return { label: t('conf_weak', null, 'Debole'), color: '#ff6b3d', pct: 25 };
 }
 
@@ -251,7 +252,7 @@ function onMatch(m) {
   card.className = 'match-card';
   card.innerHTML = `
     <div class="match-head">
-      <span class="match-word">${m.word}</span>
+      <span class="match-word">${escH(m.word)}</span>
       <span class="conf-label" style="background:${c.color}22;color:${c.color}">${c.label}</span>
     </div>
     <div class="conf-bar"><div class="conf-fill" style="width:${c.pct}%;background:${c.color}"></div></div>

@@ -84,7 +84,14 @@ const CASES = [
   // --- the trace exists even for a single-tier answer (synthesized) -----------
   { q: 'numeri primi',                                 intent: 'l1', trace: ['L1', 'knowledge'] },
   // --- MOSAICO (L2 span-stitch): a describe query is enriched with grounded spans; tier becomes L2 -
-  { q: 'cos\'e nucleoos',                              intent: 'mosaico', trace: ['stitch'] },
+  // NOT "cos'e nucleoos" any more. Its only candidate span restated the lead ("Inoltre, NucleoOS gira
+  // sul M5Stack Cardputer (ESP32-S3) e funziona offline" after a lead already saying both), so the
+  // span-dedup drops it and the answer correctly stays L1 — pinning mosaico here would pin the very
+  // repetition the dedup exists to remove. These two enrich with genuinely new spans instead.
+  { q: 'cos\'e la fotosintesi',                        intent: 'mosaico', trace: ['stitch'] },
+  { q: 'cos\'e algoritmo',                             intent: 'mosaico', trace: ['stitch'] },
+  // ...and the de-duplicated case still answers, just at its honest tier.
+  { q: 'cos\'e nucleoos',                              intent: 'l1', trace: ['L1'] },
   { q: '12*8',                                         intent: 'calc', trace: ['calc'] },
 ];
 

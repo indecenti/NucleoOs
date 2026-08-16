@@ -266,6 +266,8 @@ static void guest_apply_state(const sb_state_t *s) {
         if (fr->is_hero) continue;
         if (idx < s->nenemy) {
             const sb_enemy_t *e = &s->enemy[idx++];
+            const EnemyDef *def = brawler_enemy(e->kind);   // e->kind is a raw peer byte: brawler_enemy() is NULL if out of range
+            if (!def) { fr->on = false; continue; }         // drop the slot rather than store an invalid kind the draw path derefs
             fr->on = true;
             fr->is_hero = false;
             fr->kind = e->kind;
@@ -273,8 +275,7 @@ static void guest_apply_state(const sb_state_t *s) {
             fr->z = (float)e->z / 255.0f;
             fr->hp = (int)e->hp;
             fr->st = (BrState)e->st;
-            const EnemyDef *def = brawler_enemy(e->kind);
-            fr->maxhp = def ? def->maxhp : (e->hp > 0 ? e->hp : 1);
+            fr->maxhp = def->maxhp;
         } else {
             fr->on = false;
         }

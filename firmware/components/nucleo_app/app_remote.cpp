@@ -22,6 +22,20 @@ extern "C" int  nucleo_ws_client_count(void);   // resolved at link (no componen
 extern "C" int  nucleo_ws_shell_count(void);    // shell clients that actually drive the handoff (/ws?shell=1)
 extern "C" const char *nucleo_setup_ip(void);   // device IP (empty in AP-only / not associated)
 extern "C" const char *nucleo_auth_pin(void);   // pairing PIN (changes each boot)
+#include "nucleo_usbnet.h"                       // USB-web active? + the fixed address (NCM)
+#include "nucleo_i18n.h"                         // nucleo_i18n_lang() for the 5-language screen
+
+// 5-language literal picker (ASCII — the on-TFT font has no accented glyphs).
+static const char *L5(const char *it, const char *en, const char *es, const char *fr, const char *de)
+{
+    const char *l = nucleo_i18n_lang();
+    if (!l) return it;
+    if (l[0] == 'e' && l[1] == 'n') return en;
+    if (l[0] == 'e' && l[1] == 's') return es;
+    if (l[0] == 'f' && l[1] == 'r') return fr;
+    if (l[0] == 'd' && l[1] == 'e') return de;
+    return it;
+}
 extern "C" bool nucleo_anima_l1_unload_if_idle(void);  // free the ~24 KB offline index (lazy reload later)
 extern "C" void nucleo_voice_suspend(bool suspend);    // free the ~16 KB voice engine (restored on leave if still wanted)
 
@@ -108,34 +122,52 @@ static void remote_draw(void)
 {
     int top_y = nucleo_app_content_top();
     d.fillRect(0, top_y, W, nucleo_app_content_height(), BG);
-    int sh = nucleo_ws_shell_count();
+    const int sh = nucleo_ws_shell_count();
+    const bool usb = nucleo_usbnet_is_active();     // came up via USB-web (key W) vs Wi-Fi Remote
+    const char *ip = nucleo_setup_ip();
+    const char *pin = nucleo_auth_pin();
     int y = top_y + 2;
 
-    // Status: ready-and-listening (no client yet) vs a web OS actually connected.
+    // Status line: connected vs ready-and-listening (localized).
     d.setTextSize(1); d.setTextColor(C_GREEN, BG); d.setCursor(10, y);
-    if (sh > 0) { char s[28]; snprintf(s, sizeof s, "CONNECTED  %d client%s", sh, sh == 1 ? "" : "s"); d.print(s); }
-    else        { d.print("LISTENING - READY"); }
-    y += 16;
+    if (sh > 0) { char s[32]; snprintf(s, sizeof s, "%s %d", L5("CONNESSO", "CONNECTED", "CONECTADO", "CONNECTE", "VERBUNDEN"), sh); d.print(s); }
+    else        { d.print(L5("IN ASCOLTO - PRONTO", "LISTENING - READY", "A LA ESCUCHA - LISTO", "EN ECOUTE - PRET", "BEREIT - WARTET")); }
+    y += 15;
 
-    // Device IP — open this in a browser to drive the device.
-    const char *ip = nucleo_setup_ip();
-    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, y); d.print("Open in a browser:"); y += 11;
-    d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(10, y); d.print((ip && ip[0]) ? ip : "(no network)"); y += 22;
+    if (usb) {
+        // USB-web (NCM): the PC gets an IP over the cable; open this ONE fixed address in ANY browser.
+        // No app, no driver. Wi-Fi is OFF in this mode, so there is no other/LAN address to show — the
+        // cable IS the network (header + /api/status now read "usb", not a phantom access point).
+        d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, y);
+        d.print(L5("Nel browser del PC apri:", "In the PC browser open:", "En el navegador del PC:", "Dans le navigateur du PC:", "Im PC-Browser oeffnen:")); y += 12;
+        d.setTextSize(2); d.setTextColor(C_GREEN, BG); d.setCursor(10, y); d.print("http://192.168.7.1"); y += 20;
+        d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, y);
+        d.print(L5("via cavo USB, niente da installare", "over the USB cable, nothing to install", "por cable USB, nada que instalar", "par cable USB, rien a installer", "uber USB-Kabel, nichts installieren")); y += 14;
+    } else {
+        // Wi-Fi Remote Control: the device IP.
+        d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, y);
+        d.print(L5("Apri nel browser:", "Open in a browser:", "Abre en el navegador:", "Ouvre dans le navigateur:", "Im Browser oeffnen:")); y += 11;
+        d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(10, y);
+        d.print((ip && ip[0]) ? ip : L5("(nessuna rete)", "(no network)", "(sin red)", "(pas de reseau)", "(kein Netz)")); y += 20;
+    }
 
-    // Pairing PIN (changes each boot).
-    const char *pin = nucleo_auth_pin();
-    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, y); d.print("Pair PIN:"); y += 11;
-    d.setTextSize(2); d.setTextColor(C_BLUE, BG); d.setCursor(10, y); d.print((pin && pin[0]) ? pin : "----"); y += 22;
+    // Pairing PIN (changes each boot) — needed to pair the browser, over USB or LAN.
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, y);
+    d.print(L5("PIN accoppiamento:", "Pair PIN:", "PIN de vinculacion:", "PIN d'appairage:", "Kopplungs-PIN:")); y += 11;
+    d.setTextSize(2); d.setTextColor(C_BLUE, BG); d.setCursor(10, y); d.print((pin && pin[0]) ? pin : "----"); y += 20;
 
-    // Automatic-handoff toggle (Enter).
-    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, y); d.print("Auto handoff: ");
-    d.setTextColor(s_remote_enabled ? C_GREEN : C_RED, BG); d.print(s_remote_enabled ? "ON" : "OFF");
+    // Auto-handoff toggle (Enter) — Wi-Fi Remote only (USB-web has no screen handoff).
+    if (!usb) {
+        d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, y);
+        d.print(L5("Passaggio auto: ", "Auto handoff: ", "Traspaso auto: ", "Relais auto: ", "Auto-Uebergabe: "));
+        d.setTextColor(s_remote_enabled ? C_GREEN : C_RED, BG); d.print(s_remote_enabled ? "ON" : "OFF");
+    }
 }
 
 extern "C" void nucleo_register_remote(void)
 {
     static const nucleo_app_def_t app = {
-        "remote", "Remote Control", "Connect", "Web Client server mode: reboots into a fresh heap (max RAM), shows IP + PIN, ready for the web OS",
+        "remote", "Remote Control", "Web OS", "Web Client server mode: reboots into a fresh heap (max RAM), shows IP + PIN, ready for the web OS",
         'r', C_BLUE, remote_enter, remote_key, remote_tick, remote_draw, remote_exit
     };
     nucleo_app_register(&app);

@@ -7,15 +7,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { createReadStream, existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { planRanges, rangeHeader, MAX_WINDOW, verifyManifest } from '../../apps/anima/www/forge/download.js';
+import { listStagedModels } from './forge-staged.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const modelsDir = join(here, '..', '..', 'deploy', 'sd-safe', 'apps', 'anima', 'www', 'forge', 'models');
-const staged = existsSync(modelsDir) ? readdirSync(modelsDir).filter((d) => existsSync(join(modelsDir, d, 'manifest.json'))) : [];
+// Only models whose weights are fully present on disk (not just a manifest.json + LFS pointer stubs),
+// otherwise the Range server would 404 and the test would fail on a length mismatch instead of skipping.
+const staged = listStagedModels(modelsDir);
 
 // A tiny Range-capable static server (like nucleo_webfs static_get: 206 + Content-Range, streamed).
 function serve(dir) {

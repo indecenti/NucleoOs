@@ -18,8 +18,15 @@ export function extractJson(x){ if(!x) return null; const a=x.indexOf('{'),b=x.l
 export async function ask(){ return (globalThis.__ASK ? globalThis.__ASK() : '{"cell":0}'); }
 `);
 writeFileSync(join(t, 'shim.mjs'), 'export const defineGame = d => d;\nexport default defineGame;\n');
-writeFileSync(join(t, 'nucleo-game.mjs'), readFileSync(join(root, 'apps/games/www/nucleo-game.js'), 'utf8'));
-writeFileSync(join(t, 'llm-brain.mjs'), readFileSync(join(root, 'apps/games/www/llm-brain.js'), 'utf8').replace("'/apps/games/llm.js'", "'./llm-stub.mjs'"));
+// Node stand-in for the browser-absolute '/nucleo-i18n.js' (both nucleo-game.js and llm-brain.js import it).
+writeFileSync(join(t, 'nucleo-i18n.mjs'),
+  'const tr = (key) => key;\n' +
+  'const I18N = { t: tr, scope: () => tr, init: async () => tr, onChange() {}, ' +
+  'fmtNumber: (n) => String(n), fmtDate: (d) => String(d) };\n' +
+  'export default I18N;\nexport { tr as t };\n');
+const shimI18n = (s) => s.split("'/nucleo-i18n.js'").join("'./nucleo-i18n.mjs'");
+writeFileSync(join(t, 'nucleo-game.mjs'), shimI18n(readFileSync(join(root, 'apps/games/www/nucleo-game.js'), 'utf8')));
+writeFileSync(join(t, 'llm-brain.mjs'), shimI18n(readFileSync(join(root, 'apps/games/www/llm-brain.js'), 'utf8')).replace("'/apps/games/llm.js'", "'./llm-stub.mjs'"));
 writeFileSync(join(t, 'tris2.mjs'), readFileSync(join(root, 'apps/games/www/games/tris.js'), 'utf8').replace("'/apps/games/nucleo-game.js'", "'./shim.mjs'"));
 
 const { GameHarness } = await import(pathToFileURL(join(t, 'nucleo-game.mjs')).href);

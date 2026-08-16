@@ -111,7 +111,7 @@ static void sb_feed(const char *b, int n) {
             if (c == 0x1b) s_aesc = 1;
             else if (c == '\n') sb_commit();
             else if (c == '\r') s_curlen = 0, s_cur[0] = 0;
-            else if (c == '\t') { int t = (s_curlen / 8 + 1) * 8; while (s_curlen < t) sb_putc(' '); }
+            else if (c == '\t') { int t = (s_curlen / 8 + 1) * 8; if (t > SB_W-1) t = SB_W-1; while (s_curlen < t) sb_putc(' '); }  // clamp: sb_putc caps at SB_W-1, so an unclamped target near EOL spins forever holding s_lock
             else if (c == '\b') { if (s_curlen > 0) { s_curlen--; s_cur[s_curlen] = 0; } }
             else if (c >= 0x20 && c < 0x7f) sb_putc((char)c);
             else if (c >= 0x80) sb_putc('?');

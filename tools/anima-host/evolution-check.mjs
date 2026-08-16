@@ -19,8 +19,14 @@ import { KG, GATE } from '../anima/kge.mjs';
 import { Ledger, wdIndexFrom } from '../anima/ledger.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const SD = join(here, 'sd', 'data', 'anima', 'learned');
 const REPO = join(here, '..', '..');
+// The evo fixtures live in the host tree; a fresh clone (or CI) doesn't build it, so fall back to the
+// committed device tree (tools/sd-sim == deploy/sd) — same content — so this VKL gate RUNS read-only
+// instead of exiting 2 (a gate FAIL). Both trees carry evo/{occ,subclass}.jsonl + knowledge.ledger.jsonl.
+const HOST_SD = join(here, 'sd', 'data', 'anima', 'learned');
+const SD = existsSync(join(HOST_SD, 'evo', 'subclass.jsonl'))
+  ? HOST_SD
+  : join(REPO, 'tools/sd-sim/data/anima/learned');
 const load = (f) => readFileSync(join(SD, f), 'utf8').split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
 if (!existsSync(join(SD, 'evo', 'subclass.jsonl'))) {
   console.error('[evolution] missing evo fixtures — run `node tools/anima/enrich_wikidata.mjs` first.');

@@ -260,9 +260,9 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
           const r = await withRetry(() => dq.read(() => fetch('/api/status', { cache: 'no-store' }).then((x) => x.json())));
           if (!r || !r.os) return done(t('rt_device_na'), true);
           const gb = (b) => (Number(b || 0) / 1073741824).toFixed(1);
-          const t = (r.network && r.network.time) ? new Date(r.network.time * 1000) : null;
+          const dt = (r.network && r.network.time) ? new Date(r.network.time * 1000) : null;   // NOT `t`: that shadows the injected translator t() (TDZ-crashes the rt_device_na path above)
           return done({
-            ora: t ? t.toLocaleString(lang === 'en' ? 'en-GB' : 'it-IT') : (r.network && r.network.time_synced ? 'sincronizzata' : 'non ancora sincronizzata'),
+            ora: dt ? dt.toLocaleString(lang === 'en' ? 'en-GB' : 'it-IT') : (r.network && r.network.time_synced ? 'sincronizzata' : 'non ancora sincronizzata'),
             rete: r.network ? (r.network.mode + ' · ' + (r.network.ssid || '-') + ' · ' + (r.network.ip || '-')) : '-',
             spazio_sd: (r.storage && r.storage.mounted) ? (gb(r.storage.free_bytes) + ' GB liberi su ' + gb(r.storage.total_bytes) + ' GB') : 'SD non montata',
             uptime_s: r.uptime_s, ram_libera_kb: Math.round((r.free_heap || 0) / 1024),

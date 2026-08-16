@@ -41,7 +41,9 @@ export const ENDPOINTS = [
 // ⇒ reachable + valid but a soft threshold tripped (e.g. heap tight).
 export async function runSelfTest(fetchImpl, opts = {}) {
   const now = opts.now || (() => 0);
-  const lang = opts.lang === 'en' ? 'en' : 'it';
+  // Endpoint labels exist in it/en only; any other OS language (es/fr/de) falls back to English
+  // (the OS base language), not Italian. No opts.lang keeps the historical Italian default.
+  const lang = opts.lang === 'it' ? 'it' : opts.lang ? 'en' : 'it';
   const results = [];
   for (const ep of ENDPOINTS) {
     const t0 = now();
@@ -63,11 +65,11 @@ export async function runSelfTest(fetchImpl, opts = {}) {
 
 // A human-readable, copyable verdict block from a results array.
 export function formatReport(results, lang = 'it') {
-  const head = lang === 'en' ? 'NucleoOS self-test' : 'Self-test NucleoOS';
+  const head = lang === 'it' ? 'Self-test NucleoOS' : 'NucleoOS self-test';
   const okN = results.filter((r) => r.ok && !r.warn).length;
   const lines = results.map((r) => {
     const mark = !r.ok ? '✗' : r.warn ? '!' : '✓';
-    const st = r.ok ? (r.warn ? (lang === 'en' ? 'warn' : 'attenzione') : 'ok') : (r.status ? 'HTTP ' + r.status : (lang === 'en' ? 'unreachable' : 'irraggiungibile'));
+    const st = r.ok ? (r.warn ? (lang === 'it' ? 'attenzione' : 'warn') : 'ok') : (r.status ? 'HTTP ' + r.status : (lang === 'it' ? 'irraggiungibile' : 'unreachable'));
     return `${mark} ${r.label.padEnd(20)} ${r.path.padEnd(20)} ${st}`;
   });
   return `${head} — ${okN}/${results.length} OK\n` + lines.join('\n');
