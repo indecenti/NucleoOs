@@ -235,6 +235,18 @@ int main(void){
       CHECK(credlen==FIDO_KW_HANDLE_LEN, "non-resident credId is the 60-byte wrapped key");
     }
 
+    // 2b) rp.id that EXACTLY fills rpid[128] must be REJECTED, not over-read. Regression test for the
+    //     tinycbor "no NUL when len==cap" fix in make_cred/get_assert: without it, strlen(rpid) walks
+    //     off the 128-byte stack buffer. A clean 0x14 (MISSING_PARAMETER) proves the guard fires.
+    { char big[129]; memset(big, 'a', 128); big[128] = 0;
+      uint16_t rl=build_makecred(req,sizeof req,big,false,false,0x11);
+      uint16_t n=fido_ctap2_handle(&c2,req,rl,out,sizeof out);
+      CHECK(n==1 && out[0]==0x14, "makeCred rp.id==128B rejected (no rpid[] over-read)");
+      rl=build_getassert(req,sizeof req,big,credid,credlen);
+      n=fido_ctap2_handle(&c2,req,rl,out,sizeof out);
+      CHECK(n==1 && out[0]==0x14, "getAssertion rpId==128B rejected (no rpid[] over-read)");
+    }
+
     // 3) getAssertion with that allowList credential -----------------------------
     { uint32_t before=g_counter;
       uint16_t rl=build_getassert(req,sizeof req,"example.com",credid,credlen);

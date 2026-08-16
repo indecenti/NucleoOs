@@ -6,21 +6,26 @@
 // o da Notify.emit(...) in-process, o dal bus eventi via WebSocket (topic notify.post,
 // più il legacy calendar.reminder finché il firmware non è migrato).
 
+import I18N from './nucleo-i18n.js';
+
+const t = I18N.scope('shell');
+
 const LS_LIST = 'nucleo.notify.list';   // storico (cap 50)
 const LS_DND  = 'nucleo.notify.dnd';    // '1' = Non disturbare
 const LS_VOL  = 'nucleo.notify.vol';    // 0..100 volume melodia
 const LS_QUIET= 'nucleo.notify.quiet';  // 'HH:MM-HH:MM' ore silenziose, vuoto = off
 const CAP = 50;
 
-// Default per sorgente: icona + tag leggibile.
+// Default per sorgente: icona + chiave i18n del tag (risolta al momento del render, così
+// segue la lingua OS viva — le etichette erano italiano fisso in un OS a 5 lingue).
 const SRC = {
-  calendar: { ic: '🔔', tag: 'Calendario' },
-  system:   { ic: '⚙️', tag: 'Sistema' },
-  anima:    { ic: '✨', tag: 'ANIMA' },
-  voice:    { ic: '🎤', tag: 'Voce' },
-  recorder: { ic: '🎙️', tag: 'Registratore' },
-  ota:      { ic: '⬆️', tag: 'Aggiornamento' },
-  app:      { ic: '📦', tag: 'App' },
+  calendar: { ic: '🔔', tagKey: 'nc_src_calendar' },
+  system:   { ic: '⚙️', tagKey: 'nc_src_system' },
+  anima:    { ic: '✨', tagKey: 'nc_src_anima' },
+  voice:    { ic: '🎤', tagKey: 'nc_src_voice' },
+  recorder: { ic: '🎙️', tagKey: 'nc_src_recorder' },
+  ota:      { ic: '⬆️', tagKey: 'nc_src_ota' },
+  app:      { ic: '📦', tagKey: 'nc_src_app' },
 };
 
 // Accordi consonanti, un timbro per livello — vera polifonia (più oscillatori insieme).
@@ -70,7 +75,7 @@ export function initNotify(OS_API) {
   // ---- DOM: campanella in tray + flyout ---------------------------------
   const tray = document.getElementById('tray');
   const bell = document.createElement('span');
-  bell.id = 'notif-bell'; bell.title = 'Notifiche'; bell.setAttribute('role', 'button');
+  bell.id = 'notif-bell'; bell.title = t('nc_title'); bell.setAttribute('role', 'button');
   bell.innerHTML =
     '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">' +
     '<path d="M4 6.5a4 4 0 0 1 8 0c0 3 1 4 1.4 4.5H2.6C3 10.5 4 9.5 4 6.5z" stroke-linejoin="round"/>' +
@@ -82,16 +87,24 @@ export function initNotify(OS_API) {
 
   const center = document.createElement('section');
   center.id = 'notif-center'; center.className = 'hidden';
-  center.setAttribute('aria-label', 'Centro Notifiche');
+  center.setAttribute('aria-label', t('nc_title'));
   center.innerHTML =
     '<div class="nc-head">' +
-      '<span class="nc-title">Notifiche</span>' +
-      '<button id="nc-dnd" title="Non disturbare">🌙 <span>DND</span></button>' +
-      '<button id="nc-clear" title="Pulisci tutto">Pulisci</button>' +
+      `<span class="nc-title">${t('nc_title')}</span>` +
+      `<button id="nc-dnd" title="${t('nc_dnd_title')}">🌙 <span>DND</span></button>` +
+      `<button id="nc-clear" title="${t('nc_clear_title')}">${t('nc_clear')}</button>` +
     '</div>' +
     '<div class="nc-digest" id="nc-digest" hidden></div>' +
     '<div class="nc-list" id="nc-list"></div>';
   document.body.appendChild(center);
+  // Live language switch: retranslate the static chrome and re-render the open list.
+  I18N.onChange(() => {
+    bell.title = t('nc_title');
+    center.querySelector('.nc-title').textContent = t('nc_title');
+    dndBtn.title = t('nc_dnd_title');
+    clearBtn.title = t('nc_clear_title'); clearBtn.childNodes[0].textContent = t('nc_clear');
+    if (isOpen()) render();
+  });
 
   const listEl = center.querySelector('#nc-list');
   const digestEl = center.querySelector('#nc-digest');
@@ -105,7 +118,7 @@ export function initNotify(OS_API) {
     markAllRead(); render(); syncBadge();
     // chiudi gli altri flyout per coerenza Win11
     const ac = document.getElementById('action-center'); if (ac) ac.classList.add('hidden');
-    const sm = document.getElementById('start-menu'); if (sm) sm.classList.add('open') && sm.classList.remove('open');
+    const sm = document.getElementById('start-menu'); if (sm) sm.classList.remove('open');
   }
   function close() { center.classList.add('hidden'); }
   function toggle() { isOpen() ? close() : open(); }
@@ -186,17 +199,17 @@ export function initNotify(OS_API) {
     if (!all.length) return '';
     let cal = 0, ai = 0, unread = 0;
     for (const n of all) { if (n.src === 'calendar') cal++; else if (n.src === 'anima') ai++; if (!n.read) unread++; }
-    const p = [`${all.length} ${all.length === 1 ? 'notifica' : 'notifiche'}`];
-    if (cal) p.push(`${cal} calendario`);
+    const p = [t('nc_digest_count', { count: all.length, n: all.length })];
+    if (cal) p.push(t('nc_digest_cal', { n: cal }));
     if (ai) p.push(`${ai} ANIMA`);
-    if (unread) p.push(`${unread} da leggere`);
+    if (unread) p.push(t('nc_digest_unread', { n: unread }));
     return p.join(' · ');
   }
   function updateDigest() { const t = digestText(); digestEl.textContent = t; digestEl.hidden = !t; }
 
   function render() {
     updateDigest();
-    if (!all.length) { listEl.innerHTML = '<div class="nc-empty">Nessuna notifica</div>'; return; }
+    if (!all.length) { listEl.innerHTML = `<div class="nc-empty">${esc(t('nc_empty'))}</div>`; return; }
     listEl.innerHTML = '';
     for (const n of all) {
       const meta = SRC[n.src] || SRC.app;
@@ -211,9 +224,9 @@ export function initNotify(OS_API) {
             `<span class="nc-when">${fmtWhen(n.ts)}</span>` +
           '</div>' +
           (n.body ? `<div class="nc-txt">${esc(n.body)}</div>` : '') +
-          `<div class="nc-tag">${esc(meta.tag)}</div>` +
+          `<div class="nc-tag">${esc(t(meta.tagKey))}</div>` +
         '</div>' +
-        '<button class="nc-x" title="Rimuovi">×</button>';
+        `<button class="nc-x" title="${esc(t('nc_remove'))}">×</button>`;
       row.querySelector('.nc-x').addEventListener('click', (e) => { e.stopPropagation(); remove(n.id); });
       row.addEventListener('click', () => { runAction(n.action); close(); });
       listEl.appendChild(row);
@@ -249,9 +262,9 @@ export function initNotify(OS_API) {
   function actionLabel(act) {
     if (!act) return '';
     const [k, v] = splitAct(act);
-    if (k === 'app') return 'Apri';
-    if (k === 'file') return 'Apri';
-    if (k === 'anima') return 'Chiedi ad ANIMA';
+    if (k === 'app') return t('open');
+    if (k === 'file') return t('open');
+    if (k === 'anima') return t('nc_ask_anima');
     return '';
   }
   function splitAct(act) { const i = String(act).indexOf(':'); return i < 0 ? [act, ''] : [act.slice(0, i), act.slice(i + 1)]; }
@@ -310,7 +323,7 @@ export function initNotify(OS_API) {
     if (topic === 'calendar.reminder' && d) {  // legacy, finché il firmware non emette notify.post
       return emit({
         id: 'cal-' + (d.time || ''), src: 'calendar', lvl: 'info', icon: '🔔',
-        title: d.text || 'Promemoria', body: d.time ? `Promemoria · ${d.time}` : '',
+        title: d.text || t('nc_reminder'), body: d.time ? `${t('nc_reminder')} · ${d.time}` : '',
         action: 'app:calendar', sound: 'info',
       });
     }

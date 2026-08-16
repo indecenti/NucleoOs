@@ -6,9 +6,20 @@
 // The harness compiles the REAL firmware cascade on the PC (no flash/Wi-Fi). See
 // docs/debugging.md and tools/anima-host/README.md.
 import { spawnSync } from 'node:child_process';
-import { existsSync, statSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, statSync, readdirSync, readFileSync, openSync, readSync, closeSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+
+// A committed .exe from the OTHER OS (this repo tracks the Windows build) must be rebuilt, not run: on a
+// fresh clone every file shares one mtime, so the mtime check alone would run a Windows PE on Linux.
+function wrongPlatformExe(p) {
+  try {
+    const fd = openSync(p, 'r'); const b = Buffer.alloc(4); readSync(fd, b, 0, 4, 0); closeSync(fd);
+    const isELF = b[0] === 0x7f && b[1] === 0x45 && b[2] === 0x4c && b[3] === 0x46;   // \x7fELF
+    const isPE  = b[0] === 0x4d && b[1] === 0x5a;                                     // MZ
+    return process.platform === 'win32' ? !isPE : !isELF;
+  } catch { return true; }
+}
 
 const here  = dirname(fileURLToPath(import.meta.url));
 const repo  = join(here, '..', '..');
@@ -24,11 +35,11 @@ const sources = [
   ...readdirSync(anima).filter(f => f.endsWith('.c') || f.endsWith('.h')).map(f => join(anima, f)),
   ...(existsSync(inc) ? readdirSync(inc).map(f => join(inc, f)) : []),
   join(here, 'esp_timer_host.c'), join(here, 'anima_online_stub.c'), join(here, 'host_main.c'),
-  join(here, 'build.ps1'),
+  join(here, 'build.ps1'), join(here, 'build.sh'),
   ...readdirSync(join(here, 'shim')).map(f => join(here, 'shim', f)),
 ];
 const mtime = p => { try { return statSync(p).mtimeMs; } catch { return 0; } };
-const stale = () => !existsSync(exe) || sources.some(s => mtime(s) > mtime(exe));
+const stale = () => !existsSync(exe) || wrongPlatformExe(exe) || sources.some(s => mtime(s) > mtime(exe));
 
 const argv = process.argv.slice(2);
 const forceBuild = argv[0] === '--build';   // always recompile
@@ -42,11 +53,17 @@ const fi = argv.indexOf('--file');
 if (fi !== -1) { inputBuf = readFileSync(argv[fi + 1]); argv.splice(fi, 2); }
 
 if (forceBuild || stale()) {
+  // Windows builds via build.ps1 (MinGW), every other platform via build.sh (system gcc).
   const win = process.platform === 'win32';
-  const cmd = win ? 'powershell' : 'pwsh';
-  const args = (win ? ['-NoProfile', '-ExecutionPolicy', 'Bypass'] : ['-NoProfile'])
-    .concat(['-File', join(here, 'build.ps1')]);
+  const cmd = win ? 'powershell' : 'bash';
+  const args = win
+    ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(here, 'build.ps1')]
+    : [join(here, 'build.sh')];
   const b = spawnSync(cmd, args, { stdio: 'inherit' });
+  if (b.error) {                      // e.g. the shell itself is missing — say so, don't die silently
+    console.error(`anima host build: cannot run ${cmd}: ${b.error.message}`);
+    process.exit(1);
+  }
   if (b.status !== 0) process.exit(b.status ?? 1);
 }
 if ((forceBuild || ensure) && argv.length === 0) process.exit(0);

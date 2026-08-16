@@ -52,9 +52,14 @@ static_assert((int)WP_MODE_NULL == (int)WIFI_MODE_NULL && (int)WP_MODE_STA == (i
 // the home screen or the first-run wizard. Log-and-continue instead of ESP_ERROR_CHECK so a
 // failed radio degrades to "no network" (recoverable from the on-device Wi-Fi menu) rather
 // than bricking the boot.
+// Log the NUMERIC code alongside the name: this build has CONFIG_ESP_ERR_TO_NAME_LOOKUP off (flash
+// budget), so esp_err_to_name() can only name the generic ESP_ERR_* codes and prints every Wi-Fi
+// specific one as a bare "UNKNOWN ERROR". That is how an ESP_ERR_WIFI_IF (0x3003) from
+// esp_wifi_set_config sat in the logs unread while the radio retried forever — the message was
+// there, it just carried no information. The hex code is always readable.
 #define WIFI_TRY(expr) do { \
     esp_err_t _werr = (expr); \
-    if (_werr != ESP_OK) ESP_LOGW(TAG, "%s -> %s", #expr, esp_err_to_name(_werr)); \
+    if (_werr != ESP_OK) ESP_LOGW(TAG, "%s -> %s (0x%x)", #expr, esp_err_to_name(_werr), (unsigned)_werr); \
 } while (0)
 // Brick-class config now lives on the power-loss-safe LittleFS store (internal flash),
 // not the SD's FAT which can corrupt on a power cut mid-write. SETUP_LEGACY is the old
@@ -571,13 +576,22 @@ static void wait_for_ip(void)
 static void connect_sta(const char *ssid, const char *pass)
 {
     s_want_sta = true;                  // keep this link up (auto-reconnect on any drop)
+    // MODE FIRST, then the credentials. esp_wifi_set_config(WIFI_IF_STA) is documented as callable
+    // "only when specified interface is enabled, otherwise API fail" — in AP-only mode it returns
+    // ESP_ERR_WIFI_IF and the SSID/password are silently DROPPED. That state is reached on the normal
+    // path, and it is self-sustaining: a failed join cycle parks the radio in WIFI_MODE_AP to save
+    // battery (see WP_ACT_TRY_JOIN), nucleo_setup_scan() restores AP-only when it entered from it,
+    // and the next attempt then writes its config into a interface that does not exist. The join
+    // proceeds with whatever stale/empty config is left in NVS -> WIFI_REASON_NO_AP_FOUND (201) ->
+    // another failed cycle. Observed as an endless "set_config -> UNKNOWN ERROR / reason=201" loop
+    // that no correct password could break. Enabling STA first makes the write land.
+    wifi_mode_t cur = WIFI_MODE_NULL;
+    esp_wifi_get_mode(&cur);
+    WIFI_TRY(esp_wifi_set_mode((wifi_mode_t)wp_join_mode((wp_mode_t)cur)));   // I2: keeps a live AP beaconing
     wifi_config_t wc = {0};
     strncpy((char *)wc.sta.ssid, ssid, sizeof(wc.sta.ssid) - 1);
     strncpy((char *)wc.sta.password, pass, sizeof(wc.sta.password) - 1);
     WIFI_TRY(esp_wifi_set_config(WIFI_IF_STA, &wc));
-    wifi_mode_t cur = WIFI_MODE_NULL;
-    esp_wifi_get_mode(&cur);
-    WIFI_TRY(esp_wifi_set_mode((wifi_mode_t)wp_join_mode((wp_mode_t)cur)));
     esp_wifi_connect();
     wait_for_ip();
     if (s_ip[0]) net_remember(ssid, pass);   // every successful join is added to the known list
@@ -1260,9 +1274,20 @@ esp_err_t nucleo_setup_apply_network(void)
 }
 
 // ---- network status getters (consumed by /api/status) ----------------------
-const char *nucleo_setup_mode(void) { return s_mode; }   // "sta" | "ap"
+const char *nucleo_setup_mode(void) { return s_mode; }   // "sta" | "ap" | "usb"
 const char *nucleo_setup_ssid(void) { return s_ssid; }
-const char *nucleo_setup_ip(void)   { return s_ip; }     // STA IP, "" if none
+const char *nucleo_setup_ip(void)   { return s_ip; }     // STA/USB IP, "" if none
+
+// USB-web boot skips Wi-Fi, so s_mode stays the default "ap" and the on-device header + /api/status
+// show a phantom access point ("collegato via cavo ma vedo un IP da AP"). When the USB NIC is up,
+// call this so every consumer (native header, Remote screen, /api/status, the web UI) reports the
+// real story: mode "usb", SSID "USB", and the fixed cable address. Purely a display state (RAM only).
+void nucleo_setup_set_usb(const char *ip)
+{
+    strncpy(s_mode, "usb", sizeof(s_mode) - 1); s_mode[sizeof(s_mode) - 1] = 0;
+    strncpy(s_ssid, "USB", sizeof(s_ssid) - 1); s_ssid[sizeof(s_ssid) - 1] = 0;
+    strncpy(s_ip, ip ? ip : "", sizeof(s_ip) - 1); s_ip[sizeof(s_ip) - 1] = 0;
+}
 bool nucleo_setup_time_synced(void) { return s_time_synced; }  // true once NTP has set the clock
 
 // Live link quality of the joined AP (the NETWORK watch face). rssi is dBm (negative; 0 = not

@@ -309,6 +309,27 @@
       "converter",
       "unita di misura",
       "unit converter"
+    ],
+    "authenticator": [
+      "authenticator",
+      "autenticatore",
+      "2fa",
+      "totp",
+      "otp",
+      "codici",
+      "verifica",
+      "codes",
+      "mfa"
+    ],
+    "contacts": [
+      "contatti",
+      "contact",
+      "contacts",
+      "rubrica",
+      "contatto",
+      "persone",
+      "contactos",
+      "kontakte"
     ]
   },
   "notes": {

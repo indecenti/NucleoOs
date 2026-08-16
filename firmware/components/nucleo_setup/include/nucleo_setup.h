@@ -36,6 +36,10 @@ const char *nucleo_setup_mode(void);
 const char *nucleo_setup_ssid(void);
 const char *nucleo_setup_ip(void);
 
+// Report the USB-web link as the active "network" (mode "usb", ip = the fixed cable address) so the
+// native header, Remote screen and /api/status stop showing a phantom access point on a cable boot.
+void nucleo_setup_set_usb(const char *ip);
+
 // True once the clock has been set from NTP (for /api/status and the clock UI).
 bool nucleo_setup_time_synced(void);
 

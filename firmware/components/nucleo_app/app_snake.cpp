@@ -547,17 +547,18 @@ static void start_game(uint32_t seed) {
 // ─── applica stato (guest) ───────────────────────────────────────────────────
 static void apply_state(const sn_state_t* st, int plen) {
     int n1=st->s1_len, n2=st->s2_len;
+    if(n1>NET_SEG||n2>NET_SEG) return;   // wire lengths are peer-controlled; a legit host caps at NET_SEG(38<MAX_SEG). Reject before the copy loops overrun bx/by[MAX_SEG] and clobber the len field.
     int need=(int)(offsetof(sn_state_t,segs)+(n1+n2)*2);
     if(plen<need) return;
     s_s1.len=n1; s_s1.dir=st->s1_dir; s_s1.alive=st->s1_alive;
-    s_s1.pu=st->s1_pu; s_s1.pu_t=st->s1_put; s_s1.score=st->s1_score;
+    s_s1.pu=(st->s1_pu<PU_COUNT)?st->s1_pu:0; s_s1.pu_t=st->s1_put; s_s1.score=st->s1_score;   // pu indexes PU_COL[PU_COUNT]
     for(int i=0;i<n1;i++){s_s1.bx[i]=st->segs[i*2];s_s1.by[i]=st->segs[i*2+1];}
     int off=n1*2;
     s_s2.len=n2; s_s2.dir=st->s2_dir; s_s2.alive=st->s2_alive;
-    s_s2.pu=st->s2_pu; s_s2.pu_t=st->s2_put; s_s2.score=st->s2_score;
+    s_s2.pu=(st->s2_pu<PU_COUNT)?st->s2_pu:0; s_s2.pu_t=st->s2_put; s_s2.score=st->s2_score;
     for(int i=0;i<n2;i++){s_s2.bx[i]=st->segs[off+i*2];s_s2.by[i]=st->segs[off+i*2+1];}
     s_fx=st->fx; s_fy=st->fy; s_fx2=st->fx2; s_fy2=st->fy2;
-    s_pu_type=st->pu_type; s_pu_x=st->pu_x; s_pu_y=st->pu_y;
+    s_pu_type=(st->pu_type<PU_COUNT)?st->pu_type:0; s_pu_x=st->pu_x; s_pu_y=st->pu_y;   // indexes PU_COL/PU_SYM[PU_COUNT]
     if(st->phase==ST_OVER&&s_st==ST_PLAY) {
         s_winner=(st->s1_alive)?1:2;
         if(s_winner==2)s_wins2++;else s_wins1++;
@@ -1126,8 +1127,7 @@ static bool on_back(int key) {
         s_st=ST_MENU; nucleo_app_request_draw(); return true;
     }
     if(s_st==ST_OVER||s_st==ST_HOST||s_st==ST_HELP||s_st==ST_SCORES){
-        if(s_st==ST_BROWSE) s_join_pending=false;
-        s_st=ST_MENU; nucleo_app_request_draw(); return true;
+        s_st=ST_MENU; nucleo_app_request_draw(); return true;   // ST_BROWSE is handled separately below
     }
     if(s_st==ST_BROWSE){ s_join_pending=false; s_st=ST_MENU; nucleo_app_request_draw(); return true; }
     return false;

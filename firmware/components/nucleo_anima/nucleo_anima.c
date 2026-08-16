@@ -117,6 +117,8 @@ static const a_alias_t APP_ALIAS[] = {
     { "weather",            { "meteo", "tempo", "previsioni", "weather", "forecast", "che tempo fa", NULL } },
     { "mail",               { "mail", "email", "posta", "e-mail", "gmail", "invia mail", "manda mail", "scrivi mail", "send mail", "email", "smtp", NULL } },
     { "unit-converter",     { "convertitore", "convertire", "converti", "conversione", "conversioni", "convert", "converter", "unita di misura", "unit converter", NULL } },
+    { "authenticator",      { "authenticator", "autenticatore", "2fa", "totp", "otp", "codici", "verifica", "codes", "mfa", NULL } },
+    { "contacts",           { "contatti", "contact", "contacts", "rubrica", "contatto", "persone", "contactos", "kontakte", NULL } },
 };
 // </gen:app-alias>
 
@@ -601,6 +603,14 @@ static struct {
     char foc_subject[48];
     char foc_relation[24];
     uint32_t foc_turn;
+    // LEXICAL focus (the fallback under the structured one): the previous turn's reusable FRAME, i.e.
+    // the turn with its ENTITY punched out — "chi era einstein" -> "chi era" + _, "che batteria ho"
+    // -> "che" + _ + "ho". An L1 card answer declares no (subject, relation), so foc_subject/
+    // foc_relation stay empty and only this can carry the thread into "e newton?". The entity can sit
+    // in the middle, hence prefix AND suffix. RAM-only, 8-turn recency window via frame_turn.
+    char frame_pre[64];
+    char frame_post[32];
+    uint32_t frame_turn;
     // Conversational numeric memory for the math reasoning layer (anima_reason): the last computed
     // answer + a few user-named results ("chiamalo A"). RAM-only (NOT in the SD serializer), so a
     // reset wipes it; lets an offline cascade carry values across turns. See anima_reg_* below.
@@ -2671,6 +2681,90 @@ static void foc_remember(const anima_result_t *r) {
     s_session.foc_turn = s_session.turn;
 }
 
+// ---- TOPIC-FRAME carry-over (lexical coreference) ----------------------------------------------
+// The structured shift above only fires when the KGE reasoner DECLARED a (subject, relation). An L1
+// card answer ("chi era einstein") declares neither, so a bare "e newton?" fell through to an honest
+// miss even though the thread was unambiguous. Here we keep the previous question's FRAME (everything
+// before its trailing entity) and re-ask it with the new one: "chi era" + "newton" -> "chi era newton".
+// NOTHING is fabricated: we re-run the REAL cascade on the rebuilt question, so every retrieval guard
+// still applies and a wrong re-aim simply misses. Miss-gated, like the structured shift.
+
+// What a continuation fragment may START with, and what can therefore never be the SUBSTANCE of a
+// frame: connectors ("e newton?"), corrections ("no, la musica") and articles ("e lo spazio?").
+// Keeping them in one list is what makes a bare follow-up unable to overwrite the frame it reuses.
+static const char *const A_LEAD[] = { "e","ed","poi","allora","anche","invece","ma","quindi","pure",
+                                      "and","then","also","plus",
+                                      "no","non","nope","not","nah","anzi","piuttosto","instead",
+                                      "il","lo","la","i","gli","le","un","uno","una","l",
+                                      "the","a","an", NULL };
+static bool foc_is_lead(const char *w)
+{
+    for (int i = 0; A_LEAD[i]; i++) if (!strcmp(A_LEAD[i], w)) return true;
+    return false;
+}
+
+// Function words, i.e. everything that is part of a question's SHAPE rather than its subject. The
+// entity slot is the last run of tokens that are NOT in here, so this list is what decides where
+// "chi era | einstein |" and "che | batteria | ho" get cut. Normalized (accent-folded) forms only —
+// foc_frame_of splits a_norm_phrase output, never the raw query.
+static bool foc_is_fnword(const char *w)
+{
+    static const char *const fn[] = {
+        "chi","cosa","cos","cose","che","come","quando","dove","perche","quale","quali","quanto","quanta","quanti",
+        "e","ed","era","erano","sono","essere","stato","stata","stati","fu","furono","si","ci","ne",
+        "ho","hai","ha","abbiamo","avete","hanno","rimane","resta","rimasto","disponibile","libero",
+        "il","lo","la","i","gli","le","un","uno","una","l","del","dello","della","dei","degli","delle","dell",
+        "di","da","dal","dallo","dalla","in","nel","nello","nella","su","sul","sullo","sulla","per","con",
+        "a","al","allo","alla","ai","agli","alle","tra","fra","mi","mio","mia",
+        "significa","vuol","dire","serve","servono","funziona","funzionano","nato","nata","morto","morta",
+        "scritto","scritta","inventato","fondato","capitale","significato","definizione",
+        "who","what","when","where","why","which","how","whats","is","are","was","were","the","a","an","of",
+        "in","on","for","to","does","do","did","means","mean","born","died","wrote","invented","founded",
+        "capital","meaning","definition","have","has","got","left","remaining","free","my", NULL };
+    for (int i = 0; fn[i]; i++) if (!strcmp(fn[i], w)) return true;
+    return false;
+}
+
+// Punch the ENTITY out of the normalized form of `q` and keep what surrounds it: the reusable frame.
+// The entity is the LAST run of content tokens, which can sit at the end ("chi era |einstein|") or in
+// the middle ("che |batteria| ho") — hence a prefix AND a suffix.
+//
+// Fails when the turn has no reusable shape: no content at all, an implausibly long entity, a query
+// that is ALL entity (nothing to reuse), or a frame made only of leads — that last one is what stops
+// "e newton?" and "no, la musica" from overwriting the very frame they are trying to reuse.
+static bool foc_frame_of(const char *q, char *pre, size_t pcap, char *post, size_t scap)
+{
+    char nq[160]; a_norm_phrase(q, nq, sizeof nq);
+    char tok[A_MAX_TOKENS][A_TOK_LEN]; int n = 0;
+    for (const char *p = nq; *p && n < A_MAX_TOKENS; ) {
+        while (*p == ' ') p++;
+        if (!*p) break;
+        int k = 0;
+        while (*p && *p != ' ') { if (k + 1 < A_TOK_LEN) tok[n][k++] = *p; p++; }
+        tok[n][k] = 0; n++;
+    }
+    if (n < 2) return false;
+    int e0 = -1, e1 = -1;                               // the entity run [e0, e1]
+    for (int t = n - 1; t >= 0; t--) {
+        if (!foc_is_fnword(tok[t])) { if (e1 < 0) e1 = t; e0 = t; }
+        else if (e1 >= 0) break;
+    }
+    if (e1 < 0) return false;                           // no content token: nothing to swap
+    if (e1 - e0 + 1 > 3) return false;                  // a 4+ token run isn't an entity
+    if (e0 == 0 && e1 == n - 1) return false;           // all entity: no frame to reuse
+    bool substantive = false;
+    for (int t = 0; t < n; t++)
+        if ((t < e0 || t > e1) && !foc_is_lead(tok[t])) { substantive = true; break; }
+    if (!substantive) return false;
+    int o = 0; pre[0] = 0;
+    for (int t = 0; t < e0 && o + 1 < (int)pcap; t++)
+        o += snprintf(pre + o, pcap - o, "%s%s", o ? " " : "", tok[t]);
+    o = 0; post[0] = 0;
+    for (int t = e1 + 1; t < n && o + 1 < (int)scap; t++)
+        o += snprintf(post + o, scap - o, "%s%s", o ? " " : "", tok[t]);
+    return pre[0] || post[0];
+}
+
 static int try_cascade(const char *q, bool en, anima_result_t *r)
 {
     char topic[160];
@@ -3038,6 +3132,10 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     nucleo_anima_l1_set_online_brain(nucleo_anima_online_available() && nucleo_anima_teacher_configured()
                                      && nucleo_anima_online_only_enabled());
     s_session.turn++;
+    // Give L1 the query AS TYPED. Retrieval runs on a normalized, lowercased topic, which disarms the
+    // proper-noun guard — it can no longer see that "Floonk" is a NAME and falls back to a length
+    // heuristic that a short invented name walks straight past.
+    nucleo_anima_l1_note_raw(input);
     trace_reset();        // fresh thought-log for this turn
     content_reset();      // no composed payload until a tool produces one
     nucleo_anima_set_long_reply(NULL);   // drop any previous turn's long (code) overflow reply
@@ -3313,7 +3411,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
             }
         }
     }
-    
+
     // (Hook L0 dynamic-skill .lua su SD rimosso: interprete Lua ~90 KB flash, scaffold inerte
     //  — nessuno script spedito, anima_say scriveva solo sul log. Riattivabile se si integra davvero.)
 
@@ -3417,6 +3515,40 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
         snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
         s_session.dirty = true;
         goto done;
+    }
+
+    // TOPIC-FRAME carry-over — the LEXICAL fallback under the structured shift above. Fires only on a
+    // bare connector-led continuation ("e newton?") once the normal cascade has already missed, and
+    // only while the remembered frame is fresh. The rebuilt question goes through the ordinary
+    // cascade, so a re-aim that doesn't retrieve anything stays an honest miss.
+    if (r.tier == ANIMA_TIER_NONE && (s_session.frame_pre[0] || s_session.frame_post[0]) &&
+        (s_session.turn - s_session.frame_turn) <= 8) {
+        char ctok[A_MAX_TOKENS][A_TOK_LEN]; int cnt = a_tokenize(q, ctok);
+        int s0 = 0;
+        while (s0 < cnt && foc_is_lead(ctok[s0])) s0++;
+        // A continuation is: at least one leading connector/correction/article, then 1..3 content
+        // tokens, and no question word of its own (that shape belongs to the RELATION shift above).
+        if (s0 >= 1 && cnt - s0 >= 1 && cnt - s0 <= 3 && !a_has_qword(ctok, cnt)) {
+            char ent[64]; int o = 0; ent[0] = 0;
+            for (int t = s0; t < cnt && o + 1 < (int)sizeof ent; t++)
+                o += snprintf(ent + o, sizeof ent - o, "%s%s", o ? " " : "", ctok[t]);
+            if (strlen(ent) >= 2) {
+                char rebuilt[176];
+                snprintf(rebuilt, sizeof rebuilt, "%s%s%s%s%s",
+                         s_session.frame_pre, s_session.frame_pre[0] ? " " : "", ent,
+                         s_session.frame_post[0] ? " " : "", s_session.frame_post);
+                anima_result_t fr;
+                if (try_cascade(rebuilt, en, &fr)) {
+                    r = fr;
+                    snprintf(r.state, sizeof r.state, "followup");
+                    snprintf(r.corrected, sizeof r.corrected, "%s", rebuilt);  // show what we re-asked
+                    mem_update(&r);
+                    snprintf(s_mem.last_topic, sizeof s_mem.last_topic, "%s", rebuilt);
+                    s_session.dirty = true;
+                    goto done;
+                }
+            }
+        }
     }
 
     // HARD SAFETY GUARD: never let a non-question (bare date/number/code/garbage) reach the online
@@ -3524,7 +3656,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // Runs AFTER the typo rescue so a corrected launch/command isn't pre-empted by a fuzzy clarify.
     {
         long a1, a2;
-        if (nucleo_anima_l1_band(en, &r, &a1, &a2)) {
+        if (nucleo_anima_l1_band(q, en, &r, &a1, &a2)) {
             s_session.clarify_l1 = true; s_session.clarify_ans[0] = a1; s_session.clarify_ans[1] = a2;
             goto done;
         }
@@ -3560,6 +3692,13 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
 done: {
         g_anima_stage = 0; g_anima_phase = 0;  // DIAG: query returned cleanly (no crash this turn)
         a_strip_foreign(r.reply);              // universal: clean foreign-script clutter even from old learned cards
+        // HONEST DECLINE — an abstention has to SAY so. Until now tier=NONE returned an empty string and
+        // each of the three runtimes invented its own fallback text (the web shell, the native bubble)
+        // or showed nothing at all (voice, host CLI). The refusal belongs to the engine, once.
+        // The TIER is untouched: every abstain/hallucination gate keys on tier==NONE, never on the
+        // wording, so filling the text cannot turn a refusal into an apparent answer.
+        if (r.tier == ANIMA_TIER_NONE && r.action == ANIMA_ACT_NONE && !r.awaiting && !r.reply[0])
+            snprintf(r.reply, sizeof r.reply, "%s", en ? "I don't know." : "Non lo so.");
         if (replayed && r.action != ANIMA_ACT_NONE) { r.from_memory = 1; snprintf(r.state, sizeof(r.state), "followup"); }
         const char *domain = a_domain(&r);
         // Visible reasoning trace. A multi-step agent turn (compose-then-act) joins its steps with
@@ -3597,6 +3736,19 @@ done: {
                 snprintf(s_session.foc_subject,  sizeof s_session.foc_subject,  "%s", dsubj);
                 snprintf(s_session.foc_relation, sizeof s_session.foc_relation, "%s", drel);
                 s_session.foc_turn = s_session.turn;
+            }
+        }
+        // LEXICAL focus: remember this turn's reusable shape, so the thread survives even when
+        // hdc_detect found no structured (subject, relation) — the L1-card case. Recorded for ANY turn
+        // that did something, not just an answer: "apri le foto" is what makes "no, la musica" mean
+        // something. A bare continuation has no substantive frame of its own, so it never overwrites
+        // the good one.
+        if (r.tier != ANIMA_TIER_NONE && r.action != ANIMA_ACT_NONE && !r.awaiting) {
+            char fpre[64], fpost[32];
+            if (foc_frame_of(q, fpre, sizeof fpre, fpost, sizeof fpost)) {
+                snprintf(s_session.frame_pre,  sizeof s_session.frame_pre,  "%s", fpre);
+                snprintf(s_session.frame_post, sizeof s_session.frame_post, "%s", fpost);
+                s_session.frame_turn = s_session.turn;
             }
         }
         telemetry_log(q, &r, domain);          // offline-learning work-list (misses + L1 only)

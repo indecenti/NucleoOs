@@ -57,6 +57,9 @@ bool        nucleo_setup_net_is_known(const char *ssid);   // saved (auto-rejoin
 bool        nucleo_setup_net_has_password(const char *ssid); // saved AND has a usable password
 void        nucleo_setup_forget_ssid(const char *ssid);    // forget one saved network
 int         nucleo_setup_net_count(void);                  // how many networks are saved
+const char *nucleo_setup_net_ssid(int i);                  // SSID of saved network i
+int         nucleo_setup_net_priority(int i);              // 0 = normal; higher = preferred in auto-connect
+void        nucleo_setup_net_set_priority(const char *ssid, int prio);  // pin/unpin a saved net (0..9)
 void        nucleo_setup_set_device_name(const char *name);
 const char *nucleo_setup_ap_ssid(void);
 const char *nucleo_setup_ap_pass(void);
@@ -132,6 +135,16 @@ static int squality(int rssi) {
 static uint16_t qcol(int q)   { return q >= 60 ? GRN : q >= 33 ? AMB : REDC; }
 static bool     connected(void){ return !strcmp(nucleo_setup_mode(),"sta") && nucleo_setup_ip()[0]; }
 static bool     ap_on(void)    { return nucleo_setup_ap_intended(); }   // honest: OFF during a transient STA fallback, not just raw mode=="ap"
+
+// Priority of a saved SSID (0 = normal/not-saved). Lets the Wi-Fi list mark and toggle "preferred"
+// networks — the supervisor joins the highest-priority in-range known net first, then strongest signal.
+static int prio_of(const char *ssid){
+    if(!ssid||!ssid[0]) return 0;
+    int n=nucleo_setup_net_count();
+    for(int i=0;i<n;i++) if(!strcmp(nucleo_setup_net_ssid(i),ssid)) return nucleo_setup_net_priority(i);
+    return 0;
+}
+#define WIFI_PIN_PRIO 5    // "preferred" level set by the pin key (the store clamps to 0..9)
 static const char *tab_label(int i){ return s_en ? TABS_EN[i] : TABS[i]; }
 
 static void txt(int x,int y,const char*s,uint16_t fg,uint16_t bg,int sz){
@@ -407,14 +420,14 @@ static void draw_rete(int ch){
                 char sb[14]; snprintf(sb,sizeof sb,"%.12s",ss[0]?ss:"(hidden)");
                 txt(46,y+6,sb,cur?GRN:FG,CAP,2);
                 char det[40]; snprintf(det,sizeof det,"%s%s  ch%d  %ddBm",
-                    known?(s_en?"saved ":"salv. "):"",
+                    known?(prio_of(ss)>0?(s_en?"pref ":"pref "):(s_en?"saved ":"salv. ")):"",
                     nucleo_setup_scan_auth_label(i),nucleo_setup_scan_channel(i),rssi);
                 txt(46,y+26,det,qcol(q),CAP,1);
-                if(known) d.fillCircle(W-16,y+11,3,ACC);          // saved-network pip
+                if(known) d.fillCircle(W-16,y+11,3,prio_of(ss)>0?GRN:ACC);  // saved pip (green = preferred/pinned)
             }else{
                 char sb[16]; snprintf(sb,sizeof sb,"%.13s",ss[0]?ss:"(hidden)");
                 txt(46,y+(h-16)/2,sb,cur?GRN:MUTED,BG,2);          // size-2 name (was tiny size-1)
-                if(known) d.fillCircle(W-12,y+h/2,3,ACC);          // saved-network pip
+                if(known) d.fillCircle(W-12,y+h/2,3,prio_of(ss)>0?GRN:ACC);  // saved pip (green = preferred/pinned)
             }
         }
         y+=h;
@@ -665,7 +678,7 @@ static void update_hint(void){
         else                       nucleo_app_set_hint(s_en?"L/R tab   esc back":"L/R scheda   esc esci");
         return;
     }
-    if(s_tab==T_RETE) nucleo_app_set_hint(s_en?"ENTER join   DEL forget   L/R tab":"INVIO connetti   CANC dimentica   L/R scheda");
+    if(s_tab==T_RETE) nucleo_app_set_hint(s_en?"ENTER join  DEL forget  P pin":"INVIO conn  CANC diment  P pref");
     else              nucleo_app_set_hint(s_en?"UP/DN row   ENTER ok   L/R tab":"SU/GIU voce   INVIO ok   L/R scheda");
 }
 
@@ -807,6 +820,14 @@ static void on_key(int k,char ch){
     else if(k==NK_DEL && s_tab==T_RETE){                        // forget a saved network from the list
         const char*ss=nucleo_setup_scan_ssid(s_sel);
         if(nucleo_setup_net_is_known(ss)){ nucleo_setup_forget_ssid(ss); toast("Rete dimenticata","Forgotten"); }
+    }
+    else if((ch=='p'||ch=='P') && s_tab==T_RETE){              // pin/unpin: toggle "preferred" priority
+        const char*ss=nucleo_setup_scan_ssid(s_sel);
+        if(nucleo_setup_net_is_known(ss)){
+            bool pin=prio_of(ss)==0;                            // no priority yet -> make it preferred
+            nucleo_setup_net_set_priority(ss, pin?WIFI_PIN_PRIO:0);
+            toast(pin?"Preferita":"Priorita normale", pin?"Preferred":"Normal priority");
+        }
     }
     else if(k==NK_ENTER){ activate(); }
     nucleo_app_request_draw();

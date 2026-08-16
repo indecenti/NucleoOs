@@ -159,6 +159,39 @@ int a_spellfix(const char *raw, char *out, size_t outsz)
 // even cards learned BEFORE the fetch-side cleanup still display clean. Only ever shrinks the string.
 void a_strip_foreign(char *s)
 {
+    // 0) REPAIR double-encoded UTF-8 — "Ã¨" where the card means "è". A source that was already UTF-8
+    //    got decoded as Latin-1 and re-encoded, so every accented byte pair became four bytes. It
+    //    survives every other filter here because the result IS valid Latin text, and it reaches the
+    //    screen from the Wikipedia-derived cards ("una percentuale Ã¨ un numero..."). The mapping is
+    //    exact and reversible: C3 83 ("Ã") + C2 yy -> C3 yy, C3 82 ("Â") + C2 yy -> C2 yy. Looped,
+    //    because a doubly-mangled source encodes twice. Only ever shrinks (4 bytes -> 2).
+    for (int pass = 0; pass < 3; pass++) {
+        int w0 = 0; bool fixed = false;
+        for (unsigned char *p = (unsigned char *)s; *p; ) {
+            if (p[0] == 0xC3 && (p[1] == 0x83 || p[1] == 0x82) &&
+                p[2] == 0xC2 && p[3] >= 0x80 && p[3] <= 0xBF) {
+                s[w0++] = (char)(p[1] == 0x83 ? 0xC3 : 0xC2);
+                s[w0++] = (char)p[3];
+                p += 4; fixed = true;
+            } else {
+                s[w0++] = (char)*p++;
+            }
+        }
+        s[w0] = 0;
+        if (!fixed) break;
+    }
+    // 0b) excise Wikipedia MATH-RENDER residue: "{\displaystyle {\frac {x}{100}}}" is TeX left behind
+    //     by the extractor. It reads as noise, and the braces trip the "leaked {template}" guard that
+    //     the hallucination probes rely on. Any "{\" opens a TeX block; drop through its MATCHING brace.
+    for (char *a; (a = strstr(s, "{\\")) != NULL; ) {
+        char *e = a; int depth = 0;
+        for (; *e; e++) {
+            if (*e == '{') depth++;
+            else if (*e == '}' && --depth == 0) { e++; break; }
+        }
+        memmove(a, e, strlen(e) + 1);       // e > a always, so this always shrinks (no infinite loop)
+        if (!*a) break;                     // unterminated block: the garbage tail is gone, stop
+    }
     // 1) drop foreign SCRIPTS + standalone COMBINING marks (Russian stress ́ etc.) — keep Latin, Greek
     //    (math π/λ at 0xCE/0xCF), punctuation, symbols, em-dash.
     int o = 0; bool gap = false;
@@ -185,12 +218,18 @@ void a_strip_foreign(char *s)
             memmove(a, e, strlen(e) + 1);
         }
     }
-    // 3) tidy: collapse double spaces, drop " ," / " ;" / " )" and doubled commas, trim ends.
+    // 3) tidy: collapse double spaces, drop " ," / " ;" / " )" / " ." and doubled commas, trim ends.
+    //    ('.' joined the list with the TeX excision above: cutting a formula mid-sentence leaves the
+    //    full stop stranded — "in centesimi x 100 . Spesso" — which reads as a typo, not as cleanup.
+    //    Only a SENTENCE-ending dot qualifies: a dot followed by a letter is a file extension, and
+    //    closing the gap there corrupts real text — "sta nel .c" became "sta nel.c", which the
+    //    fluency-grounded gate caught as no longer matching its corpus field verbatim.)
     int w = 0;
     for (int r = 0; s[r]; r++) {
         char c = s[r];
         if (c == ' ' && (w == 0 || s[w-1] == ' ')) continue;
-        if ((c == ',' || c == ';' || c == ')') && w > 0 && s[w-1] == ' ') w--;
+        bool dot_ends_sentence = (c == '.') && (s[r+1] == 0 || s[r+1] == ' ');
+        if ((c == ',' || c == ';' || c == ')' || dot_ends_sentence) && w > 0 && s[w-1] == ' ') w--;
         if (c == ',' && w > 0 && s[w-1] == ',') continue;
         s[w++] = c;
     }

@@ -1,0 +1,40 @@
+// ENCODER CROSS-LINGUAL PROBES — IT/EN translation pairs for the recall@1 half of the encoder gate
+// (tools/anima-host/enc-quality.mjs). The encoder is distilled BILINGUAL: an EN question and its IT
+// translation are supposed to land in the same place in the embedding space. We score that the way
+// distill.py does at training time — for every EN probe, its own IT translation must be the nearest
+// of ALL the IT probes — but here against the SHIPPED weights, so a bad export can't slip through.
+//
+// Topics are deliberately spread out: near-duplicate probes would make recall@1 easy for the wrong
+// reason (nothing to confuse them with) instead of measuring cross-lingual alignment.
+//
+// Fields: it, en.
+{"it":"qual è la capitale del Giappone","en":"what is the capital of Japan"}
+{"it":"cos'è la fotosintesi","en":"what is photosynthesis"}
+{"it":"chi era Albert Einstein","en":"who was Albert Einstein"}
+{"it":"cos'è un transistor","en":"what is a transistor"}
+{"it":"cos'è il DNS","en":"what is DNS"}
+{"it":"quanto dista la Luna dalla Terra","en":"how far is the Moon from the Earth"}
+{"it":"cos'è un buco nero","en":"what is a black hole"}
+{"it":"come si calcola l'area di un cerchio","en":"how do you compute the area of a circle"}
+{"it":"che tempo fa oggi","en":"what is the weather today"}
+{"it":"apri il blocco note","en":"open the notepad"}
+{"it":"quanti abitanti ha Tokyo","en":"how many people live in Tokyo"}
+{"it":"cos'è la respirazione cellulare","en":"what is cellular respiration"}
+{"it":"chi era Isaac Newton","en":"who was Isaac Newton"}
+{"it":"cos'è un condensatore","en":"what is a capacitor"}
+{"it":"cos'è il protocollo HTTP","en":"what is the HTTP protocol"}
+{"it":"quanto dista Marte dal Sole","en":"how far is Mars from the Sun"}
+{"it":"cos'è la teoria della relatività","en":"what is the theory of relativity"}
+{"it":"come si calcola la circonferenza di un cerchio","en":"how do you compute the circumference of a circle"}
+{"it":"che ore sono adesso","en":"what time is it now"}
+{"it":"imposta un timer di dieci minuti","en":"set a ten minute timer"}
+{"it":"qual è l'età della Terra","en":"what is the age of the Earth"}
+{"it":"perché le foglie sono verdi","en":"why are leaves green"}
+{"it":"qual è la capitale della Francia","en":"what is the capital of France"}
+{"it":"come funziona un circuito integrato","en":"how does an integrated circuit work"}
+{"it":"alza il volume dell'altoparlante","en":"turn up the speaker volume"}
+{"it":"crea un file di appunti","en":"create a notes file"}
+{"it":"spegni lo schermo del dispositivo","en":"turn off the device screen"}
+{"it":"cos'è la gravità","en":"what is gravity"}
+{"it":"chi ha scritto la Divina Commedia","en":"who wrote the Divine Comedy"}
+{"it":"quanto è alto il monte Everest","en":"how tall is Mount Everest"}

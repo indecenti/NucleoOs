@@ -297,7 +297,7 @@ static void draw(void)
 extern "C" void nucleo_register_voicelab(void)
 {
     static const nucleo_app_def_t app = {
-        "voicelab", "Voice Lab", "Voice",
+        "voicelab", "Voice Lab", "System",
         "Test and diagnose voice recognition",
         'P', ACC, enter, on_key, tick, draw, exit_app
     };

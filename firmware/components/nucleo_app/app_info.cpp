@@ -57,54 +57,61 @@ static void build_rows(void)
     char ipb[24]; snprintf(ipb, sizeof ipb, "%s", (sta && ip[0]) ? ip : "192.168.4.1");
     char tmp[34];
 
-    // ---- Connection ----
-    add_head("CONNESSIONE", C_BLUE);
-    add_kv("Rete", sta ? nucleo_setup_ssid() : "Setup AP", C_BLUE);
-    add_kv("Indirizzo", ipb, C_GREEN);
-    add_kv("PIN", (sta && ip[0]) ? nucleo_auth_pin() : "unisci il Wi-Fi", C_YELLOW);
+    // ---- Connection ---- (labels localized in all five languages; universal terms — PIN, MAC,
+    // Firmware, ESP-IDF, Desktop, Monitor, Log — stay as-is, and so do the web-link paths.)
+    add_head(TR5("CONNESSIONE", "CONNECTION", "CONEXION", "CONNEXION", "VERBINDUNG"), C_BLUE);
+    add_kv(TR5("Rete", "Network", "Red", "Reseau", "Netz"), sta ? nucleo_setup_ssid() : "Setup AP", C_BLUE);
+    add_kv(TR5("Indirizzo", "Address", "Direccion", "Adresse", "Adresse"), ipb, C_GREEN);
+    add_kv("PIN", (sta && ip[0]) ? nucleo_auth_pin()
+                : TR5("unisci il Wi-Fi", "join Wi-Fi", "unir Wi-Fi", "rejoins le Wi-Fi", "WLAN beitreten"), C_YELLOW);
 
     // ---- Web links (open in a browser; /apps/<id>/ serves that app's index.html) ----
-    add_head("WEB - apri nel browser", C_GREEN);
+    add_head(TR5("WEB - apri nel browser", "WEB - open in browser", "WEB - abrir en navegador",
+                 "WEB - ouvrir navigateur", "WEB - im Browser oeffnen"), C_GREEN);
     add_kv("Desktop", "/", FG);
-    add_kv("Setup", "/apps/settings", FG);
-    add_kv("File", "/apps/file-commander", FG);
+    add_kv(TR5("Configura", "Setup", "Configurar", "Config", "Einrichten"), "/apps/settings", FG);
+    add_kv(TR5("File", "Files", "Archivos", "Fichiers", "Dateien"), "/apps/file-commander", FG);
     add_kv("Monitor", "/apps/system-monitor", FG);
     add_kv("Log", "/apps/log-viewer", FG);
-    add_kv("Aggiorna", "/apps/updates", FG);
-    add_kv("Aiuto/API", "/apps/help", FG);
+    add_kv(TR5("Aggiorna", "Updates", "Novedades", "Mises a jour", "Updates"), "/apps/updates", FG);
+    add_kv(TR5("Aiuto/API", "Help/API", "Ayuda/API", "Aide/API", "Hilfe/API"), "/apps/help", FG);
 
     // ---- Device ----
-    add_head("DISPOSITIVO", C_YELLOW);
-    add_kv("Modello", nucleo_ui_is_adv() ? "Cardputer ADV" : "Cardputer", FG);
+    add_head(TR5("DISPOSITIVO", "DEVICE", "DISPOSITIVO", "APPAREIL", "GERAET"), C_YELLOW);
+    add_kv(TR5("Modello", "Model", "Modelo", "Modele", "Modell"), nucleo_ui_is_adv() ? "Cardputer ADV" : "Cardputer", FG);
     const esp_app_desc_t *ad = esp_app_get_description();
     if (ad) { snprintf(tmp, sizeof tmp, "v%s", ad->version); add_kv("Firmware", tmp, FG);
               add_kv("ESP-IDF", ad->idf_ver, MUTED); }
-    snprintf(tmp, sizeof tmp, "%u KB", (unsigned)(esp_get_free_heap_size() / 1024)); add_kv("RAM libera", tmp, FG);
+    snprintf(tmp, sizeof tmp, "%u KB", (unsigned)(esp_get_free_heap_size() / 1024));
+    add_kv(TR5("RAM libera", "Free RAM", "RAM libre", "RAM libre", "Freier RAM"), tmp, FG);
     snprintf(tmp, sizeof tmp, "%u KB", (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) / 1024));
-    add_kv("Blocco max", tmp, MUTED);
+    add_kv(TR5("Blocco max", "Max block", "Bloque max", "Bloc max", "Max Block"), tmp, MUTED);
     int pct = nucleo_power_battery_pct();
     if (pct >= 0) { int mv = nucleo_power_battery_mv();
                     if (mv > 0) snprintf(tmp, sizeof tmp, "%d%%  %d.%02dV", pct, mv / 1000, (mv % 1000) / 10);
                     else        snprintf(tmp, sizeof tmp, "%d%%", pct);
-                    add_kv("Batteria", tmp, pct <= 15 ? C_RED : C_GREEN); }
-    else add_kv("Batteria", "USB", MUTED);
+                    add_kv(TR5("Batteria", "Battery", "Bateria", "Batterie", "Akku"), tmp, pct <= 15 ? C_RED : C_GREEN); }
+    else add_kv(TR5("Batteria", "Battery", "Bateria", "Batterie", "Akku"), "USB", MUTED);
     uint8_t mac[6] = {0};
     if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
         snprintf(tmp, sizeof tmp, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
         add_kv("MAC", tmp, MUTED);
     }
     int64_t up = esp_timer_get_time() / 1000000;
-    snprintf(tmp, sizeof tmp, "%dh %dm", (int)(up / 3600), (int)((up % 3600) / 60)); add_kv("Acceso da", tmp, FG);
+    snprintf(tmp, sizeof tmp, "%dh %dm", (int)(up / 3600), (int)((up % 3600) / 60));
+    add_kv(TR5("Acceso da", "Uptime", "Encendido", "Allume depuis", "Laufzeit"), tmp, FG);
 
     // ---- Storage ----
-    add_head("ARCHIVIO (SD)", C_PINK);
+    add_head(TR5("ARCHIVIO (SD)", "STORAGE (SD)", "ALMACEN (SD)", "STOCKAGE (SD)", "SPEICHER (SD)"), C_PINK);
     const nucleo_storage_info_t *si = nucleo_storage_info();
     if (si && si->mounted) {
-        add_kv("Scheda", si->fs_type[0] ? si->fs_type : "OK", C_GREEN);
+        add_kv(TR5("Scheda", "Card", "Tarjeta", "Carte", "Karte"), si->fs_type[0] ? si->fs_type : "OK", C_GREEN);
         double fg = si->free_bytes / 1073741824.0, tg = si->total_bytes / 1073741824.0;
-        snprintf(tmp, sizeof tmp, "%.1f / %.1f GB", fg, tg); add_kv("Spazio", tmp, FG);
+        snprintf(tmp, sizeof tmp, "%.1f / %.1f GB", fg, tg);
+        add_kv(TR5("Spazio", "Space", "Espacio", "Espace", "Platz"), tmp, FG);
     } else {
-        add_kv("Scheda", "assente", C_RED);
+        add_kv(TR5("Scheda", "Card", "Tarjeta", "Carte", "Karte"),
+               TR5("assente", "absent", "ausente", "absente", "fehlt"), C_RED);
     }
 }
 
@@ -127,7 +134,9 @@ static void info_enter(void)
     if (!s_row) s_row = (Row *)calloc(40, sizeof *s_row);   // ~2.2 KB only while open, zero .bss at boot
     s_scroll = 0; s_target = 0;
     nucleo_app_set_poll_handler(info_poll);
-    nucleo_app_set_hint(TR("su/giu scorri   esc indietro", "up/dn scroll   esc back"));
+    nucleo_app_set_hint(TR5("su/giu scorri   esc indietro", "up/dn scroll   esc back",
+                            "arr scroll   esc atras", "haut/bas defiler   esc retour",
+                            "hoch/runter   esc zurueck"));
     nucleo_app_request_draw();
 }
 
@@ -159,13 +168,21 @@ static void info_draw(void)
             d.setTextSize(1); d.setTextColor(R.col, BG); d.setCursor(8, ry + 5); d.print(R.label);
             continue;
         }
-        d.setTextSize(2); d.setTextColor(R.col, BG); d.setCursor(8, ry + 2); d.print(R.label);
+        // Label as a SMALL muted caption on the left; the value is the hero on the right, in the row's
+        // semantic colour, big when it fits beside the caption and small otherwise. The value's start
+        // is clamped to always clear the caption, so a long label + long value can never overlap (the
+        // old code sized the value down but still right-aligned it, letting it slide under the label).
+        const int rightM = 8;
+        d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, ry + 6); d.print(R.label);
         if (!R.val[0]) continue;
-        int lw = (int)strlen(R.label) * 12, vw2 = (int)strlen(R.val) * 12;
-        bool big = (8 + lw + 14 + vw2 <= W);                                      // big value only when it fits beside the label
-        if (big) { d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(W - 8 - vw2, ry + 2); d.print(R.val); }
-        else     { d.setTextSize(1); d.setTextColor(MUTED, BG); int vw = (int)strlen(R.val) * 6;
-                   d.setCursor(W - 8 - vw, ry + 7); d.print(R.val); }
+        const int labelEnd = 8 + (int)strlen(R.label) * 6;
+        const int vw2 = (int)strlen(R.val) * 12, vw1 = (int)strlen(R.val) * 6;
+        if (labelEnd + 8 + vw2 <= W - rightM) {                                   // value fits BIG beside the caption
+            d.setTextSize(2); d.setTextColor(R.col, BG); d.setCursor(W - rightM - vw2, ry + 2); d.print(R.val);
+        } else {                                                                  // value SMALL, but never under the caption
+            int vx = W - rightM - vw1; if (vx < labelEnd + 6) vx = labelEnd + 6;
+            d.setTextSize(1); d.setTextColor(R.col, BG); d.setCursor(vx, ry + 6); d.print(R.val);
+        }
     }
 
     // scrollbar

@@ -1,0 +1,18 @@
+{
+  "id": "weather",
+  "name": "Meteo",
+  "version": "1.0.0",
+  "description": "Geolocated weather and 6-day forecast (Open-Meteo, browser-direct: the Cardputer is never touched). Mirrors the native device Weather feature; last conditions are cached so it opens instantly and works offline.",
+  "category": "tools",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/weather/",
+  "icon": "/apps/weather/icon.svg",
+  "permissions": [],
+  "handles": { "role": "none", "extensions": [] },
+  "intents": [],
+  "subscribes": [],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": [] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

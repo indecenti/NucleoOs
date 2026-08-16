@@ -187,7 +187,16 @@ bool nucleo_weather_cache_load(nucleo_weather_t *w)
 
 void nucleo_weather_cache_save(const nucleo_weather_t *w)
 {
-    FILE *f = fopen(WX_CACHE, "wb"); if (!f) return;
-    fprintf(f, "{\"place\":\"%s\",\"lat\":%.4f,\"lon\":%.4f}", w->place, w->lat, w->lon);
-    fclose(f);
+    // Build with cJSON, not a hand-rolled fprintf: w->place is an external (geocoded) string that may
+    // contain a quote/backslash/control char, which would produce malformed JSON that cache_load's
+    // cJSON_Parse then rejects — losing the saved location. cJSON escapes it correctly.
+    cJSON *o = cJSON_CreateObject(); if (!o) return;
+    cJSON_AddStringToObject(o, "place", w->place);
+    cJSON_AddNumberToObject(o, "lat", w->lat);
+    cJSON_AddNumberToObject(o, "lon", w->lon);
+    char *txt = cJSON_PrintUnformatted(o); cJSON_Delete(o);
+    if (!txt) return;
+    FILE *f = fopen(WX_CACHE, "wb");
+    if (f) { fputs(txt, f); fclose(f); }
+    free(txt);
 }

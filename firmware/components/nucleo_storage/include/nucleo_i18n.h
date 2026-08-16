@@ -48,6 +48,11 @@ void nucleo_i18n_set_on_change(void (*cb)(const char *code));
 // Pick the right literal for the current language. Both args are flash literals -> zero RAM cost.
 const char *nucleo_tr(const char *it, const char *en);
 
+// Full 5-language pick (it/en/es/fr/de), for user-facing NAMES that deserve every shipped language
+// rather than the IT/EN fallback nucleo_tr gives. Same zero-RAM contract (all args flash literals).
+// Unknown codes fall back to Italian. Strings must be ASCII — the on-TFT font has no accented glyphs.
+const char *nucleo_tr5(const char *it, const char *en, const char *es, const char *fr, const char *de);
+
 #ifdef __cplusplus
 }
 #endif
@@ -56,4 +61,7 @@ const char *nucleo_tr(const char *it, const char *en);
 // Guarded so a file with its own local TR macro is never clobbered.
 #ifndef TR
 #define TR(it_, en_) nucleo_tr((it_), (en_))
+#endif
+#ifndef TR5
+#define TR5(it_, en_, es_, fr_, de_) nucleo_tr5((it_), (en_), (es_), (fr_), (de_))
 #endif

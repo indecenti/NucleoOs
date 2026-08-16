@@ -229,8 +229,12 @@ static void bruce_on_frame(const uint8_t *mac, const uint8_t *data) {
         snprintf(s_st.name, sizeof s_st.name, "%s", nm);
     }
     if (s_brecv.f && m->dataSize) {
-        fwrite(m->data, 1, m->dataSize, s_brecv.f);
-        s_brecv.got += m->dataSize; s_st.done = s_brecv.got; s_st.total = s_brecv.total;
+        // dataSize comes verbatim off the ESP-NOW frame (only the SENDER clamps it). m->data is just
+        // BRUCE_DATA_SIZE bytes inside the fixed rx packet — clamp so a hostile peer can't drive fwrite
+        // past data[] (OOB read of the packet/stack, or a huge bogus write).
+        size_t dn = m->dataSize > BRUCE_DATA_SIZE ? BRUCE_DATA_SIZE : m->dataSize;
+        fwrite(m->data, 1, dn, s_brecv.f);
+        s_brecv.got += dn; s_st.done = s_brecv.got; s_st.total = s_brecv.total;
     }
     if (m->done) {
         if (s_brecv.f) { fclose(s_brecv.f); s_brecv.f = NULL; }

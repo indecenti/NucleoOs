@@ -90,7 +90,7 @@ static void on_exit(void) { swarm_svc_stop(); }
 
 extern "C" void nucleo_register_swarm(void) {
     static const nucleo_app_def_t app = {
-        "swarm", "Sciame", "Communication",
+        "swarm", "Sciame", "Messaging",
         "Trova i Cardputer vicini e fai un ping (test sciame ESP-NOW)",
         'S', C_BLUE,
         on_enter, on_key, on_tick, on_draw, on_exit,

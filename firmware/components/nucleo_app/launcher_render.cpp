@@ -150,46 +150,55 @@ static int node_child_count(const MenuNode *m)
 // name differs by language need a row; pure proper nouns (ANIMA, Mail, SSH, Pong, BLE, Snake, Yahtzee,
 // Tanks, Tank Duel, Payloads, IR Remote, Evil Portal, Deauth Flood, WiFi Sniffer, …) fall through to
 // the app's own name.
-static const struct { const char *id; const char *it; const char *en; } APP_NAME_TR[] = {
-    { "alarm",       "Allarme",             "Alarm" },
-    { "brawler",     "Scorribanda",         "Brawl" },
-    { "calc",        "Calcolatrice",        "Calculator" },
-    { "calendar",    "Calendario",          "Calendar" },
-    { "chrono",      "Cronometro",          "Stopwatch" },
-    { "clock",       "Orologio",            "Clock" },
-    { "dice",        "Dadi",                "Dice" },
-    { "files",       "File",                "Files" },
-    { "giardino",    "Giardino",            "Sand Garden" },
-    { "goniometer",  "Goniometro",          "Protractor" },
-    { "info",        "Connessione",         "Connection" },
-    { "level",       "Livella",             "Level" },
-    { "link",        "Vicino",              "Nearby" },
-    { "micspec",     "Spettro Mic",         "Mic Spectrum" },
-    { "music",       "Musica",              "Music" },
-    { "notepad",     "Note",                "Notes" },
-    { "notify",      "Notifiche",           "Notifications" },
-    { "orde",        "Orde",                "Hordes" },
-    { "pedometer",   "Contapassi",          "Pedometer" },
-    { "photos",      "Foto",                "Photos" },
-    { "pinball",     "Flipper",             "Pinball" },
-    { "qr",          "Codice QR",           "QR Code" },
-    { "radio",       "Radio",               "Radio" },
-    { "reactor",     "Reattore",            "Reactor" },
-    { "recorder",    "Registratore vocale", "Voice Recorder" },
-    { "remote",      "Controllo remoto",    "Remote Control" },
-    { "screensaver", "Salvaschermo",        "Screensaver" },
-    { "slots",       "Slot",                "Slots" },
-    { "stelle",      "Costellazioni",       "Constellations" },
-    { "swarm",       "Sciame",              "Swarm" },
-    { "sysmon",      "Stato sistema",       "System Status" },
-    { "theme",       "Tema",                "Theme" },
-    { "torch",       "Torcia",              "Torch" },
-    { "usb",         "Unita USB",           "USB Drive" },
-    { "usbkbd",      "Tastiera USB",        "USB Keyboard" },
-    { "voice",       "Trainer vocale",      "Voice Trainer" },
-    { "voicelab",    "Laboratorio voce",    "Voice Lab" },
-    { "weather",     "Meteo",               "Weather" },
-    { "wifi",        "Impostazioni",        "Settings" },
+// App display names in all five shipped languages (it/en/es/fr/de). ASCII only — the on-TFT font has
+// no accented glyphs, so French/German accents are dropped (Chronometre, Wuerfel) rather than rendered
+// as tofu. Game names and brand-ish words stay close across languages on purpose.
+static const struct { const char *id, *it, *en, *es, *fr, *de; } APP_NAME_TR[] = {
+    { "alarm",       "Allarme",             "Alarm",          "Alarma",         "Alarme",           "Wecker" },
+    { "brawler",     "Scorribanda",         "Brawl",          "Pelea",          "Bagarre",          "Keilerei" },
+    { "calc",        "Calcolatrice",        "Calculator",     "Calculadora",    "Calculatrice",     "Rechner" },
+    { "calendar",    "Calendario",          "Calendar",       "Calendario",     "Calendrier",       "Kalender" },
+    { "chrono",      "Cronometro",          "Stopwatch",      "Cronometro",     "Chronometre",      "Stoppuhr" },
+    { "clock",       "Orologio",            "Clock",          "Reloj",          "Horloge",          "Uhr" },
+    { "dice",        "Dadi",                "Dice",           "Dados",          "Des",              "Wuerfel" },
+    { "files",       "File",                "Files",          "Archivos",       "Fichiers",         "Dateien" },
+    { "giardino",    "Giardino",            "Sand Garden",    "Jardin",         "Jardin",           "Sandgarten" },
+    { "goniometer",  "Goniometro",          "Protractor",     "Transportador",  "Rapporteur",       "Winkelmesser" },
+    { "info",        "Connessione",         "Connection",     "Conexion",       "Connexion",        "Verbindung" },
+    { "ir",          "Telecomando IR",      "IR Remote",      "Mando IR",       "Telecommande IR",  "IR-Fernbedienung" },
+    { "level",       "Livella",             "Level",          "Nivel",          "Niveau",           "Wasserwaage" },
+    { "link",        "Vicino",              "Nearby",         "Cerca",          "Proche",           "Nahe" },
+    { "mail",        "Posta",               "Mail",           "Correo",         "Courrier",         "Mail" },
+    { "micspec",     "Spettro Mic",         "Mic Spectrum",   "Espectro Mic",   "Spectre Mic",      "Mik-Spektrum" },
+    { "music",       "Musica",              "Music",          "Musica",         "Musique",          "Musik" },
+    { "notepad",     "Note",                "Notes",          "Notas",          "Notes",            "Notizen" },
+    { "notify",      "Notifiche",           "Notifications",  "Notificaciones", "Notifications",    "Hinweise" },
+    { "orde",        "Orde",                "Hordes",         "Hordas",         "Hordes",           "Horden" },
+    { "pedometer",   "Contapassi",          "Pedometer",      "Podometro",      "Podometre",        "Schrittzaehler" },
+    { "photos",      "Foto",                "Photos",         "Fotos",          "Photos",           "Fotos" },
+    { "pinball",     "Flipper",             "Pinball",        "Pinball",        "Flipper",          "Flipper" },
+    { "qr",          "Codice QR",           "QR Code",        "Codigo QR",      "Code QR",          "QR-Code" },
+    { "radio",       "Radio",               "Radio",          "Radio",          "Radio",            "Radio" },
+    { "reactor",     "Reattore",            "Reactor",        "Reactor",        "Reacteur",         "Reaktor" },
+    { "recorder",    "Registratore vocale", "Voice Recorder", "Grabadora",      "Dictaphone",       "Rekorder" },
+    { "remote",      "Controllo remoto",    "Remote Control", "Control remoto", "Controle distant", "Fernsteuerung" },
+    { "screensaver", "Salvaschermo",        "Screensaver",    "Salvapantallas", "Economiseur",      "Bildschirmschoner" },
+    { "slots",       "Slot",                "Slots",          "Tragaperras",    "Machines",         "Automat" },
+    { "snake",       "Serpente",            "Snake",          "Serpiente",      "Serpent",          "Schlange" },
+    { "stelle",      "Costellazioni",       "Constellations", "Constelaciones", "Constellations",   "Sternbilder" },
+    { "swarm",       "Sciame",              "Swarm",          "Enjambre",       "Essaim",           "Schwarm" },
+    { "sysmon",      "Stato sistema",       "System Status",  "Estado sistema", "Etat systeme",     "Systemstatus" },
+    { "tankd",       "Duello Carri",        "Tank Duel",      "Duelo Tanques",  "Duel de Chars",    "Panzerduell" },
+    { "tanks",       "Carri",               "Tanks",          "Tanques",        "Chars",            "Panzer" },
+    { "theme",       "Tema",                "Theme",          "Tema",           "Theme",            "Design" },
+    { "torch",       "Torcia",              "Torch",          "Linterna",       "Lampe",            "Taschenlampe" },
+    { "usb",         "Unita USB",           "USB Drive",      "Disco USB",      "Disque USB",       "USB-Disk" },
+    { "usbweb",      "Web via USB",         "Web via USB",    "Web por USB",    "Web via USB",      "Web ueber USB" },
+    { "usbkbd",      "Tastiera USB",        "USB Keyboard",   "Teclado USB",    "Clavier USB",      "USB-Tastatur" },
+    { "voice",       "Trainer vocale",      "Voice Trainer",  "Entrenador voz", "Coach vocal",      "Sprachtrainer" },
+    { "voicelab",    "Laboratorio voce",    "Voice Lab",      "Lab de voz",     "Labo vocal",       "Sprachlabor" },
+    { "weather",     "Meteo",               "Weather",        "Tiempo",         "Meteo",            "Wetter" },
+    { "wifi",        "Impostazioni",        "Settings",       "Ajustes",        "Reglages",         "Einstellungen" },
 };
 
 // Localized launcher name for an app id in the ACTIVE language, or NULL when the app uses its own
@@ -198,7 +207,8 @@ static const struct { const char *id; const char *it; const char *en; } APP_NAME
 extern "C" const char *launcher_app_localized_name(const char *id)
 {
     for (unsigned i = 0; i < sizeof APP_NAME_TR / sizeof APP_NAME_TR[0]; i++)
-        if (!strcmp(id, APP_NAME_TR[i].id)) return TR(APP_NAME_TR[i].it, APP_NAME_TR[i].en);
+        if (!strcmp(id, APP_NAME_TR[i].id))
+            return TR5(APP_NAME_TR[i].it, APP_NAME_TR[i].en, APP_NAME_TR[i].es, APP_NAME_TR[i].fr, APP_NAME_TR[i].de);
     return nullptr;
 }
 
@@ -206,16 +216,17 @@ static const char *node_label(const MenuNode *n)
 {
     if (!n) return "";
     const char *id = n->id;
-    if      (!strcmp(id, "Media"))         return TR("Media", "Media");
-    else if (!strcmp(id, "Office"))        return TR("Produttivita", "Office");
-    else if (!strcmp(id, "Tools"))         return TR("Strumenti", "Tools");
-    else if (!strcmp(id, "System"))        return TR("Sistema", "System");
-    else if (!strcmp(id, "Connect"))       return TR("Connetti", "Connect");
-    else if (!strcmp(id, "Communication")) return TR("Comunicazione", "Comms");
-    else if (!strcmp(id, "Security"))      return TR("Sicurezza", "Security");
-    else if (!strcmp(id, "Hardware"))      return TR("Sensori", "Sensors");
-    else if (!strcmp(id, "Games"))         return TR("Giochi", "Games");
-    else if (!strcmp(id, "Voice"))         return TR("Voce", "Voice");
+    // Category labels in all five shipped languages (ASCII only). Web OS / Media stay as-is everywhere.
+    if      (!strcmp(id, "Web OS"))        return "Web OS";
+    else if (!strcmp(id, "Media"))         return "Media";
+    else if (!strcmp(id, "Office"))        return TR5("Produttivita", "Office", "Oficina", "Bureau", "Buero");
+    else if (!strcmp(id, "Tools"))         return TR5("Strumenti", "Tools", "Herramientas", "Outils", "Werkzeuge");
+    else if (!strcmp(id, "System"))        return TR5("Sistema", "System", "Sistema", "Systeme", "System");
+    else if (!strcmp(id, "Connect"))       return TR5("Connetti", "Connect", "Conectar", "Connecter", "Verbinden");
+    else if (!strcmp(id, "Messaging"))     return TR5("Messaggi", "Messaging", "Mensajes", "Messages", "Nachrichten");
+    else if (!strcmp(id, "Security"))      return TR5("Sicurezza", "Security", "Seguridad", "Securite", "Sicherheit");
+    else if (!strcmp(id, "Measure"))       return TR5("Misura", "Measure", "Medir", "Mesure", "Messen");
+    else if (!strcmp(id, "Games"))         return TR5("Giochi", "Games", "Juegos", "Jeux", "Spiele");
     // app node: bilingual title from the central table above; proper-noun apps fall through to their name.
     const char *loc = launcher_app_localized_name(id);
     return loc ? loc : n->label;
@@ -327,6 +338,12 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
         IBX(cx - Tk, cy - s, 2 * Tk, s * 0.4f, col);
         IRR(cx - s * 0.5f, cy - s * 0.62f, s, s * 1.62f, s * 0.2f, col);
         IBX(cx - s * 0.5f, cy + s * 0.12f, s, Tk * 0.55f, bg);
+    } else if (!strcmp(id, "usbweb")) {                                          // globe (web) over a plug stub (cable)
+        IEL(cx, cy - s * 0.28f, s * 0.62f, s * 0.62f, col);
+        IEL(cx, cy - s * 0.28f, s * 0.26f, s * 0.62f, col);
+        g->drawFastHLine(RI(cx - s * 0.62f), RI(cy - s * 0.28f), RI(s * 1.24f), col);
+        IBX(cx - Tk * 0.5f, cy + s * 0.34f, Tk, s * 0.4f, col);                  // cable
+        IRR(cx - s * 0.3f, cy + s * 0.72f, s * 0.6f, s * 0.34f, 2, col);         // plug
     } else if (!strcmp(id, "usbkbd")) {
         IRR(cx - s, cy - s * 0.6f, 2 * s, s * 1.2f, s * 0.22f, col);
         for (int ry = 0; ry < 2; ry++) for (int cc = 0; cc < 4; cc++) IBX(cx - s * 0.72f + cc * s * 0.46f, cy - s * 0.32f + ry * s * 0.42f, Tk * 0.6f, Tk * 0.6f, bg);
@@ -338,6 +355,11 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
     } else if (!strcmp(id, "video")) {
         IRR(cx - s, cy - s * 0.75f, 2 * s, s * 1.5f, s * 0.22f, col);
         ITR(cx - s * 0.3f, cy - s * 0.42f, cx - s * 0.3f, cy + s * 0.42f, cx + s * 0.5f, cy, bg);
+    } else if (!strcmp(id, "Web OS")) {
+        // category: a globe (browser web OS) — outline circle + one meridian + one parallel.
+        IEL(cx, cy, s * 0.92f, s * 0.92f, col);
+        IEL(cx, cy, s * 0.4f, s * 0.92f, col);       // meridian
+        g->drawFastHLine(RI(cx - s * 0.92f), RI(cy), RI(s * 1.84f), col);  // equator
     } else if (!strcmp(id, "Media")) {
         ITR(cx - s * 0.7f, cy - s, cx - s * 0.7f, cy + s, cx + s, cy, col);
     } else if (!strcmp(id, "photos")) {
@@ -346,7 +368,7 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
         IFC(cx - s * 0.4f, cy - s * 0.4f, Tk * 0.8f, col);
         ITR(cx - s * 0.85f, cy + s * 0.62f, cx - s * 0.1f, cy - s * 0.15f, cx + s * 0.25f, cy + s * 0.62f, col);
         ITR(cx - s * 0.05f, cy + s * 0.62f, cx + s * 0.45f, cy + s * 0.05f, cx + s * 0.85f, cy + s * 0.62f, col);
-    } else if (!strcmp(id, "recorder") || !strcmp(id, "voice") || !strcmp(id, "Voice")) {
+    } else if (!strcmp(id, "recorder") || !strcmp(id, "voice")) {
         IRR(cx - Tk * 1.15f, cy - s, Tk * 2.3f, s * 1.25f, Tk * 1.15f, col);
         IL(cx - s * 0.58f, cy, cx - s * 0.58f, cy + s * 0.22f, Tk * 0.6f, col); IL(cx + s * 0.58f, cy, cx + s * 0.58f, cy + s * 0.22f, Tk * 0.6f, col);
         IL(cx - s * 0.58f, cy + s * 0.2f, cx, cy + s * 0.5f, Tk * 0.6f, col); IL(cx + s * 0.58f, cy + s * 0.2f, cx, cy + s * 0.5f, Tk * 0.6f, col);
@@ -411,7 +433,7 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
         IRR(cx - s, cy - s * 0.66f, 2 * s, s * 1.32f, s * 0.18f, col);
         IL(cx - s * 0.86f, cy - s * 0.46f, cx, cy + s * 0.16f, Tk * 0.6f, bg);
         IL(cx + s * 0.86f, cy - s * 0.46f, cx, cy + s * 0.16f, Tk * 0.6f, bg);
-    } else if (!strcmp(id, "Communication")) {
+    } else if (!strcmp(id, "Messaging")) {
         // category: speech bubble with a tail + three dots
         IRR(cx - s, cy - s * 0.8f, 2 * s, s * 1.28f, s * 0.34f, col);
         ITR(cx - s * 0.5f, cy + s * 0.3f, cx - s * 0.08f, cy + s * 0.3f, cx - s * 0.62f, cy + s, col);
@@ -575,7 +597,7 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
         IBX(cx - s * 0.5f, cy + s * 0.05f, s, s * 0.42f, bg);                   // inner protractor cut-out
         IL(cx, cy + s * 0.45f, cx + s * 0.66f, cy - s * 0.55f, Tk * 0.55f, col);// angle arm from the pivot
         IFC(cx, cy + s * 0.45f, Tk * 0.7f, col);                               // pivot dot
-    } else if (!strcmp(id, "Hardware")) {                                       // DIP microchip: body + side legs + pin-1 dot
+    } else if (!strcmp(id, "Measure")) {                                       // DIP microchip: body + side legs + pin-1 dot
         IRR(cx - s * 0.56f, cy - s * 0.72f, s * 1.12f, s * 1.44f, s * 0.12f, col);
         IRR(cx - s * 0.28f, cy - s * 0.44f, s * 0.56f, s * 0.9f, 2, bg);
         for (int i = -1; i <= 1; i++) {

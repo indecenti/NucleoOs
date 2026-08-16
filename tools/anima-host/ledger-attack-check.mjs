@@ -7,7 +7,7 @@
 //   certainty   conf type-coercion, empty fields, control chars, length bombs are rejected
 //   canonical   the encoding is injective (100 ≠ "100"; no 0x01 delimiter injection)
 //   soundness   abstract nodes are blocklisted; a vandalized CONCRETE target is not a certified type
-import { readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Ledger, isCertain, canonical, linkHash, genesis, validSrc, wdIndexFrom, KEY } from '../anima/ledger.mjs';
@@ -15,19 +15,27 @@ import { Ledger, isCertain, canonical, linkHash, genesis, validSrc, wdIndexFrom,
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = join(here, '..', '..');
 const SD = join(here, 'sd', 'data', 'anima', 'learned');
+// The shipped ledger to attack lives in the host fixture; a fresh clone (or CI) doesn't build that
+// fixture, so fall back to the committed device ledger (tools/sd-sim == deploy/sd) — identical content —
+// so this security gate still RUNS instead of crashing on a missing file. Temp files stay under SD.
+const LEDGER = existsSync(join(SD, 'knowledge.ledger.jsonl'))
+  ? join(SD, 'knowledge.ledger.jsonl')
+  : join(REPO, 'tools/sd-sim/data/anima/learned/knowledge.ledger.jsonl');
 const cache = JSON.parse(readFileSync(join(REPO, 'tools/anima/refdata/wd_cache.json'), 'utf8'));
 const policy = JSON.parse(readFileSync(join(REPO, 'tools/anima/refdata/closure_policy.json'), 'utf8'));
 const roots = new Set(policy.certified_roots), block = new Set(policy.blocklist);
 const wdIndex = wdIndexFrom(cache);
 const anchor = readFileSync(join(REPO, 'tools/anima/refdata/knowledge.head'), 'utf8').trim();
-const shipped = readFileSync(join(SD, 'knowledge.ledger.jsonl'), 'utf8').split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
+const shipped = readFileSync(LEDGER, 'utf8').split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
 const C = { g: '\x1b[32m', r: '\x1b[31m', d: '\x1b[2m', b: '\x1b[1m', x: '\x1b[0m' };
 const fails = [];
 const ck = (cond, msg) => { if (!cond) fails.push(msg); console.log(`   ${cond ? C.g + '✓' : C.r + '✗'}${C.x} ${msg}`); };
 
 const TMP = join(SD, 'evo', '.attack.ledger.jsonl');
+mkdirSync(dirname(TMP), { recursive: true });               // the host fixture dir may not exist on a fresh clone
 const fresh = () => { writeFileSync(TMP, '', 'utf8'); return new Ledger(TMP, { wdIndex }); };
 const real = shipped.find((e) => e.src.startsWith('wd:'));   // a genuine, cache-resolvable statement
+if (!real) { console.error('[ledger-attack] no wd:-sourced statement in the ledger fixture — cannot run'); process.exit(1); }
 
 console.log(`${C.b}=== ANIMA ledger-attack gate (VKL v2 must defeat every v1 break) ===${C.x}\n`);
 
@@ -87,7 +95,7 @@ console.log(`\n${C.b}D. Forgiatura (forge+reseal rilevato dall'ancora; chiave sb
   ck(rs.dropped >= 1 && !after.includes('vaccines'), `reseal SCARTA la riga non-certa (dropped=${rs.dropped}), non la "benedice"`);
 
   // a wrong key cannot produce a valid chain (the attacker doesn't hold the device/build secret)
-  const vWrong = await new Ledger(join(SD, 'knowledge.ledger.jsonl'), { key: 'attacker-key', wdIndex }).verify({ anchor });
+  const vWrong = await new Ledger(LEDGER, { key: 'attacker-key', wdIndex }).verify({ anchor });
   ck(!vWrong.ok, 'verifica con CHIAVE SBAGLIATA fallisce (la catena è autenticata, non solo hashata)');
   ck(genesis('attacker-key') !== genesis(KEY), 'anche il genesis dipende dalla chiave (niente radice pubblica condivisa)');
 }

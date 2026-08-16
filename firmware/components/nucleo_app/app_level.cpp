@@ -329,7 +329,7 @@ static void enter(void)
 extern "C" void nucleo_register_level(void)
 {
     static const nucleo_app_def_t app = {
-        "level", "Livella", "Hardware", "Livella pro multi-vista (BMI270)",
+        "level", "Livella", "Measure", "Livella pro multi-vista (BMI270)",
         'L', C_GREEN, enter, on_key, nullptr, draw, nullptr
     };
     nucleo_app_register(&app);

@@ -248,14 +248,22 @@ void nlink_on_frame(nlink_ctx_t *c, const uint8_t *peer6, const uint8_t *buf, in
 
     // Discovery is session-agnostic.
     if (type == NL_PING) {
-        int nl = buf[NLINK_HDR]; if (nl > NLINK_NAME_MAX) nl = NLINK_NAME_MAX;
+        // Bound the name by BOTH the dest buffer and the actual frame length — a short/truncated PING
+        // must not copy stale bytes past `len` into the peer name (over-read of the rx buffer).
+        int avail = len - (NLINK_HDR + 1);
+        int nl = avail > 0 ? buf[NLINK_HDR] : 0;
+        if (nl > NLINK_NAME_MAX) nl = NLINK_NAME_MAX;
+        if (nl > avail) nl = avail;
         char nm[NLINK_NAME_MAX + 1]; memcpy(nm, buf + NLINK_HDR + 1, nl); nm[nl] = 0;
         nlink_evt_t e = {0}; e.peer = peer6; e.name = nm; event(c, NL_EV_PING, &e);
         send_pong(c, peer6);
         return;
     }
     if (type == NL_PONG) {
-        int nl = buf[NLINK_HDR + 1]; if (nl > NLINK_NAME_MAX) nl = NLINK_NAME_MAX;
+        int avail = len - (NLINK_HDR + 2);
+        int nl = avail > 0 ? buf[NLINK_HDR + 1] : 0;
+        if (nl > NLINK_NAME_MAX) nl = NLINK_NAME_MAX;
+        if (nl > avail) nl = avail;
         char nm[NLINK_NAME_MAX + 1]; memcpy(nm, buf + NLINK_HDR + 2, nl); nm[nl] = 0;
         nlink_evt_t e = {0}; e.peer = peer6; e.name = nm; event(c, NL_EV_PEER, &e);
         return;
@@ -278,6 +286,8 @@ void nlink_on_frame(nlink_ctx_t *c, const uint8_t *peer6, const uint8_t *buf, in
         c->crc32      = get32(q);      q += 4;
         c->mode       = *q++;
         int nl = *q++; if (nl > NLINK_NAME_MAX) nl = NLINK_NAME_MAX;
+        int navail = len - (int)(q - buf);                // bytes left after the name-length byte
+        if (nl > navail) nl = navail < 0 ? 0 : navail;    // never read the name past the frame end
         memcpy(c->name, q, nl); c->name[nl] = 0;
         memcpy(c->peer, peer6, 6);
         c->offer_pending = true; c->last_rx_ms = now_ms;

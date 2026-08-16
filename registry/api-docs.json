@@ -260,6 +260,61 @@
       }
     ]
   },
+  "POST /api/wifi/priority": {
+    "it": {
+      "title": "POST /api/wifi/priority - Priorità Rete",
+      "description": "Imposta la priorità di una rete salvata (0 = normale, valori più alti = preferita). Quando più reti note sono in portata, il supervisore aggancia quella a priorità più alta, poi a parità sceglie il segnale più forte. Serve a preferire, ad esempio, la rete di casa a un hotspot aperto più vicino.",
+      "synopsis": "POST /api/wifi/priority  {\"ssid\":\"..\",\"priority\":0-9}",
+      "details": "Richiede autenticazione (cambia quale rete il dispositivo aggancia da solo). Il valore viene limitato a 0..9. Risposta {\"ok\":true}."
+    },
+    "en": {
+      "title": "POST /api/wifi/priority - Network Priority",
+      "description": "Sets a saved network's priority (0 = normal, higher = preferred). When several known networks are in range the supervisor joins the highest-priority one, breaking ties by strongest signal. Use it to prefer, say, your home network over a closer open hotspot.",
+      "synopsis": "POST /api/wifi/priority  {\"ssid\":\"..\",\"priority\":0-9}",
+      "details": "Auth-gated (changes which network the device auto-joins). The value is clamped to 0..9. Response {\"ok\":true}."
+    },
+    "params": [
+      {
+        "name": "ssid",
+        "type": "text",
+        "required": true,
+        "default": "",
+        "it": {
+          "description": "SSID della rete salvata"
+        },
+        "en": {
+          "description": "SSID of the saved network"
+        }
+      },
+      {
+        "name": "priority",
+        "type": "number",
+        "required": true,
+        "default": "0",
+        "it": {
+          "description": "Priorità 0-9 (0 = normale, più alto = preferita)"
+        },
+        "en": {
+          "description": "Priority 0-9 (0 = normal, higher = preferred)"
+        }
+      }
+    ]
+  },
+  "POST /api/wifi/reconnect": {
+    "it": {
+      "title": "POST /api/wifi/reconnect - Riconnetti Ora",
+      "description": "Esegue subito una scansione e aggancia la migliore rete nota in portata (chiamata bloccante come /api/wifi/join). Se nessuna è raggiungibile, ripiega sull'hotspot. Utile per applicare un cambio di priorità o recuperare un collegamento caduto senza aspettare il supervisore in background.",
+      "synopsis": "POST /api/wifi/reconnect",
+      "details": "Richiede autenticazione (modifica la radio). Risposta {\"ok\":true} se ha ottenuto un IP, altrimenti {\"ok\":false}."
+    },
+    "en": {
+      "title": "POST /api/wifi/reconnect - Reconnect Now",
+      "description": "Immediately rescans and joins the best in-range known network (blocking, like /api/wifi/join). Falls back to the hotspot if none is reachable. Handy to apply a priority change or recover a dropped link without waiting for the background supervisor.",
+      "synopsis": "POST /api/wifi/reconnect",
+      "details": "Auth-gated (mutates the radio). Response {\"ok\":true} if it got an IP, else {\"ok\":false}."
+    },
+    "params": []
+  },
   "POST /api/ota": {
     "it": {
       "title": "POST /api/ota - Aggiornamento Firmware OTA",

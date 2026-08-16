@@ -130,17 +130,21 @@ export function makeModelStore(deps = {}) {
       bytes = r.bytes;
     } else {
       // SD (Cardputer): SAFE bounded-Range windows, scheduler-gated, never a whole-file GET.
-      let win = MAX_WINDOW; const chunks = []; let acc = 0;
-      const ranges = () => planRanges(file.bytes, win);
-      for (let i = 0, rs = ranges(); i < rs.length; i++) {
+      // OFFSET-based (not index-into-a-recomputed-plan): the window can SHRINK mid-download (throttle
+      // or a 503), and re-planning ranges from byte 0 with a new window re-segments bytes we already
+      // have — the old index then points at a DIFFERENT byte range, so chunks overlap and the assembled
+      // shard is corrupt. Walking `off` forward makes a window change affect only the NEXT window.
+      let win = MAX_WINDOW; const chunks = []; let off = 0;
+      while (off < file.bytes) {
         throwIfAborted(signal);
         const d = decide(deps.telemetry ? deps.telemetry() : {}, { op: 'model-pull', source: 'sd' });
         if (d.action === 'pause') throw new DlError('transient', 'paused: ' + d.reason);   // back off — caller auto-resumes
-        if (d.action === 'throttle') { win = d.window; rs = ranges(); }                    // shrink window, recompute
-        const r = await deps.fetchRange(url, rs[i], { signal });
-        if (r && r.status === 503) { win = adaptiveWindow(win, true); rs = ranges(); i--; continue; }
+        if (d.action === 'throttle') win = d.window;                                        // shrink the NEXT window
+        const range = { start: off, end: Math.min(off + win, file.bytes) - 1 };
+        const r = await deps.fetchRange(url, range, { signal });
+        if (r && r.status === 503) { win = adaptiveWindow(win, true); continue; }           // retry the SAME offset, smaller window
         if (!r || !r.ok) { throwIfAborted(signal); throw new DlError(classifyStatus(r && r.status), 'sd ' + (r && r.status) + ' on ' + file.name); }
-        chunks.push(r.bytes); acc += r.bytes.length; onBytes && onBytes(acc);
+        chunks.push(r.bytes); off += r.bytes.length; onBytes && onBytes(off);
       }
       bytes = concat(chunks);
     }

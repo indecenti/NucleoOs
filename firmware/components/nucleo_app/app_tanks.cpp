@@ -1311,7 +1311,8 @@ static void net_handle(const pnet_pkt_t *p) {
     if (s_screen == ST_PLAY || s_screen == ST_OVER) {
         if (!s_haspeer || memcmp(p->mac, s_peer, 6)) return;
         if (type == TK_AIM && !local_active() && p->len >= 10) {
-            s_tk[s_active].weap = p->buf[4]; int16_t e, pw; memcpy(&e, p->buf + 6, 2); memcpy(&pw, p->buf + 8, 2);
+            int wp = p->buf[4]; if (wp >= NWEAP) wp = 0;   // clamp the peer weapon index (mirror TK_FIRE) — else OOB WEAPS[]/ammo[]
+            s_tk[s_active].weap = wp; int16_t e, pw; memcpy(&e, p->buf + 6, 2); memcpy(&pw, p->buf + 8, 2);
             s_tk[s_active].elev = e; s_tk[s_active].power = pw; s_last_rx = now_ms();
         } else if (type == TK_FIRE && !local_active() && s_phase == TP_AIM && p->len >= 12) {
             int16_t e, pw, wd; memcpy(&e, p->buf + 6, 2); memcpy(&pw, p->buf + 8, 2); memcpy(&wd, p->buf + 10, 2);

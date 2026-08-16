@@ -516,7 +516,7 @@ static void on_exit(void) { nlink_svc_stop(); free(s_ent); s_ent = nullptr; s_ne
 
 extern "C" void nucleo_register_link(void) {
     static const nucleo_app_def_t app = {
-        "link", "Vicino", "Communication",
+        "link", "Vicino", "Messaging",
         "Scambia file e comandi con altri device (Nucleo o Bruce) via ESP-NOW",
         'V', C_BLUE,
         on_enter, on_key, on_tick, on_draw, on_exit,

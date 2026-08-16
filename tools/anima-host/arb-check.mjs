@@ -4,9 +4,21 @@
 // under real thread contention, FG-preempts-BG yielding, the never-block (timeout=0) guarantee,
 // idempotent release, and the teardown heap-floor sentinel. Wired into `npm run anima:gate`.
 import { spawnSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+
+// A committed .exe from the OTHER OS (this repo tracks the Windows build) must be rebuilt, not run:
+// on a fresh clone every file shares one mtime, so the mtime staleness check alone would run a Windows
+// PE on Linux (or vice-versa). Rebuild when the on-disk exe isn't this platform's format.
+function wrongPlatformExe(p) {
+  try {
+    const fd = openSync(p, 'r'); const b = Buffer.alloc(4); readSync(fd, b, 0, 4, 0); closeSync(fd);
+    const isELF = b[0] === 0x7f && b[1] === 0x45 && b[2] === 0x4c && b[3] === 0x46;   // \x7fELF
+    const isPE  = b[0] === 0x4d && b[1] === 0x5a;                                     // MZ
+    return process.platform === 'win32' ? !isPE : !isELF;
+  } catch { return true; }
+}
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..', '..');
@@ -21,15 +33,23 @@ const srcs = [
   join(comp, 'arb_plat.h'),
   join(hostDir, 'arb_plat_host.c'),
   join(hostDir, 'arb_test.c'),
+  join(hostDir, 'arb_host_compat.h'),
   join(hostDir, 'arb-build.ps1'),
+  join(hostDir, 'build.sh'),
 ];
-const stale = !existsSync(exe) ||
+const stale = !existsSync(exe) || wrongPlatformExe(exe) ||
   srcs.some((s) => existsSync(s) && statSync(s).mtimeMs > statSync(exe).mtimeMs);
 
 if (stale) {
-  const b = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass',
-    '-File', join(hostDir, 'arb-build.ps1')], { cwd: repo, encoding: 'utf8' });
+  // Windows builds via arb-build.ps1 (MinGW), every other platform via build.sh (system gcc).
+  const win = process.platform === 'win32';
+  const cmd = win ? 'powershell' : 'bash';
+  const args = win
+    ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(hostDir, 'arb-build.ps1')]
+    : [join(hostDir, 'build.sh')];
+  const b = spawnSync(cmd, args, { cwd: repo, encoding: 'utf8' });
   process.stdout.write((b.stdout || '') + (b.stderr || ''));
+  if (b.error) { console.error(`arb-check: cannot run ${cmd}: ${b.error.message}`); process.exit(1); }
   if (b.status !== 0 || !existsSync(exe)) {
     console.error('arb-check: build FAILED');
     process.exit(1);

@@ -206,6 +206,7 @@ int music_db_search(const char *query, int filter_type, struct TrackMeta **out_r
         if (query && query[0]) {
             // Very simple case-insensitive substring search across the raw JSON line! Fast!
             char *lower_line = strdup(line);
+            if (!lower_line) continue;                       // strdup can fail under low heap — don't deref NULL
             for(char *p=lower_line; *p; ++p) *p = tolower(*p);
             char lower_q[64]; snprintf(lower_q, sizeof lower_q, "%s", query);
             for(char *p=lower_q; *p; ++p) *p = tolower(*p);

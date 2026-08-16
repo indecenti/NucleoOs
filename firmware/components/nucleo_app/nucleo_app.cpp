@@ -337,6 +337,7 @@ extern "C" void nucleo_register_video(void);
 extern "C" void nucleo_register_remote(void);
 extern "C" void nucleo_register_notepad(void);
 extern "C" void nucleo_register_usb(void);
+extern "C" void nucleo_register_usbweb(void);
 extern "C" void nucleo_register_calendar(void);
 extern "C" void nucleo_register_notify(void);
 extern "C" void nucleo_register_radio(void);
@@ -393,22 +394,34 @@ extern "C" bool nucleo_screensaver_should_activate(int64_t idle_ms);  // app_scr
 extern "C" void nucleo_screensaver_set_trigger(void);                 // app_screensaver.cpp hook per main loop
 extern "C" bool nucleo_ui_is_adv(void);               // Cardputer ADV? (M5GFX board detect — robust, independent of IMU init)
 
-// Registration order defines BOTH the category order in the root menu (by first app seen)
-// and the app order within each category. Ordered so everyday apps lead and System/Connect
-// trail — matching the web emulator (Tools, Media, System, Connect).
+// Registration order defines BOTH the category order in the root menu (first app of a category seen
+// fixes that category's slot) and the app order within each category. Grouped one category per line,
+// everyday apps first and Security last; each register call now sits under the category its app
+// actually declares (the old comments had drifted — "Connect" registered wifi/link/swarm, "Office"
+// registered usb — describing a menu that no longer existed). Change a call's line = change the menu.
 void nucleo_app_register_builtins(void)
 {
     nucleo_register_anima();                                                    // hoisted to Home top-level (launcher_build_menu); its "Tools" category is ignored
-    nucleo_register_clock(); nucleo_register_chrono(); nucleo_register_pomodoro(); nucleo_register_weather(); nucleo_register_torch(); nucleo_register_calc(); nucleo_register_qr(); nucleo_register_pixelfix(); nucleo_register_files();
-    nucleo_register_calendar(); nucleo_register_notify(); nucleo_register_notepad(); nucleo_register_mail(); nucleo_register_usb(); nucleo_register_usbkbd(); nucleo_register_ir(); nucleo_register_alarm();  // alarm on BOTH boards (mic-only on non-ADV)
-    nucleo_register_radio(); nucleo_register_player(); nucleo_register_video(); nucleo_register_photos(); nucleo_register_recorder(); nucleo_register_micspec();  // Media
-    nucleo_register_reactor(); nucleo_register_constellations(); nucleo_register_sandgarden(); nucleo_register_slots(); nucleo_register_poker(); nucleo_register_pinball(); nucleo_register_pong(); nucleo_register_tanks(); nucleo_register_tankduel(); nucleo_register_brawler(); nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake(); nucleo_register_vs(); nucleo_register_cardler();   // Games
-    if (nucleo_ui_is_adv()) { nucleo_register_level(); nucleo_register_goniometer(); nucleo_register_pedometer(); }  // Hardware (ADV-only): BMI270 measuring tools
-    nucleo_register_screensaver();                                                  // Tools: salvaschermo
-    nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme();    // System
-    nucleo_register_wifi(); nucleo_register_remote(); nucleo_register_ssh(); nucleo_register_link(); nucleo_register_swarm(); nucleo_register_keydeck();  // Connect
-    nucleo_register_voice(); nucleo_register_voicelab();                          // Voice Control + live console
-    nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_sniffer(); nucleo_register_ethernet(); nucleo_register_ble(); nucleo_register_sentinel(); nucleo_register_airspace(); nucleo_register_fido(); nucleo_register_payloads();  // Security (authorized testing)
+    // Office (time + productivity): clock/chrono/pomodoro/alarm are the time cluster
+    nucleo_register_clock(); nucleo_register_chrono(); nucleo_register_pomodoro(); nucleo_register_alarm(); nucleo_register_calc(); nucleo_register_calendar(); nucleo_register_notepad(); nucleo_register_files();
+    // Tools (everyday gadgets)
+    nucleo_register_weather(); nucleo_register_torch(); nucleo_register_qr(); nucleo_register_ir(); nucleo_register_pixelfix(); nucleo_register_screensaver();
+    // Media
+    nucleo_register_radio(); nucleo_register_player(); nucleo_register_video(); nucleo_register_photos(); nucleo_register_recorder(); nucleo_register_micspec();
+    // Web OS: the two transports to the browser web OS — cable (usbweb) and LAN (remote)
+    nucleo_register_usbweb(); nucleo_register_remote();
+    // Games
+    nucleo_register_reactor(); nucleo_register_constellations(); nucleo_register_sandgarden(); nucleo_register_slots(); nucleo_register_poker(); nucleo_register_pinball(); nucleo_register_pong(); nucleo_register_tanks(); nucleo_register_tankduel(); nucleo_register_brawler(); nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake(); nucleo_register_vs(); nucleo_register_cardler();
+    // Measure (ADV-only): BMI270 measuring instruments
+    if (nucleo_ui_is_adv()) { nucleo_register_level(); nucleo_register_goniometer(); nucleo_register_pedometer(); }
+    // Connect: the Cardputer as a peripheral or terminal of another machine (USB keyboard/disk, SSH)
+    nucleo_register_usbkbd(); nucleo_register_usb(); nucleo_register_keydeck(); nucleo_register_ssh();
+    // Messaging: device-to-device / mail
+    nucleo_register_mail(); nucleo_register_link(); nucleo_register_swarm();
+    // System (settings, device, voice control)
+    nucleo_register_wifi(); nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme(); nucleo_register_notify(); nucleo_register_voice(); nucleo_register_voicelab();
+    // Security (authorized testing)
+    nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_sniffer(); nucleo_register_ethernet(); nucleo_register_ble(); nucleo_register_sentinel(); nucleo_register_airspace(); nucleo_register_fido(); nucleo_register_payloads();
 }
 
 // ---- app lifecycle ----------------------------------------------------------

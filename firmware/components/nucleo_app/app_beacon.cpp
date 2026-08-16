@@ -157,21 +157,27 @@ static const unsigned short HLBG = 0x10A2;   // selected-row background (dark bl
 static void draw_consent(void)
 {
     app_ui_title("Beacon Spam", BCN, "AUTH");
-    d.setTextSize(1); d.setTextColor(YEL, BG); d.setCursor(10, 26); d.print("Solo test autorizzati (lab/CTF).");
-    d.setTextColor(MUTED, BG); d.setCursor(10, 38); d.print("Trasmette molte reti WiFi finte.");
+    const int bot = nucleo_app_content_height();     // usable area; the hint bar owns everything below it
+    // One compact consent line (was two, which pushed the mode list into the hint bar).
+    d.setTextSize(1); d.setTextColor(YEL, BG); d.setCursor(10, 26); d.print("Solo test autorizzati: reti WiFi finte.");
 
+    // 4 modes, size-2, laid out to END above the blurb — which sits just above the hint bar. Before,
+    // fixed y=54+21*i put mode 4 (and the blurb) at 117/122, i.e. INSIDE the 121px hint-bar cutoff, so
+    // "4 Personalizzate" was unreadable. Now everything fits inside `bot`.
+    const int step = 18, listTop = 40;
     for (int i = 0; i < N_MODE; i++) {
-        int y = 54 + i * 21;
+        int y = listTop + i * step;
         bool sel = (i == s_sel);
         unsigned short bg = sel ? HLBG : BG;
-        if (sel) d.fillRect(6, y - 2, 228, 19, HLBG);
+        if (sel) d.fillRect(6, y - 2, 228, step + 1, HLBG);
         char head[26]; snprintf(head, sizeof head, "%d  %s", i + 1, MODE_NAME[i]);
         d.setTextSize(2); d.setTextColor(sel ? FG : MUTED, bg); d.setCursor(12, y); d.print(head);
     }
 
     d.setTextSize(1);
-    if (s_err[0]) { d.setTextColor(BCN, BG); d.setCursor(10, 122); d.print(s_err); }
-    else          { d.setTextColor(GRN, BG); d.setCursor(10, 122); d.print(MODE_BLURB[s_sel]); }
+    int by = bot - 8;                                // blurb baseline just clears the hint bar
+    if (s_err[0]) { d.setTextColor(BCN, BG); d.setCursor(10, by); d.print(s_err); }
+    else          { d.setTextColor(GRN, BG); d.setCursor(10, by); d.print(MODE_BLURB[s_sel]); }
 }
 
 static void draw_custom(void)

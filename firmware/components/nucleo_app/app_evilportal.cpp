@@ -704,7 +704,7 @@ static void on_key(int key, char ch)
                     case R_SSID:  s_sel = 0; go(ST_SSID); break;
                     case R_NET:   go(ST_TARGETS); break;
                     case R_SEC:   s_mode = (s_mode == 1) ? 2 : 1; set_hint(); nucleo_app_request_draw(); break;
-                    case R_PAGE:  s_sel = s_tpl_idx; go(ST_PAGE); break;
+                    case R_PAGE:  go(ST_PAGE); s_sel = s_tpl_idx; nucleo_app_request_draw(); break;  // set sel AFTER go() (which resets s_sel=0), else the picker never lands on the current template
                     case R_CLONE:
                         if (s_ap_n <= 0)        snprintf(s_err, sizeof s_err, "Scegli prima una rete");
                         else if (twin_encrypted()) snprintf(s_err, sizeof s_err, "Rete non aperta: no portale");

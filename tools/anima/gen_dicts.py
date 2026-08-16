@@ -48,6 +48,11 @@ OUT_DIRS = [
     ROOT / "tools" / "anima-host" / "sd" / "data" / "anima",  # C host harness (anima.exe)
     ROOT / "tools" / "sd-sim" / "data" / "anima",         # JS twin / browser simulator (serve-shell.mjs)
 ]
+# The C host harness tree is an untracked BUILD ARTIFACT (see .gitignore) — a fresh clone / CI has no
+# dicts there yet. `--check` must not read that as "seed edited but not regenerated": a MISSING file in
+# this dir means "fixture not built", which is not a staleness failure. A file that EXISTS but DIFFERS
+# still fails everywhere (that's the real guard), as does a missing dict in a SHIPPED (committed) tree.
+HOST_ARTIFACT_DIR = ROOT / "tools" / "anima-host" / "sd" / "data" / "anima"
 
 A_TOK_LEN = 24       # mirror firmware: token buffer, so cap = 23 usable chars
 A_MAX_TOKENS = 24    # mirror firmware: max tokens kept per input
@@ -206,13 +211,20 @@ def main():
         targets.append((d / "dict-en-it.tsv", out_en_it, len(en_it)))
     stale = False
     for path, content, n in targets:
-        current = path.read_text(encoding="utf-8") if path.exists() else None
+        exists = path.exists()
+        current = path.read_text(encoding="utf-8") if exists else None
         if current == content:
             print(f"OK: up to date {path.relative_to(ROOT)} ({n} keys)")
             continue
+        # A missing dict in the untracked host build-artifact tree is "not built", not a seed-staleness
+        # failure — skip it under --check so a fresh clone / CI isn't blocked by an unbuilt fixture.
+        if args.check and not exists and path.parent == HOST_ARTIFACT_DIR:
+            print(f"skip: {path.relative_to(ROOT)} not built (host artifact)")
+            continue
         stale = True
         if args.check:
-            print(f"STALE: {path.relative_to(ROOT)} differs from seed", file=sys.stderr)
+            print(f"STALE: {path.relative_to(ROOT)} "
+                  f"{'missing' if not exists else 'differs from seed'}", file=sys.stderr)
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8", newline="\n")

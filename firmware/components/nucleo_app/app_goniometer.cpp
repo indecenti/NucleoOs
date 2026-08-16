@@ -225,7 +225,7 @@ static void enter(void)
 extern "C" void nucleo_register_goniometer(void)
 {
     static const nucleo_app_def_t app = {
-        "goniometer", "Goniometro", "Hardware", "Misura angoli e pendenze (BMI270)",
+        "goniometer", "Goniometro", "Measure", "Misura angoli e pendenze (BMI270)",
         'A', C_BLUE, enter, on_key, nullptr, draw, nullptr
     };
     nucleo_app_register(&app);

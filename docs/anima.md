@@ -62,6 +62,101 @@ Confidence is one signal set: **Hamming margin (top1 vs top2) + rerank score**
 (CRAG-style quality gate). Three numbers → three branches. No reflection tokens, no
 trained router.
 
+### The abstention is an answer too
+
+When the cascade falls through, the result is `tier = NONE` — and for a long time it was also an
+**empty reply string**. That looked harmless because the two visible clients each papered over it:
+the web shell substituted its own localized "I don't know yet, here's what I *can* do", and the
+native bubble had a fallback literal. The clients that had no fallback simply produced nothing —
+the **voice** path spoke silence, and the host CLI printed `(vuoto)`. One engine, four behaviours,
+and the two broken ones invisible to every gate.
+
+The refusal now belongs to the engine, filled once at the cascade's convergence point. Two
+properties make this safe rather than a hallucination risk, and both are pinned by
+`npm run anima:decline` (`tools/anima-host/decline-check.mjs`, 485 adversarial turns):
+
+- **The tier does not move.** `NONE` stays `NONE`. Every abstention and hallucination gate in this
+  repo keys on the *tier*, never on the wording, so giving the refusal words cannot make it read as
+  an answer to anything that measures us.
+- **It is narrow.** It fills only an empty reply on a `NONE`/no-action turn that isn't awaiting a
+  follow-up — so a real answer is never replaced, and a pending *clarifying question* keeps its own
+  text (a question is not an abstention).
+
+The web shell still prefers its own string, matched on the exact template: it is richer (it lists
+what ANIMA can do) and it covers es/fr/de, which the it/en engine cannot.
+
+### MOSAICO must not say the same thing twice
+
+The L2 span-stitch builds a fuller answer by appending verbatim card spans. Its duplicate guard used
+to compare only the span's first ~40 characters, so a drill-down that *restated* the lead in
+different words sailed through — `cos'è nucleoos` answered with a lead saying NucleoOS runs on the
+Cardputer and works offline, then stapled on "Inoltre, NucleoOS gira sul M5Stack Cardputer (ESP32-S3)
+e funziona offline."
+
+The guard is now sentence-level: a candidate sentence is dropped when ≥80% of its content words are
+already present, and kept sentences are folded back in so a span can't duplicate itself either.
+Sentences are only ever *omitted*, never rewritten, so MOSAICO's "every sentence is a verbatim corpus
+field" invariant is untouched. Note the honest consequence: when the only candidate span was
+redundant, the answer stays at **L1** instead of being promoted to L2 — a lower tier for a better
+answer. `npm run anima:dedup` holds it, with a unit half (the real helpers, driven with the shapes
+that caused the defect) and a sweep half (the invariant over the whole describe fixture), because
+whether the defect *fires* end-to-end depends on which two cards a given index happens to pair.
+
+...and it must not answer in two languages at once. `what is force` returned an Italian lead and then
+stapled an English runner-up onto it with " Also, " — two individually correct cards, one unreadable
+paragraph. A span is now rejected when a cheap function-word vote puts it in a **different** language
+from the lead. The vote is deliberately permissive: an undecidable span (too short to classify) is
+allowed through, so the guard can only ever remove a genuinely bilingual answer.
+
+That guard treats the symptom, and the cause is worth stating plainly: `what is force` should not
+have retrieved an *Italian* lead for an *English* query in the first place. That is a corpus/index
+issue — an IT card ranking first inside the EN pack — and fixing it means changing retrieval ranking,
+which is not something to do on top of an index that is already stale. Filed, not silently papered
+over.
+
+### Seven fabrications, and what they had in common
+
+The 0-hallucination discipline is enforced by ~590 adversarial traps. Seven were getting through, and
+they turned out to be four instances of one idea: **a true sentence is not an answer**. Each fix is a
+guard that asks whether the card addresses the *question*, not merely whether it scores well.
+
+| Trap | What came back | Why it slipped |
+|---|---|---|
+| `qual è il lago più grande dell'Africa` (×3 shapes) | *"intendi 1) Il deserto caldo più grande…"* | The **clarify band** checked scores, never scope. Offering two options asserts that one is right, so a nonsense option is a fabrication with extra steps. It now runs candidates through the same scope guard the answer path uses, plus the question's qualifier. |
+| `che cos'è il linguaggio di programmazione Floonk` | the generic *"programming language"* card | The proper-noun guard was reading a **lowercased** query, so it couldn't see `Floonk` was a name and fell back to "content word of 7+ chars" — which a 6-letter invented name walks past. `Floonkium` correctly abstained; `Floonk` did not. L1 now gets the query as typed. |
+| `qual è la capitale di Tokyo` | *"La capitale di Giappone è Tokyo."* | A **false premise** answered by inverting the relation: Tokyo *is* a capital, it does not have one. The card's subject must be the entity asked about. |
+| `when did cristiano ronaldo die` | his (living) biography | The death-question guard matched `died`/`death` but not **`die`**. Both sides of the guard learned the missing forms, so a card genuinely about dying — or about a semiconductor *die* — still passes. |
+
+Two test expectations had been calibrated to the defects and had to move with them: `agent-check`
+pinned `cos'e nucleoos` as a MOSAICO stitch whose only span was the duplicate, and `eval_skills5`
+expected an *answer* to `when did the Pacific Ocean die` — which was *"The largest ocean is the
+Pacific."*, a true sentence about size offered as an answer about death. Every structurally identical
+neighbour in that file expects abstain, and so does its own header.
+
+Worth recording honestly: the clarify band fired **zero** times across ~835 ordinary queries both
+before and after the guard — the only firings anywhere were the four wrong ones. As calibrated
+(`[0.82, 0.85)` with a 0.08 margin) the band is effectively dormant on the current index. The guard
+cost nothing because there was nothing good to lose, which is also a reason to revisit whether the
+feature earns its keep.
+
+### The corpus reaches the screen unedited
+
+ANIMA relays corpus fields verbatim — that *is* the 0-hallucination contract — so a defect in the
+corpus is a defect in the product, and no retrieval gate can catch it, because the text is valid.
+Two were shipping:
+
+- **Double-encoded UTF-8** — `una percentuale Ã¨ un numero`, where the card means `è`. A source that
+  was already UTF-8 got decoded as Latin-1 and re-encoded. It survives every filter because the
+  result *is* valid Latin text.
+- **Wikipedia math residue** — `{\displaystyle {\frac {x}{100}}}` left by the extractor. It reads as
+  noise, and its braces trip the leaked-`{template}` guard the hallucination probes depend on.
+
+Both are repaired in two places, on purpose. `npm run anima:corpustext` fixes them **at the source**
+(29 double-encoded fields and 82 TeX blocks across 9 corpus files) and, with `--check`, guards the
+corpus in the gate suite. `a_strip_foreign` also repairs both **at output time**, so an index built
+before the lint — or a card learned online later — still displays clean without waiting for a rebuild.
+The double-encoding repair is exact and reversible (`C3 83` + `C2 yy` → `C3 yy`), not a guess.
+
 ### Tiering, honestly
 
 | Tier | Value | Risk | Plan |

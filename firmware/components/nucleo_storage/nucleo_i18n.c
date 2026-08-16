@@ -42,6 +42,18 @@ void nucleo_i18n_set_on_change(void (*cb)(const char *code)) { s_on_change = cb;
 // Native strings are IT/EN only: English literal for "en", the Italian (base) literal otherwise.
 const char *nucleo_tr(const char *it, const char *en) { return nucleo_i18n_is_en() ? en : it; }
 
+// 5-language pick for names (mirrors L5() used inside apps). Reads the 2-letter code once; unknown
+// codes fall back to Italian (the base). ASCII-only literals (the on-TFT font has no accented glyphs).
+const char *nucleo_tr5(const char *it, const char *en, const char *es, const char *fr, const char *de)
+{
+    const char *l = s_lang;
+    if (l[0] == 'e' && l[1] == 'n') return en;
+    if (l[0] == 'e' && l[1] == 's') return es;
+    if (l[0] == 'f' && l[1] == 'r') return fr;
+    if (l[0] == 'd' && l[1] == 'e') return de;
+    return it;
+}
+
 // Load settings.json into a fresh cJSON tree (caller owns it, or NULL). Mirrors the proven sizing in
 // nucleo_voice: read the whole file by its real size, never a fixed buffer that could truncate.
 static cJSON *settings_load(void)

@@ -44,7 +44,11 @@
 {"q":"la montagna più alta dell'oceano","lang":"it","expect":"abstain"}
 {"q":"what is the capital of Mount Everest","lang":"en","expect":"abstain"}
 {"q":"what is the capital of the river Nile","lang":"en","expect":"abstain"}
-{"q":"when did the Pacific Ocean die","lang":"en","expect":"answer"}
+// Was expect:"answer", calibrated to a fabrication: ANIMA replied "The largest ocean is the Pacific."
+// — a true sentence about SIZE offered as the answer to a question about DEATH. Every structurally
+// identical neighbour here ("who is the president of the Atlantic Ocean") expects abstain, and so does
+// this file's own header. Fixed once the death-question guard learned to recognise "die", not just "died".
+{"q":"when did the Pacific Ocean die","lang":"en","expect":"abstain"}
 {"q":"what is the capital of the continent Asia","lang":"en","expect":"abstain"}
 {"q":"who is the president of the Atlantic Ocean","lang":"en","expect":"abstain"}
 {"q":"what language does the Colosseum speak","lang":"en","expect":"abstain"}

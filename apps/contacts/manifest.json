@@ -1,0 +1,21 @@
+{
+  "id": "contacts",
+  "name": "Contatti",
+  "version": "1.0.0",
+  "description": "The OS address book: people with email/phone/org/notes, favorites, search, vCard export to the SD. Integrates with Mail (one click opens Compose with the recipient prefilled) and the OS clipboard.",
+  "category": "productivity",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/contacts/",
+  "icon": "/apps/contacts/icon.svg",
+  "permissions": [
+    "storage.shared",
+    "system.clipboard"
+  ],
+  "handles": { "role": "viewer", "extensions": ["vcf"] },
+  "intents": [],
+  "subscribes": [],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": [] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

@@ -543,7 +543,7 @@ static void on_exit(void) {
 
 extern "C" void nucleo_register_mail(void) {
     static const nucleo_app_def_t app = {
-        "mail", "Mail", "Communication", "Invia email via Gmail/SMTP",
+        "mail", "Mail", "Messaging", "Invia email via Gmail/SMTP",
         'M', C_BLUE,
         on_enter, on_key, on_tick, on_draw, on_exit,
         NX_NET_APP

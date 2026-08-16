@@ -7,6 +7,7 @@ import { createBusyController } from './busy.js';
 import { ensureOnboarding } from './onboarding.js';   // first-boot AI setup + install tutorial
 import I18N from './nucleo-i18n.js';                  // centralized OS-wide internationalization
 import { makeFetchJSON } from './boot-fetch.js';      // resilient boot fetch (retries 503/timeout — see shell-boot-fetch.test)
+import { initSystemUI } from './system-ui.js';        // night light, lock screen, shortcuts sheet, widgets
 
 // Shell-namespaced translator: t(key, vars) → active-language string, falling back to core then key.
 // The catalog is loaded by I18N.init('shell') at boot; before that, calls return the key (harmless,
@@ -20,6 +21,9 @@ let Copilot = null;
 // The system Notification Center (the single web surface for all notifications). Loaded lazily
 // in initOS(); the WebSocket handler routes notify.post / calendar.reminder into it. See notify.js.
 let Notify = null;
+
+// System-UI extras (night light, lock screen, shortcuts sheet, widgets) — initialized in initOS().
+let SysUI = null;
 
 // Emoji glyphs keep the device free of icon assets (a deliberate weight trick).
 const GLYPHS = {
@@ -382,6 +386,12 @@ function osKeydown(e) {
   // Ctrl/⌘+Space → summon the OS-wide AI copilot from anywhere (works inside app iframes too,
   // since this handler is injected into every app frame).
   if (ctrl && e.key === ' ') { e.preventDefault(); if (Copilot) Copilot.toggle(); return; }
+  // Ctrl+Alt+L → lock the console (a privacy veil; Win+L is reserved by host OSes so it can't be used).
+  if (e.ctrlKey && e.altKey && (e.key === 'l' || e.key === 'L')) {
+    e.preventDefault();
+    if (SysUI) { closeStart(); closeSearch(); hideCtx(); SysUI.lock(); }
+    return;
+  }
   if (e.altKey && e.key === 'Tab') { e.preventDefault(); cycleWindows(e.shiftKey ? -1 : 1); return; }
   // Win/⌘ TAPPED alone → toggle Start (decided on keyup). On keydown we only arm it, so that
   // Win+<arrow>/Win+<key> combos don't ALSO pop the Start menu (the old bug).
@@ -434,6 +444,10 @@ function initOS() {
   // Load the OS-wide AI copilot (ANIMA as a system service). Additive: it reuses the /api/anima
   // engine and acts on the OS through this small surface — the same handlers the shell already uses.
   const OS_API = { byId, WM, openFile, showToast, refreshStatus, FsIndex };
+  // Real-OS chrome extras. Fed ONLY from data already in the browser (weather cache, the shell's
+  // one status snapshot, recents) — opening the widgets panel costs the device nothing.
+  SysUI = initSystemUI({ byId, WM, openFile,
+    getStatusSnap: () => lastStatusSnap, getRecent: () => state.recent, fmtBytes: (b) => I18N.fmtBytes(b) });
   import('./copilot.js').then((m) => { Copilot = m.initCopilot(OS_API); }).catch((e) => console.warn('[copilot] load failed', e));
   // System Notification Center: one surface for every source (calendar, ANIMA, system, …).
   import('./notify.js').then((m) => { Notify = m.initNotify(OS_API); window.Notify = Notify; }).catch((e) => console.warn('[notify] load failed', e));
@@ -443,6 +457,10 @@ function initOS() {
   WM.setOnFrameLoad((frame) => {
     try { frame.contentWindow.addEventListener('keydown', osKeydown); frame.contentWindow.addEventListener('keyup', osKeyup); } catch {}   // cross-origin (external links) → skip
     injectGlobalTheme(frame.contentDocument);
+    // Hand the freshly-opened app the last /api/status snapshot right away, so embedded apps that
+    // ride the shell's broadcast (Settings, System Monitor) paint at once instead of waiting out
+    // the next 15 s poll — zero extra device traffic.
+    if (lastStatusSnap) try { frame.contentWindow.postMessage({ t: 'status.snapshot', d: lastStatusSnap }, '*'); } catch {}
   });
   // NOTE: desktop rubber-band selection is wired once by wireMarquee() (called from wireChrome).
   // A second marquee handler here would double-bind #desktop and fight the first one.
@@ -750,7 +768,7 @@ function connectWS() {
       if ((ev.t === 'notify.post' || ev.t === 'calendar.reminder') && ev.d) {
         if (Notify) Notify.fromBus(ev.t, ev.d);
         else if (ev.t === 'calendar.reminder') {     // module not loaded yet → graceful fallback
-          showToast((ev.d.text || 'Promemoria') + (ev.d.time ? ` (${ev.d.time})` : ''), '🔔', 'info', 9000);
+          showToast((ev.d.text || t('nc_reminder')) + (ev.d.time ? ` (${ev.d.time})` : ''), '🔔', 'info', 9000);
         }
       }
       // An app was installed/removed over the air (registry reloaded on the device) → refresh
@@ -767,7 +785,9 @@ function connectWS() {
       // POST /api/lang. Switch the whole web OS live: the engine repaints the shell chrome and, through
       // the anima.lang storage event, every open app iframe too — no reload. Guarded so it's a no-op when
       // we're already on that language (e.g. the client that initiated the change hears its own broadcast).
-      if (ev.t === 'system.language' && ev.d && (ev.d.lang === 'it' || ev.d.lang === 'en')) {
+      if (ev.t === 'system.language' && ev.d && ev.d.lang) {
+        // setLang() already validates the code against all 5 OS languages (it/en/es/fr/de) and no-ops on
+        // an unknown one — so no it/en-only gate here, which used to drop a device->web switch to es/fr/de.
         try { if (window.NucleoI18N && window.NucleoI18N.lang !== ev.d.lang) window.NucleoI18N.setLang(ev.d.lang); } catch {}
       }
       // The heavy-work arbiter took/released its single token (one TLS/SD/heavy job at a time on the
@@ -875,7 +895,7 @@ function wireMessages() {
     // once, canonically, on the device. A change that ORIGINATED on the device (origin:'device', from
     // the system.language WS handler) is NOT echoed back — and even without that flag the loop is
     // self-limiting: the device only re-broadcasts on an ACTUAL change, so a same-value POST is a no-op.
-    if (d.type === 'set-language' && (d.lang === 'it' || d.lang === 'en')) {
+    if (d.type === 'set-language' && window.NucleoI18N && window.NucleoI18N.LANGS.some((l) => l.code === d.lang)) {
       localStorage.setItem('anima.lang', d.lang); document.documentElement.lang = d.lang;
       if (d.origin !== 'device') postLangToDevice(d.lang);
       return;
@@ -1052,9 +1072,12 @@ async function applySettingsFromDevice() {
       // localStorage keys the i18n engine reads at runtime (anima.lang = display language, driving
       // every surface's translation; nucleo.locale = optional Intl format override) so the stored
       // OS settings drive the whole OS on every client.
-      if (s.ui.language === 'it' || s.ui.language === 'en') {
-        if (window.NucleoI18N) window.NucleoI18N.setLang(s.ui.language);
-        else { localStorage.setItem('anima.lang', s.ui.language); document.documentElement.lang = s.ui.language; }
+      // Accept all 5 OS languages, not just it/en (settings.json stores the code verbatim: es/fr/de too).
+      const _lang = s.ui.language;
+      const _validLang = window.NucleoI18N ? window.NucleoI18N.LANGS.some((l) => l.code === _lang) : (_lang === 'it' || _lang === 'en');
+      if (_validLang) {
+        if (window.NucleoI18N) window.NucleoI18N.setLang(_lang);
+        else { localStorage.setItem('anima.lang', _lang); document.documentElement.lang = _lang; }
       }
       if (typeof s.ui.regionLocale === 'string' && window.NucleoI18N) window.NucleoI18N.setLocale(s.ui.regionLocale);
     }
@@ -1839,6 +1862,7 @@ function desktopMenu(e) {
       { label: t('ctx_sort_date'), fn: () => sortDesktop('date') },
     ] },
     { label: t('ctx_refresh'), glyph: '🔄', fn: () => renderDesktop() },
+    { label: t('ac_keys_title'), glyph: '⌨', fn: () => { if (SysUI) SysUI.showShortcuts(); } },
     { sep: true },
     { label: t('ctx_new'), glyph: '✚', sub: [
       { label: t('ctx_new_shortcut'), glyph: '🔗', fn: () => newShortcut() },
@@ -2262,7 +2286,18 @@ function taskBtn(a, isOpen, isNew) {
   b.innerHTML = `<span class="glyph">${a.glyph}</span><span class="label">${a.name}</span>`;
   b.title = a.name;                                // native fallback tooltip too
   b.addEventListener('click', () => (isOpen ? WM.toggle(a.id) : WM.open(a)));
-  b.addEventListener('contextmenu', (e) => { e.preventDefault(); togglePin(a.id); });
+  // Right-click = a REAL taskbar menu (it used to silently toggle the pin — surprising and
+  // undiscoverable). Middle-click closes the window, like every desktop taskbar/tab strip.
+  b.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showCtx(e.clientX, e.clientY, [
+      { label: a.name, glyph: a.glyph, fn: () => (isOpen ? WM.toggle(a.id) : WM.open(a)) },
+      isOpen ? { label: t('tb_close_win'), glyph: '✕', fn: () => WM.close(a.id) } : null,
+      { sep: true },
+      { label: state.pins.includes(a.id) ? t('ctx_unpin_taskbar') : t('ctx_pin_taskbar'), glyph: '📌', fn: () => togglePin(a.id) },
+    ].filter(Boolean));
+  });
+  b.addEventListener('auxclick', (e) => { if (e.button === 1 && isOpen) { e.preventDefault(); WM.close(a.id); } });
   return b;
 }
 
@@ -2495,6 +2530,19 @@ function wireChrome() {
     acEco.addEventListener('click', () => { const on = !acEco.classList.contains('active'); acEco.classList.toggle('active', on); applyEco(on); });
   }
 
+  // Action Center: Night light — warm veil over the console, per browser (system-ui.js).
+  const acNight = document.getElementById('ac-night');
+  if (acNight) {
+    acNight.classList.toggle('active', SysUI && SysUI.nightOn());
+    acNight.addEventListener('click', () => { if (SysUI) acNight.classList.toggle('active', SysUI.toggleNight()); });
+  }
+  // Action Center: Lock — the privacy veil (also Ctrl+Alt+L).
+  const acLock = document.getElementById('ac-lock');
+  if (acLock) acLock.addEventListener('click', () => { if (SysUI) { closeAc(); closeStart(); SysUI.lock(); } });
+  // Action Center: keyboard shortcuts cheat-sheet.
+  const acKeys = document.getElementById('ac-keys');
+  if (acKeys) acKeys.addEventListener('click', () => { if (SysUI) { closeAc(); SysUI.showShortcuts(); } });
+
   // Brightness slider — really dims the operator console (persisted per browser).
   const slider = document.getElementById('ac-brightness');
   if (slider) {
@@ -2610,11 +2658,13 @@ function closeStart() {
 function tickClock() {
   const d = new Date();
   const time = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-  const date = d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
+  // Honour the OS regional-format setting (Settings ▸ Language & Region), not the browser locale.
+  const loc = I18N.locale();
+  const date = d.toLocaleDateString(loc, { day: '2-digit', month: '2-digit', year: 'numeric' });
   const c = document.getElementById('clock');
   const t = c.querySelector('.ck-time'), dt = c.querySelector('.ck-date');
   if (t) t.textContent = time; if (dt) dt.textContent = date;
-  c.title = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  c.title = d.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 let _statusTimer = null;
@@ -2626,6 +2676,7 @@ function refreshStatus() {
 async function doRefreshStatus() {
   try {
     const s = await fetchJSON('/api/status');
+    lastStatusSnap = s;                    // kept for newly-opened windows (see setOnFrameLoad)
     const txt = `SD ${fmtSize(s.storage.free_bytes)} free`;
     document.querySelector('#tray-storage .v').textContent = txt;
     const smStorage = document.getElementById('sm-storage');
@@ -2657,7 +2708,7 @@ async function doRefreshStatus() {
 // poll-stormed. Base stays 15s (SSID/IP/battery have no bus event, so the poll is their only live source).
 // Revived instantly on visibilitychange (see the handler below). Modeled on the WS reconnect discipline.
 const STATUS_BASE = 15000, STATUS_MAX = 60000;
-let _statusInt = STATUS_BASE, _statusTick = null, _timePushed = false;
+let _statusInt = STATUS_BASE, _statusTick = null, _timePushed = false, lastStatusSnap = null;
 function scheduleStatus(ms) {
   clearTimeout(_statusTick);
   if (document.hidden) return;
@@ -2705,17 +2756,18 @@ function renderRemote(active, clients) {
 // Device-busy indicator. The firmware's heavy-work arbiter publishes system.busy when it serializes a
 // heavy job (outbound TLS, transcribe, model pull) so two can't both OOM the PSRAM-less heap. We show a
 // subtle, debounced tray pill — informative only (the arbiter degrades gracefully on its own). The job
-// label is mapped to a friendly word; we NEVER inject the raw event string into innerHTML (XSS-safe).
-const BUSY_JOB_LABELS = { proxy: 'Navigazione', llm: 'AI online', 'anima-get': 'ANIMA online',
-  'anima-post': 'ANIMA online', transcribe: 'Trascrizione' };
+// label is mapped to a friendly, LOCALIZED word (was hardcoded Italian in a 5-language OS); we NEVER
+// inject the raw event string into innerHTML (XSS-safe).
+const BUSY_JOB_KEYS = { proxy: 'busy_job_proxy', llm: 'busy_job_llm', 'anima-get': 'busy_job_anima',
+  'anima-post': 'busy_job_anima', transcribe: 'busy_job_transcribe' };
 function renderBusy(busy, job) {
   const el = document.getElementById('tray-busy');
   if (!el) return;
   el.hidden = !busy;
   if (!busy) { el.classList.remove('pulse'); return; }
-  const label = BUSY_JOB_LABELS[job] || 'Occupato';   // mapped (safe) label only — never the raw job
-  el.innerHTML = `⚙️<span class="v">${label}</span>`;
-  el.title = 'Il dispositivo sta dando precedenza a un lavoro pesante; le app potrebbero rispondere con un breve ritardo.';
+  const label = t(BUSY_JOB_KEYS[job] || 'busy_generic');   // mapped (safe) label only — never the raw job
+  el.innerHTML = `⚙️<span class="v">${escapeHtml(label)}</span>`;
+  el.title = t('busy_tip');
   el.classList.add('pulse');
 }
 // debounceMs: short TLS fetches flap busy on/off fast; coalesce them so the pill doesn't flicker.

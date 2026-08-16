@@ -31,11 +31,15 @@
 #include "nucleo_log.h"
 #include "nucleo_power.h"
 #include "nucleo_usbmsc.h"
+#include "nucleo_usbnet.h"   // USB-web as a real NCM network device: opt-in via reboot flag, same safety as MSC
+#include "esp_netif.h"       // usbweb boot inits the TCP/IP stack itself (Wi-Fi skipped) so httpd has lwIP
+#include "esp_event.h"       // default event loop for the netif when Wi-Fi is skipped
 #include "nucleo_voice.h"
 #include "nucleo_ir.h"
 #include "esp_ota_ops.h"
 #include "esp_app_desc.h"   // esp_app_get_description(): real running-image version for the boot banner
 #include "esp_system.h"     // esp_reset_reason(): why the PREVIOUS boot ended (panic vs WDT vs brownout)
+#include "esp_timer.h"      // Solo bring-up watchdog: the net under a boot that never reaches a UI task
 #include "nucleo_board.h"   // HLOG(): compile-time-gated heap tracing (see NUCLEO_HEAPLOG)
 
 static const char *TAG = "nucleoos";
@@ -56,7 +60,43 @@ extern void nucleo_register_remote(void);        // server Solo registers ONLY t
 
 // ANIMA Solo runs nucleo_app_run() on a DEDICATED large-stack task (the 8 KB main task overflows running
 // the ANIMA UI). nucleo_app_run never returns (Esc reboots), so vTaskDelete is just defensive.
-static void anima_solo_task(void *arg) { (void)arg; nucleo_app_run(); vTaskDelete(NULL); }
+// ---- Solo bring-up watchdog -------------------------------------------------------------------
+// A Solo boot has exactly ONE job: end with a UI task running. When it fails to — the 26 KB task
+// stack won't allocate, or a service hangs on the way there — nothing CRASHES, so no reset reason is
+// ever set and the anti-loop that lands crashes in the full OS never fires. The device just sits
+// there: powered, black, deaf to the keyboard (measured: Esc does nothing, serial silent, no reboot
+// loop). That is the worst failure we can ship, because it is indistinguishable from dead hardware.
+//
+// This is the net under ALL of it, whatever the cause: armed before the Solo services come up,
+// cancelled the moment the Solo task actually runs, and on expiry it reboots into the FULL OS — where
+// a consumed Solo latch lands anyway — after marking boot_trace.txt so the failure stays diagnosable.
+#define SOLO_BRINGUP_TIMEOUT_US (20 * 1000 * 1000)   // 20 s; the boot animation alone is ~2.5 s
+static esp_timer_handle_t s_solo_wd;
+static void bootmark(const char *step);              // fwd: defined below
+static void solo_bringup_failed(void *arg)
+{
+    (void)arg;
+    ESP_LOGE(TAG, "Solo bring-up never reached the UI task in %d s — rebooting into the full OS",
+             (int)(SOLO_BRINGUP_TIMEOUT_US / 1000000));
+    bootmark("solo-bringup-TIMEOUT");
+    esp_restart();                                   // never returns
+}
+static void solo_watchdog_arm(void)
+{
+    const esp_timer_create_args_t a = { .callback = solo_bringup_failed, .name = "solo-wd" };
+    if (esp_timer_create(&a, &s_solo_wd) == ESP_OK) esp_timer_start_once(s_solo_wd, SOLO_BRINGUP_TIMEOUT_US);
+    else ESP_LOGW(TAG, "solo watchdog not armed (timer create failed) — bring-up is unprotected");
+}
+static void solo_watchdog_disarm(void)
+{
+    if (!s_solo_wd) return;
+    esp_timer_stop(s_solo_wd);
+    esp_timer_delete(s_solo_wd);
+    s_solo_wd = NULL;
+}
+// Disarm FIRST: reaching here is the proof the Solo task exists and is scheduled, which is exactly
+// what the watchdog is waiting for.
+static void anima_solo_task(void *arg) { (void)arg; solo_watchdog_disarm(); nucleo_app_run(); vTaskDelete(NULL); }
 
 // Human label for the last reset cause. This is THE first question when a device reboots on its own:
 // PANIC/abort = a crash or a failed assert (often heap OOM downstream); INT/TASK_WDT = a hang (a task
@@ -192,6 +232,9 @@ void app_main(void)
         nucleo_usbmsc_run();                // never returns (key/reset restarts into the normal OS)
     }
 
+    // NB: USB-web is NOT handled here. It rides the server-Solo boot (httpd + auth up, max heap) and
+    // brings up the USB network card AFTER httpd is up -- see nucleo_usbnet_start() further down.
+
     // Animated boot identity: a glowing atomic nucleus with orbiting electrons (Nucleo = nucleus).
     // Blocks ~2.5 s on its own canvas while the heap is still clean; any key skips it. The final
     // frame stays on the panel through the SD/network bringup below until the launcher draws.
@@ -242,9 +285,15 @@ void app_main(void)
     const bool solo = nucleo_anima_solo_pending();
     const bool solo_rec = solo && (nucleo_app_solo_app() == 2);   // Recorder profile: pure cloud transcribe, no voice/TTS
     const bool solo_srv = solo && nucleo_app_solo_is_server();     // Web Client: httpd + auth stay UP; everything else skipped for max heap
+    const bool usbweb   = solo_srv && nucleo_usbnet_web_armed();   // Web Client reached via key W (USB cable): skip Wi-Fi/mDNS, the PC connects over USB-NCM (~48 KB reclaimed)
     if (solo_srv)  ESP_LOGW(TAG, "Web Client Solo boot: httpd + auth + mDNS UP; skipping recorder/IR/voice/TTS/L1/calendar for max web-OS heap");
     else if (solo) ESP_LOGW(TAG, "%s Solo boot: skipping httpd/mDNS/recorder/auth/IR%s",
                        solo_rec ? "Recorder" : "ANIMA", solo_rec ? " + TTS/voice" : "");
+    // Arm the bring-up net NOW, before any Solo-only service starts (TTS/voice are ANIMA-Solo only and
+    // are on the suspect list too), so it covers the whole path from here to a running UI task.
+    // server-Solo is excluded: it runs the UI on THIS task and never creates one, so it can't be caught
+    // by "did the Solo task start" — and it is the profile that already had its own fix.
+    if (solo && !solo_srv) solo_watchdog_arm();
 
     // Bring up networking + services FIRST so the device is never bricked and the web UI
     // always works, even while the on-device keyboard is being verified/tuned.
@@ -255,6 +304,19 @@ void app_main(void)
     extern bool nucleo_ble_kept_once(void);
     if (solo && nucleo_ble_kept_once()) {
         ESP_LOGW(TAG, "BLE Solo boot: skipping Wi-Fi bringup (BLE gets the whole heap)");
+    } else if (usbweb) {
+        // USB-web boot: the PC reaches the web OS over the USB-NCM cable, so Wi-Fi is pure dead weight.
+        // esp_wifi_init()+start() cost ~48 KB and halve the largest contiguous block (31 KB -> 15 KB) —
+        // exactly what was starving /api/apps. Skipping it hands that 48 KB to httpd + the app-list JSON.
+        // BUT the TCP/IP stack (lwIP) + default event loop are normally brought up by the Wi-Fi path's
+        // esp_netif_init(); httpd needs lwIP and runs BEFORE usbnet_start(), so we MUST init the netif
+        // stack here — just without Wi-Fi. (Skipping this was the "press W -> reboots, nothing happens"
+        // bug: httpd had no TCP/IP stack.) usbnet_start() calls these again later, harmlessly (idempotent).
+        ESP_LOGW(TAG, "USB-web Solo boot: skipping Wi-Fi (~48 KB reclaimed) — PC connects over the USB cable");
+        esp_err_t ne = esp_netif_init();
+        if (ne != ESP_OK) ESP_LOGE(TAG, "esp_netif_init failed: %s (httpd will degrade, not crash)", esp_err_to_name(ne));
+        if (esp_event_loop_create_default() == ESP_ERR_INVALID_STATE) { /* already created — harmless */ }
+        bootmark("network-usb");
     } else {
         nucleo_setup_apply_network();       bootmark("network");   // AP on first boot; Wi-Fi stays up otherwise (incl. cloud Solo)
     }
@@ -277,31 +339,40 @@ void app_main(void)
     bootmark("ir");
     HMEM("after-network");
     bootmark("pre-httpd");
-    // httpd MUST come up — the web OS is not optional, so we do NOT limp on without it (a half-booted OS
-    // is worse than an honest stop). The deep ANIMA cascade is now off-loaded to a transient worker, so
-    // this task is lean (18KB) and httpd_start is deterministic. If it EVER still fails, log it to serial
-    // AND to the SD boot trace (readable without a serial console — the silent-freeze case), then halt:
-    // error logged, nothing half-starts, no fallback.
-    if (!solo || solo_srv) { esp_err_t he = nucleo_httpd_start();   // SKIPPED in Solo EXCEPT Web Client server-Solo, which exists to serve the web OS on a fresh heap (this 18 KB task is what carves the heap on this no-PSRAM chip)
+    // httpd MUST come up — the web OS is not optional. On this no-PSRAM chip it needs an ~18 KB
+    // CONTIGUOUS block, and a tight boot can fragment the heap right below that (largest seen ~15 KB).
+    // So we free the 32 KB off-screen launcher canvas UP FRONT (the launcher re-acquires it lazily;
+    // worst case a little flicker): that hands the FIRST httpd_start a large block so it starts cleanly
+    // on the first try. Doing it up front is the whole point — a FAILED first attempt LEAKS the port-80
+    // listen socket, so the old "fail -> free -> retry" order then hit listen()=EADDRINUSE (112) on the
+    // retry and ESP_ERROR_CHECK abort-LOOPED the device. One clean attempt avoids the leak entirely.
+    if (!solo || solo_srv) {   // SKIPPED in Solo EXCEPT Web Client server-Solo (exists to serve the web OS on a fresh heap)
+      nucleo_app_release_buffers();                 // free the 32 KB canvas first: httpd's contiguous block, no leaked-socket retry
+      esp_err_t he = nucleo_httpd_start();
       if (he != ESP_OK) {
-          // ADV boot is on a knife-edge: httpd needs an ~18 KB CONTIGUOUS block and a rebuild can
-          // fragment the heap just below it (largest ~17 KB < 18432) -> start fails -> abort -> reboot
-          // loop (no degraded boot). Before giving up, free the 32 KB off-screen canvas (the launcher
-          // re-acquires it lazily; worst case a little launcher flicker) and retry: 32 KB >> 18 KB, so
-          // httpd then starts cleanly. The original board, which has more margin, never hits this path.
-          ESP_LOGW(TAG, "httpd start failed (%s) — freeing the 32 KB canvas + settle, then retrying", esp_err_to_name(he));
-          nucleo_app_release_buffers();
-          // The failed attempt can leave the port-80 listen socket bound -> the retry's listen() then hits
-          // EADDRINUSE (errno 112) -> abort. Give LWIP a moment to release it before re-listening.
-          vTaskDelay(pdMS_TO_TICKS(500));
+          ESP_LOGW(TAG, "httpd start failed (%s) — settle + one retry", esp_err_to_name(he));
+          vTaskDelay(pdMS_TO_TICKS(800));
           he = nucleo_httpd_start();
       }
       if (he != ESP_OK) {
-          ESP_LOGE(TAG, "httpd start FAILED (%s) — halting (no degraded boot)", esp_err_to_name(he));
+          // Do NOT abort here. ESP_ERROR_CHECK would panic+reboot and, on a persistently tight boot,
+          // loop forever (this bricked the device once). Degrade instead: boot the on-device UI without
+          // the web OS this boot — the device stays usable and a power-cycle / lighter boot recovers httpd.
+          ESP_LOGE(TAG, "httpd start FAILED (%s) — DEGRADED boot (on-device UI only, no web OS this boot)", esp_err_to_name(he));
           bootmark("httpd-FAILED");
-          ESP_ERROR_CHECK(he);   // halt: nothing else starts
-      } }
+      }
+    }
     bootmark("httpd");
+    // USB-web: in server-Solo, if the USB app armed it (key W), bring up the USB network card (NCM)
+    // now that the httpd is listening. The device becomes a USB NIC with its own DHCP server; the PC
+    // gets an IP and opens http://192.168.7.1 in any browser — plug-and-play, no companion, no driver
+    // (NCM is in-box on Linux/macOS/Windows). The httpd (bound to 0.0.0.0) answers on this netif. (If
+    // it fails, the flag is already consumed -> power-cycle = normal OS.)
+    if (solo_srv && nucleo_usbnet_web_pending()) {
+        nucleo_usbnet_start();
+        if (nucleo_usbnet_is_active()) nucleo_setup_set_usb(NUCLEO_USBWEB_IP);   // header/Remote/status show the cable address, not a phantom AP
+        bootmark("usbnet");
+    }
     // mDNS — AFTER httpd so its ~12 KB stayed free for the httpd_start carve (see note above). HEAP-GATED:
     // on a degraded/tight boot (seen on the ADV: largest block fell to ~7 KB after httpd) mDNS would alloc
     // its responder down to a few dozen FREE bytes — leaving httpd with no working heap to serve requests
@@ -309,7 +380,7 @@ void app_main(void)
     // "mdns_send: Cannot allocate memory". Discovery is a convenience (the device is always reachable by IP;
     // ota.ps1 already prefers IP, and web-focus stops mDNS the moment a client connects), so when the
     // contiguous heap is too low to run it without starving the SERVER, SKIP it and keep those bytes for httpd.
-    if (!solo || solo_srv) {   // Web Client Solo advertises too (heap-gated): it stops the moment a shell connects (web-focus), so it costs nothing while driving
+    if ((!solo || solo_srv) && !usbweb) {   // Web Client Solo advertises too (heap-gated); SKIPPED on USB-web (no Wi-Fi to advertise on — the PC uses the fixed USB IP)
         size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
         if (largest >= 14336) nucleo_discovery_start(nucleo_setup_device_name());   // ~14 KB headroom: mDNS fits without starving httpd
         else ESP_LOGW(TAG, "mDNS SKIPPED at boot: largest free block %u < 14336 — reachable by IP, httpd keeps the heap", (unsigned)largest);
@@ -394,12 +465,43 @@ void app_main(void)
         // ANIMA runs the INLINE query+TLS on this task (needs 26 KB). Recorder + generic game Solo are
         // UI-only (no inline TLS) and SKIP httpd, so the heap stays large and 8 KB fits with margin. 26 KB is
         // ANIMA inline-TLS only (at pre-app-run the largest block is ~25 KB on the ADV, so it fits).
+        // The task stack needs a CONTIGUOUS block, and the biggest thing standing in its way is the
+        // launcher's 32 KB off-screen canvas — which ANIMA does not want: its enter() calls
+        // nucleo_screen_release() as its first act and draws DIRECT to the panel. Holding it across the
+        // create was pure waste, and on a tight boot it is exactly what pushed the largest free block
+        // under the 26 KB request. Free it here, before we ask.
+        nucleo_app_release_buffers();
         uint32_t solo_stk = (solo_rec || nucleo_app_solo_is_generic()) ? 8192 : 26624;
         BaseType_t tcr = xTaskCreatePinnedToCore(anima_solo_task,
                                                  solo_rec ? "rec-solo" : "anima-solo",
                                                  solo_stk, NULL, ESP_TASK_MAIN_PRIO, NULL, 0);
-        if (tcr != pdPASS) ESP_LOGE(TAG, "SOLO task create FAILED (stack %u, largest %u) — halting",
-                                    (unsigned)solo_stk, (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        // A FAILED create used to fall straight through to the return below: app_main exited, its task
+        // was deleted, and NOTHING was left to draw or read the keyboard. Not a crash, not a reboot
+        // loop — a live device with a permanently BLACK screen and a silent serial port, which is the
+        // worst failure mode we can ship because it looks like dead hardware. (The same shape is
+        // documented for server-Solo in the note above, where it "freezes on the boot splash".)
+        // So degrade in steps instead, and never leave the device without a UI:
+        if (tcr != pdPASS) {
+            // 1) A smaller stack still runs the assistant. ANIMA spawns its query worker ON DEMAND in
+            //    submit() (see app_anima.cpp), so the big stack buys inline TLS, not the UI itself —
+            //    an offline-only ANIMA beats a black screen.
+            ESP_LOGW(TAG, "SOLO task create failed at %u B (largest %u) — retrying with a smaller stack",
+                     (unsigned)solo_stk, (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+            solo_stk = 12288;
+            tcr = xTaskCreatePinnedToCore(anima_solo_task,
+                                          solo_rec ? "rec-solo" : "anima-solo",
+                                          solo_stk, NULL, ESP_TASK_MAIN_PRIO, NULL, 0);
+        }
+        if (tcr != pdPASS) {
+            // 2) Still nothing. The Solo latch was already consumed by nucleo_anima_solo_pending(), so a
+            //    plain restart comes back up in the FULL OS — a usable device the user can act on,
+            //    instead of a black rectangle. Trace it first: boot_trace.txt is the only record that
+            //    survives, and this is precisely the case where there is no serial console attached.
+            ESP_LOGE(TAG, "SOLO task create FAILED at %u B too (largest %u) — rebooting into the full OS",
+                     (unsigned)solo_stk, (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+            bootmark("solo-task-FAILED");
+            esp_restart();   // never returns
+        }
         return;   // main task exits; the Solo task is now the app's home
     }
     nucleo_app_run();   // full OS AND Web Client server-Solo: launcher/watch loop on the main task

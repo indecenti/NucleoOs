@@ -176,7 +176,7 @@ static void enter(void)
 extern "C" void nucleo_register_pedometer(void)
 {
     static const nucleo_app_def_t app = {
-        "pedometer", "Contapassi", "Hardware", "Conta i passi (BMI270)",
+        "pedometer", "Contapassi", "Measure", "Conta i passi (BMI270)",
         'P', C_GREEN, enter, on_key, nullptr, draw, nullptr
     };
     nucleo_app_register(&app);

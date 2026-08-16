@@ -495,7 +495,8 @@ static void draw_text(void)
             lines[nlines][col++] = cc; if (col >= WRAP) { lines[nlines][col] = 0; nlines++; col = 0; }
         }
         if (nlines < 40) lines[nlines][col] = 0;
-        int total = nlines + 1, first = total > evis ? total - evis : 0, y = top + 20;
+        int total = nlines + 1; if (total > 40) total = 40;   // lines[] is [40]: when content fills 40 rows, never render/index lines[40]
+        int first = total > evis ? total - evis : 0, y = top + 20;
         for (int l = first; l < total && l < first + evis; l++) {
             d.setTextColor(FG, BG); d.setCursor(6, y); d.print(lines[l]);
             if (l == nlines) d.fillRect(6 + col * 12, y, 6, 14, GRN);
