@@ -11,8 +11,7 @@
   "permissions": [
     "storage.shared",
     "device.audio",
-    "device.display",
-    "device.mic"
+    "device.display"
   ],
   "handles": {
     "role": "none",
