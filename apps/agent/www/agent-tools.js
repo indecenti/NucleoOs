@@ -25,6 +25,7 @@ export const CLIENT_TOOLS = [
   { name: 'publish_app', description: 'INSTALL an app you scaffolded+built (its staging folder <id> in the workspace) onto NucleoOS, LIVE — it appears in the launcher with no reboot. Validates the manifest and that www/index.html exists, writes the files under /apps/<id>/, and registers it. The human approves this. Only apps you authored can be re-published (never a system app). Call this when the app is ready.', input_schema: { type: 'object', properties: { id: { type: 'string', description: 'the app id == its staging folder name in the workspace' } }, required: ['id'] } },
   { name: 'manage_app', description: 'Hide ("disable") or restore ("enable") an app YOU created, in the launcher — the safe way to undo/redo an install (apps cannot be deleted from the device). Only apps you authored can be toggled, never a system app. The human approves this.', input_schema: { type: 'object', properties: { id: { type: 'string', description: 'the agent-created app id' }, action: { type: 'string', enum: ['disable', 'enable'], description: 'disable = hide from the launcher; enable = restore' } }, required: ['id', 'action'] } },
   { name: 'generate_image', description: 'Generate an image from a text prompt and SAVE it to a workspace file (uses an image-capable provider — Grok/xAI). Use for "draw/make an image of …", icons, illustrations, app assets. Requires an xAI key; without one, say so honestly. The human approves the file write. After it, open_in_os({path}) shows it.', input_schema: { type: 'object', properties: { prompt: { type: 'string', description: 'what to depict' }, path: { type: 'string', description: 'workspace file to save, e.g. "art/cat.jpg" (jpg)' } }, required: ['prompt', 'path'] } },
+  { name: 'update_plan', description: 'Track a multi-step job as a live checklist the human can see. Call it ONCE as soon as you know the milestones, then AGAIN after finishing each one to mark it done and start the next. Exactly one step may be "doing". Use it for anything that takes more than a couple of tool calls (building an app, refactoring several files); skip it for one-shot answers. It costs nothing — no device access, no approval — and it is what stops a long build from looking stalled.', input_schema: { type: 'object', properties: { steps: { type: 'array', description: '3–7 real milestones, in order', items: { type: 'object', properties: { title: { type: 'string', description: 'short imperative, e.g. "Scaffold the app skeleton"' }, status: { type: 'string', enum: ['todo', 'doing', 'done'] } }, required: ['title', 'status'] } } }, required: ['steps'] } },
   { name: 'transcribe', description: 'Transcribe a workspace audio file (wav/mp3/m4a/ogg/flac) to text using a speech-capable provider (Groq Whisper). Use for "transcribe this recording / what is said in X". Requires a Groq key; without one, say so honestly. Language is auto-detected.', input_schema: { type: 'object', properties: { path: { type: 'string', description: 'workspace path of the audio file' } }, required: ['path'] } },
 ];
 export const MUTATING = new Set(['write_file', 'edit_file', 'append_file', 'delete_file', 'move_file', 'run_js', 'scaffold_app', 'publish_app', 'manage_app', 'generate_image']);
@@ -96,6 +97,47 @@ export function fenceUntrusted(kind, meta, content) {
   let body = String(content == null ? '' : content).replace(new RegExp('</?' + tag, 'gi'), '⟨fenced⟩');
   const attrs = meta ? Object.entries(meta).map(([k, v]) => ' ' + k + '="' + String(v).replace(/["\n<>]/g, '') + '"').join('') : '';
   return '<' + tag + attrs + '>\n' + body + '\n</' + tag + '>';
+}
+
+// ───────────────────────── the plan/todo surface ─────────────────────────
+// The Claude-Code parity gap called out in docs/anima-code.md §12.2: the orchestrator splits a job
+// into subtasks, but NOTHING tracked progress inside a worker, so a ten-minute app build showed the
+// user a spinner and showed the model nothing it could re-read. These two functions are the whole
+// contract — pure, so they are host-tested and shared by every transport (Anthropic, OpenAI, local).
+const PLAN_MAX = 12;                       // a "plan" longer than this is a tool-call log, not a plan
+const PLAN_TITLE_MAX = 120;
+const PLAN_STATUS = new Set(['todo', 'doing', 'done']);
+
+// Coerce whatever the model emitted into a valid plan. Never throws: a small model WILL send a bare
+// string array, a misspelled status, or three steps marked "doing" at once, and a malformed plan must
+// degrade into a usable one instead of failing the turn.
+export function normalizePlan(steps) {
+  const out = [];
+  for (const raw of (Array.isArray(steps) ? steps : []).slice(0, PLAN_MAX)) {
+    const o = (raw && typeof raw === 'object') ? raw : { title: raw };
+    const title = String(o.title == null ? '' : o.title).replace(/\s+/g, ' ').trim().slice(0, PLAN_TITLE_MAX);
+    if (!title) continue;
+    const st = String(o.status || 'todo').toLowerCase();
+    out.push({ title, status: PLAN_STATUS.has(st) ? st : 'todo' });
+  }
+  // At most one step in flight: keep the FIRST 'doing', demote the rest — otherwise the UI (and the
+  // model's own next read) can't tell where the work actually is.
+  let seen = false;
+  for (const s of out) {
+    if (s.status !== 'doing') continue;
+    if (seen) s.status = 'todo'; else seen = true;
+  }
+  return out;
+}
+
+// The tool result the model reads back. Plain glyphs (no colour, no HTML) so it survives every
+// transport and reads the same in the transcript as on screen.
+export function renderPlan(steps) {
+  if (!steps.length) return 'plan cleared';
+  const mark = { todo: '☐', doing: '▸', done: '☑' };
+  const done = steps.filter((s) => s.status === 'done').length;
+  return steps.map((s) => mark[s.status] + ' ' + s.title).join('\n')
+    + `\n(${done}/${steps.length} done)`;
 }
 
 // Map the Anthropic-shaped tool list to the OpenAI function-calling schema (the Groq contract).

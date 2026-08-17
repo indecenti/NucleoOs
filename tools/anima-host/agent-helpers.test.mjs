@@ -2,7 +2,7 @@
 // line-numbered reads + the auto-verify (write→lint) check. Both are pure → tested with no browser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { withLineNumbers, verifyCode, fenceUntrusted, GEMINI_MODELS } from '../../apps/agent/www/agent-tools.js';
+import { withLineNumbers, verifyCode, fenceUntrusted, GEMINI_MODELS, normalizePlan, renderPlan, CLIENT_TOOLS, MUTATING, ALWAYS_CONFIRM } from '../../apps/agent/www/agent-tools.js';
 import { checkSyntax } from '../../apps/code-runner/www/nucleo-run.js';   // host-safe parse-only check
 
 test('withLineNumbers prefixes each line (cat -n style)', () => {
@@ -56,4 +56,53 @@ test('GEMINI_MODELS reference REAL models (locks the dead gemini-3.5-flash regre
     assert.ok(!/3\.5/.test(m), `gemini-3.5-flash does NOT exist on the API (tier ${tier}=${m})`);
     assert.match(m, /^gemini-(2\.5-|3-|3\.1-|flash-|pro-)/, `${tier}=${m} is not a recognised live Gemini id`);
   }
+});
+
+// ── the plan/todo surface (docs/anima-code.md §12.2) ───────────────────────────────────────────
+// A checklist a small local model can also drive, so it has to survive malformed input rather than
+// fail the turn: bare strings, unknown statuses, three steps "doing" at once.
+
+test('normalizePlan accepts a well-formed plan verbatim', () => {
+  const p = normalizePlan([{ title: 'Scaffold', status: 'done' }, { title: 'Implement', status: 'doing' }, { title: 'Publish', status: 'todo' }]);
+  assert.deepEqual(p, [{ title: 'Scaffold', status: 'done' }, { title: 'Implement', status: 'doing' }, { title: 'Publish', status: 'todo' }]);
+});
+
+test('normalizePlan repairs what a weak model emits', () => {
+  const p = normalizePlan(['just a string', { title: 'x', status: 'IN-PROGRESS' }, { title: '  spaced   out  ' }, { title: '' }, null]);
+  assert.equal(p.length, 3, 'empty and null steps are dropped');
+  assert.equal(p[0].status, 'todo', 'a bare string becomes a todo step');
+  assert.equal(p[1].status, 'todo', 'an unknown status degrades to todo, never crashes');
+  assert.equal(p[2].title, 'spaced out', 'whitespace collapsed');
+});
+
+test('normalizePlan enforces exactly one step in flight', () => {
+  const p = normalizePlan([{ title: 'a', status: 'doing' }, { title: 'b', status: 'doing' }, { title: 'c', status: 'doing' }]);
+  assert.equal(p.filter((s) => s.status === 'doing').length, 1);
+  assert.equal(p[0].status, 'doing', 'the FIRST one is kept');
+});
+
+test('normalizePlan is bounded (a plan is not a tool-call log)', () => {
+  const p = normalizePlan(Array.from({ length: 40 }, (_, i) => ({ title: 'step ' + i, status: 'todo' })));
+  assert.ok(p.length <= 12);
+  assert.ok(normalizePlan([{ title: 'x'.repeat(500), status: 'todo' }])[0].title.length <= 120);
+});
+
+test('normalizePlan never throws on garbage', () => {
+  for (const bad of [undefined, null, 'nope', 42, {}, [[]]]) assert.deepEqual(normalizePlan(bad), []);
+});
+
+test('renderPlan reads back as a checklist with progress', () => {
+  const out = renderPlan(normalizePlan([{ title: 'a', status: 'done' }, { title: 'b', status: 'doing' }]));
+  assert.match(out, /☑ a/);
+  assert.match(out, /▸ b/);
+  assert.match(out, /\(1\/2 done\)/);
+  assert.equal(renderPlan([]), 'plan cleared');
+});
+
+test('update_plan is declared, cheap and never gated behind approval', () => {
+  const tool = CLIENT_TOOLS.find((x) => x.name === 'update_plan');
+  assert.ok(tool, 'the tool must be in the shared surface, so every transport gets it');
+  assert.ok(!MUTATING.has('update_plan'), 'it touches nothing — asking the human to approve it would be noise');
+  assert.ok(!ALWAYS_CONFIRM.has('update_plan'));
+  assert.equal(tool.input_schema.required[0], 'steps');
 });

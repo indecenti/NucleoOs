@@ -25,8 +25,13 @@ OS-native knowledge**, unified behind one agent loop that can run on any substra
 
 - **F0 — unified spine** — *in progress.* This document + the model-agnostic action
   protocol (one tool surface, three transports) + the merged fallback cascade adapter.
+  - **Done (2026-08-17):** the §12 hardening landed ahead of the transports — the
+    §12.3 sandbox blind spot is closed, the §12.1 unfenced inputs are fenced, and the
+    §12.2 plan/todo tool ships. `runWorkerLocal` and the merged cascade remain.
 - F1 — OS-native codegen knowledge — planned.
-- F2 — gated hardware tools (`os.hw`) + capguard closure — planned.
+- **F2 — gated hardware tools (`os.hw`)** — *capguard half done* (see §12.3): capability
+  inference, the `os.hw` danger rule and real per-run denial in the sandbox are in;
+  the agent-side `os.hw` **tools** + manifest-permission gating are still planned.
 - F3 — real agentic loop on a browser-local model — planned.
 - F4 — one "ANIMA Code" surface (engine picker + readiness + model install) — planned.
 - F5 — live device test (opt-in, gated) + NucleoOS-recipe self-distillation — planned.
@@ -320,7 +325,9 @@ stale notes suggested — three targeted reinforcements remain.
 | Writes files to the Cardputer? | Yes, two guarded surfaces | confined workspace (`fsclient.js:96-104`, `resolve()` throws on escape) + privileged publish to `/apps/<id>/www/*` + registry (`safeAppFilePath` `:265`, `planRegistryUpdate` `:280`, `lintApp` first, registry LAST, auth-gated, hot-reload no-reboot) |
 | Workspace like Claude Code? | Yes, substantially | confined root+cwd; line-numbered read `12→` (`agent-tools.js:57`); exact-string edit unique-or-all (`fsclient.js:193`); read-before-edit; tree/search/glob; diff; mkdir-p; `<env>`+open-files seed; compaction |
 
-**Reinforcements ANIMA Code adopts (audit-confirmed, with file:line):**
+**Reinforcements ANIMA Code adopts (audit-confirmed, with file:line).** The three below were the
+open items; §12.1's unfenced inputs, §12.2's missing plan tool and §12.3's sandbox blind spot are
+now **CLOSED** — each is marked inline, with the gate that keeps it closed.
 
 1. **Fencing is an `execTool` invariant — and `runWorkerLocal` MUST be built on
    `runtime.js`'s `execTool`, not on `forge/loop.js`.** The agent already fences `read_file`
@@ -330,32 +337,46 @@ stale notes suggested — three targeted reinforcements remain.
    **only if** it reuses the shared `runtime.js` `execTool`; building it on the Forge-loop
    pattern would feed file/tool content to the local model **unfenced** — a regression. The
    grammar constrains what the model *emits*, never what it *ingests*.
-   - **Fence today's unfenced inputs too:** `transcribe` (`runtime.js:343`) and the recorder's
-     `summarizeLong` (`apps/recorder/www/longtranscribe.js:128`) feed transcript text (from
-     untrusted audio) to a model with **no fence and no security clause** → wrap as
-     `<untrusted_transcript>` + add the clause. Lower severity: `device_status`/`weather`/
-     `list_apps` (`runtime.js:259-294`) return device/3rd-party data (e.g. a crafted Wi-Fi
-     SSID) untagged.
+   - **Fence today's unfenced inputs too — ✅ DONE.** `transcribe` now returns
+     `<untrusted_transcript>`, and the recorder's `summarizeLong` fences every map and reduce
+     chunk *and* carries the security clause (it had neither). `device_status`, `list_apps` and
+     `weather` are fenced too — `list_apps` matters more than its "lower severity" label
+     suggested, because the agent can *publish* an app and therefore choose the name it later
+     reads back. Every new fence tag is listed in the worker system prompt's security clause.
    - **Server-side `web_search`** (`runtime.js:368,384`) is structurally unfenceable — results
      arrive in `resp.content`, never through `execTool`. The compensating system rule
      (`runtime.js:434`) must therefore be present in **every** transport's system prompt,
      `runWorkerLocal` included.
 
-2. **Workspace checkpoints + a task tool (the Claude-Code parity gap).** Add (a) a persistent
-   **plan/todo tool** the model manages across a multi-step build (today only the orchestrator
-   splits subtasks — nothing tracks progress mid-worker), and (b) **snapshot/undo** of the
-   workspace before a batch of writes, reusing Forge's `provenance.js` hash-chain ledger, so a
-   bad generation is one-click reversible. Also give each built app a clearer per-project
-   staging root under the workspace.
+2. **Workspace checkpoints + a task tool (the Claude-Code parity gap).**
+   - (a) **plan/todo tool — ✅ DONE.** `update_plan` is in `CLIENT_TOOLS`, so *every* transport
+     gets it (including the future `runWorkerLocal`). `normalizePlan`/`renderPlan`
+     (`agent-tools.js`) are pure and repair what a weak model emits — bare strings, unknown
+     statuses, three steps marked `doing` at once — instead of failing the turn. It is not in
+     `MUTATING`: no device access, no approval, no network. The runtime keeps it session-scoped
+     (`taskPlan`, cleared per `run()`) and pushes it to `ui.plan`; Agenti renders a sticky
+     checklist with a progress bar, ANIMA emits one compact line into the thinking trace.
+     Gate: `tools/anima-host/agent-helpers.test.mjs`.
+   - (b) **snapshot/undo** of the workspace before a batch of writes, reusing Forge's
+     `provenance.js` hash-chain ledger, so a bad generation is one-click reversible — still open.
+     Also give each built app a clearer per-project staging root under the workspace.
 
-3. **`os.hw` is a double blind spot — worse than a missing rule (F2).** (a) `capguard.js`
-   `CAP_PATTERNS` (`:9-16`) has **no `os.hw.*` entry** (and misses `import()` — only
-   `importScripts` is blocked, `:43`). (b) The hermetic verify run does **not** actually deny
-   hw: `nucleo-run.js` `run()` **ignores per-call `opts.caps`** (`:303-314`), so
-   `forge/loop.js`'s `caps:{fs:false,…}` are a **no-op** and `createRunner` defaults `hw:true`
-   (`:183`). The fix needs **both** a capguard `os.hw` rule **and** either `hw:false` at
-   `createRunner` or making `run()` honor per-call caps. (The agent's own `run_js` is already
-   correctly hermetic — `runtime.js:152` — so only the Forge verify path leaks.)
+3. **`os.hw` was a double blind spot — worse than a missing rule (F2). ✅ CLOSED.**
+   The audit was right on both halves, and both are fixed:
+   - `capguard.js` now infers `hw` as a capability (so `assess()` reports it as
+     over-privilege when it wasn't granted), flags `hardware-actuation` as a `warn`, and blocks
+     **dynamic `import()`** alongside `importScripts` — `import()` was the escape hatch that
+     still worked, since `importScripts` is already stubbed out inside the worker.
+   - `nucleo-run.js` `run()` **honours per-call `opts.caps`**, via the pure `narrowCaps(base,
+     override)`: an override can only take authority AWAY, never grant it. So
+     `forge/loop.js`'s `caps:{fs:false,…}` stopped being a no-op — and it now also passes
+     `notify:false, hw:false`. `createRunner`'s `hw` default stays `true` (the Code Runner app
+     is a scripting IDE and needs it); the callers that claimed "all authority denied" while
+     silently keeping hardware — `forge-demo.html` and the **spreadsheet** coder transform,
+     a second live instance the audit had not spotted — now pass `hw:false` explicitly.
+   - Gate: `tools/anima-host/sandbox-caps.test.mjs` (narrowing works, widening is impossible,
+     the Forge verify shape denies hardware, capguard catches both import forms).
+   - Unchanged and still correct: the agent's own `run_js` is hermetic (`runtime.js:152`).
 
 **Deploy note:** `deploy/sd/apps/…` holds mirror copies of `runtime.js` / `agent-tools.js` /
 `app-review.js` — every fix lands in **both** trees + regenerated `.gz` (see `gz:check`).

@@ -12,6 +12,8 @@
   "send": "Senden",
   "hint": "Die Agenten laufen im Browser und rufen die Online-Modelle direkt auf: Der Cardputer wird nicht belastet. Destruktive Aktionen fragen nach Bestätigung.",
 
+  "plan_title": "Plan",
+
   "st_ready": "bereit",
   "st_thinking": "denkt nach…",
   "st_stopped": "gestoppt",

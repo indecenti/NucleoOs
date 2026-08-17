@@ -29,6 +29,17 @@
   .msg b{color:#fff}.msg code{background:#0c0f17;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font:12px var(--mono)}
   .msg pre{background:#0c0f17;border:1px solid var(--line);border-radius:9px;padding:10px;overflow:auto;font:12px var(--mono);margin:6px 0}
   .msg a{color:#7fb2ff}
+  /* live plan (update_plan) — one row per milestone, current one accented */
+  .plan{flex:0 0 auto;background:#0d1421;border-bottom:1px solid var(--line);padding:7px 14px;font-size:12.5px}
+  .plan .ph{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:11px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px}
+  .plan .pb{flex:1;height:3px;border-radius:2px;background:#1b2436;overflow:hidden}
+  .plan .pb i{display:block;height:100%;background:var(--acc,#4ab3ff);transition:width .25s}
+  .plan ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+  .plan li{display:flex;gap:7px;align-items:baseline;color:var(--dim)}
+  .plan li .m{width:1em;flex:0 0 auto}
+  .plan li.doing{color:var(--txt,#e6edf7);font-weight:600}
+  .plan li.done{opacity:.55;text-decoration:line-through}
+  @media (prefers-reduced-motion: reduce){ .plan .pb i{transition:none} }
   .tool{align-self:flex-start;max-width:min(760px,92%);background:#0e1422;border:1px solid var(--line);border-radius:11px;padding:8px 11px;font-size:12.5px}
   .tool .th{display:flex;align-items:center;gap:7px;font-weight:600}
   .tool .ti{font-size:14px}.tool .tn{font:12px var(--mono);color:var(--accent)}
@@ -77,6 +88,10 @@
       <label class="tog" data-i18n-attr="title:auto_hint"><input type="checkbox" id="auto"> <span data-i18n="auto_label">auto-approva</span></label>
     </div>
   </header>
+
+  <!-- Live plan: the worker's own checklist (update_plan). Sticky under the header so a long build
+       always shows WHERE it is, instead of a spinner. Hidden until the agent sets a plan. -->
+  <div id="plan" class="plan" hidden aria-live="polite"></div>
 
   <main id="log"></main>
 
