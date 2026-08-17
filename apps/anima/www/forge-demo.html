@@ -104,8 +104,13 @@ const sandbox = {
   run: async (code, opts = {}) => {
     if (opts.mode === 'check') return checkSyntax(code);
     const logs = [];
-    const rt = createRunner({ fs: false, http: false, anima: false, notify: false, timeoutMs: 4000, onLog: (l, t) => { if (t) logs.push(t); } });
-    try { const r = await rt.run(code); return { ok: !!r.ok, error: r.error, logs, value: r.value }; }
+    // hw:false is NOT optional — createRunner defaults it to true, and this sandbox runs code a small
+    // local model just generated. Without it, "verifying" a candidate could fire the IR blaster or
+    // drive GPIO. Every capability is denied here; the loop only reads stdout + the return value.
+    const rt = createRunner({ fs: false, http: false, anima: false, notify: false, hw: false, timeoutMs: 4000, onLog: (l, t) => { if (t) logs.push(t); } });
+    // Forward the loop's per-call caps as well: they can only narrow further (never widen past the
+    // all-denied runner above), so the agent's stated intent is actually enforced, not decorative.
+    try { const r = await rt.run(code, {}, { caps: opts.caps }); return { ok: !!r.ok, error: r.error, logs, value: r.value }; }
     catch (e) { return { ok: false, error: String(e && e.message || e), logs }; } finally { rt.dispose(); }
   },
 };

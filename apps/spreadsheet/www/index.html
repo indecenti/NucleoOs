@@ -2365,7 +2365,9 @@ function makeSandbox() {
     run: async (code, env, opts) => {
       const m = await runMod();
       if (opts && opts.mode === 'check') return m.checkSyntax(code);
-      const rt = m.default({ fs: false, http: false, anima: false, notify: false, timeoutMs: 4000, cwd: '/', maxLogBytes: 64 * 1024 });
+      // hw:false too — createRunner defaults hardware ON, so "all ambient authority denied" was not
+      // true for os.hw.* (IR/GPIO/Wi-Fi) in a transform written by a model.
+      const rt = m.default({ fs: false, http: false, anima: false, notify: false, hw: false, timeoutMs: 4000, cwd: '/', maxLogBytes: 64 * 1024 });
       try { return await rt.run(code, env || {}); } finally { rt.dispose(); }
     },
   };
