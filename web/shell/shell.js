@@ -8,6 +8,7 @@ import { ensureOnboarding } from './onboarding.js';   // first-boot AI setup + i
 import I18N from './nucleo-i18n.js';                  // centralized OS-wide internationalization
 import { makeFetchJSON, makeLoadState } from './boot-fetch.js';   // resilient boot fetch + typed user-state load (shell-boot-fetch.test)
 import { rankApps, rankActions, looksLikeNL } from './search-rank.js';   // pure search ranking (host-tested)
+import { createBroker } from './appbroker.js';        // capability broker for sandboxed (agent-written) apps
 import { initSystemUI } from './system-ui.js';        // night light, lock screen, shortcuts sheet, widgets
 
 // Shell-namespaced translator: t(key, vars) → active-language string, falling back to core then key.
@@ -719,9 +720,16 @@ function stopStatusPolling() {
 async function loadAppPermissions() {
   try {
     const reg = await fetchJSON('/api/fs/read?path=' + encodeURIComponent('/system/registry/apps.json'), { tries: 2, timeout: 4000 });
-    const permById = new Map(((reg && reg.installed) || []).map((a) => [a.id, Array.isArray(a.permissions) ? a.permissions : []]));
+    // created_by travels with the permissions: it is what decides whether the app gets an origin at all.
+    const byIdReg = new Map(((reg && reg.installed) || []).map((a) => [a.id, a]));
     let n = 0;
-    for (const a of state.apps) { const perms = permById.get(a.id); if (perms) { a.permissions = perms; n++; } }
+    for (const a of state.apps) {
+      const e = byIdReg.get(a.id);
+      if (!e) continue;
+      a.permissions = Array.isArray(e.permissions) ? e.permissions : [];
+      if (e.created_by) a.created_by = e.created_by;
+      n++;
+    }
     bootLog('permissions applied to ' + n + '/' + state.apps.length + ' app frames');
   } catch (e) {
     // Keep the pre-existing permissive default rather than mute dictation/recorder/ANIMA on a blip.
@@ -873,11 +881,12 @@ async function refreshApps() {
     // /api/apps carries no permissions (the firmware streams only id/name/route/icon/enabled), so a
     // naive rebuild dropped them for EVERY app and silently reverted allowAttr to the permissive
     // default — right after an install, which is exactly when a new, unvetted app appears.
-    const prevPerms = new Map(state.apps.map((a) => [a.id, a.permissions]));
+    const prevPerms = new Map(state.apps.map((a) => [a.id, { p: a.permissions, c: a.created_by }]));
     state.apps = d.apps.filter((a) => a.enabled).map((a) => {
       const app = { ...a, glyph: glyph(a) };
-      const p = prevPerms.get(a.id);
-      if (Array.isArray(p)) app.permissions = p;
+      const prev = prevPerms.get(a.id);
+      if (prev && Array.isArray(prev.p)) app.permissions = prev.p;
+      if (prev && prev.c) app.created_by = prev.c;
       return app;
     });
     permsReady = null; beginLoadAppPermissions();   // and re-read the registry: the new app has its own
@@ -1161,6 +1170,21 @@ function checkInstallGone() { if (installWinId && !WM.list().some((x) => x.app.i
 
 // Apps (e.g. File Commander) ask the shell to open a file with its associated app.
 function wireMessages() {
+  // The broker for sandboxed apps. Identity is resolved from the message SOURCE — an opaque-origin
+  // frame reports origin "null", so only matching e.source against the frames we created is sound.
+  const brokerHandler = createBroker({
+    findApp: (src) => {
+      for (const w of WM.list()) {
+        const f = w.el.querySelector('iframe');
+        if (f && f.contentWindow === src) return w.app;
+      }
+      return null;
+    },
+    notify: (text, from) => showToast(text, '🔔', 'info', 5000),
+    getLang: () => I18N.lang,          // so a sandboxed app can localise itself without importing the engine
+    onFsChange: () => { try { FsIndex.invalidate(); } catch {} },
+  });
+  window.addEventListener('message', brokerHandler);
   window.addEventListener('message', (e) => {
     const d = e.data;
     if (!d) return;

@@ -2907,6 +2907,22 @@
       "anima": false
     },
     {
+      "id": "unit-shell-appbroker",
+      "label": "shell-appbroker.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-appbroker.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-shell-boot-fetch",
       "label": "shell-boot-fetch.test.mjs",
       "category": "app-shell",

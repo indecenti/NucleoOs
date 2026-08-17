@@ -68,9 +68,19 @@ export function allowAttr(app) {
 export const attr = (v) => String(v == null ? '' : v)
   .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// Apps written by the AGENT run with NO ORIGIN. `sandbox` without allow-same-origin gives the frame an
+// opaque origin: the pairing cookie does not ride along, the shell's localStorage is invisible, and
+// /api/* is unreachable — which is the half of the boundary the Feature Policy above cannot cover.
+// They reach the OS only through the postMessage broker (web/shell/appbroker.js), which grants exactly
+// what their manifest declared. allow-forms + allow-modals keep ordinary UI working; popups, top-level
+// navigation and downloads stay off. Curated apps are untouched: they are vetted code, and revoking
+// their origin would break every one of them at once.
+export function isSandboxed(app) { return !!(app && app.created_by === 'agent'); }
+
 export function frameHtml(app, src) {
+  const sandbox = isSandboxed(app) ? ' sandbox="allow-scripts allow-forms allow-modals"' : '';
   return app && app.route
-    ? `<iframe src="${attr(src)}" title="${attr(app.name)}" allow="${attr(allowAttr(app))}"></iframe>`
+    ? `<iframe src="${attr(src)}"${sandbox} title="${attr(app.name)}" allow="${attr(allowAttr(app))}"></iframe>`
     : `<div class="placeholder">${glyph(app)}<br><br>${attr(app && app.name)}<br><small>No web route declared.</small></div>`;
 }
 
