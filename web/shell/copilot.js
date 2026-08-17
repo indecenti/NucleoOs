@@ -40,7 +40,7 @@ async function webIndexer() {
   }
   return _wi || null;
 }
-let scrim, root, logEl, inputEl, sendBtn, dotEl, subEl, modeBtn, langBtn, tbBtn;
+let scrim, root, logEl, inputEl, sendBtn, dotEl, subEl, modeBtn, langBtn, tbBtn, actBtn;
 let isOpen = false, busy = false, aborter = null, seq = 0, elapsedTimer = null;
 let history = [];                     // in-memory transcript for this session: [{role,text,r?}]
 
@@ -147,6 +147,7 @@ function buildDom() {
        <span class="cp-spark">✻</span>
        <span class="cp-title">ANIMA</span><span class="cp-sub" id="cp-sub">copilot</span>
        <span class="cp-sp"></span>
+       <button class="cp-chip" id="cp-act" title="Agente: fai, non solo rispondi" aria-pressed="false">⚡</button>
        <button class="cp-chip" id="cp-mode" title="Modalità motore"></button>
        <button class="cp-chip" id="cp-lang" title="Lingua"></button>
        <span class="cp-dot" id="cp-dot" title="motore ANIMA"></span>
@@ -166,12 +167,14 @@ function buildDom() {
   sendBtn = root.querySelector('#cp-send');
   dotEl = root.querySelector('#cp-dot');
   subEl = root.querySelector('#cp-sub');
+  actBtn = root.querySelector('#cp-act');
   modeBtn = root.querySelector('#cp-mode');
   langBtn = root.querySelector('#cp-lang');
   tbBtn = document.getElementById('copilot-btn');
 }
 
 function wire() {
+  if (actBtn) actBtn.addEventListener('click', () => setAgent(!agentOn));
   scrim.addEventListener('click', closeBar);
   root.querySelector('#cp-close').addEventListener('click', closeBar);
   sendBtn.addEventListener('click', () => (busy ? stop() : submit()));
@@ -318,6 +321,72 @@ async function ping() { try { const r = await fetch('/api/status', { cache: 'no-
 function setBusy(on) { busy = on; sendBtn.textContent = on ? 'Stop' : TR('Invia', 'Send'); sendBtn.classList.toggle('stop', on); }
 function stop() { if (aborter) { try { aborter.abort('user'); } catch {} } }
 
+// ── Agent mode: the copilot DOES, instead of only answering ───────────────────────────────────
+// The two halves already existed and had never been joined: this bar owns an OS surface (byId, WM,
+// openFile, FsIndex…) and a typed action router, but it could only act on the narrow contract the
+// on-device engine emits — launch / open_file / create_file. Meanwhile apps/agent/www/runtime.js has
+// the full tool loop (read/write/edit files, run JS, scaffold and publish a whole app), approvals,
+// and the serialized device queue. Agent mode routes the turn there.
+//
+// RAM discipline, deliberately: the runtime runs IN THE BROWSER and talks to the cloud provider
+// browser-direct. The Cardputer sees only the same /api/fs/* traffic it already serves, funnelled
+// through device-queue (one write at a time). Nothing is added to the ~18 KB heap, and the module is
+// imported LAZILY — a shell that never uses agent mode never pays for it.
+//
+// It is a MODE, not a guess. The agent mutates the SD, so escalating to it silently would be the
+// wrong shape: the user arms it, or is offered it explicitly when the offline brain has nothing.
+let agentOn = false, _agentRt = null;
+function setAgent(on) {
+  agentOn = !!on;
+  if (actBtn) { actBtn.setAttribute('aria-pressed', String(agentOn)); actBtn.classList.toggle('on', agentOn); }
+  if (subEl) subEl.textContent = agentOn ? TR('agente', 'agent') : 'copilot';
+}
+async function agentRuntime() {
+  if (_agentRt) return _agentRt;
+  const cfg = await aiConfig();
+  if (!cfg || !cfg.key) return null;
+  const { createRuntime } = await import('/apps/agent/runtime.js');   // no /www/ — device webfs mapping
+  let turn = null;
+  const ui = {
+    status: (m) => { if (turn) addLined(turn, String(m), 'dim'); },
+    note:   (m) => { if (turn) addLined(turn, String(m).split('\n')[0], 'dim'); },
+    // The worker's live checklist (update_plan): one compact line, current step first.
+    plan: (steps) => {
+      if (!turn || !steps || !steps.length) return;
+      const done = steps.filter((x) => x.status === 'done').length;
+      const cur = steps.find((x) => x.status === 'doing') || steps.find((x) => x.status === 'todo');
+      addLined(turn, '🗒️ ' + TR('Piano', 'Plan') + ' ' + done + '/' + steps.length + (cur ? ' · ▸ ' + cur.title : ' · ✓'), 'dim');
+    },
+    toolStart: (ev) => { if (turn) addLined(turn, '⚙ ' + ev.name + (ev.input && (ev.input.path || ev.input.app || ev.input.id) ? ' ' + (ev.input.path || ev.input.app || ev.input.id) : ''), 'dim'); },
+    toolEnd:   (ev, out, isErr) => { if (turn && isErr) addLined(turn, String(out).slice(0, 160), 'warn'); },
+    // NEVER auto-approve from the OS-wide bar. This surface is one keystroke away at all times; a
+    // destructive write must stay a decision, not a side effect of pressing Ctrl+Space.
+    autoApprove: () => false,
+    webSearchEnabled: () => false,
+    confirm: (req) => api.osConfirm
+      ? api.osConfirm({ title: TR('L\'agente vuole ', 'The agent wants to ') + (req.op || ''),
+                        body: (req.abs || req.path || req.id || req.name || ''), danger: /delete|publish|manage/.test(req.op || '') })
+      : Promise.resolve(false),
+  };
+  _agentRt = { rt: createRuntime({ cfg, root: '/data/agent', lang: lang(), ui, keys: (cfg.keys || {}), active: cfg }),
+               bind: (t) => { turn = t; } };
+  return _agentRt;
+}
+async function askAgent(q, turn) {
+  const a = await agentRuntime();
+  if (!a) { addLined(turn, TR('Serve una chiave IA online per la modalità agente.', 'Agent mode needs an online AI key.'), 'warn'); return false; }
+  a.bind(turn);
+  try {
+    const txt = await a.rt.run(q, history.filter((h) => h.text).slice(-6).map((h) => ({ role: h.role, text: h.text })));
+    if (txt) { addLined(turn, String(txt).slice(0, 2000), 'ok'); history.push({ role: 'bot', text: txt }); }
+    api.FsIndex && api.FsIndex.invalidate();      // the agent may have touched the SD
+    return true;
+  } catch (e) {
+    addLined(turn, String((e && e.message) || e), 'warn');
+    return false;
+  }
+}
+
 // ---- the ask cycle ----
 async function askCopilot(q) {
   q = (q || '').trim();
@@ -330,6 +399,14 @@ async function askCopilot(q) {
   aborter = new AbortController();
   const to = setTimeout(() => { try { aborter.abort('timeout'); } catch {} }, 30000);
   setBusy(true);
+  // Armed agent mode: hand the turn to the tool loop instead of the answer cascade. Nothing about the
+  // offline path changes when it is off, so this cannot regress the normal copilot.
+  if (agentOn) {
+    const turn = addBot(TR('Agente al lavoro…', 'Agent working…'));
+    await askAgent(q, turn);
+    setBusy(false); inputEl.focus();
+    return;
+  }
   const think = addThinking();
   let r;
   try {
@@ -372,6 +449,17 @@ async function askCopilot(q) {
   const reply = r.reply || T().dontknow;
   const turn = addBot(reply);
   dispatch(r, turn);
+  // Honest escalation: when the grounded brain has nothing and a key IS configured, OFFER the agent
+  // rather than silently pretending or silently doing. One click, and the user knows what it is.
+  if (!r.action && /^(non lo so|i don't know|i dont know)/i.test(String(reply).trim())) {
+    aiConfig().then((cfg) => { if (!cfg || !cfg.key) return;
+      addActions(turn, [{ label: TR('Fallo fare all\'agente', 'Let the agent do it'), fn: () => {
+        setAgent(true);
+        const t2 = addBot(TR('Agente al lavoro…', 'Agent working…'));
+        askAgent(q, t2);
+      } }]);
+    }).catch(() => {});
+  }
   history.push({ role: 'bot', text: reply, r });
   setBusy(false); inputEl.focus();
 }

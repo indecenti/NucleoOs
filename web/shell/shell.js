@@ -508,7 +508,7 @@ function initOS() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancelTaskSwitcher(); });
   // Load the OS-wide AI copilot (ANIMA as a system service). Additive: it reuses the /api/anima
   // engine and acts on the OS through this small surface — the same handlers the shell already uses.
-  const OS_API = { byId, WM, openFile, showToast, refreshStatus, FsIndex };
+  const OS_API = { byId, WM, openFile, showToast, refreshStatus, FsIndex, osConfirm };   // osConfirm: the copilot's agent mode gates every mutating tool behind it
   // Real-OS chrome extras. Fed ONLY from data already in the browser (weather cache, the shell's
   // one status snapshot, recents) — opening the widgets panel costs the device nothing.
   SysUI = initSystemUI({ byId, WM, openFile,
