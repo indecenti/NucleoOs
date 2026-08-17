@@ -12,5 +12,23 @@
     "synopsis": "heap",
     "description": "Prints the internal, DMA and default heap pools with their free bytes, largest free block, minimum ever seen and fragmentation percentage, plus the HTTP server's minimum free stack.",
     "details": "NAME\n  heap - Heap detail, including fragmentation\n\nSYNOPSIS\n  heap\n\nDESCRIPTION\n  Prints the internal, DMA and default heap pools with their free bytes, largest free block, minimum ever seen and fragmentation percentage, plus the HTTP server's minimum free stack.\n\nOPTIONS\n  This command takes no options.\n\nDEVICE COST\n  One GET /api/heap.\n\nNOTES\n  Fragmentation, not free bytes, is the documented bottleneck on this chip — and free(1) cannot show it.\n\nSEE ALSO\n  free(1), diag(1), cpu(1), watch(1)\n\nEXAMPLES\n  heap\n  watch -n 5 heap\n  heap | grep frag"
+  },
+  "fr": {
+    "title": "heap - Détail du tas, y compris la fragmentation",
+    "synopsis": "heap",
+    "description": "Affiche les réserves de tas interne, DMA et par défaut avec leurs octets libres, le plus grand bloc libre, le minimum jamais observé et le pourcentage de fragmentation, ainsi que la pile libre minimale du serveur HTTP.",
+    "details": "NOM\n  heap - Détail du tas, y compris la fragmentation\n\nSYNOPSIS\n  heap\n\nDESCRIPTION\n  Affiche les réserves de tas interne, DMA et par défaut avec leurs octets libres, le plus grand bloc libre, le minimum jamais observé et le pourcentage de fragmentation, ainsi que la pile libre minimale du serveur HTTP.\n\nOPTIONS\n  Cette commande ne prend aucune option.\n\nCOÛT POUR L'APPAREIL\n  Un GET /api/heap.\n\nNOTES\n  C'est la fragmentation, et non les octets libres, qui est le goulot d'étranglement documenté sur cette puce — et free(1) ne peut pas la montrer.\n\nVOIR AUSSI\n  free(1), diag(1), cpu(1), watch(1)\n\nEXEMPLES\n  heap\n  watch -n 5 heap\n  heap | grep frag"
+  },
+  "es": {
+    "title": "heap - Detalle del heap, incluida la fragmentación",
+    "synopsis": "heap",
+    "description": "Imprime las reservas de heap interna, DMA y por defecto con sus bytes libres, el bloque libre más grande, el mínimo histórico visto y el porcentaje de fragmentación, más la pila libre mínima del servidor HTTP.",
+    "details": "NOMBRE\n  heap - Detalle del heap, incluida la fragmentación\n\nSINOPSIS\n  heap\n\nDESCRIPCIÓN\n  Imprime las reservas de heap interna, DMA y por defecto con sus bytes libres, el bloque libre más grande, el mínimo histórico visto y el porcentaje de fragmentación, más la pila libre mínima del servidor HTTP.\n\nOPCIONES\n  Este comando no admite opciones.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/heap.\n\nNOTAS\n  La fragmentación, no los bytes libres, es el cuello de botella documentado en este chip, y free(1) no puede mostrarla.\n\nVÉASE TAMBIÉN\n  free(1), diag(1), cpu(1), watch(1)\n\nEJEMPLOS\n  heap\n  watch -n 5 heap\n  heap | grep frag"
+  },
+  "de": {
+    "title": "heap - Heap-Details, einschließlich Fragmentierung",
+    "synopsis": "heap",
+    "description": "Gibt die internen, DMA- und Standard-Heap-Pools mit ihren freien Bytes, dem größten freien Block, dem je gesehenen Minimum und dem Fragmentierungsprozentsatz aus, dazu den minimal freien Stack des HTTP-Servers.",
+    "details": "NAME\n  heap - Heap-Details, einschließlich Fragmentierung\n\nÜBERSICHT\n  heap\n\nBESCHREIBUNG\n  Gibt die internen, DMA- und Standard-Heap-Pools mit ihren freien Bytes, dem größten freien Block, dem je gesehenen Minimum und dem Fragmentierungsprozentsatz aus, dazu den minimal freien Stack des HTTP-Servers.\n\nOPTIONEN\n  Dieser Befehl akzeptiert keine Optionen.\n\nGERÄTEKOSTEN\n  Ein GET /api/heap.\n\nANMERKUNGEN\n  Die Fragmentierung, nicht die freien Bytes, ist der dokumentierte Engpass auf diesem Chip — und free(1) kann sie nicht anzeigen.\n\nSIEHE AUCH\n  free(1), diag(1), cpu(1), watch(1)\n\nBEISPIELE\n  heap\n  watch -n 5 heap\n  heap | grep frag"
   }
 }

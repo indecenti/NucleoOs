@@ -12,5 +12,23 @@
     "synopsis": "notify <text>",
     "description": "How a long watch tells you it finished after you have switched to another window.",
     "details": "NAME\n  notify - Post a notification to the OS notification centre\n\nSYNOPSIS\n  notify <text>\n\nDESCRIPTION\n  How a long watch tells you it finished after you have switched to another window.\n\nOPTIONS\n  <text>\n    The message; without it, read standard input.\n\nDEVICE COST\n  None on the device: it goes through the shell's capability broker.\n\nNOTES\n  Needs the system.notify permission.\n\nSEE ALSO\n  watch(1), say(1)\n\nEXAMPLES\n  notify \"the copy is done\""
+  },
+  "fr": {
+    "title": "notify - Publier une notification dans le centre de notifications de l'OS",
+    "synopsis": "notify <text>",
+    "description": "Comment un long watch vous signale qu'il a terminé après que vous êtes passé à une autre fenêtre.",
+    "details": "NOM\n  notify - Publier une notification dans le centre de notifications de l'OS\n\nSYNOPSIS\n  notify <text>\n\nDESCRIPTION\n  Comment un long watch vous signale qu'il a terminé après que vous êtes passé à une autre fenêtre.\n\nOPTIONS\n  <text>\n    Le message ; sans lui, lire l'entrée standard.\n\nCOÛT POUR L'APPAREIL\n  Aucun sur l'appareil : cela passe par le courtier de capacités du shell.\n\nNOTES\n  Nécessite la permission system.notify.\n\nVOIR AUSSI\n  watch(1), say(1)\n\nEXEMPLES\n  notify \"the copy is done\""
+  },
+  "es": {
+    "title": "notify - Publicar una notificación en el centro de notificaciones del SO",
+    "synopsis": "notify <text>",
+    "description": "Cómo un watch largo avisa de que ha terminado después de haber cambiado a otra ventana.",
+    "details": "NOMBRE\n  notify - Publicar una notificación en el centro de notificaciones del SO\n\nSINOPSIS\n  notify <text>\n\nDESCRIPCIÓN\n  Cómo un watch largo avisa de que ha terminado después de haber cambiado a otra ventana.\n\nOPCIONES\n  <text>\n    El mensaje; sin él, lee la entrada estándar.\n\nCOSTE PARA EL DISPOSITIVO\n  Ninguno en el dispositivo: pasa por el intermediario de capacidades del intérprete.\n\nNOTAS\n  Necesita el permiso system.notify.\n\nVÉASE TAMBIÉN\n  watch(1), say(1)\n\nEJEMPLOS\n  notify \"the copy is done\""
+  },
+  "de": {
+    "title": "notify - Eine Benachrichtigung an das OS-Benachrichtigungscenter senden",
+    "synopsis": "notify <text>",
+    "description": "Wie ein langes watch dir mitteilt, dass es fertig ist, nachdem du zu einem anderen Fenster gewechselt bist.",
+    "details": "NAME\n  notify - Eine Benachrichtigung an das OS-Benachrichtigungscenter senden\n\nÜBERSICHT\n  notify <text>\n\nBESCHREIBUNG\n  Wie ein langes watch dir mitteilt, dass es fertig ist, nachdem du zu einem anderen Fenster gewechselt bist.\n\nOPTIONEN\n  <text>\n    Die Nachricht; ohne sie die Standardeingabe lesen.\n\nGERÄTEKOSTEN\n  Keine auf dem Gerät: Es geht über den Fähigkeiten-Broker der Shell.\n\nANMERKUNGEN\n  Benötigt die Berechtigung system.notify.\n\nSIEHE AUCH\n  watch(1), say(1)\n\nBEISPIELE\n  notify \"the copy is done\""
   }
 }

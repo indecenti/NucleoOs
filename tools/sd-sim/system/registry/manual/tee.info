@@ -12,5 +12,23 @@
     "synopsis": "tee <file>",
     "description": "Saves whatever flows through it and then hands the same text to the next stage, which is what makes a pipeline durable.",
     "details": "NAME\n  tee - Write standard input to a file and pass it on\n\nSYNOPSIS\n  tee <file>\n\nDESCRIPTION\n  Saves whatever flows through it and then hands the same text to the next stage, which is what makes a pipeline durable.\n\nOPTIONS\n  <file>\n    Where to write.\n\nDEVICE COST\n  Exactly one POST /api/fs/write.\n\nSEE ALSO\n  cat(1), clip(1), base64(1)\n\nEXAMPLES\n  diag | tee /data/diag.txt\n  dmesg -l E | tee /data/errors.txt | wc"
+  },
+  "fr": {
+    "title": "tee - Écrire l'entrée standard dans un fichier et la transmettre",
+    "synopsis": "tee <file>",
+    "description": "Enregistre tout ce qui le traverse puis remet le même texte à l'étape suivante, ce qui rend un pipeline durable.",
+    "details": "NOM\n  tee - Écrire l'entrée standard dans un fichier et la transmettre\n\nSYNOPSIS\n  tee <file>\n\nDESCRIPTION\n  Enregistre tout ce qui le traverse puis remet le même texte à l'étape suivante, ce qui rend un pipeline durable.\n\nOPTIONS\n  <file>\n    Où écrire.\n\nCOÛT POUR L'APPAREIL\n  Exactement un POST /api/fs/write.\n\nVOIR AUSSI\n  cat(1), clip(1), base64(1)\n\nEXEMPLES\n  diag | tee /data/diag.txt\n  dmesg -l E | tee /data/errors.txt | wc"
+  },
+  "es": {
+    "title": "tee - Escribir la entrada estándar en un archivo y reenviarla",
+    "synopsis": "tee <file>",
+    "description": "Guarda todo lo que fluye a través de él y luego entrega el mismo texto a la siguiente etapa, que es lo que hace duradera una tubería.",
+    "details": "NOMBRE\n  tee - Escribir la entrada estándar en un archivo y reenviarla\n\nSINOPSIS\n  tee <file>\n\nDESCRIPCIÓN\n  Guarda todo lo que fluye a través de él y luego entrega el mismo texto a la siguiente etapa, que es lo que hace duradera una tubería.\n\nOPCIONES\n  <file>\n    Dónde escribir.\n\nCOSTE PARA EL DISPOSITIVO\n  Exactamente un POST /api/fs/write.\n\nVÉASE TAMBIÉN\n  cat(1), clip(1), base64(1)\n\nEJEMPLOS\n  diag | tee /data/diag.txt\n  dmesg -l E | tee /data/errors.txt | wc"
+  },
+  "de": {
+    "title": "tee - Standardeingabe in eine Datei schreiben und weiterreichen",
+    "synopsis": "tee <file>",
+    "description": "Speichert alles, was durch es fließt, und reicht denselben Text an die nächste Stufe weiter, was eine Pipeline dauerhaft macht.",
+    "details": "NAME\n  tee - Standardeingabe in eine Datei schreiben und weiterreichen\n\nÜBERSICHT\n  tee <file>\n\nBESCHREIBUNG\n  Speichert alles, was durch es fließt, und reicht denselben Text an die nächste Stufe weiter, was eine Pipeline dauerhaft macht.\n\nOPTIONEN\n  <file>\n    Wohin geschrieben wird.\n\nGERÄTEKOSTEN\n  Genau ein POST /api/fs/write.\n\nSIEHE AUCH\n  cat(1), clip(1), base64(1)\n\nBEISPIELE\n  diag | tee /data/diag.txt\n  dmesg -l E | tee /data/errors.txt | wc"
   }
 }

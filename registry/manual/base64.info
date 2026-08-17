@@ -12,5 +12,23 @@
     "synopsis": "base64 [-d] [file]",
     "description": "Encodes a file or standard input to base64, or decodes it back with -d. This is the only way a binary blob crosses a text pipeline or the OS clipboard.",
     "details": "NAME\n  base64 - Encode or decode base64\n\nSYNOPSIS\n  base64 [-d] [file]\n\nDESCRIPTION\n  Encodes a file or standard input to base64, or decodes it back with -d. This is the only way a binary blob crosses a text pipeline or the OS clipboard.\n\nOPTIONS\n  -d\n    Decode instead of encode.\n  [file]\n    Read this file; without it, read standard input.\n\nDEVICE COST\n  One GET /api/fs/read when a file is named, and nothing at all in a pipeline.\n\nNOTES\n  The encoder works on bytes, not on characters: the browser built-in btoa is latin1-only and would corrupt every byte above 0x7F.\n\nSEE ALSO\n  hexdump(1), clip(1), tee(1)\n\nEXAMPLES\n  base64 /data/logo.png\n  base64 /data/logo.b64 | base64 -d | tee /data/logo.png"
+  },
+  "fr": {
+    "title": "base64 - Encoder ou décoder du base64",
+    "synopsis": "base64 [-d] [file]",
+    "description": "Encode un fichier ou l'entrée standard en base64, ou le décode avec -d. C'est la seule façon pour un blob binaire de traverser un pipeline de texte ou le presse-papiers de l'OS.",
+    "details": "NOM\n  base64 - Encoder ou décoder du base64\n\nSYNOPSIS\n  base64 [-d] [file]\n\nDESCRIPTION\n  Encode un fichier ou l'entrée standard en base64, ou le décode avec -d. C'est la seule façon pour un blob binaire de traverser un pipeline de texte ou le presse-papiers de l'OS.\n\nOPTIONS\n  -d\n    Décoder au lieu d'encoder.\n  [file]\n    Lire ce fichier ; sans lui, lire l'entrée standard.\n\nCOÛT POUR L'APPAREIL\n  Un GET /api/fs/read quand un fichier est nommé, et rien du tout dans un pipeline.\n\nNOTES\n  L'encodeur travaille sur les octets, pas sur les caractères : la fonction btoa intégrée au navigateur est limitée au latin1 et corromprait chaque octet au-dessus de 0x7F.\n\nVOIR AUSSI\n  hexdump(1), clip(1), tee(1)\n\nEXEMPLES\n  base64 /data/logo.png\n  base64 /data/logo.b64 | base64 -d | tee /data/logo.png"
+  },
+  "es": {
+    "title": "base64 - Codificar o decodificar base64",
+    "synopsis": "base64 [-d] [file]",
+    "description": "Codifica un archivo o la entrada estándar a base64, o lo decodifica con -d. Es la única manera en que un bloque binario atraviesa una tubería de texto o el portapapeles del SO.",
+    "details": "NOMBRE\n  base64 - Codificar o decodificar base64\n\nSINOPSIS\n  base64 [-d] [file]\n\nDESCRIPCIÓN\n  Codifica un archivo o la entrada estándar a base64, o lo decodifica con -d. Es la única manera en que un bloque binario atraviesa una tubería de texto o el portapapeles del SO.\n\nOPCIONES\n  -d\n    Decodificar en lugar de codificar.\n  [file]\n    Leer este archivo; sin él, leer la entrada estándar.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/fs/read cuando se nombra un archivo, y nada en absoluto en una tubería.\n\nNOTAS\n  El codificador trabaja sobre bytes, no sobre caracteres: la función interna btoa del navegador es solo latin1 y corrompería cada byte por encima de 0x7F.\n\nVÉASE TAMBIÉN\n  hexdump(1), clip(1), tee(1)\n\nEJEMPLOS\n  base64 /data/logo.png\n  base64 /data/logo.b64 | base64 -d | tee /data/logo.png"
+  },
+  "de": {
+    "title": "base64 - Base64 kodieren oder dekodieren",
+    "synopsis": "base64 [-d] [file]",
+    "description": "Kodiert eine Datei oder die Standardeingabe nach Base64, oder dekodiert sie mit -d zurück. Dies ist der einzige Weg, auf dem ein Binär-Blob eine Text-Pipeline oder die OS-Zwischenablage passiert.",
+    "details": "NAME\n  base64 - Base64 kodieren oder dekodieren\n\nÜBERSICHT\n  base64 [-d] [file]\n\nBESCHREIBUNG\n  Kodiert eine Datei oder die Standardeingabe nach Base64, oder dekodiert sie mit -d zurück. Dies ist der einzige Weg, auf dem ein Binär-Blob eine Text-Pipeline oder die OS-Zwischenablage passiert.\n\nOPTIONEN\n  -d\n    Dekodieren statt kodieren.\n  [file]\n    Diese Datei lesen; ohne sie die Standardeingabe lesen.\n\nGERÄTEKOSTEN\n  Ein GET /api/fs/read, wenn eine Datei genannt wird, und gar nichts in einer Pipeline.\n\nANMERKUNGEN\n  Der Kodierer arbeitet auf Bytes, nicht auf Zeichen: Das im Browser eingebaute btoa ist nur latin1-fähig und würde jedes Byte über 0x7F beschädigen.\n\nSIEHE AUCH\n  hexdump(1), clip(1), tee(1)\n\nBEISPIELE\n  base64 /data/logo.png\n  base64 /data/logo.b64 | base64 -d | tee /data/logo.png"
   }
 }

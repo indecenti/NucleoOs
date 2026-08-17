@@ -12,5 +12,23 @@
     "synopsis": "find [path] -name <pattern>",
     "description": "Recursively search for files matching a pattern under a path.",
     "details": "NAME\n  find - Find files recursively.\n\nSYNOPSIS\n  find [path] -name <pattern>\n  find <pattern>\n\nDESCRIPTION\n  Traverses the directory tree starting from the target directory. Matches names using a case-insensitive query.\n\nOPTIONS\n  [path]\n    The starting folder (defaults to active CWD).\n  -name <pattern>\n    The filename query to match.\n\nSYSTEM ARCHITECTURE\n  Issues recursive asynchronous HTTP requests to '/api/fs/list'. Triggers deep scanning on child folders and returns paths dynamically. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. Traverse completed.\n  1\n    Filesystem scan error.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  ls(1), grep(1), web_api(7)\n\nADVANCED EXAMPLES\n  find .txt\n  find /data -name song.mp3"
+  },
+  "fr": {
+    "title": "find - Rechercher des fichiers récursivement",
+    "synopsis": "find [path] -name <pattern>",
+    "description": "Rechercher récursivement les fichiers correspondant à un motif sous un chemin.",
+    "details": "NOM\n  find - Rechercher des fichiers récursivement.\n\nSYNOPSIS\n  find [path] -name <pattern>\n  find <pattern>\n\nDESCRIPTION\n  Parcourt l'arborescence des répertoires à partir du répertoire cible. Fait correspondre les noms au moyen d'une requête insensible à la casse.\n\nOPTIONS\n  [path]\n    Le dossier de départ (par défaut, le CWD actif).\n  -name <pattern>\n    La requête de nom de fichier à faire correspondre.\n\nARCHITECTURE SYSTÈME\n  Émet des requêtes HTTP récursives et asynchrones vers '/api/fs/list'. Déclenche une analyse en profondeur des dossiers enfants et renvoie les chemins dynamiquement. Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès. Parcours terminé.\n  1\n    Erreur d'analyse du système de fichiers.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  ls(1), grep(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  find .txt\n  find /data -name song.mp3"
+  },
+  "es": {
+    "title": "find - Buscar archivos recursivamente",
+    "synopsis": "find [path] -name <pattern>",
+    "description": "Buscar recursivamente archivos que coincidan con un patrón bajo una ruta.",
+    "details": "NOMBRE\n  find - Buscar archivos recursivamente.\n\nSINOPSIS\n  find [path] -name <pattern>\n  find <pattern>\n\nDESCRIPCIÓN\n  Recorre el árbol de directorios a partir del directorio de destino. Coincide con los nombres usando una consulta que no distingue mayúsculas de minúsculas.\n\nOPCIONES\n  [path]\n    La carpeta de inicio (por defecto el CWD activo).\n  -name <pattern>\n    La consulta de nombre de archivo con la que coincidir.\n\nARQUITECTURA DEL SISTEMA\n  Emite peticiones HTTP asíncronas recursivas a '/api/fs/list'. Provoca un escaneo profundo en las carpetas hijas y devuelve las rutas dinámicamente. Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Recorrido completado.\n  1\n    Error de escaneo del sistema de archivos.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  ls(1), grep(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  find .txt\n  find /data -name song.mp3"
+  },
+  "de": {
+    "title": "find - Dateien rekursiv finden",
+    "synopsis": "find [path] -name <pattern>",
+    "description": "Rekursiv nach Dateien suchen, die unter einem Pfad einem Muster entsprechen.",
+    "details": "NAME\n  find - Dateien rekursiv finden.\n\nÜBERSICHT\n  find [path] -name <pattern>\n  find <pattern>\n\nBESCHREIBUNG\n  Durchläuft den Verzeichnisbaum ausgehend vom Zielverzeichnis. Gleicht Namen mit einer Suche ohne Berücksichtigung der Groß-/Kleinschreibung ab.\n\nOPTIONEN\n  [path]\n    Der Startordner (standardmäßig das aktive CWD).\n  -name <pattern>\n    Die abzugleichende Dateinamensuche.\n\nSYSTEMARCHITEKTUR\n  Sendet rekursive asynchrone HTTP-Anfragen an '/api/fs/list'. Löst tiefes Scannen von Unterordnern aus und gibt Pfade dynamisch zurück. Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg. Durchlauf abgeschlossen.\n  1\n    Fehler beim Dateisystem-Scan.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  ls(1), grep(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  find .txt\n  find /data -name song.mp3"
   }
 }

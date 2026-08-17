@@ -12,5 +12,23 @@
     "synopsis": "verify <key> <asserted> [--kind fact|numeric] [-l it|en]",
     "description": "Asks ANIMA whether an asserted value for a key is confirmed, contradicted or unknown, and prints the evidence it used.",
     "details": "NAME\n  verify - Grounded fact check against the on-device knowledge\n\nSYNOPSIS\n  verify <key> <asserted> [--kind fact|numeric] [-l it|en]\n\nDESCRIPTION\n  Asks ANIMA whether an asserted value for a key is confirmed, contradicted or unknown, and prints the evidence it used.\n\nOPTIONS\n  <key>\n    What is being asked about, e.g. \"capital of france\".\n  <asserted>\n    The value to check.\n  --kind\n    fact or numeric.\n  -l\n    Answer language.\n\nDEVICE COST\n  One GET /api/anima/verify.\n\nNOTES\n  This route exists in the firmware only; the simulator answers 404, which the command reports as \"not available on this build\" rather than as an error.\n\nSEE ALSO\n  anima(1), diag(1)\n\nEXAMPLES\n  verify \"capital of france\" Lyon"
+  },
+  "fr": {
+    "title": "verify - Vérification factuelle étayée par les connaissances embarquées",
+    "synopsis": "verify <key> <asserted> [--kind fact|numeric] [-l it|en]",
+    "description": "Demande à ANIMA si une valeur affirmée pour une clé est confirmée, contredite ou inconnue, et affiche les preuves qu'il a utilisées.",
+    "details": "NOM\n  verify - Vérification factuelle étayée par les connaissances embarquées\n\nSYNOPSIS\n  verify <key> <asserted> [--kind fact|numeric] [-l it|en]\n\nDESCRIPTION\n  Demande à ANIMA si une valeur affirmée pour une clé est confirmée, contredite ou inconnue, et affiche les preuves qu'il a utilisées.\n\nOPTIONS\n  <key>\n    Ce sur quoi porte la question, p. ex. \"capital of france\".\n  <asserted>\n    La valeur à vérifier.\n  --kind\n    fact ou numeric.\n  -l\n    Langue de réponse.\n\nCOÛT POUR L'APPAREIL\n  Un GET /api/anima/verify.\n\nNOTES\n  Cette route n'existe que dans le firmware ; le simulateur répond 404, ce que la commande signale par « non disponible sur cette build » plutôt que comme une erreur.\n\nVOIR AUSSI\n  anima(1), diag(1)\n\nEXEMPLES\n  verify \"capital of france\" Lyon"
+  },
+  "es": {
+    "title": "verify - Verificación de hechos fundamentada contra el conocimiento del dispositivo",
+    "synopsis": "verify <key> <asserted> [--kind fact|numeric] [-l it|en]",
+    "description": "Pregunta a ANIMA si un valor afirmado para una clave está confirmado, contradicho o es desconocido, e imprime la evidencia que usó.",
+    "details": "NOMBRE\n  verify - Verificación de hechos fundamentada contra el conocimiento del dispositivo\n\nSINOPSIS\n  verify <key> <asserted> [--kind fact|numeric] [-l it|en]\n\nDESCRIPCIÓN\n  Pregunta a ANIMA si un valor afirmado para una clave está confirmado, contradicho o es desconocido, e imprime la evidencia que usó.\n\nOPCIONES\n  <key>\n    Sobre qué se pregunta, p. ej. \"capital of france\".\n  <asserted>\n    El valor que se va a comprobar.\n  --kind\n    fact o numeric.\n  -l\n    Idioma de la respuesta.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/anima/verify.\n\nNOTAS\n  Esta ruta existe solo en el firmware; el simulador responde 404, lo que el comando informa como \"not available on this build\" en lugar de como un error.\n\nVÉASE TAMBIÉN\n  anima(1), diag(1)\n\nEJEMPLOS\n  verify \"capital of france\" Lyon"
+  },
+  "de": {
+    "title": "verify - Fundierte Faktenprüfung gegen das Wissen auf dem Gerät",
+    "synopsis": "verify <key> <asserted> [--kind fact|numeric] [-l it|en]",
+    "description": "Fragt ANIMA, ob ein behaupteter Wert für einen Schlüssel bestätigt, widerlegt oder unbekannt ist, und gibt die verwendeten Belege aus.",
+    "details": "NAME\n  verify - Fundierte Faktenprüfung gegen das Wissen auf dem Gerät\n\nÜBERSICHT\n  verify <key> <asserted> [--kind fact|numeric] [-l it|en]\n\nBESCHREIBUNG\n  Fragt ANIMA, ob ein behaupteter Wert für einen Schlüssel bestätigt, widerlegt oder unbekannt ist, und gibt die verwendeten Belege aus.\n\nOPTIONEN\n  <key>\n    Wonach gefragt wird, z. B. \"capital of france\".\n  <asserted>\n    Der zu prüfende Wert.\n  --kind\n    fact oder numeric.\n  -l\n    Antwortsprache.\n\nGERÄTEKOSTEN\n  Ein GET /api/anima/verify.\n\nANMERKUNGEN\n  Diese Route existiert nur in der Firmware; der Simulator antwortet mit 404, was der Befehl als \"auf diesem Build nicht verfügbar\" meldet statt als Fehler.\n\nSIEHE AUCH\n  anima(1), diag(1)\n\nBEISPIELE\n  verify \"capital of france\" Lyon"
   }
 }

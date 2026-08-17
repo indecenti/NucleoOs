@@ -12,5 +12,23 @@
     "synopsis": "ota [status]",
     "description": "The thing to read before and after a release: which partition is running, which one an update would land in, whether the current image is marked valid, and whether rollback is armed.",
     "details": "NAME\n  ota - Show the running slot, the next slot and the rollback state\n\nSYNOPSIS\n  ota [status]\n\nDESCRIPTION\n  The thing to read before and after a release: which partition is running, which one an update would land in, whether the current image is marked valid, and whether rollback is armed.\n\nOPTIONS\n  status\n    The only accepted argument; it is also the default.\n\nDEVICE COST\n  One GET /api/status.\n\nNOTES\n  Flashing is deliberately NOT available here. The device reboots about 800 ms after the last OTA byte, so a mistyped path in a shell with history recall would be an irreversible flash one keystroke away. Firmware updates belong to the release tooling.\n\nSEE ALSO\n  status(1), reboot(1), diag(1)\n\nEXAMPLES\n  ota"
+  },
+  "fr": {
+    "title": "ota - Afficher le slot actif, le prochain slot et l'état du rollback",
+    "synopsis": "ota [status]",
+    "description": "Ce qu'il faut lire avant et après une publication : quelle partition est active, sur laquelle une mise à jour atterrirait, si l'image actuelle est marquée valide, et si le rollback est armé.",
+    "details": "NOM\n  ota - Afficher le slot actif, le prochain slot et l'état du rollback\n\nSYNOPSIS\n  ota [status]\n\nDESCRIPTION\n  Ce qu'il faut lire avant et après une publication : quelle partition est active, sur laquelle une mise à jour atterrirait, si l'image actuelle est marquée valide, et si le rollback est armé.\n\nOPTIONS\n  status\n    Le seul argument accepté ; c'est aussi la valeur par défaut.\n\nCOÛT POUR L'APPAREIL\n  Un GET /api/status.\n\nNOTES\n  Le flashage n'est délibérément PAS disponible ici. L'appareil redémarre environ 800 ms après le dernier octet OTA, donc un chemin mal tapé dans un shell doté du rappel d'historique serait un flashage irréversible à une frappe de distance. Les mises à jour du firmware relèvent de l'outillage de publication.\n\nVOIR AUSSI\n  status(1), reboot(1), diag(1)\n\nEXEMPLES\n  ota"
+  },
+  "es": {
+    "title": "ota - Mostrar la ranura en ejecución, la siguiente y el estado de reversión",
+    "synopsis": "ota [status]",
+    "description": "Lo que hay que leer antes y después de una publicación: qué partición está en ejecución, en cuál caería una actualización, si la imagen actual está marcada como válida y si la reversión está armada.",
+    "details": "NOMBRE\n  ota - Mostrar la ranura en ejecución, la siguiente y el estado de reversión\n\nSINOPSIS\n  ota [status]\n\nDESCRIPCIÓN\n  Lo que hay que leer antes y después de una publicación: qué partición está en ejecución, en cuál caería una actualización, si la imagen actual está marcada como válida y si la reversión está armada.\n\nOPCIONES\n  status\n    El único argumento aceptado; también es el valor por defecto.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/status.\n\nNOTAS\n  El flasheo NO está disponible aquí deliberadamente. El dispositivo se reinicia unos 800 ms después del último byte OTA, así que una ruta mal escrita en un intérprete con recuperación de historial sería un flasheo irreversible a una pulsación de distancia. Las actualizaciones de firmware pertenecen a las herramientas de publicación.\n\nVÉASE TAMBIÉN\n  status(1), reboot(1), diag(1)\n\nEJEMPLOS\n  ota"
+  },
+  "de": {
+    "title": "ota - Den laufenden Slot, den nächsten Slot und den Rollback-Status anzeigen",
+    "synopsis": "ota [status]",
+    "description": "Das, was man vor und nach einer Veröffentlichung liest: welche Partition läuft, in welcher ein Update landen würde, ob das aktuelle Image als gültig markiert ist und ob Rollback scharfgeschaltet ist.",
+    "details": "NAME\n  ota - Den laufenden Slot, den nächsten Slot und den Rollback-Status anzeigen\n\nÜBERSICHT\n  ota [status]\n\nBESCHREIBUNG\n  Das, was man vor und nach einer Veröffentlichung liest: welche Partition läuft, in welcher ein Update landen würde, ob das aktuelle Image als gültig markiert ist und ob Rollback scharfgeschaltet ist.\n\nOPTIONEN\n  status\n    Das einzige akzeptierte Argument; es ist zugleich die Vorgabe.\n\nGERÄTEKOSTEN\n  Ein GET /api/status.\n\nANMERKUNGEN\n  Das Flashen ist hier bewusst NICHT verfügbar. Das Gerät startet etwa 800 ms nach dem letzten OTA-Byte neu, sodass ein vertippter Pfad in einer Shell mit Verlaufsabruf ein unumkehrbares Flashen einen Tastendruck weit entfernt wäre. Firmware-Updates gehören zum Release-Werkzeug.\n\nSIEHE AUCH\n  status(1), reboot(1), diag(1)\n\nBEISPIELE\n  ota"
   }
 }

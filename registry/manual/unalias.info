@@ -12,5 +12,23 @@
     "synopsis": "unalias <name>",
     "description": "Deletes one alias and saves the list again.",
     "details": "NAME\n  unalias - Remove an alias\n\nSYNOPSIS\n  unalias <name>\n\nDESCRIPTION\n  Deletes one alias and saves the list again.\n\nOPTIONS\n  <name>\n    The alias to remove.\n\nDEVICE COST\n  One POST /api/fs/write.\n\nSEE ALSO\n  alias(1)\n\nEXAMPLES\n  unalias ll"
+  },
+  "fr": {
+    "title": "unalias - Supprimer un alias",
+    "synopsis": "unalias <name>",
+    "description": "Supprime un alias et enregistre à nouveau la liste.",
+    "details": "NOM\n  unalias - Supprimer un alias\n\nSYNOPSIS\n  unalias <name>\n\nDESCRIPTION\n  Supprime un alias et enregistre à nouveau la liste.\n\nOPTIONS\n  <name>\n    L'alias à supprimer.\n\nCOÛT POUR L'APPAREIL\n  Un POST /api/fs/write.\n\nVOIR AUSSI\n  alias(1)\n\nEXEMPLES\n  unalias ll"
+  },
+  "es": {
+    "title": "unalias - Eliminar un alias",
+    "synopsis": "unalias <name>",
+    "description": "Elimina un alias y vuelve a guardar la lista.",
+    "details": "NOMBRE\n  unalias - Eliminar un alias\n\nSINOPSIS\n  unalias <name>\n\nDESCRIPCIÓN\n  Elimina un alias y vuelve a guardar la lista.\n\nOPCIONES\n  <name>\n    El alias que se va a eliminar.\n\nCOSTE PARA EL DISPOSITIVO\n  Un POST /api/fs/write.\n\nVÉASE TAMBIÉN\n  alias(1)\n\nEJEMPLOS\n  unalias ll"
+  },
+  "de": {
+    "title": "unalias - Einen Alias entfernen",
+    "synopsis": "unalias <name>",
+    "description": "Löscht einen Alias und speichert die Liste erneut.",
+    "details": "NAME\n  unalias - Einen Alias entfernen\n\nÜBERSICHT\n  unalias <name>\n\nBESCHREIBUNG\n  Löscht einen Alias und speichert die Liste erneut.\n\nOPTIONEN\n  <name>\n    Der zu entfernende Alias.\n\nGERÄTEKOSTEN\n  Ein POST /api/fs/write.\n\nSIEHE AUCH\n  alias(1)\n\nBEISPIELE\n  unalias ll"
   }
 }

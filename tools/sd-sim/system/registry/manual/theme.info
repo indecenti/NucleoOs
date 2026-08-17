@@ -12,5 +12,23 @@
     "synopsis": "theme [dark|light]",
     "description": "Display or switch the system graphic theme (dark or light).",
     "details": "NAME\n  theme - System graphic theme.\n\nSYNOPSIS\n  theme [dark|light]\n\nDESCRIPTION\n  Reads or switches the active color theme. Changes are saved to settings.json.\n\nOPTIONS\n  [dark|light]\n    The theme name to apply.\n\nSYSTEM ARCHITECTURE\n  Modifies the 'data-theme' attribute of the root DOM node. Overwrites '/system/config/settings.json' on the SD card using a POST request to '/api/fs/write'. See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    SD Card write failure.\n\nCONFORMING TO\n  NucleoOS proprietary extension.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  status(1), web_api(7)\n\nADVANCED EXAMPLES\n  theme            # Read current theme\n  theme light      # Switch to light theme\n  theme dark       # Switch to dark theme"
+  },
+  "fr": {
+    "title": "theme - Changer le thème de couleur de l'OS",
+    "synopsis": "theme [dark|light]",
+    "description": "Afficher ou basculer le thème graphique du système (sombre ou clair).",
+    "details": "NOM\n  theme - Thème graphique du système.\n\nSYNOPSIS\n  theme [dark|light]\n\nDESCRIPTION\n  Lit ou bascule le thème de couleur actif. Les changements sont enregistrés dans settings.json.\n\nOPTIONS\n  [dark|light]\n    Le nom du thème à appliquer.\n\nARCHITECTURE SYSTÈME\n  Modifie l'attribut 'data-theme' du nœud DOM racine. Écrase '/system/config/settings.json' sur la carte SD au moyen d'une requête POST vers '/api/fs/write'. Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès.\n  1\n    Échec d'écriture sur la carte SD.\n\nCONFORMITÉ\n  Extension propriétaire NucleoOS.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  status(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  theme            # Lire le thème actuel\n  theme light      # Basculer vers le thème clair\n  theme dark       # Basculer vers le thème sombre"
+  },
+  "es": {
+    "title": "theme - Cambiar el tema de color del SO",
+    "synopsis": "theme [dark|light]",
+    "description": "Mostrar o cambiar el tema gráfico del sistema (oscuro o claro).",
+    "details": "NOMBRE\n  theme - Tema gráfico del sistema.\n\nSINOPSIS\n  theme [dark|light]\n\nDESCRIPCIÓN\n  Lee o cambia el tema de color activo. Los cambios se guardan en settings.json.\n\nOPCIONES\n  [dark|light]\n    El nombre del tema que se va a aplicar.\n\nARQUITECTURA DEL SISTEMA\n  Modifica el atributo 'data-theme' del nodo raíz del DOM. Sobrescribe '/system/config/settings.json' en la tarjeta SD mediante una petición POST a '/api/fs/write'. Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Fallo de escritura en la tarjeta SD.\n\nCONFORME A\n  Extensión propietaria de NucleoOS.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  status(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  theme            # Lee el tema actual\n  theme light      # Cambia al tema claro\n  theme dark       # Cambia al tema oscuro"
+  },
+  "de": {
+    "title": "theme - OS-Farbthema ändern",
+    "synopsis": "theme [dark|light]",
+    "description": "Das grafische Systemthema (dunkel oder hell) anzeigen oder umschalten.",
+    "details": "NAME\n  theme - Grafisches Systemthema.\n\nÜBERSICHT\n  theme [dark|light]\n\nBESCHREIBUNG\n  Liest oder schaltet das aktive Farbthema um. Änderungen werden in settings.json gespeichert.\n\nOPTIONEN\n  [dark|light]\n    Der Name des anzuwendenden Themas.\n\nSYSTEMARCHITEKTUR\n  Ändert das Attribut 'data-theme' des Wurzel-DOM-Knotens. Überschreibt '/system/config/settings.json' auf der SD-Karte mittels einer POST-Anfrage an '/api/fs/write'. Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Schreibfehler auf der SD-Karte.\n\nKONFORM ZU\n  Proprietäre NucleoOS-Erweiterung.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  status(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  theme            # Aktuelles Thema lesen\n  theme light      # Zum hellen Thema wechseln\n  theme dark       # Zum dunklen Thema wechseln"
   }
 }

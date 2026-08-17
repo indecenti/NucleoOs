@@ -12,5 +12,23 @@
     "synopsis": "say [text]",
     "description": "Sends text to the speech engine, either as an argument or from a pipe. Inside a pipeline it passes the text on, so a spoken line can still be recorded.",
     "details": "NAME\n  say - Speak text through the device\n\nSYNOPSIS\n  say [text]\n\nDESCRIPTION\n  Sends text to the speech engine, either as an argument or from a pipe. Inside a pipeline it passes the text on, so a spoken line can still be recorded.\n\nOPTIONS\n  [text]\n    What to say; without it, read standard input.\n\nDEVICE COST\n  One POST /api/tts.\n\nNOTES\n  Needs the device.audio permission. If the build has no speech engine, it says so instead of pretending to have spoken.\n\nSEE ALSO\n  notify(1), anima(1), clip(1)\n\nEXAMPLES\n  say \"the backup is finished\"\n  dmesg -l E | anima \"what is wrong?\" | say"
+  },
+  "fr": {
+    "title": "say - Énoncer du texte via l'appareil",
+    "synopsis": "say [text]",
+    "description": "Envoie du texte au moteur de synthèse vocale, soit en argument, soit depuis un tube. Dans un pipeline, il transmet le texte, si bien qu'une ligne énoncée peut aussi être enregistrée.",
+    "details": "NOM\n  say - Énoncer du texte via l'appareil\n\nSYNOPSIS\n  say [text]\n\nDESCRIPTION\n  Envoie du texte au moteur de synthèse vocale, soit en argument, soit depuis un tube. Dans un pipeline, il transmet le texte, si bien qu'une ligne énoncée peut aussi être enregistrée.\n\nOPTIONS\n  [text]\n    Ce qu'il faut dire ; sans cela, lire l'entrée standard.\n\nCOÛT POUR L'APPAREIL\n  Un POST /api/tts.\n\nNOTES\n  Nécessite la permission device.audio. Si la build n'a pas de moteur de synthèse vocale, elle le signale au lieu de prétendre avoir parlé.\n\nVOIR AUSSI\n  notify(1), anima(1), clip(1)\n\nEXEMPLES\n  say \"the backup is finished\"\n  dmesg -l E | anima \"what is wrong?\" | say"
+  },
+  "es": {
+    "title": "say - Pronunciar texto a través del dispositivo",
+    "synopsis": "say [text]",
+    "description": "Envía texto al motor de voz, ya sea como argumento o desde una tubería. Dentro de una tubería reenvía el texto, de modo que una línea pronunciada aún se puede grabar.",
+    "details": "NOMBRE\n  say - Pronunciar texto a través del dispositivo\n\nSINOPSIS\n  say [text]\n\nDESCRIPCIÓN\n  Envía texto al motor de voz, ya sea como argumento o desde una tubería. Dentro de una tubería reenvía el texto, de modo que una línea pronunciada aún se puede grabar.\n\nOPCIONES\n  [text]\n    Qué decir; sin él, lee la entrada estándar.\n\nCOSTE PARA EL DISPOSITIVO\n  Un POST /api/tts.\n\nNOTAS\n  Necesita el permiso device.audio. Si la compilación no tiene motor de voz, lo indica en lugar de fingir que ha hablado.\n\nVÉASE TAMBIÉN\n  notify(1), anima(1), clip(1)\n\nEJEMPLOS\n  say \"the backup is finished\"\n  dmesg -l E | anima \"what is wrong?\" | say"
+  },
+  "de": {
+    "title": "say - Text über das Gerät sprechen",
+    "synopsis": "say [text]",
+    "description": "Sendet Text an die Sprach-Engine, entweder als Argument oder aus einer Pipe. Innerhalb einer Pipeline reicht es den Text weiter, sodass eine gesprochene Zeile trotzdem aufgezeichnet werden kann.",
+    "details": "NAME\n  say - Text über das Gerät sprechen\n\nÜBERSICHT\n  say [text]\n\nBESCHREIBUNG\n  Sendet Text an die Sprach-Engine, entweder als Argument oder aus einer Pipe. Innerhalb einer Pipeline reicht es den Text weiter, sodass eine gesprochene Zeile trotzdem aufgezeichnet werden kann.\n\nOPTIONEN\n  [text]\n    Was gesagt werden soll; ohne es die Standardeingabe lesen.\n\nGERÄTEKOSTEN\n  Ein POST /api/tts.\n\nANMERKUNGEN\n  Benötigt die Berechtigung device.audio. Hat der Build keine Sprach-Engine, sagt er das, statt vorzugeben, gesprochen zu haben.\n\nSIEHE AUCH\n  notify(1), anima(1), clip(1)\n\nBEISPIELE\n  say \"the backup is finished\"\n  dmesg -l E | anima \"what is wrong?\" | say"
   }
 }

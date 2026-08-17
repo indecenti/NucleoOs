@@ -12,5 +12,23 @@
     "synopsis": "stat <path>",
     "description": "Reports what a single file or directory is, without listing the whole folder it lives in.",
     "details": "NAME\n  stat - Show the type, size and lock state of one entry\n\nSYNOPSIS\n  stat <path>\n\nDESCRIPTION\n  Reports what a single file or directory is, without listing the whole folder it lives in.\n\nOPTIONS\n  <path>\n    The file or directory to describe.\n\nDEVICE COST\n  One GET /api/fs/list on the PARENT directory. The firmware has no per-entry stat route, so the parent listing is the cheapest honest answer.\n\nNOTES\n  The device does not report a modification time, so stat says so rather than inventing one.\n\nSEE ALSO\n  ls(1), du(1), tree(1)\n\nEXAMPLES\n  stat /data/notes.txt\n  stat /apps/terminal"
+  },
+  "fr": {
+    "title": "stat - Afficher le type, la taille et l'état de verrouillage d'une entrée",
+    "synopsis": "stat <path>",
+    "description": "Indique ce qu'est un fichier ou un répertoire unique, sans lister tout le dossier qui le contient.",
+    "details": "NOM\n  stat - Afficher le type, la taille et l'état de verrouillage d'une entrée\n\nSYNOPSIS\n  stat <path>\n\nDESCRIPTION\n  Indique ce qu'est un fichier ou un répertoire unique, sans lister tout le dossier qui le contient.\n\nOPTIONS\n  <path>\n    Le fichier ou le répertoire à décrire.\n\nCOÛT POUR L'APPAREIL\n  Un GET /api/fs/list sur le répertoire PARENT. Le firmware n'a pas de route de stat par entrée, donc le listage du parent est la réponse honnête la moins coûteuse.\n\nNOTES\n  L'appareil ne rapporte pas d'heure de modification, donc stat le signale au lieu d'en inventer une.\n\nVOIR AUSSI\n  ls(1), du(1), tree(1)\n\nEXEMPLES\n  stat /data/notes.txt\n  stat /apps/terminal"
+  },
+  "es": {
+    "title": "stat - Mostrar el tipo, el tamaño y el estado de bloqueo de una entrada",
+    "synopsis": "stat <path>",
+    "description": "Informa de qué es un único archivo o directorio, sin listar toda la carpeta en la que se encuentra.",
+    "details": "NOMBRE\n  stat - Mostrar el tipo, el tamaño y el estado de bloqueo de una entrada\n\nSINOPSIS\n  stat <path>\n\nDESCRIPCIÓN\n  Informa de qué es un único archivo o directorio, sin listar toda la carpeta en la que se encuentra.\n\nOPCIONES\n  <path>\n    El archivo o directorio que se va a describir.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/fs/list sobre el directorio PADRE. El firmware no tiene una ruta stat por entrada, así que el listado del padre es la respuesta honesta más barata.\n\nNOTAS\n  El dispositivo no informa de una hora de modificación, así que stat lo indica en lugar de inventarla.\n\nVÉASE TAMBIÉN\n  ls(1), du(1), tree(1)\n\nEJEMPLOS\n  stat /data/notes.txt\n  stat /apps/terminal"
+  },
+  "de": {
+    "title": "stat - Typ, Größe und Sperrstatus eines Eintrags anzeigen",
+    "synopsis": "stat <path>",
+    "description": "Meldet, was eine einzelne Datei oder ein Verzeichnis ist, ohne den ganzen Ordner aufzulisten, in dem es liegt.",
+    "details": "NAME\n  stat - Typ, Größe und Sperrstatus eines Eintrags anzeigen\n\nÜBERSICHT\n  stat <path>\n\nBESCHREIBUNG\n  Meldet, was eine einzelne Datei oder ein Verzeichnis ist, ohne den ganzen Ordner aufzulisten, in dem es liegt.\n\nOPTIONEN\n  <path>\n    Die zu beschreibende Datei oder das Verzeichnis.\n\nGERÄTEKOSTEN\n  Ein GET /api/fs/list auf dem ÜBERGEORDNETEN Verzeichnis. Die Firmware hat keine Route für einen Eintrag einzeln, daher ist die Auflistung des Elternverzeichnisses die günstigste ehrliche Antwort.\n\nANMERKUNGEN\n  Das Gerät meldet keine Änderungszeit, daher sagt stat das, statt eine zu erfinden.\n\nSIEHE AUCH\n  ls(1), du(1), tree(1)\n\nBEISPIELE\n  stat /data/notes.txt\n  stat /apps/terminal"
   }
 }

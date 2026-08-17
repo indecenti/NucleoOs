@@ -12,5 +12,23 @@
     "synopsis": "tail [-n lines] <file>",
     "description": "Output the last part (default 10 lines) of a file.",
     "details": "NAME\n  tail - Output last lines of a file.\n\nSYNOPSIS\n  tail [-n <lines>] <file>\n\nDESCRIPTION\n  Prints the trailing segment of a file (defaults to 10 lines).\n\nOPTIONS\n  -n <lines>\n    Specify the exact count of lines to print (e.g. '-n 5').\n  <file>\n    The target file path.\n\nSYSTEM ARCHITECTURE\n  Downloads file contents via GET '/api/fs/read'. Parses lines in memory and isolates the bottom elements using array slicing ('slice(allLines.length - n)'). See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    Read error or invalid parameter formatting.\n  404\n    Target file not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  head(1), cat(1), web_api(7)\n\nADVANCED EXAMPLES\n  tail logs.txt\n  tail -n 3 /data/net.cfg"
+  },
+  "fr": {
+    "title": "tail - Afficher les dernières lignes d'un fichier",
+    "synopsis": "tail [-n lines] <file>",
+    "description": "Afficher la fin (10 lignes par défaut) d'un fichier.",
+    "details": "NOM\n  tail - Afficher les dernières lignes d'un fichier.\n\nSYNOPSIS\n  tail [-n <lines>] <file>\n\nDESCRIPTION\n  Affiche le segment final d'un fichier (10 lignes par défaut).\n\nOPTIONS\n  -n <lines>\n    Indiquer le nombre exact de lignes à afficher (p. ex. '-n 5').\n  <file>\n    Le chemin du fichier cible.\n\nARCHITECTURE SYSTÈME\n  Télécharge le contenu du fichier via GET '/api/fs/read'. Analyse les lignes en mémoire et isole les derniers éléments par découpage de tableau ('slice(allLines.length - n)'). Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès.\n  1\n    Erreur de lecture ou format de paramètre invalide.\n  404\n    Fichier cible introuvable.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  head(1), cat(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  tail logs.txt\n  tail -n 3 /data/net.cfg"
+  },
+  "es": {
+    "title": "tail - Mostrar las últimas líneas de un archivo",
+    "synopsis": "tail [-n lines] <file>",
+    "description": "Mostrar la última parte (10 líneas por defecto) de un archivo.",
+    "details": "NOMBRE\n  tail - Mostrar las últimas líneas de un archivo.\n\nSINOPSIS\n  tail [-n <lines>] <file>\n\nDESCRIPCIÓN\n  Imprime el segmento final de un archivo (10 líneas por defecto).\n\nOPCIONES\n  -n <lines>\n    Especifica el número exacto de líneas que se imprimirán (p. ej. '-n 5').\n  <file>\n    La ruta del archivo de destino.\n\nARQUITECTURA DEL SISTEMA\n  Descarga el contenido del archivo mediante GET '/api/fs/read'. Analiza las líneas en memoria y aísla los últimos elementos mediante el troceado de arrays ('slice(allLines.length - n)'). Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Error de lectura o formato de parámetro no válido.\n  404\n    Archivo de destino no encontrado.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  head(1), cat(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  tail logs.txt\n  tail -n 3 /data/net.cfg"
+  },
+  "de": {
+    "title": "tail - Letzte Zeilen einer Datei anzeigen",
+    "synopsis": "tail [-n lines] <file>",
+    "description": "Den letzten Teil (standardmäßig 10 Zeilen) einer Datei ausgeben.",
+    "details": "NAME\n  tail - Letzte Zeilen einer Datei ausgeben.\n\nÜBERSICHT\n  tail [-n <lines>] <file>\n\nBESCHREIBUNG\n  Gibt den Endabschnitt einer Datei aus (standardmäßig 10 Zeilen).\n\nOPTIONEN\n  -n <lines>\n    Die genaue Anzahl der auszugebenden Zeilen angeben (z. B. '-n 5').\n  <file>\n    Der Zieldateipfad.\n\nSYSTEMARCHITEKTUR\n  Lädt den Dateiinhalt per GET '/api/fs/read' herunter. Parst die Zeilen im Speicher und isoliert die untersten Elemente durch Array-Slicing ('slice(allLines.length - n)'). Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Lesefehler oder ungültige Parameterformatierung.\n  404\n    Zieldatei nicht gefunden.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  head(1), cat(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  tail logs.txt\n  tail -n 3 /data/net.cfg"
   }
 }

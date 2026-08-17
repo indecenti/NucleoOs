@@ -12,5 +12,23 @@
     "synopsis": "clip   |   clip -o",
     "description": "Without arguments it puts standard input on the clipboard; with -o it prints what is on it. This is the pipeline's exit to the rest of the OS, and its entrance.",
     "details": "NAME\n  clip - Write to or read the OS clipboard\n\nSYNOPSIS\n  clip   |   clip -o\n\nDESCRIPTION\n  Without arguments it puts standard input on the clipboard; with -o it prints what is on it. This is the pipeline's exit to the rest of the OS, and its entrance.\n\nOPTIONS\n  -o\n    Read the clipboard instead of writing it.\n\nDEVICE COST\n  None on the device: the clipboard is a shell service, remembered by the OS.\n\nNOTES\n  Needs the system.clipboard permission.\n\nSEE ALSO\n  tee(1), base64(1), say(1)\n\nEXAMPLES\n  stat /data/notes.txt | clip\n  clip -o | wc"
+  },
+  "fr": {
+    "title": "clip - Écrire dans ou lire le presse-papiers de l'OS",
+    "synopsis": "clip   |   clip -o",
+    "description": "Sans argument, place l'entrée standard dans le presse-papiers ; avec -o, affiche son contenu. C'est la sortie du pipeline vers le reste de l'OS, et son entrée.",
+    "details": "NOM\n  clip - Écrire dans ou lire le presse-papiers de l'OS\n\nSYNOPSIS\n  clip   |   clip -o\n\nDESCRIPTION\n  Sans argument, place l'entrée standard dans le presse-papiers ; avec -o, affiche son contenu. C'est la sortie du pipeline vers le reste de l'OS, et son entrée.\n\nOPTIONS\n  -o\n    Lire le presse-papiers au lieu d'y écrire.\n\nCOÛT POUR L'APPAREIL\n  Aucun sur l'appareil : le presse-papiers est un service du shell, mémorisé par l'OS.\n\nNOTES\n  Nécessite la permission system.clipboard.\n\nVOIR AUSSI\n  tee(1), base64(1), say(1)\n\nEXEMPLES\n  stat /data/notes.txt | clip\n  clip -o | wc"
+  },
+  "es": {
+    "title": "clip - Escribir en el portapapeles del SO o leerlo",
+    "synopsis": "clip   |   clip -o",
+    "description": "Sin argumentos coloca la entrada estándar en el portapapeles; con -o imprime lo que hay en él. Es la salida de la tubería hacia el resto del SO, y su entrada.",
+    "details": "NOMBRE\n  clip - Escribir en el portapapeles del SO o leerlo\n\nSINOPSIS\n  clip   |   clip -o\n\nDESCRIPCIÓN\n  Sin argumentos coloca la entrada estándar en el portapapeles; con -o imprime lo que hay en él. Es la salida de la tubería hacia el resto del SO, y su entrada.\n\nOPCIONES\n  -o\n    Leer el portapapeles en lugar de escribirlo.\n\nCOSTE PARA EL DISPOSITIVO\n  Ninguno en el dispositivo: el portapapeles es un servicio del intérprete, recordado por el SO.\n\nNOTAS\n  Necesita el permiso system.clipboard.\n\nVÉASE TAMBIÉN\n  tee(1), base64(1), say(1)\n\nEJEMPLOS\n  stat /data/notes.txt | clip\n  clip -o | wc"
+  },
+  "de": {
+    "title": "clip - In die OS-Zwischenablage schreiben oder daraus lesen",
+    "synopsis": "clip   |   clip -o",
+    "description": "Ohne Argumente legt es die Standardeingabe in die Zwischenablage; mit -o gibt es aus, was darin liegt. Dies ist der Ausgang der Pipeline zum restlichen OS und ihr Eingang.",
+    "details": "NAME\n  clip - In die OS-Zwischenablage schreiben oder daraus lesen\n\nÜBERSICHT\n  clip   |   clip -o\n\nBESCHREIBUNG\n  Ohne Argumente legt es die Standardeingabe in die Zwischenablage; mit -o gibt es aus, was darin liegt. Dies ist der Ausgang der Pipeline zum restlichen OS und ihr Eingang.\n\nOPTIONEN\n  -o\n    Die Zwischenablage lesen statt schreiben.\n\nGERÄTEKOSTEN\n  Keine auf dem Gerät: Die Zwischenablage ist ein Shell-Dienst, den das OS behält.\n\nANMERKUNGEN\n  Benötigt die Berechtigung system.clipboard.\n\nSIEHE AUCH\n  tee(1), base64(1), say(1)\n\nBEISPIELE\n  stat /data/notes.txt | clip\n  clip -o | wc"
   }
 }

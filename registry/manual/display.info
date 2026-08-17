@@ -12,5 +12,23 @@
     "synopsis": "display on | display off",
     "description": "Switches the physical display, and prints the brightness the device reports afterwards.",
     "details": "NAME\n  display - Turn the panel on or off\n\nSYNOPSIS\n  display on | display off\n\nDESCRIPTION\n  Switches the physical display, and prints the brightness the device reports afterwards.\n\nOPTIONS\n  on\n    Panel on.\n  off\n    Panel off.\n\nDEVICE COST\n  One POST /api/display.\n\nNOTES\n  Needs the device.display permission. On a 120 mAh budget this is the single biggest lever there is, and until now it was only reachable through Settings.\n\nSEE ALSO\n  screen(1), status(1)\n\nEXAMPLES\n  display off\n  display on"
+  },
+  "fr": {
+    "title": "display - Allumer ou éteindre l'écran",
+    "synopsis": "display on | display off",
+    "description": "Commute l'écran physique, et affiche la luminosité que l'appareil rapporte ensuite.",
+    "details": "NOM\n  display - Allumer ou éteindre l'écran\n\nSYNOPSIS\n  display on | display off\n\nDESCRIPTION\n  Commute l'écran physique, et affiche la luminosité que l'appareil rapporte ensuite.\n\nOPTIONS\n  on\n    Écran allumé.\n  off\n    Écran éteint.\n\nCOÛT POUR L'APPAREIL\n  Un POST /api/display.\n\nNOTES\n  Nécessite la permission device.display. Sur un budget de 120 mAh, c'est le plus grand levier qui soit, et jusqu'ici il n'était accessible que par les Réglages.\n\nVOIR AUSSI\n  screen(1), status(1)\n\nEXEMPLES\n  display off\n  display on"
+  },
+  "es": {
+    "title": "display - Encender o apagar el panel",
+    "synopsis": "display on | display off",
+    "description": "Conmuta la pantalla física e imprime el brillo que el dispositivo informa después.",
+    "details": "NOMBRE\n  display - Encender o apagar el panel\n\nSINOPSIS\n  display on | display off\n\nDESCRIPCIÓN\n  Conmuta la pantalla física e imprime el brillo que el dispositivo informa después.\n\nOPCIONES\n  on\n    Panel encendido.\n  off\n    Panel apagado.\n\nCOSTE PARA EL DISPOSITIVO\n  Un POST /api/display.\n\nNOTAS\n  Necesita el permiso device.display. Con un presupuesto de 120 mAh, esta es la mayor palanca que existe, y hasta ahora solo era accesible a través de Ajustes.\n\nVÉASE TAMBIÉN\n  screen(1), status(1)\n\nEJEMPLOS\n  display off\n  display on"
+  },
+  "de": {
+    "title": "display - Das Panel ein- oder ausschalten",
+    "synopsis": "display on | display off",
+    "description": "Schaltet das physische Display und gibt die Helligkeit aus, die das Gerät danach meldet.",
+    "details": "NAME\n  display - Das Panel ein- oder ausschalten\n\nÜBERSICHT\n  display on | display off\n\nBESCHREIBUNG\n  Schaltet das physische Display und gibt die Helligkeit aus, die das Gerät danach meldet.\n\nOPTIONEN\n  on\n    Panel ein.\n  off\n    Panel aus.\n\nGERÄTEKOSTEN\n  Ein POST /api/display.\n\nANMERKUNGEN\n  Benötigt die Berechtigung device.display. Bei einem Budget von 120 mAh ist dies der größte Hebel überhaupt, und bislang war er nur über die Einstellungen erreichbar.\n\nSIEHE AUCH\n  screen(1), status(1)\n\nBEISPIELE\n  display off\n  display on"
   }
 }

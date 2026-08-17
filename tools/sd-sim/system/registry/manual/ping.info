@@ -12,5 +12,23 @@
     "synopsis": "ping [host]",
     "description": "Send network echo requests to test host connectivity and response times.",
     "details": "NAME\n  ping - Test network latency.\n\nSYNOPSIS\n  ping [host]\n\nDESCRIPTION\n  Measures round-trip time (RTT) latency by dispatching 4 HTTP HEAD requests sequentially.\n\nOPTIONS\n  [host]\n    The hostname or IP address to target (e.g. 'google.com'). Defaults to the local Cardputer status route.\n\nSYSTEM ARCHITECTURE\n  Issues 4 asynchronous HEAD requests. Calculates latency using 'performance.now()' time deltas at the TCP socket layer. Relies on web_api(7) on-device.\n\nEXIT CODES\n  0\n    Success. At least one reply received.\n  1\n    100% packet loss or name resolution failed.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  curl(1), wget(1), web_api(7)\n\nADVANCED EXAMPLES\n  ping             # Ping local device\n  ping google.com  # Ping google.com"
+  },
+  "fr": {
+    "title": "ping - Diagnostic de latence réseau",
+    "synopsis": "ping [host]",
+    "description": "Envoyer des requêtes d'écho réseau pour tester la connectivité d'un hôte et les temps de réponse.",
+    "details": "NOM\n  ping - Tester la latence réseau.\n\nSYNOPSIS\n  ping [host]\n\nDESCRIPTION\n  Mesure la latence aller-retour (RTT) en envoyant 4 requêtes HTTP HEAD séquentiellement.\n\nOPTIONS\n  [host]\n    Le nom d'hôte ou l'adresse IP à cibler (p. ex. 'google.com'). Par défaut, la route status locale du Cardputer.\n\nARCHITECTURE SYSTÈME\n  Émet 4 requêtes HEAD asynchrones. Calcule la latence au moyen des écarts de temps 'performance.now()' au niveau de la couche socket TCP. S'appuie sur web_api(7) sur l'appareil.\n\nCODES DE RETOUR\n  0\n    Succès. Au moins une réponse reçue.\n  1\n    100 % de perte de paquets ou échec de résolution de nom.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  curl(1), wget(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  ping             # Pinguer l'appareil local\n  ping google.com  # Pinguer google.com"
+  },
+  "es": {
+    "title": "ping - Diagnóstico de latencia de red",
+    "synopsis": "ping [host]",
+    "description": "Enviar peticiones de eco de red para probar la conectividad del host y los tiempos de respuesta.",
+    "details": "NOMBRE\n  ping - Probar la latencia de red.\n\nSINOPSIS\n  ping [host]\n\nDESCRIPCIÓN\n  Mide la latencia de ida y vuelta (RTT) enviando 4 peticiones HTTP HEAD de forma secuencial.\n\nOPCIONES\n  [host]\n    El nombre de host o la dirección IP de destino (p. ej. 'google.com'). Por defecto, la ruta de estado local del Cardputer.\n\nARQUITECTURA DEL SISTEMA\n  Emite 4 peticiones HEAD asíncronas. Calcula la latencia usando las diferencias de tiempo de 'performance.now()' en la capa de sockets TCP. En el dispositivo se apoya en web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Se recibió al menos una respuesta.\n  1\n    100% de pérdida de paquetes o falló la resolución de nombres.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  curl(1), wget(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  ping             # Hace ping al dispositivo local\n  ping google.com  # Hace ping a google.com"
+  },
+  "de": {
+    "title": "ping - Netzwerklatenz-Diagnose",
+    "synopsis": "ping [host]",
+    "description": "Netzwerk-Echo-Anfragen senden, um die Erreichbarkeit von Hosts und die Antwortzeiten zu testen.",
+    "details": "NAME\n  ping - Netzwerklatenz testen.\n\nÜBERSICHT\n  ping [host]\n\nBESCHREIBUNG\n  Misst die Umlaufzeit (RTT) durch sequenzielles Versenden von 4 HTTP-HEAD-Anfragen.\n\nOPTIONEN\n  [host]\n    Der Zielhostname oder die Ziel-IP-Adresse (z. B. 'google.com'). Standardmäßig die lokale Status-Route des Cardputers.\n\nSYSTEMARCHITEKTUR\n  Setzt 4 asynchrone HEAD-Anfragen ab. Berechnet die Latenz anhand der Zeitdifferenzen von 'performance.now()' auf der TCP-Socket-Ebene. Stützt sich auf dem Gerät auf web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg. Mindestens eine Antwort empfangen.\n  1\n    100 % Paketverlust oder Namensauflösung fehlgeschlagen.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  curl(1), wget(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  ping             # Lokales Gerät anpingen\n  ping google.com  # google.com anpingen"
   }
 }

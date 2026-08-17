@@ -12,5 +12,23 @@
     "synopsis": "man",
     "description": "Display the manual page for the specified command.",
     "details": "NAME\n  man - Online manual pages.\n\nSYNOPSIS\n  man <command>\n\nDESCRIPTION\n  Renders the UNIX-style (Ubuntu) manual page for the target command or guide.\n\nOPTIONS\n  <command>\n    The command name or topic query.\n\nSYSTEM ARCHITECTURE\n  Fetches '/system/manual/<command>.info'. Decodes the JSON structure and evaluates keys matching 'envVars.LANG' or navigator options, outputting formatted text.\n\nEXIT CODES\n  0\n    Success.\n  1\n    Read error or command not resolved.\n  404\n    No manual entry was found on the SD Card.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  help(1), clear(1)\n\nADVANCED EXAMPLES\n  man ls\n  man cd"
+  },
+  "fr": {
+    "title": "man - Manuel des commandes en ligne",
+    "synopsis": "man",
+    "description": "Afficher la page de manuel de la commande spécifiée.",
+    "details": "NOM\n  man - Pages de manuel en ligne.\n\nSYNOPSIS\n  man <command>\n\nDESCRIPTION\n  Affiche la page de manuel de style UNIX (Ubuntu) de la commande ou du guide cible.\n\nOPTIONS\n  <command>\n    Le nom de la commande ou le sujet recherché.\n\nARCHITECTURE SYSTÈME\n  Récupère '/system/manual/<command>.info'. Décode la structure JSON et évalue les clés correspondant à 'envVars.LANG' ou aux options du navigateur, en affichant le texte formaté.\n\nCODES DE RETOUR\n  0\n    Succès.\n  1\n    Erreur de lecture ou commande non résolue.\n  404\n    Aucune entrée de manuel trouvée sur la carte SD.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  help(1), clear(1)\n\nEXEMPLES AVANCÉS\n  man ls\n  man cd"
+  },
+  "es": {
+    "title": "man - Manual de comandos en línea",
+    "synopsis": "man",
+    "description": "Mostrar la página del manual del comando especificado.",
+    "details": "NOMBRE\n  man - Páginas del manual en línea.\n\nSINOPSIS\n  man <command>\n\nDESCRIPCIÓN\n  Renderiza la página del manual al estilo UNIX (Ubuntu) del comando o guía indicados.\n\nOPCIONES\n  <command>\n    El nombre del comando o la consulta del tema.\n\nARQUITECTURA DEL SISTEMA\n  Obtiene '/system/manual/<command>.info'. Decodifica la estructura JSON y evalúa las claves que coinciden con 'envVars.LANG' o con las opciones del navegador, mostrando texto formateado.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Error de lectura o comando no resuelto.\n  404\n    No se encontró ninguna entrada del manual en la tarjeta SD.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  help(1), clear(1)\n\nEJEMPLOS AVANZADOS\n  man ls\n  man cd"
+  },
+  "de": {
+    "title": "man - Online-Befehlshandbuch",
+    "synopsis": "man",
+    "description": "Die Handbuchseite für den angegebenen Befehl anzeigen.",
+    "details": "NAME\n  man - Online-Handbuchseiten.\n\nÜBERSICHT\n  man <command>\n\nBESCHREIBUNG\n  Stellt die Handbuchseite im UNIX-Stil (Ubuntu) für den Zielbefehl oder die Anleitung dar.\n\nOPTIONEN\n  <command>\n    Der Befehlsname oder das Themenwort.\n\nSYSTEMARCHITEKTUR\n  Ruft '/system/manual/<command>.info' ab. Dekodiert die JSON-Struktur und wertet Schlüssel aus, die zu 'envVars.LANG' oder Navigator-Optionen passen, und gibt formatierten Text aus.\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Lesefehler oder Befehl nicht aufgelöst.\n  404\n    Kein Handbucheintrag auf der SD-Karte gefunden.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  help(1), clear(1)\n\nERWEITERTE BEISPIELE\n  man ls\n  man cd"
   }
 }

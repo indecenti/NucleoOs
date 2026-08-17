@@ -12,5 +12,23 @@
     "synopsis": "echo [text] [> file]",
     "description": "Print text to stdout or redirect it to write a file.",
     "details": "NAME\n  echo - Print and redirect messages.\n\nSYNOPSIS\n  echo <text>\n  echo <text> > <file>\n\nDESCRIPTION\n  Prints a text string. If followed by the '>' redirection operator, writes the text to a file.\n\nOPTIONS\n  <text>\n    The string to print or save.\n  > <file>\n    The path to write the output string to.\n\nSYSTEM ARCHITECTURE\n  The command line parser detects the redirection token '>'. In such cases, strips external quotation marks and dispatches a POST request to '/api/fs/write?path=<file>'. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. Print or write completed.\n  1\n    Filesystem write error.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  cat(1), open(1), web_api(7)\n\nADVANCED EXAMPLES\n  echo Hello user\n  echo \"THEME=dark\" > /data/theme.cfg"
+  },
+  "fr": {
+    "title": "echo - Afficher ou écrire du texte",
+    "synopsis": "echo [text] [> file]",
+    "description": "Afficher du texte sur la sortie standard ou le rediriger pour écrire un fichier.",
+    "details": "NOM\n  echo - Afficher et rediriger des messages.\n\nSYNOPSIS\n  echo <text>\n  echo <text> > <file>\n\nDESCRIPTION\n  Affiche une chaîne de texte. S'il est suivi de l'opérateur de redirection '>', écrit le texte dans un fichier.\n\nOPTIONS\n  <text>\n    La chaîne à afficher ou enregistrer.\n  > <file>\n    Le chemin où écrire la chaîne de sortie.\n\nARCHITECTURE SYSTÈME\n  L'analyseur de la ligne de commande détecte le jeton de redirection '>'. Dans ce cas, il retire les guillemets externes et envoie une requête POST vers '/api/fs/write?path=<file>'. Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès. Affichage ou écriture terminé.\n  1\n    Erreur d'écriture du système de fichiers.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  cat(1), open(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  echo Hello user\n  echo \"THEME=dark\" > /data/theme.cfg"
+  },
+  "es": {
+    "title": "echo - Imprimir o escribir texto",
+    "synopsis": "echo [text] [> file]",
+    "description": "Imprimir texto en la salida estándar o redirigirlo para escribir un archivo.",
+    "details": "NOMBRE\n  echo - Imprimir y redirigir mensajes.\n\nSINOPSIS\n  echo <text>\n  echo <text> > <file>\n\nDESCRIPCIÓN\n  Imprime una cadena de texto. Si va seguida del operador de redirección '>', escribe el texto en un archivo.\n\nOPCIONES\n  <text>\n    La cadena que se va a imprimir o guardar.\n  > <file>\n    La ruta donde escribir la cadena de salida.\n\nARQUITECTURA DEL SISTEMA\n  El analizador de la línea de comandos detecta el token de redirección '>'. En tales casos, elimina las comillas externas y envía una petición POST a '/api/fs/write?path=<file>'. Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Impresión o escritura completada.\n  1\n    Error de escritura del sistema de archivos.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  cat(1), open(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  echo Hello user\n  echo \"THEME=dark\" > /data/theme.cfg"
+  },
+  "de": {
+    "title": "echo - Text ausgeben oder schreiben",
+    "synopsis": "echo [text] [> file]",
+    "description": "Text auf stdout ausgeben oder ihn umleiten, um eine Datei zu schreiben.",
+    "details": "NAME\n  echo - Nachrichten ausgeben und umleiten.\n\nÜBERSICHT\n  echo <text>\n  echo <text> > <file>\n\nBESCHREIBUNG\n  Gibt eine Textzeichenkette aus. Folgt der Umleitungsoperator '>', wird der Text in eine Datei geschrieben.\n\nOPTIONEN\n  <text>\n    Die auszugebende oder zu speichernde Zeichenkette.\n  > <file>\n    Der Pfad, in den die Ausgabezeichenkette geschrieben wird.\n\nSYSTEMARCHITEKTUR\n  Der Kommandozeilen-Parser erkennt das Umleitungstoken '>'. In solchen Fällen entfernt er äußere Anführungszeichen und versendet eine POST-Anfrage an '/api/fs/write?path=<file>'. Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg. Ausgabe oder Schreibvorgang abgeschlossen.\n  1\n    Schreibfehler im Dateisystem.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  cat(1), open(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  echo Hello user\n  echo \"THEME=dark\" > /data/theme.cfg"
   }
 }

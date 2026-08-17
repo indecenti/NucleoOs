@@ -12,5 +12,23 @@
     "synopsis": "tree [-L N] [path]",
     "description": "Prints the subtree under a path, indented one level per depth, directories first and marked with a trailing slash.",
     "details": "NAME\n  tree - Print a directory tree\n\nSYNOPSIS\n  tree [-L N] [path]\n\nDESCRIPTION\n  Prints the subtree under a path, indented one level per depth, directories first and marked with a trailing slash.\n\nOPTIONS\n  -L N\n    Descend at most N levels (default 3, hard maximum 6).\n  [path]\n    Where to start; the working directory by default.\n\nDEVICE COST\n  The same budgeted walk du uses: one listing per directory, sequential, capped at 60 listings and 200 printed entries.\n\nSEE ALSO\n  ls(1), du(1), find(1)\n\nEXAMPLES\n  tree\n  tree -L 1 /apps\n  tree /data | grep .txt"
+  },
+  "fr": {
+    "title": "tree - Afficher une arborescence de répertoires",
+    "synopsis": "tree [-L N] [path]",
+    "description": "Affiche le sous-arbre sous un chemin, indenté d'un niveau par profondeur, les répertoires en premier et marqués d'une barre oblique finale.",
+    "details": "NOM\n  tree - Afficher une arborescence de répertoires\n\nSYNOPSIS\n  tree [-L N] [path]\n\nDESCRIPTION\n  Affiche le sous-arbre sous un chemin, indenté d'un niveau par profondeur, les répertoires en premier et marqués d'une barre oblique finale.\n\nOPTIONS\n  -L N\n    Descendre d'au plus N niveaux (3 par défaut, maximum absolu 6).\n  [path]\n    Où commencer ; le répertoire de travail par défaut.\n\nCOÛT POUR L'APPAREIL\n  Le même parcours budgété qu'utilise du : un listage par répertoire, séquentiel, plafonné à 60 listages et 200 entrées affichées.\n\nVOIR AUSSI\n  ls(1), du(1), find(1)\n\nEXEMPLES\n  tree\n  tree -L 1 /apps\n  tree /data | grep .txt"
+  },
+  "es": {
+    "title": "tree - Imprimir un árbol de directorios",
+    "synopsis": "tree [-L N] [path]",
+    "description": "Imprime el subárbol bajo una ruta, con sangría de un nivel por profundidad, los directorios primero y marcados con una barra final.",
+    "details": "NOMBRE\n  tree - Imprimir un árbol de directorios\n\nSINOPSIS\n  tree [-L N] [path]\n\nDESCRIPCIÓN\n  Imprime el subárbol bajo una ruta, con sangría de un nivel por profundidad, los directorios primero y marcados con una barra final.\n\nOPCIONES\n  -L N\n    Descender como máximo N niveles (por defecto 3, máximo absoluto 6).\n  [path]\n    Dónde empezar; el directorio de trabajo por defecto.\n\nCOSTE PARA EL DISPOSITIVO\n  El mismo recorrido presupuestado que usa du: un listado por directorio, secuencial, limitado a 60 listados y 200 entradas impresas.\n\nVÉASE TAMBIÉN\n  ls(1), du(1), find(1)\n\nEJEMPLOS\n  tree\n  tree -L 1 /apps\n  tree /data | grep .txt"
+  },
+  "de": {
+    "title": "tree - Einen Verzeichnisbaum ausgeben",
+    "synopsis": "tree [-L N] [path]",
+    "description": "Gibt den Teilbaum unter einem Pfad aus, pro Tiefe um eine Ebene eingerückt, Verzeichnisse zuerst und mit einem abschließenden Schrägstrich markiert.",
+    "details": "NAME\n  tree - Einen Verzeichnisbaum ausgeben\n\nÜBERSICHT\n  tree [-L N] [path]\n\nBESCHREIBUNG\n  Gibt den Teilbaum unter einem Pfad aus, pro Tiefe um eine Ebene eingerückt, Verzeichnisse zuerst und mit einem abschließenden Schrägstrich markiert.\n\nOPTIONEN\n  -L N\n    Höchstens N Ebenen absteigen (Standard 3, hartes Maximum 6).\n  [path]\n    Wo begonnen wird; standardmäßig das Arbeitsverzeichnis.\n\nGERÄTEKOSTEN\n  Derselbe budgetierte Durchlauf wie bei du: eine Auflistung pro Verzeichnis, sequenziell, gedeckelt auf 60 Auflistungen und 200 ausgegebene Einträge.\n\nSIEHE AUCH\n  ls(1), du(1), find(1)\n\nBEISPIELE\n  tree\n  tree -L 1 /apps\n  tree /data | grep .txt"
   }
 }

@@ -12,5 +12,23 @@
     "synopsis": "cpu",
     "description": "Prints what the scheduler is doing: how many cores, at what frequency, how many FreeRTOS tasks and the per-core load.",
     "details": "NAME\n  cpu - Cores, frequency, task count and load\n\nSYNOPSIS\n  cpu\n\nDESCRIPTION\n  Prints what the scheduler is doing: how many cores, at what frequency, how many FreeRTOS tasks and the per-core load.\n\nOPTIONS\n  This command takes no options.\n\nDEVICE COST\n  One GET /api/cpu.\n\nSEE ALSO\n  heap(1), diag(1), uptime(1)\n\nEXAMPLES\n  cpu\n  watch -n 5 cpu"
+  },
+  "fr": {
+    "title": "cpu - Cœurs, fréquence, nombre de tâches et charge",
+    "synopsis": "cpu",
+    "description": "Affiche ce que fait l'ordonnanceur : combien de cœurs, à quelle fréquence, combien de tâches FreeRTOS et la charge par cœur.",
+    "details": "NOM\n  cpu - Cœurs, fréquence, nombre de tâches et charge\n\nSYNOPSIS\n  cpu\n\nDESCRIPTION\n  Affiche ce que fait l'ordonnanceur : combien de cœurs, à quelle fréquence, combien de tâches FreeRTOS et la charge par cœur.\n\nOPTIONS\n  Cette commande ne prend aucune option.\n\nCOÛT POUR L'APPAREIL\n  Un GET /api/cpu.\n\nVOIR AUSSI\n  heap(1), diag(1), uptime(1)\n\nEXEMPLES\n  cpu\n  watch -n 5 cpu"
+  },
+  "es": {
+    "title": "cpu - Núcleos, frecuencia, número de tareas y carga",
+    "synopsis": "cpu",
+    "description": "Imprime lo que está haciendo el planificador: cuántos núcleos, a qué frecuencia, cuántas tareas FreeRTOS y la carga por núcleo.",
+    "details": "NOMBRE\n  cpu - Núcleos, frecuencia, número de tareas y carga\n\nSINOPSIS\n  cpu\n\nDESCRIPCIÓN\n  Imprime lo que está haciendo el planificador: cuántos núcleos, a qué frecuencia, cuántas tareas FreeRTOS y la carga por núcleo.\n\nOPCIONES\n  Este comando no admite opciones.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/cpu.\n\nVÉASE TAMBIÉN\n  heap(1), diag(1), uptime(1)\n\nEJEMPLOS\n  cpu\n  watch -n 5 cpu"
+  },
+  "de": {
+    "title": "cpu - Kerne, Frequenz, Task-Anzahl und Last",
+    "synopsis": "cpu",
+    "description": "Gibt aus, was der Scheduler tut: wie viele Kerne, bei welcher Frequenz, wie viele FreeRTOS-Tasks und die Last pro Kern.",
+    "details": "NAME\n  cpu - Kerne, Frequenz, Task-Anzahl und Last\n\nÜBERSICHT\n  cpu\n\nBESCHREIBUNG\n  Gibt aus, was der Scheduler tut: wie viele Kerne, bei welcher Frequenz, wie viele FreeRTOS-Tasks und die Last pro Kern.\n\nOPTIONEN\n  Dieser Befehl akzeptiert keine Optionen.\n\nGERÄTEKOSTEN\n  Ein GET /api/cpu.\n\nSIEHE AUCH\n  heap(1), diag(1), uptime(1)\n\nBEISPIELE\n  cpu\n  watch -n 5 cpu"
   }
 }

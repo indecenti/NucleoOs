@@ -12,5 +12,23 @@
     "synopsis": "uptime",
     "description": "Show system uptime and free heap memory details.",
     "details": "NAME\n  uptime - System active time.\n\nSYNOPSIS\n  uptime\n\nDESCRIPTION\n  Displays time elapsed since last boot and ESP32S3 heap RAM status.\n\nSYSTEM ARCHITECTURE\n  Queries '/api/status', resolving microcontroller runtime ticks using 'esp_timer_get_time()' and free memory using 'esp_get_free_heap_size()'. See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    Microcontroller unreachable.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  status(1), free(1), web_api(7)\n\nADVANCED EXAMPLES\n  uptime"
+  },
+  "fr": {
+    "title": "uptime - Temps d'activité du système",
+    "synopsis": "uptime",
+    "description": "Afficher le temps de fonctionnement du système et les détails de la mémoire du tas libre.",
+    "details": "NOM\n  uptime - Temps d'activité du système.\n\nSYNOPSIS\n  uptime\n\nDESCRIPTION\n  Affiche le temps écoulé depuis le dernier démarrage et l'état de la RAM du tas de l'ESP32S3.\n\nARCHITECTURE SYSTÈME\n  Interroge '/api/status', résolvant les ticks d'exécution du microcontrôleur au moyen de 'esp_timer_get_time()' et la mémoire libre au moyen de 'esp_get_free_heap_size()'. Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès.\n  1\n    Microcontrôleur injoignable.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  status(1), free(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  uptime"
+  },
+  "es": {
+    "title": "uptime - Tiempo de actividad del sistema",
+    "synopsis": "uptime",
+    "description": "Mostrar el tiempo de actividad del sistema y los detalles de la memoria heap libre.",
+    "details": "NOMBRE\n  uptime - Tiempo de actividad del sistema.\n\nSINOPSIS\n  uptime\n\nDESCRIPCIÓN\n  Muestra el tiempo transcurrido desde el último arranque y el estado de la RAM heap del ESP32S3.\n\nARQUITECTURA DEL SISTEMA\n  Consulta '/api/status', resolviendo los ticks de tiempo de ejecución del microcontrolador con 'esp_timer_get_time()' y la memoria libre con 'esp_get_free_heap_size()'. Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Microcontrolador inalcanzable.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  status(1), free(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  uptime"
+  },
+  "de": {
+    "title": "uptime - Aktive Systemzeit",
+    "synopsis": "uptime",
+    "description": "Die Betriebszeit des Systems und Details zum freien Heap-Speicher anzeigen.",
+    "details": "NAME\n  uptime - Aktive Systemzeit.\n\nÜBERSICHT\n  uptime\n\nBESCHREIBUNG\n  Zeigt die seit dem letzten Booten verstrichene Zeit und den ESP32S3-Heap-RAM-Status an.\n\nSYSTEMARCHITEKTUR\n  Fragt '/api/status' ab und ermittelt die Laufzeit-Ticks des Mikrocontrollers mit 'esp_timer_get_time()' sowie den freien Speicher mit 'esp_get_free_heap_size()'. Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Mikrocontroller nicht erreichbar.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  status(1), free(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  uptime"
   }
 }

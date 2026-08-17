@@ -12,5 +12,23 @@
     "synopsis": "mkdir <dir>",
     "description": "Create a new empty directory on the SD Card.",
     "details": "NAME\n  mkdir - Create directory.\n\nSYNOPSIS\n  mkdir <dir>\n\nDESCRIPTION\n  Creates an empty folder. Intermediate parent directories must exist on the SD card.\n\nOPTIONS\n  <dir>\n    The name or absolute path of the directory to be created.\n\nSYSTEM ARCHITECTURE\n  Sends a POST to '/api/fs/mkdir?path=<dir>'. The ESP32 firmware intercepts the request and issues the system call 'mkdir(path, 0775)' through FATFS. If the SD Card is write-protected or full, returns HTTP 500. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. Directory created.\n  1\n    Creation failed (filesystem or permission error).\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  touch(1), rm(1), web_api(7)\n\nADVANCED EXAMPLES\n  mkdir /data/test\n  mkdir new_notes"
+  },
+  "fr": {
+    "title": "mkdir - Créer un répertoire",
+    "synopsis": "mkdir <dir>",
+    "description": "Créer un nouveau répertoire vide sur la carte SD.",
+    "details": "NOM\n  mkdir - Créer un répertoire.\n\nSYNOPSIS\n  mkdir <dir>\n\nDESCRIPTION\n  Crée un dossier vide. Les répertoires parents intermédiaires doivent exister sur la carte SD.\n\nOPTIONS\n  <dir>\n    Le nom ou le chemin absolu du répertoire à créer.\n\nARCHITECTURE SYSTÈME\n  Envoie un POST vers '/api/fs/mkdir?path=<dir>'. Le firmware de l'ESP32 intercepte la requête et émet l'appel système 'mkdir(path, 0775)' via FATFS. Si la carte SD est protégée en écriture ou pleine, renvoie HTTP 500. Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès. Répertoire créé.\n  1\n    Échec de création (erreur du système de fichiers ou de permission).\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  touch(1), rm(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  mkdir /data/test\n  mkdir new_notes"
+  },
+  "es": {
+    "title": "mkdir - Crear un directorio",
+    "synopsis": "mkdir <dir>",
+    "description": "Crear un directorio nuevo y vacío en la tarjeta SD.",
+    "details": "NOMBRE\n  mkdir - Crear un directorio.\n\nSINOPSIS\n  mkdir <dir>\n\nDESCRIPCIÓN\n  Crea una carpeta vacía. Los directorios padre intermedios deben existir en la tarjeta SD.\n\nOPCIONES\n  <dir>\n    El nombre o la ruta absoluta del directorio que se va a crear.\n\nARQUITECTURA DEL SISTEMA\n  Envía un POST a '/api/fs/mkdir?path=<dir>'. El firmware del ESP32 intercepta la petición y emite la llamada al sistema 'mkdir(path, 0775)' a través de FATFS. Si la tarjeta SD está protegida contra escritura o llena, devuelve HTTP 500. Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Directorio creado.\n  1\n    Falló la creación (error del sistema de archivos o de permisos).\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  touch(1), rm(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  mkdir /data/test\n  mkdir new_notes"
+  },
+  "de": {
+    "title": "mkdir - Verzeichnis erstellen",
+    "synopsis": "mkdir <dir>",
+    "description": "Ein neues leeres Verzeichnis auf der SD-Karte erstellen.",
+    "details": "NAME\n  mkdir - Verzeichnis erstellen.\n\nÜBERSICHT\n  mkdir <dir>\n\nBESCHREIBUNG\n  Erstellt einen leeren Ordner. Übergeordnete Zwischenverzeichnisse müssen auf der SD-Karte vorhanden sein.\n\nOPTIONEN\n  <dir>\n    Der Name oder absolute Pfad des zu erstellenden Verzeichnisses.\n\nSYSTEMARCHITEKTUR\n  Sendet ein POST an '/api/fs/mkdir?path=<dir>'. Die ESP32-Firmware fängt die Anfrage ab und setzt den Systemaufruf 'mkdir(path, 0775)' über FATFS ab. Ist die SD-Karte schreibgeschützt oder voll, wird HTTP 500 zurückgegeben. Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg. Verzeichnis erstellt.\n  1\n    Erstellung fehlgeschlagen (Dateisystem- oder Berechtigungsfehler).\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  touch(1), rm(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  mkdir /data/test\n  mkdir new_notes"
   }
 }

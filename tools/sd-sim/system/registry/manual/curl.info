@@ -12,5 +12,23 @@
     "synopsis": "curl <url>",
     "description": "Perform an HTTP GET request to a URL and output response content.",
     "details": "NAME\n  curl - Fetch HTTP web resource.\n\nSYNOPSIS\n  curl <url>\n\nDESCRIPTION\n  Performs an HTTP GET request and prints the response payload to the terminal stdout.\n\nOPTIONS\n  <url>\n    The target web address.\n\nSYSTEM ARCHITECTURE\n  Dispatches a GET request. Subject to CORS restrictions in simulated environments. Runs directly through the ESP-IDF Wi-Fi socket stack (LwIP) on physical devices. See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    Network offline, CORS block, or host timeout.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  wget(1), ping(1), web_api(7)\n\nADVANCED EXAMPLES\n  curl ipify.org\n  curl http://example.com"
+  },
+  "fr": {
+    "title": "curl - Requête web HTTP",
+    "synopsis": "curl <url>",
+    "description": "Effectuer une requête HTTP GET vers une URL et afficher le contenu de la réponse.",
+    "details": "NOM\n  curl - Récupérer une ressource web HTTP.\n\nSYNOPSIS\n  curl <url>\n\nDESCRIPTION\n  Effectue une requête HTTP GET et affiche la charge utile de la réponse sur la sortie standard du terminal.\n\nOPTIONS\n  <url>\n    L'adresse web cible.\n\nARCHITECTURE SYSTÈME\n  Envoie une requête GET. Soumise aux restrictions CORS dans les environnements simulés. S'exécute directement à travers la pile de sockets Wi-Fi de l'ESP-IDF (LwIP) sur les appareils physiques. Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès.\n  1\n    Réseau hors ligne, blocage CORS ou dépassement de délai de l'hôte.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  wget(1), ping(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  curl ipify.org\n  curl http://example.com"
+  },
+  "es": {
+    "title": "curl - Petición web HTTP",
+    "synopsis": "curl <url>",
+    "description": "Realizar una petición HTTP GET a una URL y mostrar el contenido de la respuesta.",
+    "details": "NOMBRE\n  curl - Obtener un recurso web HTTP.\n\nSINOPSIS\n  curl <url>\n\nDESCRIPCIÓN\n  Realiza una petición HTTP GET e imprime la carga útil de la respuesta en la salida estándar del terminal.\n\nOPCIONES\n  <url>\n    La dirección web de destino.\n\nARQUITECTURA DEL SISTEMA\n  Envía una petición GET. Sujeto a restricciones CORS en entornos simulados. Se ejecuta directamente a través de la pila de sockets Wi-Fi de ESP-IDF (LwIP) en los dispositivos físicos. Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Red sin conexión, bloqueo CORS o tiempo de espera agotado del host.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  wget(1), ping(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  curl ipify.org\n  curl http://example.com"
+  },
+  "de": {
+    "title": "curl - HTTP-Web-Anfrage",
+    "synopsis": "curl <url>",
+    "description": "Eine HTTP-GET-Anfrage an eine URL ausführen und den Inhalt der Antwort ausgeben.",
+    "details": "NAME\n  curl - HTTP-Web-Ressource abrufen.\n\nÜBERSICHT\n  curl <url>\n\nBESCHREIBUNG\n  Führt eine HTTP-GET-Anfrage aus und gibt die Antwortnutzlast auf stdout des Terminals aus.\n\nOPTIONEN\n  <url>\n    Die Ziel-Webadresse.\n\nSYSTEMARCHITEKTUR\n  Versendet eine GET-Anfrage. In simulierten Umgebungen den CORS-Beschränkungen unterworfen. Läuft auf physischen Geräten direkt über den Wi-Fi-Socket-Stack (LwIP) von ESP-IDF. Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Netzwerk offline, CORS-Blockade oder Host-Zeitüberschreitung.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  wget(1), ping(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  curl ipify.org\n  curl http://example.com"
   }
 }
