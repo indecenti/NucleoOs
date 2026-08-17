@@ -106,3 +106,13 @@ html[data-theme="light"] #copilot .cp-me .cp-body { color: #1c3a6e; }
 
 @media (max-width: 560px) { #copilot { top: 4vh; width: 96vw; } #copilot .cp-foot { display: none; } }
 @media (prefers-reduced-motion: reduce) { #copilot { animation: none !important; } #copilot .cp-spark { animation: none !important; } }
+
+/* Agent mode chip: armed state must be unmistakable — this is the mode where the assistant WRITES.
+   Amber rather than the accent blue, so "it can act now" never reads as ordinary chrome. */
+#copilot .cp-chip#cp-act { font-size: 12px; line-height: 1; }
+#copilot .cp-chip#cp-act.on {
+  background: linear-gradient(180deg, #f5c842, #d98b1a);
+  border-color: #f5c84266; color: #1a1206; font-weight: 700;
+  box-shadow: 0 0 0 1px #f5c84233, 0 2px 10px #f5c8422e;
+}
+#copilot .cp-chip#cp-act:focus-visible { outline: 2px solid var(--accent, #4ea1ff); outline-offset: 2px; }
