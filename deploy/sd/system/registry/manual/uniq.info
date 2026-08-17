@@ -1,0 +1,16 @@
+{
+  "id": "uniq",
+  "category": "terminal",
+  "it": {
+    "title": "uniq - Riduce le righe uguali consecutive",
+    "synopsis": "uniq [-c]",
+    "description": "Trasforma un muro di righe di log identiche in una sola riga, volendo con un conteggio. È il passaggio che rende due kilobyte di dmesg abbastanza piccoli da poterli passare ad anima.",
+    "details": "NOME\n  uniq - Riduce le righe uguali consecutive\n\nSINTASSI\n  uniq [-c]\n\nDESCRIZIONE\n  Trasforma un muro di righe di log identiche in una sola riga, volendo con un conteggio. È il passaggio che rende due kilobyte di dmesg abbastanza piccoli da poterli passare ad anima.\n\nOPZIONI\n  -c\n    Antepone a ogni riga quante volte si è ripetuta.\n\nCOSTO PER IL DISPOSITIVO\n  Nessuno. Tutto nel browser.\n\nVEDERE ANCHE\n  sort(1), grep(1), anima(1)\n\nESEMPI\n  dmesg | sort | uniq -c | sort -n -r"
+  },
+  "en": {
+    "title": "uniq - Collapse repeated adjacent lines",
+    "synopsis": "uniq [-c]",
+    "description": "Turns a wall of identical log lines into one line, optionally with a count. This is the step that makes two kilobytes of dmesg small enough to hand to anima.",
+    "details": "NAME\n  uniq - Collapse repeated adjacent lines\n\nSYNOPSIS\n  uniq [-c]\n\nDESCRIPTION\n  Turns a wall of identical log lines into one line, optionally with a count. This is the step that makes two kilobytes of dmesg small enough to hand to anima.\n\nOPTIONS\n  -c\n    Prefix each line with how many times it repeated.\n\nDEVICE COST\n  None. Entirely browser-side.\n\nSEE ALSO\n  sort(1), grep(1), anima(1)\n\nEXAMPLES\n  dmesg | sort | uniq -c | sort -n -r"
+  }
+}

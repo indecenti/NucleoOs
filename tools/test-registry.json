@@ -175,6 +175,37 @@
       "anima": true
     },
     {
+      "id": "gate-person-ambig-fresh",
+      "label": "person-ambig (fresh)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima/build_person_ambig.mjs",
+        "--check"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-which-person-clarify",
+      "label": "which-person (clarify)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/person-clarify-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-regress-corpus-l1",
       "label": "regress (corpus+L1)",
       "category": "nl-knowledge",
@@ -3107,6 +3138,38 @@
       "args": [
         "--test",
         "tools/terminal-commands.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-terminal-engine",
+      "label": "terminal-engine.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/terminal-engine.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-terminal-ux",
+      "label": "terminal-ux.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/terminal-ux.test.mjs"
       ],
       "verifies": "",
       "nl": false,

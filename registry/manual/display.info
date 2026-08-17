@@ -1,0 +1,16 @@
+{
+  "id": "display",
+  "category": "terminal",
+  "it": {
+    "title": "display - Accende o spegne il pannello",
+    "synopsis": "display on | display off",
+    "description": "Commuta lo schermo fisico e stampa la luminosità che il dispositivo riporta dopo.",
+    "details": "NOME\n  display - Accende o spegne il pannello\n\nSINTASSI\n  display on | display off\n\nDESCRIZIONE\n  Commuta lo schermo fisico e stampa la luminosità che il dispositivo riporta dopo.\n\nOPZIONI\n  on\n    Pannello acceso.\n  off\n    Pannello spento.\n\nCOSTO PER IL DISPOSITIVO\n  Una POST /api/display.\n\nNOTE\n  Richiede il permesso device.display. Con un budget da 120 mAh è la leva più grossa che esista, e finora si raggiungeva solo dalle Impostazioni.\n\nVEDERE ANCHE\n  screen(1), status(1)\n\nESEMPI\n  display off\n  display on"
+  },
+  "en": {
+    "title": "display - Turn the panel on or off",
+    "synopsis": "display on | display off",
+    "description": "Switches the physical display, and prints the brightness the device reports afterwards.",
+    "details": "NAME\n  display - Turn the panel on or off\n\nSYNOPSIS\n  display on | display off\n\nDESCRIPTION\n  Switches the physical display, and prints the brightness the device reports afterwards.\n\nOPTIONS\n  on\n    Panel on.\n  off\n    Panel off.\n\nDEVICE COST\n  One POST /api/display.\n\nNOTES\n  Needs the device.display permission. On a 120 mAh budget this is the single biggest lever there is, and until now it was only reachable through Settings.\n\nSEE ALSO\n  screen(1), status(1)\n\nEXAMPLES\n  display off\n  display on"
+  }
+}

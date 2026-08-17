@@ -1,0 +1,16 @@
+{
+  "id": "find",
+  "category": "terminal",
+  "it": {
+    "title": "find - Ricerca file ricorsiva",
+    "synopsis": "find [path] -name <pattern>",
+    "description": "Cerca file o cartelle ricorsivamente in base a un pattern nel nome.",
+    "details": "NOME\n  find - Ricerca file ricorsivamente.\n\nSINTASSI\n  find [percorso] -name <pattern>\n  find <pattern>\n\nDESCRIZIONE\n  Esplora l'albero delle directory. Cerca in modo case-insensitive corrispondenze parziali nel nome dei file.\n\nOPZIONI\n  [percorso]\n    La cartella da cui avviare la ricerca (default: CWD).\n  -name <pattern>\n    Il nome o pattern di file da cercare.\n\nARCHITETTURA E BASSO LIVELLO\n  Esegue chiamate ricorsive '/api/fs/list' scendendo nell'albero delle sottocartelle. Per ogni directory incontrata, accoda l'operazione in una coda asincrona. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo. Ricerca completata.\n  1\n    Errore di scansione sul filesystem.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  ls(1), grep(1), web_api(7)\n\nESEMPI AVANZATI\n  find .txt\n  find /data -name song.mp3"
+  },
+  "en": {
+    "title": "find - Find files recursively",
+    "synopsis": "find [path] -name <pattern>",
+    "description": "Recursively search for files matching a pattern under a path.",
+    "details": "NAME\n  find - Find files recursively.\n\nSYNOPSIS\n  find [path] -name <pattern>\n  find <pattern>\n\nDESCRIPTION\n  Traverses the directory tree starting from the target directory. Matches names using a case-insensitive query.\n\nOPTIONS\n  [path]\n    The starting folder (defaults to active CWD).\n  -name <pattern>\n    The filename query to match.\n\nSYSTEM ARCHITECTURE\n  Issues recursive asynchronous HTTP requests to '/api/fs/list'. Triggers deep scanning on child folders and returns paths dynamically. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. Traverse completed.\n  1\n    Filesystem scan error.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  ls(1), grep(1), web_api(7)\n\nADVANCED EXAMPLES\n  find .txt\n  find /data -name song.mp3"
+  }
+}

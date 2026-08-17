@@ -1,0 +1,16 @@
+{
+  "id": "du",
+  "category": "terminal",
+  "it": {
+    "title": "du - Spazio occupato per cartella, dal più grande",
+    "synopsis": "du [-d N] [path]",
+    "description": "Percorre un sottoalbero e somma la dimensione dei file di ogni cartella, riportando i figli nei padri. Il risultato è ordinato per dimensione: la risposta a \"che cosa mi riempie la scheda\" è la prima riga.",
+    "details": "NOME\n  du - Spazio occupato per cartella, dal più grande\n\nSINTASSI\n  du [-d N] [path]\n\nDESCRIZIONE\n  Percorre un sottoalbero e somma la dimensione dei file di ogni cartella, riportando i figli nei padri. Il risultato è ordinato per dimensione: la risposta a \"che cosa mi riempie la scheda\" è la prima riga.\n\nOPZIONI\n  -d N\n    Scende al massimo di N livelli (2 di default, 6 al massimo).\n  [percorso]\n    Da dove partire; di default la cartella corrente.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/fs/list per cartella, in sequenza stretta, e mai più di 60 per invocazione. Ctrl+C la ferma.\n\nNOTE\n  Una lettura di cartella costa al dispositivo una stat() per voce, quindi la scansione ha un budget invece di essere completa: quando si ferma, lo dice.\n\nVEDERE ANCHE\n  df(1), tree(1), stat(1)\n\nESEMPI\n  du\n  du -d 1 /data\n  du /data | sort -n -r | head -n 5"
+  },
+  "en": {
+    "title": "du - Disk usage per directory, biggest first",
+    "synopsis": "du [-d N] [path]",
+    "description": "Walks a subtree and adds up the size of the files in each directory, rolling children into their parents. The output is sorted by size, so the answer to \"what is eating the card\" is the first line.",
+    "details": "NAME\n  du - Disk usage per directory, biggest first\n\nSYNOPSIS\n  du [-d N] [path]\n\nDESCRIPTION\n  Walks a subtree and adds up the size of the files in each directory, rolling children into their parents. The output is sorted by size, so the answer to \"what is eating the card\" is the first line.\n\nOPTIONS\n  -d N\n    Descend at most N levels (default 2, hard maximum 6).\n  [path]\n    Where to start; the working directory by default.\n\nDEVICE COST\n  One GET /api/fs/list per directory, strictly sequential, and never more than 60 in one invocation. Ctrl+C stops it.\n\nNOTES\n  A listing costs the device a stat() per entry, so the walk is budgeted rather than complete: when it stops, it says so.\n\nSEE ALSO\n  df(1), tree(1), stat(1)\n\nEXAMPLES\n  du\n  du -d 1 /data\n  du /data | sort -n -r | head -n 5"
+  }
+}

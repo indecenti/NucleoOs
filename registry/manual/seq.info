@@ -1,0 +1,16 @@
+{
+  "id": "seq",
+  "category": "terminal",
+  "it": {
+    "title": "seq - Stampa un intervallo di numeri interi",
+    "synopsis": "seq [first] last",
+    "description": "Stampa un intero per riga, in salita o in discesa. È l'unico generatore che una pipeline ha.",
+    "details": "NOME\n  seq - Stampa un intervallo di numeri interi\n\nSINTASSI\n  seq [first] last\n\nDESCRIZIONE\n  Stampa un intero per riga, in salita o in discesa. È l'unico generatore che una pipeline ha.\n\nOPZIONI\n  primo\n    Da dove partire (1 di default).\n  ultimo\n    Dove fermarsi; conta all'indietro se è minore del primo.\n\nCOSTO PER IL DISPOSITIVO\n  Nessuno. Tutto nel browser.\n\nVEDERE ANCHE\n  sort(1), uniq(1)\n\nESEMPI\n  seq 5\n  seq 10 1"
+  },
+  "en": {
+    "title": "seq - Print a range of integers",
+    "synopsis": "seq [first] last",
+    "description": "Prints one integer per line, counting up or down. It is the only generator a pipeline has.",
+    "details": "NAME\n  seq - Print a range of integers\n\nSYNOPSIS\n  seq [first] last\n\nDESCRIPTION\n  Prints one integer per line, counting up or down. It is the only generator a pipeline has.\n\nOPTIONS\n  first\n    Where to start (1 by default).\n  last\n    Where to stop; counts down when it is smaller than first.\n\nDEVICE COST\n  None. Entirely browser-side.\n\nSEE ALSO\n  sort(1), uniq(1)\n\nEXAMPLES\n  seq 5\n  seq 10 1"
+  }
+}

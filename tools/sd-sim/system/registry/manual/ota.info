@@ -1,0 +1,16 @@
+{
+  "id": "ota",
+  "category": "terminal",
+  "it": {
+    "title": "ota - Mostra lo slot in esecuzione, il prossimo e lo stato di rollback",
+    "synopsis": "ota [status]",
+    "description": "Da leggere prima e dopo un rilascio: quale partizione è in esecuzione, dove finirebbe un aggiornamento, se l'immagine attuale è marcata valida e se il rollback è armato.",
+    "details": "NOME\n  ota - Mostra lo slot in esecuzione, il prossimo e lo stato di rollback\n\nSINTASSI\n  ota [status]\n\nDESCRIZIONE\n  Da leggere prima e dopo un rilascio: quale partizione è in esecuzione, dove finirebbe un aggiornamento, se l'immagine attuale è marcata valida e se il rollback è armato.\n\nOPZIONI\n  status\n    L'unico argomento accettato; è anche il predefinito.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/status.\n\nNOTE\n  La scrittura del firmware volutamente NON è disponibile qui. Il dispositivo si riavvia circa 800 ms dopo l'ultimo byte OTA, quindi un percorso sbagliato in una shell con richiamo della cronologia sarebbe una scrittura irreversibile a un tasto di distanza. Gli aggiornamenti del firmware restano agli strumenti di rilascio.\n\nVEDERE ANCHE\n  status(1), reboot(1), diag(1)\n\nESEMPI\n  ota"
+  },
+  "en": {
+    "title": "ota - Show the running slot, the next slot and the rollback state",
+    "synopsis": "ota [status]",
+    "description": "The thing to read before and after a release: which partition is running, which one an update would land in, whether the current image is marked valid, and whether rollback is armed.",
+    "details": "NAME\n  ota - Show the running slot, the next slot and the rollback state\n\nSYNOPSIS\n  ota [status]\n\nDESCRIPTION\n  The thing to read before and after a release: which partition is running, which one an update would land in, whether the current image is marked valid, and whether rollback is armed.\n\nOPTIONS\n  status\n    The only accepted argument; it is also the default.\n\nDEVICE COST\n  One GET /api/status.\n\nNOTES\n  Flashing is deliberately NOT available here. The device reboots about 800 ms after the last OTA byte, so a mistyped path in a shell with history recall would be an irreversible flash one keystroke away. Firmware updates belong to the release tooling.\n\nSEE ALSO\n  status(1), reboot(1), diag(1)\n\nEXAMPLES\n  ota"
+  }
+}

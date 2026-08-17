@@ -1,0 +1,16 @@
+{
+  "id": "heap",
+  "category": "terminal",
+  "it": {
+    "title": "heap - Dettaglio dell'heap, frammentazione compresa",
+    "synopsis": "heap",
+    "description": "Stampa i pool interno, DMA e predefinito con byte liberi, blocco libero più grande, minimo mai visto e percentuale di frammentazione, più lo stack libero minimo del server HTTP.",
+    "details": "NOME\n  heap - Dettaglio dell'heap, frammentazione compresa\n\nSINTASSI\n  heap\n\nDESCRIZIONE\n  Stampa i pool interno, DMA e predefinito con byte liberi, blocco libero più grande, minimo mai visto e percentuale di frammentazione, più lo stack libero minimo del server HTTP.\n\nOPZIONI\n  Questo comando non ha opzioni.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/heap.\n\nNOTE\n  Il collo di bottiglia documentato su questo chip è la frammentazione, non i byte liberi — e free(1) non riesce a mostrarla.\n\nVEDERE ANCHE\n  free(1), diag(1), cpu(1), watch(1)\n\nESEMPI\n  heap\n  watch -n 5 heap\n  heap | grep frag"
+  },
+  "en": {
+    "title": "heap - Heap detail, including fragmentation",
+    "synopsis": "heap",
+    "description": "Prints the internal, DMA and default heap pools with their free bytes, largest free block, minimum ever seen and fragmentation percentage, plus the HTTP server's minimum free stack.",
+    "details": "NAME\n  heap - Heap detail, including fragmentation\n\nSYNOPSIS\n  heap\n\nDESCRIPTION\n  Prints the internal, DMA and default heap pools with their free bytes, largest free block, minimum ever seen and fragmentation percentage, plus the HTTP server's minimum free stack.\n\nOPTIONS\n  This command takes no options.\n\nDEVICE COST\n  One GET /api/heap.\n\nNOTES\n  Fragmentation, not free bytes, is the documented bottleneck on this chip — and free(1) cannot show it.\n\nSEE ALSO\n  free(1), diag(1), cpu(1), watch(1)\n\nEXAMPLES\n  heap\n  watch -n 5 heap\n  heap | grep frag"
+  }
+}

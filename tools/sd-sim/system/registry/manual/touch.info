@@ -1,0 +1,16 @@
+{
+  "id": "touch",
+  "category": "terminal",
+  "it": {
+    "title": "touch - Crea file vuoto",
+    "synopsis": "touch <file>",
+    "description": "Crea un file vuoto nel percorso specificato, se non esiste.",
+    "details": "NOME\n  touch - Inizializza file vuoto.\n\nSINTASSI\n  touch <file>\n\nDESCRIZIONE\n  Crea un file di zero byte. Se il file esiste, non ne altera i contenuti o le date.\n\nOPZIONI\n  <file>\n    Il percorso del file da inizializzare.\n\nARCHITETTURA E BASSO LIVELLO\n  Effettua una chiamata POST a '/api/fs/write?path=<file>' inviando un corpo vuoto. Sul microcontrollore, il filesystem apre il file descriptor con 'fopen(path, \"w\")' e lo chiude immediatamente, registrando l'entry nella FAT table. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo. File creato o già presente.\n  1\n    Errore di scrittura sul filesystem.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  mkdir(1), rm(1), web_api(7)\n\nESEMPI AVANZATI\n  touch /data/empty.txt"
+  },
+  "en": {
+    "title": "touch - Create empty file",
+    "synopsis": "touch <file>",
+    "description": "Create a new empty file at the specified path.",
+    "details": "NAME\n  touch - Initialize empty file.\n\nSYNOPSIS\n  touch <file>\n\nDESCRIPTION\n  Creates a file of zero bytes. If the file exists, it remains unmodified.\n\nOPTIONS\n  <file>\n    The path of the file to initialize.\n\nSYSTEM ARCHITECTURE\n  Dispatches an HTTP POST to '/api/fs/write?path=<file>' with an empty payload. The ESP32 opens the file handle using 'fopen(path, \"w\")' and closes it instantly, committing a new record to the FAT table. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. File created or already present.\n  1\n    Filesystem write fault.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  mkdir(1), rm(1), web_api(7)\n\nADVANCED EXAMPLES\n  touch /data/empty.txt"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "hexdump",
+  "category": "terminal",
+  "it": {
+    "title": "hexdump - Esadecimale e ASCII dei primi byte di un file",
+    "synopsis": "hexdump [-n bytes] [-s offset] <file>",
+    "description": "Stampa un dump esadecimale classico: offset, sedici byte in esadecimale, poi i caratteri stampabili fra due barre verticali. È così che si guarda una cattura .ir, un'immagine di firmware o un blob di salvataggio senza che cat lo trasformi in caratteri illeggibili.",
+    "details": "NOME\n  hexdump - Esadecimale e ASCII dei primi byte di un file\n\nSINTASSI\n  hexdump [-n bytes] [-s offset] <file>\n\nDESCRIZIONE\n  Stampa un dump esadecimale classico: offset, sedici byte in esadecimale, poi i caratteri stampabili fra due barre verticali. È così che si guarda una cattura .ir, un'immagine di firmware o un blob di salvataggio senza che cat lo trasformi in caratteri illeggibili.\n\nOPZIONI\n  -n N\n    Quanti byte leggere (256 di default, 4096 al massimo).\n  -s N\n    Parte dal byte N.\n  <file>\n    Il file da leggere.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/fs/read con intestazione HTTP Range: un file da 640 MB costa 256 byte sul filo, non 640 MB.\n\nVEDERE ANCHE\n  cat(1), base64(1), wc(1)\n\nESEMPI\n  hexdump /data/remote.ir\n  hexdump -n 64 -s 512 /data/image.bin"
+  },
+  "en": {
+    "title": "hexdump - Hex and ASCII of the first bytes of a file",
+    "synopsis": "hexdump [-n bytes] [-s offset] <file>",
+    "description": "Prints a classic hex dump: offset, sixteen bytes in hexadecimal, then the printable characters between pipes. It is how you look at an .ir capture, a firmware image or a save blob without cat turning it into mojibake.",
+    "details": "NAME\n  hexdump - Hex and ASCII of the first bytes of a file\n\nSYNOPSIS\n  hexdump [-n bytes] [-s offset] <file>\n\nDESCRIPTION\n  Prints a classic hex dump: offset, sixteen bytes in hexadecimal, then the printable characters between pipes. It is how you look at an .ir capture, a firmware image or a save blob without cat turning it into mojibake.\n\nOPTIONS\n  -n N\n    How many bytes to read (default 256, maximum 4096).\n  -s N\n    Start at byte N.\n  <file>\n    The file to read.\n\nDEVICE COST\n  One GET /api/fs/read with an HTTP Range header, so a 640 MB file costs 256 bytes on the wire and not 640 MB.\n\nSEE ALSO\n  cat(1), base64(1), wc(1)\n\nEXAMPLES\n  hexdump /data/remote.ir\n  hexdump -n 64 -s 512 /data/image.bin"
+  }
+}

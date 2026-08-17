@@ -3,5 +3,16 @@
   "clear": "pulisci",
   "clr_tip": "Pulisci (Ctrl+L)",
   "input_ph": "digita 'help'…",
-  "boot_hint": "Terminale NucleoOS — digita \"help\" per i comandi."
+  "boot_hint": "Terminale NucleoOS — digita \"help\" per i comandi, Tab completa, Ctrl+R cerca nella cronologia.",
+  "run_tip": "Esegui (Invio)",
+  "pill_tip": "Vai all'output più recente",
+  "key_tab": "Completa (Tab)",
+  "key_search": "Cerca nella cronologia (Ctrl+R)",
+  "key_prev": "Comando precedente",
+  "key_next": "Comando successivo",
+  "key_abort": "Ferma il comando in corso (Ctrl+C)",
+  "key_esc": "Cancella la riga (Esc)",
+  "hist_unpaired": "cronologia: non accoppiato — solo per questa sessione",
+  "copy_ok": "copiato negli appunti",
+  "copy_fail": "copia non riuscita — seleziona il testo e usa il menu del browser"
 }

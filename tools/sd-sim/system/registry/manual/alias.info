@@ -1,0 +1,16 @@
+{
+  "id": "alias",
+  "category": "terminal",
+  "it": {
+    "title": "alias - Dà un nome breve a un comando lungo",
+    "synopsis": "alias [name=command]",
+    "description": "Senza argomenti elenca gli alias. Con nome=comando ne definisce uno, salvato sulla scheda in modo che sopravviva a un ricaricamento. Su una tastiera da 56 tasti il costo è la digitazione: è questo che rende utile il comando.",
+    "details": "NOME\n  alias - Dà un nome breve a un comando lungo\n\nSINTASSI\n  alias [name=command]\n\nDESCRIZIONE\n  Senza argomenti elenca gli alias. Con nome=comando ne definisce uno, salvato sulla scheda in modo che sopravviva a un ricaricamento. Su una tastiera da 56 tasti il costo è la digitazione: è questo che rende utile il comando.\n\nOPZIONI\n  nome=comando\n    Definisce un alias.\n  nome\n    Mostra un alias.\n\nCOSTO PER IL DISPOSITIVO\n  Una POST /api/fs/write quando un alias cambia, nella cartella dell'app. Niente del tutto quando un comando viene eseguito.\n\nNOTE\n  Un alias si espande una volta sola e solo sulla parola di comando; un corpo che contiene una pipe, una redirezione o ; && || viene rifiutato: una stringa salvata non deve poter introdurre un operatore che l'utente non ha scritto.\n\nVEDERE ANCHE\n  unalias(1), which(1), export(1)\n\nESEMPI\n  alias ll='ls /data'\n  alias errs='dmesg -l E'\n  alias"
+  },
+  "en": {
+    "title": "alias - Give a long command a short name",
+    "synopsis": "alias [name=command]",
+    "description": "Without arguments it lists the aliases. With name=command it defines one, saved on the card so it survives a reload. On a 56-key thumb keyboard the typing is the cost, which is what makes this worth its bytes.",
+    "details": "NAME\n  alias - Give a long command a short name\n\nSYNOPSIS\n  alias [name=command]\n\nDESCRIPTION\n  Without arguments it lists the aliases. With name=command it defines one, saved on the card so it survives a reload. On a 56-key thumb keyboard the typing is the cost, which is what makes this worth its bytes.\n\nOPTIONS\n  name=command\n    Define an alias.\n  name\n    Show one alias.\n\nDEVICE COST\n  One POST /api/fs/write when an alias changes, into the app's own folder. Nothing at all when a command runs.\n\nNOTES\n  An alias expands once, on the command word only, and an alias body containing a pipe, a redirect or ; && || is refused: a saved string must not be able to smuggle in an operator the user never typed.\n\nSEE ALSO\n  unalias(1), which(1), export(1)\n\nEXAMPLES\n  alias ll='ls /data'\n  alias errs='dmesg -l E'\n  alias"
+  }
+}

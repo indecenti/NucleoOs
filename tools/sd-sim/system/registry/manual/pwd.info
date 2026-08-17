@@ -1,0 +1,16 @@
+{
+  "id": "pwd",
+  "category": "terminal",
+  "it": {
+    "title": "pwd - Stampa percorso corrente",
+    "synopsis": "pwd",
+    "description": "Visualizza il percorso assoluto della directory di lavoro corrente.",
+    "details": "NOME\n  pwd - Stampa la directory di lavoro corrente.\n\nSINTASSI\n  pwd\n\nDESCRIZIONE\n  Stampa a schermo il percorso assoluto della CWD attiva. Non esegue chiamate hardware, garantendo un'output immediato.\n\nARCHITETTURA E BASSO LIVELLO\n  Legge il valore normalizzato della variabile locale 'cwd' della sessione di runtime e lo invia al buffer di stampa.\n\nCODICI DI RITORNO\n  0\n    Successo. Il percorso è stato stampato.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  cd(1), ls(1)\n\nESEMPI AVANZATI\n  pwd"
+  },
+  "en": {
+    "title": "pwd - Print working directory",
+    "synopsis": "pwd",
+    "description": "Output the absolute path of the current working directory.",
+    "details": "NAME\n  pwd - Print working directory.\n\nSYNOPSIS\n  pwd\n\nDESCRIPTION\n  Prints the absolute path of the active CWD to the terminal. Runs locally without accessing hardware resources.\n\nSYSTEM ARCHITECTURE\n  Reads the normalized runtime variable 'cwd' and outputs it directly to the terminal stdout buffer.\n\nEXIT CODES\n  0\n    Success. The path was printed.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  cd(1), ls(1)\n\nADVANCED EXAMPLES\n  pwd"
+  }
+}

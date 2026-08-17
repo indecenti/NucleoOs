@@ -1,0 +1,16 @@
+{
+  "id": "tree",
+  "category": "terminal",
+  "it": {
+    "title": "tree - Stampa l'albero di una cartella",
+    "synopsis": "tree [-L N] [path]",
+    "description": "Stampa il sottoalbero sotto un percorso, con un rientro per livello, le cartelle prima e contrassegnate da uno slash finale.",
+    "details": "NOME\n  tree - Stampa l'albero di una cartella\n\nSINTASSI\n  tree [-L N] [path]\n\nDESCRIZIONE\n  Stampa il sottoalbero sotto un percorso, con un rientro per livello, le cartelle prima e contrassegnate da uno slash finale.\n\nOPZIONI\n  -L N\n    Scende al massimo di N livelli (3 di default, 6 al massimo).\n  [percorso]\n    Da dove partire; di default la cartella corrente.\n\nCOSTO PER IL DISPOSITIVO\n  La stessa scansione con budget di du: una lettura per cartella, in sequenza, fino a 60 letture e 200 voci stampate.\n\nVEDERE ANCHE\n  ls(1), du(1), find(1)\n\nESEMPI\n  tree\n  tree -L 1 /apps\n  tree /data | grep .txt"
+  },
+  "en": {
+    "title": "tree - Print a directory tree",
+    "synopsis": "tree [-L N] [path]",
+    "description": "Prints the subtree under a path, indented one level per depth, directories first and marked with a trailing slash.",
+    "details": "NAME\n  tree - Print a directory tree\n\nSYNOPSIS\n  tree [-L N] [path]\n\nDESCRIPTION\n  Prints the subtree under a path, indented one level per depth, directories first and marked with a trailing slash.\n\nOPTIONS\n  -L N\n    Descend at most N levels (default 3, hard maximum 6).\n  [path]\n    Where to start; the working directory by default.\n\nDEVICE COST\n  The same budgeted walk du uses: one listing per directory, sequential, capped at 60 listings and 200 printed entries.\n\nSEE ALSO\n  ls(1), du(1), find(1)\n\nEXAMPLES\n  tree\n  tree -L 1 /apps\n  tree /data | grep .txt"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "apps",
+  "category": "terminal",
+  "it": {
+    "title": "apps - Elenca le app installate, o ne apre una",
+    "synopsis": "apps [-a]   |   apps open <id>",
+    "description": "Stampa una riga separata da tabulazioni per ogni app installata: id, nome, se è abilitata e la sua rotta. Con open chiede alla shell di avviarne una.",
+    "details": "NOME\n  apps - Elenca le app installate, o ne apre una\n\nSINTASSI\n  apps [-a]   |   apps open <id>\n\nDESCRIZIONE\n  Stampa una riga separata da tabulazioni per ogni app installata: id, nome, se è abilitata e la sua rotta. Con open chiede alla shell di avviarne una.\n\nOPZIONI\n  -a\n    Include anche le app disabilitate.\n  open <id>\n    Apre quell'app nella shell.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/apps, memorizzata per 30 s. Aprire un'app è un messaggio alla shell, non una chiamata al dispositivo.\n\nNOTE\n  Volutamente NON è un elenco di processi. Sul dispositivo nulla sa quali finestre sono aperte, quindi un ps costruito su questa rotta stamperebbe tutte le 46 app installate come se fossero in esecuzione.\n\nVEDERE ANCHE\n  which(1), assoc(1), open(1)\n\nESEMPI\n  apps\n  apps -a | grep off\n  apps open notepad"
+  },
+  "en": {
+    "title": "apps - List the installed apps, or open one",
+    "synopsis": "apps [-a]   |   apps open <id>",
+    "description": "Prints one tab-separated row per installed app: id, name, whether it is enabled, and its route. With open it asks the shell to launch one.",
+    "details": "NAME\n  apps - List the installed apps, or open one\n\nSYNOPSIS\n  apps [-a]   |   apps open <id>\n\nDESCRIPTION\n  Prints one tab-separated row per installed app: id, name, whether it is enabled, and its route. With open it asks the shell to launch one.\n\nOPTIONS\n  -a\n    Include disabled apps.\n  open <id>\n    Open that app in the shell.\n\nDEVICE COST\n  One GET /api/apps, memoised for 30 s. Opening an app is a shell message, not a device call.\n\nNOTES\n  This is deliberately NOT a process list. Nothing on the device knows which windows are open, so a ps built on this endpoint would print all 46 installed apps as if they were running.\n\nSEE ALSO\n  which(1), assoc(1), open(1)\n\nEXAMPLES\n  apps\n  apps -a | grep off\n  apps open notepad"
+  }
+}

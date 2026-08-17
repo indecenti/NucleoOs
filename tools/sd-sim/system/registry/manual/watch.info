@@ -1,0 +1,16 @@
+{
+  "id": "watch",
+  "category": "terminal",
+  "it": {
+    "title": "watch - Riesegue un comando sul posto ogni pochi secondi",
+    "synopsis": "watch [-n seconds] [-c count] <command>",
+    "description": "Esegue un comando ripetutamente e ridisegna il risultato sopra il ciclo precedente invece di far scorrere lo schermo. È il microscopio della frammentazione: watch -n5 heap.",
+    "details": "NOME\n  watch - Riesegue un comando sul posto ogni pochi secondi\n\nSINTASSI\n  watch [-n seconds] [-c count] <command>\n\nDESCRIZIONE\n  Esegue un comando ripetutamente e ridisegna il risultato sopra il ciclo precedente invece di far scorrere lo schermo. È il microscopio della frammentazione: watch -n5 heap.\n\nOPZIONI\n  -n S\n    Secondi fra un ciclo e l'altro (3 di default, mai meno di 2).\n  -c N\n    Quanti cicli (10 di default, 300 al massimo).\n\nCOSTO PER IL DISPOSITIVO\n  Quello che costa il comando interno, una volta per ciclo. I cicli non si sovrappongono, l'intervallo non scende sotto i due secondi e tre errori consecutivi lo fermano. Ctrl+C lo ferma subito.\n\nNOTE\n  Rifiutato dentro una pipeline, e wifi scan si rifiuta di girarci dentro: un'operazione radio bloccante in un ciclo staccherebbe il dispositivo dalla propria rete.\n\nVEDERE ANCHE\n  heap(1), diag(1), notify(1)\n\nESEMPI\n  watch -n 5 heap\n  watch -n 10 -c 60 status"
+  },
+  "en": {
+    "title": "watch - Re-run a command in place every few seconds",
+    "synopsis": "watch [-n seconds] [-c count] <command>",
+    "description": "Runs a command repeatedly and redraws its output over the previous tick instead of scrolling the screen. It is the fragmentation microscope: watch -n5 heap.",
+    "details": "NAME\n  watch - Re-run a command in place every few seconds\n\nSYNOPSIS\n  watch [-n seconds] [-c count] <command>\n\nDESCRIPTION\n  Runs a command repeatedly and redraws its output over the previous tick instead of scrolling the screen. It is the fragmentation microscope: watch -n5 heap.\n\nOPTIONS\n  -n S\n    Seconds between ticks (3 by default, never less than 2).\n  -c N\n    How many ticks (10 by default, 300 at most).\n\nDEVICE COST\n  Whatever the inner command costs, once per tick. Ticks never overlap, the interval is clamped to two seconds, and three consecutive failures stop it. Ctrl+C stops it immediately.\n\nNOTES\n  Refused inside a pipeline, and wifi scan refuses to run inside it: a blocking radio operation on a loop would knock the device off its own network.\n\nSEE ALSO\n  heap(1), diag(1), notify(1)\n\nEXAMPLES\n  watch -n 5 heap\n  watch -n 10 -c 60 status"
+  }
+}

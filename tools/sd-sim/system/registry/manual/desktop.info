@@ -1,0 +1,16 @@
+{
+  "id": "desktop",
+  "category": "guide",
+  "it": {
+    "title": "Guida del Desktop di NucleoOS",
+    "synopsis": "desktop",
+    "description": "Informazioni complete sull'ambiente grafico desktop, le icone e la barra delle applicazioni.",
+    "details": "NOME\n  desktop - Guida dell'interfaccia utente desktop di NucleoOS.\n\nDESCRIZIONE\n  NucleoOS fornisce un desktop manager grafico completo e leggero basato su web (HTML/CSS/JS):\n\n  1. GRIGLIA E ICONE:\n     - Le icone sulla scrivania sono allineate su una griglia fissa pixel-perfect (Windows-style) per impedire reflow visivi indesiderati in seguito a ridimensionamenti dello schermo o sincronizzazioni tra dispositivi.\n     - Ciascuna icona è memorizzata con coordinate assolute x,y nel file di stato '/system/config/ui-state.json'.\n     - Facendo doppio clic su un file, viene lanciata l'applicazione ad esso associata.\n\n  2. WINDOW MANAGER (WM):\n     - Il modulo 'wm.js' gestisce gli z-index delle finestre per consentire la sovrapposizione.\n     - Supporta il drag & drop afferrando l'header della finestra, il ridimensionamento dai bordi esterni, la riduzione a icona e la massimizzazione.\n     - La finestra attiva e focalizzata riceve l'input della tastiera tramite gli ascoltatori di eventi globali.\n     - Scorciatoie rapide: Esc chiude la finestra attiva focalizzata, Ctrl+Tab scorre le finestre.\n\n  3. TASKBAR E START MENU:\n     - La barra inferiore elenca le applicazioni aperte e consente di minimizzarle o ripristinarle.\n     - Il menu Start a sinistra raccoglie tutte le applicazioni installate nel sistema registrate in '/system/registry/apps.json'."
+  },
+  "en": {
+    "title": "NucleoOS Desktop User Guide",
+    "synopsis": "desktop",
+    "description": "Comprehensive guide on the graphic desktop environment, window layout, and taskbar.",
+    "details": "NAME\n  desktop - NucleoOS Desktop Environment User Guide.\n\nDESCRIPTION\n  NucleoOS features a complete and lightweight graphical web-based desktop manager (HTML/CSS/JS):\n\n  1. DESKTOP SHORTCUTS & SNAP GRID:\n     - Icons are aligned to a strict Windows-style grid. Snapped positions are stored in '/system/config/ui-state.json' to prevent messy reflows.\n     - Double-clicking file shortcuts opens them in their default registered application.\n\n  2. WINDOW MANAGER (WM):\n     - The 'wm.js' library controls z-index properties to allow clean overlapping.\n     - Handles drag & drop events via the window header, border resizing, minimizing to the taskbar, and maximizing to full-screen.\n     - The active focused window captures keyboard inputs using global event listeners.\n     - Keyboard shortcuts: Esc closes active focused window, Ctrl+Tab cycles focus.\n\n  3. TASKBAR & START MENU:\n     - The bottom taskbar lists active windows and toggles minimization states.\n     - The Start Menu reads '/system/registry/apps.json' to populate the system application index in real-time."
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "date",
+  "category": "system",
+  "it": {
+    "title": "date - Data e ora locale",
+    "synopsis": "date",
+    "description": "Mostra la data e l'ora corrente sincronizzate del sistema.",
+    "details": "NOME\n  date - Data e ora locale.\n\nSINTASSI\n  date\n\nDESCRIZIONE\n  Mostra la data e l'ora correnti. Sincronizzate al boot tramite server NTP su internet.\n\nARCHITETTURA E BASSO LIVELLO\n  Legge il tempo orologio locale. Sul chip ESP32S3 reale, mantiene sincronizzata la data sul modulo RTC integrato tramite query UDP su porta 123 (NTP).\n\nCODICI DI RITORNO\n  0\n    Successo.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  status(1), uptime(1)\n\nESEMPI AVANZATI\n  date"
+  },
+  "en": {
+    "title": "date - Local date and time",
+    "synopsis": "date",
+    "description": "Display the current system date and time.",
+    "details": "NAME\n  date - Local date and time.\n\nSYNOPSIS\n  date\n\nDESCRIPTION\n  Outputs the current local date and time. Sourced from the internal RTC, updated via UDP NTP queries.\n\nSYSTEM ARCHITECTURE\n  Reads local system time. On physical hardware, the timekeeper relies on UDP port 123 (NTP) syncing to the ESP32 internal RTC module.\n\nEXIT CODES\n  0\n    Success.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  status(1), uptime(1)\n\nADVANCED EXAMPLES\n  date"
+  }
+}

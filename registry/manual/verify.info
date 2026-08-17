@@ -1,0 +1,16 @@
+{
+  "id": "verify",
+  "category": "terminal",
+  "it": {
+    "title": "verify - Verifica un'affermazione contro la conoscenza a bordo",
+    "synopsis": "verify <key> <asserted> [--kind fact|numeric] [-l it|en]",
+    "description": "Chiede ad ANIMA se un valore affermato per una chiave è confermato, contraddetto o sconosciuto, e stampa la prova che ha usato.",
+    "details": "NOME\n  verify - Verifica un'affermazione contro la conoscenza a bordo\n\nSINTASSI\n  verify <key> <asserted> [--kind fact|numeric] [-l it|en]\n\nDESCRIZIONE\n  Chiede ad ANIMA se un valore affermato per una chiave è confermato, contraddetto o sconosciuto, e stampa la prova che ha usato.\n\nOPZIONI\n  <chiave>\n    Di che cosa si parla, per esempio \"capitale della francia\".\n  <affermato>\n    Il valore da verificare.\n  --kind\n    fact oppure numeric.\n  -l\n    Lingua della risposta.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/anima/verify.\n\nNOTE\n  Questa rotta esiste solo nel firmware; il simulatore risponde 404, e il comando lo riporta come \"non disponibile su questa build\" invece che come errore.\n\nVEDERE ANCHE\n  anima(1), diag(1)\n\nESEMPI\n  verify \"capitale della francia\" Lione"
+  },
+  "en": {
+    "title": "verify - Grounded fact check against the on-device knowledge",
+    "synopsis": "verify <key> <asserted> [--kind fact|numeric] [-l it|en]",
+    "description": "Asks ANIMA whether an asserted value for a key is confirmed, contradicted or unknown, and prints the evidence it used.",
+    "details": "NAME\n  verify - Grounded fact check against the on-device knowledge\n\nSYNOPSIS\n  verify <key> <asserted> [--kind fact|numeric] [-l it|en]\n\nDESCRIPTION\n  Asks ANIMA whether an asserted value for a key is confirmed, contradicted or unknown, and prints the evidence it used.\n\nOPTIONS\n  <key>\n    What is being asked about, e.g. \"capital of france\".\n  <asserted>\n    The value to check.\n  --kind\n    fact or numeric.\n  -l\n    Answer language.\n\nDEVICE COST\n  One GET /api/anima/verify.\n\nNOTES\n  This route exists in the firmware only; the simulator answers 404, which the command reports as \"not available on this build\" rather than as an error.\n\nSEE ALSO\n  anima(1), diag(1)\n\nEXAMPLES\n  verify \"capital of france\" Lyon"
+  }
+}

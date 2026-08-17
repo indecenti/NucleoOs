@@ -1,0 +1,16 @@
+{
+  "id": "uptime",
+  "category": "system",
+  "it": {
+    "title": "uptime - Tempo di attività sistema",
+    "synopsis": "uptime",
+    "description": "Mostra da quanto tempo il dispositivo è attivo e quanta RAM libera ha.",
+    "details": "NOME\n  uptime - Tempo di attività del sistema.\n\nSINTASSI\n  uptime\n\nDESCRIZIONE\n  Mostra il tempo trascorso dall'ultimo boot e la RAM heap dell'ESP32S3.\n\nARCHITETTURA E BASSO LIVELLO\n  Interroga '/api/status' che ricava i millisecondi sul chip ESP32S3 tramite 'esp_timer_get_time()' e calcola la memoria RAM dinamica libera tramite la chiamata 'esp_get_free_heap_size()'. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo.\n  1\n    Dispositivo non raggiungibile.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  status(1), free(1), web_api(7)\n\nESEMPI AVANZATI\n  uptime"
+  },
+  "en": {
+    "title": "uptime - System active time",
+    "synopsis": "uptime",
+    "description": "Show system uptime and free heap memory details.",
+    "details": "NAME\n  uptime - System active time.\n\nSYNOPSIS\n  uptime\n\nDESCRIPTION\n  Displays time elapsed since last boot and ESP32S3 heap RAM status.\n\nSYSTEM ARCHITECTURE\n  Queries '/api/status', resolving microcontroller runtime ticks using 'esp_timer_get_time()' and free memory using 'esp_get_free_heap_size()'. See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    Microcontroller unreachable.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  status(1), free(1), web_api(7)\n\nADVANCED EXAMPLES\n  uptime"
+  }
+}

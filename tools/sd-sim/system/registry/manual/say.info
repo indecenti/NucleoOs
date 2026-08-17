@@ -1,0 +1,16 @@
+{
+  "id": "say",
+  "category": "terminal",
+  "it": {
+    "title": "say - Fa pronunciare del testo al dispositivo",
+    "synopsis": "say [text]",
+    "description": "Manda del testo al motore vocale, come argomento o da una pipe. Dentro una pipeline lo passa avanti, così una riga pronunciata si può comunque registrare.",
+    "details": "NOME\n  say - Fa pronunciare del testo al dispositivo\n\nSINTASSI\n  say [text]\n\nDESCRIZIONE\n  Manda del testo al motore vocale, come argomento o da una pipe. Dentro una pipeline lo passa avanti, così una riga pronunciata si può comunque registrare.\n\nOPZIONI\n  [testo]\n    Che cosa dire; senza, legge lo standard input.\n\nCOSTO PER IL DISPOSITIVO\n  Una POST /api/tts.\n\nNOTE\n  Richiede il permesso device.audio. Se la build non ha un motore vocale lo dice, invece di fingere di aver parlato.\n\nVEDERE ANCHE\n  notify(1), anima(1), clip(1)\n\nESEMPI\n  say \"il backup è finito\"\n  dmesg -l E | anima \"che cosa non va?\" | say"
+  },
+  "en": {
+    "title": "say - Speak text through the device",
+    "synopsis": "say [text]",
+    "description": "Sends text to the speech engine, either as an argument or from a pipe. Inside a pipeline it passes the text on, so a spoken line can still be recorded.",
+    "details": "NAME\n  say - Speak text through the device\n\nSYNOPSIS\n  say [text]\n\nDESCRIPTION\n  Sends text to the speech engine, either as an argument or from a pipe. Inside a pipeline it passes the text on, so a spoken line can still be recorded.\n\nOPTIONS\n  [text]\n    What to say; without it, read standard input.\n\nDEVICE COST\n  One POST /api/tts.\n\nNOTES\n  Needs the device.audio permission. If the build has no speech engine, it says so instead of pretending to have spoken.\n\nSEE ALSO\n  notify(1), anima(1), clip(1)\n\nEXAMPLES\n  say \"the backup is finished\"\n  dmesg -l E | anima \"what is wrong?\" | say"
+  }
+}

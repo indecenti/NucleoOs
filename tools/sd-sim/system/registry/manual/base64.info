@@ -1,0 +1,16 @@
+{
+  "id": "base64",
+  "category": "terminal",
+  "it": {
+    "title": "base64 - Codifica o decodifica in base64",
+    "synopsis": "base64 [-d] [file]",
+    "description": "Codifica in base64 un file o lo standard input, oppure lo decodifica con -d. È l'unico modo in cui un blob binario attraversa una pipeline di testo o gli appunti del sistema.",
+    "details": "NOME\n  base64 - Codifica o decodifica in base64\n\nSINTASSI\n  base64 [-d] [file]\n\nDESCRIZIONE\n  Codifica in base64 un file o lo standard input, oppure lo decodifica con -d. È l'unico modo in cui un blob binario attraversa una pipeline di testo o gli appunti del sistema.\n\nOPZIONI\n  -d\n    Decodifica invece di codificare.\n  [file]\n    Legge questo file; senza, legge lo standard input.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/fs/read quando è indicato un file, e niente del tutto dentro una pipeline.\n\nNOTE\n  Il codificatore lavora sui byte, non sui caratteri: la btoa del browser è solo latin1 e corromperebbe ogni byte sopra 0x7F.\n\nVEDERE ANCHE\n  hexdump(1), clip(1), tee(1)\n\nESEMPI\n  base64 /data/logo.png\n  base64 /data/logo.b64 | base64 -d | tee /data/logo.png"
+  },
+  "en": {
+    "title": "base64 - Encode or decode base64",
+    "synopsis": "base64 [-d] [file]",
+    "description": "Encodes a file or standard input to base64, or decodes it back with -d. This is the only way a binary blob crosses a text pipeline or the OS clipboard.",
+    "details": "NAME\n  base64 - Encode or decode base64\n\nSYNOPSIS\n  base64 [-d] [file]\n\nDESCRIPTION\n  Encodes a file or standard input to base64, or decodes it back with -d. This is the only way a binary blob crosses a text pipeline or the OS clipboard.\n\nOPTIONS\n  -d\n    Decode instead of encode.\n  [file]\n    Read this file; without it, read standard input.\n\nDEVICE COST\n  One GET /api/fs/read when a file is named, and nothing at all in a pipeline.\n\nNOTES\n  The encoder works on bytes, not on characters: the browser built-in btoa is latin1-only and would corrupt every byte above 0x7F.\n\nSEE ALSO\n  hexdump(1), clip(1), tee(1)\n\nEXAMPLES\n  base64 /data/logo.png\n  base64 /data/logo.b64 | base64 -d | tee /data/logo.png"
+  }
+}

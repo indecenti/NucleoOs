@@ -1,0 +1,16 @@
+{
+  "id": "link",
+  "category": "terminal",
+  "it": {
+    "title": "link - Mostra i vicini ESP-NOW e lo stato dei trasferimenti",
+    "synopsis": "link peers | link status",
+    "description": "peers elenca i dispositivi che questo vede via ESP-NOW, con nome locale e canale; status dice se un trasferimento è in corso e a che punto è.",
+    "details": "NOME\n  link - Mostra i vicini ESP-NOW e lo stato dei trasferimenti\n\nSINTASSI\n  link peers | link status\n\nDESCRIZIONE\n  peers elenca i dispositivi che questo vede via ESP-NOW, con nome locale e canale; status dice se un trasferimento è in corso e a che punto è.\n\nOPZIONI\n  peers\n    Elenca i vicini (il predefinito).\n  status\n    Mostra lo stato del trasferimento.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET per ciascuno.\n\nNOTE\n  Richiede il permesso mesh.peer. Volutamente in sola lettura: mandare un comando a un altro dispositivo trasforma un errore di battitura in un problema di qualcun altro, e il passaggio di conferma per questo sta nell'app Vicino.\n\nVEDERE ANCHE\n  wifi(1), status(1)\n\nESEMPI\n  link peers\n  link status"
+  },
+  "en": {
+    "title": "link - Show the ESP-NOW neighbours and the transfer state",
+    "synopsis": "link peers | link status",
+    "description": "peers lists the devices this one can see over ESP-NOW, with the local name and channel; status shows whether a transfer is running and how far along it is.",
+    "details": "NAME\n  link - Show the ESP-NOW neighbours and the transfer state\n\nSYNOPSIS\n  link peers | link status\n\nDESCRIPTION\n  peers lists the devices this one can see over ESP-NOW, with the local name and channel; status shows whether a transfer is running and how far along it is.\n\nOPTIONS\n  peers\n    List the neighbours (the default).\n  status\n    Show the transfer state.\n\nDEVICE COST\n  One GET each.\n\nNOTES\n  Needs the mesh.peer permission. Read-only on purpose: sending a command to another device turns a typo into someone else's problem, and the confirmation step for that lives in the Vicino app.\n\nSEE ALSO\n  wifi(1), status(1)\n\nEXAMPLES\n  link peers\n  link status"
+  }
+}

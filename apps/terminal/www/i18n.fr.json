@@ -3,5 +3,16 @@
   "clear": "effacer",
   "clr_tip": "Effacer (Ctrl+L)",
   "input_ph": "tapez 'help'…",
-  "boot_hint": "Terminal NucleoOS — tapez \"help\" pour voir les commandes."
+  "boot_hint": "Terminal NucleoOS — tapez \"help\" pour les commandes, Tab complète, Ctrl+R cherche dans l'historique.",
+  "run_tip": "Exécuter (Entrée)",
+  "pill_tip": "Aller à la sortie la plus récente",
+  "key_tab": "Compléter (Tab)",
+  "key_search": "Chercher dans l'historique (Ctrl+R)",
+  "key_prev": "Commande précédente",
+  "key_next": "Commande suivante",
+  "key_abort": "Arrêter la commande en cours (Ctrl+C)",
+  "key_esc": "Effacer la ligne (Échap)",
+  "hist_unpaired": "historique : non appairé — cette session uniquement",
+  "copy_ok": "copié dans le presse-papiers",
+  "copy_fail": "échec de la copie — sélectionnez le texte et utilisez le menu du navigateur"
 }

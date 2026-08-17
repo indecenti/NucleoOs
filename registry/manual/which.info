@@ -1,0 +1,16 @@
+{
+  "id": "which",
+  "category": "terminal",
+  "it": {
+    "title": "which - Dice se un nome è un builtin, un alias o un'app",
+    "synopsis": "which <name>",
+    "description": "Risponde in una riga alla domanda \"è un comando o un'app\".",
+    "details": "NOME\n  which - Dice se un nome è un builtin, un alias o un'app\n\nSINTASSI\n  which <name>\n\nDESCRIZIONE\n  Risponde in una riga alla domanda \"è un comando o un'app\".\n\nOPZIONI\n  <nome>\n    Il nome da cercare.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/apps, memorizzata per 30 s e condivisa con il comando apps.\n\nVEDERE ANCHE\n  apps(1), alias(1), man(1)\n\nESEMPI\n  which ls\n  which notepad"
+  },
+  "en": {
+    "title": "which - Say whether a name is a builtin, an alias or an app",
+    "synopsis": "which <name>",
+    "description": "Answers the question \"is that a command or an app\" in one line.",
+    "details": "NAME\n  which - Say whether a name is a builtin, an alias or an app\n\nSYNOPSIS\n  which <name>\n\nDESCRIPTION\n  Answers the question \"is that a command or an app\" in one line.\n\nOPTIONS\n  <name>\n    The name to look up.\n\nDEVICE COST\n  One GET /api/apps, memoised for 30 s and shared with the apps command.\n\nSEE ALSO\n  apps(1), alias(1), man(1)\n\nEXAMPLES\n  which ls\n  which notepad"
+  }
+}

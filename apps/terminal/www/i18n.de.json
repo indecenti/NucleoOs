@@ -1,7 +1,18 @@
 {
   "_lang": "de",
-  "clear": "löschen",
-  "clr_tip": "Löschen (Ctrl+L)",
+  "clear": "leeren",
+  "clr_tip": "Leeren (Strg+L)",
   "input_ph": "'help' eingeben…",
-  "boot_hint": "NucleoOS-Terminal — \"help\" für Befehle eingeben."
+  "boot_hint": "NucleoOS-Terminal — \"help\" für die Befehle, Tab vervollständigt, Strg+R durchsucht den Verlauf.",
+  "run_tip": "Ausführen (Eingabe)",
+  "pill_tip": "Zur neuesten Ausgabe springen",
+  "key_tab": "Vervollständigen (Tab)",
+  "key_search": "Verlauf durchsuchen (Strg+R)",
+  "key_prev": "Vorheriger Befehl",
+  "key_next": "Nächster Befehl",
+  "key_abort": "Laufenden Befehl stoppen (Strg+C)",
+  "key_esc": "Zeile löschen (Esc)",
+  "hist_unpaired": "Verlauf: nicht gekoppelt — nur diese Sitzung",
+  "copy_ok": "in die Zwischenablage kopiert",
+  "copy_fail": "Kopieren fehlgeschlagen — Text markieren und das Browsermenü verwenden"
 }

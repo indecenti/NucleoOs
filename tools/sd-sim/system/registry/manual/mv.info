@@ -1,0 +1,16 @@
+{
+  "id": "mv",
+  "category": "terminal",
+  "it": {
+    "title": "mv - Sposta o rinomina file",
+    "synopsis": "mv <source> <dest>",
+    "description": "Sposta o rinomina un file verso una nuova destinazione.",
+    "details": "NOME\n  mv - Sposta o rinomina file.\n\nSINTASSI\n  mv <sorgente> <destinazione>\n\nDESCRIZIONE\n  Sposta un file dal percorso sorgente alla destinazione. Se la destinazione è nella stessa cartella, rinomina il file.\n\nOPZIONI\n  <sorgente>\n    Il percorso del file da spostare.\n  <destinazione>\n    Il percorso di destinazione.\n\nARCHITETTURA E BASSO LIVELLO\n  Il comando esegue una sequenza transazionale:\n  1. Lettura del file sorgente in RAM tramite GET a '/api/fs/read'.\n  2. Scrittura del file in destinazione tramite POST a '/api/fs/write'.\n  3. Solo dopo la conferma di scrittura (HTTP 200), invia una richiesta POST di eliminazione del sorgente a '/api/fs/delete'.\n  Ciò previene la perdita dei dati in caso di errori di scrittura. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo. Spostamento completato.\n  1\n    Fallimento di scrittura o eliminazione.\n  404\n    Il file sorgente non esiste.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  cp(1), rm(1), web_api(7)\n\nESEMPI AVANZATI\n  mv vecchio.txt nuovo.txt\n  mv /data/temp.txt /system/config/saved.txt"
+  },
+  "en": {
+    "title": "mv - Move or rename file",
+    "synopsis": "mv <source> <dest>",
+    "description": "Move or rename a file from source to destination.",
+    "details": "NAME\n  mv - Move or rename file.\n\nSYNOPSIS\n  mv <source> <dest>\n\nDESCRIPTION\n  Moves a file from the source path to the destination path. Renames the file if the parent directory remains the same.\n\nOPTIONS\n  <source>\n    The target file to move.\n  <dest>\n    The destination path.\n\nSYSTEM ARCHITECTURE\n  Executes a transactional sequence:\n  1. Fetches source payload in RAM via GET '/api/fs/read'.\n  2. Writes the payload to destination via POST '/api/fs/write'.\n  3. If write returns HTTP 200, sends a POST to '/api/fs/delete' targeting the source file.\n  This sequence prevents data loss during write faults. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. File moved successfully.\n  1\n    Write or deletion failure.\n  404\n    Source file was not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  cp(1), rm(1), web_api(7)\n\nADVANCED EXAMPLES\n  mv old.txt new.txt\n  mv /data/temp.txt /system/config/saved.txt"
+  }
+}
