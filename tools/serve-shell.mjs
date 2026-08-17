@@ -72,6 +72,7 @@ const simState = {
   bootMs: Date.now(),
   minFree: 17000,                 // drifts slowly downward like the real watermark
   l1Mode: 'auto', externalBrain: false,
+  lang: 'en', langGen: 1,         // OS language + generation counter, like nucleo_i18n on the device
   ttsEnabled: false,
   voiceAlwaysOn: false,
   logs: [],                       // appended to by sim actions; served oldest→newest as text/plain
@@ -304,11 +305,30 @@ async function fsApi(req, res, url) {
       return sendJSON(res, { entries });
     }
     if (op === 'read') {
+      // ONE registry, like the device. On the Cardputer /api/apps is served FROM
+      // /sd/system/registry/apps.json, so reading that path returns exactly what /api/apps listed.
+      // Here they had drifted into two different files — apiApps() reads the repo registry (46 apps)
+      // while the simulated SD carried a stale 19-app copy — so a client that cross-references them
+      // (the shell reads it for the per-app permissions) saw a registry that did not describe the
+      // running system. Serve the same file both ways.
+      if (p === '/system/registry/apps.json') return sendJSON(res, await jread('registry/apps.json'));
       // Serve with HTTP Range support so the <audio>/<video> elements can SEEK (the device
       // streams from SD directly, so this only matters for the browser simulator). Files here
       // are small (<=~1.5 MB), so we read once and slice.
       const type = TYPES[extname(abs).toLowerCase()] || 'application/octet-stream';
-      const data = await readFile(abs);
+      let data;
+      try { data = await readFile(abs); }
+      catch (e) {
+        if (e.code !== 'ENOENT') throw e;
+        // MIRROR THE FIRMWARE (nucleo_fsapi.c read_get): a missing /system/config/*.json is answered
+        // with 200 "{}", not an error — a freshly prepared SD has none of them. The sim used to turn
+        // ENOENT into a 502, so "first boot" and "device unreachable" looked identical here while
+        // they are deliberately distinct on the device. The shell now decides whether to seed-and-save
+        // or go read-only from exactly this difference, so the sim has to tell the truth.
+        if (/^\/system\/config\/[^/]+\.json$/.test(p)) return sendJSON(res, {});
+        res.writeHead(404, { 'content-type': 'text/plain', 'access-control-allow-origin': '*' });
+        return res.end('no file');
+      }
       const range = req.headers.range && /bytes=(\d*)-(\d*)/.exec(req.headers.range);
       if (range) {
         let start = range[1] ? parseInt(range[1], 10) : 0;
@@ -439,6 +459,21 @@ const server = createServer(async (req, res) => {
       largest_free_block: jit(42000, 5000), apps: { installed: a.apps.length },
       network: { ...apiStatus.network, time: Math.floor(Date.now() / 1000) } }); }   // live device clock for the Clock app badge
   if (path === '/api/apps') return sendJSON(res, await apiApps());
+  // OS language (mirrors nucleo_httpd.c lang_handler): GET reads it, POST sets it and is a config
+  // write → paired only. Without this the sim 404'd on every language change and the shell's
+  // postLangToDevice() logged a network error on a perfectly healthy path.
+  if (path === '/api/lang') {
+    if (req.method === 'POST') {
+      if (!isAuthed(req)) return reject401(res);
+      let b = {}; try { b = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}
+      const lg = String(b.lang || '').trim();
+      if (/^(it|en|es|fr|de)$/.test(lg) && lg !== simState.lang) {
+        simState.lang = lg; simState.langGen++;
+        publish('settings.changed', { lang: lg });     // the device broadcasts the change over /ws
+      }
+    }
+    return sendJSON(res, { lang: simState.lang, gen: simState.langGen });
+  }
   if (path === '/api/associations') return sendJSON(res, await jread('registry/file-associations.json'));
   if (path === '/api/display') {   // mirrors the firmware: blank/relight the Cardputer screen (no-op on the sim)
     const on = url.searchParams.get('on') !== '0';
@@ -851,11 +886,33 @@ server.on('upgrade', (req, socket) => {
   const key = req.headers['sec-websocket-key'];
   const accept = createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
   socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
+  // MIRROR THE FIRMWARE (nucleo_ws.c): the device is HARD single-client — `#define MAX_CLIENTS 1`,
+  // and a newly connecting SHELL always EVICTS the previous one (last-wins). The sim used to accept
+  // unlimited clients and evict nobody, so the single most important rule of this subsystem was
+  // invisible to anyone developing against it — including the eviction war that made two open tabs
+  // fight forever and write to the real device's SD card. A simulator that is kinder than the device
+  // does not help you: it hides the bug you are about to ship.
+  const isShell = new URL(req.url, 'http://x').searchParams.get('shell') === '1';
+  if (isShell) {
+    for (const s of sockets) {
+      sockets.delete(s);
+      try { s.destroy(); } catch {}
+      console.log('[ws] single-client: evicted previous shell for a new one');
+    }
+  } else if (sockets.size >= 1) {
+    // A non-shell page (a standalone app) never steals the seat from a live shell: it completes the
+    // handshake and simply receives no deltas, exactly like the firmware.
+    socket.on('data', () => {});
+    socket.on('close', () => {});
+    socket.on('error', () => {});
+    return;
+  }
   sockets.add(socket);
+  publish('system.clients', { n: sockets.size });   // the device publishes this on every add/drop
   socket.write(wsEncode(JSON.stringify({ op: 'sync', events: [] })));
   socket.on('data', () => {});            // ignore client frames (subscribe)
-  socket.on('close', () => sockets.delete(socket));
-  socket.on('error', () => sockets.delete(socket));
+  socket.on('close', () => { if (sockets.delete(socket)) publish('system.clients', { n: sockets.size }); });
+  socket.on('error', () => { if (sockets.delete(socket)) publish('system.clients', { n: sockets.size }); });
 });
 
 // Pull a filename from raw input (mirrors a_extract_filename in nucleo_anima.c).

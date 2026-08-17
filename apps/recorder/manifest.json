@@ -8,15 +8,47 @@
   "entry_service": "recorder",
   "web_route": "/apps/recorder/",
   "icon": "/apps/recorder/icon.svg",
-  "permissions": ["storage.shared", "device.audio"],
-  "mounts": { "app": "/apps/recorder/data" },
+  "permissions": [
+    "storage.shared",
+    "device.audio",
+    "device.mic"
+  ],
+  "mounts": {
+    "app": "/apps/recorder/data"
+  },
   "handles": {
     "role": "player",
-    "extensions": ["mp3", "wav"]
+    "extensions": [
+      "mp3",
+      "wav"
+    ]
   },
-  "intents": [ { "action": "play", "extensions": ["mp3", "wav"] } ],
-  "subscribes": ["rec.started", "rec.stopped", "rec.level", "fs.changed"],
-  "publishes": ["rec.request"],
-  "power": { "budget_class": "high", "wants_wakeup": ["keyboard"] },
-  "mesh": { "exposes": [], "consumes": [] }
+  "intents": [
+    {
+      "action": "play",
+      "extensions": [
+        "mp3",
+        "wav"
+      ]
+    }
+  ],
+  "subscribes": [
+    "rec.started",
+    "rec.stopped",
+    "rec.level",
+    "fs.changed"
+  ],
+  "publishes": [
+    "rec.request"
+  ],
+  "power": {
+    "budget_class": "high",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
 }

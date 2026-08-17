@@ -210,7 +210,8 @@
       "autostart": false,
       "permissions": [
         "storage.shared",
-        "device.audio"
+        "device.audio",
+        "device.mic"
       ]
     },
     {
@@ -222,7 +223,8 @@
       "permissions": [
         "storage.shared",
         "device.audio",
-        "device.display"
+        "device.display",
+        "device.mic"
       ]
     },
     {
@@ -266,7 +268,8 @@
       "autostart": false,
       "permissions": [
         "system.events",
-        "device.keyboard"
+        "device.keyboard",
+        "device.mic"
       ]
     },
     {
@@ -496,7 +499,9 @@
       "path": "/apps/weather",
       "enabled": true,
       "autostart": false,
-      "permissions": []
+      "permissions": [
+        "device.location"
+      ]
     },
     {
       "id": "authenticator",

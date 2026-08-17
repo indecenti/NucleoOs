@@ -13,6 +13,7 @@
 // Zero dependencies, BOM-safe. Usage: node tools/i18n-check.mjs   (exit 1 on any failure).
 
 import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -193,7 +194,13 @@ const manifest = {
   namespaces: nsKeyCount,
 };
 try {
-  writeFileSync(join(ROOT, 'web', 'shell', 'i18n', 'coverage.json'), JSON.stringify(manifest, null, 2) + '\n');
+  const covPath = join(ROOT, 'web', 'shell', 'i18n', 'coverage.json');
+  const json = JSON.stringify(manifest, null, 2) + '\n';
+  writeFileSync(covPath, json);
+  // Refresh the .gz IN THE SAME BREATH. The device serves the .gz first, and this file is a build
+  // OUTPUT of this very gate — writing only the source left `gz:check`/`validate` permanently red
+  // right after a green i18n gate, and shipped a stale coverage file to the device.
+  writeFileSync(covPath + '.gz', gzipSync(Buffer.from(json), { level: 9 }));
 } catch (e) { console.log('  (coverage.json not written: ' + e.message + ')'); }
 
 const cov = EXTRA_LANGS.map((l) => `${l} ${pct[l]}%`).join(' · ');

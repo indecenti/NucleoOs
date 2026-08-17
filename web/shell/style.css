@@ -662,6 +662,37 @@ html[data-theme='light'] .toast { background: #ffffffee; }
 .ws-dot.connected { background: #5cdb95; }
 .ws-dot.reconnecting { background: #f5c842; animation: wsPulse 1s ease-in-out infinite; }
 .ws-dot.offline { background: #ff8093; }
+/* Someone else holds the single client seat (see onWsClosed): amber-but-steady — the device is
+   healthy, we simply are not the one being served. Never the red "offline" dot, which was a lie. */
+.ws-dot.evicted { background: #b08bff; }
+
+/* The title bar is a drag surface: without this the browser claims the gesture for panning and the
+   window never moves on a touch screen (the resizers need the same). */
+.win .bar, .win-resizer { touch-action: none; }
+
+/* Eviction banner: honest, non-blocking, and the only way back to the seat is this button. */
+#ws-evicted {
+  position: fixed; left: 50%; transform: translateX(-50%) translateY(20px);
+  bottom: calc(var(--taskbar-h) + 14px); z-index: 10000;
+  display: none; align-items: center; gap: 12px;
+  padding: 10px 12px 10px 14px; border-radius: 12px;
+  background: #17203acc; border: 1px solid #ffffff26; box-shadow: 0 20px 50px #000a;
+  backdrop-filter: blur(24px) saturate(1.6); color: var(--text, #e6edf7);
+  font-size: 13px; max-width: min(560px, 92vw);
+  opacity: 0; transition: opacity .18s ease, transform .18s ease;
+}
+#ws-evicted.show { display: flex; opacity: 1; transform: translateX(-50%) translateY(0); }
+#ws-evicted .wse-ic { font-size: 16px; }
+#ws-evicted .wse-tx { flex: 1; line-height: 1.35; }
+#ws-evicted .wse-btn {
+  flex: 0 0 auto; cursor: pointer; border: 1px solid #ffffff2e; border-radius: 8px;
+  padding: 6px 12px; font: inherit; font-weight: 600; color: #fff;
+  background: linear-gradient(180deg, #4ea1ff, #2f7fe0);
+}
+#ws-evicted .wse-btn:hover { filter: brightness(1.08); }
+#ws-evicted .wse-btn:focus-visible { outline: 2px solid var(--accent, #4ea1ff); outline-offset: 2px; }
+html[data-theme='light'] #ws-evicted { background: #ffffffee; color: #17203a; border-color: #00000022; }
+@media (prefers-reduced-motion: reduce) { #ws-evicted { transition: none; } }
 @keyframes wsPulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 /* ====== Device Busy indicator (heavy-work arbiter: system.busy) ====== */
 #tray-busy {

@@ -27,6 +27,12 @@
   (function(){
     var cv=document.getElementById('boot-atom'); if(!cv||!cv.getContext) return;
     var ctx=cv.getContext('2d'), raf=0, stopped=false, t0=0;
+    // Accessibility + first-boot CPU. This canvas is the heaviest thing on screen (radial gradients,
+    // 280 stars, shadowBlur, ~60 fps) and it runs during boot, competing with the very work it is
+    // waiting for. Honour prefers-reduced-motion: paint ONE settled frame and stop — no rAF loop,
+    // no vestibular trigger, and a weak client gets its cycles back for booting the OS.
+    var REDUCE=false; try{ REDUCE=matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+    function nowMs(){ return (window.performance&&performance.now)?performance.now():Date.now(); }
     var DPR=Math.min(window.devicePixelRatio||1,2), W=0, H=0;
     var TILTS=[0,Math.PI/3,2*Math.PI/3], SPD=[2.0,-2.45,2.95], PH=[0,2.1,4.2];
     var stars=[], dust=[], nebula=[], NUC=[];
@@ -53,7 +59,11 @@
       g.addColorStop(0,'rgba('+col+','+a+')');g.addColorStop(1,'rgba('+col+',0)');
       ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,6.2832);ctx.fill();}
     function frame(ts){
-      if(stopped)return; if(!t0)t0=ts; ensureSize(); if(!W||!H){raf=requestAnimationFrame(frame);return;} var t=(ts-t0)/1000;
+      if(stopped)return;
+      // Reduced motion: bias t so the first (and only) frame shows the SETTLED composition —
+      // nucleus lit, rings drawn, wordmark in — instead of the blank start of the ignition ramp.
+      if(!t0)t0=REDUCE?ts-2200:ts;
+      ensureSize(); if(!W||!H){ if(REDUCE)return; raf=requestAnimationFrame(frame);return;} var t=(ts-t0)/1000;
       var cx=W/2, cy=H*0.42, R=Math.max(74,Math.min(168,Math.min(W,H)*0.18)), B=R*0.32;
       var nucR=R*0.22, eR=Math.max(2.4,R*0.05), fs=Math.max(22,Math.min(48,Math.min(W,H)*0.064));
       var ign=Math.min(1,t/0.6), ringR=Math.min(1,Math.max(0,(t-0.3)/0.8)),
@@ -144,15 +154,19 @@
       ctx.fillStyle=lg;ctx.fillRect(bx-hw,by-2,bw+hw*2,7);ctx.restore();
       var vg=ctx.createRadialGradient(cx,cy,Math.min(W,H)*0.3,cx,cy,Math.max(W,H)*0.72);  // vignette
       vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,6,0.55)');ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);
+      if(REDUCE)return;                 // one static frame — never schedule the animation loop
       raf=requestAnimationFrame(frame);
     }
-    function stop(){if(stopped)return;stopped=true;if(raf)cancelAnimationFrame(raf);window.removeEventListener('resize',ensureSize);}
+    // Repaint the static frame when the viewport changes, so reduced-motion isn't left with a
+    // stale canvas after a resize/rotate (the animated path redraws every frame anyway).
+    function onResize(){ var w0=W,h0=H; ensureSize(); if(REDUCE&&!stopped&&(W!==w0||H!==h0)){ t0=0; frame(nowMs()); } }
+    function stop(){if(stopped)return;stopped=true;if(raf)cancelAnimationFrame(raf);window.removeEventListener('resize',onResize);}
     var bs=document.getElementById('boot-screen');
     if(bs){if(bs.classList.contains('hidden'))stop();
       else if(window.MutationObserver){var mo=new MutationObserver(function(){if(bs.classList.contains('hidden')){setTimeout(stop,500);mo.disconnect();}});mo.observe(bs,{attributes:true,attributeFilter:['class']});}}
     setTimeout(stop,60000);   // hard backstop: never spin forever if the hide signal is missed
-    window.addEventListener('resize',ensureSize);
-    try{ensureSize();raf=requestAnimationFrame(frame);}catch(e){}
+    window.addEventListener('resize',onResize);
+    try{ensureSize();if(REDUCE)frame(nowMs());else raf=requestAnimationFrame(frame);}catch(e){}
   })();
   </script>
 

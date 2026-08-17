@@ -6,7 +6,8 @@ import { resolveShortcut, resolveEscape } from './shortcuts.js';
 import { createBusyController } from './busy.js';
 import { ensureOnboarding } from './onboarding.js';   // first-boot AI setup + install tutorial
 import I18N from './nucleo-i18n.js';                  // centralized OS-wide internationalization
-import { makeFetchJSON } from './boot-fetch.js';      // resilient boot fetch (retries 503/timeout — see shell-boot-fetch.test)
+import { makeFetchJSON, makeLoadState } from './boot-fetch.js';   // resilient boot fetch + typed user-state load (shell-boot-fetch.test)
+import { rankApps, rankActions, looksLikeNL } from './search-rank.js';   // pure search ranking (host-tested)
 import { initSystemUI } from './system-ui.js';        // night light, lock screen, shortcuts sheet, widgets
 
 // Shell-namespaced translator: t(key, vars) → active-language string, falling back to core then key.
@@ -202,6 +203,9 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
 // socket fast instead of choking the open. Large drag-and-drop uploads keep the raw untimed path.
 let cfgWriteChain = Promise.resolve();
 function saveConfig(path, body) {
+  // The ONE choke point every small config write goes through — so the read-only guard is enforced
+  // in a single place instead of at each of the three call sites.
+  if (roStores.has(path)) return Promise.resolve();
   const run = cfgWriteChain.then(async () => {
     try { await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body, signal: AbortSignal.timeout(8000) }); }
     catch {}   // timeout / reset: the next debounced save will retry; never break the chain
@@ -224,12 +228,12 @@ function saveSession() {
               // save never competes for the device's sockets while the app is still streaming in
 }
 async function restoreSession() {
-  let saved;
-  try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(SESSION_PATH), { cache: 'no-store' });
-    if (!r.ok) return;
-    saved = JSON.parse(await r.text());
-  } catch { return; }
+  const res = await loadState(SESSION_PATH);
+  // Unreachable: restoring nothing is fine, but SAVING would be fatal — the first window move would
+  // write an empty session over the real one. Lock it instead.
+  if (res.state === 'unreachable') { markReadOnly(SESSION_PATH); return; }
+  if (res.state !== 'found') return;
+  const saved = res.data;
   if (!saved) return;
   if (saved.geom && typeof saved.geom === 'object') winGeom = saved.geom;   // restore per-app memory first
   if (!Array.isArray(saved.windows)) return;
@@ -257,10 +261,11 @@ const CLIP_TOTAL_MAX = 64 * 1024;                 // not bloat the file rewritte
 let clip = { items: [] };                         // newest first
 let clipTimer = null;
 async function loadClipboard() {
-  try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(CLIP_PATH), { cache: 'no-store' });
-    if (r.ok) { const c = JSON.parse(await r.text()); if (Array.isArray(c.items)) clip.items = c.items.slice(0, CLIP_CAP); }
-  } catch {}
+  const r = await loadState(CLIP_PATH);
+  // Same trap: an unreadable history is not an empty history. Without this the first copy wrote a
+  // one-entry clipboard over the user's real one.
+  if (r.state === 'unreachable') { markReadOnly(CLIP_PATH); return; }
+  if (r.state === 'found' && Array.isArray(r.data.items)) clip.items = r.data.items.slice(0, CLIP_CAP);
 }
 function saveClipboard() {
   clearTimeout(clipTimer);
@@ -434,8 +439,42 @@ function toggleClipHistory() {
   })));
 }
 
+// ── Crash surface ─────────────────────────────────────────────────────────────────────────────
+// Before this, an exception thrown anywhere — the shell or any of the 47 apps — went nowhere: no
+// handler, no notice, no record. An app that died mid-action simply stopped responding and the user
+// was left guessing whether the click had registered. This is the OS-wide net: one toast per fault
+// (throttled, because a broken render loop can throw hundreds of times a second) plus the full detail
+// on the console for whoever is debugging. It reports; it never tries to "recover" — silently
+// swallowing an error is exactly what made this invisible in the first place.
+const _errSeen = new Map();
+function reportFault(where, msg, detail) {
+  const key = where + '|' + String(msg).slice(0, 120);
+  const now = Date.now();
+  const last = _errSeen.get(key) || 0;
+  console.error('[fault]', where, msg, detail || '');
+  if (now - last < 15000) return;                 // same fault again within 15s: log, don't re-toast
+  _errSeen.set(key, now);
+  if (_errSeen.size > 40) _errSeen.clear();       // bounded: this map must never grow with uptime
+  try { showToast(t('fault_toast', { where }), '\u26A0\uFE0F', 'error', 6000); } catch {}
+}
+// Wire a window (the shell's own, or an app iframe's) into the same net.
+function wireFaults(win, where) {
+  try {
+    win.addEventListener('error', (e) => {
+      // A failed <img>/<script> load also fires 'error' but has no .message — not a crash, skip it.
+      if (!e || !e.message) return;
+      reportFault(where, e.message, (e.filename || '') + ':' + (e.lineno || 0));
+    });
+    win.addEventListener('unhandledrejection', (e) => {
+      const r = e && e.reason;
+      reportFault(where, (r && (r.message || r)) || 'unhandled rejection', r && r.stack);
+    });
+  } catch {}                                       // cross-origin frame → nothing we can attach to
+}
+
 function initOS() {
   loadClipboard();
+  wireFaults(window, 'NucleoOS');
   document.addEventListener('keydown', osKeydown);
   document.addEventListener('keyup', osKeyup);
   // Never leave the Alt+Tab overlay stuck if the window loses focus mid-cycle.
@@ -456,6 +495,8 @@ function initOS() {
   // Inject the same handlers into each app window so shortcuts work over apps too.
   WM.setOnFrameLoad((frame) => {
     try { frame.contentWindow.addEventListener('keydown', osKeydown); frame.contentWindow.addEventListener('keyup', osKeyup); } catch {}   // cross-origin (external links) → skip
+    // Same net inside the app: an app crashing is the case the user actually meets.
+    try { const w = WM.list().find((x) => x.el.querySelector('iframe') === frame); wireFaults(frame.contentWindow, (w && w.app && w.app.name) || 'app'); } catch {}
     injectGlobalTheme(frame.contentDocument);
     // Hand the freshly-opened app the last /api/status snapshot right away, so embedded apps that
     // ride the shell's broadcast (Settings, System Monitor) paint at once instead of waiting out
@@ -468,12 +509,14 @@ function initOS() {
 
 let needSeed = false;            // true when the device had no state yet → seed it
 async function loadUiState() {
-  try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(UI_STATE_PATH), { cache: 'no-store' });
-    if (r.ok) return { ...UI_DEFAULTS, ...JSON.parse(await r.text()) };
-  } catch {}
-  needSeed = true;
-  return migrateLegacy();        // first run: lift any pre-existing localStorage value onto the device
+  const r = await loadState(UI_STATE_PATH);
+  if (r.state === 'found') return { ...UI_DEFAULTS, ...r.data };
+  if (r.state === 'absent') { needSeed = true; return migrateLegacy(); }   // first run: lift any localStorage value onto the device
+  // UNREACHABLE. We do not know what the user had, so we must not decide they had nothing: seeding
+  // here (the old behaviour) wrote the factory desktop straight over a real ui-state.json. Render the
+  // defaults for this session, keep needSeed false, and lock the store.
+  markReadOnly(UI_STATE_PATH);
+  return { ...UI_DEFAULTS };
 }
 function migrateLegacy() {
   const legacy = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
@@ -548,6 +591,22 @@ const fetchJSON = makeFetchJSON({
   AbortSignal: (typeof AbortSignal !== 'undefined' ? AbortSignal : null),
 });
 
+// Stores whose load came back UNREACHABLE. A store in here is READ-ONLY for the rest of the session:
+// we could not read the user's real state, so we must never write over it. Nothing is destroyed — a
+// reload with the device present brings everything back.
+const roStores = new Set();
+const loadState = makeLoadState(fetchJSON);
+let roNotified = false;
+// Put a store into read-only mode and say so — once, plainly. The session keeps working; it just
+// will not persist. Silence here would be the worst option: the user would think it saved.
+function markReadOnly(path) {
+  roStores.add(path);
+  bootLog('READ-ONLY store (device unreachable, nothing will be overwritten):', path);
+  if (roNotified) return;
+  roNotified = true;
+  setTimeout(() => { try { showToast(t('state_readonly'), '🔒', 'error', 9000); } catch {} }, 2000);
+}
+
 // ===== pairing gate =====
 // The device requires pairing before it will serve user data (files, OTA, live events).
 // We ask /api/auth/status first; if this browser isn't paired yet, block the OS behind a
@@ -598,6 +657,53 @@ function showPairing() {
 }
 
 function hideBootScreen() { const bs = document.getElementById('boot-screen'); if (bs) bs.classList.add('hidden'); }
+
+// The desktop breakpoint, in JS, kept deliberately in step with style.css:575 (max-width:768px).
+const mqDesktop = (typeof matchMedia === 'function') ? matchMedia('(min-width: 769px)') : { matches: true };
+let desktopStarted = false;
+// Declared permissions are NOT in /api/apps — the firmware streams only id/name/route/icon/enabled
+// (nucleo_httpd.c) to keep each app object ~200 bytes on an 18 KB heap — so read them from the
+// registry, which on the device IS the file /api/apps is served from. wm.allowAttr() turns them into
+// a real Feature Policy on each app's iframe.
+// WHERE this runs matters more than it looks: putting it in boot()'s critical path added a request
+// to the exact moment the 4-socket device is most contended, and it pushed the ui-state read past its
+// timeout — the shell then declared the device unreachable and made the desktop read-only. Measured,
+// not theorised. Here it runs after the desktop has painted and before the first window opens, which
+// is the only ordering constraint that actually exists. On a phone it never runs at all.
+async function loadAppPermissions() {
+  try {
+    const reg = await fetchJSON('/api/fs/read?path=' + encodeURIComponent('/system/registry/apps.json'), { tries: 2, timeout: 4000 });
+    const permById = new Map(((reg && reg.installed) || []).map((a) => [a.id, Array.isArray(a.permissions) ? a.permissions : []]));
+    let n = 0;
+    for (const a of state.apps) { const perms = permById.get(a.id); if (perms) { a.permissions = perms; n++; } }
+    bootLog('permissions applied to ' + n + '/' + state.apps.length + ' app frames');
+  } catch (e) {
+    // Keep the pre-existing permissive default rather than mute dictation/recorder/ANIMA on a blip.
+    console.warn('[shell] registry permissions unreadable → app iframes keep the permissive default:', (e && e.message) || e);
+  }
+}
+// Everything that costs the DEVICE something. Split out of boot() so it can be skipped entirely
+// when there is no desktop on screen, and started later if one appears.
+async function startDesktopServices() {
+  if (desktopStarted) return;
+  desktopStarted = true;
+  await loadAppPermissions();              // MUST precede the first window: `allow` is fixed at navigation
+  ensureOnboarding().catch(() => {});      // first paired boot with no AI key → curated welcome/setup
+  await restoreSession();                  // bring back the windows that were open last time
+  bootLog('desktop up (apps=' + state.apps.length + ') — attaching live socket /ws…');
+  connectWS();
+  // Warm the search index: instant from localStorage (if any), then revalidated against the
+  // device. Repaint search results live whenever the index finishes (re)building.
+  FsIndex.onUpdate(() => { if (searchActive()) refreshSearchView(); });
+  FsIndex.init();
+  doRefreshStatus(); scheduleStatus();   // adaptive: pause-when-hidden + 15s→60s error backoff (see runStatus)
+}
+function onViewportGrew(e) {
+  if (!e.matches || desktopStarted) return;
+  bootLog('viewport reached desktop size → starting the deferred services now');
+  if (mqDesktop.removeEventListener) mqDesktop.removeEventListener('change', onViewportGrew);
+  startDesktopServices();
+}
 async function boot() {
   // The splash must never be a dead end: even if a fetch hangs forever (no reject, just no
   // response) this failsafe reveals the UI. The happy path clears it in the finally below.
@@ -665,16 +771,17 @@ async function boot() {
   try { applyEco(localStorage.getItem('nucleo.eco') === '1'); } catch {}
   if (needSeed) saveUiState();             // device had nothing yet → persist current state onto it
   applySettingsFromDevice();               // theme + device name are authoritative on the device too
-  ensureOnboarding().catch(() => {});      // first paired boot with no AI key → curated welcome/setup (overlays the desktop)
-  await restoreSession();                  // bring back the windows that were open last time
-  bootLog('desktop up (apps=' + state.apps.length + ') — attaching live socket /ws…');
-  connectWS();
-  // Warm the search index: instant from localStorage (if any), then revalidated against the
-  // device. Repaint search results live whenever the index finishes (re)building.
-  FsIndex.onUpdate(() => { if (searchActive()) refreshSearchView(); });
-  FsIndex.init();
-  tickClock(); setInterval(tickClock, 10000);
-  doRefreshStatus(); scheduleStatus();   // adaptive: pause-when-hidden + 15s→60s error backoff (see runStatus)
+  tickClock(); setInterval(tickClock, 10000);   // pure browser clock: costs the device nothing
+  // Below the desktop breakpoint the shell paints #mobile-placeholder and hides the desktop, the
+  // windows, the taskbar and the Start menu (style.css). Yet boot() used to do ALL the expensive work
+  // regardless: restore the session — which OPENS EVERY APP IFRAME into a display:none container —
+  // open /ws, crawl the SD (up to ~600 /api/fs/list, fsindex.js) and poll /api/status every 15 s, on a
+  // device with 4-6 sockets. A phone was not merely refused: it was the most expensive client the
+  // Cardputer could have, and it got a "coming soon" card for the trouble. Defer all of it until
+  // there is a desktop to paint, and pick it up if the viewport later grows (rotation, desktop mode).
+  if (mqDesktop.matches) startDesktopServices();
+  else { bootLog('viewport below the desktop breakpoint → session/ws/index/polling deferred (device pays nothing)');
+         if (mqDesktop.addEventListener) mqDesktop.addEventListener('change', onViewportGrew); }
   } catch (e) {
     console.error('[boot] init error — revealing UI anyway:', e);
   } finally {
@@ -708,6 +815,46 @@ let wsState = 'offline';                       // remembered so the tooltip can 
 // rejected handshake (unpaired = 401) or a flaky link otherwise spins endless wasted requests.
 let wsSock = null, wsTimer = null, wsBackoff = 3000;
 const WS_BACKOFF_MAX = 30000;
+
+// ── The driver's seat ─────────────────────────────────────────────────────────────────────────
+// The device is HARD single-client by design: firmware nucleo_ws.c has `#define MAX_CLIENTS 1`, and a
+// newly connecting shell ALWAYS evicts the previous one (last-wins). That is a sane choice for a
+// PSRAM-less chip with ~4-6 sockets — but the shell used to fight it: an evicted tab saw onclose,
+// believed it was OFFLINE, and auto-reconnected, which evicted the other tab, which reconnected…
+// Two open tabs therefore fought forever at the backoff interval. Each eviction publishes
+// `system.clients`, and journal_skip (nucleo_eventbus.c) does NOT list that topic, so the war wrote
+// to the microSD every few seconds, for as long as both tabs stayed open.
+// Now: on close we ASK the device whether it is alive. If it is, we were not disconnected — we lost
+// the seat. We say so honestly, stop reconnecting, and make taking the seat back an explicit gesture.
+let wsEvicted = false;
+async function onWsClosed() {
+  setWsBadge('reconnecting');
+  let alive = false;
+  try {
+    const opts = { cache: 'no-store' };
+    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) opts.signal = AbortSignal.timeout(4000);
+    const r = await fetch('/api/status', opts);
+    alive = !!(r && r.ok);
+  } catch {}
+  if (!alive) { setWsBadge('offline'); scheduleWS(); return; }   // genuinely unreachable → normal backoff
+  wsEvicted = true;                                              // healthy device + closed socket = someone took the seat
+  setWsBadge('evicted');
+  showEvictedBar();
+}
+function showEvictedBar() {
+  let bar = document.getElementById('ws-evicted');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'ws-evicted'; document.body.appendChild(bar); }
+  bar.innerHTML = `<span class="wse-ic">\u{1F465}</span><span class="wse-tx">${escapeHtml(t('ws_evicted_body'))}</span>`
+    + `<button class="wse-btn" type="button">${escapeHtml(t('ws_evicted_take'))}</button>`;
+  bar.querySelector('.wse-btn').addEventListener('click', () => { hideEvictedBar(); wsBackoff = 3000; connectWS(); });
+  bar.classList.add('show');
+}
+function hideEvictedBar() {
+  wsEvicted = false;
+  const b = document.getElementById('ws-evicted');
+  if (b) b.classList.remove('show');
+}
+
 function scheduleWS() {
   if (wsTimer || document.hidden) return;      // one pending retry only; stay silent while backgrounded
   wsTimer = setTimeout(() => { wsTimer = null; connectWS(); }, wsBackoff);
@@ -728,6 +875,7 @@ function connectWS() {
   // device's tiny heap. Defer entirely while the tab is hidden; the visibility hook revives us.
   if (wsSock && (wsSock.readyState === WebSocket.OPEN || wsSock.readyState === WebSocket.CONNECTING)) return;
   if (document.hidden) return;
+  if (wsEvicted) return;   // another browser holds the seat: only the explicit button takes it back
   let ws;
   setWsBadge('reconnecting');
   // ?shell=1 marks us as the OS shell: only this triggers the device's "remote handoff" (suspend its UI,
@@ -738,6 +886,7 @@ function connectWS() {
   wsSock = ws;
   ws.onopen = () => {
     wsBackoff = 3000;                          // healthy link → reset backoff for the next drop
+    hideEvictedBar();                          // we hold the seat again
     setWsBadge('connected');
     ws.send(JSON.stringify({ op: 'subscribe', since: 0 }));
   };
@@ -800,9 +949,8 @@ function connectWS() {
   };
   ws.onclose = () => {
     if (wsSock === ws) wsSock = null;
-    setWsBadge('offline');
     renderRemote(false);
-    scheduleWS();                  // backed-off auto-reconnect (no fixed 3s storm)
+    onWsClosed();                  // offline vs evicted — never guess, ask the device
   };
 }
 // Returning to the foreground revives the link at once (and resets backoff so it feels instant),
@@ -1274,6 +1422,30 @@ function applyBrightness(v) {
 function applyEco(on) {
   document.documentElement.classList.toggle('eco', !!on);
   try { localStorage.setItem('nucleo.eco', on ? '1' : '0'); } catch {}
+}
+
+// ── Toggles as FUNCTIONS, not click handlers ──────────────────────────────────────────────────
+// Each of these is now reachable from two places (the Action Center tile and the search "actions"
+// provider), so the state change and the tile repaint live together — otherwise toggling from
+// search would leave the tile showing the old state.
+function acTile(id, on) { const el = document.getElementById(id); if (el) el.classList.toggle('active', !!on); }
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme !== 'light' ? 'light' : 'dark';
+  applyTheme(next);
+  acTile('ac-theme', next === 'dark');
+  persistTheme(next);                                  // → /system/config/settings.json on the Cardputer
+  return next;
+}
+function toggleEco() {
+  const on = localStorage.getItem('nucleo.eco') !== '1';
+  applyEco(on); acTile('ac-eco', on);
+  return on;
+}
+function toggleNight() {
+  if (!SysUI) return false;
+  const on = SysUI.toggleNight();
+  acTile('ac-night', on);
+  return on;
 }
 
 // Resolve a desktop item to its display glyph + label (apps may be renamed/removed in the registry).
@@ -2326,14 +2498,37 @@ const CAT_ORDER = ['folder', 'doc', 'image', 'audio', 'video', 'code', 'game', '
 const searchActive = () => SEARCH.target != null;
 const resultsContainer = () => document.getElementById(SEARCH.target === 'start' ? 'sm-results' : 'search-panel');
 
-// Build the flat, ranked result list for a query: matching apps first, then indexed files.
-function buildResults(q) {
-  const ql = q.toLowerCase();
-  const apps = state.apps.filter((a) => a.name.toLowerCase().includes(ql)).map((a) => ({ kind: 'app', app: a, name: a.name }));
-  const files = FsIndex.search(q, 40).map((f) => ({ kind: 'file', path: f.path, name: f.name, isDir: f.isDir, cat: f.cat }));
-  return { apps, files };
+// ── Settings & system actions provider ─────────────────────────────────────────────────────────
+// The Start search box has always promised "apps, files AND settings"; it only ever searched the
+// first two. These are the OS commands themselves — the same handlers the Action Center and Start
+// menu already run, reachable by name. Entirely browser-side: searching them costs the PSRAM-less
+// device ZERO requests. Labels/keywords come from the catalog, so they follow the OS language.
+function sysActions() {
+  const openSettings = () => { const s = byId('settings'); if (s) WM.open(s); };
+  return [
+    { id: 'settings',   glyph: '⚙️',  run: openSettings },
+    { id: 'theme',      glyph: '🌗',  run: () => toggleTheme() },
+    { id: 'wallpaper',  glyph: '🖼️',  run: openSettings },
+    { id: 'language',   glyph: '🌐',  run: openSettings },
+    { id: 'lock',       glyph: '🔒',  run: () => { if (SysUI) SysUI.lock(); } },
+    { id: 'shortcuts',  glyph: '⌨️',  run: () => { if (SysUI) SysUI.showShortcuts(); } },
+    { id: 'night',      glyph: '🌙',  run: () => toggleNight() },
+    { id: 'eco',        glyph: '🍃',  run: () => toggleEco() },
+    { id: 'clipboard',  glyph: '📋',  run: () => toggleClipHistory() },
+    { id: 'notif',      glyph: '🔔',  run: () => { if (Notify) Notify.toggle(); } },
+    { id: 'desktop',    glyph: '🖥️',  run: () => WM.showDesktop() },
+    { id: 'reboot',     glyph: '🔄',  run: () => rebootDevice() },
+  ].map((a) => ({ ...a, name: t('act_' + a.id), kw: t('act_' + a.id + '_kw') }));
 }
 
+// Build the flat, ranked result list for a query: apps, then OS settings/actions, then indexed files.
+// The ranking rules themselves live in search-rank.js (pure, host-tested in tools/shell-search-rank.test.mjs).
+function buildResults(q) {
+  const apps = rankApps(state.apps, q).map((r) => ({ kind: 'app', ...r }));
+  const actions = rankActions(sysActions(), q).map((r) => ({ kind: 'action', ...r }));
+  const files = FsIndex.search(q, 40).map((f) => ({ kind: 'file', path: f.path, name: f.name, isDir: f.isDir, cat: f.cat }));
+  return { apps, actions, files };
+}
 function runSearch(q, target) {
   SEARCH.q = q; SEARCH.target = target; SEARCH.sel = 0; SEARCH.userMoved = false;
   // Make sure the index is warm; results repaint via FsIndex.onUpdate when the crawl lands.
@@ -2344,20 +2539,26 @@ function runSearch(q, target) {
 // Re-render the current query into the active surface (called on input and when the index updates).
 function refreshSearchView() {
   if (!searchActive()) return;
-  const { apps, files } = buildResults(SEARCH.q);
+  const { apps, actions, files } = buildResults(SEARCH.q);
   // Result 0 is always the "Ask ANIMA" action — the unified search→AI bridge. It fires NO network
   // per keystroke (the /api/anima cascade runs only on commit), so file search stays instant.
-  SEARCH.results = [{ kind: 'anima', q: SEARCH.q }, ...apps, ...files];
+  SEARCH.results = [{ kind: 'anima', q: SEARCH.q }, ...apps, ...actions, ...files];
   const OFF = 1;                                   // index offset the anima row introduces
+  const ACT_OFF = OFF + apps.length;
+  const FILE_OFF = ACT_OFF + actions.length;
 
   let html = animaRow(SEARCH.q);
   if (apps.length) {
     html += `<div class="sp-cat">${escapeHtml(t('apps'))}</div>`;
     apps.forEach((r, i) => { html += spRow(OFF + i, r.app.glyph, r.app.name, '', SEARCH.q); });
   }
+  if (actions.length) {
+    html += `<div class="sp-cat">${escapeHtml(t('cat_actions'))}</div>`;
+    actions.forEach((r, i) => { html += spRow(ACT_OFF + i, r.act.glyph, r.name, t('cat_actions_sub'), SEARCH.q); });
+  }
   if (files.length) {
     const grouped = {};
-    files.forEach((r, i) => { (grouped[r.cat] = grouped[r.cat] || []).push({ r, i: OFF + apps.length + i }); });
+    files.forEach((r, i) => { (grouped[r.cat] = grouped[r.cat] || []).push({ r, i: FILE_OFF + i }); });
     for (const cat of CAT_ORDER) {
       const items = grouped[cat]; if (!items) continue;
       html += `<div class="sp-cat">${escapeHtml(catLabel(cat))}</div>`;
@@ -2368,11 +2569,11 @@ function refreshSearchView() {
       }
     }
   }
-  if (!apps.length && !files.length && !FsIndex.isReady()) {
+  if (!apps.length && !actions.length && !files.length && !FsIndex.isReady()) {
     html += `<div class="sp-empty"><span class="sp-spin"></span> ${escapeHtml(t('search_indexing'))}</div>`;
   }
-  // Default selection: the top app/file hit for short keyword lookups, the ANIMA row for questions.
-  if (!SEARCH.userMoved) SEARCH.sel = (apps.length + files.length && !looksLikeNL(SEARCH.q)) ? OFF : 0;
+  // Default selection: the top app/action/file hit for short keyword lookups, the ANIMA row for questions.
+  if (!SEARCH.userMoved) SEARCH.sel = (apps.length + actions.length + files.length && !looksLikeNL(SEARCH.q)) ? OFF : 0;
   if (SEARCH.sel >= SEARCH.results.length) SEARCH.sel = 0;
 
   const panel = resultsContainer();
@@ -2400,15 +2601,6 @@ const spRow = (i, g, name, sub, q) =>
 // The "Ask ANIMA" row that bridges search → the AI copilot (always result index 0).
 const animaRow = (q) =>
   `<div class="sp-item sp-anima" data-i="0"><span class="g">✻</span><span class="t"><div class="n">${escapeHtml(t('search_anima'))}</div><div class="p">${escapeHtml(q)}</div></span></div>`;
-// Heuristic: does the query read like a natural-language question/command (→ default to ANIMA)
-// rather than a short app/file name lookup (→ default to the first hit)?
-function looksLikeNL(q) {
-  const s = (q || '').trim();
-  if (/\?$/.test(s)) return true;
-  if (s.split(/\s+/).length >= 3) return true;
-  return /^(apri|crea|ricord|cerca |che |come |chi |cosa |quando |dove |perch|quanto|meteo|calcola|open |create |remind|what |who |how |when |where |why |weather )/i.test(s);
-}
-
 function setSel(i) { SEARCH.sel = i; highlightSel(); }
 function moveSel(d) {
   if (!SEARCH.results.length) return;
@@ -2430,6 +2622,14 @@ function openResult(r) {
     const q = r.q;
     if (SEARCH.target === 'start') closeStart(); else closeSearch();
     if (Copilot) Copilot.ask(q); else WM.open(byId('anima'), 'q=' + encodeURIComponent(q));
+    return;
+  }
+  // Run an OS command. Close the search surface FIRST: several actions (lock, clipboard history,
+  // the shortcuts sheet) put up their own overlay, and leaving the popover under it looks broken.
+  if (r.kind === 'action') {
+    if (SEARCH.target === 'start') closeStart(); else closeSearch();
+    document.getElementById('action-center').classList.add('hidden');
+    try { r.act.run(); } catch (e) { console.warn('[search] action failed', r.act.id, e); }
     return;
   }
   if (r.kind === 'app') WM.open(r.app);
@@ -2493,6 +2693,23 @@ async function rebootDevice() {
   ]);
 }
 
+// Make a non-<button> element a genuine keyboard-operable control. The tray items were <span>s with a
+// click listener: mouse-only. That put the Action Center out of reach from the keyboard — and with it
+// the lock screen, Eco, night light, brightness and the keyboard-shortcuts sheet, whose ONLY entry
+// point is that panel. An OS whose accessibility panel is itself inaccessible is the wrong shape.
+function asButton(el, onActivate) {
+  if (!el) return;
+  el.setAttribute('role', 'button');
+  el.setAttribute('tabindex', '0');
+  el.style.cursor = 'pointer';
+  el.addEventListener('click', onActivate);
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    e.preventDefault();                 // Space must not scroll the desktop
+    onActivate(e);
+  });
+}
+
 function wireChrome() {
   document.getElementById('start-btn').addEventListener('click', toggleStart);
   
@@ -2500,20 +2717,12 @@ function wireChrome() {
   const closeAc = () => document.getElementById('action-center').classList.add('hidden');
   const trayNet = document.getElementById('tray-net');
   const trayStorage = document.getElementById('tray-storage');
-  if (trayNet) { trayNet.addEventListener('click', toggleAc); trayNet.style.cursor = 'pointer'; }
-  if (trayStorage) { trayStorage.addEventListener('click', toggleAc); trayStorage.style.cursor = 'pointer'; }
+  asButton(trayNet, toggleAc);
+  asButton(trayStorage, toggleAc);
 
-  // Action Center: Theme toggle — persiste su SD del Cardputer
+  // Action Center: Theme toggle — persiste su SD del Cardputer (shared with search ▸ actions)
   const acTheme = document.getElementById('ac-theme');
-  if (acTheme) {
-    acTheme.addEventListener('click', () => {
-      const isDark = document.documentElement.dataset.theme !== 'light';
-      const next = isDark ? 'light' : 'dark';
-      applyTheme(next);
-      acTheme.classList.toggle('active', next === 'dark');
-      persistTheme(next); // → scrive /system/config/settings.json sul Cardputer
-    });
-  }
+  if (acTheme) acTheme.addEventListener('click', () => toggleTheme());
 
   // Action Center: Wi-Fi tile reflects the REAL connection (driven by renderNetwork) and opens
   // Settings to manage it — no more fake on/off toggle.
@@ -2527,14 +2736,14 @@ function wireChrome() {
   const acEco = document.getElementById('ac-eco');
   if (acEco) {
     acEco.classList.toggle('active', localStorage.getItem('nucleo.eco') === '1');
-    acEco.addEventListener('click', () => { const on = !acEco.classList.contains('active'); acEco.classList.toggle('active', on); applyEco(on); });
+    acEco.addEventListener('click', () => toggleEco());
   }
 
   // Action Center: Night light — warm veil over the console, per browser (system-ui.js).
   const acNight = document.getElementById('ac-night');
   if (acNight) {
     acNight.classList.toggle('active', SysUI && SysUI.nightOn());
-    acNight.addEventListener('click', () => { if (SysUI) acNight.classList.toggle('active', SysUI.toggleNight()); });
+    acNight.addEventListener('click', () => toggleNight());
   }
   // Action Center: Lock — the privacy veil (also Ctrl+Alt+L).
   const acLock = document.getElementById('ac-lock');
@@ -2555,8 +2764,7 @@ function wireChrome() {
   // Far-right sliver minimizes everything (and restores on a second click), like Windows.
   document.getElementById('show-desktop').addEventListener('click', () => WM.showDesktop());
   // Clicking the clock opens the Calendar app (Win11-style), if it's installed.
-  document.getElementById('clock').addEventListener('click', () => { const cal = byId('calendar'); if (cal) WM.open(cal); });
-  document.getElementById('clock').style.cursor = 'pointer';
+  asButton(document.getElementById('clock'), () => { const cal = byId('calendar'); if (cal) WM.open(cal); });
 
   // Start menu navigation: All apps / Back / Power / Account.
   const allBtn = document.getElementById('sm-allapps-btn');
@@ -2597,7 +2805,7 @@ function wireChrome() {
     // Re-clamp icons into the new bounds for display (stored positions are untouched, so
     // resizing never permanently moves an icon — it just stays on-screen).
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(renderDesktop, 150);
+    resizeTimer = setTimeout(() => { renderDesktop(); WM.clampIntoView(); }, 150);   // windows must never end up unreachable off-screen
   });
 }
 
@@ -2649,10 +2857,20 @@ function toggleStart() {
   }
 }
 function closeStart() {
-  document.getElementById('start-menu').classList.add('hidden');
-  document.getElementById('start-btn').setAttribute('aria-expanded', 'false');
+  const sm = document.getElementById('start-menu');
+  const wasOpen = sm && !sm.classList.contains('hidden');
+  sm.classList.add('hidden');
+  const btn = document.getElementById('start-btn');
+  btn.setAttribute('aria-expanded', 'false');
   resetStartView();
   if (SEARCH.target === 'start') { SEARCH.results = []; SEARCH.target = null; }
+  // Give the focus back to the control that opened the menu. Without this, closing Start with Esc
+  // dropped focus on <body> and the next Tab restarted from the top of the document — a keyboard user
+  // was thrown out of the taskbar every time. Only when the menu really was open, and only if the
+  // focus is still inside it (a click elsewhere already moved it deliberately).
+  if (wasOpen && btn && (!document.activeElement || document.activeElement === document.body || sm.contains(document.activeElement))) {
+    try { btn.focus(); } catch {}
+  }
 }
 
 function tickClock() {

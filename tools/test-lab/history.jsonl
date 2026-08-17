@@ -2,3 +2,7 @@
 {"ts": "2026-06-07T16:31:00", "health": {"hallucinations": 0, "nl_cases": 5253, "route_drift": 0, "green": [96, 99]}}
 {"ts":"2026-06-07T15:08:37","health":{"hallucinations":0,"nl_cases":6698,"route_drift":0,"green":[50,50]}}
 {"ts": "2026-06-08T01:14:47", "health": {"hallucinations": 0, "nl_cases": 6702, "route_drift": 0, "green": [51, 51]}}
+{"ts":"2026-08-17T07:13:55","health":{"hallucinations":0,"nl_cases":7570,"route_drift":1,"green":[159,169]}}
+{"ts":"2026-08-17T07:58:35","health":{"hallucinations":0,"nl_cases":7570,"route_drift":1,"green":[167,176]}}
+{"ts":"2026-08-17T09:35:53","health":{"hallucinations":0,"nl_cases":7570,"route_drift":1,"green":[167,176]}}
+{"ts":"2026-08-17T11:00:14","health":{"hallucinations":0,"nl_cases":7570,"route_drift":1,"green":[168,177]}}
