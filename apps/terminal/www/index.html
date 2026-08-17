@@ -122,6 +122,10 @@
   <script type="module">
     import I18N from '/nucleo-i18n.js';
     const t = await I18N.init('terminal');
+    // The active OS language as a 2-letter code (one of the five), for the places that speak to a
+    // language-tagged resource — man pages on the SD, the TTS engine. `envVars.LANG` still wins when
+    // the user set it explicitly in the shell, so scripts can override per session.
+    const manLang = () => String(envVars.LANG || I18N.lang || 'en').slice(0, 2).toLowerCase();
     const out = document.getElementById('out');
     const input = document.getElementById('in');
     const cwdEl = document.getElementById('cwd');
@@ -958,43 +962,37 @@
         emit(`${name}="${val}"`, 'ok');
       },
       async man(arg) {
+        // The OS runs in five languages, so the manual follows the ACTIVE OS language (I18N.lang),
+        // not navigator.language and not a two-way it/en guess. A page missing that language falls
+        // back through English then Italian (the base) so a French user always gets prose, never a
+        // blank — and never silently the wrong language when the page does have theirs.
+        const pick = (entry) => {
+          const order = [manLang(), 'en', 'it'];
+          for (const l of order) if (entry && entry[l]) return { loc: entry[l], lang: l };
+          return null;
+        };
         if (!arg) {
-          const isIt = (envVars.LANG || (typeof navigator !== 'undefined' ? navigator.language : 'en') || 'en').startsWith('it');
-          emit(isIt ? 'Quale pagina di manuale desideri?' : 'What manual page do you want?', 'warn');
+          emit(t('man_which') || 'What manual page do you want?', 'warn');
           return;
         }
         const cmd = arg.trim().toLowerCase();
-        const lang = (envVars.LANG || (typeof navigator !== 'undefined' ? navigator.language : 'en') || 'en').startsWith('it') ? 'it' : 'en';
         // The canonical home is /system/registry/manual — where the SD image puts the 43 pages and
         // where the Help app reads them. The old path is tried second, and only when the first
         // misses, so an SD laid out before the move still answers.
         let entry = await readJSON(`/system/registry/manual/${cmd}.info`);
         if (!entry) entry = await readJSON(`/system/manual/${cmd}.info`);
-        if (entry && entry[lang]) {
-          const loc = entry[lang];
+        const hit = pick(entry);
+        if (hit) {
+          const loc = hit.loc;
           emit(`${cmd.toUpperCase()}(1) - ${loc.synopsis}`);
-          emit('\nDescription:', 'dim');
+          emit('\n' + (t('man_description') || 'Description:'), 'dim');
           emit(`  ${loc.description}`);
           if (loc.details) {
-            emit('\nDetails:', 'dim');
+            emit('\n' + (t('man_details') || 'Details:'), 'dim');
             emit(`  ${loc.details}`);
           }
         } else {
-          const minimal = {
-            help: {
-              it: 'HELP(1) - Mostra i comandi disponibili.',
-              en: 'HELP(1) - Display available commands.'
-            },
-            clear: {
-              it: 'CLEAR(1) - Pulisce la schermata del terminale.',
-              en: 'CLEAR(1) - Clear the terminal screen.'
-            }
-          };
-          const fb = minimal[cmd];
-          if (fb && fb[lang]) emit(fb[lang]);
-          else {
-            emit(lang === 'it' ? `Nessuna voce di manuale per ${cmd}` : `No manual entry for ${cmd}`, 'warn');
-          }
+          emit((t('man_none') || 'No manual entry for {cmd}').replace('{cmd}', cmd), 'warn');
         }
       },
       history(arg) {
@@ -1668,7 +1666,7 @@
       async say(arg, ctx) {
         const text = (arg ? String(arg).replace(/^"([\s\S]*)"$/, '$1') : (ctx?.stdin || '')).trim();
         if (!text) { emit('usage: say <text>   (or pipe text into it)', 'err'); return; }
-        const j = await devPOST('say', '/api/tts', { say: text.slice(0, 400), lang: (envVars.LANG || 'en').slice(0, 2) });
+        const j = await devPOST('say', '/api/tts', { say: text.slice(0, 400), lang: manLang() });
         if (!j) return;
         if (j.available === false) { emit('say: no speech engine on this device', 'warn'); return; }
         // Pass the text through so `… | say | tee log` still records what was spoken.

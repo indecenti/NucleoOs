@@ -12,5 +12,23 @@
     "synopsis": "kill <app-id>",
     "description": "Asks the shell to close an app window, freeing its RAM. Named by id (the one ps prints), not by the synthetic PID.",
     "details": "NAME\n  kill - Close a foreground app\n\nSYNOPSIS\n  kill <app-id>\n\nDESCRIPTION\n  Asks the shell to close an app window, freeing its RAM. Named by id (the one ps prints), not by the synthetic PID.\n\nOPTIONS\n  No options.\n\nDEVICE COST\n  none — a message to the shell\n\nSEE ALSO\n  ps(1), apps(1)\n\nEXAMPLES\n  ps\n  kill notes"
+  },
+  "fr": {
+    "title": "kill - Ferme une appli au premier plan",
+    "synopsis": "kill <id-appli>",
+    "description": "Demande au shell de fermer la fenêtre d'une appli et libère sa RAM. Désignée par id (celui qu'affiche ps), pas par le PID synthétique.",
+    "details": "NOM\n  kill - Ferme une appli au premier plan\n\nSYNOPSIS\n  kill <id-appli>\n\nDESCRIPTION\n  Demande au shell de fermer la fenêtre d'une appli et libère sa RAM. Désignée par id (celui qu'affiche ps), pas par le PID synthétique.\n\nOPTIONS\n  Aucune option.\n\nCOÛT POUR L'APPAREIL\n  aucun — un message au shell\n\nVOIR AUSSI\n  ps(1), apps(1)\n\nEXEMPLES\n  ps\n  kill notes"
+  },
+  "es": {
+    "title": "kill - Cierra una app en primer plano",
+    "synopsis": "kill <id-app>",
+    "description": "Pide al shell que cierre la ventana de una app, liberando su RAM. Se indica por id (el que imprime ps), no por el PID sintético.",
+    "details": "NOMBRE\n  kill - Cierra una app en primer plano\n\nSINOPSIS\n  kill <id-app>\n\nDESCRIPCIÓN\n  Pide al shell que cierre la ventana de una app, liberando su RAM. Se indica por id (el que imprime ps), no por el PID sintético.\n\nOPCIONES\n  Sin opciones.\n\nCOSTE PARA EL DISPOSITIVO\n  ninguno — un mensaje al shell\n\nVÉASE TAMBIÉN\n  ps(1), apps(1)\n\nEJEMPLOS\n  ps\n  kill notes"
+  },
+  "de": {
+    "title": "kill - Eine Vordergrund-App schließen",
+    "synopsis": "kill <App-id>",
+    "description": "Bittet die Shell, ein App-Fenster zu schließen und dessen RAM freizugeben. Benannt per id (die ps ausgibt), nicht per synthetischer PID.",
+    "details": "NAME\n  kill - Eine Vordergrund-App schließen\n\nÜBERSICHT\n  kill <App-id>\n\nBESCHREIBUNG\n  Bittet die Shell, ein App-Fenster zu schließen und dessen RAM freizugeben. Benannt per id (die ps ausgibt), nicht per synthetischer PID.\n\nOPTIONEN\n  Keine Optionen.\n\nGERÄTEKOSTEN\n  keine — eine Nachricht an die Shell\n\nSIEHE AUCH\n  ps(1), apps(1)\n\nBEISPIELE\n  ps\n  kill notes"
   }
 }

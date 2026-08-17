@@ -14,5 +14,9 @@
   "key_esc": "Borrar la línea (Esc)",
   "hist_unpaired": "historial: sin emparejar — solo esta sesión",
   "copy_ok": "copiado al portapapeles",
-  "copy_fail": "no se pudo copiar — selecciona el texto y usa el menú del navegador"
+  "copy_fail": "no se pudo copiar — selecciona el texto y usa el menú del navegador",
+  "man_which": "¿Qué página de manual quieres?",
+  "man_description": "Descripción:",
+  "man_details": "Detalles:",
+  "man_none": "No hay entrada de manual para {cmd}"
 }

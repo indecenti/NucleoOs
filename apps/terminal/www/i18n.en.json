@@ -14,5 +14,9 @@
   "key_esc": "Clear the line (Esc)",
   "hist_unpaired": "history: not paired — this session only",
   "copy_ok": "copied to the clipboard",
-  "copy_fail": "copy failed — select the text and use the browser menu"
+  "copy_fail": "copy failed — select the text and use the browser menu",
+  "man_which": "What manual page do you want?",
+  "man_description": "Description:",
+  "man_details": "Details:",
+  "man_none": "No manual entry for {cmd}"
 }

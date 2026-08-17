@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-17T22:14:56.069Z",
+  "generated": "2026-08-17T22:21:12.525Z",
   "base": "it",
   "langs": [
     "it",
@@ -23,7 +23,7 @@
     "de": 100
   },
   "surfaces": 41,
-  "totalKeys": 2191,
+  "totalKeys": 2195,
   "namespaces": {
     "core": 103,
     "shell": 220,
@@ -58,7 +58,7 @@
     "ssh": 47,
     "system-monitor": 33,
     "tasks": 13,
-    "terminal": 15,
+    "terminal": 19,
     "unit-converter": 21,
     "updates": 29,
     "video-player": 75,

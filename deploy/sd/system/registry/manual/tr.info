@@ -12,5 +12,23 @@
     "synopsis": "tr <set1> <set2>   |   tr -d <set>",
     "description": "Replaces each character of set1 with the matching one in set2, or deletes them with -d. Sets are literal: no ranges or classes, to save bytes on the device.",
     "details": "NAME\n  tr - Translate or delete characters\n\nSYNOPSIS\n  tr <set1> <set2>   |   tr -d <set>\n\nDESCRIPTION\n  Replaces each character of set1 with the matching one in set2, or deletes them with -d. Sets are literal: no ranges or classes, to save bytes on the device.\n\nOPTIONS\n  -d SET\n    Delete every character in the set instead of translating.\n  If set2 is shorter than set1, its last character fills the rest.\n\nDEVICE COST\n  none\n\nSEE ALSO\n  cut(1), sort(1)\n\nEXAMPLES\n  echo hello | tr aeiou _\n  cat /data/f | tr -d \\r"
+  },
+  "fr": {
+    "title": "tr - Traduit ou supprime des caractères",
+    "synopsis": "tr <ens1> <ens2>   |   tr -d <ens>",
+    "description": "Remplace chaque caractère de ens1 par celui de ens2, ou les supprime avec -d. Les ensembles sont littéraux : ni intervalles ni classes, pour économiser des octets sur l'appareil.",
+    "details": "NOM\n  tr - Traduit ou supprime des caractères\n\nSYNOPSIS\n  tr <ens1> <ens2>   |   tr -d <ens>\n\nDESCRIPTION\n  Remplace chaque caractère de ens1 par celui de ens2, ou les supprime avec -d. Les ensembles sont littéraux : ni intervalles ni classes, pour économiser des octets sur l'appareil.\n\nOPTIONS\n  -d ENSEMBLE\n    Supprime chaque caractère de l'ensemble au lieu de le traduire.\n  Si ens2 est plus court que ens1, son dernier caractère complète le reste.\n\nCOÛT POUR L'APPAREIL\n  aucun\n\nVOIR AUSSI\n  cut(1), sort(1)\n\nEXEMPLES\n  echo bonjour | tr aeiou _\n  cat /data/f | tr -d \\r"
+  },
+  "es": {
+    "title": "tr - Traduce o elimina caracteres",
+    "synopsis": "tr <conj1> <conj2>   |   tr -d <conj>",
+    "description": "Sustituye cada carácter de conj1 por el de conj2, o los elimina con -d. Los conjuntos son literales: sin rangos ni clases, para ahorrar bytes en el dispositivo.",
+    "details": "NOMBRE\n  tr - Traduce o elimina caracteres\n\nSINOPSIS\n  tr <conj1> <conj2>   |   tr -d <conj>\n\nDESCRIPCIÓN\n  Sustituye cada carácter de conj1 por el de conj2, o los elimina con -d. Los conjuntos son literales: sin rangos ni clases, para ahorrar bytes en el dispositivo.\n\nOPCIONES\n  -d CONJUNTO\n    Elimina cada carácter del conjunto en lugar de traducirlo.\n  Si conj2 es más corto que conj1, su último carácter rellena el resto.\n\nCOSTE PARA EL DISPOSITIVO\n  ninguno\n\nVÉASE TAMBIÉN\n  cut(1), sort(1)\n\nEJEMPLOS\n  echo hola | tr aeiou _\n  cat /data/f | tr -d \\r"
+  },
+  "de": {
+    "title": "tr - Zeichen übersetzen oder löschen",
+    "synopsis": "tr <Satz1> <Satz2>   |   tr -d <Satz>",
+    "description": "Ersetzt jedes Zeichen aus Satz1 durch das entsprechende in Satz2, oder löscht sie mit -d. Sätze sind wörtlich: keine Bereiche oder Klassen, um Bytes auf dem Gerät zu sparen.",
+    "details": "NAME\n  tr - Zeichen übersetzen oder löschen\n\nÜBERSICHT\n  tr <Satz1> <Satz2>   |   tr -d <Satz>\n\nBESCHREIBUNG\n  Ersetzt jedes Zeichen aus Satz1 durch das entsprechende in Satz2, oder löscht sie mit -d. Sätze sind wörtlich: keine Bereiche oder Klassen, um Bytes auf dem Gerät zu sparen.\n\nOPTIONEN\n  -d SATZ\n    Löscht jedes Zeichen des Satzes, statt es zu übersetzen.\n  Ist Satz2 kürzer als Satz1, füllt sein letztes Zeichen den Rest.\n\nGERÄTEKOSTEN\n  keine\n\nSIEHE AUCH\n  cut(1), sort(1)\n\nBEISPIELE\n  echo hallo | tr aeiou _\n  cat /data/f | tr -d \\r"
   }
 }

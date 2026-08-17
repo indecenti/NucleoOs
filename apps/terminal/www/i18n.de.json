@@ -14,5 +14,9 @@
   "key_esc": "Zeile löschen (Esc)",
   "hist_unpaired": "Verlauf: nicht gekoppelt — nur diese Sitzung",
   "copy_ok": "in die Zwischenablage kopiert",
-  "copy_fail": "Kopieren fehlgeschlagen — Text markieren und das Browsermenü verwenden"
+  "copy_fail": "Kopieren fehlgeschlagen — Text markieren und das Browsermenü verwenden",
+  "man_which": "Welche Handbuchseite möchtest du?",
+  "man_description": "Beschreibung:",
+  "man_details": "Details:",
+  "man_none": "Kein Handbucheintrag für {cmd}"
 }

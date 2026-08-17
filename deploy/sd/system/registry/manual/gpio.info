@@ -12,5 +12,23 @@
     "synopsis": "gpio read <pin>   |   gpio write <pin> <0|1>",
     "description": "Raw pin I/O, within the firmware allowlist. A pin outside the list is refused by the device with an error, surfaced verbatim.",
     "details": "NAME\n  gpio - Read or write a pin\n\nSYNOPSIS\n  gpio read <pin>   |   gpio write <pin> <0|1>\n\nDESCRIPTION\n  Raw pin I/O, within the firmware allowlist. A pin outside the list is refused by the device with an error, surfaced verbatim.\n\nOPTIONS\n  read PIN\n    Read the pin level (readable: 0, 1, 2).\n  write PIN 0|1\n    Set the level (writable: 1, 2).\n\nDEVICE COST\n  one pin access per call\n\nSEE ALSO\n  ir(1), display(1)\n\nEXAMPLES\n  gpio read 1\n  gpio write 2 1"
+  },
+  "fr": {
+    "title": "gpio - Lit ou écrit une broche",
+    "synopsis": "gpio read <broche>   |   gpio write <broche> <0|1>",
+    "description": "E/S brute sur les broches, dans la liste autorisée du firmware. Une broche hors liste est refusée par l'appareil avec une erreur, restituée telle quelle.",
+    "details": "NOM\n  gpio - Lit ou écrit une broche\n\nSYNOPSIS\n  gpio read <broche>   |   gpio write <broche> <0|1>\n\nDESCRIPTION\n  E/S brute sur les broches, dans la liste autorisée du firmware. Une broche hors liste est refusée par l'appareil avec une erreur, restituée telle quelle.\n\nOPTIONS\n  read BROCHE\n    Lit le niveau de la broche (autorisées : 0, 1, 2).\n  write BROCHE 0|1\n    Règle le niveau (accessibles en écriture : 1, 2).\n\nCOÛT POUR L'APPAREIL\n  un accès broche par appel\n\nVOIR AUSSI\n  ir(1), display(1)\n\nEXEMPLES\n  gpio read 1\n  gpio write 2 1"
+  },
+  "es": {
+    "title": "gpio - Lee o escribe un pin",
+    "synopsis": "gpio read <pin>   |   gpio write <pin> <0|1>",
+    "description": "E/S en crudo sobre los pines, dentro de la lista permitida del firmware. Un pin fuera de la lista es rechazado por el dispositivo con un error, mostrado tal cual.",
+    "details": "NOMBRE\n  gpio - Lee o escribe un pin\n\nSINOPSIS\n  gpio read <pin>   |   gpio write <pin> <0|1>\n\nDESCRIPCIÓN\n  E/S en crudo sobre los pines, dentro de la lista permitida del firmware. Un pin fuera de la lista es rechazado por el dispositivo con un error, mostrado tal cual.\n\nOPCIONES\n  read PIN\n    Lee el nivel del pin (permitidos: 0, 1, 2).\n  write PIN 0|1\n    Fija el nivel (escribibles: 1, 2).\n\nCOSTE PARA EL DISPOSITIVO\n  un acceso a pin por llamada\n\nVÉASE TAMBIÉN\n  ir(1), display(1)\n\nEJEMPLOS\n  gpio read 1\n  gpio write 2 1"
+  },
+  "de": {
+    "title": "gpio - Einen Pin lesen oder schreiben",
+    "synopsis": "gpio read <Pin>   |   gpio write <Pin> <0|1>",
+    "description": "Roh-E/A an den Pins, innerhalb der Freigabeliste der Firmware. Ein Pin außerhalb der Liste wird vom Gerät mit einem Fehler abgelehnt, wörtlich weitergegeben.",
+    "details": "NAME\n  gpio - Einen Pin lesen oder schreiben\n\nÜBERSICHT\n  gpio read <Pin>   |   gpio write <Pin> <0|1>\n\nBESCHREIBUNG\n  Roh-E/A an den Pins, innerhalb der Freigabeliste der Firmware. Ein Pin außerhalb der Liste wird vom Gerät mit einem Fehler abgelehnt, wörtlich weitergegeben.\n\nOPTIONEN\n  read PIN\n    Liest den Pin-Pegel (lesbar: 0, 1, 2).\n  write PIN 0|1\n    Setzt den Pegel (schreibbar: 1, 2).\n\nGERÄTEKOSTEN\n  ein Pin-Zugriff pro Aufruf\n\nSIEHE AUCH\n  ir(1), display(1)\n\nBEISPIELE\n  gpio read 1\n  gpio write 2 1"
   }
 }

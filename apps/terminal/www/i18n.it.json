@@ -14,5 +14,9 @@
   "key_esc": "Cancella la riga (Esc)",
   "hist_unpaired": "cronologia: non accoppiato — solo per questa sessione",
   "copy_ok": "copiato negli appunti",
-  "copy_fail": "copia non riuscita — seleziona il testo e usa il menu del browser"
+  "copy_fail": "copia non riuscita — seleziona il testo e usa il menu del browser",
+  "man_which": "Quale pagina di manuale desideri?",
+  "man_description": "Descrizione:",
+  "man_details": "Dettagli:",
+  "man_none": "Nessuna voce di manuale per {cmd}"
 }
