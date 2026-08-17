@@ -581,6 +581,13 @@ static struct {
     char clarify_opt[2][32];   // L0 app clarify: the two app ids we proposed ("" = none pending)
     bool clarify_l1;           // L1 knowledge clarify pending (the dialogic band)
     long clarify_ans[2];       // the two AKB answer offsets offered, resolved by "1"/"2"
+    // WHICH PERSON clarify ("intendi Donald Trump o Fred Trump?"). The offered people are kept as
+    // indices into the flash table, never as strings — 6 bytes instead of 120. Indices, not a group
+    // + ordinal: when the query narrows a group, option 2 is NOT group member 2, and deriving it
+    // positionally would answer about the wrong person. Resolved by RE-ASKING with the full name, so
+    // the answer still comes from a real card through the normal cascade.
+    uint16_t clarify_person_opt[3];
+    uint8_t  clarify_person_n; // how many options were offered (0 = none pending)
     char skill_clarify[32];    // knowledge<->skill clarify: the bare topic ("fisica") awaiting "spiegami" vs "calcola"
     // Working-memory ring (most recent ANIMA_RING turns). `input` is stored only for turns
     // that produced a real action (so "ripeti"/"again" can replay the last actionable one).
@@ -712,7 +719,8 @@ static bool a_is_repeat(const char *input)
     return di && nu;
 }
 
-// "1"/"primo"/"first" -> 0, "2"/"secondo"/"second" -> 1, else -1 (resolving a clarify pick).
+// "1"/"primo"/"first" -> 0, "2"/"secondo"/"second" -> 1, "3"/"terzo"/"third" -> 2, else -1
+// (resolving a clarify pick). The two-option L1 band must reject 2 itself — see its call site.
 static int a_pick_ordinal(const char *input)
 {
     char tok[A_MAX_TOKENS][A_TOK_LEN];
@@ -721,8 +729,186 @@ static int a_pick_ordinal(const char *input)
     for (int t = 0; t < n; t++) {
         if (!strcmp(tok[t],"1")||!strcmp(tok[t],"primo")||!strcmp(tok[t],"prima")||!strcmp(tok[t],"first")||!strcmp(tok[t],"uno")||!strcmp(tok[t],"one")) return 0;
         if (!strcmp(tok[t],"2")||!strcmp(tok[t],"secondo")||!strcmp(tok[t],"seconda")||!strcmp(tok[t],"second")||!strcmp(tok[t],"due")||!strcmp(tok[t],"two")) return 1;
+        if (!strcmp(tok[t],"3")||!strcmp(tok[t],"terzo")||!strcmp(tok[t],"terza")||!strcmp(tok[t],"third")||!strcmp(tok[t],"tre")||!strcmp(tok[t],"three")) return 2;
     }
     return -1;
+}
+
+// ---- AMBIGUOUS PERSON NAMES ------------------------------------------------------------------
+// Ten people in the corpus are called Trump, four Kennedy, four King. Asked a bare surname,
+// retrieval used to answer with whichever card scored highest and state it as fact: "chi è Trump"
+// returned Frederick Christ Trump Sr. at 82%, "chi è Kennedy" returned Ethel at 80%. The cards are
+// real, which is what makes it worse than a miss — a coin flip that reads as verified.
+//
+// Cosine cannot decide this. The existing dialogic band needs the top two within 0.08 of each other
+// inside [0.82, 0.85); a bare surname scores 0.55-0.72, and "chi è Kennedy" separates its top two by
+// 0.186 — confidently wrong. So the question is answered from an EXACT fact instead: how many people
+// in the corpus carry this surname (anima_person_ambig.h, generated from the corpus, flash-resident,
+// no heap). Two or more, with nothing in the query to single one out -> ask rather than guess.
+#include "anima_person_ambig.h"
+
+// Words a person question wraps its subject in — taken from the phrasings the corpus itself indexes
+// ("chi è X", "cosa sai di X", "parlami di X", "who was X", "tell me about X"). A token that is
+// neither one of these nor part of a candidate's name means the query is asking something we did not
+// model, so we stay out of the way and let the normal cascade answer. Erring here costs a missed
+// clarify, never a wrong one.
+static const char *const A_PERSON_LEAD[] = {
+    "chi","che","cosa","cos","come","quando","dove","perche","quale","quali","conosci","conosce",
+    "parlami","parla","sai","sapresti","dimmi","raccontami","hai","mai","sentito","sentita","era","erano",
+    "stato","stata","sono","essere","del","della","dello","dei","degli","delle","dell","di","su","sul",
+    "sulla","sullo","sui","sugli","sulle","il","lo","la","gli","famoso","famosa","famose","famosi","fatto",
+    "the","who","was","were","is","are","been","what","when","where","why","which","tell","know","about",
+    "did","does","done","you","your","ever","heard","for","famous","some","something","anything","more",
+    "much","and","give",
+    NULL };
+
+static bool a_person_lead(const char *w)
+{
+    for (int i = 0; A_PERSON_LEAD[i]; i++) if (!strcmp(w, A_PERSON_LEAD[i])) return true;
+    return false;
+}
+
+// Is `w` one of the space-separated given names in `given`?
+static bool a_given_has(const char *given, const char *w)
+{
+    size_t lw = strlen(w);
+    for (const char *p = given; *p; ) {
+        const char *e = strchr(p, ' '); size_t l = e ? (size_t)(e - p) : strlen(p);
+        if (l == lw && !strncmp(p, w, l)) return true;
+        if (!e) break;
+        p = e + 1;
+    }
+    return false;
+}
+
+// Fill `out` with the people a query could mean, most prominent first (the corpus is curated in that
+// order). Returns the count, which is >= 2 only when the query genuinely fails to single one out:
+// "chi è Trump" -> 10, "chi è Donald Trump" -> 0 (one match, answer it normally), "chi è Einstein"
+// -> 0 (only one Einstein exists). `grp` receives the surname-group index so the pick can be
+// resolved later without keeping any strings in the session.
+static int a_person_ambig(const char *q, const anima_person_t **out, int cap, uint16_t *grp)
+{
+    char tok[A_MAX_TOKENS][A_TOK_LEN];
+    int n = a_tokenize(q, tok);
+    if (n == 0 || n > 8) return 0;                    // a long sentence is not a bare "who is X"
+
+    // Find the surname. A name ends with it ("Donald TRUMP"), so scan from the right.
+    const anima_surname_t *g = NULL; int si = -1;
+    for (int i = n - 1; i >= 0 && !g; i--) {
+        int lo = 0, hi = ANIMA_SURNAME_N - 1;
+        while (lo <= hi) {
+            int m = (lo + hi) / 2, c = strcmp(ANIMA_SURNAME[m].surname, tok[i]);
+            if (c == 0) { g = &ANIMA_SURNAME[m]; si = i; break; }
+            if (c < 0) lo = m + 1; else hi = m - 1;
+        }
+    }
+    if (!g) return 0;
+
+    // Every other token must be a lead word or a given name of someone in the group. Anything else
+    // ("chi ha scritto IT di King") means this is not a bare identity question -> do not clarify.
+    // Tokens that ARE given names narrow the group; when they narrow it to one, there is no ambiguity.
+    int matched = 0;
+    for (int i = 0; i < n; i++) {
+        if (i == si || strlen(tok[i]) < 2) continue;
+        if (a_person_lead(tok[i])) continue;
+        bool is_given = false;
+        for (int k = 0; k < g->n; k++) if (a_given_has(ANIMA_PERSON[g->off + k].given, tok[i])) { is_given = true; break; }
+        if (!is_given) return 0;
+        matched++;
+    }
+
+    // A name token the query does NOT say is as telling as one it does. "Donald Trump" and "Donald
+    // Trump Jr." share every token the query supplies, so narrowing alone keeps both — yet only the
+    // father's name is fully spelled, the son's needs a "Jr." nobody typed. So: among the candidates
+    // whose name the query spells COMPLETELY, the most specific one (most name tokens) is who was
+    // asked for. "Michael Jordan" resolves to the player; "Michael B. Jordan" to the actor; "Donald
+    // Trump Jr." to the son. Only a genuine tie is worth a question.
+    int best_spec = -1, best_cnt = 0;
+    for (int k = 0; k < g->n; k++) {
+        const char *gv = ANIMA_PERSON[g->off + k].given;
+        int spec = 0; bool complete = true;
+        for (const char *p = gv; *p && complete; ) {
+            const char *e = strchr(p, ' '); size_t l = e ? (size_t)(e - p) : strlen(p);
+            bool found = false;
+            for (int i = 0; i < n && !found; i++)
+                if (i != si && strlen(tok[i]) == l && !strncmp(tok[i], p, l)) found = true;
+            if (found) spec++; else complete = false;
+            if (!e) break;
+            p = e + 1;
+        }
+        if (!complete) continue;
+        if (spec > best_spec) { best_spec = spec; best_cnt = 1; }
+        else if (spec == best_spec) best_cnt++;
+    }
+    if (matched && best_cnt == 1 && best_spec > 0) return 0;   // the query named one person outright
+
+    int cnt = 0, survivors = 0;
+    for (int k = 0; k < g->n; k++) {
+        const anima_person_t *p = &ANIMA_PERSON[g->off + k];
+        if (matched) {                                 // keep only people consistent with EVERY name token given
+            bool all = true;
+            for (int i = 0; i < n && all; i++) {
+                if (i == si || strlen(tok[i]) < 2 || a_person_lead(tok[i])) continue;
+                if (!a_given_has(p->given, tok[i])) all = false;
+            }
+            if (!all) continue;
+        }
+        survivors++;                                   // counted BEFORE the cap: it is what "N more" means
+        if (cnt < cap) out[cnt++] = p;
+    }
+    if (cnt < 2) return 0;                             // singled out, or nothing left -> answer normally
+    // `total` is the number of people the query could still mean, NOT the size of the surname group:
+    // after "chi è Arthur Guinness" narrows five Guinnesses to two Arthurs, saying "3 more carry that
+    // name" would count people who are not candidates at all.
+    if (grp) *grp = (uint16_t)survivors;
+    return cnt;
+}
+
+// The other half of the same fact. A surname only ONE person carries does not need a question — it
+// needs the full name. "who was einstein" scored 0.682 against a corpus that only ever phrases that
+// card as "who was Albert Einstein", just under the 0.72 rescue floor, so English refused while
+// Italian squeaked through at 0.722. Rather than lower a gate that exists to stop hallucinations,
+// resolve the surname and ask again properly.
+//
+// Returns the full name, or NULL. The caller runs this ONLY after the cascade has already decided to
+// refuse, so it cannot displace a correct answer — the worst case is that the retry also refuses.
+static const char *a_person_unique(const char *q)
+{
+    char tok[A_MAX_TOKENS][A_TOK_LEN];
+    int n = a_tokenize(q, tok);
+    if (n == 0 || n > 6) return NULL;
+
+    // "e newton?" / "and newton?" names a unique surname, but it is a CONTINUATION, not a question:
+    // it means "the same thing I just asked, about Newton". Answering it on its own would resolve it
+    // in a cold session that has nothing to continue, and would pre-empt the focus tier that carries
+    // the thread. A leading conjunction is the whole signature.
+    static const char *const cont[] = { "e","ed","ma","poi","allora","oppure","o",
+                                        "and","but","then","or","also", NULL };
+    for (int i = 0; cont[i]; i++) if (!strcmp(tok[0], cont[i])) return NULL;
+
+    const anima_surname_t *g = NULL; int si = -1;
+    for (int i = n - 1; i >= 0 && !g; i--) {
+        int lo = 0, hi = ANIMA_SURNAME_N - 1;
+        while (lo <= hi) {
+            int m = (lo + hi) / 2, c = strcmp(ANIMA_SURNAME[m].surname, tok[i]);
+            if (c == 0) { g = &ANIMA_SURNAME[m]; si = i; break; }
+            if (c < 0) lo = m + 1; else hi = m - 1;
+        }
+    }
+    if (!g || g->n != 1) return NULL;                  // shared surnames are a question, not a retry
+
+    const anima_person_t *p = &ANIMA_PERSON[g->off];
+    // Same strictness as the clarify: every other token must be a question lead-in or part of this
+    // person's name. It is what keeps "cos'è una rose" from being answered with a K-pop singer.
+    bool adds = false;
+    for (int i = 0; i < n; i++) {
+        if (i == si || strlen(tok[i]) < 2) continue;
+        if (a_person_lead(tok[i])) continue;
+        if (!a_given_has(p->given, tok[i])) return NULL;
+        adds = true;
+    }
+    if (adds) return NULL;              // the query already spells the given name: retrying adds nothing
+    return p->display;
 }
 
 // Calendar agenda (computed-from-state): "che impegni ho oggi", "cosa devo fare oggi", "chi devo
@@ -2765,6 +2951,45 @@ static bool foc_frame_of(const char *q, char *pre, size_t pcap, char *post, size
     return pre[0] || post[0];
 }
 
+// A CORRECTION is not a connector. "e la musica?" can honestly be a fresh question about music;
+// "no, la musica" cannot — it rejects what just happened and re-aims it. That difference is why the
+// two get different privileges below: a connector waits for the cascade to miss, a correction does
+// not have to, because answering it as a new question is already the wrong reading.
+static const char *const A_CORRECT[] = { "no","non","nope","not","nah","anzi","piuttosto","invece",
+                                         "instead", NULL };
+static bool foc_is_correction(const char *w)
+{
+    for (int i = 0; A_CORRECT[i]; i++) if (!strcmp(A_CORRECT[i], w)) return true;
+    return false;
+}
+
+// Rebuild a lead-led continuation into a whole turn using the remembered frame: "apri le foto"
+// followed by "no, la musica" becomes "apri le musica". Shared by both continuation paths so they
+// cannot drift apart. `correction` reports whether the lead REJECTED the previous turn.
+static bool foc_rebuild(const char *q, char *out, size_t cap, bool *correction)
+{
+    if (correction) *correction = false;
+    if (!(s_session.frame_pre[0] || s_session.frame_post[0])) return false;
+    if ((s_session.turn - s_session.frame_turn) > 8) return false;      // stale frame: nothing to reuse
+
+    char ctok[A_MAX_TOKENS][A_TOK_LEN]; int cnt = a_tokenize(q, ctok);
+    int s0 = 0;
+    while (s0 < cnt && foc_is_lead(ctok[s0])) s0++;
+    // At least one leading connector/correction/article, then 1..3 content tokens, and no question
+    // word of its own (that shape belongs to the structured relation shift, not here).
+    if (!(s0 >= 1 && cnt - s0 >= 1 && cnt - s0 <= 3 && !a_has_qword(ctok, cnt))) return false;
+
+    char ent[64]; int o = 0; ent[0] = 0;
+    for (int t = s0; t < cnt && o + 1 < (int)sizeof ent; t++)
+        o += snprintf(ent + o, sizeof ent - o, "%s%s", o ? " " : "", ctok[t]);
+    if (strlen(ent) < 2) return false;
+
+    if (correction) for (int t = 0; t < s0; t++) if (foc_is_correction(ctok[t])) { *correction = true; break; }
+    snprintf(out, cap, "%s%s%s%s%s", s_session.frame_pre, s_session.frame_pre[0] ? " " : "", ent,
+             s_session.frame_post[0] ? " " : "", s_session.frame_post);
+    return true;
+}
+
 static int try_cascade(const char *q, bool en, anima_result_t *r)
 {
     char topic[160];
@@ -3155,9 +3380,11 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
 
     // Resolve a pending L1 knowledge clarify ("intendi 1) … o 2) …?"): an ordinal picks one of
     // the two offered cards. Not a pick -> drop the clarify and handle the input normally.
+    // Only two options are ever offered here, so a "3" (which a_pick_ordinal now understands, for the
+    // person clarify below) must NOT index clarify_ans[2].
     if (s_session.clarify_l1) {
         int pick = a_pick_ordinal(input);
-        if (pick >= 0 && nucleo_anima_l1_read(s_session.clarify_ans[pick], en, &r)) {
+        if (pick >= 0 && pick <= 1 && nucleo_anima_l1_read(s_session.clarify_ans[pick], en, &r)) {
             s_session.clarify_l1 = false; r.from_memory = 1;
             snprintf(r.state, sizeof(r.state), "clarify");
             snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", input);   // enable "tell me more"
@@ -3165,6 +3392,25 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
             goto done;
         }
         s_session.clarify_l1 = false;
+    }
+
+    // Resolve a pending WHICH-PERSON clarify. The pick is not answered from here: the full name
+    // replaces the query and the normal cascade answers it (a full name retrieves its card at 100%).
+    // That keeps one answer path, so a clarify can never assert anything the corpus does not hold.
+    char person_pick[64];
+    bool person_resolved = false;
+    if (s_session.clarify_person_n) {
+        int pick = a_pick_ordinal(input);
+        uint8_t noff = s_session.clarify_person_n;
+        s_session.clarify_person_n = 0;
+        if (pick >= 0 && pick < noff) {
+            snprintf(person_pick, sizeof person_pick, "%s",
+                     ANIMA_PERSON[s_session.clarify_person_opt[pick]].display);
+            q = person_pick;
+            person_resolved = true;
+        }
+        // Not an ordinal: the clarify is dropped and the input handled normally — the user may well
+        // have answered by typing the name itself, which the cascade resolves on its own.
     }
 
     // Resolve a pending KNOWLEDGE<->SKILL clarify ("vuoi sapere cos'è X o calcolarlo?"). Map the reply
@@ -3444,6 +3690,57 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
         }
     }
 
+    // CORRECTING THE LAST COMMAND. "apri le foto" then "no, la musica" opened the photo viewer and
+    // then explained what music IS — because the lexical carry-over waits for the cascade to miss,
+    // and L1 happily answers "la musica" at 81%. A correction cannot be a fresh question, so it is
+    // tried first; but it is accepted ONLY if the rebuilt turn actually re-aims an ACTION, which is
+    // what keeps it from hijacking "no, la musica classica mi piace di più" into launching a player.
+    {
+        char rebuilt[176]; bool corr = false;
+        if (foc_rebuild(q, rebuilt, sizeof rebuilt, &corr) && corr) {
+            anima_result_t fr;
+            if (try_cascade(rebuilt, en, &fr) && fr.action != ANIMA_ACT_ANSWER && fr.tier != ANIMA_TIER_NONE) {
+                r = fr;
+                snprintf(r.state, sizeof r.state, "followup");
+                snprintf(r.corrected, sizeof r.corrected, "%s", rebuilt);
+                mem_update(&r);
+                s_session.dirty = true;
+                goto done;
+            }
+        }
+    }
+
+    // WHICH PERSON? A bare shared surname is answered with a question, not with the highest-scoring
+    // namesake. This runs BEFORE the cascade because both tiers below would otherwise assert: L1
+    // answered "who is Trump" with Eric Trump at 80%, and L2 stitched fragments of Fred Trump at 82%.
+    // The check is exact and lexical (no embedding, no SD read), so the cost of getting here is a
+    // binary search over 84 surnames.
+    // Skipped right after a pick: the chosen full name can itself be a shared one ("Arthur Guinness"
+    // names two people), and asking about it again would loop the same question forever.
+    if (!person_resolved) {
+        const anima_person_t *opt[3]; uint16_t total = 0;
+        int nopt = a_person_ambig(q, opt, 3, &total);
+        if (nopt >= 2) {
+            memset(&r, 0, sizeof r);
+            r.tier = ANIMA_TIER_FACT; r.action = ANIMA_ACT_ANSWER; r.awaiting = 1; r.confidence = 0;
+            snprintf(r.intent, sizeof r.intent, "clarify");
+            snprintf(r.state, sizeof r.state, "clarify");
+            int w = snprintf(r.reply, sizeof r.reply, en ? "Which one do you mean: " : "Quale intendi: ");
+            for (int i = 0; i < nopt && w < (int)sizeof r.reply; i++)
+                w += snprintf(r.reply + w, sizeof r.reply - w, "%s%d) %s", i ? "  " : "", i + 1, opt[i]->display);
+            if (total > nopt && w < (int)sizeof r.reply)
+                snprintf(r.reply + w, sizeof r.reply - w,
+                         (total - nopt) == 1 ? (en ? "  (1 more carries that name)" : "  (un'altra persona porta quel nome)")
+                                             : (en ? "  (%d more carry that name)"  : "  (altre %d persone portano quel nome)"),
+                         total - nopt);
+            else if (w < (int)sizeof r.reply)
+                snprintf(r.reply + w, sizeof r.reply - w, "?");
+            for (int i = 0; i < nopt; i++) s_session.clarify_person_opt[i] = (uint16_t)(opt[i] - ANIMA_PERSON);
+            s_session.clarify_person_n = (uint8_t)nopt;
+            goto done;
+        }
+    }
+
     g_anima_phase = 0x03;                  // DIAG: try_cascade (L0/L1)
     if (try_cascade(q, en, &r)) {
         // Self-improving knowledge: an L1 fact hit that was LEARNED without Grok gets re-vetted now that
@@ -3477,6 +3774,24 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
         char fixed[160];
         if (a_spellfix(q, fixed, sizeof(fixed)) && try_cascade(fixed, en, &r)) {
             snprintf(r.corrected, sizeof(r.corrected), "%.*s", (int)sizeof(r.corrected) - 1, fixed);   // "ho inteso: …"
+            goto done;
+        }
+    }
+
+    // SURNAME RESOLUTION — a sibling of the spellfix retry: the query is not misspelled, it is
+    // under-specified. Only one person in the corpus is called Einstein, so "who was einstein" (0.682,
+    // just under the rescue floor that "chi è einstein" cleared at 0.722) is not a genuine miss and
+    // certainly not a language difference. Retry with the full name the corpus indexes. Placed here,
+    // before the online tiers, so a question we can already answer from our own cards never costs a
+    // network round-trip — and after the cascade, so it can only convert a refusal into an answer.
+    // NOT for a follow-up fragment. "e newton?" names a unique surname too, but it is a question ABOUT
+    // the running thread, and resolving it context-free would answer a cold session that must abstain
+    // — and would pre-empt the coreference tier that gives the thread its continuity.
+    {
+        const char *full = a_is_followup_q(q) ? NULL : a_person_unique(q);
+        if (full && try_cascade(full, en, &r)) {
+            snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", full);   // "tell me more" follows the person
+            mem_update(&r); s_session.dirty = true;
             goto done;
         }
     }
@@ -3521,32 +3836,18 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // bare connector-led continuation ("e newton?") once the normal cascade has already missed, and
     // only while the remembered frame is fresh. The rebuilt question goes through the ordinary
     // cascade, so a re-aim that doesn't retrieve anything stays an honest miss.
-    if (r.tier == ANIMA_TIER_NONE && (s_session.frame_pre[0] || s_session.frame_post[0]) &&
-        (s_session.turn - s_session.frame_turn) <= 8) {
-        char ctok[A_MAX_TOKENS][A_TOK_LEN]; int cnt = a_tokenize(q, ctok);
-        int s0 = 0;
-        while (s0 < cnt && foc_is_lead(ctok[s0])) s0++;
-        // A continuation is: at least one leading connector/correction/article, then 1..3 content
-        // tokens, and no question word of its own (that shape belongs to the RELATION shift above).
-        if (s0 >= 1 && cnt - s0 >= 1 && cnt - s0 <= 3 && !a_has_qword(ctok, cnt)) {
-            char ent[64]; int o = 0; ent[0] = 0;
-            for (int t = s0; t < cnt && o + 1 < (int)sizeof ent; t++)
-                o += snprintf(ent + o, sizeof ent - o, "%s%s", o ? " " : "", ctok[t]);
-            if (strlen(ent) >= 2) {
-                char rebuilt[176];
-                snprintf(rebuilt, sizeof rebuilt, "%s%s%s%s%s",
-                         s_session.frame_pre, s_session.frame_pre[0] ? " " : "", ent,
-                         s_session.frame_post[0] ? " " : "", s_session.frame_post);
-                anima_result_t fr;
-                if (try_cascade(rebuilt, en, &fr)) {
-                    r = fr;
-                    snprintf(r.state, sizeof r.state, "followup");
-                    snprintf(r.corrected, sizeof r.corrected, "%s", rebuilt);  // show what we re-asked
-                    mem_update(&r);
-                    snprintf(s_mem.last_topic, sizeof s_mem.last_topic, "%s", rebuilt);
-                    s_session.dirty = true;
-                    goto done;
-                }
+    if (r.tier == ANIMA_TIER_NONE) {
+        char rebuilt[176];
+        if (foc_rebuild(q, rebuilt, sizeof rebuilt, NULL)) {
+            anima_result_t fr;
+            if (try_cascade(rebuilt, en, &fr)) {
+                r = fr;
+                snprintf(r.state, sizeof r.state, "followup");
+                snprintf(r.corrected, sizeof r.corrected, "%s", rebuilt);  // show what we re-asked
+                mem_update(&r);
+                snprintf(s_mem.last_topic, sizeof s_mem.last_topic, "%s", rebuilt);
+                s_session.dirty = true;
+                goto done;
             }
         }
     }

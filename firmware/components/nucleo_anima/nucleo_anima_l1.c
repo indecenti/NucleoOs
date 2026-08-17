@@ -641,7 +641,9 @@ static bool l1_band_option(long ansoff, const char *query, bool en, char *out, i
 
 // Top-2 DISTINCT candidates (distinct answer offset) from the most recent query — the substrate
 // for the dialogic clarify band. Updated on every nucleo_anima_l1_query() call.
-static struct { float c1, c2; long a1, a2; } s_band;
+// `person` records that the search that produced these candidates ran over the person.bin SHARD, which
+// is what lets the person-ambiguity probe below run without re-searching (see nucleo_anima_l1_person).
+static struct { float c1, c2; long a1, a2; bool person; } s_band;
 
 // EVIDENCE-COVERAGE guard (conformal "answer only if the evidence covers the question's scope").
 // A RESCUE-band match (mid cosine, distinctly-best AMONG MY CARDS) can still be a GLOBAL default
@@ -1085,6 +1087,28 @@ extern int a_damlev(const char *a, const char *b, int max);   // exported from a
 // ("marte") or the property ("followers"/"capitale") uncovered -> abstain. Question/lead-in words are not
 // salient (so "qual è la capitale di X" hinges on capitale+X, not on "qual"). Flat is untouched: it keeps
 // its competition-based gating, so this never changes the shipped default. See nl-stress / cross-topic.
+// PREMISE MARKERS — the half of the premise guard that is safe on EVERY path, split out so it can run
+// flat as well as sharded. It is a closed list of words that name WHAT is being asked, not what it is
+// being asked about: if the query says "twittato" and the matched card never mentions tweeting, the
+// card is not answering the question, however well the entity matched. That is a different claim from
+// "every salient word must appear" — the broad version killed 52 legitimate semantic recalls — and it
+// is why this one can be trusted without a competition gate behind it.
+//
+// Both arguments must already be lowercased.
+static bool l1_marker_covered(const char *q, const char *c)
+{
+    static const char *const social[] = { "twittato","twitta","tweet","twitter","followers","follower",
+        "instagram","tiktok","hashtag","postato","snapchat","facebook","youtube","retweet","stories",
+        "email","gmail","whatsapp", /* modern channels: anachronistic for historical persons */
+        // FACTUAL-ATTRIBUTE markers: a country card states only the capital, so "valuta/lingua/popolazione
+        // del Giappone" matched it and answered the capital (wrong attribute). If the asked attribute word
+        // isn't in the card, that's a category misroute -> abstain (ANIMA has no currency/language data).
+        "valuta","moneta","currency","lingua","language","popolazione","abitanti","population","inhabitants",
+        "continente","continent", NULL };
+    for (int s = 0; social[s]; s++) if (l1_word_in(q, social[s]) && !l1_word_in(c, social[s])) return false;
+    return true;
+}
+
 static bool l1_premise_covered(const char *query, const char *reply)
 {
     if (!reply || !reply[0]) return true;                       // nothing to check against -> don't block
@@ -1100,15 +1124,7 @@ static bool l1_premise_covered(const char *query, const char *reply)
     //      isn't in the matched card it's a deflection to an unrelated true fact -> abstain.
     //  (2) CAPITAL look-ups — the char-ngram encoder confuses short country names ("capitale di Marte" ~
     //      Malta) and a topical card answers a celestial body ("capitale della Luna" -> Moon).
-    static const char *const social[] = { "twittato","twitta","tweet","twitter","followers","follower",
-        "instagram","tiktok","hashtag","postato","snapchat","facebook","youtube","retweet","stories",
-        "email","gmail","whatsapp", /* modern channels: anachronistic for historical persons */
-        // FACTUAL-ATTRIBUTE markers: a country card states only the capital, so "valuta/lingua/popolazione
-        // del Giappone" matched it and answered the capital (wrong attribute). If the asked attribute word
-        // isn't in the card, that's a category misroute -> abstain (ANIMA has no currency/language data).
-        "valuta","moneta","currency","lingua","language","popolazione","abitanti","population","inhabitants",
-        "continente","continent", NULL };
-    for (int s = 0; social[s]; s++) if (l1_word_in(q, social[s]) && !l1_word_in(c, social[s])) return false;
+    if (!l1_marker_covered(q, c)) return false;
     bool q_cap = l1_word_in(q, "capitale") || l1_word_in(q, "capital");
     if (!q_cap) return true;                                  // not a capital query -> no guard
     if (!(l1_word_in(c, "capitale") || l1_word_in(c, "capital")))
@@ -1394,7 +1410,12 @@ int nucleo_anima_l1_query(const char *text, bool en, bool want_detail, anima_res
         }
     }
     s_band.c1 = bestcos; s_band.a1 = best_ansoff; s_band.c2 = secondcos; s_band.a2 = second_ansoff;
+    s_band.person = s_in_akb5 && strstr(s_shard_path, "person.bin") != NULL;
 #ifdef ANIMA_HOST
+    if (getenv("ANIMA_L1_BAND"))
+        fprintf(stderr, "L1BAND c1=%.3f a1=%ld  c2=%.3f a2=%ld  margin=%.3f  person=%d  shard=%s\n",
+                bestcos, best_ansoff, secondcos, second_ansoff, bestcos - secondcos,
+                (int)s_band.person, s_in_akb5 ? s_shard_path : "(flat)");
     if (s_sig_base && getenv("ANIMA_L1_STATS")) {
         long ed = s_st_cand, fd = s_st_surv, sb = s_st_cand * s_sigb + s_st_surv * (s_D + 4);
         long eb = s_st_cand * (long)(s_D + 4);
@@ -1455,8 +1476,20 @@ int nucleo_anima_l1_query(const char *text, bool en, bool want_detail, anima_res
     // to the rescue band: at the absolute gate the same check muted legit identity/greeting/hyphenated cards
     // ("come ti chiami" -> "Sono ANIMA"; "wifi" -> "Wi-Fi") whose answer rightly omits the query token.
     if (is_rescue && !lex_ok && l1_lone_uncovered(text, out->reply)) { memset(out, 0, sizeof *out); return 0; }
-    // AKB5 only: the sharded path has no global runner-up to pull a false premise into the clarify band,
-    // so require full premise+entity coverage instead. Flat (s_in_akb5 == false) keeps its competition gate.
+    // PREMISE COVERAGE. The full guard (markers + the capital-lookup rules) stays AKB5-only: the
+    // sharded path has no global runner-up to pull a false premise into the clarify band, while flat
+    // keeps its competition gate. But the assumption that competition covered the SAME ground was not
+    // true — "quando ha twittato Cristoforo Colombo" retrieved the discovery card at 0.770 with a
+    // 0.340 margin, sailed past every rescue guard on the strength of the ENTITY alone, and answered
+    // about 1492. So the MARKER half, which is narrow by construction, now runs on both paths; the
+    // capital half does not, because its country-token rule reads a typo'd article as the country
+    // ("capitale dela francia" -> abstain), which flat reaches via the spellfix rescue and AKB5 doesn't.
+    if (out->action == ANIMA_ACT_ANSWER) {
+        char lq[200], lc[400]; size_t li;
+        for (li = 0; text[li] && li + 1 < sizeof lq; li++) lq[li] = (char)tolower((unsigned char)text[li]); lq[li] = 0;
+        for (li = 0; out->reply[li] && li + 1 < sizeof lc; li++) lc[li] = (char)tolower((unsigned char)out->reply[li]); lc[li] = 0;
+        if (!l1_marker_covered(lq, lc)) { memset(out, 0, sizeof *out); return 0; }
+    }
     if (s_in_akb5 && out->action == ANIMA_ACT_ANSWER && !l1_premise_covered(text, out->reply)) {
         memset(out, 0, sizeof *out); return 0;
     }

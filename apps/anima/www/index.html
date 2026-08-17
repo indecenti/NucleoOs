@@ -4092,7 +4092,15 @@
     }
     function endTurn(){ busy=false; setStop(false); input.focus(); scrollDown(); updateMeter(); }
     function setStop(on){ sendBtn.textContent = on ? 'Stop' : (TR('Invia', 'Send')); sendBtn.classList.toggle('stop',on); }
-    function parseClarify(reply){ const m=reply.match(/,\s*([^?]+?)\s+(?:o|or)\s+([^?]+?)\?/i); return m?[m[1].trim(),m[2].trim()]:null; }
+    // Two shapes: the dialogic band asks ", A o B?"; the which-person clarify numbers its options
+    // ("Quale intendi: 1) Donald Trump 2) Melania Trump (altre 7 …)") because it can offer three.
+    // Numbered first — it is unambiguous, and an option's own text may contain "or".
+    function parseClarify(reply){
+      const text=String(reply||''), body=text.replace(/\s*\([^)]*\)\s*$/,'').replace(/\?\s*$/,'');
+      // "1) A  o  2) B": the connector trails the option it follows, so strip it off the option text.
+      if(/\d\)/.test(body)){ const o=body.split(/\s*\d\)\s*/).slice(1).map(s=>s.trim().replace(/\s+(?:o|or)\s*$/i,'').trim()).filter(Boolean); if(o.length>=2) return o; }
+      const m=text.match(/,\s*([^?]+?)\s+(?:o|or)\s+([^?]+?)\?/i); return m?[m[1].trim(),m[2].trim()]:null;
+    }
 
     // ---- message actions: regenerate / edit / branch --------------------------
     function precedingUser(hidx){ for(let i=hidx-1;i>=0;i--) if(history[i].role==='user') return i; return -1; }

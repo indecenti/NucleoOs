@@ -280,6 +280,25 @@ function addActions(turn, actions) {
   }
   turn.appendChild(row); scrollDown();
 }
+// A clarify question comes in two shapes and both must become chips, or the user is left retyping a
+// name the assistant just printed. The engine's dialogic band asks "…, A o B?"; the which-person
+// clarify numbers its options ("Quale intendi: 1) Donald Trump 2) Melania Trump (altre 7 …)") because
+// it can offer three. Numbered form is tried first: it is unambiguous, and its option text can itself
+// contain "or".
+export function parseClarify(reply) {
+  const text = String(reply || '');
+  const body = text.replace(/\s*\([^)]*\)\s*$/, '').replace(/\?\s*$/, '');
+  if (/\d\)/.test(body)) {
+    // The band writes "1) A  o  2) B", so the connector trails the option it follows — strip it, or
+    // the chip would offer to ask about "il fiume più lungo o".
+    const opts = body.split(/\s*\d\)\s*/).slice(1)
+      .map((s) => s.trim().replace(/\s+(?:o|or)\s*$/i, '').trim()).filter(Boolean);
+    if (opts.length >= 2) return opts;
+  }
+  const m = text.match(/[,—–-]\s*([^?]+?)\s+(?:o|or)\s+([^?]+?)\?/i);
+  return m ? [m[1].trim(), m[2].trim()] : null;
+}
+
 function addClarify(turn, options) {
   const row = el('div', 'cp-chips');
   for (const opt of options) {
@@ -494,9 +513,8 @@ function dispatch(r, turn) {
     else if (r.intent === 'storage' || r.intent === 'ram') { api.refreshStatus(); const mon = api.byId('system-monitor'); if (mon) addActions(turn, [{ label: T().openMon, fn: () => { api.WM.open(mon); closeBar(); } }]); }
     else if (r.intent === 'network') { const s = api.byId('settings'); if (s) addActions(turn, [{ label: T().openSet, fn: () => { api.WM.open(s); closeBar(); } }]); }
   } else if (r.intent === 'clarify') {
-    // pull the two "…, A o B?" / "… — A or B?" options out of the question text
-    const m = reply_(r).match(/[,—–-]\s*([^?]+?)\s+(?:o|or)\s+([^?]+?)\?/i);
-    if (m) addClarify(turn, [m[1].trim(), m[2].trim()]);
+    const opts = parseClarify(reply_(r));
+    if (opts) addClarify(turn, opts);
   } else if (r.action === 'none') {
     // honest miss — leave the dontknow reply, no action
   }

@@ -71,6 +71,17 @@ const gates = [
     // Catches the "stale index at the old dim" (load_index rejects → L1 silently disabled) and the
     // "forgot augment_akb4" (prefilter off / parity gates vacuous) bugs the separate-file build can't.
     ok: (code) => code === 0, summary: (o) => (o.match(/PACK [A-Z][^\n]*/) || [lastLine(o)])[0].replace(/\x1b\[[0-9;]*m/g, '').trim() },
+  { name: 'person-ambig (fresh)', cmd: 'node', args: ['tools/anima/build_person_ambig.mjs', '--check'],
+    // The shared-surname table is GENERATED from the corpus and compiled into the firmware. A corpus
+    // that gains or loses a namesake without a regenerate would leave the table quietly wrong — the
+    // exact failure mode that let a stale gate fixture pass vacuously once already. Cheap, so it runs
+    // before the expensive suites.
+    ok: (code) => code === 0, summary: (o) => lastLine(o) },
+  { name: 'which-person (clarify)', cmd: 'node', args: ['tools/anima-host/person-clarify-check.mjs'],
+    // A shared surname must be ASKED about, not guessed: "chi è Trump" used to assert Fred Trump at
+    // 82%. Also pins the other side — a full name, or a surname only one person carries, must still
+    // answer — and that every name offered is itself answerable (a question may not invent a person).
+    ok: (code) => code === 0, summary: (o) => lastLine(o) },
   { name: 'regress (corpus+L1)', cmd: 'python', args: ['tools/anima/regress.py'],
     ok: (code) => code === 0, summary: (o) => lastLine(o) },
   { name: 'route-check', cmd: 'node', args: ['tools/anima-host/route-check.mjs', '--snapshot'],
