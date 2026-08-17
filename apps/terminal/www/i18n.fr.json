@@ -14,5 +14,9 @@
   "key_esc": "Effacer la ligne (Échap)",
   "hist_unpaired": "historique : non appairé — cette session uniquement",
   "copy_ok": "copié dans le presse-papiers",
-  "copy_fail": "échec de la copie — sélectionnez le texte et utilisez le menu du navigateur"
+  "copy_fail": "échec de la copie — sélectionnez le texte et utilisez le menu du navigateur",
+  "man_which": "Quelle page de manuel voulez-vous ?",
+  "man_description": "Description :",
+  "man_details": "Détails :",
+  "man_none": "Aucune entrée de manuel pour {cmd}"
 }
