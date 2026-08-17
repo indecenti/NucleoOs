@@ -121,6 +121,17 @@ async function fakeFetch(url, opts = {}) {
     if (p === '/api/status') return reply(200, JSON.stringify({ os: 'NucleoOS', version: '0.1.0', uptime_s: 1, free_heap: 1000 }));
     if (p === '/api/logs') return reply(200, 'boot ok');
     if (p === '/api/reboot') return reply(200, '{}');
+    if (p === '/api/apps') return reply(200, JSON.stringify({ apps: [{ id: 'notes', enabled: true, running: true }, { id: 'files', enabled: true }] }));
+    if (p === '/api/gpio') {
+      if ((opts.method || 'GET') === 'POST') {
+        const b = JSON.parse(opts.body || '{}');
+        if (![1, 2].includes(b.pin | 0)) return reply(200, JSON.stringify({ ok: false, err: 'pin not writable' }));
+        return reply(200, JSON.stringify({ ok: true, pin: b.pin | 0, value: b.value ? 1 : 0 }));
+      }
+      const pin = Number(u.searchParams.get('pin'));
+      if (![0, 1, 2].includes(pin)) return reply(200, JSON.stringify({ ok: false, err: 'pin not readable' }));
+      return reply(200, JSON.stringify({ ok: true, pin, value: 0 }));
+    }
     throw new Error('unrouted: ' + url);
   } finally { net.inFlight--; }
 }
@@ -133,7 +144,8 @@ const sandbox = {
     getElementById: (id) => el(id),
   },
   window: { addEventListener() {} },
-  parent: { postMessage() {} },
+  parent: { postMessage(msg) { sandbox.__posted.push(msg); } },
+  __posted: [],
   performance: { now: () => 1000 },
   Blob: class { constructor(parts) { this.size = Buffer.byteLength(parts.join('')); } },
   fetch: fakeFetch,
@@ -641,7 +653,8 @@ test('compat: every command still resolves and runs through the parser', async (
     'clear', 'date', 'free',
     // added by the command slice — the device-native half included
     'stat /data/f', 'du -d 1 /data', 'tree -L 1 /data', 'hexdump -n 16 /data/f', 'base64 /data/f',
-    'tee /data/t2', 'seq 3', 'sort', 'uniq -c', 'cut -d, -f1',
+    'tee /data/t2', 'seq 3', 'sort', 'uniq -c', 'cut -d, -f1', 'tr a b', 'tr -d x',
+    'ps', 'kill notes', 'gpio read 1', 'gpio write 2 1',
     'alias ll=ls', 'unalias ll', 'which ls', 'watch -c 1 -n 2 pwd',
     'diag', 'heap', 'cpu', 'apps', 'assoc txt', 'lang', 'ota', 'anima --caps', 'verify a b',
     'wifi known', 'ir db', 'display on', 'screen', 'say hello', 'notify hello', 'clip -o',
@@ -655,6 +668,74 @@ test('compat: every command still resolves and runs through the parser', async (
     assert.ok(!texts().some((t) => /command not found/.test(t)), line);
     assert.ok(!body().some((l) => /^[a-z]+: undefined/.test(l.text)), line + ' → ' + last());
   }
+});
+
+// ---- new commands: tr / ps / kill / gpio -------------------------------------------
+test('tr: translates a set of characters through a pipe', async () => {
+  reset();
+  net.fs['/data/f'] = 'abc';
+  await T.run('cat /data/f | tr abc xyz'); await settle();
+  assert.equal(last(), 'xyz');
+});
+
+test('tr: -d deletes every character in the set, and a short set2 repeats its last char', async () => {
+  reset();
+  net.fs['/data/f'] = 'a1b2c3';
+  await T.run('cat /data/f | tr -d 123'); await settle();
+  assert.equal(last(), 'abc');
+
+  reset();
+  net.fs['/data/f'] = 'abcd';
+  await T.run('cat /data/f | tr abcd X'); await settle();   // set2 shorter -> last char fills
+  assert.equal(last(), 'XXXX');
+});
+
+test('tr: refuses to run without a pipe (it reads stdin)', async () => {
+  reset();
+  await T.run('tr a b'); await settle();
+  assert.match(last(), /reads standard input/);
+});
+
+test('ps: lists enabled apps and never hits the device more than once', async () => {
+  reset();
+  await T.run('ps'); await settle();
+  assert.ok(net.count('/api/apps') <= 1, 'at most one app-table fetch (the 30s memo may serve it)');
+  assert.ok(texts().some((t) => /notes/.test(t)), 'the running app appears');
+});
+
+test('ps: the app table is cached, so a second listing does not re-hit the device', async () => {
+  reset();
+  await T.run('ps'); await T.run('ps'); await settle();
+  assert.ok(net.count('/api/apps') <= 1, 'the memo spares the Cardputer a second round-trip');
+});
+
+test('kill: closes an app by id through the shell, not by the synthetic PID', async () => {
+  reset();
+  sandbox.__posted.length = 0;
+  await T.run('kill notes'); await settle();
+  const msg = sandbox.__posted.at(-1);          // cross-realm object: compare fields, not reference
+  assert.equal(msg.type, 'close-app');
+  assert.equal(msg.id, 'notes');
+
+  reset();
+  const code = await T.run('kill'); await settle();
+  assert.notEqual(code, 0);
+  assert.match(last(), /usage: kill/);
+});
+
+test('gpio: reads and writes an allowed pin, and surfaces the device refusal verbatim', async () => {
+  reset();
+  await T.run('gpio read 1'); await settle();
+  assert.match(last(), /pin 1 = 0/);
+
+  reset();
+  await T.run('gpio write 2 1'); await settle();
+  assert.match(last(), /pin 2 = 1/);
+
+  reset();
+  await T.run('gpio write 5 1'); await settle();      // 5 is outside the allowlist -> 403 body
+  assert.equal(body().at(-1).cls, 'err');
+  assert.match(last(), /not writable/);
 });
 
 test('compat: quoted arguments survive the trip back to the string-parsing commands', async () => {

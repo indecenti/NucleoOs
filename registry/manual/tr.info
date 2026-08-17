@@ -1,0 +1,16 @@
+{
+  "id": "tr",
+  "category": "terminal",
+  "it": {
+    "title": "tr - Traduce o elimina caratteri",
+    "synopsis": "tr <set1> <set2>   |   tr -d <set>",
+    "description": "Sostituisce ogni carattere di set1 col corrispondente di set2, o li elimina con -d. I set sono letterali: niente intervalli né classi, per risparmiare byte sul dispositivo.",
+    "details": "NOME\n  tr - Traduce o elimina caratteri\n\nSINTASSI\n  tr <set1> <set2>   |   tr -d <set>\n\nDESCRIZIONE\n  Sostituisce ogni carattere di set1 col corrispondente di set2, o li elimina con -d. I set sono letterali: niente intervalli né classi, per risparmiare byte sul dispositivo.\n\nOPZIONI\n  -d INSIEME\n    Elimina ogni carattere dell'insieme invece di tradurlo.\n  Se set2 è più corto di set1, il suo ultimo carattere riempie il resto.\n\nCOSTO PER IL DISPOSITIVO\n  none\n\nVEDERE ANCHE\n  cut(1), sort(1)\n\nESEMPI\n  echo ciao | tr aeiou _\n  cat /data/f | tr -d \\r"
+  },
+  "en": {
+    "title": "tr - Translate or delete characters",
+    "synopsis": "tr <set1> <set2>   |   tr -d <set>",
+    "description": "Replaces each character of set1 with the matching one in set2, or deletes them with -d. Sets are literal: no ranges or classes, to save bytes on the device.",
+    "details": "NAME\n  tr - Translate or delete characters\n\nSYNOPSIS\n  tr <set1> <set2>   |   tr -d <set>\n\nDESCRIPTION\n  Replaces each character of set1 with the matching one in set2, or deletes them with -d. Sets are literal: no ranges or classes, to save bytes on the device.\n\nOPTIONS\n  -d SET\n    Delete every character in the set instead of translating.\n  If set2 is shorter than set1, its last character fills the rest.\n\nDEVICE COST\n  none\n\nSEE ALSO\n  cut(1), sort(1)\n\nEXAMPLES\n  echo hello | tr aeiou _\n  cat /data/f | tr -d \\r"
+  }
+}
