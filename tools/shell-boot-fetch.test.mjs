@@ -150,3 +150,39 @@ test('loadState passes the retry budget through to fetchJSON', async () => {
   assert.match(seen.url, /^\/api\/fs\/read\?path=/);
   assert.ok(seen.url.includes(encodeURIComponent('/system/config/clipboard.json')));
 });
+
+// A corrupt file is not an unreachable device. This was a REGRESSION introduced with makeLoadState:
+// the pre-existing code caught JSON.parse and re-seeded, so a truncated ui-state.json healed itself.
+// Routing it to 'unreachable' put the store read-only — and since writes were then blocked, the bad
+// file could never be replaced, on every boot, forever. The device serves a 0-byte file as 200 with an
+// EMPTY body (nucleo_fsapi.c), and Response.json() always rejects on that.
+test('loadState: an unparsable body is ABSENT (re-seedable), not unreachable', async () => {
+  const parseErr = Object.assign(new Error('Unexpected end of JSON input'), { parseFailure: true });
+  const loadState = makeLoadState(async () => { throw parseErr; });
+  const r = await loadState('/system/config/ui-state.json');
+  assert.equal(r.state, 'absent', 'a corrupt file must be re-seeded, never freeze the store');
+  assert.equal(r.corrupt, true);
+});
+
+test('loadState: a transport failure stays unreachable even when it also looks like bad JSON', async () => {
+  const loadState = makeLoadState(async () => { throw new Error('Unexpected end of JSON input'); });
+  assert.equal((await loadState('/x.json')).state, 'unreachable', 'no parseFailure tag → transport');
+});
+
+test('fetchJSON tags a parse failure so the caller can tell the two apart', async () => {
+  const fetchJSON = makeFetchJSON({
+    fetch: async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => { throw new SyntaxError('bad'); } }),
+    sleep: async () => {},
+  });
+  await assert.rejects(fetchJSON('/x'), (e) => e.parseFailure === true);
+});
+
+test('fetchJSON does NOT retry a parse failure — it is deterministic', async () => {
+  let calls = 0;
+  const fetchJSON = makeFetchJSON({
+    fetch: async () => { calls++; return { ok: true, status: 200, headers: { get: () => null }, json: async () => { throw new SyntaxError('bad'); } }; },
+    sleep: async () => {},
+  });
+  await fetchJSON('/x', { tries: 5 }).catch(() => {});
+  assert.equal(calls, 1, 'retrying a corrupt file just burns the device sockets');
+});

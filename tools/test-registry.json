@@ -2971,6 +2971,22 @@
       "anima": false
     },
     {
+      "id": "unit-shell-session-restore",
+      "label": "shell-session-restore.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-session-restore.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-shortcuts",
       "label": "shortcuts.test.mjs",
       "category": "app-shell",

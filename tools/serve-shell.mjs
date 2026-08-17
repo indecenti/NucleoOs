@@ -533,6 +533,10 @@ const server = createServer(async (req, res) => {
     return res.end(body);
   }
   if (path === '/api/diag') {                       // consolidated health snapshot (mirror nucleo_httpd.c diag_get)
+    // Paired-only on the device (NUCLEO_AUTH_GUARD, diag_get) — it discloses SSID and internals. The
+    // sim served it to anyone, which matters now that the shell uses this endpoint's STATUS CODE to
+    // tell "no longer paired" apart from "evicted".
+    if (!isAuthed(req)) return reject401(res);
     const up = Math.floor((Date.now() - simState.bootMs) / 1000);
     simState.minFree = Math.max(9000, simState.minFree - (Math.random() < 0.15 ? jit(120, 100) : 0));
     const free = jit(74000, 8000), lblk = jit(40000, 7000);
@@ -546,7 +550,7 @@ const server = createServer(async (req, res) => {
              reset: 'SW', slot: 'ota_0', ota: 'valid', sd: true, sd_free: 7.1e9, sd_total: 14.8e9 },
       mem: { free, min: simState.minFree, lblk, frag: Math.max(0, Math.round(100 * (1 - lblk / free))),
              dma_free: jit(150000, 9000), stack_httpd: jit(7000, 800) },
-      net: { mode: 'sta', ssid: 'home-wifi', ip: '192.168.1.42', rssi: -jit(58, 9), tsync: true, clients: 1 },
+      net: { mode: 'sta', ssid: 'home-wifi', ip: '192.168.1.42', rssi: -jit(58, 9), tsync: true, clients: sockets.size },
       anima: { online_en: true, online_only: false, online_avail: true, teacher: true,
                provider: 'anthropic', model: 'claude-opus', l1_mode: 0, l1_serving: true, l1_heap: jit(31000, 1500),
                q: a.q, none: a.none, cmd: a.cmd, fact: a.fact, stitch: a.stitch, remote: a.remote,
@@ -910,7 +914,14 @@ server.on('upgrade', (req, socket) => {
   sockets.add(socket);
   publish('system.clients', { n: sockets.size });   // the device publishes this on every add/drop
   socket.write(wsEncode(JSON.stringify({ op: 'sync', events: [] })));
-  socket.on('data', () => {});            // ignore client frames (subscribe)
+  // Client frames are ignored (subscribe) EXCEPT the CLOSE frame (opcode 0x8). The sim used to drop
+  // every incoming byte, so a browser that closed its socket cleanly was never noticed: the TCP
+  // connection lingered and net.clients kept counting a client that had gone. That is not cosmetic —
+  // the shell now READS net.clients to tell "someone holds the seat" from "the line dropped", so an
+  // inflated count is a wrong answer to a question the OS actually asks.
+  socket.on('data', (chunk) => {
+    if (chunk && chunk.length && (chunk[0] & 0x0f) === 0x8) { try { socket.destroy(); } catch {} }
+  });
   socket.on('close', () => { if (sockets.delete(socket)) publish('system.clients', { n: sockets.size }); });
   socket.on('error', () => { if (sockets.delete(socket)) publish('system.clients', { n: sockets.size }); });
 });

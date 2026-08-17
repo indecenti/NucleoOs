@@ -37,7 +37,12 @@ export function makeFetchJSON({ fetch, sleep, log = () => {}, AbortSignal: AS } 
       }
       if (!r.ok) throw new Error('HTTP ' + r.status);     // 4xx → deterministic, fail fast (no retry)
       if (i > 0) log('ok', path, 'after', i, 'retr' + (i === 1 ? 'y' : 'ies'));
-      return r.json();
+      // A body we cannot parse is NOT a transport problem, and the difference matters upstream: the
+      // device answers a 0-byte file with 200 and an EMPTY body, and Response.json() always rejects
+      // on that. Tagging it lets loadState re-seed a corrupt file instead of concluding the device is
+      // unreachable — which would put the store read-only and make the corrupt file unfixable.
+      try { return await r.json(); }
+      catch (e) { e.parseFailure = true; throw e; }
     }
     log('GAVE UP', path, 'after', tries, 'tries');
     throw lastErr || new Error('exhausted retries: ' + path);
@@ -65,6 +70,10 @@ export function makeLoadState(fetchJSON) {
     try {
       data = await fetchJSON('/api/fs/read?path=' + encodeURIComponent(path), { tries, timeout });
     } catch (e) {
+      // Corrupt/empty file → treat as "nothing usable saved", exactly as the pre-loadState code did
+      // (it caught JSON.parse and re-seeded). Calling it unreachable froze the store FOREVER: writes
+      // were blocked, so the unreadable file could never be replaced, on every boot.
+      if (e && e.parseFailure) return { state: 'absent', corrupt: true };
       return { state: 'unreachable', error: String((e && e.message) || e) };
     }
     // A non-object (or a null) is not state we can merge — treat it as nothing saved rather than
