@@ -213,17 +213,22 @@ export function clampIntoView() {
   for (const w of windows.values()) {
     if (w.max || w.snap) continue;
     const el = w.el;
-    const width = el.offsetWidth || 320, height = el.offsetHeight || 200;
+    // Read the STYLE, not the layout: a minimised window is display:none, so offsetLeft/offsetWidth
+    // are 0 — and those are exactly the windows that reappear off-screen when they are restored.
+    const curLeft = parseInt(el.style.left) || 0, curTop = parseInt(el.style.top) || 0;
+    const width = parseInt(el.style.width) || el.offsetWidth || 320;
     // Always leave a grabbable strip of title bar on screen, never a fully off-screen window.
     const maxLeft = Math.max(0, A.w - Math.min(width, 120));
     const maxTop = Math.max(0, A.h - 34);
-    const left = Math.min(Math.max(0, el.offsetLeft), maxLeft);
-    const top = Math.min(Math.max(0, el.offsetTop), maxTop);
-    if (left !== el.offsetLeft || top !== el.offsetTop) {
+    const left = Math.min(Math.max(0, curLeft), maxLeft);
+    const top = Math.min(Math.max(0, curTop), maxTop);
+    if (left !== curLeft || top !== curTop) {
       el.style.left = left + 'px'; el.style.top = top + 'px'; moved = true;
     }
   }
-  if (moved) onChange();     // persist the corrected geometry
+  // Deliberately NOT onChange(): this is a DISPLAY correction for the current viewport. Persisting it
+  // would let one session on a small screen (a projector, a rotated tablet) permanently collapse a
+  // layout built on a large one — the user never asked to move those windows.
   return moved;
 }
 
@@ -456,7 +461,7 @@ function drag(win, handle, id) {
     if (iframe) iframe.style.pointerEvents = 'none';
   });
   window.addEventListener('pointermove', (e) => {
-    if (!moving) return;
+    if (!moving || (dragPid != null && e.pointerId !== dragPid)) return;   // a second finger must not steer this window
     const A = workArea();
     win.style.left = Math.max(0, ox + e.clientX - sx) + 'px';
     win.style.top = Math.min(A.h - 34, Math.max(0, oy + e.clientY - sy)) + 'px';
@@ -466,8 +471,9 @@ function drag(win, handle, id) {
   // One exit for EVERY way a pointer gesture can end. With only pointerup, a cancelled pointer (the
   // browser takes it back, a second touch, the tab losing it) left `moving` true and the iframe stuck
   // at pointerEvents:'none' — the window kept following the cursor and its app stopped accepting clicks.
-  const endDrag = () => {
+  const endDrag = (e) => {
     if (!moving) return;
+    if (e && e.pointerId != null && dragPid != null && e.pointerId !== dragPid) return;   // not our gesture
     moving = false; hidePreview();
     try { if (dragPid != null) handle.releasePointerCapture(dragPid); } catch {}
     dragPid = null;

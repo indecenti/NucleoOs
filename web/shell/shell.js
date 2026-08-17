@@ -573,6 +573,9 @@ function addMissingAppIcons() {
   return added;
 }
 // Another client changed the shared UI state: reload and re-render (skip our own echo).
+// NOTE: this is the ONLY path that can lift a read-only store after a bad boot. Without the delete
+// below, a shell that booted while the device was busy saved nothing for the rest of the session —
+// silently, long after the 9-second toast had gone.
 async function syncUiState() {
   try {
     const r = await fetch('/api/fs/read?path=' + encodeURIComponent(UI_STATE_PATH), { cache: 'no-store' });
@@ -580,6 +583,7 @@ async function syncUiState() {
     const body = await r.text();
     if (body === lastSaved) return;
     const s = { ...UI_DEFAULTS, ...JSON.parse(body) };
+    roStores.delete(UI_STATE_PATH);   // we just read the real thing: the store is trustworthy again
     state.pins = s.pins;
     state.startPins = Array.isArray(s.startPins) ? s.startPins : state.apps.map((a) => a.id);
     state.recent = Array.isArray(s.recent) ? s.recent : [];
@@ -870,7 +874,13 @@ const WS_BACKOFF_MAX = 30000;
 // Now: on close we ASK the device whether it is alive. If it is, we were not disconnected — we lost
 // the seat. We say so honestly, stop reconnecting, and make taking the seat back an explicit gesture.
 let wsEvicted = false;
-async function onWsClosed() {
+// Sockets get replaced (visibilitychange reopens one, a retry lands) while an onWsClosed() probe is
+// still awaiting. Without a generation stamp the probe came back, saw net.clients >= 1 — which by
+// then was US — and put the eviction banner over a perfectly live connection, with auto-reconnect
+// switched off. Every close carries the generation it belonged to; a stale one is dropped.
+let wsGen = 0;
+async function onWsClosed(gen) {
+  if (gen !== wsGen) return;                       // a socket we already replaced — not our business
   setWsBadge('reconnecting');
   // A closed socket has THREE causes that look identical from here, and guessing was wrong twice:
   //   • our session is gone — the /ws handshake is auth-gated while /api/status is PUBLIC, so an
@@ -891,6 +901,8 @@ async function onWsClosed() {
     status = r.status;
     if (r.ok) diag = await r.json().catch(() => null);
   } catch {}
+  // Re-check AFTER the await: if a new socket appeared meanwhile, this verdict is about a dead past.
+  if (gen !== wsGen || wsSock) return;
   if (!status) { setWsBadge('offline'); scheduleWS(); return; }        // unreachable → normal backoff
   if (status === 401 || status === 403) {                              // not evicted: no longer paired
     setWsBadge('offline'); hideEvictedBar();
@@ -970,6 +982,7 @@ function connectWS() {
   // ?shell=1 marks us as the OS shell: only this triggers the device's "remote handoff" (suspend its UI,
   // screen-off, reclaim RAM for the server). A standalone app page that opens /ws still gets events but
   // won't blank the device. Older cached shells (no marker) keep working — they just don't trigger handoff.
+  const myGen = ++wsGen;                       // stamp this socket so a late close cannot speak for a newer one
   try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?shell=1'); }
   catch { setWsBadge('offline'); scheduleWS(); return; }
   wsSock = ws;
@@ -1037,9 +1050,10 @@ function connectWS() {
     }
   };
   ws.onclose = () => {
-    if (wsSock === ws) wsSock = null;
+    const mine = (wsSock === ws);
+    if (mine) wsSock = null;
     renderRemote(false);
-    onWsClosed();                  // offline vs evicted — never guess, ask the device
+    if (mine) onWsClosed(myGen);   // offline vs evicted — never guess, ask the device
   };
 }
 // Returning to the foreground revives the link at once (and resets backoff so it feels instant),
@@ -1567,7 +1581,7 @@ function openItem(item) {
   if (item.type === 'file') { openFile(item.target); return; }
   if (item.type === 'url') {
     if (/^https?:\/\//i.test(item.target)) window.open(item.target, '_blank', 'noopener');
-    else WM.open({ id: 'link:' + item.target, name: itemLabel(item), route: item.target, glyph: '🔗' });
+    else WM.open({ permissions: [], id: 'link:' + item.target, name: itemLabel(item), route: item.target, glyph: '🔗' });
   }
 }
 // Remember a freshly-opened file so it surfaces under Start → "Consigliati" (newest first,
@@ -1634,7 +1648,7 @@ async function openLnk(path, depth = 0) {
   if (l.type === 'app') { const a = byId(l.target); a ? WM.open(a) : showToast(t('lnk_broken'), '⚠️', 'error'); return; }
   if (l.type === 'url') {
     if (/^https?:\/\//i.test(l.target)) window.open(l.target, '_blank', 'noopener');
-    else WM.open({ id: 'link:' + l.target, name: l.label || l.target, route: l.target, glyph: '🔗' });
+    else WM.open({ permissions: [], id: 'link:' + l.target, name: l.label || l.target, route: l.target, glyph: '🔗' });
     return;
   }
   if (/\.lnk$/i.test(l.target)) return openLnk(l.target, depth + 1);   // shortcut chain
@@ -2802,6 +2816,7 @@ function asButton(el, onActivate) {
   el.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
     e.preventDefault();                 // Space must not scroll the desktop
+    e.stopPropagation();                // ...and Enter must not ALSO reach desktopNavKey and open an icon
     onActivate(e);
   });
 }
