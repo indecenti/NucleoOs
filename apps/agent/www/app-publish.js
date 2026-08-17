@@ -68,6 +68,11 @@ export function normKind(k) { return APP_KINDS.includes(k) ? k : 'blank'; }
 
 // Shared head/style + the i18n boot, so every kind looks consistent and stays valid. body/script are the
 // only per-kind parts. The inline script is an ES module (imports the OS i18n) — same shape as before.
+// The inline catalogue a sandboxed app ships with: the same it/en objects starterI18n writes to disk,
+// embedded so the app needs no cross-origin fetch to be localised.
+function catInline(spec) {
+  return JSON.stringify({ it: JSON.parse(starterI18n(spec, false)), en: JSON.parse(starterI18n(spec, true)) });
+}
 function htmlShell(spec, bodyInner, scriptInner) {
   const name = String(spec.name || 'App').replace(/[<&]/g, '');
   const id = sanitizeId(spec.id || name);
@@ -97,12 +102,60 @@ function htmlShell(spec, bodyInner, scriptInner) {
 ${bodyInner}
   </div>
   <script type="module">
-    import I18N from '/nucleo-i18n.js';
-    const t = await I18N.init('${id}');
+${brokerClient(id, catInline(spec))}
 ${scriptInner}
   </script>
 </body>
 </html>
+`;
+}
+
+// Apps written by the agent run SANDBOXED: opaque origin, no pairing cookie, no shared localStorage,
+// no reach into /api/*. That is deliberate — they are the only apps nobody vetted. Everything they are
+// allowed to do arrives through this tiny client, and the shell grants exactly what the manifest
+// declared (web/shell/appbroker.js). Note there is no import of /nucleo-i18n.js here: a cross-origin
+// module fetch cannot work from an opaque origin, so generated apps carry their own strings.
+function brokerClient(id, catJson) {
+  return `    // --- OS bridge (sandboxed app) ---
+    // This app runs with an OPAQUE ORIGIN: no pairing cookie, no shared localStorage, /api/* out of
+    // reach. Everything it may do arrives through the shell's broker, which grants exactly what this
+    // app's manifest declared (web/shell/appbroker.js). Calls are serialised there, so several
+    // generated apps cannot burst the Cardputer's 4-6 sockets.
+    const os = (() => {
+      let n = 0; const waiting = new Map();
+      addEventListener('message', (e) => {
+        const d = e.data;
+        if (!d || d.type !== 'nucleo.broker.reply') return;
+        const w = waiting.get(d.id); if (!w) return;
+        waiting.delete(d.id); w(d);
+      });
+      const call = (method, args) => new Promise((res) => {
+        const i = ++n; waiting.set(i, res);
+        parent.postMessage({ type: 'nucleo.broker', id: i, method, args }, '*');
+        setTimeout(() => { if (waiting.delete(i)) res({ ok: false, error: 'timeout' }); }, 10000);
+      });
+      return {
+        fs: { read: (path) => call('fs.read', { path }),
+              write: (path, content) => call('fs.write', { path, content }),
+              list: (path) => call('fs.list', { path }) },
+        notify: (text) => call('notify', { text }),
+        sys: { info: () => call('sys.info', {}) },
+        home: '/data/apps/${id}',          // this app's own corner of the SD
+      };
+    })();
+    // i18n WITHOUT the engine: an opaque origin cannot import /nucleo-i18n.js (a cross-origin module),
+    // so the app carries its catalogue inline and paints data-i18n itself. Same five languages, same
+    // markup contract as every other app — only the delivery changes. The language comes from the OS.
+    const I18N_CAT = ${catJson};
+    const I18N = { init: async () => {
+      let lang = 'en';
+      try { const r = await os.sys.info(); if (r && r.ok && r.lang) lang = r.lang; } catch {}
+      const tr = (k) => { const c = I18N_CAT[lang] || I18N_CAT.en || {}; const v = c[k]; return v == null ? ((I18N_CAT.en || {})[k] ?? k) : v; };
+      for (const el of document.querySelectorAll('[data-i18n]')) { const v = tr(el.getAttribute('data-i18n')); if (v != null) el.textContent = v; }
+      const ttl = tr('title'); if (ttl) document.title = ttl;
+      return tr;
+    } };
+    const t = await I18N.init('${id}');
 `;
 }
 
@@ -123,13 +176,17 @@ const KIND_SCRIPT = {
   blank: `    document.getElementById('go').addEventListener('click', () => {
       // TODO: la logica dell'app
     });`,
-  list: `    const KEY = 'items', list = document.getElementById('list'), inp = document.getElementById('inp');
-    const items = JSON.parse(localStorage.getItem(KEY) || '[]');
-    inp.placeholder = t('placeholder');
-    const save = () => localStorage.setItem(KEY, JSON.stringify(items));
+  list: `    const FILE = os.home + '/items.json', list = document.getElementById('list'), inp = document.getElementById('inp');
+    // Sandboxed: no localStorage (opaque origin). The list lives on the SD, inside this app's own
+    // folder, written through the broker — which serialises it so several apps cannot flood the device.
+    const EMPTY = 'Nessun elemento', PLACEHOLDER = 'Aggiungi qualcosa…';
+    inp.placeholder = PLACEHOLDER;
+    let items = [];
+    { const r = await os.fs.read(FILE); if (r.ok) { try { items = JSON.parse(r.content) || []; } catch {} } }
+    const save = () => os.fs.write(FILE, JSON.stringify(items));
     function render() {
       list.innerHTML = '';
-      if (!items.length) { const li = document.createElement('li'); li.textContent = t('empty'); list.appendChild(li); return; }
+      if (!items.length) { const li = document.createElement('li'); li.textContent = EMPTY; list.appendChild(li); return; }
       items.forEach((txt, i) => { const li = document.createElement('li'); li.textContent = txt; li.addEventListener('click', () => { items.splice(i, 1); save(); render(); }); list.appendChild(li); });
     }
     function add() { const v = inp.value.trim(); if (!v) return; items.push(v); inp.value = ''; save(); render(); }
