@@ -7,7 +7,7 @@
 // We inject fetch + sleep so the whole policy is exercised deterministically with no real timers/net.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeFetchJSON } from '../web/shell/boot-fetch.js';
+import { makeFetchJSON, makeLoadState } from '../web/shell/boot-fetch.js';
 
 // A fake Response. ok mirrors the fetch spec (2xx). headers.get() returns the map value or null.
 const res = (status, body = {}, headers = {}) => ({
@@ -101,4 +101,52 @@ test('mixed transient failures then success', async () => {
 test('missing dependencies throw at construction', () => {
   assert.throws(() => makeFetchJSON({ sleep: async () => {} }), /fetch dependency required/);
   assert.throws(() => makeFetchJSON({ fetch: async () => {} }), /sleep dependency required/);
+});
+
+// ── makeLoadState: the data-loss guard ────────────────────────────────────────────────────────
+// The shell used to read each user-state store with a bare un-retried fetch, take ANY failure as
+// "first run", seed the factory defaults — and write them back over the real file. These tests pin
+// the three outcomes apart, because conflating "nothing saved" with "cannot reach the device" is
+// what destroyed a desktop layout on a single 503.
+
+test('loadState: real saved state comes back as found', async () => {
+  const loadState = makeLoadState(async () => ({ pins: ['a'], iconSize: 'lg' }));
+  const r = await loadState('/system/config/ui-state.json');
+  assert.equal(r.state, 'found');
+  assert.deepEqual(r.data, { pins: ['a'], iconSize: 'lg' });
+});
+
+test('loadState: the firmware "{}" for a fresh SD is ABSENT, not found', async () => {
+  // nucleo_fsapi.c read_get answers a missing /system/config/*.json with 200 "{}" on purpose.
+  const loadState = makeLoadState(async () => ({}));
+  assert.equal((await loadState('/system/config/ui-state.json')).state, 'absent');
+});
+
+test('loadState: junk that is not a state object is ABSENT, never merged', async () => {
+  for (const junk of [null, 'nope', 42, ['a']]) {
+    const loadState = makeLoadState(async () => junk);
+    assert.equal((await loadState('/x.json')).state, 'absent', 'junk: ' + JSON.stringify(junk));
+  }
+});
+
+test('loadState: a device that cannot be reached is UNREACHABLE, never absent', async () => {
+  const loadState = makeLoadState(async () => { throw new Error('network unreachable'); });
+  const r = await loadState('/system/config/ui-state.json');
+  assert.equal(r.state, 'unreachable', 'this is the case that used to be read as "first run"');
+  assert.match(r.error, /network/);
+});
+
+test('loadState: a 4xx after retries is UNREACHABLE too — we cannot conclude the file is missing', async () => {
+  const loadState = makeLoadState(async () => { throw new Error('HTTP 401'); });
+  assert.equal((await loadState('/system/config/session.json')).state, 'unreachable');
+});
+
+test('loadState passes the retry budget through to fetchJSON', async () => {
+  let seen = null;
+  const loadState = makeLoadState(async (url, opts) => { seen = { url, opts }; return { a: 1 }; });
+  await loadState('/system/config/clipboard.json', { tries: 7, timeout: 1234 });
+  assert.equal(seen.opts.tries, 7);
+  assert.equal(seen.opts.timeout, 1234);
+  assert.match(seen.url, /^\/api\/fs\/read\?path=/);
+  assert.ok(seen.url.includes(encodeURIComponent('/system/config/clipboard.json')));
 });

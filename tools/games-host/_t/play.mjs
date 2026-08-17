@@ -63,6 +63,28 @@ const FS = {
 };
 
 const ROOMS_DIR = '/data/play/rooms';
+
+// Create the lobby directory tree ONCE per page, parent-first. The device mkdir is NOT recursive, so
+// mkdir'ing /data/play/rooms before /data/play exists fails with a 500 (then the list 404s) — and
+// because the lobby builds a fresh NucleoPlay on every tick, the old per-instance guard re-ran that
+// failing mkdir on every poll, spamming the single-task httpd at first launch. We list-before-mkdir
+// (so an already-present dir never emits a spurious 500) and cache the promise so every caller shares
+// one bring-up instead of each hammering the device.
+let _roomsDirP = null;
+function ensureRoomsDir() {
+  if (_roomsDirP) return _roomsDirP;
+  _roomsDirP = (async () => {
+    for (const p of ['/data/play', ROOMS_DIR]) {
+      try {
+        const r = await fetch('/api/fs/list?path=' + encodeURIComponent(p), { credentials: 'same-origin' });
+        if (r.status === 404) await FS.mkdir(p);          // missing → create just this level
+      } catch (e) { /* offline / unpaired: skip; listRooms will simply return [] */ }
+    }
+  })();
+  _roomsDirP.catch(() => { _roomsDirP = null; });          // don't cache a failure forever
+  return _roomsDirP;
+}
+
 const SIG_POLL_MS = 700;     // signaling/lobby poll cadence — low, because handshake is rare
 const HEARTBEAT_MS = 4000;   // room liveness; stale rooms are hidden after STALE_MS
 const STALE_MS = 15000;
@@ -111,7 +133,7 @@ export class NucleoPlay {
     // mkdir ROOMS_DIR ONCE per session, not on every 4 s lobby tick: the dir is created on first
     // use and persists, so re-mkdir'ing it each poll was a wasted round-trip (and used to spam
     // fs.changed → a /data re-crawl on every client). FS.list creates nothing, so this is safe.
-    if (!this._roomsDirReady) { try { await FS.mkdir(ROOMS_DIR); } catch (e) {} this._roomsDirReady = true; }
+    await ensureRoomsDir();                 // parent-first, once per page, shared across instances
     const entries = await FS.list(ROOMS_DIR);
     const now = this._now();
     const out = [];

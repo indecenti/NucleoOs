@@ -8,11 +8,22 @@
   "entry_service": "none",
   "web_route": "/apps/weather/",
   "icon": "/apps/weather/icon.svg",
-  "permissions": [],
-  "handles": { "role": "none", "extensions": [] },
+  "permissions": [
+    "device.location"
+  ],
+  "handles": {
+    "role": "none",
+    "extensions": []
+  },
   "intents": [],
   "subscribes": [],
   "publishes": [],
-  "power": { "budget_class": "low", "wants_wakeup": [] },
-  "mesh": { "exposes": [], "consumes": [] }
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": []
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
 }

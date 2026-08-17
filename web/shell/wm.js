@@ -30,6 +30,41 @@ function notifyVis(w, visible) {
   if (f) try { f.contentWindow.postMessage({ t: 'os-visibility', d: { visible } }, '*'); } catch {}
 }
 
+// ── Feature Policy from the manifest ──────────────────────────────────────────────────────────
+// This is the FIRST place a declared `permissions` entry actually constrains an app. Until now the
+// field was decorative — nothing in the shell or the firmware ever read it — and because every app
+// runs SAME-ORIGIN, the browser's default allowlist of `self` silently handed the microphone, the
+// camera and geolocation to all 47 of them, including any app the agent writes and installs.
+// Now a device capability is granted only if the manifest asked for it, and the others are DENIED
+// explicitly ('none') rather than merely left unused. Scope is honest: this covers exactly the
+// capabilities the BROWSER can mediate. `/api/*` capabilities (storage, IR, Wi-Fi) still need the
+// broker described in docs — an iframe attribute cannot police them.
+const FEATURE_BY_CAP = { 'device.mic': 'microphone', 'device.location': 'geolocation' };
+const GATED_FEATURES = ['microphone', 'camera', 'geolocation'];   // camera: no app uses it — deny for all
+export function allowAttr(app) {
+  const declared = Array.isArray(app && app.permissions) ? app.permissions : null;
+  // permissions unknown (registry unreadable) → keep the pre-existing behaviour rather than break
+  // dictation/recorder/ANIMA's voice. Failing OPEN here is the status quo, not a new hole; failing
+  // closed would silently mute the OS on a transient read error. shell.js logs it loudly.
+  const parts = ['fullscreen', 'gamepad', 'autoplay'];
+  if (!declared) return parts.join('; ');
+  const granted = new Set(declared.map((c) => FEATURE_BY_CAP[c]).filter(Boolean));
+  for (const f of GATED_FEATURES) parts.push(granted.has(f) ? f : `${f} 'none'`);
+  return parts.join('; ');
+}
+
+// The window body: the app's iframe, or a placeholder when the manifest declares no web route.
+// Extracted so the Feature-Policy wiring is host-testable — asserting that a declared `device.mic`
+// really reaches the rendered `allow` attribute, without needing a browser.
+// NB: no `pointer-lock` in the allow list. Chrome does not implement it as a Permissions-Policy
+// feature and logs "Unrecognized feature" for every window opened; pointer lock in a same-origin,
+// unsandboxed iframe (which this is) is allowed anyway, so the token only ever produced noise.
+export function frameHtml(app, src) {
+  return app && app.route
+    ? `<iframe src="${src}" title="${app.name}" allow="${allowAttr(app)}"></iframe>`
+    : `<div class="placeholder">${glyph(app)}<br><br>${app && app.name}<br><small>No web route declared.</small></div>`;
+}
+
 function focus(id) {
   for (const w of windows.values()) w.el.classList.remove('active');
   const w = windows.get(id);
@@ -85,9 +120,7 @@ export function open(app, query) {
   el.style.left = (60 + n * 28) + 'px';
   el.style.top = (40 + n * 28) + 'px';
 
-  const body = app.route
-    ? `<iframe src="${src}" title="${app.name}" allow="fullscreen; pointer-lock; gamepad; autoplay"></iframe>`
-    : `<div class="placeholder">${glyph(app)}<br><br>${app.name}<br><small>No web route declared.</small></div>`;
+  const body = frameHtml(app, src);
   el.innerHTML =
     `<div class="bar"><span class="glyph">${glyph(app)}</span>` +
     `<span class="t">${app.name}</span>` +
@@ -113,7 +146,7 @@ export function open(app, query) {
 
   const bar = el.querySelector('.bar');
   const maxBtn = el.querySelector('.max');
-  el.addEventListener('mousedown', () => focus(app.id));
+  el.addEventListener('pointerdown', () => focus(app.id));   // click-to-front on touch too
   el.querySelector('.min').addEventListener('click', (e) => { e.stopPropagation(); toggle(app.id); });
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); maximize(app.id); });
   el.querySelector('.close').addEventListener('click', (e) => { e.stopPropagation(); close(app.id); });
@@ -128,6 +161,31 @@ export function open(app, query) {
   const saved = geomFor(app.id);                   // restore this app's last geometry, if any
   if (saved) applyGeom(app.id, saved);
   focus(app.id);
+}
+
+// Bring every floating window back inside the work area. A window dragged to the right edge of a
+// wide screen simply VANISHED when the viewport shrank (a resize, a rotation, a smaller monitor):
+// its saved left/top were still valid numbers, just off-screen, with no way to reach the title bar
+// and drag it back. Called by the shell on resize. Maximized/snapped windows re-derive their own
+// rectangle, so they are left alone.
+export function clampIntoView() {
+  const A = workArea();
+  let moved = false;
+  for (const w of windows.values()) {
+    if (w.max || w.snap) continue;
+    const el = w.el;
+    const width = el.offsetWidth || 320, height = el.offsetHeight || 200;
+    // Always leave a grabbable strip of title bar on screen, never a fully off-screen window.
+    const maxLeft = Math.max(0, A.w - Math.min(width, 120));
+    const maxTop = Math.max(0, A.h - 34);
+    const left = Math.min(Math.max(0, el.offsetLeft), maxLeft);
+    const top = Math.min(Math.max(0, el.offsetTop), maxTop);
+    if (left !== el.offsetLeft || top !== el.offsetTop) {
+      el.style.left = left + 'px'; el.style.top = top + 'px'; moved = true;
+    }
+  }
+  if (moved) onChange();     // persist the corrected geometry
+  return moved;
 }
 
 // ---- geometry helpers --------------------------------------------------------------------
@@ -306,9 +364,15 @@ function showPreview(zone) {
 function hidePreview() { if (preview) preview.classList.add('hidden'); }
 
 // Pointer dragging within the desktop, with Windows-11 edge/corner snapping.
+// Title-bar drag on POINTER events. The resize handles 80 lines below already use them
+// (attachResize), so this was an internal inconsistency with a user-visible cost: on a touch screen
+// a window could be resized but never MOVED. Pointer capture also fixes a long-standing mouse bug —
+// dragging fast over an app iframe used to drop the gesture; the iframe is only made inert as a
+// belt-and-braces.
 function drag(win, handle, id) {
   let sx, sy, ox, oy, moving = false, zone = null;
-  handle.addEventListener('mousedown', (e) => {
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
     if (e.target.closest('button')) return;
     const w = windows.get(id);
     // Dragging a maximized/snapped window "tears it off": restore floating size under the cursor.
@@ -326,10 +390,11 @@ function drag(win, handle, id) {
     moving = true; sx = e.clientX; sy = e.clientY;
     ox = win.offsetLeft; oy = win.offsetTop;
     e.preventDefault();
+    try { handle.setPointerCapture(e.pointerId); } catch {}   // keep the gesture even over an iframe
     const iframe = win.querySelector('iframe');
     if (iframe) iframe.style.pointerEvents = 'none';
   });
-  window.addEventListener('mousemove', (e) => {
+  window.addEventListener('pointermove', (e) => {
     if (!moving) return;
     const A = workArea();
     win.style.left = Math.max(0, ox + e.clientX - sx) + 'px';
@@ -337,7 +402,7 @@ function drag(win, handle, id) {
     zone = detectZone(e.clientX, e.clientY, A);     // pointer is already in work-area coords
     if (zone) showPreview(zone); else hidePreview();
   });
-  window.addEventListener('mouseup', () => {
+  window.addEventListener('pointerup', () => {
     if (!moving) return;
     moving = false; hidePreview();
     const iframe = win.querySelector('iframe');

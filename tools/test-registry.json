@@ -144,6 +144,22 @@
   ],
   "tests": [
     {
+      "id": "gate-corpus-text-lint",
+      "label": "corpus-text (lint)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima/fix-corpus-text.mjs",
+        "--check"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-pack-coherence",
       "label": "pack-coherence",
       "category": "cascade-infra",
@@ -473,6 +489,66 @@
       ],
       "verifies": "",
       "nl": true,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-stitch-dedup-l2",
+      "label": "stitch-dedup (L2)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/stitch-dedup.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-decline-honest-abstain",
+      "label": "decline (honest abstain)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/decline-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-working-memory-follow-ups",
+      "label": "working memory (follow-ups)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/wmem-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-encoder-quality-ane2",
+      "label": "encoder quality (ANE2)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/enc-quality.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
       "lang": "both",
       "in_gate": true,
       "anima": true
@@ -2537,6 +2613,22 @@
       "anima": false
     },
     {
+      "id": "unit-sandbox-caps",
+      "label": "sandbox-caps.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/sandbox-caps.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-unit-converter",
       "label": "unit-converter.test.mjs",
       "category": "app-converter",
@@ -2839,6 +2931,38 @@
       "args": [
         "--test",
         "tools/shell-busy.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-shell-permissions",
+      "label": "shell-permissions.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-permissions.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-shell-search-rank",
+      "label": "shell-search-rank.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-search-rank.test.mjs"
       ],
       "verifies": "",
       "nl": false,
