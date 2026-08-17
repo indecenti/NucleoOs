@@ -149,11 +149,14 @@ const state = { apps: [], pins: [...UI_DEFAULTS.pins], wallpaper: UI_DEFAULTS.wa
   startPins: [], recent: [], recoCollapsed: false, iconSize: UI_DEFAULTS.iconSize, autoArrange: UI_DEFAULTS.autoArrange,
   desktop: [], assoc: {
     default_open: {
-      txt: 'notepad', md: 'notepad', log: 'notepad', json: 'notepad', csv: 'notepad',
+      txt: 'notepad', md: 'notepad', log: 'notepad', json: 'notepad', csv: 'spreadsheet',
       ini: 'notepad', cfg: 'notepad', yaml: 'notepad', yml: 'notepad', toml: 'notepad',
+      // NB: kept in step with registry/file-associations.json — tools/validate.mjs fails on a drift.
+      // These are only the SEED: /api/associations overrides them at boot. When the two disagreed, the
+      // same photo opened in a different app depending on whether that fetch happened to succeed.
       xml: 'notepad', html: 'notepad', c: 'notepad', h: 'notepad', cpp: 'notepad',
       py: 'notepad', sh: 'notepad',
-      jpg: 'photo-viewer', jpeg: 'photo-viewer', png: 'photo-viewer', bmp: 'photo-viewer', gif: 'photo-viewer',
+      jpg: 'paint', jpeg: 'paint', png: 'paint', bmp: 'paint', gif: 'photo-viewer',
       wav: 'media-player', mp3: 'media-player',
       mp4: 'video-player', webm: 'video-player', mov: 'video-player', mkv: 'video-player',
       todo: 'tasks', info: 'help'
@@ -318,12 +321,13 @@ let tsWindows = [];
 let tsIndex = 0;
 let tsActive = false;
 let tsKeyUp = null;                                // the live Alt/Win keyup handler, so we can tear it down
+let tsKeyUpTargets = [];                           // every window it was attached to (shell + app frames)
 // Cancel the Alt+Tab switcher without committing (used on blur/tab-hide/Escape). Without this the
 // overlay could get stuck visible if the modifier keyup never arrives (window lost focus mid-cycle).
 function cancelTaskSwitcher() {
   if (!tsActive && !tsKeyUp) return;
   tsActive = false;
-  if (tsKeyUp) { window.removeEventListener('keyup', tsKeyUp); tsKeyUp = null; }
+  if (tsKeyUp) { for (const t of tsKeyUpTargets) { try { t.removeEventListener('keyup', tsKeyUp); } catch {} } tsKeyUpTargets = []; tsKeyUp = null; }
   const ov = document.getElementById('task-switcher');
   if (ov) ov.classList.add('hidden');
 }
@@ -336,13 +340,19 @@ function cycleWindows(dir) {
     tsActive = true; tsIndex = dir > 0 ? 1 : tsWindows.length - 1;
     tsKeyUp = (e) => {
       if (e.key === 'Alt' || e.key === 'Meta') {
-        window.removeEventListener('keyup', tsKeyUp); tsKeyUp = null;
+        for (const t of tsKeyUpTargets) { try { t.removeEventListener('keyup', tsKeyUp); } catch {} }
+        tsKeyUpTargets = []; tsKeyUp = null;
         tsOverlay.classList.add('hidden'); tsActive = false;
         const w = tsWindows[tsIndex];
         if (w) WM.open(w.app);
       }
     };
-    window.addEventListener('keyup', tsKeyUp);
+    // osKeydown is injected into every app iframe, so Alt+Tab can START from inside an app — but the
+    // Alt KEYUP is then delivered to that iframe's window, never to the shell's. The switcher opened
+    // and never committed: it hung there until a blur or Escape. Listen everywhere the keydown can
+    // come from.
+    tsKeyUpTargets = [window, ...WM.list().map((w) => { const f = w.el.querySelector('iframe'); try { return f && f.contentWindow; } catch { return null; } }).filter(Boolean)];
+    for (const t of tsKeyUpTargets) { try { t.addEventListener('keyup', tsKeyUp); } catch {} }
   } else {
     tsIndex = (tsIndex + dir + tsWindows.length) % tsWindows.length;
   }
@@ -685,8 +695,18 @@ function showPairing() {
 function hideBootScreen() { const bs = document.getElementById('boot-screen'); if (bs) bs.classList.add('hidden'); }
 
 // The desktop breakpoint, in JS, kept deliberately in step with style.css:575 (max-width:768px).
-const mqDesktop = (typeof matchMedia === 'function') ? matchMedia('(min-width: 769px)') : { matches: true };
+// EXACTLY the complement of style.css's `max-width: 768px`. `min-width: 769px` left a dead zone at
+// fractional widths (768.5 matches neither), where the CSS hid the desktop while the JS still thought
+// it had one — and paid for /ws, polling and the SD crawl to show a "coming soon" card.
+const mqDesktop = (typeof matchMedia === 'function') ? matchMedia('not all and (max-width: 768px)') : { matches: true };
 let desktopStarted = false;
+let restartedOnce = false;   // a desktop that came BACK must not re-run onboarding or the session restore
+// Stop everything that costs the device. Used when the viewport drops below the desktop breakpoint:
+// the desktop is hidden, so the socket and the pollers have nothing to serve.
+function stopStatusPolling() {
+  clearTimeout(_statusTimer); _statusTimer = null;
+  clearTimeout(_statusTick); _statusTick = null;
+}
 // Declared permissions are NOT in /api/apps — the firmware streams only id/name/route/icon/enabled
 // (nucleo_httpd.c) to keep each app object ~200 bytes on an 18 KB heap — so read them from the
 // registry, which on the device IS the file /api/apps is served from. wm.allowAttr() turns them into
@@ -719,8 +739,10 @@ async function startDesktopServices() {
   if (desktopStarted) return;
   desktopStarted = true;
   await beginLoadAppPermissions();         // MUST precede the first window: `allow` is fixed at navigation
-  ensureOnboarding().catch(() => {});      // first paired boot with no AI key → curated welcome/setup
-  await restoreSession();                  // bring back the windows that were open last time
+  if (!restartedOnce) {
+    ensureOnboarding().catch(() => {});    // first paired boot with no AI key → curated welcome/setup
+    await restoreSession();                // bring back the windows that were open last time
+  }
   bootLog('desktop up (apps=' + state.apps.length + ') — attaching live socket /ws…');
   connectWS();
   // Warm the search index: instant from localStorage (if any), then revalidated against the
@@ -729,11 +751,22 @@ async function startDesktopServices() {
   FsIndex.init();
   doRefreshStatus(); scheduleStatus();   // adaptive: pause-when-hidden + 15s→60s error backoff (see runStatus)
 }
-function onViewportGrew(e) {
-  if (!e.matches || desktopStarted) return;
-  bootLog('viewport reached desktop size → starting the deferred services now');
-  if (mqDesktop.removeEventListener) mqDesktop.removeEventListener('change', onViewportGrew);
-  startDesktopServices();
+function onViewportChange(e) {
+  if (e.matches) {
+    if (desktopStarted) return;
+    bootLog('viewport reached desktop size → starting the deferred services now');
+    startDesktopServices();
+    return;
+  }
+  // Shrunk below the breakpoint: the desktop is hidden, so everything that costs the DEVICE stops.
+  // Windows are left alone — they carry unsaved work, and they cost nothing while nothing polls.
+  if (!desktopStarted) return;
+  bootLog('viewport below the desktop breakpoint → releasing the socket and pausing the pollers');
+  try { if (wsSock) { const s = wsSock; wsSock = null; s.close(); } } catch {}
+  if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
+  stopStatusPolling();
+  desktopStarted = false;            // so a return to desktop size starts them again
+  restartedOnce = true;              // ...but never re-runs onboarding or the session restore
 }
 async function boot() {
   // The splash must never be a dead end: even if a fetch hangs forever (no reject, just no
@@ -816,9 +849,12 @@ async function boot() {
   // device with 4-6 sockets. A phone was not merely refused: it was the most expensive client the
   // Cardputer could have, and it got a "coming soon" card for the trouble. Defer all of it until
   // there is a desktop to paint, and pick it up if the viewport later grows (rotation, desktop mode).
+  // Register the listener in BOTH directions, always: the deferral used to be one-way, so a tablet
+  // rotated to portrait kept paying for the socket, the polling and the crawl while showing the
+  // "coming soon" card. Now the cost follows the screen.
+  if (mqDesktop.addEventListener) mqDesktop.addEventListener('change', onViewportChange);
   if (mqDesktop.matches) startDesktopServices();
-  else { bootLog('viewport below the desktop breakpoint → session/ws/index/polling deferred (device pays nothing)');
-         if (mqDesktop.addEventListener) mqDesktop.addEventListener('change', onViewportGrew); }
+  else bootLog('viewport below the desktop breakpoint → session/ws/index/polling deferred (device pays nothing)');
   } catch (e) {
     console.error('[boot] init error — revealing UI anyway:', e);
   } finally {
