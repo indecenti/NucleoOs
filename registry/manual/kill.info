@@ -1,0 +1,16 @@
+{
+  "id": "kill",
+  "category": "terminal",
+  "it": {
+    "title": "kill - Chiude un'app in primo piano",
+    "synopsis": "kill <app-id>",
+    "description": "Chiede alla shell di chiudere la finestra di un'app, liberandone la RAM. Si indica per id (quello che stampa ps), non per il PID sintetico.",
+    "details": "NOME\n  kill - Chiude un'app in primo piano\n\nSINTASSI\n  kill <app-id>\n\nDESCRIZIONE\n  Chiede alla shell di chiudere la finestra di un'app, liberandone la RAM. Si indica per id (quello che stampa ps), non per il PID sintetico.\n\nOPZIONI\n  Nessuna opzione.\n\nCOSTO PER IL DISPOSITIVO\n  none — a message to the shell\n\nVEDERE ANCHE\n  ps(1), apps(1)\n\nESEMPI\n  ps\n  kill notes"
+  },
+  "en": {
+    "title": "kill - Close a foreground app",
+    "synopsis": "kill <app-id>",
+    "description": "Asks the shell to close an app window, freeing its RAM. Named by id (the one ps prints), not by the synthetic PID.",
+    "details": "NAME\n  kill - Close a foreground app\n\nSYNOPSIS\n  kill <app-id>\n\nDESCRIPTION\n  Asks the shell to close an app window, freeing its RAM. Named by id (the one ps prints), not by the synthetic PID.\n\nOPTIONS\n  No options.\n\nDEVICE COST\n  none — a message to the shell\n\nSEE ALSO\n  ps(1), apps(1)\n\nEXAMPLES\n  ps\n  kill notes"
+  }
+}

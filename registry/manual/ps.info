@@ -1,0 +1,16 @@
+{
+  "id": "ps",
+  "category": "terminal",
+  "it": {
+    "title": "ps - Elenca le app come tabella di processi",
+    "synopsis": "ps",
+    "description": "Mostra le app installate e abilitate con uno stato di esecuzione. Su un dispositivo che esegue una sola app in primo piano più la shell, questa è la cosa più vicina a un elenco processi.",
+    "details": "NOME\n  ps - Elenca le app come tabella di processi\n\nSINTASSI\n  ps\n\nDESCRIZIONE\n  Mostra le app installate e abilitate con uno stato di esecuzione. Su un dispositivo che esegue una sola app in primo piano più la shell, questa è la cosa più vicina a un elenco processi.\n\nOPZIONI\n  Nessuna opzione. Il PID mostrato è sintetico e si rinumera a ogni elenco: per agire su un'app usa il suo id con kill(1).\n\nCOSTO PER IL DISPOSITIVO\n  one app-table read, cached 30s\n\nVEDERE ANCHE\n  kill(1), apps(1)\n\nESEMPI\n  ps\n  ps | grep run"
+  },
+  "en": {
+    "title": "ps - List apps as a process table",
+    "synopsis": "ps",
+    "description": "Shows the installed, enabled apps with a run state. On a device that runs one foreground app plus the shell, this is the closest thing to a process list.",
+    "details": "NAME\n  ps - List apps as a process table\n\nSYNOPSIS\n  ps\n\nDESCRIPTION\n  Shows the installed, enabled apps with a run state. On a device that runs one foreground app plus the shell, this is the closest thing to a process list.\n\nOPTIONS\n  No options. The PID shown is synthetic and renumbers on every listing: to act on an app use its id with kill(1).\n\nDEVICE COST\n  one app-table read, cached 30s\n\nSEE ALSO\n  kill(1), apps(1)\n\nEXAMPLES\n  ps\n  ps | grep run"
+  }
+}

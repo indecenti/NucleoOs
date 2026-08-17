@@ -453,6 +453,7 @@
             ['sort [-r|-n|-u|-k N]', 'sort stdin'],
             ['uniq [-c]', 'collapse repeated lines'],
             ['cut -d<c> -f<list>', 'select fields or -c<a-b> columns'],
+            ['tr <set1> <set2> | -d <set>', 'translate or delete characters'],
             ['seq [first] last', 'print a range of integers'],
             ['tee <file>', 'pass stdin through and write it'],
           ],
@@ -469,6 +470,8 @@
             ['date [-u] [-s]', 'local and device time; -s pushes the browser clock'],
             ['lang [it|en|fr|es|de]', 'read or set the OS language'],
             ['apps [-a] | apps open <id>', 'installed apps'],
+            ['ps', 'running apps as a process table'],
+            ['kill <app-id>', 'close a foreground app (see `ps`)'],
             ['assoc [ext]', 'which app `open` will pick'],
             ['which <name>', 'builtin, app, or not found'],
             ['reboot', 'reboot the Cardputer'],
@@ -485,6 +488,7 @@
             ['ir db|send|raw|tvbgone', 'infrared (needs device.ir)'],
             ['link peers|status', 'ESP-NOW neighbours (needs mesh.peer)'],
             ['display on|off', 'panel power (needs device.display)'],
+            ['gpio read <pin> | write <pin> <0|1>', 'raw pin I/O on the safe allowlist'],
             ['screen [-o <file>]', 'save what the panel shows (needs device.display)'],
             ['say [text]', 'speak text (needs device.audio)'],
             ['notify <text>', 'post an OS notification (needs system.notify)'],
@@ -1224,6 +1228,25 @@
         flush();
         emit(rows.join('\n'));
       },
+      // `tr SET1 SET2` and `tr -d SET`. No ranges/classes — a Cardputer shell trades POSIX
+      // completeness for bytes, and 1:1 translation plus delete covers what a pipe actually needs
+      // (uppercasing a column, stripping carriage returns). Sets are taken literally, char for char.
+      tr(arg, ctx) {
+        if (ctx?.stdin == null) { emit('tr: reads standard input — put it after a pipe', 'err'); return; }
+        const argv = String(arg || '').match(/"[^"]*"|\S+/g) || [];
+        const del = argv[0] === '-d';
+        const sets = (del ? argv.slice(1) : argv).map((s) => s.replace(/^"|"$/g, ''));
+        if (del) {
+          if (!sets[0]) { emit('usage: tr -d <set>', 'err'); return; }
+          const drop = new Set([...sets[0]]);
+          emit([...ctx.stdin].filter((c) => !drop.has(c)).join(''));
+          return;
+        }
+        if (sets.length < 2 || !sets[0]) { emit('usage: tr <set1> <set2>   |   tr -d <set>', 'err'); return; }
+        const from = [...sets[0]], to = [...sets[1]];
+        const map = new Map(from.map((c, i) => [c, to[Math.min(i, to.length - 1)] ?? c]));
+        emit([...ctx.stdin].map((c) => (map.has(c) ? map.get(c) : c)).join(''));
+      },
       cut(arg, ctx) {
         if (ctx?.stdin == null) { emit('cut: reads standard input — put it after a pipe', 'err'); return; }
         const f = arg || '';
@@ -1363,6 +1386,49 @@
           n++;
         }
         emit(`${n} app${n === 1 ? '' : 's'}`, 'dim');
+      },
+      // `ps` on this OS is the app table — the closest thing to a process list on a device that runs
+      // one foreground app plus the shell. It is `apps` seen through a Linux lens, on purpose: the
+      // words people's fingers already know should do the obvious thing here too.
+      async ps() {
+        const list = await appList('ps');
+        if (!list) return;
+        emit('PID   STATE  APP', 'dim');
+        let pid = 1;
+        for (const x of list) {
+          if (x.enabled === false) continue;
+          emit(String(pid++).padStart(3) + '   ' + (x.running ? 'run ' : 'idle') + '   ' + (x.id || ''));
+        }
+      },
+      // `kill <app-id>` closes a foreground app window through the shell — a real action on a real
+      // OS, so it is by id, not by the synthetic PID `ps` prints (those renumber every listing).
+      kill(arg) {
+        const id = (arg || '').trim().replace(/^"|"$/g, '');
+        if (!id) { emit('usage: kill <app-id>   (see `ps`)', 'err'); return; }
+        try { parent.postMessage({ type: 'close-app', id }, '*'); emit('sent close → ' + id, 'dim'); }
+        catch { emit('kill: shell not reachable', 'err'); }
+      },
+      // Raw pin read/write against the firmware allowlist. The device refuses a pin outside its safe
+      // set with a 403, and this surfaces that verbatim rather than pretending it worked — a terminal
+      // that lies about hardware is worse than no terminal.
+      async gpio(arg) {
+        const argv = String(arg || '').match(/\S+/g) || [];
+        const sub = (argv[0] || '').toLowerCase();
+        if (sub === 'read' || sub === 'get') {
+          const pin = parseInt(argv[1], 10);
+          if (Number.isNaN(pin)) { emit('usage: gpio read <pin>', 'err'); return; }
+          const j = await devJSON('gpio', '/api/gpio?pin=' + pin);
+          if (j) emit(j.ok ? `pin ${j.pin} = ${j.value}` : 'gpio: ' + (j.err || 'refused'), j.ok ? '' : 'err');
+          return;
+        }
+        if (sub === 'write' || sub === 'set') {
+          const pin = parseInt(argv[1], 10), val = argv[2] === '1' || argv[2] === 'high' ? 1 : 0;
+          if (Number.isNaN(pin)) { emit('usage: gpio write <pin> <0|1>', 'err'); return; }
+          const j = await devPOST('gpio', '/api/gpio', { pin, value: val });
+          if (j) emit(j.ok ? `pin ${j.pin} = ${j.value}` : 'gpio: ' + (j.err || 'refused'), j.ok ? 'ok' : 'err');
+          return;
+        }
+        emit('usage: gpio read <pin>   |   gpio write <pin> <0|1>', 'err');
       },
       async assoc(arg) {
         const j = await devJSON('assoc', '/api/associations');

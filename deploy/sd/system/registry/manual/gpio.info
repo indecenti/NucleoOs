@@ -1,0 +1,16 @@
+{
+  "id": "gpio",
+  "category": "terminal",
+  "it": {
+    "title": "gpio - Legge o scrive un pin",
+    "synopsis": "gpio read <pin>   |   gpio write <pin> <0|1>",
+    "description": "I/O grezzo sui pin, entro la lista consentita del firmware. Un pin fuori lista viene rifiutato dal dispositivo con un errore, riportato tale e quale.",
+    "details": "NOME\n  gpio - Legge o scrive un pin\n\nSINTASSI\n  gpio read <pin>   |   gpio write <pin> <0|1>\n\nDESCRIZIONE\n  I/O grezzo sui pin, entro la lista consentita del firmware. Un pin fuori lista viene rifiutato dal dispositivo con un errore, riportato tale e quale.\n\nOPZIONI\n  read PIN\n    Legge il livello del pin (consentiti: 0, 1, 2).\n  write PIN 0|1\n    Imposta il livello (scrivibili: 1, 2).\n\nCOSTO PER IL DISPOSITIVO\n  one pin access per call\n\nVEDERE ANCHE\n  ir(1), display(1)\n\nESEMPI\n  gpio read 1\n  gpio write 2 1"
+  },
+  "en": {
+    "title": "gpio - Read or write a pin",
+    "synopsis": "gpio read <pin>   |   gpio write <pin> <0|1>",
+    "description": "Raw pin I/O, within the firmware allowlist. A pin outside the list is refused by the device with an error, surfaced verbatim.",
+    "details": "NAME\n  gpio - Read or write a pin\n\nSYNOPSIS\n  gpio read <pin>   |   gpio write <pin> <0|1>\n\nDESCRIPTION\n  Raw pin I/O, within the firmware allowlist. A pin outside the list is refused by the device with an error, surfaced verbatim.\n\nOPTIONS\n  read PIN\n    Read the pin level (readable: 0, 1, 2).\n  write PIN 0|1\n    Set the level (writable: 1, 2).\n\nDEVICE COST\n  one pin access per call\n\nSEE ALSO\n  ir(1), display(1)\n\nEXAMPLES\n  gpio read 1\n  gpio write 2 1"
+  }
+}
