@@ -12,5 +12,23 @@
     "synopsis": "seq [first] last",
     "description": "Prints one integer per line, counting up or down. It is the only generator a pipeline has.",
     "details": "NAME\n  seq - Print a range of integers\n\nSYNOPSIS\n  seq [first] last\n\nDESCRIPTION\n  Prints one integer per line, counting up or down. It is the only generator a pipeline has.\n\nOPTIONS\n  first\n    Where to start (1 by default).\n  last\n    Where to stop; counts down when it is smaller than first.\n\nDEVICE COST\n  None. Entirely browser-side.\n\nSEE ALSO\n  sort(1), uniq(1)\n\nEXAMPLES\n  seq 5\n  seq 10 1"
+  },
+  "fr": {
+    "title": "seq - Afficher une plage d'entiers",
+    "synopsis": "seq [first] last",
+    "description": "Affiche un entier par ligne, en comptant vers le haut ou vers le bas. C'est le seul générateur dont dispose un pipeline.",
+    "details": "NOM\n  seq - Afficher une plage d'entiers\n\nSYNOPSIS\n  seq [first] last\n\nDESCRIPTION\n  Affiche un entier par ligne, en comptant vers le haut ou vers le bas. C'est le seul générateur dont dispose un pipeline.\n\nOPTIONS\n  first\n    Où commencer (1 par défaut).\n  last\n    Où s'arrêter ; compte à rebours quand il est plus petit que first.\n\nCOÛT POUR L'APPAREIL\n  Aucun. Entièrement côté navigateur.\n\nVOIR AUSSI\n  sort(1), uniq(1)\n\nEXEMPLES\n  seq 5\n  seq 10 1"
+  },
+  "es": {
+    "title": "seq - Imprimir un rango de enteros",
+    "synopsis": "seq [first] last",
+    "description": "Imprime un entero por línea, contando hacia arriba o hacia abajo. Es el único generador que tiene una tubería.",
+    "details": "NOMBRE\n  seq - Imprimir un rango de enteros\n\nSINOPSIS\n  seq [first] last\n\nDESCRIPCIÓN\n  Imprime un entero por línea, contando hacia arriba o hacia abajo. Es el único generador que tiene una tubería.\n\nOPCIONES\n  first\n    Dónde empezar (1 por defecto).\n  last\n    Dónde parar; cuenta hacia atrás cuando es menor que first.\n\nCOSTE PARA EL DISPOSITIVO\n  Ninguno. Enteramente del lado del navegador.\n\nVÉASE TAMBIÉN\n  sort(1), uniq(1)\n\nEJEMPLOS\n  seq 5\n  seq 10 1"
+  },
+  "de": {
+    "title": "seq - Einen Bereich ganzer Zahlen ausgeben",
+    "synopsis": "seq [first] last",
+    "description": "Gibt eine ganze Zahl pro Zeile aus, auf- oder abwärts zählend. Es ist der einzige Generator, den eine Pipeline hat.",
+    "details": "NAME\n  seq - Einen Bereich ganzer Zahlen ausgeben\n\nÜBERSICHT\n  seq [first] last\n\nBESCHREIBUNG\n  Gibt eine ganze Zahl pro Zeile aus, auf- oder abwärts zählend. Es ist der einzige Generator, den eine Pipeline hat.\n\nOPTIONEN\n  first\n    Wo begonnen wird (standardmäßig 1).\n  last\n    Wo aufgehört wird; zählt abwärts, wenn es kleiner als first ist.\n\nGERÄTEKOSTEN\n  Keine. Vollständig browserseitig.\n\nSIEHE AUCH\n  sort(1), uniq(1)\n\nBEISPIELE\n  seq 5\n  seq 10 1"
   }
 }

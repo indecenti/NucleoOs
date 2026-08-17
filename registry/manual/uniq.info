@@ -12,5 +12,23 @@
     "synopsis": "uniq [-c]",
     "description": "Turns a wall of identical log lines into one line, optionally with a count. This is the step that makes two kilobytes of dmesg small enough to hand to anima.",
     "details": "NAME\n  uniq - Collapse repeated adjacent lines\n\nSYNOPSIS\n  uniq [-c]\n\nDESCRIPTION\n  Turns a wall of identical log lines into one line, optionally with a count. This is the step that makes two kilobytes of dmesg small enough to hand to anima.\n\nOPTIONS\n  -c\n    Prefix each line with how many times it repeated.\n\nDEVICE COST\n  None. Entirely browser-side.\n\nSEE ALSO\n  sort(1), grep(1), anima(1)\n\nEXAMPLES\n  dmesg | sort | uniq -c | sort -n -r"
+  },
+  "fr": {
+    "title": "uniq - Fusionner les lignes adjacentes répétées",
+    "synopsis": "uniq [-c]",
+    "description": "Transforme un mur de lignes de journal identiques en une seule ligne, éventuellement avec un décompte. C'est l'étape qui rend deux kilo-octets de dmesg assez petits pour être passés à anima.",
+    "details": "NOM\n  uniq - Fusionner les lignes adjacentes répétées\n\nSYNOPSIS\n  uniq [-c]\n\nDESCRIPTION\n  Transforme un mur de lignes de journal identiques en une seule ligne, éventuellement avec un décompte. C'est l'étape qui rend deux kilo-octets de dmesg assez petits pour être passés à anima.\n\nOPTIONS\n  -c\n    Préfixer chaque ligne par le nombre de fois qu'elle s'est répétée.\n\nCOÛT POUR L'APPAREIL\n  Aucun. Entièrement côté navigateur.\n\nVOIR AUSSI\n  sort(1), grep(1), anima(1)\n\nEXEMPLES\n  dmesg | sort | uniq -c | sort -n -r"
+  },
+  "es": {
+    "title": "uniq - Contraer las líneas adyacentes repetidas",
+    "synopsis": "uniq [-c]",
+    "description": "Convierte un muro de líneas de registro idénticas en una sola línea, opcionalmente con un recuento. Es el paso que hace que dos kilobytes de dmesg sean lo bastante pequeños para pasárselos a anima.",
+    "details": "NOMBRE\n  uniq - Contraer las líneas adyacentes repetidas\n\nSINOPSIS\n  uniq [-c]\n\nDESCRIPCIÓN\n  Convierte un muro de líneas de registro idénticas en una sola línea, opcionalmente con un recuento. Es el paso que hace que dos kilobytes de dmesg sean lo bastante pequeños para pasárselos a anima.\n\nOPCIONES\n  -c\n    Antepone a cada línea cuántas veces se repitió.\n\nCOSTE PARA EL DISPOSITIVO\n  Ninguno. Enteramente del lado del navegador.\n\nVÉASE TAMBIÉN\n  sort(1), grep(1), anima(1)\n\nEJEMPLOS\n  dmesg | sort | uniq -c | sort -n -r"
+  },
+  "de": {
+    "title": "uniq - Wiederholte benachbarte Zeilen zusammenfassen",
+    "synopsis": "uniq [-c]",
+    "description": "Verwandelt eine Wand identischer Log-Zeilen in eine Zeile, optional mit Zähler. Dies ist der Schritt, der zwei Kilobyte dmesg klein genug macht, um sie an anima zu übergeben.",
+    "details": "NAME\n  uniq - Wiederholte benachbarte Zeilen zusammenfassen\n\nÜBERSICHT\n  uniq [-c]\n\nBESCHREIBUNG\n  Verwandelt eine Wand identischer Log-Zeilen in eine Zeile, optional mit Zähler. Dies ist der Schritt, der zwei Kilobyte dmesg klein genug macht, um sie an anima zu übergeben.\n\nOPTIONEN\n  -c\n    Jeder Zeile voranstellen, wie oft sie sich wiederholt hat.\n\nGERÄTEKOSTEN\n  Keine. Vollständig browserseitig.\n\nSIEHE AUCH\n  sort(1), grep(1), anima(1)\n\nBEISPIELE\n  dmesg | sort | uniq -c | sort -n -r"
   }
 }

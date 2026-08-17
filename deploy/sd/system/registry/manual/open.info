@@ -12,5 +12,23 @@
     "synopsis": "open <file>",
     "description": "Open a file using the associated graphical application.",
     "details": "NAME\n  open - Open file with default application.\n\nSYNOPSIS\n  open <file>\n\nDESCRIPTION\n  Opens the specified resource. The desktop shell resolves the file extension and launches the default associated window.\n\nOPTIONS\n  <file>\n    The path of the file to open.\n\nSYSTEM ARCHITECTURE\n  Uses browser iframe 'postMessage' calls. Terminal sends '{ type: \"open-file\", path: file }' to the parent window. The shell parses the extension, reads '/system/config/file-associations.json' and opens the app (e.g. 'notepad', 'photo-viewer').\n\nEXIT CODES\n  0\n    Success. Message dispatched to the shell.\n  1\n    Shell host unreachable or invalid file association.\n\nCONFORMING TO\n  NucleoOS proprietary extension.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  echo(1)\n\nADVANCED EXAMPLES\n  open /data/Pictures/wallpaper.png\n  open /data/document.txt"
+  },
+  "fr": {
+    "title": "open - Ouvrir un fichier avec l'application par défaut",
+    "synopsis": "open <file>",
+    "description": "Ouvrir un fichier au moyen de l'application graphique associée.",
+    "details": "NOM\n  open - Ouvrir un fichier avec l'application par défaut.\n\nSYNOPSIS\n  open <file>\n\nDESCRIPTION\n  Ouvre la ressource spécifiée. Le shell de bureau résout l'extension du fichier et lance la fenêtre associée par défaut.\n\nOPTIONS\n  <file>\n    Le chemin du fichier à ouvrir.\n\nARCHITECTURE SYSTÈME\n  Utilise les appels 'postMessage' de l'iframe du navigateur. Le terminal envoie '{ type: \"open-file\", path: file }' à la fenêtre parente. Le shell analyse l'extension, lit '/system/config/file-associations.json' et ouvre l'application (p. ex. 'notepad', 'photo-viewer').\n\nCODES DE RETOUR\n  0\n    Succès. Message envoyé au shell.\n  1\n    Hôte du shell injoignable ou association de fichier invalide.\n\nCONFORMITÉ\n  Extension propriétaire NucleoOS.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  echo(1)\n\nEXEMPLES AVANCÉS\n  open /data/Pictures/wallpaper.png\n  open /data/document.txt"
+  },
+  "es": {
+    "title": "open - Abrir un archivo con la aplicación por defecto",
+    "synopsis": "open <file>",
+    "description": "Abrir un archivo usando la aplicación gráfica asociada.",
+    "details": "NOMBRE\n  open - Abrir un archivo con la aplicación por defecto.\n\nSINOPSIS\n  open <file>\n\nDESCRIPCIÓN\n  Abre el recurso especificado. El shell de escritorio resuelve la extensión del archivo y lanza la ventana asociada por defecto.\n\nOPCIONES\n  <file>\n    La ruta del archivo que se va a abrir.\n\nARQUITECTURA DEL SISTEMA\n  Usa llamadas 'postMessage' del iframe del navegador. El terminal envía '{ type: \"open-file\", path: file }' a la ventana padre. El intérprete analiza la extensión, lee '/system/config/file-associations.json' y abre la aplicación (p. ej. 'notepad', 'photo-viewer').\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Mensaje enviado al intérprete.\n  1\n    El anfitrión del intérprete es inalcanzable o la asociación de archivo no es válida.\n\nCONFORME A\n  Extensión propietaria de NucleoOS.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  echo(1)\n\nEJEMPLOS AVANZADOS\n  open /data/Pictures/wallpaper.png\n  open /data/document.txt"
+  },
+  "de": {
+    "title": "open - Datei mit der Standard-App öffnen",
+    "synopsis": "open <file>",
+    "description": "Eine Datei mit der zugeordneten grafischen Anwendung öffnen.",
+    "details": "NAME\n  open - Datei mit der Standardanwendung öffnen.\n\nÜBERSICHT\n  open <file>\n\nBESCHREIBUNG\n  Öffnet die angegebene Ressource. Die Desktop-Shell löst die Dateierweiterung auf und startet das standardmäßig zugeordnete Fenster.\n\nOPTIONEN\n  <file>\n    Der Pfad der zu öffnenden Datei.\n\nSYSTEMARCHITEKTUR\n  Verwendet 'postMessage'-Aufrufe des Browser-iframes. Das Terminal sendet '{ type: \"open-file\", path: file }' an das übergeordnete Fenster. Die Shell parst die Erweiterung, liest '/system/config/file-associations.json' und öffnet die App (z. B. 'notepad', 'photo-viewer').\n\nEXIT-CODES\n  0\n    Erfolg. Nachricht an die Shell versendet.\n  1\n    Shell-Host nicht erreichbar oder ungültige Dateizuordnung.\n\nKONFORM ZU\n  Proprietäre NucleoOS-Erweiterung.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  echo(1)\n\nERWEITERTE BEISPIELE\n  open /data/Pictures/wallpaper.png\n  open /data/document.txt"
   }
 }

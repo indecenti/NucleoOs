@@ -12,5 +12,23 @@
     "synopsis": "sort [-r] [-n] [-u] [-k N]",
     "description": "Reorders the lines that arrive from a pipe.",
     "details": "NAME\n  sort - Sort standard input\n\nSYNOPSIS\n  sort [-r] [-n] [-u] [-k N]\n\nDESCRIPTION\n  Reorders the lines that arrive from a pipe.\n\nOPTIONS\n  -r\n    Reverse the order.\n  -n\n    Compare numerically.\n  -u\n    Drop adjacent duplicates.\n  -k N\n    Sort on the Nth whitespace-separated field.\n\nDEVICE COST\n  None. Entirely browser-side.\n\nSEE ALSO\n  uniq(1), cut(1), du(1)\n\nEXAMPLES\n  du /data | sort -n -r\n  dmesg | sort -u"
+  },
+  "fr": {
+    "title": "sort - Trier l'entrée standard",
+    "synopsis": "sort [-r] [-n] [-u] [-k N]",
+    "description": "Réordonne les lignes qui arrivent d'un tube.",
+    "details": "NOM\n  sort - Trier l'entrée standard\n\nSYNOPSIS\n  sort [-r] [-n] [-u] [-k N]\n\nDESCRIPTION\n  Réordonne les lignes qui arrivent d'un tube.\n\nOPTIONS\n  -r\n    Inverser l'ordre.\n  -n\n    Comparer numériquement.\n  -u\n    Supprimer les doublons adjacents.\n  -k N\n    Trier sur le Nième champ séparé par des espaces.\n\nCOÛT POUR L'APPAREIL\n  Aucun. Entièrement côté navigateur.\n\nVOIR AUSSI\n  uniq(1), cut(1), du(1)\n\nEXEMPLES\n  du /data | sort -n -r\n  dmesg | sort -u"
+  },
+  "es": {
+    "title": "sort - Ordenar la entrada estándar",
+    "synopsis": "sort [-r] [-n] [-u] [-k N]",
+    "description": "Reordena las líneas que llegan de una tubería.",
+    "details": "NOMBRE\n  sort - Ordenar la entrada estándar\n\nSINOPSIS\n  sort [-r] [-n] [-u] [-k N]\n\nDESCRIPCIÓN\n  Reordena las líneas que llegan de una tubería.\n\nOPCIONES\n  -r\n    Invertir el orden.\n  -n\n    Comparar numéricamente.\n  -u\n    Descartar los duplicados adyacentes.\n  -k N\n    Ordenar por el N-ésimo campo separado por espacios en blanco.\n\nCOSTE PARA EL DISPOSITIVO\n  Ninguno. Enteramente del lado del navegador.\n\nVÉASE TAMBIÉN\n  uniq(1), cut(1), du(1)\n\nEJEMPLOS\n  du /data | sort -n -r\n  dmesg | sort -u"
+  },
+  "de": {
+    "title": "sort - Standardeingabe sortieren",
+    "synopsis": "sort [-r] [-n] [-u] [-k N]",
+    "description": "Ordnet die Zeilen um, die aus einer Pipe eintreffen.",
+    "details": "NAME\n  sort - Standardeingabe sortieren\n\nÜBERSICHT\n  sort [-r] [-n] [-u] [-k N]\n\nBESCHREIBUNG\n  Ordnet die Zeilen um, die aus einer Pipe eintreffen.\n\nOPTIONEN\n  -r\n    Die Reihenfolge umkehren.\n  -n\n    Numerisch vergleichen.\n  -u\n    Benachbarte Duplikate verwerfen.\n  -k N\n    Nach dem N-ten durch Leerzeichen getrennten Feld sortieren.\n\nGERÄTEKOSTEN\n  Keine. Vollständig browserseitig.\n\nSIEHE AUCH\n  uniq(1), cut(1), du(1)\n\nBEISPIELE\n  du /data | sort -n -r\n  dmesg | sort -u"
   }
 }

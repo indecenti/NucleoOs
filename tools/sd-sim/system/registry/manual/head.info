@@ -12,5 +12,23 @@
     "synopsis": "head [-n lines] <file>",
     "description": "Output the first part (default 10 lines) of a file.",
     "details": "NAME\n  head - Output first lines of a file.\n\nSYNOPSIS\n  head [-n <lines>] <file>\n\nDESCRIPTION\n  Prints the initial segment of a file (defaults to 10 lines).\n\nOPTIONS\n  -n <lines>\n    Specify the exact count of lines to print (e.g. '-n 5').\n  <file>\n    The target file path.\n\nSYSTEM ARCHITECTURE\n  Downloads file contents via GET '/api/fs/read'. Parses lines in memory and isolates the top elements using array slicing ('slice(0, n)'). See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    Read error or invalid parameter formatting.\n  404\n    Target file not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  tail(1), cat(1), web_api(7)\n\nADVANCED EXAMPLES\n  head logs.txt\n  head -n 5 /data/settings.json"
+  },
+  "fr": {
+    "title": "head - Afficher les premières lignes d'un fichier",
+    "synopsis": "head [-n lines] <file>",
+    "description": "Afficher le début (10 lignes par défaut) d'un fichier.",
+    "details": "NOM\n  head - Afficher les premières lignes d'un fichier.\n\nSYNOPSIS\n  head [-n <lines>] <file>\n\nDESCRIPTION\n  Affiche le segment initial d'un fichier (10 lignes par défaut).\n\nOPTIONS\n  -n <lines>\n    Indiquer le nombre exact de lignes à afficher (p. ex. '-n 5').\n  <file>\n    Le chemin du fichier cible.\n\nARCHITECTURE SYSTÈME\n  Télécharge le contenu du fichier via GET '/api/fs/read'. Analyse les lignes en mémoire et isole les premiers éléments par découpage de tableau ('slice(0, n)'). Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès.\n  1\n    Erreur de lecture ou format de paramètre invalide.\n  404\n    Fichier cible introuvable.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  tail(1), cat(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  head logs.txt\n  head -n 5 /data/settings.json"
+  },
+  "es": {
+    "title": "head - Mostrar las primeras líneas de un archivo",
+    "synopsis": "head [-n lines] <file>",
+    "description": "Mostrar la primera parte (10 líneas por defecto) de un archivo.",
+    "details": "NOMBRE\n  head - Mostrar las primeras líneas de un archivo.\n\nSINOPSIS\n  head [-n <lines>] <file>\n\nDESCRIPCIÓN\n  Imprime el segmento inicial de un archivo (10 líneas por defecto).\n\nOPCIONES\n  -n <lines>\n    Especifica el número exacto de líneas que se imprimirán (p. ej. '-n 5').\n  <file>\n    La ruta del archivo de destino.\n\nARQUITECTURA DEL SISTEMA\n  Descarga el contenido del archivo mediante GET '/api/fs/read'. Analiza las líneas en memoria y aísla los primeros elementos mediante el troceado de arrays ('slice(0, n)'). Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Error de lectura o formato de parámetro no válido.\n  404\n    Archivo de destino no encontrado.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  tail(1), cat(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  head logs.txt\n  head -n 5 /data/settings.json"
+  },
+  "de": {
+    "title": "head - Erste Zeilen einer Datei anzeigen",
+    "synopsis": "head [-n lines] <file>",
+    "description": "Den ersten Teil (standardmäßig 10 Zeilen) einer Datei ausgeben.",
+    "details": "NAME\n  head - Erste Zeilen einer Datei ausgeben.\n\nÜBERSICHT\n  head [-n <lines>] <file>\n\nBESCHREIBUNG\n  Gibt den Anfangsabschnitt einer Datei aus (standardmäßig 10 Zeilen).\n\nOPTIONEN\n  -n <lines>\n    Die genaue Anzahl der auszugebenden Zeilen angeben (z. B. '-n 5').\n  <file>\n    Der Zieldateipfad.\n\nSYSTEMARCHITEKTUR\n  Lädt den Dateiinhalt per GET '/api/fs/read' herunter. Parst die Zeilen im Speicher und isoliert die obersten Elemente durch Array-Slicing ('slice(0, n)'). Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Lesefehler oder ungültige Parameterformatierung.\n  404\n    Zieldatei nicht gefunden.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  tail(1), cat(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  head logs.txt\n  head -n 5 /data/settings.json"
   }
 }

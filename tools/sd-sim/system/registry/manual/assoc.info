@@ -12,5 +12,23 @@
     "synopsis": "assoc [extension]",
     "description": "Prints the file-association table, or the single entry for one extension, plus the fallback used when nothing matches.",
     "details": "NAME\n  assoc - Show which app open(1) will pick\n\nSYNOPSIS\n  assoc [extension]\n\nDESCRIPTION\n  Prints the file-association table, or the single entry for one extension, plus the fallback used when nothing matches.\n\nOPTIONS\n  [extension]\n    Just this extension, with or without the dot.\n\nDEVICE COST\n  One GET /api/associations.\n\nSEE ALSO\n  open(1), apps(1)\n\nEXAMPLES\n  assoc\n  assoc txt\n  assoc | grep notepad"
+  },
+  "fr": {
+    "title": "assoc - Indiquer quelle application open(1) choisira",
+    "synopsis": "assoc [extension]",
+    "description": "Affiche la table des associations de fichiers, ou l'entrée unique d'une extension, ainsi que le recours utilisé quand rien ne correspond.",
+    "details": "NOM\n  assoc - Indiquer quelle application open(1) choisira\n\nSYNOPSIS\n  assoc [extension]\n\nDESCRIPTION\n  Affiche la table des associations de fichiers, ou l'entrée unique d'une extension, ainsi que le recours utilisé quand rien ne correspond.\n\nOPTIONS\n  [extension]\n    Juste cette extension, avec ou sans le point.\n\nCOÛT POUR L'APPAREIL\n  Un GET /api/associations.\n\nVOIR AUSSI\n  open(1), apps(1)\n\nEXEMPLES\n  assoc\n  assoc txt\n  assoc | grep notepad"
+  },
+  "es": {
+    "title": "assoc - Mostrar qué aplicación elegirá open(1)",
+    "synopsis": "assoc [extension]",
+    "description": "Imprime la tabla de asociaciones de archivos, o la entrada única de una extensión, más el valor por defecto usado cuando no hay coincidencia.",
+    "details": "NOMBRE\n  assoc - Mostrar qué aplicación elegirá open(1)\n\nSINOPSIS\n  assoc [extension]\n\nDESCRIPCIÓN\n  Imprime la tabla de asociaciones de archivos, o la entrada única de una extensión, más el valor por defecto usado cuando no hay coincidencia.\n\nOPCIONES\n  [extension]\n    Solo esta extensión, con o sin el punto.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/associations.\n\nVÉASE TAMBIÉN\n  open(1), apps(1)\n\nEJEMPLOS\n  assoc\n  assoc txt\n  assoc | grep notepad"
+  },
+  "de": {
+    "title": "assoc - Anzeigen, welche App open(1) auswählt",
+    "synopsis": "assoc [extension]",
+    "description": "Gibt die Dateizuordnungstabelle aus oder den einzelnen Eintrag für eine Erweiterung, samt dem Rückfall, der greift, wenn nichts passt.",
+    "details": "NAME\n  assoc - Anzeigen, welche App open(1) auswählt\n\nÜBERSICHT\n  assoc [extension]\n\nBESCHREIBUNG\n  Gibt die Dateizuordnungstabelle aus oder den einzelnen Eintrag für eine Erweiterung, samt dem Rückfall, der greift, wenn nichts passt.\n\nOPTIONEN\n  [extension]\n    Nur diese Erweiterung, mit oder ohne den Punkt.\n\nGERÄTEKOSTEN\n  Ein GET /api/associations.\n\nSIEHE AUCH\n  open(1), apps(1)\n\nBEISPIELE\n  assoc\n  assoc txt\n  assoc | grep notepad"
   }
 }

@@ -12,5 +12,23 @@
     "synopsis": "which <name>",
     "description": "Answers the question \"is that a command or an app\" in one line.",
     "details": "NAME\n  which - Say whether a name is a builtin, an alias or an app\n\nSYNOPSIS\n  which <name>\n\nDESCRIPTION\n  Answers the question \"is that a command or an app\" in one line.\n\nOPTIONS\n  <name>\n    The name to look up.\n\nDEVICE COST\n  One GET /api/apps, memoised for 30 s and shared with the apps command.\n\nSEE ALSO\n  apps(1), alias(1), man(1)\n\nEXAMPLES\n  which ls\n  which notepad"
+  },
+  "fr": {
+    "title": "which - Indiquer si un nom est une commande interne, un alias ou une application",
+    "synopsis": "which <name>",
+    "description": "Répond en une ligne à la question « est-ce une commande ou une application ».",
+    "details": "NOM\n  which - Indiquer si un nom est une commande interne, un alias ou une application\n\nSYNOPSIS\n  which <name>\n\nDESCRIPTION\n  Répond en une ligne à la question « est-ce une commande ou une application ».\n\nOPTIONS\n  <name>\n    Le nom à rechercher.\n\nCOÛT POUR L'APPAREIL\n  Un GET /api/apps, mémoïsé pendant 30 s et partagé avec la commande apps.\n\nVOIR AUSSI\n  apps(1), alias(1), man(1)\n\nEXEMPLES\n  which ls\n  which notepad"
+  },
+  "es": {
+    "title": "which - Indicar si un nombre es un comando interno, un alias o una aplicación",
+    "synopsis": "which <name>",
+    "description": "Responde en una línea a la pregunta \"¿es eso un comando o una aplicación?\".",
+    "details": "NOMBRE\n  which - Indicar si un nombre es un comando interno, un alias o una aplicación\n\nSINOPSIS\n  which <name>\n\nDESCRIPCIÓN\n  Responde en una línea a la pregunta \"¿es eso un comando o una aplicación?\".\n\nOPCIONES\n  <name>\n    El nombre que se va a buscar.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/apps, memoizado durante 30 s y compartido con el comando apps.\n\nVÉASE TAMBIÉN\n  apps(1), alias(1), man(1)\n\nEJEMPLOS\n  which ls\n  which notepad"
+  },
+  "de": {
+    "title": "which - Sagen, ob ein Name ein Builtin, ein Alias oder eine App ist",
+    "synopsis": "which <name>",
+    "description": "Beantwortet die Frage \"ist das ein Befehl oder eine App\" in einer Zeile.",
+    "details": "NAME\n  which - Sagen, ob ein Name ein Builtin, ein Alias oder eine App ist\n\nÜBERSICHT\n  which <name>\n\nBESCHREIBUNG\n  Beantwortet die Frage \"ist das ein Befehl oder eine App\" in einer Zeile.\n\nOPTIONEN\n  <name>\n    Der nachzuschlagende Name.\n\nGERÄTEKOSTEN\n  Ein GET /api/apps, für 30 s zwischengespeichert und mit dem Befehl apps geteilt.\n\nSIEHE AUCH\n  apps(1), alias(1), man(1)\n\nBEISPIELE\n  which ls\n  which notepad"
   }
 }

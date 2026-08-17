@@ -12,5 +12,23 @@
     "synopsis": "rm <path>",
     "description": "Permanently delete a file or an empty directory.",
     "details": "NAME\n  rm - Remove file or directory.\n\nSYNOPSIS\n  rm <path>\n\nDESCRIPTION\n  Deletes the file or directory empty node permanently. The resource cannot be recovered from the Recycle Bin.\n\nOPTIONS\n  <path>\n    The target resource to delete.\n\nSYSTEM ARCHITECTURE\n  Sends a POST request to '/api/fs/delete?path=<path>'. The firmware calls POSIX 'unlink(path)' to free the sector blocks and clear the entry from the FAT filesystem cluster allocation map. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. File deleted.\n  1\n    Deletion failed (I/O error, folder is not empty, or write locks).\n  404\n    The specified resource does not exist.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  cp(1), mv(1), web_api(7)\n\nADVANCED EXAMPLES\n  rm /data/temp_log.txt\n  rm /data/empty_dir"
+  },
+  "fr": {
+    "title": "rm - Supprimer un fichier ou un répertoire",
+    "synopsis": "rm <path>",
+    "description": "Supprimer définitivement un fichier ou un répertoire vide.",
+    "details": "NOM\n  rm - Supprimer un fichier ou un répertoire.\n\nSYNOPSIS\n  rm <path>\n\nDESCRIPTION\n  Supprime définitivement le fichier ou le nœud de répertoire vide. La ressource ne peut pas être récupérée depuis la Corbeille.\n\nOPTIONS\n  <path>\n    La ressource cible à supprimer.\n\nARCHITECTURE SYSTÈME\n  Envoie une requête POST vers '/api/fs/delete?path=<path>'. Le firmware appelle la fonction POSIX 'unlink(path)' pour libérer les blocs de secteurs et effacer l'entrée de la carte d'allocation des clusters du système de fichiers FAT. Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès. Fichier supprimé.\n  1\n    Échec de suppression (erreur d'E/S, dossier non vide ou verrous d'écriture).\n  404\n    La ressource spécifiée n'existe pas.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  cp(1), mv(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  rm /data/temp_log.txt\n  rm /data/empty_dir"
+  },
+  "es": {
+    "title": "rm - Eliminar un archivo o directorio",
+    "synopsis": "rm <path>",
+    "description": "Eliminar permanentemente un archivo o un directorio vacío.",
+    "details": "NOMBRE\n  rm - Eliminar un archivo o directorio.\n\nSINOPSIS\n  rm <path>\n\nDESCRIPCIÓN\n  Elimina permanentemente el archivo o el nodo de directorio vacío. El recurso no puede recuperarse de la Papelera de reciclaje.\n\nOPCIONES\n  <path>\n    El recurso de destino que se va a eliminar.\n\nARQUITECTURA DEL SISTEMA\n  Envía una petición POST a '/api/fs/delete?path=<path>'. El firmware llama a 'unlink(path)' de POSIX para liberar los bloques de sectores y borrar la entrada del mapa de asignación de clústeres del sistema de archivos FAT. Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Archivo eliminado.\n  1\n    Falló el borrado (error de E/S, la carpeta no está vacía o bloqueos de escritura).\n  404\n    El recurso especificado no existe.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  cp(1), mv(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  rm /data/temp_log.txt\n  rm /data/empty_dir"
+  },
+  "de": {
+    "title": "rm - Datei oder Verzeichnis entfernen",
+    "synopsis": "rm <path>",
+    "description": "Eine Datei oder ein leeres Verzeichnis dauerhaft löschen.",
+    "details": "NAME\n  rm - Datei oder Verzeichnis entfernen.\n\nÜBERSICHT\n  rm <path>\n\nBESCHREIBUNG\n  Löscht die Datei oder den leeren Verzeichnisknoten dauerhaft. Die Ressource kann nicht aus dem Papierkorb wiederhergestellt werden.\n\nOPTIONEN\n  <path>\n    Die zu löschende Zielressource.\n\nSYSTEMARCHITEKTUR\n  Sendet eine POST-Anfrage an '/api/fs/delete?path=<path>'. Die Firmware ruft POSIX 'unlink(path)' auf, um die Sektorblöcke freizugeben und den Eintrag aus der Cluster-Belegungskarte des FAT-Dateisystems zu entfernen. Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg. Datei gelöscht.\n  1\n    Löschen fehlgeschlagen (E/A-Fehler, Ordner ist nicht leer oder Schreibsperren).\n  404\n    Die angegebene Ressource existiert nicht.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  cp(1), mv(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  rm /data/temp_log.txt\n  rm /data/empty_dir"
   }
 }

@@ -12,5 +12,23 @@
     "synopsis": "uname [-a]",
     "description": "Print operating system name and processor architecture details.",
     "details": "NAME\n  uname - System information.\n\nSYNOPSIS\n  uname [-a]\n\nDESCRIPTION\n  Prints the operating system name. Use '-a' to display target processor architecture details.\n\nOPTIONS\n  -a\n    Prints all hardware and compile details.\n\nSYSTEM ARCHITECTURE\n  Queries '/api/status' over HTTP. The firmware extracts chip build information (ESP32S3) and toolchain details. See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    Network query failed.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  status(1), uptime(1), web_api(7)\n\nADVANCED EXAMPLES\n  uname\n  uname -a"
+  },
+  "fr": {
+    "title": "uname - Détails du système et du matériel",
+    "synopsis": "uname [-a]",
+    "description": "Afficher le nom du système d'exploitation et les détails de l'architecture du processeur.",
+    "details": "NOM\n  uname - Informations système.\n\nSYNOPSIS\n  uname [-a]\n\nDESCRIPTION\n  Affiche le nom du système d'exploitation. Utiliser '-a' pour afficher les détails de l'architecture du processeur cible.\n\nOPTIONS\n  -a\n    Affiche tous les détails matériels et de compilation.\n\nARCHITECTURE SYSTÈME\n  Interroge '/api/status' via HTTP. Le firmware extrait les informations de build de la puce (ESP32S3) et les détails de la chaîne d'outils. Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès.\n  1\n    Échec de la requête réseau.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  status(1), uptime(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  uname\n  uname -a"
+  },
+  "es": {
+    "title": "uname - Detalles del sistema y del hardware",
+    "synopsis": "uname [-a]",
+    "description": "Imprimir el nombre del sistema operativo y los detalles de la arquitectura del procesador.",
+    "details": "NOMBRE\n  uname - Información del sistema.\n\nSINOPSIS\n  uname [-a]\n\nDESCRIPCIÓN\n  Imprime el nombre del sistema operativo. Use '-a' para mostrar los detalles de la arquitectura del procesador de destino.\n\nOPCIONES\n  -a\n    Imprime todos los detalles de hardware y de compilación.\n\nARQUITECTURA DEL SISTEMA\n  Consulta '/api/status' por HTTP. El firmware extrae la información de compilación del chip (ESP32S3) y los detalles de la cadena de herramientas. Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n  1\n    Falló la consulta de red.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  status(1), uptime(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  uname\n  uname -a"
+  },
+  "de": {
+    "title": "uname - System- & Hardware-Details",
+    "synopsis": "uname [-a]",
+    "description": "Betriebssystemname und Details zur Prozessorarchitektur ausgeben.",
+    "details": "NAME\n  uname - Systeminformationen.\n\nÜBERSICHT\n  uname [-a]\n\nBESCHREIBUNG\n  Gibt den Betriebssystemnamen aus. Mit '-a' werden Details zur Zielprozessorarchitektur angezeigt.\n\nOPTIONEN\n  -a\n    Gibt alle Hardware- und Kompilierungsdetails aus.\n\nSYSTEMARCHITEKTUR\n  Fragt '/api/status' über HTTP ab. Die Firmware extrahiert Chip-Build-Informationen (ESP32S3) und Toolchain-Details. Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg.\n  1\n    Netzwerkabfrage fehlgeschlagen.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  status(1), uptime(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  uname\n  uname -a"
   }
 }

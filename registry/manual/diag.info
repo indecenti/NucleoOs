@@ -12,5 +12,23 @@
     "synopsis": "diag [key-prefix]",
     "description": "Flattens everything /api/diag reports into key value lines: firmware, memory, network, ANIMA, arbiter, CPU and the OOM counters. It is the most pipeable command in the set and the best thing to hand to anima.",
     "details": "NAME\n  diag - The whole diagnostic table, one key per line\n\nSYNOPSIS\n  diag [key-prefix]\n\nDESCRIPTION\n  Flattens everything /api/diag reports into key value lines: firmware, memory, network, ANIMA, arbiter, CPU and the OOM counters. It is the most pipeable command in the set and the best thing to hand to anima.\n\nOPTIONS\n  [key-prefix]\n    Show only keys starting with this, e.g. mem or anima.\n\nDEVICE COST\n  One GET /api/diag, which replaces four separate polls.\n\nSEE ALSO\n  heap(1), cpu(1), status(1), anima(1)\n\nEXAMPLES\n  diag\n  diag mem\n  diag | anima \"is the heap ok?\"\n  diag | tee /data/diag.txt"
+  },
+  "fr": {
+    "title": "diag - Toute la table de diagnostic, une clé par ligne",
+    "synopsis": "diag [key-prefix]",
+    "description": "Aplatit tout ce que /api/diag rapporte en lignes clé valeur : firmware, mémoire, réseau, ANIMA, arbitre, CPU et les compteurs OOM. C'est la commande la plus exploitable dans un tube de tout le jeu, et la meilleure chose à passer à anima.",
+    "details": "NOM\n  diag - Toute la table de diagnostic, une clé par ligne\n\nSYNOPSIS\n  diag [key-prefix]\n\nDESCRIPTION\n  Aplatit tout ce que /api/diag rapporte en lignes clé valeur : firmware, mémoire, réseau, ANIMA, arbitre, CPU et les compteurs OOM. C'est la commande la plus exploitable dans un tube de tout le jeu, et la meilleure chose à passer à anima.\n\nOPTIONS\n  [key-prefix]\n    N'afficher que les clés commençant par ceci, p. ex. mem ou anima.\n\nCOÛT POUR L'APPAREIL\n  Un GET /api/diag, qui remplace quatre sondages distincts.\n\nVOIR AUSSI\n  heap(1), cpu(1), status(1), anima(1)\n\nEXEMPLES\n  diag\n  diag mem\n  diag | anima \"is the heap ok?\"\n  diag | tee /data/diag.txt"
+  },
+  "es": {
+    "title": "diag - Toda la tabla de diagnóstico, una clave por línea",
+    "synopsis": "diag [key-prefix]",
+    "description": "Aplana todo lo que informa /api/diag en líneas clave-valor: firmware, memoria, red, ANIMA, árbitro, CPU y los contadores OOM. Es el comando más canalizable del conjunto y lo mejor que se le puede pasar a anima.",
+    "details": "NOMBRE\n  diag - Toda la tabla de diagnóstico, una clave por línea\n\nSINOPSIS\n  diag [key-prefix]\n\nDESCRIPCIÓN\n  Aplana todo lo que informa /api/diag en líneas clave-valor: firmware, memoria, red, ANIMA, árbitro, CPU y los contadores OOM. Es el comando más canalizable del conjunto y lo mejor que se le puede pasar a anima.\n\nOPCIONES\n  [key-prefix]\n    Muestra solo las claves que empiezan por esto, p. ej. mem o anima.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/diag, que reemplaza cuatro sondeos independientes.\n\nVÉASE TAMBIÉN\n  heap(1), cpu(1), status(1), anima(1)\n\nEJEMPLOS\n  diag\n  diag mem\n  diag | anima \"is the heap ok?\"\n  diag | tee /data/diag.txt"
+  },
+  "de": {
+    "title": "diag - Die gesamte Diagnosetabelle, ein Schlüssel pro Zeile",
+    "synopsis": "diag [key-prefix]",
+    "description": "Flacht alles, was /api/diag meldet, in Schlüssel-Wert-Zeilen ab: Firmware, Speicher, Netzwerk, ANIMA, Arbiter, CPU und die OOM-Zähler. Es ist der am besten durch Pipes verarbeitbare Befehl im Satz und das Beste, was man an anima übergeben kann.",
+    "details": "NAME\n  diag - Die gesamte Diagnosetabelle, ein Schlüssel pro Zeile\n\nÜBERSICHT\n  diag [key-prefix]\n\nBESCHREIBUNG\n  Flacht alles, was /api/diag meldet, in Schlüssel-Wert-Zeilen ab: Firmware, Speicher, Netzwerk, ANIMA, Arbiter, CPU und die OOM-Zähler. Es ist der am besten durch Pipes verarbeitbare Befehl im Satz und das Beste, was man an anima übergeben kann.\n\nOPTIONEN\n  [key-prefix]\n    Nur Schlüssel anzeigen, die hiermit beginnen, z. B. mem oder anima.\n\nGERÄTEKOSTEN\n  Ein GET /api/diag, das vier separate Abfragen ersetzt.\n\nSIEHE AUCH\n  heap(1), cpu(1), status(1), anima(1)\n\nBEISPIELE\n  diag\n  diag mem\n  diag | anima \"is the heap ok?\"\n  diag | tee /data/diag.txt"
   }
 }

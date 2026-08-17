@@ -12,5 +12,23 @@
     "synopsis": "wget <url> [-O outfile]",
     "description": "Download web resources and write them to the local SD storage.",
     "details": "NAME\n  wget - Download file over HTTP.\n\nSYNOPSIS\n  wget <url> [-O <destination_file>]\n\nDESCRIPTION\n  Downloads a remote resource using a GET request and writes it to the local SD Card.\n\nOPTIONS\n  <url>\n    The URL of the file to download.\n  -O <destination_file>\n    The exact path on the SD card to write the payload to.\n\nSYSTEM ARCHITECTURE\n  Retrieves data as a binary ArrayBuffer. Then, transmits the buffer via POST to '/api/fs/write?path=<dest>'. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. Downloaded and written successfully.\n  1\n    Network error or SD Card write failure.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  curl(1), ping(1), web_api(7)\n\nADVANCED EXAMPLES\n  wget google.com/index.html\n  wget http://example.com/file.bin -O /data/firmware.bin"
+  },
+  "fr": {
+    "title": "wget - Télécharger un fichier depuis le web",
+    "synopsis": "wget <url> [-O outfile]",
+    "description": "Télécharger des ressources web et les écrire sur le stockage SD local.",
+    "details": "NOM\n  wget - Télécharger un fichier via HTTP.\n\nSYNOPSIS\n  wget <url> [-O <destination_file>]\n\nDESCRIPTION\n  Télécharge une ressource distante au moyen d'une requête GET et l'écrit sur la carte SD locale.\n\nOPTIONS\n  <url>\n    L'URL du fichier à télécharger.\n  -O <destination_file>\n    Le chemin exact sur la carte SD où écrire la charge utile.\n\nARCHITECTURE SYSTÈME\n  Récupère les données sous forme d'ArrayBuffer binaire. Transmet ensuite le tampon via POST vers '/api/fs/write?path=<dest>'. Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès. Téléchargé et écrit avec succès.\n  1\n    Erreur réseau ou échec d'écriture sur la carte SD.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  curl(1), ping(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  wget google.com/index.html\n  wget http://example.com/file.bin -O /data/firmware.bin"
+  },
+  "es": {
+    "title": "wget - Descargar un archivo de la web",
+    "synopsis": "wget <url> [-O outfile]",
+    "description": "Descargar recursos web y escribirlos en el almacenamiento SD local.",
+    "details": "NOMBRE\n  wget - Descargar un archivo por HTTP.\n\nSINOPSIS\n  wget <url> [-O <destination_file>]\n\nDESCRIPCIÓN\n  Descarga un recurso remoto usando una petición GET y lo escribe en la tarjeta SD local.\n\nOPCIONES\n  <url>\n    La URL del archivo que se va a descargar.\n  -O <destination_file>\n    La ruta exacta en la tarjeta SD donde escribir la carga útil.\n\nARQUITECTURA DEL SISTEMA\n  Recupera los datos como un ArrayBuffer binario. Luego, transmite el búfer mediante POST a '/api/fs/write?path=<dest>'. Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Descargado y escrito correctamente.\n  1\n    Error de red o fallo de escritura en la tarjeta SD.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  curl(1), ping(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  wget google.com/index.html\n  wget http://example.com/file.bin -O /data/firmware.bin"
+  },
+  "de": {
+    "title": "wget - Datei aus dem Web herunterladen",
+    "synopsis": "wget <url> [-O outfile]",
+    "description": "Web-Ressourcen herunterladen und in den lokalen SD-Speicher schreiben.",
+    "details": "NAME\n  wget - Datei über HTTP herunterladen.\n\nÜBERSICHT\n  wget <url> [-O <destination_file>]\n\nBESCHREIBUNG\n  Lädt eine entfernte Ressource mit einer GET-Anfrage herunter und schreibt sie auf die lokale SD-Karte.\n\nOPTIONEN\n  <url>\n    Die URL der herunterzuladenden Datei.\n  -O <destination_file>\n    Der genaue Pfad auf der SD-Karte, in den die Nutzlast geschrieben wird.\n\nSYSTEMARCHITEKTUR\n  Ruft Daten als binären ArrayBuffer ab. Überträgt den Puffer dann per POST an '/api/fs/write?path=<dest>'. Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg. Erfolgreich heruntergeladen und geschrieben.\n  1\n    Netzwerkfehler oder Schreibfehler auf der SD-Karte.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  curl(1), ping(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  wget google.com/index.html\n  wget http://example.com/file.bin -O /data/firmware.bin"
   }
 }

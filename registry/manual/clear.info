@@ -12,5 +12,23 @@
     "synopsis": "clear",
     "description": "Clear the terminal screen output buffer.",
     "details": "NAME\n  clear - Clear terminal screen.\n\nSYNOPSIS\n  clear\n\nDESCRIPTION\n  Wipes the active text output buffer. Relocates the command prompt to the top.\n\nSYSTEM ARCHITECTURE\n  Sets 'out.innerHTML = \"\"' to prune the browser DOM tree.\n\nEXIT CODES\n  0\n    Success.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  history(1)\n\nADVANCED EXAMPLES\n  clear"
+  },
+  "fr": {
+    "title": "clear - Effacer le tampon d'écran",
+    "synopsis": "clear",
+    "description": "Effacer le tampon de sortie de l'écran du terminal.",
+    "details": "NOM\n  clear - Effacer l'écran du terminal.\n\nSYNOPSIS\n  clear\n\nDESCRIPTION\n  Efface le tampon de sortie texte actif. Replace l'invite de commande en haut.\n\nARCHITECTURE SYSTÈME\n  Définit 'out.innerHTML = \"\"' pour élaguer l'arbre DOM du navigateur.\n\nCODES DE RETOUR\n  0\n    Succès.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  history(1)\n\nEXEMPLES AVANCÉS\n  clear"
+  },
+  "es": {
+    "title": "clear - Limpiar el búfer de pantalla",
+    "synopsis": "clear",
+    "description": "Limpiar el búfer de salida de la pantalla del terminal.",
+    "details": "NOMBRE\n  clear - Limpiar la pantalla del terminal.\n\nSINOPSIS\n  clear\n\nDESCRIPCIÓN\n  Borra el búfer de salida de texto activo. Reubica el símbolo del sistema en la parte superior.\n\nARQUITECTURA DEL SISTEMA\n  Establece 'out.innerHTML = \"\"' para podar el árbol DOM del navegador.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  history(1)\n\nEJEMPLOS AVANZADOS\n  clear"
+  },
+  "de": {
+    "title": "clear - Bildschirmpuffer leeren",
+    "synopsis": "clear",
+    "description": "Den Ausgabepuffer des Terminalbildschirms leeren.",
+    "details": "NAME\n  clear - Terminalbildschirm leeren.\n\nÜBERSICHT\n  clear\n\nBESCHREIBUNG\n  Löscht den aktiven Textausgabepuffer. Verschiebt die Eingabeaufforderung nach oben.\n\nSYSTEMARCHITEKTUR\n  Setzt 'out.innerHTML = \"\"', um den Browser-DOM-Baum zu beschneiden.\n\nEXIT-CODES\n  0\n    Erfolg.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  history(1)\n\nERWEITERTE BEISPIELE\n  clear"
   }
 }

@@ -12,5 +12,23 @@
     "synopsis": "screen [-o <file>]",
     "description": "Grabs the framebuffer and writes it to the card. No other terminal has a subject to photograph.",
     "details": "NAME\n  screen - Save what the panel is showing\n\nSYNOPSIS\n  screen [-o <file>]\n\nDESCRIPTION\n  Grabs the framebuffer and writes it to the card. No other terminal has a subject to photograph.\n\nOPTIONS\n  -o <file>\n    Where to save it (/data/screen.bmp by default).\n\nDEVICE COST\n  One GET /api/screen and one POST /api/fs/write.\n\nNOTES\n  Needs the device.display permission. The route exists in the firmware only; the simulator answers 404, and a 503 means the panel size is not available yet.\n\nSEE ALSO\n  display(1), open(1)\n\nEXAMPLES\n  screen\n  screen -o /data/shot.bmp"
+  },
+  "fr": {
+    "title": "screen - Enregistrer ce que l'écran affiche",
+    "synopsis": "screen [-o <file>]",
+    "description": "Capture le framebuffer et l'écrit sur la carte. Aucun autre terminal n'a de sujet à photographier.",
+    "details": "NOM\n  screen - Enregistrer ce que l'écran affiche\n\nSYNOPSIS\n  screen [-o <file>]\n\nDESCRIPTION\n  Capture le framebuffer et l'écrit sur la carte. Aucun autre terminal n'a de sujet à photographier.\n\nOPTIONS\n  -o <file>\n    Où l'enregistrer (/data/screen.bmp par défaut).\n\nCOÛT POUR L'APPAREIL\n  Un GET /api/screen et un POST /api/fs/write.\n\nNOTES\n  Nécessite la permission device.display. La route n'existe que dans le firmware ; le simulateur répond 404, et un 503 signifie que la taille de l'écran n'est pas encore disponible.\n\nVOIR AUSSI\n  display(1), open(1)\n\nEXEMPLES\n  screen\n  screen -o /data/shot.bmp"
+  },
+  "es": {
+    "title": "screen - Guardar lo que muestra el panel",
+    "synopsis": "screen [-o <file>]",
+    "description": "Captura el framebuffer y lo escribe en la tarjeta. Ningún otro terminal tiene un sujeto que fotografiar.",
+    "details": "NOMBRE\n  screen - Guardar lo que muestra el panel\n\nSINOPSIS\n  screen [-o <file>]\n\nDESCRIPCIÓN\n  Captura el framebuffer y lo escribe en la tarjeta. Ningún otro terminal tiene un sujeto que fotografiar.\n\nOPCIONES\n  -o <file>\n    Dónde guardarlo (/data/screen.bmp por defecto).\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/screen y un POST /api/fs/write.\n\nNOTAS\n  Necesita el permiso device.display. La ruta existe solo en el firmware; el simulador responde 404, y un 503 significa que el tamaño del panel aún no está disponible.\n\nVÉASE TAMBIÉN\n  display(1), open(1)\n\nEJEMPLOS\n  screen\n  screen -o /data/shot.bmp"
+  },
+  "de": {
+    "title": "screen - Speichern, was das Panel anzeigt",
+    "synopsis": "screen [-o <file>]",
+    "description": "Greift den Framebuffer ab und schreibt ihn auf die Karte. Kein anderes Terminal hat ein Motiv zum Fotografieren.",
+    "details": "NAME\n  screen - Speichern, was das Panel anzeigt\n\nÜBERSICHT\n  screen [-o <file>]\n\nBESCHREIBUNG\n  Greift den Framebuffer ab und schreibt ihn auf die Karte. Kein anderes Terminal hat ein Motiv zum Fotografieren.\n\nOPTIONEN\n  -o <file>\n    Wohin gespeichert wird (standardmäßig /data/screen.bmp).\n\nGERÄTEKOSTEN\n  Ein GET /api/screen und ein POST /api/fs/write.\n\nANMERKUNGEN\n  Benötigt die Berechtigung device.display. Die Route existiert nur in der Firmware; der Simulator antwortet mit 404, und ein 503 bedeutet, dass die Panelgröße noch nicht verfügbar ist.\n\nSIEHE AUCH\n  display(1), open(1)\n\nBEISPIELE\n  screen\n  screen -o /data/shot.bmp"
   }
 }

@@ -12,5 +12,23 @@
     "synopsis": "date",
     "description": "Display the current system date and time.",
     "details": "NAME\n  date - Local date and time.\n\nSYNOPSIS\n  date\n\nDESCRIPTION\n  Outputs the current local date and time. Sourced from the internal RTC, updated via UDP NTP queries.\n\nSYSTEM ARCHITECTURE\n  Reads local system time. On physical hardware, the timekeeper relies on UDP port 123 (NTP) syncing to the ESP32 internal RTC module.\n\nEXIT CODES\n  0\n    Success.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  status(1), uptime(1)\n\nADVANCED EXAMPLES\n  date"
+  },
+  "fr": {
+    "title": "date - Date et heure locales",
+    "synopsis": "date",
+    "description": "Afficher la date et l'heure système actuelles.",
+    "details": "NOM\n  date - Date et heure locales.\n\nSYNOPSIS\n  date\n\nDESCRIPTION\n  Affiche la date et l'heure locales actuelles. Issues du RTC interne, mises à jour via des requêtes NTP UDP.\n\nARCHITECTURE SYSTÈME\n  Lit l'heure système locale. Sur le matériel physique, l'horloge s'appuie sur le port UDP 123 (NTP) synchronisé avec le module RTC interne de l'ESP32.\n\nCODES DE RETOUR\n  0\n    Succès.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  status(1), uptime(1)\n\nEXEMPLES AVANCÉS\n  date"
+  },
+  "es": {
+    "title": "date - Fecha y hora local",
+    "synopsis": "date",
+    "description": "Mostrar la fecha y la hora actuales del sistema.",
+    "details": "NOMBRE\n  date - Fecha y hora local.\n\nSINOPSIS\n  date\n\nDESCRIPCIÓN\n  Muestra la fecha y la hora local actuales. Obtenidas del RTC interno, actualizado mediante consultas UDP NTP.\n\nARQUITECTURA DEL SISTEMA\n  Lee la hora local del sistema. En el hardware físico, el reloj depende del puerto UDP 123 (NTP) sincronizándose con el módulo RTC interno del ESP32.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  status(1), uptime(1)\n\nEJEMPLOS AVANZADOS\n  date"
+  },
+  "de": {
+    "title": "date - Lokales Datum und Uhrzeit",
+    "synopsis": "date",
+    "description": "Das aktuelle Systemdatum und die Uhrzeit anzeigen.",
+    "details": "NAME\n  date - Lokales Datum und Uhrzeit.\n\nÜBERSICHT\n  date\n\nBESCHREIBUNG\n  Gibt das aktuelle lokale Datum und die Uhrzeit aus. Bezogen aus der internen RTC, aktualisiert über UDP-NTP-Abfragen.\n\nSYSTEMARCHITEKTUR\n  Liest die lokale Systemzeit. Auf physischer Hardware stützt sich die Zeitmessung auf UDP-Port 123 (NTP), synchronisiert mit dem internen RTC-Modul des ESP32.\n\nEXIT-CODES\n  0\n    Erfolg.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  status(1), uptime(1)\n\nERWEITERTE BEISPIELE\n  date"
   }
 }

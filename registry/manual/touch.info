@@ -12,5 +12,23 @@
     "synopsis": "touch <file>",
     "description": "Create a new empty file at the specified path.",
     "details": "NAME\n  touch - Initialize empty file.\n\nSYNOPSIS\n  touch <file>\n\nDESCRIPTION\n  Creates a file of zero bytes. If the file exists, it remains unmodified.\n\nOPTIONS\n  <file>\n    The path of the file to initialize.\n\nSYSTEM ARCHITECTURE\n  Dispatches an HTTP POST to '/api/fs/write?path=<file>' with an empty payload. The ESP32 opens the file handle using 'fopen(path, \"w\")' and closes it instantly, committing a new record to the FAT table. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. File created or already present.\n  1\n    Filesystem write fault.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  mkdir(1), rm(1), web_api(7)\n\nADVANCED EXAMPLES\n  touch /data/empty.txt"
+  },
+  "fr": {
+    "title": "touch - Créer un fichier vide",
+    "synopsis": "touch <file>",
+    "description": "Créer un nouveau fichier vide au chemin spécifié.",
+    "details": "NOM\n  touch - Initialiser un fichier vide.\n\nSYNOPSIS\n  touch <file>\n\nDESCRIPTION\n  Crée un fichier de zéro octet. Si le fichier existe, il reste inchangé.\n\nOPTIONS\n  <file>\n    Le chemin du fichier à initialiser.\n\nARCHITECTURE SYSTÈME\n  Envoie un HTTP POST vers '/api/fs/write?path=<file>' avec une charge utile vide. L'ESP32 ouvre le descripteur de fichier au moyen de 'fopen(path, \"w\")' et le referme instantanément, validant un nouvel enregistrement dans la table FAT. Voir aussi web_api(7).\n\nCODES DE RETOUR\n  0\n    Succès. Fichier créé ou déjà présent.\n  1\n    Défaut d'écriture du système de fichiers.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  mkdir(1), rm(1), web_api(7)\n\nEXEMPLES AVANCÉS\n  touch /data/empty.txt"
+  },
+  "es": {
+    "title": "touch - Crear un archivo vacío",
+    "synopsis": "touch <file>",
+    "description": "Crear un archivo nuevo y vacío en la ruta especificada.",
+    "details": "NOMBRE\n  touch - Inicializar un archivo vacío.\n\nSINOPSIS\n  touch <file>\n\nDESCRIPCIÓN\n  Crea un archivo de cero bytes. Si el archivo existe, permanece sin modificar.\n\nOPCIONES\n  <file>\n    La ruta del archivo que se va a inicializar.\n\nARQUITECTURA DEL SISTEMA\n  Envía un HTTP POST a '/api/fs/write?path=<file>' con una carga útil vacía. El ESP32 abre el manejador de archivo usando 'fopen(path, \"w\")' y lo cierra al instante, confirmando un nuevo registro en la tabla FAT. Véase también web_api(7).\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. Archivo creado o ya presente.\n  1\n    Fallo de escritura del sistema de archivos.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  mkdir(1), rm(1), web_api(7)\n\nEJEMPLOS AVANZADOS\n  touch /data/empty.txt"
+  },
+  "de": {
+    "title": "touch - Leere Datei erstellen",
+    "synopsis": "touch <file>",
+    "description": "Eine neue leere Datei am angegebenen Pfad erstellen.",
+    "details": "NAME\n  touch - Leere Datei initialisieren.\n\nÜBERSICHT\n  touch <file>\n\nBESCHREIBUNG\n  Erstellt eine Datei mit null Bytes. Existiert die Datei, bleibt sie unverändert.\n\nOPTIONEN\n  <file>\n    Der Pfad der zu initialisierenden Datei.\n\nSYSTEMARCHITEKTUR\n  Versendet ein HTTP-POST an '/api/fs/write?path=<file>' mit leerer Nutzlast. Der ESP32 öffnet das Datei-Handle mit 'fopen(path, \"w\")' und schließt es sofort, wodurch ein neuer Eintrag in die FAT-Tabelle übernommen wird. Siehe auch web_api(7).\n\nEXIT-CODES\n  0\n    Erfolg. Datei erstellt oder bereits vorhanden.\n  1\n    Schreibfehler im Dateisystem.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  mkdir(1), rm(1), web_api(7)\n\nERWEITERTE BEISPIELE\n  touch /data/empty.txt"
   }
 }

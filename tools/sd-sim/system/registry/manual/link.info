@@ -12,5 +12,23 @@
     "synopsis": "link peers | link status",
     "description": "peers lists the devices this one can see over ESP-NOW, with the local name and channel; status shows whether a transfer is running and how far along it is.",
     "details": "NAME\n  link - Show the ESP-NOW neighbours and the transfer state\n\nSYNOPSIS\n  link peers | link status\n\nDESCRIPTION\n  peers lists the devices this one can see over ESP-NOW, with the local name and channel; status shows whether a transfer is running and how far along it is.\n\nOPTIONS\n  peers\n    List the neighbours (the default).\n  status\n    Show the transfer state.\n\nDEVICE COST\n  One GET each.\n\nNOTES\n  Needs the mesh.peer permission. Read-only on purpose: sending a command to another device turns a typo into someone else's problem, and the confirmation step for that lives in the Vicino app.\n\nSEE ALSO\n  wifi(1), status(1)\n\nEXAMPLES\n  link peers\n  link status"
+  },
+  "fr": {
+    "title": "link - Afficher les voisins ESP-NOW et l'état du transfert",
+    "synopsis": "link peers | link status",
+    "description": "peers liste les appareils que celui-ci peut voir via ESP-NOW, avec le nom local et le canal ; status indique si un transfert est en cours et sa progression.",
+    "details": "NOM\n  link - Afficher les voisins ESP-NOW et l'état du transfert\n\nSYNOPSIS\n  link peers | link status\n\nDESCRIPTION\n  peers liste les appareils que celui-ci peut voir via ESP-NOW, avec le nom local et le canal ; status indique si un transfert est en cours et sa progression.\n\nOPTIONS\n  peers\n    Lister les voisins (par défaut).\n  status\n    Afficher l'état du transfert.\n\nCOÛT POUR L'APPAREIL\n  Un GET chacun.\n\nNOTES\n  Nécessite la permission mesh.peer. En lecture seule à dessein : envoyer une commande à un autre appareil transforme une faute de frappe en problème pour autrui, et l'étape de confirmation pour cela se trouve dans l'application Vicino.\n\nVOIR AUSSI\n  wifi(1), status(1)\n\nEXEMPLES\n  link peers\n  link status"
+  },
+  "es": {
+    "title": "link - Mostrar los vecinos ESP-NOW y el estado de la transferencia",
+    "synopsis": "link peers | link status",
+    "description": "peers lista los dispositivos que este puede ver por ESP-NOW, con el nombre local y el canal; status muestra si hay una transferencia en curso y en qué punto está.",
+    "details": "NOMBRE\n  link - Mostrar los vecinos ESP-NOW y el estado de la transferencia\n\nSINOPSIS\n  link peers | link status\n\nDESCRIPCIÓN\n  peers lista los dispositivos que este puede ver por ESP-NOW, con el nombre local y el canal; status muestra si hay una transferencia en curso y en qué punto está.\n\nOPCIONES\n  peers\n    Listar los vecinos (por defecto).\n  status\n    Mostrar el estado de la transferencia.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET cada uno.\n\nNOTAS\n  Necesita el permiso mesh.peer. Solo lectura a propósito: enviar un comando a otro dispositivo convierte una errata en el problema de otro, y el paso de confirmación para eso está en la aplicación Vicino.\n\nVÉASE TAMBIÉN\n  wifi(1), status(1)\n\nEJEMPLOS\n  link peers\n  link status"
+  },
+  "de": {
+    "title": "link - Die ESP-NOW-Nachbarn und den Übertragungsstatus anzeigen",
+    "synopsis": "link peers | link status",
+    "description": "peers listet die Geräte auf, die dieses über ESP-NOW sehen kann, mit dem lokalen Namen und dem Kanal; status zeigt, ob eine Übertragung läuft und wie weit sie fortgeschritten ist.",
+    "details": "NAME\n  link - Die ESP-NOW-Nachbarn und den Übertragungsstatus anzeigen\n\nÜBERSICHT\n  link peers | link status\n\nBESCHREIBUNG\n  peers listet die Geräte auf, die dieses über ESP-NOW sehen kann, mit dem lokalen Namen und dem Kanal; status zeigt, ob eine Übertragung läuft und wie weit sie fortgeschritten ist.\n\nOPTIONEN\n  peers\n    Die Nachbarn auflisten (die Vorgabe).\n  status\n    Den Übertragungsstatus anzeigen.\n\nGERÄTEKOSTEN\n  Je ein GET.\n\nANMERKUNGEN\n  Benötigt die Berechtigung mesh.peer. Absichtlich nur lesend: Einen Befehl an ein anderes Gerät zu senden würde einen Tippfehler zum Problem eines anderen machen, und der Bestätigungsschritt dafür liegt in der App Vicino.\n\nSIEHE AUCH\n  wifi(1), status(1)\n\nBEISPIELE\n  link peers\n  link status"
   }
 }

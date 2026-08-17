@@ -12,5 +12,23 @@
     "synopsis": "pwd",
     "description": "Output the absolute path of the current working directory.",
     "details": "NAME\n  pwd - Print working directory.\n\nSYNOPSIS\n  pwd\n\nDESCRIPTION\n  Prints the absolute path of the active CWD to the terminal. Runs locally without accessing hardware resources.\n\nSYSTEM ARCHITECTURE\n  Reads the normalized runtime variable 'cwd' and outputs it directly to the terminal stdout buffer.\n\nEXIT CODES\n  0\n    Success. The path was printed.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  cd(1), ls(1)\n\nADVANCED EXAMPLES\n  pwd"
+  },
+  "fr": {
+    "title": "pwd - Afficher le répertoire de travail",
+    "synopsis": "pwd",
+    "description": "Afficher le chemin absolu du répertoire de travail courant.",
+    "details": "NOM\n  pwd - Afficher le répertoire de travail.\n\nSYNOPSIS\n  pwd\n\nDESCRIPTION\n  Affiche le chemin absolu du CWD actif sur le terminal. S'exécute localement sans accéder aux ressources matérielles.\n\nARCHITECTURE SYSTÈME\n  Lit la variable d'exécution normalisée 'cwd' et l'affiche directement sur le tampon de sortie standard du terminal.\n\nCODES DE RETOUR\n  0\n    Succès. Le chemin a été affiché.\n\nCONFORMITÉ\n  Extension NucleoOS compatible POSIX.\n\nAUTEUR\n  NucleoOS Core Devs.\n\nSIGNALER DES BOGUES\n  Signaler les bogues à support@nucleoos.org.\n\nVOIR AUSSI\n  cd(1), ls(1)\n\nEXEMPLES AVANCÉS\n  pwd"
+  },
+  "es": {
+    "title": "pwd - Imprimir el directorio de trabajo",
+    "synopsis": "pwd",
+    "description": "Mostrar la ruta absoluta del directorio de trabajo actual.",
+    "details": "NOMBRE\n  pwd - Imprimir el directorio de trabajo.\n\nSINOPSIS\n  pwd\n\nDESCRIPCIÓN\n  Imprime en el terminal la ruta absoluta del CWD activo. Se ejecuta localmente sin acceder a los recursos de hardware.\n\nARQUITECTURA DEL SISTEMA\n  Lee la variable de tiempo de ejecución normalizada 'cwd' y la envía directamente al búfer de salida estándar del terminal.\n\nCÓDIGOS DE SALIDA\n  0\n    Éxito. La ruta se imprimió.\n\nCONFORME A\n  Extensión de NucleoOS compatible con POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nNOTIFICACIÓN DE ERRORES\n  Notificar los errores a support@nucleoos.org.\n\nVÉASE TAMBIÉN\n  cd(1), ls(1)\n\nEJEMPLOS AVANZADOS\n  pwd"
+  },
+  "de": {
+    "title": "pwd - Arbeitsverzeichnis ausgeben",
+    "synopsis": "pwd",
+    "description": "Den absoluten Pfad des aktuellen Arbeitsverzeichnisses ausgeben.",
+    "details": "NAME\n  pwd - Arbeitsverzeichnis ausgeben.\n\nÜBERSICHT\n  pwd\n\nBESCHREIBUNG\n  Gibt den absoluten Pfad des aktiven CWD auf dem Terminal aus. Läuft lokal, ohne auf Hardware-Ressourcen zuzugreifen.\n\nSYSTEMARCHITEKTUR\n  Liest die normalisierte Laufzeitvariable 'cwd' und gibt sie direkt in den stdout-Puffer des Terminals aus.\n\nEXIT-CODES\n  0\n    Erfolg. Der Pfad wurde ausgegeben.\n\nKONFORM ZU\n  NucleoOS-Erweiterung, kompatibel mit POSIX.\n\nAUTOR\n  NucleoOS Core Devs.\n\nFEHLER MELDEN\n  Fehler an support@nucleoos.org melden.\n\nSIEHE AUCH\n  cd(1), ls(1)\n\nERWEITERTE BEISPIELE\n  pwd"
   }
 }

@@ -12,5 +12,23 @@
     "synopsis": "apps [-a]   |   apps open <id>",
     "description": "Prints one tab-separated row per installed app: id, name, whether it is enabled, and its route. With open it asks the shell to launch one.",
     "details": "NAME\n  apps - List the installed apps, or open one\n\nSYNOPSIS\n  apps [-a]   |   apps open <id>\n\nDESCRIPTION\n  Prints one tab-separated row per installed app: id, name, whether it is enabled, and its route. With open it asks the shell to launch one.\n\nOPTIONS\n  -a\n    Include disabled apps.\n  open <id>\n    Open that app in the shell.\n\nDEVICE COST\n  One GET /api/apps, memoised for 30 s. Opening an app is a shell message, not a device call.\n\nNOTES\n  This is deliberately NOT a process list. Nothing on the device knows which windows are open, so a ps built on this endpoint would print all 46 installed apps as if they were running.\n\nSEE ALSO\n  which(1), assoc(1), open(1)\n\nEXAMPLES\n  apps\n  apps -a | grep off\n  apps open notepad"
+  },
+  "fr": {
+    "title": "apps - Lister les applications installées, ou en ouvrir une",
+    "synopsis": "apps [-a]   |   apps open <id>",
+    "description": "Affiche une ligne séparée par des tabulations par application installée : id, nom, état d'activation et route. Avec open, demande au shell d'en lancer une.",
+    "details": "NOM\n  apps - Lister les applications installées, ou en ouvrir une\n\nSYNOPSIS\n  apps [-a]   |   apps open <id>\n\nDESCRIPTION\n  Affiche une ligne séparée par des tabulations par application installée : id, nom, état d'activation et route. Avec open, demande au shell d'en lancer une.\n\nOPTIONS\n  -a\n    Inclure les applications désactivées.\n  open <id>\n    Ouvrir cette application dans le shell.\n\nCOÛT POUR L'APPAREIL\n  Un GET /api/apps, mémoïsé pendant 30 s. Ouvrir une application est un message au shell, pas un appel à l'appareil.\n\nNOTES\n  Ce n'est délibérément PAS une liste de processus. Rien sur l'appareil ne sait quelles fenêtres sont ouvertes, donc un ps bâti sur ce point d'accès afficherait les 46 applications installées comme si elles étaient en cours d'exécution.\n\nVOIR AUSSI\n  which(1), assoc(1), open(1)\n\nEXEMPLES\n  apps\n  apps -a | grep off\n  apps open notepad"
+  },
+  "es": {
+    "title": "apps - Listar las aplicaciones instaladas, o abrir una",
+    "synopsis": "apps [-a]   |   apps open <id>",
+    "description": "Imprime una fila separada por tabuladores por cada aplicación instalada: id, nombre, si está habilitada y su ruta. Con open pide al intérprete que lance una.",
+    "details": "NOMBRE\n  apps - Listar las aplicaciones instaladas, o abrir una\n\nSINOPSIS\n  apps [-a]   |   apps open <id>\n\nDESCRIPCIÓN\n  Imprime una fila separada por tabuladores por cada aplicación instalada: id, nombre, si está habilitada y su ruta. Con open pide al intérprete que lance una.\n\nOPCIONES\n  -a\n    Incluir las aplicaciones deshabilitadas.\n  open <id>\n    Abrir esa aplicación en el intérprete.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET /api/apps, memoizado durante 30 s. Abrir una aplicación es un mensaje al intérprete, no una llamada al dispositivo.\n\nNOTAS\n  Esto NO es deliberadamente una lista de procesos. Nada en el dispositivo sabe qué ventanas están abiertas, así que un ps construido sobre este punto de acceso imprimiría las 46 aplicaciones instaladas como si estuvieran en ejecución.\n\nVÉASE TAMBIÉN\n  which(1), assoc(1), open(1)\n\nEJEMPLOS\n  apps\n  apps -a | grep off\n  apps open notepad"
+  },
+  "de": {
+    "title": "apps - Installierte Apps auflisten oder eine öffnen",
+    "synopsis": "apps [-a]   |   apps open <id>",
+    "description": "Gibt eine tabulatorgetrennte Zeile pro installierter App aus: id, Name, ob sie aktiviert ist, und ihre Route. Mit open wird die Shell gebeten, eine zu starten.",
+    "details": "NAME\n  apps - Installierte Apps auflisten oder eine öffnen\n\nÜBERSICHT\n  apps [-a]   |   apps open <id>\n\nBESCHREIBUNG\n  Gibt eine tabulatorgetrennte Zeile pro installierter App aus: id, Name, ob sie aktiviert ist, und ihre Route. Mit open wird die Shell gebeten, eine zu starten.\n\nOPTIONEN\n  -a\n    Deaktivierte Apps einbeziehen.\n  open <id>\n    Diese App in der Shell öffnen.\n\nGERÄTEKOSTEN\n  Ein GET /api/apps, für 30 s zwischengespeichert. Das Öffnen einer App ist eine Shell-Nachricht, kein Geräteaufruf.\n\nANMERKUNGEN\n  Dies ist bewusst KEINE Prozessliste. Nichts auf dem Gerät weiß, welche Fenster geöffnet sind, sodass ein auf diesem Endpunkt aufgebautes ps alle 46 installierten Apps ausgeben würde, als liefen sie.\n\nSIEHE AUCH\n  which(1), assoc(1), open(1)\n\nBEISPIELE\n  apps\n  apps -a | grep off\n  apps open notepad"
   }
 }

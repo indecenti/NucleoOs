@@ -12,5 +12,23 @@
     "synopsis": "lang [it|en|fr|es|de]",
     "description": "Without an argument it prints the active language and its generation counter. With one it sets the language for the whole OS, including the native panel UI.",
     "details": "NAME\n  lang - Read or set the OS display language\n\nSYNOPSIS\n  lang [it|en|fr|es|de]\n\nDESCRIPTION\n  Without an argument it prints the active language and its generation counter. With one it sets the language for the whole OS, including the native panel UI.\n\nOPTIONS\n  [code]\n    One of it, en, fr, es, de.\n\nDEVICE COST\n  One GET or one POST /api/lang.\n\nSEE ALSO\n  status(1), theme(1)\n\nEXAMPLES\n  lang\n  lang it"
+  },
+  "fr": {
+    "title": "lang - Lire ou définir la langue d'affichage de l'OS",
+    "synopsis": "lang [it|en|fr|es|de]",
+    "description": "Sans argument, affiche la langue active et son compteur de génération. Avec un argument, définit la langue pour tout l'OS, y compris l'interface native de l'écran.",
+    "details": "NOM\n  lang - Lire ou définir la langue d'affichage de l'OS\n\nSYNOPSIS\n  lang [it|en|fr|es|de]\n\nDESCRIPTION\n  Sans argument, affiche la langue active et son compteur de génération. Avec un argument, définit la langue pour tout l'OS, y compris l'interface native de l'écran.\n\nOPTIONS\n  [code]\n    L'un de it, en, fr, es, de.\n\nCOÛT POUR L'APPAREIL\n  Un GET ou un POST /api/lang.\n\nVOIR AUSSI\n  status(1), theme(1)\n\nEXEMPLES\n  lang\n  lang it"
+  },
+  "es": {
+    "title": "lang - Leer o establecer el idioma de la interfaz del SO",
+    "synopsis": "lang [it|en|fr|es|de]",
+    "description": "Sin argumento imprime el idioma activo y su contador de generación. Con uno establece el idioma para todo el SO, incluida la interfaz nativa del panel.",
+    "details": "NOMBRE\n  lang - Leer o establecer el idioma de la interfaz del SO\n\nSINOPSIS\n  lang [it|en|fr|es|de]\n\nDESCRIPCIÓN\n  Sin argumento imprime el idioma activo y su contador de generación. Con uno establece el idioma para todo el SO, incluida la interfaz nativa del panel.\n\nOPCIONES\n  [code]\n    Uno de it, en, fr, es, de.\n\nCOSTE PARA EL DISPOSITIVO\n  Un GET o un POST /api/lang.\n\nVÉASE TAMBIÉN\n  status(1), theme(1)\n\nEJEMPLOS\n  lang\n  lang it"
+  },
+  "de": {
+    "title": "lang - Anzeigesprache des OS lesen oder setzen",
+    "synopsis": "lang [it|en|fr|es|de]",
+    "description": "Ohne Argument gibt es die aktive Sprache und ihren Generationszähler aus. Mit einem setzt es die Sprache für das ganze OS, einschließlich der nativen Panel-Oberfläche.",
+    "details": "NAME\n  lang - Anzeigesprache des OS lesen oder setzen\n\nÜBERSICHT\n  lang [it|en|fr|es|de]\n\nBESCHREIBUNG\n  Ohne Argument gibt es die aktive Sprache und ihren Generationszähler aus. Mit einem setzt es die Sprache für das ganze OS, einschließlich der nativen Panel-Oberfläche.\n\nOPTIONEN\n  [code]\n    Eines von it, en, fr, es, de.\n\nGERÄTEKOSTEN\n  Ein GET oder ein POST /api/lang.\n\nSIEHE AUCH\n  status(1), theme(1)\n\nBEISPIELE\n  lang\n  lang it"
   }
 }
