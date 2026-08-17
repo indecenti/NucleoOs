@@ -28,6 +28,10 @@
     #out { flex: 1; overflow: auto; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere;
       user-select: text; -webkit-user-select: text; }
     #out .line { display: block; }
+    /* Columns are the one thing pre-wrap destroys: reflowing "df" on a 430px phone turns an aligned
+       table into confetti. A line whose interior holds a run of spaces was aligned on purpose, so it
+       scrolls sideways instead of wrapping — which is what a real terminal does with a wide row. */
+    #out .pre { white-space: pre; }
     #out .cmd { color: var(--accent); cursor: pointer; }
     #out .dim { color: var(--muted); }
     #out .ok { color: var(--ok); } #out .err { color: var(--err); } #out .warn { color: var(--warn); }
@@ -195,7 +199,8 @@
       const el = document.createElement('span');
       // `.cmd` already carries the pointer cursor, so it does not take the extra class — which
       // also keeps a prompt echo identifiable by its class alone.
-      el.className = 'line' + (cls ? ' ' + cls : '') + (tap && cls !== 'cmd' ? ' tap' : '');
+      el.className = 'line' + (cls ? ' ' + cls : '') + (tap && cls !== 'cmd' ? ' tap' : '')
+        + (/\S {2,}\S/.test(text) ? ' pre' : '');   // aligned columns: scroll, never reflow
       el.textContent = text;
       el.__lines = text.split('\n').length;
       if (tap) el.__tap = tap;
