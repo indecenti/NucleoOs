@@ -12,6 +12,8 @@
   "send": "Invia",
   "hint": "Gli agenti girano nel browser e chiamano i modelli online direttamente: il Cardputer non viene caricato. Le azioni distruttive chiedono conferma.",
 
+  "plan_title": "Piano",
+
   "st_ready": "pronto",
   "st_thinking": "sto ragionando…",
   "st_stopped": "interrotto",

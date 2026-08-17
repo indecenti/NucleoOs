@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -2704,7 +2704,9 @@
         if(!s) return;
         speechSynthesis.cancel();                        // interrompe l'enunciato precedente
         const u=new SpeechSynthesisUtterance(s);
-        u.lang=TR('it-IT', 'en-US');
+        // Not TR(): TR only knows it/en, so es/fr/de replies were read aloud with an ENGLISH voice.
+        // I18N.locale() is the OS-wide BCP-47 table (nucleo-i18n.js · LANGS) — one source for all five.
+        u.lang=I18N.locale(lang);
         const v=speechSynthesis.getVoices().find(x=>x.lang&&x.lang.toLowerCase().startsWith(u.lang.slice(0,2)));
         if(v) u.voice=v;
         speechSynthesis.speak(u);
@@ -3881,6 +3883,15 @@
         },
         autoApprove:()=>agentAuto,
         webSearchEnabled:()=>agentWeb,
+        // The worker's live checklist (update_plan). One compact line per update — the thinking
+        // trace keeps only the first line of a note, so we show progress + the step in flight
+        // rather than reprinting the whole list.
+        plan:(steps)=>{ try{
+          if(!_agentThink || !steps || !steps.length) return;
+          const done=steps.filter(s=>s.status==='done').length;
+          const cur=steps.find(s=>s.status==='doing') || steps.find(s=>s.status==='todo');
+          _agentThink.note('🗒️ '+TR('Piano','Plan')+' '+done+'/'+steps.length+(cur?' · ▸ '+cur.title:' · ✓'));
+        }catch{} },
       };
       const steps=parseInt(get('anima.agentSteps','0'),10)||undefined, par=parseInt(get('anima.agentParallel','0'),10)||undefined;   // optional power-user tuning via storage
       _agentRt=createRuntime({ cfg, root, lang, ui, keys:(keyCfg.keys||{}), active:cfg, maxSteps:steps, maxParallel:par }); _agentRtKey=sig; return _agentRt;

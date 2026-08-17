@@ -12,7 +12,9 @@ import I18N from '/nucleo-i18n.js';
 const t = await I18N.init('agent');
 
 const $ = (id) => document.getElementById(id);
-const lang = () => (localStorage.getItem('anima.lang') === 'en' ? 'en' : 'it');
+// The agent runtime is five-language aware; ask the OS engine instead of re-deriving it from
+// localStorage, which only ever answered 'it' or 'en' and pinned es/fr/de users to Italian.
+const lang = () => I18N.lang;
 
 let cfg = null;            // active/default provider config for the runtime
 let keys = null;           // full keys{} map (all configured providers) → cross-provider routing + fallback
@@ -47,7 +49,7 @@ function addMsg(role, text, asMd) {
 function setStatus(s, kind) { $('status').textContent = s; const dot = $('dot'); dot.className = 'dot' + (kind ? ' ' + kind : ''); }
 
 // ---- activity log: one card per tool call ----
-const TOOL_ICON = { list_files: '📁', read_file: '📄', search_files: '🔎', make_dir: '📁', write_file: '✍️', edit_file: '✏️', append_file: '➕', delete_file: '🗑️', move_file: '🔀', run_js: '⚙️', open_in_os: '🪟', device_status: '📊', list_apps: '🧩', weather: '🌤️', web_search: '🌐', scaffold_app: '🧱', publish_app: '🚀', manage_app: '🎛️', generate_image: '🎨', transcribe: '🎙️' };
+const TOOL_ICON = { update_plan: '🗒️', list_files: '📁', read_file: '📄', search_files: '🔎', make_dir: '📁', write_file: '✍️', edit_file: '✏️', append_file: '➕', delete_file: '🗑️', move_file: '🔀', run_js: '⚙️', open_in_os: '🪟', device_status: '📊', list_apps: '🧩', weather: '🌤️', web_search: '🌐', scaffold_app: '🧱', publish_app: '🚀', manage_app: '🎛️', generate_image: '🎨', transcribe: '🎙️' };
 function toolStart(ev) {
   const d = document.createElement('div'); d.className = 'tool run';
   const p = ev.input.path || ev.input.from || ev.input.app || ev.input.id || ev.input.name || '';
@@ -59,6 +61,23 @@ function toolEnd(ev, out, isErr) {
   d.className = 'tool' + (isErr ? ' err' : '');
   const tr = d.querySelector('.tr'); if (tr) tr.textContent = String(out || '').slice(0, 1200);
   scroll();
+}
+
+// ---- live plan (the worker's update_plan checklist) ----
+// Replaces the panel in place on every update, so the user watches ONE list advance instead of
+// scrolling past N snapshots of it. Empty plan → the panel disappears.
+const PLAN_MARK = { todo: '☐', doing: '▸', done: '☑' };
+function renderPlanPanel(steps) {
+  const el = $('plan');
+  if (!el) return;
+  if (!steps || !steps.length) { el.hidden = true; el.innerHTML = ''; return; }
+  const done = steps.filter((s) => s.status === 'done').length;
+  el.innerHTML = '<div class="ph"><span>' + esc(t('plan_title')) + '</span>'
+    + '<span class="pb"><i style="width:' + Math.round(done / steps.length * 100) + '%"></i></span>'
+    + '<span>' + done + '/' + steps.length + '</span></div>'
+    + '<ol>' + steps.map((s) => '<li class="' + s.status + '"><span class="m">' + PLAN_MARK[s.status] + '</span>'
+      + '<span>' + esc(s.title) + '</span></li>').join('') + '</ol>';
+  el.hidden = false;
 }
 
 // ---- approval overlay (returns a Promise<bool>) ----
@@ -95,6 +114,7 @@ const ui = {
   note: (t) => addMsg('sys', t),
   toolStart, toolEnd,
   sandboxLog: (lvl, txt) => { if (txt) addMsg('sys', '⚙️ ' + txt); },
+  plan: renderPlanPanel,
   confirm: confirmTool,
   autoApprove: () => $('auto').checked,
   webSearchEnabled: () => $('web').checked,

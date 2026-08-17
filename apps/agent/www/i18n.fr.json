@@ -12,6 +12,8 @@
   "send": "Envoyer",
   "hint": "Les agents s'exécutent dans le navigateur et appellent directement les modèles en ligne : le Cardputer n'est pas sollicité. Les actions destructrices demandent confirmation.",
 
+  "plan_title": "Plan",
+
   "st_ready": "prêt",
   "st_thinking": "réflexion…",
   "st_stopped": "arrêté",

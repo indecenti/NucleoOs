@@ -12,6 +12,8 @@
   "send": "Send",
   "hint": "Agents run in the browser and call the online models directly: the Cardputer is not loaded. Destructive actions ask for confirmation.",
 
+  "plan_title": "Plan",
+
   "st_ready": "ready",
   "st_thinking": "thinking…",
   "st_stopped": "stopped",

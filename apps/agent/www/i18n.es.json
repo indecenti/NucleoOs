@@ -12,6 +12,8 @@
   "send": "Enviar",
   "hint": "Los agentes se ejecutan en el navegador y llaman directamente a los modelos online: el Cardputer no se sobrecarga. Las acciones destructivas piden confirmación.",
 
+  "plan_title": "Plan",
+
   "st_ready": "listo",
   "st_thinking": "pensando…",
   "st_stopped": "detenido",
