@@ -1,0 +1,16 @@
+{
+  "id": "unalias",
+  "category": "terminal",
+  "it": {
+    "title": "unalias - Rimuove un alias",
+    "synopsis": "unalias <name>",
+    "description": "Cancella un alias e risalva l'elenco.",
+    "details": "NOME\n  unalias - Rimuove un alias\n\nSINTASSI\n  unalias <name>\n\nDESCRIZIONE\n  Cancella un alias e risalva l'elenco.\n\nOPZIONI\n  <nome>\n    L'alias da rimuovere.\n\nCOSTO PER IL DISPOSITIVO\n  Una POST /api/fs/write.\n\nVEDERE ANCHE\n  alias(1)\n\nESEMPI\n  unalias ll"
+  },
+  "en": {
+    "title": "unalias - Remove an alias",
+    "synopsis": "unalias <name>",
+    "description": "Deletes one alias and saves the list again.",
+    "details": "NAME\n  unalias - Remove an alias\n\nSYNOPSIS\n  unalias <name>\n\nDESCRIPTION\n  Deletes one alias and saves the list again.\n\nOPTIONS\n  <name>\n    The alias to remove.\n\nDEVICE COST\n  One POST /api/fs/write.\n\nSEE ALSO\n  alias(1)\n\nEXAMPLES\n  unalias ll"
+  }
+}

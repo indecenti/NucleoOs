@@ -1,0 +1,16 @@
+{
+  "id": "assoc",
+  "category": "terminal",
+  "it": {
+    "title": "assoc - Mostra quale app userà open(1)",
+    "synopsis": "assoc [extension]",
+    "description": "Stampa la tabella delle associazioni di file, o la singola voce di un'estensione, più il ripiego usato quando non corrisponde nulla.",
+    "details": "NOME\n  assoc - Mostra quale app userà open(1)\n\nSINTASSI\n  assoc [extension]\n\nDESCRIZIONE\n  Stampa la tabella delle associazioni di file, o la singola voce di un'estensione, più il ripiego usato quando non corrisponde nulla.\n\nOPZIONI\n  [estensione]\n    Solo questa estensione, con o senza il punto.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/associations.\n\nVEDERE ANCHE\n  open(1), apps(1)\n\nESEMPI\n  assoc\n  assoc txt\n  assoc | grep notepad"
+  },
+  "en": {
+    "title": "assoc - Show which app open(1) will pick",
+    "synopsis": "assoc [extension]",
+    "description": "Prints the file-association table, or the single entry for one extension, plus the fallback used when nothing matches.",
+    "details": "NAME\n  assoc - Show which app open(1) will pick\n\nSYNOPSIS\n  assoc [extension]\n\nDESCRIPTION\n  Prints the file-association table, or the single entry for one extension, plus the fallback used when nothing matches.\n\nOPTIONS\n  [extension]\n    Just this extension, with or without the dot.\n\nDEVICE COST\n  One GET /api/associations.\n\nSEE ALSO\n  open(1), apps(1)\n\nEXAMPLES\n  assoc\n  assoc txt\n  assoc | grep notepad"
+  }
+}

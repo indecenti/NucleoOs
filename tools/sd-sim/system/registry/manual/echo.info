@@ -1,0 +1,16 @@
+{
+  "id": "echo",
+  "category": "terminal",
+  "it": {
+    "title": "echo - Stampa o scrive testo",
+    "synopsis": "echo [text] [> file]",
+    "description": "Mostra il testo nel terminale o lo reindirizza in un file.",
+    "details": "NOME\n  echo - Stampa e reindirizza messaggi.\n\nSINTASSI\n  echo <testo>\n  echo <testo> > <file>\n\nDESCRIZIONE\n  Stampa una stringa a schermo. Se accompagnato dall'operatore '>', scrive la stringa sovrascrivendo un file.\n\nOPZIONI\n  <testo>\n    La stringa da stampare o scrivere.\n  > <file>\n    Il percorso del file di destinazione in cui scrivere il testo.\n\nARCHITETTURA E BASSO LIVELLO\n  Il parser del terminale individua l'operatore '>'. In caso positivo, esegue l'url-encode della stringa depurata dalle virgolette esterne e invia una richiesta POST all'endpoint '/api/fs/write?path=<file>'. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo. Stampa o scrittura completata.\n  1\n    Errore di scrittura sul filesystem.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  cat(1), open(1), web_api(7)\n\nESEMPI AVANZATI\n  echo Ciao utente\n  echo \"THEME=dark\" > /data/theme.cfg"
+  },
+  "en": {
+    "title": "echo - Print or write text",
+    "synopsis": "echo [text] [> file]",
+    "description": "Print text to stdout or redirect it to write a file.",
+    "details": "NAME\n  echo - Print and redirect messages.\n\nSYNOPSIS\n  echo <text>\n  echo <text> > <file>\n\nDESCRIPTION\n  Prints a text string. If followed by the '>' redirection operator, writes the text to a file.\n\nOPTIONS\n  <text>\n    The string to print or save.\n  > <file>\n    The path to write the output string to.\n\nSYSTEM ARCHITECTURE\n  The command line parser detects the redirection token '>'. In such cases, strips external quotation marks and dispatches a POST request to '/api/fs/write?path=<file>'. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. Print or write completed.\n  1\n    Filesystem write error.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  cat(1), open(1), web_api(7)\n\nADVANCED EXAMPLES\n  echo Hello user\n  echo \"THEME=dark\" > /data/theme.cfg"
+  }
+}

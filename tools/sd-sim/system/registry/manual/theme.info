@@ -1,0 +1,16 @@
+{
+  "id": "theme",
+  "category": "system",
+  "it": {
+    "title": "theme - Cambia stile visivo OS",
+    "synopsis": "theme [dark|light]",
+    "description": "Visualizza o imposta il tema grafico di sistema (dark o light).",
+    "details": "NOME\n  theme - Tema grafico di sistema.\n\nSINTASSI\n  theme [dark|light]\n\nDESCRIZIONE\n  Visualizza o cambia il tema grafico attivo (chiaro o scuro). La modifica è persistita su settings.json.\n\nOPZIONI\n  [dark|light]\n    Il tema da applicare.\n\nARCHITETTURA E BASSO LIVELLO\n  Aggiorna l'attributo 'data-theme' nel DOM. Esegue un caricamento in memoria e riscrittura del file '/system/config/settings.json' tramite POST a '/api/fs/write'. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo.\n  1\n    Errore di persistenza su SD.\n\nCONFORMITÀ A\n  Estensione NucleoOS proprietaria.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  status(1), web_api(7)\n\nESEMPI AVANZATI\n  theme            # Legge il tema corrente\n  theme light      # Passa a tema chiaro\n  theme dark       # Passa a tema scuro"
+  },
+  "en": {
+    "title": "theme - Change OS color theme",
+    "synopsis": "theme [dark|light]",
+    "description": "Display or switch the system graphic theme (dark or light).",
+    "details": "NAME\n  theme - System graphic theme.\n\nSYNOPSIS\n  theme [dark|light]\n\nDESCRIPTION\n  Reads or switches the active color theme. Changes are saved to settings.json.\n\nOPTIONS\n  [dark|light]\n    The theme name to apply.\n\nSYSTEM ARCHITECTURE\n  Modifies the 'data-theme' attribute of the root DOM node. Overwrites '/system/config/settings.json' on the SD card using a POST request to '/api/fs/write'. See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    SD Card write failure.\n\nCONFORMING TO\n  NucleoOS proprietary extension.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  status(1), web_api(7)\n\nADVANCED EXAMPLES\n  theme            # Read current theme\n  theme light      # Switch to light theme\n  theme dark       # Switch to dark theme"
+  }
+}

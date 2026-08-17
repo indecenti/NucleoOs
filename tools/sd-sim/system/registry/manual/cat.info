@@ -1,0 +1,16 @@
+{
+  "id": "cat",
+  "category": "terminal",
+  "it": {
+    "title": "cat - Leggi contenuto file",
+    "synopsis": "cat <file>",
+    "description": "Visualizza l'intero contenuto testuale di un file sullo schermo.",
+    "details": "NOME\n  cat - Mostra il contenuto di un file.\n\nSINTASSI\n  cat <file>\n\nDESCRIZIONE\n  Legge e stampa il contenuto del file specificato nel terminale. Se il file è vuoto, restituisce '(empty file)'.\n\nOPZIONI\n  <file>\n    Il percorso del file di testo da visualizzare.\n\nARCHITETTURA E BASSO LIVELLO\n  Esegue un fetch GET su '/api/fs/read?path=<file>'. Il firmware ESP32S3 riceve la richiesta, apre il descrittore del file con la chiamata C 'fopen(path, \"rb\")' e invia i byte come stream binario. Il terminale decodifica il payload in formato stringa UTF-8. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo. Il file è stato letto e stampato.\n  1\n    Impossibile leggere il file (ad es. errore di I/O o percorso non valido).\n  404\n    Il file specificato non esiste sul disco.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  grep(1), head(1), tail(1), web_api(7)\n\nESEMPI AVANZATI\n  cat /system/config/settings.json\n  cat logs.txt"
+  },
+  "en": {
+    "title": "cat - Display file content",
+    "synopsis": "cat <file>",
+    "description": "Concatenate and print the text content of a file to the screen.",
+    "details": "NAME\n  cat - Concatenate and display file content.\n\nSYNOPSIS\n  cat <file>\n\nDESCRIPTION\n  Reads and outputs the contents of the target file. Prints '(empty file)' if the file size is zero.\n\nOPTIONS\n  <file>\n    The path of the text file to be read.\n\nSYSTEM ARCHITECTURE\n  Triggers an HTTP GET fetch to '/api/fs/read?path=<file>'. The ESP32S3 open file descriptor 'fopen(path, \"rb\")' streams binary data, which is parsed by the client as a UTF-8 string. See also web_api(7).\n\nEXIT CODES\n  0\n    Success. The file was read and output.\n  1\n    Failed to read the file (I/O error or invalid descriptor).\n  404\n    File does not exist on the SD Card.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  grep(1), head(1), tail(1), web_api(7)\n\nADVANCED EXAMPLES\n  cat /system/config/settings.json\n  cat logs.txt"
+  }
+}

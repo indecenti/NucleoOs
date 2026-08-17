@@ -1,0 +1,16 @@
+{
+  "id": "clip",
+  "category": "terminal",
+  "it": {
+    "title": "clip - Scrive negli appunti del sistema o li legge",
+    "synopsis": "clip   |   clip -o",
+    "description": "Senza argomenti mette lo standard input negli appunti; con -o stampa quello che c'è. È l'uscita della pipeline verso il resto del sistema, e la sua entrata.",
+    "details": "NOME\n  clip - Scrive negli appunti del sistema o li legge\n\nSINTASSI\n  clip   |   clip -o\n\nDESCRIZIONE\n  Senza argomenti mette lo standard input negli appunti; con -o stampa quello che c'è. È l'uscita della pipeline verso il resto del sistema, e la sua entrata.\n\nOPZIONI\n  -o\n    Legge gli appunti invece di scriverli.\n\nCOSTO PER IL DISPOSITIVO\n  Nessuno sul dispositivo: gli appunti sono un servizio della shell, ricordato dal sistema.\n\nNOTE\n  Richiede il permesso system.clipboard.\n\nVEDERE ANCHE\n  tee(1), base64(1), say(1)\n\nESEMPI\n  stat /data/note.txt | clip\n  clip -o | wc"
+  },
+  "en": {
+    "title": "clip - Write to or read the OS clipboard",
+    "synopsis": "clip   |   clip -o",
+    "description": "Without arguments it puts standard input on the clipboard; with -o it prints what is on it. This is the pipeline's exit to the rest of the OS, and its entrance.",
+    "details": "NAME\n  clip - Write to or read the OS clipboard\n\nSYNOPSIS\n  clip   |   clip -o\n\nDESCRIPTION\n  Without arguments it puts standard input on the clipboard; with -o it prints what is on it. This is the pipeline's exit to the rest of the OS, and its entrance.\n\nOPTIONS\n  -o\n    Read the clipboard instead of writing it.\n\nDEVICE COST\n  None on the device: the clipboard is a shell service, remembered by the OS.\n\nNOTES\n  Needs the system.clipboard permission.\n\nSEE ALSO\n  tee(1), base64(1), say(1)\n\nEXAMPLES\n  stat /data/notes.txt | clip\n  clip -o | wc"
+  }
+}

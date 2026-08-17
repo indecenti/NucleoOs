@@ -1,0 +1,16 @@
+{
+  "id": "screen",
+  "category": "terminal",
+  "it": {
+    "title": "screen - Salva quello che sta mostrando il pannello",
+    "synopsis": "screen [-o <file>]",
+    "description": "Cattura il framebuffer e lo scrive sulla scheda. Nessun altro terminale ha un soggetto da fotografare.",
+    "details": "NOME\n  screen - Salva quello che sta mostrando il pannello\n\nSINTASSI\n  screen [-o <file>]\n\nDESCRIZIONE\n  Cattura il framebuffer e lo scrive sulla scheda. Nessun altro terminale ha un soggetto da fotografare.\n\nOPZIONI\n  -o <file>\n    Dove salvarlo (/data/screen.bmp di default).\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/screen e una POST /api/fs/write.\n\nNOTE\n  Richiede il permesso device.display. La rotta esiste solo nel firmware; il simulatore risponde 404, e un 503 significa che la dimensione del pannello non è ancora disponibile.\n\nVEDERE ANCHE\n  display(1), open(1)\n\nESEMPI\n  screen\n  screen -o /data/scatto.bmp"
+  },
+  "en": {
+    "title": "screen - Save what the panel is showing",
+    "synopsis": "screen [-o <file>]",
+    "description": "Grabs the framebuffer and writes it to the card. No other terminal has a subject to photograph.",
+    "details": "NAME\n  screen - Save what the panel is showing\n\nSYNOPSIS\n  screen [-o <file>]\n\nDESCRIPTION\n  Grabs the framebuffer and writes it to the card. No other terminal has a subject to photograph.\n\nOPTIONS\n  -o <file>\n    Where to save it (/data/screen.bmp by default).\n\nDEVICE COST\n  One GET /api/screen and one POST /api/fs/write.\n\nNOTES\n  Needs the device.display permission. The route exists in the firmware only; the simulator answers 404, and a 503 means the panel size is not available yet.\n\nSEE ALSO\n  display(1), open(1)\n\nEXAMPLES\n  screen\n  screen -o /data/shot.bmp"
+  }
+}

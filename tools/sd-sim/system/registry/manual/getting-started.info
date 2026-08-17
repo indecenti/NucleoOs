@@ -1,0 +1,16 @@
+{
+  "id": "getting-started",
+  "category": "guide",
+  "it": {
+    "title": "Guida introduttiva a NucleoOS",
+    "synopsis": "getting-started",
+    "description": "Primi passi: aprire app, fare domande, usare l'assistente ANIMA e la shell.",
+    "details": "NOME\n  getting-started - Come iniziare con NucleoOS.\n\nAPRIRE LE APP\n  Tocca un'icona sullo schermo, oppure chiedi ad ANIMA: 'apri le foto', 'avvia la calcolatrice', 'apri le note'.\n\nCHIEDERE ALL'ASSISTENTE (ANIMA)\n  Scrivi in italiano o inglese. ANIMA puo: aprire app, dirti ora/data/stagione/spazio, fare calcoli ('quanto fa 7 per 8', '2 metri in cm', 'legge di ohm con 5V e 220 ohm'), creare file ('crea note.txt') e rispondere a domande su NucleoOS, programmazione in C ed elettronica. Capisce molte frasi diverse e corregge i refusi; se non e sicura ti chiede quale risposta intendi; se non sa una cosa lo dice invece di inventare.\n\nLA SHELL\n  Apri il Terminale e usa comandi POSIX-like: ls, cd, cat, grep, find, echo, mkdir, rm. Digita 'man <comando>' per la guida del comando.\n\nGESTIONE FILE\n  Crea file con ANIMA ('crea un file diario.txt') o con 'touch' nel terminale; sfoglia con File Commander o 'ls'; cerca con 'find'.\n\nVEDERE ANCHE\n  anima(1), desktop(1), ls(1), find(1)"
+  },
+  "en": {
+    "title": "Getting started with NucleoOS",
+    "synopsis": "getting-started",
+    "description": "First steps: open apps, ask questions, use the ANIMA assistant and the shell.",
+    "details": "NAME\n  getting-started - How to get started with NucleoOS.\n\nOPENING APPS\n  Tap an icon on the screen, or ask ANIMA: 'open the photos', 'start the calculator', 'open the notes'.\n\nASKING THE ASSISTANT (ANIMA)\n  Type in Italian or English. ANIMA can: open apps, tell time/date/season/space, do math ('what's 7 times 8', '2 meters in cm', 'ohm's law with 5V and 220 ohm'), create files ('create note.txt') and answer questions about NucleoOS, C programming and electronics. It understands many phrasings and fixes typos; if unsure it asks which answer you mean; if it does not know, it says so instead of making things up.\n\nTHE SHELL\n  Open the Terminal and use POSIX-like commands: ls, cd, cat, grep, find, echo, mkdir, rm. Type 'man <command>' for a command's guide.\n\nFILE MANAGEMENT\n  Create files with ANIMA ('create a file diary.txt') or with 'touch' in the terminal; browse with File Commander or 'ls'; search with 'find'.\n\nSEE ALSO\n  anima(1), desktop(1), ls(1), find(1)"
+  }
+}

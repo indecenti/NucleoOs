@@ -1,0 +1,16 @@
+{
+  "id": "notify",
+  "category": "terminal",
+  "it": {
+    "title": "notify - Manda una notifica al centro notifiche del sistema",
+    "synopsis": "notify <text>",
+    "description": "È così che un watch lungo avvisa che ha finito dopo che si è passati a un'altra finestra.",
+    "details": "NOME\n  notify - Manda una notifica al centro notifiche del sistema\n\nSINTASSI\n  notify <text>\n\nDESCRIZIONE\n  È così che un watch lungo avvisa che ha finito dopo che si è passati a un'altra finestra.\n\nOPZIONI\n  <testo>\n    Il messaggio; senza, legge lo standard input.\n\nCOSTO PER IL DISPOSITIVO\n  Nessuno sul dispositivo: passa dal broker delle capacità della shell.\n\nNOTE\n  Richiede il permesso system.notify.\n\nVEDERE ANCHE\n  watch(1), say(1)\n\nESEMPI\n  notify \"la copia è finita\""
+  },
+  "en": {
+    "title": "notify - Post a notification to the OS notification centre",
+    "synopsis": "notify <text>",
+    "description": "How a long watch tells you it finished after you have switched to another window.",
+    "details": "NAME\n  notify - Post a notification to the OS notification centre\n\nSYNOPSIS\n  notify <text>\n\nDESCRIPTION\n  How a long watch tells you it finished after you have switched to another window.\n\nOPTIONS\n  <text>\n    The message; without it, read standard input.\n\nDEVICE COST\n  None on the device: it goes through the shell's capability broker.\n\nNOTES\n  Needs the system.notify permission.\n\nSEE ALSO\n  watch(1), say(1)\n\nEXAMPLES\n  notify \"the copy is done\""
+  }
+}

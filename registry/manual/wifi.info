@@ -1,0 +1,16 @@
+{
+  "id": "wifi",
+  "category": "terminal",
+  "it": {
+    "title": "wifi - Cerca, si collega, dimentica e assegna priorità alle reti",
+    "synopsis": "wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect",
+    "description": "La radio, dalla shell. scan elenca quello che c'è in aria con segnale, canale e sicurezza; known elenca le reti salvate e segna quella attuale con un asterisco; il resto le modifica.",
+    "details": "NOME\n  wifi - Cerca, si collega, dimentica e assegna priorità alle reti\n\nSINTASSI\n  wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect\n\nDESCRIZIONE\n  La radio, dalla shell. scan elenca quello che c'è in aria con segnale, canale e sicurezza; known elenca le reti salvate e segna quella attuale con un asterisco; il resto le modifica.\n\nOPZIONI\n  scan\n    Elenca le reti visibili.\n  known\n    Elenca le reti salvate (il predefinito).\n  join <ssid> [pass]\n    Si collega e salva.\n  forget <ssid>\n    Cancella una rete salvata.\n  prio <ssid> <n>\n    Imposta la priorità di collegamento.\n  reconnect\n    Ricollega subito.\n\nCOSTO PER IL DISPOSITIVO\n  Una richiesta per ciascuno. scan è un'operazione radio BLOCCANTE, quindi è limitata a una ogni dieci secondi e rifiutata dentro watch.\n\nNOTE\n  Richiede il permesso net.wifi. Una password scritta sulla riga non finisce nella cronologia della shell.\n\nVEDERE ANCHE\n  status(1), ping(1), link(1)\n\nESEMPI\n  wifi scan\n  wifi known\n  wifi join home-wifi segreta\n  wifi scan | sort -k2 -n"
+  },
+  "en": {
+    "title": "wifi - Scan, join, forget and prioritise networks",
+    "synopsis": "wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect",
+    "description": "The radio, from a shell. scan lists what is in the air with signal, channel and security; known lists the saved networks and marks the current one with an asterisk; the rest change them.",
+    "details": "NAME\n  wifi - Scan, join, forget and prioritise networks\n\nSYNOPSIS\n  wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect\n\nDESCRIPTION\n  The radio, from a shell. scan lists what is in the air with signal, channel and security; known lists the saved networks and marks the current one with an asterisk; the rest change them.\n\nOPTIONS\n  scan\n    List visible networks.\n  known\n    List saved networks (the default).\n  join <ssid> [pass]\n    Connect and save.\n  forget <ssid>\n    Delete a saved network.\n  prio <ssid> <n>\n    Set the join priority.\n  reconnect\n    Reconnect now.\n\nDEVICE COST\n  One request each. scan is a BLOCKING radio operation, so it is rate limited to once per ten seconds and refused inside watch.\n\nNOTES\n  Needs the net.wifi permission. A password typed inline is not stored in the shell history.\n\nSEE ALSO\n  status(1), ping(1), link(1)\n\nEXAMPLES\n  wifi scan\n  wifi known\n  wifi join home-wifi secret\n  wifi scan | sort -k2 -n"
+  }
+}

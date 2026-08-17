@@ -1,0 +1,16 @@
+{
+  "id": "shortcuts",
+  "category": "guide",
+  "it": {
+    "title": "Scorciatoie da Tastiera di Sistema",
+    "synopsis": "shortcuts",
+    "description": "Guida rapida alle combinazioni di tasti attive su tutto il sistema operativo.",
+    "details": "NOME\n  shortcuts - Scorciatoie da tastiera globali e di sistema.\n\nDESCRIZIONE\n  NucleoOS integra scorciatoie da tastiera globali gestite dal Window Manager per velocizzare la navigazione:\n\n  GESTIONE FINESTRE:\n  - Esc: Chiude la finestra attiva focalizzata, o i menu aperti (Start, Action Center, menu contestuali).\n  - Ctrl+Tab: Scorre in avanti le finestre aperte portando in primo piano la successiva.\n  - Ctrl+Shift+Tab: Scorre all'indietro le finestre aperte.\n  - Clic su sfondo desktop: Rimuove il focus dalle finestre attive.\n\n  APPLICAZIONI (NOTEPAD / EDITOR):\n  - Ctrl+C: Copia il testo selezionato negli appunti di sistema in '/system/config/clipboard.json'.\n  - Ctrl+V: Incolla il testo dagli appunti alla posizione del cursore.\n  - Ctrl+X: Taglia il testo selezionato.\n  - Ctrl+A: Seleziona tutto il testo.\n  - Ctrl+Z: Annulla l'ultima modifica.\n\n  FILE COMMANDER:\n  - F2: Rinomina il file o la cartella correntemente selezionata.\n  - Canc (Delete): Rimuove l'elemento selezionato spostandolo nel Cestino."
+  },
+  "en": {
+    "title": "Global Keyboard Shortcuts Guide",
+    "synopsis": "shortcuts",
+    "description": "Quick reference to active keyboard shortcut combinations across the OS.",
+    "details": "NAME\n  shortcuts - Global system keyboard shortcuts.\n\nDESCRIPTION\n  NucleoOS implements global keyboard shortcuts managed by the Window Manager:\n\n  WINDOW MANAGEMENT:\n  - Esc: Closes the active focused window or open context menus (Start, Action Center).\n  - Ctrl+Tab: Cycles forward through active open windows, focusing them sequentially.\n  - Ctrl+Shift+Tab: Cycles backward through active open windows.\n  - Click on desktop wallpaper: Defocuses active windows.\n\n  EDITING (NOTEPAD / EDITORS):\n  - Ctrl+C: Copies selected text to the system clipboard file '/system/config/clipboard.json'.\n  - Ctrl+V: Pastes text stored in the system clipboard at the cursor offset.\n  - Ctrl+X: Cuts selected text.\n  - Ctrl+A: Selects all text.\n  - Ctrl+Z: Undo last change.\n\n  FILE COMMANDER:\n  - F2: Renames the currently highlighted file or directory.\n  - Del (Delete): Deletes the highlighted item, moving it to the system Recycle Bin."
+  }
+}

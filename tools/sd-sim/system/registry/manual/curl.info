@@ -1,0 +1,16 @@
+{
+  "id": "curl",
+  "category": "system",
+  "it": {
+    "title": "curl - Richiesta web HTTP",
+    "synopsis": "curl <url>",
+    "description": "Invia una richiesta HTTP GET a un URL e stampa il corpo della risposta.",
+    "details": "NOME\n  curl - Ottieni risorsa web HTTP.\n\nSINTASSI\n  curl <url>\n\nDESCRIZIONE\n  Effettua una chiamata HTTP GET verso l'URL specificato e stampa la risposta sul terminale.\n\nOPZIONI\n  <url>\n    L'indirizzo web da contattare.\n\nARCHITETTURA E BASSO LIVELLO\n  Esegue un 'fetch' HTTP GET. Sul browser, è soggetto alle limitazioni CORS. Sul dispositivo reale, le chiamate passano direttamente dallo stack di rete Wi-Fi (LwIP) di ESP-IDF. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo.\n  1\n    Rete non disponibile, errore CORS o timeout.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  wget(1), ping(1), web_api(7)\n\nESEMPI AVANZATI\n  curl ipify.org\n  curl http://example.com"
+  },
+  "en": {
+    "title": "curl - HTTP web request",
+    "synopsis": "curl <url>",
+    "description": "Perform an HTTP GET request to a URL and output response content.",
+    "details": "NAME\n  curl - Fetch HTTP web resource.\n\nSYNOPSIS\n  curl <url>\n\nDESCRIPTION\n  Performs an HTTP GET request and prints the response payload to the terminal stdout.\n\nOPTIONS\n  <url>\n    The target web address.\n\nSYSTEM ARCHITECTURE\n  Dispatches a GET request. Subject to CORS restrictions in simulated environments. Runs directly through the ESP-IDF Wi-Fi socket stack (LwIP) on physical devices. See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    Network offline, CORS block, or host timeout.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  wget(1), ping(1), web_api(7)\n\nADVANCED EXAMPLES\n  curl ipify.org\n  curl http://example.com"
+  }
+}

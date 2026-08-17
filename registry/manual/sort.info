@@ -1,0 +1,16 @@
+{
+  "id": "sort",
+  "category": "terminal",
+  "it": {
+    "title": "sort - Ordina lo standard input",
+    "synopsis": "sort [-r] [-n] [-u] [-k N]",
+    "description": "Riordina le righe che arrivano da una pipe.",
+    "details": "NOME\n  sort - Ordina lo standard input\n\nSINTASSI\n  sort [-r] [-n] [-u] [-k N]\n\nDESCRIZIONE\n  Riordina le righe che arrivano da una pipe.\n\nOPZIONI\n  -r\n    Inverte l'ordine.\n  -n\n    Confronta come numeri.\n  -u\n    Elimina i duplicati adiacenti.\n  -k N\n    Ordina sull'N-esimo campo separato da spazi.\n\nCOSTO PER IL DISPOSITIVO\n  Nessuno. Tutto nel browser.\n\nVEDERE ANCHE\n  uniq(1), cut(1), du(1)\n\nESEMPI\n  du /data | sort -n -r\n  dmesg | sort -u"
+  },
+  "en": {
+    "title": "sort - Sort standard input",
+    "synopsis": "sort [-r] [-n] [-u] [-k N]",
+    "description": "Reorders the lines that arrive from a pipe.",
+    "details": "NAME\n  sort - Sort standard input\n\nSYNOPSIS\n  sort [-r] [-n] [-u] [-k N]\n\nDESCRIPTION\n  Reorders the lines that arrive from a pipe.\n\nOPTIONS\n  -r\n    Reverse the order.\n  -n\n    Compare numerically.\n  -u\n    Drop adjacent duplicates.\n  -k N\n    Sort on the Nth whitespace-separated field.\n\nDEVICE COST\n  None. Entirely browser-side.\n\nSEE ALSO\n  uniq(1), cut(1), du(1)\n\nEXAMPLES\n  du /data | sort -n -r\n  dmesg | sort -u"
+  }
+}

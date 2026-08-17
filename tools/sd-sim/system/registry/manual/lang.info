@@ -1,0 +1,16 @@
+{
+  "id": "lang",
+  "category": "terminal",
+  "it": {
+    "title": "lang - Legge o imposta la lingua del sistema",
+    "synopsis": "lang [it|en|fr|es|de]",
+    "description": "Senza argomenti stampa la lingua attiva e il suo contatore di generazione. Con un argomento imposta la lingua di tutto il sistema, compresa l'interfaccia sul pannello.",
+    "details": "NOME\n  lang - Legge o imposta la lingua del sistema\n\nSINTASSI\n  lang [it|en|fr|es|de]\n\nDESCRIZIONE\n  Senza argomenti stampa la lingua attiva e il suo contatore di generazione. Con un argomento imposta la lingua di tutto il sistema, compresa l'interfaccia sul pannello.\n\nOPZIONI\n  [codice]\n    Uno fra it, en, fr, es, de.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET o una POST /api/lang.\n\nVEDERE ANCHE\n  status(1), theme(1)\n\nESEMPI\n  lang\n  lang it"
+  },
+  "en": {
+    "title": "lang - Read or set the OS display language",
+    "synopsis": "lang [it|en|fr|es|de]",
+    "description": "Without an argument it prints the active language and its generation counter. With one it sets the language for the whole OS, including the native panel UI.",
+    "details": "NAME\n  lang - Read or set the OS display language\n\nSYNOPSIS\n  lang [it|en|fr|es|de]\n\nDESCRIPTION\n  Without an argument it prints the active language and its generation counter. With one it sets the language for the whole OS, including the native panel UI.\n\nOPTIONS\n  [code]\n    One of it, en, fr, es, de.\n\nDEVICE COST\n  One GET or one POST /api/lang.\n\nSEE ALSO\n  status(1), theme(1)\n\nEXAMPLES\n  lang\n  lang it"
+  }
+}

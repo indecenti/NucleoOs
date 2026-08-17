@@ -1,0 +1,16 @@
+{
+  "id": "ir",
+  "category": "terminal",
+  "it": {
+    "title": "ir - Comanda il LED a infrarossi",
+    "synopsis": "ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status",
+    "description": "db stampa il GPIO, i protocolli che questa build sa codificare e la dimensione della tabella TV-B-Gone, così si vede che cosa è possibile prima di inviare qualcosa. send trasmette un codice decodificato, raw una lista di tempi.",
+    "details": "NOME\n  ir - Comanda il LED a infrarossi\n\nSINTASSI\n  ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status\n\nDESCRIZIONE\n  db stampa il GPIO, i protocolli che questa build sa codificare e la dimensione della tabella TV-B-Gone, così si vede che cosa è possibile prima di inviare qualcosa. send trasmette un codice decodificato, raw una lista di tempi.\n\nOPZIONI\n  db\n    Mostra le capacità (il predefinito).\n  send <proto> <addr> <cmd> [rip]\n    Invia un codice.\n  raw <us,…>\n    Invia tempi grezzi in microsecondi.\n  tvbgone start|stop|status\n    Esegue la scansione TV-B-Gone.\n\nCOSTO PER IL DISPOSITIVO\n  Una richiesta per ciascuno.\n\nNOTE\n  Richiede il permesso device.ir. Il disturbatore volutamente non è esposto qui: inonda la banda da un task in background senza prova a vuoto, quindi resta nell'app IR Remote, dove un pulsante visibile può fermarlo.\n\nVEDERE ANCHE\n  display(1), link(1)\n\nESEMPI\n  ir db\n  ir send nec 4 8\n  ir tvbgone status"
+  },
+  "en": {
+    "title": "ir - Drive the infrared LED",
+    "synopsis": "ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status",
+    "description": "db prints the GPIO, the protocols this build encodes and the size of the TV-B-Gone table, so you can see what is possible before sending anything. send transmits one decoded code, raw transmits a timing list.",
+    "details": "NAME\n  ir - Drive the infrared LED\n\nSYNOPSIS\n  ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status\n\nDESCRIPTION\n  db prints the GPIO, the protocols this build encodes and the size of the TV-B-Gone table, so you can see what is possible before sending anything. send transmits one decoded code, raw transmits a timing list.\n\nOPTIONS\n  db\n    Show the capabilities (the default).\n  send <proto> <addr> <cmd> [rep]\n    Send a code.\n  raw <us,…>\n    Send raw microsecond timings.\n  tvbgone start|stop|status\n    Run the TV-B-Gone sweep.\n\nDEVICE COST\n  One request each.\n\nNOTES\n  Needs the device.ir permission. The jammer is deliberately not exposed here: it floods the band from a background task with no dry run, so it stays in the IR Remote app, where a visible button can stop it.\n\nSEE ALSO\n  display(1), link(1)\n\nEXAMPLES\n  ir db\n  ir send nec 4 8\n  ir tvbgone status"
+  }
+}

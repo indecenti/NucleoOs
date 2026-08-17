@@ -1,0 +1,16 @@
+{
+  "id": "stat",
+  "category": "terminal",
+  "it": {
+    "title": "stat - Mostra tipo, dimensione e stato di protezione di una voce",
+    "synopsis": "stat <path>",
+    "description": "Dice che cosa è un singolo file o cartella, senza elencare tutta la cartella che lo contiene.",
+    "details": "NOME\n  stat - Mostra tipo, dimensione e stato di protezione di una voce\n\nSINTASSI\n  stat <path>\n\nDESCRIZIONE\n  Dice che cosa è un singolo file o cartella, senza elencare tutta la cartella che lo contiene.\n\nOPZIONI\n  <percorso>\n    Il file o la cartella da descrivere.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/fs/list sulla cartella PADRE. Il firmware non ha una rotta stat per singola voce: la lettura del padre è la risposta onesta più economica.\n\nNOTE\n  Il dispositivo non riporta una data di modifica, quindi stat lo dichiara invece di inventarla.\n\nVEDERE ANCHE\n  ls(1), du(1), tree(1)\n\nESEMPI\n  stat /data/notes.txt\n  stat /apps/terminal"
+  },
+  "en": {
+    "title": "stat - Show the type, size and lock state of one entry",
+    "synopsis": "stat <path>",
+    "description": "Reports what a single file or directory is, without listing the whole folder it lives in.",
+    "details": "NAME\n  stat - Show the type, size and lock state of one entry\n\nSYNOPSIS\n  stat <path>\n\nDESCRIPTION\n  Reports what a single file or directory is, without listing the whole folder it lives in.\n\nOPTIONS\n  <path>\n    The file or directory to describe.\n\nDEVICE COST\n  One GET /api/fs/list on the PARENT directory. The firmware has no per-entry stat route, so the parent listing is the cheapest honest answer.\n\nNOTES\n  The device does not report a modification time, so stat says so rather than inventing one.\n\nSEE ALSO\n  ls(1), du(1), tree(1)\n\nEXAMPLES\n  stat /data/notes.txt\n  stat /apps/terminal"
+  }
+}

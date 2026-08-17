@@ -1,0 +1,16 @@
+{
+  "id": "app_runtimes",
+  "category": "guide",
+  "it": {
+    "title": "Architettura Applicazioni e Runtime",
+    "synopsis": "app_runtimes",
+    "description": "Guida allo sviluppo di applicazioni per NucleoOS, al file manifest.json e ai runtime Web e Native C++.",
+    "details": "NOME\n  app_runtimes - Architettura delle applicazioni e ambienti di runtime in NucleoOS.\n\nDESCRIZIONE\n  NucleoOS supporta un'architettura estensibile basata su applicazioni indipendenti. Ciascuna applicazione definisce le proprie proprietà nel file 'manifest.json'.\n\n  1. SCHEMA DI MANIFEST.JSON:\n     - id: identificativo univoco (es. 'notepad', 'help').\n     - name: nome visualizzato.\n     - runtime: ambiente di esecuzione ('web' o 'native').\n     - web_route: percorso URL per le applicazioni web.\n     - permissions: permessi richiesti per accedere ad API protette (es. ['storage.shared']).\n\n  2. WEB RUNTIME:\n     - Le applicazioni web vengono caricate all'interno di iframe HTML5 isolati gestiti dalla Shell Desktop.\n     - Comunicano con la Shell tramite chiamate 'postMessage' del browser (ad esempio per aprire file con altre app o modificare il tema grafico).\n\n  3. NATIVE C++ RUNTIME:\n     - Eseguiti direttamente sulla CPU del microcontrollore ESP32S3.\n     - Implementati come componenti del firmware ESP-IDF.\n     - Forniscono prestazioni ottimali e accesso diretto a basso livello alle risorse hardware (I2S per il registratore, SPI per il display, GPIO).\n\n  4. ASSOCIAZIONE ESTENSIONI:\n     - Il file '/system/registry/file-associations.json' associa estensioni a specifiche applicazioni (es. '.info' ad 'help')."
+  },
+  "en": {
+    "title": "Application Architecture and Runtimes",
+    "synopsis": "app_runtimes",
+    "description": "Instruction manual on app development, manifest.json specs, and Web vs Native runtimes.",
+    "details": "NAME\n  app_runtimes - Application architecture and runtime environments in NucleoOS.\n\nDESCRIPTION\n  NucleoOS features a modular application structure. Every application registers its characteristics in a 'manifest.json' file.\n\n  1. THE MANIFEST.JSON STRUCTURE:\n     - id: unique application string identifier (e.g. 'notepad', 'help').\n     - name: human-readable app label.\n     - runtime: execution environment type ('web' | 'native').\n     - web_route: relative URL route for web application entry points.\n     - permissions: requested security capabilities (e.g. ['storage.shared']).\n\n  2. WEB RUNTIME:\n     - Web applications are loaded inside isolated HTML5 iframes managed by the Desktop Shell.\n     - They communicate with the host frame via window 'postMessage' calls (e.g. to request document opens or theme changes).\n\n  3. NATIVE C++ RUNTIME:\n     - Runs directly on the ESP32S3 microcontroller CPU.\n     - Written in C/C++ inside the ESP-IDF compiler components.\n     - Grants zero-overhead performance and direct access to peripheral controls (I2S, SPI, GPIO).\n\n  4. FILE ASSOCIATIONS:\n     - The configuration file '/system/registry/file-associations.json' maps extension keys to viewer apps (e.g. '.info' is viewed by 'help')."
+  }
+}

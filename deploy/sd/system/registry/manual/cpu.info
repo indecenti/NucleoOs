@@ -1,0 +1,16 @@
+{
+  "id": "cpu",
+  "category": "terminal",
+  "it": {
+    "title": "cpu - Core, frequenza, numero di task e carico",
+    "synopsis": "cpu",
+    "description": "Stampa che cosa sta facendo lo scheduler: quanti core, a che frequenza, quanti task FreeRTOS e il carico per core.",
+    "details": "NOME\n  cpu - Core, frequenza, numero di task e carico\n\nSINTASSI\n  cpu\n\nDESCRIZIONE\n  Stampa che cosa sta facendo lo scheduler: quanti core, a che frequenza, quanti task FreeRTOS e il carico per core.\n\nOPZIONI\n  Questo comando non ha opzioni.\n\nCOSTO PER IL DISPOSITIVO\n  Una GET /api/cpu.\n\nVEDERE ANCHE\n  heap(1), diag(1), uptime(1)\n\nESEMPI\n  cpu\n  watch -n 5 cpu"
+  },
+  "en": {
+    "title": "cpu - Cores, frequency, task count and load",
+    "synopsis": "cpu",
+    "description": "Prints what the scheduler is doing: how many cores, at what frequency, how many FreeRTOS tasks and the per-core load.",
+    "details": "NAME\n  cpu - Cores, frequency, task count and load\n\nSYNOPSIS\n  cpu\n\nDESCRIPTION\n  Prints what the scheduler is doing: how many cores, at what frequency, how many FreeRTOS tasks and the per-core load.\n\nOPTIONS\n  This command takes no options.\n\nDEVICE COST\n  One GET /api/cpu.\n\nSEE ALSO\n  heap(1), diag(1), uptime(1)\n\nEXAMPLES\n  cpu\n  watch -n 5 cpu"
+  }
+}

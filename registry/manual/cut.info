@@ -1,0 +1,16 @@
+{
+  "id": "cut",
+  "category": "terminal",
+  "it": {
+    "title": "cut - Seleziona campi o colonne da ogni riga",
+    "synopsis": "cut -d<char> -f<list>   |   cut -c<from>-<to>",
+    "description": "Tiene solo una parte di ogni riga. Senza, l'output a colonne di /proc e del log del dispositivo non è utilizzabile in pipe.",
+    "details": "NOME\n  cut - Seleziona campi o colonne da ogni riga\n\nSINTASSI\n  cut -d<char> -f<list>   |   cut -c<from>-<to>\n\nDESCRIZIONE\n  Tiene solo una parte di ogni riga. Senza, l'output a colonne di /proc e del log del dispositivo non è utilizzabile in pipe.\n\nOPZIONI\n  -d C\n    Separatore di campo (tabulazione di default).\n  -f ELENCO\n    Quali campi tenere: 1, 1,3 oppure 2-4.\n  -c A-B\n    Tiene i caratteri da A a B invece dei campi.\n\nCOSTO PER IL DISPOSITIVO\n  Nessuno. Tutto nel browser.\n\nVEDERE ANCHE\n  grep(1), sort(1)\n\nESEMPI\n  cat /proc/meminfo | cut -d\" \" -f1\n  apps | cut -f1"
+  },
+  "en": {
+    "title": "cut - Select fields or columns from each line",
+    "synopsis": "cut -d<char> -f<list>   |   cut -c<from>-<to>",
+    "description": "Keeps only part of every line. Without it the column output of /proc and of the device log is not pipeable.",
+    "details": "NAME\n  cut - Select fields or columns from each line\n\nSYNOPSIS\n  cut -d<char> -f<list>   |   cut -c<from>-<to>\n\nDESCRIPTION\n  Keeps only part of every line. Without it the column output of /proc and of the device log is not pipeable.\n\nOPTIONS\n  -d C\n    Field separator (a tab by default).\n  -f LIST\n    Which fields to keep: 1, 1,3 or 2-4.\n  -c A-B\n    Keep characters A to B instead of fields.\n\nDEVICE COST\n  None. Entirely browser-side.\n\nSEE ALSO\n  grep(1), sort(1)\n\nEXAMPLES\n  cat /proc/meminfo | cut -d\" \" -f1\n  apps | cut -f1"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "head",
+  "category": "terminal",
+  "it": {
+    "title": "head - Mostra inizio del file",
+    "synopsis": "head [-n lines] <file>",
+    "description": "Visualizza le prime righe di un file di testo.",
+    "details": "NOME\n  head - Mostra le prime righe di un file.\n\nSINTASSI\n  head [-n <righe>] <file>\n\nDESCRIZIONE\n  Stampa le prime righe di un file (10 di default).\n\nOPZIONI\n  -n <righe>\n    Numero di righe da stampare (es. '-n 5').\n  <file>\n    Il file da leggere.\n\nARCHITETTURA E BASSO LIVELLO\n  Scarica il file tramite GET a '/api/fs/read'. Splitta il testo per righe e ne seleziona un sottoinsieme limitato in memoria tramite l'helper 'slice(0, n)'. Vedi anche web_api(7).\n\nCODICI DI RITORNO\n  0\n    Successo.\n  1\n    Errore di lettura o argomenti non validi.\n  404\n    File non esistente.\n\nCONFORMITÀ A\n  Estensione NucleoOS compatibile con POSIX.\n\nAUTORE\n  NucleoOS Core Devs.\n\nSEGNALAZIONE BUG\n  Segnalare i bug all'indirizzo support@nucleoos.org.\n\nVEDERE ANCHE\n  tail(1), cat(1), web_api(7)\n\nESEMPI AVANZATI\n  head logs.txt\n  head -n 5 /data/settings.json"
+  },
+  "en": {
+    "title": "head - Show first lines of a file",
+    "synopsis": "head [-n lines] <file>",
+    "description": "Output the first part (default 10 lines) of a file.",
+    "details": "NAME\n  head - Output first lines of a file.\n\nSYNOPSIS\n  head [-n <lines>] <file>\n\nDESCRIPTION\n  Prints the initial segment of a file (defaults to 10 lines).\n\nOPTIONS\n  -n <lines>\n    Specify the exact count of lines to print (e.g. '-n 5').\n  <file>\n    The target file path.\n\nSYSTEM ARCHITECTURE\n  Downloads file contents via GET '/api/fs/read'. Parses lines in memory and isolates the top elements using array slicing ('slice(0, n)'). See also web_api(7).\n\nEXIT CODES\n  0\n    Success.\n  1\n    Read error or invalid parameter formatting.\n  404\n    Target file not found.\n\nCONFORMING TO\n  NucleoOS extension compatible with POSIX.\n\nAUTHOR\n  NucleoOS Core Devs.\n\nREPORTING BUGS\n  Report bugs to support@nucleoos.org.\n\nSEE ALSO\n  tail(1), cat(1), web_api(7)\n\nADVANCED EXAMPLES\n  head logs.txt\n  head -n 5 /data/settings.json"
+  }
+}

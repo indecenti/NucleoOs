@@ -1,0 +1,16 @@
+{
+  "id": "tee",
+  "category": "terminal",
+  "it": {
+    "title": "tee - Scrive lo standard input su file e lo passa avanti",
+    "synopsis": "tee <file>",
+    "description": "Salva quello che gli passa attraverso e poi consegna lo stesso testo allo stadio successivo: è ciò che rende duratura una pipeline.",
+    "details": "NOME\n  tee - Scrive lo standard input su file e lo passa avanti\n\nSINTASSI\n  tee <file>\n\nDESCRIZIONE\n  Salva quello che gli passa attraverso e poi consegna lo stesso testo allo stadio successivo: è ciò che rende duratura una pipeline.\n\nOPZIONI\n  <file>\n    Dove scrivere.\n\nCOSTO PER IL DISPOSITIVO\n  Esattamente una POST /api/fs/write.\n\nVEDERE ANCHE\n  cat(1), clip(1), base64(1)\n\nESEMPI\n  diag | tee /data/diag.txt\n  dmesg -l E | tee /data/errori.txt | wc"
+  },
+  "en": {
+    "title": "tee - Write standard input to a file and pass it on",
+    "synopsis": "tee <file>",
+    "description": "Saves whatever flows through it and then hands the same text to the next stage, which is what makes a pipeline durable.",
+    "details": "NAME\n  tee - Write standard input to a file and pass it on\n\nSYNOPSIS\n  tee <file>\n\nDESCRIPTION\n  Saves whatever flows through it and then hands the same text to the next stage, which is what makes a pipeline durable.\n\nOPTIONS\n  <file>\n    Where to write.\n\nDEVICE COST\n  Exactly one POST /api/fs/write.\n\nSEE ALSO\n  cat(1), clip(1), base64(1)\n\nEXAMPLES\n  diag | tee /data/diag.txt\n  dmesg -l E | tee /data/errors.txt | wc"
+  }
+}
