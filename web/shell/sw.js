@@ -3,7 +3,7 @@
 // Bump this on every shell change that must reach already-installed clients. The reason for each
 // roll goes in docs/shell-cache-log.md — NOT here: it used to be one 10.5 KB comment on this line,
 // half the whole service worker, re-shipped to every browser on every update check.
-const CACHE = 'nucleo-shell-v128';   // v128 — see docs/shell-cache-log.md
+const CACHE = 'nucleo-shell-v129';   // v129 — see docs/shell-cache-log.md
 // Per-version cache for app assets (/apps/<id>/...). Tied to the shell version so a deploy (which
 // bumps CACHE) drops it; the shell also flushes it on apps.changed (OTA app update) via postMessage.
 const APP_CACHE = CACHE + '-apps';
@@ -25,6 +25,9 @@ const ASSETS = ['./', 'index.html', 'style.css', 'copilot.css', 'notify.css', 'o
 const MAX_INFLIGHT = 2;   // 3->2: serialise harder so the PSRAM-less single-task device is never flooded at boot (v93)
 let active = 0;            // permits currently held
 const queue = [];         // FIFO of { need, resolve }
+// In-flight /api/anima GETs, keyed by path+query: identical questions asked at the same moment share
+// ONE request instead of racing each other at the device. Entries are removed when the job settles.
+const animaInflight = new Map();
 function pump() {
   // Strictly head-of-line: never grant a later waiter past a blocked one (prevents the
   // exclusive write from being starved by reads that keep slipping into freed slots).
@@ -154,6 +157,29 @@ self.addEventListener('fetch', (e) => {
     if (p === '/api/fs/read' || p === '/api/fs/list' || p === '/api/fs/write') {
       const exclusive = (p === '/api/fs/write');   // list = shared read (need=1), like read
       e.respondWith(gatedFetch(e.request, exclusive).catch(() => new Response('', { status: 504, statusText: 'device busy' })));
+      return;
+    }
+    // /api/anima: la domanda all'assistente. Dodici superfici la chiamano — copilot, ricerca della
+    // shell, onboarding, ai.js, e le app anima/agent/settings/spreadsheet/games/miei-fatti/recorder/
+    // code-runner — e nessuna di loro sa delle altre: la regola "mai chiamate concorrenti" era affidata
+    // alla buona educazione di dodici file. Su un chip senza PSRAM, con 4-6 socket condivisi da tutti
+    // gli iframe, due domande insieme bastano a far scadere le letture file dell'OS.
+    //
+    // Slot CONDIVISO (need=1), non esclusivo: una query 'mode=on' apre una TLS sul device e puo' durare
+    // secondi — dandole i permessi esclusivi congelerebbe ogni /api/fs/read della shell.
+    //
+    // E COALESCENZA, che qui e' il guadagno vero: la stessa domanda posta insieme da piu' superfici
+    // (la ricerca fa da ponte verso il copilot, un'app chiede lo stesso fatto) diventa UNA richiesta
+    // sola, e tutti leggono la stessa risposta. Zero byte in piu', meno concorrenza: costo negativo.
+    if (p === '/api/anima' && e.request.method === 'GET') {
+      const key = url.pathname + url.search;
+      const inflight = animaInflight.get(key);
+      if (inflight) { e.respondWith(inflight.then((r) => r.clone())); return; }
+      const job = gatedFetch(e.request, false)
+        .catch(() => new Response('', { status: 504, statusText: 'device busy' }))
+        .finally(() => animaInflight.delete(key));
+      animaInflight.set(key, job);
+      e.respondWith(job.then((r) => r.clone()));
       return;
     }
     return; // Endpoint live/streaming (chat, logs, llm): dritti in rete, niente gate, niente cache.

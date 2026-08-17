@@ -2987,6 +2987,22 @@
       "anima": false
     },
     {
+      "id": "unit-shell-sw-anima-gate",
+      "label": "shell-sw-anima-gate.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-sw-anima-gate.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-shortcuts",
       "label": "shortcuts.test.mjs",
       "category": "app-shell",
