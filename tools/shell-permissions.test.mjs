@@ -94,3 +94,36 @@ test('an app with no web route renders a placeholder, not a frame', () => {
   assert.ok(!html.includes('<iframe'), html);
   assert.match(html, /No web route declared/);
 });
+
+// ── the bypass ────────────────────────────────────────────────────────────────────────────────
+// frameHtml built the tag by concatenation and interpolated app.name into title="…" BEFORE `allow`.
+// A name containing a double quote closes the title and injects its own attributes — and by the HTML
+// duplicate-attribute rule the FIRST `allow` wins, so the app chose its own Feature Policy. The agent
+// publishes apps with names it picks, which made this a self-service bypass of this very gate.
+
+test('an app NAME cannot inject attributes into the iframe tag', () => {
+  const evil = { id: 'evil', route: '/apps/evil/', permissions: [],
+    name: 'X" allow="microphone; camera" data-x="' };
+  const html = frameHtml(evil, '/apps/evil/');
+  const allows = html.match(/allow="/g) || [];
+  assert.equal(allows.length, 1, 'exactly one allow attribute must survive: ' + html);
+  assert.ok(html.includes("microphone 'none'"), 'the computed policy must be the one that applies: ' + html);
+  assert.ok(!/title="[^"]*"\s+allow="microphone; camera"/.test(html), html);
+});
+
+test('a hostile name cannot break out of the title attribute at all', () => {
+  const html = frameHtml({ id: 'x', route: '/apps/x/', permissions: [], name: '"><script>alert(1)</script>' }, '/apps/x/');
+  assert.ok(!html.includes('<script'), html);
+  assert.ok(html.includes('&quot;'), 'the quote must be encoded, not passed through: ' + html);
+});
+
+test('the src is escaped too — a query value must not open a second attribute', () => {
+  const html = frameHtml({ id: 'x', name: 'X', route: '/apps/x/', permissions: ['device.mic'] }, '/apps/x/?q=a"b');
+  assert.equal((html.match(/allow="/g) || []).length, 1, html);
+  assert.ok(html.includes('&quot;'), html);
+});
+
+test('a placeholder (no route) escapes the name as well', () => {
+  const html = frameHtml({ id: 'x', name: '<img src=x onerror=1>' }, '');
+  assert.ok(!html.includes('<img'), html);
+});

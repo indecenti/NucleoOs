@@ -228,7 +228,9 @@ function saveSession() {
               // save never competes for the device's sockets while the app is still streaming in
 }
 async function restoreSession() {
+  roStores.add(SESSION_PATH);                      // see loadUiState: shut until the read proves otherwise
   const res = await loadState(SESSION_PATH);
+  if (res.state !== 'unreachable') roStores.delete(SESSION_PATH);
   // Unreachable: restoring nothing is fine, but SAVING would be fatal — the first window move would
   // write an empty session over the real one. Lock it instead.
   if (res.state === 'unreachable') { markReadOnly(SESSION_PATH); return; }
@@ -238,11 +240,23 @@ async function restoreSession() {
   if (saved.geom && typeof saved.geom === 'object') winGeom = saved.geom;   // restore per-app memory first
   if (!Array.isArray(saved.windows)) return;
   restoring = true;
-  // Open in saved z-order so stacking is preserved.
+  // Open in saved z-order so stacking is preserved. Two things this used to get wrong:
+  //   1. it reopened every window BLANK — only the rectangle was saved, so File Commander came back
+  //      at its default folder and Notepad on an empty buffer. serialize() now records the live URL.
+  //   2. it created EVERY iframe at once, minimised ones included, which on a 4-6 socket device is a
+  //      burst of simultaneous app loads for windows the user cannot even see. Minimised windows are
+  //      now deferred: they appear in the taskbar and load their app the first time they are opened.
   for (const g of [...saved.windows].sort((a, b) => (a.z || 0) - (b.z || 0))) {
     const app = byId(g.id);
     if (!app) continue;                        // app was uninstalled since
-    WM.open(app);
+    // Rebuild the query from the saved URL, but only when it really points at THIS app's route —
+    // a stale session must never navigate an app somewhere it does not own.
+    let query = '';
+    if (typeof g.url === 'string' && app.route && g.url.indexOf(app.route) === 0) {
+      const q = g.url.indexOf('?');
+      if (q >= 0) query = g.url.slice(q + 1);
+    }
+    WM.open(app, query, { deferred: !!g.min });
     WM.applyGeom(g.id, g);
   }
   restoring = false;
@@ -261,7 +275,9 @@ const CLIP_TOTAL_MAX = 64 * 1024;                 // not bloat the file rewritte
 let clip = { items: [] };                         // newest first
 let clipTimer = null;
 async function loadClipboard() {
-  const r = await loadState(CLIP_PATH);
+  roStores.add(CLIP_PATH);                         // see loadUiState: a Ctrl+C during boot must not
+  const r = await loadState(CLIP_PATH);            // overwrite a history we have not managed to read
+  if (r.state !== 'unreachable') roStores.delete(CLIP_PATH);
   // Same trap: an unreadable history is not an empty history. Without this the first copy wrote a
   // one-entry clipboard over the user's real one.
   if (r.state === 'unreachable') { markReadOnly(CLIP_PATH); return; }
@@ -509,7 +525,13 @@ function initOS() {
 
 let needSeed = false;            // true when the device had no state yet → seed it
 async function loadUiState() {
+  // Hold the store shut for the DURATION of the read, not just after it fails. The desktop becomes
+  // interactive ~600 ms into boot while these loads can take ~20 s on a contended device, and every
+  // window move fires saveSession(): the destructive write this guard exists to stop could still land
+  // in that gap. Pessimistic by default; opened only once we know what is actually on the device.
+  roStores.add(UI_STATE_PATH);
   const r = await loadState(UI_STATE_PATH);
+  if (r.state !== 'unreachable') roStores.delete(UI_STATE_PATH);
   if (r.state === 'found') return { ...UI_DEFAULTS, ...r.data };
   if (r.state === 'absent') { needSeed = true; return migrateLegacy(); }   // first run: lift any localStorage value onto the device
   // UNREACHABLE. We do not know what the user had, so we must not decide they had nothing: seeding
@@ -682,12 +704,17 @@ async function loadAppPermissions() {
     console.warn('[shell] registry permissions unreadable → app iframes keep the permissive default:', (e && e.message) || e);
   }
 }
+// Started as EARLY as the app list allows and awaited later, so the window in which a user-opened app
+// could still get the permissive default is as small as we can make it without holding the boot screen
+// hostage to one more device read. startDesktopServices() awaits this same promise.
+let permsReady = null;
+function beginLoadAppPermissions() { if (!permsReady) permsReady = loadAppPermissions(); return permsReady; }
 // Everything that costs the DEVICE something. Split out of boot() so it can be skipped entirely
 // when there is no desktop on screen, and started later if one appears.
 async function startDesktopServices() {
   if (desktopStarted) return;
   desktopStarted = true;
-  await loadAppPermissions();              // MUST precede the first window: `allow` is fixed at navigation
+  await beginLoadAppPermissions();         // MUST precede the first window: `allow` is fixed at navigation
   ensureOnboarding().catch(() => {});      // first paired boot with no AI key → curated welcome/setup
   await restoreSession();                  // bring back the windows that were open last time
   bootLog('desktop up (apps=' + state.apps.length + ') — attaching live socket /ws…');
@@ -726,6 +753,7 @@ async function boot() {
     bootLog('apps FAILED after retries → using mock set', e && (e.message || e));
     state.apps = MOCK.map((a) => ({ ...a, glyph: glyph(a) }));
   }
+  beginLoadAppPermissions();               // fire now; startDesktopServices awaits the same promise
   try {
     const loadedAssoc = await fetchJSON('/api/associations');
     if (loadedAssoc && loadedAssoc.default_open) {
@@ -759,6 +787,11 @@ async function boot() {
     if (installScrim) checkInstallGone();        // installer window closed/crashed → never leave the OS blocked
     saveSession();
   });
+  // The session store must be SHUT from the moment the desktop can be clicked. WM.setOnChange below
+  // arms saveSession(), but restoreSession() now runs inside startDesktopServices(), behind an await:
+  // any window opened in that gap wrote an empty session over the real one BEFORE it had been read.
+  // restoreSession() reopens the store once it knows what is actually on the device.
+  roStores.add(SESSION_PATH);
   renderDesktop();
   renderStartMenu();
   renderTaskbar();
@@ -797,7 +830,17 @@ async function refreshApps() {
   try {
     const d = await fetchJSON('/api/apps');
     if (!d || !Array.isArray(d.apps)) return;
-    state.apps = d.apps.filter((a) => a.enabled).map((a) => ({ ...a, glyph: glyph(a) }));
+    // /api/apps carries no permissions (the firmware streams only id/name/route/icon/enabled), so a
+    // naive rebuild dropped them for EVERY app and silently reverted allowAttr to the permissive
+    // default — right after an install, which is exactly when a new, unvetted app appears.
+    const prevPerms = new Map(state.apps.map((a) => [a.id, a.permissions]));
+    state.apps = d.apps.filter((a) => a.enabled).map((a) => {
+      const app = { ...a, glyph: glyph(a) };
+      const p = prevPerms.get(a.id);
+      if (Array.isArray(p)) app.permissions = p;
+      return app;
+    });
+    permsReady = null; beginLoadAppPermissions();   // and re-read the registry: the new app has its own
     // Surface any newly installed app in the Start grid (Windows-11 pins new apps automatically).
     let added = false;
     for (const a of state.apps) if (!state.startPins.includes(a.id)) { state.startPins.push(a.id); added = true; }
@@ -829,18 +872,62 @@ const WS_BACKOFF_MAX = 30000;
 let wsEvicted = false;
 async function onWsClosed() {
   setWsBadge('reconnecting');
-  let alive = false;
+  // A closed socket has THREE causes that look identical from here, and guessing was wrong twice:
+  //   • our session is gone — the /ws handshake is auth-gated while /api/status is PUBLIC, so an
+  //     unpaired client produced exactly the evicted signature and got a banner it could never
+  //     satisfy, with the PIN gate never coming back;
+  //   • the line blipped — a suspended laptop, a Wi-Fi roam, or the device's own socket reaper. That
+  //     used to be called an eviction too, which switched auto-reconnect off and left the shell deaf;
+  //   • someone really took the seat.
+  // ONE authenticated probe separates them. /api/diag is paired-only AND reports net.clients, so its
+  // status code answers the first question and its body answers the third.
+  // Deliberately NOT "just retry and see": a retry WINS the seat back (the device is last-wins), which
+  // restarts the very eviction war this mechanism exists to end.
+  let status = 0, diag = null;
   try {
     const opts = { cache: 'no-store' };
     if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) opts.signal = AbortSignal.timeout(4000);
-    const r = await fetch('/api/status', opts);
-    alive = !!(r && r.ok);
+    const r = await fetch('/api/diag', opts);
+    status = r.status;
+    if (r.ok) diag = await r.json().catch(() => null);
   } catch {}
-  if (!alive) { setWsBadge('offline'); scheduleWS(); return; }   // genuinely unreachable → normal backoff
-  wsEvicted = true;                                              // healthy device + closed socket = someone took the seat
+  if (!status) { setWsBadge('offline'); scheduleWS(); return; }        // unreachable → normal backoff
+  if (status === 401 || status === 403) {                              // not evicted: no longer paired
+    setWsBadge('offline'); hideEvictedBar();
+    showPairing().then(() => { wsBackoff = 3000; connectWS(); });
+    return;
+  }
+  const clients = (diag && diag.net && typeof diag.net.clients === 'number') ? diag.net.clients : -1;
+  if (clients === 0) { setWsBadge('offline'); scheduleWS(); return; }  // nobody holds the seat → just reconnect
+  // clients >= 1, or unknown. Unknown resolves to "evicted" on purpose: the banner costs the user one
+  // click and damages nothing, while guessing the other way restarts a war that writes to the SD.
+  wsEvicted = true;
   setWsBadge('evicted');
   showEvictedBar();
 }
+// While the seat is taken we hold NO socket, so nothing would ever tell us it was given back: close
+// the other browser's tab and this one stayed on the banner forever. Poll cheaply — one small
+// authenticated GET, only while evicted, only while visible — and reclaim the seat the moment it is
+// free. This is the state with zero WS traffic, so the poll costs the device less than normal operation.
+const SEAT_POLL_MS = 20000;
+let wsSeatTimer = null;
+function stopWatchingSeat() { if (wsSeatTimer) { clearInterval(wsSeatTimer); wsSeatTimer = null; } }
+async function seatFreeCheck() {
+  if (!wsEvicted || document.hidden) return;
+  try {
+    const opts = { cache: 'no-store' };
+    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) opts.signal = AbortSignal.timeout(4000);
+    const r = await fetch('/api/diag', opts);
+    if (!r.ok) return;
+    const d = await r.json().catch(() => null);
+    const n = (d && d.net && typeof d.net.clients === 'number') ? d.net.clients : -1;
+    if (n !== 0) return;                        // still taken
+    stopWatchingSeat(); hideEvictedBar();
+    wsBackoff = 3000; connectWS();              // the seat is free again — take it back silently
+  } catch {}
+}
+function watchForFreeSeat() { if (!wsSeatTimer) wsSeatTimer = setInterval(seatFreeCheck, SEAT_POLL_MS); }
+
 function showEvictedBar() {
   let bar = document.getElementById('ws-evicted');
   if (!bar) { bar = document.createElement('div'); bar.id = 'ws-evicted'; document.body.appendChild(bar); }
@@ -848,9 +935,11 @@ function showEvictedBar() {
     + `<button class="wse-btn" type="button">${escapeHtml(t('ws_evicted_take'))}</button>`;
   bar.querySelector('.wse-btn').addEventListener('click', () => { hideEvictedBar(); wsBackoff = 3000; connectWS(); });
   bar.classList.add('show');
+  watchForFreeSeat();
 }
 function hideEvictedBar() {
   wsEvicted = false;
+  stopWatchingSeat();
   const b = document.getElementById('ws-evicted');
   if (b) b.classList.remove('show');
 }
@@ -957,6 +1046,7 @@ function connectWS() {
 // rather than waiting out a long backed-off timer that grew while the tab was hidden.
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
+  if (wsEvicted) { seatFreeCheck(); return; }   // torni a guardare: forse il posto si e liberato
   if (wsSock && (wsSock.readyState === WebSocket.OPEN || wsSock.readyState === WebSocket.CONNECTING)) return;
   if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
   wsBackoff = 3000;
@@ -1237,11 +1327,17 @@ async function persistTheme(newTheme) {
   try {
     const path = '/system/config/settings.json';
     const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+    // settings.json is the FOURTH state store, and it had the same destructive bug as the other three:
+    // on a failed read `s` stayed {} and we wrote it anyway, wiping ui.language, ui.accent, ui.fontSize,
+    // ui.regionLocale and device.name. Worse, the service worker turns a network failure into a
+    // Response(504) (sw.js), so the failure arrives as `!r.ok` and not as a throw. Never merge onto a
+    // read we could not trust — say so and leave the file alone.
+    if (!r.ok) { showToast(t('toast_theme_error'), '⚠️', 'error'); return; }
     let s = {};
-    if (r.ok) { const txt = await r.text(); if (txt) s = JSON.parse(txt); }
+    const txt = await r.text(); if (txt) s = JSON.parse(txt);
     if (!s.ui) s.ui = {};
     s.ui.theme = newTheme;
-    await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: JSON.stringify(s, null, 2) });
+    await saveConfig(path, JSON.stringify(s, null, 2));   // the one serialized, timed-out write path
     showToast(t('toast_theme_saved'), newTheme === 'dark' ? '🌙' : '☀️', 'success');
   } catch (err) {
     console.error('Failed to persist theme', err);

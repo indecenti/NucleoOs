@@ -59,16 +59,43 @@ export function allowAttr(app) {
 // NB: no `pointer-lock` in the allow list. Chrome does not implement it as a Permissions-Policy
 // feature and logs "Unrecognized feature" for every window opened; pointer lock in a same-origin,
 // unsandboxed iframe (which this is) is allowed anyway, so the token only ever produced noise.
+// Escape for an HTML ATTRIBUTE value. Not decoration: frameHtml built the tag by concatenation and
+// interpolated app.name straight into title="…" BEFORE the allow attribute. A name containing a
+// double quote closes the title and injects arbitrary attributes — including an `allow` of its own,
+// which by the HTML duplicate-attribute rule (the FIRST wins) overrides the computed policy entirely.
+// The agent can publish apps with names it chooses, so this was a self-service bypass of the very
+// gate this file added. Also used for the window title bar, which is innerHTML too.
+export const attr = (v) => String(v == null ? '' : v)
+  .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 export function frameHtml(app, src) {
   return app && app.route
-    ? `<iframe src="${src}" title="${app.name}" allow="${allowAttr(app)}"></iframe>`
-    : `<div class="placeholder">${glyph(app)}<br><br>${app && app.name}<br><small>No web route declared.</small></div>`;
+    ? `<iframe src="${attr(src)}" title="${attr(app.name)}" allow="${attr(allowAttr(app))}"></iframe>`
+    : `<div class="placeholder">${glyph(app)}<br><br>${attr(app && app.name)}<br><small>No web route declared.</small></div>`;
+}
+
+// Build the iframe of a deferred window, once, on demand. Everything that reads the frame already
+// guards on null (notifyVis, the status broadcast, the shortcut injection), so a pending window is
+// simply a window whose app has not loaded yet.
+function materialise(w) {
+  if (!w || !w.pending || w.holdDeferred) return;
+  const src = w.pending;
+  w.pending = null;
+  const host = w.el.querySelector('.body');
+  if (!host) return;
+  host.innerHTML = frameHtml(w.app, src);
+  const frame = host.querySelector('iframe');
+  if (frame) frame.addEventListener('load', () => {
+    try { onFrameLoad(frame, w.app); } catch {}
+    try { const d = frame.contentDocument; if (d) d.addEventListener('pointerdown', () => focus(w.app.id), true); } catch {}
+  });
 }
 
 function focus(id) {
   for (const w of windows.values()) w.el.classList.remove('active');
   const w = windows.get(id);
   if (!w) return;
+  materialise(w);                 // a deferred window loads its app the moment it is actually wanted
   const wasMin = w.min;
   w.min = false;
   w.el.classList.remove('hidden');
@@ -105,12 +132,20 @@ export function toggle(id) {
   else focus(id);
 }
 
-export function open(app, query) {
+// opts.deferred = build the window WITHOUT its iframe. The frame is materialised the first time the
+// window is focused. Session restore uses it for windows that were minimised: they belong in the
+// taskbar, but creating their iframe at boot means N simultaneous app loads on a device with 4-6
+// sockets — for windows the user cannot even see.
+export function open(app, query, opts = {}) {
   const src = app.route ? app.route + (query ? '?' + query : '') : '';
   if (windows.has(app.id)) {                       // already open: optionally navigate, then focus
     const w = windows.get(app.id);
     const iframe = w.el.querySelector('iframe');
     if (iframe && src) iframe.src = src;
+    // A DEFERRED window has no iframe yet, so setting .src silently did nothing and it later
+    // materialised its OLD pending URL: double-clicking a file with that app minimised opened
+    // yesterday's document, with no error to explain it. Retarget the pending load instead.
+    else if (!iframe && src) w.pending = src;
     focus(app.id);
     return;
   }
@@ -120,10 +155,10 @@ export function open(app, query) {
   el.style.left = (60 + n * 28) + 'px';
   el.style.top = (40 + n * 28) + 'px';
 
-  const body = frameHtml(app, src);
+  const body = opts.deferred ? '' : frameHtml(app, src);
   el.innerHTML =
     `<div class="bar"><span class="glyph">${glyph(app)}</span>` +
-    `<span class="t">${app.name}</span>` +
+    `<span class="t">${attr(app.name)}</span>` +
     `<button class="min" title="Minimize"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2" y1="6" x2="9" y2="6" stroke-linecap="round"/></svg></button>` +
     `<button class="max" title="Maximize"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="2" width="7" height="7" rx="1.2"/></svg></button>` +
     `<button class="close" title="Close"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2.6" y1="2.6" x2="8.4" y2="8.4" stroke-linecap="round"/><line x1="8.4" y1="2.6" x2="2.6" y2="8.4" stroke-linecap="round"/></svg></button></div>` +
@@ -134,7 +169,7 @@ export function open(app, query) {
     `<div class="win-resizer sw" data-dir="sw"></div><div class="win-resizer se" data-dir="se"></div>`;
 
   layer.appendChild(el);
-  windows.set(app.id, { el, app, min: false, max: false, snap: null, prev: null });
+  windows.set(app.id, { el, app, min: false, max: false, snap: null, prev: null, pending: opts.deferred ? src : null });
 
   const frame = el.querySelector('iframe');
   if (frame) frame.addEventListener('load', () => {
@@ -160,6 +195,10 @@ export function open(app, query) {
 
   const saved = geomFor(app.id);                   // restore this app's last geometry, if any
   if (saved) applyGeom(app.id, saved);
+  // A deferred window must NOT be focused here: focus() materialises the frame, which is exactly the
+  // load we are deferring. It is being restored minimised, so there is nothing to bring forward —
+  // it just needs to exist in the taskbar until the user opens it.
+  if (opts.deferred) { const w = windows.get(app.id); if (w) { w.min = true; w.el.classList.add('hidden'); } onChange(); return; }
   focus(app.id);
 }
 
@@ -291,13 +330,28 @@ window.addEventListener('resize', () => {
 });
 
 // Serialize open windows so the device can restore the session (real-OS behaviour).
+// The window's CURRENT location, so a restored window comes back with its CONTENT and not blank.
+// Only the geometry used to be saved: reopening put File Commander at its default folder, Notepad on
+// an empty buffer and the media player on nothing. Prefer the live location (apps navigate with
+// query strings), fall back to the src attribute, and keep it same-origin + bounded.
+function liveUrl(w) {
+  const f = w.el.querySelector('iframe');
+  if (!f) return w.pending || '';                 // never materialised: its pending src is the truth
+  try {
+    const l = f.contentWindow && f.contentWindow.location;
+    if (l && l.origin === location.origin) return (l.pathname + l.search).slice(0, 512);
+  } catch {}                                       // cross-origin (an external link) → attribute only
+  return (f.getAttribute('src') || '').slice(0, 512);
+}
+
 export function serialize() {
   const out = [];
   for (const w of windows.values()) {
     const g = ((w.max || w.snap) && w.prev) ? w.prev : curGeom(w);   // floating geom, so restore works
     out.push({ id: w.app.id, x: parseInt(g.left) || 0, y: parseInt(g.top) || 0,
       w: parseInt(g.width) || 0, h: parseInt(g.height) || 0,
-      min: !!w.min, max: !!w.max, snap: w.snap || null, z: parseInt(w.el.style.zIndex) || 0 });
+      min: !!w.min, max: !!w.max, snap: w.snap || null, z: parseInt(w.el.style.zIndex) || 0,
+      url: liveUrl(w) });
   }
   return out;
 }
@@ -311,8 +365,14 @@ export function applyGeom(id, g) {
   if (g.w) w.el.style.width = g.w + 'px';
   if (g.h) w.el.style.height = g.h + 'px';
   if (g.z) { w.el.style.zIndex = g.z; if (g.z > z) z = g.z; }
+  // A window restored MINIMISED must not be materialised on the way in. maximize()/applySnap() both
+  // end in focus(), which builds the iframe — precisely the load being deferred — so a
+  // minimised-AND-maximised window still paid for its app at boot. Hold materialisation across the
+  // geometry restore, then put it back in the taskbar.
+  if (g.min) w.holdDeferred = true;
   if (g.max) maximize(id);                  // re-maximize (stores current floating geom as prev)
   else if (g.snap) applySnap(id, g.snap);   // re-snap to its half/quarter
+  w.holdDeferred = false;
   if (g.min) { w.min = true; w.el.classList.add('hidden'); }
 }
 
@@ -370,7 +430,7 @@ function hidePreview() { if (preview) preview.classList.add('hidden'); }
 // dragging fast over an app iframe used to drop the gesture; the iframe is only made inert as a
 // belt-and-braces.
 function drag(win, handle, id) {
-  let sx, sy, ox, oy, moving = false, zone = null;
+  let sx, sy, ox, oy, moving = false, zone = null, dragPid = null;
   handle.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     if (e.target.closest('button')) return;
@@ -390,6 +450,7 @@ function drag(win, handle, id) {
     moving = true; sx = e.clientX; sy = e.clientY;
     ox = win.offsetLeft; oy = win.offsetTop;
     e.preventDefault();
+    dragPid = e.pointerId;
     try { handle.setPointerCapture(e.pointerId); } catch {}   // keep the gesture even over an iframe
     const iframe = win.querySelector('iframe');
     if (iframe) iframe.style.pointerEvents = 'none';
@@ -402,14 +463,22 @@ function drag(win, handle, id) {
     zone = detectZone(e.clientX, e.clientY, A);     // pointer is already in work-area coords
     if (zone) showPreview(zone); else hidePreview();
   });
-  window.addEventListener('pointerup', () => {
+  // One exit for EVERY way a pointer gesture can end. With only pointerup, a cancelled pointer (the
+  // browser takes it back, a second touch, the tab losing it) left `moving` true and the iframe stuck
+  // at pointerEvents:'none' — the window kept following the cursor and its app stopped accepting clicks.
+  const endDrag = () => {
     if (!moving) return;
     moving = false; hidePreview();
+    try { if (dragPid != null) handle.releasePointerCapture(dragPid); } catch {}
+    dragPid = null;
     const iframe = win.querySelector('iframe');
     if (iframe) iframe.style.pointerEvents = '';
     if (zone) { applySnap(id, zone); zone = null; }
     else onChange();
-  });
+  };
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+  handle.addEventListener('lostpointercapture', endDrag);
 }
 
 // ---- Snap Layouts flyout (Windows-11: hover the maximize button) -------------------------
