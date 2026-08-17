@@ -87,7 +87,15 @@ for (const t of TREES) {
   const idxP = join(repo, t.dir, 'anima-it-index.bin');
   const jsonP = join(repo, t.dir, 'anima-it-encoder.json');
   if (!existsSync(encP) || !existsSync(idxP)) {
-    console.log(`  ${C.y}SKIP${C.x} ${t.name.padEnd(20)} ${C.d}(no encoder/index present)${C.x}`);
+    // The GATE FIXTURE is not optional. A fresh clone has no pack there (the binaries are derived and
+    // stay out of git), and skipping meant anima:gate went on to score an OS with no offline brain and
+    // report plausible numbers. The tree that decides whether the product ships must say so out loud.
+    if (t.expectDim === 256) {
+      console.log(`  ${C.r}FAIL${C.x} ${t.name.padEnd(20)} ${C.r}gate fixture absent — run: node tools/anima/build_packs.mjs --host${C.x}`);
+      violations++;
+    } else {
+      console.log(`  ${C.y}SKIP${C.x} ${t.name.padEnd(20)} ${C.d}(no encoder/index present)${C.x}`);
+    }
     continue;
   }
   let enc, idx, jdim = null;
@@ -107,7 +115,14 @@ for (const t of TREES) {
   let provTag = '';
   const provP = idxP + '.prov';
   if (!existsSync(provP)) {
-    provTag = ` ${C.y}(no .prov — rebuild via npm run anima:packs to stamp provenance)${C.x}`; warnings++;
+    // Same reasoning: without provenance this tree's freshness is UNKNOWN, and for the gate fixture
+    // "unknown" is not a warning — it is the exact state that let a wrong-dimension pack sit here
+    // undetected while every routing suite was judged against it.
+    if (t.expectDim === 256) {
+      problems.push('gate fixture has no .prov — freshness cannot be verified; rebuild: node tools/anima/build_packs.mjs --host');
+    } else {
+      provTag = ` ${C.y}(no .prov — rebuild via npm run anima:packs to stamp provenance)${C.x}`; warnings++;
+    }
   } else {
     let prov = null; try { prov = JSON.parse(readFileSync(provP, 'utf8')); } catch {}
     if (!prov || !prov.corpus_sha) {

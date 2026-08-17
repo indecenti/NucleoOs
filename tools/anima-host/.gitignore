@@ -1,4 +1,15 @@
 # build output
 build/
-# local sandbox: copied L1 model + runtime session/telemetry
-sd/
+# Local sandbox: the copied L1 model + runtime session/telemetry. The pack itself stays OUT of git —
+# it is a DERIVED artifact (a deterministic function of the corpus and the d256 encoder, both of which
+# ARE tracked), and ~25 MB of binaries re-added on every rebuild is exactly the history bloat
+# docs/repo-history-purge.md exists to undo.
+sd/*
+# ...but the provenance sidecar DOES go in. It is 254 bytes, and it is what lets check_pack tell a
+# fresh clone "this fixture does not match this corpus" instead of passing vacuously — which is how
+# the gate scored against a wrong-dimension pack for weeks without anyone being able to notice.
+!sd/data/
+sd/data/*
+!sd/data/anima/
+sd/data/anima/*
+!sd/data/anima/*.prov

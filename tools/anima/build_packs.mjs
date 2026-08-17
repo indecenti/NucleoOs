@@ -65,6 +65,15 @@ if (wantHost) {
   const hostIdx = R('tools', 'anima-host', 'sd', 'data', 'anima', 'anima-it-index.bin');
   if (!existsSync(d256)) { console.error(`${C.r}missing host encoder ${d256}${C.x}`); process.exit(1); }
   console.log(`${C.b}[1/3] HOST pack (D=256) — gate fixture (--host)${C.x}`);
+  // Place the ENCODER too, not just the index. Building a 256-dim index into a tree that still holds
+  // the 192-dim device encoder produces a pack the C core REJECTS at load (nucleo_anima_l1.c), which
+  // switches L1 off SILENTLY — the gate then scores an OS with no offline brain and reports plausible
+  // nonsense. That mismatch is exactly how this fixture ended up wrong, so the command that rebuilds
+  // it must leave the tree self-consistent by construction, not by the operator remembering a cp.
+  const hostEnc = R('tools', 'anima-host', 'sd', 'data', 'anima', 'anima-it-encoder.bin');
+  mkdirSync(dirname(hostEnc), { recursive: true });
+  copyFileSync(d256, hostEnc);
+  console.log(`  ${C.d}→ encoder d256 placed in the gate fixture${C.x}`);
   py('build_akb2.py', { env: { ANIMA_ENC: d256, ANIMA_INDEX_OUT: hostIdx }, label: 'build host index' });
   augment(hostIdx, 'host index');
 } else {
