@@ -167,6 +167,19 @@ export function checkSyntax(code) {
   }
 }
 
+// The capabilities a run can hold. Anything not listed here is runner config (cwd, timeouts, …).
+export const CAP_KEYS = ['fs', 'http', 'anima', 'notify', 'hw'];
+
+// Fold a per-run capability override onto a runner's base set. NARROWING ONLY: an override may turn
+// a capability OFF for one run, never ON — so a caller can hand untrusted code a smaller sandbox
+// than the runner was built with, but can never widen past what createRunner granted.
+// Pure & DOM-free → host-testable (tools/anima-host/sandbox-caps.test.mjs).
+export function narrowCaps(base, override) {
+  const out = {};
+  for (const k of CAP_KEYS) out[k] = !!(base && base[k]) && !(override && override[k] === false);
+  return out;
+}
+
 // ---- path helpers (host side) ----
 function normPath(p) {
   const out = [];
@@ -188,6 +201,13 @@ export function createRunner(opts) {
 
   let worker = null, blobUrl = null, current = null, logBytes = 0, logCapped = false;
 
+  // PER-RUN capability NARROWING. run(code, env, {caps}) may only take authority AWAY for that one
+  // run; it can never grant what createRunner withheld. Before this, per-call caps were silently
+  // IGNORED — so a caller that verified untrusted generated code with {fs:false,http:false,anima:false}
+  // (ANIMA Forge's verify loop) actually ran it with the runner's full authority, hardware included.
+  let runCaps = null;
+  const can = (k) => narrowCaps(caps, runCaps)[k] === true;
+
   const resolve = (p) => {
     p = String(p == null ? '' : p);
     if (!p) return normPath(caps.cwd);
@@ -198,18 +218,18 @@ export function createRunner(opts) {
   async function handleRpc(method, args) {
     args = args || [];
     if (method === 'hw.command') {
-      if (!caps.hw) throw new Error('hw capability denied');
+      if (!can('hw')) throw new Error('hw capability denied');
       const m = resolveOffline(args[0] || '', { online: false });   // a script asks for deterministic offline NL
       if (!m) throw new Error('no hardware command recognised in: ' + (args[0] || ''));
       return await callCapability(m.id, m.args, fetch);
     }
     if (method.indexOf('hw.') === 0) {
-      if (!caps.hw) throw new Error('hw capability denied');
+      if (!can('hw')) throw new Error('hw capability denied');
       const id = method.slice(3);
       if (!isCapability(id)) throw new Error('unknown hardware capability: ' + id);
       return await callCapability(id, args[0] || {}, fetch);
     }
-    if (method.indexOf('fs.') === 0 && !caps.fs) throw new Error('fs capability denied');
+    if (method.indexOf('fs.') === 0 && !can('fs')) throw new Error('fs capability denied');
     switch (method) {
       case 'fs.read': {
         const r = await fsApi('read', resolve(args[0]));
@@ -238,22 +258,23 @@ export function createRunner(opts) {
       case 'fs.mkdir':  { const r = await fsApi('mkdir', resolve(args[0]), { method: 'POST' }); return r.ok; }
       case 'fs.remove': { const r = await fsApi('delete', resolve(args[0]), { method: 'POST' }); return r.ok; }
       case 'http.get': {
-        if (!caps.http) throw new Error('http capability denied');
+        if (!can('http')) throw new Error('http capability denied');
         const r = await fetch(args[0], args[1] || {});
         return { status: r.status, ok: r.ok, body: await r.text() };
       }
       case 'http.json': {
-        if (!caps.http) throw new Error('http capability denied');
+        if (!can('http')) throw new Error('http capability denied');
         const r = await fetch(args[0], args[1] || {});
         return { status: r.status, ok: r.ok, json: await r.json().catch(() => null) };
       }
       case 'anima': {
-        if (!caps.anima) throw new Error('anima capability denied');
+        if (!can('anima')) throw new Error('anima capability denied');
         const r = await fetch('/api/anima?q=' + encodeURIComponent(args[0] || '') + '&lang=' + (caps.lang || 'it') + '&mode=on');
         const j = await r.json();
         return { reply: j.reply || '', tier: j.tier, intent: j.intent };
       }
-      case 'notify': { if (caps.onNotify) caps.onNotify(String(args[0] == null ? '' : args[0])); return true; }
+      case 'notify': { if (!can('notify')) throw new Error('notify capability denied');
+        if (caps.onNotify) caps.onNotify(String(args[0] == null ? '' : args[0])); return true; }
       default: throw new Error('unknown os method: ' + method);
     }
   }
@@ -291,6 +312,7 @@ export function createRunner(opts) {
   function settle(result) {
     if (!current) return;
     const c = current; current = null;
+    runCaps = null;                      // per-run narrowing never leaks into the next run
     clearTimeout(c.timer);
     teardown();
     c.resolve(result);
@@ -304,6 +326,9 @@ export function createRunner(opts) {
     // Parse-only verification gate — no Worker, no execution (host-safe; the loop's VERIFY step).
     if (opts && opts.mode === 'check') return Promise.resolve(checkSyntax(code));
     if (current) return Promise.reject(new Error('a script is already running'));
+    // Narrow-only: {caps:{fs:false}} drops fs for THIS run; {caps:{hw:true}} on a hw-less runner
+    // stays denied. Cleared in settle() so the next run starts from the runner's own capabilities.
+    runCaps = (opts && opts.caps && typeof opts.caps === 'object') ? opts.caps : null;
     ensure();
     logBytes = 0; logCapped = false;
     return new Promise((res) => {
@@ -313,7 +338,7 @@ export function createRunner(opts) {
     });
   }
   function stop() { settle({ ok: false, error: 'stopped', stopped: true }); teardown(); }
-  function dispose() { current = null; teardown(); }
+  function dispose() { current = null; runCaps = null; teardown(); }
   function setCwd(p) { caps.cwd = p || '/'; }
 
   return { run, stop, dispose, setCwd, caps };
