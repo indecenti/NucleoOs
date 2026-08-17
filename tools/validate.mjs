@@ -65,6 +65,36 @@ for (const a of apps) {
   if (!existsSync(join(ROOT, `apps/${a.id}/manifest.json`))) { errs.push(`xref: installed app '${a.id}' has no manifest`); continue; }
   if (manifests[a.id] && manifests[a.id].id !== a.id) errs.push(`xref: id mismatch for '${a.id}' (manifest says '${manifests[a.id].id}')`);
 }
+
+// A file association must point at something that can actually OPEN a window. 'rule'/'auto'/'flow'
+// pointed at automation-studio, which is runtime:'service' and ships no www/ at all: double-clicking
+// one of those files produced a blank 404 iframe with no error anywhere. Nothing checked it, so the
+// data could stay broken indefinitely.
+for (const [ext, id] of Object.entries(assoc.default_open || {})) {
+  const m = manifests[id];
+  if (!m) { errs.push(`assoc: .${ext} → '${id}', which is not an app in apps/`); continue; }
+  if (!apps.some((a) => a.id === id && a.enabled !== false)) errs.push(`assoc: .${ext} → '${id}', which is not installed+enabled`);
+  // `runtime` is optional, so absence means "web" by convention — only an EXPLICIT non-web value is a
+  // contradiction. The decisive test either way is whether there is a page to load at all.
+  if (m.runtime && m.runtime !== 'web') errs.push(`assoc: .${ext} → '${id}' is runtime:'${m.runtime}' — only a web app can open a file in a window`);
+  if (!existsSync(join(ROOT, `apps/${id}/www/index.html`))) errs.push(`assoc: .${ext} → '${id}' has no www/index.html — the window would load blank`);
+}
+if (assoc.fallback && !manifests[assoc.fallback]) errs.push(`assoc: fallback '${assoc.fallback}' is not an app`);
+
+// The shell carries a built-in SEED copy of default_open, used until /api/associations answers (and
+// kept if that fetch fails). When the two disagreed, the same photo opened in a different app
+// depending on whether a request happened to succeed — a coin flip the user could never explain.
+try {
+  const shellSrc = readFileSync(join(ROOT, 'web/shell/shell.js'), 'utf8');
+  const blk = /default_open: \{([\s\S]*?)\},\s*\n\s*fallback:/.exec(shellSrc);
+  if (!blk) errs.push('assoc: could not find the shell seed map (web/shell/shell.js) to compare');
+  else {
+    for (const mm of blk[1].matchAll(/(\w+):\s*'([^']+)'/g)) {
+      const reg = (assoc.default_open || {})[mm[1]];
+      if (reg && reg !== mm[2]) errs.push(`assoc: shell seed .${mm[1]} → '${mm[2]}' but the registry says '${reg}'`);
+    }
+  }
+} catch (e) { errs.push('assoc: shell seed check failed: ' + e.message); }
 if (!ids.has(assoc.fallback)) errs.push(`xref: fallback '${assoc.fallback}' is not an installed app`);
 for (const [ext, app] of Object.entries(assoc.default_open)) {
   if (!ids.has(app)) { errs.push(`xref: .${ext} -> unknown app '${app}'`); continue; }

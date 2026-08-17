@@ -410,9 +410,19 @@ export function showDesktop() {
 export function close(id) {
   const w = windows.get(id);
   if (!w) return;
+  const wasActive = w.el.classList.contains('active');
   if (w.ro) try { w.ro.disconnect(); } catch {}
   w.el.remove();
   windows.delete(id);
+  // Promote a successor. Nothing did, so after closing a window active() returned null and every
+  // shortcut that targets "the current window" — Ctrl+W, Ctrl+S, Win+arrows, paste-to-app — went dead
+  // until the user happened to click another one. Take the topmost window still on screen, exactly
+  // like every desktop OS.
+  if (wasActive) {
+    const next = [...windows.values()].filter((x) => !x.min)
+      .sort((a, b) => (parseInt(b.el.style.zIndex) || 0) - (parseInt(a.el.style.zIndex) || 0))[0];
+    if (next) { focus(next.app.id); return; }   // focus() already calls onChange()
+  }
   onChange();
 }
 
