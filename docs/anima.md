@@ -139,6 +139,69 @@ before and after the guard — the only firings anywhere were the four wrong one
 cost nothing because there was nothing good to lose, which is also a reason to revisit whether the
 feature earns its keep.
 
+### Which person? — asking from an exact fact instead of a score
+
+That revisit produced a second clarify, and the interesting part is *why the first one could not do
+this job*. Ten people in the corpus are called Trump, four Kennedy, four King — 84 shared surnames
+over 210 people. Asked a bare surname, retrieval answered with whichever namesake ranked highest and
+stated it as fact: `chi è Trump` returned **Frederick Christ Trump Sr.** at 82%, `chi è Kennedy`
+returned **Ethel** at 80%. Every card was real. That is what made it worse than a miss — a coin flip
+wearing the costume of a verified answer, and invisible to every hallucination gate, which all key on
+whether the *card* is genuine.
+
+The dialogic band cannot reach these: a bare surname scores 0.55–0.72, well below its `[0.82, 0.85)`
+window. And widening the window would not help, because **cosine margin is the wrong instrument
+here** — `chi è Kennedy` beats its runner-up by 0.186, looking confident while being the wrong
+Kennedy. The question "how many people carry this surname?" has an *exact* answer, so it is answered
+at build time (`tools/anima/build_person_ambig.mjs` → `anima_person_ambig.h`) and never estimated at
+runtime.
+
+Design notes that matter more than the feature:
+
+* **Flash, not SD, and no offsets.** The table lives in flash rodata: zero heap on a device whose
+  scarce resource is RAM, and — because it stores names rather than answer offsets — it *cannot* fall
+  out of sync with a rebuilt index. A pick is resolved by **re-asking with the full name** (which
+  retrieves at 100%), so the answer always arrives from a real card through the ordinary cascade. A
+  clarify therefore cannot assert anything the corpus does not contain, by construction rather than by
+  care. `npm run anima:person:check` gates the table against the corpus hash.
+* **Asking less is part of asking well.** A full name still answers, and so does a surname only one
+  person carries. The rule is "among the candidates whose name the query spells completely, the most
+  specific wins", which is why the generational suffix and the middle initial are kept: `Jr.` and
+  `B.` are the entire difference between two people, and discarding them turns an answerable question
+  into a pointless one. A surname that is also a non-person card's subject (`curry`, `richardson`) is
+  excluded — that ambiguity is across categories and belongs to the normal cascade.
+* **The same fact, used the other way.** A surname only one person carries does not need a question,
+  it needs the full name. `who was einstein` scored 0.682 against a corpus that only ever phrases that
+  card with the full name — just under the 0.72 rescue floor, while Italian squeaked through at 0.722.
+  That looked like a language defect and was really an under-specified query. The retry runs *only
+  after the cascade has decided to refuse*, so it can convert an "I don't know" into a card but can
+  never displace a correct answer. It closed the `decline` and `working memory` gates.
+
+### The premise guard was right, it just wasn't running
+
+`quando ha twittato Cristoforo Colombo` answered *"La scoperta dell'America avvenne nel 1492…"* — a
+true sentence about a real person, offered as an answer about tweeting. The guard for exactly this
+already existed and even names the case in its own comment: `l1_premise_covered` checks a closed list
+of **premise markers** (`twittato`, `followers`, `email`, `valuta`, `lingua`, `popolazione`, …) and
+abstains when the query says one that the matched card never mentions. It was gated to the sharded
+path, on the assumption that flat's competition gate covered the same ground. It did not: the query
+scored 0.770 with a 0.340 margin and cleared every rescue guard on the strength of the **entity
+alone** — `l1_rescue_on_topic` declares a match on-topic as soon as *any* content word appears in the
+reply, and "cristoforo" did.
+
+The marker check is now split out (`l1_marker_covered`) and runs on both paths. Only that half: the
+capital-lookup half reads a typo'd article as the country name (`capitale dela francia` → abstain),
+which flat reaches through the spellfix rescue and the sharded path does not — so it stays AKB5-only.
+Measured, that split is the difference between fixing one gate and breaking two.
+
+Two bugs the which-person work found in itself, worth keeping in mind for anything that offers
+numbered options:
+when narrowing removes candidates, **option 2 is not group member 2** (`chi è Arthur Guinness` narrows
+five Guinnesses to two, sitting at positions 2 and 3 — deriving the pick from its ordinal answered
+about "Guinness family"); and a chosen name that is *itself* shared will re-ask the same question
+forever unless the clarify is suppressed for the resolving turn. `npm run anima:whichperson` pins
+both, plus the property that every offered name is independently answerable.
+
 ### The corpus reaches the screen unedited
 
 ANIMA relays corpus fields verbatim — that *is* the 0-hallucination contract — so a defect in the
