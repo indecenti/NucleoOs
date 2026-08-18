@@ -33,7 +33,14 @@ OS-native knowledge**, unified behind one agent loop that can run on any substra
     stall/loop/invalid/budget — and the cascade merge in `runWorkerWithFallback`
     (local rungs via injected `local.engines`, inert until F4 wires real engines).
     Host gate: `tools/anima-host/anima-code-local.test.mjs` (11 tests, in `anima:gate`).
-- F1 — OS-native codegen knowledge — planned.
+- **F1 — OS-native codegen knowledge** — **done (2026-08-18).** `get_os_api` tool
+  (topics routes/route/manifest/rules; bounded slicers in `agent-tools.js`, spec read once
+  per session from `/system/registry/web-api-spec.json`), the deploy footguns as hard rules,
+  a prompt seed telling the worker to consult it before touching `/api/*`, and the `device`
+  starter kind — live Cardputer status through the new broker `sys.status` (gated behind
+  `system.events`, reduced shape: no IP, no partitions). §6's "apps call /api/* directly"
+  predates the agent-app sandbox: sandboxed apps reach device state ONLY through the broker,
+  and the template shows the honest pattern. Gate: `anima-code-osapi.test.mjs` (10 tests).
 - **F2 — gated hardware tools (`os.hw`)** — *capguard half done* (see §12.3): capability
   inference, the `os.hw` danger rule and real per-run denial in the sandbox are in;
   the agent-side `os.hw` **tools** + manifest-permission gating are still planned.

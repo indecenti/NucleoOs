@@ -65,7 +65,7 @@ export function resolveAppPath(appId, permissions, path) {
 }
 
 // The whole vocabulary. Anything not listed is refused — a deny-list would be a promise we cannot keep.
-export const METHODS = ['fs.read', 'fs.write', 'fs.list', 'notify', 'sys.info', 'ai.ask', 'ai.complete'];
+export const METHODS = ['fs.read', 'fs.write', 'fs.list', 'notify', 'sys.info', 'sys.status', 'ai.ask', 'ai.complete'];
 // ai.* bounds. Small on purpose: a sandboxed app asks questions, it does not stream conversations.
 const AI_Q_MAX = 256;            // ai.ask query (chars)
 const AI_PROMPT_MAX = 4096;      // ai.complete prompt (chars)
@@ -78,6 +78,10 @@ export function methodAllowed(method, permissions) {
   // stuck in one language — and shipping monolingual apps into a five-language OS is not a trade we
   // make for isolation. It discloses nothing the user has not already chosen and can see on screen.
   if (method === 'sys.info') return true;
+  // sys.status is the device telemetry every curated app reads from /api/status — time, uptime, SD
+  // space, Wi-Fi name. Read-only and cheap, but it does describe the household's network, so it is
+  // DECLARED (system.events), not free like sys.info.
+  if (method === 'sys.status') return perms.includes('system.events');
   if (method === 'notify') return perms.includes('system.notify');
   // Intelligence as a declared capability, in two distinct trust tiers: ai.anima is the on-device
   // deterministic brain (cheap, offline, can't hallucinate); ai.cloud spends the USER'S API key.
@@ -111,6 +115,27 @@ export function createBroker({ fetchFn, findApp, notify, onFsChange, getLang, ai
     if (method === 'notify') {
       if (notify) notify(String((args && args.text) || '').slice(0, 200), app.name || app.id);
       return { ok: true };
+    }
+
+    if (method === 'sys.status') {
+      // One device socket, serialised like fs.*, and a REDUCED shape on purpose: a sandboxed app gets
+      // what a status widget needs (clock, uptime, SD space, network name), not the device's IP or
+      // partition table. Least privilege is the broker's whole reason to exist.
+      return serial(async () => {
+        const opts = { cache: 'no-store' };
+        if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) opts.signal = AbortSignal.timeout(8000);
+        try {
+          const r = await doFetch('/api/status', opts);
+          if (!r.ok) return { ok: false, error: 'http-' + r.status };
+          const j = await r.json().catch(() => null);
+          if (!j) return { ok: false, error: 'bad-json' };
+          return { ok: true, status: {
+            os: j.os, version: j.version, time: j.time || null, uptime_s: j.uptime_s | 0,
+            storage: j.storage ? { mounted: !!j.storage.mounted, free_bytes: j.storage.free_bytes | 0, total_bytes: j.storage.total_bytes | 0 } : null,
+            wifi: j.wifi ? { mode: j.wifi.mode || null, ssid: j.wifi.ssid || null } : null,
+          } };
+        } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+      });
     }
 
     // ai.ask — the on-device deterministic brain. Rides the SAME serial chain as fs.*: it is a device

@@ -37,7 +37,8 @@ export function buildManifest(spec = {}) {
     entry_service: 'none',
     web_route: '/apps/' + id + '/',
     icon: spec.icon ? String(spec.icon) : 'icon.svg',
-    permissions: Array.isArray(spec.permissions) ? spec.permissions : [],
+    permissions: Array.isArray(spec.permissions) ? spec.permissions
+      : (normKind(spec.kind) === 'device' ? ['system.events'] : []),   // the device starter reads sys.status, which the broker gates behind this
     mounts: spec.mounts && typeof spec.mounts === 'object' ? spec.mounts : {},
     handles: { role: 'none', extensions: [] },
     subscribes: [],
@@ -63,7 +64,7 @@ export function validateManifest(m) {
 
 // Scaffold KINDS: the agent picks a working starter to build on, not a blank page. Each is a complete,
 // self-contained, i18n-wired app — so a fresh scaffold runs immediately and the model has a real baseline.
-export const APP_KINDS = ['blank', 'list', 'timer', 'converter'];
+export const APP_KINDS = ['blank', 'list', 'timer', 'converter', 'device'];
 export function normKind(k) { return APP_KINDS.includes(k) ? k : 'blank'; }
 
 // Shared head/style + the i18n boot, so every kind looks consistent and stays valid. body/script are the
@@ -94,6 +95,7 @@ function htmlShell(spec, bodyInner, scriptInner) {
   ul { list-style: none; padding: 0; margin: 12px 0 0; } li { padding: 8px 2px; border-bottom: 1px solid #243352; cursor: pointer; }
   .big { font-size: 40px; font-weight: 700; letter-spacing: 1px; margin: 14px 0; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .kv { list-style: none; padding: 0; margin: 10px 0; } .kv li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid #8884; }
 </style>
 </head>
 <body>
@@ -139,7 +141,7 @@ function brokerClient(id, catJson) {
               write: (path, content) => call('fs.write', { path, content }),
               list: (path) => call('fs.list', { path }) },
         notify: (text) => call('notify', { text }),
-        sys: { info: () => call('sys.info', {}) },
+        sys: { info: () => call('sys.info', {}), status: () => call('sys.status', {}) },
         // Intelligence as a syscall — each needs its OWN manifest permission, or the call is denied:
         //   ai.ask(q)        → the on-device deterministic brain (needs 'ai.anima'; offline, no cost)
         //   ai.complete(p)   → the user's cloud model (needs 'ai.cloud'; single-flight, rate-limited)
@@ -177,6 +179,13 @@ const KIND_BODY = {
       <select id="from"><option value="C">°C</option><option value="F">°F</option></select><span>&rarr;</span>
       <select id="to"><option value="F">°F</option><option value="C">°C</option></select></div>
     <div class="big" id="out">68 °F</div>`,
+  device: `    <div class="big" id="clock">--:--</div>
+    <ul class="kv">
+      <li><span data-i18n="uptime">In funzione da</span><b id="up">—</b></li>
+      <li><span data-i18n="sd">Spazio SD</span><b id="sd">—</b></li>
+      <li><span data-i18n="net">Rete</span><b id="net">—</b></li>
+    </ul>
+    <div class="row"><button id="refresh" data-i18n="refresh">Aggiorna</button></div>`,
 };
 const KIND_SCRIPT = {
   blank: `    document.getElementById('go').addEventListener('click', () => {
@@ -217,6 +226,20 @@ const KIND_SCRIPT = {
     }
     [val, from, to].forEach((el) => el.addEventListener('input', conv));
     conv();`,
+  device: `    // The Cardputer's live state through the broker: a sandboxed app has no /api/* — os.sys.status
+    // is the DECLARED window on it (permission system.events), serialised so N apps cannot burst.
+    const fmt = (b) => b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.round(b / 1e6) + ' MB';
+    async function refresh() {
+      const r = await os.sys.status();
+      if (!r || !r.ok) { document.getElementById('net').textContent = t('offline') || 'offline'; return; }
+      const st = r.status;
+      document.getElementById('clock').textContent = st.time ? String(st.time).slice(11, 16) : '--:--';
+      document.getElementById('up').textContent = Math.floor(st.uptime_s / 3600) + 'h ' + Math.floor((st.uptime_s % 3600) / 60) + 'm';
+      document.getElementById('sd').textContent = st.storage && st.storage.mounted ? fmt(st.storage.free_bytes) + ' / ' + fmt(st.storage.total_bytes) : '—';
+      document.getElementById('net').textContent = (st.wifi && st.wifi.ssid) || '—';
+    }
+    document.getElementById('refresh').addEventListener('click', refresh);
+    refresh(); setInterval(refresh, 30000);`,
 };
 
 // A valid, self-contained starter page for the chosen kind (default 'blank'). The agent edits it into the
@@ -237,8 +260,8 @@ export function starterIcon(spec = {}) {
 }
 
 const KIND_I18N = {
-  it: { blank: { hello: 'Ciao da NucleoOS!', action: 'Avvia' }, list: { add: 'Aggiungi', placeholder: 'Nuovo elemento…', empty: 'Nessun elemento' }, timer: { start: 'Avvia', reset: 'Azzera', minutes: 'minuti' }, converter: {} },
-  en: { blank: { hello: 'Hello from NucleoOS!', action: 'Start' }, list: { add: 'Add', placeholder: 'New item…', empty: 'No items' }, timer: { start: 'Start', reset: 'Reset', minutes: 'minutes' }, converter: {} },
+  it: { blank: { hello: 'Ciao da NucleoOS!', action: 'Avvia' }, list: { add: 'Aggiungi', placeholder: 'Nuovo elemento…', empty: 'Nessun elemento' }, timer: { start: 'Avvia', reset: 'Azzera', minutes: 'minuti' }, converter: {}, device: { uptime: 'In funzione da', sd: 'Spazio SD', net: 'Rete', refresh: 'Aggiorna', offline: 'device non raggiungibile' } },
+  en: { blank: { hello: 'Hello from NucleoOS!', action: 'Start' }, list: { add: 'Add', placeholder: 'New item…', empty: 'No items' }, timer: { start: 'Start', reset: 'Reset', minutes: 'minutes' }, converter: {}, device: { uptime: 'Uptime', sd: 'SD space', net: 'Network', refresh: 'Refresh', offline: 'device unreachable' } },
 };
 export function starterI18n(spec, en) {
   const kind = normKind(spec && spec.kind);

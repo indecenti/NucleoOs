@@ -520,6 +520,12 @@ const gates = [
     // before any tool runs; stalls, loops and budget exhaustion DECLINE honestly instead of faking;
     // and the cascade skips a declining rung. docs/anima-code.md §13.
     ok: (code) => code === 0, summary: (o) => (o.match(/# pass \d+/) || ['?'])[0] + ' ' + (o.match(/# fail \d+/) || [''])[0] },
+  { name: 'anima-code os-api (F1)', cmd: 'node', args: ['--test', 'tools/anima-host/anima-code-osapi.test.mjs'],
+    // The agent reads the REAL OS contract instead of guessing it: bounded slices of the served
+    // web-api-spec, a manifest digest with the $ref-resolved permission enum, the silent deploy
+    // footguns as rules, the 'device' starter kind (broker sys.status behind system.events), and
+    // the reduced status shape that never leaks the IP into a sandbox. docs/anima-code.md §10 F1.
+    ok: (code) => code === 0, summary: (o) => (o.match(/# pass \d+/) || ['?'])[0] + ' ' + (o.match(/# fail \d+/) || [''])[0] },
   { name: 'agent-helpers (ANIMA Code)', cmd: 'node', args: ['--test', 'tools/anima-host/agent-helpers.test.mjs'],
     // ANIMA Code / Claude-Code helpers (apps/agent/agent-tools.js): line-numbered reads, the write→lint
     // verifyCode (module-aware so it never false-alarms), fenceUntrusted injection defense (forged closing

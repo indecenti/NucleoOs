@@ -26,7 +26,7 @@ import { makeFS } from '/apps/anima/fsclient.js';
 import { compact } from '/apps/anima/context.js';
 // Provider-agnostic contract layer (node+browser safe, host-testable): tool surface + the Groq/OpenAI
 // tool-use machinery so the multi-agent works on Grok too, not just Claude.
-import { CLIENT_TOOLS, MUTATING, ALWAYS_CONFIRM, GROQ_MODELS, GEMINI_MODELS, toOpenAITools, callOpenAIChat, runOpenAIToolLoop, extractJson, guardPlan, withLineNumbers, verifyCode, fenceUntrusted, normalizePlan, renderPlan } from './agent-tools.js';
+import { CLIENT_TOOLS, MUTATING, ALWAYS_CONFIRM, GROQ_MODELS, GEMINI_MODELS, toOpenAITools, callOpenAIChat, runOpenAIToolLoop, extractJson, guardPlan, withLineNumbers, verifyCode, fenceUntrusted, normalizePlan, renderPlan, osApiIndex, osApiRoute, osApiManifest, OSAPI_RULES } from './agent-tools.js';
 import { checkSyntax } from '/apps/code-runner/nucleo-run.js';   // parse-only JS check (host-safe) for the write→lint loop
 // "Create a NucleoOS app" skill — PURE orchestration (scaffold/publish/manage) + the advisory review,
 // host-tested. The privileged device I/O is injected (appIo) below; the orchestrators never touch fetch.
@@ -123,6 +123,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     return (typeof url === 'string' && url.indexOf('/api/llm') === 0) ? dq.write(() => fetch(url, opts)) : fetch(url, opts);
   }
   let sandbox = null, sandboxTried = false;
+  let osapiSpecMemo, osapiManifestMemo;            // get_os_api: the 112 KB spec is read from SD once per session
   let aborter = null;
   // The worker's live checklist (update_plan). Named taskPlan, not plan: run() already has a local
   // `plan` — the orchestrator's typed classification — and the two are different things. In memory
@@ -271,6 +272,26 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
             if (input.app) { window.parent && window.parent.postMessage({ type: 'open-app', id: String(input.app) }, '*'); return done(t('rt_open_app_ok', { app: input.app })); }
             return done(t('rt_open_specify'), true);
           } catch (e) { return done(t('rt_open_err', { error: String(e.message || e) }), true); } }
+        case 'get_os_api': {
+          // The contract the device itself ships. ONE paced read per session (112 KB from SD is not
+          // per-question money), then pure slicing; the manifest schema only when asked for.
+          const topic = String(input.topic || 'routes');
+          if (topic === 'rules') return done(fenceUntrusted('os_api', { topic }, OSAPI_RULES));
+          if (topic === 'manifest') {
+            if (osapiManifestMemo === undefined) osapiManifestMemo = await sysReadJson('/system/schemas/manifest.schema.json') || await sysReadJson('/schemas/manifest.schema.json');
+            const dig = osApiManifest(osapiManifestMemo);
+            return dig ? done(fenceUntrusted('os_api', { topic }, dig))
+                       : done(fenceUntrusted('os_api', { topic }, 'schema unavailable on this SD — rules:\n' + OSAPI_RULES));
+          }
+          if (osapiSpecMemo === undefined) osapiSpecMemo = await sysReadJson('/system/registry/web-api-spec.json');
+          if (!osapiSpecMemo) return done(t('rt_err', { op: 'get_os_api', error: 'spec unreadable' }), true);
+          if (topic === 'route') {
+            const doc = osApiRoute(osapiSpecMemo, input.query, lang === 'it' ? 'it' : 'en');
+            return doc ? done(fenceUntrusted('os_api', { topic, query: input.query || '' }, doc))
+                       : done('no route matches "' + (input.query || '') + '" — call get_os_api {topic:"routes"} for the index', true);
+          }
+          return done(fenceUntrusted('os_api', { topic: 'routes' }, osApiIndex(osapiSpecMemo, lang === 'it' ? 'it' : 'en')));
+        }
         case 'device_status': {
           const r = await withRetry(() => dq.read(() => fetch('/api/status', { cache: 'no-store' }).then((x) => x.json())));
           if (!r || !r.os) return done(t('rt_device_na'), true);
@@ -482,6 +503,7 @@ STRUMENTI:
 • list_apps: elenca le app installate (id + nome) — chiamalo prima di lanciare se non sei sicuro dell'id.
 • update_plan: la CHECKLIST viva del lavoro. Su un compito in più passi (costruire un'app, toccare più file) chiamalo SUBITO con 3-7 milestone reali (una sola in "doing"), poi di nuovo dopo ogni passo per segnarla "done" e avviare la successiva. L'umano la vede aggiornarsi in tempo reale e tu ci rileggi a che punto sei. Non costa nulla (nessun accesso al device, nessuna approvazione). Salta il piano solo per le risposte in un colpo solo.
 • scaffold_app + publish_app: PUOI CREARE NUOVE APP per NucleoOS. Flusso: 1) scaffold_app({name, description, category, kind}) genera lo scheletro da un TEMPLATE funzionante (kind: blank/list/timer/converter — scegli il più vicino all'obiettivo) in una cartella di staging nel workspace; 2) MODIFICA <id>/www/index.html (e aggiungi .js/.css se servono) con i tool file per costruire l'app vera — è una pagina web autonoma, dark-theme, può importare /nucleo-i18n.js; 3) publish_app({id}) la installa nel launcher LIVE (l'utente approva, nessun riavvio). Usa questo flusso quando l'utente chiede di "creare/costruire/fare un'app". Tieni l'app leggera e autonoma (niente dipendenze esterne pesanti): gira su un device con poca RAM. Per nascondere o ripristinare un'app che HAI creato usa manage_app({id, action:'disable'|'enable'}) — le app non si possono cancellare dal device, ma si possono disabilitare.
+• get_os_api: il CONTRATTO REALE di NucleoOS — rotte HTTP del device (topic "routes"/"route"), regole del manifest ("manifest"), regole di deploy ("rules"). CONSULTALO prima di scrivere codice che chiama /api/* e prima di publish_app: mai indovinare una rotta o un campo.
 • device_status: stato LIVE del Cardputer — ora/data, spazio SD, Wi-Fi (SSID/IP), uptime, RAM. Usalo per "che ore sono", "quanto spazio", "che rete", "è tutto ok". La BATTERIA non è leggibile su questo hardware: dillo onestamente.
 • weather: meteo attuale + min/max di oggi per una città (online, Open-Meteo, senza chiave).
 • generate_image: genera un'immagine da un prompt e la SALVA in un file del workspace (provider capace di immagini, es. Grok/xAI). Per "disegna/crea un'immagine di…", icone, asset. Se manca una chiave xAI, dillo onestamente. Poi puoi aprirla con open_in_os({path}).
