@@ -11,9 +11,7 @@
   "input_ph": "Dai un compito: crea/modifica file, calcola, cerca… (⏎ invia, ⇧⏎ a capo)",
   "send": "Invia",
   "hint": "Gli agenti girano nel browser e chiamano i modelli online direttamente: il Cardputer non viene caricato. Le azioni distruttive chiedono conferma.",
-
   "plan_title": "Piano",
-
   "st_ready": "pronto",
   "st_thinking": "sto ragionando…",
   "st_stopped": "interrotto",
@@ -22,15 +20,12 @@
   "st_pair_first": "accoppia prima il browser",
   "st_offline_reconnect": "offline — riconnetti per usare gli agenti",
   "msg_stopped": "⏹ Interrotto.",
-
   "model_anthropic": "orchestratore Haiku · agenti Sonnet/Opus",
   "model_multi": "multi-provider · strumenti OS",
   "model_tools_suffix": "strumenti OS attivi",
-
   "ready_anthropic": "🟣 Multi-agente pronto. Dammi un compito — posso leggere, scrivere e modificare file nello spazio di lavoro, eseguire codice in sandbox, cercare sul web e aprire i risultati nell'OS. Le azioni distruttive chiedono la tua approvazione.",
   "ready_generic": "✅ Multi-agente pronto. Dammi un compito — posso leggere, scrivere e modificare file nello spazio di lavoro, eseguire codice in sandbox e aprire app/risultati nell'OS. Le azioni distruttive chiedono la tua approvazione.",
   "ready_multi_suffix": " Sfrutto automaticamente il modello migliore tra i tuoi provider, con fallback se uno non risponde.",
-
   "appr_title": "Approva azione",
   "appr_allow": "Consenti",
   "appr_deny": "Nega",
@@ -48,14 +43,12 @@
   "appr_install_app": "Installa nel launcher",
   "appr_enable_app": "Abilita app",
   "appr_disable_app": "Disabilita app",
-
   "gate_offline_title": "Niente rete",
   "gate_offline_body": "Gli agenti online hanno bisogno di internet. Riconnettiti, oppure usa l'assistente ANIMA completamente offline.",
   "gate_key_title": "Collega un provider IA",
   "gate_key_body": "Il sistema multi-agente richiede la chiave API di un provider online — Claude, Groq, Grok (xAI) o Gemini. Aggiungila in Impostazioni ▸ IA: ne basta una, ma se ne configuri più di una le sfrutto tutte con fallback. Senza, puoi comunque usare l'assistente ANIMA offline.",
   "gate_open_settings": "Apri Impostazioni",
   "gate_anima": "ANIMA offline",
-
   "rt_reject": "❌ Azione rifiutata dall'utente.",
   "rt_err": "Errore {op}: {error}",
   "rt_dir_empty": "(vuota)",
@@ -102,7 +95,6 @@
   "rt_tr_empty": "Trascrizione vuota.",
   "rt_tool_unknown": "Tool sconosciuto: {name}",
   "rt_tool_exception": "Eccezione tool: {error}",
-
   "ao_bad_id_derive": "Impossibile derivare un id valido da \"{name}\".",
   "ao_system_id": "id \"{id}\" è già di un'app di sistema — scegline un altro.",
   "ao_scaffold_partial": "Scaffold parziale — errori: {errors}",
@@ -131,5 +123,28 @@
   "ao_enabled": "abilitata",
   "ao_disabled": "disabilitata",
   "ao_enabled_full": "abilitata (ripristinata nel launcher)",
-  "ao_disabled_full": "disabilitata (nascosta dal launcher)"
+  "ao_disabled_full": "disabilitata (nascosta dal launcher)",
+  "eng_btn": "Motore AI: dove pensa l’agente",
+  "eng_title": "Motore dell’agente",
+  "eng_sub": "dove gira l’intelligenza: cloud o locale, scegli tu",
+  "eng_cloud": "Cloud (provider con chiave)",
+  "eng_webgpu": "Locale · GPU (WebGPU)",
+  "eng_wasm": "Locale · CPU (WASM)",
+  "eng_auto": "Automatico",
+  "eng_auto_why": "cloud se c’è una chiave, altrimenti il migliore locale disponibile",
+  "eng_ready": "pronto",
+  "eng_needs_model": "modello da installare",
+  "eng_unsupported": "non supportato",
+  "eng_nokey_short": "senza chiave",
+  "eng_offline_short": "offline",
+  "eng_downloading": "download…",
+  "eng_no_webgpu": "Questo PC o browser non ha WebGPU: il motore GPU non può girare qui. Prova Chrome/Edge aggiornati con accelerazione hardware attiva, oppure usa il motore CPU.",
+  "eng_no_wasm": "WebAssembly non è disponibile in questo browser: il motore CPU non può girare qui.",
+  "eng_cloud_nokey": "Nessuna chiave API configurata: aggiungila nelle Impostazioni, oppure installa un modello locale.",
+  "eng_cloud_offline": "Sei offline: il cloud non è raggiungibile. Un modello locale funziona anche senza rete.",
+  "eng_install": "Installa ({size})",
+  "eng_retrying": "riconnessione… tentativo {n}",
+  "ready_local": "Nessuna chiave cloud: giro sul modello locale installato. Le azioni distruttive chiedono sempre conferma.",
+  "gate_local": "Usa un modello locale",
+  "eng_wasm_soon": "Il motore CPU arriva con un prossimo aggiornamento: il modello installato è già pronto e condiviso con ANIMA Forge."
 }

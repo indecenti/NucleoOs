@@ -4,6 +4,10 @@
 // back to the offline brain — it cleanly hands off to the separate offline ANIMA app.
 
 import { createRuntime } from './runtime.js';
+// The F4 engine picker (lazy): the header 🧠 button and the no-key gate both open it. It owns model
+// install and the honest per-rung capability verdicts; we only read its rows to build local.engines.
+let pickerMod = null, picker = null;
+async function loadPicker() { return pickerMod || (pickerMod = await import('./engine-picker.js')); }
 import { providerOf, PROVIDERS, readTeacher } from '/ai.js';   // shared provider registry + cached vault read: Claude, Groq, Grok (xAI), Gemini
 import I18N from '/nucleo-i18n.js';
 
@@ -162,14 +166,28 @@ function showGate(kind) {
   if (kind === 'offline') {
     c.innerHTML = '<div class="gi">📡</div><h2>' + esc(t('gate_offline_title')) + '</h2><p>' + esc(t('gate_offline_body')) + '</p><div><button id="g-retry">' + esc(t('retry')) + '</button><button class="ghost" id="g-anima">' + esc(t('gate_anima')) + '</button></div>';
   } else {
-    c.innerHTML = '<div class="gi">🔑</div><h2>' + esc(t('gate_key_title')) + '</h2><p>' + esc(t('gate_key_body')) + '</p><div><button id="g-set">' + esc(t('gate_open_settings')) + '</button><button class="ghost" id="g-anima">' + esc(t('gate_anima')) + '</button></div><div><button class="ghost" id="g-retry" style="margin-top:10px">' + esc(t('retry')) + '</button></div>';
+    c.innerHTML = '<div class="gi">🔑</div><h2>' + esc(t('gate_key_title')) + '</h2><p>' + esc(t('gate_key_body')) + '</p><div><button id="g-set">' + esc(t('gate_open_settings')) + '</button><button class="ghost" id="g-anima">' + esc(t('gate_anima')) + '</button></div><div><button class="ghost" id="g-eng" style="margin-top:10px">' + esc(t('gate_local')) + '</button><button class="ghost" id="g-retry" style="margin-top:10px">' + esc(t('retry')) + '</button></div>';
   }
   $('gate').classList.add('show');
   const r = $('g-retry'); if (r) r.onclick = boot;
   const s = $('g-set'); if (s) s.onclick = () => openApp('settings');
   const a = $('g-anima'); if (a) a.onclick = () => openApp('anima');
+  const g = $('g-eng'); if (g) g.onclick = () => { hideGate(); toggleEngines(); };
 }
 function hideGate() { $('gate').classList.remove('show'); }
+
+// The 🧠 header button: toggle the engine panel. Built on first open; refreshed on later opens so
+// cache/caps changes (a finished download, a browser flag flip) are reflected.
+async function toggleEngines() {
+  const hostEl = $('engines');
+  if (!hostEl.hidden) { hostEl.hidden = true; return; }
+  hostEl.hidden = false;
+  const pk = await loadPicker();
+  if (!picker) {
+    picker = pk.initEnginePicker({ host: hostEl, t, hasKey: () => !!(cfg && cfg.key),
+      onChange: () => { rebuildRuntime(); } });
+  } else picker.refresh();
+}
 
 function configuredProviders() { return Object.keys(keys || {}).filter((p) => keys[p] && keys[p].key && PROVIDERS[p]); }
 function modelLine() {
@@ -181,9 +199,40 @@ function readyMsg() {
   if (cfg.provider === 'anthropic') return t('ready_anthropic');
   return t('ready_generic') + (configuredProviders().length > 1 ? t('ready_multi_suffix') : '');
 }
-function rebuildRuntime() {
+async function rebuildRuntime() {
   const root = ($('ws').value || '/data/agent').trim() || '/data/agent';
-  rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active, t });
+  // local: the F0 cascade's rungs. Engines are constructed LAZILY on first use (the cloud path never
+  // pays for them); a rung that fails to construct declines honestly and the next one is tried.
+  const local = {
+    engines: async () => {
+      const pk = await loadPicker();
+      const caps = await pk.probeCaps();
+      const store = await pk.makeAgentStore();
+      const status = {};
+      for (const id of [pk.WEBGPU_MODEL, pk.WASM_MODEL]) { try { status[id] = await store.status(id); } catch { status[id] = 'absent'; } }
+      const rows = pk.localRungOrder(pk.rungRows(caps, status, !!(cfg && cfg.key)), localStorage.getItem(pk.ENGINE_LS) || 'auto');
+      const out = [];
+      for (const r of rows) {
+        try {
+          // Only rungs the loop can genuinely RUN are constructed (rungRows marks them runnable) —
+          // today that is WebGPU, built exactly like local-llm.js builds it: the vendor lib from the
+          // SD, CreateMLCEngine behind an injected factory. A construction failure just skips the
+          // rung; the F0 cascade declines honestly instead of pretending.
+          if (r.id === 'webgpu') {
+            const we = await import('/apps/anima/forge/webllm-engine.js');
+            const createEngine = async (modelId, opts) => {
+              const webllm = await import('/apps/anima/forge/vendor/web-llm.js');
+              return webllm.CreateMLCEngine(modelId, { initProgressCallback: opts && opts.initProgressCallback });
+            };
+            out.push({ tier: 'local-webgpu', engine: we.makeWebLLMEngine({ createEngine, modelId: r.model }) });
+          }
+        } catch { /* a missing vendor lib = this rung declines; the cascade moves on */ }
+      }
+      return out.filter((x) => x && x.engine);
+    },
+    grammar: await import('/apps/anima/forge/grammar.js').catch(() => null),
+  };
+  rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active, t, local: local.grammar ? local : null });
   $('model-line').textContent = modelLine();
 }
 
@@ -224,8 +273,29 @@ async function boot() {
     const res = pickCfg(tc || {});
     cfg = res && res.cfg; keys = res && res.keys; active = res && res.active;
   } catch { cfg = null; keys = null; active = null; }
-  if (!cfg) { showGate('key'); return; }
-  rebuildRuntime();
+  if (!cfg) {
+    // No cloud key. F4: a cached local model is a first-class way to run — boot on it instead of
+    // dead-ending at the key gate. The stub cfg has no key, so the cloud loop exits in zero hops
+    // and the cascade goes straight to the local rungs.
+    try {
+      const pk = await loadPicker();
+      const caps = await pk.probeCaps();
+      const store = await pk.makeAgentStore();
+      const status = {};
+      for (const id of [pk.WEBGPU_MODEL, pk.WASM_MODEL]) { try { status[id] = await store.status(id); } catch { status[id] = 'absent'; } }
+      const ready = pk.localRungOrder(pk.rungRows(caps, status, false));
+      if (ready.length) {
+        cfg = { provider: 'openai', key: '', model: '' }; keys = {}; active = null;
+        await rebuildRuntime();
+        $('model-line').textContent = t(ready[0].id === 'webgpu' ? 'eng_webgpu' : 'eng_wasm');
+        setStatus(t('st_ready'), 'ok');
+        if (!history.length) addMsg('sys', t('ready_local'));
+        return;
+      }
+    } catch { /* fall through to the gate */ }
+    showGate('key'); return;
+  }
+  await rebuildRuntime();
   setStatus(t('st_ready'), 'ok');
   if (!history.length) addMsg('sys', readyMsg());
 }
@@ -247,4 +317,5 @@ I18N.onChange(() => {
   if ($('gate').classList.contains('show')) showGate($('g-set') ? 'key' : 'offline');
 });
 
+document.getElementById('eng-btn').addEventListener('click', toggleEngines);
 boot();

@@ -526,6 +526,13 @@ const gates = [
     // footguns as rules, the 'device' starter kind (broker sys.status behind system.events), and
     // the reduced status shape that never leaks the IP into a sandbox. docs/anima-code.md §10 F1.
     ok: (code) => code === 0, summary: (o) => (o.match(/# pass \d+/) || ['?'])[0] + ' ' + (o.match(/# fail \d+/) || [''])[0] },
+  { name: 'anima-code engine picker (F4)', cmd: 'node', args: ['--test', 'tools/anima-host/anima-code-picker.test.mjs'],
+    // The ONE surface where the user sees every substrate, installs a model, and picks. Pins the
+    // honest hardware verdicts (no WebGPU/no WASM → unsupported WITH the reason, never a doomed
+    // download), the five-language catalogue coverage of every picker string, and the no-lying-labels
+    // rule: a stored choice binds only while ready+runnable, wasm stays out of the runnable ladder
+    // until its F3 chat adapter exists. docs/anima-code.md §10 F4.
+    ok: (code) => code === 0, summary: (o) => (o.match(/# pass \d+/) || ['?'])[0] + ' ' + (o.match(/# fail \d+/) || [''])[0] },
   { name: 'agent-helpers (ANIMA Code)', cmd: 'node', args: ['--test', 'tools/anima-host/agent-helpers.test.mjs'],
     // ANIMA Code / Claude-Code helpers (apps/agent/agent-tools.js): line-numbered reads, the write→lint
     // verifyCode (module-aware so it never false-alarms), fenceUntrusted injection defense (forged closing

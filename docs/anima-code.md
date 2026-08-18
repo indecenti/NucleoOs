@@ -45,7 +45,17 @@ OS-native knowledge**, unified behind one agent loop that can run on any substra
   inference, the `os.hw` danger rule and real per-run denial in the sandbox are in;
   the agent-side `os.hw` **tools** + manifest-permission gating are still planned.
 - F3 — real agentic loop on a browser-local model — planned.
-- F4 — one "ANIMA Code" surface (engine picker + readiness + model install) — planned.
+- **F4 — one "ANIMA Code" surface** — **done (2026-08-18).** The Agenti header grew the 🧠
+  engine picker (`apps/agent/www/engine-picker.js`): per-rung capability verdicts that WARN
+  honestly when this PC cannot run an engine (no WebGPU / no WebAssembly — reason keys resolved
+  in all five OS languages), one-at-a-time model install into the SAME Cache-API bucket the
+  Forge panel uses (one download serves the whole OS), a persisted choice honored only while
+  its rung is ready AND runnable, and a keyless boot path: with no cloud key but a cached local
+  model, Agenti runs local-only instead of dead-ending at the key gate (the gate itself offers
+  "Use a local model"). The wasm rung installs for real but stays OUT of the runnable ladder
+  until its F3 chat adapter exists — and the row says so. `forge-demo.html` retired (its
+  relative imports 404'd when device-served); the ANIMA `forge` command now opens Agenti.
+  Gate: `anima-code-picker.test.mjs` (10 tests).
 - F5 — live device test (opt-in, gated) + NucleoOS-recipe self-distillation — planned.
 
 Nothing here auto-deploys or flashes. Every phase is host-gated and shippable on its own.
