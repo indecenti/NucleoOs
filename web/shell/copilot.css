@@ -48,6 +48,11 @@ html[data-theme="light"] #copilot { background: #f6f8feec; border-color: #000000
   padding: 6px 13px; cursor: pointer; font: inherit; font-weight: 600; align-self: flex-end; }
 #copilot .cp-send:hover { background: #ffffff18; }
 #copilot .cp-send.stop { border-color: #5b2330; background: #2a131a; color: #ff9aa6; }
+#copilot .cp-mic { flex: none; border: 1px solid var(--line); background: #ffffff0d; border-radius: 8px;
+  padding: 4px 9px; cursor: pointer; line-height: 1.5; font-size: 14px; filter: grayscale(1) brightness(1.4); }
+#copilot .cp-mic:hover { background: #ffffff18; }
+#copilot .cp-mic.rec { border-color: #5b2330; background: #2a131a; filter: none; animation: cp-mic-pulse 1.2s ease-in-out infinite; }
+@keyframes cp-mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 #ff9aa640; } 50% { box-shadow: 0 0 0 6px #ff9aa600; } }
 
 /* transcript */
 #copilot .cp-log { overflow-y: auto; padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }

@@ -240,5 +240,10 @@
   "nc_src_voice": "Voce",
   "nc_src_recorder": "Registratore",
   "nc_src_ota": "Aggiornamento",
-  "nc_src_app": "App"
+  "nc_src_app": "App",
+
+  "amb_toggle_title": "Suggerimenti di ANIMA",
+  "amb_cal_body": "Inizia alle {time}",
+  "amb_sd_title": "SD quasi piena",
+  "amb_sd_body": "Resta solo il {pct}% di spazio libero"
 }

@@ -63,13 +63,26 @@ test('a forged app id cannot widen the root', () => {
 });
 
 test('the method vocabulary is a closed set, gated by declaration', () => {
-  assert.deepEqual(METHODS, ['fs.read', 'fs.write', 'fs.list', 'notify', 'sys.info']);
+  assert.deepEqual(METHODS, ['fs.read', 'fs.write', 'fs.list', 'notify', 'sys.info', 'ai.ask', 'ai.complete']);
   assert.equal(methodAllowed('fs.read', APP), true);
   assert.equal(methodAllowed('notify', APP), false, 'notify needs system.notify');
   assert.equal(methodAllowed('notify', ['system.notify']), true);
   for (const m of ['fs.remove', 'http.get', 'os.hw.ir.send', 'eval', '__proto__', '']) {
-    assert.equal(methodAllowed(m, ['storage.app', 'storage.shared', 'system.notify']), false, 'must refuse: ' + m);
+    assert.equal(methodAllowed(m, ['storage.app', 'storage.shared', 'system.notify', 'ai.anima', 'ai.cloud']), false, 'must refuse: ' + m);
   }
+});
+
+test('ai.* is gated by its OWN permission — and buys no other reach', () => {
+  assert.equal(methodAllowed('ai.ask', ['ai.anima']), true);
+  assert.equal(methodAllowed('ai.ask', ['ai.cloud']), false, 'the two tiers do not imply each other');
+  assert.equal(methodAllowed('ai.complete', ['ai.cloud']), true);
+  assert.equal(methodAllowed('ai.complete', ['ai.anima']), false);
+  for (const m of ['ai.ask', 'ai.complete']) {
+    assert.equal(methodAllowed(m, ['storage.app', 'storage.shared', 'system.notify']), false, 'storage/notify must not buy ' + m);
+  }
+  // and the other way round: an ai permission opens no filesystem door
+  assert.equal(methodAllowed('fs.read', ['ai.anima', 'ai.cloud']), false);
+  assert.equal(resolveAppPath('x', ['ai.anima', 'ai.cloud'], '/data/apps/x/a'), null);
 });
 
 // ── the message surface ───────────────────────────────────────────────────────────────────────
@@ -154,4 +167,111 @@ test('sys.info does not become a hole: it exposes nothing else', async () => {
   const h = createBroker({ findApp: (s) => (s === src ? { id: 'x', permissions: ['storage.shared'] } : null), getLang: () => 'it' });
   await h({ data: { type: 'nucleo.broker', id: 1, method: 'sys.info', args: {} }, source: src });
   assert.deepEqual(Object.keys(sent[0]).sort(), ['id', 'lang', 'ok', 'type']);
+});
+
+// ── ai.* — intelligence as a syscall. The app on the other side is machine-written; these tests
+// are the fence around the two things it must never buy: OS effects, and the user's money. ─────
+function aiHarness(perms, { fetchFn, aiComplete, aiCooldownMs } = {}) {
+  const sent = [];
+  const source = { postMessage: (m) => sent.push(m) };
+  const handler = createBroker({
+    fetchFn, aiComplete, aiCooldownMs,
+    findApp: (s) => (s === source ? { id: 'todo', permissions: perms } : null),
+    getLang: () => 'it',
+  });
+  const call = async (method, args) => {
+    sent.length = 0;
+    await handler({ data: { type: 'nucleo.broker', id: 1, method, args }, source, origin: 'null' });
+    return sent[0];
+  };
+  return { call, sent };
+}
+
+test('ai.ask without ai.anima never reaches the device', async () => {
+  let touched = false;
+  const h = aiHarness(['storage.app', 'storage.shared', 'system.notify'], { fetchFn: async () => { touched = true; } });
+  const r = await h.call('ai.ask', { q: 'che ore sono' });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /denied/);
+  assert.equal(touched, false);
+});
+
+test('ai.ask asks the OFFLINE engine, with the query bounded and encoded', async () => {
+  let url = null;
+  const h = aiHarness(['ai.anima'], { fetchFn: async (u) => { url = u; return { ok: true, json: async () => ({ reply: 'Roma', intent: 'kb' }) }; } });
+  const r = await h.call('ai.ask', { q: 'capitale d\'Italia?' });
+  assert.deepEqual(r, { type: 'nucleo.broker.reply', id: 1, ok: true, reply: 'Roma', intent: 'kb' });
+  assert.ok(url.includes('/api/anima?q=' + encodeURIComponent('capitale d\'Italia?')), url);
+  assert.ok(url.includes('mode=off'), 'a sandboxed app must not make the device network: ' + url);
+  assert.ok(url.includes('lang=it'), url);
+  // bounds
+  assert.equal((await h.call('ai.ask', { q: '' })).ok, false);
+  assert.equal((await h.call('ai.ask', { q: 'x'.repeat(300) })).ok, false, 'query over 256 chars must be refused');
+});
+
+test('THE ONE THAT MATTERS for ai.ask: OS effects are stripped before re-entering the sandbox', async () => {
+  // /api/anima replies can carry {action,tool,arg} — copilot dispatch payloads. Handing those to
+  // machine-written code would let a generated app drive the OS. Only text may cross back.
+  const h = aiHarness(['ai.anima'], { fetchFn: async () => ({ ok: true, json: async () => ({ reply: 'ok', intent: 'cmd', action: 'open-app', tool: 'fs_write', arg: '/system/x' }) }) });
+  const r = await h.call('ai.ask', { q: 'apri le impostazioni' });
+  assert.equal(r.ok, true);
+  assert.deepEqual(Object.keys(r).sort(), ['id', 'intent', 'ok', 'reply', 'type'], 'nothing beyond text may cross: ' + JSON.stringify(r));
+});
+
+test('ai.ask rides the SAME device chain as fs — never two device calls at once', async () => {
+  let live = 0, peak = 0;
+  const fetchFn = async () => {
+    live++; peak = Math.max(peak, live);
+    await new Promise((r) => setTimeout(r, 5));
+    live--; return { ok: true, text: async () => 'x', json: async () => ({ reply: 'x' }) };
+  };
+  const source = { postMessage() {} };
+  const handler = createBroker({ fetchFn, findApp: () => ({ id: 'todo', permissions: ['storage.app', 'ai.anima'] }) });
+  await Promise.all([
+    handler({ data: { type: 'nucleo.broker', id: 1, method: 'fs.read', args: { path: '/data/apps/todo/a' } }, source }),
+    handler({ data: { type: 'nucleo.broker', id: 2, method: 'ai.ask', args: { q: 'ciao' } }, source }),
+    handler({ data: { type: 'nucleo.broker', id: 3, method: 'fs.read', args: { path: '/data/apps/todo/b' } }, source }),
+  ]);
+  assert.equal(peak, 1, 'ai.ask is a device call and must respect the one-door discipline');
+});
+
+test('ai.complete needs ai.cloud, a configured brain, and returns only text', async () => {
+  const denied = aiHarness(['ai.anima'], { aiComplete: async () => 'must not run' });
+  assert.match((await denied.call('ai.complete', { prompt: 'hi' })).error, /denied/);
+  const noBrain = aiHarness(['ai.cloud'], {});          // no key configured → honest refusal
+  assert.equal((await noBrain.call('ai.complete', { prompt: 'hi' })).error, 'no-ai');
+  const h = aiHarness(['ai.cloud'], { aiComplete: async (p) => 'echo:' + p, aiCooldownMs: 0 });
+  const r = await h.call('ai.complete', { prompt: 'hello' });
+  assert.deepEqual(r, { type: 'nucleo.broker.reply', id: 1, ok: true, text: 'echo:hello' });
+  assert.equal((await h.call('ai.complete', { prompt: '' })).ok, false);
+  assert.equal((await h.call('ai.complete', { prompt: 'x'.repeat(5000) })).ok, false, 'prompt over 4 KB must be refused');
+});
+
+test('ai.complete spends the user\'s key: single-flight AND cooled down, refusals immediate', async () => {
+  let calls = 0;
+  const slow = async () => { calls++; await new Promise((r) => setTimeout(r, 20)); return 'ok'; };
+  const sent = [];
+  const src2 = { postMessage: (m) => sent.push(m) };
+  const h2 = createBroker({ aiComplete: slow, aiCooldownMs: 0, findApp: (s) => (s === src2 ? { id: 'x', permissions: ['ai.cloud'] } : null) });
+  await Promise.all([
+    h2({ data: { type: 'nucleo.broker', id: 1, method: 'ai.complete', args: { prompt: 'a' } }, source: src2 }),
+    h2({ data: { type: 'nucleo.broker', id: 2, method: 'ai.complete', args: { prompt: 'b' } }, source: src2 }),
+  ]);
+  const errors = sent.filter((m) => !m.ok);
+  assert.equal(errors.length, 1, 'exactly one of two concurrent calls must be refused: ' + JSON.stringify(sent));
+  assert.equal(errors[0].error, 'busy');
+  assert.equal(calls, 1, 'the refused call must not have spent anything');
+  // cooldown: with a real cooldown, an immediate sequential retry is refused without spending
+  const cool = aiHarness(['ai.cloud'], { aiComplete: async () => 'ok', aiCooldownMs: 60000 });
+  assert.equal((await cool.call('ai.complete', { prompt: 'a' })).ok, true);
+  const again = await cool.call('ai.complete', { prompt: 'b' });
+  assert.equal(again.ok, false);
+  assert.equal(again.error, 'rate-limited');
+});
+
+test('a huge completion is truncated before it re-enters the sandbox', async () => {
+  const h = aiHarness(['ai.cloud'], { aiComplete: async () => 'y'.repeat(50000), aiCooldownMs: 0 });
+  const r = await h.call('ai.complete', { prompt: 'go' });
+  assert.equal(r.ok, true);
+  assert.equal(r.text.length, 4000);
 });

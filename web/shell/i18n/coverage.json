@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-17T22:21:12.525Z",
+  "generated": "2026-08-18T02:20:12.836Z",
   "base": "it",
   "langs": [
     "it",
@@ -23,10 +23,10 @@
     "de": 100
   },
   "surfaces": 41,
-  "totalKeys": 2195,
+  "totalKeys": 2199,
   "namespaces": {
     "core": 103,
-    "shell": 220,
+    "shell": 224,
     "agent": 124,
     "archive-manager": 31,
     "authenticator": 27,

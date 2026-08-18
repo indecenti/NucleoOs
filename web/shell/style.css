@@ -753,6 +753,9 @@ html.eco *, html.eco *::before, html.eco *::after {
 
 /* "Ask ANIMA" row in unified search — the search → AI copilot bridge */
 .sp-item.sp-anima .g { color: #d9a066; }
+/* The row in its ANSWERING form (the browser already knows): the answer may wrap to two lines. */
+.sp-item.sp-anima.answer .n { white-space: normal; line-height: 1.35; }
+.sp-item.sp-anima.answer .p { font-family: inherit; }
 .sp-item.sp-anima .t .n { color: var(--accent); font-weight: 600; }
 .sp-item.sp-anima .t .p { font-family: inherit; opacity: .85; }
 

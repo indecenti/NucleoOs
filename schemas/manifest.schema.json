@@ -220,7 +220,9 @@
         "net.ble",
         "mesh.peer",
         "power.budget",
-        "device.location"
+        "device.location",
+        "ai.anima",
+        "ai.cloud"
       ]
     }
   }

@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normMatch, matchScore, kwScore, rankApps, rankActions, looksLikeNL } from '../web/shell/search-rank.js';
+import { normMatch, matchScore, kwScore, rankApps, rankActions, looksLikeNL, clipAnswer } from '../web/shell/search-rank.js';
 
 const APPS = [
   { id: 'calculator', name: 'Calculator' },
@@ -91,4 +91,19 @@ test('looksLikeNL leaves short name lookups alone', () => {
     assert.ok(!looksLikeNL(q), 'should read as a name lookup: ' + q);
   }
   assert.ok(looksLikeNL('foo?'), 'a question mark is always a question');
+});
+
+test('clipAnswer fits a search row without butchering words', () => {
+  assert.equal(clipAnswer('short answer'), 'short answer', 'under the cap → untouched');
+  assert.equal(clipAnswer('  spaced\n\nout   text '), 'spaced out text', 'whitespace collapses');
+  const long = 'Mercurio è il pianeta più interno del sistema solare e anche il più piccolo, ' +
+               'con un diametro di circa quattromilaottocento chilometri e nessuna atmosfera stabile.';
+  const c = clipAnswer(long, 80);
+  assert.ok(c.length <= 81, 'must respect the cap (+ellipsis): ' + c.length);
+  assert.ok(c.endsWith('…'), 'a clipped answer announces itself: ' + c);
+  assert.ok(!/[,;:.]…$/.test(c), 'no dangling punctuation before the ellipsis: ' + c);
+  const inner = c.slice(0, -1).trimEnd();
+  assert.ok(long.startsWith(inner), 'the clip is a prefix, words intact: ' + inner);
+  assert.equal(clipAnswer('', 80), '', 'empty in, empty out');
+  assert.equal(clipAnswer(null, 80), '');
 });

@@ -129,10 +129,10 @@ function brokerClient(id, catJson) {
         const w = waiting.get(d.id); if (!w) return;
         waiting.delete(d.id); w(d);
       });
-      const call = (method, args) => new Promise((res) => {
+      const call = (method, args, timeoutMs) => new Promise((res) => {
         const i = ++n; waiting.set(i, res);
         parent.postMessage({ type: 'nucleo.broker', id: i, method, args }, '*');
-        setTimeout(() => { if (waiting.delete(i)) res({ ok: false, error: 'timeout' }); }, 10000);
+        setTimeout(() => { if (waiting.delete(i)) res({ ok: false, error: 'timeout' }); }, timeoutMs || 10000);
       });
       return {
         fs: { read: (path) => call('fs.read', { path }),
@@ -140,6 +140,12 @@ function brokerClient(id, catJson) {
               list: (path) => call('fs.list', { path }) },
         notify: (text) => call('notify', { text }),
         sys: { info: () => call('sys.info', {}) },
+        // Intelligence as a syscall — each needs its OWN manifest permission, or the call is denied:
+        //   ai.ask(q)        → the on-device deterministic brain (needs 'ai.anima'; offline, no cost)
+        //   ai.complete(p)   → the user's cloud model (needs 'ai.cloud'; single-flight, rate-limited)
+        // Both return {ok, ...} like everything else here; expect and handle {ok:false}.
+        ai: { ask: (q) => call('ai.ask', { q }),
+              complete: (prompt) => call('ai.complete', { prompt }, 25000) },   // cloud: outlives the 10 s default
         home: '/data/apps/${id}',          // this app's own corner of the SD
       };
     })();

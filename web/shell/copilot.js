@@ -40,12 +40,17 @@ async function webIndexer() {
   }
   return _wi || null;
 }
-let scrim, root, logEl, inputEl, sendBtn, dotEl, subEl, modeBtn, langBtn, tbBtn, actBtn;
+let scrim, root, logEl, inputEl, sendBtn, dotEl, subEl, modeBtn, langBtn, tbBtn, actBtn, micBtn;
 let isOpen = false, busy = false, aborter = null, seq = 0, elapsedTimer = null;
 let history = [];                     // in-memory transcript for this session: [{role,text,r?}]
+let asr = null, voiceOn = false;      // live voice session (device mic → Vosk in the browser)
+let voicePending = false;             // the NEXT ask came from voice → speak the reply back
+let ttsInfo = null;                   // cached GET /api/tts ({enabled,available}), probed once per session
 
 // ---- i18n (kept tiny; mirrors the ANIMA app's tone) ----
-const STR = {
+// Exported for the catalog-parity gate (tools/shell-copilot-catalog.test.mjs): the OS i18n gate
+// cannot see this inline table, so the test is what keeps the five languages in step.
+export const STR = {
   it: {
     sub: 'copilot', placeholder: 'Chiedi qualcosa o dai un comando…',
     welLead: 'Sono ANIMA, l’assistente di NucleoOS. Apro app, creo file, do ora/meteo/spazio, gestisco il calendario e rispondo a domande — da qui, ovunque tu sia nell’OS.',
@@ -56,6 +61,7 @@ const STR = {
     reveal: 'Mostra nella cartella', openCal: 'Apri Calendario', openMon: 'Apri System Monitor', openSet: 'Apri Impostazioni',
     nomatch: 'Nessuna corrispondenza.', memory: 'memoria',
     footHint: ['<kbd>⏎</kbd> invia', '<kbd>⇧⏎</kbd> a capo', '<kbd>esc</kbd> chiudi'],
+    mic: 'Parla con ANIMA', micListening: 'Ti ascolto…', micBusy: 'Microfono in uso da', micErr: 'Voce non disponibile (modello non caricato).', verOk: 'verificato dal dispositivo', verNo: 'contraddetto dal dispositivo',
   },
   en: {
     sub: 'copilot', placeholder: 'Ask anything or give a command…',
@@ -67,6 +73,7 @@ const STR = {
     reveal: 'Reveal in folder', openCal: 'Open Calendar', openMon: 'Open System Monitor', openSet: 'Open Settings',
     nomatch: 'No match.', memory: 'memory',
     footHint: ['<kbd>⏎</kbd> send', '<kbd>⇧⏎</kbd> newline', '<kbd>esc</kbd> close'],
+    mic: 'Speak to ANIMA', micListening: 'Listening…', micBusy: 'Mic in use by', micErr: 'Voice unavailable (model not loaded).', verOk: 'verified on-device', verNo: 'contradicted on-device',
   },
   es: {
     sub: 'copilot', placeholder: 'Pregunta algo o da una orden…',
@@ -78,6 +85,7 @@ const STR = {
     reveal: 'Mostrar en la carpeta', openCal: 'Abrir Calendario', openMon: 'Abrir System Monitor', openSet: 'Abrir Ajustes',
     nomatch: 'Sin coincidencias.', memory: 'memoria',
     footHint: ['<kbd>⏎</kbd> enviar', '<kbd>⇧⏎</kbd> nueva línea', '<kbd>esc</kbd> cerrar'],
+    mic: 'Habla con ANIMA', micListening: 'Te escucho…', micBusy: 'Micrófono en uso por', micErr: 'Voz no disponible (modelo no cargado).', verOk: 'verificado en el dispositivo', verNo: 'contradicho por el dispositivo',
   },
   fr: {
     sub: 'copilot', placeholder: 'Demandez quelque chose ou donnez une commande…',
@@ -89,6 +97,7 @@ const STR = {
     reveal: 'Afficher dans le dossier', openCal: 'Ouvrir le Calendrier', openMon: 'Ouvrir System Monitor', openSet: 'Ouvrir les Réglages',
     nomatch: 'Aucune correspondance.', memory: 'mémoire',
     footHint: ['<kbd>⏎</kbd> envoyer', '<kbd>⇧⏎</kbd> nouvelle ligne', '<kbd>esc</kbd> fermer'],
+    mic: 'Parlez à ANIMA', micListening: 'Je vous écoute…', micBusy: 'Micro utilisé par', micErr: 'Voix indisponible (modèle non chargé).', verOk: "vérifié sur l'appareil", verNo: "contredit par l'appareil",
   },
   de: {
     sub: 'copilot', placeholder: 'Frag etwas oder gib einen Befehl…',
@@ -100,6 +109,7 @@ const STR = {
     reveal: 'Im Ordner anzeigen', openCal: 'Kalender öffnen', openMon: 'System Monitor öffnen', openSet: 'Einstellungen öffnen',
     nomatch: 'Keine Übereinstimmung.', memory: 'Gedächtnis',
     footHint: ['<kbd>⏎</kbd> senden', '<kbd>⇧⏎</kbd> neue Zeile', '<kbd>esc</kbd> schließen'],
+    mic: 'Sprich mit ANIMA', micListening: 'Ich höre zu…', micBusy: 'Mikrofon in Benutzung von', micErr: 'Sprache nicht verfügbar (Modell nicht geladen).', verOk: 'auf dem Gerät bestätigt', verNo: 'vom Gerät widerlegt',
   },
 };
 const CODES = ['it', 'en', 'es', 'fr', 'de'];
@@ -156,6 +166,7 @@ function buildDom() {
      <div class="cp-inputrow">
        <span class="cp-prompt">›</span>
        <textarea id="cp-q" rows="1" autocomplete="off" spellcheck="false"></textarea>
+       <button class="cp-mic" id="cp-mic" type="button" aria-pressed="false">🎤</button>
        <button class="cp-send" id="cp-send" type="button">Invia</button>
      </div>
      <div class="cp-log" id="cp-log" role="log" aria-live="polite" aria-relevant="additions"></div>
@@ -170,11 +181,13 @@ function buildDom() {
   actBtn = root.querySelector('#cp-act');
   modeBtn = root.querySelector('#cp-mode');
   langBtn = root.querySelector('#cp-lang');
+  micBtn = root.querySelector('#cp-mic');
   tbBtn = document.getElementById('copilot-btn');
 }
 
 function wire() {
   if (actBtn) actBtn.addEventListener('click', () => setAgent(!agentOn));
+  if (micBtn) micBtn.addEventListener('click', () => toggleVoice());
   scrim.addEventListener('click', closeBar);
   root.querySelector('#cp-close').addEventListener('click', closeBar);
   sendBtn.addEventListener('click', () => (busy ? stop() : submit()));
@@ -202,6 +215,94 @@ function wire() {
 function autogrow() { inputEl.style.height = 'auto'; inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px'; }
 function submit() { const q = inputEl.value; inputEl.value = ''; autogrow(); askCopilot(q); }
 
+// ---- voice: the device is the mic, the browser is the ears ----
+// micgate streams raw PCM from the Cardputer's PDM mic (no getUserMedia — the device's plain-http
+// origin has no secure context) and Vosk WASM transcribes it HERE, offline. The whole dance — mic
+// lock, /api/rec/stream, odd-byte tails, reconnects, model load CDN→SD — is the Dictation app's
+// proven consumer (apps/dictation/www/asr.js), imported as-is instead of re-derived. Walkie-talkie
+// contract: one press, one utterance. Partials are FEEDBACK in the input box; only the FINAL
+// transcript enters the normal ask cycle, so mutating effects keep their usual confirmations and
+// a misheard fragment can never dispatch. A voice ask is answered out loud too, when the device's
+// own TTS voice is switched on (POST /api/tts — the body speaks, the browser thinks).
+async function toggleVoice() {
+  if (voiceOn) { stopVoice(); return; }
+  if (busy) return;
+  let mod = null;
+  try { mod = await import('/apps/dictation/www/asr.js'); } catch {}
+  if (voiceOn) return;                       // double-click while the module loaded
+  if (!mod) { addBot(T().micErr); return; }
+  const a = mod.createASR();
+  asr = a; voiceOn = true;
+  micBtn.classList.add('rec'); micBtn.setAttribute('aria-pressed', 'true');
+  inputEl.placeholder = T().micListening;
+  // One status probe per session: whether the device's own voice is on (spoken replies).
+  if (!ttsInfo) fetch('/api/tts', { cache: 'no-store' }).then((r) => r.json()).then((j) => { ttsInfo = j || {}; }).catch(() => { ttsInfo = {}; });
+  const vlang = (lang() === 'it' || lang() === 'en') ? lang() : 'en';   // the two shipped Vosk models
+  a.start(vlang, {
+    onpartial(t) { if (voiceOn && t) { inputEl.value = t; autogrow(); } },
+    onfinal(t) {
+      if (!voiceOn) return;
+      stopVoice();
+      const q = String(t || '').trim();
+      if (q) { inputEl.value = q; autogrow(); voicePending = true; submit(); }
+    },
+    onerror(kind, who) {
+      const wasOn = voiceOn;
+      stopVoice();
+      if (wasOn) addBot(kind === 'busy' ? T().micBusy + ' ' + (who || '…') : T().micErr);
+    },
+    onend() { if (voiceOn) stopVoice(); },
+  });
+}
+function stopVoice() {
+  if (!voiceOn && !asr) return;
+  voiceOn = false;
+  const a = asr; asr = null;
+  if (a) { try { a.stop(); } catch {} }
+  if (micBtn) { micBtn.classList.remove('rec'); micBtn.setAttribute('aria-pressed', 'false'); }
+  inputEl.placeholder = T().placeholder;
+}
+// ---- truth lamp: the microcontroller fact-checks the cloud ----
+// A generative reply is a guest here; the deterministic brain is the ground. Claims the reply
+// makes are extracted (forge/extract.js), routed to verifier specs, and judged by the device via
+// GET /api/anima/verify — SEQUENTIALLY (one device call at a time), at most 3 per reply so a
+// listy answer can't trickle badges for seconds. Only DECISIVE verdicts render; an unknown is
+// silence, never a grey wall. Measured before building (the design-review bar was 20% decisive):
+// 45% decisive, 0 unknown among routed, on tools/anima-host/truthlamp-yield.mjs's corpus.
+async function verifyReplyClaims(reply, turn) {
+  let ex = null;
+  try { ex = await import('/apps/anima/forge/extract.js'); } catch { return; }
+  if (!ex || !ex.extractProseClaims || !ex.routeClaim) return;
+  const specs = [];
+  for (const c of ex.extractProseClaims(reply)) {
+    const s = ex.routeClaim(c);
+    if (s) specs.push(s);
+    if (specs.length >= 3) break;
+  }
+  for (const sp of specs) {
+    if (!turn.isConnected) return;               // the transcript moved on (cleared/superseded)
+    try {
+      const url = '/api/anima/verify?key=' + encodeURIComponent(sp.key)
+        + '&asserted=' + encodeURIComponent(sp.asserted)
+        + '&kind=' + encodeURIComponent(sp.kind)
+        + '&lang=' + encodeURIComponent(sp.lang || (lang() === 'en' ? 'en' : 'it'));
+      const j = await (await fetch(url, { cache: 'no-store' })).json();
+      const v = j && (j.verdict || j.result);
+      if (v === 'confirmed') addLined(turn, '✔ ' + sp.key + ' → ' + sp.asserted + ' · ' + T().verOk, 'ok');
+      else if (v === 'contradicted') addLined(turn, '✘ ' + sp.key + ' → ' + sp.asserted + ' · ' + T().verNo, 'warn');
+    } catch { return; }                          // device unreachable → no badges, no noise
+  }
+}
+
+// Speak a reply on the DEVICE's speaker — only after a voice ask, only if the device voice is on,
+// and clipped hard: the TTS body caps at 1 KB and nobody wants a read-aloud essay.
+function maybeSpeak(reply) {
+  if (!ttsInfo || !ttsInfo.enabled || !ttsInfo.available) return;
+  const l = (lang() === 'it' || lang() === 'en') ? lang() : 'en';
+  const say = String(reply || '').replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 280);
+  if (say) fetch('/api/tts', { method: 'POST', body: JSON.stringify({ say, lang: l }) }).catch(() => {});
+}
+
 // ---- open / close ----
 function openBar() {
   if (isOpen) return;
@@ -219,6 +320,7 @@ function closeBar() {
   isOpen = false;
   scrim.classList.add('hidden'); root.classList.add('hidden');
   if (tbBtn) tbBtn.classList.remove('on');
+  stopVoice();                                 // closing the bar releases the OS-wide mic lock
   stop();
 }
 function toggle() { isOpen ? closeBar() : openBar(); }
@@ -229,7 +331,8 @@ function syncChips() {
   subEl.textContent = T().sub;
   modeBtn.innerHTML = 'ANIMA · <b>' + esc(modeLabel()) + '</b>';
   langBtn.innerHTML = '<b>' + lang().toUpperCase() + '</b>';
-  inputEl.placeholder = T().placeholder;
+  inputEl.placeholder = voiceOn ? T().micListening : T().placeholder;
+  if (micBtn) micBtn.title = T().mic;
   if (!busy) sendBtn.textContent = TR('Invia', 'Send');   // localize the idle Send label (buildDom seeds it in Italian)
 }
 function renderFoot() { root.querySelector('#cp-foot').innerHTML = T().footHint.join(' · '); }
@@ -409,6 +512,8 @@ async function askAgent(q, turn) {
 // ---- the ask cycle ----
 async function askCopilot(q) {
   q = (q || '').trim();
+  const speakBack = voicePending;              // consume the voice flag whatever happens next
+  voicePending = false;
   if (!q || busy) return;
   if (!isOpen) openBar();
   if (!history.length) logEl.innerHTML = '';      // clear the welcome on first ask
@@ -467,6 +572,8 @@ async function askCopilot(q) {
   aborter = null; think.remove(); setDot('ok');
   const reply = r.reply || T().dontknow;
   const turn = addBot(reply);
+  if (speakBack) maybeSpeak(reply);            // a voice ask gets a spoken answer (device TTS)
+  if (r.intent === 'cloud') verifyReplyClaims(reply, turn);   // truth lamp: only generative replies get checked
   dispatch(r, turn);
   // Honest escalation: when the grounded brain has nothing and a key IS configured, OFFER the agent
   // rather than silently pretending or silently doing. One click, and the user knows what it is.

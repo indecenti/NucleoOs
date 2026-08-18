@@ -65,7 +65,11 @@ export function resolveAppPath(appId, permissions, path) {
 }
 
 // The whole vocabulary. Anything not listed is refused — a deny-list would be a promise we cannot keep.
-export const METHODS = ['fs.read', 'fs.write', 'fs.list', 'notify', 'sys.info'];
+export const METHODS = ['fs.read', 'fs.write', 'fs.list', 'notify', 'sys.info', 'ai.ask', 'ai.complete'];
+// ai.* bounds. Small on purpose: a sandboxed app asks questions, it does not stream conversations.
+const AI_Q_MAX = 256;            // ai.ask query (chars)
+const AI_PROMPT_MAX = 4096;      // ai.complete prompt (chars)
+const AI_REPLY_MAX = 4000;       // either reply, truncated before it re-enters the sandbox
 export function methodAllowed(method, permissions) {
   const perms = Array.isArray(permissions) ? permissions : [];
   if (!METHODS.includes(method)) return false;
@@ -75,11 +79,16 @@ export function methodAllowed(method, permissions) {
   // make for isolation. It discloses nothing the user has not already chosen and can see on screen.
   if (method === 'sys.info') return true;
   if (method === 'notify') return perms.includes('system.notify');
+  // Intelligence as a declared capability, in two distinct trust tiers: ai.anima is the on-device
+  // deterministic brain (cheap, offline, can't hallucinate); ai.cloud spends the USER'S API key.
+  // Neither implies the other, and neither buys any storage reach.
+  if (method === 'ai.ask') return perms.includes('ai.anima');
+  if (method === 'ai.complete') return perms.includes('ai.cloud');
   return perms.includes('storage.app') || perms.includes('storage.shared');
 }
 
 // ── the broker (needs the shell's deps injected, so the policy above stays testable) ───────────
-export function createBroker({ fetchFn, findApp, notify, onFsChange, getLang } = {}) {
+export function createBroker({ fetchFn, findApp, notify, onFsChange, getLang, aiComplete, aiCooldownMs = 2000 } = {}) {
   const doFetch = fetchFn || ((...a) => fetch(...a));
   // ONE call in flight, ever. See the device-discipline note at the top.
   let chain = Promise.resolve();
@@ -88,6 +97,10 @@ export function createBroker({ fetchFn, findApp, notify, onFsChange, getLang } =
     chain = run.then(() => {}, () => {});
     return run;
   };
+  // ai.complete is browser-direct (never touches the device), so it does not ride the device chain —
+  // but it spends the user's key, so it is single-flight AND cooled down. Both refusals are immediate:
+  // a queue here would just let an app buy delayed spending.
+  let aiBusy = false, aiLastAt = 0;
 
   async function exec(app, method, args) {
     const perms = (app && app.permissions) || [];
@@ -98,6 +111,54 @@ export function createBroker({ fetchFn, findApp, notify, onFsChange, getLang } =
     if (method === 'notify') {
       if (notify) notify(String((args && args.text) || '').slice(0, 200), app.name || app.id);
       return { ok: true };
+    }
+
+    // ai.ask — the on-device deterministic brain. Rides the SAME serial chain as fs.*: it is a device
+    // call, and the device discipline (one door, one at a time) is the whole point of this file.
+    // mode=off pins the engine to its offline path: a sandboxed app must not make the device network.
+    // The answer is STRIPPED to text: /api/anima replies can carry {action,tool,arg} OS effects, and
+    // those belong to the copilot's dispatcher, never to untrusted machine-written code.
+    if (method === 'ai.ask') {
+      const q = String((args && args.q) || '').trim();
+      if (!q) return { ok: false, error: 'empty query' };
+      if (q.length > AI_Q_MAX) return { ok: false, error: 'query too long (max ' + AI_Q_MAX + ')' };
+      const lang = (getLang ? getLang() : 'en') || 'en';
+      return serial(async () => {
+        const opts = { cache: 'no-store' };
+        if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) opts.signal = AbortSignal.timeout(8000);
+        try {
+          const r = await doFetch('/api/anima?q=' + encodeURIComponent(q) + '&lang=' + encodeURIComponent(lang) + '&mode=off', opts);
+          if (!r.ok) return { ok: false, error: 'http-' + r.status };
+          const j = await r.json().catch(() => null);
+          if (!j) return { ok: false, error: 'bad reply' };
+          return { ok: true, reply: String(j.reply || '').slice(0, AI_REPLY_MAX), intent: typeof j.intent === 'string' ? j.intent : '' };
+        } catch (e) {
+          return { ok: false, error: String((e && e.message) || e) };
+        }
+      });
+    }
+
+    // ai.complete — the cloud, on the user's key, executed by the SHELL in its own origin. The key
+    // never crosses into the sandbox; only the completion text comes back, truncated.
+    if (method === 'ai.complete') {
+      if (!aiComplete) return { ok: false, error: 'no-ai' };
+      if (aiBusy) return { ok: false, error: 'busy' };
+      const now = Date.now();
+      if (now - aiLastAt < aiCooldownMs) return { ok: false, error: 'rate-limited' };
+      const prompt = String((args && args.prompt) || '').trim();
+      if (!prompt) return { ok: false, error: 'empty prompt' };
+      if (prompt.length > AI_PROMPT_MAX) return { ok: false, error: 'prompt too long (max ' + AI_PROMPT_MAX + ')' };
+      aiBusy = true; aiLastAt = now;
+      try {
+        const signal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(20000) : undefined;
+        const text = await aiComplete(prompt, { maxTokens: 256, signal });
+        if (text == null || text === '') return { ok: false, error: 'no-ai' };
+        return { ok: true, text: String(text).slice(0, AI_REPLY_MAX) };
+      } catch (e) {
+        return { ok: false, error: String((e && e.message) || e) };
+      } finally {
+        aiBusy = false;
+      }
     }
 
     const abs = resolveAppPath(app.id, perms, args && args.path);
