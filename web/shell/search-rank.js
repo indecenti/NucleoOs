@@ -74,3 +74,13 @@ export function looksLikeNL(q) {
   if (s.split(/\s+/).length >= 3) return true;
   return NL_OPENERS.test(s);
 }
+
+// Clip an answer to fit a one-line search row: collapse whitespace, never cut a word in half,
+// drop a dangling comma/colon before the ellipsis. Used by the answering "Ask ANIMA" row.
+export function clipAnswer(text, max = 140) {
+  const s = String(text || '').replace(/\s+/g, ' ').trim();
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  const sp = cut.lastIndexOf(' ');
+  return (sp > max * 0.6 ? cut.slice(0, sp) : cut).replace(/[\s,;:.]+$/, '') + '…';
+}

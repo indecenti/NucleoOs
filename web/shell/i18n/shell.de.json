@@ -240,5 +240,10 @@
   "nc_src_voice": "Stimme",
   "nc_src_recorder": "Rekorder",
   "nc_src_ota": "Update",
-  "nc_src_app": "App"
+  "nc_src_app": "App",
+
+  "amb_toggle_title": "ANIMA-Vorschläge",
+  "amb_cal_body": "Beginnt um {time}",
+  "amb_sd_title": "SD-Karte fast voll",
+  "amb_sd_body": "Nur noch {pct}% Speicherplatz frei"
 }

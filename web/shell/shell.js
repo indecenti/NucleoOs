@@ -7,7 +7,7 @@ import { createBusyController } from './busy.js';
 import { ensureOnboarding } from './onboarding.js';   // first-boot AI setup + install tutorial
 import I18N from './nucleo-i18n.js';                  // centralized OS-wide internationalization
 import { makeFetchJSON, makeLoadState } from './boot-fetch.js';   // resilient boot fetch + typed user-state load (shell-boot-fetch.test)
-import { rankApps, rankActions, looksLikeNL } from './search-rank.js';   // pure search ranking (host-tested)
+import { rankApps, rankActions, looksLikeNL, clipAnswer } from './search-rank.js';   // pure search ranking (host-tested)
 import { createBroker } from './appbroker.js';        // capability broker for sandboxed (agent-written) apps
 import { initSystemUI } from './system-ui.js';        // night light, lock screen, shortcuts sheet, widgets
 
@@ -23,6 +23,9 @@ let Copilot = null;
 // The system Notification Center (the single web surface for all notifications). Loaded lazily
 // in initOS(); the WebSocket handler routes notify.post / calendar.reminder into it. See notify.js.
 let Notify = null;
+// Proactive ANIMA (ambient.js): the FIRST producer on the dormant src:'anima' channel. Loaded
+// lazily after notify.js so its emits always find the backbone. Rules are pure and host-tested.
+let Ambient = null;
 
 // System-UI extras (night light, lock screen, shortcuts sheet, widgets) — initialized in initOS().
 let SysUI = null;
@@ -517,6 +520,13 @@ function initOS() {
   import('./copilot.js').then((m) => { Copilot = m.initCopilot(OS_API); }).catch((e) => console.warn('[copilot] load failed', e));
   // System Notification Center: one surface for every source (calendar, ANIMA, system, …).
   import('./notify.js').then((m) => { Notify = m.initNotify(OS_API); window.Notify = Notify; }).catch((e) => console.warn('[notify] load failed', e));
+  import('./ambient.js').then((m) => {
+    Ambient = m.initAmbient({
+      emit: (n) => { if (Notify) Notify.emit(n); },
+      readJSON: (p) => fetchJSON('/api/fs/read?path=' + encodeURIComponent(p), { tries: 1, timeout: 4000 }).catch(() => null),
+      getStatusSnap: () => lastStatusSnap,
+    });
+  }).catch((e) => console.warn('[ambient] load failed', e));
   // A notification whose action is "anima:<query>" asks the copilot when clicked.
   document.addEventListener('nucleo:anima-ask', (e) => { if (Copilot && e.detail && e.detail.q) Copilot.ask(e.detail.q); });
   // Inject the same handlers into each app window so shortcuts work over apps too.
@@ -1059,6 +1069,9 @@ function connectWS() {
         reconcileDesktopFolder().then((ch) => { if (ch) { saveUiState(); renderDesktop(); } });
       }
       if (ev.t === 'fs.changed' && ev.d && typeof ev.d.path === 'string' && ev.d.path.endsWith('settings.json')) applySettingsFromDevice();
+      // Proactive ANIMA caches the calendar for the whole session — tell it when the SD changed
+      // that file so the next rule pass re-reads it (any other path is ignored inside).
+      if (ev.t === 'fs.changed' && ev.d && typeof ev.d.path === 'string' && Ambient) Ambient.onFsChanged(ev.d.path);
       // Notifications: the unified backbone topic (notify.post) plus the legacy calendar.reminder
       // both flow into the system Notification Center (toast + history + chime). See notify.js.
       if ((ev.t === 'notify.post' || ev.t === 'calendar.reminder') && ev.d) {
@@ -1183,6 +1196,16 @@ function wireMessages() {
     notify: (text, from) => showToast(text, '🔔', 'info', 5000),
     getLang: () => I18N.lang,          // so a sandboxed app can localise itself without importing the engine
     onFsChange: () => { try { FsIndex.invalidate(); } catch {} },
+    // ai.complete for apps that declared ai.cloud: executed HERE, in the shell's origin, so the user's
+    // key never enters the sandbox — only the completion text goes back over the broker. Lazy import:
+    // apps without the permission never cost the ai.js load. Same active-provider config the copilot
+    // uses (readTeacher); exec:'device' means "route via the device", which sandboxed apps must not do.
+    aiComplete: async (prompt, opts) => {
+      const AI = await import('./ai.js');
+      const cfg = await AI.readTeacher();
+      if (!cfg || !cfg.key || cfg.unpaired || (cfg.exec || 'browser') === 'device') return null;
+      return AI.cloudComplete(cfg, null, prompt, (opts && opts.maxTokens) || 256, { signal: opts && opts.signal });
+    },
   });
   window.addEventListener('message', brokerHandler);
   window.addEventListener('message', (e) => {
@@ -2691,6 +2714,45 @@ function sysActions() {
   ].map((a) => ({ ...a, name: t('act_' + a.id), kw: t('act_' + a.id + '_kw') }));
 }
 
+// ---- the answering search row (zero device traffic) ----------------------------------------
+// The "Ask ANIMA" row (always result 0) upgrades IN PLACE when the browser already knows the
+// answer: the learned-web store (IndexedDB, filled by the copilot's browser-direct indexer) is
+// probed asynchronously per repaint — pure IndexedDB, no /api, no WASM — and on a hit the row
+// shows the ANSWER itself instead of an invitation. On a miss nothing changes: no loading state,
+// no empty lane, the new-user experience is exactly the old one. Commit semantics are untouched
+// (click → copilot, which answers instantly from the same store), and indices never shift
+// because the row is upgraded, not inserted.
+let _ansMods, _ansSeq = 0;
+async function answerMods() {
+  if (_ansMods === undefined) {
+    try {
+      const wi = await import('/apps/anima/local/webindex.js');
+      const ws = await import('/apps/anima/local/webstore.js');
+      _ansMods = (wi.detectIntent && wi.slug && ws.webStore) ? { detectIntent: wi.detectIntent, slug: wi.slug, store: ws.webStore } : null;
+    } catch { _ansMods = null; }
+  }
+  return _ansMods;
+}
+async function probeSearchAnswer(q) {
+  const my = ++_ansSeq;
+  q = String(q || '').trim();
+  if (q.length < 3) return;
+  const m = await answerMods();
+  if (!m || my !== _ansSeq) return;
+  let intent = null;
+  try { intent = m.detectIntent(q, { bare: true }); } catch {}
+  if (!intent || !intent.entity) return;
+  let card = null;
+  try { card = await m.store.get(m.slug(intent.entity), I18N.lang); } catch {}
+  if (!card || !card.reply || my !== _ansSeq) return;
+  if (!searchActive() || SEARCH.q.trim() !== q) return;           // the user has already typed on
+  const row = resultsContainer() && resultsContainer().querySelector('.sp-anima');
+  if (!row) return;
+  row.classList.add('answer');
+  row.querySelector('.n').textContent = clipAnswer(card.reply, 140);
+  row.querySelector('.p').textContent = '✻ ' + (card.title || intent.entity) + ' · ' + t('search_anima');
+}
+
 // Build the flat, ranked result list for a query: apps, then OS settings/actions, then indexed files.
 // The ranking rules themselves live in search-rank.js (pure, host-tested in tools/shell-search-rank.test.mjs).
 function buildResults(q) {
@@ -2755,6 +2817,7 @@ function refreshSearchView() {
     el.addEventListener('mousemove', () => setSel(+el.dataset.i));
   });
   highlightSel();
+  probeSearchAnswer(SEARCH.q);                     // may upgrade the ANIMA row in place (async, no /api)
 }
 
 // Bold the matched part of a name (Windows-11-style match highlighting).

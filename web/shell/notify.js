@@ -92,6 +92,7 @@ export function initNotify(OS_API) {
     '<div class="nc-head">' +
       `<span class="nc-title">${t('nc_title')}</span>` +
       `<button id="nc-dnd" title="${t('nc_dnd_title')}">🌙 <span>DND</span></button>` +
+      `<button id="nc-amb" title="${t('amb_toggle_title')}">✨</button>` +
       `<button id="nc-clear" title="${t('nc_clear_title')}">${t('nc_clear')}</button>` +
     '</div>' +
     '<div class="nc-digest" id="nc-digest" hidden></div>' +
@@ -102,6 +103,7 @@ export function initNotify(OS_API) {
     bell.title = t('nc_title');
     center.querySelector('.nc-title').textContent = t('nc_title');
     dndBtn.title = t('nc_dnd_title');
+    ambBtn.title = t('amb_toggle_title');
     clearBtn.title = t('nc_clear_title'); clearBtn.childNodes[0].textContent = t('nc_clear');
     if (isOpen()) render();
   });
@@ -109,7 +111,22 @@ export function initNotify(OS_API) {
   const listEl = center.querySelector('#nc-list');
   const digestEl = center.querySelector('#nc-digest');
   const dndBtn = center.querySelector('#nc-dnd');
+  const ambBtn = center.querySelector('#nc-amb');
   const clearBtn = center.querySelector('#nc-clear');
+
+  // Proactive-ANIMA switch (ambient.js). The panel owns only the button: it flips the LS key and
+  // announces it with an event; ambient.js is the one that starts/stops. Loose coupling on
+  // purpose — no cross-imports between the two lazy modules.
+  const AMB_LS = 'nucleo.ambient';
+  const ambOn = () => (localStorage.getItem(AMB_LS) || '1') !== '0';
+  const paintAmb = () => ambBtn.classList.toggle('active', ambOn());
+  ambBtn.addEventListener('click', () => {
+    const on = !ambOn();
+    localStorage.setItem(AMB_LS, on ? '1' : '0');
+    paintAmb();
+    document.dispatchEvent(new CustomEvent('nucleo:ambient-toggle', { detail: { on } }));
+  });
+  paintAmb();
 
   // ---- apertura/chiusura -------------------------------------------------
   function isOpen() { return !center.classList.contains('hidden'); }
