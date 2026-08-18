@@ -148,5 +148,9 @@
   "gate_local": "Usa un modello locale",
   "eng_wasm_soon": "Il motore CPU arriva con un prossimo aggiornamento: il modello installato è già pronto e condiviso con ANIMA Forge.",
   "appr_hw": "Azione HARDWARE sul Cardputer — muove il mondo fisico, non annullabile.",
-  "appr_hw_op": "hardware"
+  "appr_hw_op": "hardware",
+  "smoke_ok": "✓ verifica sul device: {n} controlli ok — l'app risponde",
+  "smoke_fail": "✗ verifica sul device fallita: {names}",
+  "smoke_none": "nessuna verifica",
+  "recipe_learned": "📚 imparata come ricetta: {id}"
 }

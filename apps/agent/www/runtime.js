@@ -34,7 +34,8 @@ import { toAgentTools as hwAgentTools, capabilityForTool, callCapability, HW_MUT
 import { orchestrateScaffold, orchestratePublish, orchestrateManage } from './app-ops.js';
 import { buildReviewPrompt, parseReviewVerdict, reviewNote } from './app-review.js';
 import { createDeviceQueue } from './device-queue.js';
-import { runWorkerLocal } from './local-worker.js';   // the LOCAL transport (F0): grammar-constrained loop on an injected browser-local engine   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
+import { runWorkerLocal } from './local-worker.js';   // the LOCAL transport (F0): grammar-constrained loop on an injected browser-local engine
+import { smokeApp, smokeSummary, stageAppRecipe } from './app-recipe.js';   // F5: install-and-smoke on the device + app-recipe learning   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
 import { routeFor, providerOf, PROVIDERS, CAPMATRIX } from '/ai.js';   // multi-model router + capability matrix (image/whisper) for the capability tools
 // NOTE: hardware (IR/WiFi/GPIO) is deliberately NOT a tool here. "ANIMA Code" is a general coding/
 // workspace agent (our Claude Code); device skills live INSIDE the dedicated apps (e.g. the IR Remote
@@ -351,7 +352,46 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
           return done(renderPlan(taskPlan));
         }
         case 'scaffold_app': { const r = await orchestrateScaffold(appIo, { input }); return done(r.message, !r.ok); }
-        case 'publish_app': { const r = await orchestratePublish(appIo, { id: input.id }); return done(r.message, !r.ok); }
+        case 'publish_app': {
+          const r = await orchestratePublish(appIo, { id: input.id });
+          if (!r.ok) return done(r.message, true);
+          // F5 — LIVE SMOKE: prove the just-installed app actually serves on the device before we call
+          // it done. A publish the launcher accepted but that 404s is a silent failure. GET-only, through
+          // the device queue so it never bursts. On a pass, STAGE the app as a learned recipe (the
+          // offline floor gets better at THIS OS's apps); a failed smoke stages nothing (ranOk:false).
+          let msg = r.message;
+          try {
+            const smoke = await smokeApp(input.id, { fetchFn: (u) => dq.read(() => fetch(u, { cache: 'no-store' })), fsFetch: (u) => dq.read(() => fetch(u, { cache: 'no-store' })) });
+            msg += '\n' + smokeSummary(smoke, (k, v) => t(k, v));
+            if (smoke.ok) {
+              try {
+                let manifest = null, html = '';
+                try { manifest = await sysReadJson('/apps/' + input.id + '/manifest.json'); } catch {}
+                try { const hr = await dq.read(() => fetch('/apps/' + input.id + '/', { cache: 'no-store' })); if (hr.ok) html = await hr.text(); } catch {}
+                // Inject the forge helpers (served path → dynamic import) so app-recipe stays pure.
+                const [{ distill }, prov] = [await import('/apps/anima/www/forge/learn.js'), await import('/apps/anima/www/forge/provenance.js')];
+                const staged = await stageAppRecipe({ manifest, kind: (manifest && manifest.__kind) || '', html, smoke, approved: true, lang },
+                  { distill, canonical: prov.canonical, sha256hex: prov.sha256hex }, { existingCards: [], stagedCards: [] });
+                if (staged && staged.staged) {
+                  // Append to the SAME staging file the WebGPU forge loop writes; promote-learned.mjs is
+                  // the conservative build-time gate that later decides what enters the shipped corpus.
+                  // No device append endpoint, so read-then-write; a duplicate id is skipped (idempotent
+                  // staging — distill's slug is deterministic, so re-publishing the same app is a no-op).
+                  try {
+                    const SF = '/data/anima/learned-forge.jsonl';
+                    let prior = '';
+                    try { const pr = await dq.read(() => sysApi('read', { path: SF })); if (pr.ok) prior = await pr.text(); } catch {}
+                    if (!prior.includes('"' + staged.staged.id + '"')) {
+                      await sysWrite(SF, prior + JSON.stringify(staged.staged) + '\n');
+                      msg += '\n' + t('recipe_learned', { id: staged.staged.id });
+                    }
+                  } catch {}
+                }
+              } catch { /* learning is best-effort; a publish is not blocked by it */ }
+            }
+          } catch { /* smoke is best-effort; report the publish regardless */ }
+          return done(msg);
+        }
         case 'manage_app': { const r = await orchestrateManage(appIo, { id: input.id, action: input.action }); return done(r.message, !r.ok); }
         case 'generate_image': {
           const prompt = String(input.prompt || '').trim();
