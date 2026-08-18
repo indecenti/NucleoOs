@@ -4343,7 +4343,9 @@
       if(['impostazioni','settings','config'].includes(cmd)){ openSettings(true); return true; }
       if(['voce','voice','speak'].includes(cmd)){ if(arg==='on'||arg==='off') webVoice=(arg==='on'); else webVoice=!webVoice; set('anima.webvoice',webVoice?'1':'0'); if(!webVoice) stopSpeaking(); applyAll(); toast(webVoice?(TR('Voce browser ON', 'Browser voice ON')):(TR('Voce browser OFF', 'Browser voice OFF')),'ok'); return true; }
       if(cmd==='compact'||cmd==='compatta'){ const n=compactSession(true); toast(n?(TR('Contesto compattato in background (','Context compacted in background (')+n+TR(' turni)',' turns)')):TR('Niente da compattare','Nothing to compact'),'ok'); return true; }
-      if(cmd==='forge'){ addUser(q); window.open('forge-demo.html','_blank'); sysLine(TR('Apro **Forge** — il coder agentico offline (scegli tu il motore: GPU/CPU/cloud/device).', 'Opening **Forge** — the offline agentic coder (you pick the engine: GPU/CPU/cloud/device).')); return true; }
+      // F4 retired the detached forge-demo.html (its relative imports 404 when served by the device);
+      // the ANIMA Code surface is the Agenti app: engine picker (🧠), model install, honest capability verdicts.
+      if(cmd==='forge'){ addUser(q); try{ parent.postMessage({type:'open-app', id:'agent'}, '*'); }catch{} sysLine(TR('Apro **Agenti** — ANIMA Code: scegli il motore (cloud o locale) dal pulsante 🧠.', 'Opening **Agents** — ANIMA Code: pick the engine (cloud or local) from the 🧠 button.')); return true; }
       if(['models','modelli','modello'].includes(cmd)){ window.openModelManager&&window.openModelManager(); return true; }
       return false;
     }
