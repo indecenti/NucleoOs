@@ -514,6 +514,12 @@ const gates = [
     // runtime validation, the deterministic-floor fast-path, and the prompt-injection defense (GUARD
     // preamble + untrusted fencing + mutating fail-closed). Locks each app's skill against drift/jailbreak.
     ok: (code) => code === 0, summary: (o) => (o.match(/[#ℹ] pass \d+/) || ['tests']).concat(o.match(/[#ℹ] fail \d+/) || []).join('  ') },
+  { name: 'anima-code local transport (F0)', cmd: 'node', args: ['--test', 'tools/anima-host/anima-code-local.test.mjs'],
+    // The third transport of the model-agnostic action protocol: a scripted local engine drives a
+    // full tool loop through the SAME execTool; the grammar rejects prose/unknown ops/path escapes
+    // before any tool runs; stalls, loops and budget exhaustion DECLINE honestly instead of faking;
+    // and the cascade skips a declining rung. docs/anima-code.md §13.
+    ok: (code) => code === 0, summary: (o) => (o.match(/# pass \d+/) || ['?'])[0] + ' ' + (o.match(/# fail \d+/) || [''])[0] },
   { name: 'agent-helpers (ANIMA Code)', cmd: 'node', args: ['--test', 'tools/anima-host/agent-helpers.test.mjs'],
     // ANIMA Code / Claude-Code helpers (apps/agent/agent-tools.js): line-numbered reads, the write→lint
     // verifyCode (module-aware so it never false-alarms), fenceUntrusted injection defense (forged closing
