@@ -148,5 +148,9 @@
   "gate_local": "Utiliser un modèle local",
   "eng_wasm_soon": "Le moteur CPU arrive dans une prochaine mise à jour : le modèle installé est déjà prêt et partagé avec ANIMA Forge.",
   "appr_hw": "Action MATÉRIELLE sur le Cardputer — elle agit sur le monde physique, non annulable.",
-  "appr_hw_op": "matériel"
+  "appr_hw_op": "matériel",
+  "smoke_ok": "✓ test sur l'appareil : {n} contrôles ok — l'app répond",
+  "smoke_fail": "✗ test sur l'appareil échoué : {names}",
+  "smoke_none": "aucun test",
+  "recipe_learned": "📚 apprise comme recette : {id}"
 }

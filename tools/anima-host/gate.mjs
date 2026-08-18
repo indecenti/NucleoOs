@@ -539,6 +539,11 @@ const gates = [
     // the local loop routes a code write through the injected verify — a veto self-repairs instead of
     // landing — and the wllama chat adapter makes the CPU rung genuinely runnable. docs/anima-code.md §6/§10.
     ok: (code) => code === 0, summary: (o) => (o.match(/# pass \d+/) || ['?'])[0] + ' ' + (o.match(/# fail \d+/) || [''])[0] },
+  { name: 'anima-code F5 (smoke + learn)', cmd: 'node', args: ['--test', 'tools/anima-host/anima-code-f5.test.mjs'],
+    // Live install-and-smoke on the device (the app really serves — a launcher-accepted 404 is caught,
+    // not celebrated) + app-recipe learning through the proven distill gate (a smoke-passed app becomes
+    // an offline recipe; a failed smoke learns nothing; idempotent, reversible). docs/anima-code.md §8/§10 F5.
+    ok: (code) => code === 0, summary: (o) => (o.match(/# pass \d+/) || ['?'])[0] + ' ' + (o.match(/# fail \d+/) || [''])[0] },
   { name: 'agent-helpers (ANIMA Code)', cmd: 'node', args: ['--test', 'tools/anima-host/agent-helpers.test.mjs'],
     // ANIMA Code / Claude-Code helpers (apps/agent/agent-tools.js): line-numbered reads, the write→lint
     // verifyCode (module-aware so it never false-alarms), fenceUntrusted injection defense (forged closing

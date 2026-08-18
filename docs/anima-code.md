@@ -65,7 +65,7 @@ OS-native knowledge**, unified behind one agent loop that can run on any substra
   until its F3 chat adapter exists — and the row says so. `forge-demo.html` retired (its
   relative imports 404'd when device-served); the ANIMA `forge` command now opens Agenti.
   Gate: `anima-code-picker.test.mjs` (10 tests).
-- F5 — live device test (opt-in, gated) + NucleoOS-recipe self-distillation — planned.
+- **F5 — live device test + recipe distillation** — **done (2026-08-18).** publish→smoke→learn in `app-recipe.js`; gate `anima-code-f5.test.mjs`.
 
 Nothing here auto-deploys or flashes. Every phase is host-gated and shippable on its own.
 

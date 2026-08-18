@@ -148,5 +148,9 @@
   "gate_local": "Use a local model",
   "eng_wasm_soon": "The CPU engine lands in an upcoming update: the installed model is already prepared and shared with ANIMA Forge.",
   "appr_hw": "HARDWARE action on the Cardputer — it moves the physical world, not undoable.",
-  "appr_hw_op": "hardware"
+  "appr_hw_op": "hardware",
+  "smoke_ok": "✓ device smoke test: {n} checks ok — the app responds",
+  "smoke_fail": "✗ device smoke test failed: {names}",
+  "smoke_none": "no smoke test",
+  "recipe_learned": "📚 learned as a recipe: {id}"
 }

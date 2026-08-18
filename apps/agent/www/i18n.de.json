@@ -148,5 +148,9 @@
   "gate_local": "Ein lokales Modell verwenden",
   "eng_wasm_soon": "Die CPU-Engine kommt mit einem kommenden Update: das installierte Modell ist bereits vorbereitet und mit ANIMA Forge geteilt.",
   "appr_hw": "HARDWARE-Aktion am Cardputer — sie wirkt auf die physische Welt, nicht umkehrbar.",
-  "appr_hw_op": "Hardware"
+  "appr_hw_op": "Hardware",
+  "smoke_ok": "✓ Geräte-Smoke-Test: {n} Prüfungen ok — die App antwortet",
+  "smoke_fail": "✗ Geräte-Smoke-Test fehlgeschlagen: {names}",
+  "smoke_none": "kein Test",
+  "recipe_learned": "📚 als Rezept gelernt: {id}"
 }
