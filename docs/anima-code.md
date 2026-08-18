@@ -23,11 +23,16 @@ OS-native knowledge**, unified behind one agent loop that can run on any substra
 
 ## 0. Build status
 
-- **F0 — unified spine** — *in progress.* This document + the model-agnostic action
-  protocol (one tool surface, three transports) + the merged fallback cascade adapter.
+- **F0 — unified spine** — **done (2026-08-18).** The model-agnostic action protocol
+  (one tool surface, three transports) + the merged fallback cascade.
   - **Done (2026-08-17):** the §12 hardening landed ahead of the transports — the
     §12.3 sandbox blind spot is closed, the §12.1 unfenced inputs are fenced, and the
-    §12.2 plan/todo tool ships. `runWorkerLocal` and the merged cascade remain.
+    §12.2 plan/todo tool ships.
+  - **Done (2026-08-18):** `runWorkerLocal` (`apps/agent/www/local-worker.js`) — the
+    grammar-constrained local transport over the same `execTool`, honest-decline on
+    stall/loop/invalid/budget — and the cascade merge in `runWorkerWithFallback`
+    (local rungs via injected `local.engines`, inert until F4 wires real engines).
+    Host gate: `tools/anima-host/anima-code-local.test.mjs` (11 tests, in `anima:gate`).
 - F1 — OS-native codegen knowledge — planned.
 - **F2 — gated hardware tools (`os.hw`)** — *capguard half done* (see §12.3): capability
   inference, the `os.hw` danger rule and real per-run denial in the sandbox are in;

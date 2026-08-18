@@ -32,7 +32,8 @@ import { checkSyntax } from '/apps/code-runner/nucleo-run.js';   // parse-only J
 // host-tested. The privileged device I/O is injected (appIo) below; the orchestrators never touch fetch.
 import { orchestrateScaffold, orchestratePublish, orchestrateManage } from './app-ops.js';
 import { buildReviewPrompt, parseReviewVerdict, reviewNote } from './app-review.js';
-import { createDeviceQueue } from './device-queue.js';   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
+import { createDeviceQueue } from './device-queue.js';
+import { runWorkerLocal } from './local-worker.js';   // the LOCAL transport (F0): grammar-constrained loop on an injected browser-local engine   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
 import { routeFor, providerOf, PROVIDERS, CAPMATRIX } from '/ai.js';   // multi-model router + capability matrix (image/whisper) for the capability tools
 // NOTE: hardware (IR/WiFi/GPIO) is deliberately NOT a tool here. "ANIMA Code" is a general coding/
 // workspace agent (our Claude Code); device skills live INSIDE the dedicated apps (e.g. the IR Remote
@@ -109,7 +110,7 @@ const LANG_NAMES = { it: 'italiano', en: 'English', es: 'español', fr: 'frança
 const GEO_LANGS = new Set(['it', 'en', 'es', 'fr', 'de']);   // Open-Meteo geocoding `language=` values we ship
 
 // ───────────────────────── runtime ─────────────────────────
-export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys = null, active = null, maxSteps, maxParallel, t = (k) => k } = {}) {
+export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys = null, active = null, maxSteps, maxParallel, t = (k) => k, local = null } = {}) {
   const fs = makeFS(root);
   const uiLocale = () => LOCALES[lang] || LOCALES.en;     // BCP-47 for Intl/toLocaleString
   const langName = () => LANG_NAMES[lang] || LANG_NAMES.en;   // how we name the language TO the model
@@ -441,6 +442,30 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         lastErr = e; tried.push(wcfg.provider);
         if (!keys) throw e;   // a single configured provider → nowhere to fall back to
         if (ui && ui.note) ui.note('⚠️ ' + label + ' non disponibile (' + String(e && e.message || e) + ') — provo un altro provider…');
+      }
+    }
+    // Cloud rungs exhausted (no key, offline, or every provider down). The LOCAL rungs (F0): the
+    // injected engines — engine-policy order, wired by the UI behind a capability probe (F4) — run
+    // the same tools through the same execTool, grammar-constrained. Each rung either finishes or
+    // DECLINES HONESTLY; a decline tries the next rung, never fabricates. With nothing injected
+    // (today's default) behavior is unchanged: the original error propagates.
+    if (local && typeof local.engines === 'function') {
+      let rungs = [];
+      try { rungs = (await local.engines()) || []; } catch {}
+      for (const rung of rungs) {
+        if (!rung || !rung.engine || !local.grammar) continue;
+        if (ui && ui.status) ui.status('Agente (locale: ' + (rung.tier || 'local') + ')…');
+        try {
+          const out = await runWorkerLocal(
+            { engine: rung.engine, execTool, grammar: local.grammar },
+            { messages: baseMessages, root, maxSteps: Math.min(STEPS, 10),
+              onEvent: (e) => { if (e.type === 'action' && ui && ui.status) ui.status('⚙ ' + e.op); } });
+          if (out && !out.declined) return out.text || '';   // workers return plain text — same contract
+          if (ui && ui.note) ui.note('⚠️ ' + (rung.tier || 'local') + ': declino onesto (' + (out && out.reason || '?') + ')');
+        } catch (e) {
+          if (String(e && e.message) === 'stopped') throw e;
+          if (ui && ui.note) ui.note('⚠️ ' + (rung.tier || 'local') + ' non disponibile (' + String(e && e.message || e) + ')');
+        }
       }
     }
     throw lastErr || new Error('nessun provider disponibile');
