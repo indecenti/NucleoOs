@@ -63,10 +63,13 @@ test('a forged app id cannot widen the root', () => {
 });
 
 test('the method vocabulary is a closed set, gated by declaration', () => {
-  assert.deepEqual(METHODS, ['fs.read', 'fs.write', 'fs.list', 'notify', 'sys.info', 'ai.ask', 'ai.complete']);
+  assert.deepEqual(METHODS, ['fs.read', 'fs.write', 'fs.list', 'notify', 'sys.info', 'sys.status', 'ai.ask', 'ai.complete']);
   assert.equal(methodAllowed('fs.read', APP), true);
   assert.equal(methodAllowed('notify', APP), false, 'notify needs system.notify');
   assert.equal(methodAllowed('notify', ['system.notify']), true);
+  assert.equal(methodAllowed('sys.status', APP), false, 'sys.status needs system.events');
+  assert.equal(methodAllowed('sys.status', ['system.events']), true);
+  assert.equal(methodAllowed('sys.status', ['storage.app', 'storage.shared', 'system.notify']), false, 'no other permission implies it');
   for (const m of ['fs.remove', 'http.get', 'os.hw.ir.send', 'eval', '__proto__', '']) {
     assert.equal(methodAllowed(m, ['storage.app', 'storage.shared', 'system.notify', 'ai.anima', 'ai.cloud']), false, 'must refuse: ' + m);
   }
