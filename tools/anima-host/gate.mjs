@@ -533,6 +533,12 @@ const gates = [
     // rule: a stored choice binds only while ready+runnable, wasm stays out of the runnable ladder
     // until its F3 chat adapter exists. docs/anima-code.md §10 F4.
     ok: (code) => code === 0, summary: (o) => (o.match(/# pass \d+/) || ['?'])[0] + ' ' + (o.match(/# fail \d+/) || [''])[0] },
+  { name: 'anima-code hw + local veto (F2/F3)', cmd: 'node', args: ['--test', 'tools/anima-host/anima-code-hw.test.mjs'],
+    // F2: hardware tools gated by manifest permission, every act always-confirms, args validated
+    // client-side, and UNGRANTED os.hw actuation is a capguard hard-veto (it acts on the room). F3:
+    // the local loop routes a code write through the injected verify — a veto self-repairs instead of
+    // landing — and the wllama chat adapter makes the CPU rung genuinely runnable. docs/anima-code.md §6/§10.
+    ok: (code) => code === 0, summary: (o) => (o.match(/# pass \d+/) || ['?'])[0] + ' ' + (o.match(/# fail \d+/) || [''])[0] },
   { name: 'agent-helpers (ANIMA Code)', cmd: 'node', args: ['--test', 'tools/anima-host/agent-helpers.test.mjs'],
     // ANIMA Code / Claude-Code helpers (apps/agent/agent-tools.js): line-numbered reads, the write→lint
     // verifyCode (module-aware so it never false-alarms), fenceUntrusted injection defense (forged closing

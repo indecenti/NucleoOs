@@ -58,11 +58,8 @@ export function rungRows(caps = {}, status = {}, hasKey = false) {
   rows.push({ id: 'webgpu', model: WEBGPU_MODEL, sizeText: MODEL_SIZE_TEXT[WEBGPU_MODEL], runnable: true,
     state: !caps.webgpu ? 'unsupported' : (status[WEBGPU_MODEL] === 'cached' ? 'ready' : (status[WEBGPU_MODEL] === 'downloading' ? 'downloading' : 'needs-model')),
     reasonKey: !caps.webgpu ? 'eng_no_webgpu' : null });
-  // runnable:false — HONESTY over symmetry. The wasm MODEL installs for real (same shared cache the
-  // Forge panel reads, real air-gap value) but the agent loop's wllama chat adapter is F3 work that
-  // does not exist yet, and a picker that says "ready" for an engine that cannot run is a lie. The
-  // row says so (eng_wasm_soon) instead of pretending.
-  rows.push({ id: 'wasm', model: WASM_MODEL, sizeText: MODEL_SIZE_TEXT[WASM_MODEL], runnable: false, noteKey: 'eng_wasm_soon',
+  // F3 landed the wllama chat adapter, so the CPU rung is now genuinely runnable — no GPU needed.
+  rows.push({ id: 'wasm', model: WASM_MODEL, sizeText: MODEL_SIZE_TEXT[WASM_MODEL], runnable: true,
     state: !caps.wasm ? 'unsupported' : (status[WASM_MODEL] === 'cached' ? 'ready' : (status[WASM_MODEL] === 'downloading' ? 'downloading' : 'needs-model')),
     reasonKey: !caps.wasm ? 'eng_no_wasm' : null });
   return rows;

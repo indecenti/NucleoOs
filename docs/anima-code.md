@@ -41,10 +41,19 @@ OS-native knowledge**, unified behind one agent loop that can run on any substra
   `system.events`, reduced shape: no IP, no partitions). §6's "apps call /api/* directly"
   predates the agent-app sandbox: sandboxed apps reach device state ONLY through the broker,
   and the template shows the honest pattern. Gate: `anima-code-osapi.test.mjs` (10 tests).
-- **F2 — gated hardware tools (`os.hw`)** — *capguard half done* (see §12.3): capability
-  inference, the `os.hw` danger rule and real per-run denial in the sandbox are in;
-  the agent-side `os.hw` **tools** + manifest-permission gating are still planned.
-- F3 — real agentic loop on a browser-local model — planned.
+- **F2 — gated hardware tools** — **done (2026-08-18).** The `nucleo-hw.js` surface
+  (ir.send/tvbgone/jammer, wifi.scan, gpio.read/write, sys.status) is wired into the agent as
+  tools OFFERED ONLY when Agenti's manifest declares the matching permission (`hwPerms` →
+  `runtime.js`); every act-kind capability always-confirms with a hardware-flagged dialog (5
+  languages), args are validated by nucleo-hw before the request leaves the browser, and
+  capguard now turns UNGRANTED `os.hw` actuation into a hard VETO (not a warning). Added
+  `device.gpio` to the manifest enum (nucleo-hw referenced an orphan `hardware.gpio`).
+- **F3 — real local agentic loop** — **done (2026-08-18).** The wllama chat adapter
+  (`apps/agent/www/wllama-adapter.js`: ChatML rendering + createCompletion→createChatCompletion)
+  makes the CPU/WASM rung genuinely RUNNABLE — F4's honest "soon" is retired, the rung joins the
+  runnable ladder. And the local loop gained a grounded veto: a code write is routed through an
+  injected `verify` (capguard + the F2 hardware grant) — a veto self-repairs instead of landing,
+  exactly as the WebGPU forge loop does. Gate: `anima-code-hw.test.mjs` (12 tests).
 - **F4 — one "ANIMA Code" surface** — **done (2026-08-18).** The Agenti header grew the 🧠
   engine picker (`apps/agent/www/engine-picker.js`): per-rung capability verdicts that WARN
   honestly when this PC cannot run an engine (no WebGPU / no WebAssembly — reason keys resolved

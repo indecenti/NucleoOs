@@ -146,5 +146,7 @@
   "eng_retrying": "Neuverbindung… Versuch {n}",
   "ready_local": "Kein Cloud-Schlüssel: ich laufe auf dem installierten lokalen Modell. Zerstörerische Aktionen fragen weiterhin nach Bestätigung.",
   "gate_local": "Ein lokales Modell verwenden",
-  "eng_wasm_soon": "Die CPU-Engine kommt mit einem kommenden Update: das installierte Modell ist bereits vorbereitet und mit ANIMA Forge geteilt."
+  "eng_wasm_soon": "Die CPU-Engine kommt mit einem kommenden Update: das installierte Modell ist bereits vorbereitet und mit ANIMA Forge geteilt.",
+  "appr_hw": "HARDWARE-Aktion am Cardputer — sie wirkt auf die physische Welt, nicht umkehrbar.",
+  "appr_hw_op": "Hardware"
 }

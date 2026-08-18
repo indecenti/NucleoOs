@@ -28,6 +28,7 @@ import { compact } from '/apps/anima/context.js';
 // tool-use machinery so the multi-agent works on Grok too, not just Claude.
 import { CLIENT_TOOLS, MUTATING, ALWAYS_CONFIRM, GROQ_MODELS, GEMINI_MODELS, toOpenAITools, callOpenAIChat, runOpenAIToolLoop, extractJson, guardPlan, withLineNumbers, verifyCode, fenceUntrusted, normalizePlan, renderPlan, osApiIndex, osApiRoute, osApiManifest, OSAPI_RULES } from './agent-tools.js';
 import { checkSyntax } from '/apps/code-runner/nucleo-run.js';   // parse-only JS check (host-safe) for the write→lint loop
+import { toAgentTools as hwAgentTools, capabilityForTool, callCapability, HW_MUTATING, HW_CAPABILITIES } from '/apps/code-runner/nucleo-hw.js';   // F2: the Cardputer's real hardware as GATED agent tools
 // "Create a NucleoOS app" skill — PURE orchestration (scaffold/publish/manage) + the advisory review,
 // host-tested. The privileged device I/O is injected (appIo) below; the orchestrators never touch fetch.
 import { orchestrateScaffold, orchestratePublish, orchestrateManage } from './app-ops.js';
@@ -110,7 +111,7 @@ const LANG_NAMES = { it: 'italiano', en: 'English', es: 'español', fr: 'frança
 const GEO_LANGS = new Set(['it', 'en', 'es', 'fr', 'de']);   // Open-Meteo geocoding `language=` values we ship
 
 // ───────────────────────── runtime ─────────────────────────
-export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys = null, active = null, maxSteps, maxParallel, t = (k) => k, local = null } = {}) {
+export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys = null, active = null, maxSteps, maxParallel, t = (k) => k, local = null, hwPerms = [] } = {}) {
   const fs = makeFS(root);
   const uiLocale = () => LOCALES[lang] || LOCALES.en;     // BCP-47 for Intl/toLocaleString
   const langName = () => LANG_NAMES[lang] || LANG_NAMES.en;   // how we name the language TO the model
@@ -132,7 +133,15 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   const isAnthropic = cfg.provider === 'anthropic';
   const isGoogle = cfg.provider === 'google';                          // Gemini: OpenAI-compat tool-use via the device /api/llm proxy
   const OAMODELS = isGoogle ? GEMINI_MODELS : GROQ_MODELS;             // OpenAI-compat tier set (all gemini-2.5-flash for Gemini)
-  const STEPS = Math.min(40, (maxSteps | 0) > 0 ? (maxSteps | 0) : MAX_STEPS);        // Settings-tunable loop budget (default 14, hard-capped so a fat-fingered value can't runaway)
+  const STEPS = Math.min(40, (maxSteps | 0) > 0 ? (maxSteps | 0) : MAX_STEPS);
+  // F2 — GATED HARDWARE. A capability is offered to the model ONLY when its manifest permission is in
+  // hwPerms (which agent.js reads from Agenti's own manifest). No permission → the tool is not in the
+  // list → the model cannot call what the app was not granted. Every act-kind call also always-confirms
+  // (below), and args are validated client-side by nucleo-hw before the request leaves the browser.
+  const hwGranted = new Set(Array.isArray(hwPerms) ? hwPerms : []);
+  const HW_TOOLS = HW_CAPABILITIES.filter((c) => hwGranted.has(c.permission));
+  const hwToolDefs = HW_TOOLS.length ? hwAgentTools().filter((td) => HW_TOOLS.some((c) => c.id.replace(/\./g, '_') === td.name)) : [];
+  const hwToolNames = new Set(hwToolDefs.map((td) => td.name));        // Settings-tunable loop budget (default 14, hard-capped so a fat-fingered value can't runaway)
   const PARALLEL = Math.min(6, (maxParallel | 0) > 0 ? (maxParallel | 0) : MAX_PARALLEL);
 
   // Resolve a (cfg, model) for a subtask. When the caller passes the full keys{} map, route ACROSS providers
@@ -398,7 +407,25 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
               : t('rt_tr_empty'));
           } catch (e) { return done(t('rt_tr_err', { error: String(e && e.message || e) }), true); }
         }
-        default: return done(t('rt_tool_unknown', { name }), true);
+        default: {
+          // F2: a granted hardware tool. Route the tool name back to a capability and invoke it through
+          // nucleo-hw (client-side arg validation + the device endpoint). An ACT capability ALWAYS
+          // confirms — even under auto-approve — because it moves atoms in the room (an IR blast, a GPIO
+          // pin), which is not undoable like a workspace file. The pairing cookie rides the fetch.
+          if (hwToolNames.has(name)) {
+            const capId = capabilityForTool(name);
+            const cap = HW_CAPABILITIES.find((c) => c.id === capId);
+            if (cap && cap.kind === 'act') {
+              const ok = ui && await ui.confirm({ op: name, hw: true, ...(input || {}), abs: cap.endpoint.path, root });
+              if (!ok) return done(t('rt_reject'), true);
+            }
+            try {
+              const r = await withRetry(() => dq.write(() => callCapability(capId, input || {}, (u, o) => fetch(u, o))));
+              return done(fenceUntrusted('hw_result', { cap: capId }, typeof r === 'string' ? r : JSON.stringify(r)));
+            } catch (e) { return done(t('rt_err', { op: name, error: String(e && e.message || e) }), true); }
+          }
+          return done(t('rt_tool_unknown', { name }), true);
+        }
       }
     } catch (e) { if (String(e && e.message) === 'stopped') throw e; return done(t('rt_tool_exception', { error: String(e && e.message || e) }), true); }
   }
@@ -407,7 +434,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   // Grok too (not a degraded chat). No server-side web_search on Groq — weather/device_status cover live
   // needs. The strict tool_call_id threading is the agent↔OS contract (see agent-tools.runOpenAIToolLoop).
   async function runWorkerOpenAI({ wcfg = cfg, model, system, messages, maxTokens = 2048 }) {
-    const oaTools = toOpenAITools(CLIENT_TOOLS);
+    const oaTools = toOpenAITools([...CLIENT_TOOLS, ...hwToolDefs]);
     const msgs = [{ role: 'system', content: system }, ...messages];
     const callModel = (m) => callOpenAIChat(deviceFetch, wcfg, { model, messages: m, tools: oaTools, toolChoice: 'auto', maxTokens, temperature: 0.3, signal: aborter && aborter.signal });
     return runOpenAIToolLoop({ callModel, execTool, messages: msgs, maxSteps: STEPS,
@@ -419,7 +446,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   async function runWorker({ wcfg = cfg, model, system, messages, maxTokens = 4096 }) {
     if (wcfg.provider !== 'anthropic') return runWorkerOpenAI({ wcfg, model, system, messages, maxTokens });
     const webSearch = !!(ui && ui.webSearchEnabled && ui.webSearchEnabled());   // read live each turn (honors the toggle mid-session)
-    const tools = [...CLIENT_TOOLS, ...(webSearch ? [{ type: 'web_search_20260209', name: 'web_search' }] : [])];
+    const tools = [...CLIENT_TOOLS, ...hwToolDefs, ...(webSearch ? [{ type: 'web_search_20260209', name: 'web_search' }] : [])];
     let pauses = 0;
     for (let step = 0; step < STEPS; step++) {
       if (aborter && aborter.signal.aborted) throw new Error('stopped');
@@ -478,7 +505,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         if (ui && ui.status) ui.status('Agente (locale: ' + (rung.tier || 'local') + ')…');
         try {
           const out = await runWorkerLocal(
-            { engine: rung.engine, execTool, grammar: local.grammar },
+            { engine: rung.engine, execTool, grammar: local.grammar, verify: local.verify || null },
             { messages: baseMessages, root, maxSteps: Math.min(STEPS, 10),
               onEvent: (e) => { if (e.type === 'action' && ui && ui.status) ui.status('⚙ ' + e.op); } });
           if (out && !out.declined) return out.text || '';   // workers return plain text — same contract

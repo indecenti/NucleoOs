@@ -8,6 +8,15 @@ import { createRuntime } from './runtime.js';
 // install and the honest per-rung capability verdicts; we only read its rows to build local.engines.
 let pickerMod = null, picker = null;
 async function loadPicker() { return pickerMod || (pickerMod = await import('./engine-picker.js')); }
+// F2: the hardware permissions THIS app was granted. The gate is the manifest — a hardware tool the
+// agent app did not declare is never offered to the model. Read once; the manifest is static.
+let hwPerms = null;
+async function loadHwPerms() {
+  if (hwPerms) return hwPerms;
+  try { const r = await fetch('/apps/agent/manifest.json', { cache: 'no-store' }); const m = r.ok ? await r.json() : null; hwPerms = (m && Array.isArray(m.permissions)) ? m.permissions : []; }
+  catch { hwPerms = []; }
+  return hwPerms;
+}
 import { providerOf, PROVIDERS, readTeacher } from '/ai.js';   // shared provider registry + cached vault read: Claude, Groq, Grok (xAI), Gemini
 import I18N from '/nucleo-i18n.js';
 
@@ -93,7 +102,13 @@ function confirmTool(req) {
   return new Promise((resolve) => {
     const labels = { write_file: t('op_write_file'), edit_file: t('op_edit_file'), append_file: t('op_append_file'), delete_file: t('op_delete_file'), move_file: t('op_move_file'), run_js: t('op_run_js'), scaffold_app: t('op_scaffold_app'), publish_app: t('op_publish_app'), manage_app: t('op_manage_app'), generate_image: t('op_generate_image') };
     let bodyHtml = '';
-    if (req.op === 'edit_file') bodyHtml = diffHtml(req.old, req.new);
+    // A hardware tool moves atoms in the room (an IR blast, a GPIO pin) — show it as such, with its
+    // args, and always in the confirm dialog (the runtime forces the confirm; this only renders it).
+    if (req.hw) {
+      const args = Object.entries(req).filter(([k]) => !['op', 'hw', 'abs', 'root'].includes(k)).map(([k, v]) => k + ': ' + JSON.stringify(v));
+      bodyHtml = '<div class="pth">⚡ ' + esc(t('appr_hw')) + '</div>' + (args.length ? '<pre>' + esc(args.join('\n')) + '</pre>' : '');
+    }
+    else if (req.op === 'edit_file') bodyHtml = diffHtml(req.old, req.new);
     else if (req.op === 'write_file' || req.op === 'append_file') bodyHtml = '<pre>' + esc(String(req.content || '').slice(0, 4000)) + (String(req.content || '').length > 4000 ? '\n…' : '') + '</pre>';
     else if (req.op === 'run_js') bodyHtml = '<pre>' + esc(String(req.code || '').slice(0, 4000)) + '</pre>';
     else if (req.op === 'move_file') bodyHtml = '<div class="pth">' + esc(req.from) + ' → ' + esc(req.to) + '</div>';
@@ -103,7 +118,7 @@ function confirmTool(req) {
     else if (req.op === 'generate_image') bodyHtml = '<div class="pth">' + esc(req.path || '') + '</div><pre>' + esc(String(req.prompt || '').slice(0, 2000)) + '</pre>';
     const pth = req.path || req.from || '';
     $('appr').innerHTML =
-      '<h3>' + esc(t('appr_title')) + ' <span class="op">' + esc(labels[req.op] || req.op) + '</span></h3>' +
+      '<h3>' + esc(t('appr_title')) + ' <span class="op' + (req.hw ? ' hw' : '') + '">' + esc(req.hw ? t('appr_hw_op') : (labels[req.op] || req.op)) + '</span></h3>' +
       (pth ? '<div class="pth">' + esc(pth) + '</div>' : '') + bodyHtml +
       '<div class="btns"><button class="deny" id="ap-deny">' + esc(t('appr_deny')) + '</button><button class="allow" id="ap-allow">' + esc(t('appr_allow')) + '</button></div>';
     $('ovl').classList.add('show');
@@ -225,14 +240,31 @@ async function rebuildRuntime() {
               return webllm.CreateMLCEngine(modelId, { initProgressCallback: opts && opts.initProgressCallback });
             };
             out.push({ tier: 'local-webgpu', engine: we.makeWebLLMEngine({ createEngine, modelId: r.model }) });
+          } else if (r.id === 'wasm') {
+            // F3: the CPU rung. The wllama-adapter bridges the vendored wllama's createCompletion to the
+            // createChatCompletion shape wasm-engine expects; the model loads from the shared cache.
+            const [ws, ad] = [await import('/apps/anima/forge/wasm-engine.js'), await import('./wllama-adapter.js')];
+            out.push({ tier: 'local-wasm', engine: ws.makeWasmEngine({ createEngine: ad.makeWllamaCreateEngine(ad.browserLoadWllama), modelId: r.model }) });
           }
         } catch { /* a missing vendor lib = this rung declines; the cascade moves on */ }
       }
       return out.filter((x) => x && x.engine);
     },
     grammar: await import('/apps/anima/forge/grammar.js').catch(() => null),
+    // F3 grounded veto: the local loop's code writes go through capguard with the SAME hardware grant
+    // the tools use, so a weak model cannot write os.hw.* code the app was not granted (F2's veto),
+    // and dangerous patterns (eval, import) block too. Injected → the loop stays pure/testable.
+    verify: async ({ code }) => {
+      try {
+        const cg = await import('/apps/anima/forge/capguard.js');
+        const vf = await import('/apps/anima/forge/verify.js');
+        const granted = (await loadHwPerms()).includes('device.ir') || (await loadHwPerms()).includes('device.gpio') || (await loadHwPerms()).includes('net.wifi') ? ['hw'] : [];
+        const assessed = cg.assess(code, { granted });
+        return vf.combineVerdict({ capguard: assessed });
+      } catch { return { verdict: 'pass' }; }
+    },
   };
-  rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active, t, local: local.grammar ? local : null });
+  rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active, t, local: local.grammar ? local : null, hwPerms: await loadHwPerms() });
   $('model-line').textContent = modelLine();
 }
 

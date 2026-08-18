@@ -146,5 +146,7 @@
   "eng_retrying": "riconnessione… tentativo {n}",
   "ready_local": "Nessuna chiave cloud: giro sul modello locale installato. Le azioni distruttive chiedono sempre conferma.",
   "gate_local": "Usa un modello locale",
-  "eng_wasm_soon": "Il motore CPU arriva con un prossimo aggiornamento: il modello installato è già pronto e condiviso con ANIMA Forge."
+  "eng_wasm_soon": "Il motore CPU arriva con un prossimo aggiornamento: il modello installato è già pronto e condiviso con ANIMA Forge.",
+  "appr_hw": "Azione HARDWARE sul Cardputer — muove il mondo fisico, non annullabile.",
+  "appr_hw_op": "hardware"
 }
