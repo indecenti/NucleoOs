@@ -213,6 +213,7 @@
         "system.notify",
         "device.keyboard",
         "device.display",
+        "device.gpio",
         "device.ir",
         "device.mic",
         "device.audio",

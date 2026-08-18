@@ -56,7 +56,12 @@ test('capguard reports hardware actuation and over-privilege', () => {
   assert.ok(kinds.includes('hardware-actuation'));
   const a = assess('await os.hw.ir.tvbgone()', { granted: ['fs.read'] });
   assert.ok(a.over.includes('hw'), 'hw used but not granted → over-privilege');
-  assert.equal(a.severity, 'warn');
+  // F2 (2026-08-18): ungranted hardware actuation is now a hard BLOCK, not a warning — it acts on the
+  // room and cannot be contained by the sandbox the way an over-reaching fs read can.
+  assert.equal(a.severity, 'block');
+  assert.equal(a.hwOverreach, true);
+  // a NON-hardware over-reach stays a warning (the block is specific to os.hw)
+  assert.equal(assess('os.notify("hi")', { granted: [] }).severity, 'warn');
 });
 
 test('capguard blocks BOTH ways to pull in foreign code', () => {

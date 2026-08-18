@@ -146,5 +146,7 @@
   "eng_retrying": "reconnecting… attempt {n}",
   "ready_local": "No cloud key: running on the installed local model. Destructive actions still ask for confirmation.",
   "gate_local": "Use a local model",
-  "eng_wasm_soon": "The CPU engine lands in an upcoming update: the installed model is already prepared and shared with ANIMA Forge."
+  "eng_wasm_soon": "The CPU engine lands in an upcoming update: the installed model is already prepared and shared with ANIMA Forge.",
+  "appr_hw": "HARDWARE action on the Cardputer — it moves the physical world, not undoable.",
+  "appr_hw_op": "hardware"
 }

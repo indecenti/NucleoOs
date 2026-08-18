@@ -64,8 +64,12 @@ export function assess(code, { granted = null, allowNetwork = false } = {}) {
   const capabilities = inferCapabilities(code);
   const dangers = scanDangers(code, { allowNetwork });
   const over = Array.isArray(granted) ? capabilities.filter((c) => !granted.includes(c)) : [];
+  // F2: hardware ACTUATION the app was not granted is a BLOCK, not a warning. Over-reaching the
+  // filesystem is contained by the sandbox; firing the IR blaster or driving a GPIO pin is not — it
+  // acts on the room. So `hw` in `over` (granted was provided AND does not include it) vetoes.
+  const hwOverreach = Array.isArray(granted) && over.includes('hw');
   let severity = 'ok';
-  if (dangers.some((d) => d.level === 'block')) severity = 'block';
+  if (dangers.some((d) => d.level === 'block') || hwOverreach) severity = 'block';
   else if (over.length || dangers.length) severity = 'warn';
-  return { capabilities, over, dangers, severity };
+  return { capabilities, over, dangers, severity, hwOverreach };
 }

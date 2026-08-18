@@ -146,5 +146,7 @@
   "eng_retrying": "reconnexion… tentative {n}",
   "ready_local": "Pas de clé cloud : j’utilise le modèle local installé. Les actions destructives demandent toujours confirmation.",
   "gate_local": "Utiliser un modèle local",
-  "eng_wasm_soon": "Le moteur CPU arrive dans une prochaine mise à jour : le modèle installé est déjà prêt et partagé avec ANIMA Forge."
+  "eng_wasm_soon": "Le moteur CPU arrive dans une prochaine mise à jour : le modèle installé est déjà prêt et partagé avec ANIMA Forge.",
+  "appr_hw": "Action MATÉRIELLE sur le Cardputer — elle agit sur le monde physique, non annulable.",
+  "appr_hw_op": "matériel"
 }

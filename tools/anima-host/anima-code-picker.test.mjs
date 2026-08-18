@@ -76,22 +76,19 @@ test('a stored choice is honored only while its rung is ready and runnable', () 
   assert.equal(pickEngine('webgpu', rungRows(caps, CACHED, true)), 'webgpu');
   assert.equal(pickEngine('webgpu', rungRows(caps, {}, true)), 'auto', 'model gone → back to auto');
   assert.equal(pickEngine('webgpu', rungRows({ webgpu: false, wasm: true }, CACHED, true)), 'auto', 'GPU gone → back to auto');
-  assert.equal(pickEngine('wasm', rungRows(caps, CACHED, true)), 'auto', 'wasm is not runnable until F3 — an explicit pick must not stick');
+  assert.equal(pickEngine('wasm', rungRows(caps, CACHED, true)), 'wasm', 'wasm is runnable since F3 — an explicit cached pick sticks');
 });
 
-test('the runnable ladder: webgpu only (wasm excluded until its adapter exists, and it says why)', () => {
+test('the runnable ladder: GPU first, then CPU — both runnable since F3 landed the wllama adapter', () => {
   const rows = rungRows({ webgpu: true, wasm: true, online: true }, CACHED, true);
-  assert.deepEqual(localRungOrder(rows).map((r) => r.id), ['webgpu']);
-  const w = rows.find((r) => r.id === 'wasm');
-  assert.equal(w.runnable, false);
-  assert.equal(w.noteKey, 'eng_wasm_soon');
-  assert.equal(w.state, 'ready', 'the INSTALL is genuinely done — only the run wiring is pending');
+  assert.deepEqual(localRungOrder(rows).map((r) => r.id), ['webgpu', 'wasm']);
+  assert.equal(rows.find((r) => r.id === 'wasm').runnable, true);
 });
 
 test('an explicit choice narrows the ladder to that rung alone', () => {
   const rows = rungRows({ webgpu: true, wasm: true, online: true }, CACHED, true);
   assert.deepEqual(localRungOrder(rows, 'webgpu').map((r) => r.id), ['webgpu']);
-  assert.deepEqual(localRungOrder(rows, 'wasm').map((r) => r.id), [], 'a non-runnable pick yields an empty ladder, never a fake engine');
+  assert.deepEqual(localRungOrder(rows, 'wasm').map((r) => r.id), ['wasm'], 'an explicit wasm pick narrows to the CPU rung alone');
 });
 
 test('the persisted-choice key is stable', () => { assert.equal(ENGINE_LS, 'agent.engine'); });

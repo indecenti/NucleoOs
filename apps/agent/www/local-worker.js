@@ -77,7 +77,7 @@ export function flattenMessages(messages) {
 //   opts: { task | messages, system?, root?, maxSteps?, maxActions?, onEvent? }
 // Returns { text, steps } on success, { declined:true, reason, steps } on an honest decline.
 export async function runWorkerLocal(deps, opts = {}) {
-  const { engine, execTool, grammar } = deps || {};
+  const { engine, execTool, grammar, verify = null } = deps || {};
   if (!engine || !execTool || !grammar) throw new Error('local-worker: engine, execTool and grammar are required');
   const root = opts.root || '/data/ws';
   const maxSteps = Math.min(20, (opts.maxSteps | 0) > 0 ? (opts.maxSteps | 0) : 8);
@@ -123,6 +123,17 @@ export async function runWorkerLocal(deps, opts = {}) {
       if (a.op === 'ask')    return { text: String(a.question || ''), asked: true, steps: step + 1 };
       const m = OP_TO_TOOL[a.op];
       if (!m) return { declined: true, reason: 'unmapped-op:' + a.op, steps: step + 1 };   // schema and map drifted — a bug, surfaced honestly
+      // F3 — grounded veto: a weak local model's WRITE of code is checked before it lands (capguard +
+      // any device claim check the caller injects). A veto does NOT execute; the reason re-enters the
+      // loop so the model repairs itself, exactly as the WebGPU forge loop does. Injected → pure/testable.
+      if (verify && (a.op === 'write' || a.op === 'append' || a.op === 'edit') && (a.content || a.new)) {
+        const v = await verify({ op: a.op, path: a.path, code: a.content || a.new });
+        if (v && v.verdict === 'veto') {
+          onEvent({ type: 'veto', reason: v.reasons, step });
+          results.push('[' + a.op + ' VETOED]\n' + (Array.isArray(v.reasons) ? v.reasons.join('; ') : String(v.reasons || 'blocked')) + '\nFix the code and try again.');
+          continue;
+        }
+      }
       const res = await execTool(m.tool, m.map(a), 'local:' + step);
       results.push('[' + a.op + (res.is_error ? ' ERROR' : '') + ']\n' + (res.content || ''));
     }
