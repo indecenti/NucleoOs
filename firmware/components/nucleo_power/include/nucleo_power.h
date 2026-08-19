@@ -22,6 +22,13 @@ void nucleo_power_init(void);
 // and no charge-detect line this is a coarse estimate by nature (and reads ~full on USB).
 
 // True once the ADC channel has been brought up successfully and at least one reading exists.
+// Pin the CPU at its maximum frequency for a real-time job (the native emulator, a decoder).
+// DFS otherwise ranges 80-240 MHz, and 80 MHz is a THIRD of the budget a 60 fps emulator needs —
+// the scaler cannot know that a tight render loop is latency-critical rather than idle. Reference
+// counted, so nested callers are safe; end() must pair with begin().
+void nucleo_power_perf_begin(void);
+void nucleo_power_perf_end(void);
+
 bool nucleo_power_battery_available(void);
 
 // Smoothed state-of-charge, 0..100. Returns -1 when no battery reading is available yet
