@@ -7,6 +7,7 @@
 #include "nucleo_board.h"
 #include "nucleo_audio.h"   // raw PCM sink: the APU produces its own samples, we hand them to I2S
 #include "esp_log.h"
+#include "esp_attr.h"       // IRAM_ATTR: keep the innermost callbacks out of the flash cache
 #include "esp_heap_caps.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,8 +17,11 @@
 #define ENABLE_LCD   1
 #define ENABLE_SOUND 1     // Peanut-GB ships no APU: it calls audio_read/audio_write, which we route
                            // to the vendored minigb_apu (MIT, context-based, ~2.2 KB per frame).
-#define PEANUT_GB_HIGH_LCD_ACCURACY 1   // sprite priority/window edge cases; costs a little CPU, and
-                                        // without it a visible minority of games render subtly wrong.
+// OFF deliberately. It re-sorts sprites by X coordinate on every scanline to reproduce the DMG's
+// priority rule, which is 144 sorts per frame for a difference most games never show. On a board
+// with a 16.7 ms budget and no cycles to spare that is the wrong trade: correctness nobody sees,
+// paid for with frames everybody feels.
+#define PEANUT_GB_HIGH_LCD_ACCURACY 0
 
 #ifndef MINIGB_APU_AUDIO_FORMAT_S16SYS
 # define MINIGB_APU_AUDIO_FORMAT_S16SYS 1   // 16-bit signed: exactly what the I2S sink takes
@@ -32,8 +36,43 @@ static void    audio_write(const uint16_t addr, const uint8_t val);
 
 static const char *TAG = "gb";
 
-#define ROM_BANK_BYTES 0x4000u          // 16 KB — the Game Boy's own bank granularity
 #define CART_RAM_MAX   (32 * 1024)      // largest battery RAM we host (MBC3/5 4x8 KB)
+
+// ROM page cache. A cartridge rarely fits in RAM here (a 128 KB ROM would need 152 KB contiguous on
+// a board whose largest block is ~60 KB), so the ROM is served from the SD card and this cache is
+// what stands between the emulator and a 2-4 ms card read on the critical path.
+//
+// SMALL PAGES, MANY OF THEM. That is the whole design, and it was measured, not guessed — the host
+// gate (tools/emu-host/gb_cache_test.c) sweeps the geometry against real cartridges. At a FIXED 40 KB
+// budget, misses per frame on The Legend of Zelda / Metroid II / Kirby's Block Ball:
+//
+//     8 KB x  5 slots     6.0   5.5  12.9      <- unusable
+//     4 KB x 10 slots     6.4   3.7   4.2      <- the first design; ~19 ms/frame of SD on Zelda
+//     2 KB x 20 slots     0.1   0.4   3.0
+//     1 KB x 40 slots     0.1   0.1   0.2      <- chosen
+//
+// Same RAM, sixty times fewer reads. A game's working set is SCATTERED — a few hundred live bytes in
+// each of many places — so a big page spends most of its bulk on bytes nobody asked for, and a budget
+// divided into few large pages covers few regions. Divide it finely and it covers many. Going finer
+// still (512 B) buys nothing and doubles the bookkeeping; 1 KB is also two whole SD sectors, so a
+// refill is one aligned FATFS read.
+//
+// Fully associative with LRU. Direct mapping would collide bank 0 — the vectors and the main loop,
+// live every single frame — against every bank whose number shares its low bits.
+#ifndef PG_BITS
+# define PG_BITS  10                    // 1 KB pages
+#endif
+#ifndef PG_SLOTS
+# define PG_SLOTS 40                    // 40 KB total
+#endif
+#define PG_SIZE   (1u << PG_BITS)
+#define PG_MIN    8                     // fewer than this thrashes; refuse rather than crawl
+#define PG_EMPTY  0xFFFFFFFFu
+// Lookup accelerator. With forty slots a linear scan runs on every page CHANGE, not just every miss,
+// and page changes are frequent by design. This is a direct-mapped hint from tag to slot: one probe
+// answers almost every lookup, and because the hint is always VERIFIED against the slot's real tag a
+// stale or colliding entry costs a fallback scan rather than a wrong byte.
+#define PG_HINT   256                   // 256 bytes, indexed by the tag's low bits
 
 // ── session state ───────────────────────────────────────────────────────────────────────────────
 // One pointer, heap-allocated on open. Nothing here is static storage: while the app is closed this
@@ -47,12 +86,17 @@ typedef struct {
     FILE         *fp;                   // open ROM on the SD card
     uint32_t      rom_bytes;
     uint8_t      *rom_all;              // whole ROM, when it fits (fast path: no SD traffic at all)
-    uint8_t      *bank0;                // else: the fixed first 16 KB, always resident
-    uint8_t      *window;               // ...plus ONE cached switchable bank
-    uint32_t      window_bank;          // which bank `window` holds
-    uint8_t      *page;                 // last resort: ONE 4 KB page, direct-mapped over the whole ROM
-    uint32_t      page_no;              // which 4 KB page `page` holds
-    uint32_t      bank_misses;
+    // Page cache, used whenever the whole ROM will not fit. See rom_read for why it is pages and
+    // not banks.
+    uint8_t      *pg[PG_SLOTS];         // 4 KB each, allocated as many as the heap allows
+    uint32_t      pg_tag[PG_SLOTS];     // which 4 KB page each slot holds (PG_EMPTY = none)
+    uint32_t      pg_age[PG_SLOTS];     // LRU stamp
+    int           pg_n;                 // slots actually allocated
+    uint32_t      pg_clock;             // monotonic stamp source
+    int8_t        hint[PG_HINT];        // tag -> slot guess, always verified before use
+    uint32_t      cur_tag;              // fast path: the page the last read hit...
+    uint8_t      *cur_buf;              // ...and its buffer
+    uint32_t      bank_misses;          // SD refills since open
 
     uint8_t      *cart_ram;
     size_t        cart_ram_bytes;
@@ -74,7 +118,12 @@ static gb_session_t *S = NULL;
 // Peanut-GB passes a FLAT offset into the ROM image (it resolves banking itself), so this is a pure
 // "give me byte N of the file" service. It is called for EVERY instruction fetch, so the resident
 // paths are branch-light and the SD path is the exception, not the rule.
-static uint8_t rom_read(struct gb_s *gb, const uint_fast32_t addr)
+// IRAM. This runs on EVERY instruction fetch and every data read, several million times a second.
+// Left in flash it is fetched through a 16 KB instruction cache that the core's own dispatch switch
+// is already thrashing, so a fair share of those calls stall on an 80 MHz DIO flash read. It is a
+// few hundred bytes; buying them out of the cache is the cheapest speed in the whole emulator. Same
+// reasoning for the other four callbacks below.
+static IRAM_ATTR uint8_t rom_read(struct gb_s *gb, const uint_fast32_t addr)
 {
     // Context comes from the core's own private pointer, NEVER from the module global: gb_init()
     // calls this to read the cartridge header before open() has published S.
@@ -83,58 +132,72 @@ static uint8_t rom_read(struct gb_s *gb, const uint_fast32_t addr)
 
     if (s->rom_all) return s->rom_all[addr];            // fast path: whole ROM in RAM
 
-    // Tier 3: a single 4 KB page. Slower than the bank cache (bank 0 is no longer pinned, so hot code
-    // and far data can fight over the one page) but it needs 4 KB instead of 32, which is the
-    // difference between the cartridge starting and not starting on a tight heap.
-    if (s->page) {
-        uint32_t pg = addr >> 12;
-        if (pg != s->page_no) {
-            if (fseek(s->fp, (long)(pg << 12), SEEK_SET) != 0) return 0xFF;
-            size_t want = 4096;
-            if ((pg << 12) + want > s->rom_bytes) want = s->rom_bytes - (pg << 12);
-            size_t got = fread(s->page, 1, want, s->fp);
-            if (got != want) return 0xFF;
-            if (want < 4096) memset(s->page + want, 0xFF, 4096 - want);
-            s->page_no = pg;
-            s->bank_misses++;
+    // FAST PATH — one shift and one compare. Consecutive fetches almost always land in the page the
+    // previous one did, so this is what the vast majority of reads cost.
+    uint32_t tag = (uint32_t)(addr >> PG_BITS);
+    if (tag == s->cur_tag) return s->cur_buf[addr & (PG_SIZE - 1)];
+
+    // One probe through the hint table answers almost every page change. The tag comparison is what
+    // makes it safe: a stale hint simply fails it and falls through to the scan below.
+    int h = (int)(tag & (PG_HINT - 1));
+    int g = s->hint[h];
+    if (g >= 0 && g < s->pg_n && s->pg_tag[g] == tag) {
+        s->pg_age[g] = ++s->pg_clock;
+        s->cur_tag = tag; s->cur_buf = s->pg[g];
+        return s->pg[g][addr & (PG_SIZE - 1)];
+    }
+
+    // Hint missed (stale, or two live tags share the low bits). Scan, and re-point the hint.
+    for (int i = 0; i < s->pg_n; i++) {
+        if (s->pg_tag[i] == tag) {
+            s->pg_age[i] = ++s->pg_clock;
+            s->hint[h] = (int8_t)i;
+            s->cur_tag = tag; s->cur_buf = s->pg[i];
+            return s->pg[i][addr & (PG_SIZE - 1)];
         }
-        return s->page[addr & 0xFFF];
     }
 
-    if (addr < ROM_BANK_BYTES) return s->bank0[addr];   // fixed bank, always resident
-
-    uint32_t bank = (uint32_t)(addr / ROM_BANK_BYTES);
-    if (bank != s->window_bank) {
-        // Miss: pull the 16 KB bank in. Banks switch rarely inside a frame for most games, but a
-        // bank-thrashing title will feel it — hence the resident fast path above, and the stats.
-        if (fseek(s->fp, (long)(bank * ROM_BANK_BYTES), SEEK_SET) != 0) return 0xFF;
-        size_t want = ROM_BANK_BYTES;
-        if (bank * ROM_BANK_BYTES + want > s->rom_bytes) want = s->rom_bytes - bank * ROM_BANK_BYTES;
-        if (fread(s->window, 1, want, s->fp) != want) return 0xFF;
-        s->window_bank = bank;
-        s->bank_misses++;
+    // Miss: evict the least recently used slot and refill it from the card.
+    int v = 0;
+    for (int i = 1; i < s->pg_n; i++) if (s->pg_age[i] < s->pg_age[v]) v = i;
+    uint32_t off = tag << PG_BITS;
+    if (fseek(s->fp, (long)off, SEEK_SET) != 0) return 0xFF;
+    size_t want = PG_SIZE;
+    if (off + want > s->rom_bytes) want = s->rom_bytes - off;
+    if (fread(s->pg[v], 1, want, s->fp) != want) {
+        // The slot now holds a half-read page. Drop it, and drop the fast-path shortcut too if it
+        // happened to point here — a stale cur_buf would serve that garbage without a tag check.
+        s->pg_tag[v] = PG_EMPTY;
+        if (s->cur_buf == s->pg[v]) { s->cur_tag = PG_EMPTY; s->cur_buf = NULL; }
+        return 0xFF;
     }
-    return s->window[addr - s->window_bank * ROM_BANK_BYTES];
+    if (want < PG_SIZE) memset(s->pg[v] + want, 0xFF, PG_SIZE - want);
+    s->pg_tag[v] = tag;
+    s->pg_age[v] = ++s->pg_clock;
+    s->hint[h] = (int8_t)v;
+    s->bank_misses++;
+    s->cur_tag = tag; s->cur_buf = s->pg[v];
+    return s->pg[v][addr & (PG_SIZE - 1)];
 }
 
 // APU bridge. Peanut-GB calls these for every read/write in the 0xFF10-0xFF3F sound range.
-static uint8_t audio_read(const uint16_t addr)
+static IRAM_ATTR uint8_t audio_read(const uint16_t addr)
 {
     return S ? minigb_apu_audio_read(&S->apu, addr) : 0xFF;
 }
-static void audio_write(const uint16_t addr, const uint8_t val)
+static IRAM_ATTR void audio_write(const uint16_t addr, const uint8_t val)
 {
     if (S) minigb_apu_audio_write(&S->apu, addr, val);
 }
 
-static uint8_t cart_ram_read(struct gb_s *gb, const uint_fast32_t addr)
+static IRAM_ATTR uint8_t cart_ram_read(struct gb_s *gb, const uint_fast32_t addr)
 {
     gb_session_t *s = (gb_session_t *)gb->direct.priv;
     if (!s || !s->cart_ram || addr >= s->cart_ram_bytes) return 0xFF;
     return s->cart_ram[addr];
 }
 
-static void cart_ram_write(struct gb_s *gb, const uint_fast32_t addr, const uint8_t val)
+static IRAM_ATTR void cart_ram_write(struct gb_s *gb, const uint_fast32_t addr, const uint8_t val)
 {
     gb_session_t *s = (gb_session_t *)gb->direct.priv;
     if (!s || !s->cart_ram || addr >= s->cart_ram_bytes) return;
@@ -150,7 +213,7 @@ static void gb_err(struct gb_s *gb, const enum gb_error_e err, const uint16_t ad
 }
 
 // ── scanline out ────────────────────────────────────────────────────────────────────────────────
-static void lcd_line(struct gb_s *gb, const uint8_t *pixels, const uint_fast8_t line)
+static IRAM_ATTR void lcd_line(struct gb_s *gb, const uint8_t *pixels, const uint_fast8_t line)
 {
     gb_session_t *s = (gb_session_t *)gb->direct.priv;
     if (s && s->on_line) s->on_line(pixels, (int)line, s->user);
@@ -184,7 +247,8 @@ static void session_free(gb_session_t *s)
 {
     if (!s) return;
     if (s->fp) fclose(s->fp);
-    free(s->rom_all); free(s->bank0); free(s->window); free(s->page); free(s->cart_ram);
+    for (int i = 0; i < s->pg_n; i++) free(s->pg[i]);
+    free(s->rom_all); free(s->cart_ram);
     free(s);
 }
 
@@ -219,30 +283,26 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
         }
     }
     if (!s->rom_all) {
-        // Tier 2: pin the fixed bank and cache one switchable bank — 32 KB, the fastest layout short
-        // of holding the whole cartridge.
-        s->bank0  = (uint8_t *)malloc(ROM_BANK_BYTES);
-        s->window = (uint8_t *)malloc(ROM_BANK_BYTES);
-        if (s->bank0 && s->window) {
-            s->heap_bytes += 2 * ROM_BANK_BYTES;
-            if (fread(s->bank0, 1, ROM_BANK_BYTES, s->fp) != ROM_BANK_BYTES) { session_free(s); return ESP_FAIL; }
-            s->window_bank = 0xFFFFFFFFu;   // 0 is a real bank, so it cannot be the "nothing cached" sentinel
-        } else {
-            // Tier 3: 32 KB was not there. Rather than refuse to start — which is what the user
-            // actually sees, a game that simply does not launch — fall back to ONE 4 KB page. It is
-            // slower, and the stats say so, but a cartridge that runs beats a cartridge that does not.
-            free(s->bank0); free(s->window); s->bank0 = s->window = NULL;
-            s->page = (uint8_t *)malloc(4096);
-            if (!s->page) {
-                ESP_LOGE(TAG, "no RAM for even a 4 KB ROM page (largest %u B)",
-                         (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
-                session_free(s);
-                return ESP_ERR_NO_MEM;
-            }
-            s->heap_bytes += 4096;
-            s->page_no = 0xFFFFFFFFu;
-            ESP_LOGW(TAG, "ROM cache degraded to a single 4 KB page — expect slower loading");
+        // Take as many 4 KB pages as the heap will give, keeping a floor of headroom for the app's
+        // own buffers. More slots means fewer SD refills, and the refills that remain are small.
+        s->cur_tag = PG_EMPTY;
+        for (int i = 0; i < PG_SLOTS; i++) s->pg_tag[i] = PG_EMPTY;
+        memset(s->hint, -1, sizeof s->hint);
+        const size_t KEEP = 12 * 1024;                     // leave room for the app's band buffer etc.
+        for (int i = 0; i < PG_SLOTS; i++) {
+            if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < PG_SIZE + KEEP) break;
+            uint8_t *b = (uint8_t *)malloc(PG_SIZE);
+            if (!b) break;
+            s->pg[s->pg_n++] = b;
+            s->heap_bytes += PG_SIZE;
         }
+        if (s->pg_n < PG_MIN) {
+            ESP_LOGE(TAG, "only %d ROM pages fit (need %d) — largest block %u B",
+                     s->pg_n, PG_MIN, (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+            session_free(s);
+            return ESP_ERR_NO_MEM;
+        }
+        ESP_LOGI(TAG, "ROM page cache: %d x %u B", s->pg_n, (unsigned)PG_SIZE);
     }
 
     // Publish the session BEFORE init: the APU shims (audio_read/audio_write) are bare functions with
@@ -288,7 +348,7 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
 
     ESP_LOGI(TAG, "'%s' %uKB %s | heap %u B | largest was %u B | sound %s",
              s->title, (unsigned)(s->rom_bytes / 1024),
-             s->rom_all ? "resident" : (s->page ? "4 KB page cache" : "banked from SD"),
+             s->rom_all ? "resident" : "paged from SD",
              (unsigned)s->heap_bytes, (unsigned)largest, s->sound ? "on" : "off");
     return ESP_OK;
 }
@@ -344,7 +404,8 @@ void nucleo_gb_get_stats(nucleo_gb_stats_t *out)
     out->heap_bytes   = S->heap_bytes;
     out->rom_bytes    = S->rom_bytes;
     out->rom_resident = (S->rom_all != NULL);
-    out->rom_paged    = (S->page != NULL);
+    out->rom_paged    = (S->rom_all == NULL);
+    out->rom_pages    = S->pg_n;
     out->bank_misses  = S->bank_misses;
     out->frames       = S->frames;
 }

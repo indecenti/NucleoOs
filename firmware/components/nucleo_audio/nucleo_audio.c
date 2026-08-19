@@ -411,6 +411,10 @@ static const uint8_t s_band_sh[NUCLEO_AUDIO_BANDS_N] = { 7, 6, 5, 5, 5, 5 };
 static atomic_int s_band[NUCLEO_AUDIO_BANDS_N];
 static uint8_t  s_scope[NUCLEO_AUDIO_SCOPE_N];       // peak history ring, one entry per write
 static uint8_t  s_scope_head = 0;                    // next write position
+// Demand gate: set by any reader, cleared once nobody has asked for a while. Costs one atomic read
+// per buffer instead of a full analysis pass when no meter is on screen.
+static atomic_bool s_meter_wanted = false;
+static atomic_int  s_meter_idle = 0;
 
 static inline int scale8(int32_t v, int sh) { int32_t t = v >> sh; return t > 255 ? 255 : (int)t; }
 static inline int32_t iabs32(int32_t v) { return v < 0 ? -v : v; }
@@ -437,10 +441,13 @@ static void analyse_pcm(const int16_t *pcm, size_t nsamp)
         atomic_store(&s_band[b], scale8(mag[b], s_band_sh[b]));
     s_scope[s_scope_head] = (uint8_t)scale8(pk, 7);
     s_scope_head = (uint8_t)((s_scope_head + 1) % NUCLEO_AUDIO_SCOPE_N);
+    // ~2 s of buffers with no reader -> stop paying for the analysis until one comes back.
+    if (atomic_fetch_add(&s_meter_idle, 1) > 80) atomic_store(&s_meter_wanted, false);
 }
 
 int nucleo_audio_bands(uint8_t *out, int n)
 {
+    atomic_store(&s_meter_wanted, true); atomic_store(&s_meter_idle, 0);   // a reader exists: keep measuring
     if (!out || n <= 0) return 0;
     if (n > NUCLEO_AUDIO_BANDS_N) n = NUCLEO_AUDIO_BANDS_N;
     bool live = atomic_load(&s_playing) && !atomic_load(&s_paused) && !atomic_load(&s_muted);
@@ -450,6 +457,7 @@ int nucleo_audio_bands(uint8_t *out, int n)
 
 int nucleo_audio_scope(uint8_t *out, int n)
 {
+    atomic_store(&s_meter_wanted, true); atomic_store(&s_meter_idle, 0);
     if (!out || n <= 0) return 0;
     if (n > NUCLEO_AUDIO_SCOPE_N) n = NUCLEO_AUDIO_SCOPE_N;
     // Unroll the ring oldest-first so the caller can plot left-to-right without knowing about it.
@@ -464,7 +472,12 @@ int nucleo_audio_scope(uint8_t *out, int n)
 esp_err_t nucleo_audio_i2s_write(const int16_t *pcm, size_t bytes)
 {
     // Analyse BEFORE the write: the buffer is in cache right now, and the write blocks on DMA.
-    if (pcm && bytes >= sizeof(int16_t)) analyse_pcm(pcm, bytes / sizeof(int16_t));
+    // BUT only if someone is actually going to look. The meter runs five one-pole filters over a
+    // quarter of every buffer; that is free when a music visualiser is on screen and pure waste
+    // inside an emulator's frame loop, which is the one place the CPU budget is already spent.
+    // The gate self-clears: any reader re-arms it, so a UI that starts mid-track still gets bars.
+    if (atomic_load(&s_meter_wanted) && pcm && bytes >= sizeof(int16_t))
+        analyse_pcm(pcm, bytes / sizeof(int16_t));
     i2s_lock();
     esp_err_t r = i2s_write_locked(pcm, bytes);
     i2s_unlock();

@@ -29,6 +29,8 @@
 #include "nucleo_board.h"
 #include "nucleo_exclusive.h"
 #include "nucleo_power.h"
+#include "nucleo_setup.h"
+#include "nucleo_ble.h"
 #include "nucleo_theme.h"
 #include "nucleo_i18n.h"
 #include "esp_timer.h"
@@ -84,8 +86,17 @@ static void trace_heap(const char *label)
 #define STATE_JS NUCLEO_SD_MOUNT "/system/config/gbemu.json"
 
 // ── screen mapping ──────────────────────────────────────────────────────────────────────────────
-#define OUT_W 150            // 160 * 15/16
-#define OUT_H 135            // 144 * 15/16 (== the panel height, exactly)
+// NO SCALING HORIZONTALLY. The panel is 240 px wide and the Game Boy is 160, so every column goes to
+// exactly one pixel: native, unfiltered, no interpolation to soften it. (An earlier version dropped
+// every 16th column to make the picture 150 wide. That threw away real detail — thin sprites lost
+// limbs — to solve a problem the panel did not have.)
+//
+// VERTICALLY there is no such luxury: 144 source lines must reach a 135 px panel, and the only
+// alternatives to dropping 9 of them are cropping the picture or letterboxing a screen that is
+// already tiny. Dropping every 16th line is the least destructive of the three, and it is a DROP,
+// not a blend — no averaging, so the remaining pixels stay exactly the colours the PPU produced.
+#define OUT_W 160            // 1:1 with the Game Boy
+#define OUT_H 135            // 144 * 15/16 — forced by the panel height
 #define OUT_X ((240 - OUT_W) / 2)
 #define BAND  15             // output lines buffered before one SPI push; 15 divides 135 evenly
 
@@ -97,14 +108,25 @@ static void trace_heap(const char *label)
 // guess was washed out — its darkest shade was far too light, so black text inside a game rendered
 // as mid-grey and the picture had almost no contrast. The last two exist because this panel is NOT
 // a DMG: it is backlit and vivid, and a high-contrast ramp simply reads better in a bright room.
-#define PAL_COUNT 4
+// There are TWO defensible "original" Game Boy palettes, and on this panel they are not close:
+//
+//   DMG  #E0F8D0 #88C070 #346856 #081820 — what emulators (BGB and nearly all others) have rendered
+//        a Game Boy as for decades. Brighter and mintier, because it was chosen for EMISSIVE screens.
+//   LCD  #9BBC0F #8BAC0F #306230 #0F380F — the literal colours of the DMG's own reflective panel.
+//
+// The second is the more "correct" answer and the worse-looking one here: a reflective LCD is read by
+// ambient light, so those olive greens were never meant to be emitted. Reproduced literally on a
+// backlit ST7789 they come out dark and muddy. DMG is therefore the default and LCD sits next to it,
+// because which one is right depends on the room, not on the datasheet.
+#define PAL_COUNT 5
 static const uint16_t PALETTE[PAL_COUNT][4] = {
-    { 0x9DE1, 0x8D61, 0x3306, 0x09C1 },   // DMG    - the original 1989 green
+    { 0xE7DA, 0x8E0E, 0x334A, 0x08C4 },   // DMG    - the emulator-standard Game Boy green
+    { 0x9DE1, 0x8D61, 0x3306, 0x09C1 },   // LCD    - the literal 1989 panel colours
     { 0xC674, 0x8CAD, 0x4A87, 0x18E3 },   // Pocket - the 1996 grey-green LCD
     { 0xFFFF, 0xAD55, 0x52AA, 0x0000 },   // Mono   - maximum contrast, backlit-friendly
     { 0xFF00, 0xC540, 0x7A00, 0x2100 },   // Amber  - a plasma/VFD look, easy at night
 };
-static const char *const PAL_NAME[PAL_COUNT] = { "DMG", "Pocket", "Mono", "Amber" };
+static const char *const PAL_NAME[PAL_COUNT] = { "DMG", "LCD", "Pocket", "Mono", "Amber" };
 static int s_pal = 0;                     // persisted alongside the resume entry
 static const uint16_t *SHADE = PALETTE[0];
 
@@ -230,9 +252,13 @@ static bool rom_path(const char *name, char *out, size_t n)
 }
 
 // ── the picture ─────────────────────────────────────────────────────────────────────────────────
-// One scanline out of the core: drop every 16th line and every 16th pixel, accumulate BAND output
-// lines, push once. Nine SPI transactions per frame instead of 135 — the difference between the bus
-// being a cost and being the bottleneck.
+// One scanline out of the core: drop every 16th line, map the 160 pixels straight through, accumulate
+// BAND output lines, push once. Nine SPI transactions per frame instead of 135 — the difference
+// between the bus being a cost and being the bottleneck.
+// -O2 for this function alone. nucleo_app is a large component built at -Os like the rest of the
+// firmware, but this is the emulator's per-scanline path: 135 lines x 60 fps, and at -Os the inner
+// copy does not get unrolled. The attribute keeps the exception to the one function that earns it.
+__attribute__((optimize("-O2")))
 static void on_line(const uint8_t *px, int line, void *user)
 {
     (void)user;
@@ -240,17 +266,12 @@ static void on_line(const uint8_t *px, int line, void *user)
     if ((line & 15) == 15) return;
     if (st->out_y >= OUT_H) return;
 
-    // Decimation without a per-pixel branch. We drop exactly every 16th column, so the source is ten
-    // runs of fifteen kept pixels; copying whole runs removes 160 tests and 160 increments per line
-    // and lets the compiler hold the palette in registers. At 135 lines x 60 fps this is the hottest
-    // loop in the app.
+    // A flat 160-entry palette lookup — no strides, no run bookkeeping, no branch. Dropping the
+    // column decimation did not just improve the picture, it made this loop cheaper: a straight
+    // count-up over two contiguous arrays is what the compiler unrolls best, and it is the hottest
+    // loop in the app at 135 lines x 60 fps.
     uint16_t *row = st->band + (size_t)st->band_line * OUT_W;
-    const uint8_t *sp = px;
-    uint16_t *dp = row;
-    for (int run = 0; run < 10; run++) {
-        for (int k = 0; k < 15; k++) dp[k] = SHADE[sp[k] & 3];
-        dp += 15; sp += 16;                       // step over the dropped 16th source pixel
-    }
+    for (int x = 0; x < OUT_W; x++) row[x] = SHADE[px[x] & 3];
 
     if (st->band_line == 0) st->band_y = st->out_y;
     st->band_line++;
@@ -286,7 +307,12 @@ static void fail_box(const char *what)
 static void play(const char *name)
 {
     trace("--- play '%s' ---", name);
-    trace("  solo=%d exclusive=%d", (int)nucleo_anima_solo_active(), (int)nucleo_exclusive_active());
+    // Record what is actually RUNNING, not what we intended: "solo=1 wifi=off" is the only honest
+    // answer to "is the radio really down while I play?", and the heap line proves what it bought.
+    trace("  solo=%d exclusive=%d wifi=%s ble=%d",
+          (int)nucleo_anima_solo_active(), (int)nucleo_exclusive_active(),
+          nucleo_setup_mode() ? nucleo_setup_mode() : "off",
+          (int)nucleo_ble_radio_present());
     trace_heap("at entry");
 
     char path[300];
@@ -328,14 +354,14 @@ static void play(const char *name)
     state_save(name);
 
     nucleo_gb_stats_t stt; nucleo_gb_get_stats(&stt);
+    char cache[24];
+    if (stt.rom_resident) snprintf(cache, sizeof cache, "resident");
+    else                  snprintf(cache, sizeof cache, "%dx4KB-pages", stt.rom_pages);
     trace("  OPEN OK '%s' rom=%uKB cache=%s core-heap=%u", nucleo_gb_title(),
-          (unsigned)(stt.rom_bytes / 1024),
-          stt.rom_resident ? "resident" : (stt.rom_paged ? "4KB-page(degraded)" : "16KB-banks"),
-          (unsigned)stt.heap_bytes);
+          (unsigned)(stt.rom_bytes / 1024), cache, (unsigned)stt.heap_bytes);
     trace_heap("running");
     ESP_LOGI(TAG, "'%s' %uKB %s | core heap %u B | free %u",
-             nucleo_gb_title(), (unsigned)(stt.rom_bytes / 1024),
-             stt.rom_resident ? "resident" : "banked from SD",
+             nucleo_gb_title(), (unsigned)(stt.rom_bytes / 1024), cache,
              (unsigned)stt.heap_bytes, (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
 
     // DFS ranges 80-240 MHz and cannot tell a render loop from an idle launcher; at the floor a frame
@@ -420,11 +446,17 @@ static void play(const char *name)
         // loop owns the CPU, and the watchdog is fed inside it.
         // A frame that overran is NOT chased: catching up only compounds into stutter, and running a
         // touch slow reads better than jerking.
+        // The sleep threshold must be ONE tick plus margin, not two. At two (20 ms) it could never be
+        // reached — a whole frame is 16.75 ms — so the loop never slept, spun the core at 100% for the
+        // entire idle remainder, and starved the IDLE task that feeds the watchdog. One tick is 10 ms,
+        // so 12 ms of slack safely absorbs a 10 ms sleep and leaves the rest to the spin.
+        static const int64_t SLEEP_MIN = (int64_t)portTICK_PERIOD_MS * 1000 + 2000;
         next += FRAME_US;
         for (;;) {
             int64_t slack = next - esp_timer_get_time();
             if (slack <= 200) break;                                   // close enough: start the next frame
-            if (slack > 2 * (int64_t)portTICK_PERIOD_MS * 1000) { vTaskDelay(1); esp_task_wdt_reset(); }
+            if (slack > SLEEP_MIN) vTaskDelay(1);                      // give the core back; IDLE runs
+            esp_task_wdt_reset();                                      // ...and feed the dog either way
         }
         if (esp_timer_get_time() - next > FRAME_US * 4) next = esp_timer_get_time();   // far behind: resync
     }
