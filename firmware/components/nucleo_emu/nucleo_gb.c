@@ -49,7 +49,9 @@ typedef struct {
     uint8_t      *rom_all;              // whole ROM, when it fits (fast path: no SD traffic at all)
     uint8_t      *bank0;                // else: the fixed first 16 KB, always resident
     uint8_t      *window;               // ...plus ONE cached switchable bank
-    uint32_t      window_bank;          // which bank `window` holds (0 = none cached yet)
+    uint32_t      window_bank;          // which bank `window` holds
+    uint8_t      *page;                 // last resort: ONE 4 KB page, direct-mapped over the whole ROM
+    uint32_t      page_no;              // which 4 KB page `page` holds
     uint32_t      bank_misses;
 
     uint8_t      *cart_ram;
@@ -79,6 +81,25 @@ static uint8_t rom_read(struct gb_s *gb, const uint_fast32_t addr)
     if (!s || addr >= s->rom_bytes) return 0xFF;
 
     if (s->rom_all) return s->rom_all[addr];            // fast path: whole ROM in RAM
+
+    // Tier 3: a single 4 KB page. Slower than the bank cache (bank 0 is no longer pinned, so hot code
+    // and far data can fight over the one page) but it needs 4 KB instead of 32, which is the
+    // difference between the cartridge starting and not starting on a tight heap.
+    if (s->page) {
+        uint32_t pg = addr >> 12;
+        if (pg != s->page_no) {
+            if (fseek(s->fp, (long)(pg << 12), SEEK_SET) != 0) return 0xFF;
+            size_t want = 4096;
+            if ((pg << 12) + want > s->rom_bytes) want = s->rom_bytes - (pg << 12);
+            size_t got = fread(s->page, 1, want, s->fp);
+            if (got != want) return 0xFF;
+            if (want < 4096) memset(s->page + want, 0xFF, 4096 - want);
+            s->page_no = pg;
+            s->bank_misses++;
+        }
+        return s->page[addr & 0xFFF];
+    }
+
     if (addr < ROM_BANK_BYTES) return s->bank0[addr];   // fixed bank, always resident
 
     uint32_t bank = (uint32_t)(addr / ROM_BANK_BYTES);
@@ -165,7 +186,7 @@ static void session_free(gb_session_t *s)
 {
     if (!s) return;
     if (s->fp) fclose(s->fp);
-    free(s->rom_all); free(s->bank0); free(s->window); free(s->cart_ram);
+    free(s->rom_all); free(s->bank0); free(s->window); free(s->page); free(s->cart_ram);
     free(s);
 }
 
@@ -200,12 +221,30 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
         }
     }
     if (!s->rom_all) {
+        // Tier 2: pin the fixed bank and cache one switchable bank — 32 KB, the fastest layout short
+        // of holding the whole cartridge.
         s->bank0  = (uint8_t *)malloc(ROM_BANK_BYTES);
         s->window = (uint8_t *)malloc(ROM_BANK_BYTES);
-        if (!s->bank0 || !s->window) { ESP_LOGE(TAG, "no RAM for the ROM cache"); session_free(s); return ESP_ERR_NO_MEM; }
-        s->heap_bytes += 2 * ROM_BANK_BYTES;
-        if (fread(s->bank0, 1, ROM_BANK_BYTES, s->fp) != ROM_BANK_BYTES) { session_free(s); return ESP_FAIL; }
-        s->window_bank = 0xFFFFFFFFu;   // nothing cached yet (0 is a real bank, so it cannot be the sentinel)
+        if (s->bank0 && s->window) {
+            s->heap_bytes += 2 * ROM_BANK_BYTES;
+            if (fread(s->bank0, 1, ROM_BANK_BYTES, s->fp) != ROM_BANK_BYTES) { session_free(s); return ESP_FAIL; }
+            s->window_bank = 0xFFFFFFFFu;   // 0 is a real bank, so it cannot be the "nothing cached" sentinel
+        } else {
+            // Tier 3: 32 KB was not there. Rather than refuse to start — which is what the user
+            // actually sees, a game that simply does not launch — fall back to ONE 4 KB page. It is
+            // slower, and the stats say so, but a cartridge that runs beats a cartridge that does not.
+            free(s->bank0); free(s->window); s->bank0 = s->window = NULL;
+            s->page = (uint8_t *)malloc(4096);
+            if (!s->page) {
+                ESP_LOGE(TAG, "no RAM for even a 4 KB ROM page (largest %u B)",
+                         (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+                session_free(s);
+                return ESP_ERR_NO_MEM;
+            }
+            s->heap_bytes += 4096;
+            s->page_no = 0xFFFFFFFFu;
+            ESP_LOGW(TAG, "ROM cache degraded to a single 4 KB page — expect slower loading");
+        }
     }
 
     enum gb_init_error_e err = gb_init(&s->gb, rom_read, cart_ram_read, cart_ram_write, gb_err, NULL);
@@ -248,7 +287,7 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
 
     ESP_LOGI(TAG, "'%s' %uKB %s | heap %u B | largest was %u B | sound %s",
              s->title, (unsigned)(s->rom_bytes / 1024),
-             s->rom_all ? "resident" : "banked from SD",
+             s->rom_all ? "resident" : (s->page ? "4 KB page cache" : "banked from SD"),
              (unsigned)s->heap_bytes, (unsigned)largest, s->sound ? "on" : "off");
     return ESP_OK;
 }
@@ -304,6 +343,7 @@ void nucleo_gb_get_stats(nucleo_gb_stats_t *out)
     out->heap_bytes   = S->heap_bytes;
     out->rom_bytes    = S->rom_bytes;
     out->rom_resident = (S->rom_all != NULL);
+    out->rom_paged    = (S->page != NULL);
     out->bank_misses  = S->bank_misses;
     out->frames       = S->frames;
 }

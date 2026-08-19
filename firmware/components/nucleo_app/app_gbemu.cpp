@@ -40,6 +40,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <strings.h>
+#include <stdarg.h>
 
 #define BG    THEME_BG
 #define FG    THEME_FG
@@ -52,6 +53,29 @@
 #define AMB   0xFE8C      // content colour: Game Boy Color cart on a DMG core
 
 static const char *TAG = "gbemu";
+
+// ── on-card trace ───────────────────────────────────────────────────────────────────────────────
+// There is NO usable serial console on this device (the USB PHY belongs to TinyUSB), so ESP_LOG
+// reaches nobody. Every launch therefore leaves a breadcrumb on the SD card: pull the card, read
+// /gbemu_trace.txt, and see exactly how far a start got and what the heap looked like at each step.
+// This is the technique that finally explained the silent-video bug — guessing cost days there.
+#define TRACE_PATH NUCLEO_SD_MOUNT "/gbemu_trace.txt"
+static void trace(const char *fmt, ...)
+{
+    FILE *f = fopen(TRACE_PATH, "a");
+    if (!f) return;
+    va_list ap; va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fputs("\n", f);
+    fclose(f);
+}
+static void trace_heap(const char *label)
+{
+    trace("  %-16s free=%u largest=%u", label,
+          (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
+          (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+}
 
 // The library lives where the Arcade web app and firmware provisioning already agree it does.
 #define DIR_GB   NUCLEO_SD_MOUNT "/data/ROMs/gb"
@@ -142,7 +166,12 @@ static void scan_dir(const char *dir, bool mark_gbc)
     DIR *dp = opendir(dir);   // NB: never name a local `d` — app_gfx.h defines `d` as the draw target
     if (!dp) return;
     struct dirent *de;
+    unsigned seen = 0;
     while ((de = readdir(dp)) != NULL) {
+        // This directory holds ~4,700 entries and FATFS walks it over SPI. At roughly a millisecond
+        // each that is several SECONDS in the watchdog-subscribed UI task, which panics the device —
+        // and the scan re-runs on every typed character. Pet the dog while walking.
+        if ((++seen & 63) == 0) esp_task_wdt_reset();
         bool gbc = mark_gbc;
         if (de->d_name[0] == '.' || !is_gb(de->d_name, &gbc)) continue;
         if (!matches(de->d_name, st->filter)) continue;
@@ -208,13 +237,34 @@ static void on_line(const uint8_t *px, int line, void *user)
 }
 
 // ── the run loop ────────────────────────────────────────────────────────────────────────────────
+// Show a failure where the user is actually looking — the middle of the screen — not only in the
+// hint bar, which is easy to miss when nothing else appears to happen.
+static void fail_box(const char *what)
+{
+    int top = nucleo_app_content_top(), ch = nucleo_app_content_height();
+    int y = top + ch / 2 - 24;
+    d.fillRect(8, y, 224, 48, BG);
+    d.drawRoundRect(8, y, 224, 48, 8, AMB);
+    d.setTextSize(1);
+    d.setTextColor(AMB, BG);   d.setCursor(16, y + 8);  d.print(TR("Avvio non riuscito", "Could not start"));
+    d.setTextColor(MUTED, BG); d.setCursor(16, y + 22); d.print(what);
+    d.setTextColor(DIM, BG);   d.setCursor(16, y + 34); d.print("/gbemu_trace.txt");
+    nucleo_app_set_hint(what);
+}
+
 static void play(const char *name)
 {
+    trace("--- play '%s' ---", name);
+    trace("  solo=%d exclusive=%d", (int)nucleo_anima_solo_active(), (int)nucleo_exclusive_active());
+    trace_heap("at entry");
+
     char path[300];
     if (!rom_path(name, path, sizeof path)) {
-        nucleo_app_set_hint(TR("ROM non trovata", "ROM not found"));
+        trace("  FAIL: not found in either ROM folder");
+        fail_box(TR("ROM non trovata", "ROM not found"));
         return;
     }
+    trace("  path=%s", path);
 
     // Hand the 32 KB canvas back BEFORE the core allocates: it is the single biggest contiguous block
     // on the heap, and the ROM cache wants exactly that kind of room.
@@ -222,19 +272,23 @@ static void play(const char *name)
     nucleo_screen_release();
     nucleo_app_set_direct_draw(true);
 
+    trace_heap("canvas released");
     st->band = (uint16_t *)heap_caps_malloc((size_t)OUT_W * BAND * sizeof(uint16_t), MALLOC_CAP_DEFAULT);
     if (!st->band) {
+        trace("  FAIL: band buffer (%u B) alloc failed", (unsigned)((size_t)OUT_W * BAND * 2));
         nucleo_app_set_direct_draw(false);
-        nucleo_app_set_hint(TR("RAM insufficiente per il video", "Not enough RAM for the video"));
+        fail_box(TR("RAM insufficiente (video)", "Not enough RAM (video)"));
         return;
     }
 
     esp_err_t err = nucleo_gb_open(path, on_line, nullptr);
     if (err != ESP_OK) {
+        trace("  FAIL: nucleo_gb_open -> %s", esp_err_to_name(err));
+        trace_heap("after open fail");
         free(st->band); st->band = nullptr;
         nucleo_app_set_direct_draw(false);
-        nucleo_app_set_hint(err == ESP_ERR_NO_MEM ? TR("RAM insufficiente", "Not enough RAM")
-                                                  : TR("ROM non valida", "Invalid ROM"));
+        fail_box(err == ESP_ERR_NO_MEM ? TR("RAM insufficiente (core)", "Not enough RAM (core)")
+                                       : TR("ROM non valida", "Invalid ROM"));
         return;
     }
 
@@ -243,6 +297,11 @@ static void play(const char *name)
     state_save(name);
 
     nucleo_gb_stats_t stt; nucleo_gb_get_stats(&stt);
+    trace("  OPEN OK '%s' rom=%uKB cache=%s core-heap=%u", nucleo_gb_title(),
+          (unsigned)(stt.rom_bytes / 1024),
+          stt.rom_resident ? "resident" : (stt.rom_paged ? "4KB-page(degraded)" : "16KB-banks"),
+          (unsigned)stt.heap_bytes);
+    trace_heap("running");
     ESP_LOGI(TAG, "'%s' %uKB %s | core heap %u B | free %u",
              nucleo_gb_title(), (unsigned)(stt.rom_bytes / 1024),
              stt.rom_resident ? "resident" : "banked from SD",
@@ -311,6 +370,7 @@ static void play(const char *name)
         else if (slack < -FRAME_US * 4) next = esp_timer_get_time();
     }
 
+    trace("  END frames=%u fps=%d", (unsigned)st->fps_frames, st->fps);
     nucleo_gb_close();
     free(st->band); st->band = nullptr;
     nucleo_app_set_direct_draw(false);
@@ -486,8 +546,12 @@ static void enter(void)
     // fresh heap with the radio down. All this has to do is allocate and read the shelf.
     if (!st) st = (EState *)calloc(1, sizeof(EState));
     if (!st) { nucleo_app_set_hint(TR("RAM insufficiente", "Not enough RAM")); return; }
+    trace("=== gbemu enter: solo=%d exclusive=%d ===",
+          (int)nucleo_anima_solo_active(), (int)nucleo_exclusive_active());
+    trace_heap("on enter");
     state_load();
     rescan();
+    trace("  shelf: %d shown of %d", st->n, st->total);
     // Land on the last cartridge played, so "carry on" costs no keystrokes.
     if (st->have_resume) {
         for (int i = 0; i < st->n; i++)
