@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS "nucleo_gb.c" "vendor/minigb_apu.c"
     INCLUDE_DIRS "include"
-    REQUIRES nucleo_board nucleo_audio
+    REQUIRES nucleo_board nucleo_audio esp_timer
 )
 # Peanut-GB and minigb_apu are vendored verbatim. They are mature, widely-used cores written to a
 # different warning budget than this project's: silencing these here keeps the build strict for OUR

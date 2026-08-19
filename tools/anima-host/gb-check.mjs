@@ -84,6 +84,9 @@ const cc2 = spawnSync(GCC, [
   join(ROOT, 'tools', 'emu-host', 'gb_cache_test.c'),
   join(ROOT, 'firmware', 'components', 'nucleo_emu', 'nucleo_gb.c'),
   join(ROOT, 'firmware', 'components', 'nucleo_emu', 'vendor', 'minigb_apu.c'),
+  // nucleo_gb.c times its own frames now, so the harness needs the same monotonic clock the rest of
+  // the host gates use (QueryPerformanceCounter behind the ESP-IDF name).
+  join(ROOT, 'tools', 'anima-host', 'esp_timer_host.c'),
   '-o', cacheExe,
 ], { env, encoding: 'utf8' });
 

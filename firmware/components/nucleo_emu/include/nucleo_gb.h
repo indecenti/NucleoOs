@@ -56,6 +56,24 @@ void nucleo_gb_set_buttons(uint8_t mask);
 // Cartridge title from the ROM header (16 bytes max, NUL-terminated), or "" when closed.
 const char *nucleo_gb_title(void);
 
+// ── speed relief ────────────────────────────────────────────────────────────────────────────────
+// The core's own two levers for displays that cannot keep up, both free of any rendering cost:
+//   frame_skip — render every OTHER frame (the CPU still runs every frame, so timing and input stay
+//                correct; only the picture updates at 30 Hz).
+//   interlace  — render alternate SCANLINES each frame, so a full picture takes two frames.
+// Neither changes emulation accuracy. Off by default: they are relief, not the design.
+void nucleo_gb_set_frameskip(bool on);
+void nucleo_gb_set_interlace(bool on);
+
+// ── save states ─────────────────────────────────────────────────────────────────────────────────
+// The entire console is one struct with no external references except our own callbacks, so a state
+// is a raw dump of it plus the cartridge RAM. Written beside the ROM as <rom>.st<slot>.
+// Loading restores the callbacks from the live session — a state file must never be able to make the
+// emulator jump through a function pointer that came off an SD card.
+esp_err_t nucleo_gb_state_save(int slot);
+esp_err_t nucleo_gb_state_load(int slot);
+bool      nucleo_gb_state_exists(int slot);
+
 // Write cartridge RAM to <rom>.sav now. No-op when the cart has no battery RAM or nothing changed.
 // Called automatically by nucleo_gb_close(); exposed so a long session can checkpoint.
 void nucleo_gb_save(void);
@@ -65,12 +83,18 @@ typedef struct {
     size_t   heap_bytes;     // total allocated by this module right now
     uint32_t rom_bytes;      // ROM file size
     bool     rom_resident;   // true = whole ROM in RAM (no SD traffic while playing)
-    bool     rom_paged;      // true = served from SD through the 4 KB page cache
+    bool     rom_paged;      // true = served from SD through the page cache
     int      rom_pages;      // page-cache slots actually allocated (0 when resident)
     uint32_t bank_misses;    // page-cache misses since open (each is one 4 KB SD read)
     uint32_t frames;         // frames run since open
+    // Where a frame's time actually goes, accumulated in microseconds since the last reset. Measured
+    // rather than inferred: "the emulator is slow" is not actionable until it says WHICH part is.
+    uint32_t us_cpu;         // inside gb_run_frame (CPU + PPU + our scanline callback)
+    uint32_t us_audio;       // producing and pushing one frame of APU samples
 } nucleo_gb_stats_t;
 void nucleo_gb_get_stats(nucleo_gb_stats_t *out);
+// Zero the timing accumulators (and the miss counter) so the next window measures cleanly.
+void nucleo_gb_reset_counters(void);
 
 #ifdef __cplusplus
 }

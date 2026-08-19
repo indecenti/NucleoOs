@@ -13,9 +13,14 @@
 //   and halves the largest block — and an emulator needs no network), and releases the canvas before
 //   opening a ROM. That is what makes a 17 KB core plus a 32 KB ROM cache fit at all.
 //
-// SCREEN — the Game Boy is 160x144, the panel is 240x135. No integer scale fits, so we decimate by
-// exactly 15/16 on BOTH axes (drop every 16th column and every 16th line): 150x135, aspect preserved
-// to within a pixel, and the test is one bitmask instead of a divide per pixel.
+// SCREEN — the Game Boy is 160x144, the panel is 240x135. Horizontally there is nothing to solve:
+// 160 columns fit inside 240, so every column is one pixel, native and unfiltered. Vertically the
+// 144 lines must reach 135, and every 16th is DROPPED (not blended) — see the note above OUT_W.
+//
+// CONTROLS — built from the keyboard's LIVE pressed set, not its key events, so directions can be
+// HELD and two buttons can be down at once. WASD or the printed ; . , / arrows move; K/L = A, J = B;
+// Space = Start, N = Select. TAB held fast-forwards. P cycles the palette, M (or Esc) opens the
+// in-game menu — save state, load state, palette, picture quality, quit.
 //
 // THE SHELF — the library on the card is ~4,700 Game Boy cartridges. Holding that many names in RAM
 // is impossible (4,700 x 64 B = 300 KB), so the browser NEVER holds the whole library: it re-walks
@@ -33,6 +38,8 @@
 #include "nucleo_ble.h"
 #include "nucleo_theme.h"
 #include "nucleo_i18n.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"   // the in-game menu pauses the console with vTaskDelay
 #include "esp_timer.h"
 #include "esp_task_wdt.h"
 #include "esp_heap_caps.h"
@@ -103,31 +110,33 @@ static void trace_heap(const char *label)
 // Four-shade palettes, lightest to darkest. A Game Boy is not theme-able — this is CONTENT, not
 // chrome, so it deliberately does not follow THEME_*.
 //
-// The first two are the real hardware, converted from the panel's actual colours rather than
-// eyeballed: the DMG's #9BBC0F/#8BAC0F/#306230/#0F380F and the Pocket's grey-green LCD. The earlier
-// guess was washed out — its darkest shade was far too light, so black text inside a game rendered
-// as mid-grey and the picture had almost no contrast. The last two exist because this panel is NOT
-// a DMG: it is backlit and vivid, and a high-contrast ramp simply reads better in a bright room.
-// There are TWO defensible "original" Game Boy palettes, and on this panel they are not close:
+// GREEN is the default and it is the Game Boy's own green, CALIBRATED rather than copied.
 //
-//   DMG  #E0F8D0 #88C070 #346856 #081820 — what emulators (BGB and nearly all others) have rendered
-//        a Game Boy as for decades. Brighter and mintier, because it was chosen for EMISSIVE screens.
-//   LCD  #9BBC0F #8BAC0F #306230 #0F380F — the literal colours of the DMG's own reflective panel.
+// There are two defensible "original" palettes and neither transplants cleanly onto this panel:
+//   #9BBC0F #8BAC0F #306230 #0F380F — the literal colours of the DMG's reflective LCD
+//   #E0F8D0 #88C070 #346856 #081820 — what emulators have drawn a Game Boy as for decades
+// The literal set was designed to be read by AMBIENT LIGHT bouncing off a passive panel. Emitted by a
+// backlit ST7789 its two dark shades land near black, so mid-tones stop reading as green at all and
+// the picture goes muddy — which is exactly what "the palette leaves something to be desired" meant.
+// The emulator-standard set solves that by going mint, and stops looking like a Game Boy.
 //
-// The second is the more "correct" answer and the worse-looking one here: a reflective LCD is read by
-// ambient light, so those olive greens were never meant to be emitted. Reproduced literally on a
-// backlit ST7789 they come out dark and muddy. DMG is therefore the default and LCD sits next to it,
-// because which one is right depends on the room, not on the datasheet.
-#define PAL_COUNT 5
+// So GREEN keeps the two light shades EXACTLY as the hardware had them — #9BBC0F is the colour
+// everyone pictures — and lifts only the two dark ones, which is precisely the work ambient light
+// used to do. Shade 1 is nudged down a little at the same time, because the real panel's top two
+// shades are nearly indistinguishable and a 135 px screen cannot afford to waste a whole shade.
+// The result reads as a Game Boy across the whole ramp instead of only at the top of it.
+//
+// Then three alternatives, each earning its place rather than padding a list: the emulator-standard
+// mint, maximum contrast for a bright room, and amber for night.
+#define PAL_COUNT 4
 static const uint16_t PALETTE[PAL_COUNT][4] = {
-    { 0xE7DA, 0x8E0E, 0x334A, 0x08C4 },   // DMG    - the emulator-standard Game Boy green
-    { 0x9DE1, 0x8D61, 0x3306, 0x09C1 },   // LCD    - the literal 1989 panel colours
-    { 0xC674, 0x8CAD, 0x4A87, 0x18E3 },   // Pocket - the 1996 grey-green LCD
-    { 0xFFFF, 0xAD55, 0x52AA, 0x0000 },   // Mono   - maximum contrast, backlit-friendly
+    { 0x9DE1, 0x7CE2, 0x4385, 0x1A23 },   // Green  - #9BBC0F #7D9C10 #43712F #1A4419
+    { 0xE7DA, 0x8E0E, 0x334A, 0x08C4 },   // DMG    - the emulator-standard mint
+    { 0xFFFF, 0xAD55, 0x52AA, 0x0000 },   // Mono   - maximum contrast, bright rooms
     { 0xFF00, 0xC540, 0x7A00, 0x2100 },   // Amber  - a plasma/VFD look, easy at night
 };
-static const char *const PAL_NAME[PAL_COUNT] = { "DMG", "LCD", "Pocket", "Mono", "Amber" };
-static int s_pal = 0;                     // persisted alongside the resume entry
+static const char *const PAL_NAME[PAL_COUNT] = { "Green", "DMG", "Mono", "Amber" };
+static int s_pal = 0;                     // persisted alongside the resume entry; 0 = Green
 static const uint16_t *SHADE = PALETTE[0];
 
 // ── session state (heap on enter, never .bss: the app is closed almost always) ──────────────────
@@ -156,6 +165,14 @@ struct EState {
     uint32_t fps_frames;
     int      fps;
     int64_t  fps_t0;
+    uint32_t us_blit;        // time inside pushImage, accumulated over the measurement window
+    int      ms_cpu, ms_blit, ms_aud;   // last window's breakdown, in tenths of a millisecond
+    bool     turbo;          // TAB held: run unpaced
+    int      relief;         // 0 = full picture, 1 = interlaced, 2 = 30 fps frame-skip
+    bool     menu;           // the in-game menu is open
+    int      msel;           // its selected row
+    char     toast[28];      // transient confirmation ("saved", "loaded")
+    int64_t  toast_until;
 };
 static EState *st = nullptr;
 
@@ -281,11 +298,178 @@ static void on_line(const uint8_t *px, int line, void *user)
         // startWrite/endWrite holds CS and the bus configuration across the push instead of
         // re-arbitrating per call — transaction setup is a real cost when it happens nine times a
         // frame, sixty times a second.
+        int64_t b0 = esp_timer_get_time();
         d.startWrite();
         d.pushImage(OUT_X, st->band_y, OUT_W, st->band_line, st->band);
         d.endWrite();
+        st->us_blit += (uint32_t)(esp_timer_get_time() - b0);
         st->band_line = 0;
     }
+}
+
+// ── in-game furniture ───────────────────────────────────────────────────────────────────────────
+// The picture is 160 px wide inside a 240 px panel, which leaves two 40 px pillars. They are not
+// padding: they are the only place a running emulator can say anything without covering the game.
+// LEFT is identity and control (frame rate, palette, how to reach the menu); RIGHT is the honest
+// cost breakdown, because "it feels slow" is not a bug report until it says which part is slow.
+#define PILL_L 0
+#define PILL_R (OUT_X + OUT_W)
+#define PILL_W OUT_X
+
+static inline bool dn(char c) { return nucleo_kbd_char_down(c); }
+
+static void set_relief(int level)
+{
+    st->relief = level;
+    nucleo_gb_set_interlace(level == 1);
+    nucleo_gb_set_frameskip(level == 2);
+}
+
+static void toast(const char *msg)
+{
+    snprintf(st->toast, sizeof st->toast, "%s", msg);
+    st->toast_until = esp_timer_get_time() + 1500000;
+}
+
+// Frame rate big enough to read at arm's length, then the cost breakdown under it. Tenths of a
+// millisecond, because the interesting differences live below a whole one.
+static void hud_draw(void)
+{
+    d.fillRect(PILL_L, 0, PILL_W - 2, 30, BG);
+    d.setTextSize(2);
+    d.setTextColor(st->fps >= 55 ? SHADE[1] : AMB, BG);
+    d.setCursor(3, 3); d.printf("%2d", st->fps);
+    d.setTextSize(1);
+    d.setTextColor(DIM, BG);
+    d.setCursor(3, 20); d.print("fps");
+
+    d.fillRect(PILL_R + 2, 0, PILL_W - 2, 46, BG);
+    d.setTextSize(1);
+    d.setTextColor(MUTED, BG);
+    d.setCursor(PILL_R + 4, 3);  d.printf("c%2d.%d", st->ms_cpu  / 10, st->ms_cpu  % 10);
+    d.setCursor(PILL_R + 4, 14); d.printf("b%2d.%d", st->ms_blit / 10, st->ms_blit % 10);
+    d.setCursor(PILL_R + 4, 25); d.printf("a%2d.%d", st->ms_aud  / 10, st->ms_aud  % 10);
+    d.setTextColor(st->relief ? AMB : DIM, BG);
+    d.setCursor(PILL_R + 4, 36); d.print(st->relief == 2 ? "30fps" : st->relief == 1 ? "intrl" : "  --");
+}
+
+// Everything in the pillars that is NOT the per-second HUD: palette name, the keys that are not
+// guessable, and any transient confirmation. Repainted whenever it can have been covered.
+static void chrome_draw(void)
+{
+    d.fillRect(PILL_L, 100, PILL_W - 2, 35, BG);
+    d.setTextSize(1);
+    d.setTextColor(SHADE[1], BG);
+    d.setCursor(3, 101); d.print(PAL_NAME[s_pal]);
+    d.setTextColor(DIM, BG);
+    d.setCursor(3, 113); d.print("P pal");
+    d.setCursor(3, 124); d.print("M menu");
+
+    d.fillRect(PILL_R + 2, 100, PILL_W - 2, 35, BG);
+    if (st->toast[0]) {
+        d.setTextColor(GRN, BG);
+        d.setCursor(PILL_R + 4, 113); d.print(st->toast);
+    } else {
+        d.setTextColor(DIM, BG);
+        d.setCursor(PILL_R + 4, 113); d.print("TAB");
+        d.setCursor(PILL_R + 4, 124); d.print("fast");
+    }
+}
+
+static void pal_cycle(void)
+{
+    s_pal = (s_pal + 1) % PAL_COUNT;
+    SHADE = PALETTE[s_pal];
+    state_save(st->resume);
+    chrome_draw();
+}
+
+// ── the in-game menu ────────────────────────────────────────────────────────────────────────────
+// Opened with M or Esc. Esc opening a MENU rather than quitting outright is the deliberate choice:
+// leaving a game means losing the session (the app runs in a Solo boot and exiting reboots), so the
+// one key a player hits by reflex must not be the destructive one. Quit is still one row away.
+enum { MI_RESUME = 0, MI_SAVE, MI_LOAD, MI_PAL, MI_PIC, MI_QUIT, MI_N };
+
+static const char *menu_label(int i, char *buf, size_t n)
+{
+    switch (i) {
+        case MI_RESUME: return TR("Riprendi", "Resume");
+        case MI_SAVE:   return TR("Salva stato", "Save state");
+        case MI_LOAD:   return nucleo_gb_state_exists(0) ? TR("Carica stato", "Load state")
+                                                         : TR("Carica stato (vuoto)", "Load state (empty)");
+        case MI_PAL:    snprintf(buf, n, "%s: %s", TR("Colori", "Palette"), PAL_NAME[s_pal]); return buf;
+        case MI_PIC:    snprintf(buf, n, "%s: %s", TR("Immagine", "Picture"),
+                                 st->relief == 2 ? "30 fps" : st->relief == 1 ? TR("Interlacciata", "Interlaced")
+                                                                              : TR("Piena", "Full"));
+                        return buf;
+        default:        return TR("Esci dal gioco", "Quit game");
+    }
+}
+
+static void menu_draw(void)
+{
+    const int W = 196, H = 12 + MI_N * 17 + 8;
+    const int X = (240 - W) / 2, Y = (135 - H) / 2;
+    d.fillRect(X, Y, W, H, BG);
+    d.drawRoundRect(X, Y, W, H, 6, LINE);
+    d.setTextSize(1);
+    d.setTextColor(DIM, BG);
+    d.setCursor(X + 8, Y + 4); d.print(nucleo_gb_title());
+
+    char buf[40];
+    for (int i = 0; i < MI_N; i++) {
+        int y = Y + 14 + i * 17;
+        bool on = (i == st->msel);
+        d.fillRect(X + 4, y, W - 8, 16, on ? INK : BG);
+        // Digits pick a row directly — the smartwatch trick that beats scrolling on a small screen.
+        d.setTextSize(1);
+        d.setTextColor(on ? DIM : LINE, on ? INK : BG);
+        d.setCursor(X + 8, y + 5); d.printf("%d", i + 1);
+        d.setTextSize(2);
+        d.setTextColor(on ? FG : MUTED, on ? INK : BG);
+        d.setCursor(X + 20, y + 1); d.print(menu_label(i, buf, sizeof buf));
+    }
+}
+
+// Leaving the menu: the PPU repaints the whole 160x135 picture on its very next frame, so only the
+// pillars and the panel edges need restoring by hand.
+static void menu_close(void)
+{
+    st->menu = false;
+    d.fillRect(PILL_L, 0, PILL_W, 135, BG);
+    d.fillRect(PILL_R, 0, 240 - PILL_R, 135, BG);
+    hud_draw();
+    chrome_draw();
+}
+
+static void menu_activate(void)
+{
+    switch (st->msel) {
+        case MI_RESUME: menu_close(); return;
+        case MI_SAVE:
+            toast(nucleo_gb_state_save(0) == ESP_OK ? TR("salvato", "saved") : TR("errore", "failed"));
+            menu_close(); return;
+        case MI_LOAD: {
+            esp_err_t e = nucleo_gb_state_load(0);
+            toast(e == ESP_OK ? TR("caricato", "loaded")
+                              : e == ESP_ERR_NOT_FOUND ? TR("nessuno stato", "no state")
+                                                       : TR("stato non valido", "bad state"));
+            menu_close(); return;
+        }
+        case MI_PAL: s_pal = (s_pal + 1) % PAL_COUNT; SHADE = PALETTE[s_pal]; state_save(st->resume);
+                     menu_draw(); return;
+        case MI_PIC: set_relief((st->relief + 1) % 3); menu_draw(); return;
+        default:     st->running = false; return;
+    }
+}
+
+static void menu_key(nucleo_key_t k)
+{
+    if (k.key == NK_BACK || k.ch == '`' || k.ch == 'm' || k.ch == 'M') { menu_close(); return; }
+    if (k.ch >= '1' && k.ch <= '0' + MI_N) { st->msel = k.ch - '1'; menu_activate(); return; }
+    if (k.key == NK_UP   || k.ch == 'w' || k.ch == 'W') { st->msel = (st->msel + MI_N - 1) % MI_N; menu_draw(); return; }
+    if (k.key == NK_DOWN || k.ch == 's' || k.ch == 'S') { st->msel = (st->msel + 1) % MI_N; menu_draw(); return; }
+    if (k.key == NK_ENTER || k.ch == '\n' || k.ch == ' ' || k.ch == 'k' || k.ch == 'K') menu_activate();
 }
 
 // ── the run loop ────────────────────────────────────────────────────────────────────────────────
@@ -356,7 +540,7 @@ static void play(const char *name)
     nucleo_gb_stats_t stt; nucleo_gb_get_stats(&stt);
     char cache[24];
     if (stt.rom_resident) snprintf(cache, sizeof cache, "resident");
-    else                  snprintf(cache, sizeof cache, "%dx4KB-pages", stt.rom_pages);
+    else                  snprintf(cache, sizeof cache, "%dx1KB-pages", stt.rom_pages);
     trace("  OPEN OK '%s' rom=%uKB cache=%s core-heap=%u", nucleo_gb_title(),
           (unsigned)(stt.rom_bytes / 1024), cache, (unsigned)stt.heap_bytes);
     trace_heap("running");
@@ -369,59 +553,64 @@ static void play(const char *name)
     nucleo_power_perf_begin();
 
     d.fillScreen(BG);
-    d.fillRect(0, 0, OUT_X, 135, BG);
-    d.fillRect(OUT_X + OUT_W, 0, 240 - OUT_X - OUT_W, 135, BG);
-    // The side pillars are dead space on a 4:3 picture in a 16:9 panel — use them for the two things
-    // worth knowing mid-game: the frame rate, and which palette is on (so P is discoverable at all).
-    d.setTextSize(1); d.setTextColor(SHADE[1], BG);
-    d.setCursor(3, 113); d.print(PAL_NAME[s_pal]);
-    d.setTextColor(DIM, BG);
-    d.setCursor(3, 124); d.print("P");
 
     st->running = true;
+    st->menu = false; st->msel = 0; st->turbo = false;
+    st->toast[0] = '\0'; st->toast_until = 0;
+    st->us_blit = 0; st->ms_cpu = st->ms_blit = st->ms_aud = 0;
+    set_relief(0);                       // every cartridge starts at the full picture and earns relief
+    nucleo_gb_reset_counters();
     st->fps_frames = 0; st->fps = 0; st->fps_t0 = esp_timer_get_time();
+    hud_draw();
+    chrome_draw();
     uint8_t held = 0;
     int64_t next = esp_timer_get_time();
     const int64_t FRAME_US = 16743;                    // 59.727 Hz — the DMG's real frame time
 
     while (st->running) {
         esp_task_wdt_reset();
+        if (st->toast[0] && esp_timer_get_time() > st->toast_until) { st->toast[0] = '\0'; chrome_draw(); }
 
-        // The Cardputer has no d-pad. WASD for direction, J/K for B/A (the layout every keyboard
-        // player already has in their fingers), Space = Start, N = Select, arrows also work.
+        // INPUT — read the keyboard's LIVE pressed set, not its key EVENTS.
+        //
+        // This is the difference between a game being playable and not. nucleo_kbd_read() reports a
+        // printable key exactly once per press and never repeats, so building the button mask from it
+        // meant a held direction released itself on the very next frame: the character took one step
+        // and stopped, and two buttons could never be down together — no running jump, no diagonal.
+        // It read as the emulator being slow. It was not; the D-pad was tapping itself.
+        //
+        // nucleo_kbd_char_down() exists for exactly this (see nucleo_kbd.h — "games that need a key
+        // to act as a hold button"). It is rebuilt from the matrix on every scan, and the scan is
+        // driven by the read() below, so both still get called each frame.
         nucleo_key_t k = nucleo_kbd_read();
+
+        uint8_t b = 0;
+        // Two d-pads, both live at once: WASD under the left hand, and the ; . , / cluster that the
+        // Cardputer literally prints arrows on under the right. Players reach for different ones.
+        if (dn('w') || dn(';')) b |= NUCLEO_GB_UP;
+        if (dn('s') || dn('.')) b |= NUCLEO_GB_DOWN;
+        if (dn('a') || dn(',')) b |= NUCLEO_GB_LEFT;
+        if (dn('d') || dn('/')) b |= NUCLEO_GB_RIGHT;
+        if (dn('k') || dn('l')) b |= NUCLEO_GB_A;
+        if (dn('j'))            b |= NUCLEO_GB_B;
+        if (dn(' '))            b |= NUCLEO_GB_START;
+        if (dn('n'))            b |= NUCLEO_GB_SELECT;
+        held = b;
+
+        // TAB held = unpaced. Menus, grinding and long text are what a real player fast-forwards
+        // through, and holding a key is the right gesture: release and the game is back at speed.
+        st->turbo = dn('\t');
+
         if (k.key != NK_NONE || k.ch) {
-            if (k.key == NK_BACK || k.ch == '`') { st->running = false; break; }
-            uint8_t b = 0;
-            switch (k.ch) {
-                case 'w': case 'W': b = NUCLEO_GB_UP;     break;
-                case 's': case 'S': b = NUCLEO_GB_DOWN;   break;
-                case 'a': case 'A': b = NUCLEO_GB_LEFT;   break;
-                case 'd': case 'D': b = NUCLEO_GB_RIGHT;  break;
-                case 'k': case 'K': b = NUCLEO_GB_A;      break;
-                case 'j': case 'J': b = NUCLEO_GB_B;      break;
-                case ' ':           b = NUCLEO_GB_START;  break;
-                case 'n': case 'N': b = NUCLEO_GB_SELECT; break;
-                case 'p': case 'P':
-                    // Cycle the screen palette live: a pointer swap that lands on the very next
-                    // frame, so the choice is judged on the actual game rather than on a menu.
-                    s_pal = (s_pal + 1) % PAL_COUNT;
-                    SHADE = PALETTE[s_pal];
-                    state_save(st->resume);
-                    d.fillRect(0, 112, OUT_X - 2, 10, BG);
-                    d.setTextSize(1); d.setTextColor(SHADE[1], BG);
-                    d.setCursor(3, 113); d.print(PAL_NAME[s_pal]);
-                    break;
-                default: break;
-            }
-            if (k.key == NK_UP)    b = NUCLEO_GB_UP;
-            if (k.key == NK_DOWN)  b = NUCLEO_GB_DOWN;
-            if (k.key == NK_LEFT)  b = NUCLEO_GB_LEFT;
-            if (k.key == NK_RIGHT) b = NUCLEO_GB_RIGHT;
-            if (k.key == NK_ENTER) b = NUCLEO_GB_START;
-            held = b;                                  // the keyboard reports one key at a time
-        } else {
-            held = 0;
+            if (st->menu)                        { menu_key(k); }
+            else if (k.key == NK_BACK || k.ch == '`') { st->menu = true; st->msel = 0; menu_draw(); }
+            else if (k.ch == 'm' || k.ch == 'M') { st->menu = true; st->msel = 0; menu_draw(); }
+            else if (k.ch == 'p' || k.ch == 'P') pal_cycle();
+        }
+        if (st->menu) {                          // paused: the console does not advance
+            vTaskDelay(pdMS_TO_TICKS(20));
+            esp_task_wdt_reset();
+            continue;
         }
         nucleo_gb_set_buttons(held);
 
@@ -432,11 +621,27 @@ static void play(const char *name)
         int64_t now = esp_timer_get_time();
         if (now - st->fps_t0 >= 1000000) {
             st->fps = (int)st->fps_frames;
+            // Divide the window's accumulated microseconds by the frames in it, in TENTHS of a ms —
+            // a breakdown rounded to whole milliseconds hides exactly the differences worth seeing.
+            nucleo_gb_stats_t w; nucleo_gb_get_stats(&w);
+            uint32_t nf = w.frames ? w.frames : 1;
+            st->ms_cpu  = (int)(w.us_cpu   / nf / 100);
+            st->ms_aud  = (int)(w.us_audio / nf / 100);
+            st->ms_blit = (int)(st->us_blit / nf / 100);
+            trace("  fps=%d cpu=%d.%dms blit=%d.%dms audio=%d.%dms misses=%u relief=%d",
+                  st->fps, st->ms_cpu / 10, st->ms_cpu % 10, st->ms_blit / 10, st->ms_blit % 10,
+                  st->ms_aud / 10, st->ms_aud % 10, (unsigned)w.bank_misses, st->relief);
+            st->us_blit = 0; nucleo_gb_reset_counters();
             st->fps_frames = 0; st->fps_t0 = now;
-            char hud[16]; snprintf(hud, sizeof hud, "%2d", st->fps);
-            d.fillRect(0, 2, OUT_X - 2, 10, BG);
-            d.setTextSize(1); d.setTextColor(st->fps >= 55 ? DIM : AMB, BG);
-            d.setCursor(3, 3); d.print(hud);
+            hud_draw();
+
+            // AUTOMATIC RELIEF. If the picture cannot be produced sixty times a second, produce less
+            // of it rather than let every frame arrive late: interlacing first (full motion, half the
+            // scanlines per frame), then 30 fps frame-skip. The CPU still runs every frame either way,
+            // so timing and input stay exact — only the drawing thins out. It steps back up when the
+            // headroom returns, and never oscillates because the two thresholds do not overlap.
+            if      (st->fps < 50 && st->relief < 2) set_relief(st->relief + 1);
+            else if (st->fps >= 58 && st->relief > 0) set_relief(st->relief - 1);
         }
 
         // Pace to real Game Boy speed. FreeRTOS runs at 100 Hz here, so ONE tick is 10 ms against a
@@ -452,6 +657,16 @@ static void play(const char *name)
         // so 12 ms of slack safely absorbs a 10 ms sleep and leaves the rest to the spin.
         static const int64_t SLEEP_MIN = (int64_t)portTICK_PERIOD_MS * 1000 + 2000;
         next += FRAME_US;
+        if (st->turbo) {
+            // Unpaced — but never for free. Running frames back to back yields the CPU to nothing,
+            // and the IDLE task is what feeds the system watchdog; starving it is how a fast-forward
+            // turns into a reboot. One tick every sixteen frames costs about 4% of the speed-up and
+            // keeps the scheduler honest.
+            static int spin = 0;
+            if (++spin >= 16) { spin = 0; vTaskDelay(1); }
+            next = esp_timer_get_time();
+            continue;
+        }
         for (;;) {
             int64_t slack = next - esp_timer_get_time();
             if (slack <= 200) break;                                   // close enough: start the next frame

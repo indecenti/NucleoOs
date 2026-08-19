@@ -104,6 +104,23 @@ static uint16_t mix565(uint16_t a, uint16_t b, float t)
 }
 static bool file_exists(const char *p) { FILE *f = fopen(p, "rb"); if (f) { fclose(f); return true; } return false; }
 
+// ---- entries that must NEVER show a captured screenshot ----------------------
+// An EMULATOR's carousel entry is not a game. It is a console with a shelf of hundreds of cartridges
+// behind it, so a screenshot of whatever happened to be running last misrepresents the whole thing —
+// and the next cartridge makes it wrong again. Worse, the picture would keep changing under the
+// player for reasons that have nothing to do with the entry they are looking at.
+//
+// The console icon is the honest, stable identity: it says "Game Boy", which is exactly what the
+// entry IS. So these ids always take the procedural poster path, and cover capture refuses on them
+// rather than quietly writing a file the renderer will ignore.
+static const char *const NO_SHOT[] = { "gbemu", nullptr };
+static bool gf_never_shot(const char *id)
+{
+    if (!id) return false;
+    for (int i = 0; NO_SHOT[i]; i++) if (!strcmp(id, NO_SHOT[i])) return true;
+    return false;
+}
+
 // Background gradient colour at row y. MINIMAL: only a faint accent haze at the very top that settles
 // quickly into the flat dark BG — the cover/poster is the focal colour, not the backdrop.
 static uint16_t bg_at(uint16_t acc, int y)
@@ -329,15 +346,17 @@ template <typename T> static void draw_hero(T *c, const nucleo_app_def_t *g, con
     c->fillRoundRect(box.x + 2, box.y + 4, box.w, box.h, 6, mix565(BG, INK, 0.82f));
 
     c->setClipRect(box.x, box.y, box.w, box.h);
-    char p[192]; bool drawn = false;
-    snprintf(p, sizeof p, "%s/%s.png", GF_DIR, g->id);
-    if (file_exists(p)) { c->drawPngFile(p, box.x, box.y, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::top_left); drawn = true; }
+    char p[192]; bool drawn = gf_never_shot(g->id);   // emulators: straight to the console poster
+    if (!drawn) snprintf(p, sizeof p, "%s/%s.png", GF_DIR, g->id);
+    else        p[0] = '\0';
+    if (p[0] && file_exists(p)) { c->drawPngFile(p, box.x, box.y, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::top_left); drawn = true; }
     if (!drawn) { snprintf(p, sizeof p, "%s/%s.jpg", GF_DIR, g->id);
         if (file_exists(p)) { c->drawJpgFile(p, box.x, box.y, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::top_left); drawn = true; } }
     if (!drawn) { snprintf(p, sizeof p, "%s/%s.bmp", GF_DIR, g->id);
         // Fit the BMP into the current hero box (centre, aspect-preserved). Fitting instead of a raw
         // 1:1 blit keeps covers captured at an older box size sitting cleanly inside the new frame.
         if (file_exists(p)) { c->drawBmpFile(p, box.x, box.y, box.w, box.h, 0, 0, 0.0f, 0.0f, datum_t::top_left); drawn = true; } }
+    if (gf_never_shot(g->id)) drawn = false;          // ...and never let a stale file win
     if (!drawn) draw_poster(c, g, box);
     // NB: no read-back "gloss" sheen here. When the 32 KB canvas can't be spared (the common case on
     // this no-PSRAM chip), gamefront draws STRAIGHT to the panel — and reading the ST7789 back to
@@ -362,6 +381,7 @@ template <typename T> static void draw_hero(T *c, const nucleo_app_def_t *g, con
 // game has only a procedural poster (nothing to upgrade). Returns true if a real cover was drawn.
 template <typename T> static bool draw_cover_overlay(T *c, const nucleo_app_def_t *g, const gf_box_t &box)
 {
+    if (gf_never_shot(g->id)) return false;          // nothing to upgrade: the poster IS the art
     char p[192]; bool drawn = false;
     c->setClipRect(box.x, box.y, box.w, box.h);
     snprintf(p, sizeof p, "%s/%s.png", GF_DIR, g->id);
@@ -702,6 +722,9 @@ bool gamefront_save_cover(const char *id)
     // LCD. It is 8bpp RGB332, so colours are quantised to what is actually shown on screen —
     // i.e. the capture matches what the eye sees. rgb888_t lets M5GFX expand 332->888 cleanly.
     M5Canvas *c = nucleo_screen(); if (!c || !id || !id[0]) return false;
+    // Refuse rather than write a file the renderer is going to ignore: a capture that silently does
+    // nothing is worse than one that says no.
+    if (gf_never_shot(id)) return false;
     ensure_dir(GF_DIR);
     char p[192]; snprintf(p, sizeof p, "%s/%s.bmp", GF_DIR, id);
     int sw = c->width(), sh = c->height(), cw, ch;

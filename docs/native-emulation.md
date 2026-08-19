@@ -119,6 +119,22 @@ against every bank sharing its low bits), fronted by a one-compare fast path for
 a 256-byte direct-mapped hint table so a page *change* costs one probe rather than a 40-slot scan.
 `nucleo_gb_get_stats()` reports the path taken, the slot count, and the miss count.
 
+**Palette.** Four, and the default is the Game Boy's own green — *calibrated*, not copied. There are
+two defensible "original" palettes and neither transplants cleanly onto this panel:
+
+- `#9BBC0F #8BAC0F #306230 #0F380F` — the literal colours of the DMG's reflective LCD
+- `#E0F8D0 #88C070 #346856 #081820` — what emulators have drawn a Game Boy as for decades
+
+The literal set was designed to be read by **ambient light** bouncing off a passive panel. Emitted by
+a backlit ST7789, its two dark shades land near black: mid-tones stop reading as green and the picture
+goes muddy. The emulator-standard set fixes that by going mint, and stops looking like a Game Boy.
+
+So the default keeps the two light shades exactly as the hardware had them — `#9BBC0F` is the colour
+everyone pictures — and lifts only the two dark ones, which is precisely the work ambient light used
+to do. Shade 1 is nudged down at the same time, because the real panel's top two shades are nearly
+indistinguishable and a 135 px screen cannot afford to waste a whole shade. The alternatives are the
+emulator-standard mint, maximum contrast for a bright room, and amber for night. `P` cycles them live.
+
 **Screen — native width, no scaling.** The Game Boy is 160×144 and the panel is 240×135. Horizontally
 there is nothing to solve: 160 columns fit inside 240, so every column maps to exactly one pixel,
 unfiltered. (An earlier version decimated to 150 wide by dropping every 16th column. That destroyed
@@ -130,7 +146,23 @@ dropped, and it is a **drop, not a blend** — no averaging, so surviving pixels
 the PPU produced. Output lines are accumulated 15 at a time and pushed in one `pushImage`: **9 SPI
 transactions per frame instead of 135.**
 
-**Where the CPU goes.** Three settings matter more than any code in the app:
+**Controls — the "lag" that was not a frame-rate problem.** The first version built the button mask
+from `nucleo_kbd_read()`, which reports a printable key **once per press and never repeats**. A held
+direction therefore released itself on the very next frame: the character took one step and stopped,
+and two buttons could never be down at once — no running jump, no diagonal. It read as the emulator
+being slow. It was not; the D-pad was tapping itself.
+
+The mask is now built from `nucleo_kbd_char_down()` — the live pressed set, rebuilt from the matrix on
+every scan — so directions hold and chords work. Two d-pads are live at once: **WASD** under the left
+hand and the **`;` `.` `,` `/`** cluster the Cardputer literally prints arrows on under the right.
+**K/L** = A, **J** = B, **Space** = Start, **N** = Select, **TAB held** = fast-forward, **P** = palette,
+**M** or **Esc** = the in-game menu (save state, load state, palette, picture, quit).
+
+Esc opening a *menu* rather than quitting outright is deliberate: leaving a game means losing the
+session, because the app runs in a Solo boot and exiting reboots. The key a player hits by reflex must
+not be the destructive one.
+
+**Where the CPU goes.** Four settings matter more than any code in the app:
 
 - **`-O2`, scoped to `nucleo_emu`.** The firmware builds at `-Os` because flash is the scarce resource
   across ~60 components, but the emulator is the one place with a hard real-time deadline. The
@@ -142,6 +174,32 @@ transactions per frame instead of 135.**
   at 80 MHz **DIO**.
 - **`PEANUT_GB_HIGH_LCD_ACCURACY 0`.** It re-sorts sprites by X on every scanline to reproduce the
   DMG's priority rule — 144 sorts per frame for a difference most games never show.
+- **`PEANUT_GB_12_COLOUR 0`.** It tags every emitted pixel with which palette produced it, so a
+  front-end can give a DMG game the different colours a Game Boy Color would. This is a DMG core on a
+  four-shade screen and our callback masks the tag straight off again: an extra OR per pixel, 23,000
+  a frame, for information nobody reads.
+
+**Adaptive relief.** If the picture still cannot be produced sixty times a second, the app produces
+*less* of it rather than letting every frame arrive late. Both levers are the core's own and cost
+nothing to enable: **interlacing** first (alternate scanlines each frame — full motion, half the
+drawing), then **30 fps frame-skip**. The CPU runs every frame either way, so timing and input stay
+exact; only the drawing thins out. It steps back up when headroom returns, and the two thresholds
+(<50 down, ≥58 up) do not overlap, so it cannot oscillate. The current level is shown in the right
+pillar and can be pinned by hand from the in-game menu.
+
+**Save states.** The console is one struct with no external references except our own callbacks, so a
+state is a raw dump of it plus the cartridge RAM, written beside the ROM as `<rom>.st0`. Two things
+matter and both are enforced: the six function pointers in the struct are restored from the **live
+session**, never from the file (a state off an SD card must not be able to choose an address for the
+CPU to call), and the cartridge RAM is read into scratch first so a truncated file leaves the running
+game untouched instead of corrupting it. The host gate verifies the round-trip by replaying the
+emulator against itself and comparing a hash of every pixel drawn — see below.
+
+**The measurement is on screen.** The two 40 px pillars either side of a 160 px picture are not
+padding; they are the only place a running emulator can speak without covering the game. Left: frame
+rate, palette, the keys that are not guessable. Right: where the frame actually went — `c` CPU, `b`
+blit, `a` audio, in tenths of a millisecond — plus the relief level. The same line goes to
+`/gbemu_trace.txt` once a second, so a session can be diagnosed after the fact from the card.
 
 **Saves.** Cartridge RAM is persisted to `<rom>.sav` beside the ROM, written on close.
 
@@ -183,6 +241,12 @@ gameplay. `NUCLEO_HOST_HEAP` shrinks the heap the module believes it has to the 
 actually offers, so the SD-paged path is the one under test, and it fails the build if any cartridge
 exceeds 1.4 misses per frame.
 
+It also verifies **save states by replaying the emulator against itself**: run to a fixed point, save,
+run 120 more frames on a fixed input sequence while hashing every pixel of every scanline, load the
+state, replay the identical 120 frames, and require the two hashes to match bit for bit. "It loaded
+without crashing" tests nothing — a state that drops the PPU registers or a timer still loads, still
+runs, and quietly plays a different game. Divergence in the picture is the only check that catches it.
+
 That second gate exists because of a specific failure: the first one supplies its own callbacks, so
 it never touched `nucleo_gb.c` at all — and it stayed green through a session in which the device
 answered "invalid ROM" for every cartridge. A gate that cannot fail the way the product fails is not
@@ -202,6 +266,11 @@ demanded exactness and failed every healthy ROM.
   test on — not a silent config change.
 - **Instruction cache is 16 KB.** 32 KB would help the core's large dispatch switch measurably, but
   the cache is carved out of the same internal SRAM the emulator is already fighting for.
+- **The carousel entry shows the console, never a screenshot.** GameFront captures a cover per game,
+  but an emulator's entry is not a game — it is a console with hundreds of cartridges behind it, so a
+  picture of whatever ran last misrepresents the whole shelf and the next cartridge makes it wrong
+  again. `gf_never_shot()` in `gamefront.cpp` routes those ids to the procedural poster (which draws
+  the Game Boy icon) and makes cover capture *refuse* rather than write a file the renderer ignores.
 - **Game Boy Color.** Peanut-GB is DMG-only. `.gbc` files are listed and marked, and dual-mode carts
   run in their DMG fallback, but CGB-exclusive titles will not render correctly.
 - **Chip-8** is the obvious next core: ~5 KB, no licence question, and it exercises the same app
