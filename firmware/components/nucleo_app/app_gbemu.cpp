@@ -489,8 +489,21 @@ static void menu_draw(void)
     for (int i = 0; i < MI_N; i++) menu_row(i);
 }
 
-// Called from the paused loop at ~50 Hz: only the selected row can be moving, so only it is redrawn.
-static void menu_anim(void) { if (st->menu) menu_row(st->msel); }
+// Called from the paused loop at ~50 Hz. It must NOT redraw the whole row: menu_row() clears the row
+// to a solid fill first, and doing that fifty times a second is precisely the clear-then-draw flicker
+// (ANTI-FLICKER.md). It re-draws ONLY the selected label, and only when that label actually overflows
+// its column — the marquee's scrolling path is opaque and never clears, so it moves without flashing.
+// A label that fits was drawn once by menu_draw and is left untouched (static, so nothing to animate).
+static void menu_anim(void)
+{
+    if (!st->menu) return;
+    char buf[40];
+    const char *t = menu_label(st->msel, buf, sizeof buf);
+    d.setTextSize(2);
+    if ((int)d.textWidth(t) <= MENU_LW) return;          // fits: static, no redraw, no flicker
+    int y = MENU_Y + 14 + st->msel * 17;
+    marquee(MENU_LX, y + 1, MENU_LW, 15, t, FG, INK, 2, now_ms());
+}
 
 // Leaving the menu: the PPU repaints the whole 160x135 picture on its very next frame, so only the
 // pillars and the panel edges need restoring by hand.
@@ -884,14 +897,18 @@ static void hint(void)
         : TR("Scrivi per cercare · 1-9 · Invio gioca",     "Type to search · 1-9 · Enter plays"));
 }
 
-// ~5x/second while the shelf is foreground: keep the selected, overrunning title scrolling. play()
-// owns the CPU while a game runs, so this never fires mid-game.
+// ~5x/second while the shelf is foreground (play() owns the CPU during a game, so never mid-game).
+// The shelf is a BUFFERED app: draw() composites into the shared canvas, and the framework pushes it.
+// on_tick runs with the gfx pointed at the PANEL, not that canvas, so drawing here would land in the
+// wrong buffer at the wrong coordinates and be overwritten on the next push. Instead it asks the
+// framework for a repaint: draw() re-runs in canvas context with a fresh marquee phase, so the title
+// scrolls through the normal flicker-free buffered path. Only bother while the title actually overflows.
 static void tick(void)
 {
     if (!st || st->running || !st->sel_title[0]) return;
     d.setTextSize(2);
-    if ((int)d.textWidth(st->sel_title) <= st->sel_avail) return;   // fits: nothing to animate
-    marquee(20, st->sel_y, st->sel_avail, 16, st->sel_title, INK, ACC, 2, now_ms());
+    if ((int)d.textWidth(st->sel_title) <= st->sel_avail) return;   // fits: nothing to scroll
+    nucleo_app_force_repaint();
 }
 
 static void on_key(int key, char ch)
