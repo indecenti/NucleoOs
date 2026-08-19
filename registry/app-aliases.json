@@ -231,8 +231,23 @@
       "game",
       "giocare",
       "partita",
-      "multiplayer",
-      "arcade"
+      "multiplayer"
+    ],
+    "arcade": [
+      "arcade",
+      "emulator",
+      "emulazione",
+      "emulation",
+      "rom",
+      "roms",
+      "retrogaming",
+      "nes",
+      "snes",
+      "game boy",
+      "gameboy",
+      "mega drive",
+      "megadrive",
+      "emula"
     ],
     "code-runner": [
       "runner",

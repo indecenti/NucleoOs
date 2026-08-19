@@ -109,6 +109,7 @@
     "spread:nl-offline": "node tools/spread-copilot/nl-offline.test.mjs",
     "spread:gate": "node tools/spread-copilot/copilot.test.mjs && node tools/spread-copilot/cloud-plan.test.mjs && node tools/spread-copilot/nl-offline.test.mjs && node tools/spread-nlu/regress.mjs && node apps/spreadsheet/test.mjs",
     "games:gate": "node tools/games-host/all.mjs",
-    "dj:test": "node apps/dj/test/all.mjs"
+    "dj:test": "node apps/dj/test/all.mjs",
+    "gb:test": "node tools/anima-host/gb-check.mjs"
   }
 }

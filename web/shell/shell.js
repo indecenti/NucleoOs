@@ -3236,7 +3236,7 @@ const busyCtl = createBusyController({
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 boot();
 
-// Optional first-boot pre-copy of ANIMA Local (the ~13 MB offline WASM brain). OFF by default:
+// Optional first-boot pre-copy of ANIMA Local (the ~88 MB offline WASM brain). OFF by default:
 // NucleoOS never starts a download on its own — the device is a single-task server, so it pulls one
 // thing at a time (see dlgate.js) and only when the user asks. The brain is provisioned explicitly
 // from ANIMA ▸ Impostazioni ▸ Modelli. A power user can opt back into background pre-copy by setting

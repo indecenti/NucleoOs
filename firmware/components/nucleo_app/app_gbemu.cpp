@@ -1,0 +1,521 @@
+// app_gbemu — Game Boy, emulated natively on the Cardputer.
+//
+// The first NATIVE emulator in NucleoOS: the console runs on the ESP32-S3 itself, not in a browser.
+// It is possible because of two properties of the chosen core (Peanut-GB — see
+// nucleo_emu/vendor/README.md): the whole console is one ~16.9 KB struct, and the PPU emits the
+// picture one SCANLINE at a time, so there is no framebuffer to find room for.
+//
+// RAM POSTURE — why the app_def is declared the way it is:
+//   This board has no PSRAM and the limit that bites is the largest CONTIGUOUS block, not free bytes.
+//   The boot trace measures it collapsing to ~31.7 KB the moment the shared 32,400 B UI canvas is
+//   allocated, and the runtime reclaim in nucleo_exclusive frees RAM but CANNOT defragment. So this
+//   app declares NX_SOLO (reboot into a fresh, unfragmented heap), NX_WIFI (the radio costs ~48 KB
+//   and halves the largest block — and an emulator needs no network), and releases the canvas before
+//   opening a ROM. That is what makes a 17 KB core plus a 32 KB ROM cache fit at all.
+//
+// SCREEN — the Game Boy is 160x144, the panel is 240x135. No integer scale fits, so we decimate by
+// exactly 15/16 on BOTH axes (drop every 16th column and every 16th line): 150x135, aspect preserved
+// to within a pixel, and the test is one bitmask instead of a divide per pixel.
+//
+// THE SHELF — the library on the card is ~4,700 Game Boy cartridges. Holding that many names in RAM
+// is impossible (4,700 x 64 B = 300 KB), so the browser NEVER holds the whole library: it re-walks
+// the directory against a live filter and keeps at most MAXR matches. Type-to-filter is therefore
+// not a convenience here, it is the navigation model — which is also the right answer on a device
+// with a real keyboard and a 135 px screen (docs/device-ui.md: use the keyboard, exploit every pixel).
+#include "nucleo_app.h"
+#include "app_gfx.h"
+#include "nucleo_gb.h"
+#include "nucleo_kbd.h"
+#include "nucleo_board.h"
+#include "nucleo_exclusive.h"
+#include "nucleo_theme.h"
+#include "nucleo_i18n.h"
+#include "esp_timer.h"
+#include "esp_task_wdt.h"
+#include "esp_heap_caps.h"
+#include "esp_log.h"
+#include <dirent.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <strings.h>
+
+#define BG    THEME_BG
+#define FG    THEME_FG
+#define MUTED THEME_MUTED
+#define DIM   THEME_DIM
+#define LINE  THEME_LINE
+#define INK   THEME_INK
+#define ACC   THEME_ACC
+#define GRN   0x8FF3      // content colour: "has a save"
+#define AMB   0xFE8C      // content colour: Game Boy Color cart on a DMG core
+
+static const char *TAG = "gbemu";
+
+// The library lives where the Arcade web app and firmware provisioning already agree it does.
+#define DIR_GB   NUCLEO_SD_MOUNT "/data/ROMs/gb"
+#define DIR_GBC  NUCLEO_SD_MOUNT "/data/ROMs/gbc"
+#define STATE_JS NUCLEO_SD_MOUNT "/system/config/gbemu.json"
+
+// ── screen mapping ──────────────────────────────────────────────────────────────────────────────
+#define OUT_W 150            // 160 * 15/16
+#define OUT_H 135            // 144 * 15/16 (== the panel height, exactly)
+#define OUT_X ((240 - OUT_W) / 2)
+#define BAND  15             // output lines buffered before one SPI push; 15 divides 135 evenly
+
+// DMG four-shade palette, lightest to darkest. A Game Boy is not theme-able — this is content, not
+// chrome, so it deliberately does NOT follow THEME_*.
+static const uint16_t SHADE[4] = { 0xCF32, 0x8DEC, 0x3406, 0x11A2 };
+
+// ── session state (heap on enter, never .bss: the app is closed almost always) ──────────────────
+#define MAXR    120          // matches held at once. The filter, not this cap, is how you reach a game.
+#define NAMEMAX 56
+#define FILTMAX 20
+
+struct RomEnt {
+    char name[NAMEMAX];
+    bool gbc;
+};
+
+struct EState {
+    RomEnt   list[MAXR];
+    int      n;              // matches kept
+    int      total;          // matches that EXIST (may exceed n — we say so honestly)
+    int      sel, scroll;
+    char     filter[FILTMAX + 1];
+    int      flen;
+    char     resume[NAMEMAX];   // last cartridge played, offered at the top of an unfiltered shelf
+    bool     have_resume;
+
+    uint16_t *band;          // OUT_W * BAND pixels, pushed one band at a time
+    int      band_line, band_y, out_y;
+    bool     running;
+    uint32_t fps_frames;
+    int      fps;
+    int64_t  fps_t0;
+};
+static EState *st = nullptr;
+
+// ── tiny persisted state (resume) ───────────────────────────────────────────────────────────────
+// Deliberately a flat file, not JSON: one line, no parser, no cJSON allocation on a heap this tight.
+static void state_load(void)
+{
+    FILE *f = fopen(STATE_JS, "r");
+    if (!f) return;
+    if (fgets(st->resume, sizeof st->resume, f)) {
+        size_t l = strlen(st->resume);
+        while (l && (st->resume[l - 1] == '\n' || st->resume[l - 1] == '\r')) st->resume[--l] = '\0';
+        st->have_resume = (l > 0);
+    }
+    fclose(f);
+}
+static void state_save(const char *name)
+{
+    FILE *f = fopen(STATE_JS, "w");
+    if (!f) return;
+    fprintf(f, "%s\n", name ? name : "");
+    fclose(f);
+}
+
+// ── ROM discovery ───────────────────────────────────────────────────────────────────────────────
+static bool is_gb(const char *n, bool *gbc)
+{
+    const char *dot = strrchr(n, '.');
+    if (!dot) return false;
+    if (!strcasecmp(dot, ".gb"))  { *gbc = false; return true; }
+    if (!strcasecmp(dot, ".gbc")) { *gbc = true;  return true; }
+    return false;
+}
+
+// Case-insensitive substring — the filter must feel like search, not like a prefix rule.
+static bool matches(const char *hay, const char *needle)
+{
+    if (!needle || !*needle) return true;
+    size_t nl = strlen(needle);
+    for (const char *p = hay; *p; p++) if (!strncasecmp(p, needle, nl)) return true;
+    return false;
+}
+
+static void scan_dir(const char *dir, bool mark_gbc)
+{
+    DIR *dp = opendir(dir);   // NB: never name a local `d` — app_gfx.h defines `d` as the draw target
+    if (!dp) return;
+    struct dirent *de;
+    while ((de = readdir(dp)) != NULL) {
+        bool gbc = mark_gbc;
+        if (de->d_name[0] == '.' || !is_gb(de->d_name, &gbc)) continue;
+        if (!matches(de->d_name, st->filter)) continue;
+        st->total++;
+        if (st->n < MAXR) {
+            snprintf(st->list[st->n].name, NAMEMAX, "%s", de->d_name);
+            st->list[st->n].gbc = gbc;
+            st->n++;
+        }
+    }
+    closedir(dp);
+}
+
+static int cmp_ent(const void *a, const void *b)
+{ return strcasecmp(((const RomEnt *)a)->name, ((const RomEnt *)b)->name); }
+
+static void rescan(void)
+{
+    st->n = 0; st->total = 0;
+    scan_dir(DIR_GB,  false);
+    scan_dir(DIR_GBC, true);
+    if (st->n > 1) qsort(st->list, st->n, sizeof(RomEnt), cmp_ent);
+    st->sel = 0; st->scroll = 0;
+}
+
+// Resolve a bare filename to a full path, trying both system folders.
+static bool rom_path(const char *name, char *out, size_t n)
+{
+    struct stat sb;
+    snprintf(out, n, "%s/%s", DIR_GB, name);
+    if (stat(out, &sb) == 0) return true;
+    snprintf(out, n, "%s/%s", DIR_GBC, name);
+    return stat(out, &sb) == 0;
+}
+
+// ── the picture ─────────────────────────────────────────────────────────────────────────────────
+// One scanline out of the core: drop every 16th line and every 16th pixel, accumulate BAND output
+// lines, push once. Nine SPI transactions per frame instead of 135 — the difference between the bus
+// being a cost and being the bottleneck.
+static void on_line(const uint8_t *px, int line, void *user)
+{
+    (void)user;
+    if (!st || !st->band) return;
+    if ((line & 15) == 15) return;
+    if (st->out_y >= OUT_H) return;
+
+    uint16_t *row = st->band + (size_t)st->band_line * OUT_W;
+    int o = 0;
+    for (int x = 0; x < NUCLEO_GB_W && o < OUT_W; x++) {
+        if ((x & 15) == 15) continue;
+        row[o++] = SHADE[px[x] & 3];
+    }
+    while (o < OUT_W) row[o++] = SHADE[0];
+
+    if (st->band_line == 0) st->band_y = st->out_y;
+    st->band_line++;
+    st->out_y++;
+
+    if (st->band_line == BAND || st->out_y >= OUT_H) {
+        d.pushImage(OUT_X, st->band_y, OUT_W, st->band_line, st->band);
+        st->band_line = 0;
+    }
+}
+
+// ── the run loop ────────────────────────────────────────────────────────────────────────────────
+static void play(const char *name)
+{
+    char path[300];
+    if (!rom_path(name, path, sizeof path)) {
+        nucleo_app_set_hint(TR("ROM non trovata", "ROM not found"));
+        return;
+    }
+
+    // Hand the 32 KB canvas back BEFORE the core allocates: it is the single biggest contiguous block
+    // on the heap, and the ROM cache wants exactly that kind of room.
+    nucleo_app_release_buffers();
+    nucleo_screen_release();
+    nucleo_app_set_direct_draw(true);
+
+    st->band = (uint16_t *)heap_caps_malloc((size_t)OUT_W * BAND * sizeof(uint16_t), MALLOC_CAP_DEFAULT);
+    if (!st->band) {
+        nucleo_app_set_direct_draw(false);
+        nucleo_app_set_hint(TR("RAM insufficiente per il video", "Not enough RAM for the video"));
+        return;
+    }
+
+    esp_err_t err = nucleo_gb_open(path, on_line, nullptr);
+    if (err != ESP_OK) {
+        free(st->band); st->band = nullptr;
+        nucleo_app_set_direct_draw(false);
+        nucleo_app_set_hint(err == ESP_ERR_NO_MEM ? TR("RAM insufficiente", "Not enough RAM")
+                                                  : TR("ROM non valida", "Invalid ROM"));
+        return;
+    }
+
+    snprintf(st->resume, sizeof st->resume, "%s", name);
+    st->have_resume = true;
+    state_save(name);
+
+    nucleo_gb_stats_t stt; nucleo_gb_get_stats(&stt);
+    ESP_LOGI(TAG, "'%s' %uKB %s | core heap %u B | free %u",
+             nucleo_gb_title(), (unsigned)(stt.rom_bytes / 1024),
+             stt.rom_resident ? "resident" : "banked from SD",
+             (unsigned)stt.heap_bytes, (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
+
+    d.fillScreen(BG);
+    d.fillRect(0, 0, OUT_X, 135, BG);
+    d.fillRect(OUT_X + OUT_W, 0, 240 - OUT_X - OUT_W, 135, BG);
+
+    st->running = true;
+    st->fps_frames = 0; st->fps = 0; st->fps_t0 = esp_timer_get_time();
+    uint8_t held = 0;
+    int64_t next = esp_timer_get_time();
+    const int64_t FRAME_US = 16743;                    // 59.727 Hz — the DMG's real frame time
+
+    while (st->running) {
+        esp_task_wdt_reset();
+
+        // The Cardputer has no d-pad. WASD for direction, J/K for B/A (the layout every keyboard
+        // player already has in their fingers), Space = Start, N = Select, arrows also work.
+        nucleo_key_t k = nucleo_kbd_read();
+        if (k.key != NK_NONE || k.ch) {
+            if (k.key == NK_BACK || k.ch == '`') { st->running = false; break; }
+            uint8_t b = 0;
+            switch (k.ch) {
+                case 'w': case 'W': b = NUCLEO_GB_UP;     break;
+                case 's': case 'S': b = NUCLEO_GB_DOWN;   break;
+                case 'a': case 'A': b = NUCLEO_GB_LEFT;   break;
+                case 'd': case 'D': b = NUCLEO_GB_RIGHT;  break;
+                case 'k': case 'K': b = NUCLEO_GB_A;      break;
+                case 'j': case 'J': b = NUCLEO_GB_B;      break;
+                case ' ':           b = NUCLEO_GB_START;  break;
+                case 'n': case 'N': b = NUCLEO_GB_SELECT; break;
+                default: break;
+            }
+            if (k.key == NK_UP)    b = NUCLEO_GB_UP;
+            if (k.key == NK_DOWN)  b = NUCLEO_GB_DOWN;
+            if (k.key == NK_LEFT)  b = NUCLEO_GB_LEFT;
+            if (k.key == NK_RIGHT) b = NUCLEO_GB_RIGHT;
+            if (k.key == NK_ENTER) b = NUCLEO_GB_START;
+            held = b;                                  // the keyboard reports one key at a time
+        } else {
+            held = 0;
+        }
+        nucleo_gb_set_buttons(held);
+
+        st->out_y = 0; st->band_line = 0;
+        nucleo_gb_run_frame();
+
+        st->fps_frames++;
+        int64_t now = esp_timer_get_time();
+        if (now - st->fps_t0 >= 1000000) {
+            st->fps = (int)st->fps_frames;
+            st->fps_frames = 0; st->fps_t0 = now;
+            char hud[16]; snprintf(hud, sizeof hud, "%2d", st->fps);
+            d.fillRect(0, 2, OUT_X - 2, 10, BG);
+            d.setTextSize(1); d.setTextColor(st->fps >= 55 ? DIM : AMB, BG);
+            d.setCursor(3, 3); d.print(hud);
+        }
+
+        // Pace to real Game Boy speed. A frame that overran is NOT chased: on a board this tight,
+        // catching up only compounds into stutter, and running a touch slow reads better than jerking.
+        next += FRAME_US;
+        int64_t slack = next - esp_timer_get_time();
+        if (slack > 1000) vTaskDelay(pdMS_TO_TICKS((uint32_t)(slack / 1000)));
+        else if (slack < -FRAME_US * 4) next = esp_timer_get_time();
+    }
+
+    nucleo_gb_close();
+    free(st->band); st->band = nullptr;
+    nucleo_app_set_direct_draw(false);
+    nucleo_app_force_repaint();
+}
+
+// ── the shelf ───────────────────────────────────────────────────────────────────────────────────
+#define ROW_H 22
+
+// A small Game Boy glyph, the same silhouette as the launcher icon, drawn at the header.
+static void glyph_gb(int x, int y, int h, uint16_t col)
+{
+    int w = h * 62 / 100;
+    d.fillRoundRect(x, y, w, h, h / 8, col);
+    d.fillRect(x + w / 5, y + h / 8, w * 3 / 5, h * 3 / 10, BG);
+    d.fillRect(x + w / 4, y + h * 6 / 10, w / 10, h / 5, BG);
+    d.fillRect(x + w / 8, y + h * 7 / 10, w * 3 / 10, h / 12, BG);
+    d.fillCircle(x + w * 3 / 4, y + h * 7 / 10, h / 14, BG);
+}
+
+// Titles read better without the extension or the region/dump tags every set carries.
+static void pretty(const char *file, char *out, size_t n)
+{
+    char tmp[NAMEMAX];
+    snprintf(tmp, sizeof tmp, "%s", file);
+    char *dot = strrchr(tmp, '.'); if (dot) *dot = '\0';
+    char *cut = strstr(tmp, " (");  if (cut) *cut = '\0';
+    cut = strstr(tmp, " [");        if (cut) *cut = '\0';
+    snprintf(out, n, "%s", tmp);
+}
+
+static void draw(void)
+{
+    if (!st) return;
+    int ch = nucleo_app_content_height(), top = nucleo_app_content_top();
+    d.fillRect(0, top, 240, ch, BG);
+
+    // ── header: glyph + system, and either the live filter or the counts ──
+    glyph_gb(6, top + 2, 18, ACC);
+    if (st->flen) {
+        d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(28, top + 3);
+        char q[FILTMAX + 2]; snprintf(q, sizeof q, "%s_", st->filter);
+        d.print(q);
+    } else {
+        d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(28, top + 3); d.print("Game Boy");
+    }
+    char cnt[24];
+    if (st->total > st->n) snprintf(cnt, sizeof cnt, "%d/%d", st->n, st->total);
+    else                   snprintf(cnt, sizeof cnt, "%d", st->total);
+    int cw = (int)strlen(cnt) * 6;
+    d.setTextSize(1); d.setTextColor(st->total > st->n ? AMB : MUTED, BG);
+    d.setCursor(234 - cw, top + 8); d.print(cnt);
+    d.drawFastHLine(6, top + 21, 228, LINE);
+
+    if (st->n == 0) {
+        d.setTextSize(1); d.setTextColor(MUTED, BG);
+        d.setCursor(8, top + 34);
+        d.print(st->flen ? TR("Nessun risultato", "No match")
+                         : TR("Nessuna ROM in /data/ROMs/gb", "No ROMs in /data/ROMs/gb"));
+        if (st->flen) { d.setCursor(8, top + 48); d.setTextColor(DIM, BG); d.print(TR("Canc per correggere", "Backspace to edit")); }
+        return;
+    }
+
+    int y0 = top + 25, rows = (ch - 27) / ROW_H;
+    if (st->sel < st->scroll) st->scroll = st->sel;
+    if (st->sel >= st->scroll + rows) st->scroll = st->sel - rows + 1;
+
+    for (int i = 0; i < rows && st->scroll + i < st->n; i++) {
+        int idx = st->scroll + i, y = y0 + i * ROW_H;
+        bool foc = (idx == st->sel);
+        if (foc) d.fillRoundRect(4, y, 232, ROW_H - 2, 7, ACC);
+
+        // 1-9 quick pick: the visible row number, so a game is one keypress away without arrowing.
+        if (i < 9) {
+            d.setTextSize(1); d.setTextColor(foc ? INK : DIM, foc ? ACC : BG);
+            d.setCursor(9, y + (ROW_H - 8) / 2); char nb[3]; snprintf(nb, sizeof nb, "%d", i + 1); d.print(nb);
+        }
+
+        char title[NAMEMAX];
+        pretty(st->list[idx].name, title, sizeof title);
+        // The badges are drawn first so the title can be clipped to whatever is left, never overlap.
+        int right = 232;
+        if (st->list[idx].gbc) {
+            d.setTextSize(1); d.setTextColor(foc ? INK : AMB, foc ? ACC : BG);
+            d.setCursor(right - 12, y + (ROW_H - 8) / 2); d.print("C"); right -= 14;
+        }
+        if (st->have_resume && !strcmp(st->list[idx].name, st->resume)) {
+            d.fillCircle(right - 6, y + ROW_H / 2 - 1, 3, foc ? INK : GRN); right -= 14;
+        }
+        int avail = right - 20;
+        int maxc = avail / 12; if (maxc < 1) maxc = 1; if (maxc > 17) maxc = 17;
+        char shown[20]; snprintf(shown, sizeof shown, "%.*s", maxc, title);
+        d.setTextSize(2); d.setTextColor(foc ? INK : FG, foc ? ACC : BG);
+        d.setCursor(20, y + (ROW_H - 16) / 2); d.print(shown);
+    }
+
+    // Scroll rail: on a shelf this deep, "where am I" has to be visible without counting rows.
+    if (st->n > rows) {
+        int rh = ch - 27, kh = rh * rows / st->n; if (kh < 8) kh = 8;
+        int ky = y0 + (rh - kh) * st->sel / (st->n - 1);
+        d.fillRect(237, y0, 2, rh, LINE);
+        d.fillRect(237, ky, 2, kh, ACC);
+    }
+}
+
+static void hint(void)
+{
+    nucleo_app_set_hint(st && st->flen
+        ? TR("Invio gioca · Canc corregge · Esc pulisce",  "Enter plays · Backspace edits · Esc clears")
+        : TR("Scrivi per cercare · 1-9 · Invio gioca",     "Type to search · 1-9 · Enter plays"));
+}
+
+static void on_key(int key, char ch)
+{
+    if (!st) return;
+
+    if (key == NK_UP)    { if (st->sel > 0) st->sel--; nucleo_app_request_draw(); return; }
+    if (key == NK_DOWN)  { if (st->sel < st->n - 1) st->sel++; nucleo_app_request_draw(); return; }
+    // NB: NK_LEFT and NK_BACK never arrive here — the framework routes both to the back handler
+    // (see on_back). Only NK_RIGHT pages forward from on_key.
+    if (key == NK_RIGHT) { st->sel += 5; if (st->sel > st->n - 1) st->sel = st->n - 1; nucleo_app_request_draw(); return; }
+
+    if (key == NK_ENTER) {
+        if (st->n) { play(st->list[st->sel].name); hint(); nucleo_app_request_draw(); }
+        return;
+    }
+
+    // Backspace edits the filter one character at a time. (NK_BACK itself never reaches on_key —
+    // the framework routes it to the back handler, which clears the whole search; see on_back.)
+    if (ch == 8 || ch == 127) {
+        if (st->flen) { st->filter[--st->flen] = '\0'; rescan(); hint(); nucleo_app_request_draw(); }
+        return;
+    }
+
+    // Digits are quick-pick, not filter input: on a keyboard device the fastest path to a visible
+    // row is its number. Titles starting with a digit are still reachable by typing more letters.
+    if (ch >= '1' && ch <= '9') {
+        int want = st->scroll + (ch - '1');
+        if (want < st->n) { st->sel = want; play(st->list[want].name); hint(); nucleo_app_request_draw(); }
+        return;
+    }
+
+    // Anything else printable extends the filter. This IS the navigation model for ~4,700 carts.
+    if (ch >= 32 && ch < 127 && st->flen < FILTMAX) {
+        st->filter[st->flen++] = ch;
+        st->filter[st->flen] = '\0';
+        rescan(); hint(); nucleo_app_request_draw();
+        return;
+    }
+}
+
+// Esc / Left: clear the filter first, and only let the framework close the app when the shelf is
+// already unfiltered — a mistyped search must never throw you out of the library.
+static bool on_back(int key)
+{
+    if (!st) return false;
+    if (key == NK_LEFT) {                          // page back through a deep shelf
+        st->sel -= 5; if (st->sel < 0) st->sel = 0;
+        nucleo_app_request_draw();
+        return true;
+    }
+    if (st->flen) {                                // Esc clears the search before it closes anything
+        st->filter[0] = '\0'; st->flen = 0;
+        rescan(); hint(); nucleo_app_request_draw();
+        return true;
+    }
+    return false;                                  // unfiltered shelf: let the framework close the app
+}
+
+static void enter(void)
+{
+    // The RAM window is declarative (see the app_def): by the time this runs we are already on a
+    // fresh heap with the radio down. All this has to do is allocate and read the shelf.
+    if (!st) st = (EState *)calloc(1, sizeof(EState));
+    if (!st) { nucleo_app_set_hint(TR("RAM insufficiente", "Not enough RAM")); return; }
+    state_load();
+    rescan();
+    // Land on the last cartridge played, so "carry on" costs no keystrokes.
+    if (st->have_resume) {
+        for (int i = 0; i < st->n; i++)
+            if (!strcmp(st->list[i].name, st->resume)) { st->sel = i; break; }
+    }
+    nucleo_app_set_back_handler(on_back);
+    hint();
+}
+
+static void leave(void)
+{
+    nucleo_gb_close();
+    if (st) { free(st->band); free(st); st = nullptr; }
+    if (nucleo_exclusive_active()) nucleo_exclusive_exit();
+}
+
+extern "C" void nucleo_register_gbemu(void)
+{
+    static const nucleo_app_def_t app = {
+        "gbemu", "Game Boy", "Games",
+        "Play Game Boy cartridges natively — the emulator runs on the Cardputer itself.",
+        'G', 0x8FF3, enter, on_key, nullptr, draw, leave,
+        NX_NET_APP | NX_SOLO | NX_WIFI
+            // SOLO: only a fresh boot yields a contiguous block big enough for the core + ROM cache;
+            // the runtime reclaim frees RAM but cannot defragment (see nucleo_exclusive.h).
+            // WIFI: the radio costs ~48 KB and halves the largest free block, and an emulator has no
+            // use for a network. Leaving reboots into the full OS, so the radio returns on its own
+            // without the fragile in-place restore.
+    };
+    nucleo_app_register(&app);
+}

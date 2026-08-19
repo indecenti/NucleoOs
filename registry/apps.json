@@ -523,6 +523,18 @@
         "storage.shared",
         "system.clipboard"
       ]
+    },
+    {
+      "id": "arcade",
+      "version": "1.0.0",
+      "path": "/apps/arcade",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "device.keyboard",
+        "device.display"
+      ]
     }
   ]
 }

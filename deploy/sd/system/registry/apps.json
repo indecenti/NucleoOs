@@ -210,7 +210,8 @@
       "autostart": false,
       "permissions": [
         "storage.shared",
-        "device.audio"
+        "device.audio",
+        "device.mic"
       ]
     },
     {
@@ -266,7 +267,8 @@
       "autostart": false,
       "permissions": [
         "system.events",
-        "device.keyboard"
+        "device.keyboard",
+        "device.mic"
       ]
     },
     {
@@ -488,6 +490,50 @@
       "autostart": false,
       "permissions": [
         "system.notify"
+      ]
+    },
+    {
+      "id": "weather",
+      "version": "1.0.0",
+      "path": "/apps/weather",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "device.location"
+      ]
+    },
+    {
+      "id": "authenticator",
+      "version": "1.0.0",
+      "path": "/apps/authenticator",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.clipboard"
+      ]
+    },
+    {
+      "id": "contacts",
+      "version": "1.0.0",
+      "path": "/apps/contacts",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "system.clipboard"
+      ]
+    },
+    {
+      "id": "arcade",
+      "version": "1.0.0",
+      "path": "/apps/arcade",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "storage.shared",
+        "device.keyboard",
+        "device.display"
       ]
     }
   ]

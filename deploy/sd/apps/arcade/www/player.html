@@ -1,0 +1,179 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Arcade — Player</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  #game{width:100vw;height:100vh}
+  /* Boot/status card — the run has three failure modes worth naming (no core, no ROM, no source),
+     and a black screen tells the player nothing about which one happened. */
+  #boot{position:fixed;inset:0;display:grid;place-items:center;background:#06070b;color:#e8eaed;z-index:5}
+  #boot.gone{display:none}
+  #boot .b{max-width:460px;padding:24px;text-align:center}
+  #boot .t{font-size:16px;font-weight:600;margin-bottom:6px}
+  #boot .s{font-size:13px;color:#8b93a1;line-height:1.6}
+  #boot .src{margin-top:12px;font-size:11px;color:#2dd4bf;letter-spacing:.4px;text-transform:uppercase}
+  #boot .err{color:#f96b6b}
+  .spin{width:24px;height:24px;border:2px solid #1b2130;border-top-color:#2dd4bf;border-radius:50%;
+    animation:sp .7s linear infinite;margin:0 auto 16px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  /* Pad indicator: appears when a gamepad is connected, fades out. Players need to know it was seen. */
+  #pad{position:fixed;right:12px;bottom:12px;z-index:6;background:rgba(6,7,11,.82);border:1px solid #2dd4bf;
+    color:#2dd4bf;border-radius:9px;padding:7px 12px;font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none}
+  #pad.on{opacity:1}
+</style>
+</head><body>
+<div id="game"></div>
+<div id="boot"><div class="b"><div class="spin"></div>
+  <div class="t" id="bt">Loading…</div><div class="s" id="bs"></div><div class="src" id="bsrc"></div></div></div>
+<div id="pad"></div>
+<script>
+var q = new URLSearchParams(location.search);
+var $ = function (id) { return document.getElementById(id); };
+var IT = (navigator.language || '').toLowerCase().indexOf('it') === 0;
+function TR(it, en) { return IT ? it : en; }
+function say(t, s, cls) { $('bt').textContent = t; $('bs').textContent = s || ''; if (cls) $('bt').className = 't ' + cls; }
+
+// ── Where does the emulator come from? ───────────────────────────────────────────────────────────
+// SD FIRST, CDN as the fallback. The whole point of the device carrying its own runtime is that a
+// browser with NO internet still plays: the Cardputer serves EmulatorJS and the core off its card.
+// But a card that is missing a core (a system added later, a trimmed image) must not dead-end, so we
+// probe the exact core this run needs and fall back to the public CDN when it is absent.
+//
+// The anti-phone-home guard is applied ONLY when running from the SD: EmulatorJS otherwise reaches out
+// for a version check and netplay, which would break the "nothing leaves the device" promise. On the
+// CDN path we are online by definition, so the guard would only block the very files we need.
+var LOCAL = '/apps/arcade/emulatorjs/';
+var CDN   = 'https://cdn.emulatorjs.org/stable/data/';
+
+function installOfflineGuard() {
+  var ext = /emulatorjs\.org|fontawesome|discord|githubusercontent|(^|\/\/)github\.com/;
+  var f = window.fetch;
+  window.fetch = function (u) {
+    try { if (ext.test(String(u))) return Promise.reject(new Error('offline')); } catch (e) {}
+    return f.apply(this, arguments);
+  };
+  var X = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (m, u) {
+    if (ext.test(String(u))) u = 'data:application/json,{}';
+    return X.apply(this, [m, u].concat([].slice.call(arguments, 2)));
+  };
+}
+
+// Is a URL actually there? A ranged GET costs one packet and, unlike HEAD, is answered correctly by
+// the device's file API (which serves file bytes, not metadata).
+function exists(url) {
+  return fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, cache: 'no-store' })
+    .then(function (r) { return r.ok || r.status === 206; })
+    .catch(function () { return false; });
+}
+
+async function pickBase() {
+  var coreFile = q.get('corefile') || '';
+  var haveLoader = await exists(LOCAL + 'loader.js');
+  var haveCore = coreFile ? await exists(LOCAL + 'cores/' + coreFile + '-wasm.data') : haveLoader;
+  if (haveLoader && haveCore) { installOfflineGuard(); return { base: LOCAL, src: 'device' }; }
+  if (navigator.onLine) return { base: CDN, src: 'cdn' };
+  // Offline AND incomplete on the card: say exactly what is missing instead of hanging on a spinner.
+  return { base: null, src: 'none', missing: !haveLoader ? 'runtime' : ('core ' + coreFile) };
+}
+
+// ── Boot ────────────────────────────────────────────────────────────────────────────────────────
+(async function boot() {
+  var core = q.get('core'), rom = q.get('rom');
+  if (!core || !rom) { say(TR('Avvio non valido', 'Invalid launch'), TR('Manca il gioco o il sistema.', 'Missing game or system.'), 'err'); return; }
+
+  say(TR('Preparo l’emulatore…', 'Preparing the emulator…'), '');
+  var pick = await pickBase();
+  if (!pick.base) {
+    say(TR('Emulatore non disponibile', 'Emulator unavailable'),
+        TR('Manca ' + pick.missing + ' sulla scheda SD e non c’è connessione per scaricarlo.',
+           'Missing ' + pick.missing + ' on the SD card, and there is no connection to fetch it.'), 'err');
+    return;
+  }
+  $('bsrc').textContent = pick.src === 'device' ? TR('dal dispositivo · offline', 'from the device · offline')
+                                                : TR('dal web', 'from the web');
+
+  window.EJS_player        = '#game';
+  window.EJS_core          = core;
+  window.EJS_gameUrl       = rom;
+  window.EJS_gameName      = q.get('name') || 'game';
+  window.EJS_pathtodata    = pick.base;
+  window.EJS_startOnLoaded = true;
+  window.EJS_color         = '#2dd4bf';
+  window.EJS_alignStartButton = 'center';
+  window.EJS_backgroundColor  = '#06070b';
+  // Arcade sets (Neo Geo, some CPS) need a BIOS loaded next to the ROM or the core refuses to boot.
+  if (q.get('bios')) window.EJS_biosUrl = q.get('bios');
+  // Never spin up SharedArrayBuffer threads: the web OS is served over plain HTTP on the LAN, which is
+  // not a secure context and carries no COOP/COEP headers, so threaded cores cannot be instantiated.
+  window.EJS_threads = false;
+  // Only the WebGL2 core build ships (no -legacy variant). Most cores do not set defaultWebGL2, so
+  // EmulatorJS's own detection falls back to false and asks for a "<core>-legacy-wasm.data" that is not
+  // there -> "EJS_Runtime is not defined". Force WebGL2 on for every core.
+  window.EJS_defaultOptions = { webgl2Enabled: 'enabled' };
+
+  // The emulator's own menus ship as language packs, and EmulatorJS otherwise picks one from
+  // navigator.language — the BROWSER's language, not the OS's. Ask the device and load only once known,
+  // since EJS_language must be set before the loader runs.
+  //
+  // The pack FILENAMES must match what is actually on the card: this bundle names them by bare code
+  // (`it.json`, `en.json`). Asking for a regional name like `it-IT` fetches a 404 and the whole load
+  // fails — which is exactly how this shipped broken until a real launch was tried. So the pack is
+  // requested only when the file is present, and English is left to EmulatorJS's own default.
+  try {
+    var r = await fetch('/api/lang', { cache: 'no-store' });
+    var dd = await r.json();
+    var code = dd && dd.lang;
+    if (code && code !== 'en') {
+      var probe = await fetch(pick.base + 'localization/' + code + '.json', { method: 'GET', cache: 'no-store' });
+      if (probe.ok) window.EJS_language = code;
+    }
+  } catch (e) { /* no answer -> EmulatorJS's own default, never a 404 pack */ }
+
+  say(TR('Carico il gioco…', 'Loading the game…'), window.EJS_gameName);
+  var s = document.createElement('script');
+  s.src = pick.base + 'loader.js';
+  s.onerror = function () {
+    say(TR('Caricamento fallito', 'Load failed'),
+        TR('L’emulatore non si è caricato da ' + pick.src + '.', 'The emulator failed to load from ' + pick.src + '.'), 'err');
+  };
+  document.body.appendChild(s);
+
+  // Hide the boot card once the emulator paints. EmulatorJS has no single "ready" event we can rely on
+  // across cores, so watch for its canvas instead — the honest signal that something is on screen.
+  var t0 = Date.now();
+  var iv = setInterval(function () {
+    if (document.querySelector('#game canvas')) { clearInterval(iv); $('boot').classList.add('gone'); focusGame(); }
+    else if (Date.now() - t0 > 90000) { clearInterval(iv); say(TR('Ci sta mettendo troppo', 'This is taking too long'),
+        TR('Il core potrebbe non combaciare con questo set di ROM.', 'The core may not match this ROM set.'), 'err'); }
+  }, 400);
+})();
+
+// ── Input: keyboard, gamepad, mouse ─────────────────────────────────────────────────────────────
+// Keyboard events only reach the emulator if this document has focus. Inside an iframe that is not
+// automatic — a click lands on the parent first — so we take focus on load and on any pointer entry.
+function focusGame() { try { window.focus(); var c = document.querySelector('#game canvas'); if (c) { c.setAttribute('tabindex', '0'); c.focus(); } } catch (e) {} }
+window.addEventListener('load', focusGame);
+window.addEventListener('pointerdown', focusGame);
+document.addEventListener('mouseenter', focusGame);
+
+// Gamepad: EmulatorJS binds the Gamepad API itself, but the browser only starts delivering events
+// after a button press, and players reasonably expect confirmation their pad was seen.
+function padMsg(t) { var e = $('pad'); e.textContent = t; e.classList.add('on'); setTimeout(function () { e.classList.remove('on'); }, 2600); }
+window.addEventListener('gamepadconnected', function (e) {
+  focusGame();
+  padMsg('⌘ ' + TR('Joypad collegato', 'Gamepad connected') + (e.gamepad && e.gamepad.index != null ? ' #' + (e.gamepad.index + 1) : ''));
+});
+window.addEventListener('gamepaddisconnected', function () { padMsg('⌘ ' + TR('Joypad scollegato', 'Gamepad disconnected')); });
+
+// Esc leaves the game. The library hosts us in an iframe and listens for this message; when opened
+// standalone we simply go back. Handled here because the emulator swallows most keys.
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape') return;
+  e.preventDefault();
+  try { if (window.parent && window.parent !== window) { window.parent.postMessage({ type: 'arcade-exit' }, '*'); return; } } catch (err) {}
+  history.back();
+});
+</script>
+</body></html>

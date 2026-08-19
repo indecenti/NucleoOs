@@ -1,0 +1,22 @@
+{
+  "id": "arcade",
+  "name": "Arcade",
+  "version": "1.0.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Play the ROM library on the SD card in the browser — NES, SNES, Game Boy, GBA, Mega Drive and PC Engine, emulated client-side with self-hosted EmulatorJS. The device only serves the files; the emulation runs on the machine you open it from.",
+  "category": "games",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/arcade/",
+  "icon": "icon.svg",
+  "permissions": ["storage.shared", "device.keyboard", "device.display"],
+  "mounts": {},
+  "handles": { "role": "viewer", "extensions": ["nes", "sfc", "smc", "gb", "gbc", "gba", "md", "gen", "smd", "pce", "sms", "gg"] },
+  "intents": [],
+  "subscribes": [],
+  "publishes": [],
+  "power": { "budget_class": "high", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

@@ -28,7 +28,13 @@ __pycache__/
 # --- Non-distributable device SD content (kept LOCALLY, never committed) ---
 # Copyrighted game ROMs / DOS bundles / media, and personal user data. The distributable
 # SD tree is deploy/sd-safe (manifests only); deploy/sd + tools/sd-sim are dev cards.
-deploy/sd/data/ROMs/
+# ROM library: ignore the GAME FILES but keep the empty folder skeleton + README, so a fresh
+# clone still ships the tree that first-boot provisioning mirrors onto a blank card.
+deploy/sd/data/ROMs/**
+!deploy/sd/data/ROMs/
+!deploy/sd/data/ROMs/*/
+!deploy/sd/data/ROMs/**/.gitkeep
+!deploy/sd/data/ROMs/README.txt
 deploy/sd/data/DOS/
 deploy/sd/data/Documents/
 deploy/sd/data/Notes/
@@ -51,3 +57,14 @@ tools/sd-sim/data/*.md
 
 # Release build output
 /dist/
+
+# Copyrighted ROMs staged for the Arcade app (device/SD only, never committed).
+# The OS's ROM library lives at data/ROMs — deploy/sd and tools/sd-sim entries already exist above.
+
+# EmulatorJS runtime is vendored ONCE at apps/arcade/www/emulatorjs (the source of truth).
+# deploy/sd is a staging tree that tools/deploy.ps1 regenerates from apps/, so committing the
+# 20 MB copy there would duplicate every core blob in the repo for no gain.
+deploy/sd/apps/arcade/www/emulatorjs/
+
+# Host-harness scratch root: a throwaway SD mirror the ANIMA gate builds while running.
+tools/anima-host/d192root/
