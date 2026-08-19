@@ -15,6 +15,7 @@
 #include "driver/i2s_std.h"
 #include "esp_task_wdt.h"   // pet the watchdog while waiting for the player task to unwind
 #include "esp_heap_caps.h"  // largest-free-block: diagnose a failed player-task stack alloc
+#include "esp_timer.h"      // monotonic clock for the fade-in ramp (the media clock is seek-rebased)
 
 // The recorder owns the shared mic/speaker pins; declared here to enforce record-XOR-play.
 extern bool nucleo_recorder_is_recording(void);
@@ -36,9 +37,22 @@ static const char *TAG = "audio";
 // waiting for the player to unwind can never deadlock against it. Hold time is bounded (stop's ~4.5 s cap).
 // Created in a constructor (runs single-threaded before app_main) so the handle is race-free on first use.
 static SemaphoreHandle_t s_audio_mtx;
-__attribute__((constructor)) static void audio_mtx_init(void) { s_audio_mtx = xSemaphoreCreateRecursiveMutex(); }
+// SEPARATE, finer lock for the I2S channel handle itself. The lock above is deliberately NOT taken by
+// the player task (that invariant is what keeps stop() from deadlocking against it), so it cannot
+// protect the handle: blip/tone/siren open and close the channel from the UI task guarded only by a
+// racy s_playing read, and player_task calls i2s_close() BEFORE clearing s_playing. A sound effect
+// firing in that window ran i2s_del_channel() on the same handle the player task was deleting —
+// double free, wedged driver, every later playback silent. This mutex is held only across the short
+// open/close/retune/write calls and never while waiting on another lock, so it cannot deadlock.
+static SemaphoreHandle_t s_i2s_mtx;
+__attribute__((constructor)) static void audio_mtx_init(void) {
+    s_audio_mtx = xSemaphoreCreateRecursiveMutex();
+    s_i2s_mtx   = xSemaphoreCreateRecursiveMutex();
+}
 static inline void audio_lock(void)   { if (s_audio_mtx) xSemaphoreTakeRecursive(s_audio_mtx, portMAX_DELAY); }
 static inline void audio_unlock(void) { if (s_audio_mtx) xSemaphoreGiveRecursive(s_audio_mtx); }
+static inline void i2s_lock(void)     { if (s_i2s_mtx) xSemaphoreTakeRecursive(s_i2s_mtx, portMAX_DELAY); }
+static inline void i2s_unlock(void)   { if (s_i2s_mtx) xSemaphoreGiveRecursive(s_i2s_mtx); }
 
 // Shared MP3 decode scratch (see nucleo_audio_priv.h) — one copy for the file and radio
 // decoders, which never run concurrently (single player task). ~6.6 KB saved vs a static
@@ -91,8 +105,18 @@ static esp_err_t i2s_open(int rate, int chans)
     };
     err = i2s_channel_init_std_mode(s_tx, &std);
     if (err != ESP_OK) { ESP_LOGE(TAG, "init_std: %s", esp_err_to_name(err)); i2s_del_channel(s_tx); s_tx = NULL; return err; }
-    nucleo_codec_speaker(true);   // ADV: power up the ES8311 DAC so the I2S actually reaches the speaker
-    i2s_channel_enable(s_tx);
+    // Order matters on the ADV: the ES8311 has no MCLK wire and derives its master clock from the BCLK
+    // pin, so its clock-manager/CSM power-up must land on a LIVE clock. Configuring the codec first
+    // (the old order) programmed it against a dead pin — exactly what the ESP-IDF i2s_es8311 example
+    // avoids by enabling the channel before es8311_codec_init(). No-op ordering on the original board.
+    err = i2s_channel_enable(s_tx);
+    if (err != ESP_OK) {
+        // Was ignored: a failed enable left a NON-NULL s_tx that accepts writes and drops them, so the
+        // decoder ran to EOF at full speed in total silence with nothing logged anywhere.
+        ESP_LOGE(TAG, "i2s_channel_enable: %s", esp_err_to_name(err));
+        i2s_del_channel(s_tx); s_tx = NULL; return err;
+    }
+    nucleo_codec_speaker(true);   // ADV: power up the ES8311 DAC now that BCLK is actually running
     s_rate = rate; s_chans = chans;
     ESP_LOGI(TAG, "i2s TX up: %d Hz, %d ch (bclk=%d ws=%d dout=%d)", rate, chans,
              NUCLEO_SPK_PIN_BCLK, NUCLEO_SPK_PIN_WS, NUCLEO_SPK_PIN_DOUT);
@@ -101,11 +125,13 @@ static esp_err_t i2s_open(int rate, int chans)
 
 static void i2s_close(void)
 {
-    if (!s_tx) return;
+    i2s_lock();
+    if (!s_tx) { i2s_unlock(); return; }
     nucleo_codec_speaker(false);   // ADV: mute the ES8311 DAC so the idle speaker doesn't hiss (no-op on original)
     i2s_channel_disable(s_tx);
     i2s_del_channel(s_tx);
     s_tx = NULL; s_rate = 0; s_chans = 0;
+    i2s_unlock();
 }
 
 // One-shot procedural sound effect for game feedback (a short decaying filtered-noise "clack"). Plays
@@ -203,11 +229,8 @@ void nucleo_audio_siren(int dur_ms)
 }
 void nucleo_audio_siren_stop(void) { i2s_close(); }          // silence + free the I2S pins for the mic/recorder
 
-esp_err_t nucleo_audio_i2s_rate(int rate, int chans)
+static esp_err_t i2s_rate_locked(int rate, int chans)
 {
-    if (rate <= 0) return ESP_ERR_INVALID_ARG;
-    if (chans < 1) chans = 1;
-    if (chans > 2) chans = 2;
     if (!s_tx) return i2s_open(rate, chans);
     if (rate == s_rate && chans == s_chans) return ESP_OK;
     // Slot count changed -> reopen; otherwise just retune the clock.
@@ -215,9 +238,30 @@ esp_err_t nucleo_audio_i2s_rate(int rate, int chans)
     i2s_channel_disable(s_tx);
     i2s_std_clk_config_t clk = I2S_STD_CLK_DEFAULT_CONFIG((uint32_t)rate);
     esp_err_t err = i2s_channel_reconfig_std_clock(s_tx, &clk);
-    i2s_channel_enable(s_tx);
-    if (err == ESP_OK) s_rate = rate;
-    return err;
+    esp_err_t een = i2s_channel_enable(s_tx);
+    if (err == ESP_OK && een == ESP_OK) { s_rate = rate; return ESP_OK; }
+    // A failed retune used to leave s_rate at the OLD value while the caller ignored the error. The
+    // decode loop calls this once PER FRAME, so every following frame saw rate != s_rate and repeated
+    // the disable/reconfig/enable teardown — a permanently silent stream at full CPU. Tear the channel
+    // down instead and reopen from scratch, which also re-runs the codec power-up in the right order.
+    ESP_LOGE(TAG, "i2s retune to %d Hz failed (reconfig=%s enable=%s) — reopening",
+             rate, esp_err_to_name(err), esp_err_to_name(een));
+    i2s_close();
+    return i2s_open(rate, chans);
+}
+
+esp_err_t nucleo_audio_i2s_rate(int rate, int chans)
+{
+    if (rate <= 0) return ESP_ERR_INVALID_ARG;
+    if (chans < 1) chans = 1;
+    if (chans > 2) chans = 2;
+    // The open/close/retune decision reads s_tx/s_rate/s_chans and then acts on them: without holding
+    // the handle lock across the whole sequence a concurrent sound effect could close the channel
+    // between the test and the call. i2s_close/i2s_open take the same recursive mutex.
+    i2s_lock();
+    esp_err_t r = i2s_rate_locked(rate, chans);
+    i2s_unlock();
+    return r;
 }
 
 // Software output volume, 0..100 (%). Applied centrally here so it covers both the WAV
@@ -241,11 +285,15 @@ void nucleo_audio_fade_in(int dur_ms)
 {
     s_ramp_to       = atomic_load(&s_volume);
     s_ramp_from     = 0;
-    s_ramp_start_ms = nucleo_audio_elapsed_ms();
+    // MONOTONIC clock, not the media clock. nucleo_audio_elapsed_ms() is s_base_ms + frames/rate and a
+    // seek REBASES it, so a backward seek during the ramp made the elapsed value smaller than the ramp
+    // start: dt clamped to 0, the effective volume stayed at s_ramp_from (0), and the ramp never
+    // completed — silent for the rest of the track, with everything else looking healthy.
+    s_ramp_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
     s_ramp_dur_ms   = dur_ms > 0 ? dur_ms : 150;
 }
 
-esp_err_t nucleo_audio_i2s_write(const int16_t *pcm, size_t bytes)
+static esp_err_t i2s_write_locked(const int16_t *pcm, size_t bytes)
 {
     if (!s_tx || !bytes) return ESP_OK;
     size_t wrote = 0;
@@ -253,7 +301,7 @@ esp_err_t nucleo_audio_i2s_write(const int16_t *pcm, size_t bytes)
     // Determine effective volume (apply ramp if active)
     int vol = atomic_load(&s_volume);
     if (s_ramp_from >= 0) {
-        uint32_t el = nucleo_audio_elapsed_ms();
+        uint32_t el = (uint32_t)(esp_timer_get_time() / 1000);   // monotonic: a seek must not rewind the ramp
         uint32_t dt = (el > s_ramp_start_ms) ? (el - s_ramp_start_ms) : 0;
         if (dt >= (uint32_t)s_ramp_dur_ms) {
             vol = s_ramp_to;
@@ -319,6 +367,85 @@ esp_err_t nucleo_audio_i2s_write(const int16_t *pcm, size_t bytes)
         off += n;
     }
     return ESP_OK;
+}
+
+// ─── Live output analysis ─────────────────────────────────────────────────────────────────────────
+// Fed from the PCM on its way to the speaker, so a meter built on this shows what you actually HEAR
+// (post volume, post mute) rather than what the file contains.
+//
+// FFT-free by design. A transform would need a window buffer plus twiddle tables this no-PSRAM chip
+// cannot spare — and the whole point of the Solo boot is to keep a contiguous block free for the Helix
+// decoder, so spending it on a visualiser would be self-defeating. Instead: a cascade of one-pole
+// low-passes with increasing cutoffs. The difference between two neighbouring stages IS a band-pass,
+// so N poles give N+1 bands for ~2 integer ops each. Only every 4th sample is examined; at 44.1 kHz
+// that is still ~11k samples/s, far above the ~20 Hz the display refreshes at.
+#define NBP (NUCLEO_AUDIO_BANDS_N - 1)               // one-pole stages (bands = stages + 1)
+static int32_t s_lp[NBP];                            // filter state, persists across chunks
+static const uint8_t s_lp_sh[NBP] = { 6, 5, 4, 3, 2 };   // cutoff per stage, low -> high
+// Per-band output shift. Music is bass-heavy, so without a steeper shift on the low bands the first
+// bar would sit pinned at full scale while the rest never left the floor.
+static const uint8_t s_band_sh[NUCLEO_AUDIO_BANDS_N] = { 7, 6, 5, 5, 5, 5 };
+static atomic_int s_band[NUCLEO_AUDIO_BANDS_N];
+static uint8_t  s_scope[NUCLEO_AUDIO_SCOPE_N];       // peak history ring, one entry per write
+static uint8_t  s_scope_head = 0;                    // next write position
+
+static inline int scale8(int32_t v, int sh) { int32_t t = v >> sh; return t > 255 ? 255 : (int)t; }
+static inline int32_t iabs32(int32_t v) { return v < 0 ? -v : v; }
+
+static void analyse_pcm(const int16_t *pcm, size_t nsamp)
+{
+    int32_t mag[NUCLEO_AUDIO_BANDS_N] = {0};
+    int32_t pk = 0;
+    for (size_t i = 0; i < nsamp; i += 4) {           // decimate: shape is preserved, cost is not
+        int32_t x = pcm[i];
+        for (int b = 0; b < NBP; b++) s_lp[b] += (x - s_lp[b]) >> s_lp_sh[b];
+        int32_t m0 = iabs32(s_lp[0]);                 // below the first cutoff = bass
+        if (m0 > mag[0]) mag[0] = m0;
+        for (int b = 1; b < NBP; b++) {               // between two cutoffs = a band-pass
+            int32_t m = iabs32(s_lp[b] - s_lp[b - 1]);
+            if (m > mag[b]) mag[b] = m;
+        }
+        int32_t mt = iabs32(x - s_lp[NBP - 1]);       // above the last cutoff = treble
+        if (mt > mag[NBP]) mag[NBP] = mt;
+        int32_t a = iabs32(x);
+        if (a > pk) pk = a;
+    }
+    for (int b = 0; b < NUCLEO_AUDIO_BANDS_N; b++)
+        atomic_store(&s_band[b], scale8(mag[b], s_band_sh[b]));
+    s_scope[s_scope_head] = (uint8_t)scale8(pk, 7);
+    s_scope_head = (uint8_t)((s_scope_head + 1) % NUCLEO_AUDIO_SCOPE_N);
+}
+
+int nucleo_audio_bands(uint8_t *out, int n)
+{
+    if (!out || n <= 0) return 0;
+    if (n > NUCLEO_AUDIO_BANDS_N) n = NUCLEO_AUDIO_BANDS_N;
+    bool live = atomic_load(&s_playing) && !atomic_load(&s_paused) && !atomic_load(&s_muted);
+    for (int b = 0; b < n; b++) out[b] = live ? (uint8_t)atomic_load(&s_band[b]) : 0;
+    return n;
+}
+
+int nucleo_audio_scope(uint8_t *out, int n)
+{
+    if (!out || n <= 0) return 0;
+    if (n > NUCLEO_AUDIO_SCOPE_N) n = NUCLEO_AUDIO_SCOPE_N;
+    // Unroll the ring oldest-first so the caller can plot left-to-right without knowing about it.
+    int start = (s_scope_head + NUCLEO_AUDIO_SCOPE_N - n) % NUCLEO_AUDIO_SCOPE_N;
+    for (int i = 0; i < n; i++) out[i] = s_scope[(start + i) % NUCLEO_AUDIO_SCOPE_N];
+    return n;
+}
+
+// Holding the handle lock across the write keeps a sound effect (or siren_stop) from deleting the
+// channel while the player task is mid-transfer. The wait is bounded by the 300 ms per-chunk write
+// timeout, and the effect helpers no-op while a track plays, so contention is rare and short.
+esp_err_t nucleo_audio_i2s_write(const int16_t *pcm, size_t bytes)
+{
+    // Analyse BEFORE the write: the buffer is in cache right now, and the write blocks on DMA.
+    if (pcm && bytes >= sizeof(int16_t)) analyse_pcm(pcm, bytes / sizeof(int16_t));
+    i2s_lock();
+    esp_err_t r = i2s_write_locked(pcm, bytes);
+    i2s_unlock();
+    return r;
 }
 
 // ---- transport helpers ----
@@ -508,6 +635,9 @@ static esp_err_t start_play_window(const char *path, uint32_t start_ms, uint32_t
 {
     atomic_store(&s_dbg_drop, 0); atomic_store(&s_dbg_init, 0);          // fresh diagnostics for this play
     atomic_store(&s_dbg_err, 0);  atomic_store(&s_dbg_frames, 0); atomic_store(&s_dbg_srate, 0);
+    // Reset the meter too, so a new track never opens showing the tail of the previous one.
+    memset(s_lp, 0, sizeof s_lp); s_scope_head = 0; memset(s_scope, 0, sizeof s_scope);
+    for (int b = 0; b < NUCLEO_AUDIO_BANDS_N; b++) atomic_store(&s_band[b], 0);
     if (nucleo_recorder_is_busy() || nucleo_micspec_running()) {                               // shared GPIO43 (mic⊕speaker): block while the recorder/dictation OR the Spectrum app holds the mic RX
         ESP_LOGW(TAG, "play dropped: mic busy (rec=%d spectrum=%d) -> %s",                     // last fully-silent drop path: log it so "no game audio" is a one-line diagnosis
                  (int)nucleo_recorder_is_busy(), (int)nucleo_micspec_running(), path ? path : "?");
@@ -592,6 +722,47 @@ int nucleo_audio_dbg_srate(void)  { return atomic_load(&s_dbg_srate); }
 void nucleo_audio_dbg_set_init(int v)   { atomic_store(&s_dbg_init, v); }
 void nucleo_audio_dbg_set_err(int v)    { if (!atomic_load(&s_dbg_err)) atomic_store(&s_dbg_err, v); }
 void nucleo_audio_dbg_frame(int srate)  { atomic_fetch_add(&s_dbg_frames, 1); if (srate) atomic_store(&s_dbg_srate, srate); }
+
+// One-line verdict for a play that produced no sound. The counters above were already collected on
+// every play but nothing ever READ them, so a silent clip stayed undiagnosable — and this device has
+// no usable serial console (the USB PHY belongs to TinyUSB), so an ESP_LOGE reaches nobody. Callers
+// (the Music/Video UIs) print this on the panel instead. Ordered most-decisive first: a cause that
+// makes output impossible outranks one that merely looks suspicious.
+bool nucleo_audio_why_silent(char *buf, size_t n)
+{
+    if (!buf || n == 0) return false;
+    buf[0] = '\0';
+    int drop = atomic_load(&s_dbg_drop), init = atomic_load(&s_dbg_init);
+    int err  = atomic_load(&s_dbg_err),  frames = atomic_load(&s_dbg_frames);
+
+    // 1. The play never started: start_play_window refused or could not spawn the decode task.
+    if (drop == 1) { snprintf(buf, n, "mic busy (recorder/spectrum)"); return true; }
+    if (drop == 2) { snprintf(buf, n, "out of RAM: audio task (largest %uB)",
+                              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT)); return true; }
+    // 2. The task ran but the decoder/file did not come up.
+    if (init == 2) { snprintf(buf, n, "out of RAM: MP3 decoder (largest %uB)",
+                              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT)); return true; }
+    if (init == 3) { snprintf(buf, n, "file could not be opened"); return true; }
+    // 3. Output is being produced but deliberately silenced. Checked AFTER the hard failures so a
+    //    muted device that is ALSO out of RAM reports the cause that actually blocks playback.
+    int vol = atomic_load(&s_volume);
+    if (atomic_load(&s_muted)) { snprintf(buf, n, "MUTED (volume %d%%)", vol); return true; }
+    if (vol <= 0)              { snprintf(buf, n, "volume is 0%%"); return true; }
+    // The original board's amp uses a SQUARED volume curve (see nucleo_audio_i2s_write), so a low
+    // saved level is far quieter than the number suggests — 5% is a gain of 0.0025, inaudible on the
+    // tiny speaker and easily mistaken for a fault. Report it rather than silently changing the taper.
+    if (vol < 10 && !nucleo_codec_present()) { snprintf(buf, n, "volume very low (%d%%)", vol); return true; }
+    // 4. Decoder produced nothing at all.
+    if (frames == 0) {
+        if (init == 0) snprintf(buf, n, "decode task never started");
+        else if (err)  snprintf(buf, n, "no frames decoded (MP3 err %d)", err);
+        else           snprintf(buf, n, "no frames decoded (file not valid MP3?)");
+        return true;
+    }
+    // 5. Frames decoded but the I2S sink never opened -> nothing reached the speaker.
+    if (s_rate == 0) { snprintf(buf, n, "I2S output not open (%d frames decoded)", frames); return true; }
+    return false;                                        // engine looks healthy
+}
 
 void nucleo_audio_stop(void)
 {

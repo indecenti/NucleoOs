@@ -10,6 +10,7 @@
 #include "esp_err.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>   // size_t (nucleo_audio_why_silent)
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +73,28 @@ int         nucleo_audio_dbg_init(void);
 int         nucleo_audio_dbg_err(void);
 int         nucleo_audio_dbg_frames(void);
 int         nucleo_audio_dbg_srate(void);
+// One-line verdict for a play that produced NO audible output, composed from the counters above plus
+// the live mute/volume/I2S state. Written into `buf` (always NUL-terminated). Returns true when a
+// silent-playback cause was identified, false when the engine looks healthy (audio really is flowing).
+// The device has no usable serial console — the USB PHY is handed to TinyUSB — so this string is the
+// only way a silent play is diagnosable. Callers show it on screen.
+bool        nucleo_audio_why_silent(char *buf, size_t n);
+
+// ─── Live output analysis (for meters / scopes / spectrum-style visualisers) ───────────────────────
+// Derived from the PCM actually handed to the speaker, so it reflects volume, mute and the real mix —
+// not the file. Costs one decimated pass over a buffer already in cache; nothing is allocated.
+//
+// Band energies, 0..255, low frequency first. Built from cascaded one-pole filters rather than an FFT:
+// a real transform would need a window buffer plus twiddle tables this no-PSRAM chip cannot spare, and
+// at 240x135 no viewer can resolve more bars than this anyway. Writes min(n, NUCLEO_AUDIO_BANDS_N)
+// values and returns that count. All zero while idle, paused or muted.
+#define NUCLEO_AUDIO_BANDS_N 6
+int  nucleo_audio_bands(uint8_t *out, int n);
+// Rolling history of output peak level, 0..255, oldest first and newest last — one sample per decoded
+// frame (~26 ms), so NUCLEO_AUDIO_SCOPE_N covers roughly 1.6 s. Copies into `out`; returns how many
+// values were written (min(n, NUCLEO_AUDIO_SCOPE_N)).
+#define NUCLEO_AUDIO_SCOPE_N 64
+int  nucleo_audio_scope(uint8_t *out, int n);
 uint32_t    nucleo_audio_duration_ms(void); // ms total: exact when set (play_at), else estimated
                                             // from the running byte/time rate; 0 until playback warms up
 int         nucleo_audio_progress(void);    // 0..100 (by decoded file position)

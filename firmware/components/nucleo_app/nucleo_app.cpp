@@ -69,6 +69,27 @@ RTC_NOINIT_ATTR static char     s_solo_open_file[256];   // "open with" path for
 static char s_open_file[256] = "";               // "open with" handoff: Files passes the exact file; the viewer's on_enter consumes it
 static bool s_solo_active = false;
 static int  s_solo_app = SOLO_NONE;
+
+// Transient "bring this one Solo boot up WITHOUT Wi-Fi" flag — same one-shot RTC_NOINIT shape as the
+// BLE keep-once flag, and consumed the same way (magic filters the cold-boot garbage).
+// Why it exists: esp_wifi_init()+start() costs ~48 KB and HALVES the largest contiguous block, 31 KB
+// down to 15 KB (measured — see the USB-web branch in main.c). A Solo boot exists precisely to hand an
+// app an unfragmented arena, so for an app that needs a big contiguous run and no network at all (the
+// MP3 decoder needs ~24 KB across Helix's 8 allocations), starting Wi-Fi destroys the very thing the
+// reboot was for. An app opts in by OR-ing NX_WIFI into its exclusive_flags alongside NX_SOLO.
+// Safe by construction: leaving the app is a reboot back into the full OS, so Wi-Fi is never restored
+// in-place — that fragile teardown/restore path is what previously broke audio+SD on the ADV.
+static RTC_NOINIT_ATTR uint32_t s_wifi_skip_once;
+#define WIFI_SKIP_MAGIC 0x5749464Fu   // 'WIFO'
+extern "C" void nucleo_app_wifi_skip_next_boot(void) { s_wifi_skip_once = WIFI_SKIP_MAGIC; }
+// Consumed ONCE, early in app_main. Clearing it here is what makes it one-shot: if the Solo session
+// crashes, the next boot comes up with Wi-Fi normally instead of stranding the device offline.
+extern "C" bool nucleo_app_wifi_skip_take(void)
+{
+    if (s_wifi_skip_once != WIFI_SKIP_MAGIC) return false;
+    s_wifi_skip_once = 0;
+    return true;
+}
 // Did the PREVIOUS boot run the Web Client server-Solo profile? A crash lands in the full OS (see the
 // ESP_RST_SW gate in nucleo_anima_solo_pending), so the reset reason ALONE can't tell whether server-Solo
 // itself failed or the full OS did. Blanket-suppressing server-Solo after ANY crash was the bug: it stranded
@@ -557,9 +578,19 @@ static void open_app_def(const nucleo_app_def_t *def)
     // app — never strand suspended services on a direct switch.
     if (s_app_excl) { s_app_excl = false; nucleo_exclusive_exit(); }
     if (def && def->exclusive_flags) {
+        uint32_t xf = def->exclusive_flags;
+        // NX_WIFI paired with NX_SOLO is a BOOT-TIME decision: main.c simply never starts the radio for
+        // that boot. Feeding it to the runtime path as well would esp_wifi_stop() a radio that was never
+        // initialised and, worse, esp_wifi_start() + re-join it on exit — allocating ~48 KB and
+        // re-fragmenting the heap inside the very session the Solo reboot was meant to keep clean. That
+        // in-place restore is the path that previously broke audio + SD on the ADV. Strip it here; a
+        // non-Solo app asking for NX_WIFI still gets the runtime behaviour unchanged.
+        if ((xf & NX_SOLO) && (xf & NX_WIFI)) xf &= ~NX_WIFI;
         bool was_active = nucleo_exclusive_active();   // a background worker (Recorder AI) may already hold it
-        nucleo_exclusive_enter(def->exclusive_flags, NULL);   // idempotent: adds nothing if already active
-        s_app_excl = !was_active;                      // own the restore ONLY if WE activated it (no false latch)
+        if (xf) {
+            nucleo_exclusive_enter(xf, NULL);          // idempotent: adds nothing if already active
+            s_app_excl = !was_active;                  // own the restore ONLY if WE activated it (no false latch)
+        }
     }
     s_app_tab = nullptr;                        // each app starts without a TAB claim; on_enter may set one
     s_app_back = nullptr; s_app_direct = false; s_app_fullscreen = false; // ...nor a Back claim / direct-draw / fullscreen pin; on_enter may set them
@@ -614,6 +645,9 @@ static bool maybe_solo_launch(int idx)
     // kept for that one boot, so it opens seamlessly instead of the old "enable BT +
     // reboot + reopen" dance. Transient — the RAM-saving default returns on exit.
     if (a->exclusive_flags & NX_BLE) nucleo_ble_keep_next_boot();   // keep Bluetooth for the Solo session
+    // NX_WIFI alongside NX_SOLO = "this app needs the contiguous heap more than it needs the radio".
+    // Wi-Fi costs ~48 KB and halves the largest free block, which defeats the point of the Solo reboot.
+    if (a->exclusive_flags & NX_WIFI) nucleo_app_wifi_skip_next_boot();
     // Carry a pending "open with" path (e.g. Files -> a .nfv for the Video player) across the warm reboot;
     // s_open_file is plain RAM and would be lost. Empty for a normal menu launch -> self-clears, no stale file.
     snprintf(s_solo_open_file, sizeof s_solo_open_file, "%s", s_open_file);

@@ -302,8 +302,17 @@ void app_main(void)
     // don't fit together on this no-PSRAM chip, and bringing Wi-Fi up first fragments the
     // heap so the NimBLE controller init OOMs. Every other boot (incl. cloud Solo) keeps it.
     extern bool nucleo_ble_kept_once(void);
+    // Consume the one-shot flag UNCONDITIONALLY (even when this is not a Solo boot) so a stale request
+    // from a crashed session can never linger and silently kill Wi-Fi on a later normal boot.
+    const bool wifi_skip = nucleo_app_wifi_skip_take() && solo;
     if (solo && nucleo_ble_kept_once()) {
         ESP_LOGW(TAG, "BLE Solo boot: skipping Wi-Fi bringup (BLE gets the whole heap)");
+    } else if (wifi_skip) {
+        // A Solo app that declared NX_WIFI (e.g. Music: the Helix decoder needs ~24 KB contiguous and
+        // the app has no network features at all). Wi-Fi would halve the largest free block to ~15 KB
+        // and the decoder would OOM — playing the track in total silence. No netif init here: unlike
+        // the usbweb branch below, generic Solo runs no httpd, so nothing needs lwIP.
+        ESP_LOGW(TAG, "Solo boot: skipping Wi-Fi (~48 KB, largest block ~31 KB instead of ~15 KB)");
     } else if (usbweb) {
         // USB-web boot: the PC reaches the web OS over the USB-NCM cable, so Wi-Fi is pure dead weight.
         // esp_wifi_init()+start() cost ~48 KB and halve the largest contiguous block (31 KB -> 15 KB) —

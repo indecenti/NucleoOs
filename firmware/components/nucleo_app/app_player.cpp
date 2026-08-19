@@ -37,21 +37,29 @@ extern "C" {
 #include "cJSON.h"
 }
 #include "app_gfx.h"
+#include "nucleo_theme.h"       // THEME_*: chrome follows the live theme (docs/native-ui-kit.md)
 #include "nucleo_i18n.h"        // TR(it,en): UI labels follow the system language
 
-// ---- Design tokens (RGB565) — tuned for legibility on the dark panel, aligned with Radio ----
-#define BG    0x0841 // base background (void blue)
-#define SURF  0x10A2 // raised surface / progress-track background
-#define CAP   0x1A8B // focused capsule background (settings rows)
-#define FG    0xFFFF // primary text (always legible on BG)
-#define MUTED 0x8C71 // secondary text — readable grey (NOT the old near-black)
-#define DIM   0x52CB // tertiary text / key hints
-#define LINE  0x2945 // hairline separators
-#define ACC   0x4DDF // primary accent — bright blue
+// ---- Design tokens — CHROME follows the LIVE theme (docs/native-ui-kit.md rule 1) ---------------
+// These were baked RGB565 literals, so Music drew its own blue-on-void-blue whatever the user had
+// chosen: under Hacker Green or AMOLED it was the one screen that ignored the Theme setting. A theme
+// switch rewrites these globals at runtime, so the app now follows along for free.
+#define BG    THEME_BG
+#define FG    THEME_FG
+#define MUTED THEME_MUTED
+#define DIM   THEME_DIM
+#define LINE  THEME_LINE
+#define INK   THEME_INK
+#define ACC   THEME_ACC
+// Track/groove fill behind a bar: the kit assigns that role to LINE. The old private "raised surface"
+// and "focused capsule" tints (0x10A2 / 0x1A8B) are explicitly NOT palette roles — across the OS a
+// focused row is an ACC-filled pill with INK text, and this app now matches instead of inventing one.
+#define SURF  THEME_LINE
+#define CAP   THEME_ACC
+// ---- Content colors: real semantics, allowed by the kit as named constants ----------------------
 #define GRN   0x8FF3 // playing / positive — mint green
 #define AMB   0xFE8C // paused / folders / warm accent
 #define RED   0xF96B // favourite / stop — warm red
-#define INK   0x0000 // text on bright fills
 
 #define MUSIC_DIR     NUCLEO_SD_MOUNT "/data/Music"
 #define SETTINGS_PATH NUCLEO_SD_MOUNT "/system/config/player.json"
@@ -340,40 +348,24 @@ static int track_at(int pos)
     return s_shuffle ? st->shuf[pos] : pos;
 }
 
-// ── Dedicated-mode RAM window — held for the WHOLE Music session ─────────────────────────────────────
-// This PSRAM-less device idles with only ~5 KB free heap (largest block ~3 KB) once the OS is up, so
-// Music can't even allocate its ~5 KB state at open, let alone run the Helix MP3 decoder (~17 KB
-// contiguous). So Music takes the SAME dedicated window the Video player uses — nucleo_exclusive_enter
-// (NX_NET_APP): suspend httpd + ANIMA L1 index + mDNS + voice to reclaim ~70 KB (Wi-Fi STA stays up) —
-// but for the ENTIRE session: entered in enter() BEFORE the first alloc, released in leave() when the
-// app closes. While Music is open there's no web UI / voice (a dedicated media app, exactly like Video).
+// ── Dedicated-mode RAM window ────────────────────────────────────────────────────────────────────────
+// Music now declares NX_NET_APP | NX_SOLO in its app_def, exactly like the Video player, so the
+// framework applies the window BEFORE on_enter runs and this file no longer manages it by hand.
 //
-// TRADE-OFF (accepted): suspending+restarting httpd churns the heap, which historically could fragment
-// it enough that the next app needing a big contiguous block (ANIMA's ~30 KB worker) failed to allocate.
-// We take that risk on purpose: the alternative is Music not opening AT ALL on the current ~5 KB heap.
-static bool s_excl = false;
-static void music_excl(bool on)
-{
-    if (on == s_excl) return;
-    if (on) {
-        nucleo_exclusive_info_t inf;
-        nucleo_exclusive_enter(NX_NET_APP, &inf);
-        ESP_LOGI("music", "excl: reclaim free %u->%u largest %u->%u",
-                 (unsigned)inf.free_before, (unsigned)inf.free_after,
-                 (unsigned)inf.largest_before, (unsigned)inf.largest_after);
-    } else {
-        nucleo_exclusive_exit();
-    }
-    s_excl = on;
-}
+// Why the runtime reclaim alone was NOT enough: it frees RAM but CANNOT DEFRAGMENT (see
+// nucleo_exclusive.h). The Helix decoder needs ~20-24 KB CONTIGUOUS across its 8 allocations, and on a
+// heap that has already hosted httpd + the L1 index + a dozen app sessions, the free total can be
+// plentiful while no single block is big enough — MP3InitDecoder fails and the track plays SILENTLY.
+// That is exactly the "out of RAM: MP3 decoder" verdict this app now reports. NX_SOLO reboots into the
+// app on a fresh, unfragmented heap (httpd/mDNS/launcher never start), which is the only thing that
+// actually produces a contiguous block that size — the same reason Video and the heavy games use it.
+// Cost: opening Music reboots, and Esc reboots back to the full OS.
 
 static void play_q(int pos)
 {
     if (!st || pos < 0 || pos >= st->qn) return;
     int ti = track_at(pos);
     char abs[300]; snprintf(abs, sizeof abs, "%s%s", st->qdir, st->q[ti]);
-
-    music_excl(true);   // no-op: the session-wide window is already up (entered in enter()); kept as a safety re-assert
 
     // Hand the shared ~32 KB canvas back to the heap BEFORE the Helix decoder starts: every play
     // path funnels through here (browser autoplay/skip, queue advance, now_playing), so doing it
@@ -555,11 +547,15 @@ static void draw_list(int y0, int region_h, const char *base)
 static void draw_mini_strip(int y, bool full)
 {
     bool paused = nucleo_audio_is_paused();
-    unsigned short c = paused ? AMB : GRN;
+    // A hard mute is device-wide and survives a reboot, so the strip must not paint a confident green
+    // "playing" pill while the engine is writing silence. Muted takes the grey, and the badge says so.
+    bool muted = nucleo_audio_is_muted();
+    unsigned short c = muted ? MUTED : (paused ? AMB : GRN);
     int mid = y + 1 + (STRIP_H - 2) / 2;
 
     // Right side: optional mode badge, then a fixed-width time field to its left.
     char badge[12] = "";
+    if (muted) strcat(badge, "MUTE ");
     if (s_shuffle) strcat(badge, "~");
     if (s_repeat == 1) strcat(badge, " R1");
     else if (s_repeat == 2) strcat(badge, " RA");
@@ -623,11 +619,12 @@ enum { SV_TEXT = 0, SV_TOGGLE, SV_SLIDER, SV_ACTION };
 static void draw_set_row_fs(int y, bool focus, const char *label, const char *val,
                             int kind, bool on, bool large, int vol)
 {
+    // Focus = accent-filled pill with INK text, the one selection look the whole OS uses (kit §3).
+    // The old private dark tint + FG text was a fourth divergent capsule style.
     int h = large ? 50 : 32;
     d.fillRoundRect(4, y, 232, h - 2, 9, focus ? CAP : BG);
-    if (focus) d.fillRoundRect(4, y + 3, 5, h - 8, 2, ACC);   // accent rail
 
-    d.setTextSize(2); d.setTextColor(focus ? FG : MUTED, focus ? CAP : BG);
+    d.setTextSize(2); d.setTextColor(focus ? INK : MUTED, focus ? CAP : BG);
     d.setCursor(16, y + (h - 16) / 2 - 1); d.print(label);
 
     if (kind == SV_SLIDER) {
@@ -648,19 +645,19 @@ static void draw_set_row_fs(int y, bool focus, const char *label, const char *va
         d.fillCircle(kx, vy + sh / 2, sh / 2 - 3, on ? INK : MUTED);
         return;
     }
+    // The focused row is already an accent fill, so a value must sit ON it in INK — the old code drew
+    // a second chip in the same accent (invisible) or a dark chip that fought the pill.
     if (kind == SV_ACTION) {
         int bw = 28, bh = 22, bx = 230 - bw, vy = y + (h - bh) / 2;
-        d.fillRoundRect(bx, vy, bw, bh, 6, focus ? ACC : SURF);
-        unsigned short ar = focus ? INK : MUTED;
+        if (!focus) d.fillRoundRect(bx, vy, bw, bh, 6, SURF);
         int ax = bx + bw / 2 - 2, ay = vy + bh / 2;
-        d.fillTriangle(ax, ay - 4, ax, ay + 4, ax + 4, ay, ar);    // chevron
+        d.fillTriangle(ax, ay - 4, ax, ay + 4, ax + 4, ay, focus ? INK : MUTED);    // chevron
         return;
     }
     // SV_TEXT: value chip
     if (val && val[0]) {
         int vw = (int)strlen(val) * 12 + 14, vh = 22, bx = 230 - vw, vy = y + (h - vh) / 2;
-        if (focus) d.fillRoundRect(bx, vy, vw, vh, 6, SURF);
-        d.setTextSize(2); d.setTextColor(focus ? FG : MUTED, focus ? SURF : BG);
+        d.setTextSize(2); d.setTextColor(focus ? INK : MUTED, focus ? CAP : BG);
         d.setCursor(bx + 7, vy + 3); d.print(val);
     }
 }
@@ -689,9 +686,14 @@ static void draw_settings_full(int ch)
         it[1].label = "Repeat";   it[1].kind = SV_TEXT;   snprintf(it[1].val, 16, "%s", repeat_str());
         it[2].label = "Autoplay"; it[2].kind = SV_TOGGLE; it[2].on = s_autoplay;
     } else if (s_set_tab == 1) {
-        n = 2;
+        n = 3;
         it[0].label = "Volume";    it[0].kind = SV_SLIDER; it[0].vol = nucleo_audio_volume();
         it[1].label = "Start Vol"; it[1].kind = SV_TEXT;   snprintf(it[1].val, 16, s_vol_default ? "%d%%" : "Last", s_vol_default);
+        // Device-wide mute, exposed here because it is the one setting that can silence Music while
+        // everything else looks correct: it lives in the audio engine (not in player.json), is set from
+        // the launcher Control Center, and is restored from settings.json on every boot. Without a row
+        // here the user has no way to see or clear it without leaving the app.
+        it[2].label = "Mute";      it[2].kind = SV_TOGGLE; it[2].on = nucleo_audio_is_muted();
     } else if (s_set_tab == 2) {
         n = 3;
         it[0].label = "Queue";       it[0].kind = SV_TEXT;
@@ -759,8 +761,10 @@ static void settings_key(int key, char ch)
     // Volume adjust mode: RIGHT raises, LEFT lowers (LEFT arrives via player_back). UP/DN also work.
     // ENTER leaves; Esc leaves via player_back.
     if (s_set_edit) {
-        if      (key == NK_RIGHT || key == NK_UP) nucleo_audio_set_volume(nucleo_audio_volume() + 5);
-        else if (key == NK_DOWN)                  nucleo_audio_set_volume(nucleo_audio_volume() - 5);
+        // Moving the slider clears a hard mute (see the Now Playing volume keys): otherwise the value
+        // climbs to 100% and the speaker still says nothing.
+        if      (key == NK_RIGHT || key == NK_UP) { nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() + 5); }
+        else if (key == NK_DOWN)                  { nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() - 5); }
         else if (key == NK_ENTER)                 s_set_edit = false;
         nucleo_app_request_draw(); return;
     }
@@ -798,6 +802,10 @@ static void settings_key(int key, char ch)
                 static const int vols[] = {0, 50, 75, 100};
                 int cur = 0; for (int i = 0; i < 4; i++) if (vols[i] == s_vol_default) { cur = i; break; }
                 s_vol_default = vols[(cur + 1) % 4]; save_settings();
+            }
+            else if (s_set_row == 2) {                        // device-wide mute
+                nucleo_audio_set_mute(!nucleo_audio_is_muted());
+                nucleo_app_persist_prefs();                   // same store the Control Center writes
             }
         } else if (s_set_tab == 2) {                          // QUEUE
             if (s_set_row == 1 && st && st->qn > 0) rebuild_shuffle();
@@ -1166,12 +1174,10 @@ static void tick(void)
 
 static void enter(void)
 {
-    // Reclaim FIRST, then allocate. This PSRAM-less device idles with only ~5 KB free heap (largest
-    // block ~3 KB), so the per-app state doesn't fit and the browser can't open. So Music takes the same
-    // dedicated window the Video player uses, but for the whole session: suspend httpd/L1/mDNS/voice
-    // (~70 KB freed, Wi-Fi STA stays up) here, restore it in leave(). No background indexer at open
+    // The RAM window is DECLARATIVE now (NX_NET_APP | NX_SOLO in the app_def): the framework has already
+    // rebooted us into a fresh heap with httpd/L1/mDNS/voice absent by the time this runs, so the state
+    // below and the decoder both allocate against an unfragmented arena. No background indexer at open
     // either — the DB is built lazily on first Find use (music_db_ensure). See the note above play_q.
-    music_excl(true);
     if (!st) st = (PState *)calloc(1, sizeof(PState));
     if (!st) {                                  // OOM even after the reclaim: bail (don't deref NULL) and restore services
         size_t freeb = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
@@ -1181,8 +1187,7 @@ static void enter(void)
         char h[64]; snprintf(h, sizeof h, TR("RAM bassa: libero %uk blocco %uk", "Low RAM: free %uk block %uk"),
                              (unsigned)(freeb / 1024), (unsigned)(blk / 1024));
         nucleo_app_set_hint(h);
-        music_excl(false);                      // un-suspend what we just stopped — never leave services down
-        return;
+        return;                                 // the framework owns the window; leave() releases it
     }
     memset(st, 0, sizeof(*st));                 // calloc zeroes a fresh block; this also re-zeroes a reused one
     load_settings();
@@ -1202,7 +1207,6 @@ static void enter(void)
 static void leave(void)
 {
     nucleo_audio_stop();
-    music_excl(false);                                       // restore httpd/L1/mDNS/voice (paired with play_q's reclaim)
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();  // safety net like Video/Radio/SSH: never leave services suspended
     np_mq_free();                                            // never leak the now-playing marquee sprite
     // Free the Genres/Artists sub-list if the app is closed straight from that sheet (the back handler
@@ -1236,10 +1240,40 @@ static int  s_mq_off = 0;
 // no text ghosting). ~3.6 KB at 8bpp; acquired up front in now_playing() — after the shared
 // back-buffer is released but BEFORE the MP3 decoder grabs its ~17 KB — so it can't fragment the
 // decoder's contiguous block. Falls back to a (clipped) direct draw if the sprite won't fit.
-#define MQ_W 200
+#define MQ_W 210
 #define MQ_H 16
 static M5Canvas *s_mq_cv     = nullptr;
 static bool      s_mq_failed = false;   // createSprite failed this session -> direct fallback, no retry
+
+// ── Now-Playing layout (240x135, fullscreen) — the "Tape Deck" ────────────────────────────────────
+// The panel is a wide, short letterbox (240x135 ≈ the classic Winamp main window to within 2%), so the
+// old circular ring — a square on a letterbox — wasted a third of the width. This layout is horizontal
+// bands only: a full-BLEED spectrum visualiser is the hero, and everything continuous (progress, seek)
+// runs the full width, the one axis this screen is rich in. Design language follows the loved Cardputer
+// players (Winamp-style, MicroGroove) and car-HMI glanceability: one shape, read in ~1.5 s.
+#define NP_MARGIN  8                                 // left/right gutter for text rows
+#define NP_RIGHT   (240 - NP_MARGIN)                 // 232
+#define VIZ_Y      33
+#define VIZ_H      55
+#define VIZ_BASE   (VIZ_Y + VIZ_H)                   // 88: bar baseline
+#define VIZ_BARS   30                                // display bars: x = 1 + i*8, w=6 -> ends at 239 (full bleed)
+#define VIZ_SRC    NUCLEO_AUDIO_BANDS_N              // real bands (6), interpolated up to VIZ_BARS
+static uint8_t s_viz_cap[VIZ_BARS];                  // peak-hold caps (slow fall), in band units 0..255
+static uint8_t s_viz_prev[VIZ_BARS];                 // last drawn bar height (px), for delta-only repaint
+static uint8_t s_viz_capp[VIZ_BARS];                 // last drawn cap row (px) — kills the falling-cap ghost trail
+static const int SEEK_Y = 93;                        // seek groove
+static const int TIME_Y = 100;                       // elapsed / duration readouts
+static const int BADGE_Y = 110;                      // volume + mode badges row
+
+// Linear interpolation between two RGB565 colours (t = 0..255). Cheap per-channel lerp — used for the
+// visualiser's height gradient so a bar shades bass-green -> peak-red instead of flat blocks.
+static inline uint16_t rgb565_lerp(uint16_t a, uint16_t b, int t)
+{
+    int ar = (a >> 11) & 0x1F, ag = (a >> 5) & 0x3F, ab = a & 0x1F;
+    int br = (b >> 11) & 0x1F, bg = (b >> 5) & 0x3F, bb = b & 0x1F;
+    int r = ar + (br - ar) * t / 255, g = ag + (bg - ag) * t / 255, bl = ab + (bb - ab) * t / 255;
+    return (uint16_t)((r << 11) | (g << 5) | bl);
+}
 
 static bool np_mq_acquire(void)
 {
@@ -1281,16 +1315,27 @@ static void np_load_meta(void)
     }
 }
 
-// Static title-band chrome: favourite heart + accent rule. Clears the whole band, so it runs
-// ONLY when the title/fav/meta actually changes — never on the marquee cadence (np_marquee owns
-// the scrolling text region and never lets the panel flash).
+// Colour for the current transport state — the whole screen keys off this one value so play/pause/idle
+// read at a glance: mint when playing, amber when paused (desaturation cue), grey when stopped.
+static inline uint16_t np_state_col(bool playing, bool paused)
+{ return paused ? AMB : (playing ? GRN : MUTED); }
+
+// Static title-band chrome: favourite heart only. The accent rule underneath is now the coarse
+// progress line (np_progline), so it lives on the pct-change path, not here.
 static void np_header_chrome(bool fav)
 {
     d.fillRect(0, 2, 240, 19, BG);
-    if (fav) icon_heart(220, 6, RED);
-    d.drawFastHLine(8, 22, 224, LINE);
-    int tw = (int)strlen(s_np_title) * 12;
-    d.fillRect(8, 22, tw > 150 ? 150 : tw, 2, ACC);
+    if (fav) icon_heart(NP_RIGHT - 8, 6, RED);
+}
+
+// Full-width progress underline at y22 — doubles as a coarse position bar you read without numbers
+// (the fine one is the seek groove below the visualiser). Track in LINE, elapsed in the state colour.
+static void np_progline(uint16_t col)
+{
+    int pct = nucleo_audio_progress(); if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+    const int x = NP_MARGIN, w = NP_RIGHT - NP_MARGIN;   // 8..232 = 224
+    d.drawFastHLine(x, 22, w, LINE);
+    d.fillRect(x, 22, w * pct / 100, 2, col);
 }
 
 // Scrolling title text (size-2 accent). Short titles print once, opaque. Long titles render into
@@ -1337,91 +1382,150 @@ static void np_marquee(void)
     }
 }
 
-// Circular progress ring with a play/pause core (the hero element).
-static void np_ring(bool playing, bool paused)
+// Full-bleed spectrum visualiser — the hero. 30 bars across the whole 240px, fed by the REAL output
+// bands (nucleo_audio_bands: what the speaker actually plays, post volume/mute), interpolated 6->30 for
+// a smooth silhouette. Winamp-style peak-hold caps make a ~20fps analyser look fluid.
+//
+// GHOSTING: a column is only touched when its bar height OR its cap position changed, but when it IS
+// touched the WHOLE strip above the bar is cleared to BG first. The earlier version cleared only the
+// shrunk slice of the bar, which left the falling peak-cap hairline (it sits ABOVE the bar) as a trail
+// of stale white lines. Clearing the full column above the bar erases the old cap in the same stroke,
+// and tracking the cap's pixel row (s_viz_capp) makes the "cap just reached the floor" frame repaint
+// once more instead of leaving its last hairline behind. A full-height clear of a 6px column is a few
+// hundred pixels — negligible, and only for columns that actually changed.
+//
+// Colour gradient runs green (quiet/low) -> amber -> red (loud/peak) by BAR HEIGHT, which reads as
+// energy. force=true repaints every bar (first draw / after a full-screen clear).
+static void np_viz(bool force)
 {
-    const int cx = 54, cy = 66, r0 = 24, r1 = 33;
-    int pct = nucleo_audio_progress(); if (pct < 0) pct = 0; if (pct > 100) pct = 100;
-    unsigned short col = paused ? AMB : (playing ? GRN : MUTED);
-    int a = 360 * pct / 100;
-    if (a > 0)   d.fillArc(cx, cy, r0, r1, 0, a, col);     // elapsed
-    if (a < 360) d.fillArc(cx, cy, r0, r1, a, 360, SURF);  // remaining
-    d.fillCircle(cx, cy, r0 - 2, BG);                      // clear core
-    if (playing) icon_pause(cx - 6, cy - 9, 18, col);
-    else         icon_play(cx - 5, cy - 9, 18, col);
+    uint8_t band[VIZ_SRC];
+    int nb = nucleo_audio_bands(band, VIZ_SRC);
+    if (nb < VIZ_SRC) for (int b = nb; b < VIZ_SRC; b++) band[b] = 0;
+
+    for (int i = 0; i < VIZ_BARS; i++) {
+        // interpolate this display bar from the two nearest source bands
+        int fp = i * (VIZ_SRC - 1) * 256 / (VIZ_BARS - 1);   // fixed-point source position <<8
+        int si = fp >> 8, fr = fp & 0xFF;
+        int v = band[si]; if (si + 1 < VIZ_SRC) v += (band[si + 1] - band[si]) * fr / 256;
+        if (v < 0) v = 0;
+        if (v > 255) v = 255;
+
+        int h = v * VIZ_H / 255;                             // bar height in px
+        if (s_viz_cap[i] < v) s_viz_cap[i] = v;              // peak-hold: jump up instantly
+        else if (s_viz_cap[i] > 4) s_viz_cap[i] -= 4;        // ...fall slowly
+        else s_viz_cap[i] = 0;
+        int caph = s_viz_cap[i] * VIZ_H / 255;               // cap position in px above the baseline
+
+        // Redraw this column only when its silhouette actually changed (bar height OR cap row). The
+        // cap-row term is what makes a falling cap animate AND get its final frame cleared.
+        if (!force && h == s_viz_prev[i] && caph == s_viz_capp[i]) continue;
+        s_viz_prev[i] = (uint8_t)h;
+        s_viz_capp[i] = (uint8_t)caph;
+
+        int x = 1 + i * 8;                                   // full bleed: 1..238
+        int top = VIZ_BASE - h;
+        // Full-column clear above the bar — erases the old bar top AND the old cap hairline in one go.
+        if (top > VIZ_Y) d.fillRect(x, VIZ_Y, 6, top - VIZ_Y, BG);
+        // the bar itself: green -> amber -> red by height
+        if (h > 0) {
+            uint16_t c = v < 128 ? rgb565_lerp(GRN, AMB, v * 2)
+                                 : rgb565_lerp(AMB, RED, (v - 128) * 2);
+            d.fillRect(x, top, 6, h, c);
+        }
+        // peak-hold cap: a bright hairline, only while it floats clear above the bar
+        if (caph > h + 1) d.drawFastHLine(x, VIZ_BASE - caph, 6, FG);
+    }
 }
 
-// Elapsed/duration readout only — the one part of the info column that ticks every second.
-// Redrawn on its own so a passing second doesn't repaint the track #, metadata, volume bar,
-// and mode badges that didn't change. Region is clear of the volume bar (y78) and meta (y39).
-static void np_time(void)
+// Meta row (y24): artist/genre at the left, TRACK n/N right-aligned. Static until the track changes.
+static void np_meta(void)
 {
-    const int x = 100;
-    d.fillRect(x, 52, 132, 16, BG);
+    d.fillRect(0, 24, 240, 8, BG);
+    char pos[16]; snprintf(pos, sizeof pos, "%d/%d", st->qidx + 1, st->qn);
+    int pw = (int)strlen(pos) * 6;
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(NP_RIGHT - pw, 24); d.print(pos);
+    if (s_np_meta[0]) {
+        int maxc = (NP_RIGHT - pw - 6 - NP_MARGIN) / 6; if (maxc > 30) maxc = 30; if (maxc < 1) maxc = 1;
+        char m[32]; snprintf(m, sizeof m, "%.*s", maxc, s_np_meta);
+        d.setTextColor(DIM, BG); d.setCursor(NP_MARGIN, 24); d.print(m);
+    }
+}
+
+// Full-width seek groove (y93) + knob — the FINE position bar. 224px wide gives ~1px/second on a
+// 4-minute track, real resolution the eye can use. Fill + knob in the state colour.
+static void np_seek(uint16_t col)
+{
+    int pct = nucleo_audio_progress(); if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+    const int x = NP_MARGIN, w = NP_RIGHT - NP_MARGIN, h = 5, cy = SEEK_Y + h / 2;
+    d.fillRect(x, SEEK_Y - 3, w + 1, 10, BG);                 // clear groove + knob only (stops above the times row)
+    d.fillRoundRect(x, SEEK_Y, w, h, h / 2, SURF);
+    int fw = w * pct / 100;
+    if (fw > 0) d.fillRoundRect(x, SEEK_Y, fw, h, h / 2, col);
+    int kx = x + fw; if (kx < x + 3) kx = x + 3; if (kx > x + w - 3) kx = x + w - 3;
+    d.fillCircle(kx, cy, 4, FG); d.fillCircle(kx, cy, 2, col); // Winamp/head-unit knob
+}
+
+// Elapsed (left) / duration (right) readouts at y100 — the row that ticks each second.
+static void np_times(void)
+{
+    d.fillRect(0, TIME_Y, 240, 9, BG);
     uint32_t el = nucleo_audio_elapsed(), du = nucleo_audio_duration_ms() / 1000;
     char te[8], td[8]; fmt_time(te, sizeof te, el); fmt_time(td, sizeof td, du);
-    d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(x, 52); d.print(te);
-    if (du) { d.setTextSize(1); d.setTextColor(MUTED, BG);
-        char t2[10]; snprintf(t2, sizeof t2, "/ %s", td);
-        d.setCursor(x + (int)strlen(te) * 12 + 6, 58); d.print(t2); }
+    d.setTextSize(1); d.setTextColor(FG, BG); d.setCursor(NP_MARGIN, TIME_Y); d.print(te);
+    if (du) { d.setTextColor(MUTED, BG); int dw = (int)strlen(td) * 6;
+              d.setCursor(NP_RIGHT - dw, TIME_Y); d.print(td); }
 }
 
-// Right-hand info column: position, artist/genre, time, volume, mode badges.
-static void np_info(void)
+// Bottom row (y110): a compact volume segment bar on the left, mode badges on the right. The volume
+// bar reads MUTE (not a percent) when the engine's hard mute is set — that flag survives a reboot and
+// is invisible everywhere else, so a muted device would otherwise look broken.
+static void np_badges(void)
 {
-    const int x = 100;
-    d.fillRect(x, 26, 140, 84, BG);
-
-    char pos[16]; snprintf(pos, sizeof pos, "TRACK %d/%d", st->qidx + 1, st->qn);
-    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(x, 27); d.print(pos);
-
-    if (s_np_meta[0]) { char m[24]; snprintf(m, sizeof m, "%.20s", s_np_meta);
-        d.setTextColor(DIM, BG); d.setCursor(x, 39); d.print(m); }
-
-    np_time();
-
+    d.fillRect(0, BADGE_Y, 240, 9, BG);
     int vol = nucleo_audio_volume();
-    const int vx = x, vy = 78, vw = 104, vh = 12;
-    d.fillRoundRect(vx, vy, vw, vh, vh / 2, SURF);
-    int fw = vw * vol / 100; if (fw > 0) d.fillRoundRect(vx, vy, fw, vh, vh / 2, GRN);
-    char vb[8]; snprintf(vb, sizeof vb, "%d%%", vol);
-    d.setTextSize(1); d.setTextColor(FG, BG); d.setCursor(vx + vw + 6, vy + 2); d.print(vb);
+    bool muted = nucleo_audio_is_muted();
+    // 10 segments, 6px each + 1 gap = 70px — countable at a glance (a 1px smooth step is invisible).
+    const int vx = NP_MARGIN, vy = BADGE_Y + 1, seg = 10, on = muted ? 0 : (vol + 5) / 10;
+    for (int i = 0; i < seg; i++)
+        d.fillRect(vx + i * 7, vy, 6, 6, i < on ? (uint16_t)GRN : (uint16_t)SURF);
+    d.setTextSize(1);
+    d.setTextColor(muted ? RED : MUTED, BG);
+    d.setCursor(vx + seg * 7 + 6, BADGE_Y);
+    if (muted) d.print("MUTE"); else { char vb[6]; snprintf(vb, sizeof vb, "%d%%", vol); d.print(vb); }
 
-    int bx = x, by = 96;
-    if (s_shuffle) { d.fillRoundRect(bx, by, 16, 12, 4, SURF); d.setTextColor(ACC, SURF); d.setCursor(bx + 5, by + 2); d.print("~"); bx += 20; }
-    if (s_repeat)  { const char *rl = s_repeat == 1 ? "R1" : "RA"; d.fillRoundRect(bx, by, 22, 12, 4, SURF); d.setTextColor(ACC, SURF); d.setCursor(bx + 5, by + 2); d.print(rl); bx += 26; }
-    if (!s_shuffle && !s_repeat) { d.setTextColor(DIM, BG); d.setCursor(x, by + 2); d.print("in order"); }
-}
-
-// "Next up" line + bottom key legend (drawn once and on track/mode change).
-static void np_next(void)
-{
-    d.fillRect(0, 110, 240, 10, BG);
-    int np = next_pos();
-    if (np >= 0 && np != st->qidx) {
-        int ti = track_at(np);
-        const char *nm = st->q[ti]; const char *bn = strrchr(nm, '/'); bn = bn ? bn + 1 : nm;
-        char b[42]; snprintf(b, sizeof b, "Next: %.32s", bn);
-        d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, 111); d.print(b);
-    }
+    // Mode badges, right-aligned: shuffle (~), repeat one/all (R1/RA). INK on the app accent.
+    int bx = NP_RIGHT;
+    if (s_repeat)  { const char *rl = s_repeat == 1 ? "R1" : "RA"; bx -= 22;
+                     d.fillRoundRect(bx, BADGE_Y - 1, 20, 11, 3, ACC); d.setTextColor(INK, ACC); d.setCursor(bx + 4, BADGE_Y + 1); d.print(rl); bx -= 4; }
+    if (s_shuffle) { bx -= 14;
+                     d.fillRoundRect(bx, BADGE_Y - 1, 12, 11, 3, ACC); d.setTextColor(INK, ACC); d.setCursor(bx + 3, BADGE_Y + 1); d.print("~"); }
 }
 
 static void np_legend(void)
 {
-    d.drawFastHLine(8, 121, 224, LINE);
-    d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(8, 125);
+    d.drawFastHLine(NP_MARGIN, 121, NP_RIGHT - NP_MARGIN, LINE);
+    d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(NP_MARGIN, 125);
     d.print("L/R seek  U/D vol  [ ] track  f fav");
 }
 
 static void now_playing(void)
 {
-    // Release the shared canvas here too (play_q also releases) so we grab the small marquee sprite
-    // while the heap is freshly freed and before the decoder takes its ~17 KB — that ordering keeps
-    // the sprite from fragmenting the decoder's contiguous block (acquire order = stability).
+    // Release the shared ~32 KB canvas, then START THE TRACK BEFORE grabbing the marquee sprite.
+    // The old order acquired the 3200-byte sprite first, "so it wouldn't fragment the decoder's block" —
+    // but that is backwards: taking 3200 bytes out of the just-freed region is precisely what can split
+    // it below the ~24 KB contiguous run Helix needs, and the decoder's failure is SILENT while the
+    // sprite's is not (s_mq_failed already falls back to direct drawing). Biggest, least-recoverable
+    // allocation first; the cosmetic one takes what is left.
     nucleo_app_release_buffers();
-    s_mq_failed = false; np_mq_acquire();
     char target[300]; snprintf(target, sizeof target, "%s%s", st->qdir, st->q[track_at(st->qidx)]);
     if (strcmp(target, st->playpath) != 0 || !nucleo_audio_is_playing()) play_q(st->qidx);
+    // nucleo_audio_play() only SPAWNS the decode task, so MP3InitDecoder has not run yet when it
+    // returns — grabbing the sprite right here would still race it for the block. Wait (bounded) until
+    // the decoder reports its verdict, then take what is left. ~40 ms typical, capped at 400 ms so a
+    // failed start can never hang the UI.
+    for (int i = 0; i < 20 && nucleo_audio_dbg_init() == 0 && nucleo_audio_is_playing(); i++)
+        vTaskDelay(pdMS_TO_TICKS(20));
+    s_mq_failed = false; np_mq_acquire();
     if (st->playpath[0] == 0) {  // failed to start
         np_mq_free();
         for (int i = 0; i < 8 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
@@ -1430,12 +1534,21 @@ static void now_playing(void)
 
     d.fillScreen(BG);
     np_load_meta(); s_mq_off = 0;
-    np_legend(); np_next();
+    memset(s_viz_prev, 0, sizeof s_viz_prev); memset(s_viz_cap, 0, sizeof s_viz_cap);
+    memset(s_viz_capp, 0, sizeof s_viz_capp);            // fresh visualiser (no stale caps)
+    d.drawFastHLine(1, VIZ_BASE, 238, LINE);            // spectrum floor: silent bars still read as a baseline
+    np_legend();
     char cur[208]; snprintf(cur, sizeof cur, "%s", st->playpath);
 
     bool back = false, started = false;
     int last_meta = -1, last_el = -1, last_pct = -1;
     int64_t last_mq_ms = 0;                          // wall-clock ms of the last marquee step (esp_timer)
+    // Silent-playback watchdog. The engine already recorded WHY a play made no sound, but nothing
+    // ever read those counters, so a silent track was indistinguishable from a broken speaker — and
+    // there is no serial console on this device to check. Give the decoder a grace period, then, if
+    // it still has not emitted a single PCM frame, put the engine's own verdict on the panel.
+    int64_t play_t0 = esp_timer_get_time() / 1000;
+    bool silent_shown = false;
 
     while (!back) {
         esp_task_wdt_reset();
@@ -1446,13 +1559,16 @@ static void now_playing(void)
             else if (k.key==NK_ENTER||k.ch==' '||k.ch=='p')    nucleo_audio_toggle_pause();
             else if (k.key==NK_LEFT)                            seek_rel(-10);
             else if (k.key==NK_RIGHT)                           seek_rel(+10);
-            else if (k.key==NK_UP)                              nucleo_audio_set_volume(nucleo_audio_volume()+10);
-            else if (k.key==NK_DOWN)                            nucleo_audio_set_volume(nucleo_audio_volume()-10);
+            // Touching the volume clears a hard mute first (same rule as the video player): reaching
+            // for the volume IS the user asking to hear something, and without this the bar moves
+            // while the output stays silent.
+            else if (k.key==NK_UP)   { nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume()+10); }
+            else if (k.key==NK_DOWN) { nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume()-10); }
             else if (k.ch=='[') { play_q(prev_pos()); started=false; }
             else if (k.ch==']') { int p=next_pos(); if(p>=0){play_q(p);started=false;}else{st->playpath[0]=0;back=true;} }
             else if (k.ch=='f') { const char *bn=strrchr(st->playpath,'/'); bn=bn?bn+1:st->playpath;
                                   music_db_set_fav(bn, !music_db_is_fav(bn)); last_meta=-1; }
-            else if (k.ch=='r') { s_repeat=(s_repeat+1)%3; save_settings(); np_next(); last_meta=-1; }
+            else if (k.ch=='r') { s_repeat=(s_repeat+1)%3; save_settings(); last_meta=-1; }
             else if (k.ch>='0'&&k.ch<='9') {
                 uint32_t dur=nucleo_audio_duration_ms();
                 if (dur) nucleo_audio_seek((uint32_t)((int64_t)(k.ch-'0')*dur/10));
@@ -1461,39 +1577,66 @@ static void now_playing(void)
         if (!started && nucleo_audio_is_playing() && nucleo_audio_elapsed_ms() > 200) started = true;
         player_update_logic(&back);
 
-        // Track changed (auto-advance or skip) -> refresh metadata + up-next.
+        // Track changed (auto-advance or skip) -> refresh metadata.
         if (st->playpath[0] && strcmp(cur, st->playpath) != 0) {
             snprintf(cur, sizeof cur, "%s", st->playpath);
-            np_load_meta(); s_mq_off = 0; np_next(); last_meta = -1;
+            np_load_meta(); s_mq_off = 0; last_meta = -1;
+            play_t0 = esp_timer_get_time() / 1000; silent_shown = false;   // re-arm the watchdog
+        }
+
+        // After the grace period, ask the engine whether anything is blocking sound and, if so, show
+        // its verdict in place of the "Next:" line (2 s covers the SD open + Helix init + the first
+        // frame even on a cold card). Deliberately NOT gated on "zero frames decoded": the decoder
+        // counts a frame BEFORE the I2S sink is checked (nucleo_audio_mp3.c), so a failed i2s_open
+        // yields frames > 0 with a NULL TX handle — decoding happily into the void. Gating on the
+        // frame count would hide exactly that case. why_silent() returns false when audio is really
+        // flowing, so calling it unconditionally costs one cheap check per track.
+        if (!silent_shown && esp_timer_get_time() / 1000 - play_t0 > 2000) {
+            char why[64];
+            if (nucleo_audio_why_silent(why, sizeof why)) {
+                silent_shown = true;
+                d.fillRect(0, BADGE_Y, 240, 9, BG);      // takes over the badge row while it stands
+                char msg[72]; snprintf(msg, sizeof msg, "SILENT: %.56s", why);
+                d.setTextSize(1); d.setTextColor(RED, BG); d.setCursor(NP_MARGIN, BADGE_Y); d.print(msg);
+            }
+        } else if (silent_shown && nucleo_audio_dbg_frames() > 0 && !nucleo_audio_is_muted()) {
+            // Audio recovered (e.g. the user unmuted): drop the verdict and force a full repaint so the
+            // badge row comes back over it. Without this the red SILENT line stuck forever.
+            silent_shown = false; last_meta = -1;
         }
 
         bool playing = nucleo_audio_is_playing(), paused = nucleo_audio_is_paused();
         const char *bn = strrchr(st->playpath,'/'); bn = bn ? bn+1 : st->playpath;
         bool fav = music_db_is_fav(bn);
+        uint16_t col = np_state_col(playing, paused);
 
-        // Split the repaint by what actually changed so a passing second is cheap:
-        //  - meta (volume/play state/track/fav) -> full header + ring + info column
-        //  - elapsed second                      -> just the time readout
-        //  - ring progress percent               -> just the ring arc
-        //  - otherwise                            -> advance the title marquee
+        // Repaint split by what actually changed so a passing second is cheap:
+        //  - meta (volume/play state/track/fav) -> title chrome + marquee + meta row + badges
+        //  - elapsed second                      -> times row
+        //  - progress percent                    -> progress underline + seek groove
+        //  - EVERY frame                         -> the visualiser (delta-only, ~a few rects)
+        //  - marquee scroll                      -> time-based, its own band
         int meta = ((nucleo_audio_volume()/5)) | (paused?1<<7:0) | (playing?1<<8:0)
-                 | (st->qidx<<9) | (fav?1<<20:0);
+                 | (nucleo_audio_is_muted()?1<<9:0) | (st->qidx<<10) | (fav?1<<21:0);
         int el  = (int)nucleo_audio_elapsed();
         int pct = nucleo_audio_progress();
         if (meta != last_meta) {
             last_meta = meta;
-            np_header_chrome(fav); np_marquee(); np_ring(playing, paused); np_info();
-            last_el = el; last_pct = pct;                // info just drew the current time/ring
-        } else if (el != last_el || pct != last_pct) {
-            if (el  != last_el)  { last_el  = el;  np_time(); }
-            if (pct != last_pct) { last_pct = pct; np_ring(playing, paused); }
+            np_header_chrome(fav); np_marquee(); np_meta();
+            np_progline(col); np_seek(col);
+            if (!silent_shown) np_badges();              // don't clobber the silent verdict
+            last_pct = pct;
+        } else if (pct != last_pct) {
+            last_pct = pct; np_progline(col); np_seek(col);
         }
-        // Marquee scroll: TIME-BASED and OUTSIDE the if/else-if chain so a passing second/percent
-        // can't steal its turn. The old `++mq` counter only ticked on idle frames and was starved by
-        // el/pct edges (which fire ~1-2x/s and are not phase-aligned) -> the title barely moved and
-        // looked frozen. A fixed ~150 ms wall-clock step gives a constant, smooth speed for any track.
-        // Held still while paused. The blit touches only its own band (disjoint from header/ring/time
-        // redrawn above), so advancing it in the same iteration is safe and adds no full-panel repaint.
+        if (el != last_el) { last_el = el; np_times(); }
+
+        // The visualiser runs every frame — it is what makes the screen feel alive. Delta-only, so a
+        // steady passage costs only the bars that actually moved.
+        np_viz(false);
+
+        // Marquee scroll: time-based and independent of the edges above so a passing second can't
+        // starve it. Held still while paused. Its band is disjoint from everything else redrawn here.
         if ((int)strlen(s_np_title) * 12 > MQ_W && !paused) {   // only long titles scroll
             int64_t now_ms = esp_timer_get_time() / 1000;
             if (now_ms - last_mq_ms >= 150) {
@@ -1502,7 +1645,7 @@ static void now_playing(void)
                 np_marquee();                            // one opaque blit over its band; chrome stays put
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(40));
     }
     np_mq_free();                                        // hand the sprite RAM back before we leave
     if (st->playpath[0] == 0)
@@ -1516,9 +1659,15 @@ extern "C" void nucleo_register_player(void)
     static const nucleo_app_def_t app = {
         "music", "Music", "Media",
         "MP3/WAV browser — Shuffle, Repeat, Autoplay. TAB=settings.",
-        'M', 0xFBB6, enter, on_key, tick, draw, leave
-        // exclusive_flags stays 0: Music drives the dedicated window itself (music_excl in enter/leave)
-        // so the reclaim is logged and paired exactly with the app lifecycle. See the note above play_q.
+        'M', 0xFBB6, enter, on_key, tick, draw, leave,
+        NX_NET_APP | NX_SOLO | NX_WIFI
+            // SOLO: reboot into a fresh, UNFRAGMENTED heap. The runtime reclaim frees RAM but cannot
+            // defragment, and Helix needs ~24 KB contiguous — see the note above play_q.
+            // WIFI: with NX_SOLO this means "never start the radio for this boot". Wi-Fi costs ~48 KB
+            // and halves the largest contiguous block (31 KB -> 15 KB), which is BELOW what the decoder
+            // needs — so leaving it on would undo the whole point of the Solo reboot. Music is a purely
+            // local player (files come off the SD), and leaving the app reboots into the full OS, so the
+            // radio comes back on its own without the fragile in-place restore.
     };
     nucleo_app_register(&app);
 }
