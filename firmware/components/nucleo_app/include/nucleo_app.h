@@ -113,6 +113,14 @@ int  nucleo_app_brightness(void);
 // exit or on a toggle — never from the transient game/torch/QR/video boosts.
 void nucleo_app_persist_prefs(void);
 
+// One-shot "skip Wi-Fi on the next boot", set by the launcher when a Solo app declares NX_WIFI and
+// consumed once by app_main. Wi-Fi costs ~48 KB and halves the largest contiguous block (31 KB -> 15 KB),
+// which defeats the purpose of a Solo reboot for an app that needs a big contiguous run and no network
+// (the Helix MP3 decoder wants ~24 KB). Lives in RTC no-init RAM: survives the warm reboot, not a cold
+// power-on, and take() clears it so a crashed Solo session can never strand the device offline.
+void nucleo_app_wifi_skip_next_boot(void);
+bool nucleo_app_wifi_skip_take(void);
+
 // ─── ANIMA Solo mode ─────────────────────────────────────────────────────────
 // Reboot into a dedicated "ANIMA Solo" personality: the SAME firmware image, but main() brings up only
 // display + SD + Wi-Fi + arbiter + ANIMA/TTS/voice and SKIPS httpd / mDNS / recorder / auth / IR. The
