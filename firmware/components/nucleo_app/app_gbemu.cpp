@@ -173,6 +173,10 @@ struct EState {
     int      msel;           // its selected row
     char     toast[28];      // transient confirmation ("saved", "loaded")
     int64_t  toast_until;
+    // Cached geometry of the focused shelf row, so the ~5 Hz tick can scroll its title without
+    // recomputing the whole layout. Filled by draw(), consumed by tick().
+    int      sel_y, sel_avail;
+    char     sel_title[NAMEMAX];
 };
 static EState *st = nullptr;
 
@@ -317,12 +321,51 @@ static void on_line(const uint8_t *px, int line, void *user)
 #define PILL_W OUT_X
 
 static inline bool dn(char c) { return nucleo_kbd_char_down(c); }
+static inline int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
 
+// Smart marquee. Text that fits is drawn once, left-aligned. Text that does not ping-pongs: it holds
+// at the start long enough to read the beginning, slides left at a steady pace, holds at the end, and
+// slides back. `phase_ms` is a free-running clock, so the same call animates smoothly from the 50 Hz
+// menu loop and coarsely from the 5 Hz shelf tick without either needing its own timer. It fills its
+// own background and clips to its box, so a caller just points it at a rectangle.
+static void marquee(int x, int y, int w, int h, const char *t,
+                    uint16_t fg, uint16_t bg, int size, int64_t phase_ms)
+{
+    d.fillRect(x, y, w, h, bg);
+    d.setTextSize(size);
+    d.setTextColor(fg, bg);
+    int tw = (int)d.textWidth(t);
+    if (tw <= w) { d.setCursor(x, y); d.print(t); return; }
+
+    const int over  = tw - w;
+    const int PAUSE = 850;                 // ms held at each end
+    const int SPEED = 26;                  // px/second while sliding
+    int travel = over * 1000 / SPEED; if (travel < 1) travel = 1;
+    int period = 2 * (PAUSE + travel);
+    int ph = (int)(phase_ms % period);
+    int off;
+    if      (ph < PAUSE)                 off = 0;
+    else if (ph < PAUSE + travel)        off = (ph - PAUSE) * over / travel;
+    else if (ph < 2 * PAUSE + travel)    off = over;
+    else                                 off = over - (ph - 2 * PAUSE - travel) * over / travel;
+
+    d.setClipRect(x, y, w, h);
+    d.setCursor(x - off, y);
+    d.print(t);
+    d.clearClipRect();
+}
+
+// ONE relief lever, not two. Interlacing was the second, and it was wrong for THIS renderer: the core
+// emits alternate scanlines under interlace, but our model counts an output row per scanline RECEIVED,
+// so with half the lines arriving the picture only reaches y~67 and the bottom half of the screen
+// simply stops updating — the "split down the middle" the player saw. Frame-skip has no such problem:
+// a skipped frame calls the scanline callback zero times, so nothing half-draws. It is the only lever.
 static void set_relief(int level)
 {
+    if (level < 0) level = 0;
+    if (level > 1) level = 1;
     st->relief = level;
-    nucleo_gb_set_interlace(level == 1);
-    nucleo_gb_set_frameskip(level == 2);
+    nucleo_gb_set_frameskip(level == 1);
 }
 
 static void toast(const char *msg)
@@ -350,7 +393,7 @@ static void hud_draw(void)
     d.setCursor(PILL_R + 4, 14); d.printf("b%2d.%d", st->ms_blit / 10, st->ms_blit % 10);
     d.setCursor(PILL_R + 4, 25); d.printf("a%2d.%d", st->ms_aud  / 10, st->ms_aud  % 10);
     d.setTextColor(st->relief ? AMB : DIM, BG);
-    d.setCursor(PILL_R + 4, 36); d.print(st->relief == 2 ? "30fps" : st->relief == 1 ? "intrl" : "  --");
+    d.setCursor(PILL_R + 4, 36); d.print(st->relief == 1 ? "30fps" : "  --");
 }
 
 // Everything in the pillars that is NOT the per-second HUD: palette name, the keys that are not
@@ -399,37 +442,55 @@ static const char *menu_label(int i, char *buf, size_t n)
                                                          : TR("Carica stato (vuoto)", "Load state (empty)");
         case MI_PAL:    snprintf(buf, n, "%s: %s", TR("Colori", "Palette"), PAL_NAME[s_pal]); return buf;
         case MI_PIC:    snprintf(buf, n, "%s: %s", TR("Immagine", "Picture"),
-                                 st->relief == 2 ? "30 fps" : st->relief == 1 ? TR("Interlacciata", "Interlaced")
-                                                                              : TR("Piena", "Full"));
+                                 st->relief == 1 ? "30 fps" : TR("Piena", "Full"));
                         return buf;
         default:        return TR("Esci dal gioco", "Quit game");
     }
 }
 
-static void menu_draw(void)
-{
-    const int W = 196, H = 12 + MI_N * 17 + 8;
-    const int X = (240 - W) / 2, Y = (135 - H) / 2;
-    d.fillRect(X, Y, W, H, BG);
-    d.drawRoundRect(X, Y, W, H, 6, LINE);
-    d.setTextSize(1);
-    d.setTextColor(DIM, BG);
-    d.setCursor(X + 8, Y + 4); d.print(nucleo_gb_title());
+#define MENU_W 200
+#define MENU_H (12 + MI_N * 17 + 8)
+#define MENU_X ((240 - MENU_W) / 2)
+#define MENU_Y ((135 - MENU_H) / 2)
+#define MENU_LX (MENU_X + 22)                    // label column x
+#define MENU_LW (MENU_W - 22 - 6)                // label column width
 
+// One row. The selected row's label scrolls (marquee) so a long entry like "Load state (empty)" or a
+// palette name is fully readable instead of clipped; the rest are drawn once, clipped, no animation.
+static void menu_row(int i)
+{
     char buf[40];
-    for (int i = 0; i < MI_N; i++) {
-        int y = Y + 14 + i * 17;
-        bool on = (i == st->msel);
-        d.fillRect(X + 4, y, W - 8, 16, on ? INK : BG);
-        // Digits pick a row directly — the smartwatch trick that beats scrolling on a small screen.
-        d.setTextSize(1);
-        d.setTextColor(on ? DIM : LINE, on ? INK : BG);
-        d.setCursor(X + 8, y + 5); d.printf("%d", i + 1);
-        d.setTextSize(2);
-        d.setTextColor(on ? FG : MUTED, on ? INK : BG);
-        d.setCursor(X + 20, y + 1); d.print(menu_label(i, buf, sizeof buf));
+    int y = MENU_Y + 14 + i * 17;
+    bool on = (i == st->msel);
+    d.fillRect(MENU_X + 4, y, MENU_W - 8, 16, on ? INK : BG);
+    d.setTextSize(1);
+    d.setTextColor(on ? DIM : LINE, on ? INK : BG);
+    d.setCursor(MENU_X + 8, y + 5); d.printf("%d", i + 1);
+    const char *t = menu_label(i, buf, sizeof buf);
+    uint16_t fg = on ? FG : MUTED, bg = on ? INK : BG;
+    if (on) {
+        marquee(MENU_LX, y + 1, MENU_LW, 15, t, fg, bg, 2, now_ms());
+    } else {
+        d.fillRect(MENU_LX, y + 1, MENU_LW, 15, bg);
+        d.setClipRect(MENU_LX, y + 1, MENU_LW, 15);
+        d.setTextSize(2); d.setTextColor(fg, bg);
+        d.setCursor(MENU_LX, y + 1); d.print(t);
+        d.clearClipRect();
     }
 }
+
+static void menu_draw(void)
+{
+    d.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, BG);
+    d.drawRoundRect(MENU_X, MENU_Y, MENU_W, MENU_H, 6, LINE);
+    d.setTextSize(1);
+    d.setTextColor(DIM, BG);
+    d.setCursor(MENU_X + 8, MENU_Y + 4); d.print(nucleo_gb_title());
+    for (int i = 0; i < MI_N; i++) menu_row(i);
+}
+
+// Called from the paused loop at ~50 Hz: only the selected row can be moving, so only it is redrawn.
+static void menu_anim(void) { if (st->menu) menu_row(st->msel); }
 
 // Leaving the menu: the PPU repaints the whole 160x135 picture on its very next frame, so only the
 // pillars and the panel edges need restoring by hand.
@@ -458,7 +519,7 @@ static void menu_activate(void)
         }
         case MI_PAL: s_pal = (s_pal + 1) % PAL_COUNT; SHADE = PALETTE[s_pal]; state_save(st->resume);
                      menu_draw(); return;
-        case MI_PIC: set_relief((st->relief + 1) % 3); menu_draw(); return;
+        case MI_PIC: set_relief((st->relief + 1) % 2); menu_draw(); return;
         default:     st->running = false; return;
     }
 }
@@ -467,8 +528,8 @@ static void menu_key(nucleo_key_t k)
 {
     if (k.key == NK_BACK || k.ch == '`' || k.ch == 'm' || k.ch == 'M') { menu_close(); return; }
     if (k.ch >= '1' && k.ch <= '0' + MI_N) { st->msel = k.ch - '1'; menu_activate(); return; }
-    if (k.key == NK_UP   || k.ch == 'w' || k.ch == 'W') { st->msel = (st->msel + MI_N - 1) % MI_N; menu_draw(); return; }
-    if (k.key == NK_DOWN || k.ch == 's' || k.ch == 'S') { st->msel = (st->msel + 1) % MI_N; menu_draw(); return; }
+    if (k.key == NK_UP   || k.ch == 'e' || k.ch == 'E' || k.ch == ';') { st->msel = (st->msel + MI_N - 1) % MI_N; menu_draw(); return; }
+    if (k.key == NK_DOWN || k.ch == 's' || k.ch == 'S' || k.ch == '.') { st->msel = (st->msel + 1) % MI_N; menu_draw(); return; }
     if (k.key == NK_ENTER || k.ch == '\n' || k.ch == ' ' || k.ch == 'k' || k.ch == 'K') menu_activate();
 }
 
@@ -553,6 +614,14 @@ static void play(const char *name)
     nucleo_power_perf_begin();
 
     d.fillScreen(BG);
+    // BYTE ORDER. This is the first app to push a raw 16bpp host-order buffer straight to the panel;
+    // everything else is either 8bpp (one byte, no order) or goes through a file decoder that handles
+    // this itself. The ST7789 latches each pixel most-significant-byte first, but an ESP32 stores a
+    // uint16_t little-endian, so without a swap the two bytes arrive reversed and #9BBC0F green comes
+    // out #E19D purple. setSwapBytes(true) tells pushImage to emit big-endian; it affects ONLY the
+    // raw-buffer push path, never the colour-argument primitives (fillRect/text), so the pillars and
+    // HUD keep rendering from the same palette values correctly.
+    d.setSwapBytes(true);
 
     st->running = true;
     st->menu = false; st->msel = 0; st->turbo = false;
@@ -585,16 +654,18 @@ static void play(const char *name)
         nucleo_key_t k = nucleo_kbd_read();
 
         uint8_t b = 0;
-        // Two d-pads, both live at once: WASD under the left hand, and the ; . , / cluster that the
-        // Cardputer literally prints arrows on under the right. Players reach for different ones.
-        if (dn('w') || dn(';')) b |= NUCLEO_GB_UP;
-        if (dn('s') || dn('.')) b |= NUCLEO_GB_DOWN;
-        if (dn('a') || dn(',')) b |= NUCLEO_GB_LEFT;
-        if (dn('d') || dn('/')) b |= NUCLEO_GB_RIGHT;
-        if (dn('k') || dn('l')) b |= NUCLEO_GB_A;
-        if (dn('j'))            b |= NUCLEO_GB_B;
-        if (dn(' '))            b |= NUCLEO_GB_START;
-        if (dn('n'))            b |= NUCLEO_GB_SELECT;
+        // The layout the player asked for: E S A D as a movement diamond (E up, S down, A left,
+        // D right), the two thumb buttons on J and K, START on Enter and SELECT on Space. The
+        // Cardputer's printed arrow cluster ; . , / stays live in parallel — it costs nothing and it
+        // is the one set of keys the hardware itself labels, so a first-time player finds it blind.
+        if (dn('e') || dn(';'))  b |= NUCLEO_GB_UP;
+        if (dn('s') || dn('.'))  b |= NUCLEO_GB_DOWN;
+        if (dn('a') || dn(','))  b |= NUCLEO_GB_LEFT;
+        if (dn('d') || dn('/'))  b |= NUCLEO_GB_RIGHT;
+        if (dn('k'))             b |= NUCLEO_GB_A;
+        if (dn('j'))             b |= NUCLEO_GB_B;
+        if (dn('\n'))            b |= NUCLEO_GB_START;    // Enter
+        if (dn(' '))             b |= NUCLEO_GB_SELECT;   // Space
         held = b;
 
         // TAB held = unpaced. Menus, grinding and long text are what a real player fast-forwards
@@ -608,6 +679,7 @@ static void play(const char *name)
             else if (k.ch == 'p' || k.ch == 'P') pal_cycle();
         }
         if (st->menu) {                          // paused: the console does not advance
+            menu_anim();                         // ...but a long selected entry keeps scrolling
             vTaskDelay(pdMS_TO_TICKS(20));
             esp_task_wdt_reset();
             continue;
@@ -640,8 +712,8 @@ static void play(const char *name)
             // scanlines per frame), then 30 fps frame-skip. The CPU still runs every frame either way,
             // so timing and input stay exact — only the drawing thins out. It steps back up when the
             // headroom returns, and never oscillates because the two thresholds do not overlap.
-            if      (st->fps < 50 && st->relief < 2) set_relief(st->relief + 1);
-            else if (st->fps >= 58 && st->relief > 0) set_relief(st->relief - 1);
+            if      (st->fps < 50 && st->relief < 1) set_relief(1);
+            else if (st->fps >= 58 && st->relief > 0) set_relief(0);
         }
 
         // Pace to real Game Boy speed. FreeRTOS runs at 100 Hz here, so ONE tick is 10 ms against a
@@ -680,6 +752,7 @@ static void play(const char *name)
     trace("  END fps=%d palette=%s", st->fps, PAL_NAME[s_pal]);
     nucleo_gb_close();
     free(st->band); st->band = nullptr;
+    d.setSwapBytes(false);                 // leave the shared display as every other app expects it
     nucleo_app_set_direct_draw(false);
     nucleo_app_force_repaint();
 }
@@ -733,6 +806,7 @@ static void draw(void)
     d.drawFastHLine(6, top + 21, 228, LINE);
 
     if (st->n == 0) {
+        st->sel_title[0] = '\0';
         d.setTextSize(1); d.setTextColor(MUTED, BG);
         d.setCursor(8, top + 34);
         d.print(st->flen ? TR("Nessun risultato", "No match")
@@ -768,10 +842,20 @@ static void draw(void)
             d.fillCircle(right - 6, y + ROW_H / 2 - 1, 3, foc ? INK : GRN); right -= 14;
         }
         int avail = right - 20;
-        int maxc = avail / 12; if (maxc < 1) maxc = 1; if (maxc > 17) maxc = 17;
-        char shown[20]; snprintf(shown, sizeof shown, "%.*s", maxc, title);
-        d.setTextSize(2); d.setTextColor(foc ? INK : FG, foc ? ACC : BG);
-        d.setCursor(20, y + (ROW_H - 16) / 2); d.print(shown);
+        int ty = y + (ROW_H - 16) / 2;
+        if (foc) {
+            // The selected title is shown IN FULL and scrolls if it overruns — no more silent
+            // truncation on the one row the player is actually looking at. Cache the geometry so the
+            // 5 Hz tick can keep it moving without redrawing the whole shelf.
+            st->sel_y = ty; st->sel_avail = avail;
+            snprintf(st->sel_title, sizeof st->sel_title, "%s", title);
+            marquee(20, ty, avail, 16, title, INK, ACC, 2, now_ms());
+        } else {
+            int maxc = avail / 12; if (maxc < 1) maxc = 1; if (maxc > 17) maxc = 17;
+            char shown[20]; snprintf(shown, sizeof shown, "%.*s", maxc, title);
+            d.setTextSize(2); d.setTextColor(FG, BG);
+            d.setCursor(20, ty); d.print(shown);
+        }
     }
 
     // Scroll rail: on a shelf this deep, "where am I" has to be visible without counting rows.
@@ -788,6 +872,16 @@ static void hint(void)
     nucleo_app_set_hint(st && st->flen
         ? TR("Invio gioca · Canc corregge · Esc pulisce",  "Enter plays · Backspace edits · Esc clears")
         : TR("Scrivi per cercare · 1-9 · Invio gioca",     "Type to search · 1-9 · Enter plays"));
+}
+
+// ~5x/second while the shelf is foreground: keep the selected, overrunning title scrolling. play()
+// owns the CPU while a game runs, so this never fires mid-game.
+static void tick(void)
+{
+    if (!st || st->running || !st->sel_title[0]) return;
+    d.setTextSize(2);
+    if ((int)d.textWidth(st->sel_title) <= st->sel_avail) return;   // fits: nothing to animate
+    marquee(20, st->sel_y, st->sel_avail, 16, st->sel_title, INK, ACC, 2, now_ms());
 }
 
 static void on_key(int key, char ch)
@@ -880,7 +974,7 @@ extern "C" void nucleo_register_gbemu(void)
     static const nucleo_app_def_t app = {
         "gbemu", "Game Boy", "Games",
         "Play Game Boy cartridges natively — the emulator runs on the Cardputer itself.",
-        'G', 0x8FF3, enter, on_key, nullptr, draw, leave,
+        'G', 0x8FF3, enter, on_key, tick, draw, leave,
         NX_NET_APP | NX_SOLO | NX_WIFI
             // SOLO: only a fresh boot yields a contiguous block big enough for the core + ROM cache;
             // the runtime reclaim frees RAM but cannot defragment (see nucleo_exclusive.h).
