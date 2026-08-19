@@ -28,6 +28,7 @@
 #include "nucleo_kbd.h"
 #include "nucleo_board.h"
 #include "nucleo_exclusive.h"
+#include "nucleo_power.h"
 #include "nucleo_theme.h"
 #include "nucleo_i18n.h"
 #include "esp_timer.h"
@@ -88,9 +89,24 @@ static void trace_heap(const char *label)
 #define OUT_X ((240 - OUT_W) / 2)
 #define BAND  15             // output lines buffered before one SPI push; 15 divides 135 evenly
 
-// DMG four-shade palette, lightest to darkest. A Game Boy is not theme-able — this is content, not
-// chrome, so it deliberately does NOT follow THEME_*.
-static const uint16_t SHADE[4] = { 0xCF32, 0x8DEC, 0x3406, 0x11A2 };
+// Four-shade palettes, lightest to darkest. A Game Boy is not theme-able — this is CONTENT, not
+// chrome, so it deliberately does not follow THEME_*.
+//
+// The first two are the real hardware, converted from the panel's actual colours rather than
+// eyeballed: the DMG's #9BBC0F/#8BAC0F/#306230/#0F380F and the Pocket's grey-green LCD. The earlier
+// guess was washed out — its darkest shade was far too light, so black text inside a game rendered
+// as mid-grey and the picture had almost no contrast. The last two exist because this panel is NOT
+// a DMG: it is backlit and vivid, and a high-contrast ramp simply reads better in a bright room.
+#define PAL_COUNT 4
+static const uint16_t PALETTE[PAL_COUNT][4] = {
+    { 0x9DE1, 0x8D61, 0x3306, 0x09C1 },   // DMG    - the original 1989 green
+    { 0xC674, 0x8CAD, 0x4A87, 0x18E3 },   // Pocket - the 1996 grey-green LCD
+    { 0xFFFF, 0xAD55, 0x52AA, 0x0000 },   // Mono   - maximum contrast, backlit-friendly
+    { 0xFF00, 0xC540, 0x7A00, 0x2100 },   // Amber  - a plasma/VFD look, easy at night
+};
+static const char *const PAL_NAME[PAL_COUNT] = { "DMG", "Pocket", "Mono", "Amber" };
+static int s_pal = 0;                     // persisted alongside the resume entry
+static const uint16_t *SHADE = PALETTE[0];
 
 // ── session state (heap on enter, never .bss: the app is closed almost always) ──────────────────
 #define MAXR    120          // matches held at once. The filter, not this cap, is how you reach a game.
@@ -132,13 +148,19 @@ static void state_load(void)
         while (l && (st->resume[l - 1] == '\n' || st->resume[l - 1] == '\r')) st->resume[--l] = '\0';
         st->have_resume = (l > 0);
     }
+    char line[16];
+    if (fgets(line, sizeof line, f)) {          // second line: chosen palette (absent on an older file)
+        int v = atoi(line);
+        if (v >= 0 && v < PAL_COUNT) s_pal = v;
+    }
+    SHADE = PALETTE[s_pal];
     fclose(f);
 }
 static void state_save(const char *name)
 {
     FILE *f = fopen(STATE_JS, "w");
     if (!f) return;
-    fprintf(f, "%s\n", name ? name : "");
+    fprintf(f, "%s\n%d\n", name ? name : "", s_pal);
     fclose(f);
 }
 
@@ -218,20 +240,29 @@ static void on_line(const uint8_t *px, int line, void *user)
     if ((line & 15) == 15) return;
     if (st->out_y >= OUT_H) return;
 
+    // Decimation without a per-pixel branch. We drop exactly every 16th column, so the source is ten
+    // runs of fifteen kept pixels; copying whole runs removes 160 tests and 160 increments per line
+    // and lets the compiler hold the palette in registers. At 135 lines x 60 fps this is the hottest
+    // loop in the app.
     uint16_t *row = st->band + (size_t)st->band_line * OUT_W;
-    int o = 0;
-    for (int x = 0; x < NUCLEO_GB_W && o < OUT_W; x++) {
-        if ((x & 15) == 15) continue;
-        row[o++] = SHADE[px[x] & 3];
+    const uint8_t *sp = px;
+    uint16_t *dp = row;
+    for (int run = 0; run < 10; run++) {
+        for (int k = 0; k < 15; k++) dp[k] = SHADE[sp[k] & 3];
+        dp += 15; sp += 16;                       // step over the dropped 16th source pixel
     }
-    while (o < OUT_W) row[o++] = SHADE[0];
 
     if (st->band_line == 0) st->band_y = st->out_y;
     st->band_line++;
     st->out_y++;
 
     if (st->band_line == BAND || st->out_y >= OUT_H) {
+        // startWrite/endWrite holds CS and the bus configuration across the push instead of
+        // re-arbitrating per call — transaction setup is a real cost when it happens nine times a
+        // frame, sixty times a second.
+        d.startWrite();
         d.pushImage(OUT_X, st->band_y, OUT_W, st->band_line, st->band);
+        d.endWrite();
         st->band_line = 0;
     }
 }
@@ -307,9 +338,19 @@ static void play(const char *name)
              stt.rom_resident ? "resident" : "banked from SD",
              (unsigned)stt.heap_bytes, (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
 
+    // DFS ranges 80-240 MHz and cannot tell a render loop from an idle launcher; at the floor a frame
+    // does not fit. Hold the clock at maximum for exactly as long as a game runs.
+    nucleo_power_perf_begin();
+
     d.fillScreen(BG);
     d.fillRect(0, 0, OUT_X, 135, BG);
     d.fillRect(OUT_X + OUT_W, 0, 240 - OUT_X - OUT_W, 135, BG);
+    // The side pillars are dead space on a 4:3 picture in a 16:9 panel — use them for the two things
+    // worth knowing mid-game: the frame rate, and which palette is on (so P is discoverable at all).
+    d.setTextSize(1); d.setTextColor(SHADE[1], BG);
+    d.setCursor(3, 113); d.print(PAL_NAME[s_pal]);
+    d.setTextColor(DIM, BG);
+    d.setCursor(3, 124); d.print("P");
 
     st->running = true;
     st->fps_frames = 0; st->fps = 0; st->fps_t0 = esp_timer_get_time();
@@ -335,6 +376,16 @@ static void play(const char *name)
                 case 'j': case 'J': b = NUCLEO_GB_B;      break;
                 case ' ':           b = NUCLEO_GB_START;  break;
                 case 'n': case 'N': b = NUCLEO_GB_SELECT; break;
+                case 'p': case 'P':
+                    // Cycle the screen palette live: a pointer swap that lands on the very next
+                    // frame, so the choice is judged on the actual game rather than on a menu.
+                    s_pal = (s_pal + 1) % PAL_COUNT;
+                    SHADE = PALETTE[s_pal];
+                    state_save(st->resume);
+                    d.fillRect(0, 112, OUT_X - 2, 10, BG);
+                    d.setTextSize(1); d.setTextColor(SHADE[1], BG);
+                    d.setCursor(3, 113); d.print(PAL_NAME[s_pal]);
+                    break;
                 default: break;
             }
             if (k.key == NK_UP)    b = NUCLEO_GB_UP;
@@ -362,15 +413,24 @@ static void play(const char *name)
             d.setCursor(3, 3); d.print(hud);
         }
 
-        // Pace to real Game Boy speed. A frame that overran is NOT chased: on a board this tight,
-        // catching up only compounds into stutter, and running a touch slow reads better than jerking.
+        // Pace to real Game Boy speed. FreeRTOS runs at 100 Hz here, so ONE tick is 10 ms against a
+        // 16.7 ms frame: sleeping for "the remaining milliseconds" quantises to 0 or 10+ and jitters
+        // the frame by more than half its budget. Sleep only whole ticks that comfortably fit, then
+        // spin out the remainder on the microsecond timer — the spin is bounded by one tick, this
+        // loop owns the CPU, and the watchdog is fed inside it.
+        // A frame that overran is NOT chased: catching up only compounds into stutter, and running a
+        // touch slow reads better than jerking.
         next += FRAME_US;
-        int64_t slack = next - esp_timer_get_time();
-        if (slack > 1000) vTaskDelay(pdMS_TO_TICKS((uint32_t)(slack / 1000)));
-        else if (slack < -FRAME_US * 4) next = esp_timer_get_time();
+        for (;;) {
+            int64_t slack = next - esp_timer_get_time();
+            if (slack <= 200) break;                                   // close enough: start the next frame
+            if (slack > 2 * (int64_t)portTICK_PERIOD_MS * 1000) { vTaskDelay(1); esp_task_wdt_reset(); }
+        }
+        if (esp_timer_get_time() - next > FRAME_US * 4) next = esp_timer_get_time();   // far behind: resync
     }
 
-    trace("  END frames=%u fps=%d", (unsigned)st->fps_frames, st->fps);
+    nucleo_power_perf_end();
+    trace("  END fps=%d palette=%s", st->fps, PAL_NAME[s_pal]);
     nucleo_gb_close();
     free(st->band); st->band = nullptr;
     nucleo_app_set_direct_draw(false);

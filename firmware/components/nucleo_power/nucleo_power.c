@@ -52,6 +52,29 @@ void nucleo_power_init(void)
     ESP_LOGI(TAG, "DFS enabled: %d-%d MHz, light-sleep off", cfg.min_freq_mhz, cfg.max_freq_mhz);
 }
 
+// ---- Performance lock ------------------------------------------------------------------
+// DFS is a power win for a device that idles most of the time, but it has no way to tell an idle
+// launcher from an emulator that must finish a frame every 16.7 ms — and at the 80 MHz floor that
+// frame simply does not fit. A CPU_FREQ_MAX lock pins the clock for as long as the job holds it.
+// Created lazily on first use: an OS that never runs a real-time job never pays for the lock.
+static esp_pm_lock_handle_t s_perf;
+static int s_perf_depth;
+
+void nucleo_power_perf_begin(void)
+{
+    if (!s_perf && esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "nucleo-perf", &s_perf) != ESP_OK) {
+        ESP_LOGW(TAG, "perf lock unavailable — the emulator may run at the DFS floor");
+        return;
+    }
+    if (s_perf_depth++ == 0) esp_pm_lock_acquire(s_perf);
+}
+
+void nucleo_power_perf_end(void)
+{
+    if (!s_perf || s_perf_depth == 0) return;
+    if (--s_perf_depth == 0) esp_pm_lock_release(s_perf);
+}
+
 // ---- Battery gauge ---------------------------------------------------------------------
 // M5Cardputer wires the cell to G10 through a 2:1 resistor divider, so the ADC sees half the
 // real voltage. Same pin Bruce uses (-D ANALOG_BAT_PIN=10). G10 maps to an ADC1 channel on the
