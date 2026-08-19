@@ -178,6 +178,8 @@ struct EState {
     int      sel_y, sel_avail;
     char     sel_title[NAMEMAX];
     int      slow_secs;      // consecutive sub-50fps seconds, for the one-way relief debounce
+    M5Canvas *mq;            // dedicated sprite for the scrolling shelf title (ANTI-FLICKER technique 3)
+    int      mq_w;           // its current width, 0 = none
 };
 static EState *st = nullptr;
 
@@ -310,6 +312,55 @@ static void on_line(const uint8_t *px, int line, void *user)
     }
 }
 
+static inline int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
+
+// ── shelf title scroller (ANTI-FLICKER technique 3) ─────────────────────────────────────────────
+// The shelf is a normal foreground app, so it is redrawn only when something changes — which means a
+// scrolling title cannot ride on the list redraw (forcing a full-list repaint every frame just to move
+// one row is the clear-then-draw flicker the earlier version had). Instead the selected title lives in
+// its own small off-screen sprite, blitted in ONE pushSprite over just its row from a 50 Hz poll. The
+// panel never sees a clear, so it is flicker-free and smooth, and the rest of the list is never touched.
+static bool mq_acquire(int w)
+{
+    if (w < 8) w = 8;
+    if (st->mq && st->mq_w == w) return true;
+    if (!st->mq) { st->mq = new (std::nothrow) M5Canvas(nucleo_app_gfx()); if (!st->mq) return false; }
+    else st->mq->deleteSprite();
+    st->mq->setColorDepth(16);             // exact INK/ACC (the shelf has RAM to spare; the game is not loaded yet)
+    st->mq->setPsram(false);               // no SPIRAM on this board — skip the doomed probe
+    if (!st->mq->createSprite(w, 16)) { st->mq_w = 0; return false; }
+    st->mq->setTextWrap(false);            // CRUCIAL: without this a long title wraps instead of scrolling
+    st->mq_w = w;
+    return true;
+}
+static void mq_free(void)
+{
+    if (st && st->mq) { st->mq->deleteSprite(); delete st->mq; st->mq = nullptr; st->mq_w = 0; }
+}
+
+// ~50 Hz. Scrolls the selected title if it overflows its row; a title that fits was already drawn
+// static by draw(), so this does nothing. Returns false: it must NEVER request a list repaint (that
+// is the flicker). It draws straight to the panel over just the one row.
+static bool shelf_poll(void)
+{
+    if (!st || st->running || !st->sel_title[0]) return false;
+    const int avail = st->sel_avail;
+    int tw = (int)strlen(st->sel_title) * 12;          // size-2 glyphs are ~12 px wide
+    if (tw <= avail) return false;                      // fits: draw()'s static title is enough
+    if (!mq_acquire(avail)) return false;
+    const int span = tw + 24;                           // gap before the wrap copy, for a seamless loop
+    int off = (int)((now_ms() * 26 / 1000) % span);     // 26 px/s, continuous
+    M5Canvas *cv = st->mq;
+    cv->fillSprite(ACC);
+    cv->setTextSize(2); cv->setTextColor(INK, ACC);
+    cv->setCursor(-off, 0);        cv->print(st->sel_title);
+    cv->setCursor(-off + span, 0); cv->print(st->sel_title);   // second copy so the loop never shows a gap
+    d.setClipRect(20, st->sel_y, avail, 16);            // own the clip so the blit repaints the whole band
+    cv->pushSprite(20, st->sel_y);
+    d.clearClipRect();
+    return false;
+}
+
 // ── in-game furniture ───────────────────────────────────────────────────────────────────────────
 // The picture is 160 px wide inside a 240 px panel, which leaves two 40 px pillars. They are not
 // padding: they are the only place a running emulator can say anything without covering the game.
@@ -320,7 +371,6 @@ static void on_line(const uint8_t *px, int line, void *user)
 #define PILL_W OUT_X
 
 static inline bool dn(char c) { return nucleo_kbd_char_down(c); }
-static inline int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
 
 // Smart marquee. Text that fits is drawn once, left-aligned. Text that does not ping-pongs: it holds
 // at the start long enough to read the beginning, slides left at a steady pace, holds at the end, and
@@ -866,17 +916,19 @@ static void draw(void)
         }
         int avail = right - 20;
         int ty = y + (ROW_H - 16) / 2;
+        d.setTextSize(2); d.setTextColor(foc ? INK : FG, foc ? ACC : BG);
         if (foc) {
-            // The selected title is shown IN FULL and scrolls if it overruns — no more silent
-            // truncation on the one row the player is actually looking at. Cache the geometry so the
-            // 5 Hz tick can keep it moving without redrawing the whole shelf.
+            // Record what the 50 Hz poll needs to scroll this title in its own sprite; draw it CLIPPED
+            // and static here so a title that fits is complete, and one that overflows has a correct
+            // frame underneath for the instant before the poll's first overlay lands.
             st->sel_y = ty; st->sel_avail = avail;
             snprintf(st->sel_title, sizeof st->sel_title, "%s", title);
-            marquee(20, ty, avail, 16, title, INK, ACC, 2, now_ms());
+            d.setClipRect(20, ty, avail, 16);
+            d.setCursor(20, ty); d.print(title);
+            d.clearClipRect();
         } else {
             int maxc = avail / 12; if (maxc < 1) maxc = 1; if (maxc > 17) maxc = 17;
             char shown[20]; snprintf(shown, sizeof shown, "%.*s", maxc, title);
-            d.setTextSize(2); d.setTextColor(FG, BG);
             d.setCursor(20, ty); d.print(shown);
         }
     }
@@ -895,20 +947,6 @@ static void hint(void)
     nucleo_app_set_hint(st && st->flen
         ? TR("Invio gioca · Canc corregge · Esc pulisce",  "Enter plays · Backspace edits · Esc clears")
         : TR("Scrivi per cercare · 1-9 · Invio gioca",     "Type to search · 1-9 · Enter plays"));
-}
-
-// ~5x/second while the shelf is foreground (play() owns the CPU during a game, so never mid-game).
-// The shelf is a BUFFERED app: draw() composites into the shared canvas, and the framework pushes it.
-// on_tick runs with the gfx pointed at the PANEL, not that canvas, so drawing here would land in the
-// wrong buffer at the wrong coordinates and be overwritten on the next push. Instead it asks the
-// framework for a repaint: draw() re-runs in canvas context with a fresh marquee phase, so the title
-// scrolls through the normal flicker-free buffered path. Only bother while the title actually overflows.
-static void tick(void)
-{
-    if (!st || st->running || !st->sel_title[0]) return;
-    d.setTextSize(2);
-    if ((int)d.textWidth(st->sel_title) <= st->sel_avail) return;   // fits: nothing to scroll
-    nucleo_app_force_repaint();
 }
 
 static void on_key(int key, char ch)
@@ -986,12 +1024,14 @@ static void enter(void)
             if (!strcmp(st->list[i].name, st->resume)) { st->sel = i; break; }
     }
     nucleo_app_set_back_handler(on_back);
+    nucleo_app_set_poll_handler(shelf_poll);   // 50 Hz title scroll, sprite-blitted (no list repaint)
     hint();
 }
 
 static void leave(void)
 {
     nucleo_gb_close();
+    mq_free();
     if (st) { free(st->band); free(st); st = nullptr; }
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();
 }
@@ -1001,7 +1041,7 @@ extern "C" void nucleo_register_gbemu(void)
     static const nucleo_app_def_t app = {
         "gbemu", "Game Boy", "Games",
         "Play Game Boy cartridges natively — the emulator runs on the Cardputer itself.",
-        'G', 0x8FF3, enter, on_key, tick, draw, leave,
+        'G', 0x8FF3, enter, on_key, nullptr, draw, leave,
         NX_NET_APP | NX_SOLO | NX_WIFI
             // SOLO: only a fresh boot yields a contiguous block big enough for the core + ROM cache;
             // the runtime reclaim frees RAM but cannot defragment (see nucleo_exclusive.h).
