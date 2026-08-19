@@ -26,7 +26,11 @@ const exe = join(BUILD, 'gbtest.exe');
 
 const cc = spawnSync(GCC, [
   '-std=gnu11', '-O2', '-Wall',
+  '-DMINIGB_APU_AUDIO_FORMAT_S16SYS=1',   // the APU refuses to build without an explicit format
   join(ROOT, 'tools', 'emu-host', 'gb_test.c'),
+  // The APU is a separate translation unit in the firmware too — compile it the same way here, so
+  // the gate links the exact code the device runs rather than a header-only approximation.
+  join(ROOT, 'firmware', 'components', 'nucleo_emu', 'vendor', 'minigb_apu.c'),
   '-o', exe,
 ], { env, encoding: 'utf8' });
 

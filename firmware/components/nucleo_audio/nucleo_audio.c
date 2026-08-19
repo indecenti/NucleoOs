@@ -369,6 +369,29 @@ static esp_err_t i2s_write_locked(const int16_t *pcm, size_t bytes)
     return ESP_OK;
 }
 
+// ─── Raw PCM sink ─────────────────────────────────────────────────────────────────────────────────
+// See nucleo_audio.h. A generator (the Game Boy APU) owns its own timing, so all this does is lend it
+// the I2S under the existing lock and volume path. Deliberately thin: no task, no buffer, no state —
+// the caller already has the samples and its own frame clock, and adding a ring here would only put a
+// second pacing authority between it and the speaker.
+esp_err_t nucleo_audio_pcm_open(int rate, int channels)
+{
+    if (atomic_load(&s_playing)) return ESP_ERR_INVALID_STATE;   // a track owns the I2S; never steal it
+    if (nucleo_recorder_is_busy() || nucleo_micspec_running()) return ESP_ERR_INVALID_STATE;  // shared mic pin
+    return nucleo_audio_i2s_rate(rate, channels);
+}
+
+esp_err_t nucleo_audio_pcm_write(const int16_t *pcm, size_t bytes)
+{
+    return nucleo_audio_i2s_write(pcm, bytes);   // same volume/mute/meter path as every other sound
+}
+
+void nucleo_audio_pcm_close(void)
+{
+    if (atomic_load(&s_playing)) return;         // a track started meanwhile: it owns the channel now
+    i2s_close();
+}
+
 // ─── Live output analysis ─────────────────────────────────────────────────────────────────────────
 // Fed from the PCM on its way to the speaker, so a meter built on this shows what you actually HEAR
 // (post volume, post mute) rather than what the file contains.
