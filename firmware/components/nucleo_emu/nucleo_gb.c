@@ -76,8 +76,9 @@ static gb_session_t *S = NULL;
 // paths are branch-light and the SD path is the exception, not the rule.
 static uint8_t rom_read(struct gb_s *gb, const uint_fast32_t addr)
 {
-    (void)gb;
-    gb_session_t *s = S;
+    // Context comes from the core's own private pointer, NEVER from the module global: gb_init()
+    // calls this to read the cartridge header before open() has published S.
+    gb_session_t *s = (gb_session_t *)gb->direct.priv;
     if (!s || addr >= s->rom_bytes) return 0xFF;
 
     if (s->rom_all) return s->rom_all[addr];            // fast path: whole ROM in RAM
@@ -128,16 +129,14 @@ static void audio_write(const uint16_t addr, const uint8_t val)
 
 static uint8_t cart_ram_read(struct gb_s *gb, const uint_fast32_t addr)
 {
-    (void)gb;
-    gb_session_t *s = S;
+    gb_session_t *s = (gb_session_t *)gb->direct.priv;
     if (!s || !s->cart_ram || addr >= s->cart_ram_bytes) return 0xFF;
     return s->cart_ram[addr];
 }
 
 static void cart_ram_write(struct gb_s *gb, const uint_fast32_t addr, const uint8_t val)
 {
-    (void)gb;
-    gb_session_t *s = S;
+    gb_session_t *s = (gb_session_t *)gb->direct.priv;
     if (!s || !s->cart_ram || addr >= s->cart_ram_bytes) return;
     if (s->cart_ram[addr] != val) { s->cart_ram[addr] = val; s->cart_ram_dirty = true; }
 }
@@ -153,8 +152,7 @@ static void gb_err(struct gb_s *gb, const enum gb_error_e err, const uint16_t ad
 // ── scanline out ────────────────────────────────────────────────────────────────────────────────
 static void lcd_line(struct gb_s *gb, const uint8_t *pixels, const uint_fast8_t line)
 {
-    (void)gb;
-    gb_session_t *s = S;
+    gb_session_t *s = (gb_session_t *)gb->direct.priv;
     if (s && s->on_line) s->on_line(pixels, (int)line, s->user);
 }
 
@@ -247,9 +245,15 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
         }
     }
 
-    enum gb_init_error_e err = gb_init(&s->gb, rom_read, cart_ram_read, cart_ram_write, gb_err, NULL);
+    // Publish the session BEFORE init: the APU shims (audio_read/audio_write) are bare functions with
+    // no gb parameter, so the global is their only route, and gb_init writes the sound registers.
+    S = s;
+    minigb_apu_audio_init(&s->apu);
+
+    enum gb_init_error_e err = gb_init(&s->gb, rom_read, cart_ram_read, cart_ram_write, gb_err, s);
     if (err != GB_INIT_NO_ERROR) {
         ESP_LOGE(TAG, "gb_init failed (%d) — not a Game Boy ROM?", (int)err);
+        S = NULL;                       // never leave a dangling session published
         session_free(s);
         return ESP_ERR_NOT_SUPPORTED;
     }
@@ -261,7 +265,7 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
     if (need > CART_RAM_MAX) need = CART_RAM_MAX;
     if (need) {
         s->cart_ram = (uint8_t *)calloc(1, need);
-        if (!s->cart_ram) { ESP_LOGE(TAG, "no RAM for the %u B cart save", (unsigned)need); session_free(s); return ESP_ERR_NO_MEM; }
+        if (!s->cart_ram) { ESP_LOGE(TAG, "no RAM for the %u B cart save", (unsigned)need); S = NULL; session_free(s); return ESP_ERR_NO_MEM; }
         s->cart_ram_bytes = need;
         s->heap_bytes += need;
         snprintf(s->sav_path, sizeof s->sav_path, "%s.sav", rom_path);
@@ -276,12 +280,9 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
     gb_get_rom_name(&s->gb, s->title);
     s->title[16] = '\0';
 
-    S = s;                                  // the APU shims read S, so publish before touching sound
-
     // Sound is BEST-EFFORT: if the speaker is busy (a track playing, the recorder holding the shared
     // mic pin) the game still runs, silently. Refusing to start a cartridge because audio was taken
     // would be the wrong trade on a games machine.
-    minigb_apu_audio_init(&s->apu);
     s->sound = (nucleo_audio_pcm_open(AUDIO_SAMPLE_RATE, AUDIO_CHANNELS) == ESP_OK);
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
