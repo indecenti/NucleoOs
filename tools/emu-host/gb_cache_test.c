@@ -11,9 +11,12 @@
  * only one a 512 KB board ever takes for a real cartridge — is the path under test.
  *
  * WHAT IT MEASURES
- * Misses per frame. Each miss is one 4 KB SD read, and on the device an SD read costs roughly 2-4 ms
- * against a 16.7 ms frame budget. That single number decides whether the cartridge cache is the
- * emulator's bottleneck or a rounding error, and it is measured rather than argued about.
+ * Misses per frame. Each miss is one SD read, and on the device that costs roughly 2-4 ms against a
+ * 16.7 ms frame budget. That single number decides whether the cartridge cache is the emulator's
+ * bottleneck or a rounding error, and it is measured rather than argued about — it is also the rig
+ * that CHOSE the cache geometry (see the table in docs/native-emulation.md).
+ *
+ * It then checks save states by replaying the emulator against itself. See state_roundtrip below.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,11 +26,13 @@
 /* The emulator hands finished scanlines to the app; here we only count them, so a cartridge that
  * loads and produces nothing cannot pass. */
 static long g_lines, g_nonblank;
+static unsigned long g_hash;            /* rolling checksum of everything drawn — see state_roundtrip */
 static void on_line(const uint8_t *px, int line, void *user)
 {
     (void)line; (void)user;
     g_lines++;
     for (int i = 0; i < NUCLEO_GB_W; i++) if (px[i] & 3) { g_nonblank++; break; }
+    for (int i = 0; i < NUCLEO_GB_W; i++) g_hash = g_hash * 31u + (px[i] & 3);   /* FNV-ish, order matters */
 }
 
 /* Audio sink stub: the module opens a PCM channel and pushes a frame of samples per video frame.
@@ -51,6 +56,46 @@ static uint8_t demo_buttons(int f)
     if (f < 120) return 0;                       /* let the boot logo finish undisturbed */
     if (phase == 0) return NUCLEO_GB_START;
     if (phase == 2) return NUCLEO_GB_A;
+    return 0;
+}
+
+/* SAVE STATES — the one feature here whose failure mode is silent data loss.
+ *
+ * A state is only correct if the console it restores is INDISTINGUISHABLE from the one that was
+ * saved, and "it loaded without crashing" does not test that at all: a state that drops the PPU
+ * registers or the timer still loads, still runs, and quietly plays a different game.
+ *
+ * So this checks the emulator's actual output. Run to a fixed point, save, then run N more frames
+ * with a fixed input sequence and hash every pixel of every scanline. Load the state, replay exactly
+ * the same N frames, and hash again. The emulator is deterministic, so the two hashes must be equal
+ * bit for bit — if any part of the console failed to round-trip, the picture diverges and the numbers
+ * will not match.
+ */
+static int state_roundtrip(const char *rom)
+{
+    enum { WARMUP = 300, REPLAY = 120 };
+    for (int f = 0; f < WARMUP; f++) { nucleo_gb_set_buttons(demo_buttons(f)); nucleo_gb_run_frame(); }
+
+    if (nucleo_gb_state_save(0) != ESP_OK) { printf("    FAIL: state save\n"); return 1; }
+
+    g_hash = 1469598103u;
+    for (int f = 0; f < REPLAY; f++) { nucleo_gb_set_buttons(demo_buttons(WARMUP + f)); nucleo_gb_run_frame(); }
+    unsigned long first = g_hash;
+
+    if (nucleo_gb_state_load(0) != ESP_OK) { printf("    FAIL: state load\n"); return 1; }
+
+    g_hash = 1469598103u;
+    for (int f = 0; f < REPLAY; f++) { nucleo_gb_set_buttons(demo_buttons(WARMUP + f)); nucleo_gb_run_frame(); }
+    unsigned long second = g_hash;
+
+    /* Leave no litter in the user's ROM folder. */
+    char sp[400]; snprintf(sp, sizeof sp, "%s.st0", rom); remove(sp);
+
+    if (first != second) {
+        printf("    FAIL: state round-trip diverged (%lu vs %lu)\n", first, second);
+        return 1;
+    }
+    printf("    state: round-trip exact over %d frames\n", REPLAY);
     return 0;
 }
 
@@ -91,11 +136,18 @@ int main(int argc, char **argv)
         if (g_nonblank < FRAMES)     { printf("    FAIL: rendered nothing\n");   failures++; continue; }
 
         /* The budget. A frame is 16.7 ms; anything that spends a quarter of it waiting on the card
-         * is the bottleneck, whatever else is optimised. At ~3 ms per 4 KB read that is ~1.4
-         * misses/frame, so the gate draws the line there and reports the measurement either way. */
+         * is the bottleneck, whatever else is optimised. At ~3 ms per read that is ~1.4 misses/frame,
+         * so the gate draws the line there and reports the measurement either way. */
         if (!s1.rom_resident && per_frame > 1.4) {
             printf("    FAIL: page cache thrashes (%.1f misses/frame)\n", per_frame);
             failures++; continue;
+        }
+        /* Re-open rather than continue: the round-trip needs a clean, known starting point, and it
+         * would otherwise inherit whatever the cache measurement left the console in. */
+        if (nucleo_gb_open(rom, on_line, NULL) == 0) {
+            int bad = state_roundtrip(rom);
+            nucleo_gb_close();
+            if (bad) { failures++; continue; }
         }
         printf("    PASS\n");
     }

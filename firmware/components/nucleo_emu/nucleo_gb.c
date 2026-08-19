@@ -9,9 +9,11 @@
 #include "esp_log.h"
 #include "esp_attr.h"       // IRAM_ATTR: keep the innermost callbacks out of the flash cache
 #include "esp_heap_caps.h"
+#include "esp_timer.h"      // where a frame's time actually goes
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>   // save-state presence check
 
 // Peanut-GB build switches — set BEFORE the include, they are compile-time for the whole core.
 #define ENABLE_LCD   1
@@ -22,6 +24,11 @@
 // with a 16.7 ms budget and no cycles to spare that is the wrong trade: correctness nobody sees,
 // paid for with frames everybody feels.
 #define PEANUT_GB_HIGH_LCD_ACCURACY 0
+// Also off. It tags every emitted pixel with which palette produced it (OBJ0/OBJ1/BG) so a front-end
+// can apply the different colour palettes a Game Boy Color gives a DMG game. This is a DMG core on a
+// four-shade screen and our scanline callback masks the tag straight off again — so it is an extra OR
+// per pixel, 23,000 a frame, plus masking through the sprite path, for information nobody reads.
+#define PEANUT_GB_12_COLOUR 0
 
 #ifndef MINIGB_APU_AUDIO_FORMAT_S16SYS
 # define MINIGB_APU_AUDIO_FORMAT_S16SYS 1   // 16-bit signed: exactly what the I2S sink takes
@@ -97,6 +104,7 @@ typedef struct {
     uint32_t      cur_tag;              // fast path: the page the last read hit...
     uint8_t      *cur_buf;              // ...and its buffer
     uint32_t      bank_misses;          // SD refills since open
+    uint32_t      us_cpu, us_audio;     // where a frame's time goes
 
     uint8_t      *cart_ram;
     size_t        cart_ram_bytes;
@@ -367,7 +375,10 @@ bool nucleo_gb_is_open(void) { return S != NULL; }
 void nucleo_gb_run_frame(void)
 {
     if (!S) return;
+    int64_t t0 = esp_timer_get_time();
     gb_run_frame(&S->gb);
+    int64_t t1 = esp_timer_get_time();
+    S->us_cpu += (uint32_t)(t1 - t0);
     S->frames++;
     // One frame of sound, produced AFTER the frame that generated it and pushed straight out. The
     // write blocks on the I2S DMA, which is also what paces us to real speed — so a dropped frame
@@ -375,7 +386,101 @@ void nucleo_gb_run_frame(void)
     if (S->sound) {
         minigb_apu_audio_callback(&S->apu, S->audio);
         nucleo_audio_pcm_write(S->audio, sizeof(S->audio));
+        S->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }
+}
+
+void nucleo_gb_set_frameskip(bool on) { if (S) S->gb.direct.frame_skip = on; }
+void nucleo_gb_set_interlace(bool on) { if (S) S->gb.direct.interlace  = on; }
+
+void nucleo_gb_reset_counters(void)
+{
+    if (!S) return;
+    S->us_cpu = S->us_audio = 0;
+    S->bank_misses = 0;
+    S->frames = 0;
+}
+
+// ── save states ─────────────────────────────────────────────────────────────────────────────────
+// A state is the console struct byte for byte, followed by the cartridge RAM. The struct carries six
+// function pointers (four cartridge accessors, the error hook, the scanline hook) plus our own
+// session pointer, and those are the ONE thing that must not come from the file: a corrupt or
+// hand-edited state would otherwise hand the CPU an arbitrary address to call. They are saved with
+// everything else for simplicity and then overwritten from the live session on load.
+#define STATE_MAGIC 0x3142474Eu   // 'NGB1'
+static void state_path(char *out, size_t n, int slot)
+{
+    // sav_path is "<rom>.sav" and is the only copy of the ROM path we keep; drop the four-character
+    // suffix to get back to the cartridge and hang the slot off that.
+    size_t l = strlen(S->sav_path);
+    if (l > 4) l -= 4;
+    if (l >= n) l = n - 1;
+    memcpy(out, S->sav_path, l);
+    out[l] = ' ';
+    snprintf(out + l, n - l, ".st%d", slot < 0 ? 0 : (slot > 9 ? 9 : slot));
+}
+
+bool nucleo_gb_state_exists(int slot)
+{
+    if (!S) return false;
+    char p[300]; state_path(p, sizeof p, slot);
+    struct stat sb;
+    return stat(p, &sb) == 0 && sb.st_size > (long)sizeof(struct gb_s);
+}
+
+esp_err_t nucleo_gb_state_save(int slot)
+{
+    if (!S) return ESP_ERR_INVALID_STATE;
+    char p[300]; state_path(p, sizeof p, slot);
+    FILE *f = fopen(p, "wb");
+    if (!f) { ESP_LOGW(TAG, "state %d: cannot write %s", slot, p); return ESP_FAIL; }
+    uint32_t magic = STATE_MAGIC, ram = S->cart_ram_bytes;
+    bool ok = fwrite(&magic, 1, 4, f) == 4
+           && fwrite(&ram, 1, 4, f) == 4
+           && fwrite(&S->gb, 1, sizeof S->gb, f) == sizeof S->gb;
+    if (ok && ram) ok = fwrite(S->cart_ram, 1, ram, f) == ram;
+    fclose(f);
+    if (!ok) { remove(p); ESP_LOGW(TAG, "state %d: short write", slot); return ESP_FAIL; }
+    ESP_LOGI(TAG, "state %d saved (%u B)", slot, (unsigned)(sizeof S->gb + ram));
+    return ESP_OK;
+}
+
+esp_err_t nucleo_gb_state_load(int slot)
+{
+    if (!S) return ESP_ERR_INVALID_STATE;
+    char p[300]; state_path(p, sizeof p, slot);
+    FILE *f = fopen(p, "rb");
+    if (!f) return ESP_ERR_NOT_FOUND;
+
+    uint32_t magic = 0, ram = 0;
+    struct gb_s tmp;
+    bool ok = fread(&magic, 1, 4, f) == 4
+           && fread(&ram, 1, 4, f) == 4
+           && magic == STATE_MAGIC
+           && ram == S->cart_ram_bytes
+           && fread(&tmp, 1, sizeof tmp, f) == sizeof tmp;
+    // Read the cartridge RAM into a scratch copy first: a state that fails half way through must
+    // leave the RUNNING game untouched rather than corrupt it.
+    uint8_t *ramtmp = NULL;
+    if (ok && ram) {
+        ramtmp = (uint8_t *)malloc(ram);
+        ok = ramtmp && fread(ramtmp, 1, ram, f) == ram;
+    }
+    fclose(f);
+    if (!ok) { free(ramtmp); ESP_LOGW(TAG, "state %d: rejected", slot); return ESP_ERR_INVALID_CRC; }
+
+    // Everything is verified — commit. The pointers come from the LIVE session, never from the file.
+    tmp.gb_rom_read       = S->gb.gb_rom_read;
+    tmp.gb_cart_ram_read  = S->gb.gb_cart_ram_read;
+    tmp.gb_cart_ram_write = S->gb.gb_cart_ram_write;
+    tmp.gb_error          = S->gb.gb_error;
+    tmp.display.lcd_draw_line = S->gb.display.lcd_draw_line;
+    tmp.direct.priv       = S->gb.direct.priv;
+    S->gb = tmp;
+    if (ram) { memcpy(S->cart_ram, ramtmp, ram); S->cart_ram_dirty = true; }
+    free(ramtmp);
+    ESP_LOGI(TAG, "state %d loaded", slot);
+    return ESP_OK;
 }
 
 void nucleo_gb_set_buttons(uint8_t mask)
@@ -403,6 +508,8 @@ void nucleo_gb_get_stats(nucleo_gb_stats_t *out)
     if (!S) return;
     out->heap_bytes   = S->heap_bytes;
     out->rom_bytes    = S->rom_bytes;
+    out->us_cpu   = S->us_cpu;
+    out->us_audio = S->us_audio;
     out->rom_resident = (S->rom_all != NULL);
     out->rom_paged    = (S->rom_all == NULL);
     out->rom_pages    = S->pg_n;
