@@ -107,6 +107,17 @@
       "timer",
       "stopwatch"
     ],
+    "pomodoro": [
+      "pomodoro",
+      "pomodori",
+      "focus",
+      "concentrazione",
+      "concentrarsi",
+      "concentrati",
+      "focus timer",
+      "pomodoro technique",
+      "tecnica del pomodoro"
+    ],
     "calendar": [
       "calendario",
       "agenda",
@@ -220,8 +231,23 @@
       "game",
       "giocare",
       "partita",
-      "multiplayer",
-      "arcade"
+      "multiplayer"
+    ],
+    "arcade": [
+      "arcade",
+      "emulator",
+      "emulazione",
+      "emulation",
+      "rom",
+      "roms",
+      "retrogaming",
+      "nes",
+      "snes",
+      "game boy",
+      "gameboy",
+      "mega drive",
+      "megadrive",
+      "emula"
     ],
     "code-runner": [
       "runner",
@@ -298,6 +324,27 @@
       "converter",
       "unita di misura",
       "unit converter"
+    ],
+    "authenticator": [
+      "authenticator",
+      "autenticatore",
+      "2fa",
+      "totp",
+      "otp",
+      "codici",
+      "verifica",
+      "codes",
+      "mfa"
+    ],
+    "contacts": [
+      "contatti",
+      "contact",
+      "contacts",
+      "rubrica",
+      "contatto",
+      "persone",
+      "contactos",
+      "kontakte"
     ]
   },
   "notes": {

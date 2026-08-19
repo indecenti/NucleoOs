@@ -1,0 +1,327 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Arcade</title>
+<style>
+  :root{--bg:#06070b;--panel:#0d0f16;--line:#1b2130;--ink:#e8eaed;--dim:#8b93a1;--ac:#2dd4bf;--ac2:#6aa8ff}
+  *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+  #app{display:flex;flex-direction:column;height:100%}
+
+  header{display:flex;align-items:center;gap:12px;padding:14px 18px 10px;border-bottom:1px solid var(--line)}
+  header .logo{width:30px;height:30px;flex:none}
+  header h1{font-size:19px;font-weight:600;letter-spacing:.2px}
+  header .sub{font-size:12px;color:var(--dim);margin-left:2px}
+  header .spacer{flex:1}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim)}
+  .crumb b{color:var(--ink);font-weight:600}
+  .back{display:none;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+    border-radius:9px;padding:7px 12px;font-size:13px;cursor:pointer;transition:.15s}
+  .back:hover{border-color:var(--ac2)}
+  .search{flex:none;width:220px;max-width:38vw;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+    border-radius:9px;padding:8px 12px;font-size:13px;outline:none;display:none}
+  .search:focus{border-color:var(--ac)}
+
+  main{flex:1;overflow-y:auto;padding:16px 18px 26px}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+
+  /* system card */
+  .sys{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px 15px 13px;
+    cursor:pointer;transition:.16s;overflow:hidden;min-height:96px;display:flex;flex-direction:column;justify-content:space-between}
+  .sys:hover{transform:translateY(-2px);border-color:var(--ac)}
+  .sys .rail{position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--sa,var(--ac))}
+  .sys .nm{font-size:15px;font-weight:600;padding-left:6px}
+  .sys .ct{font-size:12px;color:var(--dim);padding-left:6px}
+  .sys .badge{position:absolute;right:12px;top:12px;font-size:11px;font-weight:700;color:#06070b;background:var(--sa,var(--ac));
+    border-radius:999px;padding:2px 9px;min-width:22px;text-align:center}
+  .sys.empty{opacity:.5}
+  .sys.empty:hover{transform:none;border-color:var(--line)}
+
+  /* game row */
+  .game{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:11px;
+    padding:11px 14px;cursor:pointer;transition:.13s}
+  .game:hover{border-color:var(--ac);background:#11141d}
+  /* Keyboard/gamepad selection has to be as loud as a mouse hover, because it is the ONLY cue
+     when there is no pointer — a handheld with a d-pad shows nothing otherwise. */
+  .sys.sel,.game.sel{border-color:var(--ac);background:#11141d;box-shadow:0 0 0 2px rgba(45,212,191,.35)}
+  .sys.sel{transform:translateY(-2px)}
+  .game .gi{width:30px;height:30px;border-radius:8px;background:var(--sa,var(--ac));flex:none;display:grid;place-items:center;
+    color:#06070b;font-weight:700;font-size:13px}
+  .game .gn{flex:1;min-width:0;font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .game .gs{font-size:11px;color:var(--dim);flex:none}
+  .games{display:flex;flex-direction:column;gap:8px}
+
+  .msg{color:var(--dim);font-size:14px;line-height:1.6;padding:24px 4px;max-width:560px}
+  .msg code{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:2px 7px;color:var(--ac);font-size:13px}
+  .spin{width:22px;height:22px;border:2px solid var(--line);border-top-color:var(--ac);border-radius:50%;
+    animation:sp .7s linear infinite;margin:26px auto}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  /* player overlay */
+  #play{position:fixed;inset:0;background:#000;z-index:50;display:none}
+  #play iframe{width:100%;height:100%;border:0;display:block}
+  #play .exit{position:absolute;left:12px;top:12px;z-index:2;width:38px;height:38px;border-radius:10px;
+    background:rgba(6,7,11,.72);border:1px solid rgba(255,255,255,.16);color:#fff;font-size:19px;cursor:pointer;
+    display:grid;place-items:center;backdrop-filter:blur(4px)}
+  #play .exit:hover{background:rgba(45,212,191,.28)}
+</style>
+</head><body>
+<div id="app">
+  <header>
+    <svg class="logo" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="4" stroke="#2dd4bf" stroke-width="1.6"/><circle cx="8" cy="12" r="1.4" fill="#2dd4bf"/><path d="M15 10.6v2.8M13.6 12h2.8" stroke="#6aa8ff" stroke-width="1.5" stroke-linecap="round"/></svg>
+    <div>
+      <h1>Arcade</h1>
+    </div>
+    <button class="back" id="back">◀ <span id="back-t">Systems</span></button>
+    <div class="crumb" id="crumb"></div>
+    <div class="spacer"></div>
+    <input class="search" id="search" type="text" placeholder="Filter…" autocomplete="off">
+  </header>
+  <main id="main"><div class="spin"></div></main>
+</div>
+
+<div id="play"><button class="exit" id="exit" title="Back to library">✕</button><iframe id="pframe" allow="autoplay; gamepad; fullscreen"></iframe></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const main = $('main');
+let SYSTEMS = [], curSys = null, curGames = [], lang = 'en';
+let sel = 0, playing = false;   // sel = keyboard/gamepad cursor within the current view
+// The OS already had a ROM library here (the deploy manifest and .gitignore both name it), so the
+// app reads the EXISTING folder rather than inventing a second one at /roms.
+const ROM_DIR = 'data/ROMs/';
+
+// Minimal i18n — the shell owns full localization; these are the app's own few strings.
+const STR = {
+  en: { systems:'Systems', filter:'Filter…', games:'games', game:'game', empty:'empty', noGames:'No games in this system yet.',
+        addRoms:'Add ROMs to', onSd:'on the SD card, then reopen this system.', noSystems:'No systems configured.',
+        loading:'Reading the library…', backSystems:'Systems',
+        romsetNote:'Arcade cores only accept the romset version they were built for.' },
+  it: { systems:'Sistemi', filter:'Filtra…', games:'giochi', game:'gioco', empty:'vuoto', noGames:'Ancora nessun gioco in questo sistema.',
+        addRoms:'Aggiungi ROM in', onSd:'sulla scheda SD, poi riapri questo sistema.', noSystems:'Nessun sistema configurato.',
+        loading:'Leggo la libreria…', backSystems:'Sistemi',
+        romsetNote:'I core arcade accettano solo la versione di romset per cui sono compilati.' },
+};
+const T = (k) => (STR[lang] && STR[lang][k]) || STR.en[k] || k;
+
+async function jget(url) {
+  try { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) return null; return await r.json(); }
+  catch (e) { return null; }
+}
+
+// Count games in a system folder without downloading them — one directory listing, extension-filtered.
+async function countSystem(sys) {
+  const d = await jget('/api/fs/list?path=' + encodeURIComponent(ROM_DIR + sys.id));
+  if (!d || !Array.isArray(d.entries)) return 0;
+  const ex = new Set(sys.exts), bios = (sys.bios || '').toLowerCase();
+  return d.entries.filter((e) => e.type === 'file' && ex.has(extOf(e.name)) && e.name.toLowerCase() !== bios).length;
+}
+function extOf(n) { const i = n.lastIndexOf('.'); return i < 0 ? '' : n.slice(i + 1).toLowerCase(); }
+function titleOf(n) { const i = n.lastIndexOf('.'); return (i < 0 ? n : n.slice(0, i)).replace(/[._]+/g, ' ').trim(); }
+
+async function showSystems() {
+  curSys = null;
+  $('back').style.display = 'none';
+  $('search').style.display = 'none';
+  $('crumb').innerHTML = '';
+  main.innerHTML = '<div class="spin"></div>';
+  // Count every system in parallel; hide the ones that don't exist on the card at all, but keep
+  // configured-but-empty ones dimmed so the user knows where to drop ROMs.
+  const counts = await Promise.all(SYSTEMS.map(countSystem));
+  const grid = document.createElement('div'); grid.className = 'grid';
+  let any = false;
+  SYSTEMS.forEach((sys, i) => {
+    const n = counts[i];
+    const el = document.createElement('div');
+    el.className = 'sys' + (n === 0 ? ' empty' : '');
+    el.style.setProperty('--sa', sys.accent || 'var(--ac)');
+    el.innerHTML = `<div class="rail"></div>${n > 0 ? `<div class="badge">${n}</div>` : ''}
+      <div class="nm">${sys.name}</div><div class="ct">${n > 0 ? n + ' ' + T(n === 1 ? 'game' : 'games') : T('empty')}</div>`;
+    if (n > 0) { any = true; el.onclick = () => showGames(sys); }
+    grid.appendChild(el);
+  });
+  main.innerHTML = '';
+  main.appendChild(grid);
+  sel = 0; paintSel();
+  if (!any && SYSTEMS.every((_, i) => counts[i] === 0)) {
+    const m = document.createElement('div'); m.className = 'msg';
+    m.innerHTML = `${T('addRoms')} <code>/sd/data/ROMs/&lt;system&gt;</code> ${T('onSd')}`;
+    main.appendChild(m);
+  }
+}
+
+async function showGames(sys) {
+  curSys = sys;
+  $('back').style.display = 'inline-flex';
+  $('back-t').textContent = T('backSystems');
+  $('crumb').innerHTML = `<b>${sys.name}</b>`;
+  main.innerHTML = '<div class="spin"></div>';
+  const d = await jget('/api/fs/list?path=' + encodeURIComponent(ROM_DIR + sys.id));
+  const ex = new Set(sys.exts);
+  // The BIOS is a support file the core loads, not a game — never list it as playable.
+  const bios = (sys.bios || '').toLowerCase();
+  curGames = (d && d.entries ? d.entries : [])
+    .filter((e) => e.type === 'file' && ex.has(extOf(e.name)) && e.name.toLowerCase() !== bios)
+    .map((e) => ({ file: e.name, title: titleOf(e.name), size: e.size }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+  const s = $('search'); s.style.display = 'block'; s.value = ''; s.placeholder = T('filter'); s.oninput = () => renderGames(s.value);
+  renderGames('');
+}
+
+function fmtSize(b) { return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+
+function renderGames(q) {
+  q = (q || '').toLowerCase();
+  const list = curGames.filter((g) => g.title.toLowerCase().includes(q));
+  if (!curGames.length) { main.innerHTML = `<div class="msg">${T('noGames')}</div>`; return; }
+  main.innerHTML = '';
+  // Arcade cores are romset-version locked and fail with a cryptic core error rather than degrading
+  // (verified: fbneo rejects an FBA 0.2.97.38 Neo Geo set outright). Say so BEFORE the user launches.
+  if (curSys.warn) {
+    const w = document.createElement('div');
+    w.style.cssText = 'display:flex;gap:8px;align-items:flex-start;background:#1a1408;border:1px solid #6b4e12;'
+                    + 'border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:12px;line-height:1.5;color:#ffce46';
+    const msg = (curSys.warn[lang] || curSys.warn.en || '');
+    w.innerHTML = `<span>⚠</span><span><b>${msg}</b><br><span style="color:var(--dim)">${T('romsetNote')}</span></span>`;
+    main.appendChild(w);
+  }
+  const box = document.createElement('div'); box.className = 'games';
+  list.forEach((g) => {
+    const el = document.createElement('div'); el.className = 'game';
+    el.style.setProperty('--sa', curSys.accent || 'var(--ac)');
+    el.innerHTML = `<div class="gi">${curSys.name[0]}</div><div class="gn">${g.title}</div><div class="gs">${fmtSize(g.size)}</div>`;
+    el.onclick = () => launch(g);
+    box.appendChild(el);
+  });
+  main.appendChild(box);
+  sel = 0; paintSel();
+}
+
+function launch(g) {
+  const rom = '/api/fs/read?path=' + encodeURIComponent(ROM_DIR + curSys.id + '/' + g.file);
+  let url = 'player.html?core=' + encodeURIComponent(curSys.core) +
+            '&rom=' + encodeURIComponent(rom) + '&name=' + encodeURIComponent(g.title) +
+            // the player probes this exact core on the SD to decide device-vs-CDN
+            '&corefile=' + encodeURIComponent(curSys.coreFile || '');
+  // Neo Geo (and other arcade sets) will not boot without their BIOS: hand the player its URL so
+  // EmulatorJS loads it alongside the game.
+  if (curSys.bios) {
+    const b = '/api/fs/read?path=' + encodeURIComponent(ROM_DIR + curSys.id + '/' + curSys.bios);
+    url += '&bios=' + encodeURIComponent(b);
+  }
+  $('pframe').src = url;
+  $('play').style.display = 'block';
+  playing = true;   // hand the keyboard and the pad to the emulator
+}
+function exitPlayer() {
+  $('play').style.display = 'none';
+  $('pframe').src = 'about:blank';   // frees the core's memory; leaving it loaded costs hundreds of MB
+  playing = false;
+  focusList();
+}
+$('exit').onclick = exitPlayer;
+// The emulator swallows keys, so the player frame tells us when the user pressed Esc.
+window.addEventListener('message', (e) => { if (e.data && e.data.type === 'arcade-exit') exitPlayer(); });
+$('back').onclick = () => showSystems();
+
+// ── Keyboard / gamepad navigation ───────────────────────────────────────────────────────────────
+// The app has to be fully usable with no mouse: this runs on a handheld and on the Cardputer's own
+// keyboard. Mouse still works everywhere — these paths only ADD a cursor, they never take over.
+function cells() { return [...main.querySelectorAll('.sys, .game')]; }
+function paintSel() {
+  const c = cells();
+  if (!c.length) return;
+  if (sel < 0) sel = 0;
+  if (sel >= c.length) sel = c.length - 1;
+  c.forEach((e, i) => e.classList.toggle('sel', i === sel));
+  c[sel].scrollIntoView({ block: 'nearest' });
+}
+function focusList() { paintSel(); }
+// Grid width, measured rather than assumed: the card grid is auto-fill, so the column count changes
+// with the window and Up/Down must follow the real layout instead of a hardcoded guess.
+function cols() {
+  const c = cells();
+  if (c.length < 2) return 1;
+  const top = c[0].offsetTop;
+  let n = 0;
+  while (n < c.length && c[n].offsetTop === top) n++;
+  return Math.max(1, n);
+}
+function activate() { const c = cells(); if (c[sel]) c[sel].click(); }
+
+document.addEventListener('keydown', (e) => {
+  if (playing) return;                       // the player owns the keyboard while a game runs
+  const typing = document.activeElement === $('search');
+  const c = cells();
+  switch (e.key) {
+    case 'ArrowRight': sel += 1; break;
+    case 'ArrowLeft':  sel -= 1; break;
+    case 'ArrowDown':  sel += (curSys ? 1 : cols()); break;
+    case 'ArrowUp':    sel -= (curSys ? 1 : cols()); break;
+    case 'Home':       sel = 0; break;
+    case 'End':        sel = c.length - 1; break;
+    case 'PageDown':   sel += 5; break;
+    case 'PageUp':     sel -= 5; break;
+    case 'Enter': case ' ':
+      if (typing) return;                    // Space belongs to the filter box while typing
+      e.preventDefault(); activate(); return;
+    case 'Escape': case 'Backspace':
+      if (typing && e.key === 'Backspace') return;
+      e.preventDefault();
+      if (typing) { $('search').value = ''; renderGames(''); $('search').blur(); }
+      else if (curSys) showSystems();
+      return;
+    default:
+      // Type-to-search: any printable key jumps into the filter box, the fastest way through a
+      // 250-game shelf on a keyboard device.
+      if (curSys && !typing && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        $('search').focus(); return;
+      }
+      return;
+  }
+  e.preventDefault();
+  paintSel();
+});
+
+// Gamepad: poll while the library is open. The browser only reports a pad after its first input, so
+// this also doubles as the connect detector. Stick and d-pad both drive the cursor; A opens, B goes
+// back — the layout every handheld user already has in their thumbs.
+(function padLoop() {
+  let last = 0, prevBtn = {};
+  function tick() {
+    if (!playing && navigator.getGamepads) {
+      const pads = navigator.getGamepads();
+      for (const gp of pads) {
+        if (!gp) continue;
+        const now = performance.now();
+        const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
+        const dpad = { l: gp.buttons[14] && gp.buttons[14].pressed, r: gp.buttons[15] && gp.buttons[15].pressed,
+                       u: gp.buttons[12] && gp.buttons[12].pressed, d: gp.buttons[13] && gp.buttons[13].pressed };
+        let dx = (dpad.r ? 1 : 0) - (dpad.l ? 1 : 0), dy = (dpad.d ? 1 : 0) - (dpad.u ? 1 : 0);
+        if (!dx && ax > 0.6) dx = 1; else if (!dx && ax < -0.6) dx = -1;
+        if (!dy && ay > 0.6) dy = 1; else if (!dy && ay < -0.6) dy = -1;
+        if ((dx || dy) && now - last > 170) {        // repeat rate: fast enough to scan, slow enough to aim
+          last = now;
+          sel += dx + dy * (curSys ? 1 : cols());
+          paintSel();
+        }
+        const a = gp.buttons[0] && gp.buttons[0].pressed, b = gp.buttons[1] && gp.buttons[1].pressed;
+        if (a && !prevBtn.a) activate();
+        if (b && !prevBtn.b) { if (curSys) showSystems(); }
+        prevBtn = { a, b };
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+
+(async function init() {
+  const l = await jget('/api/lang'); if (l && l.lang) lang = l.lang;
+  const cfg = await jget('systems.json');
+  SYSTEMS = (cfg && Array.isArray(cfg.systems)) ? cfg.systems : [];
+  if (!SYSTEMS.length) { main.innerHTML = `<div class="msg">${T('noSystems')}</div>`; return; }
+  showSystems();
+})();
+</script>
+</body></html>

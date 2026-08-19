@@ -141,10 +141,55 @@ esp_err_t nucleo_storage_provision(void)
         NUCLEO_SD_MOUNT "/data/Documents", NUCLEO_SD_MOUNT "/data/Pictures",
         NUCLEO_SD_MOUNT "/data/Music", NUCLEO_SD_MOUNT "/data/Videos",
         NUCLEO_SD_MOUNT "/data/Recordings",
+        // ROM library for the Arcade app. Created EMPTY on a fresh card, one folder per system, so the
+        // shape of the library is discoverable without documentation: the user drops a .nes into
+        // data/ROMs/nes and the app lists it. Without this the app can only say "make these folders
+        // yourself", and every install invents a different layout. Folder names are the ids in
+        // apps/arcade/www/systems.json — the two lists must stay in step.
+        NUCLEO_SD_MOUNT "/data/ROMs",
+        NUCLEO_SD_MOUNT "/data/ROMs/nes",       NUCLEO_SD_MOUNT "/data/ROMs/snes",
+        NUCLEO_SD_MOUNT "/data/ROMs/gb",        NUCLEO_SD_MOUNT "/data/ROMs/gbc",
+        NUCLEO_SD_MOUNT "/data/ROMs/gba",       NUCLEO_SD_MOUNT "/data/ROMs/gg",
+        NUCLEO_SD_MOUNT "/data/ROMs/sms",       NUCLEO_SD_MOUNT "/data/ROMs/megadrive",
+        NUCLEO_SD_MOUNT "/data/ROMs/pcengine",  NUCLEO_SD_MOUNT "/data/ROMs/ngpc",
+        NUCLEO_SD_MOUNT "/data/ROMs/linx",      NUCLEO_SD_MOUNT "/data/ROMs/neogeo",
+        NUCLEO_SD_MOUNT "/data/ROMs/cps1",      NUCLEO_SD_MOUNT "/data/ROMs/cps2",
         NUCLEO_SD_MOUNT "/backups", NUCLEO_SD_MOUNT "/www",
         NUCLEO_SD_MOUNT "/www/shell",
     };
     for (size_t i = 0; i < sizeof(dirs) / sizeof(dirs[0]); i++) ensure_dir(dirs[i]);
+
+    // One README at the library root explains where ROMs go and which extensions each system takes.
+    // Written only when absent, so a user's own edits are never clobbered. Kept short: the SD is FAT32
+    // and this file is read by a human with a card reader, not by the OS.
+    {
+        const char *readme = NUCLEO_SD_MOUNT "/data/ROMs/README.txt";
+        struct stat rst;
+        if (stat(readme, &rst) != 0) {
+            FILE *rf = fopen(readme, "w");
+            if (rf) {
+                fputs("NucleoOS - ROM library (Arcade app)\r\n"
+                      "===================================\r\n\r\n"
+                      "Drop game files into the folder for their system. The Arcade app lists whatever\r\n"
+                      "is here; empty folders show as 'empty'. Zip archives work too - they are opened\r\n"
+                      "in the browser, so you can keep the card small.\r\n\r\n"
+                      "  nes/        .nes .unf .zip          snes/       .sfc .smc .fig .swc .zip\r\n"
+                      "  gb/         .gb .zip                gbc/        .gbc .gb .zip\r\n"
+                      "  gba/        .gba .zip               gg/         .gg .zip\r\n"
+                      "  sms/        .sms .zip               megadrive/  .md .gen .smd .bin .zip\r\n"
+                      "  pcengine/   .pce .zip               ngpc/       .ngc .ngp .zip\r\n"
+                      "  linx/       .lnx .zip               neogeo/     .zip  (needs neogeo.zip BIOS)\r\n"
+                      "  cps1/       .zip                    cps2/       .zip\r\n\r\n"
+                      "Emulation runs in the BROWSER, not on the Cardputer: the device only serves the\r\n"
+                      "files, so a big game costs the device nothing but card space.\r\n\r\n"
+                      "Neo Geo and CPS need arcade romsets that match the core (FB Alpha 0.2.97.x).\r\n"
+                      "Put the neogeo.zip BIOS in neogeo/ alongside the games.\r\n\r\n"
+                      "Ship only games you own. No ROMs are distributed with NucleoOS.\r\n", rf);
+                fclose(rf);
+                ESP_LOGI(TAG, "provisioned data/ROMs + README");
+            }
+        }
+    }
 
     struct stat st;
     if (stat(VOLUME_JSON, &st) == 0) return ESP_OK;  // already provisioned

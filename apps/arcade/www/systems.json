@@ -1,0 +1,184 @@
+{
+  "_comment": "Folder under /sd/data/ROMs -> EmulatorJS system + display metadata. 'id' MUST match the folder name on the SD (and the list firmware provisioning creates in nucleo_storage.c); 'core' is the EmulatorJS system OR core id (EJS_core accepts either — getCore resolves a core name back to its system). 'exts' filters the listing (lowercase, no dot). 'bios' names a file in the same folder that the core needs loaded alongside the game.",
+  "_cores": "nes=fceumm · snes=snes9x · gb/gbc=gambatte · gba=mgba · segaMD/segaGG=genesis_plus_gx · segaMS=smsplus · pce=mednafen_pce · ngp=mednafen_ngp · lynx=handy · arcade=fbneo · cps1/cps2=fbalpha2012_*",
+  "_zip": "Every system accepts 'zip': arcade sets are always zipped, and EmulatorJS extracts them in the browser (emulatorjs/compression/extractzip.js), which keeps the SD smaller.",
+  "_arcade": "Neo Geo and CPS romsets must match the core's expected set — the fbalpha2012_* cores want FB Alpha 0.2.97.x, and fbneo wants a modern FBNeo set. A mismatched set fails to boot the game, it does not degrade.",
+  "systems": [
+    {
+      "id": "nes",
+      "name": "NES",
+      "core": "nes",
+      "exts": [
+        "nes",
+        "unf",
+        "unif",
+        "zip"
+      ],
+      "accent": "#e24b4a",
+      "coreFile": "fceumm"
+    },
+    {
+      "id": "snes",
+      "name": "SNES",
+      "core": "snes",
+      "exts": [
+        "sfc",
+        "smc",
+        "fig",
+        "swc",
+        "zip"
+      ],
+      "accent": "#7f77dd",
+      "coreFile": "snes9x"
+    },
+    {
+      "id": "gb",
+      "name": "Game Boy",
+      "core": "gb",
+      "exts": [
+        "gb",
+        "zip"
+      ],
+      "accent": "#639922",
+      "coreFile": "gambatte"
+    },
+    {
+      "id": "gbc",
+      "name": "Game Boy Color",
+      "core": "gb",
+      "exts": [
+        "gbc",
+        "gb",
+        "zip"
+      ],
+      "accent": "#1d9e75",
+      "coreFile": "gambatte"
+    },
+    {
+      "id": "gba",
+      "name": "Game Boy Advance",
+      "core": "gba",
+      "exts": [
+        "gba",
+        "zip"
+      ],
+      "accent": "#378add",
+      "coreFile": "mgba"
+    },
+    {
+      "id": "gg",
+      "name": "Game Gear",
+      "core": "segaGG",
+      "exts": [
+        "gg",
+        "zip"
+      ],
+      "accent": "#d4537e",
+      "coreFile": "genesis_plus_gx"
+    },
+    {
+      "id": "sms",
+      "name": "Master System",
+      "core": "segaMS",
+      "exts": [
+        "sms",
+        "zip"
+      ],
+      "accent": "#ba7517",
+      "coreFile": "smsplus"
+    },
+    {
+      "id": "megadrive",
+      "name": "Mega Drive",
+      "core": "segaMD",
+      "exts": [
+        "md",
+        "gen",
+        "smd",
+        "bin",
+        "zip"
+      ],
+      "accent": "#d85a30",
+      "coreFile": "genesis_plus_gx"
+    },
+    {
+      "id": "pcengine",
+      "name": "PC Engine",
+      "core": "pce",
+      "exts": [
+        "pce",
+        "zip"
+      ],
+      "accent": "#ef9f27",
+      "coreFile": "mednafen_pce"
+    },
+    {
+      "id": "ngpc",
+      "name": "Neo Geo Pocket",
+      "core": "ngp",
+      "exts": [
+        "ngc",
+        "ngp",
+        "zip"
+      ],
+      "accent": "#1d9e75",
+      "coreFile": "mednafen_ngp"
+    },
+    {
+      "id": "linx",
+      "name": "Atari Lynx",
+      "core": "lynx",
+      "exts": [
+        "lnx",
+        "zip"
+      ],
+      "accent": "#888780",
+      "coreFile": "handy"
+    },
+    {
+      "id": "neogeo",
+      "name": "Neo Geo",
+      "core": "arcade",
+      "exts": [
+        "zip"
+      ],
+      "bios": "neogeo.zip",
+      "accent": "#e24b4a",
+      "coreFile": "fbneo",
+      "warn": {
+        "it": "Set richiesto: FBNeo moderno",
+        "en": "Needs a modern FBNeo romset"
+      }
+    },
+    {
+      "id": "cps1",
+      "name": "Capcom CPS-1",
+      "core": "fbalpha2012_cps1",
+      "exts": [
+        "zip"
+      ],
+      "accent": "#ffce46",
+      "coreFile": "fbalpha2012_cps1",
+      "warn": {
+        "it": "Set richiesto: FB Alpha 0.2.97.28",
+        "en": "Needs an FB Alpha 0.2.97.28 romset"
+      }
+    },
+    {
+      "id": "cps2",
+      "name": "Capcom CPS-2",
+      "core": "fbalpha2012_cps2",
+      "exts": [
+        "zip"
+      ],
+      "accent": "#378add",
+      "coreFile": "fbalpha2012_cps2",
+      "warn": {
+        "it": "Set richiesto: FB Alpha 0.2.97.28",
+        "en": "Needs an FB Alpha 0.2.97.28 romset"
+      }
+    }
+  ],
+  "_coreFile": "Actual libretro core shipped at emulatorjs/cores/<coreFile>-wasm.data. The player probes it: present -> run fully offline from the SD; absent -> fall back to the EmulatorJS CDN.",
+  "_romsets": "Arcade cores are romset-version locked: the core refuses to boot a set it does not recognise, it does not degrade. Verified on hardware: fbneo rejected an FBA 0.2.97.38 Neo Geo set ('Romset is unknown'), and fbalpha2012_cps1 (v0.2.97.28) dropped to the RetroArch menu on the same-era CPS set. 'warn' is surfaced in the game list so the user is told BEFORE launching instead of meeting a cryptic core error."
+}

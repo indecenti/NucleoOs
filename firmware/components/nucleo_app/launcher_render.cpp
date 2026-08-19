@@ -352,6 +352,13 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
         IFC(cx - s * 0.45f, cy + s * 0.55f, Tk * 1.05f, col);
         IBX(cx - s * 0.45f + Tk * 0.6f, cy - s * 0.82f, Tk * 0.8f, s * 1.45f, col);
         ITR(cx - s * 0.45f + Tk * 1.4f, cy - s * 0.82f, cx - s * 0.45f + Tk * 1.4f, cy - s * 0.12f, cx + s * 0.72f, cy - s * 0.45f, col);
+    } else if (!strcmp(id, "gbemu")) {                                       // Game Boy: body, screen, d-pad, two buttons
+        IRR(cx - s * 0.62f, cy - s, s * 1.24f, s * 2.0f, s * 0.26f, col);      // handheld body
+        IBX(cx - s * 0.40f, cy - s * 0.78f, s * 0.80f, s * 0.62f, bg);         // screen well
+        IBX(cx - s * 0.34f, cy + s * 0.14f, s * 0.10f, s * 0.34f, bg);         // d-pad vertical
+        IBX(cx - s * 0.46f, cy + s * 0.26f, s * 0.34f, s * 0.10f, bg);         // d-pad horizontal
+        IFC(cx + s * 0.30f, cy + s * 0.22f, s * 0.13f, bg);                    // B
+        IFC(cx + s * 0.02f, cy + s * 0.42f, s * 0.13f, bg);                    // A
     } else if (!strcmp(id, "video")) {
         IRR(cx - s, cy - s * 0.75f, 2 * s, s * 1.5f, s * 0.22f, col);
         ITR(cx - s * 0.3f, cy - s * 0.42f, cx - s * 0.3f, cy + s * 0.42f, cx + s * 0.5f, cy, bg);

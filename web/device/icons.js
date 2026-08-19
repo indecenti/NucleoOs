@@ -164,6 +164,15 @@ export function drawIcon(g, id, cx, cy, s) {
       g.bx(cx - s * 0.4, cy + s * 0.34, s * 0.8, T * 0.55, g.bg);
       break;
 
+    case 'gbemu':                                    // Game Boy: body, screen, d-pad, two buttons
+      g.frr(cx - s * 0.62, cy - s, s * 1.24, s * 2.0, s * 0.26);
+      g.bx(cx - s * 0.40, cy - s * 0.78, s * 0.80, s * 0.62, g.bg);
+      g.bx(cx - s * 0.34, cy + s * 0.14, s * 0.10, s * 0.34, g.bg);
+      g.bx(cx - s * 0.46, cy + s * 0.26, s * 0.34, s * 0.10, g.bg);
+      g.fc(cx + s * 0.30, cy + s * 0.22, s * 0.13, g.bg);
+      g.fc(cx + s * 0.02, cy + s * 0.42, s * 0.13, g.bg);
+      break;
+
     case 'music':
       g.fc(cx - s * 0.45, cy + s * 0.55, T * 1.05);
       g.bx(cx - s * 0.45 + T * 0.6, cy - s * 0.82, T * 0.8, s * 1.45);
