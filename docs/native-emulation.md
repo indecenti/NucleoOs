@@ -153,10 +153,11 @@ and two buttons could never be down at once — no running jump, no diagonal. It
 being slow. It was not; the D-pad was tapping itself.
 
 The mask is now built from `nucleo_kbd_char_down()` — the live pressed set, rebuilt from the matrix on
-every scan — so directions hold and chords work. Two d-pads are live at once: **WASD** under the left
-hand and the **`;` `.` `,` `/`** cluster the Cardputer literally prints arrows on under the right.
-**K/L** = A, **J** = B, **Space** = Start, **N** = Select, **TAB held** = fast-forward, **P** = palette,
-**M** or **Esc** = the in-game menu (save state, load state, palette, picture, quit).
+every scan — so directions hold and chords work. Two d-pads are live at once: **E/S/A/D** as a movement
+diamond under the left hand, and the **`;` `.` `,` `/`** cluster the Cardputer literally prints arrows
+on under the right. **K** = A, **J** = B, **Enter** = Start, **Space** = Select, **TAB held** =
+fast-forward, **P** = palette, **M** or **Esc** = the in-game menu (save state, load state, palette,
+picture, quit).
 
 Esc opening a *menu* rather than quitting outright is deliberate: leaving a game means losing the
 session, because the app runs in a Solo boot and exiting reboots. The key a player hits by reflex must
@@ -209,6 +210,25 @@ straight to the ST7789 (`docs`/`../firmware/components/nucleo_app/ANTI-FLICKER.m
   the clipped opaque glyphs already cover every pixel — the per-frame `fillRect` a naïve marquee does
   first would be a whole frame of bare background, which is exactly the clear-then-draw flicker. The
   `fillRect` survives only on the static (fits-in-the-box) path, where it runs once and never repeats.
+
+**Scrolling text costs a sprite, not a repaint.** Getting the shelf's long game titles to scroll took
+three attempts, and the two failures are the instructive part — both produced *the same pair of
+symptoms*, "the list flickers" and "the text doesn't move", from one cause each:
+
+1. Animating from `on_tick`. The tick runs with the gfx pointed at the **panel**, not at the shared
+   canvas a buffered app's `on_draw` composites into — so the text landed in the wrong buffer at the
+   wrong coordinates and the next push painted over it. Nothing moved.
+2. Animating by calling `nucleo_app_force_repaint()` on a timer. That re-runs the whole `on_draw`, and
+   in the Solo boot the shelf draws **direct to the panel** with no canvas — so five times a second the
+   entire list was cleared and redrawn. That was the flicker, and the flashing masked the motion, which
+   is why it still looked frozen.
+
+The working answer is ANTI-FLICKER.md technique 3, the same one `app_player`'s Now-Playing title uses:
+the scrolling line gets its **own small off-screen sprite**, blitted in one `pushSprite` over just its
+row from a 50 Hz `nucleo_app_set_poll_handler`. The panel never sees a clear, nothing else on screen is
+touched, and the motion is smooth instead of a 5 Hz stutter. Two copies of the text are drawn one gap
+apart so the loop never shows a seam. A title that fits is drawn once, statically, and the poll ignores
+it. **The general rule: never drive an animation by repainting a view — give the moving part a sprite.**
 
 **Save states.** The console is one struct with no external references except our own callbacks, so a
 state is a raw dump of it plus the cartridge RAM, written beside the ROM as `<rom>.st0`. Two things
