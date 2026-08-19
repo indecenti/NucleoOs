@@ -179,13 +179,36 @@ not be the destructive one.
   four-shade screen and our callback masks the tag straight off again: an extra OR per pixel, 23,000
   a frame, for information nobody reads.
 
-**Adaptive relief.** If the picture still cannot be produced sixty times a second, the app produces
-*less* of it rather than letting every frame arrive late. Both levers are the core's own and cost
-nothing to enable: **interlacing** first (alternate scanlines each frame — full motion, half the
-drawing), then **30 fps frame-skip**. The CPU runs every frame either way, so timing and input stay
-exact; only the drawing thins out. It steps back up when headroom returns, and the two thresholds
-(<50 down, ≥58 up) do not overlap, so it cannot oscillate. The current level is shown in the right
-pillar and can be pinned by hand from the in-game menu.
+**Adaptive relief, and why it is one-way.** If the picture still cannot be produced sixty times a
+second, the app produces *less* of it rather than letting every frame arrive late: **30 fps
+frame-skip**, the core's own lever, which the CPU runs through every frame so timing and input stay
+exact — only the drawing thins out. The current level shows in the right pillar and can be raised by
+hand from the in-game menu.
+
+It engages after two consecutive slow seconds and then **stays**. It does *not* step back up
+automatically, and that is not laziness — it is the fix for a flicker. Frame-skip halves the blit
+work, so the moment it engages the measured fps jumps back up; a symmetric "recover when fps is high
+again" rule therefore switches relief off, fps falls, relief re-engages, and the whole thing toggles
+once a second — 60 fps and 30 fps in alternation, which the eye reads as flicker. The metric was
+feeding back into the thing it measured. A one-way control has no such loop.
+
+(The first version also had a second lever, **interlacing**, tried before frame-skip. It was removed:
+the core emits alternate scanlines under interlace, but this renderer counts an output row per
+scanline *received*, so with half the lines arriving the picture only reached the middle of the panel
+and the bottom half stopped updating — a visible split, not relief.)
+
+**No tearing, no clear-then-draw — the two flicker rules this app has to obey.** The board has no
+PSRAM for a full framebuffer and the panel has no hardware double-buffer, so the picture is drawn
+straight to the ST7789 (`docs`/`../firmware/components/nucleo_app/ANTI-FLICKER.md`). Two consequences:
+
+- **One SPI transaction per frame.** `run_frame` calls the scanline callback 135 times and each pushes
+  its band; the whole sweep is wrapped in a single `startWrite`/`endWrite`, so the nine bands stream to
+  the panel with no bus hand-off between them instead of nine separately-arbitrated writes. The display
+  is on SPI3 and the SD card on SPI2, so holding the display bus across a frame contends with nothing.
+- **The marquee never clears its own box on the animating path.** A scrolling line overruns its box, so
+  the clipped opaque glyphs already cover every pixel — the per-frame `fillRect` a naïve marquee does
+  first would be a whole frame of bare background, which is exactly the clear-then-draw flicker. The
+  `fillRect` survives only on the static (fits-in-the-box) path, where it runs once and never repeats.
 
 **Save states.** The console is one struct with no external references except our own callbacks, so a
 state is a raw dump of it plus the cartridge RAM, written beside the ROM as `<rom>.st0`. Two things
