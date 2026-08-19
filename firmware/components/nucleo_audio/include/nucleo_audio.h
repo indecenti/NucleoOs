@@ -80,6 +80,18 @@ int         nucleo_audio_dbg_srate(void);
 // only way a silent play is diagnosable. Callers show it on screen.
 bool        nucleo_audio_why_silent(char *buf, size_t n);
 
+// ─── Raw PCM sink (for a generator that makes its own samples) ─────────────────────────────────────
+// The file/stream players own the decode loop; an EMULATOR does not — its APU produces a block of
+// samples per emulated frame and needs somewhere to put them. These three calls hand that generator
+// the speaker directly, going through the SAME volume, mute and meter path as everything else, and
+// through the same handle lock, so a sound effect can never delete the channel mid-write.
+//
+// Refuses while a track/stream is playing: the I2S is a single resource and silently stealing it from
+// the player would be worse than saying no. Close when done — the pins go back to the recorder/codec.
+esp_err_t nucleo_audio_pcm_open(int rate, int channels);
+esp_err_t nucleo_audio_pcm_write(const int16_t *pcm, size_t bytes);
+void      nucleo_audio_pcm_close(void);
+
 // ─── Live output analysis (for meters / scopes / spectrum-style visualisers) ───────────────────────
 // Derived from the PCM actually handed to the speaker, so it reflects volume, mute and the real mix —
 // not the file. Costs one decimated pass over a buffer already in cache; nothing is allocated.

@@ -5,6 +5,7 @@
 // decided here. The core itself is vendored verbatim and never edited.
 #include "nucleo_gb.h"
 #include "nucleo_board.h"
+#include "nucleo_audio.h"   // raw PCM sink: the APU produces its own samples, we hand them to I2S
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include <stdio.h>
@@ -13,10 +14,20 @@
 
 // Peanut-GB build switches — set BEFORE the include, they are compile-time for the whole core.
 #define ENABLE_LCD   1
-#define ENABLE_SOUND 0     // no APU yet: Peanut-GB ships none, and minigb_apu would want its own
-                           // buffers + an I2S owner. Silent play first, sound as a separate step.
+#define ENABLE_SOUND 1     // Peanut-GB ships no APU: it calls audio_read/audio_write, which we route
+                           // to the vendored minigb_apu (MIT, context-based, ~2.2 KB per frame).
 #define PEANUT_GB_HIGH_LCD_ACCURACY 1   // sprite priority/window edge cases; costs a little CPU, and
                                         // without it a visible minority of games render subtly wrong.
+
+#ifndef MINIGB_APU_AUDIO_FORMAT_S16SYS
+# define MINIGB_APU_AUDIO_FORMAT_S16SYS 1   // 16-bit signed: exactly what the I2S sink takes
+#endif
+#include "../vendor/minigb_apu.h"
+// Peanut-GB reaches the APU through two BARE function names, so these shims are the bridge from its
+// global-style contract to our per-session context. They must be declared before peanut_gb.h is
+// included, and defined against the live session (S) below.
+static uint8_t audio_read(const uint16_t addr);
+static void    audio_write(const uint16_t addr, const uint8_t val);
 #include "../vendor/peanut_gb.h"
 
 static const char *TAG = "gb";
@@ -29,6 +40,9 @@ static const char *TAG = "gb";
 // module must cost zero RAM (docs/memory-budget.md).
 typedef struct {
     struct gb_s   gb;                   // ~17.2 KB — the whole console
+    struct minigb_apu_ctx apu;          // Game Boy sound chip state (context-based, no globals)
+    audio_sample_t audio[AUDIO_SAMPLES_TOTAL];   // one frame of stereo samples (~2.2 KB)
+    bool          sound;                // false when the speaker could not be claimed
 
     FILE         *fp;                   // open ROM on the SD card
     uint32_t      rom_bytes;
@@ -79,6 +93,16 @@ static uint8_t rom_read(struct gb_s *gb, const uint_fast32_t addr)
         s->bank_misses++;
     }
     return s->window[addr - s->window_bank * ROM_BANK_BYTES];
+}
+
+// APU bridge. Peanut-GB calls these for every read/write in the 0xFF10-0xFF3F sound range.
+static uint8_t audio_read(const uint16_t addr)
+{
+    return S ? minigb_apu_audio_read(&S->apu, addr) : 0xFF;
+}
+static void audio_write(const uint16_t addr, const uint8_t val)
+{
+    if (S) minigb_apu_audio_write(&S->apu, addr, val);
 }
 
 static uint8_t cart_ram_read(struct gb_s *gb, const uint_fast32_t addr)
@@ -213,11 +237,19 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
     gb_get_rom_name(&s->gb, s->title);
     s->title[16] = '\0';
 
-    S = s;
-    ESP_LOGI(TAG, "'%s' %uKB %s | heap %u B | largest was %u B",
+    S = s;                                  // the APU shims read S, so publish before touching sound
+
+    // Sound is BEST-EFFORT: if the speaker is busy (a track playing, the recorder holding the shared
+    // mic pin) the game still runs, silently. Refusing to start a cartridge because audio was taken
+    // would be the wrong trade on a games machine.
+    minigb_apu_audio_init(&s->apu);
+    s->sound = (nucleo_audio_pcm_open(AUDIO_SAMPLE_RATE, AUDIO_CHANNELS) == ESP_OK);
+    if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
+
+    ESP_LOGI(TAG, "'%s' %uKB %s | heap %u B | largest was %u B | sound %s",
              s->title, (unsigned)(s->rom_bytes / 1024),
              s->rom_all ? "resident" : "banked from SD",
-             (unsigned)s->heap_bytes, (unsigned)largest);
+             (unsigned)s->heap_bytes, (unsigned)largest, s->sound ? "on" : "off");
     return ESP_OK;
 }
 
@@ -237,6 +269,13 @@ void nucleo_gb_run_frame(void)
     if (!S) return;
     gb_run_frame(&S->gb);
     S->frames++;
+    // One frame of sound, produced AFTER the frame that generated it and pushed straight out. The
+    // write blocks on the I2S DMA, which is also what paces us to real speed — so a dropped frame
+    // shows up as a click rather than as drift.
+    if (S->sound) {
+        minigb_apu_audio_callback(&S->apu, S->audio);
+        nucleo_audio_pcm_write(S->audio, sizeof(S->audio));
+    }
 }
 
 void nucleo_gb_set_buttons(uint8_t mask)
