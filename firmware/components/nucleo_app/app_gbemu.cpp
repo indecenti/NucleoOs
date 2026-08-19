@@ -177,6 +177,7 @@ struct EState {
     // recomputing the whole layout. Filled by draw(), consumed by tick().
     int      sel_y, sel_avail;
     char     sel_title[NAMEMAX];
+    int      slow_secs;      // consecutive sub-50fps seconds, for the one-way relief debounce
 };
 static EState *st = nullptr;
 
@@ -299,13 +300,11 @@ static void on_line(const uint8_t *px, int line, void *user)
     st->out_y++;
 
     if (st->band_line == BAND || st->out_y >= OUT_H) {
-        // startWrite/endWrite holds CS and the bus configuration across the push instead of
-        // re-arbitrating per call — transaction setup is a real cost when it happens nine times a
-        // frame, sixty times a second.
+        // No startWrite here: play() holds ONE transaction open across the whole frame, so all nine
+        // bands stream to the panel with no bus re-arbitration between them — a tighter, more
+        // continuous update, which is what keeps the moving picture from tearing band by band.
         int64_t b0 = esp_timer_get_time();
-        d.startWrite();
         d.pushImage(OUT_X, st->band_y, OUT_W, st->band_line, st->band);
-        d.endWrite();
         st->us_blit += (uint32_t)(esp_timer_get_time() - b0);
         st->band_line = 0;
     }
@@ -331,11 +330,10 @@ static inline int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
 static void marquee(int x, int y, int w, int h, const char *t,
                     uint16_t fg, uint16_t bg, int size, int64_t phase_ms)
 {
-    d.fillRect(x, y, w, h, bg);
     d.setTextSize(size);
     d.setTextColor(fg, bg);
     int tw = (int)d.textWidth(t);
-    if (tw <= w) { d.setCursor(x, y); d.print(t); return; }
+    if (tw <= w) { d.fillRect(x, y, w, h, bg); d.setCursor(x, y); d.print(t); return; }
 
     const int over  = tw - w;
     const int PAUSE = 850;                 // ms held at each end
@@ -349,6 +347,8 @@ static void marquee(int x, int y, int w, int h, const char *t,
     else if (ph < 2 * PAUSE + travel)    off = over;
     else                                 off = over - (ph - 2 * PAUSE - travel) * over / travel;
 
+    // Opaque glyphs cover the whole clipped width (the line overruns the box), so no fillRect is
+    // needed and the box is never, even for one frame, just background. That is what stops the flicker.
     d.setClipRect(x, y, w, h);
     d.setCursor(x - off, y);
     d.print(t);
@@ -627,6 +627,7 @@ static void play(const char *name)
     st->menu = false; st->msel = 0; st->turbo = false;
     st->toast[0] = '\0'; st->toast_until = 0;
     st->us_blit = 0; st->ms_cpu = st->ms_blit = st->ms_aud = 0;
+    st->slow_secs = 0;
     set_relief(0);                       // every cartridge starts at the full picture and earns relief
     nucleo_gb_reset_counters();
     st->fps_frames = 0; st->fps = 0; st->fps_t0 = esp_timer_get_time();
@@ -687,7 +688,12 @@ static void play(const char *name)
         nucleo_gb_set_buttons(held);
 
         st->out_y = 0; st->band_line = 0;
+        // One SPI transaction for the ENTIRE frame. run_frame calls on_line 135 times and each pushes
+        // its band inside this single startWrite/endWrite, so the panel sees one uninterrupted sweep
+        // top to bottom instead of nine separately-arbitrated writes.
+        d.startWrite();
         nucleo_gb_run_frame();
+        d.endWrite();
 
         st->fps_frames++;
         int64_t now = esp_timer_get_time();
@@ -707,13 +713,17 @@ static void play(const char *name)
             st->fps_frames = 0; st->fps_t0 = now;
             hud_draw();
 
-            // AUTOMATIC RELIEF. If the picture cannot be produced sixty times a second, produce less
-            // of it rather than let every frame arrive late: interlacing first (full motion, half the
-            // scanlines per frame), then 30 fps frame-skip. The CPU still runs every frame either way,
-            // so timing and input stay exact — only the drawing thins out. It steps back up when the
-            // headroom returns, and never oscillates because the two thresholds do not overlap.
-            if      (st->fps < 50 && st->relief < 1) set_relief(1);
-            else if (st->fps >= 58 && st->relief > 0) set_relief(0);
+            // AUTOMATIC RELIEF — one-way, and that is the whole point. The earlier version stepped back
+            // UP when fps recovered, which turned into a per-second flicker: enabling frame-skip halves
+            // the blit work, so the measured fps jumps back over the "recover" line, relief switches
+            // off, fps drops under the "engage" line, and it toggles forever. The metric feeds back
+            // into the thing it measures. So relief only ever engages, and only after two consecutive
+            // slow seconds (a brief dip does not trip it); the player raises it again from the menu when
+            // they want to. No automatic step-up means no oscillation, which means no flicker.
+            if (st->relief == 0) {
+                if (st->fps < 50) { if (++st->slow_secs >= 2) { set_relief(1); st->slow_secs = 0; } }
+                else st->slow_secs = 0;
+            }
         }
 
         // Pace to real Game Boy speed. FreeRTOS runs at 100 Hz here, so ONE tick is 10 ms against a
