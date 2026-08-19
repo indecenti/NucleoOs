@@ -65,6 +65,7 @@ typedef struct {
     size_t   heap_bytes;     // total allocated by this module right now
     uint32_t rom_bytes;      // ROM file size
     bool     rom_resident;   // true = whole ROM in RAM (no SD traffic while playing)
+    bool     rom_paged;      // true = degraded 4 KB page cache (the heap could not spare 32 KB)
     uint32_t bank_misses;    // cache misses since open (each is a 16 KB SD read)
     uint32_t frames;         // frames run since open
 } nucleo_gb_stats_t;
