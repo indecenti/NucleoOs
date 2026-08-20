@@ -633,6 +633,7 @@ static bool maybe_solo_launch(int idx)
         if (boot_was_crash_reset() && s_prev_server_solo) return false;   // suppress ONLY if server-Solo ITSELF
                                                          // crashed last boot (avoid its reboot loop); a full-OS
                                                          // crash must NOT strand a manual tap in the heavy inline posture
+        launcher_capture_return();                       // remember where the cursor was — restore it on the way back
         nucleo_app_solo_request(SOLO_REMOTE);            // never returns (warm reboot into server Solo)
         return true;
     }
@@ -652,6 +653,7 @@ static bool maybe_solo_launch(int idx)
     // Carry a pending "open with" path (e.g. Files -> a .nfv for the Video player) across the warm reboot;
     // s_open_file is plain RAM and would be lost. Empty for a normal menu launch -> self-clears, no stale file.
     snprintf(s_solo_open_file, sizeof s_solo_open_file, "%s", s_open_file);
+    launcher_capture_return();            // remember the launch frame (Home/category + search + row) for the return boot
     nucleo_app_solo_request_id(a->id);   // never returns (warm reboot into Solo)
     return true;
 }
@@ -1310,6 +1312,14 @@ static void exit_remote(void)
 {
     s_remote = false; s_remote_clients = 0;
     web_focus_update();                                  // s_remote now false -> restores L1 policy AND resumes mDNS
+    // TAKE THE 32 KB BACK. enter_remote() hands the shared back-buffer to the HTTP/TLS path (the watch
+    // faces draw direct and don't need it) and nothing here reclaimed it: the only route back was the
+    // lazy 400 ms retry inside nucleo_screen(), which loses the race against a heap the web session has
+    // just fragmented. The device then kept running the whole UI on the DIRECT path, where every app
+    // clear-then-draws straight to a panel with no vsync — invisible on an app that repaints on a
+    // keypress, and a permanent flicker on one that repaints continuously (Livella, Goniometro).
+    // Reclaim it here, with the same bounded retry as close_app(), while the heap is settling.
+    if (!s_app_direct) for (int i = 0; i < 6 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(25));
     if (!s_disp_sleep) d.fillScreen(BG);
     s_dirty = true; s_chrome_dirty = true;                // force a full launcher repaint
     nucleo_event_publish("system.remote", "{\"active\":false}");
@@ -1460,6 +1470,11 @@ void nucleo_app_run(void)
     d.setRotation(1);
     d.fillScreen(BG);
     launcher_reset();
+    // Coming back from a Solo (NX_SOLO) app? Re-enter the exact frame the user launched from — Home or a
+    // category, their type-to-search filter, and the focused row — instead of dumping them on Home/ANIMA.
+    // Skipped in the Solo boot itself (that boot opens the target app, not the launcher). One-shot: the
+    // snapshot self-consumes and the gate is a warm reset, so a cold power-on always starts clean at Home.
+    if (!s_solo_active) launcher_apply_return();
     int64_t last_tick = 0, last_clock = 0, remote_gone_ms = 0, last_remote = 0, last_remote_input = 0;
     int64_t last_act = esp_timer_get_time() / 1000, focus_chk = 0;   // idle screen-off + web-focus recheck timers
 

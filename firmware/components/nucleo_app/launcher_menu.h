@@ -25,6 +25,12 @@ struct MenuNode {
 void launcher_build_menu(void);
 void launcher_reset(void);
 
+// Return-cursor across a Solo (NX_SOLO) warm reboot. capture() snapshots the current launch frame
+// (Home vs category + type-to-filter + focused row) into RTC just before the Solo reboot; apply()
+// re-enters it after the return boot (call AFTER build_menu()+reset(), only in the full-OS boot).
+void launcher_capture_return(void);
+void launcher_apply_return(void);
+
 // ---- queries (current frame) -----------------------------------------------
 const MenuNode *launcher_node(void);          // the menu currently shown
 int             launcher_depth(void);         // 0 at the root, >0 inside a submenu

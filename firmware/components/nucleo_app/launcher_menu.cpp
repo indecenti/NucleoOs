@@ -3,6 +3,8 @@
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "nucleo_board.h"       // NUCLEO_CFG_MOUNT for the pinned-apps store
+#include "esp_attr.h"           // RTC_NOINIT_ATTR: the return-cursor survives the Solo warm reboot
+#include "esp_system.h"         // esp_reset_reason(): only a warm reboot is a real return-from-Solo
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -159,6 +161,62 @@ void launcher_reset(void)
     s_stack[0].filter[0] = 0;
     s_top = 0;
     s_ctx_owner = nullptr;
+}
+
+// ---- return-cursor across a Solo warm reboot --------------------------------
+// A NX_SOLO app (game / Music / Video / Radio) opens by warm-rebooting into a fresh heap and Esc
+// warm-reboots back to the full OS — a brand-new boot, so launcher_reset() lands on Home/ANIMA and
+// the user loses their place (and their type-to-search context). We snapshot the launch frame into
+// RTC (survives the warm reboot, garbage after a real power-loss) right before the Solo reboot, and
+// re-apply it once we come back. Restores the exact frame: Home vs a category, the type-to-filter
+// string, and the focused row — so returning drops you back where you launched from.
+#define RET_MAGIC 0x52544E43u   // 'RTNC'
+struct RetCtx { uint32_t magic; int depth; int sel0; char filt0[16]; char cat_id[24]; int sel1; char filt1[16]; };
+RTC_NOINIT_ATTR static RetCtx s_ret;
+static void nav_push(const MenuNode *node);   // defined below; apply_return re-enters a category with it
+
+void launcher_capture_return(void)
+{
+    s_ret.magic = RET_MAGIC;
+    s_ret.depth = (s_top >= 1) ? 1 : 0;             // Home (0) or one category deep (1) — the only launch frames
+    s_ret.sel0  = s_stack[0].sel;
+    snprintf(s_ret.filt0, sizeof s_ret.filt0, "%s", s_stack[0].filter);
+    s_ret.cat_id[0] = 0; s_ret.sel1 = 0; s_ret.filt1[0] = 0;
+    if (s_ret.depth == 1 && s_stack[1].node && s_stack[1].node->id) {
+        snprintf(s_ret.cat_id, sizeof s_ret.cat_id, "%s", s_stack[1].node->id);
+        s_ret.sel1 = s_stack[1].sel;
+        snprintf(s_ret.filt1, sizeof s_ret.filt1, "%s", s_stack[1].filter);
+    }
+}
+
+// Re-apply the captured frame after the return boot. Caller runs this AFTER launcher_build_menu() +
+// launcher_reset(), and ONLY when this boot is the full OS (not the Solo boot itself). Consumes the
+// snapshot once. Gated on a warm reset so a cold power-on with garbage RTC can't teleport the cursor.
+void launcher_apply_return(void)
+{
+    if (s_ret.magic != RET_MAGIC) return;
+    s_ret.magic = 0;                                 // consume once, even if we bail below
+    if (esp_reset_reason() != ESP_RST_SW) return;    // only our own esp_restart() (Solo) — never a crash/power-on
+
+    s_top = 0;
+    s_stack[0].node = &ROOT;
+    s_stack[0].sel  = s_ret.sel0;
+    snprintf(s_stack[0].filter, sizeof s_stack[0].filter, "%s", s_ret.filt0);
+
+    if (s_ret.depth == 1 && s_ret.cat_id[0]) {       // re-enter the same category by id (pointers didn't survive)
+        for (const MenuNode *const *it = ROOT.items; it && *it; ++it) {
+            if ((*it)->kind == N_MENU && (*it)->id && !strcmp((*it)->id, s_ret.cat_id)) {
+                nav_push(*it);                        // sets sel=0/filter="" — override with the snapshot below
+                snprintf(top().filter, sizeof top().filter, "%s", s_ret.filt1);
+                top().sel = s_ret.sel1;
+                break;
+            }
+        }
+    }
+    int n = launcher_visible_count();                // clamp: the app set is identical across the reboot, but be safe
+    if (n <= 0) top().sel = 0;
+    else if (top().sel >= n) top().sel = n - 1;
+    else if (top().sel < 0)  top().sel = 0;
 }
 
 // ---- filtering + visible-row queries ---------------------------------------
