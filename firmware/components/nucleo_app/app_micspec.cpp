@@ -166,7 +166,11 @@ static void draw_pager(void)
     d.setTextColor(THEME_ACC, BG);
     d.setCursor(4, y - 3); d.print(MODE_NAME[s_mode]);
 
-    char tg[24]; snprintf(tg, sizeof tg, "%s x%d.%d", PALS[s_pal].name, s_sens / 100, (s_sens % 100) / 10);
+    // "!D" = this frame went STRAIGHT to the panel: the shared 32 KB back-buffer could not be acquired,
+    // so every repaint is a clear-then-draw on a display with no vsync. Nothing an app can smooth away —
+    // it is an OS-level contiguous-RAM problem, and it should say so rather than look like a broken app.
+    char tg[32]; snprintf(tg, sizeof tg, "%s x%d.%d%s", PALS[s_pal].name, s_sens / 100, (s_sens % 100) / 10,
+                          nucleo_app_is_buffered() ? "" : " !D");
     d.setTextColor(DIM, BG);
     d.setCursor(W - 4 - (int)strlen(tg) * 6, y - 3); d.print(tg);
 }
@@ -194,19 +198,39 @@ static void draw_bars(void)
 }
 
 // ---- mode: WATERFALL ----
+// COST, not colour, is what made this mode strobe. A cell-per-cell paint is 232 columns x 32 bands =
+// 7,424 fillRect calls EVERY frame; at ~31 fps that is ~230k calls a second, which does not merely burn
+// CPU — it makes frames arrive unevenly, and an analyzer whose frames arrive unevenly reads as flicker
+// no matter how well the DSP output itself is smoothed.
+//
+// The picture does not need them. A waterfall is mostly flat horizontally: quiet passages are long runs
+// of the SAME palette index side by side, and even loud ones repeat while a note is held. So walk one
+// band ROW at a time and merge adjacent columns of equal colour into a single wide fillRect. Identical
+// output, typically one to two orders of magnitude fewer draw calls, and the quieter the room the
+// cheaper it gets — the opposite of the old behaviour.
 static void draw_fall(void)
 {
     if (!s_hist) { draw_bars(); return; }              // OOM fallback
     int show = s_hist_n < HIST_W ? s_hist_n : HIST_W;
-    for (int c = 0; c < show; c++) {
-        int col = (s_hist_head - show + c + HIST_W * 2) % HIST_W;
-        const uint8_t *cell = &s_hist[col * MS_BANDS];
-        int x = 4 + (W - 8 - show) + c;                 // newest at the right edge
-        for (int b = 0; b < MS_BANDS; b++) {
-            // map the 32 bands proportionally over MAIN_H so the column fills the area exactly
-            int y0 = MAIN_B - (b + 1) * MAIN_H / MS_BANDS;   // low freq at bottom
-            int y1 = MAIN_B -  b      * MAIN_H / MS_BANDS;
-            d.fillRect(x, y0, 1, y1 - y0, grad8(cell[b]));
+    if (show <= 0) return;
+    const int x0 = 4 + (W - 8 - show);                 // newest at the right edge
+    for (int b = 0; b < MS_BANDS; b++) {
+        // map the 32 bands proportionally over MAIN_H so the column fills the area exactly
+        int y0 = MAIN_B - (b + 1) * MAIN_H / MS_BANDS; // low freq at bottom
+        int hh = (MAIN_B - b * MAIN_H / MS_BANDS) - y0;
+        if (hh <= 0) continue;
+        int     runc = 0;                              // first column of the run being accumulated
+        uint8_t runv = s_hist[((s_hist_head - show + HIST_W * 2) % HIST_W) * MS_BANDS + b];
+        for (int c = 1; c <= show; c++) {
+            uint8_t v = 0;
+            if (c < show) {
+                int col = (s_hist_head - show + c + HIST_W * 2) % HIST_W;
+                v = s_hist[col * MS_BANDS + b];
+            }
+            if (c == show || v != runv) {              // run ended: emit it as ONE rectangle
+                d.fillRect(x0 + runc, y0, c - runc, hh, grad8(runv));
+                runc = c; runv = v;
+            }
         }
     }
 }
@@ -359,7 +383,10 @@ static void draw_splash(const char *msg, uint16_t col)
 // ---- lifecycle ----
 static void draw(void)
 {
-    d.fillRect(0, 0, W, CONTENT_B, BG);   // self-clear; matters only on the direct-draw fallback, harmless when buffered
+    // The framework already wiped the shared back-buffer before calling us, so a self-clear there is
+    // ~29,000 redundant pixel writes per frame at the DSP rate. It is needed ONLY on the direct-draw
+    // fallback — where it is also exactly what flickers, because that clear lands on the panel itself.
+    if (!nucleo_app_is_buffered()) d.fillRect(0, 0, W, CONTENT_B, BG);
 
     if (!nucleo_micspec_running()) {
         int e = nucleo_micspec_last_error();
