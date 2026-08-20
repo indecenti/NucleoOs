@@ -295,8 +295,12 @@ extern "C" void nucleo_register_usbkbd(void)
     static const nucleo_app_def_t app = {
         "usbkbd", "USB Keyboard", "Connect", "Tastiera USB pro: layout IT/US, Fn, macro, LED del PC",
         'K', 0x4DDF, on_enter, on_key, on_tick, draw, nullptr,
-        NX_NET_APP     // exclusive while foreground: httpd/mDNS/voice/L1 down, so no high-priority
-                       // network task preempts the frame blit (and the USB stack gets the headroom)
+        // Solo boot, radio down (the instrument policy — see app_goniometer.cpp): the typing modal
+        // repaints per keystroke, and on a session whose 32 KB canvas died (~12 KB largest block at
+        // runtime) that was a blink per key. A fresh heap guarantees the buffered path; the app is a
+        // USB peripheral and uses zero network. Bonus: exiting reboots, which also returns the USB
+        // PHY TinyUSB took from the serial console.
+        NX_NET_APP | NX_SOLO | NX_WIFI
     };
     nucleo_app_register(&app);
 }
