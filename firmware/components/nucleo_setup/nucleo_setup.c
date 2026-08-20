@@ -85,6 +85,12 @@ static bool s_complete = false;
 static char s_ap_ssid[33] = "";
 static char s_ap_pass[64] = "";
 static bool s_wifi_ready;
+// STA-ONLY posture (a streaming Solo boot, e.g. the Radio). The SoftAP interface + config cost real
+// RAM on this PSRAM-less chip and nobody can use a setup hotspot inside a dedicated one-app boot —
+// measured on the Radio Solo: the full APSTA bring-up left largest-block 13.8 KB, below the ~24 KB
+// the Helix stream decoder needs, so the station played SILENT. When set (BEFORE wifi_ensure), the
+// AP netif is never created, the mode stays WIFI_MODE_STA, and every AP-fallback path is inert.
+static bool s_sta_only = false;
 static bool s_want_sta = false;        // true while we intend to stay on STA (drives auto-reconnect)
 // "Real OS" Wi-Fi: we remember EVERY network joined and auto-pick the best in-range one. s_auto means
 // the user intends a client (STA) link, so the background supervisor keeps (re)joining known networks
@@ -187,7 +193,7 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
         snprintf(s_ip, sizeof(s_ip), "%u.%u.%u.%u",
                  (unsigned)(a & 0xff), (unsigned)((a >> 8) & 0xff),
                  (unsigned)((a >> 16) & 0xff), (unsigned)((a >> 24) & 0xff));
-        ESP_LOGI(TAG, "STA got IP %s free=%u largest=%u", s_ip,
+        ESP_LOGW(TAG, "STA got IP %s free=%u largest=%u", s_ip,
                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
         // Refresh the displayed network from the AP we are ACTUALLY associated with. This is the
@@ -486,13 +492,13 @@ static void wifi_ensure(void)
     WIFI_TRY(esp_netif_init());
     if (esp_event_loop_create_default() == ESP_ERR_INVALID_STATE) { /* already created */ }
     esp_netif_create_default_wifi_sta();
-    esp_netif_create_default_wifi_ap();
+    if (!s_sta_only) esp_netif_create_default_wifi_ap();   // STA-only Solo: no AP netif at all
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     WIFI_TRY(esp_wifi_init(&cfg));
     esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi_event, NULL, NULL);
     esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_wifi_event, NULL, NULL);
     esp_wifi_set_storage(WIFI_STORAGE_FLASH);      // persist creds in NVS, not on SD
-    WIFI_TRY(esp_wifi_set_mode(WIFI_MODE_APSTA));
+    WIFI_TRY(esp_wifi_set_mode(s_sta_only ? WIFI_MODE_STA : WIFI_MODE_APSTA));
 #if NUCLEO_PRIVACY_RANDOM_STA_MAC
     // set_mac needs the iface stopped (we are, pre-start). Locally-administered, unicast random MAC.
     {
@@ -518,8 +524,9 @@ static int scan_networks(char out[][33], int max)
 {
     wifi_ensure();
     // Scanning needs the STA interface active; we may currently be AP-only, so switch to
-    // APSTA (keeps the AP up) before scanning.
-    esp_wifi_set_mode(WIFI_MODE_APSTA);
+    // APSTA (keeps the AP up) before scanning. In the STA-only posture the mode already is
+    // (and must stay) plain STA — forcing APSTA there would resurrect the AP netif we never made.
+    if (!s_sta_only) esp_wifi_set_mode(WIFI_MODE_APSTA);
     esp_wifi_scan_stop();
     esp_err_t err = esp_wifi_scan_start(NULL, true);
     if (err != ESP_OK) {
@@ -559,7 +566,7 @@ static void wait_for_ip(void)
             snprintf(s_ip, sizeof(s_ip), "%u.%u.%u.%u",
                      (unsigned)(a & 0xff), (unsigned)((a >> 8) & 0xff),
                      (unsigned)((a >> 16) & 0xff), (unsigned)((a >> 24) & 0xff));
-            ESP_LOGI(TAG, "STA got IP %s", s_ip);
+            ESP_LOGW(TAG, "STA got IP %s", s_ip);
             return;
         }
     }
@@ -635,6 +642,7 @@ static void ensure_default_ap_creds(void)
 
 static void start_ap(void)
 {
+    if (s_sta_only) return;             // STA-only Solo: every AP path is inert (no netif exists)
     s_want_sta = false;                 // AP mode: stop trying to reconnect as a client
     ensure_default_ap_creds();          // per-device SSID + random WPA2 password on first use (persists once)
     wifi_config_t wc = {0};
@@ -785,7 +793,7 @@ static bool connect_best_known(void)
         // scanning or trying the previous candidate — stop the cycle instead of fighting them.
         if (wp_ap_busy(&s_wp, ap_sta_count(), wp_now())) { ESP_LOGI(TAG, "join cycle paused: hotspot in use"); break; }
         int i = order[a];
-        ESP_LOGI(TAG, "auto-join '%s' (prio %u, %d dBm)", s_nets[i].ssid, s_nets[i].prio, rssi[a]);
+        ESP_LOGW(TAG, "auto-join '%s' (prio %u, %d dBm)", s_nets[i].ssid, s_nets[i].prio, rssi[a]);
         connect_sta(s_nets[i].ssid, s_nets[i].pass);
         if (s_ip[0]) { strncpy(s_ssid, s_nets[i].ssid, sizeof(s_ssid)-1); s_ssid[sizeof(s_ssid)-1] = 0;
                        strncpy(s_mode, "sta", sizeof(s_mode)-1); save_config(); ok = true; }
@@ -794,7 +802,7 @@ static bool connect_best_known(void)
         int r = -1; for (int j = 0; j < s_net_n; j++)   // ...that actually has a stored password
             if (s_nets[j].pass[0] && (r < 0 || s_nets[j].seq > s_nets[r].seq)) r = j;
         if (r >= 0) {
-            ESP_LOGI(TAG, "no saved net in range; blind retry '%s'", s_nets[r].ssid);
+            ESP_LOGW(TAG, "no saved net in range; blind retry '%s'", s_nets[r].ssid);
             connect_sta(s_nets[r].ssid, s_nets[r].pass);
             if (s_ip[0]) { strncpy(s_ssid, s_nets[r].ssid, sizeof(s_ssid)-1); s_ssid[sizeof(s_ssid)-1] = 0;
                            strncpy(s_mode, "sta", sizeof(s_mode)-1); save_config(); ok = true; }
@@ -864,12 +872,15 @@ static void wifi_supervisor(void *arg)
                 // restore never ran and the hotspot stayed DOWN for the whole backoff window.
                 wifi_mode_t m = WIFI_MODE_NULL;
                 esp_wifi_get_mode(&m);
-                if (wp_need_ap_restore((wp_mode_t)m)) {
+                if (s_sta_only) {
+                    // STA-only Solo: no hotspot to restore, and the STA radio must stay up for the
+                    // next retry — the supervisor just backs off and tries again.
+                } else if (wp_need_ap_restore((wp_mode_t)m)) {
                     start_ap();                                  // radio has no AP interface: bring the hotspot up
                 } else if (m == WIFI_MODE_APSTA && !wp_ap_busy(&s_wp, ap_sta_count(), wp_now())) {
                     esp_wifi_set_mode(WIFI_MODE_AP);             // drop the idle STA radio between retries (battery)
                 }
-                strncpy(s_mode, "ap", sizeof(s_mode) - 1);       // header shows the fallback honestly (RAM only)
+                if (!s_sta_only) strncpy(s_mode, "ap", sizeof(s_mode) - 1);   // header shows the fallback honestly (RAM only)
             }
             break;
         }
@@ -1269,6 +1280,31 @@ esp_err_t nucleo_setup_apply_network(void)
         s_auto = false;
         start_ap();
         ESP_LOGI(TAG, "started Access Point '%s'", s_ap_ssid);
+    }
+    return ESP_OK;
+}
+
+// STA-only network bring-up for a streaming Solo boot (generic NX_SOLO app that kept Wi-Fi, e.g. the
+// Radio). Identical join behaviour — supervisor scans + joins known networks in background — but the
+// SoftAP netif/config never exist and every AP-fallback path is inert, which keeps the ~15-20 KB the
+// APSTA posture costs where the stream decoder needs it. See s_sta_only.
+esp_err_t nucleo_setup_apply_network_sta_only(void)
+{
+    s_sta_only = true;                   // must be set BEFORE wifi_ensure creates the netifs
+    load_config();
+    load_networks();
+    restore_saved_time();
+    wifi_ensure();
+    // NO modem sleep in this posture: the boot exists to stream, and MIN_MODEM's DTIM dozing was
+    // losing the HTTP response (measured: TCP opened, headers never arrived, status -1). Battery
+    // cost is accepted while the user is actively listening; leaving Solo reboots -> default PS back.
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    if (s_net_n > 0 || s_ssid[0]) {
+        s_auto = true;                   // supervisor joins the best known network in background
+        ESP_LOGW(TAG, "Wi-Fi STA-only Solo (%d saved network(s)) — joining in background", s_net_n);
+    } else {
+        s_auto = false;                  // nothing to join and no AP fallback: the app shows the truth
+        ESP_LOGW(TAG, "STA-only Solo with no saved networks — the app will report no link");
     }
     return ESP_OK;
 }
