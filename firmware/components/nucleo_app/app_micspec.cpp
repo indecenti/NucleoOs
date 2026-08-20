@@ -16,6 +16,9 @@ extern "C" {
 #include "nucleo_micspec.h"
 }
 #include "esp_timer.h"
+#include "esp_log.h"
+#include "esp_heap_caps.h"
+#include "nucleo_setup.h"   // nucleo_setup_mode(): prove on the console whether the radio is really down
 #include "nucleo_exclusive.h"   // dedicated-mode RAM reclaim (~70KB) + NX_VOICE frees the mic — like music/video
 
 #include "launcher_theme.h"
@@ -492,6 +495,14 @@ static void enter(void)
     // AFTER micspec_start succeeds; if it fails the display silently falls back to bars mode.
     // On the ADV (no-PSRAM, ~16 KB largest free after exclusive) the original order (hist first)
     // consumed 7.4 KB of the only large block, leaving < 10 KB for the scratch alloc -> MS_ERR_OOM.
+    // The three questions that matter, answered on the console at every entry: is this a Solo boot,
+    // is the radio really down (NX_WIFI), is the shared canvas alive (buffered draw), how much heap.
+    ESP_LOGI("micspec", "enter: solo=%d wifi=%s canvas=%s free=%u largest=%u",
+             (int)nucleo_anima_solo_active(),
+             nucleo_setup_mode() ? nucleo_setup_mode() : "off",
+             nucleo_screen() ? "ALIVE(buffered)" : "DEAD(direct!)",
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
     if (nucleo_micspec_start() == ESP_OK) { s_retry_until = 0; }
     else {
         int64_t now = esp_timer_get_time() / 1000;

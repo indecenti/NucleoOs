@@ -70,6 +70,24 @@ bool nucleo_screen_acquire(void)
     s_screen.setPsram(false);
     s_screen.setColorDepth(8);
     if (s_screen.createSprite(SCREEN_W, SCREEN_H)) { s_screen_alive = true; s_screen_failed = false; return true; }
+    // Full height did not fit. MEASURED on the ADV (2026-08-20 boot console): the largest contiguous
+    // block at ui-init is 31,744 B — structurally, every boot — while 240x135@8bpp needs 32,400 B.
+    // The full-size canvas has therefore NEVER allocated on that board: the ADV has been silently
+    // direct-drawing (= flickering on every continuously-repainting app) since day one, Solo boots
+    // included. Fit the canvas to the block instead: every consumer adapts via cv->height() (band
+    // blitter clamps, hash spans the real buffer), the app content area (H-HINT rows) stays fully
+    // covered, and only a fullscreen app loses the last few rows — cleared once by set_fullscreen
+    // so they can never hold stale pixels. A short canvas that exists beats a tall one that never does.
+    {
+        size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT | MALLOC_CAP_DMA);
+        int fit = largest > 512 ? (int)((largest - 512) / SCREEN_W) : 0;   // allocator-header margin
+        if (fit > SCREEN_H) fit = SCREEN_H;
+        if (fit >= SCREEN_H - 16 && s_screen.createSprite(SCREEN_W, fit)) {  // never below the content area
+            ESP_LOGW("ui", "canvas fitted to %dx%d (%d B) - largest block %u B could not hold the full %d rows",
+                     SCREEN_W, fit, SCREEN_W * fit, (unsigned)largest, SCREEN_H);
+            s_screen_alive = true; s_screen_failed = false; return true;
+        }
+    }
     s_screen_failed = true;                               // remember: the heap can't fit it right now
     // Say WHY on the console: "the UI flickers" is undiagnosable, "the 32 KB canvas can't fit in a
     // 21 KB largest block" is a fact. Fires at most every ~400 ms (the lazy getter's retry spacing).

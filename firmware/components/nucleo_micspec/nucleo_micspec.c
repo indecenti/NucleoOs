@@ -59,11 +59,17 @@ static int16_t *s_raw = NULL;         // MS_FFT capture window (was 1 KB of perm
 // new and the screen goes perfectly still — the same "static frame when idle" contract as the
 // level app. Sensitivity (U/D) still applies to real signal; it no longer amplifies silence.
 #define AGC_MIN     20000.0f
-#define GATE_OPEN   0.0025f            // rms_norm to open (~ -52 dBFS)
-#define GATE_CLOSE  0.0012f            // rms_norm to close (~ -58 dBFS)
 #define GATE_FLAT_N 20                 // flat frames published after closing (~0.65 s of decay)
-static bool s_gate_open = false;
-static int  s_flat_cnt  = 0;
+// SELF-CALIBRATING squelch. Fixed dBFS thresholds cannot work across both boards: the ADV mic path
+// runs ~3x hotter than the original's PDM capsule (see the voice-trainer notes), so a constant that
+// gates the original sits permanently OPEN on the ADV — and the display keeps dancing on room noise
+// as if there were no gate at all. Learn the floor instead: an EMA that FALLS quickly toward any
+// quieter reading (converges on true ambient within ~1 s) and RISES very slowly (speech pauses and
+// song gaps cannot inflate it). The gate then opens at 3x the learned floor and closes at 1.8x —
+// ratios, not absolutes, so the same code calibrates itself on any mic, any room, any gain.
+static float s_floor = 0.02f;          // learned ambient RMS; starts high, learns DOWN in ~1 s
+static bool  s_gate_open = false;
+static int   s_flat_cnt  = 0;
 static float *s_td   = NULL;          // DC-removed time window (for autocorrelation)
 static float *s_re   = NULL;          // FFT real (Hann-windowed input, then real part)
 static float *s_im   = NULL;          // FFT imag
@@ -212,8 +218,22 @@ static void process_frame(int16_t *raw)
     s.level_db = peak_norm > 0.0003f ? (int)(20.0f * log10f(peak_norm)) : -90;
 
     // --- noise gate: decided in the time domain, BEFORE paying for the FFT ---
-    if (s_gate_open) { if (rms_norm < GATE_CLOSE) { s_gate_open = false; s_flat_cnt = 0; } }
-    else             { if (rms_norm > GATE_OPEN)    s_gate_open = true; }
+    if (rms_norm < s_floor) s_floor += (rms_norm - s_floor) * 0.20f;    // fall fast onto quiet
+    else                    s_floor += (rms_norm - s_floor) * 0.002f;   // rise slowly through signal
+    if (s_floor < 1e-4f) s_floor = 1e-4f;                               // sanity floor
+    float g_open = s_floor * 3.0f, g_close = s_floor * 1.8f;
+    if (g_open < 8e-4f) g_open = 8e-4f;                                 // never gate a truly dead line...
+    if (g_close > g_open * 0.7f) g_close = g_open * 0.7f;               // ...and keep real hysteresis
+    if (s_gate_open) { if (rms_norm < g_close) { s_gate_open = false; s_flat_cnt = 0; } }
+    else             { if (rms_norm > g_open)    s_gate_open = true; }
+    // Serial evidence every ~2 s: measured ambient, learned floor, gate verdict. "Does it draw
+    // correctly" is unanswerable without these numbers on the console.
+    static int s_dbg = 0;
+    if (++s_dbg >= 62) {
+        s_dbg = 0;
+        ESP_LOGI(TAG, "rms=%.5f floor=%.5f gate=%s agc=%.0f", (double)rms_norm, (double)s_floor,
+                 s_gate_open ? "OPEN" : "closed", (double)s_agc);
+    }
     if (!s_gate_open) {
         if (s_flat_cnt >= GATE_FLAT_N) return;         // still silent: seq frozen -> the screen holds still
         s_flat_cnt++;
@@ -342,7 +362,7 @@ esp_err_t nucleo_micspec_start(void)
     s_acf  = s_scratch + MS_FFT * 4;
     s_mag  = s_scratch + MS_FFT * 5;
     s_raw  = (int16_t *)(s_scratch + MS_FFT * 5 + MS_BINS);
-    s_gate_open = false; s_flat_cnt = 0;
+    s_gate_open = false; s_flat_cnt = 0; s_floor = 0.02f;
     for (int i = 0; i < MS_FFT; i++) s_hann[i] = 0.5f - 0.5f * cosf(2.0f * (float)M_PI * i / (MS_FFT - 1));
     memset(s_prevband, 0, sizeof s_prevband);
     s_agc = 1.0f; s_onset = 0.0f; s_have = false;
