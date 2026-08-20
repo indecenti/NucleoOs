@@ -35,15 +35,19 @@ static int   s_set_sel;
 #define GSET_ROWS 3
 static const char *gset_label(int i, void *)
 {
-    static const char *L[GSET_ROWS] = { "Unita", "Inverti segno", "Azzera calib." };
-    return (i >= 0 && i < GSET_ROWS) ? L[i] : "";
+    switch (i) {
+        case 0: return TR("Unita", "Units");
+        case 1: return TR("Inverti segno", "Flip sign");
+        case 2: return TR("Azzera calib.", "Reset zero");
+    }
+    return "";
 }
 static const char *gset_right(int i, void *)
 {
     switch (i) {
-        case 0: return s_cfg.units == 1 ? "%" : "gradi";
-        case 1: return s_cfg.invert ? "si" : "no";
-        case 2: return "INVIO";
+        case 0: return s_cfg.units == 1 ? "%" : TR("gradi", "deg");
+        case 1: return s_cfg.invert ? TR("si", "yes") : "no";
+        case 2: return TR("INVIO", "ENTER");
     }
     return "";
 }
@@ -117,22 +121,27 @@ static void draw(void)
     d.fillRect(0, top, W, h, BG);
 
     bool present = nucleo_imu_present();
-    // s_roll / s_reliable are advanced in poll() (the IMU rate) so the redraw can be gated to a visible
-    // change; draw only renders. Seed defensively in case draw runs before the first poll.
-    if (!s_seeded) { s_roll = atan2f(s_lx, s_ly) * RAD2DEG * ROLL_SIGN; s_seeded = true; }
-    bool reliable = s_reliable && present;
-    float shown = s_frozen ? s_frozen_val : wrap180(s_roll - s_zero);
-    if (s_cfg.invert) shown = -shown;
+    // Render STRICTLY from the display state poll() committed (s_qa/s_qx/s_qy/s_qf). The old code
+    // recomputed everything from the raw floats at draw time, so even a 0.1-deg commit repainted the
+    // needle and re-evaluated every colour boundary (onRound, reliable) against UNquantized noise —
+    // the green<->blue title and green<->yellow needle flipping per frame IS the strobe the user saw.
+    // A pure function of committed state can only change when the committed state does.
+    bool reliable = (s_qf == 1) && present;
+    float shown = s_frozen ? s_frozen_val
+                           : (s_qa == INT32_MIN ? 0.f : (float)s_qa / 10.0f);   // qa already has zero+invert applied
     bool onRound = reliable && (fabsf(shown) < 0.4f || fabsf(fabsf(shown) - 90.f) < 0.4f || fabsf(fabsf(shown) - 45.f) < 0.4f || fabsf(fabsf(shown) - 180.f) < 0.4f);
 
-    const char    *rgt = !present ? "NO IMU" : s_frozen ? "BLOCCATO" : (s_zero != 0.f ? "REL" : "LIVE");
+    const char    *rgt = !present ? "NO IMU" : s_frozen ? TR("BLOCCATO", "LOCKED") : (s_zero != 0.f ? "REL" : "LIVE");
     unsigned short acc = !present ? C_YELLOW : s_frozen ? C_GREEN : (onRound ? C_GREEN : C_BLUE);
-    int y0 = app_ui_title("Goniometro", acc, rgt);
+    // "!D" = frame going STRAIGHT to the panel (no 32 KB back-buffer) — see app_level.cpp.
+    char rb[16];
+    if (!nucleo_app_is_buffered()) { snprintf(rb, sizeof rb, "%s !D", rgt); rgt = rb; }
+    int y0 = app_ui_title(TR("Goniometro", "Protractor"), acc, rgt);
 
     if (!present) {
         d.setTextSize(2); d.setTextColor(C_YELLOW, BG);
-        d.setCursor(12, y0 + 18); d.print("Sensore IMU");
-        d.setCursor(12, y0 + 40); d.print("non rilevato");
+        d.setCursor(12, y0 + 18); d.print(TR("Sensore IMU", "IMU sensor"));
+        d.setCursor(12, y0 + 40); d.print(TR("non rilevato", "not detected"));
         return;
     }
     if (s_settings) {                                  // TAB options — shared list (no overlap, consistent)
@@ -162,8 +171,11 @@ static void draw(void)
     // plumb needle: points to gravity-down (lx,ly) in screen coords (+y = down). Tapered pointer + a
     // counter-tail + a bob at the tip, so it reads as a real plumb hanging to the low side.
     unsigned short ncol = reliable ? (onRound ? C_GREEN : C_YELLOW) : C_GREY;
-    float m = sqrtf(s_lx * s_lx + s_ly * s_ly);
-    float ux = m > 0.01f ? s_lx / m : 0.f, uy = m > 0.01f ? s_ly / m : 1.f;
+    float ux = 0.f, uy = 1.f;                                 // committed needle direction (~1 px on the rim)
+    if (s_qx != INT32_MIN) {
+        float qm = sqrtf((float)s_qx * (float)s_qx + (float)s_qy * (float)s_qy);
+        if (qm > 0.5f) { ux = (float)s_qx / qm; uy = (float)s_qy / qm; }
+    }
     float px = -uy, py = ux;                                  // perpendicular (needle width)
     int tipx = cx + (int)(ux * (R - 6)), tipy = cy + (int)(uy * (R - 6));
     int bx1 = cx + (int)(px * 5),  by1 = cy + (int)(py * 5);
@@ -178,7 +190,10 @@ static void draw(void)
     // BIG angle readout on the right, auto-fit to the landscape width. Unit: degrees or slope %.
     char ds[16];
     float val = fabsf(shown);
-    if (s_cfg.units == 1) val = tanf(val / RAD2DEG) * 100.0f;          // pendenza (grade %)
+    if (s_cfg.units == 1) {                                             // slope % — tan explodes toward 90 deg
+        val = (val > 84.0f) ? 999.9f : tanf(val / RAD2DEG) * 100.0f;    // cap at an honest gauge ceiling
+        if (val > 999.9f) val = 999.9f;                                 // (the old code printed "inf")
+    }
     if (reliable) snprintf(ds, sizeof(ds), "%.1f", (double)val);
     else          snprintf(ds, sizeof(ds), "--");
     int nx = 150, ts = 4, tw = (int)strlen(ds) * 6 * ts;
@@ -190,7 +205,9 @@ static void draw(void)
     else if (reliable) d.drawCircle(nx + tw + 4 + ts, cy - 4 * ts + 3, ts, onRound ? C_GREEN : FG);   // degree mark
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     d.setCursor(nx, cy + 4 * ts + 5);
-    d.print(!reliable ? "inclina il device" : s_frozen ? "bloccato" : (s_zero != 0.f ? "relativo" : "assoluto"));
+    d.print(!reliable ? TR("inclina il device", "tilt the device")
+                      : s_frozen ? TR("bloccato", "locked")
+                                 : (s_zero != 0.f ? TR("relativo", "relative") : TR("assoluto", "absolute")));
 }
 
 // dim a colour ~45% for the needle's counter-tail (local helper; fx3d::scl is for the 3D path).
@@ -212,7 +229,7 @@ static void on_key(int key, char ch)
     else if (ch == 'r' || ch == 'R') { s_zero = 0.f; s_frozen = false; nucleo_app_request_draw(); }  // absolute
     else if (ch == 'f' || ch == 'F') {                                                          // freeze toggle
         s_frozen = !s_frozen;
-        if (s_frozen) s_frozen_val = wrap180(s_roll - s_zero);
+        if (s_frozen) { s_frozen_val = wrap180(s_roll - s_zero); if (s_cfg.invert) s_frozen_val = -s_frozen_val; }
         nucleo_app_request_draw();
     }
 }

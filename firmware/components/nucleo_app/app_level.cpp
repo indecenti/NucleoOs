@@ -23,7 +23,16 @@
 static const unsigned short GLINT = 0xFFFF;
 
 enum { V_BULLSEYE, V_TUBE_H, V_TUBE_V, V_DIGITAL, V_SETTINGS, V_COUNT };
-static const char *VIEW_NAME[V_COUNT] = { "Mira", "Tubo", "Piombo", "Digitale", "Impostazioni" };
+static const char *view_name(int i)
+{
+    switch (i) {
+        case V_BULLSEYE: return TR("Mira", "Bullseye");
+        case V_TUBE_H:   return TR("Tubo", "Tube");
+        case V_TUBE_V:   return TR("Piombo", "Plumb");
+        case V_DIGITAL:  return TR("Digitale", "Digital");
+        default:         return TR("Impostazioni", "Settings");
+    }
+}
 
 static int   s_view;
 static float s_lx, s_ly, s_deg;     // smoothed in-plane gravity + tilt-from-flat
@@ -33,7 +42,6 @@ static float s_hx, s_hy, s_hdeg;    // held snapshot
 
 // customizable settings (persist within a boot; reset on reboot)
 static struct { int units; bool flipx, flipy; float tol; } s_cfg = { 0, false, false, 0.4f };
-static const char *UNIT_NAME[2] = { "gradi", "percento" };
 static int s_set_sel;               // selected settings row
 
 // ---- helpers ------------------------------------------------------------------------------------
@@ -45,7 +53,11 @@ static unsigned short dim(unsigned short c, int pct)
 // format an inclination (degrees in) per the unit setting into buf; returns the suffix glyph kind
 static void fmt_val(float deg, char *buf, int n)
 {
-    if (s_cfg.units == 1) snprintf(buf, n, "%.1f", (double)(tanf(deg / RAD2DEG) * 100.0f));  // grade %
+    if (s_cfg.units == 1) {                                            // slope % — tan explodes toward 90 deg
+        float p = (deg > 84.0f) ? 999.9f : tanf(deg / RAD2DEG) * 100.0f;
+        if (p > 999.9f) p = 999.9f;                                    // cap: the old code printed "inf"
+        snprintf(buf, n, "%.1f", (double)p);
+    }
     else                  snprintf(buf, n, "%.1f", (double)deg);
 }
 // big centred number with auto-fit size; draws a degree ring or % sign after it
@@ -89,7 +101,19 @@ static bool poll(void)
     return true;
 }
 
-// current axes after calibration + flip
+// Display accessors — the state poll() COMMITTED, which is the only thing draw may render from.
+// The views used to re-read the raw floats at draw time, so every 0.1-deg commit re-evaluated the
+// in-tolerance colour boundaries against unquantized noise and the green/yellow accents (bubble,
+// digits, "IN BOLLA") flipped frame to frame: that strobing is what read as flicker. A pure
+// function of committed state can only change when the quantizer actually moved.
+static void disp_axes(float *ax, float *ay)
+{
+    *ax = s_qx == INT32_MIN ? 0.f : (float)s_qx / 120.0f;
+    *ay = s_qy == INT32_MIN ? 0.f : (float)s_qy / 120.0f;
+}
+static float disp_deg(void) { return s_qd == INT32_MIN ? 0.f : (float)s_qd / 10.0f; }
+
+// current axes after calibration + flip (RAW — poll's input; never rendered directly)
 static void axes(float *ax, float *ay)
 {
     float x = (s_hold ? s_hx : s_lx) - s_ozx, y = (s_hold ? s_hy : s_ly) - s_ozy;
@@ -102,7 +126,7 @@ static float deg_now(void) { return s_hold ? s_hdeg : s_deg; }
 // ---- views --------------------------------------------------------------------------------------
 static void view_bullseye(int top, int h, int y0)
 {
-    float ax, ay; axes(&ax, &ay);
+    float ax, ay; disp_axes(&ax, &ay);
     float m = sqrtf(ax * ax + ay * ay); if (m > 1) m = 1;
     float deg = asinf(m) * RAD2DEG;
     bool level = deg < s_cfg.tol;
@@ -140,7 +164,7 @@ static void view_bullseye(int top, int h, int y0)
     d.setCursor(nx, vcy + 16); d.print(bx2);
     snprintf(bx2, sizeof(bx2), "Y %+5.1f", (double)(asinf(fminf(fmaxf(ay, -1), 1)) * RAD2DEG));
     d.setCursor(nx, vcy + 28); d.print(bx2);
-    if (level) { d.setTextColor(C_GREEN, BG); d.setCursor(nx, vcy + 42); d.print("IN BOLLA"); }
+    if (level) { d.setTextColor(C_GREEN, BG); d.setCursor(nx, vcy + 42); d.print(TR("IN BOLLA", "LEVEL")); }
 }
 
 // a horizontal/vertical capillary vial with a bubble driven by `t` in [-1..1] (0 = centred)
@@ -174,7 +198,7 @@ static void capillary(int x, int y, int len, int thick, bool horiz, float t, boo
 
 static void view_tube_h(int top, int h, int y0)
 {
-    float ax, ay; axes(&ax, &ay);
+    float ax, ay; disp_axes(&ax, &ay);
     float angle = asinf(fminf(fmaxf(ax, -1), 1)) * RAD2DEG;     // long-edge inclination
     bool level = fabsf(angle) < s_cfg.tol;
     int bottom = top + h, mid = (y0 + bottom) / 2;
@@ -185,7 +209,7 @@ static void view_tube_h(int top, int h, int y0)
 
 static void view_tube_v(int top, int h, int y0)
 {
-    float ax, ay; axes(&ax, &ay);
+    float ax, ay; disp_axes(&ax, &ay);
     float angle = asinf(fminf(fmaxf(ay, -1), 1)) * RAD2DEG;     // short-edge inclination (plumb)
     bool level = fabsf(angle) < s_cfg.tol;
     int bottom = top + h;
@@ -196,16 +220,16 @@ static void view_tube_v(int top, int h, int y0)
 
 static void view_digital(int top, int h, int y0)
 {
-    float ax, ay; axes(&ax, &ay);
+    float ax, ay; disp_axes(&ax, &ay);
     float aX = asinf(fminf(fmaxf(ax, -1), 1)) * RAD2DEG;
     float aY = asinf(fminf(fmaxf(ay, -1), 1)) * RAD2DEG;
-    float tot = deg_now();
+    float tot = disp_deg();
     bool level = tot < s_cfg.tol;
     int bottom = top + h, third = (bottom - y0) / 3;
     d.setTextSize(1); d.setTextColor(MUTED, BG);
-    d.setCursor(8, y0 + 4);  d.print("X (lungo)");
-    d.setCursor(8, y0 + third + 2); d.print("Y (corto)");
-    d.setCursor(8, y0 + 2 * third); d.print("TOTALE");
+    d.setCursor(8, y0 + 4);  d.print(TR("X (lungo)", "X (long)"));
+    d.setCursor(8, y0 + third + 2); d.print(TR("Y (corto)", "Y (short)"));
+    d.setCursor(8, y0 + 2 * third); d.print(TR("TOTALE", "TOTAL"));
     big_num(96, y0 + 2,            fabsf(aX), fabsf(aX) < s_cfg.tol ? C_GREEN : FG, W - 100);
     big_num(96, y0 + third,        fabsf(aY), fabsf(aY) < s_cfg.tol ? C_GREEN : FG, W - 100);
     big_num(96, y0 + 2 * third - 2, tot,      level ? C_GREEN : C_BLUE, W - 100);
@@ -216,18 +240,24 @@ static void view_digital(int top, int h, int y0)
 #define SET_ROWS 5
 static const char *set_label(int i, void *)
 {
-    static const char *L[SET_ROWS] = { "Unita", "Inverti X", "Inverti Y", "Tolleranza", "Azzera calib." };
-    return (i >= 0 && i < SET_ROWS) ? L[i] : "";
+    switch (i) {
+        case 0: return TR("Unita", "Units");
+        case 1: return TR("Inverti X", "Flip X");
+        case 2: return TR("Inverti Y", "Flip Y");
+        case 3: return TR("Tolleranza", "Tolerance");
+        case 4: return TR("Azzera calib.", "Reset zero");
+    }
+    return "";
 }
 static const char *set_right(int i, void *)
 {
     static char b[12];
     switch (i) {
-        case 0: return s_cfg.units == 1 ? "%" : "gradi";
-        case 1: return s_cfg.flipx ? "si" : "no";
-        case 2: return s_cfg.flipy ? "si" : "no";
+        case 0: return s_cfg.units == 1 ? "%" : TR("gradi", "deg");
+        case 1: return s_cfg.flipx ? TR("si", "yes") : "no";
+        case 2: return s_cfg.flipy ? TR("si", "yes") : "no";
         case 3: snprintf(b, sizeof b, "%.1f", (double)s_cfg.tol); return b;
-        case 4: return "INVIO";
+        case 4: return TR("INVIO", "ENTER");
     }
     return "";
 }
@@ -243,16 +273,19 @@ static void draw(void)
     d.fillRect(0, top, W, h, BG);
 
     bool present = nucleo_imu_present();
-    float pd = present ? deg_now() : 0;
+    float pd = present ? disp_deg() : 0;
     bool level = present && pd < s_cfg.tol;
-    char rt[20]; snprintf(rt, sizeof(rt), "%s%s", VIEW_NAME[s_view], s_hold ? " *" : "");
+    // "!D" = the frame is going STRAIGHT to the panel (no 32 KB back-buffer): a clear-then-draw on a
+    // no-vsync display flickers no matter how the repaint is gated — OS contiguous-RAM problem, not ours.
+    char rt[24]; snprintf(rt, sizeof(rt), "%s%s%s", view_name(s_view), s_hold ? " *" : "",
+                          nucleo_app_is_buffered() ? "" : " !D");
     unsigned short acc = !present ? C_YELLOW : s_hold ? C_PURPLE : level ? C_GREEN : C_BLUE;
-    int y0 = app_ui_title("Livella", acc, rt);
+    int y0 = app_ui_title(TR("Livella", "Level"), acc, rt);
 
     if (!present) {
         d.setTextSize(2); d.setTextColor(C_YELLOW, BG);
-        d.setCursor(12, y0 + 14); d.print("Sensore IMU");
-        d.setCursor(12, y0 + 36); d.print("non rilevato");
+        d.setCursor(12, y0 + 14); d.print(TR("Sensore IMU", "IMU sensor"));
+        d.setCursor(12, y0 + 36); d.print(TR("non rilevato", "not detected"));
         d.setTextSize(1); d.setTextColor(DIM, BG);
         d.setCursor(12, y0 + 60); d.print(nucleo_imu_debug());
         return;
@@ -269,6 +302,7 @@ static void draw(void)
 static void calibrate(void)   // capture the current tilt as the new "level" zero
 {
     s_ozx = s_lx; s_ozy = s_ly; s_hold = false;
+    s_qx = s_qy = s_qd = INT32_MIN; s_frame_us = 0;   // force a fresh commit: display snaps to the new zero
     nucleo_app_request_draw();
 }
 

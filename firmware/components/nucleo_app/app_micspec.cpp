@@ -22,7 +22,15 @@ extern "C" {
 
 // ---- modes ----
 enum { M_BARS = 0, M_FALL, M_SCOPE, M_TUNE, N_MODES };
-static const char *MODE_NAME[N_MODES] = { "BARRE", "CASCATA", "ONDA", "ACCORDATORE" };
+static const char *mode_name(int i)
+{
+    switch (i) {
+        case M_BARS:  return TR("BARRE", "BARS");
+        case M_FALL:  return TR("CASCATA", "WATERFALL");
+        case M_SCOPE: return TR("ONDA", "WAVE");
+        default:      return TR("ACCORDATORE", "TUNER");
+    }
+}
 
 static int   s_mode    = M_BARS;
 static int   s_pal     = 0;        // palette index
@@ -164,7 +172,7 @@ static void draw_pager(void)
 
     d.setTextSize(1);
     d.setTextColor(THEME_ACC, BG);
-    d.setCursor(4, y - 3); d.print(MODE_NAME[s_mode]);
+    d.setCursor(4, y - 3); d.print(mode_name(s_mode));
 
     // "!D" = this frame went STRAIGHT to the panel: the shared 32 KB back-buffer could not be acquired,
     // so every repaint is a clear-then-draw on a display with no vsync. Nothing an app can smooth away —
@@ -264,7 +272,7 @@ static void draw_tuner(void)
 {
     if (s_tnote < 0) {                                          // nothing held: clear prompt, big enough to read
         d.setTextSize(2); d.setTextColor(MUTED, BG);
-        const char *p = "Suona una nota";
+        const char *p = TR("Suona una nota", "Play a note");
         d.setCursor((W - (int)strlen(p) * 12) / 2, MAIN_T + 22); d.print(p);
         return;
     }
@@ -278,7 +286,7 @@ static void draw_tuner(void)
     if (intune && !held) {
         d.drawRect(2, MAIN_T - 2, W - 4, 50, C_GREEN);
         d.setTextSize(1); d.setTextColor(C_GREEN, BG);
-        d.setCursor(W - 50, MAIN_T - 1); d.print("INTONATO");
+        d.setCursor(W - 58, MAIN_T - 1); d.print(TR("INTONATO", "IN TUNE"));
     }
 
     // big note letter (left) + octave; dimmed while it's only the held (no live sound) note
@@ -292,7 +300,7 @@ static void draw_tuner(void)
     d.setCursor(nx + lw + 3, MAIN_T + 26); d.print(oc);
 
     // actionable verdict (right): flat or sharp? — large + colour-coded, with a dead-band around centre
-    const char *dir = intune ? "OK" : (s_tcents > 4.0f) ? "CALA" : (s_tcents < -4.0f) ? "ALZA" : "OK";
+    const char *dir = intune ? "OK" : (s_tcents > 4.0f) ? TR("CALA", "DOWN") : (s_tcents < -4.0f) ? TR("ALZA", "UP") : "OK";
     d.setTextSize(3); d.setTextColor(col, BG);
     d.setCursor(W - 6 - (int)strlen(dir) * 18, MAIN_T + 12); d.print(dir);
 
@@ -309,7 +317,7 @@ static void draw_tuner(void)
 
     // numeric readout (bottom row, clear of the pager dots)
     char ln[40];
-    snprintf(ln, sizeof ln, "%+d cent   %d.%02dHz   chiar. %d%%",
+    snprintf(ln, sizeof ln, TR("%+d cent   %d.%02dHz   chiar. %d%%", "%+d cent   %d.%02dHz   clar. %d%%"),
              cents, s_snap.pitch_cHz / 100, s_snap.pitch_cHz % 100, s_snap.clarity);
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     d.setCursor((W - (int)strlen(ln) * 6) / 2, gy + 4); d.print(ln);
@@ -391,9 +399,9 @@ static void draw(void)
     if (!nucleo_micspec_running()) {
         int e = nucleo_micspec_last_error();
         draw_hud();
-        if (e == MS_ERR_BUSY) draw_splash("Mic occupato", C_YELLOW);
-        else if (e == MS_ERR_OOM) draw_splash("Memoria insuff.", C_RED);
-        else draw_splash("Mic non avviato", C_RED);
+        if (e == MS_ERR_BUSY) draw_splash(TR("Mic occupato", "Mic busy"), C_YELLOW);
+        else if (e == MS_ERR_OOM) draw_splash(TR("Memoria insuff.", "Out of memory"), C_RED);
+        else draw_splash(TR("Mic non avviato", "Mic not started"), C_RED);
         return;
     }
 
@@ -480,7 +488,9 @@ static void on_exit(void)
 extern "C" void nucleo_register_micspec(void)
 {
     static const nucleo_app_def_t app = {
-        "micspec", "Mic Spectrum", "Media", "Analizzatore audio dal microfono",
+        // Category "Measure": it is an instrument (analyzer/tuner), and it belongs on the shelf next
+        // to the level and the protractor — not among the media players.
+        "micspec", "Mic Spectrum", "Measure", "Analizzatore audio dal microfono",
         'W', C_PURPLE, enter, on_key, nullptr, draw, on_exit,
         // SOLO BOOT: reboot into a FRESH, unfragmented heap so the 32 KB shared canvas allocates and the
         // analyzer draws BUFFERED. On the live (fragmented) heap — esp. the ADV, ~16 KB largest free — the
