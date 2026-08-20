@@ -37,6 +37,8 @@
 #include "nucleo_setup.h"
 #include "nucleo_ble.h"
 #include "nucleo_theme.h"
+#include "nucleo_audio.h"    // in-game volume row (the OS-wide software volume)
+#include "nucleo_prefs.h"    // ...persisted with the other power settings when the menu closes
 #include "nucleo_i18n.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"   // the in-game menu pauses the console with vTaskDelay
@@ -102,10 +104,16 @@ static void trace_heap(const char *label)
 // alternatives to dropping 9 of them are cropping the picture or letterboxing a screen that is
 // already tiny. Dropping every 16th line is the least destructive of the three, and it is a DROP,
 // not a blend — no averaging, so the remaining pixels stay exactly the colours the PPU produced.
-#define OUT_W 160            // 1:1 with the Game Boy
+#define SRC_W 160            // the Game Boy's own width
 #define OUT_H 135            // 144 * 15/16 — forced by the panel height
-#define OUT_X ((240 - OUT_W) / 2)
-#define BAND  15             // output lines buffered before one SPI push; 15 divides 135 evenly
+#define SRC_X ((240 - SRC_W) / 2)
+// TWO OUTPUT MODES, one buffer size. 1:1 draws 160 px centred and keeps the two 40 px pillars for the
+// HUD; STRETCH scales to the full 240 px panel (exactly 2:3, so it is a pure integer expansion) and the
+// pillars are gone. A band buffer is sized once for BOTH: 160x15 and 240x9 are each <= BAND_BYTES, so
+// switching modes mid-game never re-allocates on a heap that has no room to re-allocate.
+#define BAND_BYTES 4800      // 160*15*2 = 4800 ; 240*9*2 = 4320
+#define BAND_1TO1  15        // output lines per push at 1:1 (15 divides 135 evenly)
+#define BAND_WIDE  9         // ...and stretched (9 divides 135 evenly)
 
 // Four-shade palettes, lightest to darkest. A Game Boy is not theme-able — this is CONTENT, not
 // chrome, so it deliberately does not follow THEME_*.
@@ -139,6 +147,34 @@ static const char *const PAL_NAME[PAL_COUNT] = { "Green", "DMG", "Mono", "Amber"
 static int s_pal = 0;                     // persisted alongside the resume entry; 0 = Green
 static const uint16_t *SHADE = PALETTE[0];
 
+// The SAME palette with the two bytes already swapped. The panel latches a pixel most-significant
+// byte first; an ESP32 stores a uint16_t little-endian. setSwapBytes(true) papered over that, but it
+// costs a PER-PIXEL conversion inside pushImage (LovyanGFX picks a converting copy instead of the raw
+// one) on 21,600 pixels every frame. Pre-swapping the four palette entries ONCE moves that work from
+// the hot loop to a table of four, lets the push run as a straight no-convert copy — which is also
+// the only form that can go out over DMA — and costs nothing at all.
+static uint16_t SHADE_TX[4];
+
+// Player-visible options, persisted next to the resume entry (see state_load/state_save).
+static bool s_hud     = true;    // the two pillars: fps, cost breakdown, palette + key legend
+static bool s_stretch = false;   // false = 1:1 with pillars, true = filled 240 px panel
+
+// Output geometry for the mode in force. Set by geom_apply(), read by the scanline path.
+static int s_out_w = SRC_W, s_out_x = SRC_X, s_band_h = BAND_1TO1;
+
+static void pal_apply(void)
+{
+    SHADE = PALETTE[s_pal];
+    for (int i = 0; i < 4; i++) SHADE_TX[i] = (uint16_t)((SHADE[i] >> 8) | (SHADE[i] << 8));
+}
+static void geom_apply(void)
+{
+    if (s_stretch) { s_out_w = 240;   s_out_x = 0;     s_band_h = BAND_WIDE; }
+    else           { s_out_w = SRC_W; s_out_x = SRC_X; s_band_h = BAND_1TO1; }
+}
+// The HUD needs the picture to be 160 px wide — stretched, there is nowhere to put it.
+static inline bool hud_on(void) { return s_hud && !s_stretch; }
+
 // ── session state (heap on enter, never .bss: the app is closed almost always) ──────────────────
 #define MAXR    120          // matches held at once. The filter, not this cap, is how you reach a game.
 #define NAMEMAX 56
@@ -159,7 +195,8 @@ struct EState {
     char     resume[NAMEMAX];   // last cartridge played, offered at the top of an unfiltered shelf
     bool     have_resume;
 
-    uint16_t *band;          // OUT_W * BAND pixels, pushed one band at a time
+    uint16_t *band[2];       // two band buffers: one streams over DMA while the next is filled
+    int      band_idx;       // which one the scanline path is writing into
     int      band_line, band_y, out_y;
     bool     running;
     uint32_t fps_frames;
@@ -171,6 +208,7 @@ struct EState {
     int      relief;         // 0 = full picture, 1 = interlaced, 2 = 30 fps frame-skip
     bool     menu;           // the in-game menu is open
     int      msel;           // its selected row
+    int      mscroll;        // first visible row (the menu is taller than the panel: it scrolls)
     char     toast[28];      // transient confirmation ("saved", "loaded")
     int64_t  toast_until;
     // Cached geometry of the focused shelf row, so the ~5 Hz tick can scroll its title without
@@ -199,14 +237,19 @@ static void state_load(void)
         int v = atoi(line);
         if (v >= 0 && v < PAL_COUNT) s_pal = v;
     }
-    SHADE = PALETTE[s_pal];
+    // Lines three and four are the view options. Absent on a file written by an older build, in which
+    // case the defaults above stand — that is the whole reason this is a flat file and not a parser.
+    if (fgets(line, sizeof line, f)) s_hud     = (atoi(line) != 0);
+    if (fgets(line, sizeof line, f)) s_stretch = (atoi(line) != 0);
+    pal_apply();
+    geom_apply();
     fclose(f);
 }
 static void state_save(const char *name)
 {
     FILE *f = fopen(STATE_JS, "w");
     if (!f) return;
-    fprintf(f, "%s\n%d\n", name ? name : "", s_pal);
+    fprintf(f, "%s\n%d\n%d\n%d\n", name ? name : "", s_pal, s_hud ? 1 : 0, s_stretch ? 1 : 0);
     fclose(f);
 }
 
@@ -286,28 +329,46 @@ __attribute__((optimize("-O2")))
 static void on_line(const uint8_t *px, int line, void *user)
 {
     (void)user;
-    if (!st || !st->band) return;
+    if (!st || !st->band[0]) return;
     if ((line & 15) == 15) return;
     if (st->out_y >= OUT_H) return;
 
-    // A flat 160-entry palette lookup — no strides, no run bookkeeping, no branch. Dropping the
-    // column decimation did not just improve the picture, it made this loop cheaper: a straight
-    // count-up over two contiguous arrays is what the compiler unrolls best, and it is the hottest
-    // loop in the app at 135 lines x 60 fps.
-    uint16_t *row = st->band + (size_t)st->band_line * OUT_W;
-    for (int x = 0; x < OUT_W; x++) row[x] = SHADE[px[x] & 3];
+    // A flat palette lookup — no strides, no run bookkeeping, no branch. The entries are already in
+    // the panel's byte order (SHADE_TX), so what lands in the buffer is exactly what goes on the wire.
+    uint16_t *row = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
+    const uint16_t *sh = SHADE_TX;
+    if (!s_stretch) {
+        for (int x = 0; x < SRC_W; x++) row[x] = sh[px[x] & 3];
+    } else {
+        // 160 -> 240 is exactly 2:3, so each source PAIR becomes three output pixels and the loop
+        // stays integer, branch-free and unrollable. Nearest-neighbour on purpose: a Game Boy is
+        // meant to have hard pixel edges, and blending 21,600 pixels per frame would cost more than
+        // the stretch itself.
+        for (int x = 0, o = 0; x < SRC_W; x += 2, o += 3) {
+            uint16_t a = sh[px[x] & 3], b = sh[px[x + 1] & 3];
+            row[o] = a; row[o + 1] = a; row[o + 2] = b;
+        }
+    }
 
     if (st->band_line == 0) st->band_y = st->out_y;
     st->band_line++;
     st->out_y++;
 
-    if (st->band_line == BAND || st->out_y >= OUT_H) {
-        // No startWrite here: play() holds ONE transaction open across the whole frame, so all nine
-        // bands stream to the panel with no bus re-arbitration between them — a tighter, more
-        // continuous update, which is what keeps the moving picture from tearing band by band.
+    if (st->band_line == s_band_h || st->out_y >= OUT_H) {
+        // No startWrite here: play() holds ONE transaction open across the whole frame, so every band
+        // streams to the panel with no bus re-arbitration between them — a tighter, more continuous
+        // update, which is what keeps the moving picture from tearing band by band.
+        //
+        // DMA + two buffers. pushImageDMA returns as soon as the transfer is queued, so the CPU runs
+        // the next scanlines WHILE this band is on the wire; the emulator's two big costs stop being
+        // additive. Alternating buffers is what makes that safe: the driver cannot start band N+1
+        // until band N has drained the bus, so by the time a buffer comes round again nothing is
+        // reading it. Only possible because the data is already panel-order — a converting push
+        // builds its own temporary copy and cannot DMA from ours at all.
         int64_t b0 = esp_timer_get_time();
-        d.pushImage(OUT_X, st->band_y, OUT_W, st->band_line, st->band);
+        d.pushImageDMA(s_out_x, st->band_y, s_out_w, st->band_line, st->band[st->band_idx]);
         st->us_blit += (uint32_t)(esp_timer_get_time() - b0);
+        st->band_idx ^= 1;
         st->band_line = 0;
     }
 }
@@ -367,8 +428,8 @@ static bool shelf_poll(void)
 // LEFT is identity and control (frame rate, palette, how to reach the menu); RIGHT is the honest
 // cost breakdown, because "it feels slow" is not a bug report until it says which part is slow.
 #define PILL_L 0
-#define PILL_R (OUT_X + OUT_W)
-#define PILL_W OUT_X
+#define PILL_R (SRC_X + SRC_W)
+#define PILL_W SRC_X
 
 static inline bool dn(char c) { return nucleo_kbd_char_down(c); }
 
@@ -428,6 +489,7 @@ static void toast(const char *msg)
 // millisecond, because the interesting differences live below a whole one.
 static void hud_draw(void)
 {
+    if (!hud_on()) return;             // info hidden (or stretched: there are no pillars to draw in)
     d.fillRect(PILL_L, 0, PILL_W - 2, 30, BG);
     d.setTextSize(2);
     d.setTextColor(st->fps >= 55 ? SHADE[1] : AMB, BG);
@@ -450,13 +512,15 @@ static void hud_draw(void)
 // guessable, and any transient confirmation. Repainted whenever it can have been covered.
 static void chrome_draw(void)
 {
-    d.fillRect(PILL_L, 100, PILL_W - 2, 35, BG);
+    if (!hud_on()) return;
+    d.fillRect(PILL_L, 88, PILL_W - 2, 47, BG);
     d.setTextSize(1);
     d.setTextColor(SHADE[1], BG);
     d.setCursor(3, 101); d.print(PAL_NAME[s_pal]);
     d.setTextColor(DIM, BG);
     d.setCursor(3, 113); d.print("P pal");
     d.setCursor(3, 124); d.print("M menu");
+    d.setCursor(3, 90);  d.print("-/= vol");
 
     d.fillRect(PILL_R + 2, 100, PILL_W - 2, 35, BG);
     if (st->toast[0]) {
@@ -464,15 +528,37 @@ static void chrome_draw(void)
         d.setCursor(PILL_R + 4, 113); d.print(st->toast);
     } else {
         d.setTextColor(DIM, BG);
+        d.setCursor(PILL_R + 4, 101); d.print("I hide");     // I hides these pillars entirely
         d.setCursor(PILL_R + 4, 113); d.print("TAB");
         d.setCursor(PILL_R + 4, 124); d.print("fast");
     }
 }
 
+// Everything outside the picture, blanked in one go. Called when the info is switched off (the
+// pillars must not keep the last frame's numbers frozen on screen) and when the mode changes.
+static void frame_clear(void)
+{
+    if (s_stretch) return;             // the picture covers the whole panel; nothing is left to clear
+    d.fillRect(PILL_L, 0, PILL_W, 135, BG);
+    d.fillRect(PILL_R, 0, 240 - PILL_R, 135, BG);
+}
+
+// Apply a change of view (info on/off, 1:1 vs stretched) to a RUNNING game. The PPU repaints the
+// whole picture on its very next frame, so only the furniture around it has to be dealt with here —
+// and going back from stretched to 1:1 needs the full screen wiped, because the picture is about to
+// stop covering the pillars.
+static void view_apply(void)
+{
+    geom_apply();
+    d.fillScreen(BG);
+    hud_draw();
+    chrome_draw();
+}
+
 static void pal_cycle(void)
 {
     s_pal = (s_pal + 1) % PAL_COUNT;
-    SHADE = PALETTE[s_pal];
+    pal_apply();
     state_save(st->resume);
     chrome_draw();
 }
@@ -481,7 +567,7 @@ static void pal_cycle(void)
 // Opened with M or Esc. Esc opening a MENU rather than quitting outright is the deliberate choice:
 // leaving a game means losing the session (the app runs in a Solo boot and exiting reboots), so the
 // one key a player hits by reflex must not be the destructive one. Quit is still one row away.
-enum { MI_RESUME = 0, MI_SAVE, MI_LOAD, MI_PAL, MI_PIC, MI_QUIT, MI_N };
+enum { MI_RESUME = 0, MI_SAVE, MI_LOAD, MI_VOL, MI_SCREEN, MI_INFO, MI_PAL, MI_PIC, MI_QUIT, MI_N };
 
 static const char *menu_label(int i, char *buf, size_t n)
 {
@@ -490,6 +576,12 @@ static const char *menu_label(int i, char *buf, size_t n)
         case MI_SAVE:   return TR("Salva stato", "Save state");
         case MI_LOAD:   return nucleo_gb_state_exists(0) ? TR("Carica stato", "Load state")
                                                          : TR("Carica stato (vuoto)", "Load state (empty)");
+        case MI_VOL:    snprintf(buf, n, "%s: %d%%", TR("Volume", "Volume"), nucleo_audio_volume()); return buf;
+        case MI_SCREEN: snprintf(buf, n, "%s: %s", TR("Schermo", "Screen"),
+                                 s_stretch ? TR("Pieno", "Filled") : "1:1"); return buf;
+        case MI_INFO:   snprintf(buf, n, "%s: %s", TR("Info a schermo", "On-screen info"),
+                                 s_stretch ? TR("n.d.", "n/a") : s_hud ? TR("si", "on") : TR("no", "off"));
+                        return buf;
         case MI_PAL:    snprintf(buf, n, "%s: %s", TR("Colori", "Palette"), PAL_NAME[s_pal]); return buf;
         case MI_PIC:    snprintf(buf, n, "%s: %s", TR("Immagine", "Picture"),
                                  st->relief == 1 ? "30 fps" : TR("Piena", "Full"));
@@ -498,8 +590,12 @@ static const char *menu_label(int i, char *buf, size_t n)
     }
 }
 
+// The menu grew past what 135 px can show, so it SCROLLS: MENU_VIS rows are on screen and the
+// selection carries the window with it. Six rows is what fits without shrinking the type — the
+// panel is small enough already, and docs/device-ui.md is explicit that legibility wins.
+#define MENU_VIS 6
 #define MENU_W 200
-#define MENU_H (12 + MI_N * 17 + 8)
+#define MENU_H (12 + MENU_VIS * 17 + 8)
 #define MENU_X ((240 - MENU_W) / 2)
 #define MENU_Y ((135 - MENU_H) / 2)
 #define MENU_LX (MENU_X + 22)                    // label column x
@@ -510,12 +606,14 @@ static const char *menu_label(int i, char *buf, size_t n)
 static void menu_row(int i)
 {
     char buf[40];
-    int y = MENU_Y + 14 + i * 17;
+    int slot = i - st->mscroll;
+    if (slot < 0 || slot >= MENU_VIS) return;        // outside the scrolled window
+    int y = MENU_Y + 14 + slot * 17;
     bool on = (i == st->msel);
     d.fillRect(MENU_X + 4, y, MENU_W - 8, 16, on ? INK : BG);
     d.setTextSize(1);
     d.setTextColor(on ? DIM : LINE, on ? INK : BG);
-    d.setCursor(MENU_X + 8, y + 5); d.printf("%d", i + 1);
+    d.setCursor(MENU_X + 8, y + 5); d.printf("%d", i + 1);   // absolute row number: 1-9 always picks the same entry
     const char *t = menu_label(i, buf, sizeof buf);
     uint16_t fg = on ? FG : MUTED, bg = on ? INK : BG;
     if (on) {
@@ -531,11 +629,21 @@ static void menu_row(int i)
 
 static void menu_draw(void)
 {
+    if (st->msel < st->mscroll)                st->mscroll = st->msel;
+    if (st->msel >= st->mscroll + MENU_VIS)    st->mscroll = st->msel - MENU_VIS + 1;
+    if (st->mscroll > MI_N - MENU_VIS)         st->mscroll = MI_N - MENU_VIS;
+    if (st->mscroll < 0)                       st->mscroll = 0;
+
     d.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, BG);
     d.drawRoundRect(MENU_X, MENU_Y, MENU_W, MENU_H, 6, LINE);
     d.setTextSize(1);
     d.setTextColor(DIM, BG);
     d.setCursor(MENU_X + 8, MENU_Y + 4); d.print(nucleo_gb_title());
+    // "there is more" has to be visible without arrowing blindly: a rail on the right of the card.
+    int rh = MENU_VIS * 17, kh = rh * MENU_VIS / MI_N;
+    int ky = MENU_Y + 14 + (rh - kh) * st->mscroll / (MI_N - MENU_VIS);
+    d.fillRect(MENU_X + MENU_W - 5, MENU_Y + 14, 2, rh, LINE);
+    d.fillRect(MENU_X + MENU_W - 5, ky, 2, kh, ACC);
     for (int i = 0; i < MI_N; i++) menu_row(i);
 }
 
@@ -551,7 +659,7 @@ static void menu_anim(void)
     const char *t = menu_label(st->msel, buf, sizeof buf);
     d.setTextSize(2);
     if ((int)d.textWidth(t) <= MENU_LW) return;          // fits: static, no redraw, no flicker
-    int y = MENU_Y + 14 + st->msel * 17;
+    int y = MENU_Y + 14 + (st->msel - st->mscroll) * 17;
     marquee(MENU_LX, y + 1, MENU_LW, 15, t, FG, INK, 2, now_ms());
 }
 
@@ -560,16 +668,52 @@ static void menu_anim(void)
 static void menu_close(void)
 {
     st->menu = false;
-    d.fillRect(PILL_L, 0, PILL_W, 135, BG);
-    d.fillRect(PILL_R, 0, 240 - PILL_R, 135, BG);
+    // The card covered the middle of the screen; the PPU repaints the picture on its next frame, so
+    // only the furniture needs restoring. Stretched, there is no furniture at all.
+    frame_clear();
     hud_draw();
     chrome_draw();
+    // The volume the player just set is an OS-wide setting, so it is saved where every other surface
+    // reads it — once, on the way out of the menu, never per keypress (that would be an SD write per
+    // press). The view options go in the emulator's own one-line state file.
+    nucleo_prefs_save(nucleo_app_brightness(), nucleo_audio_volume(), nucleo_audio_is_muted());
+    state_save(st->resume);
+}
+
+// One volume step. 5% is fine-grained enough to find the level a tiny speaker actually sounds good
+// at, and coarse enough to cross the whole range in a few presses.
+static void vol_step(int dir)
+{
+    int v = nucleo_audio_volume() + dir * 5;
+    if (v < 0) v = 0;
+    if (v > 100) v = 100;
+    nucleo_audio_set_volume(v);
+}
+
+// Left/Right on a row that HAS a value: volume slides, everything else toggles. Enter still cycles,
+// so nothing is reachable only one way.
+static void menu_adjust(int dir)
+{
+    switch (st->msel) {
+        case MI_VOL:    vol_step(dir); break;
+        case MI_SCREEN: s_stretch = !s_stretch; view_apply(); break;
+        case MI_INFO:   s_hud = !s_hud; if (!s_hud) frame_clear(); else { hud_draw(); chrome_draw(); } break;
+        case MI_PAL:    s_pal = (s_pal + PAL_COUNT + dir) % PAL_COUNT; pal_apply(); break;
+        case MI_PIC:    set_relief((st->relief + 1) % 2); break;
+        default:        return;
+    }
+    menu_draw();
 }
 
 static void menu_activate(void)
 {
     switch (st->msel) {
         case MI_RESUME: menu_close(); return;
+        case MI_VOL:    vol_step(+1); menu_draw(); return;
+        case MI_SCREEN: s_stretch = !s_stretch; view_apply(); menu_draw(); return;
+        case MI_INFO:   s_hud = !s_hud;
+                        if (!s_hud) frame_clear(); else { hud_draw(); chrome_draw(); }
+                        menu_draw(); return;
         case MI_SAVE:
             toast(nucleo_gb_state_save(0) == ESP_OK ? TR("salvato", "saved") : TR("errore", "failed"));
             menu_close(); return;
@@ -580,7 +724,7 @@ static void menu_activate(void)
                                                        : TR("stato non valido", "bad state"));
             menu_close(); return;
         }
-        case MI_PAL: s_pal = (s_pal + 1) % PAL_COUNT; SHADE = PALETTE[s_pal]; state_save(st->resume);
+        case MI_PAL: s_pal = (s_pal + 1) % PAL_COUNT; pal_apply(); state_save(st->resume);
                      menu_draw(); return;
         case MI_PIC: set_relief((st->relief + 1) % 2); menu_draw(); return;
         default:     st->running = false; return;
@@ -593,6 +737,8 @@ static void menu_key(nucleo_key_t k)
     if (k.ch >= '1' && k.ch <= '0' + MI_N) { st->msel = k.ch - '1'; menu_activate(); return; }
     if (k.key == NK_UP   || k.ch == 'e' || k.ch == 'E' || k.ch == ';') { st->msel = (st->msel + MI_N - 1) % MI_N; menu_draw(); return; }
     if (k.key == NK_DOWN || k.ch == 's' || k.ch == 'S' || k.ch == '.') { st->msel = (st->msel + 1) % MI_N; menu_draw(); return; }
+    if (k.key == NK_LEFT  || k.ch == 'a' || k.ch == 'A' || k.ch == ',') { menu_adjust(-1); return; }
+    if (k.key == NK_RIGHT || k.ch == 'd' || k.ch == 'D' || k.ch == '/') { menu_adjust(+1); return; }
     if (k.key == NK_ENTER || k.ch == '\n' || k.ch == ' ' || k.ch == 'k' || k.ch == 'K') menu_activate();
 }
 
@@ -638,9 +784,16 @@ static void play(const char *name)
     nucleo_app_set_direct_draw(true);
 
     trace_heap("canvas released");
-    st->band = (uint16_t *)heap_caps_malloc((size_t)OUT_W * BAND * sizeof(uint16_t), MALLOC_CAP_DEFAULT);
-    if (!st->band) {
-        trace("  FAIL: band buffer (%u B) alloc failed", (unsigned)((size_t)OUT_W * BAND * 2));
+    // Two DMA-capable band buffers (see on_line): one is on the wire while the other is being filled.
+    // MALLOC_CAP_DMA, not DEFAULT — a DMA push from a buffer the controller cannot reach would have to
+    // be copied first, which is exactly the cost this is here to remove.
+    geom_apply();
+    st->band_idx = 0;
+    st->band[0] = (uint16_t *)heap_caps_malloc(BAND_BYTES, MALLOC_CAP_DMA);
+    st->band[1] = (uint16_t *)heap_caps_malloc(BAND_BYTES, MALLOC_CAP_DMA);
+    if (!st->band[0] || !st->band[1]) {
+        trace("  FAIL: band buffers (2 x %u B) alloc failed", (unsigned)BAND_BYTES);
+        free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
         nucleo_app_set_direct_draw(false);
         fail_box(TR("RAM insufficiente (video)", "Not enough RAM (video)"));
         return;
@@ -650,7 +803,7 @@ static void play(const char *name)
     if (err != ESP_OK) {
         trace("  FAIL: nucleo_gb_open -> %s", esp_err_to_name(err));
         trace_heap("after open fail");
-        free(st->band); st->band = nullptr;
+        free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
         nucleo_app_set_direct_draw(false);
         fail_box(err == ESP_ERR_NO_MEM ? TR("RAM insufficiente (core)", "Not enough RAM (core)")
                                        : TR("ROM non valida", "Invalid ROM"));
@@ -677,14 +830,15 @@ static void play(const char *name)
     nucleo_power_perf_begin();
 
     d.fillScreen(BG);
-    // BYTE ORDER. This is the first app to push a raw 16bpp host-order buffer straight to the panel;
-    // everything else is either 8bpp (one byte, no order) or goes through a file decoder that handles
-    // this itself. The ST7789 latches each pixel most-significant-byte first, but an ESP32 stores a
-    // uint16_t little-endian, so without a swap the two bytes arrive reversed and #9BBC0F green comes
-    // out #E19D purple. setSwapBytes(true) tells pushImage to emit big-endian; it affects ONLY the
-    // raw-buffer push path, never the colour-argument primitives (fillRect/text), so the pillars and
-    // HUD keep rendering from the same palette values correctly.
-    d.setSwapBytes(true);
+    // BYTE ORDER — handled in the PALETTE, not in the push. The ST7789 latches each pixel
+    // most-significant byte first while an ESP32 stores a uint16_t little-endian, so the two bytes
+    // have to be swapped somewhere. setSwapBytes(true) does it inside pushImage, per pixel, on 21,600
+    // pixels a frame, and it also forces LovyanGFX onto a CONVERTING copy that cannot DMA from our
+    // buffer at all. Swapping the four palette entries once (pal_apply -> SHADE_TX) makes the band
+    // buffer already panel-order, so the push is a raw no-convert DMA transfer. Leave the flag OFF:
+    // it affects only the raw-buffer path, never the colour-argument primitives the HUD uses.
+    d.setSwapBytes(false);
+    pal_apply();
 
     st->running = true;
     st->menu = false; st->msel = 0; st->turbo = false;
@@ -741,6 +895,17 @@ static void play(const char *name)
             else if (k.key == NK_BACK || k.ch == '`') { st->menu = true; st->msel = 0; menu_draw(); }
             else if (k.ch == 'm' || k.ch == 'M') { st->menu = true; st->msel = 0; menu_draw(); }
             else if (k.ch == 'p' || k.ch == 'P') pal_cycle();
+            // Two things a player changes mid-game without wanting to pause: how loud it is, and
+            // whether the pillars are there at all. Both are one key, both echo in the toast.
+            else if (k.ch == 'i' || k.ch == 'I') {
+                s_hud = !s_hud;
+                if (!s_hud) frame_clear(); else { hud_draw(); chrome_draw(); }
+            }
+            else if (k.ch == '-' || k.ch == '=') {
+                vol_step(k.ch == '=' ? +1 : -1);
+                char vb[16]; snprintf(vb, sizeof vb, "vol %d%%", nucleo_audio_volume());
+                toast(vb);
+            }
         }
         if (st->menu) {                          // paused: the console does not advance
             menu_anim();                         // ...but a long selected entry keeps scrolling
@@ -822,9 +987,13 @@ static void play(const char *name)
     }
 
     nucleo_power_perf_end();
+    // One SD write per SESSION, on the way out: the in-game hotkeys change these live but must never
+    // touch the card mid-frame (an SD write inside the 16.7 ms budget is a visible stutter).
+    state_save(st->resume);
+    nucleo_prefs_save(nucleo_app_brightness(), nucleo_audio_volume(), nucleo_audio_is_muted());
     trace("  END fps=%d palette=%s", st->fps, PAL_NAME[s_pal]);
     nucleo_gb_close();
-    free(st->band); st->band = nullptr;
+    free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
     d.setSwapBytes(false);                 // leave the shared display as every other app expects it
     nucleo_app_set_direct_draw(false);
     nucleo_app_force_repaint();
@@ -1032,7 +1201,7 @@ static void leave(void)
 {
     nucleo_gb_close();
     mq_free();
-    if (st) { free(st->band); free(st); st = nullptr; }
+    if (st) { free(st->band[0]); free(st->band[1]); free(st); st = nullptr; }
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();
 }
 

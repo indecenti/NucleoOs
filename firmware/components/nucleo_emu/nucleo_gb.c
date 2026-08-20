@@ -70,7 +70,15 @@ static const char *TAG = "gb";
 # define PG_BITS  10                    // 1 KB pages
 #endif
 #ifndef PG_SLOTS
-# define PG_SLOTS 40                    // 40 KB total
+# define PG_SLOTS 96                    // CAP, not a target: open() allocates only what the heap
+                                        // gives, and stops at the KEEP floor. 40 was measured right
+                                        // for platformers, but Street Fighter II streams ~48-64 KB of
+                                        // scattered sprite banks per fight — at 40 KB it thrashed
+                                        // (1.1 misses/frame = ~3.4 ms of SD in a 16.7 ms budget); at
+                                        // 64+ it drops to 0.1. The emulator runs in a Solo boot with
+                                        // Wi-Fi stripped, so the heap really has this to give — the
+                                        // fixed 40 was leaving it on the table. Must stay <= 127:
+                                        // the hint table stores slot indices in an int8_t.
 #endif
 #define PG_SIZE   (1u << PG_BITS)
 #define PG_MIN    8                     // fewer than this thrashes; refuse rather than crawl
@@ -254,6 +262,11 @@ void nucleo_gb_save(void)
 static void session_free(gb_session_t *s)
 {
     if (!s) return;
+    // Give the I2S channel BACK. Opening it allocates a TX channel plus its DMA descriptors and
+    // buffers, and nothing else was releasing them: quitting a cartridge left that RAM held for the
+    // rest of the session, so the next ROM had a smaller heap to be cached in (and the idle speaker
+    // kept its channel powered). Closing is a no-op if a real track has since taken the channel over.
+    if (s->sound) { s->sound = false; nucleo_audio_pcm_close(); }
     if (s->fp) fclose(s->fp);
     for (int i = 0; i < s->pg_n; i++) free(s->pg[i]);
     free(s->rom_all); free(s->cart_ram);
@@ -296,7 +309,10 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
         s->cur_tag = PG_EMPTY;
         for (int i = 0; i < PG_SLOTS; i++) s->pg_tag[i] = PG_EMPTY;
         memset(s->hint, -1, sizeof s->hint);
-        const size_t KEEP = 12 * 1024;                     // leave room for the app's band buffer etc.
+        // With the slot cap at 96 the greedy loop can now actually REACH this floor (at 40 it never
+        // did), and the I2S PCM channel — DMA descriptors + buffers — opens AFTER the cache is
+        // taken. 16 KB keeps that open reliable; the price is a few cache slots on the tightest boots.
+        const size_t KEEP = 16 * 1024;
         for (int i = 0; i < PG_SLOTS; i++) {
             if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < PG_SIZE + KEEP) break;
             uint8_t *b = (uint8_t *)malloc(PG_SIZE);
