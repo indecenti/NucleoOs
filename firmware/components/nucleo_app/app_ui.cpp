@@ -6,6 +6,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <math.h>
+#include <stdint.h>
 #include "esp_timer.h"
 
 #include "app_gfx.h"
@@ -20,6 +22,23 @@
 #define LINE  THEME_LINE
 #define INK   THEME_INK
 #define ACC   THEME_ACC
+
+// ---- live-app repaint helpers (see app_ui.h) -------------------------------------------------------
+int app_ui_step(int cur, float v)
+{
+    if (cur == INT32_MIN) return (int)lroundf(v);
+    float dv = v - (float)cur;
+    if (dv < 0) dv = -dv;
+    return dv >= 1.5f ? (int)lroundf(v) : cur;      // deadband: hold the step the user is looking at
+}
+
+bool app_ui_frame_due(int64_t *next_us, int fps)
+{
+    int64_t now = esp_timer_get_time();
+    if (*next_us && now < *next_us) return false;
+    *next_us = now + 1000000 / (fps > 0 ? fps : 20);
+    return true;
+}
 
 // Always false: no animations exist, so no app ever needs to keep ticking for redraws.
 bool app_ui_list_animating(void) { return false; }

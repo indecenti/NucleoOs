@@ -9,6 +9,8 @@
 #include "launcher_theme.h"
 #include "nucleo_i18n.h"        // TR(it,en): hint follows the system language
 #include "nucleo_imu.h"
+#include "nucleo_exclusive.h"
+#include "esp_timer.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -65,16 +67,24 @@ static float deg_now(void);
 // the buffered frame ~50x/s and the bubble/number shimmer on the panel. Read the sensor every loop but
 // request a blit ONLY when a pixel/digit the user can actually see would move — quantize the in-plane
 // gravity to ~1 px of bubble travel and the tilt to the 0.1 deg readout. A still device → static frame.
-static int s_qx = INT32_MIN, s_qy, s_qd;
+static int s_qx = INT32_MIN, s_qy = INT32_MIN, s_qd = INT32_MIN;
+static int64_t s_frame_us;                                // repaint cadence cap (app_ui_frame_due)
 static bool poll(void)
 {
     if (s_hold || s_view == V_SETTINGS) return false;     // frozen / settings list: nothing live to animate
     nucleo_imu_level(&s_lx, &s_ly, &s_deg);
     float ax, ay; axes(&ax, &ay);
-    int qx = (int)lroundf(ax * 120.0f);                   // ~1 px of bubble travel across the vial
-    int qy = (int)lroundf(ay * 120.0f);
-    int qd = (int)lroundf(deg_now() * 10.0f);             // 0.1 deg — the readout's resolution
+    // app_ui_step = Schmitt-triggered quantizer. Plain rounding chattered between two steps on the hand
+    // tremor a level is always held in, so "nothing visibly moved" still reported a change and the frame
+    // recomposited at the 50 Hz loop rate — that is the bubble/number shimmer.
+    int qx = app_ui_step(s_qx, ax * 120.0f);              // ~1 px of bubble travel across the vial
+    int qy = app_ui_step(s_qy, ay * 120.0f);
+    int qd = app_ui_step(s_qd, deg_now() * 10.0f);        // 0.1 deg — the readout's resolution
     if (qx == s_qx && qy == s_qy && qd == s_qd) return false;
+    // Real motion — but cap the blit cadence at 20 fps (no vsync: a loop-rate full-frame push shimmers
+    // and drains the battery). Values are committed only on a frame we actually draw, so the next due
+    // frame still renders the newest reading.
+    if (!app_ui_frame_due(&s_frame_us, 20)) return false;
     s_qx = qx; s_qy = qy; s_qd = qd;
     return true;
 }
@@ -316,7 +326,7 @@ static void tab(void) { s_view = (s_view + 1) % V_COUNT; nucleo_app_request_draw
 static void enter(void)
 {
     s_hold = false;
-    s_qx = INT32_MIN;                       // force the first live frame after a (re)open
+    s_qx = s_qy = s_qd = INT32_MIN; s_frame_us = 0;   // force the first live frame after a (re)open
     nucleo_imu_level(&s_lx, &s_ly, &s_deg);
     nucleo_app_set_hint(TR("tab vista   g azzera   f blocca   </> sfoglia   esc esci",
                            "tab view   g zero   f hold   </> browse   esc back"));
@@ -330,7 +340,9 @@ extern "C" void nucleo_register_level(void)
 {
     static const nucleo_app_def_t app = {
         "level", "Livella", "Measure", "Livella pro multi-vista (BMI270)",
-        'L', C_GREEN, enter, on_key, nullptr, draw, nullptr
+        'L', C_GREEN, enter, on_key, nullptr, draw, nullptr,
+        NX_NET_APP     // exclusive for the whole foreground life: httpd/mDNS/voice/L1 down -> no
+                       // high-priority network task preempting the frame blit, and RAM headroom
     };
     nucleo_app_register(&app);
 }

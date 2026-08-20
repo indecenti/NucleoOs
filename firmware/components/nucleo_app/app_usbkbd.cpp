@@ -15,6 +15,7 @@
 #include "nucleo_i18n.h"      // TR(it,en): hint follows the system language
 #include "app_gfx.h"
 #include "app_ui.h"           // shared focused-list widget (macro list) + quick-select nav
+#include "nucleo_exclusive.h" // declarative exclusive mode (NX_NET_APP)
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -45,6 +46,9 @@ static inline uint8_t HID_F(int n) { return (uint8_t)(0x3A + (n - 1)); }   // F1
 
 enum Tab { T_TYPE, T_MACRO, T_INFO, T_SET };
 static Tab s_tab = T_TYPE;
+// Last host state painted (see on_tick): repaint only when the link or the PC lock LEDs change.
+static unsigned char s_last_leds = 0xFF;
+static int  s_last_conn = -1;
 static nucleo_ducky_layout_t s_layout = DUCKY_LAYOUT_US;
 static int s_macro = 0;
 static bool s_usb_ok = false;
@@ -186,6 +190,7 @@ static bool on_back(int key)
 static void on_enter(void)
 {
     s_tab = T_TYPE; s_macro = 0;
+    s_last_conn = -1; s_last_leds = 0xFF;             // stale -> the first tick paints the real host state
     s_usb_ok = (nucleo_usbhid_start() == ESP_OK);     // resident for the session (takes USB PHY)
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_hint(TR("1-4 tab   </> cambia   invio   esc esci", "1-4 tab   </> switch   enter   esc back"));
@@ -210,7 +215,18 @@ static void on_key(int key, char ch)
     }
 }
 
-static void on_tick(void) { if (s_tab == T_INFO || s_tab == T_TYPE) nucleo_app_request_draw(); }   // live host state
+// Live host state (link up + the PC's real lock LEDs). Repaint ONLY when one of those actually
+// changed: the old unconditional request_draw recomposited + blitted the whole frame 5x/s forever,
+// which is the cadence repaint ANTI-FLICKER.md forbids (and it burned battery while idle).
+static void on_tick(void)
+{
+    if (s_tab != T_INFO && s_tab != T_TYPE) return;
+    int conn = nucleo_usbhid_ready() ? 1 : 0;
+    unsigned char leds = nucleo_usbhid_leds();
+    if (conn == s_last_conn && leds == s_last_leds) return;
+    s_last_conn = conn; s_last_leds = leds;
+    nucleo_app_request_draw();
+}
 
 // ---- drawing ---------------------------------------------------------------------------------------
 static void tabbar(int top)
@@ -278,7 +294,9 @@ extern "C" void nucleo_register_usbkbd(void)
 {
     static const nucleo_app_def_t app = {
         "usbkbd", "USB Keyboard", "Connect", "Tastiera USB pro: layout IT/US, Fn, macro, LED del PC",
-        'K', 0x4DDF, on_enter, on_key, on_tick, draw, nullptr, 0
+        'K', 0x4DDF, on_enter, on_key, on_tick, draw, nullptr,
+        NX_NET_APP     // exclusive while foreground: httpd/mDNS/voice/L1 down, so no high-priority
+                       // network task preempts the frame blit (and the USB stack gets the headroom)
     };
     nucleo_app_register(&app);
 }
