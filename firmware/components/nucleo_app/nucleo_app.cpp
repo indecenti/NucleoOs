@@ -863,6 +863,13 @@ void nucleo_app_set_fullscreen(bool on)
     s_app_fullscreen = on;
     s_dirty = true;                  // recomposite at the new height
     if (!on) s_hint_dirty = true;    // leaving fullscreen -> repaint the footer over the reclaimed rows
+    // A fitted (shorter-than-panel) canvas cannot reach the last few rows a fullscreen app claims
+    // (see nucleo_screen_acquire): blank them once here so they never show stale pixels. No-op with
+    // a full-height canvas.
+    if (on && !s_app_direct) {
+        M5Canvas *cv = nucleo_screen();
+        if (cv && cv->height() < H) d.fillRect(0, cv->height(), W, H - cv->height(), 0x0000);
+    }
 }
 void nucleo_app_request_draw(void)   { s_dirty = true; }
 // Invalidate the idle-reblit cache so the next composite pushes EVERY band, not just the changed
