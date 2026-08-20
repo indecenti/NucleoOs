@@ -375,8 +375,7 @@ extern "C" void nucleo_register_level(void)
     static const nucleo_app_def_t app = {
         "level", "Livella", "Measure", "Livella pro multi-vista (BMI270)",
         'L', C_GREEN, enter, on_key, nullptr, draw, nullptr,
-        NX_NET_APP     // exclusive for the whole foreground life: httpd/mDNS/voice/L1 down -> no
-                       // high-priority network task preempting the frame blit, and RAM headroom
+        NX_NET_APP | NX_SOLO | NX_WIFI   // Solo boot: guaranteed buffered path — see app_goniometer.cpp
     };
     nucleo_app_register(&app);
 }
