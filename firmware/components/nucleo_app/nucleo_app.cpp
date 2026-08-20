@@ -508,7 +508,12 @@ static bool blit_dirty_bands(M5Canvas *cv, int clip_bottom, bool force)
     if (!base) return false;
     const int wpx = cv->width(), hpx = cv->height();
     const int band = (hpx + BLIT_BANDS - 1) / BLIT_BANDS;
-    bool pushed = false;
+
+    // Pass 1: hash every band, mark the dirty ones. Detection is separated from pushing so the
+    // pushes can be MERGED — see below.
+    bool dirty[BLIT_BANDS] = {};
+    int  ytop[BLIT_BANDS], ybot[BLIT_BANDS];
+    int  nb = 0;
     for (int bi = 0; bi < BLIT_BANDS; bi++) {
         int y0 = bi * band, y1 = y0 + band;
         if (y1 > hpx) y1 = hpx;
@@ -518,14 +523,31 @@ static bool blit_dirty_bands(M5Canvas *cv, int clip_bottom, bool force)
         const uint32_t *w = (const uint32_t *)(base + (size_t)y0 * wpx);
         for (size_t i = 0; i < (size_t)wpx * (yb - y0) / 4; i++) { h ^= w[i]; h *= 16777619u; }
         if (!h) h = 1;
-        if (force || h != s_band_hash[bi]) {
-            s_band_hash[bi] = h;
-            d.setClipRect(0, y0, wpx, yb - y0);                  // clip restricts the push to THIS band's rows
-            cv->pushSprite(0, 0);
-            pushed = true;
-        }
+        dirty[bi] = force || h != s_band_hash[bi];
+        s_band_hash[bi] = h;
+        ytop[bi] = y0; ybot[bi] = yb; nb = bi + 1;
+    }
+
+    // Pass 2: push CONTIGUOUS dirty runs, all inside ONE SPI transaction. The old loop issued each
+    // band as its own separately-arbitrated transaction (CS toggle + address-window setup + gap),
+    // so a frame's update reached the panel as up to nine bursts spread over many milliseconds. The
+    // ST7789 has no vsync: its own refresh repeatedly scanned a HALF-updated frame in those gaps,
+    // which the eye reads as shimmer/flicker on anything that repaints continuously (the IMU
+    // instruments, the mic analyzer) — games mask it because the whole scene moves. One transaction
+    // + merged runs makes the panel-visible update window as short as this bus can make it.
+    bool pushed = false;
+    d.startWrite();
+    for (int bi = 0; bi < nb; ) {
+        if (!dirty[bi]) { bi++; continue; }
+        int be = bi;
+        while (be + 1 < nb && dirty[be + 1]) be++;               // extend the run over adjacent dirty bands
+        d.setClipRect(0, ytop[bi], wpx, ybot[be] - ytop[bi]);    // clip restricts the push to the run's rows
+        cv->pushSprite(0, 0);
+        pushed = true;
+        bi = be + 1;
     }
     d.clearClipRect();
+    d.endWrite();
     return pushed;
 }
 
