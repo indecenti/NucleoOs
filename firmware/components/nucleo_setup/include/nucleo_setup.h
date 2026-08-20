@@ -16,6 +16,9 @@ void nucleo_setup_run(void);
 
 // Bring up networking from the saved config: STA if configured, else an AP.
 esp_err_t nucleo_setup_apply_network(void);
+// STA-only variant for a streaming Solo boot (e.g. Radio): same background join, but the SoftAP
+// netif never exists and AP fallback is inert — the ~15-20 KB APSTA costs stay with the decoder.
+esp_err_t nucleo_setup_apply_network_sta_only(void);
 
 // Fast boot variant: returns in < 200 ms (no blocking connect). Starts the AP immediately
 // and lets the background supervisor handle the STA join. Use on the main boot path so

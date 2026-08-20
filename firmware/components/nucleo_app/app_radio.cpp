@@ -9,6 +9,13 @@
 // (BUILTIN[] below — the same stations the web app seeds), so the dial is rich out of the box and
 // never collapses to a single entry.
 //
+// RAM / SOLO: Radio opens via a Solo warm-reboot (NX_NET_APP | NX_SOLO — see the note at the
+// registration for the measured numbers). Inline on the full OS the Helix decoder cannot come up at
+// all (largest block ~13 KB vs ~20+ needed — the reported "no RAM" bug); the Solo boot provides
+// ~60 KB free / ~23 KB largest and the full chain was measured alive there. The session is lean
+// either way: station list freed during listen (~5.5 KB), I2S pre-opened BEFORE the jitter ring,
+// ring sized to the real heap, decoder retried after a reclaim, EAGAIN treated as a wait.
+//
 // Audio: http://<host>/stream  (MP3, decoded by the Helix task via nucleo_audio_play_url ->
 //        nucleo_audio_http.c). PLAIN HTTP, no TLS (this chip has no PSRAM; TLS would not fit beside
 //        the real-time decoder). Keep stream URLs http:// and direct-200 (no redirects) or it stalls.
@@ -35,6 +42,8 @@
 #include <ctype.h>
 #include "esp_timer.h"
 #include "esp_task_wdt.h"
+#include "esp_log.h"            // WARN-level breadcrumbs (INFO is compiled out in release builds)
+#include "esp_heap_caps.h"      // heap stats in the listen breadcrumb
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 extern "C" {
@@ -48,6 +57,13 @@ extern "C" {
 #include "app_gfx.h"
 #include "nucleo_theme.h"       // themed chrome; was hardcoded classic literals -> ignored theme switches
 #include "nucleo_i18n.h"        // TR(it,en): hint follows the system language
+
+// Live STA link state (extern like app_wifi.cpp — a header include would cycle nucleo_setup->nucleo_app).
+// The radio is the one app whose whole existence depends on the uplink, so it treats the link as a
+// first-class state instead of "assume connected and time out into a generic OFFLINE".
+extern "C" const char *nucleo_setup_ip(void);     // "" until the STA join lands
+extern "C" const char *nucleo_setup_ssid(void);
+extern "C" int         nucleo_setup_rssi(void);   // dBm, 0 = not associated
 // Chrome follows the active theme; ACC is the app identity accent, ONAIR/GRN/WARM are content colors.
 #define BG    THEME_BG
 #define FG    THEME_FG
@@ -200,15 +216,38 @@ static void radio_static(const station_t *st)
     d.setTextColor(DIM, BG); d.setCursor(10, 125); d.print(";  vol +     .  vol -     ESC  stop");
 }
 
-// status: 0 = connecting, 1 = live (audio flowing), 2 = offline (gave up).
+// status: 0 = tuning (WiFi up, stream connecting), 1 = live (audio flowing),
+//         2 = offline (gave up), 3 = waiting for the WiFi join itself.
 static void draw_status(int status)
 {
-    const char *lbl = (status == 1) ? "ON AIR" : (status == 2) ? "OFFLINE" : "TUNING";
+    const char *lbl = (status == 1) ? "ON AIR" : (status == 2) ? "OFFLINE"
+                    : (status == 3) ? "WIFI..." : "TUNING";
     unsigned short col = (status == 1) ? ONAIR : (status == 2) ? MUTED : WARM;
     d.fillCircle(18, ST_Y + 12, 6, col);
     d.fillRect(ST_X, ST_Y, EQ_X - ST_X - 4, 24, BG);
     d.setTextSize(3); d.setTextColor(col, BG);
     d.setCursor(ST_X, ST_Y); d.print(lbl);
+}
+
+// Link line under the status: SSID + signal while joined, an honest explanation while not. Its own
+// small band (y=72..80, where the genre used to sit alone) — repaints only when the text changes.
+static char s_netline_last[48];                             // reset on every listen() entry
+static void draw_netline(const station_t *st)
+{
+    char line[48];
+    const char *ip = nucleo_setup_ip();
+    if (ip[0]) {
+        int r = nucleo_setup_rssi();
+        snprintf(line, sizeof line, "%.20s  %d dBm", nucleo_setup_ssid(), r);
+    } else {
+        snprintf(line, sizeof line, "%s", TR("attendo rete WiFi...", "waiting for WiFi..."));
+    }
+    if (!strcmp(line, s_netline_last)) return;
+    snprintf(s_netline_last, sizeof s_netline_last, "%s", line);
+    d.fillRect(120, 72, 120, 10, BG);                       // right half; genre keeps the left
+    int w = (int)strlen(line) * 6;
+    d.setTextSize(1); d.setTextColor(ip[0] ? MUTED : WARM, BG);
+    d.setCursor(238 - w, 72); d.print(line);
 }
 
 // Time-driven bars (no RNG): each bar is a triangle wave at its own period. Bounded 60x24 box; this
@@ -244,18 +283,45 @@ static void draw_volume(void)
     d.setCursor(lx, ty); d.print(vb);
 }
 
-static void listen(const station_t *st)
+static void clamp_scroll(void);                   // defined with the list UI below
+static void ensure_stations(void);                // defined with enter() below
+
+static void listen(const station_t *stp)
 {
+    // Local copy of THIS station (228 B on the UI task's stack), then free the whole list for the
+    // duration of the listen: its ~5.5 KB goes exactly where the session is tightest — the Helix
+    // decoder, the jitter ring and the Wi-Fi RX pool all carve the same small arena (measured:
+    // free was ~13.5 KB at stream start). ensure_stations() rebuilds it on the way back.
+    station_t stv = *stp; const station_t *st = &stv;
+    if (s_st && s_st != &s_fallback) free(s_st);
+    s_st = nullptr; s_cap = 0; s_count = 0;
+    ESP_LOGW("radio", "listen '%s' free=%u largest=%u", st->name,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+
     nucleo_app_release_buffers();                 // reclaim RAM for the decoder + HTTP client
     // Dedicated mode while streaming: NX_NET_APP frees ~70KB (Wi-Fi STA stays for the stream) so the Helix
     // MP3 decoder never OOMs, and NX_VOICE drops the mic so it can't collide with the speaker on GPIO43.
-    nucleo_exclusive_enter(NX_NET_APP, nullptr);
-    nucleo_audio_play_url(st->stream);
+    // Skipped in Solo boot: httpd/mDNS/L1/voice never started, and the in-place enter/exit is the fragile
+    // ADV path — the clean heap already has the contiguous block the decoder needs.
+    if (!nucleo_anima_solo_active()) nucleo_exclusive_enter(NX_NET_APP, nullptr);
     radio_static(st);
+    s_netline_last[0] = 0;                        // fresh netline for this session
+    draw_netline(st);                             // show the link state from the very first frame
 
-    int64_t start = esp_timer_get_time() / 1000;
-    bool back = false;
+    // LINK-AWARE start. In the Radio Solo boot the STA join runs in the BACKGROUND (the wifi
+    // supervisor fires ~2 s after boot and may take several more to land), so the app's old
+    // "play immediately, call it OFFLINE after a blind 14 s" raced the join it depended on — the
+    // user saw OFFLINE while the WiFi was still coming up. Now the link is an explicit state:
+    // wait for the IP first (WIFI... on screen, keys live), start the stream only once the
+    // network exists, and only THEN arm the no-audio timeout.
+    const int64_t WIFI_WAIT_MS = 30000;           // supervisor scan+join worst case, with margin
+    const int64_t TUNE_WAIT_MS = 14000;           // stream connect+prebuffer once the link is up
+    int64_t t0 = esp_timer_get_time() / 1000;
+    int64_t start = -1;                           // stream start (armed when the join lands)
+    bool back = false, playing = false;
     int last_status = -1, last_vol = -1, last_eq = -1;
+    uint32_t last_elapsed = 0; int64_t last_flow_ms = 0;    // stall detector (reconnect feedback)
     while (!back) {
         esp_task_wdt_reset();
         nucleo_key_t k = nucleo_kbd_read();
@@ -266,18 +332,52 @@ static void listen(const station_t *st)
             else if (k.key == NK_DOWN) nucleo_audio_set_volume(nucleo_audio_volume() - 10);
         }
         int64_t now = esp_timer_get_time() / 1000;
-        bool flowing = nucleo_audio_is_playing() && nucleo_audio_elapsed_ms() > 0;
-        int status = flowing ? 1 : ((now - start > 14000) ? 2 : 0);    // 14 s with no audio -> offline
+        bool link = nucleo_setup_ip()[0] != 0;
+
+        if (!playing && link) {                   // join landed -> start the stream, arm the tuner
+            esp_err_t pe = nucleo_audio_play_url(st->stream);
+            playing = true;
+            start = now;
+            if (pe != ESP_OK) {                   // task/mic refusal: honest OFFLINE now, not in 14 s
+                ESP_LOGW("radio", "play_url failed: %s", esp_err_to_name(pe));
+                start = now - TUNE_WAIT_MS - 1;
+            }
+        }
+
+        int status;
+        if (!playing) {                           // still waiting for the WiFi join
+            status = (now - t0 > WIFI_WAIT_MS) ? 2 : 3;
+        } else {
+            uint32_t el = nucleo_audio_elapsed_ms();
+            bool flowing = nucleo_audio_is_playing() && el > 0;
+            if (flowing && el != last_elapsed) { last_elapsed = el; last_flow_ms = now; }
+            // elapsed frozen = decoder starved (stream stall / reconnect in progress): show TUNING
+            // again instead of a false ON AIR, and flip back the moment samples move.
+            bool stalled = flowing && (now - last_flow_ms > 3000);
+            // While the link is up and the player task is alive the producer NEVER stops retrying,
+            // so a hard OFFLINE before it succeeds is a lie — the old blind "14 s -> OFFLINE" fired
+            // exactly while a slow first connect was still in progress. OFFLINE now means something
+            // real: the player task itself gave up (play refused / decoder OOM), or a very long
+            // barren wait (60 s) with nothing ever decoded.
+            bool player_dead = !nucleo_audio_is_playing();
+            status = (flowing && !stalled) ? 1
+                   : ((player_dead || (now - start > 60000 && el == 0)) ? 2 : 0);
+            (void)TUNE_WAIT_MS;
+        }
         int vol    = nucleo_audio_volume();
         int eq_slot = (int)(now / 120);                                // ~8 fps equalizer
 
         if (status != last_status) { last_status = status; draw_status(status); draw_eq(status == 1); last_eq = eq_slot; }
         else if (status == 1 && eq_slot != last_eq) { last_eq = eq_slot; draw_eq(true); }
         if (vol != last_vol) { last_vol = vol; draw_volume(); }
+        static int nl_div = 0;
+        if (++nl_div >= 16) { nl_div = 0; draw_netline(st); }          // SSID/RSSI ~every second
         vTaskDelay(pdMS_TO_TICKS(60));
     }
     nucleo_audio_stop();                          // terminate the stream task before leaving the modal
-    nucleo_exclusive_exit();                       // restore httpd/mDNS/voice/L1 (Wi-Fi never went down)
+    if (!nucleo_anima_solo_active()) nucleo_exclusive_exit();   // restore httpd/mDNS/voice/L1 (Solo: never suspended; Esc reboots out)
+    ensure_stations();                            // rebuild the list we freed for the stream
+    clamp_scroll();
     d.fillScreen(BG);
     nucleo_app_request_draw();                    // full list redraw on the way back
 }
@@ -344,6 +444,19 @@ static void draw_list_band(void)
     }
 }
 
+// Allocate + fill the station list. Shared by enter() and the return-from-listen reload (the list is
+// FREED for the whole listen so its ~5.5 KB serves the decoder + Wi-Fi RX instead — see listen()).
+static void ensure_stations(void)
+{
+    if (!s_st) {
+        s_st = (station_t *)malloc(sizeof(station_t) * RADIO_MAX); s_cap = s_st ? RADIO_MAX : 0;
+        if (!s_st) { s_st = (station_t *)malloc(sizeof(station_t) * 12); s_cap = s_st ? 12 : 0; }  // degrade to a dozen, don't collapse to 1
+    }
+    if (!s_st) { s_st = &s_fallback; s_cap = 1; }                   // last resort: single static slot
+    load_config();
+    if (s_sel >= s_count) s_sel = 0;                                // keep the cursor valid after a reload
+}
+
 static void enter(void)
 {
     // Free the 32 KB shared canvas FIRST so the station list (228 B * 24 = ~5.5 KB CONTIGUOUS) has room.
@@ -351,12 +464,7 @@ static void enter(void)
     // to the 1-slot static net -> "only Radio Index" in the dial. Release, then allocate.
     nucleo_app_set_direct_draw(true);              // run DIRECT: no 32 KB canvas, no reacquire flicker
     nucleo_app_release_buffers();                  // hand that RAM back before we ask for the contiguous block
-    if (!s_st) {
-        s_st = (station_t *)malloc(sizeof(station_t) * RADIO_MAX); s_cap = s_st ? RADIO_MAX : 0;
-        if (!s_st) { s_st = (station_t *)malloc(sizeof(station_t) * 12); s_cap = s_st ? 12 : 0; }  // degrade to a dozen, don't collapse to 1
-    }
-    if (!s_st) { s_st = &s_fallback; s_cap = 1; }                   // last resort: single static slot
-    load_config();
+    ensure_stations();
     s_sel = (s_default < s_count) ? s_default : 0;
     s_top = 0; clamp_scroll();
     nucleo_app_set_hint(TR("su/giu scegli   invio ascolta", "up/dn pick   enter listen"));
@@ -415,7 +523,16 @@ extern "C" void nucleo_register_radio(void)
 {
     static const nucleo_app_def_t app = {
         "radio", "Radio Index", "Media", "Tune into free live radio (list shared with the web app)",
-        'R', 0x4DDF, enter, on_key, tick, draw, leave
+        'R', 0x4DDF, enter, on_key, tick, draw, leave,
+        NX_NET_APP | NX_SOLO
+            // SOLO, and this time MEASURED on both sides. Inline (full OS + declarative reclaim) the
+            // decoder is dead on arrival: free 24 KB, largest 13 KB — Helix never comes up (the very
+            // "no RAM" this app was reported for). The Solo boot gives free ~60 KB / largest ~23 KB and
+            // the serial log shows the whole chain alive there: join ~9 s, HTTP 200, bytes flowing,
+            // frames decoded. What USED to fail in Solo were two session bugs, both fixed since:
+            // EAGAIN-as-fatal tore down live connections, and the I2S sink opened last and found no
+            // DMA block (now it pre-opens before the ring). STA-only + PS_NONE keep the fresh join
+            // usable. NO NX_WIFI: the stream needs the radio up. Esc reboots back to the full OS.
     };
     nucleo_app_register(&app);
 }

@@ -1,13 +1,28 @@
-// Live MP3 radio over plain HTTP. Pulls an endless Icecast-style MP3 stream with
-// esp_http_client, decodes it frame-by-frame with Helix (fixed-point, ~30 KB, no PSRAM)
-// and pushes PCM to the shared I2S sink. A radio is meant to play forever, so a dropped
-// connection just reconnects rather than ending playback. No TLS on purpose — the device
-// reaches the station over HTTP (see the Radio app); TLS would not fit beside the decoder
-// on this PSRAM-less chip.
+// Live MP3 radio over plain HTTP: ONE task (the audio player task) pulls the endless Icecast-style
+// stream with esp_http_client, decodes it frame-by-frame with Helix (fixed-point, no PSRAM) and
+// pushes PCM to the shared I2S sink.
+//
+// SINGLE-TASK BY MEASUREMENT, not by accident. A producer/consumer split (dedicated "radio-rx" task
+// + a FreeRTOS stream-buffer jitter ring) was built, flashed and measured on the ADV: the extra
+// task stack (6 KB) + second HTTP context + the ring itself pushed the streaming session past what
+// this PSRAM-less heap can carry next to the ~20 KB Helix decoder — esp_http_client_init died with
+// "Allocation failed", then socket creation with "Connection failed, sock < 0", in an endless loop,
+// and the radio never made a sound. The proven shape is this one: the read blocks at most
+// timeout_ms, the I2S DMA paces the loop, and the freed RAM is worth more to the Wi-Fi RX pool
+// than any jitter ring we can afford.
+//
+// The session order matters: the I2S sink is pre-opened BEFORE the decoder grabs the big blocks
+// (its DMA descriptors are the first thing to die on a carved-up heap, and a failed open used to be
+// discovered only at the first frame — total silence with every other subsystem green).
+//
+// A radio is meant to play forever: a dropped connection reconnects, an EAGAIN read timeout is a
+// WAIT (three in a row = a dead stream worth rebuilding), and the decoder resyncs on the next MP3
+// sync word. No TLS on purpose — the device reaches stations over plain HTTP (see the Radio app).
 #include "nucleo_audio_priv.h"
 #include <string.h>
 #include "esp_log.h"
 #include "esp_http_client.h"
+#include "esp_heap_caps.h"
 #include "nucleo_eventbus.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -20,19 +35,38 @@ static const char *TAG = "audio.http";
 
 void nucleo_audio_stream_url(const char *url)
 {
-    // Fail-closed on https://. The CA bundle used to be attached here "just in case", which made
-    // TLS reachable de-facto: one https station in radio.json (user-editable) put a ~40-50 KB
-    // mbedTLS handshake — outside the arbiter, with no heap bar, on this task's 8 KB stack —
-    // INSIDE an endless ~1.5 s reconnect loop, right beside the Helix decoder. Product rule is
-    // "radio = plain HTTP" (header note above); now the code enforces it instead of gambling.
+    // Fail-closed on https://: one https station in user-editable radio.json would drop a ~40-50 KB
+    // mbedTLS handshake next to the decoder on this task's stack, inside an endless reconnect loop.
     if (!strncmp(url, "https://", 8)) {
         ESP_LOGW(TAG, "https station refused (radio is HTTP-only): %s", url);
         nucleo_event_publish("radio.error", "{\"reason\":\"https_unsupported\"}");
         return;
     }
 
+    // I2S FIRST (see header). Every station in the catalog streams 44.1 kHz stereo; a different
+    // first frame just re-tunes the already-open channel (cheap).
+    esp_err_t ie0 = nucleo_audio_i2s_rate(44100, 2);
+    ESP_LOGW(TAG, "i2s preopen: %s(0x%x)", esp_err_to_name(ie0), (unsigned)ie0);
+    if (ie0 != ESP_OK)
+        ESP_LOGW(TAG, "i2s preopen failed: %s (free=%u largest=%u)", esp_err_to_name(ie0),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+
     HMP3Decoder dec = MP3InitDecoder();
-    if (!dec) { ESP_LOGE(TAG, "MP3InitDecoder failed (out of RAM?)"); return; }
+    if (!dec) {
+        nucleo_audio_do_reclaim();                 // free what the app layer can, then one more try
+        dec = MP3InitDecoder();
+    }
+    if (!dec) {
+        ESP_LOGE(TAG, "MP3InitDecoder failed (out of RAM?) free=%u largest=%u",
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        nucleo_event_publish("radio.error", "{\"reason\":\"no_ram_decoder\"}");
+        return;
+    }
+    ESP_LOGW(TAG, "stream start: free=%u largest=%u",
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 
     uint8_t *in = nucleo_audio_in;        // shared scratch — file & radio decoders never run at once
     int16_t *out = nucleo_audio_out;
@@ -42,10 +76,8 @@ void nucleo_audio_stream_url(const char *url)
     while (nucleo_audio_keep_running()) {
         esp_http_client_config_t cfg = {
             .url = url,
-            .timeout_ms = 3000,    // bounds how long a blocked read can ignore a stop request: a
-                                   // longer timeout left this task stuck in read() after stop, so it
-                                   // closed the shared I2S LATE — after the next app had reopened it
-                                   // → device audio dead until reboot. 3 s = quick, clean handoff.
+            .timeout_ms = 4000,    // headers/read leash — measured: 3 s missed slow first responses;
+                                   // still under the engine's 4.5 s stop wait
             .buffer_size = 1024,
             .user_agent = "NucleoOS-Radio/1.0",
         };
@@ -61,20 +93,28 @@ void nucleo_audio_stream_url(const char *url)
         }
         esp_http_client_fetch_headers(cli);                    // ignore length: the stream is live
         int status = esp_http_client_get_status_code(cli);
-        ESP_LOGI(TAG, "connected: %s (status %d)", url, status);
-        if (status < 200 || status >= 400) {                   // bad endpoint -> back off, retry
+        ESP_LOGW(TAG, "connected: %s (status %d)", url, status);
+        if (status < 200 || status >= 400) {                   // bad/timed-out response -> back off, retry
             esp_http_client_close(cli); esp_http_client_cleanup(cli);
-            for (int i = 0; i < 20 && nucleo_audio_keep_running(); i++) vTaskDelay(pdMS_TO_TICKS(100));
-            continue;
+            for (int i = 0; i < 40 && nucleo_audio_keep_running(); i++) vTaskDelay(pdMS_TO_TICKS(100));
+            continue;                                          // ~4 s: don't hammer the DNS/server
         }
 
         uint8_t *rp = in; int left = 0; bool dropped = false;
+        uint32_t rx_total = 0; int zero_reads = 0;
         while (nucleo_audio_keep_running() && !dropped) {
-            if (left < 1441) {                                 // refill: keep at least one frame
+            if (left < 1441) {                                 // refill: keep at least one whole frame
                 memmove(in, rp, left); rp = in;
                 int n = esp_http_client_read(cli, (char *)(in + left), IN_SZ - left);
-                if (n > 0) { left += n; nucleo_audio_add_file_bytes((uint32_t)n); }
-                else { dropped = true; break; }                // 0/<0 -> server closed -> reconnect
+                if (n == -ESP_ERR_HTTP_EAGAIN) n = 0;          // benign timeout — NOT a dead stream
+                if (n > 0) { left += n; rx_total += (uint32_t)n; zero_reads = 0; nucleo_audio_add_file_bytes((uint32_t)n); }
+                else if (n < 0) { ESP_LOGW(TAG, "read error %d after %u B", n, (unsigned)rx_total); dropped = true; }
+                else if (++zero_reads >= 3) {                  // ~12 s of true silence -> rebuild
+                    ESP_LOGW(TAG, "silent stream after %u B — reconnecting", (unsigned)rx_total);
+                    dropped = true;
+                }
+                if (dropped) break;
+                if (left == 0) continue;                       // nothing yet: wait again (stop stays live)
             }
             int off = MP3FindSyncWord(rp, left);
             if (off < 0) { left = 0; continue; }
@@ -85,10 +125,16 @@ void nucleo_audio_stream_url(const char *url)
                 MP3FrameInfo fi; MP3GetLastFrameInfo(dec, &fi);
                 if (fi.outputSamps > 0) {
                     esp_err_t ie = nucleo_audio_i2s_rate(fi.samprate, fi.nChans);
+                    if (ie != ESP_OK) {                        // dead sink = total silence: heal, don't shrug
+                        nucleo_audio_do_reclaim();
+                        ie = nucleo_audio_i2s_rate(fi.samprate, fi.nChans);
+                    }
                     if (!logged) {
                         logged = true;
-                        ESP_LOGI(TAG, "first frame: %d Hz, %d ch, %d kbps, i2s=%s",
-                                 fi.samprate, fi.nChans, fi.bitrate / 1000, esp_err_to_name(ie));
+                        ESP_LOGW(TAG, "first frame: %d Hz, %d ch, %d kbps, i2s=%s(0x%x) free=%u largest=%u",
+                                 fi.samprate, fi.nChans, fi.bitrate / 1000, esp_err_to_name(ie), (unsigned)ie,
+                                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
                     }
                     nucleo_audio_i2s_write(out, (size_t)fi.outputSamps * sizeof(int16_t));
                     nucleo_audio_add_samples((uint32_t)(fi.outputSamps / (fi.nChans < 1 ? 1 : fi.nChans)), fi.samprate);

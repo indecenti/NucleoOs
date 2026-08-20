@@ -326,6 +326,12 @@ void app_main(void)
         if (ne != ESP_OK) ESP_LOGE(TAG, "esp_netif_init failed: %s (httpd will degrade, not crash)", esp_err_to_name(ne));
         if (esp_event_loop_create_default() == ESP_ERR_INVALID_STATE) { /* already created — harmless */ }
         bootmark("network-usb");
+    } else if (solo && nucleo_app_solo_is_generic()) {
+        // Generic app Solo that KEEPS Wi-Fi (e.g. Radio streaming): STA-only. The APSTA bring-up
+        // measured on this exact boot left largest-block 13.8 KB — under the ~24 KB the Helix
+        // stream decoder needs — so the station played silent. Nobody can use a setup hotspot
+        // inside a dedicated one-app boot; the AP's RAM goes to the stream instead.
+        nucleo_setup_apply_network_sta_only();  bootmark("network-sta");
     } else {
         nucleo_setup_apply_network();       bootmark("network");   // AP on first boot; Wi-Fi stays up otherwise (incl. cloud Solo)
     }
