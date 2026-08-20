@@ -71,6 +71,11 @@ bool nucleo_screen_acquire(void)
     s_screen.setColorDepth(8);
     if (s_screen.createSprite(SCREEN_W, SCREEN_H)) { s_screen_alive = true; s_screen_failed = false; return true; }
     s_screen_failed = true;                               // remember: the heap can't fit it right now
+    // Say WHY on the console: "the UI flickers" is undiagnosable, "the 32 KB canvas can't fit in a
+    // 21 KB largest block" is a fact. Fires at most every ~400 ms (the lazy getter's retry spacing).
+    ESP_LOGW("ui", "canvas %dx%d (%d B) alloc FAILED - largest free block %u B (UI falls back to DIRECT draw)",
+             SCREEN_W, SCREEN_H, SCREEN_W * SCREEN_H,
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     return false;
 }
 // Free the canvas so an audio app can give the contiguous block to the Helix MP3 decoder (~17 KB

@@ -252,8 +252,14 @@ extern "C" void nucleo_register_goniometer(void)
     static const nucleo_app_def_t app = {
         "goniometer", "Goniometro", "Measure", "Misura angoli e pendenze (BMI270)",
         'A', C_BLUE, enter, on_key, nullptr, draw, nullptr,
-        NX_NET_APP     // exclusive for the whole foreground life: httpd/mDNS/voice/L1 down -> no
-                       // high-priority network task preempting the frame blit, and RAM headroom
+        // SOLO BOOT (the gbemu-proven combo). Inline, the app depends on the 32 KB shared canvas —
+        // one contiguous block the ADV's fragmented runtime heap often CANNOT rebuild once anything
+        // (voice PTT, a web client, a decoder) has released it: the lazy re-acquire then fails
+        // forever and the instrument drops to direct draw, where a continuously-repainting app
+        // flickers no matter how well its redraws are gated. A fresh boot with the radio down is the
+        // only state on this PSRAM-less chip where the buffered path is GUARANTEED. Esc reboots back;
+        // the launcher return-cursor makes it seamless.
+        NX_NET_APP | NX_SOLO | NX_WIFI
     };
     nucleo_app_register(&app);
 }

@@ -1684,6 +1684,12 @@ void nucleo_app_run(void)
                     // delivered even if the app exits mid-hold (s_app_ptt would clear).
                     g0_app_ptt = s_app_ptt;
                     g0_app_ptt(true);
+                } else if (nucleo_exclusive_active()) {
+                    // Exclusive app foreground: NX_VOICE already disabled the engine, so a GO-hold
+                    // can do nothing useful — but the old path freed the 32 KB canvas BEFORE the
+                    // engine could refuse, and on a fragmented heap that block never came back:
+                    // one accidental side-button hold turned the rest of the session into flickering
+                    // direct draw. Ignore the hold outright; the canvas is never touched.
                 } else {
                     // Enter low-power capture for the WHOLE voice session: blank the panel (backlight 0)
                     // AND free the 32 KB shared back-buffer. Two wins: (1) the recognizer needs ~38 KB of
@@ -2012,6 +2018,19 @@ void nucleo_app_run(void)
                         blit_dirty_bands(cv, s_app_fullscreen ? H : (H - HINT), force);
                     }
                 } else if (def && def->on_draw) {
+                    // Canvas unavailable while a foreground app is LIVE. On a fragmented heap the
+                    // lazy 400 ms retry can fail forever (nothing ever frees a 32 KB run), stranding
+                    // the app on the flickering direct path for the rest of the session. Actively
+                    // help it: about every 2 s, stand the ANIMA L1 index down (~24 KB, reloads
+                    // lazily from SD on the next query — same lever enter_remote pulls) and retry.
+                    if (!s_app_direct) {
+                        static int64_t s_heal_at = 0;
+                        if (now >= s_heal_at) {
+                            s_heal_at = now + 2000;
+                            nucleo_anima_l1_unload_if_idle();
+                            if (nucleo_screen_acquire()) { s_dirty = true; continue; }   // healed: recomposite buffered
+                        }
+                    }
                     // Canvas unavailable (a background decoder holds the RAM): draw direct. App
                     // draws already clear their own region (app_ui_title/app_ui_list fillRect), so
                     // no extra clear here — that double-clear was visible flicker. Batch the whole
