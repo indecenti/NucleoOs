@@ -3,6 +3,7 @@
 // (size 2, white), and rows further away shrink + dim for depth. Mirrors the
 // simulator helper web/device/apps/_list.js so the look matches what was verified there.
 #pragma once
+#include <stdint.h>
 // C++ only (all callers are the app_*.cpp files); kept out of extern "C" so the row-
 // provider callbacks can be ordinary C++ statics without a language-linkage mismatch.
 
@@ -53,6 +54,20 @@ bool app_ui_list_animating(void);
 // state: draw the card each frame while a confirm is pending, and route keys through the _key
 // handler. `yes_focus` starts false (No) so an accidental Enter is safe.
 void app_ui_confirm(const char *title, const char *msg, bool yes_focus);
+
+// ---- live-app repaint helpers (ANTI-FLICKER.md) ---------------------------------------------------
+// For apps whose frame is driven by a NOISY analog source (the IMU level/protractor). A plain
+// lround() quantizer oscillates between two steps under hand tremor, so "nothing visibly moved"
+// still reports a change and the frame recomposites at the 50 Hz loop rate. app_ui_step() is a
+// Schmitt-triggered quantizer: it moves only once the value has travelled 1.5 steps away from the
+// one currently on screen. Seed `cur` with INT32_MIN to take the first sample as-is.
+int app_ui_step(int cur, float v);
+
+// Repaint cadence cap. A 240x135 composite + SPI blit at the loop rate is a refresh storm on a
+// panel with no vsync (visible shimmer) and burns battery for nothing; ~20 fps is plenty for a
+// bubble or a needle. Returns true when the next frame is due (and arms the following one).
+// `next_us` is the app's own state (0 = due immediately).
+bool app_ui_frame_due(int64_t *next_us, int fps);
 
 // Route a key to a pending confirm card. `;`/`.`/`,`/`/` toggle the focus; Enter picks it;
 // `y`/`n` are direct shortcuts. Returns 1 = confirmed, 0 = cancelled, -1 = still open (redraw).

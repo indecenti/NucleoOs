@@ -8,6 +8,8 @@
 #include "launcher_theme.h"
 #include "nucleo_i18n.h"       // TR(it,en): hint follows the system language
 #include "nucleo_imu.h"
+#include "nucleo_exclusive.h"
+#include "esp_timer.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -68,7 +70,8 @@ static unsigned short scl_dim(unsigned short c);   // fwd decl (defined below)
 // Update the displayed roll HERE (at the IMU rate) and gate the redraw to a visible change. Doing the
 // EMA in poll (not draw) lets the gate compare what the user will actually see; a raw-delta test repainted
 // the buffered frame ~50x/s and the needle/number shimmered (ANTI-FLICKER: only blit on a pixel/digit move).
-static int s_qa = INT32_MIN, s_qx, s_qy, s_qf;
+static int s_qa = INT32_MIN, s_qx = INT32_MIN, s_qy = INT32_MIN, s_qf = -1;
+static int64_t s_frame_us;                            // repaint cadence cap (app_ui_frame_due)
 static bool poll(void)
 {
     if (s_frozen || s_settings) return false;             // locked reading / options list: nothing live
@@ -80,16 +83,21 @@ static bool poll(void)
     s_reliable = present && (s_reliable ? s_deg > FLAT_MIN - 2.0f : s_deg > FLAT_MIN);
     float rollNow = atan2f(s_lx, s_ly) * RAD2DEG * ROLL_SIGN;
     if (!s_seeded) { s_roll = rollNow; s_seeded = true; }
-    else if (s_reliable) s_roll = wrap180(s_roll + wrap180(rollNow - s_roll) * 0.5f);
+    else if (s_reliable) s_roll = wrap180(s_roll + wrap180(rollNow - s_roll) * 0.20f);   // slower EMA: 0.5 tracked the sensor noise and the 0.1 deg digit never settled
 
     float shown = wrap180(s_roll - s_zero);
     if (s_cfg.invert) shown = -shown;
-    int qa = (int)lroundf(shown * 10.0f);                 // 0.1 deg — the readout's resolution
+    // Schmitt-triggered quantizers (app_ui_step): plain rounding chattered between two steps on hand
+    // tremor, so the frame recomposited ~50x/s and the needle + digits shimmered on the panel.
     float m = sqrtf(s_lx * s_lx + s_ly * s_ly);
-    int qx = m > 0.01f ? (int)lroundf(s_lx / m * 60.0f) : 0;   // needle tip to ~1 px on the dial rim
-    int qy = m > 0.01f ? (int)lroundf(s_ly / m * 60.0f) : 0;
+    int qa = app_ui_step(s_qa, shown * 10.0f);                        // 0.1 deg — the readout's resolution
+    int qx = app_ui_step(s_qx, m > 0.01f ? s_lx / m * 60.0f : 0.f);   // needle tip to ~1 px on the dial rim
+    int qy = app_ui_step(s_qy, m > 0.01f ? s_ly / m * 60.0f : 0.f);
     int qf = s_reliable ? 1 : 0;
     if (qa == s_qa && qx == s_qx && qy == s_qy && qf == s_qf) return false;
+    // Something visible moved — but cap the cadence. The values are NOT committed when the frame is
+    // skipped, so the next due frame still shows the newest reading.
+    if (!app_ui_frame_due(&s_frame_us, 20)) return false;
     s_qa = qa; s_qx = qx; s_qy = qy; s_qf = qf;
     return true;
 }
@@ -212,7 +220,7 @@ static void on_key(int key, char ch)
 static void enter(void)
 {
     s_zero = 0.f; s_frozen = false; s_seeded = false; s_settings = false;
-    s_qa = INT32_MIN;                       // force the first live frame after a (re)open
+    s_qa = s_qx = s_qy = INT32_MIN; s_qf = -1; s_frame_us = 0;   // force the first live frame after a (re)open
     nucleo_imu_level(&s_lx, &s_ly, &s_deg);
     s_reliable = nucleo_imu_present() && s_deg > FLAT_MIN;
     nucleo_app_set_hint(TR("spazio azzera   F blocca   R assoluto   TAB opzioni   esc esci", "space zero   F lock   R absolute   TAB options   esc back"));
@@ -226,7 +234,9 @@ extern "C" void nucleo_register_goniometer(void)
 {
     static const nucleo_app_def_t app = {
         "goniometer", "Goniometro", "Measure", "Misura angoli e pendenze (BMI270)",
-        'A', C_BLUE, enter, on_key, nullptr, draw, nullptr
+        'A', C_BLUE, enter, on_key, nullptr, draw, nullptr,
+        NX_NET_APP     // exclusive for the whole foreground life: httpd/mDNS/voice/L1 down -> no
+                       // high-priority network task preempting the frame blit, and RAM headroom
     };
     nucleo_app_register(&app);
 }
