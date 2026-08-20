@@ -79,3 +79,28 @@ this, the UI flickered. The fix is always one of the techniques below — never 
 - Does it scroll text continuously? Use a marquee sprite (technique 3).
 - Is the redraw gated to an actual content change (a `sig` that only flips when something the
   user can see changes)? It must be.
+
+## The measured constraint (2026-08: why "buffered" must be GUARANTEED, not assumed)
+
+Live numbers from the ADV mid-session: `largest_free_block` ≈ **12 KB** (11,776 via /api/status,
+12,288 on the boot console). The shared canvas needs **32,400 contiguous bytes**. It exists only
+because `nucleo_ui_init` allocates it at boot on the clean heap — the moment ANYTHING releases it
+mid-session (a voice-PTT GO-hold, a web client, a media decoder), the lazy re-acquire fails
+forever and the whole UI silently drops to direct draw. There, a continuously-repainting app
+flickers no matter how well its redraws are gated — and no buffered-path optimization changes
+anything, because the device is not on that path.
+
+Consequences, now encoded in the framework:
+
+1. **Continuously-repainting apps (instruments: level, protractor, mic analyzer; the USB-keyboard
+   typing modal; every game) run in a SOLO boot** (`NX_SOLO | NX_WIFI`): a fresh heap is the only
+   state on this PSRAM-less chip where the buffered path is guaranteed. An event-driven app
+   (repaints on keys, ~1 Hz ticks) may stay inline — a rare direct-draw repaint is invisible.
+2. **A GO-hold while an exclusive app is foreground is ignored** — voice is down (NX_VOICE), and
+   the old path freed the canvas before the engine could refuse.
+3. **The run loop self-heals**: a foreground app stuck on direct draw stands the ANIMA L1 index
+   down (~24 KB, lazy-reloads from SD) and retries the canvas every ~2 s.
+4. **Diagnosis is one serial line**: `nucleo_screen_acquire` failure logs the largest free block;
+   apps show a small `!D` marker in their title while on the direct path. Before optimizing a
+   "flickering" app, CHECK THE PATH FIRST — `!D` or the log settles it in seconds.
+

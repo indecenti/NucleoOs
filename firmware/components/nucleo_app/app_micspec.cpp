@@ -496,7 +496,9 @@ extern "C" void nucleo_register_micspec(void)
         // analyzer draws BUFFERED. On the live (fragmented) heap — esp. the ADV, ~16 KB largest free — the
         // canvas couldn't be carved, the run loop fell back to DIRECT draw, and the per-frame self-clear
         // flickered. Trade-off: Esc reboots back to the OS (the mic engine stops cleanly first).
-        NX_SOLO
+        NX_SOLO | NX_WIFI   // radio down too: the analyzer uses zero network, and on the RAM-edge
+                            // ADV the ~48 KB the Wi-Fi driver holds is exactly the headroom the DSP
+                            // scratch + waterfall history + 32 KB canvas want. Same combo as gbemu.
     };
     nucleo_app_register(&app);
 }
