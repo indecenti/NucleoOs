@@ -81,6 +81,9 @@ static float  s_agc   = 1.0f;         // adaptive reference (EMA of frame max ma
 static float  s_onset = 0.0f;         // decaying onset envelope
 
 // ---- in-place radix-2 FFT (mirrors nucleo_voice_dsp's host-verified core) ----
+// -O2 for the DSP hot paths alone (component builds at -Os): these run 31x/s inside the analysis
+// task and the difference is real CPU handed back to the UI. Same exception gbemu makes for on_line.
+__attribute__((optimize("-O2")))
 static void ms_fft(float *re, float *im, int n)
 {
     for (int i = 1, j = 0; i < n; i++) {
@@ -129,21 +132,28 @@ static esp_err_t mic_open(void) { return nucleo_codec_mic_open(MS_RATE, &s_rx); 
 static void mic_close(void)     { nucleo_codec_mic_close(s_rx); s_rx = NULL; }
 
 // Block until `need` samples are read (handling i2s partial-read timeouts), or the engine stops.
+// BOUNDED: the old loop retried a zero-byte read forever, so a wedged RX (the ADV shares BCLK/WS
+// with the speaker — a clock glitch can stall the DMA) froze the display with no recovery and no
+// error. Eight consecutive empty 200 ms reads (~1.6 s of certified silence from a 48 kHz free-run
+// source that should never be silent) now declare the capture dead; the task exits, the error is
+// latched, and the APP's retry window restarts the engine — a freeze becomes a sub-second blip.
 static bool fill_window(int16_t *raw, int need)
 {
-    int got_total = 0;
+    int got_total = 0, empty = 0;
     while (got_total < need && atomic_load(&s_run)) {
         size_t got = 0;
         // Codec HAL read: on the ADV it decimates the ES8311's native 48 kHz to MS_RATE (16 kHz),
         // so the FFT bins and pitch detection map to true frequencies. Pass-through on the PDM mic.
         esp_err_t rd = nucleo_codec_mic_read(s_rx, (char *)(raw + got_total),
                                         (need - got_total) * sizeof(int16_t), &got, pdMS_TO_TICKS(200));
-        if (got > 0) got_total += (int)(got / sizeof(int16_t));
+        if (got > 0) { got_total += (int)(got / sizeof(int16_t)); empty = 0; }
         else if (rd != ESP_OK && rd != ESP_ERR_TIMEOUT) return false;
+        else if (++empty >= 8) { ESP_LOGW(TAG, "mic RX stalled (~1.6 s no data) - stopping engine"); return false; }
     }
     return got_total >= need;
 }
 
+__attribute__((optimize("-O2")))
 static float acf_at(const float *x, int n, int lag)
 {
     float r = 0.0f;
@@ -164,19 +174,33 @@ static void detect_pitch(const float *x, int n, float rms_norm, ms_snapshot_t *s
     float r0 = acf_at(x, n, 0);
     if (r0 < 1.0f) return;
 
+    // Coarse->fine peak search: the ACF of a musical tone is smooth on the lag axis, so scanning
+    // every OTHER lag cannot miss the peak's neighbourhood; the +/-2 full-density refine then lands
+    // on the exact lag. Halves the ~83k MACs/frame this loop cost at full density — the single
+    // biggest CPU line in the engine — with bit-identical results for any real pitch.
     float best = 0.0f; int bl = 0;
-    for (int lag = minlag; lag <= maxlag; lag++) {
+    for (int lag = minlag; lag <= maxlag; lag += 2) {
         float r = acf_at(x, n, lag);
         s_acf[lag] = r;
         if (r > best) { best = r; bl = lag; }
     }
     if (bl <= minlag) return;
+    for (int lag = bl - 2; lag <= bl + 2; lag++) {       // refine at full density around the coarse hit
+        if (lag <= minlag || lag > maxlag) continue;
+        float r = acf_at(x, n, lag);
+        s_acf[lag] = r;
+        if (r > best) { best = r; bl = lag; }
+    }
 
     float clarity = best / r0;                            // 0..1, monophonic confidence
     if (clarity < 0.45f) return;
 
-    // Parabolic interpolation around the peak lag for sub-sample period accuracy.
-    float a = s_acf[bl - 1], b = s_acf[bl], c = (bl + 1 <= maxlag) ? s_acf[bl + 1] : s_acf[bl];
+    // Parabolic interpolation around the peak lag for sub-sample period accuracy. The neighbours
+    // are recomputed directly: with the coarse->fine scan, s_acf[bl +/- 1] can be a stale entry from
+    // an earlier frame when the refined peak lands at the refine window's edge.
+    float b = s_acf[bl];
+    float a = acf_at(x, n, bl - 1);
+    float c = (bl + 1 <= maxlag) ? acf_at(x, n, bl + 1) : b;
     float denom = (a - 2.0f * b + c);
     float shift = (denom != 0.0f) ? 0.5f * (a - c) / denom : 0.0f;
     if (shift > 1.0f) shift = 1.0f; else if (shift < -1.0f) shift = -1.0f;
@@ -195,6 +219,7 @@ static void detect_pitch(const float *x, int n, float rms_norm, ms_snapshot_t *s
     s->clarity   = (int)lroundf(clarity * 100.0f);
 }
 
+__attribute__((optimize("-O2")))
 static void process_frame(int16_t *raw)
 {
     ms_snapshot_t s; memset(&s, 0, sizeof s);
@@ -329,6 +354,9 @@ static void dsp_task(void *arg)
         process_frame(raw);
     }
     mic_close();
+    // A capture that died on its own (RX stall / fatal read) must SAY so: the app polls running +
+    // last_error and its retry window auto-restarts the engine off this state.
+    if (atomic_load(&s_run)) atomic_store(&s_err, MS_ERR_I2S);
     s_task = NULL;
     atomic_store(&s_run, false);
     vTaskDelete(NULL);
@@ -376,7 +404,10 @@ esp_err_t nucleo_micspec_start(void)
     }
     atomic_store(&s_err, MS_OK);
     atomic_store(&s_run, true);
-    if (xTaskCreate(dsp_task, "micspec", 4096, NULL, 5, &s_task) != pdPASS) {
+    // Priority 1 — the same as the UI (main) task, NOT above it. At 5 every 32 ms analysis burst
+    // preempted the UI mid-blit: keys lagged and pushes stretched. The I2S DMA ring holds ~30 ms of
+    // native samples, so the DSP can wait its turn through a 10-15 ms SPI push without losing audio.
+    if (xTaskCreate(dsp_task, "micspec", 4096, NULL, 1, &s_task) != pdPASS) {
         atomic_store(&s_run, false); mic_close(); free_scratch();
         atomic_store(&s_err, MS_ERR_OOM); return ESP_FAIL;
     }
@@ -394,6 +425,11 @@ void nucleo_micspec_stop(void)
 }
 
 bool nucleo_micspec_running(void) { return atomic_load(&s_run); }
+
+// Lock-free frame counter: a 32-bit aligned read is atomic on Xtensa, so the UI can ask "anything
+// new?" at its loop rate without taking the snapshot mutex or copying 750 B — it pays for the full
+// nucleo_micspec_get only on the ~31 frames/s that actually exist.
+uint32_t nucleo_micspec_seq(void) { return s_pub.seq; }
 int  nucleo_micspec_last_error(void) { return atomic_load(&s_err); }
 
 bool nucleo_micspec_get(ms_snapshot_t *out)

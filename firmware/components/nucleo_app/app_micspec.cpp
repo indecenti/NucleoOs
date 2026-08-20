@@ -392,8 +392,19 @@ static bool poll(void)
         return false;                                 // starting splash is static between attempts
     }
     if (run) s_retry_until = 0;
-    if (run != s_was_running) { s_was_running = run; return true; }  // started/stopped -> repaint once (live <-> splash)
+    if (run != s_was_running) {
+        s_was_running = run;
+        // Engine died on its own (RX stall bail-out in fill_window — not a user action): arm the
+        // same retry window the first start uses, so a wedged capture self-heals in under a second
+        // behind the "Starting mic..." splash instead of freezing the analyzer for good.
+        if (!run && s_ok && !s_retry_until) {
+            int64_t now = esp_timer_get_time() / 1000;
+            s_retry_until = now + 8000; s_retry_next = now + 300;
+        }
+        return true;                                  // started/stopped -> repaint once (live <-> splash)
+    }
     if (!run) return false;                           // error/idle splash is static
+    if (s_ok && nucleo_micspec_seq() == s_seen) return false;   // lock-free: nothing new, skip mutex+copy
     if (nucleo_micspec_get(&s_snap) && (!s_ok || s_snap.seq != s_seen)) {
         s_ok = true; s_seen = s_snap.seq; fold_frame();
         return true;                                  // a genuinely new analysis frame -> blit
