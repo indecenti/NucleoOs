@@ -41,7 +41,29 @@ static bool              s_have = false;
 // Per-run scratch: one combined 10 KB block so the allocator sees a single request, not five
 // 2 KB fragments. On the ADV (no-PSRAM, ~16 KB largest free after NX_NET_APP exclusive) five
 // separate malloc(2048) would exhaust the largest block before the task stack is created.
-static float *s_scratch = NULL;       // base of the combined block (5 * MS_FFT floats)
+static float *s_scratch = NULL;       // base of the combined block (see nucleo_micspec_start for the layout)
+static float *s_mag = NULL;           // MS_BINS magnitude scratch (was 1 KB of permanent .bss)
+static int16_t *s_raw = NULL;         // MS_FFT capture window (was 1 KB of permanent .bss in dsp_task)
+
+// ---- noise gate (squelch) --------------------------------------------------------------------
+// Without an absolute reference the AGC converges to the mic's own noise floor in a silent room:
+// every band normalizes to noise/noise (random 0..1 PER BAND PER FRAME) and the sqrt perceptual
+// curve lifts it further — the whole display dances with full-scale random bars at 31 fps, which
+// the eye reads as violent flicker. Real analyzers gate: below the squelch threshold the display
+// shows a flat floor and HOLDS STILL.
+//   AGC_MIN   — the reference never drops below ~0.5% of a full-scale sine (mag ≈ 4.2M for int16
+//               with this window), so residual noise can't be normalized up to full bars.
+//   RMS open/close — hysteresis so the gate itself can't chatter (that would be new flicker).
+// While the gate is closed we publish a short burst of flat frames (the app's envelopes decay the
+// bars smoothly to the floor) and then STOP advancing seq entirely: the app's poll sees nothing
+// new and the screen goes perfectly still — the same "static frame when idle" contract as the
+// level app. Sensitivity (U/D) still applies to real signal; it no longer amplifies silence.
+#define AGC_MIN     20000.0f
+#define GATE_OPEN   0.0025f            // rms_norm to open (~ -52 dBFS)
+#define GATE_CLOSE  0.0012f            // rms_norm to close (~ -58 dBFS)
+#define GATE_FLAT_N 20                 // flat frames published after closing (~0.65 s of decay)
+static bool s_gate_open = false;
+static int  s_flat_cnt  = 0;
 static float *s_td   = NULL;          // DC-removed time window (for autocorrelation)
 static float *s_re   = NULL;          // FFT real (Hann-windowed input, then real part)
 static float *s_im   = NULL;          // FFT imag
@@ -189,6 +211,24 @@ static void process_frame(int16_t *raw)
     s.rms      = (int)(rms_norm  * 200.0f); if (s.rms  > 100) s.rms  = 100;
     s.level_db = peak_norm > 0.0003f ? (int)(20.0f * log10f(peak_norm)) : -90;
 
+    // --- noise gate: decided in the time domain, BEFORE paying for the FFT ---
+    if (s_gate_open) { if (rms_norm < GATE_CLOSE) { s_gate_open = false; s_flat_cnt = 0; } }
+    else             { if (rms_norm > GATE_OPEN)    s_gate_open = true; }
+    if (!s_gate_open) {
+        if (s_flat_cnt >= GATE_FLAT_N) return;         // still silent: seq frozen -> the screen holds still
+        s_flat_cnt++;
+        memset(s_prevband, 0, sizeof s_prevband);      // no onset spike when the gate reopens
+        s_onset = 0.0f;
+        s.seq = s_pub.seq + 1;                         // bands/wave/pitch are already zero (memset above)
+        if (s_lock && xSemaphoreTake(s_lock, pdMS_TO_TICKS(50)) == pdTRUE) {
+            memcpy(&s_pub, &s, sizeof s_pub);
+            s_have = true;
+            xSemaphoreGive(s_lock);
+        }
+        return;
+    }
+    s_flat_cnt = 0;
+
     // --- frequency domain ---
     for (int i = 0; i < MS_FFT; i++) { s_re[i] = s_td[i] * s_hann[i]; s_im[i] = 0.0f; }
     ms_fft(s_re, s_im, MS_FFT);
@@ -196,7 +236,7 @@ static void process_frame(int16_t *raw)
     // magnitude, dominant bin, spectral centroid
     float mag_max = 0.0f; int dom_bin = 1;
     double csum = 0, cw = 0;
-    static float mag[MS_BINS];
+    float *mag = s_mag;                                // scratch, not .bss (boot-RAM discipline)
     for (int k = 1; k < MS_BINS; k++) {
         float m = sqrtf(s_re[k] * s_re[k] + s_im[k] * s_im[k]);
         mag[k] = m;
@@ -214,7 +254,7 @@ static void process_frame(int16_t *raw)
 
     // AGC: track the running max so quiet and loud sources both fill the display.
     s_agc = s_agc * 0.92f + mag_max * 0.08f;
-    if (s_agc < 1.0f) s_agc = 1.0f;
+    if (s_agc < AGC_MIN) s_agc = AGC_MIN;              // absolute floor: silence is never "full scale"
     float ref = s_agc * 1.15f;
 
     // bands: average magnitude per log band -> perceptual curve -> 0..255; spectral flux for onset
@@ -262,8 +302,8 @@ static void process_frame(int16_t *raw)
 static void dsp_task(void *arg)
 {
     (void)arg;
-    static int16_t raw[MS_FFT];
-    while (atomic_load(&s_run)) {
+    int16_t *raw = s_raw;                       // carved from the heap scratch block, not .bss
+    while (raw && atomic_load(&s_run)) {
         if (!fill_window(raw, MS_FFT)) break;
         if (!atomic_load(&s_run)) break;
         process_frame(raw);
@@ -277,7 +317,8 @@ static void dsp_task(void *arg)
 static void free_scratch(void)
 {
     free(s_scratch); s_scratch = NULL;
-    s_td = s_re = s_im = s_hann = s_acf = NULL;
+    s_td = s_re = s_im = s_hann = s_acf = s_mag = NULL;
+    s_raw = NULL;
 }
 
 esp_err_t nucleo_micspec_start(void)
@@ -286,7 +327,11 @@ esp_err_t nucleo_micspec_start(void)
     if (nucleo_recorder_is_busy() || nucleo_audio_is_playing()) { atomic_store(&s_err, MS_ERR_BUSY); return ESP_ERR_INVALID_STATE; }
 
     if (!s_lock) s_lock = xSemaphoreCreateMutex();
-    s_scratch = (float *)malloc(sizeof(float) * MS_FFT * 5);   // one 10 KB block
+    // ONE block for every scratch the engine needs: 5*MS_FFT floats (td/re/im/hann/acf) + MS_BINS
+    // floats (magnitudes) + MS_FFT int16 (the capture window). The magnitude and capture arrays
+    // were function-scope statics before — 2 KB of .bss held forever by an app that is closed
+    // 99% of the time (boot-RAM discipline: heap-on-open, never .bss).
+    s_scratch = (float *)malloc(sizeof(float) * (MS_FFT * 5 + MS_BINS) + sizeof(int16_t) * MS_FFT);
     if (!s_lock || !s_scratch) {
         atomic_store(&s_err, MS_ERR_OOM); free_scratch(); return ESP_ERR_NO_MEM;
     }
@@ -295,6 +340,9 @@ esp_err_t nucleo_micspec_start(void)
     s_im   = s_scratch + MS_FFT * 2;
     s_hann = s_scratch + MS_FFT * 3;
     s_acf  = s_scratch + MS_FFT * 4;
+    s_mag  = s_scratch + MS_FFT * 5;
+    s_raw  = (int16_t *)(s_scratch + MS_FFT * 5 + MS_BINS);
+    s_gate_open = false; s_flat_cnt = 0;
     for (int i = 0; i < MS_FFT; i++) s_hann[i] = 0.5f - 0.5f * cosf(2.0f * (float)M_PI * i / (MS_FFT - 1));
     memset(s_prevband, 0, sizeof s_prevband);
     s_agc = 1.0f; s_onset = 0.0f; s_have = false;

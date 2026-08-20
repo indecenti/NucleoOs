@@ -15,6 +15,7 @@
 extern "C" {
 #include "nucleo_micspec.h"
 }
+#include "esp_timer.h"
 #include "nucleo_exclusive.h"   // dedicated-mode RAM reclaim (~70KB) + NX_VOICE frees the mic — like music/video
 
 #include "launcher_theme.h"
@@ -40,6 +41,12 @@ static ms_snapshot_t s_snap;       // last copied frame
 static bool  s_ok      = false;    // got at least one frame
 static uint32_t s_seen = 0;        // last seq we folded into caps/history
 static bool  s_was_running = false; // last polled engine running-state (edge -> one repaint)
+// Start retry. The engine can fail TRANSIENTLY right at Solo-boot (a boot earcon still owns the
+// I2S TX, the codec I2C is mid-transaction, the DSP block races a large alloc): a one-shot start
+// latched that as a permanent error splash — "sometimes it just doesn't start". Retry every 800 ms
+// for up to 8 s, showing a starting splash; only after the window closes is the error final.
+static int64_t s_retry_until = 0;   // 0 = not retrying (running, or window exhausted)
+static int64_t s_retry_next  = 0;
 
 // peak-hold caps (bars), slow fall
 static float s_cap[MS_BANDS];
@@ -372,6 +379,16 @@ static bool poll(void)
 {
     if (s_frozen) return false;                       // frozen: the frame is held -> never auto-redraw
     bool run = nucleo_micspec_running();
+    if (!run && s_retry_until) {                      // engine down inside the retry window: keep trying
+        int64_t now = esp_timer_get_time() / 1000;
+        if (now >= s_retry_until) { s_retry_until = 0; return true; }   // window over -> show the real error
+        if (now >= s_retry_next) {
+            s_retry_next = now + 800;
+            if (nucleo_micspec_start() == ESP_OK) { s_retry_until = 0; s_was_running = true; return true; }
+        }
+        return false;                                 // starting splash is static between attempts
+    }
+    if (run) s_retry_until = 0;
     if (run != s_was_running) { s_was_running = run; return true; }  // started/stopped -> repaint once (live <-> splash)
     if (!run) return false;                           // error/idle splash is static
     if (nucleo_micspec_get(&s_snap) && (!s_ok || s_snap.seq != s_seen)) {
@@ -397,8 +414,12 @@ static void draw(void)
     if (!nucleo_app_is_buffered()) d.fillRect(0, 0, W, CONTENT_B, BG);
 
     if (!nucleo_micspec_running()) {
-        int e = nucleo_micspec_last_error();
         draw_hud();
+        if (s_retry_until) {                          // still inside the retry window: not an error yet
+            draw_splash(TR("Avvio microfono...", "Starting mic..."), MUTED);
+            return;
+        }
+        int e = nucleo_micspec_last_error();
         if (e == MS_ERR_BUSY) draw_splash(TR("Mic occupato", "Mic busy"), C_YELLOW);
         else if (e == MS_ERR_OOM) draw_splash(TR("Memoria insuff.", "Out of memory"), C_RED);
         else draw_splash(TR("Mic non avviato", "Mic not started"), C_RED);
@@ -471,7 +492,11 @@ static void enter(void)
     // AFTER micspec_start succeeds; if it fails the display silently falls back to bars mode.
     // On the ADV (no-PSRAM, ~16 KB largest free after exclusive) the original order (hist first)
     // consumed 7.4 KB of the only large block, leaving < 10 KB for the scratch alloc -> MS_ERR_OOM.
-    nucleo_micspec_start();
+    if (nucleo_micspec_start() == ESP_OK) { s_retry_until = 0; }
+    else {
+        int64_t now = esp_timer_get_time() / 1000;
+        s_retry_until = now + 8000; s_retry_next = now + 800;
+    }
     if (!s_hist) s_hist = (uint8_t *)malloc((size_t)HIST_W * MS_BANDS);   // NULL -> waterfall falls back to bars
     if (s_hist) memset(s_hist, 0, (size_t)HIST_W * MS_BANDS);
     nucleo_app_request_draw();
