@@ -226,10 +226,10 @@ static void process_frame(int16_t *raw)
     if (g_close > g_open * 0.7f) g_close = g_open * 0.7f;               // ...and keep real hysteresis
     if (s_gate_open) { if (rms_norm < g_close) { s_gate_open = false; s_flat_cnt = 0; } }
     else             { if (rms_norm > g_open)    s_gate_open = true; }
-    // Serial evidence every ~2 s: measured ambient, learned floor, gate verdict. "Does it draw
-    // correctly" is unanswerable without these numbers on the console.
+    // Serial heartbeat every ~10 s: measured ambient, learned floor, gate verdict — enough to
+    // diagnose a mis-gated session from a capture without turning the console into a firehose.
     static int s_dbg = 0;
-    if (++s_dbg >= 62) {
+    if (++s_dbg >= 310) {
         s_dbg = 0;
         ESP_LOGI(TAG, "rms=%.5f floor=%.5f gate=%s agc=%.0f", (double)rms_norm, (double)s_floor,
                  s_gate_open ? "OPEN" : "closed", (double)s_agc);
