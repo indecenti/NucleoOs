@@ -42,6 +42,9 @@ typedef struct {
 esp_err_t   nucleo_micspec_start(void);
 void        nucleo_micspec_stop(void);
 bool        nucleo_micspec_running(void);
+// Lock-free "anything new?" — the published frame counter without mutex or copy. Poll this at the
+// UI loop rate; call nucleo_micspec_get only when it moved.
+uint32_t nucleo_micspec_seq(void);
 
 // Copy the most recent snapshot. False until the first frame is produced.
 bool        nucleo_micspec_get(ms_snapshot_t *out);
