@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-30T18:30:41.092Z",
+  "generated": "2026-08-31T07:07:16.143Z",
   "base": "it",
   "langs": [
     "it",
@@ -23,7 +23,7 @@
     "de": 100
   },
   "surfaces": 43,
-  "totalKeys": 2252,
+  "totalKeys": 2263,
   "namespaces": {
     "core": 103,
     "shell": 224,
@@ -37,7 +37,7 @@
     "clock": 17,
     "code-runner": 37,
     "contacts": 27,
-    "dictation": 52,
+    "dictation": 56,
     "dj": 31,
     "dos-importer": 55,
     "dosbox": 21,
@@ -47,7 +47,7 @@
     "help": 32,
     "ir-remote": 111,
     "log-viewer": 27,
-    "mail": 44,
+    "mail": 46,
     "media-player": 4,
     "metronome": 17,
     "nearby": 56,
@@ -57,7 +57,7 @@
     "radio": 53,
     "recycle-bin": 14,
     "spreadsheet": 302,
-    "ssh": 47,
+    "ssh": 52,
     "system-monitor": 33,
     "tasks": 13,
     "terminal": 19,

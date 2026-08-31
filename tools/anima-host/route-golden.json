@@ -33,7 +33,7 @@
  "what is 15 plus 27": "calc|L0/command|answer|calc|",
  "how much is 8 times 9": "calc|L0/command|answer|calc|",
  "come ricavo la corrente da tensione e resistenza": "calc|L0/command|answer|ohm|",
- "a cosa serve la radice quadrata": "knowledge|L1/fact|answer|l1|",
+ "a cosa serve la radice quadrata": "knowledge|L2/stitch|answer|mosaico|",
  "come si calcola l'area di un cerchio": "calc|L0/command|answer|geo|",
  "quanto fa il 15% di 240": "calc|L0/command|answer|percent|",
  "radice quadrata di 144": "calc|L0/command|answer|calc|",

@@ -19,3 +19,6 @@ _scratch/**      linguist-vendored
 * text=auto
 *.ps1 text eol=crlf
 *.sh  text eol=lf
+# ANIMA knowledge corpus is hashed byte-exact (build_akb2.py / check_pack.mjs pack provenance):
+# pin LF in the working tree so autocrlf=true checkouts cannot smudge CRLF and fake a stale index.
+tools/anima/knowledge/*.jsonl text eol=lf
