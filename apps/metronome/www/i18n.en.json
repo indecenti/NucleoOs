@@ -1,0 +1,20 @@
+{
+  "_lang": "en",
+  "title": "Metronome",
+  "tab.metronome": "Metronome",
+  "tab.tuner": "Tuner",
+  "start": "Start",
+  "stop": "Stop",
+  "tap": "Tap tempo",
+  "sig": "Beats / bar",
+  "subdiv": "Subdivision",
+  "kbd.startstop": "start/stop",
+  "kbd.tap": "tap",
+  "a4": "A4",
+  "tuner.listen": "Listen",
+  "tuner.stop": "Stop",
+  "tuner.hint": "Play a single note near the microphone.",
+  "tuner.busy": "Microphone in use",
+  "tuner.denied": "Microphone access denied.",
+  "tuner.err": "Microphone unavailable."
+}

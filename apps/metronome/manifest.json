@@ -1,0 +1,21 @@
+{
+  "id": "metronome",
+  "name": "Metronome",
+  "version": "1.0.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Metronome with tap tempo, accents and subdivisions, plus a chromatic instrument tuner — all client-side Web Audio, zero device load.",
+  "category": "media",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/metronome/",
+  "icon": "icon.svg",
+  "permissions": ["device.mic"],
+  "mounts": {},
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": [],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": ["keyboard"] },
+  "mesh": { "exposes": [], "consumes": [] }
+}
