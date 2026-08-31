@@ -85,8 +85,8 @@
       "id": "automation-studio",
       "version": "0.1.0",
       "path": "/apps/automation-studio",
-      "enabled": true,
-      "autostart": true,
+      "enabled": false,
+      "autostart": false,
       "permissions": [
         "storage.app",
         "system.events",
