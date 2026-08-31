@@ -1,0 +1,20 @@
+{
+  "_lang": "it",
+  "title": "Metronomo",
+  "tab.metronome": "Metronomo",
+  "tab.tuner": "Accordatore",
+  "start": "Avvia",
+  "stop": "Ferma",
+  "tap": "Batti il tempo",
+  "sig": "Battiti / misura",
+  "subdiv": "Suddivisione",
+  "kbd.startstop": "avvia/ferma",
+  "kbd.tap": "tap",
+  "a4": "La4",
+  "tuner.listen": "Ascolta",
+  "tuner.stop": "Ferma",
+  "tuner.hint": "Suona una nota singola vicino al microfono.",
+  "tuner.busy": "Microfono in uso",
+  "tuner.denied": "Accesso al microfono negato.",
+  "tuner.err": "Microfono non disponibile."
+}

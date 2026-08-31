@@ -1,0 +1,227 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title data-i18n="title">Metronome</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: #0e1830; color: #e8eefc;
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { margin: 0 0 12px; font-size: 22px; display: flex; align-items: center; gap: 8px; }
+  h1 .g { color: #e0a43a; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .tab { background: #16223f; border: 1px solid #243352; color: #b9c6e6; border-radius: 999px;
+    padding: 6px 13px; cursor: pointer; font-size: 14px; }
+  .tab.on { background: #e0a43a; border-color: #e0a43a; color: #1a1206; font-weight: 600; }
+  .card { background: #16223f; border: 1px solid #243352; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .hidden { display: none; }
+  /* metronome */
+  .bpmrow { display: flex; align-items: baseline; justify-content: center; gap: 10px; }
+  .bpm { font-size: 64px; font-weight: 700; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+  .bpm-u { color: #8fa0c8; font-size: 18px; }
+  input[type=range] { width: 100%; accent-color: #e0a43a; margin: 10px 0; }
+  .btnrow { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+  button { font: inherit; background: #23345c; border: 1px solid #33477a; color: #cfe;
+    border-radius: 9px; padding: 9px 14px; cursor: pointer; }
+  button:active { transform: translateY(1px); }
+  button.primary { background: #e0a43a; border-color: #e0a43a; color: #1a1206; font-weight: 700;
+    padding: 9px 26px; font-size: 17px; }
+  .dots { display: flex; gap: 10px; justify-content: center; margin: 14px 0 4px; }
+  .dot { width: 16px; height: 16px; border-radius: 50%; background: #243352; transition: transform .08s, background .08s; }
+  .dot.hit { background: #e0a43a; transform: scale(1.45); }
+  .dot.hit.accent { background: #ff6b5e; }
+  .opts { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+  .opts label { font-size: 12px; color: #8fa0c8; display: block; margin-bottom: 3px; }
+  select { font: inherit; background: #0e1830; color: #e8eefc; border: 1px solid #2c3d63; border-radius: 9px; padding: 7px 10px; }
+  select:focus, input:focus { outline: none; border-color: #e0a43a; }
+  /* tuner */
+  .note { text-align: center; }
+  .note .big { font-size: 72px; font-weight: 700; line-height: 1.1; }
+  .note .big.intune { color: #2fbd7e; }
+  .note .sub { color: #8fa0c8; font-size: 18px; min-height: 26px; }
+  .gauge { position: relative; height: 34px; margin: 14px 8px 4px; background: #0e1830;
+    border: 1px solid #2c3d63; border-radius: 9px; overflow: hidden; }
+  .gauge .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: #2fbd7e; }
+  .gauge .needle { position: absolute; top: 3px; bottom: 3px; width: 6px; border-radius: 3px;
+    background: #e0a43a; left: 50%; transform: translateX(-50%); transition: left .1s linear; }
+  .gauge .needle.intune { background: #2fbd7e; }
+  .scale { display: flex; justify-content: space-between; color: #6f7ea6; font-size: 11px; margin: 2px 10px 10px; }
+  .hint { color: #8fa0c8; font-size: 13px; margin-top: 10px; min-height: 18px; text-align: center; }
+  .hint.err { color: #ff9db0; }
+  .kbd { color: #6f7ea6; font-size: 12px; margin-top: 10px; text-align: center; }
+  .kbd b { background: #23345c; border-radius: 5px; padding: 1px 6px; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1><span class="g">♩</span> <span data-i18n="title">Metronome</span></h1>
+
+  <div class="tabs">
+    <button class="tab on" id="tabMet" data-i18n="tab.metronome">Metronome</button>
+    <button class="tab" id="tabTun" data-i18n="tab.tuner">Tuner</button>
+  </div>
+
+  <div id="pageMet">
+    <div class="card">
+      <div class="bpmrow"><span class="bpm" id="bpm">120</span><span class="bpm-u">BPM</span></div>
+      <input type="range" id="slider" min="30" max="260" value="120">
+      <div class="dots" id="dots"></div>
+      <div class="btnrow">
+        <button id="minus5">−5</button><button id="minus1">−1</button>
+        <button class="primary" id="startstop" data-i18n="start">Start</button>
+        <button id="plus1">+1</button><button id="plus5">+5</button>
+      </div>
+      <div class="btnrow"><button id="tap" data-i18n="tap">Tap tempo</button></div>
+      <div class="opts">
+        <div><label data-i18n="sig">Beats / bar</label><select id="beats"></select></div>
+        <div><label data-i18n="subdiv">Subdivision</label>
+          <select id="subdiv">
+            <option value="1">♩</option><option value="2">♫</option>
+            <option value="3">♩₃</option><option value="4">♬♬</option>
+          </select></div>
+      </div>
+      <div class="kbd"><b>Space</b> <span data-i18n="kbd.startstop">start/stop</span> · <b>↑↓</b> ±5 · <b>←→</b> ±1 · <b>T</b> <span data-i18n="kbd.tap">tap</span></div>
+    </div>
+  </div>
+
+  <div id="pageTun" class="hidden">
+    <div class="card">
+      <div class="note">
+        <div class="big" id="note">—</div>
+        <div class="sub" id="notesub">&nbsp;</div>
+      </div>
+      <div class="gauge"><div class="mid"></div><div class="needle" id="needle"></div></div>
+      <div class="scale"><span>-50</span><span>-25</span><span>0</span><span>+25</span><span>+50</span></div>
+      <div class="btnrow">
+        <button class="primary" id="listen" data-i18n="tuner.listen">Listen</button>
+        <div><label data-i18n="a4">A4</label>
+          <select id="a4"><option>432</option><option>438</option><option selected>440</option><option>442</option><option>444</option></select></div>
+      </div>
+      <div class="hint" id="thint" data-i18n="tuner.hint">Play a single note near the microphone.</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    import { Metronome, makeTapTempo, detectPitch, noteFromFreq, startBrowserMic, startDeviceMic } from './app.js';
+    const t = await I18N.init('metronome');
+    const lang = (localStorage.getItem('nucleo.lang') || document.documentElement.lang || 'en').slice(0, 2);
+    const $ = (id) => document.getElementById(id);
+
+    // ── tabs ──
+    function showTab(met) {
+      $('pageMet').classList.toggle('hidden', !met);
+      $('pageTun').classList.toggle('hidden', met);
+      $('tabMet').classList.toggle('on', met);
+      $('tabTun').classList.toggle('on', !met);
+      if (met) stopTuner();
+    }
+    $('tabMet').addEventListener('click', () => showTab(true));
+    $('tabTun').addEventListener('click', () => showTab(false));
+
+    // ── state (persisted) ──
+    const SKEY = 'metronome.state';
+    let st = { bpm: 120, beats: 4, subdiv: 1, a4: 440 };
+    try { st = { ...st, ...JSON.parse(localStorage.getItem(SKEY) || '{}') } } catch {}
+    const persist = () => { try { localStorage.setItem(SKEY, JSON.stringify(st)); } catch {} };
+
+    // ── metronome ──
+    const met = new Metronome((beat, sub) => {
+      if (sub !== 0) return;
+      const d = $('dots').children[beat]; if (!d) return;
+      d.classList.add('hit'); d.classList.toggle('accent', beat === 0);
+      setTimeout(() => d.classList.remove('hit', 'accent'), 110);
+    });
+    function renderDots() {
+      const box = $('dots'); box.innerHTML = '';
+      for (let i = 0; i < met.beats; i++) { const d = document.createElement('div'); d.className = 'dot'; box.appendChild(d); }
+    }
+    function setBpm(v) {
+      st.bpm = Math.min(260, Math.max(30, Math.round(v)));
+      met.bpm = st.bpm; $('bpm').textContent = st.bpm; $('slider').value = st.bpm; persist();
+    }
+    const beatsSel = $('beats');
+    for (let i = 1; i <= 12; i++) { const o = document.createElement('option'); o.value = o.textContent = i; beatsSel.appendChild(o); }
+    beatsSel.value = st.beats; $('subdiv').value = st.subdiv; $('a4').value = st.a4;
+    met.beats = st.beats; met.subdiv = st.subdiv; setBpm(st.bpm); renderDots();
+
+    $('slider').addEventListener('input', (e) => setBpm(+e.target.value));
+    $('minus5').addEventListener('click', () => setBpm(st.bpm - 5));
+    $('minus1').addEventListener('click', () => setBpm(st.bpm - 1));
+    $('plus1').addEventListener('click', () => setBpm(st.bpm + 1));
+    $('plus5').addEventListener('click', () => setBpm(st.bpm + 5));
+    beatsSel.addEventListener('change', () => { st.beats = met.beats = +beatsSel.value; persist(); renderDots(); });
+    $('subdiv').addEventListener('change', () => { st.subdiv = met.subdiv = +$('subdiv').value; persist(); });
+
+    function toggleMet() {
+      if (met.running) { met.stop(); $('startstop').textContent = t('start'); }
+      else { met.start(); $('startstop').textContent = t('stop'); }
+    }
+    $('startstop').addEventListener('click', toggleMet);
+    const tapper = makeTapTempo();
+    $('tap').addEventListener('click', () => { const b = tapper(); if (b) setBpm(b); });
+
+    // ── tuner ──
+    let stopMic = null;
+    const thint = $('thint');
+    const setHint = (msg, err) => { thint.textContent = msg; thint.classList.toggle('err', !!err); };
+    function onAudio(buf, rate) {
+      const p = detectPitch(buf, rate);
+      const needle = $('needle'), note = $('note');
+      if (!p) { note.classList.remove('intune'); needle.classList.remove('intune'); return; }
+      const n = noteFromFreq(p.freq, st.a4);
+      const latin = lang === 'it' || lang === 'es' || lang === 'fr';
+      note.textContent = (latin ? n.solfege : n.name) + n.octave;
+      $('notesub').textContent = `${latin ? n.name : n.solfege}${n.octave} · ${p.freq.toFixed(1)} Hz · ${n.cents > 0 ? '+' : ''}${n.cents} ¢`;
+      const inTune = Math.abs(n.cents) <= 5;
+      note.classList.toggle('intune', inTune); needle.classList.toggle('intune', inTune);
+      needle.style.left = (50 + Math.max(-50, Math.min(50, n.cents))) + '%';
+    }
+    async function startTuner() {
+      setHint(t('tuner.hint'), false);
+      try {
+        if (window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          stopMic = await startBrowserMic(onAudio);
+        } else {
+          stopMic = await startDeviceMic(onAudio,
+            (kind, who) => { setHint(kind === 'busy' ? t('tuner.busy') + (who ? ` (${who})` : '') : t('tuner.err'), true); stopTuner(); },
+            t('title'));
+        }
+        $('listen').textContent = t('tuner.stop');
+      } catch (e) {
+        setHint(e && e.name === 'NotAllowedError' ? t('tuner.denied') : t('tuner.err'), true);
+        stopMic = null;
+      }
+    }
+    function stopTuner() {
+      if (stopMic) { try { stopMic(); } catch {} stopMic = null; }
+      $('listen').textContent = t('tuner.listen');
+      $('note').textContent = '—'; $('notesub').innerHTML = '&nbsp;';
+      $('needle').style.left = '50%';
+    }
+    $('listen').addEventListener('click', () => (stopMic ? stopTuner() : startTuner()));
+    $('a4').addEventListener('change', () => { st.a4 = +$('a4').value; persist(); });
+
+    // ── keyboard ──
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') e.target.blur();
+      if (e.code === 'Space') { e.preventDefault(); toggleMet(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setBpm(st.bpm + 5); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); setBpm(st.bpm - 5); }
+      else if (e.key === 'ArrowRight') setBpm(st.bpm + 1);
+      else if (e.key === 'ArrowLeft') setBpm(st.bpm - 1);
+      else if (e.key === 't' || e.key === 'T') { const b = tapper(); if (b) setBpm(b); }
+      else if (e.key === '1') showTab(true);
+      else if (e.key === '2') showTab(false);
+    });
+
+    // release the mic when the shell hides or closes the window
+    window.addEventListener('pagehide', stopTuner);
+    window.addEventListener('message', (e) => {
+      const m = e.data || {};
+      if (m.t === 'os-visibility' && m.d && m.d.visible === false) { stopTuner(); if (met.running) toggleMet(); }
+    });
+  </script>
+</body>
+</html>
