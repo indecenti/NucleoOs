@@ -2,55 +2,96 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Arcade</title>
 <style>
-  :root{--bg:#06070b;--panel:#0d0f16;--line:#1b2130;--ink:#e8eaed;--dim:#8b93a1;--ac:#2dd4bf;--ac2:#6aa8ff}
+  :root{--bg:#06070b;--panel:#0d0f16;--panel2:#11141d;--line:#1b2130;--ink:#e8eaed;--dim:#8b93a1;--ac:#2dd4bf;--ac2:#6aa8ff}
   *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
   body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
-  #app{display:flex;flex-direction:column;height:100%}
+  /* One soft glow behind the header — depth without an image (offline, zero assets). */
+  body::before{content:'';position:fixed;inset:-40% -20% auto;height:70%;pointer-events:none;
+    background:radial-gradient(60% 60% at 30% 20%,rgba(45,212,191,.07),transparent 70%),
+               radial-gradient(50% 55% at 80% 10%,rgba(106,168,255,.06),transparent 70%)}
+  #app{display:flex;flex-direction:column;height:100%;position:relative}
 
   header{display:flex;align-items:center;gap:12px;padding:14px 18px 10px;border-bottom:1px solid var(--line)}
   header .logo{width:30px;height:30px;flex:none}
-  header h1{font-size:19px;font-weight:600;letter-spacing:.2px}
-  header .sub{font-size:12px;color:var(--dim);margin-left:2px}
+  header h1{font-size:19px;font-weight:650;letter-spacing:.2px}
+  header .sub{font-size:11.5px;color:var(--dim);margin-top:1px}
   header .spacer{flex:1}
-  .crumb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim)}
-  .crumb b{color:var(--ink);font-weight:600}
   .back{display:none;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);color:var(--ink);
     border-radius:9px;padding:7px 12px;font-size:13px;cursor:pointer;transition:.15s}
   .back:hover{border-color:var(--ac2)}
-  .search{flex:none;width:220px;max-width:38vw;background:var(--panel);border:1px solid var(--line);color:var(--ink);
-    border-radius:9px;padding:8px 12px;font-size:13px;outline:none;display:none}
+  .crumb{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim)}
+  .crumb b{color:var(--ink);font-weight:600}
+  select.sort{display:none;background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:9px;
+    padding:7px 10px;font-size:12.5px;outline:none;cursor:pointer}
+  select.sort:focus{border-color:var(--ac)}
+  .search{flex:none;width:220px;max-width:34vw;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+    border-radius:9px;padding:8px 12px;font-size:13px;outline:none}
   .search:focus{border-color:var(--ac)}
 
   main{flex:1;overflow-y:auto;padding:16px 18px 26px}
-  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .sect{font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:18px 2px 10px}
+  .sect:first-child{margin-top:2px}
+
+  /* Continue-playing hero */
+  .hero{display:flex;align-items:center;gap:16px;border:1px solid var(--line);border-radius:16px;padding:16px 18px;
+    cursor:pointer;transition:.16s;background:var(--panel);position:relative;overflow:hidden}
+  .hero::before{content:'';position:absolute;inset:0;background:linear-gradient(115deg,var(--ha) 0%,transparent 55%);opacity:.16}
+  .hero:hover,.hero.sel{border-color:var(--ac);transform:translateY(-1px)}
+  .hero.sel{box-shadow:0 0 0 2px rgba(45,212,191,.35)}
+  .hero .hp{width:46px;height:46px;border-radius:13px;flex:none;display:grid;place-items:center;background:var(--ha);color:#06070b;position:relative}
+  .hero .ht{flex:1;min-width:0;position:relative}
+  .hero .ht .t{font-size:16px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hero .ht .s{font-size:12px;color:var(--dim);margin-top:2px}
+  .hero .go{position:relative;font-size:12.5px;font-weight:650;color:#06070b;background:var(--ac);border-radius:999px;padding:7px 16px;flex:none}
+
+  /* Favorites rail */
+  .rail{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+  .fav{flex:none;width:170px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 13px;
+    cursor:pointer;transition:.15s;position:relative;overflow:hidden}
+  .fav::after{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:var(--sa,var(--ac))}
+  .fav:hover,.fav.sel{border-color:var(--ac)}
+  .fav.sel{box-shadow:0 0 0 2px rgba(45,212,191,.35)}
+  .fav .t{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fav .s{font-size:11px;color:var(--dim);margin-top:3px}
+
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
 
   /* system card */
-  .sys{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px 15px 13px;
-    cursor:pointer;transition:.16s;overflow:hidden;min-height:96px;display:flex;flex-direction:column;justify-content:space-between}
+  .sys{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 15px 12px;
+    cursor:pointer;transition:.16s;overflow:hidden;min-height:104px;display:flex;flex-direction:column;justify-content:space-between}
+  .sys::before{content:'';position:absolute;inset:0;background:linear-gradient(130deg,var(--sa,var(--ac)) 0%,transparent 45%);opacity:.10}
   .sys:hover{transform:translateY(-2px);border-color:var(--ac)}
-  .sys .rail{position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--sa,var(--ac))}
-  .sys .nm{font-size:15px;font-weight:600;padding-left:6px}
-  .sys .ct{font-size:12px;color:var(--dim);padding-left:6px}
+  .sys .glyph{width:26px;height:26px;color:var(--sa,var(--ac));position:relative;margin-bottom:8px}
+  .sys .nm{font-size:15px;font-weight:650;position:relative}
+  .sys .ct{font-size:12px;color:var(--dim);position:relative;margin-top:2px}
   .sys .badge{position:absolute;right:12px;top:12px;font-size:11px;font-weight:700;color:#06070b;background:var(--sa,var(--ac));
     border-radius:999px;padding:2px 9px;min-width:22px;text-align:center}
-  .sys.empty{opacity:.5}
+  .sys.empty{opacity:.45}
+  .sys.empty::before{opacity:.04}
   .sys.empty:hover{transform:none;border-color:var(--line)}
 
   /* game row */
+  .games{display:flex;flex-direction:column;gap:8px}
   .game{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:11px;
-    padding:11px 14px;cursor:pointer;transition:.13s}
-  .game:hover{border-color:var(--ac);background:#11141d}
+    padding:10px 14px;cursor:pointer;transition:.13s}
+  .game:hover{border-color:var(--ac);background:var(--panel2)}
   /* Keyboard/gamepad selection has to be as loud as a mouse hover, because it is the ONLY cue
      when there is no pointer — a handheld with a d-pad shows nothing otherwise. */
-  .sys.sel,.game.sel{border-color:var(--ac);background:#11141d;box-shadow:0 0 0 2px rgba(45,212,191,.35)}
+  .sys.sel,.game.sel{border-color:var(--ac);background:var(--panel2);box-shadow:0 0 0 2px rgba(45,212,191,.35)}
   .sys.sel{transform:translateY(-2px)}
   .game .gi{width:30px;height:30px;border-radius:8px;background:var(--sa,var(--ac));flex:none;display:grid;place-items:center;
     color:#06070b;font-weight:700;font-size:13px}
   .game .gn{flex:1;min-width:0;font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .game .gs{font-size:11px;color:var(--dim);flex:none}
-  .games{display:flex;flex-direction:column;gap:8px}
+  .game .sv{flex:none;width:16px;height:16px;color:var(--ac);opacity:.9}
+  .game .gs{font-size:11px;color:var(--dim);flex:none;min-width:52px;text-align:right}
+  .game .star{flex:none;width:28px;height:28px;border:0;background:none;color:var(--dim);cursor:pointer;font-size:15px;
+    border-radius:7px;display:grid;place-items:center;transition:.12s;padding:0}
+  .game .star:hover{background:var(--line);color:var(--ink)}
+  .game .star.on{color:#ffce46}
 
+  .warnbox{display:flex;gap:8px;align-items:flex-start;background:#1a1408;border:1px solid #6b4e12;border-radius:9px;
+    padding:9px 12px;margin-bottom:10px;font-size:12px;line-height:1.5;color:#ffce46}
   .msg{color:var(--dim);font-size:14px;line-height:1.6;padding:24px 4px;max-width:560px}
   .msg code{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:2px 7px;color:var(--ac);font-size:13px}
   .spin{width:22px;height:22px;border:2px solid var(--line);border-top-color:var(--ac);border-radius:50%;
@@ -70,39 +111,51 @@
   <header>
     <svg class="logo" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="4" stroke="#2dd4bf" stroke-width="1.6"/><circle cx="8" cy="12" r="1.4" fill="#2dd4bf"/><path d="M15 10.6v2.8M13.6 12h2.8" stroke="#6aa8ff" stroke-width="1.5" stroke-linecap="round"/></svg>
     <div>
-      <h1>Arcade</h1>
+      <h1 data-i18n="app_name">Arcade</h1>
+      <div class="sub" id="sub"></div>
     </div>
-    <button class="back" id="back">◀ <span id="back-t">Systems</span></button>
+    <button class="back" id="back">◀ <span data-i18n="back_systems">Systems</span></button>
     <div class="crumb" id="crumb"></div>
     <div class="spacer"></div>
-    <input class="search" id="search" type="text" placeholder="Filter…" autocomplete="off">
+    <select class="sort" id="sort" data-i18n-attr="aria-label:sort_label">
+      <option value="name" data-i18n="sort_name">Name</option>
+      <option value="size" data-i18n="sort_size">Size</option>
+      <option value="recent" data-i18n="sort_recent">Recent</option>
+    </select>
+    <input class="search" id="search" type="text" data-i18n-attr="placeholder:filter" autocomplete="off">
   </header>
   <main id="main"><div class="spin"></div></main>
 </div>
 
 <div id="play"><button class="exit" id="exit" title="Back to library">✕</button><iframe id="pframe" allow="autoplay; gamepad; fullscreen"></iframe></div>
 
-<script>
+<script type="module">
+import I18N from '/nucleo-i18n.js';
+const t = await I18N.init('arcade');   // init already fills [data-i18n] with the 'arcade' namespace
+
 const $ = (id) => document.getElementById(id);
 const main = $('main');
-let SYSTEMS = [], curSys = null, curGames = [], lang = 'en';
+let SYSTEMS = [], curSys = null, curGames = [], lastCounts = null, savedSet = new Set();
 let sel = 0, playing = false;   // sel = keyboard/gamepad cursor within the current view
 // The OS already had a ROM library here (the deploy manifest and .gitignore both name it), so the
 // app reads the EXISTING folder rather than inventing a second one at /roms.
 const ROM_DIR = 'data/ROMs/';
+const SAVE_DIR = 'saves';       // per-system subfolder the player writes .state/.srm files into
 
-// Minimal i18n — the shell owns full localization; these are the app's own few strings.
-const STR = {
-  en: { systems:'Systems', filter:'Filter…', games:'games', game:'game', empty:'empty', noGames:'No games in this system yet.',
-        addRoms:'Add ROMs to', onSd:'on the SD card, then reopen this system.', noSystems:'No systems configured.',
-        loading:'Reading the library…', backSystems:'Systems',
-        romsetNote:'Arcade cores only accept the romset version they were built for.' },
-  it: { systems:'Sistemi', filter:'Filtra…', games:'giochi', game:'gioco', empty:'vuoto', noGames:'Ancora nessun gioco in questo sistema.',
-        addRoms:'Aggiungi ROM in', onSd:'sulla scheda SD, poi riapri questo sistema.', noSystems:'Nessun sistema configurato.',
-        loading:'Leggo la libreria…', backSystems:'Sistemi',
-        romsetNote:'I core arcade accettano solo la versione di romset per cui sono compilati.' },
+// ── Local shelf state (browser-side by design: the device only serves files) ────────────────────
+const store = {
+  get(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
 };
-const T = (k) => (STR[lang] && STR[lang][k]) || STR.en[k] || k;
+let favs = new Set(store.get('arcade.favs', []));            // "sysId/file"
+let recent = store.get('arcade.recent', []);                 // [{s,f,t,ts}] newest first
+let sortMode = store.get('arcade.sort', 'name');
+const favKey = (sysId, file) => sysId + '/' + file;
+function rememberPlay(sys, g) {
+  recent = [{ s: sys.id, f: g.file, t: g.title, ts: Date.now() }]
+    .concat(recent.filter((r) => !(r.s === sys.id && r.f === g.file))).slice(0, 12);
+  store.set('arcade.recent', recent);
+}
 
 async function jget(url) {
   try { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) return null; return await r.json(); }
@@ -117,147 +170,299 @@ async function countSystem(sys) {
   return d.entries.filter((e) => e.type === 'file' && ex.has(extOf(e.name)) && e.name.toLowerCase() !== bios).length;
 }
 function extOf(n) { const i = n.lastIndexOf('.'); return i < 0 ? '' : n.slice(i + 1).toLowerCase(); }
-function titleOf(n) { const i = n.lastIndexOf('.'); return (i < 0 ? n : n.slice(0, i)).replace(/[._]+/g, ' ').trim(); }
+function baseOf(n) { const i = n.lastIndexOf('.'); return i < 0 ? n : n.slice(0, i); }
+function titleOf(n) { return baseOf(n).replace(/[._]+/g, ' ').trim(); }
+// Same rule as the player's shortBase(): very long names get a shortened save base (the firmware
+// caps encoded ?path= at ~199 chars), so the badge has to match either spelling.
+function shortBase(base) {
+  let h = 5381;
+  for (let i = 0; i < base.length; i++) h = ((h * 33) ^ base.charCodeAt(i)) >>> 0;
+  return base.slice(0, 40).trim() + '~' + h.toString(36);
+}
+function fmtSize(b) { return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+const sysById = (id) => SYSTEMS.find((s) => s.id === id);
+
+// Small inline glyphs — a handheld, a pad, a cabinet. Zero assets, tinted by the system accent.
+const GLYPHS = {
+  hand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><rect x="9.4" y="5" width="5.2" height="5" rx=".8"/><circle cx="14.6" cy="14.6" r="1.1" fill="currentColor" stroke="none"/><path d="M10.2 14.6h-.02M9.2 15.6v-2M8.2 14.6h2" stroke-linecap="round"/></svg>',
+  pad:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6.5 8h11c2.5 0 4 2 4 4.5 0 3-1.6 4.7-3 4.7-1.2 0-2-.8-2.8-1.7-.6-.7-1-1-1.7-1h-4c-.7 0-1.1.3-1.7 1-.8.9-1.6 1.7-2.8 1.7-1.4 0-3-1.7-3-4.7C2.5 10 4 8 6.5 8Z"/><path d="M8 10.7v3M6.5 12.2h3" stroke-linecap="round"/><circle cx="16" cy="11.3" r=".9" fill="currentColor" stroke="none"/><circle cx="17.8" cy="13.1" r=".9" fill="currentColor" stroke="none"/></svg>',
+  cab:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 21V5.5L9 3h6l3 2.5V21"/><rect x="8.6" y="6.5" width="6.8" height="5" rx=".8"/><path d="M9 14.5h6M12 17h.01" stroke-linecap="round"/></svg>',
+};
+const GLYPH_FOR = { gb:'hand', gbc:'hand', gba:'hand', gg:'hand', ngpc:'hand', linx:'hand',
+                    neogeo:'cab', cps1:'cab', cps2:'cab' };
+const glyphOf = (sys) => GLYPHS[GLYPH_FOR[sys.id] || 'pad'];
+const SAVE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>';
+
+// ── Views ───────────────────────────────────────────────────────────────────────────────────────
+function setChrome() {
+  $('back').style.display = curSys ? 'inline-flex' : 'none';
+  $('sort').style.display = curSys ? 'block' : 'none';
+  $('crumb').innerHTML = '';
+  if (curSys) { const b = document.createElement('b'); b.textContent = curSys.name; $('crumb').appendChild(b); }
+}
+
+// Bounded fan-out: the device's httpd runs a handful of sockets with LRU purge — 14 simultaneous
+// /api/fs/list would trample it (and a purged request silently renders that system as empty).
+// Three in flight keeps the shelf snappy without shoving the firmware.
+async function mapLimited(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) { const i = next++; out[i] = await fn(items[i]); }
+  }));
+  return out;
+}
 
 async function showSystems() {
-  curSys = null;
-  $('back').style.display = 'none';
-  $('search').style.display = 'none';
-  $('crumb').innerHTML = '';
+  curSys = null; setChrome();
+  const s = $('search'); s.value = ''; s.oninput = () => renderSystems(s.value);
   main.innerHTML = '<div class="spin"></div>';
-  // Count every system in parallel; hide the ones that don't exist on the card at all, but keep
+  // Count every system; hide the ones that don't exist on the card at all, but keep
   // configured-but-empty ones dimmed so the user knows where to drop ROMs.
-  const counts = await Promise.all(SYSTEMS.map(countSystem));
+  lastCounts = await mapLimited(SYSTEMS, 3, countSystem);
+  $('sub').textContent = t('games_count', { count: lastCounts.reduce((a, b) => a + b, 0) });
+  renderSystems('');
+}
+
+function sectionTitle(key) { const h = document.createElement('div'); h.className = 'sect'; h.textContent = t(key); return h; }
+
+function renderSystems(q) {
+  if (!lastCounts) return;
+  q = (q || '').toLowerCase();
+  main.innerHTML = '';
+
+  // "Continue playing": the newest recent entry whose system is still configured.
+  const last = recent.find((r) => sysById(r.s));
+  if (last && !q) {
+    const sys = sysById(last.s);
+    main.appendChild(sectionTitle('continue_playing'));
+    const h = document.createElement('div'); h.className = 'hero';
+    h.style.setProperty('--ha', sys.accent || 'var(--ac)');
+    h.innerHTML = `<div class="hp">${glyphOf(sys)}</div><div class="ht"><div class="t"></div><div class="s"></div></div><div class="go"></div>`;
+    h.querySelector('.t').textContent = last.t;
+    h.querySelector('.s').textContent = sys.name;
+    h.querySelector('.go').textContent = '▶ ' + t('play');
+    h.onclick = () => launch(sys, { file: last.f, title: last.t });
+    main.appendChild(h);
+  }
+
+  // Favorites rail — cross-system quick launch.
+  const favList = [...favs].map((k) => {
+    const i = k.indexOf('/'); const sys = sysById(k.slice(0, i));
+    return sys ? { sys, file: k.slice(i + 1) } : null;
+  }).filter(Boolean);
+  if (favList.length && !q) {
+    main.appendChild(sectionTitle('favorites'));
+    const rail = document.createElement('div'); rail.className = 'rail';
+    favList.forEach((f) => {
+      const el = document.createElement('div'); el.className = 'fav';
+      el.style.setProperty('--sa', f.sys.accent || 'var(--ac)');
+      el.innerHTML = `<div class="t"></div><div class="s"></div>`;
+      el.querySelector('.t').textContent = titleOf(f.file);
+      el.querySelector('.s').textContent = f.sys.name;
+      el.onclick = () => launch(f.sys, { file: f.file, title: titleOf(f.file) });
+      rail.appendChild(el);
+    });
+    main.appendChild(rail);
+  }
+
+  main.appendChild(sectionTitle('systems'));
   const grid = document.createElement('div'); grid.className = 'grid';
-  let any = false;
+  let shown = 0;
   SYSTEMS.forEach((sys, i) => {
-    const n = counts[i];
+    if (q && !sys.name.toLowerCase().includes(q)) return;
+    const n = lastCounts[i];
     const el = document.createElement('div');
     el.className = 'sys' + (n === 0 ? ' empty' : '');
     el.style.setProperty('--sa', sys.accent || 'var(--ac)');
-    el.innerHTML = `<div class="rail"></div>${n > 0 ? `<div class="badge">${n}</div>` : ''}
-      <div class="nm">${sys.name}</div><div class="ct">${n > 0 ? n + ' ' + T(n === 1 ? 'game' : 'games') : T('empty')}</div>`;
-    if (n > 0) { any = true; el.onclick = () => showGames(sys); }
-    grid.appendChild(el);
+    el.innerHTML = `${n > 0 ? `<div class="badge">${n}</div>` : ''}<div class="glyph">${glyphOf(sys)}</div>
+      <div class="nm"></div><div class="ct"></div>`;
+    el.querySelector('.nm').textContent = sys.name;
+    el.querySelector('.ct').textContent = n > 0 ? t('games_count', { count: n }) : t('empty');
+    if (n > 0) { el.onclick = () => showGames(sys); }
+    grid.appendChild(el); shown++;
   });
-  main.innerHTML = '';
   main.appendChild(grid);
   sel = 0; paintSel();
-  if (!any && SYSTEMS.every((_, i) => counts[i] === 0)) {
+  if (!q && lastCounts.every((c) => c === 0)) {
     const m = document.createElement('div'); m.className = 'msg';
-    m.innerHTML = `${T('addRoms')} <code>/sd/data/ROMs/&lt;system&gt;</code> ${T('onSd')}`;
+    m.innerHTML = `${t('add_roms')} <code>/sd/data/ROMs/&lt;system&gt;</code> ${t('on_sd')}`;
     main.appendChild(m);
   }
 }
 
 async function showGames(sys) {
-  curSys = sys;
-  $('back').style.display = 'inline-flex';
-  $('back-t').textContent = T('backSystems');
-  $('crumb').innerHTML = `<b>${sys.name}</b>`;
+  curSys = sys; setChrome();
   main.innerHTML = '<div class="spin"></div>';
-  const d = await jget('/api/fs/list?path=' + encodeURIComponent(ROM_DIR + sys.id));
+  const [d, sv] = await Promise.all([
+    jget('/api/fs/list?path=' + encodeURIComponent(ROM_DIR + sys.id)),
+    jget('/api/fs/list?path=' + encodeURIComponent(ROM_DIR + sys.id + '/' + SAVE_DIR)),
+  ]);
   const ex = new Set(sys.exts);
   // The BIOS is a support file the core loads, not a game — never list it as playable.
   const bios = (sys.bios || '').toLowerCase();
   curGames = (d && d.entries ? d.entries : [])
     .filter((e) => e.type === 'file' && ex.has(extOf(e.name)) && e.name.toLowerCase() !== bios)
-    .map((e) => ({ file: e.name, title: titleOf(e.name), size: e.size }))
-    .sort((a, b) => a.title.localeCompare(b.title));
-  const s = $('search'); s.style.display = 'block'; s.value = ''; s.placeholder = T('filter'); s.oninput = () => renderGames(s.value);
+    .map((e) => ({ file: e.name, title: titleOf(e.name), size: e.size }));
+  // One listing of <sys>/saves marks every game that has a .state or .srm on the card.
+  savedSet = new Set((sv && sv.entries ? sv.entries : [])
+    .filter((e) => e.type === 'file' && /\.(state|srm)$/i.test(e.name))
+    .map((e) => baseOf(e.name).toLowerCase()));
+  const s = $('search'); s.value = ''; s.oninput = () => renderGames(s.value);
+  $('sort').value = sortMode;
   renderGames('');
 }
 
-function fmtSize(b) { return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+function sortGames(list) {
+  const ts = new Map(recent.filter((r) => curSys && r.s === curSys.id).map((r) => [r.f, r.ts]));
+  const by = {
+    name:   (a, b) => a.title.localeCompare(b.title),
+    size:   (a, b) => b.size - a.size || a.title.localeCompare(b.title),
+    recent: (a, b) => (ts.get(b.file) || 0) - (ts.get(a.file) || 0) || a.title.localeCompare(b.title),
+  };
+  return list.slice().sort(by[sortMode] || by.name);
+}
 
 function renderGames(q) {
   q = (q || '').toLowerCase();
-  const list = curGames.filter((g) => g.title.toLowerCase().includes(q));
-  if (!curGames.length) { main.innerHTML = `<div class="msg">${T('noGames')}</div>`; return; }
+  if (!curGames.length) { main.innerHTML = `<div class="msg">${t('no_games')}</div>`; return; }
+  const list = sortGames(curGames.filter((g) => g.title.toLowerCase().includes(q)));
   main.innerHTML = '';
   // Arcade cores are romset-version locked and fail with a cryptic core error rather than degrading
   // (verified: fbneo rejects an FBA 0.2.97.38 Neo Geo set outright). Say so BEFORE the user launches.
   if (curSys.warn) {
-    const w = document.createElement('div');
-    w.style.cssText = 'display:flex;gap:8px;align-items:flex-start;background:#1a1408;border:1px solid #6b4e12;'
-                    + 'border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:12px;line-height:1.5;color:#ffce46';
-    const msg = (curSys.warn[lang] || curSys.warn.en || '');
-    w.innerHTML = `<span>⚠</span><span><b>${msg}</b><br><span style="color:var(--dim)">${T('romsetNote')}</span></span>`;
+    const w = document.createElement('div'); w.className = 'warnbox';
+    const msg = (curSys.warn[I18N.lang] || curSys.warn.en || '');
+    w.innerHTML = `<span>⚠</span><span><b></b><br><span class="wn" style="color:var(--dim)"></span></span>`;
+    w.querySelector('b').textContent = msg;
+    w.querySelector('.wn').textContent = t('romset_note');
     main.appendChild(w);
   }
   const box = document.createElement('div'); box.className = 'games';
   list.forEach((g) => {
     const el = document.createElement('div'); el.className = 'game';
     el.style.setProperty('--sa', curSys.accent || 'var(--ac)');
-    el.innerHTML = `<div class="gi">${curSys.name[0]}</div><div class="gn">${g.title}</div><div class="gs">${fmtSize(g.size)}</div>`;
-    el.onclick = () => launch(g);
+    const b = baseOf(g.file);
+    const hasSave = savedSet.has(b.toLowerCase()) || savedSet.has(shortBase(b).toLowerCase());
+    const isFav = favs.has(favKey(curSys.id, g.file));
+    el.innerHTML = `<div class="gi">${curSys.name[0]}</div><div class="gn"></div>
+      ${hasSave ? `<span class="sv" title="${t('has_save')}">${SAVE_ICON}</span>` : ''}
+      <div class="gs">${fmtSize(g.size)}</div>
+      <button class="star${isFav ? ' on' : ''}" title="${t('fav_toggle')}" aria-label="${t('fav_toggle')}">${isFav ? '★' : '☆'}</button>`;
+    el.querySelector('.gn').textContent = g.title;
+    el.onclick = () => launch(curSys, g);
+    el.querySelector('.star').onclick = (ev) => {
+      ev.stopPropagation();
+      const k = favKey(curSys.id, g.file);
+      favs.has(k) ? favs.delete(k) : favs.add(k);
+      store.set('arcade.favs', [...favs]);
+      renderGames($('search').value);
+    };
     box.appendChild(el);
   });
   main.appendChild(box);
   sel = 0; paintSel();
 }
 
-function launch(g) {
-  const rom = '/api/fs/read?path=' + encodeURIComponent(ROM_DIR + curSys.id + '/' + g.file);
-  let url = 'player.html?core=' + encodeURIComponent(curSys.core) +
+// ── Launch / exit ───────────────────────────────────────────────────────────────────────────────
+function launch(sys, g) {
+  const rom = '/api/fs/read?path=' + encodeURIComponent(ROM_DIR + sys.id + '/' + g.file);
+  let url = 'player.html?core=' + encodeURIComponent(sys.core) +
             '&rom=' + encodeURIComponent(rom) + '&name=' + encodeURIComponent(g.title) +
             // the player probes this exact core on the SD to decide device-vs-CDN
-            '&corefile=' + encodeURIComponent(curSys.coreFile || '');
+            '&corefile=' + encodeURIComponent(sys.coreFile || '') +
+            // system id + file name let the player put .state/.srm next to the ROM on the SD
+            '&sys=' + encodeURIComponent(sys.id) + '&file=' + encodeURIComponent(g.file);
   // Neo Geo (and other arcade sets) will not boot without their BIOS: hand the player its URL so
   // EmulatorJS loads it alongside the game.
-  if (curSys.bios) {
-    const b = '/api/fs/read?path=' + encodeURIComponent(ROM_DIR + curSys.id + '/' + curSys.bios);
+  if (sys.bios) {
+    const b = '/api/fs/read?path=' + encodeURIComponent(ROM_DIR + sys.id + '/' + sys.bios);
     url += '&bios=' + encodeURIComponent(b);
   }
+  rememberPlay(sys, g);
+  $('search').blur();
   $('pframe').src = url;
   $('play').style.display = 'block';
   playing = true;   // hand the keyboard and the pad to the emulator
 }
-function exitPlayer() {
+async function exitPlayer() {
   $('play').style.display = 'none';
   $('pframe').src = 'about:blank';   // frees the core's memory; leaving it loaded costs hundreds of MB
   playing = false;
-  focusList();
+  // Re-enter the view (the run may have written a first save → badge, and bumped the recent shelf)
+  // but PUT THE USER BACK where they were: filter, cursor and scroll survive the game session —
+  // landing on row 1 of a 250-game shelf after playing game #200 is hostile.
+  if (curSys) {
+    const q = $('search').value, keep = sel;
+    await showGames(curSys);
+    if (q) { $('search').value = q; renderGames(q); }
+    sel = keep; paintSel();
+  } else showSystems();
 }
 $('exit').onclick = exitPlayer;
 // The emulator swallows keys, so the player frame tells us when the user pressed Esc.
 window.addEventListener('message', (e) => { if (e.data && e.data.type === 'arcade-exit') exitPlayer(); });
 $('back').onclick = () => showSystems();
+$('sort').onchange = () => { sortMode = $('sort').value; store.set('arcade.sort', sortMode); renderGames($('search').value); };
 
 // ── Keyboard / gamepad navigation ───────────────────────────────────────────────────────────────
 // The app has to be fully usable with no mouse: this runs on a handheld and on the Cardputer's own
 // keyboard. Mouse still works everywhere — these paths only ADD a cursor, they never take over.
-function cells() { return [...main.querySelectorAll('.sys, .game')]; }
+// Views mix a hero, a horizontal rail and a grid, so Up/Down works by GEOMETRY (nearest cell in
+// that direction) instead of assuming one uniform column count; Left/Right stay linear so holding
+// Right always walks the whole shelf.
+function cells() { return [...main.querySelectorAll('.sys:not(.empty), .game, .hero, .fav')]; }
 function paintSel() {
   const c = cells();
   if (!c.length) return;
   if (sel < 0) sel = 0;
   if (sel >= c.length) sel = c.length - 1;
   c.forEach((e, i) => e.classList.toggle('sel', i === sel));
-  c[sel].scrollIntoView({ block: 'nearest' });
+  c[sel].scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
-function focusList() { paintSel(); }
-// Grid width, measured rather than assumed: the card grid is auto-fill, so the column count changes
-// with the window and Up/Down must follow the real layout instead of a hardcoded guess.
-function cols() {
-  const c = cells();
-  if (c.length < 2) return 1;
-  const top = c[0].offsetTop;
-  let n = 0;
-  while (n < c.length && c[n].offsetTop === top) n++;
-  return Math.max(1, n);
+function moveVertical(dir) {          // dir = ±1
+  const c = cells(); if (!c.length) return;
+  const cur = (c[sel] || c[0]).getBoundingClientRect();
+  const cx = cur.left + cur.width / 2, cy = cur.top + cur.height / 2;
+  // Two passes, row-band first: pick the NEAREST row in that direction, then the closest cell in
+  // it. A single distance score let a far-but-aligned grid card beat the adjacent favorites rail,
+  // so Down from the hero skipped a whole section.
+  let bandY = Infinity;
+  c.forEach((el, i) => {
+    if (i === sel) return;
+    const b = el.getBoundingClientRect();
+    const ey = (b.top + b.height / 2) - cy;
+    if (Math.sign(ey) !== dir || Math.abs(ey) < 4) return;
+    if (Math.abs(ey) < bandY) bandY = Math.abs(ey);
+  });
+  if (bandY === Infinity) return;
+  let best = -1, score = Infinity;
+  c.forEach((el, i) => {
+    if (i === sel) return;
+    const b = el.getBoundingClientRect();
+    const ey = (b.top + b.height / 2) - cy;
+    if (Math.sign(ey) !== dir || Math.abs(ey) < 4) return;
+    if (Math.abs(ey) > bandY + b.height / 2) return;   // outside the nearest row band
+    const ex = Math.abs((b.left + b.width / 2) - cx);
+    if (ex < score) { score = ex; best = i; }
+  });
+  if (best >= 0) { sel = best; paintSel(); }
 }
 function activate() { const c = cells(); if (c[sel]) c[sel].click(); }
 
 document.addEventListener('keydown', (e) => {
   if (playing) return;                       // the player owns the keyboard while a game runs
   const typing = document.activeElement === $('search');
+  if (document.activeElement === $('sort')) return;   // native select handles its own keys
+  // While the caret is in the filter box, arrows/Home/End belong to TEXT EDITING — hijacking them
+  // to move the hidden list cursor makes fixing a typo impossible.
+  if (typing && e.key !== 'Enter' && e.key !== 'Escape') return;
   const c = cells();
   switch (e.key) {
     case 'ArrowRight': sel += 1; break;
     case 'ArrowLeft':  sel -= 1; break;
-    case 'ArrowDown':  sel += (curSys ? 1 : cols()); break;
-    case 'ArrowUp':    sel -= (curSys ? 1 : cols()); break;
+    case 'ArrowDown':  e.preventDefault(); moveVertical(1); return;
+    case 'ArrowUp':    e.preventDefault(); moveVertical(-1); return;
     case 'Home':       sel = 0; break;
     case 'End':        sel = c.length - 1; break;
     case 'PageDown':   sel += 5; break;
@@ -268,13 +473,13 @@ document.addEventListener('keydown', (e) => {
     case 'Escape': case 'Backspace':
       if (typing && e.key === 'Backspace') return;
       e.preventDefault();
-      if (typing) { $('search').value = ''; renderGames(''); $('search').blur(); }
+      if (typing) { $('search').value = ''; curSys ? renderGames('') : renderSystems(''); $('search').blur(); }
       else if (curSys) showSystems();
       return;
     default:
       // Type-to-search: any printable key jumps into the filter box, the fastest way through a
       // 250-game shelf on a keyboard device.
-      if (curSys && !typing && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!typing && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         $('search').focus(); return;
       }
       return;
@@ -302,8 +507,8 @@ document.addEventListener('keydown', (e) => {
         if (!dy && ay > 0.6) dy = 1; else if (!dy && ay < -0.6) dy = -1;
         if ((dx || dy) && now - last > 170) {        // repeat rate: fast enough to scan, slow enough to aim
           last = now;
-          sel += dx + dy * (curSys ? 1 : cols());
-          paintSel();
+          if (dy) moveVertical(dy);
+          else { sel += dx; paintSel(); }
         }
         const a = gp.buttons[0] && gp.buttons[0].pressed, b = gp.buttons[1] && gp.buttons[1].pressed;
         if (a && !prevBtn.a) activate();
@@ -316,11 +521,16 @@ document.addEventListener('keydown', (e) => {
   requestAnimationFrame(tick);
 })();
 
+// Live language switch: re-apply static labels and re-render the current view.
+I18N.onChange(() => {
+  I18N.apply(document, 'arcade');
+  if (curSys) renderGames($('search').value); else renderSystems($('search').value);
+});
+
 (async function init() {
-  const l = await jget('/api/lang'); if (l && l.lang) lang = l.lang;
   const cfg = await jget('systems.json');
   SYSTEMS = (cfg && Array.isArray(cfg.systems)) ? cfg.systems : [];
-  if (!SYSTEMS.length) { main.innerHTML = `<div class="msg">${T('noSystems')}</div>`; return; }
+  if (!SYSTEMS.length) { main.innerHTML = `<div class="msg">${t('no_systems')}</div>`; return; }
   showSystems();
 })();
 </script>

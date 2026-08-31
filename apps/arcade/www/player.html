@@ -9,11 +9,13 @@
      and a black screen tells the player nothing about which one happened. */
   #boot{position:fixed;inset:0;display:grid;place-items:center;background:#06070b;color:#e8eaed;z-index:5}
   #boot.gone{display:none}
-  #boot .b{max-width:460px;padding:24px;text-align:center}
+  #boot .b{max-width:460px;width:min(460px,86vw);padding:24px;text-align:center}
   #boot .t{font-size:16px;font-weight:600;margin-bottom:6px}
-  #boot .s{font-size:13px;color:#8b93a1;line-height:1.6}
+  #boot .s{font-size:13px;color:#8b93a1;line-height:1.6;min-height:20px}
   #boot .src{margin-top:12px;font-size:11px;color:#2dd4bf;letter-spacing:.4px;text-transform:uppercase}
   #boot .err{color:#f96b6b}
+  #bar{height:4px;border-radius:99px;background:#1b2130;margin-top:14px;overflow:hidden;display:none}
+  #bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#2dd4bf,#6aa8ff);transition:width .2s}
   .spin{width:24px;height:24px;border:2px solid #1b2130;border-top-color:#2dd4bf;border-radius:50%;
     animation:sp .7s linear infinite;margin:0 auto 16px}
   @keyframes sp{to{transform:rotate(360deg)}}
@@ -21,18 +23,41 @@
   #pad{position:fixed;right:12px;bottom:12px;z-index:6;background:rgba(6,7,11,.82);border:1px solid #2dd4bf;
     color:#2dd4bf;border-radius:9px;padding:7px 12px;font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none}
   #pad.on{opacity:1}
+  /* Toasts for save/load feedback — the run must SAY whether the SD accepted the write. */
+  #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:7;background:rgba(6,7,11,.88);
+    border:1px solid #2dd4bf;color:#e8eaed;border-radius:10px;padding:9px 16px;font-size:13px;opacity:0;
+    transition:opacity .25s;pointer-events:none;max-width:80vw;text-align:center}
+  #toast.on{opacity:1}
+  #toast.bad{border-color:#f96b6b}
 </style>
 </head><body>
 <div id="game"></div>
 <div id="boot"><div class="b"><div class="spin"></div>
-  <div class="t" id="bt">Loading…</div><div class="s" id="bs"></div><div class="src" id="bsrc"></div></div></div>
+  <div class="t" id="bt">Loading…</div><div class="s" id="bs"></div><div id="bar"><i></i></div><div class="src" id="bsrc"></div></div></div>
 <div id="pad"></div>
-<script>
-var q = new URLSearchParams(location.search);
-var $ = function (id) { return document.getElementById(id); };
-var IT = (navigator.language || '').toLowerCase().indexOf('it') === 0;
-function TR(it, en) { return IT ? it : en; }
-function say(t, s, cls) { $('bt').textContent = t; $('bs').textContent = s || ''; if (cls) $('bt').className = 't ' + cls; }
+<div id="toast"></div>
+<script type="module">
+import I18N from '/nucleo-i18n.js';
+const t = await I18N.init('arcade');
+
+const q = new URLSearchParams(location.search);
+const $ = (id) => document.getElementById(id);
+
+// Dev/test hook: ?rafshim=1 drives the emulator with timers instead of requestAnimationFrame, so a
+// hidden/offscreen page (headless test-lab, background pane) still advances frames. rAF stops when
+// the compositor does — an emulator frozen mid-test looks exactly like a real bug otherwise. The
+// library never sets this; it costs nothing in normal runs.
+if (q.get('rafshim') === '1') {
+  window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
+  window.cancelAnimationFrame = (id) => clearTimeout(id);
+}
+function say(tt, s, cls) { $('bt').textContent = tt; $('bs').textContent = s || ''; $('bt').className = 't ' + (cls || ''); }
+function prog(pct) { const b = $('bar'); if (pct == null) { b.style.display = 'none'; return; } b.style.display = 'block'; b.firstElementChild.style.width = pct + '%'; }
+let toastTimer = 0;
+function toast(msg, bad) {
+  const e = $('toast'); e.textContent = msg; e.className = bad ? 'bad on' : 'on';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => e.classList.remove('on'), 2400);
+}
 
 // ── Where does the emulator come from? ───────────────────────────────────────────────────────────
 // SD FIRST, CDN as the fallback. The whole point of the device carrying its own runtime is that a
@@ -43,19 +68,27 @@ function say(t, s, cls) { $('bt').textContent = t; $('bs').textContent = s || ''
 // The anti-phone-home guard is applied ONLY when running from the SD: EmulatorJS otherwise reaches out
 // for a version check and netplay, which would break the "nothing leaves the device" promise. On the
 // CDN path we are online by definition, so the guard would only block the very files we need.
-var LOCAL = '/apps/arcade/emulatorjs/';
-var CDN   = 'https://cdn.emulatorjs.org/stable/data/';
+const LOCAL = '/apps/arcade/emulatorjs/';
+const CDN   = 'https://cdn.emulatorjs.org/stable/data/';
 
 function installOfflineGuard() {
-  var ext = /emulatorjs\.org|fontawesome|discord|githubusercontent|(^|\/\/)github\.com/;
-  var f = window.fetch;
+  const ext = /emulatorjs\.org|fontawesome|discord|githubusercontent|(^|\/\/)github\.com/;
+  const f = window.fetch;
   window.fetch = function (u) {
-    try { if (ext.test(String(u))) return Promise.reject(new Error('offline')); } catch (e) {}
+    // Answer 403 instead of rejecting: EmulatorJS's own update check has no .catch(), so a rejection
+    // surfaced as an "Uncaught (in promise)" in the console — noise that reads like a real failure.
+    // Every caller here tests res.ok, and a blocked request is honestly "not allowed", not "empty".
+    try { if (ext.test(String(u))) return Promise.resolve(new Response('', { status: 403, statusText: 'offline' })); } catch (e) {}
     return f.apply(this, arguments);
   };
-  var X = XMLHttpRequest.prototype.open;
+  const X = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (m, u) {
-    if (ext.test(String(u))) u = 'data:application/json,{}';
+    // A blocked request must FAIL, not answer 200 with an empty body. EmulatorJS reads any 2xx as
+    // a real file, so the old `data:application/json,{}` stand-in became a 2-byte "core" that
+    // decompressed to nothing — which is how a busy device ended up throwing "EJS_Runtime is not
+    // defined!" instead of reporting a download problem. This path 404s, and EmulatorJS's
+    // downloadFile() turns any 4xx/5xx into its honest "file missing" branch.
+    if (ext.test(String(u))) u = '/__offline_blocked__';
     return X.apply(this, [m, u].concat([].slice.call(arguments, 2)));
   };
 }
@@ -64,35 +97,346 @@ function installOfflineGuard() {
 // the device's file API (which serves file bytes, not metadata).
 function exists(url) {
   return fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' }, cache: 'no-store' })
-    .then(function (r) { return r.ok || r.status === 206; })
-    .catch(function () { return false; });
+    .then((r) => r.ok || r.status === 206)
+    .catch(() => false);
 }
 
 async function pickBase() {
-  var coreFile = q.get('corefile') || '';
-  var haveLoader = await exists(LOCAL + 'loader.js');
-  var haveCore = coreFile ? await exists(LOCAL + 'cores/' + coreFile + '-wasm.data') : haveLoader;
+  const coreFile = q.get('corefile') || '';
+  const haveLoader = await exists(LOCAL + 'loader.js');
+  const haveCore = coreFile ? await exists(LOCAL + 'cores/' + coreFile + '-wasm.data') : haveLoader;
   if (haveLoader && haveCore) { installOfflineGuard(); return { base: LOCAL, src: 'device' }; }
   if (navigator.onLine) return { base: CDN, src: 'cdn' };
   // Offline AND incomplete on the card: say exactly what is missing instead of hanging on a spinner.
   return { base: null, src: 'none', missing: !haveLoader ? 'runtime' : ('core ' + coreFile) };
 }
 
+// ── Core transfer: "busy" is not "missing" ──────────────────────────────────────────────────────
+// The firmware refuses to START streaming a file over 512 KB while the largest contiguous block is
+// under 32 KB, and answers 503 + Retry-After so the client backs off (nucleo_webfs). Every core
+// blob is ~1 MB, so a busy moment on the device lands exactly there — and EmulatorJS reads ANY
+// 4xx/5xx as "the file is not on the card", jumping straight to its CDN failsafe, which the
+// offline guard blocks. The run then died on a decompressed-nothing core.
+//
+// So we pull the core ourselves: back off and retry while the device says "busy", verify the bytes
+// really are a core, and hand them to EmulatorJS through EJS_paths (a blob: URL, which its
+// downloadFile() reads with fetch and revokes afterwards).
+const CORE_DB = 'EmulatorJS-core', CORE_STORE = 'core';   // EmulatorJS's own IndexedDB core cache
+const CORE_TRIES = 6;
+
+// Read/delete an entry of EmulatorJS's core cache. Same db name, version and store-creation as
+// EJS_STORAGE uses — opening it any other way would leave a db it can no longer add its store to.
+function idbCore(op, key) {
+  return new Promise((done) => {
+    if (!window.indexedDB) return done();
+    let r;
+    try { r = indexedDB.open(CORE_DB, 1); } catch (e) { return done(); }
+    r.onerror = () => done();
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      if (!d.objectStoreNames.contains(CORE_STORE)) d.createObjectStore(CORE_STORE);
+    };
+    r.onsuccess = () => {
+      try {
+        const st = r.result.transaction([CORE_STORE], 'readwrite').objectStore(CORE_STORE);
+        const g = op === 'del' ? st.delete(key) : st.get(key);
+        g.onsuccess = () => done(g.result);
+        g.onerror = () => done();
+      } catch (e) { done(); }
+    };
+  });
+}
+
+// A core is a 7z archive (37 7A BC AF 27 1C) of at least a few hundred KB. Anything else — a
+// truncated transfer, an error page, a blocked request's stub — must never reach the emulator or
+// its cache: it extracts to nothing and the runtime is simply never defined.
+function looksLikeCore(data) {
+  const buf = data && data.buffer instanceof ArrayBuffer ? data.buffer : data;
+  if (!(buf instanceof ArrayBuffer) || buf.byteLength < 65536) return false;
+  const m = new Uint8Array(buf, 0, 6);
+  return m[0] === 0x37 && m[1] === 0x7a && m[2] === 0xbc && m[3] === 0xaf && m[4] === 0x27 && m[5] === 0x1c;
+}
+
+// A zip that lost its tail (a partial download re-saved as a ROM) makes EmulatorJS's extractor
+// worker hang forever at "Decompress Game Data" — no error, no canvas, spinner until the timeout.
+// The one structure a zip cannot live without is the end-of-central-directory record, always within
+// the last 65557 bytes: cheap to check here on the full bytes, impossible to recover from later
+// inside the worker. Non-zip data passes untouched — the cores judge their own formats.
+function zipIntact(buf) {
+  const b = new Uint8Array(buf);
+  if (b.length < 22 || b[0] !== 0x50 || b[1] !== 0x4B || (b[2] !== 3 && b[2] !== 7)) return true;
+  for (let i = b.length - 22, stop = Math.max(0, b.length - 65558); i >= stop; i--)
+    if (b[i] === 0x50 && b[i + 1] === 0x4B && b[i + 2] === 5 && b[i + 3] === 6) return true;
+  return false;
+}
+
+// The report carries the version key of the core cache. Missing (an SD not yet synced) is not an
+// error: EmulatorJS then falls back to a random key and simply never caches, so we always transfer.
+async function coreBuildStart(base, coreFile) {
+  try {
+    const r = await fetch(base + 'cores/reports/' + coreFile + '.json', { cache: 'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return typeof j.buildStart === 'number' ? j.buildStart : null;
+  } catch (e) { return null; }
+}
+
+// Shared retry-transfer: used for the core AND the ROM — both stream off the same busy-prone
+// device, so both deserve the 503 backoff, the mid-body-drop retry and the progress bar.
+// `validate` inspects the final bytes; returning false fails the run (retrying cannot fix content).
+async function fetchBlob(url, label, validate) {
+  for (let i = 1; i <= CORE_TRIES; i++) {
+    let res = null, err = '';
+    try { res = await fetch(url, { cache: 'no-store' }); } catch (e) { err = 'network'; }
+    if (res && res.ok) {
+      // A drop MID-BODY (the device resetting the socket under heap pressure) must retry like any
+      // other network failure, not bubble out of the loop as a fatal error.
+      let buf = null;
+      try {
+        const total = parseInt(res.headers.get('content-length') || '', 10) || 0;
+        buf = await readWithProgress(res, total, label);
+        if (total && buf.byteLength < total) { err = 'truncated'; res = null; buf = null; }   // short body = same as a drop
+      } catch (e2) { err = 'dropped'; res = null; }
+      if (buf) {
+        // `validate` answers true (good), false (generic damage) or a translated string naming the
+        // exact problem. Either failure is final: retrying cannot fix content.
+        const v = validate ? validate(buf) : true;
+        if (v === true) return { data: buf };
+        return { error: typeof v === 'string' ? v : t('p_core_damaged') };
+      }
+    }
+    // 503 is the device saying "not right now"; anything else is a real answer we must not paper over.
+    if (!res) { if (i === CORE_TRIES) return { error: t('p_no_response') }; }
+    else if (res.status !== 503) return { error: 'HTTP ' + res.status };
+    else if (i === CORE_TRIES) return { error: t('p_low_mem') };
+    const ra = res ? parseInt(res.headers.get('Retry-After') || '', 10) : 0;
+    const wait = ra > 0 ? ra * 1000 : 600 * i;
+    say(t('p_busy'), t('p_retrying', { i, n: CORE_TRIES }) + (err ? ' · ' + err : ''));
+    await new Promise((r2) => setTimeout(r2, wait));
+  }
+  return { error: t('p_core_missing') };
+}
+
+// A megabyte off an SD card over WiFi is slow enough that a bare spinner reads as a hang.
+async function readWithProgress(res, total, label) {
+  if (!res.body || !res.body.getReader) return await res.arrayBuffer();
+  const reader = res.body.getReader(), chunks = [];
+  let got = 0;
+  for (;;) {
+    const step = await reader.read();
+    if (step.done) break;
+    chunks.push(step.value); got += step.value.length;
+    if (total) { say(label, Math.floor(got / total * 100) + '%'); prog(Math.floor(got / total * 100)); }
+    else say(label, (got / 1048576).toFixed(1) + ' MB');
+  }
+  prog(null);
+  const out = new Uint8Array(got);
+  let at = 0;
+  for (let i = 0; i < chunks.length; i++) { out.set(chunks[i], at); at += chunks[i].length; }
+  return out.buffer;
+}
+
+// Returns null when nothing needs doing (cache already warm, or not running from the device), the
+// blob URL to hand EmulatorJS on success, and throws the reason when the core cannot be had.
+async function prepareCore(pick, coreFile) {
+  if (pick.src !== 'device' || !coreFile) return null;
+  const file = coreFile + '-wasm.data';
+  const buildStart = await coreBuildStart(pick.base, coreFile);
+  if (buildStart !== null) {
+    const hit = await idbCore('get', file);
+    if (hit && hit.version === buildStart) {
+      if (looksLikeCore(hit.data)) return null;     // EmulatorJS will serve it from its own cache
+      await idbCore('del', file);                   // cached junk would win over the card — drop it
+    }
+  }
+  const label = t('p_dl_core');
+  say(label, '');
+  const got = await fetchBlob(pick.base + 'cores/' + file, label, looksLikeCore);
+  if (got.error) throw new Error(got.error);
+  return URL.createObjectURL(new Blob([got.data], { type: 'application/octet-stream' }));
+}
+
+// The ROM comes through the same pipeline, for two reasons. Robustness: a multi-megabyte GBA or
+// Mega Drive image hits the firmware's 503-when-fragmented guard exactly like a core does, and
+// EmulatorJS would read that 503 as "no such game". Correct save names: EmulatorJS names its
+// in-memory content (and therefore the RetroArch save file) after the URL's basename — and every
+// device ROM URL ends in "/api/fs/read", so EVERY game's browser-side save was "read.srm". A blob:
+// URL makes EmulatorJS fall back to EJS_gameName, giving each game its own save identity.
+async function prepareRom(romUrl) {
+  const label = t('p_load_game');
+  say(label, '');
+  const got = await fetchBlob(romUrl, label, (buf) => {
+    if (!buf.byteLength) return false;
+    if (!zipIntact(buf)) return t('p_rom_corrupt');   // fail loudly HERE, not silently in the extractor
+    return true;
+  });
+  if (got.error) throw new Error(got.error);
+  return URL.createObjectURL(new Blob([got.data], { type: 'application/octet-stream' }));
+}
+
+// ── SD saves: the save follows the CARTRIDGE, not the browser ───────────────────────────────────
+// EmulatorJS keeps states and battery SRAM in the browser's IndexedDB — gone on another machine or
+// a cleared profile. This OS has the SD card right next to the ROM, so both go to
+// data/ROMs/<sys>/saves/<game>.state|.srm via the file API and any browser resumes the same game.
+const SYS  = q.get('sys')  || '';
+const FILE = q.get('file') || '';
+const SAVE_BASE = SYS && FILE ? 'data/ROMs/' + SYS + '/saves/' : null;
+// The firmware caps the percent-encoded ?path= value at 199 chars (nucleo_fsapi resolve_key), and
+// save paths are the longest URLs this app builds — a full No-Intro name plays fine but its save
+// would 400. Shorten oversized bases deterministically; the library uses the same rule (shortBase)
+// so the save badge still lights up.
+function shortBase(base) {
+  let h = 5381;
+  for (let i = 0; i < base.length; i++) h = ((h * 33) ^ base.charCodeAt(i)) >>> 0;
+  return base.slice(0, 40).trim() + '~' + h.toString(36);
+}
+const RAW_BASE = FILE.replace(/\.[^.]+$/, '');
+const GAME_BASE = SAVE_BASE && encodeURIComponent(SAVE_BASE + RAW_BASE + '.state.png').length > 190
+  ? shortBase(RAW_BASE) : RAW_BASE;
+const sdPath = (ext) => SAVE_BASE + GAME_BASE + ext;
+let saveDirReady = false;
+
+async function ensureSaveDir() {
+  if (saveDirReady) return;
+  // mkdir-first, idempotent (an already-existing dir answers an error the firmware sends and we
+  // ignore) — but only a server that actually ANSWERED latches the flag: a dropped request must
+  // retry next time, or every save of the session dies on the missing parent dir.
+  try {
+    await fetch('/api/fs/mkdir?path=' + encodeURIComponent(SAVE_BASE.replace(/\/$/, '')), { method: 'POST' });
+    saveDirReady = true;
+  } catch (e) {}
+}
+async function sdWrite(path, bytes) {
+  await ensureSaveDir();
+  const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: bytes });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+}
+async function sdRead(path) {
+  try {
+    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+    if (!r.ok) return null;
+    const b = new Uint8Array(await r.arrayBuffer());
+    return b.length ? b : null;
+  } catch (e) { return null; }
+}
+
+// Write bytes into the emulator's virtual FS at the save-file path and make the core reload them —
+// the exact sequence EmulatorJS's own "load save file" button performs.
+function pushSramIntoEmu(bytes) {
+  const gm = window.EJS_emulator.gameManager;
+  const path = gm.getSaveFilePath(), parts = path.split('/');
+  let s = '';
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (parts[i] === '') continue;
+    s += '/' + parts[i];
+    if (!gm.FS.analyzePath(s).exists) gm.FS.mkdir(s);
+  }
+  if (gm.FS.analyzePath(path).exists) gm.FS.unlink(path);
+  gm.FS.writeFile(path, bytes);
+  gm.loadSaveFiles();
+}
+
+// SRAM auto-sync: cheap signature so the periodic push only touches the SD when the game actually
+// wrote its battery save (most frames it did not).
+let lastSramSig = '';
+function sramSig(b) { return b.length + ':' + b[0] + ':' + b[b.length - 1] + ':' + b[b.length >> 1]; }
+// getSaveFile() dumps and reads back in one breath, but RetroArch performs the dump on its own
+// task queue — the immediate read can see a truncated file (observed live: 0 bytes while the FS
+// showed 8192 a moment later). Dump, give the core a beat, then read WITHOUT re-dumping.
+async function readSram() {
+  const gm = window.EJS_emulator && window.EJS_emulator.gameManager;
+  if (!gm) return null;
+  try { gm.saveSaveFiles(); } catch (e) {}
+  await new Promise((r) => setTimeout(r, 350));
+  try { const b = gm.getSaveFile(false); return b && b.length ? b : null; } catch (e) { return null; }
+}
+// RE-ENTRANCY GUARD, not an optimization: gameManager.saveSaveFiles() fires the emulator's
+// "saveSaveFiles" event SYNCHRONOUSLY, and this player listens to that event with flushSram —
+// so an unguarded flush recurses through readSram's dump straight into itself.
+let flushing = false;
+async function flushSram(silent) {
+  if (flushing) return;
+  flushing = true;
+  try {
+    if (!window.EJS_emulator || !SAVE_BASE) return;
+    const bytes = await readSram();
+    if (!bytes) { if (!silent) toast(t('p_sram_none')); return; }
+    const sig = sramSig(bytes);
+    if (silent && sig === lastSramSig) return;
+    await sdWrite(sdPath('.srm'), bytes);
+    lastSramSig = sig;
+    if (!silent) toast(t('p_sram_saved'));
+  } catch (e) { if (!silent) toast(t('p_state_save_err'), true); }
+  finally { flushing = false; }
+}
+
+function installSaveHooks() {
+  if (!SAVE_BASE) return;   // opened standalone (no sys/file): EmulatorJS's own browser storage still works
+
+  // Menu "save state" → SD (plus the screenshot as a sibling .png, a free thumbnail for later use).
+  window.EJS_onSaveState = async (e) => {
+    try {
+      await sdWrite(sdPath('.state'), e.state);
+      if (e.screenshot && e.screenshot.length) { try { await sdWrite(sdPath('.state.png'), e.screenshot); } catch (e2) {} }
+      toast(t('p_state_saved'));
+    } catch (err) { toast(t('p_state_save_err') + ' (' + err.message + ')', true); }
+  };
+  // Menu "load state" ← SD.
+  window.EJS_onLoadState = async () => {
+    const bytes = await sdRead(sdPath('.state'));
+    if (!bytes) return toast(t('p_state_none'), true);
+    try { window.EJS_emulator.gameManager.loadState(bytes); toast(t('p_state_loaded')); }
+    catch (e) { toast(t('p_state_load_err'), true); }
+  };
+  // Menu "export/import save file" → SD instead of a download/file-picker round trip.
+  window.EJS_onSaveSave = async (e) => {
+    try {
+      // e.save comes from EmulatorJS's own dump-and-read, which races the core's async write —
+      // an empty payload here often just means "read too soon", so retry through the settled path.
+      let bytes = e.save && e.save.length ? e.save : await readSram();
+      if (!bytes || !bytes.length) return toast(t('p_sram_none'));
+      await sdWrite(sdPath('.srm'), bytes);
+      lastSramSig = sramSig(bytes);
+      toast(t('p_sram_saved'));
+    } catch (err) { toast(t('p_state_save_err') + ' (' + err.message + ')', true); }
+  };
+  window.EJS_onLoadSave = async () => {
+    const bytes = await sdRead(sdPath('.srm'));
+    if (!bytes) return toast(t('p_sram_none'), true);
+    try { pushSramIntoEmu(bytes); lastSramSig = sramSig(bytes); toast(t('p_sram_loaded')); }
+    catch (e) { toast(t('p_state_load_err'), true); }
+  };
+
+  // On game start: if the SD carries a battery save for this cartridge, it wins over whatever this
+  // browser's IndexedDB remembers — the card travels with the device, the browser does not.
+  window.EJS_onGameStart = async () => {
+    ensureSaveDir();   // eager: the pagehide beacon cannot mkdir, so the dir must exist before it fires
+    const bytes = await sdRead(sdPath('.srm'));
+    if (bytes) { try { pushSramIntoEmu(bytes); lastSramSig = sramSig(bytes); } catch (e) {} }
+    // Periodic background sync + EmulatorJS's own save-interval event both feed the SD copy.
+    setInterval(() => flushSram(true), 60000);
+    try { window.EJS_emulator.on('saveSaveFiles', () => flushSram(true)); } catch (e) {}
+    // The power button fires "exit" — but so does EmulatorJS's own beforeunload hook. When the
+    // LIBRARY is tearing this page down (Esc already handled, or a new game loading into the same
+    // iframe), echoing arcade-exit back would kill the very game the library is starting — so only
+    // a live in-page exit leaves through here.
+    try { window.EJS_emulator.on('exit', () => { if (unloading) return; flushSram(true); leave(); }); } catch (e) {}
+  };
+}
+
 // ── Boot ────────────────────────────────────────────────────────────────────────────────────────
 (async function boot() {
-  var core = q.get('core'), rom = q.get('rom');
-  if (!core || !rom) { say(TR('Avvio non valido', 'Invalid launch'), TR('Manca il gioco o il sistema.', 'Missing game or system.'), 'err'); return; }
+  const core = q.get('core'), rom = q.get('rom');
+  say(t('p_loading'), '');
+  if (!core || !rom) { say(t('p_invalid'), t('p_missing'), 'err'); return; }
 
-  say(TR('Preparo l’emulatore…', 'Preparing the emulator…'), '');
-  var pick = await pickBase();
+  say(t('p_preparing'), '');
+  const pick = await pickBase();
   if (!pick.base) {
-    say(TR('Emulatore non disponibile', 'Emulator unavailable'),
-        TR('Manca ' + pick.missing + ' sulla scheda SD e non c’è connessione per scaricarlo.',
-           'Missing ' + pick.missing + ' on the SD card, and there is no connection to fetch it.'), 'err');
+    say(t('p_unavailable'), t('p_missing_offline', { what: pick.missing }), 'err');
     return;
   }
-  $('bsrc').textContent = pick.src === 'device' ? TR('dal dispositivo · offline', 'from the device · offline')
-                                                : TR('dal web', 'from the web');
+  $('bsrc').textContent = pick.src === 'device' ? t('p_from_device') : t('p_from_web');
 
   window.EJS_player        = '#game';
   window.EJS_core          = core;
@@ -103,6 +447,9 @@ async function pickBase() {
   window.EJS_color         = '#2dd4bf';
   window.EJS_alignStartButton = 'center';
   window.EJS_backgroundColor  = '#06070b';
+  // Netplay needs a server this OS does not run — drop the dead button. The power button stays: on
+  // a touch device it is the only way out (Esc needs a keyboard), and its exit event lands in leave().
+  window.EJS_Buttons = { netplay: false };
   // Arcade sets (Neo Geo, some CPS) need a BIOS loaded next to the ROM or the core refuses to boot.
   if (q.get('bios')) window.EJS_biosUrl = q.get('bios');
   // Never spin up SharedArrayBuffer threads: the web OS is served over plain HTTP on the LAN, which is
@@ -112,68 +459,123 @@ async function pickBase() {
   // EmulatorJS's own detection falls back to false and asks for a "<core>-legacy-wasm.data" that is not
   // there -> "EJS_Runtime is not defined". Force WebGL2 on for every core.
   window.EJS_defaultOptions = { webgl2Enabled: 'enabled' };
+  // Game Boy: colorize DMG carts with their per-game GBC palette by default (gambatte's "auto") and
+  // allow rewind — these are DEFAULTS, the EmulatorJS settings menu still lets the player override
+  // both (and its choice persists per game in the browser).
+  if ((q.get('corefile') || '') === 'gambatte') {
+    window.EJS_defaultOptions.gambatte_gb_colorization = 'auto';
+    window.EJS_defaultOptions.rewindEnabled = 'enabled';
+  }
+  installSaveHooks();
 
-  // The emulator's own menus ship as language packs, and EmulatorJS otherwise picks one from
-  // navigator.language — the BROWSER's language, not the OS's. Ask the device and load only once known,
-  // since EJS_language must be set before the loader runs.
-  //
-  // The pack FILENAMES must match what is actually on the card: this bundle names them by bare code
-  // (`it.json`, `en.json`). Asking for a regional name like `it-IT` fetches a 404 and the whole load
-  // fails — which is exactly how this shipped broken until a real launch was tried. So the pack is
-  // requested only when the file is present, and English is left to EmulatorJS's own default.
-  try {
-    var r = await fetch('/api/lang', { cache: 'no-store' });
-    var dd = await r.json();
-    var code = dd && dd.lang;
-    if (code && code !== 'en') {
-      var probe = await fetch(pick.base + 'localization/' + code + '.json', { method: 'GET', cache: 'no-store' });
+  // The emulator's own menus ship as language packs. The OS language comes from the i18n engine
+  // (same signal every app uses), NOT from navigator.language — the browser's locale is not the
+  // OS's. EJS_language must be set before the loader runs, and only to a pack that exists on this
+  // source: this bundle names packs by bare code (it.json); a regional name (it-IT) would 404 and
+  // kill the whole load. English is EmulatorJS's own default — no pack needed.
+  // NOTE the inverted flag: the bundled loader (loader.js:131) runs auto-detection whenever
+  // EJS_disableAutoLang !== false — the literal value `false` is the only one that disables it.
+  window.EJS_disableAutoLang = false;
+  const code = I18N.lang;
+  if (code && code !== 'en') {
+    try {
+      const probe = await fetch(pick.base + 'localization/' + code + '.json', { method: 'GET', cache: 'no-store' });
       if (probe.ok) window.EJS_language = code;
-    }
-  } catch (e) { /* no answer -> EmulatorJS's own default, never a 404 pack */ }
+    } catch (e) { /* no pack -> EmulatorJS's own default, never a 404 pack */ }
+  }
 
-  say(TR('Carico il gioco…', 'Loading the game…'), window.EJS_gameName);
-  var s = document.createElement('script');
+  // Pull the core off the card BEFORE the emulator asks for it, so a "device busy" 503 costs a
+  // retry instead of the whole run. EJS_paths maps a file name to where its bytes come from; the
+  // key is the exact blob name EmulatorJS computes (no -legacy: WebGL2 is forced just above, and
+  // the core report ships defaultWebGL2 too).
+  try {
+    const coreBlob = await prepareCore(pick, q.get('corefile') || '');
+    if (coreBlob) {
+      window.EJS_paths = window.EJS_paths || {};
+      window.EJS_paths[q.get('corefile') + '-wasm.data'] = coreBlob;
+    }
+  } catch (e) {
+    say(t('p_core_failed'), t('p_core_failed_body', { err: e.message }), 'err');
+    return;
+  }
+
+  // Every ROM takes the blob path. Arcade-family cores select their romset driver by the zip's
+  // FILE NAME — which the old direct URL destroyed anyway (basename of /api/fs/read is "read") —
+  // so for them EJS_gameName becomes the real file name WITH its extension: EmulatorJS's blob
+  // branch falls back to gameName verbatim, and the core sees "mslug.zip", not a pretty title.
+  const ARCADE_CORES = ['arcade', 'mame', 'mame2003', 'fbneo', 'fbalpha2012_cps1', 'fbalpha2012_cps2'];
+  if (ARCADE_CORES.includes(core) && FILE) window.EJS_gameName = FILE;
+  try { window.EJS_gameUrl = await prepareRom(rom); }
+  catch (e) { say(t('p_load_failed'), e.message, 'err'); return; }
+
+  say(t('p_load_game'), window.EJS_gameName);
+  const s = document.createElement('script');
   s.src = pick.base + 'loader.js';
-  s.onerror = function () {
-    say(TR('Caricamento fallito', 'Load failed'),
-        TR('L’emulatore non si è caricato da ' + pick.src + '.', 'The emulator failed to load from ' + pick.src + '.'), 'err');
-  };
+  s.onerror = () => { say(t('p_load_failed'), t('p_load_failed_body', { src: pick.src }), 'err'); };
   document.body.appendChild(s);
 
   // Hide the boot card once the emulator paints. EmulatorJS has no single "ready" event we can rely on
   // across cores, so watch for its canvas instead — the honest signal that something is on screen.
-  var t0 = Date.now();
-  var iv = setInterval(function () {
-    if (document.querySelector('#game canvas')) { clearInterval(iv); $('boot').classList.add('gone'); focusGame(); }
-    else if (Date.now() - t0 > 90000) { clearInterval(iv); say(TR('Ci sta mettendo troppo', 'This is taking too long'),
-        TR('Il core potrebbe non combaciare con questo set di ROM.', 'The core may not match this ROM set.'), 'err'); }
+  // EmulatorJS renders its own failures BEHIND this opaque card, so when it flags failedToStart the
+  // message must be lifted onto the card — otherwise every core rejection reads as an eternal spinner.
+  const t0 = Date.now();
+  const iv = setInterval(() => {
+    const E = window.EJS_emulator;
+    if (E && E.failedToStart) {
+      clearInterval(iv);
+      say(t('p_start_failed'), (E.textElem && E.textElem.innerText) || t('p_core_mismatch'), 'err');
+    }
+    else if (document.querySelector('#game canvas')) { clearInterval(iv); $('boot').classList.add('gone'); focusGame(); }
+    else if (Date.now() - t0 > 90000) { clearInterval(iv); say(t('p_too_long'), t('p_core_mismatch'), 'err'); }
   }, 400);
 })();
 
 // ── Input: keyboard, gamepad, mouse ─────────────────────────────────────────────────────────────
 // Keyboard events only reach the emulator if this document has focus. Inside an iframe that is not
 // automatic — a click lands on the parent first — so we take focus on load and on any pointer entry.
-function focusGame() { try { window.focus(); var c = document.querySelector('#game canvas'); if (c) { c.setAttribute('tabindex', '0'); c.focus(); } } catch (e) {} }
+function focusGame() { try { window.focus(); const c = document.querySelector('#game canvas'); if (c) { c.setAttribute('tabindex', '0'); c.focus(); } } catch (e) {} }
 window.addEventListener('load', focusGame);
 window.addEventListener('pointerdown', focusGame);
 document.addEventListener('mouseenter', focusGame);
 
 // Gamepad: EmulatorJS binds the Gamepad API itself, but the browser only starts delivering events
 // after a button press, and players reasonably expect confirmation their pad was seen.
-function padMsg(t) { var e = $('pad'); e.textContent = t; e.classList.add('on'); setTimeout(function () { e.classList.remove('on'); }, 2600); }
-window.addEventListener('gamepadconnected', function (e) {
+function padMsg(msg) { const e = $('pad'); e.textContent = msg; e.classList.add('on'); setTimeout(() => e.classList.remove('on'), 2600); }
+window.addEventListener('gamepadconnected', (e) => {
   focusGame();
-  padMsg('⌘ ' + TR('Joypad collegato', 'Gamepad connected') + (e.gamepad && e.gamepad.index != null ? ' #' + (e.gamepad.index + 1) : ''));
+  padMsg('⌘ ' + t('p_pad_on') + (e.gamepad && e.gamepad.index != null ? ' #' + (e.gamepad.index + 1) : ''));
 });
-window.addEventListener('gamepaddisconnected', function () { padMsg('⌘ ' + TR('Joypad scollegato', 'Gamepad disconnected')); });
+window.addEventListener('gamepaddisconnected', () => padMsg('⌘ ' + t('p_pad_off')));
 
-// Esc leaves the game. The library hosts us in an iframe and listens for this message; when opened
-// standalone we simply go back. Handled here because the emulator swallows most keys.
-document.addEventListener('keydown', function (e) {
-  if (e.key !== 'Escape') return;
-  e.preventDefault();
+// Leaving the game: Esc, or the emulator's own power button (exit event). The library hosts us in
+// an iframe and listens for this message; when opened standalone we simply go back.
+// `unloading` must be set before EmulatorJS's own beforeunload handler runs (it fires "exit" there),
+// which holds because this listener is registered first, long before the emulator exists.
+let left = false, unloading = false;
+window.addEventListener('beforeunload', () => { unloading = true; }, { capture: true });
+function leave() {
+  if (left) return;   // Esc and the exit event can both fire on one teardown — tell the library once
+  left = true;
   try { if (window.parent && window.parent !== window) { window.parent.postMessage({ type: 'arcade-exit' }, '*'); return; } } catch (err) {}
   history.back();
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  e.preventDefault();
+  flushSram(true);   // best effort — the write races the teardown, and the periodic sync already ran
+  leave();
+});
+// Tab close / navigation away: last-chance SRAM push. sendBeacon survives the page teardown.
+window.addEventListener('pagehide', () => {
+  try {
+    const gm = window.EJS_emulator && window.EJS_emulator.gameManager;
+    if (!gm || !SAVE_BASE) return;
+    // No time to await the async dump here — read whatever the last dump left. The periodic flush
+    // and EmulatorJS's own save interval keep that file fresh, so this only papers a small window.
+    const bytes = gm.getSaveFile(false);
+    if (bytes && bytes.length && sramSig(bytes) !== lastSramSig)
+      navigator.sendBeacon('/api/fs/write?path=' + encodeURIComponent(sdPath('.srm')), new Blob([bytes]));
+  } catch (e) {}
 });
 </script>
 </body></html>
