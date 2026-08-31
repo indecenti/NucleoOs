@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-31T07:07:16.143Z",
+  "generated": "2026-08-31T08:24:43.938Z",
   "base": "it",
   "langs": [
     "it",
@@ -22,8 +22,8 @@
     "fr": 100,
     "de": 100
   },
-  "surfaces": 43,
-  "totalKeys": 2263,
+  "surfaces": 45,
+  "totalKeys": 2375,
   "namespaces": {
     "core": 103,
     "shell": 224,
@@ -50,8 +50,10 @@
     "mail": 46,
     "media-player": 4,
     "metronome": 17,
+    "miei-fatti": 80,
     "nearby": 56,
     "notepad": 17,
+    "passkeys": 32,
     "photo-viewer": 2,
     "qr": 42,
     "radio": 53,
