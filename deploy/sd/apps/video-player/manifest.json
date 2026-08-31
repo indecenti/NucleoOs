@@ -24,7 +24,9 @@
       "mp4",
       "webm",
       "mov",
-      "mkv"
+      "mkv",
+      "avi",
+      "nfv"
     ]
   },
   "intents": [
@@ -34,7 +36,9 @@
         "mp4",
         "webm",
         "mov",
-        "mkv"
+        "mkv",
+        "avi",
+        "nfv"
       ]
     }
   ],

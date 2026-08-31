@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
@@ -121,12 +121,15 @@
 
     .pulse-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
     .tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;position:relative;overflow:hidden;min-height:84px}
-    .tile.wide{grid-column:span 2}
+    /* Sparkline tiles reserve a bottom band for the canvas: text and chart never overlap
+       (the absolutely-positioned canvas used to cover ".tsub" and graze the value). */
+    .tile.wide{grid-column:span 2;padding-bottom:44px;min-height:112px}
     .tile .tk{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px}
+    .tile .tk,.tile .tv,.tile .tsub,.tile .cores{position:relative;z-index:1}
     .tile .tv{font-size:23px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;line-height:1.1}
     .tile .tv small{font-size:12px;color:var(--dim);font-weight:500}
     .tile .tsub{font-size:11px;color:var(--dim);margin-top:2px}
-    .tile canvas{position:absolute;right:0;bottom:0;width:100%;height:34px;opacity:.9}
+    .tile canvas{position:absolute;left:0;right:0;bottom:0;width:100%;height:32px;opacity:.6;z-index:0;pointer-events:none}
     .tile .dotcol{width:9px;height:9px;border-radius:50%;background:var(--ok)}
     .tile.ok .dotcol{background:var(--ok)} .tile.warn .dotcol{background:var(--warn)} .tile.bad .dotcol{background:var(--bad)}
     .tile .tv.ok{color:var(--ok)} .tile .tv.warn{color:var(--warn)} .tile .tv.bad{color:var(--bad)}
@@ -188,9 +191,9 @@
     .qtoggle .qi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:17px;flex:none;
       background:rgba(128,128,128,.12);transition:.16s}
     .qtoggle.on .qi{background:rgba(94,224,160,.18)}
-    .qtoggle .qt{flex:1;min-width:0}
-    .qtoggle .ql{font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .qtoggle .qs{font-size:11px;color:var(--dim)}
+    .qtoggle .qt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;line-height:1.25}
+    .qtoggle .ql{display:block;font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .qtoggle .qs{display:block;font-size:11px;color:var(--dim);text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .qtoggle.busy{opacity:.6;pointer-events:none}
 
     /* ---- self-test ---- */
@@ -609,11 +612,32 @@ import { PRESETS, applyPreset, planPreset, feasibility, buildRegistry, gaps, APP
 import { buildActionRegistry, filterActions } from './actions.js';
 import { ENDPOINTS, runSelfTest, formatReport } from './selftest.js';
 
+// ═══════════ serial device gate ═══════════
+// ONE request to the Cardputer at a time, always. The device is a single-task PSRAM-less httpd
+// (4 sockets, fragmented heap): on open this app used to fire 3-4 concurrent /api/* fetches
+// (poller + caps + teacher + tts). Every /api/* fetch now rides a serial promise chain — this
+// also covers the shared modules (ai-keys, engine) because they resolve window.fetch at call
+// time. A 20 s timeout releases the chain if a request hangs; static assets and external
+// (browser-direct) calls pass straight through.
+const _rawFetch = window.fetch.bind(window);
+let _devChain = Promise.resolve();
+window.fetch = function (input, init) {
+  const u = typeof input === 'string' ? input : (input && input.url) || '';
+  if (!/^\/api\//.test(u)) return _rawFetch(input, init);
+  const run = _devChain.then(() => {
+    const opt = Object.assign({}, init);
+    if (!opt.signal) { try { opt.signal = AbortSignal.timeout(20000); } catch {} }
+    return _rawFetch(input, opt);
+  });
+  _devChain = run.catch(() => {});               // an error must never break the chain
+  return run;
+};
+
 const PATH = '/system/config/settings.json';
 const $ = (id) => document.getElementById(id);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 let model = merge(DEFAULTS, {});
-let lang = 'it';
+let lang = 'en';   // English-first floor until the on-disk model is read
 let dirty = false;
 let caps = { l1Mode: 'auto', l1Serving: false, hasKey: false };
 let screenOn = true;            // optimistic; we never POST on load (would wake a headless device)
@@ -658,7 +682,7 @@ function selectTab(id) {
 }
 function onTabFirstOpen(id) {
   if (id === 'personalization') loadWallpapers();
-  if (id === 'diagnostics') { refreshHeapDetail(); refreshLogs(); }
+  if (id === 'diagnostics') refreshHeapDetail();   // selectTab already refreshes the logs on every open
   if (id === 'device') refreshSessions();
 }
 
@@ -739,8 +763,18 @@ function renderCpu(c) {
   drawSpark($('tile-cpu').querySelector('canvas'), HISTORY.cpu, 100, avg >= 60 ? band.warn() : band.ok());
 }
 
-const metricOf = { status: (d) => d && d.uptime_s, heap: (d) => d && d.internal && Math.round((d.internal.free_bytes || 0) / 512), cpu: (d) => d && Math.round(d.load_avg || 0) };
+// The status "metric" must NOT include raw uptime (it changes every second, so the adaptive
+// backoff never engaged and the poller stayed at its base rate forever). Bucket uptime by the
+// minute and watch the fields a re-render actually cares about.
+const statusSig = (d) => !d ? '' : [d.network && d.network.ssid, d.network && d.network.mode, d.network && d.network.ip,
+  d.storage && d.storage.free_bytes, d.min_free_heap, Math.floor((d.uptime_s || 0) / 60)].join('|');
+const metricOf = { status: statusSig, heap: (d) => d && d.internal && Math.round((d.internal.free_bytes || 0) / 512), cpu: (d) => d && Math.round(d.load_avg || 0) };
+// Embedded in the shell, /api/status is NOT polled here at all: the shell already polls it every
+// 15 s and rebroadcasts the snapshot (status.snapshot, consumed below) — one poller for the whole
+// OS instead of two hammering the same endpoint. Standalone keeps the full rotation.
+const EMBEDDED = window.top !== window.self;
 const poller = createPoller({
+  sources: EMBEDDED ? ['heap', 'cpu'] : ['status', 'heap', 'cpu'],
   fetchJson: async (src) => {
     const path = src === 'status' ? '/api/status' : src === 'heap' ? '/api/heap' : '/api/cpu';
     const r = await fetch(path, { cache: 'no-store' });            // throws on network error → poller.onError
@@ -759,29 +793,35 @@ const poller = createPoller({
     if (src === 'status') renderStatus(data);
     else if (src === 'heap') renderHeap(data);
     else if (src === 'cpu') renderCpu(data);
+    lastUpdateAt = Date.now();                 // every live sample refreshes the "Ns ago" clock
     setLive('live');
   },
   onError: () => { setLive('offline'); if (Date.now() - lastUpdateAt > 6000) markOffline(); },
 });
 function markOffline() { $('hero-dot').className = 'verdict-dot bad'; $('hero-dot').textContent = '🔴'; $('hero-title').textContent = T('offline'); }
+let liveState = 'live';                        // remembered so the 1 s ticker can't overwrite "Offline" with "Live"
 function setLive(state) {
+  if (state) liveState = state;
   const pill = $('live-pill'), txt = $('live-txt');
   if (poller.frozen) { pill.classList.add('frozen'); txt.textContent = T('frozen'); return; }
   pill.classList.remove('frozen');
   const ago = lastUpdateAt ? Math.round((Date.now() - lastUpdateAt) / 1000) : 0;
-  txt.textContent = state === 'offline' ? T('offline') : state === 'busy' ? T('busy') : `${T('live')} · ${ago}${T('secondsAgo')}`;
+  txt.textContent = liveState === 'offline' ? T('offline') : liveState === 'busy' ? T('busy') : `${T('live')} · ${ago}${T('secondsAgo')}`;
 }
 $('live-pill').addEventListener('click', () => { poller.setFrozen(!poller.frozen); setLive('live'); if (!poller.frozen) poller.refreshNow(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poller.refreshNow(); });
-setInterval(() => { if (!poller.frozen && !document.hidden) setLive('live'); }, 1000);   // keeps the "Ns ago" honest (no fetch)
+setInterval(() => { if (!poller.frozen && !document.hidden) setLive(); }, 1000);   // keeps the "Ns ago" honest (no fetch)
 
 // ═══════════ scenes ═══════════
+// Scene/action/preset catalogs carry it+en strings only; for the tier-2 OS languages (es/fr/de)
+// fall back to English (the OS base), not Italian.
+const LBL = (o) => (o && (o[lang] || o.en || o.it)) || '';
 let activeScene = null;
 function buildScenes() {
   const box = $('scene-chips'); box.innerHTML = '';
   for (const s of SCENES) {
     const el = document.createElement('div'); el.className = 'chip'; el.dataset.id = s.id;
-    el.innerHTML = `<span class="ci">${s.icon}</span><div><div class="cl">${s[lang] || s.it}</div><div class="cd">${(s.desc && s.desc[lang]) || ''}</div></div>`;
+    el.innerHTML = `<span class="ci">${s.icon}</span><div><div class="cl">${LBL(s)}</div><div class="cd">${LBL(s.desc)}</div></div>`;
     el.addEventListener('click', () => runScene(s.id));
     box.appendChild(el);
   }
@@ -792,7 +832,7 @@ async function runScene(id) {
   $$('#scene-chips .chip').forEach((c) => c.classList.toggle('active', c.dataset.id === id));
   activeScene = id;
   if (res.selfTest) { selectTab('diagnostics'); runSelfTestUI('dg'); return; }
-  status(T('applyingScene') + (res.scene[lang] || res.scene.it) + '…');
+  status(T('applyingScene') + LBL(res.scene) + '…');
   model = res.model; toForm();
   await persistModel();                                   // patch persisted (drift-aware)
   for (const c of res.apiCalls) {                         // SEQUENTIAL — never parallel
@@ -800,7 +840,7 @@ async function runScene(id) {
   }
   await refreshCaps();
   syncQuickToggles();
-  status(T('sceneApplied') + (res.scene[lang] || res.scene.it));
+  status(T('sceneApplied') + LBL(res.scene));
 }
 
 // ═══════════ quick toggles ═══════════
@@ -851,10 +891,16 @@ async function runSelfTestUI(prefix) {
   const rows = {};
   for (const ep of ENDPOINTS) {
     const el = document.createElement('div'); el.className = 'st-item';
-    el.innerHTML = `<span class="sm run">…</span><span class="sl">${ep[lang]}</span><span class="sp">${ep.path}</span><span class="ss"></span>`;
+    el.innerHTML = `<span class="sm run">…</span><span class="sl">${ep[lang] || ep.en}</span><span class="sp">${ep.path}</span><span class="ss"></span>`;
     list.appendChild(el); rows[ep.key] = el;
   }
-  const results = await runSelfTest((p, o) => fetch(p, o), { now: () => performance.now(), lang });
+  // Freeze the live poller while the sweep runs: honest per-endpoint timings, and the sweep's own
+  // sequential requests never interleave with a poller tick on the single-task device.
+  const wasFrozen = poller.frozen;
+  if (!wasFrozen) poller.setFrozen(true);
+  let results;
+  try { results = await runSelfTest((p, o) => fetch(p, o), { now: () => performance.now(), lang }); }
+  finally { if (!wasFrozen) poller.setFrozen(false); }
   for (const r of results) {
     const el = rows[r.key]; if (!el) continue;
     const sm = el.querySelector('.sm'), ss = el.querySelector('.ss');
@@ -894,7 +940,7 @@ function renderCmd(q) {
   cmdFiltered.forEach((a, i) => {
     const el = document.createElement('div'); el.className = 'cmd-row' + (a.section === 'danger' ? ' danger' : '') + (i === 0 ? ' sel' : '');
     const icon = a.section === 'nav' ? '↪' : a.section === 'scene' ? '🎬' : a.section === 'danger' ? '⚠' : '⚡';
-    el.innerHTML = `<span class="cr-i">${icon}</span><span class="cr-t">${a[lang] || a.it}</span><span class="cr-s">${a.section}</span>`;
+    el.innerHTML = `<span class="cr-i">${icon}</span><span class="cr-t">${LBL(a)}</span><span class="cr-s">${a.section}</span>`;
     el.addEventListener('click', () => runCmd(a));
     el.addEventListener('mousemove', () => { cmdSel = i; markCmdSel(); });
     box.appendChild(el);
@@ -916,6 +962,8 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ═══════════ network scan ═══════════
+// SSIDs come off the air from anyone's beacon — escape them before touching innerHTML.
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 async function scanWifi() {
   const stat = $('wifi-scan-stat'), list = $('wifi-list'); stat.textContent = T('scanning'); list.innerHTML = '';
   const d = await apiJson('/api/wifi/scan'); stat.textContent = '';
@@ -927,7 +975,7 @@ async function scanWifi() {
     const strength = ap.rssi >= -55 ? 4 : ap.rssi >= -67 ? 3 : ap.rssi >= -78 ? 2 : 1;
     const bars = [6, 9, 12, 16].map((h, i) => `<i style="height:${h}px;${i < strength ? 'background:var(--accent)' : ''}"></i>`).join('');
     const el = document.createElement('div'); el.className = 'ap' + (conn ? ' connected' : '');
-    el.innerHTML = `<span class="bars">${bars}</span><div style="flex:1;min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${ap.ssid || T('hiddenNet')} ${conn ? '· <span style="color:var(--accent)">' + T('connectedF') + '</span>' : ''}</div><div class="as">${ap.auth || ''} · ch ${ap.channel || '?'}</div></div><span class="as">${ap.rssi} dBm</span>`;
+    el.innerHTML = `<span class="bars">${bars}</span><div style="flex:1;min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${ap.ssid ? esc(ap.ssid) : T('hiddenNet')} ${conn ? '· <span style="color:var(--accent)">' + T('connectedF') + '</span>' : ''}</div><div class="as">${esc(ap.auth || '')} · ch ${esc(ap.channel || '?')}</div></div><span class="as">${esc(ap.rssi)} dBm</span>`;
     list.appendChild(el);
   }
 }
@@ -961,7 +1009,10 @@ function applyLiveUI() {
   $$('.lang-item').forEach((el) => el.classList.toggle('active', el.dataset.lang === lang));
   try { localStorage.setItem('anima.lang', lang); } catch {}
   document.documentElement.lang = lang;
-  model.device.locale = (lang === 'en') ? 'en-US' : 'it-IT';
+  // Keep device.locale in step with the display language for ALL 5 OS languages (this used to
+  // clamp es/fr/de to it-IT, silently corrupting the stored locale on any theme/accent change).
+  const langMeta = LANGS.find((l) => l.code === lang);
+  if (langMeta) model.device.locale = langMeta.locale;
   retitle();
 }
 // Declarative binding for the static markup: elements annotated with data-t (textContent),
@@ -1257,7 +1308,17 @@ $('sec-revoke-all') && $('sec-revoke-all').addEventListener('click', async () =>
 function paintL1() { $$('#l1-policy .seg-item').forEach((el) => el.classList.toggle('active', el.dataset.m === caps.l1Mode));
   const s = $('l1-stat'); if (s) s.textContent = caps.l1Serving ? T('l1Serving') : (caps.l1Mode === 'off' ? T('l1Off') : T('l1Idle')); }
 let onCapsRefreshed = null;   // preset engine subscribes here so profiles re-evaluate when caps change
-async function refreshCaps() { const c = await apiJson('/api/anima/caps'); if (c) { caps = Object.assign(caps, c); paintL1(); } if (typeof onCapsRefreshed === 'function') { try { onCapsRefreshed(); } catch {} } }
+let capsAt = 0;               // freshness stamp — recent reads are reused instead of re-fetched
+// maxAgeMs > 0 accepts a caps read that recent (the boot path passes 4000 so the probe's read is
+// reused — the open sequence used to hit /api/anima/caps twice). Actions keep the default 0 = fresh.
+async function refreshCaps(maxAgeMs = 0) {
+  if (!maxAgeMs || Date.now() - capsAt >= maxAgeMs) {
+    const c = await apiJson('/api/anima/caps');
+    if (c) { caps = Object.assign(caps, c); capsAt = Date.now(); }
+  }
+  paintL1();
+  if (typeof onCapsRefreshed === 'function') { try { onCapsRefreshed(); } catch {} }
+}
 $$('#l1-policy .seg-item').forEach((el) => el.addEventListener('click', () => setL1(el.dataset.m)));
 
 // ═══════════ TTS ═══════════
@@ -1274,14 +1335,14 @@ if ($('tts-speed')) {
   $('tts-speed').addEventListener('input', () => { const sv = $('tts-speed-val'); if (sv) sv.textContent = $('tts-speed').value + '%'; });
   $('tts-speed').addEventListener('change', async () => {
     const v = parseInt($('tts-speed').value, 10);
-    const phrase = lang === 'en' ? 'Twenty-three degrees.' : 'Ventitré gradi.';   // breve: senti il nuovo passo
+    const phrase = lang === 'it' ? 'Ventitré gradi.' : 'Twenty-three degrees.';   // short: hear the new pace
     const body = ttsState.enabled ? { speed: v, say: phrase, lang } : { speed: v };  // anteprima solo se la voce è attiva
     const d = await apiJson('/api/tts', { method: 'POST', body });
     if (d && typeof d.speed === 'number') ttsState.speed = d.speed;
     paintTts();
   });
 }
-$('tts-test').addEventListener('click', async () => { const phrase = lang === 'en' ? 'Hello, I am your Cardputer. Twenty-three degrees.' : 'Ciao, sono il tuo Cardputer. Ventitré gradi.'; $('tts-stat').textContent = T('playing'); const d = await apiJson('/api/tts', { method: 'POST', body: { enabled: true, say: phrase, lang } }); if (d) { ttsState.enabled = d.enabled; ttsState.available = d.available; } paintTts(); });
+$('tts-test').addEventListener('click', async () => { const phrase = lang === 'it' ? 'Ciao, sono il tuo Cardputer. Ventitré gradi.' : 'Hello, I am your Cardputer. Twenty-three degrees.'; $('tts-stat').textContent = T('playing'); const d = await apiJson('/api/tts', { method: 'POST', body: { enabled: true, say: phrase, lang } }); if (d) { ttsState.enabled = d.enabled; ttsState.available = d.available; } paintTts(); });
 $('voice-always-on').addEventListener('change', toggleVoiceAlways);
 
 // ═══════════ AI provider panel — shared key manager (shell/ai-keys.js) ═══════════
@@ -1292,8 +1353,10 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
   const mountEl = $('ai-keys-mount'); if (!mountEl) return;
   try {
     const { mountKeyManager } = await import('/ai-keys.js');
-    const km = mountKeyManager(mountEl, { variant: 'full', lang: (I18N.lang === 'en' ? 'en' : 'it'), onChange() { refreshCaps(); } });
-    try { I18N.onChange(() => { if (km && km.setLang) km.setLang(I18N.lang === 'en' ? 'en' : 'it'); }); } catch {}
+    // The key manager is it/en only — tier-2 OS languages get English (the OS base), not Italian.
+    const kmLang = () => (I18N.lang === 'it' ? 'it' : 'en');
+    const km = mountKeyManager(mountEl, { variant: 'full', lang: kmLang(), onChange() { refreshCaps(); } });
+    try { I18N.onChange(() => { if (km && km.setLang) km.setLang(kmLang()); }); } catch {}
   } catch (e) { mountEl.innerHTML = '<span class="hint">' + T('keyMgrUnavailable') + ' (' + (e && e.message || e) + ').</span>'; }
 })();
 
@@ -1321,14 +1384,21 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
 (function () {
   const TPATH = '/data/anima/teacher.json';
   let REG = { providers: {} }, lastSig = null, evaluating = false, pendingApply = null;
-  const L = (o) => (o && (o[lang] || o.it)) || '';
-  const EN = () => lang === 'en';
+  // it+en catalogs only here: tier-2 languages (es/fr/de) read the English strings (OS base).
+  const L = (o) => (o && (o[lang] || o.en || o.it)) || '';
+  const EN = () => lang !== 'it';
 
   async function buildReg() { try { const ai = await import('/ai.js'); REG = buildRegistry(ai.PROVIDERS, ai.CAPMATRIX, ai.TIERS); } catch {} }
 
   // Build the CapabilityModel from signals that already exist (caps + teacher.json) + cheap browser probes.
   async function probeSignals() {
-    const c = (await apiJson('/api/anima/caps')) || caps || {};   // fresh: hasKey/online/enabled/provider/l1
+    // A caps read from the last few seconds (load/refreshCaps just ran) is reused — the open
+    // sequence used to hit /api/anima/caps twice back-to-back on the single-task device.
+    let c = caps || {};
+    if (Date.now() - capsAt >= 4000) {
+      const fresh = await apiJson('/api/anima/caps');
+      if (fresh) { c = caps = Object.assign(caps, fresh); capsAt = Date.now(); }
+    }
     const keys = { anthropic: false, openai: false, xai: false, google: false };
     let exec = 'browser', geminiTier = '';
     try {
@@ -1527,6 +1597,9 @@ window.addEventListener('message', (e) => {
   const d = e.data; if (!d) return;
   if (d.t === 'fs.changed' && typeof d.d?.path === 'string' && d.d.path.endsWith('settings.json') && !dirty) load();
   else if (d.t === 'system.busy' && d.d) { if (d.d.busy) setLive('busy'); }
+  // Embedded: the shell polls /api/status for the whole OS and rebroadcasts the snapshot — feed the
+  // hero/network/about surfaces from it instead of polling the same endpoint a second time here.
+  else if (d.t === 'status.snapshot' && d.d && EMBEDDED) { renderStatus(d.d); setLive('live'); }
 });
 
 // ═══════════ load ═══════════
@@ -1534,17 +1607,29 @@ async function load() {
   status(T('loading'));
   const onDisk = await readSettingsFile();
   model = merge(DEFAULTS, onDisk);
-  if (model.ui.language !== 'it' && model.ui.language !== 'en') model.ui.language = /^en/i.test(model.device.locale || '') ? 'en' : 'it';
+  // Sanitize garbage only — every OS language is valid here. This used to clamp to it/en, wiping a
+  // stored es/fr/de back to Italian on every open (and persisting the damage on the next save).
+  // English is the floor: an invalid/absent value resolves to English unless the locale is explicitly it-*.
+  if (!LANGS.some((l) => l.code === model.ui.language)) model.ui.language = /^it/i.test(model.device.locale || '') ? 'it' : 'en';
   lang = detectLang(model);
   applyLiveUI(); toForm(); updateScreenUI(); setDirty(false);
   status(T('ready'));
-  await refreshCaps(); await loadTts(); syncQuickToggles();
+  await refreshCaps(4000); await loadTts(); syncQuickToggles();
 }
 
 // ═══════════ boot ═══════════
 buildSidebar(); buildScenes(); buildQuick(); buildActions(); selectTab('control');
-load();
-poller.start();
+// Sequential, tiles first: one prime sweep fills every live tile right away (instead of one source
+// per ~3 s tick), then the adaptive loop takes over and the settings model loads. All device
+// traffic already rides the serial gate, so nothing here can overlap on the Cardputer.
+(async () => {
+  await poller.prime();
+  poller.start();
+  await load();
+  // Embedded, and the shell's status.snapshot hasn't arrived yet (it also pushes one on frame
+  // load) → a single one-shot read fills the hero now instead of waiting the 15 s broadcast.
+  if (EMBEDDED && !lastStatus) { const s = await apiJson('/api/status'); if (s && !lastStatus) renderStatus(s); }
+})();
 </script>
 </body>
 </html>

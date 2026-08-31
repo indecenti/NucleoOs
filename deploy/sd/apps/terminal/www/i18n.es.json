@@ -3,5 +3,20 @@
   "clear": "limpiar",
   "clr_tip": "Limpiar (Ctrl+L)",
   "input_ph": "escribe 'help'…",
-  "boot_hint": "Terminal NucleoOS — escribe \"help\" para ver los comandos."
+  "boot_hint": "Terminal NucleoOS — escribe \"help\" para ver los comandos, Tab completa, Ctrl+R busca en el historial.",
+  "run_tip": "Ejecutar (Intro)",
+  "pill_tip": "Ir a la salida más reciente",
+  "key_tab": "Completar (Tab)",
+  "key_search": "Buscar en el historial (Ctrl+R)",
+  "key_prev": "Comando anterior",
+  "key_next": "Comando siguiente",
+  "key_abort": "Detener el comando en curso (Ctrl+C)",
+  "key_esc": "Borrar la línea (Esc)",
+  "hist_unpaired": "historial: sin emparejar — solo esta sesión",
+  "copy_ok": "copiado al portapapeles",
+  "copy_fail": "no se pudo copiar — selecciona el texto y usa el menú del navegador",
+  "man_which": "¿Qué página de manual quieres?",
+  "man_description": "Descripción:",
+  "man_details": "Detalles:",
+  "man_none": "No hay entrada de manual para {cmd}"
 }

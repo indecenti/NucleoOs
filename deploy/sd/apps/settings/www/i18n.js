@@ -1,9 +1,9 @@
-// i18n.js — bilingual string table for the Settings app (IT primary, EN aware).
+// i18n.js — five-language string table for the Settings app (it/en/es/fr/de).
 //
-// Mirrors the rest of NucleoOS: Italian is the default UI language; English is offered and the
-// system language (ANIMA / copilot / voice) follows the same `ui.language` setting. `t(lang,key)`
-// resolves against the active language, falling back to IT then the raw key so a missing string is
-// never a blank in the UI. Pure (no DOM) so it can be unit-tested.
+// Mirrors the rest of NucleoOS: ENGLISH is the default and the fallback floor; the system language
+// (ANIMA / copilot / voice) follows the same `ui.language` setting. `t(lang,key)` resolves against the
+// active language, falling back to EN then the raw key so a missing string is never a blank in the UI.
+// Pure (no DOM) so it can be unit-tested.
 //
 // The Settings markup is bound to these keys declaratively via `data-t` / `data-t-html` /
 // `data-t-attr` annotations (applied by applyStaticI18n() in index.html) plus imperative T() calls
@@ -617,10 +617,13 @@ export function detectLang(model) {
   const l = model && model.ui && model.ui.language;
   if (['it', 'en', 'es', 'fr', 'de'].includes(l)) return l;
   const loc = (model && model.device && model.device.locale) || '';
-  return /^en/i.test(loc) ? 'en' : 'it';
+  // English-first OS: Italian only for an explicitly it-* locale; every other/absent value → English.
+  return /^it/i.test(loc) ? 'it' : 'en';
 }
 
 export function t(lang, key) {
-  const L = STR[lang] || STR.it;
-  return (key in L) ? L[key] : (key in STR.it ? STR.it[key] : key);
+  // English is the fallback floor: an unknown language, or a key missing from the active table,
+  // resolves through STR.en (never STR.it) before the raw key.
+  const L = STR[lang] || STR.en;
+  return (key in L) ? L[key] : (key in STR.en ? STR.en[key] : key);
 }

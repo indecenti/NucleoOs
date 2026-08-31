@@ -1,16 +1,16 @@
 {
-  "generated": "2026-08-31T08:24:43.938Z",
-  "base": "it",
+  "generated": "2026-08-31T17:42:36.267Z",
+  "base": "en",
   "langs": [
-    "it",
     "en",
+    "it",
     "es",
     "fr",
     "de"
   ],
   "required": [
-    "it",
-    "en"
+    "en",
+    "it"
   ],
   "extra": [
     "es",
@@ -22,13 +22,14 @@
     "fr": 100,
     "de": 100
   },
-  "surfaces": 45,
-  "totalKeys": 2375,
+  "surfaces": 48,
+  "totalKeys": 2654,
   "namespaces": {
     "core": 103,
     "shell": 224,
     "agent": 153,
-    "arcade": 5,
+    "anima": 8,
+    "arcade": 56,
     "archive-manager": 31,
     "authenticator": 27,
     "browser": 78,
@@ -53,10 +54,12 @@
     "miei-fatti": 80,
     "nearby": 56,
     "notepad": 17,
+    "paint": 117,
     "passkeys": 32,
     "photo-viewer": 2,
     "qr": 42,
     "radio": 53,
+    "recorder": 103,
     "recycle-bin": 14,
     "spreadsheet": 302,
     "ssh": 52,

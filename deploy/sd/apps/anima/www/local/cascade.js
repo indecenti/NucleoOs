@@ -42,7 +42,7 @@ export function answered(r) {
 //                'device'            -> device, browser, webindex  (device chosen; browser as resilience).
 //   opts.silent  true (default)  -> mid-chat fallback: the browser WASM is consulted ONLY if already
 //                                   provisioned (runners.browserProvisioned() true), so we never trigger a
-//                                   surprise ~14 MB pack download mid-turn; unprovisioned -> skip that tier.
+//                                   surprise ~88 MB pack download mid-turn; unprovisioned -> skip that tier.
 //                                   (webindex is light — a few small API calls — so it is NOT silent-gated.)
 //                false            -> explicit Browser mode: allow runners.browser's blocking provisioning gate.
 //

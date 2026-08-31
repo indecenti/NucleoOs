@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
@@ -159,7 +159,7 @@
     </div>
     <div class="row2">
       <div class="lang" id="lang">
-        <button data-l="it" class="on">IT</button><button data-l="en">EN</button>
+        <button data-l="it">IT</button><button data-l="en" class="on">EN</button>
       </div>
       <button class="tgl" id="btnNew" data-i18n-attr="title:new_title"><span class="ic">🗒</span><span data-i18n="new">Nuovo</span></button>
       <button class="tgl" id="btnSummary" data-i18n-attr="title:summary_title"><span class="ic">✨</span><span data-i18n="sum_btn">Riassumi</span></button>
@@ -188,7 +188,7 @@ const stamp = () => { const d = new Date(), p = n => String(n).padStart(2,'0');
 let file = localStorage.getItem('dictation.file') || `trascrizione-${stamp()}.txt`;
 let finalText = localStorage.getItem('dictation.text') || '';
 let partial = '';
-let lang = localStorage.getItem('dictation.lang') === 'en' ? 'en' : 'it';
+let lang = localStorage.getItem('dictation.lang') === 'it' ? 'it' : 'en';
 localStorage.setItem('dictation.file', file);
 
 const path = () => `${TDIR}/${file}`;
@@ -243,10 +243,10 @@ async function saveNow(){
   saving = true; const snapshot = finalText;
   
   const header = `---
-Data: ${sessionDate}
-Ora Inizio: ${sessionTime}
-Lingua: ${lang.toUpperCase()}
-Motore: ${asr.source === 'sd' ? 'Vosk (Offline)' : 'Groq (Online)'}
+${t('hdr_date')}: ${sessionDate}
+${t('hdr_start')}: ${sessionTime}
+${t('hdr_lang')}: ${lang.toUpperCase()}
+${t('hdr_engine')}: ${asr.source === 'sd' ? 'Vosk (Offline)' : 'Groq (Online)'}
 ---
 
 `;
@@ -275,7 +275,7 @@ function reflectScreen(){
 }
 // Heartbeat: keep feeding the firmware deadman while we want the screen dark, so if this tab
 // dies the device re-lights the screen on its own. ~45s < the firmware's 90s deadman.
-setInterval(()=>{ if(screenOff && !document.hidden) setScreen(true, true); }, 45000);
+setInterval(()=>{ if(screenOff) setScreen(true, true); }, 45000);
 
 // ---- status / notices -----------------------------------------------------
 function setStatus(kind, txt){ const p=$('status'); p.classList.remove('live','paused','err');
@@ -536,10 +536,10 @@ function cleanup(){
   // sendBeacon survives tab close / iframe teardown where fetch would be cancelled.
   try{ if(finalText && finalText!==savedText) {
     const header = `---
-Data: ${sessionDate}
-Ora Inizio: ${sessionTime}
-Lingua: ${lang.toUpperCase()}
-Motore: ${asr.source === 'sd' ? 'Vosk (Offline)' : 'Groq (Online)'}
+${t('hdr_date')}: ${sessionDate}
+${t('hdr_start')}: ${sessionTime}
+${t('hdr_lang')}: ${lang.toUpperCase()}
+${t('hdr_engine')}: ${asr.source === 'sd' ? 'Vosk (Offline)' : 'Groq (Online)'}
 ---
 
 `;

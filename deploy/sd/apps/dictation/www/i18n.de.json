@@ -1,9 +1,7 @@
 {
   "_lang": "de",
-
   "title": "Transkription",
   "subtitle": "Cardputer-Mikrofon · auf dem Gerät",
-
   "set_title": "ASR-Einstellungen",
   "set_engine_label": "Transkriptions-Engine",
   "eng_auto": "Automatisch (Vosk mit Groq-Fallback)",
@@ -14,7 +12,6 @@
   "set_base_label": "Endpoint-URL (Groq)",
   "set_forget": "Schlüssel vergessen",
   "set_forgotten": "API-Schlüssel vergessen.",
-
   "sum_title": "KI-Zusammenfassung",
   "sum_copied": "Kopiert!",
   "sum_working": "Wird zusammengefasst...",
@@ -24,15 +21,11 @@
   "sum_failed": "Zusammenfassung konnte nicht erstellt werden.",
   "sum_error": "Fehler beim Erstellen der Zusammenfassung: {msg}",
   "copy_failed": "Text konnte nicht kopiert werden.",
-
   "load_title": "Modell wird geladen...",
   "load_sub": "Das kann ein paar Sekunden dauern, während das System die KI vorbereitet.",
-
   "placeholder": "Sprich in das Cardputer-Mikrofon — der Text erscheint hier.",
-
   "exit_btn": "Beenden",
   "new_confirm": "Neue Transkription starten? Die aktuelle ist bereits gespeichert.",
-
   "screen_off": "Bildschirm AUS",
   "screen_on": "Bildschirm EIN",
   "screen_title": "Cardputer-Bildschirm",
@@ -41,11 +34,12 @@
   "summary_title": "Die Transkription mit KI zusammenfassen",
   "exit_title": "Das Display wieder einschalten und beenden",
   "foot_hint": "Beim Start schaltet sich das Cardputer-Display aus; es schaltet sich wieder ein, wenn du beendest (auch wenn du den Tab schließt).",
-
-  "wordCount": { "one": "{count} Wort", "other": "{count} Wörter" },
+  "wordCount": {
+    "one": "{count} Wort",
+    "other": "{count} Wörter"
+  },
   "saved_as": "gespeichert · {file}",
   "unsaved": "nicht gespeichert…",
-
   "st_starting": "starte…",
   "st_loading_model": "lade Modell…",
   "st_listening": "Höre zu",
@@ -56,10 +50,13 @@
   "st_no_model": "Modell fehlt",
   "st_audio_error": "Audiofehler",
   "st_mic_in_use_by": "Mikro wird von {holder} verwendet",
-
   "notice_auth": "<b>Gerät nicht gekoppelt.</b> Öffne NucleoOS, gib die auf dem Cardputer angezeigte PIN ein und öffne diese App erneut.",
   "notice_busy": "<b>Mikrofon belegt.</b> Das Cardputer-Mikro wird von <b>{holder}</b> verwendet. Stoppe es und versuche es erneut.",
   "notice_busy_other": "eine andere App",
   "notice_model": "<b>Sprachmodell nicht verfügbar.</b> Du brauchst Internet (beim ersten Mal) oder die Vosk-Modelle auf der SD.",
-  "notice_exit": "<b>Display wieder eingeschaltet.</b> Transkription gespeichert. Du kannst das Fenster schließen."
+  "notice_exit": "<b>Display wieder eingeschaltet.</b> Transkription gespeichert. Du kannst das Fenster schließen.",
+  "hdr_date": "Datum",
+  "hdr_start": "Startzeit",
+  "hdr_lang": "Sprache",
+  "hdr_engine": "Engine"
 }

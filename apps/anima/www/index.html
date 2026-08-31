@@ -730,7 +730,7 @@
       <div class="dlist" id="dlist" role="listbox" tabindex="-1" aria-label="Conversazioni"></div>
       <div class="sb-foot" id="sb-foot"></div>
     </div>
-    <div class="sb-resizer" id="sb-resizer" title="Trascina per ridimensionare" aria-hidden="true"></div>
+    <div class="sb-resizer" id="sb-resizer" title="Drag to resize" data-i18n-attr="title:resizeHint" aria-hidden="true"></div>
   </aside>
 
   <!-- files drawer (workspace tree) -->
@@ -824,7 +824,7 @@
               </div>
               <div class="set-field">
                 <div class="f-tx"><label id="s-speed">Velocità risposta</label><span class="f-sub" data-i18n data-it="Quanto velocemente compare il testo della risposta." data-en="How fast reply text streams in.">Quanto velocemente compare il testo della risposta.</span></div>
-                <div class="f-ctl"><div class="seg2" id="set-speed"><button data-s="0">Istantanea</button><button data-s="14">Fluida</button><button data-s="6">Veloce</button></div></div>
+                <div class="f-ctl"><div class="seg2" id="set-speed"><button data-s="0" data-i18n="speedInstant">Instant</button><button data-s="14" data-i18n="speedSmooth">Smooth</button><button data-s="6" data-i18n="speedFast">Fast</button></div></div>
               </div>
               <div class="set-field" id="set-ttsspeed-field" hidden>
                 <div class="f-tx"><label id="s-ttsspeed">Velocità voce Cardputer</label><span class="f-sub" data-i18n data-it="Quanto velocemente il Cardputer legge ad alta voce (voce on-device)." data-en="How fast the Cardputer reads aloud (on-device voice).">Quanto velocemente il Cardputer legge ad alta voce (voce on-device).</span></div>
@@ -951,7 +951,7 @@
           <div class="set-section">
             <h4 id="h-conv">Conversazione</h4>
             <div class="set-card"><div class="set-field-col">
-              <div class="exprow"><button id="exp-md" title="Esporta in Markdown">↓ Markdown</button><button id="exp-json" title="Esporta in JSON">↓ JSON</button></div>
+              <div class="exprow"><button id="exp-md" title="Export to Markdown" data-i18n-attr="title:exportMdTitle">↓ Markdown</button><button id="exp-json" title="Export to JSON" data-i18n-attr="title:exportJsonTitle">↓ JSON</button></div>
               <button class="btnfull" id="shortcuts-open">⌨ Scorciatoie</button>
               <button class="danger" id="clear">Pulisci conversazione</button>
             </div></div>
@@ -984,7 +984,7 @@
       <div class="box" id="box">
         <span class="prompt">›</span>
         <textarea id="q" rows="1" autocomplete="off" autofocus spellcheck="false" aria-label="Messaggio"></textarea>
-        <button class="mic" id="mic" type="button" title="Detta a voce" aria-label="Detta a voce" hidden>🎤</button>
+        <button class="mic" id="mic" type="button" title="Dictate" aria-label="Dictate" data-i18n-attr="aria-label:micAria" hidden>🎤</button>
         <button class="webtog" id="webtog" type="button" aria-pressed="false" title="Web: risposte aggiornate con fonti (Groq compound)" aria-label="Web">🌐</button>
         <button class="send" id="send" type="submit">Invia</button>
       </div>
@@ -1003,7 +1003,7 @@
 
   <!-- command palette / shortcuts overlay -->
   <div class="pal-scrim" id="pal-scrim">
-    <div class="pal" id="pal" role="dialog" aria-modal="true" aria-label="Tavolozza comandi">
+    <div class="pal" id="pal" role="dialog" aria-modal="true" aria-label="Command palette" data-i18n-attr="aria-label:cmdPaletteAria">
       <input class="pq" id="pal-q" placeholder="Cerca un comando…" autocomplete="off" spellcheck="false">
       <div class="pal-list" id="pal-list"></div>
     </div>
@@ -1259,7 +1259,7 @@
     // ── Multilingual: it/en are inline; es/fr/de come from ANIMA_L10N, keyed by the ENGLISH string.
     //    TR() routes the inline it/en ternaries; UI.es/fr/de are deep-mapped from UI.en; the settings
     //    data-i18n loop consults the same table. ANIMA/LLM system prompts are intentionally left as-is.
-    function LANG(){ const l=(get('anima.lang','it')||'it').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'it'; }
+    function LANG(){ const l=(get('anima.lang','en')||'en').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }   // English is the fallback floor (matches the OS i18n engine BASE)
     const ANIMA_L10N = {
       es: {
         "offline assistant": "asistente offline",
@@ -4784,15 +4784,17 @@
     $('clear').addEventListener('click',doClear);
 
     // ---- choose handlers ------------------------------------------------------
-    function chooseLang(l){ l=(l||'').slice(0,2); lang=['it','en','es','fr','de'].includes(l)?l:'it'; set('anima.lang',lang); applyAll(); renderAll();
+    function chooseLang(l){ l=(l||'').slice(0,2); lang=['it','en','es','fr','de'].includes(l)?l:'en'; set('anima.lang',lang); applyAll(); renderAll();
       if(!recording){ if(voice&&voice.available) micBtn.title=idleTitle(); else if(voice&&voice.reason==='insecure') micBtn.title=(TR('La voce richiede HTTPS o localhost', 'Voice needs HTTPS or localhost')); }
       try{ if(I18N.lang!==lang) I18N.setLang(lang); }catch{}   // broadcast ANIMA's own toggle to the whole OS
       try{ if(_keyKm&&_keyKm.setLang) _keyKm.setLang(lang); }catch{}   // relabel the shared key manager live
       input.focus(); }
     // Follow a language change made elsewhere in the OS (Settings, copilot, another window) — live, no reload.
-    // init('core') installs the engine's cross-window listeners in this iframe (no catalog/observe needed:
-    // ANIMA renders from its own STR table). Fire-and-forget; install() runs synchronously inside init.
-    try{ I18N.init('core',{observe:false,apply:false}); I18N.onChange(()=>{ if(I18N.lang!==lang) chooseLang(I18N.lang); }); }catch{}
+    // init('anima') loads this app's shared i18n catalog + installs the engine's cross-window listeners in
+    // this iframe, and paints the static chrome carrying data-i18n keys (the rest of the UI still renders
+    // from ANIMA's own STR/applyAll table). observe:false — every annotated node exists at load and the
+    // engine re-applies them on each language change; install() runs synchronously inside init.
+    try{ I18N.init('anima',{observe:false}); I18N.onChange(()=>{ if(I18N.lang!==lang) chooseLang(I18N.lang); }); }catch{}
     // TWO modes, not five. The old set (off/on/local/edge/only) named WHERE the compute ran - a
     // detail the 4-rung cascade already decides - so the user had to pre-pick a rung and then got
     // stuck on it (the 'answers from the WASM brain, never reaches the GPU model' report). Now:

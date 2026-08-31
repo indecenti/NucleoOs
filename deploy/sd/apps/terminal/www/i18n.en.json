@@ -3,5 +3,20 @@
   "clear": "clear",
   "clr_tip": "Clear (Ctrl+L)",
   "input_ph": "type 'help'…",
-  "boot_hint": "NucleoOS Terminal — type \"help\" for commands."
+  "boot_hint": "NucleoOS Terminal — type \"help\" for commands, Tab completes, Ctrl+R searches history.",
+  "run_tip": "Run (Enter)",
+  "pill_tip": "Jump to the newest output",
+  "key_tab": "Complete (Tab)",
+  "key_search": "Search history (Ctrl+R)",
+  "key_prev": "Previous command",
+  "key_next": "Next command",
+  "key_abort": "Stop the running command (Ctrl+C)",
+  "key_esc": "Clear the line (Esc)",
+  "hist_unpaired": "history: not paired — this session only",
+  "copy_ok": "copied to the clipboard",
+  "copy_fail": "copy failed — select the text and use the browser menu",
+  "man_which": "What manual page do you want?",
+  "man_description": "Description:",
+  "man_details": "Details:",
+  "man_none": "No manual entry for {cmd}"
 }

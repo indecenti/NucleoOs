@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -570,10 +570,14 @@
     }
 
     /* ---------- Playback ---------- */
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    let lastBlobUrl = '';   // object URL of the currently open local file — revoke it or the whole file stays pinned in RAM
     function playVideo(path) {
       currentPath = path;
       clearSubs();
       const isLocal = path.startsWith('blob:') || path.startsWith('data:');
+      if (lastBlobUrl && lastBlobUrl !== path) { URL.revokeObjectURL(lastBlobUrl); lastBlobUrl = ''; }
+      if (path.startsWith('blob:')) lastBlobUrl = path;
       v.src = isLocal ? path : getSdUrl(path);
       playerContainer.classList.remove('idle');
       v.play().catch(() => {});
@@ -583,7 +587,9 @@
       highlightActiveChip();
       updatePlayIcon(true);
       resetControlsTimeout();
-      if (!isLocal) detectSidecarSubs(path);   // auto-load matching .srt/.vtt from the SD folder
+      // Sidecar-sub detection costs an extra /api/fs/list — let the video stream win the race for the
+      // device's few sockets and only look for subs once playback has actually started.
+      if (!isLocal) v.addEventListener('canplay', () => { if (currentPath === path) detectSidecarSubs(path); }, { once: true });
     }
 
     function togglePlay() {
@@ -595,6 +601,7 @@
 
     function stopVideo() {
       v.pause(); clearSubs(); v.removeAttribute('src'); v.load();
+      if (lastBlobUrl) { URL.revokeObjectURL(lastBlobUrl); lastBlobUrl = ''; }
       currentPath = '';
       playerContainer.classList.add('idle');
       updatePlayIcon(false);
@@ -794,7 +801,7 @@
         const chip = document.createElement('div');
         chip.className = 'playlist-chip';
         chip.dataset.path = item.path;
-        chip.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg><span>' + item.name + '</span>';
+        chip.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg><span>' + esc(item.name) + '</span>';
         chip.onclick = () => playVideo(item.path);
         playlistItems.appendChild(chip);
       });
@@ -808,7 +815,9 @@
     function currentIndex() { return playlist.findIndex(i => i.path === currentPath); }
     function playNext(auto = false) {
       const idx = currentIndex();
-      if (idx === -1 || !playlist.length) return;
+      if (!playlist.length) return;
+      // a local (blob:) file is never in the playlist: manual Next jumps into it, auto-advance only loops
+      if (idx === -1) { if (!auto || loopPlaylist) playVideo(playlist[0].path); return; }
       if (idx + 1 < playlist.length) playVideo(playlist[idx + 1].path);
       else if (loopPlaylist) playVideo(playlist[0].path);
       else if (auto) { updatePlayIcon(false); }
@@ -1036,11 +1045,11 @@
         li.innerHTML = '<div class="explorer-icon ' + (isDir ? 'dir' : 'video') + '">' +
           (isDir ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
                   : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg>') +
-          '</div><span class="explorer-name">' + e.name + '</span>' +
+          '</div><span class="explorer-name">' + esc(e.name) + '</span>' +
           (isDir ? '' : '<span class="explorer-size">' + formatBytes(e.size) + '</span>');
-        li.onclick = () => {
+        li.onclick = async () => {
           if (isDir) { sdCwd = fullPath; loadSdDir(); }
-          else { loadPlaylist(sdCwd, false); playVideo(fullPath); sdModal.classList.remove('visible'); }
+          else { await loadPlaylist(sdCwd, false); playVideo(fullPath); sdModal.classList.remove('visible'); }
         };
         explorerList.appendChild(li); count++;
       });

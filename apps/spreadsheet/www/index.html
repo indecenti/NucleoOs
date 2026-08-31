@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -2050,7 +2050,7 @@ function detectLang(q) {
   const t = ' ' + q.toLowerCase() + ' ';
   const en = (t.match(/\b(the|of|column|sum|average|count|sort|chart|add|remove|highlight|rows?|cells?|how|what|find|make|please|value|values|each|every|show|give|this|in|is|are|me)\b/g) || []).length;
   const it = (t.match(/\b(la|il|lo|le|colonna|somma|media|conta|della|ogni|che|come|valori|riga|righe|celle|cosa|fai|dammi|per|favore|questa|questi|sono|nel|nella|mi|del)\b/g) || []).length;
-  return en > it ? 'en' : 'it';
+  return it > en ? 'it' : 'en';
 }
 // === SAFETY: never treat DATA/garbage as a question for the knowledge tier. ===
 // A bare date/number/time/cell-ref/code is data, not a question → it must NEVER be

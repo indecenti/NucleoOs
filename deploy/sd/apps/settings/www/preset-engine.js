@@ -137,7 +137,7 @@ export const PRESETS = [
     },
     feasible(sig) {
       if (sig.localModelReady || sig.packUsable) return { state: 'available', reason: { it: '', en: '' } };
-      return { state: 'needs-prep', reason: { it: 'Scarica il cervello (~14 MB) per funzionare offline nel browser', en: 'Download the brain (~14 MB) to run offline in the browser' } };
+      return { state: 'needs-prep', reason: { it: 'Scarica il cervello (~88 MB) per funzionare offline nel browser', en: 'Download the brain (~88 MB) to run offline in the browser' } };
     },
   },
   {

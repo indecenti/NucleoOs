@@ -2,7 +2,7 @@
   "_lang": "it",
 
   "title": "Code Runner",
-  "scratch": "scratch",
+  "scratch": "bozza",
   "unsaved": "non salvato",
 
   "t_run": "Esegui (Ctrl+Invio)",
@@ -26,7 +26,7 @@
   "ex_fs": "Leggi/scrivi file SD",
   "ex_list": "Elenca una cartella",
   "ex_anima": "Chiedi ad ANIMA",
-  "ex_http": "Fetch JSON",
+  "ex_http": "Recupera JSON",
   "ex_hw": "Hardware (IR+GPIO+WiFi)",
 
   "kbd_run": "esegui",

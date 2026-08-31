@@ -320,8 +320,8 @@
       entries.sort((a, b) => {
         if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
         let cmp = 0;
-        if (sortCol === 'name') cmp = a.name.localeCompare(b.name);
-        else if (sortCol === 'size') cmp = a.size - b.size;
+        if (sortCol === 'name') cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+        else if (sortCol === 'size') cmp = (a.size || 0) - (b.size || 0);
         return cmp * sortDir;
       });
     }
@@ -778,10 +778,15 @@
       const name = await inputModal(t('modal_rename'), t('modal_new_name'), e.name);
       if (!name || name === e.name) return;
       try {
-        if (isSD()) {   // no move endpoint on the device: copy bytes to the new name, then delete the old
-          const buf = await (await api('read', join(cwd, e.name))).arrayBuffer();
-          await api('write', join(cwd, name), { method: 'POST', body: buf });
-          await api('delete', join(cwd, e.name), { method: 'POST' });
+        if (isSD()) {
+          // The comment that used to sit here ("no move endpoint on the device") was wrong: /api/fs/move
+          // exists in the firmware AND this very app already uses it to paste (see the 'move' branch
+          // above). Renaming by copy-then-delete pulled the ENTIRE file through the browser — renaming a
+          // 300 MB video meant ~600 MB over Wi-Fi off a PSRAM-less device — it broke outright on files
+          // larger than browser memory, and it was not atomic: a failure halfway left two copies or none.
+          const from = join(cwd, e.name), to = join(cwd, name);
+          const r = await fetch('/api/fs/move?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to), { method: 'POST' });
+          if (!r.ok) { if (r.status === 403) toast(t('lock_kept_safe')); throw new Error('move ' + r.status); }
         } else await localRenameEntry(ACTIVE, e, name);
       } catch (err) { console.warn('rename failed', err); }
       load();
@@ -913,7 +918,8 @@
       const rec = undoStack.pop(); if (!rec) return;
       if (rec.type === 'delete') await restoreFromTrash(rec.trash, rec.orig);
       else if (rec.type === 'paste') { for (const p of rec.created) try { await api('delete', p, { method: 'POST' }); } catch {} }
-      else if (rec.type === 'move') { for (const m of rec.moved) try { const b = await (await api('read', m.dst)).arrayBuffer(); await api('write', m.src, { method: 'POST', body: b }); await api('delete', m.dst, { method: 'POST' }); } catch {} }
+      // undo a move with the firmware's atomic move — never read+rewrite the file through the browser
+      else if (rec.type === 'move') { for (const m of rec.moved) try { await fetch('/api/fs/move?from=' + encodeURIComponent(m.dst) + '&to=' + encodeURIComponent(m.src), { method: 'POST' }); } catch {} }
       load();
     }
 

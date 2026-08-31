@@ -9,6 +9,7 @@
 // Network discipline: a single short GET, hard 5 s timeout, on core 1 via the caller. No
 // background polling, no prefetch — energy is first-class (docs/anima.md §2).
 #include "nucleo_anima_online.h"
+#include "nucleo_take.h"          // IMA ADPCM 4:1 — the only codec this chip can afford (see the header)
 #include "anima_l1.h"            // shared encoder: nucleo_anima_l1_encode/dim (learned-card recall)
 #include "nucleo_board.h"
 #include "nucleo_setup.h"           // nucleo_setup_ip(): "" when not on STA
@@ -20,6 +21,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <math.h>               // sqrt (cosine for recall)
+#include <unistd.h>             // fsync: FATFS commits the dir entry (file size) only on sync/close
 #include <sys/stat.h>           // mkdir
 #include "freertos/FreeRTOS.h"   // vTaskDelay / pdMS_TO_TICKS: brief backoff between POST retries
 #include "freertos/task.h"
@@ -544,7 +546,11 @@ static int cache_read_by_id(bool en, const char *id, anima_result_t *out)
 // Maintain the learned vector sidecar (`<lang>.vec`) in lockstep with the JSONL: embed `embed_text`
 // with the device encoder and rewrite the file dropping the prior record for `id` and the oldest
 // beyond LEARN_MAX, appending the fresh vector last. No-op if the encoder isn't loaded (recall just
-// stays off). Record: u8 idlen | id | u8 dim | int8 vec[dim]. Bounded, streaming (O(dim) RAM).
+// stays off). Record: u8 idlen | id | u16-LE dim | int8 vec[dim]. The dim is TWO bytes because the
+// host encoder is 256-dim and the device's 192-dim — a one-byte field overflowed 256 to 0 and
+// corrupted the whole store. An older one-byte file simply mis-reads here and is rebuilt on the next
+// learn (the JSONL cards are authoritative; the .vec is only the paraphrase-recall sidecar). Bounded,
+// streaming (O(dim) RAM). Mirrors the 2-byte format nucleo_anima_learn.c already uses.
 static void vec_sync(bool en, const char *id, const char *embed_text)
 {
     static int8_t v[RECALL_DIM];
@@ -558,10 +564,11 @@ static void vec_sync(bool en, const char *id, const char *embed_text)
     int total = 0;
     FILE *in = fopen(vp, "rb");
     if (in) {
-        uint8_t l, d; char rid[80];
+        uint8_t l, db[2]; char rid[80];
         while (fread(&l, 1, 1, in) == 1) {
-            if (l == 0 || l >= sizeof(rid) || fread(rid, 1, l, in) != l || fread(&d, 1, 1, in) != 1) break;
-            if (fseek(in, d, SEEK_CUR) != 0) break;
+            if (l == 0 || l >= sizeof(rid) || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
+            int d = db[0] | (db[1] << 8);
+            if (d <= 0 || d > RECALL_DIM || fseek(in, d, SEEK_CUR) != 0) break;
             if (!(l == idl && !memcmp(rid, id, l))) total++;
         }
         fclose(in);
@@ -574,19 +581,20 @@ static void vec_sync(bool en, const char *id, const char *embed_text)
     if (!out) return;
     in = fopen(vp, "rb");
     if (in) {
-        uint8_t l, d; static char rid[80]; static int8_t rv[RECALL_DIM];
+        uint8_t l, db[2]; static char rid[80]; static int8_t rv[RECALL_DIM];
         while (fread(&l, 1, 1, in) == 1) {
-            if (l == 0 || l >= sizeof(rid) || fread(rid, 1, l, in) != l || fread(&d, 1, 1, in) != 1) break;
-            if (d == 0 || d > RECALL_DIM) { if (fseek(in, d, SEEK_CUR) != 0) break; continue; }
-            if (fread(rv, 1, d, in) != d) break;
+            if (l == 0 || l >= sizeof(rid) || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
+            int d = db[0] | (db[1] << 8);
+            if (d <= 0 || d > RECALL_DIM) break;             // bad dim (or an old 1-byte file) -> stop, rebuild fresh
+            if (fread(rv, 1, d, in) != (size_t)d) break;
             if (l == idl && !memcmp(rid, id, l)) continue;   // replaced by the fresh vector
             if (skip > 0) { skip--; continue; }              // drop oldest to stay bounded
-            fwrite(&l, 1, 1, out); fwrite(rid, 1, l, out); fwrite(&d, 1, 1, out); fwrite(rv, 1, d, out);
+            fwrite(&l, 1, 1, out); fwrite(rid, 1, l, out); fwrite(db, 1, 2, out); fwrite(rv, 1, d, out);
         }
         fclose(in);
     }
-    uint8_t dd = (uint8_t)D;
-    fwrite(&idl, 1, 1, out); fwrite(id, 1, idl, out); fwrite(&dd, 1, 1, out); fwrite(v, 1, D, out);
+    uint8_t db[2] = { (uint8_t)(D & 0xFF), (uint8_t)((D >> 8) & 0xFF) };
+    fwrite(&idl, 1, 1, out); fwrite(id, 1, idl, out); fwrite(db, 1, 2, out); fwrite(v, 1, D, out);
     fclose(out);
     remove(vp);                              // FatFs rename() won't overwrite an existing file -> drop the stale copy first
     if (rename(tmp, vp) != 0) remove(tmp);
@@ -1244,9 +1252,13 @@ static bool teacher_cfg(char *base, int bcap, char *model, int mcap, char *key, 
 // a language (fallback to the OS setting) by passing lang_hint != "auto".
 // Returns transcript length in out_text, or -1 (no key / offline / error).
 // ============================================================================
+// progress (the recorder app polls these to show "segment i/N"); declared here so BOTH the single-
+// shot and the long-take entry points can clear them on entry.
+static volatile int s_tx_done = 0, s_tx_total = 0;
 int nucleo_anima_transcribe(const char *path, const char *lang_hint,
                             char *out_text, int tcap, char *out_lang, int lcap)
 {
+    s_tx_done = 0; s_tx_total = 0;        // single-shot: no chunk progress — clear any stale long-take counters
     if (out_text && tcap) out_text[0] = 0;
     if (out_lang && lcap) out_lang[0] = 0;
     char base[160], cmodel[80], key[160], wmodel[64] = "whisper-large-v3";
@@ -1396,9 +1408,12 @@ static bool wav_parse(FILE *fp, wav_info_t *wi)
             wi->data_len = (long)sz;
             // CLAMP to the bytes actually on disk: a half-finalized take (or a wrong header) can claim more
             // 'data' than exists; streaming that would fread past EOF and upload garbage. Trust the file.
+            // A take interrupted by a flat battery has data_len = 0 (the header is only final at
+            // stop); one with a stale header can claim more than exists. Either way the bytes on
+            // disk are the truth, so a 2 h recording killed at minute 118 still transcribes.
             fseek(fp, 0, SEEK_END);
             long avail = ftell(fp) - wi->data_off;
-            if (wi->data_len > avail) wi->data_len = avail;
+            if (wi->data_len == 0 || wi->data_len > avail) wi->data_len = avail;
             return have_fmt && wi->rate > 0 && wi->channels > 0 && wi->bits > 0 && wi->data_len > 0;
         } else {
             if (fseek(fp, (long)(sz + (sz & 1)), SEEK_CUR) != 0) break;
@@ -1418,90 +1433,211 @@ static void wav_hdr44(uint8_t *b, uint32_t dlen, uint32_t rate, uint16_t ch, uin
     memcpy(b + 36, "data", 4); memcpy(b + 40, &dlen, 4);
 }
 
-// progress (the recorder app polls these to show "segment i/N")
-static volatile int s_tx_done = 0, s_tx_total = 0;
 void nucleo_anima_transcribe_progress(int *done, int *total) { if (done) *done = s_tx_done; if (total) *total = s_tx_total; }
 
-// Upload ONE segment: a synthetic-header WAV = [44-byte header | pcm_len bytes of fp at pcm_off] streamed
-// over a fresh TLS session to Whisper. Mirrors the single-shot uploader but bounded to the slice. Returns
-// transcript length in `out`, or -1. Detected language (first segment) goes to out_lang if non-NULL.
-static int transcribe_slice(const char *base, const char *key, const char *wmodel, const char *lang_hint,
-                            FILE *fp, long pcm_off, long pcm_len, const wav_info_t *wi,
-                            char *out, int tcap, char *out_lang, int lcap)
+// ── PCM cursor ─────────────────────────────────────────────────────────────────────────────────
+// One upload may carry either a single byte range (the legacy fixed-length slice) or a BATCH of
+// voiced ranges taken from the take journal, with the pauses between them simply not sent. Both look
+// the same to the uploader through this cursor, which is what lets one code path serve both and lets
+// the ADPCM encoder see an unbroken sample stream across range boundaries.
+typedef struct {
+    FILE                      *fp;
+    const nucleo_take_batch_t *b;        // NULL -> single-range mode
+    long                       base_off; // where the PCM starts in the file (journal offsets are data-relative)
+    int                        r;        // current range
+    long                       pos;      // absolute file offset of the next byte
+    long                       end;      // absolute end of the current range
+    long                       left;     // bytes still to deliver overall
+} pcm_cur_t;
+
+static void pcm_cur_range(pcm_cur_t *c, long off, long len)
 {
-    char url[200]; snprintf(url, sizeof url, "%s/audio/transcriptions", base);
-    if (online_tls_heap_too_low("POST", url)) return -1;
+    c->b = NULL; c->base_off = 0; c->r = 0; c->pos = off; c->end = off + len; c->left = len;
+}
 
-    const char *bnd = "----NucleoBoundary8x2k9q";
-    bool force = lang_hint && lang_hint[0] && strcmp(lang_hint, "auto") != 0;
-    char pre[900]; int pl = 0;
-    pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n%s\r\n", bnd, wmodel);
-    pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\njson\r\n", bnd);   // json, NOT verbose_json: verbose adds a multi-KB segments[] array that overran HTTP_CAP → truncated JSON → silent cJSON parse-fail (the "fails at 2 min" bug). Plain {text} stays small.
-    if (force) pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n%s\r\n", bnd, lang_hint);
-    pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"seg.wav\"\r\nContent-Type: audio/wav\r\n\r\n", bnd);
-    char post[48]; int psl = snprintf(post, sizeof post, "\r\n--%s--\r\n", bnd);
+static void pcm_cur_batch(pcm_cur_t *c, const nucleo_take_batch_t *b, long data_off, long total)
+{
+    c->b = b; c->base_off = data_off; c->r = 0; c->left = total;
+    c->pos = data_off + b->b0[0];
+    c->end = data_off + b->b1[0];
+}
 
-    uint8_t hdr[44]; wav_hdr44(hdr, (uint32_t)pcm_len, wi->rate, wi->channels, wi->bits);
-    long clen = (long)pl + 44 + pcm_len + psl;
+// Deliver up to `want` bytes, walking to the next range when the current one runs out. Returns the
+// bytes actually delivered (0 at the end, or on a read error).
+static long pcm_read(pcm_cur_t *c, void *dst, long want)
+{
+    char *out = (char *)dst;
+    long got = 0;
+    while (got < want && c->left > 0) {
+        if (c->pos >= c->end) {                       // range exhausted -> step to the next one
+            if (!c->b || c->r + 1 >= c->b->n) break;
+            c->r++;
+            c->pos = c->base_off + c->b->b0[c->r];
+            c->end = c->base_off + c->b->b1[c->r];
+            if (fseek(c->fp, c->pos, SEEK_SET) != 0) break;
+        }
+        long n = want - got;
+        if (n > c->end - c->pos) n = c->end - c->pos;
+        if (n > c->left)         n = c->left;
+        size_t rd = fread(out + got, 1, (size_t)n, c->fp);
+        if (rd == 0) break;
+        got += (long)rd; c->pos += (long)rd; c->left -= (long)rd;
+    }
+    return got;
+}
 
+// ── ONE TLS session for a whole take ───────────────────────────────────────────────────────────
+// A 2 h recording is ~80 segments. Opening a fresh esp_http_client per segment meant 80 TLS
+// handshakes AND 80 alloc/free cycles of the mbedTLS record buffers on a heap whose largest free
+// block is ~31 KB — 80 chances to lose that lottery, plus the fragmentation churn of doing it over
+// and over. ESP-IDF supports persistent connections and explicitly recommends reusing the handle,
+// so we hold exactly one for the whole take.
+//
+// The mechanism, read out of the IDF source rather than assumed: esp_http_client_open() calls
+// esp_http_client_connect(), which only dials when client->state < HTTP_STATE_CONNECTED, and
+// esp_http_client_prepare() (which open() always runs) re-inits the parser and clears
+// first_line_prepared. So calling open() again on a handle that still carries a live socket reuses
+// it. Two hard rules follow:
+//   1. the previous response must be FULLY drained — leftover bytes desync the next parse;
+//   2. esp_http_client_close() must NOT be called between requests. It calls esp_transport_close()
+//      and genuinely tears the connection down.
+// Anything that breaks either rule marks the connection dirty and we re-dial, so a mid-take server
+// hang-up costs one handshake instead of the take.
+typedef struct {
+    esp_http_client_handle_t cli;
+    uint32_t                 tk;      // heavy-work budget, held once for the whole take
+    char                     url[200];
+    char                     bearer[200];
+    char                     ct[96];
+    bool                     dirty;   // the socket is not safe to reuse -> re-dial before the next request
+    int                      reqs;    // requests served (telemetry)
+    int                      dials;   // handshakes actually paid for (telemetry: 1 is the goal)
+    // Codec for the upload. ADPCM cuts the bytes on the wire 4:1 for eight bytes of encoder state,
+    // which is the difference between a 2 h take taking ~30 min of TLS and taking a few. We cannot
+    // prove a given endpoint decodes it without asking, so the first segment of a take is the probe:
+    // a 4xx flips the take to PCM for good. After that first answer the choice is locked either way.
+    bool                     adpcm;
+    bool                     codec_locked;
+    int                      last_status;
+} tx_conn_t;
+
+// (Re)create the client handle. The socket itself is dialled lazily by the first open().
+static bool tx_conn_dial(tx_conn_t *c)
+{
+    c->dirty = true;   // stays true if we fail below: a later begin must re-dial, never touch a NULL cli
+    if (c->cli) { esp_http_client_close(c->cli); esp_http_client_cleanup(c->cli); c->cli = NULL; }
     esp_http_client_config_t cfg = {
-        .url = url, .timeout_ms = TRANSCRIBE_TIMEOUT_MS, .user_agent = HTTP_UA,
+        .url = c->url, .timeout_ms = TRANSCRIBE_TIMEOUT_MS, .user_agent = HTTP_UA,
         .crt_bundle_attach = esp_crt_bundle_attach, .buffer_size = 2048, .buffer_size_tx = 2048,
         .method = HTTP_METHOD_POST,
     };
-    uint32_t tk = nucleo_arb_acquire(ARB_FG, "transcribe", 0);
-    if (!tk) { ESP_LOGW(TAG, "slice: arbiter busy — bail"); return -1; }
-    esp_http_client_handle_t cli = esp_http_client_init(&cfg);
-    if (!cli) { nucleo_arb_release(tk); return -1; }
-    char ct[96]; snprintf(ct, sizeof ct, "multipart/form-data; boundary=%s", bnd);
-    char bearer[200]; snprintf(bearer, sizeof bearer, "Bearer %s", key);
-    esp_http_client_set_header(cli, "Content-Type", ct);
-    esp_http_client_set_header(cli, "Authorization", bearer);
+    c->cli = esp_http_client_init(&cfg);
+    if (!c->cli) return false;
+    esp_http_client_set_header(c->cli, "Content-Type", c->ct);     // headers persist across requests
+    esp_http_client_set_header(c->cli, "Authorization", c->bearer);
+    c->dirty = false;
+    c->dials++;
+    return true;
+}
 
-    tls_wdt_pet();
-    esp_err_t err = esp_http_client_open(cli, clen);
-    tls_wdt_pet();
-    if (err != ESP_OK) { esp_http_client_cleanup(cli); nucleo_arb_release(tk);
-        ESP_LOGW(TAG, "slice open FAIL: %s", esp_err_to_name(err)); return -1; }
+static bool tx_conn_open(tx_conn_t *c, const char *base, const char *key, const char *bnd)
+{
+    memset(c, 0, sizeof *c);
+    snprintf(c->url,    sizeof c->url,    "%s/audio/transcriptions", base);
+    snprintf(c->bearer, sizeof c->bearer, "Bearer %s", key);
+    snprintf(c->ct,     sizeof c->ct,     "multipart/form-data; boundary=%s", bnd);
+    if (online_tls_heap_too_low("POST", c->url)) return false;
+    c->tk = nucleo_arb_acquire(ARB_FG, "transcribe", 0);
+    if (!c->tk) { ESP_LOGW(TAG, "transcribe: arbiter busy (another TLS holds it) — bail"); return false; }
+    if (!tx_conn_dial(c)) { nucleo_arb_release(c->tk); c->tk = 0; return false; }
+    return true;
+}
 
-    int wok = esp_http_client_write(cli, pre, pl);
-    if (wok >= 0) wok = esp_http_client_write(cli, (const char *)hdr, 44);
-    if (fseek(fp, pcm_off, SEEK_SET) != 0) wok = -1;
-    long left = pcm_len; char buf[2048];
-    while (wok >= 0 && left > 0) {
-        size_t want = left < (long)sizeof buf ? (size_t)left : sizeof buf;
-        size_t rd = fread(buf, 1, want, fp);
-        if (rd == 0) break;
-        wok = esp_http_client_write(cli, buf, (int)rd); left -= (long)rd; tls_wdt_pet();
+static void tx_conn_close(tx_conn_t *c)
+{
+    if (c->cli) { esp_http_client_close(c->cli); esp_http_client_cleanup(c->cli); c->cli = NULL; }
+    if (c->tk)  { nucleo_arb_release(c->tk); c->tk = 0; }   // TLS down -> hand the budget back
+}
+
+// Start one request on the connection. Re-dials first if the last exchange left it unusable, and
+// retries once with a fresh socket if the server closed an idle keep-alive underneath us.
+static bool tx_conn_begin(tx_conn_t *c, long clen)
+{
+    if ((c->dirty || !c->cli) && !tx_conn_dial(c)) return false;
+    tls_wdt_pet();
+    esp_err_t err = esp_http_client_open(c->cli, clen);
+    tls_wdt_pet();
+    if (err == ESP_OK) { c->reqs++; return true; }
+    ESP_LOGW(TAG, "slice open FAIL (%s) after %d req — re-dialling", esp_err_to_name(err), c->reqs);
+    if (!tx_conn_dial(c)) return false;
+    tls_wdt_pet();
+    err = esp_http_client_open(c->cli, clen);
+    tls_wdt_pet();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "slice re-dial FAIL: %s free=%u largest=%u", esp_err_to_name(err),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        c->dirty = true;                       // a failed open leaves the handle half-connected
+        return false;
     }
-    if (wok >= 0) wok = esp_http_client_write(cli, post, psl);
-    if (wok < 0) { esp_http_client_cleanup(cli); nucleo_arb_release(tk); ESP_LOGW(TAG, "slice write failed"); return -1; }
+    c->reqs++;
+    return true;
+}
 
-    tls_wdt_pet();
-    esp_http_client_fetch_headers(cli);
-    int status = esp_http_client_get_status_code(cli);
-    size_t rcap = 1024; int rl = 0; char *resp = malloc(rcap);
-    while (resp) {
-        if ((size_t)rl + 1 >= rcap) { if (rcap >= HTTP_CAP) break;
-            size_t want = rcap * 2 > HTTP_CAP ? HTTP_CAP : rcap * 2; char *g = realloc(resp, want);
-            if (!g) break; resp = g; rcap = want; }
-        int n = esp_http_client_read(cli, resp + rl, (int)(rcap - 1 - rl));
-        if (n <= 0) break; rl += n; tls_wdt_pet();
+// Read the response. Up to `cap` bytes are kept in *out (malloc'd, caller frees, grown lazily so we
+// never seize a big block while the TLS record buffers are live); anything past that is read and
+// discarded, because a persistent connection is only safe once the body is fully consumed. If the
+// body could not be finished, the connection is marked dirty instead of being silently reused.
+static int tx_read_body(tx_conn_t *c, char **out, size_t cap)
+{
+    *out = NULL;
+    size_t rcap = 1024; int rl = 0;
+    char *resp = malloc(rcap);
+    if (!resp) { c->dirty = true; return -1; }
+    for (;;) {
+        if ((size_t)rl + 1 >= rcap) {
+            if (rcap >= cap) break;                      // at the ceiling: keep what we have, drain the rest
+            size_t want = rcap * 2 > cap ? cap : rcap * 2;
+            char *g = realloc(resp, want);
+            if (!g) break;
+            resp = g; rcap = want;
+        }
+        int n = esp_http_client_read(c->cli, resp + rl, (int)(rcap - 1 - rl));
+        if (n <= 0) break;
+        rl += n; tls_wdt_pet();
     }
-    if (resp) resp[rl] = 0;
-    esp_http_client_close(cli); esp_http_client_cleanup(cli); nucleo_arb_release(tk);
-    if (status != 200 || !resp || rl <= 0) { free(resp);
+    resp[rl] = 0;
+
+    char sink[256]; int drained = 0;
+    while (!esp_http_client_is_complete_data_received(c->cli)) {
+        int n = esp_http_client_read(c->cli, sink, sizeof sink);
+        if (n <= 0) break;
+        drained += n; tls_wdt_pet();
+    }
+    if (drained) ESP_LOGW(TAG, "reply clipped at %d, drained %d more bytes", rl, drained);
+    if (!esp_http_client_is_complete_data_received(c->cli)) c->dirty = true;   // never reuse a half-read socket
+
+    *out = resp;
+    return rl;
+}
+
+// Pull {text} (and, on the first segment, {language}) out of a Whisper reply.
+static int tx_parse_reply(const char *resp, int rl, int status, char *out, int tcap,
+                          char *out_lang, int lcap)
+{
+    if (status != 200 || !resp || rl <= 0) {
         ESP_LOGW(TAG, "slice FAIL status %d free=%u largest=%u", status,
                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)); return -1; }
-
-    cJSON *o = cJSON_Parse(resp); free(resp);
-    if (!o) { ESP_LOGW(TAG, "transcribe parse-fail (reply truncated at %d? rl=%d)", HTTP_CAP, rl); return -1; }   // no longer a silent -1
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        return -1;
+    }
+    cJSON *o = cJSON_Parse(resp);
+    if (!o) { ESP_LOGW(TAG, "transcribe parse-fail (reply truncated at %d? rl=%d)", HTTP_CAP, rl); return -1; }
     int tl = -1;
     cJSON *t = cJSON_GetObjectItem(o, "text");
     if (cJSON_IsString(t)) { snprintf(out, tcap, "%s", t->valuestring); tl = (int)strlen(out); }
     if (out_lang && lcap) {
-        cJSON *lg = cJSON_GetObjectItem(o, "language");
+        cJSON *lg = cJSON_GetObjectItem(o, "language");            // ISO ("it") or full ("italian")
         if (cJSON_IsString(lg) && lg->valuestring[0]) {
             const char *L = lg->valuestring;
             snprintf(out_lang, lcap, "%s", !strncasecmp(L, "it", 2) ? "it" : !strncasecmp(L, "en", 2) ? "en" : L);
@@ -1511,24 +1647,295 @@ static int transcribe_slice(const char *base, const char *key, const char *wmode
     return tl;
 }
 
+// Upload ONE segment on the shared connection: a synthetic-header WAV = [44-byte header | pcm_len
+// bytes of fp at pcm_off]. Returns transcript length in `out`, or -1. Detected language goes to
+// out_lang when non-NULL (we only ask on the first segment — Whisper's per-segment guess drifts).
+static int transcribe_slice(tx_conn_t *c, const char *bnd, const char *wmodel, const char *lang_hint,
+                            FILE *fp, long pcm_off, long pcm_len, const nucleo_take_batch_t *batch,
+                            long data_off, const wav_info_t *wi,
+                            char *out, int tcap, char *out_lang, int lcap)
+{
+    if (batch) pcm_len = batch->bytes;
+    pcm_len -= pcm_len & 1;                     // 16-bit mono: an odd byte count is not a sample
+    bool force = lang_hint && lang_hint[0] && strcmp(lang_hint, "auto") != 0;
+    char pre[900]; int pl = 0;
+    pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n%s\r\n", bnd, wmodel);
+    pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\njson\r\n", bnd);   // json, NOT verbose_json: verbose adds a multi-KB segments[] array that overran HTTP_CAP → truncated JSON → silent cJSON parse-fail (the "fails at 2 min" bug). Plain {text} stays small.
+    if (force) pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n%s\r\n", bnd, lang_hint);
+    pl += snprintf(pre + pl, sizeof pre - pl, "--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"seg.wav\"\r\nContent-Type: audio/wav\r\n\r\n", bnd);
+    char post[48]; int psl = snprintf(post, sizeof post, "\r\n--%s--\r\n", bnd);
+
+    // ADPCM only applies to the mono 16-bit PCM this device records; anything else goes as-is.
+    bool adpcm = c->adpcm && wi->channels == 1 && wi->bits == 16;
+    long nsamp = pcm_len / 2;
+    if (adpcm && nsamp <= 0) adpcm = false;
+
+    uint8_t hdr[NUCLEO_TAKE_ADPCM_HDR];
+    int  hlen;
+    long clen;
+    if (adpcm) {
+        nucleo_take_adpcm_hdr(hdr, nsamp, wi->rate);
+        hlen = NUCLEO_TAKE_ADPCM_HDR;
+        clen = (long)pl + hlen + nucleo_take_adpcm_size(nsamp) + psl;
+    } else {
+        wav_hdr44(hdr, (uint32_t)pcm_len, wi->rate, wi->channels, wi->bits);
+        hlen = 44;
+        clen = (long)pl + hlen + pcm_len + psl;
+    }
+
+    if (!tx_conn_begin(c, clen)) return -1;
+
+    pcm_cur_t cur = { .fp = fp };
+    if (batch) pcm_cur_batch(&cur, batch, data_off, pcm_len);
+    else       pcm_cur_range(&cur, pcm_off, pcm_len);
+
+    int wok = esp_http_client_write(c->cli, pre, pl);
+    if (wok >= 0) wok = esp_http_client_write(c->cli, (const char *)hdr, hlen);
+    if (fseek(fp, cur.pos, SEEK_SET) != 0) wok = -1;
+
+    int16_t buf[1024];                    // int16_t: the ADPCM encoder reads it as samples (alignment)
+    if (adpcm) {
+        // Encode straight into the socket: one 1010-byte read, one 256-byte block, no temp file and
+        // nothing buffered. The block count is driven by the sample count, not by what fread
+        // returns, because Content-Length was already promised and must be honoured to the byte.
+        nucleo_take_adpcm_t ast; nucleo_take_adpcm_init(&ast);
+        uint8_t blk[NUCLEO_TAKE_ADPCM_BLOCK];
+        long nblocks = (nsamp + NUCLEO_TAKE_ADPCM_SPB - 1) / NUCLEO_TAKE_ADPCM_SPB;
+        for (long b = 0; wok >= 0 && b < nblocks; b++) {
+            long want = nsamp - b * NUCLEO_TAKE_ADPCM_SPB;
+            if (want > NUCLEO_TAKE_ADPCM_SPB) want = NUCLEO_TAKE_ADPCM_SPB;
+            long rdb = pcm_read(&cur, buf, want * 2);
+            long rd  = rdb / 2;
+            if (rd == 0 || (b + 1 < nblocks && rd < want)) {         // the audio ran out under us
+                ESP_LOGW(TAG, "slice: short read at block %ld/%ld", b, nblocks);
+                wok = -1; break;
+            }
+            nucleo_take_adpcm_block(&ast, buf, (int)rd, blk);
+            wok = esp_http_client_write(c->cli, (const char *)blk, NUCLEO_TAKE_ADPCM_BLOCK);
+            tls_wdt_pet();
+        }
+    } else {
+        for (;;) {
+            long rd = pcm_read(&cur, buf, (long)sizeof buf);
+            if (rd <= 0) break;
+            wok = esp_http_client_write(c->cli, (const char *)buf, (int)rd); tls_wdt_pet();
+            if (wok < 0) break;
+        }
+    }
+    if (wok >= 0) wok = esp_http_client_write(c->cli, post, psl);
+    // A half-written body leaves the server expecting Content-Length bytes that never come: the
+    // socket is unusable, so force a fresh one rather than poisoning every later segment.
+    if (wok < 0) { c->dirty = true; ESP_LOGW(TAG, "slice write failed"); return -1; }
+
+    tls_wdt_pet();
+    if (esp_http_client_fetch_headers(c->cli) < 0) c->dirty = true;   // desynced reply: never reuse
+    int status = esp_http_client_get_status_code(c->cli);
+    c->last_status = status;                     // the codec probe in transcribe_long reads this
+    char *resp = NULL;
+    int rl = tx_read_body(c, &resp, HTTP_CAP);
+    int tl = tx_parse_reply(resp, rl, status, out, tcap, out_lang, lcap);
+    free(resp);
+    return tl;
+}
+
+// Journal-driven transcription: walk <take>.ndjson, upload only the segments that hold voice, and
+// record each result in <take>.tx.ndjson before touching the flat sidecar. Three things fall out of
+// that ordering: the pauses (30-50 % of a real recording) are never sent; a run that dies at segment
+// 40 of 80 resumes at 41 instead of starting over; and every piece of text carries the engine that
+// produced it, so a take may legitimately be half one engine and half another.
+// Returns chars written (>0), 0 if there was nothing voiced to do, or -1 if the journal is unusable.
+static int transcribe_by_journal(const char *jpath, const char *txpath, const char *sidecar_path,
+                                 const char *base, const char *key, const char *wmodel,
+                                 const char *lang_hint, bool want_adpcm, FILE *fp,
+                                 const wav_info_t *wi, char *out_lang, int lcap)
+{
+    FILE *jf = fopen(jpath, "rb");
+    if (!jf) return -1;
+
+    nucleo_take_todo_t  *todo  = calloc(1, sizeof *todo);
+    nucleo_take_batch_t *batch = calloc(1, sizeof *batch);
+    if (!todo || !batch) { free(todo); free(batch); fclose(jf); return -1; }
+
+    // What a previous attempt already paid for.
+    { FILE *tx = fopen(txpath, "rb");
+      if (tx) { nucleo_take_scan_done(tx, todo); fclose(tx); } }
+
+    // Recover the text a previous run produced, then keep appending. Rebuilding from the transcript
+    // journal (rather than trusting the flat file) is what stops a resume duplicating text.
+    FILE *out = fopen(sidecar_path, "wb");
+    if (!out) { free(todo); free(batch); fclose(jf); return -1; }
+    int written = 0;
+    if (todo->ranges > 0) {
+        FILE *tx0 = fopen(txpath, "rb");
+        if (tx0) { long n = nucleo_take_flatten(tx0, out); fclose(tx0); if (n > 0) written = (int)n; }
+        ESP_LOGI(TAG, "transcribe: resuming, %d chars recovered from %d earlier entries",
+                 written, todo->ranges);
+    }
+
+    // Count the work first, so the progress bar means something. Pure line reads — no network.
+    long budget = (long)WAV_CHUNK_SEC * wi->rate * wi->channels * (wi->bits / 8);
+    int total = 0;
+    while (nucleo_take_next_batch(jf, todo, budget, batch)) total++;
+    if (total == 0) {
+        // Either the take is already fully transcribed (then `written` holds it and the sidecar has
+        // just been rebuilt) or it never had a voiced segment to begin with.
+        ESP_LOGI(TAG, "transcribe: nothing left to do (%d chars already on file)", written);
+        fclose(out); free(todo); free(batch); fclose(jf);
+        return written;
+    }
+    s_tx_total = total; s_tx_done = 0;
+    rewind(jf);
+
+    FILE *tx = fopen(txpath, "ab");
+    if (!tx) { fclose(out); free(todo); free(batch); fclose(jf); return -1; }
+
+    nucleo_anima_l1_unload_if_idle();
+    const char *bnd = "----NucleoBoundary8x2k9q";
+    tx_conn_t conn;
+    if (!tx_conn_open(&conn, base, key, bnd)) {
+        fclose(tx); fclose(out); free(todo); free(batch); fclose(jf); return -1;
+    }
+    conn.adpcm = want_adpcm;
+
+    char *seg = malloc(4096);
+    if (!seg) { tx_conn_close(&conn); fclose(tx); fclose(out); free(todo); free(batch); fclose(jf); return -1; }
+
+    char engine[80];
+    bool got_lang = false;
+    int  done = 0;
+    int  failed = 0;                         // batches that exhausted their retries (a real hole)
+    while (nucleo_take_next_batch(jf, todo, budget, batch)) {
+        s_tx_done = done;
+        // The journal may promise a few bytes more than the file holds (its lines are flushed before
+        // the audio behind them). The file is authoritative, so clamp.
+        for (int i = 0; i < batch->n; i++) {
+            if (batch->b1[i] > wi->data_len) { batch->bytes -= batch->b1[i] - wi->data_len; batch->b1[i] = wi->data_len; }
+            if (batch->b1[i] <= batch->b0[i]) { batch->bytes -= batch->b1[i] - batch->b0[i]; batch->b1[i] = batch->b0[i]; }
+        }
+        if (batch->bytes <= 0) { done++; continue; }
+
+        int tl = transcribe_slice(&conn, bnd, wmodel, lang_hint, fp, 0, 0, batch, wi->data_off, wi,
+                                  seg, 4096, got_lang ? NULL : out_lang, got_lang ? 0 : lcap);
+        // One-shot ADPCM codec probe. A DEFINITIVE 4xx says the endpoint won't decode ADPCM -> drop
+        // to PCM for the rest of the take and re-send this batch. 429/408 are transient rate/timeout
+        // answers, NOT a codec verdict, so they must not flip a working take to 4x-larger PCM.
+        bool definitive_4xx = conn.last_status >= 400 && conn.last_status < 500 &&
+                              conn.last_status != 429 && conn.last_status != 408;
+        if (tl < 0 && conn.adpcm && !conn.codec_locked && definitive_4xx) {
+            ESP_LOGW(TAG, "transcribe: endpoint refused ADPCM (HTTP %d) — PCM for the rest of this take",
+                     conn.last_status);
+            conn.adpcm = false;
+            tl = transcribe_slice(&conn, bnd, wmodel, lang_hint, fp, 0, 0, batch, wi->data_off, wi,
+                                  seg, 4096, got_lang ? NULL : out_lang, got_lang ? 0 : lcap);
+        }
+        // Lock the codec only on a DEFINITIVE answer (a 200, or a real 4xx). A transient first batch
+        // (TLS-open fail leaves last_status 0; a 5xx/429/408) leaves the probe armed for a later one,
+        // so one unlucky handshake can't permanently pin a rejecting endpoint to ADPCM.
+        if (conn.last_status == 200 || definitive_4xx) conn.codec_locked = true;
+        // Retry only a real FAILURE (tl < 0). tl == 0 is HTTP-200 with empty {text} = Whisper-
+        // confirmed silence: deterministic, so re-uploading it only burns TLS + battery.
+        for (int rtry = 0; tl < 0 && rtry < 3; rtry++) {
+            ESP_LOGW(TAG, "transcribe: batch %d/%d (seg %d-%d) failed, retry %d",
+                     done + 1, total, batch->first, batch->last, rtry + 1);
+            vTaskDelay(pdMS_TO_TICKS(800)); nucleo_anima_l1_unload_if_idle();
+            tl = transcribe_slice(&conn, bnd, wmodel, lang_hint, fp, 0, 0, batch, wi->data_off, wi,
+                                  seg, 4096, NULL, 0);
+        }
+        if (tl >= 0) {
+            snprintf(engine, sizeof engine, "%s/%s", conn.adpcm ? "adpcm" : "pcm", wmodel);
+            // Journal first, flat file second: the journal is the durable record, the sidecar is a
+            // convenience view that a resume rebuilds from it. tl == 0 journals a done-EMPTY entry so
+            // a resume never re-uploads a silence batch; nothing is appended to the sidecar.
+            nucleo_take_journal_txt(tx, batch->first, batch->last,
+                                    (out_lang && lcap && out_lang[0]) ? out_lang : "", engine,
+                                    tl > 0 ? seg : "");
+            fsync(fileno(tx));               // FATFS commits the dir entry only on sync — a crash mid-take must keep this line
+            if (tl > 0) {
+                if (written) fputc(' ', out);
+                fwrite(seg, 1, strlen(seg), out); written += tl;
+                fflush(out); fsync(fileno(out));
+
+                // Second opinion on the language, from the text rather than the audio. Whisper's guess
+                // is unreliable on short or noisy segments and it drifts mid-take; the lexical check is
+                // free and offline. We only overrule the engine when the text is emphatic (>=70), and we
+                // fill in for it when it said nothing at all. Once settled, the language is locked for
+                // the take — it drives the transcript, the summary and the TTS voice.
+                if (!got_lang && out_lang && lcap) {
+                    char lex[8]; int conf = nucleo_take_lid(seg, lex, sizeof lex);
+                    if (!out_lang[0] && conf >= 40) {
+                        snprintf(out_lang, lcap, "%s", lex);
+                        ESP_LOGI(TAG, "transcribe: engine gave no language, the text reads %s (conf %d)", lex, conf);
+                    } else if (out_lang[0] && conf >= 70 && strncasecmp(out_lang, lex, 2)) {
+                        ESP_LOGW(TAG, "transcribe: engine said '%s' but the text reads %s (conf %d) — trusting the text",
+                                 out_lang, lex, conf);
+                        snprintf(out_lang, lcap, "%s", lex);
+                    }
+                    if (out_lang[0]) got_lang = true;
+                }
+            }
+        } else {
+            failed++;                        // a real hole: leave it un-journalled so a resume redoes it
+        }
+        done++;
+    }
+    s_tx_done = total;
+
+    ESP_LOGI(TAG, "transcribe(journal) DONE %d batches (%d failed), %d chars, %d requests on %d connection(s), codec=%s",
+             total, failed, written, conn.reqs, conn.dials, conn.adpcm ? "adpcm" : "pcm");
+    free(seg);
+    tx_conn_close(&conn);
+    fclose(tx); fclose(out); free(todo); free(batch); fclose(jf);
+    // A hole means the transcript is INCOMPLETE: return -2 so the caller does not cache a partial
+    // sidecar as final. The journalled batches persist, so the next attempt resumes only the holes.
+    if (failed > 0) return written > 0 ? -2 : -1;
+    return written;
+}
+
 // Transcribe a long WAV chunk-by-chunk, APPENDING each segment's text to `sidecar_path` on SD (the full
 // transcript never sits in RAM). Returns total chars written (>0), or -1 if NOTHING transcribed. Detected
 // language of the first good segment goes to out_lang. Progress via nucleo_anima_transcribe_progress().
 int nucleo_anima_transcribe_long(const char *path, const char *lang_hint, const char *sidecar_path,
                                  char *out_lang, int lcap)
 {
+    s_tx_done = 0; s_tx_total = 0;        // clear stale progress so the app's "segmento N/N" line only shows during an active chunked run
     char base[160], cmodel[80], key[160], wmodel[64] = "whisper-large-v3";
     if (!teacher_cfg(base, sizeof base, cmodel, sizeof cmodel, key, sizeof key)) return -1;
+    bool want_adpcm = true;              // default on; "tx_codec":"pcm" in teacher.json opts out
     { FILE *cf = fopen(NUCLEO_SD_MOUNT "/data/anima/teacher.json", "r");
       if (cf) { char b[1536]; size_t cn = fread(b, 1, sizeof b - 1, cf); fclose(cf); b[cn] = 0;
         cJSON *co = cJSON_Parse(b);
         if (co) { cJSON *w = cJSON_GetObjectItem(co, "whisper");
           if (cJSON_IsString(w) && w->valuestring[0]) snprintf(wmodel, sizeof wmodel, "%s", w->valuestring);
+          cJSON *tc = cJSON_GetObjectItem(co, "tx_codec");
+          if (cJSON_IsString(tc) && !strcasecmp(tc->valuestring, "pcm")) want_adpcm = false;
           cJSON_Delete(co); } } }
 
     FILE *fp = fopen(path, "rb"); if (!fp) return -1;
     wav_info_t wi = {0};
     if (!wav_parse(fp, &wi)) { fclose(fp); ESP_LOGW(TAG, "transcribe_long: not a parseable WAV"); return -1; }
+
+    // Journal-driven first: takes recorded by this firmware carry <take>.ndjson, and walking it beats
+    // slicing on a wall clock on every axis (silence skipped, resumable, per-batch provenance). A take
+    // from before this feature — or a file uploaded through the web app — has no journal and falls
+    // through to the fixed-length path below, unchanged.
+    { char jp[220], txp[220];
+      snprintf(jp, sizeof jp, "%s", path);
+      { char *sl = strrchr(jp, '/'); char *dot = strrchr(sl ? sl : jp, '.'); if (dot) *dot = 0; }
+      snprintf(txp, sizeof txp, "%s.tx.ndjson", jp);
+      strncat(jp, ".ndjson", sizeof(jp) - strlen(jp) - 1);
+      struct stat js;
+      if (stat(jp, &js) == 0 && js.st_size > 0) {
+          int r = transcribe_by_journal(jp, txp, sidecar_path, base, key, wmodel, lang_hint,
+                                        want_adpcm, fp, &wi, out_lang, lcap);
+          if (r > 0)  { fclose(fp); return r; }
+          if (r == 0) { fclose(fp); ESP_LOGW(TAG, "transcribe: journal held no voiced audio"); return -1; }
+          // -2 = the journal WAS used but some batches failed. The transcript is incomplete, and the
+          // journalled successes let the NEXT attempt resume the holes — so report failure and do NOT
+          // fall through to the fixed-slice path (which would re-slice from zero and overwrite the
+          // sidecar the resume depends on). Only a genuinely unusable journal (-1) falls through.
+          if (r == -2) { fclose(fp); ESP_LOGW(TAG, "transcribe: journal incomplete — resume left for the next run"); return -1; }
+          ESP_LOGW(TAG, "transcribe: journal unusable (%s) — falling back to fixed slices", jp);
+      } }
 
     long bps = (long)wi.rate * wi.channels * (wi.bits / 8), frame = wi.channels * (wi.bits / 8);
     long chunk = (long)WAV_CHUNK_SEC * bps; if (chunk > WAV_CHUNK_MAXB) chunk = WAV_CHUNK_MAXB;
@@ -1537,32 +1944,59 @@ int nucleo_anima_transcribe_long(const char *path, const char *lang_hint, const 
     int total = (int)((wi.data_len + chunk - 1) / chunk); if (total < 1) total = 1;
     s_tx_total = total; s_tx_done = 0;
 
-    FILE *out = fopen(sidecar_path, "w"); if (!out) { fclose(fp); return -1; }
-    char *seg = malloc(4096); if (!seg) { fclose(out); fclose(fp); return -1; }
+    // Free the offline index BEFORE the handshake, not between segments: with one persistent
+    // connection there is only ever one handshake to make room for.
+    nucleo_anima_l1_unload_if_idle();
+
+    const char *bnd = "----NucleoBoundary8x2k9q";
+    tx_conn_t conn;
+    if (!tx_conn_open(&conn, base, key, bnd)) { fclose(fp); return -1; }
+    conn.adpcm = want_adpcm;
+
+    FILE *out = fopen(sidecar_path, "w");
+    if (!out) { tx_conn_close(&conn); fclose(fp); return -1; }
+    char *seg = malloc(4096);
+    if (!seg) { fclose(out); tx_conn_close(&conn); fclose(fp); return -1; }
+
     int written = 0; bool got_lang = false;
     for (int i = 0; i < total; i++) {
         s_tx_done = i;
         long off = wi.data_off + (long)i * chunk;
         long len = wi.data_len - (long)i * chunk; if (len > chunk) len = chunk; if (len <= 0) break;
-        nucleo_anima_l1_unload_if_idle();                 // free the offline index before each TLS slice
-        int tl = transcribe_slice(base, key, wmodel, lang_hint, fp, off, len, &wi,
+        int tl = transcribe_slice(&conn, bnd, wmodel, lang_hint, fp, off, len, NULL, wi.data_off, &wi,
                                   seg, 4096, got_lang ? NULL : out_lang, got_lang ? 0 : lcap);
-        // The handshake peaks near OOM on the fragmented heap: a lost segment usually wins after a settle.
+        // Codec probe, once per take. A 4xx on the very first segment is the endpoint telling us it
+        // will not decode ADPCM, so we drop to PCM and re-send that segment. A 5xx or a timeout is a
+        // transient and must NOT cost us the 4x — those fall through to the ordinary retry below.
+        if (tl <= 0 && conn.adpcm && !conn.codec_locked &&
+            conn.last_status >= 400 && conn.last_status < 500) {
+            ESP_LOGW(TAG, "transcribe: endpoint refused ADPCM (HTTP %d) — PCM for the rest of this take",
+                     conn.last_status);
+            conn.adpcm = false;
+            tl = transcribe_slice(&conn, bnd, wmodel, lang_hint, fp, off, len, NULL, wi.data_off, &wi,
+                                  seg, 4096, got_lang ? NULL : out_lang, got_lang ? 0 : lcap);
+        }
+        conn.codec_locked = true;                 // one probe per take, whatever the answer was
+        // A lost segment is usually a transient: the retry re-dials (tx_conn_begin) when the socket
+        // went bad, so this covers both a dropped connection and a momentarily tight heap.
         for (int rtry = 0; tl <= 0 && rtry < 3; rtry++) {
             ESP_LOGW(TAG, "transcribe_long: seg %d/%d failed, retry %d", i + 1, total, rtry + 1);
             vTaskDelay(pdMS_TO_TICKS(800)); nucleo_anima_l1_unload_if_idle();
-            tl = transcribe_slice(base, key, wmodel, lang_hint, fp, off, len, &wi, seg, 4096, NULL, 0);
+            tl = transcribe_slice(&conn, bnd, wmodel, lang_hint, fp, off, len, NULL, wi.data_off, &wi, seg, 4096, NULL, 0);
         }
         if (tl > 0) {
             if (written) fputc(' ', out);
             fwrite(seg, 1, strlen(seg), out); written += tl;
             if (out_lang && lcap && out_lang[0]) got_lang = true;
-            fflush(out);                                  // persist progress so a crash keeps partial text
+            fflush(out); fsync(fileno(out));              // FATFS: fflush alone leaves the dir entry (size) uncommitted — a crash would read back 0 bytes
         }
     }
-    free(seg); fclose(out); fclose(fp);
+    free(seg); fclose(out);
+    ESP_LOGI(TAG, "transcribe_long DONE %d segs, %d chars, %d requests on %d connection(s), codec=%s -> %s",
+             total, written, conn.reqs, conn.dials, conn.adpcm ? "adpcm" : "pcm", sidecar_path);
+    tx_conn_close(&conn);
+    fclose(fp);
     s_tx_done = total;
-    ESP_LOGI(TAG, "transcribe_long DONE %d segs, %d chars -> %s", total, written, sidecar_path);
     return written > 0 ? written : -1;
 }
 
@@ -2268,11 +2702,12 @@ int nucleo_anima_online_recall(const char *query, bool en, anima_result_t *out)
     int32_t qn2 = 0; for (int k = 0; k < D; k++) qn2 += (int32_t)qv[k] * qv[k];
     float qn = sqrtf((float)qn2); if (qn < 1e-6f) { fclose(in); return 0; }
     char bestid[80] = ""; float best = -2.0f;
-    static char rid[80]; static int8_t rv[RECALL_DIM]; uint8_t l, d;
+    static char rid[80]; static int8_t rv[RECALL_DIM]; uint8_t l, db[2];
     while (fread(&l, 1, 1, in) == 1) {
-        if (l == 0 || l >= sizeof(rid) || fread(rid, 1, l, in) != l || fread(&d, 1, 1, in) != 1) break;
-        if ((int)d != D) { if (fseek(in, d, SEEK_CUR) != 0) break; continue; }   // dim mismatch -> skip
-        if (fread(rv, 1, d, in) != d) break;
+        if (l == 0 || l >= sizeof(rid) || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
+        int d = db[0] | (db[1] << 8);                        // u16-LE dim (see vec_sync)
+        if (d != D) { if (d <= 0 || d > RECALL_DIM || fseek(in, d, SEEK_CUR) != 0) break; continue; }   // dim mismatch (or bad/old file) -> skip/stop
+        if (fread(rv, 1, d, in) != (size_t)d) break;
         long dot = 0; int32_t vn = 0;
         for (int k = 0; k < D; k++) { dot += (int)qv[k] * rv[k]; vn += (int32_t)rv[k] * rv[k]; }
         float cos = (float)dot / (qn * sqrtf((float)vn) + 1e-9f);

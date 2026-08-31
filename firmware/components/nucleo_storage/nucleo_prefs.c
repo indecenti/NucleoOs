@@ -26,6 +26,16 @@ static cJSON *settings_load(void)
     return root;
 }
 
+// Size of settings.json on disk, or -1 if absent. Lets us tell "file missing" (fine, create it) apart
+// from "file present but unparseable" (must NOT clobber — it holds ui.language/theme we can't see).
+static long settings_file_size(void)
+{
+    FILE *f = fopen(SETTINGS_JSON, "rb");
+    if (!f) return -1;
+    fseek(f, 0, SEEK_END); long sz = ftell(f); fclose(f);
+    return sz;
+}
+
 static int clamp_pct(int v) { return v < 0 ? 0 : (v > 100 ? 100 : v); }
 
 bool nucleo_prefs_load(int *brightness, int *volume, bool *muted)
@@ -54,7 +64,14 @@ void nucleo_prefs_save(int brightness, int volume, bool muted)
 
     // Read-modify-write so every other key the web Settings app owns is preserved.
     cJSON *root = settings_load();
-    if (!root) root = cJSON_CreateObject();
+    if (!root) {
+        // Distinguish "no file yet" (create one) from "file present but unparseable". In the latter
+        // case the document still holds ui.language / ui.theme / device.* that we cannot read here —
+        // overwriting it with a power-only object would wipe those keys and revert the OS language on
+        // the next boot. A brightness/volume tweak must never do that: bail and leave the file intact.
+        if (settings_file_size() > 0) { ESP_LOGW(TAG, "settings.json unparseable — skipping prefs write to avoid clobbering ui.*"); return; }
+        root = cJSON_CreateObject();
+    }
     cJSON *power = cJSON_GetObjectItem(root, "power");
 
     // No-op guard: if the file already holds exactly these three values, skip the write entirely.

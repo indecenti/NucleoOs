@@ -13,7 +13,7 @@
 //  • LIVE         — changing the language in Settings repaints every open window with no reload,
 //                   using the browser's same-origin `storage` event (fires in all iframes but the
 //                   setter) plus an in-document event for same-frame subscribers.
-//  • HONEST       — a missing key falls back lang→base(it)→key and is never a blank; the i18n gate
+//  • HONEST       — a missing key falls back lang→base(en)→key and is never a blank; the i18n gate
 //                   (tools/i18n-check.mjs) keeps catalogs in parity so that fallback rarely fires.
 //  • DEVICE-CHEAP — all of this runs in the browser; the Cardputer only serves small static JSON.
 //
@@ -33,7 +33,7 @@ const LOCALE_KEY = 'nucleo.locale';              // optional regional-format ove
 export const LANGS = [
   { code: 'it', label: 'Italiano', flag: '🇮🇹', dir: 'ltr', locale: 'it-IT' },
   { code: 'en', label: 'English',  flag: '🇬🇧', dir: 'ltr', locale: 'en-US' },
-  // Tier-2 languages (translation in progress): every missing key falls back through base (it), so a
+  // Tier-2 languages (translation in progress): every missing key falls back through base (en), so a
   // partial catalog is safe. They appear in the Settings/onboarding pickers as soon as they're listed.
   { code: 'es', label: 'Español',  flag: '🇪🇸', dir: 'ltr', locale: 'es-ES' },
   { code: 'fr', label: 'Français', flag: '🇫🇷', dir: 'ltr', locale: 'fr-FR' },
@@ -109,13 +109,16 @@ async function fetchCatalog(url) {
 async function buildMerged(ns, lang) {
   const key = `${ns}|${lang}`;
   if (merged.has(key)) return merged.get(key);
-  // core: base + active. Both are precached by the service worker → zero device read, and the base
-  // layer is a free fallback floor. App namespace: ACTIVE language ONLY — the i18n gate guarantees
-  // IT/EN key parity, so fetching the base catalog too would be a redundant SD read on the Cardputer.
-  const coreLangs = lang === BASE ? [BASE] : [BASE, lang];
-  const jobs = coreLangs.map((L) => fetchCatalog(urlFor('core', L)));
-  if (ns !== 'core') jobs.push(fetchCatalog(urlFor(ns, lang)));
-  const layers = await Promise.all(jobs);               // [core(base), core(active), ns(active)] — later wins
+  // ENGLISH IS THE FALLBACK FLOOR (BASE) for BOTH layers. We always load the base(en) catalog under
+  // the active one — for `core` AND for the app namespace — so a key missing from the active-language
+  // file resolves to English, never to a raw key on screen. This matters for the tier-2 languages
+  // (es/fr/de), whose per-app catalogs may be partial: without the ns(en) floor they'd fall through
+  // to the key. core(en) is service-worker precached; the one extra ns(en) fetch is HTTP-cached and
+  // tiny, and buys a guaranteed English fallback everywhere. Order = later wins.
+  const langChain = lang === BASE ? [BASE] : [BASE, lang];   // [en] or [en, active]
+  const jobs = langChain.map((L) => fetchCatalog(urlFor('core', L)));
+  if (ns !== 'core') for (const L of langChain) jobs.push(fetchCatalog(urlFor(ns, L)));
+  const layers = await Promise.all(jobs);   // [core(en), core(active), ns(en), ns(active)] — later wins
   const out = Object.assign({}, ...layers);
   merged.set(key, out);
   return out;

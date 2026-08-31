@@ -2,5 +2,6 @@
   "_lang": "fr",
   "app_title": "Lecteur multimédia",
   "library_hint": "Bibliothèque · /data/Music — décodé par votre navigateur",
-  "empty_list": "Aucun audio dans /data/Music"
+  "empty_list": "Aucun audio dans /data/Music",
+  "load_failed": "Bibliothèque inaccessible — l’appareil est-il en ligne ?"
 }

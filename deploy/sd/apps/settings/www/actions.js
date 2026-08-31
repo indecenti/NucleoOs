@@ -70,7 +70,7 @@ export function buildActionRegistry(ctx) {
 const norm = (s) => String(s || '').toLowerCase()
   .normalize('NFD').replace(/[̀-ͯ]/g, '');   // strip accents so "luminosità" matches "luminosita"
 
-export function filterActions(list, query, lang = 'it') {
+export function filterActions(list, query, lang = 'en') {
   const q = norm(query).trim();
   if (!q) return list.slice();
   const other = lang === 'it' ? 'en' : 'it';

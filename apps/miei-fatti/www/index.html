@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -184,7 +184,7 @@
   const SETTINGS = '/system/config/settings.json';
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const lang = () => { const l=(localStorage.getItem('anima.lang')||'it').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'it'; };
+  const lang = () => { const l=(localStorage.getItem('anima.lang')||'en').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; };
 
   // ---- ANIMA teach grammar (matches firmware tool_teach: LEAD + copula è/sono/significa) -----
   const LEAD = { it:'ricorda che ', en:'remember that ', es:'recuerda que ', fr:'souviens-toi que ', de:'merke dir, dass ' };
@@ -240,9 +240,9 @@
     if (_views[l]) return _views[l];
     try { const r = await fetch('./i18n.' + l + '.json');
       if (r.ok) return (_views[l] = unflatten(await r.json())); } catch {}
-    return l === 'it' ? null : loadStrings('it');       // base language is the last resort
+    return l === 'en' ? null : loadStrings('en');       // base language is the last resort
   }
-  const t = () => _views[lang()] || _views.it;
+  const t = () => _views[lang()] || _views.en;
   const tf = (tpl, vars) => String(tpl||'').replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : '{'+k+'}'));
 
   // ---- storage ---------------------------------------------------------------
@@ -509,7 +509,7 @@
     if(d&&typeof d==='object'&&Array.isArray(d.facts)){ state={ schema:2, profile:{name:'',age:'',city:'',job:'',email:'',birthday:''}, facts:[], rels:[], ...d };
       state.profile={name:'',age:'',city:'',job:'',email:'',birthday:'',...(d.profile||{})}; state.rels=Array.isArray(d.rels)?d.rels:[]; }
     seq=[...state.facts,...state.rels].reduce((m,x)=>Math.max(m,(x.id|0)+1),1); }
-  async function init(){ await loadTheme(); await loadStrings('it'); if(lang()!=='it') await loadStrings(lang()); await load(); applyStrings(); loadProfileInputs();
+  async function init(){ await loadTheme(); await loadStrings('en'); if(lang()!=='en') await loadStrings(lang()); await load(); applyStrings(); loadProfileInputs();
     $('seg').addEventListener('click',(e)=>{ const b=e.target.closest('button[data-mode]'); if(b) setMode(b.dataset.mode); });
     $('cat').addEventListener('change',()=>{ applyPlaceholders(); renderPreview(); });
     $('subj').addEventListener('input',renderPreview); $('val').addEventListener('input',renderPreview);

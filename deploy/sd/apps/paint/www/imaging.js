@@ -55,7 +55,7 @@ export function removeBackgroundAuto(src, { tolerance = 48, feather = 1, bg = nu
 export function magicWandErase(src, sx, sy, { tolerance = 40, feather = 1 } = {}) {
   const { data, width: w, height: h } = src;
   const out = new Uint8ClampedArray(data);
-  sx = clamp(sx) % w | 0; sy = (sy < 0 ? 0 : sy >= h ? h - 1 : sy) | 0;
+  sx = (sx < 0 ? 0 : sx >= w ? w - 1 : sx) | 0; sy = (sy < 0 ? 0 : sy >= h ? h - 1 : sy) | 0;   // clamp X to [0,w-1] (clamp() caps at 255 — wrong seed on canvases wider than 256)
   const si = (sy * w + sx) * 4, sr = data[si], sg = data[si + 1], sb = data[si + 2];
   const tol2 = tolerance * tolerance * 3;
   const seen = new Uint8Array(w * h), stack = [sy * w + sx];

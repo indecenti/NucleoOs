@@ -83,8 +83,10 @@
     const SENT_LOG = '/system/mail/sent.log';
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    let accounts = [], presets = [], def = -1, tab = 'compose', loaded = false;
-    let draft = { to: '', subject: '', body: '', account: -1 };
+    let accounts = [], presets = [], def = -1, tab = 'compose', loaded = false, needPair = false;
+    // A recipient can be handed in via ?to= (e.g. Contacts → "Write email"): open straight into Compose.
+    const _q = new URLSearchParams(location.search);
+    let draft = { to: (_q.get('to') || '').trim(), subject: (_q.get('subject') || '').trim(), body: (_q.get('body') || '').trim(), account: -1 };
     let editing = null;
 
     const esc = (s) => (s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -100,10 +102,16 @@
     }
 
     async function loadData() {
-      const [pa, ac] = await Promise.all([
-        fetch('/api/mail/presets', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/mail/accounts', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null),
-      ]);
+      // Sequential, never parallel: the device is a single-task PSRAM-less httpd — two concurrent
+      // reads at app-open compete for its 4 sockets and fragmented heap.
+      const grab = async (p) => {
+        try { const r = await fetch(p, { cache: 'no-store' });
+          if (r.status === 401) needPair = true;
+          return r.ok ? await r.json() : null; } catch { return null; }
+      };
+      needPair = false;
+      const pa = await grab('/api/mail/presets');
+      const ac = await grab('/api/mail/accounts');
       presets = pa?.presets || [];
       accounts = ac?.accounts || [];
       def = (ac && typeof ac.default === 'number' && ac.default >= 0) ? ac.default : (accounts.length ? accounts[0].idx : -1);
@@ -116,6 +124,10 @@
 
     function renderCompose() {
       const v = $('view');
+      if (needPair) {
+        v.innerHTML = `<div class="empty"><span class="big">🔒</span><span>${esc(t('need_pair'))}</span></div>`;
+        return;
+      }
       if (!accounts.length) {
         v.innerHTML = `<div class="empty"><span class="big">✉️</span><span>${esc(t('no_account'))}</span></div>
           <div class="bar" style="justify-content:center"><button class="btn primary" id="goAdd">+ ${esc(t('add_account'))}</button></div>`;
@@ -132,7 +144,7 @@
         <label for="to">${esc(t('to'))}</label><input id="to" type="email" inputmode="email" autocapitalize="off"
           spellcheck="false" placeholder="${esc(t('to_ph'))}" value="${esc(draft.to)}">
         <label for="subj">${esc(t('subject'))}</label><input id="subj" placeholder="${esc(t('subject_ph'))}" value="${esc(draft.subject)}">
-        <label for="body">${esc(t('subject') && t('body_ph'))}</label><textarea id="body" placeholder="${esc(t('body_ph'))}">${esc(draft.body)}</textarea>
+        <label for="body">${esc(t('body_label'))}</label><textarea id="body" placeholder="${esc(t('body_ph'))}">${esc(draft.body)}</textarea>
         <div class="bar">
           <button class="btn primary" id="send">${esc(t('send'))}</button>
           <span class="ghint">${esc(t('send_hint'))}</span>
@@ -203,6 +215,7 @@
     function renderAccounts() {
       if (editing) return renderForm();
       const v = $('view');
+      if (needPair) { v.innerHTML = `<div class="empty"><span class="big">🔒</span><span>${esc(t('need_pair'))}</span></div>`; return; }
       let html = '';
       if (!accounts.length) html += `<div class="empty"><span class="big">👤</span><span>${esc(t('no_accounts'))}</span></div>`;
       for (const a of accounts) {
@@ -285,7 +298,7 @@
       const pass = $('pass').value;
       if (pass) body.pass = pass;
       if (!body.host || !EMAIL_RE.test(body.user)) { setStatus('err', t('invalid_email')); return; }
-      if (editing.idx < 0 && !pass) { setStatus('err', t('password')); return; }
+      if (editing.idx < 0 && !pass) { setStatus('err', t('err_password_required')); return; }
       setStatus('busy', t('sending'));
       try {
         const r = await fetch('/api/mail/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

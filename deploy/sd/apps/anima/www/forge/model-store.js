@@ -61,6 +61,58 @@ export const REGISTRY = [
         { name: 'vocab.json', bytes: 2776833, sha256: 'ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910' },
       ],
     } },
+  // The CHAT model, and the one the device carries: staged on the SD at the sdBase below, so a
+  // browser with no internet can still install a real generative brain straight from the Cardputer.
+  // Whole files, not split parts: the SD transport already reads them through bounded HTTP Range
+  // windows (see fetchOneShard), which is what keeps the device's httpd from resetting.
+  { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', kind: 'webgpu', label: 'Qwen2.5 1.5B · GPU (WebLLM)',
+    cdnBase: 'https://huggingface.co/mlc-ai/Qwen2.5-1.5B-Instruct-q4f16_1-MLC/resolve/main/',
+    sdBase: '/apps/anima/forge/models/Qwen2.5-1.5B-Instruct-q4f16_1-MLC/',
+    manifest: {
+      model: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', format: 'mlc', revision: '9bd564b064631febf14deadcac492efb761d60c3',
+      modelType: 'qwen2', contextWindow: 32768, totalBytes: 880286230,
+      shards: [
+        { name: 'params_shard_0.bin', bytes: 116686848, sha256: '29e46841454786b2c36cbcfd1d9a0777f8cb2bb55fb7cdf9ebd3df6ea6aa61f6' },
+        { name: 'params_shard_1.bin', bytes: 22330368, sha256: 'a99a03870f60127bdc3891f0bdc13a0f6e25efa984e9a5d6b188b5aae6f4fbae' },
+        { name: 'params_shard_2.bin', bytes: 26331136, sha256: 'c67f6aff8524441396efaa09488ea4536437e35389e0843d87fda796be9d3412' },
+        { name: 'params_shard_3.bin', bytes: 26331136, sha256: 'b14d44d720b45dbedd9c7786f1f9db1ce79392fcda0ecc8cbd6deddef6ca3ebd' },
+        { name: 'params_shard_4.bin', bytes: 26331136, sha256: 'e96c7b30a24f581df1ee5758e1697a214187a89e9e9bc93529950e2f16beecbf' },
+        { name: 'params_shard_5.bin', bytes: 26331136, sha256: '8370ade73f96fe5cdb4a816da39703032ca5610699e9714790e6e9c49be5086e' },
+        { name: 'params_shard_6.bin', bytes: 26331136, sha256: '48e651ada394e162b0bb016d8b3e340a8d29b0b67e06121ecdc6c368eec1b96d' },
+        { name: 'params_shard_7.bin', bytes: 26331136, sha256: '9eb581bc89582d23c43f66197a63ca2e80291c32eefd66695f6b6eaedf3e24ab' },
+        { name: 'params_shard_8.bin', bytes: 26331136, sha256: 'f8d5dfd8eaf86d361d20310d1d9aa7ba661156112d8524874aae78410cb3b663' },
+        { name: 'params_shard_9.bin', bytes: 26331136, sha256: 'ace7a4a00e819481571e08ead14f031e3b014f6f8cef665142b6b6463045b493' },
+        { name: 'params_shard_10.bin', bytes: 26331136, sha256: 'cbe9fa5eaff5463502bf9cc766b39081482e7df30ffc250d8f3e83c45d1700d1' },
+        { name: 'params_shard_11.bin', bytes: 26331136, sha256: 'f99e7bfc14e17d88d905360dd1f0ecbaab98d5778acdd762e397254c293a2b42' },
+        { name: 'params_shard_12.bin', bytes: 26331136, sha256: '3ec7ea81f305fc10b5ed9958ae279486d113d2621029f5f4a4cb820bc803c2ca' },
+        { name: 'params_shard_13.bin', bytes: 26331136, sha256: '6eb032a6d30b5d2bbf4b0d16ecdfaf6fa295dffa676e828917d5f8fe4d4d7ef2' },
+        { name: 'params_shard_14.bin', bytes: 26331136, sha256: 'e1a10d9e18641e9eab280e7c9cb4c7ee05b6dc3ab35b244ffe559da00b1fc950' },
+        { name: 'params_shard_15.bin', bytes: 26331136, sha256: 'fe24b3ddc07e311556e6968bb62506ae8980ca1ec55393f12ae41de468d93067' },
+        { name: 'params_shard_16.bin', bytes: 26331136, sha256: 'f86a010144bfae8748ac0abdd705d3d9c54bcb864bc51a4b7d3da8dab7d6c379' },
+        { name: 'params_shard_17.bin', bytes: 26331136, sha256: 'b473e5c8b5c226c751a393d666066cb6e8b1bf7e61604691a31fea2f82abef66' },
+        { name: 'params_shard_18.bin', bytes: 26331136, sha256: 'e36912a08ea82dfdcad4ebc288a6541d2112038e987d98f7f2f5cd8f8957cf2d' },
+        { name: 'params_shard_19.bin', bytes: 26331136, sha256: '795125e8c8eb20e28733df956ab32bb57ea2376ec99cd84b4d36f8f6f32b1f42' },
+        { name: 'params_shard_20.bin', bytes: 26331136, sha256: 'ea919f0b2a79aa359eab6cc8003dfce9cf7c742fe254651211793eb56bfb3122' },
+        { name: 'params_shard_21.bin', bytes: 26331136, sha256: '221e4cef4c28ac298fd44678378e506188a537f2752e0aba2f45066fdee27a85' },
+        { name: 'params_shard_22.bin', bytes: 26331136, sha256: '13c31268f630b52a72c158f2b7d97a672d128e760540b318566cfd70fe5e62ee' },
+        { name: 'params_shard_23.bin', bytes: 26331136, sha256: '498c729548a5afbf07735b0183534867cad01dc57132ae1e8802041f193f6f23' },
+        { name: 'params_shard_24.bin', bytes: 26331136, sha256: '103fdc607fcb3dc31d0861999f1f692768a3e2edfa81ef2f53eefc6713caf8ae' },
+        { name: 'params_shard_25.bin', bytes: 26331136, sha256: 'd60dffdf3c88f4990e04a18c343a0ce479b8f98960afb75154a1a835f29f6ea4' },
+        { name: 'params_shard_26.bin', bytes: 26331136, sha256: '086adb852f72e13c69f0cd06628375f4d5810d8fb8e00450fb1e1c964b510f77' },
+        { name: 'params_shard_27.bin', bytes: 26331136, sha256: '473be20481f3a4dcdb7128827edfe16e92c6d1b3019c330ff4dd05156a1f9a43' },
+        { name: 'params_shard_28.bin', bytes: 26331136, sha256: 'a7f2c9235da81fce6230b160007449d8f000a1f8c57a68313dce91ca080f088f' },
+        { name: 'params_shard_29.bin', bytes: 18589696, sha256: '59a8497760bc9da56ce4619e082490c607b3f107bad7ec312fb33ce1a0d3dc71' },
+      ],
+      aux: [
+        { name: 'merges.txt', bytes: 1671839, sha256: '599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3' },
+        { name: 'mlc-chat-config.json', bytes: 2043, sha256: '7da4954212d3f21a91cc3e693d179f63213fd57356796847f65d7f95478a1f9e' },
+        { name: 'ndarray-cache.json', bytes: 124489, sha256: '6d16a8936b1c9f372305064c4688eae17a609b62693f6782454d4fa2055c6e94' },
+        { name: 'tensor-cache.json', bytes: 124489, sha256: '6d16a8936b1c9f372305064c4688eae17a609b62693f6782454d4fa2055c6e94' },
+        { name: 'tokenizer.json', bytes: 7031645, sha256: 'c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539' },
+        { name: 'tokenizer_config.json', bytes: 7308, sha256: '5214600ee45ca2f887ce2eede8910378a0111ea99d657428bcbce94778e65a92' },
+        { name: 'vocab.json', bytes: 2776833, sha256: 'ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910' },
+      ],
+    } },
   { id: 'Qwen2.5-Coder-0.5B-Instruct-GGUF', kind: 'wasm', label: 'Coder 0.5B · CPU (WASM, no GPU)',
     cdnBase: 'https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF/resolve/main/',
     sdBase: '/apps/anima/forge/models/Qwen2.5-Coder-0.5B-Instruct-GGUF/',
@@ -130,17 +182,21 @@ export function makeModelStore(deps = {}) {
       bytes = r.bytes;
     } else {
       // SD (Cardputer): SAFE bounded-Range windows, scheduler-gated, never a whole-file GET.
-      let win = MAX_WINDOW; const chunks = []; let acc = 0;
-      const ranges = () => planRanges(file.bytes, win);
-      for (let i = 0, rs = ranges(); i < rs.length; i++) {
+      // OFFSET-based (not index-into-a-recomputed-plan): the window can SHRINK mid-download (throttle
+      // or a 503), and re-planning ranges from byte 0 with a new window re-segments bytes we already
+      // have — the old index then points at a DIFFERENT byte range, so chunks overlap and the assembled
+      // shard is corrupt. Walking `off` forward makes a window change affect only the NEXT window.
+      let win = MAX_WINDOW; const chunks = []; let off = 0;
+      while (off < file.bytes) {
         throwIfAborted(signal);
         const d = decide(deps.telemetry ? deps.telemetry() : {}, { op: 'model-pull', source: 'sd' });
         if (d.action === 'pause') throw new DlError('transient', 'paused: ' + d.reason);   // back off — caller auto-resumes
-        if (d.action === 'throttle') { win = d.window; rs = ranges(); }                    // shrink window, recompute
-        const r = await deps.fetchRange(url, rs[i], { signal });
-        if (r && r.status === 503) { win = adaptiveWindow(win, true); rs = ranges(); i--; continue; }
+        if (d.action === 'throttle') win = d.window;                                        // shrink the NEXT window
+        const range = { start: off, end: Math.min(off + win, file.bytes) - 1 };
+        const r = await deps.fetchRange(url, range, { signal });
+        if (r && r.status === 503) { win = adaptiveWindow(win, true); continue; }           // retry the SAME offset, smaller window
         if (!r || !r.ok) { throwIfAborted(signal); throw new DlError(classifyStatus(r && r.status), 'sd ' + (r && r.status) + ' on ' + file.name); }
-        chunks.push(r.bytes); acc += r.bytes.length; onBytes && onBytes(acc);
+        chunks.push(r.bytes); off += r.bytes.length; onBytes && onBytes(off);
       }
       bytes = concat(chunks);
     }

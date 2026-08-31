@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
@@ -159,7 +159,7 @@
     </div>
     <div class="row2">
       <div class="lang" id="lang">
-        <button data-l="it" class="on">IT</button><button data-l="en">EN</button>
+        <button data-l="it">IT</button><button data-l="en" class="on">EN</button>
       </div>
       <button class="tgl" id="btnNew" data-i18n-attr="title:new_title"><span class="ic">🗒</span><span data-i18n="new">Nuovo</span></button>
       <button class="tgl" id="btnSummary" data-i18n-attr="title:summary_title"><span class="ic">✨</span><span data-i18n="sum_btn">Riassumi</span></button>
@@ -188,7 +188,7 @@ const stamp = () => { const d = new Date(), p = n => String(n).padStart(2,'0');
 let file = localStorage.getItem('dictation.file') || `trascrizione-${stamp()}.txt`;
 let finalText = localStorage.getItem('dictation.text') || '';
 let partial = '';
-let lang = localStorage.getItem('dictation.lang') === 'en' ? 'en' : 'it';
+let lang = localStorage.getItem('dictation.lang') === 'it' ? 'it' : 'en';
 localStorage.setItem('dictation.file', file);
 
 const path = () => `${TDIR}/${file}`;

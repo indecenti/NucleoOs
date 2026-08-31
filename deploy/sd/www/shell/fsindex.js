@@ -79,6 +79,7 @@ async function crawl() {
     const entries = await listDir(path);
     if (!entries) continue;
     for (const e of entries) {
+      if (!e || typeof e.name !== 'string' || !e.name) continue;   // one malformed entry must not sink the crawl
       const isDir = e.type === 'dir';
       const full = path.endsWith('/') ? path + e.name : path + '/' + e.name;
       out.push({
@@ -98,13 +99,19 @@ export function ensure(force = false) {
   if (building) return building;
   if (!force && builtAt && (now() - builtAt) < PERSIST_TTL) return Promise.resolve(index);
   building = (async () => {
-    const items = await crawl();
-    // A crawl that returns nothing (device unreachable mid-session) shouldn't wipe a good index.
-    if (items.length || !index.length) { index = items; builtAt = now(); persist(); }
-    building = null;
-    for (const cb of updateCbs) try { cb(); } catch {}
-    return index;
+    // finally: a throw anywhere in the crawl must clear `building`, or every later ensure()/
+    // invalidate() returns this same rejected promise and search is dead for the session.
+    try {
+      const items = await crawl();
+      // A crawl that returns nothing (device unreachable mid-session) shouldn't wipe a good index.
+      if (items.length || !index.length) { index = items; builtAt = now(); persist(); }
+      for (const cb of updateCbs) try { cb(); } catch {}
+      return index;
+    } finally {
+      building = null;
+    }
   })();
+  building.catch(() => {});   // invalidate()'s fire-and-forget path must not surface as an unhandled rejection
   return building;
 }
 

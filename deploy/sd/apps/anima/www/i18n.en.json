@@ -1,0 +1,11 @@
+{
+  "_lang": "en",
+  "resizeHint": "Drag to resize",
+  "speedInstant": "Instant",
+  "speedSmooth": "Smooth",
+  "speedFast": "Fast",
+  "exportMdTitle": "Export to Markdown",
+  "exportJsonTitle": "Export to JSON",
+  "cmdPaletteAria": "Command palette",
+  "micAria": "Dictate"
+}

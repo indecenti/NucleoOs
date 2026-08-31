@@ -117,15 +117,61 @@ static void build_rows(void)
 
 static int max_top(void) { int m = s_nrow - s_vis; return m > 0 ? m : 0; }
 
+// ---- repaint bookkeeping (ANTI-FLICKER.md) -------------------------------------------------------
+// The shared back-buffer is NOT guaranteed: mid-session (a web client took Remote, a decoder ran) the
+// 32 KB canvas is gone and the framework hands this app the PANEL directly. The old draw cleared the
+// whole content area and redrew it on every frame — once per second for the live stats, plus one frame
+// per easing step of the scroll — which on the direct path is exactly the clear-then-draw cadence that
+// blinks. So: buffered -> draw everything (the sprite is wiped for us); direct -> repaint only the rows
+// whose content or position actually changed, each in its own row box, and snap the scroll instead of
+// easing it (one repaint per keypress, not ten frames of full-area clear).
+#define MAX_SLOT 10
+static uint32_t s_slot[MAX_SLOT];    // signature of what is currently ON the panel in each visible slot
+static bool     s_buffered = true;   // last known draw path (set in info_draw, read by info_poll)
+static uint32_t s_content_sig;       // signature of the whole row model - gates the 1 Hz repaint
+static unsigned s_seen_gen;          // framework panel generation we last drew against
+
+static uint32_t fnv_s(uint32_t h, const char *s) { while (*s) { h ^= (uint8_t)*s++; h *= 16777619u; } return h; }
+static uint32_t rows_sig(void)
+{
+    uint32_t h = 2166136261u;
+    for (int i = 0; i < s_nrow; i++) {
+        h = fnv_s(h, s_row[i].label); h = fnv_s(h, s_row[i].val);
+        h ^= s_row[i].col; h *= 16777619u;
+    }
+    return h ? h : 1;
+}
+static uint32_t slot_sig(const Row &R, int ry)
+{
+    uint32_t h = fnv_s(fnv_s(2166136261u, R.label), R.val);
+    h ^= (uint32_t)R.col;        h *= 16777619u;
+    h ^= (uint32_t)(ry + 4096);  h *= 16777619u;
+    h ^= (uint32_t)R.kind;       h *= 16777619u;
+    return h ? h : 1;                                   // 0 is reserved for "slot empty / cleared"
+}
+static void slots_invalidate(void) { for (int i = 0; i < MAX_SLOT; i++) s_slot[i] = 0xFFFFFFFFu; }
+
 static bool info_poll(void)
 {
-    bool moving = false;
+    bool redraw = false;
     float tgt = (float)s_target;
-    if (s_scroll != tgt) { s_scroll += (tgt - s_scroll) * 0.35f; if (fabsf(s_scroll - tgt) < 0.02f) s_scroll = tgt; moving = true; }
+    if (s_scroll != tgt) {
+        if (s_buffered) { s_scroll += (tgt - s_scroll) * 0.35f; if (fabsf(s_scroll - tgt) < 0.02f) s_scroll = tgt; }
+        else            s_scroll = tgt;                 // no buffer + no vsync -> snap, never animate
+        redraw = true;
+    }
     static int64_t last = 0; int64_t now = esp_timer_get_time();
-    bool tick = (now - last > 1000000);                 // refresh live stats (RAM/battery/uptime) ~1 Hz
-    if (tick) last = now;
-    return moving || tick;
+    if (now - last > 1000000) {                         // refresh live stats (RAM/battery/uptime) ~1 Hz
+        last = now;
+        // If the enter-time calloc lost to fragmentation, the sheet would stay blank forever (every
+        // build_rows() no-ops on a null s_row, sig never moves). Retry here — fragmentation is
+        // transient on this device, so the sheet self-heals the moment heap frees up.
+        if (!s_row) { s_row = (Row *)calloc(40, sizeof *s_row); if (s_row) slots_invalidate(); }
+        build_rows();                                   // model is rebuilt HERE, not inside the draw
+        uint32_t sig = rows_sig();
+        if (sig != s_content_sig) { s_content_sig = sig; redraw = true; }   // nothing changed -> no frame
+    }
+    return redraw;
 }
 
 static void info_enter(void)
@@ -133,6 +179,9 @@ static void info_enter(void)
     nucleo_screen_acquire();                            // buffered -> no flicker (canvas may have been freed by a media app)
     if (!s_row) s_row = (Row *)calloc(40, sizeof *s_row);   // ~2.2 KB only while open, zero .bss at boot
     s_scroll = 0; s_target = 0;
+    s_buffered = true; slots_invalidate();              // first draw settles the real path (and wipes if direct)
+    s_seen_gen = nucleo_app_repaint_gen() - 1;          // != current -> the first draw is a full pass
+    build_rows(); s_content_sig = rows_sig();
     nucleo_app_set_poll_handler(info_poll);
     nucleo_app_set_hint(TR5("su/giu scorri   esc indietro", "up/dn scroll   esc back",
                             "arr scroll   esc atras", "haut/bas defiler   esc retour",
@@ -151,17 +200,41 @@ static void info_draw(void)
 {
     int top = nucleo_app_content_top(), ch = nucleo_app_content_height();
     const int rowH = 20;
-    s_vis = ch / rowH; if (s_vis < 1) s_vis = 1;
-    build_rows();
+    s_vis = ch / rowH; if (s_vis < 1) s_vis = 1; if (s_vis > MAX_SLOT - 1) s_vis = MAX_SLOT - 1;
+    if (!s_nrow) build_rows();
     if (s_target > max_top()) s_target = max_top();
 
-    d.fillRect(0, top, W, ch, BG);
+    // Font0 is the framework default, but an app/overlay that drew before us could have left another
+    // font on this target — and the label/value layout below is measured in Font0 cells. Pin it, so a
+    // stale font can never turn this sheet into overlapping text.
+    d.setFont(&fonts::Font0);
+
+    const bool buf = nucleo_app_is_buffered();
+    unsigned gen = nucleo_app_repaint_gen();
+    bool full = (buf != s_buffered) || (gen != s_seen_gen);
+    if (full) {                                         // path flipped, or the panel was owned by an overlay
+        s_buffered = buf; s_seen_gen = gen;
+        slots_invalidate();
+        if (!buf) { d.fillRect(0, top, W, ch, BG); s_scroll = (float)s_target; }   // one wipe, then incremental
+    }
+    if (buf) d.fillRect(0, top, W, ch, BG);             // canvas frame: full repaint, composited off-screen
+
+    // Clip: a partially scrolled row used to bleed its text into the hint bar (which this app never
+    // clears), leaving a permanent smear there on the direct path. One clip covers both paths.
+    d.setClipRect(0, top, W, ch);
 
     int start = (int)s_scroll; float frac = s_scroll - (float)start;
+    bool touched = false;
     for (int r = 0; r <= s_vis; r++) {
-        int idx = start + r; if (idx < 0 || idx >= s_nrow) continue;
-        int ry = top + (int)((float)r * rowH - frac * rowH);
-        if (ry + rowH <= top || ry >= top + ch) continue;
+        int idx = start + r;
+        int ry  = top + (int)((float)r * rowH - frac * rowH);
+        uint32_t sig = (idx >= 0 && idx < s_nrow) ? slot_sig(s_row[idx], ry) : 0;
+        if (!buf) {
+            if (sig == s_slot[r]) continue;             // this slot already shows exactly this
+            s_slot[r] = sig; touched = true;
+            d.fillRect(0, ry, W, rowH, BG);             // smallest box that owns the change
+        }
+        if (!sig) continue;                             // past the last row: cleared, nothing to draw
         Row &R = s_row[idx];
         if (R.kind == RK_HEAD) {
             d.fillRect(6, ry + rowH - 4, W - 14, 2, R.col);                       // section underline
@@ -185,16 +258,18 @@ static void info_draw(void)
         }
     }
 
-    // scrollbar
-    if (s_nrow > s_vis) {
+    // Scrollbar. On the direct path the row boxes above wipe its column, so redraw it whenever a row
+    // was touched; on an untouched frame it is still on the panel and must NOT be cleared+redrawn.
+    if (s_nrow > s_vis && (buf || touched)) {
         int trackH = ch - 4, th = trackH * s_vis / s_nrow;
         int ty = top + 2 + (trackH - th) * start / (max_top() > 0 ? max_top() : 1);
         d.fillRect(W - 3, top + 2, 2, trackH, MUTED);
         d.fillRect(W - 3, ty, 2, th, C_BLUE);
     }
+    d.clearClipRect();
 }
 
-static void info_exit(void) { free(s_row); s_row = nullptr; }   // back to zero .bss until reopened
+static void info_exit(void) { free(s_row); s_row = nullptr; s_nrow = 0; }   // back to zero .bss until reopened
 
 extern "C" void nucleo_register_info(void)
 {

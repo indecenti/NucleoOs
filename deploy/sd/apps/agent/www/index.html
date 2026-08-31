@@ -29,6 +29,17 @@
   .msg b{color:#fff}.msg code{background:#0c0f17;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font:12px var(--mono)}
   .msg pre{background:#0c0f17;border:1px solid var(--line);border-radius:9px;padding:10px;overflow:auto;font:12px var(--mono);margin:6px 0}
   .msg a{color:#7fb2ff}
+  /* live plan (update_plan) — one row per milestone, current one accented */
+  .plan{flex:0 0 auto;background:#0d1421;border-bottom:1px solid var(--line);padding:7px 14px;font-size:12.5px}
+  .plan .ph{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:11px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px}
+  .plan .pb{flex:1;height:3px;border-radius:2px;background:#1b2436;overflow:hidden}
+  .plan .pb i{display:block;height:100%;background:var(--acc,#4ab3ff);transition:width .25s}
+  .plan ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+  .plan li{display:flex;gap:7px;align-items:baseline;color:var(--dim)}
+  .plan li .m{width:1em;flex:0 0 auto}
+  .plan li.doing{color:var(--txt,#e6edf7);font-weight:600}
+  .plan li.done{opacity:.55;text-decoration:line-through}
+  @media (prefers-reduced-motion: reduce){ .plan .pb i{transition:none} }
   .tool{align-self:flex-start;max-width:min(760px,92%);background:#0e1422;border:1px solid var(--line);border-radius:11px;padding:8px 11px;font-size:12.5px}
   .tool .th{display:flex;align-items:center;gap:7px;font-weight:600}
   .tool .ti{font-size:14px}.tool .tn{font:12px var(--mono);color:var(--accent)}
@@ -63,6 +74,20 @@
   .gate-card{max-width:440px}.gate-card .gi{font-size:42px}.gate-card h2{margin:10px 0 6px}.gate-card p{color:var(--dim)}
   .gate-card button{margin-top:14px;border:none;border-radius:10px;padding:10px 18px;font-weight:600;cursor:pointer;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0d16}
   .gate-card .ghost{background:var(--panel2);color:var(--ink);border:1px solid var(--line);margin-left:8px}
+  .eng-btn{border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:4px 9px;cursor:pointer;font-size:15px}
+  .engines{border-bottom:1px solid var(--line);background:var(--panel2);padding:10px 14px;font-size:13px}
+  .engines .ep-head{font-weight:700;margin-bottom:8px}.engines .ep-head small{display:block;font-weight:400;color:var(--mut)}
+  .engines .ep-row{padding:7px 0;border-top:1px solid var(--line)}
+  .engines .ep-row.dim label{color:var(--mut)}
+  .engines .ep-state{margin-left:8px;font-size:11px;border:1px solid var(--line);border-radius:8px;padding:1px 7px;color:var(--mut)}
+  .engines .s-ready{color:var(--ok,#7c6);border-color:currentColor}
+  .engines .s-unsupported,.engines .s-no-key{color:var(--warn,#c96)}
+  .engines .ep-why{color:var(--mut);margin:4px 0 0;max-width:56em}
+  .engines .ep-why.err{color:var(--err,#e66)}
+  .engines .ep-get{margin-top:6px;border:1px solid var(--line);background:none;color:var(--ink);border-radius:8px;padding:4px 10px;cursor:pointer}
+  .engines .ep-prog{margin-top:6px;height:14px;border:1px solid var(--line);border-radius:7px;position:relative;overflow:hidden;cursor:pointer}
+  .engines .ep-bar{height:100%;width:0;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  .engines .ep-pct{position:absolute;inset:0;display:grid;place-items:center;font-size:10px}
 </style>
 </head>
 <body>
@@ -75,8 +100,15 @@
       <label class="ws" data-i18n-attr="title:ws_hint">📁 <input id="ws" value="/data/agent" spellcheck="false"></label>
       <label class="tog" data-i18n-attr="title:web_hint"><input type="checkbox" id="web" checked> <span data-i18n="web_label">web</span></label>
       <label class="tog" data-i18n-attr="title:auto_hint"><input type="checkbox" id="auto"> <span data-i18n="auto_label">auto-approva</span></label>
+      <button class="eng-btn" id="eng-btn" data-i18n-attr="title:eng_btn" title="Motore AI">🧠</button>
     </div>
   </header>
+
+  <!-- Live plan: the worker's own checklist (update_plan). Sticky under the header so a long build
+       always shows WHERE it is, instead of a spinner. Hidden until the agent sets a plan. -->
+  <div id="engines" class="engines" hidden></div>
+
+  <div id="plan" class="plan" hidden aria-live="polite"></div>
 
   <main id="log"></main>
 

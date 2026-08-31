@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -121,7 +121,7 @@ const cwd = () => path ? dirname(path) : '/data';
 
 // ---- runtime (the shared engine) ----
 const rt = createRunner({
-  cwd: cwd(), lang: (navigator.language || 'it').slice(0, 2) === 'en' ? 'en' : 'it', timeoutMs: 6000,
+  cwd: cwd(), lang: (navigator.language || 'en').slice(0, 2) === 'it' ? 'it' : 'en', timeoutMs: 6000,
   onLog: (level, text) => { if (level === 'clear') clearConsole(); else line(level === 'info' ? 'info' : level === 'warn' ? 'warn' : level === 'error' ? 'err' : level === 'debug' ? 'debug' : 'log', text); },
   onNotify: (text) => { line('sys', '🔔 ' + text); try { window.parent.postMessage({ type: 'notify', text }, '*'); } catch {} },
 });

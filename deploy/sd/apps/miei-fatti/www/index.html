@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -184,7 +184,7 @@
   const SETTINGS = '/system/config/settings.json';
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const lang = () => { const l=(localStorage.getItem('anima.lang')||'it').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'it'; };
+  const lang = () => { const l=(localStorage.getItem('anima.lang')||'en').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; };
 
   // ---- ANIMA teach grammar (matches firmware tool_teach: LEAD + copula è/sono/significa) -----
   const LEAD = { it:'ricorda che ', en:'remember that ', es:'recuerda que ', fr:'souviens-toi que ', de:'merke dir, dass ' };
@@ -224,159 +224,26 @@
   const REL_ORDER = ['loc','abita','mamma','papa','fratelli','sposati','amici'];
 
   // ---- i18n ------------------------------------------------------------------
-  const S = {
-    it: { sub:'Insegna fatti ad ANIMA — e ANIMA ne deduce di nuovi.',
-      mfact:'Fatto', mrel:'Relazione',
-      addhint:'ANIMA imparerà questo fatto sul dispositivo e potrai chiederglielo a parole tue.',
-      relhint:'Collega due entità: ANIMA impara la relazione E deduce i fatti che ne derivano.',
-      cat:'Categoria', subj:'Soggetto', val:'Valore', teach:'Insegna ad ANIMA',
-      rela:'Entità A', relr:'Relazione', relb:'Entità B', addrel:'Aggiungi relazione',
-      dedh:'Deduzioni di ANIMA', dedhint:'Fatti che ANIMA NON gli hai detto, dedotti dalle tue relazioni (logica deterministica, zero invenzioni). Insegnali e ANIMA li ricorderà.',
-      teachded:'Insegna tutte le deduzioni', graph:'Grafo',
-      listh:'Memorizzati', reteach:'Re-insegna tutto', verifyall:'Verifica tutti',
-      profh:'Chi sono', profhint:'Dati personali deterministici: ANIMA li richiama esatti (nome, età, città…).',
-      saveprof:'Salva e insegna profilo', askprof:'Cosa sa ANIMA di me?',
-      p:{name:'Nome',age:'Età',city:'Città',job:'Lavoro',email:'Email',birthday:'Compleanno'},
-      foot:'Offline · sul dispositivo', footk:'cerca', footk2:'insegna',
-      empty:'Nessun fatto ancora. Aggiungi un fatto o una relazione qui sopra.',
-      listhint:(n)=>`${n}/128 fatti insegnabili ad ANIMA. Oltre, i più vecchi vengono dimenticati dal dispositivo (la lista qui resta).`,
-      cats:{person:'👤 Persona / Contatto',place:'📍 Luogo / Oggetto',define:'📖 Definizione',generic:'🔖 Generico'},
-      ph:{ person:['il numero di mamma','333 123 4567'], place:['il passaporto','nel cassetto blu'],
-           define:['HTTP','HyperText Transfer Protocol'], generic:['la mia auto','una Fiat Panda rossa'] },
-      phrel:{a:'Marco', b:'Anna'},
-      willlearn:'ANIMA imparerà:', dedwill:'Deduzione:', needboth:'Inserisci soggetto e valore.', needrel:'Inserisci entità A e B.',
-      teaching:'Insegno ad ANIMA…', taught:'Imparato! ANIMA ora lo ricorda.', relAdded:'Relazione aggiunta e insegnata.',
-      volatile:'ANIMA non lo memorizza: sembra temporaneo (oggi/adesso/meteo…).',
-      failteach:'ANIMA non è riuscita a impararlo ora.', noconn:'Dispositivo non raggiungibile.',
-      verifying:'Verifico con ANIMA…', vok:'✓ ANIMA risponde:', vno:'✗ ANIMA non l’ha ricordato.',
-      del:'Elimina', edit:'Modifica', verify:'Verifica', teach1:'Insegna',
-      reteachDone:(o,n)=>`Re-insegnati ${o}/${n}.`, verifyDone:(o,n)=>`Verificati ${o}/${n}.`,
-      dedDone:(o,n)=>`Insegnate ${o}/${n} deduzioni.`, profSaved:'Profilo salvato e insegnato.', asking:'Chiedo ad ANIMA…',
-      noded:'Aggiungi più relazioni (es. due genitori, o due luoghi collegati) e qui appariranno le deduzioni.',
-      chip:{new:'da insegnare',taught:'insegnato',verified:'verificato',volatile:'temporaneo',fail:'errore'},
-      tagRel:'relazione', tagDed:'dedotto', because:'perché' },
-    en: { sub:'Teach facts to ANIMA — and ANIMA deduces new ones.',
-      mfact:'Fact', mrel:'Relation',
-      addhint:'ANIMA learns this fact on the device; ask it back in your own words.',
-      relhint:'Link two entities: ANIMA learns the relation AND deduces the facts that follow.',
-      cat:'Category', subj:'Subject', val:'Value', teach:'Teach ANIMA',
-      rela:'Entity A', relr:'Relation', relb:'Entity B', addrel:'Add relation',
-      dedh:'ANIMA’s deductions', dedhint:'Facts you never told ANIMA, deduced from your relations (deterministic logic, no guessing). Teach them and ANIMA will remember them.',
-      teachded:'Teach all deductions', graph:'Graph',
-      listh:'Stored', reteach:'Re-teach all', verifyall:'Verify all',
-      profh:'About me', profhint:'Deterministic personal data: ANIMA recalls these exactly (name, age, city…).',
-      saveprof:'Save & teach profile', askprof:'What does ANIMA know about me?',
-      p:{name:'Name',age:'Age',city:'City',job:'Job',email:'Email',birthday:'Birthday'},
-      foot:'Offline · on device', footk:'search', footk2:'teach',
-      empty:'No facts yet. Add a fact or a relation above.',
-      listhint:(n)=>`${n}/128 facts teachable to ANIMA. Beyond that the device forgets the oldest (this list stays).`,
-      cats:{person:'👤 Person / Contact',place:'📍 Place / Object',define:'📖 Definition',generic:'🔖 General'},
-      ph:{ person:['mum’s phone number','333 123 4567'], place:['the passport','in the blue drawer'],
-           define:['HTTP','HyperText Transfer Protocol'], generic:['my car','a red Fiat Panda'] },
-      phrel:{a:'Marco', b:'Anna'},
-      willlearn:'ANIMA will learn:', dedwill:'Deduction:', needboth:'Enter a subject and a value.', needrel:'Enter entity A and B.',
-      teaching:'Teaching ANIMA…', taught:'Learned! ANIMA now remembers it.', relAdded:'Relation added and taught.',
-      volatile:'ANIMA won’t store it: looks temporary (today/now/weather…).',
-      failteach:'ANIMA could not learn it now.', noconn:'Device unreachable.',
-      verifying:'Verifying with ANIMA…', vok:'✓ ANIMA answers:', vno:'✗ ANIMA didn’t recall it.',
-      del:'Delete', edit:'Edit', verify:'Verify', teach1:'Teach',
-      reteachDone:(o,n)=>`Re-taught ${o}/${n}.`, verifyDone:(o,n)=>`Verified ${o}/${n}.`,
-      dedDone:(o,n)=>`Taught ${o}/${n} deductions.`, profSaved:'Profile saved and taught.', asking:'Asking ANIMA…',
-      noded:'Add more relations (e.g. two parents, or two linked places) and deductions will appear here.',
-      chip:{new:'to teach',taught:'taught',verified:'verified',volatile:'temporary',fail:'error'},
-      tagRel:'relation', tagDed:'deduced', because:'because' },
-    es: { sub:'Enseña datos a ANIMA — y ANIMA deduce otros nuevos.',
-      mfact:'Dato', mrel:'Relación',
-      addhint:'ANIMA aprenderá este dato en el dispositivo y podrás preguntárselo con tus palabras.',
-      relhint:'Vincula dos entidades: ANIMA aprende la relación Y deduce los datos que se derivan.',
-      cat:'Categoría', subj:'Sujeto', val:'Valor', teach:'Enseñar a ANIMA',
-      rela:'Entidad A', relr:'Relación', relb:'Entidad B', addrel:'Añadir relación',
-      dedh:'Deducciones de ANIMA', dedhint:'Datos que nunca le dijiste a ANIMA, deducidos de tus relaciones (lógica determinista, sin invenciones). Enséñalos y ANIMA los recordará.',
-      teachded:'Enseñar todas las deducciones', graph:'Grafo',
-      listh:'Memorizados', reteach:'Reenseñar todo', verifyall:'Verificar todos',
-      profh:'Quién soy', profhint:'Datos personales deterministas: ANIMA los recuerda exactos (nombre, edad, ciudad…).',
-      saveprof:'Guardar y enseñar perfil', askprof:'¿Qué sabe ANIMA de mí?',
-      p:{name:'Nombre',age:'Edad',city:'Ciudad',job:'Trabajo',email:'Email',birthday:'Cumpleaños'},
-      foot:'Sin conexión · en el dispositivo', footk:'buscar', footk2:'enseñar',
-      empty:'Aún no hay datos. Añade un dato o una relación arriba.',
-      listhint:(n)=>`${n}/128 datos enseñables a ANIMA. Más allá, el dispositivo olvida los más antiguos (esta lista permanece).`,
-      cats:{person:'👤 Persona / Contacto',place:'📍 Lugar / Objeto',define:'📖 Definición',generic:'🔖 General'},
-      ph:{ person:['el número de mamá','333 123 4567'], place:['el pasaporte','en el cajón azul'],
-           define:['HTTP','HyperText Transfer Protocol'], generic:['mi coche','un Fiat Panda rojo'] },
-      phrel:{a:'Marco', b:'Anna'},
-      willlearn:'ANIMA aprenderá:', dedwill:'Deducción:', needboth:'Introduce un sujeto y un valor.', needrel:'Introduce las entidades A y B.',
-      teaching:'Enseñando a ANIMA…', taught:'¡Aprendido! ANIMA ya lo recuerda.', relAdded:'Relación añadida y enseñada.',
-      volatile:'ANIMA no lo guarda: parece temporal (hoy/ahora/tiempo…).',
-      failteach:'ANIMA no ha podido aprenderlo ahora.', noconn:'Dispositivo no accesible.',
-      verifying:'Verificando con ANIMA…', vok:'✓ ANIMA responde:', vno:'✗ ANIMA no lo ha recordado.',
-      del:'Eliminar', edit:'Editar', verify:'Verificar', teach1:'Enseñar',
-      reteachDone:(o,n)=>`Reenseñados ${o}/${n}.`, verifyDone:(o,n)=>`Verificados ${o}/${n}.`,
-      dedDone:(o,n)=>`Enseñadas ${o}/${n} deducciones.`, profSaved:'Perfil guardado y enseñado.', asking:'Preguntando a ANIMA…',
-      noded:'Añade más relaciones (p. ej. dos progenitores, o dos lugares vinculados) y aquí aparecerán las deducciones.',
-      chip:{new:'por enseñar',taught:'enseñado',verified:'verificado',volatile:'temporal',fail:'error'},
-      tagRel:'relación', tagDed:'deducido', because:'porque' },
-    fr: { sub:'Apprends des faits à ANIMA — et ANIMA en déduit de nouveaux.',
-      mfact:'Fait', mrel:'Relation',
-      addhint:'ANIMA apprendra ce fait sur l’appareil ; redemande-le avec tes propres mots.',
-      relhint:'Relie deux entités : ANIMA apprend la relation ET déduit les faits qui en découlent.',
-      cat:'Catégorie', subj:'Sujet', val:'Valeur', teach:'Apprendre à ANIMA',
-      rela:'Entité A', relr:'Relation', relb:'Entité B', addrel:'Ajouter une relation',
-      dedh:'Déductions d’ANIMA', dedhint:'Des faits que tu n’as jamais dits à ANIMA, déduits de tes relations (logique déterministe, sans invention). Apprends-les et ANIMA s’en souviendra.',
-      teachded:'Apprendre toutes les déductions', graph:'Graphe',
-      listh:'Mémorisés', reteach:'Tout réapprendre', verifyall:'Tout vérifier',
-      profh:'Qui suis-je', profhint:'Données personnelles déterministes : ANIMA les rappelle exactement (nom, âge, ville…).',
-      saveprof:'Enregistrer et apprendre le profil', askprof:'Que sait ANIMA sur moi ?',
-      p:{name:'Nom',age:'Âge',city:'Ville',job:'Travail',email:'Email',birthday:'Anniversaire'},
-      foot:'Hors ligne · sur l’appareil', footk:'rechercher', footk2:'apprendre',
-      empty:'Aucun fait pour l’instant. Ajoute un fait ou une relation ci-dessus.',
-      listhint:(n)=>`${n}/128 faits enseignables à ANIMA. Au-delà, l’appareil oublie les plus anciens (cette liste reste).`,
-      cats:{person:'👤 Personne / Contact',place:'📍 Lieu / Objet',define:'📖 Définition',generic:'🔖 Général'},
-      ph:{ person:['le numéro de maman','333 123 4567'], place:['le passeport','dans le tiroir bleu'],
-           define:['HTTP','HyperText Transfer Protocol'], generic:['ma voiture','une Fiat Panda rouge'] },
-      phrel:{a:'Marco', b:'Anna'},
-      willlearn:'ANIMA apprendra :', dedwill:'Déduction :', needboth:'Saisis un sujet et une valeur.', needrel:'Saisis les entités A et B.',
-      teaching:'Apprentissage à ANIMA…', taught:'Appris ! ANIMA s’en souvient maintenant.', relAdded:'Relation ajoutée et apprise.',
-      volatile:'ANIMA ne le mémorise pas : cela semble temporaire (aujourd’hui/maintenant/météo…).',
-      failteach:'ANIMA n’a pas pu l’apprendre maintenant.', noconn:'Appareil injoignable.',
-      verifying:'Vérification avec ANIMA…', vok:'✓ ANIMA répond :', vno:'✗ ANIMA ne s’en est pas souvenu.',
-      del:'Supprimer', edit:'Modifier', verify:'Vérifier', teach1:'Apprendre',
-      reteachDone:(o,n)=>`Réappris ${o}/${n}.`, verifyDone:(o,n)=>`Vérifiés ${o}/${n}.`,
-      dedDone:(o,n)=>`Apprises ${o}/${n} déductions.`, profSaved:'Profil enregistré et appris.', asking:'Question à ANIMA…',
-      noded:'Ajoute d’autres relations (p. ex. deux parents, ou deux lieux liés) et les déductions apparaîtront ici.',
-      chip:{new:'à apprendre',taught:'appris',verified:'vérifié',volatile:'temporaire',fail:'erreur'},
-      tagRel:'relation', tagDed:'déduit', because:'parce que' },
-    de: { sub:'Bring ANIMA Fakten bei — und ANIMA leitet neue ab.',
-      mfact:'Fakt', mrel:'Beziehung',
-      addhint:'ANIMA lernt diesen Fakt auf dem Gerät; frag ihn in deinen eigenen Worten wieder ab.',
-      relhint:'Verknüpfe zwei Entitäten: ANIMA lernt die Beziehung UND leitet die daraus folgenden Fakten ab.',
-      cat:'Kategorie', subj:'Subjekt', val:'Wert', teach:'ANIMA beibringen',
-      rela:'Entität A', relr:'Beziehung', relb:'Entität B', addrel:'Beziehung hinzufügen',
-      dedh:'ANIMAs Schlussfolgerungen', dedhint:'Fakten, die du ANIMA nie gesagt hast, abgeleitet aus deinen Beziehungen (deterministische Logik, kein Raten). Bring sie ihr bei und ANIMA merkt sie sich.',
-      teachded:'Alle Schlussfolgerungen beibringen', graph:'Graph',
-      listh:'Gespeichert', reteach:'Alles neu beibringen', verifyall:'Alle prüfen',
-      profh:'Wer ich bin', profhint:'Deterministische persönliche Daten: ANIMA ruft sie exakt ab (Name, Alter, Stadt…).',
-      saveprof:'Profil speichern und beibringen', askprof:'Was weiß ANIMA über mich?',
-      p:{name:'Name',age:'Alter',city:'Stadt',job:'Beruf',email:'E-Mail',birthday:'Geburtstag'},
-      foot:'Offline · auf dem Gerät', footk:'suchen', footk2:'beibringen',
-      empty:'Noch keine Fakten. Füge oben einen Fakt oder eine Beziehung hinzu.',
-      listhint:(n)=>`${n}/128 Fakten für ANIMA lernbar. Darüber hinaus vergisst das Gerät die ältesten (diese Liste bleibt).`,
-      cats:{person:'👤 Person / Kontakt',place:'📍 Ort / Objekt',define:'📖 Definition',generic:'🔖 Allgemein'},
-      ph:{ person:['Mamas Nummer','333 123 4567'], place:['der Reisepass','in der blauen Schublade'],
-           define:['HTTP','HyperText Transfer Protocol'], generic:['mein Auto','ein roter Fiat Panda'] },
-      phrel:{a:'Marco', b:'Anna'},
-      willlearn:'ANIMA lernt:', dedwill:'Schlussfolgerung:', needboth:'Gib ein Subjekt und einen Wert ein.', needrel:'Gib die Entitäten A und B ein.',
-      teaching:'Bringe es ANIMA bei…', taught:'Gelernt! ANIMA merkt es sich jetzt.', relAdded:'Beziehung hinzugefügt und beigebracht.',
-      volatile:'ANIMA speichert es nicht: wirkt temporär (heute/jetzt/Wetter…).',
-      failteach:'ANIMA konnte es gerade nicht lernen.', noconn:'Gerät nicht erreichbar.',
-      verifying:'Prüfe mit ANIMA…', vok:'✓ ANIMA antwortet:', vno:'✗ ANIMA hat es nicht erinnert.',
-      del:'Löschen', edit:'Bearbeiten', verify:'Prüfen', teach1:'Beibringen',
-      reteachDone:(o,n)=>`Neu beigebracht ${o}/${n}.`, verifyDone:(o,n)=>`Geprüft ${o}/${n}.`,
-      dedDone:(o,n)=>`${o}/${n} Schlussfolgerungen beigebracht.`, profSaved:'Profil gespeichert und beigebracht.', asking:'Frage ANIMA…',
-      noded:'Füge weitere Beziehungen hinzu (z. B. zwei Eltern oder zwei verbundene Orte) und hier erscheinen die Schlussfolgerungen.',
-      chip:{new:'beizubringen',taught:'beigebracht',verified:'geprüft',volatile:'temporär',fail:'Fehler'},
-      tagRel:'Beziehung', tagDed:'abgeleitet', because:'weil' }
-  };
-  const t = () => S[lang()] || S.it;
+  // Strings live in i18n.<lang>.json like every other app (flat dot-keyed catalogs, tracked by the
+  // i18n gate at 5-language parity). The whole app was written against a NESTED view — x.p.name,
+  // x.ph[cat][0], x.chip[state] — so the active catalog is unflattened back into that shape, one
+  // cached view per language. t() stays synchronous (40+ call sites): boot awaits loadStrings()
+  // before the first paint, and every language-switch path reloads the view before repainting.
+  const _views = {};                                   // lang -> nested strings view
+  const unflatten = (flat) => { const o = {};
+    for (const [k, v] of Object.entries(flat)) { if (k === '_lang') continue;
+      const parts = k.split('.'); let cur = o;
+      for (let i = 0; i < parts.length - 1; i++) cur = (cur[parts[i]] ||= {});
+      cur[parts[parts.length - 1]] = v; }
+    return o; };
+  async function loadStrings(l) {
+    if (_views[l]) return _views[l];
+    try { const r = await fetch('./i18n.' + l + '.json');
+      if (r.ok) return (_views[l] = unflatten(await r.json())); } catch {}
+    return l === 'en' ? null : loadStrings('en');       // base language is the last resort
+  }
+  const t = () => _views[lang()] || _views.en;
+  const tf = (tpl, vars) => String(tpl||'').replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : '{'+k+'}'));
 
   // ---- storage ---------------------------------------------------------------
   let state = { schema:2, profile:{name:'',age:'',city:'',job:'',email:'',birthday:''}, facts:[], rels:[] };
@@ -478,7 +345,7 @@
     const views = allViews();
     // stored list
     const ul=$('facts'), n=views.length;
-    $('t-listhint').textContent=t().listhint(n);
+    $('t-listhint').textContent=tf(t().listhint,{n});
     $('empty').hidden=n>0; ul.hidden=n===0;
     ul.innerHTML='';
     for(const v of views){ const ch=v.status||'new';
@@ -585,11 +452,11 @@
   async function teachAllDeds(){ if(!deds.length) return; $('teachded').disabled=true; let ok=0; const snapshot=[...deds];
     for(const d of snapshot){ const rec={ id:nextId(), kind:'flat', cat:'generic', subject:d.subject, value:d.value, cop:d.cop, status:'new', src:'deduced', ts:Date.now() };
       const r=await teachItem(viewOf(rec,lang())); if(r.k==='ok') ok++; state.facts.unshift(rec); }
-    scheduleSave(); render(); flash($('dedmsg'), t().dedDone(ok,snapshot.length)); }
+    scheduleSave(); render(); flash($('dedmsg'), tf(t().dedDone,{o:ok,n:snapshot.length})); }
   async function reteachAll(){ const vs=allViews(); if(!vs.length) return; $('reteach').disabled=true; let ok=0;
-    for(const v of vs){ const r=await teachItem(v); if(r.k==='ok') ok++; } $('reteach').disabled=false; scheduleSave(); render(); flash($('addmsg'),t().reteachDone(ok,vs.length)); }
+    for(const v of vs){ const r=await teachItem(v); if(r.k==='ok') ok++; } $('reteach').disabled=false; scheduleSave(); render(); flash($('addmsg'),tf(t().reteachDone,{o:ok,n:vs.length})); }
   async function verifyAll(){ const vs=allViews(); if(!vs.length) return; $('verifyall').disabled=true; let ok=0;
-    for(const v of vs){ const r=await verifyItem(v); if(r.ok) ok++; } $('verifyall').disabled=false; scheduleSave(); render(); flash($('addmsg'),t().verifyDone(ok,vs.length)); }
+    for(const v of vs){ const r=await verifyItem(v); if(r.ok) ok++; } $('verifyall').disabled=false; scheduleSave(); render(); flash($('addmsg'),tf(t().verifyDone,{o:ok,n:vs.length})); }
   function flash(el,txt){ el.className='ask'; el.textContent=txt; setTimeout(()=>{ if(el.textContent===txt) el.textContent=''; },4000); }
 
   // ---- profile ---------------------------------------------------------------
@@ -642,7 +509,7 @@
     if(d&&typeof d==='object'&&Array.isArray(d.facts)){ state={ schema:2, profile:{name:'',age:'',city:'',job:'',email:'',birthday:''}, facts:[], rels:[], ...d };
       state.profile={name:'',age:'',city:'',job:'',email:'',birthday:'',...(d.profile||{})}; state.rels=Array.isArray(d.rels)?d.rels:[]; }
     seq=[...state.facts,...state.rels].reduce((m,x)=>Math.max(m,(x.id|0)+1),1); }
-  async function init(){ await loadTheme(); await load(); applyStrings(); loadProfileInputs();
+  async function init(){ await loadTheme(); await loadStrings('en'); if(lang()!=='en') await loadStrings(lang()); await load(); applyStrings(); loadProfileInputs();
     $('seg').addEventListener('click',(e)=>{ const b=e.target.closest('button[data-mode]'); if(b) setMode(b.dataset.mode); });
     $('cat').addEventListener('change',()=>{ applyPlaceholders(); renderPreview(); });
     $('subj').addEventListener('input',renderPreview); $('val').addEventListener('input',renderPreview);
@@ -663,13 +530,13 @@
 
   // Single re-render entry for an external language switch: repaint all labels + reload profile fields.
   // Reused by the OS-wide i18n live-sync hook below (and harmless if called any time).
-  window.__mieiFattiRelang = () => { applyStrings(); loadProfileInputs(); };
+  window.__mieiFattiRelang = () => { loadStrings(lang()).then(() => { applyStrings(); loadProfileInputs(); }); };
 
   // ---- live: theme, language, external edits, OS shortcuts -------------------
   window.addEventListener('message',(e)=>{ const d=e.data||{};
     if(d.type==='set-theme'&&d.theme) document.documentElement.dataset.theme=d.theme;
-    if(d.type==='set-language'&&['it','en','es','fr','de'].includes(d.lang)){ localStorage.setItem('anima.lang',d.lang); applyStrings(); loadProfileInputs(); }
-    if(d.t==='fs.changed'&&typeof d.d?.path==='string'){ if(d.d.path.endsWith('settings.json')) loadTheme().then(applyStrings); else if(d.d.path===FILE&&!dirty) load().then(()=>{ loadProfileInputs(); render(); }); }
+    if(d.type==='set-language'&&['it','en','es','fr','de'].includes(d.lang)){ localStorage.setItem('anima.lang',d.lang); loadStrings(d.lang).then(()=>{ applyStrings(); loadProfileInputs(); }); }
+    if(d.t==='fs.changed'&&typeof d.d?.path==='string'){ if(d.d.path.endsWith('settings.json')) loadTheme().then(()=>window.__mieiFattiRelang()); else if(d.d.path===FILE&&!dirty) load().then(()=>{ loadProfileInputs(); render(); }); }
     if(d.type==='os-shortcut'){ const a=d.action; if(a==='new') (mode==='flat'?$('subj'):$('rel-a')).focus(); else if(a==='save') flushSave(); else if(a==='refresh') load().then(()=>{ loadProfileInputs(); render(); }); }
   });
   addEventListener('keydown',(e)=>{ if(e.key==='/'&&!/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName||'')){ e.preventDefault(); (mode==='flat'?$('subj'):$('rel-a')).focus(); } });

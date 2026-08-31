@@ -72,6 +72,34 @@ this, the UI flickered. The fix is always one of the techniques below — never 
    it has no clear-then-draw step and never flickers. Only the *overlay* on top of it needs
    techniques 2/3. Clip the opaque content so it never overdraws the overlay region.
 
+## Technique 2, applied to an app that can lose the canvas (the Connection sheet)
+
+An event-driven app is not automatically safe. The Connection app (`app_info.cpp`) is the reference
+for the mixed case: it draws a key/value sheet that also carries LIVE values (free RAM, largest
+block, battery, uptime), so it repaints ~1 Hz forever, and it is exactly the app you open right
+after a web client / Remote took the 32 KB canvas — i.e. on the DIRECT path. Full-area
+`fillRect` + redraw at 1 Hz, plus one frame per easing step of its smooth scroll, is technique 1's
+cadence with technique 1 unavailable: it blinks. What it does now, and what any app in that shape
+should copy:
+
+- **Know which path you are on.** `nucleo_app_is_buffered()` is valid inside `on_draw`; latch it
+  into a static so the poll handler can read it too.
+- **Buffered:** draw the whole frame (the sprite is wiped for you). **Direct:** keep a per-visible-slot
+  signature of what is on the panel and repaint only the slots whose content or y changed, each in
+  its own row box. A 1 Hz repaint of the two rows that actually changed is invisible.
+- **Do not animate on the direct path.** Ease the scroll only when buffered; snap otherwise — one
+  repaint per keypress instead of ten full-area clears.
+- **Gate the poll on real change.** Rebuild the model in the poll handler, hash it, and ask for a
+  frame only if the hash moved. An idle sheet then costs zero frames on both paths.
+- **Clip to the content band.** A partially scrolled row otherwise paints into the hint bar, which
+  the app never clears — the smear stays there for the rest of the session.
+- **Pin the font.** The layout math assumes Font0 cells; a previous app/overlay may have left another
+  font on the target, which turns the sheet into overlapping text.
+- **Watch `nucleo_app_repaint_gen()`.** It bumps on `force_repaint()` and whenever the app regains
+  the screen from the launcher/an overlay (voice, notification banner, Control Center). An
+  incremental direct-path cache MUST invalidate then, or overlay residue stays on screen. Buffered
+  apps can ignore it — the run loop already forces a full blit in the same cases.
+
 ## Checklist when adding/touching a drawing routine
 - Does it run on a repeating cadence? If yes, it must use one of the techniques above.
 - Is there a `fillScreen`/large `fillRect` on that cadence? If yes, that's the bug — move it

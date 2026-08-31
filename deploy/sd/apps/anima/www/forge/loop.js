@@ -59,7 +59,7 @@ export async function runAgent(goal0, deps, opts = {}) {
         for (let k = 0; k < N; k++) {
           const out = await engine.chat([{ role: 'system', content: 'coder' }, { role: 'user', content: a.spec }], { phase: 'synthesize', sample: k });
           const code = stripFences(out.text);
-          const run = await sandbox.run(code, { caps: { fs: false, http: false, anima: false }, mode: 'check' });
+          const run = await sandbox.run(code, { caps: { fs: false, http: false, anima: false, notify: false, hw: false }, mode: 'check' });
           const cg = (opts.capguard === false) ? null : capAssess(code, { granted, allowNetwork });
           const ex = extract({ code });
           const checks = deviceVerify ? ((await deviceVerify({ code })).checks || []) : [];
@@ -86,7 +86,7 @@ export async function runAgent(goal0, deps, opts = {}) {
           const tg = await engine.chat([{ role: 'system', content: 'tests' }, { role: 'user', content: `Write runnable assertions (throw on failure) for: ${a.spec}\n\nCODE:\n${code}` }], { phase: 'test' });
           const testCode = stripFences(tg.text);
           if (testCode) {
-            const tr = await sandbox.run(code + '\n;\n' + testCode, { caps: { fs: false, http: false, anima: false } });
+            const tr = await sandbox.run(code + '\n;\n' + testCode, { caps: { fs: false, http: false, anima: false, notify: false, hw: false } });
             step({ state: 'TEST', ok: !!(tr && tr.ok), error: tr && tr.error, output: tr && (Array.isArray(tr.logs) ? tr.logs.join('\n') : undefined) });
             if (!(tr && tr.ok)) {
               step({ state: 'FIX', reason: 'tests-failed: ' + ((tr && tr.error) || '') });
@@ -119,7 +119,7 @@ export async function runAgent(goal0, deps, opts = {}) {
 
         // OBSERVE — run the applied code (mutation denied), CAPTURING the real console output / return
         // value and feeding it back on failure (Claude-Code-style read-the-output-then-decide).
-        const obs = await sandbox.run(code, { caps: { fs: false, http: false, anima: false } });
+        const obs = await sandbox.run(code, { caps: { fs: false, http: false, anima: false, notify: false, hw: false } });
         const out = obs ? (Array.isArray(obs.logs) ? obs.logs.join('\n') : (obs.value !== undefined ? String(obs.value) : '')) : '';
         step({ state: 'RUN', ok: !!(obs && obs.ok), error: obs && obs.error, output: out });
         if (!(obs && obs.ok)) { step({ state: 'FIX', reason: 'run-error: ' + ((obs && obs.error) || '') }); goal = goal + `\n\n[run error: ${(obs && obs.error) || ''} | output so far: ${out}] fix it.`; continue; }

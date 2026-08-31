@@ -40,12 +40,17 @@ async function webIndexer() {
   }
   return _wi || null;
 }
-let scrim, root, logEl, inputEl, sendBtn, dotEl, subEl, modeBtn, langBtn, tbBtn;
+let scrim, root, logEl, inputEl, sendBtn, dotEl, subEl, modeBtn, langBtn, tbBtn, actBtn, micBtn;
 let isOpen = false, busy = false, aborter = null, seq = 0, elapsedTimer = null;
 let history = [];                     // in-memory transcript for this session: [{role,text,r?}]
+let asr = null, voiceOn = false;      // live voice session (device mic → Vosk in the browser)
+let voicePending = false;             // the NEXT ask came from voice → speak the reply back
+let ttsInfo = null;                   // cached GET /api/tts ({enabled,available}), probed once per session
 
 // ---- i18n (kept tiny; mirrors the ANIMA app's tone) ----
-const STR = {
+// Exported for the catalog-parity gate (tools/shell-copilot-catalog.test.mjs): the OS i18n gate
+// cannot see this inline table, so the test is what keeps the five languages in step.
+export const STR = {
   it: {
     sub: 'copilot', placeholder: 'Chiedi qualcosa o dai un comando…',
     welLead: 'Sono ANIMA, l’assistente di NucleoOS. Apro app, creo file, do ora/meteo/spazio, gestisco il calendario e rispondo a domande — da qui, ovunque tu sia nell’OS.',
@@ -56,6 +61,7 @@ const STR = {
     reveal: 'Mostra nella cartella', openCal: 'Apri Calendario', openMon: 'Apri System Monitor', openSet: 'Apri Impostazioni',
     nomatch: 'Nessuna corrispondenza.', memory: 'memoria',
     footHint: ['<kbd>⏎</kbd> invia', '<kbd>⇧⏎</kbd> a capo', '<kbd>esc</kbd> chiudi'],
+    mic: 'Parla con ANIMA', micListening: 'Ti ascolto…', micBusy: 'Microfono in uso da', micErr: 'Voce non disponibile (modello non caricato).', verOk: 'verificato dal dispositivo', verNo: 'contraddetto dal dispositivo',
   },
   en: {
     sub: 'copilot', placeholder: 'Ask anything or give a command…',
@@ -67,6 +73,7 @@ const STR = {
     reveal: 'Reveal in folder', openCal: 'Open Calendar', openMon: 'Open System Monitor', openSet: 'Open Settings',
     nomatch: 'No match.', memory: 'memory',
     footHint: ['<kbd>⏎</kbd> send', '<kbd>⇧⏎</kbd> newline', '<kbd>esc</kbd> close'],
+    mic: 'Speak to ANIMA', micListening: 'Listening…', micBusy: 'Mic in use by', micErr: 'Voice unavailable (model not loaded).', verOk: 'verified on-device', verNo: 'contradicted on-device',
   },
   es: {
     sub: 'copilot', placeholder: 'Pregunta algo o da una orden…',
@@ -78,6 +85,7 @@ const STR = {
     reveal: 'Mostrar en la carpeta', openCal: 'Abrir Calendario', openMon: 'Abrir System Monitor', openSet: 'Abrir Ajustes',
     nomatch: 'Sin coincidencias.', memory: 'memoria',
     footHint: ['<kbd>⏎</kbd> enviar', '<kbd>⇧⏎</kbd> nueva línea', '<kbd>esc</kbd> cerrar'],
+    mic: 'Habla con ANIMA', micListening: 'Te escucho…', micBusy: 'Micrófono en uso por', micErr: 'Voz no disponible (modelo no cargado).', verOk: 'verificado en el dispositivo', verNo: 'contradicho por el dispositivo',
   },
   fr: {
     sub: 'copilot', placeholder: 'Demandez quelque chose ou donnez une commande…',
@@ -89,6 +97,7 @@ const STR = {
     reveal: 'Afficher dans le dossier', openCal: 'Ouvrir le Calendrier', openMon: 'Ouvrir System Monitor', openSet: 'Ouvrir les Réglages',
     nomatch: 'Aucune correspondance.', memory: 'mémoire',
     footHint: ['<kbd>⏎</kbd> envoyer', '<kbd>⇧⏎</kbd> nouvelle ligne', '<kbd>esc</kbd> fermer'],
+    mic: 'Parlez à ANIMA', micListening: 'Je vous écoute…', micBusy: 'Micro utilisé par', micErr: 'Voix indisponible (modèle non chargé).', verOk: "vérifié sur l'appareil", verNo: "contredit par l'appareil",
   },
   de: {
     sub: 'copilot', placeholder: 'Frag etwas oder gib einen Befehl…',
@@ -100,6 +109,7 @@ const STR = {
     reveal: 'Im Ordner anzeigen', openCal: 'Kalender öffnen', openMon: 'System Monitor öffnen', openSet: 'Einstellungen öffnen',
     nomatch: 'Keine Übereinstimmung.', memory: 'Gedächtnis',
     footHint: ['<kbd>⏎</kbd> senden', '<kbd>⇧⏎</kbd> neue Zeile', '<kbd>esc</kbd> schließen'],
+    mic: 'Sprich mit ANIMA', micListening: 'Ich höre zu…', micBusy: 'Mikrofon in Benutzung von', micErr: 'Sprache nicht verfügbar (Modell nicht geladen).', verOk: 'auf dem Gerät bestätigt', verNo: 'vom Gerät widerlegt',
   },
 };
 const CODES = ['it', 'en', 'es', 'fr', 'de'];
@@ -118,7 +128,7 @@ const L10N = {
 };
 const TR = (it, en) => { const l = lang(); return l === 'it' ? it : l === 'en' ? en : (L10N[l] && L10N[l][en] != null ? L10N[l][en] : en); };
 const mode = () => { const m = localStorage.getItem('anima.mode'); return ['off', 'on', 'only'].includes(m) ? m : 'on'; };
-const T = () => STR[lang()] || STR.it;
+const T = () => STR[lang()] || STR.en;   // English is the fallback floor
 const modeLabel = () => ({ off: 'offline', on: TR('ibrida', 'hybrid'), only: 'online' }[mode()]);
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -147,6 +157,7 @@ function buildDom() {
        <span class="cp-spark">✻</span>
        <span class="cp-title">ANIMA</span><span class="cp-sub" id="cp-sub">copilot</span>
        <span class="cp-sp"></span>
+       <button class="cp-chip" id="cp-act" title="Agente: fai, non solo rispondi" aria-pressed="false">⚡</button>
        <button class="cp-chip" id="cp-mode" title="Modalità motore"></button>
        <button class="cp-chip" id="cp-lang" title="Lingua"></button>
        <span class="cp-dot" id="cp-dot" title="motore ANIMA"></span>
@@ -155,6 +166,7 @@ function buildDom() {
      <div class="cp-inputrow">
        <span class="cp-prompt">›</span>
        <textarea id="cp-q" rows="1" autocomplete="off" spellcheck="false"></textarea>
+       <button class="cp-mic" id="cp-mic" type="button" aria-pressed="false">🎤</button>
        <button class="cp-send" id="cp-send" type="button">Invia</button>
      </div>
      <div class="cp-log" id="cp-log" role="log" aria-live="polite" aria-relevant="additions"></div>
@@ -166,12 +178,16 @@ function buildDom() {
   sendBtn = root.querySelector('#cp-send');
   dotEl = root.querySelector('#cp-dot');
   subEl = root.querySelector('#cp-sub');
+  actBtn = root.querySelector('#cp-act');
   modeBtn = root.querySelector('#cp-mode');
   langBtn = root.querySelector('#cp-lang');
+  micBtn = root.querySelector('#cp-mic');
   tbBtn = document.getElementById('copilot-btn');
 }
 
 function wire() {
+  if (actBtn) actBtn.addEventListener('click', () => setAgent(!agentOn));
+  if (micBtn) micBtn.addEventListener('click', () => toggleVoice());
   scrim.addEventListener('click', closeBar);
   root.querySelector('#cp-close').addEventListener('click', closeBar);
   sendBtn.addEventListener('click', () => (busy ? stop() : submit()));
@@ -199,6 +215,94 @@ function wire() {
 function autogrow() { inputEl.style.height = 'auto'; inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px'; }
 function submit() { const q = inputEl.value; inputEl.value = ''; autogrow(); askCopilot(q); }
 
+// ---- voice: the device is the mic, the browser is the ears ----
+// micgate streams raw PCM from the Cardputer's PDM mic (no getUserMedia — the device's plain-http
+// origin has no secure context) and Vosk WASM transcribes it HERE, offline. The whole dance — mic
+// lock, /api/rec/stream, odd-byte tails, reconnects, model load CDN→SD — is the Dictation app's
+// proven consumer (apps/dictation/www/asr.js), imported as-is instead of re-derived. Walkie-talkie
+// contract: one press, one utterance. Partials are FEEDBACK in the input box; only the FINAL
+// transcript enters the normal ask cycle, so mutating effects keep their usual confirmations and
+// a misheard fragment can never dispatch. A voice ask is answered out loud too, when the device's
+// own TTS voice is switched on (POST /api/tts — the body speaks, the browser thinks).
+async function toggleVoice() {
+  if (voiceOn) { stopVoice(); return; }
+  if (busy) return;
+  let mod = null;
+  try { mod = await import('/apps/dictation/www/asr.js'); } catch {}
+  if (voiceOn) return;                       // double-click while the module loaded
+  if (!mod) { addBot(T().micErr); return; }
+  const a = mod.createASR();
+  asr = a; voiceOn = true;
+  micBtn.classList.add('rec'); micBtn.setAttribute('aria-pressed', 'true');
+  inputEl.placeholder = T().micListening;
+  // One status probe per session: whether the device's own voice is on (spoken replies).
+  if (!ttsInfo) fetch('/api/tts', { cache: 'no-store' }).then((r) => r.json()).then((j) => { ttsInfo = j || {}; }).catch(() => { ttsInfo = {}; });
+  const vlang = (lang() === 'it' || lang() === 'en') ? lang() : 'en';   // the two shipped Vosk models
+  a.start(vlang, {
+    onpartial(t) { if (voiceOn && t) { inputEl.value = t; autogrow(); } },
+    onfinal(t) {
+      if (!voiceOn) return;
+      stopVoice();
+      const q = String(t || '').trim();
+      if (q) { inputEl.value = q; autogrow(); voicePending = true; submit(); }
+    },
+    onerror(kind, who) {
+      const wasOn = voiceOn;
+      stopVoice();
+      if (wasOn) addBot(kind === 'busy' ? T().micBusy + ' ' + (who || '…') : T().micErr);
+    },
+    onend() { if (voiceOn) stopVoice(); },
+  });
+}
+function stopVoice() {
+  if (!voiceOn && !asr) return;
+  voiceOn = false;
+  const a = asr; asr = null;
+  if (a) { try { a.stop(); } catch {} }
+  if (micBtn) { micBtn.classList.remove('rec'); micBtn.setAttribute('aria-pressed', 'false'); }
+  inputEl.placeholder = T().placeholder;
+}
+// ---- truth lamp: the microcontroller fact-checks the cloud ----
+// A generative reply is a guest here; the deterministic brain is the ground. Claims the reply
+// makes are extracted (forge/extract.js), routed to verifier specs, and judged by the device via
+// GET /api/anima/verify — SEQUENTIALLY (one device call at a time), at most 3 per reply so a
+// listy answer can't trickle badges for seconds. Only DECISIVE verdicts render; an unknown is
+// silence, never a grey wall. Measured before building (the design-review bar was 20% decisive):
+// 45% decisive, 0 unknown among routed, on tools/anima-host/truthlamp-yield.mjs's corpus.
+async function verifyReplyClaims(reply, turn) {
+  let ex = null;
+  try { ex = await import('/apps/anima/forge/extract.js'); } catch { return; }
+  if (!ex || !ex.extractProseClaims || !ex.routeClaim) return;
+  const specs = [];
+  for (const c of ex.extractProseClaims(reply)) {
+    const s = ex.routeClaim(c);
+    if (s) specs.push(s);
+    if (specs.length >= 3) break;
+  }
+  for (const sp of specs) {
+    if (!turn.isConnected) return;               // the transcript moved on (cleared/superseded)
+    try {
+      const url = '/api/anima/verify?key=' + encodeURIComponent(sp.key)
+        + '&asserted=' + encodeURIComponent(sp.asserted)
+        + '&kind=' + encodeURIComponent(sp.kind)
+        + '&lang=' + encodeURIComponent(sp.lang || (lang() === 'en' ? 'en' : 'it'));
+      const j = await (await fetch(url, { cache: 'no-store' })).json();
+      const v = j && (j.verdict || j.result);
+      if (v === 'confirmed') addLined(turn, '✔ ' + sp.key + ' → ' + sp.asserted + ' · ' + T().verOk, 'ok');
+      else if (v === 'contradicted') addLined(turn, '✘ ' + sp.key + ' → ' + sp.asserted + ' · ' + T().verNo, 'warn');
+    } catch { return; }                          // device unreachable → no badges, no noise
+  }
+}
+
+// Speak a reply on the DEVICE's speaker — only after a voice ask, only if the device voice is on,
+// and clipped hard: the TTS body caps at 1 KB and nobody wants a read-aloud essay.
+function maybeSpeak(reply) {
+  if (!ttsInfo || !ttsInfo.enabled || !ttsInfo.available) return;
+  const l = (lang() === 'it' || lang() === 'en') ? lang() : 'en';
+  const say = String(reply || '').replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 280);
+  if (say) fetch('/api/tts', { method: 'POST', body: JSON.stringify({ say, lang: l }) }).catch(() => {});
+}
+
 // ---- open / close ----
 function openBar() {
   if (isOpen) return;
@@ -216,6 +320,7 @@ function closeBar() {
   isOpen = false;
   scrim.classList.add('hidden'); root.classList.add('hidden');
   if (tbBtn) tbBtn.classList.remove('on');
+  stopVoice();                                 // closing the bar releases the OS-wide mic lock
   stop();
 }
 function toggle() { isOpen ? closeBar() : openBar(); }
@@ -226,7 +331,8 @@ function syncChips() {
   subEl.textContent = T().sub;
   modeBtn.innerHTML = 'ANIMA · <b>' + esc(modeLabel()) + '</b>';
   langBtn.innerHTML = '<b>' + lang().toUpperCase() + '</b>';
-  inputEl.placeholder = T().placeholder;
+  inputEl.placeholder = voiceOn ? T().micListening : T().placeholder;
+  if (micBtn) micBtn.title = T().mic;
   if (!busy) sendBtn.textContent = TR('Invia', 'Send');   // localize the idle Send label (buildDom seeds it in Italian)
 }
 function renderFoot() { root.querySelector('#cp-foot').innerHTML = T().footHint.join(' · '); }
@@ -277,6 +383,25 @@ function addActions(turn, actions) {
   }
   turn.appendChild(row); scrollDown();
 }
+// A clarify question comes in two shapes and both must become chips, or the user is left retyping a
+// name the assistant just printed. The engine's dialogic band asks "…, A o B?"; the which-person
+// clarify numbers its options ("Quale intendi: 1) Donald Trump 2) Melania Trump (altre 7 …)") because
+// it can offer three. Numbered form is tried first: it is unambiguous, and its option text can itself
+// contain "or".
+export function parseClarify(reply) {
+  const text = String(reply || '');
+  const body = text.replace(/\s*\([^)]*\)\s*$/, '').replace(/\?\s*$/, '');
+  if (/\d\)/.test(body)) {
+    // The band writes "1) A  o  2) B", so the connector trails the option it follows — strip it, or
+    // the chip would offer to ask about "il fiume più lungo o".
+    const opts = body.split(/\s*\d\)\s*/).slice(1)
+      .map((s) => s.trim().replace(/\s+(?:o|or)\s*$/i, '').trim()).filter(Boolean);
+    if (opts.length >= 2) return opts;
+  }
+  const m = text.match(/[,—–-]\s*([^?]+?)\s+(?:o|or)\s+([^?]+?)\?/i);
+  return m ? [m[1].trim(), m[2].trim()] : null;
+}
+
 function addClarify(turn, options) {
   const row = el('div', 'cp-chips');
   for (const opt of options) {
@@ -318,9 +443,77 @@ async function ping() { try { const r = await fetch('/api/status', { cache: 'no-
 function setBusy(on) { busy = on; sendBtn.textContent = on ? 'Stop' : TR('Invia', 'Send'); sendBtn.classList.toggle('stop', on); }
 function stop() { if (aborter) { try { aborter.abort('user'); } catch {} } }
 
+// ── Agent mode: the copilot DOES, instead of only answering ───────────────────────────────────
+// The two halves already existed and had never been joined: this bar owns an OS surface (byId, WM,
+// openFile, FsIndex…) and a typed action router, but it could only act on the narrow contract the
+// on-device engine emits — launch / open_file / create_file. Meanwhile apps/agent/www/runtime.js has
+// the full tool loop (read/write/edit files, run JS, scaffold and publish a whole app), approvals,
+// and the serialized device queue. Agent mode routes the turn there.
+//
+// RAM discipline, deliberately: the runtime runs IN THE BROWSER and talks to the cloud provider
+// browser-direct. The Cardputer sees only the same /api/fs/* traffic it already serves, funnelled
+// through device-queue (one write at a time). Nothing is added to the ~18 KB heap, and the module is
+// imported LAZILY — a shell that never uses agent mode never pays for it.
+//
+// It is a MODE, not a guess. The agent mutates the SD, so escalating to it silently would be the
+// wrong shape: the user arms it, or is offered it explicitly when the offline brain has nothing.
+let agentOn = false, _agentRt = null;
+function setAgent(on) {
+  agentOn = !!on;
+  if (actBtn) { actBtn.setAttribute('aria-pressed', String(agentOn)); actBtn.classList.toggle('on', agentOn); }
+  if (subEl) subEl.textContent = agentOn ? TR('agente', 'agent') : 'copilot';
+}
+async function agentRuntime() {
+  if (_agentRt) return _agentRt;
+  const cfg = await aiConfig();
+  if (!cfg || !cfg.key) return null;
+  const { createRuntime } = await import('/apps/agent/runtime.js');   // no /www/ — device webfs mapping
+  let turn = null;
+  const ui = {
+    status: (m) => { if (turn) addLined(turn, String(m), 'dim'); },
+    note:   (m) => { if (turn) addLined(turn, String(m).split('\n')[0], 'dim'); },
+    // The worker's live checklist (update_plan): one compact line, current step first.
+    plan: (steps) => {
+      if (!turn || !steps || !steps.length) return;
+      const done = steps.filter((x) => x.status === 'done').length;
+      const cur = steps.find((x) => x.status === 'doing') || steps.find((x) => x.status === 'todo');
+      addLined(turn, '🗒️ ' + TR('Piano', 'Plan') + ' ' + done + '/' + steps.length + (cur ? ' · ▸ ' + cur.title : ' · ✓'), 'dim');
+    },
+    toolStart: (ev) => { if (turn) addLined(turn, '⚙ ' + ev.name + (ev.input && (ev.input.path || ev.input.app || ev.input.id) ? ' ' + (ev.input.path || ev.input.app || ev.input.id) : ''), 'dim'); },
+    toolEnd:   (ev, out, isErr) => { if (turn && isErr) addLined(turn, String(out).slice(0, 160), 'warn'); },
+    // NEVER auto-approve from the OS-wide bar. This surface is one keystroke away at all times; a
+    // destructive write must stay a decision, not a side effect of pressing Ctrl+Space.
+    autoApprove: () => false,
+    webSearchEnabled: () => false,
+    confirm: (req) => api.osConfirm
+      ? api.osConfirm({ title: TR('L\'agente vuole ', 'The agent wants to ') + (req.op || ''),
+                        body: (req.abs || req.path || req.id || req.name || ''), danger: /delete|publish|manage/.test(req.op || '') })
+      : Promise.resolve(false),
+  };
+  _agentRt = { rt: createRuntime({ cfg, root: '/data/agent', lang: lang(), ui, keys: (cfg.keys || {}), active: cfg }),
+               bind: (t) => { turn = t; } };
+  return _agentRt;
+}
+async function askAgent(q, turn) {
+  const a = await agentRuntime();
+  if (!a) { addLined(turn, TR('Serve una chiave IA online per la modalità agente.', 'Agent mode needs an online AI key.'), 'warn'); return false; }
+  a.bind(turn);
+  try {
+    const txt = await a.rt.run(q, history.filter((h) => h.text).slice(-6).map((h) => ({ role: h.role, text: h.text })));
+    if (txt) { addLined(turn, String(txt).slice(0, 2000), 'ok'); history.push({ role: 'bot', text: txt }); }
+    api.FsIndex && api.FsIndex.invalidate();      // the agent may have touched the SD
+    return true;
+  } catch (e) {
+    addLined(turn, String((e && e.message) || e), 'warn');
+    return false;
+  }
+}
+
 // ---- the ask cycle ----
 async function askCopilot(q) {
   q = (q || '').trim();
+  const speakBack = voicePending;              // consume the voice flag whatever happens next
+  voicePending = false;
   if (!q || busy) return;
   if (!isOpen) openBar();
   if (!history.length) logEl.innerHTML = '';      // clear the welcome on first ask
@@ -328,8 +521,20 @@ async function askCopilot(q) {
   const my = ++seq;
   if (aborter) { try { aborter.abort('superseded'); } catch {} }
   aborter = new AbortController();
-  const to = setTimeout(() => { try { aborter.abort('timeout'); } catch {} }, 30000);
+  // Capture THIS turn's controller: the timeout must only ever abort its own request, never whatever
+  // controller happens to be current 30 s later.
+  const ab = aborter;
+  const to = setTimeout(() => { try { ab.abort('timeout'); } catch {} }, 30000);
   setBusy(true);
+  // Armed agent mode: hand the turn to the tool loop instead of the answer cascade. Nothing about the
+  // offline path changes when it is off, so this cannot regress the normal copilot.
+  if (agentOn) {
+    clearTimeout(to);   // the agent loop owns its own pacing — the 30 s cascade timeout must not outlive this turn
+    const turn = addBot(TR('Agente al lavoro…', 'Agent working…'));
+    await askAgent(q, turn);
+    setBusy(false); inputEl.focus();
+    return;
+  }
   const think = addThinking();
   let r;
   try {
@@ -371,7 +576,20 @@ async function askCopilot(q) {
   aborter = null; think.remove(); setDot('ok');
   const reply = r.reply || T().dontknow;
   const turn = addBot(reply);
+  if (speakBack) maybeSpeak(reply);            // a voice ask gets a spoken answer (device TTS)
+  if (r.intent === 'cloud') verifyReplyClaims(reply, turn);   // truth lamp: only generative replies get checked
   dispatch(r, turn);
+  // Honest escalation: when the grounded brain has nothing and a key IS configured, OFFER the agent
+  // rather than silently pretending or silently doing. One click, and the user knows what it is.
+  if (!r.action && /^(non lo so|i don't know|i dont know)/i.test(String(reply).trim())) {
+    aiConfig().then((cfg) => { if (!cfg || !cfg.key) return;
+      addActions(turn, [{ label: TR('Fallo fare all\'agente', 'Let the agent do it'), fn: () => {
+        setAgent(true);
+        const t2 = addBot(TR('Agente al lavoro…', 'Agent working…'));
+        askAgent(q, t2);
+      } }]);
+    }).catch(() => {});
+  }
   history.push({ role: 'bot', text: reply, r });
   setBusy(false); inputEl.focus();
 }
@@ -406,9 +624,8 @@ function dispatch(r, turn) {
     else if (r.intent === 'storage' || r.intent === 'ram') { api.refreshStatus(); const mon = api.byId('system-monitor'); if (mon) addActions(turn, [{ label: T().openMon, fn: () => { api.WM.open(mon); closeBar(); } }]); }
     else if (r.intent === 'network') { const s = api.byId('settings'); if (s) addActions(turn, [{ label: T().openSet, fn: () => { api.WM.open(s); closeBar(); } }]); }
   } else if (r.intent === 'clarify') {
-    // pull the two "…, A o B?" / "… — A or B?" options out of the question text
-    const m = reply_(r).match(/[,—–-]\s*([^?]+?)\s+(?:o|or)\s+([^?]+?)\?/i);
-    if (m) addClarify(turn, [m[1].trim(), m[2].trim()]);
+    const opts = parseClarify(reply_(r));
+    if (opts) addClarify(turn, opts);
   } else if (r.action === 'none') {
     // honest miss — leave the dontknow reply, no action
   }

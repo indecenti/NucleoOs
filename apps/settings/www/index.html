@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
@@ -637,7 +637,7 @@ const PATH = '/system/config/settings.json';
 const $ = (id) => document.getElementById(id);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 let model = merge(DEFAULTS, {});
-let lang = 'it';
+let lang = 'en';   // English-first floor until the on-disk model is read
 let dirty = false;
 let caps = { l1Mode: 'auto', l1Serving: false, hasKey: false };
 let screenOn = true;            // optimistic; we never POST on load (would wake a headless device)
@@ -1609,7 +1609,8 @@ async function load() {
   model = merge(DEFAULTS, onDisk);
   // Sanitize garbage only — every OS language is valid here. This used to clamp to it/en, wiping a
   // stored es/fr/de back to Italian on every open (and persisting the damage on the next save).
-  if (!LANGS.some((l) => l.code === model.ui.language)) model.ui.language = /^en/i.test(model.device.locale || '') ? 'en' : 'it';
+  // English is the floor: an invalid/absent value resolves to English unless the locale is explicitly it-*.
+  if (!LANGS.some((l) => l.code === model.ui.language)) model.ui.language = /^it/i.test(model.device.locale || '') ? 'it' : 'en';
   lang = detectLang(model);
   applyLiveUI(); toForm(); updateScreenUI(); setDirty(false);
   status(T('ready'));

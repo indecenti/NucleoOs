@@ -83,7 +83,7 @@
   "jammer_start": "Démarrer",
   "jammer_stop": "Arrêter",
   "jammer_running": "brouillage",
-  "jam_sweep": "Balayage", "jam_random": "Aléatoire", "jam_constant": "Constant",
+  "jam_sweep": "Balayage", "jam_random": "Aléatoire", "jam_constant": "Constante",
   "export_title": "Exporter",
   "export_desc": "Enregistrez vos favoris et boutons personnalisés dans un fichier .ir Flipper (téléchargement + enregistré dans /data/ir).",
   "export_btn": "Exporter les favoris .ir",

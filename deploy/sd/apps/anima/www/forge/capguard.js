@@ -13,6 +13,10 @@ const CAP_PATTERNS = [
   ['http',      /\bos\s*\.\s*http\s*\./],
   ['anima',     /\bos\s*\.\s*anima\s*\(/],
   ['notify',    /\bos\s*\.\s*notify\s*\(/],
+  // Hardware actuation (IR blaster, GPIO, Wi-Fi radio) — the ONE capability that acts on the world
+  // outside the browser. It was missing here, so generated code touching os.hw.* was neither
+  // inferred nor reported as over-privilege; the runner's hw default is ON, so nothing caught it.
+  ['hw',        /\bos\s*\.\s*hw\s*(?:\.|\[)/],
 ];
 
 export function inferCapabilities(code) {
@@ -40,7 +44,12 @@ export function scanDangers(code, { allowNetwork = false } = {}) {
   const s = String(code || '');
   const dangers = [];
   if (/\beval\s*\(|\bnew\s+Function\s*\(|(?:^|[^.\w])Function\s*\(/.test(s)) dangers.push({ kind: 'dynamic-eval', level: 'block' });
-  if (/\bimportScripts\s*\(/.test(s)) dangers.push({ kind: 'dynamic-import', level: 'block' });
+  // Both ways to pull in foreign code: importScripts() (classic worker) AND dynamic import().
+  // import() is the one that still works — importScripts is already stubbed out in the worker, so
+  // scanning only for it left the live escape hatch unguarded.
+  if (/\bimportScripts\s*\(/.test(s) || /(?:^|[^.\w$])import\s*\(/.test(s)) dangers.push({ kind: 'dynamic-import', level: 'block' });
+  // Hardware actuation from generated code is never incidental — surface it for the human gate.
+  if (/\bos\s*\.\s*hw\s*(?:\.|\[)/.test(s)) dangers.push({ kind: 'hardware-actuation', level: 'warn' });
   const mut = /\bos\s*\.\s*fs\s*\.\s*(?:write|append|remove|mkdir)\s*\(/;
   if (loopBodies(s).some((b) => mut.test(b))) dangers.push({ kind: 'mutation-in-loop', level: 'block' });
   if (/\bos\s*\.\s*http\s*\./.test(s) && !allowNetwork) dangers.push({ kind: 'network-exfil', level: 'block' });
@@ -55,8 +64,12 @@ export function assess(code, { granted = null, allowNetwork = false } = {}) {
   const capabilities = inferCapabilities(code);
   const dangers = scanDangers(code, { allowNetwork });
   const over = Array.isArray(granted) ? capabilities.filter((c) => !granted.includes(c)) : [];
+  // F2: hardware ACTUATION the app was not granted is a BLOCK, not a warning. Over-reaching the
+  // filesystem is contained by the sandbox; firing the IR blaster or driving a GPIO pin is not — it
+  // acts on the room. So `hw` in `over` (granted was provided AND does not include it) vetoes.
+  const hwOverreach = Array.isArray(granted) && over.includes('hw');
   let severity = 'ok';
-  if (dangers.some((d) => d.level === 'block')) severity = 'block';
+  if (dangers.some((d) => d.level === 'block') || hwOverreach) severity = 'block';
   else if (over.length || dangers.length) severity = 'warn';
-  return { capabilities, over, dangers, severity };
+  return { capabilities, over, dangers, severity, hwOverreach };
 }
