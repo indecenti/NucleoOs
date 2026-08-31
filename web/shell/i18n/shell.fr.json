@@ -240,6 +240,8 @@
   "nc_src_voice": "Voix",
   "nc_src_recorder": "Enregistreur",
   "nc_src_ota": "Mise à jour",
+  "up_title": "Mise à jour NucleoOS disponible",
+  "up_body": "La version {tag} est prête à installer — ouvrez Réglages › Mises à jour.",
   "nc_src_app": "App",
 
   "amb_toggle_title": "Suggestions d'ANIMA",

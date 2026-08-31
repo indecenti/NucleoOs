@@ -361,6 +361,12 @@ void app_main(void)
     // on the first try. Doing it up front is the whole point — a FAILED first attempt LEAKS the port-80
     // listen socket, so the old "fail -> free -> retry" order then hit listen()=EADDRINUSE (112) on the
     // retry and ESP_ERROR_CHECK abort-LOOPED the device. One clean attempt avoids the leak entirely.
+    // Boot-health signal for the OTA rollback gate (see ota_confirm_if_pending below): an image is
+    // only "proven good" once the web OS actually serves. A degraded boot (httpd down) must NOT
+    // cancel rollback, or a freshly-OTA'd image that can't start httpd would confirm itself and
+    // strand the device with no web/OTA path to recover. Solo boots never reach the OTA confirm as
+    // the trusted path either (the post-OTA reboot always lands in the full OS, not Solo).
+    bool boot_healthy = false;
     if (!solo || solo_srv) {   // SKIPPED in Solo EXCEPT Web Client server-Solo (exists to serve the web OS on a fresh heap)
       nucleo_app_release_buffers();                 // free the 32 KB canvas first: httpd's contiguous block, no leaked-socket retry
       esp_err_t he = nucleo_httpd_start();
@@ -375,6 +381,8 @@ void app_main(void)
           // the web OS this boot — the device stays usable and a power-cycle / lighter boot recovers httpd.
           ESP_LOGE(TAG, "httpd start FAILED (%s) — DEGRADED boot (on-device UI only, no web OS this boot)", esp_err_to_name(he));
           bootmark("httpd-FAILED");
+      } else {
+          boot_healthy = true;
       }
     }
     bootmark("httpd");
@@ -401,7 +409,12 @@ void app_main(void)
         else ESP_LOGW(TAG, "mDNS SKIPPED at boot: largest free block %u < 14336 — reachable by IP, httpd keeps the heap", (unsigned)largest);
     }
     bootmark("discovery");
-    ota_confirm_if_pending();               // healthy boot reached -> confirm OTA image, cancel rollback
+    // Confirm the running OTA image (cancel rollback) ONLY on a proven-healthy boot — httpd up, i.e.
+    // the web OS actually serves. A degraded boot leaves the image PENDING_VERIFY so the bootloader
+    // can still roll back on the next boot; the recovery path (web/OTA) is exactly what a degraded
+    // boot lacks, so auto-confirming there would be irreversible. A no-op when nothing is pending.
+    if (boot_healthy) ota_confirm_if_pending();
+    else ESP_LOGW(TAG, "OTA confirm DEFERRED (degraded/Solo boot) — rollback stays armed until a healthy boot");
     // Enrich the boot event so the journal's first line is a diagnosis seed: why the last boot ended,
     // the heap we came up with + the worst-ever watermark, and whether the SD mounted. Cheap (one
     // event at boot); the Log Viewer surfaces it and the "Diagnose" digest anchors uptime/resets on it.
