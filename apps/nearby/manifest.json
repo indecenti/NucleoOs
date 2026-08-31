@@ -12,6 +12,7 @@
   "runtime": "web",
   "entry_service": "none",
   "web_route": "/apps/nearby/",
+  "icon": "icon.svg",
   "permissions": [
     "storage.shared",
     "system.events",

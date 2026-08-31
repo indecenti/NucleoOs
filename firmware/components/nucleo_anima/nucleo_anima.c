@@ -116,10 +116,20 @@ static const a_alias_t APP_ALIAS[] = {
     { "ble",                { "ble", "bluetooth", "bt", NULL } },
     { "payloads",           { "payload", "payloads", "ducky", "duckyscript", "badusb", "rubber ducky", "hid", NULL } },
     { "weather",            { "meteo", "tempo", "previsioni", "weather", "forecast", "che tempo fa", NULL } },
-    { "mail",               { "mail", "email", "posta", "e-mail", "gmail", "invia mail", "manda mail", "scrivi mail", "send mail", "email", "smtp", NULL } },
+    { "mail",               { "mail", "email", "posta", "e-mail", "gmail", "invia mail", "manda mail", "scrivi mail", "send mail", "smtp", NULL } },
     { "unit-converter",     { "convertitore", "convertire", "converti", "conversione", "conversioni", "convert", "converter", "unita di misura", "unit converter", NULL } },
     { "authenticator",      { "authenticator", "autenticatore", "2fa", "totp", "otp", "codici", "verifica", "codes", "mfa", NULL } },
     { "contacts",           { "contatti", "contact", "contacts", "rubrica", "contatto", "persone", "contactos", "kontakte", NULL } },
+    { "metronome",          { "metronomo", "metronome", "accordatore", "accorda", "tuner", "intonazione", "battito", "bpm", "click", NULL } },
+    { "groq-chat",          { "chat", "groq", "chatbot", "ia chat", "assistente chat", "ai chat", NULL } },
+    { "qr",                 { "qr", "qrcode", "codice qr", "barcode", "qr code", NULL } },
+    { "ssh",                { "ssh", "terminale remoto", "remote shell", "sftp", NULL } },
+    { "passkeys",           { "passkey", "passkeys", "fido", "webauthn", "chiavi", "sicurezza", NULL } },
+    { "wifi-scanner",       { "scanner wifi", "scansione wifi", "reti wifi", "wifi scanner", "access point", "sniff", NULL } },
+    { "video-studio",       { "studio video", "montaggio", "editor video", "video editor", "converti video", "video studio", NULL } },
+    { "voice-manager",      { "comandi vocali", "parola chiave", "wake word", "voice manager", "addestra voce", NULL } },
+    { "archive-manager",    { "archivio", "zip", "estrai", "comprimi", "archive", "unzip", "archivi", NULL } },
+    { "agent",              { "agente", "agenti", "multi agente", "agent", "automa", "assistente autonomo", NULL } },
 };
 // </gen:app-alias>
 

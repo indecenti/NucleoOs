@@ -311,7 +311,6 @@
       "manda mail",
       "scrivi mail",
       "send mail",
-      "email",
       "smtp"
     ],
     "unit-converter": [
@@ -345,6 +344,86 @@
       "persone",
       "contactos",
       "kontakte"
+    ],
+    "metronome": [
+      "metronomo",
+      "metronome",
+      "accordatore",
+      "accorda",
+      "tuner",
+      "intonazione",
+      "battito",
+      "bpm",
+      "click"
+    ],
+    "groq-chat": [
+      "chat",
+      "groq",
+      "chatbot",
+      "ia chat",
+      "assistente chat",
+      "ai chat"
+    ],
+    "qr": [
+      "qr",
+      "qrcode",
+      "codice qr",
+      "barcode",
+      "qr code"
+    ],
+    "ssh": [
+      "ssh",
+      "terminale remoto",
+      "remote shell",
+      "sftp"
+    ],
+    "passkeys": [
+      "passkey",
+      "passkeys",
+      "fido",
+      "webauthn",
+      "chiavi",
+      "sicurezza"
+    ],
+    "wifi-scanner": [
+      "scanner wifi",
+      "scansione wifi",
+      "reti wifi",
+      "wifi scanner",
+      "access point",
+      "sniff"
+    ],
+    "video-studio": [
+      "studio video",
+      "montaggio",
+      "editor video",
+      "video editor",
+      "converti video",
+      "video studio"
+    ],
+    "voice-manager": [
+      "comandi vocali",
+      "parola chiave",
+      "wake word",
+      "voice manager",
+      "addestra voce"
+    ],
+    "archive-manager": [
+      "archivio",
+      "zip",
+      "estrai",
+      "comprimi",
+      "archive",
+      "unzip",
+      "archivi"
+    ],
+    "agent": [
+      "agente",
+      "agenti",
+      "multi agente",
+      "agent",
+      "automa",
+      "assistente autonomo"
     ]
   },
   "notes": {
