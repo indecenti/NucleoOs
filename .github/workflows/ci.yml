@@ -1,0 +1,22 @@
+name: CI
+
+# Continuous quality gate: run the reusable Gate on every push to main and every PR that targets
+# it. This is what makes tagging safe — main is always known-green, so a release tag builds on a
+# tree that already passed. Fast (pure Node + one gcc compile), no secrets, no device.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer commit on the same ref supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    uses: ./.github/workflows/gate.yml

@@ -161,6 +161,18 @@ See **[FLASH.md](FLASH.md)** for step-by-step instructions, including **how to a
 (image diffusion, offline chat LLM, voice) — most just download themselves from inside the app on first
 use, or can be copied onto the SD for fully-offline devices.
 
+### Update an installed device
+NucleoOS checks for new releases on its own (from the browser — the device never calls GitHub) and
+offers a **one-click, checksum-verified update**: on the device in **Settings ▸ Updates**, or in the
+native **Updates** app. No cable needed.
+
+### Verify what you downloaded
+- **Checksums:** every image is listed in **\`SHA256SUMS\`**. Verify with
+  \`sha256sum -c SHA256SUMS\` (or compare \`certutil -hashfile ${binName} SHA256\` on Windows).
+- **Build provenance:** the firmware images are signed with GitHub build attestations. Confirm a
+  binary was built by the official release workflow from this commit:
+  \`gh attestation verify ${binName} --repo indecenti/NucleoOs\`.
+
 ### What's included / not
 The download is intentionally lean (~30 MB): the large ML models are **not** bundled (they install
 in-app), and games ship **without ROMs** — add your own. No user data, keys, or other sensitive files

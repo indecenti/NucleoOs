@@ -1,0 +1,41 @@
+name: Gate
+
+# Reusable quality gate — the SINGLE source of truth for "is this tree shippable?".
+# Called by ci.yml (every push/PR) and by release.yml (before it builds or publishes anything),
+# so a release can never ship a tree that wouldn't pass CI. All checks are pure Node + a host-
+# compiled C step (gcc is preinstalled on ubuntu-latest); no secrets, no network, no device.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Registry + manifest validation
+        run: node tools/validate.mjs
+
+      - name: i18n catalog parity (5 languages)
+        run: node tools/i18n-check.mjs
+
+      - name: Gzip twins in sync (EOL-normalized)
+        run: node tools/check-gz.mjs
+
+      - name: API spec matches firmware routes
+        run: node tools/gen-api-spec.mjs --check
+
+      - name: Launcher icon parity (firmware ↔ web)
+        run: node tools/check-icons.mjs
+
+      - name: Unit tests
+        run: node --test "tools/**/*.test.mjs"
+
+      - name: Native release-update policy (host-compiled C)
+        run: node tools/anima-host/update-check.mjs
