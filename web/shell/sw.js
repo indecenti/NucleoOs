@@ -3,7 +3,7 @@
 // Bump this on every shell change that must reach already-installed clients. The reason for each
 // roll goes in docs/shell-cache-log.md — NOT here: it used to be one 10.5 KB comment on this line,
 // half the whole service worker, re-shipped to every browser on every update check.
-const CACHE = 'nucleo-shell-v132';   // v132 — settings quick-toggle label/value stacking fix
+const CACHE = 'nucleo-shell-v134';   // v134 — wallpaper/image cache capped (LRU ~24) + shell fix round
 // Per-version cache for app assets (/apps/<id>/...). Tied to the shell version so a deploy (which
 // bumps CACHE) drops it; the shell also flushes it on apps.changed (OTA app update) via postMessage.
 const APP_CACHE = CACHE + '-apps';
@@ -74,6 +74,16 @@ const MODEL_CACHE = 'anima-forge-models';
 // model cache. Served stale-while-revalidate so a changed file still refreshes in the background.
 const WALLPAPER_CACHE = 'nucleo-wallpaper';
 const isImagePath = (p) => !!p && /\.(png|jpe?g|gif|svg|webp)$/i.test(p);
+// The durable store must stay SMALL: every image read lands here (gallery browsing included), it
+// survives every deploy, and an unbounded cache eventually trips origin-quota eviction — which can
+// take the SHA-verified Forge model cache down with it. Keep the last N images, drop the oldest.
+const WALLPAPER_CACHE_MAX = 24;
+async function trimWallpaperCache(cache) {
+  try {
+    const keys = await cache.keys();
+    for (let i = 0; i < keys.length - WALLPAPER_CACHE_MAX; i++) await cache.delete(keys[i]);
+  } catch {}
+}
 function forgeModelKey(url) {
   const u = String(url).split('?')[0].split('#')[0];
   let m = /\/forge\/models\/([^/]+)\/(.+)$/.exec(u);
@@ -141,8 +151,8 @@ self.addEventListener('fetch', (e) => {
       e.respondWith((async () => {
         const cache = await caches.open(WALLPAPER_CACHE);
         const hit = await cache.match(e.request);
-        const network = gatedFetch(e.request).then((res) => {
-          if (res && res.ok) cache.put(e.request, res.clone());
+        const network = gatedFetch(e.request).then(async (res) => {
+          if (res && res.ok) { await cache.put(e.request, res.clone()); await trimWallpaperCache(cache); }
           return res;
         }).catch(() => null);
         if (hit) { e.waitUntil(network); return hit; }          // instant; refresh silently

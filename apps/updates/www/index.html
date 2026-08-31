@@ -146,6 +146,7 @@
     };
     // The device reboots right after responding, so the socket may drop — treat that as "rebooting".
     xhr.onerror = () => { setMsgKey('upload_done_rebooting', null, 'ok'); waitForReboot(); };
+    xhr.timeout = 120000;
     xhr.ontimeout = () => { setMsgKey('rebooting_short', null, 'ok'); waitForReboot(); };
     xhr.send(file);
   });

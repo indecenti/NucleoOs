@@ -521,11 +521,15 @@ async function askCopilot(q) {
   const my = ++seq;
   if (aborter) { try { aborter.abort('superseded'); } catch {} }
   aborter = new AbortController();
-  const to = setTimeout(() => { try { aborter.abort('timeout'); } catch {} }, 30000);
+  // Capture THIS turn's controller: the timeout must only ever abort its own request, never whatever
+  // controller happens to be current 30 s later.
+  const ab = aborter;
+  const to = setTimeout(() => { try { ab.abort('timeout'); } catch {} }, 30000);
   setBusy(true);
   // Armed agent mode: hand the turn to the tool loop instead of the answer cascade. Nothing about the
   // offline path changes when it is off, so this cannot regress the normal copilot.
   if (agentOn) {
+    clearTimeout(to);   // the agent loop owns its own pacing — the 30 s cascade timeout must not outlive this turn
     const turn = addBot(TR('Agente al lavoro…', 'Agent working…'));
     await askAgent(q, turn);
     setBusy(false); inputEl.focus();

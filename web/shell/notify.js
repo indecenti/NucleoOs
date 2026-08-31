@@ -122,7 +122,7 @@ export function initNotify(OS_API) {
   const paintAmb = () => ambBtn.classList.toggle('active', ambOn());
   ambBtn.addEventListener('click', () => {
     const on = !ambOn();
-    localStorage.setItem(AMB_LS, on ? '1' : '0');
+    try { localStorage.setItem(AMB_LS, on ? '1' : '0'); } catch {}   // quota/private mode must not kill the Center
     paintAmb();
     document.dispatchEvent(new CustomEvent('nucleo:ambient-toggle', { detail: { on } }));
   });
@@ -135,7 +135,7 @@ export function initNotify(OS_API) {
     markAllRead(); render(); syncBadge();
     // chiudi gli altri flyout per coerenza Win11
     const ac = document.getElementById('action-center'); if (ac) ac.classList.add('hidden');
-    const sm = document.getElementById('start-menu'); if (sm) sm.classList.remove('open');
+    const sm = document.getElementById('start-menu'); if (sm) sm.classList.add('hidden');   // the shell toggles `hidden`, not `open`
   }
   function close() { center.classList.add('hidden'); }
   function toggle() { isOpen() ? close() : open(); }
@@ -157,7 +157,7 @@ export function initNotify(OS_API) {
   }
   function muted() { return dnd || inQuietHours(); }
   function setDND(on) {
-    dnd = !!on; localStorage.setItem(LS_DND, dnd ? '1' : '0');
+    dnd = !!on; try { localStorage.setItem(LS_DND, dnd ? '1' : '0'); } catch {}   // runs during init — a quota throw here would abort initNotify
     dndBtn.classList.toggle('active', dnd); bell.classList.toggle('dnd', dnd);
   }
   setDND(dnd);

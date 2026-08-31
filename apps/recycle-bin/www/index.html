@@ -75,8 +75,11 @@
 
   async function restore(item) {
     try {
-      const buf = await (await api('read', item.trash)).arrayBuffer();
-      await api('write', item.orig, { method: 'POST', body: buf });
+      const r = await api('read', item.trash);
+      if (!r.ok) { toast(t('toast_restore_failed')); render(); return; }
+      const buf = await r.arrayBuffer();
+      const w = await api('write', item.orig, { method: 'POST', body: buf });
+      if (!w.ok) { toast(t('toast_restore_failed')); render(); return; }
       await api('delete', item.trash, { method: 'POST' });
       const db = await loadDb(); db.items = db.items.filter((i) => i.trash !== item.trash); await saveDb(db);
       toast(t('toast_restored_to', { path: item.orig }));
@@ -90,14 +93,19 @@
   }
   async function restoreAll() {
     const db = await loadDb();
+    const failed = [];
     for (const item of [...db.items]) {
       try {
-        const buf = await (await api('read', item.trash)).arrayBuffer();
-        await api('write', item.orig, { method: 'POST', body: buf });
+        const r = await api('read', item.trash);
+        if (!r.ok) { failed.push(item); continue; }
+        const buf = await r.arrayBuffer();
+        const w = await api('write', item.orig, { method: 'POST', body: buf });
+        if (!w.ok) { failed.push(item); continue; }
         await api('delete', item.trash, { method: 'POST' });
-      } catch {}
+      } catch { failed.push(item); }
     }
-    await saveDb({ items: [] }); toast(t('toast_restored_all')); render();
+    await saveDb({ items: failed });
+    toast(failed.length ? t('toast_restore_failed') : t('toast_restored_all')); render();
   }
   async function empty() {
     const db = await loadDb();

@@ -158,6 +158,7 @@
     <button id="web" type="button" class="webtog" aria-pressed="false" data-i18n-attr="title:web_toggle_title" title="Web: risposte aggiornate con fonti (Groq compound)">🌐</button>
     <select id="model" class="modelpick" data-i18n-attr="title:model_pick_title" title="Modello della pipeline — solo AI Chat"></select>
     <button class="send" id="send" type="submit" data-i18n="send">Invia</button>
+    <button class="send" id="stop" type="button" data-i18n="stop" hidden>Stop</button>
   </form>
 
   <script type="module">
@@ -188,10 +189,10 @@
     // NON-streamed so executed_tools[].search_results come back whole -> clean "Sources". docs: agentic-tooling.
     const WEB_MODEL = 'groq/compound';
     let messages = [];   // running conversation [{role, content}] — model-only, no system tricks
-    let busy = false;
+    let busy = false, ctrl = null;
 
     const $ = id => document.getElementById(id);
-    const logEl = $('log'), input = $('q'), sendBtn = $('send'), dot = $('dot');
+    const logEl = $('log'), input = $('q'), sendBtn = $('send'), stopBtn = $('stop'), dot = $('dot');
     const esc = s => (s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
     // Minimal, safe rendering: escape everything, then lift ```fenced``` blocks into <pre>.
@@ -314,13 +315,16 @@
     // Stream a chat completion (SSE). Appends deltas into `bodyEl`. Returns the full text.
     async function streamChat(bodyEl) {
       const cur = document.createElement('span'); cur.className = 'cursor'; bodyEl.appendChild(cur);
+      const ac = ctrl; let wd = 0;
+      const kick = () => { clearTimeout(wd); wd = setTimeout(() => { ac.timedOut = true; ac.abort(); }, 60000); };
+      kick();
       const resp = await fetch(LLM('/chat/completions'), {
-        method: 'POST', headers: authHeaders(),
+        method: 'POST', headers: authHeaders(), signal: ac.signal,
         body: JSON.stringify({ model: S.model, messages, stream: true }),
       });
       if (!resp.ok || !resp.body) {
         let detail = ''; try { detail = (await resp.text()).slice(0, 300); } catch {}
-        cur.remove();
+        clearTimeout(wd); cur.remove();
         throw new Error('HTTP ' + resp.status + (detail ? ' · ' + detail : ''));
       }
       const reader = resp.body.getReader(), dec = new TextDecoder();
@@ -328,6 +332,7 @@
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
+        kick();
         buf += dec.decode(value, { stream: true });
         let nl;
         while ((nl = buf.indexOf('\n')) >= 0) {
@@ -341,6 +346,7 @@
           } catch { /* ignore keep-alive / partial frames */ }
         }
       }
+      clearTimeout(wd);
       cur.remove();
       render(bodyEl, full);
       return full;
@@ -371,12 +377,15 @@
         'You are a concise web research assistant. Search the web as needed and answer DIRECTLY in the user\'s language. '
         + 'Use Markdown. Cite sources inline as [1], [2]… matching the order of the Sources list the UI appends. '
         + 'Do NOT narrate your process, do NOT print your search results as a table, and do NOT show code or its output unless explicitly asked. Keep it tight.' };
+      const ac = ctrl;
+      const wd = setTimeout(() => { ac.timedOut = true; ac.abort(); }, 60000);
       const resp = await fetch(LLM('/chat/completions'), {
-        method: 'POST', headers: authHeaders(),
+        method: 'POST', headers: authHeaders(), signal: ac.signal,
         body: JSON.stringify({ model: WEB_MODEL, messages: [sys, ...messages], stream: false, temperature: 0.3 }),
       });
-      if (!resp.ok) { let d = ''; try { d = (await resp.text()).slice(0, 300); } catch {} wait.remove(); throw new Error('HTTP ' + resp.status + (d ? ' · ' + d : '')); }
+      if (!resp.ok) { let d = ''; try { d = (await resp.text()).slice(0, 300); } catch {} clearTimeout(wd); wait.remove(); throw new Error('HTTP ' + resp.status + (d ? ' · ' + d : '')); }
       const j = await resp.json();
+      clearTimeout(wd);
       const msg = j.choices?.[0]?.message || {};
       const full = msg.content || '';
       const seen = new Set(), sources = [];
@@ -395,9 +404,11 @@
       if (!text || busy) return;
       if (!S.key) { addSys(t('need_key')); $('settings').classList.add('open'); $('key').focus(); return; }
       busy = true; sendBtn.disabled = true;
+      ctrl = new AbortController(); stopBtn.hidden = false;
       addUser(text);
       messages.push({ role: 'user', content: text });
       while (messages.length > 40) messages.shift();   // soft context cap -> bounded request body
+      while (messages.length && messages[0].role !== 'user') messages.shift();
       const body = row('bot', '◆');
       const t0 = performance.now();
       try {
@@ -410,20 +421,26 @@
         body.parentElement.remove();
         messages.pop();                              // don't keep a turn we couldn't answer
         const msg = String(e.message || e);
-        addErr(msg);
-        if (/Failed to fetch|NetworkError/i.test(msg))
-          addSys(t('err_proxy_unreachable'));
-        else if (/401|invalid_api_key|403/i.test(msg))
-          addSys(t('err_bad_key'));
-        else if (/404|no.*handler|not found/i.test(msg))
-          addSys(t('err_no_endpoint'));
+        if (ctrl.signal.aborted) {
+          if (ctrl.timedOut) { addErr('timeout · 60 s'); addSys(t('err_proxy_unreachable')); }
+        } else {
+          addErr(msg);
+          if (/Failed to fetch|NetworkError/i.test(msg))
+            addSys(t('err_proxy_unreachable'));
+          else if (/401|invalid_api_key|403/i.test(msg))
+            addSys(t('err_bad_key'));
+          else if (/404|no.*handler|not found/i.test(msg))
+            addSys(t('err_no_endpoint'));
+        }
       } finally {
-        busy = false; sendBtn.disabled = false; logEl.scrollTop = logEl.scrollHeight; input.focus();
+        busy = false; sendBtn.disabled = false; stopBtn.hidden = true; ctrl = null;
+        logEl.scrollTop = logEl.scrollHeight; input.focus();
       }
     }
 
     // ---- wiring --------------------------------------------------------------
     $('f').addEventListener('submit', e => { e.preventDefault(); const q = input.value; input.value = ''; ask(q); });
+    stopBtn.addEventListener('click', () => { if (ctrl) ctrl.abort(); });
 
     const panel = $('settings');
     $('gear').addEventListener('click', () => { panel.classList.toggle('open'); if (panel.classList.contains('open')) $('key').focus(); });

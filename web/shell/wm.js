@@ -454,8 +454,36 @@ function hidePreview() { if (preview) preview.classList.add('hidden'); }
 // a window could be resized but never MOVED. Pointer capture also fixes a long-standing mouse bug —
 // dragging fast over an app iframe used to drop the gesture; the iframe is only made inert as a
 // belt-and-braces.
+// The window-level listeners live only for the duration of a gesture: registered on pointerdown,
+// removed in endDrag. Registering them once per window leaked all three (plus the closed window's
+// DOM they close over) on every open/close cycle — close() never removed them.
 function drag(win, handle, id) {
   let sx, sy, ox, oy, moving = false, zone = null, dragPid = null;
+  const onMove = (e) => {
+    if (!moving || (dragPid != null && e.pointerId !== dragPid)) return;   // a second finger must not steer this window
+    const A = workArea();
+    win.style.left = Math.max(0, ox + e.clientX - sx) + 'px';
+    win.style.top = Math.min(A.h - 34, Math.max(0, oy + e.clientY - sy)) + 'px';
+    zone = detectZone(e.clientX, e.clientY, A);     // pointer is already in work-area coords
+    if (zone) showPreview(zone); else hidePreview();
+  };
+  // One exit for EVERY way a pointer gesture can end. With only pointerup, a cancelled pointer (the
+  // browser takes it back, a second touch, the tab losing it) left `moving` true and the iframe stuck
+  // at pointerEvents:'none' — the window kept following the cursor and its app stopped accepting clicks.
+  const endDrag = (e) => {
+    if (!moving) return;
+    if (e && e.pointerId != null && dragPid != null && e.pointerId !== dragPid) return;   // not our gesture
+    moving = false; hidePreview();
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', endDrag);
+    window.removeEventListener('pointercancel', endDrag);
+    try { if (dragPid != null) handle.releasePointerCapture(dragPid); } catch {}
+    dragPid = null;
+    const iframe = win.querySelector('iframe');
+    if (iframe) iframe.style.pointerEvents = '';
+    if (zone) { applySnap(id, zone); zone = null; }
+    else onChange();
+  };
   handle.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     if (e.target.closest('button')) return;
@@ -479,31 +507,10 @@ function drag(win, handle, id) {
     try { handle.setPointerCapture(e.pointerId); } catch {}   // keep the gesture even over an iframe
     const iframe = win.querySelector('iframe');
     if (iframe) iframe.style.pointerEvents = 'none';
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
   });
-  window.addEventListener('pointermove', (e) => {
-    if (!moving || (dragPid != null && e.pointerId !== dragPid)) return;   // a second finger must not steer this window
-    const A = workArea();
-    win.style.left = Math.max(0, ox + e.clientX - sx) + 'px';
-    win.style.top = Math.min(A.h - 34, Math.max(0, oy + e.clientY - sy)) + 'px';
-    zone = detectZone(e.clientX, e.clientY, A);     // pointer is already in work-area coords
-    if (zone) showPreview(zone); else hidePreview();
-  });
-  // One exit for EVERY way a pointer gesture can end. With only pointerup, a cancelled pointer (the
-  // browser takes it back, a second touch, the tab losing it) left `moving` true and the iframe stuck
-  // at pointerEvents:'none' — the window kept following the cursor and its app stopped accepting clicks.
-  const endDrag = (e) => {
-    if (!moving) return;
-    if (e && e.pointerId != null && dragPid != null && e.pointerId !== dragPid) return;   // not our gesture
-    moving = false; hidePreview();
-    try { if (dragPid != null) handle.releasePointerCapture(dragPid); } catch {}
-    dragPid = null;
-    const iframe = win.querySelector('iframe');
-    if (iframe) iframe.style.pointerEvents = '';
-    if (zone) { applySnap(id, zone); zone = null; }
-    else onChange();
-  };
-  window.addEventListener('pointerup', endDrag);
-  window.addEventListener('pointercancel', endDrag);
   handle.addEventListener('lostpointercapture', endDrag);
 }
 
@@ -565,7 +572,14 @@ function attachResize(win, id) {
       const iframe = win.querySelector('iframe');
       if (iframe) iframe.style.pointerEvents = 'none';
 
+      // Same discipline as drag(): capture the pointer so the gesture survives crossing another
+      // window's iframe, and end it on cancel/lostcapture too — with only pointerup, a lost pointer
+      // left the window resizing on every mouse move with its iframe stuck inert.
+      const pid = e.pointerId;
+      try { r.setPointerCapture(pid); } catch {}
+
       const move = (ev) => {
+        if (ev.pointerId !== pid) return;
         let dx = ev.clientX - startX, dy = ev.clientY - startY;
         let newW = startW, newH = startH, newL = startL, newT = startT;
         if (dir.includes('e')) newW = startW + dx;
@@ -582,14 +596,22 @@ function attachResize(win, id) {
           win.style.left = newL + 'px'; win.style.top = newT + 'px';
         }
       };
-      const up = () => {
+      let done = false;
+      const up = (ev) => {
+        if (done || (ev && ev.pointerId != null && ev.pointerId !== pid)) return;
+        done = true;
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        r.removeEventListener('lostpointercapture', up);
+        try { r.releasePointerCapture(pid); } catch {}
         if (iframe) iframe.style.pointerEvents = '';
         onChange();
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+      r.addEventListener('lostpointercapture', up);
     });
   });
 }

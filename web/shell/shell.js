@@ -335,6 +335,29 @@ function cancelTaskSwitcher() {
   const ov = document.getElementById('task-switcher');
   if (ov) ov.classList.add('hidden');
 }
+// Commit the switcher on the selected window: teardown + focus. One path for keyup, click and arrows.
+function commitTaskSwitcher() {
+  if (!tsActive) return;
+  if (tsKeyUp) { for (const t of tsKeyUpTargets) { try { t.removeEventListener('keyup', tsKeyUp); } catch {} } tsKeyUpTargets = []; tsKeyUp = null; }
+  tsActive = false;
+  const ov = document.getElementById('task-switcher');
+  if (ov) ov.classList.add('hidden');
+  const w = tsWindows[tsIndex];
+  if (w) WM.open(w.app);
+}
+function tsRender() {
+  const ov = document.getElementById('task-switcher');
+  if (!ov) return;
+  ov.innerHTML = '';
+  tsWindows.forEach((w, i) => {
+    const el = document.createElement('div');
+    el.className = 'ts-item' + (i === tsIndex ? ' sel' : '');
+    el.innerHTML = `<div class="glyph">${w.app.glyph || '▦'}</div><div class="t">${escapeHtml(w.app.name)}</div>`;
+    el.addEventListener('click', () => { tsIndex = i; commitTaskSwitcher(); });   // tiles are pickable by mouse too
+    ov.appendChild(el);
+  });
+  ov.classList.remove('hidden');
+}
 function cycleWindows(dir) {
   tsWindows = WM.list().sort((a, b) => (parseInt(b.el.style.zIndex) || 0) - (parseInt(a.el.style.zIndex) || 0));
   if (tsWindows.length < 2) { if (tsWindows[0]) WM.open(tsWindows[0].app); return; }
@@ -342,15 +365,7 @@ function cycleWindows(dir) {
   if (!tsOverlay) { tsOverlay = document.createElement('div'); tsOverlay.id = 'task-switcher'; document.body.appendChild(tsOverlay); }
   if (!tsActive) {
     tsActive = true; tsIndex = dir > 0 ? 1 : tsWindows.length - 1;
-    tsKeyUp = (e) => {
-      if (e.key === 'Alt' || e.key === 'Meta') {
-        for (const t of tsKeyUpTargets) { try { t.removeEventListener('keyup', tsKeyUp); } catch {} }
-        tsKeyUpTargets = []; tsKeyUp = null;
-        tsOverlay.classList.add('hidden'); tsActive = false;
-        const w = tsWindows[tsIndex];
-        if (w) WM.open(w.app);
-      }
-    };
+    tsKeyUp = (e) => { if (e.key === 'Alt' || e.key === 'Meta') commitTaskSwitcher(); };
     // osKeydown is injected into every app iframe, so Alt+Tab can START from inside an app — but the
     // Alt KEYUP is then delivered to that iframe's window, never to the shell's. The switcher opened
     // and never committed: it hung there until a blur or Escape. Listen everywhere the keydown can
@@ -360,14 +375,7 @@ function cycleWindows(dir) {
   } else {
     tsIndex = (tsIndex + dir + tsWindows.length) % tsWindows.length;
   }
-  tsOverlay.innerHTML = '';
-  tsWindows.forEach((w, i) => {
-    const el = document.createElement('div');
-    el.className = 'ts-item' + (i === tsIndex ? ' sel' : '');
-    el.innerHTML = `<div class="glyph">${w.app.glyph || '▦'}</div><div class="t">${escapeHtml(w.app.name)}</div>`;
-    tsOverlay.appendChild(el);
-  });
-  tsOverlay.classList.remove('hidden');
+  tsRender();
 }
 const isEditable = (t) => !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ''));
 
@@ -428,6 +436,21 @@ function osKeydown(e) {
     return;
   }
   if (e.altKey && e.key === 'Tab') { e.preventDefault(); cycleWindows(e.shiftKey ? -1 : 1); return; }
+  // While the switcher is up: arrows move the selection, Enter commits (Alt keyup still commits too).
+  if (tsActive && (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'Enter')) {
+    e.preventDefault();
+    if (e.key === 'Enter') { commitTaskSwitcher(); return; }
+    tsIndex = (tsIndex + (e.key === 'ArrowRight' ? 1 : -1) + tsWindows.length) % tsWindows.length;
+    tsRender();
+    return;
+  }
+  // Win+1…9 → launch/focus the Nth taskbar button (pinned first, then running), like Windows.
+  if (e.metaKey && !e.ctrlKey && !e.altKey && /^[1-9]$/.test(e.key)) {
+    const btns = document.querySelectorAll('#task-pinned .task-btn, #task-running .task-btn');
+    const b = btns[+e.key - 1];
+    if (b) { e.preventDefault(); metaTap = false; b.click(); }
+    return;
+  }
   // Win/⌘ TAPPED alone → toggle Start (decided on keyup). On keydown we only arm it, so that
   // Win+<arrow>/Win+<key> combos don't ALSO pop the Start menu (the old bug).
   if (e.key === 'Meta') { e.preventDefault(); metaTap = true; return; }
@@ -517,6 +540,9 @@ function initOS() {
   // one status snapshot, recents) — opening the widgets panel costs the device nothing.
   SysUI = initSystemUI({ byId, WM, openFile,
     getStatusSnap: () => lastStatusSnap, getRecent: () => state.recent, fmtBytes: (b) => I18N.fmtBytes(b) });
+  // wireChrome() painted the Action Center night-light tile BEFORE SysUI existed (always "off", even
+  // with the saved veil already applied) — repaint it now that the truth is known.
+  { const acN = document.getElementById('ac-night'); if (acN) acN.classList.toggle('active', !!(SysUI && SysUI.nightOn())); }
   import('./copilot.js').then((m) => { Copilot = m.initCopilot(OS_API); }).catch((e) => console.warn('[copilot] load failed', e));
   // System Notification Center: one surface for every source (calendar, ANIMA, system, …).
   import('./notify.js').then((m) => { Notify = m.initNotify(OS_API); window.Notify = Notify; }).catch((e) => console.warn('[notify] load failed', e));
@@ -673,6 +699,10 @@ async function ensurePaired() {
   bootLog('pairing required → showing PIN overlay');
   await showPairing();
 }
+// showPairing is called from boot AND from onWsClosed on a 401/403. Bind the form ONCE and only swap
+// the pending resolver: re-binding submit on the second call fired two POST /api/pair per Enter —
+// double load on a 4-socket device and two attempts burned against the 429 lockout.
+let pairWired = false, pairResolve = null;
 function showPairing() {
   return new Promise((resolve) => {
     const ov = document.getElementById('pair-overlay');
@@ -683,8 +713,11 @@ function showPairing() {
     // Defensive: if the pairing markup is missing (e.g. a stale cached index.html during a SW
     // update), don't throw — resolve so boot proceeds instead of hanging on the splash forever.
     if (!ov || !form || !pin || !btn) { resolve(); return; }
+    pairResolve = resolve;
     ov.classList.remove('hidden');
     pin.value = ''; pin.focus();
+    if (pairWired) return;
+    pairWired = true;
     pin.addEventListener('input', () => { pin.value = pin.value.replace(/\D/g, '').slice(0, 6); msg.textContent = ''; });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -693,7 +726,11 @@ function showPairing() {
       let r;
       try { r = await fetch('/api/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: pin.value }) }); }
       catch { msg.textContent = 'Network error — is the device on?'; btn.disabled = false; return; }
-      if (r.ok) { ov.classList.add('hidden'); resolve(); return; }   // cookie is set; proceed
+      if (r.ok) {   // cookie is set; proceed — settle whichever call is currently waiting
+        ov.classList.add('hidden'); btn.disabled = false;
+        const res = pairResolve; pairResolve = null; if (res) res();
+        return;
+      }
       let body = {}; try { body = await r.json(); } catch {}
       msg.textContent = r.status === 429 || body.locked
         ? 'Too many attempts. Wait a moment and try again.'
@@ -1118,6 +1155,9 @@ function connectWS() {
 // rather than waiting out a long backed-off timer that grew while the tab was hidden.
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
+  // Below the mobile breakpoint onViewportChange deliberately shut /ws + the status poll ("the device
+  // pays nothing for a phone-sized viewer") — returning to the foreground must not undo that.
+  if (!desktopStarted || !mqDesktop.matches) return;
   if (wsEvicted) { seatFreeCheck(); return; }   // torni a guardare: forse il posto si e liberato
   if (wsSock && (wsSock.readyState === WebSocket.OPEN || wsSock.readyState === WebSocket.CONNECTING)) return;
   if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
@@ -1456,6 +1496,7 @@ function showToast(msg, icon = 'ℹ️', type = 'info', duration = 3500) {
   container.appendChild(t);
   const timer = setTimeout(() => removeToast(t), duration);
   t._timer = timer;
+  return t;   // so long-lived toasts can be dismissed by identity, not by position
 }
 function removeToast(t) {
   clearTimeout(t._timer);
@@ -1535,24 +1576,23 @@ function wireFileDrop() {
       const dir = (ext === 'nfv' || ext === 'mp3') ? '/data/Videos' : '/data/uploads';
       const targetPath = `${dir}/${file.name}`;
       if (destLabel) destLabel.textContent = targetPath;
-      showToast(t('toast_uploading', { name: file.name }), '📤', 'info', 60000);
+      // Keep the long-lived toast's identity: dismissing container.lastElementChild removed whatever
+      // toast happened to land LAST during the upload (a WS fault, another file's result) instead.
+      const upToast = showToast(t('toast_uploading', { name: file.name }), '📤', 'info', 60000);
       try {
         const resp = await fetchWithRetry('/api/fs/write?path=' + encodeURIComponent(targetPath), {
           method: 'POST',
           headers: { 'Content-Type': 'application/octet-stream' },
           body: file,                          // streamed dal browser, niente arrayBuffer() in RAM
         });
-        // Rimuovi il toast di caricamento (era a durata lunga)
-        const tc = document.getElementById('toast-container');
-        if (tc) { const last = tc.lastElementChild; if (last) removeToast(last); }
+        if (upToast) removeToast(upToast);
         if (resp.ok) {
           showToast(t('toast_upload_ok', { name: file.name }), '✅', 'success');
         } else {
           showToast(t('toast_upload_err', { name: file.name }), '❌', 'error');
         }
       } catch (err) {
-        const tc = document.getElementById('toast-container');
-        if (tc) { const last = tc.lastElementChild; if (last) removeToast(last); }
+        if (upToast) removeToast(upToast);
         showToast(t('toast_net_err', { name: file.name }), '❌', 'error');
       }
     }

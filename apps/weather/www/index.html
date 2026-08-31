@@ -285,11 +285,12 @@ async function refresh(force) {
   } catch { setMsg(t('err_net'), true); }
   finally { busy = false; $('b-refresh').disabled = false; $('wx').classList.remove('skel'); }
 }
-function setPlace(place) {
-  cache = { place, data: null, at: 0 };
-  save(cache);
+async function setPlace(place) {
+  const prev = cache;                        // keep the old forecast until the new one lands
+  cache = { place, data: null, at: 0 };      // in memory only — refresh() persists on success
   $('place').textContent = place.name;
-  refresh(true);
+  await refresh(true);
+  if (!cache.data && prev && prev.data) { cache = prev; renderAll(); }
 }
 
 // ---- search / locate ----

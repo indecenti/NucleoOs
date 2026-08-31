@@ -405,7 +405,7 @@ const timerDisp = $('timer-disp');
 const timerDone = $('timer-done');
 timerArc.setAttribute('stroke-dasharray', CIRCUM);
 
-let timerTotal = 5 * 60 * 1000, timerBase = 0, timerStart = 0, timerRunning = false, timerRaf;
+let timerTotal = 5 * 60 * 1000, timerBase = 0, timerStart = 0, timerRunning = false, timerRaf, timerTO;
 
 function showTimer(remain) {
   const m = Math.floor(remain / 60000), s = Math.floor(remain % 60000 / 1000);
@@ -426,33 +426,42 @@ function beep() {
   } catch {}
 }
 
+// Canonical completion — idempotent; called by rAF loop or the hidden-tab timeout.
+function completeTimer() {
+  if (!timerRunning) return;
+  timerRunning = false; timerBase = timerTotal;
+  clearTimeout(timerTO); cancelAnimationFrame(timerRaf);
+  showTimer(0);
+  timerDone.textContent = t('timer_done'); timerDone.classList.add('blink');
+  $('te').textContent = t('start'); $('te').className = 'btn primary';
+  beep();
+}
+
 function loopTimer() {
   if (!timerRunning) return;
   const remain = Math.max(0, timerTotal - timerBase - (performance.now() - timerStart));
   showTimer(remain);
-  if (remain <= 0) {
-    timerRunning = false; timerBase = timerTotal;
-    timerDone.textContent = t('timer_done'); timerDone.classList.add('blink');
-    $('te').textContent = t('start'); $('te').className = 'btn primary';
-    beep(); return;
-  }
+  if (remain <= 0) { completeTimer(); return; }
   timerRaf = requestAnimationFrame(loopTimer);
 }
 
 $('te').onclick = () => {
   if (timerRunning) {
-    timerRunning = false; timerBase += performance.now() - timerStart; cancelAnimationFrame(timerRaf);
+    timerRunning = false; timerBase += performance.now() - timerStart;
+    cancelAnimationFrame(timerRaf); clearTimeout(timerTO);
     $('te').textContent = t('start'); $('te').className = 'btn primary';
   } else {
     if (timerBase >= timerTotal) { timerBase = 0; timerDone.textContent = ''; timerDone.classList.remove('blink'); }
     timerRunning = true; timerStart = performance.now();
     timerDone.textContent = ''; timerDone.classList.remove('blink');
     $('te').textContent = t('stop'); $('te').className = 'btn';
+    // rAF pauses in hidden iframes — this fires completion even when not painting.
+    timerTO = setTimeout(completeTimer, timerTotal - timerBase);
     loopTimer();
   }
 };
 $('tr').onclick = () => {
-  timerRunning = false; timerBase = 0; cancelAnimationFrame(timerRaf);
+  timerRunning = false; timerBase = 0; cancelAnimationFrame(timerRaf); clearTimeout(timerTO);
   timerDone.textContent = ''; timerDone.classList.remove('blink');
   $('te').textContent = t('start'); $('te').className = 'btn primary';
   showTimer(timerTotal);
@@ -495,6 +504,26 @@ window.addEventListener('message', e => {
   if (e.data?.type === 'set-theme' && e.data.theme)
     document.documentElement.dataset.theme = e.data.theme;
 });
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  if (e.key === 'Escape') {
+    if ($('cfg').classList.contains('open')) { $('cfg').classList.remove('open'); e.preventDefault(); }
+    return;
+  }
+  const onSw    = $('page-sw').classList.contains('active');
+  const onTimer = $('page-timer').classList.contains('active');
+  if (e.key === ' ') {
+    if (onSw)    { $('se').click(); e.preventDefault(); }
+    if (onTimer) { $('te').click(); e.preventDefault(); }
+  } else if (onSw && (e.key === 'l' || e.key === 'L')) {
+    $('sl').click();
+  } else if (onSw && (e.key === 'r' || e.key === 'R')) {
+    $('sr').click();
+  }
+});
+
 I18N.onChange(() => {
   $('se').textContent = swRunning    ? t('stop') : t('start');
   $('te').textContent = timerRunning ? t('stop') : t('start');

@@ -846,7 +846,16 @@
         const text = n.nodeValue;
         if (regex.test(text)) {
           const span = document.createElement('span');
-          span.innerHTML = text.replace(regex, '<mark class="search-highlight">$1</mark>');
+          text.split(regex).forEach((part, i) => {
+            if (i % 2 === 1) {
+              const mark = document.createElement('mark');
+              mark.className = 'search-highlight';
+              mark.textContent = part;
+              span.appendChild(mark);
+            } else if (part) {
+              span.appendChild(document.createTextNode(part));
+            }
+          });
           n.parentNode.replaceChild(span, n);
         }
       });

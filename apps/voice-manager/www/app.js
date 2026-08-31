@@ -263,6 +263,13 @@ function onMatch(m) {
 
 // ───────────────────────── WebSocket ─────────────────────────
 let ws;
+let reTimer = null;
+let reDelay = 2500;
+function scheduleReconnect() {
+  if (reTimer) clearTimeout(reTimer);
+  reTimer = setTimeout(() => { reTimer = null; connectWS(); }, reDelay);
+  reDelay = Math.min(10000, reDelay * 2);
+}
 function setWs(on) {
   $('ws-dot').classList.toggle('on', on);
   $('ws-txt').textContent = on ? t('connected', null, 'Connesso') : t('offline', null, 'Offline');
@@ -302,11 +309,13 @@ function connectWS() {
     return;
   }
   try { ws = new WebSocket(`ws://${location.host}/ws`); }
-  catch (e) { setWs(false); setTimeout(connectWS, 2500); return; }
-  ws.onopen = () => { setWs(true); ws.send(JSON.stringify({ op: 'subscribe', since: 0 })); };
-  ws.onclose = () => { setWs(false); setTimeout(connectWS, 2500); };
-  ws.onerror = () => { try { ws.close(); } catch (e) {} };
-  ws.onmessage = (e) => {
+  catch (e) { setWs(false); scheduleReconnect(); return; }
+  const sock = ws;
+  sock.onopen = () => { if (sock !== ws) return; reDelay = 2500; setWs(true); sock.send(JSON.stringify({ op: 'subscribe', since: 0 })); };
+  sock.onclose = () => { if (sock !== ws) return; setWs(false); scheduleReconnect(); };
+  sock.onerror = () => { try { sock.close(); } catch (e) {} };
+  sock.onmessage = (e) => {
+    if (sock !== ws) return;
     let msg; try { msg = JSON.parse(e.data); } catch (_) { return; }
     handleVoiceEvent(msg.t, msg.d);
   };

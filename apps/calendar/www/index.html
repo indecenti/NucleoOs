@@ -92,7 +92,6 @@
     let data = { schema: 1, events: {} };
     let view = new Date(); view.setDate(1);
     let selKey = null;
-    let seq = 1;                       // local id source; no Date.now reliance for uniqueness within a save
 
     const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const todayKey = ymd(new Date());
@@ -173,7 +172,7 @@
     async function addEvent() {
       const text = $('ev-text').value.trim(); if (!text || !selKey) return;
       const time = $('ev-time').value || '';
-      (data.events[selKey] ||= []).push({ id: 'e' + (seq++) + '-' + selKey, time, text });
+      (data.events[selKey] ||= []).push({ id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), time, text });
       $('ev-text').value = '';
       renderGrid(); renderDay(); await persist();
     }

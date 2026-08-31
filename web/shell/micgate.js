@@ -220,13 +220,26 @@ async function _runRecord(signal, opts) {
   // 600 ms, not 300: the handler reads only static vars (~150 B JSON, no SD), but a take can last
   // minutes, so halving the rate halves the steady load on the single httpd task for an imperceptible
   // VU-meter difference (the consumer interpolates between samples).
+  // The loop MUST be able to end without the firmware's help: if the device drops off the network
+  // mid-take, an unbounded poll would spin forever AND keep the OS-wide mic lock held for the life of
+  // the tab, silencing ANIMA/Dettatura everywhere. Abort ends it immediately; ~15 consecutive misses
+  // (~9 s dark) end it as a fault.
   return await new Promise((resolve) => {
+    let misses = 0, abortDeadline = 0;
+    // After an abort the stop() above is in flight: give the firmware a short grace window to flip
+    // recording:false (so the caller still gets the take's final status), then end regardless.
+    signal.addEventListener('abort', () => { abortDeadline = Date.now() + 5000; }, { once: true });
+    if (signal.aborted) abortDeadline = Date.now() + 5000;
     const poll = setInterval(async () => {
+      if (abortDeadline && Date.now() > abortDeadline) { clearInterval(poll); resolve(null); return; }
       try {
         const s = await (await fetch('/api/rec/status', { cache: 'no-store' })).json();
+        misses = 0;
         onstatus && onstatus(s);
         if (!s.recording) { clearInterval(poll); resolve(s); }
-      } catch { /* transient; keep polling */ }
+      } catch {
+        if (++misses >= 15) { clearInterval(poll); onerror && onerror('audio'); resolve(null); }
+      }
     }, 600);
   });
 }

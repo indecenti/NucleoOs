@@ -61,11 +61,14 @@ export function modelLabel(entry) {
 // ir = the IR app's NL skill now works on EVERY chat provider (cloudToolCall below: Anthropic tool_use +
 // OpenAI-compat tool_calls), so it is true across the board — kept as a field so the matrix stays the
 // single place that answers "which provider can do what".
+// audioLLM = the model takes audio DIRECTLY in a chat request (Gemini's inline audio), reaching the
+// same goal as Whisper by another road — and in one call instead of two, which on a chip with no
+// PSRAM is a RAM win as much as a latency one. `whisper` stays specifically "has /audio/transcriptions".
 export const CAPMATRIX = {
-  anthropic: { chat: true, image: false, whisper: false, toolUse: true, ir: true },
-  openai:    { chat: true, image: false, whisper: true,  toolUse: true, ir: true },   // Groq
-  xai:       { chat: true, image: true,  whisper: false, toolUse: true, ir: true },
-  google:    { chat: true, image: false, whisper: false, toolUse: true, ir: true },
+  anthropic: { chat: true, image: false, whisper: false, audioLLM: false, toolUse: true, ir: true },
+  openai:    { chat: true, image: false, whisper: true,  audioLLM: false, toolUse: true, ir: true },   // Groq
+  xai:       { chat: true, image: true,  whisper: false, audioLLM: false, toolUse: true, ir: true },
+  google:    { chat: true, image: false, whisper: false, audioLLM: true,  toolUse: true, ir: true },
 };
 // Per-provider quality tiers, mapped to REAL ids from PROVIDERS.models (validated against the registry
 // by the engine; google.max=Pro is offered only when geminiTier==='paid'). Single source so a preset
@@ -128,8 +131,15 @@ export function routeFor(spec = {}, keys = {}, active = null) {
   // CAPABILITY routing (whisper/image): only a provider whose CAPMATRIX has it — pick the BEST such one.
   if (cap) {
     const able = rank(configured.filter((p) => CAPMATRIX[p] && CAPMATRIX[p][cap]));
-    if (!able.length) return null;                       // honest: no configured key can do it
-    return cfgFor(able[0].p, keys[able[0].p], modelFor(able[0].p));
+    if (able.length) return cfgFor(able[0].p, keys[able[0].p], modelFor(able[0].p));
+    // 'whisper' names a transport, not the goal. The goal is audio -> text, and a provider whose
+    // model eats audio directly gets there too. Answering with that beats declining when the user
+    // has a perfectly capable key configured.
+    if (cap === 'whisper') {
+      const alt = rank(configured.filter((p) => CAPMATRIX[p] && CAPMATRIX[p].audioLLM));
+      if (alt.length) return Object.assign(cfgFor(alt[0].p, keys[alt[0].p], modelFor(alt[0].p)), { audioLLM: true });
+    }
+    return null;                                         // honest: no configured key can do it
   }
   // No configured key (or all excluded) → the active default, but never an EXCLUDED provider (exclude contract).
   if (!configured.length) return (active && active.key && !exclude.has(active.provider)) ? Object.assign({ exec: 'browser' }, active) : null;

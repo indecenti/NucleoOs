@@ -117,8 +117,11 @@ function capHint(p, lang) {
   };
   const s = LBL[lang] || LBL.it;
   const can = [], cant = [];
+  // Transcription is listed as available when the provider can reach it EITHER way — a dedicated
+  // Whisper endpoint or an audio-native model — because routeFor() will happily use either.
+  const c2 = Object.assign({}, c, { whisper: !!(c.whisper || c.audioLLM) });
   [['chat', 'chat'], ['image', s.image], ['whisper', s.whisper], ['toolUse', s.tools]]
-    .forEach(([k, lbl]) => (c[k] ? can : cant).push(lbl));
+    .forEach(([k, lbl]) => (c2[k] ? can : cant).push(lbl));
   return s.can + can.join(', ') + (cant.length ? s.no + cant.join(', ') : '');
 }
 
