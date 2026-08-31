@@ -144,7 +144,7 @@
         <label for="to">${esc(t('to'))}</label><input id="to" type="email" inputmode="email" autocapitalize="off"
           spellcheck="false" placeholder="${esc(t('to_ph'))}" value="${esc(draft.to)}">
         <label for="subj">${esc(t('subject'))}</label><input id="subj" placeholder="${esc(t('subject_ph'))}" value="${esc(draft.subject)}">
-        <label for="body">${esc(t('subject') && t('body_ph'))}</label><textarea id="body" placeholder="${esc(t('body_ph'))}">${esc(draft.body)}</textarea>
+        <label for="body">${esc(t('body_label'))}</label><textarea id="body" placeholder="${esc(t('body_ph'))}">${esc(draft.body)}</textarea>
         <div class="bar">
           <button class="btn primary" id="send">${esc(t('send'))}</button>
           <span class="ghint">${esc(t('send_hint'))}</span>
@@ -298,7 +298,7 @@
       const pass = $('pass').value;
       if (pass) body.pass = pass;
       if (!body.host || !EMAIL_RE.test(body.user)) { setStatus('err', t('invalid_email')); return; }
-      if (editing.idx < 0 && !pass) { setStatus('err', t('password')); return; }
+      if (editing.idx < 0 && !pass) { setStatus('err', t('err_password_required')); return; }
       setStatus('busy', t('sending'));
       try {
         const r = await fetch('/api/mail/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

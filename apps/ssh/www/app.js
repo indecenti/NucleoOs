@@ -82,7 +82,7 @@ function showForm(h) {
   const applyAuth = () => { $('row-pw').style.display = auth === 'password' ? '' : 'none'; $('row-key').style.display = auth === 'key' ? 'flex' : 'none'; for (const b of $('f-auth').children) b.classList.toggle('on', b.dataset.a === auth); };
   applyAuth();
   for (const b of $('f-auth').children) b.addEventListener('click', () => { auth = b.dataset.a; applyAuth(); });
-  const collect = () => ({ id: (h && h.id) || uid(), name: $('f-name').value.trim() || $('f-host').value.trim(), host: $('f-host').value.trim(), port: parseInt($('f-port').value, 10) || 22, user: $('f-user').value.trim(), auth });
+  const collect = () => ({ id: (h && h.id) || uid(), name: $('f-name').value.trim() || $('f-host').value.trim(), host: $('f-host').value.trim(), port: parseInt($('f-port').value, 10) || 22, user: $('f-user').value.trim(), auth, hostkey: (h && h.hostkey) || undefined });
   $('f-save').addEventListener('click', async () => {
     const prof = collect(); if (!prof.host || !prof.user) { $('f-stat').textContent = t('err_host_user_required'); return; }
     const i = hosts.findIndex((x) => x.id === prof.id); if (i >= 0) hosts[i] = prof; else hosts.push(prof);
@@ -110,7 +110,39 @@ function startSession(prof, secrets) {
 
   client = createSSHClient({ bridgeUrl: b.url, token: b.token });
   client.on('data', (u8) => term.write(u8));
-  client.on('hostkey', (fp, hash) => { const bn = $('hk-banner'); if (bn) { bn.textContent = '🔑 ' + t('hostkey_banner', { fp: hash + ':' + fp }); bn.classList.add('show'); } });
+  // TOFU host-key pinning. The bridge completes the SSH handshake itself, so the browser cannot
+  // withhold credentials until the key is judged — what it CAN do is remember the key per profile,
+  // refuse the session the moment a remembered key changes, and require an explicit human accept
+  // before ever talking to the new key again (the banner says exactly that, MITM warning included).
+  client.on('hostkey', (fp, hash) => {
+    const fpFull = hash + ':' + fp;
+    const bn = $('hk-banner'); if (!bn) return;
+    const known = prof.hostkey;
+    if (known && known !== fpFull) {
+      stat(t('st_error', { msg: t('hostkey_mismatch_short') }));
+      endSession(false);
+      bn.textContent = '⛔ ' + t('hostkey_mismatch', { old: known, fp: fpFull });
+      const btn = document.createElement('button');
+      btn.textContent = t('hostkey_accept');
+      btn.addEventListener('click', () => {
+        prof.hostkey = fpFull;
+        const i = hosts.findIndex((x) => x.id === prof.id); if (i >= 0) { hosts[i] = prof; saveHosts(); }
+        endSession(true); startSession(prof, secrets);
+      });
+      bn.appendChild(btn);
+      bn.classList.add('show', 'alarm');
+      return;
+    }
+    if (!known) {
+      prof.hostkey = fpFull;
+      const i = hosts.findIndex((x) => x.id === prof.id); if (i >= 0) { hosts[i] = prof; saveHosts(); }   // pin only saved profiles
+      bn.textContent = '🔑 ' + t('hostkey_tofu', { fp: fpFull });
+    } else {
+      bn.textContent = '🔑 ' + t('hostkey_ok', { fp: fpFull });
+    }
+    bn.classList.remove('alarm');
+    bn.classList.add('show');
+  });
   client.on('status', (state, msg) => {
     if (state === 'connecting') stat(t('st_connecting'));
     else if (state === 'authenticated') stat(t('st_authenticated'));

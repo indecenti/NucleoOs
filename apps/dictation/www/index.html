@@ -243,10 +243,10 @@ async function saveNow(){
   saving = true; const snapshot = finalText;
   
   const header = `---
-Data: ${sessionDate}
-Ora Inizio: ${sessionTime}
-Lingua: ${lang.toUpperCase()}
-Motore: ${asr.source === 'sd' ? 'Vosk (Offline)' : 'Groq (Online)'}
+${t('hdr_date')}: ${sessionDate}
+${t('hdr_start')}: ${sessionTime}
+${t('hdr_lang')}: ${lang.toUpperCase()}
+${t('hdr_engine')}: ${asr.source === 'sd' ? 'Vosk (Offline)' : 'Groq (Online)'}
 ---
 
 `;
@@ -536,10 +536,10 @@ function cleanup(){
   // sendBeacon survives tab close / iframe teardown where fetch would be cancelled.
   try{ if(finalText && finalText!==savedText) {
     const header = `---
-Data: ${sessionDate}
-Ora Inizio: ${sessionTime}
-Lingua: ${lang.toUpperCase()}
-Motore: ${asr.source === 'sd' ? 'Vosk (Offline)' : 'Groq (Online)'}
+${t('hdr_date')}: ${sessionDate}
+${t('hdr_start')}: ${sessionTime}
+${t('hdr_lang')}: ${lang.toUpperCase()}
+${t('hdr_engine')}: ${asr.source === 'sd' ? 'Vosk (Offline)' : 'Groq (Online)'}
 ---
 
 `;

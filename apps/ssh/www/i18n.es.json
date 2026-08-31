@@ -46,5 +46,10 @@
   "disconnect": "Desconectar",
   "gate_title": "Terminal SSH real",
   "gate_body": "Se conecta a tus hosts SSH a través de un pequeño <b>bridge</b> que ejecutas en una de tus propias máquinas (PC/Pi/NAS) — sin servicios de terceros. Inicia <code>tools/nucleo-ssh-bridge</code> (<code>npm i &amp;&amp; node index.js</code>), luego configura aquí la URL y el token.",
-  "gate_set_btn": "Configurar bridge"
+  "gate_set_btn": "Configurar bridge",
+  "hostkey_tofu": "nueva clave de host memorizada: {fp} — verifícala una vez, por otra vía.",
+  "hostkey_ok": "clave de host verificada: {fp}",
+  "hostkey_mismatch": "¡CLAVE DE HOST CAMBIADA! memorizada {old} — recibida {fp}. Posible MITM: sesión rechazada. Si el cambio es legítimo (servidor reinstalado), acepta la nueva clave.",
+  "hostkey_mismatch_short": "clave de host cambiada — sesión rechazada",
+  "hostkey_accept": "Aceptar nueva clave"
 }
