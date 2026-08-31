@@ -69,7 +69,8 @@ export const REGISTRY = [
     cdnBase: 'https://huggingface.co/mlc-ai/Qwen2.5-1.5B-Instruct-q4f16_1-MLC/resolve/main/',
     sdBase: '/apps/anima/forge/models/Qwen2.5-1.5B-Instruct-q4f16_1-MLC/',
     manifest: {
-      model: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', format: 'mlc', totalBytes: 880286230,
+      model: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', format: 'mlc', revision: '9bd564b064631febf14deadcac492efb761d60c3',
+      modelType: 'qwen2', contextWindow: 32768, totalBytes: 880286230,
       shards: [
         { name: 'params_shard_0.bin', bytes: 116686848, sha256: '29e46841454786b2c36cbcfd1d9a0777f8cb2bb55fb7cdf9ebd3df6ea6aa61f6' },
         { name: 'params_shard_1.bin', bytes: 22330368, sha256: 'a99a03870f60127bdc3891f0bdc13a0f6e25efa984e9a5d6b188b5aae6f4fbae' },
