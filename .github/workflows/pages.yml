@@ -53,6 +53,19 @@ jobs:
           # asset is missing (no release has run the patched release.yml yet — see bootstrap docs).
           curl -fSL --retry 3 -o _site/nucleoos-latest.bin \
             https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest.bin
+          # In-shell updater assets, same-origin for the same CORS reason: the app-only OTA image,
+          # its checksums, and a version marker the updater cross-checks against the GitHub API tag
+          # before flashing (guards the Pages deploy-lag window). Tolerant on releases that predate
+          # these assets — the updater falls back to "use the web flasher" when they are missing.
+          curl -fSL --retry 3 -o _site/nucleoos-latest-ota.bin \
+            https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest-ota.bin \
+            || { echo "no OTA asset yet (release predates the in-shell updater)"; rm -f _site/nucleoos-latest-ota.bin; }
+          curl -fSL --retry 3 -o _site/SHA256SUMS \
+            https://github.com/indecenti/NucleoOs/releases/latest/download/SHA256SUMS \
+            || { echo "no SHA256SUMS yet (release predates the in-shell updater)"; rm -f _site/SHA256SUMS; }
+          TAG=$(curl -fsSL -H 'Accept: application/vnd.github+json' \
+            https://api.github.com/repos/indecenti/NucleoOs/releases/latest | jq -r '.tag_name // empty')
+          printf '{"tag":"%s"}' "$TAG" > _site/version.json
           ls -la _site
 
       - uses: actions/configure-pages@v5

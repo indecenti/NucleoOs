@@ -12,6 +12,7 @@
 #include "nucleo_app.h"
 #include "ota_listen_fsm.h"    // pure OTA listening-handshake decision core (host-tested)
 #include "nucleo_exclusive.h"  // declarative exclusive_flags: framework enters on open, restores on close
+#include "nucleo_update.h"     // release-update: boot dialog decision + background check kick
 #include "launcher_theme.h"
 #include "launcher_menu.h"
 #include "launcher_render.h"
@@ -348,6 +349,7 @@ extern "C" void nucleo_register_info(void);
 extern "C" void nucleo_register_clock(void);
 extern "C" void nucleo_register_chrono(void);         // app_chrono.cpp — Office: stopwatch + countdown timer
 extern "C" void nucleo_register_pomodoro(void);       // app_pomodoro.cpp — Office: Pomodoro focus timer (cycles + stats)
+extern "C" void nucleo_register_updates(void);        // app_updates.cpp — System: release check + on-device OTA install
 extern "C" void nucleo_register_sysmon(void);
 extern "C" void nucleo_register_calc(void);
 extern "C" void nucleo_register_recorder(void);
@@ -441,7 +443,7 @@ void nucleo_app_register_builtins(void)
     // Messaging: device-to-device / mail
     nucleo_register_mail(); nucleo_register_link(); nucleo_register_swarm();
     // System (settings, device, voice control)
-    nucleo_register_wifi(); nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme(); nucleo_register_notify(); nucleo_register_voice(); nucleo_register_voicelab();
+    nucleo_register_wifi(); nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme(); nucleo_register_notify(); nucleo_register_voice(); nucleo_register_voicelab(); nucleo_register_updates();
     // Security (authorized testing)
     nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_sniffer(); nucleo_register_ethernet(); nucleo_register_ble(); nucleo_register_sentinel(); nucleo_register_airspace(); nucleo_register_fido(); nucleo_register_payloads();
 }
@@ -1560,10 +1562,20 @@ void nucleo_app_run(void)
     }
     // Full OS after a Recorder Solo job: re-open the Recorder so the user lands on the saved result.
     else if (reopen_recorder_pending()) { s_reopen_req = 0; nucleo_app_launch_id("recorder"); }
+    // Release-update dialog: a newer, non-dismissed release was learned on a previous boot (pure
+    // NVS decision — no network on this path). Update now / next boot (Esc) / ignore this version.
+    else if (nucleo_update_dialog_pending()) { nucleo_app_launch_id("updates"); }
 
     for (;;) {
         esp_task_wdt_reset();
         int64_t now = esp_timer_get_time() / 1000;
+
+        // One-shot background release check, ~60 s after boot (never in Solo: no launcher and no
+        // service posture there). The task waits for the STA link, honours the 24h NVS throttle,
+        // then dies; a newer release lands as a system notification (banner + notify.post to the
+        // web) and as the NVS state the next boot's update dialog reads. ~30 bytes of TLS a day.
+        static bool s_upd_kicked = false;
+        if (!s_upd_kicked && !s_solo_active && now > 60000) { s_upd_kicked = true; nucleo_update_kick_check(true); }
 
         // OTA listening-handshake (ota_listen_fsm.h is the tested decision core). An OTA request raised
         // s_force_listen from the httpd task; bring the device into the server-listening posture by LAUNCHING

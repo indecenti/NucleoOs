@@ -366,6 +366,11 @@ It's **one universal binary** — the same image auto‑detects the board (origi
 at runtime, so you build once and fan out. The ANIMA gate must be green before any flash
 (`release.ps1`/`flash.ps1` enforce it). See [`docs/releasing.md`](docs/releasing.md).
 
+Installed devices learn about new releases by themselves: the shell checks GitHub once a day
+(from the **browser** — the device never contacts the internet) and offers a verified one‑click
+update in **Settings ▸ Updates**. You can also *Watch ▸ Custom ▸ Releases* on this repo to get
+notified by GitHub. Design: [`docs/update-check.md`](docs/update-check.md).
+
 ---
 
 ## Legal & responsible use

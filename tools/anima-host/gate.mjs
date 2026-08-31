@@ -459,6 +459,14 @@ const gates = [
     // a failed cycle, and a failed one-shot join never arms the retry loop. 160 assertions incl. a full
     // replay of the issue story and uint32 ms wraparound. Pure C, no device.
     ok: (code) => code === 0, summary: (o) => (o.match(/wifi-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'update-policy (release)', cmd: 'node', args: ['tools/anima-host/update-check.mjs'],
+    // The native release-update decision core (firmware/components/nucleo_app/update_policy.c), host-
+    // compiled with MinGW — the SAME C that runs on the device. Proves semver-triplet parse/compare
+    // (build metadata never triggers), version.json + SHA256SUMS parsing (strict shape, refuses
+    // truncation and an HTML error page), the show/dismiss/dev-build-ahead dialog logic, and the 24h
+    // throttle that can never wedge (never-checked and clock-backwards are both "due"). Twin of the
+    // web logic in web/shell/update-core.js (tools/update-core.test.mjs). Pure C, no device.
+    ok: (code) => code === 0, summary: (o) => (o.match(/update-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'ble-adv (spam/beacon)', cmd: 'node', args: ['tools/anima-host/ble-check.mjs'],
     // The BLE advertisement payload core (firmware/components/nucleo_ble/nucleo_ble_adv.c), host-compiled
     // with MinGW: Apple Continuity / Microsoft Swift Pair / Google Fast Pair / iBeacon AD framing — company

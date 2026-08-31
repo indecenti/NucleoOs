@@ -72,6 +72,7 @@ const gateCat = {
   'arbiter (concurrency)': 'cascade-infra',
   'link-proto (espnow)': 'connect-transfer', 'nearby-skill (scoped)': 'connect-transfer',
   'wifi-policy (supervisor/hotspot)': 'connect-transfer',
+  'update-policy (release)': 'connect-transfer',
   'eth-frames (wired)': 'security',
   'ble-adv (spam/beacon)': 'security',
   'ducky (payloads)': 'security',

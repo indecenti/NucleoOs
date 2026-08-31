@@ -138,6 +138,21 @@ After either, reload the shell in the browser; the bumped SW pulls the new asset
 
 ---
 
+## 3. Public release (GitHub) & user update notifications
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`: CI builds the universal firmware and
+publishes the full 0x0 image, the **app-only OTA image** (`nucleoos-latest-ota.bin`), the SD
+payload zip and `SHA256SUMS`. `pages.yml` then republishes the browser-fetchable copies (Release
+assets have no CORS) plus a `version.json` marker on the web-flasher site.
+
+Installed devices pick the release up on their own: the shell checks GitHub once a day from the
+**browser** (never from the device) and raises a notification; **Settings ▸ Updates** downloads,
+verifies (SHA-256 + ESP magic) and streams the OTA image to `POST /api/ota` with one click.
+Full design + trust chain: [update-check.md](update-check.md).
+
+Practical consequence: **users only see a release once the tag is pushed** — a feature that never
+gets a tagged release is invisible to everyone who installed from the flasher.
+
 ## Release checklist
 
 **Web-layer change (app / shell / icon / registry):**

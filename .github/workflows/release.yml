@@ -49,11 +49,19 @@ jobs:
           # Stable-named copy so the hosted web flasher (Pages) can always fetch the newest firmware
           # via releases/latest/download/nucleoos-latest.bin — no per-release manifest regeneration.
           cp "dist/nucleoos-${{ steps.ver.outputs.full }}.bin" dist/nucleoos-latest.bin
+          # App-only image for the in-shell browser updater: POST /api/ota writes the OTA slot, so it
+          # must receive the plain app image — NEVER the merged 0x0 image above (that one carries the
+          # bootloader + partition table and belongs only to full flashing). Stable name for Pages.
+          cp firmware/build/nucleoos.bin "dist/nucleoos-${{ steps.ver.outputs.full }}-ota.bin"
+          cp firmware/build/nucleoos.bin dist/nucleoos-latest-ota.bin
 
       - name: Zip the SD payload
         run: |
           cd dist && zip -qr "nucleoos-${{ steps.ver.outputs.full }}-sd.zip" sd
           cp "nucleoos-${{ steps.ver.outputs.full }}-sd.zip" nucleoos-latest-sd.zip   # stable name for a direct "latest" download link
+
+      - name: Checksums (the in-shell updater verifies these before flashing)
+        run: cd dist && sha256sum *.bin *.zip > SHA256SUMS
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -64,8 +72,11 @@ jobs:
           files: |
             dist/nucleoos-${{ steps.ver.outputs.full }}.bin
             dist/nucleoos-${{ steps.ver.outputs.full }}-sd.zip
+            dist/nucleoos-${{ steps.ver.outputs.full }}-ota.bin
             dist/nucleoos-latest.bin
             dist/nucleoos-latest-sd.zip
+            dist/nucleoos-latest-ota.bin
+            dist/SHA256SUMS
             dist/FLASH.md
             dist/manifest.json
 
