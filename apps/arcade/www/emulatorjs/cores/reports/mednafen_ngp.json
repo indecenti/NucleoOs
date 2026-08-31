@@ -1,0 +1,8 @@
+{
+  "_generated": "node tools/gen-core-reports.mjs — do not edit by hand",
+  "core": "mednafen_ngp",
+  "buildStart": 226491736249216,
+  "options": {
+    "defaultWebGL2": true
+  }
+}

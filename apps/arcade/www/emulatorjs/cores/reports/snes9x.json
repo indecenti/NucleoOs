@@ -1,0 +1,8 @@
+{
+  "_generated": "node tools/gen-core-reports.mjs — do not edit by hand",
+  "core": "snes9x",
+  "buildStart": 257976086357622,
+  "options": {
+    "defaultWebGL2": true
+  }
+}

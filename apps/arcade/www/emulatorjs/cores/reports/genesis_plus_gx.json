@@ -1,0 +1,8 @@
+{
+  "_generated": "node tools/gen-core-reports.mjs — do not edit by hand",
+  "core": "genesis_plus_gx",
+  "buildStart": 27498924931175,
+  "options": {
+    "defaultWebGL2": true
+  }
+}

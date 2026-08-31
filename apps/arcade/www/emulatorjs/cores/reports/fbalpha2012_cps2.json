@@ -1,0 +1,8 @@
+{
+  "_generated": "node tools/gen-core-reports.mjs — do not edit by hand",
+  "core": "fbalpha2012_cps2",
+  "buildStart": 73857026560864,
+  "options": {
+    "defaultWebGL2": true
+  }
+}
