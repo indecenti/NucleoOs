@@ -46,5 +46,10 @@
   "disconnect": "Disconnect",
   "gate_title": "Real SSH terminal",
   "gate_body": "It connects to your SSH hosts through a small <b>bridge</b> you run on one of your own machines (PC/Pi/NAS) — no third-party service. Start <code>tools/nucleo-ssh-bridge</code> (<code>npm i &amp;&amp; node index.js</code>), then set the URL and token here.",
-  "gate_set_btn": "Set up bridge"
+  "gate_set_btn": "Set up bridge",
+  "hostkey_tofu": "new host key pinned: {fp} — verify it once, out of band.",
+  "hostkey_ok": "host key verified: {fp}",
+  "hostkey_mismatch": "HOST KEY CHANGED! pinned {old} — received {fp}. Possible MITM: session refused. If the change is legitimate (reinstalled server), accept the new key.",
+  "hostkey_mismatch_short": "host key changed — session refused",
+  "hostkey_accept": "Accept new key"
 }
