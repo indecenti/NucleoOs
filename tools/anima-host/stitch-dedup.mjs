@@ -31,19 +31,25 @@ const skip = new Set(['nucleo_anima_online.c', 'nucleo_anima_bench.c', 'nucleo_a
 const srcs = readdirSync(anima).filter((f) => f.endsWith('.c') && !skip.has(f)).map((f) => join(anima, f));
 srcs.push(join(here, 'esp_timer_host.c'), join(here, 'anima_online_stub.c'), join(here, 'stitch-dedup-ctest.c'));
 
+// Resolve gcc the way the sibling gates do: MSYS2 MinGW root first, PATH fallback — and keep the
+// MinGW bin dir on PATH so gcc can spawn cc1 and load its DLLs (bare 'gcc' ENOENTs on this box).
+const MINGW = 'C:/msys64/mingw64/bin';
+const GCC = existsSync(join(MINGW, 'gcc.exe')) ? join(MINGW, 'gcc.exe') : 'gcc';
+const env = { ...process.env, PATH: `${MINGW};${process.env.PATH || ''}` };
+
 mkdirSync(build, { recursive: true });
 const ctest = join(build, 'stitch-dedup-ctest');
-const cc = spawnSync('gcc', [
+const cc = spawnSync(GCC, [
   '-std=gnu11', '-O0', '-g', '-DANIMA_HOST',
   '-I', join(here, 'shim'), '-I', join(anima, 'include'), '-I', anima,
   '-include', join(here, 'shim', 'host_compat.h'),
   ...srcs, '-o', ctest, '-lm',
-], { encoding: 'utf8' });
+], { encoding: 'utf8', env });
 if (cc.status !== 0) {
-  console.error('[stitch-dedup] unit test failed to COMPILE:\n' + (cc.stderr || cc.stdout));
+  console.error('[stitch-dedup] unit test failed to COMPILE:\n' + (cc.stderr || cc.stdout || (cc.error && cc.error.message) || ''));
   process.exit(2);
 }
-const unit = spawnSync(ctest, [], { encoding: 'utf8' });
+const unit = spawnSync(ctest, [], { encoding: 'utf8', env });
 const unitOut = (unit.stdout || '') + (unit.stderr || '');
 if (show || unit.status !== 0) process.stdout.write(unitOut);
 const unitOk = unit.status === 0;
