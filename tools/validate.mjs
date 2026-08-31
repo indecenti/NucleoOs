@@ -162,6 +162,16 @@ try {
   errs.push(`arcade: core report check failed (${e.message})`);
 }
 
+// 6) Shell icon bundle: the desktop paints app icons from the one-fetch /icons.json (see
+// tools/gen-icon-bundle.mjs). An app icon changed/added without regenerating it ships a desktop
+// that silently falls back to per-icon GETs — the exact cold-paint trickle the bundle removes.
+try {
+  const { checkIconBundle } = await import('./gen-icon-bundle.mjs');
+  for (const d of checkIconBundle()) errs.push(`icons: stale '${d}' (run: node tools/gen-icon-bundle.mjs)`);
+} catch (e) {
+  errs.push(`icons: bundle check failed (${e.message})`);
+}
+
 if (errs.length) {
   console.error(`✗ ${errs.length} problem(s):\n` + errs.map((e) => '  - ' + e).join('\n'));
   process.exit(1);

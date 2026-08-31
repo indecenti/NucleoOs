@@ -58,10 +58,32 @@ const glyph = (a) => {
     // link (plain http LAN IP), where the service-worker gate is inert — so the ~26 file icons never hit
     // the single-task PSRAM-less httpd as one 26-wide GET burst at first paint. alt="" = no broken-image
     // flash before hydration; data-fb carries the emoji fallback the pool swaps in on a 404.
-    return `<img data-src="${src}" data-fb="${safeFb}" alt="" width="16" height="16" decoding="async" style="width:1em; height:1em; vertical-align:middle; pointer-events:none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));">`;
+    return `<img data-src="${src}" data-app="${a.id}" data-fb="${safeFb}" alt="" width="16" height="16" decoding="async" style="width:1em; height:1em; vertical-align:middle; pointer-events:none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));">`;
   }
   return fb;
 };
+
+// One-fetch icon bundle — the cure for the cold-paint icon trickle. ~32 per-icon GETs against the
+// single-task, 4-socket, PSRAM-less httpd each pay RTT + SD fopen + chunked stream, and the pool
+// below rightly caps them at 3 concurrent to protect the server — so a cold desktop took many
+// seconds to fill in. tools/gen-icon-bundle.mjs packs every repo app icon into /icons.json
+// (~4 KB gz): ONE request replaces the burst, and localStorage keeps the previous bundle so repeat
+// boots paint every icon instantly with ZERO network (stale-while-revalidate: the fresh bundle is
+// fetched in the background and wins from the next hydration on). Apps missing from the bundle
+// (raster icons, icons living on the card under /data) still take the per-icon pool path.
+const IconBundle = (() => {
+  const LS_KEY = 'nucleo.icons.v1';
+  let map = null;
+  const adopt = (txt) => { const j = JSON.parse(txt); delete j._v; map = j; };
+  try { const t = localStorage.getItem(LS_KEY); if (t) adopt(t); } catch (e) {}
+  const refresh = fetch('/icons.json', { cache: 'no-store' })
+    .then((r) => { if (!r.ok) throw 0; return r.text(); })
+    .then((txt) => { adopt(txt); try { localStorage.setItem(LS_KEY, txt); } catch (e) {} })
+    .catch(() => {});                       // offline/404 -> localStorage copy or the pool fallback
+  // "ready" = a decision exists: a cached bundle is usable NOW; otherwise wait for the one fetch.
+  const ready = map ? Promise.resolve() : refresh;
+  return { ready, get: (id) => (map && map[id]) || null };
+})();
 
 // Cold-load icon throttle — the one client-side governor that runs over a plain http LAN IP (a service
 // worker needs a secure context, so the SW MAX_INFLIGHT gate never registers on http://<device>/). File
@@ -88,17 +110,32 @@ const NucleoIcon = (() => {
       img.src = img.dataset.src;             // triggers the fetch (from HTTP cache on a repeat load)
     }
   };
+  // Bundle first, network pool as the fallback: an icon whose SVG rode in on /icons.json becomes a
+  // data: URI on the spot — no socket, no queue slot, no trickle. Only icons the bundle doesn't
+  // carry (raster files, card-side /data icons, a stale bundle after a brand-new app) hit the pool.
+  const route = (img) => {
+    if (img.__st !== 'idle') return;
+    img.__st = 'w';
+    IconBundle.ready.then(() => {
+      if (!img.isConnected) { img.__st = 'd'; return; }
+      const svg = img.dataset.app ? IconBundle.get(img.dataset.app) : null;
+      if (svg) {
+        img.addEventListener('error', () => img.replaceWith(document.createTextNode(img.getAttribute('data-fb') || '▦')), { once: true });
+        img.__st = 'd';
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      } else { img.__st = 'q'; q.push(img); pump(); }
+    });
+  };
   const io = ('IntersectionObserver' in window)
     ? new IntersectionObserver((es) => {
-        for (const e of es) if (e.isIntersecting) { io.unobserve(e.target); const img = e.target; if (img.__st === 'idle') { img.__st = 'q'; q.push(img); } }
-        pump();
+        for (const e of es) if (e.isIntersecting) { io.unobserve(e.target); route(e.target); }
       }, { rootMargin: '150px' })
     : null;
   const hydrate = (img) => {
     if (img.__st) return;                    // already handled
     img.__st = 'idle';
     if (io) io.observe(img);                 // hidden Start-menu icons stay unloaded until shown (keeps the old lazy win)
-    else { img.__st = 'q'; q.push(img); pump(); }
+    else route(img);
   };
   const mo = new MutationObserver((muts) => {
     for (const m of muts) for (const n of m.addedNodes) {
@@ -799,6 +836,15 @@ async function startDesktopServices() {
     await restoreSession();                // bring back the windows that were open last time
   }
   bootLog('desktop up (apps=' + state.apps.length + ') — attaching live socket /ws…');
+  // Passive release notifier: the BROWSER asks GitHub (the device never phones home), once a day,
+  // and pings the Notification Center when a newer NucleoOS release exists. Loaded lazily on its
+  // own delay so it never competes with the session restore or the SD crawl. See update-check.js.
+  setTimeout(() => {
+    import('./update-check.js').then((m) => m.initUpdateCheck({
+      getSnapVersion: () => (lastStatusSnap && lastStatusSnap.version) || '',
+      getNotify: () => Notify,
+    })).catch((e) => console.warn('[update] load failed', e));
+  }, 15000);
   connectWS();
   // Warm the search index: instant from localStorage (if any), then revalidated against the
   // device. Repaint search results live whenever the index finishes (re)building.
