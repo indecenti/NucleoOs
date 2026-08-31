@@ -34,8 +34,11 @@ jobs:
       - name: Launcher icon parity (firmware ↔ web)
         run: node tools/check-icons.mjs
 
-      - name: Unit tests
-        run: node --test "tools/**/*.test.mjs"
+      - name: Unit tests (portable — pure JS logic)
+        # tools/*.test.mjs only (single level): the tools/anima-host/*.test.mjs suites drive the full
+        # ANIMA harness + host-compiled binaries and are covered by the local ANIMA gate (npm test),
+        # not this fast portable CI gate.
+        run: node --test tools/*.test.mjs
 
       - name: Native release-update policy (host-compiled C)
         run: node tools/anima-host/update-check.mjs
