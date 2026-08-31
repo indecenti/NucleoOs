@@ -138,20 +138,56 @@ After either, reload the shell in the browser; the bumped SW pulls the new asset
 
 ---
 
-## 3. Public release (GitHub) & user update notifications
+## 3. Public release (GitHub) — the automated, gated pipeline
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`: CI builds the universal firmware and
-publishes the full 0x0 image, the **app-only OTA image** (`nucleoos-latest-ota.bin`), the SD
-payload zip and `SHA256SUMS`. `pages.yml` then republishes the browser-fetchable copies (Release
-assets have no CORS) plus a `version.json` marker on the web-flasher site.
+Everything below is CI; you push a tag and nothing else. **How to cut a release:**
 
-Installed devices pick the release up on their own: the shell checks GitHub once a day from the
-**browser** (never from the device) and raises a notification; **Settings ▸ Updates** downloads,
-verifies (SHA-256 + ESP magic) and streams the OTA image to `POST /api/ota` with one click.
-Full design + trust chain: [update-check.md](update-check.md).
+```
+# 1. bump the human version (semver) and land it on main
+echo 0.3.1 > firmware/version/VERSION
+git add firmware/version/VERSION && git commit -m "release: v0.3.1"
+git push origin main            # CI (ci.yml) runs the gate on main
+
+# 2. tag it (the tag MUST equal v<VERSION> — the pipeline enforces this)
+git tag v0.3.1 && git push origin v0.3.1
+```
+
+The tag triggers `.github/workflows/release.yml`, a **three-stage, each-gates-the-next** pipeline:
+
+1. **gate** — the reusable `gate.yml` (the *same* checks `ci.yml` runs on every push/PR: validate,
+   i18n parity, gz twins, API-spec drift, icon parity, unit tests, the native update-policy C gate).
+   A red tree never reaches a build — this is what makes a tag safe.
+2. **release** — asserts `tag == v<firmware/version/VERSION>` (a mismatched tag fails loudly),
+   builds the universal firmware, merges the 0x0 image, packages the SD payload + the **app-only OTA
+   image** (`nucleoos-latest-ota.bin`) + `SHA256SUMS`, publishes the Release, attaches **signed build
+   provenance** (sigstore/OIDC — verify with `gh attestation verify <bin> --repo indecenti/NucleoOs`),
+   then **dispatches `pages.yml`**.
+3. **verify** — fails the run unless the release assets are reachable *and* the web-flasher site
+   (Pages) has actually caught up: `version.json` == this tag, with the OTA image + checksums live.
+
+**Why the explicit Pages dispatch:** a Release created by `GITHUB_TOKEN` does **not** fire another
+workflow's `release: published` trigger (GitHub blocks token-created events from chaining). So
+`release.yml` dispatches `pages.yml` itself; without that, Pages would stay a version behind and the
+in-shell updater would keep saying "release not aligned yet". (Its `release: published` trigger is
+kept only for a human clicking *Publish* in the UI.)
+
+`pages.yml` republishes the browser-fetchable copies (Release assets have no CORS, Pages does) plus
+the `version.json` marker. Installed devices then pick the release up on their own — the shell (and
+the native OS) check GitHub from the **browser/device-lite path**, notify, and offer a one-click,
+checksum-verified update. Full design + trust chain: [update-check.md](update-check.md).
 
 Practical consequence: **users only see a release once the tag is pushed** — a feature that never
-gets a tagged release is invisible to everyone who installed from the flasher.
+gets a tagged release is invisible to everyone who installed from the flasher. And a tag on a tree
+that fails the gate never publishes at all.
+
+### Security properties
+- **No unreviewed ship:** the gate blocks the build; `main` is always green (CI), so tags build green.
+- **Tag ↔ version coherence:** the pipeline refuses `tag != v<VERSION>` — no "v0.3.1 that is really 0.2.x".
+- **Integrity:** `SHA256SUMS` for every asset; the updater verifies SHA-256 + the ESP image magic
+  before flashing, and the device rolls back an image that fails to boot (see `main.c` boot-health gate).
+- **Provenance:** signed attestations prove a binary came from this workflow + commit (supply chain).
+- **Least privilege:** each job declares only the permissions it needs; the only credential is the
+  automatic `GITHUB_TOKEN`.
 
 ## Release checklist
 

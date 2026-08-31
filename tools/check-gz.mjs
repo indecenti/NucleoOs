@@ -28,7 +28,13 @@ const SKIP_DIR = new Set(['node_modules', '.git']);
 // the low-heap empty-transfer failure. Flag a large served source that has no .gz twin at all.
 const MIN_GZ_BYTES = 4096;   // below this, gzip-assets leaves the file un-gzipped on purpose
 
-const sha = (buf) => createHash('sha256').update(buf).digest('hex');
+// Compare CONTENT, not line endings. The served sources are normalized to LF in the repo
+// (.gitattributes `* text=auto`), but the .gz twins are binary (linguist-vendored) and keep
+// whatever EOL the machine that ran gzip-assets had (CRLF on Windows). Byte-comparing would then
+// false-fail on Linux CI while passing on Windows. Normalizing CRLF->LF on BOTH sides before hashing
+// makes the gate portable and still catches every REAL drift (a genuine source edit changes content,
+// not just EOL). latin1 is byte-preserving, so this is safe on the binary-ish types too (.wasm/.svg).
+const sha = (buf) => createHash('sha256').update(Buffer.from(buf.toString('latin1').replace(/\r\n/g, '\n'), 'latin1')).digest('hex');
 
 export function checkGz() {
   const stale = [];

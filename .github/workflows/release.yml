@@ -1,26 +1,58 @@
 name: Release
 
 # Publish an installable NucleoOS build to GitHub Releases when a version tag is pushed.
-#   git tag v0.2.0.123 && git push origin v0.2.0.123
-# The job builds the ONE universal firmware in CI (ESP-IDF, esp32s3), merges it into a single
-# flash-at-0x0 image, packages a clean SD payload + a browser web-flasher manifest + install docs,
-# and creates the Release with those assets. No secrets are used beyond the automatic GITHUB_TOKEN,
-# and nothing non-distributable (ROMs / user data) is in the repo, so the artifacts are clean.
-
+#   git tag v0.3.0 && git push origin v0.3.0
+#
+# Pipeline (each stage gates the next):
+#   1. gate    — the reusable quality gate (same one CI runs). A red tree never reaches a build.
+#   2. release — assert tag == firmware/version/VERSION, build the ONE universal firmware in CI,
+#                merge the flash image, package the SD payload + the app-only OTA image + checksums,
+#                publish the Release, attach signed build provenance, then trigger the Pages
+#                republish (a release created by GITHUB_TOKEN cannot chain to the Pages workflow's
+#                `release: published` trigger, so we dispatch it explicitly).
+#   3. verify  — prove the release assets are reachable and that the web-flasher site (Pages) has
+#                actually caught up to this tag, so the in-shell / native updater won't be told
+#                "release not aligned yet".
+# No secrets beyond the automatic GITHUB_TOKEN; nothing non-distributable is in the repo.
 on:
   push:
     tags: ['v*']
 
+# Least privilege, scoped to what each stage needs:
 permissions:
-  contents: write        # create the release + upload assets (uses the built-in GITHUB_TOKEN)
+  contents: write        # create the release + upload assets
+  id-token: write        # OIDC identity for build-provenance attestation (sigstore)
+  attestations: write    # record the provenance attestation
+  actions: write         # dispatch the Pages workflow after publish
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false     # never interrupt a publish mid-flight
 
 jobs:
+  # 1) Same gate as CI — a tag must pass exactly what every PR must pass.
+  gate:
+    uses: ./.github/workflows/gate.yml
+
+  # 2) Build + publish, only if the gate is green.
   release:
+    needs: gate
     runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.ver.outputs.full }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1   # shallow: we only build HEAD, no history needed
+
+      - name: Tag must match firmware/version/VERSION
+        run: |
+          want="v$(cat firmware/version/VERSION)"
+          if [ "$want" != "${{ github.ref_name }}" ]; then
+            echo "::error::tag '${{ github.ref_name }}' does not match firmware/version/VERSION ('$want'). Bump VERSION and re-tag."
+            exit 1
+          fi
+          echo "tag matches VERSION ($want)"
 
       - name: Read version (VERSION.BUILD)
         id: ver
@@ -49,18 +81,18 @@ jobs:
           # Stable-named copy so the hosted web flasher (Pages) can always fetch the newest firmware
           # via releases/latest/download/nucleoos-latest.bin — no per-release manifest regeneration.
           cp "dist/nucleoos-${{ steps.ver.outputs.full }}.bin" dist/nucleoos-latest.bin
-          # App-only image for the in-shell browser updater: POST /api/ota writes the OTA slot, so it
-          # must receive the plain app image — NEVER the merged 0x0 image above (that one carries the
-          # bootloader + partition table and belongs only to full flashing). Stable name for Pages.
+          # App-only image for the in-shell / native browser updater: POST /api/ota writes the OTA
+          # slot, so it must receive the plain app image — NEVER the merged 0x0 image above (that one
+          # carries the bootloader + partition table and belongs only to full flashing). Stable name.
           cp firmware/build/nucleoos.bin "dist/nucleoos-${{ steps.ver.outputs.full }}-ota.bin"
           cp firmware/build/nucleoos.bin dist/nucleoos-latest-ota.bin
 
       - name: Zip the SD payload
         run: |
           cd dist && zip -qr "nucleoos-${{ steps.ver.outputs.full }}-sd.zip" sd
-          cp "nucleoos-${{ steps.ver.outputs.full }}-sd.zip" nucleoos-latest-sd.zip   # stable name for a direct "latest" download link
+          cp "nucleoos-${{ steps.ver.outputs.full }}-sd.zip" nucleoos-latest-sd.zip   # stable "latest" link
 
-      - name: Checksums (the in-shell updater verifies these before flashing)
+      - name: Checksums (the updater verifies these before flashing)
         run: cd dist && sha256sum *.bin *.zip > SHA256SUMS
 
       - name: Publish GitHub Release
@@ -80,9 +112,59 @@ jobs:
             dist/FLASH.md
             dist/manifest.json
 
-      # action-gh-release does NOT overwrite the body when the release already exists (re-run of a tag),
-      # so force it from our notes — keeps the description current on every re-publish.
+      # action-gh-release does NOT overwrite the body when the release already exists (re-run of a
+      # tag), so force it from our notes — keeps the description current on every re-publish.
       - name: Refresh release notes
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "${{ github.ref_name }}" --notes-file dist/RELEASE_NOTES.md
+
+      # Signed, verifiable provenance for the flashable images (sigstore via OIDC). Anyone can then
+      # run `gh attestation verify nucleoos-<ver>.bin --repo indecenti/NucleoOs` to prove the binary
+      # was built by THIS workflow from THIS commit — supply-chain integrity beyond the SHA256SUMS.
+      - name: Attest build provenance (firmware images)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'dist/nucleoos-*.bin'
+
+      # A release published by GITHUB_TOKEN does NOT fire the Pages workflow's `release: published`
+      # trigger (GitHub blocks token-created events from chaining, to avoid loops). Dispatch it
+      # explicitly — workflow_dispatch via the token IS allowed — so Pages republishes the new
+      # firmware + checksums + version.json for the updater.
+      - name: Trigger Pages republish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "${{ github.repository }}" --ref main
+
+  # 3) Prove the whole thing is actually consumable by a device before we call the release done.
+  verify:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Release assets are reachable
+        run: |
+          base="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+          for a in nucleoos-latest.bin nucleoos-latest-ota.bin nucleoos-latest-sd.zip SHA256SUMS manifest.json FLASH.md; do
+            if ! curl -fsSL --retry 3 -o /dev/null "$base/$a"; then
+              echo "::error::release asset not reachable: $a"; exit 1
+            fi
+            echo "ok: $a"
+          done
+
+      - name: Web-flasher (Pages) caught up to this tag
+        run: |
+          site="https://indecenti.github.io/NucleoOs"
+          for i in $(seq 1 18); do
+            tag=$(curl -fsSL "$site/version.json" 2>/dev/null | sed -n 's/.*"tag"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+            if [ "$tag" = "${{ github.ref_name }}" ]; then
+              if curl -fsSL -o /dev/null "$site/nucleoos-latest-ota.bin" && curl -fsSL -o /dev/null "$site/SHA256SUMS"; then
+                echo "Pages aligned to ${{ github.ref_name }} with OTA image + checksums"; exit 0
+              fi
+            fi
+            echo "waiting for Pages to publish ${{ github.ref_name }} ($i/18, currently '$tag')..."
+            sleep 20
+          done
+          echo "::error::Pages did not align to ${{ github.ref_name }} within ~6 min — check the Pages workflow"
+          exit 1
