@@ -44,6 +44,8 @@
     "todo": "tasks",
     "info": "help",
     "tsv": "spreadsheet",
-    "zip": "archive-manager"
+    "zip": "archive-manager",
+    "nfv": "video-player",
+    "avi": "video-player"
   }
 }
