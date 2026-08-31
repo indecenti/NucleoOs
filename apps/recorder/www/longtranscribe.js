@@ -62,10 +62,42 @@ function wavHeader(dataLen, fmt) {
 }
 
 // ── network primitives ------------------------------------------------------------------------------
-async function fetchRange(path, start, endInclusive, signal) {
+// `exact` (data chunks, not the header probe): the returned window MUST be exactly the bytes asked
+// for. A hop that ignores Range and answers 200 with the whole file would otherwise turn every
+// "chunk" into the entire recording (duplicated transcript, or Whisper's 25 MB rejection); a short
+// 206 under device heap pressure would silently drop audio. Slice a 200 locally and length-check.
+async function fetchRange(path, start, endInclusive, signal, exact) {
   const r = await fetch(readUrl(path), { headers: { Range: `bytes=${start}-${endInclusive}` }, signal });
   if (!(r.status === 206 || r.status === 200)) throw new Error('range read ' + r.status);
-  return new Uint8Array(await r.arrayBuffer());
+  let bytes = new Uint8Array(await r.arrayBuffer());
+  const want = endInclusive - start + 1;
+  if (r.status === 200) {                       // Range ignored: carve the requested window ourselves
+    if (bytes.byteLength < start + (exact ? want : 1)) throw new Error('range 200 body too short');
+    bytes = bytes.subarray(start, start + want);
+  }
+  if (exact && bytes.byteLength !== want) throw new Error(`short read ${bytes.byteLength}/${want}`);
+  return bytes;
+}
+
+// Retry a transient network step: 429 (honouring Retry-After) and 5xx back off and try again; an
+// abort or a 4xx-that-is-not-429 fails fast. Without this, one 429 on hour-2 of a take discards
+// every chunk already transcribed — and Groq's per-hour audio limits make a 429 likely on exactly
+// the long takes this module exists for.
+async function withRetry(fn, signal, tries = 3) {
+  let lastErr;
+  for (let a = 0; a < tries; a++) {
+    if (signal?.aborted) throw new Error('aborted');
+    try { return await fn(); }
+    catch (e) {
+      lastErr = e;
+      const msg = String(e && e.message || e);
+      const transient = /\b(429|5\d\d)\b/.test(msg) || /short read|too short|network|Failed to fetch|load failed/i.test(msg);
+      if (signal?.aborted || a === tries - 1 || !transient) break;
+      const wait = e && e.retryAfterMs ? e.retryAfterMs : 800 * Math.pow(2, a);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+  throw lastErr;
 }
 
 async function whisper(wavBlob, lang, key, base, signal) {
@@ -77,7 +109,11 @@ async function whisper(wavBlob, lang, key, base, signal) {
   const r = await fetch(base.replace(/\/$/, '') + '/audio/transcriptions', {
     method: 'POST', headers: { Authorization: 'Bearer ' + key }, body: fd, signal,
   });
-  if (!r.ok) throw new Error('whisper ' + r.status + (r.status === 401 ? ' (key?)' : ''));
+  if (!r.ok) {
+    const err = new Error('whisper ' + r.status + (r.status === 401 ? ' (key?)' : ''));
+    if (r.status === 429) { const ra = parseFloat(r.headers.get('retry-after') || ''); if (ra > 0) err.retryAfterMs = ra * 1000; }
+    throw err;
+  }
   return (await r.text()).trim();
 }
 
@@ -100,7 +136,7 @@ export async function transcribeLong({ path, lang = 'auto', onProgress, signal }
   const base = (localStorage.getItem('groq.base') || 'https://api.groq.com/openai/v1').trim();
   if (!key) throw new Error('no-key');
 
-  const head = await fetchRange(path, 0, 255, signal);          // enough for any sane header
+  const head = await withRetry(() => fetchRange(path, 0, 255, signal, false), signal);   // enough for any sane header
   const { fmt, dataOff, dataLen } = parseHeader(head.buffer);
   const bytesPerSec = fmt.sampleRate * fmt.channels * (fmt.bits / 8);
   const frame = fmt.channels * (fmt.bits / 8);
@@ -115,12 +151,16 @@ export async function transcribeLong({ path, lang = 'auto', onProgress, signal }
     const end = Math.min(dataOff + dataLen, start + chunkBytes) - 1;
     if (end < start) break;
     onProgress?.({ phase: 'transcribe', done: i, total });
-    const pcm = await fetchRange(path, start, end, signal);
+    // Each chunk retries independently, so one transient 429/5xx costs a backoff, not the whole run.
+    const pcm = await withRetry(() => fetchRange(path, start, end, signal, true), signal);
     const blob = new Blob([wavHeader(pcm.byteLength, fmt), pcm], { type: 'audio/wav' });
-    const text = await whisper(blob, lang, key, base, signal);
+    const text = await withRetry(() => whisper(blob, lang, key, base, signal), signal);
     if (text) out += (out ? ' ' : '') + text;
+    // Hand the caller the running transcript so it can persist partial progress (a crash/close then
+    // keeps what was already paid for instead of restarting from chunk 0).
+    onProgress?.({ phase: 'transcribe', done: i + 1, total, partial: out });
   }
-  onProgress?.({ phase: 'transcribe', done: total, total });
+  onProgress?.({ phase: 'transcribe', done: total, total, partial: out });
   return out;
 }
 

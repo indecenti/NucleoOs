@@ -3,11 +3,13 @@
 #include "nucleo_board.h"
 #include "nucleo_codec.h"   // board-aware mic HAL (PDM original / ES8311 ADC on ADV)
 #include "nucleo_storage.h" // SD free-space guard for long takes
+#include "nucleo_take.h"    // take journal: VAD segmenter + append-only NDJSON index (host-gated)
 #include "nucleo_eventbus.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 #include <stdatomic.h>
+#include <unistd.h>   // fsync: FAT commits the directory entry (file size) only on f_sync/f_close
 #include <sys/stat.h>
 #include <time.h>
 #include "freertos/FreeRTOS.h"
@@ -26,6 +28,11 @@ static const char *TAG = "recorder";
 #define REC_BITS      16
 #define REC_CHANNELS  1
 #define REC_DIR       NUCLEO_SD_MOUNT "/data/Recordings"
+// Flush the stdio buffer every ~5 s of audio. This is a plain write with NO seek: patching the
+// WAV header in place would mean an fseek to the end of a 230 MB FAT file, i.e. a cluster-chain
+// walk of ~50-100 ms inside the mic loop — long enough to drop samples. The header of an
+// interrupted take is repaired later instead, once, with the mic idle (nucleo_take_wav_repair).
+#define FLUSH_BYTES (5U * REC_RATE_HZ * REC_CHANNELS * (REC_BITS / 8))
 
 static i2s_chan_handle_t s_rx = NULL;
 // Single-owner mic claim, taken with compare-exchange as the FIRST action of every entry point and
@@ -37,10 +44,13 @@ static atomic_int  s_owner = MIC_IDLE;
 static atomic_bool s_recording = false;   // set false to ask the task to stop
 static atomic_bool s_streaming = false;   // a /api/rec/stream client is holding the mic (live dictation)
 static atomic_bool s_stream_stop = false; // ask the dictation worker to wind down (httpd is about to stop)
+static atomic_bool s_shutting_down = false; // httpd teardown in progress: refuse to admit a NEW stream
+                                            // (survives stream_get's s_stream_stop reset, so an abort
+                                            //  racing a just-admitted request is never erased -> no UAF)
 static TaskHandle_t s_task = NULL;
 static char s_path[160] = {0};            // current/last file (web path, /data/...)
 static uint32_t s_bytes = 0;              // PCM bytes written in the active file
-static int s_level = 0;                   // last RMS level 0..100 (for the meter)
+static int s_level = 0;                   // last peak level 0..100 (for the meter; peak, not RMS)
 
 // Little-endian WAV header for streamed PCM. data_len/riff sizes are patched on stop.
 static void write_wav_header(FILE *f, uint32_t data_len)
@@ -87,6 +97,9 @@ static void record_task(void *arg)
     FILE *f = fopen(abs, "wb");
     if (!f) {
         ESP_LOGE(TAG, "open %s failed", abs);
+        // rec.started already went out (start_post returned 200): publish a terminal event or an
+        // event-driven UI stays stuck showing an active recording forever.
+        publish_rec("rec.error", "\"reason\":\"open\"");
         atomic_store(&s_recording, false); s_task = NULL; atomic_store(&s_owner, MIC_IDLE);
         vTaskDelete(NULL); return;
     }
@@ -95,12 +108,34 @@ static void record_task(void *arg)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "I2S init failed: %s", esp_err_to_name(err));
         fclose(f);
+        unlink(abs);                        // fopen("wb") already created the file; the header write is later, so it is 0-byte — don't leave it in the library
+        publish_rec("rec.error", "\"reason\":\"mic\"");
         atomic_store(&s_recording, false); s_task = NULL; atomic_store(&s_owner, MIC_IDLE);
         vTaskDelete(NULL); return;
     }
 
-    write_wav_header(f, 0);                 // placeholder, patched at the end
+    write_wav_header(f, 0);                 // placeholder, made final at stop (or repaired on next scan)
     s_bytes = 0;
+    uint32_t last_flush = 0;
+
+    // ── take journal ──────────────────────────────────────────────────────────────────────────
+    // <take>.ndjson, appended as we record: one line per segment, never rewritten. Two payoffs.
+    // Durability: a crash costs the last unflushed line, not the take. And the segment index
+    // exists BEFORE anyone asks for a transcript, so the transcriber never re-parses 230 MB of
+    // WAV to find its boundaries — it just fills in the lines that have no text yet.
+    char jpath[210];
+    snprintf(jpath, sizeof(jpath), "%s", abs);
+    { char *slash = strrchr(jpath, '/'); char *dot = strrchr(slash ? slash : jpath, '.');
+      if (dot) *dot = 0; }
+    strncat(jpath, ".ndjson", sizeof(jpath) - strlen(jpath) - 1);
+    FILE *jf = fopen(jpath, "wb");
+    if (jf) nucleo_take_journal_open(jf, REC_RATE_HZ, REC_CHANNELS, REC_BITS, "wav", 44, (long)time(NULL));
+    else    ESP_LOGW(TAG, "journal open failed (%s) — recording without an index", jpath);
+
+    nucleo_take_vad_t  vad;
+    nucleo_take_seg_t  seg;
+    int                nsegs = 0;
+    nucleo_take_vad_init(&vad, REC_RATE_HZ, REC_CHANNELS * (REC_BITS / 8));
 
     // SD-space guard for long (1-2 h) takes: capture free bytes at start; stop GRACEFULLY before the card
     // fills (a failed fwrite would silently truncate/corrupt the WAV). 16 MB reserve keeps the FAT + the
@@ -112,6 +147,7 @@ static void record_task(void *arg)
     static int16_t buf[512];                // 1 KB DMA read chunk
     int meter_acc = 0, meter_n = 0;
     int64_t rec_t0 = esp_timer_get_time();  // DIAG: measure the REAL capture rate (bytes/time) on the ADV
+    int64_t last_diag = 0;                  // throttle the rate-diag log to once / 10 s
     while (atomic_load(&s_recording)) {
         if (free0 && (uint64_t)s_bytes + SD_RESERVE >= free0) {   // card nearly full -> stop cleanly + notify
             ESP_LOGW(TAG, "SD nearly full (wrote %u of ~%llu free) — stopping take", (unsigned)s_bytes, (unsigned long long)free0);
@@ -132,27 +168,62 @@ static void record_task(void *arg)
             if (rd != ESP_OK && rd != ESP_ERR_TIMEOUT) ESP_LOGW(TAG, "i2s read: %s", esp_err_to_name(rd));
             continue;
         }
-        fwrite(buf, 1, got, f);
+        size_t wr = fwrite(buf, 1, got, f);
+        if (wr != got) {                    // card pulled, or a write error: keep what we have and stop
+            ESP_LOGE(TAG, "SD write short (%u of %u) — stopping take", (unsigned)wr, (unsigned)got);
+            publish_rec("rec.writefail", NULL);
+            s_bytes += (uint32_t)wr;
+            atomic_store(&s_recording, false);
+            break;
+        }
+        // The VAD sees the chunk BEFORE s_bytes advances: journal offsets are DATA offsets, so the
+        // index stays valid whatever container the take ends up in.
+        if (jf && nucleo_take_vad_feed(&vad, buf, (int)(got / 2), (long)s_bytes, &seg)) {
+            nucleo_take_journal_seg(jf, &seg);
+            fsync(fileno(jf));      // commit the FAT dir entry too, or a power cut reads back 0 bytes
+            nsegs++;
+        }
         s_bytes += got;
-        // cheap peak meter over the chunk -> rec.level event a few times/sec
+        if (s_bytes - last_flush >= FLUSH_BYTES) {       // bound what a crash can lose to ~5 s
+            last_flush = s_bytes;
+            fflush(f);
+            // fflush only moves the stdio buffer into FATFS; the directory entry (file size) is
+            // committed ONLY by f_sync/f_close. Without this a power cut leaves fsize = 0 and the
+            // whole take unreachable, however much audio the clusters hold. f_sync needs no seek.
+            fsync(fileno(f));
+        }
+        // cheap peak meter over the chunk -> rec.level event ~1/s (25 chunks * 32 ms ~= 0.8 s).
+        // meter_acc HOLDS the peak across the window (max, not overwrite), so the published level
+        // reflects the whole 0.8 s, not just the final 32 ms chunk.
         int n = got / 2, peak = 0;
         for (int i = 0; i < n; i++) { int v = buf[i] < 0 ? -buf[i] : buf[i]; if (v > peak) peak = v; }
-        meter_acc = peak; meter_n++;
-        if (meter_n >= 4) {                 // ~ every 0.8 s of audio
+        if (peak > meter_acc) meter_acc = peak;
+        meter_n++;
+        if (meter_n >= 25) {                // ~ every 0.8 s of audio
             s_level = (meter_acc * 100) / 32768;
             char lv[32]; snprintf(lv, sizeof(lv), "\"level\":%d", s_level);
             publish_rec("rec.level", lv);
-            meter_n = 0;
+            meter_n = 0; meter_acc = 0;
             int64_t el = esp_timer_get_time() - rec_t0;   // DIAG: effective Hz = samples / wall-time
-            if (el > 200000)
-                ESP_LOGW(TAG, "[rec-rate] %lld samp / %lld ms = %d Hz (atteso %d)",
+            if (el > 200000 && el - last_diag > 10000000) {           // at most once / 10 s, not every tick
+                last_diag = el;
+                ESP_LOGW(TAG, "[rec-rate] %lld samp / %lld ms = %d Hz (expected %d)",
                          (long long)(s_bytes / 2), (long long)(el / 1000),
                          (int)((int64_t)(s_bytes / 2) * 1000000 / el), REC_RATE_HZ);
+            }
         }
     }
 
     mic_close(s_rx);
     s_rx = NULL;
+
+    if (jf) {                               // close the last segment, then seal the journal
+        if (nucleo_take_vad_flush(&vad, (long)s_bytes, &seg)) { nucleo_take_journal_seg(jf, &seg); nsegs++; }
+        nucleo_take_journal_end(jf, (double)s_bytes / (REC_RATE_HZ * REC_CHANNELS * (REC_BITS / 8)),
+                                (long)s_bytes, nsegs);
+        fclose(jf);
+    }
+
     fflush(f);
     fseek(f, 0, SEEK_SET);                   // patch sizes now that length is known
     write_wav_header(f, s_bytes);
@@ -182,20 +253,35 @@ esp_err_t nucleo_recorder_start(void)
     if (!atomic_compare_exchange_strong(&s_owner, &idle, MIC_REC)) return ESP_ERR_INVALID_STATE;
 
     mkdir(REC_DIR, 0775);
+    // Refresh the SD free-space snapshot in the CALLER (not record_task, where a first f_getfree FAT
+    // scan could stall the mic loop): the guard reads free_bytes at take start, and the cache is
+    // otherwise only 30 s-throttled by status endpoints — stale-low would kill a fresh take, stale-
+    // high would fire the guard too late.
+    nucleo_storage_refresh();
     // Name the take after the wall clock once NTP has set it: rec-YYYYMMDD-HHMMSS.wav sorts
     // chronologically and never collides. Before the first sync the clock reads 1970, so fall
-    // back to the monotonic event sequence (which also never repeats within a boot).
+    // back to the monotonic event sequence — but that seq is RAM-only and resets to 0 every boot,
+    // so an offline session can reproduce a previous boot's rec-N.wav. Uniquify against the card
+    // before the truncating fopen("wb"), or the earlier take is destroyed (this file's contract:
+    // "a recorder must never lose the recording").
     time_t now = time(NULL);
     struct tm tm; localtime_r(&now, &tm);
-    char fname[40];
+    char fname[48];
     if (tm.tm_year + 1900 >= 2024)
         strftime(fname, sizeof(fname), "rec-%Y%m%d-%H%M%S.wav", &tm);
     else
         snprintf(fname, sizeof(fname), "rec-%u.wav", (unsigned)nucleo_event_current_seq());
+    { char probe[80]; struct stat ss;
+      snprintf(probe, sizeof(probe), NUCLEO_SD_MOUNT "/data/Recordings/%s", fname);
+      for (int n = 2; stat(probe, &ss) == 0 && n < 1000; n++) {
+          char stem[40]; snprintf(stem, sizeof(stem), "%.*s", (int)(strlen(fname) - 4), fname);  // strip ".wav"
+          snprintf(fname, sizeof(fname), "%s-%d.wav", stem, n);
+          snprintf(probe, sizeof(probe), NUCLEO_SD_MOUNT "/data/Recordings/%s", fname);
+      } }
     snprintf(s_path, sizeof(s_path), "/data/Recordings/%s", fname);
     s_level = 0;
     atomic_store(&s_recording, true);
-    if (xTaskCreate(record_task, "rec", 4096, NULL, 5, &s_task) != pdPASS) {
+    if (xTaskCreate(record_task, "rec", 5120, NULL, 5, &s_task) != pdPASS) {
         atomic_store(&s_recording, false);
         atomic_store(&s_owner, MIC_IDLE);
         return ESP_FAIL;
@@ -222,13 +308,12 @@ static esp_err_t start_post(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     esp_err_t err = nucleo_recorder_start();
     if (err == ESP_ERR_INVALID_STATE) {
-        if (atomic_load(&s_recording) || s_task) {
-            // ESP-IDF's httpd_err_code_t has no 409; set the status line explicitly.
-            httpd_resp_set_status(req, "409 Conflict");
-            httpd_resp_sendstr(req, "already recording");
-        } else {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "mic not ready");
-        }
+        // The CAS failed because the mic is owned — diagnose off the owner, not s_recording/s_task
+        // (a live dictation stream sets neither, and would otherwise mis-report a 500 hardware error
+        // for the ordinary "dictation tab is open" case, plus the finalize window after s_task=NULL).
+        // ESP-IDF's httpd_err_code_t has no 409; set the status line explicitly.
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_sendstr(req, atomic_load(&s_owner) == MIC_STREAM ? "mic busy (stream)" : "already recording");
         return ESP_FAIL;
     }
     if (err != ESP_OK) { httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "task"); return ESP_FAIL; }
@@ -345,6 +430,14 @@ static esp_err_t stream_get(httpd_req_t *req)
         httpd_resp_sendstr(req, "mic busy");
         return ESP_FAIL;
     }
+    // A teardown may have started between the abort check and our CAS: if so, do NOT spawn a worker
+    // that would outlive httpd_stop() (use-after-free on the async request). Release and 503.
+    if (atomic_load(&s_shutting_down)) {
+        atomic_store(&s_owner, MIC_IDLE);
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        httpd_resp_sendstr(req, "shutting down");
+        return ESP_FAIL;
+    }
     atomic_store(&s_streaming, true);
     atomic_store(&s_stream_stop, false);          // fresh session: clear any abort left by a prior teardown
     // Detach the request onto a worker task so the single httpd task is freed immediately.
@@ -370,13 +463,19 @@ static esp_err_t stream_get(httpd_req_t *req)
 // strictly better than the guaranteed race of not waiting at all.
 void nucleo_recorder_stream_abort(void)
 {
-    if (!atomic_load(&s_streaming)) return;
+    // Latch shutdown FIRST — before any early-out. This closes the race where a /api/rec/stream
+    // request is admitted (owner CAS'd to MIC_STREAM) at the same instant we tear httpd down: that
+    // request re-checks s_shutting_down after its CAS and self-releases instead of spawning a
+    // worker that would outlive httpd_stop() (a use-after-free on the async request).
+    atomic_store(&s_shutting_down, true);
     atomic_store(&s_stream_stop, true);
-    // Budget covers the worst case: a chunk send wedged on a dead socket unblocks after the 2 s
-    // SO_SNDTIMEO, then mic_close + async-complete. 3.5 s leaves margin so s_streaming is reliably
-    // false (the async request fully released) before httpd_stop() proceeds.
-    for (int i = 0; i < 175 && atomic_load(&s_streaming); i++) vTaskDelay(pdMS_TO_TICKS(20));   // <= 3.5 s
-    if (atomic_load(&s_streaming)) ESP_LOGW(TAG, "stream worker did not wind down in time");
+    // Wait on the OWNER, not s_streaming: a claim-in-progress (owner=MIC_STREAM before s_streaming
+    // is set) must also be drained. The owner is cleared LAST on every stream exit path — whether
+    // the worker wound down or a just-admitted request self-released. Budget covers the worst case:
+    // a chunk send wedged on a dead socket unblocks after the 2 s SO_SNDTIMEO, then mic_close +
+    // async-complete. 3.5 s leaves margin before httpd_stop() proceeds.
+    for (int i = 0; i < 175 && atomic_load(&s_owner) == MIC_STREAM; i++) vTaskDelay(pdMS_TO_TICKS(20));  // <= 3.5 s
+    if (atomic_load(&s_owner) == MIC_STREAM) ESP_LOGW(TAG, "stream worker did not wind down in time");
 }
 
 // Who holds the mic right now (s_owner is the single gate; values match nucleo_mic_owner_t).
@@ -394,6 +493,7 @@ bool nucleo_recorder_release_stream(void)
 
 esp_err_t nucleo_recorder_register(httpd_handle_t server)
 {
+    atomic_store(&s_shutting_down, false);        // fresh httpd: streams may be admitted again
     httpd_uri_t routes[] = {
         { .uri = "/api/rec/start",  .method = HTTP_POST, .handler = start_post },
         { .uri = "/api/rec/stop",   .method = HTTP_POST, .handler = stop_post },

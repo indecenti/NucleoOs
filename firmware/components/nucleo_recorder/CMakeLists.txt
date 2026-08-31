@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS "nucleo_recorder.c"
     INCLUDE_DIRS "include"
-    REQUIRES esp_http_server json esp_driver_i2s nucleo_board nucleo_codec nucleo_eventbus nucleo_auth nucleo_storage
+    REQUIRES esp_http_server json esp_driver_i2s nucleo_board nucleo_codec nucleo_eventbus nucleo_auth nucleo_storage nucleo_take
 )
 
 # Bounded snprintf into fixed buffers on purpose; truncation is safe here.

@@ -31,6 +31,7 @@
 #include <time.h>
 extern "C" {
 #include "nucleo_recorder.h"
+#include "nucleo_take.h"           // take journal + one-shot WAV header repair
 #include "nucleo_audio.h"
 #include "nucleo_storage.h"
 #include "nucleo_board.h"
@@ -66,6 +67,8 @@ static bool s_rec_nx = false;
 // boot after a brief notice (and after the mic is idle). Inside Solo this stays 0 — no more reboots.
 static int64_t s_enter_solo_us = 0;      // 0 = none; else the notice deadline after which we reboot into Solo
 static bool    s_auto_tx_pending = false; // a just-finished take queued for AUTO transcription (Solo, inline)
+static char    s_auto_tx_name[48] = {0};  // the take name captured at queue time (start_job reads s_sel, which a keypress can move before the deferred fire)
+static int64_t s_ai_abort_deadline_us = 0; // Esc-during-AI: first Esc arms this; a second Esc before it lets the app close
 
 // Arm a manual take. The record task needs a 16 KB CONTIGUOUS stack; on the no-PSRAM Cardputer the heap
 // is so fragmented while httpd+voice run that the largest free block is often 1-3 KB (measured in the
@@ -194,6 +197,7 @@ static char  s_jobname[48];             // take filename being processed
 static char  s_jobpath[80];             // its absolute path (REC_PATH/<name>)
 static char  s_job_q[160];              // question (JOB_QA)
 static bool  s_ai_screen_freed = false; // true while the 32 KB launcher canvas is released for the cloud TLS
+static bool  s_ai_painted = false;      // the AI-working band was cleared once (direct path: never full-clear on the ~3 Hz redraw — ANTI-FLICKER.md)
 static char  s_renamed[48];             // set by the worker after a title-rename; tick re-selects it
 
 // ---- live recording visuals -----------------------------------------------------------------------
@@ -326,24 +330,39 @@ static void scan(void)
     DIR *dir = opendir(REC_PATH);
     if (dir) {
         struct dirent *e;
-        while ((e = readdir(dir)) != NULL && s_count < REC_MAX) {
+        while ((e = readdir(dir)) != NULL) {
             if (e->d_name[0] == '.') continue;
             const char *dot = strrchr(e->d_name, '.');
             if (!dot || strcasecmp(dot, ".wav")) continue;
-            Rec *r = &s_list[s_count++];
-            snprintf(r->name, sizeof(r->name), "%s", e->d_name);
+
+            // Build the record into a scratch slot first so we know its mtime before deciding where
+            // it goes. FAT dirent order is arbitrary and the newest take usually lands LAST, so a raw
+            // "first REC_MAX" cap could drop the take just recorded. Instead keep the REC_MAX NEWEST:
+            // once full, replace the oldest entry when this one is newer.
+            Rec cand; memset(&cand, 0, sizeof cand);
+            snprintf(cand.name, sizeof(cand.name), "%s", e->d_name);
             char abs[256]; snprintf(abs, sizeof(abs), "%s/%s", REC_PATH, e->d_name);
             struct stat st;
-            if (stat(abs, &st) == 0) { r->bytes = (uint32_t)st.st_size; r->mtime = st.st_mtime; }
-            else                     { r->bytes = 0; r->mtime = 0; }
-            r->secs = r->bytes > WAV_HDR ? (r->bytes - WAV_HDR) / REC_BPS : 0;
-            s_total_secs += r->secs;
+            if (stat(abs, &st) == 0) { cand.bytes = (uint32_t)st.st_size; cand.mtime = st.st_mtime; }
+            cand.secs = cand.bytes > WAV_HDR ? (cand.bytes - WAV_HDR) / REC_BPS : 0;
             char sf[300]; struct stat ss;
-            sidecar_of(sf, sizeof sf, e->d_name, ".sum.txt"); r->has_ai = (stat(sf, &ss) == 0);
-            if (!r->has_ai) { sidecar_of(sf, sizeof sf, e->d_name, ".act.txt"); r->has_ai = (stat(sf, &ss) == 0); }
-            make_label(r);
+            sidecar_of(sf, sizeof sf, e->d_name, ".sum.txt"); cand.has_ai = (stat(sf, &ss) == 0);
+            if (!cand.has_ai) { sidecar_of(sf, sizeof sf, e->d_name, ".act.txt"); cand.has_ai = (stat(sf, &ss) == 0); }
+            make_label(&cand);
+
+            if (s_count < REC_MAX) {
+                s_list[s_count++] = cand;
+            } else {
+                int oldest = 0;
+                for (int i = 1; i < s_count; i++) if (s_list[i].mtime < s_list[oldest].mtime) oldest = i;
+                if (cand.mtime > s_list[oldest].mtime) s_list[oldest] = cand;   // evict the oldest for a newer take
+            }
         }
         closedir(dir);
+        // Total across the WHOLE library, not just the shown slots: sum during a second pass so an
+        // evicted take still counts. (Cheap: stat already cached nothing, but the count is small.)
+        s_total_secs = 0;
+        for (int i = 0; i < s_count; i++) s_total_secs += s_list[i].secs;
         qsort(s_list, s_count, sizeof(Rec), cmp);
     }
     if (s_sel >= s_count) s_sel = s_count ? s_count - 1 : 0;
@@ -351,8 +370,13 @@ static void scan(void)
 
 static void play_sel(void)
 {
-    if (nucleo_recorder_is_recording() || s_sel >= s_count) return;     // record XOR play
+    // is_busy(), not is_recording(): the I2S RX channel keeps the shared WS line ~200 ms after stop,
+    // so Enter right after a take would otherwise race the mic drain and silently no-op the playback.
+    if (nucleo_recorder_is_busy() || s_sel >= s_count) return;          // record XOR play
     char abs[256]; snprintf(abs, sizeof(abs), "%s/%s", REC_PATH, s_list[s_sel].name);
+    // A take cut short by a flat battery still claims data_len 0 — no decoder will touch it. Make
+    // the header honest first: one file, mic idle, and a no-op on every take that is already fine.
+    nucleo_take_wav_repair(abs);
     if (nucleo_audio_play(abs) == ESP_OK) s_playing = s_sel;
 }
 
@@ -369,13 +393,18 @@ static void seek_playing(bool fwd)
 static void delete_sel(void)
 {
     if (nucleo_recorder_is_recording() || s_count == 0) return;
+    // An AI job holds the take's WAV / .txt / .tx.ndjson open; with CONFIG_FATFS_FS_LOCK=0 an unlink
+    // under the worker corrupts the volume and the worker then rewrites sidecars under a dead name.
+    if (s_job == 1) { nucleo_app_set_hint(TR("AI in corso — attendi", "AI busy — wait")); return; }
     char title[40]; snprintf(title, sizeof(title), "Delete %s?", s_list[s_sel].label);
     const char *opts[] = { "Cancel", "Delete" };
     if (nucleo_ui_menu(title, opts, 2) != 1) return;
     if (s_playing == s_sel) { nucleo_audio_stop(); s_playing = -1; }
-    // Remove the take and every AI sidecar that belongs to it.
-    static const char *const SX[] = { ".wav", ".txt", ".sum.txt", ".act.txt", ".ask.txt" };
-    for (int k = 0; k < 5; k++) { char p[300]; sidecar_of(p, sizeof p, s_list[s_sel].name, SX[k]); unlink(p); }
+    // Remove the take and every AI sidecar that belongs to it. .tx.ndjson is the transcript-resume
+    // journal (nucleo_anima_online.c): leaving it strands a stale index that a later same-named take
+    // would trust as already-transcribed, splicing the deleted take's text into the new one.
+    static const char *const SX[] = { ".wav", ".ndjson", ".tx.ndjson", ".txt", ".sum.txt", ".act.txt", ".ask.txt" };
+    for (size_t k = 0; k < sizeof SX / sizeof SX[0]; k++) { char p[300]; sidecar_of(p, sizeof p, s_list[s_sel].name, SX[k]); unlink(p); }
     scan();
     if (s_sel >= s_count) s_sel = s_count ? s_count - 1 : 0;
 }
@@ -409,8 +438,8 @@ static void rename_take(const char *oldname, const char *newbase)
         struct stat ss; if (stat(p, &ss) != 0) break;
         snprintf(fbase, sizeof fbase, "%.34s %d", newbase, i);
     }
-    static const char *const SX[] = { ".wav", ".txt", ".sum.txt", ".act.txt", ".ask.txt" };
-    for (int k = 0; k < 5; k++) {
+    static const char *const SX[] = { ".wav", ".ndjson", ".tx.ndjson", ".txt", ".sum.txt", ".act.txt", ".ask.txt" };
+    for (size_t k = 0; k < sizeof SX / sizeof SX[0]; k++) {
         char from[300], to[300];
         snprintf(from, sizeof from, "%s/%s%s", REC_PATH, obase, SX[k]);
         snprintf(to,   sizeof to,   "%s/%s%s", REC_PATH, fbase, SX[k]);
@@ -423,6 +452,7 @@ static void rename_take(const char *oldname, const char *newbase)
 static void rename_sel(void)
 {
     if (nucleo_recorder_is_recording() || s_count == 0) return;
+    if (s_job == 1) { nucleo_app_set_hint(TR("AI in corso — attendi", "AI busy — wait")); return; }   // worker holds the sidecars open
     char nm[40];
     snprintf(nm, sizeof(nm), "%s", s_list[s_sel].name);
     char *dot = strrchr(nm, '.'); if (dot && !strcasecmp(dot, ".wav")) *dot = '\0';
@@ -641,6 +671,7 @@ static void ai_screen_free(void)
     nucleo_app_set_direct_draw(true);   // tell the launcher NOT to lazily re-acquire the canvas
     nucleo_screen_release();            // give ~32 KB back to the heap for the TLS
     s_ai_screen_freed = true;
+    s_ai_painted = false;               // the next draw() clears the band ONCE, then only small boxes update
 }
 static void ai_screen_restore(void)
 {
@@ -676,6 +707,7 @@ static bool start_job(int kind, const char *q)
     if (!nucleo_anima_solo_active()) { request_dedicated_mode(); return false; }   // not dedicated yet -> reboot in first
     snprintf(s_jobname, sizeof s_jobname, "%s", s_list[s_sel].name);
     snprintf(s_jobpath, sizeof s_jobpath, "%s/%s", REC_PATH, s_jobname);
+    nucleo_take_wav_repair(s_jobpath);   // same reason as play_sel: an interrupted take must still transcribe
     s_job_kind = kind; s_renamed[0] = 0;
     if (kind == JOB_TRANSCRIBE) s_auto_tx_pending = false;   // a manual transcribe satisfies the pending auto-one — don't re-run it after
     if (q) snprintf(s_job_q, sizeof s_job_q, "%s", q); else s_job_q[0] = 0;
@@ -1442,6 +1474,17 @@ static bool rec_back(int key)
         if (key == NK_LEFT) { s_set_tab = (s_set_tab + ST_COUNT - 1) % ST_COUNT; s_set_row = 0; set_hint_for_mode(); nucleo_app_request_draw(); return true; }
         set_mode(M_LIST); return true;
     }
+    // In the library, Esc closes the app — which in Recorder Solo is an esp_restart back to the full
+    // OS. If an AI job is mid-TLS/mid-sidecar-write, one stray Esc would reboot out from under it and
+    // lose the paid-for cloud work (a short take/summary has no journal to resume from). Require a
+    // confirming second Esc within 2 s.
+    if (s_job == 1 && key != NK_LEFT) {
+        int64_t now = esp_timer_get_time();
+        if (s_ai_abort_deadline_us && now < s_ai_abort_deadline_us) return false;   // second Esc: let it close
+        s_ai_abort_deadline_us = now + 2000000;
+        nucleo_app_set_hint(TR("AI in corso — Esc di nuovo per uscire", "AI working — Esc again to leave"));
+        return true;
+    }
     return false;                                              // library: let the framework close the app
 }
 
@@ -1556,8 +1599,12 @@ static void tick(void)
         scan(); s_sel = 0;
         if (s_mode == M_PLAY) s_mode = M_LIST;                 // a GO-record over the Now-Playing card lands on the fresh take
         // Auto-transcription: QUEUE it. The WAV is still finalizing (is_busy true); the worker reads it, so
-        // we launch only once is_busy clears (below). We're already in the dedicated Solo boot here.
-        if (s_auto_transcribe) s_auto_tx_pending = true;
+        // we launch only once is_busy clears (below). Capture the take NAME now — a selection keypress in
+        // the fire window would otherwise make start_job (which reads s_list[s_sel]) transcribe the wrong take.
+        if (s_auto_transcribe) {
+            s_auto_tx_pending = true;
+            snprintf(s_auto_tx_name, sizeof s_auto_tx_name, "%s", s_count ? s_list[0].name : "");
+        }
         set_hint_for_mode();
         need = true;
     }
@@ -1575,7 +1622,11 @@ static void tick(void)
     if (s_auto_tx_pending && nucleo_anima_solo_active() && !nucleo_recorder_is_busy() &&
         !nucleo_audio_is_playing() && s_ptt == PTT_IDLE && s_job != 1) {
         s_auto_tx_pending = false;
-        start_job(JOB_TRANSCRIBE, nullptr);
+        // Re-resolve the captured take by name (a keypress may have moved s_sel): point s_sel at it,
+        // or bail if it is gone (deleted/renamed in the window) rather than transcribing whatever sits at slot 0.
+        int idx = -1;
+        for (int i = 0; i < s_count; i++) if (!strcmp(s_list[i].name, s_auto_tx_name)) { idx = i; break; }
+        if (idx >= 0) { s_sel = idx; start_job(JOB_TRANSCRIBE, nullptr); }
     }
 
     // Pending manual take: a web stream (or our own finalizing take) held the mic when R was pressed.
@@ -1674,20 +1725,30 @@ static void draw_ai_working(int top, int h)
     int cy = top + h / 2;
     int phase = (int)((esp_timer_get_time() / 320000) % 4);   // 0..3 for the dots / ring sweep
 
+    // DIRECT path: the band was cleared once by draw(); here we only repaint small boxes each frame,
+    // never the whole band (that is the ST7789 blink — ANTI-FLICKER.md). Each animated element clears
+    // exactly its own cell; the fixed-text lines self-clear via their BG glyph background.
     // Lightweight activity spinner: four dots around a ring, the active one lit (no math.h needed).
     static const int RX[4] = { 18, 0, -18, 0 }, RY[4] = { 0, 18, 0, -18 };   // E, S, W, N
-    for (int k = 0; k < 4; k++)
-        d.fillCircle(120 + RX[k], (cy - 30) + RY[k], k == phase ? 4 : 2, k == phase ? GRN : DIM);
+    for (int k = 0; k < 4; k++) {
+        int x = 120 + RX[k], y = (cy - 30) + RY[k];
+        d.fillRect(x - 5, y - 5, 10, 10, BG);                 // own cell only: a shrinking dot leaves no ring
+        d.fillCircle(x, y, k == phase ? 4 : 2, k == phase ? GRN : DIM);
+    }
 
     const char *lbl = job_kind_label(s_job_kind);
-    d.setFont(&fonts::Font2); d.setTextColor(FG, BG);
+    d.setFont(&fonts::Font2); d.setTextColor(FG, BG);         // BG background self-clears the (per-job constant) label
     d.setCursor(120 - (int)d.textWidth(lbl) / 2, cy - 4); d.print(lbl);
 
-    char w1[40];
-    snprintf(w1, sizeof w1, "%s%.*s", TR("Elaborazione in corso", "Processing"), phase, "...");   // no provider brand
+    // Fixed string (no animated dots): constant width, so the BG-backed glyphs fully self-clear —
+    // the spinner already carries the motion. A phase-varying width would shift the centered start
+    // and leave a residue on the direct path.
+    const char *w1 = TR("Elaborazione in corso…", "Processing…");   // no provider brand
     d.setFont(&fonts::FreeSans9pt7b); d.setTextColor(GRN, BG);
     d.setCursor(120 - (int)d.textWidth(w1) / 2, cy + 22); d.print(w1);
-    // Chunked long-transcription progress, when active: "segmento 3/15".
+    // Chunked long-transcription progress, when active: "segmento 3/15". Its width and presence both
+    // vary, so clear its row band every frame before (maybe) drawing it.
+    d.fillRect(20, cy + 32, 200, 18, BG);
     int pd = 0, pt = 0; nucleo_anima_transcribe_progress(&pd, &pt);
     if (pt > 1) {
         char w2[40]; snprintf(w2, sizeof w2, "%s %d/%d", TR("segmento", "segment"), pd + (pd < pt ? 1 : 0), pt);
@@ -1699,6 +1760,16 @@ static void draw_ai_working(int top, int h)
 static void draw(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    // The AI-working screen is on the DIRECT path (canvas freed) and redraws ~3 Hz for the spinner:
+    // a full-band fillRect on that cadence is exactly the ST7789 blink ANTI-FLICKER.md forbids. Clear
+    // the band ONCE when it appears; draw_ai_working then repaints only its own small boxes.
+    if (s_ai_screen_freed) {
+        static unsigned s_ai_gen = 0;
+        unsigned gen = nucleo_app_repaint_gen();               // an overlay (notification/voice) bumps this: re-clear once
+        if (!s_ai_painted || gen != s_ai_gen) { d.fillRect(0, top, 240, h, BG); s_ai_painted = true; s_ai_gen = gen; }
+        draw_ai_working(top, h);
+        return;
+    }
     d.fillRect(0, top, 240, h, BG);                            // clear once -> no stale pixels across modes
     // Opened from the full OS: about to reboot into the dedicated boot. Show a CLEAN splash, not the app
     // home flashing for a second (which read as "the old app appearing"). The reboot follows in tick().
@@ -1713,7 +1784,6 @@ static void draw(void)
         d.setFont(&fonts::Font0);
         return;
     }
-    if (s_ai_screen_freed) { draw_ai_working(top, h); return; }  // AI job in flight: canvas freed → minimal direct screen
     if (nucleo_recorder_is_recording() || s_ptt == PTT_ARMING) { draw_recording(); return; }
     if (s_mode == M_SETTINGS)           { settings_draw(top, h); return; }
     if (s_mode == M_DETAIL)             { detail_draw(top, h);   return; }
