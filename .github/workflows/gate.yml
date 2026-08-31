@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'   # 22 (not 20): `node --test` expands the "tools/**/*.test.mjs" glob only on 21+
 
       - name: Registry + manifest validation
         run: node tools/validate.mjs
