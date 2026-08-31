@@ -45,20 +45,26 @@ test('source index.html dropped UV, added the new-tab handoff', () => {
 
 const srcHtml = readFileSync(join(SRC, 'index.html'));
 
+// Compare CONTENT, not line endings: the .gz twins are binary and keep the EOL of whoever ran
+// gzip-assets (CRLF on Windows), while the checked-out sources normalize to LF (.gitattributes
+// `* text=auto`). Byte-comparing would false-fail on Linux CI. Normalizing CRLF->LF on both sides
+// keeps the deploy-drift guard meaningful and portable.
+const norm = (b) => Buffer.from(b.toString('latin1').replace(/\r\n/g, '\n'), 'latin1');
+
 for (const dir of COPIES) {
   test(`deploy copy clean + gz in sync: ${dir}`, () => {
     // No UV files survive in the served tree.
     const leftover = readdirSync(dir).filter(isUvFile);
     assert.deepEqual(leftover, [], `UV/SW files in ${dir}: ${leftover.join(', ')}`);
 
-    // The raw index.html matches source exactly.
+    // The raw index.html matches source (content, EOL-normalized).
     const raw = readFileSync(join(dir, 'index.html'));
-    assert.ok(raw.equals(srcHtml), `index.html in ${dir} differs from source`);
+    assert.ok(norm(raw).equals(norm(srcHtml)), `index.html in ${dir} differs from source`);
 
-    // The .gz the firmware serves must exist AND decompress to the same bytes (the deploy trap).
+    // The .gz the firmware serves must exist AND decompress to the same content (the deploy trap).
     const gzPath = join(dir, 'index.html.gz');
     assert.ok(existsSync(gzPath), `missing ${gzPath} — firmware serves the .gz, regenerate it`);
     const ungz = gunzipSync(readFileSync(gzPath));
-    assert.ok(ungz.equals(srcHtml), `index.html.gz in ${dir} is stale — re-run tools/gzip-assets.mjs`);
+    assert.ok(norm(ungz).equals(norm(srcHtml)), `index.html.gz in ${dir} is stale — re-run tools/gzip-assets.mjs`);
   });
 }
