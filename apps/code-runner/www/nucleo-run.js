@@ -215,6 +215,18 @@ export function createRunner(opts) {
   };
   const fsApi = (op, path, init) => fetch('/api/fs/' + op + '?path=' + encodeURIComponent(path), init);
 
+  // `http` means the WEB, never the device. A relative or same-origin URL would reach /api/* with the
+  // page's pairing cookie — so a script verified with {fs:false, http:true} (Forge's verify loop)
+  // could delete files or reboot the device THROUGH the http capability, bypassing the fs/hw gates.
+  const httpUrl = (u) => {
+    let parsed;
+    try { parsed = new URL(String(u == null ? '' : u)); }                 // no base: relative URLs are rejected
+    catch { throw new Error('http: absolute http(s) URL required'); }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('http: only http(s) URLs');
+    if (parsed.origin === self.location.origin) throw new Error('http: device API is gated by fs/hw capabilities, not http');
+    return parsed.href;
+  };
+
   async function handleRpc(method, args) {
     args = args || [];
     if (method === 'hw.command') {
@@ -259,12 +271,12 @@ export function createRunner(opts) {
       case 'fs.remove': { const r = await fsApi('delete', resolve(args[0]), { method: 'POST' }); return r.ok; }
       case 'http.get': {
         if (!can('http')) throw new Error('http capability denied');
-        const r = await fetch(args[0], args[1] || {});
+        const r = await fetch(httpUrl(args[0]), args[1] || {});
         return { status: r.status, ok: r.ok, body: await r.text() };
       }
       case 'http.json': {
         if (!can('http')) throw new Error('http capability denied');
-        const r = await fetch(args[0], args[1] || {});
+        const r = await fetch(httpUrl(args[0]), args[1] || {});
         return { status: r.status, ok: r.ok, json: await r.json().catch(() => null) };
       }
       case 'anima': {

@@ -136,7 +136,8 @@ body {
 #task-switcher {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
   background: #0e1830dd; border: 1px solid #ffffff1a; border-radius: 12px;
-  box-shadow: 0 24px 64px #000c; padding: 20px; z-index: 10002;
+  /* Above the copilot (100001): Alt+Tab must never cycle an invisible overlay behind it. */
+  box-shadow: 0 24px 64px #000c; padding: 20px; z-index: 100400;
   display: flex; gap: 12px; backdrop-filter: blur(30px) saturate(2);
   max-width: 90vw; overflow-x: auto;
 }

@@ -212,11 +212,11 @@
   // ── Live tail: the shell forwards every device event into this iframe as a postMessage ──────────
   window.addEventListener('message', (e) => {
     const m = e.data;
-    if (!m || typeof m.t !== 'string') return;
-    if (m.type === 'os-shortcut') {
+    if (m && m.type === 'os-shortcut') {
       if (m.action === 'refresh') loadHistory();
       return;
     }
+    if (!m || typeof m.t !== 'string') return;
     if (paused) return;
     add(m); render();
   });

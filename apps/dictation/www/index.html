@@ -275,7 +275,7 @@ function reflectScreen(){
 }
 // Heartbeat: keep feeding the firmware deadman while we want the screen dark, so if this tab
 // dies the device re-lights the screen on its own. ~45s < the firmware's 90s deadman.
-setInterval(()=>{ if(screenOff && !document.hidden) setScreen(true, true); }, 45000);
+setInterval(()=>{ if(screenOff) setScreen(true, true); }, 45000);
 
 // ---- status / notices -----------------------------------------------------
 function setStatus(kind, txt){ const p=$('status'); p.classList.remove('live','paused','err');

@@ -206,7 +206,10 @@ export function initSystemUI(ctx) {
     if (wx) {
       const c = wx.data.current, D = wx.data.daily || {};
       let days = '';
-      for (let i = 0; i < Math.min(3, (D.time || []).length); i++) {
+      // A partially-written weather cache (time present, series missing) must degrade to "no daily
+      // rows", not throw mid-render and leave the whole widgets panel empty.
+      const daysOk = D.weather_code && D.temperature_2m_min && D.temperature_2m_max;
+      for (let i = 0; daysOk && i < Math.min(3, (D.time || []).length); i++) {
         const dn = i === 0 ? t('wg_today') : I18N.fmtDate(new Date(D.time[i] + 'T12:00:00'), { weekday: 'short' });
         days += `<div class="wg-day"><span>${esc(dn)}</span><span class="e">${wxEmoji(D.weather_code[i], 1)}</span>` +
           `<span class="mm">${Math.round(D.temperature_2m_min[i])}°·<b>${Math.round(D.temperature_2m_max[i])}°</b></span></div>`;

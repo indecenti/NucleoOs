@@ -962,6 +962,8 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ═══════════ network scan ═══════════
+// SSIDs come off the air from anyone's beacon — escape them before touching innerHTML.
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 async function scanWifi() {
   const stat = $('wifi-scan-stat'), list = $('wifi-list'); stat.textContent = T('scanning'); list.innerHTML = '';
   const d = await apiJson('/api/wifi/scan'); stat.textContent = '';
@@ -973,7 +975,7 @@ async function scanWifi() {
     const strength = ap.rssi >= -55 ? 4 : ap.rssi >= -67 ? 3 : ap.rssi >= -78 ? 2 : 1;
     const bars = [6, 9, 12, 16].map((h, i) => `<i style="height:${h}px;${i < strength ? 'background:var(--accent)' : ''}"></i>`).join('');
     const el = document.createElement('div'); el.className = 'ap' + (conn ? ' connected' : '');
-    el.innerHTML = `<span class="bars">${bars}</span><div style="flex:1;min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${ap.ssid || T('hiddenNet')} ${conn ? '· <span style="color:var(--accent)">' + T('connectedF') + '</span>' : ''}</div><div class="as">${ap.auth || ''} · ch ${ap.channel || '?'}</div></div><span class="as">${ap.rssi} dBm</span>`;
+    el.innerHTML = `<span class="bars">${bars}</span><div style="flex:1;min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${ap.ssid ? esc(ap.ssid) : T('hiddenNet')} ${conn ? '· <span style="color:var(--accent)">' + T('connectedF') + '</span>' : ''}</div><div class="as">${esc(ap.auth || '')} · ch ${esc(ap.channel || '?')}</div></div><span class="as">${esc(ap.rssi)} dBm</span>`;
     list.appendChild(el);
   }
 }

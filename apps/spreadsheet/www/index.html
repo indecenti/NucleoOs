@@ -1257,6 +1257,8 @@ function clearAll() {
 }
 
 function markDirty() { dirty = true; syncTitle(); }
+// warn before closing with unsaved changes (covers standalone + the shell's window close)
+window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 function setMsg(m) { $('stInfo').textContent = m; }
 function syncTitle() {
   const name = filePath ? filePath.split('/').pop() : spT('st_untitled', null, 'senza titolo');

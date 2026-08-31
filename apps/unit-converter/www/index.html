@@ -56,7 +56,7 @@
   <div class="card">
     <div class="nl">
       <span class="star">✦</span>
-      <input id="nl" data-i18n-ph="nl.placeholder" autocomplete="off">
+      <input id="nl" data-i18n-attr="placeholder:nl.placeholder" autocomplete="off">
     </div>
     <div class="hint" id="hint" data-i18n="nl.hint">Type a value, or ask in natural language.</div>
   </div>
@@ -70,7 +70,7 @@
         <input id="val" type="number" inputmode="decimal" value="1">
         <select id="from"></select>
       </div>
-      <button class="swap" id="swap" title="Swap" data-i18n-title="swap">⇄</button>
+      <button class="swap" id="swap" title="Swap" data-i18n-attr="title:swap">⇄</button>
       <div class="col">
         <label data-i18n="to">To</label>
         <div class="out"><span class="big" id="big">—</span><span class="u" id="unit"></span></div>
@@ -197,6 +197,11 @@
     // ── boot ──
     selectCat('length');
     renderHist();
+    I18N.onChange(() => {
+      for (const b of tabsEl.children) b.textContent = t('cat.' + b.dataset.cat);
+      setHint(t('nl.hint'), false);
+      renderHist();
+    });
   </script>
 </body>
 </html>

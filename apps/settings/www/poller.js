@@ -72,12 +72,17 @@ export function createPoller(opts = {}) {
     }
   }
 
+  // `gen` guards the async gap in the loop: stop() during an in-flight tick would otherwise let the
+  // trailing `timer = setTimeout(...)` re-arm a "stopped" poller (and a start() in that same gap
+  // would spawn a second loop, since `timer` is briefly null).
+  let gen = 0;
   function start() {
     if (timer) return;
-    const loop = async () => { await tick(); timer = setTimeout(loop, interval); };
+    const g = ++gen;
+    const loop = async () => { await tick(); if (g !== gen) return; timer = setTimeout(loop, interval); };
     loop();
   }
-  function stop() { if (timer) { clearTimeout(timer); timer = null; } }
+  function stop() { gen++; if (timer) { clearTimeout(timer); timer = null; } }
 
   // One sequential sweep over ALL sources (one at a time, awaited) so every tile paints within the
   // first moments of the app instead of one-source-per-interval (~3 s each). Still one request in

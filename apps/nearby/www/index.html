@@ -240,8 +240,8 @@ async function refreshOffer() {
   box.innerHTML = `<div class="card" style="margin-top:10px;border-color:var(--acc)">
     <div>${t('offer_wants', { from: '<b>' + esc(o.from) + '</b>' })}</div><div class="amb" style="font-size:18px;margin:6px 0">${esc(o.name)} · ${fmtSize(o.size)}</div>
     <div class="flex"><button class="act" id="acc">${t('accept')}</button><button class="ghost" id="rej">${t('reject')}</button></div></div>`;
-  $('#acc').onclick = async () => { await post('/api/link/offer', { accept: true }); toast(t('accepted')); };
-  $('#rej').onclick = async () => { await post('/api/link/offer', { accept: false }); toast(t('rejected')); };
+  $('#acc').onclick = async () => { const r = await post('/api/link/offer', { accept: true }); toast(r.ok ? t('accepted') : t('send_failed')); };
+  $('#rej').onclick = async () => { const r = await post('/api/link/offer', { accept: false }); toast(r.ok ? t('rejected') : t('send_failed')); };
 }
 async function refreshCmd() {
   const box = $('#incoming'); if (!box) return;
@@ -251,8 +251,8 @@ async function refreshCmd() {
     <div>${t('cmd_incoming', { from: '<b>' + esc(c.from) + '</b>' })}</div><div class="amb" style="font-size:16px;margin:6px 0">${esc(c.cmd)}</div>
     <div class="dim">${t('cmd_via_anima')}</div>
     <div class="flex" style="margin-top:8px"><button class="act" id="cacc">${t('run')}</button><button class="ghost" id="crej">${t('discard')}</button></div></div>`;
-  $('#cacc').onclick = async () => { await post('/api/link/cmd/confirm', { ok: true }); toast(t('executed')); };
-  $('#crej').onclick = async () => { await post('/api/link/cmd/confirm', { ok: false }); toast(t('discarded')); };
+  $('#cacc').onclick = async () => { const r = await post('/api/link/cmd/confirm', { ok: true }); toast(r.ok ? t('executed') : t('send_failed')); };
+  $('#crej').onclick = async () => { const r = await post('/api/link/cmd/confirm', { ok: false }); toast(r.ok ? t('discarded') : t('send_failed')); };
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────

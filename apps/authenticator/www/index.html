@@ -159,7 +159,9 @@ function saveTokens() {
   try { localStorage.setItem('authenticator.cache', JSON.stringify({ tokens })); } catch {}
   const body = JSON.stringify({ schema: 1, tokens }, null, 2);
   saveChain = saveChain.then(() => fetch('/api/fs/write?path=' + encodeURIComponent(PATH),
-    { method: 'POST', body, signal: (() => { try { return AbortSignal.timeout(9000); } catch { return undefined; } })() }).catch(() => {}));
+    { method: 'POST', body, signal: (() => { try { return AbortSignal.timeout(9000); } catch { return undefined; } })() })
+    .then((r) => { if (!r.ok) throw 0; })
+    .catch(() => { const m = t('error'); $('msg').textContent = m; const h = $('copied'); h.textContent = m; h.classList.add('show'); clearTimeout(copyTimer); copyTimer = setTimeout(() => h.classList.remove('show'), 2500); }));
   return saveChain;
 }
 
@@ -181,7 +183,7 @@ const grouped = (code) => code.length === 6 ? code.slice(0, 3) + ' ' + code.slic
 function render() {
   const list = $('list'), q = query.toLowerCase();
   const shown = tokens.filter((tk) => !q || (tk.issuer + ' ' + tk.account).toLowerCase().includes(q));
-  $('empty').classList.toggle('hidden', tokens.length > 0);
+  $('empty').classList.toggle('hidden', shown.length > 0);
   list.innerHTML = '';
   for (const tk of shown) {
     const el = document.createElement('div');
@@ -216,7 +218,7 @@ function tick() {
     el.classList.toggle('expiring', rem <= 5);
     // refresh the code exactly when its window rolls over
     const win = Math.floor((now / 1000) / period);
-    if (el.__win !== win) { el.__win = win; const c = el.querySelector('.code'); if (c && !el.classList.contains('copied')) c.textContent = grouped(codeFor(tk)); }
+    if (el.__win !== win) { const c = el.querySelector('.code'); if (c && !el.classList.contains('copied')) { c.textContent = grouped(codeFor(tk)); el.__win = win; } }
   }
 }
 setInterval(tick, 1000);
@@ -285,13 +287,17 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('scrim
 I18N.onChange(() => render());
 
 // An external "add this account" (e.g. from a QR scan handoff) can arrive as ?otpauth=…
-(function fromQuery() {
+function fromQuery() {
   const q = new URLSearchParams(location.search).get('otpauth');
-  if (q) { const p = parseOtpauth(q); if (p) { tokens.push({ id: 'tok-' + Date.now(), type: 'totp', ...p }); } }
-})();
+  if (!q) return;
+  history.replaceState(null, '', location.pathname);
+  const p = parseOtpauth(q);
+  if (p) { tokens.push({ id: 'tok-' + Date.now(), type: 'totp', ...p }); saveTokens(); }
+}
 
 // ── boot ──
 await loadTokens();
+fromQuery();
 render();
 </script>
 </body>

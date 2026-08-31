@@ -320,8 +320,8 @@
       entries.sort((a, b) => {
         if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
         let cmp = 0;
-        if (sortCol === 'name') cmp = a.name.localeCompare(b.name);
-        else if (sortCol === 'size') cmp = a.size - b.size;
+        if (sortCol === 'name') cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+        else if (sortCol === 'size') cmp = (a.size || 0) - (b.size || 0);
         return cmp * sortDir;
       });
     }
@@ -918,7 +918,8 @@
       const rec = undoStack.pop(); if (!rec) return;
       if (rec.type === 'delete') await restoreFromTrash(rec.trash, rec.orig);
       else if (rec.type === 'paste') { for (const p of rec.created) try { await api('delete', p, { method: 'POST' }); } catch {} }
-      else if (rec.type === 'move') { for (const m of rec.moved) try { const b = await (await api('read', m.dst)).arrayBuffer(); await api('write', m.src, { method: 'POST', body: b }); await api('delete', m.dst, { method: 'POST' }); } catch {} }
+      // undo a move with the firmware's atomic move — never read+rewrite the file through the browser
+      else if (rec.type === 'move') { for (const m of rec.moved) try { await fetch('/api/fs/move?from=' + encodeURIComponent(m.dst) + '&to=' + encodeURIComponent(m.src), { method: 'POST' }); } catch {} }
       load();
     }
 

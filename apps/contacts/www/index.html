@@ -138,8 +138,16 @@ let saveChain = Promise.resolve();
 function saveContacts() {
   try { localStorage.setItem('contacts.cache', JSON.stringify({ contacts })); } catch {}
   const body = JSON.stringify({ schema: 1, contacts }, null, 2);
-  saveChain = saveChain.then(() => fetch('/api/fs/write?path=' + encodeURIComponent(PATH),
-    { method: 'POST', body, signal: (() => { try { return AbortSignal.timeout(9000); } catch { return undefined; } })() }).catch(() => {}));
+  saveChain = saveChain.then(async () => {
+    try {
+      const r = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH),
+        { method: 'POST', body, signal: (() => { try { return AbortSignal.timeout(9000); } catch { return undefined; } })() });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+    } catch {
+      const h = $('hint'); h.textContent = '⚠ Save failed · Salvataggio non riuscito'; h.classList.add('show');
+      setTimeout(() => h.classList.remove('show'), 1800);
+    }
+  });
   return saveChain;
 }
 

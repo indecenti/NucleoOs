@@ -1230,13 +1230,14 @@
           tab.historyIndex = tab.history.length - 1;
         }
         tab.isLoading = false;
-        document.getElementById('loading-spinner').style.display = 'none';
         if (tabId === state.activeTabId) switchTab(tabId);
         renderTabs();
       } catch (err) {
         showIframeError(tabId, url, err.message);
         tab.isLoading = false;
         if (tabId === state.activeTabId) switchTab(tabId);
+      } finally {
+        document.getElementById('loading-spinner').style.display = 'none';
       }
     }
 
@@ -1626,41 +1627,52 @@
     async function downloadUrlToSd(url, filename, onStep = () => {}) {
       if (!filename) filename = filenameFromUrl(url);
 
-      onStep(t('stepAuth', null, 'Verifica autenticazione...'), 10);
-      const authSt = await checkAuthStatus();
-      if (authSt.required && !authSt.paired) {
-        const e = new Error(t('errNotPaired', null, 'Dispositivo non associato — completa il pairing prima di scaricare'));
-        e.authRequired = true; throw e;
-      }
+      let withDownloadLock = null;
+      try { withDownloadLock = (await import('/dlgate.js')).withDownloadLock; } catch (_e) {}
 
-      onStep(t('stepProxy', null, 'Connessione e download tramite proxy...'), 25);
-      const response = await fetch(getProxyUrl() + encodeURIComponent(url));
-      if (!response.ok) throw new Error(t('errRemoteHttp', { status: response.status }, `Il server remoto ha risposto: HTTP ${response.status}`));
+      const run = async () => {
+        onStep(t('stepAuth', null, 'Verifica autenticazione...'), 10);
+        const authSt = await checkAuthStatus();
+        if (authSt.required && !authSt.paired) {
+          const e = new Error(t('errNotPaired', null, 'Dispositivo non associato — completa il pairing prima di scaricare'));
+          e.authRequired = true; throw e;
+        }
 
-      onStep(t('stepTransfer', null, 'Trasferimento in corso...'), 55);
-      const buffer = await response.arrayBuffer();
+        onStep(t('stepProxy', null, 'Connessione e download tramite proxy...'), 25);
+        const response = await fetch(getProxyUrl() + encodeURIComponent(url));
+        if (!response.ok) throw new Error(t('errRemoteHttp', { status: response.status }, `Il server remoto ha risposto: HTTP ${response.status}`));
 
-      onStep(t('stepSdFolder', null, 'Preparazione cartella SD...'), 68);
-      await ensureDirectory(DOWNLOADS_DIR);
+        onStep(t('stepTransfer', null, 'Trasferimento in corso...'), 55);
+        const buffer = await response.arrayBuffer();
 
-      const targetPath = `${DOWNLOADS_DIR}/${filename}`;
-      onStep(t('stepWriteSd', { name: filename }, `Scrittura su SD: ${filename}...`), 80);
-      const writeResp = await fetch(`/api/fs/write?path=${encodeURIComponent(targetPath)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: buffer
-      });
-      if (writeResp.status === 401 || writeResp.status === 403) {
-        const e = new Error(t('errAccessDenied', null, 'Accesso negato — assicurati di essere associato al dispositivo'));
-        e.authRequired = true; throw e;
-      }
-      if (!writeResp.ok) {
-        const errText = await writeResp.text();
-        throw new Error(t('errSdWrite', { status: writeResp.status, detail: errText.trim() }, `Scrittura SD fallita (${writeResp.status}): ${errText.trim()}`));
-      }
+        onStep(t('stepSdFolder', null, 'Preparazione cartella SD...'), 68);
+        await ensureDirectory(DOWNLOADS_DIR);
 
-      onStep(t('stepSavedOk', null, '✅ Salvato con successo!'), 100);
-      return { ok: true, size: buffer.byteLength, filename };
+        const targetPath = `${DOWNLOADS_DIR}/${filename}`;
+        onStep(t('stepWriteSd', { name: filename }, `Scrittura su SD: ${filename}...`), 80);
+        const writeResp = await fetch(`/api/fs/write?path=${encodeURIComponent(targetPath)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: buffer
+        });
+        if (writeResp.status === 401 || writeResp.status === 403) {
+          const e = new Error(t('errAccessDenied', null, 'Accesso negato — assicurati di essere associato al dispositivo'));
+          e.authRequired = true; throw e;
+        }
+        if (!writeResp.ok) {
+          const errText = await writeResp.text();
+          throw new Error(t('errSdWrite', { status: writeResp.status, detail: errText.trim() }, `Scrittura SD fallita (${writeResp.status}): ${errText.trim()}`));
+        }
+
+        onStep(t('stepSavedOk', null, '✅ Salvato con successo!'), 100);
+        return { ok: true, size: buffer.byteLength, filename };
+      };
+
+      if (!withDownloadLock) return run();
+      const BUSY = {};
+      const result = await withDownloadLock(filename, run, { ifAvailable: true, skipValue: BUSY });
+      if (result === BUSY) throw new Error(t('errDlBusy', null, 'Un altro download è già in corso — riprova tra poco'));
+      return result;
     }
 
     // Pulsante: usa la pagina corrente come URL da scaricare

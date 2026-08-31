@@ -2,5 +2,6 @@
   "_lang": "es",
   "app_title": "Reproductor multimedia",
   "library_hint": "Biblioteca · /data/Music — decodificado por tu navegador",
-  "empty_list": "No hay audio en /data/Music"
+  "empty_list": "No hay audio en /data/Music",
+  "load_failed": "No se puede acceder a la biblioteca — ¿el dispositivo está en línea?"
 }

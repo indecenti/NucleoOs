@@ -29,7 +29,7 @@ async function loadHosts() {
 }
 async function saveHosts() {
   try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent('/data/ssh'), { method: 'POST' }); } catch {}
-  try { await fetch('/api/fs/write?path=' + encodeURIComponent(HOSTS_PATH), { method: 'POST', body: JSON.stringify({ hosts }) }); } catch {}
+  try { const r = await fetch('/api/fs/write?path=' + encodeURIComponent(HOSTS_PATH), { method: 'POST', body: JSON.stringify({ hosts }) }); return r.ok; } catch { return false; }
 }
 
 // ── bridge status ──
@@ -86,7 +86,7 @@ function showForm(h) {
   $('f-save').addEventListener('click', async () => {
     const prof = collect(); if (!prof.host || !prof.user) { $('f-stat').textContent = t('err_host_user_required'); return; }
     const i = hosts.findIndex((x) => x.id === prof.id); if (i >= 0) hosts[i] = prof; else hosts.push(prof);
-    sel = prof; await saveHosts(); renderHosts(); $('f-stat').textContent = t('saved');
+    sel = prof; const ok = await saveHosts(); renderHosts(); $('f-stat').textContent = ok ? t('saved') : t('st_error', { msg: HOSTS_PATH });
   });
   $('f-connect').addEventListener('click', () => {
     const prof = collect(); if (!prof.host || !prof.user) { $('f-stat').textContent = t('err_host_user_required'); return; }

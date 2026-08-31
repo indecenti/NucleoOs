@@ -234,17 +234,24 @@
   const EMBEDDED = window.top !== window.self;
   let osVisible = true, lastSnap = null;
   const json = async (u)=>{ try{ const r=await fetch(u,{cache:'no-store'}); return r.ok? await r.json() : null; }catch{ return null; } };
-  let ovCount=0;
+  let ovCount=0, inFlight=false;
   async function tick(force){
     if(document.hidden || !osVisible) return;
-    if(active==='overview' && (force || (ovCount++%5)===0)){
-      // Embedded: use the shell's broadcast snapshot (saves the FAT-scan fetch). Standalone: fetch.
-      const s = EMBEDDED ? lastSnap : await json('/api/status');
-      if(s) renderOverview(s);
-    }
-    if(active==='ram'){ const h=await json('/api/heap'); if(h) renderRam(h); }
-    if(active==='cpu'){ const c=await json('/api/cpu'); if(c) renderCpu(c); else cpuUnavailable(); }
+    if(inFlight) return;   // a slow device can outlast the 2 s interval: never stack requests
+    inFlight=true;
+    try{
+      if(active==='overview' && (force || (ovCount++%5)===0)){
+        // Embedded: use the shell's broadcast snapshot (saves the FAT-scan fetch). Standalone: fetch.
+        const s = EMBEDDED ? lastSnap : await json('/api/status');
+        if(s) renderOverview(s);
+      }
+      if(active==='ram'){ const h=await json('/api/heap'); if(h) renderRam(h); }
+      if(active==='cpu'){ const c=await json('/api/cpu'); if(c) renderCpu(c); else cpuUnavailable(); }
+    } finally { inFlight=false; }
   }
+  // Embedded cold boot: the shell's status.snapshot may lag (or a broadcast was missed) and
+  // Overview would sit on '—' forever. One direct fetch fallback, no retry loop.
+  if(EMBEDDED) setTimeout(async()=>{ try{ if(!lastSnap){ const s=await json('/api/status'); if(s && !lastSnap){ lastSnap=s; if(active==='overview') renderOverview(s); } } }catch{} }, 3000);
 
   // Live event feed (shell forwards every bus event into this window).
   window.addEventListener('message',(e)=>{

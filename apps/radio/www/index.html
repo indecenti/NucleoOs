@@ -259,7 +259,7 @@
     let model = { schema:2, default:'', stations:[], credits:'' };
     let sel = 0;            // keyboard-focused row
     let curId = null;       // station currently loaded into <audio>
-    let npTimer = null, tickTimer = null, npAbort = null;
+    let npTimer = null, tickTimer = null, npAbort = null, npPull = null;
 
     // ---------- persistence (the bridge to the C app) ----------
     async function load() {
@@ -401,7 +401,7 @@
     $('vol').oninput = () => { audio.volume = (+$('vol').value) / 100; };
 
     // ---------- now-playing (Radio Index + SomaFM shapes) ----------
-    function stopNowPlaying() { clearInterval(npTimer); clearInterval(tickTimer); npTimer = tickTimer = null; if (npAbort) npAbort.abort(); }
+    function stopNowPlaying() { clearInterval(npTimer); clearInterval(tickTimer); npTimer = tickTimer = null; npPull = null; if (npAbort) npAbort.abort(); }
     function startNowPlaying(s) {
       stopNowPlaying();
       const bar = $('barWrap'), times = $('timesWrap');
@@ -410,6 +410,7 @@
       let elapsed = 0, duration = 0;
       const pull = async () => {
         if (s.id !== curId) return stopNowPlaying();
+        if (document.hidden) return;                      // minimized window → no metadata churn
         try {
           if (npAbort) npAbort.abort(); npAbort = new AbortController();
           const r = await fetch(s.nowplaying + (s.nowplaying.includes('?') ? '&' : '?') + 't=' + Date.now(), { signal: npAbort.signal });
@@ -425,12 +426,13 @@
         } catch { /* keep last label; live audio is independent of metadata */ }
       };
       const paint = (e, d) => { $('bar').style.width = Math.min(100, d ? e / d * 100 : 0) + '%'; $('tCur').textContent = fmt(e); $('tDur').textContent = fmt(d); };
-      pull();
+      pull(); npPull = pull;
       npTimer = setInterval(pull, 15000);                 // refresh metadata
       tickTimer = setInterval(() => {                     // advance the bar locally between pulls
-        if (duration > 0 && curId === s.id && !audio.paused) { elapsed = Math.min(duration, elapsed + 1); paint(elapsed, duration); }
+        if (duration > 0 && curId === s.id && !audio.paused && !document.hidden) { elapsed = Math.min(duration, elapsed + 1); paint(elapsed, duration); }
       }, 1000);
     }
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && npPull) npPull(); });
     function parseNP(j) {
       if (!j) return null;
       if (j.track || j.track_obj) {                       // Radio Index shape
@@ -486,6 +488,7 @@
       if (!name) { $('fName').focus(); return; }
       if (!/^https?:\/\//i.test(stream)) { $('fStream').focus(); checkStream(); return; }
       const data = { name, genre: $('fGenre').value.trim(), stream, nowplaying: $('fNp').value.trim() };
+      const wasEdit = editIdx >= 0;   // closeEditor() resets editIdx before the toast below reads it
       if (editIdx >= 0) {
         const old = model.stations[editIdx];
         model.stations[editIdx] = { ...old, ...data };
@@ -495,7 +498,7 @@
         model.stations.push({ id, ...data });
         if (!model.default) model.default = id;
       }
-      closeEditor(); render(); scheduleSave(editIdx >= 0 ? t('toast_saved_changes') : t('toast_added', { name }));
+      closeEditor(); render(); scheduleSave(wasEdit ? t('toast_saved_changes') : t('toast_added', { name }));
     }
     $('add').onclick = () => openEditor(-1);
     $('dlgCancel').onclick = closeEditor;

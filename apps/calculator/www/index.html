@@ -43,13 +43,16 @@
       const out = [], ops = [], pr = { '+': 1, '-': 1, '*': 2, '/': 2 };
       const apply = () => { const b = out.pop(), a = out.pop(), o = ops.pop();
         out.push(o === '+' ? a + b : o === '-' ? a - b : o === '*' ? a * b : a / b); };
+      let sign = 1, un = true;                       // un: expecting an operand, so +/- are unary
       for (const tok of toks) {
-        if (/\d/.test(tok)) out.push(parseFloat(tok));
-        else if (tok === '(') ops.push(tok);
-        else if (tok === ')') { while (ops.length && ops.at(-1) !== '(') apply(); ops.pop(); }
-        else { while (ops.length && pr[ops.at(-1)] >= pr[tok]) apply(); ops.push(tok); }
+        if (/\d/.test(tok)) { out.push(sign * parseFloat(tok)); sign = 1; un = false; }
+        else if (tok === '(') { ops.push(tok); un = true; }
+        else if (tok === ')') { while (ops.length && ops.at(-1) !== '(') apply(); ops.pop(); un = false; }
+        else if (un) { if (tok === '-') sign = -sign; }
+        else { while (ops.length && pr[ops.at(-1)] >= pr[tok]) apply(); ops.push(tok); un = true; }
       }
       while (ops.length) apply();
+      if (out.length !== 1 || !isFinite(out[0])) throw new Error('bad expression');
       return Math.round(out[0] * 1e9) / 1e9;
     }
     const keys = ['C', '(', ')', '⌫', '7', '8', '9', '/', '4', '5', '6', '*', '1', '2', '3', '-', '0', '.', '=', '+'];
@@ -81,7 +84,7 @@
         else if (!inShell && k === 'v') { e.preventDefault(); try { navigator.clipboard && navigator.clipboard.readText().then(pasteNumber); } catch {} }
         return;
       }
-      if (/[\d+\-*/().]/.test(e.key)) input(e.key);
+      if (e.key.length === 1 && /[\d+\-*/().]/.test(e.key)) input(e.key);
       else if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); input('='); }
       else if (e.key === 'Backspace') input('⌫');
       else if (e.key === 'Escape') input('C');
