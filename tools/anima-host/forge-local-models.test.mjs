@@ -1,31 +1,38 @@
 // Gate: ANIMA in-browser GPU model catalog. The chat's "Local · GPU" tier downloads one of these from the
-// CDN on first use (automatic, transparent) and caches it offline. This pins: the default IS the best model
-// a strong GPU can run, every id is a real MLC q4f16 id (so WebLLM's prebuilt config knows it — no model_lib
-// to vendor), an explicit user choice always wins, no-WebGPU is the only HARD block (a per-buffer proxy
-// never blocks a deliberate choice), and OOM/device-lost is recognised so the UI can say "pick smaller".
+// CDN on first use (automatic, transparent) and caches it offline. This pins: the default is the recommended
+// model that actually runs for most people AND ships on the device SD (since 6dd9f49 that is the 1.5B, not
+// the 7B — the 7B default OOM'd integrated GPUs after a 4.7 GB download), every id is a real MLC q4f16 id
+// (so WebLLM's prebuilt config knows it — no model_lib to vendor), an explicit user choice always wins,
+// no-WebGPU is the only HARD block (a per-buffer proxy never blocks a deliberate choice), and
+// OOM/device-lost is recognised so the UI can say "pick smaller".
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   LOCAL_MODELS, DEFAULT_LOCAL_MODEL, localModelById, resolveLocalModel, localModelCompat, isOutOfMemoryError,
 } from '../../apps/anima/www/forge/local-models.js';
 
-test('catalog: every id is a real MLC q4f16 id, best is first, smallest is last, exactly one recommended', () => {
+test('catalog: every id is a real MLC q4f16 id, ordered top-quality → smallest, exactly one recommended', () => {
   assert.ok(LOCAL_MODELS.length >= 4);
   for (const m of LOCAL_MODELS) {
     assert.match(m.id, /-q4f16_1-MLC$/, m.id + ' is an MLC q4f16 id');
     assert.ok(m.sizeGB > 0 && m.needGB > 0, m.id + ' has sizes');
   }
   assert.equal(LOCAL_MODELS.filter((m) => m.best).length, 1, 'exactly one best/recommended');
-  assert.ok(LOCAL_MODELS[0].best, 'the recommended model is listed first');
+  // Since 6dd9f49 the recommendation is decoupled from the list order: the catalog still reads
+  // top-quality first, but the recommended pick is the SD-staged model that installs offline.
+  assert.ok(LOCAL_MODELS.find((m) => m.best).onDevice, 'the recommended model is staged on the device SD');
   // the tail is the smallest, gira-quasi-ovunque fallback (last entry has the minimum size).
   const minSize = Math.min(...LOCAL_MODELS.map((m) => m.sizeGB));
   assert.equal(LOCAL_MODELS[LOCAL_MODELS.length - 1].sizeGB, minSize, 'smallest model is last');
 });
 
-test('default is the best (recommended) model — "il migliore usabile" on a strong GPU', () => {
+test('default is the recommended model — the one that actually runs for most people, from the SD', () => {
   assert.equal(DEFAULT_LOCAL_MODEL, LOCAL_MODELS.find((m) => m.best).id);
   assert.ok(localModelById(DEFAULT_LOCAL_MODEL));
-  assert.match(DEFAULT_LOCAL_MODEL, /7B/);   // a 7B fits an 8GB RTX 3070 Ti and is the quality pick
+  // 6dd9f49: the 7B default (4.7 GB, ~6 GB VRAM) OOM'd integrated GPUs; the 1.5B ships on the SD,
+  // installs with no internet, and a strong GPU still picks bigger explicitly (resolveLocalModel).
+  assert.match(DEFAULT_LOCAL_MODEL, /1\.5B/);
+  assert.equal(localModelById(DEFAULT_LOCAL_MODEL).onDevice, true, 'the default installs offline from the device');
 });
 
 test('resolveLocalModel: a valid explicit choice ALWAYS wins; unset/invalid → the best default', () => {
