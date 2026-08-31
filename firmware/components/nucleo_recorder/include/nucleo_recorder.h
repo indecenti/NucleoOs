@@ -5,6 +5,12 @@
 // lifting" principle, see docs/media.md): the ESP only writes uncompressed WAV
 // — trivial, ~tens of KB RAM, no codec. MP3 encoding happens in the browser
 // (the Recorder web app), so the device never pays for an encoder.
+//
+// Alongside the WAV it appends a TAKE JOURNAL, <take>.ndjson — one line per
+// VAD-cut segment, written as we record and never rewritten. It is what makes a
+// 1-2 h take survivable (a crash costs the last unflushed line) and what lets a
+// transcriber resume mid-take instead of re-parsing 230 MB of audio to find its
+// boundaries. See docs/take-journal.md and components/nucleo_take/.
 #pragma once
 #include "esp_err.h"
 #include "esp_http_server.h"
@@ -15,7 +21,7 @@
 // once at boot; the channel stays disabled until a recording starts.
 esp_err_t nucleo_recorder_init(void);
 
-// Register /api/rec/{start,stop,status} on an existing HTTP server.
+// Register /api/rec/{start,stop,status,stream} on an existing HTTP server.
 esp_err_t nucleo_recorder_register(httpd_handle_t server);
 
 // ---- shared control API ----------------------------------------------------
@@ -23,9 +29,11 @@ esp_err_t nucleo_recorder_register(httpd_handle_t server);
 // on-device Recorder app (app_recorder.cpp), so there is one source of truth and
 // only one recording can run at a time.
 
-// Begin a new WAV in /data/Recordings. Returns ESP_ERR_INVALID_STATE if a
-// recording is already running or the mic failed to init, ESP_FAIL if the writer
-// task could not start, ESP_OK otherwise.
+// Begin a new WAV in /data/Recordings. Returns ESP_ERR_INVALID_STATE if the mic is already owned
+// (a recording OR a live dictation stream — check nucleo_recorder_owner() to tell which), ESP_FAIL
+// if the writer task could not start, ESP_OK otherwise. Mic init happens ASYNCHRONOUSLY in the
+// writer task, so a hardware/mic-alloc failure does NOT surface here — it is reported via the
+// "rec.error" event; subscribe to rec events or poll status for it.
 esp_err_t nucleo_recorder_start(void);
 
 // Ask the writer task to finalise the current WAV (header patched asynchronously).
@@ -52,6 +60,6 @@ bool        nucleo_recorder_is_recording(void);
 // timeout (≤200 ms) AFTER stop(), while is_recording() is already false. Speaker playback shares the I2S
 // WS line, so anything that plays audio right after a recording must wait for this, not is_recording().
 bool        nucleo_recorder_is_busy(void);
-int         nucleo_recorder_level(void);     // last RMS level, 0..100 (for the meter)
+int         nucleo_recorder_level(void);     // last peak level, 0..100 (for the meter; peak, not RMS)
 uint32_t    nucleo_recorder_seconds(void);   // elapsed seconds of the active/last file
 const char *nucleo_recorder_path(void);      // web path of the active/last file (/data/...)
