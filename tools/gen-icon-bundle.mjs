@@ -49,7 +49,10 @@ function buildJson(warn) {
     if (statSync(file).size > PER_ICON_CAP) { if (warn) console.warn(`  ! ${id}: icon over ${PER_ICON_CAP} B, skipped`); continue; }
     if (!file.toLowerCase().endsWith('.svg')) continue;   // raster icons stay per-file <img>
 
-    bundle[id] = readFileSync(file, 'utf8');
+    // Normalize EOL to LF: the SVG source is embedded verbatim, so a CRLF working copy (Windows)
+    // would bundle "\r\n" while a LF checkout (Linux CI) bundles "\n" — different bytes, different
+    // `_v` hash, a bundle that fails the --check gate on the other platform. LF makes it reproducible.
+    bundle[id] = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
   }
   const body = { _v: createHash('sha1').update(JSON.stringify(bundle)).digest('hex').slice(0, 12), ...bundle };
   return { json: JSON.stringify(body), count: Object.keys(bundle).length };
