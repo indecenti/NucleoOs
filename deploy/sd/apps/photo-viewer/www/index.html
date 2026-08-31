@@ -17,11 +17,13 @@
     .bar { display: flex; gap: 6px; overflow-x: auto; padding: 6px; background: var(--panel); border-top: 1px solid var(--line); }
     .chip { padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; cursor: pointer; white-space: nowrap; font-size: 12px; }
     .chip:hover { background: #ffffff14; }
+    .chip.active { border-color: var(--accent); background: #4ea1ff22; }
+    .msg { color: var(--muted); font-size: 12px; }
   </style>
 </head>
 <body>
   <header><span class="name" id="name" data-i18n="header_name">Pictures</span><button id="wall" data-i18n="btn_wallpaper">Set as wallpaper</button></header>
-  <div class="stage"><img id="img" alt=""></div>
+  <div class="stage"><img id="img" alt=""><div id="msg" class="msg" hidden></div></div>
   <div class="bar" id="bar"></div>
   <script type="module">
     import I18N from '/nucleo-i18n.js';
@@ -30,23 +32,52 @@
     const img = document.getElementById('img');
     const name = document.getElementById('name');
     const bar = document.getElementById('bar');
+    const msg = document.getElementById('msg');
     let current = '';
+    let list = [], chips = [], idx = -1;
     const src = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
+    function mark() {
+      chips.forEach((c, i) => c.classList.toggle('active', i === idx));
+      if (chips[idx]) chips[idx].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
     // Showing a file = the header displays its path (not a catalog string), so drop the i18n
     // annotation here; otherwise a live language switch would repaint the path back to "Pictures".
-    function show(path) { current = path; img.src = src(path); name.removeAttribute('data-i18n'); name.textContent = path; }
+    function show(path) {
+      current = path; idx = list.indexOf(path);
+      img.hidden = false; msg.hidden = true; img.src = src(path);
+      name.removeAttribute('data-i18n'); name.textContent = path;
+      mark();
+    }
+    img.onerror = () => { img.hidden = true; msg.textContent = 'Failed to load ' + current; msg.hidden = false; };
     document.getElementById('wall').onclick = () => current && window.parent.postMessage({ type: 'set-wallpaper', path: current }, '*');
     async function load() {
-      let data; try { data = await (await fetch('/api/fs/list?path=' + encodeURIComponent(DIR))).json(); } catch { return; }
+      let data;
+      try { data = await (await fetch('/api/fs/list?path=' + encodeURIComponent(DIR))).json(); }
+      catch { if (!current) { msg.textContent = 'Cannot read ' + DIR; msg.hidden = false; } return; }
       const imgs = (data.entries || []).filter(e => e.type === 'file' && /\.(png|jpe?g|gif|bmp|svg)$/i.test(e.name));
-      bar.innerHTML = '';
+      bar.innerHTML = ''; chips = []; list = imgs.map(im => DIR + '/' + im.name);
+      if (!list.length && !current) { msg.textContent = 'No pictures in ' + DIR; msg.hidden = false; }
       imgs.forEach((im, i) => {
         const c = document.createElement('div'); c.className = 'chip'; c.textContent = im.name;
         c.onclick = () => show(DIR + '/' + im.name);
-        bar.appendChild(c);
+        bar.appendChild(c); chips.push(c);
         if (i === 0 && !new URLSearchParams(location.search).get('path')) show(DIR + '/' + im.name);
       });
+      if (current) { idx = list.indexOf(current); mark(); }
     }
+    addEventListener('keydown', (e) => {
+      const el = document.activeElement;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (!list.length) return;
+      let n;
+      if (e.key === 'ArrowLeft') n = Math.max(0, idx - 1);
+      else if (e.key === 'ArrowRight') n = Math.min(list.length - 1, idx + 1);
+      else if (e.key === 'Home') n = 0;
+      else if (e.key === 'End') n = list.length - 1;
+      else return;
+      e.preventDefault();
+      if (n !== idx) show(list[n]);
+    });
     const q = new URLSearchParams(location.search).get('path');
     if (q) show(q);
     load();

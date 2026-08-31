@@ -14,7 +14,7 @@ const load = (p) => { try { return read(p); } catch (e) { errs.push(`${p}: inval
 const typeOf = (v) => (Array.isArray(v) ? 'array' : v === null ? 'null' : typeof v);
 
 // Minimal JSON-Schema subset: type, required, properties, additionalProperties,
-// enum, items, pattern, minimum, and local $ref (#/$defs/...).
+// enum, items, pattern, minLength/maxLength, minimum/maximum, and local $ref (#/$defs/...).
 function check(data, schema, root, path, errs) {
   if (schema.$ref) schema = schema.$ref.replace(/^#\//, '').split('/').reduce((s, k) => s[k], root);
   if (schema.type) {
@@ -24,7 +24,10 @@ function check(data, schema, root, path, errs) {
   }
   if (schema.enum && !schema.enum.includes(data)) errs.push(`${path}: '${data}' not in [${schema.enum.join(', ')}]`);
   if (schema.pattern && typeof data === 'string' && !new RegExp(schema.pattern).test(data)) errs.push(`${path}: '${data}' fails /${schema.pattern}/`);
+  if (typeof data === 'string' && schema.minLength !== undefined && data.length < schema.minLength) errs.push(`${path}: length ${data.length} < minLength ${schema.minLength}`);
+  if (typeof data === 'string' && schema.maxLength !== undefined && data.length > schema.maxLength) errs.push(`${path}: length ${data.length} > maxLength ${schema.maxLength}`);   // e.g. wifi SSID 32 / passphrase 63 are hard 802.11 buffer limits
   if (typeof data === 'number' && schema.minimum !== undefined && data < schema.minimum) errs.push(`${path}: ${data} < ${schema.minimum}`);
+  if (typeof data === 'number' && schema.maximum !== undefined && data > schema.maximum) errs.push(`${path}: ${data} > ${schema.maximum}`);
   if (typeOf(data) === 'object') {
     for (const r of schema.required || []) if (!(r in data)) errs.push(`${path}: missing required '${r}'`);
     for (const [k, v] of Object.entries(data)) {
@@ -146,6 +149,17 @@ try {
   for (const o of orphan) errs.push(`gz: orphan '${o}' (source deleted — remove the .gz)`);
 } catch (e) {
   errs.push(`gz: freshness check failed (${e.message})`);
+}
+
+// 5) Arcade core reports: EmulatorJS keys its IndexedDB core cache on cores/reports/<core>.json.
+// A missing or stale report disables that cache, so the device re-streams a ~1 MB core on every
+// launch — straight into the webfs low-heap 503. The report is derived from the core blob itself,
+// so swapping a core without regenerating it is drift the gate can see.
+try {
+  const { checkCoreReports } = await import('./gen-core-reports.mjs');
+  for (const d of checkCoreReports()) errs.push(`arcade: core report ${d} (run: node tools/gen-core-reports.mjs)`);
+} catch (e) {
+  errs.push(`arcade: core report check failed (${e.message})`);
 }
 
 if (errs.length) {

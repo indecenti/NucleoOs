@@ -5,7 +5,7 @@ idf_component_register(
     REQUIRES nucleo_board esp_timer
     # online tier (docs/anima-online.md): HTTPS fetch + JSON parse + the live Wi-Fi IP.
     # nucleo_arb: the heavy-work arbiter that serializes the outbound TLS window (no concurrent-OOM).
-    PRIV_REQUIRES esp_http_client mbedtls json nucleo_setup nucleo_arb
+    PRIV_REQUIRES esp_http_client mbedtls json nucleo_setup nucleo_arb nucleo_take
 )
 
 # Bounded snprintf into fixed buffers on purpose (entity/slug/url/reply); truncation is safe.

@@ -18,10 +18,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const LANGS = ['it', 'en'];                  // REQUIRED: complete + strict parity. Keep in sync with nucleo-i18n.js.
+const LANGS = ['en', 'it'];                  // REQUIRED: complete + strict parity. Keep in sync with nucleo-i18n.js.
 const EXTRA_LANGS = ['es', 'fr', 'de'];      // tier-2: translation IN PROGRESS — optional + partial OK (runtime falls back to base).
 const ALL_LANGS = [...LANGS, ...EXTRA_LANGS];
-const BASE = 'it';
+const BASE = 'en';                           // English is the source of truth + fallback floor (matches nucleo-i18n.js BASE).
 
 const errors = [];
 const warnings = [];
@@ -149,7 +149,17 @@ function checkHtmlRefs(catalogs) {
   const coreKeys = new Set(Object.keys((catalogs.get('core') || {})[BASE] || {}));
   for (const { ns, file } of surfaces) {
     const nsKeys = new Set(Object.keys((catalogs.get(ns) || {})[BASE] || {}));
-    if (!nsKeys.size && ns !== 'shell') continue;   // app not migrated yet → nothing to check
+    if (!nsKeys.size && ns !== 'shell') {
+      // Visible (non-fatal) so "cover every surface" is measurable. Distinguish two cases honestly:
+      // an app that ships its OWN i18n fork (apps/<id>/www/i18n.js) IS translated and DOES follow the OS
+      // language — it just isn't on the central engine (e.g. settings); flag it as a fork to consolidate,
+      // not as untranslated. An app with neither a catalog nor a fork renders hardcoded strings verbatim.
+      const hasFork = existsSync(join(ROOT, 'apps', ns, 'www', 'i18n.js'));
+      warnings.push(hasFork
+        ? `[${ns}] uses a self-contained i18n fork (apps/${ns}/www/i18n.js) — translated, but not on the central engine (candidate to consolidate)`
+        : `[${ns}] has an index.html but NO i18n catalog or fork — surface not on the engine (renders hardcoded strings, won't follow the OS language)`);
+      continue;
+    }
     const html = readFileSync(file, 'utf8');
     const refs = new Set();
     let m;

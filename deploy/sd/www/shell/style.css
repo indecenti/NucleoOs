@@ -136,7 +136,8 @@ body {
 #task-switcher {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
   background: #0e1830dd; border: 1px solid #ffffff1a; border-radius: 12px;
-  box-shadow: 0 24px 64px #000c; padding: 20px; z-index: 10002;
+  /* Above the copilot (100001): Alt+Tab must never cycle an invisible overlay behind it. */
+  box-shadow: 0 24px 64px #000c; padding: 20px; z-index: 100400;
   display: flex; gap: 12px; backdrop-filter: blur(30px) saturate(2);
   max-width: 90vw; overflow-x: auto;
 }
@@ -196,7 +197,10 @@ html[data-theme="light"] .icon:focus-visible .label { background: rgba(20,40,80,
 /* Windows */
 @keyframes winIn { from { opacity: 0; transform: scale(.965) translateY(8px); } to { opacity: 1; transform: none; } }
 .win {
-  position: absolute; min-width: 240px; min-height: 160px; width: 520px; height: 360px;
+  /* Default size scales with the viewport (real-OS feel: apps open comfortably readable, not in a
+     tiny fixed 520×360 box). Per-app geometry memory still wins the moment the user resizes. */
+  position: absolute; min-width: 240px; min-height: 160px;
+  width: min(860px, 84vw); height: min(580px, 78vh);
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md);
   box-shadow: var(--sh-2); display: flex; flex-direction: column; overflow: hidden;
   animation: winIn var(--dur-2) var(--ease); transition: box-shadow var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
@@ -659,6 +663,37 @@ html[data-theme='light'] .toast { background: #ffffffee; }
 .ws-dot.connected { background: #5cdb95; }
 .ws-dot.reconnecting { background: #f5c842; animation: wsPulse 1s ease-in-out infinite; }
 .ws-dot.offline { background: #ff8093; }
+/* Someone else holds the single client seat (see onWsClosed): amber-but-steady — the device is
+   healthy, we simply are not the one being served. Never the red "offline" dot, which was a lie. */
+.ws-dot.evicted { background: #b08bff; }
+
+/* The title bar is a drag surface: without this the browser claims the gesture for panning and the
+   window never moves on a touch screen (the resizers need the same). */
+.win .bar, .win-resizer { touch-action: none; }
+
+/* Eviction banner: honest, non-blocking, and the only way back to the seat is this button. */
+#ws-evicted {
+  position: fixed; left: 50%; transform: translateX(-50%) translateY(20px);
+  bottom: calc(var(--taskbar-h) + 14px); z-index: 10000;
+  display: none; align-items: center; gap: 12px;
+  padding: 10px 12px 10px 14px; border-radius: 12px;
+  background: #17203acc; border: 1px solid #ffffff26; box-shadow: 0 20px 50px #000a;
+  backdrop-filter: blur(24px) saturate(1.6); color: var(--text, #e6edf7);
+  font-size: 13px; max-width: min(560px, 92vw);
+  opacity: 0; transition: opacity .18s ease, transform .18s ease;
+}
+#ws-evicted.show { display: flex; opacity: 1; transform: translateX(-50%) translateY(0); }
+#ws-evicted .wse-ic { font-size: 16px; }
+#ws-evicted .wse-tx { flex: 1; line-height: 1.35; }
+#ws-evicted .wse-btn {
+  flex: 0 0 auto; cursor: pointer; border: 1px solid #ffffff2e; border-radius: 8px;
+  padding: 6px 12px; font: inherit; font-weight: 600; color: #fff;
+  background: linear-gradient(180deg, #4ea1ff, #2f7fe0);
+}
+#ws-evicted .wse-btn:hover { filter: brightness(1.08); }
+#ws-evicted .wse-btn:focus-visible { outline: 2px solid var(--accent, #4ea1ff); outline-offset: 2px; }
+html[data-theme='light'] #ws-evicted { background: #ffffffee; color: #17203a; border-color: #00000022; }
+@media (prefers-reduced-motion: reduce) { #ws-evicted { transition: none; } }
 @keyframes wsPulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 /* ====== Device Busy indicator (heavy-work arbiter: system.busy) ====== */
 #tray-busy {
@@ -719,6 +754,9 @@ html.eco *, html.eco *::before, html.eco *::after {
 
 /* "Ask ANIMA" row in unified search — the search → AI copilot bridge */
 .sp-item.sp-anima .g { color: #d9a066; }
+/* The row in its ANSWERING form (the browser already knows): the answer may wrap to two lines. */
+.sp-item.sp-anima.answer .n { white-space: normal; line-height: 1.35; }
+.sp-item.sp-anima.answer .p { font-family: inherit; }
 .sp-item.sp-anima .t .n { color: var(--accent); font-weight: 600; }
 .sp-item.sp-anima .t .p { font-family: inherit; opacity: .85; }
 
@@ -752,3 +790,93 @@ html[data-theme="light"] .ctx-item.danger:hover { background: #e0556b1a; }
 html[data-theme="light"] .drop-inner { background: #ffffffe6; border-color: #2b6fd644; }
 html[data-theme="light"] .toast.error .toast-title,
 html[data-theme="light"] .pair-msg { color: #cf3a50; }
+
+/* ── System-UI extras (system-ui.js): night light, lock screen, shortcuts, widgets ── */
+
+/* Night light: a warm veil over the whole console. pointer-events:none = purely optical. */
+#night-veil { position: fixed; inset: 0; z-index: 100180; pointer-events: none;
+  background: #ffb46b; mix-blend-mode: multiply; opacity: 0; transition: opacity .6s var(--ease); }
+#night-veil.on { opacity: .5; }
+html[data-theme="light"] #night-veil.on { opacity: .35; }
+
+/* Lock screen: a privacy veil (clock + date over the blurred desktop). Above everything. */
+#lock-screen { position: fixed; inset: 0; z-index: 100300; display: flex; align-items: center;
+  justify-content: center; background: rgba(5, 9, 20, 0.55);
+  backdrop-filter: blur(34px) saturate(1.2) brightness(.75);
+  animation: lockIn .3s var(--ease); }
+html[data-theme="light"] #lock-screen { background: rgba(235, 240, 252, 0.5); }
+#lock-screen.lk-out { transition: transform .38s var(--ease), opacity .38s var(--ease);
+  transform: translateY(-100%); opacity: 0; }
+@keyframes lockIn { from { opacity: 0; } to { opacity: 1; } }
+.lk-center { text-align: center; user-select: none; }
+.lk-time { font-size: clamp(56px, 12vw, 110px); font-weight: 700; letter-spacing: 2px;
+  font-variant-numeric: tabular-nums; text-shadow: 0 6px 40px rgba(0,0,0,.4); }
+.lk-date { font-size: 18px; color: var(--text); opacity: .85; margin-top: 2px; text-transform: capitalize; }
+.lk-dev { margin-top: 26px; font-size: 13px; color: var(--muted); }
+.lk-hint { margin-top: 6px; font-size: 12.5px; color: var(--muted); opacity: .8;
+  animation: lkPulse 2.6s ease-in-out infinite; }
+@keyframes lkPulse { 0%, 100% { opacity: .8; } 50% { opacity: .35; } }
+
+/* Shortcuts cheat-sheet overlay */
+#kbd-overlay { position: fixed; inset: 0; z-index: 100210; background: rgba(6, 10, 22, 0.55);
+  backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.kb-card { background: var(--panel); border: 1px solid var(--glass-brd); border-radius: var(--r-xl);
+  box-shadow: var(--sh-3); width: min(720px, 94vw); max-height: 86vh; display: flex; flex-direction: column;
+  outline: none; animation: winIn var(--dur-3) var(--ease); }
+.kb-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px;
+  font-weight: 600; border-bottom: 1px solid var(--glass-brd); }
+.kb-x { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer;
+  padding: 0 4px; line-height: 1; }
+.kb-x:hover { color: var(--text); }
+.kb-body { padding: 14px 18px; overflow: auto; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+.kb-gt { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent);
+  font-weight: 600; margin-bottom: 8px; }
+.kb-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.kb-keys { display: flex; align-items: center; gap: 3px; flex: none; }
+.kb-keys i { color: var(--muted); font-style: normal; font-size: 11px; }
+.kb-keys kbd { background: var(--glass-1); border: 1px solid var(--glass-brd); border-bottom-width: 2px;
+  border-radius: 6px; padding: 2px 7px; font: 11.5px ui-monospace, monospace; color: var(--text); }
+.kb-what { font-size: 12.5px; color: var(--muted); }
+
+/* Widgets: taskbar pill (left corner, Win11-style) + flyout panel */
+#tb-widgets { display: flex; align-items: center; gap: 6px; margin-left: 10px; padding: 5px 10px;
+  background: transparent; border: none; border-radius: var(--r-sm); color: var(--text);
+  cursor: pointer; font: inherit; transition: background var(--dur-1); }
+#tb-widgets:hover { background: var(--glass-2); }
+#tb-widgets .wg-emo { font-size: 17px; }
+#tb-widgets .wg-t { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#widgets-panel { position: absolute; left: 12px; bottom: calc(var(--taskbar-h) + 12px); width: 330px;
+  z-index: 9999; display: flex; flex-direction: column; gap: 10px; padding: 12px;
+  background: #0e1830cc; border: 1px solid var(--glass-brd); border-radius: var(--r-lg);
+  box-shadow: var(--sh-3); backdrop-filter: blur(30px) saturate(2); animation: winIn var(--dur-3) var(--ease); }
+html[data-theme="light"] #widgets-panel { background: #ffffffdd; }
+.wg-card { background: var(--glass-1); border: 1px solid var(--glass-brd); border-radius: var(--r-md);
+  padding: 11px 13px; }
+.wg-card[data-open] { cursor: pointer; transition: background var(--dur-1); }
+.wg-card[data-open]:hover { background: var(--glass-2); }
+.wg-ct { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted);
+  font-weight: 600; margin-bottom: 7px; }
+.wg-wx-main { display: flex; align-items: center; gap: 10px; }
+.wg-wx-emo { font-size: 30px; }
+.wg-wx-t { font-size: 27px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wg-wx-place { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; min-width: 0; }
+.wg-days { display: flex; gap: 6px; margin-top: 9px; }
+.wg-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--glass-1); border-radius: var(--r-sm); padding: 6px 4px; font-size: 11px;
+  color: var(--muted); }
+.wg-day .e { font-size: 16px; }
+.wg-day .mm { font-variant-numeric: tabular-nums; }
+.wg-day .mm b { color: var(--text); }
+.wg-stats { display: flex; gap: 8px; }
+.wg-stats span { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.wg-stats i { font-style: normal; font-size: 10px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .5px; }
+.wg-stats b { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.wg-file { display: flex; align-items: center; gap: 7px; width: 100%; background: none; border: none;
+  color: var(--text); font: 12.5px system-ui; padding: 5px 2px; cursor: pointer; border-radius: var(--r-xs);
+  text-align: left; }
+.wg-file:hover { background: var(--glass-2); }
+.wg-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wg-empty { font-size: 12px; color: var(--muted); padding: 3px 0; }

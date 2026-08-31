@@ -16,3 +16,11 @@
 {"ts":"2026-08-17T16:51:03","health":{"hallucinations":0,"nl_cases":7570,"route_drift":1,"green":[176,180]}}
 {"ts":"2026-08-17T17:13:47","health":{"hallucinations":0,"nl_cases":7570,"route_drift":1,"green":[176,180]}}
 {"ts":"2026-08-17T18:45:44","health":{"hallucinations":0,"nl_cases":7570,"route_drift":0,"green":[180,180]}}
+{"ts":"2026-08-30T18:26:07","health":{"hallucinations":0,"nl_cases":7592,"route_drift":1,"green":[180,187]}}
+{"ts":"2026-08-31T07:25:40","health":{"hallucinations":0,"nl_cases":7592,"route_drift":0,"green":[187,187]}}
+{"ts":"2026-08-31T13:38:35","health":{"hallucinations":0,"nl_cases":7592,"route_drift":0,"green":[186,187]}}
+{"ts":"2026-08-31T14:27:08","health":{"hallucinations":0,"nl_cases":7592,"route_drift":0,"green":[185,187]}}
+{"ts":"2026-08-31T14:31:57","health":{"hallucinations":0,"nl_cases":7592,"route_drift":0,"green":[185,187]}}
+{"ts":"2026-08-31T17:20:36","health":{"hallucinations":0,"nl_cases":7592,"route_drift":0,"green":[186,187]}}
+{"ts":"2026-08-31T17:23:25","health":{"hallucinations":0,"nl_cases":7592,"route_drift":0,"green":[186,187]}}
+{"ts":"2026-08-31T17:26:42","health":{"hallucinations":0,"nl_cases":7592,"route_drift":0,"green":[187,187]}}

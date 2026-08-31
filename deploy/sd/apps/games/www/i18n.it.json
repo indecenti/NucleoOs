@@ -15,7 +15,7 @@
   "loading_lobby": "Carico la lobby…",
   "catalog_empty": "Catalogo vuoto.",
 
-  "btn_hint": "💡 Hint",
+  "btn_hint": "💡 Suggerimento",
   "btn_invite": "🔗 Invita",
   "btn_ready": "✓ Pronto",
   "btn_start": "▶ Inizia",
@@ -131,7 +131,7 @@
   "reason_no_reply": "non risponde",
   "reason_bad_move": "ha proposto una mossa non valida",
   "reason_net_error": "errore di rete",
-  "coach_reconnected": "🟢 {label} ririconnesso — riprendo.",
+  "coach_reconnected": "🟢 {label} riconnesso — riprendo.",
   "coach_paused": "⛔ {label} non risponde — partita IN PAUSA (nessun avversario offline al suo posto). Riprovo…",
 
   "waiting_players": "In attesa di giocatori ({have}/{need})…"

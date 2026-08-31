@@ -20,11 +20,13 @@ export const CLIENT_TOOLS = [
   { name: 'open_in_os', description: 'Launch a NucleoOS app by id (e.g. "calculator","notepad","media-player","radio") OR open a workspace file in its app, so the human sees it on the device. Call list_apps first if unsure of the id. This is how you "open the calculator", "play music", etc.', input_schema: { type: 'object', properties: { path: { type: 'string', description: 'workspace file to open' }, app: { type: 'string', description: 'app id to launch e.g. calculator, notepad' } }, required: [] } },
   { name: 'device_status', description: 'Read the Cardputer\'s LIVE state: current date/time, free/total SD space, Wi-Fi (mode/SSID/IP), uptime and free RAM. Use for "what time is it", "how much space is left", "which Wi-Fi", "is the device healthy". Lightweight (/api/status) — does NOT wake the offline brain.', input_schema: { type: 'object', properties: {}, required: [] } },
   { name: 'list_apps', description: 'List the apps installed on the device (id + name) so you can open the right one with open_in_os. Cheap (/api/apps).', input_schema: { type: 'object', properties: {}, required: [] } },
+  { name: 'get_os_api', description: 'Look up the REAL NucleoOS contract instead of guessing it. topic "routes" lists every device HTTP route (/api/*); topic "route" + query returns ONE route\'s full documentation (synopsis, parameters, response shape) — e.g. query "status" or "/api/ir/send"; topic "manifest" returns the app-manifest rules (required fields, category and permission enums); topic "rules" returns the deploy footguns every generated app must respect. ALWAYS consult this before writing code that calls /api/* or before publish_app.', input_schema: { type: 'object', properties: { topic: { type: 'string', enum: ['routes', 'route', 'manifest', 'rules'] }, query: { type: 'string', description: 'for topic "route": route path or keyword, e.g. "status", "/api/wifi/scan"' } }, required: ['topic'] } },
   { name: 'weather', description: 'Current weather + today\'s min/max for a city, fetched online from Open-Meteo (no key, no device load). Use for "che tempo fa a X" / "weather in X".', input_schema: { type: 'object', properties: { city: { type: 'string', description: 'city name, e.g. Roma, London' } }, required: ['city'] } },
-  { name: 'scaffold_app', description: 'Create a NEW NucleoOS app skeleton in the workspace (a staging folder named like the id), with a complete manifest.json, a working www/index.html starter, and i18n files. Use this FIRST when the user asks to "build/create an app". Pick the `kind` closest to the goal so you start from a real working app, not a blank page. After it, EDIT <id>/www/index.html (and add JS files) with the file tools to implement the real app, then call publish_app to install it on the device. The app is a self-contained web page; you may import /nucleo-i18n.js. id is auto-kebab-cased.', input_schema: { type: 'object', properties: { id: { type: 'string', description: 'short app id, e.g. "todo" or "unit-converter"' }, name: { type: 'string', description: 'display name' }, description: { type: 'string' }, category: { type: 'string', description: 'one of: tools, productivity, media, system, connectivity, games' }, kind: { type: 'string', enum: ['blank', 'list', 'timer', 'converter'], description: 'starter template: blank (empty card), list (add/remove items, saved to localStorage), timer (countdown), converter (°C/°F). Default blank.' } }, required: ['name'] } },
+  { name: 'scaffold_app', description: 'Create a NEW NucleoOS app skeleton in the workspace (a staging folder named like the id), with a complete manifest.json, a working www/index.html starter, and i18n files. Use this FIRST when the user asks to "build/create an app". Pick the `kind` closest to the goal so you start from a real working app, not a blank page. After it, EDIT <id>/www/index.html (and add JS files) with the file tools to implement the real app, then call publish_app to install it on the device. The app is a self-contained web page; you may import /nucleo-i18n.js. id is auto-kebab-cased.', input_schema: { type: 'object', properties: { id: { type: 'string', description: 'short app id, e.g. "todo" or "unit-converter"' }, name: { type: 'string', description: 'display name' }, description: { type: 'string' }, category: { type: 'string', description: 'one of: tools, productivity, media, system, connectivity, games' }, kind: { type: 'string', enum: ['blank', 'list', 'timer', 'converter', 'device'], description: 'starter template: blank (empty card), list (add/remove items, saved on the SD), timer (countdown), converter (°C/°F), device (live Cardputer status via the broker — clock, uptime, SD space, Wi-Fi). Default blank.' } }, required: ['name'] } },
   { name: 'publish_app', description: 'INSTALL an app you scaffolded+built (its staging folder <id> in the workspace) onto NucleoOS, LIVE — it appears in the launcher with no reboot. Validates the manifest and that www/index.html exists, writes the files under /apps/<id>/, and registers it. The human approves this. Only apps you authored can be re-published (never a system app). Call this when the app is ready.', input_schema: { type: 'object', properties: { id: { type: 'string', description: 'the app id == its staging folder name in the workspace' } }, required: ['id'] } },
   { name: 'manage_app', description: 'Hide ("disable") or restore ("enable") an app YOU created, in the launcher — the safe way to undo/redo an install (apps cannot be deleted from the device). Only apps you authored can be toggled, never a system app. The human approves this.', input_schema: { type: 'object', properties: { id: { type: 'string', description: 'the agent-created app id' }, action: { type: 'string', enum: ['disable', 'enable'], description: 'disable = hide from the launcher; enable = restore' } }, required: ['id', 'action'] } },
   { name: 'generate_image', description: 'Generate an image from a text prompt and SAVE it to a workspace file (uses an image-capable provider — Grok/xAI). Use for "draw/make an image of …", icons, illustrations, app assets. Requires an xAI key; without one, say so honestly. The human approves the file write. After it, open_in_os({path}) shows it.', input_schema: { type: 'object', properties: { prompt: { type: 'string', description: 'what to depict' }, path: { type: 'string', description: 'workspace file to save, e.g. "art/cat.jpg" (jpg)' } }, required: ['prompt', 'path'] } },
+  { name: 'update_plan', description: 'Track a multi-step job as a live checklist the human can see. Call it ONCE as soon as you know the milestones, then AGAIN after finishing each one to mark it done and start the next. Exactly one step may be "doing". Use it for anything that takes more than a couple of tool calls (building an app, refactoring several files); skip it for one-shot answers. It costs nothing — no device access, no approval — and it is what stops a long build from looking stalled.', input_schema: { type: 'object', properties: { steps: { type: 'array', description: '3–7 real milestones, in order', items: { type: 'object', properties: { title: { type: 'string', description: 'short imperative, e.g. "Scaffold the app skeleton"' }, status: { type: 'string', enum: ['todo', 'doing', 'done'] } }, required: ['title', 'status'] } } }, required: ['steps'] } },
   { name: 'transcribe', description: 'Transcribe a workspace audio file (wav/mp3/m4a/ogg/flac) to text using a speech-capable provider (Groq Whisper). Use for "transcribe this recording / what is said in X". Requires a Groq key; without one, say so honestly. Language is auto-detected.', input_schema: { type: 'object', properties: { path: { type: 'string', description: 'workspace path of the audio file' } }, required: ['path'] } },
 ];
 export const MUTATING = new Set(['write_file', 'edit_file', 'append_file', 'delete_file', 'move_file', 'run_js', 'scaffold_app', 'publish_app', 'manage_app', 'generate_image']);
@@ -96,6 +98,106 @@ export function fenceUntrusted(kind, meta, content) {
   let body = String(content == null ? '' : content).replace(new RegExp('</?' + tag, 'gi'), '⟨fenced⟩');
   const attrs = meta ? Object.entries(meta).map(([k, v]) => ' ' + k + '="' + String(v).replace(/["\n<>]/g, '') + '"').join('') : '';
   return '<' + tag + attrs + '>\n' + body + '\n</' + tag + '>';
+}
+
+// ---- get_os_api: the OS contract, sliced and BOUNDED --------------------------------------------
+// The spec file is ~112 KB of bilingual route docs; a model must never receive it whole. These pure
+// slicers cut it to what the question needs, capped, so the tool result stays a few hundred tokens.
+// Source of truth is the file the device itself serves (/system/registry/web-api-spec.json) — the
+// agent reads the SAME contract the OS ships, not a copy that can drift.
+const OSAPI_CAP = 4000;                      // chars per tool result — a page, not a book
+const osapiLang = (e, lang) => (e && (e[lang] || e.en || e.it)) || {};
+
+export function osApiIndex(spec, lang = 'en') {
+  const rows = (Array.isArray(spec) ? spec : []).map((e) => {
+    const L = osapiLang(e, lang);
+    return (e.method || 'GET') + ' ' + (e.path || '?') + ' — ' + String(L.title || '').replace(/^[A-Z]+ \/[^ ]+ - /, '');
+  });
+  return rows.join('\n').slice(0, OSAPI_CAP);
+}
+
+export function osApiRoute(spec, query, lang = 'en') {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return null;
+  const list = Array.isArray(spec) ? spec : [];
+  const hit = list.find((e) => (e.path || '').toLowerCase() === q)
+    || list.find((e) => (e.path || '').toLowerCase().includes(q))
+    || list.find((e) => JSON.stringify(osapiLang(e, lang).title || '').toLowerCase().includes(q));
+  if (!hit) return null;
+  const L = osapiLang(hit, lang);
+  const parts = [ (hit.method || 'GET') + ' ' + hit.path, L.synopsis || '', L.description || '', L.details || '' ];
+  return parts.filter(Boolean).join('\n\n').slice(0, OSAPI_CAP);
+}
+
+// The manifest contract, digested from schemas/manifest.schema.json — passed in, never fetched here.
+export function osApiManifest(schema) {
+  if (!schema || !schema.properties) return null;
+  const req = (schema.required || []).join(', ');
+  const cat = (((schema.properties.category || {}).enum) || []).join(' | ');
+  const items = ((schema.properties.permissions || {}).items) || {};
+  // The permission enum lives behind a $ref ($defs.capability) — resolve one level, which is all
+  // this schema uses; a digest that says "(none defined)" would teach the model to invent strings.
+  const ref = typeof items.$ref === 'string' && items.$ref.startsWith('#/$defs/') ? (schema.$defs || {})[items.$ref.slice(8)] : null;
+  const perms = ((items.enum || (ref && ref.enum)) || []).join(' | ');
+  return [
+    'manifest.json — required fields: ' + req,
+    'category: one of ' + (cat || '(free)'),
+    'permissions (each must be declared to be usable): ' + (perms || '(none defined)'),
+    'additionalProperties are ' + (schema.additionalProperties === false ? 'REJECTED — no invented fields' : 'allowed'),
+  ].join('\n').slice(0, OSAPI_CAP);
+}
+
+// The deploy footguns as hard rules — the things that fail SILENTLY when guessed wrong. Curated
+// here (docs/anima-code.md §6) because no schema file states them; keep in sync with app-publish.
+export const OSAPI_RULES = [
+  'www/ is INVISIBLE in URLs: the file apps/<id>/www/index.html is served at /apps/<id>/index.html.',
+  'A .gz file next to an asset SHADOWS the raw file — after editing, the stale .gz wins. publish_app regenerates them.',
+  'The registry entry needs enabled:true or the app exists but never appears in the launcher.',
+  'Icons and every asset the page loads must live under www/ (same-origin, relative paths).',
+  'Apps run in a plain iframe: fetch("/api/…") works directly; talk to the shell only via postMessage (open-app, clipboard).',
+  'Keep apps self-contained and light: no external CDNs (the device may be offline), no heavy frameworks (~18 KB device heap serves the page).',
+].join('\n');
+
+
+// ───────────────────────── the plan/todo surface ─────────────────────────
+// The Claude-Code parity gap called out in docs/anima-code.md §12.2: the orchestrator splits a job
+// into subtasks, but NOTHING tracked progress inside a worker, so a ten-minute app build showed the
+// user a spinner and showed the model nothing it could re-read. These two functions are the whole
+// contract — pure, so they are host-tested and shared by every transport (Anthropic, OpenAI, local).
+const PLAN_MAX = 12;                       // a "plan" longer than this is a tool-call log, not a plan
+const PLAN_TITLE_MAX = 120;
+const PLAN_STATUS = new Set(['todo', 'doing', 'done']);
+
+// Coerce whatever the model emitted into a valid plan. Never throws: a small model WILL send a bare
+// string array, a misspelled status, or three steps marked "doing" at once, and a malformed plan must
+// degrade into a usable one instead of failing the turn.
+export function normalizePlan(steps) {
+  const out = [];
+  for (const raw of (Array.isArray(steps) ? steps : []).slice(0, PLAN_MAX)) {
+    const o = (raw && typeof raw === 'object') ? raw : { title: raw };
+    const title = String(o.title == null ? '' : o.title).replace(/\s+/g, ' ').trim().slice(0, PLAN_TITLE_MAX);
+    if (!title) continue;
+    const st = String(o.status || 'todo').toLowerCase();
+    out.push({ title, status: PLAN_STATUS.has(st) ? st : 'todo' });
+  }
+  // At most one step in flight: keep the FIRST 'doing', demote the rest — otherwise the UI (and the
+  // model's own next read) can't tell where the work actually is.
+  let seen = false;
+  for (const s of out) {
+    if (s.status !== 'doing') continue;
+    if (seen) s.status = 'todo'; else seen = true;
+  }
+  return out;
+}
+
+// The tool result the model reads back. Plain glyphs (no colour, no HTML) so it survives every
+// transport and reads the same in the transcript as on screen.
+export function renderPlan(steps) {
+  if (!steps.length) return 'plan cleared';
+  const mark = { todo: '☐', doing: '▸', done: '☑' };
+  const done = steps.filter((s) => s.status === 'done').length;
+  return steps.map((s) => mark[s.status] + ' ' + s.title).join('\n')
+    + `\n(${done}/${steps.length} done)`;
 }
 
 // Map the Anthropic-shaped tool list to the OpenAI function-calling schema (the Groq contract).

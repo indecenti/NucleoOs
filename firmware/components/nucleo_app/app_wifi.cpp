@@ -65,6 +65,8 @@ const char *nucleo_setup_ap_ssid(void);
 const char *nucleo_setup_ap_pass(void);
 bool        nucleo_setup_ap_secure(void);
 bool        nucleo_setup_ap_intended(void);
+bool        nucleo_setup_ap_active(void);   // SoftAP reachable now (chosen hotspot OR rescue fallback)
+bool        nucleo_setup_ap_rescue(void);   // AP up only as a temporary STA-fallback
 void        nucleo_setup_set_ap_ssid(const char *ssid);
 void        nucleo_setup_set_ap_pass(const char *pass);
 int         nucleo_setup_apply_network(void);
@@ -135,6 +137,8 @@ static int squality(int rssi) {
 static uint16_t qcol(int q)   { return q >= 60 ? GRN : q >= 33 ? AMB : REDC; }
 static bool     connected(void){ return !strcmp(nucleo_setup_mode(),"sta") && nucleo_setup_ip()[0]; }
 static bool     ap_on(void)    { return nucleo_setup_ap_intended(); }   // honest: OFF during a transient STA fallback, not just raw mode=="ap"
+static bool     ap_up(void)    { return nucleo_setup_ap_active(); }     // reachable NOW (chosen hotspot OR rescue fallback) — the dashboard shows its join info either way
+static bool     ap_resc(void)  { return nucleo_setup_ap_rescue(); }     // reachable, but only as a temporary fallback while still trying to join a client link
 
 // Priority of a saved SSID (0 = normal/not-saved). Lets the Wi-Fi list mark and toggle "preferred"
 // networks — the supervisor joins the highest-priority in-range known net first, then strongest signal.
@@ -313,23 +317,27 @@ static void draw_stato(int ch){
 
     // signal ring (watchface arc)
     int cx=40,cy=58,r1=27,r0=19;
-    uint16_t rc=(connected()||ap_on())?qcol(q):DIM;
+    uint16_t rc=(connected()||ap_up())?qcol(q):DIM;
     d.fillArc(cx,cy,r0,r1,135.0f,405.0f,SURF);
-    if(connected()||ap_on()){
+    if(connected()||ap_up()){
         float e=135.0f+q*270.0f/100.0f; if(e>405.0f)e=405.0f;
         d.fillArc(cx,cy,r0,r1,135.0f,e,rc);
     }
     char b[24];
-    if(ap_on())          txt(cx-6,cy-8,"AP",ACC,BG,2);
+    if(ap_up())          txt(cx-6,cy-8,"AP",ACC,BG,2);
     else if(connected()){snprintf(b,4,"%d",q); txt(cx-(int)strlen(b)*6,cy-8,b,qcol(q),BG,2);}
     else                 txt(cx-6,cy-8,"--",DIM,BG,2);
 
-    // right column — primary values size 2
+    // right column — primary values size 2. Show the reachable hotspot whenever the AP is up (chosen OR
+    // a rescue fallback): during a STA-intended boot with the saved network out of range the rescue AP is
+    // the ONLY way into the device, so printing its SSID + 192.168.4.1 here is what keeps it from looking
+    // bricked. A rescue AP is labelled apart so the user knows it will switch to their Wi-Fi on its own.
     int rx=80;
-    if(ap_on()){
+    if(ap_up()){
         txt(rx,30,nucleo_setup_ap_ssid(),AMB,BG,2);
         txt(rx,52,"192.168.4.1",FG,BG,2);
-        txt(rx,74,s_en?"Hotspot active":"Hotspot attivo",GRN,BG,1);
+        if(ap_resc()) txt(rx,74,s_en?"Rescue hotspot":"Hotspot di soccorso",AMB,BG,1);
+        else          txt(rx,74,s_en?"Hotspot active":"Hotspot attivo",GRN,BG,1);
     }else{
         const char*ss=nucleo_setup_ssid()[0]?nucleo_setup_ssid():(s_en?"No network":"Nessuna rete");
         char sb[16]; snprintf(sb,sizeof sb,"%.13s",ss);

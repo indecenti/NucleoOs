@@ -1,0 +1,20 @@
+{
+  "_lang": "de",
+  "title": "Metronom",
+  "tab.metronome": "Metronom",
+  "tab.tuner": "Stimmgerät",
+  "start": "Start",
+  "stop": "Stopp",
+  "tap": "Tempo tippen",
+  "sig": "Schläge / Takt",
+  "subdiv": "Unterteilung",
+  "kbd.startstop": "Start/Stopp",
+  "kbd.tap": "Tap",
+  "a4": "A4",
+  "tuner.listen": "Zuhören",
+  "tuner.stop": "Stopp",
+  "tuner.hint": "Spiele eine einzelne Note nahe am Mikrofon.",
+  "tuner.busy": "Mikrofon belegt",
+  "tuner.denied": "Mikrofonzugriff verweigert.",
+  "tuner.err": "Mikrofon nicht verfügbar."
+}

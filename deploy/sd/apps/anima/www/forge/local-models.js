@@ -4,16 +4,23 @@
 // Every id below EXISTS in the vendored web-llm.js prebuiltAppConfig (verified), so no model_lib must be
 // vendored: WebLLM already knows each model's library + weight URLs. Pure & DOM-free → host-testable.
 
+// `onDevice: true` marks a model STAGED ON THE SD CARD: the browser can install it straight from the
+// Cardputer with no internet at all. That is the whole point of a device that carries its own brain —
+// a fresh browser on a network with no WAN still gets a real generative model.
 export const LOCAL_MODELS = [
-  { id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC',   label: 'Qwen2.5 7B',   sizeGB: 4.7, needGB: 6,   best: true, note: 'massima qualità' },
-  { id: 'Llama-3.1-8B-Instruct-q4f16_1-MLC', label: 'Llama 3.1 8B', sizeGB: 5.0, needGB: 7,               note: 'ottimo, un filo più pesante' },
-  { id: 'Qwen2.5-3B-Instruct-q4f16_1-MLC',   label: 'Qwen2.5 3B',   sizeGB: 2.0, needGB: 3,               note: 'equilibrio' },
-  { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 1.5B', sizeGB: 1.1, needGB: 2,               note: 'leggero' },
-  { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 0.5B', sizeGB: 0.3, needGB: 1,               note: 'minimo, gira quasi ovunque' },
+  { id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC',   label: 'Qwen2.5 7B',   sizeGB: 4.7, needGB: 6,   note: 'massima qualità, GPU dedicata' },
+  { id: 'Llama-3.1-8B-Instruct-q4f16_1-MLC', label: 'Llama 3.1 8B', sizeGB: 5.0, needGB: 7,   note: 'ottimo, un filo più pesante' },
+  { id: 'Qwen2.5-3B-Instruct-q4f16_1-MLC',   label: 'Qwen2.5 3B',   sizeGB: 2.0, needGB: 3,   note: 'equilibrio' },
+  { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 1.5B', sizeGB: 0.9, needGB: 2, best: true, onDevice: true, note: 'consigliato — sulla SD, si installa anche senza internet' },
+  { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 0.5B', sizeGB: 0.3, needGB: 1,   note: 'minimo, gira quasi ovunque' },
 ];
 
-// "Il migliore in assoluto utilizzabile" on a strong discrete GPU (e.g. RTX 3070 Ti, 8 GB).
-export const DEFAULT_LOCAL_MODEL = 'Qwen2.5-7B-Instruct-q4f16_1-MLC';
+// The recommended default is the one that ACTUALLY RUNS for most people and is already on the card.
+// It used to be the 7B: a 4.7 GB download needing ~6 GB of VRAM, offered as "consigliato" to every
+// visitor including the ones on an integrated GPU, who then waited for gigabytes and got an OOM. The
+// 1.5B is ~0.9 GB, wants ~2 GB of VRAM, and ships on the SD — so it installs offline, from the device.
+// A user with a strong GPU can still pick a bigger one; an explicit choice always wins (resolveLocalModel).
+export const DEFAULT_LOCAL_MODEL = 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC';
 
 export function localModelById(id) { return LOCAL_MODELS.find((m) => m.id === id) || null; }
 

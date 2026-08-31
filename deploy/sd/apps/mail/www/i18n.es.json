@@ -43,5 +43,7 @@
   "saved": "Guardado",
   "deleted": "Eliminado",
   "secured": "guardada",
-  "gmail_hint": "Gmail/Yahoo/iCloud necesitan una Contraseña de aplicación (con 2FA), no tu contraseña de acceso."
+  "gmail_hint": "Gmail/Yahoo/iCloud necesitan una Contraseña de aplicación (con 2FA), no tu contraseña de acceso.",
+  "body_label": "Mensaje",
+  "err_password_required": "Introduce la contraseña de la cuenta."
 }

@@ -1,0 +1,20 @@
+{
+  "_lang": "fr",
+  "title": "Métronome",
+  "tab.metronome": "Métronome",
+  "tab.tuner": "Accordeur",
+  "start": "Démarrer",
+  "stop": "Arrêter",
+  "tap": "Battre le tempo",
+  "sig": "Temps / mesure",
+  "subdiv": "Subdivision",
+  "kbd.startstop": "démarrer/arrêter",
+  "kbd.tap": "tap",
+  "a4": "La4",
+  "tuner.listen": "Écouter",
+  "tuner.stop": "Arrêter",
+  "tuner.hint": "Jouez une seule note près du microphone.",
+  "tuner.busy": "Microphone occupé",
+  "tuner.denied": "Accès au microphone refusé.",
+  "tuner.err": "Microphone indisponible."
+}

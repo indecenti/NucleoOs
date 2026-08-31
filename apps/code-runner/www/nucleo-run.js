@@ -194,7 +194,7 @@ function normPath(p) {
 export function createRunner(opts) {
   const caps = Object.assign({
     fs: true, http: true, anima: true, notify: true, hw: true,
-    cwd: '/', lang: 'it', timeoutMs: 5000,
+    cwd: '/', lang: 'en', timeoutMs: 5000,
     maxLogBytes: 256 * 1024,                 // output cap: drop logs past this, with one notice
     onLog: null, onNotify: null,
   }, opts || {});
@@ -281,7 +281,7 @@ export function createRunner(opts) {
       }
       case 'anima': {
         if (!can('anima')) throw new Error('anima capability denied');
-        const r = await fetch('/api/anima?q=' + encodeURIComponent(args[0] || '') + '&lang=' + (caps.lang || 'it') + '&mode=on');
+        const r = await fetch('/api/anima?q=' + encodeURIComponent(args[0] || '') + '&lang=' + (caps.lang || 'en') + '&mode=on');
         const j = await r.json();
         return { reply: j.reply || '', tier: j.tier, intent: j.intent };
       }

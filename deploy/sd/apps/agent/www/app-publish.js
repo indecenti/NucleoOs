@@ -37,7 +37,8 @@ export function buildManifest(spec = {}) {
     entry_service: 'none',
     web_route: '/apps/' + id + '/',
     icon: spec.icon ? String(spec.icon) : 'icon.svg',
-    permissions: Array.isArray(spec.permissions) ? spec.permissions : [],
+    permissions: Array.isArray(spec.permissions) ? spec.permissions
+      : (normKind(spec.kind) === 'device' ? ['system.events'] : []),   // the device starter reads sys.status, which the broker gates behind this
     mounts: spec.mounts && typeof spec.mounts === 'object' ? spec.mounts : {},
     handles: { role: 'none', extensions: [] },
     subscribes: [],
@@ -63,11 +64,16 @@ export function validateManifest(m) {
 
 // Scaffold KINDS: the agent picks a working starter to build on, not a blank page. Each is a complete,
 // self-contained, i18n-wired app — so a fresh scaffold runs immediately and the model has a real baseline.
-export const APP_KINDS = ['blank', 'list', 'timer', 'converter'];
+export const APP_KINDS = ['blank', 'list', 'timer', 'converter', 'device'];
 export function normKind(k) { return APP_KINDS.includes(k) ? k : 'blank'; }
 
 // Shared head/style + the i18n boot, so every kind looks consistent and stays valid. body/script are the
 // only per-kind parts. The inline script is an ES module (imports the OS i18n) — same shape as before.
+// The inline catalogue a sandboxed app ships with: the same it/en objects starterI18n writes to disk,
+// embedded so the app needs no cross-origin fetch to be localised.
+function catInline(spec) {
+  return JSON.stringify({ it: JSON.parse(starterI18n(spec, false)), en: JSON.parse(starterI18n(spec, true)) });
+}
 function htmlShell(spec, bodyInner, scriptInner) {
   const name = String(spec.name || 'App').replace(/[<&]/g, '');
   const id = sanitizeId(spec.id || name);
@@ -89,6 +95,7 @@ function htmlShell(spec, bodyInner, scriptInner) {
   ul { list-style: none; padding: 0; margin: 12px 0 0; } li { padding: 8px 2px; border-bottom: 1px solid #243352; cursor: pointer; }
   .big { font-size: 40px; font-weight: 700; letter-spacing: 1px; margin: 14px 0; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .kv { list-style: none; padding: 0; margin: 10px 0; } .kv li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid #8884; }
 </style>
 </head>
 <body>
@@ -97,12 +104,66 @@ function htmlShell(spec, bodyInner, scriptInner) {
 ${bodyInner}
   </div>
   <script type="module">
-    import I18N from '/nucleo-i18n.js';
-    const t = await I18N.init('${id}');
+${brokerClient(id, catInline(spec))}
 ${scriptInner}
   </script>
 </body>
 </html>
+`;
+}
+
+// Apps written by the agent run SANDBOXED: opaque origin, no pairing cookie, no shared localStorage,
+// no reach into /api/*. That is deliberate — they are the only apps nobody vetted. Everything they are
+// allowed to do arrives through this tiny client, and the shell grants exactly what the manifest
+// declared (web/shell/appbroker.js). Note there is no import of /nucleo-i18n.js here: a cross-origin
+// module fetch cannot work from an opaque origin, so generated apps carry their own strings.
+function brokerClient(id, catJson) {
+  return `    // --- OS bridge (sandboxed app) ---
+    // This app runs with an OPAQUE ORIGIN: no pairing cookie, no shared localStorage, /api/* out of
+    // reach. Everything it may do arrives through the shell's broker, which grants exactly what this
+    // app's manifest declared (web/shell/appbroker.js). Calls are serialised there, so several
+    // generated apps cannot burst the Cardputer's 4-6 sockets.
+    const os = (() => {
+      let n = 0; const waiting = new Map();
+      addEventListener('message', (e) => {
+        const d = e.data;
+        if (!d || d.type !== 'nucleo.broker.reply') return;
+        const w = waiting.get(d.id); if (!w) return;
+        waiting.delete(d.id); w(d);
+      });
+      const call = (method, args, timeoutMs) => new Promise((res) => {
+        const i = ++n; waiting.set(i, res);
+        parent.postMessage({ type: 'nucleo.broker', id: i, method, args }, '*');
+        setTimeout(() => { if (waiting.delete(i)) res({ ok: false, error: 'timeout' }); }, timeoutMs || 10000);
+      });
+      return {
+        fs: { read: (path) => call('fs.read', { path }),
+              write: (path, content) => call('fs.write', { path, content }),
+              list: (path) => call('fs.list', { path }) },
+        notify: (text) => call('notify', { text }),
+        sys: { info: () => call('sys.info', {}), status: () => call('sys.status', {}) },
+        // Intelligence as a syscall — each needs its OWN manifest permission, or the call is denied:
+        //   ai.ask(q)        → the on-device deterministic brain (needs 'ai.anima'; offline, no cost)
+        //   ai.complete(p)   → the user's cloud model (needs 'ai.cloud'; single-flight, rate-limited)
+        // Both return {ok, ...} like everything else here; expect and handle {ok:false}.
+        ai: { ask: (q) => call('ai.ask', { q }),
+              complete: (prompt) => call('ai.complete', { prompt }, 25000) },   // cloud: outlives the 10 s default
+        home: '/data/apps/${id}',          // this app's own corner of the SD
+      };
+    })();
+    // i18n WITHOUT the engine: an opaque origin cannot import /nucleo-i18n.js (a cross-origin module),
+    // so the app carries its catalogue inline and paints data-i18n itself. Same five languages, same
+    // markup contract as every other app — only the delivery changes. The language comes from the OS.
+    const I18N_CAT = ${catJson};
+    const I18N = { init: async () => {
+      let lang = 'en';
+      try { const r = await os.sys.info(); if (r && r.ok && r.lang) lang = r.lang; } catch {}
+      const tr = (k) => { const c = I18N_CAT[lang] || I18N_CAT.en || {}; const v = c[k]; return v == null ? ((I18N_CAT.en || {})[k] ?? k) : v; };
+      for (const el of document.querySelectorAll('[data-i18n]')) { const v = tr(el.getAttribute('data-i18n')); if (v != null) el.textContent = v; }
+      const ttl = tr('title'); if (ttl) document.title = ttl;
+      return tr;
+    } };
+    const t = await I18N.init('${id}');
 `;
 }
 
@@ -118,18 +179,29 @@ const KIND_BODY = {
       <select id="from"><option value="C">°C</option><option value="F">°F</option></select><span>&rarr;</span>
       <select id="to"><option value="F">°F</option><option value="C">°C</option></select></div>
     <div class="big" id="out">68 °F</div>`,
+  device: `    <div class="big" id="clock">--:--</div>
+    <ul class="kv">
+      <li><span data-i18n="uptime">In funzione da</span><b id="up">—</b></li>
+      <li><span data-i18n="sd">Spazio SD</span><b id="sd">—</b></li>
+      <li><span data-i18n="net">Rete</span><b id="net">—</b></li>
+    </ul>
+    <div class="row"><button id="refresh" data-i18n="refresh">Aggiorna</button></div>`,
 };
 const KIND_SCRIPT = {
   blank: `    document.getElementById('go').addEventListener('click', () => {
       // TODO: la logica dell'app
     });`,
-  list: `    const KEY = 'items', list = document.getElementById('list'), inp = document.getElementById('inp');
-    const items = JSON.parse(localStorage.getItem(KEY) || '[]');
-    inp.placeholder = t('placeholder');
-    const save = () => localStorage.setItem(KEY, JSON.stringify(items));
+  list: `    const FILE = os.home + '/items.json', list = document.getElementById('list'), inp = document.getElementById('inp');
+    // Sandboxed: no localStorage (opaque origin). The list lives on the SD, inside this app's own
+    // folder, written through the broker — which serialises it so several apps cannot flood the device.
+    const EMPTY = 'Nessun elemento', PLACEHOLDER = 'Aggiungi qualcosa…';
+    inp.placeholder = PLACEHOLDER;
+    let items = [];
+    { const r = await os.fs.read(FILE); if (r.ok) { try { items = JSON.parse(r.content) || []; } catch {} } }
+    const save = () => os.fs.write(FILE, JSON.stringify(items));
     function render() {
       list.innerHTML = '';
-      if (!items.length) { const li = document.createElement('li'); li.textContent = t('empty'); list.appendChild(li); return; }
+      if (!items.length) { const li = document.createElement('li'); li.textContent = EMPTY; list.appendChild(li); return; }
       items.forEach((txt, i) => { const li = document.createElement('li'); li.textContent = txt; li.addEventListener('click', () => { items.splice(i, 1); save(); render(); }); list.appendChild(li); });
     }
     function add() { const v = inp.value.trim(); if (!v) return; items.push(v); inp.value = ''; save(); render(); }
@@ -154,6 +226,20 @@ const KIND_SCRIPT = {
     }
     [val, from, to].forEach((el) => el.addEventListener('input', conv));
     conv();`,
+  device: `    // The Cardputer's live state through the broker: a sandboxed app has no /api/* — os.sys.status
+    // is the DECLARED window on it (permission system.events), serialised so N apps cannot burst.
+    const fmt = (b) => b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.round(b / 1e6) + ' MB';
+    async function refresh() {
+      const r = await os.sys.status();
+      if (!r || !r.ok) { document.getElementById('net').textContent = t('offline') || 'offline'; return; }
+      const st = r.status;
+      document.getElementById('clock').textContent = st.time ? String(st.time).slice(11, 16) : '--:--';
+      document.getElementById('up').textContent = Math.floor(st.uptime_s / 3600) + 'h ' + Math.floor((st.uptime_s % 3600) / 60) + 'm';
+      document.getElementById('sd').textContent = st.storage && st.storage.mounted ? fmt(st.storage.free_bytes) + ' / ' + fmt(st.storage.total_bytes) : '—';
+      document.getElementById('net').textContent = (st.wifi && st.wifi.ssid) || '—';
+    }
+    document.getElementById('refresh').addEventListener('click', refresh);
+    refresh(); setInterval(refresh, 30000);`,
 };
 
 // A valid, self-contained starter page for the chosen kind (default 'blank'). The agent edits it into the
@@ -174,8 +260,8 @@ export function starterIcon(spec = {}) {
 }
 
 const KIND_I18N = {
-  it: { blank: { hello: 'Ciao da NucleoOS!', action: 'Avvia' }, list: { add: 'Aggiungi', placeholder: 'Nuovo elemento…', empty: 'Nessun elemento' }, timer: { start: 'Avvia', reset: 'Azzera', minutes: 'minuti' }, converter: {} },
-  en: { blank: { hello: 'Hello from NucleoOS!', action: 'Start' }, list: { add: 'Add', placeholder: 'New item…', empty: 'No items' }, timer: { start: 'Start', reset: 'Reset', minutes: 'minutes' }, converter: {} },
+  it: { blank: { hello: 'Ciao da NucleoOS!', action: 'Avvia' }, list: { add: 'Aggiungi', placeholder: 'Nuovo elemento…', empty: 'Nessun elemento' }, timer: { start: 'Avvia', reset: 'Azzera', minutes: 'minuti' }, converter: {}, device: { uptime: 'In funzione da', sd: 'Spazio SD', net: 'Rete', refresh: 'Aggiorna', offline: 'device non raggiungibile' } },
+  en: { blank: { hello: 'Hello from NucleoOS!', action: 'Start' }, list: { add: 'Add', placeholder: 'New item…', empty: 'No items' }, timer: { start: 'Start', reset: 'Reset', minutes: 'minutes' }, converter: {}, device: { uptime: 'Uptime', sd: 'SD space', net: 'Network', refresh: 'Refresh', offline: 'device unreachable' } },
 };
 export function starterI18n(spec, en) {
   const kind = normKind(spec && spec.kind);

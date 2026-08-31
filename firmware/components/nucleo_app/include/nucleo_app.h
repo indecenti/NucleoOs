@@ -49,6 +49,13 @@ void nucleo_app_request_draw(void);            // ask for a redraw next loop
 // and re-acquired the shared canvas: the per-band hashes still describe the PRE-modal frame, so the
 // normal diff would leave the stale direct-drawn pixels on screen. This invalidates that cache.
 void nucleo_app_force_repaint(void);
+// Panel-content generation. Bumped whenever what is ON the panel can no longer be trusted to match
+// what the foreground app last drew: a force_repaint(), or the app regaining the screen from the
+// launcher / an overlay (voice, notification banner, Control Center). An app that repaints
+// INCREMENTALLY on the direct-draw path (no canvas -> it only redraws the rows that changed, see
+// app_info.cpp) must invalidate its own cache when this value changes, or overlay residue stays on
+// screen. Buffered apps need not care: the run loop already forces a full blit in the same cases.
+unsigned int nucleo_app_repaint_gen(void);
 void nucleo_app_release_buffers(void);         // free launcher off-screen buffers (reclaim RAM)
 // Heavy one-shot HTTP downloads (OTA) raise this so the run loop LAUNCHES Remote Control from the UI task
 // — the RAM-listening posture (frees the 32 KB canvas + L1) that lets a flash through, but automatic.

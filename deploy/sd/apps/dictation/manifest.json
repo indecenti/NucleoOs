@@ -8,9 +8,27 @@
   "entry_service": "dictation",
   "web_route": "/apps/dictation/",
   "icon": "/apps/dictation/icon.svg",
-  "permissions": ["storage.shared", "device.audio", "device.display"],
-  "handles": { "role": "none", "extensions": [] },
-  "subscribes": ["rec.started", "rec.stopped"],
-  "power": { "budget_class": "high", "wants_wakeup": ["keyboard"] },
-  "mesh": { "exposes": [], "consumes": [] }
+  "permissions": [
+    "storage.shared",
+    "device.audio",
+    "device.display"
+  ],
+  "handles": {
+    "role": "none",
+    "extensions": []
+  },
+  "subscribes": [
+    "rec.started",
+    "rec.stopped"
+  ],
+  "power": {
+    "budget_class": "high",
+    "wants_wakeup": [
+      "keyboard"
+    ]
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
 }

@@ -168,6 +168,101 @@ export function shape(raw, q, lang) {
   return out;
 }
 
+// ---- executor: fill the {value} templates the cascade leaves for its host ---------------------------
+// Several intents (capabilities/network/ram/version/storage/uptime) are answered from LIVE STATE, so the
+// cascade returns the sentence with a "{value}" hole and state:'tool' for the host to fill. The firmware
+// does this in nucleo_httpd.c — the BROWSER never did, so those questions printed the raw "{value}"
+// template at the user ("cosa sai fare?" -> "{value}"). Fill it here from the device's own APIs.
+//
+// Contract: NEVER return a reply that still contains the placeholder. If the value can't be resolved we
+// clear the reply instead, so the caller's abstain path takes over and the cascade falls through to a
+// brain that can actually answer — a wrong-but-confident sentence is worse than no answer.
+const PILLARS = {
+  it: 'darti ora, data, stagione, spazio su SD e batteria; il meteo di una citta; gestire il calendario; risolvere matematica, fisica, geometria e legge di Ohm; convertire unita; creare file; e rispondere su NucleoOS, C ed elettronica',
+  en: 'tell the time, date, season, SD space and battery; a city\'s weather; manage your calendar; solve maths, physics, geometry and Ohm\'s law; convert units; create files; and answer about NucleoOS, C and electronics',
+};
+
+async function jget(url, fetchImpl) {
+  try { const r = await (fetchImpl || fetch)(url, { cache: 'no-store' }); return r.ok ? await r.json() : null; }
+  catch { return null; }
+}
+
+// ---- how big is the brain, really? -----------------------------------------------------------------
+// The UI used to quote a hardcoded "~14 MB". That was the STATIC PACK[] list only: the AKB5 knowledge is
+// 60+ topic shards enumerated dynamically at load (see PACK's comment), and they are the bulk of the
+// download — the true figure is ~88 MB. A hardcoded number drifts the moment a shard is added, so
+// measure it: two directory listings, summed, cached for the session. Falls back to a conservative
+// estimate only if the device can't be reached, and NEVER under-reports.
+let _packBytes = 0;
+export async function packSizeBytes(deps = {}) {
+  if (_packBytes) return _packBytes;
+  const f = deps.fetch;
+  const listUrl = deps.fsListUrl || ((p) => '/api/fs/list?path=' + encodeURIComponent(p));
+  let total = 0;
+  for (const dir of ['data/anima', 'data/anima/akb5']) {
+    const d = await jget(listUrl(dir), f);
+    for (const e of (d && d.entries) || []) if (e.type === 'file') total += e.size || 0;
+  }
+  _packBytes = total || 88 * 1024 * 1024;   // device unreachable -> the measured real-world figure
+  return _packBytes;
+}
+export function fmtMB(bytes) {
+  const mb = bytes / (1024 * 1024);
+  return mb >= 100 ? `${Math.round(mb)} MB` : `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
+}
+
+export async function fillToolTemplate(out, lang, deps = {}) {
+  if (!out || typeof out.reply !== 'string' || !out.reply.includes('{value}')) return out;
+  const f = deps.fetch;
+  const en = lang === 'en';
+  const arg = out.arg || out.intent || '';
+  let value = '';
+
+  if (arg === 'capabilities') {
+    const apps = await jget('/api/apps', f);
+    const list = Array.isArray(apps && apps.apps) ? apps.apps : (Array.isArray(apps) ? apps : []);
+    const names = list.map((a) => a && (a.name || a.id)).filter(Boolean);
+    const head = names.slice(0, 5).join(', ');
+    value = en
+      ? `open your ${names.length} apps${head ? ` (${head}…)` : ''}, ${PILLARS.en}`
+      : `aprire le tue ${names.length} app${head ? ` (${head}…)` : ''}, ${PILLARS.it}`;
+  } else if (arg === 'network') {
+    const s = await jget('/api/status', f), n = s && s.network;
+    if (n) {
+      value = n.mode === 'ap'
+        ? (en ? `a Wi-Fi hotspot "${n.ssid}", IP ${n.ip}` : `un hotspot Wi-Fi "${n.ssid}", IP ${n.ip}`)
+        : (n.ssid ? (en ? `connected to "${n.ssid}", IP ${n.ip}` : `connesso a "${n.ssid}", IP ${n.ip}`)
+                  : (en ? 'not connected' : 'non connesso'));
+    }
+  } else if (arg === 'ram') {
+    const s = await jget('/api/status', f);
+    if (s && typeof s.free_heap === 'number') {
+      const kb = Math.round(s.free_heap / 1024);
+      value = en ? `${kb} KB of RAM free` : `${kb} KB di RAM liberi`;
+    }
+  } else if (arg === 'version') {
+    const s = await jget('/api/status', f);
+    if (s && s.version) value = `NucleoOS ${s.version}`;
+  } else if (arg === 'storage') {
+    const s = await jget('/api/status', f), st = s && s.storage;
+    if (st && st.free_bytes) {
+      const gb = (st.free_bytes / 1e9).toFixed(1);
+      value = en ? `${gb} GB free` : `${gb} GB liberi`;
+    }
+  } else if (arg === 'uptime') {
+    const s = await jget('/api/status', f);
+    if (s && typeof s.uptime_s === 'number') {
+      const m = Math.floor(s.uptime_s / 60), h = Math.floor(m / 60);
+      value = h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
+    }
+  }
+
+  // Unresolvable (device unreachable, unknown tool) -> abstain rather than print the placeholder.
+  if (!value) { out.reply = ''; out.domain = 'none'; out.confidence = 0; return out; }
+  out.reply = out.reply.split('{value}').join(value);
+  return out;
+}
+
 // ---- public engine --------------------------------------------------------------------------------
 export function createAnimaLocal(opts = {}) {
   const here = new URL('.', import.meta.url);
@@ -324,7 +419,7 @@ export function createAnimaLocal(opts = {}) {
     // download (the mid-chat silent-fallback probe). Never pulls; safe to call often.
     async ready() { return loaded || await packCached(); },
     // Load ONLY from the cache (cachedOnly: NO network at all), and only if the required pack is present;
-    // otherwise resolve false so the caller falls back to the device instead of pulling ~14 MB. This is
+    // otherwise resolve false so the caller falls back to the device instead of pulling ~88 MB. This is
     // the silent boot/mid-chat mount — it can never start a download.
     async loadIfCached(onProgress, signal) {
       if (loaded) return true;

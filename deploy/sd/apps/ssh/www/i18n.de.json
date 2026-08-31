@@ -46,5 +46,10 @@
   "disconnect": "Trennen",
   "gate_title": "Echtes SSH-Terminal",
   "gate_body": "Es verbindet sich mit deinen SSH-Hosts über eine kleine <b>Bridge</b>, die du auf einem deiner eigenen Rechner (PC/Pi/NAS) betreibst — kein Drittanbieterdienst. Starte <code>tools/nucleo-ssh-bridge</code> (<code>npm i &amp;&amp; node index.js</code>) und lege dann URL und Token hier fest.",
-  "gate_set_btn": "Bridge einrichten"
+  "gate_set_btn": "Bridge einrichten",
+  "hostkey_tofu": "neuer Host-Schlüssel gemerkt: {fp} — einmal über einen anderen Kanal prüfen.",
+  "hostkey_ok": "Host-Schlüssel bestätigt: {fp}",
+  "hostkey_mismatch": "HOST-SCHLÜSSEL GEÄNDERT! gemerkt {old} — empfangen {fp}. Möglicher MITM: Sitzung abgelehnt. Ist die Änderung legitim (Server neu aufgesetzt), neuen Schlüssel akzeptieren.",
+  "hostkey_mismatch_short": "Host-Schlüssel geändert — Sitzung abgelehnt",
+  "hostkey_accept": "Neuen Schlüssel akzeptieren"
 }

@@ -93,7 +93,7 @@
     import I18N from '/nucleo-i18n.js';
     import { UNITS, unitsInCategory, categoryOf, convert, fmt, runCommand } from './convert.js';
     const t = await I18N.init('unit-converter');
-    const lang = (localStorage.getItem('nucleo.lang') || document.documentElement.lang || 'it').slice(0, 2);
+    const lang = (localStorage.getItem('nucleo.lang') || document.documentElement.lang || 'en').slice(0, 2);
 
     const $ = (id) => document.getElementById(id);
     // Friendly display labels; anything not listed shows its canonical symbol as-is.

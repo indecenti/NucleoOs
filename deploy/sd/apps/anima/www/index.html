@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -730,7 +730,7 @@
       <div class="dlist" id="dlist" role="listbox" tabindex="-1" aria-label="Conversazioni"></div>
       <div class="sb-foot" id="sb-foot"></div>
     </div>
-    <div class="sb-resizer" id="sb-resizer" title="Trascina per ridimensionare" aria-hidden="true"></div>
+    <div class="sb-resizer" id="sb-resizer" title="Drag to resize" data-i18n-attr="title:resizeHint" aria-hidden="true"></div>
   </aside>
 
   <!-- files drawer (workspace tree) -->
@@ -824,7 +824,7 @@
               </div>
               <div class="set-field">
                 <div class="f-tx"><label id="s-speed">Velocità risposta</label><span class="f-sub" data-i18n data-it="Quanto velocemente compare il testo della risposta." data-en="How fast reply text streams in.">Quanto velocemente compare il testo della risposta.</span></div>
-                <div class="f-ctl"><div class="seg2" id="set-speed"><button data-s="0">Istantanea</button><button data-s="14">Fluida</button><button data-s="6">Veloce</button></div></div>
+                <div class="f-ctl"><div class="seg2" id="set-speed"><button data-s="0" data-i18n="speedInstant">Instant</button><button data-s="14" data-i18n="speedSmooth">Smooth</button><button data-s="6" data-i18n="speedFast">Fast</button></div></div>
               </div>
               <div class="set-field" id="set-ttsspeed-field" hidden>
                 <div class="f-tx"><label id="s-ttsspeed">Velocità voce Cardputer</label><span class="f-sub" data-i18n data-it="Quanto velocemente il Cardputer legge ad alta voce (voce on-device)." data-en="How fast the Cardputer reads aloud (on-device voice).">Quanto velocemente il Cardputer legge ad alta voce (voce on-device).</span></div>
@@ -951,7 +951,7 @@
           <div class="set-section">
             <h4 id="h-conv">Conversazione</h4>
             <div class="set-card"><div class="set-field-col">
-              <div class="exprow"><button id="exp-md" title="Esporta in Markdown">↓ Markdown</button><button id="exp-json" title="Esporta in JSON">↓ JSON</button></div>
+              <div class="exprow"><button id="exp-md" title="Export to Markdown" data-i18n-attr="title:exportMdTitle">↓ Markdown</button><button id="exp-json" title="Export to JSON" data-i18n-attr="title:exportJsonTitle">↓ JSON</button></div>
               <button class="btnfull" id="shortcuts-open">⌨ Scorciatoie</button>
               <button class="danger" id="clear">Pulisci conversazione</button>
             </div></div>
@@ -984,7 +984,7 @@
       <div class="box" id="box">
         <span class="prompt">›</span>
         <textarea id="q" rows="1" autocomplete="off" autofocus spellcheck="false" aria-label="Messaggio"></textarea>
-        <button class="mic" id="mic" type="button" title="Detta a voce" aria-label="Detta a voce" hidden>🎤</button>
+        <button class="mic" id="mic" type="button" title="Dictate" aria-label="Dictate" data-i18n-attr="aria-label:micAria" hidden>🎤</button>
         <button class="webtog" id="webtog" type="button" aria-pressed="false" title="Web: risposte aggiornate con fonti (Groq compound)" aria-label="Web">🌐</button>
         <button class="send" id="send" type="submit">Invia</button>
       </div>
@@ -1003,7 +1003,7 @@
 
   <!-- command palette / shortcuts overlay -->
   <div class="pal-scrim" id="pal-scrim">
-    <div class="pal" id="pal" role="dialog" aria-modal="true" aria-label="Tavolozza comandi">
+    <div class="pal" id="pal" role="dialog" aria-modal="true" aria-label="Command palette" data-i18n-attr="aria-label:cmdPaletteAria">
       <input class="pq" id="pal-q" placeholder="Cerca un comando…" autocomplete="off" spellcheck="false">
       <div class="pal-list" id="pal-list"></div>
     </div>
@@ -1139,13 +1139,10 @@
         suggLbl:'Suggerimenti', clear:'Pulisci conversazione',
         compactLbl:'Compatta contesto', pin:'fissa', pinned:'Fissato nel contesto', unpinned:'Sfissato', pinHint:'Fissa: tieni nel contesto durante la compattazione',
         themeNames:{ dark:'Midnight', light:'Daylight', oled:'Carbon', hc:'Contrast' },
-        subByMode:{ off:'solo offline', on:'offline + online', local:'GPU del browser', edge:'offline, nel browser', only:'solo online' },
-        stByMode:{ off:'offline', on:'ibrida', local:'GPU locale', edge:'browser', only:'online' },
-        modeHints:{ off:'Offline: il cervello del Cardputer, senza rete. Se il dispositivo non risponde, il cervello del browser (se pronto) fa da riserva. Digita /guida per la mappa completa.',
-                    on:'Ibrida: prima il Cardputer (che può già usare il maestro cloud), poi — come riserva — il cervello del browser e l’indice web.',
-                    local:'GPU locale: il modello gira sulla GPU del browser — offline e privato. Per le traduzioni di frasi intere senza cloud (Grok solo se manca la GPU).',
-                    edge:'Browser: tutta la cascata offline di ANIMA gira QUI nel browser (WebAssembly) — risposte identiche al Cardputer. Se non sa, recupera dalle card web già in cache (niente rete). Il cervello si scarica una volta; poi funziona anche col Cardputer spento. Nulla lascia il dispositivo.',
-                    only:'Online: LLM veri (cloud Grok/Claude → LLM del browser). Come ultima risorsa, PRIMA di scalare sul Cardputer, usa il cervello del browser e indicizza il web.' },
+        subByMode:{ auto:'il cervello migliore disponibile', private:'tutto in locale, niente rete' },
+        stByMode:{ auto:'auto', private:'privato' },
+        modeHints:{ auto:'Auto: ANIMA usa il cervello migliore disponibile in questo momento e scende la scala finche’ uno risponde — IA online (se hai una chiave), poi il modello sulla GPU del browser, poi il cervello WASM nel browser, poi il Cardputer. Non scegli tu dove gira.',
+                    private:'Privato: la stessa scala senza nessun gradino di rete — modello sulla GPU del browser, cervello WASM, Cardputer. Nulla lascia questa macchina.' },
         edgeErr:'Non riesco a caricare ANIMA in locale: scaricamento del cervello non riuscito. Controlla la connessione al dispositivo.',
         edgeNeedInstall:'ANIMA offline gira in questo browser (WASM), ma il cervello non è ancora installato qui. Installalo una volta da Impostazioni ▸ Modelli (poi risponde in locale anche senza Cardputer), oppure usa la modalità Ibrida/Online.',
         edge:{ lead:'Assistente di NucleoOS che gira INTERAMENTE in questo browser (WebAssembly): offline, privato e istantaneo. Apre app, fa calcoli, dà ora e data, crea file, risponde a domande e impara ciò che gli insegni — senza che nulla lasci il dispositivo.',
@@ -1203,13 +1200,10 @@
         suggLbl:'Suggestions', clear:'Clear conversation',
         compactLbl:'Compact context', pin:'pin', pinned:'Pinned in context', unpinned:'Unpinned', pinHint:'Pin: keep in context through compaction',
         themeNames:{ dark:'Midnight', light:'Daylight', oled:'Carbon', hc:'Contrast' },
-        subByMode:{ off:'offline only', on:'offline + online', local:'browser GPU', edge:'offline, in-browser', only:'online only' },
-        stByMode:{ off:'offline', on:'hybrid', local:'local GPU', edge:'browser', only:'online' },
-        modeHints:{ off:'Offline: the Cardputer’s brain, no network. If the device doesn’t answer, the browser brain (if ready) is the backup. Type /guide for the full map.',
-                    on:'Hybrid: the Cardputer first (it can already use the cloud teacher), then — as backup — the browser brain and the web index.',
-                    local:'Local GPU: the model runs on the browser GPU — offline and private. For full-sentence translation with no cloud (Grok only if there is no GPU).',
-                    edge:'Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the Cardputer. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the Cardputer off. Nothing leaves the device.',
-                    only:'Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the Cardputer, it uses the browser brain and indexes the web.' },
+        subByMode:{ auto:'the best brain available', private:'all local, no network' },
+        stByMode:{ auto:'auto', private:'private' },
+        modeHints:{ auto:'Auto: ANIMA uses the best brain available right now, walking the ladder down until one answers — online AI (if you have a key), then the model on the browser GPU, then the in-browser WASM brain, then the Cardputer. You never pick where it runs.',
+                    private:'Private: the same ladder with every network rung removed — browser GPU model, WASM brain, Cardputer. Nothing leaves this machine.' },
         edgeErr:'Could not load ANIMA locally: brain download failed. Check the device connection.',
         edgeNeedInstall:'ANIMA offline runs in this browser (WASM), but the brain isn’t installed here yet. Install it once from Settings ▸ Models (then it answers locally even without the Cardputer), or use Hybrid/Online mode.',
         edge:{ lead:"NucleoOS's assistant running ENTIRELY in this browser (WebAssembly): offline, private and instant. It opens apps, does math, tells time and date, creates files, answers questions and learns what you teach it — without anything leaving the device.",
@@ -1265,7 +1259,7 @@
     // ── Multilingual: it/en are inline; es/fr/de come from ANIMA_L10N, keyed by the ENGLISH string.
     //    TR() routes the inline it/en ternaries; UI.es/fr/de are deep-mapped from UI.en; the settings
     //    data-i18n loop consults the same table. ANIMA/LLM system prompts are intentionally left as-is.
-    function LANG(){ const l=(get('anima.lang','it')||'it').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'it'; }
+    function LANG(){ const l=(get('anima.lang','en')||'en').slice(0,2); return ['it','en','es','fr','de'].includes(l)?l:'en'; }   // English is the fallback floor (matches the OS i18n engine BASE)
     const ANIMA_L10N = {
       es: {
         "offline assistant": "asistente offline",
@@ -1547,13 +1541,13 @@
         "Retry": "Reintentar",
         "Use device": "Usar el dispositivo",
         "Download ANIMA’s offline brain?": "¿Descargar el cerebro offline de ANIMA?",
-        "To run ANIMA locally in this browser I need to download its brain (~14 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Para correr ANIMA en local en este navegador necesito descargar su cerebro (~14 MB) del dispositivo, una vez. Luego funciona rápido, privado y con el Cardputer apagado.",
+        "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Para correr ANIMA en local en este navegador necesito descargar su cerebro (~88 MB) del dispositivo, una vez. Luego funciona rápido, privado y con el Cardputer apagado.",
         "Nothing downloads without your OK. You can switch to <b>Hybrid</b> (use the device) anytime.": "Nada se descarga sin tu OK. Puedes cambiar a <b>Híbrida</b> (usar el dispositivo) cuando quieras.",
-        "Download (~14 MB)": "Descargar (~14 MB)",
+        "Download (~88 MB)": "Descargar (~88 MB)",
         "capital of France": "capital de Francia",
         "How ANIMA works": "Cómo funciona ANIMA",
         "Got it": "Entendido",
-        "Re-download ANIMA's brain (~14 MB)?": "¿Volver a descargar el cerebro de ANIMA (~14 MB)?",
+        "Re-download ANIMA's brain (~88 MB)?": "¿Volver a descargar el cerebro de ANIMA (~88 MB)?",
         " · best": " · recomendado",
         "Loading… ": "Cargando… ",
         "✓ Ready — runs offline now": "✓ Listo — ahora corre offline",
@@ -2012,13 +2006,13 @@
         "Retry": "Réessayer",
         "Use device": "Utiliser l’appareil",
         "Download ANIMA’s offline brain?": "Télécharger le cerveau hors ligne d’ANIMA ?",
-        "To run ANIMA locally in this browser I need to download its brain (~14 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Pour exécuter ANIMA en local dans ce navigateur, je dois télécharger son cerveau (~14 Mo) depuis l’appareil, une fois. Ensuite elle fonctionne vite, en privé, et Cardputer éteint.",
+        "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Pour exécuter ANIMA en local dans ce navigateur, je dois télécharger son cerveau (~88 Mo) depuis l’appareil, une fois. Ensuite elle fonctionne vite, en privé, et Cardputer éteint.",
         "Nothing downloads without your OK. You can switch to <b>Hybrid</b> (use the device) anytime.": "Rien ne se télécharge sans votre accord. Vous pouvez passer en <b>Hybride</b> (utiliser l’appareil) à tout moment.",
-        "Download (~14 MB)": "Télécharger (~14 Mo)",
+        "Download (~88 MB)": "Télécharger (~88 Mo)",
         "capital of France": "capitale de la France",
         "How ANIMA works": "Comment fonctionne ANIMA",
         "Got it": "Compris",
-        "Re-download ANIMA's brain (~14 MB)?": "Re-télécharger le cerveau d’ANIMA (~14 Mo) ?",
+        "Re-download ANIMA's brain (~88 MB)?": "Re-télécharger le cerveau d’ANIMA (~88 Mo) ?",
         " · best": " · recommandé",
         "Loading… ": "Chargement… ",
         "✓ Ready — runs offline now": "✓ Prêt — fonctionne hors ligne maintenant",
@@ -2472,13 +2466,13 @@
         "Retry": "Erneut versuchen",
         "Use device": "Gerät verwenden",
         "Download ANIMA’s offline brain?": "ANIMAs Offline-Gehirn herunterladen?",
-        "To run ANIMA locally in this browser I need to download its brain (~14 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Um ANIMA lokal in diesem Browser auszuführen, muss ich ihr Gehirn (~14 MB) einmal vom Gerät laden. Danach läuft es schnell, privat und bei ausgeschaltetem Cardputer.",
+        "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Um ANIMA lokal in diesem Browser auszuführen, muss ich ihr Gehirn (~88 MB) einmal vom Gerät laden. Danach läuft es schnell, privat und bei ausgeschaltetem Cardputer.",
         "Nothing downloads without your OK. You can switch to <b>Hybrid</b> (use the device) anytime.": "Ohne dein OK wird nichts geladen. Du kannst jederzeit zu <b>Hybrid</b> (Gerät nutzen) wechseln.",
-        "Download (~14 MB)": "Herunterladen (~14 MB)",
+        "Download (~88 MB)": "Herunterladen (~88 MB)",
         "capital of France": "Hauptstadt von Frankreich",
         "How ANIMA works": "Wie ANIMA funktioniert",
         "Got it": "Verstanden",
-        "Re-download ANIMA's brain (~14 MB)?": "ANIMAs Gehirn erneut laden (~14 MB)?",
+        "Re-download ANIMA's brain (~88 MB)?": "ANIMAs Gehirn erneut laden (~88 MB)?",
         " · best": " · empfohlen",
         "Loading… ": "Lade… ",
         "✓ Ready — runs offline now": "✓ Bereit — läuft jetzt offline",
@@ -2675,7 +2669,11 @@
     // ---- state ----------------------------------------------------------------
     let lang    = LANG();
     let speed   = parseInt(get('anima.speed','14')); if(![0,6,14].includes(speed)) speed=14;
-    let mode    = get('anima.mode','edge'); if(!['off','on','local','edge','only'].includes(mode)) mode='edge';
+    // Default AUTO: walk the ladder and use the best brain available right now (see chooseMode).
+    // Legacy values are mapped inline rather than via normMode(): that helper closes over a const
+    // declared much further down, so calling it this early would hit its temporal dead zone.
+    let mode    = get('anima.mode','auto');
+    if (mode !== 'auto' && mode !== 'private') mode = (mode === 'off' || mode === 'edge') ? 'private' : 'auto';
     let l1mode  = get('anima.l1mode','auto'); if(!['auto','on','off'].includes(l1mode)) l1mode='auto';   // device offline L1 brain: AUTO (stand down when online/browser-LLM answers, freeing RAM) | ON (force) | OFF
     let _l1ext  = null;   // last browserLLM flag pushed to the device (dedupe redundant POSTs)
     let fsize   = parseFloat(get('anima.size','13.5')); if(![12,13.5,15.5].includes(fsize)) fsize=13.5;
@@ -2704,7 +2702,9 @@
         if(!s) return;
         speechSynthesis.cancel();                        // interrompe l'enunciato precedente
         const u=new SpeechSynthesisUtterance(s);
-        u.lang=TR('it-IT', 'en-US');
+        // Not TR(): TR only knows it/en, so es/fr/de replies were read aloud with an ENGLISH voice.
+        // I18N.locale() is the OS-wide BCP-47 table (nucleo-i18n.js · LANGS) — one source for all five.
+        u.lang=I18N.locale(lang);
         const v=speechSynthesis.getVoices().find(x=>x.lang&&x.lang.toLowerCase().startsWith(u.lang.slice(0,2)));
         if(v) u.voice=v;
         speechSynthesis.speak(u);
@@ -3025,7 +3025,7 @@
       } else if(r.web){                                             // in-browser WEB INDEX — live Wikipedia/Wikidata from the browser, or a cached recall (never the MCU)
         kind='wasm'; icon='🌐'; eng=TR('Browser · indice web', 'Browser · web index');
         model = r.recalled ? (TR('card in cache', 'cached card')) : (TR('Wikipedia (live)', 'Wikipedia (live)'));
-      } else if(r.local || mode==='edge'){                          // offline cascade compiled to WASM, in-browser
+      } else if(r.local){                          // offline cascade compiled to WASM, in-browser
         kind='wasm'; icon='◆'; eng=TR('Browser · cascata WASM', 'Browser · WASM cascade'); model=subTier(r,en);
       } else {                                                      // on-device offline cascade
         kind='device'; icon='▣'; eng=TR('Dispositivo · cascata offline', 'Device · offline cascade'); model=subTier(r,en);
@@ -3163,7 +3163,7 @@
         '<div class="wcard"><h5>'+esc(t.catCommands)+'</h5>'+t.cmdCards.map(c=>'<button class="wchip" data-fill="'+esc(c)+' ">'+esc(c)+'</button>').join('')+'</div>'+
         '</div>' : '';
       wb.innerHTML='<div class="top"><span class="star">✻</span><span class="title">'+esc(greeting())+' — '+esc(t.welTitle)+'</span></div>'+
-        '<div class="lead">'+esc(mode==='edge'&&t.edge?t.edge.lead:t.welLead)+'</div>'+cards+
+        '<div class="lead">'+esc(isPrivate()&&t.edge?t.edge.lead:t.welLead)+'</div>'+cards+
         '<div class="tips">'+t.welTips.join('').replace(/⌘K/g, isMac?'⌘K':'Ctrl K')+'</div>';
       w.appendChild(wb); logEl.appendChild(w);
     }
@@ -3358,12 +3358,12 @@
     // common words, hybrid only) and Grok as the ladder around it. Returns an ANIMA-shaped result, or null
     // to let the normal /api/anima path run (off → dictionary, only → Grok, or any fallback).
     async function routeTranslate(q){
-      if(mode!=='local' && mode!=='on') return null;          // mode gate FIRST (cheap) → off/only never load the GPU module
+      // The GPU translation rung is always allowed: it is local compute, fine in private mode too.
       const m = await loadLLM();                              // lazy: pulls local-llm + webllm chain only when local/on
       if(!m.isTranslateRequest(q)) return null;
       let caps; try{ caps = await m.probeLocal(); }catch{ caps = {webgpu:false}; }
       if(!caps.webgpu) return null;                            // no browser GPU → fall through to device/Grok
-      if(mode==='on'){                                         // hybrid: try the grounded device dictionary first
+      if(!isPrivate()){                                        // try the grounded device dictionary first
         try{
           const d = await (await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode=off')).json();
           if(d && d.reply && / in (inglese|italiano|english|italian):/i.test(d.reply)) return d;  // dictionary hit
@@ -3376,7 +3376,7 @@
 
     // ===========================================================================
     // BROWSER mode (edge): ANIMA's offline cascade compiled to WASM, run on the CLIENT.
-    // The engine + ~13 MB knowledge pack are a decoupled snapshot in apps/anima/local/. On first use the
+    // The engine + ~88 MB knowledge pack are a decoupled snapshot in apps/anima/local/. On first use the
     // brain is downloaded ONCE from the device (cached in IndexedDB -> works offline after) behind a
     // BLOCKING provisioning gate, so the user waits until it's ready. This SUBSTITUTES the device offline
     // tier entirely (no /api/anima call); answers are byte-identical (parity-certified 16/16 vs native).
@@ -3456,10 +3456,19 @@
     }
     function provHide(){ const e=provEl(); const cx=e.querySelector('.prov-cancel'); if(cx) cx.style.display='none'; e.classList.remove('on'); }
 
-    // CONSENT GATE — the brain download (~14 MB) NEVER starts on its own; we ask first and only proceed on an
+    // CONSENT GATE — the brain download (~88 MB) NEVER starts on its own; we ask first and only proceed on an
     // explicit "Scarica". Reuses the prov-card as a QUESTION (progress bar/meter hidden via .tut). Resolves
     // true = go ahead (caller continues into provShow()/download), false = use the device instead.
     let _consentP=null;
+    // The advertised size is MEASURED, never hardcoded: the old '~88 MB' counted only the static
+    // file list and ignored the 60+ AKB5 knowledge shards, understating the real download ~6x.
+    let _sizeTxt = '';
+    async function packSizeTxt(){
+      if(_sizeTxt) return _sizeTxt;
+      try{ const m = await import('./local/engine.js'); _sizeTxt = m.fmtMB(await m.packSizeBytes()); }
+      catch{ _sizeTxt = '~88 MB'; }
+      return _sizeTxt;
+    }
     function provConsent(){
       if(_consentP) return _consentP;
       _consentP=new Promise((resolve)=>{
@@ -3468,15 +3477,19 @@
         card.classList.add('tut');                               // hide progress bar/meter: this is a question
         e.querySelector('.pi').textContent='⚡';
         e.querySelector('.pt').textContent = TR('Scaricare il cervello offline di ANIMA?', 'Download ANIMA’s offline brain?');
-        e.querySelector('.pd').textContent = TR('Per far girare ANIMA in locale in questo browser devo scaricare il suo cervello (~14 MB) dal dispositivo, una sola volta. Poi funziona veloce, privato e anche col Cardputer spento.', 'To run ANIMA locally in this browser I need to download its brain (~14 MB) from the device, once. Then it works fast, private, and with the Cardputer off.');
-        e.querySelector('.prov-tip').innerHTML = TR('Niente parte senza il tuo OK. Puoi passare a <b>Ibrida</b> (usa il dispositivo) quando vuoi.', 'Nothing downloads without your OK. You can switch to <b>Hybrid</b> (use the device) anytime.');
+        const pd = e.querySelector('.pd');
+        const mkDesc = (sz) => TR('Per far girare ANIMA in locale in questo browser devo scaricare il suo cervello ('+sz+') dal dispositivo, una sola volta. Poi funziona veloce, privato e anche col Cardputer spento.', 'To run ANIMA locally in this browser I need to download its brain ('+sz+') from the device, once. Then it works fast, private, and with the Cardputer off.');
+        pd.textContent = mkDesc(TR('calcolo...', 'measuring...'));
+        e.querySelector('.prov-tip').innerHTML = TR('Niente parte senza il tuo OK. Senza cervello locale, ANIMA usa comunque il Cardputer e le altre menti.', 'Nothing downloads without your OK. Without the local brain, ANIMA still uses the Cardputer and the other minds.');
         const act=e.querySelector('.prov-act'); act.classList.add('on');
         const yes=e.querySelector('.pretry'), no=e.querySelector('.pdev');
-        yes.textContent = TR('Scarica (~14 MB)', 'Download (~14 MB)');
+        yes.textContent = TR('Scarica', 'Download');
+        // Fill both the sentence and the button once the real size is known (two fs listings).
+        packSizeTxt().then((sz)=>{ pd.textContent = mkDesc(sz); yes.textContent = TR('Scarica ('+sz+')', 'Download ('+sz+')'); }).catch(()=>{});
         no.textContent  = TR('Usa il dispositivo', 'Use device');
         const done=(v)=>{ _consentP=null; act.classList.remove('on'); card.classList.remove('tut'); resolve(v); };
         yes.onclick=()=>done(true);
-        no.onclick =()=>{ provHide(); done(false); chooseMode('on'); };   // decline → fall back to the device
+        no.onclick =()=>{ provHide(); done(false); chooseMode('auto'); };   // decline -> fall back to the ladder
         e.classList.add('on');
       });
       return _consentP;
@@ -3546,7 +3559,7 @@
       catch{ stat.textContent=t.edge.missing; }
     }
     $('edge-reload')?.addEventListener('click', async ()=>{
-      if(!confirm(TR('Riscaricare il cervello di ANIMA (~14 MB)?', "Re-download ANIMA's brain (~14 MB)?"))) return;
+      if(!confirm(TR('Riscaricare il cervello di ANIMA (~88 MB)?', "Re-download ANIMA's brain (~88 MB)?"))) return;
       try{ const e=await edgeEngine(); await e.refresh(); }catch{}
       _edgeReady=false; _ensuring=null;
       ensureEdge(true, true).then(()=>{ updateEdgeRow(); }).catch(()=>{});   // confirm() above IS consent
@@ -3606,7 +3619,7 @@
         try{ await _ensuring; } finally { _ensuring=null; }
         return;
       }
-      // Not cached → a real ~14 MB download. It NEVER starts on its own: ask first unless this call already
+      // Not cached → a real ~88 MB download. It NEVER starts on its own: ask first unless this call already
       // carries consent. Declining throws EDGE_DECLINED so the cascade falls back to the device.
       if(!consented){
         if(!(await provConsent())) throw Object.assign(new Error('edge download declined'),{code:'EDGE_DECLINED'});
@@ -3633,9 +3646,16 @@
       _ensuring=(async()=>{ try{ const eng=await edgeEngine(); if(await eng.loadIfCached()){ _edgeReady=true; try{ applyAll(); }catch{} } }catch{} })();
       try{ await _ensuring; } finally { _ensuring=null; }
     }
+    // Several cascade intents (capabilities/network/ram/version/storage/uptime) come back as a
+    // sentence with a {value} hole for the HOST to fill from live state - the firmware does it in
+    // nucleo_httpd.c. The browser never did, so 'cosa sai fare?' printed the raw template.
+    async function edgeFill(out){
+      try{ const m = await import('./local/engine.js'); return await m.fillToolTemplate(out, lang); }
+      catch{ return out; }
+    }
     async function edgeAsk(q){
       await ensureEdge(true);                 // gate (no-op if already provisioned at launch)
-      return (await edgeEngine()).query(q, lang);
+      return edgeFill((await edgeEngine()).query(q, lang));
     }
 
     // ---- offline brains: in-browser WASM cascade  +  the Cardputer's own offline cascade ------------
@@ -3649,12 +3669,12 @@
     async function browserProvisioned(){ if(_edgeReady) return true; try{ return await (await edgeEngine()).ready(); }catch{ return false; } }
     // Run the in-browser WASM cascade. silent=false → explicit Browser mode (blocking provisioning gate, may
     // pull the pack). silent=true → mid-chat fallback: use ONLY what's already cached (loadIfCached), else throw
-    // NOT_PROVISIONED so the policy falls through to the device instead of triggering a surprise ~14 MB download.
+    // NOT_PROVISIONED so the policy falls through to the device instead of triggering a surprise ~88 MB download.
     async function browserOffline(q, lang, silent){
       if(!silent) return edgeAsk(q);
       const eng = await edgeEngine();
       if(!eng.isLoaded() && !(await eng.loadIfCached())) throw Object.assign(new Error('browser brain not cached'), {code:'NOT_PROVISIONED'});
-      return eng.query(q, lang);
+      return edgeFill(eng.query(q, lang));
     }
     // The Cardputer's own offline cascade (/api/anima). Returns the parsed result, or null if unreachable.
     async function deviceOffline(q, lang, devMode){
@@ -3778,7 +3798,7 @@
     // largest ~16KB) and OOMs (measured live: oom.count 0→12, "il modello non ha risposto") — that IS the
     // "online-only responds to nothing" bug. The key lives on the device but the CALL runs in the browser, off
     // the Cardputer. exec still governs the hybrid/teacher device-side paths (which don't use this predicate).
-    function cloudDirectEligible(){ return mode==='only' && keyCfg && keyCfg.key; }
+    function cloudDirectEligible(){ return !isPrivate() && keyCfg && keyCfg.key; }
     // WORKSPACE-AS-CONTEXT (Claude-Code style): when a workspace is open, hand the model the folder
     // STRUCTURE (a depth-limited tree) and the CONTENTS of files the user @-mentioned or named — so
     // "fix the bug in app.js" works without pasting the file. Token-budgeted inside contextkit. Cheap:
@@ -3881,6 +3901,15 @@
         },
         autoApprove:()=>agentAuto,
         webSearchEnabled:()=>agentWeb,
+        // The worker's live checklist (update_plan). One compact line per update — the thinking
+        // trace keeps only the first line of a note, so we show progress + the step in flight
+        // rather than reprinting the whole list.
+        plan:(steps)=>{ try{
+          if(!_agentThink || !steps || !steps.length) return;
+          const done=steps.filter(s=>s.status==='done').length;
+          const cur=steps.find(s=>s.status==='doing') || steps.find(s=>s.status==='todo');
+          _agentThink.note('🗒️ '+TR('Piano','Plan')+' '+done+'/'+steps.length+(cur?' · ▸ '+cur.title:' · ✓'));
+        }catch{} },
       };
       const steps=parseInt(get('anima.agentSteps','0'),10)||undefined, par=parseInt(get('anima.agentParallel','0'),10)||undefined;   // optional power-user tuning via storage
       _agentRt=createRuntime({ cfg, root, lang, ui, keys:(keyCfg.keys||{}), active:cfg, maxSteps:steps, maxParallel:par }); _agentRtKey=sig; return _agentRt;
@@ -3939,88 +3968,61 @@
       // 🌐 WEB: when armed, an explicit web-grounded turn via Groq compound takes precedence over the selected
       // mode. Browser-direct, Groq-only. On no key / failure it falls through to the normal engine (never dead-ends).
       if(webCompound){ await ensureKeyLoaded(); if(hasGroq()){ try{ r = await cloudCompoundChat(sendQ); }catch(e){ r = null; } } }
-      if(!r && mode==='edge'){
-        // BROWSER mode: offline runs ENTIRELY in this browser — WASM brain → web index. It NEVER scales onto
-        // the Cardputer (skipDevice:true): the no-PSRAM chip can't run the offline L1 cascade for a web client
-        // (it OOMs → 503) and loading it only steals the RAM the web server needs — while a web client is
-        // connected the device keeps L1 unloaded by design. The web index is RECALL-ONLY by default (cached
-        // cards, no network); opt-in `anima.edgeWeb` lets it fetch grounded answers LIVE from Wikipedia and
-        // cache them, so the browser's offline knowledge GROWS through use. If the WASM brain isn't installed
-        // yet we point the user at the existing one-time install (Settings → Models) — never an auto-download.
-        r = await offlineAnswer(sendQ, lang, { prefer:'browser', silent:false, webOnline: get('anima.edgeWeb','0')==='1', skipDevice:true });
-        if(!r){ think.remove(); const {body}=botShell(history.length, false);
-               const have = await browserProvisioned().catch(()=>false);
-               const msg = have ? (UI[lang].edgeErr||UI[lang].offline) : (UI[lang].edgeNeedInstall||UI[lang].edgeErr);
-               await type(body, msg); history.push({role:'bot',text:msg}); persist(); setDot('err'); endTurn(); return; }
-      } else if(!r){
-        // GPU-locale translation ladder: device dictionary → local browser GPU model (WebLLM) → cloud.
-        if(mode==='only') await ensureKeyLoaded();   // make sure keyCfg is hydrated so browser-direct fires on the first turn too
+      if(!r){
+        // -- ONE ladder, walked top-down until a rung answers -------------------------------------
+        // This replaced five hand-written per-mode ladders. They named WHERE compute ran, so picking
+        // a mode PINNED the answer to one rung: 'Browser' never reached the GPU model however capable
+        // the machine was, and every reply carried an 'offline fallback' banner. The cascade already
+        // knows how to pick; the user only says whether the network may be used at all.
+        //   auto    - cloud key -> browser GPU LLM -> browser WASM brain -> Cardputer -> web index
+        //   private - the same ladder with every network rung removed
+        const priv = isPrivate();
+        if(!priv) await ensureKeyLoaded();   // hydrate the key so browser-direct fires on turn one
+
+        // 0 - translation has its own grounded ladder (device dictionary -> GPU model -> cloud)
         try{ r = await routeTranslate(q); }catch{ r = null; }
-        // The AGENTIC LOOP is BROWSER-HOSTED — it ALWAYS runs browser-direct (Claude Code style). The PSRAM-less
-        // chip cannot run a tool loop and OOMs trying; routing the LLM through it (exec='device') just starves
-        // its heap (see /api/logs: "anima.online skip POST heap too low") and then falls to WebLLM, which dumps
-        // code in CHAT with no file tools. So the loop engages on ANY online turn with a non-proxy key,
-        // INDEPENDENT of exec — which now only governs the single-shot fallback. This fixes file-writing AND
-        // keeps the heavy work OFF the Cardputer. Gemini (proxy) skips the loop (a 14-step relay would hammer it).
-        const loopEligible = mode==='only' && useAgents && keyCfg.key && !curProv().proxy;
-        if(!r && loopEligible){
-          const wsx = await wsContext(sendQ);   // workspace context built ONCE — shared by the loop seed AND any cloud fallback
-          _agentDidMutate = false; _agentCancelled = false; _agentWsAsked = false;
-          try{ r = await agentAsk(sendQ, think, wsx); }catch(e){ r = null; }
-          if(_agentCancelled){
-            // User pressed Stop/Esc → the runtime aborted. End the turn cleanly; do NOT fall through to a fresh
-            // single-shot cloud/offline answer (which would spend tokens and read as if nothing was stopped).
-            r = { reply:(TR('Annullato.', 'Stopped.'))+(_agentDidMutate?(TR(' Alcune modifiche ai file erano gia\' state applicate.', ' Some file changes were already applied.')):''), intent:'stopped', confidence:0, domain:'online' };
-          } else if(!r && cloudDirectEligible()){   // loop failed AND a browser-direct key (exec='browser') → toolless single call
-            try{ r = await cloudAsk(sendQ, wsx); }catch(e){ r = null; }
-            if(r && _agentDidMutate) r.reply = (TR('(Nota: alcune modifiche ai file erano gia\' state applicate prima dell\'interruzione.)\n\n', '(Note: some file changes were already applied before the interruption.)\n\n')) + r.reply;
-          }
-        } else if(!r && cloudDirectEligible()){
-          // useAgents OFF, or a proxy provider (Gemini, relayed via the device /api/llm) → single budgeted browser-direct call.
-          const wsx = await wsContext(sendQ);
-          try{ r = await cloudAsk(sendQ, wsx); }catch(e){ r = null; }
-        }
-        if(mode==='only'){
-          // ONLINE = real LLM only, and ALWAYS off the Cardputer. Intelligent fallback LADDER (ascending device
-          // cost, every rung browser-side): cloud API (Grok/Claude, browser-direct, rungs 1-2 above) → browser
-          // GPU LLM (WebLLM) → LABELLED offline degrade (browser WASM / live web index) → honest dead-stop. We
-          // NEVER route the cloud call through the firmware: its mbedTLS handshake OOMs on this PSRAM-less chip
-          // (measured oom 0→12), which is exactly the "online-only responds to nothing, no fallback" bug. The
-          // old device rung (dfetch /api/anima?mode=only) was deleted — cloudDirectEligible now covers exec=device.
-          if(!r){   // 2nd priority: the browser's own GPU LLM (downloads the model on first use)
-            let caps; try{ const m = await loadLLM(); caps = await m.probeLocal(); if(caps.webgpu){ try{ r = await m.queryLocal(sendQ, lang, history); }catch{ r = null; } } }catch{ /* GPU module/probe failed → honest miss below */ }
-          }
-          if(!r){   // LAST RESORT (user rule: offline puro solo come ultima opzione) — reached ONLY after BOTH
-            // the cloud LLM and the browser LLM failed. Stay 100% in the BROWSER (skipDevice:true → never the
-            // Cardputer's firmware cascade, even when the WASM pack isn't provisioned): WASM brain (only if
-            // already provisioned, silent:true = no surprise ~14 MB pull) → live web index. Whatever it yields
-            // is NOT the online model, so we LABEL it honestly — the ONLY place online-only surfaces non-cloud
-            // text. Scoped inside this if(!r) so a genuine cloud/agent/WebLLM answer is never relabelled.
-            r = await offlineAnswer(sendQ, lang, { prefer:'browser', silent:true, webOnline:true, skipDevice:true });
-            if(r && r.reply){
-              r.reply = (TR('⚠ Ripiego offline (il modello online non era raggiungibile):\n\n', '⚠ Offline fallback (the online model was unreachable):\n\n')) + r.reply;
+
+        // 1 - CLOUD. Browser-direct, never through the firmware: the mbedTLS handshake OOMs on this
+        //     PSRAM-less chip. The agentic loop is browser-hosted for the same reason; a proxy
+        //     provider (relayed via the device) skips the loop so a 14-step relay cannot hammer it.
+        if(!r && !priv && keyCfg.key){
+          const loopEligible = useAgents && !curProv().proxy;
+          const wsx = await wsContext(sendQ);   // built ONCE - shared by the loop seed and fallback
+          if(loopEligible){
+            _agentDidMutate = false; _agentCancelled = false; _agentWsAsked = false;
+            try{ r = await agentAsk(sendQ, think, wsx); }catch(e){ r = null; }
+            if(_agentCancelled){
+              // Stop/Esc -> end cleanly; never fall through to an answer that reads as if nothing stopped.
+              r = { reply:(TR('Annullato.', 'Stopped.')), intent:'stopped', confidence:0, domain:'online' };
             }
           }
-          if(!r){   // truly nothing answered (no cloud, no browser LLM, no offline)
-            think.remove(); const {body}=botShell(history.length, false); const msg=UI[lang].onlineNoLLM||UI[lang].offline;
-            await type(body, msg); history.push({role:'bot',text:msg}); persist(); setDot('err'); endTurn(); return;
+          if(!r && !_agentCancelled){
+            try{ r = await cloudAsk(sendQ, wsx); }catch(e){ r = null; }
           }
-        } else if(!r){
-          // off / on / local: the device cascade FIRST (hybrid 'on' can still reach the cloud teacher
-          // server-side). mode=local is a browser concept; a GPU run that didn't happen degrades to hybrid.
-          const devMode = mode==='local' ? 'on' : mode;
-          r = await deviceOffline(sendQ, lang, devMode);
-          // Universal resilience: if the Cardputer is unreachable or abstained, let the BROWSER answer — its
-          // WASM brain (if provisioned) then the web index — before giving up. webOnline only in modes that
-          // permit network (offline 'off' stays recall-only). The device's own reply is kept if the browser
-          // doesn't improve on it; honest-miss only when truly nothing answered.
-          const { answered } = await cascadeMod();
-          if(!answered(r)){
-            const b = await offlineAnswer(sendQ, lang, { prefer:'browser', silent:true, webOnline:(mode!=='off'), skipDevice:true });
-            if(answered(b)) r = b;
-          }
-          if(!r){ think.remove(); const {body}=botShell(history.length, false); await type(body, UI[lang].offline);
-                 history.push({role:'bot',text:UI[lang].offline}); persist(); setDot('err'); endTurn(); return; }
+        }
+
+        // 2 - BROWSER GPU LLM (WebLLM). A real generative model on the user's own GPU - the rung the
+        //     old 'Browser' mode could never reach. Works in private mode too: once installed it is local.
+        if(!r && !_agentCancelled){
+          try{
+            const m = await loadLLM(); const caps = await m.probeLocal();
+            if(caps.webgpu){ try{ r = await m.queryLocal(sendQ, lang, history); }catch{ r = null; } }
+          }catch{ /* module/probe failed -> next rung */ }
+        }
+
+        // 3 - BROWSER WASM brain, then 4 - the Cardputer, then 5 - the web index. offlineAnswer walks
+        //     these itself. silent:true - never trigger a surprise model pull mid-chat. The device is a
+        //     real rung here, unlike the old online-only path which skipped it and dead-ended instead.
+        if(!r && !_agentCancelled){
+          r = await offlineAnswer(sendQ, lang, { prefer:'browser', silent:true, webOnline: !priv, skipDevice:false });
+        }
+
+        // Nothing on any rung: say so honestly rather than inventing an answer.
+        if(!r){
+          think.remove(); const {body}=botShell(history.length, false);
+          const have = await browserProvisioned().catch(()=>false);
+          const msg = have ? UI[lang].offline : (UI[lang].edgeNeedInstall||UI[lang].offline);
+          await type(body, msg); history.push({role:'bot',text:msg}); persist(); setDot('err'); endTurn(); return;
         }
       }
       setDot('ok'); think.remove();
@@ -4081,7 +4083,15 @@
     }
     function endTurn(){ busy=false; setStop(false); input.focus(); scrollDown(); updateMeter(); }
     function setStop(on){ sendBtn.textContent = on ? 'Stop' : (TR('Invia', 'Send')); sendBtn.classList.toggle('stop',on); }
-    function parseClarify(reply){ const m=reply.match(/,\s*([^?]+?)\s+(?:o|or)\s+([^?]+?)\?/i); return m?[m[1].trim(),m[2].trim()]:null; }
+    // Two shapes: the dialogic band asks ", A o B?"; the which-person clarify numbers its options
+    // ("Quale intendi: 1) Donald Trump 2) Melania Trump (altre 7 …)") because it can offer three.
+    // Numbered first — it is unambiguous, and an option's own text may contain "or".
+    function parseClarify(reply){
+      const text=String(reply||''), body=text.replace(/\s*\([^)]*\)\s*$/,'').replace(/\?\s*$/,'');
+      // "1) A  o  2) B": the connector trails the option it follows, so strip it off the option text.
+      if(/\d\)/.test(body)){ const o=body.split(/\s*\d\)\s*/).slice(1).map(s=>s.trim().replace(/\s+(?:o|or)\s*$/i,'').trim()).filter(Boolean); if(o.length>=2) return o; }
+      const m=text.match(/,\s*([^?]+?)\s+(?:o|or)\s+([^?]+?)\?/i); return m?[m[1].trim(),m[2].trim()]:null;
+    }
 
     // ---- message actions: regenerate / edit / branch --------------------------
     function precedingUser(hidx){ for(let i=hidx-1;i>=0;i--) if(history[i].role==='user') return i; return -1; }
@@ -4324,7 +4334,9 @@
       if(['impostazioni','settings','config'].includes(cmd)){ openSettings(true); return true; }
       if(['voce','voice','speak'].includes(cmd)){ if(arg==='on'||arg==='off') webVoice=(arg==='on'); else webVoice=!webVoice; set('anima.webvoice',webVoice?'1':'0'); if(!webVoice) stopSpeaking(); applyAll(); toast(webVoice?(TR('Voce browser ON', 'Browser voice ON')):(TR('Voce browser OFF', 'Browser voice OFF')),'ok'); return true; }
       if(cmd==='compact'||cmd==='compatta'){ const n=compactSession(true); toast(n?(TR('Contesto compattato in background (','Context compacted in background (')+n+TR(' turni)',' turns)')):TR('Niente da compattare','Nothing to compact'),'ok'); return true; }
-      if(cmd==='forge'){ addUser(q); window.open('forge-demo.html','_blank'); sysLine(TR('Apro **Forge** — il coder agentico offline (scegli tu il motore: GPU/CPU/cloud/device).', 'Opening **Forge** — the offline agentic coder (you pick the engine: GPU/CPU/cloud/device).')); return true; }
+      // F4 retired the detached forge-demo.html (its relative imports 404 when served by the device);
+      // the ANIMA Code surface is the Agenti app: engine picker (🧠), model install, honest capability verdicts.
+      if(cmd==='forge'){ addUser(q); try{ parent.postMessage({type:'open-app', id:'agent'}, '*'); }catch{} sysLine(TR('Apro **Agenti** — ANIMA Code: scegli il motore (cloud o locale) dal pulsante 🧠.', 'Opening **Agents** — ANIMA Code: pick the engine (cloud or local) from the 🧠 button.')); return true; }
       if(['models','modelli','modello'].includes(cmd)){ window.openModelManager&&window.openModelManager(); return true; }
       return false;
     }
@@ -4359,7 +4371,7 @@
       for(const k of ['dark','light','oled','hc']) A.push({cat:C.theme, icon:'◐', label:t.theme+': '+t.themeNames[k], cur:theme===k, run:()=>chooseTheme(k)});
       A.push({cat:C.lang, icon:'A', label:t.language+': IT', cur:lang==='it', run:()=>chooseLang('it')});
       A.push({cat:C.lang, icon:'A', label:t.language+': EN', cur:lang==='en', run:()=>chooseLang('en')});
-      for(const m of ['off','on','local','edge','only']) A.push({cat:C.mode, icon:'◉', label:t.mode+': '+cap(t.stByMode[m]), cur:mode===m, run:()=>chooseMode(m)});
+      for(const m of ['auto','private']) A.push({cat:C.mode, icon:'◉', label:t.mode+': '+cap(t.stByMode[m]), cur:mode===m, run:()=>chooseMode(m)});
       A.push({cat:C.set, icon:'⚙', label:t.appearance+' / '+t.engine, run:()=>openSettings(true)});
       A.push({cat:C.set, icon:'⬇', label:(TR('Gestione modelli (download)', 'Model manager (downloads)')), run:()=>window.openModelManager&&window.openModelManager()});
       A.push({cat:C.set, icon:'⌨', label:t.shortcuts, keys:['?'], run:openShortcuts});
@@ -4772,16 +4784,27 @@
     $('clear').addEventListener('click',doClear);
 
     // ---- choose handlers ------------------------------------------------------
-    function chooseLang(l){ l=(l||'').slice(0,2); lang=['it','en','es','fr','de'].includes(l)?l:'it'; set('anima.lang',lang); applyAll(); renderAll();
+    function chooseLang(l){ l=(l||'').slice(0,2); lang=['it','en','es','fr','de'].includes(l)?l:'en'; set('anima.lang',lang); applyAll(); renderAll();
       if(!recording){ if(voice&&voice.available) micBtn.title=idleTitle(); else if(voice&&voice.reason==='insecure') micBtn.title=(TR('La voce richiede HTTPS o localhost', 'Voice needs HTTPS or localhost')); }
       try{ if(I18N.lang!==lang) I18N.setLang(lang); }catch{}   // broadcast ANIMA's own toggle to the whole OS
       try{ if(_keyKm&&_keyKm.setLang) _keyKm.setLang(lang); }catch{}   // relabel the shared key manager live
       input.focus(); }
     // Follow a language change made elsewhere in the OS (Settings, copilot, another window) — live, no reload.
-    // init('core') installs the engine's cross-window listeners in this iframe (no catalog/observe needed:
-    // ANIMA renders from its own STR table). Fire-and-forget; install() runs synchronously inside init.
-    try{ I18N.init('core',{observe:false,apply:false}); I18N.onChange(()=>{ if(I18N.lang!==lang) chooseLang(I18N.lang); }); }catch{}
-    function chooseMode(m){ mode=['off','on','local','edge','only'].includes(m)?m:'on'; set('anima.mode',mode); set('anima.modeSet','1'); applyAll(); syncL1Ext(); input.focus(); if(mode==='edge') ensureEdge(true).catch(()=>{}); }
+    // init('anima') loads this app's shared i18n catalog + installs the engine's cross-window listeners in
+    // this iframe, and paints the static chrome carrying data-i18n keys (the rest of the UI still renders
+    // from ANIMA's own STR/applyAll table). observe:false — every annotated node exists at load and the
+    // engine re-applies them on each language change; install() runs synchronously inside init.
+    try{ I18N.init('anima',{observe:false}); I18N.onChange(()=>{ if(I18N.lang!==lang) chooseLang(I18N.lang); }); }catch{}
+    // TWO modes, not five. The old set (off/on/local/edge/only) named WHERE the compute ran - a
+    // detail the 4-rung cascade already decides - so the user had to pre-pick a rung and then got
+    // stuck on it (the 'answers from the WASM brain, never reaches the GPU model' report). Now:
+    //   auto    - use the best brain available right now, walking the ladder until one answers.
+    //   private - the same ladder with every network rung removed; nothing leaves this machine.
+    // Provider keys stay in Advanced: they are configuration, not a mode. Old stored values map on.
+    const MODE_MAP = { off:'private', edge:'private', on:'auto', local:'auto', only:'auto' };
+    function normMode(m){ return m==='auto'||m==='private' ? m : (MODE_MAP[m] || 'auto'); }
+    function isPrivate(){ return mode==='private'; }
+    function chooseMode(m){ mode=normMode(m); set('anima.mode',mode); set('anima.modeSet','1'); applyAll(); syncL1Ext(); input.focus(); ensureEdge(true).catch(()=>{}); }
     // Tell the device whether a brain OTHER than its offline L1 is generating, so AUTO frees L1's RAM.
     // The browser cascade (edge), browser GPU (local) and pure-online (only) all mean "stand the L1 down".
     // hybrid/offline (on/off) send false — the firmware then decides via online-key availability.
@@ -4831,8 +4854,9 @@
     });
     $('ctx-inspect').addEventListener('click',()=>{ openSettings(false); openInspector(); });
     $('ctx-meter').addEventListener('click',()=>openInspector());
-    $('q-mode').addEventListener('click',()=>chooseMode(mode==='edge'?'on':mode==='on'?'only':'edge'));
-    $('mode-pill').addEventListener('click',()=>chooseMode(mode==='edge'?'on':mode==='on'?'only':'edge'));
+    const toggleMode = () => chooseMode(mode==='private' ? 'auto' : 'private');
+    $('q-mode').addEventListener('click', toggleMode);
+    $('mode-pill').addEventListener('click', toggleMode);
     $('q-lang').addEventListener('click',()=>chooseLang(lang==='it'?'en':'it'));
     // Reflect the persisted L1 policy on the device at startup (firmware resets to AUTO each boot) and
     // push the current engine's browser-LLM state once. Best-effort: the device may be unreachable.
@@ -4846,8 +4870,8 @@
       try{
         if(get('anima.modeSet','')==='1') return;                 // explicit user choice — never override
         const c = await (await dfetch('/api/anima/caps')).json();
-        if(c && c.hasKey && navigator.onLine && mode!=='only'){
-          mode='only'; set('anima.mode','only'); applyAll(); syncL1Ext(); renderAll();
+        if(c && c.hasKey && navigator.onLine && isPrivate()){
+          mode='auto'; set('anima.mode','auto'); applyAll(); syncL1Ext(); renderAll();
         }
       }catch{}
     }, 500);
@@ -4882,10 +4906,12 @@
       // status + header
       $('st-mode').textContent=t.stByMode[mode]; $('pill-mode').textContent=t.stByMode[mode]; $('st-lang').textContent=lang.toUpperCase();
       // BROWSER (edge): ⚡ prefix on the pill + a ready-aware tooltip, and surface the local-engine row
-      const mp=$('mode-pill'); if(mp){ mp.classList.toggle('edge', mode==='edge'); mp.classList.toggle('ready', mode==='edge'&&_edgeReady);
-        mp.title = (mode==='edge'&&t.edge) ? (t.edge.pillTip+(_edgeReady?(TR(' (pronto)', ' (ready)')):'')) : (TR('Modalità motore — clic per cambiare', 'Engine mode — click to switch')); }
-      const re=$('row-edge'); if(re){ re.hidden = mode!=='edge'; if(mode==='edge' && typeof updateEdgeRow==='function') updateEdgeRow(); }
-      const rlm=$('row-localmodel'); if(rlm){ rlm.hidden = mode!=='local'; if(mode==='local' && typeof renderLocalModel==='function') renderLocalModel(); }
+      const mp=$('mode-pill'); if(mp){ mp.classList.toggle('edge', isPrivate()); mp.classList.toggle('ready', isPrivate()&&_edgeReady);
+        mp.title = (isPrivate()&&t.edge) ? (t.edge.pillTip+(_edgeReady?(TR(' (pronto)', ' (ready)')):'')) : (TR('Modalità — clic per cambiare', 'Mode — click to switch')); }
+      // Both rows are always relevant now: the WASM brain and the GPU model are rungs of the one
+      // ladder, not modes you switch into, so either can be managed at any time.
+      const re=$('row-edge'); if(re){ re.hidden = false; if(typeof updateEdgeRow==='function') updateEdgeRow(); }
+      const rlm=$('row-localmodel'); if(rlm){ rlm.hidden = false; if(typeof renderLocalModel==='function') renderLocalModel(); }
       const onseg=(host,attr,val)=>{ for(const b of $(host).children) b.classList.toggle('on', b.dataset[attr]===String(val)); };
       onseg('set-lang','l',lang); onseg('set-mode','m',mode); onseg('set-theme','t',theme); onseg('set-size','z',fsize);
       onseg('set-speed','s',speed); onseg('set-details','d',detMode); onseg('set-sugg','g',suggOn?'1':'0'); onseg('set-compact','c',autoCompact?'1':'0');
@@ -5092,7 +5118,7 @@
     // ---- the file agent loop ----
     async function composeContent(intent){
       let c=intent.content||''; if(!c) return '';
-      if(intent.mode==='auto' && mode!=='off'){ try{ const r=await (await dfetch('/api/anima?q='+encodeURIComponent(c)+'&lang='+lang+'&mode='+(mode==='local'?'on':mode))).json(); if(r&&r.reply&&r.tier!=='none') return r.reply; }catch{} }
+      if(intent.mode==='auto'){ try{ const r=await (await dfetch('/api/anima?q='+encodeURIComponent(c)+'&lang='+lang+'&mode='+(isPrivate()?'off':'on'))).json(); if(r&&r.reply&&r.tier!=='none') return r.reply; }catch{} }
       return c;   // literal fallback (offline or no engine answer)
     }
     async function runFileIntent(q, intent){
@@ -5279,7 +5305,7 @@
     // paint) we only MOUNT it if the user already downloaded it before (warm IndexedDB cache → no network, no
     // dialog); a cold cache does nothing. The actual download waits for an explicit user action (a query in
     // Browser mode, or re-picking the mode), which always goes through the consent gate (provConsent) first.
-    if(mode==='edge') idle(()=>edgeMountIfCached(), 300);
+    idle(()=>edgeMountIfCached(), 300);   // the WASM brain is a rung of every ladder now - warm it if cached
     wsLoad(); wsReflect();   // restore the persisted workspace (localStorage + fs.setRoot, no socket) IN the boot tick so file-intent routing + the label are correct from the first frame
     idle(wsBoot, 500);       // defer only the DEVICE reads (refreshTree /api/fs/list + the workspace.json fallback) off the boot burst
     requestAnimationFrame(()=>document.documentElement.classList.add('themed'));   // enable theme transitions after first paint

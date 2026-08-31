@@ -95,6 +95,8 @@ const char *nucleo_setup_ap_ssid(void);
 const char *nucleo_setup_ap_pass(void);
 bool        nucleo_setup_ap_secure(void);                 // true iff the AP is ACTUALLY WPA2 (pass >= 8); UIs must use this, not pass[0]
 bool        nucleo_setup_ap_intended(void);               // true iff the hotspot is the USER'S choice (not a transient STA fallback); the Settings toggle must read THIS
+bool        nucleo_setup_ap_active(void);                 // true whenever the SoftAP is beaconing/reachable now (chosen hotspot OR rescue fallback); a "how to reach me" UI keys on THIS
+bool        nucleo_setup_ap_rescue(void);                 // true iff the AP is up only as a temporary fallback while still trying to join a client link
 void        nucleo_setup_set_ap_ssid(const char *ssid);   // edit hotspot name (persists; applies live)
 void        nucleo_setup_set_ap_pass(const char *pass);   // "" = open AP, else WPA2 (8..63 chars)
 

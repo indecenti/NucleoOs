@@ -164,13 +164,13 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 
 export function mountKeyManager(container, opts = {}) {
   injectCss();
-  let lang = ['en', 'es', 'fr', 'de'].includes(opts.lang) ? opts.lang : 'it';
+  let lang = ['it', 'es', 'fr', 'de'].includes(opts.lang) ? opts.lang : 'en';
   const variant = opts.variant === 'compact' ? 'compact' : 'full';
   const full = variant === 'full';
   const showExec = full && opts.exec !== false;
   const showTier = opts.tier !== false;
   const onChange = typeof opts.onChange === 'function' ? opts.onChange : () => {};
-  const t = () => STR[lang] || STR.it;
+  const t = () => STR[lang] || STR.en;   // English is the fallback floor
 
   // The live config (one per mount). keys{} remembers every provider's saved config so a switch is lossless.
   let cfg = { provider: 'anthropic', base: AI.PROVIDERS.anthropic.base, model: AI.PROVIDERS.anthropic.def,
@@ -346,7 +346,7 @@ export function mountKeyManager(container, opts = {}) {
 
   return {
     reload, getCfg,
-    setLang(l) { lang = ['en', 'es', 'fr', 'de'].includes(l) ? l : 'it'; /* re-render labels by rebuilding */ mountKeyManager(container, Object.assign({}, opts, { lang })); },
+    setLang(l) { lang = ['it', 'es', 'fr', 'de'].includes(l) ? l : 'en'; /* re-render labels by rebuilding */ mountKeyManager(container, Object.assign({}, opts, { lang })); },
     destroy() { container.innerHTML = ''; },
   };
 }

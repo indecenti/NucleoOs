@@ -1,0 +1,289 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title data-i18n="title">Contatti</title>
+<style>
+  :root { color-scheme: dark; --bg:#0e1830; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc;
+    --muted:#8aa0c8; --line:#2a3a5e; --field:#0b1220; --accent:#4ea1ff; --ok:#5ee0a0; --bad:#ff6b6b; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); display: flex; flex-direction: column;
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 9px; padding: 11px 14px; flex: none; }
+  header h1 { font-size: 17px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  header .g { color: var(--accent); }
+  header .sp { flex: 1; }
+  .iconbtn { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 9px;
+    padding: 7px 12px; cursor: pointer; font: inherit; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  .iconbtn:hover { border-color: var(--accent); }
+  .iconbtn.primary { background: linear-gradient(135deg, rgba(94,224,160,.22), rgba(106,168,255,.14)); border-color: rgba(94,224,160,.4); font-weight: 600; }
+  .iconbtn.danger { border-color: rgba(255,107,107,.32); background: rgba(255,107,107,.08); color: var(--bad); }
+  .search { flex: 1; max-width: 260px; }
+  .search input { width: 100%; background: var(--field); border: 1px solid var(--line); color: var(--text); border-radius: 9px; padding: 7px 12px; font: inherit; }
+  .search input:focus { outline: none; border-color: var(--accent); }
+  .body { flex: 1; display: flex; overflow: hidden; }
+  .list { width: 280px; flex: none; border-right: 1px solid var(--line); overflow: auto; }
+  @media (max-width: 620px) { .list { width: 100%; } .list.hide-mobile { display: none; } .detail.show-mobile { display: flex !important; } }
+  .grp { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); font-weight: 600;
+    padding: 10px 16px 4px; position: sticky; top: 0; background: var(--bg); }
+  .row { display: flex; align-items: center; gap: 11px; padding: 9px 16px; cursor: pointer; border-left: 2px solid transparent; }
+  .row:hover { background: rgba(128,128,128,.08); }
+  .row.sel { background: rgba(78,161,255,.12); border-left-color: var(--accent); }
+  .av { width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 700; font-size: 14px; color: #06121f; }
+  .row .nm { flex: 1; min-width: 0; }
+  .row .nm .n1 { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .nm .n2 { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .star { color: var(--muted); font-size: 12px; }
+  .row .star.on { color: #ffd166; }
+  .detail { flex: 1; overflow: auto; padding: 26px 28px; display: flex; flex-direction: column; }
+  .detail.empty { align-items: center; justify-content: center; color: var(--muted); text-align: center; }
+  .detail.empty .big { font-size: 46px; margin-bottom: 12px; }
+  .dhead { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+  .dhead .av { width: 68px; height: 68px; border-radius: 50%; font-size: 27px; }
+  .dhead .dn { font-size: 22px; font-weight: 700; }
+  .dhead .dt { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .fields { display: flex; flex-direction: column; gap: 2px; max-width: 480px; }
+  .frow { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid rgba(128,128,128,.09); }
+  .frow .fk { width: 124px; flex: none; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .4px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .frow .fv { flex: 1; min-width: 0; word-break: break-word; }
+  .frow .fa { display: flex; gap: 6px; flex: none; }
+  .chip { background: var(--field); border: 1px solid var(--line); color: var(--text); border-radius: 8px;
+    padding: 5px 10px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 5px; }
+  .chip:hover { border-color: var(--accent); }
+  .detail-actions { display: flex; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+  .empty-all { text-align: center; color: var(--muted); margin: 12vh auto; max-width: 360px; padding: 20px; }
+  .empty-all .big { font-size: 44px; margin-bottom: 10px; }
+  .empty-all h2 { color: var(--text); font-size: 17px; margin: 0 0 6px; }
+  .hint { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ok);
+    color: #06121f; padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; opacity: 0;
+    transition: opacity .2s; pointer-events: none; }
+  .hint.show { opacity: 1; }
+  /* edit sheet */
+  .scrim { position: fixed; inset: 0; background: rgba(6,10,22,.7); backdrop-filter: blur(5px); display: none;
+    align-items: center; justify-content: center; padding: 16px; z-index: 40; }
+  .scrim.show { display: flex; }
+  .sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; width: 100%;
+    max-width: 420px; box-shadow: 0 24px 60px rgba(0,0,0,.5); max-height: 90vh; overflow: auto; }
+  .sheet h2 { margin: 0 0 14px; font-size: 16px; }
+  .fld { margin-bottom: 11px; }
+  .fld label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+  .fld input, .fld textarea { width: 100%; background: var(--field); border: 1px solid var(--line); color: var(--text);
+    border-radius: 9px; padding: 9px 12px; font: inherit; }
+  .fld textarea { resize: vertical; min-height: 60px; }
+  .fld input:focus, .fld textarea:focus { outline: none; border-color: var(--accent); }
+  .sheet-actions { display: flex; gap: 10px; justify-content: space-between; margin-top: 8px; }
+  .msg { font-size: 12px; color: var(--bad); min-height: 16px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+  <header>
+    <h1><span class="g">👤</span> <span data-i18n="title">Contatti</span></h1>
+    <div class="sp"></div>
+    <div class="search"><input id="search" data-i18n-attr="placeholder:search_ph" autocomplete="off" spellcheck="false"></div>
+    <button class="iconbtn primary" id="add">＋ <span data-i18n="add">Nuovo</span></button>
+  </header>
+
+  <div class="body">
+    <div class="list" id="list"></div>
+    <div class="detail empty" id="detail">
+      <div class="big">👥</div>
+      <div id="empty-msg" data-i18n="pick">Scegli un contatto per vederne i dettagli.</div>
+    </div>
+  </div>
+
+  <!-- edit sheet -->
+  <div class="scrim" id="scrim">
+    <div class="sheet">
+      <h2 id="sheet-title" data-i18n="new_contact">Nuovo contatto</h2>
+      <div class="fld"><label data-i18n="f_name">Nome</label><input id="f-name" autocomplete="off"></div>
+      <div class="fld"><label data-i18n="f_email">Email</label><input id="f-email" type="email" autocomplete="off" spellcheck="false"></div>
+      <div class="fld"><label data-i18n="f_phone">Telefono</label><input id="f-phone" autocomplete="off"></div>
+      <div class="fld"><label data-i18n="f_org">Organizzazione</label><input id="f-org" autocomplete="off"></div>
+      <div class="fld"><label data-i18n="f_note">Note</label><textarea id="f-note"></textarea></div>
+      <div class="msg" id="msg"></div>
+      <div class="sheet-actions">
+        <button class="iconbtn danger hidden" id="del" data-i18n="delete">Elimina</button>
+        <div class="sp" style="flex:1"></div>
+        <button class="iconbtn" id="cancel" data-i18n="cancel">Annulla</button>
+        <button class="iconbtn primary" id="save" data-i18n="save">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="hint" id="hint"></div>
+
+<script type="module">
+import I18N from '/nucleo-i18n.js';
+const t = await I18N.init('contacts');
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// One JSON on the SD (follows the user across paired browsers). Read once, write once per change.
+const PATH = '/data/contacts.json';
+let contacts = [];          // [{ id, name, email, phone, org, note, fav }]
+let selId = null, query = '';
+
+async function loadContacts() {
+  try {
+    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store' });
+    if (r.ok) { const s = await r.text(); const j = s ? JSON.parse(s) : {}; if (Array.isArray(j.contacts)) contacts = j.contacts; }
+  } catch {}
+  if (!contacts.length) { try { const l = JSON.parse(localStorage.getItem('contacts.cache') || '{}'); if (Array.isArray(l.contacts)) contacts = l.contacts; } catch {} }
+}
+let saveChain = Promise.resolve();
+function saveContacts() {
+  try { localStorage.setItem('contacts.cache', JSON.stringify({ contacts })); } catch {}
+  const body = JSON.stringify({ schema: 1, contacts }, null, 2);
+  saveChain = saveChain.then(async () => {
+    try {
+      const r = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH),
+        { method: 'POST', body, signal: (() => { try { return AbortSignal.timeout(9000); } catch { return undefined; } })() });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+    } catch {
+      const h = $('hint'); h.textContent = '⚠ Save failed · Salvataggio non riuscito'; h.classList.add('show');
+      setTimeout(() => h.classList.remove('show'), 1800);
+    }
+  });
+  return saveChain;
+}
+
+function avatarColor(s) { let h = 0; for (const c of String(s || '?')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return `hsl(${h % 360} 68% 62%)`; }
+const initial = (c) => (c.name || c.email || '?').trim().charAt(0).toUpperCase() || '?';
+const collator = new Intl.Collator(I18N.locale());
+
+// ── list (grouped by initial, favourites first) ──────────────────────────────
+function render() {
+  const q = query.toLowerCase();
+  const filtered = contacts.filter((c) => !q || (c.name + ' ' + c.email + ' ' + c.org + ' ' + c.phone).toLowerCase().includes(q));
+  const list = $('list'); list.innerHTML = '';
+  if (!contacts.length) {
+    list.innerHTML = `<div class="empty-all"><div class="big">👥</div><h2>${esc(t('empty_title'))}</h2><p>${esc(t('empty_body'))}</p></div>`;
+    showDetail(null); return;
+  }
+  const favs = filtered.filter((c) => c.fav).sort((a, b) => collator.compare(a.name || '', b.name || ''));
+  const rest = filtered.filter((c) => !c.fav).sort((a, b) => collator.compare(a.name || '', b.name || ''));
+  if (favs.length) { addGroup('★ ' + t('favorites')); favs.forEach(addRow); }
+  let letter = null;
+  for (const c of rest) {
+    const L = (c.name || c.email || '#').trim().charAt(0).toUpperCase() || '#';
+    if (L !== letter) { letter = L; addGroup(L); }
+    addRow(c);
+  }
+  function addGroup(label) { const g = document.createElement('div'); g.className = 'grp'; g.textContent = label; list.appendChild(g); }
+  function addRow(c) {
+    const el = document.createElement('div');
+    el.className = 'row' + (c.id === selId ? ' sel' : '');
+    el.innerHTML = `<div class="av" style="background:${avatarColor(c.name || c.email)}">${esc(initial(c))}</div>` +
+      `<div class="nm"><div class="n1">${esc(c.name || c.email || '—')}</div>` +
+      (c.org || c.email ? `<div class="n2">${esc(c.org || c.email)}</div>` : '') + '</div>' +
+      `<span class="star ${c.fav ? 'on' : ''}">${c.fav ? '★' : '☆'}</span>`;
+    el.addEventListener('click', () => { selId = c.id; render(); showDetail(c); if (window.innerWidth <= 620) { $('list').classList.add('hide-mobile'); $('detail').classList.add('show-mobile'); } });
+    el.querySelector('.star').addEventListener('click', (e) => { e.stopPropagation(); c.fav = !c.fav; saveContacts(); render(); });
+    list.appendChild(el);
+  }
+}
+
+// ── detail ───────────────────────────────────────────────────────────────────
+function copy(text) {
+  try { navigator.clipboard && navigator.clipboard.writeText(text); } catch {}
+  try { window.parent.postMessage({ type: 'clipboard-write', kind: 'text', data: text }, '*'); } catch {}
+  const h = $('hint'); h.textContent = t('copied'); h.classList.add('show'); setTimeout(() => h.classList.remove('show'), 1200);
+}
+// Ask the shell to open Mail with this recipient prefilled (Mail reads ?to=). Real OS integration.
+function mailTo(email) { try { window.parent.postMessage({ type: 'open-app', id: 'mail', query: 'to=' + encodeURIComponent(email) }, '*'); } catch {} }
+
+function showDetail(c) {
+  const d = $('detail');
+  if (!c) { d.className = 'detail empty'; d.innerHTML = `<div class="big">👥</div><div>${esc(t('pick'))}</div>`; return; }
+  d.className = 'detail';
+  const frow = (key, val, actions) => !val ? '' :
+    `<div class="frow"><div class="fk">${esc(key)}</div><div class="fv">${esc(val)}</div><div class="fa">${actions}</div></div>`;
+  const copyBtn = (val) => `<button class="chip" data-copy="${esc(val)}">⧉ ${esc(t('copy'))}</button>`;
+  const mailBtn = (val) => `<button class="chip" data-mail="${esc(val)}">✉ ${esc(t('email_action'))}</button>`;
+  d.innerHTML =
+    `<div class="dhead"><div class="av" style="background:${avatarColor(c.name || c.email)}">${esc(initial(c))}</div>` +
+      `<div><div class="dn">${esc(c.name || c.email || '—')}</div>${c.org ? `<div class="dt">${esc(c.org)}</div>` : ''}</div></div>` +
+    `<div class="fields">` +
+      frow(t('f_email'), c.email, c.email ? mailBtn(c.email) + copyBtn(c.email) : '') +
+      frow(t('f_phone'), c.phone, c.phone ? copyBtn(c.phone) : '') +
+      frow(t('f_org'), c.org, '') +
+      frow(t('f_note'), c.note, '') +
+    `</div>` +
+    `<div class="detail-actions">` +
+      `<button class="iconbtn" id="d-edit">✎ ${esc(t('edit'))}</button>` +
+      `<button class="iconbtn" id="d-vcard">⇩ ${esc(t('export_vcard'))}</button>` +
+      (c.email ? `<button class="iconbtn" id="d-mail">✉ ${esc(t('write_email'))}</button>` : '') +
+    `</div>`;
+  d.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', () => copy(b.dataset.copy)));
+  d.querySelectorAll('[data-mail]').forEach((b) => b.addEventListener('click', () => mailTo(b.dataset.mail)));
+  $('d-edit').addEventListener('click', () => openSheet(c));
+  $('d-vcard').addEventListener('click', () => exportVcard(c));
+  const dm = $('d-mail'); if (dm) dm.addEventListener('click', () => mailTo(c.email));
+}
+
+// ── vCard export (a real .vcf on the SD — importable anywhere) ────────────────
+function vcard(c) {
+  const esc = (s) => String(s || '').replace(/([,;\\])/g, '\\$1').replace(/\n/g, '\\n');
+  return ['BEGIN:VCARD', 'VERSION:3.0', `FN:${esc(c.name || c.email || 'Contact')}`,
+    c.org ? `ORG:${esc(c.org)}` : '', c.email ? `EMAIL:${esc(c.email)}` : '',
+    c.phone ? `TEL:${esc(c.phone)}` : '', c.note ? `NOTE:${esc(c.note)}` : '', 'END:VCARD'].filter(Boolean).join('\r\n') + '\r\n';
+}
+async function exportVcard(c) {
+  const safe = (c.name || c.email || 'contact').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'contact';
+  const path = '/data/Contacts/' + safe + '.vcf';
+  try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent('/data/Contacts'), { method: 'POST' }); } catch {}
+  try {
+    const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: vcard(c) });
+    const h = $('hint'); h.textContent = r.ok ? t('vcard_saved', { path }) : t('vcard_fail'); h.classList.add('show');
+    setTimeout(() => h.classList.remove('show'), 1800);
+  } catch { const h = $('hint'); h.textContent = t('vcard_fail'); h.classList.add('show'); setTimeout(() => h.classList.remove('show'), 1800); }
+}
+
+// ── add / edit sheet ─────────────────────────────────────────────────────────
+let editId = null;
+function openSheet(c) {
+  editId = c ? c.id : null;
+  $('sheet-title').textContent = c ? t('edit_contact') : t('new_contact');
+  $('f-name').value = c ? (c.name || '') : ''; $('f-email').value = c ? (c.email || '') : '';
+  $('f-phone').value = c ? (c.phone || '') : ''; $('f-org').value = c ? (c.org || '') : '';
+  $('f-note').value = c ? (c.note || '') : '';
+  $('del').classList.toggle('hidden', !c);
+  $('msg').textContent = '';
+  $('scrim').classList.add('show'); setTimeout(() => $('f-name').focus(), 40);
+}
+function closeSheet() { $('scrim').classList.remove('show'); }
+function saveSheet() {
+  const name = $('f-name').value.trim(), email = $('f-email').value.trim();
+  if (!name && !email) { $('msg').textContent = t('err_empty'); return; }
+  const data = { name, email, phone: $('f-phone').value.trim(), org: $('f-org').value.trim(), note: $('f-note').value.trim() };
+  if (editId) { const c = contacts.find((x) => x.id === editId); if (c) Object.assign(c, data); }
+  else { const c = { id: 'c-' + Date.now() + '-' + Math.floor(Math.random() * 1e4), fav: false, ...data }; contacts.push(c); selId = c.id; }
+  saveContacts(); render(); showDetail(contacts.find((x) => x.id === selId)); closeSheet();
+}
+function delContact() {
+  if (!editId) return;
+  const c = contacts.find((x) => x.id === editId);
+  if (!confirm(t('confirm_del', { name: (c && (c.name || c.email)) || '' }))) return;
+  contacts = contacts.filter((x) => x.id !== editId); if (selId === editId) selId = null;
+  saveContacts(); render(); showDetail(null); closeSheet();
+}
+
+$('add').addEventListener('click', () => openSheet(null));
+$('cancel').addEventListener('click', closeSheet);
+$('save').addEventListener('click', saveSheet);
+$('del').addEventListener('click', delContact);
+$('scrim').addEventListener('mousedown', (e) => { if (e.target === $('scrim')) closeSheet(); });
+$('search').addEventListener('input', (e) => { query = e.target.value.trim(); render(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('scrim').classList.contains('show')) closeSheet(); });
+I18N.onChange(() => { render(); const c = contacts.find((x) => x.id === selId); showDetail(c || null); });
+
+// ── boot ──
+await loadContacts();
+render();
+</script>
+</body>
+</html>

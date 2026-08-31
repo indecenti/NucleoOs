@@ -57,14 +57,14 @@ export const HW_CAPABILITIES = [
     pick: (j) => (Array.isArray(j) ? j : (j && (j.networks || j.aps || j.results)) || []),
   },
   {
-    id: 'gpio.write', ns: 'gpio', action: 'write', kind: 'act', permission: 'hardware.gpio',
+    id: 'gpio.write', ns: 'gpio', action: 'write', kind: 'act', permission: 'device.gpio',
     summary: 'Drive a GPIO pin. pin = a safe header/Grove pin (1 or 2 on the Cardputer), value 0|1, mode "out" (default). Use for relays, LEDs, triggers on the Grove port.',
     endpoint: { method: 'POST', path: '/api/gpio' },
     args: { type: 'object', properties: { pin: { type: 'number' }, value: { type: 'number', enum: [0, 1] }, mode: { type: 'string', enum: ['out'] } }, required: ['pin', 'value'] },
     guard: (a) => GPIO_WRITE_PINS.includes(a.pin) ? null : ('pin ' + a.pin + ' not writable — safe pins are ' + GPIO_WRITE_PINS.join(',')),
   },
   {
-    id: 'gpio.read', ns: 'gpio', action: 'read', kind: 'read', permission: 'hardware.gpio',
+    id: 'gpio.read', ns: 'gpio', action: 'read', kind: 'read', permission: 'device.gpio',
     summary: 'Read a GPIO pin level (0|1). pin = a safe header pin (0, 1 or 2 on the Cardputer).',
     endpoint: { method: 'GET', path: '/api/gpio', query: ['pin'] },
     args: { type: 'object', properties: { pin: { type: 'number' } }, required: ['pin'] },

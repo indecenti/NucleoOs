@@ -10,8 +10,10 @@
     html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86;
       --accent:#2b6fd6; --line:#cdd8ee; --field:#f4f7fe; --ok:#1c9d5b; --err:#c83e52; --warn:#c2820f; }
     * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
+    /* --fs is stepped by Ctrl+- / Ctrl+= and remembered: this console is read on a 2" panel as
+       often as on a desktop, and one fixed size cannot serve both. */
     body { display: flex; flex-direction: column; background: var(--bg); color: var(--text);
-      font: 13px/1.45 ui-monospace, "Cascadia Code", Consolas, monospace; }
+      font: var(--fs, 15px)/1.35 ui-monospace, "Cascadia Code", Consolas, monospace; }
     header { display: flex; align-items: center; gap: 6px; padding: 4px 8px; flex: none;
       background: var(--panel); border-bottom: 1px solid var(--line); }
     header .t { flex: 1; font-weight: 600; font-size: 12px; letter-spacing: .3px; }
@@ -20,17 +22,70 @@
     header button { border: 1px solid var(--line); background: #80808018; color: var(--text);
       border-radius: 6px; padding: 2px 9px; cursor: pointer; font: inherit; font-size: 11px; }
     header button:hover { background: #80808033; }
-    #out { flex: 1; overflow: auto; padding: 6px 8px; white-space: pre-wrap; word-break: break-word; }
+    /* `anywhere` and not `break-word`: a long path must wrap instead of widening the page, but a
+       short token must not be split down the middle. user-select is stated so nothing silently
+       makes the transcript uncopyable again. */
+    #out { flex: 1; overflow: auto; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere;
+      user-select: text; -webkit-user-select: text; }
     #out .line { display: block; }
-    #out .cmd { color: var(--accent); }
+    /* Columns are the one thing pre-wrap destroys: reflowing "df" on a 430px phone turns an aligned
+       table into confetti. A line whose interior holds a run of spaces was aligned on purpose, so it
+       scrolls sideways instead of wrapping — which is what a real terminal does with a wide row. */
+    #out .pre { white-space: pre; }
+    #out .cmd { color: var(--accent); cursor: pointer; }
     #out .dim { color: var(--muted); }
     #out .ok { color: var(--ok); } #out .err { color: var(--err); } #out .warn { color: var(--warn); }
     #out .dir { color: var(--accent); }
-    .prompt { display: flex; align-items: center; gap: 6px; padding: 5px 8px; flex: none;
+    #out .tap { cursor: pointer; }
+    #out .sel { background: var(--accent); color: var(--bg); }
+    /* Reading the scrollback while a command still prints must not be interrupted, so a tail that
+       moved out of sight is announced instead of chased. */
+    #pill { position: fixed; right: 12px; bottom: 46px; z-index: 5; border: 1px solid var(--accent);
+      background: var(--panel); color: var(--accent); border-radius: 999px; padding: 4px 12px;
+      font: inherit; font-size: 11px; cursor: pointer; }
+    #pill[hidden] { display: none; }
+    /* One row above the prompt for completion candidates and history matches. It is a row and not
+       a list on purpose: a panel that grows is a panel that hides the transcript on a 135 px screen. */
+    #strip { flex: none; display: flex; align-items: center; gap: 5px; padding: 3px 8px;
+      background: var(--field); border-top: 1px solid var(--line); white-space: nowrap;
+      overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; }
+    #strip[hidden] { display: none; }
+    #strip::-webkit-scrollbar { height: 4px; } #strip::-webkit-scrollbar-thumb { background: var(--line); }
+    #strip .k { flex: none; color: var(--muted); font-size: 11px; user-select: none; }
+    #strip .c { flex: none; position: relative; scroll-snap-align: start; border: 1px solid var(--line);
+      border-radius: 5px; padding: 2px 8px; background: none; color: var(--text); font: inherit; cursor: pointer; }
+    #strip .c .n { color: var(--muted); margin-right: 4px; }
+    #strip .c.d { color: var(--accent); }
+    #strip .c.on { background: var(--accent); color: var(--bg); border-color: transparent; }
+    #strip .c.on .n { color: var(--bg); }
+    #strip .c.more { color: var(--warn); }
+    #strip .c.bad { color: var(--err); border-style: dashed; cursor: default; }
+    @media (pointer: coarse) { #strip .c::after { content: ''; position: absolute; inset: -9px -3px; } }
+    /* Dead weight next to a real keyboard, the only route to Tab / Ctrl+R / Ctrl+C on a touchscreen. */
+    #keys { display: none; flex: none; gap: 5px; padding: 3px 6px; overflow-x: auto;
+      background: var(--panel); border-top: 1px solid var(--line); }
+    #keys button { flex: none; min-width: 44px; min-height: 32px; border: 1px solid var(--line);
+      background: #80808018; color: var(--text); border-radius: 6px; font: inherit; cursor: pointer; }
+    #keys button:active { background: var(--accent); color: var(--bg); }
+    @media (pointer: coarse) { #keys { display: flex; } #pill { bottom: 96px; } }
+    .prompt { display: flex; align-items: center; gap: 6px; padding: 5px 8px; flex: none; margin: 0;
       background: var(--field); border-top: 1px solid var(--line); }
     .prompt .ps { color: var(--ok); flex: none; }
+    .prompt .ps.search { color: var(--warn); }
+    .prompt .field { position: relative; flex: 1; min-width: 0; display: flex; }
     .prompt input { flex: 1; min-width: 0; border: 0; background: none; outline: none;
       color: var(--text); font: inherit; }
+    /* The suggestion is drawn UNDER the input, never inside its value — so nothing that was not
+       typed can ever be submitted. The typed half is transparent and only pushes the tail along. */
+    #ghost { position: absolute; inset: 0; pointer-events: none; overflow: hidden; white-space: pre; }
+    #ghost .a { color: transparent; } #ghost .b { color: var(--muted); }
+    /* The run button is not decoration: it is the only send path on a keyboard that emits no
+       Enter keydown (dictation, some IMEs), so it stays visible and finger-sized. */
+    .prompt button { flex: none; min-width: 34px; min-height: 28px; border: 1px solid var(--line);
+      background: #80808018; color: var(--accent); border-radius: 6px; font: inherit;
+      line-height: 1; cursor: pointer; padding: 0 10px; }
+    .prompt button:active { background: var(--accent); color: var(--bg); }
+    @media (pointer: coarse) { .prompt button { min-width: 44px; min-height: 44px; } }
     /* thin scrollbar so the tiny screen keeps its width */
     #out::-webkit-scrollbar { width: 6px; } #out::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
   </style>
@@ -42,19 +97,48 @@
     <button id="clr" data-i18n="clear" data-i18n-attr="title:clr_tip">clear</button>
   </header>
   <div id="out"></div>
-  <div class="prompt">
-    <span class="ps" id="ps">/ $</span>
-    <input id="in" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-i18n-attr="placeholder:input_ph" placeholder="type 'help'…">
+  <button id="pill" hidden data-i18n-attr="title:pill_tip">&#9660; <span id="pilln">0</span></button>
+  <div id="strip" hidden></div>
+  <div id="keys">
+    <button data-k="tab" data-i18n-attr="title:key_tab">&#8677;</button>
+    <button data-k="search" data-i18n-attr="title:key_search">&#8981;</button>
+    <button data-k="up" data-i18n-attr="title:key_prev">&#8593;</button>
+    <button data-k="down" data-i18n-attr="title:key_next">&#8595;</button>
+    <button data-k="abort" data-i18n-attr="title:key_abort">^C</button>
+    <button data-k="esc" data-i18n-attr="title:key_esc">esc</button>
+    <button data-k="ins" data-ch="/">/</button>
+    <button data-k="ins" data-ch="-">-</button>
+    <button data-k="ins" data-ch="|">|</button>
   </div>
+  <form class="prompt" id="cmdform" autocomplete="off">
+    <span class="ps" id="ps">/ $</span>
+    <span class="field">
+      <input id="in" enterkeyhint="go" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-i18n-attr="placeholder:input_ph" placeholder="type 'help'…">
+      <span id="ghost" aria-hidden="true"><span class="a" id="gha"></span><span class="b" id="ghb"></span></span>
+    </span>
+    <button type="submit" id="run" data-i18n-attr="title:run_tip;aria-label:run_tip" title="Run">&#9654;</button>
+  </form>
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
     const t = await I18N.init('terminal');
+    // The active OS language as a 2-letter code (one of the five), for the places that speak to a
+    // language-tagged resource — man pages on the SD, the TTS engine. `envVars.LANG` still wins when
+    // the user set it explicitly in the shell, so scripts can override per session.
+    const manLang = () => String(envVars.LANG || I18N.lang || 'en').slice(0, 2).toLowerCase();
     const out = document.getElementById('out');
     const input = document.getElementById('in');
     const cwdEl = document.getElementById('cwd');
     const psEl = document.getElementById('ps');
+    const stripEl = document.getElementById('strip');
+    const pillEl = document.getElementById('pill');
+    const pillN = document.getElementById('pilln');
+    const ghA = document.getElementById('gha');
+    const ghB = document.getElementById('ghb');
     const SETTINGS = '/system/config/settings.json';
+    // The manifest's own declared mount. It is the narrowest place this app may write, and the only
+    // store that survives a browser change — which localStorage, on a shared kiosk browser, does not.
+    const APPDIR = '/apps/terminal/data';
 
     // ---- device file API (degrades gracefully outside the OS) -----------------
     const api = (op, path, opts) => fetch(`/api/fs/${op}?path=` + encodeURIComponent(path), opts);
@@ -78,57 +162,369 @@
       return '/' + parts.join('/');
     };
     const setCwd = (p) => { cwd = p || '/'; cwdEl.textContent = cwd; psEl.textContent = cwd + ' $'; envVars.CWD = cwd; };
+    // User-defined command names, expanded once (never recursively) when a stage is resolved.
+    const aliases = {};
+    let watching = false, lastScanAt = 0;
+
+    // ---- bounds -----------------------------------------------------------------
+    // ~18 KB of device heap, 4-6 shared sockets, and a browser that is often a phone: every
+    // number here exists so one mistyped command cannot monopolise either side of the wire.
+    const LIMITS = {
+      maxLines: 400,          // logical lines kept in the scrollback
+      maxBytes: 64 * 1024,    // per-line render cap, and per-stage pipe buffer cap
+      maxRows: 200,           // directory entries ls prints
+      maxMatches: 200,        // matches grep prints
+      maxListCalls: 60,       // /api/fs/list calls one find may spend
+      maxDepth: 6,            // levels find may descend
+      maxStages: 8,           // commands in one pipeline
+      maxQueued: 8,           // submitted lines allowed to wait behind the running one
+      submitDebounceMs: 30,   // window in which a second Enter signal is still the same gesture
+    };
 
     // ---- output helpers --------------------------------------------------------
-    function emit(text, cls) {
+    // A non-final pipeline stage swaps `sink` for a buffer. Errors deliberately bypass it: a
+    // failure that is about to abort the pipeline must never end up in a discarded buffer.
+    let sink = null, errors = 0, lineCount = 0, trimNote = null, unseen = 0;
+    function emit(text, cls, tap) {
+      const s = text == null ? '' : String(text);
+      if (cls === 'err') errors++;
+      if (sink && cls !== 'err') { sink(s); return; }
+      if (s.length > LIMITS.maxBytes) {
+        addLine(s.slice(0, LIMITS.maxBytes), cls);
+        addLine(`… truncated: ${fmtBytes(s.length)} in total, first ${fmtBytes(LIMITS.maxBytes)} shown`, 'warn');
+        return;
+      }
+      addLine(s, cls, tap);
+    }
+    // `tap` is what makes a line actionable on a touchscreen: retyping a path picked out of wrapped
+    // monospace with a thumb is the single most expensive thing this app can ask of a phone.
+    function addLine(text, cls, tap) {
+      const follow = atBottom();
       const el = document.createElement('span');
-      el.className = 'line' + (cls ? ' ' + cls : '');
+      // `.cmd` already carries the pointer cursor, so it does not take the extra class — which
+      // also keeps a prompt echo identifiable by its class alone.
+      el.className = 'line' + (cls ? ' ' + cls : '') + (tap && cls !== 'cmd' ? ' tap' : '')
+        + (/\S {2,}\S/.test(text) ? ' pre' : '');   // aligned columns: scroll, never reflow
       el.textContent = text;
+      el.__lines = text.split('\n').length;
+      if (tap) el.__tap = tap;
       out.appendChild(el);
-      out.scrollTop = out.scrollHeight;
+      lineCount += el.__lines;
+      if (lineCount > LIMITS.maxLines) trimTop();
+      if (follow) out.scrollTop = out.scrollHeight;
+      else showPill(el.__lines);
+    }
+    // Scrolling up to read while a command is still printing must not yank the view back down,
+    // so the tail is followed only when it was already in sight.
+    function atBottom() {
+      const top = out.scrollTop, view = out.clientHeight, all = out.scrollHeight;
+      if (typeof top !== 'number' || typeof view !== 'number' || typeof all !== 'number') return true;
+      return all - top - view < 40;
+    }
+    function trimTop() {
+      if (typeof out.removeChild !== 'function') { lineCount = LIMITS.maxLines; return; }
+      while (lineCount > LIMITS.maxLines) {
+        const first = out.firstChild === trimNote ? trimNote.nextSibling : out.firstChild;
+        if (!first) break;
+        lineCount -= first.__lines || 1;
+        out.removeChild(first);
+      }
+      if (!trimNote) {
+        trimNote = document.createElement('span');
+        trimNote.className = 'line dim';
+        trimNote.textContent = '⋯ earlier output trimmed';
+      }
+      if (out.firstChild !== trimNote && typeof out.insertBefore === 'function') out.insertBefore(trimNote, out.firstChild);
+    }
+    // `watch` redraws in place instead of appending a screenful per tick. The guards exist because
+    // the test DOM has no child list at all: without one, watch degrades to appending, not to a crash.
+    function childCount() {
+      if (out.children && typeof out.children.length === 'number') return out.children.length;
+      if (out.childNodes && typeof out.childNodes.length === 'number') return out.childNodes.length;
+      return -1;
+    }
+    function dropSince(mark) {
+      if (mark < 0 || typeof out.removeChild !== 'function') return;
+      while (childCount() > mark) {
+        const last = out.lastChild || (out.children && out.children[out.children.length - 1]);
+        if (!last) return;
+        lineCount -= last.__lines || 1;
+        out.removeChild(last);
+      }
+    }
+    function showPill(n) {
+      unseen += n;
+      if (!pillEl || typeof pillEl !== 'object') return;
+      if (pillN) pillN.textContent = String(unseen);
+      pillEl.hidden = false;
+    }
+    function toBottom() {
+      unseen = 0;
+      if (pillEl) pillEl.hidden = true;
+      if (typeof out.scrollHeight === 'number') out.scrollTop = out.scrollHeight;
     }
     const fmtBytes = (b) => b >= 1e9 ? (b/1e9).toFixed(2)+' GB' : b >= 1e6 ? (b/1e6).toFixed(1)+' MB'
       : b >= 1e3 ? (b/1e3).toFixed(1)+' KB' : b + ' B';
 
+    // ---- device helpers shared by the system commands ---------------------------
+    // One shape for every device GET that answers JSON, so no command has to invent a plausible
+    // zero when the device simply did not answer. 401 is named as 401: unpaired is not "offline".
+    // One sentence for every filesystem failure, and it always names the reason. "mkdir: failed"
+    // is the difference between a bug report and a shrug — and 401 has to say 401, because
+    // "cannot read" reads like a broken card when the truth is an unpaired browser.
+    function fsFail(name, path, r) {
+      if (!r) emit(`${name}: cannot reach the file API (running outside the OS?)`, 'err');
+      else if (r.status === 401) emit(`${name}: not paired (401)`, 'err');
+      else if (r.status === 404) emit(`${name}: no such file or directory: ${path}`, 'err');
+      else emit(`${name}: failed on ${path} (status ${r.status})`, 'err');
+    }
+    async function devJSON(name, url) {
+      let r;
+      try { r = await fetch(url, { cache: 'no-store' }); }
+      catch { emit(`${name}: cannot reach the device`, 'err'); return null; }
+      if (r.status === 401) { emit(`${name}: not paired (401)`, 'err'); return null; }
+      if (r.status === 404) { emit(`${name}: not available on this build (404)`, 'warn'); return null; }
+      if (!r.ok) { emit(`${name}: failed (status ${r.status})`, 'err'); return null; }
+      try { return await r.json(); } catch { emit(`${name}: invalid response`, 'err'); return null; }
+    }
+    async function devPOST(name, url, body) {
+      let r;
+      try {
+        r = await fetch(url, body === undefined ? { method: 'POST' }
+          : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      } catch { emit(`${name}: cannot reach the device`, 'err'); return null; }
+      if (r.status === 401) { emit(`${name}: not paired (401)`, 'err'); return null; }
+      if (r.status === 404) { emit(`${name}: not available on this build (404)`, 'warn'); return null; }
+      if (!r.ok) { emit(`${name}: failed (status ${r.status})`, 'err'); return null; }
+      try { return await r.json(); } catch { return {}; }
+    }
+    // Flatten a nested diagnostic object into `key value` lines: two levels is all the device emits,
+    // and flat text is the only shape that pipes into grep, sort or anima without a parser.
+    function flatten(obj, prefix, outArr) {
+      for (const [k, v] of Object.entries(obj || {})) {
+        const key = prefix ? prefix + '.' + k : k;
+        if (v && typeof v === 'object' && !Array.isArray(v)) flatten(v, key, outArr);
+        else outArr.push(key + ' ' + (Array.isArray(v) ? v.join(',') : v === true ? 1 : v === false ? 0 : v));
+      }
+      return outArr;
+    }
+    // /api/apps is asked for by `which`, `apps` and `open`; one memo keeps three commands honest
+    // without three requests, and 30 s is far shorter than the time it takes to install an app.
+    let appsMemo = null, appsAt = 0;
+    async function appList(name) {
+      if (appsMemo && Date.now() - appsAt < 30000) return appsMemo;
+      const j = await devJSON(name, '/api/apps');
+      if (!j) return null;
+      appsMemo = j.apps || []; appsAt = Date.now();
+      return appsMemo;
+    }
+    // du and tree share one budgeted walk, for the same reason find has one: a recursive listing is
+    // the only thing this shell can do that starves the device's four sockets.
+    // onEntry fires in ls order and a directory is descended immediately after it is announced, so
+    // `tree` can print depth-first without buffering the whole walk.
+    async function bwalk(root, maxDepth, onDir, onEntry) {
+      const st = { calls: 0, capped: false };
+      const step = async (dir, depth) => {
+        if (aborted || st.capped) return;
+        if (depth > maxDepth || st.calls >= LIMITS.maxListCalls) { st.capped = true; return; }
+        st.calls++;
+        let r;
+        try { r = await api('list', dir); } catch { return; }
+        if (!r.ok) return;
+        let j;
+        try { j = await r.json(); } catch { return; }
+        const entries = (j.entries || []).slice().sort((a, b) =>
+          a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1);
+        if (onDir) onDir(dir, depth, entries);
+        for (const e of entries) {
+          if (aborted || st.capped) break;
+          const full = dir === '/' ? '/' + e.name : dir + '/' + e.name;
+          if (onEntry) onEntry(full, depth, e);
+          if (e.type === 'dir') await step(full, depth + 1);
+        }
+      };
+      await step(root, 1);
+      return st;
+    }
+    // UTF-8 by hand for the same reason base64 is: the sandbox has no TextEncoder, and a device
+    // browser that predates it would corrupt every accented character in silence.
+    function utf8Bytes(s) {
+      const o = [];
+      for (const ch of String(s)) {
+        const c = ch.codePointAt(0);
+        if (c < 0x80) o.push(c);
+        else if (c < 0x800) o.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+        else if (c < 0x10000) o.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+        else o.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      }
+      return o;
+    }
+    function utf8Text(b) {
+      let s = '';
+      for (let i = 0; i < b.length;) {
+        const c = b[i++];
+        if (c < 0x80) s += String.fromCharCode(c);
+        else if (c < 0xe0) s += String.fromCodePoint(((c & 31) << 6) | (b[i++] & 63));
+        else if (c < 0xf0) s += String.fromCodePoint(((c & 15) << 12) | ((b[i++] & 63) << 6) | (b[i++] & 63));
+        else s += String.fromCodePoint(((c & 7) << 18) | ((b[i++] & 63) << 12) | ((b[i++] & 63) << 6) | (b[i++] & 63));
+      }
+      return s;
+    }
+    // Hand-rolled because btoa is latin1-only — it corrupts every byte above 0x7F, which is most of
+    // a firmware image — and because the test sandbox has neither btoa nor TextEncoder.
+    const B64AB = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    function b64encode(bytes) {
+      let s = '';
+      for (let i = 0; i < bytes.length; i += 3) {
+        const a = bytes[i], b = bytes[i + 1], c = bytes[i + 2];
+        s += B64AB[a >> 2] + B64AB[((a & 3) << 4) | ((b || 0) >> 4)];
+        s += i + 1 < bytes.length ? B64AB[((b & 15) << 2) | ((c || 0) >> 6)] : '=';
+        s += i + 2 < bytes.length ? B64AB[c & 63] : '=';
+      }
+      return s;
+    }
+    function b64decode(str) {
+      const clean = String(str).replace(/[^A-Za-z0-9+/]/g, '');
+      const bytes = [];
+      for (let i = 0; i < clean.length; i += 4) {
+        const n = (B64AB.indexOf(clean[i]) << 18) | (B64AB.indexOf(clean[i + 1]) << 12)
+          | ((B64AB.indexOf(clean[i + 2]) & 63) << 6) | (B64AB.indexOf(clean[i + 3]) & 63);
+        bytes.push((n >> 16) & 255);
+        if (i + 2 < clean.length) bytes.push((n >> 8) & 255);
+        if (i + 3 < clean.length) bytes.push(n & 255);
+      }
+      return bytes;
+    }
+    // ANIMA's query buffer is char q[160] behind a char query[208] URL-decode buffer, so the whole
+    // encoded query string has to fit. Trim by CODE POINT, never by character: cutting mid-%XX or
+    // mid-UTF-8 hands the firmware a byte sequence it cannot decode.
+    const ANIMA_Q_ENC = 150;
+    function encTrim(s, cap) {
+      let n = 0, kept = '';
+      for (const cp of String(s)) {
+        const w = encodeURIComponent(cp).length;
+        if (n + w > cap) break;
+        n += w; kept += cp;
+      }
+      return kept;
+    }
+    // A 2 KB log ring cannot cross a 150-byte query, so the browser digests first: drop timestamps
+    // and the repeated prefix, keep the distinct lines in severity order, and count the duplicates.
+    function animaDigest(text) {
+      const seen = new Map();
+      for (let ln of String(text).split(/\r?\n/)) {
+        ln = ln.replace(/^\s*[\[(]?\d{1,10}[:.\]) ]*\s*/, '').replace(/\s+/g, ' ').trim();
+        if (!ln) continue;
+        seen.set(ln, (seen.get(ln) || 0) + 1);
+      }
+      const rank = (s) => (/^E|error|fail|panic/i.test(s) ? 0 : /^W|warn/i.test(s) ? 1 : 2);
+      return [...seen.entries()]
+        .sort((a, b) => rank(a[0]) - rank(b[0]) || b[1] - a[1])
+        .map(([s, n]) => (n > 1 ? `${s} x${n}` : s))
+        .join('; ');
+    }
+
     // ---- commands --------------------------------------------------------------
     const COMMANDS = {
-      help() {
-        emit('Commands:', 'dim');
-        emit('  ls [path]      list a directory', 'dim');
-        emit('  cd <path>      change directory   (cd ..  cd /data)', 'dim');
-        emit('  pwd            print working directory', 'dim');
-        emit('  cat <file>     print a file  (try: cat /proc/meminfo)', 'dim');
-        emit('  cp <src> <dst> copy a file', 'dim');
-        emit('  mv <src> <dst> move or rename a file', 'dim');
-        emit('  mkdir <dir>    create a directory', 'dim');
-        emit('  touch <file>   create an empty file', 'dim');
-        emit('  rm <path>      delete a file or directory', 'dim');
-        emit('  echo <text> > <file>   write text to a file', 'dim');
-        emit('  open <file>    open in the default app', 'dim');
-        emit('  grep <pat> <f> search pattern in a file', 'dim');
-        emit('  find <pat>     find files recursively', 'dim');
-        emit('  wc <file>      count lines, words, and bytes', 'dim');
-        emit('  head <file>    show first lines of a file', 'dim');
-        emit('  tail <file>    show last lines of a file', 'dim');
-        emit('  df             display disk space usage', 'dim');
-        emit('  uptime         show device uptime', 'dim');
-        emit('  dmesg          print device kernel/system logs', 'dim');
-        emit('  reboot         reboot the Cardputer', 'dim');
-        emit('  ping [host]    ping Cardputer or external host', 'dim');
-        emit('  curl <url>     fetch and display URL content', 'dim');
-        emit('  wget <url>     download URL content to file', 'dim');
-        emit('  sleep <sec>    delay execution for N seconds', 'dim');
-        emit('  env            show environment variables', 'dim');
-        emit('  export [V=val] set environment variable', 'dim');
-        emit('  man <command>  show manual page for a command', 'dim');
-        emit('  history        show command history', 'dim');
-        emit('  uname [-a]     print system information', 'dim');
-        emit('  status         system + storage + network', 'dim');
-        emit('  free           free heap memory', 'dim');
-        emit('  date           device / local time', 'dim');
-        emit('  theme [dark|light]   read or switch theme', 'dim');
-        emit('  clear          clear the screen   (Ctrl+L)', 'dim');
-        emit('History: ↑ / ↓ recalls previous commands.', 'dim');
+      help(arg) {
+        // `help` is a table, not prose: `man <command>` holds the prose, in it and en, on the SD.
+        const groups = {
+          files: [
+            ['ls [path]', 'list a directory'],
+            ['cd <path>', 'change directory   (cd ..  cd /data)'],
+            ['pwd', 'print working directory'],
+            ['cat <file>', 'print a file  (try: cat /proc/meminfo)'],
+            ['stat <path>', 'type, size and lock state of one entry'],
+            ['cp <src> <dst>', 'copy a file'],
+            ['mv <src> <dst>', 'move or rename a file'],
+            ['mkdir <dir>', 'create a directory'],
+            ['touch <file>', 'create an empty file'],
+            ['rm <path>', 'delete a file or directory'],
+            ['open <file>', 'open in the default app'],
+            ['du [-d N] [path]', 'disk usage per directory, biggest first'],
+            ['tree [-L N] [path]', 'directory tree'],
+            ['find [path] -name <p>', 'find files recursively (bounded)'],
+            ['df', 'display disk space usage'],
+            ['hexdump [-n N] <file>', 'hex + ASCII of the first bytes (Range read)'],
+            ['base64 [-d] [file]', 'encode or decode base64'],
+          ],
+          text: [
+            ['echo <text>', 'print text'],
+            ['grep <pat> [file]', 'search a pattern'],
+            ['wc [file]', 'count lines, words and bytes'],
+            ['head [-n N] [file]', 'first lines'],
+            ['tail [-n N] [file]', 'last lines'],
+            ['sort [-r|-n|-u|-k N]', 'sort stdin'],
+            ['uniq [-c]', 'collapse repeated lines'],
+            ['cut -d<c> -f<list>', 'select fields or -c<a-b> columns'],
+            ['tr <set1> <set2> | -d <set>', 'translate or delete characters'],
+            ['seq [first] last', 'print a range of integers'],
+            ['tee <file>', 'pass stdin through and write it'],
+          ],
+          system: [
+            ['status', 'system + storage + network'],
+            ['diag [prefix]', 'the whole diagnostic table, one key per line'],
+            ['heap', 'heap detail — fragmentation, not just free bytes'],
+            ['cpu', 'cores, frequency, tasks, load'],
+            ['free', 'free heap memory'],
+            ['uptime', 'show device uptime'],
+            ['uname [-a]', 'print system information'],
+            ['dmesg [-l E|W|I|D|V]', 'device logs, filtered on the device'],
+            ['ota', 'running slot, next slot, rollback state'],
+            ['date [-u] [-s]', 'local and device time; -s pushes the browser clock'],
+            ['lang [it|en|fr|es|de]', 'read or set the OS language'],
+            ['apps [-a] | apps open <id>', 'installed apps'],
+            ['ps', 'running apps as a process table'],
+            ['kill <app-id>', 'close a foreground app (see `ps`)'],
+            ['assoc [ext]', 'which app `open` will pick'],
+            ['which <name>', 'builtin, app, or not found'],
+            ['reboot', 'reboot the Cardputer'],
+            ['watch [-n S] [-c N] <cmd>', 're-run a command in place'],
+          ],
+          anima: [
+            ['anima [-o off|on|only] [-v] <q>', 'ask the offline brain; reads stdin as context'],
+            ['anima --caps', 'which brain is actually answering'],
+            ['anima --l1 on|off|auto', 'pin or free the ~31 KB offline index'],
+            ['verify <key> <asserted>', 'grounded fact check'],
+          ],
+          radios: [
+            ['wifi scan|known|join|forget|prio|reconnect', 'Wi-Fi (needs net.wifi)'],
+            ['ir db|send|raw|tvbgone', 'infrared (needs device.ir)'],
+            ['link peers|status', 'ESP-NOW neighbours (needs mesh.peer)'],
+            ['display on|off', 'panel power (needs device.display)'],
+            ['gpio read <pin> | write <pin> <0|1>', 'raw pin I/O on the safe allowlist'],
+            ['screen [-o <file>]', 'save what the panel shows (needs device.display)'],
+            ['say [text]', 'speak text (needs device.audio)'],
+            ['notify <text>', 'post an OS notification (needs system.notify)'],
+            ['clip [-o]', 'write stdin to, or read, the OS clipboard'],
+          ],
+          shell: [
+            ['ping [host]', 'ping Cardputer or external host'],
+            ['curl <url>', 'fetch and display URL content'],
+            ['wget <url> [-O f]', 'download URL content to a file'],
+            ['sleep <sec>', 'delay execution for N seconds'],
+            ['env', 'show environment variables'],
+            ['export [V=val]', 'set an environment variable'],
+            ['alias [n=cmd] | unalias n', 'name a long command'],
+            ['history [clear|N]', 'command history'],
+            ['man <command>', 'show the manual page for a command'],
+            ['theme [dark|light]', 'read or switch theme'],
+            ['clear', 'clear the screen   (Ctrl+L)'],
+          ],
+        };
+        const want = (arg || '').trim().toLowerCase();
+        const names = Object.keys(groups);
+        if (want && !names.includes(want)) { emit('help: no such section — ' + names.join(' '), 'err'); return; }
+        for (const g of names) {
+          if (want && g !== want) continue;
+          emit(g + ':', 'dim');
+          for (const [syn, desc] of groups[g]) emit('  ' + syn.padEnd(30) + desc, 'dim');
+        }
+        if (want) return;
+        emit('Shell: a | b   pipe · > file  >> file  < file   redirect · a ; b   a && b   a || b', 'dim');
+        emit('Quoting: "double" expands $VARS, \'single\' is literal, \\ escapes one character.', 'dim');
+        emit('Keys: Tab completes · Ctrl+R searches history · ↑ ↓ recall · Ctrl+C stops · Ctrl+L clears.', 'dim');
+        emit('help <section> narrows this list: ' + names.join(' '), 'dim');
       },
       async ls(arg) {
         const path = arg ? norm(arg) : cwd;
@@ -155,10 +551,12 @@
         const entries = (j.entries || []).sort((a, b) =>
           a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1);
         if (!entries.length) { emit('(empty)', 'dim'); return; }
-        for (const e of entries) {
-          if (e.type === 'dir') emit('  ' + e.name + '/', 'dir');
-          else emit('  ' + e.name.padEnd(28) + fmtBytes(e.size || 0).padStart(10), '');
+        for (const e of entries.slice(0, LIMITS.maxRows)) {
+          const tap = { kind: e.type === 'dir' ? 'dir' : 'file', name: e.name };
+          if (e.type === 'dir') emit('  ' + e.name + '/', 'dir', tap);
+          else emit('  ' + e.name.padEnd(28) + fmtBytes(e.size || 0).padStart(10), '', tap);
         }
+        if (entries.length > LIMITS.maxRows) emit(`showing first ${LIMITS.maxRows} of ${entries.length}`, 'warn');
         emit(`${entries.length} item${entries.length === 1 ? '' : 's'}`, 'dim');
       },
       async cd(arg) {
@@ -169,28 +567,35 @@
         catch { emit('cd: no such directory: ' + path, 'err'); }
       },
       pwd() { emit(cwd); },
-      async cat(arg) {
-        if (!arg) { emit('cat: missing file', 'err'); return; }
+      async cat(arg, ctx) {
+        if (!arg) {
+          if (ctx?.stdin != null) { emit(ctx.stdin); return; }   // `a | cat` is the identity stage
+          emit('cat: missing file', 'err'); return;
+        }
         const path = norm(arg);
         if (isProc(path)) {                                      // live system node, served as plain text
-          try { const r = await fetch(path, { cache: 'no-store' }); if (!r.ok) throw 0;
-            const t = await r.text(); emit(t.replace(/\n$/, '')); }
-          catch { emit('cat: cannot read ' + path, 'err'); }
+          let r;
+          try { r = await fetch(path, { cache: 'no-store' }); }
+          catch { emit('cat: cannot read ' + path, 'err'); return; }
+          if (!r.ok) { emit(`cat: cannot read ${path} (status ${r.status})`, 'err'); return; }
+          emit((await r.text()).replace(/\n$/, ''));
           return;
         }
-        try { const r = await api('read', path); if (!r.ok) throw 0;
-          const t = await r.text(); emit(t.length ? t.replace(/\n$/, '') : '(empty file)', t.length ? '' : 'dim'); }
-        catch { emit('cat: cannot read ' + path, 'err'); }
+        let r;
+        try { r = await api('read', path); } catch { fsFail('cat', path, null); return; }
+        if (!r.ok) { fsFail('cat', path, r); return; }
+        const txt = await r.text();
+        emit(txt.length ? txt.replace(/\n$/, '') : '(empty file)', txt.length ? '' : 'dim');
       },
       async cp(arg) {
         const m = arg && arg.match(/^(".*?"|\S+)\s+(".*?"|\S+)$/);
-        if (!m) { emit('usage: cp <source> <dest>', 'dim'); return; }
+        if (!m) { emit('usage: cp <source> <dest>', 'err'); return; }
         const src = norm(m[1].replace(/^"|"$/g, ''));
         const dest = norm(m[2].replace(/^"|"$/g, ''));
         try {
           emit(`copying ${src} to ${dest} ...`, 'dim');
           const rRead = await api('read', src);
-          if (!rRead.ok) { emit('cp: cannot read source ' + src, 'err'); return; }
+          if (!rRead.ok) { fsFail('cp', src, rRead); return; }
           const buf = await rRead.arrayBuffer();
           const rWrite = await api('write', dest, {
             method: 'POST',
@@ -198,25 +603,25 @@
             body: buf
           });
           if (rWrite.ok) emit('copied successfully', 'ok');
-          else emit('cp: failed to write destination ' + dest, 'err');
+          else fsFail('cp', dest, rWrite);
         } catch { emit('cp: file API unavailable', 'err'); }
       },
       async mv(arg) {
         const m = arg && arg.match(/^(".*?"|\S+)\s+(".*?"|\S+)$/);
-        if (!m) { emit('usage: mv <source> <dest>', 'dim'); return; }
+        if (!m) { emit('usage: mv <source> <dest>', 'err'); return; }
         const src = norm(m[1].replace(/^"|"$/g, ''));
         const dest = norm(m[2].replace(/^"|"$/g, ''));
         try {
           emit(`moving ${src} to ${dest} ...`, 'dim');
           const rRead = await api('read', src);
-          if (!rRead.ok) { emit('mv: cannot read source ' + src, 'err'); return; }
+          if (!rRead.ok) { fsFail('mv', src, rRead); return; }
           const buf = await rRead.arrayBuffer();
           const rWrite = await api('write', dest, {
             method: 'POST',
             headers: { 'Content-Type': 'application/octet-stream' },
             body: buf
           });
-          if (!rWrite.ok) { emit('mv: failed to write destination ' + dest, 'err'); return; }
+          if (!rWrite.ok) { fsFail('mv', dest, rWrite); return; }
           const rDel = await api('delete', src, { method: 'POST' });
           if (rDel.ok) emit('moved successfully', 'ok');
           else emit('mv: copied to destination but failed to delete source', 'warn');
@@ -225,28 +630,31 @@
       async mkdir(arg) {
         if (!arg) { emit('mkdir: missing name', 'err'); return; }
         try { const r = await api('mkdir', norm(arg), { method: 'POST' });
-          emit(r.ok ? 'created ' + norm(arg) : 'mkdir: failed', r.ok ? 'ok' : 'err'); }
-        catch { emit('mkdir: file API unavailable', 'err'); }
+          if (r.ok) emit('created ' + norm(arg), 'ok'); else fsFail('mkdir', norm(arg), r); }
+        catch { fsFail('mkdir', norm(arg), null); }
       },
       async touch(arg) {
         if (!arg) { emit('touch: missing name', 'err'); return; }
         try { const r = await api('write', norm(arg), { method: 'POST', body: '' });
-          emit(r.ok ? 'created ' + norm(arg) : 'touch: failed', r.ok ? 'ok' : 'err'); }
-        catch { emit('touch: file API unavailable', 'err'); }
+          if (r.ok) emit('created ' + norm(arg), 'ok'); else fsFail('touch', norm(arg), r); }
+        catch { fsFail('touch', norm(arg), null); }
       },
       async rm(arg) {
         if (!arg) { emit('rm: missing path', 'err'); return; }
         try { const r = await api('delete', norm(arg), { method: 'POST' });
-          emit(r.ok ? 'removed ' + norm(arg) : 'rm: failed', r.ok ? 'ok' : 'err'); }
-        catch { emit('rm: file API unavailable', 'err'); }
+          if (r.ok) emit('removed ' + norm(arg), 'ok'); else fsFail('rm', norm(arg), r); }
+        catch { fsFail('rm', norm(arg), null); }
       },
-      async echo(arg) {
+      async echo(arg, ctx) {
+        // Through the shell the parser already took the redirection, so every remaining word is
+        // literal text; the "text > file" branch below only serves a direct, tokenless call.
+        if (ctx?.argv) { emit(ctx.argv.slice(1).join(' ')); return; }
         const m = arg && arg.match(/^(.*?)\s*>\s*(.+?)\s*$/);
         if (!m) { emit(arg || ''); return; }                       // plain echo
         const body = m[1].replace(/^"|"$/g, ''), path = norm(m[2].replace(/^"|"$/g, ''));
         try { const r = await api('write', path, { method: 'POST', body });
-          emit(r.ok ? 'wrote ' + path : 'echo: write failed', r.ok ? 'ok' : 'err'); }
-        catch { emit('echo: file API unavailable', 'err'); }
+          if (r.ok) emit('wrote ' + path, 'ok'); else fsFail('echo', path, r); }
+        catch { fsFail('echo', path, null); }
       },
       open(arg) {
         if (!arg) { emit('open: missing file', 'err'); return; }
@@ -254,19 +662,33 @@
         try { parent.postMessage({ type: 'open-file', path: p }, '*'); emit('opening ' + p + ' …', 'dim'); }
         catch { emit('open: shell not reachable', 'err'); }
       },
-      async grep(arg) {
+      async grep(arg, ctx) {
+        // From a pipe grep filters stdin and prints bare lines, so the result stays pipeable;
+        // reading a named file keeps the numbered form, which is what makes it readable on screen.
+        if (ctx?.stdin != null && ctx.argv && ctx.argv.length === 2) {
+          const pattern = ctx.argv[1];
+          let found = 0;
+          for (const ln of ctx.stdin.split(/\r?\n/)) {
+            if (!ln.includes(pattern)) continue;
+            if (found >= LIMITS.maxMatches) { emit(`grep: stopped at ${found} matches`, 'warn'); break; }
+            emit(ln); found++;
+          }
+          if (found === 0) emit('(no matches)', 'dim');
+          return;
+        }
         const m = arg && arg.match(/^(".*?"|\S+)\s+(.+)$/);
-        if (!m) { emit('usage: grep <pattern> <file>', 'dim'); return; }
+        if (!m) { emit('usage: grep <pattern> <file>', 'err'); return; }
         const pattern = m[1].replace(/^"|"$/g, '');
         const file = norm(m[2].replace(/^"|"$/g, ''));
         try {
           const r = await api('read', file);
-          if (!r.ok) { emit('grep: cannot read ' + file, 'err'); return; }
+          if (!r.ok) { fsFail('grep', file, r); return; }
           const txt = await r.text();
           const lines = txt.split(/\r?\n/);
           let found = 0;
           for (let i = 0; i < lines.length; i++) {
             if (lines[i].includes(pattern)) {
+              if (found >= LIMITS.maxMatches) { emit(`grep: stopped at ${found} matches`, 'warn'); break; }
               emit(`${i + 1}: ${lines[i]}`);
               found++;
             }
@@ -284,75 +706,92 @@
         } else {
           pattern = (arg || '').replace(/^"|"$/g, '').trim();
         }
-        if (!pattern) { emit('usage: find [path] -name <pattern>', 'dim'); return; }
+        if (!pattern) { emit('usage: find [path] -name <pattern>', 'err'); return; }
         emit(`searching for "${pattern}" under ${path} ...`, 'dim');
-        let count = 0;
-        const scan = async (dirPath) => {
+        let count = 0, calls = 0, capped = false;
+        // One listing costs the device a stat() per entry plus a subdirectory scan, so the walk
+        // is budgeted: an unbounded find over the whole SD is the one command that can starve
+        // the 4-6 sockets the rest of the shell needs.
+        const scan = async (dirPath, depth) => {
+          if (aborted || capped) return;
+          if (depth > LIMITS.maxDepth || calls >= LIMITS.maxListCalls) { capped = true; return; }
+          calls++;
           let r;
           try { r = await api('list', dirPath); } catch { return; }
           if (!r.ok) return;
           let j; try { j = await r.json(); } catch { return; }
           const entries = j.entries || [];
           for (const e of entries) {
+            if (aborted || capped) return;
             const full = dirPath === '/' ? '/' + e.name : dirPath + '/' + e.name;
             if (e.name.toLowerCase().includes(pattern.toLowerCase())) {
               emit(full, e.type === 'dir' ? 'dir' : '');
               count++;
             }
             if (e.type === 'dir' && e.name !== '.' && e.name !== '..') {
-              await scan(full);
+              await scan(full, depth + 1);
             }
           }
         };
-        await scan(path);
+        await scan(path, 1);
+        if (capped) emit(`find: search stopped after ${calls} directories (depth ${LIMITS.maxDepth}) — narrow the path`, 'warn');
         emit(`found ${count} item(s)`, 'dim');
       },
-      async wc(arg) {
-        if (!arg) { emit('usage: wc <file>', 'dim'); return; }
+      async wc(arg, ctx) {
+        const count = (txt, tail) => {
+          const lines = txt.split(/\r?\n/).length;
+          const words = txt.trim().split(/\s+/).filter(Boolean).length;
+          emit(`  ${lines} lines, ${words} words, ${new Blob([txt]).size} bytes${tail}`);
+        };
+        if (!arg) {
+          if (ctx?.stdin != null) { count(ctx.stdin, ''); return; }
+          emit('usage: wc <file>', 'err'); return;
+        }
         const file = norm(arg.replace(/^"|"$/g, ''));
         try {
           const r = await api('read', file);
-          if (!r.ok) { emit('wc: cannot read ' + file, 'err'); return; }
-          const txt = await r.text();
-          const lines = txt.split(/\r?\n/).length;
-          const words = txt.trim().split(/\s+/).filter(Boolean).length;
-          const bytes = new Blob([txt]).size;
-          emit(`  ${lines} lines, ${words} words, ${bytes} bytes for ${file}`);
+          if (!r.ok) { fsFail('wc', file, r); return; }
+          count(await r.text(), ' for ' + file);
         } catch { emit('wc: file API unavailable', 'err'); }
       },
-      async head(arg) {
+      async head(arg, ctx) {
         let file = '';
         let n = 10;
-        const m = arg && arg.match(/^-n\s+(\d+)\s+(.+)$/);
+        const m = arg && arg.match(/^-n\s+(\d+)\s*(.*)$/);
         if (m) {
           n = parseInt(m[1]);
-          file = norm(m[2].replace(/^"|"$/g, ''));
+          if (m[2]) file = norm(m[2].replace(/^"|"$/g, ''));
         } else if (arg) {
           file = norm(arg.replace(/^"|"$/g, ''));
         }
-        if (!file) { emit('usage: head [-n <lines>] <file>', 'dim'); return; }
+        if (!file && ctx?.stdin != null) { emit(ctx.stdin.split(/\r?\n/).slice(0, n).join('\n')); return; }
+        if (!file) { emit('usage: head [-n <lines>] <file>', 'err'); return; }
         try {
           const r = await api('read', file);
-          if (!r.ok) { emit('head: cannot read ' + file, 'err'); return; }
+          if (!r.ok) { fsFail('head', file, r); return; }
           const txt = await r.text();
           const lines = txt.split(/\r?\n/).slice(0, n);
           emit(lines.join('\n'));
         } catch { emit('head: file API unavailable', 'err'); }
       },
-      async tail(arg) {
+      async tail(arg, ctx) {
         let file = '';
         let n = 10;
-        const m = arg && arg.match(/^-n\s+(\d+)\s+(.+)$/);
+        const m = arg && arg.match(/^-n\s+(\d+)\s*(.*)$/);
         if (m) {
           n = parseInt(m[1]);
-          file = norm(m[2].replace(/^"|"$/g, ''));
+          if (m[2]) file = norm(m[2].replace(/^"|"$/g, ''));
         } else if (arg) {
           file = norm(arg.replace(/^"|"$/g, ''));
         }
-        if (!file) { emit('usage: tail [-n <lines>] <file>', 'dim'); return; }
+        if (!file && ctx?.stdin != null) {
+          const all = ctx.stdin.split(/\r?\n/);
+          emit(all.slice(Math.max(0, all.length - n)).join('\n')); return;
+        }
+        if (!file) { emit('usage: tail [-n <lines>] <file>', 'err'); return; }
         try {
           const r = await api('read', file);
-          if (!r.ok) { emit('tail: cannot read ' + file, 'err'); return; }
+          if (!r.ok) { fsFail('tail', file, r); return; }
           const txt = await r.text();
           const allLines = txt.split(/\r?\n/);
           const lines = allLines.slice(Math.max(0, allLines.length - n));
@@ -399,6 +838,7 @@
         let sent = 0, received = 0;
         const times = [];
         for (let i = 0; i < count; i++) {
+          if (aborted) break;
           const start = performance.now();
           try {
             const url = isDevice ? `${target}?_cb=${start}` : target;
@@ -476,10 +916,15 @@
         emit(`sleeping for ${secs}s ...`, 'dim');
         await new Promise(r => setTimeout(r, secs * 1000));
       },
-      async dmesg() {
+      async dmesg(arg) {
+        // The firmware already filters the 2 KB ring server-side; asking for the whole ring and
+        // filtering here would cost the same request and more of the browser's work for nothing.
+        const m = arg && arg.match(/-l\s*([EWIDVewidv])/);
+        const url = m ? '/api/logs?level=' + m[1].toUpperCase() : '/api/logs';
         try {
-          const r = await fetch('/api/logs', { cache: 'no-store' });
-          if (!r.ok) { emit('dmesg: failed to read logs', 'err'); return; }
+          const r = await fetch(url, { cache: 'no-store' });
+          if (r.status === 401) { emit('dmesg: not paired (401)', 'err'); return; }
+          if (!r.ok) { emit('dmesg: failed to read logs (status ' + r.status + ')', 'err'); return; }
           const text = await r.text();
           emit(text);
         } catch {
@@ -501,57 +946,63 @@
           emit(`${k}=${v}`);
         }
       },
-      export(arg) {
-        if (!arg) {
+      export(arg, ctx) {
+        // Tokenised, `export X="a b"` arrives as one already-unquoted word, so the quote
+        // stripping below would eat a legitimate leading/trailing quote in the value.
+        const spec = ctx?.argv ? ctx.argv.slice(1).join(' ') : arg;
+        if (!spec) {
           for (const [k, v] of Object.entries(envVars)) emit(`declare -x ${k}="${v}"`);
           return;
         }
-        const m = arg.match(/^(\w+)\s*=\s*(.+)$/);
-        if (!m) { emit('usage: export NAME=value', 'dim'); return; }
+        const m = spec.match(/^(\w+)\s*=\s*([\s\S]*)$/);
+        if (!m) { emit('usage: export NAME=value', 'err'); return; }
         const name = m[1];
-        const val = m[2].replace(/^"|"$/g, '');
+        const val = ctx?.argv ? m[2] : m[2].replace(/^"|"$/g, '');
         envVars[name] = val;
         emit(`${name}="${val}"`, 'ok');
       },
       async man(arg) {
+        // The OS runs in five languages, so the manual follows the ACTIVE OS language (I18N.lang),
+        // not navigator.language and not a two-way it/en guess. A page missing that language falls
+        // back through English then Italian (the base) so a French user always gets prose, never a
+        // blank — and never silently the wrong language when the page does have theirs.
+        const pick = (entry) => {
+          const order = [manLang(), 'en', 'it'];
+          for (const l of order) if (entry && entry[l]) return { loc: entry[l], lang: l };
+          return null;
+        };
         if (!arg) {
-          const isIt = (envVars.LANG || (typeof navigator !== 'undefined' ? navigator.language : 'en') || 'en').startsWith('it');
-          emit(isIt ? 'Quale pagina di manuale desideri?' : 'What manual page do you want?', 'warn');
+          emit(t('man_which') || 'What manual page do you want?', 'warn');
           return;
         }
         const cmd = arg.trim().toLowerCase();
-        const lang = (envVars.LANG || (typeof navigator !== 'undefined' ? navigator.language : 'en') || 'en').startsWith('it') ? 'it' : 'en';
-        let entry = await readJSON(`/system/manual/${cmd}.info`);
-        if (entry && entry[lang]) {
-          const loc = entry[lang];
+        // The canonical home is /system/registry/manual — where the SD image puts the 43 pages and
+        // where the Help app reads them. The old path is tried second, and only when the first
+        // misses, so an SD laid out before the move still answers.
+        let entry = await readJSON(`/system/registry/manual/${cmd}.info`);
+        if (!entry) entry = await readJSON(`/system/manual/${cmd}.info`);
+        const hit = pick(entry);
+        if (hit) {
+          const loc = hit.loc;
           emit(`${cmd.toUpperCase()}(1) - ${loc.synopsis}`);
-          emit('\nDescription:', 'dim');
+          emit('\n' + (t('man_description') || 'Description:'), 'dim');
           emit(`  ${loc.description}`);
           if (loc.details) {
-            emit('\nDetails:', 'dim');
+            emit('\n' + (t('man_details') || 'Details:'), 'dim');
             emit(`  ${loc.details}`);
           }
         } else {
-          const minimal = {
-            help: {
-              it: 'HELP(1) - Mostra i comandi disponibili.',
-              en: 'HELP(1) - Display available commands.'
-            },
-            clear: {
-              it: 'CLEAR(1) - Pulisce la schermata del terminale.',
-              en: 'CLEAR(1) - Clear the terminal screen.'
-            }
-          };
-          const fb = minimal[cmd];
-          if (fb && fb[lang]) emit(fb[lang]);
-          else {
-            emit(lang === 'it' ? `Nessuna voce di manuale per ${cmd}` : `No manual entry for ${cmd}`, 'warn');
-          }
+          emit((t('man_none') || 'No manual entry for {cmd}').replace('{cmd}', cmd), 'warn');
         }
       },
-      history() {
-        if (!hist.length) { emit('(empty history)', 'dim'); return; }
-        hist.forEach((cmd, i) => emit(`  ${i + 1}  ${cmd}`));
+      history(arg) {
+        const a = (arg || '').trim().toLowerCase();
+        if (a === 'clear') { hist.length = 0; histNew = hist.length; saveHistory(true); emit('history cleared', 'ok'); return; }
+        const n = parseInt(a);
+        const rows = (isFinite(n) && n > 0) ? hist.slice(-n) : hist;
+        if (!rows.length) { emit('(empty history)', 'dim'); return; }
+        const base = hist.length - rows.length;
+        rows.forEach((cmd, i) => emit(`  ${base + i + 1}  ${cmd}`, '', { kind: 'cmd', name: cmd }));
       },
       async uname(arg) {
         const wantAll = arg && arg.trim().includes('-a');
@@ -588,8 +1039,22 @@
         if (s?.free_heap != null) emit('free heap: ' + fmtBytes(s.free_heap), 'ok');
         else emit('free: status unavailable', 'err');
       },
-      date() {
-        emit('local:  ' + new Date().toString());
+      async date(arg) {
+        const flags = arg || '';
+        const utc = /(^|\s)-u(\s|$)/.test(flags), push = /(^|\s)-s(\s|$)/.test(flags);
+        const fmt = (d) => utc ? d.toISOString().slice(0, 19) + 'Z'
+          : new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+        emit('local  ' + fmt(new Date()));
+        const s = await devJSON('date', '/api/status');
+        if (!s) return;
+        const n = s.network || {};
+        if (n.time) emit('device ' + fmt(new Date(n.time * 1000)) + (n.time_synced ? ' (NTP-synced)' : ' (no NTP)'));
+        else emit('device clock not reported', 'warn');
+        if (!push) return;
+        // No battery-backed RTC: when NTP has not landed, the browser's clock is the only one in the
+        // room that is right, and a wrong device clock breaks TLS and every calendar entry at once.
+        const r = await devPOST('date', '/api/time/set', { ts: Math.floor(Date.now() / 1000) });
+        if (r) emit('device clock set from this browser', 'ok');
       },
       async theme(arg) {
         const want = (arg || '').trim().toLowerCase();
@@ -603,58 +1068,1637 @@
           { method: 'POST', body: JSON.stringify(s, null, 2) }); emit('theme set to ' + want, 'ok'); }
         catch { emit('theme: applied locally (device unreachable)', 'warn'); }
       },
-      clear() { out.innerHTML = ''; },
+
+      // ---- filesystem extras ------------------------------------------------
+      async stat(arg) {
+        if (!arg) { emit('usage: stat <path>', 'err'); return; }
+        const p = norm(arg.replace(/^"|"$/g, ''));
+        const parent = p.replace(/\/[^/]*$/, '') || '/';
+        const name = p.slice(parent === '/' ? 1 : parent.length + 1);
+        const j = await devJSON('stat', '/api/fs/list?path=' + encodeURIComponent(parent));
+        if (!j) return;
+        const e = (j.entries || []).find((x) => x.name === name);
+        if (!e) { emit('stat: no such file or directory: ' + p, 'err'); return; }
+        emit('path       ' + p);
+        emit('type       ' + e.type);
+        emit('size       ' + (e.type === 'dir' ? '-' : (e.size || 0) + '  (' + fmtBytes(e.size || 0) + ')'));
+        emit('protected  ' + (e.protected ? 'yes' : 'no'));
+        // The list API reports no timestamp, and a plausible-looking invented one is worse than a gap.
+        emit('modified   not reported by the device', 'dim');
+      },
+      async du(arg) {
+        let depth = 2;
+        const rest = (arg || '').replace(/-d\s*(\d+)/, (_, n) => {
+          depth = Math.max(1, Math.min(parseInt(n), LIMITS.maxDepth)); return '';
+        }).trim();
+        const path = rest ? norm(rest.replace(/^"|"$/g, '')) : cwd;
+        const own = new Map();
+        const st = await bwalk(path, depth, (dir, d, entries) => {
+          let n = 0;
+          for (const e of entries) if (e.type !== 'dir') n += e.size || 0;
+          own.set(dir, n);
+        });
+        if (!own.size) { emit('du: cannot read ' + path, 'err'); return; }
+        // Deepest first, so every child total is final before its parent claims it.
+        const total = new Map(own);
+        const depthOf = (s) => s.split('/').length;
+        for (const d of [...own.keys()].sort((a, b) => depthOf(b) - depthOf(a))) {
+          if (d === path) continue;
+          const parent = d.replace(/\/[^/]*$/, '') || '/';
+          if (total.has(parent)) total.set(parent, total.get(parent) + total.get(d));
+        }
+        for (const [d, n] of [...total.entries()].sort((a, b) => b[1] - a[1])) emit(fmtBytes(n).padStart(9) + '\t' + d);
+        if (st.capped) emit(`du: stopped after ${st.calls} directories — narrow the path or lower -d`, 'warn');
+        emit(`total ${fmtBytes(total.get(path) || 0)} in ${st.calls} listing${st.calls === 1 ? '' : 's'}`, 'dim');
+      },
+      async tree(arg) {
+        let depth = 3;
+        const rest = (arg || '').replace(/-L\s*(\d+)/, (_, n) => {
+          depth = Math.max(1, Math.min(parseInt(n), LIMITS.maxDepth)); return '';
+        }).trim();
+        const path = rest ? norm(rest.replace(/^"|"$/g, '')) : cwd;
+        let dirs = 0, files = 0, shown = 0, cut = false;
+        emit(path, 'dir');
+        const st = await bwalk(path, depth, null, (full, d, e) => {
+          if (shown >= LIMITS.maxRows) { cut = true; return; }
+          shown++;
+          const pad = '  '.repeat(d - 1);
+          if (e.type === 'dir') { dirs++; emit(pad + '├ ' + e.name + '/', 'dir'); }
+          else { files++; emit(pad + '├ ' + e.name, ''); }
+        });
+        if (!st.calls) { emit('tree: cannot read ' + path, 'err'); return; }
+        if (cut) emit(`tree: showing the first ${LIMITS.maxRows} entries`, 'warn');
+        if (st.capped) emit(`tree: stopped after ${st.calls} directories — lower -L`, 'warn');
+        emit(`${dirs} director${dirs === 1 ? 'y' : 'ies'}, ${files} file${files === 1 ? '' : 's'}`, 'dim');
+      },
+      async hexdump(arg) {
+        let n = 256, off = 0;
+        const rest = (arg || '')
+          .replace(/-n\s*(\d+)/, (_, v) => { n = Math.max(1, Math.min(parseInt(v), 4096)); return ''; })
+          .replace(/-s\s*(\d+)/, (_, v) => { off = parseInt(v); return ''; }).trim();
+        if (!rest) { emit('usage: hexdump [-n bytes] [-s offset] <file>', 'err'); return; }
+        const p = norm(rest.replace(/^"|"$/g, ''));
+        // A Range request is why this is safe on a 640 MB video: the device streams 256 bytes,
+        // not the file. /api/fs/read answers 206 for a range it can satisfy.
+        let r;
+        try {
+          r = await fetch('/api/fs/read?path=' + encodeURIComponent(p),
+            { cache: 'no-store', headers: { Range: `bytes=${off}-${off + n - 1}` } });
+        } catch { emit('hexdump: cannot reach the file API', 'err'); return; }
+        if (r.status === 401) { emit('hexdump: not paired (401)', 'err'); return; }
+        if (!r.ok) { fsFail('hexdump', p, r); return; }
+        let bytes = [];
+        try { bytes = Array.from(new Uint8Array(await r.arrayBuffer())); }
+        catch { bytes = utf8Bytes(await r.text()); }
+        bytes = bytes.slice(0, n);
+        if (!bytes.length) { emit('(empty)', 'dim'); return; }
+        const rows = [];
+        for (let i = 0; i < bytes.length; i += 16) {
+          const chunk = bytes.slice(i, i + 16);
+          const hex = chunk.map((b) => b.toString(16).padStart(2, '0')).join(' ').padEnd(47);
+          const asc = chunk.map((b) => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+          rows.push((off + i).toString(16).padStart(8, '0') + '  ' + hex + '  |' + asc + '|');
+        }
+        emit(rows.join('\n'));
+      },
+      async base64(arg, ctx) {
+        const dec = /(^|\s)-d(\s|$)/.test(arg || '');
+        const rest = (arg || '').replace(/(^|\s)-d(\s|$)/, ' ').trim();
+        let bytes = null, text = null;
+        if (rest) {
+          const p = norm(rest.replace(/^"|"$/g, ''));
+          let r;
+          try { r = await api('read', p); } catch { emit('base64: cannot reach the file API', 'err'); return; }
+          if (!r.ok) { fsFail('base64', p, r); return; }
+          if (dec) text = await r.text();
+          else { try { bytes = Array.from(new Uint8Array(await r.arrayBuffer())); } catch { bytes = utf8Bytes(await r.text()); } }
+        } else if (ctx?.stdin != null) {
+          if (dec) text = ctx.stdin; else bytes = utf8Bytes(ctx.stdin);
+        } else { emit('usage: base64 [-d] [file]', 'err'); return; }
+        if (dec) { emit(utf8Text(b64decode(text))); return; }
+        emit(b64encode(bytes).replace(/(.{76})/g, '$1\n'));
+      },
+      async tee(arg, ctx) {
+        if (!arg) { emit('usage: tee <file>', 'err'); return; }
+        const p = norm(arg.replace(/^"|"$/g, ''));
+        const body = ctx?.stdin != null ? ctx.stdin : '';
+        try {
+          const r = await api('write', p, { method: 'POST', body });
+          if (!r.ok) { fsFail('tee', p, r); return; }
+        } catch { emit('tee: file API unavailable', 'err'); return; }
+        emit(body);                       // transparent, or it is not tee
+      },
+
+      // ---- text, entirely in the browser ------------------------------------
+      seq(arg) {
+        const nums = (arg || '').split(/\s+/).filter(Boolean).map(Number);
+        if (!nums.length || nums.some((n) => !isFinite(n))) { emit('usage: seq [first] last', 'err'); return; }
+        const first = nums.length > 1 ? nums[0] : 1;
+        const last = nums.length > 1 ? nums[1] : nums[0];
+        const count = Math.abs(last - first) + 1;
+        if (count > LIMITS.maxRows * 5) { emit(`seq: refusing more than ${LIMITS.maxRows * 5} lines`, 'err'); return; }
+        const step = last >= first ? 1 : -1, rows = [];
+        for (let i = 0; i < count; i++) rows.push(String(first + i * step));
+        emit(rows.join('\n'));
+      },
+      sort(arg, ctx) {
+        if (ctx?.stdin == null) { emit('sort: reads standard input — put it after a pipe', 'err'); return; }
+        const f = arg || '';
+        const km = f.match(/-k\s*(\d+)/), key = km ? parseInt(km[1]) : 0;
+        const field = (s) => key ? (s.trim().split(/\s+/)[key - 1] || '') : s;
+        let rows = ctx.stdin.split(/\r?\n/);
+        rows.sort((a, b) => /-n/.test(f)
+          ? (parseFloat(field(a)) || 0) - (parseFloat(field(b)) || 0)
+          : field(a).localeCompare(field(b)));
+        if (/-r/.test(f)) rows.reverse();
+        if (/-u/.test(f)) rows = rows.filter((l, i) => i === 0 || l !== rows[i - 1]);
+        emit(rows.join('\n'));
+      },
+      uniq(arg, ctx) {
+        if (ctx?.stdin == null) { emit('uniq: reads standard input — put it after a pipe', 'err'); return; }
+        const count = /-c/.test(arg || ''), rows = [];
+        let prev = null, n = 0;
+        const flush = () => { if (prev !== null) rows.push(count ? String(n).padStart(4) + ' ' + prev : prev); };
+        for (const l of ctx.stdin.split(/\r?\n/)) {
+          if (l === prev) { n++; continue; }
+          flush(); prev = l; n = 1;
+        }
+        flush();
+        emit(rows.join('\n'));
+      },
+      // `tr SET1 SET2` and `tr -d SET`. No ranges/classes — a Cardputer shell trades POSIX
+      // completeness for bytes, and 1:1 translation plus delete covers what a pipe actually needs
+      // (uppercasing a column, stripping carriage returns). Sets are taken literally, char for char.
+      tr(arg, ctx) {
+        if (ctx?.stdin == null) { emit('tr: reads standard input — put it after a pipe', 'err'); return; }
+        const argv = String(arg || '').match(/"[^"]*"|\S+/g) || [];
+        const del = argv[0] === '-d';
+        const sets = (del ? argv.slice(1) : argv).map((s) => s.replace(/^"|"$/g, ''));
+        if (del) {
+          if (!sets[0]) { emit('usage: tr -d <set>', 'err'); return; }
+          const drop = new Set([...sets[0]]);
+          emit([...ctx.stdin].filter((c) => !drop.has(c)).join(''));
+          return;
+        }
+        if (sets.length < 2 || !sets[0]) { emit('usage: tr <set1> <set2>   |   tr -d <set>', 'err'); return; }
+        const from = [...sets[0]], to = [...sets[1]];
+        const map = new Map(from.map((c, i) => [c, to[Math.min(i, to.length - 1)] ?? c]));
+        emit([...ctx.stdin].map((c) => (map.has(c) ? map.get(c) : c)).join(''));
+      },
+      cut(arg, ctx) {
+        if (ctx?.stdin == null) { emit('cut: reads standard input — put it after a pipe', 'err'); return; }
+        const f = arg || '';
+        const cm = f.match(/-c\s*(\d+)-(\d+)/);
+        const dm = f.match(/-d\s*"?(\S)"?/);
+        const fm = f.match(/-f\s*([\d,-]+)/);
+        if (!cm && !fm) { emit('usage: cut -d<char> -f<list>  |  cut -c<from>-<to>', 'err'); return; }
+        const delim = dm ? (dm[1] === 't' && /-d\s*"?\\t/.test(f) ? '\t' : dm[1]) : '\t';
+        const wanted = (n) => {
+          const picked = [];
+          for (const part of (fm ? fm[1] : '1').split(',')) {
+            const r = part.split('-');
+            const a = parseInt(r[0]) || 1;
+            const b = r.length > 1 ? (parseInt(r[1]) || n) : a;
+            for (let i = a; i <= Math.min(b, n); i++) picked.push(i);
+          }
+          return picked;
+        };
+        const rows = ctx.stdin.split(/\r?\n/).map((l) => {
+          if (cm) return l.slice(parseInt(cm[1]) - 1, parseInt(cm[2]));
+          const parts = delim === ' ' ? l.trim().split(/\s+/) : l.split(delim);
+          return wanted(parts.length).map((i) => parts[i - 1] ?? '').join(delim === ' ' ? ' ' : delim);
+        });
+        emit(rows.join('\n'));
+      },
+
+      // ---- shell ------------------------------------------------------------
+      alias(arg, ctx) {
+        // On a 56-key thumb keyboard the cost is the typing, so an alias is worth more here than
+        // on a desktop — and it costs the device nothing at all once it is saved.
+        let spec = (ctx?.argv ? ctx.argv.slice(1).join(' ') : (arg || '')).trim();
+        if (spec.length > 1 && spec[0] === '"' && spec.endsWith('"')) spec = spec.slice(1, -1);
+        if (!spec) {
+          const keys = Object.keys(aliases).sort();
+          if (!keys.length) { emit('(no aliases)', 'dim'); return; }
+          for (const k of keys) emit(`${k}='${aliases[k]}'`);
+          return;
+        }
+        const m = spec.match(/^([A-Za-z_][\w-]*)\s*=\s*([\s\S]+)$/);
+        if (!m) {
+          const v = aliases[spec];
+          if (v) emit(`${spec}='${v}'`); else { emit('alias: ' + spec + ': not found', 'err'); }
+          return;
+        }
+        const val = m[2].trim().replace(/^"([\s\S]*)"$/, '$1').replace(/^'([\s\S]*)'$/, '$1');
+        aliases[m[1]] = val;
+        emit(`${m[1]}='${val}'`, 'ok');
+        saveAliases();
+      },
+      unalias(arg) {
+        const n = (arg || '').trim().replace(/^"|"$/g, '');
+        if (!n) { emit('usage: unalias <name>', 'err'); return; }
+        if (!(n in aliases)) { emit('unalias: ' + n + ': not found', 'err'); return; }
+        delete aliases[n];
+        emit('removed ' + n, 'ok');
+        saveAliases();
+      },
+      async which(arg) {
+        const n = (arg || '').trim().replace(/^"|"$/g, '');
+        if (!n) { emit('usage: which <name>', 'err'); return; }
+        if (aliases[n]) { emit(`${n}: alias for '${aliases[n]}'`); return; }
+        if (COMMANDS[n]) { emit(`${n}: shell builtin`); return; }
+        const list = await appList('which');
+        if (!list) return;
+        const a = list.find((x) => x.id === n || String(x.name || '').toLowerCase() === n.toLowerCase());
+        if (a) emit(`${n}: app → ${a.route || '/apps/' + a.id + '/'}${a.enabled === false ? ' (disabled)' : ''}`);
+        else emit(`${n}: not found`, 'warn');
+      },
+      async watch(arg, ctx) {
+        // `isPipe` alone is not enough: the LAST stage of a pipeline writes to the screen, so it is
+        // not captured — but it still must not be re-run in place every three seconds.
+        if (ctx?.isPipe || ctx?.stdin != null) { emit('watch: cannot run inside a pipeline', 'err'); return; }
+        if (watching) { emit('watch: already watching', 'err'); return; }
+        let every = 3, times = 10;
+        let rest = (arg || '')
+          .replace(/-n\s*(\d+(?:\.\d+)?)/, (_, v) => { every = parseFloat(v); return ''; })
+          .replace(/-c\s*(\d+)/, (_, v) => { times = parseInt(v); return ''; }).trim();
+        if (!rest) { emit('usage: watch [-n seconds] [-c count] <command>', 'err'); return; }
+        rest = rest.replace(/^"([\s\S]*)"$/, '$1');
+        // Two seconds is a floor, not a default: this shares four sockets with the whole OS, and a
+        // one-second watch is indistinguishable from hammering the device by hand.
+        every = Math.max(2, every || 3);
+        times = Math.max(1, Math.min(times, 300));
+        watching = true;
+        let fails = 0;
+        try {
+          for (let i = 1; i <= times && !aborted; i++) {
+            const mark = childCount();
+            const before = errors;
+            addLine(`every ${every}s · tick ${i}/${times} · ${rest}`, 'dim');
+            await exec(rest);
+            if (errors > before) {
+              if (++fails >= 3) { emit('watch: three failures in a row — stopping', 'err'); break; }
+            } else fails = 0;
+            if (i >= times || aborted) break;
+            await new Promise((r) => setTimeout(r, every * 1000));
+            if (!aborted) dropSince(mark);        // redraw in place; the scrollback stays readable
+          }
+        } finally { watching = false; }
+      },
+
+      // ---- system -----------------------------------------------------------
+      async diag(arg) {
+        // One request for the whole picture, where status+heap+cpu+anima would be four.
+        const j = await devJSON('diag', '/api/diag');
+        if (!j) return;
+        const pre = (arg || '').trim().replace(/^"|"$/g, '');
+        const rows = flatten(j, '', []).filter((l) => !pre || l.startsWith(pre));
+        if (!rows.length) { emit('diag: no key starts with ' + pre, 'warn'); return; }
+        emit(rows.join('\n'));
+      },
+      async heap() {
+        // Fragmentation, not free bytes, is the documented bottleneck — and `free` cannot show it.
+        const j = await devJSON('heap', '/api/heap');
+        if (j) emit(flatten(j, '', []).join('\n'));
+      },
+      async cpu() {
+        const j = await devJSON('cpu', '/api/cpu');
+        if (j) emit(flatten(j, '', []).join('\n'));
+      },
+      async apps(arg) {
+        const a = (arg || '').trim();
+        const m = a.match(/^open\s+(\S+)$/);
+        if (m) {
+          const id = m[1].replace(/^"|"$/g, '');
+          try { parent.postMessage({ type: 'open-app', id }, '*'); emit('opening ' + id + ' …', 'dim'); }
+          catch { emit('apps: shell not reachable', 'err'); }
+          return;
+        }
+        const all = /(^|\s)-a(\s|$)/.test(a);
+        const list = await appList('apps');
+        if (!list) return;
+        let n = 0;
+        for (const x of list) {
+          if (!all && x.enabled === false) continue;
+          emit([x.id, x.name || x.id, x.enabled === false ? 'off' : 'on', x.route || ''].join('\t'));
+          n++;
+        }
+        emit(`${n} app${n === 1 ? '' : 's'}`, 'dim');
+      },
+      // `ps` on this OS is the app table — the closest thing to a process list on a device that runs
+      // one foreground app plus the shell. It is `apps` seen through a Linux lens, on purpose: the
+      // words people's fingers already know should do the obvious thing here too.
+      async ps() {
+        const list = await appList('ps');
+        if (!list) return;
+        emit('PID   STATE  APP', 'dim');
+        let pid = 1;
+        for (const x of list) {
+          if (x.enabled === false) continue;
+          emit(String(pid++).padStart(3) + '   ' + (x.running ? 'run ' : 'idle') + '   ' + (x.id || ''));
+        }
+      },
+      // `kill <app-id>` closes a foreground app window through the shell — a real action on a real
+      // OS, so it is by id, not by the synthetic PID `ps` prints (those renumber every listing).
+      kill(arg) {
+        const id = (arg || '').trim().replace(/^"|"$/g, '');
+        if (!id) { emit('usage: kill <app-id>   (see `ps`)', 'err'); return; }
+        try { parent.postMessage({ type: 'close-app', id }, '*'); emit('sent close → ' + id, 'dim'); }
+        catch { emit('kill: shell not reachable', 'err'); }
+      },
+      // Raw pin read/write against the firmware allowlist. The device refuses a pin outside its safe
+      // set with a 403, and this surfaces that verbatim rather than pretending it worked — a terminal
+      // that lies about hardware is worse than no terminal.
+      async gpio(arg) {
+        const argv = String(arg || '').match(/\S+/g) || [];
+        const sub = (argv[0] || '').toLowerCase();
+        if (sub === 'read' || sub === 'get') {
+          const pin = parseInt(argv[1], 10);
+          if (Number.isNaN(pin)) { emit('usage: gpio read <pin>', 'err'); return; }
+          const j = await devJSON('gpio', '/api/gpio?pin=' + pin);
+          if (j) emit(j.ok ? `pin ${j.pin} = ${j.value}` : 'gpio: ' + (j.err || 'refused'), j.ok ? '' : 'err');
+          return;
+        }
+        if (sub === 'write' || sub === 'set') {
+          const pin = parseInt(argv[1], 10), val = argv[2] === '1' || argv[2] === 'high' ? 1 : 0;
+          if (Number.isNaN(pin)) { emit('usage: gpio write <pin> <0|1>', 'err'); return; }
+          const j = await devPOST('gpio', '/api/gpio', { pin, value: val });
+          if (j) emit(j.ok ? `pin ${j.pin} = ${j.value}` : 'gpio: ' + (j.err || 'refused'), j.ok ? 'ok' : 'err');
+          return;
+        }
+        emit('usage: gpio read <pin>   |   gpio write <pin> <0|1>', 'err');
+      },
+      async assoc(arg) {
+        const j = await devJSON('assoc', '/api/associations');
+        if (!j) return;
+        const map = j.default_open || {};
+        const want = (arg || '').trim().toLowerCase().replace(/^["'.]+|["']+$/g, '');
+        if (want) { emit(want + '\t' + (map[want] || j.fallback || '(none)')); return; }
+        for (const k of Object.keys(map).sort()) emit(k + '\t' + map[k]);
+        emit('*\t' + (j.fallback || '(none)'));
+      },
+      async lang(arg) {
+        const want = (arg || '').trim().toLowerCase().replace(/^"|"$/g, '');
+        if (!want) { const j = await devJSON('lang', '/api/lang'); if (j) emit(`lang ${j.lang} gen ${j.gen}`); return; }
+        if (!['it', 'en', 'fr', 'es', 'de'].includes(want)) { emit('usage: lang [it|en|fr|es|de]', 'err'); return; }
+        const j = await devPOST('lang', '/api/lang', { lang: want });
+        if (j) emit(`lang ${j.lang || want} gen ${j.gen == null ? '?' : j.gen}`, 'ok');
+      },
+      async ota(arg) {
+        // Status only. The device reboots ~800 ms after the last OTA byte, so a mistyped path in a
+        // shell with history recall would be an irreversible flash one keystroke away.
+        const a = (arg || '').trim().toLowerCase();
+        if (a && a !== 'status') { emit('ota: only "ota status" is available here — flashing lives in the release tooling', 'err'); return; }
+        const s = await devJSON('ota', '/api/status');
+        if (!s) return;
+        const o = s.ota || {};
+        emit(`running ${o.running || '?'}  next ${o.next || '?'}  state ${o.state || '?'}  rollback ${o.rollback_enabled ? 'on' : 'off'}`);
+      },
+
+      // ---- ANIMA, the offline brain -----------------------------------------
+      async anima(arg, ctx) {
+        const argv = ctx?.argv ? ctx.argv.slice(1) : (String(arg || '').match(/"[^"]*"|\S+/g) || []);
+        let mode = '', lang = '', reset = false, verbose = false, caps = false, l1 = null;
+        const words = [];
+        for (let i = 0; i < argv.length; i++) {
+          const a = String(argv[i]);
+          if (a === '-o') mode = String(argv[++i] || '').toLowerCase();
+          else if (a === '-l') lang = String(argv[++i] || '').toLowerCase().slice(0, 2);
+          else if (a === '-v') verbose = true;
+          else if (a === '--reset') reset = true;
+          else if (a === '--caps') caps = true;
+          else if (a === '--l1') l1 = String(argv[++i] || '').toLowerCase();
+          else words.push(a.replace(/^"|"$/g, ''));
+        }
+        if (caps) {
+          const c = await devJSON('anima', '/api/anima/caps');
+          if (c) emit(`l1=${c.l1Mode} serving=${c.l1Serving ? 'yes' : 'no'} enabled=${c.enabled ? 'yes' : 'no'}`
+            + ` key=${c.hasKey ? 'yes' : 'no'} online=${c.online ? 'yes' : 'no'}`);
+          return;
+        }
+        if (l1 !== null) {
+          if (!['on', 'off', 'auto'].includes(l1)) { emit('usage: anima --l1 on|off|auto', 'err'); return; }
+          const j = await devPOST('anima', '/api/anima/l1', { mode: l1 });
+          if (j) emit(`l1=${j.l1Mode || l1} serving=${j.l1Serving ? 'yes' : 'no'}`, 'ok');
+          return;
+        }
+        let q = words.join(' ');
+        // The firmware's query buffer is 160 bytes behind a 208-byte URL buffer, so a 2 KB log
+        // cannot be shipped: the browser digests it first and the device only ever sees the digest.
+        if (ctx?.stdin != null && ctx.stdin.trim()) {
+          const d = animaDigest(ctx.stdin);
+          q = q ? q + ' | ' + d : d;
+        }
+        q = encTrim(q, ANIMA_Q_ENC);
+        if (!q) { emit('usage: anima [-o off|on|only] [-l it|en] [-v] <question>', 'err'); return; }
+        // Notes bypass the sink on purpose: down a pipe `anima` yields the reply and nothing else.
+        if (ctx?.stdin != null) addLine('asked: ' + q, 'dim');
+        let url = '/api/anima?q=' + encodeURIComponent(q);
+        if (lang) url += '&lang=' + encodeURIComponent(lang);
+        if (mode) url += '&mode=' + encodeURIComponent(mode);
+        if (reset) url += '&reset=1';
+        let j = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          let r;
+          try { r = await fetch(url, { cache: 'no-store' }); }
+          catch { emit('anima: cannot reach the device', 'err'); return; }
+          if (r.status === 401) { emit('anima: not paired (401)', 'err'); return; }
+          // The brain is single-owner; 503 means another turn holds it, not that it is broken.
+          if (r.status === 503) {
+            if (attempt) { emit('anima: brain busy — try again', 'warn'); return; }
+            let wait = 250;
+            try { wait = (await r.json()).retry_after_ms || 250; } catch {}
+            await new Promise((res) => setTimeout(res, wait));
+            continue;
+          }
+          if (!r.ok) { emit('anima: failed (status ' + r.status + ')', 'err'); return; }
+          try { j = await r.json(); } catch { emit('anima: invalid response', 'err'); return; }
+          break;
+        }
+        if (!j) return;
+        const reply = String(j.reply || '').trim();
+        if (reply) emit(reply); else addLine('(no answer — the offline brain abstained)', 'dim');
+        if (j.action && j.action !== 'none') {
+          // In a pipeline an action is DATA. A stage that launched an app as a side effect would
+          // make `dmesg | anima "…" | tee log` open windows while it wrote a file.
+          if (!ctx?.isPipe && j.action === 'launch' && j.arg) {
+            addLine('→ launch ' + j.arg, 'ok');
+            try { parent.postMessage({ type: 'open-app', id: j.arg }, '*'); } catch {}
+          } else addLine(('→ ' + j.action + ' ' + (j.arg || '')).trim(), 'dim');
+        }
+        if (verbose) addLine(`tier=${j.tier} domain=${j.domain} conf=${j.confidence} trace="${j.trace || ''}"`, 'dim');
+      },
+      async verify(arg, ctx) {
+        const argv = ctx?.argv ? ctx.argv.slice(1) : (String(arg || '').match(/"[^"]*"|\S+/g) || []);
+        let kind = '', lang = '';
+        const words = [];
+        for (let i = 0; i < argv.length; i++) {
+          const a = String(argv[i]);
+          if (a === '--kind') kind = String(argv[++i] || '');
+          else if (a === '-l') lang = String(argv[++i] || '').slice(0, 2);
+          else words.push(a.replace(/^"|"$/g, ''));
+        }
+        if (words.length < 2) { emit('usage: verify <key> <asserted> [--kind fact|numeric] [-l it|en]', 'err'); return; }
+        const asserted = words.pop(), key = words.join(' ');
+        let url = '/api/anima/verify?key=' + encodeURIComponent(encTrim(key, 100))
+          + '&asserted=' + encodeURIComponent(encTrim(asserted, 60));
+        if (kind) url += '&kind=' + encodeURIComponent(kind);
+        if (lang) url += '&lang=' + encodeURIComponent(lang);
+        const j = await devJSON('verify', url);
+        if (j) emit(((j.verdict || j.result || 'unknown') + '\t' + (j.evidence || '')).trim());
+      },
+
+      // ---- radios and panel (each one widens the manifest — see the report) --
+      async wifi(arg, ctx) {
+        const argv = ctx?.argv ? ctx.argv.slice(1) : (String(arg || '').match(/"[^"]*"|\S+/g) || []);
+        const sub = String(argv[0] || '').toLowerCase();
+        const a1 = String(argv[1] || '').replace(/^"|"$/g, '');
+        const a2 = String(argv[2] || '').replace(/^"|"$/g, '');
+        if (sub === 'scan') {
+          // A scan parks the radio for a second or two. It is refused inside watch, and rate
+          // limited, because a shell loop over it would knock the device off its own network.
+          if (watching) { emit('wifi: scan is a blocking radio operation — not inside watch', 'err'); return; }
+          if (Date.now() - lastScanAt < 10000) { emit('wifi: scanned less than 10 s ago — let the radio finish', 'warn'); return; }
+          lastScanAt = Date.now();
+          const j = await devJSON('wifi', '/api/wifi/scan');
+          if (!j) return;
+          const nets = j.networks || [];
+          for (const n of nets) emit([n.ssid, n.rssi, n.channel, n.auth || ''].join('\t'));
+          emit(`${nets.length} network${nets.length === 1 ? '' : 's'}`, 'dim');
+          return;
+        }
+        if (sub === 'known' || !sub) {
+          const j = await devJSON('wifi', '/api/wifi/known');
+          if (!j) return;
+          for (const n of (j.networks || [])) emit([(n.current ? '*' : ' ') + n.ssid, n.priority == null ? '' : n.priority].join('\t'));
+          emit('mode ' + (j.mode || '?') + (j.ssid ? ' · ' + j.ssid : ''), 'dim');
+          return;
+        }
+        if (sub === 'join') {
+          if (!a1) { emit('usage: wifi join <ssid> [password]', 'err'); return; }
+          const j = await devPOST('wifi', '/api/wifi/join', { ssid: a1, password: a2 });
+          if (j) emit('joining ' + a1 + ' …', 'ok');
+          return;
+        }
+        if (sub === 'forget') {
+          if (!a1) { emit('usage: wifi forget <ssid>', 'err'); return; }
+          const j = await devPOST('wifi', '/api/wifi/forget', { ssid: a1 });
+          if (j) emit('forgot ' + a1, 'ok');
+          return;
+        }
+        if (sub === 'prio') {
+          if (!a1 || !a2) { emit('usage: wifi prio <ssid> <n>', 'err'); return; }
+          const j = await devPOST('wifi', '/api/wifi/priority', { ssid: a1, priority: parseInt(a2) || 0 });
+          if (j) emit(`${a1} priority ${a2}`, 'ok');
+          return;
+        }
+        if (sub === 'reconnect') {
+          const j = await devPOST('wifi', '/api/wifi/reconnect');
+          if (j) emit('reconnecting …', 'ok');
+          return;
+        }
+        emit('usage: wifi scan | known | join <ssid> [pass] | forget <ssid> | prio <ssid> <n> | reconnect', 'err');
+      },
+      async ir(arg, ctx) {
+        const argv = ctx?.argv ? ctx.argv.slice(1) : (String(arg || '').match(/"[^"]*"|\S+/g) || []);
+        const sub = String(argv[0] || 'db').toLowerCase();
+        if (sub === 'db') {
+          const j = await devJSON('ir', '/api/ir/db');
+          if (!j) return;
+          emit('gpio ' + j.gpio + '  ready ' + (j.ready ? 'yes' : 'no'));
+          emit('protocols ' + (j.protocols || []).join(' '));
+          if (j.tvbgone) emit(`tvbgone ${j.tvbgone.count} codes  regions ${(j.tvbgone.regions || []).join(' ')}`);
+          return;
+        }
+        if (sub === 'send') {
+          const [, proto, addr, cmd, rep] = argv;
+          if (!proto || addr == null || cmd == null) { emit('usage: ir send <proto> <addr> <cmd> [repeats]', 'err'); return; }
+          const j = await devPOST('ir', '/api/ir/send',
+            { proto: String(proto), addr: parseInt(addr) || 0, cmd: parseInt(cmd) || 0, repeats: parseInt(rep) || 1 });
+          if (j) emit(`ok proto=${proto} addr=${addr} cmd=${cmd}`, 'ok');
+          return;
+        }
+        if (sub === 'raw') {
+          const timings = String(argv.slice(1).join(',')).replace(/["\s]/g, '');
+          if (!timings) { emit('usage: ir raw <us,us,us,…>', 'err'); return; }
+          const j = await devPOST('ir', '/api/ir/send', { raw: timings.split(',').map((n) => parseInt(n) || 0) });
+          if (j) emit('ok raw ' + timings.split(',').length + ' marks', 'ok');
+          return;
+        }
+        if (sub === 'tvbgone') {
+          const act = String(argv[1] || 'status').toLowerCase();
+          if (act === 'status') { const j = await devJSON('ir', '/api/ir/tvbgone');
+            if (j) emit(`running ${j.running ? 'yes' : 'no'}  sent ${j.sent}/${j.total}`); return; }
+          if (act !== 'start' && act !== 'stop') { emit('usage: ir tvbgone start|stop|status', 'err'); return; }
+          const j = await devPOST('ir', '/api/ir/tvbgone', { action: act, region: String(argv[2] || 'all') });
+          if (j) emit('tvbgone ' + act, 'ok');
+          return;
+        }
+        // The jammer floods the band from a background task with no dry run and no stop on screen;
+        // it stays in the IR Remote app, where a visible button can stop it.
+        if (sub === 'jam') { emit('ir: the jammer is not exposed here — use the IR Remote app, which has a stop button', 'err'); return; }
+        emit('usage: ir db | send <proto> <addr> <cmd> [rep] | raw <us,…> | tvbgone start|stop|status', 'err');
+      },
+      async display(arg) {
+        const a = (arg || '').trim().toLowerCase();
+        if (a !== 'on' && a !== 'off') { emit('usage: display on | display off', 'err'); return; }
+        // The single biggest lever on a 120 mAh budget, and until now only reachable through Settings.
+        const j = await devPOST('display', '/api/display', { on: a === 'on' });
+        if (j) emit(`display ${j.on === false ? 'off' : 'on'} brightness=${j.brightness == null ? '?' : j.brightness}`, 'ok');
+      },
+      async screen(arg) {
+        const m = (arg || '').match(/-o\s+(\S+)/);
+        const outPath = norm((m ? m[1] : '/data/screen.bmp').replace(/^"|"$/g, ''));
+        let r;
+        try { r = await fetch('/api/screen', { cache: 'no-store' }); }
+        catch { emit('screen: cannot reach the device', 'err'); return; }
+        if (r.status === 401) { emit('screen: not paired (401)', 'err'); return; }
+        if (r.status === 404) { emit('screen: not available on this build (404)', 'warn'); return; }
+        if (r.status === 503) { emit('screen: panel size unavailable — try again once the panel is on', 'warn'); return; }
+        if (!r.ok) { emit('screen: failed (status ' + r.status + ')', 'err'); return; }
+        const buf = await r.arrayBuffer();
+        try {
+          const w = await api('write', outPath, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf });
+          if (!w.ok) { emit('screen: failed to write ' + outPath + ' (status ' + w.status + ')', 'err'); return; }
+        } catch { emit('screen: file API unavailable', 'err'); return; }
+        emit(`saved ${outPath} ${buf.byteLength} bytes`, 'ok');
+      },
+      async say(arg, ctx) {
+        const text = (arg ? String(arg).replace(/^"([\s\S]*)"$/, '$1') : (ctx?.stdin || '')).trim();
+        if (!text) { emit('usage: say <text>   (or pipe text into it)', 'err'); return; }
+        const j = await devPOST('say', '/api/tts', { say: text.slice(0, 400), lang: manLang() });
+        if (!j) return;
+        if (j.available === false) { emit('say: no speech engine on this device', 'warn'); return; }
+        // Pass the text through so `… | say | tee log` still records what was spoken.
+        if (ctx?.isPipe) emit(text); else emit(`spoken ${text.length} chars`, 'ok');
+      },
+      notify(arg, ctx) {
+        const text = (arg ? String(arg).replace(/^"([\s\S]*)"$/, '$1') : (ctx?.stdin || '')).trim();
+        if (!text) { emit('usage: notify <text>', 'err'); return; }
+        // The shell's capability broker, not a direct API: this is how a long `watch` reaches the
+        // user after they have switched windows.
+        try { parent.postMessage({ type: 'nucleo.broker', method: 'notify', id: 'term-' + Date.now(), args: { text: text.slice(0, 200) } }, '*'); }
+        catch { emit('notify: shell not reachable', 'err'); return; }
+        emit('notified', 'ok');
+      },
+      clip(arg, ctx) {
+        // The pipeline's exit to the rest of the OS, and its entrance: the clipboard is a shell
+        // service here, not a browser one, so it survives a window change.
+        if (/(^|\s)-o(\s|$)/.test(arg || '')) {
+          return new Promise((resolve) => {
+            let done = false;
+            const onMsg = (e) => {
+              if (!e.data || e.data.type !== 'clipboard-data' || done) return;
+              done = true;
+              try { window.removeEventListener('message', onMsg); } catch {}
+              const it = e.data.item;
+              if (it && it.data != null) emit(String(it.data)); else emit('(clipboard empty)', 'dim');
+              resolve();
+            };
+            try { window.addEventListener('message', onMsg); parent.postMessage({ type: 'clipboard-read' }, '*'); }
+            catch { emit('clip: shell not reachable', 'err'); resolve(); return; }
+            setTimeout(() => { if (!done) { done = true; emit('clip: no answer from the shell', 'err'); resolve(); } }, 1500);
+          });
+        }
+        const text = (arg ? String(arg).replace(/^"([\s\S]*)"$/, '$1') : (ctx?.stdin || ''));
+        if (!text) { emit('usage: clip   (pipe text into it)  |  clip -o', 'err'); return; }
+        try { parent.postMessage({ type: 'clipboard-write', kind: 'text', data: text }, '*'); }
+        catch { emit('clip: shell not reachable', 'err'); return; }
+        if (ctx?.isPipe) emit(text); else emit(`copied ${text.length} chars`, 'ok');
+      },
+      async link(arg) {
+        const sub = (arg || 'peers').trim().toLowerCase();
+        if (sub === 'peers' || !sub) {
+          const j = await devJSON('link', '/api/link/peers');
+          if (!j) return;
+          const peers = j.peers || [];
+          peers.forEach((p, i) => emit([i, p.name || '', p.mac || '', p.proto || ''].join('\t')));
+          emit(`name ${j.name || '?'} · channel ${j.channel == null ? '?' : j.channel} · ${peers.length} peer${peers.length === 1 ? '' : 's'}`, 'dim');
+          return;
+        }
+        if (sub === 'status') {
+          const j = await devJSON('link', '/api/link/status');
+          if (j) emit(`state ${j.state} ${j.sending ? 'tx' : 'rx'} ${j.total ? Math.round(j.done / j.total * 100) : 0}%`
+            + (j.peer ? ' peer ' + j.peer : ''));
+          return;
+        }
+        // Sending a command to another device turns a typo into someone else's problem; the
+        // confirmation step lives in Vicino's UI for that reason.
+        emit('usage: link peers | link status   (sending is deliberately left to the Vicino app)', 'err');
+      },
+      clear() { out.innerHTML = ''; lineCount = 0; trimNote = null; unseen = 0; if (pillEl) pillEl.hidden = true; },
     };
 
-    // ---- runner ----------------------------------------------------------------
-    async function run(raw) {
-      const cmd = raw.trim();
-      emit(cwd + ' $ ' + cmd, 'cmd');
-      if (!cmd) return;
-      const expanded = cmd.replace(/\$(\w+)/g, (_, name) => envVars[name] || '');
-      const sp = expanded.indexOf(' ');
-      const name = (sp < 0 ? expanded : expanded.slice(0, sp)).toLowerCase();
-      const arg = sp < 0 ? '' : expanded.slice(sp + 1).trim();
-      const fn = COMMANDS[name];
-      if (!fn) { emit(name + ': command not found — type "help"', 'err'); return; }
-      try { await fn(arg); } catch (e) { emit(name + ': ' + (e?.message || e), 'err'); }
+    // ---- lexer ------------------------------------------------------------------
+    // Operators count only outside quotes, and $VAR is substituted AFTER the split, so an
+    // expanded value can never introduce a word break, a quote or a pipe of its own.
+    const OPS = ['&&', '||', '>>', '|', '>', '<', ';'];
+    function tokenize(line) {
+      const toks = [];
+      let parts = null, quoted = false;
+      const put = (text, expand) => {
+        if (!parts) parts = [];
+        const last = parts[parts.length - 1];
+        if (last && last.expand === expand) last.text += text; else parts.push({ text, expand });
+      };
+      const flush = () => { if (parts) toks.push({ w: parts, quoted }); parts = null; quoted = false; };
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '\\') {
+          if (i + 1 >= line.length) return { error: 'syntax error: unexpected end of input' };
+          put(line[++i], false);
+        } else if (c === "'") {
+          const end = line.indexOf("'", i + 1);
+          if (end < 0) return { error: 'syntax error: unterminated quote' };
+          quoted = true; put(line.slice(i + 1, end), false); i = end;
+        } else if (c === '"') {
+          quoted = true; put('', true);
+          let j = i + 1, closed = false;
+          for (; j < line.length; j++) {
+            const d = line[j];
+            if (d === '\\' && j + 1 < line.length && '"\\$'.includes(line[j + 1])) { put(line[++j], false); continue; }
+            if (d === '"') { closed = true; break; }
+            put(d, true);
+          }
+          if (!closed) return { error: 'syntax error: unterminated quote' };
+          i = j;
+        } else if (/\s/.test(c)) {
+          flush();
+        } else {
+          const op = OPS.find((o) => line.startsWith(o, i));
+          if (op) { flush(); toks.push({ op }); i += op.length - 1; }
+          else put(c, true);
+        }
+      }
+      flush();
+      return { tokens: toks };
     }
 
-    // ---- history + key handling ------------------------------------------------
+    // An unquoted word that expands to nothing disappears; a quoted one stays as an empty
+    // argument. That difference is why the substitution has to know how each part was written.
+    function expandWord(tok) {
+      let text = '', substituted = false;
+      for (const p of tok.w) {
+        if (!p.expand) { text += p.text; continue; }
+        text += p.text.replace(/\$(?:\{(\w+)\}|(\w+))/g, (_, braced, bare) => {
+          substituted = true;
+          const v = envVars[braced || bare];
+          return v == null ? '' : String(v);
+        });
+      }
+      return { text, drop: text === '' && !tok.quoted && substituted };
+    }
+
+    // ---- parser -----------------------------------------------------------------
+    // line := pipeline ( (';' | '&&' | '||') pipeline )* ;  pipeline := stage ('|' stage)* ;
+    // stage := word+ ( ('>' | '>>' | '<') word )*
+    function parse(line) {
+      const lex = tokenize(line);
+      if (lex.error) return lex;
+      const list = [];
+      let stages = [], stage = null, redir = null, join = ';';
+      const closeStage = () => {
+        if (!stage) return null;
+        if (!stage.argv.length) return 'syntax error: redirection without a command';
+        stages.push(stage); stage = null; return null;
+      };
+      for (const tk of lex.tokens) {
+        if (!tk.op) {
+          const w = expandWord(tk);
+          if (!stage) stage = { argv: [], redirs: [] };
+          if (redir) {
+            if (w.drop || !w.text) return { error: 'syntax error: missing redirection target' };
+            stage.redirs.push({ op: redir, path: w.text }); redir = null;
+          } else if (!w.drop) stage.argv.push(w.text);
+          continue;
+        }
+        if (redir) return { error: `syntax error near '${tk.op}'` };
+        if (tk.op === '>' || tk.op === '>>' || tk.op === '<') { redir = tk.op; continue; }
+        if (tk.op !== ';' && !stage) return { error: `syntax error near '${tk.op}'` };
+        const bad = closeStage();
+        if (bad) return { error: bad };
+        if (tk.op === '|') continue;
+        if (!stages.length) return { error: `syntax error near '${tk.op}'` };
+        list.push({ stages, join });
+        stages = []; join = tk.op;
+      }
+      if (redir) return { error: 'syntax error: missing redirection target' };
+      const bad = closeStage();
+      if (bad) return { error: bad };
+      if (stages.length) list.push({ stages, join });
+      else if (join !== ';' && list.length) return { error: `syntax error: '${join}' with no command` };
+      for (const seg of list) if (seg.stages.length > LIMITS.maxStages)
+        return { error: `too many stages in one pipeline (max ${LIMITS.maxStages})` };
+      // Aliases expand once, on the command word only. One pass cannot loop on `alias ls='ls -l'`,
+      // and refusing an alias body that contains an operator keeps a saved string from smuggling in
+      // a pipe or a redirect the user never typed.
+      for (const seg of list) for (const st of seg.stages) {
+        const body = aliases[st.argv[0]];
+        if (!body) continue;
+        const lex2 = tokenize(body);
+        if (lex2.error || lex2.tokens.some((tk) => tk.op)) continue;
+        const words = lex2.tokens.map(expandWord).filter((w) => !w.drop).map((w) => w.text);
+        if (words.length) st.argv.splice(0, 1, ...words);
+      }
+      return { list };
+    }
+
+    // ---- executor ----------------------------------------------------------------
+    let aborted = false;
+    // The 34 commands were written against a raw argument string, so tokens are re-joined for
+    // them — re-quoting whatever carries whitespace, which is what makes `cp "$SRC" /data/b`
+    // work once $SRC expands to a path with a space in it.
+    const quoteArg = (a) => (a === '' || /\s/.test(a)) ? '"' + a + '"' : a;
+
+    async function runStage(stage, stdin, last) {
+      const name = stage.argv[0].toLowerCase();
+      const outTo = stage.redirs.find((r) => r.op === '>' || r.op === '>>');
+      const inFrom = stage.redirs.find((r) => r.op === '<');
+      let feed = stdin;
+      if (inFrom) {
+        const p = norm(inFrom.path);
+        let r;
+        try { r = await api('read', p); }
+        catch { emit(`${name}: cannot reach the file API`, 'err'); return { out: '', code: 1 }; }
+        if (!r.ok) { emit(`${name}: cannot read ${p} (status ${r.status})`, 'err'); return { out: '', code: 1 }; }
+        feed = (await r.text()).slice(0, LIMITS.maxBytes);
+      }
+      const capture = !!outTo || !last;
+      const buf = []; let bufLen = 0, cut = false;
+      const prev = sink;
+      if (capture) sink = (s) => {
+        if (bufLen + s.length > LIMITS.maxBytes) {
+          if (!cut) { cut = true; addLine(`${name}: output truncated at ${fmtBytes(LIMITS.maxBytes)}`, 'warn'); }
+          return;
+        }
+        buf.push(s); bufLen += s.length + 1;
+      };
+      const before = errors;
+      try {
+        await COMMANDS[name](stage.argv.slice(1).map(quoteArg).join(' '),
+          { stdin: feed, argv: stage.argv, env: envVars, cwd, isPipe: capture });
+      } catch (e) { sink = prev; emit(`${name}: ${e?.message || e}`, 'err'); }
+      sink = prev;
+      let code = errors > before ? 1 : 0;
+      if (!outTo) return { out: buf.join('\n'), code };
+      const p = norm(outTo.path);
+      let body = buf.join('\n');
+      if (outTo.op === '>>') {
+        try { const r = await api('read', p); if (r.ok) { const old = await r.text(); if (old) body = old.replace(/\n$/, '') + '\n' + body; } } catch {}
+      }
+      try {
+        const w = await api('write', p, { method: 'POST', body });
+        if (!w.ok) { emit(`${name}: failed to write ${p} (status ${w.status})`, 'err'); code = 1; }
+      } catch { emit(`${name}: failed to write ${p} (file API unavailable)`, 'err'); code = 1; }
+      return { out: '', code };
+    }
+
+    async function runPipeline(stages) {
+      for (const st of stages) {
+        // Reject the whole pipeline up front: a typo in stage 3 must not cost stage 1 a request.
+        const nm = st.argv[0].toLowerCase();
+        if (!COMMANDS[nm]) { emit(nm + ': command not found — type "help"', 'err'); return 1; }
+      }
+      let data = null, code = 0;
+      for (let i = 0; i < stages.length; i++) {
+        if (aborted) return 130;
+        const r = await runStage(stages[i], data, i === stages.length - 1);
+        code = r.code;
+        if (code !== 0) return code;      // pipefail: a dead pipe must not fire further requests
+        data = r.out;
+      }
+      return code;
+    }
+
+    // ---- runner ----------------------------------------------------------------
+    // exec() is run() without the prompt echo and without clearing the abort token — which is what
+    // `watch` needs to re-run a line every few seconds and still stop on Ctrl+C.
+    async function exec(cmd) {
+      const p = parse(cmd);
+      if (p.error) { emit(p.error, 'err'); return 2; }
+      let code = 0;
+      for (const seg of p.list) {
+        if (aborted) break;
+        if (seg.join === '&&' && code !== 0) continue;
+        if (seg.join === '||' && code === 0) continue;
+        code = await runPipeline(seg.stages);
+      }
+      return code;
+    }
+    async function run(raw) {
+      const cmd = raw.trim();
+      // One echo per submitted line, not per stage — and it is tappable, which on a touchscreen is
+      // the fastest recall there is: point at a command you ran, get it back in the input.
+      emit(cwd + ' $ ' + cmd, 'cmd', cmd ? { kind: 'cmd', name: cmd } : null);
+      if (!cmd) return 0;
+      aborted = false;
+      return exec(cmd);
+    }
+
+    // ---- directory cache for completion -----------------------------------------
+    // A listing costs the device one stat() per entry plus a subdirectory scan, built into cJSON in
+    // an 18 KB heap — so it is the expensive call, and Tab is the thing that would repeat it. The
+    // cache is generous where memory is free (24 directories, ~3 KB each, in the browser) and stingy
+    // where it is not: one request per directory per 20 s, single-flight, and never two at a time.
+    const CDIR = { map: new Map(), inflight: new Map() };
+    const CACHE_TTL = 20000, CACHE_NEG_TTL = 5000, CACHE_MAX = 24;
+    let listBusy = false, procNodes = null;
+    function cacheGet(dir) {
+      const e = CDIR.map.get(dir);
+      if (!e) return null;
+      if (Date.now() - e.at > (e.neg ? CACHE_NEG_TTL : CACHE_TTL)) { CDIR.map.delete(dir); return null; }
+      CDIR.map.delete(dir); CDIR.map.set(dir, e);      // Map insertion order IS the LRU order
+      return e;
+    }
+    function cachePut(dir, entries, neg) {
+      CDIR.map.delete(dir);
+      CDIR.map.set(dir, { entries, at: Date.now(), neg: !!neg });
+      while (CDIR.map.size > CACHE_MAX) CDIR.map.delete(CDIR.map.keys().next().value);
+    }
+    // Explicit invalidation beats a short TTL: it is exact, and it costs the device nothing.
+    function cacheDrop(path) {
+      if (!path) { CDIR.map.clear(); return; }
+      CDIR.map.delete(path);
+      CDIR.map.delete(path.replace(/\/[^/]*$/, '') || '/');
+    }
+    async function warmDir(dir) {
+      if (cacheGet(dir)) return null;
+      if (CDIR.inflight.has(dir)) return CDIR.inflight.get(dir);
+      if (listBusy) return 'busy';        // one completion listing at a time: the shell needs the sockets
+      listBusy = true;
+      const job = (async () => {
+        await null;                       // suspend before any work, so the inflight entry lands first
+        try {
+          const r = await api('list', dir);
+          // A 401 is never cached: pairing can happen at any moment, and a remembered 401 would
+          // leave the terminal looking broken for twenty seconds after the user fixed it.
+          if (r.status === 401) return '401';
+          if (!r.ok) { cachePut(dir, [], true); return null; }
+          const j = await r.json();
+          cachePut(dir, (j.entries || []).map((e) => ({ name: e.name, type: e.type })), false);
+          return null;
+        } catch { return 'net'; }
+        finally { CDIR.inflight.delete(dir); listBusy = false; }
+      })();
+      CDIR.inflight.set(dir, job);
+      return job;
+    }
+    // /proc is a fixed firmware table that cannot change without a reboot, so it is fetched once.
+    async function warmProc() {
+      if (procNodes) return;
+      try {
+        const r = await fetch('/proc', { cache: 'no-store' });
+        if (!r.ok) return;
+        procNodes = (await r.text()).split(/\n/).filter(Boolean).map((n) => ({ name: n, type: 'file' }));
+      } catch {}
+    }
+
+    // ---- completion (pure: it reads the cache and never the wire) -----------------
+    // Most commands take no path at all, and the table below is why: the device is asked for a
+    // listing only when the fragment under the caret is genuinely pointing at the filesystem.
+    // One letter per argument position, the last one repeating — d dirs, f files first, p both,
+    // '-' nothing.
+    const PATHRULE = {
+      cd: 'd', mkdir: 'd', du: 'd', tree: 'd',
+      ls: 'p', rm: 'p', stat: 'p', find: 'p', cp: 'pp', mv: 'pp',
+      cat: 'f', wc: 'f', open: 'f', touch: 'f', head: 'f', tail: 'f',
+      hexdump: 'f', base64: 'f', tee: 'f', grep: '-f', wget: '-f', screen: '-f',
+    };
+    const WORDRULE = {
+      help: ['files', 'text', 'system', 'anima', 'radios', 'shell'],
+      theme: ['dark', 'light'], uname: ['-a'], history: ['clear', '10', '20', '50'],
+      anima: ['--caps', '--l1', '--reset', '-o', '-l', '-v'],
+      wifi: ['scan', 'known', 'join', 'forget', 'prio', 'reconnect'],
+      ir: ['db', 'send', 'raw', 'tvbgone'], display: ['on', 'off'], ota: ['status'],
+      apps: ['open', '-a'], lang: ['it', 'en', 'fr', 'es', 'de'], link: ['peers', 'status'],
+      sort: ['-r', '-n', '-u', '-k'], uniq: ['-c'], clip: ['-o'], base64: ['-d'],
+      dmesg: ['-l'], date: ['-u', '-s'], du: ['-d'], tree: ['-L'], cut: ['-d', '-f', '-c'],
+      hexdump: ['-n', '-s'], head: ['-n'], tail: ['-n'], find: ['-name'], watch: ['-n', '-c'],
+    };
+    const URLCMD = { curl: 1, wget: 1, ping: 1 };
+    const SEP = { '|': 1, ';': 1, '&&': 1, '||': 1 };
+    const REDIR = { '>': 1, '>>': 1, '<': 1 };
+
+    // A second, offset-preserving split: the shell tokeniser throws positions away, and completion
+    // is nothing but positions.
+    function ctokens(line) {
+      const toks = []; let cur = null, q = false;
+      const close = (i) => { if (cur) { cur.end = i; toks.push(cur); cur = null; } };
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') { if (!cur) cur = { start: i, text: '', quoted: true }; else cur.quoted = true; q = !q; continue; }
+        if (!q && /\s/.test(c)) { close(i); continue; }
+        if (!cur) cur = { start: i, text: '', quoted: false };
+        cur.text += c;
+      }
+      close(line.length);
+      return toks;
+    }
+    const lcp = (arr) => {
+      let p = arr[0] || '';
+      for (const s of arr) { let i = 0; while (i < p.length && i < s.length && p[i] === s[i]) i++; p = p.slice(0, i); }
+      return p;
+    };
+    const cmdNames = () => Object.keys(COMMANDS).concat(Object.keys(aliases)).sort();
+
+    function completions(line, caret) {
+      const toks = ctokens(line);
+      let idx = toks.findIndex((t) => caret >= t.start && caret <= t.end);
+      let tok;
+      if (idx < 0) {
+        tok = { start: caret, end: caret, text: '', quoted: false };
+        idx = toks.filter((t) => t.end <= caret).length;
+        toks.splice(idx, 0, tok);
+      } else tok = toks[idx];
+      let cmdIdx = 0;
+      for (let i = idx - 1; i >= 0; i--) if (!toks[i].quoted && SEP[toks[i].text]) { cmdIdx = i + 1; break; }
+      const prev = idx > 0 ? toks[idx - 1] : null;
+      const afterRedir = !!(prev && !prev.quoted && REDIR[prev.text]);
+      const name = (toks[cmdIdx] || {}).text || '';
+      const frag = tok.text;
+      const res = { start: tok.start, end: tok.end, frag, kind: 'word', items: [], pending: null };
+
+      if (idx === cmdIdx && !afterRedir) {
+        res.kind = 'command';
+        res.items = cmdNames().filter((n) => n.startsWith(frag)).map((n) => ({ text: n, kind: 'command', display: n }));
+        return res;
+      }
+      const ai = idx - cmdIdx;
+      if (!afterRedir) {
+        // Nobody retypes a URL on a 56-key keyboard, and every URL worth completing was already
+        // typed once — so this is history, not a request.
+        if (URLCMD[name] && ai === 1) {
+          const seen = new Set(), hits = [];
+          for (let i = hist.length - 1; i >= 0 && hits.length < 20; i--) {
+            const w = ctokens(hist[i]);
+            if (!w.length || w[0].text !== name) continue;
+            for (const t of w.slice(1)) {
+              if (t.text.startsWith('-') || seen.has(t.text) || !t.text.startsWith(frag)) continue;
+              seen.add(t.text); hits.push({ text: t.text, kind: 'url', display: t.text });
+            }
+          }
+          if (hits.length) { res.kind = 'url'; res.items = hits; return res; }
+        }
+        if (name === 'unalias' && ai === 1) {
+          res.items = Object.keys(aliases).filter((n) => n.startsWith(frag)).sort().map((n) => ({ text: n, kind: 'word', display: n }));
+          return res;
+        }
+        if (name === 'export' && ai === 1) {
+          res.items = Object.keys(envVars).filter((n) => n.startsWith(frag)).sort().map((n) => ({ text: n + '=', kind: 'word', display: n + '=' }));
+          return res;
+        }
+        if ((name === 'man' || name === 'which' || name === 'watch') && ai === 1) {
+          res.kind = 'command';
+          res.items = cmdNames().filter((n) => n.startsWith(frag)).map((n) => ({ text: n, kind: 'command', display: n }));
+          return res;
+        }
+        const words = WORDRULE[name];
+        if (words) {
+          const hits = words.filter((w) => w.startsWith(frag));
+          if (hits.length && (frag || ai === 1)) {
+            res.items = hits.map((w) => ({ text: w, kind: 'word', display: w }));
+            return res;
+          }
+        }
+      }
+      let rule = afterRedir ? 'f' : '';
+      if (!rule) {
+        const spec = PATHRULE[name] || '';
+        rule = spec ? spec.charAt(Math.min(ai - 1, spec.length - 1)) : '';
+        // An unknown command still completes a fragment that is obviously a path: the user pointed
+        // at the filesystem, which is the only condition this whole design cares about.
+        if ((!rule || rule === '-') && /^\.{0,2}\//.test(frag)) rule = 'p';
+      }
+      if (!rule || rule === '-') return res;
+
+      const slash = frag.lastIndexOf('/');
+      const dirPart = slash < 0 ? '' : frag.slice(0, slash + 1);
+      const leaf = slash < 0 ? frag : frag.slice(slash + 1);
+      const baseDir = norm(dirPart || '.');
+      res.kind = rule === 'd' ? 'dir' : 'file';
+      let entries;
+      if (baseDir === '/proc') entries = procNodes;
+      else if (baseDir.startsWith('/proc/')) entries = [];        // nothing lives below a /proc node
+      else { const c = cacheGet(baseDir); entries = c ? c.entries : null; }
+      if (!entries) { res.pending = baseDir; return res; }
+      let hits = entries.filter((e) => e.name.startsWith(leaf));
+      // The SD is FAT, which is case-insensitive. Pretending otherwise is a lie the user pays for.
+      if (!hits.length && leaf) hits = entries.filter((e) => e.name.toLowerCase().startsWith(leaf.toLowerCase()));
+      if (rule === 'd') hits = hits.filter((e) => e.type === 'dir');
+      hits = hits.slice().sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1);
+      res.items = hits.map((e) => ({
+        text: dirPart + e.name + (e.type === 'dir' ? '/' : ''),
+        kind: e.type === 'dir' ? 'dir' : 'file',
+        display: e.name + (e.type === 'dir' ? '/' : ''),
+      }));
+      return res;
+    }
+    // A directory gets no trailing space, so the next Tab descends into it instead of starting a
+    // new argument. Everything else gets one, because the argument is finished.
+    function applyCompletion(line, res, index) {
+      const it = res.items[index];
+      if (!it) return { line, caret: res.end };
+      const ins = (/\s/.test(it.text) ? '"' + it.text + '"' : it.text) + (it.kind === 'dir' ? '' : ' ');
+      return { line: line.slice(0, res.start) + ins + line.slice(res.end), caret: res.start + ins.length };
+    }
+
+    // ---- the strip: completion candidates and history matches share one row -------
+    let stripState = null;
+    const clearT = (id) => { if (id && typeof clearTimeout === 'function') clearTimeout(id); };
+    function stripHide() {
+      stripState = null;
+      if (!stripEl) return;
+      stripEl.hidden = true;
+      try { stripEl.innerHTML = ''; } catch {}
+    }
+    function stripPaint(label, items, sel, extraCls) {
+      if (!stripEl || typeof stripEl.appendChild !== 'function') return;
+      try { stripEl.innerHTML = ''; } catch {}
+      stripEl.hidden = false;
+      const tag = document.createElement('span');
+      tag.className = 'k'; tag.textContent = label;
+      stripEl.appendChild(tag);
+      // Nine is the whole quick-select alphabet on this keyboard; a tenth chip could not be reached
+      // by a digit anyway, so the slot is spent on an honest count instead.
+      const shown = items.slice(0, items.length > 9 ? 8 : 9);
+      shown.forEach((it, i) => {
+        const el = document.createElement('span');
+        el.className = 'c' + (it.kind === 'dir' ? ' d' : '') + (i === sel ? ' on' : '') + (extraCls ? ' ' + extraCls : '');
+        const n = document.createElement('span');
+        n.className = 'n'; n.textContent = String(i + 1);
+        el.appendChild(n);
+        const nm = document.createElement('span');
+        nm.textContent = ellipsis(it.display || it.text);
+        el.appendChild(nm);
+        el.addEventListener('click', () => pickChip(i));
+        stripEl.appendChild(el);
+        if (i === sel && typeof el.scrollIntoView === 'function') el.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+      });
+      if (items.length > 9) {
+        const more = document.createElement('span');
+        more.className = 'c more'; more.textContent = '+' + (items.length - 8);
+        more.addEventListener('click', () => listAll());
+        stripEl.appendChild(more);
+      }
+    }
+    // Head and extension both carry meaning; the middle of a long name does not.
+    function ellipsis(s) {
+      if (s.length <= 18) return ' ' + s;
+      return ' ' + s.slice(0, 9) + '…' + s.slice(-8);
+    }
+    function stripNote(text, cls) {
+      if (!stripEl || typeof stripEl.appendChild !== 'function') return;
+      try { stripEl.innerHTML = ''; } catch {}
+      stripEl.hidden = false;
+      const tag = document.createElement('span');
+      tag.className = 'c ' + (cls || 'bad'); tag.textContent = text;
+      stripEl.appendChild(tag);
+      // No auto-hide: a 1.2 s flash is easy to miss on a phone, and the next keystroke or the next
+      // Tab replaces the note anyway. It costs one row, and only after something actually failed.
+    }
+    function setInput(v, caret) {
+      input.value = v;
+      if (typeof input.setSelectionRange === 'function') { try { input.setSelectionRange(caret, caret); } catch {} }
+      paintGhost();
+    }
+    function pickChip(i) {
+      if (!stripState) return;
+      if (stripState.mode === 'search') { stripState.sel = i; searchPaint(); searchEnd(false); return; }
+      selectChip(i);
+      stripHide();
+      if (typeof input.focus === 'function') input.focus();
+    }
+    // The only place a long candidate list is allowed to spend vertical space — and only because
+    // the user asked for it, with one key. It is one line, so the scrollback cap barely notices.
+    function listAll() {
+      if (!stripState || stripState.mode !== 'complete') return;
+      addLine(stripState.res.items.map((i) => i.display || i.text).join('  '), 'dim');
+      stripHide();
+    }
+    function selectChip(i) {
+      const s = stripState;
+      if (!s || s.mode !== 'complete') return;
+      const n = s.res.items.length;
+      s.sel = ((i % n) + n) % n;
+      const a = applyCompletion(s.line, s.res, s.sel);   // preview: the candidate lands in the input
+      setInput(a.line, a.caret);
+      stripPaint(s.res.kind === 'command' ? 'cmd' : s.res.kind === 'url' ? 'url' : s.res.kind === 'dir' ? 'dir' : 'file',
+        s.res.items, s.sel);
+    }
+
+    let completing = false;
+    async function doComplete(delta) {
+      if (completing) return;
+      if (stripState && stripState.mode === 'complete') { selectChip(stripState.sel + (delta || 1)); return; }
+      completing = true;
+      try {
+        const line = input.value;
+        const caret = typeof input.selectionStart === 'number' ? input.selectionStart : line.length;
+        let res = completions(line, caret);
+        if (res.pending) {
+          if (res.pending === '/proc') await warmProc();
+          else {
+            stripNote('…', 'more');
+            const err = await warmDir(res.pending);
+            if (err === '401') { stripNote('not paired (401)'); return; }
+            if (err === 'net') { stripNote('device unreachable'); return; }
+          }
+          res = completions(line, caret);
+          if (res.pending) { stripHide(); return; }
+        }
+        // A failed Tab never writes to the transcript: a console that scrolls when completion
+        // misses is exactly the flooding this whole design exists to avoid.
+        if (!res.items.length) { stripNote('no match'); return; }
+        if (res.items.length === 1) {
+          const a = applyCompletion(line, res, 0);
+          setInput(a.line, a.caret);
+          stripHide();
+          return;
+        }
+        const common = lcp(res.items.map((i) => i.text));
+        let cur = line, curCaret = caret;
+        if (common.length > res.frag.length) {
+          cur = line.slice(0, res.start) + common + line.slice(res.end);
+          curCaret = res.start + common.length;
+          setInput(cur, curCaret);
+          const again = completions(cur, curCaret);
+          if (!again.pending && again.items.length > 1) res = again;
+        }
+        stripState = { mode: 'complete', res, sel: -1, line: cur, caret: curCaret };
+        selectChip(delta < 0 ? res.items.length - 1 : 0);
+      } finally { completing = false; }
+    }
+
+    // ---- reverse history search (Ctrl+R) ------------------------------------------
+    // Bash shows one match at a time. Nine numbered chips is strictly better on a keyboard this
+    // small, and it reuses the strip rather than inventing a second surface.
+    function searchStart() {
+      const saved = input.value;
+      stripState = { mode: 'search', q: '', saved, sel: 0, matches: [] };
+      searchPaint();
+    }
+    function searchPaint() {
+      const s = stripState;
+      if (!s || s.mode !== 'search') return;
+      const q = s.q.toLowerCase(), seen = new Set(), m = [];
+      for (let i = hist.length - 1; i >= 0 && m.length < 200; i--) {
+        const h = hist[i];
+        if (q && !h.toLowerCase().includes(q)) continue;
+        if (seen.has(h)) continue;
+        seen.add(h); m.push({ text: h, kind: 'word', display: h });
+      }
+      s.matches = m;
+      if (s.sel >= m.length) s.sel = 0;
+      const label = '(r-search: ' + s.q + ')';
+      psEl.className = 'ps search';
+      psEl.textContent = label.length > 22 ? '(r-search: …' + s.q.slice(-12) + ')' : label;
+      const val = m.length ? m[s.sel].text : s.saved;
+      setInput(val, val.length);
+      if (m.length) stripPaint('hist', m, s.sel);
+      else stripNote('no match');
+    }
+    function searchEnd(restore) {
+      const s = stripState;
+      psEl.className = 'ps'; psEl.textContent = cwd + ' $';
+      if (s && restore) setInput(s.saved, s.saved.length);
+      stripHide();
+    }
+
+    // ---- ghost suggestion ---------------------------------------------------------
+    // Never issues a request. That is the whole guarantee: typing costs the device nothing, so the
+    // suggestion is only ever as good as what is already in the browser — which is enough.
+    let ghostTimer = 0, ghostFull = '';
+    function ghostFor(v) {
+      for (let i = hist.length - 1; i >= 0; i--) if (hist[i] !== v && hist[i].startsWith(v)) return hist[i];
+      if (!/\s/.test(v)) {
+        const n = cmdNames().find((c) => c !== v && c.startsWith(v));
+        if (n) return n;
+      }
+      const res = completions(v, v.length);
+      if (!res.pending && res.items.length === 1) return v.slice(0, res.start) + res.items[0].text;
+      return '';
+    }
+    function paintGhost() {
+      if (!ghA || !ghB) return;
+      const v = input.value;
+      const atEnd = typeof input.selectionStart !== 'number' || input.selectionStart === v.length;
+      let full = '';
+      try { if (v && atEnd && !stripState) full = ghostFor(v); } catch {}
+      ghostFull = (full && full.startsWith(v) && full !== v) ? full : '';
+      ghA.textContent = ghostFull ? v : '';
+      ghB.textContent = ghostFull ? ghostFull.slice(v.length) : '';
+    }
+    function scheduleGhost() {
+      clearT(ghostTimer);
+      ghostTimer = setTimeout(paintGhost, 160);
+    }
+    function acceptGhost() {
+      if (!ghostFull) return false;
+      setInput(ghostFull, ghostFull.length);
+      return true;
+    }
+
+    // ---- persistence: history, aliases, resume ------------------------------------
+    // /api/fs/write has no append mode, so the file is rewritten from a bounded in-memory list.
+    // Flushing is batched (10 commands or 30 s) and always happens when the window goes away —
+    // worst case one 8 KB write per 30 s while actively typing, and nothing at all while idle.
     const hist = []; let hi = -1;
+    const HIST_MAX = 200, HIST_BATCH = 10, HIST_IDLE = 30000;
+    let histNew = 0, histFirstAt = 0, histTimer = 0, histNoted = false, histLoaded = false;
+    function remember(line) {
+      if (!line.trim() || line.startsWith(' ')) return;   // a leading space keeps a line off the SD
+      const at = hist.indexOf(line);
+      if (at >= 0) hist.splice(at, 1);                    // a repeat moves to the end, never duplicates
+      hist.push(line);
+      while (hist.length > HIST_MAX) hist.shift();
+      histNew++;
+      if (!histFirstAt) histFirstAt = Date.now();
+      if (histNew >= HIST_BATCH || Date.now() - histFirstAt >= HIST_IDLE) saveHistory(false);
+      else { clearT(histTimer); histTimer = setTimeout(() => saveHistory(false), HIST_IDLE); }
+    }
+    async function writeApp(path, body, keepalive) {
+      const opts = { method: 'POST', body };
+      if (keepalive) opts.keepalive = true;
+      let r;
+      try { r = await api('write', path, opts); } catch { return false; }
+      if (r.ok) return true;
+      // The app's own mount is created on first use: nothing ships it on the SD image.
+      if (r.status === 404) {
+        try {
+          await fetch('/api/fs/mkdir?path=' + encodeURIComponent(APPDIR), { method: 'POST' });
+          const again = await api('write', path, opts);
+          return !!(again && again.ok);
+        } catch { return false; }
+      }
+      if (r.status === 401 && !histNoted) {
+        histNoted = true;
+        addLine(t('hist_unpaired'), 'dim');
+      }
+      return false;
+    }
+    async function saveHistory(keepalive) {
+      if (!histLoaded) return;
+      clearT(histTimer); histTimer = 0; histNew = 0; histFirstAt = 0;
+      await writeApp(APPDIR + '/history.jsonl', hist.map((h) => JSON.stringify(h)).join('\n'), keepalive);
+    }
+    async function saveAliases() {
+      await writeApp(APPDIR + '/aliases.json', JSON.stringify(aliases));
+    }
+    async function saveState() {
+      await writeApp(APPDIR + '/state.json', JSON.stringify({ cwd, fs: fontStep }));
+    }
+    async function loadPersisted() {
+      // One JSON line per entry, so a truncated tail costs one command and not the file.
+      let r = null;
+      try { r = await api('read', APPDIR + '/history.jsonl'); } catch {}
+      if (r && r.ok) {
+        for (const ln of (await r.text()).split(/\r?\n/)) {
+          if (!ln.trim()) continue;
+          try { const v = JSON.parse(ln); if (typeof v === 'string') hist.push(v); } catch {}
+        }
+        while (hist.length > HIST_MAX) hist.shift();
+      } else if (r && r.status === 401 && !histNoted) {
+        histNoted = true;
+        addLine(t('hist_unpaired'), 'dim');
+      }
+      hi = hist.length;
+      histLoaded = true;
+      const al = await readJSON(APPDIR + '/aliases.json');
+      if (al && typeof al === 'object') for (const [k, v] of Object.entries(al)) if (typeof v === 'string') aliases[k] = v;
+      const st = await readJSON(APPDIR + '/state.json');
+      if (st && typeof st.fs === 'number') setFont(st.fs);
+      // Resuming the working directory costs one listing that also warms the cache, so the first
+      // Tab of the session is free.
+      if (st && typeof st.cwd === 'string' && st.cwd !== '/') {
+        const err = await warmDir(st.cwd);
+        if (!err && cacheGet(st.cwd)) setCwd(st.cwd);
+      }
+    }
+
+    // ---- font size ----------------------------------------------------------------
+    const FONTS = [13, 15, 17, 20];
+    let fontStep = 1;
+    function setFont(step) {
+      fontStep = Math.max(0, Math.min(FONTS.length - 1, step));
+      const root = document.documentElement;
+      if (root && root.style && typeof root.style.setProperty === 'function') root.style.setProperty('--fs', FONTS[fontStep] + 'px');
+    }
+
+    // ---- submission ----------------------------------------------------------------
+    let composing = false, lastSubmit = 0, busy = false;
+    const queue = [];
+
+    // "Enter" is not a portable signal. Desktop keyboards send keydown Enter; many mobile IMEs
+    // send only beforeinput/insertLineBreak, or keydown 229 while a word is still composing;
+    // dictation sends no key event at all. So four routes feed one guarded entry point, and the
+    // <form> exists mainly so the on-screen keyboard offers a Go key in the first place.
+    function submit() {
+      if (composing) return false;
+      const now = Date.now();
+      if (now - lastSubmit < LIMITS.submitDebounceMs) return false;   // second signal, same gesture
+      // Refuse before touching the input, so a rejected line stays where the user can see it.
+      if (queue.length >= LIMITS.maxQueued) { emit('shell: too many commands queued', 'warn'); return false; }
+      lastSubmit = now;
+      const raw = input.value;
+      const nl = raw.search(/[\r\n]/);
+      const line = nl < 0 ? raw : raw.slice(0, nl);
+      input.value = nl < 0 ? '' : raw.slice(nl).replace(/^[\r\n]+/, '');
+      remember(line);
+      hi = hist.length;
+      stripHide();
+      paintGhost();
+      queue.push(line);
+      drain();
+      return true;
+    }
+    // Submitted lines run one at a time: `sink` and `cwd` are shared state, and two lines racing
+    // would also double the number of sockets in flight on a device that has four.
+    async function drain() {
+      if (busy) return;
+      busy = true;
+      try {
+        while (queue.length) {
+          const line = queue.shift();
+          try { await run(line); }
+          catch (e) { emit('shell: ' + (e?.message || e), 'err'); }
+          // A command that changed the SD makes the cached listing wrong; dropping the two
+          // directories it could have touched is exact, and cheaper than a shorter TTL.
+          const w = ctokens(line);
+          if (w.length > 1 && /^(mkdir|touch|rm|cp|mv|tee|wget|screen)$/.test(w[0].text))
+            for (const tk of w.slice(1)) if (!tk.text.startsWith('-')) cacheDrop(norm(tk.text));
+        }
+      } finally { busy = false; }
+    }
+
+    const caretToEnd = () => {
+      const place = () => input.setSelectionRange?.(input.value.length, input.value.length);
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(place); else place();
+    };
+    input.addEventListener('compositionstart', () => { composing = true; });
+    input.addEventListener('compositionend', () => { composing = false; });
+    input.addEventListener('beforeinput', (e) => {
+      if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') { e.preventDefault(); submit(); }
+    });
+    input.addEventListener('input', (e) => {
+      if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') { submit(); return; }
+      if (/[\r\n]/.test(input.value)) { submit(); return; }   // a pasted or dictated line arrives with its newline
+      if (!stripState || stripState.mode === 'complete') stripHide();
+      scheduleGhost();
+    });
+    document.getElementById('cmdform').addEventListener('submit', (e) => { e.preventDefault(); submit(); });
+    document.getElementById('run').addEventListener('click', (e) => { e.preventDefault(); submit(); input.focus(); });
+
+    // ---- keys ------------------------------------------------------------------------
+    // Digits are intercepted only while the strip is open: `head -n 5` has to keep working.
+    function stripKeys(e) {
+      const s = stripState;
+      if (!s) return false;
+      const k = e.key || '';
+      if (s.mode === 'search') {
+        if (k === 'Escape' || (k === 'g' && e.ctrlKey)) { e.preventDefault(); searchEnd(true); return true; }
+        if (k === 'Enter') { e.preventDefault(); searchEnd(false); return true; }
+        if (k === 'ArrowLeft' || k === 'ArrowRight') { searchEnd(false); return true; }
+        if ((k === 'r' && e.ctrlKey) || k === 'Tab' || k === 'ArrowUp') { e.preventDefault(); s.sel++; searchPaint(); return true; }
+        if ((k === 's' && e.ctrlKey) || k === 'ArrowDown') { e.preventDefault(); s.sel = Math.max(0, s.sel - 1); searchPaint(); return true; }
+        if (/^[1-9]$/.test(k)) { e.preventDefault(); pickChip(parseInt(k) - 1); return true; }
+        if (k === 'Backspace') { e.preventDefault(); s.q = s.q.slice(0, -1); searchPaint(); return true; }
+        if (k.length === 1 && !e.ctrlKey && !e.metaKey) { e.preventDefault(); s.q += k; searchPaint(); return true; }
+        return false;
+      }
+      if (k === 'Escape') { e.preventDefault(); setInput(s.line, s.caret); stripHide(); return true; }
+      // Enter accepts the previewed chip and closes WITHOUT running. On a cramped keyboard an
+      // accidental run right after a completion is expensive; one extra keystroke is not.
+      if (k === 'Enter') { e.preventDefault(); stripHide(); return true; }
+      if (k === 'Tab' || k === 'ArrowRight') { e.preventDefault(); selectChip(s.sel + (e.shiftKey ? -1 : 1)); return true; }
+      if (k === 'ArrowLeft') { e.preventDefault(); selectChip(s.sel - 1); return true; }
+      if (/^[1-9]$/.test(k)) { e.preventDefault(); pickChip(parseInt(k) - 1); return true; }
+      if (k === '0') { e.preventDefault(); listAll(); return true; }
+      if (k.length === 1) stripHide();      // any other printable narrows the fragment
+      return false;
+    }
+    function delRange(from, to) {
+      const v = input.value;
+      setInput(v.slice(0, from) + v.slice(to), from);
+    }
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const v = input.value; input.value = '';
-        if (v.trim()) { hist.push(v); if (hist.length > 100) hist.shift(); }
-        hi = hist.length; run(v);
-      } else if (e.key === 'ArrowUp') {
-        if (hi > 0) { hi--; input.value = hist[hi]; e.preventDefault();
-          requestAnimationFrame(() => input.setSelectionRange(input.value.length, input.value.length)); }
-      } else if (e.key === 'ArrowDown') {
+      if (stripKeys(e)) return;
+      const k = e.key || '';
+      const v = input.value;
+      const caret = typeof input.selectionStart === 'number' ? input.selectionStart : v.length;
+      const collapsed = input.selectionStart === input.selectionEnd;
+      if (k === 'Enter') {
+        // keyCode 229 / isComposing means the IME is still assembling a word, not sending a line
+        if (e.isComposing || e.keyCode === 229 || e.shiftKey) return;
+        e.preventDefault(); submit();
+      } else if (k === 'Tab') {
+        e.preventDefault(); doComplete(e.shiftKey ? -1 : 1);
+      } else if (k === 'ArrowUp') {
+        if (hi > 0) { hi--; input.value = hist[hi]; e.preventDefault(); caretToEnd(); paintGhost(); }
+      } else if (k === 'ArrowDown') {
         if (hi < hist.length - 1) { hi++; input.value = hist[hi]; }
         else { hi = hist.length; input.value = ''; }
+        e.preventDefault(); paintGhost();
+      } else if (k === 'ArrowRight' && caret === v.length && collapsed && ghostFull) {
+        if (acceptGhost()) e.preventDefault();
+      } else if (e.ctrlKey && (k === 'f' || k === 'F')) {
+        if (acceptGhost()) e.preventDefault();
+      } else if (e.ctrlKey && (k === 'r' || k === 'R')) {
+        e.preventDefault(); searchStart();          // the browser's reload has to lose this one
+      } else if (e.ctrlKey && (k === 'l' || k === 'L')) {
+        e.preventDefault(); COMMANDS.clear();
+      } else if (e.ctrlKey && e.shiftKey && (k === 'c' || k === 'C')) {
+        e.preventDefault(); copySelection();
+      } else if (e.ctrlKey && (k === 'c' || k === 'C')) {
+        if (busy || queue.length) { e.preventDefault(); aborted = true; queue.length = 0; emit('^C', 'warn'); }
+        else if (v && collapsed) { e.preventDefault(); setInput('', 0); }
+      } else if (e.ctrlKey && (k === 'u' || k === 'U')) {
+        e.preventDefault(); delRange(0, caret);
+      } else if (e.ctrlKey && (k === 'k' || k === 'K')) {
+        e.preventDefault(); setInput(v.slice(0, caret), caret);
+      } else if (e.ctrlKey && (k === 'w' || k === 'W')) {
         e.preventDefault();
-      } else if (e.key === 'l' && e.ctrlKey) { e.preventDefault(); COMMANDS.clear(); }
+        const head = v.slice(0, caret).replace(/\s*\S+$/, '');
+        delRange(head.length, caret);
+      } else if (e.ctrlKey && (k === 'a' || k === 'A')) {
+        // Only when there is something to move through, so the browser keeps select-all otherwise.
+        if (v && collapsed) { e.preventDefault(); input.setSelectionRange?.(0, 0); }
+      } else if (e.ctrlKey && (k === 'e' || k === 'E')) {
+        e.preventDefault(); input.setSelectionRange?.(v.length, v.length);
+      } else if (e.ctrlKey && (k === 'd' || k === 'D')) {
+        e.preventDefault();
+        if (!v) emit('there is no exit — close the window instead', 'dim');
+        else delRange(caret, Math.min(caret + 1, v.length));
+      } else if (e.ctrlKey && (k === '-' || k === '_')) {
+        e.preventDefault(); setFont(fontStep - 1); saveState();
+      } else if (e.ctrlKey && (k === '=' || k === '+')) {
+        e.preventDefault(); setFont(fontStep + 1); saveState();
+      } else if (k === 'Escape') {
+        // Never closes the app: the shell owns that, and losing a half-typed line to a stray Esc
+        // on a device with no undo is not a trade worth making twice.
+        if (v) { e.preventDefault(); setInput('', 0); }
+      }
     });
     document.getElementById('clr').onclick = () => { COMMANDS.clear(); input.focus(); };
-    out.addEventListener('click', () => input.focus());
+
+    // ---- copying, and pointing at the output -----------------------------------------
+    function selectionText() {
+      try { return (typeof window.getSelection === 'function' ? String(window.getSelection()) : ''); } catch { return ''; }
+    }
+    function copySelection() {
+      let text = selectionText();
+      if (!text) text = out.innerText || out.textContent || '';
+      if (!text) return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text); addLine(t('copy_ok'), 'dim'); return; }
+      } catch {}
+      // Some device browsers still have no async clipboard, and a copy that silently does nothing
+      // is worse than none: the textarea route is the one that works everywhere.
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+        addLine(t('copy_ok'), 'dim');
+      } catch { addLine(t('copy_fail'), 'warn'); }
+    }
+    let pressTimer = 0;
+    function lineOf(node) {
+      let el = node;
+      while (el && el !== out && !(el.className && String(el.className).indexOf('line') === 0)) el = el.parentNode;
+      return el && el !== out ? el : null;
+    }
+    out.addEventListener('pointerdown', (e) => {
+      clearT(pressTimer);
+      const el = lineOf(e.target);
+      if (!el) return;
+      // A long press selects the whole line so the phone's own drag handles can take over from
+      // there; picking one path out of wrapped monospace with a thumb is otherwise miserable.
+      pressTimer = setTimeout(() => {
+        try {
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          const r = document.createRange();
+          r.selectNodeContents(el);
+          sel.addRange(r);
+        } catch {}
+      }, 500);
+    });
+    out.addEventListener('pointerup', (e) => {
+      clearT(pressTimer);
+      // Focusing on every click is what made the transcript uncopyable: it collapsed the selection
+      // the user had just made. Focus only when there is nothing selected.
+      if (selectionText()) return;
+      const el = lineOf(e.target);
+      const tap = el && el.__tap;
+      if (tap) {
+        if (tap.kind === 'cmd') setInput(tap.name, tap.name.length);
+        else if (tap.kind === 'dir') setInput('cd ' + tap.name, ('cd ' + tap.name).length);
+        else {
+          const v = input.value;
+          const add = (v && !/\s$/.test(v) ? ' ' : '') + tap.name;
+          setInput(v + add, (v + add).length);
+        }
+      }
+      if (typeof input.focus === 'function') input.focus();
+    });
+    if (pillEl && typeof pillEl.addEventListener === 'function') pillEl.addEventListener('click', toBottom);
+    out.addEventListener('scroll', () => { if (atBottom()) { unseen = 0; if (pillEl) pillEl.hidden = true; } });
+
+    // ---- the on-screen key row --------------------------------------------------------
+    const keysEl = document.getElementById('keys');
+    if (keysEl && typeof keysEl.addEventListener === 'function') keysEl.addEventListener('click', (e) => {
+      const b = e.target && e.target.closest ? e.target.closest('button') : null;
+      if (!b) return;
+      e.preventDefault();
+      const k = b.getAttribute('data-k');
+      if (k === 'tab') doComplete(1);
+      else if (k === 'search') searchStart();
+      else if (k === 'up') input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: false }));
+      else if (k === 'down') input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: false }));
+      else if (k === 'abort') { if (busy || queue.length) { aborted = true; queue.length = 0; emit('^C', 'warn'); } else setInput('', 0); }
+      else if (k === 'esc') { if (stripState) { if (stripState.mode === 'search') searchEnd(true); else stripHide(); } else setInput('', 0); }
+      else if (k === 'ins') {
+        const ch = b.getAttribute('data-ch') || '';
+        const v = input.value;
+        const c = typeof input.selectionStart === 'number' ? input.selectionStart : v.length;
+        setInput(v.slice(0, c) + ch + v.slice(c), c + ch.length);
+      }
+      if (typeof input.focus === 'function') input.focus();
+    });
 
     // ---- live: OS theme changes ------------------------------------------------
     window.addEventListener('message', (e) => {
       if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
-      if (e.data?.t === 'fs.changed' && e.data.d?.path?.endsWith('settings.json')) loadTheme();
+      if (e.data?.t === 'fs.changed') {
+        // The OS says the SD moved under us; the completion cache is the only thing here that
+        // remembers it, so drop exactly what changed rather than everything.
+        cacheDrop(e.data.d && e.data.d.path);
+        if (e.data.d?.path?.endsWith('settings.json')) loadTheme();
+      }
     });
     async function loadTheme() {
       const s = await readJSON(SETTINGS);
       if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
     }
 
+    // The vm harness and the CDP driver reach the engine through this instead of rewriting the
+    // source, which used to break silently the moment a binding was renamed.
+    globalThis.__T = { COMMANDS, run, exec, norm, api, fmtBytes, setCwd, hist, envVars, aliases,
+      tokenize, parse, expandWord, submit, LIMITS, completions, applyCompletion, ctokens, lcp,
+      cacheGet, cachePut, cacheDrop, animaDigest, encTrim, b64encode, b64decode, remember };
+
     // ---- boot ------------------------------------------------------------------
     async function init() {
       await loadTheme();
       emit(t('boot_hint'), 'dim');
       setCwd('/');
+      setFont(1);
       input.focus();
+      await loadPersisted();
+      // The window can go away without a beforeunload on mobile; these two are the only events
+      // that actually fire there, and keepalive is what lets the write survive the teardown.
+      const flush = () => { if (histNew) saveHistory(true); };
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+      window.addEventListener('pagehide', flush);
     }
     init();
   </script>

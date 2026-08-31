@@ -51,7 +51,7 @@ You may ONLY: discover devices, send a file to a device, send a command (the pee
 };
 
 export function buildNearbySpec(ops, opts = {}) {
-  const lang = opts.lang === 'en' ? 'en' : 'it';
+  const lang = opts.lang === 'it' ? 'it' : 'en';
   return {
     id: 'nearby', label: 'Vicino',
     systemPrompt: SYS[lang],

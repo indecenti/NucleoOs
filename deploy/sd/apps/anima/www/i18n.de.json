@@ -1,0 +1,11 @@
+{
+  "_lang": "de",
+  "resizeHint": "Zum Ändern der Größe ziehen",
+  "speedInstant": "Sofort",
+  "speedSmooth": "Flüssig",
+  "speedFast": "Schnell",
+  "exportMdTitle": "Als Markdown exportieren",
+  "exportJsonTitle": "Als JSON exportieren",
+  "cmdPaletteAria": "Befehlspalette",
+  "micAria": "Diktieren"
+}

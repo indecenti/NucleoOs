@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1257,6 +1257,8 @@ function clearAll() {
 }
 
 function markDirty() { dirty = true; syncTitle(); }
+// warn before closing with unsaved changes (covers standalone + the shell's window close)
+window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 function setMsg(m) { $('stInfo').textContent = m; }
 function syncTitle() {
   const name = filePath ? filePath.split('/').pop() : spT('st_untitled', null, 'senza titolo');
@@ -2048,7 +2050,7 @@ function detectLang(q) {
   const t = ' ' + q.toLowerCase() + ' ';
   const en = (t.match(/\b(the|of|column|sum|average|count|sort|chart|add|remove|highlight|rows?|cells?|how|what|find|make|please|value|values|each|every|show|give|this|in|is|are|me)\b/g) || []).length;
   const it = (t.match(/\b(la|il|lo|le|colonna|somma|media|conta|della|ogni|che|come|valori|riga|righe|celle|cosa|fai|dammi|per|favore|questa|questi|sono|nel|nella|mi|del)\b/g) || []).length;
-  return en > it ? 'en' : 'it';
+  return it > en ? 'it' : 'en';
 }
 // === SAFETY: never treat DATA/garbage as a question for the knowledge tier. ===
 // A bare date/number/time/cell-ref/code is data, not a question → it must NEVER be
@@ -2365,7 +2367,9 @@ function makeSandbox() {
     run: async (code, env, opts) => {
       const m = await runMod();
       if (opts && opts.mode === 'check') return m.checkSyntax(code);
-      const rt = m.default({ fs: false, http: false, anima: false, notify: false, timeoutMs: 4000, cwd: '/', maxLogBytes: 64 * 1024 });
+      // hw:false too — createRunner defaults hardware ON, so "all ambient authority denied" was not
+      // true for os.hw.* (IR/GPIO/Wi-Fi) in a transform written by a model.
+      const rt = m.default({ fs: false, http: false, anima: false, notify: false, hw: false, timeoutMs: 4000, cwd: '/', maxLogBytes: 64 * 1024 });
       try { return await rt.run(code, env || {}); } finally { rt.dispose(); }
     },
   };

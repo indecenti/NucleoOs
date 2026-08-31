@@ -42,5 +42,7 @@
   "saved": "Saved",
   "deleted": "Deleted",
   "secured": "stored",
-  "gmail_hint": "Gmail/Yahoo/iCloud need an App Password (with 2FA), not your login password."
+  "gmail_hint": "Gmail/Yahoo/iCloud need an App Password (with 2FA), not your login password.",
+  "body_label": "Message",
+  "err_password_required": "Enter the account password."
 }

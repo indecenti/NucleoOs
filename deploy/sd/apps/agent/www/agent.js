@@ -4,6 +4,19 @@
 // back to the offline brain — it cleanly hands off to the separate offline ANIMA app.
 
 import { createRuntime } from './runtime.js';
+// The F4 engine picker (lazy): the header 🧠 button and the no-key gate both open it. It owns model
+// install and the honest per-rung capability verdicts; we only read its rows to build local.engines.
+let pickerMod = null, picker = null;
+async function loadPicker() { return pickerMod || (pickerMod = await import('./engine-picker.js')); }
+// F2: the hardware permissions THIS app was granted. The gate is the manifest — a hardware tool the
+// agent app did not declare is never offered to the model. Read once; the manifest is static.
+let hwPerms = null;
+async function loadHwPerms() {
+  if (hwPerms) return hwPerms;
+  try { const r = await fetch('/apps/agent/manifest.json', { cache: 'no-store' }); const m = r.ok ? await r.json() : null; hwPerms = (m && Array.isArray(m.permissions)) ? m.permissions : []; }
+  catch { hwPerms = []; }
+  return hwPerms;
+}
 import { providerOf, PROVIDERS, readTeacher } from '/ai.js';   // shared provider registry + cached vault read: Claude, Groq, Grok (xAI), Gemini
 import I18N from '/nucleo-i18n.js';
 
@@ -12,7 +25,9 @@ import I18N from '/nucleo-i18n.js';
 const t = await I18N.init('agent');
 
 const $ = (id) => document.getElementById(id);
-const lang = () => (localStorage.getItem('anima.lang') === 'en' ? 'en' : 'it');
+// The agent runtime is five-language aware; ask the OS engine instead of re-deriving it from
+// localStorage, which only ever answered 'it' or 'en' and pinned es/fr/de users to Italian.
+const lang = () => I18N.lang;
 
 let cfg = null;            // active/default provider config for the runtime
 let keys = null;           // full keys{} map (all configured providers) → cross-provider routing + fallback
@@ -47,7 +62,7 @@ function addMsg(role, text, asMd) {
 function setStatus(s, kind) { $('status').textContent = s; const dot = $('dot'); dot.className = 'dot' + (kind ? ' ' + kind : ''); }
 
 // ---- activity log: one card per tool call ----
-const TOOL_ICON = { list_files: '📁', read_file: '📄', search_files: '🔎', make_dir: '📁', write_file: '✍️', edit_file: '✏️', append_file: '➕', delete_file: '🗑️', move_file: '🔀', run_js: '⚙️', open_in_os: '🪟', device_status: '📊', list_apps: '🧩', weather: '🌤️', web_search: '🌐', scaffold_app: '🧱', publish_app: '🚀', manage_app: '🎛️', generate_image: '🎨', transcribe: '🎙️' };
+const TOOL_ICON = { update_plan: '🗒️', list_files: '📁', read_file: '📄', search_files: '🔎', make_dir: '📁', write_file: '✍️', edit_file: '✏️', append_file: '➕', delete_file: '🗑️', move_file: '🔀', run_js: '⚙️', open_in_os: '🪟', device_status: '📊', list_apps: '🧩', weather: '🌤️', web_search: '🌐', scaffold_app: '🧱', publish_app: '🚀', manage_app: '🎛️', generate_image: '🎨', transcribe: '🎙️' };
 function toolStart(ev) {
   const d = document.createElement('div'); d.className = 'tool run';
   const p = ev.input.path || ev.input.from || ev.input.app || ev.input.id || ev.input.name || '';
@@ -61,6 +76,23 @@ function toolEnd(ev, out, isErr) {
   scroll();
 }
 
+// ---- live plan (the worker's update_plan checklist) ----
+// Replaces the panel in place on every update, so the user watches ONE list advance instead of
+// scrolling past N snapshots of it. Empty plan → the panel disappears.
+const PLAN_MARK = { todo: '☐', doing: '▸', done: '☑' };
+function renderPlanPanel(steps) {
+  const el = $('plan');
+  if (!el) return;
+  if (!steps || !steps.length) { el.hidden = true; el.innerHTML = ''; return; }
+  const done = steps.filter((s) => s.status === 'done').length;
+  el.innerHTML = '<div class="ph"><span>' + esc(t('plan_title')) + '</span>'
+    + '<span class="pb"><i style="width:' + Math.round(done / steps.length * 100) + '%"></i></span>'
+    + '<span>' + done + '/' + steps.length + '</span></div>'
+    + '<ol>' + steps.map((s) => '<li class="' + s.status + '"><span class="m">' + PLAN_MARK[s.status] + '</span>'
+      + '<span>' + esc(s.title) + '</span></li>').join('') + '</ol>';
+  el.hidden = false;
+}
+
 // ---- approval overlay (returns a Promise<bool>) ----
 function diffHtml(oldS, newS) {
   return '<pre>' + (oldS ? '<span class="del">- ' + esc(oldS).replace(/\n/g, '\n- ') + '</span>\n' : '') +
@@ -70,7 +102,13 @@ function confirmTool(req) {
   return new Promise((resolve) => {
     const labels = { write_file: t('op_write_file'), edit_file: t('op_edit_file'), append_file: t('op_append_file'), delete_file: t('op_delete_file'), move_file: t('op_move_file'), run_js: t('op_run_js'), scaffold_app: t('op_scaffold_app'), publish_app: t('op_publish_app'), manage_app: t('op_manage_app'), generate_image: t('op_generate_image') };
     let bodyHtml = '';
-    if (req.op === 'edit_file') bodyHtml = diffHtml(req.old, req.new);
+    // A hardware tool moves atoms in the room (an IR blast, a GPIO pin) — show it as such, with its
+    // args, and always in the confirm dialog (the runtime forces the confirm; this only renders it).
+    if (req.hw) {
+      const args = Object.entries(req).filter(([k]) => !['op', 'hw', 'abs', 'root'].includes(k)).map(([k, v]) => k + ': ' + JSON.stringify(v));
+      bodyHtml = '<div class="pth">⚡ ' + esc(t('appr_hw')) + '</div>' + (args.length ? '<pre>' + esc(args.join('\n')) + '</pre>' : '');
+    }
+    else if (req.op === 'edit_file') bodyHtml = diffHtml(req.old, req.new);
     else if (req.op === 'write_file' || req.op === 'append_file') bodyHtml = '<pre>' + esc(String(req.content || '').slice(0, 4000)) + (String(req.content || '').length > 4000 ? '\n…' : '') + '</pre>';
     else if (req.op === 'run_js') bodyHtml = '<pre>' + esc(String(req.code || '').slice(0, 4000)) + '</pre>';
     else if (req.op === 'move_file') bodyHtml = '<div class="pth">' + esc(req.from) + ' → ' + esc(req.to) + '</div>';
@@ -80,7 +118,7 @@ function confirmTool(req) {
     else if (req.op === 'generate_image') bodyHtml = '<div class="pth">' + esc(req.path || '') + '</div><pre>' + esc(String(req.prompt || '').slice(0, 2000)) + '</pre>';
     const pth = req.path || req.from || '';
     $('appr').innerHTML =
-      '<h3>' + esc(t('appr_title')) + ' <span class="op">' + esc(labels[req.op] || req.op) + '</span></h3>' +
+      '<h3>' + esc(t('appr_title')) + ' <span class="op' + (req.hw ? ' hw' : '') + '">' + esc(req.hw ? t('appr_hw_op') : (labels[req.op] || req.op)) + '</span></h3>' +
       (pth ? '<div class="pth">' + esc(pth) + '</div>' : '') + bodyHtml +
       '<div class="btns"><button class="deny" id="ap-deny">' + esc(t('appr_deny')) + '</button><button class="allow" id="ap-allow">' + esc(t('appr_allow')) + '</button></div>';
     $('ovl').classList.add('show');
@@ -95,6 +133,7 @@ const ui = {
   note: (t) => addMsg('sys', t),
   toolStart, toolEnd,
   sandboxLog: (lvl, txt) => { if (txt) addMsg('sys', '⚙️ ' + txt); },
+  plan: renderPlanPanel,
   confirm: confirmTool,
   autoApprove: () => $('auto').checked,
   webSearchEnabled: () => $('web').checked,
@@ -142,14 +181,28 @@ function showGate(kind) {
   if (kind === 'offline') {
     c.innerHTML = '<div class="gi">📡</div><h2>' + esc(t('gate_offline_title')) + '</h2><p>' + esc(t('gate_offline_body')) + '</p><div><button id="g-retry">' + esc(t('retry')) + '</button><button class="ghost" id="g-anima">' + esc(t('gate_anima')) + '</button></div>';
   } else {
-    c.innerHTML = '<div class="gi">🔑</div><h2>' + esc(t('gate_key_title')) + '</h2><p>' + esc(t('gate_key_body')) + '</p><div><button id="g-set">' + esc(t('gate_open_settings')) + '</button><button class="ghost" id="g-anima">' + esc(t('gate_anima')) + '</button></div><div><button class="ghost" id="g-retry" style="margin-top:10px">' + esc(t('retry')) + '</button></div>';
+    c.innerHTML = '<div class="gi">🔑</div><h2>' + esc(t('gate_key_title')) + '</h2><p>' + esc(t('gate_key_body')) + '</p><div><button id="g-set">' + esc(t('gate_open_settings')) + '</button><button class="ghost" id="g-anima">' + esc(t('gate_anima')) + '</button></div><div><button class="ghost" id="g-eng" style="margin-top:10px">' + esc(t('gate_local')) + '</button><button class="ghost" id="g-retry" style="margin-top:10px">' + esc(t('retry')) + '</button></div>';
   }
   $('gate').classList.add('show');
   const r = $('g-retry'); if (r) r.onclick = boot;
   const s = $('g-set'); if (s) s.onclick = () => openApp('settings');
   const a = $('g-anima'); if (a) a.onclick = () => openApp('anima');
+  const g = $('g-eng'); if (g) g.onclick = () => { hideGate(); toggleEngines(); };
 }
 function hideGate() { $('gate').classList.remove('show'); }
+
+// The 🧠 header button: toggle the engine panel. Built on first open; refreshed on later opens so
+// cache/caps changes (a finished download, a browser flag flip) are reflected.
+async function toggleEngines() {
+  const hostEl = $('engines');
+  if (!hostEl.hidden) { hostEl.hidden = true; return; }
+  hostEl.hidden = false;
+  const pk = await loadPicker();
+  if (!picker) {
+    picker = pk.initEnginePicker({ host: hostEl, t, hasKey: () => !!(cfg && cfg.key),
+      onChange: () => { rebuildRuntime(); } });
+  } else picker.refresh();
+}
 
 function configuredProviders() { return Object.keys(keys || {}).filter((p) => keys[p] && keys[p].key && PROVIDERS[p]); }
 function modelLine() {
@@ -161,9 +214,57 @@ function readyMsg() {
   if (cfg.provider === 'anthropic') return t('ready_anthropic');
   return t('ready_generic') + (configuredProviders().length > 1 ? t('ready_multi_suffix') : '');
 }
-function rebuildRuntime() {
+async function rebuildRuntime() {
   const root = ($('ws').value || '/data/agent').trim() || '/data/agent';
-  rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active, t });
+  // local: the F0 cascade's rungs. Engines are constructed LAZILY on first use (the cloud path never
+  // pays for them); a rung that fails to construct declines honestly and the next one is tried.
+  const local = {
+    engines: async () => {
+      const pk = await loadPicker();
+      const caps = await pk.probeCaps();
+      const store = await pk.makeAgentStore();
+      const status = {};
+      for (const id of [pk.WEBGPU_MODEL, pk.WASM_MODEL]) { try { status[id] = await store.status(id); } catch { status[id] = 'absent'; } }
+      const rows = pk.localRungOrder(pk.rungRows(caps, status, !!(cfg && cfg.key)), localStorage.getItem(pk.ENGINE_LS) || 'auto');
+      const out = [];
+      for (const r of rows) {
+        try {
+          // Only rungs the loop can genuinely RUN are constructed (rungRows marks them runnable) —
+          // today that is WebGPU, built exactly like local-llm.js builds it: the vendor lib from the
+          // SD, CreateMLCEngine behind an injected factory. A construction failure just skips the
+          // rung; the F0 cascade declines honestly instead of pretending.
+          if (r.id === 'webgpu') {
+            const we = await import('/apps/anima/forge/webllm-engine.js');
+            const createEngine = async (modelId, opts) => {
+              const webllm = await import('/apps/anima/forge/vendor/web-llm.js');
+              return webllm.CreateMLCEngine(modelId, { initProgressCallback: opts && opts.initProgressCallback });
+            };
+            out.push({ tier: 'local-webgpu', engine: we.makeWebLLMEngine({ createEngine, modelId: r.model }) });
+          } else if (r.id === 'wasm') {
+            // F3: the CPU rung. The wllama-adapter bridges the vendored wllama's createCompletion to the
+            // createChatCompletion shape wasm-engine expects; the model loads from the shared cache.
+            const [ws, ad] = [await import('/apps/anima/forge/wasm-engine.js'), await import('./wllama-adapter.js')];
+            out.push({ tier: 'local-wasm', engine: ws.makeWasmEngine({ createEngine: ad.makeWllamaCreateEngine(ad.browserLoadWllama), modelId: r.model }) });
+          }
+        } catch { /* a missing vendor lib = this rung declines; the cascade moves on */ }
+      }
+      return out.filter((x) => x && x.engine);
+    },
+    grammar: await import('/apps/anima/forge/grammar.js').catch(() => null),
+    // F3 grounded veto: the local loop's code writes go through capguard with the SAME hardware grant
+    // the tools use, so a weak model cannot write os.hw.* code the app was not granted (F2's veto),
+    // and dangerous patterns (eval, import) block too. Injected → the loop stays pure/testable.
+    verify: async ({ code }) => {
+      try {
+        const cg = await import('/apps/anima/forge/capguard.js');
+        const vf = await import('/apps/anima/forge/verify.js');
+        const granted = (await loadHwPerms()).includes('device.ir') || (await loadHwPerms()).includes('device.gpio') || (await loadHwPerms()).includes('net.wifi') ? ['hw'] : [];
+        const assessed = cg.assess(code, { granted });
+        return vf.combineVerdict({ capguard: assessed });
+      } catch { return { verdict: 'pass' }; }
+    },
+  };
+  rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active, t, local: local.grammar ? local : null, hwPerms: await loadHwPerms() });
   $('model-line').textContent = modelLine();
 }
 
@@ -204,8 +305,29 @@ async function boot() {
     const res = pickCfg(tc || {});
     cfg = res && res.cfg; keys = res && res.keys; active = res && res.active;
   } catch { cfg = null; keys = null; active = null; }
-  if (!cfg) { showGate('key'); return; }
-  rebuildRuntime();
+  if (!cfg) {
+    // No cloud key. F4: a cached local model is a first-class way to run — boot on it instead of
+    // dead-ending at the key gate. The stub cfg has no key, so the cloud loop exits in zero hops
+    // and the cascade goes straight to the local rungs.
+    try {
+      const pk = await loadPicker();
+      const caps = await pk.probeCaps();
+      const store = await pk.makeAgentStore();
+      const status = {};
+      for (const id of [pk.WEBGPU_MODEL, pk.WASM_MODEL]) { try { status[id] = await store.status(id); } catch { status[id] = 'absent'; } }
+      const ready = pk.localRungOrder(pk.rungRows(caps, status, false));
+      if (ready.length) {
+        cfg = { provider: 'openai', key: '', model: '' }; keys = {}; active = null;
+        await rebuildRuntime();
+        $('model-line').textContent = t(ready[0].id === 'webgpu' ? 'eng_webgpu' : 'eng_wasm');
+        setStatus(t('st_ready'), 'ok');
+        if (!history.length) addMsg('sys', t('ready_local'));
+        return;
+      }
+    } catch { /* fall through to the gate */ }
+    showGate('key'); return;
+  }
+  await rebuildRuntime();
   setStatus(t('st_ready'), 'ok');
   if (!history.length) addMsg('sys', readyMsg());
 }
@@ -227,4 +349,5 @@ I18N.onChange(() => {
   if ($('gate').classList.contains('show')) showGate($('g-set') ? 'key' : 'offline');
 });
 
+document.getElementById('eng-btn').addEventListener('click', toggleEngines);
 boot();

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -139,7 +139,8 @@
       geo:    { icon: '⌖', nameKey: 'ty_geo', fields: [{ k: 'lat', lKey: 'f_lat', val: '' }, { k: 'lng', lKey: 'f_lng', val: '' }],
                 build: function (f) { return 'geo:' + (f.lat || '0') + ',' + (f.lng || '0'); }, label: function (f) { return 'Geo ' + (f.lat || '') + ',' + (f.lng || ''); } },
       vcard:  { icon: '☺', nameKey: 'ty_vcard', fields: [{ k: 'name', lKey: 'f_name', val: '' }, { k: 'org', lKey: 'f_org', val: '' }, { k: 'tel', lKey: 'ty_tel', val: '' }, { k: 'email', lKey: 'ty_email', val: '' }],
-                build: function (f) { return 'BEGIN:VCARD\nVERSION:3.0\nN:' + (f.name || '') + '\nFN:' + (f.name || '') + (f.org ? '\nORG:' + f.org : '') + (f.tel ? '\nTEL:' + f.tel : '') + (f.email ? '\nEMAIL:' + f.email : '') + '\nEND:VCARD'; },
+                build: function (f) { var ve = function (s) { return String(s || '').replace(/([,;\\])/g, '\\$1').replace(/\n/g, '\\n'); };
+                  return ['BEGIN:VCARD', 'VERSION:3.0', 'N:' + ve(f.name) + ';;;;', 'FN:' + ve(f.name), f.org ? 'ORG:' + ve(f.org) : '', f.tel ? 'TEL:' + ve(f.tel) : '', f.email ? 'EMAIL:' + ve(f.email) : '', 'END:VCARD'].filter(Boolean).join('\r\n'); },
                 label: function (f) { return f.name || TR('ty_vcard'); } },
       pair:   { icon: '⚷', nameKey: 'ty_pair', fields: [], note: true,
                 build: function () { return location.origin || 'http://192.168.4.1'; }, label: function () { return TR('ty_pair') + ' ' + location.host; } }
@@ -216,8 +217,13 @@
     }
     function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
     function loadItem(it) {
-      if (it.type === 'text' || !TYPES[it.type]) { cur = 'text'; setChips(); initForm(); form.text = it.data; $('#form').querySelector('[data-k="text"]').value = it.data; }
-      else { cur = 'text'; setChips(); initForm(); form.text = it.data; var ta = $('#form').querySelector('[data-k="text"]'); if (ta) ta.value = it.data; }
+      // link/text re-emit their raw payload directly; structured types fall back to raw text.
+      var fill = { link: 'url', text: 'text' };
+      cur = (TYPES[it.type] && fill[it.type]) ? it.type : 'text';
+      var k = fill[cur];
+      setChips(); initForm();
+      form[k] = it.data;
+      var el = $('#form').querySelector('[data-k="' + k + '"]'); if (el) el.value = it.data;
       render(); toast(TR('loaded_x', { label: it.label }));
     }
     async function persist(msg) {

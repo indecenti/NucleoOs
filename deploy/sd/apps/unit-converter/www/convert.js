@@ -42,7 +42,7 @@ const ALIASES = {
   yd: 'yd', yard: 'yd', yards: 'yd', iarda: 'yd', iarde: 'yd',
   ft: 'ft', foot: 'ft', feet: 'ft', piede: 'ft', piedi: 'ft',
   in: 'in', inch: 'in', inches: 'in', pollice: 'in', pollici: 'in',
-  nmi: 'nmi', 'nautical-mile': 'nmi', 'miglio-nautico': 'nmi',
+  nmi: 'nmi', 'nautical-mile': 'nmi', 'nautical-miles': 'nmi', 'miglio-nautico': 'nmi', 'miglia-nautiche': 'nmi',
   // mass
   kg: 'kg', kilogram: 'kg', kilograms: 'kg', kilogramme: 'kg', chilo: 'kg', chili: 'kg', chilogrammo: 'kg', chilogrammi: 'kg',
   g: 'g', gram: 'g', grams: 'g', grammo: 'g', grammi: 'g',
@@ -58,12 +58,12 @@ const ALIASES = {
   // volume
   l: 'l', liter: 'l', liters: 'l', litre: 'l', litres: 'l', litro: 'l', litri: 'l',
   ml: 'ml', milliliter: 'ml', milliliters: 'ml', millilitro: 'ml', millilitri: 'ml',
-  m3: 'm3', 'cubic-meter': 'm3', 'metro-cubo': 'm3',
+  m3: 'm3', 'cubic-meter': 'm3', 'cubic-meters': 'm3', 'metro-cubo': 'm3', 'metri-cubi': 'm3',
   gal: 'gal', gallon: 'gal', gallons: 'gal', gallone: 'gal', galloni: 'gal',
   qt: 'qt', quart: 'qt', quarts: 'qt',
   pt: 'pt', pint: 'pt', pints: 'pt', pinta: 'pt', pinte: 'pt',
   cup: 'cup', cups: 'cup', tazza: 'cup', tazze: 'cup',
-  floz: 'floz', 'fl-oz': 'floz', 'fluid-ounce': 'floz',
+  floz: 'floz', 'fl-oz': 'floz', 'fluid-ounce': 'floz', 'fluid-ounces': 'floz',
   // data
   b: 'B', byte: 'B', bytes: 'B',
   kb: 'KB', kilobyte: 'KB', kilobytes: 'KB',
@@ -178,17 +178,17 @@ export function parseCommand(text, lang) {
   return { ok: true, value, from, to, category: cat };
 }
 
-// Pick the unit-bearing token from a phrase: scan tokens right→left and return the first that
-// resolves to a known unit (so "gradi celsius" → "celsius", "5 chili" → "chili"). Falls back to
-// the whole phrase (handles multi-word units like "fl oz" via resolveUnit's dash join).
+// Pick the unit-bearing token from a phrase: try the whole phrase, then adjacent PAIRS right→left
+// (multi-word units like "nautical miles"/"fl oz" must beat their bare last word, which would
+// silently resolve to the wrong unit), then single tokens right→left ("gradi celsius" → "celsius").
 function lastUnitToken(phrase) {
   const p = String(phrase).trim();
   if (!p) return '';
   if (resolveUnit(p)) return p;
   const toks = p.split(' ').filter(Boolean);
-  for (let i = toks.length - 1; i >= 0; i--) if (resolveUnit(toks[i])) return toks[i];
-  // try adjacent pairs (multi-word units) right→left
+  // adjacent pairs (multi-word units) first, right→left
   for (let i = toks.length - 2; i >= 0; i--) if (resolveUnit(toks[i] + '-' + toks[i + 1])) return toks[i] + '-' + toks[i + 1];
+  for (let i = toks.length - 1; i >= 0; i--) if (resolveUnit(toks[i])) return toks[i];
   return toks[toks.length - 1] || '';
 }
 

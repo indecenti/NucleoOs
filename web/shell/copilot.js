@@ -128,7 +128,7 @@ const L10N = {
 };
 const TR = (it, en) => { const l = lang(); return l === 'it' ? it : l === 'en' ? en : (L10N[l] && L10N[l][en] != null ? L10N[l][en] : en); };
 const mode = () => { const m = localStorage.getItem('anima.mode'); return ['off', 'on', 'only'].includes(m) ? m : 'on'; };
-const T = () => STR[lang()] || STR.it;
+const T = () => STR[lang()] || STR.en;   // English is the fallback floor
 const modeLabel = () => ({ off: 'offline', on: TR('ibrida', 'hybrid'), only: 'online' }[mode()]);
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

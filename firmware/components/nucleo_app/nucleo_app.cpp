@@ -877,9 +877,13 @@ void nucleo_app_request_draw(void)   { s_dirty = true; }
 // an app drew direct-to-panel behind the run loop (a blocking playback modal that freed the canvas).
 // Without this, bands identical to the pre-modal frame are skipped and the direct-drawn residue
 // (a black video frame) stays on screen — the "black film list on exit" bug. See ANTI-FLICKER.md.
+static unsigned int s_repaint_gen = 1;   // see nucleo_app_repaint_gen() in the header
+unsigned int nucleo_app_repaint_gen(void) { return s_repaint_gen; }
+
 void nucleo_app_force_repaint(void)
 {
     s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true;
+    s_repaint_gen++;                              // incremental direct-draw apps must redraw in full
     s_fg_was_fg = false;                          // makes the next blit force=true (see the run loop)
     s_fg_last_hash = 0;                           // whole-canvas gate can't short-circuit either
     for (int i = 0; i < BLIT_BANDS; i++) s_band_hash[i] = 0;   // no band can hash-match a stale frame
@@ -1350,7 +1354,12 @@ static void exit_remote(void)
     // Reclaim it here, with the same bounded retry as close_app(), while the heap is settling.
     if (!s_app_direct) for (int i = 0; i < 6 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(25));
     if (!s_disp_sleep) d.fillScreen(BG);
-    s_dirty = true; s_chrome_dirty = true;                // force a full launcher repaint
+    // force_repaint(), not just s_dirty/s_chrome_dirty: a buffered foreground app (e.g. Connection)
+    // that was up during the remote session hash-matches its pre-remote frame, so the composite blit
+    // is skipped and it stays BLACK until content changes. force_repaint bumps the gen, clears
+    // s_fg_was_fg + s_fg_last_hash + the band hashes and sets s_hint_dirty — the forced full blit for
+    // both buffered and incremental-direct apps.
+    nucleo_app_force_repaint();
     nucleo_event_publish("system.remote", "{\"active\":false}");
 }
 
@@ -1958,6 +1967,10 @@ void nucleo_app_run(void)
             // across launcher<->app transitions, so nothing re-allocates here. Only the blocking
             // media modals (video/music) release it for the decoder, then draw direct.
             fg_taken = true;
+            // The app is regaining the screen (launcher / overlay / modal owned it last frame): the
+            // panel no longer matches what it last drew. Buffered apps get force=true below; apps that
+            // repaint incrementally on the direct path watch this counter to invalidate their cache.
+            if (!s_fg_was_fg) s_repaint_gen++;
             const nucleo_app_def_t *def = active_def();
             // Live apps (mic spectrum) drive their own data source: poll it every loop (~50 Hz) and
             // ask for a blit ONLY when a new frame actually arrived, so the full-frame composite+push

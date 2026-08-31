@@ -909,7 +909,10 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
     // into an eternal scan/join loop that kept knocking the hotspot over ("AP keeps
     // disconnecting", phones failing to authenticate). Failure keeps the previous intent.
     s_auto = wp_join_result_auto(prev_auto, ok);
-    if (ok) { strncpy(s_mode, "sta", sizeof(s_mode) - 1); save_config(); }
+    // A successful join from the web/native Wi-Fi app is proof the device is configured, so mark setup
+    // complete here too. Without this, s_complete was set ONLY by the on-device wizard — a device brought
+    // online purely over the web kept complete=false and re-ran the BLOCKING native wizard on EVERY boot.
+    if (ok) { strncpy(s_mode, "sta", sizeof(s_mode) - 1); s_complete = true; save_config(); }
     else if (!prev_auto) start_ap();           // was an intentional hotspot: put it back, stable
                                                // (also clears s_want_sta -> stops the driver
                                                //  retrying the bad credentials in background)
@@ -991,6 +994,19 @@ bool        nucleo_setup_ap_secure(void)         { return ap_secure(); }
 // Settings toggle read "ON" and bounce back to "ON" when tapped off. The toggle must read THIS instead,
 // so it honestly shows OFF while the device is really trying to be a client.
 bool        nucleo_setup_ap_intended(void)       { return !s_auto && !strcmp(s_mode, "ap"); }
+// The SoftAP is beaconing and reachable RIGHT NOW — whether it is the user's chosen hotspot OR the
+// rescue AP that apply_network() raises while a saved network is out of range. A "how to reach the
+// device" UI must key on THIS, not on ap_intended(): during a STA fallback the rescue AP is the only
+// way in, yet ap_intended() is false, so the old dashboard printed "No network" over a live hotspot —
+// the device looked bricked. (s_mode=="ap" is the RAM display state BOTH paths set; the GOT_IP handler
+// flips it to "sta" the instant a client join lands.)
+// s_sta_only guard: a streaming Solo boot never creates the SoftAP netif, so no matter what s_mode a
+// prior config save left behind, the AP is NOT reachable in that posture — report false (mirrors the
+// explicit s_sta_only special-casing in wifi_supervisor()).
+bool        nucleo_setup_ap_active(void)         { return !s_sta_only && !strcmp(s_mode, "ap"); }
+// The AP is up as a TEMPORARY fallback while the supervisor keeps trying to join a client link — not
+// the user's deliberate hotspot. UIs label this apart ("rescue hotspot / joining <ssid>…").
+bool        nucleo_setup_ap_rescue(void)         { return !s_sta_only && s_auto && !strcmp(s_mode, "ap"); }
 void nucleo_setup_persist_status(nucleo_persist_status_t *out)
 {
     if (!out) return;

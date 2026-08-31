@@ -43,7 +43,7 @@ export async function runSelfTest(fetchImpl, opts = {}) {
   const now = opts.now || (() => 0);
   // Endpoint labels exist in it/en only; any other OS language (es/fr/de) falls back to English
   // (the OS base language), not Italian. No opts.lang keeps the historical Italian default.
-  const lang = opts.lang === 'it' ? 'it' : opts.lang ? 'en' : 'it';
+  const lang = opts.lang === 'it' ? 'it' : 'en';   // English is the floor (any non-it, incl. unset → en)
   const results = [];
   for (const ep of ENDPOINTS) {
     const t0 = now();
@@ -64,7 +64,7 @@ export async function runSelfTest(fetchImpl, opts = {}) {
 }
 
 // A human-readable, copyable verdict block from a results array.
-export function formatReport(results, lang = 'it') {
+export function formatReport(results, lang = 'en') {
   const head = lang === 'it' ? 'Self-test NucleoOS' : 'NucleoOS self-test';
   const okN = results.filter((r) => r.ok && !r.warn).length;
   const lines = results.map((r) => {

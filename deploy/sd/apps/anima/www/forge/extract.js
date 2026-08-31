@@ -43,6 +43,30 @@ export function extractProseClaims(prose) {
   return claims;
 }
 
+// Route ONE extracted prose claim to a device-verifier spec ({kind,key,asserted}), or null when
+// the sentence carries nothing the deterministic brain can re-derive. This is the truth-lamp
+// router, shared by the copilot badges and the yield harness (tools/anima-host/truthlamp-yield.mjs
+// — measured 40% decisive on a realistic corpus, which is what earned the feature its UI).
+//   numeric → only when a DERIVABLE expression is present ("2+2 è 4", "90/2 = 45"); a bare
+//             measurement ("330 metres tall") has nothing to recompute → null.
+//   fact    → the known key patterns (capital-of, it/en), mirroring the extractor's own gate.
+export function routeClaim(c) {
+  const s = String((c && c.text) || '');
+  if (c && c.kind === 'numeric') {
+    const m = /([-\d\s+*/().]+?)\s*,?\s*(?:=|fa|è(?:\s+uguale\s+a)?|equals|is(?:\s+equal\s+to)?|makes)\s*(-?\d+(?:\.\d+)?)/i.exec(s);
+    if (m && /[+*/-]/.test(m[1]) && /\d/.test(m[1])) return { kind: 'numeric', key: m[1].trim(), asserted: m[2] };
+    return null;
+  }
+  if (c && c.kind === 'fact') {
+    let m = /\b(?:la\s+)?capitale\s+(della|dell'|del|di)\s*([\p{L} ']{2,30}?)\s+è\s+([\p{L}'-]{2,30})/iu.exec(s);
+    if (m) return { kind: 'fact', key: ('capitale ' + m[1] + ' ' + m[2]).replace(/\s+/g, ' ').trim(), asserted: m[3].trim(), lang: 'it' };
+    m = /\bthe\s+capital\s+(?:city\s+)?of\s+([\p{L} ']{2,30}?)\s+(?:is|was)\s+([\p{L}'-]{2,30})/iu.exec(s);
+    if (m) return { kind: 'fact', key: 'capital of ' + m[1].trim(), asserted: m[2].trim(), lang: 'en' };
+    return null;
+  }
+  return null;
+}
+
 // artifact: a string (code) or { code?, prose? }. Returns { claims, coverage }.
 export function extract(artifact) {
   const code = typeof artifact === 'string' ? artifact : (artifact && artifact.code) || '';

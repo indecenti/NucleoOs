@@ -63,7 +63,7 @@
     },
     {
       "id": "video-player",
-      "version": "0.1.0",
+      "version": "3.0.0",
       "path": "/apps/video-player",
       "enabled": true,
       "autostart": false,
@@ -85,8 +85,8 @@
       "id": "automation-studio",
       "version": "0.1.0",
       "path": "/apps/automation-studio",
-      "enabled": true,
-      "autostart": true,
+      "enabled": false,
+      "autostart": false,
       "permissions": [
         "storage.app",
         "system.events",
@@ -165,7 +165,7 @@
     },
     {
       "id": "clock",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "path": "/apps/clock",
       "enabled": true,
       "autostart": false,
@@ -534,6 +534,16 @@
         "storage.shared",
         "device.keyboard",
         "device.display"
+      ]
+    },
+    {
+      "id": "metronome",
+      "version": "1.0.0",
+      "path": "/apps/metronome",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "device.mic"
       ]
     }
   ]

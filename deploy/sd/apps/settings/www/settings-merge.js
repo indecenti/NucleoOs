@@ -10,7 +10,7 @@
 
 export const DEFAULTS = {
   schema: 1,
-  device:  { name: 'nucleo-01', locale: 'it-IT', timezone: 'Europe/Rome' },
+  device:  { name: 'nucleo-01', locale: 'en-US', timezone: 'Europe/Rome' },
   network: {
     wifi:  { enabled: true },
     ble:   { enabled: true },
@@ -18,7 +18,7 @@ export const DEFAULTS = {
     ipv6:  { enabled: false },
   },
   power: { profile: 'performance', sleep_timeout_s: 0, display_brightness: 100, volume: 70 },
-  ui:    { theme: 'dark', accent: '#4ea1ff', fontSize: '14px', language: 'it', regionLocale: '' },
+  ui:    { theme: 'dark', accent: '#4ea1ff', fontSize: '14px', language: 'en', regionLocale: '' },
   voice: { alwaysOn: false },
   // AI profile: only the chosen preset INTENT is durable on SD. The concrete brain knobs
   // (anima.mode, L1 policy, exec, local model) are RE-DERIVED at load by preset-engine.js from

@@ -253,5 +253,5 @@ test('Paint: os-shortcut copy writes the canvas image to the system clipboard', 
 test('Paint: os-shortcut new clears the path (untitled)', () => {
   const app = loadApp('apps/paint/www/index.html', { search: '?path=/data/Pictures/x.png' });
   app.osShortcut('new');
-  assert.equal(app.getEl('st-file').textContent, 'senza titolo', 'status shows untitled after New');
+  assert.equal(app.getEl('st-file').textContent, 'untitled', 'status shows untitled after New');
 });
