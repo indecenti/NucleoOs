@@ -160,11 +160,26 @@ static bool wifi_sta_connected(void)
     return esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
 }
 
+// The web-to-native bridge: the browser CAN do HTTPS to GitHub, the device can't. So the browser
+// writes the latest release tag to SD (/system/config/update.json) and the native side reads it here
+// — zero device-side TLS. This is the reliable replacement for the (removed) on-device fetch.
+#define UPD_SD_FILE  "/sd/system/config/update.json"
+static bool read_sd_latest(char *tag, size_t cap)
+{
+    FILE *f = fopen(UPD_SD_FILE, "rb");
+    if (!f) return false;
+    char buf[256];
+    size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+    fclose(f);
+    buf[n] = 0;
+    return upd_extract_tag(buf, tag, cap);   // parses {"tag":"vX.Y.Z", ...}
+}
+
 // ── public queries ─────────────────────────────────────────────────────────────────────────────
 bool nucleo_update_dialog_pending(void)
 {
     char latest[24], dismiss[24];
-    nvs_get_string("latest", latest, sizeof latest);
+    if (!read_sd_latest(latest, sizeof latest)) return false;   // no update learned by the browser yet
     nvs_get_string("dismiss", dismiss, sizeof dismiss);
     const esp_app_desc_t *app = esp_app_get_description();
     return upd_should_show(app ? app->version : "?", latest, dismiss);
@@ -172,8 +187,9 @@ bool nucleo_update_dialog_pending(void)
 
 const char *nucleo_update_latest_tag(void)
 {
-    nvs_ready();
-    return s_st.latest;
+    static char tag[24];
+    if (!read_sd_latest(tag, sizeof tag)) tag[0] = 0;
+    return tag;
 }
 
 void nucleo_update_dismiss_latest(void)

@@ -419,8 +419,28 @@ void app_main(void)
     // the web OS actually serves. A degraded boot leaves the image PENDING_VERIFY so the bootloader
     // can still roll back on the next boot; the recovery path (web/OTA) is exactly what a degraded
     // boot lacks, so auto-confirming there would be irreversible. A no-op when nothing is pending.
-    if (boot_healthy) ota_confirm_if_pending();
-    else ESP_LOGW(TAG, "OTA confirm DEFERRED (degraded/Solo boot) — rollback stays armed until a healthy boot");
+    if (boot_healthy) {
+        ota_confirm_if_pending();
+    } else if (!solo) {
+        // FULL-OS boot but httpd did NOT come up = a genuinely degraded boot. If we're running a
+        // freshly-OTA'd image that is still PENDING_VERIFY, it just proved itself broken on its very
+        // first boot -> roll back to the previous, known-good firmware RIGHT NOW (automatic self-heal,
+        // no waiting for a manual reboot). The previous image was confirmed valid, so this can't loop.
+        // An already-valid image that degrades is transient bad luck -> stay and retry next boot.
+        const esp_partition_t *run = esp_ota_get_running_partition();
+        esp_ota_img_states_t ost;
+        if (run && esp_ota_get_state_partition(run, &ost) == ESP_OK && ost == ESP_OTA_IMG_PENDING_VERIFY) {
+            ESP_LOGE(TAG, "DEGRADED boot on a PENDING OTA image -> rolling back to the previous firmware");
+            bootmark("ota-rollback");
+            vTaskDelay(pdMS_TO_TICKS(300));                    // let the log/mark flush
+            esp_ota_mark_app_invalid_rollback_and_reboot();     // reboots into the previous image; returns ONLY if impossible
+            ESP_LOGE(TAG, "rollback impossible (no valid previous image) — staying on this degraded boot");
+        } else {
+            ESP_LOGW(TAG, "degraded boot but image already valid — staying, will retry next boot");
+        }
+    } else {
+        ESP_LOGW(TAG, "Solo boot: httpd intentionally down, OTA confirm deferred (not degraded)");
+    }
     // Enrich the boot event so the journal's first line is a diagnosis seed: why the last boot ended,
     // the heap we came up with + the worst-ever watermark, and whether the SD mounted. Cheap (one
     // event at boot); the Log Viewer surfaces it and the "Diagnose" digest anchors uptime/resets on it.
