@@ -123,8 +123,14 @@ static void nvs_get_string(const char *key, char *out, size_t cap)
 // Fills buf (NUL-terminated), returns body length or -1. Caller holds the arbiter token.
 static int small_get(const char *url, char *buf, size_t cap)
 {
-    if (heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < 9 * 1024) {
-        ESP_LOGW(TAG, "heap too low for TLS");
+    // HARD heap gate. An outbound TLS handshake to GitHub Pages needs a large contiguous block; below
+    // this it does NOT fail cleanly — mbedTLS can OOM mid-handshake and STALL, holding the heap. On
+    // this no-PSRAM chip the largest block is ~30 KB even at its best (fresh boot, canvas freed), so
+    // in practice this gate refuses the fetch rather than risk a stall. The reliable release check is
+    // the browser/web path; the device never gambles its stability on a handshake that may not fit.
+    size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+    if (largest < 42 * 1024) {
+        ESP_LOGW(TAG, "heap too low for TLS (largest=%u, need >=42K) — skipping fetch", (unsigned)largest);
         return -1;
     }
     esp_http_client_config_t cfg = {
