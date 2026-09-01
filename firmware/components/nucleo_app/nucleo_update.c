@@ -16,6 +16,7 @@
 #include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
@@ -23,6 +24,7 @@
 #include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include "esp_wifi.h"
+#include "esp_netif.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "nvs.h"
@@ -257,6 +259,76 @@ static void check_task(void *arg)
 out_silent:
     s_task_alive = false;
     vTaskDelete(NULL);
+}
+
+// Boot-time check BODY. Runs in its OWN task (see nucleo_update_boot_check) in the pre-httpd window
+// where the 32 KB canvas is freed and httpd/L1/mDNS are not up yet — the ONE moment with a large
+// contiguous block for the external TLS handshake. Writes NVS, which the boot dialog reads.
+static StaticSemaphore_t s_boot_sem_buf;
+static SemaphoreHandle_t s_boot_sem = NULL;
+
+static void boot_fetch_task(void *arg)
+{
+    (void)arg;
+    do {
+        if (!nvs_ready()) break;
+        const esp_app_desc_t *app0 = esp_app_get_description();
+        const char *cur0 = app0 ? app0->version : "?";
+        // Re-check NOW (ignore the 24h throttle) if the firmware changed since our last check — an
+        // OTA/flash just happened; a freshly-updated device should confirm its update state on first boot.
+        char ckver[40]; size_t cl = sizeof ckver;
+        bool ver_changed = (nvs_get_str(s_nvs, "ckver", ckver, &cl) != ESP_OK) || strcmp(ckver, cur0) != 0;
+        uint32_t last = 0; nvs_get_u32(s_nvs, "lastck", &last);
+        if (ver_changed) last = 0;
+        if (!upd_check_due((uint32_t)time(NULL), last, UPD_CHECK_INTERVAL_S)) break;
+
+        // Wait up to ~10 s for the STA IP (DHCP lands ~8 s in on a cold boot). Fine 100 ms poll.
+        esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        bool have_ip = false;
+        for (int i = 0; i < 100 && !have_ip; i++) {
+            esp_netif_ip_info_t ip;
+            if (sta && esp_netif_get_ip_info(sta, &ip) == ESP_OK && ip.ip.addr != 0) have_ip = true;
+            else vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        if (!have_ip) { ESP_LOGW(TAG, "boot-check: no STA IP, skipping"); break; }
+
+        uint32_t tk = nucleo_arb_acquire(ARB_FG, "upd-boot", 0);
+        if (!tk) break;
+        char body[192], tag[24];
+        ESP_LOGI(TAG, "boot-check: heap largest=%u, fetching",
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        int n = small_get(UPD_VERSION_URL, body, sizeof body);
+        nucleo_arb_release(tk);
+        if (n <= 0 || !upd_extract_tag(body, tag, sizeof tag) || !upd_parse_semver(tag, NULL)) {
+            ESP_LOGW(TAG, "boot-check: fetch/parse failed (n=%d)", n); break;
+        }
+        portENTER_CRITICAL(&s_mux);
+        strncpy(s_st.latest, tag, sizeof(s_st.latest) - 1); s_st.latest[sizeof(s_st.latest) - 1] = 0;
+        portEXIT_CRITICAL(&s_mux);
+        nvs_set_str(s_nvs, "latest", tag);
+        nvs_set_u32(s_nvs, "lastck", (uint32_t)time(NULL));
+        nvs_set_str(s_nvs, "ckver", cur0);   // remember which firmware ran this check (throttle-reset key)
+        nvs_commit(s_nvs);
+        ESP_LOGI(TAG, "boot-check: latest %s (running %s) -> dialog %s",
+                 tag, cur0, nucleo_update_dialog_pending() ? "YES" : "no");
+    } while (0);
+    if (s_boot_sem) xSemaphoreGive(s_boot_sem);
+    vTaskDelete(NULL);
+}
+
+// Called from main.c pre-httpd. Runs the check in a task and waits at MOST the hard ceiling below,
+// then RETURNS so the boot proceeds no matter what. This is the safety lesson from a soft-brick: a
+// synchronous fetch here stalled past its own socket timeout and wedged the boot before httpd. Now a
+// stalled handshake keeps the task alive in the background (it holds its heap until it unwinds) but
+// can NEVER block the boot — httpd always starts. The task is one-shot at boot; the static semaphore
+// is never freed (so a late give can't touch freed memory).
+void nucleo_update_boot_check(void)
+{
+    s_boot_sem = xSemaphoreCreateBinaryStatic(&s_boot_sem_buf);
+    if (!s_boot_sem) return;
+    if (xTaskCreate(boot_fetch_task, "upd_boot", 8192, NULL, 5, NULL) != pdPASS) return;
+    // ~10 s IP wait + ~8 s fetch fits comfortably; 22 s ceiling, then boot regardless.
+    xSemaphoreTake(s_boot_sem, pdMS_TO_TICKS(22000));
 }
 
 bool nucleo_update_kick_check(bool from_boot)
