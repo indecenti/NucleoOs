@@ -56,6 +56,28 @@ same-origin POST — the same browser-direct rule the LLM API keys follow.
   `localStorage` key `nucleo.update.enabled`).
 - One notification per tag per browser (`nucleo.update.notified`), coalesced by stable id.
 
+## Automatic rollback (fail-safe by construction)
+
+An update can never leave the device unusable — two independent layers guarantee it:
+
+1. **Integrity, before the image is ever booted.** The install verifies SHA-256 + the ESP image
+   magic, and `esp_ota_end()` validates the image's own checksum. A corrupt or incomplete download
+   therefore **never becomes the boot partition** (`esp_ota_set_boot_partition` runs only after
+   validation) — the device simply keeps running the old firmware. This is true for both the
+   browser install (`POST /api/ota`) and any native path.
+2. **Rollback, if a valid-looking image boots badly.** `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`: a
+   freshly-flashed image boots as `PENDING_VERIFY` and is only *confirmed*
+   (`esp_ota_mark_app_valid_cancel_rollback`) once the boot proves healthy — httpd actually serving
+   (`boot_healthy` in `main.c`). Two outcomes if it doesn't:
+   - **Crash / panic / watchdog:** the bootloader rolls back to the previous image on the next boot.
+   - **Degraded boot** (full OS, httpd never came up) on a still-`PENDING_VERIFY` image: `main.c`
+     rolls back **immediately** — `esp_ota_mark_app_invalid_rollback_and_reboot()` reboots straight
+     into the previous, known-good firmware. No waiting for a manual reboot. The previous image was
+     already confirmed valid, so this cannot loop; a Solo boot (httpd down by design) is excluded.
+
+Net effect: a bad update **self-heals** — corrupt images are refused before boot, and an image that
+boots but doesn't work is replaced automatically with the one that did.
+
 ## Native OS path
 
 For users who live in the native launcher and may never open the browser shell, the device checks
