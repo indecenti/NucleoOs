@@ -39,6 +39,13 @@ typedef struct {
 // Safe to call before any check ran; lazy-inits the NVS handle.
 bool nucleo_update_dialog_pending(void);
 
+// SYNCHRONOUS boot-time version check. Call from the boot sequence in the pre-httpd window — after
+// the launcher canvas is freed and BEFORE httpd/L1/mDNS start — where the largest contiguous heap
+// block is big enough for the external TLS handshake (it isn't once the OS is fully up). Throttled
+// 24h on NVS; returns quickly when not due or when there's no network yet. Writes the learned tag
+// to NVS so nucleo_update_dialog_pending() can offer the update on this same boot.
+void nucleo_update_boot_check(void);
+
 // Last tag learned from the network ("" if never). Points at internal storage; copy if kept.
 const char *nucleo_update_latest_tag(void);
 

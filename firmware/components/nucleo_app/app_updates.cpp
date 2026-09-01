@@ -39,6 +39,8 @@ static bool s_dirty = true;
 static bool s_exclusive = false;       // we entered NX_NET_APP for the install
 static bool s_dismissed_now = false;   // "ignore this version" chosen in this session
 static bool s_busy_retry = false;      // install couldn't start (check running) — show a retry hint
+static bool s_flash_dd = false;        // flash screen runs canvas-free + direct-draw (max heap for TLS)
+static bool s_flash_bg = false;        // the static flash background has been painted once
 static upd_phase_t s_last_phase = UPD_IDLE;
 static int  s_last_pct = -2;
 
@@ -98,6 +100,14 @@ static void start_install(void)
         s_busy_retry = true; s_ui = UI_MAIN; set_hint_for_ui(); mark();
         return;
     }
+    // The native OTA does an OUTBOUND TLS handshake to GitHub Pages (~40 KB) PLUS the flash write —
+    // far heavier than /api/ota, which only RECEIVES a POSTed image over an existing socket. NX_NET_APP
+    // (~47 KB: httpd+L1+mDNS+voice) isn't enough on its own; also free the 32 KB launcher canvas so the
+    // largest contiguous block clears the TLS bar. That means the flash screen must draw WITHOUT the
+    // canvas — direct-draw with per-region self-clear (never fillScreen; see native-app anti-flicker).
+    nucleo_app_release_buffers();
+    nucleo_app_set_direct_draw(true);
+    s_flash_dd = true; s_flash_bg = false;
     s_ui = UI_FLASH;
     set_hint_for_ui();
     mark();
@@ -210,9 +220,20 @@ static void draw_confirm(void)
     center(PT("ENTER = Si", "ENTER = Yes", "ENTER = Si", "ENTREE = Oui", "ENTER = Ja"), 84, 1, C_GREEN);
 }
 
+// The flash screen runs canvas-free + direct-draw (the canvas RAM went to the TLS handshake). So it
+// must NOT fillScreen on every frame (that flashes the panel). Paint the static chrome ONCE, then
+// self-clear only the dynamic band (phase label + progress) each update — native-app anti-flicker #2.
 static void draw_flash(void)
 {
     nucleo_update_state_t st; nucleo_update_get_state(&st);
+
+    if (!s_flash_bg) {
+        d.fillScreen(BG);                        // one-time clear on entry (canvas-free)
+        s_flash_bg = true;
+    }
+    // Dynamic band: everything from y=8 down. Erase it, then repaint for the current phase.
+    d.fillRect(0, 8, W, H - 8, BG);
+
     if (st.phase == UPD_FAILED) {
         center(PT("AGGIORNAMENTO FALLITO", "UPDATE FAILED", "ACTUALIZACION FALLIDA", "MISE A JOUR ECHOUEE", "UPDATE FEHLGESCHLAGEN"), 24, 1, C_RED);
         center(st.err, 46, 1, FG);
@@ -251,10 +272,10 @@ static void on_draw(void)
 {
     if (!s_dirty) return;
     s_dirty = false;
+    if (s_ui == UI_FLASH) { draw_flash(); return; }   // owns its own clears (canvas-free direct-draw)
     d.fillScreen(BG);
     if (s_ui == UI_MAIN) draw_main();
-    else if (s_ui == UI_CONFIRM) draw_confirm();
-    else draw_flash();
+    else draw_confirm();
 }
 
 // ── lifecycle ─────────────────────────────────────────────────────────────────
@@ -269,6 +290,8 @@ static void on_enter(void)
 
 static void on_exit(void)
 {
+    // Leave direct-draw mode so the framework re-acquires the canvas for the next app.
+    if (s_flash_dd) { nucleo_app_set_direct_draw(false); s_flash_dd = false; s_flash_bg = false; }
     // Restore the reclaimed subsystems if an install bailed out (success path never returns —
     // the engine reboots). The framework's close safety-net would also catch this; being explicit
     // keeps the pairing local and obvious.

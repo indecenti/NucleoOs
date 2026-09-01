@@ -1570,12 +1570,10 @@ void nucleo_app_run(void)
         esp_task_wdt_reset();
         int64_t now = esp_timer_get_time() / 1000;
 
-        // One-shot background release check, ~60 s after boot (never in Solo: no launcher and no
-        // service posture there). The task waits for the STA link, honours the 24h NVS throttle,
-        // then dies; a newer release lands as a system notification (banner + notify.post to the
-        // web) and as the NVS state the next boot's update dialog reads. ~30 bytes of TLS a day.
-        static bool s_upd_kicked = false;
-        if (!s_upd_kicked && !s_solo_active && now > 60000) { s_upd_kicked = true; nucleo_update_kick_check(true); }
+        // NOTE: the release check now runs SYNCHRONOUSLY at boot (main.c, pre-httpd window) where the
+        // contiguous heap is large enough for the external TLS handshake. A +60 s async check here
+        // could never fetch — once httpd/L1/mDNS/canvas are up the largest block is ~7 KB, far under
+        // what mbedTLS needs — so it was removed. Manual re-check stays available via the Updates app.
 
         // OTA listening-handshake (ota_listen_fsm.h is the tested decision core). An OTA request raised
         // s_force_listen from the httpd task; bring the device into the server-listening posture by LAUNCHING

@@ -21,6 +21,7 @@
 #include "nucleo_recorder.h"
 #include "nucleo_discovery.h"
 #include "nucleo_app.h"
+#include "nucleo_update.h"   // early boot-time release check (pre-httpd, max contiguous heap)
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
 #include "nucleo_audio.h"
@@ -369,6 +370,11 @@ void app_main(void)
     bool boot_healthy = false;
     if (!solo || solo_srv) {   // SKIPPED in Solo EXCEPT Web Client server-Solo (exists to serve the web OS on a fresh heap)
       nucleo_app_release_buffers();                 // free the 32 KB canvas first: httpd's contiguous block, no leaked-socket retry
+      // Release update check, HERE and nowhere else: the canvas is freed and httpd/L1/mDNS are not up
+      // yet, so this is the ONE moment with a large contiguous block for the external TLS handshake
+      // (it collapses to ~7 KB once the OS is up — the +60 s async check could never fetch). Throttled
+      // 24h, so it delays the boot at most once a day; writes NVS for the boot update dialog below.
+      nucleo_update_boot_check();
       esp_err_t he = nucleo_httpd_start();
       if (he != ESP_OK) {
           ESP_LOGW(TAG, "httpd start failed (%s) — settle + one retry", esp_err_to_name(he));
