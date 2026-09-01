@@ -193,6 +193,41 @@ void nucleo_update_get_state(nucleo_update_state_t *out)
     portEXIT_CRITICAL(&s_mux);
 }
 
+// "Install at the next (fresh-heap Solo) boot" flag. The outbound TLS + flash need a large
+// contiguous block that only a fresh boot has; the Updates app arms this, reboots into Solo, and
+// the Solo boot runs the real install on an unfragmented heap. NVS-persisted across the warm reboot.
+void nucleo_update_arm_boot_install(void)
+{
+    if (!nvs_ready()) return;
+    nvs_set_u8(s_nvs, "install", 1);
+    nvs_commit(s_nvs);
+}
+bool nucleo_update_boot_install_armed(void)
+{
+    if (!nvs_ready()) return false;
+    uint8_t v = 0;
+    return nvs_get_u8(s_nvs, "install", &v) == ESP_OK && v == 1;
+}
+void nucleo_update_disarm_boot_install(void)
+{
+    if (!nvs_ready()) return;
+    nvs_erase_key(s_nvs, "install");
+    nvs_commit(s_nvs);
+}
+
+// Wait up to ~12 s for the STA IP — used before the install fetch in a Solo boot, where Wi-Fi has
+// only just come up. Returns false if no IP (caller aborts the install cleanly).
+static bool wait_sta_ip(void)
+{
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    for (int i = 0; i < 120; i++) {
+        esp_netif_ip_info_t ip;
+        if (sta && esp_netif_get_ip_info(sta, &ip) == ESP_OK && ip.ip.addr != 0) return true;
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    return false;
+}
+
 bool nucleo_update_busy(void) { return s_task_alive; }
 
 // ── check worker ───────────────────────────────────────────────────────────────────────────────
@@ -364,8 +399,9 @@ static void install_task(void *arg)
     (void)arg;
     char want[65];
 
-    // The caller (app_updates) already entered the NX_NET_APP posture (~47 KB reclaimed). The
-    // arbiter still serializes us against any other heavy job, exactly like /api/ota does.
+    // Runs in a fresh-heap Solo boot where Wi-Fi has only just come up — wait for the STA IP first.
+    if (!wait_sta_ip()) fail_install(UT("Nessuna rete Wi-Fi", "No Wi-Fi network", "Sin red Wi-Fi", "Pas de réseau Wi-Fi", "Kein WLAN"), 0);
+
     uint32_t tk = nucleo_arb_acquire(ARB_FG, "ota-nat", 0);
     if (!tk) fail_install(UT("Dispositivo occupato, riprova", "Device busy, retry", "Dispositivo ocupado, reintenta", "Appareil occupé, réessayez", "Gerät beschäftigt, erneut versuchen"), 0);
 

@@ -19,6 +19,11 @@
 #include <stdio.h>
 #include "esp_app_desc.h"
 
+// Reboot-into-Solo (fresh, unfragmented heap) for the install — the outbound TLS + flash need a big
+// contiguous block that only a fresh boot has. Provided by nucleo_app.cpp (link-time, no header dep).
+extern "C" void nucleo_app_solo_request_id(const char *id);   // never returns (warm reboot)
+extern "C" bool nucleo_anima_solo_active(void);               // true when this boot IS a Solo boot
+
 // Five-language literal pick (pomodoro pattern; Font0 is ASCII so strings are accent-folded).
 static const char *PT(const char *it, const char *en, const char *es, const char *fr, const char *de)
 {
@@ -85,31 +90,26 @@ static void set_hint_for_ui(void)
 }
 
 // ── actions ───────────────────────────────────────────────────────────────────
+// "Update now": the install can't run here (runtime heap is fragmented to ~7-15 KB; the outbound TLS
+// to GitHub needs ~30 KB contiguous). Arm it and reboot into a Solo boot — a fresh, unfragmented heap
+// with Wi-Fi and the UI up — where the install actually fits. The Solo instance auto-runs it (on_enter).
 static void start_install(void)
 {
-    // Reclaim ~47 KB (httpd + L1 + mDNS + voice; Wi-Fi stays up — we need it) only NOW, when the
-    // user actually confirmed. The framework's close safety-net restores everything if we bail.
-    nucleo_exclusive_info_t inf;
-    nucleo_exclusive_enter(NX_NET_APP, &inf);
-    s_exclusive = true;
-    if (!nucleo_update_start()) {
-        // The worker slot is held by the ~daily background check (a ~2 s window). Don't enter the
-        // flash screen with no task behind it (that would sit at 0% forever): restore RAM and ask
-        // the user to retry in a moment.
-        nucleo_exclusive_exit(); s_exclusive = false;
-        s_busy_retry = true; s_ui = UI_MAIN; set_hint_for_ui(); mark();
-        return;
-    }
-    // The native OTA does an OUTBOUND TLS handshake to GitHub Pages (~40 KB) PLUS the flash write —
-    // far heavier than /api/ota, which only RECEIVES a POSTed image over an existing socket. NX_NET_APP
-    // (~47 KB: httpd+L1+mDNS+voice) isn't enough on its own; also free the 32 KB launcher canvas so the
-    // largest contiguous block clears the TLS bar. That means the flash screen must draw WITHOUT the
-    // canvas — direct-draw with per-region self-clear (never fillScreen; see native-app anti-flicker).
+    nucleo_update_arm_boot_install();
+    nucleo_app_solo_request_id("updates");   // never returns (warm reboot into Solo)
+}
+
+// The REAL install, run only from the fresh-heap Solo boot. Free the 32 KB canvas for TLS+flash
+// headroom (httpd/L1/mDNS aren't even up in Solo, so there's little else to reclaim) and draw the
+// progress canvas-free (direct-draw, per-region self-clear — never fillScreen).
+static void run_install_now(void)
+{
     nucleo_app_release_buffers();
     nucleo_app_set_direct_draw(true);
     s_flash_dd = true; s_flash_bg = false;
     s_ui = UI_FLASH;
     set_hint_for_ui();
+    if (!nucleo_update_start()) { s_busy_retry = true; s_ui = UI_MAIN; }
     mark();
 }
 
@@ -133,7 +133,11 @@ static bool on_back(int key)
     if (s_ui == UI_FLASH) {
         nucleo_update_state_t st; nucleo_update_get_state(&st);
         if (st.phase == UPD_FAILED) return false;    // failed: let Esc close (safety-net restores)
-        return true;                                 // mid-flash: never abandon the stream
+        // In the Solo install boot, Esc must always be able to bail: aborting mid-download is safe
+        // (the OTA slot is only made bootable at the very end), and Esc warm-reboots back to the full
+        // OS. This is the escape hatch if the fetch ever stalls, so the user is never trapped.
+        if (nucleo_anima_solo_active()) return false;
+        return true;                                 // full-OS mid-flash: never abandon the stream
     }
     return false;                                    // UI_MAIN: Esc = "again next boot", just leave
 }
@@ -283,7 +287,14 @@ static void on_enter(void)
 {
     s_ui = UI_MAIN; s_sel = 0; s_dismissed_now = false; s_exclusive = false;
     s_last_phase = UPD_IDLE; s_last_pct = -2;
+    s_flash_dd = false; s_flash_bg = false; s_busy_retry = false;
     nucleo_app_set_back_handler(on_back);
+    // Launched by a fresh-heap Solo boot to DO the install (armed by "Update now")? Run it now.
+    if (nucleo_anima_solo_active() && nucleo_update_boot_install_armed()) {
+        nucleo_update_disarm_boot_install();   // consume once — a failed install won't loop-reboot
+        run_install_now();
+        return;
+    }
     set_hint_for_ui();
     mark();
 }

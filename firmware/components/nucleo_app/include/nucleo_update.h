@@ -59,10 +59,17 @@ void nucleo_update_dismiss_latest(void);
 // Returns false if a check/install task is already running.
 bool nucleo_update_kick_check(bool from_boot);
 
-// Spawn the OTA install worker. Call AFTER the app entered its exclusive/reclaimed posture.
-// Returns false if already running. Progress via nucleo_update_get_state(); on success the
-// device reboots by itself (phase UPD_REBOOTING is the last thing the UI sees).
+// Spawn the OTA install worker. Call AFTER the app entered its exclusive/reclaimed posture (and,
+// per the fresh-heap design, from a Solo boot). Returns false if already running. Progress via
+// nucleo_update_get_state(); on success the device reboots by itself (phase UPD_REBOOTING).
 bool nucleo_update_start(void);
+
+// "Install at the next boot" flag, persisted in NVS. The Updates app arms it and reboots into a
+// fresh-heap Solo boot (nucleo_app_solo_request_id("updates")) where the TLS+flash actually fit;
+// the Solo instance reads armed(), disarms, and runs nucleo_update_start().
+void nucleo_update_arm_boot_install(void);
+bool nucleo_update_boot_install_armed(void);
+void nucleo_update_disarm_boot_install(void);
 
 // Snapshot the engine state for the UI (thread-safe copy).
 void nucleo_update_get_state(nucleo_update_state_t *out);
