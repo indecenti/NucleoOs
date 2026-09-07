@@ -598,6 +598,18 @@ static void connect_sta(const char *ssid, const char *pass)
     wifi_config_t wc = {0};
     strncpy((char *)wc.sta.ssid, ssid, sizeof(wc.sta.ssid) - 1);
     strncpy((char *)wc.sta.password, pass, sizeof(wc.sta.password) - 1);
+    // Reliability across multi-AP homes (mesh / range-extender / the same SSID on the 2.4 GHz and the
+    // 5 GHz radios): the driver DEFAULTS to WIFI_FAST_SCAN, which stops at the FIRST beacon it hears for
+    // the SSID — often a weak or distant node, so the association flaps or times out. That is the classic
+    // "connects some boots, not others" failure. Scan every channel and pick the STRONGEST match instead
+    // (the fix WiFiManager / ESPHome / Tasmota all ship). Because creds persist in NVS (WIFI_STORAGE_FLASH),
+    // the driver's OWN auto-reconnect after a drop (on_wifi_event -> esp_wifi_connect) reuses this config too.
+    wc.sta.scan_method        = WIFI_ALL_CHANNEL_SCAN;
+    wc.sta.sort_method        = WIFI_CONNECT_AP_BY_SIGNAL;   // strongest RSSI first
+    wc.sta.threshold.rssi     = -127;                        // never filter a reachable AP out by weak signal
+    wc.sta.threshold.authmode = WIFI_AUTH_OPEN;              // accept whatever security the AP offers (no min filter)
+    wc.sta.pmf_cfg.capable    = true;                        // 802.11w PMF: needed to associate with WPA2/WPA3-mixed APs
+    wc.sta.failure_retry_cnt  = 3;                           // let the driver retry the association before it gives up
     WIFI_TRY(esp_wifi_set_config(WIFI_IF_STA, &wc));
     esp_wifi_connect();
     wait_for_ip();
@@ -1266,6 +1278,31 @@ void nucleo_setup_set_time(time_t t)
     settimeofday(&tv, NULL);
     s_time_synced = true;
     ESP_LOGI(TAG, "Clock set from browser push: %lu", (unsigned long)t);
+}
+
+// Set the device clock MANUALLY (on-device Settings > SYS > Data/ora, or a browser). Unlike
+// nucleo_setup_set_time() this ALWAYS applies — the user is deliberately overriding, typically because
+// the device is offline and NTP will never land. The five fields are LOCAL wall-clock time in the device
+// zone (Europe/Rome); TZ is set so mktime() converts them to the correct epoch (and honours DST). Marks
+// the clock "synced" so every app drops the "waiting for NTP" placeholder, and persists to the same file
+// the NTP sync writes so an offline reboot restores this instead of falling back to 1970.
+void nucleo_setup_set_datetime(int year, int mon, int day, int hour, int min)
+{
+    if (year < 2020 || year > 2099 || mon < 1 || mon > 12 || day < 1 || day > 31 ||
+        hour < 0 || hour > 23 || min < 0 || min > 59) return;
+    setenv("TZ", DEFAULT_TZ, 1); tzset();          // interpret the fields in the device's local zone
+    struct tm tm = {0};
+    tm.tm_year = year - 1900; tm.tm_mon = mon - 1; tm.tm_mday = day;
+    tm.tm_hour = hour; tm.tm_min = min; tm.tm_sec = 0; tm.tm_isdst = -1;
+    time_t t = mktime(&tm);
+    if (t < 1640000000 || t > 4102444800LL) return;
+    struct timeval tv = { .tv_sec = t, .tv_usec = 0 };
+    settimeofday(&tv, NULL);
+    s_time_synced = true;
+    ESP_LOGI(TAG, "Clock set manually: %04d-%02d-%02d %02d:%02d (local)", year, mon, day, hour, min);
+    mkdir(NUCLEO_SD_MOUNT "/system", 0775);
+    FILE *f = fopen(NUCLEO_SD_MOUNT "/system/time.json", "w");
+    if (f) { fprintf(f, "{\"t\":%lu}", (unsigned long)t); fclose(f); }
 }
 
 esp_err_t nucleo_setup_apply_network(void)

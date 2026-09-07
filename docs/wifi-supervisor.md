@@ -69,3 +69,21 @@ pre-fix behaviour lost *most* first joins; this loses a rare one, once.
 stale link, drop-AP, uint32 wraparound, and a full replay of the issue #3 story (fallback →
 phone associates → zero scans until grace end after it leaves → retries resume). The gate is
 in the test registry (`gate-wifi-policy`, category connect-transfer) and runs in `test:all`.
+
+## STA join config — all-channel scan (multi-AP reliability)
+
+`connect_sta()` (nucleo_setup.c) writes the station `wifi_config_t` with more than SSID + password:
+
+- `scan_method = WIFI_ALL_CHANNEL_SCAN`, `sort_method = WIFI_CONNECT_AP_BY_SIGNAL`. The driver
+  default is `WIFI_FAST_SCAN`, which stops at the **first** beacon it hears for the SSID — in a
+  home with a mesh, a range-extender, or the same SSID on both radios that is often a weak/distant
+  node, so the association flaps or times out. This is the classic "connects some boots, not
+  others" failure. All-channel scan enumerates every matching AP and picks the **strongest**.
+- `threshold.rssi = -127` (never filter a reachable AP by signal), `threshold.authmode =
+  WIFI_AUTH_OPEN` (no minimum-security filter), `pmf_cfg.capable = true` (802.11w — needed to
+  associate with WPA2/WPA3-mixed APs), `failure_retry_cnt = 3` (driver retries association).
+
+Creds persist in NVS (`WIFI_STORAGE_FLASH`), so the driver's **own** auto-reconnect after a drop
+(`on_wifi_event → esp_wifi_connect`) reuses this config too — the reliability win covers reconnects,
+not just the first join. Cost: an all-channel scan is ~1-2 s slower per attempt than fast scan; the
+`wait_for_ip()` budget (8 s) and the supervisor backoff absorb it. Policy/scheduling is unchanged.
