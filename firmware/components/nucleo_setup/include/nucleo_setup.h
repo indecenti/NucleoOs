@@ -49,6 +49,10 @@ bool nucleo_setup_time_synced(void);
 // Set the device clock from an external source (e.g. browser push). No-op if NTP already synced.
 void nucleo_setup_set_time(time_t t);
 
+// Manually set the clock from local wall-clock fields (offline-friendly override; always applies,
+// marks the clock synced, persists across reboot). Used by the on-device Settings date/time editor.
+void nucleo_setup_set_datetime(int year, int mon, int day, int hour, int min);
+
 // Live link quality of the joined AP. rssi in dBm (negative; 0 = not associated); channel 1-13.
 int nucleo_setup_rssi(void);
 int nucleo_setup_channel(void);

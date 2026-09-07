@@ -25,6 +25,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 extern "C" {
 #include "nucleo_storage.h"
@@ -42,6 +43,7 @@ int         nucleo_setup_rssi(void);
 int         nucleo_setup_channel(void);
 const char *nucleo_setup_device_name(void);
 bool        nucleo_setup_time_synced(void);
+void        nucleo_setup_set_datetime(int year,int mon,int day,int hour,int min);  // manual clock (offline)
 int         nucleo_setup_scan(void);
 int         nucleo_setup_scan_count(void);
 const char *nucleo_setup_scan_ssid(int i);
@@ -85,6 +87,8 @@ static const unsigned short
     GRN  = C_GREEN,
     AMB  = C_YELLOW,
     REDC = C_RED;
+
+#define DT_EPOCH_2023 1672531200   // 2023-01-01 UTC: the clock is "real" (NTP/manual) at/after this
 
 // ---- tabs ------------------------------------------------------------------
 #define T_STATO 0
@@ -568,6 +572,12 @@ static void build_sys(Row*it,int*n){
         else        snprintf(it[k].val,20,"%u/%uM",(unsigned)f,(unsigned)t);
     }else snprintf(it[k].val,20,"%s",s_en?"none":"assente");
     k++;
+    // Date & time — shows the current value (or "set" when the clock has never been synced), ENTER opens
+    // the field editor. Lets an OFFLINE device (no NTP) get a correct clock for the Clock/Calendar/Alarm.
+    it[k].label=s_en?"Date/time":"Data/ora"; it[k].kind=RV_TEXT;
+    { time_t now=time(NULL); struct tm tmv; localtime_r(&now,&tmv);
+      if(now>=DT_EPOCH_2023) strftime(it[k].val,20,"%d/%m %H:%M",&tmv);
+      else snprintf(it[k].val,20,"%s",s_en?"set":"imposta"); } k++;
     it[k].label=s_en?"Manual":"Manuale"; it[k].kind=RV_ACTION; k++;
     *n=k;
 }
@@ -578,7 +588,69 @@ static void build_sys(Row*it,int*n){
 #define SYS_FORGET 4
 #define SYS_RESTART 5
 #define SYS_SD 6
-#define SYS_MANUAL 7
+#define SYS_DT 7
+#define SYS_MANUAL 8
+
+// ---- date/time editor (SYS > Data/ora) -------------------------------------
+// A no-typing, smartwatch-style editor: LEFT/RIGHT pick the field, UP/DOWN roll its value, ENTER
+// saves. It exists so an OFFLINE unit (no NTP) can still get a correct wall clock — the firmware
+// setter treats the fields as local time, marks the clock synced and persists it across reboot.
+static bool s_dt=false;                         // editor open
+static int  s_dtf=0;                            // focused field 0=Y 1=M 2=D 3=h 4=m
+static int  s_dtv[5];                           // year, month, day, hour, minute
+
+static int dt_days(int y,int m){
+    static const int dim[12]={31,28,31,30,31,30,31,31,30,31,30,31};   // NB: `d` is the draw-target macro
+    if(m==2 && ((y%4==0&&y%100!=0)||y%400==0)) return 29;
+    return (m>=1&&m<=12)?dim[m-1]:31;
+}
+static void dt_adjust(int dir){
+    int *v=&s_dtv[s_dtf];
+    *v+=dir;
+    switch(s_dtf){
+        case 0: if(*v<2020)*v=2020; if(*v>2099)*v=2099; break;                 // year clamps (no wrap)
+        case 1: if(*v<1)*v=12; if(*v>12)*v=1; break;                           // month wraps
+        case 2: { int dim=dt_days(s_dtv[0],s_dtv[1]); if(*v<1)*v=dim; if(*v>dim)*v=1; } break; // day wraps
+        case 3: if(*v<0)*v=23; if(*v>23)*v=0; break;                           // hour wraps
+        case 4: if(*v<0)*v=59; if(*v>59)*v=0; break;                           // minute wraps
+    }
+    int dim=dt_days(s_dtv[0],s_dtv[1]); if(s_dtv[2]>dim)s_dtv[2]=dim;           // keep day valid after Y/M change
+}
+static void dt_open(void){
+    time_t now=time(NULL); struct tm tmv; localtime_r(&now,&tmv);
+    if(now>=DT_EPOCH_2023 && tmv.tm_year+1900>=2020){                          // seed from the live clock
+        s_dtv[0]=tmv.tm_year+1900; s_dtv[1]=tmv.tm_mon+1; s_dtv[2]=tmv.tm_mday;
+        s_dtv[3]=tmv.tm_hour;      s_dtv[4]=tmv.tm_min;
+    }else{ s_dtv[0]=2026; s_dtv[1]=1; s_dtv[2]=1; s_dtv[3]=12; s_dtv[4]=0; }    // never synced: sane default
+    s_dtf=0; s_dt=true;
+    nucleo_app_set_hint(s_en?"L/R field  UP/DN value  ENTER save":"SX/DX campo  SU/GIU valore  INVIO salva");
+    nucleo_app_request_draw();
+}
+static void dt_box(int x,int y,int w,int h,const char*s,int sz,bool sel){
+    d.fillRoundRect(x,y,w,h,5,sel?ACC:SURF);
+    int tw=(int)strlen(s)*6*sz;
+    txt(x+(w-tw)/2, y+(h-8*sz)/2, s, sel?INK:FG, sel?ACC:SURF, sz);
+}
+static void draw_datetime(int ch){
+    d.fillRect(0,0,W,ch,BG);
+    txt(8,6,s_en?"Set date & time":"Imposta data e ora",ACC,BG,1);
+    // field captions above the boxes, so it's clear which is year/month/day and hour/minute
+    txt(8,20,s_en?"Date  (Y / M / D)":"Data  (A / M / G)",MUTED,BG,1);
+    char b[8];
+    // date line: [YYYY] - [MM] - [DD]
+    int yw=58,mw=40,dw=40,g=8, totw=yw+mw+dw+2*(g+10), x=(W-totw)/2, y=30, bh=30;
+    snprintf(b,sizeof b,"%04d",s_dtv[0]); dt_box(x,y,yw,bh,b,2,s_dtf==0); x+=yw;
+    txt(x+g/2-2,y+bh/2-8,"-",MUTED,BG,2); x+=g+10;
+    snprintf(b,sizeof b,"%02d",s_dtv[1]); dt_box(x,y,mw,bh,b,2,s_dtf==1); x+=mw;
+    txt(x+g/2-2,y+bh/2-8,"-",MUTED,BG,2); x+=g+10;
+    snprintf(b,sizeof b,"%02d",s_dtv[2]); dt_box(x,y,dw,bh,b,2,s_dtf==2);
+    txt(8,66,s_en?"Time  (H : M)":"Ora  (H : M)",MUTED,BG,1);
+    // time line: [HH] : [MM]
+    int hw=52,g2=12, tw=hw*2+g2+10, tx=(W-tw)/2, ty=76, th=32;
+    snprintf(b,sizeof b,"%02d",s_dtv[3]); dt_box(tx,ty,hw,th,b,3,s_dtf==3); tx+=hw;
+    txt(tx+g2/2-3,ty+th/2-12,":",FG,BG,3); tx+=g2+10;
+    snprintf(b,sizeof b,"%02d",s_dtv[4]); dt_box(tx,ty,hw,th,b,3,s_dtf==4);
+}
 
 // ---- manual ----------------------------------------------------------------
 static bool s_manual=false;
@@ -607,7 +679,7 @@ static void draw_manual(int ch){
 
 // ---- rows-per-tab ----------------------------------------------------------
 static int tab_rows(int t){
-    Row it[8]; int n=0;
+    Row it[10]; int n=0;
     if(t==T_AP) build_ap(it,&n);
     else if(t==T_DISP) build_disp(it,&n);
     else if(t==T_RESET) build_reset(it,&n);
@@ -620,6 +692,7 @@ static int tab_rows(int t){
 static void on_draw(void){
     int ch=nucleo_app_content_height();
     if(s_manual){ draw_manual(ch); return; }
+    if(s_dt){ draw_datetime(ch); return; }
     d.fillRect(0,0,W,ch,BG);
     draw_tabbar(s_sel==-1);
 
@@ -631,7 +704,7 @@ static void on_draw(void){
         return;
     }
 
-    Row it[8]; int n;
+    Row it[10]; int n;
     switch(s_tab){
     case T_STATO: draw_stato(ch); break;
     case T_RETE:  draw_rete(ch);  break;
@@ -784,6 +857,7 @@ static void activate(void){
             if(s_rconf) esp_restart();
             else { s_rconf=true; toast(s_en?"ENTER again":"INVIO ancora",s_en?"ENTER again":"INVIO ancora"); }
         }
+        else if(s_sel==SYS_DT){ dt_open(); }
         else if(s_sel==SYS_MANUAL){ s_manual=true; }
         break;
     }
@@ -803,6 +877,14 @@ static void slider_adjust(int delta){
 // LEFT and Esc never arrive here — the framework routes them to wifi_back.
 static void on_key(int k,char ch){
     if(s_manual){ s_manual=false; nucleo_app_request_draw(); return; }
+    if(s_dt){                                                // date/time editor owns every key
+        if(k==NK_UP)        dt_adjust(+1);
+        else if(k==NK_DOWN) dt_adjust(-1);
+        else if(k==NK_RIGHT)s_dtf=(s_dtf+1)%5;
+        else if(k==NK_ENTER){ nucleo_setup_set_datetime(s_dtv[0],s_dtv[1],s_dtv[2],s_dtv[3],s_dtv[4]);
+                              s_dt=false; update_hint(); toast("Ora impostata","Time set"); }
+        nucleo_app_request_draw(); return;
+    }
     if(s_busy) return;
     if(s_im!=IM_NONE){ input_key(k,ch); return; }
     if(s_rconf&&k!=NK_ENTER){ s_rconf=false; }
@@ -847,6 +929,10 @@ static void on_key(int k,char ch){
 // (row -> header -> close) so the launcher is reached only with Esc.
 static bool wifi_back(int key){
     if(s_manual){ s_manual=false; nucleo_app_request_draw(); return true; }
+    if(s_dt){                                                // in the editor: LEFT pages the field, Esc cancels
+        if(key==NK_LEFT){ s_dtf=(s_dtf+4)%5; nucleo_app_request_draw(); return true; }
+        s_dt=false; update_hint(); nucleo_app_request_draw(); return true;
+    }
     if(s_im!=IM_NONE){ s_im=IM_NONE; memset(s_ibuf,0,sizeof s_ibuf); s_ilen=0; nucleo_app_request_draw(); return true; }
     if(s_busy) return true;
     if(s_edit){
@@ -893,7 +979,7 @@ static void on_tick(void){
 // ---- lifecycle -------------------------------------------------------------
 static void enter(void){
     s_en = nucleo_i18n_is_en();           // follow the system language
-    s_tab=T_STATO; s_sel=-1; s_im=IM_NONE; s_manual=false;
+    s_tab=T_STATO; s_sel=-1; s_im=IM_NONE; s_manual=false; s_dt=false;
     s_msg_t=0; s_histn=0; s_skey[0]=0; s_rconf=false; s_fconf=false;
     s_rst_n=0; s_rst_type=0;
     if(!s_task){ s_busy=false; s_op=OP_NONE; s_done=false; }
