@@ -1,8 +1,9 @@
 // Allarme / antifurto — Tools. Arms after an exit delay, then watches the chosen SENSORS and fires.
 // Two firing MODES, both self-resetting:
 //   - Sirena:      loud, piercing, continuous wail + red flashing screen.
-//   - Silenzioso:  no sound, no light — the screen stays dark; the hit is only counted/timestamped and
-//                  published on the event bus, so the device betrays nothing in the room.
+//   - Silenzioso:  no sound, no light — the screen stays dark; the hit is counted/timestamped,
+//                  published on the event bus, and RECORDED: the mic keeps rolling into a WAV on the
+//                  SD for the configured minutes, across re-arms and further hits.
 // In BOTH modes the trigger lasts a BOUNDED window (auto-riarmo, default 20 s): the siren stops, the
 // alarm re-arms itself and the screen goes dark again — no key needed. The panel is NEVER left lit in
 // this app, in ANY state (settings included): the app OPENS lit for 10 s, then goes dark 15 s after
@@ -29,6 +30,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "esp_timer.h"
 #include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
@@ -65,6 +67,7 @@ static int      s_delay_idx = 1;
 static unsigned s_pin_hash = 0;         // FNV-1a of the PIN: the plaintext never sits in RAM or on SD
 static int      s_mode = MODE_SIREN;    // Sirena | Silenzioso
 static int      s_rearm_idx = 2;        // index into REARM[] -> 20 s: the trigger window in BOTH modes
+static int      s_rec_idx = 3;          // index into REC_MIN[] -> 3 min of ambient recording (silent mode)
 static bool     s_settings, s_pin_edit;
 static int      s_set_sel;
 static char     s_pin_buf[8];
@@ -83,12 +86,18 @@ static int64_t  s_trig_t0;              // when the current trigger fired (auto-
 static int      s_trig_count;           // hits this session (a silent alarm's visible output)
 static char     s_trig_last[8];         // "HH:MM" of the last hit, "" = none
 static int64_t  s_settle_until;         // arm/re-arm grace: ignore hits until the room (and the DMA) settle
+// Ambient recording (silent mode only): survives re-arms and further hits — see the recorder block.
+static FILE    *s_rec;
+static unsigned s_rec_bytes;            // PCM payload written so far (WAV header patched on close)
+static int64_t  s_rec_until, s_rec_cap, s_rec_t0;
+static unsigned s_rec_synced;           // payload length last written INTO the header (crash safety)
+static char     s_rec_name[40];
 static bool     s_scr_off;              // WE blanked the backlight (armed = dark panel)
 static int64_t  s_scr_hold_until;       // keep it lit until this deadline, then blank again
 
 // mic state
 static i2s_chan_handle_t s_mic = NULL;
-static int16_t  s_mic_buf[320];
+static int16_t *s_mic_buf;              // 640 B, heap while the mic is open (never .bss)
 static int      s_audio_consec;
 static float    s_audio_level;          // 0..1 live peak (for the bar)
 static int      s_saved_vol = -1;
@@ -104,6 +113,10 @@ static const int         DELAYS[4]   = { 3, 5, 10, 15 };
 // Auto-riarmo is not a bool: it IS the trigger window. After this many seconds the siren stops, the
 // alarm re-arms itself and the screen goes dark — in the silent mode too. 0 = off (hold until PIN).
 static const int         REARM[5]    = { 0, 10, 20, 30, 60 };
+// Ambient recording length, minutes. 0 = off. The alarm re-arms itself DURING the recording and can
+// fire again — neither stops it: a further hit only pushes the stop deadline out (never past the cap).
+static const int         REC_MIN[6]  = { 0, 1, 2, 3, 5, 10 };
+#define REC_CAP_US (10LL * 60 * 1000000)   // hard ceiling from the first hit: ~19 MB of WAV, and no more
 static int64_t rearm_us(void) { return (int64_t)REARM[s_rearm_idx] * 1000000; }
 
 static bool motion_on(void) { return (s_src == SRC_MOTION || s_src == SRC_BOTH) && nucleo_imu_present(); }
@@ -142,6 +155,10 @@ static bool cfg_load(void)
     if (sm >= 1 && sm <= SENS_MAX)  s_sens_motion = sm;
     if ((unsigned)dl < 4)           s_delay_idx = dl;
     if ((unsigned)re < 5)           s_rearm_idx = re;
+    // "rec" was added later: read it separately so an older config file still loads (and a newer one
+    // still opens on an older build) instead of failing the whole strict-format scanf.
+    const char *r = strstr(buf, "\"rec\":");
+    if (r) { int v = atoi(r + 6); if ((unsigned)v < 6) s_rec_idx = v; }
     return true;
 }
 // ---- SD event log --------------------------------------------------------------------------------
@@ -153,7 +170,7 @@ static bool cfg_load(void)
 #define ALARM_LOG     "/sd/data/Alarm/alarm.ndjson"
 #define ALARM_LOG_OLD "/sd/data/Alarm/alarm.1.ndjson"
 #define ALARM_LOG_MAX (256 * 1024)
-static void log_evt(const char *ev, const char *src, int lvl_pct)
+static void log_evt_i(const char *ev, const char *src, int lvl_pct, const char *info)
 {
     struct stat st;
     if (stat(ALARM_LOG, &st) == 0 && st.st_size > ALARM_LOG_MAX) {   // rotate: keep exactly one backup
@@ -178,13 +195,14 @@ static void log_evt(const char *ev, const char *src, int lvl_pct)
     int bat = nucleo_power_battery_available() ? nucleo_power_battery_pct() : -1;
     fprintf(f, "{\"t\":\"%s\",\"up\":%d,\"ev\":\"%s\",\"src\":\"%s\",\"mode\":\"%s\","
                "\"n\":%d,\"lvl\":%d,\"thr\":%d,\"sens_a\":%d,\"sens_m\":%d,"
-               "\"delay\":%d,\"rearm\":%d,\"bat\":%d}\n",
+               "\"delay\":%d,\"rearm\":%d,\"rec\":%d,\"bat\":%d,\"info\":\"%s\"}\n",
             ts, (int)(esp_timer_get_time() / 1000000), ev, src ? src : "",
             s_mode == MODE_SILENT ? "silent" : "siren", s_trig_count, lvl_pct,
             (int)(audio_thr() * 100.0f + 0.5f), s_sens_audio, s_sens_motion,
-            DELAYS[s_delay_idx], REARM[s_rearm_idx], bat);
+            DELAYS[s_delay_idx], REARM[s_rearm_idx], REC_MIN[s_rec_idx], bat, info ? info : "");
     fclose(f);
 }
+static void log_evt(const char *ev, const char *src, int lvl_pct) { log_evt_i(ev, src, lvl_pct, ""); }
 // Wiping the log is itself logged: the file is never silently empty about who emptied it.
 static void log_wipe(void)
 {
@@ -209,9 +227,108 @@ static void cfg_save(void)
     mkdir("/sd/system/config", 0775);
     FILE *f = fopen(ALARM_CFG, "wb");
     if (!f) return;
-    fprintf(f, "{\"pin\":%u,\"src\":%d,\"mode\":%d,\"sa\":%d,\"sm\":%d,\"delay\":%d,\"rearm\":%d}\n",
-            s_pin_hash, s_src, s_mode, s_sens_audio, s_sens_motion, s_delay_idx, s_rearm_idx);
+    fprintf(f, "{\"pin\":%u,\"src\":%d,\"mode\":%d,\"sa\":%d,\"sm\":%d,\"delay\":%d,\"rearm\":%d,\"rec\":%d}\n",
+            s_pin_hash, s_src, s_mode, s_sens_audio, s_sens_motion, s_delay_idx, s_rearm_idx, s_rec_idx);
     fclose(f);
+}
+
+
+// ---- ambient recording (silent mode) --------------------------------------------------------------
+// A silent alarm that only counts hits tells you something happened; a recording tells you WHAT. On a
+// silent trigger the mic stays open and its frames are written to a plain 16 kHz mono 16-bit WAV on
+// the SD — the same frames the detector is already reading, so there is no second stream and no gap.
+//
+// The recording deliberately OUTLIVES the alarm cycle: the auto re-arm re-arms underneath it and a
+// further hit can fire while it runs. Neither closes the file — a further hit only pushes the stop
+// deadline out, never past REC_CAP_US from the first one. Siren mode never records: the speaker and
+// the mic share the I2S/WS line on this hardware, so the wail and the capture cannot coexist.
+#define REC_DIR "/sd/data/Alarm/rec"
+#define REC_RATE 16000
+static void wav_head(FILE *f, unsigned data_bytes)
+{
+    unsigned char h[44] = {
+        'R','I','F','F', 0,0,0,0, 'W','A','V','E', 'f','m','t',' ',
+        16,0,0,0, 1,0, 1,0, 0,0,0,0, 0,0,0,0, 2,0, 16,0,
+        'd','a','t','a', 0,0,0,0
+    };
+    unsigned riff = 36 + data_bytes, rate = REC_RATE, brate = REC_RATE * 2;
+    memcpy(h + 4,  &riff,  4);
+    memcpy(h + 24, &rate,  4);
+    memcpy(h + 28, &brate, 4);
+    memcpy(h + 40, &data_bytes, 4);
+    fwrite(h, 1, sizeof h, f);
+}
+static void rec_close(const char *why)
+{
+    if (!s_rec) return;
+    fflush(s_rec);
+    fseek(s_rec, 0, SEEK_SET);          // patch the two sizes now that the payload length is known
+    wav_head(s_rec, s_rec_bytes);
+    fclose(s_rec);
+    s_rec = NULL;
+    char info[64];
+    snprintf(info, sizeof info, "%s %ds %uKB", s_rec_name,
+             (int)((esp_timer_get_time() - s_rec_t0) / 1000000), (s_rec_bytes + 1023) / 1024);
+    log_evt_i("rec_stop", why, 0, info);
+    nucleo_app_request_draw();
+}
+static void rec_open(void)
+{
+    if (s_rec || !REC_MIN[s_rec_idx]) return;
+    time_t t = time(NULL);
+    struct tm tmv;
+    if (t >= 1600000000 && localtime_r(&t, &tmv))
+        snprintf(s_rec_name, sizeof s_rec_name, "%04d%02d%02d-%02d%02d%02d.wav",
+                 tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+    else
+        snprintf(s_rec_name, sizeof s_rec_name, "up%d.wav", (int)(esp_timer_get_time() / 1000000));
+    char path[80];
+    snprintf(path, sizeof path, "%s/%s", REC_DIR, s_rec_name);
+    s_rec = fopen(path, "wb");
+    if (!s_rec) {                                    // first run: the folder does not exist yet
+        mkdir("/sd/data", 0775); mkdir("/sd/data/Alarm", 0775); mkdir(REC_DIR, 0775);
+        s_rec = fopen(path, "wb");
+    }
+    if (!s_rec) { log_evt_i("rec_fail", "open", 0, s_rec_name); return; }   // no SD: the alarm still works
+    s_rec_bytes = 0; s_rec_synced = 0;
+    s_rec_t0 = esp_timer_get_time();
+    s_rec_cap = s_rec_t0 + REC_CAP_US;
+    wav_head(s_rec, 0);
+    fflush(s_rec);                                   // the file must be real on the card from second 0
+    log_evt_i("rec_start", "mic", 0, s_rec_name);
+}
+// A hit while the tape rolls: extend, never restart — and never past the absolute cap.
+static void rec_bump(void)
+{
+    if (!REC_MIN[s_rec_idx]) return;
+    int64_t now = esp_timer_get_time();
+    if (!s_rec) rec_open();
+    if (!s_rec) return;
+    s_rec_until = now + (int64_t)REC_MIN[s_rec_idx] * 60 * 1000000;
+    if (s_rec_until > s_rec_cap) s_rec_until = s_rec_cap;
+}
+static void rec_clock(char *out, size_t n)
+{
+    int64_t now = esp_timer_get_time();
+    int el  = (int)((now - s_rec_t0) / 1000000);
+    int rem = (int)((s_rec_until - now) / 1000000); if (rem < 0) rem = 0;
+    snprintf(out, n, "REC %d:%02d -%ds", el / 60, el % 60, rem);
+}
+static void rec_sync(void)
+{
+    if (!s_rec) return;
+    long pos = ftell(s_rec);
+    fseek(s_rec, 0, SEEK_SET);
+    wav_head(s_rec, s_rec_bytes);
+    fseek(s_rec, pos, SEEK_SET);
+    fflush(s_rec);
+}
+static void rec_write(const void *buf, size_t n)
+{
+    if (!s_rec) return;
+    if (fwrite(buf, 1, n, s_rec) != n) { rec_close("write error"); return; }   // SD full / pulled out
+    s_rec_bytes += (unsigned)n;
+    if (s_rec_bytes - s_rec_synced >= 64000) { s_rec_synced = s_rec_bytes; rec_sync(); }   // ~2 s
 }
 
 // ---- siren: loud (max volume), piercing (2.9/3.8 kHz), continuous warble ----
@@ -231,47 +348,67 @@ static void voice_hold(bool on)
     s_voice_held = on;
     nucleo_voice_suspend(on);
 }
-static void mic_start(void)
+#define MIC_FRAME 320                             // samples per read = 20 ms @ 16 kHz
+static void mic_ensure(void)                      // open regardless of the source setting
 {
-    if (s_mic || !audio_on()) return;
+    if (s_mic) return;
+    if (!s_mic_buf) s_mic_buf = (int16_t *)malloc(MIC_FRAME * sizeof(int16_t));
+    if (!s_mic_buf) return;                       // out of heap: stay silent rather than crash
     voice_hold(true);
     nucleo_codec_mic(true);                       // power the ADV ADC (no-op on original)
     if (nucleo_codec_mic_open(16000, &s_mic) != ESP_OK) s_mic = NULL;
     s_audio_consec = 0; s_audio_level = 0;
 }
+static void mic_start(void) { if (audio_on()) mic_ensure(); }
 static void mic_stop(void)
 {
     if (s_mic) { nucleo_codec_mic_close(s_mic); s_mic = NULL; }
     nucleo_codec_mic(false);
+    free(s_mic_buf); s_mic_buf = NULL;
 }
-static bool mic_loud(void)
+// ONE read path: it updates the live level AND feeds the recorder, so the tape gets exactly the
+// frames the detector saw — no second stream, no gap while a hit is being processed.
+static bool mic_frame(void)
 {
-    if (!s_mic) return false;
+    if (!s_mic || !s_mic_buf) return false;
     size_t got = 0;
-    if (nucleo_codec_mic_read(s_mic, s_mic_buf, sizeof s_mic_buf, &got, 0) != ESP_OK || got < 2) return false;
+    if (nucleo_codec_mic_read(s_mic, s_mic_buf, MIC_FRAME * sizeof(int16_t), &got, 0) != ESP_OK || got < 2) return false;
     int n = (int)(got / 2); int32_t peak = 0;
     for (int i = 0; i < n; i++) { int32_t a = s_mic_buf[i]; if (a < 0) a = -a; if (a > peak) peak = a; }
     s_audio_level = (float)peak / 32768.0f;
-    if (s_audio_level > audio_thr()) { return (++s_audio_consec >= 2); }   // 2 frames = no single-click trigger
-    s_audio_consec = 0;
-    return false;
+    rec_write(s_mic_buf, got);
+    return true;
 }
+// Drain what the DMA holds (one frame is 20 ms; the poll runs faster, but an SD write can stall it),
+// so nothing is lost from the recording and no stale audio is left to re-trigger the alarm.
+#define MIC_DRAIN 8
+static bool mic_loud(void)
+{
+    bool loud = false;
+    for (int i = 0; i < MIC_DRAIN && mic_frame(); i++) {
+        if (s_audio_level > audio_thr()) { if (++s_audio_consec >= 2) { loud = true; break; } }
+        else s_audio_consec = 0;
+    }
+    return loud;
+}
+// Same drain, detection off: used while a trigger is being served so the tape keeps rolling.
+static void mic_pump(void) { for (int i = 0; i < MIC_DRAIN && mic_frame(); i++) {} }
 
 // ---- settings (TAB) ----
 // Named rows: the row order changed (Modo was inserted), so every index is a symbol now.
-enum { R_SRC = 0, R_MODE, R_SENS_A, R_SENS_M, R_DELAY, R_PIN, R_TEST, R_REARM, R_LOG, ASET_ROWS };
+enum { R_SRC = 0, R_MODE, R_SENS_A, R_SENS_M, R_DELAY, R_PIN, R_TEST, R_REARM, R_REC, R_LOG, ASET_ROWS };
 static const char *aset_label(int i)
 {
-    static const char *const L[ASET_ROWS] = { "Sorgente", "Modo", "Sens. audio", "Sens. movimento",
+    static const char *const L[ASET_ROWS] = { "Sorgente", "Modo", "Sens. audio", "Sens. moto",
                                               "Ritardo armo", "PIN", "Test sirena", "Auto-riarmo",
-                                              "Cancella log" };
+                                              "Registra muto", "Cancella log" };
     return (i >= 0 && i < ASET_ROWS) ? L[i] : "";
 }
 static const char *aset_right(int i)
 {
     static char b[16];
     switch (i) {
-        case R_SRC: if (s_src != SRC_MIC && !nucleo_imu_present()) return "Mic (no IMU)"; return SRC_NAME[s_src];
+        case R_SRC: if (s_src != SRC_MIC && !nucleo_imu_present()) return "solo Mic"; return SRC_NAME[s_src];
         case R_MODE: return s_mode == MODE_SILENT ? "Silenzioso" : "Sirena";
         case R_SENS_A: snprintf(b, sizeof b, "%d/20", s_sens_audio); return b;
         case R_SENS_M: if (!nucleo_imu_present()) return "n/d"; snprintf(b, sizeof b, "%d/20", s_sens_motion); return b;
@@ -279,6 +416,9 @@ static const char *aset_right(int i)
         case R_PIN: return "INVIO";
         case R_TEST: return "INVIO";
         case R_REARM: if (!REARM[s_rearm_idx]) return "off"; snprintf(b, sizeof b, "%ds", REARM[s_rearm_idx]); return b;
+        case R_REC: if (s_mode != MODE_SILENT) return "n/d";      // the siren owns the I2S: no capture
+                    if (!REC_MIN[s_rec_idx]) return "off";
+                    snprintf(b, sizeof b, "%dmin", REC_MIN[s_rec_idx]); return b;
         case R_LOG: { long n = log_size(); if (!n) return "vuoto"; snprintf(b, sizeof b, "%ldKB", (n + 1023) / 1024); return b; }
     }
     return "";
@@ -300,6 +440,7 @@ static void set_change(int dir)
         case R_SENS_M: s_sens_motion += dir; if (s_sens_motion < 1) s_sens_motion = 1; if (s_sens_motion > SENS_MAX) s_sens_motion = SENS_MAX; break;
         case R_DELAY: s_delay_idx = (s_delay_idx + dir + 4) % 4; break;
         case R_REARM: s_rearm_idx = (s_rearm_idx + dir + 5) % 5; break;
+        case R_REC:   s_rec_idx   = (s_rec_idx + dir + 6) % 6; break;
     }
     nucleo_app_request_draw();
 }
@@ -359,6 +500,7 @@ static void screen_keep_dark(int64_t now)
 static void disarm_to_idle(void)
 {
     log_evt(s_state == ST_ARMING ? "cancel" : "disarm", NULL, 0);
+    rec_close("disarmed");                       // the PIN is a deliberate end to the whole session
     mic_stop(); voice_hold(false); nucleo_audio_siren_stop(); siren_vol_release();
     s_state = ST_DISARMED; s_entry_len = 0; s_flash = false; s_bad = false;
     screen_wake(SCR_HOLD_KEY_US);          // disarmed is a normal, visible screen
@@ -405,7 +547,7 @@ static void stamp_now(char *out, size_t n)
 }
 static void fire_trigger(const char *src)
 {
-    mic_stop();                                  // free the I2S: the siren needs it
+    if (s_mode == MODE_SIREN) mic_stop();        // free the I2S for the wail (siren mode cannot record)
     s_trig_count++;
     stamp_now(s_trig_last, sizeof s_trig_last);
     char p[128];
@@ -415,7 +557,14 @@ static void fire_trigger(const char *src)
     log_evt("trigger", src, (int)(s_audio_level * 100.0f + 0.5f));
     s_state = ST_TRIGGERED; s_trig_t0 = esp_timer_get_time();
     s_entry_len = 0; s_bad = false;
-    if (s_mode == MODE_SILENT) { screen_blank(); return; }   // mute AND dark: nothing in the room changes
+    if (s_mode == MODE_SILENT) {                 // mute AND dark: nothing in the room changes
+        if (REC_MIN[s_rec_idx]) {
+            mic_ensure();                        // a motion-only setup has no mic open yet
+            rec_bump();                          // start the tape, or push its deadline out
+        }
+        screen_blank();
+        return;
+    }
     siren_vol_grab();
     screen_wake(SCR_HOLD_KEY_US);                            // the red flashing screen is part of the siren mode
     nucleo_app_request_draw();
@@ -477,6 +626,17 @@ static bool poll(void)
     if (s_state == ST_ARMING && !s_scr_off) s_scr_hold_until = now + 2000000;
     screen_keep_dark(now);
     if (!s_scr_off && now > s_scr_hold_until) screen_blank();
+
+    // The tape outlives the trigger AND the auto re-arm: it is serviced here, above the state
+    // machine, so no state transition can drop a frame or leave the file open.
+    if (s_rec) {
+        if (now >= s_rec_until) {
+            rec_close("done");
+            if (!audio_on() && s_mic) mic_stop();          // motion-only: the mic was only for the tape
+        } else if (s_state == ST_TRIGGERED || !audio_on()) {
+            mic_pump();                                    // ARMED+audio already drains inside mic_loud()
+        }
+    }
     if (s_settings) return false;
 
     if (s_state == ST_ARMING) {
@@ -556,7 +716,8 @@ static void on_key(int key, char ch)
             } else if (key == NK_ENTER) { s_pin_edit = false; nucleo_app_request_draw(); }
             return;
         }
-        if (key == NK_UP)        { s_set_sel = (s_set_sel + ASET_ROWS - 1) % ASET_ROWS; nucleo_app_request_draw(); }
+        if (ch >= '1' && ch <= '9' && ch - '1' < ASET_ROWS) { s_set_sel = ch - '1'; nucleo_app_request_draw(); }
+        else if (key == NK_UP)   { s_set_sel = (s_set_sel + ASET_ROWS - 1) % ASET_ROWS; nucleo_app_request_draw(); }
         else if (key == NK_DOWN) { s_set_sel = (s_set_sel + 1) % ASET_ROWS; nucleo_app_request_draw(); }
         else if (key == NK_RIGHT || key == NK_ENTER) {
             if (s_set_sel == R_PIN || s_set_sel == R_LOG) {
@@ -602,17 +763,27 @@ static void draw_settings(int y0, int bottom)
         else             center("conferma il PIN in uso", bottom - 16, 1, MUTED, BG);
         return;
     }
-    if (esp_timer_get_time() < s_pin_ok_until) center(s_toast,        y0 + 4, 2, C_GREEN, BG);
-    else                                       center("Impostazioni", y0 + 4, 2, C_BLUE,  BG);
-    int rowh = 18, y = y0 + 26, maxrows = (bottom - y) / rowh;
+    // No "Impostazioni" caption: the app title sits right above, and those 22 px are worth two more
+    // rows on a 135 px panel. The toast takes that space only while it is up.
+    bool toast = esp_timer_get_time() < s_pin_ok_until;
+    if (toast) center(s_toast, y0 + 2, 2, C_GREEN, BG);
+    int rowh = 18, y = y0 + (toast ? 22 : 2), maxrows = (bottom - y) / rowh;
     int start = 0; if (s_set_sel >= maxrows) start = s_set_sel - maxrows + 1;
     for (int i = start; i < ASET_ROWS && i < start + maxrows; i++) {
         bool on = (i == s_set_sel);
-        if (on) d.fillRoundRect(4, y, W - 8, rowh - 2, 3, ACCENT);
+        if (on) d.fillRoundRect(4, y, W - 12, rowh - 2, 3, ACCENT);
         d.setTextSize(2); d.setTextColor(on ? FG : MUTED, on ? ACCENT : BG); d.setCursor(10, y + 2); d.print(aset_label(i));
         const char *rv = aset_right(i);
-        int rw = (int)strlen(rv) * 12; d.setTextColor(on ? C_GREEN : DIM, on ? ACCENT : BG); d.setCursor(W - 10 - rw, y + 2); d.print(rv);
+        int rw = (int)strlen(rv) * 12; d.setTextColor(on ? C_GREEN : DIM, on ? ACCENT : BG); d.setCursor(W - 14 - rw, y + 2); d.print(rv);
         y += rowh;
+    }
+    // Scrollbar: 10 rows, 5 visible — without it you cannot tell where you are in the list.
+    int track_y = y0 + (toast ? 22 : 2), track_h = maxrows * rowh;
+    if (ASET_ROWS > maxrows && track_h > 8) {
+        int kh = track_h * maxrows / ASET_ROWS; if (kh < 8) kh = 8;
+        int ky = track_y + (track_h - kh) * start / (ASET_ROWS - maxrows);
+        d.fillRect(W - 4, track_y, 2, track_h, LINE);
+        d.fillRect(W - 4, ky, 2, kh, ACCENT);
     }
 }
 
@@ -629,6 +800,7 @@ static void draw(void)
     if (s_state == ST_ARMING)         { rl = "armo"; acc = C_YELLOW; }
     else if (s_state == ST_ARMED)     { rl = s_mode == MODE_SILENT ? "MUTO" : "ON"; acc = C_GREEN; }
     else if (s_state == ST_TRIGGERED) { rl = "!!!";  acc = C_RED;    }
+    if (s_rec) rl = "REC";                                                                   // the tape is rolling
     if (s_trig_count > 0) { snprintf(rb, sizeof rb, "%s %d", rl, s_trig_count); rl = rb; }   // hit counter, always in view
     int y0 = app_ui_title("Allarme", acc, rl);
     int cy = (y0 + bottom) / 2;
@@ -651,23 +823,29 @@ static void draw(void)
         center(nb, y0 + 12, 6, C_YELLOW, BG);
         center("allontanati...", bottom - 16, 2, MUTED, BG);
     } else if (s_state == ST_ARMED) {
-        center("ARMATO", y0 + 8, 3, C_GREEN, BG);
-        int by = cy + 4, bw = W - 64, bx = 32;
+        center("ARMATO", y0 + 4, 3, C_GREEN, BG);            // 28..52
+        int by = y0 + 42, bw = W - 64, bx = 32;              // first bar 66..74, label at 56
         if (motion_on()) {
             float frac = nucleo_imu_energy() / motion_e_thr(); if (frac > 1) frac = 1;
             d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(bx, by - 10); d.print("movimento");
             d.drawRect(bx, by, bw, 8, MUTED); d.fillRect(bx + 1, by + 1, (int)((bw - 2) * frac), 6, frac > 0.8f ? C_RED : C_GREEN);
-            by += 22;
+            by += 22;                                        // second bar 88..96
         }
         if (audio_on()) {
-            bool dead = !s_mic;                       // open failed: the alarm would be armed but deaf
+            bool dead = !s_mic;                              // open failed: the alarm would be armed but deaf
             float frac = dead ? 0 : s_audio_level / audio_thr(); if (frac > 1) frac = 1;
             d.setTextSize(1); d.setTextColor(dead ? C_RED : MUTED, BG); d.setCursor(bx, by - 10);
             d.print(dead ? "audio: mic KO" : "audio");
             d.drawRect(bx, by, bw, 8, dead ? C_RED : MUTED);
             d.fillRect(bx + 1, by + 1, (int)((bw - 2) * frac), 6, frac > 0.8f ? C_RED : C_BLUE);
         }
-        center(s_bad ? "PIN errato" : "digita il PIN", bottom - 14, 2, s_bad ? C_RED : MUTED, BG);
+        if (s_bad) center("PIN errato", bottom - 18, 2, C_RED, BG);
+        else if (s_rec) {                                    // two size-1 lines fit where one size-2 did
+            char rc[40];
+            rec_clock(rc, sizeof rc);
+            center(rc, bottom - 18, 1, C_RED, BG);
+            center("digita il PIN", bottom - 9, 1, MUTED, BG);
+        } else center("digita il PIN", bottom - 18, 2, MUTED, BG);
     } else {   // TRIGGERED
         bool silent = (s_mode == MODE_SILENT);
         center(silent ? "! RILEVATO !" : "! ALLARME !", y0 + 10, 3, silent ? C_YELLOW : FG, bg);
@@ -675,9 +853,10 @@ static void draw(void)
         if (s_bad) { center("PIN errato", bottom - 16, 2, FG, bg); return; }
         char ln[40];
         int rem = rearm_us() ? (int)((rearm_us() - (esp_timer_get_time() - s_trig_t0)) / 1000000) + 1 : 0;
-        if (rem > 0) snprintf(ln, sizeof ln, "%s %s   riarmo in %ds", silent ? "muto" : "sirena", s_trig_last, rem);
-        else         snprintf(ln, sizeof ln, "%s %s   PIN per fermare", silent ? "muto" : "sirena", s_trig_last);
-        center(ln, bottom - 14, 1, FG, bg);
+        if (rem > 0) snprintf(ln, sizeof ln, "%s %s  riarmo in %ds", silent ? "muto" : "sirena", s_trig_last, rem);
+        else         snprintf(ln, sizeof ln, "%s %s  PIN per fermare", silent ? "muto" : "sirena", s_trig_last);
+        center(ln, bottom - 22, 1, FG, bg);
+        if (s_rec) { char rc[40]; rec_clock(rc, sizeof rc); center(rc, bottom - 12, 1, C_RED, bg); }
     }
 }
 
@@ -690,11 +869,12 @@ static void enter(void)
     s_trig_count = 0; s_trig_last[0] = 0;
     s_pin_bad = false; s_pin_ok_until = 0; s_dirty_cfg = false;
     s_settle_until = 0; s_mic_retry = 0; s_audio_level = 0;
+    s_rec = NULL; s_rec_bytes = 0; s_rec_until = 0; s_rec_cap = 0;
     bool had_cfg = cfg_load();                   // PIN + options survive a reboot
     // Exploit the IMU when it's there — but never override a saved, deliberate "Microfono" choice.
     if (!had_cfg && nucleo_imu_present() && s_src == SRC_MIC) s_src = SRC_BOTH;
-    nucleo_app_set_hint(TR("invio arma   tab modo/opzioni   tasto = accendi schermo",
-                           "enter arm   tab mode/options   any key = screen on"));
+    nucleo_app_set_hint(TR("invio arma   tab modo/registrazione   tasto = schermo",
+                           "enter arm   tab mode/recording   any key = screen on"));
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(tab);
     nucleo_app_set_back_handler(back);
@@ -704,7 +884,7 @@ static void enter(void)
 // Never leave the panel dark behind us: the app owns the backlight only while it is foreground.
 static void on_exit(void)
 {
-    cfg_save(); mic_stop(); voice_hold(false);
+    cfg_save(); rec_close("app closed"); mic_stop(); voice_hold(false);
     nucleo_audio_siren_stop(); siren_vol_release();
     screen_wake(0);                          // never hand the launcher a dark panel
 }
