@@ -5,8 +5,9 @@
 //                  published on the event bus, so the device betrays nothing in the room.
 // In BOTH modes the trigger lasts a BOUNDED window (auto-riarmo, default 20 s): the siren stops, the
 // alarm re-arms itself and the screen goes dark again — no key needed. The panel is NEVER left lit in
-// this app, in ANY state (settings included): 15 s after the last key it goes dark and stays dark;
-// the siren keeps wailing behind it. Any key lights it again for 15 s. Sensor sources:
+// this app, in ANY state (settings included): the app OPENS lit for 10 s, then goes dark 15 s after
+// the last key and STAYS dark — the siren keeps wailing behind it. Any key lights it again for 15 s
+// and is swallowed by the wake. Sensor sources:
 //   - Microfono: loud-noise detection (RMS peak + debounce so silence/clicks don't false-trigger).
 //     Works on BOTH boards (board-aware mic HAL) — this is the ONLY source on the non-ADV Cardputer.
 //   - Movimento: BMI270 shake/tilt (ADV only).
@@ -47,7 +48,7 @@ enum { MODE_SIREN = 0, MODE_SILENT = 1 };
 static const unsigned short ACCENT = C_RED;
 
 static int      s_state = ST_DISARMED;
-static int64_t  s_arm_t0, s_last_siren;
+static int64_t  s_arm_t0;
 static int      s_arm_shown;
 static float    s_ref_lx, s_ref_ly;
 static bool     s_flash, s_siren_hi;
@@ -81,6 +82,7 @@ static bool     s_dirty_cfg;            // options changed -> persist on the way
 static int64_t  s_trig_t0;              // when the current trigger fired (auto-rearm deadline)
 static int      s_trig_count;           // hits this session (a silent alarm's visible output)
 static char     s_trig_last[8];         // "HH:MM" of the last hit, "" = none
+static int64_t  s_settle_until;         // arm/re-arm grace: ignore hits until the room (and the DMA) settle
 static bool     s_scr_off;              // WE blanked the backlight (armed = dark panel)
 static int64_t  s_scr_hold_until;       // keep it lit until this deadline, then blank again
 
@@ -105,7 +107,7 @@ static const int         REARM[5]    = { 0, 10, 20, 30, 60 };
 static int64_t rearm_us(void) { return (int64_t)REARM[s_rearm_idx] * 1000000; }
 
 static bool motion_on(void) { return (s_src == SRC_MOTION || s_src == SRC_BOTH) && nucleo_imu_present(); }
-static bool audio_on(void)  { return (s_src == SRC_MIC || s_src == SRC_BOTH); }
+static bool audio_on(void)  { return s_src == SRC_MIC || s_src == SRC_BOTH || !nucleo_imu_present(); }
 
 // ---- PIN + persisted options -------------------------------------------------------------------
 // The PIN is stored as a 32-bit FNV-1a hash, never as text: a 4-digit code is brute-forceable by
@@ -153,14 +155,17 @@ static bool cfg_load(void)
 #define ALARM_LOG_MAX (256 * 1024)
 static void log_evt(const char *ev, const char *src, int lvl_pct)
 {
-    mkdir("/sd/data", 0775);
-    mkdir("/sd/data/Alarm", 0775);
     struct stat st;
     if (stat(ALARM_LOG, &st) == 0 && st.st_size > ALARM_LOG_MAX) {   // rotate: keep exactly one backup
         remove(ALARM_LOG_OLD);
         rename(ALARM_LOG, ALARM_LOG_OLD);
     }
     FILE *f = fopen(ALARM_LOG, "ab");
+    if (!f) {                                                        // first run: create the folders once
+        mkdir("/sd/data", 0775);
+        mkdir("/sd/data/Alarm", 0775);
+        f = fopen(ALARM_LOG, "ab");
+    }
     if (!f) return;
     char ts[24];
     time_t t = time(NULL);
@@ -214,10 +219,22 @@ static void siren_vol_grab(void) { if (s_saved_vol < 0) { s_saved_vol = nucleo_a
 static void siren_vol_release(void) { if (s_saved_vol >= 0) { nucleo_audio_set_volume(s_saved_vol); s_saved_vol = -1; } }
 
 // ---- mic lifecycle ----
+// The voice engine owns the mic unless we suspend it, and the suspension is held for the WHOLE armed
+// life — not per mic open. It used to be released inside mic_stop(), which runs on every trigger: the
+// voice engine could then grab GPIO43 in the ~20 s siren window and the auto re-arm would reopen the
+// mic into a busy I2S — leaving the alarm armed but DEAF. Released only on disarm / app exit.
+static bool s_voice_held;
+static int64_t s_mic_retry;             // next attempt after a failed open
+static void voice_hold(bool on)
+{
+    if (on == s_voice_held) return;
+    s_voice_held = on;
+    nucleo_voice_suspend(on);
+}
 static void mic_start(void)
 {
     if (s_mic || !audio_on()) return;
-    nucleo_voice_suspend(true);                  // the voice engine owns the mic otherwise
+    voice_hold(true);
     nucleo_codec_mic(true);                       // power the ADV ADC (no-op on original)
     if (nucleo_codec_mic_open(16000, &s_mic) != ESP_OK) s_mic = NULL;
     s_audio_consec = 0; s_audio_level = 0;
@@ -226,7 +243,6 @@ static void mic_stop(void)
 {
     if (s_mic) { nucleo_codec_mic_close(s_mic); s_mic = NULL; }
     nucleo_codec_mic(false);
-    nucleo_voice_suspend(false);
 }
 static bool mic_loud(void)
 {
@@ -309,6 +325,7 @@ static void draw_pin_dots(int cy, int len, unsigned short col, unsigned short bg
 // blank goes straight to the panel driver — the same escape hatch /api/display uses. The stored level
 // is untouched, so waking is just re-applying it. Any key lights the screen for SCR_HOLD_KEY_US (long
 // enough to type the PIN); after that, and after every auto re-arm, it goes dark again.
+#define SCR_HOLD_OPEN_US (10LL * 1000000)   // the app OPENS lit and stays lit this long
 #define SCR_HOLD_ARM_US  (3LL  * 1000000)   // show the "ARMATO" confirmation this long, then dark
 #define SCR_HOLD_KEY_US  (15LL * 1000000)   // a keypress lights the panel this long (PIN entry)
 static void screen_wake(int64_t hold_us)
@@ -325,6 +342,8 @@ static void screen_blank(void)
     if (s_scr_off) return;
     s_scr_off = true;
     s_scr_hold_until = esp_timer_get_time() + 2000000;   // reused as the next re-assert deadline
+    s_entry_len = 0; s_bad = false;                      // the keypad session ends with the light
+    if (s_pin_edit) { s_pin_edit = false; s_pin_buf_len = 0; }
     nucleo_ui_set_brightness(0);
 }
 // Re-assert the dark panel every ~2 s while armed: the torch overlay, a notification banner or the
@@ -340,14 +359,18 @@ static void screen_keep_dark(int64_t now)
 static void disarm_to_idle(void)
 {
     log_evt(s_state == ST_ARMING ? "cancel" : "disarm", NULL, 0);
-    mic_stop(); nucleo_audio_siren_stop(); siren_vol_release();
+    mic_stop(); voice_hold(false); nucleo_audio_siren_stop(); siren_vol_release();
     s_state = ST_DISARMED; s_entry_len = 0; s_flash = false; s_bad = false;
     screen_wake(SCR_HOLD_KEY_US);          // disarmed is a normal, visible screen
     nucleo_app_request_draw();
 }
 static void start_arming(void)
 {
-    if (!motion_on() && !audio_on()) return;
+    if (!motion_on() && !audio_on()) {          // ENTER used to do nothing at all here
+        s_toast = "Nessun sensore attivo"; s_pin_ok_until = esp_timer_get_time() + 2000000;
+        nucleo_app_request_draw();
+        return;
+    }
     s_state = ST_ARMING; s_arm_t0 = esp_timer_get_time(); s_arm_shown = DELAYS[s_delay_idx]; s_entry_len = 0;
     nucleo_app_request_draw();
 }
@@ -362,6 +385,7 @@ static void go_armed(void)
     if (motion_on()) capture_ref();
     mic_start();
     s_state = ST_ARMED;
+    s_settle_until = esp_timer_get_time() + 1500000;   // let the mic DMA + the hand that pressed ENTER settle
     log_evt("armed", motion_on() ? (audio_on() ? "mic+motion" : "motion") : "mic", 0);
     screen_wake(SCR_HOLD_ARM_US);          // brief "ARMATO" confirmation, then the panel goes dark
     nucleo_app_request_draw();
@@ -390,7 +414,7 @@ static void fire_trigger(const char *src)
     nucleo_event_publish("alarm.trigger", p);
     log_evt("trigger", src, (int)(s_audio_level * 100.0f + 0.5f));
     s_state = ST_TRIGGERED; s_trig_t0 = esp_timer_get_time();
-    s_last_siren = 0; s_entry_len = 0; s_bad = false;
+    s_entry_len = 0; s_bad = false;
     if (s_mode == MODE_SILENT) { screen_blank(); return; }   // mute AND dark: nothing in the room changes
     siren_vol_grab();
     screen_wake(SCR_HOLD_KEY_US);                            // the red flashing screen is part of the siren mode
@@ -405,6 +429,9 @@ static void rearm_now(void)
     if (motion_on()) capture_ref();
     mic_start();
     s_state = ST_ARMED;
+    // 3 s of grace: without it the siren's own tail (and the stale I2S buffer) re-triggers the alarm
+    // the instant it re-arms, looping a hit every REARM seconds forever.
+    s_settle_until = esp_timer_get_time() + 3000000;
     log_evt("rearm", NULL, 0);
     // Dark again — unless a key was pressed in the last SCR_HOLD_KEY_US (someone is standing there
     // typing the PIN): then the ARMED poll blanks it when that window expires, so the panel never
@@ -447,7 +474,7 @@ static bool poll(void)
     // the last keypress it goes dark and STAYS dark (re-asserted, since the torch/banner/Control
     // Center can re-light it behind our back). The first key lights it again. The exit countdown is
     // the single exception — it must stay readable while you walk away — and it lasts <= 15 s anyway.
-    if (s_state == ST_ARMING) s_scr_hold_until = now + 2000000;
+    if (s_state == ST_ARMING && !s_scr_off) s_scr_hold_until = now + 2000000;
     screen_keep_dark(now);
     if (!s_scr_off && now > s_scr_hold_until) screen_blank();
     if (s_settings) return false;
@@ -469,7 +496,10 @@ static bool poll(void)
             if (e > motion_e_thr() || td > motion_t_thr()) { trig = true; src = "motion"; }
         }
         if (!trig && audio_on() && mic_loud()) trig = true;
+        if (trig && now < s_settle_until) { trig = false; s_audio_consec = 0; }   // arm/re-arm grace
         if (trig) { fire_trigger(src); return false; }
+        // A failed mic_open would otherwise leave the alarm armed but deaf until the next re-arm.
+        if (audio_on() && !s_mic && now - s_mic_retry > 1000000) { s_mic_retry = now; mic_start(); }
         if (!s_scr_off && now - s_last_armed_draw > 120000) {     // throttle live-bar redraw to ~8 fps -> no flicker
             s_last_armed_draw = now; nucleo_app_request_draw();
         }
@@ -487,6 +517,9 @@ static bool poll(void)
         if (!s_scr_off) nucleo_app_request_draw();               // dark panel: don't composite the flash
         nucleo_audio_siren(150);                                 // the WAIL never stops with the screen — only the light does
         return false;
+    }
+    if (s_pin_ok_until && now > s_pin_ok_until) {   // toast expired: one redraw to clear it
+        s_pin_ok_until = 0; nucleo_app_request_draw();
     }
     return false;
 }
@@ -608,9 +641,11 @@ static void draw(void)
         char ln[44];
         const char *src = (s_src != SRC_MIC && !nucleo_imu_present()) ? "Microfono" : SRC_NAME[s_src];
         const char *md  = (s_mode == MODE_SILENT) ? "silenzioso" : "sirena";
-        if (s_trig_count > 0) snprintf(ln, sizeof ln, "%s  %d eventi  ultimo %s", md, s_trig_count, s_trig_last);
-        else                  snprintf(ln, sizeof ln, "%s  %s  ritardo %ds", src, md, DELAYS[s_delay_idx]);
-        center(ln, bottom - 14, 1, DIM, BG);
+        bool toast = esp_timer_get_time() < s_pin_ok_until;
+        if (toast)                 snprintf(ln, sizeof ln, "%s", s_toast);
+        else if (s_trig_count > 0) snprintf(ln, sizeof ln, "%s  %d eventi  ultimo %s", md, s_trig_count, s_trig_last);
+        else                       snprintf(ln, sizeof ln, "%s  %s  ritardo %ds", src, md, DELAYS[s_delay_idx]);
+        center(ln, bottom - 14, 1, toast ? C_RED : DIM, BG);
     } else if (s_state == ST_ARMING) {
         char nb[8]; snprintf(nb, sizeof nb, "%d", s_arm_shown > 0 ? s_arm_shown : 1);
         center(nb, y0 + 12, 6, C_YELLOW, BG);
@@ -625,9 +660,12 @@ static void draw(void)
             by += 22;
         }
         if (audio_on()) {
-            float frac = s_audio_level / audio_thr(); if (frac > 1) frac = 1;
-            d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(bx, by - 10); d.print("audio");
-            d.drawRect(bx, by, bw, 8, MUTED); d.fillRect(bx + 1, by + 1, (int)((bw - 2) * frac), 6, frac > 0.8f ? C_RED : C_BLUE);
+            bool dead = !s_mic;                       // open failed: the alarm would be armed but deaf
+            float frac = dead ? 0 : s_audio_level / audio_thr(); if (frac > 1) frac = 1;
+            d.setTextSize(1); d.setTextColor(dead ? C_RED : MUTED, BG); d.setCursor(bx, by - 10);
+            d.print(dead ? "audio: mic KO" : "audio");
+            d.drawRect(bx, by, bw, 8, dead ? C_RED : MUTED);
+            d.fillRect(bx + 1, by + 1, (int)((bw - 2) * frac), 6, frac > 0.8f ? C_RED : C_BLUE);
         }
         center(s_bad ? "PIN errato" : "digita il PIN", bottom - 14, 2, s_bad ? C_RED : MUTED, BG);
     } else {   // TRIGGERED
@@ -647,9 +685,11 @@ static void enter(void)
 {
     s_state = ST_DISARMED; s_settings = false; s_pin_edit = false;
     s_entry_len = 0; s_flash = false; s_bad = false;
-    s_scr_off = false; s_scr_hold_until = 0;
+    // The app opens LIT: a zero deadline made the very first poll blank the panel instantly.
+    s_scr_off = false; s_scr_hold_until = esp_timer_get_time() + SCR_HOLD_OPEN_US;
     s_trig_count = 0; s_trig_last[0] = 0;
     s_pin_bad = false; s_pin_ok_until = 0; s_dirty_cfg = false;
+    s_settle_until = 0; s_mic_retry = 0; s_audio_level = 0;
     bool had_cfg = cfg_load();                   // PIN + options survive a reboot
     // Exploit the IMU when it's there — but never override a saved, deliberate "Microfono" choice.
     if (!had_cfg && nucleo_imu_present() && s_src == SRC_MIC) s_src = SRC_BOTH;
@@ -662,7 +702,12 @@ static void enter(void)
 }
 
 // Never leave the panel dark behind us: the app owns the backlight only while it is foreground.
-static void on_exit(void) { cfg_save(); mic_stop(); nucleo_audio_siren_stop(); siren_vol_release(); screen_wake(0); }
+static void on_exit(void)
+{
+    cfg_save(); mic_stop(); voice_hold(false);
+    nucleo_audio_siren_stop(); siren_vol_release();
+    screen_wake(0);                          // never hand the launcher a dark panel
+}
 
 extern "C" void nucleo_register_alarm(void)
 {
