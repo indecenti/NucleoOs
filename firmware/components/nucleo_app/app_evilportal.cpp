@@ -476,6 +476,8 @@ static void tile(int cx, const char *label, const char *val, unsigned short col)
     d.setTextSize(3); d.setTextColor(col, BG);   d.setCursor(cx - (int)strlen(val) * 9, 52); d.print(val);
 }
 
+static uint32_t ep_shash(const char *s) { uint32_t h = 2166136261u; while (s && *s) h = (h ^ (unsigned char)*s++) * 16777619u; return h; }
+
 static void draw_running(int h)
 {
     app_ui_title("Evil Portal", EP_RED, "");
@@ -497,6 +499,15 @@ static void draw_running(int h)
     if (conf > 0) { char cf[12]; snprintf(cf, sizeof cf, "conf %d", conf); d.setTextSize(1);
                     d.setTextColor(GRN, BG); d.setCursor(178 - (int)strlen(cf) * 3, 74); d.print(cf); }
     d.drawFastHLine(10, 84, 220, LINE);
+    // The loot band is the only DIRECT-path field that can SHRINK or swap (placeholder <-> captured
+    // creds), so clear its box only when it actually changes — re-clearing it on every 1 Hz repaint
+    // would blink the panel there (ANTI-FLICKER.md technique 2). Everything above is opaque + grows.
+    { static uint32_t s_loot_sig = 1; static unsigned s_loot_gen = ~0u;
+      uint32_t sig = (uint32_t)(caps ? 1 : 0) ^ ((uint32_t)nucleo_evilportal_twin_coherent() << 1)
+                   ^ (ep_shash(nucleo_evilportal_last_user()) * 3u) ^ ep_shash(nucleo_evilportal_last_pass());
+      unsigned g = nucleo_app_repaint_gen();
+      if (sig != s_loot_sig || g != s_loot_gen) { s_loot_sig = sig; s_loot_gen = g;
+          d.fillRect(0, 86, 240, (h - 10) - 86, BG); } }
     if (caps == 0) { const char *e = nucleo_evilportal_twin_coherent() ? "coerente: identita clonata, no login"
                                                                        : "in attesa di vittime...";
                      d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, 92); d.print(e); }
@@ -568,7 +579,18 @@ static void draw_menu(int h)   // TAB overlay
 static void draw(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
-    d.fillRect(0, top, 240, h, BG);
+    // RUNNING / LURE are on the DIRECT path (canvas freed for the AP/deauth) and repaint ~1 Hz. A
+    // full-content fillRect on that cadence blinks the whole panel (ANTI-FLICKER.md technique 2):
+    // clear the band ONCE on entry (or when an overlay bumps the repaint gen), then the per-screen
+    // draw refreshes its own fields — the title band self-clears, counters are opaque + monotonic,
+    // and the loot band clears its own box only on change. Other states are event-driven (no cadence).
+    bool live = (s_state == ST_RUNNING || s_state == ST_LURE || s_state == ST_KARMA_SCAN);
+    static bool s_live_painted = false;
+    static unsigned s_gen = 0;
+    unsigned gen = nucleo_app_repaint_gen();
+    if (!live || nucleo_app_is_buffered() || !s_live_painted || gen != s_gen)
+        d.fillRect(0, top, 240, h, BG);
+    s_gen = gen; s_live_painted = live;
     switch (s_state) {
         case ST_CONSENT: draw_consent(h); break;
         case ST_HOME:    draw_home(h); break;
@@ -584,10 +606,14 @@ static void draw(void)
         case ST_GUIDE:   draw_guide(h); break;
         case ST_SCAN:    draw_busy("Scansione...", "Cerco le reti reali vicine.", h); s_scan_armed = true; break;
         case ST_KARMA_SCAN: {
+            // DIRECT path (canvas freed for the sniff), repaints ~1 Hz: the band is cleared ONCE above,
+            // so the static card doesn't blink. Erase+redraw only the small live bits in their own boxes.
             draw_busy("Karma...", "Ascolto chi cerca quali reti.", h);
+            d.fillRect(215, h / 2 - 12, 10, 10, BG);   // pulse dot's box (self-erase so it can blink off)
             if (s_pulse) d.fillCircle(220, h / 2 - 7, 4, EP_RED);
             int hp = nucleo_wifiatk_karma_heap();      // confirm how much heap the sniff actually got
             if (hp > 0) { char hb[24]; snprintf(hb, sizeof hb, "heap %d B", hp);
+                          d.fillRect(10, h - 10, 130, 10, BG);   // clear the heap field (value width varies)
                           d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, h - 9); d.print(hb); }
             s_karma_armed = true; break;
         }
@@ -602,7 +628,8 @@ static void ep_tab(void)
 {
     if (s_state == ST_CONSENT || s_state == ST_SCAN || s_state == ST_KARMA_SCAN ||
         s_state == ST_CLONE || s_state == ST_STOPPING) return;
-    s_menu = !s_menu; s_menu_sel = 0; set_hint(); nucleo_app_request_draw();
+    s_menu = !s_menu; s_menu_sel = 0; set_hint();
+    nucleo_app_force_repaint();   // menu is an overlay: force a full repaint so closing it erases the box on the DIRECT path
 }
 static void menu_choose(void)
 {
@@ -611,12 +638,12 @@ static void menu_choose(void)
     if (!strcmp(it, "Loot catture"))       { s_ret = s_state; go(ST_LOOT); }
     else if (!strcmp(it, "Ferma portale")) { s_stop_armed = false; go(ST_STOPPING); }
     else if (!strcmp(it, "Guida"))         { s_ret = s_state; go(ST_GUIDE); }
-    else { set_hint(); nucleo_app_request_draw(); }
+    else { set_hint(); nucleo_app_force_repaint(); }   // stayed on a live screen: full repaint erases the menu box
 }
 static bool ep_back(int key)
 {
     (void)key;
-    if (s_menu) { s_menu = false; set_hint(); nucleo_app_request_draw(); return true; }
+    if (s_menu) { s_menu = false; set_hint(); nucleo_app_force_repaint(); return true; }   // erase the overlay box (DIRECT path)
     switch (s_state) {
         case ST_SSID: case ST_PAGE: go(ST_SETUP); return true;
         case ST_TYPE: go(ST_SSID); return true;

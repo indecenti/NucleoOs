@@ -189,7 +189,10 @@ static void draw_busy(const char *t, const char *m)
 static void draw_running(void)
 {
     int h = nucleo_app_content_height();
-    app_ui_title("WiFi Sniffer", SNF, MODE_NAME[s_mode]);
+    // No mode in the title-right here: the live channel readout below owns that top-right slot, and a
+    // longer mode name ("Handshake") drawn under a short channel ("ch 6") left a garbled overlap. The
+    // capture mode is shown on the config screen where it's chosen.
+    app_ui_title("WiFi Sniffer", SNF, "");
     if (s_pulse) d.fillCircle(150, 9, 4, SNF);
     d.setTextSize(1); d.setTextColor(SNF, BG); d.setCursor(160, 7); d.print("REC");
     int cc = nucleo_wifiatk_sniffer_channel();
@@ -198,6 +201,11 @@ static void draw_running(void)
 
     unsigned pk = nucleo_wifiatk_sniffer_pkts(), dr = nucleo_wifiatk_sniffer_drops();
     char ps[16]; snprintf(ps, sizeof ps, "%u", pk);
+    // The "pacchetti" label trails the count, so when the number gains a digit its old x moves and
+    // (on the DIRECT path with the once-only band clear) would leave a stale label behind. Wipe the
+    // count+label box only on that rare digit-count change — imperceptible, and residue-proof.
+    static int s_pslen = -1; int pl = (int)strlen(ps);
+    if (pl != s_pslen) { s_pslen = pl; d.fillRect(10, 32, 130, 28, BG); }
     d.setTextSize(3); d.setTextColor(FG, BG); d.setCursor(10, 34); d.print(ps);
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(12 + (int)strlen(ps) * 18, 48); d.print("pacchetti");
 
@@ -223,7 +231,19 @@ static void draw_running(void)
 static void draw(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
-    d.fillRect(0, top, 240, h, BG);
+    // RUNNING is on the DIRECT path (the canvas was freed for the sniffer queues) and repaints ~1 Hz
+    // (pulse dot + live counters). A full-content fillRect on that cadence blinks the whole panel
+    // (ANTI-FLICKER.md technique 2). Clear the band ONCE on entry (or when an overlay bumps the
+    // repaint gen); draw_running() then repaints only its own fields — the title band self-clears, the
+    // counters are opaque + monotonic, and the .pcap path is fixed for the session. All other states
+    // are buffered / event-driven, so a per-draw full clear is free there.
+    bool running = (s_state == ST_RUNNING);
+    static bool s_run_painted = false;
+    static unsigned s_gen = 0;
+    unsigned gen = nucleo_app_repaint_gen();
+    if (!running || nucleo_app_is_buffered() || !s_run_painted || gen != s_gen)
+        d.fillRect(0, top, 240, h, BG);
+    s_gen = gen; s_run_painted = running;
     if (s_state == ST_CONSENT)       draw_consent();
     else if (s_state == ST_ARMING)   { draw_busy("Avvio...", "Apro la cattura."); s_arm_armed = true; }
     else if (s_state == ST_STOPPING) { draw_busy("Salvo...", "Chiudo il .pcap e ripristino rete."); s_stop_armed = true; }
