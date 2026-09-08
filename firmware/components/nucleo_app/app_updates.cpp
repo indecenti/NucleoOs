@@ -48,6 +48,7 @@ static bool s_flash_dd = false;        // flash screen runs canvas-free + direct
 static bool s_flash_bg = false;        // the static flash background has been painted once
 static upd_phase_t s_last_phase = UPD_IDLE;
 static int  s_last_pct = -2;
+static int  s_last_kb  = -1;            // also redraw on bytes-received change (live counter / barber-pole)
 
 static void mark(void) { s_dirty = true; nucleo_app_request_draw(); }
 
@@ -160,8 +161,8 @@ static void on_tick(void)
 {
     // Redraw only when the engine state actually moved (phase or visible percent).
     nucleo_update_state_t st; nucleo_update_get_state(&st);
-    if (st.phase != s_last_phase || st.pct != s_last_pct) {
-        s_last_phase = st.phase; s_last_pct = st.pct;
+    if (st.phase != s_last_phase || st.pct != s_last_pct || st.recv_kb != s_last_kb) {
+        s_last_phase = st.phase; s_last_pct = st.pct; s_last_kb = st.recv_kb;
         if (s_ui == UI_MAIN) set_hint_for_ui();      // a finished check can add/remove menu rows
         mark();
     }
@@ -230,45 +231,49 @@ static void draw_confirm(void)
 static void draw_flash(void)
 {
     nucleo_update_state_t st; nucleo_update_get_state(&st);
+    static int s_flash_phase = -1;
+    const int bx = 20, by = 66, bw = W - 40, bh = 14;
 
-    if (!s_flash_bg) {
-        d.fillScreen(BG);                        // one-time clear on entry (canvas-free)
-        s_flash_bg = true;
-    }
-    // Dynamic band: everything from y=8 down. Erase it, then repaint for the current phase.
-    d.fillRect(0, 8, W, H - 8, BG);
+    if (!s_flash_bg) { d.fillScreen(BG); s_flash_bg = true; s_flash_phase = -1; }  // one-time clear on entry (canvas-free)
 
-    if (st.phase == UPD_FAILED) {
-        center(PT("AGGIORNAMENTO FALLITO", "UPDATE FAILED", "ACTUALIZACION FALLIDA", "MISE A JOUR ECHOUEE", "UPDATE FEHLGESCHLAGEN"), 24, 1, C_RED);
-        center(st.err, 46, 1, FG);
-        center(PT("ESC per uscire", "ESC to exit", "ESC para salir", "ESC pour quitter", "ESC zum Beenden"), 84, 1, MUTED);
-        return;
+    // The whole band (y=8 down) is repainted ONCE per phase — NOT on every percent tick. Clearing it
+    // each tick on the canvas-free DIRECT path flashed the entire "DO NOT POWER OFF" screen at the
+    // download rate (native-app anti-flicker #2). Within a phase, only the bar fill + counter update,
+    // each in its own small box.
+    bool newphase = (st.phase != s_flash_phase);
+    if (newphase) {
+        s_flash_phase = st.phase;
+        d.fillRect(0, 8, W, H - 8, BG);
+        if (st.phase == UPD_FAILED) {
+            center(PT("AGGIORNAMENTO FALLITO", "UPDATE FAILED", "ACTUALIZACION FALLIDA", "MISE A JOUR ECHOUEE", "UPDATE FEHLGESCHLAGEN"), 24, 1, C_RED);
+            center(st.err, 46, 1, FG);
+            center(PT("ESC per uscire", "ESC to exit", "ESC para salir", "ESC pour quitter", "ESC zum Beenden"), 84, 1, MUTED);
+        } else if (st.phase == UPD_REBOOTING) {
+            center(PT("Fatto! Riavvio...", "Done! Rebooting...", "Listo! Reiniciando...", "Termine ! Redemarrage...", "Fertig! Neustart..."), 52, 2, C_GREEN);
+        } else {
+            center(st.phase == UPD_VERIFYING
+                       ? PT("Verifica SHA-256...", "Verifying SHA-256...", "Verificando SHA-256...", "Verification SHA-256...", "Pruefe SHA-256...")
+                       : PT("Aggiornamento in corso", "Updating", "Actualizando", "Mise a jour", "Aktualisiere"),
+                   18, 2, FG);
+            center(PT("NON SPEGNERE", "DO NOT POWER OFF", "NO APAGAR", "NE PAS ETEINDRE", "NICHT AUSSCHALTEN"), 44, 1, C_YELLOW);
+            d.drawRoundRect(bx, by, bw, bh, 4, MUTED);                                  // static bar frame
+            if (st.phase == UPD_VERIFYING) d.fillRoundRect(bx + 2, by + 2, bw - 4, bh - 4, 3, C_GREEN);  // verify: full, static
+        }
     }
-    if (st.phase == UPD_REBOOTING) {
-        center(PT("Fatto! Riavvio...", "Done! Rebooting...", "Listo! Reiniciando...", "Termine ! Redemarrage...", "Fertig! Neustart..."), 52, 2, C_GREEN);
-        return;
-    }
-    center(st.phase == UPD_VERIFYING
-               ? PT("Verifica SHA-256...", "Verifying SHA-256...", "Verificando SHA-256...", "Verification SHA-256...", "Pruefe SHA-256...")
-               : PT("Aggiornamento in corso", "Updating", "Actualizando", "Mise a jour", "Aktualisiere"),
-           18, 2, FG);
-    center(PT("NON SPEGNERE", "DO NOT POWER OFF", "NO APAGAR", "NE PAS ETEINDRE", "NICHT AUSSCHALTEN"), 44, 1, C_YELLOW);
+    if (st.phase != UPD_DOWNLOADING) return;   // only the download phase has per-tick dynamics
 
-    // Progress bar: frame always; fill by pct, or a barber-pole third when length is unknown.
-    int bx = 20, by = 66, bw = W - 40, bh = 14;
-    d.drawRoundRect(bx, by, bw, bh, 4, MUTED);
-    if (st.phase == UPD_DOWNLOADING && st.pct >= 0) {
+    // Dynamic: progress fill + counter, each self-clearing its own box (no full-band wipe).
+    if (st.pct >= 0) {
         int fill = (bw - 4) * st.pct / 100;
-        if (fill > 1) d.fillRoundRect(bx + 2, by + 2, fill, bh - 4, 3, C_GREEN);
+        if (fill > 1) d.fillRoundRect(bx + 2, by + 2, fill, bh - 4, 3, C_GREEN);        // grows over prior fill
         char p[24]; snprintf(p, sizeof p, "%d%%  %d/%d KB", st.pct, st.recv_kb, st.total_kb);
-        center(p, by + bh + 8, 1, MUTED);
-    } else if (st.phase == UPD_DOWNLOADING) {
+        d.fillRect(0, by + bh + 6, W, 12, BG); center(p, by + bh + 8, 1, MUTED);        // counter (width varies)
+    } else {                                                                             // unknown length: barber-pole
         int fill = (bw - 4) / 3, off = (st.recv_kb * 7) % (bw - 4 - fill);
+        d.fillRect(bx + 2, by + 2, bw - 4, bh - 4, BG);                                  // clear bar interior (segment moves)
         d.fillRoundRect(bx + 2 + off, by + 2, fill, bh - 4, 3, C_GREEN);
         char p[24]; snprintf(p, sizeof p, "%d KB", st.recv_kb);
-        center(p, by + bh + 8, 1, MUTED);
-    } else {
-        d.fillRoundRect(bx + 2, by + 2, bw - 4, bh - 4, 3, C_GREEN);
+        d.fillRect(0, by + bh + 6, W, 12, BG); center(p, by + bh + 8, 1, MUTED);
     }
 }
 
