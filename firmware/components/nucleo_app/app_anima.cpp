@@ -2,7 +2,8 @@
 // Type a line, Enter asks ANIMA, the answer scrolls in a transcript. Mirrors what the web
 // client gets from GET /api/anima (nucleo_httpd.c): it runs the same nucleo_anima_query()
 // and resolves the SYSTEM {value} templates + LAUNCH/TOOL actions locally (system values,
-// create_file, set_volume/brightness, add_event calendar reminders, and app launching).
+// create_file, set_volume/brightness, add_event calendar reminders). A LAUNCH answer OFFERS the app
+// ("Enter = open Music"): Enter hands its id over in RTC and reboots into the full OS, which opens it.
 //
 // Readability (smartwatch-style): the chat renders in a REAL anti-aliased proportional font
 // (FreeSans, M5GFX's built-in GFX font) instead of the cramped 6x8 bitmap — the single biggest
@@ -16,10 +17,13 @@
 //
 // Drawing: ANIMA frees the 32 KB shared canvas on enter (the L1 index + TLS need that RAM) and
 // pins itself to DIRECT drawing, so it can't use the framework's off-screen composite. Per
-// ANTI-FLICKER.md technique 2, draw() repaints only the region that changed (header badge /
-// transcript / input); the caret blink toggles a single bar and the spinner repaints just the
-// badge rect. The transcript is a word-wrapped row cache rebuilt from a small message ring only
-// when the content changes (so toggling text size re-wraps cleanly without losing history).
+// ANTI-FLICKER.md technique 2 everything paints IN PLACE: opaque text over the old pixels, only the
+// leftovers cleared (box_text / pill_band), so a scroll, a page flip, a typewriter frame or a menu key
+// never blanks a region; one clear happens only on a scene change. The caret blink toggles a single
+// bar. The transcript is a word-wrapped row cache rebuilt from a small message ring only when the
+// content changes, shown top-anchored: every answer lands on its FIRST row, fn+;/. flip pages, and Enter
+// on an empty line opens a full-screen reader (docs/anima-native.md §8). Chrome follows the OS theme
+// (THEME_* roles) and the text the OS language.
 //
 // Solo only: opening ANIMA from the full OS reboots into the dedicated ANIMA Solo boot (enter()), so
 // every line below the Solo gate runs on the big `anima-solo` task. nucleo_anima_query() — which can
@@ -30,14 +34,16 @@
 // Keyboard (the Notes-editor rule): the driver delivers ; . , / as arrows that CARRY their character.
 // Wherever you write — chat, welcome deck, IDEE fill-in forms, file editor — they TYPE themselves, so
 // "2.5", "ciao." or an Italian decimal comma just work and '/' starts a slash command. Their arrow
-// meaning needs a modifier (the Cardputer's own arrow layer): fn+; / fn+. scroll the chat (move the
-// deck / hop form fields), fn+/ accepts the ghost completion (on an empty line: cycles the online
-// mode), ctrl+; / ctrl+. walk the command history. ',' reaches on_back (the launcher routes Left
+// meaning needs a modifier (the Cardputer's own arrow layer): fn+; / fn+. page the chat (a row while
+// typing; move the deck / hop form fields), fn+/ accepts the ghost completion (on an empty line: cycles
+// the online mode, or retries online after an offline "I don't know"), ctrl+; / ctrl+. walk the history. ',' reaches on_back (the launcher routes Left
 // there) and is typed as a comma — it never leaves. Only Esc (backtick) leaves, behind a confirm. In
 // the tabbed menu's lists (no text entry) the plain arrows still navigate and ',' pages the tabs.
 #include "nucleo_app.h"
 #include "app_gfx.h"
 #include "app_ui.h"       // app_ui_ascii_fold: shared UTF-8 -> ASCII fold for the TFT fonts
+#include "nucleo_i18n.h"   // the OS language (settings.json ui.language): ANIMA follows it, TR(it,en)
+#include "nucleo_theme.h"  // THEME_* roles: the chrome follows the OS theme (docs/native-ui-kit.md)
 #include <M5GFX.h>
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
@@ -55,6 +61,7 @@
 #include "esp_task_wdt.h"   // pet il task-WDT prima della scrittura SD del calendario (anti-reboot)
 #include "esp_attr.h"       // RTC_NOINIT_ATTR: carry the seeded question across the ANIMA Solo reboot
 #include "esp_app_desc.h"   // esp_app_get_description(): real running-image version (single source of truth)
+#include "esp_system.h"     // esp_reset_reason(): the "open <app>" handoff is honoured only after our own reboot
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 extern "C" {
@@ -85,16 +92,28 @@ void nucleo_audio_wait_idle(uint32_t max_ms);
 // Event bus: publish a calendar.changed event after a native add_event write (so the web/calendar
 // service refresh). Defined in nucleo_eventbus; linked into this component (calendar_svc uses it).
 uint32_t nucleo_event_publish(const char *topic, const char *payload_json);
+// Launcher display name of a native app in the OS language (flash table in launcher_render.cpp); NULL when
+// the app keeps its own proper-noun name. Works in any boot — ANIMA Solo registers no other app.
+const char *launcher_app_localized_name(const char *id);
 }
 
-static const unsigned short BG = 0x0841, FG = 0xFFFF, MUTED = 0x8C71, DIM = 0x4410,
-                            ACC = 0x929F /* ANIMA violet */, GRN = 0x8FF3, LINE = 0x2945,
-                            INK = 0x0000, USR = 0x6E1F /* user echo blue */,
-                            AMBER = 0xFD20,
-                            SURF = 0x10A2 /* raised surface: slider track / value chip */,
-                            CAP  = 0x1A8B /* focused settings-row capsule (Music/Video parity) */;
+// Chrome follows the OS theme (docs/native-ui-kit.md §1): the roles, never an RGB565 literal, so AMOLED /
+// Hacker Green / Nano Banana recolour ANIMA like every other app. The focused row / active tab is the kit's
+// one selection look — an ACC pill with INK text — (the old CAP/SURF capsule greys are gone).
+#define BG    THEME_BG
+#define FG    THEME_FG
+#define MUTED THEME_MUTED
+#define DIM   THEME_DIM
+#define LINE  THEME_LINE
+#define INK   THEME_INK
+// Identity + content semantics (named, theme-independent — allowed by the kit): the app's registered
+// accent, "live/ok" green, the user-echo blue and the "awaiting your reply" amber.
+static const unsigned short ACC = 0x929F /* ANIMA violet */, GRN = 0x8FF3, USR = 0x6E1F, AMBER = 0xFD20;
+// Transcript colour ROLE codes (Msg.col / Msg.accent): see col_role() / pal().
+static const unsigned short K_FG = 1, K_MUTED = 2, K_DIM = 3, K_ACC = 4, K_GRN = 5, K_USR = 6, K_AMBER = 7;
 
 #define A_INMAX  140           // max input length
+#define MSG_TAG  12            // an answer's source + time tag ("web|12.3 s")
 #define RECENT_N 8             // recent IDEE form values remembered for the slot ghost (recent_push)
 #define TODAY_MAX 10           // OGGI tab: today's events + the next upcoming peek
 
@@ -125,6 +144,26 @@ typedef struct {
     char cal_next[72];                 // raw next event today-or-later (deck glance source)
     int  agenda_n;                     // events today (array size, as the agenda readout counts them)
     long cal_size; time_t cal_mtime; char cal_key[12]; bool cal_en, cal_ok;   // cache stamp
+    // Transcript view (reader). Top-anchored: vtop = first visible row. vmode FOLLOW pins the newest row to
+    // the bottom (a new question), ANCHOR puts the first row of message `anchor` (the answer) at the top so
+    // a long answer reads from its start, MANUAL is where the user paged to. Rows are re-wrapped on every
+    // push, so the anchor is a ring slot, resolved to a row index at paint time.
+    int  vtop;
+    signed char vmode, anchor;
+    bool reader;                       // full-screen reader: header, input and footer hidden, ~7 rows
+    char launch[16];                   // native app id the last answer offers ("Enter = open Music"); "" = none
+    char last_tag[MSG_TAG];            // the last answer's source + time (STATO tab)
+    bool retry_online;                 // the last answer abstained offline while the network is up: fn+/ = retry online
+    bool cloud_note;                   // the blocking turn may reach the cloud: the input row says how long it can take
+    // Menu paint cache (flicker-free direct draw): the scene painted last (tab / IDEE level / form / language)
+    // — a change = one clear + the static parts; within a scene only the list rows whose content moved repaint.
+    int  mscene;
+    uint32_t msig[8];                  // what each visible list-row slot shows
+    short mleft, mpage;                // where the list's leftover band starts; the GUIDA page on the panel
+    bool mfull;                        // this menu paint is a scene paint (static parts too)
+    bool clear_confirm, clear_yes;     // "Clear chat" asks first: the kit's confirm card (focus starts on No)
+    signed char body_kind;             // what the chat body currently shows on the panel (BK_*): a change = one clear
+    unsigned rgen;                     // nucleo_app_repaint_gen() at the last paint: a bump = overlay residue, repaint all
 } AnimaSession;
 static AnimaSession *s_ses = nullptr;
 
@@ -141,7 +180,10 @@ enum { R_META = 0, R_USER = 1, R_ANIMA = 2 };
                        // margin — at 384 the idle free sat right on the NUCLEO_TLS_MIN_FREE gate and online
                        // turns flip-flopped by ~100 bytes after fragmentation. (Online replies are steered
                        // compact, well under this.) The rare >320 L2 answer clips at a sentence boundary.
-typedef struct { char text[MSG_TEXT]; unsigned short col, accent; unsigned char role; } Msg;
+// tag = the answer's source + time ("L1|0.4 s", '|' drawn as a dot), shown discreetly at the end of the answer.
+// A meta line pushed with accent MSG_EPHEMERAL (a next-step hint) is display-only: never written to the SD.
+#define MSG_EPHEMERAL 1
+typedef struct { char text[MSG_TEXT]; unsigned short col, accent; unsigned char role; char tag[MSG_TAG]; } Msg;
 // Heap-on-enter (was .bss): the transcript ring is ~5 KB and ANIMA is closed almost always, so keeping it
 // resident cost the boot RAM budget for nothing. calloc'd in enter() (inside the exclusive reclaim window),
 // freed in leave(); every access is null-guarded so an OOM-on-enter degrades to "no transcript", not a crash.
@@ -153,26 +195,32 @@ static int s_mhead, s_mcount;
 static int  s_full_idx = -1;
 static int  s_reveal   = -1;   // typewriter: -1 = mostra tutto s_ses->full; >=0 = mostra solo i primi N byte (rivelazione graduale stile GPT)
 static bool s_exit_confirm = false;   // modale conferma uscita (Esc nel chat base): true = mostra la modale a tutto schermo
-static bool s_typing = false;         // typewriter in corso: draw_body evita la pulizia piena del corpo (anti-flicker)
 extern void launcher_render_hint_bar(void);   // ridipinge il footer SUBITO (il loop framework e' bloccato durante la query inline)
 
 // Wrapped display rows (derived). A row points into a message's text (valid until the next
 // rebuild, which every push triggers after writing the message).
 enum { F_SMALL = 0 /*Font0 6x8*/, F_MED = 1 /*Font2 16px*/, F_BIG = 2 /*FreeSans9pt7b*/, F_BOLD = 3 /*FreeSansBold9pt7b*/ };
 #define ROW_MAX 120
-typedef struct { const char *p; unsigned short len, col, accent; unsigned char role, font, first; } Row;
+// `first` carries flags: RF_FIRST = first row of its message (3 px gap above). `mi` = the message's ring
+// slot, so the view can anchor on a message and the position indicator can count an answer's rows.
+enum { RF_FIRST = 1, RF_TAG = 2 /* draw the message's tag at the right end of this row */,
+       RF_TAGROW = 4 /* this row IS the tag (it did not fit on the last text row) */ };
+typedef struct { const char *p; unsigned short len, col, accent; unsigned char role, font, first, mi; } Row;
 static Row *s_row = nullptr;      // heap-on-enter (was .bss ~2 KB), paired with s_msg above
 static int s_rown;
-static int s_scroll;            // rows scrolled up from the bottom (0 = newest)
+enum { V_FOLLOW = 0, V_ANCHOR, V_MANUAL };        // AnimaSession.vmode
+enum { BK_NONE = 0, BK_DECK, BK_CHAT };           // AnimaSession.body_kind
 
 // ---- dirty regions (flicker-free direct draw) -------------------------------
-static bool s_d_hdr, s_d_body, s_d_input, s_d_badge;
-static void mark_all_dirty(void) { s_d_hdr = s_d_body = s_d_input = true; }
+// Every chat region paints IN PLACE (opaque text + only the leftover pixels cleared), so a dirty flag costs
+// no blank frame. s_d_clear is the one exception: a SCENE change (menu/editor/modal/reader closed, chat
+// cleared) wipes the content area once before the regions paint.
+static bool s_d_hdr, s_d_body, s_d_input, s_d_badge, s_d_clear;
+static void mark_all_dirty(void) { s_d_hdr = s_d_body = s_d_input = s_d_clear = true; }
 
 // ---- input + last-answer state (the text buffers live in s_ses) -------------
 static int  s_ilen;
 static int  s_last_conf;                         // confidence of the last answer (-1 = none)
-static const char *s_last_tier = "";             // "L0"/"L1"/"web" label of the last answer
 static int  s_blink, s_spin;
 static bool s_user_sent;                          // false until the first question -> show the deck
 static int  s_sug_sel;                            // focused suggestion in the deck / IDEE tab
@@ -252,7 +300,7 @@ static bool slot_autocomplete(const char *pfx, char *out, int cap)
 enum { OM_OFF = 0, OM_ON = 1, OM_ONLY = 2 };
 static int  s_omode = OM_ON;
 static bool s_big   = true;                       // chat text size: true = FreeSans (Grande), false = Font2 (Compatto)
-static bool s_en    = false;                      // language: false = it, true = en
+static bool s_en    = false;                      // mirror of the OS language (nucleo_i18n_is_en), refreshed by load_settings
 // TAB opens a full-screen tabbed MENU over the chat — the exact persistent tab-bar + carousel
 // pattern the Music/Video apps use (draw_tabbar + draw_set_row). The chat is the base; the menu is
 // a modal overlay (not a page in a ring). RIGHT cycles tabs; UP/DOWN walk the rows of the live tab;
@@ -263,7 +311,7 @@ enum { TAB_IDEE = 0, TAB_OGGI = 1, TAB_GUIDA = 2, TAB_IA = 3, TAB_STATO = 4 };
 // IA (settings) tab rows — fixed order; SLIDER rows (Velocita voce/Volume/Luce) entrano in L/R adjust.
 enum { IA_ONLINE = 0, IA_LANG, IA_TEXT, IA_VOICE, IA_SPEED, IA_VOL, IA_BRI, IA_CLEAR };
 #define IA_ROWS 8
-#define GUIDE_N 8                                 // cards in the GUIDA manual (also its "row" count)
+#define GUIDE_N 9                                 // cards in the GUIDA manual (also its "row" count)
 static bool s_menu_open;                          // the tabbed menu is up (modal over the chat)
 static int  s_tab;                                // active tab (TAB_*)
 static int  s_mrow;                                // focused row: -1 = tab bar, 0..n-1 = content row
@@ -299,6 +347,8 @@ typedef struct {
     char  buf[ED_BUF_CAP];                          // the file content being typed
     char  path[80];                                 // absolute SD-relative path "/data/..." (from the form slot)
     short loff[ED_LCAP], llen[ED_LCAP];             // draw_editor's wrapped-line layout (was static .bss)
+    short cx, cy;                                   // where the caret was painted (the blink toggles only it)
+    bool  full, dirty;                              // full = scene paint; dirty = the text changed; else caret only
 } AnimaEditor;
 static AnimaEditor *s_ed = nullptr;                 // non-NULL exactly while s_ed_open
 static bool s_ed_open;
@@ -329,12 +379,73 @@ static void set_font(unsigned char f)
 }
 static unsigned char chat_font(void) { return s_big ? F_BIG : F_MED; }
 static int  font_h(unsigned char f)  { return (f == F_BIG || f == F_BOLD) ? 18 : f == F_MED ? 15 : 11; }
-static int  row_h(const Row *r)      { return font_h(r->font) + (r->first ? 3 : 0); }   // +gap before a new message
+static int  row_h(const Row *r)      { return font_h(r->font) + ((r->first & RF_FIRST) ? 3 : 0); }   // +gap before a new message
 static int  input_h(void)            { return font_h(chat_font()) + 8; }
 // Width of the first n bytes of s with the CURRENT font (textWidth needs a NUL-terminated string).
 static int  meas(const char *s, int n) { char t[216]; if (n > 215) n = 215; memcpy(t, s, n); t[n] = 0; return (int)d.textWidth(t); }
 
+// ---- in-place painters (ANTI-FLICKER.md technique 2, no back-buffer) ---------------------------------
+// ANIMA draws DIRECT to the panel, so a fillRect-then-print blinks. These never clear under the text: the
+// font paints its own cell background (M5GFX fills the glyph box when fg != bg), and only the pixels the
+// glyphs won't cover are filled — so a box goes from its old content straight to the new one.
+// Opaque text in the box [bx,bx+bw) x [by,by+bh) with the CURRENT font; returns the x after the text.
+static int box_text(int bx, int by, int bw, int bh, int tx, int ty, const char *s, unsigned short fg, unsigned short bg)
+{
+    const int fh = (int)d.fontHeight(), w = (s && s[0]) ? (int)d.textWidth(s) : 0, bx1 = bx + bw, by1 = by + bh;
+    if (tx < bx) tx = bx;
+    const int gy0 = ty < by ? by : ty, gy1 = ty + fh > by1 ? by1 : ty + fh;   // glyph rows inside the box
+    if (gy0 > by)  d.fillRect(bx, by, bw, gy0 - by, bg);
+    if (gy1 < by1) d.fillRect(bx, gy1, bw, by1 - gy1, bg);
+    if (gy1 > gy0) {
+        if (tx > bx) d.fillRect(bx, gy0, tx - bx, gy1 - gy0, bg);
+        if (tx + w < bx1) d.fillRect(tx + w, gy0, bx1 - tx - w, gy1 - gy0, bg);
+    }
+    if (w) { d.setTextColor(fg, bg); d.setCursor(tx, ty); d.print(s); }
+    return tx + w;
+}
+// A focused-row pill (the kit's one selection look: accent fill, INK text) painted over whatever the band
+// held: only the four corner squares outside the arc and the side margins [0,x) / [x+w,xr) go to BG first.
+static void pill_band(int x, int y, int w, int h, int r, unsigned short col, int xr)
+{
+    if (x > 0) d.fillRect(0, y, x, h, BG);
+    if (x + w < xr) d.fillRect(x + w, y, xr - x - w, h, BG);
+    d.fillRect(x, y, r, r, BG);         d.fillRect(x + w - r, y, r, r, BG);
+    d.fillRect(x, y + h - r, r, r, BG); d.fillRect(x + w - r, y + h - r, r, r, BG);
+    d.fillRoundRect(x, y, w, h, r, col);
+}
+// A one-line Font0 field [x0,x1) at glyph row y: two coloured segments (a, then b) aligned left or right,
+// everything else in the field painted BG. Header clusters, the reader's status strip.
+static void seg_field(int x0, int x1, int y, bool right, const char *a, unsigned short ca, const char *b, unsigned short cb)
+{
+    d.setFont(&fonts::Font0); d.setTextSize(1);
+    const int wa = (a && a[0]) ? (int)strlen(a) * 6 : 0, wb = (b && b[0]) ? (int)strlen(b) * 6 : 0;
+    const int gap = (wa && wb) ? 12 : 0;
+    int x = right ? x1 - (wa + gap + wb) : x0;
+    if (x < x0) x = x0;
+    if (x > x0) d.fillRect(x0, y, x - x0, 8, BG);
+    if (wa) { d.setTextColor(ca, BG); d.setCursor(x, y); d.print(a); x += wa; }
+    if (gap) { d.fillRect(x, y, gap, 8, BG); x += gap; }
+    if (wb) { d.setTextColor(cb, BG); d.setCursor(x, y); d.print(b); x += wb; }
+    if (x < x1) d.fillRect(x, y, x1 - x, 8, BG);
+}
+// Slim scroll rail in the column [235,240): track, thumb, track as three non-overlapping pieces, so the
+// thumb moves without the column ever blanking. total/first/shown are in rows.
+static void draw_vscroll(int ty0, int avail, int total, int first, int shown)
+{
+    if (total <= 0 || shown >= total) { d.fillRect(235, ty0, 5, avail, BG); return; }
+    int th = avail * shown / total; if (th < 8) th = 8;
+    if (th > avail) th = avail;
+    int tyo = first * (avail - th) / (total - shown);
+    if (tyo < 0) tyo = 0;
+    if (tyo > avail - th) tyo = avail - th;
+    const int bot = ty0 + tyo + th, rest = ty0 + avail - bot;
+    if (tyo) { d.fillRect(235, ty0, 2, tyo, BG); d.drawFastVLine(237, ty0, tyo, LINE); d.fillRect(238, ty0, 2, tyo, BG); }
+    d.fillRect(235, ty0 + tyo, 1, th, BG); d.fillRect(236, ty0 + tyo, 3, th, MUTED); d.fillRect(239, ty0 + tyo, 1, th, BG);
+    if (rest > 0) { d.fillRect(235, bot, 2, rest, BG); d.drawFastVLine(237, bot, rest, LINE); d.fillRect(238, bot, 2, rest, BG); }
+}
+
 // ---- row cache: word-wrap the message ring by pixel width --------------------
+static unsigned char s_wrap_mi;   // ring slot of the message wrap_msg is emitting (stamped on its rows)
 static void emit_row(const char *p, int len, unsigned short col, unsigned short acc,
                      unsigned char role, unsigned char font, unsigned char first)
 {
@@ -342,7 +453,18 @@ static void emit_row(const char *p, int len, unsigned short col, unsigned short 
     if (s_rown == ROW_MAX) { memmove(&s_row[0], &s_row[1], sizeof(Row) * (ROW_MAX - 1)); s_rown--; }
     Row *r = &s_row[s_rown++];
     r->p = p; r->len = (unsigned short)len; r->col = col; r->accent = acc;
-    r->role = role; r->font = font; r->first = first;
+    r->role = role; r->font = font; r->first = first; r->mi = s_wrap_mi;
+}
+
+// Source tags ("L1|0.4 s") are Font0; the '|' is drawn as a small centred dot (the ASCII font has no '·').
+static int tag_w(const char *t) { return (int)strlen(t) * 6; }
+static void draw_tag(int x, int y, const char *t, unsigned short col)
+{
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(col, BG);
+    for (const char *p = t; *p; p++, x += 6) {
+        if (*p == '|') { d.fillRect(x, y, 6, 8, BG); d.fillRect(x + 2, y + 3, 2, 2, col); }
+        else { char c[2] = { *p, 0 }; d.setCursor(x, y); d.print(c); }
+    }
 }
 
 // Greedy word-wrap one message into rows, measuring with its font. Honours '\n', hard-splits a word
@@ -358,6 +480,7 @@ static void wrap_msg(const Msg *m, const char *override_text)
     // start at x=11 (210..225 region) so 214. Wrapping must match the render budget or a full line clips.
     const int availw = (m->role == R_META) ? 224 : (m->role == R_USER) ? 210 : 214;
     const char *text = override_text ? override_text : m->text;   // risposta corrente: testo pieno da s_ses->full
+    s_wrap_mi = (unsigned char)(m - s_msg);
     int before = s_rown, first = 1;
     if (!text[0]) { emit_row(text, 0, m->col, m->accent, m->role, font, 1); return; }
     const char *ls = text, *p = text;
@@ -381,6 +504,13 @@ static void wrap_msg(const Msg *m, const char *override_text)
     }
     if (p > ls) emit_row(ls, (int)(p - ls), m->col, m->accent, m->role, font, first);
     if (s_rown == before) emit_row(text, 0, m->col, m->accent, m->role, font, 1);   // all-spaces -> keep a blank row
+    // The source tag rides at the right end of the answer's last row when it fits there (no extra row),
+    // else on a small row of its own. Not while the typewriter is still revealing the text.
+    if (m->role == R_ANIMA && m->tag[0] && !(override_text && s_reveal >= 0)) {
+        const Row *lr = &s_row[s_rown - 1];
+        if (meas(lr->p, lr->len) <= 217 - tag_w(m->tag)) s_row[s_rown - 1].first |= RF_TAG;
+        else emit_row(m->tag, (int)strlen(m->tag), K_DIM, 0, R_META, F_SMALL, RF_TAGROW);
+    }
 }
 
 // Wrap the ring into rows from row index `k` on. from_cur=false: the whole ring (k = 0). from_cur=true:
@@ -402,23 +532,124 @@ static void wrap_ring(int k, bool from_cur)
             } else wrap_msg(&s_msg[idx], s_ses->full);
         } else if (on) wrap_msg(&s_msg[idx], NULL); }
     d.setFont(&fonts::Font0); d.setTextSize(1);   // leave the global font at the framework default
-    s_scroll = 0; s_d_body = true;                // any new content snaps the view to the bottom
+    s_d_body = true;                              // the view mode (FOLLOW / ANCHOR / MANUAL) decides where it lands
 }
 static void rebuild_rows(void) { wrap_ring(0, false); }
 
+// Transcript colours are stored as ROLES (small codes), resolved at paint time — a restored chat follows the
+// active theme. Old chat files hold real RGB565 values (all far above the codes): those paint unchanged.
+static unsigned short col_role(unsigned short c)
+{
+    return c == FG ? K_FG : c == USR ? K_USR : c == ACC ? K_ACC : c == AMBER ? K_AMBER : c == GRN ? K_GRN
+         : c == MUTED ? K_MUTED : c == DIM ? K_DIM : c;
+}
+static unsigned short pal(unsigned short c)
+{
+    switch (c) {
+        case K_FG: return FG;   case K_MUTED: return MUTED; case K_DIM: return DIM;     case K_ACC: return ACC;
+        case K_GRN: return GRN; case K_USR: return USR;     case K_AMBER: return AMBER; default: return c;
+    }
+}
 static void push_msg(unsigned char role, unsigned short col, unsigned short accent, const char *text)
 {
     if (!s_msg) return;
     if (s_mhead == s_full_idx) s_full_idx = -1;   // lo slot del messaggio "intero" viene riusato -> torna accorciato
     Msg *m = &s_msg[s_mhead];
     app_ui_ascii_fold(text, m->text, MSG_TEXT);
-    m->col = col; m->accent = accent; m->role = role;
+    m->col = col_role(col); m->accent = role == R_ANIMA ? col_role(accent) : accent; m->role = role; m->tag[0] = 0;
     s_mhead = (s_mhead + 1) % MSG_MAX; if (s_mcount < MSG_MAX) s_mcount++;
     rebuild_rows();
 }
 static void push_meta(const char *t, unsigned short col) { push_msg(R_META, col, 0, t); }
-static void push_user(const char *t)                     { push_msg(R_USER, USR, 0, t); }
+// A new question pins the view to the newest row again (the answer then anchors itself, present_result).
+static void push_user(const char *t)                     { if (s_ses) s_ses->vmode = V_FOLLOW; push_msg(R_USER, USR, 0, t); }
 static void push_anima(const char *t, unsigned short acc) { push_msg(R_ANIMA, FG, acc, t); }
+
+// ---- transcript view: top-anchored, page-wise (the reader) ------------------------------------------
+// The row at the TOP of the viewport drops its 3 px message gap (it separates messages, not the view
+// edge), so a page holds one more line. Geometry: chat body = content - 18 header - input - 1; the
+// full-screen reader (fullscreen: no header, input or footer) = RD_BODY rows + a 9 px status strip.
+#define RD_BODY 126
+static int top_h(int i)  { return font_h(s_row[i].font); }                   // row i as the view's top row
+static int chat_avail(void) { return nucleo_app_content_height() - 18 - input_h() - 1; }
+static int first_row_of(int slot) { for (int i = 0; i < s_rown; i++) if (s_row[i].mi == slot) return i; return -1; }
+// The last row index that fits fully when row t is at the top.
+static int last_fit(int t, int avail)
+{
+    int used = 0, last = t;
+    for (int i = t; i < s_rown; i++) {
+        int hh = (i == t) ? top_h(i) : row_h(&s_row[i]);
+        if (used + hh > avail) break;
+        used += hh; last = i;
+    }
+    return last;
+}
+// The top row that shows the newest row at the bottom (the FOLLOW position, and the scroll limit).
+static int max_top(int avail)
+{
+    int used = 0, t = s_rown - 1;
+    for (int i = s_rown - 1; i >= 0; i--) {
+        if (used + top_h(i) > avail) break;
+        t = i; used += row_h(&s_row[i]);
+    }
+    return t < 0 ? 0 : t;
+}
+// Resolve the view mode to a top row for this viewport (and remember it: paging starts from there).
+static int view_top(int avail)
+{
+    AnimaSession *S = s_ses;
+    int mt = max_top(avail), t = mt;
+    if (S->vmode == V_ANCHOR) { int a = first_row_of(S->anchor); if (a >= 0 && a < mt) t = a; }
+    else if (S->vmode == V_MANUAL && S->vtop < mt) t = S->vtop;
+    if (t < 0) t = 0;
+    S->vtop = t;
+    return t;
+}
+static void view_set(int t, int avail)
+{
+    int mt = max_top(avail);
+    if (t > mt) t = mt;
+    if (t < 0) t = 0;
+    s_ses->vtop = t; s_ses->vmode = (t >= mt) ? V_FOLLOW : V_MANUAL;   // reaching the end pins the newest row
+    s_d_body = s_d_badge = true;
+}
+// One PAGE (not a row): the rows below / above, keeping the last (first) visible row as context when a
+// page shows 3+ rows. ~40 presses to read 1 KB became ~5.
+static void view_page(int dir, int avail)
+{
+    if (s_rown <= 0) return;
+    int t = view_top(avail), last = last_fit(t, avail), nt;
+    if (dir > 0) nt = (last > t + 1) ? last : last + 1;
+    else {
+        int keep = (last > t + 1) ? t : t - 1;           // the old top ends up as the new page's last row
+        if (keep < 0) keep = 0;
+        nt = keep;
+        for (int i = keep, used = 0; i >= 0; i--) {      // climb while the rows still fit above it
+            if (used + top_h(i) > avail) break;
+            nt = i; used += row_h(&s_row[i]);
+        }
+    }
+    view_set(nt, avail);
+}
+static void view_scroll(int dir, int avail) { if (s_rown > 0) view_set(view_top(avail) + dir, avail); }
+// "p/N" pages of the CURRENT answer when it overflows the viewport. False = it fits, or you are reading
+// older history above it (then only the scrollbar shows where you are). Pages step like view_page.
+static bool answer_pos(int avail, int *p, int *n)
+{
+    if (!s_ses || s_full_idx < 0 || s_rown <= 0) return false;
+    int a = first_row_of(s_full_idx);
+    if (a < 0) return false;
+    int e = a; while (e + 1 < s_rown && s_row[e + 1].mi == s_full_idx) e++;
+    int la = last_fit(a, avail);
+    if (la >= e) return false;                                        // the whole answer fits one page
+    int t = view_top(avail);
+    if (t < a) return false;
+    int vis = la - a + 1, step = vis > 2 ? vis - 1 : vis;
+    int N = 1 + (e - la + step - 1) / step;
+    int P = (last_fit(t, avail) >= e) ? N : 1 + (t - a + step - 1) / step;
+    *p = P < 1 ? 1 : P > N ? N : P; *n = N;
+    return true;
+}
 
 // Push online down to the assistant: master switch on unless Off; online-only when Only.
 static void apply_online_mode(void)
@@ -444,17 +675,16 @@ static void load_settings(void)
             buf[n] = 0;
             cJSON *root = cJSON_Parse(buf);
             if (root) {
-                cJSON *o = cJSON_GetObjectItem(root, "online"), *b = cJSON_GetObjectItem(root, "big"),
-                      *l = cJSON_GetObjectItem(root, "lang");
+                cJSON *o = cJSON_GetObjectItem(root, "online"), *b = cJSON_GetObjectItem(root, "big");
                 if (cJSON_IsString(o))      s_omode = !strcmp(o->valuestring, "off")  ? OM_OFF
                                                     : !strcmp(o->valuestring, "only") ? OM_ONLY : OM_ON;
                 else if (cJSON_IsBool(o))   s_omode = cJSON_IsTrue(o) ? OM_ON : OM_OFF;   // legacy bool
                 if (cJSON_IsBool(b)) s_big = cJSON_IsTrue(b);
-                if (cJSON_IsString(l)) s_en = !strcmp(l->valuestring, "en");
                 cJSON_Delete(root);
             }
         }
     }
+    s_en = nucleo_i18n_is_en();   // ANIMA speaks the OS language (the file's legacy "lang" key is only written back)
     apply_online_mode();
 }
 
@@ -479,6 +709,7 @@ static void save_settings(void)
 // back (and legacy files that already piled several up are cleaned on load), so there is at most one.
 static bool is_session_sep(const Msg *m)
 {
+    if (m->role == R_META && m->accent == MSG_EPHEMERAL) return true;   // next-step hints: display-only too
     if (m->role != R_META || strncmp(m->text, "-- ", 3) != 0) return false;
     size_t n = strlen(m->text);
     return n >= 6 && !strcmp(m->text + n - 3, " --");
@@ -498,9 +729,12 @@ static void save_chat(void)
         int idx = (s_mhead - s_mcount + i + MSG_MAX) % MSG_MAX;
         Msg *m = &s_msg[idx];
         if (is_session_sep(m)) continue;                     // display-only, never persisted
-        uint16_t len = (uint16_t)strlen(m->text);
+        // A tagged answer is stored as "\x1f<tag>\x1f<text>" (same ACH1 record; old files have no tag).
+        const uint16_t tl = (uint16_t)strlen(m->tag), len = (uint16_t)(strlen(m->text) + (tl ? tl + 2 : 0));
         fwrite(&m->role, 1, 1, f); fwrite(&m->col, 1, 2, f); fwrite(&m->accent, 1, 2, f);
-        fwrite(&len, 1, 2, f); fwrite(m->text, 1, len, f);
+        fwrite(&len, 1, 2, f);
+        if (tl) { fputc(0x1f, f); fwrite(m->tag, 1, tl, f); fputc(0x1f, f); }
+        fwrite(m->text, 1, strlen(m->text), f);
     }
     fclose(f);
 }
@@ -518,9 +752,17 @@ static void load_chat(void)
         uint16_t len = 0;
         if (fread(&m->role, 1, 1, f) != 1 || fread(&m->col, 1, 2, f) != 2 ||
             fread(&m->accent, 1, 2, f) != 2 || fread(&len, 1, 2, f) != 2) break;
-        if (len >= MSG_TEXT) len = MSG_TEXT - 1;
-        if (fread(m->text, 1, len, f) != len) break;
-        m->text[len] = 0;
+        char buf[MSG_TEXT + MSG_TAG + 2];
+        const uint16_t rd = len < sizeof buf - 1 ? len : (uint16_t)(sizeof buf - 1);
+        if (fread(buf, 1, rd, f) != rd) break;
+        if (rd < len && fseek(f, len - rd, SEEK_CUR) != 0) break;   // longer than we keep: skip it, stay in sync
+        buf[rd] = 0;
+        const char *tx = buf; m->tag[0] = 0;
+        if (buf[0] == 0x1f) {                                // "\x1f<tag>\x1f<text>": the answer's source tag
+            const char *e = strchr(buf + 1, 0x1f);
+            if (e) { int tl = (int)(e - buf - 1); if (tl > MSG_TAG - 1) tl = MSG_TAG - 1; memcpy(m->tag, buf + 1, tl); m->tag[tl] = 0; tx = e + 1; }
+        }
+        snprintf(m->text, MSG_TEXT, "%s", tx);
         if (is_session_sep(m)) continue;                     // legacy file: drop old separators (slot reused)
         s_mhead = (s_mhead + 1) % MSG_MAX; if (s_mcount < MSG_MAX) s_mcount++;
     }
@@ -543,7 +785,7 @@ static void load_chat(void)
         // Slot libero prima della testa logica: (mhead - mcount - 1) % MSG_MAX
         int slot = (s_mhead - s_mcount - 1 + MSG_MAX * 2) % MSG_MAX;
         Msg *m = &s_msg[slot];
-        m->role = R_META; m->col = DIM; m->accent = 0;
+        m->role = R_META; m->col = K_DIM; m->accent = 0; m->tag[0] = 0;
         snprintf(m->text, MSG_TEXT, "%s", sep);
         s_mcount++;   // il ring ora include il meta come messaggio piu' vecchio
     }
@@ -582,6 +824,24 @@ extern "C" void nucleo_anima_app_ask(const char *q)
     if (!q) return;
     snprintf(s_rtc_preset, sizeof s_rtc_preset, "%s", q);
     s_preset_staged = q[0] != 0;
+}
+
+// "Enter = open <app>" (the other direction). ANIMA Solo registers no other app, so it cannot open one
+// itself: it stages the NATIVE app id in the same RTC no-init slot as the preset question — the magic word
+// says which of the two the slot holds, so this costs zero extra RTC bytes — and reboots into the full OS.
+// There the run loop asks for it ONCE (nucleo_anima_take_launch) and opens it like a launcher tap, so an
+// NX_SOLO app (Music, Video, a game) still gets its own fresh-heap boot with its Wi-Fi/BLE flags.
+// Only our own reboot (ESP_RST_SW) honours it: a crash or a cold power-on (garbage RTC) never opens anything.
+// A stale handoff (an OS without the consumer hook) is cleared by the next ANIMA Solo enter().
+#define ANIMA_LAUNCH_MAGIC 0xA11A0A6Cu
+#define LAUNCH_ID_MAX 16
+extern "C" const char *nucleo_anima_take_launch(void)
+{
+    if (s_rtc_preset_magic != ANIMA_LAUNCH_MAGIC) return nullptr;
+    s_rtc_preset_magic = 0;                                     // consume once, even when refused below
+    if (esp_reset_reason() != ESP_RST_SW) return nullptr;
+    s_rtc_preset[LAUNCH_ID_MAX - 1] = 0;
+    return s_rtc_preset[0] ? s_rtc_preset : nullptr;
 }
 
 // Voce on-device: pronuncia la risposta, MA non la conoscenza (tier remoto/L1/MOSAICO) ne' la
@@ -924,11 +1184,11 @@ static void fill_system_value(const char *arg, char *out, size_t n, bool en)
         else if (ssid && ssid[0])        snprintf(out, n, en ? "connected to \"%s\", IP %s" : "connesso a \"%s\", IP %s", ssid, ip);
         else                             snprintf(out, n, en ? "not connected" : "non connesso");
     } else if (!strcmp(arg, "capabilities")) {
-        // ANIMA Solo: the assistant runs alone (no app launching), so capabilities advertises only the
-        // skills it can actually fulfil here — device readouts, Wi-Fi/network, weather, calendar, the
-        // math/physics solvers, conversions, spreadsheet formulas, the built-in file editor, knowledge.
-        snprintf(out, n, en ? "I can give you time/date/space/RAM/battery, your Wi-Fi/network status, the weather of a city, the time in a world city, manage the calendar, set timers and alarms, work out the weekday of a date, days until a holiday, days in a month or age from a birth year, solve math/physics/geometry/vectors/Ohm, conversions, spreadsheet formulas, create and edit files, and answer about NucleoOS/C/electronics"
-                            : "Posso darti ora/data/spazio/RAM/batteria, lo stato del Wi-Fi/rete, il meteo di una citta, l'ora in una citta del mondo, gestire il calendario, impostare timer e sveglie, calcolare il giorno della settimana di una data, i giorni a una festa o in un mese, l'età da un anno di nascita, risolvere matematica/fisica/geometria/vettori/Ohm, conversioni, formule del foglio di calcolo, creare e modificare file, e rispondere su NucleoOS/C/elettronica");
+        // Capabilities advertises only what ANIMA Solo can actually fulfil: device readouts, Wi-Fi/network,
+        // weather, calendar, the solvers, conversions, spreadsheet formulas, the built-in file editor,
+        // knowledge — and opening a device app (offered as "Enter = open X", then a reboot into the full OS).
+        snprintf(out, n, en ? "I can give you time/date/space/RAM/battery, your Wi-Fi/network status, the weather of a city, the time in a world city, manage the calendar, set timers and alarms, work out the weekday of a date, days until a holiday, days in a month or age from a birth year, solve math/physics/geometry/vectors/Ohm, conversions, spreadsheet formulas, create and edit files, open the device's apps, and answer about NucleoOS/C/electronics"
+                            : "Posso darti ora/data/spazio/RAM/batteria, lo stato del Wi-Fi/rete, il meteo di una citta, l'ora in una citta del mondo, gestire il calendario, impostare timer e sveglie, calcolare il giorno della settimana di una data, i giorni a una festa o in un mese, l'età da un anno di nascita, risolvere matematica/fisica/geometria/vettori/Ohm, conversioni, formule del foglio di calcolo, creare e modificare file, aprire le app del device, e rispondere su NucleoOS/C/elettronica");
     } else if (!strcmp(arg, "agenda") && tm) {
         snprintf(out, n, en ? "you have no events today" : "oggi non hai impegni");
         cal_refresh(false);                              // cached parse: re-read only if the file / day changed
@@ -1059,14 +1319,49 @@ static bool chain_math(const char *in, char *out, size_t n)
 
 static void draw(void);   // fwd: the inline Solo path paints the answer SYNCHRONOUSLY before speaking it
 
-// Turn the just-returned result into transcript messages (and queue a launch if asked).
-static void present_result(void)
+// ---- "open <app>" answers ------------------------------------------------------------------------------
+// Native apps whose launcher name is a proper noun (no row in launcher_app_localized_name's table).
+static const struct { const char *id, *it, *en; } APP_PROPER[] = {
+    { "video", "Video", "Video" },       { "pomodoro", "Pomodoro", "Pomodoro" }, { "ssh", "SSH", "SSH" },
+    { "ble", "BLE", "BLE" },             { "payloads", "Payloads", "Payloads" }, { "ethernet", "Ethernet", "Ethernet" },
+    { "updates", "Aggiornamenti", "Updates" }, { "pong", "Pong", "Pong" },       { "poker", "Poker", "Poker" },
+    { "yahtzee", "Yahtzee", "Yahtzee" }, { "gbemu", "Game Boy", "Game Boy" },    { "anima", "ANIMA", "ANIMA" },
+};
+// The NATIVE launcher id for an ANIMA/registry app id ("media-player" -> "music") and its display name in
+// the OS language, or NULL when the app has no native screen (web-only: paint, spreadsheet, ...).
+static const char *launch_target(const char *arg, char *nm, size_t n)
+{
+    if (!arg || !arg[0]) return nullptr;
+    const char *nat = !strcmp(arg, "settings") ? "wifi" : nucleo_app_native_id(arg);   // native Settings is "wifi"
+    if (!nat || !nat[0]) return nullptr;
+    const char *loc = launcher_app_localized_name(nat);
+    if (loc) { snprintf(nm, n, "%s", loc); return nat; }
+    for (unsigned i = 0; i < sizeof APP_PROPER / sizeof APP_PROPER[0]; i++)
+        if (!strcmp(nat, APP_PROPER[i].id)) { snprintf(nm, n, "%s", s_en ? APP_PROPER[i].en : APP_PROPER[i].it); return APP_PROPER[i].id; }
+    return nullptr;
+}
+
+// The answer's source + time tag: calc (a solver), L0 (command/device readout), L1 (retrieval / reasoning),
+// L2 (MOSAICO stitch), web (the online tiers). The time only when it is worth reading (>= 0.25 s).
+static void make_tag(char *out, size_t n, const anima_result_t &r, int ms)
+{
+    const char *src = r.tier == ANIMA_TIER_NONE ? "" : is_math_intent(r.intent) ? "calc"
+                    : r.tier == ANIMA_TIER_COMMAND ? "L0" : r.tier == ANIMA_TIER_FACT ? "L1"
+                    : r.tier == ANIMA_TIER_STITCH ? "L2" : "web";
+    if (!src[0]) out[0] = 0;                                   // an abstention gets a next step instead
+    else if (ms >= 250) snprintf(out, n, "%s|%d.%d s", src, ms / 1000 % 100, (ms % 1000) / 100);
+    else snprintf(out, n, "%s", src);
+}
+
+// Turn the just-returned result into transcript messages (and queue a launch if asked). `ms` = the turn time.
+static void present_result(int ms)
 {
     char reply[1024];   // pieno fino al cap del motore (s_ses->res.reply[1024]): la risposta corrente si mostra INTERA
     // NB: sullo stack di proposito, NON static — su ADV 1 KB di .bss in piu' spinge httpd_start oltre il filo
     // del rasoio dell'heap di boot (abort loop in main.c). La pressione sullo stack main 8 KB e' un rischio
     // teorico latente (mai un overflow osservato); l'heap di boot e' il vincolo reale. Vedi boot-ram-discipline.
     bool tool_ok = true;            // esito dell'operazione TOOL -> conferma vocale "Fatto"/"Errore"
+    s_ses->launch[0] = 0;           // a new answer supersedes any "Enter = open <app>" offer
     bool _tool_write = s_ses->res.action == ANIMA_ACT_TOOL &&
         (!strcmp(s_ses->res.intent, "add_event") || !strcmp(s_ses->res.intent, "create_file"));
     // PIPELINE SEQUENZIALE (mai operazioni parallele): prima di scrivere il memo su SD, FERMA del tutto
@@ -1097,14 +1392,14 @@ static void present_result(void)
         char *slash = strrchr(dir, '/'); if (slash && slash != dir) { *slash = 0; mkdir(dir, 0775); }
         if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();   // pet il WDT prima del write SD (come apply_event)
         FILE *ex = fopen(path, "rb");
-        if (ex) { fclose(ex); snprintf(reply, sizeof(reply), "%s esiste gia: non lo sovrascrivo.", bn); nucleo_anima_note_file(s_ses->res.arg); nucleo_anima_observe("create_file", true); }
+        if (ex) { fclose(ex); snprintf(reply, sizeof(reply), s_en ? "%s already exists: I won't overwrite it." : "%s esiste gia: non lo sovrascrivo.", bn); nucleo_anima_note_file(s_ses->res.arg); nucleo_anima_observe("create_file", true); }
         else {
             FILE *cf = fopen(path, "wb");
             if (cf) { const char *body = nucleo_anima_tool_content();
-                      if (body && body[0]) { fwrite(body, 1, strlen(body), cf); snprintf(reply, sizeof(reply), "Ho creato %s con il contenuto.", bn); }
-                      else snprintf(reply, sizeof(reply), "Ho creato %s.", bn);
+                      if (body && body[0]) { fwrite(body, 1, strlen(body), cf); snprintf(reply, sizeof(reply), s_en ? "I created %s with the content." : "Ho creato %s con il contenuto.", bn); }
+                      else snprintf(reply, sizeof(reply), s_en ? "I created %s." : "Ho creato %s.", bn);
                       fclose(cf); nucleo_anima_note_file(s_ses->res.arg); nucleo_anima_observe("create_file", true); }
-            else    { snprintf(reply, sizeof(reply), "Non riesco a creare %s.", bn); nucleo_anima_observe("create_file", false); tool_ok = false; }
+            else    { snprintf(reply, sizeof(reply), s_en ? "I can't create %s." : "Non riesco a creare %s.", bn); nucleo_anima_observe("create_file", false); tool_ok = false; }
         }
     } else if (s_ses->res.action == ANIMA_ACT_TOOL &&
                (!strcmp(s_ses->res.intent, "set_volume") || !strcmp(s_ses->res.intent, "set_brightness"))) {
@@ -1140,10 +1435,15 @@ static void present_result(void)
         snprintf(reply, sizeof(reply), s_en ? "Invalid file path." : "Percorso file non valido.");
         nucleo_anima_observe("create_file", false); tool_ok = false;
     } else if (s_ses->res.action == ANIMA_ACT_LAUNCH) {
-        // ANIMA Solo: the assistant runs alone — no other app is loaded, so don't fake a launch.
-        // Esc reboots back into the full OS, where the launcher opens apps. (See ANIMA Solo mode.)
-        snprintf(reply, sizeof(reply), s_en ? "I run alone in Solo mode — press Esc to return to the OS, then open the app from the launcher."
-                                            : "In modalita Solo giro da sola: premi Esc per tornare all'OS, poi apri l'app dal launcher.");
+        // ANIMA Solo hosts no other app, so the answer OFFERS the launch: Enter on the empty line stages the
+        // native id in RTC and reboots into the full OS, which opens it (launch_now / nucleo_anima_take_launch).
+        char nm[32]; const char *nat = launch_target(s_ses->res.arg, nm, sizeof nm);
+        if (nat && !strcmp(nat, "anima")) snprintf(reply, sizeof(reply), "%s", s_en ? "You are already in ANIMA." : "Sei gia' in ANIMA.");
+        else if (nat) {
+            snprintf(s_ses->launch, sizeof s_ses->launch, "%s", nat);
+            snprintf(reply, sizeof(reply), s_en ? "Enter = open %s" : "Invio = apri %s", nm);
+        } else snprintf(reply, sizeof(reply), s_en ? "%s is only in the web OS: open the device's IP in a browser."
+                                                   : "%s c'e' solo nel web OS: apri l'IP del device nel browser.", s_ses->res.arg);
     } else {
         // Show the FULL cloud answer: grok_chat keeps anything over the 360-char on-card clip on the heap
         // overflow channel (nucleo_anima_long_reply); the engine clips s_ses->res.reply to 360. Prefer the overflow
@@ -1170,16 +1470,26 @@ static void present_result(void)
     s_full_idx = -1;                                  // il rebuild dentro push_anima NON deve applicare s_ses->full allo slot vecchio
     push_anima(reply, s_ses->res.awaiting ? AMBER : ACC);  // copia accorciata nel ring (cronologia)
     s_full_idx = (s_mhead - 1 + MSG_MAX) % MSG_MAX;   // marca lo slot appena scritto: mostralo INTERO da s_ses->full
+    s_ses->vmode = V_ANCHOR; s_ses->anchor = (signed char)s_full_idx;   // reader: the answer's FIRST row at the top
+    make_tag(s_msg[s_full_idx].tag, MSG_TAG, s_ses->res, ms);            // "L1 . 0.4 s" at the answer's end
+    snprintf(s_ses->last_tag, sizeof s_ses->last_tag, "%s", s_msg[s_full_idx].tag);
     rebuild_rows();                                   // ri-wrappa quel messaggio dal testo pieno
     if (s_ses->res.corrected[0]) { char c[80]; snprintf(c, sizeof(c), s_en ? "(understood: %s)" : "(ho inteso: %s)", s_ses->res.corrected); push_meta(c, DIM); }
     // Reasoning trace (Claude-Code-style steps): only for genuine multi-step agent turns (those whose
     // trace has a step separator). Single-tier answers stay clean — the badge already shows tier+conf.
     if (strstr(s_ses->res.trace, " > ")) { char tr[120]; snprintf(tr, sizeof(tr), "|_ %s", s_ses->res.trace); push_meta(tr, DIM); }
+    // An honest "I don't know" comes with ONE actionable next step (display-only, never persisted): the
+    // network is up but ANIMA is offline -> fn+/ retries the question online; otherwise -> the IDEE catalog.
+    s_ses->retry_online = false;
+    if (s_ses->res.tier == ANIMA_TIER_NONE && !s_ses->res.awaiting) {
+        const char *ip = nucleo_setup_ip();
+        if (s_omode == OM_OFF && ip && ip[0]) {
+            s_ses->retry_online = true;
+            push_msg(R_META, GRN, MSG_EPHEMERAL, s_en ? "fn / : try online" : "fn / : prova online");
+        } else push_msg(R_META, GRN, MSG_EPHEMERAL, s_en ? "TAB > IDEAS: what I can do" : "TAB > IDEE: cosa so fare");
+    }
 
     s_last_conf = (s_ses->res.action == ANIMA_ACT_NONE) ? -1 : s_ses->res.confidence;
-    s_last_tier = s_ses->res.tier == ANIMA_TIER_COMMAND ? "L0" :
-                  s_ses->res.tier == ANIMA_TIER_FACT    ? "L1" :
-                  s_ses->res.tier == ANIMA_TIER_REMOTE  ? "web" : "";
     snprintf(s_ses->last_subject, sizeof(s_ses->last_subject), "%s", s_ses->res.subject);
     s_awaiting = s_ses->res.awaiting;                  // drives the "rispondi..." input placeholder
     // Calculator chain: remember the number this answer produced so a bare "diviso 32" continues it.
@@ -1203,6 +1513,7 @@ static void present_result(void)
 }
 
 static void clear_chat(void);
+static void ask_clear(void);               // "Clear chat" behind the confirm card (defined with clear_chat)
 static void submit(void);
 static void chat_type(char ch);            // types one char into the chat line (defined with the key handlers)
 static void refresh_complications(void);   // watch-face glance strip; used by clear_chat() above its definition
@@ -1218,6 +1529,22 @@ static void cancel_query(void)
     s_d_hdr = true; s_d_input = true;   // ridipingi la riga input: toglie i puntini "pensa" (anche path NK_DEL)
     nucleo_app_set_hint(chat_hint());   // ripristina il footer normale
     push_meta(s_en ? "(stopped)" : "(annullato)", DIM);
+}
+
+// Enter on the empty line after an "Enter = open <app>" answer: stage the app in RTC and leave. leave() saves
+// the chat, close_app() reboots into the full OS, whose run loop opens the app (nucleo_anima_take_launch).
+static void launch_now(void)
+{
+    char nm[32] = "", t[48];
+    if (!launch_target(s_ses->launch, nm, sizeof nm)) snprintf(nm, sizeof nm, "%s", s_ses->launch);
+    snprintf(s_rtc_preset, sizeof s_rtc_preset, "%s", s_ses->launch);
+    s_rtc_preset_magic = ANIMA_LAUNCH_MAGIC;
+    s_ses->launch[0] = 0;
+    snprintf(t, sizeof t, s_en ? "Opening %s..." : "Apro %s...", nm);
+    s_ses->vmode = V_FOLLOW; push_meta(t, GRN);                // kept in the chat: the history says what happened
+    nucleo_app_set_hint(t); launcher_render_hint_bar();        // the reboot pause reads as intentional
+    draw();
+    nucleo_app_exit();                                         // Solo: saves + esp_restart(), never returns
 }
 
 // Effetto "scrittura" stile GPT/Claude per le risposte ONLINE: rivela la risposta corrente in al massimo
@@ -1239,7 +1566,6 @@ static int typewriter_reveal(void)
     for (int i = 0; i < s_rown; i++)
         if (s_row[i].p >= s_ses->full && s_row[i].p <= s_ses->full + total) { k = i; break; }
     const int step = (total + TW_FRAMES - 1) / TW_FRAMES;   // bytes per frame -> <= TW_FRAMES frames
-    s_typing = true;
     int res = TK_NONE, n = 0;
     while (n < total) {
         n += step; if (n > total) n = total;
@@ -1254,22 +1580,28 @@ static int typewriter_reveal(void)
         if (res != TK_NONE) break;                             // Invio/Esc = STOP; un tasto stampabile pure
         vTaskDelay(pdMS_TO_TICKS(TW_FRAME_MS));
     }
-    s_typing = false;
     s_reveal = -1;
-    if (n < total) {                                           // interrotto: mostra subito il testo pieno
-        if (k >= 0) wrap_ring(k, true); else rebuild_rows();
-        draw();                                                // (il chiamante spegne s_busy + ridipinge input/header)
-    }
+    // Always re-wrap the whole text once more: an interrupted reveal shows the rest at once, and a complete
+    // one gains the answer's source tag (skipped while revealing). The caller paints it right away.
+    if (k >= 0) wrap_ring(k, true); else rebuild_rows();
     return res;
 }
 
+// The online mode's name in the OS language (chat lines, the /info readout, the mode toast, STATO).
+static const char *mode_name(int m)
+{
+    return m == OM_OFF ? "Offline" : m == OM_ONLY ? TR("Solo online", "Online only") : TR("Ibrido", "Hybrid");
+}
+static void push_mode(void)
+{
+    char t[40]; snprintf(t, sizeof t, s_en ? "Mode: %s" : "Modalita: %s", mode_name(s_omode)); push_meta(t, GRN);
+}
 // Quick mode switch: Offline -> Ibrido -> Solo online -> ...
 static void cycle_mode(void)
 {
     s_omode = (s_omode + 1) % 3;
     apply_online_mode(); save_settings();
-    const char *m = s_omode == OM_OFF ? "Offline" : s_omode == OM_ONLY ? "Solo online" : "Ibrido";
-    char t[40]; snprintf(t, sizeof t, "Modalita: %s", m); push_meta(t, GRN);
+    push_mode();
 }
 
 // Cycle the offline L1 brain policy: AUTO -> ON (forced) -> OFF -> AUTO. AUTO already stands L1 down
@@ -1291,10 +1623,11 @@ static void cycle_l1(void)
 static void push_help(void)
 {
     push_meta(s_en ? "Commands:" : "Comandi:", ACC);
-    push_meta("/stop  /modo  /offline  /ibrido  /online", DIM);
-    push_meta("/l1  /cancella  /info  /aiuto", DIM);
+    push_meta(s_en ? "/stop  /mode  /offline  /hybrid  /online" : "/stop  /modo  /offline  /ibrido  /online", DIM);
+    push_meta(s_en ? "/l1  /clear  /info  /help" : "/l1  /cancella  /info  /aiuto", DIM);
     push_meta(s_en ? "/l1: offline brain AUTO/ON/OFF (RAM)" : "/l1: AI offline AUTO/ON/OFF (RAM)", DIM);
-    push_meta(s_en ? "fn ;/. scroll the chat, ctrl ;/. history." : "fn ;/. scorre la chat, ctrl ;/. cronologia.", DIM);
+    push_meta(s_en ? "fn ;/. page the chat, ctrl ;/. history." : "fn ;/. pagina la chat, ctrl ;/. cronologia.", DIM);
+    push_meta(s_en ? "Enter on an empty line: full-screen reader." : "Invio a riga vuota: lettore a schermo pieno.", DIM);
     push_meta(s_en ? "fn /: complete, or switch mode. TAB: menu." : "fn /: completa, o cambia modalita. TAB: menu.", DIM);
     push_meta(s_en ? "Hold G0: push-to-talk. Esc: leave." : "Tieni premuto G0: parla (push-to-talk). Esc: esci.", DIM);
 }
@@ -1302,16 +1635,15 @@ static void push_help(void)
 static void push_info(void)
 {
     char b[64];
-    snprintf(b, sizeof b, "RAM libera: %u KB", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / 1024)); push_meta(b, MUTED);
+    snprintf(b, sizeof b, s_en ? "Free RAM: %u KB" : "RAM libera: %u KB", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / 1024)); push_meta(b, MUTED);
     const char *ssid = nucleo_setup_ssid(), *ip = nucleo_setup_ip();
-    if (ip && ip[0]) snprintf(b, sizeof b, "Rete: %s  %s", (ssid && ssid[0]) ? ssid : "-", ip);
-    else             snprintf(b, sizeof b, "Rete: non connesso");
+    if (ip && ip[0]) snprintf(b, sizeof b, s_en ? "Network: %s  %s" : "Rete: %s  %s", (ssid && ssid[0]) ? ssid : "-", ip);
+    else             snprintf(b, sizeof b, "%s", s_en ? "Network: not connected" : "Rete: non connesso");
     push_meta(b, MUTED);
-    const char *m = s_omode == OM_OFF ? "Offline" : s_omode == OM_ONLY ? "Solo online" : "Ibrido";
     // ANIMA always runs in Solo: every query runs inline on the Solo task (there is no worker).
-    snprintf(b, sizeof b, "Modalita: %s   Worker: inline (Solo)", m); push_meta(b, MUTED);
+    snprintf(b, sizeof b, s_en ? "Mode: %s   Worker: inline (Solo)" : "Modalita: %s   Worker: inline (Solo)", mode_name(s_omode)); push_meta(b, MUTED);
     int l1m = nucleo_anima_l1_get_mode();
-    snprintf(b, sizeof b, "AI offline (L1): %s  (%s)",
+    snprintf(b, sizeof b, s_en ? "Offline AI (L1): %s  (%s)" : "AI offline (L1): %s  (%s)",
              l1m == 1 ? "ON" : l1m == 2 ? "OFF" : "AUTO",
              nucleo_anima_l1_serving() ? (s_en ? "active" : "attiva") : (s_en ? "stood down" : "a riposo"));
     push_meta(b, MUTED);
@@ -1324,11 +1656,11 @@ static bool handle_slash(const char *in)
 {
     push_user(in);
     if      (!strcmp(in, "/stop"))                              cancel_query();
-    else if (!strcmp(in, "/cancella") || !strcmp(in, "/clear")) clear_chat();
-    else if (!strcmp(in, "/offline")) { s_omode = OM_OFF;  apply_online_mode(); save_settings(); push_meta("Modalita: Offline", GRN); }
-    else if (!strcmp(in, "/ibrido"))  { s_omode = OM_ON;   apply_online_mode(); save_settings(); push_meta("Modalita: Ibrido", GRN); }
-    else if (!strcmp(in, "/online"))  { s_omode = OM_ONLY; apply_online_mode(); save_settings(); push_meta("Modalita: Solo online", GRN); }
-    else if (!strcmp(in, "/modo"))    cycle_mode();
+    else if (!strcmp(in, "/cancella") || !strcmp(in, "/clear")) ask_clear();
+    else if (!strcmp(in, "/offline")) { s_omode = OM_OFF;  apply_online_mode(); save_settings(); push_mode(); }
+    else if (!strcmp(in, "/ibrido") || !strcmp(in, "/hybrid")) { s_omode = OM_ON; apply_online_mode(); save_settings(); push_mode(); }
+    else if (!strcmp(in, "/online"))  { s_omode = OM_ONLY; apply_online_mode(); save_settings(); push_mode(); }
+    else if (!strcmp(in, "/modo") || !strcmp(in, "/mode")) cycle_mode();
     else if (!strcmp(in, "/l1"))      cycle_l1();
     else if (!strcmp(in, "/info") || !strcmp(in, "/stato")) push_info();
     else if (!strcmp(in, "/aiuto") || !strcmp(in, "/help")) push_help();
@@ -1343,6 +1675,8 @@ static void submit(void)
     hist_push(s_ses->input);                           // remember the typed line for ctrl+; recall + autocomplete
     s_user_sent = true;                           // first question -> the suggestion deck steps aside
     s_awaiting = false;                           // the user is answering; a new follow-up may re-arm it
+    s_ses->launch[0] = 0;                         // a new line drops any pending "Enter = open <app>"
+    s_ses->retry_online = false;
     if (s_ses->input[0] == '/') {                       // slash-commands run anytime (even while busy, e.g. /stop)
         handle_slash(s_ses->input);
         s_ilen = 0; s_ses->input[0] = 0; s_d_input = true; nucleo_app_request_draw(); return;
@@ -1377,6 +1711,10 @@ static void submit(void)
             vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
+    // The query below blocks this task (no key, no animation) — up to the engine's 12 s network budget when
+    // a cloud tier may answer. Say so in the input row BEFORE freezing, so the still screen is explained.
+    s_ses->cloud_note = nucleo_anima_online_available();
+    if (s_ses->cloud_note) { s_d_input = true; draw(); }
     ESP_LOGW(ATAG, "inline query START online=%d free=%u largest=%u",   // Solo heap margin + connectivity at turn start (WARN so it shows in /api/logs + serial)
              (int)nucleo_anima_online_available(),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
@@ -1385,13 +1723,16 @@ static void submit(void)
     // Built IN PLACE: the ~1.4 KB result is constructed straight into the session block (guaranteed copy
     // elision: the callee writes through the hidden return pointer), never as a temporary in this frame and
     // then copied — that temporary sat on the 26 KB Solo stack for the whole query (TLS included).
+    const int64_t t0 = esp_timer_get_time();
     ::new (static_cast<void *>(&s_ses->res)) anima_result_t(nucleo_anima_query(s_ses->req, s_en ? "en" : "it"));
+    const int turn_ms = (int)((esp_timer_get_time() - t0) / 1000);
+    s_ses->cloud_note = false;
     { const char *lr = nucleo_anima_long_reply();
       ESP_LOGW(ATAG, "inline query DONE tier=%d action=%d stack_hw=%u free=%u reply_len=%u long_len=%u",   // tier 4=REMOTE; reply_len=clip, long_len=full overflow
              (int)s_ses->res.tier, (int)s_ses->res.action, (unsigned)(uxTaskGetStackHighWaterMark(NULL)*sizeof(StackType_t)),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT), (unsigned)strlen(s_ses->res.reply), (unsigned)(lr ? strlen(lr) : 0)); }
     s_ses->carry = 0;
-    present_result();
+    present_result(turn_ms);
     // TEXT BEFORE VOICE: the inline query BLOCKS this UI task, so the launcher loop can't paint until we
     // return — meaning speak_result() (which blocks on TTS) would otherwise be HEARD before the answer is
     // SEEN. Paint it synchronously now (ANIMA is direct-draw), THEN speak. Only an ONLINE answer gets the
@@ -1414,8 +1755,9 @@ static void submit(void)
 static void clear_chat(void)
 {
     nucleo_anima_reset_session();
-    s_mhead = s_mcount = 0; s_rown = 0; s_scroll = 0; s_ilen = 0; s_ses->input[0] = 0;
-    s_last_conf = -1; s_last_tier = ""; s_ses->last_subject[0] = 0;
+    s_mhead = s_mcount = 0; s_rown = 0; s_ilen = 0; s_ses->input[0] = 0;
+    s_full_idx = -1; s_ses->vmode = V_FOLLOW; s_ses->vtop = 0; s_ses->launch[0] = 0; s_ses->retry_online = false;
+    s_last_conf = -1; s_ses->last_tag[0] = 0; s_ses->last_subject[0] = 0;
     s_last_math = false; s_ses->last_num[0] = 0;
     s_user_sent = false; s_sug_sel = 0; s_awaiting = false;   // back to the suggestion deck
     remove(CHAT_PATH);                                        // forget the persisted conversation too
@@ -1423,11 +1765,28 @@ static void clear_chat(void)
     mark_all_dirty();
 }
 
+// "Clear chat" (IA row, /cancella, /clear) is destructive and final — it also deletes the saved chat file —
+// so it asks with the kit's standard confirm card (app_ui_confirm), focus on No: a stray Enter is safe.
+static void ask_clear(void)
+{
+    s_ses->clear_confirm = true; s_ses->clear_yes = false;
+    nucleo_app_set_hint(s_en ? "</> pick   enter ok   esc back" : "</> scegli   invio ok   esc annulla");
+    nucleo_app_request_draw();
+}
+static void menu_hint(void);               // footer hint for the menu (defined with the menu)
+static void clear_confirm_done(bool yes)
+{
+    s_ses->clear_confirm = false;
+    if (yes) { clear_chat(); s_menu_open = false; }       // cleared: back to the welcome deck
+    if (s_menu_open) menu_hint(); else nucleo_app_set_hint(chat_hint());
+    mark_all_dirty(); nucleo_app_request_draw();          // the card leaves: repaint the scene under it
+}
+
 // ---- suggestion deck (empty-state) ------------------------------------------
 // A fresh/cleared chat shows starter prompts that exercise the breadth of ANIMA AND lean on everyday
 // human life: time, weather, Wi-Fi/network, mental math, a calendar reminder, a unit conversion, a
-// percentage (tip/discount), capabilities. fn+;/. pick, Invio runs. (No "open app" prompts: ANIMA Solo
-// runs alone, so app launching was removed — see the LAUNCH handler in present_result.)
+// percentage (tip/discount), capabilities. fn+;/. pick, Invio runs. (No "open app" prompt here on purpose:
+// opening an app leaves ANIMA with a reboot — it lives in IDEE > App e file, one confirm away.)
 #define SUG_N 16   // deck espanso: 16 voci scrollabili (su/giu), copre piu' skill
 static const char *SUG_IT[SUG_N] = {
     "Che ore sono", "Che giorno e oggi", "Meteo a Brescia",
@@ -1474,8 +1833,8 @@ static void hist_recall(int dir)
 // Inline autocomplete (fish-style ghost text): the best single completion of the typed prefix, drawn
 // dimmed after the caret and accepted with fn+/ (a plain '/' just types). Sources, in priority: slash commands,
 // your own history (most recent first), then the starter suggestions. Case-insensitive prefix match.
-static const char *const SLASH_CMDS[] = { "/stop", "/cancella", "/clear", "/offline", "/ibrido",
-                                          "/online", "/modo", "/l1", "/info", "/stato", "/aiuto", "/help" };
+static const char *const SLASH_CMDS[] = { "/stop", "/cancella", "/clear", "/offline", "/ibrido", "/hybrid",
+                                          "/online", "/modo", "/mode", "/l1", "/info", "/stato", "/aiuto", "/help" };
 static bool ready_leaf_complete(const char *pfx, char *out, int cap, int pl);   // scans the ready (slots==0) skills
 static bool autocomplete(const char *pfx, char *out, int cap)
 {
@@ -1503,9 +1862,9 @@ static bool autocomplete(const char *pfx, char *out, int cap)
 // "ask for the numbers instead of inventing 4x4" behaviour). Stored const -> lives in flash, not RAM.
 #define CAT_N 9
 static const char *CAT_IT[CAT_N] = { "Sistema", "Calcolo", "Geometria", "Conversioni", "Meteo",
-                                     "Agenda", "File", "Sapere", "Traduci" };
+                                     "Agenda", "App e file", "Sapere", "Traduci" };
 static const char *CAT_EN[CAT_N] = { "System", "Math", "Geometry", "Conversions", "Weather",
-                                     "Agenda", "Files", "Knowledge", "Translate" };
+                                     "Agenda", "Apps & files", "Knowledge", "Translate" };
 static const char *cat_label(int c) { return (s_en ? CAT_EN : CAT_IT)[c]; }
 
 typedef struct {
@@ -1584,8 +1943,11 @@ static const Leaf LEAVES[] = {
     { 5,1, "Sveglia","Alarm",            "Sveglia alle %s","Alarm at %s",                         "Ora HH:MM","Time HH:MM",0,0 },
     { 5,2, "Promem. domani","Tomorrow",  "Ricordami %s domani alle %s","Remind me %s tomorrow at %s","Cosa","What","Ora HH:MM","Time HH:MM" },
     { 5,2, "Promem. oggi","Today rem.",  "Ricordami %s oggi alle %s","Remind me %s today at %s",  "Cosa","What","Ora HH:MM","Time HH:MM" },
-    // -- File (6): ANIMA's OWN built-in editor (no app launching — see ANIMA Solo: only the assistant
-    // runs, so "apri musica/radio/..." was removed; the quick-note + create-file editor live INSIDE ANIMA).
+    // -- App e file (6): open a device app (the answer offers "Enter = open X": ANIMA reboots into the full
+    // OS, which opens it — see launch_now), then ANIMA's OWN built-in editor (quick note + create file).
+    { 6,1, "Apri app","Open app",        "Apri %s","Open %s",                                     "App es musica","App e.g. music",0,0 },
+    { 6,0, "Musica","Music",             "Apri la musica","Open music",                           0,0,0,0 },
+    { 6,0, "Impostazioni","Settings",    "Apri le impostazioni","Open settings",                  0,0,0,0 },
     // NOTA RAPIDA: sentinella @note in p1 (slots=0) -> activate_leaf apre l'editor con path timestamp
     { 6,0, "Nota rapida","Quick note",   0,0,  "@note",0,  0,0 },
     // EDITOR leaf: slots=1 collects the PATH, then "@editor" (sentinel in p2) opens the full-screen
@@ -1644,7 +2006,6 @@ static void form_build_query(char *out, size_t n, bool preview)
 // "STATUS" = 36px, centred with 6px margins). Localised IT/EN like the rest of the app.
 static const char *const TABS_IT[TAB_N] = { "IDEE", "OGGI", "GUIDA", "IA", "STATO" };
 static const char *const TABS_EN[TAB_N] = { "IDEAS", "TODAY", "GUIDE", "AI", "STATUS" };
-static const char *tab_label(int i) { return (s_en ? TABS_EN : TABS_IT)[i]; }
 // Number of UP/DOWN-navigable rows in a tab. STATO is a read-only readout (0 rows); OGGI is the
 // live agenda length (0 => empty state, DOWN does nothing). s_today_n is the cached agenda count.
 static int tab_rows(int t)
@@ -1683,6 +2044,8 @@ static void menu_key(int key, char ch);       // route a key while the tabbed me
 static void menu_hint(void);                  // footer hint for the current menu tab/row
 static void draw_menu(int ch);                // paint the tabbed menu (tab bar + active tab body)
 static int  list_scroll_y0(int top, int avail, int n, int f);   // natural-scroll layout (used by draw_ia, defined later)
+static void reader_open(void);                // full-screen reader (defined with the painters)
+static void reader_close(void);
 
 // Collapse the IDEE tree back to its category list (called when the menu (re)opens or pages away).
 static void reset_idee(void) { s_idee_cat = -1; s_form_leaf = -1; s_form_slot = 0; s_list_scroll = 0; }
@@ -1717,7 +2080,7 @@ static void enter(void)
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
     nucleo_anima_set_compact_reply(true);   // small screen: cloud answers short & complete (off again in leave)
     load_settings();
-    nucleo_anima_init("it");
+    nucleo_anima_init(nucleo_i18n_lang());          // the OS language, as main.c's boot init (was a hard-coded "it")
     // Clear any "a browser LLM is serving" hint the web app may have left set: when the NATIVE app is
     // foreground the device itself is the brain, so AUTO must decide L1 purely on online-key availability.
     // (An explicit user /l1 ON/OFF override still wins — set_external_brain only affects AUTO.)
@@ -1740,10 +2103,13 @@ static void enter(void)
     if (!s_msg)    s_msg    = (Msg *)calloc(MSG_MAX, sizeof *s_msg);   // ~5 KB transcript ring — heap, not .bss
     if (!s_row)    s_row    = (Row *)calloc(ROW_MAX, sizeof *s_row);   // ~2 KB wrapped-row cache
     load_chat();                                   // restore the last conversation (empty ring if none)
-    s_rown = 0; s_scroll = 0; s_ilen = 0;
+    s_rown = 0; s_ilen = 0; s_full_idx = -1;
+    s_ses->vmode = V_FOLLOW; s_ses->vtop = 0; s_ses->anchor = -1; s_ses->reader = false;   // restored chat: newest row
+    s_ses->launch[0] = 0; s_ses->clear_confirm = false; s_ses->retry_online = false; s_ses->cloud_note = false;
+    s_ses->body_kind = BK_NONE; s_ses->rgen = nucleo_app_repaint_gen(); s_ses->mscene = -1;
     s_ed_open = false; s_ed_len = 0; s_ed_scroll = 0;   // the editor block is allocated only when it opens
     s_busy = false;
-    s_last_conf = -1; s_last_tier = ""; s_ses->last_subject[0] = 0;
+    s_last_conf = -1; s_ses->last_tag[0] = 0; s_ses->last_subject[0] = 0;
     s_user_sent = (s_mcount > 0); s_sug_sel = 0; s_awaiting = false; s_clock_min = -1;
     s_hist_count = 0; s_hist_head = 0; s_hist_nav = -1; s_ses->hist_draft[0] = 0;
     hist_from_chat();                              // fresh Solo boot: recall your own lines from the restored chat
@@ -1787,6 +2153,8 @@ static const char *chat_hint(void)
 {
     if (deck_active()) return s_en ? "fn ;/. pick  1-9 try  fn / mode" : "fn ;/. scegli  1-9 prova  fn / modo";
     if (s_ilen > 0)    return s_en ? "enter send  fn / complete  tab menu" : "invio invia  fn / completa  tab menu";
+    if (s_ses && s_ses->launch[0]) return s_en ? "enter open app  fn ;. page  fn / mode" : "invio apri app  fn ;. pagina  fn / modo";
+    if (s_rown > 0) return s_en ? "enter read  fn ;. page  fn / mode" : "invio leggi  fn ;. pagina  fn / modo";
     return s_en ? "esc exit  fn ;/. scroll  fn / mode" : "esc esci  fn ;/. scorri  fn / modo";
 }
 
@@ -1816,7 +2184,7 @@ static void menu_hint(void)
             else                nucleo_app_set_hint(s_en ? "up/dn  enter send  esc back" : "su giu  invio invia  esc su");
             break;
         case TAB_OGGI:  nucleo_app_set_hint(s_en ? "up/dn scroll   l/r tab"      : "su giu scorri  sx/dx scheda");  break;
-        case TAB_GUIDA: nucleo_app_set_hint(s_en ? "up/dn page  1-8 jump  l/r"   : "su giu pag  1-8  sx/dx sch");   break;
+        case TAB_GUIDA: nucleo_app_set_hint(s_en ? "up/dn page  1-9 jump  l/r"   : "su giu pag  1-9  sx/dx sch");   break;
         case TAB_IA:    nucleo_app_set_hint(s_en ? "up/dn  enter change  l/r tab" : "su giu  invio cambia sx/dx"); break;
         default:        nucleo_app_set_hint(s_en ? "l/r tab   esc close"          : "sx/dx scheda  esc chiudi");
     }
@@ -1826,7 +2194,8 @@ static void menu_hint(void)
 // RIGHT page the tabs). Always opens on IDEE with the tab bar focused, so the first DOWN dives in.
 static void on_tab(void)
 {
-    if (!s_ses || s_ed_open || s_exit_confirm) return;   // no session / the editor / a confirm owns the screen
+    if (!s_ses || s_ed_open || s_exit_confirm || s_ses->clear_confirm) return;   // no session / the editor / a confirm owns the screen
+    reader_close();                                        // TAB from the reader: straight to the menu
     s_menu_open = !s_menu_open;
     if (s_menu_open) { s_tab = TAB_IDEE; s_mrow = -1; s_edit = false; s_sug_sel = 0; reset_idee(); load_today(); menu_hint(); }
     else             { nucleo_app_set_hint(chat_hint()); }
@@ -1851,8 +2220,7 @@ static void chat_type(char ch)
     bool was_deck = deck_active();
     if (s_ilen < A_INMAX - 1) { s_ses->input[s_ilen++] = ch; s_ses->input[s_ilen] = 0; }
     s_hist_nav = -1;
-    if (s_scroll) { s_scroll = 0; s_d_body = true; }
-    chat_changed(was_deck);
+    chat_changed(was_deck);                          // the view stays where you are reading (the input row is always visible)
 }
 static void idee_form_key(int key, char ch);   // defined below (fill-in form keys)
 
@@ -1865,12 +2233,22 @@ static bool on_back(int key)
 {
     if (!s_ses) { if (key == NK_BACK) nucleo_app_exit(); return true; }   // OOM notice: Esc leaves (Solo -> reboot)
     if (s_exit_confirm) { s_exit_confirm = false; mark_all_dirty(); nucleo_app_request_draw(); return true; }  // Esc nel modale = annulla (resta)
+    if (s_ses->clear_confirm) {                             // confirm card: Esc = No, ',' toggles the focus
+        if (key == NK_BACK) clear_confirm_done(false);
+        else { app_ui_confirm_key(NK_LEFT, 0, &s_ses->clear_yes); nucleo_app_request_draw(); }
+        return true;
+    }
     if (s_ed_open) {                                        // editor: the launcher routes ',' (Left) and Esc here
         if (key == NK_LEFT) {                               // ',' -> type a literal comma (textarea isn't comma-blind)
-            if (s_ed_len < ED_BUF_CAP - 1) { s_ed->buf[s_ed_len++] = ','; s_ed->buf[s_ed_len] = 0; nucleo_app_request_draw(); }
+            if (s_ed_len < ED_BUF_CAP - 1) { s_ed->buf[s_ed_len++] = ','; s_ed->buf[s_ed_len] = 0; s_ed->dirty = true; nucleo_app_request_draw(); }
         } else if (s_ed_len > 0) {                          // Esc with text typed: ask before throwing it away
             s_exit_confirm = true; nucleo_app_request_draw();
         } else editor_cancel();                             // Esc on an empty editor: nothing to lose
+        return true;
+    }
+    if (s_ses->reader) {                                    // reader: Esc closes it, ',' (Left) pages back
+        if (key == NK_BACK) reader_close();
+        else { view_page(-1, RD_BODY); nucleo_app_request_draw(); }
         return true;
     }
     if (!s_menu_open) {                                     // chat base + welcome deck
@@ -2075,7 +2453,7 @@ static void editor_open(const char *path)
     while (*path == ' ') path++;
     if (path[0] == '/') snprintf(s_ed->path, sizeof s_ed->path, "%s", path);
     else                snprintf(s_ed->path, sizeof s_ed->path, "/data/%s", path);   // default to /data/
-    s_ed->buf[0] = 0; s_ed_len = 0; s_ed_scroll = 0; s_ed_open = true;
+    s_ed->buf[0] = 0; s_ed_len = 0; s_ed_scroll = 0; s_ed_open = true; s_ed->full = true;
     s_form_leaf = -1; s_menu_open = false; reset_idee();
     nucleo_app_set_hint(s_en ? "Enter=newline  Ctrl+S save  Esc cancel"
                              : "Invio=a capo  Ctrl+S salva  Esc annulla");
@@ -2144,6 +2522,7 @@ static void editor_key(int key, char ch)
     } else if (ch >= 32 && ch < 127) {
         if (s_ed_len < ED_BUF_CAP - 1) { s_ed->buf[s_ed_len++] = ch; s_ed->buf[s_ed_len] = 0; }
     } else return;
+    s_ed->dirty = true;                                   // repaint the text (in place); the blink alone touches only the caret
     nucleo_app_request_draw();
 }
 
@@ -2171,13 +2550,19 @@ static void ia_key(int key)
     else if (key == NK_ENTER) {
         switch (s_mrow) {
             case IA_ONLINE: s_omode = (s_omode + 1) % 3; apply_online_mode(); save_settings(); break;
-            case IA_LANG:   s_en = !s_en; save_settings(); rebuild_rows(); break;   // re-wrap + relabel
-            case IA_TEXT:   s_big = !s_big; save_settings(); rebuild_rows(); break; // re-wrap the transcript
+            case IA_LANG:                                    // the OS language itself (settings.json ui.language)
+                nucleo_i18n_set_en(!s_en); s_en = nucleo_i18n_is_en(); save_settings();
+                if (s_ses->vmode == V_MANUAL) s_ses->vmode = V_FOLLOW;
+                rebuild_rows(); break;                       // re-wrap + relabel
+            case IA_TEXT:                                    // re-wrap the transcript: row indices change
+                s_big = !s_big; save_settings();
+                if (s_ses->vmode == V_MANUAL) s_ses->vmode = V_FOLLOW;
+                rebuild_rows(); break;
             case IA_VOICE:  if (nucleo_tts_available()) nucleo_tts_set_enabled(!nucleo_tts_enabled()); break;
             case IA_SPEED:  s_edit = true; break;            // -> L/R adjust mode (velocita' voce)
             case IA_VOL:    s_edit = true; break;            // -> L/R adjust mode
             case IA_BRI:    s_edit = true; break;
-            case IA_CLEAR:  clear_chat(); s_menu_open = false; nucleo_app_set_hint(chat_hint()); nucleo_app_request_draw(); return;
+            case IA_CLEAR:  ask_clear(); return;           // destructive: the confirm card first
         }
     } else return;
     menu_hint(); nucleo_app_request_draw();
@@ -2221,13 +2606,27 @@ static void cycle_mode_key(void)
 {
     if (deck_active()) { s_omode = (s_omode + 1) % 3; apply_online_mode(); save_settings(); }
     else cycle_mode();
-    static const char *const NM_IT[3] = { "Offline", "Ibrido", "Solo online" };
-    static const char *const NM_EN[3] = { "Offline", "Hybrid", "Online only" };
     char t[40];
-    snprintf(t, sizeof t, s_en ? "Mode: %s  (fn / next)" : "Modo: %s  (fn / cambia)", (s_en ? NM_EN : NM_IT)[s_omode % 3]);
+    snprintf(t, sizeof t, s_en ? "Mode: %s  (fn / next)" : "Modo: %s  (fn / cambia)", mode_name(s_omode));
     nucleo_app_set_hint(t);
     s_toast_until = esp_timer_get_time() + 2500000;         // tick() puts the key hint back after 2.5 s
     s_d_hdr = true; nucleo_app_request_draw();
+}
+
+// fn+/ right after an offline "I don't know" while the network is up: switch to Hybrid and ask the same
+// question again (the next step the answer offered). The header label shows the new mode.
+static void retry_online(void)
+{
+    s_ses->retry_online = false;
+    s_omode = OM_ON; apply_online_mode(); save_settings();
+    push_meta(s_en ? "Mode: Hybrid - asking online" : "Modo: Ibrido - chiedo online", GRN);
+    // Straight into the input line (no local copy: this frame stays on the 26 KB Solo stack for the whole
+    // blocking query). A bounded memmove — the source may be another member of the same session block.
+    const char *h = hist_at(0), *src = h ? h : s_ses->req;
+    size_t L = strlen(src); if (L > A_INMAX - 1) L = A_INMAX - 1;
+    if (!L || src[0] == '/') return;
+    memmove(s_ses->input, src, L); s_ses->input[L] = 0; s_ilen = (int)L;
+    submit();
 }
 
 static void on_key(int key, char ch)
@@ -2245,8 +2644,21 @@ static void on_key(int key, char ch)
         else { mark_all_dirty(); nucleo_app_request_draw(); }   // annulla -> torna alla chat
         return;
     }
+    if (s_ses->clear_confirm) {                             // the confirm card owns every key
+        int r = app_ui_confirm_key(key, ch, &s_ses->clear_yes);
+        if (r >= 0) clear_confirm_done(r == 1); else nucleo_app_request_draw();
+        return;
+    }
     if (s_ed_open)   { editor_key(key, ch); return; }       // the full-screen editor owns every key
     if (s_menu_open) { menu_key(key, ch); return; }
+    if (s_ses->reader) {                                    // reader: no text entry, so the plain arrows page
+        if (key == NK_ENTER || key == NK_DEL) { reader_close(); return; }
+        if (key == NK_UP || key == NK_DOWN || key == NK_RIGHT || ch == ' ') {
+            view_page(key == NK_UP ? -1 : +1, RD_BODY); nucleo_app_request_draw(); return;
+        }
+        if (ch > 32 && ch < 127 && !key_mod()) { reader_close(); chat_type(ch); }   // a letter: back to the chat, typed
+        return;
+    }
 
     // ---- chat + welcome deck. ; . / TYPE (see the header note); the arrow meaning needs a modifier:
     //      fn+; fn+.  scroll the transcript (on the deck: move the pick)
@@ -2261,14 +2673,15 @@ static void on_key(int key, char ch)
         if (was_deck) {
             if (key == NK_UP)   { if (s_sug_sel > 0)         { s_sug_sel--; s_d_body = true; } }
             else                { if (s_sug_sel < SUG_N - 1) { s_sug_sel++; s_d_body = true; } }
-        } else {                                            // su/giu = scorri la conversazione su/giu
-            if (key == NK_UP)   { if (s_scroll < s_rown - 1) { s_scroll++; s_d_body = true; } }
-            else                { if (s_scroll > 0)          { s_scroll--; s_d_body = true; } }
-        }
+        } else if (s_ilen == 0) view_page(key == NK_UP ? -1 : +1, chat_avail());   // empty line: a PAGE per press
+        else                     view_scroll(key == NK_UP ? -1 : +1, chat_avail());  // while typing: a row
         nucleo_app_request_draw(); return;
     }
     if (key == NK_RIGHT && key_mod()) {
-        if (s_ilen == 0) { cycle_mode_key(); return; }
+        if (s_ilen == 0) {
+            if (s_ses->retry_online && s_omode == OM_OFF) retry_online(); else cycle_mode_key();
+            return;
+        }
         char g[HIST_LEN];
         if (autocomplete(s_ses->input, g, sizeof g)) {           // no ghost -> nothing (fn+/ never types a '/')
             snprintf(s_ses->input, sizeof s_ses->input, "%s", g); s_ilen = (int)strlen(s_ses->input);
@@ -2284,8 +2697,12 @@ static void on_key(int key, char ch)
     }
 
     if (key == NK_ENTER) {                                  // Invio mentre elabora = stop (the inline turn polls it itself: turn_key)
+        if (!s_busy && s_ilen == 0) {                        // empty line: open the offered app, else the reader
+            if (s_ses->launch[0]) launch_now(); else reader_open();
+            return;
+        }
         if (s_busy) cancel_query(); else submit();
-        if (!s_busy) nucleo_app_set_hint(chat_hint());      // slash commands / inline turns: line is empty again
+        if (!s_busy && !s_ses->clear_confirm) nucleo_app_set_hint(chat_hint());   // line is empty again (a confirm card keeps its hint)
     }
     else if (key == NK_DEL)  {
         if (s_ilen > 0) { s_ses->input[--s_ilen] = 0; s_hist_nav = -1; chat_changed(was_deck); return; }   // deck returns on the last char
@@ -2300,13 +2717,13 @@ static void on_key(int key, char ch)
 static void tick(void)
 {
     if (!s_ses) return;           // no session block (see enter): static notice, nothing to animate
-    if (s_exit_confirm) return;   // modale uscita statica: niente redraw periodici (era il leggero flicker)
+    if (s_exit_confirm || s_ses->clear_confirm) return;   // a modal is up: static, no periodic redraws
     if (s_toast_until && esp_timer_get_time() >= s_toast_until) {   // mode toast expired -> the key hint returns
         s_toast_until = 0;
         if (!s_menu_open && !s_ed_open && !s_busy) nucleo_app_set_hint(chat_hint());
     }
     if (s_ed_open) { if ((++s_blink & 1) == 0) nucleo_app_request_draw(); return; }   // editor: blink the caret only
-    if (s_menu_open) return;                                                // the menu is up: no chat animation
+    if (s_menu_open || s_ses->reader) return;                               // the menu / the reader: no chat animation
     if (s_busy) { s_spin = (s_spin + 1) & 3; s_d_badge = true; s_d_input = true; nucleo_app_request_draw(); return; }   // anima sia "pensa..." (header) sia "sta scrivendo..." (input)
     time_t now = time(NULL); struct tm *tm = localtime(&now);               // header clock: repaint on a minute change
     int mn = tm ? tm->tm_min : -1;
@@ -2314,26 +2731,42 @@ static void tick(void)
     else if ((++s_blink & 1) == 0 && !deck_active()) nucleo_app_request_draw();  // cursor blink (caret cell only)
 }
 
-// ---- tabbed menu: the Music/Video tab-bar + settings widgets (ported, ANIMA violet) ----------
-// Persistent segmented tab bar across the top 22px. The active tab is a filled ACC capsule with
-// INK text; the rest are MUTED (always readable — never the near-invisible DIM). 240/5 = 48px segs.
+// ---- tabbed menu: the kit's tab strip + settings rows (docs/native-ui-kit.md §3) -------------------
+// The standard app_ui_tabs strip across the top 20px (active = ACC pill + INK, others LINE pills + MUTED);
+// the content starts at 22. It fills its own band, so it is painted only on a menu scene change.
 static void draw_tabbar(int active)
 {
-    d.fillRect(0, 0, 240, 22, BG);
     d.setFont(&fonts::Font0); d.setTextSize(1);
-    const int seg = 240 / TAB_N;                       // 48px per tab
-    for (int i = 0; i < TAB_N; i++) {
-        const char *t = tab_label(i);
-        int x = i * seg, tx = x + (seg - (int)strlen(t) * 6) / 2;
-        if (i == active) {
-            d.fillRoundRect(x + 2, 2, seg - 4, 17, 8, ACC);
-            d.setTextColor(INK, ACC);
-        } else {
-            d.setTextColor(MUTED, BG);
-        }
-        d.setCursor(tx, 7); d.print(t);
-    }
-    d.drawFastHLine(0, 21, 240, LINE);
+    app_ui_tabs(0, s_en ? TABS_EN : TABS_IT, TAB_N, active, ACC);
+    d.fillRect(0, 20, 240, 2, BG);
+}
+// A menu row band [y, y+h): focused = the accent pill (INK content), else BG (MUTED content). It paints the
+// whole band, so repainting one row never needs a clear first; returns the content background.
+static unsigned short row_band(int y, int h, bool focus)
+{
+    if (focus) { pill_band(4, y, 232, h - 2, 9, ACC, 240); d.fillRect(0, y + h - 2, 240, 2, BG); return ACC; }
+    d.fillRect(0, y, 240, h, BG);
+    return BG;
+}
+// Menu lists repaint per ROW: slot k (counted from the first visible row) is repainted only when what it
+// shows changed (row, y, focus, value). A focus move then repaints two rows, not the screen.
+#define MSIG_N 8
+static uint32_t mix(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }
+static bool mrow_dirty(int k, uint32_t sig)
+{
+    sig |= 1u;                                          // 0 = "unknown" (forces a paint)
+    if (k >= MSIG_N) return true;
+    if (s_ses->msig[k] == sig) return false;
+    s_ses->msig[k] = sig;
+    return true;
+}
+// After a list: forget the slots below the last row and clear the band left below it (only when it moved).
+static void mlist_tail(int k, int y, int ch)
+{
+    for (; k < MSIG_N; k++) s_ses->msig[k] = 0;
+    if (y > ch) y = ch;
+    if (y < ch && s_ses->mleft != y) d.fillRect(0, y, 240, ch - y, BG);
+    s_ses->mleft = (short)y;
 }
 
 // One settings row — toggle pill / value chip / slider / action chevron — exactly like Music/Video.
@@ -2342,44 +2775,38 @@ enum { SV_TEXT = 0, SV_TOGGLE, SV_SLIDER, SV_ACTION };
 static void draw_set_row(int y, bool focus, const char *label, const char *val,
                          int kind, bool on, int slider_val)
 {
-    int h = focus ? 46 : 30;
-    d.fillRoundRect(4, y, 232, h - 2, 9, focus ? CAP : BG);
-    if (focus) d.fillRoundRect(4, y + 3, 5, h - 8, 2, ACC);          // accent rail
+    const int h = focus ? 46 : 30;
+    const unsigned short bg = row_band(y, h, focus), ink = focus ? INK : MUTED;
     d.setFont(&fonts::Font0); d.setTextSize(2);
-    d.setTextColor(focus ? FG : MUTED, focus ? CAP : BG);
+    d.setTextColor(ink, bg);
     d.setCursor(16, y + (h - 16) / 2 - 1); d.print(label);
 
-    if (kind == SV_SLIDER) {
+    if (kind == SV_SLIDER) {                                        // track LINE, fill GRN, knob FG
         bool edit = focus && s_edit;
         int sw = focus ? 96 : 60, sh = 12, bx = 230 - sw, vy = y + (h - sh) / 2;
-        d.fillRoundRect(bx, vy, sw, sh, sh / 2, SURF);
+        d.fillRoundRect(bx, vy, sw, sh, sh / 2, LINE);
         int onw = slider_val * sw / 100; if (onw < 0) onw = 0; if (onw > sw) onw = sw;
         if (onw > 0) d.fillRoundRect(bx, vy, onw, sh, sh / 2, GRN);
         int kx = bx + onw; if (kx < bx + 6) kx = bx + 6; if (kx > bx + sw - 6) kx = bx + sw - 6;
         d.fillCircle(kx, vy + sh / 2, edit ? sh / 2 + 2 : sh / 2 + 1, FG);
-        if (edit) d.drawRoundRect(bx - 2, vy - 2, sw + 4, sh + 4, (sh + 4) / 2, ACC);
+        if (edit) d.drawRoundRect(bx - 2, vy - 2, sw + 4, sh + 4, (sh + 4) / 2, INK);
         return;
     }
     if (kind == SV_TOGGLE) {
         int sw = 42, sh = 20, bx = 230 - sw, vy = y + (h - sh) / 2;
-        d.fillRoundRect(bx, vy, sw, sh, sh / 2, on ? GRN : SURF);
+        d.fillRoundRect(bx, vy, sw, sh, sh / 2, on ? GRN : LINE);
         int kx = on ? bx + sw - sh / 2 - 1 : bx + sh / 2 + 1;
-        d.fillCircle(kx, vy + sh / 2, sh / 2 - 3, on ? INK : MUTED);
+        d.fillCircle(kx, vy + sh / 2, sh / 2 - 3, on ? INK : FG);
         return;
     }
-    if (kind == SV_ACTION) {
-        int bw = 28, bh = 22, bx = 230 - bw, vy = y + (h - bh) / 2;
-        d.fillRoundRect(bx, vy, bw, bh, 6, focus ? ACC : SURF);
-        unsigned short ar = focus ? INK : MUTED;
-        int ax = bx + bw / 2 - 2, ay = vy + bh / 2;
-        d.fillTriangle(ax, ay - 4, ax, ay + 4, ax + 4, ay, ar);     // chevron
+    if (kind == SV_ACTION) {                                        // a chevron: Enter acts
+        int ax = 214, ay = y + h / 2;
+        d.fillTriangle(ax, ay - 5, ax, ay + 5, ax + 6, ay, ink);
         return;
     }
-    if (val && val[0]) {                                            // SV_TEXT value chip
-        int vw = (int)strlen(val) * 12 + 14, vh = 22, bx = 230 - vw, vy = y + (h - vh) / 2;
-        if (focus) d.fillRoundRect(bx, vy, vw, vh, 6, SURF);
-        d.setTextColor(focus ? FG : MUTED, focus ? SURF : BG);
-        d.setCursor(bx + 7, vy + 3); d.print(val);
+    if (val && val[0]) {                                            // SV_TEXT value, right-aligned
+        d.setTextColor(ink, bg);
+        d.setCursor(228 - (int)strlen(val) * 12, y + (h - 16) / 2 - 1); d.print(val);
     }
 }
 
@@ -2390,9 +2817,10 @@ static int build_ia(IAItem *it)
 {
     memset(it, 0, sizeof(IAItem) * IA_ROWS);
     it[IA_ONLINE].label = "Online"; it[IA_ONLINE].kind = SV_TEXT;
-    snprintf(it[IA_ONLINE].val, 14, "%s", s_omode == OM_OFF ? "Off" : s_omode == OM_ONLY ? "Solo" : "On");
-    it[IA_LANG].label = s_en ? "Lang" : "Lingua"; it[IA_LANG].kind = SV_TEXT;
-    snprintf(it[IA_LANG].val, 14, "%s", s_en ? "EN" : "IT");
+    snprintf(it[IA_ONLINE].val, 14, "%s", s_omode == OM_OFF ? "Off" : s_omode == OM_ONLY ? TR("Solo", "Only") : "On");
+    it[IA_LANG].label = s_en ? "Lang" : "Lingua"; it[IA_LANG].kind = SV_TEXT;   // the OS language (Enter: IT <-> EN)
+    snprintf(it[IA_LANG].val, 14, "%.2s", nucleo_i18n_lang());
+    for (char *c = it[IA_LANG].val; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
     it[IA_TEXT].label = s_en ? "Text" : "Testo"; it[IA_TEXT].kind = SV_TEXT;
     snprintf(it[IA_TEXT].val, 14, "%s", s_big ? (s_en ? "Big" : "Grande") : (s_en ? "Small" : "Piccolo"));
     it[IA_VOICE].label = s_en ? "Voice" : "Voce"; it[IA_VOICE].kind = SV_TOGGLE;
@@ -2408,13 +2836,14 @@ static int build_ia(IAItem *it)
 
 // Word-wrap `text` (honouring '\n') from (x,y) within maxw px and render it. Returns the y after the
 // last line. Shared by the manual; measures with the chosen font so it never clips on either language.
+static void wline(int x, int y, int lineh, const char *t, unsigned short col) { box_text(0, y, 240, lineh, x, y, t, col, BG); }
 static int draw_wrapped(const char *text, int x, int y, int maxw, unsigned char font, unsigned short col, int lineh)
 {
-    set_font(font); d.setTextColor(col, BG);
+    set_font(font);
     char t[120];
     const char *ls = text, *p = text;
     while (*p) {
-        if (*p == '\n') { int n = (int)(p - ls); if (n > 119) n = 119; memcpy(t, ls, n); t[n] = 0; d.setCursor(x, y); d.print(t); y += lineh; p++; ls = p; continue; }
+        if (*p == '\n') { int n = (int)(p - ls); if (n > 119) n = 119; memcpy(t, ls, n); t[n] = 0; wline(x, y, lineh, t, col); y += lineh; p++; ls = p; continue; }
         if (*p == ' ' && p == ls) { p++; ls = p; continue; }
         const char *we = p; while (*we == ' ') we++; while (*we && *we != ' ' && *we != '\n') we++;
         if (meas(ls, (int)(we - ls)) <= maxw) { p = we; continue; }
@@ -2425,22 +2854,22 @@ static int draw_wrapped(const char *text, int x, int y, int maxw, unsigned char 
                 while (q + take <= we && meas(q, take) <= maxw) take++;
                 take--;
                 if (take < 1) take = 1;
-                int n = take; memcpy(t, q, n); t[n] = 0; d.setCursor(x, y); d.print(t); y += lineh; q += take;
+                int n = take; memcpy(t, q, n); t[n] = 0; wline(x, y, lineh, t, col); y += lineh; q += take;
             }
             ls = we; p = we;
         } else {
-            int n = (int)(p - ls); if (n > 119) n = 119; memcpy(t, ls, n); t[n] = 0; d.setCursor(x, y); d.print(t); y += lineh;
+            int n = (int)(p - ls); if (n > 119) n = 119; memcpy(t, ls, n); t[n] = 0; wline(x, y, lineh, t, col); y += lineh;
             while (*p == ' ') p++;
             ls = p;
         }
     }
-    if (p > ls) { int n = (int)(p - ls); if (n > 119) n = 119; memcpy(t, ls, n); t[n] = 0; d.setCursor(x, y); d.print(t); y += lineh; }
+    if (p > ls) { int n = (int)(p - ls); if (n > 119) n = 119; memcpy(t, ls, n); t[n] = 0; wline(x, y, lineh, t, col); y += lineh; }
     return y;
 }
 
 // ---- the navigable manual (GUIDA tab) ---------------------------------------
 // A smartwatch-style card carousel: one topic per card, a BIG bold title + a few BIG FreeSans lines,
-// with page dots at the foot showing position. UP/DOWN flip cards, 1-8 jump. Content is hand-verified
+// with page dots at the foot showing position. UP/DOWN flip cards, 1-9 jump. Content is hand-verified
 // against the real app (no invented features) and each body is hand-fit to <=3 short lines so the big
 // type always clears the 240x99 body region — no clipped text.
 typedef struct { const char *title, *body; } GuidePage;
@@ -2448,9 +2877,10 @@ typedef struct { const char *title, *body; } GuidePage;
 // (~9-11px/char, 224px budget) and every card is <=3 lines — fits below the title rule, above the dots.
 static const GuidePage GUIDE_IT[GUIDE_N] = {
     { "ANIMA",         "Assistente offline.\nScrivi e premi Invio.\nVa anche senza rete." },
-    { "Tasti",         "fn ;/.  scorri la chat\nctrl ;/.  cronologia\nfn /  completa, modo" },
+    { "Tasti",         "fn ;/.  pagina la chat\nctrl ;/.  cronologia\nfn /  completa, modo" },
+    { "Lettura",       "Invio a riga vuota:\nlettore a schermo\npieno, ;/. pagina." },
     { "Menu",          "TAB apre il menu.\nInvio apri, Esc su.\nDx/Sx cambia scheda." },
-    { "Cosa chiedere", "Ora, meteo, calcoli,\npromemoria, traduzioni.\n\"Apri Musica\" e altro." },
+    { "Cosa chiedere", "Ora, meteo, calcoli,\npromemoria, traduzioni.\n\"Apri Musica\" + Invio." },
     { "IDEE",          "Catalogo di cio' che\nso fare. Invio entra.\n\"...\" chiede i dati." },
     { "Modalita",      "Offline: solo qui.\nIbrido: poi il cloud.\nSolo online: cloud." },
     { "Solo online",   "Usa un LLM nel cloud.\nServe Wi-Fi e una\nchiave API (da web)." },
@@ -2458,9 +2888,10 @@ static const GuidePage GUIDE_IT[GUIDE_N] = {
 };
 static const GuidePage GUIDE_EN[GUIDE_N] = {
     { "ANIMA",         "Offline assistant.\nType and press Enter.\nWorks with no network." },
-    { "Keys",          "fn ;/.  scroll the chat\nctrl ;/.  history\nfn /  complete, mode" },
+    { "Keys",          "fn ;/.  page the chat\nctrl ;/.  history\nfn /  complete, mode" },
+    { "Reading",       "Enter on empty line:\nfull-screen reader,\n;/. flips pages." },
     { "Menu",          "TAB opens the menu.\nEnter opens, Esc back.\nLeft/Right switch tab." },
-    { "What to ask",   "Time, weather, math,\nreminders, translate.\n\"Open Music\" and more." },
+    { "What to ask",   "Time, weather, math,\nreminders, translate.\n\"Open Music\" + Enter." },
     { "IDEAS",         "Catalog of all I\ncan do. Enter to open.\n\"...\" asks for input." },
     { "Modes",         "Offline: device only.\nHybrid: then cloud.\nOnline: cloud only." },
     { "Online only",   "Uses a cloud LLM.\nNeeds Wi-Fi and an\nAPI key (from web)." },
@@ -2473,15 +2904,21 @@ static void draw_guide(int ch)
 {
     int pg = s_mrow < 0 ? 0 : s_mrow;
     if (pg >= GUIDE_N) pg = GUIDE_N - 1;
+    if (!s_ses->mfull && s_ses->mpage == pg) return;     // same card on the panel: nothing to repaint
+    s_ses->mpage = (short)pg;
     const GuidePage *g = (s_en ? GUIDE_EN : GUIDE_IT) + pg;
-    set_font(F_BOLD); d.setTextColor(ACC, BG); d.setCursor(8, 22); d.print(g->title);   // big bold title (was a tiny 6x8)
+    set_font(F_BOLD);                                     // big bold title (was a tiny 6x8), painted in place
+    box_text(0, 22, 240, 21, 8, 22, g->title, ACC, BG);
     d.drawFastHLine(8, 43, 224, LINE);
     d.setClipRect(0, 45, 240, ch - 53);                  // body band, kept clear of the title and the dots
-    draw_wrapped(g->body, 8, 47, 224, F_BIG, FG, 18);    // big anti-aliased FreeSans body
+    int by = draw_wrapped(g->body, 8, 47, 224, F_BIG, FG, 18);   // big anti-aliased FreeSans body
     d.clearClipRect();
+    if (by < ch - 8) d.fillRect(0, by, 240, ch - 8 - by, BG);
     int gap = 14, span = (GUIDE_N - 1) * gap, x0 = 120 - span / 2, dy = ch - 6;          // carousel page dots
-    for (int i = 0; i < GUIDE_N; i++)
+    for (int i = 0; i < GUIDE_N; i++) {
+        d.fillRect(x0 + i * gap - 3, dy - 3, 7, 7, BG);  // a dot's own 7x7 box: the only thing that clears
         d.fillCircle(x0 + i * gap, dy, i == pg ? 3 : 2, i == pg ? ACC : MUTED);
+    }
     d.setFont(&fonts::Font0); d.setTextSize(1);          // leave the global font at the framework default
 }
 
@@ -2493,14 +2930,19 @@ static void draw_ia(int ch)
     IAItem it[IA_ROWS]; int n = build_ia(it);
     const int top = 24, f = s_mrow;
     d.setClipRect(0, 22, 240, ch - 22);
-    int yy = list_scroll_y0(top, ch - top, n, f);
+    int yy = list_scroll_y0(top, ch - top, n, f), k = 0;
     for (int i = 0; i < n; i++) {
         int hh = (i == f) ? 46 : 30;
-        if (yy + hh > 22 && yy < ch)
-            draw_set_row(yy, i == f, it[i].label, it[i].val, it[i].kind, it[i].on, it[i].slider);
+        if (yy + hh > 22 && yy < ch) {
+            uint32_t sg = mix(mix(mix(mix(2166136261u, 0x1A00u + i), ((uint32_t)yy << 2) | (i == f) | ((i == f && s_edit) << 1)),
+                                  (uint32_t)(it[i].slider * 2 + it[i].on)), (uint32_t)(it[i].val[0] | it[i].val[1] << 8 | it[i].val[2] << 16));
+            if (mrow_dirty(k, sg)) draw_set_row(yy, i == f, it[i].label, it[i].val, it[i].kind, it[i].on, it[i].slider);
+            k++;
+        }
         yy += hh;
     }
     d.clearClipRect();
+    mlist_tail(k, yy, ch);
 }
 
 // ---- STATO tab: read-only on-device diagnostics -----------------------------
@@ -2535,7 +2977,7 @@ static void draw_stato(int ch)
     const char *ssid = nucleo_setup_ssid(), *ip = nucleo_setup_ip();
     if (ip && ip[0]) snprintf(v, sizeof v, "%s", ip);
     else             snprintf(v, sizeof v, "%s", s_en ? "offline" : "non conn.");
-    stato_row(y, "Rete", v, (ip && ip[0]) ? GRN : MUTED);
+    stato_row(y, TR("Rete", "Net"), v, (ip && ip[0]) ? GRN : MUTED);
     if (ip && ip[0] && ssid && ssid[0]) {                                // SSID as a small grey tag, right-aligned
         char sb[18]; snprintf(sb, sizeof sb, "%.16s", ssid);
         d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(DIM, BG);
@@ -2543,8 +2985,8 @@ static void draw_stato(int ch)
     }
     y += step;
 
-    const char *m = s_omode == OM_OFF ? "Offline" : s_omode == OM_ONLY ? (s_en ? "Online" : "Solo online") : (s_en ? "Hybrid" : "Ibrido");
-    snprintf(v, sizeof v, "%s  %s", m, s_en ? "EN" : "IT");
+    char lc[4]; snprintf(lc, sizeof lc, "%.2s", nucleo_i18n_lang()); for (char *c = lc; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
+    snprintf(v, sizeof v, "%s  %s", mode_name(s_omode), lc);
     // Plain FG: the old "amber if no worker" was a permanent false alarm — ANIMA always runs in Solo, where
     // queries run inline and a worker never exists.
     stato_row(y, s_en ? "Mode" : "Modo", v, FG); y += step;
@@ -2555,8 +2997,10 @@ static void draw_stato(int ch)
     snprintf(v, sizeof v, s_en ? "%s  %d ev" : "%s  %d oggi", ut, s_today_count);
     stato_row(y, s_en ? "On" : "Acceso", v, FG); y += step;
 
-    if (s_last_tier[0] && y <= ymax) {                                   // last answer's tier + confidence
-        snprintf(v, sizeof v, "%s  %d%%", s_last_tier, s_last_conf < 0 ? 0 : s_last_conf);
+    if (s_ses->last_tag[0] && y <= ymax) {                               // last answer's source + time + confidence
+        char tg[MSG_TAG]; snprintf(tg, sizeof tg, "%s", s_ses->last_tag);
+        char *bar = strchr(tg, '|'); if (bar) *bar = ' ';
+        snprintf(v, sizeof v, "%s  %d%%", tg, s_last_conf < 0 ? 0 : s_last_conf);
         stato_row(y, s_en ? "Last" : "Ultima", v, ACC); y += step;
     }
 }
@@ -2575,21 +3019,6 @@ static void fit_w(char *s, int budget)
     }
     int n = (int)strlen(s);                                       // pathologically narrow budget: hard clip
     while (n > 0 && (int)d.textWidth(s) > budget) s[--n] = 0;
-}
-
-// Focused list-row look, shared by the suggestion deck / IDEE / OGGI lists so a selected line reads
-// like the settings rows (a raised CAP capsule + violet rail + bright FG text) instead of the old
-// flat violet capsule with hard-to-read black text. Sets the text colour for the row; callers print
-// the label at x>=12 so it clears the rail. `unfocused_col` is the normal (non-selected) text colour.
-static void list_row_focus(int y, int rh, bool foc, unsigned short unfocused_col)
-{
-    if (foc) {
-        d.fillRoundRect(4, y - 1, 232, rh, 6, CAP);     // raised capsule, softened to match the IA settings rows
-        d.fillRoundRect(6, y + 1, 3, rh - 4, 1, ACC);   // violet accent rail, rounded ends (parity with draw_set_row)
-        d.setTextColor(FG, CAP);
-    } else {
-        d.setTextColor(unfocused_col, BG);
-    }
 }
 
 // ---- IDEE tab: the skill catalog, a smartwatch-style drill-down -------------
@@ -2634,59 +3063,45 @@ static void draw_cat_icon(int c, int x, int y, unsigned short col)
     }
 }
 
-// Slim scroll rail on the right when a list overflows the viewport (the watch "there's more" cue).
-static void draw_list_scroll(int ty0, int avail, int total, int first, int shown)
-{
-    if (shown >= total) return;
-    int th = avail * shown / total; if (th < 8) th = 8;
-    int tyo = (total > shown) ? first * (avail - th) / (total - shown) : 0;
-    d.drawFastVLine(237, ty0, avail, LINE);
-    d.fillRect(236, ty0 + tyo, 3, th, MUTED);
-}
-
-// One category row, framed like an IA settings row: CAP capsule + ACC rail when focused. A subtle
+// One category row, framed like an IA settings row: the ACC pill (INK content) when focused. A subtle
 // quick-pick index (1-9) on the far left, the identity glyph, the big size-2 label, and on the right a
 // small leaf-count badge + the drill chevron. Everything is vertically centred for either row height.
 static void draw_cat_row(int y, bool focus, int i)
 {
-    int h = focus ? 46 : 30;
-    d.fillRoundRect(4, y, 232, h - 2, 9, focus ? CAP : BG);
-    if (focus) d.fillRoundRect(4, y + 3, 5, h - 8, 2, ACC);                  // accent rail
-    unsigned short bg = focus ? CAP : BG, ink = focus ? FG : MUTED;
+    const int h = focus ? 46 : 30;
+    const unsigned short bg = row_band(y, h, focus), ink = focus ? INK : MUTED;
     int cy = y + h / 2, ty = y + (h - 16) / 2;
     char num[4]; snprintf(num, sizeof num, "%d", i + 1);                     // quick-pick index, subtle
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(focus ? MUTED : DIM, bg);
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(focus ? INK : DIM, bg);
     d.setCursor(11, cy - 3); d.print(num);
-    draw_cat_icon(i, 22, ty, focus ? ACC : MUTED);                          // identity glyph
+    draw_cat_icon(i, 22, ty, ink);                                           // identity glyph
     d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(ink, bg);     // big label
     char line[40]; snprintf(line, sizeof line, "%s", cat_label(i));
     fit_w(line, 150);                                                        // ".." if longer; room for badge + chevron
     d.setCursor(44, ty - 1); d.print(line);
     char cnt[6]; snprintf(cnt, sizeof cnt, "%d", cat_leaf_count(i));         // leaf-count badge, right of the label
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(focus ? FG : MUTED, bg);
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(ink, bg);
     d.setCursor(206 - (int)strlen(cnt) * 6, cy - 3); d.print(cnt);
-    d.fillTriangle(222, cy - 4, 222, cy + 4, 227, cy, focus ? ACC : MUTED);  // drill chevron
+    d.fillTriangle(222, cy - 4, 222, cy + 4, 227, cy, ink);                  // drill chevron
 }
 
 // One leaf row, framed like an IA settings row: a subtle quick-pick index on the left, the big size-2
 // label, and — for leaves that open a fill-in form — a "..." badge on the right (the "needs input" cue).
 static void draw_leaf_row(int y, bool focus, int c, int i)
 {
-    int h = focus ? 46 : 30;
-    d.fillRoundRect(4, y, 232, h - 2, 9, focus ? CAP : BG);
-    if (focus) d.fillRoundRect(4, y + 3, 5, h - 8, 2, ACC);
+    const int h = focus ? 46 : 30;
     const Leaf *L = &LEAVES[cat_leaf_at(c, i)];
-    unsigned short bg = focus ? CAP : BG, ink = focus ? FG : MUTED;
+    const unsigned short bg = row_band(y, h, focus), ink = focus ? INK : MUTED;
     bool form = L->slots > 0;
     int cy = y + h / 2, ty = y + (h - 16) / 2;
     char num[4]; snprintf(num, sizeof num, "%d", i + 1);                     // quick-pick index, subtle
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(focus ? MUTED : DIM, bg);
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(focus ? INK : DIM, bg);
     d.setCursor(11, cy - 3); d.print(num);
     d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(ink, bg);     // big label
     char line[44]; snprintf(line, sizeof line, "%s", s_en ? L->l_en : L->l_it);
     fit_w(line, form ? 152 : 188);                                           // ".." if longer; room for the form badge
     d.setCursor(34, ty - 1); d.print(line);
-    if (form) { d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(focus ? ACC : MUTED, bg);
+    if (form) { d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(ink, bg);
                 d.setCursor(202, ty - 1); d.print("..."); }
 }
 
@@ -2713,13 +3128,17 @@ static void draw_idee_cats(int ch)
 {
     const int top = 24, f = s_mrow;
     d.setClipRect(0, 22, 240, ch - 22);
-    int yy = list_scroll_y0(top, ch - top, CAT_N, f);
+    int yy = list_scroll_y0(top, ch - top, CAT_N, f), k = 0;
     for (int i = 0; i < CAT_N; i++) {
         int hh = (i == f) ? 46 : 30;
-        if (yy + hh > 22 && yy < ch) draw_cat_row(yy, i == f, i);
+        if (yy + hh > 22 && yy < ch) {
+            if (mrow_dirty(k, mix(mix(2166136261u, 0xC000u + i), ((uint32_t)yy << 1) | (i == f)))) draw_cat_row(yy, i == f, i);
+            k++;
+        }
         yy += hh;
     }
     d.clearClipRect();
+    mlist_tail(k, yy, ch);
 }
 
 // Leaves of the open category: a slim "[icon] < Category   N" breadcrumb, then the same naturally-
@@ -2727,23 +3146,28 @@ static void draw_idee_cats(int ch)
 static void draw_idee_leaves(int ch)
 {
     int c = s_idee_cat, n = cat_leaf_count(c);
-    draw_cat_icon(c, 6, 22, ACC);                 // breadcrumb icon carries the category identity down
-    d.setFont(&fonts::Font0); d.setTextSize(1);
-    char hd[40]; snprintf(hd, sizeof hd, "< %s", cat_label(c));
-    d.setTextColor(ACC, BG); d.setCursor(28, 27); d.print(hd);
-    char cc[6]; snprintf(cc, sizeof cc, "%d", n);
-    d.setTextColor(MUTED, BG); d.setCursor(232 - (int)strlen(cc) * 6, 27); d.print(cc);
-    d.drawFastHLine(8, 40, 224, LINE);
-
+    if (s_ses->mfull) {                           // the breadcrumb is static for the whole scene
+        draw_cat_icon(c, 6, 22, ACC);             // breadcrumb icon carries the category identity down
+        d.setFont(&fonts::Font0); d.setTextSize(1);
+        char hd[40]; snprintf(hd, sizeof hd, "< %s", cat_label(c));
+        d.setTextColor(ACC, BG); d.setCursor(28, 27); d.print(hd);
+        char cc[6]; snprintf(cc, sizeof cc, "%d", n);
+        d.setTextColor(MUTED, BG); d.setCursor(232 - (int)strlen(cc) * 6, 27); d.print(cc);
+        d.drawFastHLine(8, 40, 224, LINE);
+    }
     const int top = 44, f = s_mrow;
     d.setClipRect(0, 42, 240, ch - 42);
-    int yy = list_scroll_y0(top, ch - top, n, f);
+    int yy = list_scroll_y0(top, ch - top, n, f), k = 0;
     for (int i = 0; i < n; i++) {
         int hh = (i == f) ? 46 : 30;
-        if (yy + hh > 42 && yy < ch) draw_leaf_row(yy, i == f, c, i);
+        if (yy + hh > 42 && yy < ch) {
+            if (mrow_dirty(k, mix(mix(2166136261u, 0x1E00u + i), ((uint32_t)yy << 1) | (i == f)))) draw_leaf_row(yy, i == f, c, i);
+            k++;
+        }
         yy += hh;
     }
     d.clearClipRect();
+    mlist_tail(k, yy, ch);
 }
 
 // The fill-in form, redesigned as a full-screen FOCUS wizard (one field at a time, BIG type): a slim
@@ -2754,51 +3178,69 @@ static void draw_idee_form(int ch)
 {
     const Leaf *L = &LEAVES[s_form_leaf];
     int s = s_form_slot;
+    const int bx = 8, bw = 224, by = 64, bh = 38;
 
-    // -- breadcrumb: icon + "Cat > Leaf" (left), step dots (right) --
-    draw_cat_icon(L->cat, 6, 22, ACC);
-    d.setFont(&fonts::Font0); d.setTextSize(1);
-    char hd[52]; snprintf(hd, sizeof hd, "%s > %s", cat_label(L->cat), s_en ? L->l_en : L->l_it);
-    while (hd[0] && (int)d.textWidth(hd) > 150) hd[strlen(hd) - 1] = 0;
-    d.setTextColor(ACC, BG); d.setCursor(28, 27); d.print(hd);
-    if (L->slots > 1) {                                          // step dots only matter for multi-field forms
+    // -- breadcrumb: icon + "Cat > Leaf" (left) + the value box frame: static for the whole form --
+    if (s_ses->mfull) {
+        draw_cat_icon(L->cat, 6, 22, ACC);
+        d.setFont(&fonts::Font0); d.setTextSize(1);
+        char hd[52]; snprintf(hd, sizeof hd, "%s > %s", cat_label(L->cat), s_en ? L->l_en : L->l_it);
+        while (hd[0] && (int)d.textWidth(hd) > 150) hd[strlen(hd) - 1] = 0;
+        d.setTextColor(ACC, BG); d.setCursor(28, 27); d.print(hd);
+        d.drawFastHLine(8, 40, 224, LINE);
+        d.drawRoundRect(bx, by, bw, bh, 8, ACC); d.drawRoundRect(bx + 1, by + 1, bw - 2, bh - 2, 7, ACC);   // the active field
+        d.fillRect(bx + 4, by + 5, 4, bh - 10, ACC);            // active rail
+    }
+    // -- step "n/N" + dots (multi-field forms): a fixed field and each dot's own box --
+    if (L->slots > 1) {
         char sp[12]; snprintf(sp, sizeof sp, "%d/%d", s + 1, L->slots);
-        d.setTextColor(MUTED, BG); d.setCursor(186, 27); d.print(sp);
+        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(186, 27); d.print(sp);
         for (int i = 0; i < L->slots; i++) {
             int dx = 224 - (L->slots - 1 - i) * 11, dy = 30;
+            d.fillRect(dx - 4, dy - 4, 9, 9, BG);
             if      (i <  s) d.fillCircle(dx, dy, 3, GRN);
             else if (i == s) d.fillCircle(dx, dy, 4, ACC);
             else             d.drawCircle(dx, dy, 3, MUTED);
         }
     }
-    d.drawFastHLine(8, 40, 224, LINE);
-
-    // -- BIG question label (this slot's field) --
+    // -- BIG question label (this slot's field), opaque in its band --
     const char *pl = (s == 0) ? (s_en ? L->p1_en : L->p1_it) : (s_en ? L->p2_en : L->p2_it);
     char lab[40]; snprintf(lab, sizeof lab, "%s", pl ? pl : "");
-    d.setFont(&fonts::FreeSans9pt7b);
+    d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1);
     while (lab[0] && (int)d.textWidth(lab) > 224) lab[strlen(lab) - 1] = 0;
-    d.setTextColor(FG, BG); d.setCursor(10, 44); d.print(lab);
+    box_text(0, 42, 240, by - 42, 10, 44, lab, FG, BG);
 
-    // -- tall full-width value box with size-2 input + recent-value ghost --
-    const int bx = 8, bw = 224, by = 64, bh = 38;
-    d.fillRoundRect(bx, by, bw, bh, 8, CAP);
-    d.fillRect(bx + 3, by + 5, 4, bh - 10, ACC);                // active rail
+    // -- the value, painted in place inside the frame: text, caret, recent-value ghost, then the leftover --
+    const int ix0 = bx + 9, ix1 = bx + bw - 3, iy0 = by + 3, ih = bh - 6;
     const int vx = bx + 14, vy = by + (bh - 32) / 2;            // size-2 Font2 glyph is ~32px tall
     d.setFont(&fonts::Font2);
+    d.setClipRect(ix0, iy0, ix1 - ix0, ih);                    // a long value never paints over the frame
     int cx = vx;
     if (s_ses->slot[s][0]) {
-        d.setTextSize(2); d.setTextColor(FG, CAP); d.setCursor(vx, vy); d.print(s_ses->slot[s]);
-        cx = vx + (int)d.textWidth(s_ses->slot[s]); if (cx > bx + bw - 8) cx = bx + bw - 8;
-        char g[40];                                             // ghost: a past value with this prefix
-        if (slot_autocomplete(s_ses->slot[s], g, sizeof g) && cx < bx + bw - 36) {
-            d.setTextColor(DIM, CAP); d.setCursor(cx + 4, vy); d.print(g + strlen(s_ses->slot[s]));
-        }
+        d.setTextSize(2);
+        const char *sv = s_ses->slot[s];                        // long value: show its tail, like the chat line
+        while (sv[1] && (int)d.textWidth(sv) > ix1 - 6 - vx) sv++;
+        d.fillRect(ix0, iy0, vx - ix0, ih, BG);
+        d.setTextColor(FG, BG); d.setCursor(vx, vy); d.print(sv);
+        cx = vx + (int)d.textWidth(sv); if (cx > ix1 - 5) cx = ix1 - 5;
     } else {
-        d.setTextSize(1); d.setTextColor(DIM, CAP);
-        d.setCursor(vx, by + (bh - 16) / 2); d.print(s_en ? "type..." : "scrivi...");
+        d.setTextSize(1);
+        cx = ix0 + 1;
+        box_text(cx + 5, iy0, ix1 - cx - 5, ih, vx, by + (bh - 16) / 2, s_en ? "type..." : "scrivi...", DIM, BG);
+        d.fillRect(ix0, iy0, 1, ih, BG);
     }
-    d.fillRect(cx + 2, vy, 3, 30, GRN);                          // big caret
+    d.fillRect(cx, iy0, 1, ih, BG); d.fillRect(cx + 1, vy, 3, 30, GRN); d.fillRect(cx + 4, iy0, 1, ih, BG);   // big caret
+    if (vy + 30 < iy0 + ih) d.fillRect(cx + 1, vy + 30, 3, iy0 + ih - vy - 30, BG);
+    if (s_ses->slot[s][0]) {
+        char g[40]; int ge = cx + 5;                            // ghost: a past value with this prefix
+        if (cx < bx + bw - 36 && slot_autocomplete(s_ses->slot[s], g, sizeof g)) {
+            d.setTextSize(2);
+            ge = box_text(cx + 5, iy0, ix1 - cx - 5, ih, cx + 6, vy, g + strlen(s_ses->slot[s]), DIM, BG);
+        } else d.fillRect(cx + 5, iy0, ix1 - cx - 5, ih, BG);
+        (void)ge;
+    }
+    d.clearClipRect();
+    d.setTextSize(1);
 
     // -- live preview of the assembled question (fills as you type) --
     char q[A_INMAX]; form_build_query(q, sizeof q, true);
@@ -2806,8 +3248,7 @@ static void draw_idee_form(int ch)
     d.setFont(&fonts::Font0); d.setTextSize(1);
     while (pv[0] && (int)d.textWidth(pv) > 224) pv[strlen(pv) - 1] = 0;
     int py = by + bh + 8; if (py > ch - 10) py = ch - 10;
-    d.setTextColor(MUTED, BG); d.setCursor(8, py); d.print(pv);
-    d.setTextSize(1);                                            // leave global size at the default
+    box_text(0, py, 240, 8, 8, py, pv, MUTED, BG);
 }
 
 static void draw_idee(int ch)
@@ -2833,13 +3274,11 @@ static void today_key(int key, char ch)
 // "next upcoming" peek (i >= s_today_count) is drawn dimmer. Splits "prefix  title" on the double space.
 static void draw_event_row(int y, bool focus, int i)
 {
-    int h = focus ? 46 : 30;
+    const int h = focus ? 46 : 30;
     bool future = (i >= s_today_count);
-    d.fillRoundRect(4, y, 232, h - 2, 9, focus ? CAP : BG);
-    if (focus) d.fillRoundRect(4, y + 3, 5, h - 8, 2, future ? MUTED : ACC);     // accent rail
-    unsigned short bg = focus ? CAP : BG;
-    unsigned short tcol = future ? MUTED : (focus ? FG : MUTED);                 // title colour
-    unsigned short acol = future ? MUTED : (focus ? GRN : ACC);                  // time/date accent
+    const unsigned short bg = row_band(y, h, focus);
+    unsigned short tcol = focus ? INK : (future ? DIM : MUTED);                  // title colour
+    unsigned short acol = focus ? INK : (future ? DIM : ACC);                    // time/date accent
     const char *sep = strstr(s_ses->today[i], "  ");
     char pre[24] = ""; const char *title = s_ses->today[i];
     if (sep && sep != s_ses->today[i]) { int pl = (int)(sep - s_ses->today[i]); if (pl > 23) pl = 23;
@@ -2865,14 +3304,17 @@ static void draw_event_row(int y, bool focus, int i)
 // header + a friendly, readable empty state.
 static void draw_today(int ch)
 {
-    set_font(F_MED); d.setTextColor(ACC, BG);                                   // bigger, accented date header
-    d.setCursor(8, 24); d.print(s_ses->today_hdr[0] ? s_ses->today_hdr : (s_en ? "Today" : "Oggi"));
-    if (s_today_count > 0) { char cb[6]; snprintf(cb, sizeof cb, "%d", s_today_count);
-        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(MUTED, BG);
-        d.setCursor(232 - (int)strlen(cb) * 6, 28); d.print(cb); }
-    d.drawFastHLine(8, 42, 224, LINE);
     const int top = 44, f = s_mrow;
+    if (s_ses->mfull) {                                                         // header: static for the scene
+        set_font(F_MED); d.setTextColor(ACC, BG);                               // bigger, accented date header
+        d.setCursor(8, 24); d.print(s_ses->today_hdr[0] ? s_ses->today_hdr : (s_en ? "Today" : "Oggi"));
+        if (s_today_count > 0) { char cb[6]; snprintf(cb, sizeof cb, "%d", s_today_count);
+            d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(MUTED, BG);
+            d.setCursor(232 - (int)strlen(cb) * 6, 28); d.print(cb); }
+        d.drawFastHLine(8, 42, 224, LINE);
+    }
     if (s_today_n == 0) {                                                       // friendly, bigger empty state
+        if (!s_ses->mfull) return;
         set_font(F_BIG); d.setTextColor(MUTED, BG);
         d.setCursor(10, top + 10); d.print(s_en ? "No events today" : "Niente in agenda oggi");
         d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(DIM, BG);
@@ -2880,13 +3322,17 @@ static void draw_today(int ch)
         return;
     }
     d.setClipRect(0, top, 240, ch - top);
-    int yy = list_scroll_y0(top, ch - top, s_today_n, f);
+    int yy = list_scroll_y0(top, ch - top, s_today_n, f), k = 0;
     for (int i = 0; i < s_today_n; i++) {
         int hh = (i == f) ? 46 : 30;
-        if (yy + hh > top && yy < ch) draw_event_row(yy, i == f, i);
+        if (yy + hh > top && yy < ch) {
+            if (mrow_dirty(k, mix(mix(2166136261u, 0x0D00u + i), ((uint32_t)yy << 1) | (i == f)))) draw_event_row(yy, i == f, i);
+            k++;
+        }
         yy += hh;
     }
     d.clearClipRect();
+    mlist_tail(k, yy, ch);
 }
 
 // ---- chat: region painters (direct draw; each self-clears its own box) -------
@@ -2897,37 +3343,35 @@ static void draw_today(int ch)
 // (grey), both right-aligned with the cluster edge at x=234. While busy the whole cluster is
 // replaced by the "pensa..." pulse. Keeping the date next to the clock (not floating far left)
 // and in a distinct colour is the uniformity the launcher header now shares.
+// The right field [104,234): "thinking..." while busy; otherwise the answer's page "2/5" (when it overflows
+// the body) or the date, then the clock. One opaque Font0 field — a tick or a page flip never blanks it.
 static void put_badge(int top)
 {
-    d.setFont(&fonts::Font0); d.setTextSize(1);
+    char a[24] = "", b[8] = ""; unsigned short ca = AMBER;
     if (s_busy) {
         static const char *dots[] = { "", ".", "..", "..." };
-        char s[16]; snprintf(s, sizeof(s), "pensa%s", dots[s_spin]);
-        d.setTextColor(GRN, BG); d.setCursor(234 - (int)strlen(s) * 6, top + 4); d.print(s);
-        return;
+        snprintf(a, sizeof a, "%s%s", s_en ? "thinking" : "pensa", dots[s_spin & 3]); ca = GRN;
+    } else {
+        time_t now = time(NULL); struct tm *tm = localtime(&now);
+        const bool clk = tm && now > 1672531200;                // pre-NTP: no clock/date yet
+        int p, n;
+        if (answer_pos(chat_avail(), &p, &n)) { snprintf(a, sizeof a, "%d/%d", p, n); ca = ACC; }
+        else if (clk) snprintf(a, sizeof a, "%s %d %s", (s_en ? WD3_EN : WD3_IT)[tm->tm_wday], tm->tm_mday,
+                               (s_en ? MO3_EN : MO3_IT)[tm->tm_mon]);
+        if (clk) snprintf(b, sizeof b, "%02d:%02d", tm->tm_hour, tm->tm_min);
     }
-    time_t now = time(NULL); struct tm *tm = localtime(&now);
-    if (!tm || now <= 1672531200) return;                       // pre-NTP: no clock/date yet
-    char clk[8]; snprintf(clk, sizeof clk, "%02d:%02d", tm->tm_hour, tm->tm_min);
-    int clkx = 234 - (int)strlen(clk) * 6;
-    d.setTextColor(MUTED, BG); d.setCursor(clkx, top + 4); d.print(clk);
-    char dt[20]; snprintf(dt, sizeof dt, "%s %d %s",
-                          (s_en ? WD3_EN : WD3_IT)[tm->tm_wday], tm->tm_mday, (s_en ? MO3_EN : MO3_IT)[tm->tm_mon]);
-    d.setTextColor(AMBER, BG);                                   // distinct from the grey clock
-    d.setCursor(clkx - 6 - (int)strlen(dt) * 6, top + 4); d.print(dt);
+    seg_field(104, 234, top + 4, true, a, ca, b, MUTED);
 }
-// Clear covers the whole date+clock cluster (worst case ~96px) so neither half-erases on a tick.
-static void draw_badge(int top) { d.fillRect(112, top, 128, 13, BG); put_badge(top); }
+static void draw_badge(int top) { put_badge(top); }
 
 static void draw_header(int top)
 {
-    d.fillRect(0, top, 240, 18, BG);
     d.setFont(&fonts::Font0); d.setTextSize(1);
     d.setTextColor(ACC, BG); d.setCursor(8, top + 4); d.print("ANIMA");
-    const char *ml = s_omode == OM_OFF ? "offline" : s_omode == OM_ONLY ? "online" : "ibrido";
+    char ml[8]; snprintf(ml, sizeof ml, "%-7s", s_omode == OM_OFF ? "offline" : s_omode == OM_ONLY ? "online" : (s_en ? "hybrid" : "ibrido"));
     d.setTextColor(s_omode == OM_OFF ? DIM : s_omode == OM_ONLY ? GRN : ACC, BG);
-    d.setCursor(60, top + 4); d.print(ml);
-    put_badge(top);                                             // date + clock, right-aligned cluster
+    d.setCursor(60, top + 4); d.print(ml);                      // fixed 7-cell field: a shorter label erases the longer
+    put_badge(top);                                             // page / date + clock, right-aligned cluster
     d.drawFastHLine(0, top + 15, 240, LINE);
 }
 
@@ -2935,88 +3379,137 @@ static void draw_deck(int ty0, int avail)
 {
     // Glance header: a time-of-day greeting (left) + clock (right) — like a watch's top card — then
     // the starter prompts. fn+;/. pick, Invio (or 1-9) sends, so the first ask needs no typing.
+    // Painted in place (opaque text + leftovers): moving the pick repaints the rows, never a blank body.
     time_t now = time(NULL); struct tm *tm = localtime(&now);
     int hr = tm ? tm->tm_hour : 9;
     const char *greet = s_en ? (hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening")
                              : (hr < 12 ? "Buongiorno"   : hr < 18 ? "Buon pomeriggio" : "Buonasera");
-    d.setFont(&fonts::Font2); d.setTextSize(1); d.setTextColor(ACC, BG);
-    d.setCursor(8, ty0); d.print(greet);
-    if (tm && now > 1672531200) { char hm[8]; snprintf(hm, sizeof hm, "%02d:%02d", tm->tm_hour, tm->tm_min);
-                                  d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
-                                  d.setCursor(232 - (int)strlen(hm) * 6, ty0 + 4); d.print(hm); }
+    char hm[8] = "";
+    if (tm && now > 1672531200) snprintf(hm, sizeof hm, "%02d:%02d", tm->tm_hour, tm->tm_min);
+    d.setFont(&fonts::Font2); d.setTextSize(1);
+    box_text(0, ty0, 196, 16, 8, ty0, greet, ACC, BG);
+    d.setFont(&fonts::Font0);
+    box_text(196, ty0, 44, 16, 232 - (int)strlen(hm) * 6, ty0 + 4, hm, MUTED, BG);
     // Glance line: the next reminder if there's one, otherwise a hint that TAB opens the full skill
     // catalog (so first-timers discover the IDEE tree beyond these quick picks). One dim Font0 line.
     bool reminder = s_ses->complics[0] != 0;
     const char *glance = reminder ? s_ses->complics : (s_en ? "TAB: full skill catalog" : "TAB: catalogo completo");
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(reminder ? MUTED : DIM, BG);
-    d.setCursor(8, ty0 + 16); d.print(glance);
+    box_text(0, ty0 + 16, 240, 12, 8, ty0 + 16, glance, reminder ? MUTED : DIM, BG);
     d.setFont(&fonts::Font2); d.setTextSize(1);
     if (s_sug_sel < 0) s_sug_sel = 0;
     if (s_sug_sel >= SUG_N) s_sug_sel = SUG_N - 1;
-    int rh = 16, top_y = ty0 + 28;
-    int maxvis = (ty0 + avail - top_y) / rh; if (maxvis < 1) maxvis = 1;   // scroll so the selection stays on screen
+    const int rh = 16, top_y = ty0 + 28, end = ty0 + avail;
+    int maxvis = (end - top_y) / rh; if (maxvis < 1) maxvis = 1;   // scroll so the selection stays on screen
     int first = (s_sug_sel >= maxvis) ? s_sug_sel - maxvis + 1 : 0;
     int yy = top_y;
-    for (int i = first; i < SUG_N && i < first + maxvis; i++) {
-        bool foc = (i == s_sug_sel);
-        list_row_focus(yy, rh, foc, FG);
-        char line[48]; snprintf(line, sizeof line, "%s", cur_sug(i)); fit_w(line, 218);
-        d.setCursor(12, yy + 1); d.print(line);
-        yy += rh;
+    for (int i = first; i < SUG_N && i < first + maxvis; i++, yy += rh) {
+        char line[48]; snprintf(line, sizeof line, "%s", cur_sug(i)); fit_w(line, 212);
+        if (i == s_sug_sel) {                                     // the kit's selection look: accent pill, INK text
+            pill_band(4, yy, 228, rh, 6, ACC, 235);
+            d.setTextColor(INK, ACC); d.setCursor(12, yy); d.print(line);
+        } else box_text(0, yy, 235, rh, 12, yy, line, FG, BG);
     }
+    if (yy < end) d.fillRect(0, yy, 235, end - yy, BG);
     int shown = (SUG_N - first < maxvis) ? SUG_N - first : maxvis;
-    draw_list_scroll(top_y, maxvis * rh, SUG_N, first, shown);    // scroll cue when the deck overflows
+    draw_vscroll(top_y, maxvis * rh, SUG_N, first, shown);        // scroll cue when the deck overflows
 }
 
-static void render_row(int y, const Row *r)
+// One transcript row, painted IN PLACE over the band [0,235) x [y, y+height): the 3 px message gap (dropped
+// for the view's top row), the rail of an answer, then the opaque text via box_text — no clear under it, so
+// a scroll, a page flip or a typewriter frame never shows a blank body.
+static int render_row(int y, const Row *r, bool at_top)
 {
     set_font(r->font);
-    int gap = r->first ? 3 : 0, ty = y + gap, base = font_h(r->font);
+    const int gap = ((r->first & RF_FIRST) && !at_top) ? 3 : 0, base = font_h(r->font), ty = y + gap;
+    if (gap) d.fillRect(0, y, 235, gap, BG);
     char t[216]; int n = r->len; if (n > 215) n = 215; memcpy(t, r->p, n); t[n] = 0;
-    if (r->role == R_USER) {
-        int w = (int)d.textWidth(t); int x = 232 - w; if (x < 22) x = 22;
-        d.setTextColor(r->col, BG); d.setCursor(x, ty); d.print(t);
-    } else if (r->role == R_ANIMA) {
-        d.fillRect(3, ty, 3, base - 2, r->accent);          // the message's left rail (violet / amber)
-        d.setTextColor(r->col, BG); d.setCursor(11, ty); d.print(t);
-    } else {
-        d.setTextColor(r->col, BG); d.setCursor(8, ty); d.print(t);
+    if (r->first & RF_TAGROW) {                              // the answer's source tag on a row of its own
+        const int tw = tag_w(t), tgx = 232 - tw;
+        d.fillRect(0, ty, tgx, base, BG);
+        d.fillRect(tgx, ty, tw, 1, BG); d.fillRect(tgx, ty + 9, tw, base - 9, BG);
+        d.fillRect(tgx + tw, ty, 235 - tgx - tw, base, BG);
+        draw_tag(tgx, ty + 1, t, pal(r->col));
+        return gap + base;
     }
+    int x0 = 0, tx = 8;
+    if (r->role == R_USER) { tx = 232 - (int)d.textWidth(t); if (tx < 22) tx = 22; }
+    else if (r->role == R_ANIMA) {                           // the message's left rail (violet / amber)
+        d.fillRect(0, ty, 3, base, BG);
+        d.fillRect(3, ty, 3, base - 2, pal(r->accent));
+        d.fillRect(3, ty + base - 2, 3, 2, BG);
+        x0 = 6; tx = 11;
+    }
+    if (r->first & RF_TAG) {                                 // text, then the tag right-aligned on the same row
+        const char *tg = s_msg[r->mi].tag;
+        const int tw = tag_w(tg), tgx = 232 - tw, gy = ty + base - 12;
+        box_text(x0, ty, tgx - 4 - x0, base, tx, ty, t, pal(r->col), BG);
+        d.fillRect(tgx - 4, ty, 239 - tgx, gy - ty, BG);
+        d.fillRect(tgx - 4, gy + 8, 239 - tgx, ty + base - gy - 8, BG);
+        d.fillRect(tgx - 4, gy, 4, 8, BG); d.fillRect(tgx + tw, gy, 235 - tgx - tw, 8, BG);
+        draw_tag(tgx, gy, tg, DIM);
+        return gap + base;
+    }
+    box_text(x0, ty, 235 - x0, base, tx, ty, t, pal(r->col), BG);
+    return gap + base;
+}
+// Paint rows from `t` into [ty0, ty0+avail) and clear only what is left below the last one.
+static void paint_rows(int ty0, int avail, int t)
+{
+    int y = ty0; const int end = ty0 + avail;
+    d.setClipRect(0, ty0, 235, avail);                       // a partial last row never bleeds onto the input edge
+    for (int i = t; i < s_rown && y < end; i++) y += render_row(y, &s_row[i], i == t);
+    d.clearClipRect();
+    if (y < end) d.fillRect(0, y, 235, end - y, BG);
+    draw_vscroll(ty0, avail, s_rown, t, last_fit(t, avail) - t + 1);
 }
 
 static void draw_body(int top, int h)
 {
-    int inH = input_h();
-    int ty0 = top + 18, body_bottom = top + h - inH - 1, avail = body_bottom - ty0;
-    if (deck_active()) { d.fillRect(0, ty0, 240, avail, BG); draw_deck(ty0, avail); return; }
+    const int ty0 = top + 18, avail = h - input_h() - 1 - 18;
+    const signed char kind = deck_active() ? BK_DECK : BK_CHAT;
+    if (s_ses->body_kind != kind) {                          // deck <-> transcript: a scene change, one clear
+        if (s_ses->body_kind != BK_NONE) d.fillRect(0, ty0, 240, avail, BG);
+        s_ses->body_kind = kind;
+    }
+    if (kind == BK_DECK) { draw_deck(ty0, avail); return; }
     if (s_rown <= 0) { d.fillRect(0, ty0, 240, avail, BG); return; }
-    int maxscroll = s_rown - 1;
-    if (s_scroll > maxscroll) s_scroll = maxscroll;
-    if (s_scroll < 0) s_scroll = 0;
-    int bottom = s_rown - 1 - s_scroll;
-    int used = 0, start = bottom;
-    for (int i = bottom; i >= 0; i--) {
-        int hh = row_h(&s_row[i]);
-        if (i != bottom && used + hh > avail) break;        // always keep the bottom row
-        used += hh; start = i;
-        if (used >= avail) break;
-    }
-    // Typewriter anti-flicker: se il testo entra senza scroll (start==0) NON pulire tutto il corpo a ogni
-    // frame (era il flash) — render_row ridisegna lo sfondo per carattere e il testo cresce in area pulita.
-    // Quando scrolla (start>0) la vista si sposta -> serve la pulizia piena.
-    if (!(s_typing && start == 0 && s_scroll == 0)) d.fillRect(0, ty0, 240, avail, BG);
-    int y = ty0;
-    d.setClipRect(0, ty0, 240, avail);                       // keep the bottom row from bleeding onto the input's top edge
-    for (int i = start; i <= bottom; i++) { render_row(y, &s_row[i]); y += row_h(&s_row[i]); }
-    d.clearClipRect();
-    int shown = bottom - start + 1;                          // slim scrollbar when history overflows
-    if (shown < s_rown) {
-        int th = avail * shown / s_rown; if (th < 8) th = 8;
-        int tymax = avail - th;
-        int tyo = (s_rown - 1 - bottom) * tymax / (s_rown - shown);
-        d.drawFastVLine(237, ty0, avail, LINE);
-        d.fillRect(236, body_bottom - th - tyo, 3, th, MUTED);
-    }
+    paint_rows(ty0, avail, view_top(avail));
+}
+
+// ---- the full-screen reader ---------------------------------------------------------------------------
+// Enter on an empty line (or when an answer needs it) opens it: header, input AND the footer go away
+// (fullscreen), the transcript gets RD_BODY px (~7 big rows instead of ~4) and a 9 px status strip at the
+// foot names where you are ("2/5"), the answer's source and the keys. ; . (and fn+; fn+., ',' '/', space)
+// flip PAGES; Enter / Esc / DEL close it; any letter closes it and starts the next question.
+static void reader_status(void)
+{
+    char a[24] = ""; int p, n;
+    if (answer_pos(RD_BODY, &p, &n)) snprintf(a, sizeof a, "%d/%d", p, n);
+    d.fillRect(0, RD_BODY, 240, 1, BG);
+    seg_field(0, 120, RD_BODY + 1, false, a, ACC, "", MUTED);
+    seg_field(120, 240, RD_BODY + 1, true, s_en ? ";/. page  esc" : ";/. pagina  esc", DIM, "", DIM);
+}
+static void draw_reader(void)
+{
+    if (s_rown <= 0) { d.fillRect(0, 0, 240, RD_BODY, BG); reader_status(); return; }
+    paint_rows(0, RD_BODY, view_top(RD_BODY));
+    reader_status();
+}
+static const char *chat_hint(void);
+static void reader_open(void)
+{
+    if (!s_ses || s_rown <= 0 || s_ses->reader) return;
+    s_ses->reader = true;
+    nucleo_app_set_fullscreen(true);                          // reclaim the footer rows too: every pixel for the text
+    mark_all_dirty(); nucleo_app_request_draw();
+}
+static void reader_close(void)
+{
+    if (!s_ses || !s_ses->reader) return;
+    s_ses->reader = false;
+    nucleo_app_set_fullscreen(false);                         // the framework repaints the footer
+    nucleo_app_set_hint(chat_hint());
+    mark_all_dirty(); nucleo_app_request_draw();
 }
 
 // Text start x of the input row: right after the ">" prompt with a fixed gap, measured in the live
@@ -3025,38 +3518,46 @@ static void draw_body(int top, int h)
 static const int PROMPT_X = 8;
 static int input_x0(void) { return PROMPT_X + (int)d.textWidth(">") + (s_big ? 14 : 6); }
 
+// The input row, painted in place: every keystroke overwrites the line (opaque glyphs) and clears only what
+// is left to its right — the row never blanks while you type. Busy: the dot wave (its own small box is the
+// one thing that clears, it animates anyway) and, when the turn may reach the cloud, how long it can take.
 static void draw_input(int top, int h)
 {
-    int inH = input_h(), in_top = top + h - inH;
-    d.fillRect(0, in_top, 240, inH, BG);
+    const int inH = input_h(), in_top = top + h - inH, ty = in_top + 4, bot = in_top + inH;
     d.drawFastHLine(0, in_top, 240, LINE);
     set_font(chat_font());
+    const int fh = (int)d.fontHeight();
+    d.fillRect(0, in_top + 1, 240, ty - in_top - 1, BG);   // the margins around the glyph band (BG over BG: invisible)
+    if (ty + fh < bot) d.fillRect(0, ty + fh, 240, bot - ty - fh, BG);
     if (s_busy && s_ilen == 0) {                            // pensa: onda di 4 pallini, il "picco" luminoso scorre
-        int cy = in_top + inH / 2, act = (int)(s_spin & 3);
+        const int cy = in_top + inH / 2, act = (int)(s_spin & 3);
+        d.fillRect(0, ty, 72, fh, BG);
         for (int i = 0; i < 4; i++) {
             int dist = i - act; if (dist < 0) dist = -dist;
             int r = dist == 0 ? 4 : dist == 1 ? 3 : 2;
             unsigned short col = dist == 0 ? GRN : dist == 1 ? ACC : DIM;
             d.fillCircle(PROMPT_X + 8 + i * 14, cy, r, col);
         }
+        const char *note = s_ses->cloud_note ? (s_en ? "cloud: up to 12 s" : "cloud: max 12 s") : "";
+        set_font(F_MED);
+        box_text(72, ty, 168, fh, 76, ty + (fh - (int)d.fontHeight()) / 2, note, MUTED, BG);
         return;
     }
-    int ty = in_top + 4;
-    d.setTextColor(ACC, BG); d.setCursor(PROMPT_X, ty); d.print(">");
     const int x0 = input_x0(), availw = 232 - x0;
+    const int pe = box_text(0, ty, 8 + (int)d.textWidth(">"), fh, PROMPT_X, ty, ">", ACC, BG);
+    if (x0 > pe) d.fillRect(pe, ty, x0 - pe, fh, BG);
     if (s_ilen == 0) {                                       // empty -> a dim placeholder cue (smartwatch style)
-        d.setTextColor(DIM, BG); d.setCursor(x0, ty);
-        d.print(s_awaiting ? (s_en ? "reply..." : "rispondi...") : (s_en ? "type..." : "scrivi..."));
+        box_text(x0, ty, 240 - x0, fh, x0, ty, s_awaiting ? (s_en ? "reply..." : "rispondi...") : (s_en ? "type..." : "scrivi..."), DIM, BG);
         return;
     }
     int startc = 0; while (s_ses->input[startc] && (int)d.textWidth(s_ses->input + startc) > availw) startc++;   // scroll to keep the caret visible
-    d.setTextColor(FG, BG); d.setCursor(x0, ty); d.print(s_ses->input + startc);
+    const char *vis = s_ses->input + startc;
+    const int te = x0 + (int)d.textWidth(vis);
+    d.setTextColor(FG, BG); d.setCursor(x0, ty); d.print(vis);
     // Ghost completion: the dim tail of the best match, drawn after the caret. fn+/ accepts it.
     char ghost[HIST_LEN];
-    if (autocomplete(s_ses->input, ghost, sizeof ghost)) {
-        int cx = x0 + (int)d.textWidth(s_ses->input + startc) + 3;
-        if (cx < 230) { d.setTextColor(DIM, BG); d.setCursor(cx, ty); d.print(ghost + s_ilen); }
-    }
+    if (te + 3 < 230 && autocomplete(s_ses->input, ghost, sizeof ghost)) box_text(te, ty, 240 - te, fh, te + 3, ty, ghost + s_ilen, DIM, BG);
+    else if (te < 240) d.fillRect(te, ty, 240 - te, fh, BG);
 }
 
 // The caret is a thin bar after the visible input. Toggling just this cell lets the blink animate
@@ -3074,17 +3575,26 @@ static void draw_caret(int top, int h)
     d.fillRect(cx + 1, ty, 2, ch, show ? GRN : BG);
 }
 
-// Paint the whole tabbed menu: clear the body, the persistent tab bar, then the active tab.
+// The tabbed menu. A SCENE change (menu opened, tab paged, IDEE level/form entered, language, an overlay
+// painted over us) costs one clear + the tab strip + the static parts; inside a scene a key repaints only
+// what moved (the list rows whose content changed, the form's value, the GUIDA card on a page flip).
 static void draw_menu(int ch)
 {
-    d.fillRect(0, 0, 240, ch, BG);
-    draw_tabbar(s_tab);
+    AnimaSession *S = s_ses;
+    const int scene = s_tab | ((s_idee_cat + 1) << 4) | ((s_form_leaf + 1) << 8) | (s_en ? 1 << 16 : 0);
+    S->mfull = (S->mscene != scene);
+    if (S->mfull) {
+        S->mscene = scene;
+        d.fillRect(0, 0, 240, ch, BG);
+        draw_tabbar(s_tab);
+        memset(S->msig, 0, sizeof S->msig); S->mleft = -1; S->mpage = -1;
+    }
     switch (s_tab) {
         case TAB_IDEE:  draw_idee(ch);  break;
         case TAB_OGGI:  draw_today(ch); break;
         case TAB_GUIDA: draw_guide(ch); break;
         case TAB_IA:    draw_ia(ch);    break;
-        case TAB_STATO: draw_stato(ch); break;
+        case TAB_STATO: if (S->mfull) draw_stato(ch); break;   // a read-only readout: painted per scene
     }
 }
 
@@ -3093,13 +3603,23 @@ static void draw_menu(int ch)
 // buffer is <=1 KB). The bottom hint line is the framework's (set in editor_open).
 static void draw_editor(int top, int h)
 {
-    d.fillRect(0, top, 240, h, BG);
-    // Title bar: the target path, with a live char count on the right.
-    d.fillRect(0, top, 240, 17, CAP);
-    set_font(F_MED); d.setTextColor(FG, CAP);
-    d.setCursor(4, top + 1); d.print(s_ed->path[0] ? s_ed->path : "(file)");
+    AnimaEditor *E = s_ed;
+    const int fh = font_h(F_MED);
+    if (!E->full && !E->dirty) {                         // the blink: toggle ONLY the caret bar
+        d.fillRect(E->cx, E->cy, 2, fh, (s_blink & 2) ? ACC : BG);
+        return;
+    }
+    set_font(F_MED);
+    if (E->full) {                                       // scene: clear once + the title bar with the path
+        d.fillRect(0, top, 240, h, BG);
+        d.fillRect(0, top, 240, 17, LINE);
+        char pth[80]; snprintf(pth, sizeof pth, "%s", E->path[0] ? E->path : "(file)"); fit_w(pth, 176);
+        d.setTextColor(FG, LINE); d.setCursor(4, top + 1); d.print(pth);
+    }
+    // Title bar: the live char count on the right, an opaque field (no clear).
     char cc[16]; snprintf(cc, sizeof cc, "%d", s_ed_len);
-    int cw = (int)d.textWidth(cc); d.setTextColor(MUTED, CAP); d.setCursor(238 - cw, top + 1); d.print(cc);
+    box_text(184, top, 56, 17, 238 - (int)d.textWidth(cc), top + 1, cc, ACC, LINE);
+    E->full = E->dirty = false;
 
     // Word-wrap the buffer into line segments [off,len), honoring '\n' and hard-splitting over-wide words.
     // The segment arrays live in the editor block (heap while the editor is open; were static .bss).
@@ -3124,15 +3644,18 @@ static void draw_editor(int top, int h)
     // Show the LAST rows that fit (caret-follows-bottom). Empty buffer -> just the caret.
     int by = top + 19, bh = h - 19, maxrows = bh / lh; if (maxrows < 1) maxrows = 1;
     int first = nl > maxrows ? nl - maxrows : 0;
-    int y = by; d.setTextColor(FG, BG);
+    // Each visible line painted in place (opaque text + its leftover), then what is left below the last one.
+    int y = by;
+    E->cx = 5; E->cy = (short)by;
     for (int r = first; r < nl; r++) {
         char tmp[80]; int L = llen[r]; if (L > 79) L = 79;
         memcpy(tmp, s_ed->buf + loff[r], L); tmp[L] = 0;
-        d.setCursor(4, y); d.print(tmp);
-        if (r == nl - 1 && (s_blink & 1)) { int tw = (int)d.textWidth(tmp); d.fillRect(5 + tw, y, 2, font_h(F_MED), ACC); }
+        int te = box_text(0, y, 240, lh, 4, y, tmp, FG, BG);
+        if (r == nl - 1) { E->cx = (short)(te + 1); E->cy = (short)y; }
         y += lh;
     }
-    if (nl == 0 && (s_blink & 1)) d.fillRect(5, by, 2, font_h(F_MED), ACC);
+    if (y < top + h) d.fillRect(0, y, 240, top + h - y, BG);
+    d.fillRect(E->cx, E->cy, 2, fh, (s_blink & 2) ? ACC : BG);   // the caret at the end of the text
 }
 
 // Modale di conferma uscita: pannello a tutto schermo, font grandi ben visibili (REGOLA UI nativa).
@@ -3143,17 +3666,17 @@ static void draw_exit_modal(void)
     const bool ed = s_ed_open;
     d.fillRect(0, top, 240, h, BG);
     int bw = 212, bh = 92, bx = (240 - bw) / 2, by = top + (h - bh) / 2;
-    d.fillRoundRect(bx, by, bw, bh, 10, CAP);
+    d.fillRoundRect(bx, by, bw, bh, 10, BG);
     d.drawRoundRect(bx, by, bw, bh, 10, ACC);
     d.drawRoundRect(bx + 1, by + 1, bw - 2, bh - 2, 9, ACC);          // doppio bordo = piu' marcato
-    set_font(F_BIG); d.setTextColor(FG, CAP);
+    set_font(F_BIG); d.setTextColor(FG, BG);
     const char *q = ed ? (s_en ? "Discard the text?" : "Scartare il testo?") : (s_en ? "Leave ANIMA?" : "Uscire da ANIMA?");
     d.setCursor(120 - (int)d.textWidth(q) / 2, by + 14); d.print(q);
     set_font(F_MED);
     const char *yes = ed ? (s_en ? "Enter = Discard" : "Invio = Scarta") : (s_en ? "Enter = Exit" : "Invio = Esci");
-    d.setTextColor(ed ? AMBER : GRN, CAP); d.setCursor(120 - (int)d.textWidth(yes) / 2, by + 44); d.print(yes);
+    d.setTextColor(ed ? AMBER : GRN, BG); d.setCursor(120 - (int)d.textWidth(yes) / 2, by + 44); d.print(yes);
     const char *no = ed ? (s_en ? "Esc = Keep writing" : "Esc = Continua") : (s_en ? "Esc = Stay" : "Esc = Resta");
-    d.setTextColor(MUTED, CAP); d.setCursor(120 - (int)d.textWidth(no) / 2, by + 66); d.print(no);
+    d.setTextColor(MUTED, BG); d.setCursor(120 - (int)d.textWidth(no) / 2, by + 66); d.print(no);
     d.setFont(&fonts::Font0); d.setTextSize(1);
 }
 
@@ -3169,28 +3692,54 @@ static void draw(void)
         d.setFont(&fonts::Font0); d.setTextSize(1);
         return;
     }
+    // An overlay (voice, notification banner, Control Center) painted over us, or a force_repaint(): what the
+    // in-place painters believe is on the panel is stale -> one full repaint (ANTI-FLICKER.md, repaint_gen).
+    const unsigned gen = nucleo_app_repaint_gen();
+    if (gen != s_ses->rgen) { s_ses->rgen = gen; mark_all_dirty(); }
     if (s_exit_confirm) { draw_exit_modal(); return; }      // modale uscita sopra a tutto
+    if (s_ses->clear_confirm) {                             // the kit's confirm card over the current scene
+        if (s_d_clear) { d.fillRect(0, top, 240, h, BG); s_d_clear = false; }   // an overlay painted over: clean backdrop
+        d.setFont(&fonts::Font0); d.setTextSize(1);
+        app_ui_confirm(s_en ? "Clear the chat?" : "Pulire la chat?",
+                       s_en ? "Deletes the saved conversation" : "Cancella la conversazione salvata", s_ses->clear_yes);
+        d.setFont(&fonts::Font0); d.setTextSize(1);
+        return;
+    }
+    // Safety net: if the framework ever hands us its (freshly cleared) off-screen canvas instead of
+    // the direct path, repaint everything so nothing is left blank (the in-place painters assume the panel).
+    if (nucleo_app_is_buffered()) mark_all_dirty();
+    if (s_d_clear) {                                        // a scene change reaches whichever view paints next
+        if (s_ed) s_ed->full = true;
+        s_ses->mscene = -1;
+    }
+    if (s_ed_open || s_menu_open) s_d_clear = false;        // (they do their own one clear per scene)
     if (s_ed_open)   { draw_editor(top, h); d.setFont(&fonts::Font0); d.setTextSize(1); return; }
     if (s_menu_open) { draw_menu(h); d.setFont(&fonts::Font0); d.setTextSize(1); return; }
 
-    // Safety net: if the framework ever hands us its (freshly cleared) off-screen canvas instead of
-    // the direct path, repaint everything so nothing is left blank.
-    if (nucleo_app_is_buffered()) mark_all_dirty();
+    if (s_ses->reader) {                                    // full-screen reader (fullscreen: h = the whole panel)
+        if (s_d_clear) d.fillRect(0, 0, 240, h, BG);
+        draw_reader();
+        s_d_hdr = s_d_body = s_d_input = s_d_badge = s_d_clear = false;
+        d.setFont(&fonts::Font0); d.setTextSize(1);
+        return;
+    }
+    if (s_d_clear) { d.fillRect(0, top, 240, h, BG); s_ses->body_kind = BK_NONE; }   // scene change: the one clear
+    if (s_d_body) s_d_badge = true;                         // the header's page indicator follows the body
 
+    if (s_d_body)       draw_body(top, h);
     if (s_d_hdr)        draw_header(top);
     else if (s_d_badge) draw_badge(top);
-    if (s_d_body)       draw_body(top, h);
     if (s_d_input)      draw_input(top, h);
     draw_caret(top, h);
 
-    s_d_hdr = s_d_body = s_d_input = s_d_badge = false;
+    s_d_hdr = s_d_body = s_d_input = s_d_badge = s_d_clear = false;
     d.setFont(&fonts::Font0); d.setTextSize(1);    // leave the global font at the framework default
 }
 
 extern "C" void nucleo_register_anima(void)
 {
     static const nucleo_app_def_t app = {
-        "anima", "ANIMA", "Tools", "Offline assistant: ask in plain Italian",
+        "anima", "ANIMA", "Tools", "Offline assistant: ask in plain words",
         'a', ACC, enter, on_key, tick, draw, leave
     };
     nucleo_app_register(&app);
