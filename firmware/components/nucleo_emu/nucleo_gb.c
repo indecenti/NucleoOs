@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/stat.h>   // save-state presence check
 #include <time.h>       // MBC3 real-time clock seeded from the system clock
+#include "esp_task_wdt.h" // SD work on the app task feeds its watchdog (8 s) between steps
 
 // Peanut-GB build switches — set BEFORE the include, they are compile-time for the whole core.
 #define ENABLE_LCD   1
@@ -152,7 +153,9 @@ typedef struct {
     uint16_t      core_err_addr;
     uint8_t       core_err_kind;
 
-    char          rom_path[300];        // the cartridge; .sav and .stN hang off it
+    char          rom_path[300];        // the cartridge
+    char          save_base[300];       // "<...>/Saves/<system>/<rom name without extension>" — see save_base_init
+    bool          sav_is_new;           // no save in the Saves folder yet: write one at once (see open)
     char          title[17];
 
     nucleo_gb_line_fn on_line;
@@ -373,7 +376,7 @@ static IRAM_ATTR void lcd_line(struct gb_s *gb, const uint8_t *pixels, const uin
 // with the .sav every other emulator writes; only its residency in memory is banked.
 static size_t ram_chunk(const gb_session_t *s) { return s->cart_ram_bytes < RAM_BANK ? s->cart_ram_bytes : RAM_BANK; }
 static bool   ram_swapped(const gb_session_t *s) { return s->ram_nb > s->ram_ns; }
-static void   swp_name(const gb_session_t *s, char *out, size_t n) { snprintf(out, n, "%s.sav.swp", s->rom_path); }
+static void   swp_name(const gb_session_t *s, char *out, size_t n) { snprintf(out, n, "%s.sav.swp", s->save_base); }
 
 // One bank between a slot and the swap file. Opened per call: a swap is an event by design, and a
 // handle held for the whole session would cost a FATFS object the ROM cache could use.
@@ -468,6 +471,7 @@ static size_t copy_stream(FILE *out, FILE *in, size_t n)
         if (got < want) memset(buf + got, 0, want - got);       // short source: the rest is erased RAM
         if (fwrite(buf, 1, want, out) != want) break;
         done += want;
+        if ((done & 0x1FFF) == 0) esp_task_wdt_reset();
         if (in && got < want) in = NULL;
     }
     return done;
@@ -524,23 +528,76 @@ static size_t ram_import(gb_session_t *s, FILE *in)
 
 static void ram_clear(gb_session_t *s) { ram_import(s, NULL); }
 
+// ── where a cartridge's files live ─────────────────────────────────────────────────────────────
+// NOT beside the ROM. /data/ROMs/gb holds the whole library — over a thousand long file names — and
+// FATFS finds a name by walking the directory from the top, over SPI, on every open, stat, remove and
+// rename. The atomic save below does half a dozen of those; beside the ROM they added up to more than
+// the app task's 8 s watchdog, so opening the in-game menu (which saves) REBOOTED the console — the
+// "Esc quits the emulator" bug. Saves, states and the SRAM swap file therefore live in
+// "<...>/Saves/<system>/", a folder that only ever holds a handful of names per game played.
+// A save left beside the ROM by an older build is still found (once) and moved over on the next write.
+static void mkdir_one(const char *p)
+{
+#ifdef _WIN32
+    mkdir(p);
+#else
+    mkdir(p, 0775);
+#endif
+}
+static void save_base_init(gb_session_t *s)
+{
+    const char *path = s->rom_path;
+    const char *file = strrchr(path, '/');
+    const char *bs = strrchr(path, '\\');
+    if (!file || (bs && bs > file)) file = bs;
+    file = file ? file + 1 : path;
+    // "<root>/ROMs/<sys>/<file>" -> root + "/Saves/" + sys. Anything else: a "saves" folder beside it.
+    const char *roms = strstr(path, "/ROMs/");
+    if (!roms) roms = strstr(path, "\\ROMs\\");
+    char dir[260];
+    if (roms && roms < file) {
+        const char *sys = roms + 6;
+        int sys_len = (int)(file - 1 - sys);
+        int root_len = (int)(roms - path);
+        if (sys_len > 0 && sys_len < 32) {
+            snprintf(dir, sizeof dir, "%.*s/Saves", root_len, path);
+            mkdir_one(dir);
+            snprintf(dir, sizeof dir, "%.*s/Saves/%.*s", root_len, path, sys_len, sys);
+        } else roms = NULL;
+    }
+    if (!roms || !roms[0]) snprintf(dir, sizeof dir, "%.*s/saves", (int)(file - 1 - path), path);
+    mkdir_one(dir);
+    const char *dot = strrchr(file, '.');
+    int base_len = dot ? (int)(dot - file) : (int)strlen(file);
+    snprintf(s->save_base, sizeof s->save_base, "%s/%.*s", dir, base_len, file);
+}
+
 // ── save RAM ────────────────────────────────────────────────────────────────────────────────────
-// "<rom>.sav" beside the cartridge. Written to "<rom>.sav.tmp" first and renamed over the old file:
-// the device runs on a 120 mAh cell, and a save cut short by a flat battery must cost the last few
-// seconds of play, never the whole save. FATFS cannot rename onto an existing name, so the old file
-// is removed in between — and a load that finds no .sav falls back to a .tmp left by exactly that gap.
+// "<save_base>.sav". Written to "<save_base>.sav.tmp" first and renamed over the old file: the device
+// runs on a 120 mAh cell, and a save cut short by a flat battery must cost the last few seconds of
+// play, never the whole save. FATFS cannot rename onto an existing name, so the old file is removed in
+// between — and a load that finds no .sav falls back to a .tmp left by exactly that gap.
 static void sav_name(const gb_session_t *s, char *out, size_t n, bool tmp)
 {
-    snprintf(out, n, "%s.sav%s", s->rom_path, tmp ? ".tmp" : "");
+    snprintf(out, n, "%s.sav%s", s->save_base, tmp ? ".tmp" : "");
 }
 
 static void sav_load(gb_session_t *s)
 {
     if (!s->cart_ram_bytes) return;
     char p[320];
+    s->sav_is_new = false;
     sav_name(s, p, sizeof p, false);
     FILE *f = fopen(p, "rb");
     if (!f) { sav_name(s, p, sizeof p, true); f = fopen(p, "rb"); }
+    if (!f) {
+        // An older build kept the save beside the ROM. Read it from there this once; the open writes
+        // it to the Saves folder straight away, so the slow library directory is not searched again.
+        s->sav_is_new = true;
+        snprintf(p, sizeof p, "%s.sav", s->rom_path);
+        f = fopen(p, "rb");
+        esp_task_wdt_reset();
+    }
     if (!f) { ram_clear(s); return; }         // no save yet: erased RAM (and, if banked, a fresh swap file)
     size_t got = ram_import(s, f);
     fclose(f);
@@ -555,6 +612,7 @@ void nucleo_gb_save(void)
     // battery RAM since is garbage. Writing that over the player's save would turn a crash into lost
     // progress — so a crashed session never saves. Reset (or loading a state) clears the condition.
     if (s->core_errors) { ESP_LOGW(TAG, "save skipped: the console crashed"); return; }
+    esp_task_wdt_reset();
     char tmp[320], fin[320];
     sav_name(s, tmp, sizeof tmp, true);
     sav_name(s, fin, sizeof fin, false);
@@ -574,6 +632,8 @@ void nucleo_gb_save(void)
     remove(fin);
     if (rename(tmp, fin) != 0) { ESP_LOGW(TAG, "save rename failed — kept as %s", tmp); return; }
     s->cart_ram_dirty = false;
+    s->sav_is_new = false;
+    esp_task_wdt_reset();
     ESP_LOGI(TAG, "save written (%u B)", (unsigned)put);
 }
 
@@ -623,6 +683,7 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
     if (sz < 0x150) { session_free(s); return ESP_ERR_INVALID_SIZE; }   // not even a header
     s->rom_bytes = (uint32_t)sz;
     snprintf(s->rom_path, sizeof s->rom_path, "%s", rom_path);
+    save_base_init(s);
 
     // Decide from the header BEFORE any big allocation: a cartridge this core cannot run should be
     // refused in microseconds, not after the page cache has been carved out of the heap.
@@ -733,6 +794,9 @@ esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *
         ESP_LOGW(TAG, "cart RAM size mismatch: core %u B, host %u B", (unsigned)core_need, (unsigned)s->cart_ram_bytes);
     s->gb.gb_rom_read = rom_read;       // header decisions are made: switch to the hot-path reader
     rtc_seed(s);
+    // First launch since the Saves folder existed: put the save there now (migrated or erased), so no
+    // later launch has to look in the library directory for it.
+    if (s->cart_ram_bytes && s->sav_is_new) { s->cart_ram_dirty = true; S = s; nucleo_gb_save(); }
 
     gb_init_lcd(&s->gb, lcd_line);
     // Frame skipping is the core's own knob; we run every frame and let the app pace itself, so the
@@ -815,12 +879,12 @@ void nucleo_gb_reset_counters(void)
 // hand-edited state would otherwise hand the CPU an arbitrary address to call. They are saved with
 // everything else for simplicity and then overwritten from the live session on load.
 #define STATE_MAGIC 0x3142474Eu   // 'NGB1'
-// "<rom>.st<slot>". It used to be derived from the .sav path, which exists only for cartridges with
-// battery RAM — so on Tetris, Super Mario Land and every other RAM-less cart the path came out as a
-// bare ".st0" and save states silently failed. The session now keeps the ROM path itself.
+// "<save_base>.st<slot>". It used to be derived from the .sav path, which exists only for cartridges
+// with battery RAM — so on Tetris, Super Mario Land and every other RAM-less cart the path came out as
+// a bare ".st0" and save states silently failed.
 static void state_path(char *out, size_t n, int slot)
 {
-    snprintf(out, n, "%s.st%d", S->rom_path, slot < 0 ? 0 : (slot > 9 ? 9 : slot));
+    snprintf(out, n, "%s.st%d", S->save_base, slot < 0 ? 0 : (slot > 9 ? 9 : slot));
 }
 
 bool nucleo_gb_state_exists(int slot)
@@ -914,7 +978,7 @@ esp_err_t nucleo_gb_state_load(int slot)
     // of one game and half of another. The running console goes to "<rom>.stu" first; a failed load
     // puts it back exactly as it was. The file is removed once the load has succeeded.
     char undo[320];
-    snprintf(undo, sizeof undo, "%s.stu", S->rom_path);
+    snprintf(undo, sizeof undo, "%s.stu", S->save_base);
     bool have_undo = state_write(undo) == ESP_OK;
 
     if (!state_read_live(p)) {

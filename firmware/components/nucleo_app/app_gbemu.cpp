@@ -256,6 +256,7 @@ struct EState {
     bool     have_stash;
     bool     crash_told;     // the crash menu opens once per crash, not every second
     bool     mute_keys;      // buttons held when the menu closed stay OUT of the game until released
+    bool     state_ok;       // a save state exists — looked up once per menu open, not per repaint
     char     fail[48];       // why the last start failed; drawn over the shelf until the next key
     M5Canvas *mq;            // dedicated sprite for the scrolling shelf title (ANTI-FLICKER technique 3)
     int      mq_w;           // its current width, 0 = none
@@ -671,8 +672,10 @@ static const char *menu_label(int i, char *buf, size_t n)
     switch (i) {
         case MI_RESUME: return TR("Riprendi", "Resume");
         case MI_SAVE:   return TR("Salva stato", "Save state");
-        case MI_LOAD:   return nucleo_gb_state_exists(0) ? TR("Carica stato", "Load state")
-                                                         : TR("Carica stato (vuoto)", "Load state (empty)");
+        // Cached: menu_label runs on every repaint and every 20 ms for the scrolling row, and a stat()
+        // on the SD card per call is exactly the kind of work that must not ride a UI loop.
+        case MI_LOAD:   return st->state_ok ? TR("Carica stato", "Load state")
+                                            : TR("Carica stato (vuoto)", "Load state (empty)");
         case MI_VOL:    snprintf(buf, n, "%s: %d%%", TR("Volume", "Volume"), nucleo_audio_volume()); return buf;
         case MI_SCREEN: snprintf(buf, n, "%s: %s", TR("Schermo", "Screen"),
                                  s_stretch ? TR("Pieno", "Filled") : "1:1"); return buf;
@@ -832,9 +835,12 @@ static void menu_activate(void)
         case MI_INFO:   s_hud = !s_hud;
                         if (!s_hud) frame_clear(); else { hud_draw(); chrome_draw(); }
                         menu_draw(); return;
-        case MI_SAVE:
-            toast(nucleo_gb_state_save(0) == ESP_OK ? TR("salvato", "saved") : TR("errore", "failed"));
+        case MI_SAVE: {
+            esp_err_t e = nucleo_gb_state_save(0);
+            if (e == ESP_OK) st->state_ok = true;
+            toast(e == ESP_OK ? TR("salvato", "saved") : TR("errore", "failed"));
             menu_close(); return;
+        }
         case MI_LOAD: {
             esp_err_t e = nucleo_gb_state_load(0);
             toast(e == ESP_OK ? TR("caricato", "loaded")
@@ -926,6 +932,7 @@ static void play_session(const char *name)
         return;
     }
     trace("  path=%s", path);
+    esp_task_wdt_reset();          // each step below walks the library directory once — feed between them
 
     // Read the header while the shelf is still up. A cartridge this core cannot run is refused here,
     // in words, without tearing the UI down and building it back — "Invalid ROM" told nobody anything.
@@ -972,7 +979,9 @@ static void play_session(const char *name)
         return;
     }
 
+    esp_task_wdt_reset();
     esp_err_t err = nucleo_gb_open(path, on_line, nullptr);
+    esp_task_wdt_reset();
     if (err != ESP_OK) {
         // The numeric code, not esp_err_to_name(): the name table is compiled out of this firmware,
         // so every error used to reach the trace as "UNKNOWN ERROR".
@@ -991,6 +1000,7 @@ static void play_session(const char *name)
     snprintf(st->resume, sizeof st->resume, "%s", name);
     st->have_resume = true;
     state_save(name);
+    st->state_ok = false;          // looked up when the menu first opens
 
     nucleo_gb_stats_t stt; nucleo_gb_get_stats(&stt);
     char cache[24];
@@ -1073,10 +1083,19 @@ static void play_session(const char *name)
         if (k.key != NK_NONE || k.ch) {
             if (st->menu)                        { menu_key(k); }
             else if (k.key == NK_BACK || k.ch == '`' || k.ch == 'm' || k.ch == 'M') {
-                // The menu is a pause, so it is the one moment an SD write costs the player nothing:
-                // flush battery RAM here, before they can pick Quit or pull the power.
+                // The menu comes up FIRST, then the SD work: it is a pause, so it is the one moment a
+                // write costs the player nothing — flush battery RAM before they can pick Quit or pull
+                // the power, and look up whether a state exists. The time is traced: an SD step that
+                // outgrew its budget once rebooted the console from exactly this key.
+                st->menu = true; st->msel = 0;
+                menu_draw();
+                int64_t t0 = esp_timer_get_time();
                 nucleo_gb_save();
-                st->menu = true; st->msel = 0; menu_draw();
+                st->state_ok = nucleo_gb_state_exists(0);
+                esp_task_wdt_reset();
+                int ms = (int)((esp_timer_get_time() - t0) / 1000);
+                if (ms > 200) trace("  menu: save+lookup took %d ms", ms);
+                menu_draw();
             }
             else if (k.ch == 'p' || k.ch == 'P') pal_cycle();
             // Two things a player changes mid-game without wanting to pause: how loud it is, and
@@ -1141,6 +1160,7 @@ static void play_session(const char *name)
             if (w.core_errors && !st->crash_told && !st->menu) {
                 st->crash_told = true;
                 st->menu = true; st->msel = MI_RESUME;  // paused; Reset is a deliberate choice, never a mashed key
+                st->state_ok = nucleo_gb_state_exists(0);
                 menu_draw();
             }
             // Battery RAM reaches the card within ~2 s of an in-game save, not only on quit.
