@@ -77,6 +77,44 @@ static inline bool online_tls_heap_too_low(const char *what, const char *url)
 // POST retries so a stalling network can't drag a turn past the watchdog (or the user) either.
 #define HTTP_TIMEOUT       6000     // per-attempt socket timeout (ms), shared by every chat TLS path; < 8 s TWDT
 #define TLS_TURN_BUDGET_MS 10000    // total wall-clock budget per online turn across POST retries
+// Whole-QUESTION budget across ALL network tiers (Wikidata, Wikipedia, entity, LLM...). Each GET/POST
+// alone is bounded, but a miss could chain several of them past 15 s. Armed by nucleo_anima_query()
+// only (turn_begin/turn_end), so transcription and other callers keep their own limits.
+#define ANIMA_NET_TURN_MS  12000
+#define NET_MIN_ATTEMPT_MS 1500     // below this, starting another TLS handshake is pointless
+static int64_t s_turn_deadline_us;  // 0 = no question in flight
+void nucleo_anima_online_turn_begin(void) { s_turn_deadline_us = esp_timer_get_time() + (int64_t)ANIMA_NET_TURN_MS * 1000; }
+void nucleo_anima_online_turn_end(void)   { s_turn_deadline_us = 0; }
+// Milliseconds this question may still spend on the network (INT32_MAX when no question is in flight).
+static int32_t net_turn_left_ms(void)
+{
+    if (!s_turn_deadline_us) return INT32_MAX;
+    int64_t left = (s_turn_deadline_us - esp_timer_get_time()) / 1000;
+    return left < 0 ? 0 : (left > INT32_MAX ? INT32_MAX : (int32_t)left);
+}
+// Per-attempt socket timeout: the usual HTTP_TIMEOUT, clamped to what the question has left.
+// Returns 0 when there isn't enough left to be worth a handshake (the caller bails as a miss).
+static int net_attempt_timeout(const char *what, const char *url)
+{
+    int32_t left = net_turn_left_ms();
+    if (left < NET_MIN_ATTEMPT_MS) {
+        ESP_LOGW(TAG, "skip %s: question network budget spent (%d ms left) — %s", what, (int)left, url ? url : "");
+        return 0;
+    }
+    return left < HTTP_TIMEOUT ? (int)left : HTTP_TIMEOUT;
+}
+// Same for one POST retry started at t0: also clamped to what TLS_TURN_BUDGET_MS has left, so the
+// LAST attempt can't start at 9.9 s and run a full HTTP_TIMEOUT past the budget (~16 s turns).
+static int post_attempt_timeout(int64_t t0, const char *url)
+{
+    int tmo = net_attempt_timeout("POST", url);
+    int64_t left = (int64_t)TLS_TURN_BUDGET_MS - (esp_timer_get_time() - t0) / 1000;
+    if (left < NET_MIN_ATTEMPT_MS) {
+        ESP_LOGW(TAG, "POST budget %dms spent -> bail %s", TLS_TURN_BUDGET_MS, url ? url : "");
+        return 0;
+    }
+    return (tmo && left < tmo) ? (int)left : tmo;
+}
 // Audio-upload timeout: the transcribe paths stream a multi-MB body and READ the reply in a loop that pets
 // the Task-WDT every iteration (tls_wdt_pet) — so a long socket timeout here is safe (it is NOT one
 // un-pettable blocking call like a chat perform). One symbol, shared by single-shot AND chunked upload.
@@ -935,10 +973,12 @@ static esp_err_t http_evt(esp_http_client_event_t *e)
 static int http_get(const char *url, char **out)
 {
     *out = NULL;
+    int tmo = net_attempt_timeout("GET", url);
+    if (!tmo) return -1;                                  // this question already spent its network budget
     if (online_tls_heap_too_low("GET", url)) return -1;   // post-reclaim heap still too tight -> bail, don't OOM
     http_acc_t acc = { NULL, 0, 0, HTTP_CAP };   // buffer grown lazily in http_evt (heap note above)
     esp_http_client_config_t cfg = {
-        .url = url, .timeout_ms = HTTP_TIMEOUT, .user_agent = HTTP_UA,
+        .url = url, .timeout_ms = tmo, .user_agent = HTTP_UA,
         .crt_bundle_attach = esp_crt_bundle_attach, .buffer_size = 2048,   // match the working /api/proxy
         .buffer_size_tx = 1536,                                            // long browser UA + long Wikipedia URLs overflow the 512 default -> truncated request -> server hangs
         .max_redirection_count = 5,                                        // Wikipedia REST 30x -> canonical title
@@ -1011,9 +1051,11 @@ static int http_post_json(const char *url, const char *auth, const char *body, c
             if (attempt < POST_TRIES) { vTaskDelay(pdMS_TO_TICKS(1500)); continue; }   // freed/coalesced yet) -> WAIT and retry, don't fail outright
             return -1;                                         // still too low after waiting -> honest miss (no OOM)
         }
+        int tmo = post_attempt_timeout(t0, url);
+        if (!tmo) return -1;                                   // not enough budget left for another handshake
         http_acc_t acc = { NULL, 0, 0, HTTP_CAP };   // buffer grown lazily in http_evt (heap note above)
         esp_http_client_config_t cfg = {
-            .url = url, .timeout_ms = HTTP_TIMEOUT, .user_agent = HTTP_UA,   // per-attempt < 8 s TWDT; Grok answers ~1.5 s, 6 s bounds a stall, retried below
+            .url = url, .timeout_ms = tmo, .user_agent = HTTP_UA,   // per-attempt < 8 s TWDT; Grok answers ~1.5 s, clamped to the budget left
             .crt_bundle_attach = esp_crt_bundle_attach, .buffer_size = 2048, .buffer_size_tx = 2048,   // 2 KB rx: Groq sends a large header block (many x-ratelimit-*); match the working proxy
             .method = HTTP_METHOD_POST, .event_handler = http_evt, .user_data = &acc,
         };
@@ -1149,9 +1191,11 @@ static int http_post_anthropic(const char *url, const char *key, const char *ver
             if (attempt < POST_TRIES) { vTaskDelay(pdMS_TO_TICKS(1500)); continue; }
             return -1;
         }
+        int tmo = post_attempt_timeout(t0, url);
+        if (!tmo) return -1;
         http_acc_t acc = { NULL, 0, 0, HTTP_CAP };
         esp_http_client_config_t cfg = {
-            .url = url, .timeout_ms = HTTP_TIMEOUT, .user_agent = HTTP_UA,   // per-attempt < 8 s TWDT (was 20s = reboot); Claude ~1-4 s, retried within budget
+            .url = url, .timeout_ms = tmo, .user_agent = HTTP_UA,   // per-attempt < 8 s TWDT (was 20s = reboot); Claude ~1-4 s, clamped to the budget left
             .crt_bundle_attach = esp_crt_bundle_attach, .buffer_size = 2048, .buffer_size_tx = 2048,
             .method = HTTP_METHOD_POST, .event_handler = http_evt, .user_data = &acc,
         };
@@ -3297,10 +3341,23 @@ static bool teacher_cfg(char *base, int bcap, char *model, int mcap, char *key, 
 
 // True iff a CHAT teacher key (any provider — Claude or OpenAI-compatible) is configured on the SD.
 // Used for the learned-card "g" vetted flag and the self-upgrade gate.
+// Asked 2-3x per query (L1 stand-down policy, the online-LLM flag, ...), and every teacher_load() is an
+// SD read + a full cJSON parse with a 1.5 KB stack buffer. Cache only the yes/no, keyed on the file's
+// size+mtime — a stat() is one directory lookup. Adding or removing a key always changes the size, so
+// the one change FAT's 2 s mtime could hide (a same-size rewrite) can't flip the answer anyway.
 static bool teacher_has_key(void)
 {
+    static bool   cached = false, have = false;
+    static off_t  csize;
+    static time_t cmtime;
+    struct stat st;
+    if (stat(NUCLEO_SD_MOUNT "/data/anima/teacher.json", &st) != 0) { cached = true; csize = -1; have = false; return false; }
+    if (cached && st.st_size == csize && st.st_mtime == cmtime) return have;
     teacher_cfg_t c;
-    return teacher_load(&c);
+    have = teacher_load(&c);
+    memset(&c, 0, sizeof c);                       // don't leave the key lying on the stack
+    cached = true; csize = st.st_size; cmtime = st.st_mtime;
+    return have;
 }
 
 // Public (for the httpd /api/anima/caps endpoint): report the active CHAT teacher WITHOUT the key.

@@ -20,6 +20,9 @@ extern "C" {
 // True if the device currently has internet (STA associated, has an IP) AND the user hasn't
 // forced offline-only. Cheap, no I/O. Every network tier gates on this.
 bool nucleo_anima_online_available(void);
+// One QUESTION's network budget across every online tier (armed/disarmed by nucleo_anima_query).
+void nucleo_anima_online_turn_begin(void);
+void nucleo_anima_online_turn_end(void);
 
 // User master switch for the network tiers (persisted by the ANIMA app). OFF -> offline-only:
 // cache + recall still answer, the network is never touched. Default ON.

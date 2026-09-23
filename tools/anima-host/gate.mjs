@@ -133,6 +133,13 @@ const gates = [
     // questions (incl. typo'd or offline-unknown ones) must stay grounded or HONESTLY abstain — never a
     // compute skill, never a fabrication. Locks programmatic routing + safe degradation on garbled input.
     ok: (code) => code === 0, summary: (o) => (o.match(/\[realistic\][^\n]*$/m) || [lastLine(o)])[0].replace(/\x1b\[[0-9;]*m/g, '').trim() },
+  // The DEVICE runs the AKB5 sharded router, the host gates above run the flat index: two AKB5-only
+  // fabrications ("ip address of heaven", "ATM PIN of Cleopatra") sat unseen until the same batteries
+  // were run with ANIMA_AKB5=1. Both now run in device mode on every gate.
+  { name: 'halluc-battery (AKB5)', cmd: 'node', args: ['tools/anima-host/halluc-suite.mjs'], env: { ANIMA_AKB5: '1' },
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[halluc-suite\][^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'realistic (AKB5)', cmd: 'node', args: ['tools/anima-host/realistic.mjs'], env: { ANIMA_AKB5: '1' },
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[realistic\][^\n]*$/m) || [lastLine(o)])[0].replace(/\x1b\[[0-9;]*m/g, '').trim() },
   { name: 'skill<->knowledge boundary', cmd: 'node', args: ['tools/anima-host/boundary.mjs'],
     // The deterministic SKILL<->KNOWLEDGE boundary, both directions, over 35 homographs (forza/energia/
     // media/vettore/area/resistenza/logaritmo/seno…) that are BOTH a skill trigger AND a knowledge concept:
@@ -589,7 +596,7 @@ const results = [];
 for (const g of gates) {
   process.stdout.write(`  ${C.d}running ${g.name} ...${C.x}\r`);
   clearVolatile();                       // each gate starts from clean SD state — no cross-gate pollution
-  const { code, out } = run(g.cmd, g.args);
+  const { code, out } = run(g.cmd, g.args, { env: g.env || {} });
   const pass = g.ok(code, out);
   results.push({ name: g.name, pass, summary: g.summary(out) });
   console.log(`  ${pass ? C.g + 'PASS' : C.r + 'FAIL'}${C.x}  ${g.name.padEnd(22)} ${C.d}${g.summary(out).slice(0, 76)}${C.x}`);

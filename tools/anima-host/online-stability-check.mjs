@@ -40,10 +40,18 @@ ok(ht <= twdMs - 1000,
    `blocking call and must finish inside the ${twdMs / 1000} s Task-WDT with margin`);
 
 // --- 2) chat TLS paths (get / post_json / post_anthropic) use the symbol, not a raw literal ---------
-const symUses = (src.match(/\.timeout_ms\s*=\s*HTTP_TIMEOUT/g) || []).length;
+// A path may bind the symbol directly, or `tmo` — the per-question/per-POST budget CLAMP, accepted only
+// while its helpers provably cap it at HTTP_TIMEOUT (so the TWDT bound above still holds).
+const symUses = (src.match(/\.timeout_ms\s*=\s*(HTTP_TIMEOUT|tmo)\b/g) || []).length;
 ok(symUses >= 3,
-   `expected >=3 chat TLS paths binding ".timeout_ms = HTTP_TIMEOUT" (get/post/anthropic), found ${symUses} ` +
-   `— a raw numeric literal would dodge the TWDT bound`);
+   `expected >=3 chat TLS paths binding ".timeout_ms = HTTP_TIMEOUT" (or the clamped "tmo") (get/post/anthropic), ` +
+   `found ${symUses} — a raw numeric literal would dodge the TWDT bound`);
+if (/\.timeout_ms\s*=\s*tmo\b/.test(src)) {
+  ok(/static\s+int\s+net_attempt_timeout[\s\S]*?return[^;]*HTTP_TIMEOUT[^;]*;/.test(src),
+     'net_attempt_timeout() must cap the per-attempt timeout at HTTP_TIMEOUT (the TWDT-safe bound)');
+  ok(/static\s+int\s+post_attempt_timeout[\s\S]*?net_attempt_timeout\(/.test(src),
+     'post_attempt_timeout() must derive from net_attempt_timeout() (never exceed HTTP_TIMEOUT)');
+}
 
 // --- 3) at most ONE numeric literal timeout (the audio-upload transcribe path, on an unwatched task) ---
 const numLits = [...src.matchAll(/\.timeout_ms\s*=\s*(\d+)/g)].map((m) => Number(m[1]));

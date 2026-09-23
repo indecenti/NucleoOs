@@ -19,8 +19,11 @@ function ask(q, lang, akb5) {
   let out = '';
   try { out = execFileSync(exe, [], { input, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], env }); }
   catch (e) { out = (e.stdout || '').toString(); }
+  // An abstention is tier=none. The engine now SAYS so ("Non lo so." / "I don't know."), so the reply
+  // text alone can't tell an answer from a refusal — an empty string is returned for any tier=none.
+  const t = (out.match(/tier=(\S+)/) || [])[1] || 'none';
   const m = out.match(/^ {3}reply: (.*)$/m);
-  let r = m ? m[1] : ''; if (r === '(vuoto)') r = '';
+  let r = m ? m[1] : ''; if (r === '(vuoto)' || t === 'none') r = '';
   return r.trim();
 }
 

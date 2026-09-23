@@ -9,6 +9,8 @@
 static bool s_enabled = true;   // mirrors the device default (master switch ON)
 
 bool nucleo_anima_online_available(void) { return false; }       // no internet on host
+void nucleo_anima_online_turn_begin(void) { }                    // no network budget to arm on host
+void nucleo_anima_online_turn_end(void)   { }
 void nucleo_anima_set_online(bool on)    { s_enabled = on; }
 bool nucleo_anima_online_enabled(void)   { return s_enabled; }
 bool nucleo_anima_teacher_configured(void) { return false; }     // no cloud key on host -> L1 always serves (gates run offline)
