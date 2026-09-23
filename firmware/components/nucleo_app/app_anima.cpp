@@ -33,6 +33,7 @@
 // both leave the app — so a query can't contain a comma.
 #include "nucleo_app.h"
 #include "app_gfx.h"
+#include "app_ui.h"       // app_ui_ascii_fold: shared UTF-8 -> ASCII fold for the TFT fonts
 #include <M5GFX.h>
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
@@ -295,41 +296,6 @@ static int  input_h(void)            { return font_h(chat_font()) + 8; }
 // Width of the first n bytes of s with the CURRENT font (textWidth needs a NUL-terminated string).
 static int  meas(const char *s, int n) { char t[216]; if (n > 215) n = 215; memcpy(t, s, n); t[n] = 0; return (int)d.textWidth(t); }
 
-// Fold UTF-8 (accents, smart quotes, dashes) to ASCII and drop anything else, so the ASCII-only
-// GFX chat font never renders tofu boxes for online answers / accented city names. The offline
-// corpus is already ASCII-folded, so this is mostly a safety net for the online tiers.
-static void ascii_fold(const char *src, char *dst, int cap)
-{
-    int o = 0; const unsigned char *s = (const unsigned char *)src;
-    while (*s && o < cap - 1) {
-        unsigned char c = *s;
-        if (c < 0x80) { dst[o++] = (char)c; s++; continue; }
-        if (c == 0xC3 && s[1]) {                              // Latin-1 supplement (accented letters)
-            char r = 0; unsigned char d2 = s[1];
-            if      (d2 >= 0x80 && d2 <= 0x85) r = 'A'; else if (d2 >= 0xA0 && d2 <= 0xA5) r = 'a';
-            else if (d2 >= 0x88 && d2 <= 0x8B) r = 'E'; else if (d2 >= 0xA8 && d2 <= 0xAB) r = 'e';
-            else if (d2 >= 0x8C && d2 <= 0x8F) r = 'I'; else if (d2 >= 0xAC && d2 <= 0xAF) r = 'i';
-            else if (d2 >= 0x92 && d2 <= 0x96) r = 'O'; else if (d2 >= 0xB2 && d2 <= 0xB6) r = 'o';
-            else if (d2 >= 0x99 && d2 <= 0x9C) r = 'U'; else if (d2 >= 0xB9 && d2 <= 0xBC) r = 'u';
-            else if (d2 == 0x87) r = 'C'; else if (d2 == 0xA7) r = 'c';
-            else if (d2 == 0x91) r = 'N'; else if (d2 == 0xB1) r = 'n';
-            else if (d2 == 0x97) r = 'x';                     // multiplication sign
-            if (r) dst[o++] = r;
-            s += 2; continue;
-        }
-        if (c == 0xE2 && s[1] == 0x80 && s[2]) {              // general punctuation
-            unsigned char d3 = s[2];
-            if      (d3 == 0x98 || d3 == 0x99) dst[o++] = '\'';
-            else if (d3 == 0x9C || d3 == 0x9D) dst[o++] = '"';
-            else if (d3 == 0x93 || d3 == 0x94) dst[o++] = '-';
-            else if (d3 == 0xA6 && o < cap - 3) { dst[o++] = '.'; dst[o++] = '.'; dst[o++] = '.'; }
-            s += 3; continue;
-        }
-        s++; while ((*s & 0xC0) == 0x80) s++;                 // unknown: skip the whole codepoint
-    }
-    dst[o] = 0;
-}
-
 // ---- row cache: word-wrap the message ring by pixel width --------------------
 static void emit_row(const char *p, int len, unsigned short col, unsigned short acc,
                      unsigned char role, unsigned char font, unsigned char first)
@@ -401,7 +367,7 @@ static void push_msg(unsigned char role, unsigned short col, unsigned short acce
     if (!s_msg) return;
     if (s_mhead == s_full_idx) s_full_idx = -1;   // lo slot del messaggio "intero" viene riusato -> torna accorciato
     Msg *m = &s_msg[s_mhead];
-    ascii_fold(text, m->text, MSG_TEXT);
+    app_ui_ascii_fold(text, m->text, MSG_TEXT);
     m->col = col; m->accent = accent; m->role = role;
     s_mhead = (s_mhead + 1) % MSG_MAX; if (s_mcount < MSG_MAX) s_mcount++;
     rebuild_rows();
@@ -1289,7 +1255,7 @@ static void present_result(void)
     }
     // La risposta CORRENTE si mostra INTERA: salva il testo pieno (foldato) in s_full; quel messaggio verra'
     // wrappato da li' (vedi rebuild_rows). Nel ring va solo la copia accorciata qui sotto (cronologia, RAM bassa).
-    ascii_fold(reply, s_full, sizeof s_full);
+    app_ui_ascii_fold(reply, s_full, sizeof s_full);
     // Tiny screen: keep a long answer SHORT in the HISTORY ring (the current one shows full, scroll to read).
     // Clip at a clean boundary — the longest complete sentence within the limit, else a whole word; never mid-word.
     if ((int)strlen(reply) > NATIVE_REPLY_MAX) {
@@ -2926,7 +2892,7 @@ static bool next_event(char *out, size_t n)
                 char raw[72];
                 if (!strcmp(bestk, today)) snprintf(raw, sizeof raw, "%s%s%s", ts, ts[0] ? " " : "", txs);
                 else { int yy, mm, dd; if (sscanf(bestk, "%d-%d-%d", &yy, &mm, &dd) == 3) snprintf(raw, sizeof raw, "%d/%d %s", dd, mm, txs); else snprintf(raw, sizeof raw, "%s", txs); }
-                ascii_fold(raw, out, (int)n); ok = out[0] != 0;
+                app_ui_ascii_fold(raw, out, (int)n); ok = out[0] != 0;
             }
         }
         if (root) cJSON_Delete(root);
@@ -2970,7 +2936,7 @@ static void load_today(void)
                 const cJSON *tmj = cJSON_GetObjectItem(ev, "time"), *tx = cJSON_GetObjectItem(ev, "text");
                 const char *ts = cJSON_IsString(tmj) ? tmj->valuestring : "", *txs = cJSON_IsString(tx) ? tx->valuestring : "";
                 char line[72]; if (ts[0]) snprintf(line, sizeof line, "%s  %s", ts, txs); else snprintf(line, sizeof line, "%s", txs);
-                ascii_fold(line, s_today[s_today_n++], 72);
+                app_ui_ascii_fold(line, s_today[s_today_n++], 72);
             }
             s_today_count = s_today_n;
         }
@@ -2990,7 +2956,7 @@ static void load_today(void)
                 int yy, mm, dd; char line[72];
                 if (sscanf(bestk, "%d-%d-%d", &yy, &mm, &dd) == 3) snprintf(line, sizeof line, s_en ? "next %d/%d  %s" : "poi %d/%d  %s", dd, mm, txs);
                 else snprintf(line, sizeof line, "%s", txs);
-                ascii_fold(line, s_today[s_today_n++], 72);
+                app_ui_ascii_fold(line, s_today[s_today_n++], 72);
             }
         }
         if (root) cJSON_Delete(root);

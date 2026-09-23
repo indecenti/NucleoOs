@@ -1,8 +1,9 @@
 // Background calendar reminder service — event-light by design.
 //
 // A single low-priority task wakes every 15 s and keeps only TODAY's events in RAM
-// (reloaded from the SD card on a day-change or at most every 5 min — never per wake, so it
-// stays off ANIMA's SD path). When an event's HH:MM arrives it ALWAYS publishes
+// (reloaded from the SD card on a day-change, when the file changes — a stat() per wake, no read —
+// or at most every 5 min, so it stays off ANIMA's SD path). The change check is what makes an event
+// added a few minutes ahead (native Calendar or web) still chime. When an event's HH:MM arrives it ALWAYS publishes
 // "calendar.reminder" on the event bus → the WebSocket sink broadcasts it → any connected
 // web client renders a toast. When NO web client is driving the device (the launcher
 // suspends its UI while remote, handing CPU/RAM to the server), it ALSO chimes the speaker
@@ -38,7 +39,9 @@ static Ev s_ev[MAX_EV];
 static int s_evn = 0;
 static char s_day[12] = "";        // cached day key (empty -> force first load)
 static int64_t s_loaded_us = 0;
-static char s_done_min[6] = "";    // HH:MM whose reminders were already dispatched (survives a same-day reload)
+static char s_done_min[6] = "";
+static time_t s_file_mt = 0;        // calendar.json stamp of the loaded cache
+static long   s_file_sz = -1;    // HH:MM whose reminders were already dispatched (survives a same-day reload)
 
 
 // ---- load today's events (rare: day-change or >5 min stale) ----------------
@@ -86,7 +89,11 @@ static void svc_task(void *)
             int64_t us = esp_timer_get_time();
             char hhmm[6]; snprintf(hhmm, sizeof hhmm, "%02d:%02d", tm.tm_hour, tm.tm_min);
             bool newday = strcmp(key, s_day) != 0;
-            if (newday || us - s_loaded_us > 300LL * 1000000) {
+            struct stat st; bool changed = false;
+            if (stat(CAL_PATH, &st) == 0 && (st.st_mtime != s_file_mt || (long)st.st_size != s_file_sz)) {
+                s_file_mt = st.st_mtime; s_file_sz = (long)st.st_size; changed = true;
+            }
+            if (newday || changed || us - s_loaded_us > 300LL * 1000000) {
                 load_today(key); s_loaded_us = us;           // resets every fired flag...
                 if (!newday && !strcmp(s_done_min, hhmm))    // ...so a reload inside an already-fired minute
                     for (int i = 0; i < s_evn; i++)          // must not chime/banner those events twice
