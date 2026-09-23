@@ -855,11 +855,11 @@
                 <div class="f-ctl edge-mgmt"><span class="edge-stat" id="edge-stat"></span><button class="ebtn" id="edge-reload" title="Riscarica il cervello dal dispositivo (se l'hai aggiornato) e ricostruisce la cache locale.">Ricarica</button></div>
               </div>
               <div class="set-field" id="row-localmodel">
-                <div class="f-tx"><label id="s-localmodel">Modello locale (GPU)</label><span class="f-sub" data-i18n data-it="L’LLM che gira nel TUO browser sulla GPU (modalità “GPU locale”). Si scarica dal web una volta — automatico e trasparente — poi funziona offline. Più grande = migliore, ma serve più VRAM." data-en="The LLM that runs in YOUR browser on the GPU (“Local GPU” mode). Downloaded from the web once — automatic and transparent — then works offline. Bigger = better but needs more VRAM.">L’LLM che gira nel tuo browser sulla GPU. Si scarica dal web una volta (automatico), poi offline.</span></div>
+                <div class="f-tx"><label id="s-localmodel">Modello locale (GPU)</label><span class="f-sub" data-i18n data-it="L’LLM che gira nel TUO browser sulla GPU. Si scarica una volta sola, solo quando premi “Scarica ora”, poi funziona offline. Più grande = migliore, ma serve più VRAM." data-en="The LLM that runs in YOUR browser on the GPU. Downloaded once, only when you press “Download now”, then works offline. Bigger = better but needs more VRAM.">L’LLM che gira nel tuo browser sulla GPU. Si scarica solo quando premi “Scarica ora”, poi offline.</span></div>
                 <div class="f-ctl" style="flex-direction:column;align-items:flex-end;gap:6px">
                   <select id="set-localmodel" class="keyin" style="cursor:pointer;width:auto;min-width:170px"></select>
                   <span id="localmodel-stat" style="font:11px var(--mono);color:var(--muted);text-align:right;max-width:230px"></span>
-                  <button class="ebtn" id="localmodel-get" title="Scarica/carica ora il modello nel browser (mostra il progresso). Non obbligatorio: parte da solo al primo uso.">Scarica ora</button>
+                  <button class="ebtn" id="localmodel-get" title="Scarica/carica ora il modello nel browser (mostra il progresso). Non si scarica mai da solo: finché non è installato, la chat salta la GPU locale.">Scarica ora</button>
                 </div>
               </div>
               <div class="set-field">
@@ -900,7 +900,7 @@
                 <div class="f-ctl"><div class="seg2" id="set-agents"><button data-a="0">No</button><button data-a="1" data-i18n data-it="Sì" data-en="Yes">Sì</button></div></div>
               </div>
               <div class="set-field">
-                <div class="f-tx"><label id="s-agentauto" data-i18n data-it="Auto-approva azioni agente" data-en="Auto-approve agent actions">Auto-approva azioni agente</label><span class="f-sub" data-i18n data-it="Esegue le azioni dell'agente senza chiedere conferma (sconsigliato)." data-en="Run the agent's actions without asking (not recommended).">Esegue le azioni dell'agente senza chiedere conferma.</span></div>
+                <div class="f-tx"><label id="s-agentauto" data-i18n data-it="Auto-approva azioni agente" data-en="Auto-approve agent actions">Auto-approva azioni agente</label><span class="f-sub" data-i18n data-it="Esegue le azioni dell'agente (modifiche ai file, script) senza chiedere conferma (sconsigliato). Eliminazioni, installazione di app e azioni hardware chiedono sempre." data-en="Run the agent's actions (file edits, scripts) without asking (not recommended). Deleting, installing apps and hardware actions always ask.">Esegue le azioni dell'agente senza chiedere conferma. Eliminazioni, app e hardware chiedono sempre.</span></div>
                 <div class="f-ctl"><div class="seg2" id="set-agentauto"><button data-aa="0">No</button><button data-aa="1" data-i18n data-it="Sì" data-en="Yes">Sì</button></div></div>
               </div>
               <div class="set-field">
@@ -1437,7 +1437,7 @@
         "Local GPU": "GPU local",
         "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Cardputer. It scales onto the Cardputer only as the last net. Type /guide in chat for the full map.": "Cadena de reserva: Online (nube) → GPU local → Navegador (WASM + índice web) → Cardputer. Escala al Cardputer solo como última red. Escribe /guide en el chat para el mapa completo.",
         "The offline brain downloaded in this browser.": "El cerebro offline descargado en este navegador.",
-        "The LLM that runs in YOUR browser on the GPU (“Local GPU” mode). Downloaded from the web once — automatic and transparent — then works offline. Bigger = better but needs more VRAM.": "El LLM que corre en TU navegador en la GPU (modo «GPU local»). Se descarga de la web una vez — automático y transparente — y luego funciona offline. Más grande = mejor, pero necesita más VRAM.",
+        "The LLM that runs in YOUR browser on the GPU. Downloaded once, only when you press “Download now”, then works offline. Bigger = better but needs more VRAM.": "El LLM que corre en TU navegador en la GPU. Se descarga una sola vez, solo cuando pulsas «Descargar ahora», y luego funciona offline. Más grande = mejor, pero necesita más VRAM.",
         "The Cardputer's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.": "El cerebro programático offline del Cardputer. Auto: se retira cuando responde el online o un modelo del navegador (libera RAM). On: siempre. Off: nunca.",
         "Replies": "Respuestas",
         "Show example prompts under replies.": "Muestra ejemplos de pregunta bajo las respuestas.",
@@ -1448,7 +1448,7 @@
         "Agents (Online)": "Agentes (Online)",
         "For complex tasks (files, apps, web, device state) use the multi-agent runtime. Works with Claude or Grok.": "Para tareas complejas (archivos, apps, web, estado del dispositivo) usa el runtime multiagente. Funciona con Claude o Grok.",
         "Auto-approve agent actions": "Auto-aprobar acciones del agente",
-        "Run the agent's actions without asking (not recommended).": "Ejecuta las acciones del agente sin preguntar (no recomendado).",
+        "Run the agent's actions (file edits, scripts) without asking (not recommended). Deleting, installing apps and hardware actions always ask.": "Ejecuta las acciones del agente (ediciones de archivos, scripts) sin preguntar (no recomendado). Borrar, instalar apps y las acciones de hardware siempre preguntan.",
         "Web search (agent)": "Búsqueda web (agente)",
         "Let the agent search the web.": "Permite al agente buscar en la web.",
         "AI Models — Forge": "Modelos de IA — Forge",
@@ -1715,7 +1715,7 @@
         "Show, under every reply, which tool ANIMA used to reason (engine, model, steps). Line = a collapsible one-liner; Tree = expanded.": "Muestra, bajo cada respuesta, qué herramienta usó ANIMA para razonar (motor, modelo, pasos). Línea = una línea plegable; Árbol = expandido.",
         "ANIMA’s offline brain downloaded in this browser. Cached = it works even without the Cardputer.": "El cerebro offline de ANIMA descargado en este navegador. En caché = funciona incluso sin el Cardputer.",
         "Re-download the brain from the device (if you updated it) and rebuild the local cache.": "Vuelve a descargar el cerebro del dispositivo (si lo actualizaste) y reconstruye la caché local.",
-        "Download/load the model in the browser now (shows progress). Optional: it starts by itself on first use.": "Descarga/carga el modelo en el navegador ahora (muestra el progreso). Opcional: se inicia solo en el primer uso.",
+        "Download/load the model in the browser now (shows progress). It never downloads by itself: until it is installed, chat skips the local GPU.": "Descarga/carga el modelo en el navegador ahora (muestra el progreso). Nunca se descarga solo: hasta que esté instalado, el chat omite la GPU local.",
         "Message": "Mensaje",
         ") — click to inspect": ") — clic para inspeccionar",
         "Compacted ": "Compactados ",
@@ -1903,7 +1903,7 @@
         "Local GPU": "GPU local",
         "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Cardputer. It scales onto the Cardputer only as the last net. Type /guide in chat for the full map.": "Chaîne de secours : En ligne (cloud) → GPU local → Navigateur (WASM + index web) → Cardputer. Il bascule sur le Cardputer seulement en dernier recours. Tapez /guide dans le chat pour la carte complète.",
         "The offline brain downloaded in this browser.": "Le cerveau hors ligne téléchargé dans ce navigateur.",
-        "The LLM that runs in YOUR browser on the GPU (“Local GPU” mode). Downloaded from the web once — automatic and transparent — then works offline. Bigger = better but needs more VRAM.": "Le LLM qui tourne dans VOTRE navigateur sur le GPU (mode « GPU local »). Téléchargé une fois depuis le web — automatique et transparent — puis fonctionne hors ligne. Plus grand = meilleur mais demande plus de VRAM.",
+        "The LLM that runs in YOUR browser on the GPU. Downloaded once, only when you press “Download now”, then works offline. Bigger = better but needs more VRAM.": "Le LLM qui tourne dans VOTRE navigateur sur le GPU. Téléchargé une seule fois, uniquement quand vous appuyez sur « Télécharger maintenant », puis fonctionne hors ligne. Plus grand = meilleur mais demande plus de VRAM.",
         "The Cardputer's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.": "Le cerveau programmatique hors ligne du Cardputer. Auto : se retire quand l’en ligne ou un modèle du navigateur répond (libère de la RAM). On : toujours. Off : jamais.",
         "Replies": "Réponses",
         "Show example prompts under replies.": "Affiche des exemples de question sous les réponses.",
@@ -1914,7 +1914,7 @@
         "Agents (Online)": "Agents (En ligne)",
         "For complex tasks (files, apps, web, device state) use the multi-agent runtime. Works with Claude or Grok.": "Pour les tâches complexes (fichiers, apps, web, état de l’appareil) utilisez le runtime multi-agent. Fonctionne avec Claude ou Grok.",
         "Auto-approve agent actions": "Approuver auto. les actions de l’agent",
-        "Run the agent's actions without asking (not recommended).": "Exécute les actions de l’agent sans demander (déconseillé).",
+        "Run the agent's actions (file edits, scripts) without asking (not recommended). Deleting, installing apps and hardware actions always ask.": "Exécute les actions de l’agent (modifications de fichiers, scripts) sans demander (déconseillé). Supprimer, installer des apps et les actions matérielles demandent toujours.",
         "Web search (agent)": "Recherche web (agent)",
         "Let the agent search the web.": "Permet à l’agent de chercher sur le web.",
         "AI Models — Forge": "Modèles d’IA — Forge",
@@ -2177,7 +2177,7 @@
         "Show, under every reply, which tool ANIMA used to reason (engine, model, steps). Line = a collapsible one-liner; Tree = expanded.": "Affiche, sous chaque réponse, quel outil ANIMA a utilisé pour raisonner (moteur, modèle, étapes). Ligne = une ligne repliable ; Arbre = déplié.",
         "ANIMA’s offline brain downloaded in this browser. Cached = it works even without the Cardputer.": "Le cerveau hors ligne d’ANIMA téléchargé dans ce navigateur. En cache = fonctionne même sans le Cardputer.",
         "Re-download the brain from the device (if you updated it) and rebuild the local cache.": "Re-télécharge le cerveau depuis l’appareil (si vous l’avez mis à jour) et reconstruit le cache local.",
-        "Download/load the model in the browser now (shows progress). Optional: it starts by itself on first use.": "Télécharge/charge le modèle dans le navigateur maintenant (affiche la progression). Optionnel : il démarre seul à la première utilisation.",
+        "Download/load the model in the browser now (shows progress). It never downloads by itself: until it is installed, chat skips the local GPU.": "Télécharge/charge le modèle dans le navigateur maintenant (affiche la progression). Il ne se télécharge jamais tout seul : tant qu’il n’est pas installé, le chat saute le GPU local.",
         ") — click to inspect": ") — cliquer pour inspecter",
         "Compacted ": "Compactés ",
         " turns": " tours",
@@ -2366,7 +2366,7 @@
         "Local GPU": "Lokale GPU",
         "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Cardputer. It scales onto the Cardputer only as the last net. Type /guide in chat for the full map.": "Fallback-Kette: Online (Cloud) → lokale GPU → Browser (WASM + Web-Index) → Cardputer. Auf den Cardputer wird nur als letztes Netz ausgewichen. Tippe /guide im Chat für die vollständige Übersicht.",
         "The offline brain downloaded in this browser.": "Das in diesem Browser geladene Offline-Gehirn.",
-        "The LLM that runs in YOUR browser on the GPU (“Local GPU” mode). Downloaded from the web once — automatic and transparent — then works offline. Bigger = better but needs more VRAM.": "Das LLM, das in DEINEM Browser auf der GPU läuft („Lokale GPU“-Modus). Wird einmal aus dem Web geladen — automatisch und transparent — dann offline nutzbar. Größer = besser, braucht aber mehr VRAM.",
+        "The LLM that runs in YOUR browser on the GPU. Downloaded once, only when you press “Download now”, then works offline. Bigger = better but needs more VRAM.": "Das LLM, das in DEINEM Browser auf der GPU läuft. Wird nur einmal geladen, und nur wenn du „Jetzt herunterladen“ drückst, dann offline nutzbar. Größer = besser, braucht aber mehr VRAM.",
         "The Cardputer's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.": "Das programmatische Offline-Gehirn des Cardputer. Auto: tritt zurück, wenn online oder ein Browser-Modell antwortet (gibt RAM frei). On: immer. Off: nie.",
         "Replies": "Antworten",
         "Show example prompts under replies.": "Beispielfragen unter den Antworten anzeigen.",
@@ -2377,7 +2377,7 @@
         "Agents (Online)": "Agenten (Online)",
         "For complex tasks (files, apps, web, device state) use the multi-agent runtime. Works with Claude or Grok.": "Für komplexe Aufgaben (Dateien, Apps, Web, Gerätestatus) nutze die Multi-Agent-Laufzeit. Funktioniert mit Claude oder Grok.",
         "Auto-approve agent actions": "Agent-Aktionen automatisch genehmigen",
-        "Run the agent's actions without asking (not recommended).": "Führt die Agent-Aktionen ohne Nachfrage aus (nicht empfohlen).",
+        "Run the agent's actions (file edits, scripts) without asking (not recommended). Deleting, installing apps and hardware actions always ask.": "Führt die Agent-Aktionen (Dateiänderungen, Skripte) ohne Nachfrage aus (nicht empfohlen). Löschen, App-Installationen und Hardware-Aktionen fragen immer.",
         "Web search (agent)": "Websuche (Agent)",
         "Let the agent search the web.": "Erlaubt dem Agenten die Websuche.",
         "AI Models — Forge": "KI-Modelle — Forge",
@@ -2641,7 +2641,7 @@
         "Show, under every reply, which tool ANIMA used to reason (engine, model, steps). Line = a collapsible one-liner; Tree = expanded.": "Zeigt unter jeder Antwort, welches Werkzeug ANIMA zum Schlussfolgern nutzte (Engine, Modell, Schritte). Zeile = einklappbare Einzeile; Baum = ausgeklappt.",
         "ANIMA’s offline brain downloaded in this browser. Cached = it works even without the Cardputer.": "ANIMAs Offline-Gehirn, in diesem Browser geladen. Im Cache = funktioniert auch ohne Cardputer.",
         "Re-download the brain from the device (if you updated it) and rebuild the local cache.": "Lädt das Gehirn erneut vom Gerät (falls aktualisiert) und baut den lokalen Cache neu auf.",
-        "Download/load the model in the browser now (shows progress). Optional: it starts by itself on first use.": "Lädt das Modell jetzt im Browser (zeigt Fortschritt). Optional: startet bei der ersten Nutzung von selbst.",
+        "Download/load the model in the browser now (shows progress). It never downloads by itself: until it is installed, chat skips the local GPU.": "Lädt das Modell jetzt im Browser (zeigt Fortschritt). Es lädt sich nie von selbst: bis es installiert ist, überspringt der Chat die lokale GPU.",
         "Message": "Nachricht",
         " tokens (": " Tokens (",
         ") — click to inspect": ") — zum Prüfen klicken",
@@ -2662,6 +2662,67 @@
     Object.assign(ANIMA_L10N.es, { "Cardputer voice speed":"Velocidad de voz del Cardputer", "Local model (GPU)":"Modelo local (GPU)", "SD integrity":"Integridad de la SD", "Air-gap readiness":"Preparación air-gap", "Search conversations":"Buscar conversaciones", "Conversations (Ctrl/⌘⇧S)":"Conversaciones (Ctrl/⌘⇧S)", "Show/hide conversations":"Mostrar/ocultar conversaciones", "+ File":"+ Archivo" });
     Object.assign(ANIMA_L10N.fr, { "Cardputer voice speed":"Vitesse de la voix du Cardputer", "Local model (GPU)":"Modèle local (GPU)", "SD integrity":"Intégrité SD", "Air-gap readiness":"Autonomie air-gap", "Search conversations":"Rechercher des conversations", "Conversations (Ctrl/⌘⇧S)":"Conversations (Ctrl/⌘⇧S)", "Show/hide conversations":"Afficher/masquer les conversations", "+ File":"+ Fichier" });
     Object.assign(ANIMA_L10N.de, { "Cardputer voice speed":"Cardputer-Sprechtempo", "Local model (GPU)":"Lokales Modell (GPU)", "SD integrity":"SD-Integrität", "Air-gap readiness":"Air-Gap-Bereitschaft", "Search conversations":"Unterhaltungen suchen", "Conversations (Ctrl/⌘⇧S)":"Unterhaltungen (Ctrl/⌘⇧S)", "Show/hide conversations":"Unterhaltungen ein-/ausblenden", "+ File":"+ Datei" });
+    // Agent approval prompt · local GPU model consent · device actions (done / NOT done) · too-long question.
+    Object.assign(ANIMA_L10N.es, {
+      "The agent wants to run: ":"El agente quiere ejecutar: ", "Path: ":"Ruta: ", "Target: ":"Destino: ",
+      "Hardware action (it acts in the real world): it is always confirmed.":"Acción de hardware (actúa en el mundo real): siempre se confirma.",
+      "Irreversible or system-level action: it is always confirmed, even with auto-approve on.":"Acción irreversible o de sistema: siempre se confirma, incluso con la aprobación automática activada.",
+      "installed":"instalado", "not installed — chat skips it until you download it":"no instalado — el chat no lo usa hasta que lo descargues",
+      "Download {m} (~{gb} GB) into this browser? It happens once; afterwards it runs offline on your GPU.":"¿Descargar {m} (~{gb} GB) en este navegador? Ocurre una sola vez; después funciona offline en tu GPU.",
+      "Preparing… (if another download is running, it waits for it to finish)":"Preparando… (si hay otra descarga en curso, espera a que termine)",
+      "the event was not added":"el evento no se ha añadido", "the volume was not changed":"el volumen no se ha cambiado",
+      "the brightness was not changed":"el brillo no se ha cambiado", "the file was not created":"el archivo no se ha creado",
+      "the command was not carried out":"el comando no se ha ejecutado",
+      "This browser isn’t paired with the Cardputer (PIN needed)":"Este navegador no está emparejado con el Cardputer (hace falta el PIN)",
+      "The Cardputer is busy, try again in a moment":"El Cardputer está ocupado, inténtalo de nuevo en un momento",
+      "The request is too long for the Cardputer":"La petición es demasiado larga para el Cardputer",
+      "This Cardputer firmware can’t run it from the web (update it)":"El firmware de este Cardputer no puede ejecutarlo desde la web (actualízalo)",
+      "The Cardputer did not recognise it as a command":"El Cardputer no lo ha reconocido como comando",
+      "The Cardputer refused or could not do it":"El Cardputer lo ha rechazado o no ha podido hacerlo",
+      "I can’t reach the Cardputer":"No consigo conectar con el Cardputer",
+      "Volume":"Volumen", "Brightness":"Brillo", "Done on the Cardputer":"Hecho en el Cardputer",
+      "This question is too long for the Cardputer: shorten it and try again.":"La pregunta es demasiado larga para el Cardputer: acórtala e inténtalo de nuevo."
+    });
+    Object.assign(ANIMA_L10N.fr, {
+      "The agent wants to run: ":"L’agent veut exécuter : ", "Path: ":"Chemin : ", "Target: ":"Cible : ",
+      "Hardware action (it acts in the real world): it is always confirmed.":"Action matérielle (elle agit dans le monde réel) : elle est toujours confirmée.",
+      "Irreversible or system-level action: it is always confirmed, even with auto-approve on.":"Action irréversible ou système : elle est toujours confirmée, même avec l’approbation automatique activée.",
+      "installed":"installé", "not installed — chat skips it until you download it":"non installé — le chat ne l’utilise pas tant que vous ne l’avez pas téléchargé",
+      "Download {m} (~{gb} GB) into this browser? It happens once; afterwards it runs offline on your GPU.":"Télécharger {m} (~{gb} Go) dans ce navigateur ? Cela n’arrive qu’une fois ; ensuite il tourne hors ligne sur votre GPU.",
+      "Preparing… (if another download is running, it waits for it to finish)":"Préparation… (si un autre téléchargement est en cours, il attend qu’il se termine)",
+      "the event was not added":"l’événement n’a pas été ajouté", "the volume was not changed":"le volume n’a pas été modifié",
+      "the brightness was not changed":"la luminosité n’a pas été modifiée", "the file was not created":"le fichier n’a pas été créé",
+      "the command was not carried out":"la commande n’a pas été exécutée",
+      "This browser isn’t paired with the Cardputer (PIN needed)":"Ce navigateur n’est pas associé au Cardputer (PIN requis)",
+      "The Cardputer is busy, try again in a moment":"Le Cardputer est occupé, réessayez dans un instant",
+      "The request is too long for the Cardputer":"La demande est trop longue pour le Cardputer",
+      "This Cardputer firmware can’t run it from the web (update it)":"Le firmware de ce Cardputer ne peut pas l’exécuter depuis le web (mettez-le à jour)",
+      "The Cardputer did not recognise it as a command":"Le Cardputer ne l’a pas reconnu comme une commande",
+      "The Cardputer refused or could not do it":"Le Cardputer l’a refusé ou n’a pas pu le faire",
+      "I can’t reach the Cardputer":"Je n’arrive pas à joindre le Cardputer",
+      "Volume":"Volume", "Brightness":"Luminosité", "Done on the Cardputer":"Fait sur le Cardputer",
+      "This question is too long for the Cardputer: shorten it and try again.":"La question est trop longue pour le Cardputer : raccourcissez-la et réessayez."
+    });
+    Object.assign(ANIMA_L10N.de, {
+      "The agent wants to run: ":"Der Agent möchte ausführen: ", "Path: ":"Pfad: ", "Target: ":"Ziel: ",
+      "Hardware action (it acts in the real world): it is always confirmed.":"Hardware-Aktion (wirkt in der realen Welt): wird immer bestätigt.",
+      "Irreversible or system-level action: it is always confirmed, even with auto-approve on.":"Irreversible oder systemweite Aktion: wird immer bestätigt, auch mit automatischer Freigabe.",
+      "installed":"installiert", "not installed — chat skips it until you download it":"nicht installiert — der Chat nutzt es erst, wenn du es herunterlädst",
+      "Download {m} (~{gb} GB) into this browser? It happens once; afterwards it runs offline on your GPU.":"{m} (~{gb} GB) in diesen Browser herunterladen? Das passiert nur einmal; danach läuft es offline auf deiner GPU.",
+      "Preparing… (if another download is running, it waits for it to finish)":"Vorbereitung… (läuft schon ein anderer Download, wird gewartet, bis er fertig ist)",
+      "the event was not added":"der Termin wurde nicht hinzugefügt", "the volume was not changed":"die Lautstärke wurde nicht geändert",
+      "the brightness was not changed":"die Helligkeit wurde nicht geändert", "the file was not created":"die Datei wurde nicht erstellt",
+      "the command was not carried out":"der Befehl wurde nicht ausgeführt",
+      "This browser isn’t paired with the Cardputer (PIN needed)":"Dieser Browser ist nicht mit dem Cardputer gekoppelt (PIN nötig)",
+      "The Cardputer is busy, try again in a moment":"Der Cardputer ist beschäftigt, versuch es gleich noch einmal",
+      "The request is too long for the Cardputer":"Die Anfrage ist zu lang für den Cardputer",
+      "This Cardputer firmware can’t run it from the web (update it)":"Die Firmware dieses Cardputers kann das nicht aus dem Web ausführen (aktualisiere sie)",
+      "The Cardputer did not recognise it as a command":"Der Cardputer hat es nicht als Befehl erkannt",
+      "The Cardputer refused or could not do it":"Der Cardputer hat es abgelehnt oder konnte es nicht ausführen",
+      "I can’t reach the Cardputer":"Ich erreiche den Cardputer nicht",
+      "Volume":"Lautstärke", "Brightness":"Helligkeit", "Done on the Cardputer":"Auf dem Cardputer ausgeführt",
+      "This question is too long for the Cardputer: shorten it and try again.":"Die Frage ist zu lang für den Cardputer: kürze sie und versuch es noch einmal."
+    });
     function TR(it,en){ const l=lang; if(l==='it')return it; if(l==='en')return en; const o=ANIMA_L10N[l]; return (o&&o[en]!=null)?o[en]:en; }
     (function(){ const mp=(o,tr)=>{ if(typeof o==='string')return (tr&&tr[o]!=null)?tr[o]:o; if(Array.isArray(o))return o.map(v=>mp(v,tr)); if(o&&typeof o==='object'){ const r={}; for(const k in o) r[k]=mp(o[k],tr); return r; } return o; };
       for(const L of ['es','fr','de']) UI[L]=mp(UI.en, ANIMA_L10N[L]); })();
@@ -3343,6 +3404,8 @@
       if(c.kind==='create_file') return { icon:'≣', status:c.status||'ok', title:c.arg, sub:c.status==='warn'?t.fileExists:t.fileCreated,
         btn:c.status==='warn'?null:t.openFile, onClick:()=>handoffFile(c.arg) };
       if(c.kind==='add_event') return { icon:'◷', status:'ok', title:c.arg||t.eventAdded, sub:t.eventAdded, btn:t.openCal, onClick:()=>handoffApp('calendar') };
+      if(c.kind==='device_done') return { icon:'✓', status:'ok', title:c.arg==='set_volume'?TR('Volume', 'Volume'):TR('Luminosità', 'Brightness'), sub:TR('Eseguito sul Cardputer', 'Done on the Cardputer') };
+      if(c.kind==='not_done'){ const w=notDoneWhat(c.arg); return { icon:'⚠', status:'warn', title:w.charAt(0).toUpperCase()+w.slice(1), sub:notDoneWhy(c.why) }; }
       // Image generation is ISOLATED in Paint's Atelier (browser GPU): ANIMA explains in the reply and OFFERS
       // to open Paint — it never generates inline (keeps the generative skill from colliding with the chat).
       if(c.kind==='open_paint') return { icon:'✎', status:'info', title:t.imageGen, sub:t.openPaintSub, btn:t.openPaint, onClick:()=>handoffApp('paint') };
@@ -3363,13 +3426,16 @@
       if(!m.isTranslateRequest(q)) return null;
       let caps; try{ caps = await m.probeLocal(); }catch{ caps = {webgpu:false}; }
       if(!caps.webgpu) return null;                            // no browser GPU → fall through to device/Grok
-      if(!isPrivate()){                                        // try the grounded device dictionary first
+      // Installed only: a translation must never start a multi-GB model pull (Settings ▸ Download now does).
+      let have=false; try{ have = await m.localAvailable(); }catch{ have=false; }
+      if(!have) return null;
+      if(!isPrivate() && !devTooLong(q)){                      // try the grounded device dictionary first (if it fits its URL cap)
         try{
           const d = await (await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode=off')).json();
           if(d && d.reply && / in (inglese|italiano|english|italian):/i.test(d.reply)) return d;  // dictionary hit
         }catch{}
       }
-      const txt = await m.translateLocal(q, lang);            // GPU run (downloads the model on first use)
+      const txt = await m.translateLocal(q, lang);            // GPU run on the INSTALLED model (never downloads)
       if(txt) return { reply:txt, tier:'M4-local', intent:'translate', trace:(TR('GPU locale · WebLLM', 'Local GPU · WebLLM')) };
       return null;
     }
@@ -3582,8 +3648,12 @@
         sel.dataset.filled='1';
       }
       sel.value = cat.localModelById(cur)?cur:cat.DEFAULT_LOCAL_MODEL;
-      const paintStat=()=>{ const c=cat.localModelCompat(sel.value, caps);
-        stat.textContent=c.msg; stat.style.color = c.level==='no-webgpu'?'#f87272':(c.level==='tight'?'#fbbd23':'var(--muted)'); };
+      // Say whether the chosen model is INSTALLED: the chat's GPU tier only ever uses an installed one.
+      const paintStat=()=>{ const c=cat.localModelCompat(sel.value, caps), id=sel.value;
+        stat.textContent=c.msg; stat.style.color = c.level==='no-webgpu'?'#f87272':(c.level==='tight'?'#fbbd23':'var(--muted)');
+        if(c.level==='no-webgpu') return;
+        loadLLM().then(m=>m.localModelCached(id)).then((ok)=>{ if(sel.value!==id) return;
+          stat.textContent=c.msg+' · '+(ok?'✓ '+TR('installato', 'installed'):TR('non installato — la chat non lo usa finché non lo scarichi', 'not installed — chat skips it until you download it')); }).catch(()=>{}); };
       paintStat();
       if(!_lmWired){ _lmWired=true;
         sel.addEventListener('change', async ()=>{ try{ localStorage.setItem('anima.localModel', sel.value); }catch{}
@@ -3592,10 +3662,17 @@
         btn.addEventListener('click', async ()=>{
           const c=cat.localModelCompat(sel.value, caps);
           if(c.level==='no-webgpu'){ stat.style.color='#f87272'; stat.textContent=c.msg; return; }
+          // This button is the ONLY way the model gets downloaded: ask first (like the WASM brain's consent
+          // gate), then pull under the OS-wide download lock (loadLocal allowDownload → dlgate.js).
+          let m; try{ m=await loadLLM(); }catch{ return; }
+          const mo=cat.localModelById(sel.value)||{label:sel.value,sizeGB:'?'};
+          let have=false; try{ have=await m.localModelCached(sel.value); }catch{}
+          if(!have && !confirm(TR('Scaricare {m} (~{gb} GB) in questo browser? Succede una volta sola; poi gira offline sulla tua GPU.', 'Download {m} (~{gb} GB) into this browser? It happens once; afterwards it runs offline on your GPU.').replace('{m}',mo.label).replace('{gb}',String(mo.sizeGB)))) return;
           btn.disabled=true;
-          try{ const m=await loadLLM(); await m.unloadLocal();
+          try{ await m.unloadLocal();
+            stat.style.color='var(--muted)'; stat.textContent=TR('Preparo… (se c’è un altro download in corso, aspetto che finisca)', 'Preparing… (if another download is running, it waits for it to finish)');
             await m.loadLocal((p)=>{ const pct=Math.round((p&&p.progress||0)*100); stat.style.color='var(--muted)';
-              stat.textContent=(p&&p.text)||((TR('Caricamento… ', 'Loading… '))+pct+'%'); });
+              stat.textContent=(p&&p.text)||((TR('Caricamento… ', 'Loading… '))+pct+'%'); }, { allowDownload:true });
             stat.style.color='#36d399'; stat.textContent=(TR('✓ Pronto — ora gira offline', '✓ Ready — runs offline now')); }
           catch(e){ stat.style.color='#f87272'; stat.textContent='✗ '+String(e&&e.message||e); }
           finally{ btn.disabled=false; }
@@ -3671,15 +3748,112 @@
     // pull the pack). silent=true → mid-chat fallback: use ONLY what's already cached (loadIfCached), else throw
     // NOT_PROVISIONED so the policy falls through to the device instead of triggering a surprise ~88 MB download.
     async function browserOffline(q, lang, silent){
+      // The commands-first probe may already have run the engine on this exact turn: reuse that answer
+      // instead of querying again (the engine is stateful — a second pass would count as a repeat).
+      if(_turnLocal && _turnLocal.q===q){ const r=_turnLocal.r; _turnLocal=null; return r; }
       if(!silent) return edgeAsk(q);
       const eng = await edgeEngine();
       if(!eng.isLoaded() && !(await eng.loadIfCached())) throw Object.assign(new Error('browser brain not cached'), {code:'NOT_PROVISIONED'});
       return edgeFill(eng.query(q, lang));
     }
     // The Cardputer's own offline cascade (/api/anima). Returns the parsed result, or null if unreachable.
+    // A question the device can't take (too long for its URL buffer) is flagged for the turn, so the
+    // miss is reported as "too long" instead of a bare "I don't know".
     async function deviceOffline(q, lang, devMode){
-      try{ const resp = await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode='+(devMode||'off')); if(!resp.ok) return null; return await resp.json(); }
+      if(_turnDevice && _turnDevice.q===q){ const d=_turnDevice; _turnDevice=null; return d.r||null; }   // commands-first already asked it
+      if(devTooLong(q)){ _turnDevErr='too_long'; return null; }
+      try{ const resp = await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode='+(devMode||'off'));
+        if(resp.status===413 || resp.status===414){ _turnDevErr='too_long'; return null; }
+        if(!resp.ok) return null; return await resp.json(); }
       catch{ return null; }
+    }
+
+    // ---- COMMANDS FIRST: device actions + live state ---------------------------------------------------
+    // A device action (reminder, volume, brightness, file on the SD) can only HAPPEN on the Cardputer, and
+    // live state (time, date, battery, agenda…) is only TRUE there. So such an utterance goes to the device
+    // before the cloud agent / browser LLM, which can't do it and might claim they did. The pure policy
+    // (lexical gate, classifier, "was it really done?") lives in local/cascade.js and is unit-tested.
+    // Turn-scoped memos: the probe's engine/device answers are reused by the offline rungs of the same turn
+    // (never a second query — both engines keep dialogue state).
+    let _turnLocal=null, _turnDevice=null, _turnDevErr='';
+    // CONFIG_HTTPD_MAX_URI_LEN=512 minus '/api/anima?q=' and '&lang=xx&mode=only': past this the device
+    // answers 414/413, so don't send it at all.
+    const DEV_Q_MAX_ENC = 470;
+    const devTooLong = (q)=> encodeURIComponent(String(q||'')).length > DEV_Q_MAX_ENC;
+    // One device turn with the error kept apart: { r } on a reply, else { err: too_long|unpaired|busy|unreachable }.
+    // mode=off: commands are deterministic L0 — never a TLS handshake on the device for them.
+    async function deviceCommand(q){
+      if(_turnDevice && _turnDevice.q===q) return _turnDevice;
+      const done=(d)=>{ _turnDevice={q, ...d}; if(d.err==='too_long') _turnDevErr='too_long'; return _turnDevice; };
+      if(devTooLong(q)) return done({ err:'too_long' });
+      let resp;
+      try{ resp = await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode=off'); }
+      catch{ return done({ err:'unreachable' }); }
+      if(resp.status===401) return done({ err:'unpaired' });
+      if(resp.status===413 || resp.status===414) return done({ err:'too_long' });
+      if(resp.status===503) return done({ err:'busy' });
+      if(!resp.ok) return done({ err:'unreachable' });
+      try{ return done({ r: await resp.json() }); }catch{ return done({ err:'unreachable' }); }
+    }
+    function notDoneWhat(tool){
+      if(tool==='add_event') return TR('l’evento non è stato aggiunto', 'the event was not added');
+      if(tool==='set_volume') return TR('il volume non è stato cambiato', 'the volume was not changed');
+      if(tool==='set_brightness') return TR('la luminosità non è stata cambiata', 'the brightness was not changed');
+      if(tool==='create_file') return TR('il file non è stato creato', 'the file was not created');
+      return TR('il comando non è stato eseguito', 'the command was not carried out');
+    }
+    function notDoneWhy(why){
+      if(why==='unpaired') return TR('Questo browser non è associato al Cardputer (serve il PIN)', 'This browser isn’t paired with the Cardputer (PIN needed)');
+      if(why==='busy') return TR('Il Cardputer è occupato, riprova tra poco', 'The Cardputer is busy, try again in a moment');
+      if(why==='too_long') return TR('La richiesta è troppo lunga per il Cardputer', 'The request is too long for the Cardputer');
+      if(why==='unsupported') return TR('Il firmware di questo Cardputer non può eseguirlo dal web (aggiornalo)', 'This Cardputer firmware can’t run it from the web (update it)');
+      if(why==='mismatch') return TR('Il Cardputer non l’ha riconosciuto come comando', 'The Cardputer did not recognise it as a command');
+      if(why==='failed') return TR('Il Cardputer l’ha rifiutato o non ci è riuscito', 'The Cardputer refused or could not do it');
+      return TR('Non riesco a raggiungere il Cardputer', 'I can’t reach the Cardputer');
+    }
+    // An honest "NOT done" result. 'failed' keeps the device's own reply (it says why: PIN, file exists…).
+    function notPerformed(r, why, tool){
+      const t=tool||(r&&(r.tool||r.intent))||'';
+      const reply=(why==='failed' && r && r.reply) ? r.reply : '⚠ '+notDoneWhy(why)+': '+notDoneWhat(t)+'.';
+      return { ...(r||{ intent:'not_done', domain:'tool', tier:'none', confidence:0 }), reply, done:false, notDone:{ tool:t, why } };
+    }
+    async function commandFirst(q){
+      const P=await cascadeMod();
+      const hint=P.commandHint(q); if(!hint) return null;             // ordinary question: no device round-trip
+      try{ const m=await loadLLM(); if(m.isTranslateRequest(q)) return null; }catch{}   // translation has its own ladder
+      // The real classifier: the in-browser engine when it is already here (no download), else the device.
+      if(await browserProvisioned()){
+        let local=null; try{ local=await browserOffline(q, lang, true); }catch{ local=null; }
+        _turnLocal={ q, r:local };                                    // rung 3 reuses it if this isn't a command
+        const kind=P.classifyCommand(local);
+        if(!kind) return null;
+        if(kind==='client' || kind==='device'){ _turnLocal=null; return local; }   // browser hand-off / run by settleDeviceAction
+        const d=await deviceCommand(q);                               // live state: the device is the authority
+        if(d.r && P.answered(d.r)){ _turnLocal=null; return d.r; }
+        if(P.answered(local)){ _turnLocal=null; return local; }       // filled from /api/status by the browser engine
+        return null;                                                  // both memos stay for the offline rungs
+      }
+      const d=await deviceCommand(q);
+      if(d.r) return P.classifyCommand(d.r) ? d.r : null;             // not a command after all → normal ladder (rung 4 reuses d)
+      // Device unreachable: never let an LLM rung "perform" a device change it cannot make.
+      return hint==='act' ? notPerformed(null, d.err) : null;
+    }
+    // Make a device action REAL or say it wasn't: the in-browser engine only proposes (so the device runs it),
+    // and a device reply counts as done only when the device says so (the "done" flag; legacy inference).
+    async function settleDeviceAction(r, q){
+      if(!r || r.notDone || r.action!=='tool') return r;
+      const P=await cascadeMod();
+      if(P.classifyCommand(r)!=='device') return r;
+      const tool=r.tool||r.intent;
+      if(tool==='create_file' && fs.hasRoot()) return r;               // written into the open workspace below, in the browser
+      if(r.local){
+        const d=await deviceCommand(q);
+        if(!d.r) return notPerformed(r, d.err);
+        if(P.classifyCommand(d.r)!=='device') return notPerformed(r, 'mismatch');
+        r=d.r;
+      }
+      const out=P.deviceToolOutcome(r);
+      return out==='done' ? r : notPerformed(r, out==='unsupported'?'unsupported':'failed');
     }
     // Resolve an offline answer from the browser's own brains (WASM cascade → web index) and the device,
     // in the preferred order; returns a result or null. opts.webOnline → the web index may fetch LIVE
@@ -3875,10 +4049,32 @@
     // The cache sig must change when ANY routed provider's key/model changes — not just the active one or the
     // SET of provider names — or the cached runtime would route in-loop subtasks with a stale secondary cfg.
     function keysSig(){ return Object.entries(keyCfg.keys||{}).map(([p,e])=>p+':'+((e&&e.model)||'')+':'+String((e&&e.key)||'').slice(-4)).sort().join(','); }
+    // The approval prompt says WHAT and WHERE: the op, then its ABSOLUTE target — the resolved path incl. the
+    // root (so a no-workspace write to /data/agent is honest), the app folder for publish/manage, the device
+    // endpoint for a hardware act — plus why it is being asked even under auto-approve.
+    function agentConfirmText(a, always){
+      const op=String(a.op||'?'), root=a.root?String(a.root).replace(/\/+$/,'')+'/':'';
+      let target='', isPath=true;
+      if((op==='publish_app'||op==='manage_app') && a.id){ target='/apps/'+a.id+'/'+(op==='manage_app'?' ('+(a.action||'?')+')':''); isPath=false; }
+      else if(a.hw){ target=a.abs||''; isPath=false; }
+      else if(op==='move_file' && a.from) target=(String(a.from).startsWith('/')?'':root)+String(a.from).replace(/^\.\//,'')+' → '+(a.abs||a.to||'?');
+      else target=a.abs||(a.path?root+String(a.path).replace(/^\.?\/+/,''):'');
+      const lines=[TR('L’agente vuole eseguire: ', 'The agent wants to run: ')+op];
+      if(target) lines.push((isPath?TR('Percorso: ', 'Path: '):TR('Destinazione: ', 'Target: '))+target);
+      if(always) lines.push('⚠ '+(a.hw
+        ? TR('Azione hardware (agisce nel mondo reale): va sempre confermata.', 'Hardware action (it acts in the real world): it is always confirmed.')
+        : TR('Azione irreversibile o di sistema: va sempre confermata, anche con l’auto-approvazione.', 'Irreversible or system-level action: it is always confirmed, even with auto-approve on.')));
+      lines.push(TR('Consentire?', 'Allow?'));
+      return lines.join('\n');
+    }
     async function agentRuntime(){
       const sig=(keyCfg.key||'')+'|'+(keyCfg.model||'')+'|'+keysSig()+'|'+((fs.hasRoot&&fs.hasRoot())?fs.getRoot():'');
       if(_agentRt && _agentRtKey===sig) return _agentRt;
       const { createRuntime } = await import('/apps/agent/runtime.js');   // device webfs maps /apps/<id>/<rest> → /apps/<id>/www/<rest>: the URI must NOT contain /www/
+      // The runtime's own "never auto-approve" set (delete_file / publish_app / manage_app). Same module
+      // instance runtime.js already loaded, so no extra fetch; mirrored as a floor if it ever fails to load.
+      let ALWAYS=null; try{ ALWAYS=(await import('/apps/agent/agent-tools.js')).ALWAYS_CONFIRM; }catch{}
+      if(!ALWAYS || typeof ALWAYS.has!=='function') ALWAYS=new Set(['delete_file','publish_app','manage_app']);
       const cfg={ provider:keyCfg.provider, key:keyCfg.key, base:keyCfg.base, model:keyCfg.model, version:keyCfg.version, geminiTier:keyCfg.geminiTier };
       const root=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : '/data/agent';
       const ui={
@@ -3897,7 +4093,12 @@
             }
             // declined → fall through: write to /data/agent (scratch), still gated by the per-op rule below
           }
-          return agentAuto ? true : confirm((TR('L\'agente vuole ', 'The agent wants to '))+(a.op||'agire')+(a.abs?': '+a.abs:(a.path?': '+a.path:''))+'\n'+(TR('Consentire?', 'Allow?')));   // show the ABSOLUTE path (incl. root) so a no-workspace write to /data/agent is honest
+          // Auto-approve covers ordinary workspace edits ONLY. An irreversible/system op (ALWAYS_CONFIRM) or a
+          // hardware act (a.hw) is asked EVERY time — the runtime calls confirm() for those precisely because
+          // auto-approve must not cover them (a prompt-injected "publish this app" would otherwise go through).
+          const always = !!a.hw || ALWAYS.has(a.op);
+          if(agentAuto && !always) return true;
+          return confirm(agentConfirmText(a, always));
         },
         autoApprove:()=>agentAuto,
         webSearchEnabled:()=>agentWeb,
@@ -3965,9 +4166,13 @@
       addUser(q); history.push({role:'user',text:q}); persist();
       const think=startThinking();
       let r; const _t0=Date.now();   // pipeline latency: measured across the whole brain resolution (incl. fallbacks)
+      _turnLocal=null; _turnDevice=null; _turnDevErr='';
+      // COMMANDS FIRST: a device action or live-state question ("alza il volume", "ricordami…", "che ore sono")
+      // is resolved by the Cardputer before any LLM rung — even with 🌐 Web armed — see commandFirst().
+      try{ r = await commandFirst(sendQ); }catch{ r = null; }
       // 🌐 WEB: when armed, an explicit web-grounded turn via Groq compound takes precedence over the selected
       // mode. Browser-direct, Groq-only. On no key / failure it falls through to the normal engine (never dead-ends).
-      if(webCompound){ await ensureKeyLoaded(); if(hasGroq()){ try{ r = await cloudCompoundChat(sendQ); }catch(e){ r = null; } } }
+      if(!r && webCompound){ await ensureKeyLoaded(); if(hasGroq()){ try{ r = await cloudCompoundChat(sendQ); }catch(e){ r = null; } } }
       if(!r){
         // -- ONE ladder, walked top-down until a rung answers -------------------------------------
         // This replaced five hand-written per-mode ladders. They named WHERE compute ran, so picking
@@ -4003,10 +4208,12 @@
 
         // 2 - BROWSER GPU LLM (WebLLM). A real generative model on the user's own GPU - the rung the
         //     old 'Browser' mode could never reach. Works in private mode too: once installed it is local.
+        //     INSTALLED ONLY: this rung never starts a multi-GB download (that is Settings ▸ Download now,
+        //     with consent + the OS download lock). Not installed -> skipped, the next rung answers.
         if(!r && !_agentCancelled){
           try{
             const m = await loadLLM(); const caps = await m.probeLocal();
-            if(caps.webgpu){ try{ r = await m.queryLocal(sendQ, lang, history); }catch{ r = null; } }
+            if(caps.webgpu && await m.localAvailable()){ try{ r = await m.queryLocal(sendQ, lang, history); }catch{ r = null; } }
           }catch{ /* module/probe failed -> next rung */ }
         }
 
@@ -4021,10 +4228,16 @@
         if(!r){
           think.remove(); const {body}=botShell(history.length, false);
           const have = await browserProvisioned().catch(()=>false);
-          const msg = have ? UI[lang].offline : (UI[lang].edgeNeedInstall||UI[lang].offline);
+          // A question the Cardputer rejected as too long must not read as "I don't know".
+          const msg = _turnDevErr==='too_long'
+            ? TR('La domanda è troppo lunga per il Cardputer: accorciala e riprova.', 'This question is too long for the Cardputer: shorten it and try again.')
+            : have ? UI[lang].offline : (UI[lang].edgeNeedInstall||UI[lang].offline);
           await type(body, msg); history.push({role:'bot',text:msg}); persist(); setDot('err'); endTurn(); return;
         }
       }
+      // A device action is done only if the Cardputer did it: run a browser-engine proposal on the device,
+      // or turn it into an honest "not done" (device unreachable / unpaired / refused / old firmware).
+      try{ r = await settleDeviceAction(r, sendQ); }catch{}
       setDot('ok'); think.remove();
       // The engine now fills a bare refusal on an abstention ("Non lo so." / "I don't know.") instead
       // of returning an empty string, so the runtimes that had NO fallback (voice, host CLI) stop going
@@ -4048,7 +4261,9 @@
       if(r.trace && r.trace.includes(' > ')) entry.trace=r.trace.split(' > ');
       // action/result connector lines
       // tool-result card + automatic shell hand-off (so the embedded shell opens immediately)
-      if(r.action==='launch' && r.arg){ entry.card={kind:'launch',arg:r.arg}; buildCard(body, cardFromDescriptor(entry.card)); handoffApp(r.arg); }
+      // A device action that did NOT happen gets a warning card, never a success card (settleDeviceAction).
+      if(r.notDone){ entry.card={kind:'not_done',arg:r.notDone.tool||'',why:r.notDone.why||''}; buildCard(body, cardFromDescriptor(entry.card)); }
+      else if(r.action==='launch' && r.arg){ entry.card={kind:'launch',arg:r.arg}; buildCard(body, cardFromDescriptor(entry.card)); handoffApp(r.arg); }
       else if(r.action==='tool' && r.tool==='open_file' && r.arg){ entry.card={kind:'open_file',arg:r.arg}; buildCard(body, cardFromDescriptor(entry.card)); handoffFile(r.arg); }
       else if(r.tool==='create_file' && r.arg){
         if(fs.hasRoot()){                                   // re-target ANIMA's create_file into the open workspace (full content, no 200B cap)
@@ -4067,6 +4282,7 @@
         }
       }
       else if(r.tool==='add_event'){ entry.card={kind:'add_event',arg:(reply.match(/["“”]([^"“”]+)["“”]/)||[])[1]||''}; buildCard(body, cardFromDescriptor(entry.card)); }
+      else if(r.tool==='set_volume' || r.tool==='set_brightness'){ entry.card={kind:'device_done',arg:r.tool}; buildCard(body, cardFromDescriptor(entry.card)); }
       // image-gen decline (firmware intent=image_gen): the reply explains it lives in Paint; offer to open it.
       else if(r.intent==='image_gen'){ entry.card={kind:'open_paint'}; buildCard(body, cardFromDescriptor(entry.card)); }
       // dialogue state surfacing
@@ -4985,8 +5201,8 @@
           'Riscarica il cervello dal dispositivo (se l\'hai aggiornato) e ricostruisce la cache locale.',
           'Re-download the brain from the device (if you updated it) and rebuild the local cache.');
         P('localmodel-get','title',
-          'Scarica/carica ora il modello nel browser (mostra il progresso). Non obbligatorio: parte da solo al primo uso.',
-          'Download/load the model in the browser now (shows progress). Optional: it starts by itself on first use.');
+          'Scarica/carica ora il modello nel browser (mostra il progresso). Non si scarica mai da solo: finché non è installato, la chat salta la GPU locale.',
+          'Download/load the model in the browser now (shows progress). It never downloads by itself: until it is installed, chat skips the local GPU.');
         { const g=$('localmodel-get'); if(g) g.textContent=TR('Scarica ora', 'Download now'); }
       }catch{}
       syncTitle(); if(typeof wsReflect==='function') wsReflect();

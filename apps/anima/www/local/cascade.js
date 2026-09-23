@@ -70,3 +70,99 @@ export async function resolveOffline(q, lang, opts = {}, runners = {}) {
   }
   return null;
 }
+
+// ---- commands first: device actions and live state -------------------------------------------------
+// The engines only PROPOSE a device action (add_event / set_volume / set_brightness / create_file); only
+// the Cardputer can perform it, through /api/anima (which executes the tool server-side under the pairing
+// gate). Two rules follow, both pinned by cascade.test.mjs:
+//   1. such an utterance goes to the device BEFORE the cloud agent / browser LLM, which can't do it and
+//      might claim they did (and would guess "che ore sono" instead of reading the RTC);
+//   2. the UI calls an action done only when the device says it ran it.
+export const DEVICE_TOOLS = new Set(['add_event', 'set_volume', 'set_brightness', 'create_file']);
+
+// classifyCommand(r): what a shaped engine result asks its host to do.
+//   'device' - a side-effecting tool the Cardputer must execute (DEVICE_TOOLS)
+//   'live'   - a live-state answer (time, date, storage, network, agenda...): the device is the authority
+//   'client' - launch an app / open a file: the browser performs the hand-off itself
+//   null     - not a command (knowledge, chat, calc, abstention)
+export function classifyCommand(r) {
+  if (!r || typeof r !== 'object') return null;
+  if (r.action === 'tool') {
+    const tool = r.tool || r.intent || '';
+    if (DEVICE_TOOLS.has(tool)) return 'device';
+    if (tool === 'open_file' && r.arg) return 'client';
+    return null;
+  }
+  if (r.action === 'system') return 'live';
+  if (r.action === 'launch' && r.arg) return 'client';
+  return null;
+}
+
+// deviceToolOutcome(r) for a DEVICE_TOOLS result:
+//   'proposed'    - from the in-browser engine (r.local): nothing ran on the device
+//   'done'        - the device executed it
+//   'failed'      - the device refused or failed (pairing / file exists / write error); its reply says why
+//   'unsupported' - firmware older than the "done" flag, which never executed set_volume/set_brightness
+export function deviceToolOutcome(r) {
+  if (!r || r.local) return 'proposed';
+  if (r.done === true) return 'done';
+  if (r.done === false) return 'failed';
+  const tool = r.tool || r.intent || '';
+  if (tool === 'set_volume' || tool === 'set_brightness') return 'unsupported';
+  if (/associat|pairing|\bpin\b|non sono riuscit|non riesco|couldn'?t|can'?t|esiste|exists/i.test(r.reply || '')) return 'failed';
+  if (tool === 'create_file') return r.path ? 'done' : 'failed';
+  return 'done';   // add_event: legacy firmware wrote it server-side and replied with the confirmation
+}
+
+// commandHint(q): a cheap lexical gate, NOT the classifier. It only decides whether an utterance is worth
+// asking the real classifier (the in-browser engine, else the device) BEFORE the cloud/LLM rungs, so
+// ordinary questions never pay a device round-trip. Italian + English, like the engine.
+//   'act'    - asks the device to change something (setting, reminder, event, timer)
+//   'live'   - asks for device state (time, date, battery, storage, RAM, network, version, agenda)
+//   'launch' - opens an app
+// File creation is deliberately NOT here: with a key the agent writes real files into the workspace.
+const fold = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u2018\u2019`]/g, "'");
+const SETTING_NOUN = /\b(volume|audio|suono|luminosita|brightness|schermo|screen|display|retroilluminazione|backlight)\b/;
+const SETTING_VERB = /\b(alza|abbassa|aumenta|diminuisci|riduci|imposta|metti|porta|regola|cambia|setta|modifica|muta|silenzia|azzera|raise|lower|increase|decrease|set|turn|mute|unmute|dim|brighten|change|adjust|fai|rendi|make)\b/;
+const SETTING_AMOUNT = /\b(piu|meno|more|less|max|massimo|massima|minimo|minima|meta|half|zero|muto|alto|alta|basso|bassa|up|down)\b|\d/;
+const GEOMETRY = /\b(cubo|sfera|cilindro|cono|piramide|prisma|lato|raggio|altezza|diametro|densita|massa|litri|cube|sphere|cylinder|cone|pyramid|prism|side|radius|height|diameter|density|mass|liters|litres|vendite|sales)\b/;
+const REMIND = /\b(ricordami|ricordamelo|ricordatemi|promemoria|remind me|reminder)\b/;
+const EVENT_VERB = /\b(aggiungi|crea|segna|metti|fissa|programma|pianifica|prenota|inserisci|add|create|schedule|book|put|new|nuovo|nuova)\b/;
+const EVENT_NOUN = /\b(evento|eventi|appuntamento|appuntamenti|impegno|riunione|incontro|event|appointment|meeting)\b|\b(in|nel|al|to|on) (my |mio |il |nel )?(calendario|calendar|agenda)\b/;
+const TIMER = /\b(timer|sveglia|alarm)\b/;
+const TIMER_CUE = /\b(metti|imposta|avvia|punta|fai partire|set|start)\b|\b\d+\s*(s|sec|secondi|seconds|min|minuti|minutes|h|ore|hours)\b|\b(alle|at)\s+\d/;
+// Live state is matched as the WHOLE utterance (plus polite fillers), never as a fragment: "che versione di
+// python devo usare" or "che giorno è natale" are questions for a brain, not for the RTC, and must not be
+// answered by the device ahead of the cloud.
+const LEAD = String.raw`(?:(?:ehi |hey |ciao )?anima,? )?(?:(?:mi )?(?:dici|sai dirmi|puoi dirmi) |dimmi |(?:can|could) you tell me |tell me |please )?`;
+const TAIL = String.raw` ?(?:adesso|ora|oggi|now|today|please|per favore|grazie)?`;
+const LIVE = [
+  String.raw`che or[ae] (?:e|sono)|che ora e|l'ora|ora esatta|what time is it|what'?s the time|the time|current time`,
+  String.raw`che giorno (?:e|siamo)(?: oggi)?|oggi che giorno e|che data e(?: oggi)?|(?:la )?data(?: di oggi)?|what day is (?:it|today)|what'?s the date|what is the date|today'?s date|the date`,
+  String.raw`che anno (?:e|siamo)|in che anno siamo|what year is it|che stagione e|in che stagione siamo|what season is it`,
+  String.raw`(?:quanta|livello(?: della)?|stato(?: della)?|carica(?: della)?) batteria(?: ho| hai| c'e| rimane| resta)?|batteria|battery(?: level| left| status)?|how much battery(?: is left| do i have| left)?`,
+  String.raw`quanto spazio (?:libero |rimasto )?(?:ho|hai|c'e|resta|rimane)(?: sulla sd| su sd)?|spazio (?:libero|rimasto|disponibile|su sd|sulla sd)|(?:free|disk|sd) space|how much (?:free )?space(?: is left| do i have| left)?|storage left`,
+  String.raw`quanta (?:ram|memoria)(?: libera)?(?: ho| hai| c'e)?|(?:ram|memoria) (?:libera|disponibile)|free (?:ram|memory)|how much (?:ram|memory)(?: is free| do you have| left)?`,
+  String.raw`uptime|da quanto (?:tempo )?(?:sei|e) acces[oa]|how long have you been (?:on|up|running)`,
+  String.raw`(?:che|quale) versione (?:sei|hai|e|di nucleoos|del firmware|del sistema)|versione(?: del)? firmware|firmware version|what version (?:are you|is this|of nucleoos)`,
+  String.raw`(?:a che|a quale) (?:rete|wi-?fi) sono connesso|(?:che|quale) (?:rete|wi-?fi)(?: e| uso| stai usando)?|sono connesso(?: a internet)?|am i connected|(?:which|what) (?:network|wi-?fi)(?: am i on| is this)?|(?:qual e )?(?:il mio )?indirizzo ip|(?:what'?s )?my ip(?: address)?|ip address`,
+  String.raw`(?:che|quali) (?:impegni|appuntamenti) ho(?: oggi| domani)?|i miei impegni|impegni(?: di)? oggi|cosa ho (?:in agenda|oggi|domani)|agenda(?: di)? oggi|(?:what'?s|what is) on (?:today|my calendar)|my (?:schedule|agenda|appointments)(?: today)?`,
+].map((re) => new RegExp('^' + LEAD + '(?:' + re + ')' + TAIL + '$'));
+// "how do I raise the volume on my PC?" is a how-to, not an order: interrogative openers never trigger 'act'.
+const HOWTO = /^(come|perche|quando|dove|chi|cosa|che cosa|quale|how|why|when|where|who|what|which|can i|posso)\b/;
+const LAUNCH = /^(apri|avvia|lancia|open|launch)\s+(?!source\b)\S/;
+export function commandHint(q) {
+  const t = fold(q).replace(/[?!.,;:]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return null;
+  if (!HOWTO.test(t)) {
+    // A setting needs an imperative verb, or a SHORT "noun + amount" phrase ("volume al 50", "più luce"):
+    // like the engine's own guard, a longer verb-less sentence is a statement ("l'audio del film era basso").
+    const words = t.split(' ').length;
+    if (SETTING_NOUN.test(t) && !GEOMETRY.test(t) &&
+        (SETTING_VERB.test(t) || (SETTING_AMOUNT.test(t) && words <= 4))) return 'act';
+    if (REMIND.test(t) || (EVENT_VERB.test(t) && EVENT_NOUN.test(t)) || (TIMER.test(t) && TIMER_CUE.test(t))) return 'act';
+  }
+  for (const re of LIVE) if (re.test(t)) return 'live';
+  if (LAUNCH.test(t)) return 'launch';
+  return null;
+}
