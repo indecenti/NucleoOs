@@ -72,3 +72,8 @@ bool app_ui_frame_due(int64_t *next_us, int fps);
 // Route a key to a pending confirm card. `;`/`.`/`,`/`/` toggle the focus; Enter picks it;
 // `y`/`n` are direct shortcuts. Returns 1 = confirmed, 0 = cancelled, -1 = still open (redraw).
 int app_ui_confirm_key(int key, char ch, bool *yes_focus);
+
+// Fold UTF-8 to the ASCII the on-TFT fonts can draw: accented letters -> base letter, smart quotes /
+// dashes / ellipsis -> ASCII, any other codepoint dropped whole (never a split multi-byte glyph).
+// Use it on every web- or network-authored string before printing it natively.
+void app_ui_ascii_fold(const char *src, char *dst, int cap);

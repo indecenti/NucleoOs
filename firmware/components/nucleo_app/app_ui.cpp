@@ -40,6 +40,41 @@ bool app_ui_frame_due(int64_t *next_us, int fps)
     return true;
 }
 
+// Fold UTF-8 (accents, smart quotes, dashes) to ASCII and drop anything else, so the ASCII-only
+// GFX fonts never render tofu boxes for web-authored text (calendar events), online answers or
+// accented city names. Shared by ANIMA and Calendar (see app_ui.h).
+void app_ui_ascii_fold(const char *src, char *dst, int cap)
+{
+    int o = 0; const unsigned char *s = (const unsigned char *)src;
+    while (*s && o < cap - 1) {
+        unsigned char c = *s;
+        if (c < 0x80) { dst[o++] = (char)c; s++; continue; }
+        if (c == 0xC3 && s[1]) {                              // Latin-1 supplement (accented letters)
+            char r = 0; unsigned char d2 = s[1];
+            if      (d2 >= 0x80 && d2 <= 0x85) r = 'A'; else if (d2 >= 0xA0 && d2 <= 0xA5) r = 'a';
+            else if (d2 >= 0x88 && d2 <= 0x8B) r = 'E'; else if (d2 >= 0xA8 && d2 <= 0xAB) r = 'e';
+            else if (d2 >= 0x8C && d2 <= 0x8F) r = 'I'; else if (d2 >= 0xAC && d2 <= 0xAF) r = 'i';
+            else if (d2 >= 0x92 && d2 <= 0x96) r = 'O'; else if (d2 >= 0xB2 && d2 <= 0xB6) r = 'o';
+            else if (d2 >= 0x99 && d2 <= 0x9C) r = 'U'; else if (d2 >= 0xB9 && d2 <= 0xBC) r = 'u';
+            else if (d2 == 0x87) r = 'C'; else if (d2 == 0xA7) r = 'c';
+            else if (d2 == 0x91) r = 'N'; else if (d2 == 0xB1) r = 'n';
+            else if (d2 == 0x97) r = 'x';                     // multiplication sign
+            if (r) dst[o++] = r;
+            s += 2; continue;
+        }
+        if (c == 0xE2 && s[1] == 0x80 && s[2]) {              // general punctuation
+            unsigned char d3 = s[2];
+            if      (d3 == 0x98 || d3 == 0x99) dst[o++] = '\'';
+            else if (d3 == 0x9C || d3 == 0x9D) dst[o++] = '"';
+            else if (d3 == 0x93 || d3 == 0x94) dst[o++] = '-';
+            else if (d3 == 0xA6 && o < cap - 3) { dst[o++] = '.'; dst[o++] = '.'; dst[o++] = '.'; }
+            s += 3; continue;
+        }
+        s++; while ((*s & 0xC0) == 0x80) s++;                 // unknown: skip the whole codepoint
+    }
+    dst[o] = 0;
+}
+
 // Always false: no animations exist, so no app ever needs to keep ticking for redraws.
 bool app_ui_list_animating(void) { return false; }
 
