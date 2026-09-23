@@ -439,6 +439,25 @@ static bool a_wx_knowledge_frame(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok)
     return true;
 }
 
+// "come cambio lo sfondo", "le azioni del governo", "il prezzo della fama": cambio/prezzo/azioni are
+// market words only next to a finance cue. Without one they are an ordinary verb/noun, and the live
+// news/FX hard stop must not swallow the question (it answered "come cambio lo sfondo" with a miss).
+static bool a_news_ambiguous_only(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok)
+{
+    static const char *const amb[]  = { "cambio","prezzo","prezzi","azioni","price","stock", NULL };
+    static const char *const hard[] = { "notizie","bitcoin","borsa","quotazione", NULL };
+    static const char *const cue[]  = { "euro","eur","dollaro","dollari","usd","sterlina","sterline","gbp","yen","franco",
+                                        "franchi","valuta","valute","tasso","borsa","mercato","crypto","bitcoin","ethereum",
+                                        "btc","eth","oro","petrolio","quotazione","azionario","titolo","titoli","nasdaq","ftse", NULL };
+    bool amb_hit = false;
+    for (int t = 0; t < ntok; t++) {
+        for (int i = 0; hard[i]; i++) if (a_match(hard[i], tok[t])) return false;
+        for (int i = 0; cue[i]; i++)  if (!strcmp(cue[i], tok[t])) return false;
+        for (int i = 0; amb[i]; i++)  if (!strcmp(amb[i], tok[t])) amb_hit = true;
+    }
+    return amb_hit;
+}
+
 // Build the typed plan for `raw`. The intelligence is which signals are present + a cheap
 // dominant-class rule — deterministic, no model. Layers downstream read it instead of re-deciding.
 static bool a_action_is_statement(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok);   // fwd: defined below
@@ -3749,15 +3768,17 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // ...and NOT an image-generation command: "draw an image of a SNOWY mountain" / "genera una foto di
     // PIOGGIA" carry a weather word but are a request to PAINT a picture, not a forecast -> let the
     // image_gen decline tool (in l0_query) own it, exactly as is_create_cmd protects create_file.
-    bool is_image_gen = false, is_wx_knowledge = false;
+    bool is_image_gen = false, is_wx_knowledge = false, is_news_ambig = false;
     { char gtok[A_MAX_TOKENS][A_TOK_LEN]; int gnt = a_tokenize(q, gtok); is_image_gen = a_is_image_gen(gtok, gnt);
-      is_wx_knowledge = a_wx_knowledge_frame(gtok, gnt); }
+      is_wx_knowledge = a_wx_knowledge_frame(gtok, gnt); is_news_ambig = a_news_ambiguous_only(gtok, gnt); }
     // An explicit TRANSLATE request ("traduci sole in inglese", "come si dice pioggia") carries a weather
     // word as its OBJECT, not its subject — the offline dictionary must own it, never the forecast. Veto.
     bool is_translate = nucleo_anima_translate_is_request(q);
-    bool wx_req = (plan.feat & (F_WEATHER | F_NEWS)) && !(plan.feat & (F_DEFWORD | F_MATHOP)) && !has_digit && !is_create_cmd && !is_geo && !is_image_gen && !is_translate
-                  && !(is_wx_knowledge && !(plan.feat & F_NEWS));
-    if (askable && (wx_req || (!is_wx_knowledge && nucleo_anima_online_is_live(q, en)))) {
+    bool wx_ask   = (plan.feat & F_WEATHER) && !is_wx_knowledge;
+    bool news_ask = (plan.feat & F_NEWS) && !is_news_ambig;
+    bool wx_req = (wx_ask || news_ask) && !(plan.feat & (F_DEFWORD | F_MATHOP)) && !has_digit && !is_create_cmd && !is_geo && !is_image_gen && !is_translate;
+    bool live_veto = is_wx_knowledge || is_news_ambig;   // a knowledge/ordinary-word frame: not a live ask
+    if (askable && (wx_req || (!live_veto && nucleo_anima_online_is_live(q, en)))) {
         if (nucleo_anima_online_available()) nucleo_anima_l1_unload();
         if (nucleo_anima_online_live(q, en, &r)) { mem_update(&r); s_session.dirty = true; goto done; }
         // A weather/news REQUEST with no live data (offline / unreachable) -> honest miss. NEVER fall
