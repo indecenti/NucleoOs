@@ -42,6 +42,12 @@ const steps = [
   { q: 'ricorda che oggi è il mio giorno fortunato', lang: 'it', want: { intent: 'teach', reply: /temporanea|temporary/i } },
   // --- a reminder ("ricordami DI ...") must NOT be hijacked by teach (no copula -> falls through) ---
   { q: 'ricordami di chiamare luca domani', lang: 'it', want: { notIntent: 'teach' } },
+  // --- the tiny keyboard has no "è": an unaccented copula after a POSSESSIVE subject still teaches
+  //     (it used to fall to add_event and create a bogus reminder), and recalls ---
+  { q: 'ricordati che il mio colore preferito e il blu', lang: 'it', want: { intent: 'teach', notIntent: 'add_event' } },
+  { q: 'qual e il mio colore preferito', lang: 'it', want: { intent: 'recall', reply: /blu/i } },
+  // ...but a coordination of two possessed nouns is not a definition ("mia moglie e mio figlio ...")
+  { q: 'ricordati che mia moglie e mio figlio vengono a cena', lang: 'it', want: { notIntent: 'teach' } },
 ];
 
 wipe();

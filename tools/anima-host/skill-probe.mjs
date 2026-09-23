@@ -5,6 +5,7 @@
 //   expect = "abstain"           pass if honest miss (tier none / empty reply) — for WRONG/unanswerable asks
 //   expect = "answer"            pass if it answered with any tier (fact/command), non-empty reply
 //   expect = "tier:L0/command"   pass if the tier matches (prefix ok)
+//   expect = "not:weather|news"  pass if routed intent is NONE of those (a mis-route guard)
 // Prints per-file pass rate + every failure (phrase, expected, got). Exit != 0 on any failure.
 //
 //   node tools/anima-host/skill-probe.mjs <cases.jsonl> [--show]
@@ -53,6 +54,7 @@ for (let i = 0; i < items.length; i++) {
   if (exp === 'abstain') ok = !factAnswered(p) && p.intent !== 'capabilities' && p.intent !== 'agenda';
   else if (exp === 'answer') ok = answered(p);
   else if (exp.startsWith('tier:')) ok = p.tier.startsWith(exp.slice(5));
+  else if (exp.startsWith('not:')) ok = !exp.slice(4).split('|').map(s => s.trim()).includes(intentEq(p));
   else ok = exp.split('|').map(s => s.trim()).includes(intentEq(p));
   if (!ok) fails.push([it.q, exp, `${p.intent || '(none)'} / ${p.tier}`, p.reply.slice(0, 44)]);
   if (show) console.log(`${ok ? '  ok  ' : 'FAIL  '} "${it.q}" exp=${exp} got=${p.intent || '(none)'}/${p.tier}`);

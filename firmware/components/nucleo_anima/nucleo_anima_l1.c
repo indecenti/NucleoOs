@@ -63,6 +63,10 @@ extern uint32_t g_anima_stage;   // DIAG breadcrumb (defined in nucleo_anima.c)
 // typo-neighbour (newtron->neutron) or a fabricated name cannot borrow a real bio. Gated by akb5-content
 // person-existence traps (newtron/washingtom/fake names must abstain). NEVER applied to the flat path.
 #define L1_PERSON_FLOOR  0.55f
+// VERBATIM match: at this cosine the query is (near) word-for-word one of the card's own stored
+// phrasings, so every word in it is covered by the card by construction. Measured: verbatim asks land
+// at 1.000; queries carrying an invented name sit <= 0.86 (its n-grams pull the vector away).
+#define L1_VERBATIM_COS  0.97f
 
 // HOST-ONLY gate/recall instrumentation: lets tools/anima sweep the gate, rescue and probe count
 // from env vars WITHOUT recompiling, to separate gate-victims from AKB2-recall-victims with measured
@@ -758,6 +762,10 @@ static bool l1_word_in_fuzzy(const char *hay, const char *w)
 // generic "programming language" card, while "Floonkium" (9) correctly abstained. Same module-scope
 // per-turn pattern as s_band; set once per turn by the cascade, single-threaded.
 static char s_raw_q[160];
+// True only while the winning match is VERBATIM (see L1_VERBATIM_COS) — set around the gate's
+// coverage check. Disarms the lowercase "long word = name" fallback, which otherwise vetoed exact
+// matches on plain verbs ("quando e iniziata la seconda guerra mondiale" -> "iniziata").
+static bool s_verbatim;
 void nucleo_anima_l1_note_raw(const char *raw)
 {
     snprintf(s_raw_q, sizeof s_raw_q, "%s", raw ? raw : "");
@@ -807,7 +815,7 @@ static bool l1_proper_noun_uncovered(const char *query, const char *clow)
 
             if (trust_caps) {
                 if (f >= 'A' && f <= 'Z') is_proper = true;
-            } else {
+            } else if (!s_verbatim) {                   // no caps signal: a long word may be a name — unless verbatim
                 if (k >= 7 && !l1_is_stop_word(lw)) is_proper = true;
             }
 
@@ -1468,7 +1476,10 @@ int nucleo_anima_l1_query(const char *text, bool en, bool want_detail, anima_res
     // global-default-applied-to-a-narrower-question ("fiume più lungo DELLA CINA" -> "il Nilo") ->
     // abstain rather than answer confidently wrong. Runs in BOTH bands: a strong cosine to the global
     // card doesn't make the scoped answer right. Transparent to non-superlatives (returns covered).
-    if (!l1_scope_covered(text, out->reply)) { memset(out, 0, sizeof *out); return 0; }
+    s_verbatim = (bestcos >= L1_VERBATIM_COS);
+    bool scope_ok = l1_scope_covered(text, out->reply);
+    s_verbatim = false;
+    if (!scope_ok) { memset(out, 0, sizeof *out); return 0; }
     // mid-confidence rescues must also be on-topic (kills off-topic rescues like "imperatore di Marte").
     if (is_rescue && !l1_rescue_on_topic(text, out->reply)) { memset(out, 0, sizeof *out); return 0; }
     // a LONE salient word absent from the card, rescued only by margin (no typo corroboration), is an encoder
