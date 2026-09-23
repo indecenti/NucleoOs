@@ -114,8 +114,17 @@ static void set_view(int v)
     nucleo_app_set_hint(v == V_DETAIL ? TR("su/giu scorri   esc indietro", "up/dn scroll   esc back")
                                       : TR("</> o su/giu giorno   invio apri", "</> or up/dn day   enter open"));
 }
+// The framework routes LEFT/BACK here (never to on_key) and closes the app unless we consume them:
+// without this, "<" (previous day) and Esc in the day view both exited Calendar.
+static bool cal_back(int key)
+{
+    if (s_view == V_DETAIL) { set_view(V_DAYS); nucleo_app_request_draw(); return true; }
+    if (key == NK_LEFT)     { s_offset--; nucleo_app_request_draw(); return true; }
+    return false;                                   // BACK in the day strip -> close the app
+}
 static void enter(void)
 {
+    nucleo_app_set_back_handler(cal_back);
     if (!s_ev) s_ev = (Ev *)malloc(sizeof(Ev) * MAX_EV);   // ~6.5 KB, only while the app is open
     reload_root();
     s_offset = 0; s_view = V_DAYS; s_reload = 0; s_last_min = -1;
@@ -133,7 +142,10 @@ static void tick(void)
     bool need_draw = false;
     if (++s_reload >= 25) {           // ~5 s: pick up edits made from the web companion
         s_reload = 0; reload_root();
-        if (s_view == V_DETAIL) load_day(s_offset);
+        if (s_view == V_DETAIL) {                   // keep the cursor: load_day() resets it to the top
+            int sel = s_sel; load_day(s_offset);
+            s_sel = (sel < s_evn) ? sel : (s_evn > 0 ? s_evn - 1 : 0);
+        }
         need_draw = true;
     }
 
@@ -152,14 +164,14 @@ static void tick(void)
 static void on_key(int key, char ch)
 {
     if (s_view == V_DAYS) {
-        if (key == NK_LEFT || key == NK_UP)         { s_offset--; nucleo_app_request_draw(); }
+        if (key == NK_UP)                           { s_offset--; nucleo_app_request_draw(); }   // LEFT: cal_back
         else if (key == NK_RIGHT || key == NK_DOWN) { s_offset++; nucleo_app_request_draw(); }
         else if (ch == 't')                         { s_offset = 0; nucleo_app_request_draw(); }   // jump to today
         else if (key == NK_ENTER)                   { load_day(s_offset); set_view(V_DETAIL); nucleo_app_request_draw(); }
         return;
     }
     // V_DETAIL
-    if (key == NK_BACK || key == NK_DEL)            { set_view(V_DAYS); nucleo_app_request_draw(); }
+    if (key == NK_DEL)                              { set_view(V_DAYS); nucleo_app_request_draw(); }   // BACK: cal_back
     else if (app_ui_list_key(key, ch, &s_sel, s_evn,
              [](int i, void *) { return (const char *)s_ev[i].x; }, nullptr)) {
         nucleo_app_request_draw();
