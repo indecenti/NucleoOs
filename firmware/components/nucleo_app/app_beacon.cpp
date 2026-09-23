@@ -77,8 +77,13 @@ static void enter_custom(void)
     s_state = ST_CUSTOM; set_hint(); nucleo_app_request_draw();
 }
 
+// The framework never hands TAB to on_key: unclaimed, it toggles the Control Center. Claim it
+// ("tab start" arms the custom SSID list).
+static void on_key(int key, char ch);
+static void beacon_tab(void) { on_key(NK_TAB, 0); }
 static void enter(void)
 {
+    nucleo_app_set_tab_handler(beacon_tab);
     s_err[0] = 0;
     if (nucleo_wifiatk_beacon_running()) s_state = ST_RUNNING;
     else if (s_consented)               { s_state = ST_ARMING; s_arm_armed = false; }

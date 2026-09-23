@@ -309,10 +309,15 @@ static int render_doc(int scroll, bool measure)
 // ---- lifecycle ----
 static bool notes_on_back(int key);   // forward (LEFT/BACK handler)
 
+// The framework never hands TAB to on_key: unclaimed, it toggles the Control Center. Claim it
+// (view-options card in M_VIEW / M_SET).
+static void on_key(int key, char ch);
+static void notes_tab(void) { on_key(NK_TAB, 0); }
 static void enter(void)
 {
     nucleo_app_set_direct_draw(true);
     nucleo_app_set_back_handler(notes_on_back);
+    nucleo_app_set_tab_handler(notes_tab);
     if (!s_names) s_names = (char (*)[56])calloc(48, sizeof *s_names);
     if (!s_buf)   s_buf   = (char *)calloc(MAXBUF, 1);
     cfg_load();

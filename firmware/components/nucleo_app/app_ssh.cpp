@@ -493,6 +493,9 @@ static void on_draw() {
     } else draw_connecting();
 }
 static void on_tick() { if (s_dirty) nucleo_app_request_draw(); }
+// The framework never hands TAB to on_key: unclaimed, it toggles the Control Center. Claim it
+// (next field in the connect form, completion in the shell).
+static void ssh_tab() { on_key(NK_TAB, 0); }
 static void on_enter() {
     s_state = ST_FORM; s_field = 0; s_status[0] = 0; s_dirty = true; s_zoom = 1; s_manual = false;
     s_auth = AUTH_PW; s_keyIdx = 0;
@@ -505,6 +508,7 @@ static void on_enter() {
     scan_keys(); hist_load();
     nucleo_app_set_hint(s_en ? "arrows/Tab field  </>auth/key  Enter go  Fn+H help" : "frecce/Tab campo  </>auth/chiave  Invio vai  Fn+H aiuto");
     nucleo_app_set_back_handler(back_handler);
+    nucleo_app_set_tab_handler(ssh_tab);
     nucleo_app_request_draw();
 }
 static void on_exit() {
