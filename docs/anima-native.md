@@ -17,39 +17,45 @@ first and keep it green.
 
 ---
 
-## 1. Lifecycle — free first, allocate last
+## 1. Lifecycle — Solo only, one task, heap-on-enter
 
-The native app is the launcher's most RAM-hungry tenant (a 30 KB worker stack + the L1 index + a TLS
-handshake's transient ~34 KB). The whole design is **reclaim everything reclaimable BEFORE allocating
-anything**, so the contiguous block the worker/TLS need actually exists on a fragmented heap.
+The native app **only ever runs in its own ANIMA Solo boot** (§7). In the full OS, `enter()` does one
+thing: arm the RTC copy of a seeded question (if any) and call `nucleo_anima_solo_request()`, which
+`esp_restart()`s and **never returns**. The Solo flag is latched for the whole boot, so everything past
+that gate in `app_anima.cpp` runs in Solo, on the one `anima-solo` task. There is **no worker task**,
+no per-query exclusive window, and no app hand-off (LAUNCH/`open_file` answers point to Esc + the
+launcher). The old full-OS worker path (`anima_worker`, `run_longform`, `stop_worker`, the deferred
+launch in `tick()`) was unreachable and has been removed.
 
-`enter()` (`app_anima.cpp`), in order:
+`enter()` (Solo), in order:
 
-1. `nucleo_screen_release()` + `nucleo_app_set_direct_draw(true)` — hand back the **32 KB** shared UI
-   canvas (ANIMA draws direct to the panel). One clean contiguous block freed first.
-2. `nucleo_audio_stop()` — release any prior media decoder buffers.
-3. `nucleo_exclusive_enter(NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY)` — suspend the heavy network
-   subsystems **for the whole session** (~47 KB, see §2). **Not** `NX_VOICE` (ANIMA must speak — the
-   voice engine is lazy, ~0 KB at rest, so not requesting it costs nothing) and **not** `NX_WIFI`
-   (cloud queries need the radio).
-4. Only now: `calloc` the small session buffers (`s_hist` ~0.94 KB, `s_ed_buf` 1 KB) — cheap, and
-   they hold **zero `.bss`** when the app is closed.
-5. The **30 KB worker is NOT spawned here.** It is created on demand in `submit()` on the first query,
-   inside the open reclaim window. Spawning it at `enter()` made it live concurrently with the UI + L1
-   + TLS for the whole session and panicked on launch after a media app fragmented the heap.
+1. Consume the RTC preset magic (a question another app staged, see below).
+2. `nucleo_screen_release()` + `nucleo_app_set_direct_draw(true)` — hand back the **32 KB** shared UI
+   canvas (ANIMA draws direct to the panel); `nucleo_audio_stop()`.
+3. Settings + `nucleo_anima_init`, then the session buffers, all `calloc`'d once, early, from the fresh
+   Solo heap: **`s_ses`** (one `AnimaSession` block, ~4.5 KB: the query result, the full current answer,
+   the input/request/draft lines, the IDEE slots + recent values, the calendar cache), `s_hist`, `s_msg`,
+   `s_row`. None of them is `.bss`, so the **normal OS boots no longer reserve them** (~4.9 KB of `.bss`
+   given back to every boot); in the Solo boot it is ~neutral (same bytes, taken once, no fragmentation).
+   The editor block (`s_ed`, ~1.6 KB: buffer + path + wrap layout) is allocated only while the editor is
+   open (`editor_open` / `editor_close`), so it is never held during a query's TLS handshake.
+4. If `s_ses` can't be allocated, the app shows an out-of-memory notice and Esc leaves; every framework
+   callback (`draw`/`tick`/`on_key`/`on_tab`/`on_back`) bails while `s_ses` is NULL.
 
-`leave()` (on_exit) restores everything itself, in a safe order: `save_chat` → `stop_worker` (orphans
-the worker; it self-reclaims its 30 KB stack and any per-query window) → free the session buffers →
-`nucleo_exclusive_exit()` (httpd / L1 / mDNS back). Every real exit path funnels through `leave()`
-(Back/Esc → `close_app` → on_exit; app→app → `launch_by_id` → outgoing on_exit). On the LAUNCH-intent
-hand-off (`tick()`), the worker is stopped **early** so the idle task reclaims its 30 KB during the
-~0.6 s settle, then `launch_by_id` runs `leave()` which closes the window.
+**Cross-app ask.** `nucleo_anima_app_ask()` (notify action, ESP-NOW link) runs in the **full OS**, where
+`s_ses` doesn't exist: it writes the question straight into RTC no-init RAM (`s_rtc_preset`) and sets a
+1-byte "staged in this boot" flag; the full-OS `enter()` arms the magic only when staged, and the Solo
+`enter()` auto-submits it. A question staged in a boot where ANIMA never opens is dropped at the next
+reboot, as before.
 
-> ANIMA manages exclusive **imperatively** (`exclusive_flags = 0`), so the framework's declarative
-> `close_app` safety-net (`s_app_excl`) does **not** cover it — `leave()` is the sole restorer. Keep
-> `leave()` linear: never add an early `return` before `nucleo_exclusive_exit()`.
+`leave()` (on_exit, only ever reached from `close_app()` right before its `esp_restart()`): `save_chat`
+→ free every session block → re-acquire the canvas. Keep it linear.
 
 ## 2. Verified reclaim inventory (the ~47 KB session window)
+
+> Historical for the native app: since ANIMA runs only in Solo (§1), it no longer opens this window —
+> the Solo boot never starts these subsystems. The inventory still holds for the full-OS
+> `nucleo_exclusive` callers.
 
 Measured 2026-06-24 (`BOOTSTEP` heap deltas + the real buffer/stack sizes). On this chip the number
 that matters is **largest contiguous block**, not total free.
@@ -74,7 +80,7 @@ belt-and-suspenders on top.
 
 ## 3. Online transport — the anti-reboot stability contract  {#stability}
 
-`nucleo_anima_online.c` is shared by the **native worker** and the **web `/api/anima`** handler. A
+`nucleo_anima_online.c` is shared by the **native app (inline, Solo)** and the **web `/api/anima`** handler. A
 single `esp_http_client_perform()` is **one un-pettable blocking call**. The binding rule:
 
 > **Per-attempt TLS timeout MUST stay below the 8 s Task-WDT.** A timeout ≥ TWDT is a guaranteed
@@ -117,22 +123,28 @@ unreachable (not a firmware fault). Unstick with
 
 ## 5. Invariants — do not regress
 
-1. **`enter()` frees the canvas + the exclusive window BEFORE any allocation**, and the 30 KB worker
-   stays on-demand (never spawned at `enter`). Big blocks first, small allocs last.
-2. **Keep `.bss` as `.bss`.** Do **not** move ANIMA's resident static buffers (`s_msg`/`s_full`/
-   `s_row`/`s_res`) to heap-on-enter to "save RAM": `.bss` is a separate region — heap-allocating them
-   during a session only **fragments** the heap around the worker block. (It helps other apps when
-   ANIMA is closed, never ANIMA's own session.)
+1. **ANIMA runs only in Solo, inline on one task.** No worker task, no per-query exclusive window: the
+   Solo boot never started httpd/L1/mDNS, and `nucleo_exclusive_exit()` there would *start* them.
+2. **No sized `.bss` in `app_anima.cpp`.** Every buffer the app owns lives in a heap block allocated in
+   the Solo `enter()` (`s_ses`, `s_msg`, `s_row`, `s_hist`) or while the editor is open (`s_ed`) — the
+   `.bss` would otherwise be reserved in *every* boot (a +9 KB `.bss` once boot-looped a device). Only
+   scalars and a few pointers stay static (~130 B). Anything that must outlive the Solo reboot goes in
+   `RTC_NOINIT` (`s_rtc_preset`), never `.bss`. No `s_ses->` access outside the session: all callbacks
+   bail on NULL.
 3. **Never suspend `NX_VOICE` in ANIMA** — it gates the whole voice engine including TTS output, so it
    would mute ANIMA's speech. It's already ~0 KB at rest.
 4. **Online per-attempt timeout < TWDT, always** (§3). Use the `HTTP_TIMEOUT` symbol for chat paths —
    no raw numeric literals that dodge the bound. Keep the wall-clock budget, the WDT pets, and the
    heap-state failure logs.
-5. **`nucleo_exclusive_enter` returns per-call ownership** (`return acted`), and `leave()` is the only
-   restorer for ANIMA — keep it linear.
-6. **Right-sizing the 30 KB worker stack needs DATA, never a guess** (a blind shrink stack-overflow
-   panicked before). `stop_worker()` logs the stack high-water at every session close; read it from
-   `/api/logs` and only then trim, with margin.
+5. **`nucleo_exclusive_enter` returns per-call ownership** (`return acted`) — for its full-OS callers
+   (Recorder AI, Video, …). The native ANIMA app never enters exclusive; keep `leave()` linear.
+6. **Nothing big by value on the query path.** The `anima-solo` stack is 26 KB with ~5.6 KB measured
+   headroom (§7). The ~1.4 KB `anima_result_t` is built **in place** in `s_ses->res` (placement-new of
+   the prvalue = guaranteed copy elision, `submit()` frame 1648 → 256 B) and passed by reference.
+7. **One calendar reader.** `cal_load()` is the only parser of `calendar.json`, with one cap
+   (`CAL_MAX_BYTES` 32 KB: a bigger file is refused and logged, the writer fails closed). `cal_refresh()`
+   caches the OGGI list, agenda readout and next-event glance, and re-parses only when the file's
+   size/mtime, the day or the language changed (a menu open costs a `stat()`); `enter()` forces one read.
 
 ## 6. How to verify (host-first, then one board)
 
@@ -173,10 +185,16 @@ the 18 KB-httpd full-OS layout cannot spare.
 **Chat UX implemented (`app_anima.cpp`):** instant user echo + an animated "thinking" dot wave in the
 input row; footer "Invio per fermare" during a turn (painted immediately via `launcher_render_hint_bar()`
 because the framework footer is frozen during the inline turn); text-before-voice with a **typewriter**
-reveal (word-by-word, ~40 frames; `s_reveal` truncates `s_full`; `draw_body` skips the full-body clear
-while the text grows without scrolling = anti-flicker); **Invio = stop** at every interruptible point
-(the typewriter returns "stopped" → skips the voice; the voice polls `nucleo_audio_playing()` every
-40 ms so it stops mid-clip); **voice cap 340 chars** → one "read it on screen" hint, never twice
+reveal for **online answers only** (offline answers are instant, so they appear at once): at most
+`TW_FRAMES` = 10 frames × 35 ms whatever the length (was ~40–80 × 50 ms, +1.5–2.5 s on a mid-length
+answer); `s_reveal` truncates `s_ses->full` and each frame re-wraps **only the current answer** (+ the meta
+lines after it, `wrap_ring(k, true)`), not the whole transcript; `draw_body` skips the full-body clear while
+the text grows without scrolling = anti-flicker. **Keys during a turn** (`turn_key`): **Invio/Esc = stop**
+at every interruptible point (the reveal returns "stopped" → skips the voice; the voice polls
+`nucleo_audio_playing()` every 40 ms so it stops mid-clip); a **printable key** (no fn/ctrl) also ends the
+reveal/voice and is **kept** (`s_ses->carry`) as the first character of the next question — keys typed
+while the query ran are drained the same way, the first printable one ends the drain and later keys stay
+queued for the normal loop (they used to be silently dropped); **voice cap 340 chars** → one "read it on screen" hint, never twice
 (`nucleo_tts_say_quiet()` stays mute on an uncovered phrase instead of speaking the hint itself);
 **Esc → full-screen confirm modal** (big font). **Keys (Notes-editor rule):** the driver delivers
 `; . , /` as arrows carrying their character — wherever you write (chat, welcome deck, IDEE fill-in
@@ -210,8 +228,8 @@ fits). Verified 6/6 cold boots on the ADV.
 - **Long answers still flicker on scroll.** The anti-flicker no-clear only holds while the revealed text
   fits without scrolling; once it overflows and the view scrolls, the body is cleared each frame.
 - **A >340-char / long-form answer is voiced as a single "read it" hint, not narrated.** By design (the
-  cap), but chunked narration of long answers is not wired on the Solo inline path (`run_longform` is
-  worker-only / full-OS).
+  cap). The old segmented long-form narration (`run_longform`) only existed on the removed full-OS worker
+  path; `nucleo_anima_online_longform()` is still in the engine if Solo ever wires it inline.
 - **The original board (.166 / COM3) trails the ADV.** The chat-UX + boot/voice fixes were flashed to
   the ADV (.104 / COM4) during iteration; re-flash the original to keep the one universal binary in
   sync (`nucleo-release-dual`).
