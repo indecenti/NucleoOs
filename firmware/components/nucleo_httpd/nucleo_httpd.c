@@ -1116,20 +1116,61 @@ static void anima_verify_thunk(void *p)
     j->out = nucleo_anima_verify_claim(j->kind, j->key, j->asserted, j->lang, j->ev, j->evcap);
 }
 
+// /api/anima question size. The query used to go through fixed q[160]/query[208] stack buffers: past
+// ~159 URL-encoded bytes (~120 Italian chars) httpd_query_key_value failed and the cascade silently
+// answered "Non lo so" to an EMPTY query. Now one short-lived heap block sized to the ACTUAL query holds
+// it (freed on every exit; no .bss, less stack), and an oversize one gets an explicit 413 JSON error.
+// CONFIG_HTTPD_MAX_URI_LEN (512) bounds the URI first (httpd answers 414); ANIMA_QS_MAX caps the heap
+// block should that ever be raised.
+#define ANIMA_QS_MAX 1024   // encoded query string, bytes
+#define ANIMA_Q_MAX  480    // decoded question, bytes (native input is 140)
+static esp_err_t anima_busy_503(httpd_req_t *req)
+{
+    httpd_resp_set_status(req, "503 Service Unavailable");
+    httpd_resp_set_hdr(req, "Retry-After", "1");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"busy\":true,\"retry_after_ms\":250}");
+    return ESP_OK;
+}
+static esp_err_t anima_too_long_413(httpd_req_t *req)
+{
+    httpd_resp_set_status(req, "413 Payload Too Large");
+    httpd_resp_set_type(req, "application/json");
+    char out[48];
+    snprintf(out, sizeof(out), "{\"error\":\"too_long\",\"max\":%d}", ANIMA_Q_MAX);
+    httpd_resp_sendstr(req, out);
+    return ESP_OK;
+}
+// set_volume / set_brightness executors: the same public setters the native ANIMA executor calls.
+// Forward-declared and resolved at final link, like nucleo_app_register_display below (a REQUIRES on
+// nucleo_app would cycle; nucleo_audio comes in through nucleo_app).
+extern int  nucleo_audio_volume(void);
+extern void nucleo_audio_set_volume(int pct);
+extern int  nucleo_app_brightness(void);
+extern void nucleo_app_set_brightness(int pct);
+extern void nucleo_app_persist_prefs(void);
+
 static esp_err_t anima_get(httpd_req_t *req)
 {
     NUCLEO_AUTH_GUARD(req);   // an ANIMA turn spawns the 30 KB worker and can reach PAID cloud (teacher/weather/wiki);
                              // reject before any of that so an unpaired LAN client can't drain credits or the heap.
-    char q[160] = { 0 };
+    const char *q = "";
     char lang[4] = "it";
-    char query[208];
+    char *qbuf = NULL;   // [query string | decoded q] — freed on every return below
     int mode_ov = 0;   // per-request online mode from the web app: 0=none, 1=off, 2=on(hybrid), 3=only
-    if (httpd_req_get_url_query_len(req) > 0 &&
-        httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
-        char val[160];
-        if (httpd_query_key_value(query, "q", val, sizeof(val)) == ESP_OK) {
+    size_t qslen = httpd_req_get_url_query_len(req);
+    if (qslen > ANIMA_QS_MAX) return anima_too_long_413(req);
+    if (qslen > 0) {
+        qbuf = malloc(2 * (qslen + 1));
+        if (!qbuf) return anima_busy_503(req);
+    }
+    if (qbuf && httpd_req_get_url_query_str(req, qbuf, qslen + 1) == ESP_OK) {
+        const char *query = qbuf;
+        char *val = qbuf + qslen + 1;   // a value is a substring of the query, so qslen + 1 always fits
+        if (httpd_query_key_value(query, "q", val, qslen + 1) == ESP_OK) {
             url_decode(val);
-            strncpy(q, val, sizeof(q) - 1);
+            if (strlen(val) > ANIMA_Q_MAX) { free(qbuf); return anima_too_long_413(req); }
+            q = val;
         }
         char lv[8];
         if (httpd_query_key_value(query, "lang", lv, sizeof(lv)) == ESP_OK && (lv[0] == 'e' || lv[0] == 'E'))
@@ -1178,11 +1219,8 @@ static esp_err_t anima_get(httpd_req_t *req)
     // shared L1/session state (fixes the concurrent use-after-free that rebooted the device). httpd must
     // NEVER block -> try-only; on contention return a lean 503 "busy, retry" (no new endpoint, ~30 B).
     if (!nucleo_anima_try_lock()) {
-        httpd_resp_set_status(req, "503 Service Unavailable");
-        httpd_resp_set_hdr(req, "Retry-After", "1");
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, "{\"busy\":true,\"retry_after_ms\":250}");
-        return ESP_OK;
+        free(qbuf);
+        return anima_busy_503(req);
     }
 
     // Apply a per-request online mode (web ANIMA mode selector), saving/restoring the device-global
@@ -1204,11 +1242,8 @@ static esp_err_t anima_get(httpd_req_t *req)
             }
         }
         nucleo_anima_unlock();
-        httpd_resp_set_status(req, "503 Service Unavailable");
-        httpd_resp_set_hdr(req, "Retry-After", "1");
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, "{\"busy\":true,\"retry_after_ms\":250}");
-        return ESP_OK;
+        free(qbuf);
+        return anima_busy_503(req);
     }
     anima_result_t r = qj.out;
 
@@ -1341,13 +1376,17 @@ static esp_err_t anima_get(httpd_req_t *req)
 
     // Tool execution (function calling). Side-effecting tools require a paired session
     // (queries stay public; only the write is gated). create_file -> empty .txt on the SD.
+    // tool_done: -1 = not an executed tool; else 0/1 -> "done" in the JSON, so the web client can tell
+    // "carried out" from "proposed/refused" instead of guessing from the reply text.
     char tool_path[96] = "";
+    int tool_done = -1;
     if (r.action == ANIMA_ACT_TOOL && strcmp(r.intent, "create_file") == 0 && r.arg[0]) {
         const char *bn = strrchr(r.arg, '/'); bn = bn ? bn + 1 : r.arg;
         if (!nucleo_auth_request_ok(req)) {
             snprintf(reply, sizeof(reply), en ? "Pairing required to create files (enter the PIN)."
                                               : "Per creare file devo essere associato (inserisci il PIN).");
             nucleo_anima_observe("create_file", false);   // blocked -> close the loop (no stale state)
+            tool_done = 0;
         } else {
             char path[128]; snprintf(path, sizeof(path), NUCLEO_SD_MOUNT "%s", r.arg);  // /data/<Folder>/<name>
             char dir[128]; snprintf(dir, sizeof(dir), "%s", path);                       // ensure the folder exists
@@ -1359,6 +1398,7 @@ static esp_err_t anima_get(httpd_req_t *req)
                                                   : "%s esiste gia: non lo sovrascrivo.", bn);
                 nucleo_anima_note_file(r.arg);         // it exists -> follow-up "aprilo" can open it
                 nucleo_anima_observe("create_file", true);
+                tool_done = 0;                         // nothing written
             } else {
                 FILE *cf = fopen(path, "wb");
                 if (cf) { const char *body = nucleo_anima_tool_content();   // compose-then-act payload ("" -> empty file)
@@ -1366,9 +1406,10 @@ static esp_err_t anima_get(httpd_req_t *req)
                           fclose(cf); snprintf(tool_path, sizeof(tool_path), "%s", r.arg);
                           nucleo_anima_note_file(r.arg);     // remember only a real, created file
                           nucleo_anima_observe("create_file", true);
-                          nucleo_event_publish("fs.changed", "{\"op\":\"create\",\"by\":\"anima\"}"); }  // File Commander refresh
+                          nucleo_event_publish("fs.changed", "{\"op\":\"create\",\"by\":\"anima\"}");  // File Commander refresh
+                          tool_done = 1; }
                 else    { snprintf(reply, sizeof(reply), en ? "Can't create %s." : "Non riesco a creare %s.", bn);
-                          nucleo_anima_observe("create_file", false); }
+                          nucleo_anima_observe("create_file", false); tool_done = 0; }
             }
         }
     }
@@ -1378,11 +1419,39 @@ static esp_err_t anima_get(httpd_req_t *req)
             snprintf(reply, sizeof(reply), en ? "Pairing required to add events (enter the PIN)."
                                               : "Per aggiungere eventi devo essere associato (inserisci il PIN).");
             nucleo_anima_observe("add_event", false);
+            tool_done = 0;
         } else if (anima_apply_event(nucleo_anima_tool_content(), en, reply, sizeof(reply))) {
             nucleo_anima_observe("add_event", true);
+            tool_done = 1;
         } else {
             snprintf(reply, sizeof(reply), en ? "I couldn't add the event." : "Non sono riuscito ad aggiungere l'evento.");
             nucleo_anima_observe("add_event", false);
+            tool_done = 0;
+        }
+    }
+    // set_volume / set_brightness -> apply them here too, exactly like the native executor (app_anima.cpp).
+    // The web used to get "Imposto il volume al 50%" back for a change that never happened. arg is "<pct>"
+    // (absolute) or "+N"/"-N" (relative); same pairing gate as the other side-effecting tools.
+    else if (r.action == ANIMA_ACT_TOOL &&
+             (strcmp(r.intent, "set_volume") == 0 || strcmp(r.intent, "set_brightness") == 0)) {
+        bool vol = strcmp(r.intent, "set_volume") == 0;
+        if (!nucleo_auth_request_ok(req)) {
+            snprintf(reply, sizeof(reply), en ? "Pairing required to change settings (enter the PIN)."
+                                              : "Per cambiare le impostazioni devo essere associato (inserisci il PIN).");
+            nucleo_anima_observe(r.intent, false);
+            tool_done = 0;
+        } else {
+            int cur  = vol ? nucleo_audio_volume() : nucleo_app_brightness();
+            int want = (r.arg[0] == '+' || r.arg[0] == '-') ? cur + atoi(r.arg) : atoi(r.arg);
+            if (want < 0) want = 0;
+            if (want > 100) want = 100;
+            if (vol) nucleo_audio_set_volume(want); else nucleo_app_set_brightness(want);
+            nucleo_app_persist_prefs();   // a deliberate "set volume/brightness" survives a reboot (as on the device)
+            if (!vol) want = nucleo_app_brightness();   // the setter floors the backlight at 10%: report what applied
+            snprintf(reply, sizeof(reply), en ? (vol ? "Volume %d%%." : "Brightness %d%%.")
+                                              : (vol ? "Volume al %d%%." : "Luminosita al %d%%."), want);
+            nucleo_anima_observe(r.intent, true);
+            tool_done = 1;
         }
     }
 
@@ -1404,6 +1473,7 @@ static esp_err_t anima_get(httpd_req_t *req)
     const char *long_reply = nucleo_anima_long_reply();
     cJSON_AddStringToObject(root, "reply", (long_reply && long_reply[0]) ? long_reply : reply);
     if (tool_path[0]) cJSON_AddStringToObject(root, "path", tool_path);
+    if (tool_done >= 0) cJSON_AddBoolToObject(root, "done", tool_done);   // executed-tool outcome (absent otherwise)
     cJSON_AddStringToObject(root, "tool", r.action == ANIMA_ACT_TOOL ? r.intent : "");
     cJSON_AddNumberToObject(root, "confidence", r.confidence);
     // micro-thought: the structured decision behind the reply (observable plan).
@@ -1450,6 +1520,7 @@ static esp_err_t anima_get(httpd_req_t *req)
              (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)(uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t)));
 #endif
+    free(qbuf);   // after the OUT snapshot, so the per-query delta stays a clean leak signal
     return ESP_OK;
 }
 

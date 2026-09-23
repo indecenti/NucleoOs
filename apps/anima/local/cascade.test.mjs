@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const mod = join(here, '..', 'www', 'local', 'cascade.js');
-const { answered, resolveOffline } = await import(pathToFileURL(mod).href);
+const { answered, resolveOffline, classifyCommand, deviceToolOutcome, commandHint, DEVICE_TOOLS } = await import(pathToFileURL(mod).href);
 
 // A runner factory that records call order into `log` and returns a fixed result.
 const rec = (log, name, result) => async () => { log.push(name); return result; };
@@ -172,4 +172,53 @@ test('missing webindex runner is simply skipped (back-compat)', async () => {
   });
   assert.deepEqual(log, ['browser', 'device']);
   assert.equal(r.source, 'device');
+});
+
+// ---- commands first + honest device actions ----------------------------------------------------
+
+test('classifyCommand(): device tools, live state, client hand-offs, everything else', () => {
+  for (const tool of ['add_event', 'set_volume', 'set_brightness', 'create_file'])
+    assert.equal(classifyCommand({ action: 'tool', tool, reply: 'x' }), 'device', tool);
+  assert.ok(DEVICE_TOOLS.has('set_volume'));
+  assert.equal(classifyCommand({ action: 'tool', tool: '', intent: 'add_event' }), 'device', 'intent fallback');
+  assert.equal(classifyCommand({ action: 'system', arg: 'time', reply: '{value}.' }), 'live');
+  assert.equal(classifyCommand({ action: 'launch', arg: 'calculator' }), 'client');
+  assert.equal(classifyCommand({ action: 'tool', tool: 'open_file', arg: '/data/a.txt' }), 'client');
+  assert.equal(classifyCommand({ action: 'tool', tool: 'translate' }), null, 'a pure tool is not a device action');
+  assert.equal(classifyCommand({ action: 'answer', tier: 'fact', reply: 'Parigi' }), null);
+  assert.equal(classifyCommand(null), null);
+});
+
+test('deviceToolOutcome(): only the device can make an action "done"', () => {
+  assert.equal(deviceToolOutcome({ local: true, action: 'tool', tool: 'add_event', reply: 'Aggiunto' }), 'proposed', 'browser engine never executes');
+  assert.equal(deviceToolOutcome({ action: 'tool', tool: 'set_volume', done: true }), 'done');
+  assert.equal(deviceToolOutcome({ action: 'tool', tool: 'add_event', done: false, reply: 'Per aggiungere eventi devo essere associato' }), 'failed');
+  // firmware older than the "done" flag: set_* were proposed but never executed by /api/anima
+  assert.equal(deviceToolOutcome({ action: 'tool', tool: 'set_volume', reply: 'Imposto il volume al 50%.' }), 'unsupported');
+  assert.equal(deviceToolOutcome({ action: 'tool', tool: 'set_brightness', reply: 'Alzo la luminosita.' }), 'unsupported');
+  // ...while create_file/add_event were executed server-side
+  assert.equal(deviceToolOutcome({ action: 'tool', tool: 'add_event', reply: 'Aggiunto "dentista" il 2026-09-24.' }), 'done');
+  assert.equal(deviceToolOutcome({ action: 'tool', tool: 'add_event', reply: "Non sono riuscito ad aggiungere l'evento." }), 'failed');
+  assert.equal(deviceToolOutcome({ action: 'tool', tool: 'create_file', arg: '/data/Note/a.txt', path: '/data/Note/a.txt', reply: 'Creo a.txt' }), 'done');
+  assert.equal(deviceToolOutcome({ action: 'tool', tool: 'create_file', arg: '/data/Note/a.txt', reply: 'a.txt esiste gia: non lo sovrascrivo.' }), 'failed');
+  assert.equal(deviceToolOutcome({ action: 'tool', tool: 'create_file', arg: '/data/Note/a.txt', reply: 'Per creare file devo essere associato (inserisci il PIN).' }), 'failed');
+});
+
+test('commandHint(): device commands and live state are caught, ordinary questions are not', () => {
+  const act = ['alza il volume', 'volume al 50', 'metti la luminosità al massimo', 'fai più chiaro lo schermo', 'turn up the volume',
+    'set brightness to 30', 'ricordami di chiamare Marco domani alle 10', 'aggiungi un evento dentista venerdì', 'remind me to call mum',
+    'metti una sveglia alle 7', 'fammi un timer di 5 minuti'];
+  const live = ['che ore sono', 'Che ora è?', 'what time is it', 'Anima, che ore sono adesso?', 'mi dici che ore sono per favore', 'che giorno è oggi', "what's the date", 'quanta batteria ho',
+    'quanto spazio libero ho', 'quanta ram libera', 'a che rete sono connesso', 'che versione è', 'cosa ho oggi', 'my schedule'];
+  const launch = ['apri la calcolatrice', 'open calculator', 'avvia il player'];
+  const none = ['chi è Einstein', 'capitale della Francia', 'volume del cubo lato 3', 'come funziona il timer 555',
+    'come funziona una batteria al litio', 'rete neurale', 'open source software is great', "l'audio del film era basso",
+    'il volume di vendite è alto', 'crea un file note.txt', 'scrivi una funzione debounce in js', 'quanto fa 2+2', '',
+    // look-alikes that belong to a brain, not the RTC / a device action (live state is matched whole-utterance)
+    'che versione di python devo usare', "che giorno è natale quest'anno", 'come alzo il volume del mio pc?',
+    'come creo un evento su google calendar?', 'start a new project in python'];
+  for (const q of act) assert.equal(commandHint(q), 'act', q);
+  for (const q of live) assert.equal(commandHint(q), 'live', q);
+  for (const q of launch) assert.equal(commandHint(q), 'launch', q);
+  for (const q of none) assert.equal(commandHint(q), null, q);
 });
