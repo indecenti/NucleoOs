@@ -198,10 +198,14 @@ void nucleo_update_dismiss_latest(void)
     // Snapshot s_st.latest under the lock — the background check task can be mid-strncpy into it
     // right now (the dialog shows an NVS-cached tag while a fresh check runs). Then do flash I/O on
     // the local copy OUTSIDE the spinlock.
+    // Dismiss the SAME tag the dialog/app compare against (the browser-written SD copy): s_st.latest is
+    // only filled by an on-device check, so saving it left "Ignore" a no-op (or saved a stale tag).
     char tag[24];
-    portENTER_CRITICAL(&s_mux);
-    strncpy(tag, s_st.latest, sizeof(tag) - 1); tag[sizeof(tag) - 1] = 0;
-    portEXIT_CRITICAL(&s_mux);
+    if (!read_sd_latest(tag, sizeof tag)) {
+        portENTER_CRITICAL(&s_mux);
+        strncpy(tag, s_st.latest, sizeof(tag) - 1); tag[sizeof(tag) - 1] = 0;
+        portEXIT_CRITICAL(&s_mux);
+    }
     if (!tag[0]) return;
     nvs_set_str(s_nvs, "dismiss", tag);
     nvs_commit(s_nvs);

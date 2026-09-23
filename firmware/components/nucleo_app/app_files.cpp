@@ -64,6 +64,7 @@ static int  s_tab_page    = 0;      // 0 = Recent, 1 = Search
 static int  s_tab_sel     = 0;
 static char s_query[28]   = "";
 static bool s_search_mode = false;  // main list = search results; name = full web-path
+static int  s_search_long = 0;      // matches skipped: full path longer than Entry.name (a cut path can't be opened)
 
 // ── Actions / input / details modals ─────────────────────────────────────────
 enum { ACT_OPEN, ACT_DETAILS, ACT_RENAME, ACT_MKDIR, ACT_DELETE, ACT_COUNT };
@@ -300,12 +301,13 @@ static void search_walk(const char *abs_dir, const char *web_dir, int depth)
         struct stat st; if (stat(abs_c, &st) != 0) continue;
         if (S_ISDIR(st.st_mode)) {
             char asub[200], wsub[128];
-            snprintf(asub, sizeof asub, "%s%s/", abs_dir, de->d_name);
-            snprintf(wsub, sizeof wsub, "%s%s/", web_dir, de->d_name);
+            if (snprintf(asub, sizeof asub, "%s%s/", abs_dir, de->d_name) >= (int)sizeof asub ||
+                snprintf(wsub, sizeof wsub, "%s%s/", web_dir, de->d_name) >= (int)sizeof wsub) continue;
             search_walk(asub, wsub, depth+1);
         } else if (ci_contains(de->d_name, s_query)) {
             Entry *r = &s_e[s_n];
-            snprintf(r->name, sizeof r->name, "%s%s", web_dir, de->d_name);
+            // A truncated path would list a result that opens nothing (or the wrong file): skip + count it.
+            if (snprintf(r->name, sizeof r->name, "%s%s", web_dir, de->d_name) >= (int)sizeof r->name) { s_search_long++; continue; }
             r->dir = false;
             r->kb  = (uint32_t)((st.st_size + 1023) / 1024);
             s_n++;
@@ -316,7 +318,7 @@ static void search_walk(const char *abs_dir, const char *web_dir, int depth)
 
 static void do_search(void)
 {
-    s_n = 0; s_sel = 0;
+    s_n = 0; s_sel = 0; s_search_long = 0;
     if (!s_e || !s_query[0]) return;
     char aroot[192]; snprintf(aroot, sizeof aroot, "%s/", NUCLEO_SD_MOUNT);
     search_walk(aroot, "/", 0);
@@ -349,8 +351,11 @@ static const char *search_parent(const char *full)
 static void update_hint(void)
 {
     if (s_search_mode) {
-        static char h[52];
-        snprintf(h, sizeof h, TR("'%s'  DEL=reset filtro", "'%s'  DEL=clear filter"), s_query);
+        static char h[64];
+        if (s_search_long > 0)
+            snprintf(h, sizeof h, TR("'%s' +%d percorsi lunghi omessi", "'%s' +%d long paths skipped"), s_query, s_search_long);
+        else
+            snprintf(h, sizeof h, TR("'%s'  DEL=reset filtro", "'%s'  DEL=clear filter"), s_query);
         nucleo_app_set_hint(h);
     } else if (at_root()) {
         nucleo_app_set_hint(TR("INVIO apri  ->azioni  /=recenti  ESC esci",

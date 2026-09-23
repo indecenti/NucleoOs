@@ -38,6 +38,7 @@ static Ev s_ev[MAX_EV];
 static int s_evn = 0;
 static char s_day[12] = "";        // cached day key (empty -> force first load)
 static int64_t s_loaded_us = 0;
+static char s_done_min[6] = "";    // HH:MM whose reminders were already dispatched (survives a same-day reload)
 
 
 // ---- load today's events (rare: day-change or >5 min stale) ----------------
@@ -83,10 +84,14 @@ static void svc_task(void *)
             struct tm tm; localtime_r(&now, &tm);
             char key[12]; strftime(key, sizeof key, "%Y-%m-%d", &tm);
             int64_t us = esp_timer_get_time();
-            if (strcmp(key, s_day) != 0 || us - s_loaded_us > 300LL * 1000000) {
-                load_today(key); s_loaded_us = us;
-            }
             char hhmm[6]; snprintf(hhmm, sizeof hhmm, "%02d:%02d", tm.tm_hour, tm.tm_min);
+            bool newday = strcmp(key, s_day) != 0;
+            if (newday || us - s_loaded_us > 300LL * 1000000) {
+                load_today(key); s_loaded_us = us;           // resets every fired flag...
+                if (!newday && !strcmp(s_done_min, hhmm))    // ...so a reload inside an already-fired minute
+                    for (int i = 0; i < s_evn; i++)          // must not chime/banner those events twice
+                        if (!strcmp(s_ev[i].t, hhmm)) s_ev[i].fired = true;
+            }
             for (int i = 0; i < s_evn; i++) {
                 if (s_ev[i].fired || strcmp(s_ev[i].t, hhmm) != 0) continue;
                 s_ev[i].fired = true;
@@ -96,6 +101,7 @@ static void svc_task(void *)
                 char id[24]; snprintf(id, sizeof id, "cal-%s", s_ev[i].t);
                 nucleo_notify_emit("calendar", NOTIFY_INFO, id, s_ev[i].x, s_ev[i].t, "app:calendar");
             }
+            snprintf(s_done_min, sizeof s_done_min, "%s", hhmm);
         }
         vTaskDelay(pdMS_TO_TICKS(15000));
     }

@@ -70,6 +70,7 @@ static int   s_aesc = 0, s_p[6], s_pn = 0;     // CSI param accumulator (for SGR
 static uint8_t s_fgbase = DEF_FG; static bool s_bold = false;
 static int   s_scroll = 0;
 static bool  s_mask = false;
+static bool  s_cr = false;          // CR seen: erase the line only if TEXT follows (so "\r\n" keeps it)
 static SemaphoreHandle_t s_lock = nullptr;
 static volatile bool s_dirty = true;
 
@@ -89,7 +90,9 @@ static void sb_commit() {
     if (strstr(low, "password") || strstr(low, "passphrase")) { int e = s_curlen; while (e > 0 && s_cur[e-1] == ' ') e--; if (e > 0 && s_cur[e-1] == ':') s_mask = true; }
     s_curlen = 0; s_cur[0] = 0;
 }
-static void sb_putc(char c) { if (s_curlen < SB_W - 1) { if (s_sbcol) s_curcol[s_curlen] = cur_fg(); s_cur[s_curlen++] = c; s_cur[s_curlen] = 0; } }
+static void sb_putc(char c) {
+    if (s_cr) { s_cr = false; s_curlen = 0; s_cur[0] = 0; }   // bare CR + text = overwrite the line
+    if (s_curlen < SB_W - 1) { if (s_sbcol) s_curcol[s_curlen] = cur_fg(); s_cur[s_curlen++] = c; s_cur[s_curlen] = 0; } }
 static void apply_sgr() {
     if (s_pn == 0) { s_fgbase = DEF_FG; s_bold = false; return; }
     for (int i = 0; i < s_pn; i++) { int n = s_p[i];
@@ -109,8 +112,8 @@ static void sb_feed(const char *b, int n) {
         unsigned char c = (unsigned char)b[i];
         if (s_aesc == 0) {
             if (c == 0x1b) s_aesc = 1;
-            else if (c == '\n') sb_commit();
-            else if (c == '\r') s_curlen = 0, s_cur[0] = 0;
+            else if (c == '\n') { s_cr = false; sb_commit(); }
+            else if (c == '\r') s_cr = true;   // deferred: servers end EVERY line with \r\n; erasing here blanked all output
             else if (c == '\t') { int t = (s_curlen / 8 + 1) * 8; if (t > SB_W-1) t = SB_W-1; while (s_curlen < t) sb_putc(' '); }  // clamp: sb_putc caps at SB_W-1, so an unclamped target near EOL spins forever holding s_lock
             else if (c == '\b') { if (s_curlen > 0) { s_curlen--; s_cur[s_curlen] = 0; } }
             else if (c >= 0x20 && c < 0x7f) sb_putc((char)c);
@@ -302,7 +305,7 @@ static void start_connect() {
     }
     // colour plane only when RAM is comfortable; otherwise run monochrome
     s_sbcol = (inf.free_after > 90 * 1024) ? (uint8_t *)malloc((size_t)SB_LINES * SB_W) : nullptr;
-    s_head = s_count = s_curlen = s_scroll = 0; s_aesc = s_pn = 0; s_mask = false; s_cur[0] = 0;
+    s_head = s_count = s_curlen = s_scroll = 0; s_aesc = s_pn = 0; s_mask = false; s_cr = false; s_cur[0] = 0;
     s_fgbase = DEF_FG; s_bold = false;
     if (!s_lock) s_lock = xSemaphoreCreateMutex();
     if (!s_in) s_in = xStreamBufferCreate(1024, 1);

@@ -47,6 +47,7 @@ enum { M_LIST, M_VIEW, M_EDIT, M_SET, M_ACT, M_INPUT, M_DETAILS };
 static char (*s_names)[56] = nullptr;   // [48][56], heap-allocated on enter()
 static int s_n, s_sel, s_mode, s_vscroll;
 static bool s_dirty;
+static bool s_trunc;                     // file larger than the buffer: read-only (a save would cut it)
 static bool s_confirm_del, s_del_yes;
 static char *s_buf = nullptr;           // [MAXBUF], heap-allocated on enter()
 static int s_len;
@@ -121,8 +122,8 @@ static void load(const char *name)
     snprintf(s_file, sizeof(s_file), "%s", name);
     char abs[200]; snprintf(abs, sizeof(abs), "%s/%s", NOTES_DIR, name);
     FILE *f = fopen(abs, "rb");
-    s_len = 0;
-    if (f) { if (s_buf) s_len = (int)fread(s_buf, 1, MAXBUF - 1, f); fclose(f); }
+    s_len = 0; s_trunc = false;
+    if (f) { if (s_buf) { s_len = (int)fread(s_buf, 1, MAXBUF - 1, f); s_trunc = (s_len == MAXBUF - 1 && fgetc(f) != EOF); } fclose(f); }
     if (s_buf) s_buf[s_len] = 0;
     s_dirty = false; s_mode = M_VIEW; s_vscroll = 0;
     view_hint();
@@ -133,15 +134,15 @@ static void load_abs(const char *abs)
     const char *bn = strrchr(abs, '/'); bn = bn ? bn + 1 : abs;
     snprintf(s_file, sizeof(s_file), "%s", bn);
     FILE *f = fopen(abs, "rb");
-    s_len = 0;
-    if (f) { if (s_buf) s_len = (int)fread(s_buf, 1, MAXBUF - 1, f); fclose(f); }
+    s_len = 0; s_trunc = false;
+    if (f) { if (s_buf) { s_len = (int)fread(s_buf, 1, MAXBUF - 1, f); s_trunc = (s_len == MAXBUF - 1 && fgetc(f) != EOF); } fclose(f); }
     if (s_buf) s_buf[s_len] = 0;
     s_dirty = false; s_mode = M_VIEW; s_vscroll = 0;
     view_hint();
 }
 static void save(void)
 {
-    if (!s_dirty || !s_file[0] || !s_buf) return;
+    if (!s_dirty || !s_file[0] || !s_buf || s_trunc) return;
     char abs[256];
     if (s_abs[0]) snprintf(abs, sizeof(abs), "%s", s_abs);
     else { mkdir(NOTES_DIR, 0775); snprintf(abs, sizeof(abs), "%s/%s", NOTES_DIR, s_file); }
@@ -153,7 +154,7 @@ static void new_note(void)
     int max = 0;
     if (s_names) for (int i = 0; i < s_n; i++) { int v; if (sscanf(s_names[i], "note-%d", &v) == 1 && v > max) max = v; }
     snprintf(s_file, sizeof(s_file), "note-%d.md", max + 1);
-    s_len = 0; if (s_buf) s_buf[0] = 0; s_dirty = true; s_mode = M_EDIT; s_vscroll = 0;
+    s_len = 0; if (s_buf) s_buf[0] = 0; s_dirty = true; s_trunc = false; s_mode = M_EDIT; s_vscroll = 0;
     edit_hint();
 }
 
@@ -415,7 +416,10 @@ static void on_key(int key, char ch)
         if (key == NK_UP)        { if (s_vscroll > 0) s_vscroll--; }
         else if (key == NK_DOWN) { if (s_vscroll < maxs) s_vscroll++; }
         else if (key == NK_TAB)  { s_mode = M_SET; s_setsel = 0; nucleo_app_set_hint(TR("SU/GIU voce  DX cambia  TAB chiudi", "UP/DN row  RIGHT change  TAB close")); }
-        else if (key == NK_ENTER) { s_mode = M_EDIT; edit_hint(); }
+        else if (key == NK_ENTER) {
+            if (s_trunc) nucleo_app_set_hint(TR("File >4KB: sola lettura (usa l'app web)", "File >4KB: read-only (use the web app)"));
+            else { s_mode = M_EDIT; edit_hint(); }
+        }
         else if (key == NK_DEL) { save(); s_mode = M_LIST; scan(); s_abs[0] = 0; list_hint(); }
         else return;
     } else {                                                     // M_EDIT
@@ -487,18 +491,22 @@ static void draw_text(void)
 
     if (editing) {
         const int LINEH = 16, WRAP = 19; d.setTextSize(2);
-        int evis = (h - 20) / LINEH; if (evis < 1) evis = 1;
-        static char lines[40][WRAP + 1]; int nlines = 0, col = 0;
-        for (int i = 0; s_buf && i < s_len && nlines < 40; i++) {
-            char cc = s_buf[i];
-            if (cc == '\n') { lines[nlines][col] = 0; nlines++; col = 0; continue; }
-            lines[nlines][col++] = cc; if (col >= WRAP) { lines[nlines][col] = 0; nlines++; col = 0; }
+        // The editor appends at the end and shows the tail, so wrap the WHOLE buffer through a small ring
+        // and keep only the last RING rows. (A fixed [40] array stopped laying out after 40 rows: text
+        // typed into a longer note was invisible and the cursor vanished.)
+        const int RING = 16;
+        int evis = (h - 20) / LINEH; if (evis < 1) evis = 1; if (evis > RING) evis = RING;
+        static char lines[RING][WRAP + 1]; int nlines = 0, col = 0;
+        for (int i = 0; s_buf && i < s_len; i++) {
+            char cc = s_buf[i]; char *cur = lines[nlines % RING];
+            if (cc == '\n') { cur[col] = 0; nlines++; col = 0; continue; }
+            cur[col++] = cc; if (col >= WRAP) { cur[col] = 0; nlines++; col = 0; }
         }
-        if (nlines < 40) lines[nlines][col] = 0;
-        int total = nlines + 1; if (total > 40) total = 40;   // lines[] is [40]: when content fills 40 rows, never render/index lines[40]
+        lines[nlines % RING][col] = 0;
+        int total = nlines + 1;
         int first = total > evis ? total - evis : 0, y = top + 20;
-        for (int l = first; l < total && l < first + evis; l++) {
-            d.setTextColor(FG, BG); d.setCursor(6, y); d.print(lines[l]);
+        for (int l = first; l < total; l++) {
+            d.setTextColor(FG, BG); d.setCursor(6, y); d.print(lines[l % RING]);
             if (l == nlines) d.fillRect(6 + col * 12, y, 6, 14, GRN);
             y += LINEH;
         }

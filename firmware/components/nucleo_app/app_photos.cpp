@@ -134,6 +134,14 @@ static void open_selected(void)
     else enter_view();
 }
 
+static void view_to_list(const char *hint)
+{
+    s_view = false;
+    nucleo_app_set_direct_draw(false);
+    d.releasePngMemory();
+    nucleo_app_set_hint(hint);
+}
+
 static void on_key(int key, char ch)
 {
     if (s_view) {
@@ -141,14 +149,14 @@ static void on_key(int key, char ch)
             if (key == NK_DEL) { s_open_abs[0] = 0; s_view = false; nucleo_app_set_direct_draw(false); d.releasePngMemory(); nucleo_app_set_hint(TR(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back")); }
             else return;
         }
-        else if (key == NK_UP)   { if (s_n) s_sel = (s_sel + s_n - 1) % s_n; }
-        else if (key == NK_DOWN) { if (s_n) s_sel = (s_sel + 1) % s_n; }
-        else if (key == NK_DEL)  {
-            s_view = false;
-            nucleo_app_set_direct_draw(false);
-            d.releasePngMemory();
-            nucleo_app_set_hint(TR(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back"));
+        else if (key == NK_UP || key == NK_DOWN) {
+            if (!s_n) return;
+            s_sel = (key == NK_UP) ? (s_sel + s_n - 1) % s_n : (s_sel + 1) % s_n;
+            // prev/next must pass the same oversize guard as Enter: a camera-size neighbour crashes the decoder
+            char abs[256]; snprintf(abs, sizeof abs, "%s/%s", PIC_DIR, s_names[s_sel]);
+            if (nucleo_app_image_oversize(abs)) view_to_list(TR("Troppo grande: usa l'app web", "Too large: use the web app"));
         }
+        else if (key == NK_DEL)  view_to_list(TR(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back"));
         else return;
     } else {
         if (key == NK_UP)        { if (s_n) s_sel = (s_sel + s_n - 1) % s_n; }

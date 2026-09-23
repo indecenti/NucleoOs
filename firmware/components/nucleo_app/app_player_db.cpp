@@ -283,7 +283,7 @@ int music_db_get_unique(int type, char ***out_list) {
             for (int i=0; i<count; i++) {
                 if (!strcasecmp(res[i], tgt->valuestring)) { found = true; break; }
             }
-            if (!found) res[count++] = strdup(tgt->valuestring);
+            if (!found) { char *dup = strdup(tgt->valuestring); if (dup) res[count++] = dup; }   // OOM: skip, never store NULL (next strcasecmp would deref it)
         }
         cJSON_Delete(j);
     }
