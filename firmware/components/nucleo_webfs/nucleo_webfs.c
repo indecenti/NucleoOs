@@ -2,6 +2,7 @@
 #include "nucleo_board.h"
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>        // stat/fstat: the size+mtime ETag (conditional GET -> 304)
 #include "esp_log.h"
 #include "esp_heap_caps.h"   // largest-free-block check for the large-file circuit breaker
 #include "freertos/FreeRTOS.h"
@@ -113,11 +114,51 @@ static void map_uri(const char *uri, char *out, size_t n)
     if (L && out[L - 1] == '/') strncat(out, "index.html", n - L - 1);
 }
 
+// Strong validator for one REPRESENTATION of a file: 'g' (the .gz sibling) or 'r' (raw) + size + mtime.
+// FAT mtime has 2 s granularity; a same-size rewrite inside that window is the only miss, and the
+// service worker's own versioning still covers releases.
+static void make_etag(char *out, size_t n, bool gz, const struct stat *st)
+{
+    snprintf(out, n, "\"%c%lx-%lx\"", gz ? 'g' : 'r', (unsigned long)st->st_size, (unsigned long)st->st_mtime);
+}
+
 static esp_err_t static_get(httpd_req_t *req)
 {
     char path[256];
     map_uri(req->uri, path, sizeof(path));
     if (!path[0]) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad path"); return ESP_FAIL; }
+
+    // CONDITIONAL GET first, from two stat()s — before any heap reclaim or file open. HTML/JS/CSS are
+    // "no-cache" (revalidate every load) and on http://LAN-IP the service worker is inert, so without a
+    // validator every launch re-downloaded the whole web OS from this single-task server. Now a repeat
+    // load is a string compare and an empty 304 per asset. Range requests keep their own path below.
+    // FUNCTION scope: httpd_resp_set_hdr() keeps header values by pointer until the response is sent.
+    char etag[40]; etag[0] = 0;
+    char range_probe[8];
+    bool has_range = httpd_req_get_hdr_value_str(req, "Range", range_probe, sizeof(range_probe)) != ESP_ERR_NOT_FOUND;
+    if (!has_range) {
+        struct stat st;
+        bool gz_ok = false;
+        char ae[80];
+        if (httpd_req_get_hdr_value_str(req, "Accept-Encoding", ae, sizeof(ae)) == ESP_OK && strstr(ae, "gzip")) {
+            char gzp[260];
+            int gl = snprintf(gzp, sizeof(gzp), "%s.gz", path);
+            if (gl > 0 && gl < (int)sizeof(gzp) && stat(gzp, &st) == 0) gz_ok = true;
+        }
+        if (gz_ok || stat(path, &st) == 0) {
+            make_etag(etag, sizeof etag, gz_ok, &st);
+            char inm[48];
+            if (httpd_req_get_hdr_value_str(req, "If-None-Match", inm, sizeof(inm)) == ESP_OK && strstr(inm, etag)) {
+                const char *type = content_type(path);
+                httpd_resp_set_status(req, "304 Not Modified");
+                httpd_resp_set_hdr(req, "ETag", etag);
+                httpd_resp_set_hdr(req, "Cache-Control", is_immutable_asset(type) ? "public, max-age=604800" : "no-cache");
+                if (gz_ok) httpd_resp_set_hdr(req, "Vary", "Accept-Encoding");
+                httpd_resp_send(req, NULL, 0);
+                return ESP_OK;
+            }
+        }
+    }
 
     // A client is loading the web OS: GUARANTEE the server has the RAM to serve it before we start. If the
     // largest contiguous block is under the floor, reclaim the idle ANIMA index (~31 KB) and, if still tight,
@@ -213,6 +254,13 @@ static esp_err_t static_get(httpd_req_t *req)
     httpd_resp_set_hdr(req, "X-Content-Type-Options", "nosniff");
     httpd_resp_set_hdr(req, "Cache-Control",
                        is_immutable_asset(type) ? "public, max-age=604800" : "no-cache");
+    // The validator for THIS representation. The stat above chose gz vs raw the same way the open did;
+    // if the .gz vanished in between we opened raw -> recompute, never send a mismatched tag.
+    if (etag[0] && ((etag[1] == 'g') != gz)) {
+        struct stat st;
+        if (fstat(fileno(f), &st) == 0) make_etag(etag, sizeof etag, gz, &st); else etag[0] = 0;
+    }
+    if (etag[0] && !want_range) httpd_resp_set_hdr(req, "ETag", etag);
 
     long start = 0, end = 0;
     bool ranged = false;
