@@ -68,3 +68,6 @@ deploy/sd/apps/arcade/www/emulatorjs/
 
 # Host-harness scratch root: a throwaway SD mirror the ANIMA gate builds while running.
 tools/anima-host/d192root/
+
+# Game Boy reference test ROMs, fetched SHA-256-pinned by tools/emu-host/gb-accuracy.mjs
+tools/emu-host/testroms/

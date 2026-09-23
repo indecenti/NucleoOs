@@ -7,11 +7,11 @@
  * while the device answered "invalid ROM", because the two used different callback wiring.
  *
  * This gate compiles firmware/components/nucleo_emu/nucleo_gb.c ITSELF and drives it through its
- * public API. NUCLEO_HOST_HEAP shrinks the heap the module believes it has, so the paged path — the
- * only one a 512 KB board ever takes for a real cartridge — is the path under test.
+ * public API against a MODEL of the device heap (heap_model.h: free blocks, best fit, the Solo-boot
+ * shape), so the paged path and every allocation the device could refuse are the paths under test.
  *
  * WHAT IT MEASURES
- * Misses per frame. Each miss is one SD read, and on the device that costs roughly 2-4 ms against a
+ * Misses per frame. Each miss is one 1 KB SD read, and on the device that costs roughly 1-3 ms against a
  * 16.7 ms frame budget. That single number decides whether the cartridge cache is the emulator's
  * bottleneck or a rounding error, and it is measured rather than argued about — it is also the rig
  * that CHOSE the cache geometry (see the table in docs/native-emulation.md).
@@ -22,6 +22,56 @@
 #include <stdlib.h>
 #include <string.h>
 #include "nucleo_gb.h"
+
+/* ── the device heap, as a SHAPE ────────────────────────────────────────────────────────────────────
+ * nucleo_gb.c is compiled with heap_model.h force-included, so its malloc/calloc/free land here and
+ * heap_caps_* read the same numbers. NUCLEO_HOST_HEAP_BLOCKS is a comma list of free-block sizes —
+ * gb-check passes the emulator's Solo-boot profile (largest 32 KB, ~90 KB total). Best fit, like the
+ * device's TLSF; a freed allocation returns to the block it came from. Unset = one generous block. */
+#define HM_MAX 64
+static size_t hm_blk[HM_MAX];
+static int    hm_n;
+typedef struct { size_t take; int blk; } hm_hdr;
+
+static void hm_init(void)
+{
+    const char *e = getenv("NUCLEO_HOST_HEAP_BLOCKS");
+    hm_n = 0;
+    if (!e || !*e) { hm_blk[hm_n++] = (size_t)64 * 1024 * 1024; return; }
+    while (*e && hm_n < HM_MAX) {
+        hm_blk[hm_n++] = (size_t)strtoul(e, (char **)&e, 0);
+        while (*e == ',' || *e == ' ') e++;
+    }
+}
+size_t nucleo_host_model_free(void)    { size_t t = 0; for (int i = 0; i < hm_n; i++) t += hm_blk[i]; return t; }
+size_t nucleo_host_model_largest(void) { size_t m = 0; for (int i = 0; i < hm_n; i++) if (hm_blk[i] > m) m = hm_blk[i]; return m; }
+
+void *nucleo_hm_malloc(size_t n)
+{
+    size_t take = ((n + 3) & ~(size_t)3) + 8;            /* 4-byte granules + a TLSF-sized header */
+    int best = -1;
+    for (int i = 0; i < hm_n; i++)
+        if (hm_blk[i] >= take && (best < 0 || hm_blk[i] < hm_blk[best])) best = i;
+    if (best < 0) return NULL;
+    hm_hdr *h = (hm_hdr *)malloc(sizeof(hm_hdr) + n);
+    if (!h) return NULL;
+    hm_blk[best] -= take;
+    h->take = take; h->blk = best;
+    return h + 1;
+}
+void *nucleo_hm_calloc(size_t n, size_t m)
+{
+    void *p = nucleo_hm_malloc(n * m);
+    if (p) memset(p, 0, n * m);
+    return p;
+}
+void nucleo_hm_free(void *p)
+{
+    if (!p) return;
+    hm_hdr *h = (hm_hdr *)p - 1;
+    hm_blk[h->blk] += h->take;
+    free(h);
+}
 
 /* The emulator hands finished scanlines to the app; here we only count them, so a cartridge that
  * loads and produces nothing cannot pass. */
@@ -109,8 +159,48 @@ int main(int argc, char **argv)
         printf("  %s\n", rom);
 
         g_lines = g_nonblank = g_pcm_writes = 0;
+        hm_init();                                   /* every launch starts from the Solo-boot heap */
+        /* ...minus what the app holds before it opens a cartridge: two 4.8 KB DMA band buffers. */
+        void *band0 = nucleo_hm_malloc(4800), *band1 = nucleo_hm_malloc(4800);
+
+        /* A Game Boy Color-ONLY cartridge must be REFUSED, by the header probe and by open alike: a
+         * DMG core would boot it into garbage. For these the refusal IS the pass condition. */
+        nucleo_gb_info_t inf;
+        if (nucleo_gb_probe(rom, &inf) == ESP_ERR_INVALID_VERSION) {
+            esp_err_t e = nucleo_gb_open(rom, on_line, NULL);
+            if (e == ESP_ERR_INVALID_VERSION && !nucleo_gb_is_open()) printf("    refused: Game Boy Color only - PASS\n");
+            else { printf("    FAIL: GBC-only cartridge was not refused (open -> %d)\n", (int)e); failures++; nucleo_gb_close(); }
+            nucleo_hm_free(band0); nucleo_hm_free(band1);
+            continue;
+        }
+
+        /* "mooneye:<rom>" — a mooneye MBC test run through THIS module's banked, swapped battery RAM on
+         * the device-shaped heap, judged by the Fibonacci registers it leaves behind. ram_256kb walks
+         * all four 8 KB SRAM banks with two resident, so it exercises every swap path. */
+        if (!strncmp(rom, "mooneye:", 8)) {
+            const char *path = rom + 8;
+            esp_err_t e = nucleo_gb_open(path, on_line, NULL);
+            if (e != ESP_OK) { printf("    FAIL: open -> %d\n", (int)e); failures++; nucleo_hm_free(band0); nucleo_hm_free(band1); continue; }
+            for (int f = 0; f < 600; f++) nucleo_gb_run_frame();
+            nucleo_gb_regs_t r; nucleo_gb_get_regs(&r);
+            nucleo_gb_stats_t st; nucleo_gb_get_stats(&st);
+            nucleo_gb_close();
+            nucleo_hm_free(band0); nucleo_hm_free(band1);
+            char sp[400]; snprintf(sp, sizeof sp, "%s.sav", path); remove(sp);   /* the test's RAM, not a save */
+            bool ok = r.r_b == 3 && r.r_c == 5 && r.r_d == 8 && r.r_e == 13;
+            printf("    %s  (SRAM %s, %u bank swaps)\n", ok ? "PASS" : "FAIL: registers are not 3/5/8/13",
+                   st.ram_banked ? "banked+swapped" : "resident", (unsigned)st.ram_swaps);
+            if (!ok) failures++;
+            continue;
+        }
+
+        size_t pre_free = nucleo_host_model_free(), pre_big = nucleo_host_model_largest();
         esp_err_t err = nucleo_gb_open(rom, on_line, NULL);
-        if (err != 0) { printf("    FAIL: open -> %d\n", (int)err); failures++; continue; }
+        if (err != 0) {
+            printf("    FAIL: open -> %d on a heap of %u B free, largest %u B\n", (int)err, (unsigned)pre_free, (unsigned)pre_big);
+            failures++; nucleo_hm_free(band0); nucleo_hm_free(band1); continue;
+        }
+        size_t run_free = nucleo_host_model_free();
 
         nucleo_gb_stats_t s0; nucleo_gb_get_stats(&s0);
         char title[24]; snprintf(title, sizeof title, "%s", nucleo_gb_title());
@@ -120,11 +210,20 @@ int main(int argc, char **argv)
         }
         nucleo_gb_stats_t s1; nucleo_gb_get_stats(&s1);
         nucleo_gb_close();
+        nucleo_hm_free(band0); nucleo_hm_free(band1);
+        /* Everything the module took must come back: on the device a leak here is a smaller cache
+         * for the next cartridge of the session, and eventually a failed launch. */
+        if (nucleo_host_model_free() != pre_free + 2 * (4800 + 8)) {
+            printf("    FAIL: the module leaked %d B of heap across open/close\n",
+                   (int)(pre_free + 2 * (4800 + 8)) - (int)nucleo_host_model_free());
+            failures++; continue;
+        }
 
         double per_frame = (double)s1.bank_misses / FRAMES;
-        printf("    title='%s' rom=%uKB cache=%s(%d slots) heap=%uB\n",
+        printf("    title='%s' rom=%uKB cache=%s(%d slots) heap=%uB | device heap %uB free, largest %uB -> %uB left while playing\n",
                title, (unsigned)(s1.rom_bytes / 1024),
-               s1.rom_resident ? "resident" : "paged", s1.rom_pages, (unsigned)s0.heap_bytes);
+               s1.rom_resident ? "resident" : "paged", s1.rom_pages, (unsigned)s0.heap_bytes,
+               (unsigned)pre_free, (unsigned)pre_big, (unsigned)run_free);
         printf("    lines=%ld nonblank=%ld  misses=%u (%.1f/frame -> ~%.1f ms/frame of SD)\n",
                g_lines, g_nonblank, (unsigned)s1.bank_misses, per_frame, per_frame * 3.0);
 

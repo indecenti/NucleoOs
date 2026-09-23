@@ -5,7 +5,7 @@
  * exercises exactly the two things that decide whether the app works on device:
  *
  *   1. MEMORY  — sizeof(struct gb_s) is the number the whole design rests on. Assert it, so a future
- *                core update that quietly doubles it fails here instead of on a board with 60 KB.
+ *                core update that quietly doubles it fails here instead of on a board with a 32 KB block.
  *   2. RUNNING — boot each ROM, run frames, and count the scanlines the PPU actually emits. A core
  *                that loads but renders nothing is the failure mode a "does it compile" test misses.
  *

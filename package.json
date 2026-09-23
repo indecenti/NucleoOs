@@ -114,6 +114,7 @@
     "dj:test": "node apps/dj/test/all.mjs",
     "gb:test": "node tools/anima-host/gb-check.mjs",
     "gen:icons": "node tools/gen-icon-bundle.mjs",
-    "alarm:test": "node tools/alarm-host/run.mjs"
+    "alarm:test": "node tools/alarm-host/run.mjs",
+    "gb:accuracy": "node tools/emu-host/gb-accuracy.mjs"
   }
 }

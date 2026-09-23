@@ -9,7 +9,8 @@
 // That matters because RAM here is measured in CONTIGUOUS blocks, not totals: the boot trace shows
 // the largest free block collapsing to ~31.7 KB the moment the shared 32,400-byte UI canvas is
 // allocated. Only a Solo boot (fresh, unfragmented heap) with Wi-Fi skipped and the canvas released
-// gets it back toward ~60 KB — which is the budget this module is designed to live inside.
+// gets it back — measured in the emulator's own trace: ~90 KB free, largest block 32 KB. That shape is
+// the budget this module is designed to live inside (and the one the host gate models).
 //
 // EVERYTHING IS HEAP-ON-OPEN. Nothing here lives in .bss: an emulator that is closed 99% of the time
 // must cost nothing while closed (see docs/memory-budget.md, and the boot-RAM lessons in CLAUDE.md).
@@ -31,9 +32,28 @@ extern "C" {
 // once per visible line, in order. Keep it cheap: it runs 144 times per frame.
 typedef void (*nucleo_gb_line_fn)(const uint8_t *pixels, int line, void *user);
 
-// Open a ROM from the SD card. Allocates the core state and the ROM cache; returns ESP_ERR_NO_MEM if
-// the heap cannot host them (the caller should have entered a Solo/exclusive window first).
+// Open a ROM from the SD card. Allocates the core state and the ROM cache. Errors, each one a thing
+// the player can be told in words:
+//   ESP_ERR_NOT_FOUND        no such file
+//   ESP_ERR_INVALID_SIZE     too short to hold a cartridge header
+//   ESP_ERR_INVALID_VERSION  Game Boy Color-only cartridge (this is a DMG core)
+//   ESP_ERR_NOT_SUPPORTED    a cartridge controller the core does not model (MBC6/7, camera, HuC3...)
+//   ESP_ERR_NO_MEM           the heap cannot host core + cache (enter a Solo/exclusive window first)
 esp_err_t nucleo_gb_open(const char *rom_path, nucleo_gb_line_fn on_line, void *user);
+
+// Read the cartridge header WITHOUT opening a session — no allocation. Returns the same verdicts as
+// nucleo_gb_open for GBC-only and unsupported controllers, so a front-end can refuse up front.
+typedef struct {
+    uint32_t rom_bytes;
+    uint8_t  cart_type;      // header 0x147
+    uint8_t  cgb_flag;       // header 0x143: 0x80 = GBC-enhanced (runs here), 0xC0 = GBC only
+} nucleo_gb_info_t;
+esp_err_t nucleo_gb_probe(const char *rom_path, nucleo_gb_info_t *out);
+// Human name of a cartridge controller the core refuses ("MBC7", "HuC3", ...).
+const char *nucleo_gb_cart_name(uint8_t type);
+
+// Restart the running cartridge (battery RAM is flushed and kept).
+void nucleo_gb_reset(void);
 
 // Persist cartridge RAM (if the cart has any) and release everything. Safe to call when not open.
 void nucleo_gb_close(void);
@@ -77,6 +97,9 @@ bool      nucleo_gb_state_exists(int slot);
 // Write cartridge RAM to <rom>.sav now. No-op when the cart has no battery RAM or nothing changed.
 // Called automatically by nucleo_gb_close(); exposed so a long session can checkpoint.
 void nucleo_gb_save(void);
+// Write it only once the game has left its battery RAM alone for ~1.5 s (i.e. a save has finished).
+// Cheap to call every second; returns true when it actually wrote.
+bool nucleo_gb_autosave(void);
 
 // Diagnostics — what this session actually costs and how the ROM is being served.
 typedef struct {
@@ -85,14 +108,26 @@ typedef struct {
     bool     rom_resident;   // true = whole ROM in RAM (no SD traffic while playing)
     bool     rom_paged;      // true = served from SD through the page cache
     int      rom_pages;      // page-cache slots actually allocated (0 when resident)
-    uint32_t bank_misses;    // page-cache misses since open (each is one 4 KB SD read)
+    uint32_t bank_misses;    // page-cache misses since the last reset (each is one 1 KB SD read)
     uint32_t frames;         // frames run since open
     // Where a frame's time actually goes, accumulated in microseconds since the last reset. Measured
     // rather than inferred: "the emulator is slow" is not actionable until it says WHICH part is.
     uint32_t us_cpu;         // inside gb_run_frame (CPU + PPU + our scanline callback)
     uint32_t us_audio;       // producing and pushing one frame of APU samples
+    uint32_t core_errors;    // invalid opcodes/reads since open or reset — a crashed game, not a slow one
+    uint16_t core_err_addr;  // ...and where the first one happened
+    uint8_t  cart_type;      // header 0x147 as the core runs it
+    bool     save_dirty;     // battery RAM changed and not yet on the card
+    bool     ram_banked;     // battery RAM larger than the resident banks: the rest is swapped to the card
+    uint32_t ram_swaps;      // SRAM banks brought in from the card since open (a box change in Pokémon)
 } nucleo_gb_stats_t;
 void nucleo_gb_get_stats(nucleo_gb_stats_t *out);
+
+// CPU registers right now — for a crash report, and for the host gates, which judge mooneye test
+// ROMs by the Fibonacci registers B/C/D/E = 3/5/8/13 those ROMs leave behind on success.
+// Field names carry an r_ prefix: app_gfx.h defines `d` as a macro in every native app.
+typedef struct { uint16_t pc, sp; uint8_t r_a, r_b, r_c, r_d, r_e, r_h, r_l; } nucleo_gb_regs_t;
+void nucleo_gb_get_regs(nucleo_gb_regs_t *out);
 // Zero the timing accumulators (and the miss counter) so the next window measures cleanly.
 void nucleo_gb_reset_counters(void);
 
