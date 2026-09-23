@@ -2922,6 +2922,41 @@ static bool a_is_anaphoric_attr_q(char tok[A_MAX_TOKENS][A_TOK_LEN], int n)
     return content <= 1;
 }
 
+// Can `reply` (the previous topic's card) answer the subject-less fragment `q`? A WHEN/birth/death
+// fragment needs a year or the event itself in the card; anything else ("e cosa ha fatto?") is served.
+static bool a_fragment_answered_by(const char *q, const char *reply)
+{
+    char qt[A_MAX_TOKENS][A_TOK_LEN], rt_w[A_TOK_LEN];
+    int qn = a_tokenize(q, qt);
+    bool when = false, birth = false, death = false;
+    for (int i = 0; i < qn; i++) {
+        const char *w = qt[i];
+        if (!strcmp(w, "quando") || !strcmp(w, "when")) when = true;
+        if (!strcmp(w, "nato") || !strcmp(w, "nata") || !strcmp(w, "nascita") || !strcmp(w, "born")) birth = true;
+        if (!strcmp(w, "morto") || !strcmp(w, "morta") || !strcmp(w, "morte") || !strcmp(w, "died") ||
+            !strcmp(w, "death") || !strcmp(w, "die")) death = true;
+    }
+    if (!when && !birth && !death) return true;
+    bool year = false, has_birth = false, has_death = false;
+    int wl = 0, digits = 0;
+    for (const unsigned char *p = (const unsigned char *)reply; ; p++) {
+        if (isdigit(*p)) { if (++digits >= 3) year = true; } else digits = 0;
+        char o = isalpha(*p) ? (char)tolower(*p) : 0;
+        if (o) { if (wl < A_TOK_LEN - 1) rt_w[wl++] = o; continue; }
+        if (wl) {
+            rt_w[wl] = 0; wl = 0;
+            if (!strcmp(rt_w, "nato") || !strcmp(rt_w, "nata") || !strcmp(rt_w, "born") || !strcmp(rt_w, "nascita")) has_birth = true;
+            if (!strcmp(rt_w, "morto") || !strcmp(rt_w, "morta") || !strcmp(rt_w, "morte") || !strcmp(rt_w, "died") ||
+                !strcmp(rt_w, "death") || !strcmp(rt_w, "deceduto") || !strcmp(rt_w, "scomparso")) has_death = true;
+        }
+        if (!*p) break;
+    }
+    if (birth && !(has_birth || year)) return false;
+    if (death && !(has_death || year)) return false;
+    if (when && !year) return false;
+    return true;
+}
+
 // Does `reply` name `subj`? True when any subject token of 4+ letters appears in the reply
 // (prefix-tolerant, accent-folded). A subject with no such token can't be checked -> true.
 static bool a_reply_names(const char *reply, const char *subj)
@@ -3087,8 +3122,18 @@ static bool foc_frame_of(const char *q, char *pre, size_t pcap, char *post, size
     for (int t = e1 + 1; t < n && o + 1 < (int)scap; t++)
         o += snprintf(post + o, scap - o, "%s%s", o ? " " : "", tok[t]);
     if (ent && ecap) {
+        // The entity itself, widened over a name particle the frame logic treats as a function word:
+        // "leonardo DA vinci", "van gogh", "de gaulle" — the frame keeps its own shape unchanged.
+        static const char *const particle[] = { "da","de","van","von","der","du","dos", NULL };
+        int s0 = e0;
+        while (s0 >= 2) {
+            bool is_p = false;
+            for (int i = 0; particle[i]; i++) if (!strcmp(tok[s0 - 1], particle[i])) { is_p = true; break; }
+            if (!is_p || foc_is_fnword(tok[s0 - 2]) || e1 - (s0 - 2) + 1 > 4) break;
+            s0 -= 2;
+        }
         o = 0; ent[0] = 0;
-        for (int t = e0; t <= e1 && o + 1 < (int)ecap; t++)
+        for (int t = s0; t <= e1 && o + 1 < (int)ecap; t++)
             o += snprintf(ent + o, ecap - o, "%s%s", o ? " " : "", tok[t]);
     }
     return pre[0] || post[0];
@@ -3773,16 +3818,20 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // The reasoner's own lexical/role/coherence guards reject a wrong re-aim, so on a refuse we simply fall
     // through to the normal cascade (which reloads L1 on demand). Only fires with a fresh focus -> a cold
     // query (no prior fact in the thread) can never be hijacked, so single-shot routing cannot regress.
+    // The structured focus only leads while it is the LATEST thread: a later L1 turn ("chi era einstein"
+    // [KGE] -> "chi era leonardo da vinci" [L1 card]) moved the conversation on, and the lexical focus
+    // below must win — otherwise "e quanto pesa" was re-aimed at Einstein.
     if ((s_session.foc_subject[0] || s_session.foc_relation[0]) &&
-        (s_session.turn - s_session.foc_turn) <= 8) {
+        (s_session.turn - s_session.foc_turn) <= 8 && s_session.foc_turn >= s_session.frame_turn) {
         char ftok[A_MAX_TOKENS][A_TOK_LEN]; int fnt = a_tokenize(q, ftok);
         static const char *const conn[] = { "e","ed","poi","allora","anche","invece","ma","quindi","pure",
                                              "and","then","also","plus", NULL };
         bool lead_conn = false;
         if (fnt >= 1) for (int i = 0; conn[i]; i++) if (!strcmp(conn[i], ftok[0])) { lead_conn = true; break; }
         bool qword = a_has_qword(ftok, fnt);
+        bool attr_q = a_is_anaphoric_attr_q(ftok, fnt);   // "e quanto pesa": an attribute, not a new entity
         char shifted[176]; shifted[0] = 0;
-        if (lead_conn && !qword && s_session.foc_relation[0] && fnt >= 2 && fnt <= 4) {
+        if (lead_conn && !qword && !attr_q && s_session.foc_relation[0] && fnt >= 2 && fnt <= 4) {
             // SUBJECT-shift: skip leading connectors, take the rest as the new entity, reuse the relation.
             int s0 = 0;
             while (s0 < fnt) { bool c = false; for (int i = 0; conn[i]; i++) if (!strcmp(conn[i], ftok[s0])) c = true; if (!c) break; s0++; }
@@ -3793,7 +3842,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
         } else if (qword && s_session.foc_subject[0] && a_is_followup_q(q)) {
             // RELATION-shift: the subject-less question fragment carries the new relation; reuse the subject.
             snprintf(shifted, sizeof shifted, "%s %s", q, s_session.foc_subject);
-        } else if (s_session.foc_subject[0] && a_is_anaphoric_attr_q(ftok, fnt)) {
+        } else if (s_session.foc_subject[0] && attr_q) {
             // An ATTRIBUTE asked of the thread's subject through a pronoun/ellipsis ("how tall is it",
             // "e quanto pesa"). Try the same re-aim; whatever answers must then be ABOUT that subject
             // (checked at done:) — a bare fragment otherwise fuzzy-matched an unrelated card (Everest).
@@ -3816,9 +3865,30 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
 
     // Lexical fallback: an L1-card thread ("chi era leonardo da vinci") declares no structured subject,
     // but its entity is known — an anaphoric attribute follow-up must still be answered ABOUT it.
-    if (!need_subj[0] && s_session.frame_ent[0] && (s_session.turn - s_session.frame_turn) <= 8) {
+    // It also re-aims a RELATION follow-up at that entity: "chi era leonardo da vinci" -> "quando e nato"
+    // used to re-serve the bio; the reasoner now gets "quando e nato leonardo da vinci" and answers the
+    // date (its own guards refuse a wrong re-aim, and then the cascade runs as before).
+    bool struct_fresh = s_session.foc_subject[0] && (s_session.turn - s_session.foc_turn) <= 8
+                        && s_session.foc_turn >= s_session.frame_turn;   // a later L1 turn supersedes it
+    if (!need_subj[0] && !struct_fresh && s_session.frame_ent[0] && (s_session.turn - s_session.frame_turn) <= 8) {
         char atok[A_MAX_TOKENS][A_TOK_LEN]; int ant = a_tokenize(q, atok);
-        if (a_is_anaphoric_attr_q(atok, ant)) snprintf(need_subj, sizeof need_subj, "%s", s_session.frame_ent);
+        bool rel_fu  = a_has_qword(atok, ant) && a_is_followup_q(q);
+        bool attr_fu = a_is_anaphoric_attr_q(atok, ant);
+        if (rel_fu || attr_fu) {
+            char shifted[176];
+            snprintf(shifted, sizeof shifted, "%s %s", q, s_session.frame_ent);
+            nucleo_anima_l1_unload();                       // the reasoner builds its KG of HVs: needs the heap
+            if (nucleo_anima_hdc_reason(shifted, en ? "en" : "it", &r)) {
+                foc_remember(&r);
+                snprintf(r.state, sizeof r.state, "followup");
+                snprintf(r.corrected, sizeof r.corrected, "%s", shifted);   // show what was re-asked
+                mem_update(&r);
+                snprintf(s_mem.last_topic, sizeof s_mem.last_topic, "%s", shifted);
+                s_session.dirty = true;
+                goto done;
+            }
+            if (attr_fu) snprintf(need_subj, sizeof need_subj, "%s", s_session.frame_ent);
+        }
     }
 
     // (Hook L0 dynamic-skill .lua su SD rimosso: interprete Lua ~90 KB flash, scaffold inerte
@@ -4114,7 +4184,12 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
             snprintf(r.state, sizeof(r.state), "followup"); mem_update(&r); s_session.dirty = true; goto done;
         }
         if (s_mem.last_topic[0] && nucleo_anima_l1_query(s_mem.last_topic, en, false, &r)) {
-            snprintf(r.state, sizeof(r.state), "followup"); mem_update(&r); s_session.dirty = true; goto done;
+            // The previous topic's card only answers the fragment if it holds what the fragment asks:
+            // "quando e nato" after "chi era leonardo da vinci" re-served a bio with no date in it.
+            if (a_fragment_answered_by(q, r.reply)) {
+                snprintf(r.state, sizeof(r.state), "followup"); mem_update(&r); s_session.dirty = true; goto done;
+            }
+            memset(&r, 0, sizeof r); r.tier = ANIMA_TIER_NONE; r.action = ANIMA_ACT_NONE;
         }
     }
 

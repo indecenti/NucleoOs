@@ -546,3 +546,6 @@
 {"q":"area del cerchio","lang":"it","expect":"Area del cerchio"}
 {"q":"volume del cubo lato 3","lang":"it","expect":"27"}
 {"q":"circle area radius 5","lang":"en","expect":"78.5398"}
+{"q":"quanto fa 2 elevato alla decima","lang":"it","expect":"1024"}
+{"q":"5 elevato alla seconda","lang":"it","expect":"25"}
+{"q":"2 elevato alla terza","lang":"it","expect":"= 8"}

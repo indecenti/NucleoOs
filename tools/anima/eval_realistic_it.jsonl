@@ -28,7 +28,7 @@
 {"q":"2 alla decima","lang":"it","kind":"skill","expect":"calc"}
 {"q":"radice cubica di 27","lang":"it","kind":"skill","expect":"calc"}
 {"q":"5 al cubo","lang":"it","kind":"skill","expect":"calc"}
-{"q":"3 elevato alla quarta","lang":"it","kind":"knowledge"}
+{"q":"3 elevato alla quarta","lang":"it","kind":"skill","expect":"calc"}
 {"q":"radice quadrata di 144","lang":"it","kind":"skill","expect":"calc"}
 {"q":"4 alla quinta","lang":"it","kind":"skill","expect":"calc"}
 {"q":"radcie cubica di 8","lang":"it","kind":"skill","expect":"calc","typo":true}

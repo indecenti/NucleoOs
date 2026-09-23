@@ -693,10 +693,15 @@ static bool a_solve_powroot(a_sitem_t *it, int n, bool en, anima_result_t *r)
         }
     }
     // idiom "<num> alla <ordinale>" -> num^ordinal (strict adjacency; ordinal, not a range number).
+    // Also the full form "<num> elevato alla <ordinale>" ("2 elevato alla decima"), which is how it is
+    // actually said — the old strict adjacency read "alla" as the exponent and abstained.
     for (int i = 0; i + 2 < n; i++) {
         if (!it[i].isnum || it[i+1].isnum || it[i+2].isnum) continue;
         if (strcmp(it[i+1].w,"alla") && strcmp(it[i+1].w,"elevato") && strcmp(it[i+1].w,"elevata")) continue;
-        int ord = a_ordinal_power(it[i+2].w);
+        int oi = i + 2;
+        if ((!strcmp(it[i+1].w,"elevato") || !strcmp(it[i+1].w,"elevata")) && oi + 1 < n && !it[oi+1].isnum &&
+            (!strcmp(it[oi].w,"alla") || !strcmp(it[oi].w,"al"))) oi++;
+        int ord = a_ordinal_power(it[oi].w);
         if (!ord) continue;
         char a[40], cc[40]; a_fmt_num(it[i].val,a,sizeof(a)); a_fmt_num(pow(it[i].val,ord),cc,sizeof(cc));
         r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_ANSWER; r->confidence = 95;
