@@ -202,9 +202,35 @@ intros or DBpedia abstracts instead.
 | `tools/anima/import_codata.mjs` | `allascii.txt` → constant cards. |
 | `tools/anima/categorize.mjs` | QID→P31→`taxonomy.json` bucket (bilingual); deterministic fallback classifier; the single categorization authority for all importers. |
 | `tools/anima/build_akb5.py` | Sharded + 2-level-IVF + PQ index builder (supersedes `build_akb2.py` at scale); per-shard files, shard-router table, PQ codebooks, AKB4 signatures, Merkle roots. **Incremental/append** per shard. |
+| `tools/anima/build_akb5_shard.py` | **DONE (2026-09).** The "incremental per shard" line above, implemented as a SCOPED sibling of `build_akb5.py`: rebuilds only the NAMED shards + patches only their manifest entries, leaving every other shard file and manifest entry byte-for-byte untouched (verified: two runs with unchanged input are byte-identical; a corpus edit confined to N categories changes exactly those N shard files). Use it instead of a full `build_akb5.py` run for a scoped corpus edit — a full rebuild's blast radius is every shard, including ones an unrelated pre-existing staged/tracked drift would silently also change. |
 | `tools/anima/build_factstore.mjs` | Front-coded subject-slug dictionary + StreamVByte posting lists + temporal index (`index-*.bin`). |
 | `tools/anima/conflict_resolve.mjs` | Per-`(s,rel)` contradiction detection + source-reliability/recency resolution; emits superseded-edge ledger records. |
 | `tools/sd-net-sync.mjs` (extend) | Add a **`pull`** mode for `user.tsv`/`user.vec`/`learned-forge.jsonl` device→PC (close the loop). |
+
+**The staged corpus + `ANIMA_EXTRA` mechanism (how to grow AKB5 without ever rebuilding the flat
+index).** `tools/anima/knowledge/*.jsonl` feeds BOTH the flat index (`build_akb2.py`) and AKB5; its
+content hash is checked by `check_pack.mjs` (`npm run anima:gate`'s first gate), so ANY edit there
+forces a flat rebuild — and the flat index's global K-means is NOT safely rebuildable on a whim (a
+reshuffle can flip unrelated gate cases; see §8b's 2026-06-07 entry). `tools/anima/knowledge.staged/`
+is the escape hatch: JSONL files there are excluded from that hash (and from `regress.py`'s flat-path
+recall measurement) but ARE picked up by `build_akb5.py` / `build_akb5_shard.py` via
+`ANIMA_EXTRA=path1,path2,...` (comma-separated file list, merged on top of the tracked corpus before
+sharding) and are linted by `fix-corpus-text.mjs`. This is how the 402+-card encyclopedia landed
+(§8b) and how OS how-to content grows AKB5-only.
+- **ID-OVERRIDE (added 2026-09).** An `ANIMA_EXTRA` card whose `id` matches an already-loaded card
+  (tracked corpus OR an earlier `ANIMA_EXTRA` file, in file-list order) REPLACES it in place — same
+  position in the shard's card list — instead of being appended as a second, competing entry with the
+  same id. Both `build_akb5.py` and `build_akb5_shard.py` implement the identical rule and print how
+  many overrides fired. Without this, correcting a shipped card's content (e.g. removing a wrong
+  alias) from a staged file created a DUPLICATE id whose retrieval outcome against the original was an
+  unresolved int8-quantization tie — the ID-override makes the correction unambiguous and, because it
+  replaces rather than adds, keeps the shard's card COUNT (and the isolation property above) unchanged.
+- **`tools/anima/knowledge.staged/overrides.jsonl`** is the dedicated override file: full-card
+  corrections to shipped content, applied via `ANIMA_EXTRA`. First user: corrected
+  `wiki.it.accesso-casuale` (a Wikipedia "random access" concept card that had picked up "ram" as an
+  ask alias, so `"cos'è la ram"` answered with the wrong concept instead of the RAM/computer-memory
+  card) by re-declaring the same id with the RAM aliases removed from its `ask` list, everything else
+  identical.
 
 New firmware work (host-first, flash only to confirm): `AKB5` loader + shard router + PQ decode in
 `nucleo_anima_l1.c`; on-SD keyed fact store reads in `nucleo_anima_facet.c` / `nucleo_anima_hdc.c`

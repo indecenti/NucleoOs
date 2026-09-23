@@ -13,6 +13,14 @@ vectors. AKB5 fixes both:
 
 Reuses the EXACT AKB4 encoding of build_akb2.py + augment_akb4.py (byte-identical to the firmware reader).
 Run: python tools/anima/build_akb5.py   (uses models/anima-it-encoder.bin, i.e. the device D)
+
+ANIMA_EXTRA=path1,path2 merges extra JSONL card files (typically tools/anima/knowledge.staged/*) on
+top of the tracked corpus without touching it (so the flat index's corpus hash never sees them). An
+extra card whose "id" matches an already-loaded card is an ID-OVERRIDE: it REPLACES that card in
+place (same position) rather than being appended as a duplicate id competing for the same query. This
+is how a staged file corrects a shipped card (e.g. tools/anima/knowledge.staged/overrides.jsonl fixing
+the "ram" alias collision on wiki.it.accesso-casuale) without editing tracked knowledge/*.jsonl. See
+docs/anima-knowledge-scale.md.
 """
 import os, sys, struct
 import numpy as np
@@ -26,13 +34,34 @@ encode_unit = A.make_encoder(table, H, D, NGRAMS)
 cards, counts = A.load_corpus()
 # ANIMA_EXTRA=path1,path2 — extra JSONL card files to include (e.g. staged imports). Lets us prove the
 # ISOLATION property: adding cards to a category rebuilds ONLY that shard, others stay byte-identical.
+#
+# ID-OVERRIDE: an ANIMA_EXTRA card whose "id" matches an ALREADY-LOADED card (from the tracked corpus
+# or an earlier ANIMA_EXTRA file) REPLACES it IN PLACE (same position in `cards`) instead of being
+# appended as a second, competing entry. Without this, a staged correction to a card that also exists
+# in the tracked/earlier-staged corpus produced a DUPLICATE id with two different ask lists feeding
+# the SAME shard, and retrieval between them was an unresolved int8-quantization tie (observed on
+# tools/anima/knowledge.staged/overrides.jsonl correcting the "ram" alias collision on
+# wiki.it.accesso-casuale — see docs/anima-knowledge-scale.md). Deterministic: position is decided
+# solely by (file order, in-file order); replacing in place also means the containing shard's OTHER
+# cards are unaffected (same isolation property as adding a brand-new id).
 import json as _json
+_id_pos = {c["id"]: i for i, c in enumerate(cards) if "id" in c}
+_n_override = 0
 for _p in filter(None, os.environ.get("ANIMA_EXTRA", "").split(",")):
     for _l in open(_p, encoding="utf-8"):
         _l = _l.strip()
         if not _l or _l.startswith("//"): continue
-        try: cards.append(_json.loads(_l))
-        except Exception: pass
+        try: _c = _json.loads(_l)
+        except Exception: continue
+        _cid = _c.get("id")
+        if _cid and _cid in _id_pos:
+            cards[_id_pos[_cid]] = _c
+            _n_override += 1
+        else:
+            if _cid: _id_pos[_cid] = len(cards)
+            cards.append(_c)
+if _n_override:
+    print(f"[akb5] ANIMA_EXTRA: {_n_override} card(s) overrode an already-loaded id in place")
 print(f"[akb5] encoder {H}x{D}  {len(cards)} cards")
 
 OUTDIR = os.environ.get("ANIMA_AKB5_DIR", os.path.join(A.ROOT, "models", "akb5"))

@@ -91,3 +91,8 @@
 {"q":"che temperatura c e a milano","lang":"it","expect":"weather"}
 {"q":"com e il tempo oggi","lang":"it","expect":"weather"}
 {"q":"che tempo fa","lang":"it","expect":"weather"}
+// --- "cambio/prezzo/azioni" are market words only next to a finance cue ---
+{"q":"come cambio lo sfondo","lang":"it","expect":"not:news|weather"}
+{"q":"le azioni del governo italiano","lang":"it","expect":"not:news|weather"}
+{"q":"cambio euro dollaro","lang":"it","expect":"news"}
+{"q":"tasso di cambio","lang":"it","expect":"news"}
