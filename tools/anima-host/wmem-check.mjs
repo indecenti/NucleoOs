@@ -124,6 +124,21 @@ const SCENARIOS = [
   { name: 'anaphoric attribute follow-up never answers about something else (EN)', lang: 'en', turns: [
       { q: 'who was einstein', want: /einstein/i },
       { q: 'how tall is it', notWant: /everest|mountain/i } ] },
+  // A RELATION asked after an L1-card thread is re-aimed at that thread's entity (the card declares no
+  // structured subject): "chi era einstein" -> "quando e nato" answers the date, not the bio again.
+  { name: 'relation follow-up after an L1 card answers the relation', turns: [
+      { q: 'chi era einstein', want: /einstein/i },
+      { q: 'quando e nato', want: /1879/ } ] },
+  // When nothing holds the asked relation, the previous card is NOT re-served as if it answered it.
+  { name: 'a relation follow-up is not answered by a card without it', turns: [
+      { q: 'chi era leonardo da vinci', want: /leonardo/i },
+      { q: 'quando e nato', wantTier: /none/, notWant: /scienziato/i } ] },
+  // ...and the LATEST thread wins: a newer L1 turn supersedes an older structured focus.
+  { name: 'the newest thread wins over an older structured focus', turns: [
+      { q: 'chi era einstein', want: /einstein/i },
+      { q: 'quando e nato', want: /1879/ },
+      { q: 'chi era leonardo da vinci', want: /leonardo/i },
+      { q: 'e quanto pesa', notWant: /einstein|assistente|corpo/i } ] },
   // A COMMAND frame must not launch something at random when the follow-up doesn't fit it. The
   // rebuilt turn goes through the real router, so "apri le newton" finds no app and abstains.
   { name: 'a command frame does not launch a bogus app', turns: [

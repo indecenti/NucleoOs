@@ -1823,7 +1823,10 @@ function trySolve(raw, lang) {
     for (let i = 0; i + 2 < items.length; i++) {
       if (!items[i].num || items[i+1].num || items[i+2].num) continue;
       if (!['alla','elevato','elevata'].includes(items[i+1].w)) continue;
-      const ord = ORD[items[i+2].w]; if (!ord) continue;
+      let oi = i + 2;   // "<num> elevato alla <ordinale>" (mirrors the firmware's optional "alla"/"al")
+      if (['elevato','elevata'].includes(items[i+1].w) && oi + 1 < items.length && !items[oi+1].num &&
+          ['alla','al'].includes(items[oi].w)) oi++;
+      const ord = ORD[items[oi].w]; if (!ord) continue;
       return { intent: 'calc', conf: 95, reply: en ? `${fmt(items[i].val)}^${ord} = ${fmt(Math.pow(items[i].val, ord))}.` : `${fmt(items[i].val)} elevato ${ord} = ${fmt(Math.pow(items[i].val, ord))}.` };
     } }
   { let root=false, poww=false, cubeGarble=false; const nums=[];
