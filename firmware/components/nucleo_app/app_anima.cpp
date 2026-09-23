@@ -10,7 +10,7 @@
 // chat bubbles: your questions right-aligned in blue, ANIMA's answers left with a colored rail,
 // meta notes dim and small. "Compatto" in Settings swaps to the denser 16px Font2 for more lines.
 // All visible strings are ASCII-folded on the way in so accented online text never shows tofu in
-// the ASCII-only GFX font. A fresh/cleared chat shows a suggestion deck (su/giu + Invio) that both
+// the ASCII-only GFX font. A fresh/cleared chat shows a suggestion deck (fn+;/. + Invio) that both
 // welcomes and showcases what ANIMA can do; TAB opens the IDEE tab — a drill-down catalog of every
 // offline skill, where parametric entries (e.g. a multiplication) open a fill-in form for the values.
 //
@@ -26,11 +26,14 @@
 // straight from the UI loop would freeze the launcher and trip the 8 s task watchdog. So the query
 // runs on a side task and we poll the result in tick(), showing a "thinking" spinner.
 //
-// Keyboard note (matrix limitation, shared with Notes): ; . / type as themselves while writing,
-// but with the input empty Up/Down scroll the transcript (or move the suggestion deck). The
-// backtick (Esc/Back) and ',' (Left) are intercepted by the launcher loop and handed to on_back: in
-// the menu Esc steps back a level and Left pages the tabs (the mirror of Right); from the chat base
-// both leave the app — so a query can't contain a comma.
+// Keyboard (the Notes-editor rule): the driver delivers ; . , / as arrows that CARRY their character.
+// Wherever you write — chat, welcome deck, IDEE fill-in forms, file editor — they TYPE themselves, so
+// "2.5", "ciao." or an Italian decimal comma just work and '/' starts a slash command. Their arrow
+// meaning needs a modifier (the Cardputer's own arrow layer): fn+; / fn+. scroll the chat (move the
+// deck / hop form fields), fn+/ accepts the ghost completion (on an empty line: cycles the online
+// mode), ctrl+; / ctrl+. walk the command history. ',' reaches on_back (the launcher routes Left
+// there) and is typed as a comma — it never leaves. Only Esc (backtick) leaves, behind a confirm. In
+// the tabbed menu's lists (no text entry) the plain arrows still navigate and ',' pages the tabs.
 #include "nucleo_app.h"
 #include "app_gfx.h"
 #include "app_ui.h"       // app_ui_ascii_fold: shared UTF-8 -> ASCII fold for the TFT fonts
@@ -156,9 +159,21 @@ static int  s_sug_sel;                            // focused suggestion in the d
 static bool s_awaiting;                            // last answer was a follow-up question -> input placeholder hints it
 static int  s_clock_min = -1;                      // header clock: last minute painted (repaint only when it changes)
 
+// ---- arrow-layer modifiers ----------------------------------------------------
+// ; . , / TYPE while writing (see the header note); their arrow meaning needs a modifier. The driver's
+// bit names are offset from the PRINTED legends (nucleo_kbd mod_for_xy is best-effort; same note as
+// app_pinball.cpp): the key printed "fn" (row 3, left) reports NK_MOD_CTRL, the key printed "ctrl"
+// (row 4, left) reports NK_MOD_FN. ANIMA names keys by what is printed on them — if a board ever
+// reports them the other way round, swap these two helpers and every hint stays true.
+static inline bool key_fn(void)   { return (nucleo_kbd_mods() & NK_MOD_CTRL) != 0; }   // printed "fn": scroll / move
+static inline bool key_ctrl(void) { return (nucleo_kbd_mods() & NK_MOD_FN)   != 0; }   // printed "ctrl": history
+static inline bool key_mod(void)  { return key_fn() || key_ctrl(); }                   // either: arrow meaning
+static int64_t s_toast_until;   // >0 = the footer shows a transient status (mode switch); tick() restores the hint
+
 // ---- command history (shell-style recall) -----------------------------------
-// A small ring of the lines the user sent. Ctrl+Up walks back through them (Ctrl+Down forward),
-// leaving plain Up/Down free to scroll the transcript. Session-only (.bss, reset on enter).
+// A small ring of the lines the user sent. ctrl+; walks back through them (ctrl+. forward); fn+;/.
+// scroll the transcript. Every ANIMA open is a fresh Solo boot, so enter() rebuilds the ring from the
+// user's own lines in the restored chat (hist_from_chat) — recall and ghost completion span sessions.
 #define HIST_N   8
 #define HIST_LEN 120
 // Heap-on-enter (freed in leave): the input-history ring is session-only and the app is closed
@@ -187,7 +202,7 @@ static void hist_push(const char *s)
 
 // ---- recent field values (smartwatch: re-typing the same city/number is the common case) ----------
 // A tiny ring of distinct values typed into IDEE form slots; the form ghosts the best prefix match so
-// you accept a past value with one Right press instead of retyping it. Session-only (.bss).
+// you accept a past value with one fn+/ press instead of retyping it. Session-only (.bss).
 #define RECENT_N 8
 static char s_recent[RECENT_N][40];
 static int  s_recent_count, s_recent_head;
@@ -241,7 +256,8 @@ static bool s_edit;                               // a slider row (IA Volume/Luc
 // offline, grouped by skill. Level 0 = categories; ENTER drills into a category's leaves; a leaf
 // either sends a ready prompt or — when it needs values (e.g. "Moltiplica" wants two numbers) —
 // opens a tiny fill-in FORM so the device asks for each operand instead of guessing them. Esc/Left
-// climb back up a level (form -> leaves -> categories -> tab bar), the watch-menu "back" gesture.
+// climb back up a level (form -> leaves -> categories -> tab bar), the watch-menu "back" gesture
+// (inside a form Left is fn+, — a plain ',' types a decimal comma into the field).
 static int  s_idee_cat = -1;                       // -1 = category list; >=0 = inside that category
 static int  s_form_leaf = -1;                       // >=0 = a fill-in form is open for LEAVES[s_form_leaf]
 static int  s_form_slot;                            // which slot the form is collecting (0/1)
@@ -254,8 +270,10 @@ static signed char s_focus_leaf[9];                 // last focused leaf row per
 
 // ---- full-screen text editor (file creation from IDEE) ----------------------
 // A simple full-screen textarea: type freely, Enter = newline, DEL = backspace, Ctrl+S saves to the
-// SD path collected by the "Crea file" form, Esc cancels. Append-only edit (caret at the end) — a true
-// mid-text cursor is overkill on this keyboard; this matches "una semplice textarea". Static (.bss).
+// SD path collected by the "Crea file" form (never over an existing file: name-2, name-3...), Esc
+// cancels — behind the exit-style confirm when there is text. A failed save keeps the editor open with
+// the text intact. Append-only edit (caret at the end) — a true mid-text cursor is overkill on this
+// keyboard; this matches "una semplice textarea". Static (.bss).
 static bool s_ed_open;
 static char s_ed_path[80];                          // absolute SD-relative path "/data/..." (from the form slot)
 #define ED_BUF_CAP 1024
@@ -431,6 +449,14 @@ static void save_settings(void)
 // off. Binary + length-prefixed (messages may contain '\n'). Bounded by MSG_MAX. Best-effort: a failed
 // read/write just yields a fresh chat. Saved at the end of each turn and on leave.
 #define CHAT_PATH NUCLEO_SD_MOUNT "/system/config/anima_chat.dat"
+// The "-- ripresa DD/MM HH:MM --" separator load_chat() prepends is display-only: it is never written
+// back (and legacy files that already piled several up are cleaned on load), so there is at most one.
+static bool is_session_sep(const Msg *m)
+{
+    if (m->role != R_META || strncmp(m->text, "-- ", 3) != 0) return false;
+    size_t n = strlen(m->text);
+    return n >= 6 && !strcmp(m->text + n - 3, " --");
+}
 static void save_chat(void)
 {
     if (!s_msg) return;
@@ -438,11 +464,14 @@ static void save_chat(void)
     mkdir(NUCLEO_SD_MOUNT "/system/config", 0775);
     FILE *f = fopen(CHAT_PATH, "wb");
     if (!f) return;
-    uint8_t cnt = (uint8_t)s_mcount;
+    uint8_t cnt = 0;
+    for (int i = 0; i < s_mcount; i++)
+        if (!is_session_sep(&s_msg[(s_mhead - s_mcount + i + MSG_MAX) % MSG_MAX])) cnt++;
     fwrite("ACH1", 1, 4, f); fwrite(&cnt, 1, 1, f);
     for (int i = 0; i < s_mcount; i++) {
         int idx = (s_mhead - s_mcount + i + MSG_MAX) % MSG_MAX;
         Msg *m = &s_msg[idx];
+        if (is_session_sep(m)) continue;                     // display-only, never persisted
         uint16_t len = (uint16_t)strlen(m->text);
         fwrite(&m->role, 1, 1, f); fwrite(&m->col, 1, 2, f); fwrite(&m->accent, 1, 2, f);
         fwrite(&len, 1, 2, f); fwrite(m->text, 1, len, f);
@@ -466,6 +495,7 @@ static void load_chat(void)
         if (len >= MSG_TEXT) len = MSG_TEXT - 1;
         if (fread(m->text, 1, len, f) != len) break;
         m->text[len] = 0;
+        if (is_session_sep(m)) continue;                     // legacy file: drop old separators (slot reused)
         s_mhead = (s_mhead + 1) % MSG_MAX; if (s_mcount < MSG_MAX) s_mcount++;
     }
     fclose(f);
@@ -491,6 +521,17 @@ static void load_chat(void)
         snprintf(m->text, MSG_TEXT, "%s", sep);
         s_mcount++;   // il ring ora include il meta come messaggio piu' vecchio
     }
+}
+// Seed the recall ring from the restored transcript (oldest -> newest, so the newest line is hist_at(0)).
+// Only the user's own lines; "[nuovo file]"-style pseudo-bubbles are not something you'd re-send.
+static void hist_from_chat(void)
+{
+    if (!s_msg || !s_hist) return;
+    for (int i = 0; i < s_mcount; i++) {
+        const Msg *m = &s_msg[(s_mhead - s_mcount + i + MSG_MAX * 2) % MSG_MAX];
+        if (m->role == R_USER && m->text[0] && m->text[0] != '[') hist_push(m->text);
+    }
+    s_hist_nav = -1;
 }
 
 // ---- worker task: runs the (possibly blocking) query off the UI loop --------
@@ -1393,8 +1434,9 @@ static void push_help(void)
     push_meta("/stop  /modo  /offline  /ibrido  /online", DIM);
     push_meta("/l1  /cancella  /info  /aiuto", DIM);
     push_meta(s_en ? "/l1: offline brain AUTO/ON/OFF (RAM)" : "/l1: AI offline AUTO/ON/OFF (RAM)", DIM);
-    push_meta(s_en ? "Right: switch mode. TAB: menu." : "Freccia destra: modalita. TAB: menu.", DIM);
-    push_meta(s_en ? "Hold G0 1.5s: open ANIMA anywhere." : "Tieni G0 1.5s: apri ANIMA ovunque.", DIM);
+    push_meta(s_en ? "fn ;/. scroll the chat, ctrl ;/. history." : "fn ;/. scorre la chat, ctrl ;/. cronologia.", DIM);
+    push_meta(s_en ? "fn /: complete, or switch mode. TAB: menu." : "fn /: completa, o cambia modalita. TAB: menu.", DIM);
+    push_meta(s_en ? "Hold G0: push-to-talk. Esc: leave." : "Tieni premuto G0: parla (push-to-talk). Esc: esci.", DIM);
 }
 
 static void push_info(void)
@@ -1406,7 +1448,10 @@ static void push_info(void)
     else             snprintf(b, sizeof b, "Rete: non connesso");
     push_meta(b, MUTED);
     const char *m = s_omode == OM_OFF ? "Offline" : s_omode == OM_ONLY ? "Solo online" : "Ibrido";
-    snprintf(b, sizeof b, "Modalita: %s   Worker: %s", m, s_worker ? "ok" : "NON pronto"); push_meta(b, MUTED);
+    // Solo (always, for this app) runs every query inline on its own big-stack task — no worker is ever
+    // spawned there, so "not ready" was a false alarm. The full OS spawns it on demand per query.
+    snprintf(b, sizeof b, "Modalita: %s   Worker: %s", m,
+             s_worker ? "ok" : nucleo_anima_solo_active() ? "inline (Solo)" : "on demand"); push_meta(b, MUTED);
     int l1m = nucleo_anima_l1_get_mode();
     snprintf(b, sizeof b, "AI offline (L1): %s  (%s)",
              l1m == 1 ? "ON" : l1m == 2 ? "OFF" : "AUTO",
@@ -1437,7 +1482,7 @@ static void submit(void)
 {
     if (s_ilen == 0) return;
     s_input[s_ilen] = 0;
-    hist_push(s_input);                           // remember the typed line for Ctrl+Up recall + autocomplete
+    hist_push(s_input);                           // remember the typed line for ctrl+; recall + autocomplete
     s_user_sent = true;                           // first question -> the suggestion deck steps aside
     s_awaiting = false;                           // the user is answering; a new follow-up may re-arm it
     if (s_input[0] == '/') {                       // slash-commands run anytime (even while busy, e.g. /stop)
@@ -1543,7 +1588,7 @@ static void clear_chat(void)
 // ---- suggestion deck (empty-state) ------------------------------------------
 // A fresh/cleared chat shows starter prompts that exercise the breadth of ANIMA AND lean on everyday
 // human life: time, weather, Wi-Fi/network, mental math, a calendar reminder, a unit conversion, a
-// percentage (tip/discount), capabilities. su/giu pick, Invio runs. (No "open app" prompts: ANIMA Solo
+// percentage (tip/discount), capabilities. fn+;/. pick, Invio runs. (No "open app" prompts: ANIMA Solo
 // runs alone, so app launching was removed — see the LAUNCH handler in present_result.)
 #define SUG_N 16   // deck espanso: 16 voci scrollabili (su/giu), copre piu' skill
 static const char *SUG_IT[SUG_N] = {
@@ -1569,7 +1614,7 @@ static const char *SUG_EN[SUG_N] = {
 static const char *cur_sug(int i) { return (s_en ? SUG_EN : SUG_IT)[i < SUG_N ? i : 0]; }
 static bool deck_active(void)     { return !s_user_sent && s_ilen == 0 && !s_menu_open; }
 
-// Recall a history entry into the input. dir<0 = older (Ctrl+Up), dir>0 = newer (Ctrl+Down). The live
+// Recall a history entry into the input. dir<0 = older (ctrl+;), dir>0 = newer (ctrl+.). The live
 // draft is parked on first step back and restored when you walk forward past the newest entry.
 static void hist_recall(int dir)
 {
@@ -1589,7 +1634,7 @@ static void hist_recall(int dir)
 }
 
 // Inline autocomplete (fish-style ghost text): the best single completion of the typed prefix, drawn
-// dimmed after the caret and accepted with the Right arrow. Sources, in priority: slash commands,
+// dimmed after the caret and accepted with fn+/ (a plain '/' just types). Sources, in priority: slash commands,
 // your own history (most recent first), then the starter suggestions. Case-insensitive prefix match.
 static const char *const SLASH_CMDS[] = { "/stop", "/cancella", "/clear", "/offline", "/ibrido",
                                           "/online", "/modo", "/l1", "/info", "/stato", "/aiuto", "/help" };
@@ -1855,6 +1900,8 @@ static void enter(void)
     s_last_conf = -1; s_last_tier = ""; s_last_subject[0] = 0;
     s_user_sent = (s_mcount > 0); s_sug_sel = 0; s_awaiting = false; s_clock_min = -1;
     s_hist_count = 0; s_hist_head = 0; s_hist_nav = -1; s_hist_draft[0] = 0;
+    hist_from_chat();                              // fresh Solo boot: recall your own lines from the restored chat
+    s_toast_until = 0; s_exit_confirm = false;
     s_recent_count = 0; s_recent_head = 0;
     s_last_math = false; s_last_num[0] = 0;
     s_today_n = s_today_count = 0; s_today_hdr[0] = 0; s_complics[0] = 0;
@@ -1874,8 +1921,7 @@ static void enter(void)
         snprintf(s_input, sizeof s_input, "%s", s_preset); s_ilen = (int)strlen(s_input); s_preset[0] = 0;
         submit();   // submit() now spawns the worker on demand (or runs inline forced-offline if it can't)
     }
-    nucleo_app_set_hint(s_user_sent ? chat_hint()
-                                    : (s_en ? "up/dn  1-9 try   tab menu" : "su giu  1-9 prova  tab menu"));
+    nucleo_app_set_hint(chat_hint());              // deck or chat hint, whichever is up
     mark_all_dirty();
     nucleo_app_request_draw();
 }
@@ -1899,11 +1945,13 @@ static void leave(void)
     d.setFont(&fonts::Font0); d.setTextSize(1);    // restore the framework's default font for the next app
 }
 
-// The hint shown on the chat page (depends on whether the welcome deck is up).
+// The hint shown on the chat page: the deck, an empty line, or a line being written (<= 39 chars, the
+// footer's cap). It teaches the arrow layer — plain ; . , / type, fn+key is the arrow (header note).
 static const char *chat_hint(void)
 {
-    if (deck_active()) return s_en ? "up/dn  1-9 try   tab menu" : "su giu  1-9 prova  tab menu";
-    return s_en ? "enter send  -> complete  tab menu" : "invio invia  -> completa  tab menu";
+    if (deck_active()) return s_en ? "fn ;/. pick  1-9 try  fn / mode" : "fn ;/. scegli  1-9 prova  fn / modo";
+    if (s_ilen > 0)    return s_en ? "enter send  fn / complete  tab menu" : "invio invia  fn / completa  tab menu";
+    return s_en ? "esc exit  fn ;/. scroll  fn / mode" : "esc esci  fn ;/. scorri  fn / modo";
 }
 
 // Footer hint for the live menu state: slider-adjust, tab-bar (row -1), or a per-tab row hint.
@@ -1918,8 +1966,11 @@ static void menu_hint(void)
     }
     if (s_tab == TAB_IDEE && s_form_leaf >= 0) {               // adapt: last slot sends, earlier ones advance
         bool last = s_form_slot >= LEAVES[s_form_leaf].slots - 1;
-        nucleo_app_set_hint(s_en ? (last ? "type  -> fill  enter send" : "type  -> fill  enter next")
-                                 : (last ? "digita  -> riempi  invio invia" : "digita  -> riempi  invio avanti"));
+        if (LEAVES[s_form_leaf].slots < 2)                     // single field: nothing to hop between
+            nucleo_app_set_hint(s_en ? "type  fn / fill  enter send" : "digita  fn / riempi  invio invia");
+        else                                                   // ; . , / type; fn+;/. hop fields, fn+/ fills
+            nucleo_app_set_hint(s_en ? (last ? "fn / fill  fn ;. field  enter send" : "fn / fill  fn ;. field  enter next")
+                                     : (last ? "fn / riempi  fn ;. campo  invio invia" : "fn / riempi  fn ;. campo  invio avanti"));
         return;
     }
     if (s_mrow == -1) { nucleo_app_set_hint(s_en ? "l/r tab   down enter   esc" : "sx/dx scheda  giu entra  esc"); return; }
@@ -1939,6 +1990,7 @@ static void menu_hint(void)
 // RIGHT page the tabs). Always opens on IDEE with the tab bar focused, so the first DOWN dives in.
 static void on_tab(void)
 {
+    if (s_ed_open || s_exit_confirm) return;   // the editor / a confirm owns the screen: no menu underneath it
     s_menu_open = !s_menu_open;
     if (s_menu_open) { s_tab = TAB_IDEE; s_mrow = -1; s_edit = false; s_sug_sel = 0; reset_idee(); load_today(); menu_hint(); }
     else             { nucleo_app_set_hint(chat_hint()); }
@@ -1946,22 +1998,52 @@ static void on_tab(void)
     nucleo_app_request_draw();
 }
 
-// Esc/Back AND Left both route here with the key code, so we tell them apart. LEFT pages the tabs
-// backward (the mirror of RIGHT in menu_key) instead of leaving — pressing Left in the menu used to
-// close the whole sheet, which read as "the tab system closes". ESC/Back stays hierarchical: slider
-// adjust -> row -> tab bar -> close menu. From the chat base, return false so the framework closes ANIMA.
+// A chat/deck key changed the line: repaint the input, swap the body when the welcome deck steps aside
+// (first char) or comes back (last char deleted), and keep the footer hint in step. The hint is left
+// alone while a turn runs (its "Enter to stop" belongs to the busy state).
+static void chat_changed(bool was_deck)
+{
+    s_d_input = true;
+    if (was_deck != deck_active()) s_d_body = true;
+    if (!s_busy) nucleo_app_set_hint(chat_hint());         // idempotent: repaints the footer only on a change
+    nucleo_app_request_draw();
+}
+// Append one character to the chat line — every printable key, INCLUDING ; . , / (they type; their
+// arrow meaning needs fn). Typing snaps a scrolled-up transcript back to the newest line.
+static void chat_type(char ch)
+{
+    bool was_deck = deck_active();
+    if (s_ilen < A_INMAX - 1) { s_input[s_ilen++] = ch; s_input[s_ilen] = 0; }
+    s_hist_nav = -1;
+    if (s_scroll) { s_scroll = 0; s_d_body = true; }
+    chat_changed(was_deck);
+}
+static void idee_form_key(int key, char ch);   // defined below (fill-in form keys)
+
+// Esc/Back AND Left (= the ',' key) both route here with the key code, so we tell them apart. Wherever
+// you write (chat, deck, fill-in form, editor) ',' is a COMMA — it never leaves nor throws a form away;
+// only fn+, is the Left arrow. In the menu lists LEFT pages the tabs backward (the mirror of RIGHT in
+// menu_key). ESC/Back stays hierarchical: slider adjust -> row -> tab bar -> close menu; from the chat
+// base Esc opens the leave-confirm (leaving Solo = reboot, so never on a single stray key).
 static bool on_back(int key)
 {
     if (s_exit_confirm) { s_exit_confirm = false; mark_all_dirty(); nucleo_app_request_draw(); return true; }  // Esc nel modale = annulla (resta)
     if (s_ed_open) {                                        // editor: the launcher routes ',' (Left) and Esc here
         if (key == NK_LEFT) {                               // ',' -> type a literal comma (textarea isn't comma-blind)
             if (s_ed_len < ED_BUF_CAP - 1) { s_ed_buf[s_ed_len++] = ','; s_ed_buf[s_ed_len] = 0; nucleo_app_request_draw(); }
-        } else editor_cancel();                             // Esc/backtick -> cancel the editor
+        } else if (s_ed_len > 0) {                          // Esc with text typed: ask before throwing it away
+            s_exit_confirm = true; nucleo_app_request_draw();
+        } else editor_cancel();                             // Esc on an empty editor: nothing to lose
         return true;
     }
-    if (!s_menu_open) {                                     // chat base
+    if (!s_menu_open) {                                     // chat base + welcome deck
         if (key == NK_BACK) { s_exit_confirm = true; nucleo_app_request_draw(); return true; }  // Esc -> chiedi conferma, NON chiudere subito
-        return false;                                       // Left u altro: comportamento framework di prima
+        if (!key_mod()) chat_type(',');                     // ',' types a comma (was: closed ANIMA = Solo reboot)
+        return true;                                        // fn+, (Left arrow): nothing to move on an append-only line
+    }
+    if (s_tab == TAB_IDEE && s_form_leaf >= 0 && key == NK_LEFT && !key_mod()) {   // form: ',' = decimal comma
+        idee_form_key(NK_CHAR, ',');                        // (fn+, still climbs back, below)
+        return true;
     }
     if (s_edit) {
         if (key == NK_LEFT) slider_adjust(-5);              // Left lowers the value
@@ -1970,6 +2052,7 @@ static bool on_back(int key)
     }
     // IDEE drill-down: when inside a category or a fill-form, BOTH Esc and Left climb one level (the
     // watch "back" gesture) instead of paging tabs — only at the top category list does Left page.
+    // (In a form Left means fn+, — a plain ',' was typed above.)
     if (s_tab == TAB_IDEE && (s_form_leaf >= 0 || s_idee_cat >= 0)) {
         if (s_form_leaf >= 0) s_form_leaf = -1;             // form -> back to its leaf list
         else { s_mrow = s_idee_cat; s_idee_cat = -1; s_list_scroll = 0; }   // leaves -> back to categories (land on it)
@@ -2009,6 +2092,41 @@ static void enter_cat(int c)
     s_idee_cat = c; s_mrow = row; s_form_leaf = -1; s_list_scroll = 0;   // fresh scroll for the new leaf list
     menu_hint(); nucleo_app_request_draw();
 }
+// Never overwrite: if the SD-relative path `rel` ("/dir/name.ext") exists, rewrite it in place to the
+// first free "/dir/name-2.ext", "-3", ... Returns false when no free name fits (caller refuses to save).
+static bool path_make_unique(char *rel, size_t cap)
+{
+    char full[180]; struct stat st;
+    snprintf(full, sizeof full, NUCLEO_SD_MOUNT "%s", rel);
+    if (stat(full, &st) != 0) return true;                  // free already
+    char stem[80]; snprintf(stem, sizeof stem, "%s", rel);
+    char *slash = strrchr(stem, '/'), *dot = strrchr(stem, '.');
+    char ext[16] = "";
+    if (slash && dot && dot > slash + 1 && strlen(dot) < sizeof ext) { snprintf(ext, sizeof ext, "%s", dot); *dot = 0; }
+    for (int k = 2; k < 100; k++) {
+        char cand[112];
+        snprintf(cand, sizeof cand, "%s-%d%s", stem, k, ext);
+        if (strlen(cand) >= cap) return false;
+        snprintf(full, sizeof full, NUCLEO_SD_MOUNT "%s", cand);
+        if (stat(full, &st) != 0) { snprintf(rel, cap, "%s", cand); return true; }
+    }
+    return false;
+}
+// A quick-note target: /data/note/YYYYMMDD_HHMMSS.txt (seconds, so two notes in one minute don't
+// collide), or nota.txt before the clock is set — both made unique, so a note never lands on another.
+static void quick_note_path(char *out, size_t n)
+{
+    mkdir(NUCLEO_SD_MOUNT "/data", 0775);
+    mkdir(NUCLEO_SD_MOUNT "/data/note", 0775);
+    time_t now = time(NULL); struct tm tmv;
+    if (now > 1672531200 && localtime_r(&now, &tmv))
+        snprintf(out, n, "/data/note/%04d%02d%02d_%02d%02d%02d.txt", tmv.tm_year + 1900, tmv.tm_mon + 1,
+                 tmv.tm_mday, tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+    else
+        snprintf(out, n, "/data/note/nota.txt");
+    path_make_unique(out, n);
+}
+
 // Fire a leaf: ready prompts send immediately and close the menu; parametric ones open the form so
 // the device ASKS for the values (e.g. the two operands of a multiplication) rather than inventing them.
 static void activate_leaf(int li)
@@ -2023,16 +2141,8 @@ static void activate_leaf(int li)
         // NOTA RAPIDA: sentinella @note in p1_it -> genera path con timestamp e apre l'editor direttamente.
         // Non invia nessuna query; l'utente scrive il contenuto e Ctrl+S salva il file.
         if (L->p1_it && !strcmp(L->p1_it, "@note")) {
-            time_t now = time(NULL); struct tm *tm = localtime(&now);
             char path[80];
-            if (tm && now > 1672531200)
-                snprintf(path, sizeof path, "/data/note/%04d%02d%02d_%02d%02d.txt",
-                         tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-                         tm->tm_hour, tm->tm_min);
-            else
-                snprintf(path, sizeof path, "/data/note/nota.txt");
-            mkdir(NUCLEO_SD_MOUNT "/data", 0775);
-            mkdir(NUCLEO_SD_MOUNT "/data/note", 0775);
+            quick_note_path(path, sizeof path);             // per-second name, never an existing file
             editor_open(path);
             return;
         }
@@ -2042,16 +2152,20 @@ static void activate_leaf(int li)
         menu_hint(); nucleo_app_request_draw();
     }
 }
-// Keys while a fill-in form is open: type into the active slot, ENTER advances (or sends on the last
-// slot), DEL backspaces (and steps back a slot when empty), UP/DOWN hop between slots.
+// Keys while a fill-in form is open: type into the active slot — ; . , / included, so "2.5", "3,75",
+// "12/25" or "10:30" go in as typed — ENTER advances (or sends on the last slot), DEL backspaces (and
+// steps back a slot when empty). The arrow layer: fn+; / fn+. hop between slots, fn+/ accepts the
+// recent-value ghost (one-press fill). ',' arrives via on_back (Left) and is re-routed here.
 static void idee_form_key(int key, char ch)
 {
     const Leaf *L = &LEAVES[s_form_leaf];
     int sl = s_form_slot;
-    // Right accepts the recent-value ghost (one-press fill); with no ghost it falls through to type '/'.
-    if (key == NK_RIGHT && s_slot[sl][0]) {
+    if (key_mod() && (key == NK_UP || key == NK_DOWN || key == NK_RIGHT)) {
         char g[40];
-        if (slot_autocomplete(s_slot[sl], g, sizeof g)) { snprintf(s_slot[sl], sizeof s_slot[sl], "%s", g); menu_hint(); nucleo_app_request_draw(); return; }
+        if      (key == NK_UP)   { if (sl > 0)            s_form_slot--; }
+        else if (key == NK_DOWN) { if (sl < L->slots - 1) s_form_slot++; }
+        else if (s_slot[sl][0] && slot_autocomplete(s_slot[sl], g, sizeof g)) snprintf(s_slot[sl], sizeof s_slot[sl], "%s", g);
+        menu_hint(); nucleo_app_request_draw(); return;
     }
     if (key == NK_ENTER) {
         if (s_slot[sl][0] == 0) { nucleo_app_request_draw(); return; }   // need a value before advancing
@@ -2071,9 +2185,7 @@ static void idee_form_key(int key, char ch)
         int n = (int)strlen(s_slot[sl]);
         if (n > 0)        s_slot[sl][n - 1] = 0;
         else if (sl > 0)  s_form_slot--;                                 // empty backspace -> previous slot
-    } else if (key == NK_UP)   { if (sl > 0)              s_form_slot--; }
-    else if (key == NK_DOWN)   { if (sl < L->slots - 1)   s_form_slot++; }
-    else if (ch >= 32 && ch < 127) {
+    } else if (ch >= 32 && ch < 127) {                                   // plain ; . / arrive here with their char
         int n = (int)strlen(s_slot[sl]);
         if (n < (int)sizeof(s_slot[0]) - 1) { s_slot[sl][n] = ch; s_slot[sl][n + 1] = 0; }
     } else return;
@@ -2126,24 +2238,41 @@ static void editor_open(const char *path)
                              : "Invio=a capo  Ctrl+S salva  Esc annulla");
     mark_all_dirty(); nucleo_app_request_draw();
 }
-// Write the buffer to the SD path (guarded: absolute "/..." path, no ".."). Creates the parent dir,
-// overwrites (an explicit editor save). Stops audio first (sequenziale: una risorsa per volta), pets
-// the WDT around the SD I/O, then pushes a confirmation to the chat and closes the editor.
+// Write the buffer to the SD path (guarded: absolute "/..." path, no ".."). NEVER overwrites: the
+// editor starts empty, so writing over an existing file would silently wipe it — an existing name
+// becomes name-2, name-3... Creates the parent dir, stops audio first (sequenziale: una risorsa per
+// volta), pets the WDT around the SD I/O. Success: confirmation in the chat + editor closed. FAILURE:
+// the editor STAYS OPEN with the text intact and the footer says so; a user path that can't be written
+// (bad name, missing parent chain) is re-pointed to a fresh /data/note/ name — the title bar shows it —
+// so the very next Ctrl+S can still rescue the text.
 static void editor_save(void)
 {
-    char reply[120]; bool ok = false;
-    if (s_ed_path[0] == '/' && !strstr(s_ed_path, "..")) {
+    bool ok = false;
+    if (s_ed_path[0] == '/' && !strstr(s_ed_path, "..") && path_make_unique(s_ed_path, sizeof s_ed_path)) {
         char full[180]; snprintf(full, sizeof full, NUCLEO_SD_MOUNT "%s", s_ed_path);
         char dir[180];  snprintf(dir, sizeof dir, "%s", full);
         char *slash = strrchr(dir, '/'); if (slash && slash != dir) { *slash = 0; mkdir(dir, 0775); }
         nucleo_audio_stop();                                              // no audio while we touch the SD
         if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
         FILE *f = fopen(full, "wb");
-        if (f) { if (s_ed_len) fwrite(s_ed_buf, 1, (size_t)s_ed_len, f); fclose(f); ok = true; nucleo_anima_note_file(s_ed_path); }
+        if (f) {
+            ok = (s_ed_len == 0 || fwrite(s_ed_buf, 1, (size_t)s_ed_len, f) == (size_t)s_ed_len);   // SD full = short write
+            if (fclose(f) != 0) ok = false;
+            if (!ok) remove(full);                                        // drop the half-written NEW file (unique name: ours)
+        }
     }
+    if (!ok) {                                                            // keep the editor + text; say what happened
+        bool in_notes = !strncmp(s_ed_path, "/data/note/", 11);
+        if (!in_notes) quick_note_path(s_ed_path, sizeof s_ed_path);     // rescue target for the retry
+        nucleo_app_set_hint(in_notes ? (s_en ? "ERROR: not saved. Ctrl+S to retry" : "ERRORE: non salvato. Ctrl+S riprova")
+                                     : (s_en ? "Not saved. Ctrl+S: save to note/" : "Non salvato. Ctrl+S: salva in note/"));
+        mark_all_dirty(); nucleo_app_request_draw();
+        return;
+    }
+    nucleo_anima_note_file(s_ed_path);
+    char reply[120];
     const char *bn = strrchr(s_ed_path, '/'); bn = bn ? bn + 1 : s_ed_path;
-    if (ok) snprintf(reply, sizeof reply, s_en ? "Saved %s (%d chars)." : "Salvato %s (%d caratteri).", bn, s_ed_len);
-    else    snprintf(reply, sizeof reply, s_en ? "Couldn't save %s (bad path?)." : "Non riesco a salvare %s (percorso?).", bn);
+    snprintf(reply, sizeof reply, s_en ? "Saved %s (%d chars)." : "Salvato %s (%d caratteri).", bn, s_ed_len);
     s_ed_open = false;
     push_user(s_en ? "[new file]" : "[nuovo file]");
     push_anima(reply, ACC);
@@ -2158,12 +2287,13 @@ static void editor_cancel(void)
     nucleo_app_set_hint(chat_hint());
     mark_all_dirty(); nucleo_app_request_draw();
 }
-// Editor keystrokes: printable -> append; Enter -> newline; DEL -> backspace; Ctrl+S -> save. (Esc and
-// the comma key arrive via on_back — the launcher intercepts them — and are handled there: Esc cancels,
-// Left/',' types a literal comma so the textarea isn't comma-blind.)
+// Editor keystrokes: printable -> append (; . / included); Enter -> newline; DEL -> backspace; Ctrl+S ->
+// save (printed ctrl OR fn: the driver's bit names are offset, see key_fn). (Esc and the comma key arrive
+// via on_back — the launcher intercepts them — and are handled there: Esc cancels (confirming first when
+// there is text), Left/',' types a literal comma so the textarea isn't comma-blind.)
 static void editor_key(int key, char ch)
 {
-    if ((nucleo_kbd_mods() & NK_MOD_CTRL) && (ch == 's' || ch == 'S' || ch == 0x13)) { editor_save(); return; }
+    if (key_mod() && (ch == 's' || ch == 'S' || ch == 0x13)) { editor_save(); return; }
     if (key == NK_ENTER) {
         if (s_ed_len < ED_BUF_CAP - 1) { s_ed_buf[s_ed_len++] = '\n'; s_ed_buf[s_ed_len] = 0; }
     } else if (key == NK_DEL) {
@@ -2240,59 +2370,85 @@ static void menu_key(int key, char ch)
     }
 }
 
+// fn+/ on an empty line: cycle Offline -> Ibrido -> Solo online. The header label changes and a short
+// footer toast names the new mode — on the welcome deck too, where it used to switch silently. In the
+// chat the transcript also gets the usual "Modalita:" line; on the deck it doesn't (it would be
+// invisible there, and a persisted meta line would replace the deck on the next open).
+static void cycle_mode_key(void)
+{
+    if (deck_active()) { s_omode = (s_omode + 1) % 3; apply_online_mode(); save_settings(); }
+    else cycle_mode();
+    static const char *const NM_IT[3] = { "Offline", "Ibrido", "Solo online" };
+    static const char *const NM_EN[3] = { "Offline", "Hybrid", "Online only" };
+    char t[40];
+    snprintf(t, sizeof t, s_en ? "Mode: %s  (fn / next)" : "Modo: %s  (fn / cambia)", (s_en ? NM_EN : NM_IT)[s_omode % 3]);
+    nucleo_app_set_hint(t);
+    s_toast_until = esp_timer_get_time() + 2500000;         // tick() puts the key hint back after 2.5 s
+    s_d_hdr = true; nucleo_app_request_draw();
+}
+
 static void on_key(int key, char ch)
 {
-    if (s_exit_confirm) {                                   // modale conferma uscita: Invio/S/Y = esci, altro = annulla
+    if (s_exit_confirm) {                                   // modale conferma: Invio = conferma, altro = annulla
+        s_exit_confirm = false;
+        if (s_ed_open) {                                    // editor "discard the text?": Enter only (letters are
+            if (key == NK_ENTER) editor_cancel();           // what you type — a stray 's' must never discard a note)
+            else { mark_all_dirty(); nucleo_app_request_draw(); }
+            return;
+        }
         if (key == NK_ENTER || ch == 's' || ch == 'S' || ch == 'y' || ch == 'Y')
             nucleo_app_exit();                             // conferma -> chiude (in Solo = esp_restart, NON ritorna)
-        else { s_exit_confirm = false; mark_all_dirty(); nucleo_app_request_draw(); }   // annulla -> torna alla chat
+        else { mark_all_dirty(); nucleo_app_request_draw(); }   // annulla -> torna alla chat
         return;
     }
     if (s_ed_open)   { editor_key(key, ch); return; }       // the full-screen editor owns every key
     if (s_menu_open) { menu_key(key, ch); return; }
 
-    if (deck_active()) {                                    // suggestion deck owns the keys when idle
-        if      (key == NK_UP)    { if (s_sug_sel > 0)         { s_sug_sel--; s_d_body = true; } }
-        else if (key == NK_DOWN)  { if (s_sug_sel < SUG_N - 1) { s_sug_sel++; s_d_body = true; } }
-        else if (key == NK_ENTER) { run_suggestion(); return; }
-        else if (key == NK_RIGHT) cycle_mode();
-        else if (ch >= '1' && ch <= '9' && ch <= '0' + SUG_N) { s_sug_sel = ch - '1'; run_suggestion(); return; }  // digit 1-9 jump+send (never punctuation past '9')
-        else if (ch >= 32 && ch < 127) {                   // start typing -> the deck steps aside
-            if (s_ilen < A_INMAX - 1) { s_input[s_ilen++] = ch; s_input[s_ilen] = 0; }
-            s_d_input = true; s_d_body = true;
-        } else return;
-        nucleo_app_request_draw(); return;
+    // ---- chat + welcome deck. ; . / TYPE (see the header note); the arrow meaning needs a modifier:
+    //      fn+; fn+.  scroll the transcript (on the deck: move the pick)
+    //      ctrl+; ctrl+.  command history (from the deck too: it steps aside for the recalled line)
+    //      fn+/  accept the ghost completion; on an empty line cycle the online mode
+    const bool was_deck = deck_active();
+    if ((key == NK_UP || key == NK_DOWN) && key_ctrl()) {
+        hist_recall(key == NK_UP ? -1 : +1);
+        chat_changed(was_deck); return;
     }
-
-    // Up/Down (FN+;/. sul Cardputer): scorri la chat. Ctrl+Up/Down: cronologia comandi (Linux style).
-    if (key == NK_UP || key == NK_DOWN) {
-        if (nucleo_kbd_mods() & NK_MOD_CTRL) {
-            hist_recall(key == NK_UP ? -1 : +1);
+    if ((key == NK_UP || key == NK_DOWN) && key_fn()) {
+        if (was_deck) {
+            if (key == NK_UP)   { if (s_sug_sel > 0)         { s_sug_sel--; s_d_body = true; } }
+            else                { if (s_sug_sel < SUG_N - 1) { s_sug_sel++; s_d_body = true; } }
         } else {                                            // su/giu = scorri la conversazione su/giu
             if (key == NK_UP)   { if (s_scroll < s_rown - 1) { s_scroll++; s_d_body = true; } }
-            if (key == NK_DOWN) { if (s_scroll > 0)          { s_scroll--; s_d_body = true; } }
+            else                { if (s_scroll > 0)          { s_scroll--; s_d_body = true; } }
         }
         nucleo_app_request_draw(); return;
     }
-    // Right with text: accept the ghost completion if there is one, else fall through (types '/').
-    if (key == NK_RIGHT && s_ilen > 0) {
+    if (key == NK_RIGHT && key_mod()) {
+        if (s_ilen == 0) { cycle_mode_key(); return; }
         char g[HIST_LEN];
-        if (autocomplete(s_input, g, sizeof g)) {
+        if (autocomplete(s_input, g, sizeof g)) {           // no ghost -> nothing (fn+/ never types a '/')
             snprintf(s_input, sizeof s_input, "%s", g); s_ilen = (int)strlen(s_input);
-            s_hist_nav = -1; s_d_input = true; nucleo_app_request_draw(); return;
+            s_hist_nav = -1; chat_changed(was_deck);
         }
+        return;
+    }
+    if (was_deck && (key == NK_ENTER || (ch >= '1' && ch <= '9' && ch <= '0' + SUG_N))) {   // the deck's own picks
+        if (key != NK_ENTER) s_sug_sel = ch - '1';          // digit 1-9 jump+send (never punctuation past '9')
+        run_suggestion();
+        if (!s_busy) nucleo_app_set_hint(chat_hint());      // deck -> chat hint (a running turn keeps "stop")
+        return;
     }
 
-    if (key == NK_ENTER)     { if (s_busy) cancel_query(); else submit(); }   // Invio mentre elabora = stop (loop vivo: worker full-OS)
+    if (key == NK_ENTER) {                                  // Invio mentre elabora = stop (loop vivo: worker full-OS)
+        if (s_busy) cancel_query(); else submit();
+        if (!s_busy) nucleo_app_set_hint(chat_hint());      // slash commands / inline turns: line is empty again
+    }
     else if (key == NK_DEL)  {
-        if (s_ilen > 0) { s_input[--s_ilen] = 0; s_d_input = true; s_hist_nav = -1; if (s_ilen == 0 && !s_user_sent) s_d_body = true; }
+        if (s_ilen > 0) { s_input[--s_ilen] = 0; s_hist_nav = -1; chat_changed(was_deck); return; }   // deck returns on the last char
         else if (s_busy) cancel_query();
+        else return;
     }
-    else if (s_ilen == 0 && key == NK_RIGHT) cycle_mode();
-    else if (ch >= 32 && ch < 127) {
-        if (s_ilen < A_INMAX - 1) { s_input[s_ilen++] = ch; s_input[s_ilen] = 0; s_d_input = true; s_hist_nav = -1; }
-        if (s_scroll) { s_scroll = 0; s_d_body = true; }
-    }
+    else if (ch >= 32 && ch < 127) { chat_type(ch); return; }   // letters AND plain ; . / (the deck steps aside)
     else return;
     nucleo_app_request_draw();
 }
@@ -2300,6 +2456,10 @@ static void on_key(int key, char ch)
 static void tick(void)
 {
     if (s_exit_confirm) return;   // modale uscita statica: niente redraw periodici (era il leggero flicker)
+    if (s_toast_until && esp_timer_get_time() >= s_toast_until) {   // mode toast expired -> the key hint returns
+        s_toast_until = 0;
+        if (!s_menu_open && !s_ed_open && !s_busy) nucleo_app_set_hint(chat_hint());
+    }
     // Deferred app hand-off. Opening a RAM-heavy app (music/recorder) the instant the answer arrived
     // OOMs on this PSRAM-less chip: ANIMA still pins a 30 KB worker stack (+ maybe the ~18 KB L1 index)
     // while the target app needs the 32 KB launcher canvas + its decoder — and the largest free block
@@ -2486,7 +2646,7 @@ typedef struct { const char *title, *body; } GuidePage;
 // (~9-11px/char, 224px budget) and every card is <=3 lines — fits below the title rule, above the dots.
 static const GuidePage GUIDE_IT[GUIDE_N] = {
     { "ANIMA",         "Assistente offline.\nScrivi e premi Invio.\nVa anche senza rete." },
-    { "Tasti",         "Invio: invia.\nSu/Giu: scorri.\nDestra: completa." },
+    { "Tasti",         "fn ;/.  scorri la chat\nctrl ;/.  cronologia\nfn /  completa, modo" },
     { "Menu",          "TAB apre il menu.\nInvio apri, Esc su.\nDx/Sx cambia scheda." },
     { "Cosa chiedere", "Ora, meteo, calcoli,\npromemoria, traduzioni.\n\"Apri Musica\" e altro." },
     { "IDEE",          "Catalogo di cio' che\nso fare. Invio entra.\n\"...\" chiede i dati." },
@@ -2496,7 +2656,7 @@ static const GuidePage GUIDE_IT[GUIDE_N] = {
 };
 static const GuidePage GUIDE_EN[GUIDE_N] = {
     { "ANIMA",         "Offline assistant.\nType and press Enter.\nWorks with no network." },
-    { "Keys",          "Enter: send.\nUp/Down: scroll.\nRight: complete." },
+    { "Keys",          "fn ;/.  scroll the chat\nctrl ;/.  history\nfn /  complete, mode" },
     { "Menu",          "TAB opens the menu.\nEnter opens, Esc back.\nLeft/Right switch tab." },
     { "What to ask",   "Time, weather, math,\nreminders, translate.\n\"Open Music\" and more." },
     { "IDEAS",         "Catalog of all I\ncan do. Enter to open.\n\"...\" asks for input." },
@@ -2583,7 +2743,9 @@ static void draw_stato(int ch)
 
     const char *m = s_omode == OM_OFF ? "Offline" : s_omode == OM_ONLY ? (s_en ? "Online" : "Solo online") : (s_en ? "Hybrid" : "Ibrido");
     snprintf(v, sizeof v, "%s  %s", m, s_en ? "EN" : "IT");
-    stato_row(y, s_en ? "Mode" : "Modo", v, s_worker ? FG : AMBER); y += step;   // amber if the worker is down
+    // Plain FG: the old "amber if no worker" was a permanent false alarm — ANIMA always runs in Solo, where
+    // queries run inline and a worker never exists (the full OS spawns one on demand, per query).
+    stato_row(y, s_en ? "Mode" : "Modo", v, FG); y += step;
 
     long up = (long)(esp_timer_get_time() / 1000000);
     int uh = (int)(up / 3600), um = (int)((up % 3600) / 60);
@@ -3080,7 +3242,7 @@ static void draw_header(int top)
 static void draw_deck(int ty0, int avail)
 {
     // Glance header: a time-of-day greeting (left) + clock (right) — like a watch's top card — then
-    // the starter prompts. su/giu pick, Invio (or 1-9) sends, so the first ask needs no typing.
+    // the starter prompts. fn+;/. pick, Invio (or 1-9) sends, so the first ask needs no typing.
     time_t now = time(NULL); struct tm *tm = localtime(&now);
     int hr = tm ? tm->tm_hour : 9;
     const char *greet = s_en ? (hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening")
@@ -3197,7 +3359,7 @@ static void draw_input(int top, int h)
     }
     int startc = 0; while (s_input[startc] && (int)d.textWidth(s_input + startc) > availw) startc++;   // scroll to keep the caret visible
     d.setTextColor(FG, BG); d.setCursor(x0, ty); d.print(s_input + startc);
-    // Ghost completion: the dim tail of the best match, drawn after the caret. Right accepts it.
+    // Ghost completion: the dim tail of the best match, drawn after the caret. fn+/ accepts it.
     char ghost[HIST_LEN];
     if (autocomplete(s_input, ghost, sizeof ghost)) {
         int cx = x0 + (int)d.textWidth(s_input + startc) + 3;
@@ -3281,21 +3443,23 @@ static void draw_editor(int top, int h)
 }
 
 // Modale di conferma uscita: pannello a tutto schermo, font grandi ben visibili (REGOLA UI nativa).
+// With the editor open the same modal asks "discard the typed text?" (Esc in the editor with text).
 static void draw_exit_modal(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    const bool ed = s_ed_open;
     d.fillRect(0, top, 240, h, BG);
     int bw = 212, bh = 92, bx = (240 - bw) / 2, by = top + (h - bh) / 2;
     d.fillRoundRect(bx, by, bw, bh, 10, CAP);
     d.drawRoundRect(bx, by, bw, bh, 10, ACC);
     d.drawRoundRect(bx + 1, by + 1, bw - 2, bh - 2, 9, ACC);          // doppio bordo = piu' marcato
     set_font(F_BIG); d.setTextColor(FG, CAP);
-    const char *q = s_en ? "Leave ANIMA?" : "Uscire da ANIMA?";
+    const char *q = ed ? (s_en ? "Discard the text?" : "Scartare il testo?") : (s_en ? "Leave ANIMA?" : "Uscire da ANIMA?");
     d.setCursor(120 - (int)d.textWidth(q) / 2, by + 14); d.print(q);
     set_font(F_MED);
-    const char *yes = s_en ? "Enter = Exit" : "Invio = Esci";
-    d.setTextColor(GRN, CAP);   d.setCursor(120 - (int)d.textWidth(yes) / 2, by + 44); d.print(yes);
-    const char *no = s_en ? "Esc = Stay" : "Esc = Resta";
+    const char *yes = ed ? (s_en ? "Enter = Discard" : "Invio = Scarta") : (s_en ? "Enter = Exit" : "Invio = Esci");
+    d.setTextColor(ed ? AMBER : GRN, CAP); d.setCursor(120 - (int)d.textWidth(yes) / 2, by + 44); d.print(yes);
+    const char *no = ed ? (s_en ? "Esc = Keep writing" : "Esc = Continua") : (s_en ? "Esc = Stay" : "Esc = Resta");
     d.setTextColor(MUTED, CAP); d.setCursor(120 - (int)d.textWidth(no) / 2, by + 66); d.print(no);
     d.setFont(&fonts::Font0); d.setTextSize(1);
 }

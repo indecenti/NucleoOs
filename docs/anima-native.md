@@ -178,7 +178,16 @@ while the text grows without scrolling = anti-flicker); **Invio = stop** at ever
 (the typewriter returns "stopped" → skips the voice; the voice polls `nucleo_audio_playing()` every
 40 ms so it stops mid-clip); **voice cap 340 chars** → one "read it on screen" hint, never twice
 (`nucleo_tts_say_quiet()` stays mute on an uncovered phrase instead of speaking the hint itself);
-**Esc → full-screen confirm modal** (big font); Up/Down scroll the chat, Ctrl+Up/Down = command history.
+**Esc → full-screen confirm modal** (big font). **Keys (Notes-editor rule):** the driver delivers
+`; . , /` as arrows carrying their character — wherever you write (chat, welcome deck, IDEE fill-in
+forms, file editor) they **type** (`2.5`, `ciao.`, a decimal comma, `/l1`); `,` (routed to the back
+handler as Left) is a comma and never leaves. The arrow meaning needs a modifier: **fn+; / fn+.** scroll
+the chat (move the deck pick / hop form fields), **fn+/** accepts the ghost completion (empty line:
+cycles Offline→Ibrido→Solo online with a footer toast), **ctrl+; / ctrl+.** = command history, rebuilt
+on enter from the user's lines in the restored chat. Menu lists keep plain arrows. Driver bit names are
+offset from the printed legends (printed fn → `NK_MOD_CTRL`, printed ctrl → `NK_MOD_FN`; see `key_fn()`).
+Editor: Ctrl+S never overwrites (`name-2`, `-3`…; quick notes are per-second), a failed save keeps the
+text open, Esc with text asks first. The "-- ripresa --" separator is display-only (never persisted).
 
 **TTS-render TWDT fix.** A knowledge answer's TTS render reads many clips from SD (`fseek` per clip);
 on the ADV's slow SD the cumulative time exceeds the 8 s task-WDT → `anima-solo` TWDT reboot (real
