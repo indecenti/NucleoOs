@@ -362,14 +362,14 @@
     "it": {
       "title": "GET /api/anima - Query Assistente ANIMA",
       "description": "Interroga il motore NLP offline locale di ANIMA. Esegue la cosine similarity e restituisce una risposta strutturata contenente testo, intenti rilevati, livelli di confidenza e azioni di sistema.",
-      "synopsis": "GET /api/anima?q=<domanda>&lang=<lingua>&reset=<0|1>",
-      "details": "La risposta JSON contiene:\n- query: domanda inserita\n- confidence: punteggio di pertinenza\n- action: tipo di azione (launch, system, answer, tool, none)\n- arg: argomento dell'azione (es. nome app o nome variabile)\n- reply: testo tradotto della risposta da mostrare in chat\n- domain: categoria semantica rilevata (calc, knowledge, app...)"
+      "synopsis": "GET /api/anima?q=<domanda>&lang=<lingua>&reset=<0|1>&sid=<id>&mode=<off|on|only>",
+      "details": "La risposta JSON contiene:\n- query: domanda inserita\n- confidence: punteggio di pertinenza\n- action: tipo di azione (launch, system, answer, tool, none)\n- arg: argomento dell'azione (es. nome app o nome variabile)\n- reply: testo tradotto della risposta da mostrare in chat\n- domain: categoria semantica rilevata (calc, knowledge, app...)\n- done: per volume/luminosità, true se il device ha eseguito l'azione (richiede l'abbinamento)\n\nUna domanda troppo lunga riceve 413 {\"error\":\"too_long\",\"max\":N} invece di una query vuota."
     },
     "en": {
       "title": "GET /api/anima - Query ANIMA Assistant",
       "description": "Queries the local offline NLP assistant ANIMA. Evaluates similarity indices and returns parsed responses containing texts, intent domains, scores, and system tool directives.",
-      "synopsis": "GET /api/anima?q=<query>&lang=<lang>&reset=<0|1>",
-      "details": "JSON response schema:\n- query: input phrase\n- confidence: match score\n- action: execution directive (launch, system, answer, tool, none)\n- arg: target argument (e.g. app name, system variable key)\n- reply: localized string response to output in GUI chat bubbles\n- domain: resolved semantic sector (calc, knowledge, app...)"
+      "synopsis": "GET /api/anima?q=<query>&lang=<lang>&reset=<0|1>&sid=<id>&mode=<off|on|only>",
+      "details": "JSON response schema:\n- query: input phrase\n- confidence: match score\n- action: execution directive (launch, system, answer, tool, none)\n- arg: target argument (e.g. app name, system variable key)\n- reply: localized string response to output in GUI chat bubbles\n- domain: resolved semantic sector (calc, knowledge, app...)\n- done: for volume/brightness, true when the device actually applied it (pairing required)\n\nAn over-long question gets 413 {\"error\":\"too_long\",\"max\":N} instead of an empty query."
     },
     "params": [
       {
@@ -406,6 +406,30 @@
         },
         "en": {
           "description": "Set to 1 to clean temporary conversation context buffers"
+        }
+      },
+      {
+        "name": "sid",
+        "type": "text",
+        "required": false,
+        "default": "",
+        "it": {
+          "description": "Id della conversazione del client (max 23 caratteri). Se cambia rispetto alla richiesta precedente, il device riparte da un contesto pulito: i follow-up di client diversi non si mescolano"
+        },
+        "en": {
+          "description": "Client conversation id (max 23 chars). When it differs from the previous request's, the device starts a fresh context, so follow-ups from different clients never mix"
+        }
+      },
+      {
+        "name": "mode",
+        "type": "text",
+        "required": false,
+        "default": "",
+        "it": {
+          "description": "Modalità online solo per questa richiesta: off (solo offline), on (ibrida), only (solo online)"
+        },
+        "en": {
+          "description": "Online mode for this request only: off (offline only), on (hybrid), only (online only)"
         }
       }
     ]
