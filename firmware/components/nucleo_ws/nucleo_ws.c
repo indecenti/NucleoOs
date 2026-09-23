@@ -176,7 +176,10 @@ static esp_err_t ws_handler(httpd_req_t *req)
     // Incoming frame: read length, then payload.
     httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT };
     if (httpd_ws_recv_frame(req, &frame, 0) != ESP_OK) return ESP_FAIL;
-    if (frame.len == 0 || frame.len > 256) return ESP_OK;
+    if (frame.len == 0) return ESP_OK;
+    // Oversized: its unread payload would be parsed as the NEXT frame header (stream desync), and the
+    // public API can't skip it. Drop the socket instead; the shell reconnects and resyncs via "since".
+    if (frame.len > 256) { ESP_LOGW(TAG, "frame too long (%u) - closing", (unsigned)frame.len); return ESP_FAIL; }
     uint8_t buf[257] = {0};
     frame.payload = buf;
     if (httpd_ws_recv_frame(req, &frame, frame.len) != ESP_OK) return ESP_FAIL;

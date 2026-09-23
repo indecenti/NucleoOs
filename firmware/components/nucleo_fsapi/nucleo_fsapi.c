@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>   // strcasecmp: FATFS case-insensitive same-file check in move_post
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -90,6 +91,16 @@ static void publish_change(const char *op, const char *path)
     nucleo_event_publish("fs.changed", d);
 }
 
+// Listing didn't fit the heap: a retriable 503, never a 200 the client would read as "empty folder".
+static esp_err_t list_oom(httpd_req_t *req)
+{
+    httpd_resp_set_status(req, "503 Service Unavailable");
+    httpd_resp_set_hdr(req, "Retry-After", "1");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"error\":\"oom\"}");
+    return ESP_OK;
+}
+
 static esp_err_t list_get(httpd_req_t *req)
 {
     NUCLEO_AUTH_GUARD(req);
@@ -100,6 +111,7 @@ static esp_err_t list_get(httpd_req_t *req)
 
     cJSON *root = cJSON_CreateObject();
     cJSON *arr = cJSON_AddArrayToObject(root, "entries");
+    if (!arr) { closedir(dir); cJSON_Delete(root); return list_oom(req); }   // else every entry below leaks
     struct dirent *de;
     while ((de = readdir(dir)) != NULL) {
         char full[300]; snprintf(full, sizeof(full), "%s/%s", abs, de->d_name);
@@ -170,8 +182,9 @@ static esp_err_t list_get(httpd_req_t *req)
         }
     }
 
-    char *out = cJSON_PrintUnformatted(root);
+    char *out = cJSON_PrintUnformatted(root);   // a 200+ entry folder needs a big contiguous buffer
     cJSON_Delete(root);
+    if (!out) return list_oom(req);             // was: 200 with an EMPTY body -> client saw an empty folder
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_sendstr(req, out);
@@ -447,8 +460,11 @@ static esp_err_t move_post(httpd_req_t *req)
     char q[512], ov[4] = {0};
     if (httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK)
         httpd_query_key_value(q, "overwrite", ov, sizeof(ov));
+    // FATFS is case-insensitive: a case-only rename (a.JPG -> a.jpg) stat()s the SOURCE as the
+    // destination. Treat it as a plain rename — never "exists", never remove(to) (= delete the source).
+    bool same = !strcasecmp(from, to);
     struct stat st = {0};
-    if (stat(to, &st) == 0) {
+    if (!same && stat(to, &st) == 0) {
         if (ov[0] != '1') { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "destination exists"); return ESP_FAIL; }
         remove(to);   // FATFS rename won't overwrite; clear the way first
     }

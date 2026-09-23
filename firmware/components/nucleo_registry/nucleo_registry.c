@@ -55,13 +55,15 @@ static char *read_file(const char *path)
 
 esp_err_t nucleo_registry_load(void)
 {
-    s_count = 0;
+    // Runtime reloads (after an apps.json write) run on a tight heap: a failed read/parse must keep the
+    // previous table, not empty the launcher until reboot. Reset the count only once the doc is parsed.
     char *txt = read_file(APPS_JSON);
     if (!txt) return ESP_FAIL;
 
     cJSON *root = cJSON_Parse(txt);
     free(txt);
     if (!root) { ESP_LOGE(TAG, "invalid JSON in apps.json"); return ESP_FAIL; }
+    s_count = 0;
 
     cJSON *installed = cJSON_GetObjectItem(root, "installed");
     cJSON *item;
