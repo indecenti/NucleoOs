@@ -40,18 +40,38 @@ export function engineSources() {
   ];
 }
 
-// Everything the compiled module depends on: the sources above, every header they can reach
-// (firmware, host shims, the wasm overrides) and the build script (flags change the output too).
+// Everything the compiled module depends on: the sources above, the headers they ACTUALLY reach
+// (transitive #include closure over the build's include dirs) and the build script (flags change the
+// output too). Only reachable headers count, so editing a host shim the engine never includes (the
+// harness shares tools/anima-host/shim with other host tests) doesn't mark the WASM stale. A header
+// name found in several include dirs counts in all of them — conservative: never a false "fresh".
+const INCLUDE_DIRS = [join(here, 'shim'), join(host, 'shim'), anima, join(anima, 'include')];
+const PRELUDE = join(here, 'shim', 'wasm_prelude.h');   // force-included by build.ps1 (-include)
+
+function includeClosure(roots) {
+  const seen = new Set(), out = [];
+  const stack = [...roots];
+  while (stack.length) {
+    const f = stack.pop();
+    if (seen.has(f) || !existsSync(f)) continue;
+    seen.add(f); out.push(f);
+    const src = readFileSync(f, 'latin1');
+    for (const m of src.matchAll(/^\s*#\s*include\s*[<"]([^>"]+)[>"]/gm)) {
+      const name = m[1];
+      for (const d of [dirname(f), ...INCLUDE_DIRS]) {
+        const p = join(d, name);
+        if (existsSync(p) && !seen.has(p)) stack.push(p);
+      }
+    }
+  }
+  return out;
+}
+
 export function engineInputs() {
-  const h = (f) => f.endsWith('.h');
-  return [
-    ...engineSources(),
-    ...ls(anima, h),
-    ...ls(join(anima, 'include'), h),
-    ...ls(join(host, 'shim'), h),
-    ...ls(join(here, 'shim'), h),
-    join(here, 'build.ps1'),
-  ];
+  const reached = includeClosure([...engineSources(), PRELUDE]);
+  const sources = new Set(engineSources());
+  const headers = reached.filter((f) => !sources.has(f)).sort();
+  return [...engineSources(), ...headers, join(here, 'build.ps1')];
 }
 
 export function engineHash() {
