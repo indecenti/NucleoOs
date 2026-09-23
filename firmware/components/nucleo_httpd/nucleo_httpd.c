@@ -1161,6 +1161,8 @@ static esp_err_t anima_get(httpd_req_t *req)
     char lang[4] = "it";
     char *qbuf = NULL;   // [query string | decoded q] — freed on every return below
     int mode_ov = 0;   // per-request online mode from the web app: 0=none, 1=off, 2=on(hybrid), 3=only
+    bool want_reset = false;
+    char sidv[24] = "";  // client/conversation id: the web app and Copilot each send their own
     size_t qslen = httpd_req_get_url_query_len(req);
     if (qslen > ANIMA_QS_MAX) return anima_too_long_413(req);
     if (qslen > 0) {
@@ -1180,7 +1182,8 @@ static esp_err_t anima_get(httpd_req_t *req)
             strcpy(lang, "en");
         char rv[4];
         if (httpd_query_key_value(query, "reset", rv, sizeof(rv)) == ESP_OK && rv[0] == '1')
-            nucleo_anima_reset_session();   // "pulisci conversazione" -> forget device-side context
+            want_reset = true;              // "pulisci conversazione" -> forget device-side context (under the lock)
+        if (httpd_query_key_value(query, "sid", sidv, sizeof(sidv)) != ESP_OK) sidv[0] = 0;
         char mv[8];
         if (httpd_query_key_value(query, "mode", mv, sizeof(mv)) == ESP_OK && mv[0]) {
             if (mv[0] == 'o' && mv[1] == 'f') mode_ov = 1;        // off  -> offline-only
@@ -1225,6 +1228,18 @@ static esp_err_t anima_get(httpd_req_t *req)
         free(qbuf);
         return anima_busy_503(req);
     }
+
+    // ONE conversation per client. The device holds a single session (a slot per client would cost
+    // ~2.5 KB .bss each), so the web app, Copilot and PTT shared one follow-up frame: "e newton?" from
+    // Copilot chained off the ANIMA app's last question. A request whose sid differs from the last one
+    // starts a fresh context instead. Done under the spine lock, like the explicit reset (which used to
+    // memset the session unlocked, racing a voice query).
+    static char s_last_sid[24];
+    if (sidv[0]) {
+        if (s_last_sid[0] && strcmp(s_last_sid, sidv) != 0) want_reset = true;
+        snprintf(s_last_sid, sizeof s_last_sid, "%s", sidv);
+    }
+    if (want_reset) nucleo_anima_reset_session();
 
     // Apply a per-request online mode (web ANIMA mode selector), saving/restoring the device-global
     // state so this never clobbers the native Settings toggle. Mirrors the sim's `mode` param.
