@@ -183,8 +183,9 @@ ANIMA's offline brain is written once in C and runs in **three** places, certifi
 3. **On the PC host harness** (`anima.exe`) for development and gates.
 
 A **parity gate** runs every query through the WASM module *and* the native build and asserts
-byte‑identical replies; a **web‑contract gate** pins every JSON field the chat UI reads. The
-"cascata WASM" isn't a port — it's literally the device's C, recompiled.
+byte‑identical replies — and refuses a WASM not rebuilt from the current firmware sources; a
+**web‑contract gate** pins every JSON field the chat UI reads. The "cascata WASM" isn't a port —
+it's literally the device's C (`firmware/components/nucleo_anima`), recompiled.
 
 ### The retrieval cascade — cheap first, honest always
 

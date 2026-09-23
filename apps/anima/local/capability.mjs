@@ -23,7 +23,7 @@ const wasmMjs = join(here, '..', 'www', 'local', 'anima-local.mjs');
 if (!existsSync(wasmMjs)) { console.error('anima-local.mjs not found — run apps/anima/local/build.ps1'); process.exit(2); }
 if (!existsSync(sdRoot))  { console.error('brain fixture not found at tools/anima-host/sd'); process.exit(2); }
 
-process.env.L1_PFM = '64';   // PC-grade rerank pool, same as the browser
+// No env knobs here: anima_init (wasm_main.c) applies the browser's own PC-grade knobs itself.
 
 const AnimaLocal = (await import(pathToFileURL(wasmMjs).href)).default;
 const { shape, answered } = await import(pathToFileURL(join(here, '..', 'www', 'local', 'engine.js')).href).then(async (m) => ({
@@ -63,8 +63,11 @@ const HARD = [
   ['solver multiply',   'it', 'quanto fa 12 per 8',              (r) => has(r, '96')],
   ['solver sqrt',       'it', 'radice quadrata di 144',          (r) => has(r, '12')],
   ['translate IT->EN',  'it', 'traduci cane in inglese',         (r) => has(r, 'dog')],
-  // ABSTENTION — the protected property: gibberish must NOT fabricate (empty reply, nothing "answered").
-  ['OOD abstains',      'it', 'asdkfj qwerty zzz',               (r) => !answered(r) && !(r.reply || '').trim()],
+  // ABSTENTION — the protected property: gibberish must NOT fabricate. Keyed on the TIER, like every
+  // firmware abstain gate: the engine now SAYS its refusal ("Non lo so." / "I don't know." at tier=none,
+  // nucleo_anima.c HONEST DECLINE), so the reply is no longer empty, but nothing may be "answered".
+  ['OOD abstains',      'it', 'asdkfj qwerty zzz',               (r) => !answered(r) && r.tier === 'none' && r.action === 'none'],
+  ['OOD abstains (en)', 'en', 'asdkfj qwerty zzz',               (r) => !answered(r) && r.tier === 'none' && r.action === 'none'],
 ];
 
 // CONDITIONAL rows: return 'pass' | 'skip' | 'fail'. Depend on the corpus build; may SKIP, never go red.

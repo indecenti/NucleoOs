@@ -9,6 +9,10 @@ The only fakes are four ESP‑IDF headers (`shim/`) and the network tier
 (`anima_online_stub.c`), which here always answers "offline / honest miss" — i.e. a device
 with Wi‑Fi switched off.
 
+The browser's offline engine (`apps/anima/local/build.ps1` -> `anima-local.wasm`) is built from the
+same firmware sources and reuses this folder's `shim/`, `anima_online_stub.c` and `esp_timer_host.c`.
+After editing the engine or those files, rerun that build too — `npm run anima:gate` fails until you do.
+
 > **Full guide, toolchain notes, and the wider debug menu (JTAG / QEMU / Wokwi):**
 > [docs/debugging.md](../../docs/debugging.md).
 

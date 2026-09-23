@@ -185,6 +185,9 @@ runtime confirmation. Everything up to and including a clean, complete firmware 
   "Era il bug…" comment): `traduci cane in inglese` dumps both directions in the browser twin while
   the firmware correctly answers `in inglese: dog, hound, trigger`. Caught by `parity.mjs` (21/22).
   Fix: rebuild the WASM (`apps/anima/local/build.ps1`, needs emscripten).
+  **Resolved 2026-09:** the WASM is now built directly from `firmware/components/nucleo_anima` (the
+  June `apps/anima/local/src/` snapshot is gone) and `anima:gate` fails on a WASM not rebuilt from the
+  current sources (compiled-in fingerprint) or diverging from `anima.exe` — see docs/debugging.md.
 - **No CI runs the gate.** `.github/workflows` only packages a release; nothing runs `anima:gate` /
   `check_pack` / the test suites. The two staleness defects above would have been caught by CI. Now
   that the harness is Linux-portable, a CI job is feasible. Also still Windows-only (not gate-blocking

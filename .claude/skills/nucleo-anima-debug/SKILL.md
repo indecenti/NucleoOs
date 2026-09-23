@@ -25,6 +25,8 @@ npm run anima:sweep                      # batch over tools/anima-host/queries.t
   anti-hallucination stress (485-phrase suite + metamorphic harness).
 - `npm run anima:typed` / `anima:typednl` — typed knowledge graph.
 - `npm run anima:local` — the browser WASM cascade (policy + contract + capability + parity).
+  The WASM is built from the firmware sources: after an engine edit run
+  `powershell -NoProfile -ExecutionPolicy Bypass -File apps/anima/local/build.ps1`, or the gate fails (stale).
 - Per-subsystem (non-ANIMA): `npm run <ir|link|mesh|eth|hw|skill|radio|logviewer>:test`,
   `npm run validate` (registry/manifests), `npm run i18n:gate`.
 

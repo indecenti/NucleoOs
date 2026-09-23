@@ -69,6 +69,24 @@ Q: che cos'è nucleoos
   if you ever want to test the network tier on host.
 - `host_main.c` is the driver (one‑shot / REPL / batch, IT+EN).
 
+### The browser engine is the same build (ANIMA Local)
+The web app's offline brain (`apps/anima/www/local/anima-local.{mjs,wasm}`) is compiled by
+Emscripten **directly from `firmware/components/nucleo_anima`**, with the same exclusions, the same
+`anima_online_stub.c` and the same `shim/` as `anima.exe` — there is no copy of the engine to drift.
+`apps/anima/local/engine-src.mjs` is the one list of what goes in; the build stamps a fingerprint of
+those inputs into the module, and `npm run anima:gate` (entry `anima-local (wasm fresh+parity)`)
+fails when the fingerprint no longer matches the sources, then checks WASM == `anima.exe` reply for reply.
+
+> **Rule:** after editing anything in `firmware/components/nucleo_anima/` (or the shared
+> `tools/anima-host/shim/`, `anima_online_stub.c`, `esp_timer_host.c`), rebuild the browser engine:
+> `powershell -NoProfile -ExecutionPolicy Bypass -File apps/anima/local/build.ps1`
+> (needs Emscripten at `C:\emsdk`; it also rewrites the two `.gz` twins), then `npm run anima:local`.
+
+The only wasm-side code is glue: `wasm_main.c` (the JSON API + the browser's PC-grade knobs
+`L1_PFM`/`ANIMA_AKB5`/`ANIMA_AKB5_PROBE`, which parity replays on `anima.exe`), `wasm_fs.c`
+(link-time `--wrap` that keeps user-taught state — `user.tsv/.vec`, `profile.tsv`, `units.txt` — in the
+IndexedDB-persisted `/sd/data/anima/rw/`), and `shim/nucleo_board.h` (`/sd` instead of `./sd`).
+
 ---
 
 ## 2. Toolchain (this machine)
