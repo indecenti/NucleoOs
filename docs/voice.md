@@ -23,6 +23,17 @@ which maps them to an intent/action (launch app, answer, …). So the engine
 recognizes **words**; ANIMA turns word sequences into **commands** — the command
 set can be larger than the trained vocabulary through composition.
 
+The query does **not** run on the 16 KB voice task: a sentence that misses L0
+falls through the full cascade (L1, AKB5, HDC, online TLS), which needs the same
+30 KB stack it gets under httpd and the native ANIMA app. `semantic_dispatch`
+therefore frees the per-PTT buffers first, then runs `nucleo_anima_query()` on a
+transient 30 KB worker (`voice_q`, same core + priority as the voice task) and
+deletes it as soon as the answer is back — 0 B at rest. If the stack can't be
+carved, it frees the MFCC tables + the idle L1 cache and retries once; if that
+fails too, the result is an honest "not enough memory" (toast + `voice/state`
+`{"error":"no_mem"}`), never a crash. The log line `ANIMA worker done: stack
+peak N/30720 B` reports the real headroom.
+
 The voice task is **pinned to APP_CPU (core 1)** — the codebase convention for
 real-time audio — so I2S capture + FFT + DTW run off core 0, which the Wi-Fi/lwIP/
 httpd stack drives. Capture stays glitch-free even while the Voice Manager web

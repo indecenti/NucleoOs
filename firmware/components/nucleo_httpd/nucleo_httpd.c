@@ -1079,7 +1079,10 @@ static bool anima_run_offthread(void (*fn)(void *), void *ctx)
         // retry was a futile second 30 KB allocation whose churn (unload + 120 ms settle + re-alloc) steadily
         // FRAGMENTED the heap under the web OS — the source of the OOM drift. Skip it there and fail fast to a
         // lean 503; the browser answers from its own brain instead.
-        nucleo_anima_l1_unload_if_idle();          // free ~31 KB if the offline index is idle...
+        // The caller HOLDS the spine lock (a non-recursive atomic flag), so _unload_if_idle()'s try_lock
+        // always failed here and the retry never had more room than the first attempt. No query can be
+        // running while we hold it, so the index IS idle: drop it directly.
+        nucleo_anima_l1_unload();                  // free the offline index + hot-row cache...
         vTaskDelay(pdMS_TO_TICKS(120));            // ...let the idle task coalesce the freed block, then retry once
         ok = xTaskCreate(anima_offthread_task, "anima_web", 30720, &j, tskIDLE_PRIORITY + 2, NULL);
     }

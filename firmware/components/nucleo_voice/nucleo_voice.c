@@ -4,7 +4,8 @@
 //   FN held → I2S PCM streamed into vdsp_acc (framing+MFCC happen incrementally,
 //   raw audio never held) → VAD (RMS) segments audio into "bursts" (one per word) →
 //   each burst → CMN'd canonical MFCC → banded DTW match → label →
-//   labels accumulated into a sentence → fed to nucleo_anima_query() →
+//   labels accumulated into a sentence → fed to nucleo_anima_query() (on a transient 30 KB
+//   worker, NOT this 16 KB task — see voice_query_offthread) →
 //   anima_result_t dispatched locally (nucleo_app_launch_id) OR remotely via WS.
 //
 // Learning mode: next PTT saves the burst's MFCC template (.tpl, versioned), no match.
@@ -18,6 +19,8 @@
 //   • vdsp_acc (~24 KB) + PCM + 2 match buffers (~7 KB) : on PTT press, freed on release.
 //   • templates live on SD, STREAMED one at a time during a match (peak ~7 KB) — no big
 //     resident cache, so the recognizer fits no matter how many words are trained.
+//   • ANIMA query: a transient 30 KB worker stack, alive only for the query, created AFTER
+//     the per-PTT buffers above are freed (the cascade is too deep for the 16 KB voice stack).
 #include "nucleo_voice.h"
 #include "nucleo_voice_dsp.h"
 #include "nucleo_kbd.h"
@@ -32,6 +35,8 @@
 #include "driver/i2s_pdm.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "esp_task_wdt.h"
 #include "driver/gpio.h"
 #include "nucleo_ui.h"
 #include "nucleo_codec.h"   // board-aware mic HAL (PDM original / ES8311 ADC on ADV)
@@ -328,6 +333,71 @@ static void store_result(const char *sentence, int action, const char *reply, bo
 }
 
 // ---------------------------------------------------------------------------
+// ANIMA cascade OFF the 16 KB voice stack. A sentence that misses L0 falls through L1 encode, AKB5,
+// the HDC reasoner and the online TLS helpers — the same cascade httpd and the native ANIMA app run on
+// 30 KB stacks; inline here it could overflow. It runs on a transient worker with that same 30 KB
+// stack, alive ONLY for the query (0 B at rest). Worker is pinned to THIS core at THIS priority, so
+// scheduling is unchanged from the old inline call, and because it can never be running while we
+// run, our vTaskDelete frees its stack at once (a self-delete waits for the idle task) — the heap is
+// back before the TTS reply spawns its audio task.
+// ---------------------------------------------------------------------------
+#define VOICE_QUERY_STACK 30720
+
+typedef struct {
+    const char       *q;
+    anima_result_t   *out;          // caller-owned: valid because the caller blocks until done
+    SemaphoreHandle_t done;
+    unsigned          stack_free;   // worker stack never touched (bytes) — on-device headroom evidence
+} voice_query_job_t;
+
+static void voice_query_worker(void *p)
+{
+    voice_query_job_t *j = (voice_query_job_t *)p;
+    *j->out = nucleo_anima_query(j->q, VOICE_LANG);
+    j->stack_free = (unsigned)(uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t));
+    xSemaphoreGive(j->done);
+    vTaskSuspend(NULL);             // parked until the dispatcher deletes it
+}
+
+static TaskHandle_t voice_query_spawn(voice_query_job_t *j)
+{
+    TaskHandle_t h = NULL;
+    if (xTaskCreatePinnedToCore(voice_query_worker, "voice_q", VOICE_QUERY_STACK, j,
+                                uxTaskPriorityGet(NULL), &h, xPortGetCoreID()) != pdPASS) return NULL;
+    return h;
+}
+
+// Run the cascade for `q` into *out on the worker and block until it finishes. Caller MUST hold the
+// ANIMA spine gate. Returns false (nothing ran, *out untouched) if the stack can't be carved even
+// after reclaiming what this session can spare. Waits unbounded, like the old inline call (the
+// cascade self-bounds via its own query/TLS timeouts); the job lives on our stack, so it must never
+// be abandoned. The wait pets the task WDT in case this task is ever subscribed (today it isn't).
+static bool voice_query_offthread(const char *q, anima_result_t *out)
+{
+    voice_query_job_t j = { .q = q, .out = out, .done = xSemaphoreCreateBinary(), .stack_free = 0 };
+    if (!j.done) return false;
+    TaskHandle_t h = voice_query_spawn(&j);
+    if (!h) {
+        // Retry once after freeing: the MFCC tables (capture is over; rebuilt on the next PTT) —
+        // allocated just before the ~24 KB accumulator already freed, so usually adjacent — plus the
+        // idle L1 hot-row cache (we hold the gate, so the direct unload is the in-cascade call).
+        if (s_ctx) { vdsp_ctx_free(s_ctx); s_ctx = NULL; }
+        if (nucleo_anima_l1_heap_bytes() > 0) nucleo_anima_l1_unload();
+        vTaskDelay(pdMS_TO_TICKS(50));   // let the idle task reap any just-self-deleted task stack
+        h = voice_query_spawn(&j);
+    }
+    if (!h) { vSemaphoreDelete(j.done); return false; }
+    while (xSemaphoreTake(j.done, pdMS_TO_TICKS(1000)) != pdTRUE) {
+        if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
+    }
+    vTaskDelete(h);
+    vSemaphoreDelete(j.done);
+    ESP_LOGI(TAG, "ANIMA worker done: stack peak %u/%u B",
+             (unsigned)(VOICE_QUERY_STACK - j.stack_free), (unsigned)VOICE_QUERY_STACK);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Semantic Fusion: fuse the recognized words into a sentence, resolve it with
 // ANIMA, then EITHER route to a connected web client OR act locally (launch app /
 // speak). In test mode the result is recorded but NOT executed (no side effects).
@@ -348,8 +418,22 @@ static void semantic_dispatch(const char *tokens[], int ntok)
         nucleo_event_publish("voice/state", "{\"error\":\"anima_busy\"}");
         return;
     }
-    anima_result_t r = nucleo_anima_query(sentence, VOICE_LANG);
+    anima_result_t r;
+    bool ran = voice_query_offthread(sentence, &r);
     nucleo_anima_unlock();
+
+    if (!ran) {
+        // Honest OOM: say why instead of crashing or pretending we didn't hear. matched=true so the
+        // home toast / Voce console print this reason rather than "not understood".
+        ESP_LOGE(TAG, "no RAM for the ANIMA worker (free=%u largest=%u): '%s' not processed",
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), sentence);
+        store_result(sentence, ANIMA_ACT_NONE,
+                     VOICE_LANG[0] == 'e' ? "Not enough memory, try again" : "Memoria insufficiente, riprova",
+                     true, false);
+        nucleo_event_publish("voice/state", "{\"error\":\"no_mem\"}");
+        return;
+    }
 
     if (r.tier == ANIMA_TIER_NONE) {
         ESP_LOGW(TAG, "Anima: no intent for '%s'", sentence);
@@ -710,6 +794,14 @@ static void voice_task(void *arg)
                 handle_burst(obs, tokens, &ntokens, true);
             }
             have_burst = false;
+            // Capture is over (EMA-adapted templates already written back by handle_burst): reclaim
+            // the big per-session buffers NOW, before the dispatch, so the ~24 KB accumulator block
+            // is free for the 30 KB ANIMA worker stack + the cascade. Keep only the small ctx cache.
+            // tokens[] point into static s_tokbuf, not into these buffers.
+            if (s_acc)  { vdsp_acc_free(s_acc); s_acc  = NULL; }
+            if (s_pcm)  { free(s_pcm);  s_pcm  = NULL; }
+            if (s_scan) { free(s_scan); s_scan = NULL; }
+            if (s_win)  { free(s_win);  s_win  = NULL; }
 
             bool was_learning;
             portENTER_CRITICAL(&s_intro_mux);
@@ -724,12 +816,6 @@ static void voice_task(void *arg)
             } else if (ntokens > 0) {
                 semantic_dispatch(tokens, ntokens);
             }
-            // EMA-adapted templates are written back to SD inline (handle_burst);
-            // reclaim the big per-session buffers, keep only the small ctx cache.
-            if (s_acc)  { vdsp_acc_free(s_acc); s_acc  = NULL; }
-            if (s_pcm)  { free(s_pcm);  s_pcm  = NULL; }
-            if (s_scan) { free(s_scan); s_scan = NULL; }
-            if (s_win)  { free(s_win);  s_win  = NULL; }
             // End-of-interaction "done" beep. Played HERE — mic already closed, big buffers already
             // freed (so it runs with maximum free heap), and BEFORE dropping VH_PTT — because the UI
             // loop keeps the screen blanked + the canvas freed until VH_PTT clears: gating the hold

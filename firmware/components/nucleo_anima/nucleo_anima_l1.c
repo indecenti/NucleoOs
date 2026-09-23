@@ -136,7 +136,24 @@ static int  s_sigb;                // signature bytes per vector (D/8)
 // HOST-ONLY cost meter (compiled out of the device build): with ANIMA_L1_STATS=1 each query prints
 // what the exact path WOULD have cost (every probed vector) vs what the prefilter actually did.
 static long s_st_cand, s_st_surv;
+// HOST-ONLY per-process cost counters (ANIMA_L1_COUNT=1 prints them at exit): query encodes, hot-row
+// cache mallocs, index/shard loads — the device-cost proxies the PC's fast disk hides.
+static long s_ct_enc, s_ct_cache, s_ct_load;
+static void l1_count_report(void)
+{
+    fprintf(stderr, "L1COUNT encodes=%ld cache_allocs=%ld index_loads=%ld\n", s_ct_enc, s_ct_cache, s_ct_load);
+}
+static bool s_ct_reg;
+#define L1_COUNT(v) do { if (!s_ct_reg && getenv("ANIMA_L1_COUNT")) { s_ct_reg = true; atexit(l1_count_report); } (v)++; } while (0)
+#else
+#define L1_COUNT(v) do { } while (0)
 #endif
+
+// The query vector of the turn. The AKB5 router encodes the text ONCE into s_qv and raises s_qv_ready
+// for the per-shard searches, which then reuse it instead of re-encoding (each encode is ~100 encoder
+// row reads and re-grabs the ~24 KB hot-row cache the shard switch just freed).
+static int8_t s_qv[L1_MAXDIM];
+static bool   s_qv_ready;
 
 // ---- FNV-1a 32-bit with a leading tag byte (matches distill.py feats()) ----
 static uint32_t fnv1a_tag(uint8_t tag, const char *s, int len)
@@ -199,7 +216,7 @@ static void ec_cache_acquire(void)
     if (s_ec_row || s_D == 0) return;
     for (int want = ENC_CACHE; want >= 16; want >>= 1) {   // largest power-of-two cache that fits
         s_ec_row = malloc((size_t)want * s_D);
-        if (s_ec_row) { s_ec_slots = want; break; }
+        if (s_ec_row) { s_ec_slots = want; L1_COUNT(s_ct_cache); break; }
     }
     if (s_ec_row) for (int i = 0; i < s_ec_slots; i++) s_ec_id[i] = 0xFFFFFFFFu;
     else s_ec_slots = 0;
@@ -253,6 +270,7 @@ static void ensure_encoder(void)
 static bool l1_encode(const char *text, int8_t *qv)
 {
     g_anima_stage = 0xCA;                          // DIAG: in l1_encode (query embedding)
+    L1_COUNT(s_ct_enc);
     char w[L1_MAXWORDS][L1_WORDLEN];
     int nw = l1_words(text, w);
     if (nw == 0) return false;
@@ -315,6 +333,7 @@ static bool load_index(void)
     // ciclo. Con max 8 FD FATFS, dopo alcune frasi il render TTS non riesce piu' ad aprire _say.wav
     // ("tts: open out failed") e la VOCE SMETTE. Chiudi sempre l'eventuale FD residuo prima di riaprire.
     if (s_idx) { fclose(s_idx); s_idx = NULL; }
+    L1_COUNT(s_ct_load);
     s_idx = fopen(s_idx_path, "rb");
     if (!s_idx) return false;
     char magic[4]; if (fread(magic,1,4,s_idx)!=4 || memcmp(magic,"AKB3",4)) { fclose(s_idx); s_idx=NULL; return false; }
@@ -925,7 +944,10 @@ static bool l1_scope_covered(const char *query, const char *reply)
             "cugino","cugina","cousin","maratona","maratone","marathon","marathons",
             // EN counterparts of "codice fiscale" — the IT side was covered, the EN side was not, so
             // "what is leonardo da vinci's tax id number" was answered with Leonardo's biography.
-            "tax","vat","ssn", NULL };
+            "tax","vat","ssn",
+            // credentials asked OF someone ("what is the ATM PIN of Cleopatra" -> her biography, AKB5
+            // person-shard rescue): a card that really answers them names them ("what is a PIN").
+            "pin","atm","iban","bancomat", NULL };
         for (int a = 0; attrw[a]; a++) if (l1_word_in(q, attrw[a]) && !l1_word_in(c, attrw[a])) return false;
         if ((l1_word_in(q,"temperatura")||l1_word_in(q,"temperature")) &&
             !(l1_word_in(c,"temperatura")||l1_word_in(c,"temperature")||strstr(c,"gradi")||strstr(c,"celsius")||strstr(c,"kelvin")||strstr(c,"fahrenheit"))) return false;
@@ -1044,6 +1066,24 @@ static bool l1_rescue_on_topic(const char *query, const char *reply)
         salient++;
     }
     return salient < 2;                                // >=2 salient words, none matched -> off-topic -> abstain
+}
+
+// OWNER COVERAGE (rescue band only): "the X OF <Y>" / "la X DI <Y>" asks about Y. A mid-confidence card
+// that never mentions Y answers the generic X instead — "what is the ip address of heaven" was rescued
+// (AKB5, 0.72) into the definition of an IP address. A confident (>= gate) card is left alone.
+static bool l1_owner_uncovered(const char *query, const char *reply)
+{
+    char q[160], c[256]; size_t i;
+    for (i = 0; query[i] && i + 1 < sizeof q; i++) q[i] = (char)tolower((unsigned char)query[i]); q[i] = 0;
+    for (i = 0; reply && reply[i] && i + 1 < sizeof c; i++) c[i] = (char)tolower((unsigned char)reply[i]); c[i] = 0;
+    static const char *const heads[] = { " of the ", " of ", " di ", " del ", " della ", " dello ", " dei ",
+                                         " degli ", " delle ", " dell ", " dell'", NULL };
+    char owner[40];
+    if (!l1_next_word_after(q, heads, owner, sizeof owner)) return false;
+    size_t ol = strlen(owner);
+    while (ol && (owner[ol-1] == '?' || owner[ol-1] == '!' || owner[ol-1] == '.')) owner[--ol] = 0;
+    if (ol < 4 || l1_is_stop_word(owner)) return false;
+    return !l1_word_in_fuzzy(c, owner);
 }
 
 // LONE-WORD COLLISION: a query that is a SINGLE salient content word the card never mentions is a cross-
@@ -1240,16 +1280,18 @@ int nucleo_anima_l1_query(const char *text, bool en, bool want_detail, anima_res
     // (online teacher with a key, or a browser LLM). Return a clean miss BEFORE ensure_index() so the
     // index never loads — the cascade then falls through to the online tiers. Internal AKB5 shard
     // re-entry (s_in_akb5) always proceeds: it only happens once the top-level call passed this gate.
+    // Reset the clarify evidence FIRST: a stood-down turn must not leave the previous query's band
+    // behind for nucleo_anima_l1_band() to offer as a "did you mean" on this one.
+    s_band.a1 = s_band.a2 = -1; s_band.c1 = s_band.c2 = -2.0f;
     if (!s_in_akb5 && !nucleo_anima_l1_serving()) return 0;
     // Transparent AKB5 routing: when a category-sharded manifest is present, EVERY caller (and the
     // stitch/band that follow) is served from the right shard with no change at the call sites. The
     // router re-enters this function once per shard with s_in_akb5 set, so those run the flat search.
     if (s_akb5_on && !s_in_akb5) return nucleo_anima_l1_akb5_query(text, en, want_detail, out);
-    s_band.a1 = s_band.a2 = -1; s_band.c1 = s_band.c2 = -2.0f;
     if (!s_ready || !text || !ensure_index()) return 0;     // reload the index on demand if it was freed
     g_anima_stage = 0xC8;                          // DIAG: flat L1 search (index resident, encoding)
-    static int8_t qv[L1_MAXDIM];
-    if (!l1_encode(text, qv)) return 0;
+    int8_t *qv = s_qv;
+    if (!(s_in_akb5 && s_qv_ready) && !l1_encode(text, qv)) return 0;   // the router already encoded it
     // float (hardware FPU on the S3) not double (software-emulated). Norm via an int32 sum-of-squares
     // (exact: |qv|<=127, D<=256 -> <=4.1M, fits int32), then one hardware sqrtf.
     int32_t qss = 0; for (uint32_t k = 0; k < s_D; k++) qss += (int32_t)qv[k]*qv[k];
@@ -1482,6 +1524,7 @@ int nucleo_anima_l1_query(const char *text, bool en, bool want_detail, anima_res
     if (!scope_ok) { memset(out, 0, sizeof *out); return 0; }
     // mid-confidence rescues must also be on-topic (kills off-topic rescues like "imperatore di Marte").
     if (is_rescue && !l1_rescue_on_topic(text, out->reply)) { memset(out, 0, sizeof *out); return 0; }
+    if (is_rescue && l1_owner_uncovered(text, out->reply)) { memset(out, 0, sizeof *out); return 0; }
     // a LONE salient word absent from the card, rescued only by margin (no typo corroboration), is an encoder
     // collision ("gatto" -> the "cat" command card) -> abstain rather than answer confidently off-topic. Kept
     // to the rescue band: at the absolute gate the same check muted legit identity/greeting/hyphenated cards
@@ -1517,6 +1560,7 @@ int nucleo_anima_l1_query(const char *text, bool en, bool want_detail, anima_res
 int nucleo_anima_l1_band(const char *query, bool en, anima_result_t *out, long *ans1, long *ans2)
 {
     if (!s_ready || s_band.a1 < 0 || s_band.a2 < 0) return 0;
+    if (!nucleo_anima_l1_serving()) return 0;       // stood down: never reload the index just to offer a guess
     if (!(s_band.c1 >= L1_COS_LO && s_band.c1 < L1_COS_MIN)) return 0;
     if (s_band.c2 < L1_COS_LO) return 0;                            // BOTH options must be plausible
     if ((s_band.c1 - s_band.c2) >= L1_BAND_MARGIN) return 0;        // not genuinely competing
@@ -1547,7 +1591,9 @@ int nucleo_anima_l1_band(const char *query, bool en, anima_result_t *out, long *
 // Resolve a clarify pick: read the full answer at `ansoff` (one of the two offered offsets).
 int nucleo_anima_l1_read(long ansoff, bool en, anima_result_t *out)
 {
-    if (!s_ready || !l1_read_answer(ansoff, en, false, out)) return 0;
+    // The pick arrives on the NEXT turn; the index may have been unloaded in between (an app opened,
+    // the online stand-down) — l1_read_answer would fseek a closed FILE*. Reopen the band's index first.
+    if (!s_ready || !ensure_index() || !l1_read_answer(ansoff, en, false, out)) return 0;
     out->confidence = 75;                        // a confirmed choice, not a raw cosine score
     return 1;
 }
@@ -1800,8 +1846,11 @@ int nucleo_anima_l1_akb5_query(const char *text, bool en, bool want_detail, anim
     if (D != s_D || ns == 0 || ns > AKB5_MAXSHARD) { fclose(f); return 0; }
     g_anima_stage = 0xC2;                          // DIAG: AKB5 manifest header valid
 
-    int8_t qv[L1_MAXDIM];
-    if (nucleo_anima_l1_encode(text, qv, L1_MAXDIM) != (int)D) { fclose(f); return 0; }
+    // Encode ONCE for the whole turn: routing below and every per-shard search reuse s_qv (s_qv_ready),
+    // instead of re-encoding per shard — which also re-grabbed the ~24 KB hot-row cache each shard
+    // switch had just freed (12-23 big malloc/free cycles per query on the device).
+    const int8_t *qv = s_qv;
+    if (nucleo_anima_l1_encode(text, s_qv, L1_MAXDIM) != (int)D) { fclose(f); return 0; }
     double qn2 = 0; for (uint32_t k = 0; k < D; k++) qn2 += (double)qv[k] * qv[k];
     float qn = sqrtf((float)qn2) + 1e-6f;
 
@@ -1850,7 +1899,13 @@ int nucleo_anima_l1_akb5_query(const char *text, bool en, bool want_detail, anim
         for (uint32_t i = 0; i < ns; i++) fprintf(stderr, "[akb5] %-26s route=%.3f\n", tab[i].name, tab[i].best);
     anima_result_t best; memset(&best, 0, sizeof best);
     int best_conf = -1, answered = 0; char best_name[32] = {0};
+    // The strongest NEAR-MISS across the probed shards (highest top-1 cosine that did not answer): on a
+    // miss it stays resident with its band, so the clarify tier reads its candidates from THAT shard —
+    // not shard offsets out of the flat file, which is what restoring IDX_PATH on a miss used to do.
+    struct { float c1, c2; long a1, a2; bool person; char name[32]; } near = { -2.0f, -2.0f, -1, -1, false, {0} };
+    struct { float c1, c2; long a1, a2; bool person; } win = { -2.0f, -2.0f, -1, -1, false };   // the answering shard's band
     s_in_akb5 = true;                          // per-shard nucleo_anima_l1_query must run FLAT (no re-route)
+    s_qv_ready = true;                         // ...and reuse the query vector encoded above
     for (int pick = 0; pick < probe; pick++) {
         int bi = -1; float bv = -2.0f;
         for (uint32_t i = 0; i < ns; i++) if (tab[i].best > bv) { bv = tab[i].best; bi = (int)i; }
@@ -1864,20 +1919,32 @@ int nucleo_anima_l1_akb5_query(const char *text, bool en, bool want_detail, anim
         if (nucleo_anima_l1_query(text, en, want_detail, &tmp) && tmp.confidence > best_conf) {
             best_conf = tmp.confidence; best = tmp; answered = 1;
             snprintf(best_name, sizeof best_name, "%s", tab[bi].name);
+            win.c1 = s_band.c1; win.c2 = s_band.c2; win.a1 = s_band.a1; win.a2 = s_band.a2; win.person = s_band.person;
+        } else if (!answered && s_band.a1 >= 0 && s_band.c1 > near.c1) {
+            near.c1 = s_band.c1; near.c2 = s_band.c2; near.a1 = s_band.a1; near.a2 = s_band.a2;
+            near.person = s_band.person; snprintf(near.name, sizeof near.name, "%s", tab[bi].name);
         }
     }
     free(tab);
-    // Leave the WINNING shard resident (re-run on it) so a following nucleo_anima_l1_stitch()/_band()
-    // reads the right shard and s_band reflects THIS query. If nothing answered, restore the flat default.
+    // Leave the WINNING shard resident with the band it produced, so a following nucleo_anima_l1_stitch()
+    // /_band() reads the right shard and s_band reflects THIS query — restored from the first pass, not by
+    // searching that shard a second time. On a miss, leave the best near-miss shard resident with its band;
+    // with none at all, restore the flat default.
     if (answered) {
         snprintf(s_shard_path, sizeof s_shard_path, "%s%s", AKB5_SHARDDIR, best_name);
         s_idx_path = s_shard_path; nucleo_anima_l1_unload();
-        anima_result_t tmp; memset(&tmp, 0, sizeof tmp);
-        nucleo_anima_l1_query(text, en, want_detail, &tmp);
+        ensure_index();                        // stitch reads the winner's records straight from s_idx
+        s_band.c1 = win.c1; s_band.c2 = win.c2; s_band.a1 = win.a1; s_band.a2 = win.a2; s_band.person = win.person;
         *out = best;
+    } else if (near.a1 >= 0) {
+        snprintf(s_shard_path, sizeof s_shard_path, "%s%s", AKB5_SHARDDIR, near.name);
+        s_idx_path = s_shard_path; nucleo_anima_l1_unload();   // the band's ensure_index() loads THIS shard
+        s_band.c1 = near.c1; s_band.c2 = near.c2; s_band.a1 = near.a1; s_band.a2 = near.a2; s_band.person = near.person;
     } else {
         s_idx_path = IDX_PATH; nucleo_anima_l1_unload();
+        s_band.a1 = s_band.a2 = -1; s_band.c1 = s_band.c2 = -2.0f;
     }
+    s_qv_ready = false;
     s_in_akb5 = false;
     return answered;
 }

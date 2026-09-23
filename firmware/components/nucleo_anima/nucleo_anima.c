@@ -3500,6 +3500,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     nucleo_anima_l1_set_online_brain(nucleo_anima_online_available() && nucleo_anima_teacher_configured()
                                      && nucleo_anima_online_only_enabled());
     s_session.turn++;
+    nucleo_anima_online_turn_begin();   // every network tier of THIS question shares one time budget
     // Give L1 the query AS TYPED. Retrieval runs on a normalized, lowercased topic, which disarms the
     // proper-noun guard — it can no longer see that "Floonk" is a NAME and falls back to a length
     // heuristic that a short invented name walks straight past.
@@ -3512,6 +3513,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     const char *q = input;
     bool replayed = false;
     char need_subj[48]; need_subj[0] = 0;   // an anaphoric follow-up's subject: a fact answer must name it
+    bool fact_tried = false;                // the Wikidata fact tier already ran (and missed) this turn
     if (a_is_repeat(input)) {
         const char *prev = ring_last_input();
         if (prev) { q = prev; replayed = true; }      // else fall through -> honest miss
@@ -3753,6 +3755,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // the fact) answers. Free L1 first — the TLS claim fetch needs the contiguous heap.
     if (askable && nucleo_anima_online_available() && nucleo_anima_online_is_fact(q, en)) {
         nucleo_anima_l1_unload();
+        fact_tried = true;
         if (nucleo_anima_online_fact(q, en, &r)) {
             mem_update(&r);
             snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
@@ -4044,7 +4047,9 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // Wikidata precise facts (born/died/capital/author): deterministic, no key. Before the Wikipedia
     // bio so "capitale di X" / "quando è nato X" gives the fact, not a summary. Skipped when the LLM owns
     // online (policy above); keyless devices still use it.
-    if (!online_llm && nucleo_anima_online_fact(q, en, &r)) {
+    // (Not again if the structured-fact priority above already asked Wikidata this turn and missed —
+    // that was a second TLS round-trip per miss for the same answer.)
+    if (!online_llm && !fact_tried && nucleo_anima_online_fact(q, en, &r)) {
         mem_update(&r);
         snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
         s_session.dirty = true;
@@ -4125,7 +4130,9 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
 
     // Bare-noun entity fallback ("batman?", "einstein"): a short command-less noun L0/L1/clarify all
     // missed. STRICT Wikipedia lookup (free, no key) so junk stays an honest miss. Skipped when the LLM
-    // owns online (it'll answer below); keyless devices still use it.
+    // owns online (it'll answer below); keyless devices still use it. The clarify band just above
+    // reloads the L1 index, so free it again before this TLS fetch needs the contiguous heap.
+    if (!online_llm && nucleo_anima_online_available()) nucleo_anima_l1_unload();
     if (!online_llm && nucleo_anima_online_entity_bare(q, en, &r)) {
         mem_update(&r);
         snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", q);
@@ -4223,6 +4230,7 @@ done: {
         telemetry_log(q, &r, domain);          // offline-learning work-list (misses + L1 only)
         session_save();                        // persist context if it changed
         diag_count(&r);                        // cumulative tier/abstain telemetry for /api/diag (cheap)
+        nucleo_anima_online_turn_end();        // disarm: other callers (transcribe...) keep their own limits
         return r;
     }
 }
