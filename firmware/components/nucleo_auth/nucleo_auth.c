@@ -120,21 +120,23 @@ static void load_auth(void)
     memset(s_tok_seen, 0, sizeof(s_tok_seen));
     s_token_count = 0; s_token_head = 0;
 
-    // Read /cfg first, then the NVS fallback.
+    // Read /cfg first, then the NVS fallback. Size the buffer from the file: a full 32-token ring is
+    // ~2.3 KB, and the old fixed 2 KB read truncated it -> parse failed -> PIN + all sessions wiped.
     bool from_nvs = false;
     char *buf = NULL;
     FILE *f = fopen(AUTH_JSON, "rb");
     if (f) {
-        buf = malloc(2048);
-        if (buf) { size_t n = fread(buf, 1, 2048 - 1, f); buf[n] = '\0'; }
+        fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+        if (sz > 0 && sz < 8192 && (buf = malloc(sz + 1)) != NULL) { size_t n = fread(buf, 1, sz, f); buf[n] = '\0'; }
         fclose(f);
     }
-    if (!buf) { buf = auth_nvs_read(); from_nvs = (buf != NULL); }
-    if (!buf) return;                         // no tier holds it -> fresh PIN minted by init, safe
-
-    cJSON *root = cJSON_Parse(buf);
-    free(buf);
-    if (!root) return;
+    cJSON *root = NULL;
+    if (buf) { root = cJSON_Parse(buf); free(buf); }
+    if (!root) {                              // /cfg missing or unreadable -> NVS copy
+        buf = auth_nvs_read();
+        if (buf) { root = cJSON_Parse(buf); free(buf); from_nvs = (root != NULL); }
+    }
+    if (!root) return;                        // no tier holds it -> fresh PIN minted by init, safe
     cJSON *pin = cJSON_GetObjectItem(root, "pin");           // restore the persisted PIN
     if (cJSON_IsString(pin) && strlen(pin->valuestring) == 6) strcpy(s_pin, pin->valuestring);
     cJSON *arr = cJSON_GetObjectItem(root, "tokens");

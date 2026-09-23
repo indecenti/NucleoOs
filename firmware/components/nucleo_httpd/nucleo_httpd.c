@@ -32,6 +32,7 @@
 #include "esp_log.h"
 #include "esp_http_server.h"
 #include "lwip/sockets.h"     // close() — we own socket teardown once we set config.close_fn
+#include "lwip/ip4_addr.h"     // ip4addr_aton: classify IPv4 literals exactly as the resolver parses them
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "esp_ota_ops.h"
@@ -859,7 +860,8 @@ static esp_err_t ota_post(httpd_req_t *req)
         if (esp_ota_write(h, buf, r) != ESP_OK) { esp_ota_abort(h); OTA_BAIL(); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ota_write"); return ESP_FAIL; }
         total += r;
     }
-    if (r < 0 || esp_ota_end(h) != ESP_OK) { OTA_BAIL(); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "incomplete/invalid image"); return ESP_FAIL; }
+    if (r < 0) { esp_ota_abort(h); OTA_BAIL(); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "upload interrupted"); return ESP_FAIL; }   // abort frees the OTA handle
+    if (esp_ota_end(h) != ESP_OK) { OTA_BAIL(); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "incomplete/invalid image"); return ESP_FAIL; }   // end frees it even on failure
     if (esp_ota_set_boot_partition(part) != ESP_OK) { OTA_BAIL(); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "set_boot"); return ESP_FAIL; }
     #undef OTA_BAIL
 
@@ -908,11 +910,8 @@ static void url_decode(char *s)
 // the trivial "http://192.168.1.1/" abuse while leaving real external browsing untouched. It does
 // NOT defeat DNS-rebinding (a public name resolving to a private IP) — esp_http_client resolves
 // internally and we can't cheaply inspect the result; documented as a known limit.
-static bool url_target_blocked(const char *url)
+static bool host_part_blocked(const char *h)   // h = text right after "scheme://" (or "//")
 {
-    const char *h = strstr(url, "://");
-    if (!h) return false;
-    h += 3;
     const char *at = NULL;
     for (const char *p = h; *p && *p != '/'; p++) { if (*p == '@') at = p; }   // strip userinfo
     if (at) h = at + 1;
@@ -929,8 +928,12 @@ static bool url_target_blocked(const char *url)
     }
     if (!strcasecmp(host, "localhost")) return true;
 
-    unsigned a, b2, c, d;                                  // IPv4 literal -> classify the range
-    if (sscanf(host, "%u.%u.%u.%u", &a, &b2, &c, &d) == 4 && a < 256 && b2 < 256 && c < 256 && d < 256) {
+    // IPv4 literal -> classify the range. Parse with lwIP's own ip4addr_aton (what the connect path's
+    // resolver uses), so single-number / hex / octal spellings ("3232235777", "0x7f.1", "0300.0250.1.1")
+    // can't slip past a dotted-decimal-only check.
+    ip4_addr_t ia;
+    if (ip4addr_aton(host, &ia)) {
+        unsigned a = ip4_addr1(&ia), b2 = ip4_addr2(&ia);
         if (a == 127 || a == 10 || a == 0) return true;                 // loopback / private / this-host
         if (a == 192 && b2 == 168) return true;                         // private
         if (a == 172 && b2 >= 16 && b2 <= 31) return true;             // private
@@ -938,6 +941,20 @@ static bool url_target_blocked(const char *url)
         if (a == 100 && b2 >= 64 && b2 <= 127) return true;            // CGNAT
     }
     return false;   // a hostname or a public IP: allowed
+}
+static bool url_target_blocked(const char *url)
+{
+    const char *h = strstr(url, "://");
+    return h ? host_part_blocked(h + 3) : false;
+}
+// Redirect Location check: absolute and scheme-relative ("//host/..") targets are re-classified;
+// a path-relative one stays on the (already allowed) current host.
+static bool location_blocked(const char *loc)
+{
+    if (!loc) return false;
+    if (strstr(loc, "://")) return url_target_blocked(loc);
+    if (loc[0] == '/' && loc[1] == '/') return host_part_blocked(loc + 2);
+    return false;
 }
 
 // ANIMA online-mode controls (defined in nucleo_anima*.c; forward-declared like app_anima.cpp).
@@ -1566,7 +1583,9 @@ static esp_err_t assoc_get(httpd_req_t *req)
 // is served BY this device, so a same-origin endpoint sidesteps the browser's CORS wall entirely
 // (no third-party CORS proxy). esp_http_client + the built-in cert bundle handle HTTPS + redirects;
 // the body is streamed in small chunks so we never buffer a whole page (RAM is scarce here).
-typedef struct { httpd_req_t *req; bool started; char ctype[80]; } proxy_ctx_t;
+// Redirects are followed by hand (disable_auto_redirect + HTTP_EVENT_REDIRECT) so every hop's Location
+// goes through the SSRF guard: auto-follow let "evil.example -> 302 -> http://192.168.1.1/" through.
+typedef struct { httpd_req_t *req; bool started; char ctype[80]; bool loc_blocked, blocked, skip_body; } proxy_ctx_t;
 
 static esp_err_t proxy_evt(esp_http_client_event_t *e)
 {
@@ -1574,7 +1593,18 @@ static esp_err_t proxy_evt(esp_http_client_event_t *e)
     if (e->event_id == HTTP_EVENT_ON_HEADER) {
         if (e->header_key && !strcasecmp(e->header_key, "Content-Type"))
             snprintf(c->ctype, sizeof c->ctype, "%s", e->header_value ? e->header_value : "");
+        else if (e->header_key && !strcasecmp(e->header_key, "Location"))
+            c->loc_blocked = location_blocked(e->header_value);
+    } else if (e->event_id == HTTP_EVENT_REDIRECT) {
+        // Same point where auto-redirect would call set_redirection; the 30x body is dropped either way.
+        c->skip_body = true; c->ctype[0] = 0;
+        if (c->loc_blocked) c->blocked = true;                 // stop here: perform() ends on this 30x
+        else esp_http_client_set_redirection(e->client);       // follow (max_redirection_count still applies)
+        c->loc_blocked = false;
+    } else if (e->event_id == HTTP_EVENT_ON_FINISH) {
+        c->skip_body = false;                                   // next response (after a hop) streams normally
     } else if (e->event_id == HTTP_EVENT_ON_DATA) {
+        if (c->skip_body) return ESP_OK;
         if (!c->started) {                          // first byte: commit headers, then stream
             c->started = true;
             httpd_resp_set_type(c->req, c->ctype[0] ? c->ctype : "text/html; charset=utf-8");
@@ -1628,6 +1658,7 @@ static esp_err_t proxy_get(httpd_req_t *req)
         .buffer_size = 2048,
         .buffer_size_tx = 1536,                        // long request URLs need a bigger TX buffer
         .max_redirection_count = 5,                    // follow 30x (google.com -> www., etc.)
+        .disable_auto_redirect = true,                 // ...by hand in proxy_evt, SSRF-checking each hop
         .user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     };
@@ -1647,6 +1678,7 @@ static esp_err_t proxy_get(httpd_req_t *req)
     nucleo_arb_release(tk);                            // TLS torn down -> free the budget (samples heap floor)
 
     if (!ctx.started) {                                // nothing streamed (network/TLS error or empty body)
+        if (ctx.blocked) { httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "redirect target not allowed"); return ESP_FAIL; }
         if (err != ESP_OK) { httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err)); return ESP_FAIL; }
         httpd_resp_set_type(req, "text/html; charset=utf-8");
     }
@@ -1993,6 +2025,7 @@ static esp_err_t llm_proxy(httpd_req_t *req)
         .buffer_size = 2048,
         .buffer_size_tx = 2048,
         .method = (req->method == HTTP_POST) ? HTTP_METHOD_POST : HTTP_METHOD_GET,
+        .disable_auto_redirect = true,                 // perform() path: proxy_evt follows + SSRF-checks each hop
     };
     if (!stream_req) { cfg.event_handler = proxy_evt; cfg.user_data = &ctx; }   // GET/empty POST: response streamed by proxy_evt
 
@@ -2016,6 +2049,7 @@ static esp_err_t llm_proxy(httpd_req_t *req)
         esp_http_client_cleanup(client);
         nucleo_arb_release(tk);
         if (!ctx.started) {
+            if (ctx.blocked) { httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "redirect target not allowed"); return ESP_FAIL; }
             if (err != ESP_OK) { httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err)); return ESP_FAIL; }
             httpd_resp_set_type(req, "application/json");
         }
@@ -2112,7 +2146,10 @@ static esp_err_t transcribe_get(httpd_req_t *req)
     } else {
         char p[270];
         snprintf(p, sizeof p, "%s.txt", absbase);
-        FILE *f = fopen(p, "w"); if (f) { fwrite(text, 1, strlen(text), f); fclose(f); }
+        size_t tlen = strlen(text);
+        FILE *f = fopen(p, "w");
+        bool saved = f && fwrite(text, 1, tlen, f) == tlen;
+        if (f && fclose(f) != 0) saved = false;
         const char *uselang = detlang[0] ? detlang : (strcmp(lang, "auto") ? lang : "it");
         char *summary = NULL;
         if (dosum && (summary = malloc(2048))) {
@@ -2125,7 +2162,10 @@ static esp_err_t transcribe_get(httpd_req_t *req)
         cJSON_AddStringToObject(root, "language", uselang);
         cJSON_AddStringToObject(root, "summary", summary ? summary : "");
         free(summary);
-        remove(abs); // ELIMINA IL FILE ORIGINALE (.wav o .mp3) DOPO LA CONVERSIONE
+        // Delete the original recording only once a non-empty transcript is safely on the SD:
+        // a failed .txt write (full card, fopen error) used to lose BOTH the audio and the text.
+        if (saved && tlen > 0) remove(abs);
+        cJSON_AddBoolToObject(root, "audio_kept", !(saved && tlen > 0));
     }
     free(text);
     char *out = cJSON_PrintUnformatted(root); cJSON_Delete(root);

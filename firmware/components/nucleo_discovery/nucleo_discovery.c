@@ -33,7 +33,9 @@ esp_err_t nucleo_discovery_start(const char *device_id)
         { "api", "/api/status" },
     };
     err = mdns_service_add("NucleoOS", "_nucleoos", "_tcp", 80, txt, 3);
-    if (err != ESP_OK) { ESP_LOGW(TAG, "service_add: %s", esp_err_to_name(err)); return err; }
+    // Tear the responder down on failure: left half-up it keeps its task + RAM, stop() can't silence it
+    // (s_up is false) and resume()'s mdns_init() fails with INVALID_STATE.
+    if (err != ESP_OK) { ESP_LOGW(TAG, "service_add: %s", esp_err_to_name(err)); mdns_free(); return err; }
 
     ESP_LOGI(TAG, "mDNS up: %s.local, _nucleoos._tcp:80", device_id);
     s_up = true;
