@@ -4,7 +4,8 @@ What the device can emulate **itself**, in firmware C, with no browser involved 
 as short as it is. For the browser-side emulator (the Arcade app, EmulatorJS on the client), see
 `apps/arcade/` and its `NOTICE.md`; the two answer different questions and should not be confused.
 
-Status: **Game Boy (DMG) ships** as the native app `gbemu`. Everything else on this page is analysis.
+Status: **Game Boy (DMG) ships** as the native app `gbemu` — a patched Peanut-GB core held to the
+blargg/mooneye/acid2 reference suites by a ratchet gate (§5). Everything else on this page is analysis.
 
 ---
 
@@ -23,6 +24,7 @@ boot trace (`/sd/boot_trace.txt`) shows where it goes:
 | `ui-init` | 86,400 | **31,744** ← the 32,400 B shared UI canvas lands here |
 | `sd-mounted` | 74,260 | 31,744 |
 | Solo boot over USB, no Wi-Fi | 65,728 | 31,744 |
+| `gbemu` Solo boot, canvas released (`/gbemu_trace.txt`) | ~90,000 | **32,768** |
 
 Two things follow, and they drive every design decision below:
 
@@ -64,6 +66,7 @@ RAM figures are the emulator's working set; the licence column is what decides m
 | Master System / Game Gear | smsplus | ~30–40 KB | GPL-2.0 | 🔴 licence |
 | NES | nofrendo | ~80 KB | LGPL-2.0 | 🟡 relink obligation |
 | Game Boy Color | gnuboy | ~105 KB | GPL-2.0 | 🔴 licence |
+| Game Boy Color | Walnut-CGB | ~49 KB (one block) | MIT | 🟡 RAM shape + CPU — see §6 |
 | PC Engine | pce-go | ~115 KB | GPL-2.0 | 🔴 licence |
 | Neo Geo Pocket | RACE | ~147 KB | GPL-2.0 | 🔴 licence |
 | Mega Drive / WonderSwan | — | — | — | 🔴 too slow |
@@ -79,24 +82,83 @@ So Game Boy was not merely the best first target: it is the only clean one.
 
 ## 4. How the Game Boy app works
 
-**Core.** Peanut-GB, vendored verbatim at `firmware/components/nucleo_emu/vendor/peanut_gb.h`
-(revision recorded in the README beside it). Two properties make it fit:
+**Core.** Peanut-GB at `firmware/components/nucleo_emu/vendor/peanut_gb.h`: upstream (revision in
+the README beside it) plus eight marked accuracy patches, `NUCLEO PATCH (P1–P8)`, each justified by a
+test ROM that failed without it and listed in `vendor/README.md` with a re-appliable
+`peanut_gb.nucleo.patch`. Three properties make the core fit:
 
 - `sizeof(struct gb_s)` = **16,952 B** — 8 KB WRAM + 8 KB VRAM + 160 B OAM + 256 B HRAM/IO + state.
-  Measured, not estimated; the host gate asserts it so a future update cannot quietly double it.
+  Measured, not estimated; the host gate asserts it, and no patch changed it (P1 reuses two spare
+  bits of an existing flag byte).
 - **No framebuffer.** The PPU calls `lcd_draw_line(gb, pixels, line)` once per visible line, so the
   display costs a 160-byte line buffer instead of the 23–46 KB a frame would.
 - **Zero mutable statics** → 0 bytes of `.bss`, which is exactly the heap-on-enter rule in
   `docs/memory-budget.md`.
 
-**Cartridge — the page cache.** `gb_rom_read()` is a host callback, so the ROM need not be resident.
-A 32 KB cartridge is loaded outright when the largest free block can take it with 24 KB of headroom;
-everything bigger is **paged from the card**, because a 128 KB ROM would need 152 KB contiguous on a
-board whose largest block is ~60 KB even after a Solo boot.
+### 4.1 Accuracy — what was wrong, and how it is held right
 
-The geometry of that cache decides whether the emulator runs. It was **measured, not chosen** — the
-host gate sweeps it against real cartridges at a fixed 40 KB budget. Misses per frame over 15 seconds
-of emulated gameplay, on the three worst titles in the library:
+Measured against the reference suites (blargg, mooneye-test-suite, dmg-acid2 — §5). The core that
+shipped before this work passed **48 of 119**; the patched core passes **66** — including the
+dmg-acid2 picture pixel-for-pixel, blargg's `halt_bug`, and 8 of mooneye's 11 timer tests (0
+before). The failures that are left are cycle-exact tests (M-cycle memory timing, OAM DMA timing, PPU mode-3
+length) that a line-based, instruction-granular core cannot pass by construction; no game in the
+library depends on them.
+
+What the fixes mean on a real cartridge:
+
+| Symptom a player saw | Cause | Fix |
+|---|---|---|
+| MBC2 games (Kirby's Pinball Land, Konami Golf, Final Fantasy Legend) never kept a save | init read the header's "0 RAM banks" — MBC2's RAM is inside the controller — and switched cart RAM **off** | P5 |
+| Some games dropped to half speed in places, or missed an interrupt | `EI` took effect immediately, so `EI; HALT` with an interrupt pending serviced it *before* the HALT and then waited a whole extra interrupt | P2 |
+| Rare lock-ups / wrong code paths after HALT | the HALT bug was not emulated | P3 |
+| Music tempo / RNG drift in games that resync on DIV or TAC | DIV and TIMA were independent counters | P8 |
+| 1–2 MB MBC1 cartridges crashed after the first level | the high bank bits were ignored in mode 1 | P6 |
+| Sprites drawn on top of the wrong sprite (flicker-swap on overlaps) | DMG sprite priority was switched off for speed (`PEANUT_GB_HIGH_LCD_ACCURACY 0`) — dmg-acid2 showed 40 wrong pixels | switched **on**; the jump-table dispatch (§4.6) pays for it |
+| A stray invalid opcode could take the device with it | upstream treats the error hook as `__builtin_unreachable()`; ours returns | P4, plus the crash menu (§4.4) |
+
+**The header is corrected, not trusted** (`header_fix` in `nucleo_gb.c`, no core patch needed): a
+stale header checksum no longer refuses the cartridge (prototypes, fan translations, homebrew — the
+device trace shows *Adventures of Pinocchio (Proto)* failing exactly this way); an out-of-range
+ROM-size byte is derived from the file size instead of indexing past the core's table; HuC1 runs as
+the MBC1 it is. These corrected bytes are served **only while `gb_init()` runs** — the running game
+reads its real header, so titles that verify their own checksum still see the original.
+
+**Refused in words, before the UI is torn down.** `nucleo_gb_probe()` reads the header without
+allocating anything, so the shelf refuses a Game Boy Color–only cartridge ("Game Boy Color only") or a
+controller the core has no model of ("Unsupported cartridge: MBC7") instantly, instead of booting it
+into garbage or answering "Invalid ROM". GBC-*enhanced* cartridges (header `0x80`) still run in their
+DMG mode.
+
+### 4.2 Memory — the heap has a shape, not a size
+
+The emulator's own trace (`/gbemu_trace.txt`) is the ground truth, and it corrected an assumption this
+page used to state: in the Solo boot, after the UI canvas is released, the heap has **~90 KB free but
+its largest block is 32 KB**, not ~60 KB. Everything below is designed against that shape, and the host
+gate now *models* it (§5) instead of trusting a PC heap that always has a 32 KB block to give.
+
+Where the RAM goes while a game runs, and what changed:
+
+| | before | now |
+|---|---:|---:|
+| core + APU + session | ~21 KB | ~21 KB |
+| ROM page cache (1 KB pages, greedy) | 40 pages (device trace) | **53 pages** on the modelled heap (61 with no battery RAM) |
+| battery RAM, 8 KB cart | 8 KB | 8 KB |
+| battery RAM, 32 KB cart (Pokémon) | **could not start** — one 32 KB block, asked for after the cache | **2 × 8 KB resident**, 45 cache pages, 0.2 SD reads/frame |
+| floor kept for runtime file handles | 16 KB | 8 KB (the speaker's DMA channel now opens *before* the cache) |
+| shelf name list during play | ~6.8 KB resident | swapped to `/system/config/gbemu.shelf` |
+| shelf title-scroller sprite during play | ~6.3 KB resident | freed |
+
+**Battery RAM lives in 8 KB banks, and at most two of them in RAM.** A cartridge with more (Pokémon
+Red/Blue/Yellow/Gold/Silver carry 32 KB; MBC5 allows 128 KB) keeps the other banks in
+`<rom>.sav.swp`, brought in over the least-recently-used slot on a bank switch. That is cheap exactly
+where it matters: Pokémon decompresses sprites in SRAM bank 0 constantly, writes its save to bank 1,
+and touches banks 2–3 only when the player changes PC box — a swap is an event, not a per-frame cost.
+mooneye's `mbc1/ram_256kb`, which walks all four banks, passes through this path on the modelled heap
+(18 swaps). On disk the RAM is always one flat image, byte-compatible with every other emulator's
+`.sav`.
+
+**Page cache geometry** (unchanged, still measured): 1 KB pages, fully associative LRU, one-compare
+fast path plus a 256-byte hint table. The sweep that chose it, at a fixed 40 KB budget:
 
 | Geometry (all = 40 KB) | Zelda (512 KB) | Metroid II (256 KB) | Kirby's Block Ball (512 KB) |
 |---|---|---|---|
@@ -105,218 +167,159 @@ of emulated gameplay, on the three worst titles in the library:
 | 2 KB × 20 slots | 0.1 | 0.4 | 3.0 |
 | **1 KB × 40 slots** | **0.1** | **0.1** | **0.2** |
 
-Same RAM, sixty times fewer reads. A miss is one SD read at roughly 2–4 ms against a 16.7 ms frame,
-so the 4 KB configuration spent **~19 ms per frame** waiting on the card in Zelda — more than a whole
-frame, which is precisely what "the emulator lags" meant.
+A game's working set is scattered — a few hundred live bytes in many places — so small pages cover
+more of it for the same RAM. The curve has a knee: Kirby's Block Ball reads 0.2 misses/frame at 45
+pages and 3.9 at 29, which is why every recovered KB above was worth chasing.
 
-Why small pages win: a game's working set is *scattered* — a few hundred live bytes in each of many
-places — so a large page spends most of its bulk on bytes nobody asked for, and a fixed budget cut
-into few large pages covers few regions. Cut finely, it covers many. Below 1 KB the curve flattens
-and the bookkeeping doubles; 1 KB is also two whole SD sectors, so a refill is one aligned read.
+### 4.3 Saves that survive a flat battery
 
-The cache is fully associative with LRU (direct mapping would collide bank 0 — live every frame —
-against every bank sharing its low bits), fronted by a one-compare fast path for the current page and
-a 256-byte direct-mapped hint table so a page *change* costs one probe rather than a 40-slot scan.
-`nucleo_gb_get_stats()` reports the path taken, the slot count, and the miss count.
+- **Autosave.** Battery RAM used to reach the card only when the emulator closed — a crash or a flat
+  120 mAh cell threw the session's progress away. It is now written once the game has left its RAM
+  alone for ~1.5 s (i.e. a save screen has finished), and whenever the in-game menu opens (a pause,
+  so the SD write costs nothing visible). A game that uses battery RAM as scratch every frame never
+  goes quiet, so it cannot turn this into an SD write per second.
+- **Atomic.** Written to `<rom>.sav.tmp`, closed (a failed `fclose` is a failed write — FATFS flushes
+  there), then renamed over `.sav`. FATFS cannot rename onto an existing name, so the old file is
+  removed in between; a `.tmp` left by exactly that gap is promoted on the next load or save, never
+  overwritten.
+- **A crashed console never saves.** After an invalid opcode the CPU is running data, and anything it
+  wrote to battery RAM is garbage. Saving is suppressed; *Reset* reloads battery RAM from the card.
 
-**Palette.** Four, and the default is the Game Boy's own green — *calibrated*, not copied. There are
-two defensible "original" palettes and neither transplants cleanly onto this panel:
+### 4.4 Save states, reset, crash
 
-- `#9BBC0F #8BAC0F #306230 #0F380F` — the literal colours of the DMG's reflective LCD
-- `#E0F8D0 #88C070 #346856 #081820` — what emulators have drawn a Game Boy as for decades
+- **States work on every cartridge.** The state path was derived from the `.sav` path, which exists
+  only for carts with battery RAM — Tetris, Super Mario Land and every RAM-less cart wrote to a bare
+  `.st0` and silently failed. The session now keeps the ROM path.
+- **Loading no longer overflows the stack.** Every game runs on the Solo task's **8 KB** stack, and the
+  loader verified a state by reading it into a `struct gb_s` on the stack — 17 KB. It now validates
+  the file (magic, RAM size, exact length), writes the running console to `<rom>.stu`, and reads the
+  state straight into the live struct; a read that fails half way restores the `.stu`. Every function
+  pointer in the struct — the serial and boot-ROM hooks included, which the core calls whenever they
+  are non-NULL — comes from the live session, never from the file.
+- **Reset** (menu) restarts the cartridge; battery RAM is kept (flushed first, or reloaded from the
+  card after a crash). The APU is re-initialised by hand — `gb_reset()` leaves it alone.
+- **Crash.** On the first invalid opcode the game pauses into the menu, titled
+  "CPU crashed @PC — Reset?". The *Resume* row is preselected: a mashed button must never reset.
+- **MBC3 clock.** Seeded from the system clock (kept across the Solo reboot) when it is plausibly set.
+  The day counter runs from a fixed epoch, so it only ever moves forward — the core's own
+  `gb_set_rtc()` uses the day-of-year, which falls back to 0 every New Year and would tell a game time
+  ran backwards.
 
-The literal set was designed to be read by **ambient light** bouncing off a passive panel. Emitted by
-a backlit ST7789, its two dark shades land near black: mid-tones stop reading as green and the picture
-goes muddy. The emulator-standard set fixes that by going mint, and stops looking like a Game Boy.
+### 4.5 Screen
 
-So the default keeps the two light shades exactly as the hardware had them — `#9BBC0F` is the colour
-everyone pictures — and lifts only the two dark ones, which is precisely the work ambient light used
-to do. Shade 1 is nudged down at the same time, because the real panel's top two shades are nearly
-indistinguishable and a 135 px screen cannot afford to waste a whole shade. The alternatives are the
-emulator-standard mint, maximum contrast for a bright room, and amber for night. `P` cycles them live.
+**Native width, no scaling horizontally.** 160 columns fit inside 240, so every column is one pixel.
+Vertically 144 lines must reach 135: one line in sixteen has to go. By default it is **blended** into
+the line below it — each pixel the exact midpoint of the two palette colours (`MIX_TX`, precomputed
+per palette, panel byte order) — so a row of every 8×8 glyph, a 1 px ledge, the top of a sprite never
+simply vanish. *Lines: Sharp* in the menu restores the pure drop for players who want only original
+colours. The merged lines are 7, 23, … 135: every one has a successor, so there is no end case.
+Nine rows a frame take the blend path; the other 126 stay on the flat lookup.
 
-**Screen — native width, no scaling.** The Game Boy is 160×144 and the panel is 240×135. Horizontally
-there is nothing to solve: 160 columns fit inside 240, so every column maps to exactly one pixel,
-unfiltered. (An earlier version decimated to 150 wide by dropping every 16th column. That destroyed
-real detail — thin sprites lost limbs — to solve a problem the panel did not have.)
+Palettes (Green calibrated for a backlit panel, DMG mint, Mono, Amber), *Screen: Filled* (240 px,
+exact 2:3), the HUD pillars, the one-SPI-transaction-per-frame DMA band pipeline and the flicker rules
+are unchanged from the first version — see the comments in `app_gbemu.cpp`.
 
-Vertically there is no such luxury: 144 lines must reach a 135 px panel, and the alternatives to
-dropping 9 of them are cropping or letterboxing a screen that is already small. Every 16th line is
-dropped, and it is a **drop, not a blend** — no averaging, so surviving pixels keep exactly the colours
-the PPU produced. Output lines are accumulated 15 at a time and pushed in one `pushImage`: **9 SPI
-transactions per frame instead of 135.**
+### 4.6 Where the CPU goes
 
-**Controls — the "lag" that was not a frame-rate problem.** The first version built the button mask
-from `nucleo_kbd_read()`, which reports a printable key **once per press and never repeats**. A held
-direction therefore released itself on the very next frame: the character took one step and stopped,
-and two buttons could never be down at once — no running jump, no diagonal. It read as the emulator
-being slow. It was not; the D-pad was tapping itself.
+**The device is not instruction-bound, it is instruction-*cache*-bound.** `tools/emu-host/qemu-bench`
+runs the core on Espressif's ESP32-S3 QEMU with `-icount` (one instruction = one virtual ns). Street
+Fighter II costs **~0.8 M instructions per frame** — 3.4 ms at 240 MHz at one instruction per cycle —
+while the device measures **15 ms** for the same frame. The difference is the 16 KB instruction cache
+refilling from 80 MHz DIO flash (~450 CPU cycles per 32-byte line) under a hot path that barely fits
+in it. Two consequences steer every change here: fewer instructions help, *smaller hot code* helps
+more, and RAM spent on IRAM would be paid by every other app.
 
-The mask is now built from `nucleo_kbd_char_down()` — the live pressed set, rebuilt from the matrix on
-every scan — so directions hold and chords work. Two d-pads are live at once: **E/S/A/D** as a movement
-diamond under the left hand, and the **`;` `.` `,` `/`** cluster the Cardputer literally prints arrows
-on under the right. **K** = A, **J** = B, **Enter** = Start, **Space** = Select, **TAB held** =
-fast-forward, **P** = palette, **M** or **Esc** = the in-game menu (save state, load state, palette,
-picture, quit).
+| Variant (6 cartridges, k-instructions/frame, summed) | total | `__gb_step_cpu` |
+|---|---:|---:|
+| as shipped before (upstream core, sprite priority off, no jump tables) | 7,960 | 14,452 B |
+| patched core + sprite priority, no jump tables | 8,211 | ~14.4 KB |
+| **patched core + sprite priority + jump tables (now)** | **7,394** | **12,465 B** |
+| same at `-Os` | 8,350 | 10,601 B |
 
-Esc opening a *menu* rather than quitting outright is deliberate: leaving a game means losing the
-session, because the app runs in a Solo boot and exiting reboots. The key a player hits by reflex must
-not be the destructive one.
+**Jump tables** are the lever. ESP-IDF adds `-fno-jump-tables -fno-tree-switch-conversion` to every
+file (a table in flash would break code that runs from IRAM with the cache off), which turns the
+256-way opcode switch, the CB-prefix switch and the memory-map switch in every read and write into
+binary trees of ~8 compare-and-branches. `nucleo_emu/CMakeLists.txt` turns them back on for this
+component only — nothing in it runs with the cache disabled. Result: −10 % instructions *and* −14 %
+hot code, which is what pays for sprite priority and the accuracy patches with room to spare. `-O2`
+stays: `-Os` saves 1.9 KB of hot code for +13 % instructions.
 
-**Where the CPU goes.** Four settings matter more than any code in the app:
+Also measured and kept: `-O2` scoped to the component, `IRAM_ATTR` on the five callbacks,
+`PEANUT_GB_12_COLOUR 0`, the CPU pinned at 240 MHz while a game runs, one-way 30 fps relief.
 
-- **`-O2`, scoped to `nucleo_emu`.** The firmware builds at `-Os` because flash is the scarce resource
-  across ~60 components, but the emulator is the one place with a hard real-time deadline. The
-  exception is declared in the component's own `CMakeLists.txt` and costs a few KB of flash, not the
-  ~250 KB a global `-O2` would.
-- **`IRAM_ATTR` on the five core callbacks** (`rom_read`, the two APU shims, the two cart-RAM
-  accessors, the scanline hand-off). These run millions of times a second; left in flash they are
-  fetched through a 16 KB instruction cache that the core's own dispatch switch is already thrashing,
-  at 80 MHz **DIO**.
-- **`PEANUT_GB_HIGH_LCD_ACCURACY 0`.** It re-sorts sprites by X on every scanline to reproduce the
-  DMG's priority rule — 144 sorts per frame for a difference most games never show.
-- **`PEANUT_GB_12_COLOUR 0`.** It tags every emitted pixel with which palette produced it, so a
-  front-end can give a DMG game the different colours a Game Boy Color would. This is a DMG core on a
-  four-shade screen and our callback masks the tag straight off again: an extra OR per pixel, 23,000
-  a frame, for information nobody reads.
+**The on-card trace is aggregated**: one line per 10 s of play (average and minimum fps, cost
+breakdown, SD misses, crash address) instead of an fopen/append/fclose every second — each of which
+was a FAT update on the SD bus mid-frame and a card wake on a 120 mAh battery.
 
-**Adaptive relief, and why it is one-way.** If the picture still cannot be produced sixty times a
-second, the app produces *less* of it rather than letting every frame arrive late: **30 fps
-frame-skip**, the core's own lever, which the CPU runs through every frame so timing and input stay
-exact — only the drawing thins out. The current level shows in the right pillar and can be raised by
-hand from the in-game menu.
+### 4.7 Controls, shelf, menu
 
-It engages after two consecutive slow seconds and then **stays**. It does *not* step back up
-automatically, and that is not laziness — it is the fix for a flicker. Frame-skip halves the blit
-work, so the moment it engages the measured fps jumps back up; a symmetric "recover when fps is high
-again" rule therefore switches relief off, fps falls, relief re-engages, and the whole thing toggles
-once a second — 60 fps and 30 fps in alternation, which the eye reads as flicker. The metric was
-feeding back into the thing it measured. A one-way control has no such loop.
+Controls are built from the keyboard's live pressed set (holds and chords work): **E/S/A/D** or the
+printed **`;` `.` `,` `/`** arrows, **K** = A, **J** = B, **Enter** = Start, **Space** = Select, **TAB**
+held = fast-forward, **P** palette, **I** HUD, **−/=** volume, **M/Esc** menu. Keys still held when the
+menu closes stay out of the game until released — picking *Resume* with Enter used to press Start.
 
-(The first version also had a second lever, **interlacing**, tried before frame-skip. It was removed:
-the core emits alternate scanlines under interlace, but this renderer counts an output row per
-scanline *received*, so with half the lines arriving the picture only reached the middle of the panel
-and the bottom half stopped updating — a visible split, not relief.)
+The shelf filters ~4,700 cartridges live and holds at most 120 matches. Names are stored whole in a
+packed pool: the old fixed 56-byte slots truncated long No-Intro names ("…Defender & Joust (USA,
+Europe).g") and play() then looked for a file that did not exist — "ROM not found" on a cartridge
+sitting right there (device trace). A failed start now stays on screen until the next key; before, the
+shelf's own repaint wiped the box before anyone could read it.
 
-**No tearing, no clear-then-draw — the two flicker rules this app has to obey.** The board has no
-PSRAM for a full framebuffer and the panel has no hardware double-buffer, so the picture is drawn
-straight to the ST7789 (`docs`/`../firmware/components/nucleo_app/ANTI-FLICKER.md`). Two consequences:
-
-- **One SPI transaction per frame.** `run_frame` calls the scanline callback 135 times and each pushes
-  its band; the whole sweep is wrapped in a single `startWrite`/`endWrite`, so the nine bands stream to
-  the panel with no bus hand-off between them instead of nine separately-arbitrated writes. The display
-  is on SPI3 and the SD card on SPI2, so holding the display bus across a frame contends with nothing.
-- **The marquee never clears its own box on the animating path.** A scrolling line overruns its box, so
-  the clipped opaque glyphs already cover every pixel — the per-frame `fillRect` a naïve marquee does
-  first would be a whole frame of bare background, which is exactly the clear-then-draw flicker. The
-  `fillRect` survives only on the static (fits-in-the-box) path, where it runs once and never repeats.
-
-**Scrolling text costs a sprite, not a repaint.** Getting the shelf's long game titles to scroll took
-three attempts, and the two failures are the instructive part — both produced *the same pair of
-symptoms*, "the list flickers" and "the text doesn't move", from one cause each:
-
-1. Animating from `on_tick`. The tick runs with the gfx pointed at the **panel**, not at the shared
-   canvas a buffered app's `on_draw` composites into — so the text landed in the wrong buffer at the
-   wrong coordinates and the next push painted over it. Nothing moved.
-2. Animating by calling `nucleo_app_force_repaint()` on a timer. That re-runs the whole `on_draw`, and
-   in the Solo boot the shelf draws **direct to the panel** with no canvas — so five times a second the
-   entire list was cleared and redrawn. That was the flicker, and the flashing masked the motion, which
-   is why it still looked frozen.
-
-The working answer is ANTI-FLICKER.md technique 3, the same one `app_player`'s Now-Playing title uses:
-the scrolling line gets its **own small off-screen sprite**, blitted in one `pushSprite` over just its
-row from a 50 Hz `nucleo_app_set_poll_handler`. The panel never sees a clear, nothing else on screen is
-touched, and the motion is smooth instead of a 5 Hz stutter. Two copies of the text are drawn one gap
-apart so the loop never shows a seam. A title that fits is drawn once, statically, and the poll ignores
-it. **The general rule: never drive an animation by repainting a view — give the moving part a sprite.**
-
-**Save states.** The console is one struct with no external references except our own callbacks, so a
-state is a raw dump of it plus the cartridge RAM, written beside the ROM as `<rom>.st0`. Two things
-matter and both are enforced: the six function pointers in the struct are restored from the **live
-session**, never from the file (a state off an SD card must not be able to choose an address for the
-CPU to call), and the cartridge RAM is read into scratch first so a truncated file leaves the running
-game untouched instead of corrupting it. The host gate verifies the round-trip by replaying the
-emulator against itself and comparing a hash of every pixel drawn — see below.
-
-**The measurement is on screen.** The two 40 px pillars either side of a 160 px picture are not
-padding; they are the only place a running emulator can speak without covering the game. Left: frame
-rate, palette, the keys that are not guessable. Right: where the frame actually went — `c` CPU, `b`
-blit, `a` audio, in tenths of a millisecond — plus the relief level. The same line goes to
-`/gbemu_trace.txt` once a second, so a session can be diagnosed after the fact from the card.
-
-**Saves.** Cartridge RAM is persisted to `<rom>.sav` beside the ROM, written on close.
-
-**Speed.** The same core runs at >70 fps on a 133 MHz Cortex-M0+ (RP2040-GB), so a 240 MHz LX7 has
-ample headroom *on paper*. In practice the budget is spent long before the CPU is: see "Where the CPU
-goes" above, and the page cache before that. On the host gate the core runs at 6,000–11,000 fps.
-
-**What the app switches off.** The emulator declares `NX_NET_APP | NX_SOLO | NX_WIFI`, which is not a
-runtime reclaim but a *boot-time* decision: opening it reboots into a Solo session where `main.c`
-never starts Wi-Fi (~48 KB, and it halves the largest contiguous block), httpd, mDNS, the recorder,
-auth or IR — and the heap comes up unfragmented, which is the only reason 40 KB of page cache plus a
-17 KB core fits at all. `nucleo_power_perf_begin()` additionally pins the CPU at 240 MHz for exactly
-as long as a game runs, because DFS cannot tell a render loop from an idle launcher. The audio meter
-in `nucleo_audio` is demand-gated, so it costs nothing unless a visualiser is actually on screen.
-
-**The shelf.** The library on the card is ~4,700 Game Boy cartridges — 300 KB of names if held in
-RAM, which is impossible. The browser therefore never holds the whole library: it re-walks the
-directory against a live filter and keeps at most 120 matches, reporting `shown/total` honestly.
-Type-to-filter is the navigation model, not a convenience, which is also the right answer on a device
-with a real keyboard (see `docs/device-ui.md`). Digits 1–9 pick a visible row directly; the last
-cartridge played is remembered and pre-selected on the next open.
+Menu: Resume · Save state · Load state · Volume · Screen · **Lines (blended/sharp)** · On-screen info ·
+Palette · Picture (30 fps relief) · **Reset game** · Quit. 1–9 pick rows directly.
 
 ## 5. Verifying it
 
-Host-first, per `CLAUDE.md` — the core and the host callbacks are proven on the PC before anything
-reaches a board:
+Host-first, per `CLAUDE.md`:
 
 ```bash
 npm run gb:test
 ```
 
-It runs **two** gates. The first compiles the vendored core with the firmware's build switches,
-asserts the struct size, then boots ROMs from `tools/sd-sim/data/ROMs/gb|gbc` and runs 180 frames of
-each, checking that the PPU emits scanlines and that they are not all blank.
+Three parts:
 
-The second compiles **`nucleo_gb.c` itself** — the file that decides where a cartridge lives — and
-drives its public API for 900 frames while mashing START and A to get past the title screen into real
-gameplay. `NUCLEO_HOST_HEAP` shrinks the heap the module believes it has to the ~60 KB a Solo boot
-actually offers, so the SD-paged path is the one under test, and it fails the build if any cartridge
-exceeds 1.4 misses per frame.
+1. **Render** — the vendored core with the firmware's switches boots ROMs from
+   `tools/sd-sim/data/ROMs/gb|gbc`, asserts `sizeof(struct gb_s)`, and checks the PPU really emits
+   non-blank lines (most of them — a game may switch the LCD off legitimately).
+2. **The real module on a device-shaped heap** — `nucleo_gb.c` itself, compiled with
+   `tools/emu-host/heap_model.h` force-included so its `malloc`/`calloc`/`free` go through a best-fit
+   model of the Solo-boot heap (largest block 32 KB) and `heap_caps_*` read the same model. It opens
+   the biggest cartridges, a synthesised 32 KB-SRAM variant (Pokémon's shape), and mooneye's
+   `mbc1/ram_64kb` + `ram_256kb` through the banked-swapped SRAM path; it asserts misses/frame under
+   1.4, that open/close returns every byte to the heap, that a GBC-only cartridge is refused, and that
+   save states round-trip **bit-exactly** (replay the same 120 frames from the state and compare a hash
+   of every pixel — "it loaded" tests nothing).
+3. **Accuracy ratchet** — `npm run gb:accuracy` (also standalone) runs blargg `cpu_instrs`,
+   `instr_timing`, `halt_bug`, dmg-acid2 (expected hash derived from the reference PNG, not from our
+   output) and every DMG-compatible mooneye `acceptance/` and `emulator-only/mbc1,2,5` test. The ROMs
+   are fetched once, SHA-256-pinned, into `tools/emu-host/testroms/` (gitignored). The gate fails if
+   anything in `gb-accuracy-expected.json` stops passing; `--update` locks newly passing tests in.
+   Currently **55 of 98** in that set.
 
-It also verifies **save states by replaying the emulator against itself**: run to a fixed point, save,
-run 120 more frames on a fixed input sequence while hashing every pixel of every scanline, load the
-state, replay the identical 120 frames, and require the two hashes to match bit for bit. "It loaded
-without crashing" tests nothing — a state that drops the PPU registers or a timer still loads, still
-runs, and quietly plays a different game. Divergence in the picture is the only check that catches it.
-
-That second gate exists because of a specific failure: the first one supplies its own callbacks, so
-it never touched `nucleo_gb.c` at all — and it stayed green through a session in which the device
-answered "invalid ROM" for every cartridge. A gate that cannot fail the way the product fails is not
-a gate. It is also the rig that produced the geometry table above; the page size and slot count are
-overridable at compile time *only* so it can sweep them.
+And, for cost rather than correctness, `tools/emu-host/qemu-bench/run.ps1` (§4.6).
 
 One invariant that looks obvious and is **wrong**: "144 scanlines per frame". A game may switch the
 LCD off (LCDC bit 7) during boot logos or VRAM setup, and the PPU legitimately emits nothing while it
-is off. The gate therefore requires most of the expected lines, not all of them — the first version
-demanded exactness and failed every healthy ROM.
+is off. The render gate requires most lines, not all.
 
 ## 6. Open questions
 
-- **Flash mode is DIO, not QIO.** Every instruction-cache miss is a 2-bit-wide read at 80 MHz; QIO
-  would double that bandwidth for free in RAM terms. It is not enabled because a wrong guess about the
-  module's flash chip is a serial-recovery brick, so it needs a deliberate decision and a device to
-  test on — not a silent config change.
-- **Instruction cache is 16 KB.** 32 KB would help the core's large dispatch switch measurably, but
-  the cache is carved out of the same internal SRAM the emulator is already fighting for.
-- **The carousel entry shows the console, never a screenshot.** GameFront captures a cover per game,
-  but an emulator's entry is not a game — it is a console with hundreds of cartridges behind it, so a
-  picture of whatever ran last misrepresents the whole shelf and the next cartridge makes it wrong
-  again. `gf_never_shot()` in `gamefront.cpp` routes those ids to the procedural poster (which draws
-  the Game Boy icon) and makes cover capture *refuse* rather than write a file the renderer ignores.
-- **Game Boy Color.** Peanut-GB is DMG-only. `.gbc` files are listed and marked, and dual-mode carts
-  run in their DMG fallback, but CGB-exclusive titles will not render correctly.
-- **Chip-8** is the obvious next core: ~5 KB, no licence question, and it exercises the same app
-  scaffolding.
-- **Measured Solo-boot free DRAM** is still unrecorded for this app. That single number decides
-  whether anything heavier than Game Boy is ever worth revisiting.
+- **Flash mode is DIO, not QIO — now the biggest lever left.** §4.6 shows the emulator is bound by
+  instruction-cache refills from flash, and QIO would roughly halve every refill for zero RAM. It
+  needs the *bootloader* rebuilt and written over serial (OTA does not carry it), and a wrong guess
+  about the module's flash is a serial-recovery session — a deliberate decision with a device on the
+  bench, not a config change to make blind.
+- **Instruction cache is 16 KB.** 32 KB would likely help more than anything in code, but costs 16 KB
+  of SRAM for every app, always.
+- **Measure on the device.** The instruction counts are exact; the cache effect is inferred from one
+  device number (SF2: 15 ms vs 3.4 ms of instructions). The aggregated trace line reports `cpu=` per
+  10 s — compare it before/after this change on the same cartridge.
+- **Game Boy Color.** [Walnut-CGB](https://github.com/Mr-PauI/Walnut-CGB) (MIT) passes cgb-acid2 and
+  is the only licence-clean CGB core found. Measured on the host gate it gives no DMG accuracy gain,
+  and its console struct is ~49 KB with 32 KB WRAM + 16 KB VRAM in one block — on a heap whose largest
+  block is 32 KB, and with double-speed CGB titles needing twice the CPU the DMG core already spends.
+  It would need the WRAM/VRAM split into 4–8 KB banks (the SRAM banking above is the pattern) and the
+  flash/cache work first. GBC cartridges are covered today by the browser Arcade.
+- **The carousel entry shows the console, never a screenshot** — `gf_never_shot()` in `gamefront.cpp`.
+  Its procedural poster is the console glyph alone: the title is printed once, under the cover, like
+  every other game (it used to be printed a second time inside the poster).
+- **Chip-8** is the obvious next core: ~5 KB, no licence question, same app scaffolding.

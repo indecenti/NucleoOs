@@ -322,19 +322,15 @@ template <typename T> static void draw_poster(T *c, const nucleo_app_def_t *g, c
         if (a > 0.01f) c->drawFastHLine(box.x, box.y + yy, box.w, mix565(mix565(acc, INK, 0.32f), FG, a));
     }
     int cx = box.x + box.w / 2;
-    // Big game glyph, upper-center — radius clamped to the box width so a narrow portrait
-    // cover (pinball) doesn't blow past its own frame.
-    int iconR = (box.w - 16) / 2; if (iconR > 34) iconR = 34; if (iconR < 12) iconR = 12;
-    launcher_draw_icon(c, cx, box.y + iconR + 4, iconR, g->id, g->icon,
+    // The glyph IS the poster: centred in the box and as large as the box allows. No title inside it —
+    // draw_title() already prints the name on its own line under every cover, so a second copy inside
+    // the art (e.g. "Game Boy" on the Game Boy poster) was the only cover in the carousel that said
+    // its name twice. Real screenshots carry no text; a poster should read the same way.
+    int iconR = (box.w < box.h ? box.w : box.h) / 2 - 10;
+    if (iconR > 40) iconR = 40;
+    if (iconR < 12) iconR = 12;
+    launcher_draw_icon(c, cx, box.y + box.h / 2, iconR, g->id, g->icon,
                        mix565(acc, FG, 0.88f), mix565(acc, INK, 0.30f));
-    // Game title along the bottom, with a drop shadow for legibility over the gradient.
-    const char *t = gf_title(g);
-    c->setFont(&fonts::Font2);
-    int tw = (int)c->textWidth(t);
-    if (tw > box.w - 10) { c->setFont(&fonts::Font0); c->setTextSize(1); tw = (int)c->textWidth(t); }
-    int tx = cx - tw / 2, ty = box.y + box.h - c->fontHeight() - 5;
-    c->setTextColor(mix565(acc, INK, 0.45f)); c->setCursor(tx + 1, ty + 1); c->print(t);   // shadow
-    c->setTextColor(FG);                      c->setCursor(tx,     ty);     c->print(t);   // face
 }
 
 template <typename T> static void draw_hero(T *c, const nucleo_app_def_t *g, const gf_box_t &box)

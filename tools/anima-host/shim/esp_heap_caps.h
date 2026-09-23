@@ -24,6 +24,17 @@ static inline size_t nucleo_host_heap_(void)
     return e ? (size_t)strtoul(e, NULL, 0) : (size_t)4 * 1024 * 1024;
 }
 
+#ifdef NUCLEO_HOST_HEAP_MODEL
+// A harness that models the device heap itself (free blocks, best fit, fragmentation — see
+// tools/emu-host/gb_cache_test.c) answers these from the model, so the firmware's allocation
+// strategy runs against the SHAPE of the device heap and not merely its size.
+size_t nucleo_host_model_free(void);
+size_t nucleo_host_model_largest(void);
+static inline size_t heap_caps_get_free_size(unsigned caps)          { (void)caps; return nucleo_host_model_free(); }
+static inline size_t heap_caps_get_largest_free_block(unsigned caps) { (void)caps; return nucleo_host_model_largest(); }
+static inline size_t heap_caps_get_minimum_free_size(unsigned caps)  { (void)caps; return nucleo_host_model_free(); }
+#else
 static inline size_t heap_caps_get_free_size(unsigned caps)          { (void)caps; return nucleo_host_heap_(); }
 static inline size_t heap_caps_get_largest_free_block(unsigned caps) { (void)caps; return nucleo_host_heap_() / 4; }
 static inline size_t heap_caps_get_minimum_free_size(unsigned caps)  { (void)caps; return nucleo_host_heap_() / 2; }
+#endif

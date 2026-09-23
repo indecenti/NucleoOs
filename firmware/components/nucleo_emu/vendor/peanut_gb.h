@@ -633,6 +633,10 @@ struct gb_s
 		bool lcd_blank	: 1;
 		/* Set if MBC3O cart is used. */
 		bool cart_is_mbc3O : 1;
+		/* NUCLEO PATCH (P1): HALT bug + EI delay state. Two spare bits of the
+		 * flag byte above, so sizeof(struct gb_s) does not change. */
+		bool halt_bug : 1;
+		bool ime_delay : 1;
 	};
 
 	/* Cartridge information:
@@ -796,17 +800,19 @@ uint8_t __gb_read(struct gb_s *gb, uint16_t addr)
 	case 0x1:
 	case 0x2:
 	case 0x3:
+		/* NUCLEO PATCH (P6): MBC1 mode 1 maps bank BANK2<<5 here. */
+		if(gb->mbc == 1 && gb->cart_mode_select)
+			return gb->gb_rom_read(gb,
+				addr + (uint_fast32_t)(gb->selected_rom_bank & 0x60) * ROM_BANK_SIZE);
 		return gb->gb_rom_read(gb, addr);
 
 	case 0x4:
 	case 0x5:
 	case 0x6:
 	case 0x7:
-		if(gb->mbc == 1 && gb->cart_mode_select)
-			return gb->gb_rom_read(gb,
-					       addr + ((gb->selected_rom_bank & 0x1F) - 1) * ROM_BANK_SIZE);
-		else
-			return gb->gb_rom_read(gb, addr + (gb->selected_rom_bank - 1) * ROM_BANK_SIZE);
+		/* NUCLEO PATCH (P6): the full bank number applies in both MBC1
+		 * modes (mode 1 only changes 0000-3FFF and the RAM bank). */
+		return gb->gb_rom_read(gb, addr + (gb->selected_rom_bank - 1) * ROM_BANK_SIZE);
 
 	case 0x8:
 	case 0x9:
@@ -824,7 +830,9 @@ uint8_t __gb_read(struct gb_s *gb, uint16_t addr)
 			{
 				/* Only 9 bits are available in address. */
 				addr &= 0x1FF;
-				return gb->gb_cart_ram_read(gb, addr);
+				/* NUCLEO PATCH (P5): MBC2 RAM is 4 bits wide; the
+				 * upper nibble always reads as 1. */
+				return gb->gb_cart_ram_read(gb, addr) | 0xF0;
 			}
 			else if((gb->cart_mode_select || gb->mbc != 1) &&
 					gb->cart_ram_bank < gb->num_ram_banks)
@@ -884,7 +892,8 @@ uint8_t __gb_read(struct gb_s *gb, uint16_t addr)
 
 	/* Return address that caused read error. */
 	(gb->gb_error)(gb, GB_INVALID_READ, addr);
-	PGB_UNREACHABLE();
+	/* NUCLEO PATCH (P4): the error hook returns; read as open bus. */
+	return 0xFF;
 }
 
 /**
@@ -1086,9 +1095,10 @@ void __gb_write(struct gb_s *gb, uint_fast16_t addr, uint8_t val)
 		/* Joypad */
 		case 0x00:
 			/* Only bits 5 and 4 are R/W.
-			 * The lower bits are overwritten later, and the two most
-			 * significant bits are unused. */
-			gb->hram_io[IO_JOYP] = val;
+			 * The lower bits are overwritten later.
+			 * The two most significant bits are unused,
+			 * but they must always be read as 1. */
+			gb->hram_io[IO_JOYP] = val | 0xC0;
 
 			/* Direction keys selected */
 			if((gb->hram_io[IO_JOYP] & 0x10) == 0)
@@ -1111,6 +1121,26 @@ void __gb_write(struct gb_s *gb, uint_fast16_t addr, uint8_t val)
 		/* Timer Registers */
 		case 0x04:
 			gb->hram_io[IO_DIV] = 0x00;
+			/* NUCLEO PATCH (P8): DIV and TIMA are both taps of ONE
+			 * internal counter, so a DIV write restarts the timer's
+			 * phase too - and if the tapped bit was high, the reset
+			 * is a falling edge that clocks TIMA once. Games that
+			 * write DIV to resync their music otherwise drift. */
+			gb->counter.div_count = 0;
+			if(gb->hram_io[IO_TAC] & IO_TAC_ENABLE_MASK)
+			{
+				static const uint_fast16_t tac_half[4] = { 512, 8, 32, 128 };
+				if(gb->counter.tima_count >=
+					tac_half[gb->hram_io[IO_TAC] & IO_TAC_RATE_MASK])
+				{
+					if(++gb->hram_io[IO_TIMA] == 0)
+					{
+						gb->hram_io[IO_IF] |= TIMER_INTR;
+						gb->hram_io[IO_TIMA] = gb->hram_io[IO_TMA];
+					}
+				}
+			}
+			gb->counter.tima_count = 0;
 			return;
 
 		case 0x05:
@@ -1122,8 +1152,32 @@ void __gb_write(struct gb_s *gb, uint_fast16_t addr, uint8_t val)
 			return;
 
 		case 0x07:
+		{
+			/* NUCLEO PATCH (P8): TIMA's phase IS the internal
+			 * counter's, so re-derive it whenever TAC changes rate
+			 * or is re-enabled (it froze while the timer was off).
+			 * Disabling the timer, or switching to a rate whose
+			 * tapped bit is low, while the old tapped bit is high
+			 * is a falling edge: TIMA clocks once. */
+			static const uint_fast16_t tac_period[4] = { 1024, 16, 64, 256 };
+			const uint_fast16_t sys =
+				((uint_fast16_t)gb->hram_io[IO_DIV] << 8) |
+				(gb->counter.div_count & 0xFF);
+			const uint8_t old = gb->hram_io[IO_TAC];
+			const bool old_bit = (old & IO_TAC_ENABLE_MASK) &&
+				(sys & (tac_period[old & IO_TAC_RATE_MASK] >> 1));
+			const bool new_bit = (val & IO_TAC_ENABLE_MASK) &&
+				(sys & (tac_period[val & IO_TAC_RATE_MASK] >> 1));
+			if(old_bit && !new_bit && ++gb->hram_io[IO_TIMA] == 0)
+			{
+				gb->hram_io[IO_IF] |= TIMER_INTR;
+				gb->hram_io[IO_TIMA] = gb->hram_io[IO_TMA];
+			}
 			gb->hram_io[IO_TAC] = val;
+			gb->counter.tima_count =
+				sys & (tac_period[val & IO_TAC_RATE_MASK] - 1);
 			return;
+		}
 
 		/* Interrupt Flag Register */
 		case 0x0F:
@@ -1644,7 +1698,9 @@ void __gb_draw_line(struct gb_s *gb)
 #if PEANUT_GB_HIGH_LCD_ACCURACY
 		uint8_t number_of_sprites = 0;
 
-		struct sprite_data sprites_to_render[MAX_SPRITES_LINE];
+		/* NUCLEO PATCH (P7): +1, upstream PR #153 - the insertion sort
+		 * writes one slot past MAX_SPRITES_LINE before trimming. */
+		struct sprite_data sprites_to_render[MAX_SPRITES_LINE + 1];
 
 		/* Record number of sprites on the line being rendered, limited
 		 * to the maximum number sprites that the Game Boy is able to
@@ -1815,6 +1871,9 @@ void __gb_step_cpu(struct gb_s *gb)
 	};
 	static const uint_fast16_t TAC_CYCLES[4] = {1024, 16, 64, 256};
 
+	/* NUCLEO PATCH (P2): an EI executed by the PREVIOUS instruction. */
+	const bool ei_pending = gb->ime_delay;
+
 	/* Handle interrupts */
 	/* If gb_halt is positive, then an interrupt must have occurred by the
 	 * time we reach here, because on HALT, we jump to the next interrupt
@@ -1829,6 +1888,14 @@ void __gb_step_cpu(struct gb_s *gb)
 
 		/* Disable interrupts */
 		gb->gb_ime = false;
+
+		/* NUCLEO PATCH (P3): "EI; HALT" with an interrupt pending takes
+		 * the HALT bug path; the handler then returns to the HALT. */
+		if(gb->halt_bug)
+		{
+			gb->halt_bug = false;
+			gb->cpu_reg.pc.reg--;
+		}
 
 		/* Push Program Counter */
 		__gb_write(gb, --gb->cpu_reg.sp.reg, gb->cpu_reg.pc.bytes.p);
@@ -1866,6 +1933,12 @@ void __gb_step_cpu(struct gb_s *gb)
 
 	/* Obtain opcode */
 	opcode = __gb_read(gb, gb->cpu_reg.pc.reg++);
+	/* NUCLEO PATCH (P3): the fetch after a bugged HALT does not advance. */
+	if(gb->halt_bug)
+	{
+		gb->halt_bug = false;
+		gb->cpu_reg.pc.reg--;
+	}
 	inst_cycles = op_cycles[opcode];
 
 	/* Execute opcode */
@@ -2471,7 +2544,16 @@ void __gb_step_cpu(struct gb_s *gb)
 	{
 		int_fast16_t halt_cycles = INT_FAST16_MAX;
 
-		/* TODO: Emulate HALT bug? */
+		/* NUCLEO PATCH (P3): HALT bug. With IME=0 and an interrupt
+		 * already pending the CPU does not halt, and the PC fails to
+		 * advance past the next opcode byte. */
+		if(!gb->gb_ime &&
+			(gb->hram_io[IO_IE] & gb->hram_io[IO_IF] & ANY_INTR))
+		{
+			gb->halt_bug = true;
+			break;
+		}
+
 		gb->gb_halt = true;
 
 		if(gb->hram_io[IO_SC] & SERIAL_SC_TX_START)
@@ -3204,6 +3286,7 @@ void __gb_step_cpu(struct gb_s *gb)
 
 	case 0xF3: /* DI */
 		gb->gb_ime = false;
+		gb->ime_delay = false;	/* NUCLEO PATCH (P2): DI cancels a pending EI */
 		break;
 
 	case 0xF5: /* PUSH AF */
@@ -3250,7 +3333,10 @@ void __gb_step_cpu(struct gb_s *gb)
 	}
 
 	case 0xFB: /* EI */
-		gb->gb_ime = true;
+		/* NUCLEO PATCH (P2): IME is set after the instruction that
+		 * follows EI, not immediately. "EI; HALT" with an interrupt
+		 * already pending must enter the HALT first. */
+		gb->ime_delay = true;
 		break;
 
 	case 0xFE: /* CP imm */
@@ -3269,7 +3355,19 @@ void __gb_step_cpu(struct gb_s *gb)
 	default:
 		/* Return address where invalid opcode that was read. */
 		(gb->gb_error)(gb, GB_INVALID_OPCODE, gb->cpu_reg.pc.reg - 1);
-		PGB_UNREACHABLE();
+		/* NUCLEO PATCH (P4): the error hook RETURNS on an appliance (a bad
+		 * cartridge must not take the device down), so this is not
+		 * unreachable - telling the compiler it is would be undefined
+		 * behaviour at exactly the moment a game goes wrong. */
+		break;
+	}
+
+	/* NUCLEO PATCH (P2): the EI of the previous instruction lands now, unless
+	 * this instruction was a DI (which clears ime_delay). */
+	if(ei_pending && gb->ime_delay)
+	{
+		gb->ime_delay = false;
+		gb->gb_ime = true;
 	}
 
 	do
@@ -3617,6 +3715,8 @@ void gb_reset(struct gb_s *gb)
 {
 	gb->gb_halt = false;
 	gb->gb_ime = true;
+	gb->halt_bug = false;	/* NUCLEO PATCH (P2/P3) */
+	gb->ime_delay = false;
 
 	/* Initialise MBC values. */
 	gb->selected_rom_bank = 1;
@@ -3774,7 +3874,9 @@ enum gb_init_error_e gb_init(struct gb_s *gb,
 
 	/* If the ROM says that it support RAM, but has 0 RAM banks, then
 	 * disable RAM reads from the cartridge. */
-	if(gb->cart_ram == 0 || gb->num_ram_banks == 0)
+	/* NUCLEO PATCH (P5): not for MBC2, whose built-in RAM is never
+	 * declared in the header - zeroing it here disabled MBC2 saves. */
+	if(gb->mbc != 2 && (gb->cart_ram == 0 || gb->num_ram_banks == 0))
 	{
 		gb->cart_ram = 0;
 		gb->num_ram_banks = 0;
