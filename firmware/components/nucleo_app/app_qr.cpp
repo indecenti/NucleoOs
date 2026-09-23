@@ -129,7 +129,7 @@ static void set_src(int s)
 
 static void on_key(int key, char ch)
 {
-    if (key == NK_RIGHT || key == NK_TAB) { set_src(s_src + 1); return; }
+    if (key == NK_RIGHT) { set_src(s_src + 1); return; }   // TAB never reaches on_key: it stays the Control Center
     if (s_src == SRC_SAVED) {
         if (key == NK_UP && s_sv_n)        { s_sv_sel = (s_sv_sel + s_sv_n - 1) % s_sv_n; rebuild(); }
         else if (key == NK_DOWN && s_sv_n) { s_sv_sel = (s_sv_sel + 1) % s_sv_n; rebuild(); }
