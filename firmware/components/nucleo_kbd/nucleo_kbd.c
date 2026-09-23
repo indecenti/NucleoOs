@@ -107,6 +107,7 @@ static i2c_master_bus_handle_t s_bus;
 static i2c_master_dev_handle_t s_dev;
 static char s_tca_shift = 0;
 static char s_tca_held = 0;        // layout char currently down (0 = none), for auto-repeat
+static char s_tca_held_base = 0;   // its UNSHIFTED char: release matches on this (Shift may flip mid-hold)
 static int64_t s_tca_rep_us = 0;   // earliest time the held key may repeat
 
 static void tca_w(uint8_t reg, uint8_t val)
@@ -182,11 +183,11 @@ static nucleo_key_t tca_read(void)
     char lc = s_tca_shift ? KM_SH[y][x] : KM[y][x];
     if (!pressed) {                                          // key released
         down_set(base, false);
-        if (lc == s_tca_held) s_tca_held = 0;               // stop repeating it
+        if (base == s_tca_held_base) s_tca_held = 0;        // stop repeating it (lc differs if Shift changed)
         return (nucleo_key_t){NK_NONE, 0};
     }
     down_set(base, true);
-    s_tca_held = lc;                                        // fresh press: arm the repeat clock
+    s_tca_held = lc; s_tca_held_base = base;                // fresh press: arm the repeat clock
     s_tca_rep_us = now + KEY_REPEAT_DELAY_US;
     return map_char(lc);
 }

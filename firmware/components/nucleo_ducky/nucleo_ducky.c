@@ -115,6 +115,7 @@ int nucleo_ducky_keyname(const char *name, nucleo_ducky_layout_t layout, uint8_t
 }
 
 // ---- engine (shared by analyze + run) ------------------------------------------------------------
+#define DUCKY_REPEAT_MAX 10000u   // sanity cap on one REPEAT count (analyze has no abort hook)
 static uint32_t atou(const char *s) { while (*s == ' ') s++; uint32_t v = 0; while (*s >= '0' && *s <= '9') v = v*10 + (*s++ - '0'); return v; }
 
 static void emit_key(const nucleo_ducky_backend_t *be, nucleo_ducky_stat_t *st, uint8_t m, uint8_t k)
@@ -197,6 +198,7 @@ static int process(const char *script, size_t len, nucleo_ducky_layout_t layout,
 
         if (!strncasecmp(t, "REPEAT", 6) && (t[6]==0 || t[6]==' ')) {
             uint32_t r = atou(t + 6);
+            if (r > DUCKY_REPEAT_MAX) r = DUCKY_REPEAT_MAX;   // "REPEAT 4000000000" would spin analyze() into the WDT
             for (uint32_t k = 0; k < r; k++) {
                 if (be && (be->aborted(be->ctx) || !be->ready(be->ctx))) return idx;
                 run_command(prev, layout, be, st, &def_delay, &str_delay);

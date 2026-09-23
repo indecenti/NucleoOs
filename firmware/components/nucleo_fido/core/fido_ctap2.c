@@ -197,7 +197,9 @@ static uint16_t make_cred(const fido_ctap2_cfg *cfg, const uint8_t *req, uint16_
         memcpy(rec.rpIdHash, rpIdHash, 32);
         size_t uidl = sizeof rec.userId;
         if (submap_bytes(&user, "id", rec.userId, &uidl) == 0) rec.userIdLen = (uint8_t)uidl;
-        size_t nl = sizeof rec.userName; submap_text(&user, "name", rec.userName, &nl);   // optional
+        size_t nl = sizeof rec.userName;                                  // optional; same exact-fill trap as rp.id:
+        if (submap_text(&user, "name", rec.userName, &nl) || nl >= sizeof rec.userName) rec.userName[0] = 0;
+        else rec.userName[nl] = 0;
         size_t rl = sizeof rec.rpId; if (rl > strlen(rpid) + 1) rl = strlen(rpid) + 1;
         memcpy(rec.rpId, rpid, rl ? rl - 1 : 0); rec.rpId[rl ? rl - 1 : 0] = 0;
         size_t wl = 0;

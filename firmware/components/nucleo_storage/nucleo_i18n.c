@@ -94,15 +94,18 @@ void nucleo_i18n_load(void)
 // Set the OS language. norm_lang() clamps the incoming code to the supported set {it,en,es,fr,de}
 // (matching web/shell nucleo-i18n.js LANGS) before it is stored, so the web keeps the exact choice
 // across a reboot; native painting floors to ENGLISH for any code that isn't "it" (see nucleo_tr).
-void nucleo_i18n_set_lang(const char *code)
+// Read-modify-write ui.language so every other key the web Settings app owns is preserved.
+static void persist_lang(void)
 {
-    char nl[6]; norm_lang(nl, sizeof nl, code);
-    bool changed = (strcmp(s_lang, nl) != 0);
-    snprintf(s_lang, sizeof s_lang, "%s", nl);   // live: the next paint of any native screen reflects it
-
-    // Read-modify-write so every other key the web Settings app owns is preserved.
     cJSON *root = settings_load();
-    if (!root) root = cJSON_CreateObject();
+    if (!root) {
+        // File present but unreadable (OOM / oversize / bad JSON): rebuilding it from an empty object
+        // would wipe power.*, theme, device.* ... Keep the live language, skip the write.
+        struct stat st;
+        if (stat(SETTINGS_JSON, &st) == 0 && st.st_size > 0) { ESP_LOGW(TAG, "settings.json unreadable — language not persisted"); return; }
+        root = cJSON_CreateObject();
+        if (!root) return;
+    }
     cJSON *ui = cJSON_GetObjectItem(root, "ui");
     if (!cJSON_IsObject(ui)) { cJSON_DeleteItemFromObject(root, "ui"); ui = cJSON_AddObjectToObject(root, "ui"); }
     if (ui) {
@@ -122,6 +125,14 @@ void nucleo_i18n_set_lang(const char *code)
     }
     cJSON_free(out);
     ESP_LOGI(TAG, "language set: %s", s_lang);
+}
+
+void nucleo_i18n_set_lang(const char *code)
+{
+    char nl[6]; norm_lang(nl, sizeof nl, code);
+    bool changed = (strcmp(s_lang, nl) != 0);
+    snprintf(s_lang, sizeof s_lang, "%s", nl);   // live: the next paint of any native screen reflects it
+    persist_lang();
 
     // Notify the rest of the system ONLY on a real change: bump the generation so native screens
     // repaint on their next frame, and fire the hook so the HTTP layer can push the change to any

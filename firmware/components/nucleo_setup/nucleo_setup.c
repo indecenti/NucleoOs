@@ -329,6 +329,7 @@ static char *load_doc(const char *cfg_path, const char *sd_path, const char *nvs
 }
 
 static void save_config(void);   // fwd: load may re-persist when recovering from a fallback tier
+static bool s_cfg_loaded;        // a config doc was parsed once: RAM (s_mode/s_ssid/s_complete) is now authoritative
 
 static bool load_config(void)
 {
@@ -350,6 +351,7 @@ static bool load_config(void)
     if (cJSON_IsString(as) && as->valuestring[0]) strncpy(s_ap_ssid, as->valuestring, sizeof(s_ap_ssid) - 1);
     if (cJSON_IsString(ap)) strncpy(s_ap_pass, ap->valuestring, sizeof(s_ap_pass) - 1);
     bool complete = cJSON_IsTrue(c);
+    s_cfg_loaded = true;
     s_complete = complete;                    // reflect the persisted flag so later save_config()s preserve it
     cJSON_Delete(r);
     // Recovered from NVS or the SD backup (e.g. /cfg absent on a launcher install, or the legacy
@@ -481,7 +483,9 @@ static void net_remember(const char *ssid, const char *pass)
 }
 
 
-bool nucleo_setup_is_complete(void) { return load_config(); }
+// Don't re-read once loaded: apply_network() already moved s_mode to the RAM-only "ap" (rescue hotspot
+// up, STA joining in background); a reload here reverted it to "sta", so ap_active()/status lied.
+bool nucleo_setup_is_complete(void) { return s_cfg_loaded ? s_complete : load_config(); }
 const char *nucleo_setup_device_name(void) { return s_name; }
 
 // ---- wifi helpers ----------------------------------------------------------
@@ -688,7 +692,9 @@ int nucleo_setup_scan(void)
     // battery — a first-class resource here). Callers that go on to join a net (connect_sta) re-set the
     // mode themselves, so the restore never fights them.
     wifi_mode_t prev = WIFI_MODE_NULL; esp_wifi_get_mode(&prev);
-    esp_wifi_set_mode(WIFI_MODE_APSTA);          // need STA up to scan; keep the AP for the web UI
+    // Need STA up to scan; keep the AP for the web UI. NOT in the STA-only Solo posture: APSTA there
+    // resurrected the NVS hotspot (and its RAM) under the stream decoder, and nothing switched it back.
+    if (!s_sta_only) esp_wifi_set_mode(WIFI_MODE_APSTA);
     esp_wifi_scan_stop();
     if (esp_wifi_scan_start(NULL, true) != ESP_OK) { s_wscan_n = 0; if (prev == WIFI_MODE_AP) esp_wifi_set_mode(WIFI_MODE_AP); if (s_scan_lock) xSemaphoreGive(s_scan_lock); return 0; }
     uint16_t num = 0; esp_wifi_scan_get_ap_num(&num);
