@@ -9,6 +9,7 @@
 //   math-check        every math answer exact + JS-twin parity
 //   ood-check         end-to-end OOS safety on the real exe (0 false-positives) — parsed from output
 //   kge / hdc / combinator-eval   the offline reasoning tiers (deduction, recall, composition)
+//   anima-local       the browser WASM engine: built from THESE firmware sources (fresh) + WASM == exe
 //   node --test       the *.test.mjs suite (weather NLU, etc.)
 //
 // Exits non-zero if ANY hard gate fails. Run from the repo root: `npm run anima:gate`.
@@ -97,6 +98,23 @@ const gates = [
     // search and drop none the exact path found — the regression guard for the holographic/asymmetric
     // prefilter that let M shrink 64->16 (4x fewer scattered SD reads). Derivation: tools/anima/holo_probe.py.
     ok: (code) => code === 0, summary: (o) => (o.match(/device recall[^\n]*/) || [lastLine(o)])[0].trim() },
+  // ONE ENGINE — the browser's offline brain (apps/anima/www/local/anima-local.wasm) is compiled from these
+  // same firmware sources. parity.mjs fails if the module's compiled-in build id no longer matches the
+  // sources on disk (an engine edit not rebuilt into the WASM: run apps/anima/local/build.ps1), then
+  // asserts WASM == anima.exe reply-for-reply with the browser's own knobs (L1_PFM/AKB5) on both sides.
+  { name: 'anima-local (wasm fresh+parity)', cmd: 'node', args: ['apps/anima/local/parity.mjs'],
+    ok: (code) => code === 0,
+    summary: (o) => { const m = o.match(/=== parity: ([^\n]*?) ===/); return m ? (/STALE/.test(m[1]) ? `${m[1]} — run apps/anima/local/build.ps1` : m[1]) : lastLine(o); } },
+  { name: 'anima-local (web contract)', cmd: 'node', args: ['apps/anima/local/engine-contract.mjs'],
+    // every JSON field the chat UI reads from the WASM engine, well-formed after engine.js shaping
+    ok: (code) => code === 0, summary: (o) => (o.match(/=== engine contract: ([^\n]*?) ===/) || [, lastLine(o)])[1] },
+  { name: 'anima-local (capability)', cmd: 'node', args: ['apps/anima/local/capability.mjs'],
+    // the browser brain answers per tier (launch/fact/KGE/solver/translate) AND abstains on gibberish
+    ok: (code) => code === 0, summary: (o) => (o.match(/=== capability: ([^\n]*?) ===/) || [, lastLine(o)])[1] },
+  { name: 'anima-local (cascade policy)', cmd: 'node', args: ['--test', 'apps/anima/local/cascade.test.mjs'],
+    // browser -> webindex -> device ordering: the browser exhausts itself before the Cardputer is asked
+    ok: (code) => code === 0,
+    summary: (o) => (o.match(/[#ℹ] pass \d+/) || ['tests']).concat(o.match(/[#ℹ] fail \d+/) || []).join('  ') },
   { name: 'agent-check', cmd: 'node', args: ['tools/anima-host/agent-check.mjs'],
     ok: (code) => code === 0, summary: (o) => lastLine(o) },
   { name: 'math-check', cmd: 'node', args: ['tools/anima-host/math-check.mjs'],
