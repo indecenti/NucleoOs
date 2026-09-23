@@ -398,6 +398,47 @@ static bool a_any(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok, const char *const
     return false;
 }
 
+static const char *const A_W_WEATHER[] = { "tempo","meteo","pioggia","piove","sole","nuvoloso","temperatura","gradi","clima","weather","rain","forecast",
+    "vento","neve","nevica","nebbia","umidita","temporale","grandine","sereno","soleggiato","piovoso","afa","ventoso","nuvole","piova","piovera","piovuto","wind","snow","sunny","cloudy", NULL };
+
+// A KNOWLEDGE question that merely names the Sun / a temperature / degrees / climate / time, with no
+// forecast frame around it: "quanto dista il sole dalla terra", "chi ha scoperto la temperatura di
+// fusione del ferro", "quanto tempo ci vuole". Those words are weather words only inside a live frame —
+// a time ("oggi"), a place ("a Bari"), "meteo"/"previsioni", "fa" ("che tempo fa") or "fuori"/"caldo".
+// Any UNAMBIGUOUS weather word (piove, neve, nuvoloso...) keeps it a forecast request.
+static bool a_wx_knowledge_frame(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok)
+{
+    static const char *const amb[]  = { "sole","temperatura","gradi","clima","tempo", NULL };
+    static const char *const cue[]  = { "meteo","previsioni","previsione","forecast","weather","fuori","outside",
+                                        "caldo","freddo","hot","cold","domani","oggi","ieri","dopodomani","adesso","ora",
+                                        "stamattina","stasera","stanotte","weekend","tonight","today","tomorrow","yesterday", NULL };
+    static const char *const nonplace[] = { "cui","quale","quali","che","quanto","quanta","quanti","poco","molto",
+                                            "il","lo","la","i","gli","le","un","uno","una","l","piedi","media", NULL };
+    bool amb_hit = false;
+    for (int t = 0; t < ntok; t++) {
+        bool wx = false, is_amb = false;
+        for (int i = 0; A_W_WEATHER[i]; i++) if (a_match(A_W_WEATHER[i], tok[t])) { wx = true; break; }
+        if (!wx) continue;
+        for (int i = 0; amb[i]; i++) if (a_match(amb[i], tok[t])) { is_amb = true; break; }
+        if (!is_amb) return false;                              // piove / neve / nuvoloso... = a real forecast ask
+        amb_hit = true;
+    }
+    if (!amb_hit) return false;
+    for (int t = 0; t < ntok; t++) {
+        for (int i = 0; cue[i]; i++) if (!strcmp(cue[i], tok[t])) return false;
+        // "che tempo fa" is a forecast; "quanto tempo fa" / "molto tempo fa" is "how long ago".
+        if (!strcmp(tok[t], "fa") && !(t >= 1 && !strcmp(tok[t-1], "tempo") && !(t >= 2 && !strcmp(tok[t-2], "che"))))
+            return false;
+        if (t + 1 < ntok && !strcmp(tok[t], "che") && !strcmp(tok[t+1], "tempo")) return false;
+        if (t + 1 < ntok && (!strcmp(tok[t], "a") || !strcmp(tok[t], "in") || !strcmp(tok[t], "at")) && strlen(tok[t+1]) >= 3) {
+            bool np = false;
+            for (int i = 0; nonplace[i]; i++) if (!strcmp(nonplace[i], tok[t+1])) { np = true; break; }
+            if (!np) return false;                              // "c'è il sole a Bari": a place = a live ask
+        }
+    }
+    return true;
+}
+
 // Build the typed plan for `raw`. The intelligence is which signals are present + a cheap
 // dominant-class rule — deterministic, no model. Layers downstream read it instead of re-deciding.
 static bool a_action_is_statement(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok);   // fwd: defined below
@@ -420,8 +461,7 @@ static void anima_cortex_plan(const char *raw, bool en, anima_plan_t *p)
     static const char *const w_open[]   = { "apri","aprire","avvia","lancia","mostra","mostrami","open","launch","show","run","portami","metti","riproduci","suona","ascolta","play","start", NULL };
     static const char *const w_create[] = { "crea","creare","crei","nuovo","nuova","create","make","scrivi","annota","appunta","segna","prepara","genera","draft","jot", NULL };
     static const char *const w_temp[]   = { "domani","oggi","ieri","dopodomani","adesso","stamattina","stasera","stanotte","tonight","today","tomorrow","yesterday", NULL };
-    static const char *const w_weather[]= { "tempo","meteo","pioggia","piove","sole","nuvoloso","temperatura","gradi","clima","weather","rain","forecast",
-        "vento","neve","nevica","nebbia","umidita","temporale","grandine","sereno","soleggiato","piovoso","afa","ventoso","nuvole","piova","piovera","piovuto","wind","snow","sunny","cloudy", NULL };
+    static const char *const *const w_weather = A_W_WEATHER;
     static const char *const w_news[]   = { "notizie","prezzo","cambio","bitcoin","borsa","quotazione","azioni","price","stock", NULL };
     static const char *const w_file[]   = { "file","nota","note","documento","document","testo","appunti","foglio", NULL };
     static const char *const w_fu[]     = { "lo","la","quello","quella","questo","questa","esso","essa","aprilo","aprila","it","that","this", NULL };
@@ -628,6 +668,7 @@ static struct {
     // in the middle, hence prefix AND suffix. RAM-only, 8-turn recency window via frame_turn.
     char frame_pre[64];
     char frame_post[32];
+    char frame_ent[32];   // the punched-out entity itself: the subject an anaphoric follow-up refers to
     uint32_t frame_turn;
     // Conversational numeric memory for the math reasoning layer (anima_reason): the last computed
     // answer + a few user-named results ("chiamalo A"). RAM-only (NOT in the SD serializer), so a
@@ -2271,6 +2312,31 @@ static int tool_teach(const char *raw, char tok[A_MAX_TOKENS][A_TOK_LEN], int nt
         const char *p = strstr(rem, COP[i]);
         if (p && (!cop || p < cop)) { cop = p; clen = strlen(COP[i]); }
     }
+    // Unaccented "e" — the tiny keyboard has no "è", so "ricordati che il mio colore preferito e il blu" is
+    // how it really gets typed. Without this it fell to tool_event and created a bogus reminder. Accepted
+    // ONLY when the subject is POSSESSIVE ("il mio X", "mia sorella") and the value is NOT a second
+    // possessed noun ("mia moglie e mio figlio..." is a coordination) nor carries a time cue (a reminder).
+    if (!cop) {
+        const char *e = strstr(rem, " e ");
+        if (e) {
+            static const char *const POSS[] = { "mio ","mia ","miei ","mie ","nostro ","nostra ","nostri ","nostre ", NULL };
+            static const char *const ART[]  = { "il ","la ","lo ","i ","gli ","le ","l'", "", NULL };
+            bool poss_subj = false;
+            for (int a = 0; ART[a] && !poss_subj; a++) {
+                size_t al = strlen(ART[a]);
+                if (strncmp(rem, ART[a], al)) continue;
+                for (int p = 0; POSS[p]; p++) if (!strncmp(rem + al, POSS[p], strlen(POSS[p]))) { poss_subj = true; break; }
+            }
+            const char *val = e + 3;
+            bool poss_val = false;
+            for (int p = 0; POSS[p]; p++) if (!strncmp(val, POSS[p], strlen(POSS[p]))) { poss_val = true; break; }
+            static const char *const TIME[] = { "domani","oggi","stasera","stamattina","dopodomani"," alle ","lunedi","martedi",
+                                                "mercoledi","giovedi","venerdi","sabato","domenica", NULL };
+            bool timed = false;
+            for (int t = 0; TIME[t]; t++) if (strstr(val, TIME[t])) { timed = true; break; }
+            if (poss_subj && !poss_val && !timed && *val) { cop = e; clen = 3; }
+        }
+    }
     if (!cop) return 0;                                // a teach lead with no copula -> abstain, don't guess
 
     // Extract subject/fact from the ORIGINAL raw at the byte-aligned offsets (preserves case + accents).
@@ -2823,6 +2889,67 @@ static bool a_has_phrase(const char *norm, const char *const *phrases);      // 
 // Is `q` a context-needing follow-up FRAGMENT — a short question with no subject of its own ("e cosa
 // ha fatto?", "e quando è morto?", "perché?", "e lui?")? Used (MISS-gated) to retry with the last topic
 // injected = lightweight coreference without NER.
+// An ATTRIBUTE asked of the thread's subject without naming it: a question word plus an explicit
+// pronoun ("how tall is it", "quanto è alto lui"), or an Italian ellipsis — a leading connector, a
+// question word and at most ONE content word ("e quanto pesa", "e dove si trova"). A fragment that
+// brings its own subject ("e quanto costa bitcoin") is a new question, not this.
+static bool a_is_anaphoric_attr_q(char tok[A_MAX_TOKENS][A_TOK_LEN], int n)
+{
+    if (n < 2 || n > 6) return false;
+    static const char *const qw[] = { "quanto","quanta","quanti","quante","quando","dove","come","perche","chi","quale","quali",
+                                      "cosa","cos","how","what","when","where","why","who","which", NULL };
+    static const char *const ana[] = { "it","its","esso","essa","lui","lei", NULL };
+    static const char *const conn[] = { "e","ed","and","ma", NULL };
+    static const char *const fn[] = { "si","ha","il","la","lo","di","del","della","is","the","a","of","does","do", NULL };
+    bool has_q = false, has_ana = false;
+    for (int t = 0; t < n; t++) {
+        for (int i = 0; qw[i]; i++)  if (!strcmp(qw[i], tok[t]))  has_q = true;
+        for (int i = 0; ana[i]; i++) if (!strcmp(ana[i], tok[t])) has_ana = true;
+    }
+    if (!has_q) return false;
+    if (has_ana) return true;
+    bool lead = false;
+    for (int i = 0; conn[i]; i++) if (!strcmp(conn[i], tok[0])) lead = true;
+    if (!lead) return false;
+    int content = 0;
+    for (int t = 1; t < n; t++) {
+        bool skip = false;
+        for (int i = 0; qw[i] && !skip; i++)   if (!strcmp(qw[i], tok[t]))   skip = true;
+        for (int i = 0; conn[i] && !skip; i++) if (!strcmp(conn[i], tok[t])) skip = true;
+        for (int i = 0; fn[i] && !skip; i++)   if (!strcmp(fn[i], tok[t]))   skip = true;
+        if (!skip) content++;
+    }
+    return content <= 1;
+}
+
+// Does `reply` name `subj`? True when any subject token of 4+ letters appears in the reply
+// (prefix-tolerant, accent-folded). A subject with no such token can't be checked -> true.
+static bool a_reply_names(const char *reply, const char *subj)
+{
+    char st[A_MAX_TOKENS][A_TOK_LEN];
+    int sn = a_tokenize(subj, st);
+    bool checkable = false;
+    for (int i = 0; i < sn; i++) if (strlen(st[i]) >= 4) checkable = true;
+    if (!checkable) return true;
+    // Stream the reply word by word (it can be far longer than a_tokenize's 24-token window).
+    char w[A_TOK_LEN]; int wl = 0;
+    for (const unsigned char *p = (const unsigned char *)reply; ; p++) {
+        unsigned char c = *p; char o = 0;
+        if (c == 0xC3 && p[1]) {
+            unsigned char d = *++p;
+            o = (d >= 0xA0 && d <= 0xA2) ? 'a' : (d >= 0xA8 && d <= 0xAA) ? 'e' : (d >= 0xAC && d <= 0xAE) ? 'i'
+              : (d >= 0xB2 && d <= 0xB4) ? 'o' : (d >= 0xB9 && d <= 0xBB) ? 'u' : 0;
+        } else if (isalnum(c)) o = (char)tolower(c);
+        if (o) { if (wl < A_TOK_LEN - 1) w[wl++] = o; continue; }
+        if (wl) {
+            w[wl] = 0; wl = 0;
+            for (int i = 0; i < sn; i++) if (strlen(st[i]) >= 4 && a_match(st[i], w)) return true;
+        }
+        if (c == 0) break;
+    }
+    return false;
+}
+
 static bool a_is_followup_q(const char *q)
 {
     char nq[120]; a_norm_phrase(q, nq, sizeof nq);
@@ -2929,7 +3056,7 @@ static bool foc_is_fnword(const char *w)
 // Fails when the turn has no reusable shape: no content at all, an implausibly long entity, a query
 // that is ALL entity (nothing to reuse), or a frame made only of leads — that last one is what stops
 // "e newton?" and "no, la musica" from overwriting the very frame they are trying to reuse.
-static bool foc_frame_of(const char *q, char *pre, size_t pcap, char *post, size_t scap)
+static bool foc_frame_of(const char *q, char *pre, size_t pcap, char *post, size_t scap, char *ent, size_t ecap)
 {
     char nq[160]; a_norm_phrase(q, nq, sizeof nq);
     char tok[A_MAX_TOKENS][A_TOK_LEN]; int n = 0;
@@ -2959,6 +3086,11 @@ static bool foc_frame_of(const char *q, char *pre, size_t pcap, char *post, size
     o = 0; post[0] = 0;
     for (int t = e1 + 1; t < n && o + 1 < (int)scap; t++)
         o += snprintf(post + o, scap - o, "%s%s", o ? " " : "", tok[t]);
+    if (ent && ecap) {
+        o = 0; ent[0] = 0;
+        for (int t = e0; t <= e1 && o + 1 < (int)ecap; t++)
+            o += snprintf(ent + o, ecap - o, "%s%s", o ? " " : "", tok[t]);
+    }
     return pre[0] || post[0];
 }
 
@@ -3379,6 +3511,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // Action memory: "ripeti" / "di nuovo" replays the last actionable turn from the ring.
     const char *q = input;
     bool replayed = false;
+    char need_subj[48]; need_subj[0] = 0;   // an anaphoric follow-up's subject: a fact answer must name it
     if (a_is_repeat(input)) {
         const char *prev = ring_last_input();
         if (prev) { q = prev; replayed = true; }      // else fall through -> honest miss
@@ -3569,13 +3702,15 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // ...and NOT an image-generation command: "draw an image of a SNOWY mountain" / "genera una foto di
     // PIOGGIA" carry a weather word but are a request to PAINT a picture, not a forecast -> let the
     // image_gen decline tool (in l0_query) own it, exactly as is_create_cmd protects create_file.
-    bool is_image_gen = false;
-    { char gtok[A_MAX_TOKENS][A_TOK_LEN]; int gnt = a_tokenize(q, gtok); is_image_gen = a_is_image_gen(gtok, gnt); }
+    bool is_image_gen = false, is_wx_knowledge = false;
+    { char gtok[A_MAX_TOKENS][A_TOK_LEN]; int gnt = a_tokenize(q, gtok); is_image_gen = a_is_image_gen(gtok, gnt);
+      is_wx_knowledge = a_wx_knowledge_frame(gtok, gnt); }
     // An explicit TRANSLATE request ("traduci sole in inglese", "come si dice pioggia") carries a weather
     // word as its OBJECT, not its subject — the offline dictionary must own it, never the forecast. Veto.
     bool is_translate = nucleo_anima_translate_is_request(q);
-    bool wx_req = (plan.feat & (F_WEATHER | F_NEWS)) && !(plan.feat & (F_DEFWORD | F_MATHOP)) && !has_digit && !is_create_cmd && !is_geo && !is_image_gen && !is_translate;
-    if (askable && (wx_req || nucleo_anima_online_is_live(q, en))) {
+    bool wx_req = (plan.feat & (F_WEATHER | F_NEWS)) && !(plan.feat & (F_DEFWORD | F_MATHOP)) && !has_digit && !is_create_cmd && !is_geo && !is_image_gen && !is_translate
+                  && !(is_wx_knowledge && !(plan.feat & F_NEWS));
+    if (askable && (wx_req || (!is_wx_knowledge && nucleo_anima_online_is_live(q, en)))) {
         if (nucleo_anima_online_available()) nucleo_anima_l1_unload();
         if (nucleo_anima_online_live(q, en, &r)) { mem_update(&r); s_session.dirty = true; goto done; }
         // A weather/news REQUEST with no live data (offline / unreachable) -> honest miss. NEVER fall
@@ -3655,10 +3790,17 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
         } else if (qword && s_session.foc_subject[0] && a_is_followup_q(q)) {
             // RELATION-shift: the subject-less question fragment carries the new relation; reuse the subject.
             snprintf(shifted, sizeof shifted, "%s %s", q, s_session.foc_subject);
+        } else if (s_session.foc_subject[0] && a_is_anaphoric_attr_q(ftok, fnt)) {
+            // An ATTRIBUTE asked of the thread's subject through a pronoun/ellipsis ("how tall is it",
+            // "e quanto pesa"). Try the same re-aim; whatever answers must then be ABOUT that subject
+            // (checked at done:) — a bare fragment otherwise fuzzy-matched an unrelated card (Everest).
+            snprintf(shifted, sizeof shifted, "%s %s", q, s_session.foc_subject);
+            snprintf(need_subj, sizeof need_subj, "%s", s_session.foc_subject);
         }
         if (shifted[0]) {
             nucleo_anima_l1_unload();                       // the reasoner builds its own KG of HVs; it needs the heap
             if (nucleo_anima_hdc_reason(shifted, en ? "en" : "it", &r)) {
+                need_subj[0] = 0;                           // the reasoner re-aimed it on the subject: grounded
                 foc_remember(&r);                           // chain: the re-aimed turn becomes the new focus
                 snprintf(r.state, sizeof r.state, "followup");
                 mem_update(&r);
@@ -3667,6 +3809,13 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
                 goto done;
             }
         }
+    }
+
+    // Lexical fallback: an L1-card thread ("chi era leonardo da vinci") declares no structured subject,
+    // but its entity is known — an anaphoric attribute follow-up must still be answered ABOUT it.
+    if (!need_subj[0] && s_session.frame_ent[0] && (s_session.turn - s_session.frame_turn) <= 8) {
+        char atok[A_MAX_TOKENS][A_TOK_LEN]; int ant = a_tokenize(q, atok);
+        if (a_is_anaphoric_attr_q(atok, ant)) snprintf(need_subj, sizeof need_subj, "%s", s_session.frame_ent);
     }
 
     // (Hook L0 dynamic-skill .lua su SD rimosso: interprete Lua ~90 KB flash, scaffold inerte
@@ -4003,6 +4152,13 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
 
 done: {
         g_anima_stage = 0; g_anima_phase = 0;  // DIAG: query returned cleanly (no crash this turn)
+        // Anaphoric follow-up answered by a card that never names the thread's subject = an off-topic
+        // match (not a fabrication, so the halluc gates can't see it) -> honest miss instead.
+        if (need_subj[0] && (r.tier == ANIMA_TIER_FACT || r.tier == ANIMA_TIER_STITCH || r.tier == ANIMA_TIER_REMOTE)
+            && !a_reply_names(r.reply, need_subj)) {
+            memset(&r, 0, sizeof r);
+            r.tier = ANIMA_TIER_NONE; r.action = ANIMA_ACT_NONE;
+        }
         a_strip_foreign(r.reply);              // universal: clean foreign-script clutter even from old learned cards
         // HONEST DECLINE — an abstention has to SAY so. Until now tier=NONE returned an empty string and
         // each of the three runtimes invented its own fallback text (the web shell, the native bubble)
@@ -4056,10 +4212,11 @@ done: {
         // something. A bare continuation has no substantive frame of its own, so it never overwrites
         // the good one.
         if (r.tier != ANIMA_TIER_NONE && r.action != ANIMA_ACT_NONE && !r.awaiting) {
-            char fpre[64], fpost[32];
-            if (foc_frame_of(q, fpre, sizeof fpre, fpost, sizeof fpost)) {
+            char fpre[64], fpost[32], fent[32];
+            if (foc_frame_of(q, fpre, sizeof fpre, fpost, sizeof fpost, fent, sizeof fent)) {
                 snprintf(s_session.frame_pre,  sizeof s_session.frame_pre,  "%s", fpre);
                 snprintf(s_session.frame_post, sizeof s_session.frame_post, "%s", fpost);
+                snprintf(s_session.frame_ent,  sizeof s_session.frame_ent,  "%s", fent);
                 s_session.frame_turn = s_session.turn;
             }
         }

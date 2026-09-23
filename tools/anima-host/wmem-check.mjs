@@ -113,6 +113,17 @@ const SCENARIOS = [
   { name: 'a follow-up never invents when the thread had no answer', turns: [
       { q: 'chi era zzqqwubba', wantTier: /none/ },
       { q: 'e newton?', notWant: /zzqqwubba/i } ] },
+  // An ATTRIBUTE asked through a pronoun/ellipsis must be answered ABOUT the thread's subject, or
+  // abstain — a bare fragment used to fuzzy-match an unrelated card (Everest, ANIMA's own body).
+  { name: 'anaphoric attribute follow-up never answers about something else (IT)', turns: [
+      { q: 'chi era leonardo da vinci', want: /leonardo/i },
+      { q: 'e quanto pesa', notWant: /assistente|corpo/i } ] },
+  { name: 'anaphoric attribute follow-up never answers about something else (structured)', turns: [
+      { q: 'qual e la capitale del giappone', want: /tokyo/i },
+      { q: 'e quanto e alta', notWant: /everest/i } ] },
+  { name: 'anaphoric attribute follow-up never answers about something else (EN)', lang: 'en', turns: [
+      { q: 'who was einstein', want: /einstein/i },
+      { q: 'how tall is it', notWant: /everest|mountain/i } ] },
   // A COMMAND frame must not launch something at random when the follow-up doesn't fit it. The
   // rebuilt turn goes through the real router, so "apri le newton" finds no app and abstains.
   { name: 'a command frame does not launch a bogus app', turns: [
