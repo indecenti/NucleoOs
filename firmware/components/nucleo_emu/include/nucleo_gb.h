@@ -87,14 +87,16 @@ void nucleo_gb_set_interlace(bool on);
 
 // ── save states ─────────────────────────────────────────────────────────────────────────────────
 // The entire console is one struct with no external references except our own callbacks, so a state
-// is a raw dump of it plus the cartridge RAM. Written beside the ROM as <rom>.st<slot>.
+// is a raw dump of it plus the cartridge RAM. Written as "<SD>/data/Saves/<system>/<rom name>.st<slot>".
 // Loading restores the callbacks from the live session — a state file must never be able to make the
 // emulator jump through a function pointer that came off an SD card.
 esp_err_t nucleo_gb_state_save(int slot);
 esp_err_t nucleo_gb_state_load(int slot);
 bool      nucleo_gb_state_exists(int slot);
 
-// Write cartridge RAM to <rom>.sav now. No-op when the cart has no battery RAM or nothing changed.
+// Files per cartridge live in "<SD>/data/Saves/<system>/<rom name>.*" (.sav, .stN, .sav.swp), never
+// beside the ROM: the library directory is too big to search on every save (docs/native-emulation.md §4.3).
+// Write cartridge RAM to its .sav now. No-op when the cart has no battery RAM or nothing changed.
 // Called automatically by nucleo_gb_close(); exposed so a long session can checkpoint.
 void nucleo_gb_save(void);
 // Write it only once the game has left its battery RAM alone for ~1.5 s (i.e. a save has finished).

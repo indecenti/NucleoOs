@@ -173,6 +173,17 @@ pages and 3.9 at 29, which is why every recovered KB above was worth chasing.
 
 ### 4.3 Saves that survive a flat battery
 
+**Where.** Every per-cartridge file — `.sav`, `.sav.tmp`, `.sav.swp`, `.st0`, `.stu` — lives in
+`<SD>/data/Saves/<system>/<rom name>.*`, **not beside the ROM**. `/data/ROMs/gb` holds the whole
+library, over a thousand long names, and FATFS finds a name by walking the directory from the top over
+SPI on every open, stat, remove and rename. The atomic save does half a dozen of those; beside the ROM
+they added up to more than the app task's **8 s watchdog**, so opening the in-game menu (which flushes
+the save) rebooted the console — the "Esc quits the emulator" report, confirmed on the device by
+`TASK_WDT (task hung)` in `/journal/events.ndjson` and by sessions in `/gbemu_trace.txt` that end with
+no `END` line. A save left beside the ROM by an older build is read once and rewritten into `Saves/`
+immediately. The menu now appears first and does its SD work after, looks up "does a state exist"
+once per opening instead of on every repaint, and traces the time if it ever exceeds 200 ms.
+
 - **Autosave.** Battery RAM used to reach the card only when the emulator closed — a crash or a flat
   120 mAh cell threw the session's progress away. It is now written once the game has left its RAM
   alone for ~1.5 s (i.e. a save screen has finished), and whenever the in-game menu opens (a pause,
