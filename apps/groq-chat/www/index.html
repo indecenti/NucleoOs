@@ -163,12 +163,15 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import * as AI from '/ai.js';   // automatic model choice + fallback + plain-words errors (shared with the whole OS)
     const t = await I18N.init('groq-chat');   // core + this app's catalog; paints DOM, live-switches
     // ---- AI Chat: talks directly to a Groq (OpenAI-compatible) endpoint from the browser.
     // For now this is the MODEL ALONE — no on-device ANIMA in the loop (that wiring comes later,
     // as ANIMA's teacher tier, docs/anima-online.md §4). The API key lives only in localStorage.
     const DEFAULT_BASE  = 'https://api.groq.com/openai/v1';
-    const DEFAULT_MODEL = 'llama-3.1-8b-instant';
+    // 'auto' = no pinned id: the best chat model the key serves right now (AI.withAutoModel). Providers retire
+    // ids on their own schedule (Groq shut down groq/compound on 2026-09-21), so a pinned default eventually 404s.
+    const DEFAULT_MODEL = 'auto';
     // Known Groq chat models as a fallback list until /models is fetched live.
     const SEED_MODELS = [
       'llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b',
@@ -185,9 +188,12 @@
       model: get('groq.model', DEFAULT_MODEL),
       web:   get('groq.web', '0') === '1',   // 🌐 Web mode: route the turn to Groq's agentic "compound" system (built-in web search) for current, cited answers
     };
-    // Groq's agentic system with built-in web search + code execution. Only on api.groq.com. We call it
-    // NON-streamed so executed_tools[].search_results come back whole -> clean "Sources". docs: agentic-tooling.
-    const WEB_MODEL = 'groq/compound';
+    // 🌐 Web mode = Groq's built-in browser_search tool, on a model that carries it (the gpt-oss family, picked
+    // from the key's own list by AI.resolveModel need:'web'). It replaced groq/compound, retired 2026-09-21.
+    // NON-streamed so executed_tools[].search_results come back whole -> clean "Sources".
+    const aiCfg = () => ({ provider: 'openai', base: S.base, key: S.key, model: S.model === 'auto' ? '' : S.model, tier: 'mid' });
+    // Where THIS app keeps its key, for the error texts (not the OS Settings: the ⚙ panel here).
+    const KEY_AT = '⚙';
     let messages = [];   // running conversation [{role, content}] — model-only, no system tricks
     let busy = false, ctrl = null;
 
@@ -255,7 +261,7 @@
     }
 
     function setStatus() {
-      const label = S.web ? '🌐 ' + t('web_on') : S.model;
+      const label = S.web ? '🌐 ' + t('web_on') : (S.model === 'auto' ? 'Auto' : S.model);
       $('sub').textContent = label + (S.key ? '' : ' · ' + t('set_key_hint'));
       dot.className = 'dot' + (S.key ? ' ok' : ' err');
       document.title = 'AI Chat · ' + label;
@@ -294,13 +300,15 @@
     async function fetchModels() {
       const sel = $('model');
       const fill = (ids) => {
-        const uniq = [...new Set(ids)].filter(Boolean).sort();
+        const uniq = [...new Set(ids)].filter((id) => id && id !== 'auto').sort();
         sel.innerHTML = '';
+        const best = AI.rankModels(uniq, 'mid')[0];
+        const auto = document.createElement('option'); auto.value = 'auto'; auto.textContent = 'Auto' + (best ? ' · ' + best : ''); sel.appendChild(auto);
         for (const id of uniq) { const o = document.createElement('option'); o.value = id; o.textContent = id; sel.appendChild(o); }
-        if (!uniq.includes(S.model)) { const o = document.createElement('option'); o.value = S.model; o.textContent = S.model; sel.appendChild(o); }
+        if (S.model !== 'auto' && !uniq.includes(S.model)) { const o = document.createElement('option'); o.value = S.model; o.textContent = S.model; sel.appendChild(o); }
         sel.value = S.model;
       };
-      fill(SEED_MODELS.concat([S.model]));            // seed first so the picker is never empty
+      fill(SEED_MODELS);                               // seed first so the picker is never empty
       if (!S.key) return;
       try {
         const r = await fetch(LLM('/models'), { headers: authHeaders() });
@@ -313,19 +321,19 @@
     }
 
     // Stream a chat completion (SSE). Appends deltas into `bodyEl`. Returns the full text.
-    async function streamChat(bodyEl) {
+    async function streamChat(bodyEl, model) {
       const cur = document.createElement('span'); cur.className = 'cursor'; bodyEl.appendChild(cur);
       const ac = ctrl; let wd = 0;
       const kick = () => { clearTimeout(wd); wd = setTimeout(() => { ac.timedOut = true; ac.abort(); }, 60000); };
       kick();
       const resp = await fetch(LLM('/chat/completions'), {
         method: 'POST', headers: authHeaders(), signal: ac.signal,
-        body: JSON.stringify({ model: S.model, messages, stream: true }),
+        body: JSON.stringify({ model, messages, stream: true }),
       });
       if (!resp.ok || !resp.body) {
-        let detail = ''; try { detail = (await resp.text()).slice(0, 300); } catch {}
+        let detail = ''; try { detail = await resp.text(); } catch {}
         clearTimeout(wd); cur.remove();
-        throw new Error('HTTP ' + resp.status + (detail ? ' · ' + detail : ''));
+        throw await AI.aiErrorFromResponse(resp, { provider: 'openai', model }, detail);
       }
       const reader = resp.body.getReader(), dec = new TextDecoder();
       let buf = '', full = '';
@@ -371,7 +379,7 @@
     // 🌐 Web mode: one NON-streamed call to Groq's compound system. It autonomously web-searches, so we
     // get the answer + executed_tools[].search_results back whole -> render markdown + a clean Sources list.
     // A firm system prompt keeps it from dumping its search tables / code traces (the raw compound style).
-    async function compoundChat(bodyEl) {
+    async function compoundChat(bodyEl, model) {
       const wait = document.createElement('span'); wait.className = 'searching'; wait.textContent = t('web_searching'); bodyEl.appendChild(wait);
       const sys = { role: 'system', content:
         'You are a concise web research assistant. Search the web as needed and answer DIRECTLY in the user\'s language. '
@@ -381,13 +389,14 @@
       const wd = setTimeout(() => { ac.timedOut = true; ac.abort(); }, 60000);
       const resp = await fetch(LLM('/chat/completions'), {
         method: 'POST', headers: authHeaders(), signal: ac.signal,
-        body: JSON.stringify({ model: WEB_MODEL, messages: [sys, ...messages], stream: false, temperature: 0.3 }),
+        body: JSON.stringify({ model, messages: [sys, ...messages], stream: false, temperature: 0.3,
+                               tools: [{ type: 'browser_search' }], tool_choice: 'required' }),
       });
-      if (!resp.ok) { let d = ''; try { d = (await resp.text()).slice(0, 300); } catch {} clearTimeout(wd); wait.remove(); throw new Error('HTTP ' + resp.status + (d ? ' · ' + d : '')); }
+      if (!resp.ok) { let d = ''; try { d = await resp.text(); } catch {} clearTimeout(wd); wait.remove(); throw await AI.aiErrorFromResponse(resp, { provider: 'openai', model }, d); }
       const j = await resp.json();
       clearTimeout(wd);
       const msg = j.choices?.[0]?.message || {};
-      const full = msg.content || '';
+      const full = String(msg.content || '').replace(/【[^】]*】/g, '').trim();   // browser_search's raw citation markers
       const seen = new Set(), sources = [];
       for (const tool of (msg.executed_tools || [])) {
         const rs = tool.search_results && tool.search_results.results;
@@ -412,25 +421,23 @@
       const body = row('bot', '◆');
       const t0 = performance.now();
       try {
-        const full = S.web ? await compoundChat(body) : await streamChat(body);
+        const pick = S.web ? { need: 'web' } : {};
+        const full = await AI.withAutoModel(aiCfg(), (c) => (S.web ? compoundChat(body, c.model) : streamChat(body, c.model)), pick);
         messages.push({ role: 'assistant', content: full });
         const m = document.createElement('span'); m.className = 'meta';
-        m.textContent = `${S.web ? WEB_MODEL + ' · 🌐' : S.model} · ${Math.round(performance.now() - t0)} ms`;
+        m.textContent = `${pick.used || S.model}${S.web ? ' · 🌐' : ''} · ${Math.round(performance.now() - t0)} ms`;
         body.appendChild(m);
       } catch (e) {
         body.parentElement.remove();
         messages.pop();                              // don't keep a turn we couldn't answer
-        const msg = String(e.message || e);
+        const err = AI.toAiError(e, { provider: 'openai', model: S.model });
         if (ctrl.signal.aborted) {
           if (ctrl.timedOut) { addErr('timeout · 60 s'); addSys(t('err_proxy_unreachable')); }
         } else {
-          addErr(msg);
-          if (/Failed to fetch|NetworkError/i.test(msg))
-            addSys(t('err_proxy_unreachable'));
-          else if (/401|invalid_api_key|403/i.test(msg))
-            addSys(t('err_bad_key'));
-          else if (/404|no.*handler|not found/i.test(msg))
-            addSys(t('err_no_endpoint'));
+          // One sentence that says what went wrong AND how to fix it (a retired model is already handled:
+          // withAutoModel switched to another one before we ever got here).
+          addErr(AI.explainAiError(err, undefined, { settings: KEY_AT }));
+          if (err.kind === 'network' && !CORS_DIRECT.test(S.base)) addSys(t('err_proxy_unreachable'));
         }
       } finally {
         busy = false; sendBtn.disabled = false; stopBtn.hidden = true; ctrl = null;

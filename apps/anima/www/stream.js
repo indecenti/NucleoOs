@@ -55,9 +55,16 @@ export function deltaOf(provider, payload) {
   return t ? { text: t } : null;
 }
 
+// A provider failure keeps its HTTP status and error code, so ai.js can say what went wrong and pick another
+// model when this one was retired (AI.toAiError / withAutoModel).
 const errorOf = async (resp) => {
   const j = await resp.json().catch(() => null);
-  return new Error((j && j.error && (j.error.message || (typeof j.error === 'string' ? j.error : ''))) || ('HTTP ' + resp.status));
+  const e = j && j.error;
+  const err = new Error((e && (e.message || (typeof e === 'string' ? e : ''))) || ('HTTP ' + resp.status));
+  err.status = resp.status;
+  err.code = (e && (e.code || e.type)) || '';
+  err.retryAfter = Number(resp.headers && resp.headers.get && resp.headers.get('retry-after')) || 0;
+  return err;
 };
 
 // Read an SSE body to the end, calling onDelta(text) per token batch. Returns the full text.

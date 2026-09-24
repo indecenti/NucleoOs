@@ -345,7 +345,16 @@ export function createAnimaLocal(opts = {}) {
     const note = (o) => { try { onProgress && onProgress(o); } catch {} };
     ckAbort();
     note({ phase: 'wasm' });
-    const { default: AnimaLocal } = await import(new URL('./anima-local.mjs', here).href);
+    // The Cardputer can drop a connection mid-load (it reboots into its web-server mode when the shell
+    // connects), and a browser remembers a failed module fetch for that URL for the life of the page: retry
+    // on a fresh URL instead of failing every later load until a reload.
+    let AnimaLocal, lastErr;
+    for (let a = 0; a < 3 && !AnimaLocal; a++) {
+      if (a) await new Promise((res) => setTimeout(res, 500 * a));
+      const u = new URL('./anima-local.mjs', here); if (a) u.searchParams.set('r', Date.now().toString(36));
+      try { ({ default: AnimaLocal } = await import(u.href)); } catch (e) { lastErr = e; }
+    }
+    if (!AnimaLocal) throw lastErr;
     M = await AnimaLocal();
 
     // Mount IDBFS on the small writable subtree (/sd/data/anima/rw) so user-taught facts (learn tier)

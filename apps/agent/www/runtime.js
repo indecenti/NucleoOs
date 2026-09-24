@@ -26,7 +26,7 @@ import { makeFS } from '/apps/anima/fsclient.js';
 import { compact } from '/apps/anima/context.js';
 // Provider-agnostic contract layer (node+browser safe, host-testable): tool surface + the Groq/OpenAI
 // tool-use machinery so the multi-agent works on Grok too, not just Claude.
-import { CLIENT_TOOLS, MUTATING, ALWAYS_CONFIRM, GROQ_MODELS, GEMINI_MODELS, toOpenAITools, callOpenAIChat, runOpenAIToolLoop, extractJson, guardPlan, withLineNumbers, verifyCode, fenceUntrusted, normalizePlan, renderPlan, osApiIndex, osApiRoute, osApiManifest, OSAPI_RULES } from './agent-tools.js';
+import { CLIENT_TOOLS, MUTATING, ALWAYS_CONFIRM, GROQ_MODELS, GEMINI_MODELS, toOpenAITools, callOpenAIChat as rawOpenAIChat, runOpenAIToolLoop, extractJson, guardPlan, withLineNumbers, verifyCode, fenceUntrusted, normalizePlan, renderPlan, osApiIndex, osApiRoute, osApiManifest, OSAPI_RULES } from './agent-tools.js';
 import { checkSyntax } from '/apps/code-runner/nucleo-run.js';   // parse-only JS check (host-safe) for the write→lint loop
 import { toAgentTools as hwAgentTools, capabilityForTool, callCapability, HW_MUTATING, HW_CAPABILITIES } from '/apps/code-runner/nucleo-hw.js';   // F2: the Cardputer's real hardware as GATED agent tools
 // "Create a NucleoOS app" skill — PURE orchestration (scaffold/publish/manage) + the advisory review,
@@ -36,7 +36,7 @@ import { buildReviewPrompt, parseReviewVerdict, reviewNote } from './app-review.
 import { createDeviceQueue } from './device-queue.js';
 import { runWorkerLocal } from './local-worker.js';   // the LOCAL transport (F0): grammar-constrained loop on an injected browser-local engine
 import { smokeApp, smokeSummary, stageAppRecipe } from './app-recipe.js';   // F5: install-and-smoke on the device + app-recipe learning   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
-import { routeFor, providerOf, PROVIDERS, CAPMATRIX } from '/ai.js';   // multi-model router + capability matrix (image/whisper) for the capability tools
+import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError } from '/ai.js';   // multi-model router + capability matrix (image/whisper) for the capability tools
 // NOTE: hardware (IR/WiFi/GPIO) is deliberately NOT a tool here. "ANIMA Code" is a general coding/
 // workspace agent (our Claude Code); device skills live INSIDE the dedicated apps (e.g. the IR Remote
 // app embeds its own scoped ANIMA skill via anima-skill.js). Centralising skills per-app cuts
@@ -95,12 +95,36 @@ async function callAnthropic(cfg, { model, system, messages, tools, maxTokens = 
       throw new Error('service busy (HTTP ' + resp.status + ')');
     }
     j = await resp.json().catch(() => null);
-    if (!resp.ok || !j || j.type === 'error') throw new Error((j && j.error && j.error.message) || ('HTTP ' + resp.status));
+    if (!resp.ok || !j || j.type === 'error') {
+      const err = new Error((j && j.error && j.error.message) || ('HTTP ' + resp.status));
+      err.status = resp.status; err.code = (j && j.error && j.error.type) || '';
+      throw err;
+    }
     return j;
   }
   throw new Error('call failed');
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Providers retire models on their own schedule (Groq shut down groq/compound on 2026-09-21), and the tables
+// above (MODELS, GROQ_MODELS…) are only first guesses. Every agent call therefore runs on a model the key
+// still SERVES — the chosen one when it is, else the best served one of the same kind (ai.js servedModel) —
+// and a "model not found / decommissioned" answer re-picks once. A lineup change can't strand a plan midway.
+async function onServedModel(cfg, model, run) {
+  const m = await servedModel(cfg, model);
+  try { return await run(m); }
+  catch (e) {
+    if (toAiError(e, { ...cfg, model: m }).kind !== 'model') throw e;
+    const next = await servedModel(cfg, m, { exclude: [m], fresh: true });
+    if (!next || next === m) throw e;
+    return run(next);
+  }
+}
+const callOpenAIChat = (fetchFn, cfg, opts) => onServedModel(cfg, opts.model || cfg.model, (m) => rawOpenAIChat(fetchFn, cfg, { ...opts, model: m }));
+const callAnthropicServed = (cfg, opts) => onServedModel(cfg, opts.model, async (m) => {
+  const fb = opts.fallback ? await servedModel(cfg, opts.fallback) : opts.fallback;
+  return callAnthropic(cfg, { ...opts, model: m, fallback: fb });
+});
 const textOf = (content) => Array.isArray(content) ? content.filter((b) => b && b.type === 'text').map((b) => b.text).join('') : '';
 
 // The OS ships FIVE languages (web/shell/nucleo-i18n.js · LANGS). Every place that turns the active
@@ -205,7 +229,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     const { system, user } = buildReviewPrompt(manifest, html);
     let raw = '';
     if (rcfg.provider === 'anthropic') {
-      const resp = await callAnthropic(rcfg, { model: rmodel, system, maxTokens: 700, messages: [{ role: 'user', content: user }], signal: aborter && aborter.signal });
+      const resp = await callAnthropicServed(rcfg, { model: rmodel, system, maxTokens: 700, messages: [{ role: 'user', content: user }], signal: aborter && aborter.signal });
       raw = textOf(resp.content);
     } else {
       const msg = await callOpenAIChat(deviceFetch, rcfg, { model: rmodel, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], maxTokens: 700, temperature: 0.2, signal: aborter && aborter.signal });
@@ -490,7 +514,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     let pauses = 0;
     for (let step = 0; step < STEPS; step++) {
       if (aborter && aborter.signal.aborted) throw new Error('stopped');
-      const resp = await callAnthropic(wcfg, { model, system, messages, tools, maxTokens, signal: aborter && aborter.signal, fallback: MODELS.small });
+      const resp = await callAnthropicServed(wcfg, { model, system, messages, tools, maxTokens, signal: aborter && aborter.signal, fallback: MODELS.small });
       messages.push({ role: 'assistant', content: resp.content });
       if (resp.stop_reason === 'tool_use') {
         const uses = (resp.content || []).filter((b) => b.type === 'tool_use');
@@ -602,7 +626,7 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
     const { cfg: ocfg, model: omodel } = routeCfg({ difficulty: 'fast' });   // cheapest fast model for the triage (cross-provider when keys present)
     try {
       if (ocfg.provider === 'anthropic') {
-        const resp = await callAnthropic(ocfg, { model: omodel, system: sys, maxTokens: 700,
+        const resp = await callAnthropicServed(ocfg, { model: omodel, system: sys, maxTokens: 700,
           messages: [{ role: 'user', content: userContent }], signal: aborter && aborter.signal });
         return guardPlan(extractJson(textOf(resp.content)), userMsg);
       }
@@ -619,7 +643,7 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
     const user = 'Richiesta originale: ' + userMsg + '\n\nRisultati:\n' + merged;
     const { cfg: scfg, model: smodel } = routeCfg({ difficulty: 'mid' });
     if (scfg.provider === 'anthropic') {
-      const resp = await callAnthropic(scfg, { model: smodel, maxTokens: 1500, system: sys, messages: [{ role: 'user', content: user }], signal: aborter.signal });
+      const resp = await callAnthropicServed(scfg, { model: smodel, maxTokens: 1500, system: sys, messages: [{ role: 'user', content: user }], signal: aborter.signal });
       return textOf(resp.content) || merged;
     }
     const msg = await callOpenAIChat(deviceFetch, scfg, { model: smodel, messages: [{ role: 'system', content: sys }, { role: 'user', content: user }], maxTokens: 1500, temperature: 0.4, signal: aborter.signal });
