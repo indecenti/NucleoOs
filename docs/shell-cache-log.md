@@ -10,6 +10,8 @@ Roll it whenever a precached shell asset changes (JS/CSS/HTML/i18n) or the app r
 
 | Version | Change |
 |---|---|
+| `v139` | roll APP_CACHE for the ANIMA web fixes — the browser answers the weather itself (Open-Meteo, shared local/weather.js), apps answer to their own name ("apri notepad"), a total miss says "I don't know" instead of blaming an unreachable device, and the rebuilt WASM engine (article ≠ pronoun, "terminale" ≠ close). /apps is cache-first, so without the roll clients keep the old engine. |
+| `v138` | ANIMA: streaming + real Stop, one mode (anima-mode.js, precached), per-client sid, personal memory on the device, pack delta sync. |
 | `v137` | update-check.js writes the learned release tag to SD (`/system/config/update.json`) so the native firmware can show the boot update dialog without any device-side HTTPS (the chip can't do the TLS handshake — web→SD→native bridge). |
 | `v135` | release update-check: `update-check.js` (passive daily GitHub notifier, browser-direct, ETag/304) + `update-core.js`/`sha256.js` shared with the Settings Updates tab; notify action deep-link `app:settings@updates`. |
 | `v134` | wallpaper/image durable cache capped at 24 entries (unbounded growth risked origin-quota eviction taking the Forge model cache with it) + shell fix round: wm drag/resize listener lifecycle, micgate poll termination, pairing single-bind, task-switcher z/clicks/arrows, Win+1..9. |
