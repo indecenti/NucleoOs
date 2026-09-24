@@ -33,6 +33,7 @@ Two disciplines fell out of the review and are now house rules for AI work:
 | Proactive ANIMA (`web/shell/ambient.js`, 2 rules, ✨ switch) | the dormant `src:'anima'` notification channel, finally speaking |
 | Answering search row (webstore lane, in-place upgrade) | zero-device-traffic instant answers in the Start menu |
 | Truth lamp (cloud replies fact-checked by the C brain, decisive-only badges) | the 18 KB microcontroller grading the frontier model |
+| Live model choice + plain-words errors (v141, [`ai-models.md`](ai-models.md)) | a provider retiring a model (Groq's `groq/compound`, 2026-09-21) no longer breaks any AI surface |
 
 ## The pipeline, in the judge's order
 

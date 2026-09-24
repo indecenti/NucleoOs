@@ -10,6 +10,7 @@ Roll it whenever a precached shell asset changes (JS/CSS/HTML/i18n) or the app r
 
 | Version | Change |
 |---|---|
+| `v141` | ai.js picks every model LIVE from the key's own /models list (a saved model is only a preference while served), replaces a retired one and retries (withAutoModel), and turns every provider failure into one plain sentence with the fix (explainAiError) — wired into ANIMA, AI Chat, Agents, Dictation, Recorder, Games and Paint. Groq retired groq/compound (2026-09-21): the 🌐 web mode now uses browser_search on an auto-picked gpt-oss model. ANIMA survives a module the device dropped mid-reboot (lazy imports never cache a failure) and a turn never ends in silence. |
 | `v140` | ANIMA web: when the Cardputer answers /api/anima "busy" (a heap too fragmented for the cascade worker — the ADV with the web OS on), device actions the browser engine decided (file, reminder, volume, brightness) run through POST /api/anima/act instead of ending "not done"; a proposed reminder is never also queued for replay. |
 | `v139` | roll APP_CACHE for the ANIMA web fixes — the browser answers the weather itself (Open-Meteo, shared local/weather.js), apps answer to their own name ("apri notepad"), a total miss says "I don't know" instead of blaming an unreachable device, and the rebuilt WASM engine (article ≠ pronoun, "terminale" ≠ close). /apps is cache-first, so without the roll clients keep the old engine. |
 | `v138` | ANIMA: streaming + real Stop, one mode (anima-mode.js, precached), per-client sid, personal memory on the device, pack delta sync. |

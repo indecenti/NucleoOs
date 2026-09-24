@@ -1058,14 +1058,32 @@
     import * as ctxkit from './contextkit.js';   // context engine: token-budgeted, injection-safe messages[] for any backend
     import * as AI from '/ai.js';                 // shell registry: the ONE provider table + teacher.json vault + cloud wire
     import * as AM from '/anima-mode.js';         // the ONE engine-mode definition + turn abort/timeout helper (shared with the copilot)
+    // Lazily imported modules, memoized ONLY once they loaded. The Cardputer drops connections while it
+    // reboots into its web-server mode (the shell connecting triggers it) or while its few sockets are busy,
+    // so an import can fail mid-load — and a browser remembers a failed module fetch for that URL for the
+    // life of the page. A plain `p ||= import(url)` kept the REJECTED promise: every later turn failed on
+    // it ("Failed to fetch dynamically imported module …/cascade.js") and no answer came until a reload.
+    // Now a failure is never cached: up to 3 tries, backing off, each retry on a fresh URL.
+    function lazy(url, init=(m)=>m){
+      let done=null, inflight=null;
+      return ()=> done ? Promise.resolve(done) : (inflight ||= (async ()=>{
+        let err;
+        for(let a=0;a<3;a++){
+          if(a) await new Promise((res)=>setTimeout(res, 500*a));
+          try{ const m=await import(a ? url+(url.includes('?')?'&':'?')+'r='+Date.now().toString(36) : url); return (done=await init(m)); }
+          catch(e){ err=e; }
+        }
+        throw err;
+      })().finally(()=>{ inflight=null; }));
+    }
     // Streaming cloud client — lazy: only a turn that actually reaches the cloud pays for it.
-    let _streamP=null; const loadStream=()=>_streamP||(_streamP=import('./stream.js'));
+    const loadStream=lazy('./stream.js');
 
     // "GPU locale" tier (WebLLM) — only touched when a message is actually sent in local/online mode.
     // Lazy: keeps local-llm → webllm-engine → router + grammar (4 modules) OFF the boot path. The heavy
     // WebLLM vendor inside local-llm is itself loaded only on first real inference.
     const CODER_MODEL = 'Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC';   // reasoning-map label (mirrors webllm-engine.js)
-    let _llmP=null; const loadLLM=()=>_llmP||(_llmP=import('./local-llm.js'));
+    const loadLLM=lazy('./local-llm.js');
 
     // Forge model/readiness panel — only reachable from Settings. Lazy: keeps model-store, readiness,
     // lib-resolver, lib-verify (+ download, scheduler = 6 modules) OFF the boot path. forgeStore is built
@@ -3184,14 +3202,14 @@
         kind='gpu'; icon='✦'; eng=TR('GPU locale · WebLLM', 'Local GPU · WebLLM'); model=prettyModel(CODER_MODEL); host=TR('browser · WebGPU', 'browser · WebGPU');
       } else if(T==='remote' || D==='online' || ['grok','teacher','cloud','online','agent','wiki','wikidata','weather','fx'].includes(I)){   // online tier (incl. the firmware online-only 'cloud' intent, code answers, and the multi-agent path)
         kind='cloud'; icon='☁';
-        if(I==='webcompound'){ icon='🌐'; eng=TR('Online · Ricerca web', 'Online · Web search'); model='groq/compound'; host='api.groq.com'; }
+        if(I==='webcompound'){ icon='🌐'; eng=TR('Online · Ricerca web', 'Online · Web search'); model=r.model||'browser_search'; host='api.groq.com'; }
         else if(I==='agent'){ icon='🤖'; eng=TR('Online · Multi-agente', 'Online · Multi-agent'); model=(keyCfg&&keyCfg.model)||'Claude'; host=hostOf((keyCfg&&keyCfg.base)||''); }
         else if(I==='weather'){ eng=TR('Online · Meteo', 'Online · Weather'); model='Open-Meteo'; }
         else if(I==='fx'){ eng=TR('Online · Cambio valute', 'Online · Exchange'); model='exchangerate'; }
         else if(I==='wiki'){ eng='Online · Wikipedia'; model='REST API'; }
         else if(I==='wikidata'){ eng='Online · Wikidata'; model='REST API'; }
         else { eng=TR('Online · maestro Grok', 'Online · Grok teacher');   // grok / teacher / generic remote
-               model=(keyCfg&&keyCfg.model)||'llama-3.1-8b-instant'; host=hostOf((keyCfg&&keyCfg.base)||''); }
+               model=r.model||(keyCfg&&keyCfg.model)||'auto'; host=hostOf((keyCfg&&keyCfg.base)||''); }
       } else if(r.web){                                             // in-browser WEB INDEX — live Wikipedia/Wikidata from the browser, or a cached recall (never the MCU)
         kind='wasm'; icon='🌐'; eng=TR('Browser · indice web', 'Browser · web index');
         model = r.recalled ? (TR('card in cache', 'cached card')) : (TR('Wikipedia (live)', 'Wikipedia (live)'));
@@ -3646,7 +3664,8 @@
     // tier entirely (no /api/anima call); answers are byte-identical (parity-certified 16/16 vs native).
     // ===========================================================================
     let _edge=null, _edgeReady=false, _ensuring=null;
-    function edgeEngine(){ return _edge || (_edge = import('./local/engine.js').then(m=>m.createAnimaLocal())); }
+    const _edgeLoad=lazy('./local/engine.js', (m)=>m.createAnimaLocal());
+    function edgeEngine(){ return _edge || (_edge = _edgeLoad().catch((e)=>{ _edge=null; throw e; })); }
     const _fmtMB=(b)=>(Math.max(0,b)/1048576).toFixed(1)+' MB';
     addEventListener('pagehide',()=>{ if(_edge) _edge.then(e=>e.flush&&e.flush()).catch(()=>{}); });   // persist taught facts before unload
 
@@ -3977,8 +3996,9 @@
     // local/cascade.js (apps/anima/local/cascade.test.mjs); offlineAnswer() just injects the real runners.
     // Default order is BROWSER-FIRST: the WASM brain runs on real CPU/RAM (PC-grade M=64, AKB5 probe=24)
     // and never bothers the single-task MCU, so we lean on it BEFORE scaling onto the Cardputer.
-    let _cascade, _cascadeP;
-    function cascadeMod(){ return _cascade ? Promise.resolve(_cascade) : (_cascadeP ||= import('./local/cascade.js').then(m=>(_cascade=m))); }
+    let _cascade;
+    const _cascadeLoad=lazy('./local/cascade.js', (m)=>(_cascade=m));
+    function cascadeMod(){ return _cascade ? Promise.resolve(_cascade) : _cascadeLoad(); }
     // Can the browser WASM brain answer with NO network pull? (loaded, or pack already cached). Never downloads.
     async function browserProvisioned(){ if(_edgeReady) return true; try{ return await (await edgeEngine()).ready(); }catch{ return false; } }
     // Run the in-browser WASM cascade. silent=false → explicit Browser mode (blocking provisioning gate, may
@@ -4154,8 +4174,11 @@
       if(r.local){
         const d=await deviceCommand(q);
         if(d.r){
-          if(P.classifyCommand(d.r)!=='device') return notPerformed(r, 'mismatch');
-          r=d.r;
+          // The device's engine didn't read it as the same command: typically context only this page has ("devo
+          // chiamare Marco" was answered here, so the device can't resolve "ricordamelo"). Let it carry out the
+          // decision the same engine made here, rather than calling the action not done.
+          if(P.classifyCommand(d.r)!=='device'){ const acted=await deviceAct(r); if(!acted) return notPerformed(r, 'mismatch'); r=acted; }
+          else r=d.r;
         } else {
           // Busy = the device can't run the cascade right now, not that it can't act: hand it our decision.
           const acted = d.err==='busy' ? await deviceAct(r) : null;
@@ -4189,8 +4212,7 @@
     // the web OS connected the device often can't afford its TLS handshake (it answers "busy") — so the
     // reply was a generic "I don't know" under an "Online · Weather" label. Shared, tested module:
     // local/weather.js (the simulator runs the same code). Private mode: an honest "needs internet".
-    let _wx;
-    const weatherMod = ()=> _wx || (_wx = import('./local/weather.js'));
+    const weatherMod = lazy('./local/weather.js');
     async function weatherAsk(q, online){
       if(_turnSig && _turnSig.aborted) return null;
       const w = await weatherMod();
@@ -4212,7 +4234,8 @@
     // and caches it in its own learned store so it is recalled instantly+offline next time. This is what
     // lets "Browser" mode answer "chi è X" without an LLM and without leaning on the single-task Cardputer.
     let _webidx;
-    function webidxMod(){ return _webidx || (_webidx = Promise.all([import('./local/webindex.js'), import('./local/webstore.js')]).then(([w,s])=>(_webidx={w,s}))); }
+    const _webidxW=lazy('./local/webindex.js'), _webidxS=lazy('./local/webstore.js');
+    function webidxMod(){ return _webidx ? Promise.resolve(_webidx) : Promise.all([_webidxW(), _webidxS()]).then(([w,s])=>(_webidx={w,s})); }
     async function webAnswer(q, lang, online){
       if(_turnSig && _turnSig.aborted) return null;
       try{
@@ -4239,13 +4262,28 @@
                     maxTokens: opts.maxTokens||1024, temperature: typeof opts.temperature==='number' ? opts.temperature : 0.4 };
       const proxyUrl = AI.providerOf(provider).proxy ? (u)=>'/api/llm?url='+encodeURIComponent(u) : null;
       const streaming = !!opts.onDelta && !proxyUrl;
+      // The model is CHOSEN, not pinned (AI.withAutoModel): the saved one while the provider still serves it,
+      // else the best one it serves for the tier; a model the provider retired is replaced and the call retried.
       // A stream is bounded by silence (idle) and a generous total; a single-shot call by one step timeout.
-      return AM.withStep(opts.signal, streaming ? AM.STEP_MS.stream : AM.STEP_MS.cloud, (signal)=>
-        chatComplete({ provider, base, model, key, version }, req, { signal, onDelta:opts.onDelta, idleMs:AM.STEP_MS.idle, proxyUrl }));
+      const pick = { tier: opts.tier || 'mid' };
+      const out = await AI.withAutoModel({ provider, base, model, key, version, tier: pick.tier }, (c)=>
+        AM.withStep(opts.signal, streaming ? AM.STEP_MS.stream : AM.STEP_MS.cloud, (signal)=>
+          chatComplete({ provider:c.provider, base:c.base, model:c.model, key:c.key, version:c.version }, req, { signal, onDelta:opts.onDelta, idleMs:AM.STEP_MS.idle, proxyUrl })), pick);
+      _lastCloudModel = pick.used || model;
+      return out;
     }
-    // 🌐 WEB MODE (Groq compound). compound is GROQ-ONLY, so resolve a usable Groq creds set: the active
-    // provider if it IS Groq, else the stored 'openai' key (ai.js calls Groq the 'openai' provider). Require
-    // the base to be api.groq.com (a user could repoint 'openai' at real OpenAI, which has no compound).
+    let _lastCloudModel = '';
+    // Every cloud failure of this turn, kept to TELL the user (a bad key, a used-up quota, a retired model…)
+    // instead of silently degrading to another tier. The most actionable one wins.
+    let _turnAiErr = null;
+    function noteAiErr(e, cfg){
+      const err = AI.toAiError(e, cfg || keyCfg);
+      if(err.kind==='stopped') return;
+      if(!_turnAiErr || (AI.actionableAiError(err) && !AI.actionableAiError(_turnAiErr))) _turnAiErr = err;
+    }
+    // 🌐 WEB MODE: an answer grounded in a live web search, with its sources. Groq-only, so resolve a usable Groq
+    // creds set: the active provider if it IS Groq, else the stored 'openai' key (ai.js calls Groq the 'openai'
+    // provider). Require the base to be api.groq.com (a user could repoint 'openai' at real OpenAI).
     function groqCfg(){
       const cand = (keyCfg.provider==='openai' && keyCfg.key) ? keyCfg
                  : (keyCfg.keys && keyCfg.keys.openai && keyCfg.keys.openai.key) ? keyCfg.keys.openai : null;
@@ -4255,12 +4293,16 @@
       return { base, key:cand.key };
     }
     const hasGroq = () => !!groqCfg();
-    // One NON-streamed call to groq/compound: it autonomously web-searches, so we get the answer +
-    // executed_tools[].search_results back whole -> render markdown + a clean Sources list (deduped by URL).
-    // A firm system prompt suppresses compound's raw "I searched / here's a table / print(...)" process dumps.
+    // One NON-streamed call with Groq's built-in browser_search tool. It used to be groq/compound, which Groq
+    // retired on 2026-09-21 — the web mode then died with a bare 404. The model is now picked from the key's own
+    // list (AI.resolveModel need:'web' = the gpt-oss family that carries browser_search), so the next lineup
+    // change is followed the same way. The answer + executed_tools[].search_results come back whole -> render
+    // markdown + a clean Sources list (deduped by URL). A firm system prompt keeps process dumps out.
     async function cloudCompoundChat(q){
       const g=groqCfg(); if(!g) return null;
-      return AM.withStep(_turnSig, AM.STEP_MS.cloud, (signal)=>compoundCall(g, q, signal));
+      const cfg={ provider:'openai', base:g.base, key:g.key, model:'' };
+      const pick={ need:'web' };
+      return AI.withAutoModel(cfg, (c)=>AM.withStep(_turnSig, AM.STEP_MS.cloud, (signal)=>compoundCall(c, q, signal)), pick);
     }
     async function compoundCall(g, q, signal){
       const today=(()=>{ try{ return new Date().toISOString().slice(0,10); }catch{ return ''; } })();
@@ -4271,17 +4313,19 @@
       const msgs=history.filter(h=>h.role==='user'||h.role==='bot').slice(-8).map(h=>({role:h.role==='bot'?'assistant':'user', content:String(h.text||'')}));
       const resp=await fetch(g.base+'/chat/completions', { method:'POST', signal,
         headers:{ 'content-type':'application/json', 'authorization':'Bearer '+g.key },
-        body: JSON.stringify({ model:'groq/compound', max_tokens:1024, temperature:0.3, stream:false,
+        body: JSON.stringify({ model:g.model, max_tokens:1024, temperature:0.3, stream:false,
+                               tools:[{ type:'browser_search' }], tool_choice:'required',
                                messages:[{role:'system',content:sys},...msgs] }) });
-      const j=await resp.json().catch(()=>null);
-      if(!resp.ok || !j || j.error) throw new Error((j&&j.error&&(j.error.message||j.error))||('HTTP '+resp.status));
+      const text=await resp.text().catch(()=>'');
+      let j=null; try{ j=JSON.parse(text); }catch{}
+      if(!resp.ok || !j || j.error) throw await AI.aiErrorFromResponse(resp, g, text);
       const m=(j.choices && j.choices[0] && j.choices[0].message) || {};
-      const full=m.content||'';
+      const full=String(m.content||'').replace(/【[^】]*】/g, '').trim();   // browser_search's raw 【n†Lx-Ly】 citation markers
       const seen=new Set(), sources=[];
       for(const tool of (m.executed_tools||[])){ const rs=tool.search_results && tool.search_results.results;
         if(Array.isArray(rs)) for(const x of rs){ if(x && x.url && !seen.has(x.url)){ seen.add(x.url); sources.push({title:x.title, url:x.url}); } } }
       if(!full) return null;
-      return { reply:full, intent:'webcompound', confidence:85, domain:'online', sources, substrate:'M3', model:'groq/compound' };
+      return { reply:full, intent:'webcompound', confidence:85, domain:'online', sources, substrate:'M3', model:g.model };
     }
     // Append a compact, deduped "Sources" list under a web-grounded answer (titles are textContent -> no markup injection).
     function appendSources(bodyEl, sources){
@@ -4355,12 +4399,13 @@
       const callWith=async(cfg)=>{
         const a=ctxkit.assemble({ history, user:q, mode:'only', provider:cfg.provider, model:cfg.model, lang, now:today,
           workspace:wsRoot, tree:wsx.tree, files:wsx.files });
-        return cloudComplete(cfg.provider, cfg.base, cfg.model, cfg.key, cfg.version, a.system, a.messages, { maxTokens:a.maxTokens, temperature:a.temperature, signal:_turnSig, onDelta });
+        return cloudComplete(cfg.provider, cfg.base, cfg.model, cfg.key, cfg.version, a.system, a.messages, { maxTokens:a.maxTokens, temperature:a.temperature, signal:_turnSig, onDelta, tier: hard ? 'max' : 'mid' });
       };
       let txt;
       try{ txt = await callWith(route); }
       catch(e){
         if(streamed || (_turnSig && _turnSig.aborted)) throw e;   // stopped, or half an answer is on screen: no silent retry
+        noteAiErr(e, route);
         // PROVIDER FALLBACK: on a definite failure, retry on the next-best configured provider BEFORE the
         // caller degrades to WebLLM/offline (online means real LLM only). Only if a DIFFERENT key exists.
         let fb=null; try{ fb=AI.routeFor({difficulty:hard?'hard':'fast', exclude:[route.provider]}, keyCfg.keys||{}, keyCfg); }catch{}
@@ -4368,9 +4413,10 @@
         else throw e;
       }
       if(!txt) return null;
-      const routed = route.provider!==keyCfg.provider || route.model!==keyCfg.model;   // surface the model when it differs from the active one
-      const note = routed ? (AI.providerOf(route.provider).label+' · '+route.model) : '';
-      return { reply:txt, intent:/```/.test(txt)?'code':'cloud', confidence:70, substrate:'M3', domain:'online', model:route.model, ...(note?{trace:note}:{}) };
+      const used = _lastCloudModel || route.model;
+      const routed = route.provider!==keyCfg.provider || used!==keyCfg.model;   // surface the model when it differs from the saved one
+      const note = routed ? (AI.providerOf(route.provider).label+' · '+used) : '';
+      return { reply:txt, intent:/```/.test(txt)?'code':'cloud', confidence:70, substrate:'M3', domain:'online', model:used, ...(note?{trace:note}:{}) };
     }
 
     // ---- multi-agent path: the PRIMARY online engine. Reuses the Agenti runtime (orchestrator → tool-use
@@ -4514,7 +4560,7 @@
       let live=null;
       const onDelta=(d)=>{ if(sig.aborted) return; if(!live){ think.remove(); live=streamShell(); } live.push(d); };
       let r; const _t0=Date.now();   // pipeline latency: measured across the whole brain resolution (incl. fallbacks)
-      _turnLocal=null; _turnDevice=null; _turnDevErr='';
+      _turnLocal=null; _turnDevice=null; _turnDevErr=''; _turnAiErr=null; _lastCloudModel='';
       try{
       // COMMANDS FIRST: a device action or live-state question ("alza il volume", "ricordami…", "che ore sono"),
       // and anything about the user's personal memory, is resolved by the Cardputer before any LLM rung — even
@@ -4524,7 +4570,7 @@
       if(!r && !sig.aborted){ try{ r = await weatherAsk(sendQ, !isPrivate()); }catch{ r = null; } }
       // 🌐 WEB: when armed, an explicit web-grounded turn via Groq compound takes precedence over Auto. Private
       // never reaches the network, armed or not. On no key / failure it falls through to the normal ladder.
-      if(!r && webCompound && !isPrivate() && !sig.aborted){ await ensureKeyLoaded(); if(hasGroq()){ try{ r = await cloudCompoundChat(sendQ); }catch(e){ r = null; } } }
+      if(!r && webCompound && !isPrivate() && !sig.aborted){ await ensureKeyLoaded(); if(hasGroq()){ try{ r = await cloudCompoundChat(sendQ); }catch(e){ r = null; noteAiErr(e, groqCfg() && { provider:'openai' }); } } }
       if(!r && !sig.aborted){
         // -- ONE ladder, walked top-down until a rung answers -------------------------------------
         // This replaced five hand-written per-mode ladders. They named WHERE compute ran, so picking
@@ -4547,12 +4593,12 @@
           const wsx = await wsContext(sendQ);   // built ONCE - shared by the loop seed and fallback
           if(loopEligible && !sig.aborted){
             _agentDidMutate = false; _agentCancelled = false; _agentWsAsked = false;
-            try{ r = await agentAsk(sendQ, think, wsx); }catch(e){ r = null; }
+            try{ r = await agentAsk(sendQ, think, wsx); }catch(e){ r = null; noteAiErr(e); }
           }
           if(!r && !sig.aborted){
             // Streamed: tokens render as they arrive. A connection that dies mid-answer keeps what came.
             try{ r = await cloudAsk(sendQ, wsx, { onDelta }); }
-            catch(e){ r = null;
+            catch(e){ r = null; noteAiErr(e);
               const part = live ? live.text() : (e && e.partial) || '';
               if(part && !sig.aborted) r = { reply:part, intent:'cloud', confidence:40, substrate:'M3', domain:'online', incomplete:true }; }
           }
@@ -4602,7 +4648,9 @@
         // device" even when the device had answered, or was merely busy. Only when NO brain could be asked
         // does the reply name the device problem (and how to get a local one).
         const why = _turnDevErr;
-        const msg = why==='too_long'
+        const aiWhy = _turnAiErr ? AI.explainAiError(_turnAiErr, lang) : '';
+        const msg = aiWhy ? aiWhy + ' ' + (have ? UI[lang].dontknow : (UI[lang].edgeNeedInstall||''))
+          : why==='too_long'
           ? TR('La domanda è troppo lunga per il Cardputer: accorciala e riprova.', 'This question is too long for the Cardputer: shorten it and try again.')
           : (have || !why) ? UI[lang].dontknow
           : (why==='unreachable' ? UI[lang].offline : '⚠ '+notDoneWhy(why)+'.') + ' ' + (UI[lang].edgeNeedInstall||'');
@@ -4635,6 +4683,10 @@
       // a stream that died mid-answer, or a personal fact kept in this browser until the Cardputer is back
       if(r.incomplete){ const t='⚠ '+L('streamCut'); entry.lines.push({ text:t, kind:'warn' }); addLined(body, t, 'warn'); }
       if(r.memPending){ const t='⏳ '+L('memPendingNote'); entry.lines.push({ text:t, kind:'dim' }); addLined(body, t, 'dim'); }
+      // The cloud failed and another tier answered: say why, so a bad key / used-up quota gets fixed instead of
+      // silently making every answer worse. Actionable -> a warning; a transient blip -> a quiet note.
+      if(_turnAiErr && r.domain!=='online'){ const act=AI.actionableAiError(_turnAiErr); const t=(act?'⚠ ':'ℹ ')+AI.explainAiError(_turnAiErr, lang);
+        entry.lines.push({ text:t, kind:act?'warn':'dim' }); addLined(body, t, act?'warn':'dim'); }
 
       // multi-step reasoning plan kept for export; rendered inside the engine map (below) as the "Steps" node
       if(r.trace && r.trace.includes(' > ')) entry.trace=r.trace.split(' > ');
@@ -4674,6 +4726,18 @@
       if(r.intent==='clarify' || r.state==='clarify'){ const opts=parseClarify(reply); if(opts){ entry.clarify=opts; buildClarify(body, opts); } }
 
       history.push(entry); persist();
+      } catch(e) {
+        // A turn must never end in silence (it used to: an unhandled rejection, a console toast, no reply).
+        // Whatever broke — a module the device dropped mid-reboot, a provider change — the user gets an honest
+        // line and the next turn starts clean.
+        console.error('[anima] turn failed', e);
+        think.remove();
+        const why = String((e && e.message) || e || '').slice(0, 140);
+        const msg = TR('Questa risposta non è andata a buon fine', 'This answer didn’t go through') + (why ? ' ('+why+')' : '')
+          + TR('. Riprova tra un attimo: se il Cardputer si stava riavviando, ora è pronto.', '. Try again in a moment: if the Cardputer was restarting, it is ready now.');
+        const { body } = botShell(history.length, false);
+        renderMd(body, msg); body.dataset.raw = msg;
+        history.push({ role:'bot', text:msg }); persist(); setDot('err');
       } finally {
         think.remove();
         if(turnCtl===ctl) turnCtl=null;
