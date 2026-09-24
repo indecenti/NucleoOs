@@ -176,10 +176,24 @@ static bool read_sd_latest(char *tag, size_t cap)
 }
 
 // ── public queries ─────────────────────────────────────────────────────────────────────────────
+// Whichever source has learned a release tag: the browser bridge (SD file — richer, carries notes)
+// if a browser has ever visited this device online, else the native boot/background check's own
+// NVS-cached result (nvs_ready() warms s_st.latest from it). Either path alone is enough to offer
+// an update — this device never NEEDS a browser to have visited first.
+static bool best_known_latest(char *out, size_t cap)
+{
+    if (read_sd_latest(out, cap)) return true;
+    nvs_ready();
+    portENTER_CRITICAL(&s_mux);
+    strncpy(out, s_st.latest, cap - 1); out[cap - 1] = 0;
+    portEXIT_CRITICAL(&s_mux);
+    return out[0] != 0;
+}
+
 bool nucleo_update_dialog_pending(void)
 {
     char latest[24], dismiss[24];
-    if (!read_sd_latest(latest, sizeof latest)) return false;   // no update learned by the browser yet
+    if (!best_known_latest(latest, sizeof latest)) return false;   // no update learned by either path yet
     nvs_get_string("dismiss", dismiss, sizeof dismiss);
     const esp_app_desc_t *app = esp_app_get_description();
     return upd_should_show(app ? app->version : "?", latest, dismiss);
@@ -188,25 +202,17 @@ bool nucleo_update_dialog_pending(void)
 const char *nucleo_update_latest_tag(void)
 {
     static char tag[24];
-    if (!read_sd_latest(tag, sizeof tag)) tag[0] = 0;
+    if (!best_known_latest(tag, sizeof tag)) tag[0] = 0;
     return tag;
 }
 
 void nucleo_update_dismiss_latest(void)
 {
     if (!nvs_ready()) return;
-    // Snapshot s_st.latest under the lock — the background check task can be mid-strncpy into it
-    // right now (the dialog shows an NVS-cached tag while a fresh check runs). Then do flash I/O on
-    // the local copy OUTSIDE the spinlock.
-    // Dismiss the SAME tag the dialog/app compare against (the browser-written SD copy): s_st.latest is
-    // only filled by an on-device check, so saving it left "Ignore" a no-op (or saved a stale tag).
+    // Dismiss the SAME tag the dialog/app compare against — whichever source it came from
+    // (see best_known_latest), not necessarily a fresh one if a background check is mid-flight.
     char tag[24];
-    if (!read_sd_latest(tag, sizeof tag)) {
-        portENTER_CRITICAL(&s_mux);
-        strncpy(tag, s_st.latest, sizeof(tag) - 1); tag[sizeof(tag) - 1] = 0;
-        portEXIT_CRITICAL(&s_mux);
-    }
-    if (!tag[0]) return;
+    if (!best_known_latest(tag, sizeof tag)) return;
     nvs_set_str(s_nvs, "dismiss", tag);
     nvs_commit(s_nvs);
     ESP_LOGI(TAG, "dismissed %s", tag);

@@ -21,7 +21,6 @@
 #include "nucleo_recorder.h"
 #include "nucleo_discovery.h"
 #include "nucleo_app.h"
-#include "nucleo_update.h"   // early boot-time release check (pre-httpd, max contiguous heap)
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
 #include "nucleo_audio.h"
@@ -421,6 +420,9 @@ void app_main(void)
     // boot lacks, so auto-confirming there would be irreversible. A no-op when nothing is pending.
     if (boot_healthy) {
         ota_confirm_if_pending();
+        // The promised replacement for the pre-httpd check above (removed for the OOM/stall reason
+        // explained there) is kicked from nucleo_app.cpp, AFTER its own synchronous
+        // nucleo_update_dialog_pending() call — see the note there for why the ordering matters.
     } else if (!solo) {
         // FULL-OS boot but httpd did NOT come up = a genuinely degraded boot. If we're running a
         // freshly-OTA'd image that is still PENDING_VERIFY, it just proved itself broken on its very
