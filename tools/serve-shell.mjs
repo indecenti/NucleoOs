@@ -345,7 +345,12 @@ async function fsApi(req, res, url) {
     }
     if (op === 'write') { await writeFile(abs, await readBody(req)); publish('fs.changed', { op: 'write', path: p }); return sendJSON(res, { ok: true }); }
     if (op === 'delete') { await rm(abs, { recursive: true }); publish('fs.changed', { op: 'delete', path: p }); return sendJSON(res, { ok: true }); }
-    if (op === 'mkdir') { await mkdir(abs, { recursive: true }); publish('fs.changed', { op: 'mkdir', path: p }); return sendJSON(res, { ok: true }); }
+    if (op === 'mkdir') {
+      let existed = true; try { await stat(abs); } catch { existed = false; }
+      await mkdir(abs, { recursive: true });
+      if (!existed) publish('fs.changed', { op: 'mkdir', path: p });   // real firmware only fires on actual creation — an unconditional fire loops reconcileDesktopFolder()
+      return sendJSON(res, { ok: true });
+    }
     if (op === 'move') {
       const from = sdPath(url.searchParams.get('from') || '');
       const to = sdPath(url.searchParams.get('to') || '');
