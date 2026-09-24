@@ -33,6 +33,53 @@
 #endif
 #include "nucleo_anima.h"
 
+// "/learnvec it|en" — rebuild ./sd/data/anima/learned/<lang>.vec from <lang>.jsonl the way the
+// device's online tier does for Wikipedia/teacher cards (vec_sync: the card's ask phrasings joined by
+// spaces; Wikidata fact cards embed only their primary ask), record u8 idlen | id | u16-LE dim | int8 vec. Lets recall-check.mjs gate the network-free learned-card
+// recall on the host without a network tier. Tiny JSON-string reader: the lines are cJSON-printed.
+int nucleo_anima_l1_encode(const char *text, int8_t *out, int cap);
+static const char *hm_json_str(const char *p, char *out, int cap)
+{
+    if (!p || *p != '"') return NULL;
+    int o = 0;
+    for (p++; *p && *p != '"'; p++) {
+        char c = *p;
+        if (c == '\\') { c = *++p; if (!c) return NULL; if (c == 'u') { p += 4; c = '?'; } else if (c == 'n') c = ' '; }
+        if (o < cap - 1) out[o++] = c;
+    }
+    out[o] = 0;
+    return *p == '"' ? p + 1 : NULL;
+}
+static int hm_learnvec(const char *lang)
+{
+    char jp[200], vp[200];
+    snprintf(jp, sizeof jp, "./sd/data/anima/learned/%s.jsonl", lang);
+    snprintf(vp, sizeof vp, "./sd/data/anima/learned/%s.vec", lang);
+    FILE *in = fopen(jp, "r"); if (!in) return -1;
+    FILE *out = fopen(vp, "wb"); if (!out) { fclose(in); return -1; }
+    static char line[4096]; int n = 0;
+    char key[12]; snprintf(key, sizeof key, "\"%s\":[", lang);
+    while (fgets(line, sizeof line, in)) {
+        const char *ip = strstr(line, "\"id\":\""); if (!ip) continue;
+        char id[80]; if (!hm_json_str(ip + 5, id, sizeof id) || !id[0]) continue;
+        const char *a = strstr(line, "\"ask\":{"); const char *arr = a ? strstr(a, key) : NULL; if (!arr) continue;
+        char emb[256]; int eo = 0; const char *p = arr + strlen(key);
+        while (*p == '"') {
+            char s[128]; p = hm_json_str(p, s, sizeof s); if (!p) break;
+            for (int k = 0; s[k] && eo < (int)sizeof emb - 1; k++) emb[eo++] = s[k];
+            if (eo < (int)sizeof emb - 1) emb[eo++] = ' ';
+            if (*p == ',') p++;
+        }
+        emb[eo] = 0;
+        static int8_t v[256];
+        int D = nucleo_anima_l1_encode(emb, v, 256); if (D <= 0) continue;
+        uint8_t l = (uint8_t)strlen(id), db[2] = { (uint8_t)(D & 0xFF), (uint8_t)(D >> 8) };
+        fwrite(&l, 1, 1, out); fwrite(id, 1, l, out); fwrite(db, 1, 2, out); fwrite(v, 1, (size_t)D, out); n++;
+    }
+    fclose(in); fclose(out);
+    return n;
+}
+
 // Diagnostics from the L1 tier (internal): the last query's top-2 cosines. Declared here (not via
 // the internal header) so the host driver can print how close a miss was under ANIMA_TRACE.
 void nucleo_anima_l1_last_band(float *c1, float *c2);
@@ -248,6 +295,7 @@ int main(int argc, char **argv) {
         if (!strcmp(line, "/en"))    { lang = "en"; nucleo_anima_init(lang); continue; }
         if (!strcmp(line, "/it"))    { lang = "it"; nucleo_anima_init(lang); continue; }
         if (!strcmp(line, "/reset")) { nucleo_anima_reset_session(); fprintf(stderr, "(sessione azzerata)\n"); continue; }
+        if (!strncmp(line, "/learnvec ", 10)) { fprintf(stderr, "(learnvec %s: %d vectors)\n", line + 10, hm_learnvec(line + 10)); continue; }
         anima_result_t r = nucleo_anima_query(line, lang);
         print_result(line, &r);
     }

@@ -263,10 +263,17 @@ Extends [`anima.md`](anima.md) §6:
   written to a bounded vector sidecar `learned/<lang>.vec` kept in lockstep with the JSONL
   (one encode per cache write, streaming O(dim) RAM). `nucleo_anima_online_recall()` encodes
   the query and cosine-matches the sidecar, answering a **paraphrase** of something already
-  learned — offline, no network — above a conservative gate (`RECALL_THRESH`, refuse rather
-  than misattribute). Wired after the live tier, before the clarify band. Note: the distilled
-  encoder is shallow (hashed n-grams), so recall catches lexical/morphological variants more
-  than deep conceptual paraphrase; threshold to be tuned with `tools/anima/eval.py`/`band_sim`.
+  learned — offline, no network — refusing rather than misattributing. Wired after the live
+  tier, before the clarify band. The recall lives in the network-free
+  `nucleo_anima_recall.c`, so the device, the host harness and the browser WASM (ANIMA Local,
+  which syncs `learned/<lang>.{jsonl,vec}` from the device) run the SAME code — one personal
+  memory. Because the distilled encoder is shallow (hashed n-grams), the gate is two-channel:
+  the lower the cosine, the more of the card's **title** the query must name (typo-tolerant,
+  distinctive ≥5-letter words only when the title has any): `RECALL_STRONG` 0.90 vector alone ·
+  `RECALL_THRESH` 0.75 + one title word · `RECALL_NAMED` 0.65 + every title word. Measured on
+  the host: queries naming the entity sit at 0.70–0.74, unrelated ones ≤0.51. Pinned by
+  `tools/anima-host/recall-check.mjs` (gate entry "learned-card recall"; `RECALL_TRACE=1` prints
+  the best cosine on host; `/learnvec it|en` in the REPL rebuilds a host `.vec` sidecar).
 - **O3 — Wikidata facts. ✅ IMPLEMENTED & TESTED (simulator).** A deterministic QA layer (NO
   LLM, NO key — Wikidata is free): `factDetect()` pattern-matches "quando è nato/morto X",
   "capitale di X", "chi ha scritto / autore di X" (IT+EN) → `wikidataFact()` resolves the entity

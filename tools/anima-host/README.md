@@ -25,7 +25,7 @@ After editing the engine or those files, rerun that build too — `npm run anima
 .\build.ps1                                   # -> build\anima.exe (static)
 .\build\anima.exe "che ore sono"              # one‑shot
 .\build\anima.exe --en "what time is it"      # English
-.\build\anima.exe                             # REPL: one query per line; /en /it /reset
+.\build\anima.exe                             # REPL: one query per line; /en /it /reset; /learnvec it|en rebuilds learned/<lang>.vec
 Get-Content queries.txt | .\build\anima.exe   # batch
 ```
 From the repo root: `npm run anima -- "che ore sono"` (auto‑builds if sources changed),
