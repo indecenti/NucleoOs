@@ -693,7 +693,7 @@
     /* context inspector ("what's in context", à la Claude Code) */
     .ctxm-scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:60;padding:18px}
     .ctxm-scrim.open{display:flex}
-    .ctxm{width:100%;max-width:680px;max-height:86vh;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line2);border-radius:var(--r-lg);box-shadow:0 18px 60px rgba(0,0,0,.5);overflow:hidden}
+    .ctxm{width:100%;max-width:680px;max-height:86vh;display:flex;flex-direction:column;background:var(--card-bg);border:1px solid var(--line2);border-radius:var(--r-lg);box-shadow:0 18px 60px rgba(0,0,0,.5);overflow:hidden}
     .ctxm-h{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line2)}
     .ctxm-h b{font-size:13px} .ctxm-h .ctxm-sub{color:var(--dim);font-size:11px;margin-left:auto}
     .ctxm-x{cursor:pointer;border:none;background:none;color:var(--dim);font-size:15px;padding:2px 6px;border-radius:var(--r-sm)} .ctxm-x:hover{color:var(--text);background:var(--card-tint)}
@@ -944,7 +944,7 @@
               <!-- Shared key manager (shell/ai-keys.js) — the SAME component Settings ▸ IA mounts, built on
                    shell/ai.js. Provider, model, key + test/save/delete all live there now; this app no longer
                    carries its own provider table or teacher.json I/O (it kept drifting from the canon). -->
-              <div id="ai-keys-mount"><div class="keystat">…</div></div>
+              <div class="set-field-col"><div id="ai-keys-mount"><div class="keystat">…</div></div></div>
             </div>
             <div class="modehint" id="key-hint">Meteo e Wikipedia funzionano già senza chiave. La chiave serve all'IA online: comprensione migliore, verifica anti-errore e modalità "Online". <b>Claude</b> risponde direttamente dal browser (non carica il Cardputer). La chiave resta solo sul tuo dispositivo (SD), mai nei log.</div>
           </div>
