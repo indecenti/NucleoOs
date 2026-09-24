@@ -12,6 +12,7 @@
 
 #include "app_gfx.h"
 #include "nucleo_theme.h"
+#include "nucleo_i18n.h"     // TR(it,en): the confirm card's Yes/No follow the system language
 // Palette follows the active OS theme (was hardcoded literals -> the shared list widget ignored
 // theme switches while the launcher recolored). ink/fg are constant across the current all-dark
 // theme set, so contrast is preserved. Zero RAM cost: THEME_* are existing globals.
@@ -254,12 +255,13 @@ void app_ui_confirm(const char *title, const char *msg, bool yes_focus)
     // Yes = destructive (red); No = safe (accent). Focused button is filled.
     d.fillRoundRect(yx, by, bw, bh, 7, yes_focus ? DANGER : BG);
     d.drawRoundRect(yx, by, bw, bh, 7, DANGER);
+    const char *yes = TR("Si", "Yes"), *no = "No";
     d.setTextSize(2); d.setTextColor(yes_focus ? INK : DANGER, yes_focus ? DANGER : BG);
-    d.setCursor(yx + bw / 2 - 18, by + 4); d.print("Yes");
+    d.setCursor(yx + bw / 2 - (int)strlen(yes) * 6, by + 4); d.print(yes);
     d.fillRoundRect(nx, by, bw, bh, 7, yes_focus ? BG : ACC);
     d.drawRoundRect(nx, by, bw, bh, 7, ACC);
     d.setTextColor(yes_focus ? FG : INK, yes_focus ? BG : ACC);
-    d.setCursor(nx + bw / 2 - 12, by + 4); d.print("No");
+    d.setCursor(nx + bw / 2 - (int)strlen(no) * 6, by + 4); d.print(no);
 }
 
 int app_ui_confirm_key(int key, char ch, bool *yes_focus)
@@ -332,3 +334,224 @@ bool app_ui_list_key(int key, char ch, int *sel, int count, app_ui_text_fn label
     }
     return false;
 }
+
+// ---- system glyph set (see ui_glyph.h) ------------------------------------------------------------
+#include "ui_glyph.h"
+
+#define UGI(v)  ((int)lroundf((float)(v)))
+#define UGW(v)  (UGI(v) > 0 ? UGI(v) : 1)        // a stroke is never thinner than one pixel
+
+// Thick line as a filled quad (exact width) — the few diagonals (mute cross).
+static void ug_line(LovyanGFX *g, float x0, float y0, float x1, float y1, float w, uint16_t c)
+{
+    float dx = x1 - x0, dy = y1 - y0, len = sqrtf(dx * dx + dy * dy);
+    if (len < 0.001f) { g->fillCircle(UGI(x0), UGI(y0), UGI(w / 2), c); return; }
+    float px = -dy / len * (w / 2), py = dx / len * (w / 2);
+    g->fillTriangle(UGI(x0 + px), UGI(y0 + py), UGI(x0 - px), UGI(y0 - py), UGI(x1 + px), UGI(y1 + py), c);
+    g->fillTriangle(UGI(x1 + px), UGI(y1 + py), UGI(x1 - px), UGI(y1 - py), UGI(x0 - px), UGI(y0 - py), c);
+}
+
+// Speaker body + cone, shared by UG_SPEAKER and UG_MUTE.
+static void ug_speaker(LovyanGFX *g, float cx, float cy, float r, uint16_t col)
+{
+    g->fillRect(UGI(cx - r * 0.85f), UGI(cy - r * 0.28f), UGI(r * 0.38f), UGI(r * 0.56f) + 1, col);
+    g->fillTriangle(UGI(cx - r * 0.55f), UGI(cy - r * 0.28f), UGI(cx), UGI(cy - r * 0.78f), UGI(cx), UGI(cy + r * 0.78f), col);
+    g->fillTriangle(UGI(cx - r * 0.55f), UGI(cy - r * 0.28f), UGI(cx), UGI(cy + r * 0.78f), UGI(cx - r * 0.55f), UGI(cy + r * 0.28f), col);
+}
+
+void ui_glyph(LovyanGFX *g, int glyph, int cx, int cy, int ri, uint16_t col, uint16_t bg)
+{
+    if (!g || ri < 3) return;
+    const float r = (float)ri, t = (r * 0.26f > 2.0f) ? r * 0.26f : 2.0f;
+    switch (glyph) {
+    case UG_WIFI: {                                             // dot + two rising arcs (a Wi-Fi fan)
+        float by = cy + r * 0.55f;
+        g->fillCircle(cx, UGI(by), UGI(t * 0.75f), col);
+        g->fillArc(cx, UGI(by), UGI(r * 0.55f), UGI(r * 0.55f + t), 218.0f, 322.0f, col);
+        g->fillArc(cx, UGI(by), UGI(r * 1.05f), UGI(r * 1.05f + t), 218.0f, 322.0f, col);
+    } break;
+    case UG_HOTSPOT:                                            // broadcast: dot + arcs to both sides
+        g->fillCircle(cx, cy, UGI(t * 0.85f), col);
+        g->fillArc(cx, cy, UGI(r * 0.45f), UGI(r * 0.45f + t * 0.8f), 140.0f, 220.0f, col);
+        g->fillArc(cx, cy, UGI(r * 0.45f), UGI(r * 0.45f + t * 0.8f), 320.0f, 400.0f, col);
+        g->fillArc(cx, cy, UGI(r * 0.82f), UGI(r * 0.82f + t * 0.8f), 145.0f, 215.0f, col);
+        g->fillArc(cx, cy, UGI(r * 0.82f), UGI(r * 0.82f + t * 0.8f), 325.0f, 395.0f, col);
+        break;
+    case UG_SUN:                                                // disc + 8 ray dots
+        g->fillCircle(cx, cy, UGI(r * 0.42f), col);
+        for (int k = 0; k < 8; k++) {
+            float a = k * 0.785398f;
+            g->fillCircle(UGI(cx + cosf(a) * r * 0.84f), UGI(cy + sinf(a) * r * 0.84f), UGW(t * 0.5f), col);
+        }
+        break;
+    case UG_SPEAKER:                                            // speaker + two sound waves
+        ug_speaker(g, cx, cy, r, col);
+        g->fillArc(cx, cy, UGI(r * 0.35f), UGI(r * 0.35f + t * 0.75f), 305.0f, 415.0f, col);
+        g->fillArc(cx, cy, UGI(r * 0.72f), UGI(r * 0.72f + t * 0.75f), 310.0f, 410.0f, col);
+        break;
+    case UG_MUTE:                                               // speaker + a cross
+        ug_speaker(g, cx - r * 0.1f, cy, r, col);
+        ug_line(g, cx + r * 0.3f, cy - r * 0.38f, cx + r * 0.95f, cy + r * 0.38f, t * 0.8f, col);
+        ug_line(g, cx + r * 0.3f, cy + r * 0.38f, cx + r * 0.95f, cy - r * 0.38f, t * 0.8f, col);
+        break;
+    case UG_GLOBE:                                              // ring + meridian ellipse + equator
+        g->fillCircle(cx, cy, ri, col); g->fillCircle(cx, cy, UGI(r - t * 0.8f), bg);
+        g->drawEllipse(cx, cy, UGI(r * 0.42f), ri - 1, col); g->drawEllipse(cx, cy, UGI(r * 0.42f) - 1, ri - 1, col);
+        g->fillRect(cx - ri + 1, cy - UGI(t * 0.35f), 2 * ri - 2, UGW(t * 0.7f), col);
+        break;
+    case UG_CLOCK:                                              // ring + two hands + hub
+        g->fillCircle(cx, cy, ri, col); g->fillCircle(cx, cy, UGI(r - t), bg);
+        g->fillRect(UGI(cx - t * 0.4f), UGI(cy - r * 0.62f), UGW(t * 0.8f), UGI(r * 0.62f), col);
+        g->fillRect(cx, UGI(cy - t * 0.4f), UGI(r * 0.48f), UGW(t * 0.8f), col);
+        g->fillCircle(cx, cy, UGW(t * 0.6f), col);
+        break;
+    case UG_CHIP:                                               // package + die + 3 pins per side
+        g->fillRoundRect(UGI(cx - r * 0.62f), UGI(cy - r * 0.62f), UGI(r * 1.24f), UGI(r * 1.24f), 2, col);
+        g->fillRect(UGI(cx - r * 0.26f), UGI(cy - r * 0.26f), UGI(r * 0.52f), UGI(r * 0.52f), bg);
+        for (int i = -1; i <= 1; i++) {
+            int o = UGI(i * r * 0.4f), pw = UGW(t * 0.6f), pl = UGI(r * 0.3f);
+            g->fillRect(cx + o - pw / 2, cy - ri, pw, pl, col); g->fillRect(cx + o - pw / 2, cy + ri - pl, pw, pl, col);
+            g->fillRect(cx - ri, cy + o - pw / 2, pl, pw, col); g->fillRect(cx + ri - pl, cy + o - pw / 2, pl, pw, col);
+        }
+        break;
+    case UG_RESET: {                                            // open ring + arrow head (restore / restart)
+        float R = r * 0.84f, a = 300.0f * 0.0174533f;
+        g->fillArc(cx, cy, UGI(R - t), UGI(R), 20.0f, 300.0f, col);
+        float rm = R - t / 2, px = cx + cosf(a) * rm, py = cy + sinf(a) * rm;
+        float tx = -sinf(a), ty = cosf(a), nx = cosf(a), ny = sinf(a), h = t * 1.5f;
+        g->fillTriangle(UGI(px + tx * h * 1.2f), UGI(py + ty * h * 1.2f),
+                        UGI(px + nx * h - tx * h * 0.3f), UGI(py + ny * h - ty * h * 0.3f),
+                        UGI(px - nx * h - tx * h * 0.3f), UGI(py - ny * h - ty * h * 0.3f), col);
+    } break;
+    case UG_POWER: {                                            // ring open at the top + a bar
+        float R = r * 0.86f;
+        g->fillArc(cx, cy, UGI(R - t), UGI(R), 305.0f, 595.0f, col);
+        g->fillRect(UGI(cx - t * 0.45f), cy - ri, UGW(t * 0.9f), UGI(r * 0.95f), col);
+    } break;
+    case UG_MOON:                                               // crescent
+        g->fillCircle(UGI(cx - r * 0.08f), cy, UGI(r * 0.86f), col);
+        g->fillCircle(UGI(cx + r * 0.34f), UGI(cy - r * 0.3f), UGI(r * 0.68f), bg);
+        break;
+    case UG_TORCH:                                              // flared head + body + switch
+        g->fillTriangle(UGI(cx - r * 0.66f), UGI(cy - r * 0.86f), UGI(cx + r * 0.66f), UGI(cy - r * 0.86f), UGI(cx + r * 0.3f), UGI(cy - r * 0.22f), col);
+        g->fillTriangle(UGI(cx - r * 0.66f), UGI(cy - r * 0.86f), UGI(cx + r * 0.3f), UGI(cy - r * 0.22f), UGI(cx - r * 0.3f), UGI(cy - r * 0.22f), col);
+        g->fillRoundRect(UGI(cx - r * 0.3f), UGI(cy - r * 0.3f), UGI(r * 0.6f), UGI(r * 1.2f), 2, col);
+        g->fillRect(UGI(cx - t * 0.35f), UGI(cy + r * 0.05f), UGW(t * 0.7f), UGI(r * 0.32f), bg);
+        break;
+    case UG_GEAR:                                               // body + 8 teeth + hub hole
+        g->fillCircle(cx, cy, UGI(r * 0.66f), col);
+        for (int k = 0; k < 8; k++) {
+            float a = k * 0.785398f; int s = UGI(t * 1.3f);
+            g->fillRect(UGI(cx + cosf(a) * r * 0.78f) - s / 2, UGI(cy + sinf(a) * r * 0.78f) - s / 2, s, s, col);
+        }
+        g->fillCircle(cx, cy, UGI(r * 0.27f), bg);
+        break;
+    case UG_KEYBOARD: {                                         // board + 2 key rows + space bar
+        g->fillRoundRect(cx - ri, UGI(cy - r * 0.62f), 2 * ri, UGI(r * 1.24f), 2, col);
+        int k = UGW(t * 0.62f);
+        for (int ry = 0; ry < 2; ry++) for (int c = 0; c < 4; c++)
+            g->fillRect(UGI(cx - r * 0.7f + c * r * 0.46f), UGI(cy - r * 0.34f + ry * r * 0.4f), k, k, bg);
+        g->fillRect(UGI(cx - r * 0.42f), UGI(cy + r * 0.3f), UGI(r * 0.84f), k, bg);
+    } break;
+    case UG_USB:                                                // plug head + body with a slot
+        g->fillRect(UGI(cx - t), cy - ri, UGI(2 * t), UGI(r * 0.4f), col);
+        g->fillRoundRect(UGI(cx - r * 0.5f), UGI(cy - r * 0.62f), ri, UGI(r * 1.62f), 2, col);
+        g->fillRect(UGI(cx - r * 0.5f), UGI(cy + r * 0.12f), ri, UGW(t * 0.55f), bg);
+        break;
+    case UG_MONITOR:                                            // screen + stand (web client)
+        g->fillRoundRect(cx - ri, UGI(cy - r * 0.78f), 2 * ri, UGI(r * 1.26f), 2, col);
+        g->fillRect(UGI(cx - r + t * 0.75f), UGI(cy - r * 0.78f + t * 0.75f), UGI(2 * r - t * 1.5f), UGI(r * 1.26f - t * 1.5f), bg);
+        g->fillRect(UGI(cx - t * 0.4f), UGI(cy + r * 0.48f), UGW(t * 0.8f), UGI(r * 0.3f), col);
+        g->fillRect(UGI(cx - r * 0.5f), UGI(cy + r * 0.76f), ri, UGW(t * 0.6f), col);
+        break;
+    case UG_PALETTE:                                            // half-filled disc (theme)
+        g->fillCircle(cx, cy, UGI(r * 0.9f), col);
+        g->fillRect(cx + 1, cy - ri, ri, 2 * ri + 1, bg);
+        g->drawCircle(cx, cy, UGI(r * 0.9f), col); g->drawCircle(cx, cy, UGI(r * 0.9f) - 1, col);
+        break;
+    case UG_MIC:                                                // capsule + holder + stand
+        g->fillRoundRect(UGI(cx - r * 0.3f), cy - ri, UGI(r * 0.6f), UGI(r * 1.2f), UGI(r * 0.3f), col);
+        g->fillArc(cx, UGI(cy - r * 0.05f), UGI(r * 0.55f), UGI(r * 0.55f + t * 0.7f), 15.0f, 165.0f, col);
+        g->fillRect(UGI(cx - t * 0.35f), UGI(cy + r * 0.5f), UGW(t * 0.7f), UGI(r * 0.35f), col);
+        g->fillRect(UGI(cx - r * 0.42f), UGI(cy + r * 0.82f), UGI(r * 0.84f), UGW(t * 0.55f), col);
+        break;
+    case UG_STAR: {                                             // five-point star (preferred)
+        float ox[5], oy[5], ix[5], iy[5];
+        for (int k = 0; k < 5; k++) {
+            float a = (-90.0f + 72.0f * k) * 0.0174533f, b = a + 36.0f * 0.0174533f;
+            ox[k] = cx + cosf(a) * r; oy[k] = cy + sinf(a) * r;
+            ix[k] = cx + cosf(b) * r * 0.42f; iy[k] = cy + sinf(b) * r * 0.42f;
+        }
+        for (int k = 0; k < 5; k++) {
+            int p = (k + 4) % 5;
+            g->fillTriangle(UGI(ox[k]), UGI(oy[k]), UGI(ix[p]), UGI(iy[p]), UGI(ix[k]), UGI(iy[k]), col);
+            g->fillTriangle(cx, cy, UGI(ix[p]), UGI(iy[p]), UGI(ix[k]), UGI(iy[k]), col);
+        }
+    } break;
+    case UG_LOCK:                                               // shackle + body + keyhole
+        g->fillArc(cx, UGI(cy - r * 0.12f), UGI(r * 0.36f), UGI(r * 0.36f + t * 0.75f), 180.0f, 360.0f, col);
+        g->fillRect(UGI(cx - r * 0.36f - t * 0.75f), UGI(cy - r * 0.12f), UGW(t * 0.75f), UGI(r * 0.2f), col);
+        g->fillRect(UGI(cx + r * 0.36f), UGI(cy - r * 0.12f), UGW(t * 0.75f), UGI(r * 0.2f), col);
+        g->fillRoundRect(UGI(cx - r * 0.62f), UGI(cy - r * 0.05f), UGI(r * 1.24f), UGI(r * 0.95f), 2, col);
+        g->fillCircle(cx, UGI(cy + r * 0.38f), UGW(t * 0.45f), bg);
+        break;
+    case UG_UPDATE: {                                           // down arrow into a tray
+        int w = UGW(t * 0.7f);
+        g->fillRect(UGI(cx - t * 0.45f), cy - ri, UGW(t * 0.9f), UGI(r * 0.95f), col);
+        g->fillTriangle(UGI(cx - r * 0.55f), UGI(cy - r * 0.1f), UGI(cx + r * 0.55f), UGI(cy - r * 0.1f), cx, UGI(cy + r * 0.5f), col);
+        g->fillRect(cx - ri, UGI(cy + r * 0.72f), 2 * ri, w, col);
+        g->fillRect(cx - ri, UGI(cy + r * 0.3f), w, UGI(r * 0.5f), col);
+        g->fillRect(cx + ri - w, UGI(cy + r * 0.3f), w, UGI(r * 0.5f), col);
+    } break;
+    case UG_KEY:                                                // bow ring + shaft + two bits (pairing PIN)
+        g->fillCircle(UGI(cx - r * 0.45f), cy, UGI(r * 0.48f), col);
+        g->fillCircle(UGI(cx - r * 0.45f), cy, UGW(r * 0.2f), bg);
+        g->fillRect(UGI(cx - r * 0.05f), UGI(cy - t * 0.4f), ri, UGW(t * 0.8f), col);
+        g->fillRect(UGI(cx + r * 0.52f), cy, UGW(t * 0.7f), UGI(r * 0.38f), col);
+        g->fillRect(UGI(cx + r * 0.8f), cy, UGW(t * 0.7f), UGI(r * 0.28f), col);
+        break;
+    case UG_CHECK:                                              // tick (confirmation)
+        ug_line(g, cx - r * 0.72f, cy + r * 0.02f, cx - r * 0.2f, cy + r * 0.55f, t * 1.1f, col);
+        ug_line(g, cx - r * 0.2f, cy + r * 0.55f, cx + r * 0.8f, cy - r * 0.55f, t * 1.1f, col);
+        break;
+    case UG_SEARCH:                                             // magnifier: ring + handle
+        g->fillCircle(UGI(cx - r * 0.2f), UGI(cy - r * 0.2f), UGI(r * 0.6f), col);
+        g->fillCircle(UGI(cx - r * 0.2f), UGI(cy - r * 0.2f), UGI(r * 0.6f - t), bg);
+        ug_line(g, cx + r * 0.22f, cy + r * 0.22f, cx + r * 0.85f, cy + r * 0.85f, t * 1.1f, col);
+        break;
+    case UG_BELL:                                               // bell: dome + rim + clapper
+        g->fillRoundRect(UGI(cx - r * 0.62f), UGI(cy - r * 0.7f), UGI(r * 1.24f), UGI(r * 1.2f), UGI(r * 0.6f), col);
+        g->fillRect(UGI(cx - r * 0.85f), UGI(cy + r * 0.34f), UGI(r * 1.7f), UGW(t * 0.7f), col);
+        g->fillCircle(cx, UGI(cy + r * 0.72f), UGW(t * 0.6f), col);
+        break;
+    case UG_BATTERY: {                                          // cell body + terminal, two-thirds full
+        int bw = UGI(r * 1.6f), bh = UGI(r * 0.95f), bx = cx - bw / 2 - 1, by = cy - bh / 2;
+        g->fillRoundRect(bx, by, bw, bh, 2, col);
+        g->fillRect(bx + bw, cy - bh / 4, UGW(t * 0.6f), bh / 2, col);
+        g->fillRect(bx + UGW(t * 0.6f) + UGI(bw * 0.6f), by + UGW(t * 0.6f), bw - 2 * UGW(t * 0.6f) - UGI(bw * 0.6f), bh - 2 * UGW(t * 0.6f), bg);
+    } break;
+    case UG_BLUETOOTH:                                          // the rune: spine + two chevrons
+        ug_line(g, cx, cy - r, cx, cy + r, t * 0.8f, col);
+        ug_line(g, cx, cy - r, cx + r * 0.55f, cy - r * 0.45f, t * 0.8f, col);
+        ug_line(g, cx + r * 0.55f, cy - r * 0.45f, cx - r * 0.55f, cy + r * 0.45f, t * 0.8f, col);
+        ug_line(g, cx, cy + r, cx + r * 0.55f, cy + r * 0.45f, t * 0.8f, col);
+        ug_line(g, cx + r * 0.55f, cy + r * 0.45f, cx - r * 0.55f, cy - r * 0.45f, t * 0.8f, col);
+        break;
+    case UG_INFO:                                               // (i)
+        g->fillCircle(cx, cy, ri, col);
+        g->fillRect(UGI(cx - t * 0.45f), UGI(cy - r * 0.15f), UGW(t * 0.9f), UGI(r * 0.65f), bg);
+        g->fillCircle(cx, UGI(cy - r * 0.48f), UGW(t * 0.55f), bg);
+        break;
+    case UG_NEXT:                                               // chevron right
+        g->fillTriangle(UGI(cx - r * 0.35f), UGI(cy - r * 0.6f), UGI(cx - r * 0.35f), UGI(cy + r * 0.6f), UGI(cx + r * 0.4f), cy, col);
+        break;
+    case UG_PREV:                                               // chevron left
+        g->fillTriangle(UGI(cx + r * 0.35f), UGI(cy - r * 0.6f), UGI(cx + r * 0.35f), UGI(cy + r * 0.6f), UGI(cx - r * 0.4f), cy, col);
+        break;
+    default:
+        g->fillCircle(cx, cy, UGI(r * 0.4f), col);
+        break;
+    }
+}
+#undef UGW
+#undef UGI

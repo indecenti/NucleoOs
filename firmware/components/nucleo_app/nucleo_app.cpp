@@ -175,6 +175,7 @@ static bool boot_was_crash_reset(void)
 RTC_NOINIT_ATTR static uint32_t s_reopen_req;
 extern "C" void nucleo_app_request_reopen_recorder(void) { s_reopen_req = REOPEN_RECORDER_MAGIC; }
 static bool reopen_recorder_pending(void) { return esp_reset_reason() == ESP_RST_SW && s_reopen_req == REOPEN_RECORDER_MAGIC; }
+extern "C" const char *nucleo_anima_take_launch(void);   // ANIMA "open app" handoff (RTC, one-shot, only after ESP_RST_SW)
 
 // ---- shared display brightness ----------------------------------------------
 static int s_brightness = 100;                 // percent; the Control Center + video share this
@@ -484,6 +485,11 @@ static bool s_app_excl   = false;          // framework entered exclusive for th
 // screen from an overlay/launcher (the canvas may match a stale pre-overlay frame). One owner of the rule.
 static uint32_t s_fg_last_hash = 0;
 static bool     s_fg_was_fg    = false;
+// Was the foreground app's LAST frame drawn DIRECT (no canvas)? Then the panel no longer matches the last
+// buffered push, so the next buffered frame must blit in full (the band hashes would skip "unchanged"
+// bands that direct draws have since overwritten -> stale rows), and a direct frame after a buffered one
+// bumps s_repaint_gen so incremental direct painters re-sync with one full paint.
+static bool     s_fg_direct_last = false;
 static uint32_t fg_canvas_hash(M5Canvas *cv)
 {
     const uint8_t *b = (const uint8_t *)cv->getBuffer();
@@ -818,6 +824,7 @@ void nucleo_app_exit(void) { close_app(); }
 static void torch_off(void)
 {
     if (!s_torch) return;
+    ESP_LOGW("torch", "off");
     s_torch = false;
     nucleo_app_set_brightness(s_torch_prev_bright);                       // give the user's level back
     d.fillScreen(BG);                                                    // wipe white before the layer below repaints
@@ -826,6 +833,7 @@ static void torch_off(void)
 static void torch_on(void)
 {
     s_torch_prev_bright = nucleo_app_brightness();                        // remember to restore on dismiss
+    ESP_LOGW("torch", "on (bright %d -> 100)", s_torch_prev_bright);
     s_torch = true;
     nucleo_app_set_brightness(100);
     s_dirty = true;                                                      // the run loop paints the white overlay
@@ -1562,6 +1570,8 @@ void nucleo_app_run(void)
     }
     // Full OS after a Recorder Solo job: re-open the Recorder so the user lands on the saved result.
     else if (reopen_recorder_pending()) { s_reopen_req = 0; nucleo_app_launch_id("recorder"); }
+    // Full OS after ANIMA Solo said "open Music": open the app it staged, like a launcher tap.
+    else if (const char *aid = nucleo_anima_take_launch()) nucleo_app_launch_id(aid);
     // Release-update dialog: a newer, non-dismissed release was learned on a previous boot (pure
     // NVS decision — no network on this path). Update now / next boot (Esc) / ignore this version.
     else if (nucleo_update_dialog_pending()) { nucleo_app_launch_id("updates"); }
@@ -1636,7 +1646,7 @@ void nucleo_app_run(void)
                                  // Client gone for good → wake the panel: with no client it must stay on.
                                  if (now - remote_gone_ms >= REMOTE_GRACE_MS) { exit_remote(); display_wake(); last_act = now; } }
             nucleo_key_t wk = nucleo_kbd_read();
-            if (wk.key != NK_NONE || gpio_get_level(GPIO_NUM_0) == 0) { display_wake(); last_act = now; last_remote_input = now; }
+            if (wk.key != NK_NONE || gpio_get_level(GPIO_NUM_0) == 0) { ESP_LOGW("g0", "wake from display sleep"); display_wake(); last_act = now; last_remote_input = now; }
             esp_task_wdt_reset();
             vTaskDelay(pdMS_TO_TICKS(40));
             continue;
@@ -1699,7 +1709,7 @@ void nucleo_app_run(void)
         // press. (The old long-press jump to the ANIMA app is gone — hold now talks instead.)
         if (gpio_get_level(GPIO_NUM_0) == 0) {                 // pressed (active-low)
             last_act = now;
-            if (g0_down_ms == 0) g0_down_ms = now;
+            if (g0_down_ms == 0) { g0_down_ms = now; ESP_LOGW("g0", "down"); }
             else if (!g0_ptt && now - g0_down_ms >= G0_HOLD_MS) {
                 g0_ptt = true;                                 // crossed the threshold → start talking
                 if (s_torch) torch_off();                      // a hold past a torch tap dismisses the light first
@@ -1733,6 +1743,7 @@ void nucleo_app_run(void)
                 }
             }
         } else {                                               // released
+            if (g0_down_ms) ESP_LOGW("g0", "up after %d ms ptt=%d cooldown=%d", (int)(now - g0_down_ms), (int)g0_ptt, (int)(now < g0_cooldown_ms));
             if (g0_ptt) {
                 if (g0_app_ptt) { g0_app_ptt(false); g0_app_ptt = nullptr; }  // app PTT (recorder): stop + end cue
                 else            { nucleo_voice_ptt(false); }                  // voice PTT → recognize (screen dark until end beep)
@@ -1825,6 +1836,7 @@ void nucleo_app_run(void)
                 if (cap_cover) s_cover_req = true; else s_shot_req = true;   // in-game cover (Ctrl+P/'C') vs Fn+P screenshot
                 s_dirty = true;
             } else if (s_torch) {                // flashlight overlay is up — any key turns it off
+                ESP_LOGW("torch", "key %d ch %d dismisses", nk.key, (int)nk.ch);
                 torch_off();
             } else if (s_notify_show) {           // a reminder banner is up — any key dismisses it
                 s_notify_show = false; d.fillScreen(BG); s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true;
@@ -1847,12 +1859,21 @@ void nucleo_app_run(void)
                     }
                 }
             } else if (s_control_center) {
-                // The sheet now owns Back/Left and pops hierarchically (edit -> row -> header);
-                // it returns CC_CLOSE (2) when Back is pressed past the top level, CC_SCREEN_OFF (3) for the screen-off action.
+                // The panel owns every key while up (Back closes it). Codes: CC_CLOSE (2), CC_SCREEN_OFF (3),
+                // CC_LAUNCH (4, app id from _launch_id()), CC_TORCH (5); CC_REDRAW (1) repaints.
                 int r = launcher_render_control_center_key(nk.key, nk.ch);
-                if (r == 2) { s_control_center = false; s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true; launcher_render_control_center_close(); if (s_cc_canvas_borrowed) { nucleo_screen_release(); s_cc_canvas_borrowed = false; } d.fillScreen(BG); }
-                else if (r == 3) { s_control_center = false; launcher_render_control_center_close(); if (s_cc_canvas_borrowed) { nucleo_screen_release(); s_cc_canvas_borrowed = false; } d.fillScreen(BG); s_wake_saved_bright = nucleo_app_brightness(); nucleo_app_set_brightness(0); s_wake_pending = true; }
-                else if (r == 4) { const char *lid = launcher_render_control_center_launch_id(); s_control_center = false; launcher_render_control_center_close(); if (s_cc_canvas_borrowed) { nucleo_screen_release(); s_cc_canvas_borrowed = false; } d.fillScreen(BG); if (lid) nucleo_app_launch_id(lid); }
+                if (r >= 2) {
+                    s_control_center = false; launcher_render_control_center_close();
+                    if (s_cc_canvas_borrowed) { nucleo_screen_release(); s_cc_canvas_borrowed = false; }
+                    d.fillScreen(BG); s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true;   // repaint what's underneath
+                }
+                if (r == 3) {
+                    // Backlight fully OFF (the app-level setter floors at 10% on purpose, so go to the panel
+                    // driver). s_brightness is untouched, so the wake key restores the exact level.
+                    s_wake_saved_bright = nucleo_app_brightness(); nucleo_ui_set_brightness(0); s_wake_pending = true;
+                }
+                else if (r == 4) { const char *lid = launcher_render_control_center_launch_id(); if (lid) nucleo_app_launch_id(lid); }
+                else if (r == 5) torch_on();
                 else if (r == 1) s_dirty = true;
             } else if (s_gamefront) {
                 // GameFront owns input while up (s_active is still -1). It returns an id to launch.
@@ -1929,12 +1950,12 @@ void nucleo_app_run(void)
                 if (def && def->on_tick) def->on_tick();      // foreground apps tick ~5x/s
             }
         }
-        // Once-a-second refresh: the launcher chrome (clock digits) or, when the SISTEMA tab
-        // is up, the Control Center info strip (it embeds a clock + free RAM). RAPIDE and RETE
-        // tabs have no time-varying content, so skip the 1 Hz tick there. Suppressed during PTT.
+        // Once-a-second refresh: the launcher chrome (clock digits) or the Control Center status strip
+        // (clock, battery, link, hotspot) — the panel repaints only when its content signature changed,
+        // so a static panel is never re-blitted. Suppressed during PTT.
         if (!s_torch && !s_voice_dark && now - last_clock >= 1000) {
             last_clock = now;
-            if (s_control_center && launcher_render_control_center_tab() == 2) s_dirty = true;
+            if (s_control_center) { if (launcher_render_control_center_tick()) s_dirty = true; }
             // Launcher home: tick only the clock digits in place — repainting the whole chrome
             // every second flashed all three bars black. Skip while the list is mid-scroll so
             // the direct write can't race the band blit.
@@ -1947,6 +1968,9 @@ void nucleo_app_run(void)
         if (s_gamefront && !s_control_center && !s_torch && !s_voice_dark && gamefront_step()) s_dirty = true;
 
         bool fg_taken = false;   // did the foreground-app branch own the screen this iteration? (idle-reblit guard)
+        // An overlay above the Control Center owns the panel this frame (PTT, torch, voice, reminder): the
+        // CC's direct-draw snapshot no longer matches the screen, so its next paint must be a full one.
+        if (s_control_center && (s_voice_dark || s_torch || voice_active || s_notify_show)) launcher_render_control_center_invalidate();
         if (s_voice_dark) {
             // PTT low-power capture: the panel is off and the 32 KB back-buffer is freed for the
             // recognizer (held across the async dispatch tail too). Draw NOTHING — never fall through
@@ -2040,7 +2064,8 @@ void nucleo_app_run(void)
                     // Force it the frame the app regains the screen (was_fg false) or while the toast is
                     // overlaid (the pill must reach the panel even on an otherwise-static frame).
                     uint32_t h = fg_canvas_hash(cv);
-                    bool force = !s_fg_was_fg || toast;
+                    bool force = !s_fg_was_fg || toast || s_fg_direct_last;
+                    s_fg_direct_last = false;
                     if (force || h != s_fg_last_hash) {
                         s_fg_last_hash = h;
                         // Push only the bands that changed (fullscreen apps reclaim the hint rows). Unchanged
@@ -2065,6 +2090,7 @@ void nucleo_app_run(void)
                     // draws already clear their own region (app_ui_title/app_ui_list fillRect), so
                     // no extra clear here — that double-clear was visible flicker. Batch the whole
                     // repaint into ONE SPI transaction so the clear→text gap is as short as possible.
+                    if (!s_fg_direct_last) { s_fg_direct_last = true; s_repaint_gen++; }   // buffered -> direct: re-sync
                     d.startWrite();
                     def->on_draw();
                     d.endWrite();

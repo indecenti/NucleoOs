@@ -116,9 +116,93 @@ For destructive actions use the shared confirm card `app_ui_confirm(title, msg, 
 replaced the old "press D twice" arm), Notifications (clear history) and Voice (delete trained
 template). Returns 1 = confirmed, 0 = cancelled, -1 = still open.
 
-Deliberately **not** converted: flows that already gate destructive actions their own way —
-Recorder's delete uses the blocking `nucleo_ui_menu` Cancel/Delete modal, and WiFi's factory
-reset keeps its triple-press countdown (high-friction on purpose for a whole-OS wipe).
+Settings uses it too (Restart, Forget all networks, forget one network). Deliberately **not**
+converted: flows that already gate destructive actions their own way — Recorder's delete uses the
+blocking `nucleo_ui_menu` Cancel/Delete modal, and Settings ▸ Reset keeps its triple-press
+countdown (high-friction on purpose for a whole-OS wipe; the row shows the presses left).
+
+## Control Center (TAB)
+
+TAB from anywhere (unless the foreground app claims it) raises a **one-screen quick panel** — no
+tabs, no hidden pages. Top to bottom:
+
+```
+┌ 14:05  CasaNet              ▮▮▮ ▭ 85% ┐  status strip: clock · network · signal · battery
+│ [1 Mute] [2 Torch] [3 Sleep] [4 Hotspot]│  toggle tiles — keys 1-4 fire them directly
+│ ☀ ━━━━━━━━━━━━━━●──────────      70%   │  brightness (LEFT/RIGHT adjust in place)
+│ ♪ ━━━━━━━●─────────────────      40%   │  volume     (LEFT/RIGHT adjust, ENTER = mute)
+│ (⚙) (▭) (⌨) (▯) (⏻)                    │  Settings · Web client · USB keyboard · USB drive · Restart
+└ Brightness 70%   </> adjust            ┘  context line: what the focus does + its live value
+```
+
+- UP/DOWN move between lines (wrap), LEFT/RIGHT move inside a line or adjust a slider, ENTER acts,
+  Esc or TAB closes. The focus is **remembered** across opens and drawn as a 2 px **ring** around
+  the element (red while a disruptive action is armed).
+- The context line names the focused control and its state; on the Web-client shortcut it shows
+  the **IP and pairing PIN** (what you need to open the web OS).
+- Disruptive actions — Hotspot (it drops the Wi-Fi client link) and Restart — **arm** on the first
+  ENTER and fire on the second; any other key disarms. In a Wi-Fi-skipped Solo boot (BLE suite /
+  Sentinel, NX_WIFI apps, USB-web) the setup config was never loaded, so the Hotspot tile is drawn
+  disabled and `nucleo_setup_start_ap/stop_ap` refuse (`nucleo_setup_config_loaded()`).
+- Brightness/volume changes are persisted once, when the panel closes. Screen-off turns the
+  backlight fully off; the next key wakes it (and is swallowed).
+- **Flicker-free without the back-buffer.** On the ADV the 32 KB canvas often can't be allocated
+  after Wi-Fi comes up, so the panel paints straight to the display. It then repaints only the
+  elements whose state changed (`CcShown s_ccs`) and never clears first: focus moves redraw two
+  ring outlines, colour changes redraw a glyph over its own fill, a slider lifts only its old knob
+  and repaints the track as two non-overlapping pieces, and every text line is a fixed-width field
+  drawn opaque. Only opening the panel — or an overlay (torch, voice, reminder) having painted over
+  it (`launcher_render_control_center_invalidate()`) — costs one full paint.
+
+Code: `launcher_render.cpp` (§ Control Center). Theme roles only + named `C_*` semantics.
+
+## Settings app (native, id `wifi`)
+
+A smartwatch-style settings app: a **root list of sections**, each row previewing its live value,
+then one page per section. Rows are built on demand from an id (no row arrays in RAM).
+
+```
+Settings
+├─ [suggestion]  (only when needed: set the clock · battery low → dim · join Wi-Fi)
+├─ Wi-Fi        (SSID)     → status card · Nearby networks · Saved networks · Web handoff
+├─ Hotspot      (On/Off)   → Hotspot · Status · Name · Password · Address
+├─ Bluetooth    (On/Off)   → On at boot (NVS, applies after restart) · Right now · Restart
+├─ Display      (70%)      → Brightness · Theme · Screensaver timeout (Never…10 min) · Style
+├─ Sound        (40%)      → Volume · Mute · Read aloud (TTS) · Voice speed · Always listen
+├─ ANIMA        (inline)   → Offline / Hybrid / Online only (anima_ui.json + live flags)
+├─ Language     (inline)   → it / en / es / fr / de
+├─ Date/time    (14:05)    → no-typing field editor (day/month/year · hours:minutes)
+├─ Device       (name)     → Name · PIN · Web sessions (sign everyone out) · Model · Version ·
+│                             Battery · SD · Free RAM · Uptime · Updates · Restart
+└─ Reset                   → Reset settings · Factory reset (ENTER ×3, the chip says what it erases)
+```
+
+- **Fisheye chips.** Compact rows (19 px) show the name and the value in the proportional
+  **Font2** (16 px, full colour); the focused row expands into a two-line accent chip: the name,
+  then a readable second line — a slider bar, `< choice >`, the value, or what the setting does.
+- **Type to search.** Any letter on the root opens a live search across every section; results
+  *act like the real rows* (flip, adjust with LEFT/RIGHT, open). DEL erases, Esc closes.
+- **Crown acceleration.** Holding LEFT/RIGHT on a slider steps 5 → 10 once the key repeats.
+- Same keys on every screen: UP/DOWN move (wrap) · **1-9** jump (on the root they open the section)
+  · ENTER acts · LEFT/RIGHT adjust (elsewhere RIGHT opens, LEFT goes back — LEFT never closes the
+  app) · Esc back · **TAB next section**. Focus is remembered per page. Confirmations use a tick toast.
+- Toggles flip only on ENTER; the Hotspot switch and "sign everyone out" ask with a confirm card.
+- Nearby networks scans when opened; ENTER joins (asks the password only for a secured network
+  without a saved one), `p` marks a saved network preferred, `Del` forgets it (confirm card, by SSID).
+- Getters that hit storage (TTS voice-pack probe, BLE NVS pref) are cached per visit, never per paint.
+- The chip is the **theme accent**, so cycling the theme in Display recolours the screen live.
+- **Flicker-free without the back-buffer** (the usual ADV state): only changed boxes repaint, each
+  rendered in a strip sprite (as tall as the heap allows: a whole 34 px chip, 19 or 12 rows) and pushed
+  atomically; the list scrolls by JUMPS (chip to the top going down, to the bottom going up) so most
+  keys repaint two rows, not the whole list. See `ANTI-FLICKER.md` ("atomic box repaint").
+
+Only settings with a real firmware backend are listed. Web-only keys in `settings.json` with no
+firmware reader (`device.timezone`, `power.profile`, `power.sleep_timeout_s`, `network.ble.enabled`…)
+are deliberately absent: nothing on the device reads them (time zone and NTP are compile-time,
+screen-off-while-remote is a `#define`, the real BLE switch is NVS `ble/on`).
+
+Both surfaces draw their icons from the shared system glyph set `ui_glyph.h` (Wi-Fi fan, sun,
+speaker, power, gear…), separate from the launcher app-icon set so it never touches `icons:gate`.
 
 ## Framework
 

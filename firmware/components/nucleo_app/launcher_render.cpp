@@ -8,8 +8,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <time.h>
-#include "esp_system.h"      // esp_restart() for the SISTEMA > Riavvia action
-#include "esp_heap_caps.h"   // free-heap readout for the SISTEMA > RAM row
+#include "esp_system.h"      // esp_restart() for the Control Center's Restart shortcut
 #include "esp_timer.h"       // esp_timer_get_time() for the frame-rate-independent carousel ease
 #include "nucleo_i18n.h"     // system language (TR/it-en) for the Control Center labels
 
@@ -28,7 +27,6 @@ void      nucleo_screen_release(void);
 extern "C" const char *nucleo_setup_mode(void);        // "sta" | "ap"
 extern "C" const char *nucleo_setup_ssid(void);
 extern "C" const char *nucleo_setup_ip(void);
-extern "C" const char *nucleo_setup_device_name(void);
 extern "C" const char *nucleo_auth_pin(void);
 
 // Evil Portal live state, so the status bar can flag it while it runs in the background.
@@ -52,10 +50,9 @@ extern "C" bool nucleo_audio_is_paused(void);
 extern "C" const char *nucleo_audio_path(void);
 extern "C" int  nucleo_power_battery_pct(void);             // 0..100, -1 = unavailable
 
-// System hooks (nucleo_setup, nucleo_usbmsc — resolved at final link, no cycle).
+// System hooks (nucleo_setup — resolved at final link, no cycle).
 extern "C" int  nucleo_setup_rssi(void);
 extern "C" bool nucleo_setup_time_synced(void);
-extern "C" void nucleo_usbmsc_request(void);
 
 // ---- hint + instruction text ------------------------------------------------
 static char s_hint[48] = "";
@@ -78,15 +75,15 @@ void launcher_render_update_chrome(void)
     // back; ENTER opens. When an app is focused, '*' pins/unpins it to the top of Home (ANIMA excluded,
     // it already lives there). s_hint is 48 B; the longest string below is ~30 chars, well within 240 px.
     bool app = cur && cur->kind == N_APP && strcmp(cur->id, "anima");
-    const char *pinw = app ? (launcher_is_pinned(cur->id) ? "* togli" : "* fissa") : "";
+    const char *pinw = app ? (launcher_is_pinned(cur->id) ? TR("* togli", "* unpin") : TR("* fissa", "* pin")) : "";
     if (launcher_filter()[0]) {
-        snprintf(s_hint, sizeof(s_hint), "filtro \"%.12s\"   -   esc azzera", launcher_filter());
+        snprintf(s_hint, sizeof(s_hint), TR("cerca \"%.12s\"   esc azzera", "find \"%.12s\"   esc clear"), launcher_filter());
     } else if (launcher_depth() > 0) {
-        if (app) snprintf(s_hint, sizeof(s_hint), "invio apre   %s   esc", pinw);
-        else     snprintf(s_hint, sizeof(s_hint), "scorri   invio apre   esc");
+        if (app) snprintf(s_hint, sizeof(s_hint), TR("invio apri   %s   esc indietro", "enter open   %s   esc back"), pinw);
+        else     snprintf(s_hint, sizeof(s_hint), "%s", TR("invio apri   esc indietro", "enter open   esc back"));
     } else {
-        if (app) snprintf(s_hint, sizeof(s_hint), "invio apre   %s", pinw);
-        else     snprintf(s_hint, sizeof(s_hint), "invio apre   digita per cercare");   // teach Spotlight
+        if (app) snprintf(s_hint, sizeof(s_hint), TR("invio apri   %s   tab rapide", "enter open   %s   tab quick"), pinw);
+        else     snprintf(s_hint, sizeof(s_hint), "%s", TR("invio apri   digita cerca   tab rapide", "enter open   type to find   tab quick"));   // teach Spotlight + the Control Center
     }
     s_hint[sizeof(s_hint) - 1] = 0;
 }
@@ -359,6 +356,13 @@ template <typename T> static void ui_icon(T *g, int cx, int cy, int r, const cha
         IBX(cx - s * 0.46f, cy + s * 0.26f, s * 0.34f, s * 0.10f, bg);         // d-pad horizontal
         IFC(cx + s * 0.30f, cy + s * 0.22f, s * 0.13f, bg);                    // B
         IFC(cx + s * 0.02f, cy + s * 0.42f, s * 0.13f, bg);                    // A
+    } else if (!strcmp(id, "ggemu")) {                                       // Game Gear: landscape body, screen, d-pad, two buttons
+        IRR(cx - s, cy - s * 0.62f, s * 2.0f, s * 1.24f, s * 0.40f, col);      // handheld body
+        IBX(cx - s * 0.36f, cy - s * 0.42f, s * 0.72f, s * 0.84f, bg);         // screen well
+        IBX(cx - s * 0.80f, cy - s * 0.06f, s * 0.30f, s * 0.12f, bg);         // d-pad horizontal
+        IBX(cx - s * 0.71f, cy - s * 0.21f, s * 0.12f, s * 0.42f, bg);         // d-pad vertical
+        IFC(cx + s * 0.56f, cy - s * 0.06f, s * 0.11f, bg);                    // 2
+        IFC(cx + s * 0.80f, cy + s * 0.14f, s * 0.11f, bg);                    // 1
     } else if (!strcmp(id, "video")) {
         IRR(cx - s, cy - s * 0.75f, 2 * s, s * 1.5f, s * 0.22f, col);
         ITR(cx - s * 0.3f, cy - s * 0.42f, cx - s * 0.3f, cy + s * 0.42f, cx + s * 0.5f, cy, bg);
@@ -736,10 +740,14 @@ void launcher_render_status_bar(void)
             draw_wifi(rx - 19, 4, sta, nucleo_setup_rssi());   rx -= 19 + 6;   // antenna gauge, far right
             int bpct = nucleo_power_battery_pct();
             if (bpct >= 0) { draw_battery_pip(rx - 14, 4, bpct); rx -= 14 + 6; }   // pip left of the gauge
-            static const char *const WD[7]  = { "dom","lun","mar","mer","gio","ven","sab" };
-            static const char *const MO[12] = { "gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic" };
+            // Day + month follow the system language (Italian only for "it"; English is the floor, like TR).
+            static const char *const WD_IT[7]  = { "dom","lun","mar","mer","gio","ven","sab" };
+            static const char *const MO_IT[12] = { "gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic" };
+            static const char *const WD_EN[7]  = { "Sun","Mon","Tue","Wed","Thu","Fri","Sat" };
+            static const char *const MO_EN[12] = { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" };
+            bool it = !strcmp(nucleo_i18n_lang(), "it");
             char dt[16] = "";
-            if (tm && now > 1672531200) snprintf(dt, sizeof dt, "%s %d %s", WD[tm->tm_wday], tm->tm_mday, MO[tm->tm_mon]);
+            if (tm && now > 1672531200) snprintf(dt, sizeof dt, "%s %d %s", (it ? WD_IT : WD_EN)[tm->tm_wday], tm->tm_mday, (it ? MO_IT : MO_EN)[tm->tm_mon]);
             int dw = (int)strlen(dt) * 6;
             if (dt[0] && rx - dw > clock_r + 6) {
                 d.setTextColor(C_YELLOW, INK); d.setCursor(rx - dw, 4); d.print(dt);
@@ -1077,402 +1085,411 @@ void launcher_render_list(void)
     }
 }
 
-// ---- Control Center overlay (tabbed quick settings) -------------------------
-// A full-screen sheet raised with TAB from anywhere, with navigation IDENTICAL to the Music /
-// Video settings sheets (app_player.cpp / app_video.cpp):
-//   · a persistent segmented tab bar; the header (s_cc_row == -1) is the tab cursor;
-//   · RIGHT / LEFT page to the next / previous tab from ANYWHERE (header or a row), never close;
-//   · DOWN from the header drops into the rows; UP from row 0 returns to the header;
-//   · UP/DOWN walk the rows; ENTER acts (toggle / cycle / play-pause, or arms a slider);
-//   · a slider arms an EDIT mode on ENTER — then UP/RIGHT raise, DOWN/LEFT lower, ENTER/Esc end;
-//   · Esc/Back pops one level hierarchically: edit -> row -> header -> close the sheet (Tab also closes).
-// The look mirrors the Music/Video sheet too: same palette, segmented tabs, accent-railed
-// carousel rows, slider knobs, toggle pills and value chips. The RETE tab renders the IP and
-// pairing PIN at size-2 so they read across the room.
+// ---- Control Center overlay (one-screen quick panel) -------------------------
+// Raised with TAB from anywhere. ONE screen, no tabs and no hidden pages: everything a quick panel is
+// for is visible at once, top to bottom —
 //
-// Palette mirrors app_player.cpp / app_video.cpp so the sheet matches the Music/Video look.
-// Background + accent now follow the active OS theme (were fixed literals -> the sheet ignored theme
-// switches while the launcher recolored). The two surface shades stay fixed dark: every shipped theme
-// has a dark background, so they keep their contrast. Zero RAM: THEME_* are existing globals.
-#define CC_BG   THEME_BG                        // sheet background (themed)
-#define CC_ACC  THEME_ACC                       // accent: tab fill + focus rail + edit ring (themed)
-static const unsigned short CC_SURF = 0x10A2;  // raised surface / slider track
-static const unsigned short CC_CAP  = 0x1A8B;  // focused capsule background
-static const unsigned short CC_GRN  = 0x8FF3;  // positive / playing
+//   14:05  CasaNet                 |||  [=] 85%    status strip: clock · network · signal · battery
+//   [1 Muto] [2 Torcia] [3 Spegni] [4 Hotspot]     toggle tiles (keys 1-4 fire them directly)
+//   (sun)  =================o---------   70%       brightness  (LEFT/RIGHT adjust in place)
+//   (spk)  ========o------------------   40%       volume      (ENTER toggles mute)
+//   (gear) (web) (kbd) (usb) (power)               shortcuts: Settings · Web client · USB keyboard ·
+//                                                  USB drive · Restart
+//   Luminosita 70%   </> regola                    context line: what the focus does + its live value
+//                                                  (on the Web shortcut: the IP and pairing PIN)
+//
+// Keys: UP/DOWN move between lines (wrap); LEFT/RIGHT move inside a line or adjust a slider; ENTER acts;
+// Esc (or TAB) closes. The focus is REMEMBERED across opens (resume where you left off). Disruptive
+// actions (Hotspot, which drops the Wi-Fi client link, and Restart) arm on the first ENTER and fire on
+// the second; any other key disarms — the focus turns red and the context line says so.
+//
+// Colours are theme roles (BG/FG/MUTED/DIM/LINE/INK/THEME_ACC) plus the named semantic C_* accents only:
+// the old sheet's private 0x10A2/0x1A8B surface tints ignored the theme (black-on-black on AMOLED).
+// Language, theme, USB-drive and network details moved to the Settings app (the gear shortcut), so the
+// panel stays a panel. Zero .bss beyond a few focus bytes; composited into the shared back-buffer.
+#include "ui_glyph.h"
 
-// launcher_render_control_center_key return codes (so the launcher can pop/close hierarchically).
-enum { CC_NONE = 0, CC_REDRAW = 1, CC_CLOSE = 2, CC_SCREEN_OFF = 3, CC_LAUNCH = 4 };
-static const char *s_cc_launch_id = nullptr;  // set before returning CC_LAUNCH
+extern "C" bool        nucleo_setup_ap_intended(void);   // hotspot chosen by the user (not a rescue fallback)
+extern "C" bool        nucleo_setup_ap_active(void);     // SoftAP reachable right now
+extern "C" const char *nucleo_setup_ap_ssid(void);
+extern "C" void        nucleo_setup_start_ap(void);
+extern "C" void        nucleo_setup_stop_ap(void);
+extern "C" bool        nucleo_setup_config_loaded(void); // false in Wi-Fi-skipped Solo boots (BLE / NX_WIFI / USB-web)
 
-enum { CC_TEXT = 0, CC_NOTE, CC_SLIDER, CC_TOGGLE, CC_CYCLE, CC_ACTION, CC_BIG, CC_BATTERY, CC_SIGNAL };   // row kinds
-// Action ids — the durable identity of each interactive row, so the key handler dispatches on
-// MEANING (not on a fragile tab+row coordinate that shifts when a dynamic row appears).
-enum { A_NONE = 0, A_BRIGHT, A_VOLUME, A_MUTE, A_SCREEN,
-       A_LANG, A_THEME, A_USB, A_REBOOT, A_USBKBD, A_REMOTE };
+// launcher_render_control_center_key return codes (see launcher_render.h).
+enum { CC_NONE = 0, CC_REDRAW = 1, CC_CLOSE = 2, CC_SCREEN_OFF = 3, CC_LAUNCH = 4, CC_TORCH = 5 };
+enum { CL_TILES = 0, CL_BRIGHT, CL_VOLUME, CL_SHORT, CC_NLINES };          // the four focusable lines
+enum { TL_MUTE = 0, TL_TORCH, TL_SCREEN, TL_HOTSPOT, CC_NTILES };          // toggle tiles
+enum { SC_SETTINGS = 0, SC_WEB, SC_USBKBD, SC_USBDRIVE, SC_RESTART, CC_NSHORT };   // shortcuts
+#define CC_ARM_HOTSPOT  TL_HOTSPOT
+#define CC_ARM_RESTART  (100 + SC_RESTART)
 
-static const int CC_NTABS = 3;
-// Tab names, localized.
-static const char *cc_tab_name(int i)
+// Geometry (240x135, full screen). Every element keeps a 2 px focus-ring margin that never overlaps a
+// neighbour's ring (tiles 4x55 + 4 px gaps, shortcuts 5x43 + 4 px gaps, lines 2 px apart), so a focus
+// move only redraws two outlines. Rings: tiles y 20..57, sliders 59..77 / 78..96, shortcuts 98..119.
+static const int CC_STRIP_H = 18;
+static const int CC_TILE_Y = 22, CC_TILE_H = 34, CC_TILE_W = 55, CC_TILE_P = 59;
+static const int CC_BRI_Y = 61, CC_VOL_Y = 80, CC_SL_H = 15, CC_SL_X = 4, CC_SL_W = 232;
+static const int CC_TRK_X = 30, CC_TRK_W = 168, CC_TRK_H = 6;                        // slider track
+static const int CC_SHORT_Y = 100, CC_SHORT_H = 18, CC_SHORT_W = 43, CC_SHORT_P = 47;
+static const int CC_CTX_Y = 121;
+
+static int  s_cc_line  = CL_TILES;     // focused line — kept across opens (resume)
+static int  s_cc_tile  = 0;            // focused tile
+static int  s_cc_short = 0;            // focused shortcut
+static int  s_cc_arm   = -1;           // armed disruptive action (CC_ARM_*), -1 = none
+static bool s_cc_prefs = false;        // brightness/volume moved: persist ONCE on close, not per key
+static const char *s_cc_launch_id = nullptr;   // set before returning CC_LAUNCH
+
+static bool cc_online(void) { return !strcmp(nucleo_setup_mode(), "sta") && nucleo_setup_ip()[0]; }
+
+// Hotspot needs this boot's setup config: in a Wi-Fi-skipped Solo boot s_mode is only the RAM default
+// ("ap"), so the tile would lie ON and toggling it would persist defaults over setup.json + wake ~48 KB
+// of Wi-Fi next to NimBLE. There the tile is drawn disabled and ignores ENTER.
+static bool cc_hotspot_ok(void) { return nucleo_setup_config_loaded(); }
+
+static bool cc_tile_on(int i)
+{
+    if (i == TL_MUTE)    return nucleo_audio_is_muted();
+    if (i == TL_HOTSPOT) return cc_hotspot_ok() && nucleo_setup_ap_intended();
+    return false;                                          // Torch / Screen off are momentary actions
+}
+static unsigned short cc_tile_col(int i) { return i == TL_MUTE ? C_RED : i == TL_HOTSPOT ? C_YELLOW : THEME_ACC; }
+static int cc_tile_glyph(int i) { return i == TL_MUTE ? UG_MUTE : i == TL_TORCH ? UG_TORCH : i == TL_SCREEN ? UG_MOON : UG_HOTSPOT; }
+static const char *cc_tile_label(int i)
 {
     switch (i) {
-        case 0:  return TR("RAPIDE", "QUICK");
-        case 1:  return TR("RETE", "NETWORK");
-        default: return TR("SISTEMA", "SYSTEM");
+        case TL_MUTE:   return TR("Muto", "Mute");
+        case TL_TORCH:  return TR("Torcia", "Torch");
+        case TL_SCREEN: return TR("Spegni", "Sleep");
+        default:        return "Hotspot";
     }
 }
-
-// Theme cycling (SISTEMA tab): the OS theme registry is the single source of truth.
-static const char *cc_theme_name(void)
+static int cc_short_glyph(int i)
 {
-    int cnt = 0; const nucleo_theme_t *all = nucleo_theme_get_all(&cnt);
-    const char *cur = nucleo_theme_get_current();
-    for (int i = 0; i < cnt; i++) if (cur && all[i].id && !strcmp(all[i].id, cur)) return all[i].name;
-    return cur ? cur : "?";
-}
-static void cc_theme_cycle(int dir)
-{
-    int cnt = 0; const nucleo_theme_t *all = nucleo_theme_get_all(&cnt);
-    if (!all || cnt <= 0) return;
-    const char *cur = nucleo_theme_get_current();
-    int idx = 0; for (int i = 0; i < cnt; i++) if (cur && all[i].id && !strcmp(all[i].id, cur)) { idx = i; break; }
-    idx = (idx + dir + cnt) % cnt;
-    nucleo_theme_set(all[idx].id);
+    static const int G[CC_NSHORT] = { UG_GEAR, UG_MONITOR, UG_KEYBOARD, UG_USB, UG_POWER };
+    return G[i];
 }
 
-static int  s_cc_tab     = 0;          // 0=RAPIDE 1=RETE 2=SISTEMA
-static int  s_cc_row     = -1;         // -1 = tab header, 0..n-1 = row
-static bool s_cc_edit    = false;      // a slider is in adjust mode (UP/DN/L/R change it)
-static int  s_cc_confirm = A_NONE;     // a destructive action awaiting a second ENTER (USB/Riavvia)
-
-struct CcItem { const char *label; char val[32]; int kind; int act; int slider; bool on; unsigned short col; };
-
-// Build the rows of the active tab into `it` (max 7). Returns the row count.
-static int cc_build(CcItem *it)
+void launcher_render_control_center_invalidate(void);
+void launcher_render_control_center_open(void)          // focus kept: resume; first paint is a full one
 {
-    memset(it, 0, sizeof(CcItem) * 7);
-    bool sta = !strcmp(nucleo_setup_mode(), "sta") && nucleo_setup_ip()[0];
-    if (s_cc_tab == 0) {                                       // RAPIDE — luce, audio, stato
-        int n = 0;
-        it[n].label = TR("Web Client", "Web Client");    it[n].kind = CC_ACTION; it[n].act = A_REMOTE;  it[n].col = CC_ACC; n++;
-        it[n].label = TR("Luminosita", "Brightness"); it[n].kind = CC_SLIDER; it[n].act = A_BRIGHT; it[n].slider = nucleo_app_brightness(); it[n].col = C_YELLOW; n++;
-        it[n].label = TR("Volume", "Volume");         it[n].kind = CC_SLIDER; it[n].act = A_VOLUME; it[n].slider = nucleo_audio_volume();   it[n].col = CC_GRN;   n++;
-        it[n].label = TR("Muto", "Mute");             it[n].kind = CC_TOGGLE; it[n].act = A_MUTE;   it[n].on = nucleo_audio_is_muted();     it[n].col = CC_GRN;   n++;
-        it[n].label = TR("Schermo off", "Screen off"); it[n].kind = CC_ACTION; it[n].act = A_SCREEN; it[n].col = C_BLUE; n++;
-        it[n].label = TR("Tastiera USB", "USB Keyboard"); it[n].kind = CC_ACTION; it[n].act = A_USBKBD; it[n].col = CC_ACC; n++;
-        int bpct = nucleo_power_battery_pct();
-        it[n].label = TR("Batteria", "Battery"); it[n].kind = CC_BATTERY; it[n].slider = bpct;
-        it[n].col = (bpct >= 0 && bpct < 20) ? C_RED : (bpct < 50 ? C_YELLOW : CC_GRN);
-        n++;
-        return n;
-    }
-    if (s_cc_tab == 1) {                                       // RETE — IP, PIN, WiFi, segnale
-        it[0].label = "IP"; it[0].kind = CC_BIG; it[0].col = CC_GRN;
-        snprintf(it[0].val, sizeof it[0].val, "%s", sta ? nucleo_setup_ip() : "192.168.4.1");
-        it[1].label = "PIN"; it[1].kind = CC_BIG; it[1].col = C_YELLOW;
-        snprintf(it[1].val, sizeof it[1].val, "%s", nucleo_auth_pin());
-        it[2].label = TR("WiFi", "WiFi"); it[2].kind = CC_BIG; it[2].col = FG;
-        snprintf(it[2].val, sizeof it[2].val, "%.16s", sta ? nucleo_setup_ssid() : "Setup AP");
-        it[3].label = TR("Segnale", "Signal"); it[3].kind = CC_SIGNAL;
-        it[3].slider = sta ? nucleo_setup_rssi() : 0;
-        it[3].col = MUTED;
-        return 4;
-    }
-    // SISTEMA — lingua, tema, USB, riavvio, stato
-    int n = 0;
-    it[n].label = TR("Lingua", "Language"); it[n].kind = CC_CYCLE; it[n].act = A_LANG; it[n].col = C_BLUE;
-    snprintf(it[n].val, sizeof it[n].val, "%s", nucleo_i18n_is_en() ? "English" : "Italiano"); n++;
-    it[n].label = TR("Tema", "Theme"); it[n].kind = CC_CYCLE; it[n].act = A_THEME; it[n].col = C_BLUE;
-    snprintf(it[n].val, sizeof it[n].val, "%.10s", cc_theme_name()); n++;
-    it[n].label = TR("USB Drive", "USB Drive"); it[n].kind = CC_ACTION; it[n].act = A_USB;    it[n].col = C_BLUE; n++;
-    it[n].label = TR("Riavvia", "Restart");     it[n].kind = CC_ACTION; it[n].act = A_REBOOT; it[n].col = C_RED;  n++;
-    // Compact info strip — RAM · hostname · time (one row instead of three).
-    char tt[8]; time_t now = time(NULL); struct tm *tm = localtime(&now);
-    snprintf(tt, sizeof tt, "%02d:%02d%s", tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0, nucleo_setup_time_synced() ? "" : "?");
-    it[n].label = ""; it[n].kind = CC_NOTE; it[n].col = FG;
-    snprintf(it[n].val, sizeof it[n].val, "%uKB  %.8s  %s",
-        (unsigned)(heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / 1024),
-        nucleo_setup_device_name(), tt);
-    n++;
-    return n;
+    s_cc_arm = -1; s_cc_prefs = false; launcher_render_control_center_invalidate();
 }
 
-void launcher_render_control_center_open(void) { s_cc_tab = 0; s_cc_row = -1; s_cc_edit = false; s_cc_confirm = A_NONE; }
-int  launcher_render_control_center_tab(void)  { return s_cc_tab; }
-
-// Adjust the focused slider by delta, dispatching on the row's action id (robust to layout).
-static void cc_slider_adjust(int delta)
+void launcher_render_control_center_close(void)
 {
-    CcItem it[7]; int n = cc_build(it);
-    if (s_cc_row < 0 || s_cc_row >= n) return;
-    if (it[s_cc_row].act == A_VOLUME) nucleo_audio_set_volume(nucleo_audio_volume() + delta);
-    else                              nucleo_app_set_brightness(nucleo_app_brightness() + delta);
-}
-
-int launcher_render_control_center_key(int key, char ch)
-{
-    (void)ch;
-    CcItem it[7]; int n = cc_build(it);
-    if (s_cc_row >= n) s_cc_row = n - 1;
-
-    // --- slider adjust mode (identical to Music/Video edit) ---
-    if (s_cc_edit) {
-        if      (key == NK_RIGHT || key == NK_UP)   cc_slider_adjust(+5);
-        else if (key == NK_LEFT  || key == NK_DOWN) cc_slider_adjust(-5);
-        else if (key == NK_ENTER || key == NK_BACK) { s_cc_edit = false; nucleo_app_persist_prefs(); }  // save the adjusted brightness/volume once, on exit
-        return CC_REDRAW;
-    }
-
-    // Any non-ENTER keystroke abandons a pending destructive confirmation.
-    if (key != NK_ENTER) s_cc_confirm = A_NONE;
-
-    // --- RIGHT / LEFT page the tabs from anywhere (header or a row); they never close ---
-    if (key == NK_RIGHT) {
-        s_cc_tab = (s_cc_tab + 1) % CC_NTABS;
-        if (s_cc_row >= 0) s_cc_row = 0;
-        return CC_REDRAW;
-    }
-    if (key == NK_LEFT) {
-        s_cc_tab = (s_cc_tab + CC_NTABS - 1) % CC_NTABS;
-        if (s_cc_row >= 0) s_cc_row = 0;
-        return CC_REDRAW;
-    }
-
-    // --- Esc/Back: pop one level (row -> header -> close the sheet) ---
-    if (key == NK_BACK) {
-        if (s_cc_row >= 0) { s_cc_row = -1; return CC_REDRAW; }
-        return CC_CLOSE;
-    }
-
-    // --- header (tab cursor) ---
-    if (s_cc_row == -1) {
-        if (key == NK_DOWN) { s_cc_row = 0; return CC_REDRAW; }
-        return CC_NONE;
-    }
-
-    // --- rows ---
-    if (key == NK_UP)   { s_cc_row = (s_cc_row > 0) ? s_cc_row - 1 : -1; return CC_REDRAW; }  // row 0 -> header
-    if (key == NK_DOWN) { if (s_cc_row < n - 1) s_cc_row++; return CC_REDRAW; }
-    if (key == NK_ENTER) {
-        int act = it[s_cc_row].act;
-        if (it[s_cc_row].kind == CC_SLIDER) { s_cc_edit = true; return CC_REDRAW; }
-        switch (act) {
-            case A_MUTE:   nucleo_audio_set_mute(!nucleo_audio_is_muted()); nucleo_app_persist_prefs(); return CC_REDRAW;
-            case A_SCREEN:  return CC_SCREEN_OFF;
-            case A_USBKBD:  s_cc_launch_id = "usbkbd"; return CC_LAUNCH;
-            case A_REMOTE:  s_cc_launch_id = "remote";  return CC_LAUNCH;
-            case A_THEME:  cc_theme_cycle(+1);                            return CC_REDRAW;
-            case A_LANG:  nucleo_i18n_set_en(!nucleo_i18n_is_en());       return CC_REDRAW;
-            case A_USB:   case A_REBOOT:
-                if (s_cc_confirm == act) { if (act == A_USB) nucleo_usbmsc_request(); else esp_restart(); }
-                else s_cc_confirm = act;
-                return CC_REDRAW;
-            default: return CC_NONE;
-        }
-    }
-    return CC_NONE;
+    s_cc_arm = -1;
+    if (s_cc_prefs) { s_cc_prefs = false; nucleo_app_persist_prefs(); }   // one settings.json write per visit
 }
 
 const char *launcher_render_control_center_launch_id(void) { return s_cc_launch_id; }
 
-// Segmented tab bar — full-height pill for active tab, every pixel used.
-template <typename T> static void cc_tabbar(T *g, int active, bool hdr)
+static int cc_tile_act(int i, int armed)
 {
-    const int TH = 26;                                  // tab bar total height
-    const int seg = W / CC_NTABS;
-    for (int i = 0; i < CC_NTABS; i++) {
-        const char *nm = cc_tab_name(i);
-        int x = i * seg, tw = (int)strlen(nm) * 6;
-        int ty = (TH - 8) / 2;                         // vertically centred text (size-1 = 8px)
-        if (i == active) {
-            unsigned short bg = hdr ? CC_ACC : CC_SURF;
-            unsigned short fg = hdr ? INK : FG;
-            g->fillRoundRect(x + 1, 1, seg - 2, TH - 2, 7, bg);
-            g->setTextSize(1); g->setTextColor(fg, bg);
-            g->setCursor(x + (seg - tw) / 2, ty); g->print(nm);
-        } else {
-            g->setTextSize(1); g->setTextColor(hdr ? MUTED : DIM, CC_BG);
-            g->setCursor(x + (seg - tw) / 2, ty); g->print(nm);
-        }
-    }
-    g->drawFastHLine(0, TH, W, LINE);
-}
-
-// One settings row, styled exactly like the Music/Video sheet (app_video.cpp draw_set_row):
-// rounded capsule + accent rail when focused, label at size-2, then a kind-specific control.
-template <typename T> static void cc_set_row(T *g, int y, bool focus, const CcItem *it, bool edit)
-{
-    int h = focus ? 50 : 32;
-    unsigned short rbg = focus ? CC_CAP : CC_BG;
-    g->fillRoundRect(4, y, 232, h - 2, 9, rbg);
-    if (focus) g->fillRoundRect(4, y + 3, 5, h - 8, 2, CC_ACC);   // accent rail
-
-    if (it->kind == CC_BIG) {
-        // Small label, then the value at size-2 below it — readability win for IP/PIN.
-        g->setTextSize(1); g->setTextColor(focus ? FG : MUTED, rbg);
-        g->setCursor(16, y + (focus ? 8 : 5)); g->print(it->label);
-        g->setTextSize(2); g->setTextColor(it->col, rbg);
-        g->setCursor(16, y + (focus ? 24 : 15)); g->print(it->val);
-        return;
-    }
-
-    if (it->kind == CC_NOTE) {
-        // Compact single line, all size-1: small grey label + small value (e.g. the SSID),
-        // deliberately less prominent than the big IP/PIN rows below it.
-        g->setTextSize(1);
-        g->setTextColor(MUTED, rbg);
-        g->setCursor(16, y + (h - 8) / 2); g->print(it->label);
-        g->setTextColor(focus ? it->col : MUTED, rbg);
-        g->setCursor(16 + ((int)strlen(it->label) + 1) * 6, y + (h - 8) / 2); g->print(it->val);
-        return;
-    }
-
-    g->setTextSize(2); g->setTextColor(focus ? FG : MUTED, rbg);
-    g->setCursor(16, y + (h - 16) / 2 - 1); g->print(it->label);
-
-    if (it->kind == CC_BATTERY) {
-        int pct = it->slider;
-        // Battery body: outline + proportional fill + nub, right-aligned.
-        int bw = focus ? 46 : 34, bh = focus ? 16 : 11;
-        int bx = 225 - bw, by = y + (h - bh) / 2;
-        int nh = bh / 2, ny = by + (bh - nh) / 2;
-        g->fillRoundRect(bx, by, bw, bh, 2, CC_SURF);
-        g->fillRect(bx + bw, ny, 3, nh, CC_SURF);                       // positive terminal nub
-        if (pct > 0) {
-            int fw = (bw - 2) * pct / 100; if (fw < 1) fw = 1;
-            g->fillRoundRect(bx + 1, by + 1, fw, bh - 2, 1, it->col);
-        }
-        if (pct >= 0) {
-            char buf[8]; snprintf(buf, sizeof buf, "%d%%", pct);
-            if (focus) {
-                g->setTextSize(2); g->setTextColor(it->col, rbg);
-                g->setCursor(bx - (int)strlen(buf) * 12 - 6, y + (h - 16) / 2 - 1);
-            } else {
-                g->setTextSize(1); g->setTextColor(it->col, rbg);
-                g->setCursor(bx - (int)strlen(buf) * 6 - 4, y + (h - 8) / 2);
-            }
-            g->print(buf);
-        }
-        return;
-    }
-    if (it->kind == CC_SIGNAL) {
-        // 4 bars, heights 4/7/10/13px, width 4px, gap 2px; bars lit = signal strength.
-        int rssi = it->slider;
-        int bars = wifi_bars(rssi);                          // shared map: matches the top-bar gauge exactly
-        unsigned short bc = (bars <= 1) ? C_RED : (bars <= 2) ? C_YELLOW : CC_GRN;
-        const int bw = 4, gap = 2, bh[4] = {4, 7, 10, 13};
-        int bx0 = 228 - (4 * bw + 3 * gap);
-        int base = y + (h + 13) / 2;
-        for (int b = 0; b < 4; b++)
-            g->fillRoundRect(bx0 + b * (bw + gap), base - bh[b], bw, bh[b], 1,
-                             b < bars ? bc : CC_SURF);
-        return;
-    }
-    if (it->kind == CC_SLIDER) {
-        int sw = focus ? 96 : 64, sh = 12, bx = 230 - sw, vy = y + (h - sh) / 2;
-        g->fillRoundRect(bx, vy, sw, sh, sh / 2, CC_SURF);
-        int onw = it->slider * sw / 100; if (onw < 0) onw = 0; if (onw > sw) onw = sw;
-        if (onw > 0) g->fillRoundRect(bx, vy, onw, sh, sh / 2, it->col);
-        int kx = bx + onw; if (kx < bx + 6) kx = bx + 6; if (kx > bx + sw - 6) kx = bx + sw - 6;
-        g->fillCircle(kx, vy + sh / 2, edit ? sh / 2 + 2 : sh / 2 + 1, FG);
-        if (edit) g->drawRoundRect(bx - 2, vy - 2, sw + 4, sh + 4, (sh + 4) / 2, CC_ACC);
-        return;
-    }
-    if (it->kind == CC_TOGGLE) {
-        int sw = 42, sh = 20, bx = 230 - sw, vy = y + (h - sh) / 2;
-        g->fillRoundRect(bx, vy, sw, sh, sh / 2, it->on ? CC_GRN : CC_SURF);
-        int kx = it->on ? bx + sw - sh / 2 - 1 : bx + sh / 2 + 1;
-        g->fillCircle(kx, vy + sh / 2, sh / 2 - 3, it->on ? INK : MUTED);
-        return;
-    }
-    if (it->kind == CC_ACTION) {
-        if (s_cc_confirm == it->act) {
-            const char *q = "Confermi?";
-            g->setTextSize(1); g->setTextColor(C_RED, rbg);
-            g->setCursor(230 - (int)strlen(q) * 6, y + (h - 8) / 2); g->print(q);
-        } else {
-            int bw = 28, bh = 22, bx = 230 - bw, vy = y + (h - bh) / 2;
-            g->fillRoundRect(bx, vy, bw, bh, 6, focus ? it->col : CC_SURF);
-            unsigned short ar = focus ? INK : MUTED;
-            int ax = bx + bw / 2 - 2, ay = vy + bh / 2;
-            g->fillTriangle(ax, ay - 4, ax, ay + 4, ax + 4, ay, ar);    // chevron
-        }
-        return;
-    }
-    if (it->kind == CC_CYCLE && it->val[0]) {
-        // Cycled value: a size-2 pill, right-aligned (Tema / Cervello / ...).
-        int vw = (int)strlen(it->val) * 12 + 14, vh = 22, bx = 230 - vw, vy = y + (h - vh) / 2;
-        if (focus) g->fillRoundRect(bx, vy, vw, vh, 6, CC_SURF);
-        g->setTextSize(2); g->setTextColor(it->col, focus ? CC_SURF : rbg);
-        g->setCursor(bx + 7, vy + 3); g->print(it->val);
-        return;
-    }
-    // CC_TEXT read-only value, size-1, right-aligned (RSSI / RAM / model / time ...).
-    if (it->val[0]) {
-        g->setTextSize(1); g->setTextColor(it->col, rbg);
-        g->setCursor(230 - (int)strlen(it->val) * 6, y + (h - 8) / 2); g->print(it->val);
+    switch (i) {
+        case TL_MUTE:   nucleo_audio_set_mute(!nucleo_audio_is_muted()); nucleo_app_persist_prefs(); return CC_REDRAW;
+        case TL_TORCH:  return CC_TORCH;
+        case TL_SCREEN: return CC_SCREEN_OFF;
+        default:
+            if (!cc_hotspot_ok()) { s_cc_arm = -1; return CC_NONE; }                 // disabled this boot
+            if (armed != CC_ARM_HOTSPOT) { s_cc_arm = CC_ARM_HOTSPOT; return CC_REDRAW; }
+            s_cc_arm = -1;
+            if (nucleo_setup_ap_intended()) nucleo_setup_stop_ap(); else nucleo_setup_start_ap();
+            return CC_REDRAW;
     }
 }
 
-// Compose the whole sheet into `g` (an off-screen canvas, or the display as a fallback).
-// Layout mirrors app_video.cpp draw_settings: a dimmed top-down preview while the header is
-// focused, then a centered carousel (focused row enlarged) once inside the rows.
-template <typename T> static void cc_draw(T *g)
+static int cc_short_act(int i, int armed)
 {
-    const int CH = H;
-    g->fillScreen(CC_BG);
-    bool hdr = (s_cc_row == -1);
-    cc_tabbar(g, s_cc_tab, hdr);
-
-    CcItem it[7]; int n = cc_build(it);
-    if (s_cc_row >= n) s_cc_row = n - 1;
-
-    const int AREA_TOP = 27, AREA_BOT = CH - 12;       // content window (tab bar above, hint below)
-    g->setClipRect(0, AREA_TOP, W, AREA_BOT - AREA_TOP);
-    if (hdr) {
-        int y = AREA_TOP + 2;                           // dimmed preview; DOWN to focus
-        for (int i = 0; i < n && y < AREA_BOT; i++) { cc_set_row(g, y, false, &it[i], false); y += 34; }
-    } else {
-        int f = s_cc_row;
-        // Top-biased cy: row 0 sits near AREA_TOP, deeper rows slide to centre.
-        int cy_top = AREA_TOP + 25 + f * 32;           // if rows were stacked from top
-        int cy_ctr = (AREA_TOP + AREA_BOT) / 2;        // classic centre
-        int cy = (cy_top < cy_ctr) ? cy_top : cy_ctr;
-        for (int i = 0; i < n; i++) {
-            int dist = i - f, h = (dist == 0) ? 50 : 32, y;
-            if (dist == 0)     y = cy - h / 2;
-            else if (dist < 0) y = cy - 25 + dist * 32;
-            else               y = cy + 25 + (dist - 1) * 32;
-            if (y + h > AREA_TOP && y < AREA_BOT)
-                cc_set_row(g, y, i == f, &it[i], i == f && s_cc_edit);
-        }
+    switch (i) {
+        case SC_SETTINGS: s_cc_launch_id = "wifi";   return CC_LAUNCH;
+        case SC_WEB:      s_cc_launch_id = "remote"; return CC_LAUNCH;
+        case SC_USBKBD:   s_cc_launch_id = "usbkbd"; return CC_LAUNCH;
+        case SC_USBDRIVE: s_cc_launch_id = "usb";    return CC_LAUNCH;
+        default:
+            if (armed != CC_ARM_RESTART) { s_cc_arm = CC_ARM_RESTART; return CC_REDRAW; }
+            launcher_render_control_center_close();       // flush a pending brightness/volume first
+            esp_restart();
+            return CC_NONE;
     }
-    g->clearClipRect();
-
-    // Footer hint (Italian, matches the Music/Video sheet style) — context aware.
-    const char *hint; unsigned short hc = DIM;
-    int fk = (!hdr && s_cc_row >= 0 && s_cc_row < n) ? it[s_cc_row].kind : -1;
-    if      (s_cc_edit)               hint = TR("L/R regola   ENTER ok", "L/R adjust   ENTER ok");
-    else if (hdr)                     hint = TR("L/R scheda   DOWN righe   ESC chiudi", "L/R tab   DOWN rows   ESC close");
-    else if (s_cc_confirm != A_NONE)  { hint = TR("ENTER conferma   ESC annulla", "ENTER confirm   ESC cancel"); hc = C_RED; }
-    else if (fk == CC_ACTION)         hint = TR("ENTER esegui   L/R scheda", "ENTER run   L/R tab");
-    else if (fk == CC_TOGGLE)    hint = TR("ENTER attiva/disattiva   L/R scheda", "ENTER toggle   L/R tab");
-    else if (fk == CC_CYCLE)     hint = TR("ENTER cambia   L/R scheda", "ENTER change   L/R tab");
-    else if (fk == CC_SLIDER)    hint = TR("ENTER regola   L/R scheda", "ENTER adjust   L/R tab");
-    else                         hint = TR("su/giu riga   L/R scheda   ESC indietro", "up/dn row   L/R tab   ESC back");
-    g->setTextSize(1); g->setTextColor(hc, CC_BG); g->setCursor(8, CH - 10); g->print(hint);
 }
 
-// The sheet is a full-screen overlay repainted every second (clock + Now-Playing time) and on
-// every adjust key. Drawing it straight to the display means fillScreen(INK) + a full redraw
-// flash blank-then-paint = flicker. So we composite into the shared back-buffer and blit in ONE
-// pushSprite. No separate allocation: the launcher list underneath isn't drawing while the
-// sheet is up, so the one permanent buffer serves both (the buffer is taller than the screen;
-// the panel clips the extra rows on push).
+int launcher_render_control_center_key(int key, char ch)
+{
+    int  armed = s_cc_arm;
+    bool digit = (key == NK_CHAR && ch >= '1' && ch < '1' + CC_NTILES);
+    if (key != NK_ENTER && !digit) s_cc_arm = -1;          // any other key disarms a pending action
+
+    if (key == NK_BACK) return CC_CLOSE;
+    if (digit) {                                           // 1-4: fire a tile directly (smartwatch quick keys)
+        s_cc_line = CL_TILES; s_cc_tile = ch - '1';
+        if (armed != s_cc_tile) { armed = -1; s_cc_arm = -1; }
+        return cc_tile_act(s_cc_tile, armed);
+    }
+    if (key == NK_UP || key == NK_DOWN) {
+        s_cc_line = (s_cc_line + (key == NK_DOWN ? 1 : CC_NLINES - 1)) % CC_NLINES;
+        return CC_REDRAW;
+    }
+    if (key == NK_LEFT || key == NK_RIGHT) {
+        int dir = (key == NK_RIGHT) ? 1 : -1;
+        switch (s_cc_line) {
+            case CL_TILES:  s_cc_tile  = (s_cc_tile  + dir + CC_NTILES) % CC_NTILES; break;
+            case CL_SHORT:  s_cc_short = (s_cc_short + dir + CC_NSHORT) % CC_NSHORT; break;
+            case CL_BRIGHT: nucleo_app_set_brightness(nucleo_app_brightness() + dir * 5); s_cc_prefs = true; break;
+            default:        nucleo_audio_set_volume(nucleo_audio_volume() + dir * 5);     s_cc_prefs = true; break;
+        }
+        return CC_REDRAW;
+    }
+    if (key == NK_ENTER) {
+        if (s_cc_line == CL_TILES)  return cc_tile_act(s_cc_tile, armed);
+        if (s_cc_line == CL_SHORT)  return cc_short_act(s_cc_short, armed);
+        if (s_cc_line == CL_VOLUME) { nucleo_audio_set_mute(!nucleo_audio_is_muted()); nucleo_app_persist_prefs(); return CC_REDRAW; }
+        return CC_NONE;                                    // brightness: LEFT/RIGHT only
+    }
+    return (armed != s_cc_arm) ? CC_REDRAW : CC_NONE;      // a stray key that only disarmed: repaint
+}
+
+// Signature of everything the panel SHOWS (clock minute, battery, link, hotspot, audio, light).
+static uint32_t cc_sig(void)
+{
+    time_t now = time(NULL); struct tm tmv; localtime_r(&now, &tmv);
+    uint32_t sig = 2166136261u;
+    #define MIX(v) do { sig = (sig ^ (uint32_t)(v)) * 16777619u; } while (0)
+    MIX(tmv.tm_hour); MIX(tmv.tm_min); MIX(nucleo_setup_time_synced());
+    MIX(nucleo_power_battery_pct());
+    MIX(cc_online()); MIX(wifi_bars(nucleo_setup_rssi()));
+    MIX(nucleo_setup_ap_active()); MIX(nucleo_setup_ap_intended());
+    MIX(nucleo_audio_is_muted()); MIX(nucleo_audio_volume()); MIX(nucleo_app_brightness());
+    #undef MIX
+    return sig;
+}
+static uint32_t s_cc_drawn_sig = 0;    // latched by every draw (key-driven or tick-driven)
+
+// 1 Hz: true only when the panel's content changed since it was last DRAWN — a static panel is never
+// re-blitted, and a key-driven redraw is not repeated by the next tick (ANTI-FLICKER.md).
+bool launcher_render_control_center_tick(void) { return cc_sig() != s_cc_drawn_sig; }
+
+// ---- drawing ------------------------------------------------------------------------------------
+// One painter for both paths. With the shared back-buffer the whole panel is composed and blitted once.
+// WITHOUT it (heap fragmented — the usual state on the ADV after Wi-Fi) the panel is drawn straight to
+// the display, so every paint is INCREMENTAL: each element remembers what it last put on screen (s_ccs)
+// and repaints only what changed, and never by clearing first —
+//   · focus = a 2 px ring OUTSIDE the element (outlines only): moving the focus redraws two rings;
+//   · a colour change redraws the glyph/label over the same fill (identical shapes, no blank frame);
+//   · a slider lifts only its old knob, repaints the track as two non-overlapping pieces, drops the knob;
+//   · text lines are fixed-width fields drawn opaque, so a shorter string overwrites a longer one.
+// Only opening the panel (or an overlay having painted over it) costs one full paint.
+struct CcShown {
+    bool     valid;
+    uint32_t strip, ctx;
+    uint8_t  tile_fill[CC_NTILES];
+    uint16_t tile_ink[CC_NTILES], tile_ring[CC_NTILES];
+    uint8_t  sl_glyph[2], sl_kr[2];
+    uint16_t sl_ink[2], sl_ring[2], sl_col[2];
+    int16_t  sl_val[2], sl_kx[2];
+    uint16_t sh_ring[CC_NSHORT], sh_ink[CC_NSHORT];
+    int16_t  clock_r;
+};
+static CcShown s_ccs;
+
+void launcher_render_control_center_invalidate(void) { s_ccs.valid = false; }
+
+static unsigned short cc_focus_col(bool foc, bool armed) { return foc ? (armed ? C_RED : THEME_ACC) : BG; }
+
+// 2 px focus ring just outside an element box (never overlaps a neighbour's ring: see the geometry).
+template <typename T> static void cc_ring(T *g, int x, int y, int w, int h, int r, unsigned short c)
+{
+    g->drawRoundRect(x - 1, y - 1, w + 2, h + 2, r + 1, c);
+    g->drawRoundRect(x - 2, y - 2, w + 4, h + 4, r + 2, c);
+}
+
+// Status strip: clock · network · Wi-Fi gauge · battery. Every piece lands in a fixed cell and is drawn
+// opaque, so the 1-minute tick never wipes the strip.
+template <typename T> static void cc_strip(T *g, bool full)
+{
+    time_t now = time(NULL); struct tm tmv; localtime_r(&now, &tmv);
+    bool sta = cc_online(), ap = nucleo_setup_ap_active(), synced = nucleo_setup_time_synced();
+    int  bpct = nucleo_power_battery_pct(), rssi = nucleo_setup_rssi();
+    const char *net = sta ? nucleo_setup_ssid() : ap ? nucleo_setup_ap_ssid() : "offline";
+    uint32_t sig = 2166136261u;
+    #define MIX(v) do { sig = (sig ^ (uint32_t)(v)) * 16777619u; } while (0)
+    MIX(tmv.tm_hour); MIX(tmv.tm_min); MIX(synced); MIX(bpct); MIX(sta); MIX(ap); MIX(wifi_bars(rssi));
+    for (const char *p = net; *p; p++) MIX(*p);
+    #undef MIX
+    if (!full && sig == s_ccs.strip) return;
+    s_ccs.strip = sig;
+
+    char t[8]; snprintf(t, sizeof t, "%02d:%02d", tmv.tm_hour, tmv.tm_min);
+    g->setFont(&fonts::Font2);                                        // the big clock face Home uses
+    g->setTextColor(synced ? FG : MUTED, BG);                         // muted = clock never set
+    g->setCursor(6, 1); g->print(t);
+    int cr = 6 + (int)g->textWidth(t);
+    g->setFont(&fonts::Font0); g->setTextSize(1);
+    if (!full && s_ccs.clock_r > cr) g->fillRect(cr, 0, s_ccs.clock_r - cr, CC_STRIP_H, BG);   // narrower digits
+    s_ccs.clock_r = (int16_t)cr;
+
+    int rx = W - 4;                                                   // right cluster, fixed cells
+    char b[8]; if (bpct >= 0) snprintf(b, sizeof b, "%3d%%", bpct); else snprintf(b, sizeof b, "  --");
+    g->setTextColor(FG, BG); g->setCursor(rx - 24, 5); g->print(b); rx -= 24 + 4;
+    unsigned short bc = (bpct < 20) ? C_RED : (bpct < 50) ? C_YELLOW : C_GREEN;
+    int bx = rx - 14, fw = bpct > 0 ? (10 * bpct) / 100 : 0; if (fw < 1 && bpct > 0) fw = 1; if (fw > 10) fw = 10;
+    g->drawRoundRect(bx, 5, 12, 8, 1, MUTED); g->fillRect(bx + 12, 8, 2, 3, MUTED);
+    if (fw > 0)  g->fillRect(bx + 1, 6, fw, 6, bc);
+    if (fw < 10) g->fillRect(bx + 1 + fw, 6, 10 - fw, 6, BG);
+    rx = bx - 8;
+    int lvl = sta ? wifi_bars(rssi) : 1; if (lvl < 1) lvl = 1;
+    unsigned short on = sta ? C_GREEN : ap ? C_YELLOW : C_RED;       // same colour code as the home bar
+    for (int i = 0; i < 4; i++) { int bh = 2 + i * 2; g->fillRect(rx - 19 + i * 5, 4 + 9 - bh, 3, bh, i < lvl ? on : LINE); }
+    rx -= 19 + 6;
+    int cells = (rx - 58) / 6;                                        // network name: right-aligned fixed field
+    if (cells > 0) {
+        char nb[32]; if (cells > 30) cells = 30;
+        char nm[31]; snprintf(nm, sizeof nm, "%.*s", cells, net);
+        snprintf(nb, sizeof nb, "%*s", cells, nm);
+        g->setTextColor(sta ? MUTED : ap ? C_YELLOW : C_RED, BG);
+        g->setCursor(rx - cells * 6, 5); g->print(nb);
+    }
+    if (full) g->drawFastHLine(0, CC_STRIP_H, W, LINE);
+}
+
+template <typename T> static void cc_tile(T *g, int i, bool full)
+{
+    int x = 4 + i * CC_TILE_P, y = CC_TILE_Y;
+    bool on = cc_tile_on(i), foc = (s_cc_line == CL_TILES && s_cc_tile == i);
+    bool off = (i == TL_HOTSPOT && !cc_hotspot_ok());                 // unavailable this boot
+    uint8_t  fk   = (uint8_t)((on ? 1 : 0) | (off ? 2 : 0));
+    unsigned short fill = on ? cc_tile_col(i) : LINE;
+    unsigned short ink  = on ? INK : off ? DIM : (foc ? FG : MUTED);
+    unsigned short ring = cc_focus_col(foc, i == TL_HOTSPOT && s_cc_arm == CC_ARM_HOTSPOT);
+    if (full || ring != s_ccs.tile_ring[i]) { cc_ring(g, x, y, CC_TILE_W, CC_TILE_H, 8, ring); s_ccs.tile_ring[i] = ring; }
+    bool refill = full || fk != s_ccs.tile_fill[i];
+    if (refill) g->fillRoundRect(x, y, CC_TILE_W, CC_TILE_H, 8, fill);
+    if (refill || ink != s_ccs.tile_ink[i]) {
+        ui_glyph(g, cc_tile_glyph(i), x + CC_TILE_W / 2, y + 12, 7, ink, fill);
+        const char *lb = cc_tile_label(i);
+        g->setTextSize(1); g->setTextColor(ink, fill);
+        g->setCursor(x + (CC_TILE_W - (int)strlen(lb) * 6) / 2, y + 24); g->print(lb);
+        char k[2] = { (char)('1' + i), 0 };                           // quick-key badge
+        g->setTextColor(on ? INK : DIM, fill); g->setCursor(x + 4, y + 3); g->print(k);
+    }
+    s_ccs.tile_fill[i] = fk; s_ccs.tile_ink[i] = ink;
+}
+
+template <typename T> static void cc_slider(T *g, int k, bool full)
+{
+    int  line = k ? CL_VOLUME : CL_BRIGHT, y = k ? CC_VOL_Y : CC_BRI_Y, cy = y + CC_SL_H / 2;
+    bool foc = (s_cc_line == line), muted = k && nucleo_audio_is_muted();
+    int  val = k ? nucleo_audio_volume() : nucleo_app_brightness();
+    unsigned short sem  = k ? (muted ? DIM : C_GREEN) : C_YELLOW;
+    unsigned short ink  = foc ? FG : MUTED;
+    unsigned short ring = cc_focus_col(foc, false);
+    uint8_t glyph = (uint8_t)(k ? (muted ? UG_MUTE : UG_SPEAKER) : UG_SUN);
+    if (full || ring != s_ccs.sl_ring[k]) { cc_ring(g, CC_SL_X, y, CC_SL_W, CC_SL_H, 7, ring); s_ccs.sl_ring[k] = ring; }
+    if (full || glyph != s_ccs.sl_glyph[k] || ink != s_ccs.sl_ink[k]) {
+        if (!full && glyph != s_ccs.sl_glyph[k]) g->fillRect(7, y, 17, CC_SL_H, BG);   // a different icon SHAPE
+        ui_glyph(g, glyph, 15, cy, 6, ink, BG);
+    }
+    int fw = val * CC_TRK_W / 100; if (fw < 0) fw = 0; if (fw > CC_TRK_W) fw = CC_TRK_W;
+    int kr = foc ? 5 : 3;
+    int kx = CC_TRK_X + fw; if (kx < CC_TRK_X + 5) kx = CC_TRK_X + 5; if (kx > CC_TRK_X + CC_TRK_W - 5) kx = CC_TRK_X + CC_TRK_W - 5;
+    if (full || val != s_ccs.sl_val[k] || kr != s_ccs.sl_kr[k] || kx != s_ccs.sl_kx[k] || sem != s_ccs.sl_col[k] || ink != s_ccs.sl_ink[k]) {
+        if (!full) g->fillCircle(s_ccs.sl_kx[k], cy, s_ccs.sl_kr[k], BG);            // lift the old knob
+        int ty = cy - CC_TRK_H / 2;
+        if (fw < CC_TRK_W) { g->setClipRect(CC_TRK_X + fw, ty, CC_TRK_W - fw, CC_TRK_H); g->fillRoundRect(CC_TRK_X, ty, CC_TRK_W, CC_TRK_H, 3, LINE); }
+        if (fw > 0)        { g->setClipRect(CC_TRK_X, ty, fw, CC_TRK_H);                g->fillRoundRect(CC_TRK_X, ty, CC_TRK_W, CC_TRK_H, 3, sem); }
+        g->clearClipRect();
+        g->fillCircle(kx, cy, kr, foc ? FG : sem);
+        char b[8]; snprintf(b, sizeof b, "%3d%%", val);                // fixed 4-char field, opaque
+        g->setTextSize(1); g->setTextColor(ink, BG);
+        g->setCursor(CC_SL_X + CC_SL_W - 4 - 24, cy - 3); g->print(b);
+    }
+    s_ccs.sl_glyph[k] = glyph; s_ccs.sl_ink[k] = ink; s_ccs.sl_val[k] = (int16_t)val;
+    s_ccs.sl_kx[k] = (int16_t)kx; s_ccs.sl_kr[k] = (uint8_t)kr; s_ccs.sl_col[k] = sem;
+}
+
+template <typename T> static void cc_short(T *g, int i, bool full)
+{
+    int x = 4 + i * CC_SHORT_P, y = CC_SHORT_Y;
+    bool foc = (s_cc_line == CL_SHORT && s_cc_short == i);
+    unsigned short ring = cc_focus_col(foc, i == SC_RESTART && s_cc_arm == CC_ARM_RESTART);
+    unsigned short ink  = (i == SC_RESTART) ? C_RED : (foc ? FG : MUTED);
+    if (full) g->fillRoundRect(x, y, CC_SHORT_W, CC_SHORT_H, 7, LINE);
+    if (full || ring != s_ccs.sh_ring[i]) { cc_ring(g, x, y, CC_SHORT_W, CC_SHORT_H, 7, ring); s_ccs.sh_ring[i] = ring; }
+    if (full || ink != s_ccs.sh_ink[i])   { ui_glyph(g, cc_short_glyph(i), x + CC_SHORT_W / 2, y + CC_SHORT_H / 2, 6, ink, LINE); s_ccs.sh_ink[i] = ink; }
+}
+
+// The one line of text on the panel: names the focused control, its live state and the key that acts
+// (vocabulary of docs/native-ui-kit.md §5). Red while a disruptive action is armed.
+static const char *cc_context_text(char *b, int cap, unsigned short *col)
+{
+    const char *s = b; *col = MUTED; b[0] = 0;
+    if (s_cc_arm == CC_ARM_HOTSPOT) {
+        *col = C_RED;
+        return nucleo_setup_ap_intended() ? TR("invio spegne hotspot   esc annulla", "enter hotspot off   esc cancel")
+                                          : TR("invio accende hotspot   esc annulla", "enter hotspot on   esc cancel");
+    }
+    if (s_cc_arm == CC_ARM_RESTART) { *col = C_RED; return TR("invio riavvia ora   esc annulla", "enter restart now   esc cancel"); }
+    if (s_cc_line == CL_TILES) {
+        switch (s_cc_tile) {
+            case TL_MUTE:   return nucleo_audio_is_muted() ? TR("Audio muto   invio riattiva", "Sound muted   enter unmute")
+                                                           : TR("Audio attivo   invio silenzia", "Sound on   enter mute");
+            case TL_TORCH:  return TR("Torcia   invio accende", "Torch   enter turn on");
+            case TL_SCREEN: return TR("Spegni schermo   un tasto riaccende", "Screen off   any key wakes it");
+            default:
+                if (!cc_hotspot_ok()) return TR("Hotspot non disponibile in questa app", "Hotspot unavailable in this app");
+                if (nucleo_setup_ap_intended()) { snprintf(b, cap, "%.18s  192.168.4.1", nucleo_setup_ap_ssid()); *col = C_YELLOW; return s; }
+                return TR("Hotspot spento   invio x2 accende", "Hotspot off   enter x2 turns on");
+        }
+    }
+    if (s_cc_line == CL_BRIGHT) { snprintf(b, cap, TR("Luminosita %d%%   </> regola", "Brightness %d%%   </> adjust"), nucleo_app_brightness()); return s; }
+    if (s_cc_line == CL_VOLUME) {
+        if (nucleo_audio_is_muted()) snprintf(b, cap, TR("Volume %d%% muto   invio riattiva", "Volume %d%% muted   enter unmute"), nucleo_audio_volume());
+        else                         snprintf(b, cap, TR("Volume %d%%   </> regola   invio muto", "Volume %d%%   </> adjust   enter mute"), nucleo_audio_volume());
+        return s;
+    }
+    switch (s_cc_short) {
+        case SC_SETTINGS: return TR("Tutte le impostazioni   invio apri", "All settings   enter open");
+        case SC_WEB: {
+            const char *ip = cc_online() ? nucleo_setup_ip() : nucleo_setup_ap_active() ? "192.168.4.1" : "--";
+            snprintf(b, cap, "Web %.15s   PIN %.8s", ip, nucleo_auth_pin()); *col = FG; return s;
+        }
+        case SC_USBKBD:   return TR("Tastiera USB per il PC   invio apri", "USB keyboard for a PC   enter open");
+        case SC_USBDRIVE: return TR("Scheda SD come disco USB   invio apri", "SD card as a USB drive   enter open");
+        default:          return TR("Riavvia il dispositivo   invio x2", "Restart the device   enter x2");
+    }
+}
+
+template <typename T> static void cc_context(T *g, bool full)
+{
+    char b[48]; unsigned short c; const char *s = cc_context_text(b, sizeof b, &c);
+    char o[40]; memset(o, ' ', 39); o[39] = 0;                        // centred in a fixed 39-column field
+    int len = (int)strlen(s); if (len > 39) len = 39;
+    memcpy(o + (39 - len) / 2, s, len);
+    uint32_t h = 2166136261u; for (const char *p = o; *p; p++) h = (h ^ (uint8_t)*p) * 16777619u;
+    h ^= c;
+    if (!full && h == s_ccs.ctx) return;
+    s_ccs.ctx = h;
+    if (full) g->drawFastHLine(0, CC_CTX_Y, W, LINE);
+    g->setTextSize(1); g->setTextColor(c, BG); g->setCursor(3, CC_CTX_Y + 4); g->print(o);
+}
+
+template <typename T> static void cc_paint(T *g, bool full)
+{
+    if (full) g->fillScreen(BG);
+    cc_strip(g, full);
+    for (int i = 0; i < CC_NTILES; i++) cc_tile(g, i, full);
+    cc_slider(g, 0, full);
+    cc_slider(g, 1, full);
+    for (int i = 0; i < CC_NSHORT; i++) cc_short(g, i, full);
+    cc_context(g, full);
+}
+
 void launcher_render_control_center(void)
 {
+    s_cc_drawn_sig = cc_sig();
     M5Canvas *c = nucleo_screen();
-    if (c) { cc_draw(c); c->pushSprite(0, 0); }            // one blit -> no flicker
-    else   { cc_draw(&d); }                                // low-heap fallback: direct (may flicker)
+    if (c) { cc_paint(c, true); c->pushSprite(0, 0); }                // back-buffer: compose all, ONE blit
+    else   { d.startWrite(); cc_paint(&d, !s_ccs.valid); d.endWrite(); }   // direct: only what changed
+    s_ccs.valid = true;                                               // the screen now matches s_ccs
 }
-
-void launcher_render_control_center_close(void) { }       // no-op: buffer is shared (kept for call sites)

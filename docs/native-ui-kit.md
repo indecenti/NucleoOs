@@ -51,6 +51,7 @@ per-category accents. Do not scatter the accent as a literal across draw calls.
 | **Selectable row** | `app_ui_row(y, h, label, focus, accent)` | one-off settings rows |
 | **Gauge** | `app_ui_gauge(y, label, val, pct, col)` | copied battery/RAM/storage bars |
 | **Confirm card** | `app_ui_confirm(...)` + `app_ui_confirm_key(...)` | "press D again" hints |
+| **System glyph** | `ui_glyph(&d, UG_*, cx, cy, r, col, bg)` (`ui_glyph.h`) | hand-drawn control icons (Wi-Fi, sun, speaker, power, gear, lock, star…) |
 
 Selection look is **one look everywhere**: the focused row / active tab is an **accent-filled
 rounded pill with `INK` text**; unfocused is `MUTED` text on `BG`. This matches the launcher and
@@ -98,7 +99,9 @@ only the regions you change. Static screens redraw on key input only — never r
 ## 7. Adoption status & migration
 
 Reference apps (already on-canon): **Files, Notes, Calendar** (list), **System Status**, **Meteo**
-(tabbed, post-pilot). New apps start from `nucleo-new-app` / the `nucleo-native-app` skill, which
+(tabbed, post-pilot), **Settings** + the **Control Center** (system surfaces — see `docs/device-ui.md`).
+The two system surfaces use `THEME_ACC` as their accent rather than a per-app colour: they *are* the
+OS, and it lets a theme change recolour Settings live as its own preview. New apps start from `nucleo-new-app` / the `nucleo-native-app` skill, which
 pull these primitives.
 
 Migrating an existing app:

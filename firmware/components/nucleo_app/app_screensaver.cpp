@@ -43,6 +43,7 @@
 static int32_t g_threshold_ms = 60000;
 static int     g_mode         = MODE_CLOCK;
 static bool    g_trigger      = false;
+static bool    s_cfg_loaded   = false;   // screensaver.json read this boot (see cfg_ensure)
 
 // ---- Stato app --------------------------------------------------------------
 static bool    s_running    = false;
@@ -332,7 +333,8 @@ static void load_settings(void)
     int mode = MODE_CLOCK, sec = 60;
     sscanf(buf, "{\"mode\":%d,\"sec\":%d}", &mode, &sec);
     if (mode < 0 || mode > 3) mode = MODE_CLOCK;
-    if (sec < 5)   sec = 5;
+    if (sec < 0) sec = 60;
+    if (sec != 0 && sec < 5) sec = 5;              // 0 = never (set from Settings)
     if (sec > 600) sec = 600;
     g_mode         = mode;
     g_threshold_ms = (int32_t)sec * 1000;
@@ -381,7 +383,8 @@ static void draw_settings(void)
 
         int sec = (int)(g_threshold_ms / 1000);
         char sv[20];
-        if (sec < 60)           snprintf(sv, sizeof sv, "%d sec", sec);
+        if (sec == 0)           snprintf(sv, sizeof sv, "%s", TR("mai", "never"));   // set from Settings
+        else if (sec < 60)      snprintf(sv, sizeof sv, "%d sec", sec);
         else if (sec == 60)     snprintf(sv, sizeof sv, "1 min");
         else if (sec % 60 == 0) snprintf(sv, sizeof sv, "%d min", sec / 60);
         else                    snprintf(sv, sizeof sv, "%dm %ds", sec / 60, sec % 60);
@@ -458,7 +461,7 @@ static bool poll_fn(void)
 
 static void on_enter(void)
 {
-    load_settings();
+    load_settings(); s_cfg_loaded = true;
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_poll_handler(poll_fn);
@@ -524,9 +527,32 @@ static void on_draw(void)
 static void on_exit(void) { if (s_running) saver_stop(); save_settings(); free(fire_buf); fire_buf = nullptr; }
 
 // ==================== HOOK DI SISTEMA =======================================
+// The saved timeout/style used to be read only when this app was opened, so after a reboot the saver
+// always fired at the 60 s default. Load once, lazily, from whichever entry point runs first.
+static void cfg_ensure(void) { if (!s_cfg_loaded) { s_cfg_loaded = true; load_settings(); } }
+
 extern "C" bool nucleo_screensaver_should_activate(int64_t idle_ms)
 {
+    cfg_ensure();
     return g_threshold_ms > 0 && idle_ms >= g_threshold_ms;
+}
+
+// Settings app hooks (Display > Screensaver). Timeout 0 = never; 5..600 s otherwise.
+extern "C" int  nucleo_screensaver_timeout_s(void) { cfg_ensure(); return (int)(g_threshold_ms / 1000); }
+extern "C" void nucleo_screensaver_set_timeout_s(int sec)
+{
+    cfg_ensure();
+    if (sec < 0) sec = 0;
+    if (sec != 0 && sec < 5) sec = 5;
+    if (sec > 600) sec = 600;
+    g_threshold_ms = (int32_t)sec * 1000; save_settings();
+}
+extern "C" int  nucleo_screensaver_mode(void) { cfg_ensure(); return g_mode; }   // 0 off-screen, 1 clock, 2 stars, 3 fire
+extern "C" void nucleo_screensaver_set_mode(int mode)
+{
+    cfg_ensure();
+    if (mode < MODE_OFF || mode > MODE_FIRE) return;
+    g_mode = mode; save_settings();
 }
 extern "C" void nucleo_screensaver_set_trigger(void) { g_trigger = true; }
 
