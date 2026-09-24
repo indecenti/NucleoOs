@@ -644,6 +644,7 @@ static struct {
     char last_file[64];        // last real file touched (routed paths: /data/<Folder>/<name>)
     char last_kind;            // 'a' app / 'f' file — recency tie-break for "aprilo"
     char last_topic[96];       // last knowledge query (for "tell me more")
+    char said[64];             // the user's last non-command utterance: what "ricordamelo" refers to
     // FSM AWAITING_SLOT: a tool asked for a missing argument; next turn fills it.
     char pending_tool[16];     // "" = no pending slot
     char pending_slot[16];     // which argument we're waiting for ("filename" | "folder")
@@ -1968,10 +1969,30 @@ static int tool_setting(const char *raw, char tok[A_MAX_TOKENS][A_TOK_LEN], int 
 // WHEN (day offset: oggi/domani/dopodomani/"tra N giorni"), an optional TIME ("alle HH[:MM]"), and the
 // TEXT; packs them on the content channel as "off=<d>;time=<HH:MM|>;text=<...>" and proposes ONE
 // ANIMA_ACT_TOOL the executor resolves against the RTC date and appends to the OS calendar.
+// A first-person TO-DO ("devo chiamare Marco", "I need to call the bank"): not a question, a thing the user has
+// to do. Leads only, no '?' — "devo usare malloc o calloc?" is a question and stays one.
+static bool a_is_todo(const char *q)
+{
+    if (!q || strchr(q, '?')) return false;
+    char lo[96]; size_t i = 0;
+    while (*q == ' ') q++;
+    for (; q[i] && i + 1 < sizeof lo; i++) lo[i] = (char)tolower((unsigned char)q[i]);
+    lo[i] = 0;
+    static const char *const lead[] = { "devo ", "dovrei ", "dovro ", "ho da ", "mi tocca ", "non devo dimenticare ",
+        "non devo scordare ", "i need to ", "i have to ", "i must ", "i should ", "i've got to ", "i gotta ",
+        "don't let me forget ", NULL };
+    for (int k = 0; lead[k]; k++) {
+        size_t L = strlen(lead[k]);
+        if (!strncmp(lo, lead[k], L) && strlen(lo) > L + 2) return true;
+    }
+    return false;
+}
+
 static bool a_event_trigger(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok)
 {
     if (a_action_is_statement(tok, ntok)) return false;   // "ho creato un evento", "non aggiungere…" -> not a command
-    static const char *remind[] = { "ricordami", "ricorda", "promemoria", "reminder", "remind", "dimenticare", "dimenticarmi", "forget", NULL };
+    static const char *remind[] = { "ricordami", "ricorda", "promemoria", "reminder", "remind", "dimenticare", "dimenticarmi", "forget",
+                                    "ricordarmi", NULL };
     static const char *verbs[]  = { "crea", "creare", "aggiungi", "segna", "nuovo", "nuova", "add", "new", "set", "metti",
                                     "schedule", "pianifica", "programma", "fissa", "prenota", NULL };
     static const char *nouns[]  = { "evento", "eventi", "appuntamento", "appuntamenti", "impegno", "event", "appointment",
@@ -1991,19 +2012,45 @@ static bool a_event_trigger(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok)
     // were missing, so "ricordami quanto fa 2+2" fabricated a junk calendar entry (EN "what" worked).
     static const char *qwords[] = { "come", "cosa", "cos", "chi", "quando", "dove", "perche", "quale", "quali",
                                     "quanto", "quanti", "quanta", "quante", "significato", "significa", "spiega", "spiegami",
-                                    "how", "what", "who", "when", "where", "why", "which",
-                                    "posso", "puoi", "potresti", "puo", "sai", "riesci", "sapresti",
+                                    "how", "what", "who", "when", "where", "why", "which", NULL };
+    // A polite modal ("puoi / potresti / can you remind me…") is only a question when nothing to SCHEDULE
+    // follows: "puoi ricordarmi di comprare il pane domani" is a request, "puoi ricordarmi cos'è X" is not.
+    static const char *modal[]  = { "posso", "puoi", "potresti", "puo", "sai", "riesci", "sapresti",
                                     "can", "could", "may", "able", NULL };
-    bool rem = false, v = false, n = false, q = false; bool has_ore = false, has_sono = false;
+    static const char *sched[]  = { "di", "to", "domani", "dopodomani", "oggi", "stasera", "tomorrow", "today", "tonight",
+                                    "alle", "ore", "at", "tra", "fra", "lunedi", "martedi", "mercoledi", "giovedi", "venerdi",
+                                    "sabato", "domenica", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", NULL };
+    bool rem = false, v = false, n = false, q = false, md = false, sc = false; bool has_ore = false, has_sono = false;
     for (int t = 0; t < ntok; t++) {
         for (int i = 0; remind[i]; i++) if (a_match(remind[i], tok[t])) rem = true;
         for (int i = 0; verbs[i];  i++) if (a_match(verbs[i],  tok[t])) v = true;
         for (int i = 0; nouns[i];  i++) if (a_match(nouns[i],  tok[t])) n = true;
         for (int i = 0; qwords[i]; i++) if (!strcmp(qwords[i], tok[t])) q = true;   // "ricordami COME..." = a question
+        for (int i = 0; modal[i];  i++) if (!strcmp(modal[i],  tok[t])) md = true;
+        for (int i = 0; sched[i];  i++) if (!strcmp(sched[i],  tok[t])) sc = true;
         if (!strcmp(tok[t], "ore")) has_ore = true;
         if (!strcmp(tok[t], "sono")) has_sono = true;
     }
     if (q) return false;                          // a how/what/when question is never a reminder to schedule
+    // "ricordamelo / ricordatelo" points back at something said before, so it schedules only when the rest of the
+    // line is just the WHEN ("ricordamelo domani alle 12"). With content of its own ("ho un appuntamento domani,
+    // ricordamelo") it is a question about the agenda, answered by the agenda intent.
+    {
+        static const char *const clit[] = { "ricordamelo", "ricordatelo", "ricordarmelo", NULL };
+        static const char *const when[] = { "domani", "dopodomani", "oggi", "stasera", "stamattina", "alle", "ore", "a", "tra",
+            "fra", "per", "favore", "mattina", "pomeriggio", "sera", "lunedi", "martedi", "mercoledi", "giovedi", "venerdi",
+            "sabato", "domenica", "prossimo", "prossima", "settimana", "giorni", "giorno", NULL };
+        bool has_clit = false, only_when = true;
+        for (int t = 0; t < ntok; t++) {
+            bool c = false, w = false;
+            for (int i = 0; clit[i]; i++) if (!strcmp(clit[i], tok[t])) c = true;
+            for (int i = 0; when[i]; i++) if (!strcmp(when[i], tok[t])) w = true;
+            if (c) has_clit = true;
+            else if (!w && !isdigit((unsigned char)tok[t][0])) only_when = false;
+        }
+        if (has_clit) return only_when;
+    }
+    if (md && !(rem && sc)) return false;         // "puoi ricordarmi X?" with nothing to schedule: a question
     if (has_ore && has_sono) return false;        // "ricordami che ore sono" — a time question, not a task
     return rem || (v && n);
 }
@@ -2218,6 +2265,13 @@ static int tool_event(const char *raw, char tok[A_MAX_TOKENS][A_TOK_LEN], int nt
     }
 
     bool drop[A_MAX_TOKENS]; for (int i = 0; i < n; i++) drop[i] = false;
+    // "ricordamelo / remind me of it" points BACK at what the user just said: its pronoun is not the content.
+    bool back = false;
+    for (int i = 0; i < n; i++) {
+        if (!strcmp(low[i], "ricordamelo") || !strcmp(low[i], "ricordatelo") || !strcmp(low[i], "ricordarmelo")) back = true;
+        if ((!strcmp(low[i], "it") || !strcmp(low[i], "that") || !strcmp(low[i], "this")) && i > 0
+            && (!strcmp(low[i-1], "of") || !strcmp(low[i-1], "about"))) { back = true; drop[i] = true; drop[i-1] = true; }
+    }
 
     // WHEN: day offset (default today). Drop the when-words from the text. localtime gives today's
     // weekday so a named day ("venerdì") resolves to its NEXT occurrence.
@@ -2285,6 +2339,9 @@ static int tool_event(const char *raw, char tok[A_MAX_TOKENS][A_TOK_LEN], int nt
 
     // Drop the LEADING structural run (trigger / verb / event-noun / article / "di"/"che"/"to"/"that").
     static const char *lead[] = { "ricordami","ricorda","promemoria","reminder","remind","me","mi",
+        "ricordamelo","ricordatelo","ricordarmelo","ricordarmi","puoi","potresti","vorrei","please","favore",   // "puoi ricordarmi…"
+        "can","could","would","you",                                                                   // "can you remind me to…"
+        "mettimi","impostami","imposta","segnami","aggiungimi","fissami","programmami","creami","inserisci",   // "mettimi un promemoria per…"
         "crea","creare","crei","aggiungi","segna","nuovo","nuova","add","new","set","metti",
         "schedule","pianifica","programma","fissa","prenota",                                      // scheduling verbs
         "evento","eventi","appuntamento","appuntamenti","impegno","event","appointment",
@@ -2307,6 +2364,23 @@ static int tool_event(const char *raw, char tok[A_MAX_TOKENS][A_TOK_LEN], int nt
         for (int k = 0; k < len && tl < (int)sizeof(text) - 1; k++) text[tl++] = s[k];
     }
     text[tl] = 0;
+    // The thing to remember is what the user just said, minus its "devo / I need to" ("devo chiamare Marco" ->
+    // "ricordamelo domani alle 12" -> "chiamare Marco" tomorrow at 12). Nothing said yet -> ASK, never an empty event.
+    if (!text[0] && back) {
+        if (!s_session.said[0]) {
+            r->tier = ANIMA_TIER_COMMAND; r->action = ANIMA_ACT_ANSWER; r->confidence = 80; r->awaiting = 1;
+            snprintf(r->intent, sizeof(r->intent), "add_event");
+            snprintf(r->state, sizeof(r->state), "slot");
+            snprintf(r->reply, sizeof(r->reply), en ? "What should I remind you of? e.g. \"remind me tomorrow at 9 to call Marco\"."
+                                                    : "Cosa devo ricordarti? Es. «ricordami domani alle 9 di chiamare Marco».");
+            return 1;
+        }
+        const char *said = s_session.said;
+        static const char *const must[] = { "devo ", "dovrei ", "dovro ", "dovrò ", "ho da ", "bisogna ", "mi tocca ",
+                                            "i need to ", "i have to ", "i must ", "i should ", "i've got to ", NULL };
+        for (int i = 0; must[i]; i++) { size_t k = strlen(must[i]); if (!strncasecmp(said, must[i], k)) { said += k; break; } }
+        snprintf(text, sizeof text, "%s", said);
+    }
     if (!text[0]) {                                   // a timed reminder with no body ("promemoria per venerdì
         if (off > 0 || hh >= 0) snprintf(text, sizeof text, en ? "reminder" : "promemoria");  // alle 18") -> generic text
         else return 0;                                // truly nothing to schedule
@@ -3387,7 +3461,12 @@ static int a_topic_strip(const char *q, char *out, size_t outsz)
         "descrivermi",
         // IT mechanism questions -> EN parity (kind=1 = L0-first, so live commands still win, then L1 gets the topic)
         "come funziona","come funzionano","come funziona il","come funziona la","come funziona lo","a cosa serve",
-        "a cosa servono","a che serve","come si usa","come si fa", NULL };
+        "a cosa servono","a che serve","come si usa","come si fa",
+        // a RECALL request wrapping a question ("mi ricordi cosa fa malloc", "can you remind me what X is"): the
+        // question is the topic. L0-first like a formal opener, so "ricordami che ore sono" stays the TIME.
+        // tool_event already refused these (a question word follows, nothing to schedule).
+        "mi ricordi","me lo ricordi","puoi ricordarmi","potresti ricordarmi","sai ricordarmi","ricordami",
+        "can you remind me","could you remind me","remind me","do you remember", NULL };
     int kind = 0; const char *rest = NULL;
     for (int i = 0; lead_conv[i]; i++) {
         char pat[40]; snprintf(pat, sizeof pat, " %s ", lead_conv[i]);
@@ -4297,6 +4376,14 @@ done: {
         // or showed nothing at all (voice, host CLI). The refusal belongs to the engine, once.
         // The TIER is untouched: every abstain/hallucination gate keys on tier==NONE, never on the
         // wording, so filling the text cannot turn a refusal into an apparent answer.
+        // A to-do nothing answered ("devo chiamare Marco") is not a question to refuse: offer to schedule it. The
+        // utterance is kept as s_session.said below, so "ricordamelo domani alle 9" then schedules exactly it.
+        if (r.tier == ANIMA_TIER_NONE && r.action == ANIMA_ACT_NONE && !r.awaiting && a_is_todo(q)) {
+            r.tier = ANIMA_TIER_COMMAND; r.action = ANIMA_ACT_ANSWER; r.confidence = 60;
+            snprintf(r.intent, sizeof(r.intent), "offer_reminder");
+            snprintf(r.reply, sizeof(r.reply), en ? "Want me to remind you? Tell me when, e.g. \"remind me of it tomorrow at 9\"."
+                                                  : "Vuoi che te lo ricordi? Dimmi quando, es. «ricordamelo domani alle 9».");
+        }
         if (r.tier == ANIMA_TIER_NONE && r.action == ANIMA_ACT_NONE && !r.awaiting && !r.reply[0])
             snprintf(r.reply, sizeof r.reply, "%s", en ? "I don't know." : "Non lo so.");
         if (replayed && r.action != ANIMA_ACT_NONE) { r.from_memory = 1; snprintf(r.state, sizeof(r.state), "followup"); }
@@ -4326,6 +4413,10 @@ done: {
             // Append to the online-context transcript too, so the cloud teacher sees a real multi-turn
             // dialogue next time (a no-op for empty answers — a miss carries nothing to replay).
             if (r.tier != ANIMA_TIER_NONE) chat_push(q, r.reply);
+            // What the user just SAID ("devo chiamare Marco"), not a command: a following "ricordamelo domani"
+            // schedules exactly that. Commands (a reminder, a launch…) never become the thing to remember.
+            if (r.action != ANIMA_ACT_TOOL && r.action != ANIMA_ACT_LAUNCH && r.action != ANIMA_ACT_SYSTEM)
+                snprintf(s_session.said, sizeof s_session.said, "%s", q);
         }
         // Capture the conversational FOCUS from the QUERY's structure, whichever tier answered (a capital
         // fact often comes from an L1 card, not the reasoner). A bare follow-up ("e newton?") is not itself
