@@ -74,16 +74,29 @@ function authHeaders(cfg) {
 
 // One short completion. Returns text or '' on failure (never throws into the game loop). Logs the exact
 // endpoint hit so "is it really Grok?" is answerable from the browser console / network tab.
-export async function ask(cfg, system, user, { maxTokens = 300, signal } = {}) {
+// The model is not pinned: the shared /ai.js picks one the key still serves (fast tier) and re-picks if the
+// provider retired it, and a failure is logged in plain words (what went wrong, how to fix it).
+let _ai = null;
+const aiMod = () => _ai || (_ai = import('/ai.js').catch(() => { _ai = null; return null; }));
+export let lastAiError = '';
+export async function ask(cfg, system, user, opts = {}) {
   if (!cfg) return '';
-  try {
-    if (cfg.provider === 'anthropic') {
+  lastAiError = '';
+  const AI = await aiMod();
+  if (!AI || !AI.withAutoModel) { try { return await askOnce(cfg, system, user, opts); } catch { return ''; } }
+  try { return await AI.withAutoModel({ ...cfg, tier: 'fast' }, (c) => askOnce(c, system, user, opts)); }
+  catch (e) { lastAiError = AI.explainAiError(e) || ''; if (lastAiError) console.warn('[coach]', lastAiError); return ''; }
+}
+async function askOnce(cfg, system, user, { maxTokens = 300, signal } = {}) {
+  const fail = async (resp, text) => { const e = new Error((() => { try { const j = JSON.parse(text); return (j.error && (j.error.message || j.error)) || ''; } catch { return ''; } })() || ('HTTP ' + resp.status));
+    e.status = resp.status; try { const j = JSON.parse(text); e.code = (j.error && (j.error.code || j.error.type)) || ''; } catch {} return e; };
+  if (cfg.provider === 'anthropic') {
       const base = (cfg.base || 'https://api.anthropic.com').replace(/\/+$/, '');
       console.info('[coach] →', brandOf(cfg), base + '/v1/messages', cfg.model);
       const body = { model: cfg.model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] };
       const resp = await fetch(base + '/v1/messages', { method: 'POST', headers: authHeaders(cfg), body: JSON.stringify(body), signal });
-      const j = await resp.json().catch(() => null);
-      if (!resp.ok || !j || j.type === 'error') return '';
+      const text = await resp.text().catch(() => ''); let j = null; try { j = JSON.parse(text); } catch {}
+      if (!resp.ok || !j || j.type === 'error') throw await fail(resp, text);
       return Array.isArray(j.content) ? j.content.filter(b => b && b.type === 'text').map(b => b.text).join('') : '';
     } else {
       const base = (cfg.base || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
@@ -92,11 +105,10 @@ export async function ask(cfg, system, user, { maxTokens = 300, signal } = {}) {
       console.info('[coach] →', brandOf(cfg), url, cfg.model);
       const msgs = [{ role: 'system', content: system }, { role: 'user', content: user }];
       const resp = await fetch(url, { method: 'POST', headers: authHeaders(cfg), body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens, messages: msgs }), signal });
-      const j = await resp.json().catch(() => null);
-      if (!resp.ok || !j || j.error) return '';
+      const text = await resp.text().catch(() => ''); let j = null; try { j = JSON.parse(text); } catch {}
+      if (!resp.ok || !j || j.error) throw await fail(resp, text);
       return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
     }
-  } catch { return ''; }
 }
 
 export function extractJson(text) {

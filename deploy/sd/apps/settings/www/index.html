@@ -96,6 +96,12 @@
     .sw input:checked+span{background:var(--accent)}
     .sw input:checked+span::after{transform:translateX(20px)}
 
+    /* ---- Updates tab: download/flash progress ---- */
+    .up-bar{height:8px;border-radius:4px;background:rgba(128,128,128,.18);overflow:hidden}
+    .up-bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:4px;transition:width .3s ease}
+    .up-bar>i.pulse{animation:up-pulse 1.2s ease-in-out infinite}
+    @keyframes up-pulse{0%,100%{opacity:.45}50%{opacity:1}}
+
     button{border:1px solid var(--line);background:rgba(128,128,128,0.06);color:var(--ink);
       border-radius:8px;padding:7px 16px;cursor:pointer;transition:.15s;font:inherit;font-size:13px}
     button:hover{background:rgba(128,128,128,0.14)}
@@ -550,6 +556,34 @@
           <div class="hint" data-t-html="privacyHint">Solo <code>/api/status</code> (discovery) resta <b>pubblico</b> sulla rete locale e mostra SSID/IP. Log e diagnostica (<code>/api/logs</code>, <code>/api/diag</code>, <code>/api/heap</code>, <code>/api/cpu</code>) ora <b>richiedono l'associazione</b>. Su reti non fidate usa l'hotspot WPA2 del dispositivo.</div></div>
       </section>
 
+      <!-- ═══════════ UPDATES ═══════════ -->
+      <section id="tab-updates" class="tab-content">
+        <div class="sect"><h2><span data-t="upTitle">Aggiornamenti</span> <span class="badge fw">Firmware</span></h2>
+          <div class="info-grid">
+            <div class="info-cell"><div class="il" data-t="upInstalled">Versione installata</div><div class="iv" id="up-cur">—</div></div>
+            <div class="info-cell"><div class="il" data-t="upLatest">Ultima release</div><div class="iv" id="up-latest">—</div></div>
+            <div class="info-cell"><div class="il" data-t="upChannel">Canale</div><div class="iv">GitHub Releases</div></div>
+            <div class="info-cell"><div class="il" data-t="upChecked">Ultimo controllo</div><div class="iv" id="up-checked">—</div></div>
+          </div>
+          <div class="row" style="margin-top:6px"><label data-t="upState">Stato</label><div class="ctl"><span class="hint" id="up-state">—</span></div></div>
+          <div class="ctl" style="gap:10px;flex-wrap:wrap;margin-top:8px">
+            <button id="up-check">🔎 <span data-t="upCheckNow">Controlla ora</span></button>
+            <button id="up-flash" class="primary" hidden>⬆️ <span id="up-flash-lbl" data-t="upInstall">Aggiorna firmware</span></button>
+            <a id="up-sd" class="hint" target="_blank" rel="noopener" hidden style="align-self:center">📦 <span data-t="upSdZip">Scarica contenuti SD (.zip)</span></a>
+            <a id="up-notes-link" class="hint" target="_blank" rel="noopener" hidden style="align-self:center">🔗 <span data-t="upNotesLink">Note di rilascio</span></a>
+          </div>
+          <div id="up-prog" hidden style="margin-top:12px">
+            <div class="up-bar"><i id="up-prog-bar"></i></div>
+            <div class="hint" id="up-prog-lbl" style="margin-top:6px">—</div>
+          </div>
+          <div class="hint" style="margin-top:10px" data-t="upFlashHint">Scarica l'immagine OTA dal sito ufficiale, ne verifica l'integrità (SHA-256) e la invia al dispositivo. Al termine il Cardputer si riavvia da solo; se l'immagine non parte, torna da sola alla versione precedente (rollback).</div></div>
+        <div class="sect"><h2 data-t="upNotesTitle">Novità</h2><div class="logbox" id="up-notes">—</div></div>
+        <div class="sect"><h2 data-t="upPrefs">Preferenze</h2>
+          <div class="row"><label data-t="upAuto">Controllo automatico</label><div class="ctl">
+            <label class="sw"><input type="checkbox" id="up-auto" checked><span></span></label>
+            <span class="hint" data-t="upAutoHint">Una richiesta al giorno a GitHub, da questo browser. Il dispositivo non contatta mai internet.</span></div></div></div>
+      </section>
+
       <!-- ═══════════ ABOUT ═══════════ -->
       <section id="tab-about" class="tab-content">
         <div class="sect"><h2 data-t="systemInfo">Informazioni sistema</h2>
@@ -611,6 +645,7 @@ import { SCENES, applyScene } from './scenes.js';
 import { PRESETS, applyPreset, planPreset, feasibility, buildRegistry, gaps, APP_MAP, appStatus } from './preset-engine.js';
 import { buildActionRegistry, filterActions } from './actions.js';
 import { ENDPOINTS, runSelfTest, formatReport } from './selftest.js';
+import { initUpdatesTab } from './fwupdate.js';
 
 // ═══════════ serial device gate ═══════════
 // ONE request to the Cardputer at a time, always. The device is a single-task PSRAM-less httpd
@@ -659,7 +694,7 @@ async function apiJson(path, opt) { try { const r = await api(path, opt); return
 // ═══════════ tabs / sidebar ═══════════
 const TABS = [
   ['control', '🎛'], ['display', '📺'], ['personalization', '🎨'], ['network', '🌐'],
-  ['ai', '🧠'], ['device', '💻'], ['diagnostics', '🩺'], ['about', 'ℹ️'],
+  ['ai', '🧠'], ['device', '💻'], ['diagnostics', '🩺'], ['updates', '⬆️'], ['about', 'ℹ️'],
 ];
 let activeTab = 'control';
 function buildSidebar() {
@@ -684,6 +719,7 @@ function onTabFirstOpen(id) {
   if (id === 'personalization') loadWallpapers();
   if (id === 'diagnostics') refreshHeapDetail();   // selectTab already refreshes the logs on every open
   if (id === 'device') refreshSessions();
+  if (id === 'updates' && Updates) Updates.check(false);   // respects the 24h TTL; "Check now" forces
 }
 
 // ═══════════ live data poller (the ONLY timer) ═══════════
@@ -712,6 +748,9 @@ const fmtUp = (s) => { s |= 0; const d = s / 86400 | 0, h = s % 86400 / 3600 | 0
 let lastStatus = null, lastUpdateAt = 0, everReached = false;
 function renderStatus(s) {
   lastStatus = s; everReached = true; lastUpdateAt = Date.now();
+  // Updates tab: the installed-version cell rides every status sample (the tab may have rendered
+  // before the first snapshot landed).
+  { const uc = $('up-cur'); if (uc && s.version) uc.textContent = s.version; }
   const net = s.network || {}, st = s.storage || {};
   // hero verdict
   const minFree = s.min_free_heap ?? 0, busy = s.arbiter && s.arbiter.busy;
@@ -1597,6 +1636,8 @@ window.addEventListener('message', (e) => {
   const d = e.data; if (!d) return;
   if (d.t === 'fs.changed' && typeof d.d?.path === 'string' && d.d.path.endsWith('settings.json') && !dirty) load();
   else if (d.t === 'system.busy' && d.d) { if (d.d.busy) setLive('busy'); }
+  // Deep-link from the shell (an update notification click): jump to the requested tab.
+  else if (d.t === 'settings.tab' && typeof d.d === 'string' && TABS.some(([id]) => id === d.d)) selectTab(d.d);
   // Embedded: the shell polls /api/status for the whole OS and rebroadcasts the snapshot — feed the
   // hero/network/about surfaces from it instead of polling the same endpoint a second time here.
   else if (d.t === 'status.snapshot' && d.d && EMBEDDED) { renderStatus(d.d); setLive('live'); }
@@ -1619,6 +1660,17 @@ async function load() {
 
 // ═══════════ boot ═══════════
 buildSidebar(); buildScenes(); buildQuick(); buildActions(); selectTab('control');
+// Updates tab: check/download/verify/flash driver (see fwupdate.js). The poller freezes during a
+// flash so the serial fetch chain belongs to the OTA stream alone.
+const Updates = initUpdatesTab({
+  $, T, getStatus: () => lastStatus,
+  pausePoller: () => poller.setFrozen(true), resumePoller: () => poller.setFrozen(false),
+});
+// One-shot tab deep-link left by the shell before opening us (notification click on a cold boot).
+try {
+  const want = localStorage.getItem('nucleo.settings.tab');
+  if (want) { localStorage.removeItem('nucleo.settings.tab'); if (TABS.some(([id]) => id === want)) selectTab(want); }
+} catch {}
 // Sequential, tiles first: one prime sweep fills every live tile right away (instead of one source
 // per ~3 s tick), then the adaptive loop takes over and the settings model loads. All device
 // traffic already rides the serial gate, so nothing here can overlap on the Cardputer.

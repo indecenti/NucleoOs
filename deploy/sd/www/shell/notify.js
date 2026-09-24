@@ -289,7 +289,19 @@ export function initNotify(OS_API) {
     if (!act) return;
     const [k, v] = splitAct(act);
     try {
-      if (k === 'app') { const a = byId && byId(v); if (a && WM) WM.open(a); }
+      if (k === 'app') {
+        // "app:settings@updates" deep-links a tab inside the app: a one-shot localStorage hint
+        // covers a cold app boot, a postMessage covers one already open (same contract, see the
+        // Settings boot + message listener).
+        const at = v.indexOf('@'); const id = at < 0 ? v : v.slice(0, at); const tab = at < 0 ? '' : v.slice(at + 1);
+        if (tab) try { localStorage.setItem('nucleo.settings.tab', tab); } catch {}
+        const a = byId && byId(id); if (a && WM) WM.open(a);
+        if (tab && WM) try {
+          const w = WM.list().find((x) => x.app && x.app.id === id);
+          const f = w && w.el.querySelector('iframe');
+          if (f) f.contentWindow.postMessage({ t: 'settings.tab', d: tab }, '*');
+        } catch {}
+      }
       else if (k === 'file') { if (openFile) openFile(v); }
       else if (k === 'anima') {
         // Inoltra al copilot di sistema se presente (Ctrl+Spazio).

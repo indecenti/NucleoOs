@@ -1324,12 +1324,18 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
 
   // Browser-DIRECT chat completion for the prompt enhancer — the Cardputer never proxies it ("tutto cliente").
   // Request building + response parsing live in online-image.js (host-tested for both provider shapes).
+  // The model is not pinned: the fastest good one the key serves, re-picked if the provider retired it
+  // (the shared /ai.js withAutoModel — the same rule every NucleoOS AI surface follows).
+  let _ai=null; const aiMod=()=> _ai || (_ai=import('/ai.js').catch((e)=>{ _ai=null; throw e; }));
   async function cloudAsk(cfg, system, user){
-    const req=PIPEMOD.O.buildChatRequest(cfg, system, user, 320);
-    const r=await fetchT(req.url,{method:'POST',headers:req.headers,body:JSON.stringify(req.body)},90000);
-    const j=await r.json().catch(()=>null);
-    if(!r.ok||!j||j.type==='error'||j.error) throw new Error('LLM '+(r.status||''));
-    return PIPEMOD.O.parseChatResponse(cfg.provider, j);
+    const AI=await aiMod();
+    return AI.withAutoModel(Object.assign({}, cfg, { tier:'fast' }), async (c)=>{
+      const req=PIPEMOD.O.buildChatRequest(c, system, user, 320);
+      const r=await fetchT(req.url,{method:'POST',headers:req.headers,body:JSON.stringify(req.body)},90000);
+      const text=await r.text().catch(()=>''); let j=null; try{ j=JSON.parse(text); }catch{}
+      if(!r.ok||!j||j.type==='error'||j.error) throw await AI.aiErrorFromResponse(r, c, text);
+      return PIPEMOD.O.parseChatResponse(c.provider, j);
+    });
   }
 
   // Decode an INLINE data: URL (b64 from the online model) → RGBA on a same-origin canvas (no taint/CORS).
@@ -1483,7 +1489,11 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   // Resolve the engine for the chosen provider (online cloud / local SDXS already booted / procedural preview).
   async function resolveEngine(id, localEngine){
     if(id==='online'){ if(!aiCfg.image) throw new Error(UL('nessun provider immagini online — configura xAI/Grok in Impostazioni · IA','no online image provider — configure xAI/Grok in Settings · AI'));
-      const e=PIPEMOD.O.makeOnlineImageEngine({ cfg:aiCfg.image, fetchImpl:(u,o)=>fetchT(u,o,90000), decode:decodeDataUrl, label:PIPEMOD.P.brandOf(aiCfg.image) }); await e.load(); return e; }
+      // The image model is picked from the key's own list (newest image model; the saved one while served), so a
+      // retired grok-2-image can't break Atelier. No list -> the configured id, as before.
+      let imgCfg=aiCfg.image;
+      try{ const AI=await aiMod(); const m=await AI.resolveModel(aiCfg.image, { need:'image' }); if(m) imgCfg=Object.assign({}, aiCfg.image, { model:m }); }catch{}
+      const e=PIPEMOD.O.makeOnlineImageEngine({ cfg:imgCfg, fetchImpl:(u,o)=>fetchT(u,o,90000), decode:decodeDataUrl, label:PIPEMOD.P.brandOf(imgCfg) }); await e.load(); return e; }
     if(id==='preview'){ const de=await import('./diffusion/diffusion-engine.js'); const e=de.makeMockEngine({resolution:RES}); await e.load(); return e; }
     return localEngine || await boot();                                       // local SDXS
   }

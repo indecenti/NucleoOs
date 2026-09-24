@@ -117,15 +117,30 @@ async function whisper(wavBlob, lang, key, base, signal) {
   return (await r.text()).trim();
 }
 
+// The summary model is not pinned: the saved AI Chat model while Groq still serves it, else the strongest one it
+// serves (the shared /ai.js withAutoModel, which also re-picks a retired model). A failure explains itself.
+let _ai = null;
+const aiMod = () => _ai || (_ai = import('/ai.js').catch(() => { _ai = null; return null; }));
 async function chat(messages, key, base, signal) {
-  const model = localStorage.getItem('groq.model') || 'llama-3.3-70b-versatile';
-  const r = await fetch(base.replace(/\/$/, '') + '/chat/completions', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-    body: JSON.stringify({ model, temperature: 0.3, messages }), signal,
-  });
-  if (!r.ok) throw new Error('summary ' + r.status);
-  const j = await r.json();
-  return (j.choices?.[0]?.message?.content || '').trim();
+  const saved = localStorage.getItem('groq.model') || '';
+  const once = async (model) => {
+    const r = await fetch(base.replace(/\/$/, '') + '/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+      body: JSON.stringify({ model, temperature: 0.3, messages }), signal,
+    });
+    const text = await r.text().catch(() => '');
+    if (!r.ok) {
+      const AI = await aiMod();
+      if (AI) throw await AI.aiErrorFromResponse(r, { provider: 'openai', model }, text);
+      throw new Error('summary ' + r.status);
+    }
+    const j = JSON.parse(text);
+    return (j.choices?.[0]?.message?.content || '').trim();
+  };
+  const AI = await aiMod();
+  if (!AI) return once(saved === 'auto' || !saved ? 'llama-3.3-70b-versatile' : saved);
+  try { return await AI.withAutoModel({ provider: 'openai', base, key, model: saved === 'auto' ? '' : saved, tier: 'max' }, (c) => once(c.model)); }
+  catch (e) { const msg = AI.explainAiError(e, undefined, { settings: 'AI Chat ⚙' }); throw new Error(msg || String(e && e.message || e)); }
 }
 
 // ── public API --------------------------------------------------------------------------------------
