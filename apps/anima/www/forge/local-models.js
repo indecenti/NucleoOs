@@ -36,10 +36,10 @@ export function resolveLocalModel(stored, _vramMB) {
 // IMPORTANT: vramMB here is WebGPU's maxBufferSize (per-buffer cap), a POOR proxy for total VRAM, so it only
 // ever raises a soft 'tight' hint — it NEVER blocks a model the user deliberately chose. Only the hard fact
 // "no WebGPU at all" blocks (then the local-GPU tier genuinely cannot run; the chat uses device/cloud).
-export function localModelCompat(id, caps = {}) {
+export function localModelCompat(id, caps = {}, env = {}) {
   const m = localModelById(id);
   if (!m) return { ok: false, level: 'unknown', msg: 'Modello sconosciuto.' };
-  if (!caps.webgpu) return { ok: false, level: 'no-webgpu', msg: 'Richiede WebGPU (Chrome/Edge con accelerazione hardware).' };
+  if (!caps.webgpu) return { ok: false, level: 'no-webgpu', cause: webgpuCause(caps, env), msg: 'Richiede WebGPU (Chrome/Edge con accelerazione hardware).' };
   // maxBufferSize on a real discrete GPU is often capped (~1–4 GB) far below total VRAM, so flag only a
   // CLEAR shortfall — a per-buffer budget below ~40% of the model's need — and even then as advisory.
   const proxyMB = caps.vramMB || 0;
@@ -47,6 +47,19 @@ export function localModelCompat(id, caps = {}) {
     return { ok: true, level: 'tight', msg: `Potrebbe non entrare in GPU: ~${m.needGB} GB di VRAM consigliati. Se va in errore, scegli un modello più piccolo.` };
   }
   return { ok: true, level: 'ok', msg: `~${m.sizeGB} GB, scaricati una volta dal web e poi offline.` };
+}
+
+// WHY there is no WebGPU, so the UI can say what to do instead of a generic "needs WebGPU".
+// caps.reason comes from probeWebGPU; env.secure is window.isSecureContext.
+//   'insecure' — navigator.gpu is hidden because the page is plain HTTP (http://<device-ip>): the usual
+//                case for the shell served by the Cardputer. Fix: the Chromium insecure-origin flag.
+//   'browser'  — a secure page and still no navigator.gpu: this browser has no WebGPU.
+//   'blocked'  — WebGPU exists but no usable adapter: hardware acceleration off, GPU blocklisted or too old.
+export function webgpuCause(caps = {}, env = {}) {
+  if (caps.webgpu) return null;
+  const r = String(caps.reason || 'no-webgpu');
+  if (r === 'no-webgpu') return env.secure === false ? 'insecure' : 'browser';
+  return 'blocked';
 }
 
 // Is an engine/load error a GPU out-of-memory / device-lost (→ "pick a smaller model"), vs a transient

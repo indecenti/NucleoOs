@@ -3,7 +3,7 @@
 // Bump this on every shell change that must reach already-installed clients. The reason for each
 // roll goes in docs/shell-cache-log.md — NOT here: it used to be one 10.5 KB comment on this line,
 // half the whole service worker, re-shipped to every browser on every update check.
-const CACHE = 'nucleo-shell-v141';   // v141 — AI: models chosen live (never pinned), retired ones replaced, errors in plain words
+const CACHE = 'nucleo-shell-v142';   // v142 — ANIMA: the GPU-model button says why WebGPU is off and how to turn it on
 // Per-version cache for app assets (/apps/<id>/...). Tied to the shell version so a deploy (which
 // bumps CACHE) drops it; the shell also flushes it on apps.changed (OTA app update) via postMessage.
 const APP_CACHE = CACHE + '-apps';
