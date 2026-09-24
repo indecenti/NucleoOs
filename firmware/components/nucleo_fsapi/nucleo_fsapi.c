@@ -6,6 +6,7 @@
 #include "nucleo_eventbus.h"
 #include "nucleo_storage.h"
 #include "nucleo_registry.h"
+#include "fslist.h"            // streaming /api/fs/list body
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,7 +15,6 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include "esp_log.h"
-#include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <errno.h>
@@ -101,6 +101,18 @@ static esp_err_t list_oom(httpd_req_t *req)
     return ESP_OK;
 }
 
+// The listing is STREAMED (fslist.c): O(1) RAM in the number of entries. The cJSON tree +
+// one-shot print it replaced needed O(entries) heap and a big contiguous block, so a 60-80 entry
+// folder already answered 503 "oom" with a ~13 KB largest free block — and push-ota --sync then
+// skipped the whole folder. Only the 1 KB chunk buffer is allocated here; list_oom is left for
+// when even that doesn't fit.
+#define FSLIST_CHUNK 1024
+
+static bool list_sink(void *ctx, const char *data, size_t len)
+{
+    return httpd_resp_send_chunk((httpd_req_t *)ctx, data, (ssize_t)len) == ESP_OK;
+}
+
 static esp_err_t list_get(httpd_req_t *req)
 {
     NUCLEO_AUTH_GUARD(req);
@@ -108,87 +120,15 @@ static esp_err_t list_get(httpd_req_t *req)
     if (!resolve_path(req, abs, sizeof(abs))) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "path"); return ESP_FAIL; }
     DIR *dir = opendir(abs);
     if (!dir) { httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no dir"); return ESP_FAIL; }
-
-    cJSON *root = cJSON_CreateObject();
-    cJSON *arr = cJSON_AddArrayToObject(root, "entries");
-    if (!arr) { closedir(dir); cJSON_Delete(root); return list_oom(req); }   // else every entry below leaks
-    struct dirent *de;
-    while ((de = readdir(dir)) != NULL) {
-        char full[300]; snprintf(full, sizeof(full), "%s/%s", abs, de->d_name);
-        struct stat st = {0}; stat(full, &st);
-        cJSON *e = cJSON_CreateObject();
-        cJSON_AddStringToObject(e, "name", de->d_name);
-        bool is_dir = S_ISDIR(st.st_mode);
-        cJSON_AddStringToObject(e, "type", is_dir ? "dir" : "file");
-        cJSON_AddNumberToObject(e, "size", (double)st.st_size);
-        // Tell the client which entries are protected system files so it can show a lock
-        // and gray out delete/rename/cut. Authoritative enforcement is server-side (above);
-        // this is only UX. Emitted only when true to keep the listing JSON small. Bundled
-        // factory games are marked in a second pass below (one streaming read of .factory).
-        if (nucleo_fs_is_protected(full)) cJSON_AddBoolToObject(e, "protected", true);
-        if (is_dir) {
-            bool has_subdirs = false;
-            DIR *subdir = opendir(full);
-            if (subdir) {
-                struct dirent *subde;
-                while ((subde = readdir(subdir)) != NULL) {
-                    if (strcmp(subde->d_name, ".") != 0 && strcmp(subde->d_name, "..") != 0) {
-                        char subfull[360]; snprintf(subfull, sizeof(subfull), "%s/%s", full, subde->d_name);
-                        struct stat subst = {0};
-                        if (stat(subfull, &subst) == 0 && S_ISDIR(subst.st_mode)) {
-                            has_subdirs = true;
-                            break;
-                        }
-                    }
-                }
-                closedir(subdir);
-            }
-            cJSON_AddBoolToObject(e, "has_subdirs", has_subdirs);
-        }
-        cJSON_AddItemToArray(arr, e);
-    }
-    closedir(dir);
-
-    // Second pass (UX lock-flag only): inside a bundled-game folder, stream its ".factory"
-    // manifest ONCE and flag each listed game + the manifest itself as protected. One SD read
-    // per listing, no heap — the per-entry alternative would re-open .factory for every ROM in
-    // a 200+ file folder. Enforcement is authoritative server-side in delete/move regardless.
-    if (nucleo_fs_factory_scope(abs)) {
-        char fpath[300]; snprintf(fpath, sizeof(fpath), "%s/.factory", abs);
-        FILE *ff = fopen(fpath, "r");
-        if (ff) {
-            char line[160];
-            while (fgets(line, sizeof(line), ff)) {
-                cJSON *it;
-                cJSON_ArrayForEach(it, arr) {
-                    cJSON *nm = cJSON_GetObjectItem(it, "name");
-                    if (nm && nm->valuestring && nucleo_fs_factory_line_eq(line, nm->valuestring) &&
-                        !cJSON_GetObjectItem(it, "protected")) {
-                        cJSON_AddBoolToObject(it, "protected", true);
-                        break;
-                    }
-                }
-            }
-            fclose(ff);
-            cJSON *it;   // pin the ".factory" entry itself (never a manifest line, handle apart)
-            cJSON_ArrayForEach(it, arr) {
-                cJSON *nm = cJSON_GetObjectItem(it, "name");
-                if (nm && nm->valuestring && !strcasecmp(nm->valuestring, ".factory") &&
-                    !cJSON_GetObjectItem(it, "protected")) {
-                    cJSON_AddBoolToObject(it, "protected", true);
-                    break;
-                }
-            }
-        }
-    }
-
-    char *out = cJSON_PrintUnformatted(root);   // a 200+ entry folder needs a big contiguous buffer
-    cJSON_Delete(root);
-    if (!out) return list_oom(req);             // was: 200 with an EMPTY body -> client saw an empty folder
+    char *buf = malloc(FSLIST_CHUNK);
+    if (!buf) { closedir(dir); return list_oom(req); }
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_sendstr(req, out);
-    cJSON_free(out);
+    bool ok = fslist_stream(dir, abs, buf, FSLIST_CHUNK, list_sink, req);
+    closedir(dir);
+    free(buf);
+    if (!ok) return ESP_FAIL;                   // client gone mid-stream: nothing more can be sent
+    httpd_resp_send_chunk(req, NULL, 0);        // end of the chunked body
     return ESP_OK;
 }
 

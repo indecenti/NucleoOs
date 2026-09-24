@@ -127,6 +127,10 @@ a live file.
   incrementally (reads each file first, writes only what changed). Use `--dry-run` to
   preview, `--only <subtree>` to scope. It **never** touches `system/config` (user
   state: pins, wallpaper, settings, session) or `data/` (media, ROMs).
+  The `--sync` mode diffs against each folder's `/api/fs/list`. If a folder can't be
+  listed (firmware up to 0.3.0+43 answered 503 "oom" on 60+ entry folders), it stats
+  each file with a 1-byte `Range` read instead of skipping the folder; only create-only
+  user state stays "unverifiable". The firmware now streams the listing (O(1) RAM).
 - **SD sync (card in the PC):**
   `tools\deploy.ps1 -To H:\` (the `-To` guard refuses non-removable / system drives).
   Then put the card back in the Cardputer.

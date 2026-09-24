@@ -497,6 +497,13 @@ const gates = [
     // throttle that can never wedge (never-checked and clock-backwards are both "due"). Twin of the
     // web logic in web/shell/update-core.js (tools/update-core.test.mjs). Pure C, no device.
     ok: (code) => code === 0, summary: (o) => (o.match(/update-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'fs-list (stream)', cmd: 'node', args: ['tools/anima-host/fslist-check.mjs'],
+    // The streaming GET /api/fs/list body (firmware/components/nucleo_fsapi/fslist.c), host-compiled
+    // with MinGW — O(1) RAM in the entries, so a big folder no longer answers 503 "oom" and makes
+    // push-ota --sync skip it. Proves the response contract, the protected-tree and ".factory" lock
+    // flags (hash set == zero-heap fallback, byte for byte), chunk-boundary independence, sink
+    // failure and cJSON-identical escaping on a fixture SD incl. a 300-entry folder. Pure C, no device.
+    ok: (code) => code === 0, summary: (o) => (o.match(/fslist: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'ble-adv (spam/beacon)', cmd: 'node', args: ['tools/anima-host/ble-check.mjs'],
     // The BLE advertisement payload core (firmware/components/nucleo_ble/nucleo_ble_adv.c), host-compiled
     // with MinGW: Apple Continuity / Microsoft Swift Pair / Google Fast Pair / iBeacon AD framing — company
