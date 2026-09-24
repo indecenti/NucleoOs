@@ -71,5 +71,12 @@ tools/anima-host/d192root/
 
 # Game Boy reference test ROMs, fetched SHA-256-pinned by tools/emu-host/gb-accuracy.mjs
 tools/emu-host/testroms/
+# gg-sweep is a local compat-QA report: emulator-rendered frames of the tester's own (copyrighted)
+# GG ROM collection, plus a text index/log. The renders are derivative screenshots of commercial
+# games — never publish them. Keep this local-only; gg:test's real gate is zexall, not the sweep.
+build/gg-sweep/
 # Saves/states the emulators write into the SD simulator (native gbemu: data/Saves/<system>/)
 tools/sd-sim/data/Saves/
+# Same, when a local gbemu/ggemu session writes straight into a staged deploy/sd (personal game
+# saves — never shipping content, and the .sav/.id/.st0 filenames leak the game titles played).
+deploy/sd/data/Saves/
