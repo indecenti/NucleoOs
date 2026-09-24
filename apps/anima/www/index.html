@@ -2876,7 +2876,7 @@
         +'<h3 id="dlg-t"></h3><p class="dlg-b" id="dlg-b"></p><div class="dlg-act"><button type="button" class="dlg-no"></button><button type="button" class="pri dlg-ok"></button></div></div>';
       document.body.appendChild(s); _dlgEl=s; return s;
     }
-    function askDialog({ title, body, ok, cancel, danger }={}){
+    function askDialog({ title, body, ok, cancel, danger, single }={}){
       const gen=_dlgGen;
       const show=()=>new Promise((resolve)=>{
         if(gen!==_dlgGen){ resolve(false); return; }     // queued behind a Stop: the turn is gone, the answer is no
@@ -2884,13 +2884,13 @@
         const prev=document.activeElement;
         s.querySelector('#dlg-t').textContent=title||'';
         s.querySelector('#dlg-b').textContent=body||''; s.querySelector('#dlg-b').hidden=!body;
-        okB.textContent=ok||L('ok')||'OK'; noB.textContent=cancel||L('cancel')||'Cancel';
+        okB.textContent=ok||L('ok')||'OK'; noB.textContent=cancel||L('cancel')||'Cancel'; noB.hidden=!!single;   // single: an explanation, one button
         box.classList.toggle('danger', !!danger);
         const done=(v)=>{ s.classList.remove('open'); s.removeEventListener('keydown',key,true); okB.onclick=noB.onclick=null; s.onclick=null; _dlgClose=null;
           try{ prev&&prev.focus&&prev.focus(); }catch{} resolve(v); };
         const key=(e)=>{
           if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); done(false); return; }
-          if(e.key==='Tab'){ e.preventDefault(); e.stopPropagation(); (document.activeElement===okB?noB:okB).focus(); return; }
+          if(e.key==='Tab'){ e.preventDefault(); e.stopPropagation(); (document.activeElement===okB&&!noB.hidden?noB:okB).focus(); return; }
           e.stopPropagation();   // Enter/Space act on the focused button; nothing leaks to the chat shortcuts
         };
         okB.onclick=()=>done(true); noB.onclick=()=>done(false);
@@ -3905,19 +3905,35 @@
       }
       sel.value = cat.localModelById(cur)?cur:cat.DEFAULT_LOCAL_MODEL;
       // Say whether the chosen model is INSTALLED: the chat's GPU tier only ever uses an installed one.
-      const paintStat=()=>{ const c=cat.localModelCompat(sel.value, caps), id=sel.value;
-        stat.textContent=c.msg; stat.style.color = c.level==='no-webgpu'?'#f87272':(c.level==='tight'?'#fbbd23':'var(--muted)');
-        if(c.level==='no-webgpu') return;
+      // No WebGPU: say WHY (plain-HTTP page / browser / GPU) and turn the button into "How to turn it on",
+      // never a button that silently repeats the same red line.
+      const env={ secure: window.isSecureContext };
+      const gpuWhy=(c)=>L('gpuOff_'+c.cause)||c.msg;
+      const paintStat=()=>{ const c=cat.localModelCompat(sel.value, caps, env), id=sel.value, mo=cat.localModelById(id)||{};
+        const off=c.level==='no-webgpu';
+        btn.dataset.why=off?'1':''; btn.textContent=off?L('gpuHow'):TR('Scarica ora', 'Download now');
+        if(off){ stat.style.color='#f87272'; stat.textContent=gpuWhy(c); return; }
+        const base=(c.level==='tight'?L('gpuTight',{ need:String(mo.needGB) }):L('gpuOk',{ gb:String(mo.sizeGB) }))||c.msg;
+        stat.textContent=base; stat.style.color=c.level==='tight'?'#fbbd23':'var(--muted)';
         loadLLM().then(m=>m.localModelCached(id)).then((ok)=>{ if(sel.value!==id) return;
-          stat.textContent=c.msg+' · '+(ok?'✓ '+TR('installato', 'installed'):TR('non installato — la chat non lo usa finché non lo scarichi', 'not installed — chat skips it until you download it')); }).catch(()=>{}); };
+          stat.textContent=base+' · '+(ok?'✓ '+TR('installato', 'installed'):TR('non installato — la chat non lo usa finché non lo scarichi', 'not installed — chat skips it until you download it')); }).catch(()=>{}); };
+      // The whole story in one dialog: why, the exact steps, and that ANIMA keeps answering meanwhile.
+      const explainNoGpu=async (c)=>{
+        const flag=(/\bEdg\//.test(navigator.userAgent)?'edge':'chrome')+'://flags/#unsafely-treat-insecure-origin-as-secure';
+        const r=String(caps.reason||''), detail=r.startsWith('adapter-error:')?'\n\n'+L('gpuDetail',{ d:r.slice(14) }):'';
+        const copy=c.cause==='insecure';
+        const go=await askDialog({ title:L('gpuDlgTitle'), ok:copy?L('gpuCopyFlag'):L('close'), cancel:L('close'), single:!copy,
+          body:gpuWhy(c)+'\n\n'+L('gpuFix_'+c.cause,{ flag, origin:location.origin })+detail+'\n\n'+L('gpuMeanwhile') });
+        if(go && copy){ const ok=await copyText(flag); toast(ok?L('gpuCopied'):L('gpuCopyNo',{ flag }), ok?'ok':'warn'); }
+      };
       paintStat();
       if(!_lmWired){ _lmWired=true;
         sel.addEventListener('change', async ()=>{ try{ localStorage.setItem('anima.localModel', sel.value); }catch{}
           try{ const m=await loadLLM(); await m.unloadLocal(); }catch{}   // drop the old engine so the choice applies next inference
           paintStat(); });
         btn.addEventListener('click', async ()=>{
-          const c=cat.localModelCompat(sel.value, caps);
-          if(c.level==='no-webgpu'){ stat.style.color='#f87272'; stat.textContent=c.msg; return; }
+          const c=cat.localModelCompat(sel.value, caps, env);
+          if(c.level==='no-webgpu'){ await explainNoGpu(c); return; }
           // This button is the ONLY way the model gets downloaded: ask first (like the WASM brain's consent
           // gate), then pull under the OS-wide download lock (loadLocal allowDownload → dlgate.js).
           let m; try{ m=await loadLLM(); }catch{ return; }
@@ -3930,7 +3946,8 @@
             await m.loadLocal((p)=>{ const pct=Math.round((p&&p.progress||0)*100); stat.style.color='var(--muted)';
               stat.textContent=(p&&p.text)||((TR('Caricamento… ', 'Loading… '))+pct+'%'); }, { allowDownload:true });
             stat.style.color='#36d399'; stat.textContent=(TR('✓ Pronto — ora gira offline', '✓ Ready — runs offline now')); }
-          catch(e){ stat.style.color='#f87272'; stat.textContent='✗ '+String(e&&e.message||e); }
+          catch(e){ stat.style.color='#f87272';   // say what to do, not just the raw error
+            stat.textContent='✗ '+((cat.isOutOfMemoryError(e)?L('gpuLoadOom',{ m:mo.label }):L('gpuLoadFail',{ e:String(e&&e.message||e) }))||String(e&&e.message||e)); }
           finally{ btn.disabled=false; }
         });
       }
@@ -5648,7 +5665,7 @@
         P('localmodel-get','title',
           'Scarica/carica ora il modello nel browser (mostra il progresso). Non si scarica mai da solo: finché non è installato, la chat salta la GPU locale.',
           'Download/load the model in the browser now (shows progress). It never downloads by itself: until it is installed, chat skips the local GPU.');
-        { const g=$('localmodel-get'); if(g) g.textContent=TR('Scarica ora', 'Download now'); }
+        { const g=$('localmodel-get'); if(g) g.textContent=g.dataset.why==='1'?L('gpuHow'):TR('Scarica ora', 'Download now'); }
       }catch{}
       syncTitle(); if(typeof wsReflect==='function') wsReflect();
     }

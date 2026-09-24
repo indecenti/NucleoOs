@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LOCAL_MODELS, DEFAULT_LOCAL_MODEL, localModelById, resolveLocalModel, localModelCompat, isOutOfMemoryError,
+  LOCAL_MODELS, DEFAULT_LOCAL_MODEL, localModelById, resolveLocalModel, localModelCompat, isOutOfMemoryError, webgpuCause,
 } from '../../apps/anima/www/forge/local-models.js';
 
 test('catalog: every id is a real MLC q4f16 id, ordered top-quality → smallest, exactly one recommended', () => {
@@ -51,6 +51,19 @@ test('compat: no WebGPU is the ONLY hard block; a deliberate choice is never blo
   assert.equal(tight.ok, true);
   assert.equal(tight.level, 'tight');
   assert.equal(localModelCompat('nope', { webgpu: true }).ok, false);         // unknown id
+});
+
+test('webgpuCause: says WHY there is no WebGPU so the button can say what to do', () => {
+  // plain-HTTP page (http://<device-ip>): Chromium hides navigator.gpu -> the insecure-origin flag fixes it
+  assert.equal(webgpuCause({ webgpu: false, reason: 'no-webgpu' }, { secure: false }), 'insecure');
+  assert.equal(localModelCompat(DEFAULT_LOCAL_MODEL, { webgpu: false, reason: 'no-webgpu' }, { secure: false }).cause, 'insecure');
+  // secure page and still nothing -> the browser itself lacks WebGPU
+  assert.equal(webgpuCause({ webgpu: false, reason: 'no-webgpu' }, { secure: true }), 'browser');
+  assert.equal(webgpuCause({ webgpu: false }), 'browser');
+  // WebGPU present, no usable adapter -> acceleration off / GPU blocklisted or too old
+  assert.equal(webgpuCause({ webgpu: false, reason: 'no-adapter' }, { secure: true }), 'blocked');
+  assert.equal(webgpuCause({ webgpu: false, reason: 'adapter-error:boom' }, { secure: false }), 'blocked');
+  assert.equal(webgpuCause({ webgpu: true }), null);
 });
 
 test('isOutOfMemoryError recognises GPU OOM / device-lost, not ordinary errors', () => {
