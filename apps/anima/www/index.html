@@ -4004,8 +4004,9 @@
       try{ return await AM.withStep(_turnSig, AM.STEP_MS.device, async (signal)=>{
           const resp = await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode='+(devMode||'off')+sidQ(), { signal });
           if(resp.status===413 || resp.status===414){ _turnDevErr='too_long'; return null; }
-          if(!resp.ok) return null; return await resp.json(); }); }
-      catch{ return null; }
+          if(!resp.ok){ _turnDevErr ||= resp.status===401 ? 'unpaired' : resp.status===503 ? 'busy' : 'unreachable'; return null; }
+          return await resp.json(); }); }
+      catch{ if(!(_turnSig && _turnSig.aborted)) _turnDevErr ||= 'unreachable'; return null; }
     }
 
     // ---- COMMANDS FIRST: device actions + live state ---------------------------------------------------
@@ -4027,7 +4028,7 @@
     // mode=off: commands are deterministic L0 — never a TLS handshake on the device for them.
     async function deviceCommand(q){
       if(_turnDevice && _turnDevice.q===q) return _turnDevice;
-      const done=(d)=>{ _turnDevice={q, ...d}; if(d.err==='too_long') _turnDevErr='too_long'; return _turnDevice; };
+      const done=(d)=>{ _turnDevice={q, ...d}; if(d.err && d.err!=='stopped') _turnDevErr = d.err==='too_long' ? 'too_long' : (_turnDevErr || d.err); return _turnDevice; };
       if(devTooLong(q)) return done({ err:'too_long' });
       if(_turnSig && _turnSig.aborted) return done({ err:'stopped' });
       const st=AM.stepSignal(_turnSig, AM.STEP_MS.device);
@@ -4157,6 +4158,29 @@
       if(!opts.skipDevice) runners.device=(qq,ll)=>deviceOffline(qq,ll,opts.devMode);
       const r=await resolveOffline(q, lang, { prefer:opts.prefer, silent }, runners);
       return (_turnSig && _turnSig.aborted) ? null : r;      // a late answer from a stopped turn is dropped
+    }
+
+    // ---- live WEATHER, from the browser ---------------------------------------------------------------
+    // Open-Meteo is keyless and CORS-open, so the browser answers "meteo brescia domani" itself. It used to
+    // live only on the Cardputer: the cloud / LLM rungs have no forecast (and would make one up), and with
+    // the web OS connected the device often can't afford its TLS handshake (it answers "busy") — so the
+    // reply was a generic "I don't know" under an "Online · Weather" label. Shared, tested module:
+    // local/weather.js (the simulator runs the same code). Private mode: an honest "needs internet".
+    let _wx;
+    const weatherMod = ()=> _wx || (_wx = import('./local/weather.js'));
+    async function weatherAsk(q, online){
+      if(_turnSig && _turnSig.aborted) return null;
+      const w = await weatherMod();
+      const wl = lang==='it' ? 'it' : 'en';                     // the weather NLU speaks it/en, like the engine
+      if(!w.parseWeather(q, { lang:wl }).isWeather) return null;
+      try{
+        return await AM.withStep(_turnSig, AM.STEP_MS.web, (signal)=> w.weatherAnswer(q, wl,
+          { fetch:AM.fetchWith(signal), online: online && navigator.onLine!==false }));
+      }catch(e){
+        if(_turnSig && _turnSig.aborted) throw e;                 // Stop: the stopped-turn path renders it
+        const city = w.parseWeather(q, { lang:wl }).city;         // timeout / network: an honest miss, never an LLM guess
+        return w.weatherResult(q, wl==='en' ? `I couldn't get the weather for ${city}.` : `Non riesco a recuperare il meteo per ${city}.`, 40);
+      }
     }
 
     // ---- client-side WEB INDEXER: the in-browser hybrid tier (ZERO LLM) ------------------------------
@@ -4473,6 +4497,8 @@
       // and anything about the user's personal memory, is resolved by the Cardputer before any LLM rung — even
       // with 🌐 Web armed — see commandFirst().
       try{ r = await commandFirst(sendQ); }catch{ r = null; }
+      // WEATHER: a forecast question is answered live by the browser (Open-Meteo) — see weatherAsk().
+      if(!r && !sig.aborted){ try{ r = await weatherAsk(sendQ, !isPrivate()); }catch{ r = null; } }
       // 🌐 WEB: when armed, an explicit web-grounded turn via Groq compound takes precedence over Auto. Private
       // never reaches the network, armed or not. On no key / failure it falls through to the normal ladder.
       if(!r && webCompound && !isPrivate() && !sig.aborted){ await ensureKeyLoaded(); if(hasGroq()){ try{ r = await cloudCompoundChat(sendQ); }catch(e){ r = null; } } }
@@ -4548,9 +4574,15 @@
         think.remove(); const {body}=botShell(history.length, false);
         const have = await browserProvisioned().catch(()=>false);
         // A question the Cardputer rejected as too long must not read as "I don't know".
-        const msg = _turnDevErr==='too_long'
+        // Every rung abstained. The browser brain IS the device's engine, so with it present (or with the
+        // device reachable and abstaining too) that is a plain "I don't know" — it used to say "can't reach the
+        // device" even when the device had answered, or was merely busy. Only when NO brain could be asked
+        // does the reply name the device problem (and how to get a local one).
+        const why = _turnDevErr;
+        const msg = why==='too_long'
           ? TR('La domanda è troppo lunga per il Cardputer: accorciala e riprova.', 'This question is too long for the Cardputer: shorten it and try again.')
-          : have ? UI[lang].offline : (UI[lang].edgeNeedInstall||UI[lang].offline);
+          : (have || !why) ? UI[lang].dontknow
+          : (why==='unreachable' ? UI[lang].offline : '⚠ '+notDoneWhy(why)+'.') + ' ' + (UI[lang].edgeNeedInstall||'');
         renderMd(body, msg); body.dataset.raw=msg; history.push({role:'bot',text:msg}); persist(); setDot('err'); return;
       }
       // A device action is done only if the Cardputer did it: run a browser-engine proposal on the device,

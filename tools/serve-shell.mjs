@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { Mind } from './anima/hdc.mjs';   // hyperdimensional reasoning core (offline compose/recall/analogy)
 import { KG } from './anima/kge.mjs';      // permutation-KGE deductive core (inverse/transitive/multi-hop)
 import { answer as combinatorRun, parseQuery as combinatorParse } from './anima/combinator.mjs';   // neuro-symbolic combinators
-import { parseWeather, formatWeather } from './anima/weather.mjs';   // shared weather NLU (mirrors firmware)
+import { weatherAnswer as sharedWeatherAnswer } from './anima/weather.mjs';   // shared weather NLU + forecast (mirrors firmware)
 import { translateAnswer, isTranslateRequest } from './anima/translate.mjs';   // offline IT<->EN translator (twin of nucleo_anima_translate.c)
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -2547,81 +2547,11 @@ const isEphemeral = (q) => { const s = String(q).toLowerCase().normalize('NFD').
   return EPHEMERAL_MARKERS.some(m => new RegExp('\\b' + m.replace(/ /g, '\\s+') + '\\b').test(s)); };
 
 // ---- live WEATHER (Open-Meteo, keyless, NEVER cached — volatility law §6) -------------------
-// Geocode the place, then fetch the daily forecast for the requested day (start_date=end_date so any
-// day within the ~15-day horizon works, incl. "24 febbraio"/weekday/"fra 3 giorni"). Mirrors the
-// firmware weather_fetch(); the parsing/formatting come from the shared weather.mjs so web == device.
+// The shared implementation (apps/anima/www/local/weather.js) — the SAME code the ANIMA web app runs in
+// the browser, mirroring the firmware weather_fetch(). The simulator only adds its User-Agent.
 const WX_UA = { 'User-Agent': 'NucleoOS-ANIMA/1.0 (weather)' };
-const fold = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-// Geocode with a multi-word fallback: Open-Meteo's index misses "reggio emilia" (it's stored as
-// "Reggio nell'Emilia"), so on a miss we search the FIRST token and pick the candidate whose
-// region/admin/country matches the remaining words ("emilia" -> Reggio nell'Emilia). Mirrors the
-// firmware's full-then-first-token retry.
-async function geocodeCity(city, en) {
-  const q = async (name, count) => {
-    const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=${count}&language=${en ? 'en' : 'it'}&format=json`, { headers: WX_UA });
-    return r.ok ? ((await r.json())?.results || []) : [];
-  };
-  let res = await q(city, 1);
-  if (res.length && typeof res[0].latitude === 'number') return res[0];
-  const toks = city.split(/\s+/).filter(Boolean);
-  if (toks.length > 1) {
-    const cand = (await q(toks[0], 10)).filter(c => typeof c.latitude === 'number');
-    if (cand.length) {
-      const rest = toks.slice(1).map(fold);
-      let best = cand[0], bestScore = -1;
-      for (const c of cand) {
-        const hay = fold(`${c.name || ''} ${c.admin1 || ''} ${c.admin2 || ''} ${c.admin3 || ''} ${c.country || ''}`);
-        const score = rest.reduce((s, t) => s + (hay.includes(t) ? 1 : 0), 0);
-        if (score > bestScore) { bestScore = score; best = c; }
-      }
-      return best;   // score-matched region if any, else most-populous match of the first token
-    }
-  }
-  return null;
-}
-async function fetchForecast(city, dayOffset, en, now = new Date()) {
-  try {
-    const hit = await geocodeCity(city, en);
-    if (!hit || typeof hit.latitude !== 'number') return null;
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset);
-    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${hit.latitude}&longitude=${hit.longitude}`
-      + `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max`
-      + `&current=temperature_2m&timezone=auto&start_date=${ds}&end_date=${ds}`;
-    const f = await fetch(url, { headers: WX_UA });
-    if (!f.ok) return null;
-    const fj = await f.json();
-    const dy = fj?.daily;
-    if (!dy || !Array.isArray(dy.time) || !dy.time.length) return null;
-    if (typeof dy.weather_code?.[0] !== 'number') return null;
-    return {
-      place: hit.name || city,
-      code: dy.weather_code[0],
-      tmax: dy.temperature_2m_max?.[0],
-      tmin: dy.temperature_2m_min?.[0],
-      precipProb: typeof dy.precipitation_probability_max?.[0] === 'number' ? dy.precipitation_probability_max[0] : undefined,
-      tcur: dayOffset === 0 ? fj?.current?.temperature_2m : undefined,
-    };
-  } catch { return null; }
-}
-function wxResult(q, reply, conf) {
-  return { query: q, tier: 'remote', action: 'answer', intent: 'weather', confidence: conf, state: 'idle', reply, learned: false, verified: true, domain: 'weather' };
-}
-async function weatherAnswer(q, lang, allowOnline) {
-  const en = lang === 'en';
-  const p = parseWeather(q, { lang });
-  if (!p.isWeather) return null;
-  if (!p.city)
-    return wxResult(q, en ? 'Which city? e.g. "weather in Rome".' : 'Per quale città? Es. "che tempo fa a Roma".', 55);
-  if (p.tooFar)
-    return wxResult(q, en ? `I only have a ~15-day forecast — ${p.dateLabel} is too far ahead.`
-                          : `Ho previsioni solo fino a ~15 giorni: ${p.dateLabel} è troppo lontano.`, 60);
-  if (!allowOnline)
-    return wxResult(q, en ? 'I need internet to check the weather.' : 'Mi serve internet per controllare il meteo.', 45);
-  const fc = await fetchForecast(p.city, p.dayOffset, en);
-  if (!fc || typeof fc.tmax !== 'number' || typeof fc.tmin !== 'number')
-    return wxResult(q, en ? `I couldn't get the weather for ${p.city}.` : `Non riesco a recuperare il meteo per ${p.city}.`, 40);
-  return wxResult(q, formatWeather(p, fc.place, fc, lang), 90);
+function weatherAnswer(q, lang, allowOnline) {
+  return sharedWeatherAnswer(q, lang, { online: !!allowOnline, headers: WX_UA });
 }
 
 // "who/what is X" triggers, longest-first (so "che cos'è" wins over "cos'è"). Both accented and bare

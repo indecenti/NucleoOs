@@ -31,7 +31,8 @@
       "scrivi",
       "notes",
       "text",
-      "write"
+      "write",
+      "notepad"
     ],
     "file-commander": [
       "file",
@@ -40,7 +41,8 @@
       "documenti",
       "esplora",
       "documents",
-      "folders"
+      "folders",
+      "commander"
     ],
     "media-player": [
       "musica",
@@ -202,7 +204,8 @@
       "sottotitoli",
       "stt",
       "transcription",
-      "speech to text"
+      "speech to text",
+      "dictation"
     ],
     "recycle-bin": [
       "cestino",
@@ -391,7 +394,8 @@
       "reti wifi",
       "wifi scanner",
       "access point",
-      "sniff"
+      "sniff",
+      "scanner"
     ],
     "video-studio": [
       "studio video",
@@ -424,6 +428,12 @@
       "agent",
       "automa",
       "assistente autonomo"
+    ],
+    "dos-importer": [
+      "importer"
+    ],
+    "nearby": [
+      "nearby"
     ]
   },
   "notes": {

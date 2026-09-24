@@ -83,8 +83,8 @@ typedef struct { const char *id; const char *alias[A_MAX_ALIAS]; } a_alias_t;
 static const a_alias_t APP_ALIAS[] = {
     { "photo-viewer",       { "foto", "fotografie", "immagini", "galleria", "photos", "photo", "images", "pictures", "gallery", NULL } },
     { "paint",              { "paint", "disegno", "disegna", "disegnare", "pittura", "draw", "painting", NULL } },
-    { "notepad",            { "note", "blocco", "appunti", "testo", "nota", "scrivi", "notes", "text", "write", NULL } },
-    { "file-commander",     { "file", "files", "cartelle", "documenti", "esplora", "documents", "folders", NULL } },
+    { "notepad",            { "note", "blocco", "appunti", "testo", "nota", "scrivi", "notes", "text", "write", "notepad", NULL } },
+    { "file-commander",     { "file", "files", "cartelle", "documenti", "esplora", "documents", "folders", "commander", NULL } },
     { "media-player",       { "musica", "brani", "canzoni", "audio", "lettore", "music", "songs", "song", "player", NULL } },
     { "radio",              { "radio", "radioline", "stazione", "fm", "station", NULL } },
     { "video-player",       { "video", "filmati", "filmato", "film", "videos", "movie", "movies", NULL } },
@@ -104,7 +104,7 @@ static const a_alias_t APP_ALIAS[] = {
     { "swarm",              { "sciame", "swarm", NULL } },
     { "automation-studio",  { "automazioni", "automazione", "scenari", "automation", "macros", NULL } },
     { "recorder",           { "registratore", "registra", "voce", "microfono", "recorder", "record", "mic", "voice", "memo", "nota vocale", "promemoria vocale", "dettatura", "detta", "trascrivi", "registrazione", NULL } },
-    { "dictation",          { "trascrizione", "sottotitoli", "stt", "transcription", "speech to text", NULL } },
+    { "dictation",          { "trascrizione", "sottotitoli", "stt", "transcription", "speech to text", "dictation", NULL } },
     { "recycle-bin",        { "cestino", "eliminati", "spazzatura", "trash", "recycle", "bin", NULL } },
     { "updates",            { "aggiornamenti", "aggiorna", "update", "updates", NULL } },
     { "dosbox",             { "dos", "emulatore", "msdos", "dosbox", NULL } },
@@ -125,11 +125,13 @@ static const a_alias_t APP_ALIAS[] = {
     { "qr",                 { "qr", "qrcode", "codice qr", "barcode", "qr code", NULL } },
     { "ssh",                { "ssh", "terminale remoto", "remote shell", "sftp", NULL } },
     { "passkeys",           { "passkey", "passkeys", "fido", "webauthn", "chiavi", "sicurezza", NULL } },
-    { "wifi-scanner",       { "scanner wifi", "scansione wifi", "reti wifi", "wifi scanner", "access point", "sniff", NULL } },
+    { "wifi-scanner",       { "scanner wifi", "scansione wifi", "reti wifi", "wifi scanner", "access point", "sniff", "scanner", NULL } },
     { "video-studio",       { "studio video", "montaggio", "editor video", "video editor", "converti video", "video studio", NULL } },
     { "voice-manager",      { "comandi vocali", "parola chiave", "wake word", "voice manager", "addestra voce", NULL } },
     { "archive-manager",    { "archivio", "zip", "estrai", "comprimi", "archive", "unzip", "archivi", NULL } },
     { "agent",              { "agente", "agenti", "multi agente", "agent", "automa", "assistente autonomo", NULL } },
+    { "dos-importer",       { "importer", NULL } },
+    { "nearby",             { "nearby", NULL } },
 };
 // </gen:app-alias>
 
@@ -1288,6 +1290,33 @@ static bool a_uptime_ok(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok)
     return false;
 }
 
+// Is tok[t] a PRONOUN rather than an article? "lo"/"la" are both in Italian: "aprila"/"apri quello di
+// prima" point back, "apri la calcolatrice" names the app. So a pronoun is only one followed by nothing
+// but filler ("di prima", "di nuovo", "ancora", "per favore") or a generic noun ("that file", "quella
+// app"). Without this, "apri la calcolatrice" after "apri le foto" reopened the photos.
+static bool a_pron_at(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok, int t)
+{
+    static const char *const tail[] = { "di", "prima", "nuovo", "ancora", "per", "favore", "pure", "subito",
+                                        "ora", "again", "please", "now", "file", "app", "applicazione",
+                                        "programma", NULL };
+    for (int k = t + 1; k < ntok; k++) {
+        bool filler = false;
+        for (int i = 0; tail[i]; i++) if (!strcmp(tail[i], tok[k])) { filler = true; break; }
+        if (!filler) return false;
+    }
+    return true;
+}
+
+// Is tok[t] one of the app-name aliases? A verb matched prefix-tolerantly must not BE the app's name:
+// "termina" ~ "terminale" turned "apri il terminale" into "Chiudo terminal".
+static bool a_is_alias_tok(const char *w)
+{
+    for (size_t i = 0; i < sizeof(APP_ALIAS) / sizeof(APP_ALIAS[0]); i++)
+        for (int j = 0; j < A_MAX_ALIAS && APP_ALIAS[i].alias[j]; j++)
+            if (!strcmp(APP_ALIAS[i].alias[j], w)) return true;
+    return false;
+}
+
 // "aprilo" / "open it" / "apri quello": an open verb + a pronoun (or the explicit
 // inflected form). Distinct from "apri spotify" (a named, unknown app -> not a follow-up).
 static bool a_is_followup_open(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok)
@@ -1300,7 +1329,7 @@ static bool a_is_followup_open(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok)
     for (int t = 0; t < ntok; t++) {
         for (int i = 0; fu[i]; i++)    if (!strcmp(fu[i], tok[t]))    fuv = true;
         for (int i = 0; openv[i]; i++) if (a_match(openv[i], tok[t])) opn = true;
-        for (int i = 0; pron[i]; i++)  if (!strcmp(pron[i], tok[t]))  prn = true;
+        for (int i = 0; pron[i]; i++)  if (!strcmp(pron[i], tok[t]) && a_pron_at(tok, ntok, t)) prn = true;
     }
     return fuv || (opn && prn);
 }
@@ -1315,8 +1344,8 @@ static bool a_is_followup_close(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok)
     bool fuv = false, cv = false, prn = false;
     for (int t = 0; t < ntok; t++) {
         for (int i = 0; fu[i]; i++)     if (!strcmp(fu[i], tok[t]))     fuv = true;
-        for (int i = 0; closev[i]; i++) if (a_match(closev[i], tok[t])) cv = true;
-        for (int i = 0; pron[i]; i++)   if (!strcmp(pron[i], tok[t]))   prn = true;
+        for (int i = 0; closev[i]; i++) if (a_match(closev[i], tok[t]) && !a_is_alias_tok(tok[t])) cv = true;
+        for (int i = 0; pron[i]; i++)   if (!strcmp(pron[i], tok[t]) && a_pron_at(tok, ntok, t)) prn = true;
     }
     return fuv || (cv && prn);
 }
@@ -2601,7 +2630,7 @@ static anima_result_t l0_query(const char *input, bool en)
         bool wantclose = false, isq = false, is_set = false;
         for (int t = 0; t < ntok; t++) {
             if (a_qword(tok[t])) isq = true;
-            for (int i = 0; closev[i]; i++) if (a_match(closev[i], tok[t])) wantclose = true;
+            for (int i = 0; closev[i]; i++) if (a_match(closev[i], tok[t]) && !a_is_alias_tok(tok[t])) wantclose = true;   // "terminale" is an app, not "termina"
             for (int i = 0; setw[i];   i++) if (a_match(setw[i],   tok[t])) is_set = true;   // "spegni l'audio" -> mute, not close
         }
         if (wantclose && !isq && !is_set) {

@@ -65,6 +65,25 @@ const SCENARIOS = [
   { name: 'app slot resolves "chiudilo"', turns: [
       { q: 'apri il blocco note' },
       { q: 'chiudilo', wantTier: /L0/ } ] },
+  // An article is not a pronoun: "la"/"lo" before a NAMED app used to count as "aprila", reopening the
+  // previous app ("apri la calcolatrice" after the photos -> "Apro photo-viewer").
+  { name: 'article + named app is not a follow-up', turns: [
+      { q: 'apri le foto',         want: /photo/i },
+      { q: 'zzqq wubba' },
+      { q: 'apri la calcolatrice', want: /calculator/i, notWant: /photo/i },
+      { q: 'chiudi la calcolatrice', want: /chiudo calculator/i },
+      { q: 'apri lo scanner',      want: /scanner/i, notWant: /photo|calculator/i } ] },
+  { name: 'real pronouns still point back', turns: [
+      { q: 'apri le foto' },
+      { q: 'apri quello di prima', want: /photo/i },
+      { q: 'chiudi quella app',    want: /chiudo photo/i } ] },
+  // An app named like a verb: "terminale" prefix-matches "termina", which turned it into a CLOSE.
+  { name: 'an app name is never the close verb', turns: [
+      { q: 'apri il terminale',    want: /apro terminal/i, notWant: /chiudo/i },
+      { q: 'termina il terminale', want: /chiudo terminal/i } ] },
+  { name: 'an app answers to its own name', turns: [
+      { q: 'apri notepad',         want: /apro notepad/i },
+      { q: 'apri file commander',  want: /file-commander/i, reset: true } ] },
 
   // ---- topic-frame carry-over: the gap this closes ---------------------------------------------
   { name: 'IT knowledge thread continues with a new entity', turns: [

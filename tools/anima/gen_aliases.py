@@ -58,8 +58,20 @@ def a_match(a: str, b: str) -> bool:
     return a[:m] == b[:m]
 
 
+# Installed apps allowed NOT to answer to their own one-word id. "anima": the user is talking TO
+# ANIMA, so "anima, apri le foto" must not name a second app (that turns a launch into a clarify).
+# "help": an English word the L0 help intent already owns.
+SELF_EXEMPT = {"anima", "help"}
+
+
 def validate(aliases: dict, installed: set) -> tuple[list, list]:
     errs, warns = [], []
+    # An app must answer to its own name: "apri notepad" found nothing because "notepad" was not one
+    # of the notepad aliases (only note/blocco/appunti...). Every installed app whose id is one plain
+    # word must list that word (multi-word ids like "file-commander" can't be typed as one token).
+    for app in sorted(installed):
+        if app.isascii() and app.isalnum() and app not in SELF_EXEMPT and app not in aliases.get(app, []):
+            errs.append(f"app '{app}' must list its own name '{app}' as an alias (else \"apri {app}\" can't open it)")
     A_MAX = max((len(v) for v in aliases.values()), default=0) + 1
     # Each app's aliases.
     seen = {}  # alias -> app id (for exact-collision detection)
