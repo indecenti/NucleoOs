@@ -166,3 +166,53 @@ export function commandHint(q) {
   if (LAUNCH.test(t)) return 'launch';
   return null;
 }
+
+// ---- personal memory: ONE owner --------------------------------------------------------------------
+// What the user teaches ("ricorda che X è Y", "mi chiamo Marco") and asks back ("come mi chiamo", "qual è
+// il mio colore preferito") belongs to the DEVICE (user.tsv / profile.tsv), not to whichever browser
+// happened to be open. The host routes these utterances to the device first; the in-browser store is only
+// the fallback while the device is unreachable, and what it learns there is replayed later.
+//   'teach'   - an explicit teach frame: a teach lead + a binding copula. The copula is the accented "è"
+//               (the engine's own frame) or, after a possessive ("il mio colore preferito e il blu"), the
+//               unaccented "e" people type on a keyboard without accents; sono/significa/is/are/means.
+//   'profile' - a typed personal fact: "mi chiamo X", "my name is X", "vivo a X", "ho 30 anni", ...
+//   'recall'  - asking any of it back: "come mi chiamo", "qual è il mio …", "what's my …", "cosa sai di me".
+// Mirrors the leads in the engine (nucleo_anima.c tool_teach, nucleo_anima_profile.c SET/RECALL); a lexical
+// router, not the parser — the device decides what is actually stored.
+const TEACH_LEAD = /(?:^|\s)(?:ricorda|ricordati|ricordare|impara|imparare|memorizza|tieni a mente|annota|segnati|sappi|remember|teach anima|teach you|teach|learn|note|keep in mind) che\s|(?:^|\s)(?:remember|teach anima|teach you|teach|learn|note|keep in mind) that\s/;
+const TEACH_COPULA = /\s(?:e|sono|significa|vuol dire|is|are|means)\s/;   // "e" is the folded "è"
+const POSSESSIVE = /(?:^|\s)(?:il mio|la mia|i miei|le mie|mio|mia|my)\s/;
+const PROFILE_SET = new RegExp('(?:^|\\s)(?:' + [
+  'mi chiamo', 'il mio nome e', 'puoi chiamarmi', 'chiamami', 'my name is', 'you can call me', 'call me', "i'm called", 'i am called',
+  'abito a', 'abito in', 'vivo a', 'vivo in', 'i live in', 'i live at',
+  'di lavoro faccio', 'il mio lavoro e', 'lavoro come', 'di mestiere faccio', 'my job is', 'i work as',
+  'la mia e-?mail e', 'la mia mail e', 'my e-?mail(?: address)? is',
+  'il mio compleanno e', 'sono nat[oa] il', 'my birthday is', 'i was born on',
+].join('|') + ')\\s');
+const PROFILE_AGE = /(?:^|\s)(?:ho \d{1,3} anni|i am \d{1,3}(?: years? old)?|i'm \d{1,3}(?: years? old)?|my age is \d{1,3})(?:\s|$)/;
+const MEM_RECALL = new RegExp('(?:^|\\s)(?:' + [
+  'come mi chiamo', 'cosa sai di me', 'che cosa sai di me', 'che sai di me', 'cosa sai su di me', 'il mio profilo',
+  'quanti anni ho', 'che eta ho', 'dove abito', 'dove vivo', 'in che citta vivo', 'in quale citta abito',
+  'che lavoro faccio', 'che lavoro ho', 'quando sono nat[oa]',
+  'qual e il mio', 'qual e la mia', 'quale e il mio', 'quale e la mia', 'quali sono i miei', 'quali sono le mie',
+  'ti ricordi (?:il mio|la mia|i miei|le mie|come mi chiamo|di me)', 'quando e il mio compleanno',
+  "what(?:'s| is) my", 'what are my', 'what do you know about me', 'tell me about (?:myself|me)', 'my profile',
+  'what am i called', 'do you (?:know|remember) my', 'how old am i', 'where do i live', 'what city do i live in',
+  'what do i do for (?:work|a living)', "when(?:'s| is) my birthday",
+].join('|') + ')(?:\\s|$)');
+export function memoryHint(q) {
+  const t = fold(q).replace(/[?!.,;:]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return null;
+  const lead = TEACH_LEAD.exec(t);
+  if (lead) {
+    const rest = t.slice(lead.index + lead[0].length - 1);
+    // fold() strips accents, so the engine's copula "è" is looked for on the raw text; the folded "e"
+    // (a conjunction as often as a verb) binds only after a possessive subject.
+    const accented = /\s[èé]\s/.test(' ' + String(q).toLowerCase().replace(/\s+/g, ' ') + ' ');
+    // A lead with no copula is a reminder ("ricordami di comprare il latte"), not a fact: not ours.
+    if (accented || /\s(?:sono|significa|vuol dire|is|are|means)\s/.test(rest) || (POSSESSIVE.test(rest) && TEACH_COPULA.test(rest))) return 'teach';
+  }
+  if (MEM_RECALL.test(t)) return 'recall';
+  if (!HOWTO.test(t) && (PROFILE_SET.test(t + ' ') || PROFILE_AGE.test(t))) return 'profile';
+  return null;
+}
