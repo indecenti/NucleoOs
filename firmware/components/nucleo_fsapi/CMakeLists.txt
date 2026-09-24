@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "nucleo_fsapi.c"
+    SRCS "nucleo_fsapi.c" "fslist.c"
     INCLUDE_DIRS "include"
     REQUIRES esp_http_server json nucleo_board nucleo_eventbus nucleo_storage nucleo_auth nucleo_registry
 )

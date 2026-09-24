@@ -154,7 +154,14 @@ async function syncSd(host, args) {
     try {
       const r = await fetchWithTimeout(host + '/api/fs/list?path=' + encodeURIComponent(devDir), { cache: 'no-store', headers: authHeaders() }, Math.min(args.timeout, 30000));
       if (r.status === 404) res = { kind: 'absent' };
-      else if (r.ok) { const j = await r.json().catch(() => ({})); res = { kind: 'ok', files: new Map((j.entries || []).filter((e) => e.type !== 'dir').map((e) => [e.name, Number(e.size) || 0])) }; }
+      else if (r.ok) {
+        // A listing cut mid-stream is unparseable: UNKNOWN, never "empty folder" (which would make
+        // create-only user state look absent and get overwritten).
+        const j = await r.json().catch(() => null);
+        res = j && Array.isArray(j.entries)
+          ? { kind: 'ok', files: new Map(j.entries.filter((e) => e.type !== 'dir').map((e) => [e.name, Number(e.size) || 0])) }
+          : { kind: 'unknown' };
+      }
       else res = { kind: 'unknown' };
     } catch { res = { kind: 'unknown' }; }
     listCache.set(devDir, res);
@@ -171,6 +178,24 @@ async function syncSd(host, args) {
       if (args.dryRun) continue;
       try { await fetchWithTimeout(host + '/api/fs/mkdir?path=' + encodeURIComponent(cur), { method: 'POST', headers: authHeaders() }, Math.min(args.timeout, 30000)); } catch {}
     }
+  }
+  // One file's size when its folder can't be listed (firmware before the streaming /api/fs/list
+  // answered 503 "oom" on 60+ entry folders): a 1-byte Range read carries the total in
+  // Content-Range, so nothing is downloaded. {kind:'ok',size} | {kind:'absent'} | {kind:'unknown'}.
+  async function probeFile(devPath) {
+    try {
+      const r = await fetchWithTimeout(host + '/api/fs/read?path=' + encodeURIComponent(devPath),
+        { cache: 'no-store', headers: { ...authHeaders(), range: 'bytes=0-0' } }, Math.min(args.timeout, 30000));
+      if (r.status === 404) { await r.arrayBuffer().catch(() => {}); return { kind: 'absent' }; }
+      if (r.status === 206) {
+        const m = /\/(\d+)\s*$/.exec(r.headers.get('content-range') || '');
+        await r.arrayBuffer().catch(() => {});
+        return m ? { kind: 'ok', size: Number(m[1]) } : { kind: 'unknown' };
+      }
+      if (r.ok) return { kind: 'ok', size: (await r.arrayBuffer()).byteLength };   // empty file (plain 200)
+      await r.arrayBuffer().catch(() => {});
+    } catch { /* fall through */ }
+    return { kind: 'unknown' };
   }
   async function deviceEquals(devPath, buf) {
     try {
@@ -189,7 +214,8 @@ async function syncSd(host, args) {
         if (r.ok) {
           if (buf.length > SMALL) {                  // confirm the big transfer actually landed intact
             const idx = await dirIndex(devDir, true);
-            if (!(idx.kind === 'ok' && idx.files.get(name) === buf.length)) throw new Error('landed size mismatch');
+            const landed = idx.kind === 'ok' ? idx.files.get(name) : (await probeFile(devPath)).size;
+            if (landed !== buf.length) throw new Error('landed size mismatch');
           }
           return true;
         }
@@ -207,10 +233,18 @@ async function syncSd(host, args) {
     if (isDeviceState(f.rel)) { stateKept++; continue; }   // device-owned state: never push / never overwrite (key, learned, settings, sessions)
     const devPath = '/' + f.rel, devDir = posix.dirname(devPath), name = posix.basename(devPath);
     const idx = await dirIndex(devDir);
-    const present = idx.kind === 'ok' && idx.files.has(name);
-    const devSize = present ? idx.files.get(name) : -1;
+    let present = idx.kind === 'ok' && idx.files.has(name);
+    let devSize = present ? idx.files.get(name) : -1;
 
-    if (idx.kind === 'unknown') { console.error(`  ? ${devPath} → dir not listable, skipped (won't risk a write)`); unknown++; continue; }
+    if (idx.kind === 'unknown') {
+      // Folder not listable: stat the file itself instead of skipping the whole folder. Create-only
+      // user state stays skipped — a missing system/config/*.json reads back as "{}", so its absence
+      // can't be told apart from a real file there.
+      const probe = prefixed(f.rel, PROTECTED) ? { kind: 'unknown' } : await probeFile(devPath);
+      if (probe.kind === 'unknown') { console.error(`  ? ${devPath} → dir not listable, skipped (won't risk a write)`); unknown++; continue; }
+      present = probe.kind === 'ok';
+      devSize = present ? probe.size : -1;
+    }
     if (present && prefixed(f.rel, PROTECTED)) { skipped++; continue; }   // user state: create-only
 
     // Delete stale gzipped orphans if they exist on the device but are not in our staged list.
@@ -278,7 +312,10 @@ async function fillMissing(host, args) {
     try {
       const r = await fetchWithTimeout(host + '/api/fs/list?path=' + encodeURIComponent(devDir), { cache: 'no-store', headers: authHeaders() }, args.timeout);
       if (r.status === 404) res = { kind: 'absent' };
-      else if (r.ok) { const j = await r.json().catch(() => ({})); res = { kind: 'ok', names: new Set((j.entries || []).map(e => e.name)) }; }
+      else if (r.ok) {
+        const j = await r.json().catch(() => null);   // cut mid-stream -> unknown, never "empty"
+        res = j && Array.isArray(j.entries) ? { kind: 'ok', names: new Set(j.entries.map(e => e.name)) } : { kind: 'unknown' };
+      }
       else res = { kind: 'unknown' };
     } catch { res = { kind: 'unknown' }; }
     listCache.set(devDir, res);
