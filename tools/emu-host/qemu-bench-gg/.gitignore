@@ -1,0 +1,8 @@
+build/
+roms/
+sdkconfig
+sdkconfig.old
+main/peanut_old.h
+dependencies.lock
+managed_components/
+build_*.log

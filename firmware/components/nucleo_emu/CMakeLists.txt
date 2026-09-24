@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "nucleo_gb.c" "vendor/minigb_apu.c"
+    SRCS "nucleo_gb.c" "nucleo_gg.c" "vendor/minigb_apu.c"
     INCLUDE_DIRS "include"
     REQUIRES nucleo_board nucleo_audio esp_timer
 )

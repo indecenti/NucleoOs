@@ -65,3 +65,31 @@ largest block is 32 KB. See `docs/native-emulation.md` §6 for what it would tak
 
 - MIT (`minigb_apu.LICENSE`), vendored verbatim. Context-based (no globals), ~2.2 KB per frame of
   stereo samples.
+
+## z80emu/ — Zilog Z80 (the Game Gear's CPU)
+
+- Upstream: <https://github.com/anotherlin/z80emu> (Lin Ke-Fong)
+- Base revision: `1c418fa0d719abab9273131113defbe276101d95` (2017-09-18)
+- Licence: "This code is free, do whatever you want with it." (header of every file)
+- `z80emu.c`, `z80emu.h`, `instructions.h`, `macros.h`, `tables.h` are **verbatim**. `z80config.h`
+  and `z80user.h` are the two files upstream says to replace, and ours replace them:
+  - `z80config.h` catches HALT and EI, so the host can take the Game Gear's level-triggered IRQ at
+    exactly the instruction boundaries where it can change. It also bridges an upstream naming
+    mismatch: `z80emu.c` uses `Z80_STATUS_FLAG_*`, `z80emu.h` declares `Z80_STATUS_*`, so enabling
+    any `Z80_CATCH_*` does not compile as shipped.
+  - `z80user.h` routes memory and I/O to five functions `nucleo_gg.c` defines before it
+    `#include`s `z80emu.c`, so every memory access inlines into the interpreter.
+- Verified: built with OUR `z80config.h`, it passes `zexall` and `zexdoc` (all 67 groups) —
+  `npm run gg:test` runs zexall every time (`tools/emu-host/zex_test.c`, a minimal CP/M). The machine
+  around it is held to real cartridges by the same gate and to SMS Plus by the differential runs
+  described in `docs/native-emulation.md` §7.
+
+### Why this CPU and not SMS Plus
+
+Every small SMS/GG emulator (SMS Plus and its forks: retro-go, pico-smsplus, the PocketSprite port)
+carries MAME's Z80 by Juergen Buchmueller, "freeware for non-commercial purposes", whose terms the
+author reserves the right to change retroactively — unusable in a project that ships binaries under
+any open licence. They also keep the 16 KB VRAM in `.bss`, read the ROM through a flat pointer, and
+want 32–320 KB of tile caches or look-up tables. The Game Gear machine around the CPU (`nucleo_gg.c`:
+VDP, PSG, mappers) is our own, written from the public hardware notes; z80emu is the one part worth
+not rewriting.

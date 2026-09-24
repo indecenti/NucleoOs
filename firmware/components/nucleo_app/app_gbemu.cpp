@@ -1,4 +1,10 @@
-// app_gbemu — Game Boy, emulated natively on the Cardputer.
+// app_gbemu — Game Boy and Game Gear, emulated natively on the Cardputer.
+//
+// ONE FRONT-END, TWO CONSOLES. Both screens are 160x144, so the shelf, the scaler, the in-game menu,
+// the saves and the Solo-boot posture below are shared; a small descriptor (EmuSys, further down)
+// names what differs — folders, the core's calls, the frame time, and whether the palette is the
+// player's to choose (Game Boy) or the cartridge's (Game Gear). Two launcher entries, "gbemu" and
+// "ggemu", open the same code with a different descriptor.
 //
 // The first NATIVE emulator in NucleoOS: the console runs on the ESP32-S3 itself, not in a browser.
 // It is possible because of two properties of the chosen core (Peanut-GB — see
@@ -30,6 +36,7 @@
 #include "nucleo_app.h"
 #include "app_gfx.h"
 #include "nucleo_gb.h"
+#include "nucleo_gg.h"
 #include "nucleo_kbd.h"
 #include "nucleo_board.h"
 #include "nucleo_exclusive.h"
@@ -66,16 +73,51 @@
 
 static const char *TAG = "gbemu";
 
+// ── the console this session drives ─────────────────────────────────────────────────────────────
+// Everything that differs between the Game Boy and the Game Gear, in one place. The instances (SYS_GB,
+// SYS_GG) sit below the scanline paths they point at; enter_gb()/enter_gg() pick one.
+struct EmuSys {
+    const char *id, *name, *short_name;      // app id, shelf header, 2-letter pillar tag
+    const char *dir_a, *dir_b;               // ROM folders; entries found in dir_b carry the badge
+    const char *ext_a, *ext_b;               // extensions; ext_b also carries the badge
+    const char *badge;                       // "C": a Game Boy Color cart on the DMG core
+    const char *empty_it, *empty_en;         // what an empty shelf says
+    const char *state_js, *shelf_swp;        // resume + view options; the shelf while a game runs
+    const char *trace, *trace_name;          // the on-card trace, and how a failure box names it
+    int64_t     frame_us;                    // the console's real frame time
+    bool        palettes;                    // the player picks the colours (GB); else the cartridge does
+    uint8_t     band_1to1, band_wide;        // output rows per DMA band, 1:1 and stretched (divide 135)
+    esp_err_t (*open)(const char *path);
+    esp_err_t (*probe)(const char *path);    // header check, no allocation
+    void (*explain)(esp_err_t e, const char *path, char *buf, size_t n);   // a refusal, in words
+    void (*close)(void);
+    void (*reset)(void);
+    void (*run_frame)(void);
+    void (*set_buttons)(uint8_t);
+    const char *(*title)(void);
+    void (*set_frameskip)(bool);
+    esp_err_t (*state_save)(int);
+    esp_err_t (*state_load)(int);
+    bool (*state_exists)(int);
+    void (*save)(void);
+    bool (*autosave)(void);
+    void (*get_stats)(nucleo_gb_stats_t *);
+    void (*reset_counters)(void);
+    void (*geometry)(int *w, int *h);        // what the open cartridge emits: 160x144 or 256x192
+    bool zip;                                // .zip in the library folders opens too (the core unpacks it)
+};
+static const EmuSys *SYS = nullptr;
+
 // ── on-card trace ───────────────────────────────────────────────────────────────────────────────
 // There is NO usable serial console on this device (the USB PHY belongs to TinyUSB), so ESP_LOG
 // reaches nobody. Every launch therefore leaves a breadcrumb on the SD card: pull the card, read
-// /gbemu_trace.txt, and see exactly how far a start got and what the heap looked like at each step.
-// This is the technique that finally explained the silent-video bug — guessing cost days there.
-#define TRACE_PATH NUCLEO_SD_MOUNT "/gbemu_trace.txt"
+// /gbemu_trace.txt (/ggemu_trace.txt), and see exactly how far a start got and what the heap looked
+// like at each step. This is the technique that finally explained the silent-video bug.
 #define TRACE_WIN  10        // seconds of play per aggregated trace line
 static void trace(const char *fmt, ...)
 {
-    FILE *f = fopen(TRACE_PATH, "a");
+    if (!SYS) return;
+    FILE *f = fopen(SYS->trace, "a");
     if (!f) return;
     va_list ap; va_start(ap, fmt);
     vfprintf(f, fmt, ap);
@@ -93,8 +135,8 @@ static void trace_heap(const char *label)
 // The library lives where the Arcade web app and firmware provisioning already agree it does.
 #define DIR_GB   NUCLEO_SD_MOUNT "/data/ROMs/gb"
 #define DIR_GBC  NUCLEO_SD_MOUNT "/data/ROMs/gbc"
-#define STATE_JS NUCLEO_SD_MOUNT "/system/config/gbemu.json"
-#define SHELF_SWP NUCLEO_SD_MOUNT "/system/config/gbemu.shelf"
+#define DIR_GG   NUCLEO_SD_MOUNT "/data/ROMs/gg"
+#define DIR_SMS  NUCLEO_SD_MOUNT "/data/ROMs/sms"
 
 // ── screen mapping ──────────────────────────────────────────────────────────────────────────────
 // NO SCALING HORIZONTALLY. The panel is 240 px wide and the Game Boy is 160, so every column goes to
@@ -114,11 +156,19 @@ static void trace_heap(const char *label)
 #define SRC_X ((240 - SRC_W) / 2)
 // TWO OUTPUT MODES, one buffer size. 1:1 draws 160 px centred and keeps the two 40 px pillars for the
 // HUD; STRETCH scales to the full 240 px panel (exactly 2:3, so it is a pure integer expansion) and the
-// pillars are gone. A band buffer is sized once for BOTH: 160x15 and 240x9 are each <= BAND_BYTES, so
-// switching modes mid-game never re-allocates on a heap that has no room to re-allocate.
-#define BAND_BYTES 4800      // 160*15*2 = 4800 ; 240*9*2 = 4320
-#define BAND_1TO1  15        // output lines per push at 1:1 (15 divides 135 evenly)
+// pillars are gone. A band buffer is sized once for BOTH (band_bytes), so switching modes mid-game never
+// re-allocates on a heap that has no room to re-allocate. The Game Boy pushes 15/9-row bands (4.8 KB
+// each); the Game Gear 5/3-row bands (1.6 KB each): its cartridge cache is the scarcer resource, and
+// the 6.4 KB given back is six more 1 KB ROM pages � the step from 4 SD reads a frame to under 1 on
+// Sonic 2 � for 27 DMA pushes a frame instead of 9.
+#define BAND_1TO1  15        // Game Boy rows per push at 1:1 (15 divides 135 evenly)
 #define BAND_WIDE  9         // ...and stretched (9 divides 135 evenly)
+static inline size_t band_bytes(void)
+{
+    // A 180 px Master System picture pushes wide-sized bands (band_wide rows), so 240 x band_wide covers it.
+    size_t a = (size_t)SRC_W * SYS->band_1to1, b = (size_t)240 * SYS->band_wide;
+    return (a > b ? a : b) * sizeof(uint16_t);
+}
 
 // Four-shade palettes, lightest to darkest. A Game Boy is not theme-able — this is CONTENT, not
 // chrome, so it deliberately does not follow THEME_*.
@@ -183,13 +233,22 @@ static void pal_apply(void)
         MIX_TX[a * 4 + b] = swap16((uint16_t)((r << 11) | (g << 5) | bl));
     }
 }
+// The picture the core emits: 160x144 (Game Boy, Game Gear) or 256x192 (a Game Gear cartridge in
+// Master System mode, or a .sms file). The big one fits the panel at 45/64 on BOTH axes — 180x135,
+// its own aspect — or at 60/64 across and 45/64 down when filled (240x135).
+static int s_src_w = SRC_W, s_src_h = 144;
+static void hscale_build(void);
 static void geom_apply(void)
 {
-    if (s_stretch) { s_out_w = 240;   s_out_x = 0;     s_band_h = BAND_WIDE; }
-    else           { s_out_w = SRC_W; s_out_x = SRC_X; s_band_h = BAND_1TO1; }
+    int w1 = s_src_w == SRC_W ? SRC_W : 180;
+    if (s_stretch) { s_out_w = 240; s_out_x = 0;              s_band_h = SYS ? SYS->band_wide : BAND_WIDE; }
+    else           { s_out_w = w1;  s_out_x = (240 - w1) / 2;
+                     s_band_h = !SYS ? BAND_1TO1 : w1 == SRC_W ? SYS->band_1to1 : SYS->band_wide; }
+    if (s_src_w != SRC_W) hscale_build();
 }
-// The HUD needs the picture to be 160 px wide — stretched, there is nowhere to put it.
-static inline bool hud_on(void) { return s_hud && !s_stretch; }
+// The HUD needs the picture to be 160 px wide — stretched, or a 180 px Master System picture, leaves
+// no pillars wide enough to put it in.
+static inline bool hud_on(void) { return s_hud && !s_stretch && s_src_w == SRC_W; }
 
 // ── session state (heap on enter, never .bss: the app is closed almost always) ──────────────────
 #define MAXR    120          // matches held at once. The filter, not this cap, is how you reach a game.
@@ -204,7 +263,7 @@ static inline bool hud_on(void) { return s_hud && !s_stretch; }
 // holds the full names in about the same RAM, because most names are far shorter than a fixed slot.
 struct RomEnt {
     uint16_t off;            // into EState::pool
-    bool     gbc;
+    bool     alt;            // shows SYS->badge (a Game Boy Color cartridge on the DMG core)
 };
 
 // The shelf's names, in their OWN block — so that for as long as a game runs they can live on the card
@@ -253,6 +312,9 @@ struct EState {
     int      tw_n, tw_fps_sum, tw_fps_min, tw_cpu_sum, tw_blit_sum, tw_aud_sum;
     uint32_t tw_miss;
     uint8_t  stash[SRC_W];   // the line being blended into the next one (see on_line)
+    uint16_t stash16[256];   // ...the same for a colour line (on_line16), up to a Master System line
+    uint8_t  hsrc[240];      // Master System lines: output column -> first source column (hscale_build)
+    uint8_t  hmix[240];      // ...and whether it is the midpoint of that column and the next
     bool     have_stash;
     bool     crash_told;     // the crash menu opens once per crash, not every second
     bool     mute_keys;      // buttons held when the menu closed stay OUT of the game until released
@@ -268,7 +330,7 @@ static inline const char *ent_name(int i) { return st->sh->pool + st->sh->list[i
 // Deliberately a flat file, not JSON: one line, no parser, no cJSON allocation on a heap this tight.
 static void state_load(void)
 {
-    FILE *f = fopen(STATE_JS, "r");
+    FILE *f = fopen(SYS->state_js, "r");
     if (!f) return;
     if (fgets(st->resume, sizeof st->resume, f)) {
         size_t l = strlen(st->resume);
@@ -291,7 +353,7 @@ static void state_load(void)
 }
 static void state_save(const char *name)
 {
-    FILE *f = fopen(STATE_JS, "w");
+    FILE *f = fopen(SYS->state_js, "w");
     if (!f) return;
     fprintf(f, "%s\n%d\n%d\n%d\n%d\n", name ? name : "", s_pal, s_hud ? 1 : 0, s_stretch ? 1 : 0,
             s_sharp ? 1 : 0);
@@ -299,12 +361,13 @@ static void state_save(const char *name)
 }
 
 // ── ROM discovery ───────────────────────────────────────────────────────────────────────────────
-static bool is_gb(const char *n, bool *gbc)
+static bool is_rom(const char *n, bool *alt)
 {
     const char *dot = strrchr(n, '.');
     if (!dot) return false;
-    if (!strcasecmp(dot, ".gb"))  { *gbc = false; return true; }
-    if (!strcasecmp(dot, ".gbc")) { *gbc = true;  return true; }
+    if (!strcasecmp(dot, SYS->ext_a))                { return true; }
+    if (SYS->ext_b && !strcasecmp(dot, SYS->ext_b))  { *alt = true; return true; }
+    if (SYS->zip && !strcasecmp(dot, ".zip"))        { return true; }      // its folder decides the badge
     return false;
 }
 
@@ -317,8 +380,9 @@ static bool matches(const char *hay, const char *needle)
     return false;
 }
 
-static void scan_dir(const char *dir, bool mark_gbc)
+static void scan_dir(const char *dir, bool mark_alt)
 {
+    if (!dir) return;
     DIR *dp = opendir(dir);   // NB: never name a local `d` — app_gfx.h defines `d` as the draw target
     if (!dp) return;
     struct dirent *de;
@@ -328,15 +392,15 @@ static void scan_dir(const char *dir, bool mark_gbc)
         // each that is several SECONDS in the watchdog-subscribed UI task, which panics the device —
         // and the scan re-runs on every typed character. Pet the dog while walking.
         if ((++seen & 63) == 0) esp_task_wdt_reset();
-        bool gbc = mark_gbc;
-        if (de->d_name[0] == '.' || !is_gb(de->d_name, &gbc)) continue;
+        bool alt = mark_alt;
+        if (de->d_name[0] == '.' || !is_rom(de->d_name, &alt)) continue;
         if (!matches(de->d_name, st->filter)) continue;
         st->total++;
         size_t len = strlen(de->d_name) + 1;
         if (st->n < MAXR && len <= PATHMAX && st->sh->pool_used + (int)len <= POOL) {
             memcpy(st->sh->pool + st->sh->pool_used, de->d_name, len);
             st->sh->list[st->n].off = (uint16_t)st->sh->pool_used;
-            st->sh->list[st->n].gbc = gbc;
+            st->sh->list[st->n].alt = alt;
             st->sh->pool_used += (int)len;
             st->n++;
         }
@@ -351,8 +415,8 @@ static void rescan(void)
 {
     if (!st->sh) return;
     st->n = 0; st->total = 0; st->sh->pool_used = 0;
-    scan_dir(DIR_GB,  false);
-    scan_dir(DIR_GBC, true);
+    scan_dir(SYS->dir_a, false);
+    scan_dir(SYS->dir_b, true);
     if (st->n > 1) qsort(st->sh->list, st->n, sizeof(RomEnt), cmp_ent);
     st->sel = 0; st->scroll = 0;
 }
@@ -364,12 +428,12 @@ static void rescan(void)
 static void shelf_swap_out(void)
 {
     if (!st->sh) return;
-    FILE *f = fopen(SHELF_SWP, "wb");
+    FILE *f = fopen(SYS->shelf_swp, "wb");
     if (!f) return;
     bool ok = fwrite(st->sh, 1, sizeof(Shelf), f) == sizeof(Shelf);
     ok = (fclose(f) == 0) && ok;
     if (ok) { free(st->sh); st->sh = nullptr; }
-    else remove(SHELF_SWP);
+    else remove(SYS->shelf_swp);
 }
 static void rescan(void);
 static void shelf_swap_in(void)
@@ -377,10 +441,10 @@ static void shelf_swap_in(void)
     if (st->sh) return;
     st->sh = (Shelf *)calloc(1, sizeof(Shelf));
     if (!st->sh) { st->n = st->total = 0; return; }   // draw() says so; the next key retries
-    FILE *f = fopen(SHELF_SWP, "rb");
+    FILE *f = fopen(SYS->shelf_swp, "rb");
     bool ok = f && fread(st->sh, 1, sizeof(Shelf), f) == sizeof(Shelf);
     if (f) fclose(f);
-    remove(SHELF_SWP);
+    remove(SYS->shelf_swp);
     if (!ok) {                                 // the card said no: rebuild it, keeping the selection
         int sel = st->sel, scroll = st->scroll;
         rescan();
@@ -392,9 +456,10 @@ static void shelf_swap_in(void)
 static bool rom_path(const char *name, char *out, size_t n)
 {
     struct stat sb;
-    snprintf(out, n, "%s/%s", DIR_GB, name);
+    snprintf(out, n, "%s/%s", SYS->dir_a, name);
     if (stat(out, &sb) == 0) return true;
-    snprintf(out, n, "%s/%s", DIR_GBC, name);
+    if (!SYS->dir_b) return false;
+    snprintf(out, n, "%s/%s", SYS->dir_b, name);
     return stat(out, &sb) == 0;
 }
 
@@ -405,6 +470,7 @@ static bool rom_path(const char *name, char *out, size_t n)
 // -O2 for this function alone. nucleo_app is a large component built at -Os like the rest of the
 // firmware, but this is the emulator's per-scanline path: 135 lines x 60 fps, and at -Os the inner
 // copy does not get unrolled. The attribute keeps the exception to the one function that earns it.
+static void row_done(void);
 __attribute__((optimize("-O2")))
 static void on_line(const uint8_t *px, int line, void *user)
 {
@@ -446,7 +512,84 @@ static void on_line(const uint8_t *px, int line, void *user)
             row[o] = a; row[o + 1] = a; row[o + 2] = b;
         }
     }
+    row_done();
+}
 
+// Midpoint of two panel-order RGB565 pixels: the channels are averaged in place (the mask drops each
+// field's low bit so no carry crosses into its neighbour), then the bytes go back to the panel's order.
+static inline uint16_t mix565_tx(uint16_t a, uint16_t b)
+{
+    a = (uint16_t)((a >> 8) | (a << 8)); b = (uint16_t)((b >> 8) | (b << 8));
+    uint16_t m = (uint16_t)((a & b) + (((a ^ b) & 0xF7DE) >> 1));
+    return (uint16_t)((m >> 8) | (m << 8));
+}
+
+// Master System columns: 256 source columns onto s_out_w (180 or 240). Source column i lands on
+// output i*k/64; where two neighbours land on the same output they are blended into it — the same
+// "merge, never drop" rule as the lines — so a 1 px detail survives at half strength.
+static void hscale_build(void)
+{
+    if (!st) return;
+    int k = s_out_w * 64 / 256;                 // 45 (1:1) or 60 (filled)
+    for (int i = 0, o = 0; i < 256 && o < s_out_w; o++) {
+        st->hsrc[o] = (uint8_t)i;
+        st->hmix[o] = (i + 1 < 256 && ((i + 1) * k >> 6) == (i * k >> 6));
+        i += st->hmix[o] ? 2 : 1;
+    }
+}
+static inline uint16_t hscale_px(const uint16_t *px, int o)
+{
+    uint16_t c = px[st->hsrc[o]];
+    return st->hmix[o] ? mix565_tx(c, px[st->hsrc[o] + 1]) : c;
+}
+
+// The Game Gear's line: already colour, already in the panel's byte order (nucleo_gg.h), so 1:1 is a
+// copy. Same line-merge and 2:3 stretch as the Game Boy path above. A 256x192 Master System picture
+// merges 57 of its 192 lines (45/64) and resamples its columns through hscale_build's table.
+__attribute__((optimize("-O2")))
+static void on_line16(const uint16_t *px, int line, void *user)
+{
+    (void)user;
+    if (!st || !st->band[0]) return;
+    bool merge = s_src_h == 144 ? (line & 15) == 7 : (line * 45 >> 6) == ((line + 1) * 45 >> 6);
+    if (merge) {
+        if (!s_sharp) { memcpy(st->stash16, px, (size_t)s_src_w * sizeof *px); st->have_stash = true; }
+        return;
+    }
+    if (st->out_y >= OUT_H) return;
+    uint16_t *row = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
+    if (s_src_w != SRC_W) {
+        if (st->have_stash) {
+            st->have_stash = false;
+            for (int o = 0; o < s_out_w; o++) row[o] = mix565_tx(hscale_px(st->stash16, o), hscale_px(px, o));
+        } else {
+            for (int o = 0; o < s_out_w; o++) row[o] = hscale_px(px, o);
+        }
+    } else if (st->have_stash) {
+        st->have_stash = false;
+        const uint16_t *q = st->stash16;
+        if (!s_stretch) {
+            for (int x = 0; x < SRC_W; x++) row[x] = mix565_tx(q[x], px[x]);
+        } else {
+            for (int x = 0, o = 0; x < SRC_W; x += 2, o += 3) {
+                uint16_t a = mix565_tx(q[x], px[x]), b = mix565_tx(q[x + 1], px[x + 1]);
+                row[o] = a; row[o + 1] = a; row[o + 2] = b;
+            }
+        }
+    } else if (!s_stretch) {
+        memcpy(row, px, SRC_W * sizeof *row);
+    } else {
+        for (int x = 0, o = 0; x < SRC_W; x += 2, o += 3) {
+            uint16_t a = px[x], b = px[x + 1];
+            row[o] = a; row[o + 1] = a; row[o + 2] = b;
+        }
+    }
+    row_done();
+}
+
+// One output row is in the band buffer: count it, and push the band once it is full.
+static void row_done(void)
+{
     if (st->band_line == 0) st->band_y = st->out_y;
     st->band_line++;
     st->out_y++;
@@ -573,7 +716,7 @@ static void set_relief(int level)
     if (level < 0) level = 0;
     if (level > 1) level = 1;
     st->relief = level;
-    nucleo_gb_set_frameskip(level == 1);
+    SYS->set_frameskip(level == 1);
 }
 
 static void toast(const char *msg)
@@ -589,7 +732,7 @@ static void hud_draw(void)
     if (!hud_on()) return;             // info hidden (or stretched: there are no pillars to draw in)
     d.fillRect(PILL_L, 0, PILL_W - 2, 30, BG);
     d.setTextSize(2);
-    d.setTextColor(st->fps >= 55 ? SHADE[1] : AMB, BG);
+    d.setTextColor(st->fps >= 55 ? (SYS->palettes ? SHADE[1] : GRN) : AMB, BG);
     d.setCursor(3, 3); d.printf("%2d", st->fps);
     d.setTextSize(1);
     d.setTextColor(DIM, BG);
@@ -612,10 +755,12 @@ static void chrome_draw(void)
     if (!hud_on()) return;
     d.fillRect(PILL_L, 88, PILL_W - 2, 47, BG);
     d.setTextSize(1);
-    d.setTextColor(SHADE[1], BG);
-    d.setCursor(3, 101); d.print(PAL_NAME[s_pal]);
+    // The palette is the player's on a Game Boy; on a Game Gear the cartridge owns the colours, so
+    // the slot names the console instead and "P" has nothing to cycle.
+    d.setTextColor(SYS->palettes ? SHADE[1] : GRN, BG);
+    d.setCursor(3, 101); d.print(SYS->palettes ? PAL_NAME[s_pal] : SYS->short_name);
     d.setTextColor(DIM, BG);
-    d.setCursor(3, 113); d.print("P pal");
+    if (SYS->palettes) { d.setCursor(3, 113); d.print("P pal"); }
     d.setCursor(3, 124); d.print("M menu");
     d.setCursor(3, 90);  d.print("-/= vol");
 
@@ -636,8 +781,8 @@ static void chrome_draw(void)
 static void frame_clear(void)
 {
     if (s_stretch) return;             // the picture covers the whole panel; nothing is left to clear
-    d.fillRect(PILL_L, 0, PILL_W, 135, BG);
-    d.fillRect(PILL_R, 0, 240 - PILL_R, 135, BG);
+    d.fillRect(0, 0, s_out_x, 135, BG);
+    d.fillRect(s_out_x + s_out_w, 0, 240 - (s_out_x + s_out_w), 135, BG);
 }
 
 // Apply a change of view (info on/off, 1:1 vs stretched) to a RUNNING game. The PPU repaints the
@@ -654,6 +799,7 @@ static void view_apply(void)
 
 static void pal_cycle(void)
 {
+    if (!SYS->palettes) return;
     s_pal = (s_pal + 1) % PAL_COUNT;
     pal_apply();
     state_save(st->resume);
@@ -683,9 +829,11 @@ static const char *menu_label(int i, char *buf, size_t n)
                                  s_sharp ? TR("Nette", "Sharp") : TR("Fuse", "Blended")); return buf;
         case MI_RESET:  return TR("Reset gioco", "Reset game");
         case MI_INFO:   snprintf(buf, n, "%s: %s", TR("Info a schermo", "On-screen info"),
-                                 s_stretch ? TR("n.d.", "n/a") : s_hud ? TR("si", "on") : TR("no", "off"));
+                                 (s_stretch || s_src_w != SRC_W) ? TR("n.d.", "n/a") : s_hud ? TR("si", "on") : TR("no", "off"));
                         return buf;
-        case MI_PAL:    snprintf(buf, n, "%s: %s", TR("Colori", "Palette"), PAL_NAME[s_pal]); return buf;
+        case MI_PAL:    snprintf(buf, n, "%s: %s", TR("Colori", "Palette"),
+                                 SYS->palettes ? PAL_NAME[s_pal] : TR("della cartuccia", "cartridge"));
+                        return buf;
         case MI_PIC:    snprintf(buf, n, "%s: %s", TR("Immagine", "Picture"),
                                  st->relief == 1 ? "30 fps" : TR("Piena", "Full"));
                         return buf;
@@ -740,14 +888,14 @@ static void menu_draw(void)
     d.fillRect(MENU_X, MENU_Y, MENU_W, MENU_H, BG);
     d.drawRoundRect(MENU_X, MENU_Y, MENU_W, MENU_H, 6, LINE);
     d.setTextSize(1);
-    nucleo_gb_stats_t w; nucleo_gb_get_stats(&w);
+    nucleo_gb_stats_t w; SYS->get_stats(&w);
     if (w.core_errors) {                  // the game ran into data: say it, the Reset row is selected
         d.setTextColor(AMB, BG);
         d.setCursor(MENU_X + 8, MENU_Y + 4);
         d.printf(TR("CPU bloccata @%04X - Reset?", "CPU crashed @%04X - Reset?"), (unsigned)w.core_err_addr);
     } else {
         d.setTextColor(DIM, BG);
-        d.setCursor(MENU_X + 8, MENU_Y + 4); d.print(nucleo_gb_title());
+        d.setCursor(MENU_X + 8, MENU_Y + 4); d.print(SYS->title());
     }
     // "there is more" has to be visible without arrowing blindly: a rail on the right of the card.
     int rh = MENU_VIS * 17, kh = rh * MENU_VIS / MI_N;
@@ -813,7 +961,8 @@ static void menu_adjust(int dir)
         case MI_SCREEN: s_stretch = !s_stretch; view_apply(); break;
         case MI_LINES:  s_sharp = !s_sharp; break;
         case MI_INFO:   s_hud = !s_hud; if (!s_hud) frame_clear(); else { hud_draw(); chrome_draw(); } break;
-        case MI_PAL:    s_pal = (s_pal + PAL_COUNT + dir) % PAL_COUNT; pal_apply(); break;
+        case MI_PAL:    if (!SYS->palettes) return;
+                        s_pal = (s_pal + PAL_COUNT + dir) % PAL_COUNT; pal_apply(); break;
         case MI_PIC:    set_relief((st->relief + 1) % 2); break;
         default:        return;
     }
@@ -828,7 +977,7 @@ static void menu_activate(void)
         case MI_SCREEN: s_stretch = !s_stretch; view_apply(); menu_draw(); return;
         case MI_LINES:  s_sharp = !s_sharp; menu_draw(); return;
         case MI_RESET:
-            nucleo_gb_reset();
+            SYS->reset();
             st->crash_told = false;
             toast(TR("reset", "reset"));
             menu_close(); return;
@@ -836,19 +985,20 @@ static void menu_activate(void)
                         if (!s_hud) frame_clear(); else { hud_draw(); chrome_draw(); }
                         menu_draw(); return;
         case MI_SAVE: {
-            esp_err_t e = nucleo_gb_state_save(0);
+            esp_err_t e = SYS->state_save(0);
             if (e == ESP_OK) st->state_ok = true;
             toast(e == ESP_OK ? TR("salvato", "saved") : TR("errore", "failed"));
             menu_close(); return;
         }
         case MI_LOAD: {
-            esp_err_t e = nucleo_gb_state_load(0);
+            esp_err_t e = SYS->state_load(0);
             toast(e == ESP_OK ? TR("caricato", "loaded")
                               : e == ESP_ERR_NOT_FOUND ? TR("nessuno stato", "no state")
                                                        : TR("stato non valido", "bad state"));
             menu_close(); return;
         }
-        case MI_PAL: s_pal = (s_pal + 1) % PAL_COUNT; pal_apply(); state_save(st->resume);
+        case MI_PAL: if (!SYS->palettes) return;
+                     s_pal = (s_pal + 1) % PAL_COUNT; pal_apply(); state_save(st->resume);
                      menu_draw(); return;
         case MI_PIC: set_relief((st->relief + 1) % 2); menu_draw(); return;
         default:     st->running = false; return;
@@ -882,7 +1032,7 @@ static void fail_draw(void)
     d.setTextSize(1);
     d.setTextColor(AMB, BG);   d.setCursor(16, y + 8);  d.print(TR("Avvio non riuscito", "Could not start"));
     d.setTextColor(FG, BG);    d.setCursor(16, y + 22); d.print(st->fail);
-    d.setTextColor(DIM, BG);   d.setCursor(16, y + 34); d.print("/gbemu_trace.txt");
+    d.setTextColor(DIM, BG);   d.setCursor(16, y + 34); d.print(SYS->trace_name);
 }
 static void fail_box(const char *what)
 {
@@ -937,12 +1087,11 @@ static void play_session(const char *name)
     // Read the header while the shelf is still up. A cartridge this core cannot run is refused here,
     // in words, without tearing the UI down and building it back — "Invalid ROM" told nobody anything.
     {
-        nucleo_gb_info_t inf;
-        esp_err_t pe = nucleo_gb_probe(path, &inf);
+        esp_err_t pe = SYS->probe(path);
         if (pe != ESP_OK) {
             char why[48];
-            start_error(pe, inf.cart_type, why, sizeof why);
-            trace("  REFUSED: %s (err 0x%x type %02X cgb %02X)", why, (unsigned)pe, inf.cart_type, inf.cgb_flag);
+            SYS->explain(pe, path, why, sizeof why);
+            trace("  REFUSED: %s (err 0x%x)", why, (unsigned)pe);
             fail_box(why);
             return;
         }
@@ -967,12 +1116,13 @@ static void play_session(const char *name)
     // Two DMA-capable band buffers (see on_line): one is on the wire while the other is being filled.
     // MALLOC_CAP_DMA, not DEFAULT — a DMA push from a buffer the controller cannot reach would have to
     // be copied first, which is exactly the cost this is here to remove.
+    s_src_w = SRC_W; s_src_h = 144;              // until the open cartridge says otherwise
     geom_apply();
     st->band_idx = 0;
-    st->band[0] = (uint16_t *)heap_caps_malloc(BAND_BYTES, MALLOC_CAP_DMA);
-    st->band[1] = (uint16_t *)heap_caps_malloc(BAND_BYTES, MALLOC_CAP_DMA);
+    st->band[0] = (uint16_t *)heap_caps_malloc(band_bytes(), MALLOC_CAP_DMA);
+    st->band[1] = (uint16_t *)heap_caps_malloc(band_bytes(), MALLOC_CAP_DMA);
     if (!st->band[0] || !st->band[1]) {
-        trace("  FAIL: band buffers (2 x %u B) alloc failed", (unsigned)BAND_BYTES);
+        trace("  FAIL: band buffers (2 x %u B) alloc failed", (unsigned)band_bytes());
         free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
         nucleo_app_set_direct_draw(false);
         fail_box(TR("RAM insufficiente (video)", "Not enough RAM (video)"));
@@ -980,37 +1130,40 @@ static void play_session(const char *name)
     }
 
     esp_task_wdt_reset();
-    esp_err_t err = nucleo_gb_open(path, on_line, nullptr);
+    esp_err_t err = SYS->open(path);
     esp_task_wdt_reset();
     if (err != ESP_OK) {
         // The numeric code, not esp_err_to_name(): the name table is compiled out of this firmware,
         // so every error used to reach the trace as "UNKNOWN ERROR".
-        trace("  FAIL: nucleo_gb_open -> 0x%x", (unsigned)err);
+        trace("  FAIL: open -> 0x%x", (unsigned)err);
         trace_heap("after open fail");
         free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
         nucleo_app_set_direct_draw(false);
         char why[48];
-        nucleo_gb_info_t inf;
-        nucleo_gb_probe(path, &inf);
-        start_error(err, inf.cart_type, why, sizeof why);
+        SYS->explain(err, path, why, sizeof why);
         fail_box(why);
         return;
     }
+
+    // What the cartridge draws decides the scaler: a Game Gear cartridge can turn out to be a Master
+    // System game (its CRC says so), known only now. The bands were sized for the widest case.
+    SYS->geometry(&s_src_w, &s_src_h);
+    geom_apply();
 
     snprintf(st->resume, sizeof st->resume, "%s", name);
     st->have_resume = true;
     state_save(name);
     st->state_ok = false;          // looked up when the menu first opens
 
-    nucleo_gb_stats_t stt; nucleo_gb_get_stats(&stt);
+    nucleo_gb_stats_t stt; SYS->get_stats(&stt);
     char cache[24];
     if (stt.rom_resident) snprintf(cache, sizeof cache, "resident");
     else                  snprintf(cache, sizeof cache, "%dx1KB-pages", stt.rom_pages);
-    trace("  OPEN OK '%s' rom=%uKB cache=%s core-heap=%u", nucleo_gb_title(),
+    trace("  OPEN OK '%s' rom=%uKB cache=%s core-heap=%u", SYS->title(),
           (unsigned)(stt.rom_bytes / 1024), cache, (unsigned)stt.heap_bytes);
     trace_heap("running");
     ESP_LOGI(TAG, "'%s' %uKB %s | core heap %u B | free %u",
-             nucleo_gb_title(), (unsigned)(stt.rom_bytes / 1024), cache,
+             SYS->title(), (unsigned)(stt.rom_bytes / 1024), cache,
              (unsigned)stt.heap_bytes, (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
 
     // DFS ranges 80-240 MHz and cannot tell a render loop from an idle launcher; at the floor a frame
@@ -1035,13 +1188,13 @@ static void play_session(const char *name)
     st->slow_secs = 0;
     st->tw_n = 0; st->tw_fps_sum = st->tw_cpu_sum = st->tw_blit_sum = st->tw_aud_sum = 0; st->tw_miss = 0;
     set_relief(0);                       // every cartridge starts at the full picture and earns relief
-    nucleo_gb_reset_counters();
+    SYS->reset_counters();
     st->fps_frames = 0; st->fps = 0; st->fps_t0 = esp_timer_get_time();
     hud_draw();
     chrome_draw();
     uint8_t held = 0;
     int64_t next = esp_timer_get_time();
-    const int64_t FRAME_US = 16743;                    // 59.727 Hz — the DMG's real frame time
+    const int64_t FRAME_US = SYS->frame_us;             // the console's real frame time (DMG 59.73 Hz, GG 59.92 Hz)
 
     while (st->running) {
         esp_task_wdt_reset();
@@ -1090,8 +1243,8 @@ static void play_session(const char *name)
                 st->menu = true; st->msel = 0;
                 menu_draw();
                 int64_t t0 = esp_timer_get_time();
-                nucleo_gb_save();
-                st->state_ok = nucleo_gb_state_exists(0);
+                SYS->save();
+                st->state_ok = SYS->state_exists(0);
                 esp_task_wdt_reset();
                 int ms = (int)((esp_timer_get_time() - t0) / 1000);
                 if (ms > 200) trace("  menu: save+lookup took %d ms", ms);
@@ -1116,14 +1269,14 @@ static void play_session(const char *name)
             esp_task_wdt_reset();
             continue;
         }
-        nucleo_gb_set_buttons(held);
+        SYS->set_buttons(held);
 
         st->out_y = 0; st->band_line = 0; st->have_stash = false;
         // One SPI transaction for the ENTIRE frame. run_frame calls on_line 135 times and each pushes
         // its band inside this single startWrite/endWrite, so the panel sees one uninterrupted sweep
         // top to bottom instead of nine separately-arbitrated writes.
         d.startWrite();
-        nucleo_gb_run_frame();
+        SYS->run_frame();
         d.endWrite();
 
         st->fps_frames++;
@@ -1132,7 +1285,7 @@ static void play_session(const char *name)
             st->fps = (int)st->fps_frames;
             // Divide the window's accumulated microseconds by the frames in it, in TENTHS of a ms —
             // a breakdown rounded to whole milliseconds hides exactly the differences worth seeing.
-            nucleo_gb_stats_t w; nucleo_gb_get_stats(&w);
+            nucleo_gb_stats_t w; SYS->get_stats(&w);
             uint32_t nf = w.frames ? w.frames : 1;
             st->ms_cpu  = (int)(w.us_cpu   / nf / 100);
             st->ms_aud  = (int)(w.us_audio / nf / 100);
@@ -1160,12 +1313,12 @@ static void play_session(const char *name)
             if (w.core_errors && !st->crash_told && !st->menu) {
                 st->crash_told = true;
                 st->menu = true; st->msel = MI_RESUME;  // paused; Reset is a deliberate choice, never a mashed key
-                st->state_ok = nucleo_gb_state_exists(0);
+                st->state_ok = SYS->state_exists(0);
                 menu_draw();
             }
             // Battery RAM reaches the card within ~2 s of an in-game save, not only on quit.
-            if (nucleo_gb_autosave()) trace("  autosave");
-            st->us_blit = 0; nucleo_gb_reset_counters();
+            if (SYS->autosave()) trace("  autosave");
+            st->us_blit = 0; SYS->reset_counters();
             st->fps_frames = 0; st->fps_t0 = now;
             hud_draw();
 
@@ -1220,7 +1373,7 @@ static void play_session(const char *name)
     state_save(st->resume);
     nucleo_prefs_save(nucleo_app_brightness(), nucleo_audio_volume(), nucleo_audio_is_muted());
     trace("  END fps=%d palette=%s", st->fps, PAL_NAME[s_pal]);
-    nucleo_gb_close();
+    SYS->close();
     free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
     d.setSwapBytes(false);                 // leave the shared display as every other app expects it
     nucleo_app_set_direct_draw(false);
@@ -1239,6 +1392,18 @@ static void glyph_gb(int x, int y, int h, uint16_t col)
     d.fillRect(x + w / 4, y + h * 6 / 10, w / 10, h / 5, BG);
     d.fillRect(x + w / 8, y + h * 7 / 10, w * 3 / 10, h / 12, BG);
     d.fillCircle(x + w * 3 / 4, y + h * 7 / 10, h / 14, BG);
+}
+
+// The Game Gear, landscape: screen in the middle, d-pad left, two buttons right (launcher icon too).
+static void glyph_gg(int x, int y, int h, uint16_t col)
+{
+    int w = h * 16 / 10;
+    d.fillRoundRect(x, y, w, h, h / 3, col);
+    d.fillRect(x + w * 3 / 10, y + h / 6, w * 4 / 10, h * 2 / 3, BG);          // screen
+    d.fillRect(x + w / 8, y + h * 4 / 10, w / 7, h / 7, BG);                   // d-pad
+    d.fillRect(x + w / 8 + w / 21, y + h * 3 / 10, w / 21 + 1, h * 3 / 8, BG);
+    d.fillCircle(x + w * 8 / 10, y + h * 4 / 10, h / 10 + 1, BG);              // 2
+    d.fillCircle(x + w * 9 / 10 - 1, y + h * 6 / 10, h / 10 + 1, BG);          // 1
 }
 
 // Titles read better without the extension or the region/dump tags every set carries.
@@ -1260,13 +1425,13 @@ static void draw(void)
     d.fillRect(0, top, 240, ch, BG);
 
     // ── header: glyph + system, and either the live filter or the counts ──
-    glyph_gb(6, top + 2, 18, ACC);
+    if (SYS->palettes) glyph_gb(6, top + 2, 18, ACC); else glyph_gg(4, top + 4, 14, ACC);
     if (st->flen) {
         d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(28, top + 3);
         char q[FILTMAX + 2]; snprintf(q, sizeof q, "%s_", st->filter);
         d.print(q);
     } else {
-        d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(28, top + 3); d.print("Game Boy");
+        d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(28, top + 3); d.print(SYS->name);
     }
     char cnt[24];
     if (st->total > st->n) snprintf(cnt, sizeof cnt, "%d/%d", st->n, st->total);
@@ -1281,7 +1446,7 @@ static void draw(void)
         d.setTextSize(1); d.setTextColor(MUTED, BG);
         d.setCursor(8, top + 34);
         d.print(st->flen ? TR("Nessun risultato", "No match")
-                         : TR("Nessuna ROM in /data/ROMs/gb", "No ROMs in /data/ROMs/gb"));
+                         : TR(SYS->empty_it, SYS->empty_en));
         if (st->flen) { d.setCursor(8, top + 48); d.setTextColor(DIM, BG); d.print(TR("Canc per correggere", "Backspace to edit")); }
         fail_draw();
         return;
@@ -1306,9 +1471,10 @@ static void draw(void)
         pretty(ent_name(idx), title, sizeof title);
         // The badges are drawn first so the title can be clipped to whatever is left, never overlap.
         int right = 232;
-        if (st->sh->list[idx].gbc) {
+        if (st->sh->list[idx].alt && SYS->badge) {
             d.setTextSize(1); d.setTextColor(foc ? INK : AMB, foc ? ACC : BG);
-            d.setCursor(right - 12, y + (ROW_H - 8) / 2); d.print("C"); right -= 14;
+            int bw = (int)strlen(SYS->badge) * 6;
+            d.setCursor(right - bw - 6, y + (ROW_H - 8) / 2); d.print(SYS->badge); right -= bw + 8;
         }
         if (st->have_resume && !strcmp(ent_name(idx), st->resume)) {
             d.fillCircle(right - 6, y + ROW_H / 2 - 1, 3, foc ? INK : GRN); right -= 14;
@@ -1409,15 +1575,63 @@ static bool on_back(int key)
     return false;                                  // unfiltered shelf: let the framework close the app
 }
 
+// ── the two consoles ────────────────────────────────────────────────────────────────────────────
+static esp_err_t gb_open(const char *p)  { return nucleo_gb_open(p, on_line, nullptr); }
+static esp_err_t gb_probe(const char *p) { nucleo_gb_info_t i; return nucleo_gb_probe(p, &i); }
+static void gb_geometry(int *w, int *h) { *w = NUCLEO_GB_W; *h = NUCLEO_GB_H; }
+static void gb_explain(esp_err_t e, const char *path, char *buf, size_t n)
+{
+    nucleo_gb_info_t inf;
+    nucleo_gb_probe(path, &inf);
+    start_error(e, inf.cart_type, buf, n);
+}
+static const EmuSys SYS_GB = {
+    "gbemu", "Game Boy", "GB", DIR_GB, DIR_GBC, ".gb", ".gbc", "C",
+    "Nessuna ROM in /data/ROMs/gb", "No ROMs in /data/ROMs/gb",
+    NUCLEO_SD_MOUNT "/system/config/gbemu.json", NUCLEO_SD_MOUNT "/system/config/gbemu.shelf",
+    NUCLEO_SD_MOUNT "/gbemu_trace.txt", "/gbemu_trace.txt",
+    16743,                                   // 59.727 Hz — the DMG's real frame time
+    true, BAND_1TO1, BAND_WIDE,
+    gb_open, gb_probe, gb_explain, nucleo_gb_close, nucleo_gb_reset, nucleo_gb_run_frame,
+    nucleo_gb_set_buttons, nucleo_gb_title, nucleo_gb_set_frameskip, nucleo_gb_state_save,
+    nucleo_gb_state_load, nucleo_gb_state_exists, nucleo_gb_save, nucleo_gb_autosave,
+    nucleo_gb_get_stats, nucleo_gb_reset_counters, gb_geometry, false,
+};
+
+static esp_err_t gg_open(const char *p)  { return nucleo_gg_open(p, on_line16, nullptr); }
+static esp_err_t gg_probe(const char *p) { nucleo_gg_info_t i; return nucleo_gg_probe(p, &i); }
+static void gg_explain(esp_err_t e, const char *path, char *buf, size_t n)
+{
+    // No controller the core refuses: "not supported" can only be a zip without a cartridge in it.
+    if (e == ESP_ERR_NOT_SUPPORTED && strcasestr(path, ".zip"))
+        snprintf(buf, n, "%s", TR("Nessun gioco nello zip", "No game in the zip"));
+    else start_error(e, 0, buf, n);
+}
+static const EmuSys SYS_GG = {
+    "ggemu", "Game Gear", "GG", DIR_GG, DIR_SMS, ".gg", ".sms", "SMS",
+    "Nessuna ROM in /data/ROMs/gg o /sms", "No ROMs in /data/ROMs/gg or /sms",
+    NUCLEO_SD_MOUNT "/system/config/ggemu.json", NUCLEO_SD_MOUNT "/system/config/ggemu.shelf",
+    NUCLEO_SD_MOUNT "/ggemu_trace.txt", "/ggemu_trace.txt",
+    16688,                                   // 262 x 228 cycles at 3.579545 MHz = 59.92 Hz
+    false, 5, 3,
+    gg_open, gg_probe, gg_explain, nucleo_gg_close, nucleo_gg_reset, nucleo_gg_run_frame,
+    nucleo_gg_set_buttons, nucleo_gg_title, nucleo_gg_set_frameskip, nucleo_gg_state_save,
+    nucleo_gg_state_load, nucleo_gg_state_exists, nucleo_gg_save, nucleo_gg_autosave,
+    nucleo_gg_get_stats, nucleo_gg_reset_counters, nucleo_gg_geometry, true,
+};
+
 static void enter(void)
 {
     // The RAM window is declarative (see the app_def): by the time this runs we are already on a
     // fresh heap with the radio down. All this has to do is allocate and read the shelf.
+    // View options start from their defaults for each console; state_load() then applies its file.
+    s_pal = 0; s_hud = true; s_stretch = false; s_sharp = false;
+    pal_apply(); geom_apply();
     if (!st) st = (EState *)calloc(1, sizeof(EState));
     if (st && !st->sh) st->sh = (Shelf *)calloc(1, sizeof(Shelf));
     if (st && !st->sh) { free(st); st = nullptr; }
     if (!st) { nucleo_app_set_hint(TR("RAM insufficiente", "Not enough RAM")); return; }
-    trace("=== gbemu enter: solo=%d exclusive=%d ===",
+    trace("=== %s enter: solo=%d exclusive=%d ===", SYS->id,
           (int)nucleo_anima_solo_active(), (int)nucleo_exclusive_active());
     trace_heap("on enter");
     state_load();
@@ -1433,12 +1647,16 @@ static void enter(void)
     hint();
 }
 
+static void enter_gb(void) { SYS = &SYS_GB; enter(); }
+static void enter_gg(void) { SYS = &SYS_GG; enter(); }
+
 static void leave(void)
 {
-    nucleo_gb_close();
+    nucleo_gb_close();                           // both are no-ops when closed
+    nucleo_gg_close();
     mq_free();
     if (st) { free(st->band[0]); free(st->band[1]); free(st->sh); free(st); st = nullptr; }
-    remove(SHELF_SWP);                           // never leave a stale shelf image for the next visit
+    if (SYS) remove(SYS->shelf_swp);             // never leave a stale shelf image for the next visit
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();
 }
 
@@ -1447,7 +1665,7 @@ extern "C" void nucleo_register_gbemu(void)
     static const nucleo_app_def_t app = {
         "gbemu", "Game Boy", "Games",
         "Play Game Boy cartridges natively — the emulator runs on the Cardputer itself.",
-        'G', 0x8FF3, enter, on_key, nullptr, draw, leave,
+        'G', 0x8FF3, enter_gb, on_key, nullptr, draw, leave,
         NX_NET_APP | NX_SOLO | NX_WIFI
             // SOLO: only a fresh boot yields a contiguous block big enough for the core + ROM cache;
             // the runtime reclaim frees RAM but cannot defragment (see nucleo_exclusive.h).
@@ -1456,4 +1674,12 @@ extern "C" void nucleo_register_gbemu(void)
             // without the fragile in-place restore.
     };
     nucleo_app_register(&app);
+    // The Game Gear: same shelf, same menu, same RAM posture — only the descriptor differs.
+    static const nucleo_app_def_t gg = {
+        "ggemu", "Game Gear", "Games",
+        "Play Game Gear cartridges natively — the emulator runs on the Cardputer itself.",
+        'G', 0x5D7F, enter_gg, on_key, nullptr, draw, leave,
+        NX_NET_APP | NX_SOLO | NX_WIFI
+    };
+    nucleo_app_register(&gg);
 }

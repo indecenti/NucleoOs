@@ -5,7 +5,9 @@ as short as it is. For the browser-side emulator (the Arcade app, EmulatorJS on 
 `apps/arcade/` and its `NOTICE.md`; the two answer different questions and should not be confused.
 
 Status: **Game Boy (DMG) ships** as the native app `gbemu` — a patched Peanut-GB core held to the
-blargg/mooneye/acid2 reference suites by a ratchet gate (§5). Everything else on this page is analysis.
+blargg/mooneye/acid2 reference suites by a ratchet gate (§5). **Game Gear** runs as the native app
+`ggemu` on the same front-end — our own machine around the vendored z80emu CPU (§7). Everything else on
+this page is analysis.
 
 ---
 
@@ -61,9 +63,10 @@ RAM figures are the emulator's working set; the licence column is what decides m
 | System | Core | RAM | Licence | Verdict |
 |---|---|---:|---|---|
 | **Game Boy (DMG)** | **Peanut-GB** | **~17 KB** | **MIT** | 🟢 **shipped** |
+| **Game Gear** | **ours + z80emu** | **~25 KB** | **ours / "do whatever you want"** | 🟢 **shipped** (§7) |
 | Chip-8 | write our own | ~5 KB | ours | 🟢 feasible, trivial |
-| ZX Spectrum 48K | (needs a permissive Z80) | ~48 KB | varies | 🟢 feasible |
-| Master System / Game Gear | smsplus | ~30–40 KB | GPL-2.0 | 🔴 licence |
+| ZX Spectrum 48K | z80emu (already vendored) | ~48 KB | as above | 🟢 feasible |
+| Master System / Game Gear | smsplus | ~30–40 KB | GPL-2.0 + MAME Z80 (non-commercial) | 🔴 licence — see §7 |
 | NES | nofrendo | ~80 KB | LGPL-2.0 | 🟡 relink obligation |
 | Game Boy Color | gnuboy | ~105 KB | GPL-2.0 | 🔴 licence |
 | Game Boy Color | Walnut-CGB | ~49 KB (one block) | MIT | 🟡 RAM shape + CPU — see §6 |
@@ -334,3 +337,106 @@ is off. The render gate requires most lines, not all.
   Its procedural poster is the console glyph alone: the title is printed once, under the cover, like
   every other game (it used to be printed a second time inside the poster).
 - **Chip-8** is the obvious next core: ~5 KB, no licence question, same app scaffolding.
+
+## 7. The Game Gear (and the Master System it contains)
+
+Native app `ggemu`, on the **same front-end** as `gbemu` (`app_gbemu.cpp`: a small `EmuSys`
+descriptor names what differs — folders, the core's calls, frame time, whether the palette is the
+player's). Same shelf, menu, save/state keys, Solo-boot posture (`NX_SOLO | NX_WIFI`), GameFront
+entry and launcher glyph. The shelf lists `/data/ROMs/gg` and `/data/ROMs/sms` (badge **SMS**), and
+opens `.zip` too — the folders are shared with the browser Arcade, which reads zips.
+
+### 7.1 Why our own machine
+
+Every SMS/GG core small enough for a microcontroller descends from SMS Plus (retro-go, pico-smsplus,
+the PocketSprite port) and ships **MAME's Z80** ("freeware for non-commercial purposes", revocable at
+the author's will) inside a GPL body. It also keeps VRAM in `.bss`, reads the ROM through a flat
+pointer and wants 32–320 KB of tile caches or LUTs, so adopting one meant rewriting nearly every file
+anyway. The machine — VDP mode 4, SN76489, Sega/Codemasters mappers, 93C46 EEPROM, GG ports — is
+written from the public hardware notes (`nucleo_emu/nucleo_gg.c`, ~1,600 lines); the CPU is the
+vendored **z80emu** (`vendor/z80emu`, "free, do whatever you want", passes zexall), built *inside*
+`nucleo_gg.c` so every memory access inlines.
+
+SMS Plus is still useful — as an **oracle on the PC only**: pico-smsplus built on the host renders
+the same cartridges, and diffing the two (pictures, then the sequence of port and memory writes)
+located every divergence below in minutes. It never goes near the firmware.
+
+### 7.2 Memory
+
+| | bytes |
+|---|---:|
+| console (`gg_machine_t`: 8 KB WRAM + 16 KB VRAM + CPU/VDP/PSG/EEPROM) — one block, the save state | ~25 KB |
+| session (page map, line buffers in background space, sprite bands, PSG frame) | ~6.5 KB |
+| cartridge page cache: 1 KB pages, as many as fit | **55 pages** on the modelled heap |
+| battery RAM: 1 KB pages borrowed from the cache, only those a game writes | 0–32 KB |
+| `.bss` | 4 B (the session pointer) |
+
+The cache policy is the Game Boy's with two changes, both measured on the heaviest cartridges
+(Sonic 2/Chaos, Earthworm Jim — ~45–55 distinct pages touched per frame):
+
+- **Recency, not residency.** A page stays mapped for as long as its bank is switched in — for code
+  in slots 0–1 that is the whole game — so "mapped" says nothing about "used". The ROM mappings are
+  forgotten once a frame; the next touch is a soft fault (a hint lookup, no SD read) that stamps the
+  page's age. Sonic 2 at 50 pages: 8.9 → 3.3 misses/frame.
+- **Smaller DMA bands for this console** (5/3 rows instead of 15/9): 6.4 KB back = six more pages,
+  the step from 4 SD reads a frame to 0.6 on Sonic 2. The miss curve has a cliff between 44 and 56
+  pages (14 → 0.4 misses/frame); the gate holds every sampled cartridge under 1.4.
+
+The SD card runs at 15 MHz SPI (`nucleo_storage.c`), so a miss is ~1 ms: the budget is real.
+
+### 7.3 Accuracy — what the oracle found
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Monster Truck Wars, Chicago Syndicate hung at boot | they poll the VDP status for the frame flag with interrupts enabled; an IRQ raised on the same boundary always won and cleared it | the frame IRQ is seen from the line *after* the flag rises (the IN catches it first, as on hardware) |
+| Evander Holyfield, Ecco the Dolphin never drew a frame | both `PUSH IX / POP IX` as a delay **before setting SP**; with SP near FFFF the pushes land on the mapper registers and page random banks over the code | power-on SP = **DFF0**, where the BIOS leaves it (z80emu's FFFF froze Evander, MAME's 0000 froze Ecco) |
+| Pac-Attack waited forever | it turns the link port's transmitter on and waits to read that bit back | GG ports 1–5 are registers that read back |
+| Castle of Illusion, Prince of Persia, Olympic Gold… blue stripes | Game Gear releases that are Master System games running in the GG's **SMS mode** | CRC database → SMS mode (256×192, 6-bit CRAM, Start = Pause/NMI) |
+| World Series Baseball ×2, The Majors: blank | 93C46 serial EEPROM instead of battery RAM | Microwire EEPROM at $8000 behind FFFC bit 3, saved as a 128-byte `.sav` |
+| Micro Machines, Cosmic Spacehead… | Codemasters mapper | header checksum heuristic + CRC database |
+
+The CRC database (`CARTS[]`, ~75 entries compiled from SMS Power! / the Genesis Plus GX game list:
+facts, no code) is keyed on the file's CRC-32, computed on first launch and remembered in
+`<save_base>.id`.
+
+Library sweep (`node tools/anima-host/gg-check.mjs --sweep`, 249 `.gg` + the zipped `.sms`): **244
+of 252** render and move under demo input. Of the rest, Last Action Hero, Mortal Kombat, Spider-Man
+and Power Strike II behave identically in SMS Plus (the Power Strike II file reads a zeroed pointer
+table — a dump question); three are static title screens and one (Zool) is a dark intro the filter
+misreads. Contact sheets land in `build/gg-sweep/`.
+
+### 7.4 Screen
+
+Game Gear: 160×144, exactly the Game Boy path (1:1 or filled 2:3, the 1-in-16 line merge). Master
+System: 256×192 fits at **45/64 on both axes** — 180×135, its own aspect — or 240×135 filled; source
+columns and lines that land on the same output are *blended*, never dropped (`hscale_build`), the
+same rule as the Game Boy's line merge. No HUD pillars at 180 px.
+
+The renderer works in **background space**: each tile row is decoded as two 32-bit words from two
+16-entry nibble tables (128 B, where a byte-indexed table costs 2 KB), written with aligned stores
+whatever the fine scroll, straight to colour — the sprites draw over the colours in place, so there is
+no separate index→colour pass. A tile row identical to the previous one is copied, not decoded.
+Sprites are found per 8-line band from a list rebuilt only when the sprite table's Y bytes, its base
+or the sprite size change.
+
+### 7.5 Cost
+
+`tools/emu-host/qemu-bench-gg/run.ps1` runs the real `nucleo_gg.c` on six cartridges in Espressif's
+QEMU (`-icount`, 1 instruction = 1 ns) and splits a frame into render / sprites / CPU+PSG
+(`NUCLEO_GG_PROFILE`, bench-only; its own timer reads add ~60–80 k to "bg").
+
+| k-instructions per frame, gameplay (Sonic · Sonic 2 · Chaos · MM2 · EWJ · SoR2) | total of 6 |
+|---|---:|
+| first working version (per-pixel tile loop, index→colour pass, 64-entry sprite scan per line) | 6,905 |
+| background space + aligned 32-bit tile rows | 6,549 |
+| colour fused into the background, identical tile rows reused, sprite bands | 5,341 |
+| name-table row hoisted per line | **5,195** |
+
+Where Sonic's 930 k go now: background 404, sprites 108, **CPU + PSG 418** — z80emu is now half of
+the frame. The GB measurement (§4.6) says the device is instruction-*cache* bound rather than
+instruction bound (`emulate()` is 23 KB against a 16 KB I-cache), so the on-card trace's `cpu=` is the
+number that decides what to optimise next; the QIO flash question in §6 applies here unchanged.
+
+**Not done, needs a decision:** caching the ROM in the *inactive OTA partition* and
+`esp_partition_mmap`-ing it would remove every SD miss and hand the page cache's ~55 KB back — at the
+price of overwriting the rollback image in that partition (§2 rules out a dedicated one).
