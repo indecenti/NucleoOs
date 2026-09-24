@@ -334,6 +334,11 @@ const gates = [
     // the offline user-teach tier (nucleo_anima_learn.c): teach a fact -> recall it by paraphrase offline
     // (IT+EN), while same-shape-different-subject and volatile statements abstain. 0 misattributions.
     ok: (code) => code === 0, summary: (o) => (o.match(/\[teach-check\][^\n]*/) || [lastLine(o)])[0] },
+  { name: 'learned-card recall', cmd: 'node', args: ['tools/anima-host/recall-check.mjs'],
+    // the network-free recall of cards the online tier learned (nucleo_anima_recall.c — same code on
+    // device, host and browser WASM): paraphrases naming the card are recalled offline, while unrelated
+    // or generic-word queries never borrow one. Writes a temporary learned/it.* and restores it after.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[recall-check\][^\n]*/) || [lastLine(o)])[0] },
   { name: 'profile (personal)', cmd: 'node', args: ['tools/anima-host/profile-check.mjs'],
     // the typed personal-profile tier (nucleo_anima_profile.c): 100+ IT+EN cases — set/recall self-facts
     // cross-session deterministically, honest "don't know yet" on unset, ZERO third-person/teach hijack.

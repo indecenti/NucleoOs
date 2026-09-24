@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "nucleo_anima.c" "anima_solve.c" "anima_text.c" "nucleo_anima_bench.c" "nucleo_anima_l1.c" "nucleo_anima_online.c" "nucleo_anima_learn.c" "nucleo_anima_profile.c" "nucleo_anima_translate.c" "nucleo_anima_hdc.c" "nucleo_anima_facet.c"
+    SRCS "nucleo_anima.c" "anima_solve.c" "anima_text.c" "nucleo_anima_bench.c" "nucleo_anima_l1.c" "nucleo_anima_online.c" "nucleo_anima_recall.c" "nucleo_anima_learn.c" "nucleo_anima_profile.c" "nucleo_anima_translate.c" "nucleo_anima_hdc.c" "nucleo_anima_facet.c"
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "."
     REQUIRES nucleo_board esp_timer

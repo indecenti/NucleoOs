@@ -29,9 +29,8 @@ int nucleo_anima_online_live(const char *input, bool en, anima_result_t *out) {
 bool nucleo_anima_online_is_live(const char *input, bool en) {
     (void)input; (void)en; return false;
 }
-int nucleo_anima_online_recall(const char *query, bool en, anima_result_t *out) {
-    (void)query; (void)en; (void)out; return 0;
-}
+// nucleo_anima_online_recall is REAL on the host/WASM now: it lives in the network-free
+// firmware/components/nucleo_anima/nucleo_anima_recall.c, compiled by both builds.
 int nucleo_anima_online_fact(const char *input, bool en, anima_result_t *out) {
     (void)input; (void)en; (void)out; return 0;
 }

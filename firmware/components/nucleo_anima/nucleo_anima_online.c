@@ -126,7 +126,6 @@ static int post_attempt_timeout(int64_t t0, const char *url)
 #define DEFAULT_TTL  3650           // entities are mostly stable; volatile ones re-fetch when online
 #define MAX_ALIASES  8              // bounded ask[] phrasings per learned card (alias merge cap)
 #define RECALL_DIM   256            // max encoder dim we size buffers for (L1_MAXDIM)
-#define RECALL_THRESH 0.75f         // learned-card semantic recall gate: refuse rather than misattribute
 
 // ---- connectivity ----------------------------------------------------------
 
@@ -495,7 +494,9 @@ static void ask_add(cJSON *arr, const char *phrase)
 // ask_dup_elsewhere calls; the harvested aliases live in a separate array). INVARIANT: a new scan that
 // calls another scanner while a line is still live here MUST use its own buffer. Folding the former 11
 // per-function static[1536/1024] buffers into this one reclaims ~14 KB of .bss (permanent heap floor).
-static char s_scan_line[1536];
+// Defined once in nucleo_anima_recall.c (the network-free learned-store reader shares it).
+extern char g_anima_scan_line[1536];
+#define s_scan_line g_anima_scan_line
 
 // Runtime cross-card dedup: is this exact `phrase` already an ask on ANOTHER learned card (id != own)?
 // Keeps the learned store free of ambiguous duplicate questions as ANIMA learns new things online.
@@ -542,39 +543,6 @@ static int cache_get(const char *slug, bool en, anima_result_t *out, long *age)
             }
         }
         cJSON_Delete(o);
-        if (found) break;
-    }
-    fclose(f);
-    return found;
-}
-
-// Read a learned card by exact id into `out` (reply in the card's language). Used by recall once a
-// vector match picks a card. Returns 1 on success.
-static int cache_read_by_id(bool en, const char *id, anima_result_t *out)
-{
-    char path[160]; cache_path(path, sizeof(path), en);
-    char idq[84]; snprintf(idq, sizeof(idq), "\"%s\"", id);
-    FILE *f = fopen(path, "r");
-    if (!f) return 0;
-    int found = 0;
-    while (fgets(s_scan_line, sizeof(s_scan_line), f)) {
-        if (!strstr(s_scan_line, idq)) continue;
-        cJSON *o = cJSON_Parse(s_scan_line);
-        if (o) {
-            cJSON *jid = cJSON_GetObjectItem(o, "id");
-            if (cJSON_IsString(jid) && !strcmp(jid->valuestring, id)) {
-                cJSON *rep = cJSON_GetObjectItem(o, "reply");
-                cJSON *txt = rep ? cJSON_GetObjectItem(rep, en ? "en" : "it") : NULL;
-                if (!cJSON_IsString(txt) && rep) txt = cJSON_GetObjectItem(rep, en ? "it" : "en");
-                if (cJSON_IsString(txt) && txt->valuestring[0]) {
-                    memset(out, 0, sizeof(*out));
-                    out->tier = ANIMA_TIER_FACT; out->action = ANIMA_ACT_ANSWER;
-                    snprintf(out->reply, sizeof(out->reply), "%s", txt->valuestring);
-                    found = 1;
-                }
-            }
-            cJSON_Delete(o);
-        }
         if (found) break;
     }
     fclose(f);
@@ -2719,51 +2687,8 @@ int nucleo_anima_online_fact(const char *input, bool en, anima_result_t *out)
     return 1;
 }
 
-// ---- semantic recall over learned cards (offline, no network) ------------------------------
-//
-// The growth payoff (docs/anima-online.md §5.2): a query that PARAPHRASES something the device
-// already learned is matched by the shared device encoder against the learned vector sidecar.
-// Catches phrasings the exact-slug/alias lookup misses. Conservative: only answers above
-// RECALL_THRESH, else returns 0 — refuse rather than misattribute. Pure local; works offline.
-extern uint32_t g_anima_stage;   // DIAG breadcrumb (defined in nucleo_anima.c)
-int nucleo_anima_online_recall(const char *query, bool en, anima_result_t *out)
-{
-    g_anima_stage = 0xD0;                          // DIAG: entered online/learned recall
-    int D = nucleo_anima_l1_dim();
-    if (D <= 0 || D > RECALL_DIM || !query) return 0;       // encoder not loaded -> recall off
-
-    // Open the sidecar FIRST: with nothing learned yet, skip the (costly) query encode entirely.
-    char vp[170]; vec_path(vp, sizeof(vp), en);
-    FILE *in = fopen(vp, "rb");
-    if (!in) return 0;
-
-    static int8_t qv[RECALL_DIM];
-    if (nucleo_anima_l1_encode(query, qv, RECALL_DIM) != D) { fclose(in); return 0; }
-    // int8 vectors → each squared term ≤127² and D≤256, so the norm sums are exact in int32
-    // (≤4.2M, far under 2.1e9). The ESP32-S3 has no hardware double, so the old double accumulators
-    // ran software-emulated for ~49k MACs per query; int32 + sqrtf is exact, float-fast and matches
-    // the L1 encoder's own math. Cosine precision (~1e-7) far exceeds the 0.75 threshold's needs.
-    int32_t qn2 = 0; for (int k = 0; k < D; k++) qn2 += (int32_t)qv[k] * qv[k];
-    float qn = sqrtf((float)qn2); if (qn < 1e-6f) { fclose(in); return 0; }
-    char bestid[80] = ""; float best = -2.0f;
-    static char rid[80]; static int8_t rv[RECALL_DIM]; uint8_t l, db[2];
-    while (fread(&l, 1, 1, in) == 1) {
-        if (l == 0 || l >= sizeof(rid) || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
-        int d = db[0] | (db[1] << 8);                        // u16-LE dim (see vec_sync)
-        if (d != D) { if (d <= 0 || d > RECALL_DIM || fseek(in, d, SEEK_CUR) != 0) break; continue; }   // dim mismatch (or bad/old file) -> skip/stop
-        if (fread(rv, 1, d, in) != (size_t)d) break;
-        long dot = 0; int32_t vn = 0;
-        for (int k = 0; k < D; k++) { dot += (int)qv[k] * rv[k]; vn += (int32_t)rv[k] * rv[k]; }
-        float cos = (float)dot / (qn * sqrtf((float)vn) + 1e-9f);
-        if (cos > best) { best = cos; rid[l] = 0; snprintf(bestid, sizeof(bestid), "%s", rid); }
-    }
-    fclose(in);
-    if (best < RECALL_THRESH || !bestid[0]) return 0;       // not confidently the same thing
-    if (!cache_read_by_id(en, bestid, out)) return 0;       // card may have been evicted since
-    out->confidence = (int)(best * 100.0f + 0.5f);
-    snprintf(out->intent, sizeof(out->intent), "recall");
-    return 1;
-}
+// ---- semantic recall over learned cards: see nucleo_anima_recall.c (network-free, so the host and the
+// browser WASM compile the same code) ----------------------------------------------------------
 
 // ---- live tier: weather / exchange rate / news (answered fresh, NEVER cached) --------------
 //
