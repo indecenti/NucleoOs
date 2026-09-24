@@ -142,9 +142,25 @@ DOS bundles to \`data/DOS/\`.
 - **A model won't download:** check the device (or your browser) has internet the first time; downloads are one-at-a-time.
 `);
 
+// Pull this version's own section out of CHANGELOG.md (## [x.y.z] ... up to the next ## or ---) so the
+// GitHub release, the in-app Settings ▸ Updates notes, and the native boot dialog's 200-char truncation
+// all lead with the actual "what's new" instead of the generic install boilerplate below. Best-effort:
+// a missing/renamed section (e.g. a build-counter-only re-tag) just omits the block, never fails the build.
+function changelogSection(version) {
+  let text = '';
+  try { text = readFileSync(join(root, 'CHANGELOG.md'), 'utf8'); } catch { return ''; }
+  const start = text.indexOf(`## [${version}]`);
+  if (start === -1) return '';
+  const rest = text.slice(start);
+  const bodyStart = rest.indexOf('\n') + 1;
+  const nextHeading = rest.slice(bodyStart).search(/\n## \[|\n---/);
+  const body = (nextHeading === -1 ? rest.slice(bodyStart) : rest.slice(bodyStart, bodyStart + nextHeading)).trim();
+  return body ? `### What's new in ${version}\n\n${body}\n\n---\n\n` : '';
+}
+
 writeFileSync(join(dist, 'RELEASE_NOTES.md'), `## NucleoOS ${tag}
 
-An installable build of NucleoOS — a web-native appliance OS — for the **M5Stack Cardputer**
+${changelogSection(ver)}An installable build of NucleoOS — a web-native appliance OS — for the **M5Stack Cardputer**
 (ESP32-S3). One universal firmware runs on both the **original** and the **ADV** board.
 
 ### Download

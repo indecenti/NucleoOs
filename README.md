@@ -11,9 +11,12 @@ lab, on‑device transcription and offline image generation.
 
 `ESP32‑S3 / M5StampS3` · `ESP‑IDF firmware` · `PWA web shell` · `English‑only codebase`
 
+[![Latest release](https://img.shields.io/github/v/release/indecenti/NucleoOs?label=release)](https://github.com/indecenti/NucleoOs/releases/latest)
 ![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
 ![Platform: ESP32-S3](https://img.shields.io/badge/platform-ESP32--S3-informational)
 ![Framework: ESP-IDF](https://img.shields.io/badge/firmware-ESP--IDF-red)
+
+<sub>📋 **[What's new in the latest release →](CHANGELOG.md)**</sub>
 
 <sub>Free for noncommercial use · **commercial use requires a paid license** → niki070585@gmail.com</sub>
 
@@ -109,11 +112,15 @@ When you *do* want a frontier model, NucleoOS wires it in cleanly:
 icon"*, *"remove the background"*, *"brightness +20"*, *"rotate right"*. Heavy pixels live in the
 browser GPU; the device just stores the result.
 
-### 🎮 Games — native multiplayer + a web Game Center
+### 🎮 Games — native multiplayer, retro emulation + a web Game Center
 
 - **Native multiplayer** over **ESP‑NOW** (no router): Pong, Snake Duel, Tank Duel, plus a full
   beat‑'em‑up (Scorribanda), Pinball, Tanks artillery, Poker, Slots, Yahtzee, Dice and 3D
   constellations — each rebooting into a fresh heap for maximum RAM.
+- **Native Game Boy & Game Gear emulation** — our own cores (no PSRAM tricks, cartridge‑accurate,
+  battery‑backed saves), running your own ROMs straight off the SD, zero browser needed.
+- **Arcade (web)** — a second, browser‑side emulator (EmulatorJS: NES, SNES, Game Boy, GBA, Mega
+  Drive, PC Engine) for when you'd rather play on the big screen.
 - **Game Center (web)** — peer‑to‑peer over WebRTC with the Cardputer as signaling: Tic‑Tac‑Toe,
   Connect 4, Pong — 2‑player **or vs ANIMA** (offline brain, or an LLM brain when online).
 
@@ -271,6 +278,7 @@ Every demanding feature respects a tight set of RAM tricks, validated on hardwar
 | **Instruments & sensors** | Torch · Bubble Level · Protractor · Alarm (mic + accelerometer + IMU) · Pedometer · Weather · IR Remote · QR · PixelFix · Screensaver |
 | **System** | WiFi manager · Settings/Theme · Clock · Calendar · Notepad · Calculator · System Monitor · Notifications · Info · Mail (SMTP) · SSH terminal |
 | **Games** | Pong · Snake Duel · Tank Duel · Tanks (artillery) · Scorribanda (brawler) · Pinball · Poker · Slots · Dice · Yahtzee · Constellations (3D) · Reactor · Sand Garden — via the **GameFront** carousel |
+| **Emulation** | Game Boy (own core, battery-backed saves) · Game Gear (own VDP/PSG/mapper machine + a permissively-licensed Z80 core) — both native, cartridge-accurate, zero browser needed |
 
 ### Web apps (NucleoOS Web — served by the device, run in your browser)
 
@@ -283,7 +291,7 @@ Every demanding feature respects a tight set of RAM tricks, validated on hardwar
 | **Tools** | Weather (Open‑Meteo, browser‑direct: 6‑day forecast, geolocation, offline cache) · Authenticator (2FA TOTP/HOTP, pure‑JS — works over http LAN & offline) · Unit Converter · Passkeys · IR Remote |
 | **Personal** | Contacts (address book — email/phone/org, favorites, vCard export, one‑click Compose in Mail) · Tasks · Calendar · Miei Fatti |
 | **Voice** | Transcription (Vosk WASM, on‑device + remote realtime) · Recorder · Voice Manager · Dictation |
-| **Play & connect** | Game Center (WebRTC P2P) · Games · DJ · DOSBox (+ DOS Importer) · Nearby · Swarm |
+| **Play & connect** | Game Center (WebRTC P2P) · Games · Arcade (EmulatorJS — NES/SNES/Game Boy/GBA/Mega Drive/PC Engine, your own ROMs, client‑side) · DJ · DOSBox (+ DOS Importer) · Nearby · Swarm |
 
 > The **desktop shell** is a real workstation: window snapping (drag‑to‑edge + Snap Layouts), Alt‑Tab,
 > a global search that also asks ANIMA, an OS clipboard with history, a Notification Center (Do‑Not‑Disturb
