@@ -113,7 +113,7 @@ static bool file_exists(const char *p) { FILE *f = fopen(p, "rb"); if (f) { fclo
 // The console icon is the honest, stable identity: it says "Game Boy", which is exactly what the
 // entry IS. So these ids always take the procedural poster path, and cover capture refuses on them
 // rather than quietly writing a file the renderer will ignore.
-static const char *const NO_SHOT[] = { "gbemu", nullptr };
+static const char *const NO_SHOT[] = { "gbemu", "ggemu", nullptr };
 static bool gf_never_shot(const char *id)
 {
     if (!id) return false;

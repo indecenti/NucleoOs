@@ -71,6 +71,8 @@ static void remote_save(void)
 }
 
 extern "C" bool nucleo_remote_enabled(void) { remote_load(); return s_remote_enabled; }
+// Same persisted toggle, driven from Settings > Wi-Fi > Web handoff (the canonical home for it).
+extern "C" void nucleo_remote_set_enabled(bool on) { remote_load(); s_remote_enabled = on; remote_save(); }
 
 static int s_sig = -1;
 

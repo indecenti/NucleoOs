@@ -378,6 +378,7 @@ static void save_config(void)
     char *txt = cJSON_PrintUnformatted(r);
     cJSON_Delete(r);
     if (!txt) return;
+    s_cfg_loaded = true;                      // what we persist IS the config now (wizard / first web join): RAM is authoritative
     int tiers = persist_doc(SETUP_JSON, SETUP_LEGACY, "setup", txt);
     if (tiers == 0) ESP_LOGE(TAG, "save_config: NO persistence tier available — settings will not survive reboot");
     free(txt);
@@ -937,7 +938,18 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
     if (s_wifi_op_lock) xSemaphoreGive(s_wifi_op_lock);
     return ok;
 }
-void nucleo_setup_start_ap(void)  { s_auto = false; strncpy(s_mode, "ap", sizeof(s_mode) - 1); start_ap(); save_config(); }
+// True once the saved setup config was parsed (or written) this boot. A Wi-Fi-skipped Solo boot (BLE suite /
+// Sentinel, NX_WIFI apps, USB-web) never runs load_config(): s_mode/s_name/AP creds are still the RAM
+// DEFAULTS there, so the Control Center must not offer the hotspot toggle, and start/stop_ap refuse.
+bool nucleo_setup_config_loaded(void) { return s_cfg_loaded; }
+
+void nucleo_setup_start_ap(void)
+{
+    // Guard: persisting RAM defaults would overwrite setup.json (wizard re-runs, device name lost) and
+    // wifi_ensure() would bring ~48 KB of Wi-Fi up next to NimBLE in a BLE Solo boot.
+    if (!s_cfg_loaded) { ESP_LOGW(TAG, "start_ap ignored: setup config not loaded this boot"); return; }
+    s_auto = false; strncpy(s_mode, "ap", sizeof(s_mode) - 1); start_ap(); save_config();
+}
 
 // Turn the Access Point OFF and return to client (STA) mode — rejoin the best known network. The AP
 // toggle in Settings MUST call this, NOT apply_network() directly: apply_network() only brings STA up
@@ -948,6 +960,7 @@ void nucleo_setup_start_ap(void)  { s_auto = false; strncpy(s_mode, "ap", sizeof
 // supervisor rejoins automatically the moment a known network reappears.
 void nucleo_setup_stop_ap(void)
 {
+    if (!s_cfg_loaded) { ESP_LOGW(TAG, "stop_ap ignored: setup config not loaded this boot"); return; }   // see start_ap
     strncpy(s_mode, "sta", sizeof(s_mode) - 1);
     save_config();
     nucleo_setup_apply_network();

@@ -173,6 +173,15 @@ export function drawIcon(g, id, cx, cy, s) {
       g.fc(cx + s * 0.02, cy + s * 0.42, s * 0.13, g.bg);
       break;
 
+    case 'ggemu':                                    // Game Gear: landscape body, screen, d-pad, two buttons
+      g.frr(cx - s, cy - s * 0.62, s * 2.0, s * 1.24, s * 0.40);
+      g.bx(cx - s * 0.36, cy - s * 0.42, s * 0.72, s * 0.84, g.bg);
+      g.bx(cx - s * 0.80, cy - s * 0.06, s * 0.30, s * 0.12, g.bg);
+      g.bx(cx - s * 0.71, cy - s * 0.21, s * 0.12, s * 0.42, g.bg);
+      g.fc(cx + s * 0.56, cy - s * 0.06, s * 0.11, g.bg);
+      g.fc(cx + s * 0.80, cy + s * 0.14, s * 0.11, g.bg);
+      break;
+
     case 'music':
       g.fc(cx - s * 0.45, cy + s * 0.55, T * 1.05);
       g.bx(cx - s * 0.45 + T * 0.6, cy - s * 0.82, T * 0.8, s * 1.45);

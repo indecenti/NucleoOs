@@ -58,11 +58,16 @@ void launcher_render_list(void);          // composite + blit the scrolling list
 bool launcher_render_step_scroll(void);
 
 // Full-screen overlays.
-void launcher_render_control_center(void);             // draw the interactive quick-settings sheet
-void launcher_render_control_center_open(void);        // reset selection + free the band when raised
-void launcher_render_control_center_close(void);       // release the sheet's off-screen canvas
-// Handle a key. Returns CC_NONE(0)/CC_REDRAW(1)/CC_CLOSE(2)/CC_SCREEN_OFF(3)/CC_LAUNCH(4).
+// Control Center (TAB): one-screen quick panel — status strip, 4 toggle tiles, brightness/volume
+// sliders, 5 shortcuts and a context line. Focus is kept across opens (resume).
+void launcher_render_control_center(void);             // compose + blit the panel
+void launcher_render_control_center_open(void);        // disarm any pending action (focus is kept)
+void launcher_render_control_center_close(void);       // persist a brightness/volume change once
+// Handle a key. Returns CC_NONE(0)/CC_REDRAW(1)/CC_CLOSE(2)/CC_SCREEN_OFF(3)/CC_LAUNCH(4)/CC_TORCH(5).
 // When CC_LAUNCH: call launcher_render_control_center_launch_id() for the app id to open.
 int         launcher_render_control_center_key(int key, char ch);
 const char *launcher_render_control_center_launch_id(void);
-int         launcher_render_control_center_tab(void);   // 0=RAPIDE 1=RETE 2=SISTEMA
+bool        launcher_render_control_center_tick(void);  // 1 Hz: true when what the panel shows changed
+// Without the back-buffer the panel repaints only the elements that changed (flicker-free); call this
+// when something else drew over it, so the next paint is a full one.
+void        launcher_render_control_center_invalidate(void);

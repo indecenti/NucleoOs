@@ -100,6 +100,29 @@ should copy:
   incremental direct-path cache MUST invalidate then, or overlay residue stays on screen. Buffered
   apps can ignore it — the run loop already forces a full blit in the same cases.
 
+### Going one step further: atomic box repaint (Settings, Control Center)
+
+Technique 2 still clears a changed row before drawing it, so a focus move blinks the two rows that
+changed. Two system surfaces remove even that:
+
+- **Settings** (`app_wifi.cpp`) renders a changed box (list row, Wi-Fi card, date field) into a small
+  **240x12 16-bpp strip sprite** (~5.6 KB, allocated on the first direct paint of the visit, freed on
+  leave or as soon as the canvas is back), one strip at a time, and pushes each strip in one transfer
+  clipped to the box — the panel goes from the old box straight to the new one. The box painter just
+  receives a shifted `y`, so the same draw code serves both paths. Header values, the search query, the
+  text-editor field and the scrollbar are fixed-width opaque fields (no clear at all). Full paints only
+  on a scene change (page, overlay open/close, theme, language) or `nucleo_app_repaint_gen()`.
+- **Control Center** (`launcher_render.cpp`) needs no sprite: focus is a ring of outlines, colour
+  changes redraw a glyph over its own fill, sliders lift only the old knob, and every text line is an
+  opaque fixed-width field.
+
+**Path switches must re-sync (fixed 2026-09-24).** The buffered blit pushes only bands whose hash
+changed since the last *buffered* frame. When an app had drawn DIRECT in between (canvas lost, then
+re-acquired by the heal loop), those bands were skipped although the panel had changed — stale rows,
+e.g. a Settings chip duplicated below itself. The run loop now forces a full blit on the first buffered
+frame after direct frames, and bumps `nucleo_app_repaint_gen()` on the first direct frame after a
+buffered one, so incremental direct painters redo one full paint.
+
 ## Checklist when adding/touching a drawing routine
 - Does it run on a repeating cadence? If yes, it must use one of the techniques above.
 - Is there a `fillScreen`/large `fillRect` on that cadence? If yes, that's the bug — move it

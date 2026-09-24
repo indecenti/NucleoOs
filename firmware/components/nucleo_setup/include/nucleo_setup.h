@@ -77,7 +77,8 @@ int         nucleo_setup_scan_channel(int i);
 int         nucleo_setup_scan_secure(int i);      // 1 = encrypted (not OPEN)
 const char *nucleo_setup_scan_auth_label(int i);  // "Open"/"WPA2"/"WPA3"/... (for the web scanner)
 bool        nucleo_setup_join(const char *ssid, const char *pass);  // blocking; true if it got an IP
-void        nucleo_setup_start_ap(void);          // switch to hotspot (AP) mode now
+bool        nucleo_setup_config_loaded(void);     // saved config parsed/written this boot (false in Wi-Fi-skipped Solo boots)
+void        nucleo_setup_start_ap(void);          // switch to hotspot (AP) mode now (no-op if !config_loaded)
 void        nucleo_setup_stop_ap(void);           // turn AP OFF -> rejoin client (STA) mode (Settings toggle)
 void        nucleo_setup_forget(void);            // wipe ALL saved networks, drop to AP
 
