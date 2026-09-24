@@ -81,6 +81,23 @@ const SCENARIOS = [
   { name: 'an app name is never the close verb', turns: [
       { q: 'apri il terminale',    want: /apro terminal/i, notWant: /chiudo/i },
       { q: 'termina il terminale', want: /chiudo terminal/i } ] },
+  // Reminders, the way people actually ask. A to-do nothing answered is offered as a reminder, and
+  // "ricordamelo" then schedules exactly that (minus the "devo"); with nothing said before, it ASKS.
+  { name: 'to-do offer, then "ricordamelo" schedules it', turns: [
+      { q: 'devo chiamare Marco',          want: /ricordi/i, wantTier: /L0/ },
+      { q: 'ricordamelo domani alle 9',    want: /"chiamare Marco" domani alle 09:00/ } ] },
+  { name: '"ricordamelo" with nothing said asks what', turns: [
+      { q: 'ricordamelo domani alle 12',   want: /Cosa devo ricordarti/, notWant: /Promemoria "/ } ] },
+  { name: 'EN to-do, then "remind me of it"', lang: 'en', turns: [
+      { q: 'I need to call the bank',      want: /remind you/i },
+      { q: 'remind me of it tomorrow at 10', want: /"call the bank" tomorrow at 10:00/ } ] },
+  { name: 'polite and wrapped reminder requests keep only the content', turns: [
+      { q: 'puoi ricordarmi di comprare il pane domani alle 9', want: /"comprare il pane" domani alle 09:00/ },
+      { q: 'mettimi un promemoria per domani alle 12: spesa', want: /"spesa" domani alle 12:00/, reset: true },
+      { q: 'can you remind me to buy milk tomorrow', want: /"buy milk" tomorrow/, lang: 'en', reset: true } ] },
+  { name: 'a recall wrapper around a question is a question', turns: [
+      { q: 'mi ricordi cosa fa malloc',    want: /malloc/i, notWant: /Promemoria/ },
+      { q: 'devo usare malloc o calloc?',  notWant: /te lo ricordi/i, reset: true } ] },
   { name: 'an app answers to its own name', turns: [
       { q: 'apri notepad',         want: /apro notepad/i },
       { q: 'apri file commander',  want: /file-commander/i, reset: true } ] },

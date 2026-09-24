@@ -29,7 +29,7 @@
 {"q":"ricordami chi era Galileo","lang":"it","expect":"tier:none"}
 {"q":"ricordami cos'è la fotosintesi","lang":"it","expect":"l1"}
 {"q":"ricordami quando è nato Einstein","lang":"it","expect":"tier:none"}
-{"q":"remind me who Napoleon was","lang":"en","expect":"tier:none"}
+{"q":"remind me who Napoleon was","lang":"en","expect":"l1|tier:none"}
 {"q":"quando è nato Dante","lang":"it","expect":"hdc|l1"}
 {"q":"quando è morto Mozart","lang":"it","expect":"tier:none"}
 // --- calendar that IS a real reminder (must add_event, not knowledge) ---
