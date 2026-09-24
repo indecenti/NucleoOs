@@ -700,6 +700,22 @@ static void save_settings(void)
     fclose(f);
 }
 
+// Settings app hooks: ANIMA's online mode (OM_OFF / OM_ON hybrid / OM_ONLY) lives here — live flags +
+// anima_ui.json. Loaded once on first use (the app reloads it on every enter anyway), so painting the
+// Settings root never re-reads the SD.
+static bool s_ui_loaded = false;
+extern "C" int nucleo_anima_ui_online_mode(void)
+{
+    if (!s_ui_loaded) { s_ui_loaded = true; load_settings(); }
+    return s_omode;
+}
+extern "C" void nucleo_anima_ui_set_online_mode(int mode)
+{
+    if (!s_ui_loaded) { s_ui_loaded = true; load_settings(); }    // keep big/lang as saved
+    if (mode < OM_OFF || mode > OM_ONLY) return;
+    s_omode = mode; apply_online_mode(); save_settings();
+}
+
 // ---- transcript persistence: show the last conversation on re-entry --------
 // The chat ring is .bss (reset on enter); persist it to SD so reopening ANIMA restores where you left
 // off. Binary + length-prefixed (messages may contain '\n'). Bounded by MSG_MAX. Best-effort: a failed
