@@ -4043,6 +4043,20 @@
         try{ const r=await resp.json(); replayPendingSoon(); return done({ r }); }catch{ return done({ err:'unreachable' }); }
       } finally { st.done(); }
     }
+    // Carry out a device action the BROWSER's engine decided (POST /api/anima/act). For a Cardputer that answers
+    // /api/anima "busy" — a heap too fragmented for the cascade's 30 KB worker, the ADV with the web OS on — the
+    // WASM engine is the same cascade, so the decision is already made; only the device can make it happen.
+    // null: not a device action, or the device couldn't (older firmware 404, refused 400, still busy 503).
+    async function deviceAct(r){
+      const P=await cascadeMod(); const body=P.actRequest(r, lang); if(!body) return null;
+      const st=AM.stepSignal(_turnSig, AM.STEP_MS.device);
+      try{
+        const resp=await dfetch('/api/anima/act', { method:'POST', headers:{ 'content-type':'application/json' }, body:JSON.stringify(body), signal:st.signal });
+        if(!resp.ok) return null;
+        return await resp.json();
+      }catch{ return null; }
+      finally{ st.done(); }
+    }
     function notDoneWhat(tool){
       if(tool==='add_event') return TR('l’evento non è stato aggiunto', 'the event was not added');
       if(tool==='set_volume') return TR('il volume non è stato cambiato', 'the volume was not changed');
@@ -4099,6 +4113,9 @@
       let local=null; try{ local=await browserOffline(q, lang, true); }catch{ local=null; }
       _turnLocal=null;
       if(!P.answered(local)) return null;
+      // "ricorda che la sala … e al terzo piano" can be a REMINDER (add_event), not a fact: that is a device
+      // action settleDeviceAction carries out now — queueing it too would replay it and add it twice.
+      if(P.classifyCommand(local)==='device') return local;
       if(kind!=='recall'){ queuePending(q, kind); return { ...local, memPending:true }; }
       return local;
     }
@@ -4136,9 +4153,15 @@
       if(tool==='create_file' && fs.hasRoot()) return r;               // written into the open workspace below, in the browser
       if(r.local){
         const d=await deviceCommand(q);
-        if(!d.r) return notPerformed(r, d.err);
-        if(P.classifyCommand(d.r)!=='device') return notPerformed(r, 'mismatch');
-        r=d.r;
+        if(d.r){
+          if(P.classifyCommand(d.r)!=='device') return notPerformed(r, 'mismatch');
+          r=d.r;
+        } else {
+          // Busy = the device can't run the cascade right now, not that it can't act: hand it our decision.
+          const acted = d.err==='busy' ? await deviceAct(r) : null;
+          if(!acted) return notPerformed(r, d.err);
+          r=acted;
+        }
       }
       const out=P.deviceToolOutcome(r);
       return out==='done' ? r : notPerformed(r, out==='unsupported'?'unsupported':'failed');

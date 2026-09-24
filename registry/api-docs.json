@@ -611,6 +611,34 @@
       }
     ]
   },
+  "POST /api/anima/act": {
+    "it": {
+      "title": "POST /api/anima/act - Esegui Azione Decisa dal Browser",
+      "description": "Il dispositivo esegue un'azione (crea file, promemoria, volume, luminosità) che il motore ANIMA del browser ha già deciso. Il motore WASM è la stessa cascata del firmware: quando il Cardputer non riesce a creare il worker da 30 KB della cascata (heap frammentato, /api/anima risponde busy) la decisione è già presa, e solo il dispositivo può metterla in atto. Nessuna cascata qui: lo stesso esecutore di /api/anima, sul task httpd.",
+      "synopsis": "POST /api/anima/act",
+      "details": "Richiede l'associazione (PIN), come ogni scrittura. Corpo JSON (max 1024 byte):\n- tool: \"create_file\" | \"add_event\" | \"set_volume\" | \"set_brightness\"\n- arg: create_file = /data/<Documents|Music|Pictures|Videos>/<nome>; set_* = percentuale \"30\" o relativa \"+10\"/\"-10\"\n- content: testo del file o specifica evento \"off=<giorni>;time=<HH:MM>;text=<testo>\" (max 199 byte)\n- reply: la risposta del motore, restituita se l'azione riesce\n- lang: \"it\" | \"en\"\nOgni campo è validato come lo produrrebbe la cascata (400 altrimenti); 503 se ANIMA è occupata. Risposta: forma di /api/anima con done (true se eseguita) e path per un file creato."
+    },
+    "en": {
+      "title": "POST /api/anima/act - Run a Browser-Decided Action",
+      "description": "The device carries out an action (create file, reminder, volume, brightness) that the browser's ANIMA engine already decided. The WASM engine is the firmware's own cascade: when the Cardputer can't carve the cascade's 30 KB worker (fragmented heap, /api/anima answers busy) the decision is already made, and only the device can make it happen. No cascade here: the same executor as /api/anima, on the httpd task.",
+      "synopsis": "POST /api/anima/act",
+      "details": "Paired only (PIN), like every write. JSON body (max 1024 bytes):\n- tool: \"create_file\" | \"add_event\" | \"set_volume\" | \"set_brightness\"\n- arg: create_file = /data/<Documents|Music|Pictures|Videos>/<name>; set_* = absolute \"30\" or relative \"+10\"/\"-10\" percent\n- content: file text or event spec \"off=<days>;time=<HH:MM>;text=<text>\" (max 199 bytes)\n- reply: the engine's reply, returned when the action succeeds\n- lang: \"it\" | \"en\"\nEvery field is validated as the cascade would produce it (else 400); 503 when ANIMA is busy. Response: the /api/anima shape with done (true when carried out) and path for a created file."
+    },
+    "params": [
+      {
+        "name": "body",
+        "type": "textarea",
+        "required": true,
+        "default": "{\n  \"tool\": \"set_volume\",\n  \"arg\": \"30\",\n  \"lang\": \"it\"\n}",
+        "it": {
+          "description": "Corpo JSON con tool, arg, content, reply, lang"
+        },
+        "en": {
+          "description": "JSON body with tool, arg, content, reply, lang"
+        }
+      }
+    ]
+  },
   "GET /api/tts": {
     "it": {
       "title": "GET /api/tts - Stato Voce On-Device",

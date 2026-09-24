@@ -93,6 +93,12 @@ esp_err_t nucleo_anima_init(const char *lang);
 // ("en" -> English, anything else -> Italian). Always returns (tier NONE if unsure).
 anima_result_t nucleo_anima_query(const char *input, const char *lang);
 
+// The personal-memory tiers only (profile "mi chiamo X"/"come mi chiamo", teach "ricorda che X è Y",
+// user-taught recall), a few KB of stack instead of the full cascade's ~30 KB worker. For a server whose
+// heap can't carve that worker right now. 1 = handled (*out filled), 0 = not a memory utterance.
+// Hold the spine lock (nucleo_anima_try_lock) around it, like nucleo_anima_query().
+int nucleo_anima_query_memory(const char *input, const char *lang, anima_result_t *out);
+
 // Lightweight cumulative query telemetry for the diagnostics surface (/api/diag, Log Viewer). These
 // are plain u32 counters bumped once at the single convergence point of nucleo_anima_query() — no SD,
 // no alloc, no hot-path cost — so the web side can compute an honest ANIMA health picture (abstain

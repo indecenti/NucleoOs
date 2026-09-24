@@ -114,6 +114,17 @@ export function deviceToolOutcome(r) {
   return 'done';   // add_event: legacy firmware wrote it server-side and replied with the confirmation
 }
 
+// actRequest(r, lang): the POST /api/anima/act body that asks the DEVICE to carry out an action the browser's
+// engine decided, or null if r is not a device action. For a device that answers /api/anima "busy" (a heap
+// too fragmented for the cascade's 30 KB worker, e.g. the ADV with the web OS on): the WASM engine is the
+// same cascade, so the decision is already made — only the Cardputer can make it happen. The device
+// validates every field again; this just carries the engine's own tool/arg/content/reply.
+export function actRequest(r, lang) {
+  if (classifyCommand(r) !== 'device') return null;
+  return { tool: r.tool || r.intent, arg: String(r.arg || ''), content: String(r.content || ''),
+           reply: String(r.reply || ''), lang: lang === 'en' ? 'en' : 'it' };
+}
+
 // commandHint(q): a cheap lexical gate, NOT the classifier. It only decides whether an utterance is worth
 // asking the real classifier (the in-browser engine, else the device) BEFORE the cloud/LLM rungs, so
 // ordinary questions never pay a device round-trip. Italian + English, like the engine.

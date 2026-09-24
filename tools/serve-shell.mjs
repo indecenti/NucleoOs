@@ -722,8 +722,28 @@ const server = createServer(async (req, res) => {
     try { simState.voiceAlwaysOn = !!JSON.parse((await readBody(req)).toString('utf8') || '{}').on; } catch {}
     return sendJSON(res, { ok: true, on: simState.voiceAlwaysOn });
   }
+  // Sim-only knob: make /api/anima answer 503 busy like the Cardputer ADV, whose fragmented heap (largest
+  // block ~13 KB) can't carve the cascade's 30 KB worker — to exercise the web app's /api/anima/act path.
+  if (path === '/api/sim/anima-busy' && req.method === 'POST') {
+    try { simState.animaBusy = !!JSON.parse((await readBody(req)).toString('utf8') || '{}').on; } catch {}
+    return sendJSON(res, { ok: true, on: !!simState.animaBusy });
+  }
+  // POST /api/anima/act — carry out a device action the browser's engine decided (mirrors anima_act_post in
+  // nucleo_httpd.c): the same executor as /api/anima, fields validated as strictly as the cascade makes them.
+  if (path === '/api/anima/act' && req.method === 'POST') {
+    let b = {}; try { b = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}
+    const tool = String(b.tool || ''), arg = String(b.arg || ''), content = String(b.content || '');
+    const en = String(b.lang || '')[0] === 'e';
+    if (!animaActValid(tool, arg, content)) { res.writeHead(400, { 'content-type': 'text/plain' }); return res.end('tool'); }
+    const r = { tier: 'command', action: 'tool', intent: tool, tool, arg, content, reply: String(b.reply || '') || (en ? 'Done.' : 'Fatto.'),
+                confidence: 95, domain: 'tool', state: 'tool', trace: 'L0 tool | device' };
+    await simExecTool(r, en);
+    delete r.content;
+    return sendJSON(res, r);
+  }
   if (path === '/api/anima') {
     if (url.searchParams.get('reset') === '1') resetAnimaSession();   // "pulisci conversazione"
+    if (simState.animaBusy) { res.writeHead(503, { 'content-type': 'application/json', 'retry-after': '1' }); return res.end('{"busy":true,"retry_after_ms":250}'); }
     // ONE conversation per client (mirrors nucleo_httpd.c s_last_sid): a request whose sid differs from the
     // last one starts a fresh context, so the ANIMA app and the copilot don't chain each other's follow-ups.
     // No sid -> unchanged; an over-long sid is dropped like the device's 24-byte query buffer does.
@@ -809,37 +829,7 @@ const server = createServer(async (req, res) => {
     // a hallucination. This is the "via di fuga in extremis" — it runs only after every free source missed.
     if (r.tier === 'none' && allowOnline) { const t = await teacherAnswer(q, lang0); if (t) r = t; }
     }   // end askable gate — data / non-questions never reach the knowledge tiers
-    if (r.action === 'tool' && r.tool === 'create_file' && r.arg) {       // execute the tool (mirrors firmware)
-      const en = (url.searchParams.get('lang') || '')[0] === 'e';
-      const bn = r.arg.split('/').pop();
-      const fp = join(SD, r.arg.replace(/^\//, ''));
-      try {
-        await mkdir(dirname(fp), { recursive: true });        // ensure the routed folder exists
-        let exists = true; try { await stat(fp); } catch { exists = false; }
-        if (exists) r.reply = en ? `${bn} already exists — not overwritten.` : `${bn} esiste gia: non lo sovrascrivo.`;
-        else { await writeFile(fp, r.content || ''); r.path = r.arg; }   // compose-then-act payload ("" -> empty)
-        animaMem.last_file = r.arg; animaMem.last_kind = 'f';   // real file (created or existing)
-      } catch { r.reply = en ? `Can't create ${bn}.` : `Non riesco a creare ${bn}.`; }
-    }
-    // add_event -> append the reminder to the OS calendar (mirrors anima_apply_event in nucleo_httpd.c)
-    if (r.action === 'tool' && r.tool === 'add_event' && r.content) {
-      const en = (url.searchParams.get('lang') || '')[0] === 'e';
-      const m = { off: 0, time: '', text: '' };
-      const mo = r.content.match(/off=(-?\d+)/); if (mo) m.off = parseInt(mo[1], 10);
-      const mt = r.content.match(/;time=([^;]*)/); if (mt) m.time = mt[1];
-      const mx = r.content.match(/;text=([\s\S]*)$/); if (mx) m.text = mx[1];
-      try {
-        const d = new Date(); d.setDate(d.getDate() + m.off);
-        const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const fp = join(SD, 'system', 'config', 'calendar.json');
-        await mkdir(dirname(fp), { recursive: true });
-        let cal = { events: {} }; try { cal = JSON.parse(readFileSync(fp, 'utf8')); if (!cal.events) cal.events = {}; } catch {}
-        (cal.events[date] = cal.events[date] || []).push({ time: m.time, text: m.text });
-        await writeFile(fp, JSON.stringify(cal, null, 2));
-        r.reply = m.time ? (en ? `Added "${m.text}" on ${date} at ${m.time}.` : `Aggiunto "${m.text}" il ${date} alle ${m.time}.`)
-                         : (en ? `Added "${m.text}" on ${date}.` : `Aggiunto "${m.text}" il ${date}.`);
-      } catch { r.reply = en ? `I couldn't add the event.` : `Non sono riuscito ad aggiungere l'evento.`; }
-    }
+    if (r.action === 'tool') await simExecTool(r, (url.searchParams.get('lang') || '')[0] === 'e');   // mirrors anima_exec_tool
     // utility memory: remember launches here; create_file is remembered above only when real
     if (r.action === 'launch' && r.arg) { animaMem.last_app = r.arg; animaMem.last_kind = 'a'; }
     if (r.tier === 'fact') animaMem.last_topic = q;
@@ -2550,6 +2540,58 @@ const isEphemeral = (q) => { const s = String(q).toLowerCase().normalize('NFD').
 // The shared implementation (apps/anima/www/local/weather.js) — the SAME code the ANIMA web app runs in
 // the browser, mirroring the firmware weather_fetch(). The simulator only adds its User-Agent.
 const WX_UA = { 'User-Agent': 'NucleoOS-ANIMA/1.0 (weather)' };
+
+// ---- device tool executor (mirrors anima_exec_tool in nucleo_httpd.c) ------------------------------
+// Sets r.reply / r.path / r.done like the firmware ("done" tells the web app "carried out" from "proposed").
+async function simExecTool(r, en) {
+  const tool = r.tool || r.intent || '';
+  if (tool === 'create_file' && r.arg) {
+    const bn = r.arg.split('/').pop();
+    const fp = join(SD, r.arg.replace(/^\//, ''));
+    try {
+      await mkdir(dirname(fp), { recursive: true });        // ensure the routed folder exists
+      let exists = true; try { await stat(fp); } catch { exists = false; }
+      if (exists) { r.reply = en ? `${bn} already exists — not overwritten.` : `${bn} esiste gia: non lo sovrascrivo.`; r.done = false; }
+      else { await writeFile(fp, r.content || ''); r.path = r.arg; r.done = true; }   // compose-then-act payload ("" -> empty)
+      animaMem.last_file = r.arg; animaMem.last_kind = 'f';   // real file (created or existing)
+    } catch { r.reply = en ? `Can't create ${bn}.` : `Non riesco a creare ${bn}.`; r.done = false; }
+  } else if (tool === 'add_event' && r.content) {
+    const m = { off: 0, time: '', text: '' };
+    const mo = r.content.match(/off=(-?\d+)/); if (mo) m.off = parseInt(mo[1], 10);
+    const mt = r.content.match(/;time=([^;]*)/); if (mt) m.time = mt[1];
+    const mx = r.content.match(/;text=([\s\S]*)$/); if (mx) m.text = mx[1];
+    try {
+      const d = new Date(); d.setDate(d.getDate() + m.off);
+      const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const fp = join(SD, 'system', 'config', 'calendar.json');
+      await mkdir(dirname(fp), { recursive: true });
+      let cal = { events: {} }; try { cal = JSON.parse(readFileSync(fp, 'utf8')); if (!cal.events) cal.events = {}; } catch {}
+      (cal.events[date] = cal.events[date] || []).push({ time: m.time, text: m.text });
+      await writeFile(fp, JSON.stringify(cal, null, 2));
+      r.reply = m.time ? (en ? `Added "${m.text}" on ${date} at ${m.time}.` : `Aggiunto "${m.text}" il ${date} alle ${m.time}.`)
+                       : (en ? `Added "${m.text}" on ${date}.` : `Aggiunto "${m.text}" il ${date}.`);
+      r.done = true;
+    } catch { r.reply = en ? `I couldn't add the event.` : `Non sono riuscito ad aggiungere l'evento.`; r.done = false; }
+  } else if (tool === 'set_volume' || tool === 'set_brightness') {
+    const vol = tool === 'set_volume', key = vol ? 'volume' : 'brightness';
+    const cur = typeof simState[key] === 'number' ? simState[key] : 50;
+    let want = /^[+-]/.test(r.arg || '') ? cur + parseInt(r.arg, 10) : parseInt(r.arg, 10);
+    if (!Number.isFinite(want)) { r.done = false; return r; }
+    want = Math.max(vol ? 0 : 10, Math.min(100, want));      // the device floors the backlight at 10%
+    simState[key] = want;
+    r.reply = vol ? (en ? `Volume ${want}%.` : `Volume al ${want}%.`) : (en ? `Brightness ${want}%.` : `Luminosita al ${want}%.`);
+    r.done = true;
+  }
+  return r;
+}
+// Validation of a browser-decided action (mirrors anima_act_path_ok / anima_act_pct_ok in the firmware).
+function animaActValid(tool, arg, content) {
+  if (arg.length >= 64 || content.length >= 200) return false;
+  if (tool === 'create_file') return /^\/data\/(Documents|Music|Pictures|Videos)\/[^/\\\x00-\x1f]+$/.test(arg) && !arg.includes('..');
+  if (tool === 'add_event') return content.length > 0;
+  if (tool === 'set_volume' || tool === 'set_brightness') return /^[+-]?\d{1,3}$/.test(arg);
+  return false;
+}
 function weatherAnswer(q, lang, allowOnline) {
   return sharedWeatherAnswer(q, lang, { online: !!allowOnline, headers: WX_UA });
 }

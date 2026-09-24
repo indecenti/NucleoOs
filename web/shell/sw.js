@@ -3,7 +3,7 @@
 // Bump this on every shell change that must reach already-installed clients. The reason for each
 // roll goes in docs/shell-cache-log.md — NOT here: it used to be one 10.5 KB comment on this line,
 // half the whole service worker, re-shipped to every browser on every update check.
-const CACHE = 'nucleo-shell-v139';   // v139 — ANIMA web: live weather in the browser, app names, honest miss, article ≠ pronoun
+const CACHE = 'nucleo-shell-v140';   // v140 — ANIMA web: device actions via /api/anima/act when the device is busy
 // Per-version cache for app assets (/apps/<id>/...). Tied to the shell version so a deploy (which
 // bumps CACHE) drops it; the shell also flushes it on apps.changed (OTA app update) via postMessage.
 const APP_CACHE = CACHE + '-apps';
