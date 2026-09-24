@@ -289,7 +289,11 @@ export async function callOpenAIChat(fetchFn, cfg, { model, messages, tools, too
       throw new Error('service busy (HTTP ' + resp.status + ')');
     }
     const j = await resp.json().catch(() => null);
-    if (!resp.ok || !j || j.error) throw new Error((j && j.error && (j.error.message || j.error)) || ('HTTP ' + resp.status));
+    if (!resp.ok || !j || j.error) {   // keep status + code: the caller can tell a retired model from a bad key
+      const e = j && j.error, err = new Error((e && (e.message || e)) || ('HTTP ' + resp.status));
+      err.status = resp.status; err.code = (e && (e.code || e.type)) || '';
+      throw err;
+    }
     return (j.choices && j.choices[0] && j.choices[0].message) || { role: 'assistant', content: '' };
   }
   throw new Error('call failed');

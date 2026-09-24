@@ -1,20 +1,26 @@
 // ANIMA Local — WebAssembly entry point.
 //
-// Exposes the EXACT offline cascade (nucleo_anima_query) to JavaScript as a single
-// JSON-returning call. The network tier is stubbed (stub/anima_online_stub.c), so this
-// runs the pure offline cascade — L0 intents + L1 retrieval + HDC/KGE deduction +
-// facet/profile/learn — byte-identical to a Cardputer with Wi-Fi off, just on the
-// client's CPU instead of the MCU's. The knowledge pack is mounted at /sd before init.
+// Exposes the offline cascade (nucleo_anima_query) to JavaScript as a single JSON-returning call.
+// The engine is compiled DIRECTLY from firmware/components/nucleo_anima (see engine-src.mjs) with the
+// host harness's online stub, so this runs the pure offline cascade — L0 intents + L1 retrieval +
+// HDC/KGE deduction + facet/profile/learn — the same C as the Cardputer with Wi-Fi off and as
+// tools/anima-host's anima.exe, just on the client's CPU. The knowledge pack is mounted at /sd first.
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>     // setenv (PC-grade retrieval knob)
 #include <emscripten.h>
 #include "nucleo_anima.h"
 
-// Overflow channels filled by the cascade (see nucleo_anima.h). long_reply is online-only
-// (stubbed -> "" here); tool_content carries a composed file body for "compose THEN act".
-const char *nucleo_anima_long_reply(void);
-const char *nucleo_anima_tool_content(void);
+// Fingerprint of the sources this module was built from (engine-src.mjs engineHash()), injected by
+// build.ps1 through a generated -include header. parity.mjs compares it with the sources on disk.
+#ifndef ANIMA_LOCAL_BUILD_ID
+#define ANIMA_LOCAL_BUILD_ID "unstamped"
+#endif
+EMSCRIPTEN_KEEPALIVE
+const char *anima_build_id(void) { return ANIMA_LOCAL_BUILD_ID; }
+
+// Overflow channels (declared in nucleo_anima.h): long_reply is filled by the online tier only, so it
+// stays "" with the stub; tool_content carries a composed file body for "compose THEN act".
 
 static char s_json[32768];   // reused per call: offline replies are < 1 KB, content bounded
 
@@ -41,29 +47,49 @@ static void json_str(char *dst, int cap, int *pos, const char *s) {
     *pos = p;
 }
 
-// Initialize the cascade for `lang` ("it"/"en"). Call ONCE after the /sd pack is mounted.
-EMSCRIPTEN_KEEPALIVE
-int anima_init(const char *lang) {
-    // PC-GRADE RETRIEVAL — Browser mode runs on a real CPU+RAM, not the 18 KB MCU. Restore the FULL
-    // rerank pool the device shrank to 16 to cut SD reads (prefilter M 16->64): the reranker sees more
-    // candidates from the SAME adaptively-probed clusters, so recall rises while the gate still judges
+// The browser's PC-GRADE runtime knobs, applied by anima_init and reported by anima_knobs (one table,
+// so what parity.mjs replays on anima.exe is by construction what the browser runs). All are read by the
+// firmware's ANIMA_HOST hooks (this build sets -DANIMA_HOST), so they are pure runtime knobs.
+static const struct { const char *k, *v; int keep_if_set; } k_knobs[] = {
+    // Full rerank pool: the device shrank it to 16 to cut SD reads (prefilter M 16->64). The reranker sees
+    // more candidates from the SAME adaptively-probed clusters, so recall rises while the gate still judges
     // EXACT cosines. CERTIFIED 0 new fabrications on the full host gate (45/45; describe-stress fab 0,
     // cross-topic 103/103, halluc 0/441). We deliberately do NOT widen nprobe/keep — probing distant
     // clusters surfaced near-misses that fabricated (tested and rejected, to protect zero-hallucination).
-    // Read by the L1 tier's ANIMA_HOST hook (this build sets -DANIMA_HOST), so it's a pure runtime knob.
-    setenv("L1_PFM", "64", 1);
-    // PC-grade scalable knowledge: use the category-SHARDED AKB5 index when a manifest is mounted (the
-    // browser's local-only EXTENDED brain — thousands of grounded cards past the device's curated set).
-    // No manifest mounted -> no-op -> flat index (base build behaves as before). Recall is certified by
-    // apps/anima/local/akb5-recall-cert (new-knowledge answered + abstention holds).
-    setenv("ANIMA_AKB5", "1", 1);
-    // PC-grade AKB5 ROUTING — the device probes only the top-4 shards/query to bound SD reads. In the
-    // browser the shards live in RAM (MEMFS), so probing many more is ~free and FIXES routing recall once
-    // the corpus grows to dozens of shards (e.g. 25k+ people sub-sharded by domain): a person's home shard
-    // must be in the probed set or they're invisible. Searched shards still each apply the EXACT 0.85 gate,
-    // so wider routing adds RECALL, never fabrication. Overridable via ANIMA_AKB5_PROBE for A/B sweeps.
-    if (!getenv("ANIMA_AKB5_PROBE")) setenv("ANIMA_AKB5_PROBE", "24", 1);
+    { "L1_PFM", "64", 0 },
+    // Category-SHARDED AKB5 index when a manifest is mounted (the browser's local-only EXTENDED brain —
+    // thousands of grounded cards past the device's curated set). No manifest mounted -> no-op -> flat
+    // index. Recall is certified by apps/anima/local/akb5-recall-cert (new-knowledge answered + abstention).
+    { "ANIMA_AKB5", "1", 0 },
+    // AKB5 ROUTING: the device probes only the top-4 shards/query to bound SD reads. In the browser the
+    // shards live in RAM (MEMFS), so probing many more is ~free and FIXES routing recall once the corpus
+    // grows to dozens of shards (e.g. 25k+ people sub-sharded by domain): a person's home shard must be in
+    // the probed set or they're invisible. Searched shards still each apply the EXACT 0.85 gate, so wider
+    // routing adds RECALL, never fabrication. A prior anima_set_env wins (device-vs-PC A/B sweeps).
+    { "ANIMA_AKB5_PROBE", "24", 1 },
+};
+
+// Initialize the cascade for `lang` ("it"/"en"). Call ONCE after the /sd pack is mounted.
+EMSCRIPTEN_KEEPALIVE
+int anima_init(const char *lang) {
+    for (size_t i = 0; i < sizeof k_knobs / sizeof k_knobs[0]; i++)
+        if (!(k_knobs[i].keep_if_set && getenv(k_knobs[i].k))) setenv(k_knobs[i].k, k_knobs[i].v, 1);
     return (int)nucleo_anima_init(lang && lang[0] ? lang : "it");
+}
+
+// The knobs in effect, as "K=V\n" lines (current values, so an anima_set_env override shows up).
+EMSCRIPTEN_KEEPALIVE
+const char *anima_knobs(void) {
+    static char buf[256];
+    int p = 0; buf[0] = 0;
+    for (size_t i = 0; i < sizeof k_knobs / sizeof k_knobs[0]; i++) {
+        const char *v = getenv(k_knobs[i].k);
+        if (v && p < (int)sizeof buf) {
+            int n = snprintf(buf + p, sizeof buf - p, "%s=%s\n", k_knobs[i].k, v);
+            if (n > 0) p += n;
+        }
+    }
+    return buf;
 }
 
 // Set an env knob BEFORE anima_init (e.g. ANIMA_AKB5_PROBE) — lets the harness A/B device-vs-PC probe on
