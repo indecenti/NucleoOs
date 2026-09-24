@@ -14,6 +14,8 @@
 #include "nucleo_voice.h"
 #include "nucleo_board.h"
 #include "nucleo_fsprotect.h"   // /api/anima/act: a browser-decided create path must not touch system files
+#include "esp_cpu.h"                   // esp_cpu_get_sp: stack left at a call, for the inline memory tiers
+#include "freertos/idf_additions.h"    // pxTaskGetStackStart
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
 #include "nucleo_smtp.h"     // SMTP-over-TLS sender for /api/mail/send
@@ -1057,12 +1059,11 @@ static inline bool nucleo_tls_heap_ok(void)
 // 30 KB worker spawned per request and torn down right after, so the big stack exists only WHILE a query
 // runs, then returns to the heap (~12 KB recovered at idle). The caller already holds the spine lock
 // (nucleo_anima_try_lock), so at most ONE such worker is ever alive — never 2x30 KB at once.
-typedef struct { void (*fn)(void *); void *ctx; SemaphoreHandle_t done; unsigned stack_free; } anima_offthread_t;
+typedef struct { void (*fn)(void *); void *ctx; SemaphoreHandle_t done; } anima_offthread_t;
 static void anima_offthread_task(void *p)
 {
     anima_offthread_t *j = (anima_offthread_t *)p;
     j->fn(j->ctx);
-    j->stack_free = (unsigned)(uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t));   // before the give: j dies with the caller
     xSemaphoreGive(j->done);
     vTaskDelete(NULL);
 }
@@ -1071,16 +1072,11 @@ static void anima_offthread_task(void *p)
 // now) — the caller then answers a lean 503 instead of overflowing the small httpd stack. MUST be called
 // holding the spine lock so this is the sole ANIMA worker alive.
 #define ANIMA_WORKER_STACK 30720   // the full cascade (L1/AKB5/HDC + online TLS)
-// The personal-memory tiers only (nucleo_anima_query_memory): 5.4 KB worst case on xtensa from the
-// -fstack-usage call graph (tool_teach -> learn_put -> l1_encode), plus newlib/FATFS callees the graph
-// can't see. 10 KB keeps a third of headroom and still fits the ~13 KB block a fragmented heap leaves.
-// Its measured peak is logged per query ("anima lite: ... stack peak") to confirm this on hardware.
-#define ANIMA_LITE_STACK   10240
-static bool anima_run_offthread_sz(void (*fn)(void *), void *ctx, uint32_t stack, unsigned *peak)
+static bool anima_run_offthread(void (*fn)(void *), void *ctx)
 {
-    anima_offthread_t j = { fn, ctx, xSemaphoreCreateBinary(), 0 };
+    anima_offthread_t j = { fn, ctx, xSemaphoreCreateBinary() };
     if (!j.done) return false;
-    BaseType_t ok = xTaskCreate(anima_offthread_task, "anima_web", stack, &j, tskIDLE_PRIORITY + 2, NULL);
+    BaseType_t ok = xTaskCreate(anima_offthread_task, "anima_web", ANIMA_WORKER_STACK, &j, tskIDLE_PRIORITY + 2, NULL);
     if (ok != pdPASS && nucleo_anima_l1_heap_bytes() > 0) {
         // Retry ONLY when dropping the L1 index would actually free a block worth retrying for. In the Web
         // Client server-Solo (web OS connected) L1 is already unloaded, so the reclaim frees nothing and the
@@ -1092,7 +1088,7 @@ static bool anima_run_offthread_sz(void (*fn)(void *), void *ctx, uint32_t stack
         // running while we hold it, so the index IS idle: drop it directly.
         nucleo_anima_l1_unload();                  // free the offline index + hot-row cache...
         vTaskDelay(pdMS_TO_TICKS(120));            // ...let the idle task coalesce the freed block, then retry once
-        ok = xTaskCreate(anima_offthread_task, "anima_web", stack, &j, tskIDLE_PRIORITY + 2, NULL);
+        ok = xTaskCreate(anima_offthread_task, "anima_web", ANIMA_WORKER_STACK, &j, tskIDLE_PRIORITY + 2, NULL);
     }
     if (ok != pdPASS) {
         // NEVER silent: log why (heap can't carve 30 KB right now) so a stuck query is diagnosable over
@@ -1106,12 +1102,20 @@ static bool anima_run_offthread_sz(void (*fn)(void *), void *ctx, uint32_t stack
     }
     xSemaphoreTake(j.done, portMAX_DELAY);         // the cascade is self-bounding (internal TLS/query timeouts)
     vSemaphoreDelete(j.done);
-    if (peak) *peak = stack - j.stack_free;
     return true;
 }
-static bool anima_run_offthread(void (*fn)(void *), void *ctx)
+// The personal-memory tiers (nucleo_anima_query_memory) need no worker at all. Measured, not guessed: 5.4 KB
+// worst case on xtensa (tools/stack-depth.mjs: tool_teach -> learn_put -> l1_encode) plus the newlib/FATFS
+// callees the call graph can't see. So they run right on this httpd task (18 KB), which on the ADV has
+// ~11 KB left below anima_get's 4.8 KB frame — but only when the stack left AT THE CALL, read from the
+// stack pointer, covers ANIMA_LITE_NEED; else the caller answers busy. No heap: on the ADV the largest
+// free block inside a request is ~9.7 KB, too small for any worker (a 10 KB one never spawned there).
+#define ANIMA_LITE_NEED 9216
+static size_t anima_stack_left(void)
 {
-    return anima_run_offthread_sz(fn, ctx, ANIMA_WORKER_STACK, NULL);
+    uint8_t *base = pxTaskGetStackStart(NULL);           // lowest address: the stack grows down toward it
+    uint8_t *sp = (uint8_t *)esp_cpu_get_sp();
+    return (base && sp > base) ? (size_t)(sp - base) : 0;
 }
 // Give the WEB SERVER the RAM to LOAD the web OS: the static handler calls this (via nucleo_webfs_set_reclaim_cb)
 // when a client pulls a UI asset under low heap — drop the idle offline index (~31 KB, reloads from SD on the
@@ -1124,12 +1128,6 @@ static void anima_query_thunk(void *p)
 {
     anima_query_job_t *j = (anima_query_job_t *)p;
     j->out = nucleo_anima_query(j->q, j->lang);
-}
-typedef struct { const char *q; const char *lang; anima_result_t *out; int hit; } anima_memory_job_t;
-static void anima_memory_thunk(void *p)
-{
-    anima_memory_job_t *j = (anima_memory_job_t *)p;
-    j->hit = nucleo_anima_query_memory(j->q, j->lang, j->out);
 }
 typedef struct { const char *kind, *key, *asserted, *lang; char *ev; size_t evcap; anima_verify_t out; } anima_verify_job_t;
 static void anima_verify_thunk(void *p)
@@ -1361,14 +1359,18 @@ static esp_err_t anima_get(httpd_req_t *req)
     bool ran = anima_run_offthread(anima_query_thunk, &qj);
     if (!ran) {
         // The heap can't carve 30 KB right now (the ADV with the web OS on: largest block ~13 KB, so this
-        // used to answer "busy" to EVERYTHING). The personal-memory tiers need a few KB: run them on a small
-        // worker, so "mi chiamo…"/"ricorda che…" still land in the device's own memory. Anything else stays
-        // a lean 503 — the browser answers it with the same engine, and sends device actions to /api/anima/act.
-        anima_memory_job_t mj = { .q = q, .lang = lang, .out = &qj.out, .hit = 0 };
-        unsigned peak = 0;
-        ran = anima_run_offthread_sz(anima_memory_thunk, &mj, ANIMA_LITE_STACK, &peak) && mj.hit;
-        if (peak) ESP_LOGI(TAG, "anima lite: %s, stack peak %u/%u B", mj.hit ? "memory" : "not memory",
-                           peak, (unsigned)ANIMA_LITE_STACK);
+        // used to answer "busy" to EVERYTHING). The personal-memory tiers run right here instead (see
+        // anima_stack_left), so "mi chiamo…"/"ricorda che…" still land in the device's own memory. Anything
+        // else stays a lean 503 — the browser answers it with the same engine, and sends device actions to
+        // /api/anima/act.
+        size_t left = anima_stack_left();
+        if (left >= ANIMA_LITE_NEED) {
+            ran = nucleo_anima_query_memory(q, lang, &qj.out) != 0;
+            ESP_LOGI(TAG, "anima lite: %s, stack left %u B, httpd min %u B", ran ? "memory" : "not memory",
+                     (unsigned)left, (unsigned)(uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t)));
+        } else {
+            ESP_LOGW(TAG, "anima lite: skipped, stack left %u B < %u", (unsigned)left, (unsigned)ANIMA_LITE_NEED);
+        }
     }
     if (!ran) {
         // Neither fits (or not a memory utterance) -> restore the mode override + spine and 503.
