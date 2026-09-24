@@ -10,6 +10,7 @@ Roll it whenever a precached shell asset changes (JS/CSS/HTML/i18n) or the app r
 
 | Version | Change |
 |---|---|
+| `v140` | ANIMA web: when the Cardputer answers /api/anima "busy" (a heap too fragmented for the cascade worker — the ADV with the web OS on), device actions the browser engine decided (file, reminder, volume, brightness) run through POST /api/anima/act instead of ending "not done"; a proposed reminder is never also queued for replay. |
 | `v139` | roll APP_CACHE for the ANIMA web fixes — the browser answers the weather itself (Open-Meteo, shared local/weather.js), apps answer to their own name ("apri notepad"), a total miss says "I don't know" instead of blaming an unreachable device, and the rebuilt WASM engine (article ≠ pronoun, "terminale" ≠ close). /apps is cache-first, so without the roll clients keep the old engine. |
 | `v138` | ANIMA: streaming + real Stop, one mode (anima-mode.js, precached), per-client sid, personal memory on the device, pack delta sync. |
 | `v137` | update-check.js writes the learned release tag to SD (`/system/config/update.json`) so the native firmware can show the boot update dialog without any device-side HTTPS (the chip can't do the TLS handshake — web→SD→native bridge). |

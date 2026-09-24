@@ -4360,6 +4360,47 @@ done: {
     }
 }
 
+// LEAN MEMORY PATH: the personal memory tiers only (profile, teach, user-taught recall), with the
+// cascade's own functions and its own session bookkeeping, in a few KB of stack. The full cascade walks
+// L1/AKB5/HDC and needs a ~30 KB worker stack that a fragmented heap can't always carve (the ADV with
+// the web OS connected: largest block ~13 KB), so /api/anima answered "busy" to everything, including
+// "mi chiamo Marco" and "ricorda che...": writes only the device can keep, since its profile.tsv /
+// user.tsv is the one personal memory. Measured worst case on xtensa (-fstack-usage call graph):
+// tool_teach 4.8 KB, learn_recall 4.3 KB, tool_profile 1.7 KB. Caller holds the spine lock.
+// Returns 1 with *out filled, or 0 when the input is not a memory utterance (the caller says "busy").
+int nucleo_anima_query_memory(const char *input, const char *lang, anima_result_t *out)
+{
+    if (!s_ready || !input || !input[0] || !out) return 0;
+    bool en = lang && (lang[0] == 'e' || lang[0] == 'E');
+    char tok[A_MAX_TOKENS][A_TOK_LEN];
+    int ntok = a_tokenize(input, tok);
+    if (ntok == 0) return 0;
+    anima_result_t *r = out;
+    memset(r, 0, sizeof *r);
+    trace_reset();
+    content_reset();
+    int hit = tool_profile(input, tok, ntok, en, r) || tool_teach(input, tok, ntok, en, r);
+    if (!hit && nucleo_anima_learn_recall(input, en, r)) {
+        mem_update(r);
+        snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", input);
+        hit = 1;
+    }
+    if (!hit) { memset(r, 0, sizeof *r); return 0; }
+    // The epilogue's essentials, so the turn is part of the conversation like any other.
+    s_session.turn++;
+    s_session.dirty = true;
+    const char *domain = a_domain(r);
+    snprintf(r->trace, sizeof(r->trace), "L0 %s | %d%%", domain, r->confidence);
+    ring_push(r->action != ANIMA_ACT_NONE && !r->awaiting ? input : "", r->intent, domain, r->arg);
+    snprintf(s_session.last.reply, sizeof(s_session.last.reply), "%s", r->reply);
+    s_session.last.tier = r->tier; s_session.last.conf = r->confidence;
+    snprintf(s_session.last.intent, sizeof(s_session.last.intent), "%s", r->intent);
+    if (r->tier != ANIMA_TIER_NONE) chat_push(input, r->reply);
+    session_save();
+    diag_count(r);
+    return 1;
+}
+
 // ---- cross-substrate grounded verification (ANIMA Forge) -------------------------------------
 // Normalized substring test: lowercase ASCII, drop punctuation, fold accented bytes to spaces, then
 // substring-match. Enough to tell "Parigi" present in "La capitale è Parigi." from a wrong "Lione".

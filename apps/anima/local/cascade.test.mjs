@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const mod = join(here, '..', 'www', 'local', 'cascade.js');
-const { answered, resolveOffline, classifyCommand, deviceToolOutcome, commandHint, memoryHint, DEVICE_TOOLS } = await import(pathToFileURL(mod).href);
+const { answered, resolveOffline, classifyCommand, deviceToolOutcome, commandHint, memoryHint, DEVICE_TOOLS, actRequest } = await import(pathToFileURL(mod).href);
 
 // A runner factory that records call order into `log` and returns a fixed result.
 const rec = (log, name, result) => async () => { log.push(name); return result; };
@@ -238,4 +238,19 @@ test('memoryHint(): teach / profile / recall go to the device (the one owner of 
   for (const q of profile) assert.equal(memoryHint(q), 'profile', q);
   for (const q of recall) assert.equal(memoryHint(q), 'recall', q);
   for (const q of none) assert.equal(memoryHint(q), null, q);
+});
+
+test('actRequest(): a device action the browser decided, for /api/anima/act', () => {
+  const vol = actRequest({ local: true, action: 'tool', tool: 'set_volume', arg: '30', reply: 'Volume al 30%.' }, 'it');
+  assert.deepEqual(vol, { tool: 'set_volume', arg: '30', content: '', reply: 'Volume al 30%.', lang: 'it' });
+  const note = actRequest({ local: true, action: 'tool', intent: 'create_file', arg: '/data/Documents/spesa.txt', content: 'latte, pane' }, 'en');
+  assert.equal(note.tool, 'create_file', 'the tool falls back to the intent, like classifyCommand');
+  assert.equal(note.content, 'latte, pane', 'the composed payload travels with it');
+  assert.equal(note.lang, 'en');
+  assert.equal(actRequest({ action: 'tool', tool: 'add_event', content: 'off=1;time=16:00;text=dentista' }, 'es').lang, 'it', 'the device speaks it/en');
+  // not a device action: nothing to carry out on the Cardputer
+  assert.equal(actRequest({ action: 'launch', arg: 'notepad' }, 'it'), null, 'a launch is the browser\'s own hand-off');
+  assert.equal(actRequest({ action: 'tool', tool: 'open_file', arg: '/data/x.txt' }, 'it'), null);
+  assert.equal(actRequest({ action: 'answer', reply: 'Parigi' }, 'it'), null);
+  assert.equal(actRequest(null, 'it'), null);
 });

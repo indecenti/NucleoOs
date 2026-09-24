@@ -296,6 +296,14 @@ int main(int argc, char **argv) {
         if (!strcmp(line, "/it"))    { lang = "it"; nucleo_anima_init(lang); continue; }
         if (!strcmp(line, "/reset")) { nucleo_anima_reset_session(); fprintf(stderr, "(sessione azzerata)\n"); continue; }
         if (!strncmp(line, "/learnvec ", 10)) { fprintf(stderr, "(learnvec %s: %d vectors)\n", line + 10, hm_learnvec(line + 10)); continue; }
+        // "/memory <q>": the lean personal-memory path (nucleo_anima_query_memory) the web server falls back
+        // to when its heap can't carve the full cascade's worker. Prints like a query, or "(memory: not mine)".
+        if (!strncmp(line, "/memory ", 8)) {
+            anima_result_t mr;
+            if (nucleo_anima_query_memory(line + 8, lang, &mr)) print_result(line + 8, &mr);
+            else { printf("Q: %s\n   (memory: not mine)\n", line + 8); fflush(stdout); }
+            continue;
+        }
         anima_result_t r = nucleo_anima_query(line, lang);
         print_result(line, &r);
     }

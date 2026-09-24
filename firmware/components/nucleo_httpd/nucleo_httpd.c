@@ -13,6 +13,7 @@
 #include "nucleo_auth.h"
 #include "nucleo_voice.h"
 #include "nucleo_board.h"
+#include "nucleo_fsprotect.h"   // /api/anima/act: a browser-decided create path must not touch system files
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
 #include "nucleo_smtp.h"     // SMTP-over-TLS sender for /api/mail/send
@@ -1056,11 +1057,12 @@ static inline bool nucleo_tls_heap_ok(void)
 // 30 KB worker spawned per request and torn down right after, so the big stack exists only WHILE a query
 // runs, then returns to the heap (~12 KB recovered at idle). The caller already holds the spine lock
 // (nucleo_anima_try_lock), so at most ONE such worker is ever alive — never 2x30 KB at once.
-typedef struct { void (*fn)(void *); void *ctx; SemaphoreHandle_t done; } anima_offthread_t;
+typedef struct { void (*fn)(void *); void *ctx; SemaphoreHandle_t done; unsigned stack_free; } anima_offthread_t;
 static void anima_offthread_task(void *p)
 {
     anima_offthread_t *j = (anima_offthread_t *)p;
     j->fn(j->ctx);
+    j->stack_free = (unsigned)(uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t));   // before the give: j dies with the caller
     xSemaphoreGive(j->done);
     vTaskDelete(NULL);
 }
@@ -1068,11 +1070,17 @@ static void anima_offthread_task(void *p)
 // stack can't be allocated even after dropping the idle L1 index and retrying once (heap too tight right
 // now) — the caller then answers a lean 503 instead of overflowing the small httpd stack. MUST be called
 // holding the spine lock so this is the sole ANIMA worker alive.
-static bool anima_run_offthread(void (*fn)(void *), void *ctx)
+#define ANIMA_WORKER_STACK 30720   // the full cascade (L1/AKB5/HDC + online TLS)
+// The personal-memory tiers only (nucleo_anima_query_memory): 5.4 KB worst case on xtensa from the
+// -fstack-usage call graph (tool_teach -> learn_put -> l1_encode), plus newlib/FATFS callees the graph
+// can't see. 10 KB keeps a third of headroom and still fits the ~13 KB block a fragmented heap leaves.
+// Its measured peak is logged per query ("anima lite: ... stack peak") to confirm this on hardware.
+#define ANIMA_LITE_STACK   10240
+static bool anima_run_offthread_sz(void (*fn)(void *), void *ctx, uint32_t stack, unsigned *peak)
 {
-    anima_offthread_t j = { fn, ctx, xSemaphoreCreateBinary() };
+    anima_offthread_t j = { fn, ctx, xSemaphoreCreateBinary(), 0 };
     if (!j.done) return false;
-    BaseType_t ok = xTaskCreate(anima_offthread_task, "anima_web", 30720, &j, tskIDLE_PRIORITY + 2, NULL);
+    BaseType_t ok = xTaskCreate(anima_offthread_task, "anima_web", stack, &j, tskIDLE_PRIORITY + 2, NULL);
     if (ok != pdPASS && nucleo_anima_l1_heap_bytes() > 0) {
         // Retry ONLY when dropping the L1 index would actually free a block worth retrying for. In the Web
         // Client server-Solo (web OS connected) L1 is already unloaded, so the reclaim frees nothing and the
@@ -1084,7 +1092,7 @@ static bool anima_run_offthread(void (*fn)(void *), void *ctx)
         // running while we hold it, so the index IS idle: drop it directly.
         nucleo_anima_l1_unload();                  // free the offline index + hot-row cache...
         vTaskDelay(pdMS_TO_TICKS(120));            // ...let the idle task coalesce the freed block, then retry once
-        ok = xTaskCreate(anima_offthread_task, "anima_web", 30720, &j, tskIDLE_PRIORITY + 2, NULL);
+        ok = xTaskCreate(anima_offthread_task, "anima_web", stack, &j, tskIDLE_PRIORITY + 2, NULL);
     }
     if (ok != pdPASS) {
         // NEVER silent: log why (heap can't carve 30 KB right now) so a stuck query is diagnosable over
@@ -1098,7 +1106,12 @@ static bool anima_run_offthread(void (*fn)(void *), void *ctx)
     }
     xSemaphoreTake(j.done, portMAX_DELAY);         // the cascade is self-bounding (internal TLS/query timeouts)
     vSemaphoreDelete(j.done);
+    if (peak) *peak = stack - j.stack_free;
     return true;
+}
+static bool anima_run_offthread(void (*fn)(void *), void *ctx)
+{
+    return anima_run_offthread_sz(fn, ctx, ANIMA_WORKER_STACK, NULL);
 }
 // Give the WEB SERVER the RAM to LOAD the web OS: the static handler calls this (via nucleo_webfs_set_reclaim_cb)
 // when a client pulls a UI asset under low heap — drop the idle offline index (~31 KB, reloads from SD on the
@@ -1111,6 +1124,12 @@ static void anima_query_thunk(void *p)
 {
     anima_query_job_t *j = (anima_query_job_t *)p;
     j->out = nucleo_anima_query(j->q, j->lang);
+}
+typedef struct { const char *q; const char *lang; anima_result_t *out; int hit; } anima_memory_job_t;
+static void anima_memory_thunk(void *p)
+{
+    anima_memory_job_t *j = (anima_memory_job_t *)p;
+    j->hit = nucleo_anima_query_memory(j->q, j->lang, j->out);
 }
 typedef struct { const char *kind, *key, *asserted, *lang; char *ev; size_t evcap; anima_verify_t out; } anima_verify_job_t;
 static void anima_verify_thunk(void *p)
@@ -1152,6 +1171,94 @@ extern void nucleo_audio_set_volume(int pct);
 extern int  nucleo_app_brightness(void);
 extern void nucleo_app_set_brightness(int pct);
 extern void nucleo_app_persist_prefs(void);
+
+// Carry out a side-effecting ANIMA tool on the device. ONE executor for both deciders: GET /api/anima (the
+// device cascade decided) and POST /api/anima/act (the browser's copy of the same engine decided, when this
+// heap can't carve the cascade's worker). Side-effecting tools require a paired session (queries stay
+// public; only the write is gated). Returns -1 = not an executable tool, else 0/1 -> "done" in the JSON,
+// so the web client can tell "carried out" from "proposed/refused" instead of guessing from the reply.
+// reply[] is rewritten on refusal/failure and for volume/brightness (what actually applied); tool_path[]
+// is set for a created file. Runs on the httpd task: shallow, no cascade.
+static int anima_exec_tool(httpd_req_t *req, const char *intent, const char *arg, const char *content, bool en,
+                           char *reply, size_t rcap, char *tool_path, size_t pcap)
+{
+    int tool_done = -1;
+    if (strcmp(intent, "create_file") == 0 && arg[0]) {
+        const char *bn = strrchr(arg, '/'); bn = bn ? bn + 1 : arg;
+        if (!nucleo_auth_request_ok(req)) {
+            snprintf(reply, rcap, en ? "Pairing required to create files (enter the PIN)."
+                                              : "Per creare file devo essere associato (inserisci il PIN).");
+            nucleo_anima_observe("create_file", false);   // blocked -> close the loop (no stale state)
+            tool_done = 0;
+        } else {
+            char path[128]; snprintf(path, sizeof(path), NUCLEO_SD_MOUNT "%s", arg);  // /data/<Folder>/<name>
+            char dir[128]; snprintf(dir, sizeof(dir), "%s", path);                       // ensure the folder exists
+            char *slash = strrchr(dir, '/'); if (slash && slash != dir) { *slash = 0; mkdir(dir, 0775); }  // idempotent
+            FILE *ex = fopen(path, "rb");
+            if (ex) {                                  // never silently overwrite (data loss)
+                fclose(ex);
+                snprintf(reply, rcap, en ? "%s already exists — not overwritten."
+                                                  : "%s esiste gia: non lo sovrascrivo.", bn);
+                nucleo_anima_note_file(arg);         // it exists -> follow-up "aprilo" can open it
+                nucleo_anima_observe("create_file", true);
+                tool_done = 0;                         // nothing written
+            } else {
+                FILE *cf = fopen(path, "wb");
+                if (cf) { const char *body = content;   // compose-then-act payload ("" -> empty file)
+                          if (body && body[0]) fwrite(body, 1, strlen(body), cf);
+                          fclose(cf); snprintf(tool_path, pcap, "%s", arg);
+                          nucleo_anima_note_file(arg);     // remember only a real, created file
+                          nucleo_anima_observe("create_file", true);
+                          nucleo_event_publish("fs.changed", "{\"op\":\"create\",\"by\":\"anima\"}");  // File Commander refresh
+                          tool_done = 1; }
+                else    { snprintf(reply, rcap, en ? "Can't create %s." : "Non riesco a creare %s.", bn);
+                          nucleo_anima_observe("create_file", false); tool_done = 0; }
+            }
+        }
+    }
+    // add_event -> append the reminder to the OS calendar (same pairing gate as create_file).
+    else if (strcmp(intent, "add_event") == 0) {
+        if (!nucleo_auth_request_ok(req)) {
+            snprintf(reply, rcap, en ? "Pairing required to add events (enter the PIN)."
+                                              : "Per aggiungere eventi devo essere associato (inserisci il PIN).");
+            nucleo_anima_observe("add_event", false);
+            tool_done = 0;
+        } else if (anima_apply_event(content, en, reply, rcap)) {
+            nucleo_anima_observe("add_event", true);
+            tool_done = 1;
+        } else {
+            snprintf(reply, rcap, en ? "I couldn't add the event." : "Non sono riuscito ad aggiungere l'evento.");
+            nucleo_anima_observe("add_event", false);
+            tool_done = 0;
+        }
+    }
+    // set_volume / set_brightness -> apply them here too, exactly like the native executor (app_anima.cpp).
+    // The web used to get "Imposto il volume al 50%" back for a change that never happened. arg is "<pct>"
+    // (absolute) or "+N"/"-N" (relative); same pairing gate as the other side-effecting tools.
+    else if (strcmp(intent, "set_volume") == 0 || strcmp(intent, "set_brightness") == 0) {
+        bool vol = strcmp(intent, "set_volume") == 0;
+        if (!nucleo_auth_request_ok(req)) {
+            snprintf(reply, rcap, en ? "Pairing required to change settings (enter the PIN)."
+                                              : "Per cambiare le impostazioni devo essere associato (inserisci il PIN).");
+            nucleo_anima_observe(intent, false);
+            tool_done = 0;
+        } else {
+            int cur  = vol ? nucleo_audio_volume() : nucleo_app_brightness();
+            int want = (arg[0] == '+' || arg[0] == '-') ? cur + atoi(arg) : atoi(arg);
+            if (want < 0) want = 0;
+            if (want > 100) want = 100;
+            if (vol) nucleo_audio_set_volume(want); else nucleo_app_set_brightness(want);
+            nucleo_app_persist_prefs();   // a deliberate "set volume/brightness" survives a reboot (as on the device)
+            if (!vol) want = nucleo_app_brightness();   // the setter floors the backlight at 10%: report what applied
+            snprintf(reply, rcap, en ? (vol ? "Volume %d%%." : "Brightness %d%%.")
+                                              : (vol ? "Volume al %d%%." : "Luminosita al %d%%."), want);
+            nucleo_anima_observe(intent, true);
+            tool_done = 1;
+        }
+    }
+
+    return tool_done;
+}
 
 static esp_err_t anima_get(httpd_req_t *req)
 {
@@ -1251,8 +1358,20 @@ static esp_err_t anima_get(httpd_req_t *req)
 
     // Run the cascade on a transient 30 KB worker (NOT in this lean httpd task — see anima_run_offthread).
     anima_query_job_t qj = { .q = q, .lang = lang };
-    if (!anima_run_offthread(anima_query_thunk, &qj)) {
-        // Heap too fragmented to spawn the worker right now -> restore the mode override + spine and 503.
+    bool ran = anima_run_offthread(anima_query_thunk, &qj);
+    if (!ran) {
+        // The heap can't carve 30 KB right now (the ADV with the web OS on: largest block ~13 KB, so this
+        // used to answer "busy" to EVERYTHING). The personal-memory tiers need a few KB: run them on a small
+        // worker, so "mi chiamo…"/"ricorda che…" still land in the device's own memory. Anything else stays
+        // a lean 503 — the browser answers it with the same engine, and sends device actions to /api/anima/act.
+        anima_memory_job_t mj = { .q = q, .lang = lang, .out = &qj.out, .hit = 0 };
+        unsigned peak = 0;
+        ran = anima_run_offthread_sz(anima_memory_thunk, &mj, ANIMA_LITE_STACK, &peak) && mj.hit;
+        if (peak) ESP_LOGI(TAG, "anima lite: %s, stack peak %u/%u B", mj.hit ? "memory" : "not memory",
+                           peak, (unsigned)ANIMA_LITE_STACK);
+    }
+    if (!ran) {
+        // Neither fits (or not a memory utterance) -> restore the mode override + spine and 503.
         if (mode_ov) {
             bool want_online = (mode_ov != 1), want_only = (mode_ov == 3);
             if (nucleo_anima_online_enabled() == want_online && nucleo_anima_online_only_enabled() == want_only) {
@@ -1392,86 +1511,11 @@ static esp_err_t anima_get(httpd_req_t *req)
         snprintf(reply, sizeof(reply), "%s", r.reply);
     }
 
-    // Tool execution (function calling). Side-effecting tools require a paired session
-    // (queries stay public; only the write is gated). create_file -> empty .txt on the SD.
-    // tool_done: -1 = not an executed tool; else 0/1 -> "done" in the JSON, so the web client can tell
-    // "carried out" from "proposed/refused" instead of guessing from the reply text.
+    // Tool execution (function calling): the cascade decided, the device carries it out (anima_exec_tool).
     char tool_path[96] = "";
-    int tool_done = -1;
-    if (r.action == ANIMA_ACT_TOOL && strcmp(r.intent, "create_file") == 0 && r.arg[0]) {
-        const char *bn = strrchr(r.arg, '/'); bn = bn ? bn + 1 : r.arg;
-        if (!nucleo_auth_request_ok(req)) {
-            snprintf(reply, sizeof(reply), en ? "Pairing required to create files (enter the PIN)."
-                                              : "Per creare file devo essere associato (inserisci il PIN).");
-            nucleo_anima_observe("create_file", false);   // blocked -> close the loop (no stale state)
-            tool_done = 0;
-        } else {
-            char path[128]; snprintf(path, sizeof(path), NUCLEO_SD_MOUNT "%s", r.arg);  // /data/<Folder>/<name>
-            char dir[128]; snprintf(dir, sizeof(dir), "%s", path);                       // ensure the folder exists
-            char *slash = strrchr(dir, '/'); if (slash && slash != dir) { *slash = 0; mkdir(dir, 0775); }  // idempotent
-            FILE *ex = fopen(path, "rb");
-            if (ex) {                                  // never silently overwrite (data loss)
-                fclose(ex);
-                snprintf(reply, sizeof(reply), en ? "%s already exists — not overwritten."
-                                                  : "%s esiste gia: non lo sovrascrivo.", bn);
-                nucleo_anima_note_file(r.arg);         // it exists -> follow-up "aprilo" can open it
-                nucleo_anima_observe("create_file", true);
-                tool_done = 0;                         // nothing written
-            } else {
-                FILE *cf = fopen(path, "wb");
-                if (cf) { const char *body = nucleo_anima_tool_content();   // compose-then-act payload ("" -> empty file)
-                          if (body && body[0]) fwrite(body, 1, strlen(body), cf);
-                          fclose(cf); snprintf(tool_path, sizeof(tool_path), "%s", r.arg);
-                          nucleo_anima_note_file(r.arg);     // remember only a real, created file
-                          nucleo_anima_observe("create_file", true);
-                          nucleo_event_publish("fs.changed", "{\"op\":\"create\",\"by\":\"anima\"}");  // File Commander refresh
-                          tool_done = 1; }
-                else    { snprintf(reply, sizeof(reply), en ? "Can't create %s." : "Non riesco a creare %s.", bn);
-                          nucleo_anima_observe("create_file", false); tool_done = 0; }
-            }
-        }
-    }
-    // add_event -> append the reminder to the OS calendar (same pairing gate as create_file).
-    else if (r.action == ANIMA_ACT_TOOL && strcmp(r.intent, "add_event") == 0) {
-        if (!nucleo_auth_request_ok(req)) {
-            snprintf(reply, sizeof(reply), en ? "Pairing required to add events (enter the PIN)."
-                                              : "Per aggiungere eventi devo essere associato (inserisci il PIN).");
-            nucleo_anima_observe("add_event", false);
-            tool_done = 0;
-        } else if (anima_apply_event(nucleo_anima_tool_content(), en, reply, sizeof(reply))) {
-            nucleo_anima_observe("add_event", true);
-            tool_done = 1;
-        } else {
-            snprintf(reply, sizeof(reply), en ? "I couldn't add the event." : "Non sono riuscito ad aggiungere l'evento.");
-            nucleo_anima_observe("add_event", false);
-            tool_done = 0;
-        }
-    }
-    // set_volume / set_brightness -> apply them here too, exactly like the native executor (app_anima.cpp).
-    // The web used to get "Imposto il volume al 50%" back for a change that never happened. arg is "<pct>"
-    // (absolute) or "+N"/"-N" (relative); same pairing gate as the other side-effecting tools.
-    else if (r.action == ANIMA_ACT_TOOL &&
-             (strcmp(r.intent, "set_volume") == 0 || strcmp(r.intent, "set_brightness") == 0)) {
-        bool vol = strcmp(r.intent, "set_volume") == 0;
-        if (!nucleo_auth_request_ok(req)) {
-            snprintf(reply, sizeof(reply), en ? "Pairing required to change settings (enter the PIN)."
-                                              : "Per cambiare le impostazioni devo essere associato (inserisci il PIN).");
-            nucleo_anima_observe(r.intent, false);
-            tool_done = 0;
-        } else {
-            int cur  = vol ? nucleo_audio_volume() : nucleo_app_brightness();
-            int want = (r.arg[0] == '+' || r.arg[0] == '-') ? cur + atoi(r.arg) : atoi(r.arg);
-            if (want < 0) want = 0;
-            if (want > 100) want = 100;
-            if (vol) nucleo_audio_set_volume(want); else nucleo_app_set_brightness(want);
-            nucleo_app_persist_prefs();   // a deliberate "set volume/brightness" survives a reboot (as on the device)
-            if (!vol) want = nucleo_app_brightness();   // the setter floors the backlight at 10%: report what applied
-            snprintf(reply, sizeof(reply), en ? (vol ? "Volume %d%%." : "Brightness %d%%.")
-                                              : (vol ? "Volume al %d%%." : "Luminosita al %d%%."), want);
-            nucleo_anima_observe(r.intent, true);
-            tool_done = 1;
-        }
-    }
+    int tool_done = r.action == ANIMA_ACT_TOOL
+        ? anima_exec_tool(req, r.intent, r.arg, nucleo_anima_tool_content(), en, reply, sizeof(reply), tool_path, sizeof(tool_path))
+        : -1;
 
     const char *tier = r.tier == ANIMA_TIER_COMMAND ? "command" :
                        r.tier == ANIMA_TIER_FACT ? "fact" :
@@ -1539,6 +1583,86 @@ static esp_err_t anima_get(httpd_req_t *req)
              (unsigned)(uxTaskGetStackHighWaterMark(NULL) * sizeof(StackType_t)));
 #endif
     free(qbuf);   // after the OUT snapshot, so the per-query delta stays a clean leak signal
+    return ESP_OK;
+}
+
+// POST /api/anima/act {"tool","arg","content","reply","lang"} -> carry out a device action the BROWSER's
+// engine decided. The web app runs the very same cascade in WASM (parity-certified), so when this heap can't
+// carve the 30 KB worker (/api/anima answers busy) the decision is already made: only the device can make it
+// HAPPEN. No cascade here: the same executor as /api/anima, on this task. Every field is client-supplied, so
+// it is validated as strictly as the cascade would have produced it: one of the four device tools, a create
+// path of the exact shape the engine emits (/data/<Documents|Music|Pictures|Videos>/<name>), a bounded
+// payload, a numeric volume/brightness. Paired only, like every write.
+static bool anima_act_path_ok(const char *arg)
+{
+    static const char *const dirs[] = { "Documents", "Music", "Pictures", "Videos", NULL };
+    if (strncmp(arg, "/data/", 6) != 0 || strstr(arg, "..") || strchr(arg, '\\')) return false;
+    const char *d = arg + 6, *sl = strchr(d, '/');
+    if (!sl || !sl[1] || strchr(sl + 1, '/')) return false;          // exactly /data/<dir>/<name>
+    bool known = false;
+    for (int i = 0; dirs[i]; i++) if ((size_t)(sl - d) == strlen(dirs[i]) && !strncmp(d, dirs[i], (size_t)(sl - d))) known = true;
+    if (!known) return false;
+    for (const unsigned char *c = (const unsigned char *)sl + 1; *c; c++) if (*c < 0x20) return false;
+    char abs[128]; snprintf(abs, sizeof abs, NUCLEO_SD_MOUNT "%s", arg);
+    return !nucleo_fs_is_protected(abs);
+}
+static bool anima_act_pct_ok(const char *a)
+{
+    if (*a == '+' || *a == '-') a++;
+    int n = 0; for (; *a; a++, n++) if (*a < '0' || *a > '9') return false;
+    return n >= 1 && n <= 3;
+}
+static esp_err_t anima_act_post(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    int blen = req->content_len;
+    if (blen <= 0 || blen > 1024) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body"); return ESP_FAIL; }
+    char *buf = malloc(blen + 1);
+    if (!buf) return anima_busy_503(req);
+    int got = 0;
+    while (got < blen) { int n = httpd_req_recv(req, buf + got, blen - got); if (n <= 0) break; got += n; }
+    buf[got] = 0;
+    cJSON *in = got == blen ? cJSON_Parse(buf) : NULL;
+    free(buf);
+    const cJSON *jt = in ? cJSON_GetObjectItem(in, "tool") : NULL, *ja = in ? cJSON_GetObjectItem(in, "arg") : NULL;
+    const cJSON *jc = in ? cJSON_GetObjectItem(in, "content") : NULL, *jr = in ? cJSON_GetObjectItem(in, "reply") : NULL;
+    const cJSON *jl = in ? cJSON_GetObjectItem(in, "lang") : NULL;
+    const char *tool = cJSON_IsString(jt) ? jt->valuestring : "", *arg = cJSON_IsString(ja) ? ja->valuestring : "";
+    const char *content = cJSON_IsString(jc) ? jc->valuestring : "";
+    bool en = cJSON_IsString(jl) && jl->valuestring[0] == 'e';
+    bool ok = strlen(arg) < 64 && strlen(content) < 200;           // the engine's own arg[64] / tool content caps
+    if (ok && !strcmp(tool, "create_file"))      ok = anima_act_path_ok(arg);
+    else if (ok && !strcmp(tool, "add_event"))   ok = content[0] != 0;
+    else if (ok && (!strcmp(tool, "set_volume") || !strcmp(tool, "set_brightness"))) ok = anima_act_pct_ok(arg);
+    else ok = false;
+    if (!ok) { if (in) cJSON_Delete(in); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "tool"); return ESP_FAIL; }
+    // The executors also note the outcome in the ANIMA session (last file, observe): same spine as a query.
+    if (!nucleo_anima_try_lock()) { cJSON_Delete(in); return anima_busy_503(req); }
+    char reply[256];
+    snprintf(reply, sizeof reply, "%s", cJSON_IsString(jr) && jr->valuestring[0] ? jr->valuestring : (en ? "Done." : "Fatto."));
+    char tool_path[96] = "";
+    int done = anima_exec_tool(req, tool, arg, content, en, reply, sizeof reply, tool_path, sizeof tool_path);
+    nucleo_anima_unlock();
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "tier", "command");
+    cJSON_AddStringToObject(root, "action", "tool");
+    cJSON_AddStringToObject(root, "intent", tool);
+    cJSON_AddStringToObject(root, "tool", tool);
+    cJSON_AddStringToObject(root, "arg", arg);
+    cJSON_AddStringToObject(root, "reply", reply);
+    if (tool_path[0]) cJSON_AddStringToObject(root, "path", tool_path);
+    cJSON_AddBoolToObject(root, "done", done == 1);
+    cJSON_AddNumberToObject(root, "confidence", 95);
+    cJSON_AddStringToObject(root, "domain", "tool");
+    cJSON_AddStringToObject(root, "state", "tool");
+    cJSON_AddStringToObject(root, "trace", "L0 tool | device");
+    cJSON_Delete(in);
+    char *out = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!out) return anima_busy_503(req);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, out);
+    cJSON_free(out);
     return ESP_OK;
 }
 
@@ -2470,6 +2594,7 @@ esp_err_t nucleo_httpd_start(void)
     httpd_uri_t anima_verify = { .uri = "/api/anima/verify", .method = HTTP_GET, .handler = anima_verify_get };
     httpd_uri_t anima_caps = { .uri = "/api/anima/caps", .method = HTTP_GET, .handler = anima_caps_get };  // teacher provider/model (no key)
     httpd_uri_t anima_l1 = { .uri = "/api/anima/l1", .method = HTTP_POST, .handler = anima_l1_post };      // offline L1 brain policy
+    httpd_uri_t anima_act = { .uri = "/api/anima/act", .method = HTTP_POST, .handler = anima_act_post };   // run a browser-decided device action
     httpd_uri_t tts_get  = { .uri = "/api/tts", .method = HTTP_GET,  .handler = tts_handler };             // voce on-device: stato
     httpd_uri_t tts_post = { .uri = "/api/tts", .method = HTTP_POST, .handler = tts_handler };             // voce on-device: set/test
     httpd_uri_t mail_presets = { .uri = "/api/mail/presets",  .method = HTTP_GET,  .handler = mail_presets_get };
@@ -2508,6 +2633,7 @@ esp_err_t nucleo_httpd_start(void)
     httpd_register_uri_handler(server, &anima_verify);   // ANIMA Forge cross-substrate grounded verify
     httpd_register_uri_handler(server, &anima_caps);     // /api/anima/caps (teacher provider/model, no key)
     httpd_register_uri_handler(server, &anima_l1);        // /api/anima/l1 (offline L1 brain policy)
+    httpd_register_uri_handler(server, &anima_act);       // /api/anima/act (device action the browser engine decided)
     httpd_register_uri_handler(server, &tts_get);         // /api/tts (voce on-device)
     httpd_register_uri_handler(server, &tts_post);
     httpd_register_uri_handler(server, &mail_presets);   // /api/mail/presets (provider presets)

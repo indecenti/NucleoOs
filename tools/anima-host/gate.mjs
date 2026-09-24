@@ -334,6 +334,11 @@ const gates = [
     // the offline user-teach tier (nucleo_anima_learn.c): teach a fact -> recall it by paraphrase offline
     // (IT+EN), while same-shape-different-subject and volatile statements abstain. 0 misattributions.
     ok: (code) => code === 0, summary: (o) => (o.match(/\[teach-check\][^\n]*/) || [lastLine(o)])[0] },
+  { name: 'memory lite path', cmd: 'node', args: ['tools/anima-host/memory-lite-check.mjs'],
+    // nucleo_anima_query_memory: what /api/anima runs on a 10 KB worker when the heap can't carve the full
+    // cascade's 30 KB one (the ADV with the web OS on). Same answers as the full cascade for profile/teach/
+    // recall (IT+EN), and it claims nothing else. Writes a temporary profile/user store and restores it.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[memory-lite\][^\n]*/) || [lastLine(o)])[0] },
   { name: 'learned-card recall', cmd: 'node', args: ['tools/anima-host/recall-check.mjs'],
     // the network-free recall of cards the online tier learned (nucleo_anima_recall.c — same code on
     // device, host and browser WASM): paraphrases naming the card are recalled offline, while unrelated
