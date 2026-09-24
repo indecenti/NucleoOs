@@ -71,7 +71,7 @@ can't easily recover.** See `releasing.md` for the serial recovery procedure.
 
 ## ANIMA web workers — sized by measurement
 
-`/api/anima` never runs the cascade on the lean 18 KB httpd task: each query spawns a **transient**
+`/api/anima` never runs the FULL cascade on the lean 18 KB httpd task: each query spawns a **transient**
 worker whose stack exists only while the query runs. The sizes are measured with
 `node tools/stack-depth.mjs <entry> [--component=<name>]` — the device toolchain's
 `-fstack-usage -fcallgraph-info` call graph, deepest chain frame by frame (library callees count a flat
@@ -80,17 +80,19 @@ guess, so a path deep into newlib/FATFS/mbedTLS needs headroom on top):
 | Path | Runs on | Measured worst (xtensa) | Budget |
 |---|---|---|---|
 | Full cascade (`nucleo_anima_query`: L0 → L1/AKB5 → HDC → online TLS) | transient worker | 15 KB offline + TLS/library frames | **30 KB** |
-| Personal memory only (`nucleo_anima_query_memory`: profile, teach, taught recall) | transient worker | 5.4 KB | **10 KB** |
+| Personal memory only (`nucleo_anima_query_memory`: profile, teach, taught recall) | httpd task, inline | 5.4 KB | needs **9 KB left** at the call |
 | Device action the browser decided (`POST /api/anima/act`) | httpd task | 1.3 KB | httpd (18 KB, ~7.6 KB peak on the ADV) |
 
 A fragmented heap can make the 30 KB block impossible: on the **Cardputer ADV with the web OS connected
 the largest free block is ~13 KB**, so before this fallback every `/api/anima` answered 503 "busy". Now:
-full worker → if it can't be carved, the 10 KB memory worker (so "mi chiamo…"/"ricorda che…" still land in
-the device's own profile/user store) → else a lean 503, and the web app answers with its WASM copy of the
+full worker → if it can't be carved, the memory tiers inline on the httpd task, only when the stack left at
+that call (stack pointer minus the task's stack base, read at runtime) is ≥ 9 KB — so "mi chiamo…"/"ricorda
+che…" still land in the device's own profile/user store → else a lean 503, and the web app answers with its WASM copy of the
 engine and sends device actions (file, reminder, volume, brightness) to `/api/anima/act`.
 
-Confirm on hardware: the memory worker logs its real peak per query (`/api/logs`:
-`anima lite: memory, stack peak N/10240 B`), and `/api/heap` reports `httpd_stack_free_min`.
+No worker for them on purpose: measured on the ADV, the largest free block INSIDE a request is ~9.7 KB, so
+even a 10 KB worker never spawned. Confirm on hardware in `/api/logs`: `anima lite: memory, stack left N B,
+httpd min M B` (M = the httpd task's lowest free stack ever; `/api/heap` reports it too).
 
 ## Validation gate
 
