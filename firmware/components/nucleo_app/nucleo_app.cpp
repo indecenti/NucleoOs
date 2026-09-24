@@ -1576,6 +1576,16 @@ void nucleo_app_run(void)
     // NVS decision — no network on this path). Update now / next boot (Esc) / ignore this version.
     else if (nucleo_update_dialog_pending()) { nucleo_app_launch_id("updates"); }
 
+    // Kick THIS boot's background release check, now that the dialog decision above has run and
+    // (via nvs_ready(), inside nucleo_update_dialog_pending()) safely opened the "nucupd" NVS
+    // namespace on this, the sole task, before any other task can touch it — nvs_ready() has no
+    // lock by design (nvs_open must never run inside a spinlock) and relies on exactly this
+    // ordering, so the check must be kicked AFTER dialog_pending(), never before. from_boot=true
+    // makes the worker self-throttling (24 h via NVS), wifi-gated and heap-gated (see nucleo_update.c)
+    // — it can only ever notify (nucleo_notify_emit -> native banner + web Notification Center) on
+    // this boot; the dialog itself follows on the NEXT boot via the pure-NVS check just above.
+    if (!s_solo_active) nucleo_update_kick_check(true);
+
     for (;;) {
         esp_task_wdt_reset();
         int64_t now = esp_timer_get_time() / 1000;
