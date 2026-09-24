@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const mod = join(here, '..', 'www', 'local', 'cascade.js');
-const { answered, resolveOffline, classifyCommand, deviceToolOutcome, commandHint, DEVICE_TOOLS } = await import(pathToFileURL(mod).href);
+const { answered, resolveOffline, classifyCommand, deviceToolOutcome, commandHint, memoryHint, DEVICE_TOOLS } = await import(pathToFileURL(mod).href);
 
 // A runner factory that records call order into `log` and returns a fixed result.
 const rec = (log, name, result) => async () => { log.push(name); return result; };
@@ -221,4 +221,21 @@ test('commandHint(): device commands and live state are caught, ordinary questio
   for (const q of live) assert.equal(commandHint(q), 'live', q);
   for (const q of launch) assert.equal(commandHint(q), 'launch', q);
   for (const q of none) assert.equal(commandHint(q), null, q);
+});
+
+test('memoryHint(): teach / profile / recall go to the device (the one owner of personal memory)', () => {
+  const teach = ['ricorda che la sala riunioni è al terzo piano', 'Ricordati che il mio colore preferito e il blu',
+    'memorizza che il wifi di casa si chiama Pippo e la password è segreta', 'remember that my wife is Anna',
+    'remember that the meeting room is on the third floor', 'tieni a mente che le chiavi sono nel cassetto'];
+  const profile = ['mi chiamo Marco', 'Il mio nome è Giulia', 'my name is John', 'call me Ada', 'vivo a Brescia',
+    'I live in London', 'ho 30 anni', "I'm 42 years old", 'lavoro come ingegnere', 'il mio compleanno è il 3 maggio'];
+  const recall = ['come mi chiamo', 'come mi chiamo?', 'qual è il mio colore preferito', 'qual e il mio nome',
+    "what's my name", 'what is my favourite colour', 'cosa sai di me', 'quanti anni ho', 'dove vivo', 'when is my birthday'];
+  const none = ['ricordami di comprare il latte', 'remind me to call mum', 'ricorda che domani piove e fa freddo',
+    'chi è Einstein', 'come si chiama il fiume più lungo', 'apri la calcolatrice', 'che ore sono', 'marco e luigi',
+    'come vivo meglio?', ''];
+  for (const q of teach) assert.equal(memoryHint(q), 'teach', q);
+  for (const q of profile) assert.equal(memoryHint(q), 'profile', q);
+  for (const q of recall) assert.equal(memoryHint(q), 'recall', q);
+  for (const q of none) assert.equal(memoryHint(q), null, q);
 });

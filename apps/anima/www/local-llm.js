@@ -139,19 +139,46 @@ export async function loadLocal(onProgress, opts = {}) {
   return _loading;
 }
 
+// Run one chat completion on the resident engine. opts.signal stops generation (WebLLM's
+// interruptGenerate — the GPU stops, the partial text is discarded by the caller); opts.onDelta streams
+// tokens as they are decoded. Throws the abort reason when stopped.
+async function generate(eng, body, opts = {}) {
+  const { signal, onDelta } = opts;
+  if (signal && signal.aborted) throw signal.reason || Object.assign(new Error('Stopped'), { name: 'AbortError' });
+  const stop = () => { try { eng.interruptGenerate && eng.interruptGenerate(); } catch { /* best-effort */ } };
+  if (signal) signal.addEventListener('abort', stop, { once: true });
+  try {
+    if (onDelta) {
+      const chunks = await eng.chat.completions.create({ ...body, stream: true });
+      let full = '';
+      for await (const ch of chunks) {
+        if (signal && signal.aborted) break;
+        const d = ch && ch.choices && ch.choices[0] && ch.choices[0].delta && ch.choices[0].delta.content;
+        if (d) { full += d; try { onDelta(d); } catch { /* renderer errors never kill the stream */ } }
+      }
+      if (signal && signal.aborted) throw signal.reason || Object.assign(new Error('Stopped'), { name: 'AbortError' });
+      return full;
+    }
+    const res = await eng.chat.completions.create(body);
+    if (signal && signal.aborted) throw signal.reason || Object.assign(new Error('Stopped'), { name: 'AbortError' });
+    return (res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content) || '';
+  } finally {
+    if (signal) signal.removeEventListener('abort', stop);
+  }
+}
+
 // Translate a request with the local model. Returns the translation text (throws on load/inference error —
 // incl. NOT_INSTALLED: it never downloads — so the caller can fall back to Grok). The model is a coder model but multilingual — fine for IT<->EN.
-export async function translateLocal(q, lang, onProgress) {
+export async function translateLocal(q, lang, onProgress, opts = {}) {
   const eng = await loadLocal(onProgress);
   const sys = 'You are a translation engine between Italian and English. The user gives a request such as '
     + '"traduci X in inglese" / "translate X to italian" / "come si dice X in inglese". Carry it out: output '
     + 'ONLY the translation of the phrase X into the requested language — no preamble, no quotes, no notes. '
     + 'If no target language is given, translate Italian->English or English->Italian.';
-  const res = await eng.chat.completions.create({
+  const txt = await generate(eng, {
     messages: [{ role: 'system', content: sys }, { role: 'user', content: String(q) }],
     temperature: 0.2,
-  });
-  const txt = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
+  }, { signal: opts.signal });
   return (txt || '').trim();
 }
 
@@ -160,17 +187,17 @@ export async function translateLocal(q, lang, onProgress) {
 // online mode never has to fall back to the offline retrieval cascade. Returns a result object shaped
 // like the chat expects, or null on empty output. Throws on load/inference error (caller -> honest error),
 // including NOT_INSTALLED: this never downloads the model.
-export async function queryLocal(q, lang, history, onProgress) {
+// opts.signal: Stop/timeout interrupts generation. opts.onDelta(text): stream tokens as they decode.
+export async function queryLocal(q, lang, history, onProgress, opts = {}) {
   const eng = await loadLocal(onProgress);
   // Build the SAME budgeted, injection-safe transcript as the cloud path, but with the small WebLLM
   // profile (short window, few verbatim turns, brief replies) — these models are reduced, so we keep
   // the context lean on purpose. system goes as the OpenAI 'system' message; messages are user/assistant.
   const { system, messages, maxTokens, temperature } = ctxkit.assemble({ history: history || [], user: q, mode: 'webllm', lang });
-  const res = await eng.chat.completions.create({
+  const txt = await generate(eng, {
     messages: [{ role: 'system', content: system }, ...messages],
     temperature, max_tokens: maxTokens,
-  });
-  const txt = res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
+  }, opts);
   const reply = (txt || '').trim();
   if (!reply) return null;
   return { reply, tier: 'M4-local', intent: /```/.test(reply) ? 'code' : 'local', confidence: 60, domain: 'local', trace: 'Browser LLM · WebLLM' };

@@ -724,6 +724,11 @@ const server = createServer(async (req, res) => {
   }
   if (path === '/api/anima') {
     if (url.searchParams.get('reset') === '1') resetAnimaSession();   // "pulisci conversazione"
+    // ONE conversation per client (mirrors nucleo_httpd.c s_last_sid): a request whose sid differs from the
+    // last one starts a fresh context, so the ANIMA app and the copilot don't chain each other's follow-ups.
+    // No sid -> unchanged; an over-long sid is dropped like the device's 24-byte query buffer does.
+    const sid = url.searchParams.get('sid') || '';
+    if (sid && sid.length <= 23) { if (animaLastSid && animaLastSid !== sid) resetAnimaSession(); animaLastSid = sid; }
     let q = url.searchParams.get('q') || '';
     let replayed = false;
     if (isRepeat(q) && animaMem.lastActionInput) { q = animaMem.lastActionInput; replayed = true; }   // action memory
@@ -1873,6 +1878,7 @@ function trySolve(raw, lang) {
 // nucleo_anima.c: utility memory + pending tool slot (FSM AWAITING_SLOT) + clarify options.
 let animaMem = { last_app: '', last_file: '', last_kind: '', last_topic: '',
                  pending_tool: '', pending_slot: '', pending_arg: '', clarify_opt: ['', ''], lastActionInput: '' };
+let animaLastSid = '';   // last /api/anima conversation id (see the sid handling in the route)
 function resetAnimaSession() {
   animaMem = { last_app: '', last_file: '', last_kind: '', last_topic: '',
                pending_tool: '', pending_slot: '', pending_arg: '', clarify_opt: ['', ''], lastActionInput: '' };

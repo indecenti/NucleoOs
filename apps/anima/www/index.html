@@ -709,25 +709,53 @@
     .ctxm-msg .mt{font-size:12px;color:var(--text);white-space:pre-wrap;max-height:84px;overflow:hidden}
     .ctxm-f{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line2)}
     .ctxm-empty{color:var(--dim);font-size:12px;font-style:italic}
+
+    /* ---- a11y: one polite status line for progress (screen readers only) ---- */
+    .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+    /* live token stream: a caret after the text while the model is still writing */
+    .turn .body.streaming::after{content:"";display:inline-block;width:7px;height:1em;margin-left:2px;background:var(--accent2);vertical-align:-2px;animation:bl 1s steps(1) infinite}
+    @media (prefers-reduced-motion: reduce){ .turn .body.streaming::after{animation:none} }
+
+    /* ---- plain-HTTP (insecure context) banner: what is off, and how to turn it on ---- */
+    .secbar{display:flex;gap:10px;align-items:flex-start;margin:8px 12px 0;padding:8px 10px 8px 12px;border:1px solid color-mix(in srgb,var(--warn) 45%,var(--line2));
+      background:color-mix(in srgb,var(--warn) 9%,var(--panel));border-radius:var(--r);font-size:11.5px;line-height:1.45;color:var(--muted);flex:none}
+    .secbar .sb-ic{color:var(--warn);flex:none;font-size:13px;line-height:1.3}
+    .secbar .sb-tx{flex:1;min-width:0;overflow-wrap:anywhere}
+    .secbar .sb-tx b{color:var(--text);font-weight:var(--fw-label)}
+    .secbar code{font-family:var(--mono);color:var(--text);background:var(--chip-bg);border-radius:4px;padding:0 4px}
+    .secbar .sb-x{flex:none;border:1px solid var(--line2);background:transparent;color:var(--muted);border-radius:var(--r-sm);width:24px;height:24px;cursor:pointer}
+    .secbar .sb-x:hover{color:var(--text);background:var(--hover)}
+
+    /* ---- in-app confirm dialog (approvals, downloads): replaces window.confirm ---- */
+    .dlg-scrim{position:fixed;inset:0;z-index:var(--z-palette);display:none;align-items:center;justify-content:center;padding:18px;background:rgba(6,9,14,.62);backdrop-filter:blur(2px)}
+    .dlg-scrim.open{display:flex}
+    .dlg{width:min(460px,100%);background:var(--panel);border:1px solid var(--line2);border-radius:var(--r-lg);box-shadow:var(--sh-2);padding:16px 16px 14px;color:var(--text)}
+    .dlg.danger{border-color:var(--danger-line)}
+    .dlg h3{margin:0 0 8px;font-size:14px;font-weight:var(--fw-title)}
+    .dlg .dlg-b{margin:0;font-size:12.5px;line-height:1.55;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;max-height:50vh;overflow:auto}
+    .dlg .dlg-act{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
+    .dlg .dlg-act button{padding:6px 14px;border-radius:var(--r);border:1px solid var(--line2);background:var(--chip-bg);color:var(--text);font:var(--fw-label) 12px var(--mono);cursor:pointer}
+    .dlg .dlg-act button.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-on)}
+    .dlg.danger .dlg-act button.pri{background:var(--danger-bg2);border-color:var(--danger-line);color:var(--danger-text)}
   </style>
 </head>
 <body>
   <!-- conversations sidebar — docked left column (desktop) · off-canvas overlay (≤720px) -->
   <div class="scrim" id="drawer-scrim"></div>
-  <aside class="sidebar" id="drawer" role="complementary" aria-label="Conversazioni">
+  <aside class="sidebar" id="drawer" role="complementary" aria-label="Conversations" data-i18n-attr="aria-label:conversationsLabel">
     <div class="sb-body">
       <div class="sb-head">
-        <span class="sb-title" id="dh-title">Conversazioni</span>
+        <span class="sb-title" id="dh-title">Conversations</span>
         <span class="sb-count" id="sb-count">0</span>
-        <button class="sb-collapse" id="sb-collapse" title="Comprimi pannello" aria-label="Comprimi pannello">«</button>
+        <button class="sb-collapse" id="sb-collapse" title="Collapse panel" aria-label="Collapse panel" data-i18n-attr="title:collapsePanel;aria-label:collapsePanel">«</button>
       </div>
-      <button class="sb-new" id="dnew" title="Nuova conversazione"><span class="sbn-ic">＋</span><span class="sbn-tx">Nuova conversazione</span></button>
+      <button class="sb-new" id="dnew" title="New conversation"><span class="sbn-ic" aria-hidden="true">＋</span><span class="sbn-tx">New conversation</span></button>
       <div class="sb-search">
-        <span class="sbs-ic">⌕</span>
-        <input id="dsearch" placeholder="Cerca…" autocomplete="off" spellcheck="false" aria-label="Cerca conversazioni">
-        <button class="sbs-clr" id="dsearch-clr" title="Cancella ricerca" aria-label="Cancella ricerca" hidden>✕</button>
+        <span class="sbs-ic" aria-hidden="true">⌕</span>
+        <input id="dsearch" placeholder="Search…" autocomplete="off" spellcheck="false" aria-label="Search conversations" data-i18n-attr="aria-label:searchConversations">
+        <button class="sbs-clr" id="dsearch-clr" title="Clear search" aria-label="Clear search" data-i18n-attr="title:clearSearch;aria-label:clearSearch" hidden>✕</button>
       </div>
-      <div class="dlist" id="dlist" role="listbox" tabindex="-1" aria-label="Conversazioni"></div>
+      <div class="dlist" id="dlist" role="listbox" tabindex="-1" aria-label="Conversations" data-i18n-attr="aria-label:conversationsLabel"></div>
       <div class="sb-foot" id="sb-foot"></div>
     </div>
     <div class="sb-resizer" id="sb-resizer" title="Drag to resize" data-i18n-attr="title:resizeHint" aria-hidden="true"></div>
@@ -737,7 +765,7 @@
   <aside class="fsdrawer" id="fsdrawer" role="dialog" aria-modal="true" aria-label="Workspace">
     <div class="fdh">
       <div class="fdt"><b id="fd-root">Workspace</b><span id="fd-path"></span></div>
-      <button class="icobtn" id="fd-close" title="Chiudi" aria-label="Chiudi">✕</button>
+      <button class="icobtn" id="fd-close" title="Close" aria-label="Close" data-i18n-attr="title:close;aria-label:close">✕</button>
     </div>
     <div class="fsact">
       <button id="fd-open">Apri…</button>
@@ -751,8 +779,8 @@
 
   <!-- workspace picker (folder browser) -->
   <div class="pal-scrim" id="wspick-scrim">
-    <div class="wspick" role="dialog" aria-modal="true" aria-label="Scegli workspace">
-      <div class="wph"><b id="wp-title">Apri un workspace</b><button class="icobtn" id="wp-x" aria-label="Chiudi">✕</button></div>
+    <div class="wspick" role="dialog" aria-modal="true" aria-label="Choose workspace" data-i18n-attr="aria-label:chooseWorkspace">
+      <div class="wph"><b id="wp-title">Open a workspace</b><button class="icobtn" id="wp-x" aria-label="Close" data-i18n-attr="aria-label:close">✕</button></div>
       <div class="wpcur" id="wppath">/data</div>
       <div class="wpgrid" id="wspick-list"></div>
       <div class="wpfoot">
@@ -766,7 +794,7 @@
 
   <!-- settings -->
   <div class="scrim" id="scrim"></div>
-  <div class="settings" id="settings" role="dialog" aria-modal="true" aria-label="Impostazioni">
+  <div class="settings" id="settings" role="dialog" aria-modal="true" aria-label="Settings" data-i18n-attr="aria-label:settings">
 
     <!-- left navigation rail -->
     <nav class="set-rail">
@@ -788,7 +816,7 @@
     <div class="set-main">
       <div class="set-top" id="set-top">
         <span class="set-crumb" id="set-crumb">Aspetto</span>
-        <button class="set-x" id="set-x" title="Chiudi" aria-label="Chiudi">✕</button>
+        <button class="set-x" id="set-x" title="Close" aria-label="Close" data-i18n-attr="title:close;aria-label:close">✕</button>
       </div>
       <div class="set-content" id="set-content">
 
@@ -844,11 +872,11 @@
             <h4 id="h-engine">Motore</h4>
             <div class="set-card">
               <div class="set-field">
-                <div class="f-tx"><label id="s-mode">Modalità</label><span class="f-sub" data-i18n data-it="Dove gira l’intelligenza: dispositivo, browser o online." data-en="Where the intelligence runs: device, browser or online.">Dove gira l’intelligenza: dispositivo, browser o online.</span></div>
-                <div class="f-ctl"><div class="seg2 acc" id="set-mode"><button data-m="off">Offline</button><button data-m="on" data-i18n data-it="Ibrida" data-en="Hybrid">Ibrida</button><button data-m="local" data-i18n data-it="GPU locale" data-en="Local GPU">GPU locale</button><button data-m="edge" title="ANIMA offline gira interamente in questo browser (WebAssembly): scarica il cervello una volta dal dispositivo, poi risponde in locale anche senza Cardputer — stesse identiche risposte.">Browser</button><button data-m="only">Online</button></div></div>
+                <div class="f-tx"><label id="s-mode">Mode</label><span class="f-sub" data-i18n="modeFieldSub">Whether ANIMA may use the network: Auto uses it when it helps, Private never does.</span></div>
+                <div class="f-ctl"><div class="seg2 acc" id="set-mode" role="radiogroup" aria-labelledby="s-mode"><button data-m="auto" role="radio" data-i18n="modeAuto">Auto</button><button data-m="private" role="radio" data-i18n="modePrivate">Private</button></div></div>
               </div>
               <div class="set-field" style="border:none">
-                <div class="f-tx" style="flex:1"><span class="f-sub" data-i18n data-it="Catena di fallback: Online (cloud) → GPU locale → Browser (WASM + indice web) → Cardputer. Si scala sul Cardputer solo come ultima rete. Digita /guida in chat per la mappa completa." data-en="Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Cardputer. It scales onto the Cardputer only as the last net. Type /guide in chat for the full map.">Catena di fallback: Online → GPU locale → Browser (WASM + indice web) → Cardputer. Digita /guida per la mappa completa.</span></div>
+                <div class="f-tx" style="flex:1"><span class="f-sub" data-i18n="modeChain">Auto walks one ladder until a brain answers: online AI (with a key) → the model on your browser GPU → the browser brain (WASM + web index) → the Cardputer. Private is the same ladder with every network step removed. Type /guide for the full map.</span></div>
               </div>
               <div class="set-field" id="row-edge" hidden>
                 <div class="f-tx"><label id="s-edge" title="Il cervello offline di ANIMA scaricato in questo browser. In cache = funziona anche senza il Cardputer.">Cervello locale</label><span class="f-sub" data-i18n data-it="Il cervello offline scaricato in questo browser." data-en="The offline brain downloaded in this browser.">Il cervello offline scaricato in questo browser.</span></div>
@@ -964,38 +992,39 @@
 
   <div class="appmain" id="appmain">
   <header>
-    <button class="icobtn hamb" id="hamb" title="Conversazioni (Ctrl/⌘⇧S)" aria-label="Mostra/nascondi conversazioni">☰</button>
-    <div class="mark" id="mark" title="ANIMA — ⌘K">A</div>
-    <div class="t"><b>ANIMA</b><span id="sub">assistente offline</span></div>
+    <button class="icobtn hamb" id="hamb" title="Conversations (Ctrl/⌘⇧S)" aria-label="Show/hide conversations" data-i18n-attr="title:conversationsShortcut;aria-label:toggleConversations">☰</button>
+    <div class="mark" id="mark" title="ANIMA — ⌘K" aria-hidden="true">A</div>
+    <div class="t"><b>ANIMA</b><span id="sub"></span></div>
     <div class="sp"></div>
-    <button class="mode-pill" id="mode-pill" title="Cambia modalità">ANIMA · <b id="pill-mode">ibrida</b></button>
-    <button class="icobtn khint" id="palbtn" title="Comandi (Ctrl/⌘ K)" aria-label="Tavolozza comandi"><kbd>⌘K</kbd></button>
-    <button class="icobtn" id="wsbtn" title="Workspace / file" aria-label="Workspace">▦</button>
-    <div class="dot" id="dot" title="motore ANIMA"></div>
-    <button class="icobtn gear" id="gear" title="Impostazioni" aria-label="Impostazioni">⚙</button>
+    <button class="mode-pill" id="mode-pill" title="Switch mode">ANIMA · <b id="pill-mode"></b></button>
+    <button class="icobtn khint" id="palbtn" title="Commands (Ctrl/⌘ K)" aria-label="Command palette" data-i18n-attr="title:paletteTitle;aria-label:cmdPaletteAria"><kbd>⌘K</kbd></button>
+    <button class="icobtn" id="wsbtn" title="Workspace / files" aria-label="Workspace / files" data-i18n-attr="title:workspaceFiles;aria-label:workspaceFiles">▦</button>
+    <div class="dot" id="dot" title="ANIMA engine" data-i18n-attr="title:engineStatus"></div>
+    <button class="icobtn gear" id="gear" title="Settings" aria-label="Settings" data-i18n-attr="title:settings;aria-label:settings">⚙</button>
   </header>
 
-  <div id="log" role="log" aria-live="polite" aria-label="Conversazione"></div>
-  <button class="jump" id="jump" title="Vai in fondo">↓ <span id="jumpn"></span></button>
+  <div id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation" data-i18n-attr="aria-label:conversationLog"></div>
+  <div id="a11y-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+  <button class="jump" id="jump" title="Go to bottom" aria-label="Go to bottom" data-i18n-attr="title:goBottom;aria-label:goBottom">↓ <span id="jumpn"></span></button>
 
   <footer>
     <div class="slash" id="slash"></div>
     <form class="compose" id="f">
       <div class="box" id="box">
         <span class="prompt">›</span>
-        <textarea id="q" rows="1" autocomplete="off" autofocus spellcheck="false" aria-label="Messaggio"></textarea>
+        <textarea id="q" rows="1" autocomplete="off" autofocus spellcheck="false" aria-label="Message" data-i18n-attr="aria-label:messageAria"></textarea>
         <button class="mic" id="mic" type="button" title="Dictate" aria-label="Dictate" data-i18n-attr="aria-label:micAria" hidden>🎤</button>
-        <button class="webtog" id="webtog" type="button" aria-pressed="false" title="Web: risposte aggiornate con fonti (Groq compound)" aria-label="Web">🌐</button>
-        <button class="send" id="send" type="submit">Invia</button>
+        <button class="webtog" id="webtog" type="button" aria-pressed="false" title="Web" aria-label="Web">🌐</button>
+        <button class="send" id="send" type="submit">Send</button>
       </div>
       <div class="status">
-        <span class="seg"><span class="dot" id="dot2"></span><span class="qmode" id="q-mode" title="Cambia modalità">ANIMA · <b id="st-mode">ibrida</b></span></span>
-        <span class="qmode" id="q-lang" title="Cambia lingua"><b id="st-lang">IT</b></span>
-        <span class="sess" id="st-session" title="Conversazioni"></span>
-        <span class="ws-label none" id="ws-label" title="Workspace">Nessun workspace</span>
-        <span class="ctx-meter" id="ctx-meter" title="Contesto"></span>
+        <span class="seg"><span class="dot" id="dot2" aria-hidden="true"></span><span class="qmode" id="q-mode" role="button" tabindex="0" title="Switch mode" data-i18n-attr="title:switchMode">ANIMA · <b id="st-mode"></b></span></span>
+        <span class="qmode" id="q-lang" role="button" tabindex="0" title="Switch language" data-i18n-attr="title:switchLanguage;aria-label:switchLanguage"><b id="st-lang">EN</b></span>
+        <span class="sess" id="st-session" title="Conversations" data-i18n-attr="title:conversationsLabel"></span>
+        <span class="ws-label none" id="ws-label" title="Workspace"></span>
+        <span class="ctx-meter" id="ctx-meter" title=""></span>
         <span class="sp"></span>
-        <span class="keys"><kbd>⏎</kbd> invia · <kbd>/</kbd> comandi · <kbd>⌘K</kbd> tavolozza · <kbd>?</kbd> aiuto</span>
+        <span class="keys"></span>
       </div>
     </form>
   </footer>
@@ -1028,6 +1057,9 @@
     import { compact as ctxCompact, usage as ctxUsage } from './context.js';
     import * as ctxkit from './contextkit.js';   // context engine: token-budgeted, injection-safe messages[] for any backend
     import * as AI from '/ai.js';                 // shell registry: the ONE provider table + teacher.json vault + cloud wire
+    import * as AM from '/anima-mode.js';         // the ONE engine-mode definition + turn abort/timeout helper (shared with the copilot)
+    // Streaming cloud client — lazy: only a turn that actually reaches the cloud pays for it.
+    let _streamP=null; const loadStream=()=>_streamP||(_streamP=import('./stream.js'));
 
     // "GPU locale" tier (WebLLM) — only touched when a message is actually sent in local/online mode.
     // Lazy: keeps local-llm → webllm-engine → router + grammar (4 modules) OFF the boot path. The heavy
@@ -1083,13 +1115,17 @@
       const slot=()=>new Promise(res=>{ q.push(res); pump(); });
       const backoff=a=>Math.min(1500, 250*(1<<a))+Math.floor(Math.random()*120);   // jittered, capped
       return async function dfetch(url, opts={}, tries=3){
+        // An aborted turn (Stop/Esc, step timeout) must not be retried or keep a pool slot: bail at once.
+        const sig=opts&&opts.signal, dead=()=>!!(sig&&sig.aborted), why=()=>(sig&&sig.reason)||AM.stopReason();
+        if(dead()) throw why();
         await slot();
         try{
           for(let a=0;;a++){
+            if(dead()) throw why();
             let r;
             try{ r=await fetch(url, opts); }
-            catch(e){ if(a>=tries-1) throw e; await wait(backoff(a)); continue; }      // socket reset → back off, don't hammer
-            if(r.status===503 && a<tries-1){                                            // device busy (arbiter / spine try-lock)
+            catch(e){ if(dead() || a>=tries-1) throw e; await wait(backoff(a)); continue; }      // socket reset → back off, don't hammer
+            if(r.status===503 && a<tries-1 && !dead()){                                // device busy (arbiter / spine try-lock)
               let ra=0; try{ ra=(await r.clone().json()).retry_after_ms|0; }catch{}
               await wait(ra||backoff(a)); continue;                                     // honor the server's Retry-After
             }
@@ -1139,10 +1175,6 @@
         suggLbl:'Suggerimenti', clear:'Pulisci conversazione',
         compactLbl:'Compatta contesto', pin:'fissa', pinned:'Fissato nel contesto', unpinned:'Sfissato', pinHint:'Fissa: tieni nel contesto durante la compattazione',
         themeNames:{ dark:'Midnight', light:'Daylight', oled:'Carbon', hc:'Contrast' },
-        subByMode:{ auto:'il cervello migliore disponibile', private:'tutto in locale, niente rete' },
-        stByMode:{ auto:'auto', private:'privato' },
-        modeHints:{ auto:'Auto: ANIMA usa il cervello migliore disponibile in questo momento e scende la scala finche’ uno risponde — IA online (se hai una chiave), poi il modello sulla GPU del browser, poi il cervello WASM nel browser, poi il Cardputer. Non scegli tu dove gira.',
-                    private:'Privato: la stessa scala senza nessun gradino di rete — modello sulla GPU del browser, cervello WASM, Cardputer. Nulla lascia questa macchina.' },
         edgeErr:'Non riesco a caricare ANIMA in locale: scaricamento del cervello non riuscito. Controlla la connessione al dispositivo.',
         edgeNeedInstall:'ANIMA offline gira in questo browser (WASM), ma il cervello non è ancora installato qui. Installalo una volta da Impostazioni ▸ Modelli (poi risponde in locale anche senza Cardputer), oppure usa la modalità Ibrida/Online.',
         edge:{ lead:'Assistente di NucleoOS che gira INTERAMENTE in questo browser (WebAssembly): offline, privato e istantaneo. Apre app, fa calcoli, dà ora e data, crea file, risponde a domande e impara ciò che gli insegni — senza che nulla lasci il dispositivo.',
@@ -1200,10 +1232,6 @@
         suggLbl:'Suggestions', clear:'Clear conversation',
         compactLbl:'Compact context', pin:'pin', pinned:'Pinned in context', unpinned:'Unpinned', pinHint:'Pin: keep in context through compaction',
         themeNames:{ dark:'Midnight', light:'Daylight', oled:'Carbon', hc:'Contrast' },
-        subByMode:{ auto:'the best brain available', private:'all local, no network' },
-        stByMode:{ auto:'auto', private:'private' },
-        modeHints:{ auto:'Auto: ANIMA uses the best brain available right now, walking the ladder down until one answers — online AI (if you have a key), then the model on the browser GPU, then the in-browser WASM brain, then the Cardputer. You never pick where it runs.',
-                    private:'Private: the same ladder with every network rung removed — browser GPU model, WASM brain, Cardputer. Nothing leaves this machine.' },
         edgeErr:'Could not load ANIMA locally: brain download failed. Check the device connection.',
         edgeNeedInstall:'ANIMA offline runs in this browser (WASM), but the brain isn’t installed here yet. Install it once from Settings ▸ Models (then it answers locally even without the Cardputer), or use Hybrid/Online mode.',
         edge:{ lead:"NucleoOS's assistant running ENTIRELY in this browser (WebAssembly): offline, private and instant. It opens apps, does math, tells time and date, creates files, answers questions and learns what you teach it — without anything leaving the device.",
@@ -2724,17 +2752,22 @@
       "This question is too long for the Cardputer: shorten it and try again.":"Die Frage ist zu lang für den Cardputer: kürze sie und versuch es noch einmal."
     });
     function TR(it,en){ const l=lang; if(l==='it')return it; if(l==='en')return en; const o=ANIMA_L10N[l]; return (o&&o[en]!=null)?o[en]:en; }
+    // Catalog strings — apps/anima/www/i18n.<lang>.json through the OS i18n engine, all five languages,
+    // checked by `npm run i18n:gate`. Every string this app adds or reworks lives there; TR()/ANIMA_L10N
+    // stay only for the older inline it/en pairs. Until a catalog has arrived (first paint, or the moment
+    // after a language switch) a key shows its last good value — never its raw name — and the engine's
+    // onChange hook repaints once the new catalog is in.
+    const _lastL={};
+    function L(k,vars){ const v=I18N.t(k,vars,'anima'); if(v===k) return _lastL[k+'|'+(vars?JSON.stringify(vars):'')]||''; _lastL[k+'|'+(vars?JSON.stringify(vars):'')]=v; return v; }
     (function(){ const mp=(o,tr)=>{ if(typeof o==='string')return (tr&&tr[o]!=null)?tr[o]:o; if(Array.isArray(o))return o.map(v=>mp(v,tr)); if(o&&typeof o==='object'){ const r={}; for(const k in o) r[k]=mp(o[k],tr); return r; } return o; };
       for(const L of ['es','fr','de']) UI[L]=mp(UI.en, ANIMA_L10N[L]); })();
 
     // ---- state ----------------------------------------------------------------
     let lang    = LANG();
     let speed   = parseInt(get('anima.speed','14')); if(![0,6,14].includes(speed)) speed=14;
-    // Default AUTO: walk the ladder and use the best brain available right now (see chooseMode).
-    // Legacy values are mapped inline rather than via normMode(): that helper closes over a const
-    // declared much further down, so calling it this early would hit its temporal dead zone.
-    let mode    = get('anima.mode','auto');
-    if (mode !== 'auto' && mode !== 'private') mode = (mode === 'off' || mode === 'edge') ? 'private' : 'auto';
+    // Default AUTO: walk the ladder and use the best brain available right now (see chooseMode). The
+    // key, the two values and the legacy map live in /anima-mode.js — the copilot reads the same module.
+    let mode    = AM.readMode();
     let l1mode  = get('anima.l1mode','auto'); if(!['auto','on','off'].includes(l1mode)) l1mode='auto';   // device offline L1 brain: AUTO (stand down when online/browser-LLM answers, freeing RAM) | ON (force) | OFF
     let _l1ext  = null;   // last browserLLM flag pushed to the device (dedupe redundant POSTs)
     let fsize   = parseFloat(get('anima.size','13.5')); if(![12,13.5,15.5].includes(fsize)) fsize=13.5;
@@ -2777,18 +2810,25 @@
 
     // ---- multi-session model --------------------------------------------------
     let sessions=[], activeId='';
+    // Every conversation carries its own device conversation id (`sid`): /api/anima keeps ONE dialogue
+    // context and starts a fresh one when the sid changes, so switching conversations here switches the
+    // device's follow-up frame too, and the copilot (its own sid) never chains off this app's questions.
+    const mkSession = (history) => ({ id:uid(), sid:AM.newSid('a'), title:'', created:Date.now(), modified:Date.now(), history:history||[] });
     function loadSessions(){
       try{ sessions = JSON.parse(get('anima.sessions','[]')) || []; }catch{ sessions=[]; }
       if(!Array.isArray(sessions)) sessions=[];
       sessions = sessions.filter(s=>s && Array.isArray(s.history));
       if(!sessions.length){
         let legacy=[]; try{ legacy = JSON.parse(get('anima.history','[]')) || []; }catch{}
-        sessions=[{ id:uid(), title:'', created:Date.now(), modified:Date.now(), history:Array.isArray(legacy)?legacy:[] }];
+        sessions=[mkSession(Array.isArray(legacy)?legacy:[])];
       }
+      for(const s of sessions) if(!AM.validSid(s.sid)) s.sid=AM.newSid('a');
       activeId = get('anima.active','');
       if(!sessions.find(s=>s.id===activeId)) activeId = sessions[0].id;
     }
     const activeSession = () => sessions.find(s=>s.id===activeId) || sessions[0];
+    // The device conversation id of the active conversation, as a query-string suffix for /api/anima.
+    function sidQ(){ const s=activeSession(); if(s && !AM.validSid(s.sid)) s.sid=AM.newSid('a'); return s?('&sid='+encodeURIComponent(s.sid)):''; }
     let history = [];   // alias to active session's history (same array reference)
 
     // ---- workspace state (the file agent's cwd, persistent on the SD) ----------
@@ -2805,6 +2845,46 @@
       $('toasts').appendChild(t);
       setTimeout(()=>{ t.style.transition='opacity .3s'; t.style.opacity='0'; setTimeout(()=>t.remove(),320); }, 2200);
     }
+
+    // ---- in-app confirm dialog --------------------------------------------------------------------------
+    // Replaces window.confirm for approvals and downloads: themed, localized, keyboard-complete (Tab stays
+    // inside, Esc = the safe answer, focus returns where it was) and announced as an alertdialog. Requests
+    // queue, so two parallel agent tool calls never stack two dialogs. askDialog(...) -> Promise<boolean>.
+    let _dlgQ=Promise.resolve(), _dlgEl=null, _dlgClose=null, _dlgGen=0;
+    function dlgEl(){
+      if(_dlgEl) return _dlgEl;
+      const s=document.createElement('div'); s.className='dlg-scrim';
+      s.innerHTML='<div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dlg-t" aria-describedby="dlg-b">'
+        +'<h3 id="dlg-t"></h3><p class="dlg-b" id="dlg-b"></p><div class="dlg-act"><button type="button" class="dlg-no"></button><button type="button" class="pri dlg-ok"></button></div></div>';
+      document.body.appendChild(s); _dlgEl=s; return s;
+    }
+    function askDialog({ title, body, ok, cancel, danger }={}){
+      const gen=_dlgGen;
+      const show=()=>new Promise((resolve)=>{
+        if(gen!==_dlgGen){ resolve(false); return; }     // queued behind a Stop: the turn is gone, the answer is no
+        const s=dlgEl(), box=s.querySelector('.dlg'), okB=s.querySelector('.dlg-ok'), noB=s.querySelector('.dlg-no');
+        const prev=document.activeElement;
+        s.querySelector('#dlg-t').textContent=title||'';
+        s.querySelector('#dlg-b').textContent=body||''; s.querySelector('#dlg-b').hidden=!body;
+        okB.textContent=ok||L('ok')||'OK'; noB.textContent=cancel||L('cancel')||'Cancel';
+        box.classList.toggle('danger', !!danger);
+        const done=(v)=>{ s.classList.remove('open'); s.removeEventListener('keydown',key,true); okB.onclick=noB.onclick=null; s.onclick=null; _dlgClose=null;
+          try{ prev&&prev.focus&&prev.focus(); }catch{} resolve(v); };
+        const key=(e)=>{
+          if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); done(false); return; }
+          if(e.key==='Tab'){ e.preventDefault(); e.stopPropagation(); (document.activeElement===okB?noB:okB).focus(); return; }
+          e.stopPropagation();   // Enter/Space act on the focused button; nothing leaks to the chat shortcuts
+        };
+        okB.onclick=()=>done(true); noB.onclick=()=>done(false);
+        s.onclick=(e)=>{ if(e.target===s) done(false); };
+        s.addEventListener('keydown',key,true);
+        _dlgClose=()=>done(false);
+        s.classList.add('open');
+        setTimeout(()=>(danger?noB:okB).focus(), 30);   // a dangerous action never defaults to "yes"
+      });
+      const p=_dlgQ.then(show, show); _dlgQ=p.catch(()=>{}); return p;
+    }
+    function dismissDialogs(){ _dlgGen++; if(_dlgClose) _dlgClose(); }   // Stop: deny the open request and every queued one
 
     // ===========================================================================
     // MARKDOWN — escape first, then format. Block-level + inline, all XSS-safe.
@@ -2948,6 +3028,35 @@
       bar.appendChild(rb);
     }
 
+    // ---- copy to clipboard, honest on plain HTTP ---------------------------------------------------
+    // navigator.clipboard exists only in a secure context; on http://<device-ip> the buttons used to do
+    // nothing at all. Fallback: a hidden textarea + execCommand('copy') inside the click. If even that
+    // is refused, say so and SELECT the text so Ctrl+C works.
+    function execCopy(text){
+      let ok=false; const ta=document.createElement('textarea');
+      ta.value=text; ta.setAttribute('readonly',''); ta.setAttribute('aria-hidden','true');
+      ta.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none';
+      const prev=document.activeElement; document.body.appendChild(ta);
+      try{ ta.focus({preventScroll:true}); ta.select(); ta.setSelectionRange(0,text.length); ok=document.execCommand('copy'); }catch{ ok=false; }
+      ta.remove(); try{ prev&&prev.focus&&prev.focus({preventScroll:true}); }catch{}
+      return ok;
+    }
+    function copyText(text){
+      text=String(text||'');
+      if(window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText)
+        return navigator.clipboard.writeText(text).then(()=>true, ()=>execCopy(text));
+      return Promise.resolve(execCopy(text));       // synchronous inside the click: keeps the user gesture
+    }
+    function selectNode(node){ try{ const r=document.createRange(); r.selectNodeContents(node); const s=getSelection(); s.removeAllRanges(); s.addRange(r); }catch{} }
+    // Wire a copy button. getText() -> the text; selectEl -> what to select when copying is refused.
+    function wireCopy(btn, getText, selectEl){
+      btn.addEventListener('click',()=>{ copyText(getText()).then((ok)=>{
+        if(ok){ btn.textContent=UI[lang].copied+' ✓'; }
+        else { btn.textContent=L('copyNo'); if(selectEl) selectNode(selectEl); toast(L('copyUnavailable'),'warn'); }
+        setTimeout(()=>btn.textContent=UI[lang].copy, ok?1100:2600);
+      }); });
+    }
+
     function renderMd(el, text){
       el.innerHTML=''; el.classList.add('rendered');
       const parts = String(text).split(/```/);
@@ -2959,9 +3068,9 @@
           const bar=document.createElement('div'); bar.className='codebar';
           const lab=document.createElement('span'); lab.className='lang'; lab.textContent=langRaw||'code'; bar.appendChild(lab);
           const cb=document.createElement('button'); cb.className='cbtn'; cb.textContent=UI[lang].copy;
-          cb.addEventListener('click',()=>{ navigator.clipboard?.writeText(code).then(()=>{ cb.textContent=UI[lang].copied+' ✓'; setTimeout(()=>cb.textContent=UI[lang].copy,1100); }); });
-          bar.appendChild(cb); attachRun(bar, wrap, code, langRaw); wrap.appendChild(bar);
           const pre=document.createElement('pre'); pre.className='code'; pre.innerHTML=hl(code,langRaw);
+          wireCopy(cb, ()=>code, pre);
+          bar.appendChild(cb); attachRun(bar, wrap, code, langRaw); wrap.appendChild(bar);
           if(code.split('\n').length>18){
             const det=document.createElement('details'); const sm=document.createElement('summary');
             sm.textContent=(TR('Mostra tutte le ', 'Show all '))+code.split('\n').length+(TR(' righe', ' lines'));
@@ -2998,8 +3107,8 @@
       d.innerHTML='<div class="gut">⏺</div>'; d.appendChild(body);
       const act=document.createElement('div'); act.className='msg-actions';
       const mkBtn=(label,fn)=>{ const b=document.createElement('button'); b.textContent=label; b.addEventListener('click',fn); return b; };
-      const cp=mkBtn(UI[lang].copy,()=>{ const t=body.dataset.raw||body.textContent;
-        navigator.clipboard?.writeText(t).then(()=>{ cp.textContent=UI[lang].copied+' ✓'; setTimeout(()=>cp.textContent=UI[lang].copy,1100); }); });
+      const cp=document.createElement('button'); cp.textContent=UI[lang].copy;
+      wireCopy(cp, ()=>body.dataset.raw||body.textContent, body);
       act.appendChild(cp);
       if(engineReply && hidx!=null){
         act.appendChild(mkBtn('↻ '+UI[lang].regenerate, ()=>regenerate(hidx)));
@@ -3131,7 +3240,7 @@
       };
       const capr=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
       grp('⌁', TR('Percorso', 'Route'), [
-        [TR('Modalità', 'Mode'), capr(UI[lang].stByMode[em.mode]||em.mode)],
+        [TR('Modalità', 'Mode'), modeLabel(em.mode)],
         [TR('Motore', 'Engine'), em.eng],
         em.model && [em.modelIsTool?(TR('Strumento', 'Tool')):(TR('Modello', 'Model')), em.model],
         em.provider && [TR('Provider', 'Provider'), em.provider],
@@ -3177,37 +3286,63 @@
       host.appendChild(c);
     }
 
-    // typewriter that reveals plain text, then swaps in rendered markdown
+    // Typewriter — ONLY for instant local answers (device, browser brain, web index), where it is a short
+    // flourish. It is capped at ~60 ticks whatever the length (a long local answer used to take seconds to
+    // "type" after it had arrived). Generated answers are streamed for real (streamShell) or shown at once.
     function type(body, text){
       body.dataset.raw=text;
       return new Promise(resolve=>{
         const finish=()=>{ renderMd(body,text); scrollDown(); resolve(); };
-        if(speed===0){ finish(); return; }
-        const cur=document.createElement('span'); cur.className='cursor'; body.appendChild(cur);
+        if(speed===0 || reducedMotion()){ finish(); return; }
+        const cur=document.createElement('span'); cur.className='cursor'; cur.setAttribute('aria-hidden','true'); body.appendChild(cur);
+        const n=Math.max(Math.round(2*(14/Math.max(speed,4))), Math.ceil(text.length/60));
         let i=0;
         const step=()=>{
           if(interrupt || i>=text.length){ cur.remove(); finish(); return; }
-          const n=Math.max(1, Math.round(2*(14/Math.max(speed,4))));
           cur.insertAdjacentText('beforebegin', text.slice(i,i+n)); i+=n; scrollDown();
           setTimeout(step, speed);
         };
         setTimeout(step, speed);
       });
     }
+    const reducedMotion=()=>{ try{ return matchMedia('(prefers-reduced-motion: reduce)').matches; }catch{ return false; } };
 
-    // thinking indicator (rotating spark + elapsed + esc-to-interrupt)
+    // Live token stream into a bot turn, repainted at most once per animation frame (a burst of 40 tiny
+    // SSE deltas costs one markdown render, not 40). Created on the FIRST token, so the thinking line stays
+    // until something real arrives. finish(text) settles the final markdown.
+    function streamShell(){
+      const { body, turn }=botShell(history.length, true);
+      body.classList.add('streaming');
+      let text='', raf=0;
+      const paint=()=>{ raf=0; renderMd(body, text); body.dataset.raw=text; scrollDown(); };
+      return { body, turn,
+        push(d){ text+=d; if(!raf) raf=requestAnimationFrame(paint); },
+        text:()=>text,
+        finish(final){ if(raf){ cancelAnimationFrame(raf); raf=0; } if(final!=null) text=final; body.classList.remove('streaming'); renderMd(body, text); body.dataset.raw=text; scrollDown(); } };
+    }
+
+    // ---- a11y: the transcript is a polite live log. While a turn is generating it is aria-busy (so the
+    // spinner and the token stream are not read out keystroke by keystroke); progress goes to ONE status
+    // line; when the turn ends busy clears and the finished answer is announced once.
+    const a11yStatus=$('a11y-status');
+    let _annAt=0, _annTxt='';
+    function announce(s, force){ if(!a11yStatus) return; s=String(s||''); if(!force && (s===_annTxt || Date.now()-_annAt<4000)) return; _annTxt=s; _annAt=Date.now(); a11yStatus.textContent=s; }
+    function setLogBusy(on){ logEl.setAttribute('aria-busy', on?'true':'false'); if(on) announce(L('thinkingStatus'), true); else { _annTxt=''; a11yStatus && (a11yStatus.textContent=''); } }
+
+    // thinking indicator (rotating spark + elapsed + esc-to-interrupt). Decorative for screen readers
+    // (aria-hidden): its text changes every 110 ms. Sticky step notes go to the status line, throttled.
     const SPARK=['✳','✶','✻','✺','✸','✷'];
     function startThinking(){
-      const w=wrapEl(); const d=document.createElement('div'); d.className='turn bot';
+      const w=wrapEl(); const d=document.createElement('div'); d.className='turn bot'; d.setAttribute('aria-hidden','true');
       let vi=Math.floor(Math.random()*UI[lang].thinking.length);
       d.innerHTML='<div class="gut"></div><div class="thinking"><span class="sp">✻</span><span class="vb">'+esc(UI[lang].thinking[vi])+'…</span>'+
-        '<span class="el">(0s)</span><span class="esc">· <kbd>esc</kbd> '+(TR('per fermare', 'to interrupt'))+'</span></div>';
+        '<span class="el">(0s)</span><span class="esc">· <kbd>esc</kbd> '+esc(L('escToStop'))+'</span></div>';
       w.appendChild(d); logEl.appendChild(w); scrollDown(true);
       const sp=d.querySelector('.sp'), el=d.querySelector('.el'), vb=d.querySelector('.vb');
       const t0=Date.now(); let k=0, status='';   // status = a sticky line (e.g. live agent step) that overrides the rotating verbs
       const iv=setInterval(()=>{ sp.textContent=SPARK[k++%SPARK.length]; el.textContent='('+Math.round((Date.now()-t0)/1000)+'s)';
         if(status){ vb.textContent=status; } else if(k%18===0){ vi=(vi+1)%UI[lang].thinking.length; vb.textContent=UI[lang].thinking[vi]+'…'; } }, 110);
-      return { remove(){ clearInterval(iv); w.remove(); }, note(s){ status=s||''; if(s) vb.textContent=s; } };
+      return { remove(){ clearInterval(iv); w.remove(); }, note(s){ status=s||''; if(s){ vb.textContent=s; announce(s); } } };
     }
 
     // welcome / empty state
@@ -3252,14 +3387,16 @@
       d.appendChild(det); w.appendChild(d); logEl.appendChild(w);
     }
     function renderAll(){
-      bulk=true; logEl.innerHTML=''; welcomeBox();
+      // A re-render (session switch, language change) is not news: silence the live region while the whole
+      // transcript is rebuilt, so a screen reader does not read the conversation out from the top.
+      bulk=true; logEl.setAttribute('aria-live','off'); logEl.innerHTML=''; welcomeBox();
       history.forEach((h,idx)=>{
         if(h.kind==='digest'){ renderDigest(h); return; }
         if(h.role==='user'){ addUser(h.text); return; }
         const { body }=botShell(idx, !!h.engine);
         replayBot(body, h);
       });
-      bulk=false; scrollDown(true); updateSessions(); updateMeter();
+      bulk=false; setTimeout(()=>logEl.setAttribute('aria-live','polite'), 200); scrollDown(true); updateSessions(); updateMeter();
     }
 
     // ---- persistence (multi-session, quota-guarded) ---------------------------
@@ -3275,8 +3412,22 @@
       const r=ctxCompact(s.history,{budget:CTX_BUDGET,lang});
       return (r.compacted?r.history:s.history).slice(-80);
     }
+    // Retention: the newest SESS_MAX conversations (pinned and the active one always stay). What falls out
+    // is tombstoned, so a later merge with the SD copy cannot bring it back.
+    const SESS_MAX=50, SESS_SD_MAX=256*1024, SESS_PATH='/data/anima/sessions.json';
+    let tombs=(()=>{ try{ const t=JSON.parse(get('anima.sessTomb','[]')); return Array.isArray(t)?t.filter(x=>Array.isArray(x)&&typeof x[0]==='string'):[]; }catch{ return []; } })();
+    function saveTombs(){ tombs=tombs.slice(-300); set('anima.sessTomb', JSON.stringify(tombs)); }
+    function tomb(id){ tombs=tombs.filter(t=>t[0]!==id); tombs.push([id,Date.now()]); saveTombs(); }
+    function untomb(id){ const n=tombs.length; tombs=tombs.filter(t=>t[0]!==id); if(tombs.length!==n) saveTombs(); }
+    function capSessions(pool){
+      if(pool.length<=SESS_MAX) return pool;
+      const keep=new Set(pool.filter(s=>s.pinned||s.id===activeId).map(s=>s.id));
+      for(const s of pool.slice().sort((a,b)=>(b.modified||0)-(a.modified||0))){ if(keep.size>=SESS_MAX) break; keep.add(s.id); }
+      for(const s of pool) if(!keep.has(s.id)) tomb(s.id);
+      return pool.filter(s=>keep.has(s.id));
+    }
     function saveSessions(){
-      let pool=sessions.slice();
+      let pool=capSessions(sessions.slice());
       for(let guard=0; guard<8; guard++){
         try{
           set('anima.sessions', JSON.stringify(pool.map(s=>({ ...s, history:storedHistory(s) }))));
@@ -3289,14 +3440,60 @@
       }
     }
 
-    // ---- context budget: compaction + meter (à la Claude Code) ----------------
-    let sessSdTimer=0, _sessLast='';
+    // ---- SD copy of the conversations: written (debounced, only when it changed) AND read back ----------
+    // /data/anima/sessions.json is how a phone opening ANIMA finds the conversations started on the PC. The
+    // device file API has no append/patch, so the copy stays one file; it is capped instead (the newest
+    // conversations up to SESS_SD_MAX bytes, empty ones never written) and a write happens only when its
+    // content changed. Format v2 = { v, sessions, tomb } (a bare array — the v1 shape — is still read).
+    let sessSdTimer=0, _sessLast='', _sessMergedAt=0;
+    function sdPayload(){
+      const pool=sessions.filter(s=>s.history && s.history.length)
+        .sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0)) || ((b.modified||0)-(a.modified||0)));
+      const out=[]; let bytes=0;
+      for(const s of pool){ const j=JSON.stringify({ ...s, history:storedHistory(s) }); if(out.length && bytes+j.length>SESS_SD_MAX) continue; bytes+=j.length; out.push(j); }
+      return '{"v":2,"sessions":['+out.join(',')+'],"tomb":'+JSON.stringify(tombs)+'}';
+    }
     function sessSdSave(){ clearTimeout(sessSdTimer); sessSdTimer=setTimeout(()=>{ try{
-      const body=JSON.stringify(sessions.map(s=>({...s,history:storedHistory(s)})));
-      if(body===_sessLast) return;                     // unchanged since the last SD write → skip the device round-trip
+      const body=sdPayload();
+      if(body===_sessLast) return;                     // unchanged since the last SD write (or read) → no device round-trip
       _sessLast=body;
-      fetch('/api/fs/write?path='+encodeURIComponent('/data/anima/sessions.json'),{method:'POST',body}).catch(()=>{ _sessLast=''; });  // let a retry through on failure
+      fetch('/api/fs/write?path='+encodeURIComponent(SESS_PATH),{method:'POST',body}).catch(()=>{ _sessLast=''; });  // let a retry through on failure
     }catch{} }, 2500); }
+    // Merge the SD copy into this browser by id: a conversation missing here is added, one that is newer
+    // there replaces ours, a tombstone (deleted in either browser) wins over an older copy. Never runs under
+    // a turn in flight. Local-only or newer-here conversations are written back by the normal debounce.
+    async function sessSdLoad(){
+      if(busy) return;
+      _sessMergedAt=Date.now();
+      let j=null;
+      try{ const r=await dfetch('/api/fs/read?path='+encodeURIComponent(SESS_PATH),{cache:'no-store'}); if(!r.ok) return; j=JSON.parse(await r.text()); }catch{ return; }
+      if(busy) return;
+      const remote=Array.isArray(j)?j:(j&&Array.isArray(j.sessions)?j.sessions:[]);
+      for(const t of ((j&&Array.isArray(j.tomb))?j.tomb:[])) if(Array.isArray(t)&&typeof t[0]==='string'){ const mine=tombs.find(x=>x[0]===t[0]); if(!mine) tombs.push([t[0],+t[1]||0]); else if((+t[1]||0)>mine[1]) mine[1]=+t[1]; }
+      const tombAt=id=>{ const t=tombs.find(x=>x[0]===id); return t?t[1]:0; };
+      let added=0, replaced=false, activeTouched=false;
+      const before=sessions.length;
+      sessions=sessions.filter(s=>{ const t=tombAt(s.id); return !(t && t>=(s.modified||0) && s.id!==activeId); });
+      const dropped=before!==sessions.length;
+      for(const rs of remote){
+        if(!rs || typeof rs.id!=='string' || !Array.isArray(rs.history) || !rs.history.length) continue;
+        if(tombAt(rs.id)>=(rs.modified||0)) continue;
+        const ls=sessions.find(s=>s.id===rs.id);
+        if(!ls){ sessions.push({ id:rs.id, sid:AM.validSid(rs.sid)?rs.sid:AM.newSid('a'), title:String(rs.title||''), created:+rs.created||+rs.modified||Date.now(),
+                                 modified:+rs.modified||Date.now(), pinned:!!rs.pinned, history:rs.history }); added++; }
+        else if((+rs.modified||0)>(ls.modified||0)){
+          ls.title=String(rs.title||ls.title||''); ls.modified=+rs.modified; ls.pinned=!!rs.pinned; ls.history=rs.history;
+          if(AM.validSid(rs.sid)) ls.sid=rs.sid; replaced=true; if(ls.id===activeId) activeTouched=true;
+        }
+      }
+      saveTombs();
+      if(!added && !replaced && !dropped){ _sessLast=sdPayload(); return; }   // nothing new: remember it so an idle save doesn't rewrite it
+      sessions=capSessions(sessions);
+      if(activeTouched){ history=activeSession().history; renderAll(); } else updateSessions();
+      saveSessions();
+      if(added) toast(L('sessSynced',{count:added}),'ok');
+    }
+    document.addEventListener('visibilitychange',()=>{ if(!document.hidden && Date.now()-_sessMergedAt>60000) sessSdLoad(); });
     // Silent compaction: the digest is computed for the STORED copy (see storedHistory) — the
     // visible transcript is left whole. We only re-persist and refresh the meter; nothing is
     // removed from the screen. Returns how many turns the stored copy folds away (for feedback).
@@ -3420,7 +3617,7 @@
     // (WebLLM on the user's GPU — offline, private), keeping the grounded device dictionary (instant for
     // common words, hybrid only) and Grok as the ladder around it. Returns an ANIMA-shaped result, or null
     // to let the normal /api/anima path run (off → dictionary, only → Grok, or any fallback).
-    async function routeTranslate(q){
+    async function routeTranslate(q, sig){
       // The GPU translation rung is always allowed: it is local compute, fine in private mode too.
       const m = await loadLLM();                              // lazy: pulls local-llm + webllm chain only when local/on
       if(!m.isTranslateRequest(q)) return null;
@@ -3429,13 +3626,14 @@
       // Installed only: a translation must never start a multi-GB model pull (Settings ▸ Download now does).
       let have=false; try{ have = await m.localAvailable(); }catch{ have=false; }
       if(!have) return null;
-      if(!isPrivate() && !devTooLong(q)){                      // try the grounded device dictionary first (if it fits its URL cap)
+      if(!devTooLong(q)){                                      // try the grounded device dictionary first (if it fits its URL cap)
         try{
-          const d = await (await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode=off')).json();
+          const d = await AM.withStep(sig, AM.STEP_MS.device, (signal)=>dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode=off'+sidQ(), { signal }).then(r=>r.json()));
           if(d && d.reply && / in (inglese|italiano|english|italian):/i.test(d.reply)) return d;  // dictionary hit
-        }catch{}
+        }catch{ if(sig && sig.aborted) return null; }
       }
-      const txt = await m.translateLocal(q, lang);            // GPU run on the INSTALLED model (never downloads)
+      // GPU run on the INSTALLED model (never downloads); Stop / the step timeout interrupt generation.
+      const txt = await AM.withStep(sig, AM.STEP_MS.local, (signal)=>m.translateLocal(q, lang, null, { signal }));
       if(txt) return { reply:txt, tier:'M4-local', intent:'translate', trace:(TR('GPU locale · WebLLM', 'Local GPU · WebLLM')) };
       return null;
     }
@@ -3517,7 +3715,7 @@
       const retry=e.querySelector('.pretry'), dev=e.querySelector('.pdev');
       retry.textContent=TR('Riprova', 'Retry'); dev.textContent=TR('Usa il dispositivo', 'Use device');
       retry.onclick=()=>{ act.classList.remove('on'); ensureEdge(true, true).catch(()=>{}); };   // Retry IS consent
-      dev.onclick=()=>{ provHide(); chooseMode('on'); };
+      dev.onclick=()=>{ provHide(); };   // the device rung answers anyway; the MODE (e.g. Private) is the user's, never flipped here
       act.classList.add('on');
     }
     function provHide(){ const e=provEl(); const cx=e.querySelector('.prov-cancel'); if(cx) cx.style.display='none'; e.classList.remove('on'); }
@@ -3555,7 +3753,7 @@
         no.textContent  = TR('Usa il dispositivo', 'Use device');
         const done=(v)=>{ _consentP=null; act.classList.remove('on'); card.classList.remove('tut'); resolve(v); };
         yes.onclick=()=>done(true);
-        no.onclick =()=>{ provHide(); done(false); chooseMode('auto'); };   // decline -> fall back to the ladder
+        no.onclick =()=>{ provHide(); done(false); };   // decline -> the rest of the ladder answers; the mode is left as the user set it
         e.classList.add('on');
       });
       return _consentP;
@@ -3573,7 +3771,8 @@
       e.querySelector('.pi').textContent='⚡';
       e.querySelector('.pt').textContent=t.edge.tutTitle;
       e.querySelector('.pd').innerHTML=t.edge.tutBody;
-      e.querySelector('.prov-tip').innerHTML='<ul class="tut-list">'+t.edge.tutBullets.map(b=>'<li>'+b+'</li>').join('')+'</ul>';
+      // bullet 3 used to point at the retired "Hybrid" mode: it now comes from the catalog (Auto / Private).
+      e.querySelector('.prov-tip').innerHTML='<ul class="tut-list">'+t.edge.tutBullets.map((b,i)=>'<li>'+(i===2?L('tutModeBullet'):b)+'</li>').join('')+'</ul>';
       const act=e.querySelector('.prov-act'); act.classList.add('on');
       const start=e.querySelector('.pretry'), demo=e.querySelector('.pdev');
       start.textContent=t.edge.tutBtn; start.onclick=()=>{ provHide(); if(typeof input!=='undefined'&&input) input.focus(); };
@@ -3583,37 +3782,35 @@
 
     // Persistent, re-openable GUIDE (/guida · /guide): the brains, the fallback cascade, the modes, teaching
     // and privacy. Reuses the prov-card overlay styling; self-contained so it never collides with provisioning.
-    let _guideEl;
+    // All five languages come from the catalog (the old guide was it + English-for-everyone-else, and still
+    // described the five retired modes). The body strings are trusted catalog HTML (<b>, <code>, <br>).
+    let _guideEl, _guidePrev=null;
+    function closeGuide(){ if(!_guideEl || !_guideEl.classList.contains('on')) return false; _guideEl.classList.remove('on'); try{ _guidePrev&&_guidePrev.focus&&_guidePrev.focus(); }catch{} return true; }
     function openGuide(){
-      const en = lang==='en';
+      provEl();                                   // the overlay styles (.prov-scrim/.prov-card) are injected there
       if(!_guideEl){
-        const el=document.createElement('div'); el.className='prov-scrim'; el.setAttribute('role','dialog'); el.setAttribute('aria-modal','true');
+        const el=document.createElement('div'); el.className='prov-scrim'; el.setAttribute('role','dialog'); el.setAttribute('aria-modal','true'); el.setAttribute('aria-labelledby','g-title');
         el.innerHTML='<div class="prov-card" style="max-width:540px;text-align:left;max-height:86vh;overflow:auto">'
-          +'<div class="pi" style="margin:0 auto 12px">📖</div><h3 class="g-title" style="text-align:center;margin:0 0 4px"></h3>'
+          +'<div class="pi" style="margin:0 auto 12px" aria-hidden="true">📖</div><h3 class="g-title" id="g-title" style="text-align:center;margin:0 0 4px"></h3>'
           +'<div class="g-body" style="font-size:12.5px;line-height:1.55;color:var(--muted,#9aa7bd)"></div>'
-          +'<div class="prov-act on" style="margin-top:16px;justify-content:center"><button class="pri g-close"></button></div></div>';
+          +'<div class="prov-act on" style="margin-top:16px;justify-content:center"><button class="pri g-close" type="button"></button></div></div>';
         document.body.appendChild(el); _guideEl=el;
-        el.addEventListener('click',(ev)=>{ if(ev.target===el) el.classList.remove('on'); });
-        el.querySelector('.g-close').addEventListener('click',()=>el.classList.remove('on'));
+        el.addEventListener('click',(ev)=>{ if(ev.target===el) closeGuide(); });
+        el.addEventListener('keydown',(ev)=>{ if(ev.key==='Escape'){ ev.preventDefault(); ev.stopPropagation(); closeGuide(); } else if(ev.key==='Tab'){ ev.preventDefault(); el.querySelector('.g-close').focus(); } });
+        el.querySelector('.g-close').addEventListener('click',closeGuide);
       }
-      const sec=(icon,title,body)=>'<div style="margin:14px 0 0"><div style="font-weight:700;color:var(--text,#eaf0ff);font-size:13px">'+icon+' '+title+'</div><div style="margin-top:4px">'+body+'</div></div>';
+      const sec=(icon,title,body)=>'<div style="margin:14px 0 0"><div style="font-weight:700;color:var(--text,#eaf0ff);font-size:13px"><span aria-hidden="true">'+icon+'</span> '+esc(title)+'</div><div style="margin-top:4px">'+body+'</div></div>';
       const g=_guideEl;
-      g.querySelector('.g-title').textContent = TR('Come funziona ANIMA', 'How ANIMA works');
-      g.querySelector('.g-body').innerHTML = (lang!=='it') ? (
-        sec('🧠','Four minds, one cascade','ANIMA tries its brains <b>in order</b>, from the most capable to the always-available, and scales onto the Cardputer only as the last safety net:'
-          +'<div style="margin-top:6px">☁ <b>1 · Online (cloud)</b> — Claude/Groq/Grok, needs a key + Internet.<br>✦ <b>2 · Local GPU</b> — a full LLM on your browser GPU (WebLLM).<br>◆ <b>3 · Browser (WASM) + web index</b> — the Cardputer’s offline cascade compiled to WebAssembly and run on your CPU; if it doesn’t know, it indexes Wikipedia from the browser. <i>The last step before the Cardputer.</i><br>▣ <b>4 · Cardputer</b> — the on-device brain, always offline, the final net.</div>')
-        + sec('🎛️','Modes','Switch with the ⚡ pill or <code>/offline</code> <code>/hybrid</code> <code>/online</code>. <b>Browser</b> = everything in this browser (private). <b>Hybrid</b> = device + cloud teacher. <b>Online</b> = real LLMs only.')
-        + sec('📚','Teach it','Say “remember that the meeting room <b>is</b> on the third floor”. Use the copula <b>is</b>; it persists in this browser across reloads.')
-        + sec('🔒','Privacy','In <b>Browser</b> mode nothing leaves the device — even the web index serves only already-cached cards offline. With a key, cloud calls go straight from your browser, never logged.')
-      ) : (
-        sec('🧠','Quattro menti, una cascata','ANIMA prova i suoi cervelli <b>in ordine</b>, dal più capace al sempre-disponibile, e scala sul Cardputer solo come ultima rete di sicurezza:'
-          +'<div style="margin-top:6px">☁ <b>1 · Online (cloud)</b> — Claude/Groq/Grok, serve chiave + Internet.<br>✦ <b>2 · GPU locale</b> — un LLM completo sulla GPU del browser (WebLLM).<br>◆ <b>3 · Browser (WASM) + indice web</b> — la cascata offline del Cardputer compilata a WebAssembly e girata sulla tua CPU; se non sa, indicizza Wikipedia dal browser. <i>L’ultimo passo prima del Cardputer.</i><br>▣ <b>4 · Cardputer</b> — il cervello on-device, sempre offline, la rete finale.</div>')
-        + sec('🎛️','Le modalità','Cambia con la pill ⚡ o con <code>/offline</code> <code>/ibrida</code> <code>/online</code>. <b>Browser</b> = tutto in questo browser (privato). <b>Ibrida</b> = dispositivo + maestro cloud. <b>Online</b> = solo LLM veri.')
-        + sec('📚','Insegnagli','Di’ «ricorda che la sala riunioni <b>è</b> al terzo piano». Usa la copula <b>è</b>; il fatto resta in questo browser anche dopo aver ricaricato.')
-        + sec('🔒','Privacy','In modalità <b>Browser</b> nulla lascia il dispositivo — anche l’indice web serve solo card già in cache, offline. Con una chiave, le chiamate cloud partono dritte dal tuo browser, mai nei log.')
-      );
-      g.querySelector('.g-close').textContent = TR('Ho capito', 'Got it');
+      g.querySelector('.g-title').textContent = L('guideTitle');
+      g.querySelector('.g-body').innerHTML =
+          sec('🧠', L('guideMindsT'), L('guideMinds'))
+        + sec('🎛️', L('guideModesT'), L('guideModes'))
+        + sec('📚', L('guideTeachT'), L('guideTeach'))
+        + sec('🔒', L('guidePrivacyT'), L('guidePrivacy'));
+      g.querySelector('.g-close').textContent = L('guideClose');
+      _guidePrev=document.activeElement;
       g.classList.add('on');
+      setTimeout(()=>g.querySelector('.g-close').focus(), 30);
     }
 
     // Settings · Engine: reflect whether the brain is cached, and offer a re-download.
@@ -3621,15 +3818,55 @@
       const t=UI[lang], s=$('s-edge'), stat=$('edge-stat'), btn=$('edge-reload');
       if(s) s.textContent=t.edge.mgmt; if(btn) btn.textContent=t.edge.reload;
       if(!stat) return;
-      try{ const m=await import('./local/engine.js'); stat.textContent=(await m.packCached())?t.edge.cached:t.edge.missing; }
+      if(_edgeSyncing) return;                          // a running update owns the status line
+      try{ const m=await import('./local/engine.js'); stat.textContent=(await m.packCached())?(_edgeAvail?L('edgeAvailable',{ size:fmtBytes(_edgeAvail.bytes) }):t.edge.cached):t.edge.missing; }
       catch{ stat.textContent=t.edge.missing; }
     }
+    // "Reload" = bring the local brain up to date with the Cardputer, file by file: only what changed on the
+    // device is fetched (usually a few KB of learned facts), after an explicit OK that names the size.
+    // Nothing cached yet -> the normal first download, behind the same consent gate.
+    let _edgeSyncing=false;
     $('edge-reload')?.addEventListener('click', async ()=>{
-      if(!confirm(TR('Riscaricare il cervello di ANIMA (~88 MB)?', "Re-download ANIMA's brain (~88 MB)?"))) return;
-      try{ const e=await edgeEngine(); await e.refresh(); }catch{}
-      _edgeReady=false; _ensuring=null;
-      ensureEdge(true, true).then(()=>{ updateEdgeRow(); }).catch(()=>{});   // confirm() above IS consent
+      if(_edgeSyncing) return;
+      let eng; try{ eng=await edgeEngine(); }catch{ return; }
+      if(!(await eng.ready())){ ensureEdge(true).then(updateEdgeRow).catch(()=>{}); return; }
+      const stat=$('edge-stat'), put=(s)=>{ if(stat) stat.textContent=s; };
+      let repaint=false;                                      // hand the status line back to updateEdgeRow at the end
+      _edgeSyncing=true;
+      try{
+        put(L('edgeChecking'));
+        const plan=await eng.sync({ maxBytes:0 });              // plan only: anything to fetch comes back as 'available'
+        if(plan.state==='current'){ _edgeAvail=null; put(L('edgeCurrent')); return; }
+        if(plan.state==='offline'){ put(L('edgeOffline')); return; }
+        if(plan.state==='available'){
+          const ok=await askDialog({ title:L('edgeUpdateQ'), body:L('edgeUpdateBody',{ count:plan.count, size:fmtBytes(plan.bytes) }), ok:L('download') });
+          if(!ok){ repaint=true; return; }
+          put(L('edgeUpdating'));
+          const res=await eng.sync({ onProgress:(p)=>put(L('edgeUpdating')+' '+Math.min(p.count,(p.idx||0)+1)+'/'+p.count) });
+          if(res.state==='updated') _edgeAvail=null;
+          put(res.state==='updated' ? (res.reload ? L('edgeUpdatedReload') : L('edgeUpdated')) : res.state==='busy' ? L('edgeBusy') : L('edgeOffline'));
+          return;
+        }
+        repaint=true;
+      } catch { repaint=true; }
+      finally{ _edgeSyncing=false; if(repaint) updateEdgeRow(); }
     });
+    const fmtBytes=(n)=>{ try{ return I18N.fmtBytes(n); }catch{ return _fmtMB(n); } };   // "949 B", "1.2 MB" in the UI locale
+    // At idle, when the device answers: keep the local brain current without asking for SMALL deltas (the
+    // learned facts, a few KB). Big deltas are never pulled silently — the Settings row offers them. It
+    // never runs before the first, consented download, and it yields to any other download (ifAvailable).
+    let _edgeBgAt=0;
+    async function edgeBackgroundSync(){
+      if(_edgeSyncing || busy || document.hidden || Date.now()-_edgeBgAt<10*60000) return;
+      _edgeBgAt=Date.now();
+      try{
+        const m=await import('./local/engine.js'); if(!(await m.packCached())) return;
+        const eng=await edgeEngine();
+        const res=await eng.sync({ maxBytes:2*1048576, ifAvailable:true });
+        if(res.state==='available'){ const s=$('edge-stat'); if(s) s.textContent=L('edgeAvailable',{ size:fmtBytes(res.bytes) }); _edgeAvail=res; }
+      }catch{}
+    }
+    let _edgeAvail=null;
 
     // Settings · Engine: the in-browser GPU model picker. WebLLM downloads the chosen model from the CDN on
     // first use (automatic + transparent) and caches it for offline reuse; the default is the best one a
@@ -3667,7 +3904,7 @@
           let m; try{ m=await loadLLM(); }catch{ return; }
           const mo=cat.localModelById(sel.value)||{label:sel.value,sizeGB:'?'};
           let have=false; try{ have=await m.localModelCached(sel.value); }catch{}
-          if(!have && !confirm(TR('Scaricare {m} (~{gb} GB) in questo browser? Succede una volta sola; poi gira offline sulla tua GPU.', 'Download {m} (~{gb} GB) into this browser? It happens once; afterwards it runs offline on your GPU.').replace('{m}',mo.label).replace('{gb}',String(mo.sizeGB)))) return;
+          if(!have && !(await askDialog({ title:L('downloadModelTitle'), body:L('downloadModelQ',{ m:mo.label, gb:String(mo.sizeGB) }), ok:L('download') }))) return;
           btn.disabled=true;
           try{ await m.unloadLocal();
             stat.style.color='var(--muted)'; stat.textContent=TR('Preparo… (se c’è un altro download in corso, aspetto che finisca)', 'Preparing… (if another download is running, it waits for it to finish)');
@@ -3711,7 +3948,7 @@
         try{ applyAll(); }catch{}                 // refresh the ⚡ pill + local-engine row now it's ready
       })();
       try{ await _ensuring; } catch(e){ _ensuring=null;
-        if(e && e.code==='CANCELLED'){ provHide(); try{ toast(TR('Download annullato — uso il dispositivo', 'Download cancelled — using the device'),'warn'); }catch{} try{ chooseMode('on'); }catch{} throw e; }
+        if(e && e.code==='CANCELLED'){ provHide(); try{ toast(TR('Download annullato — uso il dispositivo', 'Download cancelled — using the device'),'warn'); }catch{} throw e; }
         if(blocking) provError(); throw e;
       }
       _ensuring=null;
@@ -3748,6 +3985,7 @@
     // pull the pack). silent=true → mid-chat fallback: use ONLY what's already cached (loadIfCached), else throw
     // NOT_PROVISIONED so the policy falls through to the device instead of triggering a surprise ~88 MB download.
     async function browserOffline(q, lang, silent){
+      if(_turnSig && _turnSig.aborted) return null;             // stopped: no further rung runs
       // The commands-first probe may already have run the engine on this exact turn: reuse that answer
       // instead of querying again (the engine is stateful — a second pass would count as a repeat).
       if(_turnLocal && _turnLocal.q===q){ const r=_turnLocal.r; _turnLocal=null; return r; }
@@ -3761,10 +3999,12 @@
     // miss is reported as "too long" instead of a bare "I don't know".
     async function deviceOffline(q, lang, devMode){
       if(_turnDevice && _turnDevice.q===q){ const d=_turnDevice; _turnDevice=null; return d.r||null; }   // commands-first already asked it
+      if(_turnSig && _turnSig.aborted) return null;
       if(devTooLong(q)){ _turnDevErr='too_long'; return null; }
-      try{ const resp = await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode='+(devMode||'off'));
-        if(resp.status===413 || resp.status===414){ _turnDevErr='too_long'; return null; }
-        if(!resp.ok) return null; return await resp.json(); }
+      try{ return await AM.withStep(_turnSig, AM.STEP_MS.device, async (signal)=>{
+          const resp = await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode='+(devMode||'off')+sidQ(), { signal });
+          if(resp.status===413 || resp.status===414){ _turnDevErr='too_long'; return null; }
+          if(!resp.ok) return null; return await resp.json(); }); }
       catch{ return null; }
     }
 
@@ -3776,9 +4016,12 @@
     // Turn-scoped memos: the probe's engine/device answers are reused by the offline rungs of the same turn
     // (never a second query — both engines keep dialogue state).
     let _turnLocal=null, _turnDevice=null, _turnDevErr='';
-    // CONFIG_HTTPD_MAX_URI_LEN=512 minus '/api/anima?q=' and '&lang=xx&mode=only': past this the device
-    // answers 414/413, so don't send it at all.
-    const DEV_Q_MAX_ENC = 470;
+    // The running turn's AbortSignal (null between turns). Every device / web / cloud / GPU step of the
+    // turn runs under AM.withStep(_turnSig, …): Stop aborts them all, a slow step times out on its own.
+    let _turnSig=null;
+    // CONFIG_HTTPD_MAX_URI_LEN=512 minus '/api/anima?q=', '&lang=xx&mode=only' and '&sid=' + a 23-char
+    // conversation id: past this the device answers 414/413, so don't send it at all.
+    const DEV_Q_MAX_ENC = 440;
     const devTooLong = (q)=> encodeURIComponent(String(q||'')).length > DEV_Q_MAX_ENC;
     // One device turn with the error kept apart: { r } on a reply, else { err: too_long|unpaired|busy|unreachable }.
     // mode=off: commands are deterministic L0 — never a TLS handshake on the device for them.
@@ -3786,14 +4029,18 @@
       if(_turnDevice && _turnDevice.q===q) return _turnDevice;
       const done=(d)=>{ _turnDevice={q, ...d}; if(d.err==='too_long') _turnDevErr='too_long'; return _turnDevice; };
       if(devTooLong(q)) return done({ err:'too_long' });
-      let resp;
-      try{ resp = await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode=off'); }
-      catch{ return done({ err:'unreachable' }); }
-      if(resp.status===401) return done({ err:'unpaired' });
-      if(resp.status===413 || resp.status===414) return done({ err:'too_long' });
-      if(resp.status===503) return done({ err:'busy' });
-      if(!resp.ok) return done({ err:'unreachable' });
-      try{ return done({ r: await resp.json() }); }catch{ return done({ err:'unreachable' }); }
+      if(_turnSig && _turnSig.aborted) return done({ err:'stopped' });
+      const st=AM.stepSignal(_turnSig, AM.STEP_MS.device);
+      try{
+        let resp;
+        try{ resp = await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode=off'+sidQ(), { signal:st.signal }); }
+        catch{ return done({ err: (_turnSig && _turnSig.aborted) ? 'stopped' : 'unreachable' }); }
+        if(resp.status===401) return done({ err:'unpaired' });
+        if(resp.status===413 || resp.status===414) return done({ err:'too_long' });
+        if(resp.status===503) return done({ err:'busy' });
+        if(!resp.ok) return done({ err:'unreachable' });
+        try{ const r=await resp.json(); replayPendingSoon(); return done({ r }); }catch{ return done({ err:'unreachable' }); }
+      } finally { st.done(); }
     }
     function notDoneWhat(tool){
       if(tool==='add_event') return TR('l’evento non è stato aggiunto', 'the event was not added');
@@ -3817,8 +4064,48 @@
       const reply=(why==='failed' && r && r.reply) ? r.reply : '⚠ '+notDoneWhy(why)+': '+notDoneWhat(t)+'.';
       return { ...(r||{ intent:'not_done', domain:'tool', tier:'none', confidence:0 }), reply, done:false, notDone:{ tool:t, why } };
     }
+    // ---- PERSONAL MEMORY: one owner, the Cardputer ------------------------------------------------------
+    // "ricorda che X è Y", "mi chiamo Marco", "come mi chiamo": the device keeps user.tsv / profile.tsv, so
+    // these go to it first (same conversation sid, mode=off). Only when it is unreachable (or unpaired) does
+    // the browser's own store answer — and a fact taught there is queued and replayed to the device, as the
+    // same utterance, the next time the device answers. Detection: local/cascade.js memoryHint().
+    const MEM_PENDING_KEY='anima.memPending';
+    function memPending(){ try{ const a=JSON.parse(get(MEM_PENDING_KEY,'[]')); return Array.isArray(a)?a.filter(x=>x&&typeof x.q==='string'):[]; }catch{ return []; } }
+    function queuePending(q, kind){ const a=memPending().filter(x=>x.q!==q); a.push({ q, lang, kind, at:Date.now() }); set(MEM_PENDING_KEY, JSON.stringify(a.slice(-50))); }
+    let _replaying=false, _replayT=0;
+    async function replayPending(){
+      if(_replaying) return; if(busy){ replayPendingSoon(); return; }
+      const a=memPending(); if(!a.length) return;
+      _replaying=true; let sent=0;
+      try{
+        for(const it of a){
+          if(busy) break;                                   // a user turn has the device now: continue later
+          let ok=false;
+          try{ const r=await dfetch('/api/anima?q='+encodeURIComponent(it.q)+'&lang='+(it.lang||'it')+'&mode=off'+sidQ(), {}, 2); ok=r.ok; if(ok) await r.json().catch(()=>null); }catch{ ok=false; }
+          if(!ok) break;                                    // unreachable / unpaired / busy: keep the rest, in order
+          sent++;
+          set(MEM_PENDING_KEY, JSON.stringify(memPending().filter(x=>x.q!==it.q)));
+        }
+      } finally { _replaying=false; }
+      if(sent) toast(L('memSynced',{ count:sent }),'ok');
+    }
+    function replayPendingSoon(){ if(!memPending().length) return; clearTimeout(_replayT); _replayT=setTimeout(replayPending, 1500); }
+    async function memoryFirst(q, kind, P){
+      const d=await deviceCommand(q);
+      if(d.r){ if(P.answered(d.r)){ _turnDevice=null; return d.r; } return null; }   // reachable: the device decided
+      if(d.err==='stopped' || d.err==='too_long') return null;
+      if(!(await browserProvisioned())) return null;        // no local brain either: the normal ladder says so honestly
+      let local=null; try{ local=await browserOffline(q, lang, true); }catch{ local=null; }
+      _turnLocal=null;
+      if(!P.answered(local)) return null;
+      if(kind!=='recall'){ queuePending(q, kind); return { ...local, memPending:true }; }
+      return local;
+    }
+
     async function commandFirst(q){
       const P=await cascadeMod();
+      const mem=P.memoryHint ? P.memoryHint(q) : null;
+      if(mem) return memoryFirst(q, mem, P);
       const hint=P.commandHint(q); if(!hint) return null;             // ordinary question: no device round-trip
       try{ const m=await loadLLM(); if(m.isTranslateRequest(q)) return null; }catch{}   // translation has its own ladder
       // The real classifier: the in-browser engine when it is already here (no download), else the device.
@@ -3868,7 +4155,8 @@
         browserProvisioned,
       };
       if(!opts.skipDevice) runners.device=(qq,ll)=>deviceOffline(qq,ll,opts.devMode);
-      return resolveOffline(q, lang, { prefer:opts.prefer, silent }, runners);
+      const r=await resolveOffline(q, lang, { prefer:opts.prefer, silent }, runners);
+      return (_turnSig && _turnSig.aborted) ? null : r;      // a late answer from a stopped turn is dropped
     }
 
     // ---- client-side WEB INDEXER: the in-browser hybrid tier (ZERO LLM) ------------------------------
@@ -3879,11 +4167,13 @@
     let _webidx;
     function webidxMod(){ return _webidx || (_webidx = Promise.all([import('./local/webindex.js'), import('./local/webstore.js')]).then(([w,s])=>(_webidx={w,s}))); }
     async function webAnswer(q, lang, online){
+      if(_turnSig && _turnSig.aborted) return null;
       try{
         const { w, s } = await webidxMod();
-        // online=false → recall-only (cached cards, no network) so Browser/Offline keep "nothing leaves the
-        // device"; online=true → live fetch when the browser has connectivity. bare → resolve bare nouns too.
-        return await w.webIndexAnswer(q, lang, { store:s.webStore, bare:true, online: online!==false && navigator.onLine!==false, now: Date.now() });
+        // online=false → recall-only (cached cards, no network) so Private keeps "nothing leaves this
+        // machine"; online=true → live fetch when the browser has connectivity. bare → resolve bare nouns too.
+        return await AM.withStep(_turnSig, AM.STEP_MS.web, (signal)=>w.webIndexAnswer(q, lang,
+          { fetch:AM.fetchWith(signal), store:s.webStore, bare:true, online: online!==false && navigator.onLine!==false, now: Date.now() }));
       }catch{ return null; }
     }
 
@@ -3893,31 +4183,18 @@
     // opt-in header (this is the user's own single-tenant device served to their own browser). ------
     // `userOrMessages` is either a plain string (single turn — used by cloudPing) or a full
     // contextkit messages[] array (the multi-turn transcript). `opts` carries {maxTokens,temperature}.
-    async function cloudComplete(provider, base, model, key, version, system, userOrMessages, opts){
-      const msgs = Array.isArray(userOrMessages) ? userOrMessages : [{role:'user',content:String(userOrMessages||'')}];
-      const maxTokens = (opts&&opts.maxTokens)||1024, temperature = (opts&&typeof opts.temperature==='number')?opts.temperature:0.4;
-      if(provider==='anthropic'){
-        const resp = await fetch((base||'https://api.anthropic.com').replace(/\/+$/,'')+'/v1/messages', {
-          method:'POST',
-          headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':version||'2023-06-01',
-                    'anthropic-dangerous-direct-browser-access':'true' },
-          body: JSON.stringify({ model:model||'claude-sonnet-4-6', max_tokens:maxTokens, ...(system?{system}:{}), messages:msgs }) });
-        const j = await resp.json().catch(()=>null);
-        if(!resp.ok || !j || j.type==='error') throw new Error((j&&j.error&&j.error.message)||('HTTP '+resp.status));
-        return Array.isArray(j.content) ? j.content.filter(b=>b&&b.type==='text').map(b=>b.text).join('') : '';
-      }
-      // OpenAI-compatible (Groq/OpenAI/Gemini). Browser-direct offloads the device — EXCEPT Gemini,
-      // whose API sends no CORS headers, so it's relayed through the device's same-origin /api/llm
-      // proxy (firmware dials Google server-side, key passed through, streamed back heap-gated).
-      const epDirect=(base||'https://api.groq.com/openai/v1').replace(/\/+$/,'')+'/chat/completions';
-      const epUrl=(AI.providerOf(provider).proxy)?'/api/llm?url='+encodeURIComponent(epDirect):epDirect;
-      const resp = await fetch(epUrl, {
-        method:'POST', headers:{ 'content-type':'application/json', 'authorization':'Bearer '+key },
-        body: JSON.stringify({ model:model||'llama-3.1-8b-instant', max_tokens:maxTokens, temperature,
-                               messages:[...(system?[{role:'system',content:system}]:[]),...msgs] }) });
-      const j = await resp.json().catch(()=>null);
-      if(!resp.ok || !j || j.error) throw new Error((j&&j.error&&(j.error.message||j.error))||('HTTP '+resp.status));
-      return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    // opts: {maxTokens, temperature, signal, onDelta}. With onDelta the answer STREAMS (SSE) — Anthropic and
+    // the OpenAI-compatible providers — and the caller renders tokens as they land. A provider relayed
+    // through the device (Gemini: no CORS, so /api/llm dials it server-side) stays a single short call.
+    async function cloudComplete(provider, base, model, key, version, system, userOrMessages, opts={}){
+      const { chatComplete } = await loadStream();
+      const req = { system, messages: Array.isArray(userOrMessages) ? userOrMessages : [{role:'user',content:String(userOrMessages||'')}],
+                    maxTokens: opts.maxTokens||1024, temperature: typeof opts.temperature==='number' ? opts.temperature : 0.4 };
+      const proxyUrl = AI.providerOf(provider).proxy ? (u)=>'/api/llm?url='+encodeURIComponent(u) : null;
+      const streaming = !!opts.onDelta && !proxyUrl;
+      // A stream is bounded by silence (idle) and a generous total; a single-shot call by one step timeout.
+      return AM.withStep(opts.signal, streaming ? AM.STEP_MS.stream : AM.STEP_MS.cloud, (signal)=>
+        chatComplete({ provider, base, model, key, version }, req, { signal, onDelta:opts.onDelta, idleMs:AM.STEP_MS.idle, proxyUrl }));
     }
     // 🌐 WEB MODE (Groq compound). compound is GROQ-ONLY, so resolve a usable Groq creds set: the active
     // provider if it IS Groq, else the stored 'openai' key (ai.js calls Groq the 'openai' provider). Require
@@ -3936,13 +4213,16 @@
     // A firm system prompt suppresses compound's raw "I searched / here's a table / print(...)" process dumps.
     async function cloudCompoundChat(q){
       const g=groqCfg(); if(!g) return null;
+      return AM.withStep(_turnSig, AM.STEP_MS.cloud, (signal)=>compoundCall(g, q, signal));
+    }
+    async function compoundCall(g, q, signal){
       const today=(()=>{ try{ return new Date().toISOString().slice(0,10); }catch{ return ''; } })();
       const sys=(lang==='en'
         ? 'You are a concise web research assistant. Search the web as needed and answer DIRECTLY in English. Use Markdown. Cite sources inline as [1], [2]… matching the order of the Sources list the UI appends. Do NOT narrate your process, do NOT print your search results as a table, and do NOT show code or its output unless explicitly asked. Keep it tight.'
         : 'Sei un assistente di ricerca web conciso. Cerca sul web quando serve e rispondi DIRETTAMENTE in italiano. Usa Markdown. Cita le fonti inline come [1], [2]… nello stesso ordine dell\'elenco Fonti che l\'interfaccia aggiunge. NON raccontare il tuo processo, NON stampare i risultati di ricerca come tabella e NON mostrare codice o il suo output se non richiesto esplicitamente. Sii sintetico.')
         + (today?(lang==='en'?'\nToday is '+today+'.':'\nOggi è '+today+'.'):'');
       const msgs=history.filter(h=>h.role==='user'||h.role==='bot').slice(-8).map(h=>({role:h.role==='bot'?'assistant':'user', content:String(h.text||'')}));
-      const resp=await fetch(g.base+'/chat/completions', { method:'POST',
+      const resp=await fetch(g.base+'/chat/completions', { method:'POST', signal,
         headers:{ 'content-type':'application/json', 'authorization':'Bearer '+g.key },
         body: JSON.stringify({ model:'groq/compound', max_tokens:1024, temperature:0.3, stream:false,
                                messages:[{role:'system',content:sys},...msgs] }) });
@@ -4011,8 +4291,12 @@
     // assembled by the context engine (system prompt + working-memory FACTS + recent verbatim turns +
     // the workspace tree/files + the current ask). `history` already holds the just-typed user turn;
     // contextkit uses `q` as the engine-facing current ask (may differ from the visible turn via chaining).
-    async function cloudAsk(q, _wsx){
+    // opts.onDelta streams the tokens to the caller's renderer. A failure AFTER tokens arrived is not
+    // retried on another provider (it would repeat the answer) — it throws with .partial for the caller.
+    async function cloudAsk(q, _wsx, opts={}){
       const today=(()=>{ try{ return new Date().toISOString().slice(0,10); }catch{ return ''; } })();
+      let streamed=false;
+      const onDelta = opts.onDelta ? (d)=>{ streamed=true; opts.onDelta(d); } : null;
       const wsx=_wsx || await wsContext(q);   // reuse the caller's workspace context when provided (no redundant device reads)
       const wsRoot=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : undefined;
       // MULTI-MODEL: hard turns (code / long-form) go to the STRONGEST configured model across all keys
@@ -4024,11 +4308,12 @@
       const callWith=async(cfg)=>{
         const a=ctxkit.assemble({ history, user:q, mode:'only', provider:cfg.provider, model:cfg.model, lang, now:today,
           workspace:wsRoot, tree:wsx.tree, files:wsx.files });
-        return cloudComplete(cfg.provider, cfg.base, cfg.model, cfg.key, cfg.version, a.system, a.messages, { maxTokens:a.maxTokens, temperature:a.temperature });
+        return cloudComplete(cfg.provider, cfg.base, cfg.model, cfg.key, cfg.version, a.system, a.messages, { maxTokens:a.maxTokens, temperature:a.temperature, signal:_turnSig, onDelta });
       };
       let txt;
       try{ txt = await callWith(route); }
       catch(e){
+        if(streamed || (_turnSig && _turnSig.aborted)) throw e;   // stopped, or half an answer is on screen: no silent retry
         // PROVIDER FALLBACK: on a definite failure, retry on the next-best configured provider BEFORE the
         // caller degrades to WebLLM/offline (online means real LLM only). Only if a DIFFERENT key exists.
         let fb=null; try{ fb=AI.routeFor({difficulty:hard?'hard':'fast', exclude:[route.provider]}, keyCfg.keys||{}, keyCfg); }catch{}
@@ -4059,13 +4344,10 @@
       else if(a.hw){ target=a.abs||''; isPath=false; }
       else if(op==='move_file' && a.from) target=(String(a.from).startsWith('/')?'':root)+String(a.from).replace(/^\.\//,'')+' → '+(a.abs||a.to||'?');
       else target=a.abs||(a.path?root+String(a.path).replace(/^\.?\/+/,''):'');
-      const lines=[TR('L’agente vuole eseguire: ', 'The agent wants to run: ')+op];
-      if(target) lines.push((isPath?TR('Percorso: ', 'Path: '):TR('Destinazione: ', 'Target: '))+target);
-      if(always) lines.push('⚠ '+(a.hw
-        ? TR('Azione hardware (agisce nel mondo reale): va sempre confermata.', 'Hardware action (it acts in the real world): it is always confirmed.')
-        : TR('Azione irreversibile o di sistema: va sempre confermata, anche con l’auto-approvazione.', 'Irreversible or system-level action: it is always confirmed, even with auto-approve on.')));
-      lines.push(TR('Consentire?', 'Allow?'));
-      return lines.join('\n');
+      const lines=[];
+      if(target) lines.push(L(isPath?'agentPath':'agentTarget',{ p:target }));
+      if(always) lines.push('⚠ '+L(a.hw?'agentHw':'agentIrrev'));
+      return { title:L('agentWants',{ op }), body:lines.join('\n') };
     }
     async function agentRuntime(){
       const sig=(keyCfg.key||'')+'|'+(keyCfg.model||'')+'|'+keysSig()+'|'+((fs.hasRoot&&fs.hasRoot())?fs.getRoot():'');
@@ -4086,7 +4368,7 @@
           // files stay visible/navigable in ANIMA's tree instead of landing invisibly in the scratch /data/agent.
           if(!fs.hasRoot() && !_agentWsAsked && /^(write_file|edit_file|append_file|make_dir|move_file)$/.test(a.op||'')){
             _agentWsAsked=true;
-            const open=confirm(TR('L\'agente sta per creare file, ma non c\'è un workspace aperto.\nApri un workspace ora così i file restano visibili qui?\n(Annulla = scrivi nella cartella temporanea /data/agent.)', 'The agent is about to create files, but no workspace is open.\nOpen a workspace now so the files stay visible here?\n(Cancel = write to the temporary /data/agent folder.)'));
+            const open=await askDialog({ title:L('wsAskTitle'), body:L('wsAskBody'), ok:L('wsAskOpen'), cancel:L('wsAskScratch') });
             if(open){
               const picked=await pickWorkspaceModal('/data');
               if(picked){ try{ _agentRt && _agentRt.fs && _agentRt.fs.setRoot(ws.root); }catch{} return true; }   // chosen destination → the write lands in the workspace; approve it
@@ -4098,7 +4380,8 @@
           // auto-approve must not cover them (a prompt-injected "publish this app" would otherwise go through).
           const always = !!a.hw || ALWAYS.has(a.op);
           if(agentAuto && !always) return true;
-          return confirm(agentConfirmText(a, always));
+          const q=agentConfirmText(a, always);
+          return askDialog({ title:q.title, body:q.body, ok:L('allow'), cancel:L('deny'), danger:always });
         },
         autoApprove:()=>agentAuto,
         webSearchEnabled:()=>agentWeb,
@@ -4155,6 +4438,19 @@
       return val+' '+q.trim();
     }
 
+    // ---- one turn = one AbortController -------------------------------------------------------------
+    // Stop / Esc abort the turn signal: the in-flight fetch (device, web index, cloud stream), the GPU
+    // generation and the agent loop all stop at once, pending approvals are denied, and whatever already
+    // streamed stays on screen marked as stopped. It used to only set a flag the requests never saw.
+    let turnCtl=null;
+    function stopTurn(){
+      interrupt=true; cancelAgent(); stopSpeaking(); dismissDialogs();
+      if(turnCtl && !turnCtl.signal.aborted){ try{ turnCtl.abort(AM.stopReason()); }catch{} }
+    }
+    // Answers that were GENERATED (cloud, agent, browser GPU, web search) are streamed or shown at once;
+    // only instant local answers get the short typewriter.
+    const generatedReply = (r)=> !!r && (r.tier==='M4-local' || r.domain==='online' || r.domain==='local' || r.substrate==='M3');
+
     async function ask(q){
       q=(q||'').trim(); if(!q || busy) return;
       if(q[0]==='/' && handleSlash(q)) return;
@@ -4163,46 +4459,53 @@
       if(fintent){ if(fs.hasRoot()){ runFileIntent(q, fintent); return; } inviteWorkspace(q); return; }
       const sendQ = chainMath(q);   // engine-facing query (may carry the running total); visible msg stays q
       busy=true; interrupt=false; setStop(true); closeSlash(); stopSpeaking();   // un nuovo turno zittisce la risposta precedente
+      const ctl=new AbortController(); turnCtl=ctl; _turnSig=ctl.signal; const sig=ctl.signal;
+      setLogBusy(true);
       addUser(q); history.push({role:'user',text:q}); persist();
       const think=startThinking();
+      // The first streamed token replaces the thinking line with the live answer (see streamShell).
+      let live=null;
+      const onDelta=(d)=>{ if(sig.aborted) return; if(!live){ think.remove(); live=streamShell(); } live.push(d); };
       let r; const _t0=Date.now();   // pipeline latency: measured across the whole brain resolution (incl. fallbacks)
       _turnLocal=null; _turnDevice=null; _turnDevErr='';
-      // COMMANDS FIRST: a device action or live-state question ("alza il volume", "ricordami…", "che ore sono")
-      // is resolved by the Cardputer before any LLM rung — even with 🌐 Web armed — see commandFirst().
+      try{
+      // COMMANDS FIRST: a device action or live-state question ("alza il volume", "ricordami…", "che ore sono"),
+      // and anything about the user's personal memory, is resolved by the Cardputer before any LLM rung — even
+      // with 🌐 Web armed — see commandFirst().
       try{ r = await commandFirst(sendQ); }catch{ r = null; }
-      // 🌐 WEB: when armed, an explicit web-grounded turn via Groq compound takes precedence over the selected
-      // mode. Browser-direct, Groq-only. On no key / failure it falls through to the normal engine (never dead-ends).
-      if(!r && webCompound){ await ensureKeyLoaded(); if(hasGroq()){ try{ r = await cloudCompoundChat(sendQ); }catch(e){ r = null; } } }
-      if(!r){
+      // 🌐 WEB: when armed, an explicit web-grounded turn via Groq compound takes precedence over Auto. Private
+      // never reaches the network, armed or not. On no key / failure it falls through to the normal ladder.
+      if(!r && webCompound && !isPrivate() && !sig.aborted){ await ensureKeyLoaded(); if(hasGroq()){ try{ r = await cloudCompoundChat(sendQ); }catch(e){ r = null; } } }
+      if(!r && !sig.aborted){
         // -- ONE ladder, walked top-down until a rung answers -------------------------------------
         // This replaced five hand-written per-mode ladders. They named WHERE compute ran, so picking
         // a mode PINNED the answer to one rung: 'Browser' never reached the GPU model however capable
         // the machine was, and every reply carried an 'offline fallback' banner. The cascade already
         // knows how to pick; the user only says whether the network may be used at all.
-        //   auto    - cloud key -> browser GPU LLM -> browser WASM brain -> Cardputer -> web index
-        //   private - the same ladder with every network rung removed
+        //   auto    - cloud key -> browser GPU LLM -> browser WASM brain -> web index -> Cardputer (hybrid)
+        //   private - the same ladder with every network rung removed; the Cardputer answers offline-only
         const priv = isPrivate();
         if(!priv) await ensureKeyLoaded();   // hydrate the key so browser-direct fires on turn one
 
         // 0 - translation has its own grounded ladder (device dictionary -> GPU model -> cloud)
-        try{ r = await routeTranslate(q); }catch{ r = null; }
+        try{ r = await routeTranslate(q, sig); }catch{ r = null; }
 
         // 1 - CLOUD. Browser-direct, never through the firmware: the mbedTLS handshake OOMs on this
         //     PSRAM-less chip. The agentic loop is browser-hosted for the same reason; a proxy
         //     provider (relayed via the device) skips the loop so a 14-step relay cannot hammer it.
-        if(!r && !priv && keyCfg.key){
+        if(!r && !priv && keyCfg.key && !sig.aborted){
           const loopEligible = useAgents && !curProv().proxy;
           const wsx = await wsContext(sendQ);   // built ONCE - shared by the loop seed and fallback
-          if(loopEligible){
+          if(loopEligible && !sig.aborted){
             _agentDidMutate = false; _agentCancelled = false; _agentWsAsked = false;
             try{ r = await agentAsk(sendQ, think, wsx); }catch(e){ r = null; }
-            if(_agentCancelled){
-              // Stop/Esc -> end cleanly; never fall through to an answer that reads as if nothing stopped.
-              r = { reply:(TR('Annullato.', 'Stopped.')), intent:'stopped', confidence:0, domain:'online' };
-            }
           }
-          if(!r && !_agentCancelled){
-            try{ r = await cloudAsk(sendQ, wsx); }catch(e){ r = null; }
+          if(!r && !sig.aborted){
+            // Streamed: tokens render as they arrive. A connection that dies mid-answer keeps what came.
+            try{ r = await cloudAsk(sendQ, wsx, { onDelta }); }
+            catch(e){ r = null;
+              const part = live ? live.text() : (e && e.partial) || '';
+              if(part && !sig.aborted) r = { reply:part, intent:'cloud', confidence:40, substrate:'M3', domain:'online', incomplete:true }; }
           }
         }
 
@@ -4210,30 +4513,45 @@
         //     old 'Browser' mode could never reach. Works in private mode too: once installed it is local.
         //     INSTALLED ONLY: this rung never starts a multi-GB download (that is Settings ▸ Download now,
         //     with consent + the OS download lock). Not installed -> skipped, the next rung answers.
-        if(!r && !_agentCancelled){
+        if(!r && !sig.aborted && !live){
           try{
             const m = await loadLLM(); const caps = await m.probeLocal();
-            if(caps.webgpu && await m.localAvailable()){ try{ r = await m.queryLocal(sendQ, lang, history); }catch{ r = null; } }
+            if(caps.webgpu && await m.localAvailable()){
+              try{ r = await AM.withStep(sig, AM.STEP_MS.local, (signal)=>m.queryLocal(sendQ, lang, history, null, { signal, onDelta })); }catch{ r = null; }
+            }
           }catch{ /* module/probe failed -> next rung */ }
         }
 
-        // 3 - BROWSER WASM brain, then 4 - the Cardputer, then 5 - the web index. offlineAnswer walks
-        //     these itself. silent:true - never trigger a surprise model pull mid-chat. The device is a
-        //     real rung here, unlike the old online-only path which skipped it and dead-ended instead.
-        if(!r && !_agentCancelled){
-          r = await offlineAnswer(sendQ, lang, { prefer:'browser', silent:true, webOnline: !priv, skipDevice:false });
+        // 3 - BROWSER WASM brain, then the web index, then 4 - the Cardputer. offlineAnswer walks these
+        //     itself. silent:true - never trigger a surprise model pull mid-chat. The device gets the mode's
+        //     own ?mode= (AM.deviceMode): hybrid in Auto, offline-only in Private.
+        if(!r && !sig.aborted && !live){
+          r = await offlineAnswer(sendQ, lang, { prefer:'browser', silent:true, webOnline: !priv, skipDevice:false, devMode:AM.deviceMode(mode) });
         }
+      }
 
-        // Nothing on any rung: say so honestly rather than inventing an answer.
-        if(!r){
-          think.remove(); const {body}=botShell(history.length, false);
-          const have = await browserProvisioned().catch(()=>false);
-          // A question the Cardputer rejected as too long must not read as "I don't know".
-          const msg = _turnDevErr==='too_long'
-            ? TR('La domanda è troppo lunga per il Cardputer: accorciala e riprova.', 'This question is too long for the Cardputer: shorten it and try again.')
-            : have ? UI[lang].offline : (UI[lang].edgeNeedInstall||UI[lang].offline);
-          await type(body, msg); history.push({role:'bot',text:msg}); persist(); setDot('err'); endTurn(); return;
-        }
+      // STOPPED: keep what already streamed (marked), else a plain "Stopped." — never a fresh answer that
+      // reads as if nothing happened.
+      if(sig.aborted){
+        think.remove();
+        const part = live ? live.text() : '';
+        const note = '■ '+L('stoppedNote');
+        let body;
+        if(live){ live.finish(part); body=live.body; } else { body=botShell(history.length, false).body; renderMd(body, L('stopped')); body.dataset.raw=L('stopped'); }
+        if(part) addLined(body, note, 'warn');
+        history.push(part ? { role:'bot', text:part, lines:[{ text:note, kind:'warn' }] } : { role:'bot', text:L('stopped') });
+        persist(); return;
+      }
+
+      // Nothing on any rung: say so honestly rather than inventing an answer.
+      if(!r){
+        think.remove(); const {body}=botShell(history.length, false);
+        const have = await browserProvisioned().catch(()=>false);
+        // A question the Cardputer rejected as too long must not read as "I don't know".
+        const msg = _turnDevErr==='too_long'
+          ? TR('La domanda è troppo lunga per il Cardputer: accorciala e riprova.', 'This question is too long for the Cardputer: shorten it and try again.')
+          : have ? UI[lang].offline : (UI[lang].edgeNeedInstall||UI[lang].offline);
+        renderMd(body, msg); body.dataset.raw=msg; history.push({role:'bot',text:msg}); persist(); setDot('err'); return;
       }
       // A device action is done only if the Cardputer did it: run a browser-engine proposal on the device,
       // or turn it into an honest "not done" (device unreachable / unpaired / refused / old firmware).
@@ -4247,8 +4565,11 @@
       const bareDecline = /^(non lo so\.?|i don'?t know\.?)$/i;
       const reply = (!r.reply || bareDecline.test(r.reply.trim())) ? UI[lang].dontknow : r.reply;
       const hidx = history.length;          // this bot turn's index after push below
-      const { body, turn }=botShell(hidx, true);
-      await type(body, reply);
+      let body, turn;
+      if(live){ ({ body, turn }=live); live.finish(reply); }                     // streamed: settle the final markdown
+      else { ({ body, turn }=botShell(hidx, true));
+        if(generatedReply(r)){ renderMd(body, reply); body.dataset.raw=reply; scrollDown(); }   // arrived whole: show it whole
+        else await type(body, reply); }                                         // instant local answer: short typewriter
       if(r.sources && r.sources.length) appendSources(body, r.sources);   // 🌐 web-grounded: cited Sources under the answer
       speakReply(reply);   // voce browser (speechSynthesis), se attiva: legge la risposta finale per intero
 
@@ -4256,6 +4577,9 @@
       const entry={ role:'bot', text:reply, engine:true,
         meta:{domain:r.domain,intent:r.intent,confidence:r.confidence,memory:r.memory,corrected:r.corrected,state:r.state,incoherent:r.incoherent},
         trace:null, lines:[], card:null, banner:null, clarify:null, sources:(r.sources&&r.sources.length?r.sources:null) };
+      // a stream that died mid-answer, or a personal fact kept in this browser until the Cardputer is back
+      if(r.incomplete){ const t='⚠ '+L('streamCut'); entry.lines.push({ text:t, kind:'warn' }); addLined(body, t, 'warn'); }
+      if(r.memPending){ const t='⏳ '+L('memPendingNote'); entry.lines.push({ text:t, kind:'dim' }); addLined(body, t, 'dim'); }
 
       // multi-step reasoning plan kept for export; rendered inside the engine map (below) as the "Steps" node
       if(r.trace && r.trace.includes(' > ')) entry.trace=r.trace.split(' > ');
@@ -4295,10 +4619,16 @@
       if(r.intent==='clarify' || r.state==='clarify'){ const opts=parseClarify(reply); if(opts){ entry.clarify=opts; buildClarify(body, opts); } }
 
       history.push(entry); persist();
-      endTurn();
+      } finally {
+        think.remove();
+        if(turnCtl===ctl) turnCtl=null;
+        _turnSig=null;
+        setLogBusy(false);
+        endTurn();
+      }
     }
     function endTurn(){ busy=false; setStop(false); input.focus(); scrollDown(); updateMeter(); }
-    function setStop(on){ sendBtn.textContent = on ? 'Stop' : (TR('Invia', 'Send')); sendBtn.classList.toggle('stop',on); }
+    function setStop(on){ sendBtn.textContent = on ? (L('stop')||'Stop') : TR('Invia', 'Send'); sendBtn.classList.toggle('stop',on); sendBtn.setAttribute('aria-label', sendBtn.textContent); }
     // Two shapes: the dialogic band asks ", A o B?"; the which-person clarify numbers its options
     // ("Quale intendi: 1) Donald Trump 2) Melania Trump (altre 7 …)") because it can offer three.
     // Numbered first — it is unambiguous, and an option's own text may contain "or".
@@ -4323,7 +4653,7 @@
     }
     function branchFrom(hidx){
       const slice=history.slice(0,hidx+1).map(h=>JSON.parse(JSON.stringify(h)));
-      const s={ id:uid(), title:'', created:Date.now(), modified:Date.now(), history:slice };
+      const s=mkSession(slice);
       const u=slice.find(h=>h.role==='user'); if(u) s.title=clamp(u.text.trim(),60);
       sessions.unshift(s); activeId=s.id; history=s.history; saveSessions(); renderAll(); closeDrawer();
       toast(UI[lang].branchMade,'ok'); input.focus();
@@ -4442,7 +4772,7 @@
     function togglePin(id){ const s=sessions.find(x=>x.id===id); if(!s) return; s.pinned=!s.pinned; saveSessions(); updateSessions(); toast(s.pinned?UI[lang].convPinned:UI[lang].convUnpinned,'ok'); }
     function newSession(){
       if(activeSession().history.length===0){ closeDrawer(); input.focus(); return; }   // reuse the empty one
-      const s={ id:uid(), title:'', created:Date.now(), modified:Date.now(), history:[] };
+      const s=mkSession([]);
       sessions.unshift(s); activeId=s.id; history=s.history; saveSessions(); renderAll(); closeDrawer();
       toast(UI[lang].newStarted); input.focus();
     }
@@ -4453,9 +4783,9 @@
     function deleteSession(id){
       const idx=sessions.findIndex(s=>s.id===id); if(idx<0) return;
       const removed=sessions[idx], wasActive=(id===activeId);
-      sessions.splice(idx,1);
+      sessions.splice(idx,1); tomb(id);                  // tombstone: the SD copy / another browser must not bring it back
       let placeholderId=null;
-      if(!sessions.length){ const p={ id:uid(), title:'', created:Date.now(), modified:Date.now(), history:[] }; sessions.push(p); placeholderId=p.id; }
+      if(!sessions.length){ const p=mkSession([]); sessions.push(p); placeholderId=p.id; }
       if(wasActive){ activeId=sessions.slice().sort((a,b)=>b.modified-a.modified)[0].id; history=activeSession().history; renderAll(); } else { updateSessions(); }
       saveSessions();
       _undo={removed,idx,wasActive,placeholderId};
@@ -4465,6 +4795,7 @@
       if(!_undo) return; const {removed,idx,wasActive,placeholderId}=_undo; _undo=null;
       if(placeholderId){ const p=sessions.find(s=>s.id===placeholderId); if(p && (!p.history||!p.history.length) && p.id!==removed.id) sessions=sessions.filter(s=>s.id!==placeholderId); }
       if(!sessions.find(s=>s.id===removed.id)) sessions.splice(Math.min(idx,sessions.length),0,removed);
+      untomb(removed.id);
       if(wasActive){ activeId=removed.id; history=activeSession().history; renderAll(); } else { updateSessions(); }
       saveSessions(); toast(UI[lang].restored,'ok');
     }
@@ -4522,7 +4853,7 @@
           if(h.role==='user') md+='> '+h.text.replace(/\n/g,'\n> ')+'\n\n';
           else { md+=(h.text||'')+'\n'; (h.trace||[]).forEach(t=>md+='  - '+t+'\n'); (h.lines||[]).forEach(l=>md+='  - '+l.text+'\n'); md+='\n'; }
         });
-        md+='\n---\n*ANIMA · '+date+' · '+UI[lang].stByMode[mode]+' · '+lang.toUpperCase()+'*\n';
+        md+='\n---\n*ANIMA · '+date+' · '+modeLabel(mode)+' · '+lang.toUpperCase()+'*\n';
         download(name+'.md', md, 'text/markdown');
       }
       toast(UI[lang].exported+' ✓','ok');
@@ -4534,18 +4865,24 @@
     // SLASH COMMANDS
     // ===========================================================================
     function sysLine(t){ const {body}=botShell(null,false); renderMd(body,t); body.dataset.raw=t; scrollDown(); }
+    // The slash list / help with the two engine modes (/auto, /private) in place of the retired three.
+    const RETIRED_MODE_CMD=/^\/(offline|ibrida|hybrid|online)$/;
+    function cmdList(){ const out=[]; let put=false;
+      for(const c of UI[lang].cmds){ if(RETIRED_MODE_CMD.test(c.c)){ if(!put){ out.push({c:'/auto',d:L('cmdAuto')},{c:'/private',d:L('cmdPrivate')}); put=true; } continue; } out.push(c); }
+      return out; }
+    function helpText(){ return UI[lang].helpText.replace(/^( *)\/offline \/(?:ibrida|hybrid) \/online +[^\n]*$/m, (m,sp)=>sp+'/auto /private'+' '.repeat(12)+L('cmdModes')); }
     function handleSlash(q){
       const parts=q.slice(1).trim().split(/\s+/); const cmd=(parts[0]||'').toLowerCase(); const arg=(parts[1]||'').toLowerCase();
-      if(cmd==='help'||cmd==='?'){ addUser(q); history.push({role:'user',text:q}); sysLine(UI[lang].helpText); history.push({role:'bot',text:UI[lang].helpText}); persist(); return true; }
+      if(cmd==='help'||cmd==='?'){ const h=helpText(); addUser(q); history.push({role:'user',text:q}); sysLine(h); history.push({role:'bot',text:h}); persist(); return true; }
       if(['guida','guide'].includes(cmd)){ openGuide(); return true; }
       if(cmd==='new'){ newSession(); return true; }
       if(cmd==='clear'){ doClear(); return true; }
       if(cmd==='theme'){ const map={midnight:'dark',dark:'dark',daylight:'light',light:'light',carbon:'oled',oled:'oled',contrast:'hc',hc:'hc'};
         if(map[arg]) chooseTheme(map[arg]); else openPalette('theme '); return true; }
       if(cmd==='export'){ exportConv(arg==='json'?'json':'md'); return true; }
-      if(['offline','off'].includes(cmd)){ chooseMode('off'); return true; }
-      if(['ibrida','hybrid','on'].includes(cmd)){ chooseMode('on'); return true; }
-      if(['online','only'].includes(cmd)){ chooseMode('only'); return true; }
+      // Two modes. The old /offline /ibrida /online spellings still work and land on the mode they meant.
+      if(['private','privato','privata','privado','privada','prive','privé','privat','offline','off'].includes(cmd)){ chooseMode('private'); toast(L('modeNow',{ mode:modeLabel('private') }),'ok'); return true; }
+      if(['auto','ibrida','hybrid','on','online','only'].includes(cmd)){ chooseMode('auto'); toast(L('modeNow',{ mode:modeLabel('auto') }),'ok'); return true; }
       if(['it','en','es','fr','de'].includes(cmd)){ chooseLang(cmd); return true; }
       if(['impostazioni','settings','config'].includes(cmd)){ openSettings(true); return true; }
       if(['voce','voice','speak'].includes(cmd)){ if(arg==='on'||arg==='off') webVoice=(arg==='on'); else webVoice=!webVoice; set('anima.webvoice',webVoice?'1':'0'); if(!webVoice) stopSpeaking(); applyAll(); toast(webVoice?(TR('Voce browser ON', 'Browser voice ON')):(TR('Voce browser OFF', 'Browser voice OFF')),'ok'); return true; }
@@ -4562,7 +4899,7 @@
       const v=input.value;
       if(v[0]!=='/' || v.includes(' ')){ closeSlash(); return; }
       const q=v.slice(1).toLowerCase();
-      slashItems=UI[lang].cmds.filter(c=>c.c.slice(1).startsWith(q));
+      slashItems=cmdList().filter(c=>c.c.slice(1).startsWith(q));
       if(!slashItems.length){ closeSlash(); return; }
       slashSel=Math.min(slashSel,slashItems.length-1);
       slashEl.innerHTML=slashItems.map((c,i)=>'<div class="it'+(i===slashSel?' sel':'')+'" data-i="'+i+'"><span class="cmd">'+esc(c.c)+'</span><span class="d">'+esc(c.d)+'</span></div>').join('');
@@ -4587,13 +4924,13 @@
       for(const k of ['dark','light','oled','hc']) A.push({cat:C.theme, icon:'◐', label:t.theme+': '+t.themeNames[k], cur:theme===k, run:()=>chooseTheme(k)});
       A.push({cat:C.lang, icon:'A', label:t.language+': IT', cur:lang==='it', run:()=>chooseLang('it')});
       A.push({cat:C.lang, icon:'A', label:t.language+': EN', cur:lang==='en', run:()=>chooseLang('en')});
-      for(const m of ['auto','private']) A.push({cat:C.mode, icon:'◉', label:t.mode+': '+cap(t.stByMode[m]), cur:mode===m, run:()=>chooseMode(m)});
+      for(const m of AM.MODES) A.push({cat:C.mode, icon:'◉', label:t.mode+': '+modeLabel(m), cur:mode===m, run:()=>chooseMode(m)});
       A.push({cat:C.set, icon:'⚙', label:t.appearance+' / '+t.engine, run:()=>openSettings(true)});
       A.push({cat:C.set, icon:'⬇', label:(TR('Gestione modelli (download)', 'Model manager (downloads)')), run:()=>window.openModelManager&&window.openModelManager()});
       A.push({cat:C.set, icon:'⌨', label:t.shortcuts, keys:['?'], run:openShortcuts});
       A.push({cat:C.nav, icon:'↑', label:TR('Vai in cima', 'Scroll to top'), run:()=>{stickBottom=false;logEl.scrollTop=0;}});
       A.push({cat:C.nav, icon:'↓', label:TR('Vai in fondo', 'Scroll to bottom'), run:()=>{stickBottom=true;scrollDown(true);}});
-      for(const c of t.cmds) A.push({cat:C.cmd, icon:'/', label:c.c+'  '+c.d, run:()=>{ closePalette(); ask(c.c); }});
+      for(const c of cmdList()) A.push({cat:C.cmd, icon:'/', label:c.c+'  '+c.d, run:()=>{ closePalette(); ask(c.c); }});
       return A;
     }
     const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
@@ -4609,7 +4946,7 @@
         ['↑ / ↓',TR('Cronologia input', 'Input history')],[mod+' L',t.clear],[mod+' E',t.expMd.replace('↓ ','Export ')],
         ['Esc',TR('Ferma / chiudi', 'Stop / close')],['?',t.shortcuts]];
       const A=KB.map(([k,d])=>({cat:t.scTitle, icon:'⌨', label:d, keys:k.split(' ')}));
-      for(const c of t.cmds) A.push({cat:t.palCats.cmd, icon:'/', label:c.c+'  '+c.d, run:()=>{ closePalette(); ask(c.c); }});
+      for(const c of cmdList()) A.push({cat:t.palCats.cmd, icon:'/', label:c.c+'  '+c.d, run:()=>{ closePalette(); ask(c.c); }});
       return A;
     }
     function renderPalette(){
@@ -4689,10 +5026,10 @@
         autogrow(); setTimeout(()=>input.setSelectionRange(input.value.length,input.value.length),0); return;
       }
       if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); submit(); return; }
-      if(e.key==='Escape' && busy){ interrupt=true; cancelAgent(); stopSpeaking(); }
+      if(e.key==='Escape' && busy){ e.preventDefault(); e.stopPropagation(); stopTurn(); }
     });
     function submit(){ stopRec(); const q=input.value; input.value=''; autogrow(); closeSlash(); histIdx=-1; ask(q); }
-    $('f').addEventListener('submit',e=>{ e.preventDefault(); if(busy){ interrupt=true; cancelAgent(); stopSpeaking(); return; } submit(); });
+    $('f').addEventListener('submit',e=>{ e.preventDefault(); if(busy){ stopTurn(); return; } submit(); });
 
     // welcome cards / clarify chips delegation
     logEl.addEventListener('click',e=>{
@@ -4714,7 +5051,8 @@
         if(palScrim.classList.contains('open')){ closePalette(); return; }
         if(drawer.classList.contains('open')){ closeDrawer(); return; }
         if($('settings').classList.contains('open')){ openSettings(false); return; }
-        if(busy){ interrupt=true; cancelAgent(); stopSpeaking(); }
+        if(closeGuide()) return;
+        if(busy){ stopTurn(); }
       }
     });
 
@@ -4747,9 +5085,7 @@
     function effectiveSource(){ if(!voice) return null; const want=curVoiceSrc();
       if(want==='cardputer') return voice.deviceAvailable ? 'cardputer' : (voice.browserAvailable ? 'browser' : null);
       return voice.browserAvailable ? 'browser' : (voice.deviceAvailable ? 'cardputer' : null); }
-    function showVoiceInsecureHelp(){ const en=lang==='en'; const o='http://'+location.host;
-      sysMsg((lang!=='it')?'Browser-mic dictation needs a secure context. On the device ('+o+') pick the Cardputer mic in Settings ▸ General, or open chrome://flags/#unsafely-treat-insecure-origin-as-secure, add '+o+', set Enabled and restart the browser.'
-               :'La dettatura col mic del browser richiede un contesto sicuro. Sul device ('+o+') scegli il mic Cardputer in Impostazioni ▸ Generale, oppure apri chrome://flags/#unsafely-treat-insecure-origin-as-secure, aggiungi '+o+', metti Enabled e riavvia il browser.'); }
+    function showVoiceInsecureHelp(){ sysMsg(L('voiceInsecure',{ origin:location.origin })); }
     const idleTitle=()=>{ const en=lang==='en'; const base=TR('Detta a voce', 'Dictate'); if(!voice) return base;
       const eff=effectiveSource();
       const src = eff==='cardputer' ? (TR('mic Cardputer', 'Cardputer mic'))
@@ -4771,6 +5107,10 @@
         const src=effectiveSource();
         if(!src){ if(voice.reason==='insecure') showVoiceInsecureHelp();
           else sysMsg(TR('La dettatura non è disponibile ora.', 'Dictation is unavailable right now.')); return; }
+        // Private = nothing leaves this machine. The browser's Web Speech recognizer streams the audio to a
+        // cloud service (Chrome/Edge -> Google), so it is off in Private; Vosk and the Cardputer mic are local.
+        const SRx = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if(isPrivate() && src==='browser' && (voice.engine==='webspeech' || (!['it','en'].includes(lang) && SRx))){ sysMsg(L('voicePrivate')); return; }
         recBase=input.value && !/\s$/.test(input.value) ? input.value+' ' : input.value; recFinal='';
         voice.start(lang, {
           onloading(){ micBtn.classList.add('busy'); micBtn.title=TR('Carico il modello vocale…', 'Loading voice model…'); },
@@ -4994,37 +5334,42 @@
     }
     scrim.addEventListener('click',()=>openSettings(false));
 
-    function doClear(){ history.length=0; activeSession().history=history; activeSession().title=''; persist(); openSettings(false); closeDrawer();
-      dfetch('/api/anima?reset=1&q=').catch(()=>{}); renderAll();
+    function doClear(){ history.length=0; activeSession().history=history; activeSession().title=''; activeSession().sid=AM.newSid('a'); persist(); openSettings(false); closeDrawer();
+      dfetch('/api/anima?reset=1&q='+sidQ()).catch(()=>{}); renderAll();   // a cleared conversation is a new device context too
       const {body}=botShell(null,false); const t=UI[lang].cleared; renderMd(body,t); body.dataset.raw=t; input.focus(); }
     $('clear').addEventListener('click',doClear);
 
     // ---- choose handlers ------------------------------------------------------
     function chooseLang(l){ l=(l||'').slice(0,2); lang=['it','en','es','fr','de'].includes(l)?l:'en'; set('anima.lang',lang); applyAll(); renderAll();
-      if(!recording){ if(voice&&voice.available) micBtn.title=idleTitle(); else if(voice&&voice.reason==='insecure') micBtn.title=(TR('La voce richiede HTTPS o localhost', 'Voice needs HTTPS or localhost')); }
-      try{ if(I18N.lang!==lang) I18N.setLang(lang); }catch{}   // broadcast ANIMA's own toggle to the whole OS
+      if(!recording){ if(voice&&voice.available) micBtn.title=idleTitle(); else if(voice&&voice.reason==='insecure') micBtn.title=L('voiceNeedsSecure'); }
+      try{ if(I18N.lang!==lang) I18N.setLang(lang); }catch{}   // broadcast ANIMA's own toggle to the whole OS (its onChange repaints the catalog strings)
       try{ if(_keyKm&&_keyKm.setLang) _keyKm.setLang(lang); }catch{}   // relabel the shared key manager live
       input.focus(); }
-    // Follow a language change made elsewhere in the OS (Settings, copilot, another window) — live, no reload.
-    // init('anima') loads this app's shared i18n catalog + installs the engine's cross-window listeners in
-    // this iframe, and paints the static chrome carrying data-i18n keys (the rest of the UI still renders
-    // from ANIMA's own STR/applyAll table). observe:false — every annotated node exists at load and the
-    // engine re-applies them on each language change; install() runs synchronously inside init.
-    try{ I18N.init('anima',{observe:false}); I18N.onChange(()=>{ if(I18N.lang!==lang) chooseLang(I18N.lang); }); }catch{}
+    // init('anima') loads this app's catalogs (i18n.<lang>.json + the shared core one), installs the engine's
+    // cross-window listeners and paints the [data-i18n*] chrome. observe:false — every annotated node exists at
+    // load and the engine re-applies them on each language change. Once the catalog is in (boot, or after a
+    // language switch from anywhere in the OS) the imperative strings are repainted from it too.
+    const i18nReady=(async()=>{ try{ await I18N.init('anima',{observe:false}); }catch{} })();
+    i18nReady.then(()=>{ try{ applyAll(); secureBanner(); }catch{} });
+    try{ I18N.onChange(()=>{ if(I18N.lang!==lang) chooseLang(I18N.lang); else { try{ applyAll(); secureBanner(); }catch{} } }); }catch{}
     // TWO modes, not five. The old set (off/on/local/edge/only) named WHERE the compute ran - a
     // detail the 4-rung cascade already decides - so the user had to pre-pick a rung and then got
     // stuck on it (the 'answers from the WASM brain, never reaches the GPU model' report). Now:
     //   auto    - use the best brain available right now, walking the ladder until one answers.
     //   private - the same ladder with every network rung removed; nothing leaves this machine.
-    // Provider keys stay in Advanced: they are configuration, not a mode. Old stored values map on.
-    const MODE_MAP = { off:'private', edge:'private', on:'auto', local:'auto', only:'auto' };
-    function normMode(m){ return m==='auto'||m==='private' ? m : (MODE_MAP[m] || 'auto'); }
-    function isPrivate(){ return mode==='private'; }
-    function chooseMode(m){ mode=normMode(m); set('anima.mode',mode); set('anima.modeSet','1'); applyAll(); syncL1Ext(); input.focus(); ensureEdge(true).catch(()=>{}); }
+    // The definition (key, values, legacy map, device ?mode=) is /anima-mode.js, shared with the copilot,
+    // so "Private" means the same thing in Ctrl+Space. Provider keys are configuration, not a mode.
+    function isPrivate(){ return AM.isPrivate(mode); }
+    const modeLabel = (m)=> L(AM.isPrivate(m) ? 'modePrivate' : 'modeAuto');
+    function chooseMode(m){ mode=AM.writeMode(m); applyAll(); syncL1Ext(); input.focus();
+      // Private leans on the local brains: offer the WASM brain (consent-gated, never a silent pull) if it is not here yet.
+      if(isPrivate()) ensureEdge(true).catch(()=>{}); }
+    // Another surface (the copilot chip, another tab) changed the mode: follow it live.
+    AM.onModeChange((m)=>{ if(m!==mode){ mode=m; applyAll(); syncL1Ext(); } });
     // Tell the device whether a brain OTHER than its offline L1 is generating, so AUTO frees L1's RAM.
-    // The browser cascade (edge), browser GPU (local) and pure-online (only) all mean "stand the L1 down".
-    // hybrid/offline (on/off) send false — the firmware then decides via online-key availability.
-    function syncL1Ext(){ const ext=['edge','local','only'].includes(mode); if(ext===_l1ext) return; _l1ext=ext;
+    // With two modes this is only known per turn, so the flag stays false and the firmware decides from
+    // its own online-key availability (the documented hybrid/offline behaviour).
+    function syncL1Ext(){ const ext=false; if(ext===_l1ext) return; _l1ext=ext;
       try{ dfetch('/api/anima/l1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({browserLLM:ext})}).catch(()=>{}); }catch{} }
     // User override of the device's offline L1 brain (Auto/On/Off). Persisted + pushed to the device.
     function chooseL1Mode(m){ l1mode=['auto','on','off'].includes(m)?m:'auto'; set('anima.l1mode',l1mode); applyAll();
@@ -5065,6 +5410,7 @@
     for(const b of $('set-agentweb').children)  b.addEventListener('click',()=>{ agentWeb=b.dataset.aw==='1'; set('anima.agentweb',agentWeb?'1':'0'); applyAll(); });
     // 🌐 Web toggle: arm only if a Groq key is reachable (compound is Groq-only); otherwise point the user to Settings ▸ AI.
     $('webtog').addEventListener('click', async ()=>{
+      if(!webCompound && isPrivate()){ sysLine(L('webPrivate')); return; }   // Private never reaches the web
       if(!webCompound){ await ensureKeyLoaded(); if(!hasGroq()){ sysLine(UI[lang].webNoKey); return; } }
       webCompound=!webCompound; set('anima.web', webCompound?'1':'0'); applyAll(); input.focus();
     });
@@ -5074,6 +5420,8 @@
     $('q-mode').addEventListener('click', toggleMode);
     $('mode-pill').addEventListener('click', toggleMode);
     $('q-lang').addEventListener('click',()=>chooseLang(lang==='it'?'en':'it'));
+    // The two status-bar toggles are spans with role=button: give them the keyboard a button has.
+    for(const id of ['q-mode','q-lang']) $(id).addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); $(id).click(); } });
     // Reflect the persisted L1 policy on the device at startup (firmware resets to AUTO each boot) and
     // push the current engine's browser-LLM state once. Best-effort: the device may be unreachable.
     idle(function initL1(){ try{ if(l1mode!=='auto') dfetch('/api/anima/l1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:l1mode})}).catch(()=>{}); }catch{} _l1ext=null; syncL1Ext(); }, 700);   // push the boot L1-policy POST off the launch burst
@@ -5084,10 +5432,10 @@
     // anima.modeSet); an explicit choice is always respected. With no key, the offline/browser default stays.
     idle(async function initMode(){
       try{
-        if(get('anima.modeSet','')==='1') return;                 // explicit user choice — never override
+        if(AM.isExplicit()) return;                               // explicit user choice — never override
         const c = await (await dfetch('/api/anima/caps')).json();
         if(c && c.hasKey && navigator.onLine && isPrivate()){
-          mode='auto'; set('anima.mode','auto'); applyAll(); syncL1Ext(); renderAll();
+          mode=AM.writeMode('auto',{ explicit:false }); applyAll(); syncL1Ext(); renderAll();
         }
       }catch{}
     }, 500);
@@ -5099,31 +5447,32 @@
       document.documentElement.setAttribute('data-theme',theme);
       document.documentElement.style.setProperty('--fs',fsize+'px');
       document.body.classList.toggle('nodetails',detMode==='0');
-      $('sub').textContent=t.subByMode[mode]||t.sub;
+      $('sub').textContent=L(isPrivate()?'modeSubPrivate':'modeSubAuto');
       input.placeholder=t.placeholder;
       $('h-appear').textContent=t.appearance; $('h-general').textContent=t.general; $('h-engine').textContent=t.engine; $('h-conv').textContent=t.conv;
       $('tab-appear').textContent=t.appearance; $('tab-general').textContent=t.general; $('tab-engine').textContent=t.engine;
       $('tab-forge').textContent='Forge'; $('tab-data').textContent=(TR('Dati', 'Data'));
-      $('set-title').textContent=(TR('Impostazioni', 'Settings')); $('set-x').title=(TR('Chiudi', 'Close'));
+      $('set-title').textContent=(TR('Impostazioni', 'Settings'));
       $('s-theme').textContent=t.theme; $('s-lang').textContent=t.language; $('s-voicesrc').textContent=t.voiceSrc; $('s-size').textContent=t.size; $('s-speed').textContent=t.speed;
       $('s-mode').textContent=t.mode; $('s-details').textContent=t.details; $('s-sugg').textContent=t.suggLbl; $('s-compact').textContent=t.compactLbl;
       { const db=$('set-details').children, o=t.detOpts||['No','Riga','Albero']; for(let i=0;i<db.length&&i<o.length;i++) db[i].textContent=o[i]; }
       { const dh=$('s-details-hint'); if(dh) dh.innerHTML=t.detHint||''; }
-      $('clear').textContent=t.clear; $('s-modehint').textContent=t.modeHints[mode];
+      $('clear').textContent=t.clear; $('s-modehint').textContent=L(isPrivate()?'modeHintPrivate':'modeHintAuto');
       $('exp-md').textContent=t.expMd; $('exp-json').textContent=t.expJson; $('shortcuts-open').textContent='⌨ '+t.shortcuts;
       $('dh-title').textContent=t.sessions; $('dsearch').placeholder=t.searchSess;
       { const nx=$('dnew'); if(nx){ const tx=nx.querySelector('.sbn-tx'); if(tx) tx.textContent=t.newConvFull; nx.title=t.newConvFull; } }
-      { const cl=$('sb-collapse'); if(cl){ cl.title=t.collapseSb; cl.setAttribute('aria-label',t.collapseSb); } const cs=$('dsearch-clr'); if(cs){ cs.title=t.clearSearch; cs.setAttribute('aria-label',t.clearSearch); } }
+      // Static aria-labels/titles carry data-i18n-attr keys (i18n.<lang>.json): the OS engine paints them in
+      // all five languages and on every language change — nothing to set here.
       // theme labels
       const tn=t.themeNames; const tb=$('set-theme').children; tb[0].textContent=tn.dark; tb[1].textContent=tn.light; tb[2].textContent=tn.oled; tb[3].textContent=tn.hc;
       // localized field descriptions / section notes (data-it / data-en) + crumb mirrors the active tab
       for(const el of panel.querySelectorAll('[data-i18n]')){ let v=el.dataset[lang]; if(v==null){ const den=el.dataset.en, o=ANIMA_L10N[lang]; v=(o&&den!=null&&o[den]!=null)?o[den]:(den!=null?den:el.dataset.it); } if(v!=null) el.innerHTML=v; }
       { const on=$('set-tabs').querySelector('.set-tab.on'), cr=$('set-crumb'); if(on&&cr){ const tl=on.querySelector('.tl'); if(tl) cr.textContent=tl.textContent; } }
       // status + header
-      $('st-mode').textContent=t.stByMode[mode]; $('pill-mode').textContent=t.stByMode[mode]; $('st-lang').textContent=lang.toUpperCase();
+      $('st-mode').textContent=modeLabel(mode); $('pill-mode').textContent=modeLabel(mode); $('st-lang').textContent=lang.toUpperCase();
       // BROWSER (edge): ⚡ prefix on the pill + a ready-aware tooltip, and surface the local-engine row
       const mp=$('mode-pill'); if(mp){ mp.classList.toggle('edge', isPrivate()); mp.classList.toggle('ready', isPrivate()&&_edgeReady);
-        mp.title = (isPrivate()&&t.edge) ? (t.edge.pillTip+(_edgeReady?(TR(' (pronto)', ' (ready)')):'')) : (TR('Modalità — clic per cambiare', 'Mode — click to switch')); }
+        mp.title = L('modePillTip',{ mode:modeLabel(mode) }); mp.setAttribute('aria-label', mp.title); }
       // Both rows are always relevant now: the WASM brain and the GPU model are rungs of the one
       // ladder, not modes you switch into, so either can be managed at any time.
       const re=$('row-edge'); if(re){ re.hidden = false; if(typeof updateEdgeRow==='function') updateEdgeRow(); }
@@ -5142,12 +5491,6 @@
       { const e=$('s-localmodel'); if(e) e.textContent=TR('Modello locale (GPU)','Local model (GPU)'); }
       { const e=$('s-verify'); if(e) e.textContent=TR('Integrità SD','SD integrity'); }
       { const e=$('h-readiness'); if(e) e.textContent=TR('Air-gap readiness','Air-gap readiness'); }
-      { const e=$('settings'); if(e) e.setAttribute('aria-label',TR('Impostazioni','Settings')); }
-      { const e=$('set-x'); if(e) e.setAttribute('aria-label',TR('Chiudi','Close')); }
-      { const e=$('dsearch'); if(e) e.setAttribute('aria-label',TR('Cerca conversazioni','Search conversations')); }
-      { const e=$('hamb'); if(e){ e.title=TR('Conversazioni (Ctrl/⌘⇧S)','Conversations (Ctrl/⌘⇧S)'); e.setAttribute('aria-label',TR('Mostra/nascondi conversazioni','Show/hide conversations')); } }
-      { const e=$('drawer'); if(e) e.setAttribute('aria-label',TR('Conversazioni','Conversations')); }
-      { const e=$('dlist'); if(e) e.setAttribute('aria-label',TR('Conversazioni','Conversations')); }
       { const e=$('fd-newfile'); if(e) e.textContent=TR('+ File','+ File'); }
       { const seg=$('set-l1mode'); if(seg) for(const b of seg.children) b.classList.toggle('on', b.dataset.l1===l1mode); }
       { const sb=$('set-voicesrc'); if(sb){ sb.children[0].disabled=!(voice&&voice.browserAvailable); sb.children[1].disabled=!(voice&&voice.deviceAvailable); } }
@@ -5161,45 +5504,28 @@
       try{ const E=lang==='en';
         const P=(id,prop,it,en)=>{ const el=$(id); if(el) el[prop]=TR(it,en); };
         const AL=(id,it,en)=>{ const el=$(id); if(el) el.setAttribute('aria-label',TR(it,en)); };
-        // header
-        P('palbtn','title','Comandi (Ctrl/⌘ K)','Commands (Ctrl/⌘ K)'); AL('palbtn','Tavolozza comandi','Command palette');
-        P('wsbtn','title','Workspace / file','Workspace / files');
-        P('dot','title','motore ANIMA','ANIMA engine');
-        P('gear','title','Impostazioni','Settings'); AL('gear','Impostazioni','Settings');
-        P('jump','title','Vai in fondo','Go to bottom');
-        AL('log','Conversazione','Conversation');
-        // composer + status bar
-        AL('q','Messaggio','Message');
-        P('q-mode','title','Cambia modalità','Switch mode');
-        P('q-lang','title','Cambia lingua','Switch language');
-        P('st-session','title','Conversazioni','Conversations');
-        P('ctx-meter','title','Contesto','Context');
-        { const s=$('send'); if(s && !s.classList.contains('stop')) s.textContent=TR('Invia', 'Send'); }
-        { const k=document.querySelector('footer .keys'); if(k) k.innerHTML=TR('<kbd>⏎</kbd> invia · <kbd>/</kbd> comandi · <kbd>⌘K</kbd> tavolozza · <kbd>?</kbd> aiuto', '<kbd>⏎</kbd> send · <kbd>/</kbd> commands · <kbd>⌘K</kbd> palette · <kbd>?</kbd> help'); }
+        // header + composer: static labels come from the catalog (data-i18n-attr); only live state here
+        { const s=$('send'); if(s){ s.textContent = s.classList.contains('stop') ? (L('stop')||'Stop') : TR('Invia', 'Send'); s.setAttribute('aria-label', s.textContent); } }
+        { const k=document.querySelector('footer .keys'); if(k) k.innerHTML=L('footerKeys'); }
         // file drawer
-        P('fd-close','title','Chiudi','Close'); AL('fd-close','Chiudi','Close');
         P('fd-open','textContent','Apri…','Open…');
         P('fd-refresh','textContent','↻ Aggiorna','↻ Refresh');
         P('fd-newdir','textContent','+ Cartella','+ Folder');
         P('fd-leave','textContent','Chiudi workspace','Close workspace');
         // workspace picker
         P('wp-title','textContent','Apri un workspace','Open a workspace');
-        AL('wp-x','Chiudi','Close');
         P('wp-newdir','textContent','+ Nuova cartella','+ New folder');
         P('wp-cancel','textContent','Annulla','Cancel');
         P('wp-use','textContent','Usa questa cartella','Use this folder');
-        { const w=document.querySelector('.wspick'); if(w) w.setAttribute('aria-label',TR('Scegli workspace', 'Choose workspace')); }
         // settings-panel tooltips (title= — the data-i18n loop sets innerHTML only, never attributes)
-        { const b=$('set-mode'), eb=b&&b.querySelector('[data-m="edge"]'); if(eb) eb.title=TR('ANIMA offline gira interamente in questo browser (WebAssembly): scarica il cervello una volta dal dispositivo, poi risponde in locale anche senza Cardputer — stesse identiche risposte.', 'ANIMA offline runs entirely in this browser (WebAssembly): it downloads the brain once from the device, then answers locally even without the Cardputer — the exact same answers.'); }
+        { const seg=$('set-mode'); if(seg) for(const b of seg.children){ const on=b.dataset.m===mode; b.setAttribute('aria-checked', on?'true':'false'); b.title=L(b.dataset.m==='private'?'modeHintPrivate':'modeHintAuto'); } }
         P('s-details','title',
           'Mostra, sotto ogni risposta, quale strumento ANIMA ha usato per ragionare (motore, modello, passi). Riga = una riga richiudibile; Albero = già espanso.',
           'Show, under every reply, which tool ANIMA used to reason (engine, model, steps). Line = a collapsible one-liner; Tree = expanded.');
         P('s-edge','title',
           'Il cervello offline di ANIMA scaricato in questo browser. In cache = funziona anche senza il Cardputer.',
           'ANIMA’s offline brain downloaded in this browser. Cached = it works even without the Cardputer.');
-        P('edge-reload','title',
-          'Riscarica il cervello dal dispositivo (se l\'hai aggiornato) e ricostruisce la cache locale.',
-          'Re-download the brain from the device (if you updated it) and rebuild the local cache.');
+        { const e=$('edge-reload'); if(e) e.title=L('edgeReloadTip'); }
         P('localmodel-get','title',
           'Scarica/carica ora il modello nel browser (mostra il progresso). Non si scarica mai da solo: finché non è installato, la chat salta la GPU locale.',
           'Download/load the model in the browser now (shows progress). It never downloads by itself: until it is installed, chat skips the local GPU.');
@@ -5334,7 +5660,7 @@
     // ---- the file agent loop ----
     async function composeContent(intent){
       let c=intent.content||''; if(!c) return '';
-      if(intent.mode==='auto'){ try{ const r=await (await dfetch('/api/anima?q='+encodeURIComponent(c)+'&lang='+lang+'&mode='+(isPrivate()?'off':'on'))).json(); if(r&&r.reply&&r.tier!=='none') return r.reply; }catch{} }
+      if(intent.mode==='auto'){ try{ const r=await (await dfetch('/api/anima?q='+encodeURIComponent(c)+'&lang='+lang+'&mode='+AM.deviceMode(mode)+sidQ())).json(); if(r&&r.reply&&r.tier!=='none') return r.reply; }catch{} }
       return c;   // literal fallback (offline or no engine answer)
     }
     async function runFileIntent(q, intent){
@@ -5446,9 +5772,9 @@
       const bar=document.createElement('div'); bar.className='codebar';
       const lab=document.createElement('span'); lab.className='lang'; lab.textContent=path||langRaw||'text'; bar.appendChild(lab);
       const cb=document.createElement('button'); cb.className='cbtn'; cb.textContent=UI[lang].copy;
-      cb.addEventListener('click',()=>{ navigator.clipboard?.writeText(code).then(()=>{ cb.textContent=UI[lang].copied+' ✓'; setTimeout(()=>cb.textContent=UI[lang].copy,1100); }); });
-      bar.appendChild(cb); attachRun(bar, wrap, code, langRaw); wrap.appendChild(bar);
       const pre=document.createElement('pre'); pre.className='code'; pre.innerHTML=hl(code||'', langRaw);
+      wireCopy(cb, ()=>code||'', pre);
+      bar.appendChild(cb); attachRun(bar, wrap, code, langRaw); wrap.appendChild(bar);
       if((code||'').split('\n').length>26){ const det=document.createElement('details'); const sm=document.createElement('summary'); sm.textContent=(TR('Mostra tutte le ', 'Show all '))+code.split('\n').length+(TR(' righe', ' lines')); det.appendChild(sm); det.appendChild(pre); wrap.appendChild(det); } else wrap.appendChild(pre);
       return wrap;
     }
@@ -5506,12 +5832,44 @@
     $('fd-close').addEventListener('click',closeFsDrawer);
     $('fd-refresh').addEventListener('click',refreshTree);
     $('fd-open').addEventListener('click',()=>openPicker(ws.root||'/data'));
-    $('fd-leave').addEventListener('click',()=>{ if(confirm(TR('Chiudere il workspace?', 'Close the workspace?'))){ closeWorkspace(); closeFsDrawer(); } });
+    $('fd-leave').addEventListener('click',async()=>{ if(await askDialog({ title:L('closeWsQ'), ok:L('close') })){ closeWorkspace(); closeFsDrawer(); } });
     $('fd-newdir').addEventListener('click',async()=>{ if(!fs.hasRoot()) return; const name=prompt(TR('Nuova cartella:', 'New folder:')); if(!name) return; const r=await fs.mkdir(name.trim()); if(r.ok){ refreshTree(); toast(TR('Cartella creata', 'Folder created'),'ok'); } });
     $('fd-newfile').addEventListener('click',async()=>{ if(!fs.hasRoot()) return; const name=prompt(TR('Nuovo file:', 'New file:')); if(!name) return; const r=await fs.write(name.trim(),'',{overwrite:false}); if(r.ok){ refreshTree(); handoffFile(r.abs); toast(TR('File creato', 'File created'),'ok'); } else toast(r.error==='exists'?(TR('Esiste già', 'Already exists')):(TR('Non riuscito', 'Failed')),'warn'); });
     function closeWorkspace(){ setWorkspace(''); }
     $('drawer-scrim').addEventListener('click',()=>{ if(fsdrawer.classList.contains('open')) closeFsDrawer(); });
     window.addEventListener('message',e=>{ const d=e.data; if(d && d.t==='fs.changed' && fs.hasRoot()) scheduleTreeRefresh(); });
+
+    // ---- plain-HTTP honesty ------------------------------------------------------------------------------
+    // Served from http://<device-ip> the page is not a secure context, so the browser silently switches off
+    // WebGPU (the GPU model), the browser microphone, the async clipboard and the service worker (offline
+    // cache). One concise, dismissible banner says what is off here and how to turn it on — instead of
+    // buttons that just do nothing. Dismissal is remembered per origin.
+    let _secEl=null;
+    function secureBanner(){
+      if(window.isSecureContext) return;
+      const off=[];
+      if(!('gpu' in navigator)) off.push(L('secFeatGpu'));
+      if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) off.push(L('secFeatMic'));
+      if(!(navigator.clipboard && navigator.clipboard.writeText)) off.push(L('secFeatClip'));
+      if(!('serviceWorker' in navigator)) off.push(L('secFeatSw'));
+      if(!off.length || get('anima.secBannerOff','')===location.origin) { if(_secEl){ _secEl.remove(); _secEl=null; } return; }
+      if(!_secEl){
+        _secEl=document.createElement('div'); _secEl.className='secbar'; _secEl.setAttribute('role','note');
+        _secEl.innerHTML='<span class="sb-ic" aria-hidden="true">⚠</span><div class="sb-tx"></div><button type="button" class="sb-x">✕</button>';
+        _secEl.querySelector('.sb-x').addEventListener('click',()=>{ set('anima.secBannerOff', location.origin); _secEl.remove(); _secEl=null; input.focus(); });
+        $('appmain').insertBefore(_secEl, logEl);
+      }
+      let list=off.join(', '); try{ list=I18N.fmtList(off); }catch{}
+      const tx=_secEl.querySelector('.sb-tx');
+      tx.innerHTML='<b></b> <span class="sb-off"></span> <span class="sb-fix"></span>';
+      tx.querySelector('b').textContent=L('secTitle');
+      tx.querySelector('.sb-off').textContent=L('secOff',{ list });
+      // secFix is catalog text with a <code> for the flag page; the origin is inserted as TEXT, never as HTML.
+      tx.querySelector('.sb-fix').innerHTML=L('secFix',{ origin:'<code class="sb-origin"></code>' });
+      tx.querySelectorAll('.sb-origin').forEach(c=>{ c.textContent=location.origin; });
+      _secEl.setAttribute('aria-label', L('secTitle'));
+      const x=_secEl.querySelector('.sb-x'); x.title=L('close'); x.setAttribute('aria-label', L('secDismiss'));
+    }
 
     // ---- boot -----------------------------------------------------------------
     loadSessions(); history=activeSession().history;
@@ -5524,6 +5882,11 @@
     idle(()=>edgeMountIfCached(), 300);   // the WASM brain is a rung of every ladder now - warm it if cached
     wsLoad(); wsReflect();   // restore the persisted workspace (localStorage + fs.setRoot, no socket) IN the boot tick so file-intent routing + the label are correct from the first frame
     idle(wsBoot, 500);       // defer only the DEVICE reads (refreshTree /api/fs/list + the workspace.json fallback) off the boot burst
+    idle(sessSdLoad, 900);   // conversations started in another browser (the SD copy) — merged by id, off the boot burst
+    idle(replayPending, 3000);   // personal facts taught here while the Cardputer was away -> hand them to their owner
+    // Local brain freshness: one cheap check (fs listings) after the boot burst, then at most every 10 min on return.
+    setTimeout(()=>idle(edgeBackgroundSync, 2000), 15000);
+    document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ idle(edgeBackgroundSync, 2000); replayPendingSoon(); } });
     requestAnimationFrame(()=>document.documentElement.classList.add('themed'));   // enable theme transitions after first paint
     if(EMBEDDED){
       // dot driven by the shell's status.snapshot broadcast — no own /api/status poll

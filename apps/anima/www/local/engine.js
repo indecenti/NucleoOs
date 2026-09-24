@@ -24,6 +24,13 @@ const PACK = [
   { p: 'data/anima/learned/mind.en.jsonl',    req: false },
   { p: 'data/anima/learned/facets.it.jsonl',  req: false },
   { p: 'data/anima/learned/facets.en.jsonl',  req: false },
+  // What the DEVICE learned online (teacher/Wikipedia cards) + their encoder vectors. Small, append-only,
+  // and the part of the brain that changes most often — so the per-file sync below keeps them fresh
+  // without touching the 60-97 MB of static knowledge.
+  { p: 'data/anima/learned/it.jsonl',         req: false },
+  { p: 'data/anima/learned/en.jsonl',         req: false },
+  { p: 'data/anima/learned/it.vec',           req: false },
+  { p: 'data/anima/learned/en.vec',           req: false },
   // UNIFIED brain (AKB5 sharded): the SAME knowledge the device now ships at /data/anima/ (base + extended,
   // RAM-flat one-shard-at-a-time). The WASM (ANIMA_AKB5=1) loads the manifest + shards; the shards are
   // enumerated dynamically at load. Absent -> the flat index above is used. Single source of truth.
@@ -84,6 +91,58 @@ async function cacheGetText(key) { const b = await cacheGet(key); return b ? new
 async function cachePutText(key, s) { await cachePut(key, new TextEncoder().encode(s)); }
 // djb2 over bytes -> short base36 string (provenance fingerprint; not security, just change-detection).
 function hashBytes(b) { let h = 5381; for (let i = 0; i < b.length; i++) h = ((h << 5) + h + b[i]) >>> 0; return h.toString(36); }
+
+// ---- per-file signatures: re-fetch only what changed on the device ----------------------------------
+// The old sync compared ONE signature over the whole brain, so a single new learned fact (learned/*.jsonl
+// grows by a line) threw away the entire cache and re-pulled 60-97 MB from the ESP32. Now every cached
+// file carries its own signature and only files whose signature moved are fetched again.
+// The device's fs listing reports no mtime, so a signature is the file SIZE; the L1 index additionally
+// carries a hash of its provenance sidecar (a rebuild can keep the size). learned/ files are append-only,
+// so a changed file is a longer file.
+const SIGS_KEY = '__sigs__', LIST_KEY = '__packlist__';
+const INDEX_P = 'data/anima/anima-it-index.bin';
+async function readSigs() { try { const t = await cacheGetText(SIGS_KEY); const j = t ? JSON.parse(t) : null; return (j && typeof j === 'object') ? j : {}; } catch { return {}; } }
+async function writeSigs(s) { try { await cachePutText(SIGS_KEY, JSON.stringify(s)); } catch {} }
+async function readPackList() { try { const t = await cacheGetText(LIST_KEY); const j = t ? JSON.parse(t) : null; return Array.isArray(j) ? j : null; } catch { return null; } }
+// Same file? A signature recorded before the provenance hash was known (the bootstrap: cached length)
+// still matches on size, so an existing cache is adopted instead of re-downloaded.
+function sameSig(have, cur) {
+  if (have == null || cur == null) return false;
+  if (have === cur) return true;
+  return !String(have).includes('#') && String(cur).split('#')[0] === String(have);
+}
+// The device's view of the brain: { sigs:{path:sig}, sizes:{path:bytes}, shards:[akb5 paths] }.
+// All-or-nothing: if a listing fails (other than a missing optional dir) we return null, because a
+// partial view would look like "file deleted on the device" and evict good cache entries.
+async function deviceSigs(fsListUrl, fsReadUrl, signal, fetchImpl) {
+  const f = fetchImpl || fetch;
+  const sigs = {}, sizes = {}, shards = [];
+  for (const dir of ['data/anima', 'data/anima/learned', 'data/anima/akb5']) {
+    let r;
+    try { r = await f(fsListUrl('/' + dir), { cache: 'no-store', signal }); }
+    catch (e) { if (signal && signal.aborted) throw Object.assign(new Error('cancelled'), { code: 'CANCELLED' }); return null; }
+    if (r.status === 404 && dir !== 'data/anima') continue;   // no learned/ or akb5/ on this device: fine
+    if (!r.ok) return null;
+    let j; try { j = await r.json(); } catch { return null; }
+    for (const e of (j.entries || [])) {
+      if (e.type === 'dir') continue;
+      const p = dir + '/' + e.name;
+      sizes[p] = e.size | 0; sigs[p] = String(e.size | 0);
+      if (dir === 'data/anima/akb5' && e.name.endsWith('.bin')) shards.push(p);
+    }
+  }
+  if (sigs[INDEX_P]) {
+    try {
+      const pr = await f(fsReadUrl('/' + INDEX_P + '.prov'), { cache: 'no-store', signal });
+      if (pr.ok) sigs[INDEX_P] += '#' + hashBytes(new Uint8Array(await pr.arrayBuffer()));
+    } catch (e) { if (signal && signal.aborted) throw Object.assign(new Error('cancelled'), { code: 'CANCELLED' }); }
+  }
+  return { sigs, sizes, shards };
+}
+// Only the online-learned cards (+ vectors) are safe to hot-swap into a RUNNING engine's MEMFS: they are
+// looked up per query. Everything else (index, encoder, commands, AKB5 manifest + shards read lazily
+// against an in-RAM manifest) takes effect on the next mount, never mid-session.
+const hotSwappable = (p) => /^data\/anima\/learned\/(?:it|en)\.(?:jsonl|vec)$/.test(p);
 
 // ---- streaming fetch with byte-progress (smooth bar for the ~8 MB index) --------------------------
 async function fetchBytes(url, onChunk, signal) {
@@ -268,7 +327,7 @@ export function createAnimaLocal(opts = {}) {
   const here = new URL('.', import.meta.url);
   const fsReadUrl = opts.fsReadUrl || ((p) => '/api/fs/read?path=' + encodeURIComponent(p));
   const fsListUrl = opts.fsListUrl || ((p) => '/api/fs/list?path=' + encodeURIComponent(p));
-  let M = null, _q = null, _reset = null, loaded = false, loading = null, totalBytes = 0, _idbfs = false, _flushTimer = null;
+  let M = null, _q = null, _reset = null, loaded = false, loading = null, totalBytes = 0, _idbfs = false, _flushTimer = null, _stale = false;
 
   function mkdirp(M, dir) {
     let cur = '';
@@ -305,50 +364,27 @@ export function createAnimaLocal(opts = {}) {
     // CACHED-ONLY mount (silent path): touch NO network. Restore exactly the set the last full download
     // saved in `__packlist__` (so even dynamically-enumerated AKB5 shards come back from IndexedDB) and
     // skip the auto-sync entirely. This is what GUARANTEES a cached mount can never start a download.
-    let items;
+    let items, dev = null;
+    const sigs = await readSigs();
+    let sigsDirty = false;
     if (cachedOnly) {
-      let list = null;
-      try { const t = await cacheGetText('__packlist__'); if (t) list = JSON.parse(t); } catch {}
-      items = (Array.isArray(list) && list.length)
+      const list = await readPackList();
+      items = (list && list.length)
         ? list.map((p) => ({ p, req: PACK.some((x) => x.p === p && x.req) }))
         : PACK.slice();
     } else {
-      // ---- AUTO-SYNC: keep the local brain in lockstep with the Cardputer. A cheap signature (every brain
-      // file's size from /api/fs/list + a hash of the index provenance sidecar) is compared to the cached one;
-      // if the device's brain changed (rebuilt index, edited cards, facts taught ON the device) the stale pack
-      // is dropped so the loop below re-downloads it. Offline (device unreachable) -> sig null -> cache kept.
-      // The browser's OWN taught facts live in IDBFS (/sd/.../rw, a SEPARATE DB) and are never touched here.
-      // Only runs on a CONSENTED full download — NEVER on the silent cached mount above.
+      // ---- AUTO-SYNC, per file: compare each cached file's signature with the device's and re-fetch only
+      // the ones that moved (a rebuilt index, an edited shard, a fact the device learned). Device unreachable
+      // -> dev null -> the cache is kept as is. The browser's OWN taught facts live in IDBFS (/sd/.../rw, a
+      // SEPARATE DB) and are never touched here. Only on a CONSENTED load — never on the silent cached mount.
       note({ phase: 'sync' });
-      let sig = null;
-      try {
-        const parts = [];
-        for (const dir of ['/data/anima', '/data/anima/learned', '/data/anima/akb5']) {
-          ckAbort();
-          const r = await fetch(fsListUrl(dir), { cache: 'no-store', signal });
-          if (r.ok) { const j = await r.json(); for (const e of (j.entries || [])) if (e.type !== 'dir') parts.push(dir + '/' + e.name + ':' + e.size); }
-        }
-        if (parts.length) {
-          const prov = await fetchBytes(fsReadUrl('/data/anima/anima-it-index.bin.prov'), null, signal);
-          sig = parts.sort().join('|') + (prov ? '#' + hashBytes(prov) : '');
-        }
-      } catch (e) { if (e && e.code === 'CANCELLED') throw e; }
-      if (sig) {
-        const stored = await cacheGetText('__brainsig__');
-        if (stored && stored !== sig) { note({ phase: 'update' }); await cacheClear(); }   // device/extended brain changed -> full refresh
-        await cachePutText('__brainsig__', sig);
-      }
-
-      // Build the download list: the static PACK + every AKB5 shard (enumerated dynamically from the unified
-      // device path /data/anima/akb5). Each item downloads from `from` (or `p`) and mounts at `p`.
+      try { dev = await deviceSigs(fsListUrl, fsReadUrl, signal); } catch (e) { if (e && e.code === 'CANCELLED') throw e; dev = null; }
+      ckAbort();
+      // The download list: the static PACK + every AKB5 shard (enumerated from the unified device path
+      // /data/anima/akb5). Device unreachable -> whatever the last load mounted. Each item mounts at `p`.
       items = PACK.slice();
-      try {
-        ckAbort();
-        const r = await fetch(fsListUrl('/data/anima/akb5'), { cache: 'no-store', signal });
-        if (r.ok) for (const e of ((await r.json()).entries || []))
-          if (e.type !== 'dir' && e.name.endsWith('.bin'))
-            items.push({ p: 'data/anima/akb5/' + e.name, req: false });
-      } catch (e) { if (e && e.code === 'CANCELLED') throw e; }
+      const extra = dev ? dev.shards : ((await readPackList()) || []);
+      for (const p of extra) if (!items.some((x) => x.p === p)) items.push({ p, req: false });
     }
 
     const files = [];
@@ -359,6 +395,15 @@ export function createAnimaLocal(opts = {}) {
       const name = f.p.split('/').pop();
       note({ phase: 'fetch', name, idx: i, count: items.length, bytes: totalBytes });
       let bytes = await cacheGet(f.p);
+      if (bytes && dev) {
+        const cur = dev.sigs[f.p];
+        if (cur === undefined) {                      // gone from the device: drop the stale copy (optional files only)
+          if (!f.req) { await cacheDel(f.p); delete sigs[f.p]; sigsDirty = true; bytes = null; continue; }
+        } else if (!sameSig(sigs[f.p] != null ? sigs[f.p] : String(bytes.length), cur)) {
+          note({ phase: 'update', name });            // changed on the device: re-fetch THIS file only
+          await cacheDel(f.p); bytes = null;
+        }
+      }
       const fromCache = !!bytes;
       if (!bytes && !cachedOnly) {
         bytes = await fetchBytes(fsReadUrl('/' + (f.from || f.p)), (n) =>
@@ -374,13 +419,19 @@ export function createAnimaLocal(opts = {}) {
         if (f.req) throw Object.assign(new Error('ANIMA Local: required pack file missing: ' + (f.from || f.p)), { code: 'PACK_REQUIRED_MISSING' });
         continue;
       }
+      // Record this file's signature: the device's when we just compared/fetched against it, else (the
+      // cached mount, or a pack cached before signatures existed) its byte length — the bootstrap that
+      // lets the next sync compare per file instead of re-downloading everything.
+      const want = dev && dev.sigs[f.p] != null ? dev.sigs[f.p] : (sigs[f.p] != null ? sigs[f.p] : String(bytes.length));
+      if (sigs[f.p] !== want) { sigs[f.p] = want; sigsDirty = true; }
       totalBytes += bytes.length;
       files.push({ p: f.p, bytes, fromCache });
       note({ phase: 'fetch', name, idx: i + 1, count: items.length, bytes: totalBytes });
     }
 
     // Remember EXACTLY what we mounted so a later cached-only mount restores the same set with no network.
-    if (!cachedOnly) { try { await cachePutText('__packlist__', JSON.stringify(files.map((f) => f.p))); } catch {} }
+    if (!cachedOnly) { try { await cachePutText(LIST_KEY, JSON.stringify(files.map((f) => f.p))); } catch {} }
+    if (sigsDirty) await writeSigs(sigs);
 
     // mount the pack into the WASM in-memory filesystem at /sd (the firmware's NUCLEO_SD_MOUNT)
     for (const { p, bytes } of files) {
@@ -450,7 +501,68 @@ export function createAnimaLocal(opts = {}) {
     reset() { if (_reset) _reset(); },
     flush,               // force-persist now (e.g. on pagehide)
     async refresh() { await cacheClear(); loaded = false; loading = null; M = null; },  // force a fresh download next load
+    // Incremental update of an ALREADY-CACHED pack (see syncPack). Never downloads a first pack.
+    sync(opts = {}) { return syncPack(opts); },
+    // True once a sync replaced a file the running engine only reads at mount: the next mount uses it.
+    stale() { return _stale; },
   };
+
+  // Compare every cached brain file with the device (two fs listings + the index provenance) and fetch
+  // ONLY the files whose signature moved — typically a few KB of learned/*.jsonl, not 60-97 MB.
+  //   opts.maxBytes     larger deltas are not fetched: { state:'available', bytes, count } for the UI to offer
+  //   opts.ifAvailable  background call: yield instead of queueing if another download holds the OS lock
+  //   opts.signal, opts.onProgress({phase:'fetch', name, idx, count, bytes})
+  // -> { state: 'absent'|'offline'|'current'|'available'|'busy'|'updated', count, bytes, reload }
+  // It never runs before the user consented to the first download (packCached() gates it), and every
+  // byte moves under the OS-wide download lock, like the first pull.
+  async function syncPack(opts = {}) {
+    const { signal, onProgress, maxBytes = Infinity, ifAvailable = false } = opts;
+    if (!(await packCached())) return { state: 'absent' };
+    let dev = null;
+    try { dev = await deviceSigs(fsListUrl, fsReadUrl, signal); } catch { dev = null; }
+    if (!dev) return { state: 'offline' };
+    const sigs = await readSigs();
+    const list = (await readPackList()) || PACK.filter((x) => x.req).map((x) => x.p);
+    const inList = new Set(list);
+    const want = [...PACK.map((x) => x.p), ...dev.shards.filter((p) => !PACK.some((x) => x.p === p))];
+    const changed = [], removed = [];
+    for (const p of want) {
+      const cur = dev.sigs[p];
+      if (cur === undefined) { if (inList.has(p) && !PACK.some((x) => x.p === p && x.req)) removed.push(p); continue; }
+      let have = sigs[p];
+      if (have == null && inList.has(p)) {             // cached before signatures existed: adopt its length once
+        const b = await cacheGet(p); have = b ? String(b.length) : null;
+        if (have != null) sigs[p] = have;
+      }
+      if (!sameSig(have, cur)) changed.push(p);
+    }
+    const bytes = changed.reduce((n, p) => n + (dev.sizes[p] || 0), 0);
+    if (!changed.length && !removed.length) { await writeSigs(sigs); return { state: 'current', count: 0, bytes: 0 }; }
+    if (bytes > maxBytes) return { state: 'available', count: changed.length, bytes };
+    const gate = await downloadGate();
+    const run = async () => {
+      let done = 0, got = 0; const fetched = [];
+      for (const p of changed) {
+        if (signal && signal.aborted) break;
+        const name = p.split('/').pop();
+        try { onProgress && onProgress({ phase: 'fetch', name, idx: done, count: changed.length, bytes: got }); } catch {}
+        const b = await fetchBytes(fsReadUrl('/' + p), null, signal);
+        if (!b) continue;                              // transient miss: this file is simply retried next sync
+        await cachePut(p, b);
+        sigs[p] = dev.sigs[p]; fetched.push(p); got += b.length; done++;
+        if (loaded && M && hotSwappable(p)) { try { const vp = '/sd/' + p; mkdirp(M, vp.slice(0, vp.lastIndexOf('/'))); M.FS.writeFile(vp, b); } catch {} }
+        else if (loaded) _stale = true;
+      }
+      for (const p of removed) { await cacheDel(p); delete sigs[p]; }
+      const next = list.filter((p) => !removed.includes(p));
+      for (const p of fetched) if (!next.includes(p)) next.push(p);
+      await cachePutText(LIST_KEY, JSON.stringify(next));
+      await writeSigs(sigs);
+      return { state: 'updated', count: fetched.length, bytes: got, reload: _stale };
+    };
+    const res = await gate(PACK_LABEL, run, ifAvailable ? { ifAvailable: true } : {});
+    return res || { state: 'busy', count: changed.length, bytes };
+  }
 }
 
 // Background pre-copy: download + cache the knowledge pack WITHOUT instantiating the WASM (lighter).
@@ -460,6 +572,7 @@ export function createAnimaLocal(opts = {}) {
 async function _prefetchPack(onProgress, fsReadUrl) {
   const url = fsReadUrl || ((p) => '/api/fs/read?path=' + encodeURIComponent(p));
   let total = 0;
+  const sigs = await readSigs(); let dirty = false;
   for (let i = 0; i < PACK.length; i++) {
     const f = PACK[i];
     let bytes = await cacheGet(f.p);
@@ -468,9 +581,11 @@ async function _prefetchPack(onProgress, fsReadUrl) {
       if (!bytes) { if (f.req) throw new Error('ANIMA prefetch: required file missing: ' + f.p); else continue; }
       await cachePut(f.p, bytes);
     }
+    if (sigs[f.p] == null) { sigs[f.p] = String(bytes.length); dirty = true; }   // per-file sync baseline
     total += bytes.length;
     try { onProgress && onProgress({ idx: i + 1, count: PACK.length, bytes: total, name: f.p.split('/').pop() }); } catch {}
   }
+  if (dirty) await writeSigs(sigs);
   return total;
 }
 
