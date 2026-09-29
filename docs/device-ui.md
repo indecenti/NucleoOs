@@ -16,44 +16,64 @@ Google Wear OS launcher.
 └──────────────────────────────┘
 ```
 
-## Launcher (Wear OS-style focused menu)
+## Launcher (smartwatch carousel)
 
-A vertical list where the **selected row is a large rounded pill** (icon in a colored
-circle + big label); neighbours are smaller and dimmed. Few items per screen, generous
-spacing, a breadcrumb at the top and a one-line **instruction** above the hint bar.
+A horizontal **icon carousel**: the focused app/category is a big centred badge with its title
+underneath; the neighbours peek in smaller and dimmer on each side; a dot rail (or `k/n` past 13
+items) marks the position. The status bar carries the breadcrumb (category + app count) or the
+clock, date (in the OS language), SSID, Wi-Fi bars and battery; the hint bar names the keys.
 
-- `;` up · `.` down (hold to repeat), with wrap-around.
-- **Number keys `1`–`9` activate directly** (no scrolling) — exploits the physical keyboard.
-- **Type-to-filter**: typing letters narrows the current menu (case-insensitive substring).
-- `Enter` opens the focused menu / launches the focused app.
-- `/` (right) opens the focused app's **context submenu** (Open · Pin to Home · App Info).
-- `Esc`/`` ` `` clears the filter if any, otherwise goes back one menu level.
+- Every arrow (`;` `.` `,` `/`) steps the focus by one, with wrap-around; hold to repeat.
+- `Enter` opens a category / launches an app. The **Games** tile opens the GameFront carousel.
+- **Spotlight**: typing letters or digits filters. At Home the search is **global** (every app,
+  flat); inside a category it narrows that category. An app matches by its registered label **or
+  its title in any of the five languages** — "wetter", "meteo" or "weather" all find Weather,
+  whatever the OS language. Results are **ranked**: titles that start with the query, then titles
+  with a word that starts with it, then the rest (registration order inside each tier), so the
+  focus lands on the likeliest app. `Del` edits the query; the status bar shows it (`/query`).
+- **Spotlight reaches into Settings**: when the query also matches settings rows, one last result
+  "N settings" (Settings glyph) opens Settings already searching for that query.
+- `*` pins / unpins the focused app to Home (up to 6, oldest evicted, persisted in
+  `/cfg/config/pins.txt`); pinned apps ride right after ANIMA, which always leads Home.
+- **Recent**: one fixed Home tile (after the pins, clock glyph) lists the last 5 apps opened, newest
+  first, from any path (launcher, ANIMA, Control Center, open-with). System launches (screensaver,
+  web handoff, the boot update dialog) are not recorded. It is a single tile so the categories never
+  shift; persisted in `/cfg/config/recents.txt`, written only when the order changes.
+- `Esc`/`` ` `` clears the query if any, otherwise goes back one level. `TAB` opens the Control Center.
+- **Return cursor**: leaving a Solo app (it warm-reboots back to the OS) lands on the same frame —
+  Home or category, query and focused row — via an RTC snapshot that a cold boot ignores.
+- Digits are **query characters**, not quick-select: a 1–9 launcher shortcut used to steal them
+  from Spotlight and was removed. (The in-app list widget below still has 1–9.)
 
-### Menu hierarchy (menus, submenus, icons)
+### Menu tree
 
-The launcher is a hierarchical tree, not a flat list. The root shows **categories**; each
-descends into its apps; each app has a small context submenu. Every node has a glyph icon, a
-per-category accent color, and a clear English `desc` shown on the instruction line.
+`launcher_menu.cpp` builds the tree from the registered apps at boot: Home = ANIMA + pinned apps
++ Recent (once something was opened) + one node per category (in registration order); each category
+lists its apps in registration order. After a rebuild (pin, launch) the focus follows the same node. Capacity is **`NUCLEO_APP_MAX`** (`nucleo_app.h`, currently 80) for the registry and the
+tree alike; an app past it is dropped with an `ESP_LOGE`. The per-category lists share one flat
+pointer pool, so raising the cap costs ~68 B per slot, not a full matrix row per category.
 
-```
-Home
-├─ ♪ Media     → Voice Recorder · Music · Photos
-├─ ⚙ Tools     → Calculator · Clock · Files · IR Remote
-├─ ◆ System    → System Status · Network · Settings · About
-└─ ⇄ Connect   → Companion App · Swarm
-                   └─ (per app) ▶ Open · ★ Pin to Home · ⓘ App Info
-```
+### Verify on the PC (no device)
 
-### Simulator & tests (verify before flashing)
+The C code is the source of truth; two host gates compile it unchanged:
 
-The navigation logic lives in **`web/device/nav.js`** as a pure, render-free state machine —
-the single source of truth that the firmware mirrors in C (`nucleo_app.cpp`). It is:
+- **`npm run launcher:test`** (`tools/launcher-host/`) — the REAL `launcher_menu.cpp` against the
+  real app table extracted from the firmware sources (`tools/launcher-host/apps.mjs`): capacity per
+  board (original / ADV) vs `NUCLEO_APP_MAX`, every app reachable exactly once, Spotlight (5-language
+  titles, ranking, 15-char cap, the Settings result), Recent (order, cap, exclusions, persistence,
+  focus), pins (persist, evict, focus) and the Solo return cursor. Part of
+  `npm run anima:gate`. It would have caught v0.4.0 silently dropping apps at the old 64 cap.
+- **`npm run ui:shots`** (`tools/ui-host/`) — renders the REAL `launcher_render.cpp`, `app_ui.cpp`,
+  `app_wifi.cpp` (Settings), `nucleo_theme.cpp` and `nucleo_i18n.c` with the REAL LovyanGFX core into
+  an in-memory 240×135 display: pixel-identical to the panel (same fonts, same 8bpp back-buffer, and
+  the ADV direct-draw path). Every scene × 5 languages × 4 themes → `build/ui-host/shots/*.png`, one
+  sheet per scene in `build/ui-host/sheets/` and a contact sheet `build/ui-host/index.html`. It fails
+  on a hint longer than the bar (39 glyphs) and on any pixel change vs `tools/ui-host/golden.json`;
+  review the PNGs, then accept with `npm run ui:shots -- --update`. `--only <substring>` renders a subset.
 
-- **Unit-tested**: `tools/device-ui.test.mjs` (run `npm test`) covers nav, wrap-around,
-  filter, back/clear, quick keys, context menu and the contextual hint/instruction text.
-- **Previewed**: `web/device/` is a faithful **240×135 pixel simulator** (canvas, integer-
-  scaled, keyboard-driven), served at `/device/` by `tools/serve-shell.mjs`. Use it to design
-  and verify the on-device UX in a browser before committing it to firmware.
+`web/device/` (nav.js + the canvas simulator) is an older JS re-implementation kept for web-side UX
+sketches; it does NOT track the firmware (no carousel, no pins, no multilingual search). Trust the
+two gates above for the native UI.
 
 ## Foreground model ("one closes the other")
 
@@ -103,7 +123,7 @@ Apps with a scrollable list should route keys through `app_ui_list_key()` and dr
 `app_ui_list()` instead of hand-rolling a scroll loop. This gives every list the same
 smartwatch UX for free:
 - `;` / `.` move with wrap-around; a right-edge scroll knob shows position.
-- **`1`–`9` jump to the n-th row** (same shortcut as the launcher).
+- **`1`–`9` jump to the n-th row** (the launcher does not do this: there digits feed Spotlight).
 - **Type-ahead**: typing letters does a time-windowed prefix search (`ra` → first `Ra…`
   row); tapping the same single key again cycles through items starting with it.
 
@@ -181,7 +201,9 @@ Settings
   **Font2** (16 px, full colour); the focused row expands into a two-line accent chip: the name,
   then a readable second line — a slider bar, `< choice >`, the value, or what the setting does.
 - **Type to search.** Any letter on the root opens a live search across every section; results
-  *act like the real rows* (flip, adjust with LEFT/RIGHT, open). DEL erases, Esc closes.
+  *act like the real rows* (flip, adjust with LEFT/RIGHT, open) and wear their section's glyph. The
+  header counts the hits (`18+` past the 18 listed). DEL erases, Esc closes. The launcher's Spotlight
+  opens Settings straight on this search (`nucleo_settings_search_preset`).
 - **Crown acceleration.** Holding LEFT/RIGHT on a slider steps 5 → 10 once the key repeats.
 - Same keys on every screen: UP/DOWN move (wrap) · **1-9** jump (on the root they open the section)
   · ENTER acts · LEFT/RIGHT adjust (elsewhere RIGHT opens, LEFT goes back — LEFT never closes the
@@ -190,7 +212,12 @@ Settings
 - Nearby networks scans when opened; ENTER joins (asks the password only for a secured network
   without a saved one), `p` marks a saved network preferred, `Del` forgets it (confirm card, by SSID).
 - Getters that hit storage (TTS voice-pack probe, BLE NVS pref) are cached per visit, never per paint.
-- The chip is the **theme accent**, so cycling the theme in Display recolours the screen live.
+- The chip is the **theme accent**, so cycling the theme in Display recolours the screen live
+  (`nucleo_theme_preview`, no write). Theme, screensaver time/style, voice speed, brightness and
+  volume are held in RAM while you dial them and **saved once** when the focus leaves the row or the
+  app (`flush_prefs`), so a held arrow never hammers flash or the SD card.
+- **Five languages**: every string is `TR5` (it/en/es/fr/de, ASCII, sized for the 240 px rows);
+  `npm run ui:shots` renders each screen in all of them.
 - **Flicker-free without the back-buffer** (the usual ADV state): only changed boxes repaint, each
   rendered in a strip sprite (as tall as the heap allows: a whole 34 px chip, 19 or 12 rows) and pushed
   atomically; the list scrolls by JUMPS (chip to the top going down, to the bottom going up) so most

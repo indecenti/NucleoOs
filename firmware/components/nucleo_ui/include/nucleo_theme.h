@@ -29,11 +29,21 @@ extern uint16_t THEME_INK;
 extern uint16_t THEME_SEL;
 extern uint16_t THEME_ACC;
 
+// Text/glyph colour for `want` drawn on a `fill` surface, guaranteed legible in EVERY theme: `want` if it
+// contrasts enough with `fill`, else THEME_MUTED, else whichever of THEME_FG/THEME_BG contrasts more.
+// Needed because themes may alias roles (Hacker/Nano Banana: LINE == MUTED), so MUTED text on a
+// LINE-filled chip vanishes. Classic keeps its exact colours (they already clear the bar).
+uint16_t nucleo_theme_ink_on(uint16_t fill, uint16_t want);
+
 // Initialize the theme system (loads from NVS / setup.json)
 void nucleo_theme_init(void);
 
-// Apply a theme by ID and save it
+// Apply a theme by ID and save it (LittleFS + SD backup)
 bool nucleo_theme_set(const char *id);
+
+// Apply a theme by ID WITHOUT saving: live preview while a picker cycles; call nucleo_theme_set()
+// once on commit so a held arrow doesn't write two files per step.
+bool nucleo_theme_preview(const char *id);
 
 // Get the current theme ID
 const char* nucleo_theme_get_current(void);

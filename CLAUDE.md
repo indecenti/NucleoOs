@@ -45,6 +45,12 @@ Verification matrix: `npm run validate` (registry/manifest), `i18n:gate`, `gz:ch
 `icons:gate` (firmware↔web launcher icon-set parity), `gen:api:check`, `anima:gate`,
 `test:all`. See `docs/debugging.md` and the skills below.
 
+Native UI (launcher, Control Center, Settings) is verified on the PC too, never by flashing to look:
+`npm run launcher:test` compiles the real `launcher_menu.cpp` against the real app table;
+`npm run ui:shots` renders the real UI C with the real LovyanGFX into PNGs (5 languages × 4 themes ×
+direct/buffered path) under `build/ui-host/` and diffs them against `tools/ui-host/golden.json`.
+Look at `build/ui-host/sheets/*.png` after any native UI change; accept with `-- --update`.
+
 **Library/API docs:** when touching a third-party API (ESP-IDF, Three.js, Vosk, js-dos, the
 LLM providers, web platform APIs), use the **context7** MCP (`.mcp.json`) — `resolve-library-id`
 then `get-library-docs` — to pull version-correct docs instead of guessing. Wrong/outdated API

@@ -69,6 +69,21 @@ static const nucleo_theme_t s_themes[] = {
 };
 static const int s_theme_count = sizeof(s_themes) / sizeof(s_themes[0]);
 
+static int luma565(uint16_t c)       // perceived brightness 0..255 (Rec. 601 weights)
+{
+    int r = ((c >> 11) & 31) * 255 / 31, g = ((c >> 5) & 63) * 255 / 63, b = (c & 31) * 255 / 31;
+    return (r * 299 + g * 587 + b * 114) / 1000;
+}
+
+uint16_t nucleo_theme_ink_on(uint16_t fill, uint16_t want)
+{
+    const int MIN_DELTA = 40;         // below this a glyph melts into its chip on the ST7789
+    int lf = luma565(fill);
+    if (abs(luma565(want) - lf) >= MIN_DELTA) return want;
+    if (abs(luma565(THEME_MUTED) - lf) >= MIN_DELTA) return THEME_MUTED;
+    return abs(luma565(THEME_FG) - lf) >= abs(luma565(THEME_BG) - lf) ? THEME_FG : THEME_BG;
+}
+
 static void apply_theme_struct(const nucleo_theme_t *t) {
     THEME_BG = t->bg;
     THEME_FG = t->fg;
@@ -125,16 +140,14 @@ extern "C" void nucleo_theme_init(void) {
     load_config_theme();
 }
 
+extern "C" bool nucleo_theme_preview(const char *id) {
+    for (int i = 0; i < s_theme_count; i++)
+        if (!strcmp(s_themes[i].id, id)) { apply_theme_struct(&s_themes[i]); return true; }
+    return false;
+}
+
 extern "C" bool nucleo_theme_set(const char *id) {
-    const nucleo_theme_t *found = NULL;
-    for (int i = 0; i < s_theme_count; i++) {
-        if (!strcmp(s_themes[i].id, id)) {
-            found = &s_themes[i];
-            break;
-        }
-    }
-    if (!found) return false;
-    apply_theme_struct(found);
+    if (!nucleo_theme_preview(id)) return false;
 
     // Save to LittleFS
     cJSON *r = cJSON_CreateObject();

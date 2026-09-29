@@ -126,11 +126,11 @@ static void load_speed(void)
 void nucleo_tts_set_speed(int pct)
 {
     int v = nucleo_tts_speed_clamp(pct);
-    bool changed = (v != s_speed_pct);
+    if (v == s_speed_pct) return;       // same value: no SD write, and the WAV cache stays valid
     s_speed_pct = v;
     FILE *f = fopen(SPEED_PATH, "wb");
     if (f) { char buf[8]; int k = snprintf(buf, sizeof buf, "%d", v); if (k > 0) fwrite(buf, 1, (size_t)k, f); fclose(f); }
-    if (changed) purge_clip_cache();    // i WAV cache hanno il vecchio rate cotto nell'header
+    purge_clip_cache();                 // i WAV cache hanno il vecchio rate cotto nell'header
     ESP_LOGI(TAG, "velocita' lettura = %d%%", v);
 }
 int nucleo_tts_speed(void) { return s_speed_pct; }

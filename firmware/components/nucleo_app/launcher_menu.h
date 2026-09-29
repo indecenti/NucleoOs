@@ -1,15 +1,15 @@
-// Launcher menu model + navigation (the C mirror of web/device/nav.js).
+// Launcher menu model + navigation (source of truth; host-tested by `npm run launcher:test`).
 //
-// Owns the hierarchical menu tree (categories -> apps -> per-app context actions), the
+// Owns the hierarchical menu tree (Home -> categories -> apps, plus pinned apps on Home), the
 // navigation stack with type-to-filter, and all the queries the renderer/run-loop need.
 // It deliberately knows NOTHING about drawing or about launching apps: navigation that
 // would start an app returns the target node to the caller (launcher_enter), so this
-// module has no dependency on the app-lifecycle code. Keep in sync with nav.js, which is
-// unit-tested (tools/device-ui.test.mjs) and previewed in web/device/.
+// module has no dependency on the app-lifecycle code — which is what lets tools/launcher-host
+// compile it unchanged on the PC against the real app table.
 #pragma once
 #include "launcher_theme.h"
 
-enum node_kind_t { N_MENU, N_APP, N_ACTION };
+enum node_kind_t { N_MENU, N_APP };
 
 struct MenuNode {
     const char *id;
@@ -43,12 +43,23 @@ const MenuNode *launcher_nth_visible(int idx); // nth visible row (NULL if out o
 
 // ---- navigation ------------------------------------------------------------
 bool            launcher_back(void);           // clear filter, else pop a frame; false at root
-void            launcher_open_context(void);   // open the focused app's context submenu
-// Apply Enter to the focused row. Pushes submenus / resolves context actions internally;
+// Apply Enter to the focused row. Pushes submenus internally;
 // returns the app node to launch (caller's job) or NULL when handled here.
 const MenuNode *launcher_enter(void);
 void            launcher_filter_push(char c);  // append a char to the filter, reset focus
 void            launcher_filter_backspace(void);
+
+// ---- recents -------------------------------------------------------------------
+// Home carries one fixed "Recent" tile (id LAUNCHER_RECENT_ID) listing the last apps opened, newest
+// first; it appears after the first launch. Call on EVERY app launch (launcher, ANIMA, CC, open-with).
+#define LAUNCHER_RECENT_ID "recent"
+void            launcher_note_launch(const char *id);
+
+// ---- Spotlight -> Settings --------------------------------------------------------
+// The last Spotlight result when the query matches settings: launching it opens Settings searching for
+// the query (nucleo_app.cpp routes the id). hits() = settings found by the active Home query (0 = none).
+#define LAUNCHER_SETTINGS_SEARCH_ID "settings-search"
+int             launcher_settings_hits(void);
 
 // ---- pin to Home ------------------------------------------------------------
 bool            launcher_is_pinned(const char *id);   // true if this app id rides the top of Home

@@ -24,6 +24,9 @@ bool gamefront_step(void);                                 // animation tick; tr
 // Capture the freshly-composited shared canvas to the SD. cover -> downscaled /data/GameShots/<id>.bmp;
 // screenshot -> full-res /data/Screenshots/<name>.bmp. Call right after the frame is pushed.
 bool gamefront_save_cover(const char *id);        // true if the BMP was written
+// Unique name for the next /data/Screenshots capture: shot_YYYYMMDD_HHMMSS once the clock is set, else
+// shot_N one past the highest N already on the card (never overwrites an earlier session's shots).
+void gamefront_shot_name(char *out, int cap);
 bool gamefront_save_screenshot(const char *name); // true if the BMP was written (reads the canvas)
 bool gamefront_save_panel_screenshot(const char *name); // reads the PHYSICAL PANEL — works for direct-draw / Solo-mode apps
 bool gamefront_save_panel_cover(const char *id);        // full-frame panel shot AS the carousel cover (/data/GameShots/<id>.bmp, overwrites)
