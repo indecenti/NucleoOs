@@ -15,6 +15,7 @@ import { KG } from './anima/kge.mjs';      // permutation-KGE deductive core (in
 import { answer as combinatorRun, parseQuery as combinatorParse } from './anima/combinator.mjs';   // neuro-symbolic combinators
 import { weatherAnswer as sharedWeatherAnswer } from './anima/weather.mjs';   // shared weather NLU + forecast (mirrors firmware)
 import { translateAnswer, isTranslateRequest } from './anima/translate.mjs';   // offline IT<->EN translator (twin of nucleo_anima_translate.c)
+import { execFileSync } from 'node:child_process';   // git short hash + dirty flag for FW_VERSION (as version.cmake does)
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SHELL = join(REPO, 'web', 'shell');
@@ -59,7 +60,19 @@ async function apiApps() {
   }
   return { apps };
 }
-const apiStatus = { os: 'NucleoOS', version: '0.1.0', uptime_s: 0, free_heap: 210000,
+// Running-firmware version, composed like firmware/version/version.cmake composes PROJECT_VER:
+// "<semver>+<build>.g<git-short>[*]" from firmware/version/{VERSION,BUILD} + git. The device reports
+// this one string everywhere (/api/status, /proc/version, /proc/uname, /api/diag sys.fw, ANIMA's
+// "che versione?") — a hand-edited literal here drifts from the release and makes the shell announce
+// an "update" to the version it is already running.
+const FW_VERSION = (() => {
+  const vf = (f, dflt) => { try { return readFileSync(join(REPO, 'firmware', 'version', f), 'utf8').split(/\r?\n/)[0].trim() || dflt; } catch { return dflt; } };
+  const git = (args) => { try { return execFileSync('git', args, { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim(); } catch { return null; } };
+  const hash = git(['rev-parse', '--short=7', 'HEAD']) || 'nogit';
+  const dirty = hash !== 'nogit' && git(['status', '--porcelain', '--', ':(exclude)firmware/version']) ? '*' : '';
+  return `${vf('VERSION', '0.0.0')}+${vf('BUILD', '0')}.g${hash}${dirty}`.slice(0, 31);   // app-descriptor cap
+})();
+const apiStatus = { os: 'NucleoOS', version: FW_VERSION, uptime_s: 0, free_heap: 210000,
   min_free_heap: 17000, largest_free_block: 42000,
   storage: { mounted: true, fs: 'exFAT', total_bytes: 63864569856, free_bytes: 63800000000 },
   network: { mode: 'sta', ssid: 'home-wifi', ip: '192.168.1.42', time_synced: true }, apps: { installed: 9 },
@@ -80,7 +93,7 @@ const simState = {
   oom: 0,                         // stays 0 (healthy); bump by hand to exercise the OOM flag
 };
 function simLog(line) { simState.logs.push(line); if (simState.logs.length > 60) simState.logs.shift(); }
-simLog('I (220) boot: NucleoOS 0.1.0, reset reason POWERON');
+simLog(`I (220) boot: NucleoOS ${FW_VERSION}, reset reason POWERON`);
 simLog('I (640) wifi: connected to home-wifi, ip=192.168.1.42');
 simLog('I (910) anima: L1 index loaded (AKB2), 18.2 KB free internal');
 simLog('W (1180) power: battery low (3.42 V), enable saver soon');
@@ -510,8 +523,8 @@ const server = createServer(async (req, res) => {
     let body;
     switch (node) {
       case '':         body = 'version\nuname\nbootreason\nuptime\nloadavg\nmeminfo\ncpuinfo\nstat\nmounts\npartitions\nnet\n'; break;
-      case 'version':  body = 'NucleoOS version 0.1.0 (esp32s3) SMP cores=2\n'; break;
-      case 'uname':    body = 'NucleoOS cardputer 0.2.0 #nucleoos Jun 9 2026 12:00:00 idf v5.4 esp32s3 rev0 cores=2\n'; break;
+      case 'version':  body = `NucleoOS version ${FW_VERSION} (esp32s3) SMP cores=2\n`; break;
+      case 'uname':    body = `NucleoOS cardputer ${FW_VERSION} #nucleoos Jun 9 2026 12:00:00 idf v5.4 esp32s3 rev0 cores=2\n`; break;
       case 'bootreason': body = 'SW\n'; break;
       case 'uptime':   body = `${up}.00 ${(up * 2 * (1 - load)).toFixed(2)}\n`; break;
       case 'loadavg':  body = `${load.toFixed(2)} ${load.toFixed(2)} ${load.toFixed(2)} 2/${tasks} ${up}\n`; break;
@@ -551,7 +564,7 @@ const server = createServer(async (req, res) => {
     a.last_conf = jit(70, 25); a.last = ['greet', 'time', 'recall', 'miss', 'launch'][Math.floor(Math.random() * 5)];
     return sendJSON(res, {
       v: 1, ts: Math.floor(Date.now() / 1000),
-      sys: { fw: '0.2.0', proj: 'nucleoos', built: 'Jun 9 2026', idf: 'v5.4', uptime_s: up,
+      sys: { fw: FW_VERSION, proj: 'nucleoos', built: 'Jun 9 2026', idf: 'v5.4', uptime_s: up,
              reset: 'SW', slot: 'ota_0', ota: 'valid', sd: true, sd_free: 7.1e9, sd_total: 14.8e9 },
       mem: { free, min: simState.minFree, lblk, frag: Math.max(0, Math.round(100 * (1 - lblk / free))),
              dma_free: jit(150000, 9000), stack_httpd: jit(7000, 800) },
@@ -3268,7 +3281,7 @@ function animaQuery(input, lang, mem) {
         value = SE[((mo===2&&day>=20)||mo===3||mo===4||(mo===5&&day<=20)) ? 1 : ((mo===5&&day>=21)||mo===6||mo===7||(mo===8&&day<=22)) ? 2 : ((mo===8&&day>=23)||mo===9||mo===10||(mo===11&&day<=20)) ? 3 : 0]; }
       else value = en ? `Today is ${WD[d.getDay()]}, ${MO[mo]} ${d.getDate()} ${d.getFullYear()}` : `Oggi e ${WD[d.getDay()]} ${d.getDate()} ${MO[mo]} ${d.getFullYear()}`;
     }
-    else if (arg === 'version') value = 'NucleoOS 0.1.0';
+    else if (arg === 'version') value = `NucleoOS ${FW_VERSION}`;
     else if (arg === 'uptime') {                        // process uptime stands in for the device's
       const s = Math.floor(process.uptime()), dd = Math.floor(s / 86400), hh = Math.floor((s % 86400) / 3600), mm = Math.floor((s % 3600) / 60);
       value = dd ? `${dd}${lang === 'en' ? 'd' : 'g'} ${hh}h` : hh ? `${hh}h ${mm}m` : `${mm}m`;
