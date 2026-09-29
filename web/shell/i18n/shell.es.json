@@ -241,6 +241,7 @@
   "nc_src_recorder": "Grabadora",
   "nc_src_ota": "Actualización",
   "up_title": "Actualización de NucleoOS disponible",
+  "up_title_sec": "Actualización de seguridad de NucleoOS",
   "up_body": "La versión {tag} está lista para instalar — abre Ajustes › Actualizaciones.",
   "nc_src_app": "App",
 

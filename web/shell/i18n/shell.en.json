@@ -241,6 +241,7 @@
   "nc_src_recorder": "Recorder",
   "nc_src_ota": "Update",
   "up_title": "NucleoOS update available",
+  "up_title_sec": "NucleoOS security update",
   "up_body": "Version {tag} is ready to install — open Settings › Updates.",
   "nc_src_app": "App",
 

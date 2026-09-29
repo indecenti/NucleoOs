@@ -54,6 +54,25 @@ int main(void)
     CHECK(!upd_extract_tag("{\"tag\":\"vvvvvvvvvvvvvvvvvvvvvvvvvvvvvv0.1.0\"}", tag, 8), "refuse truncation");
     CHECK(!upd_extract_tag(NULL, tag, sizeof tag), "reject NULL json");
 
+    // ── version.json type extraction ───────────────────────────────────────────
+    char ty[16];
+    upd_extract_type("{\"tag\":\"v0.3.0\",\"type\":\"security\"}", ty, sizeof ty);
+    CHECK(!strcmp(ty, "security"), "extract security type");
+    upd_extract_type("{ \"type\" :  \"Major\" }", ty, sizeof ty);
+    CHECK(!strcmp(ty, "major"), "extract type, lowercased + whitespace");
+    upd_extract_type("{\"tag\":\"v0.3.0\"}", ty, sizeof ty);
+    CHECK(!strcmp(ty, "patch"), "missing type defaults to patch");
+    upd_extract_type("{\"type\":\"bogus\"}", ty, sizeof ty);
+    CHECK(!strcmp(ty, "patch"), "unknown type defaults to patch");
+    upd_extract_type("{\"type\":null}", ty, sizeof ty);
+    CHECK(!strcmp(ty, "patch"), "non-string type defaults to patch");
+    upd_extract_type("{\"type\":\"security", ty, sizeof ty);
+    CHECK(!strcmp(ty, "patch"), "unterminated type defaults to patch");
+    upd_extract_type(NULL, ty, sizeof ty);
+    CHECK(!strcmp(ty, "patch"), "NULL json defaults to patch");
+    upd_extract_type("{\"type\":\"security\"}", ty, 4);
+    CHECK(strlen(ty) <= 3, "never overflows a tiny buffer");
+
     // ── SHA256SUMS lookup ──────────────────────────────────────────────────────
     const char *sums =
         "1111111111111111111111111111111111111111111111111111111111111111  nucleoos-latest.bin\r\n"

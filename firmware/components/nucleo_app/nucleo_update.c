@@ -314,11 +314,20 @@ static void check_task(void *arg)
                      UT("disponibile - apri Aggiornamenti", "available - open Updates",
                         "disponible - abre Actualizaciones", "disponible - ouvrez Mises a jour",
                         "verfuegbar - oeffne Updates"));
+            // A security release rings louder: WARN (colour + chime) instead of INFO. The type comes
+            // from the same version.json the tag did; a missing/unknown type is an ordinary update.
+            char utype[16];
+            upd_extract_type(body, utype, sizeof utype);
+            bool sec = (strcmp(utype, "security") == 0);
+            const char *title = sec
+                ? UT("Aggiornamento di sicurezza NucleoOS", "NucleoOS security update",
+                     "Actualizacion de seguridad NucleoOS", "Mise a jour de securite NucleoOS",
+                     "NucleoOS-Sicherheitsupdate")
+                : UT("Aggiornamento NucleoOS", "NucleoOS update", "Actualizacion de NucleoOS",
+                     "Mise a jour NucleoOS", "NucleoOS-Update");
             // One backbone: SD journal + notify.post -> web Notification Center + native banner/chime.
-            nucleo_notify_emit("ota", NOTIFY_INFO, id,
-                               UT("Aggiornamento NucleoOS", "NucleoOS update", "Actualizacion de NucleoOS",
-                                  "Mise a jour NucleoOS", "NucleoOS-Update"),
-                               body_txt, "app:settings@updates");
+            nucleo_notify_emit("ota", sec ? NOTIFY_WARN : NOTIFY_INFO, id,
+                               title, body_txt, "app:settings@updates");
         }
         st_set_phase(UPD_CHECK_DONE, NULL);
     }
