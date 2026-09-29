@@ -50,6 +50,10 @@ Everything that reports a version reads it back from there via `esp_app_get_desc
 | ANIMA "che versione?" (web tool + native app) | `nucleo_httpd.c`, `app_anima.cpp` |
 | SD `volume.json` `os_version` (at provisioning) | `nucleo_storage.c` |
 
+The host simulator (`tools/serve-shell.mjs`) composes the same string from the same files + git at
+startup (`FW_VERSION`) and serves it on its mirrors of those surfaces — never a hand-edited literal,
+or the shell compares a stale version against the latest release and announces a bogus update.
+
 ## How the counter moves on every build
 
 `tools/flash.ps1` runs `tools/version-bump.ps1` before building (unless `-NoBump`). That writes the
