@@ -1,11 +1,12 @@
 # KryonOS integration plan
 
-**Status:** planned, not started · **Opened:** 2026-09-30 · **Owner:** indecenti
+**Status:** items 1 & 3 implemented (host-tested; firmware halves flash-pending) · item 2 parked ·
+**Opened:** 2026-09-30 · **Owner:** indecenti
 **Fits:** the consolidation phase (harden/test what exists; no new apps).
 
-How to resume: this file **is** the plan. Re-read it, then pick an item from
-[§6 Order of work](#6-order-of-work). Nothing here has been implemented except the
-license-wording fix in [§7](#7-already-done-license-wording).
+How to resume: this file **is** the plan. Item 1 (rescue page) and item 3 (release `type`) are
+implemented and green on every host gate; their firmware C halves still need one flash to confirm
+on-device (see [§8 Implementation status](#8-implementation-status)). Item 2 stays parked.
 
 ---
 
@@ -234,3 +235,34 @@ found during this evaluation:
 - `nucleo_wifiatk.h` header — "NucleoOS stays MIT" → "NucleoOS keeps its own license".
 
 These are wording fixes only; no behaviour change.
+
+## 8. Implementation status
+
+**Item 1 — rescue page: implemented (2026-09-30).**
+- `firmware/components/nucleo_webfs/rescue.html` — single self-contained source (inline CSS+JS,
+  ~11 KB), shared by the firmware (EMBED) and the simulator; drives `/api/status`, `/api/fs/*`
+  (list/write/delete), `/api/ota` and `/api/pair`.
+- `nucleo_webfs.c` + `CMakeLists.txt` — `EMBED_TXTFILES "rescue.html"`, served from `static_get`
+  when the shell entry page (`/` or `/index.html`) can't be opened; every other missing asset keeps
+  the honest 404. Design change vs §4: the page is public like the shell HTML (the `/api/*` auth gate
+  is what protects uploads/flash), embedded **raw** not gz (simpler, still trivial in flash).
+- `tools/serve-shell.mjs` — serves the same file at `/rescue` and mirrors the shell-missing fallback.
+- Verified: the page paired, listed `/www/shell`, uploaded+deleted a file, and posted `/api/ota`
+  against the simulator (browser + curl), no console errors; `/` still serves the real shell.
+- **Flash-pending:** the `nucleo_webfs.c` C is not host-compiled (needs a device build/flash).
+
+**Item 3 — release `type`: implemented (2026-09-30).**
+- Pure cores (host-tested): `update_policy.c/.h` `upd_extract_type()` (gate `npm run update:test`,
+  58/58) and `update-core.js` `parseReleaseType()` + `updateLevel()` (`tools/update-core.test.mjs`,
+  green). A `security` release → `warn`/`NOTIFY_WARN`; else `info`/`NOTIFY_INFO`.
+- Wiring: `update-check.js` (web notification level + icon + `type` in the SD bridge write) and
+  `nucleo_update.c` (native notify level + security title). New i18n key `up_title_sec` in all five
+  shell locales. `.github/workflows/pages.yml` derives `type` from the release-notes marker
+  (`[security]` / `[major]` / `[minor]` / `[patch]`, default patch) into `version.json`.
+- Green gates: `update:test`, `update-core` test, `gz:check` (595 pairs), `i18n:gate`, `validate`,
+  `gen:api:check` (76/76).
+- **Flash-pending:** the `nucleo_update.c` wiring is not host-compiled (the pure core it calls is).
+
+Deviation noted: §4 item 3 proposed the `type` in `version.json` only; the browser actually derives
+it from the release notes it already fetches, so no extra fetch — CI copies the same marker into
+`version.json` for the native path. One authoring convention (`[security]` in the notes), both surfaces.
