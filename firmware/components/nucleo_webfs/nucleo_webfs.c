@@ -10,6 +10,24 @@
 
 static const char *TAG = "webfs";
 
+// Flash-embedded rescue console (EMBED_TXTFILES "rescue.html" in CMakeLists). Served at the device
+// root ONLY when the SD shell entry page can't be opened — a blank/corrupt/unprovisioned card would
+// otherwise make http://<device>/ a dead 404 with no web way to recover. The page is fully
+// self-contained (inline CSS+JS, no side assets) and drives the existing paired /api/fs and /api/ota
+// endpoints; the API auth gate is what actually protects uploads/flash, so the page itself is public
+// exactly like the normal shell HTML. TXTFILES appends a NUL, so the byte length drops the last byte.
+extern const char rescue_html_start[] asm("_binary_rescue_html_start");
+extern const char rescue_html_end[]   asm("_binary_rescue_html_end");
+
+static esp_err_t serve_rescue(httpd_req_t *req)
+{
+    size_t len = (size_t)(rescue_html_end - rescue_html_start);
+    if (len > 0) len--;   // drop the trailing NUL that EMBED_TXTFILES appends
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, rescue_html_start, len);
+}
+
 // Circuit breaker for the static catch-all: refuse to START a large full-file stream when contiguous
 // SRAM is already low. Streaming a multi-MB asset (e.g. an offline voice-model part) through the
 // single-task web server while it's heap-starved is what tips it over — every other request
@@ -197,6 +215,18 @@ static esp_err_t static_get(httpd_req_t *req)
     }
     if (!f) f = fopen(path, "rb");
     if (!f) {
+        // Web OS rescue fallback: the shell entry page is missing (blank/corrupt/unprovisioned SD).
+        // Serve the flash-embedded rescue console at the device root instead of a dead 404, so the
+        // operator can re-upload the shell or re-flash over the web. ONLY the navigation entry
+        // ("/" or "/index.html") triggers it — every other missing asset keeps the honest 404, so a
+        // real missing-file bug is never masked and the rescue page's own (inline) load can't loop.
+        char nav[16]; size_t ni = 0;
+        for (const char *u = req->uri; *u && *u != '?' && ni < sizeof(nav) - 1; u++) nav[ni++] = *u;
+        nav[ni] = '\0';
+        if (strcmp(nav, "/") == 0 || strcmp(nav, "/index.html") == 0) {
+            ESP_LOGW(TAG, "shell index missing -> serving embedded rescue console");
+            return serve_rescue(req);
+        }
         ESP_LOGD(TAG, "404 %s", path);
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Not found");
         return ESP_OK;   // the client got a complete 404 (benign probe: /favicon.ico, missing wllama variants).
