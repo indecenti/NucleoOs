@@ -1,6 +1,6 @@
 // nucleo_eth — wired (Ethernet/W5500) Layer-2/3 offensive engine for NucleoOS.
 //
-// Clean-room, MIT: built on our own MACRAW driver (nucleo_w5500) + pure frame craft (eth_frames),
+// Clean-room (no copyleft source copied): built on our own MACRAW driver (nucleo_w5500) + pure frame craft (eth_frames),
 // NOT on Bruce/lwIP source. It does, better, what Bruce's "Ethernet" menu does — host scan, ARP
 // spoof/poison, DHCP starvation, MAC flooding — plus things Bruce doesn't: a hand-rolled DHCP client
 // to self-configure with no TCP/IP stack, OUI vendor fingerprinting, a rogue-DHCP MITM, on-SD PCAP

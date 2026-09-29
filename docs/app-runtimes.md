@@ -55,8 +55,10 @@ APK. An SD card carried over from an older build therefore can't load an app it 
 
 Apps are bundles validated against `schemas/manifest.schema.json`. The OS contract is:
 the manifest (capabilities, routes, runtime), the event protocol (`docs/event-protocol.md`),
-and the file API. NucleoOS is **MIT-licensed** (see `LICENSE`) so third parties can build
-and ship apps freely.
+and the file API — a stable, documented contract that third parties can build against.
+NucleoOS's own source is under [PolyForm Noncommercial 1.0.0](../LICENSE) (commercial use
+needs a paid license, see `COMMERCIAL.md`); an app you build on this SDK is your own work,
+licensed however you choose.
 
 ## Case study: DOS emulation (why it's a `web` app)
 
@@ -77,7 +79,7 @@ and only one fits the Cardputer:
 The **DOS Box** app (`apps/dosbox`, `runtime: web`) implements the second path: it lists
 `/data/DOS` for `.jsdos`/`.zip`/`.img`/`.ima` images and boots the selected one in js-dos.
 js-dos is GPL/LGPL but is *served and executed on the client*, never linked into our
-MIT firmware — no license contamination. The loader defaults to the js-dos CDN and can be
+firmware — no license contamination. The loader defaults to the js-dos CDN and can be
 **vendored on the SD card** (`apps/dosbox/www/vendor/`) for fully offline use.
 
 ## Positioning vs other ESP32 OSes
