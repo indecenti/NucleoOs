@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "_comment": "Pluggable catalog for the Game Center hub (apps/games). Add a game = drop a module under apps/games/www/games/<id>.js that calls defineGame(), then add an entry here. The hub reads this list to populate the catalog; no firmware change. minPlayers/maxPlayers/ai/realtime mirror the defineGame() contract so the lobby can show seats and AI options before the module is loaded.",
+  "_comment": "Pluggable catalog for the Game Center hub (apps/games). Add a game = drop a module under apps/games/www/games/<id>.js that calls defineGame(), then add an entry here. The hub reads this list to populate the catalog; no firmware change. minPlayers/maxPlayers/ai/realtime mirror the defineGame() contract so the lobby can show seats and AI options before the module is loaded. Shown name/desc are localized: add game_<id>_name / game_<id>_desc to every apps/games/www/i18n.<lang>.json; the name/desc here are the Italian originals, used only as the fallback when those keys are missing.",
   "games": [
     {
       "id": "tris",

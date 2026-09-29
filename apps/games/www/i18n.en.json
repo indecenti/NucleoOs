@@ -15,6 +15,16 @@
   "loading_lobby": "Loading lobby…",
   "catalog_empty": "Catalog is empty.",
 
+  "badge_realtime": "real-time",
+  "game_tris_name": "Tic-Tac-Toe",
+  "game_tris_desc": "Turn-based tic-tac-toe: 2 players, against ANIMA offline, or against an online LLM (Grok/Claude) that really plays the moves.",
+  "game_forza4_name": "Connect Four",
+  "game_forza4_desc": "Line up four discs. 2 players, against ANIMA (easy/medium), or against an online LLM (Grok/Claude) that picks every move.",
+  "game_pong_name": "Pong 3D",
+  "game_pong_desc": "Neon 3D arena (Three.js) with power-ups, trails, particles and sound effects. 1v1 over the network or against ANIMA — offline brain or online LLM (Claude/Grok/Groq).",
+  "game_constellations_name": "Constellations 3D",
+  "game_constellations_desc": "3D star trader/hunter (Three.js). CONTINUES the same run as the Cardputer: an infinite procedural universe, missions and first-person dogfights. Gamepad, mouse or keyboard.",
+
   "btn_hint": "💡 Hint",
   "btn_invite": "🔗 Invite",
   "btn_ready": "✓ Ready",

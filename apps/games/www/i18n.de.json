@@ -15,6 +15,16 @@
   "loading_lobby": "Lobby wird geladen…",
   "catalog_empty": "Der Katalog ist leer.",
 
+  "badge_realtime": "Echtzeit",
+  "game_tris_name": "Tic-Tac-Toe",
+  "game_tris_desc": "Rundenbasiertes Tic-Tac-Toe: 2 Spieler, gegen ANIMA offline oder gegen ein Online-LLM (Grok/Claude), das die Züge wirklich selbst spielt.",
+  "game_forza4_name": "Vier gewinnt",
+  "game_forza4_desc": "Bringe vier Steine in eine Reihe. 2 Spieler, gegen ANIMA (leicht/mittel) oder gegen ein Online-LLM (Grok/Claude), das jeden Zug wählt.",
+  "game_pong_name": "Pong 3D",
+  "game_pong_desc": "Neon-3D-Arena (Three.js) mit Power-ups, Leuchtspur, Partikeln und Soundeffekten. 1-gegen-1 im Netzwerk oder gegen ANIMA — Offline-Gehirn oder Online-LLM (Claude/Grok/Groq).",
+  "game_constellations_name": "Sternbilder 3D",
+  "game_constellations_desc": "Sternenhändler/-jäger in 3D (Three.js). SETZT denselben Spielstand des Cardputers FORT: unendliches prozedurales Universum, Missionen und Raumkämpfe aus der Ego-Perspektive. Gamepad, Maus oder Tastatur.",
+
   "btn_hint": "💡 Tipp",
   "btn_invite": "🔗 Einladen",
   "btn_ready": "✓ Bereit",
