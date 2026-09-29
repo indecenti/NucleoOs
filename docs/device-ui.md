@@ -90,7 +90,7 @@ Exactly one app runs at a time, full-screen. Opening an app calls its `onEnter`;
 | `Enter` | select / confirm |
 | `Esc` (top-left key) | back / close app → launcher |
 | `Del` | backspace (text) |
-| `1`–`9` | direct launch in launcher; app-specific elsewhere |
+| `1`–`9` | jump to the n-th row in list apps; in the launcher digits are Spotlight query characters |
 | printable | type (filter, text, calculator) |
 
 (Verify key codes on hardware; M5Cardputer exposes `keysState()` with `enter`/`del` flags
