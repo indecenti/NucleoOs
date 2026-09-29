@@ -1,6 +1,6 @@
 // Wi-Fi offensive toolkit — clean-room ESP-IDF re-implementation of the "WiFi Atks" family that
 // firmwares like Bruce/Marauder ship. Built only on the public esp_wifi / esp_netif primitives so
-// NucleoOS stays MIT (no GPL/AGPL source is copied — Bruce is used only as a behaviour reference).
+// NucleoOS keeps its own license (no GPL/AGPL source is copied — Bruce is used only as a behaviour reference).
 //
 // PURPOSE & SCOPE. AUTHORIZED USE ONLY: security-awareness demos, auditing networks you own or
 // have written permission to test, and CTF/lab exercises. Jamming/deauthing third-party networks
