@@ -4,6 +4,7 @@
 #include "nucleo_kbd.h"
 #include <M5GFX.h>
 #include <string.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h>
@@ -74,16 +75,22 @@ void launcher_render_update_chrome(void)
     // Hint line: the controls that actually do something right now. Arrows move the focus; Esc goes
     // back; ENTER opens. When an app is focused, '*' pins/unpins it to the top of Home (ANIMA excluded,
     // it already lives there). s_hint is 48 B; the longest string below is ~30 chars, well within 240 px.
-    bool app = cur && cur->kind == N_APP && strcmp(cur->id, "anima");
-    const char *pinw = app ? (launcher_is_pinned(cur->id) ? TR("* togli", "* unpin") : TR("* fissa", "* pin")) : "";
+    bool app = cur && cur->kind == N_APP && strcmp(cur->id, "anima") && strcmp(cur->id, LAUNCHER_SETTINGS_SEARCH_ID);
+    const char *pinw = app ? (launcher_is_pinned(cur->id) ? TR5("* togli", "* unpin", "* soltar", "* retirer", "* loesen") : TR5("* fissa", "* pin", "* fijar", "* epingler", "* anheften")) : "";
     if (launcher_filter()[0]) {
-        snprintf(s_hint, sizeof(s_hint), TR("cerca \"%.12s\"   esc azzera", "find \"%.12s\"   esc clear"), launcher_filter());
+        snprintf(s_hint, sizeof(s_hint), TR5("cerca \"%.12s\"   esc azzera", "find \"%.12s\"   esc clear", "buscar \"%.12s\"   esc borrar",
+                                               "chercher \"%.12s\"  esc effacer", "suche \"%.12s\"   esc leeren"), launcher_filter());
     } else if (launcher_depth() > 0) {
-        if (app) snprintf(s_hint, sizeof(s_hint), TR("invio apri   %s   esc indietro", "enter open   %s   esc back"), pinw);
-        else     snprintf(s_hint, sizeof(s_hint), "%s", TR("invio apri   esc indietro", "enter open   esc back"));
+        if (app) snprintf(s_hint, sizeof(s_hint), TR5("invio apri   %s   esc indietro", "enter open   %s   esc back", "enter abrir   %s   esc atras",
+                                         "enter ouvrir   %s   esc retour", "enter oeffnen  %s  esc zurueck"), pinw);
+        else     snprintf(s_hint, sizeof(s_hint), "%s", TR5("invio apri   esc indietro", "enter open   esc back", "enter abrir   esc atras",
+                                                         "enter ouvrir   esc retour", "enter oeffnen   esc zurueck"));
     } else {
-        if (app) snprintf(s_hint, sizeof(s_hint), TR("invio apri   %s   tab rapide", "enter open   %s   tab quick"), pinw);
-        else     snprintf(s_hint, sizeof(s_hint), "%s", TR("invio apri   digita cerca   tab rapide", "enter open   type to find   tab quick"));   // teach Spotlight + the Control Center
+        if (app) snprintf(s_hint, sizeof(s_hint), TR5("invio apri   %s   tab rapide", "enter open   %s   tab quick", "enter abrir   %s   tab rapido",
+                                         "enter ouvrir   %s   tab rapide", "enter oeffnen  %s  tab schnell"), pinw);
+        else     snprintf(s_hint, sizeof(s_hint), "%s", TR5("invio apri   digita cerca   tab rapide", "enter open   type to find   tab quick",
+                                                         "enter abrir   teclea busca   tab rapido", "enter ouvrir  tape cherche  tab rapide",
+                                                         "enter oeffnen  tippe sucht  tab schnell"));   // teach Spotlight + the Control Center
     }
     s_hint[sizeof(s_hint) - 1] = 0;
 }
@@ -201,6 +208,25 @@ static const struct { const char *id, *it, *en, *es, *fr, *de; } APP_NAME_TR[] =
 // Localized launcher name for an app id in the ACTIVE language, or NULL when the app uses its own
 // (language-neutral) name. Shared with the menu filter so Spotlight search matches the name shown in
 // the current language too — not only the app's default-language spelling.
+// An app's title in one of the five shipped languages (0 it, 1 en, 2 es, 3 fr, 4 de), or NULL when the
+// app has no translated title (proper nouns). Spotlight (launcher_menu.cpp) scores a query against all
+// five, so an app is found by any name a user knows it by, whatever the OS language.
+extern "C" const char *launcher_app_title(const char *id, int lang)
+{
+    for (unsigned i = 0; i < sizeof APP_NAME_TR / sizeof APP_NAME_TR[0]; i++) {
+        if (strcmp(id, APP_NAME_TR[i].id)) continue;
+        switch (lang) {
+            case 0: return APP_NAME_TR[i].it;
+            case 1: return APP_NAME_TR[i].en;
+            case 2: return APP_NAME_TR[i].es;
+            case 3: return APP_NAME_TR[i].fr;
+            case 4: return APP_NAME_TR[i].de;
+            default: return nullptr;
+        }
+    }
+    return nullptr;
+}
+
 extern "C" const char *launcher_app_localized_name(const char *id)
 {
     for (unsigned i = 0; i < sizeof APP_NAME_TR / sizeof APP_NAME_TR[0]; i++)
@@ -224,6 +250,13 @@ static const char *node_label(const MenuNode *n)
     else if (!strcmp(id, "Security"))      return TR5("Sicurezza", "Security", "Seguridad", "Securite", "Sicherheit");
     else if (!strcmp(id, "Measure"))       return TR5("Misura", "Measure", "Medir", "Mesure", "Messen");
     else if (!strcmp(id, "Games"))         return TR5("Giochi", "Games", "Juegos", "Jeux", "Spiele");
+    else if (!strcmp(n->id, LAUNCHER_RECENT_ID)) return TR5("Recenti", "Recent", "Recientes", "Recents", "Zuletzt");
+    else if (!strcmp(n->id, LAUNCHER_SETTINGS_SEARCH_ID)) {       // "3 settings": what the query finds inside Settings
+        static char b[24]; int k = launcher_settings_hits();
+        snprintf(b, sizeof b, "%d %s", k, k == 1 ? TR5("impostazione", "setting", "ajuste", "reglage", "Option")
+                                                 : TR5("impostazioni", "settings", "ajustes", "reglages", "Optionen"));
+        return b;
+    }
     // app node: bilingual title from the central table above; proper-noun apps fall through to their name.
     const char *loc = launcher_app_localized_name(id);
     return loc ? loc : n->label;
@@ -711,7 +744,7 @@ void launcher_render_status_bar(void)
         // Breadcrumb: a colour chip carrying the category icon + the name in the big Font2 face
         // (legible), with the Wi-Fi gauge and the item count packed from the right edge inward.
         d.fillRoundRect(2, 1, 14, 14, 3, node->color);
-        ui_icon(&d, 9, 8, 6, node->id, node->icon, INK, node->color);
+        ui_icon(&d, 9, 8, 6, strcmp(node->id, LAUNCHER_RECENT_ID) ? node->id : "clock", node->icon, INK, node->color);
         d.setFont(&fonts::Font2); d.setTextColor(FG, INK); d.setCursor(20, 0);
         char b[16]; snprintf(b, sizeof(b), "%.14s", node_label(node)); d.print(b);
         d.setFont(&fonts::Font0); d.setTextSize(1);
@@ -740,14 +773,21 @@ void launcher_render_status_bar(void)
             draw_wifi(rx - 19, 4, sta, nucleo_setup_rssi());   rx -= 19 + 6;   // antenna gauge, far right
             int bpct = nucleo_power_battery_pct();
             if (bpct >= 0) { draw_battery_pip(rx - 14, 4, bpct); rx -= 14 + 6; }   // pip left of the gauge
-            // Day + month follow the system language (Italian only for "it"; English is the floor, like TR).
-            static const char *const WD_IT[7]  = { "dom","lun","mar","mer","gio","ven","sab" };
-            static const char *const MO_IT[12] = { "gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic" };
-            static const char *const WD_EN[7]  = { "Sun","Mon","Tue","Wed","Thu","Fri","Sat" };
-            static const char *const MO_EN[12] = { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" };
-            bool it = !strcmp(nucleo_i18n_lang(), "it");
+            // Day + month in the system language (it/en/es/fr/de; ASCII 3-letter forms, English is the floor).
+            static const char *const WD[5][7] = {
+                { "dom","lun","mar","mer","gio","ven","sab" }, { "Sun","Mon","Tue","Wed","Thu","Fri","Sat" },
+                { "dom","lun","mar","mie","jue","vie","sab" }, { "dim","lun","mar","mer","jeu","ven","sam" },
+                { "So","Mo","Di","Mi","Do","Fr","Sa" } };
+            static const char *const MO[5][12] = {
+                { "gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic" },
+                { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" },
+                { "ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic" },
+                { "jan","fev","mar","avr","mai","jun","jul","aou","sep","oct","nov","dec" },
+                { "Jan","Feb","Mar","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez" } };
+            const char *lc = nucleo_i18n_lang();
+            int li = !strcmp(lc, "it") ? 0 : !strcmp(lc, "es") ? 2 : !strcmp(lc, "fr") ? 3 : !strcmp(lc, "de") ? 4 : 1;
             char dt[16] = "";
-            if (tm && now > 1672531200) snprintf(dt, sizeof dt, "%s %d %s", (it ? WD_IT : WD_EN)[tm->tm_wday], tm->tm_mday, (it ? MO_IT : MO_EN)[tm->tm_mon]);
+            if (tm && now > 1672531200) snprintf(dt, sizeof dt, "%s %d %s", WD[li][tm->tm_wday], tm->tm_mday, MO[li][tm->tm_mon]);
             int dw = (int)strlen(dt) * 6;
             if (dt[0] && rx - dw > clock_r + 6) {
                 d.setTextColor(C_YELLOW, INK); d.setCursor(rx - dw, 4); d.print(dt);
@@ -947,7 +987,7 @@ template <typename T> static void draw_dots(T *c, int n, int sel, int cx, int y,
     if (n > 13) {
         char b[12]; snprintf(b, sizeof b, "%d/%d", sel + 1, n);
         c->setFont(&fonts::Font0); c->setTextSize(1); c->setTextColor(MUTED, BG);
-        c->setCursor(cx - (int)c->textWidth(b) / 2, y - 4); c->print(b);
+        c->setCursor(cx - (int)c->textWidth(b) / 2, y - 6); c->print(b);   // 8 px glyphs end above the band edge
         return;
     }
     int gap = 10, x0 = cx - (n - 1) * gap / 2;
@@ -984,8 +1024,9 @@ template <typename T> static void draw_list(T *c, int base)
 
     int n = launcher_visible_count();
     if (n == 0) {
+        const char *none = TR5("Nessuna app", "No apps", "Ninguna app", "Aucune app", "Keine Apps");
         c->setFont(&fonts::Font2); c->setTextColor(DIM, BG);
-        c->setCursor(54, base + LIST_BAND_H / 2 - 8); c->print("Nessuna app");
+        c->setCursor((W - (int)c->textWidth(none)) / 2, base + LIST_BAND_H / 2 - 8); c->print(none);
         c->setFont(&fonts::Font0); c->setTextSize(1);
         return;
     }
@@ -1033,7 +1074,9 @@ template <typename T> static void draw_list(T *c, int base)
         }
         int      gr   = (int)(r * 0.68f + 0.5f);                        // glyph half-size fills the square badge
         uint16_t gcol = (t > 0.5f) ? INK : mix565(BG, FG, 0.62f);       // dark glyph on the bright focus
-        ui_icon(c, x, cy, gr, it->id, it->icon, gcol, badge);
+        const char *gid = !strcmp(it->id, LAUNCHER_RECENT_ID) ? "clock"                   // Recent wears a clock,
+                        : !strcmp(it->id, LAUNCHER_SETTINGS_SEARCH_ID) ? "wifi" : it->id;   // the Settings result the Settings glyph
+        ui_icon(c, x, cy, gr, gid, it->icon, gcol, badge);
         if (it->kind == N_MENU && t > 0.85f)                            // category: count rosette on the top-right corner
             draw_badge(c, x + (int)(r * 0.82f), cy - (int)(r * 0.82f), node_child_count(it), it->color);
         else if (it->kind == N_APP && t > 0.6f && launcher_is_pinned(it->id)) {   // pinned app: yellow dot, top-right
@@ -1159,9 +1202,9 @@ static int cc_tile_glyph(int i) { return i == TL_MUTE ? UG_MUTE : i == TL_TORCH 
 static const char *cc_tile_label(int i)
 {
     switch (i) {
-        case TL_MUTE:   return TR("Muto", "Mute");
-        case TL_TORCH:  return TR("Torcia", "Torch");
-        case TL_SCREEN: return TR("Spegni", "Sleep");
+        case TL_MUTE:   return TR5("Muto", "Mute", "Silencio", "Muet", "Stumm");
+        case TL_TORCH:  return TR5("Torcia", "Torch", "Linterna", "Torche", "Lampe");
+        case TL_SCREEN: return TR5("Spegni", "Sleep", "Reposo", "Veille", "Schlaf");
         default:        return "Hotspot";
     }
 }
@@ -1360,7 +1403,7 @@ template <typename T> static void cc_tile(T *g, int i, bool full)
     bool off = (i == TL_HOTSPOT && !cc_hotspot_ok());                 // unavailable this boot
     uint8_t  fk   = (uint8_t)((on ? 1 : 0) | (off ? 2 : 0));
     unsigned short fill = on ? cc_tile_col(i) : LINE;
-    unsigned short ink  = on ? INK : off ? DIM : (foc ? FG : MUTED);
+    unsigned short ink  = nucleo_theme_ink_on(fill, on ? INK : off ? DIM : (foc ? FG : MUTED));
     unsigned short ring = cc_focus_col(foc, i == TL_HOTSPOT && s_cc_arm == CC_ARM_HOTSPOT);
     if (full || ring != s_ccs.tile_ring[i]) { cc_ring(g, x, y, CC_TILE_W, CC_TILE_H, 8, ring); s_ccs.tile_ring[i] = ring; }
     bool refill = full || fk != s_ccs.tile_fill[i];
@@ -1371,7 +1414,7 @@ template <typename T> static void cc_tile(T *g, int i, bool full)
         g->setTextSize(1); g->setTextColor(ink, fill);
         g->setCursor(x + (CC_TILE_W - (int)strlen(lb) * 6) / 2, y + 24); g->print(lb);
         char k[2] = { (char)('1' + i), 0 };                           // quick-key badge
-        g->setTextColor(on ? INK : DIM, fill); g->setCursor(x + 4, y + 3); g->print(k);
+        g->setTextColor(nucleo_theme_ink_on(fill, on ? INK : DIM), fill); g->setCursor(x + 4, y + 3); g->print(k);
     }
     s_ccs.tile_fill[i] = fk; s_ccs.tile_ink[i] = ink;
 }
@@ -1413,7 +1456,7 @@ template <typename T> static void cc_short(T *g, int i, bool full)
     int x = 4 + i * CC_SHORT_P, y = CC_SHORT_Y;
     bool foc = (s_cc_line == CL_SHORT && s_cc_short == i);
     unsigned short ring = cc_focus_col(foc, i == SC_RESTART && s_cc_arm == CC_ARM_RESTART);
-    unsigned short ink  = (i == SC_RESTART) ? C_RED : (foc ? FG : MUTED);
+    unsigned short ink  = (i == SC_RESTART) ? C_RED : nucleo_theme_ink_on(LINE, foc ? FG : MUTED);   // red = semantic, kept
     if (full) g->fillRoundRect(x, y, CC_SHORT_W, CC_SHORT_H, 7, LINE);
     if (full || ring != s_ccs.sh_ring[i]) { cc_ring(g, x, y, CC_SHORT_W, CC_SHORT_H, 7, ring); s_ccs.sh_ring[i] = ring; }
     if (full || ink != s_ccs.sh_ink[i])   { ui_glyph(g, cc_short_glyph(i), x + CC_SHORT_W / 2, y + CC_SHORT_H / 2, 6, ink, LINE); s_ccs.sh_ink[i] = ink; }
@@ -1426,37 +1469,52 @@ static const char *cc_context_text(char *b, int cap, unsigned short *col)
     const char *s = b; *col = MUTED; b[0] = 0;
     if (s_cc_arm == CC_ARM_HOTSPOT) {
         *col = C_RED;
-        return nucleo_setup_ap_intended() ? TR("invio spegne hotspot   esc annulla", "enter hotspot off   esc cancel")
-                                          : TR("invio accende hotspot   esc annulla", "enter hotspot on   esc cancel");
+        return nucleo_setup_ap_intended() ? TR5("invio spegne hotspot   esc annulla", "enter hotspot off   esc cancel", "enter apaga hotspot   esc cancela",
+                                              "enter coupe hotspot   esc annule", "enter Hotspot aus   esc abbrechen")
+                                          : TR5("invio accende hotspot   esc annulla", "enter hotspot on   esc cancel", "enter activa hotspot   esc cancela",
+                                              "enter active hotspot   esc annule", "enter Hotspot an   esc abbrechen");
     }
-    if (s_cc_arm == CC_ARM_RESTART) { *col = C_RED; return TR("invio riavvia ora   esc annulla", "enter restart now   esc cancel"); }
+    if (s_cc_arm == CC_ARM_RESTART) { *col = C_RED; return TR5("invio riavvia ora   esc annulla", "enter restart now   esc cancel", "enter reiniciar   esc cancela",
+                                                            "enter redemarrer   esc annule", "enter Neustart   esc abbrechen"); }
     if (s_cc_line == CL_TILES) {
         switch (s_cc_tile) {
-            case TL_MUTE:   return nucleo_audio_is_muted() ? TR("Audio muto   invio riattiva", "Sound muted   enter unmute")
-                                                           : TR("Audio attivo   invio silenzia", "Sound on   enter mute");
-            case TL_TORCH:  return TR("Torcia   invio accende", "Torch   enter turn on");
-            case TL_SCREEN: return TR("Spegni schermo   un tasto riaccende", "Screen off   any key wakes it");
+            case TL_MUTE:   return nucleo_audio_is_muted() ? TR5("Audio muto   invio riattiva", "Sound muted   enter unmute", "Sin sonido   enter activa",
+                                                                  "Son coupe   enter retablit", "Ton aus   enter Ton an")
+                                                           : TR5("Audio attivo   invio silenzia", "Sound on   enter mute", "Sonido activo   enter silencia",
+                                                                  "Son actif   enter coupe", "Ton an   enter stumm");
+            case TL_TORCH:  return TR5("Torcia   invio accende", "Torch   enter turn on", "Linterna   enter enciende", "Torche   enter allume", "Lampe   enter an");
+            case TL_SCREEN: return TR5("Spegni schermo   un tasto riaccende", "Screen off   any key wakes it", "Apaga pantalla   una tecla despierta",
+                                  "Ecran eteint   une touche reveille", "Display aus   Taste weckt");
             default:
-                if (!cc_hotspot_ok()) return TR("Hotspot non disponibile in questa app", "Hotspot unavailable in this app");
+                if (!cc_hotspot_ok()) return TR5("Hotspot non disponibile in questa app", "Hotspot unavailable in this app", "Hotspot no disponible aqui",
+                                               "Hotspot indisponible ici", "Hotspot hier nicht verfuegbar");
                 if (nucleo_setup_ap_intended()) { snprintf(b, cap, "%.18s  192.168.4.1", nucleo_setup_ap_ssid()); *col = C_YELLOW; return s; }
-                return TR("Hotspot spento   invio x2 accende", "Hotspot off   enter x2 turns on");
+                return TR5("Hotspot spento   invio x2 accende", "Hotspot off   enter x2 turns on", "Hotspot apagado   enter x2 activa",
+                          "Hotspot coupe   enter x2 active", "Hotspot aus   enter x2 an");
         }
     }
-    if (s_cc_line == CL_BRIGHT) { snprintf(b, cap, TR("Luminosita %d%%   </> regola", "Brightness %d%%   </> adjust"), nucleo_app_brightness()); return s; }
+    if (s_cc_line == CL_BRIGHT) { snprintf(b, cap, TR5("Luminosita %d%%   </> regola", "Brightness %d%%   </> adjust", "Brillo %d%%   </> ajusta",
+                                                  "Luminosite %d%%   </> regle", "Helligkeit %d%%   </> stellt"), nucleo_app_brightness()); return s; }
     if (s_cc_line == CL_VOLUME) {
-        if (nucleo_audio_is_muted()) snprintf(b, cap, TR("Volume %d%% muto   invio riattiva", "Volume %d%% muted   enter unmute"), nucleo_audio_volume());
-        else                         snprintf(b, cap, TR("Volume %d%%   </> regola   invio muto", "Volume %d%%   </> adjust   enter mute"), nucleo_audio_volume());
+        if (nucleo_audio_is_muted()) snprintf(b, cap, TR5("Volume %d%% muto   invio riattiva", "Volume %d%% muted   enter unmute", "Volumen %d%% mudo   enter activa",
+                                            "Volume %d%% coupe   enter retablit", "Lautst. %d%% stumm   enter an"), nucleo_audio_volume());
+        else                         snprintf(b, cap, TR5("Volume %d%%   </> regola   invio muto", "Volume %d%%   </> adjust   enter mute", "Volumen %d%%   </> ajusta   enter mudo",
+                                            "Volume %d%%   </> regle   enter muet", "Lautst. %d%%   </> stellt   enter stumm"), nucleo_audio_volume());
         return s;
     }
     switch (s_cc_short) {
-        case SC_SETTINGS: return TR("Tutte le impostazioni   invio apri", "All settings   enter open");
+        case SC_SETTINGS: return TR5("Tutte le impostazioni   invio apri", "All settings   enter open", "Todos los ajustes   enter abrir",
+                                    "Tous les reglages   enter ouvrir", "Alle Einstellungen   enter oeffnen");
         case SC_WEB: {
             const char *ip = cc_online() ? nucleo_setup_ip() : nucleo_setup_ap_active() ? "192.168.4.1" : "--";
             snprintf(b, cap, "Web %.15s   PIN %.8s", ip, nucleo_auth_pin()); *col = FG; return s;
         }
-        case SC_USBKBD:   return TR("Tastiera USB per il PC   invio apri", "USB keyboard for a PC   enter open");
-        case SC_USBDRIVE: return TR("Scheda SD come disco USB   invio apri", "SD card as a USB drive   enter open");
-        default:          return TR("Riavvia il dispositivo   invio x2", "Restart the device   enter x2");
+        case SC_USBKBD:   return TR5("Tastiera USB per il PC   invio apri", "USB keyboard for a PC   enter open", "Teclado USB para PC   enter abrir",
+                                    "Clavier USB pour PC   enter ouvrir", "USB-Tastatur fuer PC   enter oeffnen");
+        case SC_USBDRIVE: return TR5("Scheda SD come disco USB   invio apri", "SD card as a USB drive   enter open", "SD como disco USB   enter abrir",
+                                    "SD en disque USB   enter ouvrir", "SD als USB-Laufwerk   enter oeffnen");
+        default:          return TR5("Riavvia il dispositivo   invio x2", "Restart the device   enter x2", "Reiniciar el equipo   enter x2",
+                                    "Redemarrer l'appareil   enter x2", "Geraet neu starten   enter x2");
     }
 }
 

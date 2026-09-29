@@ -29,6 +29,11 @@ typedef struct {
     unsigned int exclusive_flags;    // trailing field: existing positional initializers zero it
 } nucleo_app_def_t;
 
+// Capacity of the app registry (nucleo_app.cpp) and of the launcher tree (launcher_menu.cpp), which
+// size their static tables from this ONE constant. A registration past it is dropped and logged as an
+// error; `npm run launcher:test` fails the build first, counting every nucleo_app_register call site.
+#define NUCLEO_APP_MAX 80
+
 // Register a native app (call before nucleo_app_run).
 void nucleo_app_register(const nucleo_app_def_t *app);
 

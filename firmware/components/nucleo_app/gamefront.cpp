@@ -16,6 +16,9 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <stdlib.h>
+#include <time.h>
 extern "C" {
 #include "nucleo_board.h"
 }
@@ -729,6 +732,34 @@ bool gamefront_save_cover(const char *id)
     if ((long)coverW * sh > (long)coverH * sw) { cw = sw; ch = (int)((long)sw * coverH / coverW); }
     else                                       { ch = sh; cw = (int)((long)sh * coverW / coverH); }
     return save_bmp(c, p, coverW, coverH, (sw - cw) / 2, (sh - ch) / 2, cw, ch);
+}
+
+void gamefront_shot_name(char *out, int cap)
+{
+    static int s_next = 0;                        // 0 = card not scanned yet this boot
+    time_t now = time(NULL);
+    if (now >= 1672531200) {                      // clock set (NTP/manual): a sortable, meaningful name
+        struct tm tmv; localtime_r(&now, &tmv);
+        snprintf(out, cap, "shot_%04d%02d%02d_%02d%02d%02d", tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
+                 tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+        struct stat st; char p[192]; snprintf(p, sizeof p, "%s/%s.bmp", SHOT_DIR, out);
+        if (stat(p, &st) != 0) return;            // two shots in the same second fall through to shot_N
+    }
+    if (s_next == 0) {
+        s_next = 1;
+        DIR *dp = opendir(SHOT_DIR);
+        if (dp) {
+            struct dirent *e;
+            while ((e = readdir(dp)) != nullptr) {
+                const char *n = e->d_name;
+                if (strncmp(n, "shot_", 5) || !isdigit((unsigned char)n[5]) || strchr(n + 5, '_')) continue;
+                int v = atoi(n + 5);
+                if (v >= s_next) s_next = v + 1;
+            }
+            closedir(dp);
+        }
+    }
+    snprintf(out, cap, "shot_%d", s_next++);
 }
 
 bool gamefront_save_screenshot(const char *name)

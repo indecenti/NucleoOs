@@ -75,6 +75,7 @@ tools/emu-host/testroms/
 # GG ROM collection, plus a text index/log. The renders are derivative screenshots of commercial
 # games — never publish them. Keep this local-only; gg:test's real gate is zexall, not the sweep.
 build/gg-sweep/
+build/launcher-host/
 # Saves/states the emulators write into the SD simulator (native gbemu: data/Saves/<system>/)
 tools/sd-sim/data/Saves/
 # Same, when a local gbemu/ggemu session writes straight into a staged deploy/sd (personal game

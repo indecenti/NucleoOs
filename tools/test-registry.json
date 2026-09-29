@@ -273,6 +273,67 @@
       "anima": true
     },
     {
+      "id": "gate-anima-local-wasm-fresh-parity",
+      "label": "anima-local (wasm fresh+parity)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "apps/anima/local/parity.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-anima-local-web-contract",
+      "label": "anima-local (web contract)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "apps/anima/local/engine-contract.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-anima-local-capability",
+      "label": "anima-local (capability)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "apps/anima/local/capability.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-anima-local-cascade-policy",
+      "label": "anima-local (cascade policy)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "apps/anima/local/cascade.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-agent-check",
       "label": "agent-check",
       "category": "cascade-infra",
@@ -439,6 +500,36 @@
           "re": "(\\d+)\\s*programmatic requests"
         }
       ],
+      "anima": true
+    },
+    {
+      "id": "gate-halluc-battery-akb5",
+      "label": "halluc-battery (AKB5)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/halluc-suite.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-realistic-akb5",
+      "label": "realistic (AKB5)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/realistic.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
       "anima": true
     },
     {
@@ -1173,6 +1264,36 @@
       "anima": true
     },
     {
+      "id": "gate-memory-lite-path",
+      "label": "memory lite path",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/memory-lite-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-learned-card-recall",
+      "label": "learned-card recall",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/recall-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-profile-personal",
       "label": "profile (personal)",
       "category": "nl-memory",
@@ -1632,6 +1753,36 @@
       "anima": false
     },
     {
+      "id": "gate-launcher-model-native-ui",
+      "label": "launcher-model (native UI)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/launcher-host/check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-fs-list-stream",
+      "label": "fs-list (stream)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/fslist-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-ble-adv-spam-beacon",
       "label": "ble-adv (spam/beacon)",
       "category": "security",
@@ -1967,6 +2118,22 @@
       "verifies": "Spreadsheet ANIMA copilot integration: formula extraction regex and C solver simulation logic",
       "nl": true,
       "lang": "it",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-ai-models",
+      "label": "ai-models.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/ai-models.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
       "in_gate": true,
       "anima": false
     },

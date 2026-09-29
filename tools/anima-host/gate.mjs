@@ -502,6 +502,21 @@ const gates = [
     // throttle that can never wedge (never-checked and clock-backwards are both "due"). Twin of the
     // web logic in web/shell/update-core.js (tools/update-core.test.mjs). Pure C, no device.
     ok: (code) => code === 0, summary: (o) => (o.match(/update-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'launcher-model (native UI)', cmd: 'node', args: ['tools/launcher-host/check.mjs'],
+    // The native launcher model (firmware/components/nucleo_app/launcher_menu.cpp), host-compiled with
+    // MinGW against the REAL app table extracted from the firmware sources: registry capacity (every
+    // nucleo_app_register call site must fit NUCLEO_APP_MAX — v0.4.0 silently dropped 1-5 apps at 64),
+    // every app reachable exactly once under its declared category, Spotlight filter (localized titles,
+    // 15-char cap), pin-to-Home persistence + eviction + cursor clamp, and the Solo return-cursor
+    // (one-shot, warm reset only). Pure C++, no device, no display.
+    ok: (code) => code === 0, summary: (o) => (o.match(/launcher-model: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'ui-shots (native UI pixels)', cmd: 'node', args: ['tools/ui-host/run.mjs'],
+    // The REAL native UI C (launcher_render/app_ui/app_wifi Settings/nucleo_theme/nucleo_i18n) rendered on
+    // the PC by the REAL LovyanGFX core into a 240x135 frame — pixel-identical to the panel — for every
+    // scene x 5 languages x 4 themes x buffered/direct path. Fails on a hint the bar would cut, and on any
+    // pixel change vs tools/ui-host/golden.json: look at build/ui-host/sheets/*.png, then accept a
+    // deliberate change with `npm run ui:shots -- --update`. No device.
+    ok: (code) => code === 0, summary: (o) => (o.match(/ui-shots: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'fs-list (stream)', cmd: 'node', args: ['tools/anima-host/fslist-check.mjs'],
     // The streaming GET /api/fs/list body (firmware/components/nucleo_fsapi/fslist.c), host-compiled
     // with MinGW — O(1) RAM in the entries, so a big folder no longer answers 503 "oom" and makes

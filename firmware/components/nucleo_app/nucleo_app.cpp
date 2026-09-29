@@ -324,15 +324,20 @@ extern "C" esp_err_t nucleo_app_register_display(httpd_handle_t server)
 }
 
 // ---- registered foreground apps --------------------------------------------
-// Cap dimensionato sul numero reale di app (35) + margine; static array (no heap), deve combaciare
-// con launcher_menu.cpp. Era 64: spreco di .bss residente su HW senza PSRAM.
-#define MAX_APPS 64
+// Static array (no heap), sized by NUCLEO_APP_MAX (nucleo_app.h), shared with launcher_menu.cpp.
+// Overflow used to be a silent `return`: at 64 slots v0.4.0 lost Payloads + Device Info (and on the
+// ADV also Sentinel/Airspace/FIDO) with no trace. Now it logs, and launcher:test gates the count.
+#define MAX_APPS NUCLEO_APP_MAX
 static nucleo_app_def_t s_apps[MAX_APPS];
 static int s_app_count;
 
 void nucleo_app_register(const nucleo_app_def_t *app)
 {
-    if (s_app_count >= MAX_APPS) return;
+    if (!app) return;
+    if (s_app_count >= MAX_APPS) {
+        ESP_LOGE("applaunch", "app registry full (%d): '%s' dropped — raise NUCLEO_APP_MAX", MAX_APPS, app->id ? app->id : "?");
+        return;
+    }
     // Discipline guard: native games are heavy (fx3d + WAV SFX) and must dedicate RAM for their whole
     // foreground life. A game registered without exclusive_flags starves the audio player task under
     // fragmentation — the "game is mute" class. Flag it at boot so a new game can't regress silently.
@@ -687,9 +692,17 @@ static bool maybe_solo_launch(int idx)
     nucleo_app_solo_request_id(a->id);   // never returns (warm reboot into Solo)
     return true;
 }
+extern "C" void nucleo_settings_search_preset(const char *q);   // app_wifi.cpp
+static void launch_by_id(const char *id);
 static void launch(const MenuNode *app)
 {
+    if (!strcmp(app->id, LAUNCHER_SETTINGS_SEARCH_ID)) {           // Spotlight "N settings": open Settings on that search
+        nucleo_settings_search_preset(launcher_filter());
+        launch_by_id("wifi");
+        return;
+    }
     int idx = find_app(app->id);
+    if (idx >= 0) launcher_note_launch(app->id);         // Recent tile (before a Solo reboot, so it sticks)
     if (maybe_solo_launch(idx)) return;
     if (idx >= 0) { s_active = idx; s_stub = nullptr; open_app_def(&s_apps[idx]); }
     else          { s_active = -2; s_stub = app;     open_app_def(&STUB); }
@@ -698,6 +711,7 @@ static void launch_by_id(const char *id)
 {
     int idx = find_app(id);
     if (idx < 0) return;
+    launcher_note_launch(id);
     if (maybe_solo_launch(idx)) return;
     // App-to-app switch (Files "open with", ANIMA "apri musica"): give the OUTGOING app its on_exit
     // so it frees its buffers (e.g. Files' ~6 KB listing, ANIMA's worker) BEFORE the incoming app
@@ -1082,7 +1096,7 @@ template <typename T> static void watch_ring(T *g, int cx, int cy, int rad, int 
     if (pct < 0) pct = 0;
     if (pct > 100) pct = 100;
     int r0 = rad - 8, r1 = rad;
-    g->fillArc(cx, cy, r0, r1, 0, 360, 0x2104);                       // dim full track
+    g->fillArc(cx, cy, r0, r1, 0, 360, LINE);                         // dim full track (theme role, not a literal)
     if (pct > 0) g->fillArc(cx, cy, r0, r1, 0, 360 * pct / 100, col); // value arc
     char b[6]; snprintf(b, sizeof b, "%d%%", pct);
     g->setTextSize(2); g->setTextColor(col, BG);
@@ -1096,14 +1110,14 @@ template <typename T> static void watch_bar(T *g, int x, int y, int w, const cha
     g->setTextSize(1); g->setTextColor(MUTED, BG); g->setCursor(x, y); g->print(lbl);
     char b[6]; snprintf(b, sizeof b, "%d%%", pct);
     g->setTextColor(col, BG); g->setCursor(x + w - (int)strlen(b) * 6, y); g->print(b);
-    g->drawRoundRect(x, y + 11, w, 6, 2, 0x2945);
+    g->drawRoundRect(x, y + 11, w, 6, 2, LINE);
     g->fillRoundRect(x, y + 11, w * pct / 100, 6, 2, col);
 }
 
 // Trend line into a small strip (the watch "history" trick). Reads the ring buffer oldest->newest.
 template <typename T> static void watch_spark(T *g, int x, int y, int w, int h, const uint8_t *hist, unsigned short col)
 {
-    g->drawFastHLine(x, y + h, w, 0x2104);
+    g->drawFastHLine(x, y + h, w, LINE);
     if (s_h_n < 2) return;
     int show = s_h_n < SPN ? s_h_n : SPN;
     int px = -1, py = 0;
@@ -1130,7 +1144,7 @@ template <typename T> static void watch_chrome(T *g, int face)
     char clk[6] = "--:--";
     if (nucleo_setup_time_synced()) { time_t t = time(NULL); struct tm tmv; localtime_r(&t, &tmv); snprintf(clk, sizeof clk, "%02d:%02d", tmv.tm_hour, tmv.tm_min); }
     g->setTextColor(MUTED, BG); g->setCursor(W - (int)strlen(clk) * 6 - 8, 5); g->print(clk);
-    g->drawFastHLine(8, 16, W - 16, 0x2945);
+    g->drawFastHLine(8, 16, W - 16, LINE);
 }
 
 // Bottom pager dots — the active face is a larger, accent-colored dot (smartwatch pagination).
@@ -1139,7 +1153,7 @@ template <typename T> static void watch_footer(T *g, int face)
     int gap = 12, x0 = (W - (NFACES - 1) * gap) / 2, y = 128;
     for (int i = 0; i < NFACES; i++) {
         if (i == face) g->fillCircle(x0 + i * gap, y, 3, watch_accent(i));
-        else           g->fillCircle(x0 + i * gap, y, 2, 0x4208);
+        else           g->fillCircle(x0 + i * gap, y, 2, DIM);
     }
 }
 
@@ -1223,7 +1237,7 @@ template <typename T> static void watch_signal(T *g, int x, int y, int bars, uns
     for (int i = 0; i < 5; i++) {
         int bh = 4 + i * 4, bx = x + i * 7, by = y - bh;
         if (i < bars) g->fillRoundRect(bx, by, 5, bh, 1, col);
-        else          g->drawRoundRect(bx, by, 5, bh, 1, 0x4208);
+        else          g->drawRoundRect(bx, by, 5, bh, 1, DIM);
     }
 }
 
@@ -1393,6 +1407,8 @@ static void display_wake(void)
 {
     s_disp_wake_req = false;                      // any wake satisfies a pending /api/display wake request
     if (!s_disp_sleep) return;
+    s_wake_pending = false;                       // the idle sleep took over a CC "screen off": this wake ends both,
+                                                  // else the NEXT real key is swallowed as the (stale) CC wake key
     s_disp_sleep = false;
     s_disp_off = false;                           // a physical wake also ends a web client's dark-hold, else it strands until the <=90s deadman (blocking idle screen-off + 32 KB reclaim)
     // Don't reclaim the 32 KB canvas on a mid-session remote wake: the watch faces draw DIRECT (cv is forced
@@ -2037,7 +2053,7 @@ void nucleo_app_run(void)
                     // saved image, then arm a non-blocking confirm toast (no frozen preview).
                     if (s_shot_req) {                              // Fn+P -> real full-frame screenshot, always
                         s_shot_req = false;
-                        static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq);
+                        char nm[32]; gamefront_shot_name(nm, sizeof nm);
                         s_shot_toast_ok = gamefront_save_screenshot(nm);
                         s_shot_toast_until = now + 1200;
                     }
@@ -2109,7 +2125,7 @@ void nucleo_app_run(void)
                     // local SD write. Read it later over Wi-Fi via /api/fs once back at the launcher.
                     if (s_shot_req) {                              // Fn+P -> real full-frame screenshot from the panel
                         s_shot_req = false;
-                        static int seq = 0; char nm[24]; snprintf(nm, sizeof nm, "shot_%d", ++seq);
+                        char nm[32]; gamefront_shot_name(nm, sizeof nm);
                         bool ok = gamefront_save_panel_screenshot(nm);
                         nucleo_notify_post("Screenshot", ok ? "Saved" : "Capture failed");
                     }

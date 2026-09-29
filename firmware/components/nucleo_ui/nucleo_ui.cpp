@@ -452,7 +452,7 @@ extern "C" int nucleo_ui_menu(const char *title, const char *const *items, int n
             if (item_y > 20 && item_y < H) {
                 if (i == sel) {
                     canvas.fillRoundRect(6, item_y, W - 12, 22, 6, SEL);
-                    canvas.setTextColor(0x0000, SEL);
+                    canvas.setTextColor(THEME_INK, SEL);
                     canvas.setTextSize(2);
                     // Marquee logic if text is too long
                     int tw = canvas.textWidth(items[i]);
