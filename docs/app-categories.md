@@ -16,8 +16,10 @@ applied, and the work deliberately deferred.
   `category` value is inert.
 - Category tile order on Home = the order categories are first seen while registering apps
   (the `nucleo_register_*` call order in `nucleo_app.cpp`).
-- Hard limits: `MAX_CATS = 10`, `MAX_APPS = 64` (both `.bss`-resident — do not raise casually,
-  see the RAM notes in `launcher_menu.cpp`).
+- Hard limits: `MAX_CATS = 10` and `MAX_APPS = NUCLEO_APP_MAX = 80` (`MAX_APPS` in
+  `launcher_menu.cpp` is an alias of `NUCLEO_APP_MAX` in `nucleo_app.h`, the one constant that also
+  sizes the app registry in `nucleo_app.cpp`). Both are `.bss`-resident — do not raise casually, see
+  the RAM notes in `launcher_menu.cpp`. `npm run launcher:test` fails if the registrations outgrow them.
 
 ## Guiding principle — split by USE, not by implementation
 
@@ -84,10 +86,19 @@ categories; the largest non-Games group is 7.
 ### RAM / roadmap note
 
 Future **LoRa messaging and other comm apps go INSIDE `Communication`** — they are new *apps*
-(bounded by `MAX_APPS = 64`, currently 54 in use), not new categories, so they cost no category
+(bounded by `MAX_APPS` = `NUCLEO_APP_MAX` = 80; 69 registered today on the ADV, 66 on the original
+Cardputer, per `npm run launcher:test`), not new categories, so they cost no category
 slots. However, the launcher now sits at **exactly `MAX_CATS = 10`**: adding a *genuinely new
-category* later requires bumping `MAX_CATS` (each +1 costs ≈ `(MAX_APPS+1)` pointers of `.bss` ≈
-260 B, plus one `MenuNode`). Do that consciously if/when a new top-level use appears.
+category* later requires bumping `MAX_CATS`. Since the per-category lists became one flat pointer
+pool (`s_cat_pool[MAX_APPS + MAX_CATS]`), each +1 costs only one `MenuNode` plus a couple of pointers
+of `.bss` (a few dozen bytes), not a full `(MAX_APPS+1)`-pointer row. Do that consciously if/when a new
+top-level use appears.
+
+> The inventory tables above are a snapshot of that reorganization. The live tree has since grown
+> (69 apps in 10 categories today) and the category set has changed — the launcher now has
+> `Messaging`, `Measure` and `Web OS`, and no longer `Communication`, `Hardware` or `Voice`.
+> `npm run launcher:test` compiles the real `launcher_menu.cpp` against the real app table and is
+> the source of truth.
 
 ## UI/UX applied alongside the reorg
 

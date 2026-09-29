@@ -258,7 +258,8 @@ Every demanding feature respects a tight set of RAM tricks, validated on hardwar
 - **Multi‑runtime apps** — `web` (zero device RAM) · `vm` (sandboxed on‑device bytecode) ·
   `service` (native C) · `elf` (PSRAM‑gated). Install/run without reflashing.
 - **OS services** — capability‑scoped manifests, OTA A/B with rollback, PIN pairing + cookie auth,
-  delta SD‑sync (never `/MIR`), OS‑wide live IT/EN i18n, notifications, an OS‑wide **mic gate** and
+  delta SD‑sync (never `/MIR`), OS‑wide live i18n in 5 languages (IT/EN/DE/ES/FR; ANIMA and its
+  voice stay IT/EN), notifications, an OS‑wide **mic gate** and
   **download gate** (Web Locks), and a service‑worker update gate.
 - **Robustness gates** — a hallucination stress suite (485 metamorphic sentences, 40 gates), corpus
   dedup/quality gate, and an auto‑evolving knowledge graph (Wikipedia + teacher‑LLM, AUG‑192 encoder).
@@ -336,6 +337,9 @@ tools/anima-host/  Host gates — compile the REAL firmware C and run it on the 
 
 Start every orientation from the relevant file under `docs/*.md` — it's the source of truth,
 one focused engineering spec per topic; prefer reading it over re‑deriving.
+
+New here? Read the **[User Guide](docs/user-guide.md)** (end‑user manual), or browse the
+**[docs index](docs/README.md)** for every spec grouped by topic.
 
 ---
 
