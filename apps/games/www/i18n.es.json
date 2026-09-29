@@ -15,6 +15,16 @@
   "loading_lobby": "Cargando la sala…",
   "catalog_empty": "El catálogo está vacío.",
 
+  "badge_realtime": "tiempo real",
+  "game_tris_name": "Tres en raya",
+  "game_tris_desc": "Tres en raya por turnos: 2 jugadores, contra ANIMA sin conexión, o contra un LLM en línea (Grok/Claude) que juega de verdad las jugadas.",
+  "game_forza4_name": "Conecta 4",
+  "game_forza4_desc": "Alinea cuatro fichas. 2 jugadores, contra ANIMA (fácil/medio), o contra un LLM en línea (Grok/Claude) que elige cada jugada.",
+  "game_pong_name": "Pong 3D",
+  "game_pong_desc": "Arena 3D de neón (Three.js) con potenciadores, estela, partículas y efectos de sonido. 1 contra 1 en red o contra ANIMA — cerebro sin conexión o LLM en línea (Claude/Grok/Groq).",
+  "game_constellations_name": "Constelaciones 3D",
+  "game_constellations_desc": "Comerciante/cazador estelar en 3D (Three.js). CONTINÚA la misma partida del Cardputer: universo procedural infinito, misiones y combates espaciales en primera persona. Mando, ratón o teclado.",
+
   "btn_hint": "💡 Pista",
   "btn_invite": "🔗 Invitar",
   "btn_ready": "✓ Listo",

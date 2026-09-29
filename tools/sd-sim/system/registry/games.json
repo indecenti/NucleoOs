@@ -1,39 +1,54 @@
 {
   "schema": 1,
-  "_comment": "Pluggable catalog for the Game Center hub (apps/games). Add a game = drop a module under apps/games/www/games/<id>.js that calls defineGame(), then add an entry here. The hub reads this list to populate the catalog; no firmware change. minPlayers/maxPlayers/ai/realtime mirror the defineGame() contract so the lobby can show seats and AI options before the module is loaded.",
+  "_comment": "Pluggable catalog for the Game Center hub (apps/games). Add a game = drop a module under apps/games/www/games/<id>.js that calls defineGame(), then add an entry here. The hub reads this list to populate the catalog; no firmware change. minPlayers/maxPlayers/ai/realtime mirror the defineGame() contract so the lobby can show seats and AI options before the module is loaded. Shown name/desc are localized: add game_<id>_name / game_<id>_desc to every apps/games/www/i18n.<lang>.json; the name/desc here are the Italian originals, used only as the fallback when those keys are missing.",
   "games": [
     {
       "id": "tris",
       "name": "Tris",
+      "icon": "⭕",
       "module": "/apps/games/games/tris.js",
       "minPlayers": 2,
       "maxPlayers": 2,
       "ai": true,
       "realtime": false,
       "category": "classic",
-      "desc": "Filetto a turni, 2 giocatori o contro ANIMA."
+      "desc": "Filetto a turni: 2 giocatori, contro ANIMA offline, oppure contro un LLM online (Grok/Claude) che gioca davvero le mosse."
     },
     {
       "id": "forza4",
       "name": "Forza 4",
+      "icon": "🔴",
       "module": "/apps/games/games/forza4.js",
       "minPlayers": 2,
       "maxPlayers": 2,
       "ai": true,
       "realtime": false,
       "category": "classic",
-      "desc": "Allinea quattro gettoni. 2 giocatori o contro ANIMA (facile/medio)."
+      "desc": "Allinea quattro gettoni. 2 giocatori, contro ANIMA (facile/medio), o contro un LLM online (Grok/Claude) che sceglie ogni mossa."
     },
     {
       "id": "pong",
-      "name": "Pong",
+      "name": "Pong 3D",
+      "icon": "🏓",
       "module": "/apps/games/games/pong.js",
       "minPlayers": 2,
       "maxPlayers": 2,
       "ai": true,
       "realtime": true,
       "category": "arcade",
-      "desc": "Il classico in tempo reale. 1v1 umani in rete, o contro ANIMA (offline o con cervello LLM Claude/Grok)."
+      "desc": "Arena 3D neon (Three.js) con power-up, scia, particelle ed effetti sonori. 1v1 in rete o contro ANIMA — cervello offline o LLM online (Claude/Grok/Groq)."
+    },
+    {
+      "id": "constellations",
+      "name": "Costellazioni 3D",
+      "icon": "🚀",
+      "module": "/apps/games/games/constellations.js",
+      "minPlayers": 1,
+      "maxPlayers": 1,
+      "ai": false,
+      "realtime": true,
+      "category": "arcade",
+      "desc": "Mercante/cacciatore stellare in 3D (Three.js). CONTINUA la stessa run del Cardputer: universo procedurale infinito, missioni e dogfight in prima persona. Joypad, mouse o tastiera."
     }
   ]
 }
