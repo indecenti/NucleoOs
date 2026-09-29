@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NucleoOS Rescue</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#171b22; --panel2:#1e232c; --line:#2a313c;
+    --fg:#e6e9ee; --dim:#9aa4b2; --accent:#4ea1ff; --ok:#3fb950; --warn:#d29922; --err:#f85149;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f4f6f9; --panel:#ffffff; --panel2:#f0f3f7; --line:#d8dee6;
+           --fg:#1c2530; --dim:#5a6472; --accent:#0969da; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+  .wrap{max-width:760px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 2px;display:flex;align-items:center;gap:8px}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:0 0 14px}
+  .card h2{font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);margin:0 0 10px}
+  .grid{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px}
+  .grid b{color:var(--dim);font-weight:500}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);
+    color:var(--fg);border-radius:8px;padding:8px 14px}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button:disabled{opacity:.5;cursor:default}
+  input[type=text],input[type=password]{font:inherit;background:var(--panel2);color:var(--fg);
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  td,th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:500;font-size:12px;text-transform:uppercase}
+  td.r,th.r{text-align:right}
+  .pill{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
+  .msg{font-size:13px;margin-top:8px;min-height:18px}
+  .msg.ok{color:var(--ok)} .msg.err{color:var(--err)} .msg.warn{color:var(--warn)}
+  .hidden{display:none}
+  a{color:var(--accent)}
+  code{background:var(--panel2);padding:1px 5px;border-radius:5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🛟 NucleoOS Rescue</h1>
+  <p class="sub">The desktop shell is unavailable on this device. Use this console to re-upload the
+    web OS or re-flash the firmware. Actions need pairing — enter the PIN shown on the device screen.</p>
+
+  <div class="card" id="pairCard">
+    <h2>Pairing</h2>
+    <div class="row">
+      <input type="password" id="pin" inputmode="numeric" autocomplete="off" placeholder="6-digit PIN" maxlength="6" style="width:130px">
+      <button class="primary" id="pairBtn">Pair</button>
+      <span class="pill" id="pairState">checking…</span>
+    </div>
+    <div class="msg" id="pairMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Device</h2>
+    <div class="grid" id="statusGrid"><b>Status</b><span>loading…</span></div>
+    <div class="row" style="margin-top:10px"><button id="refreshBtn">Refresh</button></div>
+  </div>
+
+  <div class="card">
+    <h2>Firmware update (OTA)</h2>
+    <p class="sub" style="margin:0 0 10px">Pick the app image (<code>nucleoos-latest-ota.bin</code>) —
+      the OTA slot, never the merged full-flash image. The device verifies and reboots.</p>
+    <div class="row">
+      <input type="file" id="fwFile" accept=".bin">
+      <button class="primary" id="fwBtn" disabled>Flash</button>
+    </div>
+    <div class="msg" id="fwMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Files</h2>
+    <div class="row" style="margin-bottom:10px">
+      <input type="text" id="path" value="/www/shell" style="flex:1;min-width:200px">
+      <button id="lsBtn">List</button>
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <input type="file" id="upFile">
+      <button id="upBtn" disabled>Upload here</button>
+    </div>
+    <table><thead><tr><th>Name</th><th class="r">Size</th><th></th></tr></thead>
+      <tbody id="lsBody"><tr><td colspan="3" style="color:var(--dim)">—</td></tr></tbody></table>
+    <div class="msg" id="fsMsg"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  function fmtBytes(n){
+    if (n == null) return "—";
+    var u = ["B","KB","MB","GB"], i = 0;
+    while (n >= 1024 && i < u.length-1){ n /= 1024; i++; }
+    return (i ? n.toFixed(1) : n) + " " + u[i];
+  }
+  function msg(el, text, cls){ el.textContent = text || ""; el.className = "msg" + (cls ? " "+cls : ""); }
+
+  function api(path, opts){
+    opts = opts || {};
+    opts.credentials = "same-origin";
+    return fetch(path, opts);
+  }
+
+  // ---- pairing ----
+  var paired = false;
+  function setPaired(p){
+    paired = p;
+    $("pairState").textContent = p ? "paired" : "not paired";
+    $("pairState").style.borderColor = p ? "var(--ok)" : "var(--warn)";
+    $("pairState").style.color = p ? "var(--ok)" : "var(--warn)";
+    $("pairCard").classList.toggle("hidden", p);
+    gate();
+  }
+  function gate(){
+    $("fwBtn").disabled = !paired || !$("fwFile").files.length;
+    $("upBtn").disabled = !paired || !$("upFile").files.length;
+  }
+  function checkAuth(){
+    api("/api/auth/status").then(function(r){ return r.json(); }).then(function(d){
+      // required=false means the device isn't pairing-gated: treat as paired.
+      setPaired(!d.required || !!d.paired);
+    }).catch(function(){ setPaired(false); });
+  }
+  $("pairBtn").onclick = function(){
+    var pin = $("pin").value.trim();
+    if (pin.length !== 6){ msg($("pairMsg"), "Enter the 6-digit PIN.", "err"); return; }
+    msg($("pairMsg"), "Pairing…");
+    api("/api/pair", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({pin:pin}) })
+      .then(function(r){
+        if (r.ok){ msg($("pairMsg"), "Paired.", "ok"); setPaired(true); loadStatus(); }
+        else { msg($("pairMsg"), "Wrong PIN.", "err"); }
+      }).catch(function(e){ msg($("pairMsg"), "Error: "+e, "err"); });
+  };
+
+  // ---- status ----
+  function loadStatus(){
+    var g = $("statusGrid");
+    api("/api/status").then(function(r){ return r.json(); }).then(function(s){
+      var st = s.storage || {}, ota = s.ota || {}, net = s.network || {};
+      var rows = [
+        ["Version", s.version || "?"],
+        ["Free heap", fmtBytes(s.free_heap) + " (min " + fmtBytes(s.min_free_heap) + ")"],
+        ["Largest block", fmtBytes(s.largest_free_block)],
+        ["Storage", st.mounted ? (st.fs || "mounted") + " · " + fmtBytes(st.free_bytes) + " free" : "NOT MOUNTED"],
+        ["OTA slot", (ota.running || "?") + " → " + (ota.next || "?") + " (" + (ota.state || "?") + ")"],
+        ["Network", net.ip ? (net.mode || "") + " · " + net.ip : "offline"]
+      ];
+      g.innerHTML = "";
+      rows.forEach(function(kv){
+        var b = document.createElement("b"); b.textContent = kv[0];
+        var v = document.createElement("span"); v.textContent = kv[1];
+        g.appendChild(b); g.appendChild(v);
+      });
+    }).catch(function(e){ g.innerHTML = "<b>Status</b><span>unreachable: "+e+"</span>"; });
+  }
+  $("refreshBtn").onclick = loadStatus;
+
+  // ---- OTA ----
+  $("fwFile").onchange = gate;
+  $("fwBtn").onclick = function(){
+    var f = $("fwFile").files[0];
+    if (!f) return;
+    if (!confirm("Flash " + f.name + " (" + fmtBytes(f.size) + ") to the OTA slot? The device will reboot.")) return;
+    $("fwBtn").disabled = true;
+    msg($("fwMsg"), "Uploading & flashing " + fmtBytes(f.size) + "… do not power off.", "warn");
+    api("/api/ota", { method:"POST", body:f }).then(function(r){
+      return r.json().catch(function(){ return {ok:r.ok}; });
+    }).then(function(d){
+      if (d.ok){ msg($("fwMsg"), "Flashed " + fmtBytes(d.bytes||f.size) + " to " + (d.slot||"OTA") + ". Rebooting…", "ok"); }
+      else { msg($("fwMsg"), "Flash rejected.", "err"); $("fwBtn").disabled = false; }
+    }).catch(function(e){ msg($("fwMsg"), "Error: "+e, "err"); $("fwBtn").disabled = false; });
+  };
+
+  // ---- files ----
+  function joinPath(dir, name){ return (dir.replace(/\/+$/,"") || "") + "/" + name; }
+  function listFiles(){
+    var dir = $("path").value.trim() || "/";
+    msg($("fsMsg"), "");
+    api("/api/fs/list?path=" + encodeURIComponent(dir)).then(function(r){
+      if (r.status === 401){ msg($("fsMsg"), "Pair first to browse files.", "warn"); throw new Error("401"); }
+      return r.json();
+    }).then(function(d){
+      var body = $("lsBody"); body.innerHTML = "";
+      var entries = (d.entries || []).slice().sort(function(a,b){
+        return (a.type===b.type) ? a.name.localeCompare(b.name) : (a.type==="dir"?-1:1);
+      });
+      if (!entries.length){ body.innerHTML = "<tr><td colspan='3' style='color:var(--dim)'>empty</td></tr>"; return; }
+      entries.forEach(function(e){
+        var tr = document.createElement("tr");
+        var isDir = e.type === "dir";
+        var nameTd = document.createElement("td");
+        if (isDir){
+          var a = document.createElement("a"); a.href = "#"; a.textContent = "📁 " + e.name;
+          a.onclick = function(ev){ ev.preventDefault(); $("path").value = joinPath(dir, e.name); listFiles(); };
+          nameTd.appendChild(a);
+        } else { nameTd.textContent = "📄 " + e.name; }
+        var sizeTd = document.createElement("td"); sizeTd.className = "r"; sizeTd.textContent = isDir ? "" : fmtBytes(e.size);
+        var actTd = document.createElement("td"); actTd.className = "r";
+        if (!isDir && paired){
+          var del = document.createElement("button"); del.textContent = "Delete";
+          del.onclick = function(){
+            if (!confirm("Delete " + joinPath(dir, e.name) + "?")) return;
+            api("/api/fs/delete?path=" + encodeURIComponent(joinPath(dir, e.name)), { method:"POST" })
+              .then(function(r){ if (r.ok){ msg($("fsMsg"), "Deleted " + e.name, "ok"); listFiles(); }
+                                 else msg($("fsMsg"), "Delete failed", "err"); });
+          };
+          actTd.appendChild(del);
+        }
+        tr.appendChild(nameTd); tr.appendChild(sizeTd); tr.appendChild(actTd);
+        body.appendChild(tr);
+      });
+    }).catch(function(e){ if (String(e).indexOf("401") < 0) msg($("fsMsg"), "Error: "+e, "err"); });
+  }
+  $("lsBtn").onclick = listFiles;
+  $("upFile").onchange = gate;
+  $("upBtn").onclick = function(){
+    var f = $("upFile").files[0]; if (!f) return;
+    var dest = joinPath($("path").value.trim() || "/", f.name);
+    msg($("fsMsg"), "Uploading " + f.name + "…");
+    api("/api/fs/write?path=" + encodeURIComponent(dest), { method:"POST", body:f }).then(function(r){
+      if (r.ok){ msg($("fsMsg"), "Uploaded " + f.name + " (" + fmtBytes(f.size) + ")", "ok"); listFiles(); }
+      else if (r.status === 401){ msg($("fsMsg"), "Pair first to upload.", "warn"); }
+      else msg($("fsMsg"), "Upload failed (" + r.status + ")", "err");
+    }).catch(function(e){ msg($("fsMsg"), "Error: "+e, "err"); });
+  };
+
+  // ---- boot ----
+  checkAuth();
+  loadStatus();
+})();
+</script>
+</body>
+</html>

@@ -882,6 +882,12 @@ const server = createServer(async (req, res) => {
   if (path.startsWith('/api/fs/')) return fsApi(req, res, url);
 
   // On-device screen simulator (Wear OS-style launcher) under /device/
+  // Rescue console: mirror the firmware, which serves firmware/components/nucleo_webfs/rescue.html
+  // from flash. Single source of truth (the device EMBED_TXTFILES the same file). Reachable directly
+  // at /rescue for testing; also served at / when the shell entry page is missing (fallback below).
+  const RESCUE = join(REPO, 'firmware', 'components', 'nucleo_webfs', 'rescue.html');
+  if (path === '/rescue' || path === '/rescue/') return sendFile(res, RESCUE);
+
   if (path === '/device' || path === '/device/') return sendFile(res, join(REPO, 'web', 'device', 'index.html'));
   const dm = path.match(/^\/device\/(.+)$/);
   if (dm) { const abs = normalize(join(REPO, 'web', 'device', dm[1])); if (!abs.startsWith(join(REPO, 'web', 'device'))) return send(res, 403, 'text/plain', '403'); return sendFile(res, abs); }
@@ -892,6 +898,9 @@ const server = createServer(async (req, res) => {
   const rel = path === '/' ? 'index.html' : path.replace(/^\//, '');
   const abs = normalize(join(SHELL, rel));
   if (!abs.startsWith(SHELL)) return send(res, 403, 'text/plain', '403');
+  // Mirror the firmware rescue fallback: if the shell entry page is missing, serve the rescue
+  // console at the root instead of a 404 (every other missing asset keeps the honest 404).
+  if ((path === '/' || path === '/index.html') && !existsSync(abs)) return sendFile(res, RESCUE);
   return sendFile(res, abs);
 });
 
