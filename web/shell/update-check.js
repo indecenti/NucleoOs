@@ -8,7 +8,7 @@
 import I18N from './nucleo-i18n.js';
 import {
   LS_CACHE, LS_NOTIFIED, LS_ENABLED, UPDATE_TTL_MS,
-  checkDue, decideNotify, fetchLatestRelease,
+  checkDue, decideNotify, fetchLatestRelease, parseReleaseType, updateLevel,
 } from './update-core.js';
 
 const t = I18N.scope('shell');
@@ -39,20 +39,22 @@ export function initUpdateCheck({ getSnapVersion, getNotify }) {
       if (cache && cache.tag) {
         const notified = readJSON(LS_NOTIFIED) || [];
         const d = decideNotify({ currentVer: version, latestTag: cache.tag, notifiedTags: notified });
+        const type = parseReleaseType(cache.notes);   // "security" rings louder (see updateLevel)
+        const lvl = updateLevel(type);
         // Bridge to the NATIVE boot dialog: the device can't do HTTPS to GitHub, so write what the
         // browser learned to SD. The firmware reads /system/config/update.json at boot (zero TLS)
         // and shows the update dialog. Best-effort — a write failure just means no native dialog.
         if (d.newer) {
           try {
             fetch('/api/fs/write?path=' + encodeURIComponent('/system/config/update.json'),
-              { method: 'POST', body: JSON.stringify({ tag: cache.tag, notes: String(cache.notes || '').slice(0, 200) }) })
+              { method: 'POST', body: JSON.stringify({ tag: cache.tag, type, notes: String(cache.notes || '').slice(0, 200) }) })
               .catch(() => {});
           } catch {}
         }
         if (d.notify) {
           Notify.emit({
-            id: 'update-' + cache.tag, src: 'ota', lvl: 'info', icon: '⬆️',
-            title: t('up_title'),
+            id: 'update-' + cache.tag, src: 'ota', lvl: lvl, icon: lvl === 'warn' ? '⚠️' : '⬆️',
+            title: lvl === 'warn' ? t('up_title_sec') : t('up_title'),
             body: t('up_body', { tag: cache.tag }),
             action: 'app:settings@updates',
           });

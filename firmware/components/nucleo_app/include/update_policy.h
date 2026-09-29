@@ -27,6 +27,12 @@ int upd_cmp(const char *a, const char *b);
 // False when absent, empty, non-string or longer than cap-1.
 bool upd_extract_tag(const char *json, char *out, size_t cap);
 
+// Extract the release "type" from a version.json body ({"type":"security"}). Always writes a
+// valid lowercase token into out (cap>=2). One of security|major|minor|patch; anything absent,
+// empty, non-string, unterminated or unrecognised falls back to "patch" (an ordinary update).
+// A "security" type is what raises the update-notification level (see the JS twin updateLevel()).
+void upd_extract_type(const char *json, char *out, size_t cap);
+
 // Find the SHA-256 for `name` in sha256sum output ("<64 hex>  <name>", optional '*' binary
 // marker, CR tolerated). Writes 64 lowercase hex chars + NUL into out_hex65. False if absent.
 bool upd_find_sha256(const char *sums, const char *name, char *out_hex65);

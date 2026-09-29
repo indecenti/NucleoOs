@@ -59,6 +59,39 @@ bool upd_extract_tag(const char *json, char *out, size_t cap)
     return true;
 }
 
+void upd_extract_type(const char *json, char *out, size_t cap)
+{
+    if (!out || cap < 2) return;
+    char tok[16];
+    size_t n = 0;
+    const char *k = json ? strstr(json, "\"type\"") : NULL;
+    if (k) {
+        k += 6;                                        // past "type"
+        while (*k == ' ' || *k == '\t' || *k == '\r' || *k == '\n') k++;
+        if (*k == ':') {
+            k++;
+            while (*k == ' ' || *k == '\t' || *k == '\r' || *k == '\n') k++;
+            if (*k == '"') {
+                k++;
+                while (k[n] && k[n] != '"' && n < sizeof(tok) - 1) {
+                    tok[n] = (char)tolower((unsigned char)k[n]);
+                    n++;
+                }
+                if (k[n] != '"') n = 0;                // unterminated string: ignore
+                tok[n] = 0;
+            }
+        }
+    }
+    const char *val = "patch";                         // default: an ordinary update
+    if (n && (!strcmp(tok, "security") || !strcmp(tok, "major") ||
+              !strcmp(tok, "minor") || !strcmp(tok, "patch")))
+        val = tok;
+    size_t vl = strlen(val);
+    if (vl >= cap) vl = cap - 1;                        // never overflow the caller's buffer
+    memcpy(out, val, vl);
+    out[vl] = 0;
+}
+
 bool upd_find_sha256(const char *sums, const char *name, char *out_hex65)
 {
     if (!sums || !name || !name[0] || !out_hex65) return false;

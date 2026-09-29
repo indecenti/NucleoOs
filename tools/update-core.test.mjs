@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 
 import {
   parseSemver, cmpSemver, checkDue, decideNotify, fetchLatestRelease, parseSha256Sums,
+  parseReleaseType, updateLevel,
   UPDATE_API_LATEST,
 } from '../web/shell/update-core.js';
 import { sha256Hex } from '../web/shell/sha256.js';
@@ -34,6 +35,30 @@ test('cmpSemver: triplet ordering, build metadata ignored', () => {
   assert.equal(cmpSemver('0.2.9', 'v0.2.11'), -1);            // numeric, not lexicographic (9 < 11)
   assert.equal(cmpSemver('1.0.0', 'v0.9.9'), 1);
   assert.equal(cmpSemver('garbage', 'v0.3.0'), 0);            // unparsable → "equal" → no action
+});
+
+// ---- release type / notification level -------------------------------------------------------
+
+test('parseReleaseType: marker in the notes, default patch, case-insensitive', () => {
+  assert.equal(parseReleaseType('Security fixes\n[security] CVE-2026-1'), 'security');
+  assert.equal(parseReleaseType('[MAJOR] big rewrite'), 'major');
+  assert.equal(parseReleaseType('routine [Minor] tweaks'), 'minor');
+  assert.equal(parseReleaseType('[patch] typo'), 'patch');
+  assert.equal(parseReleaseType('no marker here'), 'patch');   // default
+  assert.equal(parseReleaseType(''), 'patch');
+  assert.equal(parseReleaseType(null), 'patch');
+  assert.equal(parseReleaseType('[bogus] unknown token'), 'patch');   // unrecognised → default
+  assert.equal(parseReleaseType('[minor] then [security]'), 'minor'); // first match wins
+});
+
+test('updateLevel: security is warn, everything else info', () => {
+  assert.equal(updateLevel('security'), 'warn');
+  assert.equal(updateLevel('SECURITY'), 'warn');
+  assert.equal(updateLevel('major'), 'info');
+  assert.equal(updateLevel('minor'), 'info');
+  assert.equal(updateLevel('patch'), 'info');
+  assert.equal(updateLevel(''), 'info');
+  assert.equal(updateLevel(null), 'info');
 });
 
 // ---- cadence ---------------------------------------------------------------------------------

@@ -63,9 +63,18 @@ jobs:
           curl -fSL --retry 3 -o _site/SHA256SUMS \
             https://github.com/indecenti/NucleoOs/releases/latest/download/SHA256SUMS \
             || { echo "no SHA256SUMS yet (release predates the in-shell updater)"; rm -f _site/SHA256SUMS; }
-          TAG=$(curl -fsSL -H 'Accept: application/vnd.github+json' \
-            https://api.github.com/repos/indecenti/NucleoOs/releases/latest | jq -r '.tag_name // empty')
-          printf '{"tag":"%s"}' "$TAG" > _site/version.json
+          REL=$(curl -fsSL -H 'Accept: application/vnd.github+json' \
+            https://api.github.com/repos/indecenti/NucleoOs/releases/latest)
+          TAG=$(printf '%s' "$REL" | jq -r '.tag_name // empty')
+          # Release "type" drives how loud the update notification is (a security release rings
+          # louder — WARN, not INFO). The releaser marks it in the release notes with a leading
+          # [security]/[major]/[minor]/[patch] token; default patch. Same token the browser parses
+          # from the notes (update-core.js parseReleaseType) and the native updater reads back here
+          # (update_policy.c upd_extract_type) — one authoring convention, both surfaces.
+          TYPE=$(printf '%s' "$REL" | jq -r '.body // ""' \
+            | grep -oiE '\[(security|major|minor|patch)\]' | head -1 | tr -d '[]' | tr 'A-Z' 'a-z')
+          TYPE=${TYPE:-patch}
+          printf '{"tag":"%s","type":"%s"}' "$TAG" "$TYPE" > _site/version.json
           ls -la _site
 
       - uses: actions/configure-pages@v5
