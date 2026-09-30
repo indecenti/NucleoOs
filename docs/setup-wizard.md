@@ -91,11 +91,49 @@ SD is re-written to every tier. The wizard therefore also runs on a device with 
   once (the device is reachable immediately) and lets the background Wi-Fi supervisor join the best
   saved network; otherwise it starts the AP.
 
+The three-tier store is `firmware/components/nucleo_setup/setup_store.c` — plain C, host-tested
+by `npm run setupstore:test` (fan-out, read order, and the reset contract below).
+
 ## Reset
 
 The wizard runs again only when no tier holds a `setup.json` with `complete: true`. Because `/cfg` and
-NVS are read before the SD mirror, deleting the SD copy alone (e.g. from File Commander) does **not**
-re-arm it, and neither does Settings ▸ Reset, which clears SD paths only.
+NVS are read before the SD mirror (and a copy recovered from them is written back to the SD), deleting
+the SD copy alone — e.g. from File Commander — does **not** re-arm it. Settings ▸ Reset does it
+properly; both rows need ENTER ×3 and then reboot:
+
+- **Reset settings** ("Network, prefs, logs. Files kept") calls `nucleo_setup_factory_reset()`:
+  `setup.json` and `networks.json` are erased from `/cfg`, NVS (`nucleocfg` keys `setup` / `networks`)
+  and the SD mirror, and esp_wifi's own copy of the STA credentials is cleared (`esp_wifi_restore()`,
+  which also stops Wi-Fi at once, then its `nvs.net80211` namespace is erased directly — the only path
+  in a Wi-Fi-skipped boot, where the driver is not up). Saved networks, the hotspot SSID and password,
+  the device name, the mode and `complete` are all gone: the wizard runs on the next boot and the
+  hotspot gets a freshly minted password. It also clears every Settings pref — the SD `system/config`
+  (`settings.json`: language, brightness, volume, voice; `anima_ui.json`; `screensaver.json`; the
+  apps' own UI state), the theme (`/cfg/config/theme.json` + `/sd/apps/theme.cfg`), read-aloud
+  (`/sd/data/tts/speak.cfg`), and the NVS-backed Web handoff and Bluetooth-at-boot toggles (back to
+  their defaults) — plus `system/sessions` and the logs (`system/log`, `system/logs`,
+  `net_trace.txt`, `boot_trace.txt`). User content stays: files, and the calendar events and alarms
+  that live beside the config (`system/config/calendar.json`, `alarm.json`).
+  **Pairing is kept**: the PIN and web sessions are not network config, a paired browser should not
+  have to re-pair after a Wi-Fi fix, and Settings ▸ Device ▸ Web sessions revokes them on its own.
+- **Factory reset** ("Also keys and ANIMA data") does all of the above, plus
+  `nucleo_auth_factory_reset()` — the pairing PIN and every session, from `/cfg/config/auth.json` and
+  the `nucleoauth` NVS namespace (every browser must pair again; the next boot mints a new PIN) — the
+  SMTP accounts and their app passwords (`nucleo_mailcfg_erase_all()`, `mail` NVS) and the sent-mail
+  log (`system/mail`), the Key deck server address + PIN (`nucleo_keydeck_forget()`, `keydeck` NVS),
+  the rest of `/cfg/config` (launcher pins and recents), and on the SD `system/keys`, ANIMA's learned
+  data and session files, `config`, `backups` and `journal`. User files, calendar and alarms stay here
+  too — wipe the card for those.
+- Both **seal** their stores before erasing: from that moment every save is refused until the reboot.
+  Without it a Wi-Fi supervisor join or the hotspot minting its default password in the gap before
+  `esp_restart()` would write the document straight back. esp_wifi is switched to RAM storage for the
+  same reason. The reset functions return false when a tier survived (erase could not be verified,
+  NVS down, or a racing save outlived the seal's 2 s wait). The row then does **not** reboot — a
+  reboot would heal the survivor back and look reset — but shows "Reset incomplete: try again";
+  every step is idempotent, so ENTER ×3 again retries. Details are in the log (`reset: … still present`).
+- **Not erased by either**: FIDO passkeys (`fido` NVS) — wiping them locks the owner out of every
+  account the key protects, so that stays a deliberate act in the Passkeys app (`POST /api/fido/reset`)
+  — and the update-check state (`nucupd`, no secrets). A full flash erase clears everything.
 
 ## Architecture
 

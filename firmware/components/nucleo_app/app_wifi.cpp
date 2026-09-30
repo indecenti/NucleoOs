@@ -36,6 +36,7 @@
 #include "esp_timer.h"
 #include "esp_app_desc.h"
 #include <string.h>
+#include <strings.h>          // strcasecmp: the reset's keep-list match (FAT names fold case)
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -69,6 +70,7 @@ bool        nucleo_setup_join(const char *ssid, const char *pass);
 void        nucleo_setup_start_ap(void);
 void        nucleo_setup_stop_ap(void);
 void        nucleo_setup_forget(void);
+bool        nucleo_setup_factory_reset(void);             // Reset rows: every tier of setup/networks + esp_wifi creds
 bool        nucleo_setup_net_is_known(const char *ssid);
 bool        nucleo_setup_net_has_password(const char *ssid);
 void        nucleo_setup_forget_ssid(const char *ssid);
@@ -88,6 +90,9 @@ void        nucleo_setup_set_ap_pass(const char *pass);
 const char *nucleo_auth_pin(void);
 int         nucleo_auth_revoke(const char *keep_token);   // NULL = every web session
 int         nucleo_auth_session_count(void);
+bool        nucleo_auth_factory_reset(void);              // Factory reset: PIN + sessions from /cfg and NVS
+bool        nucleo_mailcfg_erase_all(void);               // Factory reset: every SMTP account (nucleo_smtp)
+bool        nucleo_keydeck_forget(void);                  // Factory reset: Key deck server address + PIN
 int         nucleo_audio_volume(void);
 void        nucleo_audio_set_volume(int pct);
 void        nucleo_audio_set_mute(bool muted);
@@ -1570,6 +1575,23 @@ static void rm_tree(const char *path)
     closedir(dir); rmdir(path);
 }
 
+// Empty a directory but keep the named top-level entries (user content that lives beside the config).
+static void rm_children_except(const char *path, const char *const *keep, int nkeep)
+{
+    DIR *dir = opendir(path);
+    if (!dir) return;
+    struct dirent *e;
+    while ((e = readdir(dir))) {
+        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+        bool kept = false;
+        for (int i = 0; i < nkeep && !kept; i++) kept = !strcasecmp(e->d_name, keep[i]);   // FAT names fold case
+        if (kept) continue;
+        char sub[256]; snprintf(sub, sizeof sub, "%s/%s", path, e->d_name);
+        rm_tree(sub);
+    }
+    closedir(dir);
+}
+
 static void activate(const Row &r)
 {
     int sec = section_of(r.id);
@@ -1607,17 +1629,42 @@ static void activate(const Row &r)
         if (s_rst_id != r.id) { s_rst_id = r.id; s_rst_left = 2; }
         else if (--s_rst_left <= 0) {
             flush_prefs();
-            // Soft: config + sessions + logs. Hard: also keys, ANIMA's learned data, backups, journal.
-            static const char *const SOFT[] = { "/sd/system/config", "/sd/system/sessions", "/sd/system/log" };
-            static const char *const HARD[] = { "/sd/system/keys", "/sd/data/anima/learned", "/sd/config", "/sd/backups", "/sd/journal" };
+            // The brick-class config lives on internal flash (/cfg LittleFS + NVS), with the SD only a
+            // mirror that /cfg and NVS heal back — so each owner erases EVERY tier of its store and seals
+            // it (no background save lands before the reboot). SD paths alone never re-armed the wizard.
+            // Soft: network + setup (networks, hotspot, device name, wizard re-runs), every Settings pref
+            //       (settings.json, theme, read-aloud, web handoff, BT at boot), logs. User content that
+            //       lives beside the config (calendar events, alarms) is kept: "Files kept".
+            //       Pairing is KEPT: it is not network config, and the "Web sessions" row revokes it alone.
+            // Hard: also pairing (PIN + every session), SMTP accounts, the Key deck server PIN, the rest of
+            //       /cfg (launcher pins/recents), keys, the sent-mail log, ANIMA's learned data, backups,
+            //       journal. FIDO passkeys stay (the Passkeys app resets those, with its own warning).
+            bool ok = nucleo_setup_factory_reset();
+            nucleo_remote_set_enabled(true); nucleo_ble_set_pref(false);   // prefs kept in NVS: factory defaults
+            static const char *const KEEP[] = { "calendar.json", "alarm.json" };
+            static const char *const SOFT[] = { "/sd/system/sessions", "/sd/system/log", "/sd/system/logs" };
+            static const char *const SOFT_FILES[] = { "/cfg/config/theme.json", "/sd/apps/theme.cfg", "/sd/data/tts/speak.cfg",
+                                                      "/sd/net_trace.txt", "/sd/boot_trace.txt" };   // prefs off /sd/system/config + logs
+            static const char *const HARD[] = { "/cfg/config", "/sd/system/keys", "/sd/system/mail", "/sd/data/anima/learned",
+                                                "/sd/config", "/sd/backups", "/sd/journal" };
             static const char *const HARD_FILES[] = { "/sd/data/anima/teacher.json", "/sd/data/anima/telemetry.ndjson",
                                                       "/sd/data/anima/session.txt", "/sd/data/anima/sessions.json", "/sd/data/anima/workspace.json" };
+            rm_children_except("/sd/system/config", KEEP, NROWS(KEEP));
             for (int i = 0; i < NROWS(SOFT); i++) rm_tree(SOFT[i]);
+            for (int i = 0; i < NROWS(SOFT_FILES); i++) unlink(SOFT_FILES[i]);
             if (r.id == R_RST_HARD) {
+                ok = nucleo_auth_factory_reset() && ok;
+                ok = nucleo_mailcfg_erase_all() && ok;     // SMTP app passwords
+                ok = nucleo_keydeck_forget() && ok;        // a remote device's address + PIN
                 for (int i = 0; i < NROWS(HARD); i++) rm_tree(HARD[i]);
                 for (int i = 0; i < NROWS(HARD_FILES); i++) unlink(HARD_FILES[i]);
             }
-            esp_restart();
+            if (ok) esp_restart();
+            // A tier survived (logged): don't reboot into a device that would heal it back and look reset.
+            // Every step is idempotent and the stores stay sealed, so ENTER x3 again simply retries.
+            s_rst_id = R_NONE;
+            toast(TR5("Reset incompleto: riprova", "Reset incomplete: try again", "Reset incompleto: reintenta",
+                      "Reset incomplet: reessayez", "Reset unvollstaendig: nochmal"));
         }
         break;
     default: break;                                 // info rows: nothing to do

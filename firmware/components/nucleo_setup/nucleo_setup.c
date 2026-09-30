@@ -1,6 +1,6 @@
 #include "nucleo_setup.h"
 #include "nucleo_board.h"
-#include <sys/stat.h>   // mkdir() for the redundant SD credential backup
+#include <sys/stat.h>   // mkdir() for the SD time.json
 #include "nucleo_ui.h"
 #include "nucleo_storage.h"
 #include "nucleo_app.h"
@@ -15,7 +15,7 @@
 #include "esp_sntp.h"
 #include "esp_event.h"
 #include "cJSON.h"
-#include "nvs.h"           // NVS fallback tier: config survives even without /cfg partition or SD
+#include "nvs.h"           // factory reset: esp_wifi's own namespace when the driver is not up
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -24,6 +24,7 @@
 #include "nucleo_i18n.h"   // first-run wizard language step + bilingual (TR) wizard strings
 #include "esp_heap_caps.h"
 #include "wifi_policy.h"   // supervisor decision core (pure C, host-tested by `npm run wifi:test`)
+#include "setup_store.h"   // three-tier config persistence (pure C, host-tested by `npm run setupstore:test`)
 #include <assert.h>
 
 static const char *TAG = "setup";
@@ -211,122 +212,12 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
 }
 
 // ---- persistence -----------------------------------------------------------
-
-// Read a whole small config file. CAPS the allocation: `n` comes from ftell on a file that may be
-// corrupt or attacker-placed (SD legacy path), and a multi-MB malloc on the ~18 KB heap would OOM the
-// boot. Config docs here are < 4 KB; 32 KB is a generous ceiling that rejects the pathological case.
-#define SLURP_MAX (32 * 1024)
-static char *slurp(const char *path)
-{
-    FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
-    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
-    if (n < 0 || n > SLURP_MAX) { fclose(f); return NULL; }
-    char *b = malloc(n + 1);
-    if (b && fread(b, 1, n, f) == (size_t)n) b[n] = '\0'; else { free(b); b = NULL; }
-    fclose(f);
-    return b;
-}
-
-// ---- three-tier persistence ------------------------------------------------
 // Config MUST survive a reboot on ANY install, including the worst case a user can hit: a firmware
 // loaded through a third-party launcher that lacks our custom partition table (so the /cfg LittleFS
-// store never mounts) AND with no SD card inserted. We therefore write to three INDEPENDENT tiers,
-// each best-effort so one failure never blocks the others:
-//   1. /cfg LittleFS  — primary, power-loss-safe, works on an SD-less device (needs our partition table)
-//   2. NVS            — present in every ESP-IDF app (esp_wifi already relies on it); the guaranteed
-//                       fallback that persists even when tiers 1 and 3 are both unavailable
-//   3. SD mirror      — survives an internal-flash wipe / reflash and is human-visible on the card
-// Read order mirrors reliability: /cfg -> NVS -> SD. The first tier that answers wins, and the loader
-// re-persists so any missing tier heals on the next save. Result: settings stick no matter how the
-// firmware was installed and whether or not an SD is present.
-#define CFG_NVS_NS "nucleocfg"   // NVS namespace for the setup/networks documents (<=15 chars)
-
-// Atomic write via temp+rename. Parent dirs must already exist. Returns false — never crashes — if the
-// path's filesystem is absent. Works on BOTH stores: LittleFS rename overwrites the destination in place
-// (atomic, power-loss-safe), but FATFS (the SD) rename FAILS if the destination already exists — so on a
-// rename failure we remove the old file and retry. tmp is only dropped if the retry also fails, so the
-// destination is never left both-gone by the common (dest-exists) case.
-static bool write_file_atomic(const char *path, const char *text)
-{
-    char tmp[160];
-    if ((size_t)snprintf(tmp, sizeof tmp, "%s.tmp", path) >= sizeof tmp) return false;
-    FILE *f = fopen(tmp, "w");
-    if (!f) return false;
-    bool ok = (fputs(text, f) >= 0);
-    fflush(f);
-    fclose(f);
-    if (!ok) { remove(tmp); return false; }
-    if (rename(tmp, path) != 0) {          // LittleFS: overwrites -> done. FATFS: fails if dest exists...
-        remove(path);                      // ...so clear the old file and retry (SD mirror path).
-        if (rename(tmp, path) != 0) { remove(tmp); return false; }
-    }
-    return true;
-}
-
-// SD backup write: create the /system/config subtree first. Best-effort no-op if no card is mounted.
-static bool write_sd_backup(const char *sd_path, const char *text)
-{
-    mkdir(NUCLEO_SD_MOUNT "/system", 0775);
-    mkdir(NUCLEO_SD_MOUNT "/system/config", 0775);
-    return write_file_atomic(sd_path, text);
-}
-
-static bool nvs_write_str(const char *key, const char *val)
-{
-    nvs_handle_t h;
-    if (nvs_open(CFG_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return false;
-    esp_err_t e = nvs_set_str(h, key, val);
-    if (e == ESP_OK) e = nvs_commit(h);
-    nvs_close(h);
-    return e == ESP_OK;
-}
-
-// Read an NVS string. Returns a malloc'd, NUL-terminated buffer (caller frees) or NULL if absent.
-static char *nvs_read_str(const char *key)
-{
-    nvs_handle_t h;
-    if (nvs_open(CFG_NVS_NS, NVS_READONLY, &h) != ESP_OK) return NULL;
-    size_t sz = 0;
-    if (nvs_get_str(h, key, NULL, &sz) != ESP_OK || sz == 0) { nvs_close(h); return NULL; }
-    char *buf = malloc(sz);
-    if (!buf) { nvs_close(h); return NULL; }
-    esp_err_t e = nvs_get_str(h, key, buf, &sz);
-    nvs_close(h);
-    if (e != ESP_OK) { free(buf); return NULL; }
-    return buf;
-}
-
-// Persistence health of the most recent persist_doc(), surfaced via nucleo_setup_persist_status()
-// for /api/diag so "settings not saved" reports are instantly triageable.
-static bool s_cfg_ok = false, s_nvs_ok = false, s_sd_ok = false;
-static int  s_tiers_ok = -1;   // -1 until the first save
-
-// Fan one config document out to every available tier (independent, best-effort writes). Returns how
-// many tiers accepted it, so the caller can shout when that is zero (no persistence at all).
-static int persist_doc(const char *cfg_path, const char *sd_path, const char *nvs_key, const char *text)
-{
-    bool cfg = write_file_atomic(cfg_path, text);     // 1. /cfg LittleFS (power-loss-safe, SD-independent)
-    bool nvs = nvs_write_str(nvs_key, text);          // 2. NVS (always present — the guaranteed fallback)
-    bool sd  = write_sd_backup(sd_path, text);        // 3. SD mirror (survives a flash wipe)
-    s_cfg_ok = cfg; s_nvs_ok = nvs; s_sd_ok = sd;
-    s_tiers_ok = (cfg ? 1 : 0) + (nvs ? 1 : 0) + (sd ? 1 : 0);
-    return s_tiers_ok;
-}
-
-// Load a config document in reliability order. *from_fallback is set when it did NOT come from the
-// primary /cfg tier, so the caller can re-persist and heal the others. Malloc'd result (caller frees).
-static char *load_doc(const char *cfg_path, const char *sd_path, const char *nvs_key, bool *from_fallback)
-{
-    if (from_fallback) *from_fallback = false;
-    char *txt = slurp(cfg_path);
-    if (txt) return txt;
-    txt = nvs_read_str(nvs_key);
-    if (txt) { if (from_fallback) *from_fallback = true; return txt; }
-    txt = slurp(sd_path);
-    if (txt) { if (from_fallback) *from_fallback = true; return txt; }
-    return NULL;
-}
+// store never mounts) AND with no SD card inserted. setup_store.c therefore writes every document to
+// three INDEPENDENT tiers — /cfg LittleFS, NVS, SD mirror — and reads them back in that order; the
+// loader re-persists a copy recovered from a fallback tier so any missing tier heals on the next save.
+// It is plain C (host-tested: `npm run setupstore:test`); see setup_store.h.
 
 static void save_config(void);   // fwd: load may re-persist when recovering from a fallback tier
 static bool s_cfg_loaded;        // a config doc was parsed once: RAM (s_mode/s_ssid/s_complete) is now authoritative
@@ -335,7 +226,7 @@ static bool load_config(void)
 {
     // Try /cfg, then the NVS fallback, then the SD backup (covers the legacy SD-only layout too).
     bool from_fallback = false;
-    char *txt = load_doc(SETUP_JSON, SETUP_LEGACY, "setup", &from_fallback);
+    char *txt = setup_store_load(SETUP_JSON, SETUP_LEGACY, "setup", &from_fallback);
     if (!txt) return false;
     cJSON *r = cJSON_Parse(txt); free(txt);
     if (!r) return false;
@@ -364,7 +255,7 @@ static void save_config(void)
 {
     // Serialize with cJSON — it ESCAPES quotes/backslashes in the user-supplied strings (device name is
     // free-text; SSIDs/passwords can contain " or \). Hand-rolled snprintf JSON would emit a malformed
-    // document that persist_doc then fans out IDENTICALLY to all three tiers, so cJSON_Parse fails
+    // document that setup_store_persist then fans out IDENTICALLY to all three tiers, so cJSON_Parse fails
     // everywhere on next boot -> load_config() returns false -> the first-run wizard re-runs and the
     // config resets. Then fan out best-effort (no early return: a dead /cfg must not stop NVS + SD).
     cJSON *r = cJSON_CreateObject();
@@ -379,8 +270,8 @@ static void save_config(void)
     cJSON_Delete(r);
     if (!txt) return;
     s_cfg_loaded = true;                      // what we persist IS the config now (wizard / first web join): RAM is authoritative
-    int tiers = persist_doc(SETUP_JSON, SETUP_LEGACY, "setup", txt);
-    if (tiers == 0) ESP_LOGE(TAG, "save_config: NO persistence tier available — settings will not survive reboot");
+    int tiers = setup_store_persist(SETUP_JSON, SETUP_LEGACY, "setup", txt);
+    if (tiers == 0 && !setup_store_sealed()) ESP_LOGE(TAG, "save_config: NO persistence tier available — settings will not survive reboot");
     free(txt);
 }
 
@@ -404,7 +295,7 @@ static void load_networks(void)
     if (s_nets_loaded) return;
     s_nets_loaded = true;
     bool from_fallback = false;
-    char *txt = load_doc(NETS_JSON, NETS_SD, "networks", &from_fallback);   // /cfg -> NVS -> SD
+    char *txt = setup_store_load(NETS_JSON, NETS_SD, "networks", &from_fallback);   // /cfg -> NVS -> SD
     if (!txt) return;
     cJSON *r = cJSON_Parse(txt); free(txt);
     if (!r) return;
@@ -448,8 +339,8 @@ static void save_networks(void)
     char *txt = cJSON_PrintUnformatted(r);
     cJSON_Delete(r);
     if (!txt) return;
-    int tiers = persist_doc(NETS_JSON, NETS_SD, "networks", txt);   // /cfg + NVS + SD, best-effort
-    if (tiers == 0) ESP_LOGE(TAG, "save_networks: NO persistence tier available");
+    int tiers = setup_store_persist(NETS_JSON, NETS_SD, "networks", txt);   // /cfg + NVS + SD, best-effort
+    if (tiers == 0 && !setup_store_sealed()) ESP_LOGE(TAG, "save_networks: NO persistence tier available");
     free(txt);
 }
 
@@ -976,6 +867,47 @@ void nucleo_setup_forget(void)
     strncpy(s_mode, "ap", sizeof(s_mode) - 1); start_ap(); save_config();
 }
 
+// Erase everything this component persists, from EVERY tier: setup.json (mode, SSID, device name, hotspot
+// SSID + password, complete flag) and networks.json on /cfg, NVS and the SD mirror, plus the STA
+// credentials esp_wifi keeps in its own NVS (WIFI_STORAGE_FLASH). The first-run wizard runs on the next
+// boot. Deleting SD paths alone never did this: /cfg and NVS are read first and heal the SD copy back.
+// The caller reboots on success; until then the store is sealed and the radio runs on RAM-only config,
+// so nothing can write a document back. false = a tier survived (logged): retry, don't reboot.
+bool nucleo_setup_factory_reset(void)
+{
+    s_auto = false; s_want_sta = false;          // the supervisor starts no new join cycle...
+    bool ok = setup_store_seal();                // ...and every later save is refused until reboot
+    ok = setup_store_erase(SETUP_JSON, SETUP_LEGACY, "setup") && ok;
+    ok = setup_store_erase(NETS_JSON, NETS_SD, "networks") && ok;
+    s_net_n = 0; s_net_seq = 0; s_nets_loaded = true; s_complete = false;   // RAM matches the erased store
+    if (s_wifi_ready) {
+        // esp_wifi_restore() is the driver's own reset (what ESP-IDF's wifi_prov_mgr_reset_provisioning()
+        // calls); it stops Wi-Fi first, so the hotspot and any STA link drop right here — fine, the reboot
+        // follows. Then RAM storage, so a join still in flight cannot persist its credentials again. The op
+        // lock keeps a fresh join from starting, but it is bounded: a join cycle can hold it for 30 s+.
+        bool locked = s_wifi_op_lock && xSemaphoreTake(s_wifi_op_lock, pdMS_TO_TICKS(3000)) == pdTRUE;
+        if (!locked) ESP_LOGW(TAG, "factory reset: join cycle still running — restoring Wi-Fi without the op lock");
+        esp_err_t e = esp_wifi_restore();
+        esp_wifi_set_storage(WIFI_STORAGE_RAM);
+        if (locked) xSemaphoreGive(s_wifi_op_lock);
+        if (e != ESP_OK) { ESP_LOGE(TAG, "esp_wifi_restore -> 0x%x", (unsigned)e); ok = false; }
+    }
+    // Then erase the driver's private NVS namespace directly (name verified in the IDF 5.4 libnet80211), in
+    // BOTH cases: in a Wi-Fi-skipped boot (Solo / USB-web) the driver is not up and esp_wifi_restore() would
+    // refuse, and after a restore it closes the gap before set_storage(RAM), where a racing join could
+    // still have written its credentials. Idempotent, and independent of the closed-source restore.
+    nvs_handle_t h;
+    esp_err_t e = nvs_open("nvs.net80211", NVS_READONLY, &h);   // probe: no namespace = nothing stored
+    if (e == ESP_OK) {
+        nvs_close(h);
+        e = nvs_open("nvs.net80211", NVS_READWRITE, &h);
+        if (e == ESP_OK) { e = nvs_erase_all(h); if (e == ESP_OK) e = nvs_commit(h); nvs_close(h); }
+    } else if (e == ESP_ERR_NVS_NOT_FOUND) e = ESP_OK;
+    if (e != ESP_OK) { ESP_LOGE(TAG, "erase esp_wifi NVS -> 0x%x", (unsigned)e); ok = false; }
+    ESP_LOGW(TAG, "factory reset: setup, saved networks and Wi-Fi credentials erased%s", ok ? "" : " (INCOMPLETE)");
+    return ok;
+}
+
 // ---- known-networks public API (native Wi-Fi app + web manager) ------------
 int         nucleo_setup_net_count(void)     { load_networks(); return s_net_n; }
 const char *nucleo_setup_net_ssid(int i)     { load_networks(); return (i >= 0 && i < s_net_n) ? s_nets[i].ssid : ""; }
@@ -1041,8 +973,7 @@ bool        nucleo_setup_ap_rescue(void)         { return !s_sta_only && s_auto 
 void nucleo_setup_persist_status(nucleo_persist_status_t *out)
 {
     if (!out) return;
-    out->cfg_ok = s_cfg_ok; out->nvs_ok = s_nvs_ok; out->sd_ok = s_sd_ok;
-    out->tiers_ok = s_tiers_ok;   // -1 = no save yet this boot
+    setup_store_status(&out->cfg_ok, &out->nvs_ok, &out->sd_ok, &out->tiers_ok);   // tiers_ok -1 = no save yet this boot
 }
 
 // Edit the hotspot credentials. SSID must be non-empty; password is "" (open) or 8..63 (WPA2).
@@ -1273,7 +1204,7 @@ void nucleo_setup_suspend(void)
 static void restore_saved_time(void)
 {
     if (s_time_synced) return;
-    char *buf = slurp(NUCLEO_SD_MOUNT "/system/time.json");
+    char *buf = setup_store_slurp(NUCLEO_SD_MOUNT "/system/time.json");
     if (!buf) return;
     const char *p = strstr(buf, "\"t\":");
     if (p) {

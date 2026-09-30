@@ -39,6 +39,10 @@ esp_err_t nucleo_mailcfg_delete(int idx);
 int  nucleo_mailcfg_default(void);          // -1 if none
 void nucleo_mailcfg_set_default(int idx);
 
+// Settings ▸ Factory reset: erase every account (incl. the app passwords) and the default, i.e. the
+// whole "mail" NVS namespace. true when nothing is left (a never-configured device included).
+bool nucleo_mailcfg_erase_all(void);
+
 // Append a record to the SD sent-mail log, shared by the native app and the web endpoint.
 // Format: "YYYY-MM-DD HH:MM | OK|ERR | <to> | <subject>".
 void nucleo_mailcfg_log_sent(const char *to, const char *subject, bool ok);

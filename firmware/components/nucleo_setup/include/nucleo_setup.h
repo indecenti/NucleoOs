@@ -81,6 +81,11 @@ bool        nucleo_setup_config_loaded(void);     // saved config parsed/written
 void        nucleo_setup_start_ap(void);          // switch to hotspot (AP) mode now (no-op if !config_loaded)
 void        nucleo_setup_stop_ap(void);           // turn AP OFF -> rejoin client (STA) mode (Settings toggle)
 void        nucleo_setup_forget(void);            // wipe ALL saved networks, drop to AP
+// Settings ▸ Reset: erase setup.json + networks.json from /cfg, NVS and the SD mirror, and esp_wifi's
+// stored STA credentials, so the first-run wizard runs again. Seals the config store (no later save
+// lands until reboot): on true the caller esp_restart()s; on false some tier survived — retry (it is
+// idempotent) rather than reboot into a device that heals the survivor back.
+bool        nucleo_setup_factory_reset(void);
 
 // ---- Known-networks store (multi-network, "real OS" Wi-Fi) -------------------
 // NucleoOS remembers every Wi-Fi it has joined (SSID+password, on power-safe flash) and, at boot

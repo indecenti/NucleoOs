@@ -144,3 +144,17 @@ void nucleo_mailcfg_set_default(int idx) {
     nvs_commit(h);
     nvs_close(h);
 }
+
+bool nucleo_mailcfg_erase_all(void) {
+    nvs_handle_t h;
+    esp_err_t e = nvs_open(NS, NVS_READONLY, &h);      // probe: no namespace = no account ever saved
+    if (e == ESP_ERR_NVS_NOT_FOUND) return true;
+    if (e != ESP_OK) return false;
+    nvs_close(h);
+    if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) return false;
+    e = nvs_erase_all(h);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    if (e != ESP_OK) ESP_LOGE(TAG, "erase accounts -> 0x%x", (unsigned)e);
+    return e == ESP_OK;
+}
