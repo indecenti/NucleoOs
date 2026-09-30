@@ -13,7 +13,7 @@
 // Zero dependencies, BOM-safe. Usage: node tools/i18n-check.mjs   (exit 1 on any failure).
 
 import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
-import { gzipSync } from 'node:zlib';
+import { gzipSync, gunzipSync } from 'node:zlib';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -205,12 +205,20 @@ const manifest = {
 };
 try {
   const covPath = join(ROOT, 'web', 'shell', 'i18n', 'coverage.json');
+  // Write only on a real change: a fresh timestamp on every run made each green gate dirty the tree
+  // and the committed deploy/sd staging (staging:check). Unchanged content keeps its old `generated`.
+  let prev = null;
+  try { prev = JSON.parse(readFileSync(covPath, 'utf8')); } catch {}
+  if (prev && typeof prev.generated === 'string'
+      && JSON.stringify({ ...prev, generated: '' }) === JSON.stringify({ ...manifest, generated: '' })) manifest.generated = prev.generated;
   const json = JSON.stringify(manifest, null, 2) + '\n';
-  writeFileSync(covPath, json);
+  const same = (p, text) => { try { return readFileSync(p, 'utf8').replace(/\r\n/g, '\n') === text; } catch { return false; } };
+  const gzSame = () => { try { return gunzipSync(readFileSync(covPath + '.gz')).toString('utf8') === json; } catch { return false; } };
+  if (!same(covPath, json)) writeFileSync(covPath, json);
   // Refresh the .gz IN THE SAME BREATH. The device serves the .gz first, and this file is a build
   // OUTPUT of this very gate — writing only the source left `gz:check`/`validate` permanently red
   // right after a green i18n gate, and shipped a stale coverage file to the device.
-  writeFileSync(covPath + '.gz', gzipSync(Buffer.from(json), { level: 9 }));
+  if (!gzSame()) writeFileSync(covPath + '.gz', gzipSync(Buffer.from(json), { level: 9 }));
 } catch (e) { console.log('  (coverage.json not written: ' + e.message + ')'); }
 
 const cov = EXTRA_LANGS.map((l) => `${l} ${pct[l]}%`).join(' · ');
