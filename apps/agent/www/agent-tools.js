@@ -58,6 +58,9 @@ export const GEMINI_MODELS = {
 // model reads with numbers to reference/edit precise lines; edit_file still matches the RAW text.
 export function withLineNumbers(content, { offset = 1, limit } = {}) {
   const lines = String(content == null ? '' : content).split('\n');
+  // A file ending in "\n" has no extra line after it (cat -n agrees). Numbering that empty tail made models
+  // count one item too many — measured: Qwen3-1.7B read a 3-item list as "4 elements".
+  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
   const start = Math.max(1, offset | 0);
   const end = limit ? Math.min(lines.length, start - 1 + (limit | 0)) : lines.length;
   const out = [];

@@ -99,7 +99,7 @@ test('one invalid turn gets a corrective retry; recovery then completes', async 
   const r = await runWorkerLocal({ engine, execTool: fakeExecTool(), grammar }, { task: 'x' });
   assert.equal(r.text, 'recovered');
   assert.equal(engine.calls.length, 2);
-  assert.match(engine.calls[1].messages[engine.calls[1].messages.length - 1].content, /Invalid/);
+  assert.match(engine.calls[1].messages[engine.calls[1].messages.length - 1].content, /Format problem/);
 });
 
 // ---- 3. honest declines ------------------------------------------------------------------------
@@ -186,4 +186,13 @@ test('prose after a real tool result is the final answer; prose with no tool beh
   const r = await runWorkerLocal({ engine, execTool, grammar }, { task: 'quante righe?', maxSteps: 4 });
   assert.equal(r.text, 'Il file contiene tre righe.');
   assert.equal(execTool.log.length, 1);
+});
+
+test('an answer written in the same reply as a read is dropped: the next turn answers from the real result', async () => {
+  const engine = scriptedEngine(['[{"op":"read","path":"a.txt"}],[{"op":"answer","text":"INVENTED"},{"op":"done"}]', '[{"op":"answer","text":"tre righe"}]']);
+  const execTool = fakeExecTool({ 'a.txt': '1\n2\n3' });
+  const r = await runWorkerLocal({ engine, execTool, grammar }, { task: 'quante righe?', maxSteps: 4 });
+  assert.equal(r.text, 'tre righe');
+  assert.equal(execTool.log.length, 1);
+  assert.equal(engine.calls.length, 2);
 });

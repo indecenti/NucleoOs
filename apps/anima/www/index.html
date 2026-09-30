@@ -3224,7 +3224,7 @@
       if(T==='server' && r.engine){                                  // local AI server on this computer (Ollama / LM Studio …)
         kind='server'; icon='⌂'; eng=L('engLocalServer')+' · '+(r.engine.server||''); model=r.engine.model||''; host=hostOf(r.engine.base||'');
       } else if(T==='M4-local' || r.substrate==='M4-local'){               // local-GPU tier (browser WebLLM)
-        kind='gpu'; icon='✦'; eng=TR('GPU locale · WebLLM', 'Local GPU · WebLLM'); model=prettyModel(CODER_MODEL); host=TR('browser · WebGPU', 'browser · WebGPU');
+        kind='gpu'; icon='✦'; eng=TR('GPU locale · WebLLM', 'Local GPU · WebLLM'); model=prettyModel(r.model||CODER_MODEL); host=TR('browser · WebGPU', 'browser · WebGPU');
       } else if(T==='remote' || D==='online' || ['grok','teacher','cloud','online','agent','wiki','wikidata','weather','fx'].includes(I)){   // online tier (incl. the firmware online-only 'cloud' intent, code answers, and the multi-agent path)
         kind='cloud'; icon='☁';
         if(I==='webcompound'){ icon='🌐'; eng=TR('Online · Ricerca web', 'Online · Web search'); model=r.model||'browser_search'; host='api.groq.com'; }
@@ -4625,8 +4625,8 @@
         // On the PC's own model the turn is named like any local-server answer (engine map "k-server": Ollama · model).
         if(eng && eng.kind==='server') return { reply:txt, tier:'server', intent:'agent', confidence:75, domain:'local', engine:eng, model:eng.model,
           trace:L('agentLocal',{ server:eng.server||'', model:eng.model||'' }) };
-        if(eng && eng.kind==='local') return { reply:txt, tier:'M4-local', substrate:'M4-local', intent:'agent', confidence:65, domain:'local',
-          trace:L('agentLocal',{ server:'WebGPU', model:'' }) };
+        if(eng && eng.kind==='local') return { reply:txt, tier:'M4-local', substrate:'M4-local', intent:'agent', confidence:65, domain:'local', model:eng.model||'',
+          trace:L('agentLocal',{ server:'WebGPU', model:eng.model||'' }) };
         return { reply:txt, intent:'agent', confidence:80, domain:'online', substrate:'M2', trace:(TR('Agenti · orchestratore → worker', 'Agents · orchestrator → worker')) };
       } finally { _agentThink=null; }
     }
@@ -4671,8 +4671,10 @@
     async function agentCanRun(){
       if(!useAgents) return false;
       if(!isPrivate()){ await ensureKeyLoaded(); if(keyCfg.key && !curProv().proxy) return true; }
-      const E=await enginesMod(); const cfg=E.loadLocalConfig(); if(!cfg.enabled) return false;
-      return (await E.liveServers({ config:cfg })).some((s)=>s.status==='ok' && s.models.length && (!isPrivate() || E.isLoopback(s.base)));
+      const E=await enginesMod(); const cfg=E.loadLocalConfig();
+      if(cfg.enabled && (await E.liveServers({ config:cfg })).some((s)=>s.status==='ok' && s.models.length && (!isPrivate() || E.isLoopback(s.base)))) return true;
+      // …or the installed in-browser GPU model (the 2a rung): installed only, never a download
+      try{ const m=await loadLLM(); return !!((await m.probeLocal()).webgpu && await m.localAvailable()); }catch{ return false; }
     }
     const generatedReply = (r)=> !!r && (r.tier==='M4-local' || r.domain==='online' || r.domain==='local' || r.substrate==='M3');
 
@@ -4784,7 +4786,16 @@
             const m = await loadLLM(); const caps = await m.probeLocal();
             if(caps.webgpu && await m.localAvailable()){
               _agentDidMutate=false; _agentCancelled=false; _agentWsAsked=false; _agentLocalFirst=true;
-              try{ r = await agentAsk(sendQ, think, await wsxOnce()); }catch(e){ r = null; if(String(e&&e.message)!=='stopped') noteAiErr(e); }
+              try{ r = await agentAsk(sendQ, think, await wsxOnce()); }
+              catch(e){
+                r = null;
+                // The GPU model could not do the task: say so, with why. Never fall through to the tool-less chat
+                // rung for a task on the user's files — it would describe files it never read.
+                if(e && e.kind==='local-declined' && !sig.aborted){
+                  const msg=L('agentDeclined',{ model:prettyModel(e.model||'')||'WebGPU', why:e.reason||'?' });
+                  r={ reply:msg, tier:'M4-local', substrate:'M4-local', intent:'agent', confidence:0, domain:'local', model:e.model||'', trace:L('agentLocal',{ server:'WebGPU', model:e.model||'' }) };
+                }
+              }
             }
           }catch{ /* no GPU model → the chat rung below */ }
         }

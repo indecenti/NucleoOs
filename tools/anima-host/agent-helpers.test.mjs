@@ -8,6 +8,7 @@ import { checkSyntax } from '../../apps/code-runner/www/nucleo-run.js';   // hos
 test('withLineNumbers prefixes each line (cat -n style)', () => {
   assert.equal(withLineNumbers('a\nb\nc'), '1→a\n2→b\n3→c');
   assert.equal(withLineNumbers(''), '1→');
+  assert.equal(withLineNumbers('a\nb\n'), '1→a\n2→b', 'a trailing newline is not an extra line');
 });
 
 test('withLineNumbers supports offset + limit for big files', () => {

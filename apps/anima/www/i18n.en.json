@@ -126,5 +126,6 @@
   "engThisPc": "this computer",
   "netThisPc": "none · stays on this computer",
   "localSkipped": "{m} did not fit in memory: a lighter model answered",
-  "agentLocal": "Local agent · {server} · {model}"
+  "agentLocal": "Local agent · {server} · {model}",
+  "agentDeclined": "The local model ({model}) could not complete this task on your files ({why}), and I will not make up an answer. A bigger model on your PC (Ollama) or a cloud key can do it; or try splitting the request into simpler steps."
 }

@@ -636,6 +636,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     // the same tools through the same execTool, grammar-constrained. Each rung either finishes or
     // DECLINES HONESTLY; a decline tries the next rung, never fabricates. With nothing injected
     // (today's default) behavior is unchanged: the original error propagates.
+    let declined = null;                            // the last local rung's honest decline: { tier, reason }
     if (local && typeof local.engines === 'function') {
       let rungs = [];
       try { rungs = (await local.engines()) || []; } catch {}
@@ -647,14 +648,18 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
             { engine: rung.engine, execTool, grammar: local.grammar, verify: local.verify || null },
             { messages: baseMessages, root, maxSteps: Math.min(STEPS, 10),
               onEvent: (e) => { if (e.type === 'action' && ui && ui.status) ui.status('⚙ ' + e.op); } });
-          if (out && !out.declined) { lastEngine = { kind: 'local', tier: rung.tier }; return out.text || ''; }   // workers return plain text — same contract
-          if (ui && ui.note) ui.note('⚠️ ' + (rung.tier || 'local') + ': declino onesto (' + (out && out.reason || '?') + ')');
+          if (out && !out.declined) { lastEngine = { kind: 'local', tier: rung.tier, model: rung.engine.model || '' }; return out.text || ''; }   // workers return plain text — same contract
+          declined = { tier: rung.tier || 'local', reason: (out && out.reason) || '?', model: rung.engine.model || '' };
+          if (ui && ui.note) ui.note('⚠️ ' + (rung.tier || 'local') + ': declino onesto (' + declined.reason + ')');
         } catch (e) {
           if (String(e && e.message) === 'stopped') throw e;
           if (ui && ui.note) ui.note('⚠️ ' + (rung.tier || 'local') + ' non disponibile (' + String(e && e.message || e) + ')');
         }
       }
     }
+    // A local model that honestly declined is NOT "no provider": the caller must say so, not hand the task to a
+    // model without tools (measured: the GPU chat rung then "counted" a file it never read).
+    if (declined && !lastErr) throw Object.assign(new Error('local model declined: ' + declined.reason), { kind: 'local-declined', ...declined });
     throw lastErr || new Error('nessun provider disponibile');
   }
 

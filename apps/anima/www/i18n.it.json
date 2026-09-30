@@ -126,5 +126,6 @@
   "engThisPc": "questo computer",
   "netThisPc": "nessuna · resta su questo computer",
   "localSkipped": "{m} non entrava in memoria: ho usato un modello più leggero",
-  "agentLocal": "Agente locale · {server} · {model}"
+  "agentLocal": "Agente locale · {server} · {model}",
+  "agentDeclined": "Il modello locale ({model}) non è riuscito a completare questo compito sui file ({why}), e non ti do una risposta inventata. Con un modello più grande sul PC (Ollama) o con una chiave cloud ci riesco; oppure prova a dividere la richiesta in passi più semplici."
 }

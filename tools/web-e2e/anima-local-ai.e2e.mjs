@@ -73,7 +73,7 @@ test('B. real GPU: Qwen3-1.7B installs and answers in Italian and German, knowin
   t.diagnostic(`it (${it.ms} ms): ${it.reply}`);
   assert.ok(it.reply && it.reply.includes(year), 'Italian answer knows the current year: ' + it.reply);
   assert.ok(!/<think>/.test(it.reply), 'no thinking residue');
-  const de = await ask('Welches Datum haben wir heute? Antworte kurz auf Deutsch.', 'de');
+  const de = await ask('Welches Datum haben wir heute? Antworte kurz auf Deutsch, mit Tag, Monat und Jahr.', 'de');
   t.diagnostic(`de (${de.ms} ms): ${de.reply}`);
   assert.ok(de.reply && de.reply.includes(year), 'German answer knows the current year: ' + de.reply);
   assert.ok(/\b(heute|ist|der|den|am|Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\b/i.test(de.reply) && !/\b(oggi|è|today)\b/i.test(de.reply),
@@ -102,6 +102,7 @@ test('B. real GPU: Qwen3-1.7B installs and answers in Italian and German, knowin
   t.diagnostic(`GPU agent, fix (${fix && fix.s} s): ${fix && fix.line}`);
   assert.ok(fix, 'the agent turn finished');
   assert.equal(fix.kind, 'k-gpu', 'answered on the browser GPU: ' + fix.line);
+  assert.match(fix.line, /Qwen3-1\.7B/, 'the engine map names the model that really ran: ' + fix.line);
   const src = await sim.readSd('/data/proj/app.js');
   assert.match(src, /return\s+a\s*\+\s*b/, 'the GPU agent fixed the file on the SD:\n' + src);
   const count = await agentTurn('Leggi notes.md e dimmi quanti elementi ci sono nella lista della spesa.');
