@@ -77,6 +77,47 @@ jobs:
           printf '{"tag":"%s","type":"%s"}' "$TAG" "$TYPE" > _site/version.json
           ls -la _site
 
+      - name: SD content of the last 3 releases, per file (device SD-content installer)
+        # The device downloads its SD content file by file from sd/<x.y.z>/ and checks each file against
+        # sd/<x.y.z>/sd-manifest.txt (docs/sd-content-install.md). Three versions stay hosted so a device
+        # a release or two behind still finds content matching ITS firmware. Releases that predate the
+        # manifest are skipped (their zip is the old, stale payload). Every hosted tree is verified
+        # against its manifest here — a mismatch fails the deploy instead of publishing bad content.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p _site/sd
+          : > _site/sd/index.txt
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/indecenti/NucleoOs/releases?per_page=30" > releases.json
+          n=0
+          for row in $(jq -r '.[] | select(.draft == false and .prerelease == false) | @base64' releases.json); do
+            [ "$n" -ge 3 ] && break
+            r=$(printf '%s' "$row" | base64 -d)
+            tag=$(printf '%s' "$r" | jq -r '.tag_name'); ver=${tag#v}
+            pick() { printf '%s' "$r" | jq -r --arg re "$1" \
+              '[.assets[] | select(.name | test($re)) | select(.name | test("latest") | not)][0].browser_download_url // empty'; }
+            zip_url=$(pick '-sd\\.zip$'); man_url=$(pick '-sd-manifest\\.txt$')
+            if [ -z "$zip_url" ] || [ -z "$man_url" ]; then echo "skip $tag (no device SD manifest)"; continue; fi
+            d="_site/sd/$ver"; mkdir -p "$d"
+            curl -fSL --retry 3 -o sd.zip "$zip_url"
+            unzip -q sd.zip -d "$d"; rm -f sd.zip
+            curl -fSL --retry 3 -o "$d/sd-manifest.txt" "$man_url"
+            head -1 "$d/sd-manifest.txt" | grep -q "^#nucleoos-sd 1 $tag " \
+              || { echo "::error::$tag manifest header does not name $tag"; exit 1; }
+            grep -v '^#' "$d/sd-manifest.txt" \
+              | sed -E 's/^([0-9a-f]{64}) [0-9]+ [a-z0-9-]+ [a-z] (.*)$/\1  \2/' \
+              | (cd "$d" && sha256sum -c --quiet) \
+              || { echo "::error::$tag SD tree does not match its manifest"; exit 1; }
+            echo "$ver" >> _site/sd/index.txt
+            n=$((n + 1))
+          done
+          rm -f releases.json
+          echo "hosted SD content: $(tr '\n' ' ' < _site/sd/index.txt)"
+          # GitHub Pages caps a site at 1 GB; stay well under it.
+          mb=$(du -sm _site | cut -f1); echo "site size: ${mb} MB"
+          [ "$mb" -lt 900 ] || { echo "::error::Pages site ${mb} MB is too close to the 1 GB cap"; exit 1; }
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
