@@ -504,8 +504,7 @@ const gates = [
     // them; flash-wipe / launcher-install / no-card / legacy-plaintext-card recovery still work; an
     // allocation failure at every malloc of a save never leaks the full text onto the card; a deliberately
     // OPEN hotspot is never re-minted to a password. Plus a static drift guard on the persisted members.
-    ok: (code) => code === 0, summary: (o) => (o.match(/setup-store: d+ passed[^
-]*/) || [lastLine(o)])[0].trim() },
+    ok: (code) => code === 0, summary: (o) => (o.match(/setup-store: \d+ passed[^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'update-policy (release)', cmd: 'node', args: ['tools/anima-host/update-check.mjs'],
     // The native release-update decision core (firmware/components/nucleo_app/update_policy.c), host-
     // compiled with MinGW — the SAME C that runs on the device. Proves semver-triplet parse/compare
