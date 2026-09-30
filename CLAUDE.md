@@ -25,6 +25,13 @@ tools/anima-host/  Host gates — compile the REAL firmware C and run it on the 
 ```
 Start every orientation from **`README.md`** (full docs index) and the relevant
 `docs/*.md`. `docs/` is the source of truth; prefer reading it over re-deriving.
+ANIMA today (modes, answer order, web profile, local models, agent guards): **`docs/anima-engines.md`**.
+
+### Context hygiene (long sessions burn tokens)
+- Many docs are 25–47 KB: `grep -n '^#'` a doc first and read only the section you need (Read offset/limit).
+- `docs/archive/` is history — never read it for how-to.
+- Prefer text over screenshots when verifying (read_page / get_page_text / curl); pipe long logs through `tail`/`grep`.
+- At a stable point (work committed, tests green) prefer a fresh session: record status/next steps in memory, not in chat.
 
 ## Default dev loop — host first, flash last
 Don't iterate by flashing. The host harness compiles the real ANIMA C and runs it on the PC:

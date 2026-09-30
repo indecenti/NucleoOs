@@ -44,6 +44,7 @@ ANIMA is NucleoOS's offline natural-language assistant (retrieval + reasoning in
 
 | Doc | What you get |
 |---|---|
+| [anima-engines.md](anima-engines.md) | **Start here for ANIMA today**: the two modes, the real answer order, the Cardputer web profile, local models on the PC, agent guards. *(current, short)* |
 | [anima.md](anima.md) | The engine overview and where each part runs. *(aspirational design — for what actually runs, read `anima-cortex.md`)* |
 | [anima-cortex.md](anima-cortex.md) | **Ground truth**: the cascade the firmware actually runs today, and what is built vs deferred. |
 | [anima-native.md](anima-native.md) | The native on-device C app (`app_anima.cpp`) — lifecycle, RAM budget, invariants. The definitive start for native ANIMA work. |
@@ -105,9 +106,9 @@ Point-in-time records — useful for context and decisions already made, not cur
 
 | Doc | What you get |
 |---|---|
-| [original-plan.md](original-plan.md) | The original execution plan NucleoOS started from — v1 core vs. phased innovation roadmap. *(historical)* |
-| [maintenance-2026-06.md](maintenance-2026-06.md) | June 2026 hardening pass — dead-code removal, RAM/fragmentation and concurrency fixes. *(historical)* |
-| [maintenance-2026-08.md](maintenance-2026-08.md) | August 2026 pass — making the test harness portable off-Windows and hunting real correctness bugs. *(historical)* |
+| [original-plan.md](archive/original-plan.md) | The original execution plan NucleoOS started from — v1 core vs. phased innovation roadmap. *(historical)* |
+| [maintenance-2026-06.md](archive/maintenance-2026-06.md) | June 2026 hardening pass — dead-code removal, RAM/fragmentation and concurrency fixes. *(historical)* |
+| [maintenance-2026-08.md](archive/maintenance-2026-08.md) | August 2026 pass — making the test harness portable off-Windows and hunting real correctness bugs. *(historical)* |
 | [maintenance-2026-09.md](maintenance-2026-09.md) | September 2026 web-OS consolidation — the browser E2E suite and the fixes it found. *(historical)* |
 | [shell-cache-log.md](shell-cache-log.md) | The service-worker cache-version changelog for `web/shell/sw.js` (why each roll happened). |
 | [roadmap.md](roadmap.md) | The honest overall state — what a real OS needs, what exists vs is still designed. *(roadmap)* |
