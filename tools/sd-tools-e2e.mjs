@@ -131,7 +131,7 @@ async function withSimulator(card, fn, extraEnv = {}) {
 
 function run(label, cmd, args) {
   const r = spawnSync(cmd, args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 << 20 });
-  if (r.status !== 0 && !(r.status === 1 && /sd-net-sync/.test(args.join(' ')))) {
+  if (r.status !== 0) {
     console.log(`  FAIL ${label}: exit ${r.status}\n${(r.stdout || '').slice(-1500)}${(r.stderr || '').slice(-1500)}`); failures++; return false;
   }
   return r;
