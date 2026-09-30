@@ -107,6 +107,23 @@ static void ip_save(const char *ip)
     nvs_close(h);
 }
 
+// Settings ▸ Factory reset: forget the server address and its PIN (the whole "keydeck" NVS namespace).
+// true when nothing is left (a never-paired device included).
+extern "C" bool nucleo_keydeck_forget(void)
+{
+    s_saved_ip[0] = '\0'; s_pin[0] = '\0';
+    nvs_handle_t h;
+    esp_err_t e = nvs_open("keydeck", NVS_READONLY, &h);   // probe: no namespace = nothing saved
+    if (e == ESP_ERR_NVS_NOT_FOUND) return true;
+    if (e != ESP_OK) return false;
+    nvs_close(h);
+    if (nvs_open("keydeck", NVS_READWRITE, &h) != ESP_OK) return false;
+    e = nvs_erase_all(h);
+    if (e == ESP_OK) e = nvs_commit(h);
+    nvs_close(h);
+    return e == ESP_OK;
+}
+
 // ---- socket lifecycle --------------------------------------------------------------------
 static void sock_close(void)
 {

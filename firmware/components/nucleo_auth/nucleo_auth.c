@@ -4,13 +4,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>            // time() — wall clock for the sliding session idle-TTL
+#include <errno.h>
+#include <time.h>           // time() — wall clock for the sliding session idle-TTL
 #include "esp_log.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "cJSON.h"
 #include "nvs.h"             // NVS fallback tier for auth.json (survives a /cfg-less launcher install)
 #include "lwip/sockets.h"   // getpeername / sockaddr_in — per-source-IP pairing lockout
+#include <stdatomic.h>       // factory-reset seal vs an in-flight save_auth()
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"   // vTaskDelay while a racing save drains
 
 static const char *TAG = "auth";
 
@@ -83,7 +87,22 @@ static char *auth_nvs_read(void)   // malloc'd (caller frees) or NULL
     return b;
 }
 
+// Factory-reset latch (nucleo_auth_factory_reset). Once sealed, save_auth() never writes again this boot,
+// so a pairing or a session refresh racing the reset can't re-create auth.json / the NVS copy behind it.
+// A save announces itself (s_saving++) BEFORE it reads the seal; the reset raises the seal BEFORE it reads
+// s_saving — with sequentially-consistent atomics one side always sees the other (same as setup_store.c).
+static atomic_bool s_sealed;
+static atomic_int  s_saving;
+
+static void save_auth_now(void);
 static void save_auth(void)
+{
+    atomic_fetch_add(&s_saving, 1);
+    if (!atomic_load(&s_sealed)) save_auth_now();
+    atomic_fetch_sub(&s_saving, 1);
+}
+
+static void save_auth_now(void)
 {
     cJSON *root = cJSON_CreateObject();
     if (s_pin[0]) cJSON_AddStringToObject(root, "pin", s_pin);   // stable PIN survives reboots
@@ -327,6 +346,31 @@ int nucleo_auth_revoke(const char *keep_token)
 }
 
 int nucleo_auth_session_count(void) { return s_token_count; }
+
+bool nucleo_auth_factory_reset(void)
+{
+    atomic_store(&s_sealed, true);
+    for (int i = 0; i < 200 && atomic_load(&s_saving) > 0; i++) vTaskDelay(pdMS_TO_TICKS(10));   // let a racing save land first
+    bool ok = (atomic_load(&s_saving) == 0);
+    if (!ok) ESP_LOGE(TAG, "factory reset: a save is still in flight — it may land after the erase");
+    // RAM first: every session is dead and pairing is refused (no PIN matches "") from this instant on.
+    memset(s_tokens, 0, sizeof(s_tokens));
+    memset(s_tok_seen, 0, sizeof(s_tok_seen));
+    s_token_count = 0; s_token_head = 0; s_pin[0] = '\0';
+    remove(AUTH_JSON); remove(AUTH_JSON ".tmp");
+    struct stat st;                                          // gone only if the FS says so (not EMFILE / I/O error)
+    if (!(stat(AUTH_JSON, &st) != 0 && (errno == ENOENT || errno == ENOTDIR))) ok = false;
+    nvs_handle_t h;
+    esp_err_t e = nvs_open(AUTH_NVS_NS, NVS_READONLY, &h);   // probe: no namespace = nothing stored
+    if (e == ESP_OK) {
+        nvs_close(h);
+        e = nvs_open(AUTH_NVS_NS, NVS_READWRITE, &h);
+        if (e == ESP_OK) { e = nvs_erase_all(h); if (e == ESP_OK) e = nvs_commit(h); nvs_close(h); }
+    } else if (e == ESP_ERR_NVS_NOT_FOUND) e = ESP_OK;
+    if (e != ESP_OK) ok = false;
+    ESP_LOGW(TAG, "factory reset: pairing PIN and all sessions erased%s", ok ? "" : " (INCOMPLETE)");
+    return ok;
+}
 
 // ---- handlers ----
 static esp_err_t status_get(httpd_req_t *req)

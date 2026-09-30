@@ -1738,6 +1738,21 @@
       "anima": false
     },
     {
+      "id": "gate-setup-store-reset",
+      "label": "setup-store (reset)",
+      "category": "connect-transfer",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/setup-store-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "gate-update-policy-release",
       "label": "update-policy (release)",
       "category": "connect-transfer",

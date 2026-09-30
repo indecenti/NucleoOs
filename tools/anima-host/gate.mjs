@@ -494,6 +494,13 @@ const gates = [
     // a failed cycle, and a failed one-shot join never arms the retry loop. 160 assertions incl. a full
     // replay of the issue story and uint32 ms wraparound. Pure C, no device.
     ok: (code) => code === 0, summary: (o) => (o.match(/wifi-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'setup-store (reset)', cmd: 'node', args: ['tools/anima-host/setup-store-check.mjs'],
+    // The three-tier config store behind setup.json + networks.json (firmware/components/nucleo_setup/
+    // setup_store.c), host-compiled with MinGW against an in-memory NVS: fan-out to /cfg + NVS + SD with
+    // independent tiers, /cfg -> NVS -> SD read order, and the Settings ▸ Reset contract — erase EVERY
+    // tier (the old SD-only wipe left /cfg/NVS answering, so the wizard never re-ran), report an
+    // uninitialised NVS as a failure, and a sealed store refuses the supervisor's racing re-save. Pure C.
+    ok: (code) => code === 0, summary: (o) => (o.match(/setup-store: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'update-policy (release)', cmd: 'node', args: ['tools/anima-host/update-check.mjs'],
     // The native release-update decision core (firmware/components/nucleo_app/update_policy.c), host-
     // compiled with MinGW — the SAME C that runs on the device. Proves semver-triplet parse/compare

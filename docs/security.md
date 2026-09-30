@@ -80,8 +80,14 @@ money/heap, or reveals more than "a NucleoOS device exists here", it is paired-o
 - **Revoke** (`POST /api/unpair`, paired-only): the leaked-cookie recovery. `{"scope":"others"}`
   (default) logs out every *other* client and keeps the caller in; `{"scope":"all"}` wipes every
   session so everyone re-pairs with the PIN. `GET /api/auth/status` reports the live `sessions` count
-  so a UI can surface "N active sessions" + a revoke button. (Clearing `auth.json` on the SD-less
-  config tier is the physical-access equivalent.)
+  so a UI can surface "N active sessions" + a revoke button. The physical-access equivalents are
+  native: Settings ▸ Device ▸ **Web sessions** revokes every session (the PIN stays), and Settings ▸
+  Reset ▸ **Factory reset** calls `nucleo_auth_factory_reset()`, which drops every session and the PIN
+  in RAM at once, deletes `/cfg/config/auth.json` and the `nucleoauth` NVS copy, and seals the store so
+  a pairing racing the reset can't write it back; the reboot that follows mints a fresh PIN. (Deleting
+  `auth.json` by hand is *not* enough — the NVS tier restores it on the next boot.) **Reset settings**
+  deliberately keeps pairing: it erases network config, prefs and logs, not who may connect — see
+  [setup-wizard.md § Reset](setup-wizard.md#reset).
 - **Brute-force guard**: **per source-IP**, not global (a global counter let one hostile client
   lock out pairing for everyone — a trivial remote DoS). After 5 wrong PINs from an IP the device
   refuses that IP with an **exponential backoff** (30 s, 60 s, 120 s … capped ~16 min;
@@ -118,8 +124,12 @@ static esp_err_t write_post(httpd_req_t *req) {
   unused/leaked-but-unreplayed sessions, and `POST /api/unpair` logs out other/all sessions on
   demand. The **web UI** ships too: Settings → Device → *Security & sessions* shows the live
   `sessions` count with "Revoke other sessions" / "Revoke all" buttons (and Ctrl+K palette actions).
-  Still open: a **native** "revoke all" menu item on the device screen — the highest-trust,
-  physical-access recovery for when every web session may be compromised.
+  The **native** recovery ships too, for when every web session may be compromised: Settings ▸
+  Device ▸ Web sessions (revoke all) and Settings ▸ Reset ▸ Factory reset (also replaces the PIN).
+- **Factory reset keeps the FIDO passkeys.** It erases pairing, Wi-Fi and hotspot credentials, SMTP
+  app passwords, the Key deck server PIN and `/cfg`, but not the passkeys (`fido` NVS): wiping them
+  locks the owner out of every account the key protects, so that stays a deliberate act in the
+  Passkeys app (`POST /api/fido/reset`). Only a flash erase clears everything at once.
 - **OTA accepts any `0xE9` image.** `/api/ota` is paired-only, but it does not verify a signature —
   a paired client can flash arbitrary firmware. Secure Boot v2 + signed OTA is the fix; it is a
   flash-config decision (irreversible eFuse) and is deliberately not enabled yet.

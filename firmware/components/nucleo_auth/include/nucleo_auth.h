@@ -45,6 +45,11 @@ int nucleo_auth_revoke(const char *keep_token);
 // Number of live paired sessions (for the UI's "N active sessions" + revoke button).
 int nucleo_auth_session_count(void);
 
+// Settings ▸ Factory reset: revoke pairing for good. Drops every session and the PIN in RAM at once, then
+// deletes /cfg/config/auth.json and the NVS copy, and seals the store (no later save lands this boot).
+// On true the caller esp_restart()s and the next boot mints a fresh PIN; false = a tier survived (retry).
+bool nucleo_auth_factory_reset(void);
+
 // Drop-in guard for a protected handler: 401s and returns when unpaired.
 #define NUCLEO_AUTH_GUARD(req) do { if (!nucleo_auth_request_ok(req)) return nucleo_auth_reject(req); } while (0)
 

@@ -41,6 +41,7 @@ int         nucleo_setup_scan_secure(int i) { return i >= 0 && i < SCAN_N ? SCAN
 const char *nucleo_setup_scan_auth_label(int i) { return i >= 0 && i < SCAN_N ? SCAN[i].auth : ""; }
 bool        nucleo_setup_join(const char *, const char *) { return true; }
 void        nucleo_setup_forget(void) { s_saved_n = 0; }
+bool        nucleo_setup_factory_reset(void) { s_saved_n = 0; snprintf(s_devname, sizeof s_devname, "nucleo-01"); return true; }
 bool        nucleo_setup_net_is_known(const char *ssid) { for (int i = 0; i < s_saved_n; i++) if (!strcmp(s_saved[i], ssid)) return true; return false; }
 bool        nucleo_setup_net_has_password(const char *ssid) { return nucleo_setup_net_is_known(ssid); }
 void        nucleo_setup_forget_ssid(const char *ssid)
@@ -59,6 +60,9 @@ void        nucleo_setup_set_ap_ssid(const char *s) { snprintf(s_ap_ssid, sizeof
 void        nucleo_setup_set_ap_pass(const char *p) { snprintf(s_ap_pass, sizeof s_ap_pass, "%s", p); }
 int         nucleo_auth_revoke(const char *) { int n = s_sessions; s_sessions = 0; return n; }
 int         nucleo_auth_session_count(void) { return s_sessions; }
+bool        nucleo_auth_factory_reset(void) { s_sessions = 0; return true; }
+bool        nucleo_mailcfg_erase_all(void) { return true; }
+bool        nucleo_keydeck_forget(void) { return true; }
 bool        nucleo_remote_enabled(void) { return s_remote; }
 void        nucleo_remote_set_enabled(bool on) { s_remote = on; }
 bool        nucleo_tts_available(void) { return true; }
