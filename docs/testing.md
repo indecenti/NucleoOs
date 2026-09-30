@@ -123,6 +123,7 @@ the user — or another firmware on a shared M5Launcher card — keeps there, it
 | Command | What it proves |
 |---|---|
 | `node tools/sd-tools-e2e.mjs` (`npm run sdtools:e2e`) | runs `sd_deploy.py update`, `push-ota --sync`, `sd-net-sync --force` (against the simulator), and on Windows `sd-sync.ps1` and `deploy.ps1 -To` (via `-TestTarget`, which only accepts a folder under `%TEMP%`) FOR REAL on fake cards with 34 user/state/foreign sentinels, empty user folders and an Agent app — twice each — plus `deploy.ps1 -DryRun` writing zero bytes. Local gate (copies a few hundred MB per tool); `SDTOOLS_ONLY=<name>` runs one tool. |
+| `node --test tools/sd-policy.test.mjs` | ONE device/user-state table, `tools/lib/sd-policy.json`, read by every SD tool: the JS, Python and PowerShell readers agree on every row of `tools/lib/sd-policy-vectors.json`, and no tool carries a private list any more |
 | `node --test tools/registry-merge.test.mjs` | the apps.json merge rule, JS and its Python twin byte-identical on the shared `tools/lib/registry-merge-vectors.json` |
 | `node --test tools/sd-payload.test.mjs` | the release SD payload (`sd_deploy.py release`) and the shared write allow-list vectors |
 | `node tools/anima-host/registry-check.mjs` | the firmware registry limits and byte-identical `/api/apps` fields |

@@ -53,42 +53,12 @@ function Is-Voice($rel) {
     return ($rel -like 'data/tts/*') -or ($rel -like 'apps/anima/www/vosk/models/*')
 }
 
-# Device-state files: provisioned by the USER at runtime (API keys, learned cards, settings,
-# telemetry). The release system must NEVER stage, overwrite, or mirror-delete these — a key on
-# the SD always wins over anything in the repo. Mirrors the protection in sd-sync.ps1 / sd_deploy.py.
-# Match is against the forward-slash SD-relative path.
-$STATE = @(
-    'data/anima/teacher.json',          # online provider config + API key
-    # learned/ is NOT excluded wholesale: facets.<lang>.jsonl are firmware-hash-pinned READ-ONLY seeds and
-    # MUST ship (byte-match VKL_FACETS_* in the .bin). Protect only the DEVICE-WRITTEN files here by name:
-    'data/anima/learned/it.jsonl', 'data/anima/learned/en.jsonl',   # online answer cache
-    'data/anima/learned/it.vec', 'data/anima/learned/en.vec',       # cache embeddings
-    'data/anima/learned/mind.*.jsonl',                              # runtime KGE triples (mind_put)
-    'data/anima/learned/knowledge.ledger.jsonl', 'data/anima/learned/evo/*',   # evolution ledger
-    'data/anima/telemetry.ndjson', 'data/anima/session.txt', 'data/anima/sessions.json',
-    'data/anima/workspace.json', 'data/anima/*.httptrace',
-    'system/config/*', 'system/keys/*', 'system/sessions/*',   # runtime user settings + pairing key + sessions
-    'system/log/*', 'system/logs/*',                            # device logs
-    'config/*', 'backups/*', 'journal/*',                       # runtime config / backups / journal
-    'auth.json', 'volume.json', 'settings.json', '*.vec'        # settings.json = root-level only (system/registry/settings.json is a system default)
-)
-function Is-State($rel) {
-    foreach ($p in $STATE) { if ($rel -like $p) { return $true } }
-    # ANIMA subtree is ALLOWLISTED like the firmware (nucleo_fs_is_protected): the ONLY things deploy
-    # ships under data/anima are the system knowledge (akb5 shards; anima-*/dict-*/commands* files),
-    # the firmware-pinned facets seeds, and the create-only workspace default. EVERYTHING ELSE there
-    # — teacher.json (API key), learned caches, profile, presets, sessions, *.vec — is user state and
-    # is never staged, overwritten, nor mirror-deleted. New ANIMA state files are protected for free.
-    if ($rel -like 'data/anima/*') {
-        if ($rel -like 'data/anima/akb5/*') { return $false }                                          # shards: ship
-        $b = Split-Path $rel -Leaf
-        if ($b -like 'facets.*.jsonl') { return $false }                                               # seeds: ship
-        if ($b -like 'anima-*' -or $b -like 'dict-*' -or $b -like 'commands*') { return $false }       # encoder/index/dict/commands: ship
-        if ($rel -eq 'data/anima/workspace.json') { return $false }                                    # default: create-only
-        return $true                                                                                   # else: user state
-    }
-    return $false
-}
+# Device / user state (API keys, learned cards, settings, keys, sessions, the user's documents...) is NEVER
+# staged, pushed, overwritten or mirror-deleted: a key on the SD always wins over anything in the repo. The
+# table is tools/lib/sd-policy.json, shared with sd-sync.ps1, push-ota, sd-net-sync and sd_deploy.py
+# (tools/lib/sd-policy.ps1 reads it; tools/sd-policy.test.mjs holds every reader to the same vectors).
+. (Join-Path $PSScriptRoot 'lib/sd-policy.ps1')
+function Is-State($rel) { return (Is-DeviceState $rel) }
 
 function Load-Manifest($root) {
     $p = Join-Path $root $MANIFEST; $h = @{}

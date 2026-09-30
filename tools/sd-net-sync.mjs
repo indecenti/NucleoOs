@@ -20,6 +20,7 @@ import { join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { REGISTRY_REL, mergeRegistryText } from './lib/registry-merge.mjs';
 import { staleTwins } from './lib/twin-scope.mjs';
+import { isDeviceState } from './lib/sd-policy.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, def) => { const i = argv.indexOf('--' + name); return i >= 0 ? (argv[i + 1] ?? true) : def; };
@@ -36,21 +37,11 @@ const BASE    = `http://${HOST}`;
 const here = fileURLToPath(new URL('.', import.meta.url));
 const SRC  = join(here, '..', 'deploy', 'sd');
 
-// Device-state that must never be clobbered (same set as sd-sync.ps1). The payload shouldn't
-// contain these, but enforce defensively so a stray file can't overwrite a key or learned card.
-const PROT_FILES = new Set(['teacher.json', 'telemetry.ndjson', 'session.txt', 'sessions.json', '.httptrace',
-  'auth.json', 'volume.json', 'settings.json', 'workspace.json']);
-const PROT_EXT = ['.vec', '.httptrace'];
-const PROT_DIRS = ['data/anima/learned', 'system/config', 'system/keys', 'system/sessions',
-  'system/log', 'system/logs', 'config', 'backups', 'journal'];
-
-const isProtected = (rel) => {
-  const base = rel.split('/').pop();
-  if (PROT_FILES.has(base)) return true;
-  if (PROT_EXT.some((e) => base.endsWith(e))) return true;
-  if (PROT_DIRS.some((d) => rel === d || rel.startsWith(d + '/'))) return true;
-  return false;
-};
+// Device / user state (API key, learned caches, settings, keys, the user's documents...) is never uploaded:
+// the payload shouldn't contain it, but a stray file must not overwrite a key or a learned card. One table
+// for every SD tool: tools/lib/sd-policy.json. (The facets seeds and system/registry/settings.json are
+// payload and DO ship — the old basename list here blocked both.)
+const isProtected = (rel) => isDeviceState(rel) || rel === '.deploy-manifest.json';   // the staging manifest is not payload
 
 // ---- HTTP helpers -----------------------------------------------------------
 let COOKIE = '';

@@ -64,6 +64,9 @@ const EMPTY_DIRS = ['data/Music', 'data/Pictures', 'BruceRF/empty'];
 // A stale .gz twin of a file the payload ships WITHOUT a twin: the device would serve it instead of the file
 // (webfs serves "<file>.gz" first). Every tool must leave that file served correctly: twin gone or byte-exact.
 const STALE_TWIN_OF = 'apps/calculator/www/i18n.en.json';
+// System files an old list used to block by NAME (sd-sync's basename /XF, sd-net-sync's whole learned/ dir):
+// removed from the card first, every tool must deliver them.
+const MUST_DELIVER = ['system/registry/settings.json', 'data/anima/learned/facets.it.jsonl'];
 const AGENT = { id: 'myapp', version: '0.1.0', path: '/apps/myapp', enabled: true, created_by: 'agent', permissions: ['storage.app'] };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -77,6 +80,7 @@ function makeCard(dir, payload) {
   if (!existsSync(join(payload, STALE_TWIN_OF)) || existsSync(join(payload, STALE_TWIN_OF + '.gz')))
     throw new Error(`fixture: ${STALE_TWIN_OF} must ship without a twin`);
   writeFileSync(join(dir, STALE_TWIN_OF + '.gz'), gzipSync('{"stale":"old code"}'));
+  for (const rel of MUST_DELIVER) rmSync(join(dir, rel), { force: true });
   const reg = join(dir, 'system/registry/apps.json');
   const doc = JSON.parse(readFileSync(reg, 'utf8'));
   doc.installed.push(AGENT);
@@ -98,6 +102,7 @@ function check(label, dir) {
   else if (mine && JSON.stringify(mine) !== JSON.stringify(AGENT)) bad.push('Agent app entry altered');
   if (reg && reg.installed.length < 40) bad.push(`registry lost the bundled apps (${reg.installed.length})`);
   if (!existsSync(join(dir, 'www/shell/index.html'))) bad.push('payload missing: www/shell/index.html');
+  for (const rel of MUST_DELIVER) if (!existsSync(join(dir, rel))) bad.push(`not delivered: ${rel}`);
   const tw = join(dir, STALE_TWIN_OF + '.gz');
   if (existsSync(tw) && !gunzipSync(readFileSync(tw)).equals(readFileSync(join(dir, STALE_TWIN_OF)))) bad.push(`stale twin still shadows ${STALE_TWIN_OF}`);
   console.log(`  ${bad.length ? 'FAIL' : 'ok  '} ${label}${bad.length ? '\n        ' + bad.join('\n        ') : ''}`);

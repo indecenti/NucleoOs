@@ -40,6 +40,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative, posix, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { REGISTRY_REL, mergeRegistryText } from './lib/registry-merge.mjs';
+import { isDeviceState } from './lib/sd-policy.mjs';
 
 const REPO = join(fileURLToPath(import.meta.url), '..', '..');
 const SD = join(REPO, 'deploy', 'sd');
@@ -47,43 +48,16 @@ const SD = join(REPO, 'deploy', 'sd');
 // Web-layer subtrees that are safe to mirror over the air.
 const DEFAULT_TREES = ['www', 'apps', 'system/registry'];
 
-// Paths the sync may CREATE if missing but NEVER overwrites — device-owned defaults.
-// data/anima/workspace.json ships a default ({"root":"","recents":[]}) so first run has no 404, but
-// it becomes user state the moment a workspace is opened — create-only so a later release can't reset it.
-const PROTECTED = ['system/config', 'data/anima/workspace.json'];
+// Paths the sync may CREATE if missing but NEVER overwrites. None today: the old entries (system/config,
+// data/anima/workspace.json) are device state in tools/lib/sd-policy.json, so they are never pushed at all.
+const PROTECTED = [];
 // Heavy media: synced only with --include-media (large WiFi uploads are flaky; copy via the SD).
 const MEDIA = ['data/ROMs', 'data/DOS', 'data/Music', 'data/Videos'];
 
-// Device STATE — provisioned by the USER at runtime (API key, learned cards, online cache, KGE
-// triples, evolution ledger, profile, presets, sessions, telemetry, vectors, settings, keys). The
-// release must NEVER push NOR overwrite these: whatever is on the device always wins. Checked
-// INDEPENDENTLY of the staging manifest, so even a polluted manifest (a stray teacher.json or
-// learned/it.jsonl that shouldn't have been staged) can never clobber the device. Mirrors
-// deploy.ps1 Is-State, sd_deploy.py DEVICE_STATE, and firmware nucleo_fs_is_protected.
-//
-// data/anima is ALLOWLISTED like the firmware: the ONLY things deploy ships there are the system
-// knowledge (akb5 shards; anima-*/dict-*/commands* files), the firmware-hash-pinned facets seeds
-// (byte-match VKL_FACETS_* in the .bin), and the create-only workspace default. EVERYTHING ELSE
-// under data/anima — teacher.json (API key), learned caches, profile, presets, sessions, *.vec, …
-// — is user state and is never touched. New ANIMA state files are protected automatically.
-const STATE_EXACT = new Set(['auth.json', 'volume.json', 'settings.json']);
-const STATE_DIRS = ['system/config', 'system/keys', 'system/sessions', 'system/log', 'system/logs',
-                    'config', 'backups', 'journal'];
-function isDeviceState(rel) {
-  rel = rel.replace(/\\/g, '/');
-  const base = rel.split('/').pop();
-  if (rel.startsWith('data/anima/')) {                                   // allowlist the system brain; the rest is state
-    if (rel.startsWith('data/anima/akb5/')) return false;                // knowledge shards: ship
-    if (/^facets\.[a-z-]+\.jsonl$/i.test(base)) return false;            // firmware-pinned seeds: ship
-    if (/^(anima-|dict-|commands)/i.test(base)) return false;            // encoder/index/dict/command map: ship
-    if (rel === 'data/anima/workspace.json') return false;              // default workspace: create-only (PROTECTED)
-    return true;                                                         // teacher.json key, learned, profile, … : state
-  }
-  if (STATE_EXACT.has(rel)) return true;
-  if (STATE_DIRS.some((d) => rel === d || rel.startsWith(d + '/'))) return true;
-  if (/\.(vec|httptrace)$/i.test(base)) return true;
-  return false;
-}
+// Device / user STATE (API key, learned cards, caches, settings, keys, sessions, the user's documents...) is
+// NEVER pushed nor overwritten: whatever is on the device always wins. Checked INDEPENDENTLY of the staging
+// manifest, so a polluted staging tree can never clobber the device. One table for every SD tool:
+// tools/lib/sd-policy.json (isDeviceState in tools/lib/sd-policy.mjs, held to tools/lib/sd-policy-vectors.json).
 // Below this, a same-size file is content-verified (cheap read); above it we trust size (no download).
 const SMALL = 256 * 1024;
 
@@ -381,6 +355,7 @@ async function fillMissing(host, args) {
   for (const abs of files) {
     const rel = relative(SD, abs).split(/[\\/]/).join('/');
     if (isExcluded(rel)) { excluded++; continue; }
+    if (isDeviceState(rel)) { excluded++; continue; }   // device/user state: never created from staging either
     const devPath = '/' + rel, devDir = posix.dirname(devPath), name = posix.basename(devPath);
     const idx = await dirIndex(devDir);
     if (idx.kind === 'ok' && idx.names.has(name)) { present++; continue; }                 // already there → never overwrite
@@ -554,6 +529,7 @@ async function main() {
   let written = 0, skipped = 0, failed = 0, bytes = 0;
   for (const abs of files) {
     const rel = relative(SD, abs).split(/[\\/]/).join('/');     // POSIX for the device
+    if (isDeviceState(rel)) { skipped++; continue; }           // device/user state: never pushed (sd-policy.json)
     const devPath = '/' + rel;
     let buf = await readFile(abs);
     if (rel === REGISTRY_REL) {                                            // merge, never overwrite
