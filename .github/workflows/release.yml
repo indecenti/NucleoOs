@@ -61,7 +61,9 @@ jobs:
       - name: Build firmware (ESP-IDF v5.4, esp32s3)
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.4
+          # Exact patch release, matching firmware/dependencies.lock (idf 5.4.4): the managed components resolve
+          # to the locked versions only on the IDF they were locked with — the release must be the build that was tested.
+          esp_idf_version: v5.4.4
           target: esp32s3
           path: firmware
 
