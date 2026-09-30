@@ -16,7 +16,7 @@ This needs a real device. /api/fs is gated, so it pairs first (POST /api/pair wi
 sends the nucleo_session cookie). It SKIPs cleanly (exit 0) when the device is unreachable, so it
 never falses-red in an offline CI run.
 
-  python tools/test_api_stress.py --url http://192.168.0.166 [--pin 689614] [--workers 2] [--files 50]
+  python tools/test_api_stress.py --url http://192.168.0.166 [--pin 123456] [--workers 2] [--files 50]
 
 Exit 0 = pass/skip, 1 = fail.
 """
@@ -205,12 +205,25 @@ def api_request_exists(base_url: str, path: str) -> bool:
         return False
 
 
+def _local_pin() -> str:
+    """The pairing PIN is never hardcoded (public repo): NUCLEO_PIN, else tools/release.local.json."""
+    import os
+    if os.environ.get("NUCLEO_PIN"):
+        return os.environ["NUCLEO_PIN"]
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "release.local.json")
+    try:
+        with open(p, encoding="utf-8-sig") as f:
+            return str(json.load(f).get("pin", ""))
+    except Exception:
+        return ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="NucleoOS FS stress test")
     parser.add_argument("--url", default="http://192.168.0.166",
                         help="URL base del device (es. http://192.168.0.166)")
-    parser.add_argument("--pin", default="689614",
-                        help="PIN di pairing (default 689614). Vuoto per saltare il pairing.")
+    parser.add_argument("--pin", default=_local_pin(),
+                        help="PIN di pairing (default: NUCLEO_PIN o tools/release.local.json). Vuoto per saltare il pairing.")
     parser.add_argument("--workers", type=int, default=2,
                         help="Scritture concorrenti (default 2; tienilo basso sul device single-task)")
     parser.add_argument("--files", type=int, default=50, help="Numero di file (default 50)")

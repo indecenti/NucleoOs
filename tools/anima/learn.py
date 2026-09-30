@@ -23,7 +23,7 @@ keep the good phrasings, run build_akb2 + eval. eval_ood.jsonl stays untouched (
 
 Usage:
   python tools/anima/learn.py --telemetry path/to/telemetry.ndjson
-  python tools/anima/learn.py --host 192.168.0.166 --pin 689614   # pull it off the device first
+  python tools/anima/learn.py --host 192.168.0.166 --pin 123456   # pull it off the device first
 """
 import os, sys, json, argparse, urllib.request
 import numpy as np

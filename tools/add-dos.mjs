@@ -17,7 +17,7 @@
 //                          [--machine svga_s3] [--cycles auto] [--no-sound] [--no-stage]
 //   <source>   a folder of DOS files, or a single .exe/.com/.bat
 // Examples:
-//   node tools/add-dos.mjs ./games/keen           --host http://192.168.0.166 --pin 095323
+//   node tools/add-dos.mjs ./games/keen           --host http://192.168.0.166 --pin 123456
 //   node tools/add-dos.mjs ./PRINCE.EXE --name prince --cycles "fixed 20000"
 import { readdirSync, statSync, readFileSync, mkdirSync } from 'node:fs';
 import { join, relative, sep, basename, extname, dirname } from 'node:path';

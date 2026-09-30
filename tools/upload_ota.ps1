@@ -13,7 +13,7 @@ param (
 )
 
 # Esempio d'uso: 
-# .\upload_ota.ps1 -IP 192.168.1.50 -PIN 689614 -FilePath ..\web\shell\wallpaper.png -DestinationPath /www/shell/wallpaper.png
+# .\upload_ota.ps1 -IP 192.168.1.50 -PIN 123456 -FilePath ..\web\shell\wallpaper.png -DestinationPath /www/shell/wallpaper.png
 
 $pairUrl = "http://$IP/api/pair"
 $uploadUrl = "http://$IP/api/fs/write?path=$DestinationPath"

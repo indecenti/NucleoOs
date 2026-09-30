@@ -1,9 +1,11 @@
 // Auto-diagnostic: waits for the device on WiFi (after USB unplug), forces the Wikipedia tier
 // (Grok off), triggers a query that hangs, and dumps the http phase trace read back over WiFi.
-const H = 'http://192.168.0.166';
+import { deviceTarget } from '../lib/device-target.mjs';
+const T = deviceTarget();   // host/PIN from NUCLEO_HOST/NUCLEO_PIN or tools/release.local.json — never hardcoded
+const H = 'http://' + (T.host || '192.168.0.166').replace(/^https?:\/\//, '');
 const s = ms => new Promise(r => setTimeout(r, ms));
 async function pair() {
-  const r = await fetch(H + '/api/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: '689614' }) });
+  const r = await fetch(H + '/api/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: T.pin }) });
   const c = r.headers.get('set-cookie');
   return c ? c.split(';')[0] : '';
 }

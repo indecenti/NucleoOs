@@ -7,7 +7,7 @@
 //   node tools/ir-pack.mjs in.json out.bin
 //
 // Exports pack()/unpack() so the host gate (irpack:test) can round-trip without a device.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -185,7 +185,8 @@ function main(argv) {
   }
   for (const out of targets) {
     mkdirSync(dirname(out), { recursive: true });
-    writeFileSync(out, buf);
+    // only when the bytes changed: an unchanged pack must keep its mtime (staging-manifest stability)
+    if (!(existsSync(out) && readFileSync(out).equals(buf))) writeFileSync(out, buf);
   }
   const { remotes, tvpower } = unpack(buf);
   console.log(`ir-pack: ${remotes.length} remotes, ${tvpower.length} tv-power codes -> ${buf.length} bytes`);

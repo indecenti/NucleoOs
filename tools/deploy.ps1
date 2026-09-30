@@ -68,9 +68,19 @@ function Load-Manifest($root) {
 function Save-Manifest($root, $man) {
     if ($DryRun) { return }
     if (-not (Test-Path $root)) { New-Item -ItemType Directory -Force -Path $root | Out-Null }
-    ($man | ConvertTo-Json -Depth 4) | Out-File (Join-Path $root $MANIFEST) -Encoding utf8
+    # Only entries whose file is really there (a key for a vanished file made push-ota read a file that does
+    # not exist), sorted (stable diffs), UTF-8 WITHOUT a BOM and LF (Out-File -Encoding utf8 wrote a BOM that
+    # made every JSON.parse of this manifest fail).
+    $out = [ordered]@{}
+    [string[]]$keys = @($man.Keys)
+    [Array]::Sort($keys, [StringComparer]::Ordinal)                  # ordinal: identical on every machine/culture
+    foreach ($k in $keys) {
+        if (Test-Path -LiteralPath (Join-Path $root ($k -replace '/', '\')) -PathType Leaf) { $out[$k] = $man[$k] }
+    }
+    $json = ($out | ConvertTo-Json -Depth 4) -replace "`r`n", "`n"
+    [IO.File]::WriteAllText((Join-Path $root $MANIFEST), $json + "`n", (New-Object Text.UTF8Encoding $false))
 }
-function FileHash($path) { (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash }
+function FileHash($path) { (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant() }   # lowercase, like sha256sum / sd_deploy.py
 
 function Copy-IfChanged($src, $dst, $key, $man, $seen, $stat) {
     $seen[$key] = $true

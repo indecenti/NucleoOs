@@ -79,7 +79,11 @@ const apiStatus = { os: 'NucleoOS', version: FW_VERSION, uptime_s: 0, free_heap:
   min_free_heap: 17000, largest_free_block: 42000,
   storage: { mounted: true, fs: 'exFAT', total_bytes: 63864569856, free_bytes: 63800000000 },
   network: { mode: 'sta', ssid: 'home-wifi', ip: '192.168.1.42', time_synced: true }, apps: { installed: 9 },
-  ota: { running: 'factory', next: 'ota_0', state: 'valid', rollback_enabled: true },
+  // self_update/host mirror the firmware's guest mode (nucleo_httpd.c): SIM_GUEST=1 plays a device installed by
+  // M5Launcher — no self-OTA (/api/ota answers 409), no rollback.
+  ota: process.env.SIM_GUEST
+    ? { running: 'app1', next: 'app0', state: 'undefined', rollback_enabled: false, self_update: false, host: 'm5launcher' }
+    : { running: 'factory', next: 'ota_0', state: 'valid', rollback_enabled: true, self_update: true, host: 'standalone' },
   arbiter: { busy: false, job: '', held_ms: 0, waiters: 0, grants: 4, denials: 0, yields: 0, heap_free_min: 12800 } };
 
 // Deterministic nearby-AP list for /api/wifi/scan (also decides "secured" for the simulated join).
@@ -154,7 +158,7 @@ async function otaApi(req, res) {
   req.on('data', (c) => { bytes += c.length; });
   req.on('end', () => {
     if (bytes === 0) { send(res, 400, 'text/plain', 'empty image'); return; }
-    apiStatus.ota = { running: 'ota_0', next: 'ota_1', state: 'pending', rollback_enabled: true };  // as after a real OTA
+    apiStatus.ota = { running: 'ota_0', next: 'ota_1', state: 'pending', rollback_enabled: true, self_update: true, host: 'standalone' };  // as after a real OTA
     sendJSON(res, { ok: true, bytes, slot: 'ota_0', reboot: true });
   });
 }
@@ -1093,6 +1097,8 @@ const server = createServer(async (req, res) => {
     r.lang = (url.searchParams.get('lang') || '')[0] === 'e' ? 'en' : 'it';
     return sendJSON(res, r);
   }
+  if (path === '/api/ota' && req.method === 'POST' && process.env.SIM_GUEST)   // firmware ota_post under M5Launcher
+    return send(res, 409, 'application/json', JSON.stringify({ error: 'hosted', host: 'm5launcher', message: 'Installed by M5Launcher: update NucleoOS from the Launcher (OTA)' }));
   if (path === '/api/ota' && req.method === 'POST') return otaApi(req, res);
   if (path === '/api/reboot' && req.method === 'POST') { if (!isAuthed(req)) return reject401(res); return sendJSON(res, { ok: true, reboot: true }); }
   if (path === '/api/llm') return llmApi(req, res, url);   // same-origin LLM proxy (mirrors firmware /api/llm)

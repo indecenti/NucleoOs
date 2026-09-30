@@ -115,9 +115,9 @@ const tree = (dir) => {
   walk(dir); return out.sort().join('\n');
 };
 
-async function withSimulator(card, fn) {
+async function withSimulator(card, fn, extraEnv = {}) {
   const sim = spawn(process.execPath, ['tools/serve-shell.mjs'], {
-    cwd: ROOT, env: { ...process.env, NUCLEO_SD_ROOT: card, PORT: '0', SIM_REGISTRY_FROM_SD: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    cwd: ROOT, env: { ...process.env, NUCLEO_SD_ROOT: card, PORT: '0', SIM_REGISTRY_FROM_SD: '1', ...extraEnv }, stdio: ['ignore', 'pipe', 'pipe'] });
   try {
     const port = await new Promise((res, rej) => {
       const t = setTimeout(() => rej(new Error('simulator did not start')), 30000);
@@ -149,6 +149,18 @@ const TOOLS = [
   ...(WIN ? [
     { name: 'sd-sync.ps1', go: (card) => run('sd-sync.ps1', 'powershell', ['-ExecutionPolicy', 'Bypass', '-File', 'tools/sd-sync.ps1', '-Target', card]) },
     { name: 'deploy.ps1 -To', go: (card) => run('deploy.ps1 -To', 'powershell', ['-ExecutionPolicy', 'Bypass', '-File', 'tools/deploy.ps1', '-To', card, '-TestTarget']) },
+    // the one-command release (SD path) against the simulator: staging + push-ota --sync + /api/reboot
+    { name: 'release.ps1 -SdOnly', go: (card) => withSimulator(card, async (port, pin) =>
+        run('release.ps1 -SdOnly', 'powershell', ['-ExecutionPolicy', 'Bypass', '-File', 'tools/release.ps1',
+          '-DeviceHost', `localhost:${port}`, '-Pin', pin, '-SkipGate', '-SkipBuild', '-SdOnly'])) },
+    // a device installed by M5Launcher: the full release must NOT send firmware (it would be refused) and still
+    // sync the SD and reboot
+    { name: 'release.ps1 (M5Launcher guest)', go: (card) => withSimulator(card, async (port, pin) => {
+        const r = run('release.ps1 guest', 'powershell', ['-ExecutionPolicy', 'Bypass', '-File', 'tools/release.ps1',
+          '-DeviceHost', `localhost:${port}`, '-Pin', pin, '-SkipGate', '-SkipBuild']);
+        if (r && !/firmware NOT sent/.test(r.stdout + r.stderr)) { console.log('  FAIL release.ps1 guest: no "firmware NOT sent" notice'); failures++; }
+        if (r && /OTA firmware \(device reboots/.test(r.stdout)) { console.log('  FAIL release.ps1 guest: tried the firmware OTA'); failures++; }
+        return r; }, { SIM_GUEST: '1' }) },
   ] : []),
 ];
 
@@ -182,7 +194,7 @@ try {
       if (tree(card) !== before) { console.log('  FAIL deploy.ps1 -DryRun wrote to the card'); failures++; }
       else console.log('  ok   deploy.ps1 -To -DryRun: card byte-identical');
     }
-  } else console.log('  (PowerShell tools skipped: not Windows)');
+  } else if (!WIN) console.log('  (PowerShell tools skipped: not Windows)');
 } catch (e) { console.log(`sd-tools e2e: ERROR ${e.message}`); failures++; }
 finally {
   rmSync(work, { recursive: true, force: true });

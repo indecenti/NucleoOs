@@ -1,6 +1,8 @@
 async function main() {
-  const ip = '192.168.0.166';
-  const pin = '689614';
+  const { deviceTarget } = await import('./lib/device-target.mjs');
+  const t = deviceTarget();   // never a hardcoded PIN
+  const ip = t.host.replace(/^https?:\/\//, '');
+  const pin = t.pin;
   
   const pairRes = await fetch(`http://${ip}/api/pair`, {
     method: 'POST',

@@ -13,7 +13,7 @@
 // discount, sell 88%, refuel, jump cost) lives in app_constellations.cpp and is re-implemented in
 // apps/games/www/games/constellations-econ.js (logic, not data) — keep the two in sync by hand.
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -110,6 +110,9 @@ const out =
   '// Regenerate after changing goods/economies/systems/missions in the firmware header.\n' +
   `export const CONTENT = ${JSON.stringify(CONTENT, null, 2)};\n` +
   'export default CONTENT;\n';
-writeFileSync(OUT, out);
-console.log(`gen-constellations-content: wrote ${OUT}`);
+// Write only when the CONTENT changed (line endings aside: a CRLF checkout of the same text is current).
+// Rewriting an unchanged file bumped its mtime on every deploy.ps1 run -> staging-manifest churn + EOL git noise.
+const cur = existsSync(OUT) ? readFileSync(OUT, 'utf8').replace(/\r\n/g, '\n') : null;
+if (cur !== out) writeFileSync(OUT, out);
+console.log(`gen-constellations-content: ${cur === out ? 'unchanged' : 'wrote'} ${OUT}`);
 console.log(`  goods=${goods.length} econ=${econ.length} factions=${factions.length} (systems/missions are procedural)`);

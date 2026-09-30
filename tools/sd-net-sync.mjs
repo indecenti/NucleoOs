@@ -6,11 +6,11 @@
 // ONLY what's missing. Never deletes. Protects device-state files the same way sd-sync.ps1 does.
 //
 // Usage:
-//   node tools/sd-net-sync.mjs                         # host .166, only-missing, real upload
+//   node tools/sd-net-sync.mjs                         # host/PIN from tools/release.local.json, only-missing
 //   node tools/sd-net-sync.mjs --dry                   # preview: list what WOULD be sent
 //   node tools/sd-net-sync.mjs --force                 # re-upload everything (overwrite)
 //   node tools/sd-net-sync.mjs --size                  # also re-upload when device size differs
-//   node tools/sd-net-sync.mjs --host 192.168.0.166 --pin 689614
+//   node tools/sd-net-sync.mjs --host 192.168.0.166 --pin 123456
 //
 // Notes: /api/fs/write does NOT create parent dirs and /api/fs/mkdir is single-level, so we mkdir
 // every ancestor first. Uploads are strictly sequential (device heap is tiny) with light retries.
@@ -21,13 +21,16 @@ import { fileURLToPath } from 'node:url';
 import { REGISTRY_REL, mergeRegistryText } from './lib/registry-merge.mjs';
 import { staleTwins } from './lib/twin-scope.mjs';
 import { isDeviceState } from './lib/sd-policy.mjs';
+import { deviceTarget, TARGET_HELP } from './lib/device-target.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, def) => { const i = argv.indexOf('--' + name); return i >= 0 ? (argv[i + 1] ?? true) : def; };
 const flag = (name) => argv.includes('--' + name);
 
-const HOST    = String(opt('host', '192.168.0.166'));
-const PIN     = String(opt('pin', '689614'));
+const TARGET  = deviceTarget({ host: opt('host'), pin: opt('pin') });   // never hardcoded: the PIN is a secret
+const HOST    = TARGET.host.replace(/^https?:\/\//, '');
+const PIN     = TARGET.pin;
+if (!HOST || !PIN) { console.error(`sd-net-sync: no device host/PIN — ${TARGET_HELP}`); process.exit(2); }
 const FORCE   = flag('force');
 const BYSIZE  = flag('size');
 const DRY     = flag('dry');

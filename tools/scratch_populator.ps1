@@ -33,7 +33,10 @@ foreach ($num in $ips) {
 }
 
 if ($found) {
-    $cfg = @{ host = $found; pin = "689614" } | ConvertTo-Json
+    # Update the HOST only: keep the PIN already in release.local.json (or NUCLEO_PIN) — never a hardcoded PIN.
+    $pin = $env:NUCLEO_PIN
+    if (-not $pin -and (Test-Path "tools/release.local.json")) { $pin = (Get-Content -Raw "tools/release.local.json" | ConvertFrom-Json).pin }
+    $cfg = @{ host = $found; pin = "$pin" } | ConvertTo-Json
     $cfg | Out-File "tools\release.local.json" -Encoding utf8
     Write-Host "release.local.json aggiornato con successo a $found." -ForegroundColor Green
 } else {

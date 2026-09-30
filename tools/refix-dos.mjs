@@ -6,7 +6,7 @@
 // sections are copied verbatim from digger.jsdos (the known-good reference) with only the
 // [autoexec] swapped to mount C: and run that game's executable.
 //
-// Usage: node tools/refix-dos.mjs --host http://192.168.0.166 --pin 689614 [--ref digger.jsdos]
+// Usage: node tools/refix-dos.mjs --host http://192.168.0.166 --pin 123456 [--ref digger.jsdos]
 import zlib from 'node:zlib';
 import { writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

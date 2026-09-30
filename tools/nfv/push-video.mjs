@@ -5,7 +5,7 @@
 // .tmp file on the SD card and renames it atomically — no full-file RAM buffering — so big
 // clips are fine despite the 512 KB SRAM.
 //
-//   node tools/nfv/push-video.mjs --host http://192.168.0.166 --pin 689614 "tools/nfv/out/Clip.nfv"
+//   node tools/nfv/push-video.mjs --host http://192.168.0.166 --pin 123456 "tools/nfv/out/Clip.nfv"
 //
 // Pass the .nfv path(s); the sibling .mp3 (same basename) is uploaded automatically.
 import { readFile, stat } from 'node:fs/promises';
