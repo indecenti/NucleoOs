@@ -87,6 +87,35 @@ firmware route (`sim-endpoint-coverage.test.mjs` now checks ALL of `web-api-spec
   indirect questions ("do you know what X is") reduce to X, and the proper-noun guard no longer mistakes
   "piacerebbe"/"curioso" for a name. Gate: 0 fabrications across every hallucination suite.
 
+## Repository hygiene & professionalization (2026-09-30)
+
+A pass over everything *around* the code — what a first-time reader or a license reviewer sees.
+
+- **Untracked build output & scratch:** stopped tracking 214 regenerable/personal files — host-gate
+  `.exe`s under `build/` and `tools/*-host/build/`, `*.pyc`, 81 build/flash logs, `_scratch/`, the
+  Windows app's `dist/`, and deploy-time device-state backups. Files stay on disk; `.gitignore` was
+  rewritten in English and grouped by purpose so the tree only holds sources.
+- **English-only enforced:** the Italian root plan `piano-cardputer-os.md` became
+  [`docs/original-plan.md`](original-plan.md) (indexed under History); `OVERSIZED-ASSETS.md`,
+  `tools/nucleo-suite/README.md`, the `oversized-assets/` tooling, and the TTS/oversize comments in
+  `deploy.ps1` / `sd-sync.ps1` / `sd_deploy.py` were all translated.
+- **No more vendored third-party trees:** `reference/bruce` (AGPL-3.0, ~63 MB) and `reference/esp-claw`
+  (Apache-2.0, ~22 MB) were full upstream copies checked into a PolyForm-Noncommercial repo. Replaced
+  by [`reference/README.md`](../reference/README.md) (upstreams, licenses, clone commands); firmware
+  header comments now cite `upstream pr3y/Bruce`. Nothing built against them.
+- **Copyrighted media removed:** the *Wallace & Gromit* / *Screamers* `.nfv`/`.mp3` test clips under
+  `tools/nfv/out/` (and the SD `data/Videos/` copies) are no longer tracked; `*.nfv` is ignored.
+- **Oversized assets fetched on demand, not split into git:** the 1.4 GB of 90 MiB parts is gone from
+  the working tree. The Qwen GGUF (streamed from Hugging Face by the browser) and the regenerable
+  `teacher_*.npy` cache were dropped entirely; the two ~400 MiB TTS clip banks move to a GitHub Release.
+  [`oversized-assets/rejoin.mjs`](../oversized-assets/rejoin.mjs) now resolves each asset *on disk →
+  local parts → Release/CDN download*, SHA-256-verifying every result (`npm run assets`).
+- **Consistency:** `package.json` version aligned to the released `0.4.0`; stale memory path dropped
+  from `CLAUDE.md`.
+- **History rewrite (separate step):** the copyrighted media, the vendored `reference/` trees and the
+  dropped GGUF/teacher parts still exist in git history; a `git filter-branch` + force-push removes
+  them and shrinks the ~3 GB `.git`. The TTS parts are purged in a second pass once the Release exists.
+
 ## Backlog found by the audit (to fix, highest risk first)
 
 ### Data loss
