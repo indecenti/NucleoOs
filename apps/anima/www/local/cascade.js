@@ -179,6 +179,29 @@ const LIVE = [
 const HOWTO = /^(come|perche|quando|dove|chi|cosa|che cosa|quale|how|why|when|where|who|what|which|can i|posso|como|por que|cuando|donde|quien|puedo|comment|pourquoi|quand|ou|qui|est-ce que|puis-je|wie|warum|wann|wo|wer|kann ich)\b/;
 const LAUNCH = /^(apri|avvia|lancia|open|launch|abre|abrir|inicia|ouvre|ouvrir|lance|lancer|offne|offnen|starte)\s+(?!source\b)\S/;
 
+// The language a short question is written in (it/en/es/fr/de), or null when it does not show — for the
+// answers composed HERE without a model (liveFromStatus): a German question on an Italian desktop gets German.
+// Cheap and deliberately conservative: distinctive function words + a few letters only one language uses.
+const LANG_CUES = {
+  it: /\b(che|quanto|quanta|quanti|sono|ho|hai|della|sulla|oggi|adesso|mi|dimmi|batteria|spazio|ore)\b/g,
+  en: /\b(what|how|much|many|is|the|my|do|have|left|time|today|battery|space|which|am)\b/g,
+  es: /\b(que|cuanto|cuanta|tengo|queda|hay|estoy|hoy|es|mi|la|el|bateria|espacio|hora|dime)\b/g,
+  fr: /\b(quel|quelle|combien|est|il|reste|suis|aujourd'hui|mon|ma|de|batterie|espace|heure|sommes)\b/g,
+  de: /\b(wie|viel|ist|es|habe|ich|bin|welche|welches|heute|mein|meine|akku|speicherplatz|spat|uhr|haben|wir)\b/g,
+};
+export function guessLang(q) {
+  const raw = String(q || '').toLowerCase();
+  if (/[¿¡ñ]/.test(raw)) return 'es';
+  if (/[äöüß]/.test(raw)) return 'de';
+  const t = fold(q).replace(/[?!.,;:¿¡]+/g, ' ');
+  let best = null, bestN = 0, second = 0;
+  for (const [l, re] of Object.entries(LANG_CUES)) {
+    const n = (t.match(re) || []).length;
+    if (n > bestN) { second = bestN; bestN = n; best = l; } else if (n > second) second = n;
+  }
+  return bestN > 0 && bestN > second ? best : null;       // a tie is "unclear": the caller keeps the OS language
+}
+
 // Which live value a 'live' question asks for — same order as LIVE above.
 const LIVE_KINDS = ['time', 'date', 'year', 'battery', 'space', 'ram', 'uptime', 'version', 'network', 'agenda'];
 export function liveKind(q) {

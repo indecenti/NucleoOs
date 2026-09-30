@@ -751,6 +751,8 @@
     .eng-list li b{color:var(--text);font-weight:var(--fw-title)}
     .eng-list li .ok{color:var(--accent2)} .eng-list li .off{color:var(--muted)}
     .eng-order{margin:10px 0 0;font-size:11.5px;color:var(--muted)}
+    .eng-pick{display:flex;align-items:center;gap:8px;margin:12px 0 0;font-size:12px;color:var(--muted)}
+    .eng-pick select{flex:1;min-width:0;background:var(--chip-bg);color:var(--text);border:1px solid var(--line2);border-radius:var(--r);padding:5px 6px;font:inherit}
     .set-field.is-off .f-ctl{opacity:.45}
     .set-field.is-off .f-ctl button{cursor:not-allowed}
     /* shared capability panel (/capabilities.js renderCapabilityHelp) */
@@ -4221,7 +4223,7 @@
       if(hint==='live' && d.err!=='unpaired' && d.err!=='stopped' && P.liveKind){
         const k=P.liveKind(q);
         if(k){ let st=null; try{ const rs=await fetch('/api/status',{ cache:'no-store' }); if(rs.ok) st=await rs.json(); }catch{}
-          const txt=st && P.liveFromStatus(k, st, lang);
+          const txt=st && P.liveFromStatus(k, st, (P.guessLang && P.guessLang(q)) || lang);   // answer in the language the user wrote in
           if(txt) return { reply:txt, intent:'live_'+k, domain:'system', tier:'status', status:true, confidence:95 }; }
       }
       // Same for live state ("how much SD space") and launching an app: a tool-less chat would guess the value
@@ -5774,7 +5776,10 @@
       try{ const E=await enginesMod(); const cfg=E.loadLocalConfig(); st.pcFirst=cfg.prefer==='local';
         if(cfg.enabled){ const live=await E.liveServers({ config:cfg, fresh:true });
           const ok=live.find((s)=>s.status==='ok' && s.models && s.models.length), cors=live.find((s)=>s.status==='cors');
-          if(ok) st.pc={ name:ok.name, model:E.pickModel(ok.models,'chat',{ perf:E.loadPerf(), base:ok.base })||'' };
+          if(ok){ const perf=E.loadPerf(); const pin=cfg.models && cfg.models[ok.id] && cfg.models[ok.id].chat;
+            st.pc={ id:ok.id, name:ok.name, base:ok.base, pin:pin||'', model:pin||E.pickModel(ok.models,'chat',{ perf, base:ok.base })||'',
+              models:ok.models.filter((m)=>!(m.caps && m.caps.embedding && !m.caps.chat) && !/embed|bge|minilm|e5-/i.test(m.id))
+                .map((m)=>({ id:m.id, sizeGB:m.sizeGB, tps:(perf.models[ok.base+'|'+m.id]||{}).tps||0 })) }; }
           else if(cors) st.pc={ name:cors.name, cors:true }; } }catch{}
       try{ st.browser=await browserProvisioned(); }catch{}
       await refreshDevProfile(); st.device=_devProfile;
@@ -5797,6 +5802,14 @@
           + row('▣', 'Cardputer', st.device==='full' || st.device==='up', L(st.device==='web'?'engDevWeb':st.device==='full'?'engDevFull':st.device==='up'?'engDevUp':'engDevNone'))
           + row('☁', 'Cloud', !!st.cloud && !priv, st.cloud ? (priv ? L('engCloudPriv',{ p:st.cloud }) : st.cloud) : L('engCloudNone'))
           +'</ul>'
+          // Which PC model answers: Auto (the pipeline picks per task from what was MEASURED on this computer)
+          // or one model for chat, code and the agent — the ai-engines config pin nothing could set before.
+          +(st.pc && !st.pc.cors && st.pc.models && st.pc.models.length
+            ? '<label class="eng-pick"><span>'+esc(L('engModel'))+'</span><select id="eng-model">'
+              +'<option value="">'+esc(L('engModelAuto'))+'</option>'
+              +st.pc.models.map((m)=>'<option value="'+esc(m.id)+'"'+(m.id===st.pc.pin?' selected':'')+'>'+esc(m.id+(m.sizeGB?' · '+m.sizeGB+' GB':'')+(m.tps?' · '+Math.round(m.tps)+' tok/s':''))+'</option>').join('')
+              +'</select></label>'
+            : '')
           // With BOTH a cloud key and a PC model, Auto has a real choice of who goes first (ai-engines "prefer",
           // shared with the copilot) — shown only when it matters, instead of a setting nobody could reach.
           +(!priv && st.cloud && st.pc && !st.pc.cors
@@ -5806,6 +5819,12 @@
             : '')
           +'<p class="eng-order">'+esc(L(priv ? 'engOrderPriv' : !st.cloud ? 'engOrderAuto' : st.pcFirst && st.pc ? 'engOrderAutoPcFirst' : 'engOrderAutoCloud'))+'</p>';
         for(const b of el.querySelectorAll('.eng-mode:not(.eng-pref)')) b.addEventListener('click',()=>{ chooseMode(b.dataset.m); render(el); });
+        const sel=el.querySelector('#eng-model');
+        if(sel) sel.addEventListener('change',async()=>{
+          try{ const E=await enginesMod(); const cfg=E.loadLocalConfig(); cfg.models=cfg.models||{};
+            if(sel.value) cfg.models[st.pc.id]={ chat:sel.value, code:sel.value, agent:sel.value }; else delete cfg.models[st.pc.id];
+            E.saveLocalConfig(cfg); st.pc.pin=sel.value; st.pc.model=sel.value||st.pc.model; }catch{}
+          render(el); });
         for(const b of el.querySelectorAll('.eng-pref')) b.addEventListener('click',async()=>{
           try{ const E=await enginesMod(); const cfg=E.loadLocalConfig(); if(b.dataset.p==='local') cfg.prefer='local'; else delete cfg.prefer; E.saveLocalConfig(cfg); st.pcFirst=b.dataset.p==='local'; }catch{}
           render(el); });

@@ -198,3 +198,53 @@ test('adapts to THIS computer: measured speed and VRAM beat the size estimate', 
   forgetServers();
 });
 function rankModelsOf(models, perf, base) { return rankModelsImpl(models, 'chat', { perf, base }); }
+
+test('a model bigger than the GPU loads split GPU/CPU instead of being skipped, and the split is remembered', async () => {
+  // Measured 2026-10-01, qwen3.6 35B-A3B (22.6 GB, 41 layers) on an 8 GB RTX 5070 laptop: Ollama's own split
+  // died "CUDA error: out of memory"; 12 layers on the GPU → 22.4 tok/s; 20 layers → 3.8 tok/s (spilled).
+  const { gpuLayersFor, forgetServers, notePerf } = await import('../web/shell/ai-engines.js');
+  assert.equal(gpuLayersFor({ sizeGB: 22.6, blockCount: 41, vramGB: 8 }), 11, 'the layers that fit, with room for the KV cache');
+  assert.equal(gpuLayersFor({ sizeGB: 22.6, blockCount: 41 }), 9, 'default VRAM estimate: a little more on the CPU, still fast');
+  assert.equal(gpuLayersFor({ sizeGB: 4, blockCount: 30, vramGB: 8 }), 30, 'never more layers than the model has');
+  assert.equal(gpuLayersFor({ sizeGB: 22.6, blockCount: 0 }), null, 'unknown layer count: no guess');
+
+  const base = ollamaFetch();
+  const sent = [];
+  const f = async (url, init) => {
+    if (url.endsWith('/api/show')) { const m = JSON.parse(init.body).model; return json({ capabilities: CAPS[m] || [], model_info: { 'qwen35moe.block_count': 41, 'x.context_length': 32768 } }); }
+    if (url.endsWith('/api/ps')) return json({ models: [{ name: 'qwen3.6-coder:16k', size: 22.6e9, size_vram: 6.4e9 }] });
+    if (!url.endsWith('/api/chat')) return base(url, init);
+    const body = JSON.parse(init.body); sent.push({ model: body.model, num_gpu: body.options.num_gpu });
+    if (body.model === 'qwen3.6-coder:16k' && body.options.num_gpu == null) return new Response('{"error":"llama-server reported out-of-memory during startup: CUDA error\\nCUDA error: out of memory"}', { status: 500 });
+    return stream(['{"message":{"content":"fatto"}}\n{"done":true,"eval_count":44,"eval_duration":2000000000}\n']);
+  };
+  forgetServers();
+  const store = new Map(); const st = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  const cfg = { enabled: true, servers: [DEFAULT_SERVERS[0]], models: { ollama: { code: 'qwen3.6-coder:16k' } } };
+  const r = await localComplete('code', { messages: [{ role: 'user', content: 'x' }], fetch: f, storage: st, config: cfg });
+  assert.equal(r.text, 'fatto');
+  assert.equal(r.engine.model, 'qwen3.6-coder:16k', 'the big model answered — not skipped for the 9B');
+  assert.deepEqual(sent.slice(0, 2), [{ model: 'qwen3.6-coder:16k', num_gpu: undefined }, { model: 'qwen3.6-coder:16k', num_gpu: 9 }], 'one retry with the split that fits');
+  assert.equal(r.engine.gpuLayers, 9);
+  for (let i = 0; i < 20 && !store.get('ai.local.perf'); i++) await new Promise((res) => setTimeout(res, 5));
+  const saved = JSON.parse(store.get('ai.local.perf'));
+  const rec = saved.models['http://localhost:11434|qwen3.6-coder:16k'];
+  assert.equal(rec.numGpu, 9, 'the working split is remembered');
+  assert.equal(saved.vramGB, undefined, 'a deliberate split is not read as the GPU size (6.4 GB held is our choice)');
+  // next turn: straight to the remembered split, no failed load first
+  sent.length = 0; forgetServers();
+  await localComplete('code', { messages: [{ role: 'user', content: 'y' }], fetch: f, storage: st, config: cfg, perf: saved });
+  assert.deepEqual(sent, [{ model: 'qwen3.6-coder:16k', num_gpu: 9 }]);
+  // measured fast here → the big MoE wins the automatic choice too, not only when pinned
+  const models = [
+    { id: 'qwen3.5:9b', sizeGB: 6.59, params: '9.7B', family: 'qwen35', caps: { chat: true, tools: true } },
+    { id: 'qwen3.6:35b-a3b', sizeGB: 22.6, params: '35.5B', family: 'qwen35moe', caps: { chat: true, tools: true } },
+  ];
+  const b = 'http://localhost:11434';
+  assert.equal(pickModel(models, 'chat', { perf: { models: {} }, base: b }), 'qwen3.5:9b', 'never measured: the 22 GB file stays the fallback');
+  const fast = notePerf({ models: {} }, b, 'qwen3.6:35b-a3b', { tps: 22.4, sizeGB: 22.6, vramGB: 6.4, numGpu: 12 });
+  assert.equal(pickModel(models, 'chat', { perf: fast, base: b }), 'qwen3.6:35b-a3b', 'measured 22 tok/s: speed is the truth, the capable model answers');
+  const slow = notePerf({ models: {} }, b, 'qwen3.6:35b-a3b', { tps: 3.8, sizeGB: 22.6, vramGB: 10.5, numGpu: 20 });
+  assert.equal(pickModel(models, 'chat', { perf: slow, base: b }), 'qwen3.5:9b', 'measured slow: back to the small one');
+  forgetServers();
+});

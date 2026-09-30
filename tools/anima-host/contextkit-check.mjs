@@ -123,8 +123,9 @@ ok('usageTokens ratio clamped', u.ratio > 0 && u.ratio <= 1 && u.budget === MODE
   for (const [lg, name] of Object.entries(names)) {
     for (const mode of ['only', 'webllm', 'server']) {
       const a = assemble({ history: [], user: 'x', mode, provider: 'anthropic', lang: lg });
-      if (name) ok(`${lg}/${mode}: explicit "reply in ${name}"`, a.system.includes('Always reply in ' + name));
-      else ok(`it/${mode}: Italian prompt, no English reply rule`, !/Always reply in/.test(a.system) && /Sei ANIMA/.test(a.system));
+      // Reply in the language the user WROTE in; the OS language is the named default.
+      if (name) ok(`${lg}/${mode}: user's language first, ${name} as the default`, a.system.includes('language of the user’s latest message') && a.system.includes('reply in ' + name));
+      else ok(`it/${mode}: Italian prompt, user's language first`, /Sei ANIMA/.test(a.system) && /lingua dell’ultimo messaggio dell’utente/.test(a.system) && !/reply in English/.test(a.system));
       ok(`${lg}/${mode}: the current year is in the prompt`, a.system.includes(String(new Date().getFullYear())));
     }
   }
