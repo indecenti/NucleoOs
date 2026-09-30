@@ -22,3 +22,7 @@ _scratch/**      linguist-vendored
 # ANIMA knowledge corpus is hashed byte-exact (build_akb2.py / check_pack.mjs pack provenance):
 # pin LF in the working tree so autocrlf=true checkouts cannot smudge CRLF and fake a stale index.
 tools/anima/knowledge/*.jsonl text eol=lf
+# Generated artifacts whose --check compares the file text byte-exact against the generator's LF
+# output (gen-api-spec.mjs, gen-core-reports.mjs via validate): same reason, pin LF.
+web-api-spec.json text eol=lf
+apps/arcade/www/emulatorjs/cores/reports/*.json text eol=lf
