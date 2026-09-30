@@ -1,6 +1,6 @@
-# Assembla RISPOSTE REALI di ANIMA dai clip mirati (_wav), come fara' il device: composizione per i
-# template (ore/batteria/data/apro), clip-INTERA per le risposte fisse (identita'/fallback). Scrive un
-# player per ascoltare la coerenza. Solo verifica, non e' il pack.
+# Assembles REAL ANIMA REPLIES from the targeted clips (_wav), the way the device will: composition for the
+# templates (time/battery/date/open), WHOLE clip for the fixed replies (identity/fallback). Writes a
+# player to listen for coherence. Verification only, it is not the pack.
 import os, sys, wave
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -8,7 +8,7 @@ from build_voice import slugify
 RATE = 24000
 OUT = os.path.join(HERE, "_samples_anima")
 
-# (lang, testo risposta, tokens) — token ("c",slug) clip | ("p",ms) pausa. None = clip-intera (slug=slugify).
+# (lang, reply text, tokens) — token ("c",slug) clip | ("p",ms) pause. None = whole clip (slug=slugify).
 REPLIES = [
  ("it","Sono le 9 e 30.",                [("c","sono_le"),("c","n9"),("c","e"),("c","n30"),("p",300)]),
  ("it","La batteria è al 90 per cento.", [("c","la_batteria_e_al"),("c","n90"),("c","per_cento"),("p",300)]),
@@ -44,7 +44,7 @@ def main():
     allmiss = 0
     for i, (lang, text, toks) in enumerate(REPLIES):
         if toks is None:
-            toks = [("c", slugify(text)), ("p", 300)]      # risposta fissa -> clip intera
+            toks = [("c", slugify(text)), ("p", 300)]      # fixed reply -> whole clip
         name = "r%02d.wav" % i
         miss = assemble(os.path.join(OUT, name), lang, toks)
         if miss: allmiss += len(miss); print("  MANCANTI in [%s]: %s" % (text, miss))

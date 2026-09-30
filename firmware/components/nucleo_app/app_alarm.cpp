@@ -1,10 +1,10 @@
-// Allarme / antifurto — Tools. Arms after an exit delay, then watches the chosen SENSORS and fires.
+// Alarm / anti-theft — Tools. Arms after an exit delay, then watches the chosen SENSORS and fires.
 // Two firing MODES, both self-resetting:
 //   - Sirena:      loud, piercing, continuous wail + red flashing screen.
 //   - Silenzioso:  no sound, no light — the screen stays dark; the hit is counted/timestamped,
 //                  published on the event bus, and RECORDED: the mic keeps rolling into a WAV on the
 //                  SD for the configured minutes, across re-arms and further hits.
-// In BOTH modes the trigger lasts a BOUNDED window (auto-riarmo, default 20 s): the siren stops, the
+// In BOTH modes the trigger lasts a BOUNDED window (auto re-arm, default 20 s): the siren stops, the
 // alarm re-arms itself and the screen goes dark again — no key needed. The panel is NEVER left lit in
 // this app, in ANY state (settings included): the app OPENS lit for 10 s, then goes dark 15 s after
 // the last key and STAYS dark — the siren keeps wailing behind it. Any key lights it again for 15 s
@@ -12,8 +12,8 @@
 //   - Microfono: loud-noise detection (RMS peak + debounce so silence/clicks don't false-trigger).
 //     Works on BOTH boards (board-aware mic HAL) — this is the ONLY source on the non-ADV Cardputer.
 //   - Movimento: BMI270 shake/tilt (ADV only).
-// Tabbed settings (TAB), big fonts: sorgente, MODO, sensibilita audio/movimento, ritardo, PIN, test
-// sirena, auto-riarmo (0/10/20/30/60 s). ESC is blocked while armed/triggered — the PIN is the way
+// Tabbed settings (TAB), big fonts: source, MODE, audio/motion sensitivity, delay, PIN, siren
+// test, auto re-arm (0/10/20/30/60 s). ESC is blocked while armed/triggered — the PIN is the way
 // out and ALWAYS disarms. FOR PERSONAL USE.
 #include "nucleo_app.h"
 #include "app_ui.h"
@@ -110,7 +110,7 @@ static float motion_e_thr(void){ return 0.45f  - (float)(s_sens_motion - 1) * (0
 static float motion_t_thr(void){ return 0.30f  - (float)(s_sens_motion - 1) * (0.30f  - 0.020f) / (SENS_MAX - 1); }  // tilt delta
 static const char *const SRC_NAME[3] = { "Microfono", "Movimento", "Entrambi" };
 static const int         DELAYS[4]   = { 3, 5, 10, 15 };
-// Auto-riarmo is not a bool: it IS the trigger window. After this many seconds the siren stops, the
+// Auto re-arm is not a bool: it IS the trigger window. After this many seconds the siren stops, the
 // alarm re-arms itself and the screen goes dark — in the silent mode too. 0 = off (hold until PIN).
 static const int         REARM[5]    = { 0, 10, 20, 30, 60 };
 // Ambient recording length, minutes. 0 = off. The alarm re-arms itself DURING the recording and can
@@ -126,7 +126,7 @@ static bool audio_on(void)  { return s_src == SRC_MIC || s_src == SRC_BOTH || !n
 // The PIN is stored as a 32-bit FNV-1a hash, never as text: a 4-digit code is brute-forceable by
 // anyone holding the SD card anyway, but at least the card doesn't show it at a glance. Options live
 // next to the other native apps' config (screensaver.json et al.) so a changed PIN survives a reboot
-// — an antifurto that forgets its code on every power cycle is useless.
+// — an anti-theft alarm that forgets its code on every power cycle is useless.
 #define ALARM_CFG "/sd/system/config/alarm.json"
 static unsigned pin_hash(const char *p)
 {

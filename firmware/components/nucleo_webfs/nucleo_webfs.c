@@ -47,12 +47,12 @@ static esp_err_t serve_rescue(httpd_req_t *req)
 static void (*s_reclaim_cb)(void);
 void nucleo_webfs_set_reclaim_cb(void (*cb)(void)) { s_reclaim_cb = cb; }
 
-// Richiesta one-shot: un asset GRANDE (lib/modello Vosk, shard WebLLM) va servito ma il blocco
-// contiguo e' sotto la soglia. L'unico blocco abbastanza grande da liberare e' il framebuffer da
-// 32 KB del launcher, ma la sprite si puo' cancellare SOLO dal task app (un deleteSprite dal task
-// httpd sarebbe una race col suo render) -> alziamo un flag che il loop app consuma per lanciare
-// display_sleep() (libera la canvas, stesso percorso del blank idle a 10s). "RAM just-in-time":
-// scatta SOLO mentre un asset pesante e' davvero richiesto (es. il vosk OFFLINE dalla SD).
+// One-shot request: a LARGE asset (Vosk lib/model, WebLLM shard) needs serving but the contiguous
+// block is below the threshold. The only block big enough to free is the launcher's 32 KB
+// framebuffer, but the sprite can only be deleted from the app task (a deleteSprite from the
+// httpd task would race its render) -> we raise a flag that the app loop consumes to trigger
+// display_sleep() (frees the canvas, same path as the 10s idle blank). "Just-in-time RAM":
+// it only fires while a heavy asset is genuinely being requested (e.g. offline Vosk from the SD).
 static volatile bool s_heap_request;
 bool nucleo_webfs_take_heap_request(void) { bool r = s_heap_request; s_heap_request = false; return r; }
 
@@ -243,16 +243,16 @@ static esp_err_t static_get(httpd_req_t *req)
     // path; the JS coexistence logic is host-gated, confirm this firmware half on the next flash.)
     if (!gz) {
         fseek(f, 0, SEEK_END); long fsz = ftell(f); fseek(f, 0, SEEK_SET);
-        // Byte che trasferiremo DAVVERO: un ranged-read minuscolo (voice.js sonda vosk.js con un Range
-        // di 1 byte per testarne la presenza) e' economico a prescindere dalla dimensione del file —
-        // non va mai gated ne' fa reclaim. Solo un trasferimento bulk vero puo' ingolfare il server.
+        // Bytes we'll ACTUALLY transfer: a tiny ranged read (voice.js probes vosk.js with a 1-byte
+        // Range to test its presence) is cheap regardless of the file's size —
+        // it should never be gated or trigger a reclaim. Only a real bulk transfer can choke the server.
         long want_bytes = fsz;
         if (want_range) { long rs = 0, re = -1; int n = sscanf(range_hdr, "bytes=%ld-%ld", &rs, &re);
             if (n == 2 && re >= rs) want_bytes = re - rs + 1; else if (n >= 1 && rs <= fsz) want_bytes = fsz - rs; }
         if (fsz > NUCLEO_WEBFS_LARGE_FILE && want_bytes > 4096) {
-            // Asset pesante. Se il blocco contiguo e' sotto la soglia, chiedi al task app di restituire
-            // i 32 KB del framebuffer e aspetta brevemente che arrivino — RAM liberata SOLO quando un
-            // asset pesante viene davvero richiesto. Ancora corto? 503 e il client fa backoff.
+            // Heavy asset. If the contiguous block is below the threshold, ask the app task to give back
+            // the framebuffer's 32 KB and wait briefly for it to arrive — RAM freed ONLY when a
+            // heavy asset is genuinely requested. Still short? 503 and the client backs off.
             if (heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < NUCLEO_WEBFS_LARGE_MIN_HEAP) {
                 s_heap_request = true;
                 for (int i = 0; i < NUCLEO_WEBFS_HEAP_WAIT_STEPS &&

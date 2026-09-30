@@ -1231,7 +1231,7 @@ function fmtNum(v) {   // precisione (mirror a_fmt_num): %.6g
   return (isFinite(v) && Math.abs(v) < 1e15 && Math.abs(v - Math.round(v)) < 1e-9)
     ? String(Math.round(v)) : String(parseFloat(v.toPrecision(6)));
 }
-function fmtRound(v) {  // max 4 decimali (mirror a_fmt_round): calcolo "normale"
+function fmtRound(v) {  // max 4 decimals (mirror a_fmt_round): "normal" calculation
   if (isFinite(v) && Math.abs(v) < 1e15 && Math.abs(v - Math.round(v)) < 1e-9) return String(Math.round(v));
   if (!isFinite(v)) return String(v);
   return String(parseFloat(v.toFixed(4)));
@@ -3316,7 +3316,7 @@ function animaQuery(input, lang, mem) {
   if (calc) {
     const reply = calc.kind === 'divzero'
       ? (lang === 'en' ? "I can't divide by zero." : 'Non posso dividere per zero.')
-      : (lang === 'en' ? `It's ${fmtRound(calc.value)}.` : `Fa ${fmtRound(calc.value)}.`);   // calcolo base -> max 4 dec (mirror C)
+      : (lang === 'en' ? `It's ${fmtRound(calc.value)}.` : `Fa ${fmtRound(calc.value)}.`);   // basic calc -> max 4 dec (mirror C)
     return { query: input, tier: 'command', action: 'answer', intent: 'calc', confidence: 95, state: 'tool', reply };
   }
 
@@ -3482,7 +3482,7 @@ function animaQuery(input, lang, mem) {
   if (best.action === 'launch') reply = lang === 'en' ? `Opening ${arg}.` : `Apro ${arg}.`;
   else if (best.action === 'system') {
     let value = lang === 'en' ? 'unavailable' : 'non disponibile';
-    if (arg === 'time') {   // ora PARLABILE esatta al minuto (mirror di nucleo_tts_speak_time): niente "HH:MM"
+    if (arg === 'time') {   // exact SPOKEN time to the minute (mirror of nucleo_tts_speak_time): no "HH:MM"
       const d = new Date(), h = d.getHours(), m = d.getMinutes();
       if (lang === 'en') {
         value = m === 0 ? (h === 0 ? 'It is midnight' : h === 12 ? 'It is noon' : `It is ${h} o'clock`) : `It is ${h} ${m}`;

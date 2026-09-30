@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# _smoke.py — smoke-test della pipeline voce su SCRATCH (non tocca i pack reali):
-#   edge-tts -> ffmpeg (trim+loudnorm) -> build_index (index.bin + clips.pcm). Usa le funzioni REALI.
+# _smoke.py — smoke test of the voice pipeline on SCRATCH (does not touch the real packs):
+#   edge-tts -> ffmpeg (trim+loudnorm) -> build_index (index.bin + clips.pcm). Uses the REAL functions.
 import asyncio, os, sys, struct, argparse, shutil
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)

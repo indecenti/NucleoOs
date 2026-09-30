@@ -410,16 +410,16 @@ extern "C" void nucleo_register_tanks(void);          // app_tanks.cpp — Games
 extern "C" void nucleo_register_tankduel(void);       // app_tankduel.cpp — Games: top-down 1v1 arena (40×40 map, shop zones, ESP-NOW)
 extern "C" void nucleo_register_brawler(void);        // app_brawler.cpp — Games: SCORRIBANDA noir belt-scroll beat'em up (+ ESP-NOW co-op)
 extern "C" void nucleo_register_dice(void);           // app_dice.cpp — Games: 3D dice roll (shake / ENTER); IMU shake is ADV-only
-extern "C" void nucleo_register_yahtzee(void);        // app_yahtzee.cpp — Games: Yahtzee a turni (hot-seat 1-4 + CPU), dadi 3D fx3d
-extern "C" void nucleo_register_snake(void);          // app_snake.cpp — Games: Snake Duel 1v1 in rete (ESP-NOW) o vs AI, power-up
+extern "C" void nucleo_register_yahtzee(void);        // app_yahtzee.cpp — Games: turn-based Yahtzee (hot-seat 1-4 + CPU), 3D dice fx3d
+extern "C" void nucleo_register_snake(void);          // app_snake.cpp — Games: Snake Duel 1v1 over the network (ESP-NOW) or vs AI, power-ups
 extern "C" void nucleo_register_vs(void);             // app_vs.cpp — Games: Orde, mini vampire-survivors (Solo boot)
 extern "C" void nucleo_register_cardler(void);        // app_cardler.cpp — Games: Cardler, mini RPG (Solo boot)
 extern "C" void nucleo_register_level(void);          // app_level.cpp — Hardware (ADV-only): BMI270 bubble level
 extern "C" void nucleo_register_goniometer(void);     // app_goniometer.cpp — Hardware (ADV-only): angle finder
 extern "C" void nucleo_register_pedometer(void);      // app_pedometer.cpp — Hardware (ADV-only): step counter
-extern "C" void nucleo_register_alarm(void);          // app_alarm.cpp — Hardware (ADV-only): motion alarm / antifurto
+extern "C" void nucleo_register_alarm(void);          // app_alarm.cpp — Hardware (ADV-only): motion alarm / anti-theft
 extern "C" void nucleo_register_pixelfix(void);       // app_pixelfix.cpp — Tools: LCD pixel rehabilitation (6 full-screen patterns)
-extern "C" void nucleo_register_screensaver(void);    // app_screensaver.cpp — Tools: salvaschermo animato + screen-off
+extern "C" void nucleo_register_screensaver(void);    // app_screensaver.cpp — Tools: animated screensaver + screen-off
 extern "C" bool nucleo_screensaver_should_activate(int64_t idle_ms);  // app_screensaver.cpp hook per main loop
 extern "C" void nucleo_screensaver_set_trigger(void);                 // app_screensaver.cpp hook per main loop
 extern "C" bool nucleo_ui_is_adv(void);               // Cardputer ADV? (M5GFX board detect — robust, independent of IMU init)
@@ -997,7 +997,7 @@ extern "C" bool      nucleo_anima_teacher_configured(void);   // an online model
 extern "C" void      nucleo_anima_l1_set_external_brain(bool); // force the offline ANIMA brain to stand down
 extern "C" void      nucleo_discovery_stop(void);             // stop mDNS advertising (client already connected)
 extern "C" esp_err_t nucleo_discovery_resume(void);           // resume mDNS advertising
-extern "C" bool      nucleo_webfs_take_heap_request(void);    // webfs: un asset pesante chiede di liberare i 32 KB canvas
+extern "C" bool      nucleo_webfs_take_heap_request(void);    // webfs: a heavy asset asks to free the 32 KB canvas
 
 static bool s_web_focus = false;            // deep RAM teardown active (online key + signal while a client drives)
 static bool s_mdns_off  = false;            // mDNS stopped while the OS shell is connected (s_remote; frees ~10KB, unconditional re: online key / AP-vs-STA)
@@ -1697,17 +1697,17 @@ void nucleo_app_run(void)
             display_sleep();
             continue;
         }
-        // Salvaschermo locale: si attiva dal launcher (nessuna app aperta), senza client remoto.
-        // Funziona anche da GameFront: s_gamefront viene azzerato prima del lancio (altrimenti il
-        // branch render gamefront>foreground-app impedisce a on_draw di girare) e s_gf_return=true
-        // assicura il rientro nel carosello dopo la chiusura del saver.
-        // Qualsiasi tasto nell'app screensaver resetta last_act (via on_key) e chiude il saver.
+        // Local screensaver: triggers from the launcher (no app open), without a remote client.
+        // Also works from GameFront: s_gamefront is cleared before launching it (otherwise the
+        // gamefront>foreground-app render branch stops on_draw from running) and s_gf_return=true
+        // ensures we return to the carousel once the saver closes.
+        // Any key inside the screensaver app resets last_act (via on_key) and closes the saver.
         if (s_active == -1 && !s_remote && !s_torch && !s_voice_dark && !s_disp_sleep &&
             nucleo_screensaver_should_activate(now - last_act)) {
             nucleo_screensaver_set_trigger();
             if (s_gamefront) { s_gamefront = false; s_gf_return = true; }
             nucleo_app_launch_id("screensaver");
-            last_act = now;  // reset per non ri-triggerare subito dopo
+            last_act = now;  // reset so it doesn't re-trigger immediately after
         }
 
         // PTT low-power capture finished: the voice engine has captured, recognized, and played the

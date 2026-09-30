@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""NucleoOS Flasher — GUI per build, flash, deploy SD e OTA del Cardputer.
+"""NucleoOS Flasher — GUI for build, flash, SD deploy and OTA of the Cardputer.
 
-Tutto ruota attorno agli script gia' presenti nel repo, cosi' la GUI e gli script
-da riga di comando restano allineati:
+Everything revolves around the scripts already in the repo, so the GUI and the
+command-line scripts stay aligned:
   - Flash USB : tools/flash.ps1   (ESP-IDF build + idf.py flash)
-  - SD Deploy : tools/deploy.ps1  (sync incrementale hash-based, guardia Removable)
-  - OTA Wi-Fi : tools/ota.ps1     (push firmware via /api/ota con pairing PIN)
-  - Identify  : esptool chip-id   (capire QUALE board e DOVE)
+  - SD Deploy : tools/deploy.ps1  (incremental hash-based sync, Removable guard)
+  - OTA Wi-Fi : tools/ota.ps1     (push firmware via /api/ota with PIN pairing)
+  - Identify  : esptool chip-id   (work out WHICH board and WHERE)
 
-Avvio:  python tools/flasher.py    (o doppio click su tools/flasher.bat)
-Dipendenze: pyserial (gia' installato). tkinter e' nella stdlib.
+Run:    python tools/flasher.py    (or double-click tools/flasher.bat)
+Dependencies: pyserial (already installed). tkinter is in the stdlib.
 """
 
 import os
@@ -29,7 +29,7 @@ try:
 except Exception:
     list_ports = None
 
-# --- Percorsi -----------------------------------------------------------------
+# --- Paths -----------------------------------------------------------------
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(TOOLS_DIR)
 FLASH_PS1 = os.path.join(TOOLS_DIR, "flash.ps1")
@@ -40,13 +40,13 @@ FW_BIN = os.path.join(FIRMWARE, "build", "nucleoos.bin")
 IDF_EXPORT = r"C:\esp\esp-idf\export.ps1"
 SETTINGS = os.path.join(TOOLS_DIR, ".flasher.json")
 
-# Dimensione slot app OTA (ota_0/ota_1) da partitions.csv: 0x380000 = 3.5 MB.
+# OTA app slot size (ota_0/ota_1) from partitions.csv: 0x380000 = 3.5 MB.
 APP_PART_SIZE = 0x380000
 
-# Indizi nelle descrizioni porta che suggeriscono un ESP collegato.
+# Hints in port descriptions that suggest a connected ESP.
 ESP_HINTS = ("usb", "serial", "cp210", "ch340", "ch910", "jtag", "uart", "esp")
 
-# PowerShell base senza profilo (avvio piu' rapido e prevedibile).
+# Bare PowerShell without a profile (faster, more predictable startup).
 PS = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass"]
 
 
@@ -80,9 +80,9 @@ def human(n):
 
 
 class Tooltip:
-    """Tooltip giallo-pallido con testo a capo, compare dopo un breve ritardo."""
+    """Pale-yellow tooltip with wrapped text, shown after a short delay."""
 
-    _open = None  # tooltip attualmente visibile (uno alla volta)
+    _open = None  # currently visible tooltip (one at a time)
 
     def __init__(self, widget, text, delay=450, wrap=360):
         self.widget = widget
@@ -137,7 +137,7 @@ class Tooltip:
 
 
 def tip(widget, text):
-    """Scorciatoia: collega un tooltip a un widget e lo ritorna."""
+    """Shortcut: attach a tooltip to a widget and return it."""
     Tooltip(widget, text)
     return widget
 
@@ -171,7 +171,7 @@ class FlasherApp:
         except Exception:
             pass
 
-        # --- Riga porta + identificazione (condivisa, in alto) ---------------
+        # --- Port row + identification (shared, at the top) ---------------
         bar = ttk.LabelFrame(self.root, text="Dispositivo")
         bar.pack(fill="x", padx=8, pady=(8, 4))
 
@@ -197,7 +197,7 @@ class FlasherApp:
         tip(lbl_chip, "Risultato dell'identificazione: tipo di chip e indirizzo MAC.\n"
                       "Diventa un avviso rosso se la board NON è una ESP32-S3.")
 
-        # --- Schede ----------------------------------------------------------
+        # --- Tabs ----------------------------------------------------------
         self.nb = nb = ttk.Notebook(self.root)
         nb.pack(fill="x", padx=8, pady=4)
         self._tab_usb(nb)
@@ -205,7 +205,7 @@ class FlasherApp:
         self._tab_ota(nb)
         nb.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
-        # --- Stato + progress -----------------------------------------------
+        # --- Status + progress -----------------------------------------------
         self.pb = ttk.Progressbar(self.root, mode="indeterminate")
         self.pb.pack(fill="x", padx=12, pady=(6, 0))
         sb = ttk.Frame(self.root); sb.pack(fill="x", padx=12)
@@ -346,7 +346,7 @@ class FlasherApp:
                             self.btn_stage, self.btn_deploy, self.btn_ota]
 
     # ========================================================================
-    #  Porte / Drive / Info firmware
+    #  Ports / Drives / Firmware info
     # ========================================================================
     def refresh_ports(self):
         ports = []
@@ -375,7 +375,7 @@ class FlasherApp:
         return self._port_map.get(self.port_var.get(), "")
 
     def refresh_drives(self):
-        """Elenca SOLO le unita' removibili (coerente con la guardia di deploy.ps1)."""
+        """List ONLY removable drives (consistent with the deploy.ps1 guard)."""
         drives = []
         try:
             ps_cmd = ("Get-Volume | Where-Object {$_.DriveType -eq 'Removable' -and $_.DriveLetter} | "
@@ -417,7 +417,7 @@ class FlasherApp:
             self.fw_var.set("nucleoos.bin: non ancora compilato")
 
     # ========================================================================
-    #  Azioni — USB
+    #  Actions — USB
     # ========================================================================
     def detect_chip(self):
         port = self.selected_port()
@@ -461,7 +461,7 @@ class FlasherApp:
                                      title=f"Build & Flash ({port})", cwd=REPO, on_done=self._after_build)
         if self.erase_var.get():
             self._run(find_esptool() + ["--port", port, "erase-flash"],
-                      title=f"Erase flash ({port})", on_done=flash)  # build solo se erase ok
+                      title=f"Erase flash ({port})", on_done=flash)  # build only if erase succeeded
         else:
             flash()
 
@@ -489,7 +489,7 @@ class FlasherApp:
             self.log_line(f"Monitor non avviato: {e}", "err")
 
     # ========================================================================
-    #  Azioni — SD
+    #  Actions — SD
     # ========================================================================
     def do_stage(self):
         args = PS + ["-File", DEPLOY_PS1]
@@ -512,7 +512,7 @@ class FlasherApp:
         self._run(args, title=f"Deploy → {drive}" + (" (dry-run)" if dry else ""), cwd=REPO)
 
     # ========================================================================
-    #  Azioni — OTA
+    #  Actions — OTA
     # ========================================================================
     def do_ota(self):
         host = self.host_var.get().strip()
@@ -528,7 +528,7 @@ class FlasherApp:
         self._run(args, title=f"OTA → {host}", cwd=REPO)
 
     def _on_tab_changed(self, _=None):
-        """Quando apri la scheda OTA: aggiorna l'info firmware e auto-verifica online."""
+        """When the OTA tab is opened: refresh the firmware info and auto-check online."""
         try:
             if self.nb.select() != str(self.ota_tab):
                 return
@@ -540,7 +540,7 @@ class FlasherApp:
             self.check_online(auto=True)
 
     def check_online(self, auto=False):
-        """Ping non bloccante a http://host/api/status per vedere se il device risponde."""
+        """Non-blocking ping to http://host/api/status to see whether the device responds."""
         host = self.host_var.get().strip()
         if not host:
             if not auto:
@@ -591,7 +591,7 @@ class FlasherApp:
                 self.log_line(f"Device non raggiungibile: {body}", "err")
 
     # ========================================================================
-    #  Motore esecuzione con streaming
+    #  Execution engine with streaming
     # ========================================================================
     def _need(self, val, msg):
         if not val:
@@ -634,7 +634,7 @@ class FlasherApp:
 
     @staticmethod
     def _pretty(cmd):
-        # accorcia il rumore di powershell -NoProfile -ExecutionPolicy Bypass -File <path>
+        # shorten the noise of powershell -NoProfile -ExecutionPolicy Bypass -File <path>
         skip = {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File"}
         parts = []
         for c in cmd:

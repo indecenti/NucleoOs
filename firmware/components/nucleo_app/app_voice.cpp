@@ -1,12 +1,12 @@
 // AVCEB Voice Manager — native Cardputer app.
 //
-// Tab 0 — TRIGGERS : elenco dei template salvati su /system/voice/*.tpl
-//          Del = elimina, R = avvia registrazione guidata del template selezionato
-// Tab 1 — RECORD   : workflow "tieni FN + parla" per registrare una nuova parola
-//          L'utente scrive il nome della parola, premi Invio, poi usi FN per incidere.
-// Tab 2 — STATUS   : numero di template, lingua Anima, WS clients, engine on/off
+// Tab 0 — TRIGGERS : list of templates saved under /system/voice/*.tpl
+//          Del = delete, R = start guided recording of the selected template
+// Tab 1 — RECORD   : "hold FN + speak" workflow to record a new word
+//          The user types the word's name, presses Enter, then uses FN to record it.
+// Tab 2 — STATUS   : template count, ANIMA language, WS clients, engine on/off
 //
-// Tutto offline. Nessuna rete richiesta.
+// Fully offline. No network required.
 #include "nucleo_app.h"
 #include "app_ui.h"
 #include <M5GFX.h>
@@ -39,7 +39,7 @@ extern "C" {
 #define LINE  THEME_LINE
 static const unsigned short
     ACC    = 0x07E0,   // verde lime — app accent (registered)
-    ACC2   = 0xFD20,   // arancio per stati attivi
+    ACC2   = 0xFD20,   // orange for active states
     C_RED  = 0xF800,   // status red
     REC_BG = 0x2000,   // capture box (live recording)
     OK_BG  = 0x03E0,   // success box (saved)
@@ -288,7 +288,7 @@ static void draw_record(int top_y)
 
     switch (s_rec_step) {
     case RS_IDLE:
-        d.fillRoundRect(8, y, 240 - 16, 80, 8, LINE); // Box scuro
+        d.fillRoundRect(8, y, 240 - 16, 80, 8, LINE); // Dark box
         d.setTextColor(FG, LINE); d.setCursor(16, y + 8); d.setTextSize(2);
         d.print(TR("Nuova Parola", "New Word"));
         d.setTextSize(1); d.setTextColor(ACC, LINE); d.setCursor(16, y + 30);
@@ -328,7 +328,7 @@ static void draw_record(int top_y)
     }
 
     case RS_DONE:
-        d.fillRoundRect(8, y, W - 16, 80, 8, OK_BG); // Box verde tenue
+        d.fillRoundRect(8, y, W - 16, 80, 8, OK_BG); // Soft green box
         d.setTextSize(2); d.setTextColor(ACC, OK_BG); d.setCursor(16, y + 16);
         d.print(TR("SALVATO!", "SAVED!"));
         d.setTextSize(1); d.setTextColor(FG, OK_BG); d.setCursor(16, y + 44);
@@ -339,7 +339,7 @@ static void draw_record(int top_y)
         break;
 
     case RS_TOO_SHORT:
-        d.fillRoundRect(8, y, W - 16, 80, 8, ERR_BG); // Box rosso/arancio
+        d.fillRoundRect(8, y, W - 16, 80, 8, ERR_BG); // Red/orange box
         d.setTextSize(2); d.setTextColor(C_RED, ERR_BG); d.setCursor(16, y + 12);
         d.print(TR("ERRORE AUDIO", "AUDIO ERROR"));
         d.setTextSize(1); d.setTextColor(FG, ERR_BG); d.setCursor(16, y + 36);

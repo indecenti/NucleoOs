@@ -1,7 +1,7 @@
-// Gate voce offline: compila la C reale del firmware coi test host e la esegue. Due test:
-//   1) planner (nucleo_tts_plan.c)        -> testo IT/EN -> token CLIP/PAUSE/UNKNOWN
-//   2) indice  (nucleo_tts_index.c)       -> ricerca binaria su index.bin (retrieval del device)
-// Nessun hardware. Uso: npm run anima:tts
+// Offline voice gate: compiles the real firmware C with the host tests and runs it. Two tests:
+//   1) planner (nucleo_tts_plan.c)        -> IT/EN text -> CLIP/PAUSE/UNKNOWN tokens
+//   2) index   (nucleo_tts_index.c)       -> binary search on index.bin (device retrieval)
+// No hardware. Usage: npm run anima:tts
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -34,7 +34,7 @@ function compileRun(label, srcs, exeName) {
     console.error(`[${label}] compilazione fallita:\n` + (cc.error ? cc.error.message + '\n' : '') + (cc.stderr || cc.stdout || ''));
     return 1;
   }
-  const run = spawnSync(exe, [], { encoding: 'utf8', env, cwd: here });   // cwd=here -> "build/..." del test risolve
+  const run = spawnSync(exe, [], { encoding: 'utf8', env, cwd: here });   // cwd=here -> the test's "build/..." resolves
   process.stdout.write(run.stdout || '');
   if (run.stderr) process.stderr.write(run.stderr);
   return run.status ?? 1;

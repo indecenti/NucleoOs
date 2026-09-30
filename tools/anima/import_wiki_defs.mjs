@@ -17,9 +17,9 @@ const OUT = join(here, 'knowledge.staged', 'wiki-defs.jsonl');
 const UA = 'NucleoOS-ANIMA/1.0 (offline pocket encyclopedia; grounded, no-hallucination)';
 
 // CURATED high-value, non-niche concepts: {cat, it: <IT wiki title>, en: <EN wiki title>}. Chosen for a
-// pocket encyclopedia — informatica, elettronica/ESP, scienza, storia essenziale, cultura generale.
+// pocket encyclopedia — computing, electronics/ESP, science, essential history, general culture.
 const T = [
-  // --- informatica / CS ---
+  // --- computing / CS ---
   ['computer-science','Algoritmo','Algorithm'],['computer-science','Struttura dati','Data structure'],
   ['computer-science','Database','Database'],['computer-science','Sistema operativo','Operating system'],
   ['computer-science','Compilatore','Compiler'],['computer-science','Linguaggio di programmazione','Programming language'],
@@ -28,34 +28,34 @@ const T = [
   ['computer-science','Compressione dei dati','Data compression'],['computer-science','Codice sorgente','Source code'],
   ['computer-science','Programmazione orientata agli oggetti','Object-oriented programming'],['computer-science','Ricorsione','Recursion'],
   ['computer-science','Complessità computazionale','Computational complexity'],['computer-science','Sistema numerico binario','Binary number'],
-  // --- reti / web ---
+  // --- networking / web ---
   ['networking','Internet','Internet'],['networking','World Wide Web','World Wide Web'],['networking','Indirizzo IP','IP address'],
   ['networking','Hypertext Transfer Protocol','HTTP'],['networking','Domain Name System','Domain Name System'],
   ['networking','Suite di protocolli Internet','Internet protocol suite'],['networking','Wi-Fi','Wi-Fi'],['networking','Bluetooth','Bluetooth'],
-  // --- elettronica / embedded / ESP ---
+  // --- electronics / embedded / ESP ---
   ['electronics','Transistor','Transistor'],['electronics','Resistore','Resistor'],['electronics','Condensatore (elettrotecnica)','Capacitor'],
   ['electronics','Diodo','Diode'],['electronics','Diodo a emissione di luce','Light-emitting diode'],['electronics','Circuito integrato','Integrated circuit'],
   ['electronics','Microcontrollore','Microcontroller'],['electronics','Microprocessore','Microprocessor'],['electronics','Semiconduttore','Semiconductor'],
   ['electronics','Corrente elettrica','Electric current'],['electronics','Tensione elettrica','Voltage'],['electronics','Legge di Ohm','Ohm\'s law'],
   ['esp32','Arduino (hardware)','Arduino'],['esp32','Sensore','Sensor'],['esp32','Sistema embedded','Embedded system'],
-  // --- scienza ---
+  // --- science ---
   ['science','Atomo','Atom'],['science','Elettrone','Electron'],['science','Molecola','Molecule'],['science','Energia','Energy'],
   ['science','Gravità','Gravity'],['science','Fotosintesi','Photosynthesis'],['science','DNA','DNA'],['science','Cellula','Cell (biology)'],
   ['science','Evoluzione','Evolution'],['science','Teoria della relatività','Theory of relativity'],['science','Meccanica quantistica','Quantum mechanics'],
   ['science','Sistema solare','Solar System'],['science','Buco nero','Black hole'],['science','Tavola periodica','Periodic table'],
   ['science','Vulcano','Volcano'],['science','Terremoto','Earthquake'],['science','Clima','Climate'],['science','Virus (biologia)','Virus'],
-  // --- matematica ---
+  // --- mathematics ---
   ['math','Numero primo','Prime number'],['math','Pi greco','Pi'],['math','Teorema di Pitagora','Pythagorean theorem'],
   ['math','Derivata','Derivative'],['math','Probabilità','Probability'],['math','Geometria','Geometry'],
-  // --- storia essenziale ---
+  // --- essential history ---
   ['world-history','Impero romano','Roman Empire'],['world-history','Antico Egitto','Ancient Egypt'],['world-history','Medioevo','Middle Ages'],
   ['world-history','Rinascimento','Renaissance'],['world-history','Rivoluzione francese','French Revolution'],['world-history','Rivoluzione industriale','Industrial Revolution'],
   ['world-history','Prima guerra mondiale','World War I'],['world-history','Seconda guerra mondiale','World War II'],['world-history','Guerra fredda','Cold War'],
-  // --- cultura generale ---
+  // --- general culture ---
   ['disciplines','Filosofia','Philosophy'],['disciplines','Economia','Economics'],['disciplines','Democrazia','Democracy'],
   ['disciplines','Lingua (linguistica)','Language'],['disciplines','Musica','Music'],['disciplines','Fotografia','Photography'],
   // ===== EXPANSION (curated, high-value, NON-niche) =====
-  // --- informatica everyday ---
+  // --- everyday computing ---
   ['computer-science','Unità di elaborazione centrale','Central processing unit'],['computer-science','Memoria ad accesso casuale','Random-access memory'],
   ['computer-science','Disco rigido','Hard disk drive'],['computer-science','Unità a stato solido','Solid-state drive'],
   ['computer-science','Universal Serial Bus','USB'],['computer-science','Bit','Bit'],['computer-science','Byte','Byte'],
@@ -65,34 +65,34 @@ const T = [
   ['computer-science','Server','Server (computing)'],['computer-science','Password','Password'],['computer-science','Firewall','Firewall (computing)'],
   ['computer-science','Backup','Backup'],['computer-science','Codice QR','QR code'],['computer-science','Posta elettronica','Email'],
   ['computer-science','Sistema di posizionamento globale','Global Positioning System'],['computer-science','Pixel','Pixel'],
-  // --- elettronica / embedded ---
+  // --- electronics / embedded ---
   ['electronics','Corrente alternata','Alternating current'],['electronics','Corrente continua','Direct current'],
   ['electronics','Batteria (elettrotecnica)','Electric battery'],['electronics','Modulazione di larghezza di impulso','Pulse-width modulation'],
   ['electronics','Antenna','Antenna (radio)'],['electronics','Frequenza','Frequency'],['electronics','Onda radio','Radio wave'],
   ['electronics','Relè','Relay'],['electronics','Motore elettrico','Electric motor'],['electronics','Potenza elettrica','Electric power'],
-  // --- fisica ---
+  // --- physics ---
   ['science','Forza','Force'],['science','Massa (fisica)','Mass'],['science','Velocità','Velocity'],['science','Accelerazione','Acceleration'],
   ['science','Temperatura','Temperature'],['science','Pressione','Pressure'],['science','Elettricità','Electricity'],['science','Magnetismo','Magnetism'],
   ['science','Luce','Light'],['science','Suono','Sound'],['science','Calore','Heat'],['science','Onda','Wave'],['science','Radioattività','Radioactive decay'],
-  // --- chimica ---
+  // --- chemistry ---
   ['chemistry','Elemento chimico','Chemical element'],['chemistry','Ossigeno','Oxygen'],['chemistry','Idrogeno','Hydrogen'],['chemistry','Carbonio','Carbon'],
   ['chemistry','Acqua','Water'],['chemistry','Cloruro di sodio','Sodium chloride'],['chemistry','Acido','Acid'],['chemistry','Metallo','Metal'],
-  // --- biologia / salute ---
+  // --- biology / health ---
   ['biology','Gene','Gene'],['biology','Proteina','Protein'],['biology','Batteri','Bacteria'],['biology','Vaccino','Vaccine'],
   ['health','Cuore','Heart'],['health','Cervello','Brain'],['health','Sangue','Blood'],['health','Polmone','Lung'],
   ['health','Osso','Bone'],['health','Muscolo','Muscle'],['health','Sistema immunitario','Immune system'],['biology','Neurone','Neuron'],
-  // --- astronomia / terra ---
+  // --- astronomy / earth ---
   ['astronomy','Sole','Sun'],['astronomy','Luna','Moon'],['astronomy','Terra','Earth'],['astronomy','Pianeta','Planet'],
   ['astronomy','Stella','Star'],['astronomy','Galassia','Galaxy'],['astronomy','Universo','Universe'],['astronomy','Big Bang','Big Bang'],
   ['geography','Oceano','Ocean'],['geography','Montagna','Mountain'],['geography','Fiume','River'],['geography','Deserto','Desert'],
   ['geography','Continente','Continent'],['geography','Atmosfera terrestre','Atmosphere of Earth'],
-  // --- matematica ---
+  // --- mathematics ---
   ['math','Equazione','Equation'],['math','Frazione (matematica)','Fraction'],['math','Percentuale','Percentage'],['math','Logaritmo','Logarithm'],
   ['math','Funzione (matematica)','Function (mathematics)'],['math','Statistica','Statistics'],['math','Numero','Number'],['math','Insieme','Set (mathematics)'],
-  // --- storia essenziale ---
+  // --- essential history ---
   ['world-history','Antica Grecia','Ancient Greece'],['world-history','Antica Roma','Ancient Rome'],['world-history','Cristianesimo','Christianity'],
   ['world-history','Islam','Islam'],['world-history','Illuminismo','Age of Enlightenment'],['world-history','Risorgimento','Italian unification'],
-  // --- società / economia ---
+  // --- society / economy ---
   ['disciplines','Stato (diritto)','Sovereign state'],['disciplines','Governo','Government'],['disciplines','Legge','Law'],
   ['disciplines','Valuta','Currency'],['disciplines','Mercato (economia)','Market (economics)'],['disciplines','Religione','Religion'],
   ['disciplines','Riscaldamento globale','Global warming'],['disciplines','Inquinamento','Pollution'],['disciplines','Energia solare','Solar energy'],

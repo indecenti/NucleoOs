@@ -130,7 +130,7 @@ def main() -> int:
         print("[nl-soak] SKIP — no NL queries found in corpus")
         return 0
 
-    eta_min = len(corpus) * delay / 60.0       # cadenza fissa: ~delay per ciclo (la richiesta vi sta dentro)
+    eta_min = len(corpus) * delay / 60.0       # fixed cadence: ~delay per cycle (the request fits inside it)
     print(f"[nl-soak] target {base} | {len(corpus)} query (mode={args.mode}, cadenza {delay:.0f}s) "
           f"| {too_long} saltate (troppo lunghe) | ETA ~{eta_min:.0f} min")
     print("[nl-soak] non-associato → create_file/add_event bloccati: soak READ-ONLY (il device non muta)")
@@ -148,7 +148,7 @@ def main() -> int:
 
     for i, item in enumerate(corpus):
         url = f"{base}/api/anima?q={urllib.parse.quote(item['q'])}&lang={item['lang']}&mode={args.mode}"
-        cycle_t0 = time.time()                  # cadenza misurata dall'INIZIO della richiesta
+        cycle_t0 = time.time()                  # cadence measured from the START of the request
         code, body = get(url, timeout=30.0)
         req_ms = int((time.time() - cycle_t0) * 1000)
         rec = {"i": i, "q": item["q"], "lang": item["lang"], "src": item["src"], "http": code}
@@ -178,11 +178,11 @@ def main() -> int:
             rec["error"] = f"HTTP {code}"
         detail.write(json.dumps(rec, ensure_ascii=False) + "\n"); detail.flush()
 
-        # Una riga per OGNI query → stream "uno ad uno" leggibile live nel cockpit.
+        # One line for EVERY query → a one-by-one stream readable live in the cockpit.
         mark = "ok " if code == 200 else ("CRASH" if code == -1 else f"H{code}")
         trapflag = "  ⚠trappola-non-astenuta" if rec.get("TRAP_NOT_ABSTAINED") else ""
         ms = rec.get("ms")
-        ms = ms if isinstance(ms, (int, float)) else req_ms     # fallback: round-trip misurato
+        ms = ms if isinstance(ms, (int, float)) else req_ms     # fallback: measured round-trip
         print(f"[q] {i+1}/{len(corpus)} {mark} {item['lang']} {rec.get('tier','-'):>7} "
               f"{ms:>4}ms · {item['q'][:46]}{trapflag}", flush=True)
 
@@ -196,8 +196,8 @@ def main() -> int:
 
         if (i + 1) % 100 == 0:
             print(f"[nl-soak] — progresso {i+1}/{len(corpus)} · servite={served} crash={crashed} err={errors}", flush=True)
-        # Cadenza fissa: l'intervallo fra l'inizio di due query è `delay`. Se la richiesta ha già speso
-        # parte (o tutto) quel tempo, aspetto solo ciò che manca — zero se l'ha già superato.
+        # Fixed cadence: the interval between the start of two queries is `delay`. If the request already spent
+        # part (or all) of that time, sleep only what is missing — zero if it already exceeded it.
         if i + 1 < len(corpus):
             remaining = delay - (time.time() - cycle_t0)
             if remaining > 0:

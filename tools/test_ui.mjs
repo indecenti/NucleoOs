@@ -8,7 +8,7 @@ const ROOT = path.resolve('./');
 let listApiCalls = 0;
 
 const server = http.createServer((req, res) => {
-    // 1. Endpoint per i risultati del test
+    // 1. Endpoint for the test results
     if (req.method === 'POST' && req.url === '/report') {
         let body = '';
         req.on('data', chunk => body += chunk);
@@ -32,7 +32,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // 2. Pagina di test HTML che inietta l'app nell'iframe
+    // 2. HTML test page that injects the app into the iframe
     if (req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(`
@@ -122,7 +122,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // 3. API Mock per il filesystem
+    // 3. Mock API for the filesystem
     if (req.url === '/api/test-count') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(listApiCalls));
@@ -140,7 +140,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // 4. Server File Statici per caricare file-commander e assets
+    // 4. Static file server to load file-commander and assets
     let filePath = path.join(ROOT, req.url.split('?')[0]);
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
         res.writeHead(200);
@@ -155,6 +155,6 @@ server.listen(PORT, () => {
     console.log(`[Test Server] Avviato su http://localhost:${PORT}/`);
     console.log(`[Test Server] Apro il browser per avviare la suite di test E2E UI...`);
     
-    // Apri il browser automaticamente (su Windows usa 'start')
+    // Open the browser automatically (on Windows use 'start')
     exec(`start http://localhost:${PORT}/`);
 });

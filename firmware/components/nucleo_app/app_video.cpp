@@ -820,7 +820,7 @@ static int play_nfv3(const char *vpath, const char *title, const char *reskey, i
             else if (k.ch == ']')       { result = PR_NEXT; stop = true; }
             else if (k.ch == '[')       { result = PR_PREV; stop = true; }
             else if (k.key == NK_ENTER || k.ch == ' ' || k.ch == 'p') { paused = !paused; if (have_audio) nucleo_audio_toggle_pause(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.key == NK_TAB)   { help = !help; if (!help) need_full = true; ui_sig = 0xffffffff; }   // TAB = pannello Comandi
+            else if (k.key == NK_TAB)   { help = !help; if (!help) need_full = true; ui_sig = 0xffffffff; }   // TAB = commands panel
             else if (k.ch == 'm')       { nucleo_audio_set_mute(!nucleo_audio_is_muted()); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
             else if (k.ch == 't')       { s_time_rem = !s_time_rem; overlay_until = now + 3000000; ui_sig = 0xffffffff; }
             else if (k.key == NK_LEFT || k.key == NK_RIGHT) {
@@ -1110,7 +1110,7 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
             else if (k.ch == ']')       { result = PR_NEXT; stop = true; }   // skip to next clip
             else if (k.ch == '[')       { result = PR_PREV; stop = true; }   // skip to previous clip
             else if (k.key == NK_ENTER || k.ch == ' ' || k.ch == 'p') { paused = !paused; if (have_audio) nucleo_audio_toggle_pause(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.key == NK_TAB)   { help = !help; if (!help) need_full = true; ui_sig = 0xffffffff; }   // TAB = pannello Comandi
+            else if (k.key == NK_TAB)   { help = !help; if (!help) need_full = true; ui_sig = 0xffffffff; }   // TAB = commands panel
             else if (k.ch == 'm')       { nucleo_audio_set_mute(!nucleo_audio_is_muted()); overlay_until = now + 3000000; ui_sig = 0xffffffff; }   // mute toggle
             else if (k.ch == 't')       { s_time_rem = !s_time_rem; overlay_until = now + 3000000; ui_sig = 0xffffffff; }   // elapsed/remaining (persist via VIEW>Time; no SD write mid-play)
             else if (k.key == NK_LEFT || k.key == NK_RIGHT) {
@@ -1168,7 +1168,7 @@ static int play_nfv(const char *vpath, const char *title, const char *reskey, in
         // FORWARD-ONLY. The loop holds (no backward walk) on small jitter — that killed the 1-9 lag.
         // BUT a BIG forward gap must never be crawled frame-by-frame: on a 120k-frame clip that's a
         // multi-MINUTE hang (load_frame pets the WDT, so it's not a reboot — it's a true freeze, the
-        // "video non arriva"). If the target is far ahead of the read cursor, jump there via the index
+        // "video never arrives"). If the target is far ahead of the read cursor, jump there via the index
         // in O(1) (seek_far is WDT-safe), so load_frame only skips the short remainder.
         bool want_load = (int64_t)target >= (int64_t)next_idx;
         if (want_load && idx_stride && (int64_t)target > (int64_t)next_idx + 4 * (int64_t)idx_stride) {
@@ -1742,7 +1742,7 @@ static void play_from(int idx, int64_t start_ms)
     // The dedicated reclaim window (NX_NET_APP, ~70 KB; Wi-Fi STA stays up) is already held for the whole
     // app session by enter() — like the Music player. We do NOT toggle it per-play: the old per-play
     // enter/exit meant the FILE BROWSER ran at the ~5 KB idle heap, where scan()'s opendir/fopen OOM and
-    // the list comes up EMPTY ("non vedo i file"). Holding it from enter() gives both browser and player
+    // the list comes up EMPTY ("I don't see any files"). Holding it from enter() gives both browser and player
     // the headroom. (Do NOT add NX_WIFI: tearing the radio down+up is the ADV's fragile path — it left
     // audio dead + SD flaky for an extra ~30-50KB we don't need; an .nfv plays off SD, no network.)
     vtrace("play_enter", true);

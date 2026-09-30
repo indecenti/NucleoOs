@@ -1,15 +1,15 @@
-// nucleo_tts_index — indice clip RAM-light per la voce concatenativa.
+// nucleo_tts_index — RAM-light clip index for the concatenative voice.
 //
-// PERCHE': una cartella SD con decine di migliaia di file .wav (il dizionario) e' patologica su
-// FATFS — aprire/stat-are un file = scansione lineare della directory (nessun indice nativo) =
-// centinaia di ms e tanto I/O per parola. Invece: UN file indice ordinato (slug -> offset,len) +
-// UN blob PCM con tutte le clip concatenate. Trovare una clip = ricerca binaria nell'indice via
-// fseek (~log2(N) letture da 56 byte), RAM ~zero, CPU/I-O minimi. Stessa filosofia dello streaming
-// centroidi L1. Puro stdio: host-compilabile e testabile (tools/anima-host/ttsidx-ctest.c).
+// WHY: an SD folder with tens of thousands of .wav files (the dictionary) is pathological on
+// FATFS — opening/stat-ing a file = a linear directory scan (no native index) =
+// hundreds of ms and heavy I/O per word. Instead: ONE sorted index file (slug -> offset,len) +
+// ONE PCM blob with all the clips concatenated. Finding a clip = a binary search in the index via
+// fseek (~log2(N) reads of 56 bytes), ~zero RAM, minimal CPU/I-O. Same philosophy as the L1
+// centroid streaming. Pure stdio: host-compilable and testable (tools/anima-host/ttsidx-ctest.c).
 //
-// Formato index.bin (little-endian): "NTI1" | uint32 rate | uint32 count | count record ORDINATI
-// per slug (strcmp byte-order): char slug[48] (null-pad) + uint32 off + uint32 len. (record = 56 B)
-// clips.pcm: PCM mono 16-bit @rate, tutte le clip una dopo l'altra (niente header per-clip).
+// index.bin format (little-endian): "NTI1" | uint32 rate | uint32 count | count records SORTED
+// by slug (byte-order strcmp): char slug[48] (null-pad) + uint32 off + uint32 len. (record = 56 B)
+// clips.pcm: mono 16-bit PCM @rate, all clips back-to-back (no per-clip header).
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
@@ -21,10 +21,10 @@
 
 typedef struct { FILE *f; uint32_t count; uint32_t rate; } tts_index_t;
 
-// Apre l'indice. Ritorna true e riempie ix se valido; false se assente/corrotto (voce non installata).
+// Opens the index. Returns true and fills ix if valid; false if missing/corrupt (voice not installed).
 bool tts_index_open(tts_index_t *ix, const char *index_path);
 
-// Ricerca binaria: true se lo slug esiste, riempiendo *off/*len (posizione nel blob clips.pcm).
+// Binary search: true if the slug exists, filling *off/*len (position in the clips.pcm blob).
 bool tts_index_find(tts_index_t *ix, const char *slug, uint32_t *off, uint32_t *len);
 
 void tts_index_close(tts_index_t *ix);

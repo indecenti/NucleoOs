@@ -60,8 +60,8 @@ for (const e of itEn) cases.push({ kind: 'recall', q: `traduci ${e.key} in ingle
 for (const e of enIt) cases.push({ kind: 'recall', q: `traduci ${e.key} in italiano`, want: e.val });
 for (const w of JUNK) cases.push({ kind: 'junk', q: `traduci ${w} in inglese` });
 for (const w of WX)   cases.push({ kind: 'weather', q: `traduci ${w} in inglese` });
-// Omografo SENZA direzione = sorgente ambigua -> deve mostrare entrambi i sensi (mai un singolo). CON
-// direzione esplicita ("in inglese") la sorgente NON e' ambigua -> traduzione direzionale (vedi recall).
+// A homograph WITHOUT a direction = ambiguous source -> must show both senses (never a single one). WITH
+// an explicit direction ("in inglese") the source is NOT ambiguous -> directional translation (see recall).
 for (const w of HOMO) cases.push({ kind: 'homo', q: `traduci ${w}` });
 
 const lines = [];

@@ -1,11 +1,11 @@
-# build_exe.ps1 — compila la NucleoOS Toolkit in un .exe distribuibile.
+# build_exe.ps1 — builds the NucleoOS Toolkit into a distributable .exe.
 #
-# Uso (da qualsiasi cartella):
+# Usage (from any folder):
 #   powershell -ExecutionPolicy Bypass -File tools\nucleo-suite\build_exe.ps1
 #
-# Risultato: tools\nucleo-suite\dist\NucleoSuite\NucleoSuite.exe  (cartella unica
-# da zippare e distribuire). Ricordati che ffmpeg deve stare sul PATH dell'utente
-# finale per il convertitore video.
+# Result: tools\nucleo-suite\dist\NucleoSuite\NucleoSuite.exe  (single folder
+# to zip and distribute). Remember that ffmpeg must be on the end
+# user's PATH for the video converter.
 
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -20,7 +20,7 @@ foreach ($d in $deps) {
         python -m pip install $d
     }
 }
-# tkinterdnd2 è opzionale (drag&drop nel converter): installalo se vuoi includerlo
+# tkinterdnd2 is optional (drag&drop in the converter): install it if you want to include it
 python -m pip show tkinterdnd2 2>$null | Out-Null
 if (-not $?) { Write-Host "  (tkinterdnd2 assente: drag&drop disattivato nel bundle)" -ForegroundColor DarkGray }
 

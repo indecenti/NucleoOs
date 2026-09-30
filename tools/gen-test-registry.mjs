@@ -40,9 +40,9 @@ const categories = [
   { id: 'build-lint',       label: 'Build & lint',             nl: false, desc: 'Validazione asset/manifest e drift dello spec API.' },
 ];
 
-// ANIMA = la cascata DETERMINISTICA offline (M1), SENZA modelli generativi. Esclude forge-webllm (il
-// substrato WebLLM/M4: anche se mockato riguarda i MODELLI), i test delle APP (foglio/paint/shell/device)
-// e il build-lint. È "ANIMA offline, solo quella" → flag `anima` su categorie e test.
+// ANIMA = the offline DETERMINISTIC cascade (M1), WITHOUT generative models. Excludes forge-webllm (the
+// WebLLM/M4 substrate: even when mocked it concerns the MODELS), the APP tests (sheet/paint/shell/device)
+// and the build-lint. It is "ANIMA offline, only that" → `anima` flag on categories and tests.
 const ANIMA_CATS = new Set(['nl-hallucination', 'nl-skill-routing', 'nl-knowledge', 'nl-reasoning',
   'nl-math', 'nl-memory', 'nl-translate', 'nl-weather', 'cascade-infra', 'knowledge-graph']);
 for (const c of categories) c.anima = ANIMA_CATS.has(c.id);

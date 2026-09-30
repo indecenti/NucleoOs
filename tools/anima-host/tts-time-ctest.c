@@ -1,7 +1,7 @@
-// Prova ESAUSTIVA del "deve dirmi l'ora precisa, sempre pronunciabile": per OGNI minuto del giorno
-// (24x60 = 1440) compone l'orario con nucleo_tts_speak_time() e lo pianifica (nucleo_tts_plan) contro
-// l'INDICE REALE delle clip (index.bin generato) -> ogni minuto deve dare 0 token UNKNOWN, altrimenti
-// finirebbe in "leggila sullo schermo". Linka la C reale del firmware. Uso:
+// EXHAUSTIVE test of "it must tell me the exact time, always pronounceable": for EVERY minute of the day
+// (24x60 = 1440) it composes the time with nucleo_tts_speak_time() and plans it (nucleo_tts_plan) against
+// the REAL clip INDEX (generated index.bin) -> every minute must yield 0 UNKNOWN tokens, otherwise it
+// would end up as "read it on the screen". Links the real firmware C. Usage:
 //   tts-time-ctest <it_index.bin> <en_index.bin>
 #include "nucleo_tts.h"
 #include "nucleo_tts_index.h"
@@ -13,7 +13,7 @@ static bool has_clip(const char *slug, void *ud) {
     (void)ud; return slug && slug[0] && tts_index_find(&IX, slug, NULL, NULL);
 }
 
-// Ritorna i minuti scoperti per `lang`, o -1 se l'indice non e' apribile (SKIP).
+// Returns the uncovered minutes for `lang`, or -1 if the index cannot be opened (SKIP).
 static int check_lang(const char *idxp, const char *lang)
 {
     if (!tts_index_open(&IX, idxp)) { printf("[%s] SKIP (indice non apribile: %s)\n", lang, idxp); return -1; }
@@ -23,7 +23,7 @@ static int check_lang(const char *idxp, const char *lang)
         char txt[64];
         nucleo_tts_speak_time(txt, sizeof txt, h, m, lang);
 
-        // Coperto come risposta-fissa-intera? (es. "Mezzogiorno") -> ok.
+        // Covered as a whole fixed reply? (e.g. "Mezzogiorno") -> ok.
         char full[48]; nucleo_tts_full_slug(txt, full, sizeof full);
         if (full[0] && tts_index_find(&IX, full, NULL, NULL)) continue;
 

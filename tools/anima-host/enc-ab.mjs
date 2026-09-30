@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// ENC A/B — misura recall (encoder-sensitive) sulla fixture host CORRENTE. Forza AKB5 on. Stampa recall per
-// gruppo (curate/verbose/knowledge) + halluc sui false-premise. Si lancia DUE volte (fixture old vs aug) e
-// si confrontano i numeri. Uso: node tools/anima-host/enc-ab.mjs [tag]
+// ENC A/B — measures recall (encoder-sensitive) on the CURRENT host fixture. Forces AKB5 on. Prints recall per
+// group (curated/verbose/knowledge) + hallucinations on the false-premise set. Run it TWICE (old vs aug fixture)
+// and compare the numbers. Usage: node tools/anima-host/enc-ab.mjs [tag]
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +12,7 @@ const tag = process.argv[2] || '';
 if (!existsSync(exe)) { console.error('anima.exe missing'); process.exit(2); }
 if (!existsSync(join(here, 'sd', 'data', 'anima', 'anima-it-akb5.bin'))) { console.error('no AKB5 manifest in fixture'); process.exit(2); }
 
-// CURATE (canoniche) — encoder-sensitive
+// CURATE (canonical) — encoder-sensitive
 const CURATE = [
   { q: 'capitale del Giappone', lang: 'it', want: ['tokyo'] },
   { q: "cos'è la fotosintesi", lang: 'it', want: ['piant'] },
@@ -20,7 +20,7 @@ const CURATE = [
   { q: "cos'è il DNS", lang: 'it', want: ['domini'] },
   { q: 'costante di Planck', lang: 'it', want: ['6.626'] },
 ];
-// VERBOSE (parafrasi col filler — il caso che instrada male)
+// VERBOSE (paraphrases with filler — the case that routes badly)
 const VERBOSE = [
   { q: 'spiegami come funziona la fotosintesi', lang: 'it', want: ['piant', 'luce', 'cloro'] },
   { q: 'puoi spiegarmi cos è un transistor e a cosa serve', lang: 'it', want: ['transistor', 'interrutt', 'amplific'] },
@@ -29,7 +29,7 @@ const VERBOSE = [
   { q: 'can you explain how photosynthesis works', lang: 'en', want: ['light', 'plant', 'chloro'] },
   { q: 'tell me about the theory of relativity', lang: 'en', want: ['einstein', 'space', 'time', 'relativ'] },
 ];
-// KNOWLEDGE-20 reali (escludo skill/math non encoder-dipendenti)
+// Real KNOWLEDGE-20 (skill/math excluded: not encoder-dependent)
 const KNOW = [
   { q: 'chi ha scritto la divina commedia', lang: 'it', want: ['dante', 'alighieri'] },
   { q: "cos'e il dna", lang: 'it', want: ['acido', 'genetic', 'nucleic'] },
