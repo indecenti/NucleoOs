@@ -1,5 +1,5 @@
-// Mini PONG per NucleoOS Sandbox (No DOM, solo Console API)
-// Creato per gestire correttamente la sandbox Web Worker.
+// Mini PONG for the NucleoOS Sandbox (no DOM, Console API only)
+// Created to work correctly with the Web Worker sandbox.
 
 const W = 60;
 const H = 20;
@@ -14,7 +14,7 @@ let p1y = Math.floor((H - PADDLE) / 2);
 let p2y = Math.floor((H - PADDLE) / 2);
 let score1 = 0, score2 = 0;
 
-// Semplice IA per muovere le racchette
+// Simple AI to move the paddles
 function updatePaddle(paddleY, targetY) {
     const center = paddleY + PADDLE / 2;
     if (targetY < center - 0.5) return Math.max(0, paddleY - 1);
@@ -56,39 +56,39 @@ async function runPong() {
     await os.sleep(1000);
     
     while (score1 < MAX_SCORE && score2 < MAX_SCORE) {
-        // Aggiorna posizione palla
+        // Update ball position
         bx += vx;
         by += vy;
         
-        // Rimbalzo alto/basso
+        // Bounce off top/bottom
         if (by <= 0 || by >= H - 1) {
             vy = -vy;
             by = Math.max(0, Math.min(H - 1, by));
         }
         
-        // Collisione racchette
+        // Paddle collision
         if (bx <= 1 && by >= p1y && by < p1y + PADDLE) {
-            vx = Math.abs(vx) * 1.05; // Accelera leggermente
+            vx = Math.abs(vx) * 1.05; // Speed up slightly
             bx = 1;
         } else if (bx >= W - 2 && by >= p2y && by < p2y + PADDLE) {
             vx = -Math.abs(vx) * 1.05;
             bx = W - 2;
         }
         
-        // Punto per P2
+        // Point for P2
         if (bx < 0) {
             score2++;
             bx = W / 2; by = H / 2;
             vx = 1.2; vy = (Math.random() > 0.5 ? 0.8 : -0.8);
         }
-        // Punto per P1
+        // Point for P1
         else if (bx >= W) {
             score1++;
             bx = W / 2; by = H / 2;
             vx = -1.2; vy = (Math.random() > 0.5 ? 0.8 : -0.8);
         }
         
-        // L'IA segue la palla
+        // The AI follows the ball
         if (vx < 0) {
             p1y = updatePaddle(p1y, by);
         } else {
