@@ -1045,7 +1045,7 @@ async function boot() {
   renderTaskbar();
   wireChrome();
   wireMessages();
-  wireFileDrop();                          // Drag & Drop file dal PC → SD Cardputer
+  wireFileDrop();                          // Drag & Drop files from the PC → Cardputer SD
   initOS();                                // OS-wide clipboard + keyboard shortcuts
   applyWallpaper(state.wallpaper);
   try { applyBrightness(localStorage.getItem('nucleo.brightness') || 100); } catch {}
@@ -1316,7 +1316,7 @@ document.addEventListener('visibilitychange', () => {
   // Below the mobile breakpoint onViewportChange deliberately shut /ws + the status poll ("the device
   // pays nothing for a phone-sized viewer") — returning to the foreground must not undo that.
   if (!desktopStarted || !mqDesktop.matches) return;
-  if (wsEvicted) { seatFreeCheck(); return; }   // torni a guardare: forse il posto si e liberato
+  if (wsEvicted) { seatFreeCheck(); return; }   // back in view: the seat may have been freed
   if (wsSock && (wsSock.readyState === WebSocket.OPEN || wsSock.readyState === WebSocket.CONNECTING)) return;
   if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
   wsBackoff = 3000;
@@ -1521,7 +1521,7 @@ function applyGlobalUI() {
   document.documentElement.style.fontSize = currentThemeState.fontSize;
   document.body.style.fontSize = currentThemeState.fontSize;
   
-  // Applica anche al documento principale (Shell)
+  // Also apply to the main document (Shell)
   injectGlobalTheme(document);
 
   // Inject into all currently open iframes
@@ -1564,7 +1564,7 @@ function injectGlobalTheme(doc) {
     const isLight = currentThemeState.theme === 'light';
     const acc = currentThemeState.accent;
     const fs = currentThemeState.fontSize;
-    // Forziamo i valori di base in modo che sovrascrivano i :root delle app usando !important
+    // Force the base values so they override the apps' :root via !important
     style.textContent = `
       :root, html {
         --accent: ${acc} !important;
@@ -1584,7 +1584,7 @@ function injectGlobalTheme(doc) {
       }
       `}
     `;
-    // Molte app usano 'font: 14px system-ui' sul body. Sovrascriviamolo se necessario
+    // Many apps use 'font: 14px system-ui' on the body. Override it if necessary
     if (!doc.getElementById('os-global-body')) {
       const bstyle = doc.createElement('style');
       bstyle.id = 'os-global-body';
@@ -1596,7 +1596,7 @@ function injectGlobalTheme(doc) {
   } catch (err) {} // cross-origin safe
 }
 
-// Mantieni retrocompatibilità
+// Keep backward compatibility
 function applyTheme(theme) {
   currentThemeState.theme = theme === 'light' ? 'light' : 'dark';
   applyGlobalUI();
@@ -1693,12 +1693,12 @@ function removeToast(t) {
   setTimeout(() => t.remove(), 220);
 }
 
-// ===== Drag & Drop file dal PC → SD del Cardputer =====
-// I container video (mp4/mkv/…) NON vanno caricati grezzi sul device: il Cardputer non ha
-// ffmpeg e non riproduce un .mkv — vanno convertiti in .nfv dal companion Video Studio (sul
-// PC). Per giunta caricare un film intero via Wi-Fi con un solo POST satura l'ESP32 e fa
-// ERR_CONNECTION_RESET. Quindi i video aprono il Video Studio; tutto il resto (compresi i
-// .nfv/.mp3 già convertiti) si carica sulla SD, in streaming (niente file intero in RAM).
+// ===== Drag & Drop files from the PC → Cardputer SD =====
+// Video containers (mp4/mkv/…) must NOT be uploaded raw to the device: the Cardputer has no
+// ffmpeg and cannot play a .mkv — they must be converted to .nfv by the Video Studio companion (on the
+// PC). Besides, uploading a whole movie over Wi-Fi in a single POST saturates the ESP32 and causes
+// ERR_CONNECTION_RESET. So videos open Video Studio; everything else (including the already-
+// converted .nfv/.mp3) is uploaded to the SD, streamed (no whole file in RAM).
 const VIDEO_SRC = new Set(['mp4', 'mkv', 'mov', 'avi', 'webm', 'm4v', 'wmv', 'flv', 'mpg', 'mpeg', 'ts', 'm2ts', 'mts', '3gp', 'ogv']);
 const fileExt = (n) => (n.split('.').pop() || '').toLowerCase();
 
@@ -1707,13 +1707,13 @@ function wireFileDrop() {
   const destLabel = overlay ? overlay.querySelector('.drop-dest') : null;
   let dragDepth = 0;
 
-  // Solo i drop sullo SFONDO del desktop diventano upload. Sopra una finestra app (es. il
-  // Video Studio) NON intercettiamo: l'iframe gestisce il proprio drop. L'overlay è anche
-  // pointer-events:none (CSS), così non copre mai le finestre.
+  // Only drops on the desktop BACKGROUND become uploads. Over an app window (e.g. the
+  // Video Studio) we do NOT intercept: the iframe handles its own drop. The overlay is also
+  // pointer-events:none (CSS), so it never covers the windows.
   const overWindow = (e) => !!(e.target && e.target.closest && e.target.closest('.win'));
 
-  // Previeni il comportamento default del browser (aprirebbe il file) — ma non sulle finestre.
-  // Quando un drag di File Commander è in volo, il desktop è una zona di rilascio: mostriamo il
+  // Prevent the browser default (it would open the file) — but not over windows.
+  // While a File Commander drag is in flight, the desktop is a drop zone: show the
   // cursore giusto (copia/sposta/collega) in base al modificatore tenuto premuto.
   const fcLive = () => fcDrag && (Date.now() - fcDrag.ts < 30000);   // honour a File Commander drag only while fresh
   document.addEventListener('dragover', (e) => {
@@ -1736,7 +1736,7 @@ function wireFileDrop() {
   });
 
   document.addEventListener('drop', async (e) => {
-    if (overWindow(e)) return;              // drop sopra una finestra app → lo gestisce lei, non noi
+    if (overWindow(e)) return;              // drop over an app window → it handles it, not us
     e.preventDefault();
     dragDepth = 0;
     if (overlay) overlay.classList.add('hidden');
@@ -1747,7 +1747,7 @@ function wireFileDrop() {
     const files = e.dataTransfer ? Array.from(e.dataTransfer.files) : [];
     if (!files.length) return;
 
-    // Container video → vanno convertiti: apri il Video Studio, NON caricarli grezzi.
+    // Video containers → must be converted: open Video Studio, do NOT upload them raw.
     const videos = files.filter((f) => VIDEO_SRC.has(fileExt(f.name)));
     const others = files.filter((f) => !VIDEO_SRC.has(fileExt(f.name)));
     if (videos.length) {
@@ -1757,9 +1757,9 @@ function wireFileDrop() {
       showToast(t('toast_video_studio', { count: videos.length, names }), '🎬', 'info', 9000);
     }
 
-    // Tutto il resto va sulla SD. I .nfv/.mp3 già convertiti vanno in /data/Videos (pronti da
-    // riprodurre); il resto in /data/uploads. Passiamo il File direttamente a fetch così il
-    // browser fa streaming e non bufferizza l'intero file in RAM.
+    // Everything else goes to the SD. Already-converted .nfv/.mp3 go to /data/Videos (ready to
+    // play); the rest to /data/uploads. We pass the File straight to fetch so the
+    // browser streams it and does not buffer the whole file in RAM.
     for (const file of others) {
       const ext = fileExt(file.name);
       const dir = (ext === 'nfv' || ext === 'mp3') ? '/data/Videos' : '/data/uploads';
@@ -1772,7 +1772,7 @@ function wireFileDrop() {
         const resp = await fetchWithRetry('/api/fs/write?path=' + encodeURIComponent(targetPath), {
           method: 'POST',
           headers: { 'Content-Type': 'application/octet-stream' },
-          body: file,                          // streamed dal browser, niente arrayBuffer() in RAM
+          body: file,                          // streamed by the browser, no arrayBuffer() in RAM
         });
         if (upToast) removeToast(upToast);
         if (resp.ok) {
@@ -2170,18 +2170,18 @@ function renderDesktop() {
     let px = snap(item.x), py = snap(item.y);
     const { w, h } = desktopBox();
     if (w >= ICON_W && h >= ICON_H) {
-      // Clamp visivo: maxPx/maxPy calcolati con Math.floor (non snap/round) per garantire
-      // che l'icona entri SEMPRE nel viewport. snap() con round può eccedere w-ICON_W di
-      // qualche pixel, il che faceva scattare subito il break del loop anti-overlap senza
-      // che il de-overlap girasse, lasciando più icone nella stessa cella (overlap visivo).
+      // Visual clamp: maxPx/maxPy computed with Math.floor (not snap/round) to guarantee
+      // the icon ALWAYS fits in the viewport. snap() with round can exceed w-ICON_W by
+      // a few pixels, which made the anti-overlap loop break immediately without
+      // the de-overlap ever running, leaving several icons in the same cell (visual overlap).
       const maxPx = PAD + Math.max(0, Math.floor((w - PAD - ICON_W) / CELL)) * CELL;
       const maxPy = PAD + Math.max(0, Math.floor((h - PAD - ICON_H) / CELL)) * CELL;
       px = Math.min(snap(item.x), maxPx);
       py = Math.min(snap(item.y), maxPy);
-      // Anti-overlap: avanza riga→colonna senza mai fermarsi su px > viewport.
-      // Icone in eccesso (viewport troppo piccolo) vanno off-screen e spariscono per
-      // overflow:hidden — mai sovrapposte. Alle prossime renderDesktop (window cresce)
-      // le coordinate originali da state.desktop.{x,y} vengono ripristinate.
+      // Anti-overlap: advance row→column without ever stopping on px > viewport.
+      // Excess icons (viewport too small) go off-screen and disappear via
+      // overflow:hidden — never overlapped. On the next renderDesktop (window grows)
+      // the original coordinates from state.desktop.{x,y} are restored.
       let guard = 0;
       while (visualTaken.has(px + ',' + py) && ++guard < 2000) {
         py += CELL;
@@ -3234,7 +3234,7 @@ function wireChrome() {
   asButton(trayNet, toggleAc);
   asButton(trayStorage, toggleAc);
 
-  // Action Center: Theme toggle — persiste su SD del Cardputer (shared with search ▸ actions)
+  // Action Center: Theme toggle — persisted on the Cardputer SD (shared with search ▸ actions)
   const acTheme = document.getElementById('ac-theme');
   if (acTheme) acTheme.addEventListener('click', () => toggleTheme());
 

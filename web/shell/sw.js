@@ -161,26 +161,26 @@ self.addEventListener('fetch', (e) => {
       })());
       return;
     }
-    // Letture/scritture file: richiesta/risposta corte, mai in cache (dati vivi). La WRITE
-    // gira ESCLUSIVA (prende tutti i permessi): il device la serve da sola, con tutto l'heap
-    // libero, così trova un blocco contiguo grande invece di andare in OOM a metà burst.
+    // File reads/writes: short request/response, never cached (live data). The WRITE
+    // runs EXCLUSIVE (takes all permits): the device serves it alone, with the whole heap
+    // free, so it finds a large contiguous block instead of running OOM mid-burst.
     if (p === '/api/fs/read' || p === '/api/fs/list' || p === '/api/fs/write') {
       const exclusive = (p === '/api/fs/write');   // list = shared read (need=1), like read
       e.respondWith(gatedFetch(e.request, exclusive).catch(() => new Response('', { status: 504, statusText: 'device busy' })));
       return;
     }
-    // /api/anima: la domanda all'assistente. Dodici superfici la chiamano — copilot, ricerca della
-    // shell, onboarding, ai.js, e le app anima/agent/settings/spreadsheet/games/miei-fatti/recorder/
-    // code-runner — e nessuna di loro sa delle altre: la regola "mai chiamate concorrenti" era affidata
-    // alla buona educazione di dodici file. Su un chip senza PSRAM, con 4-6 socket condivisi da tutti
-    // gli iframe, due domande insieme bastano a far scadere le letture file dell'OS.
+    // /api/anima: the question to the assistant. Twelve surfaces call it — copilot, shell
+    // search, onboarding, ai.js, and the anima/agent/settings/spreadsheet/games/my-facts/recorder/
+    // code-runner apps — and none of them knows about the others: the "never concurrent calls" rule was left
+    // to the good manners of twelve files. On a chip without PSRAM, with 4-6 sockets shared by all
+    // the iframes, two questions at once are enough to time out the OS file reads.
     //
-    // Slot CONDIVISO (need=1), non esclusivo: una query 'mode=on' apre una TLS sul device e puo' durare
-    // secondi — dandole i permessi esclusivi congelerebbe ogni /api/fs/read della shell.
+    // SHARED slot (need=1), not exclusive: a 'mode=on' query opens a TLS session on the device and can last
+    // seconds — giving it the exclusive permits would freeze every /api/fs/read of the shell.
     //
-    // E COALESCENZA, che qui e' il guadagno vero: la stessa domanda posta insieme da piu' superfici
-    // (la ricerca fa da ponte verso il copilot, un'app chiede lo stesso fatto) diventa UNA richiesta
-    // sola, e tutti leggono la stessa risposta. Zero byte in piu', meno concorrenza: costo negativo.
+    // And COALESCING, which is the real gain here: the same question asked together by several surfaces
+    // (search bridges to the copilot, an app asks for the same fact) becomes ONE request
+    // only, and everyone reads the same answer. Zero extra bytes, less concurrency: negative cost.
     if (p === '/api/anima' && e.request.method === 'GET') {
       const key = url.pathname + url.search;
       const inflight = animaInflight.get(key);
@@ -192,7 +192,7 @@ self.addEventListener('fetch', (e) => {
       e.respondWith(job.then((r) => r.clone()));
       return;
     }
-    return; // Endpoint live/streaming (chat, logs, llm): dritti in rete, niente gate, niente cache.
+    return; // Live/streaming endpoints (chat, logs, llm): straight to the network, no gate, no cache.
   }
   // App assets (/apps/<id>/...): the device serves them no-cache, so without this EVERY cold open
   // re-downloaded the whole app (~25-440 KB) from the single-task httpd. Cache-first, version-keyed:
@@ -212,8 +212,8 @@ self.addEventListener('fetch', (e) => {
     })());
     return;
   }
-  // Asset statici dello shell: prima la cache, poi rete con gate + retry, e un fallback
-  // pulito così un reset transitorio non diventa un "Uncaught Failed to fetch" in console.
+  // Static shell assets: cache first, then network with gate + retry, and a clean
+  // fallback so a transient reset does not become an "Uncaught Failed to fetch" in the console.
   e.respondWith((async () => {
     const hit = await caches.match(e.request);
     if (hit) return hit;
