@@ -120,5 +120,12 @@
   "guideTeach": "Say “remember that the meeting room <b>is</b> on the third floor” or “my name is Marco”. Personal facts are kept by the Cardputer, so every browser sees them; while the Cardputer is unreachable they wait in this browser and are handed over as soon as it answers.",
   "guidePrivacyT": "Privacy",
   "guidePrivacy": "In <b>Private</b> mode nothing leaves this machine and your Cardputer. With a key, online calls go straight from your browser to the provider — never through the device, never logged.",
-  "guideClose": "Got it"
+  "guideClose": "Got it",
+  "gpuRecommended": "recommended for this GPU",
+  "engLocalServer": "Local server",
+  "engThisPc": "this computer",
+  "netThisPc": "none · stays on this computer",
+  "localSkipped": "{m} did not fit in memory: a lighter model answered",
+  "agentLocal": "Local agent · {server} · {model}",
+  "agentDeclined": "The local model ({model}) could not complete this task on your files ({why}), and I will not make up an answer. A bigger model on your PC (Ollama) or a cloud key can do it; or try splitting the request into simpler steps."
 }

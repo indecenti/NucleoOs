@@ -3,13 +3,15 @@
 // The device exposes only /api/fs/list (no native search). Hitting it per keystroke is slow
 // and hammers the ESP, so instead we crawl the SD ONCE (breadth-first, capped), keep a flat
 // in-memory index, and answer every search from RAM — instant, zero network. The index is:
-//   • persisted to localStorage so a returning browser searches immediately (cold start),
-//     then silently revalidated against the live device in the background;
-//   • refreshed (debounced) whenever the device reports an fs.changed event, so results stay
-//     fresh without polling;
+//   • persisted to localStorage so a returning browser searches immediately (any age), and
+//     re-crawled only when someone searches and it is missing, stale or older than 10 min — never at
+//     boot (it used to walk /data on every boot, in the middle of the session restore);
+//   • MARKED stale by fs.changed (no request); re-crawled at once only while a search is open, so
+//     results stay fresh without polling or re-reading the SD after every save;
 //   • bounded (depth + total directory reads) to stay kind to the ESP32 and its SD card.
 //
-// Everything here is framework-free and self-contained; the shell just calls search()/ensure().
+// Everything here is framework-free and self-contained; the shell calls init() at boot, warm() + search()
+// from the search UI, invalidate() on fs.changed. Host-tested in tools/shell-fsindex.test.mjs.
 
 const ROOTS = ['/data'];
 const MAX_DEPTH = 6;            // how deep into /data we descend
@@ -115,10 +117,20 @@ export function ensure(force = false) {
   return building;
 }
 
-// The device changed something on disk — schedule a debounced rebuild so search stays fresh.
+// The device changed something on disk. The index is only MARKED stale: re-crawling the whole SD after
+// every save (a note, a config file, ANIMA's learning) was the costliest thing the shell did to the
+// Cardputer. It is re-crawled when someone searches (warm), or right away only while a search is open.
+let stale = false;
+let isLive = () => false;      // set by init(): "is a search on screen right now?"
 export function invalidate() {
+  stale = true;
   clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(() => ensure(true), REFRESH_DEBOUNCE);
+  if (isLive()) refreshTimer = setTimeout(() => ensure(true), REFRESH_DEBOUNCE);
+}
+// Called by the search UI: answer from what we have, and refresh in the background if it is missing,
+// stale, or old. Concurrent calls share one crawl.
+export function warm() {
+  if (!builtAt || stale || (now() - builtAt) >= PERSIST_TTL) { stale = false; ensure(true); }   // a change DURING the crawl marks it stale again
 }
 
 export function onUpdate(cb) { updateCbs.add(cb); return () => updateCbs.delete(cb); }
@@ -172,10 +184,11 @@ export function search(query, limit = 40) {
 }
 
 // Initialise from the persisted index (instant), then revalidate against the device.
-export function init() {
-  const warm = loadPersisted();
+// Boot: the index this browser kept (any age) answers searches instantly; NO crawl here. Every boot used
+// to walk /data (up to MAX_DIRS /api/fs/list) even when nobody searched — on a 4-socket, no-PSRAM device,
+// in the middle of the session restore. The crawl now happens on the first search (warm()).
+export function init({ live } = {}) {
+  if (typeof live === 'function') isLive = live;
+  loadPersisted();
   if (index.length) for (const cb of updateCbs) try { cb(); } catch {}
-  // Revalidate now if cold, or shortly after if warm (don't compete with first paint).
-  if (warm) setTimeout(() => ensure(true), 4000);
-  else ensure(true);
 }

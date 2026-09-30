@@ -15,6 +15,16 @@
   "loading_lobby": "Carico la lobby…",
   "catalog_empty": "Catalogo vuoto.",
 
+  "badge_realtime": "tempo reale",
+  "game_tris_name": "Tris",
+  "game_tris_desc": "Filetto a turni: 2 giocatori, contro ANIMA offline, oppure contro un LLM online (Grok/Claude) che gioca davvero le mosse.",
+  "game_forza4_name": "Forza 4",
+  "game_forza4_desc": "Allinea quattro gettoni. 2 giocatori, contro ANIMA (facile/medio), o contro un LLM online (Grok/Claude) che sceglie ogni mossa.",
+  "game_pong_name": "Pong 3D",
+  "game_pong_desc": "Arena 3D neon (Three.js) con power-up, scia, particelle ed effetti sonori. 1v1 in rete o contro ANIMA — cervello offline o LLM online (Claude/Grok/Groq).",
+  "game_constellations_name": "Costellazioni 3D",
+  "game_constellations_desc": "Mercante/cacciatore stellare in 3D (Three.js). CONTINUA la stessa run del Cardputer: universo procedurale infinito, missioni e dogfight in prima persona. Joypad, mouse o tastiera.",
+
   "btn_hint": "💡 Suggerimento",
   "btn_invite": "🔗 Invita",
   "btn_ready": "✓ Pronto",

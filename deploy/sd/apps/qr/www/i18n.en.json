@@ -47,5 +47,8 @@
   "deleted": "Deleted",
   "save_failed": "Save failed (device offline?)",
   "saved_to_device": "Saved to device",
-  "load": "Load"
+  "load": "Load",
+  "read_failed": "Couldn't read the saved QR codes from the Cardputer: nothing is saved so they aren't overwritten. Try again shortly.",
+  "read_corrupt": "The QR file on the Cardputer can't be read: it is left untouched so nothing is lost.",
+  "not_paired": "This browser isn't paired with the Cardputer — pair it to save QR codes."
 }

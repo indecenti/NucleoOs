@@ -120,5 +120,12 @@
   "guideTeach": "Dites « remember that the meeting room <b>is</b> on the third floor » ou « my name is Marco » (le cerveau hors ligne comprend l’anglais et l’italien). Les faits personnels sont gardés par le Cardputer, donc chaque navigateur les voit ; si le Cardputer est injoignable, ils attendent dans ce navigateur et lui sont transmis dès qu’il répond.",
   "guidePrivacyT": "Confidentialité",
   "guidePrivacy": "En mode <b>Privé</b>, rien ne quitte cette machine ni votre Cardputer. Avec une clé, les appels en ligne partent directement de votre navigateur vers le fournisseur — jamais par l’appareil, jamais journalisés.",
-  "guideClose": "Compris"
+  "guideClose": "Compris",
+  "gpuRecommended": "recommandé pour ce GPU",
+  "engLocalServer": "Serveur local",
+  "engThisPc": "cet ordinateur",
+  "netThisPc": "aucun · reste sur cet ordinateur",
+  "localSkipped": "{m} ne tenait pas en mémoire : un modèle plus léger a répondu",
+  "agentLocal": "Agent local · {server} · {model}",
+  "agentDeclined": "Le modèle local ({model}) n'a pas pu mener à bien cette tâche sur tes fichiers ({why}), et je ne vais pas inventer de réponse. Un modèle plus grand sur ton PC (Ollama) ou une clé cloud peuvent le faire ; ou découpe la demande en étapes plus simples."
 }

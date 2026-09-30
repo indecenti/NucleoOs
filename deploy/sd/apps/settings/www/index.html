@@ -640,6 +640,8 @@
 import { DEFAULTS, merge } from './settings-merge.js';
 import { STR, t as tr, detectLang } from './i18n.js';
 import I18N, { LANGS } from '/nucleo-i18n.js';   // OS i18n engine: live language + regional formats
+// The shared core catalog (cap_* capability strings, app names) — loaded once, never repaints Settings' own UI.
+const coreReady = I18N.init('core', { apply: false, observe: false }).catch(() => {});
 import { createPoller } from './poller.js';
 import { SCENES, applyScene } from './scenes.js';
 import { PRESETS, applyPreset, planPreset, feasibility, buildRegistry, gaps, APP_MAP, appStatus } from './preset-engine.js';
@@ -1295,15 +1297,36 @@ function fromForm() {
 }
 
 // ═══════════ persistence (drift-aware: re-read → merge → write) ═══════════
-async function readSettingsFile() { try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store' }); if (r.ok) { const t = await r.text(); return t ? JSON.parse(t) : {}; } } catch {} return {}; }
-async function persistModel() {
-  const onDisk = await readSettingsFile();                 // preserve keys we don't manage
-  const out = merge(onDisk, model);
-  try { const w = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH), { method: 'POST', body: JSON.stringify(out, null, 2) }); return w.ok; } catch { return false; }
+// Typed read. A FAILED read (offline, 401, 503) is NOT an empty settings file: the old reader returned {}
+// for it, the page showed the DEFAULTS, and the next save — even a theme tap — wrote defaults + that one
+// change over the real settings.json (Wi-Fi, language, device name…). 404/empty = none yet (firmware "{}").
+async function readSettingsFile() {
+  try {
+    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store' });
+    if (r.status === 404) return { ok: true, data: {} };
+    if (!r.ok) return { ok: false, status: r.status };
+    const t = (await r.text()).trim();
+    const j = t ? JSON.parse(t) : {};
+    return j && typeof j === 'object' && !Array.isArray(j) ? { ok: true, data: j } : { ok: false, status: 'corrupt' };
+  } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
 }
-async function save() { fromForm(); status(T('saving')); const ok = await persistModel(); status(ok ? T('saved') : T('saveFailed'), ok); if (ok) setDirty(false); }
+const readFailText = (st) => st === 401 || st === 403 ? T('settingsNotPaired') : st === 'corrupt' ? T('settingsReadCorrupt') : T('settingsReadFailed');
+let settingsRead = false;      // saving is allowed only once the REAL file was read
+let loadedOnce = false;
+async function persistModel() {
+  const r = await readSettingsFile();                      // re-read → merge → write: preserve keys we don't manage
+  if (!r.ok) { settingsRead = false; return readFailText(r.status); }
+  const out = merge(r.data, model);
+  try { const w = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH), { method: 'POST', body: JSON.stringify(out, null, 2) }); return w.ok ? true : (w.status === 401 || w.status === 403 ? T('settingsNotPaired') : T('saveFailed')); } catch { return T('saveFailed'); }
+}
+async function save() {
+  if (!settingsRead) { await load(); if (!settingsRead) return; }      // never save over a file we could not read
+  fromForm(); status(T('saving')); const ok = await persistModel(); status(ok === true ? T('saved') : ok, ok === true); if (ok === true) setDirty(false);
+}
 let uiSaveT = null;
-function persistUiSoon() { clearTimeout(uiSaveT); uiSaveT = setTimeout(async () => { status(T('saving')); const ok = await persistModel(); status(ok ? T('personalizationSaved') : T('saveFailed'), ok); }, 350); }
+function persistUiSoon() { clearTimeout(uiSaveT); uiSaveT = setTimeout(async () => {
+  if (!settingsRead) { status(T('settingsReadFailed'), false); return; }  // the change stays live on screen, not on the SD
+  status(T('saving')); const ok = await persistModel(); status(ok === true ? T('personalizationSaved') : ok, ok === true); }, 350); }
 $('btn-save').addEventListener('click', save);
 $('btn-reload').addEventListener('click', load);
 
@@ -1431,6 +1454,7 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
 
   // Build the CapabilityModel from signals that already exist (caps + teacher.json) + cheap browser probes.
   async function probeSignals() {
+    await coreReady;
     // A caps read from the last few seconds (load/refreshCaps just ran) is reused — the open
     // sequence used to hit /api/anima/caps twice back-to-back on the single-task device.
     let c = caps || {};
@@ -1441,13 +1465,21 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
     const keys = { anthropic: false, openai: false, xai: false, google: false };
     let exec = 'browser', geminiTier = '';
     try {
-      const r = await fetch('/api/fs/read?path=' + encodeURIComponent(TPATH), { cache: 'no-store' });
-      if (r.ok) { const j = JSON.parse(await r.text()) || {}; const kk = j.keys || {};
+      // Through the shared, cached reader: Settings used to read teacher.json twice within 3 ms at open.
+      const j = await (await import('/ai.js')).readTeacher();
+      if (j && !j.unpaired) { const kk = j.keys || {};
         for (const p of Object.keys(keys)) keys[p] = !!(kk[p] && kk[p].key) || (j.provider === p && !!j.key);
         exec = j.exec || 'browser'; geminiTier = j.geminiTier || ''; }
     } catch {}
-    let webgpu = false, vramMB = null;
-    try { if (navigator.gpu) { const a = await navigator.gpu.requestAdapter(); if (a) { webgpu = true; const lim = a.limits && a.limits.maxBufferSize; if (lim) vramMB = Math.round(lim / 1048576); } } } catch {}
+    // GPU rung: the OS-wide diagnosis (/capabilities.js) + whether ANIMA's chosen model is REALLY installed
+    // (the same cache check ANIMA uses). localModelReady used to be hard-coded false, so this rung said
+    // "model not downloaded" forever and the Local preset could never land on the GPU.
+    let webgpu = false, vramMB = null, gpuCause = null, localModelReady = false, localModelId = null;
+    try {
+      const C = await import('/capabilities.js'); const caps = await C.probeCapabilities();
+      webgpu = !!(caps.webgpu && caps.webgpu.available); vramMB = (caps.webgpu && caps.webgpu.maxBufferMB) || null; gpuCause = caps.diagnosis.gpu;
+    } catch {}
+    if (webgpu) { try { const m = await import('/apps/anima/local-llm.js'); localModelReady = await m.localAvailable(); localModelId = m.chosenLocalBuild(); } catch {} }
     let packCached = false;
     try { const m = await import('/apps/anima/local/engine.js'); packCached = await m.packCached(); } catch {}
     return {
@@ -1455,7 +1487,7 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
       provider: c.provider || 'anthropic', model: c.model || '', keys, geminiTier,
       l1Mode: c.l1Mode || 'auto', l1Serving: !!c.l1Serving,
       webgpu, vramMB, deviceMemory: navigator.deviceMemory || null,
-      packCached, packUsable: packCached, localModelReady: false, localModelId: null,
+      packCached, packUsable: packCached, localModelReady, localModelId, gpuCause,
       tts: !!ttsState.available, exec,
     };
   }
@@ -1484,17 +1516,33 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
     const active = (model.ai && model.ai.preset) || 'auto';
     const landed = (planPreset(active, sig, REG) || {}).landedRung;
     const cloudOk = sig.online && sig.enabled && sig.hasKey;
-    const gpuOk = sig.webgpu && (sig.vramMB || 0) >= 900 && sig.localModelReady;
+    const gpuOk = sig.webgpu && sig.localModelReady;
     const wasmOk = sig.packUsable;
+    const CT = (k, v) => I18N.t(k, v, 'core');
+    const shortModel = String(sig.localModelId || '').replace(/-q4f(16|32)_1-MLC$/, '').replace(/-Instruct$/, '');
+    const gpuS = sig.webgpu ? (gpuOk ? CT('cap_gpu_ready', { model: shortModel }) : CT('cap_gpu_nomodel'))
+      : (sig.gpuCause === 'insecure' ? CT('cap_gpu_blocked_http') : CT('cap_gpu_none'));
     const rungs = [
       { k: 'cloud', t: EN() ? '1 · Cloud' : '1 · Cloud', led: cloudOk ? 'on' : (sig.hasKey ? 'warn' : 'off'), s: cloudOk ? ('✓ ' + sig.provider) : (sig.hasKey ? (sig.online ? (EN() ? 'ready' : 'pronta') : 'offline') : (EN() ? 'no key' : 'nessuna chiave')) },
-      { k: 'gpu', t: EN() ? '2 · Browser GPU' : '2 · GPU browser', led: gpuOk ? 'on' : 'off', s: sig.webgpu ? (gpuOk ? (EN() ? 'ready' : 'pronto') : (EN() ? 'model not downloaded' : 'modello non scaricato')) : (EN() ? 'WebGPU absent' : 'WebGPU assente') },
+      { k: 'gpu', t: EN() ? '2 · Browser GPU' : '2 · GPU browser', led: gpuOk ? 'on' : (sig.webgpu ? 'warn' : 'off'), s: gpuS, how: !sig.webgpu },
       { k: 'wasm', t: EN() ? '3 · Browser WASM' : '3 · WASM browser', led: wasmOk ? 'on' : 'warn', s: wasmOk ? (EN() ? 'cached' : 'in cache') : (EN() ? 'pack not downloaded' : 'pack non scaricato') },
       { k: 'device', t: EN() ? '4 · Cardputer' : '4 · Cardputer', led: 'on', s: EN() ? 'always ready' : 'sempre pronto' },
     ];
-    box.innerHTML = rungs.map((r) => `<div class="rung" style="${r.k === landed ? 'border-color:var(--accent)' : ''}"><div class="rh"><span class="led ${r.led}"></span>${r.t}${r.k === landed ? ' ◀' : ''}</div><div class="rs">${r.s}</div></div>`).join('')
-      + `<div style="flex-basis:100%;margin-top:5px"><button id="preset-verify" style="font-size:12px">▶ ${EN() ? 'Test now' : 'Prova adesso'}</button> <span class="hint" id="preset-verify-out"></span></div>`;
+    const escT = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    box.innerHTML = rungs.map((r) => `<div class="rung" style="${r.k === landed ? 'border-color:var(--accent)' : ''}"><div class="rh"><span class="led ${r.led}"></span>${r.t}${r.k === landed ? ' ◀' : ''}</div><div class="rs">${escT(r.s)}${r.how ? ` <button type="button" class="cap-how" style="font-size:11px">${escT(CT('cap_how'))}</button>` : ''}</div></div>`).join('')
+      + `<div style="flex-basis:100%;margin-top:5px"><button id="preset-verify" style="font-size:12px">▶ ${EN() ? 'Test now' : 'Prova adesso'}</button> <span class="hint" id="preset-verify-out"></span></div>`
+      + `<div id="cap-panel" style="flex-basis:100%" hidden></div>`;
     const vb = $('preset-verify'); if (vb) vb.addEventListener('click', () => verifyNow());
+    // The same checklist + exact fix ANIMA shows, inline here (no second explanation to drift).
+    const hb = box.querySelector('.cap-how');
+    if (hb) hb.addEventListener('click', async () => {
+      const host = $('cap-panel'); if (!host) return;
+      if (!host.hidden) { host.hidden = true; return; }
+      try { await I18N.init('core', { apply: false, observe: false }); } catch {}
+      const C = await import('/capabilities.js');
+      host.hidden = false;
+      C.renderCapabilityHelp(host, await C.probeCapabilities({ fresh: true }), CT, { onVerified: () => location.reload() });
+    });
   }
 
   function renderCaps(sig) {
@@ -1641,12 +1689,19 @@ window.addEventListener('message', (e) => {
   // Embedded: the shell polls /api/status for the whole OS and rebroadcasts the snapshot — feed the
   // hero/network/about surfaces from it instead of polling the same endpoint a second time here.
   else if (d.t === 'status.snapshot' && d.d && EMBEDDED) { renderStatus(d.d); setLive('live'); }
+  // The shell's link monitor: the Cardputer dropped off / came back. Without it the pill kept saying
+  // "Live" while the device was gone.
+  else if (d.t === 'link.state' && d.d && EMBEDDED) setLive(d.d.online ? 'live' : 'offline');
 });
 
 // ═══════════ load ═══════════
 async function load() {
   status(T('loading'));
-  const onDisk = await readSettingsFile();
+  const rd = await readSettingsFile();
+  settingsRead = rd.ok;
+  // A later re-read that fails keeps what is on screen. The FIRST one still renders (defaults, SAVING BLOCKED).
+  if (!rd.ok && loadedOnce) { status(readFailText(rd.status), false); return; }
+  const onDisk = rd.ok ? rd.data : {};
   model = merge(DEFAULTS, onDisk);
   // Sanitize garbage only — every OS language is valid here. This used to clamp to it/en, wiping a
   // stored es/fr/de back to Italian on every open (and persisting the damage on the next save).
@@ -1654,7 +1709,8 @@ async function load() {
   if (!LANGS.some((l) => l.code === model.ui.language)) model.ui.language = /^it/i.test(model.device.locale || '') ? 'it' : 'en';
   lang = detectLang(model);
   applyLiveUI(); toForm(); updateScreenUI(); setDirty(false);
-  status(T('ready'));
+  status(rd.ok ? T('ready') : readFailText(rd.status), rd.ok);
+  loadedOnce = true;
   await refreshCaps(4000); await loadTts(); syncQuickToggles();
 }
 

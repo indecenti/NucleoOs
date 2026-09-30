@@ -40,16 +40,23 @@
     // Safe arithmetic evaluator (no eval): shunting-yard over + - * / and parentheses.
     function evaluate(s) {
       const toks = s.match(/(\d+\.?\d*|[+\-*/()])/g) || [];
-      const out = [], ops = [], pr = { '+': 1, '-': 1, '*': 2, '/': 2 };
-      const apply = () => { const b = out.pop(), a = out.pop(), o = ops.pop();
-        out.push(o === '+' ? a + b : o === '-' ? a - b : o === '*' ? a * b : a / b); };
-      let sign = 1, un = true;                       // un: expecting an operand, so +/- are unary
+      // 'neg' is unary minus: a real PREFIX operator binding tighter than * and /. It used to be a sign
+      // flag stuck onto the next NUMBER, so -(2+3) negated the 2 inside the bracket and gave 1.
+      const out = [], ops = [], pr = { '+': 1, '-': 1, '*': 2, '/': 2, neg: 3 };
+      const apply = () => {
+        const o = ops.pop();
+        if (o === 'neg') { if (!out.length) throw new Error('bad expression'); out.push(-out.pop()); return; }
+        if (out.length < 2) throw new Error('bad expression');
+        const b = out.pop(), a = out.pop();
+        out.push(o === '+' ? a + b : o === '-' ? a - b : o === '*' ? a * b : a / b);
+      };
+      let un = true;                                 // un: expecting an operand, so +/- are unary
       for (const tok of toks) {
-        if (/\d/.test(tok)) { out.push(sign * parseFloat(tok)); sign = 1; un = false; }
+        if (/\d/.test(tok)) { out.push(parseFloat(tok)); un = false; }
         else if (tok === '(') { ops.push(tok); un = true; }
         else if (tok === ')') { while (ops.length && ops.at(-1) !== '(') apply(); ops.pop(); un = false; }
-        else if (un) { if (tok === '-') sign = -sign; }
-        else { while (ops.length && pr[ops.at(-1)] >= pr[tok]) apply(); ops.push(tok); un = true; }
+        else if (un) { if (tok === '-') ops.push('neg'); }          // unary '+' is a no-op; prefix ops pop nothing
+        else { while (ops.length && ops.at(-1) !== '(' && pr[ops.at(-1)] >= pr[tok]) apply(); ops.push(tok); un = true; }
       }
       while (ops.length) apply();
       if (out.length !== 1 || !isFinite(out[0])) throw new Error('bad expression');

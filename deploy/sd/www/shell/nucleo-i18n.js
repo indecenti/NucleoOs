@@ -88,20 +88,42 @@ function urlFor(ns, lang) {
   return `/apps/${ns}/i18n.${lang}.json`;
 }
 
-async function fetchCatalog(url) {
-  if (rawCatalogs.has(url)) return rawCatalogs.get(url);   // in-memory dedup within this document
-  let obj = null;
+// Catalogs this OS session already holds. The shell (top document) publishes its Map; an app window of the
+// same origin reads core/shell from it instead of asking the Cardputer again. Measured 2026-09-30: a cold
+// boot that restored four app windows fetched core.en + core.<lang> SIX times each (once per document, twice
+// in Settings, whose three concurrent init('core') raced this cache). Sandboxed/cross-origin frames can't
+// see the top window: they fetch as before.
+function sharedCatalog(url) {
   try {
-    // No app-level persistent cache on purpose: the service worker already precaches core/shell and
-    // the HTTP cache covers the rest, so fetches are cheap — and a persistent cache would serve a
-    // STALE catalog for the whole session after a deploy/edit. The in-memory Map is enough.
-    const r = await fetch(url, { cache: 'no-cache' });
-    if (r.ok) obj = await r.json();
-  } catch {}
-  // A missing/empty catalog is fine (the namespace just inherits core + falls back to keys).
-  if (obj == null) obj = {};
-  rawCatalogs.set(url, obj);
-  return obj;
+    const top = globalThis.top;
+    if (!top || top === globalThis || !top.__nucleoCatalogs) return undefined;
+    return top.__nucleoCatalogs.get(url);
+  } catch { return undefined; }
+}
+try { if (globalThis.top === globalThis) globalThis.__nucleoCatalogs = rawCatalogs; } catch {}
+
+function fetchCatalog(url) {
+  // In-memory dedup within this document — the PROMISE is stored at once, so concurrent init() calls
+  // share one request instead of racing past an empty cache.
+  if (rawCatalogs.has(url)) return Promise.resolve(rawCatalogs.get(url));
+  const shared = /^\/i18n\//.test(url) ? sharedCatalog(url) : undefined;
+  if (shared !== undefined) { rawCatalogs.set(url, shared); return Promise.resolve(shared); }
+  const job = (async () => {
+    let obj = null;
+    try {
+      // No app-level persistent cache on purpose: the service worker already precaches core/shell and
+      // the HTTP cache covers the rest, so fetches are cheap — and a persistent cache would serve a
+      // STALE catalog for the whole session after a deploy/edit. The in-memory Map is enough.
+      const r = await fetch(url, { cache: 'no-cache' });
+      if (r.ok) obj = await r.json();
+    } catch {}
+    // A missing/empty catalog is fine (the namespace just inherits core + falls back to keys).
+    if (obj == null) obj = {};
+    rawCatalogs.set(url, obj);
+    return obj;
+  })();
+  rawCatalogs.set(url, job);        // pending: later callers here — and app windows via the top Map — share it
+  return job;
 }
 
 // Build the resolved lookup table for (ns, lang): core(base) ⊂ core(active) ⊂ ns(base) ⊂ ns(active).
@@ -226,6 +248,14 @@ const I18N = {
 
   // Return a namespace-bound t() without re-loading (use after init for convenience).
   scope(ns) { return (key, vars) => translate(ns, key, vars); },
+
+  // The raw catalog of ONE namespace in ANY language (not only the active one) — for callers that must
+  // match text across languages, e.g. the shell's app search finding "Rechner" while the UI is in
+  // Italian. Shares the in-memory dedup, so the base/active files already loaded cost nothing again.
+  catalog(ns, lang) {
+    const l = normalize(lang);
+    return l ? fetchCatalog(urlFor(ns || 'core', l)) : Promise.resolve({});
+  },
 
   // Fill every [data-i18n*] element under `root`. Call after building DOM dynamically.
   apply(root = document, defaultNs = 'core') {

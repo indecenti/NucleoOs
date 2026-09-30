@@ -26,5 +26,10 @@
   "err_empty": "Se requiere un nombre o un correo",
   "confirm_del": "¿Eliminar \"{name}\"?",
   "vcard_saved": "vCard guardada en {path}",
-  "vcard_fail": "No se pudo guardar la vCard"
+  "vcard_fail": "No se pudo guardar la vCard",
+  "read_failed": "No se pudieron leer los contactos del Cardputer: la edición está en pausa para no sobrescribirlos.",
+  "read_corrupt": "El archivo de contactos del Cardputer no se puede leer: no lo modifico para no perderlo.",
+  "not_paired": "Este navegador no está vinculado al Cardputer: vincúlalo para guardar los contactos.",
+  "save_failed": "No se pudo guardar: el Cardputer no responde. Inténtalo de nuevo en breve.",
+  "ro_cache": "Ves la última copia guardada en este navegador (solo lectura)."
 }

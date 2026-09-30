@@ -305,6 +305,17 @@ const show = (sel, on) => $(sel).classList.toggle('hidden', !on);
 // catalog, paints the [data-i18n] markup, installs the observer, and live-switches on an OS language change.
 const t = I18N.scope('games');
 const lang = () => I18N.lang;
+// Game names/descriptions follow the OS language too. registry/games.json stays language-neutral data;
+// the shown text is the catalog key `game_<id>_name` / `game_<id>_desc` (so the i18n gate keeps every
+// language in parity), falling back to the registry's own name/desc — the Italian originals — for a
+// drop-in game that ships no catalog keys yet. t() returns the key itself when it's missing.
+function gameText(id, field) {
+  const k = `game_${id}_${field}`, v = t(k);
+  if (v !== k) return v;
+  const g = CATALOG.find(x => x.id === id) || (def && def.id === id ? def : null);
+  return (g && g[field]) || (field === 'name' ? id : '');
+}
+const gameName = (id) => gameText(id, 'name');
 
 let CATALOG = [], STATS = {};
 let play = null, harness = null, def = null, profile = P.getProfile();
@@ -353,12 +364,12 @@ async function loadCatalog() {
     const card = el('div', 'card cat-' + (g.category || 'classic'));
     card.appendChild(el('div', 'accent'));
     card.appendChild(el('div', 'ico', g.icon || iconFor(g)));
-    card.appendChild(el('h3', null, g.name));
-    card.appendChild(el('p', null, g.desc || ''));
+    card.appendChild(el('h3', null, gameName(g.id)));
+    card.appendChild(el('p', null, gameText(g.id, 'desc')));
     const meta = el('div', 'row');
     meta.appendChild(el('span', 'badge', `${g.minPlayers}-${g.maxPlayers}P`));
     if (g.ai) meta.appendChild(el('span', 'badge', 'vs ANIMA'));
-    if (g.realtime) meta.appendChild(el('span', 'badge', 'real-time'));
+    if (g.realtime) meta.appendChild(el('span', 'badge', t('badge_realtime')));
     const st = P.summarize(STATS, g.id); if (st.games) meta.appendChild(el('span', 'badge', t('record_short', { w: st.w, l: st.l })));
     card.appendChild(meta);
     const actions = el('div', 'row'); actions.style.marginTop = '12px';
@@ -398,7 +409,7 @@ async function loadRoomsInner() {
     const info = el('div', 'grow');
     info.appendChild(el('div', null, r.name));
     const sub = el('div'); sub.style.cssText = 'font-size:12px;color:var(--dim)';
-    sub.textContent = `${(gd && gd.name) || r.gameId} · ${r.seats.length}/${r.maxSeats}${r.spectators ? ' · 👁' + r.spectators : ''}`;
+    sub.textContent = `${gd ? gameName(gd.id) : r.gameId} · ${r.seats.length}/${r.maxSeats}${r.spectators ? ' · 👁' + r.spectators : ''}`;
     info.appendChild(sub); row.appendChild(info);
     const full = r.seats.length >= r.maxSeats;
     const b = el('button', full ? 'ghost' : 'primary', full ? ('👁 ' + t('watch')) : t('join'));
@@ -410,7 +421,7 @@ async function loadRoomsInner() {
 // ---- enter a room (host or guest) ----------------------------------------------------------
 async function hostGame(g, withAI) {
   play = new NucleoPlay({ profile });
-  await play.host({ gameId: g.id, name: `${profile.name} · ${g.name}`, maxSeats: g.maxPlayers });
+  await play.host({ gameId: g.id, name: `${profile.name} · ${gameName(g.id)}`, maxSeats: g.maxPlayers });
   if (withAI && g.ai) play.addAI('ANIMA');
   await setupSession(g.id);
   gotoPhase('waiting'); play.setPhase('waiting');
@@ -440,7 +451,7 @@ async function setupSession(gameId) {
     onAiActed: () => maybeBanter(),
     onOver: r => onGameOver(r),
   });
-  $('#gameName').textContent = def.name;
+  $('#gameName').textContent = gameName(def.id);
   $('#roomCode').textContent = '#' + play.roomId.replace(/^r_/, '');
   wireRoomOnce();
   wireInput($('#board'));
@@ -482,7 +493,7 @@ function enterImmersive() {
   document.body.classList.add('immersive');
   $('#gbSlot').appendChild(asideEl);                 // roster + chat move into the bar
   requestFs();                                       // works on a gesture (host Start); guests retry on input
-  if (!shownIntro) { shownIntro = true; toast('🎮 ' + (def ? def.name : t('game')) + t('intro_menu_hint')); }
+  if (!shownIntro) { shownIntro = true; toast('🎮 ' + (def ? gameName(def.id) : t('game')) + t('intro_menu_hint')); }
   if (wantsLock() && !play.spectator) showLockHint(true);   // only when the game actually wants the mouse now (combat), not the hub
   // Re-measure after the chrome collapses (reflow) and after a 3D game finishes its async renderer
   // load, so the board fills the screen with no first-frame flash.
@@ -555,7 +566,7 @@ function closeBar() {
 }
 function toggleBar() { barOpen ? closeBar() : openBar(); }
 function renderBar() {
-  $('#gbTitle').textContent = def ? def.name : '';
+  $('#gbTitle').textContent = def ? gameName(def.id) : '';
   $('#gbCode').textContent = play ? ('#' + play.roomId.replace(/^r_/, '')) : '';
   $('#gbCtrlHint').textContent = ctrlHintText();
   $('#gbFs').textContent = document.fullscreenElement ? t('btn_exit_fullscreen') : t('btn_fullscreen');
@@ -600,7 +611,7 @@ function toast(text) {
 // ---- waiting room (transversal) ------------------------------------------------------------
 function renderWaiting() {
   if (phase !== 'waiting') return;
-  $('#waitTitle').textContent = play.spectator ? t('watch_title', { game: def.name }) : t('waiting_title', { game: def.name });
+  $('#waitTitle').textContent = play.spectator ? t('watch_title', { game: gameName(def.id) }) : t('waiting_title', { game: gameName(def.id) });
   const players = (play.roster || []).filter(r => r.seat >= 0).sort((a, b) => a.seat - b.seat);
   const cards = $('#seatCards'); cards.innerHTML = '';
   for (let s = 0; s < play.maxSeats; s++) {
@@ -792,11 +803,11 @@ function onGameOver(r) {
   if (immersive) openBar(); else syncBarButtons();   // surface rematch/leave automatically
   if (play.seat >= 0 && !play.spectator) { const o = r.winner === -1 ? 'draw' : (won ? 'win' : 'loss'); P.recordResult(def.id, o).then(s => { STATS = s; paintCard(); }); }
   const who = r.winner === -1 ? t('who_draw') : t('who_won', { name: nameOfSeat(r.winner) });
-  animaSay(t('prompt_gameover', { game: def.name, who })).then(line => { if (line) animaMsg(line); });
+  animaSay(t('prompt_gameover', { game: gameName(def.id), who })).then(line => { if (line) animaMsg(line); });
 }
 async function maybeBanter() {
   const now = performance.now(); if (now - animaLast < 9000) return; animaLast = now;
-  const line = await animaSay(t('prompt_banter', { game: def.name }));
+  const line = await animaSay(t('prompt_banter', { game: gameName(def.id) }));
   if (line) animaMsg(line);
 }
 
@@ -962,7 +973,7 @@ function relabel() {
     for (const o of (def.options || [])) { const i = $('#opt_' + o.key); if (i && cur[o.key] != null) { if (o.type === 'toggle') i.checked = !!cur[o.key]; else i.value = cur[o.key]; } }
   }
   if (phase === 'lobby') { loadCatalog(); loadRooms(); }
-  else { renderWaiting(); renderRoster(); }
+  else { if (def) $('#gameName').textContent = gameName(def.id); renderWaiting(); renderRoster(); }
   if (barOpen) renderBar(); else syncBarButtons();
 }
 

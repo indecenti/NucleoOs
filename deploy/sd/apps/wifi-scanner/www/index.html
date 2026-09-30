@@ -138,7 +138,8 @@
         const r = await fetch('/api/wifi/known', { cache: 'no-store' });
         if (!r.ok) { known = new Map(); return; }
         const j = await r.json();
-        known = new Map((j.networks || []).map((n) => [n.ssid, { priority: n.priority | 0, current: !!n.current }]));
+        // has_pass absent (older firmware) -> assume the password is stored, the old behaviour.
+        known = new Map((j.networks || []).map((n) => [n.ssid, { priority: n.priority | 0, current: !!n.current, hasPass: n.has_pass !== false }]));
         if (j.ssid) connectedSSID = j.ssid;
       } catch { known = new Map(); }
     }
@@ -177,12 +178,13 @@
       closeActions();
       const saved = known.get(n.ssid);
       const cur = connectedSSID && n.ssid === connectedSSID;
-      // Show a password field for any secured network. For a saved one it's optional (leave blank to
-      // reuse the stored password) — but always available so a wrong/empty stored password can be fixed.
+      // Show a password field for any secured network. For a saved one WITH a stored password it's
+      // optional (leave blank to reuse it) — but always available so a wrong stored password can be fixed.
+      // A saved one WITHOUT (recovered from the password-free SD mirror) asks for it like a new network.
       const needPass = !isOpen(n.auth);
       const act = document.createElement('div'); act.className = 'act';
       act.innerHTML =
-        (needPass ? `<input class="pw" type="password" placeholder="${saved ? t('password_keep') : t('password')}" autocomplete="off">` : ``) +
+        (needPass ? `<input class="pw" type="password" placeholder="${saved && saved.hasPass ? t('password_keep') : t('password')}" autocomplete="off">` : ``) +
         `<button class="join">${cur ? t('reconnect') : t('connect')}</button>` +
         (saved ? `<button class="forget">${t('forget')}</button>` : ``);
       act.onclick = (e) => e.stopPropagation();

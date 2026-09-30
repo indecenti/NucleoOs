@@ -26,5 +26,10 @@
   "err_empty": "A name or an email is required",
   "confirm_del": "Delete \"{name}\"?",
   "vcard_saved": "vCard saved to {path}",
-  "vcard_fail": "vCard save failed"
+  "vcard_fail": "vCard save failed",
+  "read_failed": "Couldn't read the contacts from the Cardputer: editing is paused so nothing gets overwritten.",
+  "read_corrupt": "The contacts file on the Cardputer can't be read: it is left untouched so nothing is lost.",
+  "not_paired": "This browser isn't paired with the Cardputer — pair it to save your contacts.",
+  "save_failed": "Save failed: the Cardputer isn't answering. Try again shortly.",
+  "ro_cache": "You are seeing the last copy saved in this browser (read-only)."
 }

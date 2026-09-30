@@ -47,5 +47,8 @@
   "deleted": "Gelöscht",
   "save_failed": "Speichern fehlgeschlagen (Gerät offline?)",
   "saved_to_device": "Auf dem Gerät gespeichert",
-  "load": "Laden"
+  "load": "Laden",
+  "read_failed": "Die gespeicherten QR-Codes konnten nicht vom Cardputer gelesen werden: nichts wird gespeichert, damit sie nicht überschrieben werden. Versuche es gleich erneut.",
+  "read_corrupt": "Die QR-Datei auf dem Cardputer ist nicht lesbar: sie bleibt unverändert, damit nichts verloren geht.",
+  "not_paired": "Dieser Browser ist nicht mit dem Cardputer gekoppelt – kopple ihn, um QR-Codes zu speichern."
 }

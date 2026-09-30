@@ -56,6 +56,22 @@ export function decideNotify({ currentVer, latestTag, notifiedTags }) {
   return { notify: newer && !seen, newer };
 }
 
+// --- release "type" (how loud the update notification should be) -----------------------------
+// GitHub releases carry no native "type", so the releaser marks it in the release notes with a
+// leading token like "[security]" (or [major]/[minor]/[patch]); default "patch". The Pages CI
+// copies the same token into version.json so the native updater (update_policy.c upd_extract_type)
+// reads it too — one authoring convention, both surfaces. Case-insensitive; first match wins.
+export function parseReleaseType(text) {
+  const m = /\[(security|major|minor|patch)\]/i.exec(String(text || ''));
+  return m ? m[1].toLowerCase() : 'patch';
+}
+
+// Notification level for a release type: a security update is a 'warn' (louder colour + chime),
+// every other type is a plain 'info'. Mirrors the native NOTIFY_WARN/NOTIFY_INFO choice.
+export function updateLevel(type) {
+  return String(type || '').toLowerCase() === 'security' ? 'warn' : 'info';
+}
+
 // --- GitHub "latest release" fetch (conditional, rate-limit friendly) ------------------------
 // Injected fetch → unit-testable. A 304 keeps the old cache (and is free against the API rate
 // limit); any error returns the cache unchanged — the caller stays silent on failure by design.

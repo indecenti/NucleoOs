@@ -11,7 +11,9 @@
 
 // Case-fold and treat -, _ and . as word separators, so "file-commander" is one phrase for matching
 // purposes and an app ID reads like its display name.
-export const normMatch = (s) => String(s == null ? '' : s).toLowerCase().replace(/[-_.]+/g, ' ');
+// Soft hyphens (U+00AD, typographic break points in long localised app names) are invisible: never let
+// them split a match ("Einstel­lungen" must match "einstellungen").
+export const normMatch = (s) => String(s == null ? '' : s).replace(/­/g, '').toLowerCase().replace(/[-_.]+/g, ' ');
 
 // Score a candidate against a query. -1 = no match. BOTH sides are normalised here, so callers
 // cannot half-apply the rule (an un-normalised "file-commander" used to match nothing at all).
@@ -36,11 +38,20 @@ export function kwScore(kw, query) {
 
 // Apps: the display name leads, the ID is a slightly weaker alias (so "file-commander" finds the app
 // even when the name is localised). Ties break alphabetically for a stable, predictable list.
-export function rankApps(apps, query) {
+// `label(app)` is the name shown NOW (the shell passes the active-language name); `aliases(app)` lists
+// every other name the app is known by — its name in the other OS languages — so "Rechner" still finds
+// the calculator with the UI in Italian, as the native Spotlight does. An alias hit ranks just under
+// the same hit on the shown name, so the current language wins a tie.
+export function rankApps(apps, query, label = (app) => app.name, aliases = () => []) {
   const ql = normMatch(query).trim();
   if (!ql) return [];
   return (apps || [])
-    .map((app) => ({ app, name: app.name, s: Math.max(matchScore(app.name, ql), matchScore(app.id, ql) - 5) }))
+    .map((app) => {
+      const name = label(app);
+      let s = Math.max(matchScore(name, ql), matchScore(app.id, ql) - 5);
+      for (const alt of aliases(app) || []) s = Math.max(s, matchScore(alt, ql) - 2);
+      return { app, name, s };
+    })
     .filter((r) => r.s >= 0)
     .sort((a, b) => b.s - a.s || String(a.name).localeCompare(String(b.name)));
 }
