@@ -7,6 +7,7 @@
 #include "nucleo_storage.h"
 #include "nucleo_registry.h"
 #include "fslist.h"            // streaming /api/fs/list body
+#include "fstwin.h"            // drop a stale <file>.gz twin when <file> is rewritten (webfs serves the twin first)
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -312,10 +313,14 @@ static esp_err_t write_post(httpd_req_t *req)
     remove(abs);
     if (rename(tmp, abs) != 0) { remove(tmp); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "rename"); return ESP_FAIL; }
     publish_change("write", abs);
+    // A new <file> must not stay shadowed by an old <file>.gz (webfs serves the twin first, and deleting
+    // it over the API is refused under /www and /apps). Writers that ship both write <file> first.
+    if (nucleo_fs_drop_stale_twin(abs)) ESP_LOGI(TAG, "dropped stale twin %s.gz", abs);
     // Installing an app over the air rewrites the registry index. Reload it in place so
     // /api/apps reflects the new app immediately (no reboot), and nudge clients to refetch
-    // their launcher. Cheap and only fires for this one path.
-    if (strstr(abs, "/system/registry/apps.json")) {
+    // their launcher. Cheap and only fires for this one path (exact match: not apps.json.gz / .tmp).
+    static const char apps_json[] = NUCLEO_SD_MOUNT "/system/registry/apps.json";
+    if (strcmp(abs, apps_json) == 0) {
         nucleo_registry_load();
         nucleo_event_publish("apps.changed", "{}");
     }

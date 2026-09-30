@@ -48,3 +48,6 @@ jobs:
 
       - name: App registry limits (the C layer runs in the local gate, needs ESP-IDF cJSON)
         run: node tools/anima-host/registry-check.mjs
+
+      - name: Stale .gz twin rule (firmware C + JS + Python agree; real files)
+        run: node tools/anima-host/fstwin-check.mjs

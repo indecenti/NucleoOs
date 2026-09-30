@@ -124,8 +124,11 @@ the panic console is the **same COMx** as flashing (`CONFIG_ESP_CONSOLE_USB_SERI
 it at 115200 after a watchdog reset to read `BOOTSTEP`/backtrace.
 
 ## Gotchas
-- **`.gz` shadowing:** the device serves `foo.js.gz` in preference to `foo.js`. After editing
-  a web asset you must regenerate its `.gz` (`npm run gz:check` / the gzip step), or the old
+- **`.gz` shadowing:** the device serves `foo.js.gz` in preference to `foo.js` (under `/www/shell`
+  and `/apps/<id>/www`). Since 2026-09-30 writing `foo.js` over the API drops a stale `foo.js.gz`
+  (firmware `nucleo_fsapi/fstwin.c`), and every SD tool removes a twin the payload no longer ships —
+  so a raw-only push is safe. Writers that ship both must write `foo.js` FIRST, then `foo.js.gz`.
+  After editing a web asset you must still regenerate its `.gz` (`npm run gz:check` / the gzip step), or the old
   gzipped version keeps being served. JSON assets aren't auto-gzipped.
 - **Shell asset change → bump `sw.js`** version, or the service worker serves stale files and
   boot can hang (SW skew). See memory `shell-boot-resilience`.

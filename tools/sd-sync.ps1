@@ -79,6 +79,23 @@ $rc = $LASTEXITCODE
 # robocopy: 0-7 = success (8+ = real error)
 if ($rc -ge 8) { throw "robocopy ha riportato un errore (exit $rc)." }
 
+# Stale .gz twins — the one kind of file removed from the card. The device serves "<file>.gz" instead of
+# "<file>" in /www/shell and /apps/<id>/www, so a twin the payload does not ship, next to a raw file it does,
+# would shadow the new file. Same rule as the firmware (nucleo_fsapi fstwin.c) and deploy.ps1; the regex is
+# held to tools/lib/twin-scope-vectors.json by tools/anima-host/fstwin-check.mjs.
+$twins = 0
+Get-ChildItem -LiteralPath $src -Recurse -File | ForEach-Object {
+  $rel = ($_.FullName.Substring($src.Length).TrimStart('\', '/')) -replace '\\', '/'
+  if ($rel -match '^(www/shell|apps/[^/]+/www)/.' -and $rel -notmatch '\.gz$' -and -not (Test-Path -LiteralPath "$($_.FullName).gz")) {
+    $g = Join-Path $Target ("$rel.gz" -replace '/', '\')
+    if (Test-Path -LiteralPath $g -PathType Leaf) {
+      if (-not $WhatIfPreference) { Remove-Item -LiteralPath $g -Force }
+      $script:twins++
+    }
+  }
+}
+if ($twins) { Write-Host "Stale .gz twins removed: $twins" }
+
 # Registry: merge the staged system/registry/apps.json into the card's copy (tools/lib/registry-merge.mjs):
 # the release is authoritative for bundled apps, the user's Agent apps (created_by "agent") are kept.
 $regSrc = Join-Path $src 'system/registry/apps.json'

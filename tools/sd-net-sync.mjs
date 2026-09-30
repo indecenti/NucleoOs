@@ -19,6 +19,7 @@ import { readFileSync, statSync, readdirSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { REGISTRY_REL, mergeRegistryText } from './lib/registry-merge.mjs';
+import { staleTwins } from './lib/twin-scope.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, def) => { const i = argv.indexOf('--' + name); return i >= 0 ? (argv[i + 1] ?? true) : def; };
@@ -200,6 +201,28 @@ const log = (...a) => console.log(...a);
       log('  ERR  ', '/' + f.rel, '->', e.message);
     }
   }
+
+  // Stale .gz twins: a twin on the device that the payload does not ship, next to a raw file it does, is
+  // served INSTEAD of that file (tools/lib/twin-scope.mjs). Delete it; where the device refuses deletes
+  // (/www, /apps -> 403) rewrite the raw file, which makes the firmware drop the twin (fstwin.c).
+  const staged = new Set(files.map((f) => f.rel));
+  const byRel = new Map(files.map((f) => [f.rel, f]));
+  dirCache.clear();                                   // listings are stale after the uploads above
+  let twins = 0;
+  for (const twin of staleTwins(staged, () => true)) {
+    const raw = twin.slice(0, -3);
+    const parent = raw.includes('/') ? raw.slice(0, raw.lastIndexOf('/')) : '';
+    const listing = await listDir(parent).catch(() => null);
+    if (!listing || !listing.has(twin.split('/').pop())) continue;
+    if (DRY) { log('  DEL  ', '/' + twin, '(stale twin)'); twins++; continue; }
+    const r = await http('POST', `/api/fs/delete?path=${enc('/' + twin)}`);
+    if (r.ok) { twins++; log('  del  ', '/' + twin, '(stale twin)'); continue; }
+    if (r.status === 403) {
+      try { const f = byRel.get(raw); await uploadFile(f.rel, f.abs, f.size); twins++; log('  sent ', '/' + raw, '(rewritten: the device drops its stale twin)'); }
+      catch (e) { errors++; log('  ERR  ', '/' + raw, '->', e.message); }
+    } else { errors++; log('  ERR  ', '/' + twin, `-> delete HTTP ${r.status}`); }
+  }
+  if (twins) log(`  stale .gz twins handled: ${twins}`);
 
   dirsMade = knownDirs.size - dirsAtStart;
   log(`\nDone. ${DRY ? 'would upload' : 'uploaded'} ${uploaded} file(s), dirs ensured ${knownDirs.size}` +

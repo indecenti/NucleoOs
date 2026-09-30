@@ -269,6 +269,21 @@ if ($To) {
     $script:CardPush = $true
     Sync-Dir $sd $To '' $tman $tseen $tstat
     $script:CardPush = $false
+    # Stale .gz twins — the one kind of file removed from a card. The device serves "<file>.gz" instead of
+    # "<file>" in /www/shell and /apps/<id>/www, so a twin the staging does not ship, next to a raw file it
+    # does, would shadow the new file. Same rule as the firmware (nucleo_fsapi fstwin.c) and
+    # tools/lib/twin-scope.mjs; the regex is held to tools/lib/twin-scope-vectors.json by fstwin-check.mjs.
+    $twins = 0
+    foreach ($k in @($tseen.Keys)) {
+        if ($k -match '^(www/shell|apps/[^/]+/www)/.' -and $k -notmatch '\.gz$' -and -not $tseen.ContainsKey("$k.gz")) {
+            $g = Join-Path $To ("$k.gz" -replace '/', '\')
+            if (Test-Path -LiteralPath $g -PathType Leaf) {
+                if (-not $DryRun) { Remove-Item -LiteralPath $g -Force }
+                $tman.Remove("$k.gz"); $twins++
+            }
+        }
+    }
+    if ($twins) { Write-Host "Stale .gz twins removed on the card: $twins" }
     Save-Manifest $To $tman
     Report "Push ($To)" $tstat
 

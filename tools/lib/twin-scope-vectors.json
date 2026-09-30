@@ -1,0 +1,21 @@
+{
+  "_comment": "Where a '<file>.gz' is a derived twin that webfs serves INSTEAD of '<file>' (so a stale one must go when <file> changes): exactly /www/shell/** and /apps/<id>/www/**, case-insensitive (FAT). Paths are SD-relative. Checked against the firmware (nucleo_fsapi/fstwin.c via tools/anima-host/fstwin-check.mjs), tools/lib/twin-scope.mjs and sd_deploy.py twin_scope().",
+  "scope": {
+    "www/shell/index.html": true,
+    "www/shell/i18n/shell.it.json": true,
+    "apps/notepad/www/app.js": true,
+    "apps/calculator/www/i18n.en.json": true,
+    "APPS/Notepad/WWW/app.js": true,
+    "WWW/Shell/x.css": true,
+    "www/shell/": false,
+    "www/other/x.js": false,
+    "apps/notepad/manifest.json": false,
+    "apps/terminal/data/history.js": false,
+    "apps/theme.cfg": false,
+    "apps//www/x.js": false,
+    "data/backup.tar": false,
+    "system/registry/apps.json": false,
+    "evilportal/portals/01-wifi-gratis.html": false,
+    "": false
+  }
+}
