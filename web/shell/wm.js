@@ -12,8 +12,12 @@ const windows = new Map(); // id -> { el, app, min, max, snap, prev, ro }
 let onChange = () => {};
 let onFrameLoad = () => {};
 let geomFor = () => null;  // shell-supplied: last-known geometry for an app id (survives close)
+let labelFor = (app) => (app && app.name) || '';   // shell-supplied: the app's name in the active UI language
 
 export function setOnChange(fn) { onChange = fn; }
+// The shell localises app names (i18n catalog, manifest name as fallback) and hands the resolver here,
+// so the title bar and the iframe's accessible title follow the OS language.
+export function setLabeler(fn) { labelFor = fn; }
 // Called with (iframe, app) each time an app's iframe finishes loading, so the shell can
 // inject OS-wide keyboard shortcuts into the app document (same-origin apps only).
 export function setOnFrameLoad(fn) { onFrameLoad = fn; }
@@ -80,8 +84,30 @@ export function isSandboxed(app) { return !!(app && app.created_by === 'agent');
 export function frameHtml(app, src) {
   const sandbox = isSandboxed(app) ? ' sandbox="allow-scripts allow-forms allow-modals"' : '';
   return app && app.route
-    ? `<iframe src="${attr(src)}"${sandbox} title="${attr(app.name)}" allow="${attr(allowAttr(app))}"></iframe>`
-    : `<div class="placeholder">${glyph(app)}<br><br>${attr(app && app.name)}<br><small>No web route declared.</small></div>`;
+    ? `<iframe src="${attr(src)}"${sandbox} title="${attr(labelFor(app))}" allow="${attr(allowAttr(app))}"></iframe>`
+    : `<div class="placeholder">${glyph(app)}<br><br>${attr(app && labelFor(app))}<br><small>No web route declared.</small></div>`;
+}
+
+// An app renaming its own window (postMessage `set-window-title`: "Paint — foto.png", a dirty-dot
+// editor). Remembered so a language change does not overwrite it with the plain app name — the app
+// re-posts its own title when IT relabels. An empty title hands the bar back to the app name.
+export function setTitle(id, title) {
+  const w = windows.get(id);
+  if (!w) return;
+  w.title = title ? String(title) : null;
+  const t = w.el.querySelector('.bar .t');
+  if (t) t.textContent = w.title || labelFor(w.app);
+}
+
+// Repaint every window's name in the current language (the shell calls this on I18N.onChange).
+export function relabel() {
+  for (const w of windows.values()) {
+    const name = labelFor(w.app);
+    const t = w.el.querySelector('.bar .t');
+    if (t && !w.title) t.textContent = name;
+    const f = w.el.querySelector('iframe');
+    if (f) f.title = name;
+  }
 }
 
 // Build the iframe of a deferred window, once, on demand. Everything that reads the frame already
@@ -168,7 +194,7 @@ export function open(app, query, opts = {}) {
   const body = opts.deferred ? '' : frameHtml(app, src);
   el.innerHTML =
     `<div class="bar"><span class="glyph">${glyph(app)}</span>` +
-    `<span class="t">${attr(app.name)}</span>` +
+    `<span class="t">${attr(labelFor(app))}</span>` +
     `<button class="min" title="Minimize"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2" y1="6" x2="9" y2="6" stroke-linecap="round"/></svg></button>` +
     `<button class="max" title="Maximize"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="2" width="7" height="7" rx="1.2"/></svg></button>` +
     `<button class="close" title="Close"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2.6" y1="2.6" x2="8.4" y2="8.4" stroke-linecap="round"/><line x1="8.4" y1="2.6" x2="2.6" y2="8.4" stroke-linecap="round"/></svg></button></div>` +

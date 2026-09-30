@@ -227,6 +227,14 @@ const I18N = {
   // Return a namespace-bound t() without re-loading (use after init for convenience).
   scope(ns) { return (key, vars) => translate(ns, key, vars); },
 
+  // The raw catalog of ONE namespace in ANY language (not only the active one) — for callers that must
+  // match text across languages, e.g. the shell's app search finding "Rechner" while the UI is in
+  // Italian. Shares the in-memory dedup, so the base/active files already loaded cost nothing again.
+  catalog(ns, lang) {
+    const l = normalize(lang);
+    return l ? fetchCatalog(urlFor(ns || 'core', l)) : Promise.resolve({});
+  },
+
   // Fill every [data-i18n*] element under `root`. Call after building DOM dynamically.
   apply(root = document, defaultNs = 'core') {
     const r = root.nodeType === 1 || root.nodeType === 9 ? root : document;

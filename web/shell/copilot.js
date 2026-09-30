@@ -681,7 +681,7 @@ function dispatch(r, turn) {
 
   if (r.action === 'launch' && r.arg) {
     const app = api.byId(r.arg);
-    if (app) { addLined(turn, `${app.name} ${T().opened}`, 'ok'); api.WM.open(app); closeBar(); return; }
+    if (app) { addLined(turn, `${api.appName ? api.appName(app) : app.name} ${T().opened}`, 'ok'); api.WM.open(app); closeBar(); return; }
     addLined(turn, r.arg, 'warn');
   } else if (r.action === 'tool' && (r.tool === 'open_file' || r.intent === 'open_file') && r.arg) {
     addLined(turn, basename(r.arg), 'ok'); api.openFile(r.arg); closeBar(); return;

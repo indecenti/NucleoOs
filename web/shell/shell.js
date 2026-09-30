@@ -16,6 +16,40 @@ import { initSystemUI } from './system-ui.js';        // night light, lock scree
 // since the only t() callers below run after boot).
 const t = I18N.scope('shell');
 
+// App display names. /api/apps carries ONE `name` per app — the manifest's, a historical mix of
+// Italian and English ("Giochi", "Calculator") — so an English or German shell titled windows
+// "Giochi" and "Contatti". The shell catalog localises them with one key per app, `app_<id>`, in all
+// five languages (the same words as the native launcher's APP_NAME_TR). An app without a key keeps
+// its manifest name: proper nouns (ANIMA, SSH, Paint) and anything the agent installs.
+function appName(a) {
+  if (!a) return '';
+  const k = 'app_' + a.id;
+  const v = t(k);
+  return v && v !== k ? v : (a.name || a.id);
+}
+// Every name an app has in ANY OS language, so search finds "Rechner" with the UI in Italian (the
+// native Spotlight matches all five too). Only the base + active catalogs are loaded at boot; the
+// others are fetched once, on the first search — precached by the service worker, so the device
+// never sees them.
+const appAliases = new Map();   // app id -> [manifest name, name per language…]
+let appAliasesLoad = null;
+function loadAppAliases() {
+  if (appAliasesLoad) return appAliasesLoad;
+  appAliasesLoad = Promise.all(I18N.LANGS.map((l) => I18N.catalog('shell', l.code))).then((cats) => {
+    for (const cat of cats) for (const [k, v] of Object.entries(cat || {})) {
+      if (!k.startsWith('app_') || typeof v !== 'string' || !v) continue;
+      const id = k.slice(4);
+      const list = appAliases.get(id) || [];
+      if (!list.includes(v)) list.push(v);
+      appAliases.set(id, list);
+    }
+    if (searchActive()) refreshSearchView();
+  }).catch(() => { appAliasesLoad = null; });   // transient failure: retry on the next search
+  return appAliasesLoad;
+}
+const appSearchNames = (a) => [a.name, ...(appAliases.get(a.id) || [])];
+WM.setLabeler(appName);         // window title bars + iframe titles use the same localised name
+
 // The OS-wide AI copilot is loaded lazily in initOS(); held here so OS-level handlers
 // (Escape, the unified search row) can talk to it. null until copilot.js initialises.
 let Copilot = null;
@@ -389,7 +423,7 @@ function tsRender() {
   tsWindows.forEach((w, i) => {
     const el = document.createElement('div');
     el.className = 'ts-item' + (i === tsIndex ? ' sel' : '');
-    el.innerHTML = `<div class="glyph">${w.app.glyph || '▦'}</div><div class="t">${escapeHtml(w.app.name)}</div>`;
+    el.innerHTML = `<div class="glyph">${w.app.glyph || '▦'}</div><div class="t">${escapeHtml(appName(w.app))}</div>`;
     el.addEventListener('click', () => { tsIndex = i; commitTaskSwitcher(); });   // tiles are pickable by mouse too
     ov.appendChild(el);
   });
@@ -572,7 +606,7 @@ function initOS() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) cancelTaskSwitcher(); });
   // Load the OS-wide AI copilot (ANIMA as a system service). Additive: it reuses the /api/anima
   // engine and acts on the OS through this small surface — the same handlers the shell already uses.
-  const OS_API = { byId, WM, openFile, showToast, refreshStatus, FsIndex, osConfirm };   // osConfirm: the copilot's agent mode gates every mutating tool behind it
+  const OS_API = { byId, appName, WM, openFile, showToast, refreshStatus, FsIndex, osConfirm };   // osConfirm: the copilot's agent mode gates every mutating tool behind it
   // Real-OS chrome extras. Fed ONLY from data already in the browser (weather cache, the shell's
   // one status snapshot, recents) — opening the widgets panel costs the device nothing.
   SysUI = initSystemUI({ byId, WM, openFile,
@@ -596,7 +630,7 @@ function initOS() {
   WM.setOnFrameLoad((frame) => {
     try { frame.contentWindow.addEventListener('keydown', osKeydown); frame.contentWindow.addEventListener('keyup', osKeyup); } catch {}   // cross-origin (external links) → skip
     // Same net inside the app: an app crashing is the case the user actually meets.
-    try { const w = WM.list().find((x) => x.el.querySelector('iframe') === frame); wireFaults(frame.contentWindow, (w && w.app && w.app.name) || 'app'); } catch {}
+    try { const w = WM.list().find((x) => x.el.querySelector('iframe') === frame); wireFaults(frame.contentWindow, (w && w.app && appName(w.app)) || 'app'); } catch {}
     injectGlobalTheme(frame.contentDocument);
     // Hand the freshly-opened app the last /api/status snapshot right away, so embedded apps that
     // ride the shell's broadcast (Settings, System Monitor) paint at once instead of waiting out
@@ -642,8 +676,10 @@ function saveUiState() {
 }
 
 // Build the default desktop (one shortcut per installed app) used to seed a fresh device.
+// No `label`: an app icon without one shows appName(), so it follows the UI language. Baking the name
+// in froze it in whatever language the desktop was first seeded in.
 function seedDesktop() {
-  return state.apps.map((a, i) => ({ uid: 'app-' + a.id, type: 'app', target: a.id, label: a.name }));
+  return state.apps.map((a) => ({ uid: 'app-' + a.id, type: 'app', target: a.id }));
 }
 // Add a desktop shortcut for any installed app that doesn't have one yet (so newly
 // installed apps — e.g. ANIMA — appear on an existing desktop, not only in Start).
@@ -652,7 +688,7 @@ function addMissingAppIcons() {
   const have = new Set(state.desktop.filter((it) => it.type === 'app').map((it) => it.target));
   let added = 0;
   for (const a of state.apps) if (!have.has(a.id)) {
-    state.desktop.push({ uid: 'app-' + a.id, type: 'app', target: a.id, label: a.name }); added++;
+    state.desktop.push({ uid: 'app-' + a.id, type: 'app', target: a.id }); added++;
   }
   return added;
 }
@@ -879,7 +915,7 @@ async function boot() {
   // is shown — including the pairing overlay. Re-render the imperatively-built surfaces (Start menu,
   // taskbar, tray) whenever the OS language changes live (from Settings, any window).
   await I18N.init('shell');
-  I18N.onChange(() => { try { renderStartMenu(); renderTaskbar(); setWsBadge(wsState); if (searchActive()) refreshSearchView(); } catch {} });
+  I18N.onChange(() => { try { WM.relabel(); renderDesktop(); renderStartMenu(); renderTaskbar(); setWsBadge(wsState); if (searchActive()) refreshSearchView(); } catch {} });
   bootLog('boot start — checking pairing…');
   await ensurePaired();                          // block until this browser is paired with the device
   bootLog('pairing ok — loading /api/apps…');
@@ -1350,7 +1386,7 @@ function wireMessages() {
         const f = w.el.querySelector('iframe');
         if (f && f.contentWindow === e.source) {
           if (d.type === 'close-window') WM.close(w.app.id);
-          else { const t = w.el.querySelector('.bar .t'); if (t && d.title) t.textContent = d.title; }
+          else if (d.title) WM.setTitle(w.app.id, d.title);
           break;
         }
       }
@@ -1738,8 +1774,14 @@ function itemGlyph(item) {
   return a ? a.glyph : '📄';
 }
 function itemLabel(item) {
+  if (item.type === 'app') {
+    const a = byId(item.target);
+    // Desktops seeded before app names were localised carry the manifest name as `label`; that is the
+    // default, not a rename, so it localises too. Any other label is the user's own and wins.
+    if (item.label && !(a && item.label === a.name)) return item.label;
+    return a ? appName(a) : item.target;
+  }
   if (item.label) return item.label;
-  if (item.type === 'app') { const a = byId(item.target); return a ? a.name : item.target; }
   // a .lnk shows its name WITHOUT the extension (Windows shows the shortcut's display name).
   if (item.type === 'file') return item.target.split('/').pop().replace(/\.lnk$/i, '');
   return item.target;
@@ -1795,7 +1837,7 @@ const DESKTOP_DIR = '/data/Desktop';
 const PROTECTED_TARGET = /^\/(system|www|apps)(\/|$)|^\/data\/anima(\/|$)|(^|\/)\.\.(\/|$)/i;   // never link/copy/move these
 const safeLnkBase = (s) => (String(s || 'Collegamento').replace(/\.lnk$/i, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Collegamento');
 function defaultLnkLabel(p) {
-  if (p.type === 'app') { const a = byId(p.target); return a ? a.name : p.target; }
+  if (p.type === 'app') { const a = byId(p.target); return a ? appName(a) : p.target; }
   if (p.type === 'url') { try { return new URL(p.target).hostname || p.target; } catch { return p.target; } }
   return (p.target.split('/').pop() || p.target);
 }
@@ -2191,7 +2233,13 @@ function beginRename(uid) {
           else if (r.status === 403) showToast(t('lnk_protected'), '⚠️', 'error');
         } catch {}
       }
-    } else if (save) { item.label = v || undefined; saveUiState(); }
+    } else if (save) {
+      // Committing an app icon's own default name (F2 → Enter) is not a rename: keep it unlabelled so
+      // it goes on following the UI language.
+      const a = item.type === 'app' ? byId(item.target) : null;
+      item.label = (v && !(a && (v === appName(a) || v === a.name))) ? v : undefined;
+      saveUiState();
+    }
     renderDesktop();
   };
   input.addEventListener('keydown', (e) => {                // swallow OS shortcuts while typing a name
@@ -2246,7 +2294,7 @@ function itemProperties(item) {
   if (item.x != null) rows.push([t('prop_position'), `${snap(item.x)}, ${snap(item.y)}`]);
   if (item.type === 'file') {
     const ext = (item.target.split('.').pop() || '').toLowerCase();
-    const a = byId(state.assoc.default_open[ext]); rows.push([t('prop_app'), a ? a.name : t('none')]);
+    const a = byId(state.assoc.default_open[ext]); rows.push([t('prop_app'), a ? appName(a) : t('none')]);
   }
   osInfo({ title: itemLabel(item), glyph: itemGlyph(item), rows });
 }
@@ -2327,7 +2375,7 @@ function desktopMenu(e) {
 }
 function pickAppMenu(e, apps) {
   showCtx(e.clientX, e.clientY, apps.map((a) => ({
-    label: a.name, glyph: a.glyph, fn: () => addItem({ type: 'app', target: a.id, label: a.name }),
+    label: appName(a), glyph: a.glyph, fn: () => addItem({ type: 'app', target: a.id }),
   })));
 }
 
@@ -2545,8 +2593,8 @@ function renderStartPinned() {
 function startAppTile(a) {
   const el = document.createElement('button');
   el.className = 'sm-item'; el.type = 'button';
-  el.innerHTML = `<span class="glyph">${a.glyph}</span><span class="label">${escapeHtml(a.name)}</span>`;
-  el.title = a.name;
+  el.innerHTML = `<span class="glyph">${a.glyph}</span><span class="label">${escapeHtml(appName(a))}</span>`;
+  el.title = appName(a);
   el.addEventListener('click', () => { WM.open(a); closeStart(); });
   el.addEventListener('contextmenu', (e) => { e.preventDefault(); startAppMenu(e, a); });
   return el;
@@ -2557,14 +2605,15 @@ function renderAllApps() {
   const list = document.getElementById('sm-all');
   if (!list) return;
   list.innerHTML = '';
-  const apps = [...state.apps].sort((a, b) => a.name.localeCompare(b.name));
+  const coll = new Intl.Collator(I18N.locale());   // sort by the name shown, in the UI language
+  const apps = [...state.apps].sort((a, b) => coll.compare(appName(a), appName(b)));
   for (const a of apps) {
     const pinned = state.startPins.includes(a.id);
     const row = document.createElement('button');
     row.className = 'sm-row'; row.type = 'button';
-    row.innerHTML = `<span class="g">${a.glyph}</span><span class="n">${escapeHtml(a.name)}</span>` +
+    row.innerHTML = `<span class="g">${a.glyph}</span><span class="n">${escapeHtml(appName(a))}</span>` +
       (pinned ? `<span class="sm-rowtag">${escapeHtml(t('start_pinned_tag'))}</span>` : '');
-    row.title = a.name;
+    row.title = appName(a);
     row.addEventListener('click', () => { WM.open(a); closeStart(); });
     row.addEventListener('contextmenu', (e) => { e.preventDefault(); startAppMenu(e, a); });
     list.appendChild(row);
@@ -2734,15 +2783,15 @@ function taskBtn(a, isOpen, isNew) {
   const b = document.createElement('button');
   b.className = 'task-btn' + (isOpen ? ' running' : '') + (isNew ? ' launching' : '');
   if (WM.list().some((w) => w.app.id === a.id && w.el.classList.contains('active') && !w.min)) b.classList.add('focus');
-  b.innerHTML = `<span class="glyph">${a.glyph}</span><span class="label">${a.name}</span>`;
-  b.title = a.name;                                // native fallback tooltip too
+  b.innerHTML = `<span class="glyph">${a.glyph}</span><span class="label">${escapeHtml(appName(a))}</span>`;
+  b.title = appName(a);                            // native fallback tooltip too
   b.addEventListener('click', () => (isOpen ? WM.toggle(a.id) : WM.open(a)));
   // Right-click = a REAL taskbar menu (it used to silently toggle the pin — surprising and
   // undiscoverable). Middle-click closes the window, like every desktop taskbar/tab strip.
   b.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     showCtx(e.clientX, e.clientY, [
-      { label: a.name, glyph: a.glyph, fn: () => (isOpen ? WM.toggle(a.id) : WM.open(a)) },
+      { label: appName(a), glyph: a.glyph, fn: () => (isOpen ? WM.toggle(a.id) : WM.open(a)) },
       isOpen ? { label: t('tb_close_win'), glyph: '✕', fn: () => WM.close(a.id) } : null,
       { sep: true },
       { label: state.pins.includes(a.id) ? t('ctx_unpin_taskbar') : t('ctx_pin_taskbar'), glyph: '📌', fn: () => togglePin(a.id) },
@@ -2842,13 +2891,14 @@ async function probeSearchAnswer(q) {
 // Build the flat, ranked result list for a query: apps, then OS settings/actions, then indexed files.
 // The ranking rules themselves live in search-rank.js (pure, host-tested in tools/shell-search-rank.test.mjs).
 function buildResults(q) {
-  const apps = rankApps(state.apps, q).map((r) => ({ kind: 'app', ...r }));
+  const apps = rankApps(state.apps, q, appName, appSearchNames).map((r) => ({ kind: 'app', ...r }));
   const actions = rankActions(sysActions(), q).map((r) => ({ kind: 'action', ...r }));
   const files = FsIndex.search(q, 40).map((f) => ({ kind: 'file', path: f.path, name: f.name, isDir: f.isDir, cat: f.cat }));
   return { apps, actions, files };
 }
 function runSearch(q, target) {
   SEARCH.q = q; SEARCH.target = target; SEARCH.sel = 0; SEARCH.userMoved = false;
+  loadAppAliases();                // once: app names in every language, so any of them finds the app
   // Make sure the index is warm; results repaint via FsIndex.onUpdate when the crawl lands.
   if (!FsIndex.isReady()) FsIndex.ensure();
   refreshSearchView();
@@ -2868,7 +2918,7 @@ function refreshSearchView() {
   let html = animaRow(SEARCH.q);
   if (apps.length) {
     html += `<div class="sp-cat">${escapeHtml(t('apps'))}</div>`;
-    apps.forEach((r, i) => { html += spRow(OFF + i, r.app.glyph, r.app.name, '', SEARCH.q); });
+    apps.forEach((r, i) => { html += spRow(OFF + i, r.app.glyph, r.name, '', SEARCH.q); });
   }
   if (actions.length) {
     html += `<div class="sp-cat">${escapeHtml(t('cat_actions'))}</div>`;
