@@ -22,6 +22,7 @@ import { REGISTRY_REL, mergeRegistryText } from './lib/registry-merge.mjs';
 import { staleTwins } from './lib/twin-scope.mjs';
 import { isDeviceState } from './lib/sd-policy.mjs';
 import { deviceTarget, TARGET_HELP } from './lib/device-target.mjs';
+import { stagingDrift } from './staging-check.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, def) => { const i = argv.indexOf('--' + name); return i >= 0 ? (argv[i + 1] ?? true) : def; };
@@ -152,6 +153,8 @@ const log = (...a) => console.log(...a);
   await pair();
   log('paired ✓\n');
 
+  { const d = stagingDrift(); const n = d.changed.length + d.missing.length;   // deploy/sd is pushed as is
+    if (n) console.warn(`  ⚠ deploy/sd is STALE vs the sources (${d.changed.length} changed, ${d.missing.length} missing): run tools/deploy.ps1 first, or this pushes old web code`); }
   const files = walk(SRC).sort((a, b) => a.rel.localeCompare(b.rel));
   let uploaded = 0, skippedExist = 0, skippedProt = 0, dirsMade = knownDirs.size, errors = 0;
   const before = new Set(); // track dirs created during run for the summary

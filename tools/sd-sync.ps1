@@ -64,6 +64,13 @@ Write-Host "Modalita : $mode"
 Write-Host ("Protected: {0} file(s) of device/user state (tools/lib/sd-policy.json) + apps.json (merged)" -f ($xf.Count - 1))
 Write-Host ''
 
+# deploy/sd is copied AS IS: warn when it is stale vs the sources (tools/deploy.ps1 rebuilds it).
+$nodeExe = Get-Command node -ErrorAction SilentlyContinue
+if ($nodeExe) {
+  $drift = & $nodeExe.Source (Join-Path $PSScriptRoot 'staging-check.mjs')
+  if ($LASTEXITCODE -eq 1) { Write-Warning ("deploy/sd is STALE: " + ($drift | Select-Object -First 1) + " - run tools\deploy.ps1 first") }
+}
+
 & robocopy "$src" "$Target" *.* @flags /XF @xf
 $rc = $LASTEXITCODE
 # robocopy: 0-7 = success (8+ = real error)
