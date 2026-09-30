@@ -187,7 +187,11 @@ Sync-Dir "$repo\deploy\sd-safe\wallpapers"      $sd 'wallpapers'     $man $seen 
 if (Test-Path "$repo\deploy\sd-safe\README.md") {
     Copy-IfChanged "$repo\deploy\sd-safe\README.md" (Join-Path $sd 'README.md') 'README.md' $man $seen $stat
 }
+# NucleoConnect (Windows companion): a fresh local build (windows-app\dist, gitignored) wins; otherwise the
+# committed copy in web\downloads — the same source sd_deploy.py ships. Without the fallback a machine that
+# never built the Windows app mirror-deleted the tracked staged copy.
 $exe = "$repo\windows-app\dist\NucleoConnect.exe"
+if (-not (Test-Path $exe)) { $exe = "$repo\web\downloads\NucleoConnect.exe" }
 if (Test-Path $exe) { Copy-IfChanged $exe (Join-Path $sd 'www\shell\downloads\NucleoConnect.exe') 'www/shell/downloads/NucleoConnect.exe' $man $seen $stat }
 else { Write-Warning "NucleoConnect.exe missing - run: dotnet publish (windows-app)" }
 

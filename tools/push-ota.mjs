@@ -41,6 +41,7 @@ import { join, relative, posix, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { REGISTRY_REL, mergeRegistryText } from './lib/registry-merge.mjs';
 import { isDeviceState } from './lib/sd-policy.mjs';
+import { stagingDrift } from './staging-check.mjs';
 
 const REPO = join(fileURLToPath(import.meta.url), '..', '..');
 const SD = join(REPO, 'deploy', 'sd');
@@ -146,6 +147,8 @@ async function loadStaged(only) {
 // Writes retry with backoff and (for large files) verify the landed size, so a flaky Wi-Fi
 // transfer is safe to re-run — the next pass only touches what's still wrong (resumable).
 async function syncSd(host, args) {
+  { const d = stagingDrift(); const n = d.changed.length + d.missing.length;   // deploy/sd is pushed as is
+    if (n) console.warn(`  ⚠ deploy/sd is STALE vs the sources (${d.changed.length} changed, ${d.missing.length} missing): run tools/deploy.ps1 first, or this pushes old web code`); }
   const staged = await loadStaged(args.only);
   if (!staged.length) { console.error(`✗ No staged files${args.only ? ' under ' + args.only : ''}. Run deploy.ps1 first.`); return 1; }
   const exclude = [...args.exclude, ...(args.includeMedia ? [] : MEDIA)];
