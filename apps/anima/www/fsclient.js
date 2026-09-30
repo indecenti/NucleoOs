@@ -132,9 +132,22 @@ export function makeFS(initialRoot) {
   }
   const exists = async (p) => (await stat(p)).exists;
 
+  // The root itself may not exist yet: the agent's default sandbox (/data/agent) is created by nobody, so on a
+  // fresh card EVERY first write failed with "500 open" (the device does not create parent folders). Create
+  // the root's own chain once per client (idempotent; "exists" is ignored), before anything below it.
+  let rootReady = null;
+  function ensureRoot() {
+    if (!rootReady) rootReady = (async () => {
+      let cur = '';
+      for (const seg of root.split('/').filter(Boolean)) { cur += '/' + seg; try { await api('mkdir', { method: 'POST', path: cur }); } catch {} }
+    })();
+    return rootReady;
+  }
+
   // mkdir -p: create each segment below the root in order (idempotent; ignore "exists").
   async function mkdirp(dirPath) {
     const full = typeof dirPath === 'string' && dirPath[0] === '/' && dirPath.startsWith(root) ? normPath(dirPath) : resolve(dirPath);
+    await ensureRoot();
     if (full === root || full.length <= root.length) return { ok: true };
     const tail = full.slice(root.length + 1).split('/');
     let cur = root;
@@ -172,7 +185,7 @@ export function makeFS(initialRoot) {
     let full; try { full = resolve(p); } catch (e) { return { ok: false, error: e.message }; }
     const had = await exists(full);
     if (had && !overwrite) return { ok: false, error: 'exists', path: rel(full), abs: full };
-    if (mkdir) { const d = parentOf(full); if (d && d !== root) await mkdirp(d); }
+    if (mkdir) await mkdirp(parentOf(full) || root);   // also when the file sits right in the root (see ensureRoot)
     try {
       const r = await api('write', { method: 'POST', path: full, body: content });
       if (!r.ok) return { ok: false, error: 'http-' + r.status, path: rel(full) };
@@ -215,7 +228,7 @@ export function makeFS(initialRoot) {
 
   async function move(from, to, { overwrite = false } = {}) {
     let f, t; try { f = resolve(from); t = resolve(to); } catch (e) { return { ok: false, error: e.message }; }
-    const d = parentOf(t); if (d && d !== root) await mkdirp(d);
+    await mkdirp(parentOf(t) || root);
     try {
       const r = await api('move', { method: 'POST', qs: 'from=' + enc(f) + '&to=' + enc(t) + (overwrite ? '&overwrite=1' : '') });
       if (!r.ok) { const txt = await r.text().catch(() => ''); return { ok: false, error: r.status === 403 ? 'protected' : /exist/i.test(txt) ? 'dest-exists' : 'http-' + r.status, from: rel(f), to: rel(t) }; }
@@ -283,7 +296,7 @@ export function makeFS(initialRoot) {
   }
 
   return {
-    setRoot(p) { root = p ? normPath(p) : ''; cwd = ''; return root; },
+    setRoot(p) { root = p ? normPath(p) : ''; cwd = ''; rootReady = null; return root; },
     getRoot() { return root; },
     hasRoot() { return !!root; },
     setCwd(p) { try { const full = resolve(p); cwd = full === root ? '' : full.slice(root.length + 1); } catch {} return cwd; },
