@@ -111,12 +111,20 @@ async function loadStaged(only) {
   const root = only ? join(SD, only.replace(/^\/+/, '')) : SD;
   let entries = [];
   try {
-    const man = JSON.parse(await readFile(join(SD, '.deploy-manifest.json'), 'utf8'));
-    for (const [rel, m] of Object.entries(man)) {
+    // The manifest is the file LIST; sizes come from the disk (the manifest's were measured on the staging
+    // machine's checkout — CRLF vs LF — and it used to be written with a BOM that made this parse fail).
+    // An entry whose file is gone is skipped and reported, never read.
+    const man = JSON.parse((await readFile(join(SD, '.deploy-manifest.json'), 'utf8')).replace(/^﻿/, ''));
+    let ghosts = 0;
+    for (const rel of Object.keys(man)) {
       if (rel === '.deploy-manifest.json') continue;
       if (only && !prefixed(rel, [only.replace(/^\/+/, '')])) continue;
-      entries.push({ rel, abs: join(SD, rel.split('/').join('\\')), size: Number(m.size) || 0 });
+      const abs = join(SD, ...rel.split('/'));
+      const st = await stat(abs).catch(() => null);
+      if (!st || !st.isFile()) { ghosts++; continue; }
+      entries.push({ rel, abs, size: st.size });
     }
+    if (ghosts) console.warn(`  ⚠ staging manifest lists ${ghosts} file(s) not in deploy/sd — skipped (re-run deploy.ps1)`);
   } catch {
     for (const abs of await walk(root)) {
       const rel = relative(SD, abs).split(/[\\/]/).join('/');

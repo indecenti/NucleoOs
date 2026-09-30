@@ -160,7 +160,7 @@ function drawControlCenter() {
 
   const fy = CY + CH - 26;
   text('@ NucleoOS  192.168.4.1', CX + 8, fy, '#7CFC9A', 8);
-  text('PIN 689614', CX + 8, fy + 10, '#ffd166', 8);
+  text('PIN 123456', CX + 8, fy + 10, '#ffd166', 8);
   text('scroll · < > adjust · tab close', CX + 8, CY + CH - 6, COL.muted, 7);
 }
 

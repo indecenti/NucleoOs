@@ -9,9 +9,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { deviceTarget } from '../lib/device-target.mjs';
 
-const host = process.argv[2] || '192.168.0.166';
-const pin = process.argv[3] || '689614';
+const { host, pin } = deviceTarget({ host: process.argv[2], pin: process.argv[3] });   // never a hardcoded PIN
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 // --- 1. corpus token set (every alnum token >=4 chars across all card asks + replies, accent-folded) ---

@@ -12,13 +12,13 @@
 # DOS/Music/Videos) is skipped (flaky over WiFi — copy via SD), pass -IncludeMedia to push
 # it too. Writes retry+verify, so it's safe to re-run after a dropped transfer (resumable).
 #
-# IP + PIN are baked here because the device PIN is STABLE (persisted in /cfg, never
-# rotates — see nucleo_auth.c). Override per-run with -DeviceHost / -Pin, or put a
-# tools\release.local.json = { "host": "...", "pin": "......" } to change the defaults
-# without editing this file. To pin a memorable code, set settings.security.pin on device.
+# IP + PIN are NEVER written in this file (the repo is public and the PIN is the device's pairing
+# secret): pass -DeviceHost / -Pin, or keep them in tools\release.local.json = { "host": "...",
+# "pin": "......" } (gitignored: tools/*.local.json). The device PIN is stable (persisted in /cfg,
+# see nucleo_auth.c). To pin a memorable code, set settings.security.pin on device.
 param(
-    [string]$DeviceHost = "192.168.0.166",
-    [string]$Pin        = "689614",
+    [string]$DeviceHost = "",
+    [string]$Pin        = "",
     [switch]$SkipBuild,          # reuse the current build
     [switch]$FirmwareOnly,       # OTA the .bin only, skip the SD sync
     [switch]$SdOnly,             # sync the SD only, skip the firmware OTA
@@ -38,8 +38,22 @@ if (Test-Path $cfg) {
     if ($j.host -and -not $PSBoundParameters.ContainsKey('DeviceHost')) { $DeviceHost = $j.host }
     if ($j.pin  -and -not $PSBoundParameters.ContainsKey('Pin'))        { $Pin = $j.pin }
 }
+if (-not $DeviceHost -or -not $Pin) {
+    Write-Error 'No device host/PIN: pass -DeviceHost/-Pin or create tools\release.local.json = { "host": "...", "pin": "..." }'
+    exit 1
+}
+$DeviceHost = $DeviceHost -replace '^https?://', ''
 $base = "http://$DeviceHost"
 function Step($s) { Write-Host "`n=== $s ===" -ForegroundColor Cyan }
+
+# Reboot through the device's own endpoint (paired session): light, and it works under M5Launcher too,
+# where /api/ota is refused (guest mode). Used when no firmware image is sent.
+function Invoke-DeviceReboot {
+    $pair = Invoke-WebRequest "$base/api/pair" -Method Post -ContentType 'application/json' `
+        -Body (@{ pin = $Pin } | ConvertTo-Json) -SessionVariable sess -UseBasicParsing -TimeoutSec 10
+    if ($pair.StatusCode -ne 200) { throw "pairing failed (HTTP $($pair.StatusCode))" }
+    Invoke-WebRequest "$base/api/reboot" -Method Post -WebSession $sess -UseBasicParsing -TimeoutSec 10 | Out-Null
+}
 
 # 0) ANIMA regression gate (host, 12 gates: corpus/route/agent/math/ood/reliability/halluc/skill-routing/
 #    kge/hdc/combinator/unit). A red gate ABORTS the release before we touch the device — zero regressions
@@ -58,6 +72,10 @@ $beforeVer = $st.version
 Write-Host ("online: v{0}, {1} {2}, SD {3}" -f $beforeVer, $st.network.mode, $st.network.ssid,
             ($(if ($st.storage.mounted) { 'mounted' } else { 'NOT mounted' })))
 if (-not $st.storage.mounted) { Write-Error "SD not mounted on device - cannot sync files."; exit 1 }
+# Installed by M5Launcher? Then its firmware is updated from the Launcher (the device refuses /api/ota so
+# it can never overwrite another installed app — docs/m5launcher.md). The SD sync still works.
+$guest = ($st.ota -and $st.ota.self_update -eq $false)
+if ($guest) { Write-Host "device runs under M5Launcher ($($st.ota.host)): firmware must be updated from the Launcher" -ForegroundColor Yellow }
 
 if (-not $SkipBuild) {
     Step "1/4 Build firmware"
@@ -68,6 +86,7 @@ if (-not $SkipBuild) {
 if (-not $FirmwareOnly) {
     Step "2/4 Assemble SD staging (deploy/sd)"
     powershell -ExecutionPolicy Bypass -File (Join-Path $here "deploy.ps1")
+    if ($LASTEXITCODE -ne 0) { Write-Error "SD staging failed - nothing was synced (a stale or half-built deploy/sd must never ship)"; exit 1 }
 
     Step "3/4 Sync SD (dynamic, manifest-driven; create/update, never clobbers user state)"
     # ONE pass for the whole card — web + ANIMA models + config defaults + data, straight from
@@ -78,7 +97,7 @@ if (-not $FirmwareOnly) {
     if ($LASTEXITCODE -ne 0) { Write-Error "SD sync failed (re-run release.ps1 to resume)"; exit 1 }
 }
 
-if (-not $SdOnly) {
+if (-not $SdOnly -and -not $guest) {
     Step "4/4 OTA firmware (device reboots into the new image)"
     powershell -ExecutionPolicy Bypass -File (Join-Path $here "ota.ps1") -DeviceHost $DeviceHost -Pin $Pin
     if ($LASTEXITCODE -ne 0) { Write-Error "firmware OTA failed"; exit 1 }
@@ -86,10 +105,10 @@ if (-not $SdOnly) {
     # The on-device L1 (ANIMA retrieval) reads the AKB2 index header + offsets into RAM ONCE at
     # boot and keeps the file open. Replacing the index on the SD without a reboot leaves those
     # offsets stale -> every knowledge query silently falls below the gate. So an SD-only release
-    # that touched data/anima must reboot too. Reusing the firmware OTA is the only reboot path.
+    # (or a guest device, whose firmware comes from M5Launcher) must reboot too: /api/reboot.
+    if ($guest -and -not $SdOnly) { Write-Warning "firmware NOT sent: the device runs under M5Launcher - update it from the Launcher (OTA)." }
     Step "4/4 Reboot device so L1 reloads the new index"
-    powershell -ExecutionPolicy Bypass -File (Join-Path $here "ota.ps1") -DeviceHost $DeviceHost -Pin $Pin
-    if ($LASTEXITCODE -ne 0) { Write-Error "reboot failed"; exit 1 }
+    try { Invoke-DeviceReboot } catch { Write-Error "reboot failed: $($_.Exception.Message)"; exit 1 }
 }
 
 # Verify the device actually rebooted into the version we just shipped. /api/status.version is the

@@ -9,7 +9,7 @@
 // which is exactly what nucleo_webfs reads from (URL /sw.js -> SD www/shell/sw.js, etc.), so it's
 // immune to which physical card is inserted.
 //
-//   node tools/push-files.mjs --host http://192.168.0.166 --pin 318134 \
+//   node tools/push-files.mjs --host http://192.168.0.166 --pin 123456 \
 //        <local>:<devicePath> [<local>:<devicePath> ...]
 //
 // Example device paths: www/shell/sw.js , apps/groq-chat/www/index.html
