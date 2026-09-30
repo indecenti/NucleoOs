@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "nucleo_auth.c"
+    SRCS "nucleo_auth.c" "auth_slots.c"
     INCLUDE_DIRS "include"
     REQUIRES esp_http_server json nucleo_board esp_timer nvs_flash lwip
 )
