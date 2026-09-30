@@ -10,6 +10,10 @@ static const char *TAG = "registry";
 static nucleo_app_t s_apps[NUCLEO_MAX_APPS];
 static int s_count;
 
+// RAM budget: this table is static DRAM on a PSRAM-less chip. Raising the cap must never cost more than
+// the old 48 x 157 B layout did — shrink a field instead (the cap went 48 -> 80 at no RAM cost).
+_Static_assert(sizeof(s_apps) <= 48 * 157, "registry table grew past its RAM budget");
+
 #define APPS_JSON NUCLEO_SD_MOUNT "/system/registry/apps.json"
 
 static char *read_file(const char *path);
@@ -29,9 +33,48 @@ static void load_manifest_fields(nucleo_app_t *a)
     cJSON *route = cJSON_GetObjectItem(m, "web_route");
     cJSON *icon = cJSON_GetObjectItem(m, "icon");
     if (cJSON_IsString(name))  strncpy(a->name, name->valuestring, sizeof(a->name) - 1);
-    if (cJSON_IsString(route)) strncpy(a->web_route, route->valuestring, sizeof(a->web_route) - 1);
-    if (cJSON_IsString(icon))  strncpy(a->icon, icon->valuestring, sizeof(a->icon) - 1);
+    if (cJSON_IsString(route)) {
+        // webfs only ever serves an app at /apps/<id>/ (nucleo_webfs.c map_uri), so any other route could
+        // not have worked: record the standard one and say so.
+        char std[sizeof(a->id) + 8];
+        snprintf(std, sizeof std, "/apps/%s/", a->id);
+        if (strcmp(route->valuestring, std) != 0)
+            ESP_LOGW(TAG, "%s: web_route '%s' unsupported, using %s", a->id, route->valuestring, std);
+        a->route = NUCLEO_ROUTE_STD;
+    }
+    if (cJSON_IsString(icon)) {
+        char std[sizeof(a->id) + 16];
+        snprintf(std, sizeof std, "/apps/%s/icon.svg", a->id);
+        if (!strcmp(icon->valuestring, std)) {
+            a->icon = NUCLEO_ICON_STD;
+        } else if (strlen(icon->valuestring) < sizeof(a->icon_raw)) {
+            a->icon = NUCLEO_ICON_RAW;
+            strcpy(a->icon_raw, icon->valuestring);
+        } else {
+            ESP_LOGW(TAG, "%s: icon '%s' too long (max %u), using the standard icon", a->id,
+                     icon->valuestring, (unsigned)(sizeof(a->icon_raw) - 1));
+            a->icon = NUCLEO_ICON_STD;
+        }
+    }
     cJSON_Delete(m);
+}
+
+const char *nucleo_registry_route(const nucleo_app_t *a, char *buf, size_t n)
+{
+    if (!buf || !n) return "";
+    buf[0] = '\0';
+    if (a && a->route == NUCLEO_ROUTE_STD) snprintf(buf, n, "/apps/%s/", a->id);
+    return buf;
+}
+
+const char *nucleo_registry_icon(const nucleo_app_t *a, char *buf, size_t n)
+{
+    if (!buf || !n) return "";
+    buf[0] = '\0';
+    if (!a) return buf;
+    if (a->icon == NUCLEO_ICON_STD) snprintf(buf, n, "/apps/%s/icon.svg", a->id);
+    else if (a->icon == NUCLEO_ICON_RAW) snprintf(buf, n, "%s", a->icon_raw);
+    return buf;
 }
 
 // Cap the read: `len` comes from ftell on an SD file that may be corrupt/oversized, and an unbounded

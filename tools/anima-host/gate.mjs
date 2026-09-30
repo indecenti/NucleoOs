@@ -520,6 +520,12 @@ const gates = [
     // app's), back-to-Launcher mirrors the Launcher bootloader (key > DDLB > deep sleep), and Launcher's
     // merged-image installer finds our app at ota_0 and keeps the `cfg` label. docs/m5launcher.md.
     ok: (code) => code === 0, summary: (o) => (o.match(/guest-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'app-registry (firmware)', cmd: 'node', args: ['tools/anima-host/registry-check.mjs'],
+    // The firmware registry (firmware/components/nucleo_registry/nucleo_registry.c), host-compiled with the
+    // IDF cJSON: every shipped app fits the compact 94-byte entry, /api/apps strings (name/route/icon) come
+    // out byte-identical to the manifests, the cap leaves room for the user's Agent-published apps (the
+    // old cap equalled the shipped count and dropped all of them) and exactly the cap loads past it.
+    ok: (code) => code === 0, summary: (o) => (o.match(/registry: [^\n]*/g) || [lastLine(o)]).pop().trim() },
   { name: 'launcher-model (native UI)', cmd: 'node', args: ['tools/launcher-host/check.mjs'],
     // The native launcher model (firmware/components/nucleo_app/launcher_menu.cpp), host-compiled with
     // MinGW against the REAL app table extracted from the firmware sources: registry capacity (every
