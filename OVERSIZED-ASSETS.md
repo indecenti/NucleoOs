@@ -1,44 +1,43 @@
-# Asset oversize (>100 MiB)
+# Oversized assets (>100 MiB)
 
-GitHub rifiuta i singoli file oltre **100 MiB** sul piano gratuito. Alcuni asset binari
-di NucleoOS superano quel limite, quindi sono versionati **a pezzi** (parti da ≤90 MiB,
-blob git normali — niente Git LFS, niente costi) sotto [`oversized-assets/parts/`](oversized-assets/parts/),
-e si **ricostruiscono al volo** con uno script.
+GitHub rejects individual files larger than **100 MiB** on the free plan. Some binary
+assets of NucleoOS exceed that limit, so they are versioned **in pieces** (parts of ≤90 MiB,
+plain git blobs — no Git LFS, no cost) under [`oversized-assets/parts/`](oversized-assets/parts/),
+and are **rebuilt on the fly** with a script.
 
-## Come ricostruirli
+## How to rebuild them
 
-Dalla root del repo (serve Node):
+From the repo root (Node required):
 
 ```bash
-node oversized-assets/rejoin.mjs            # ricostruisce tutti
-node oversized-assets/rejoin.mjs teacher-npy tts-it-clips   # solo alcuni
+node oversized-assets/rejoin.mjs            # rebuilds all of them
+node oversized-assets/rejoin.mjs teacher-npy tts-it-clips   # only some
 ```
 
-Lo script concatena le parti nel percorso originale, creando le cartelle, e **verifica
-l'integrità con SHA-256**. I file ricostruiti sono in `.git/info/exclude` (non rientrano
-nel versionamento): restano locali.
+The script concatenates the parts into the original path, creating the folders, and **verifies
+integrity with SHA-256**. The rebuilt files are listed in `.git/info/exclude` (they are not
+versioned): they stay local.
 
-## Asset inclusi
+## Included assets
 
-| id | File ricostruito | Peso | Parti | Cos'è |
-|----|------------------|------|-------|-------|
-| `qwen-coder-gguf` | `deploy/sd-safe/apps/anima/www/forge/models/Qwen2.5-Coder-0.5B-Instruct-GGUF/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf` | 469 MiB | 6 | Modello **Qwen2.5-Coder 0.5B Instruct** (GGUF q4_k_m) per ANIMA Forge (path wllama/llama.cpp) |
-| `teacher-npy` | `tools/anima/.cache/teacher_200000_192.npy` | 146 MiB | 2 | Cache NumPy embedding "teacher" (200k×192) della pipeline encoder ANIMA |
-| `tts-it-clips` | `deploy/sd-safe/data/tts/it/clips.pcm` | 416 MiB | 5 | Banco clip del **TTS concatenativo italiano** (`nucleo_tts`) |
-| `tts-en-clips` | `deploy/sd-safe/data/tts/en/clips.pcm` | 386 MiB | 5 | Banco clip del **TTS concatenativo inglese** (`nucleo_tts`) |
+| id | Rebuilt file | Size | Parts | What it is |
+|----|------------------|------|-------|-----------|
+| `qwen-coder-gguf` | `deploy/sd-safe/apps/anima/www/forge/models/Qwen2.5-Coder-0.5B-Instruct-GGUF/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf` | 469 MiB | 6 | **Qwen2.5-Coder 0.5B Instruct** model (GGUF q4_k_m) for ANIMA Forge (wllama/llama.cpp path) |
+| `teacher-npy` | `tools/anima/.cache/teacher_200000_192.npy` | 146 MiB | 2 | NumPy "teacher" embedding cache (200k×192) of the ANIMA encoder pipeline |
+| `tts-it-clips` | `deploy/sd-safe/data/tts/it/clips.pcm` | 416 MiB | 5 | Clip bank of the **Italian concatenative TTS** (`nucleo_tts`) |
+| `tts-en-clips` | `deploy/sd-safe/data/tts/en/clips.pcm` | 386 MiB | 5 | Clip bank of the **English concatenative TTS** (`nucleo_tts`) |
 
-I checksum SHA-256 di riferimento sono in [`oversized-assets/manifest.json`](oversized-assets/manifest.json).
+The reference SHA-256 checksums are in [`oversized-assets/manifest.json`](oversized-assets/manifest.json).
 
-## Rigenerare le parti (per chi aggiorna gli asset)
+## Regenerating the parts (for anyone updating the assets)
 
-Se sostituisci un file originale, rigenera parti + manifest con:
+If you replace an original file, regenerate the parts and the manifest with:
 
 ```bash
 node oversized-assets/make-parts.mjs
 ```
 
-## Non incluso
+## Not included
 
-- `tools/nfv/out/Screamers - Urla dalla Spazio (1995).nfv` (307 MiB) — video `.nfv` di test:
-  escluso di proposito (non è sorgente; riconvertibile dal filmato originale con il
-  convertitore in `tools/nfv/`).
+- Converted `.nfv` videos (`tools/nfv/out/`) are never committed: they are build output of
+  the converter in `tools/nfv/`, and third-party films are copyrighted.
