@@ -48,7 +48,9 @@ if (-not $looksLikeSd -and -not $Force) {
 # The files WRITTEN by the device inside learned/ are instead protected by NAME below: the online cache
 # (it.jsonl/en.jsonl + *.vec), the runtime KGE triples (mind.*.jsonl) and the evolution ledger
 # (knowledge.ledger.jsonl, occ/subclass.jsonl). Added sessions.json (real chat history).
-$xf = @('teacher.json','telemetry.ndjson','session.txt','sessions.json','.httptrace','*.httptrace','*.vec','auth.json','volume.json','settings.json','workspace.json',
+# apps.json is excluded from the bulk copy and MERGED afterwards (see below): the card's registry also lists the
+# user's own Agent-published apps, and a plain copy would uninstall them.
+$xf = @('apps.json','teacher.json','telemetry.ndjson','session.txt','sessions.json','.httptrace','*.httptrace','*.vec','auth.json','volume.json','settings.json','workspace.json',
         'it.jsonl','en.jsonl','mind.it.jsonl','mind.en.jsonl','knowledge.ledger.jsonl','occ.jsonl','subclass.jsonl')
 $xd = @(
   (Join-Path $Target 'system\config'),
@@ -76,6 +78,26 @@ Write-Host ''
 $rc = $LASTEXITCODE
 # robocopy: 0-7 = success (8+ = real error)
 if ($rc -ge 8) { throw "robocopy ha riportato un errore (exit $rc)." }
+
+# Registry: merge the staged system/registry/apps.json into the card's copy (tools/lib/registry-merge.mjs):
+# the release is authoritative for bundled apps, the user's Agent apps (created_by "agent") are kept.
+$regSrc = Join-Path $src 'system/registry/apps.json'
+$regDst = Join-Path $Target 'system/registry/apps.json'
+if (Test-Path $regSrc) {
+  $node = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $node) {
+    Write-Warning "node not found: system/registry/apps.json NOT updated (it must be merged, never copied over)."
+  } else {
+    $merge = Join-Path $PSScriptRoot 'lib/registry-merge.mjs'
+    $out = if ($WhatIfPreference) { [IO.Path]::GetTempFileName() } else { $regDst }
+    if (-not $WhatIfPreference) { New-Item -ItemType Directory -Force (Split-Path $regDst) | Out-Null }
+    $dev = if (Test-Path $regDst) { $regDst } else { '-' }
+    $res = & $node.Source $merge $regSrc $dev $out
+    if ($LASTEXITCODE -ne 0) { throw "registry merge failed (exit $LASTEXITCODE)" }
+    Write-Host "Registry  : $res"
+    if ($WhatIfPreference) { Remove-Item $out -ErrorAction SilentlyContinue }
+  }
+}
 
 # TTS voice: the clip bank (data/tts) is not in deploy/sd (too big for the repo) ->
 # copied directly from deploy/sd-safe. Same deal: no /MIR, only add/update.

@@ -371,7 +371,9 @@ async function fsApi(req, res, url) {
       // while the simulated SD carried a stale 19-app copy — so a client that cross-references them
       // (the shell reads it for the per-app permissions) saw a registry that did not describe the
       // running system. Serve the same file both ways.
-      if (p === '/system/registry/apps.json') return sendJSON(res, await jread('registry/apps.json'));
+      // SIM_REGISTRY_FROM_SD=1 (SD-tool tests only): serve the card's own apps.json, like the device, so a
+      // tool that merges the registry sees the user's Agent-published apps on the simulated card.
+      if (p === '/system/registry/apps.json' && !process.env.SIM_REGISTRY_FROM_SD) return sendJSON(res, await jread('registry/apps.json'));
       // Serve with HTTP Range support so the <audio>/<video> elements can SEEK (the device
       // streams from SD directly, so this only matters for the browser simulator). Files here
       // are small (<=~1.5 MB), so we read once and slice.
