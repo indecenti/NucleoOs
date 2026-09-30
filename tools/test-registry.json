@@ -3263,6 +3263,22 @@
       "anima": false
     },
     {
+      "id": "unit-games-catalog-i18n",
+      "label": "games-catalog-i18n.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/games-catalog-i18n.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-log-viewer-diag",
       "label": "log-viewer-diag.test.mjs",
       "category": "app-shell",
