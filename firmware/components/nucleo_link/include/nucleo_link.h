@@ -4,7 +4,7 @@
 // (ESP-NOW on device; an in-memory lossy channel in the host gate). This is the EVOLVED
 // path — the Bruce-compatible path lives in nucleo_link_bruce.h.
 //
-// vs Bruce's naive ESP-NOW share (reference/bruce/src/core/connect): Bruce sends 150-byte
+// vs Bruce's naive ESP-NOW share (upstream pr3y/Bruce: src/core/connect): Bruce sends 150-byte
 // chunks every 100ms with NO ACK and NO retransmission (one dropped frame corrupts the file)
 // and re-sends the filename+filepath in EVERY frame. This protocol adds:
 //   • sliding window + cumulative/selective ACK + timeout retransmission (lossless),

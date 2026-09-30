@@ -93,3 +93,11 @@ deploy/sd/apps/arcade/www/emulatorjs/
 # =============================================================================
 reference/*
 !reference/README.md
+
+# Rebuilt oversized binaries — fetched by oversized-assets/rejoin.mjs, never committed
+# (TTS voice packs from a GitHub Release; the Forge GGUF streams from Hugging Face)
+deploy/sd-safe/data/tts/**/clips.pcm
+deploy/sd-safe/apps/anima/www/forge/models/**/*.gguf
+tools/anima/.cache/teacher_*.npy
+oversized-assets/parts/qwen-coder-gguf/
+oversized-assets/parts/teacher-npy/

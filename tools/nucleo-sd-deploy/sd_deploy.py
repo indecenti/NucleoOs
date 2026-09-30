@@ -70,18 +70,18 @@ SOURCE_MAP = [
          src=_src("deploy/sd-safe/data/anima/akb5")),
     dict(dest="data/anima/anima-it-akb5.bin", kind="file", gz=False,
          src=_src("deploy/sd-safe/data/anima/anima-it-akb5.bin", "models/anima-it-akb5.bin")),
-    # VOCE che PARLA: banco clip del TTS concatenativo (nucleo_tts), IT+EN. clips.pcm è oversize
-    # (ricostruito da oversized-assets/rejoin.mjs); index.bin è committato. Parte di sistema, non
-    # stato utente -> sempre scritto, mai cancellato. (La VOCE che ASCOLTA — modelli Vosk a parti
-    # split — cavalca la regola 'apps' qui sopra.)
+    # SPOKEN voice: concatenative TTS clip bank (nucleo_tts), IT+EN. clips.pcm is oversized
+    # (fetched by oversized-assets/rejoin.mjs); index.bin is committed. System part, not user
+    # state -> always written, never deleted. (The LISTENING voice — split-part Vosk models —
+    # rides the 'apps' rule above.)
     dict(dest="data/tts",        kind="tree", gz=False, src=_src("deploy/sd-safe/data/tts")),
-    # extra solo-payload — i portali captive vanno serviti gz (il firmware preferisce i .gz)
+    # payload-only extras — captive portals are served gz (the firmware prefers .gz)
     dict(dest="evilportal",      kind="tree", gz=True,  src=_src("deploy/sd-safe/evilportal")),
     dict(dest="wallpapers",      kind="tree", gz=False, src=_src("deploy/sd-safe/wallpapers")),
     dict(dest="README.md",       kind="file", gz=False, src=_src("deploy/sd-safe/README.md")),
 ]
 
-# File critici che DEVONO esistere nel master, altrimenti il provisioning è monco.
+# Critical files that MUST exist in the master, otherwise provisioning is incomplete.
 COMPLETENESS = [
     ("encoder ANIMA",    "data/anima/anima-it-encoder.bin"),
     ("index ANIMA",      "data/anima/anima-it-index.bin"),
@@ -89,10 +89,10 @@ COMPLETENESS = [
     ("shell index.html", "www/shell/index.html"),
     ("registry apps",    "system/registry/apps.json"),
     ("app companion",    "www/shell/downloads/NucleoConnect.exe"),
-    # VOCE (parte integrante del sistema): clip TTS (parla) + modelli Vosk a parti (ascolta).
-    # Un clips.pcm mancante = oversize non ricostruito -> 'node oversized-assets/rejoin.mjs'.
-    ("voce TTS it (clip)", "data/tts/it/clips.pcm"),
-    ("voce TTS en (clip)", "data/tts/en/clips.pcm"),
+    # VOICE (integral system part): TTS clips (speaks) + split-part Vosk models (listens).
+    # A missing clips.pcm = oversized asset not fetched -> 'node oversized-assets/rejoin.mjs'.
+    ("TTS voice it (clips)", "data/tts/it/clips.pcm"),
+    ("TTS voice en (clips)", "data/tts/en/clips.pcm"),
     ("voce TTS it (idx)",  "data/tts/it/index.bin"),
     ("dettatura Vosk it",  "apps/anima/www/vosk/models/vosk-model-small-it-0.4.tar.gz.000"),
     ("dettatura Vosk en",  "apps/anima/www/vosk/models/vosk-model-small-en-us-0.15.tar.gz.000"),
@@ -116,7 +116,7 @@ FACTORY_TARGETS = [
 
 # ---------------------------------------------------------------- device state
 # Path (glob, rel SD root) di STATO DEVICE: su PROVISION si scrive un template pulito;
-# su UPDATE si PRESERVANO (mai sovrascritti, mai cancellati).
+# on UPDATE they are PRESERVED (never overwritten, never deleted).
 DEVICE_STATE = [
     "data/anima/teacher.json",      # chiave Groq / config online
     # learned/ NON in blocco: facets.<lang>.jsonl sono SEED firmware-pinned READ-ONLY (devono combaciare

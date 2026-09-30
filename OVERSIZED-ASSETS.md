@@ -1,43 +1,57 @@
-# Oversized assets (>100 MiB)
+# Oversized assets
 
-GitHub rejects individual files larger than **100 MiB** on the free plan. Some binary
-assets of NucleoOS exceed that limit, so they are versioned **in pieces** (parts of ≤90 MiB,
-plain git blobs — no Git LFS, no cost) under [`oversized-assets/parts/`](oversized-assets/parts/),
-and are **rebuilt on the fly** with a script.
+A few binaries are too large to belong in git (they would bloat every clone and the history
+forever). They are kept **out of the repository** and fetched on demand, each from its canonical
+home, then SHA-256-verified into place.
 
-## How to rebuild them
+## Get them (one command)
 
-From the repo root (Node required):
+From the repo root (Node 18+):
 
 ```bash
-node oversized-assets/rejoin.mjs            # rebuilds all of them
-node oversized-assets/rejoin.mjs teacher-npy tts-it-clips   # only some
+node oversized-assets/rejoin.mjs            # fetch every repo-hosted asset
+node oversized-assets/rejoin.mjs tts-it-clips   # only some, by id
 ```
 
-The script concatenates the parts into the original path, creating the folders, and **verifies
-integrity with SHA-256**. The rebuilt files are listed in `.git/info/exclude` (they are not
-versioned): they stay local.
+For each asset `rejoin.mjs` tries, in order: the file already on disk (skipped if its SHA-256
+matches), local split parts under `oversized-assets/parts/` (offline fallback), then the declared
+`source`. Everything is SHA-256-verified before it is written.
 
-## Included assets
+## Repo-hosted assets (GitHub Release)
 
-| id | Rebuilt file | Size | Parts | What it is |
-|----|------------------|------|-------|-----------|
-| `qwen-coder-gguf` | `deploy/sd-safe/apps/anima/www/forge/models/Qwen2.5-Coder-0.5B-Instruct-GGUF/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf` | 469 MiB | 6 | **Qwen2.5-Coder 0.5B Instruct** model (GGUF q4_k_m) for ANIMA Forge (wllama/llama.cpp path) |
-| `teacher-npy` | `tools/anima/.cache/teacher_200000_192.npy` | 146 MiB | 2 | NumPy "teacher" embedding cache (200k×192) of the ANIMA encoder pipeline |
-| `tts-it-clips` | `deploy/sd-safe/data/tts/it/clips.pcm` | 416 MiB | 5 | Clip bank of the **Italian concatenative TTS** (`nucleo_tts`) |
-| `tts-en-clips` | `deploy/sd-safe/data/tts/en/clips.pcm` | 386 MiB | 5 | Clip bank of the **English concatenative TTS** (`nucleo_tts`) |
+Project-generated data with no public mirror. Hosted as plain files on a GitHub Release
+(`releaseBase` in [`manifest.json`](oversized-assets/manifest.json)) and downloaded plug-and-play.
 
-The reference SHA-256 checksums are in [`oversized-assets/manifest.json`](oversized-assets/manifest.json).
+| id | Rebuilt file | Size | What it is |
+|----|------------------|------|-----------|
+| `tts-it-clips` | `deploy/sd-safe/data/tts/it/clips.pcm` | 416 MiB | Clip bank of the Italian concatenative TTS (`nucleo_tts`) |
+| `tts-en-clips` | `deploy/sd-safe/data/tts/en/clips.pcm` | 386 MiB | Clip bank of the English concatenative TTS (`nucleo_tts`) |
 
-## Regenerating the parts (for anyone updating the assets)
+On the device these are the spoken-voice packs: `tools/deploy.ps1` stages them onto the SD card,
+and the on-device **Updates** app can pull them the same plug-and-play way the browser pulls
+LLM/Vosk models. Split parts under `oversized-assets/parts/` remain as an offline fallback.
 
-If you replace an original file, regenerate the parts and the manifest with:
+## External assets (never in the repo)
+
+Fetched from their upstream, not hosted by this project at all.
+
+| id | Where it comes from |
+|----|---------------------|
+| `qwen-coder-gguf` | The ANIMA Forge model. The browser streams it straight from Hugging Face (`apps/anima/www/forge/model-store.js`); a copy is never kept here. |
+| `teacher-npy` | A NumPy encoder cache. Regenerated on demand: `python tools/anima/distill_aug.py`. |
+
+## Updating a repo-hosted asset
+
+If you replace a `clips.pcm`, regenerate the parts and refresh the manifest hashes, then upload
+the new file to the release:
 
 ```bash
 node oversized-assets/make-parts.mjs
 ```
 
-## Not included
+Reference SHA-256 checksums live in [`manifest.json`](oversized-assets/manifest.json).
 
-- Converted `.nfv` videos (`tools/nfv/out/`) are never committed: they are build output of
-  the converter in `tools/nfv/`, and third-party films are copyrighted.
+## Not committed
+
+Converted `.nfv` videos (`tools/nfv/out/`) are build output of the converter in `tools/nfv/`;
+third-party films are copyrighted and never committed.
