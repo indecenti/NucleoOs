@@ -24,6 +24,36 @@
 // because the broker is the only door and the door admits one at a time. This makes the device work
 // LESS than the status quo, where each app fetched on its own schedule.
 
+// ── app record policy (pure) ──────────────────────────────────────────────────────────────────
+// /api/apps streams id/name/route/icon straight from each manifest — and the agent can publish a
+// manifest with any strings it likes. Those fields end up in innerHTML (taskbar, Start, window bar),
+// in attribute values (data-src, data-app) and as the iframe src. So every app record is normalised
+// HERE, once, before the shell ever renders it: an id is a plain slug, a route is a same-origin path,
+// an icon is a same-origin path or an inline image. Rendering sites escape as well (defence in depth);
+// this is what makes a hostile manifest inert even where one of them forgets.
+const APP_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
+const SAFE_PATH = /^[A-Za-z0-9._~\/-]+$/;              // no quotes, spaces, brackets, colons, backslashes
+function samePath(p) {
+  if (typeof p !== 'string' || !p) return '';
+  if (p.startsWith('//') || !SAFE_PATH.test(p) || /(^|\/)\.\.(\/|$)/.test(p)) return '';
+  return p;
+}
+export function sanitizeApp(a) {
+  if (!a || typeof a !== 'object' || typeof a.id !== 'string' || !APP_ID.test(a.id)) return null;
+  const out = { ...a };
+  out.name = String(a.name == null || a.name === '' ? a.id : a.name).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 80);
+  // A route is where the window's iframe points: only an absolute same-origin path (never a scheme).
+  out.route = typeof a.route === 'string' && a.route.startsWith('/') ? samePath(a.route) : '';
+  if (typeof a.web_route === 'string') out.web_route = a.web_route.startsWith('/') ? samePath(a.web_route) : '';
+  if (typeof a.path === 'string') out.path = a.path.startsWith('/') ? samePath(a.path) : '';
+  // An icon is a same-origin (relative or absolute) path, or an inline raster/SVG image. Remote URLs are
+  // dropped: an icon that pings a third-party host would leak "this device is on" to anyone.
+  const ic = typeof a.icon === 'string' ? a.icon.trim() : '';
+  if (/^data:image\/(png|gif|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(ic)) out.icon = ic;
+  else out.icon = samePath(ic);
+  return out;
+}
+
 // ── path policy (pure) ────────────────────────────────────────────────────────────────────────
 // An app's reach is decided by what its manifest DECLARED, not by what it asks for:
 //   storage.app     → /data/apps/<id>/…      its own private corner

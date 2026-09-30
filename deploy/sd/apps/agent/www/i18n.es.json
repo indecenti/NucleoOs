@@ -152,5 +152,8 @@
   "smoke_ok": "✓ prueba en el dispositivo: {n} comprobaciones ok — la app responde",
   "smoke_fail": "✗ prueba en el dispositivo fallida: {names}",
   "smoke_none": "sin prueba",
-  "recipe_learned": "📚 aprendida como receta: {id}"
+  "recipe_learned": "📚 aprendida como receta: {id}",
+  "rt_local_server_failed": "El modelo de este ordenador no ha respondido ({error}) — pruebo el siguiente motor…",
+  "ready_local_server": "Sin clave en la nube: funciono con {model} en {server}, en este ordenador — sin necesidad de internet. Las acciones destructivas siempre piden confirmación.",
+  "rt_search_fallback": "Ninguna coincidencia exacta para \"{q}\"; resultados para \"{term}\":"
 }

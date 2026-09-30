@@ -26,5 +26,10 @@
   "err_empty": "Ein Name oder eine E-Mail ist erforderlich",
   "confirm_del": "„{name}\" löschen?",
   "vcard_saved": "vCard gespeichert unter {path}",
-  "vcard_fail": "vCard-Speichern fehlgeschlagen"
+  "vcard_fail": "vCard-Speichern fehlgeschlagen",
+  "read_failed": "Die Kontakte konnten nicht vom Cardputer gelesen werden: Bearbeiten ist pausiert, damit nichts überschrieben wird.",
+  "read_corrupt": "Die Kontaktdatei auf dem Cardputer ist nicht lesbar: sie bleibt unverändert, damit nichts verloren geht.",
+  "not_paired": "Dieser Browser ist nicht mit dem Cardputer gekoppelt – kopple ihn, um die Kontakte zu speichern.",
+  "save_failed": "Speichern fehlgeschlagen: der Cardputer antwortet nicht. Versuche es gleich erneut.",
+  "ro_cache": "Du siehst die letzte in diesem Browser gespeicherte Kopie (nur lesen)."
 }

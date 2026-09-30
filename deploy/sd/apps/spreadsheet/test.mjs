@@ -2,7 +2,7 @@ import assert from 'assert';
 
 console.log('🧪 Avvio Unit Tests per Spreadsheet & ANIMA Copilot Integration');
 
-// 1. Test della Magic Insert Regex usata in sendAnima()
+// 1. Test of the Magic Insert regex used in sendAnima()
 function extractFormula(replyText) {
     const formulaMatch = replyText.match(/`(=[A-Z0-9(),\s<>=:\.\-\+]+)`/i);
     return formulaMatch ? formulaMatch[1] : null;
@@ -34,9 +34,9 @@ assert.strictEqual(
 
 console.log('✅ Test Regex completati con successo.');
 
-// 2. Test mock della logica a_solve_spreadsheet (Simulazione output del C)
+// 2. Mock test of the a_solve_spreadsheet logic (simulated C output)
 function simulateCSolver(query) {
-    // Replica della logica C (a_solve_spreadsheet)
+    // Replica of the C logic (a_solve_spreadsheet)
     const norm = query.toLowerCase();
     
     let fn = null;
@@ -45,7 +45,7 @@ function simulateCSolver(query) {
     else if (norm.includes('se ') || norm.includes('condizione')) fn = "IF";
     else if (norm.includes('arrotonda')) fn = "ROUND";
     
-    // Regex per le celle usata per simulare it[i].w
+    // Cell regex used to simulate it[i].w
     const cellRegex = /[a-z][0-9]+/g;
     let match;
     const cells = [];

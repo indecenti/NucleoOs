@@ -10,5 +10,7 @@
   "more_events": {
     "one": "+{count} weiterer",
     "other": "+{count} weitere"
-  }
+  },
+  "read_failed": "Der Kalender konnte nicht vom Cardputer gelesen werden. Bearbeiten ist pausiert, damit nichts überschrieben wird – versuche es gleich erneut.",
+  "not_paired": "Dieser Browser ist nicht mit dem Cardputer gekoppelt – kopple ihn, um den Kalender zu speichern."
 }

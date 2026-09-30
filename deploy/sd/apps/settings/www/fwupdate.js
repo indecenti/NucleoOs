@@ -132,8 +132,16 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
     try {
       if (typeof pausePoller === 'function') pausePoller();
 
-      // 1. Pages ↔ API alignment: refuse to ship yesterday's image under a fresh tag.
+      // 0. Installed by M5Launcher: the device refuses self-OTA (its "next" slot is another app's) —
+      // say so up front instead of downloading a few MB into a guaranteed 409. docs/m5launcher.md.
       setProgress(true, T('upChecking'));
+      try {
+        const r = await fetch('/api/status', { cache: 'no-store', signal: AbortSignal.timeout(4000) });
+        const s = r.ok ? await r.json() : null;
+        if (s && s.ota && s.ota.self_update === false) return fail(T('upHosted'));
+      } catch {}
+
+      // 1. Pages ↔ API alignment: refuse to ship yesterday's image under a fresh tag.
       let vj = null;
       try { const r = await pagesFetch(UPDATE_VERSION_JSON); if (r.ok) vj = await r.json(); } catch {}
       if (!vj || !vj.tag || !parseSemver(vj.tag) || cmpSemver(vj.tag, cache.tag) !== 0) return fail(T('upPagesLag'));
@@ -174,6 +182,7 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
       if (!resp) return fail(T('upFailTimeout'));
       if (resp.status === 401) return fail(T('upAuthFail'));
       if (resp.status === 503) return fail(T('upBusy'));
+      if (resp.status === 409) return fail(T('upHosted'));
       if (!resp.ok) return fail(T('upFailTimeout'));
 
       // 6. The device reboots into the new slot. Poll until the reported version matches the tag.

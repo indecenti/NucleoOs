@@ -152,5 +152,8 @@
   "smoke_ok": "✓ test sur l'appareil : {n} contrôles ok — l'app répond",
   "smoke_fail": "✗ test sur l'appareil échoué : {names}",
   "smoke_none": "aucun test",
-  "recipe_learned": "📚 apprise comme recette : {id}"
+  "recipe_learned": "📚 apprise comme recette : {id}",
+  "rt_local_server_failed": "Le modèle de cet ordinateur n'a pas répondu ({error}) — j'essaie le moteur suivant…",
+  "ready_local_server": "Pas de clé cloud : je tourne sur {model} via {server}, sur cet ordinateur — sans internet. Les actions destructives demandent toujours confirmation.",
+  "rt_search_fallback": "Aucune correspondance exacte pour « {q} » ; résultats pour « {term} » :"
 }

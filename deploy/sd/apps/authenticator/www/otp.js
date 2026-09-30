@@ -151,7 +151,9 @@ export function parseOtpauth(uri) {
     type, secret, issuer: issuer.trim(), account: account.trim(),
     digits: parseInt(q.get('digits'), 10) === 8 ? 8 : 6,
     period: Math.max(5, parseInt(q.get('period'), 10) || 30),
-    algorithm: /256/.test(q.get('algorithm') || '') ? 'SHA256' : 'SHA1',
+    // Report SHA512 as SHA512 (it used to be silently mapped to SHA1 → every code wrong); the app refuses
+    // what the hashers below cannot compute instead of showing codes that never work.
+    algorithm: /512/.test(q.get('algorithm') || '') ? 'SHA512' : /256/.test(q.get('algorithm') || '') ? 'SHA256' : 'SHA1',
     counter: parseInt(q.get('counter'), 10) || 0,
   };
 }

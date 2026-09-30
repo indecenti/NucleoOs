@@ -47,7 +47,7 @@ export async function loadCfg() {
   // 1) Anthropic Claude (Messages API).
   const anth = (keys.anthropic && keys.anthropic.key) ? keys.anthropic
     : (j.provider === 'anthropic' && j.key ? { base: j.base, model: j.model, key: j.key, version: j.version } : null);
-  if (anth && anth.key) return { provider: 'anthropic', base: anth.base || 'https://api.anthropic.com', model: anth.model || 'claude-sonnet-4-6', key: anth.key, version: anth.version || '2023-06-01' };
+  if (anth && anth.key) return { provider: 'anthropic', base: anth.base || 'https://api.anthropic.com', model: anth.model || 'claude-sonnet-5-5', key: anth.key, version: anth.version || '2023-06-01' };
 
   // 2) xAI Grok — its own slot (keys.xai / keys.grok) or a flat config whose base points at x.ai.
   const xai = (keys.xai && keys.xai.key) ? keys.xai : (keys.grok && keys.grok.key) ? keys.grok

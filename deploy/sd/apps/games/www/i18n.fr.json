@@ -15,6 +15,16 @@
   "loading_lobby": "Chargement du lobby…",
   "catalog_empty": "Le catalogue est vide.",
 
+  "badge_realtime": "temps réel",
+  "game_tris_name": "Morpion",
+  "game_tris_desc": "Morpion au tour par tour : 2 joueurs, contre ANIMA hors ligne, ou contre un LLM en ligne (Grok/Claude) qui joue vraiment les coups.",
+  "game_forza4_name": "Puissance 4",
+  "game_forza4_desc": "Alignez quatre jetons. 2 joueurs, contre ANIMA (facile/moyen), ou contre un LLM en ligne (Grok/Claude) qui choisit chaque coup.",
+  "game_pong_name": "Pong 3D",
+  "game_pong_desc": "Arène 3D néon (Three.js) avec bonus, traînée, particules et effets sonores. 1 contre 1 en réseau ou contre ANIMA — cerveau hors ligne ou LLM en ligne (Claude/Grok/Groq).",
+  "game_constellations_name": "Constellations 3D",
+  "game_constellations_desc": "Marchand/chasseur stellaire en 3D (Three.js). CONTINUE la même partie que sur le Cardputer : univers procédural infini, missions et combats spatiaux à la première personne. Manette, souris ou clavier.",
+
   "btn_hint": "💡 Indice",
   "btn_invite": "🔗 Inviter",
   "btn_ready": "✓ Prêt",

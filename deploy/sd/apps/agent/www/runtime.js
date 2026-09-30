@@ -26,7 +26,7 @@ import { makeFS } from '/apps/anima/fsclient.js';
 import { compact } from '/apps/anima/context.js';
 // Provider-agnostic contract layer (node+browser safe, host-testable): tool surface + the Groq/OpenAI
 // tool-use machinery so the multi-agent works on Grok too, not just Claude.
-import { CLIENT_TOOLS, MUTATING, ALWAYS_CONFIRM, GROQ_MODELS, GEMINI_MODELS, toOpenAITools, callOpenAIChat as rawOpenAIChat, runOpenAIToolLoop, extractJson, guardPlan, withLineNumbers, verifyCode, fenceUntrusted, normalizePlan, renderPlan, osApiIndex, osApiRoute, osApiManifest, OSAPI_RULES } from './agent-tools.js';
+import { CLIENT_TOOLS, MUTATING, ALWAYS_CONFIRM, GROQ_MODELS, GEMINI_MODELS, toOpenAITools, callOpenAIChat as rawOpenAIChat, runOpenAIToolLoop, runLocalToolLoop, localToolDefs, searchFallbackTerms, extractJson, guardPlan, withLineNumbers, verifyCode, fenceUntrusted, normalizePlan, renderPlan, osApiIndex, osApiRoute, osApiManifest, OSAPI_RULES } from './agent-tools.js';
 import { checkSyntax } from '/apps/code-runner/nucleo-run.js';   // parse-only JS check (host-safe) for the write→lint loop
 import { toAgentTools as hwAgentTools, capabilityForTool, callCapability, HW_MUTATING, HW_CAPABILITIES } from '/apps/code-runner/nucleo-hw.js';   // F2: the Cardputer's real hardware as GATED agent tools
 // "Create a NucleoOS app" skill — PURE orchestration (scaffold/publish/manage) + the advisory review,
@@ -44,14 +44,16 @@ import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError } fr
 
 export const MODELS = {
   orchestrator: 'claude-haiku-4-5',   // cheap/fast triage + small tasks
-  worker: 'claude-sonnet-4-6',        // default doer
-  hard: 'claude-opus-4-8',            // deep reasoning
+  worker: 'claude-sonnet-5-5',        // default doer
+  hard: 'claude-opus-5-5',            // deep reasoning
   small: 'claude-haiku-4-5',
 };
 const MAX_STEPS = 14;            // tool-use rounds per worker
 const MAX_PAUSE = 6;             // server-tool (web_search) continuations
 const MAX_PARALLEL = 3;          // concurrent cloud workers
 const READ_CAP = 24000;          // bytes returned to the model per read (keeps context lean)
+const LOCAL_READ_CAP = 9000;     // ...and to a local model, whose whole window is AGENT_CTX tokens
+const AGENT_CTX = 16384;         // Ollama num_ctx for the agent: measured 2026-09-30, qwen3.5:9b 8k -> 16k costs +0.27 GB
 
 // Retry a workspace op on transient device pressure (503 "busy" / network blip). Returns the op's
 // own {ok,...} shape; only retries when the failure looks transient.
@@ -133,10 +135,16 @@ const textOf = (content) => Array.isArray(content) ? content.filter((b) => b && 
 // Spanish, French and German users — including the agent's own replies.
 const LOCALES    = { it: 'it-IT',    en: 'en-US',   es: 'es-ES',   fr: 'fr-FR',    de: 'de-DE' };
 const LANG_NAMES = { it: 'italiano', en: 'English', es: 'español', fr: 'français', de: 'Deutsch' };
-const GEO_LANGS = new Set(['it', 'en', 'es', 'fr', 'de']);   // Open-Meteo geocoding `language=` values we ship
+const GEO_LANGS = new Set(['it', 'en', 'es', 'fr', 'de']);
+const CLOUD_ONLY_MARK = 'Sei ONLINE';            // swapped for the local note on a PC model — see localSystemNote()   // Open-Meteo geocoding `language=` values we ship
 
 // ───────────────────────── runtime ─────────────────────────
-export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys = null, active = null, maxSteps, maxParallel, t = (k) => k, local = null, hwPerms = [] } = {}) {
+// localServer: the user's OWN PC as an agent engine (Ollama / LM Studio …, via /ai-engines.js) — the
+// "OpenCode on a Cardputer" rung: native tool calling on the PC's GPU, the Cardputer only stores the files.
+//   { first: () => bool   — try it BEFORE the cloud (the user chose local first; always when there is no key)
+//     private: () => bool — Private mode: only a server on this very computer, no network tools
+//     engines: () => module — optional injection of the ai-engines module (host tests) }
+export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys = null, active = null, maxSteps, maxParallel, t = (k) => k, local = null, hwPerms = [], localServer = null } = {}) {
   const fs = makeFS(root);
   const uiLocale = () => LOCALES[lang] || LOCALES.en;     // BCP-47 for Intl/toLocaleString
   const langName = () => LANG_NAMES[lang] || LANG_NAMES.en;   // how we name the language TO the model
@@ -155,6 +163,10 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   // `plan` — the orchestrator's typed classification — and the two are different things. In memory
   // only; a checklist describes THIS run, so persisting it would resurrect a stale one next question.
   let taskPlan = [];
+  let lastEngine = null;                           // who answered the last run: { kind:'server'|'cloud'|'local', … }
+  let readCap = READ_CAP;                          // lowered while a local-window model is working
+  const hasCloud = () => !!(cfg && cfg.key) || !!(keys && Object.values(keys).some((e) => e && e.key));
+  const localFirst = () => !!(localServer && (!hasCloud() || (localServer.private && localServer.private()) || (localServer.first && localServer.first())));
   const isAnthropic = cfg.provider === 'anthropic';
   const isGoogle = cfg.provider === 'google';                          // Gemini: OpenAI-compat tool-use via the device /api/llm proxy
   const OAMODELS = isGoogle ? GEMINI_MODELS : GROQ_MODELS;             // OpenAI-compat tier set (all gemini-2.5-flash for Gemini)
@@ -276,14 +288,20 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
       }
       switch (name) {
         case 'list_files': { const r = await withRetry(() => dq.read(() => fs.list(input.path || '.'))); if (!r.ok) return done(t('rt_err', { op: 'list', error: r.error }), true);
-          return done((r.entries || []).map((e) => (e.type === 'dir' ? '📁 ' : '📄 ') + e.name + (e.type === 'file' ? ' (' + (e.size || 0) + 'b)' : '')).join('\n') || t('rt_dir_empty')); }
-        case 'read_file': { const r = await withRetry(() => dq.read(() => fs.read(input.path, { maxBytes: READ_CAP }))); if (!r.ok) return done(t('rt_err', { op: 'read', error: r.error }), true);
+          return done((r.entries || []).map((e) => (e.type === 'dir' ? '📁 ' : '📄 ') + e.name + (e.type === 'dir' ? '/' : '') + (e.type === 'file' ? ' (' + (e.size || 0) + 'b)' : '')).join('\n') || t('rt_dir_empty')); }
+        case 'read_file': { const r = await withRetry(() => dq.read(() => fs.read(input.path, { maxBytes: readCap }))); if (!r.ok) return done(t('rt_err', { op: 'read', error: r.error }), true);
           // Fence the file body as UNTRUSTED data (prompt-injection defense): instructions inside a
           // file must never be obeyed. Line numbers stay inside the fence for reference.
-          return done(fenceUntrusted('file', { path: input.path }, withLineNumbers(r.content, { offset: input.offset, limit: input.limit }) + (r.truncated ? t('rt_truncated', { n: READ_CAP }) : ''))); }
+          return done(fenceUntrusted('file', { path: input.path }, withLineNumbers(r.content, { offset: input.offset, limit: input.limit }) + (r.truncated ? t('rt_truncated', { n: readCap }) : ''))); }
         case 'search_files': { const r = await withRetry(() => dq.read(() => fs.search(input.query, { glob: input.glob, maxFiles: 40, maxMatches: 80 }))); if (!r.ok) return done(t('rt_err', { op: 'search', error: r.error }), true);
-          const hits = (r.matches || []).slice(0, 60).map((m) => m.path + ':' + (m.line || '?') + '  ' + (m.text || '').trim().slice(0, 120)).join('\n') || t('rt_no_results');
-          return done(fenceUntrusted('search_results', {}, hits)); }
+          let matches = r.matches || [], note = '';
+          // No hit for a phrase: retry its most distinctive term (grep leniency — see searchFallbackTerms).
+          if (!matches.length) for (const term of searchFallbackTerms(input.query)) {
+            const r2 = await withRetry(() => dq.read(() => fs.search(term, { glob: input.glob, maxFiles: 40, maxMatches: 80 })));
+            if (r2.ok && r2.matches && r2.matches.length) { matches = r2.matches; note = t('rt_search_fallback', { q: input.query, term }) + '\n'; break; }
+          }
+          const hits = matches.slice(0, 60).map((m) => m.path + ':' + (m.line || '?') + '  ' + (m.text || '').trim().slice(0, 120)).join('\n') || t('rt_no_results');
+          return done(note + fenceUntrusted('search_results', {}, hits)); }
         case 'make_dir': { const r = await withRetry(() => dq.write(() => fs.mkdir(input.path))); return r.ok ? done(t('rt_mkdir_ok', { path: r.path })) : done(t('rt_err', { op: 'mkdir', error: r.error }), true); }
         case 'write_file': { const r = await withRetry(() => dq.write(() => fs.write(input.path, input.content == null ? '' : String(input.content), { overwrite: true, mkdir: true })));
           if (!r.ok) return done(t('rt_err', { op: 'write', error: r.error }), true);
@@ -532,6 +550,50 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     return '(step budget exhausted — the task may be incomplete)';
   }
 
+  // LOCAL SERVER worker: the same tool surface through the PC's own model (native tool calling). The model
+  // is chosen once per task (tools-capable, fits this GPU — ai-engines.rankModels, with what was measured
+  // here) and PINNED for every later step, so a long edit does not switch models halfway. → text, or null
+  // when no local server is enabled + reachable (the caller moves on to the next rung).
+  async function runWorkerLocalServer({ system, messages }) {
+    if (!localServer) return null;
+    let E; try { E = localServer.engines ? await localServer.engines() : await import('/ai-engines.js'); } catch { return null; }
+    const priv = !!(localServer.private && localServer.private());
+    const config = E.loadLocalConfig(); if (!config.enabled) return null;
+    const live = (await E.liveServers({ config })).filter((s) => s.status === 'ok' && s.models.length && (!priv || E.isLoopback(s.base)));
+    if (!live.length) return null;
+    const tools = toOpenAITools([...localToolDefs(CLIENT_TOOLS, { private: priv }), ...hwToolDefs]);
+    let pin = null;                                 // { server, model } once a step has answered
+    const chat = async (msgs, o = {}) => {
+      const common = { messages: msgs, tools: o.noTools ? undefined : tools, numCtx: AGENT_CTX, temperature: 0.2, signal: aborter && aborter.signal, config };
+      if (pin) return E.localComplete('agent', { ...common, servers: [pin.server], model: pin.model });
+      for (const s of live) {
+        const r = await E.localComplete('agent', { ...common, servers: [s] });
+        if (r) {
+          pin = { server: s, model: r.engine.model }; lastEngine = { ...r.engine, kind: 'server', serverKind: r.engine.kind };   // engine.kind is the server's own ('ollama'|'openai')
+          if (ui && ui.status) ui.status('Agente (' + s.name + ' · ' + r.engine.model + ')…');
+          return r;
+        }
+      }
+      throw new Error('no local model could run (out of memory?)');
+    };
+    readCap = LOCAL_READ_CAP;
+    try {
+      return await runLocalToolLoop({ chat, execTool, messages: [{ role: 'system', content: system }, ...messages], tools, maxSteps: STEPS,
+        abort: aborter && aborter.signal, onEvent: (e) => { if (e.type === 'tool' && ui && ui.status) ui.status('⚙ ' + e.name); } });
+    } finally { readCap = READ_CAP; }
+  }
+  // The local-server rung with its failure handled: a dead/refusing server is a note, never the end of the turn.
+  async function tryLocalServer(system, baseMessages) {
+    try {
+      const out = await runWorkerLocalServer({ system: system.replace(CLOUD_ONLY_MARK, localSystemNote()), messages: baseMessages.map((m) => ({ ...m })) });
+      return out == null ? null : { text: out || '' };
+    } catch (e) {
+      if (String(e && e.message) === 'stopped' || (aborter && aborter.signal.aborted)) throw new Error('stopped');
+      if (ui && ui.note) ui.note('⚠️ ' + t('rt_local_server_failed', { error: String(e && e.message || e) }));
+      return null;
+    }
+  }
+
   // Run one subtask with CROSS-PROVIDER FALLBACK. routeCfg() chooses the best (cfg, model) for the spec
   // across ALL configured keys; on a provider-level failure (down / bad key / rate-exhausted after retries
   // — NOT a user Stop) we re-pick EXCLUDING the failed provider and retry, until providers run out. So
@@ -540,15 +602,23 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   // not here. baseMessages is cloned per attempt (runWorker mutates its array).
   async function runWorkerWithFallback({ spec, system, baseMessages, maxTokens }) {
     const tried = [];
-    let lastErr;
-    for (let hop = 0; hop < 4; hop++) {
+    let lastErr, serverTried = false;
+    if (localFirst()) {
+      serverTried = true;
+      const r = await tryLocalServer(system, baseMessages);
+      if (r) return r.text;
+    }
+    const priv = !!(localServer && localServer.private && localServer.private());
+    for (let hop = 0; hop < 4 && !priv; hop++) {
       const { cfg: wcfg, model } = routeCfg({ ...spec, exclude: [...(spec.exclude || []), ...tried] });
       if (!wcfg || !wcfg.key || tried.includes(wcfg.provider)) break;   // no fresh provider left to try
       const label = wcfg.provider === 'anthropic' ? (spec.difficulty === 'hard' ? 'Opus' : 'Sonnet') : (providerOf(wcfg.provider).label || wcfg.provider);
       if (ui && ui.status) ui.status('Agente (' + label + ')…');
       try {
         const messages = baseMessages.map((m) => ({ ...m }));
-        return await runWorker({ wcfg, model, system, messages, maxTokens });
+        const out = await runWorker({ wcfg, model, system, messages, maxTokens });
+        lastEngine = { kind: 'cloud', provider: wcfg.provider, model };
+        return out;
       } catch (e) {
         if (String(e && e.message) === 'stopped') throw e;
         lastErr = e; tried.push(wcfg.provider);
@@ -556,11 +626,17 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         if (ui && ui.note) ui.note('⚠️ ' + label + ' non disponibile (' + String(e && e.message || e) + ') — provo un altro provider…');
       }
     }
+    // Cloud rungs exhausted: the PC's own model is the next best thing (no key, no internet, quota gone).
+    if (localServer && !serverTried) {
+      const r = await tryLocalServer(system, baseMessages);
+      if (r) return r.text;
+    }
     // Cloud rungs exhausted (no key, offline, or every provider down). The LOCAL rungs (F0): the
     // injected engines — engine-policy order, wired by the UI behind a capability probe (F4) — run
     // the same tools through the same execTool, grammar-constrained. Each rung either finishes or
     // DECLINES HONESTLY; a decline tries the next rung, never fabricates. With nothing injected
     // (today's default) behavior is unchanged: the original error propagates.
+    let declined = null;                            // the last local rung's honest decline: { tier, reason }
     if (local && typeof local.engines === 'function') {
       let rungs = [];
       try { rungs = (await local.engines()) || []; } catch {}
@@ -572,20 +648,31 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
             { engine: rung.engine, execTool, grammar: local.grammar, verify: local.verify || null },
             { messages: baseMessages, root, maxSteps: Math.min(STEPS, 10),
               onEvent: (e) => { if (e.type === 'action' && ui && ui.status) ui.status('⚙ ' + e.op); } });
-          if (out && !out.declined) return out.text || '';   // workers return plain text — same contract
-          if (ui && ui.note) ui.note('⚠️ ' + (rung.tier || 'local') + ': declino onesto (' + (out && out.reason || '?') + ')');
+          if (out && !out.declined) { lastEngine = { kind: 'local', tier: rung.tier, model: rung.engine.model || '' }; return out.text || ''; }   // workers return plain text — same contract
+          declined = { tier: rung.tier || 'local', reason: (out && out.reason) || '?', model: rung.engine.model || '' };
+          if (ui && ui.note) ui.note('⚠️ ' + (rung.tier || 'local') + ': declino onesto (' + declined.reason + ')');
         } catch (e) {
           if (String(e && e.message) === 'stopped') throw e;
           if (ui && ui.note) ui.note('⚠️ ' + (rung.tier || 'local') + ' non disponibile (' + String(e && e.message || e) + ')');
         }
       }
     }
+    // A local model that honestly declined is NOT "no provider": the caller must say so, not hand the task to a
+    // model without tools (measured: the GPU chat rung then "counted" a file it never read).
+    if (declined && !lastErr) throw Object.assign(new Error('local model declined: ' + declined.reason), { kind: 'local-declined', ...declined });
     throw lastErr || new Error('nessun provider disponibile');
   }
 
+  // The worker prompt names the substrate. A local model must not believe it is online (no web search, no
+  // image/voice providers) — tryLocalServer swaps the CLOUD_ONLY_MARK sentence for this one.
+  function localSystemNote() {
+    const priv = !!(localServer && localServer.private && localServer.private());
+    return 'Giri su un modello LOCALE sul computer dell\'utente (niente cloud' + (priv ? ', niente rete: modalità Privata' : '')
+      + '; non hai web_search, generate_image, transcribe' + (priv ? ', weather' : '') + ')';
+  }
   function workerSystem(extra) {
     const today = (() => { try { return new Date().toISOString().slice(0, 10); } catch { return ''; } })();
-    return `Sei un AGENTE operativo di NucleoOS — un vero sistema operativo multi-app su un M5Stack Cardputer, guidato dal browser dell'utente. Sei ONLINE e PROGRAMMI come uno sviluppatore esperto. Porti a termine il compito USANDO gli strumenti reali.
+    return `Sei un AGENTE operativo di NucleoOS — un vero sistema operativo multi-app su un M5Stack Cardputer, guidato dal browser dell'utente. ${CLOUD_ONLY_MARK} e PROGRAMMI come uno sviluppatore esperto. Porti a termine il compito USANDO gli strumenti reali.
 
 STRUMENTI:
 • File nello spazio di lavoro (root ${root}): list_files, read_file, search_files, make_dir, write_file, edit_file, append_file, delete_file, move_file.
@@ -680,8 +767,16 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
     const seedExtra = buildSeedExtra(opts.seed);
 
     const historyHint = hist.slice(-4).map((t) => (t.role === 'bot' ? 'A: ' : 'U: ') + String(t.text || '').slice(0, 200)).join('\n');
-    if (ui && ui.status) ui.status(isAnthropic ? 'Orchestratore (Haiku)…' : ('Orchestratore (' + (isGoogle ? 'Gemini Flash' : 'Groq 8B') + ')…'));
-    const plan = await orchestrate(userMsg, historyHint);
+    lastEngine = null;
+    // Local first: no triage round. A cloud orchestrator would send the question out (wrong in Private, useless
+    // without a key), and on a PC model it is one more full prompt for nothing — the worker answers a plain
+    // question directly and calls tools for a task.
+    let plan;
+    if (localFirst()) plan = { mode: 'task' };
+    else {
+      if (ui && ui.status) ui.status(isAnthropic ? 'Orchestratore (Haiku)…' : ('Orchestratore (' + (isGoogle ? 'Gemini Flash' : 'Groq 8B') + ')…'));
+      plan = await orchestrate(userMsg, historyHint);
+    }
 
     if (plan.mode === 'answer' && plan.answer) { if (ui && ui.status) ui.status('Risposta diretta'); return String(plan.answer); }
 
@@ -715,5 +810,5 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
     });
   }
 
-  return { run, stop, fs, get workspace() { return root; }, get plan() { return taskPlan.map((x) => ({ ...x })); } };
+  return { run, stop, fs, get workspace() { return root; }, get plan() { return taskPlan.map((x) => ({ ...x })); }, get engine() { return lastEngine && { ...lastEngine }; } };
 }

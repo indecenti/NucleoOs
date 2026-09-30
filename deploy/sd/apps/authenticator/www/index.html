@@ -83,6 +83,7 @@
   .note { background: var(--field); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
     font-size: 11.5px; color: var(--muted); line-height: 1.5; max-width: 560px; margin: 14px auto 0; }
   .note b { color: var(--text); }
+  .note.warn { color: #ffd479; border-color: #f5c84255; background: #f5c84214; }
 </style>
 </head>
 <body>
@@ -100,6 +101,7 @@
       <h2 data-i18n="empty_title">Nessun account 2FA</h2>
       <p data-i18n="empty_body">Aggiungi un account per generare i codici di verifica a 6 cifre. Incolla un link <code>otpauth://</code> (dal QR del sito) o la chiave segreta.</p>
     </div>
+    <div class="note warn" id="offline-note" role="status" hidden></div>
     <div class="note" data-i18n-html="privacy_note">🔒 <b>Tutto in locale.</b> I codici sono calcolati nel browser (nessun segreto lascia il dispositivo). Le chiavi sono salvate sulla SD del Cardputer, protette dall'associazione: revoca le sessioni in Impostazioni se perdi un dispositivo.</div>
   </main>
 
@@ -146,23 +148,46 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 const PATH = '/system/config/authenticator.json';
 let tokens = [];   // [{ id, type, issuer, account, secret, digits, period, algorithm, counter }]
 
-async function loadTokens() {
+// The SD copy is the source of truth. A FAILED read is not "no accounts": the old code then saved the
+// next add over the real file — a new browser with no local cache lost every 2FA secret. Now:
+//   • read OK      → the device list wins (so an account deleted elsewhere stays deleted);
+//   • read failed  → codes still work from this browser's last copy, but changes are paused;
+//   • every change is read-modify-write against a FRESH read, so two browsers never erase each other.
+const signal9 = () => { try { return AbortSignal.timeout(9000); } catch { return undefined; } };
+async function readDevice() {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store' });
-    if (r.ok) { const t = await r.text(); const j = t ? JSON.parse(t) : {}; if (Array.isArray(j.tokens)) tokens = j.tokens; }
-  } catch {}
-  // Local fallback so the app still works with no device (offline / WASM): last-known set.
-  if (!tokens.length) { try { const l = JSON.parse(localStorage.getItem('authenticator.cache') || '{}'); if (Array.isArray(l.tokens)) tokens = l.tokens; } catch {} }
+    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store', signal: signal9() });
+    if (r.status === 404) return { ok: true, tokens: [] };
+    if (!r.ok) return { ok: false, status: r.status };
+    const txt = await r.text(); const j = txt ? JSON.parse(txt) : {};
+    return { ok: true, tokens: Array.isArray(j.tokens) ? j.tokens : [] };
+  } catch { return { ok: false, status: 0 }; }
+}
+const cacheTokens = () => { try { localStorage.setItem('authenticator.cache', JSON.stringify({ tokens })); } catch {} };
+function flash(m) { $('msg').textContent = m; const h = $('copied'); h.textContent = m; h.classList.add('show'); clearTimeout(copyTimer); copyTimer = setTimeout(() => h.classList.remove('show'), 3500); }
+const failMsg = (status) => (status === 401 || status === 403 ? t('err_unpaired') : t('err_device'));
+let offline = false;
+async function loadTokens() {
+  const r = await readDevice();
+  if (r.ok) { tokens = r.tokens; offline = false; cacheTokens(); return; }
+  offline = true;
+  try { const l = JSON.parse(localStorage.getItem('authenticator.cache') || '{}'); if (Array.isArray(l.tokens)) tokens = l.tokens; } catch {}
 }
 let saveChain = Promise.resolve();
-function saveTokens() {
-  try { localStorage.setItem('authenticator.cache', JSON.stringify({ tokens })); } catch {}
-  const body = JSON.stringify({ schema: 1, tokens }, null, 2);
-  saveChain = saveChain.then(() => fetch('/api/fs/write?path=' + encodeURIComponent(PATH),
-    { method: 'POST', body, signal: (() => { try { return AbortSignal.timeout(9000); } catch { return undefined; } })() })
-    .then((r) => { if (!r.ok) throw 0; })
-    .catch(() => { const m = t('error'); $('msg').textContent = m; const h = $('copied'); h.textContent = m; h.classList.add('show'); clearTimeout(copyTimer); copyTimer = setTimeout(() => h.classList.remove('show'), 2500); }));
-  return saveChain;
+function mutateTokens(fn) {
+  const run = saveChain.then(async () => {
+    const r = await readDevice();
+    if (!r.ok) { flash(failMsg(r.status)); return false; }
+    const next = r.tokens;
+    fn(next);
+    let w = null;
+    try { w = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH), { method: 'POST', body: JSON.stringify({ schema: 1, tokens: next }), signal: signal9() }); } catch {}
+    if (!w || !w.ok) { flash(failMsg(w ? w.status : 0)); return false; }
+    tokens = next; offline = false; cacheTokens();
+    return true;
+  });
+  saveChain = run.catch(() => false);
+  return run;
 }
 
 // ── stable per-issuer colour for the avatar (hashed, so the same service always looks the same)
@@ -181,6 +206,7 @@ function codeFor(tok) {
 const grouped = (code) => code.length === 6 ? code.slice(0, 3) + ' ' + code.slice(3) : code.slice(0, 4) + ' ' + code.slice(4);
 
 function render() {
+  const ob = $('offline-note'); ob.hidden = !offline; ob.textContent = offline ? t('offline_banner') : '';
   const list = $('list'), q = query.toLowerCase();
   const shown = tokens.filter((tk) => !q || (tk.issuer + ' ' + tk.account).toLowerCase().includes(q));
   $('empty').classList.toggle('hidden', shown.length > 0);
@@ -250,10 +276,17 @@ function applyUri() {
   $('f-digits').value = String(p.digits); $('f-period').value = String(p.period); $('f-algo').value = p.algorithm;
   $('msg').textContent = '';
 }
-function saveToken() {
+// Only what this app can really compute: time-based codes with SHA-1/SHA-256. Anything else would show
+// codes that never work — refuse it clearly instead.
+function unsupported(p) { return p && p.type === 'hotp' ? t('err_hotp') : p && p.algorithm === 'SHA512' ? t('err_algo') : ''; }
+async function saveToken() {
   // A pasted URI that wasn't "applied" yet still works: parse it here too.
   const uri = $('uri').value.trim();
-  if (uri) { const p = parseOtpauth(uri); if (p) { $('f-issuer').value = p.issuer; $('f-account').value = p.account; $('f-secret').value = p.secret; $('f-digits').value = String(p.digits); $('f-period').value = String(p.period); $('f-algo').value = p.algorithm; } }
+  if (uri) {
+    const p = parseOtpauth(uri);
+    const why = unsupported(p); if (why) { $('msg').textContent = why; return; }
+    if (p) { $('f-issuer').value = p.issuer; $('f-account').value = p.account; $('f-secret').value = p.secret; $('f-digits').value = String(p.digits); $('f-period').value = String(p.period); $('f-algo').value = p.algorithm; }
+  }
   const secret = $('f-secret').value.replace(/\s/g, '');
   if (!secret || !isValidBase32(secret)) { $('msg').textContent = t('err_secret'); return; }
   const tok = {
@@ -263,13 +296,18 @@ function saveToken() {
     period: Math.max(5, Math.min(120, parseInt($('f-period').value, 10) || 30)),
     algorithm: $('f-algo').value === 'SHA256' ? 'SHA256' : 'SHA1',
   };
-  tokens.push(tok); saveTokens(); render(); closeSheet();
+  $('save').disabled = true;
+  const ok = await mutateTokens((list) => { list.push(tok); });
+  $('save').disabled = false;
+  render();
+  if (ok) closeSheet();                    // on failure the sheet stays open with the reason, nothing lost
 }
 async function removeToken(id) {
   const tk = tokens.find((x) => x.id === id);
   const label = tk ? (tk.issuer || tk.account || '') : '';
   if (!confirm(t('confirm_del', { name: label }))) return;
-  tokens = tokens.filter((x) => x.id !== id); saveTokens(); render();
+  await mutateTokens((list) => { const i = list.findIndex((x) => x.id === id); if (i >= 0) list.splice(i, 1); });
+  render();
 }
 
 $('add').addEventListener('click', openSheet);
@@ -292,7 +330,8 @@ function fromQuery() {
   if (!q) return;
   history.replaceState(null, '', location.pathname);
   const p = parseOtpauth(q);
-  if (p) { tokens.push({ id: 'tok-' + Date.now(), type: 'totp', ...p }); saveTokens(); }
+  const why = unsupported(p); if (why) { flash(why); return; }
+  if (p) mutateTokens((list) => { list.push({ ...p, id: 'tok-' + Date.now(), type: 'totp' }); }).then(() => render());
 }
 
 // ── boot ──

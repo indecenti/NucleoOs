@@ -120,5 +120,12 @@
   "guideTeach": "Di’ «ricorda che la sala riunioni <b>è</b> al terzo piano» oppure «mi chiamo Marco». I fatti personali li custodisce il Cardputer, così ogni browser li vede; se il Cardputer non è raggiungibile aspettano in questo browser e gli vengono passati appena risponde.",
   "guidePrivacyT": "Privacy",
   "guidePrivacy": "In modalità <b>Privato</b> nulla esce da questa macchina e dal tuo Cardputer. Con una chiave, le chiamate online partono dritte dal tuo browser al provider — mai attraverso il dispositivo, mai nei log.",
-  "guideClose": "Ho capito"
+  "guideClose": "Ho capito",
+  "gpuRecommended": "consigliato per questa GPU",
+  "engLocalServer": "Server locale",
+  "engThisPc": "questo computer",
+  "netThisPc": "nessuna · resta su questo computer",
+  "localSkipped": "{m} non entrava in memoria: ho usato un modello più leggero",
+  "agentLocal": "Agente locale · {server} · {model}",
+  "agentDeclined": "Il modello locale ({model}) non è riuscito a completare questo compito sui file ({why}), e non ti do una risposta inventata. Con un modello più grande sul PC (Ollama) o con una chiave cloud ci riesco; oppure prova a dividere la richiesta in passi più semplici."
 }

@@ -47,5 +47,8 @@
   "deleted": "Eliminado",
   "save_failed": "Guardado fallido (¿dispositivo sin conexión?)",
   "saved_to_device": "Guardado en el dispositivo",
-  "load": "Cargar"
+  "load": "Cargar",
+  "read_failed": "No se pudieron leer los QR guardados del Cardputer: no guardo nada para no sobrescribirlos. Inténtalo de nuevo en breve.",
+  "read_corrupt": "El archivo de QR del Cardputer no se puede leer: no lo modifico para no perderlo.",
+  "not_paired": "Este navegador no está vinculado al Cardputer: vincúlalo para guardar los QR."
 }
